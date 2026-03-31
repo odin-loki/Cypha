@@ -1,0 +1,49 @@
+# Virtual environments
+.venv/
+.venv-*/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Test / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local data caches (OpenML, sklearn download_home, etc.)
+data_cache/
+
+# Demo export from scripts/export_regression_head.py (regenerate anytime)
+artifacts/regression_head_demo.json
+# From `make experiment-ddl` (canonical DDL is experiment._SCHEMA + CMake configure)
+artifacts/experiment_schema.sql
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Native (CMake) — all local build trees; regen with cmake -S native -B native/build ...
+native/build/
+native/build-wsl/
+native/build-ci-local/
+native/build-mingw-w64/
+native/build_check/
+native/build-qt/
+native/build-qt-stub/
+native/build-qt-shell-test/
+native/build-exp/
+native/build-opencl/
+native/build-win/
+native/out/

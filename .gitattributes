@@ -1,0 +1,6 @@
+# Shell entrypoints must stay LF so WSL/bash do not see CRLF in `set -o pipefail`.
+scripts/*.sh text eol=lf
+# Pip requirement files: normalize line endings (helps Windows tools and `pip install -r`).
+requirements-verify.txt text eol=lf
+requirements-pip-merged.txt text eol=lf
+cypha_studio/requirements.txt text eol=lf

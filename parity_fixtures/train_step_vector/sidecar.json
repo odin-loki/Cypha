@@ -1,0 +1,23 @@
+{
+  "x": [
+    1.8,
+    0.1,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "label": "0",
+  "expected_loss": -1.725939349915191,
+  "total_steps_before": 120,
+  "world_lr": 0.008,
+  "delta_lr": 0.05,
+  "ood_sigma": 1.0,
+  "enc_lr": 0.002,
+  "replay_ratio": 0.3,
+  "replay_cap": 10000,
+  "align_every": 500,
+  "temp_recalib_every": 0
+}

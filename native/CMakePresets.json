@@ -1,0 +1,37 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 19,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mingw-w64-cross",
+      "displayName": "MinGW-w64 → Windows x64 (cross from Linux/WSL)",
+      "description": "Uses native/toolchains/mingw-w64-x86_64.cmake; outputs *.exe under build-mingw-w64/. Requires g++-mingw-w64-x86-64 (or matching CYPHA_MINGW_TOOLCHAIN_PREFIX).",
+      "binaryDir": "${sourceDir}/build-mingw-w64",
+      "generator": "Unix Makefiles",
+      "toolchainFile": "${sourceDir}/toolchains/mingw-w64-x86_64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mingw-w64-cross-release",
+      "configurePreset": "mingw-w64-cross",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "mingw-w64-cross",
+      "configurePreset": "mingw-w64-cross",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

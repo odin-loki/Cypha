@@ -1,0 +1,38 @@
+{
+  "source": "scripts/tune_quality_performance.py --preset medium (full grid, include-generation)",
+  "classification_cyphadif": {
+    "world_lr": 0.008,
+    "delta_lr": 0.05,
+    "enc_lr": 0.002,
+    "mdl_lambda": 0.001,
+    "temperature": 1.15,
+    "field_dim": 128,
+    "context_win": 32,
+    "n_epochs": 3,
+    "train_passes_cap": 400
+  },
+  "regression_difregressor": {
+    "world_lr": 0.01,
+    "delta_lr": 0.05,
+    "enc_lr": 0.002,
+    "mdl_lambda": 0.001,
+    "temperature": 1.05,
+    "field_dim": 128,
+    "context_win": 32,
+    "n_epochs": 2,
+    "train_passes_cap": 900,
+    "target_lr": 0.06,
+    "n_experts": 8
+  },
+  "generation_generate_call": {
+    "temperature": 1.0,
+    "max_candidates": 16,
+    "rejection_sampling": true,
+    "eval_protocol_n_calls": 8,
+    "eval_protocol_n_per_call": 8
+  },
+  "notes": [
+    "Library defaults in Cypha.py / TrainerConfig / DIFRegressor.__init__ follow these (cls vs reg where they differ).",
+    "Regression uses raw y in the tuner; scale X only (StandardScaler), same as download_profile_e2e."
+  ]
+}

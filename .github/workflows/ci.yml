@@ -1,0 +1,61 @@
+# Native CTest + Python pytest (headless Qt + optional cypha_rest subprocess smoke).
+#
+# Fixture regeneration:
+#   After any change to CyphaDIF._save_state / cypha_save_binary / v3 layout (adding or removing keys,
+#   changing dtypes/shapes, or changing the binary encoding), regenerate ALL parity fixtures:
+#     python scripts/generate_parity_fixtures.py     # re-generates parity_fixtures/{reference.cypha,
+#                                                    #   native_parity.bin, memory_train/after.cypha, …}
+#     python scripts/generate_memory_train_parity.py # (called above; run standalone to update just memory_train/)
+#   Then commit the updated fixture files alongside the code change.
+#   The following tests rely on these golden files: tests/test_parity_fixtures.py,
+#   tests/test_cypha_binary_buffer_api.py, tests/test_memory_train_fixture.py.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev qt6-base-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-verify.txt
+          pip install PySide6 pyqtgraph pytest-qt
+      - name: Native build + CTest
+        run: |
+          cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON
+          cmake --build native/build -j 2
+          ctest --test-dir native/build --output-on-failure
+        # Local equivalent: bash scripts/ci_native_linux.sh (optional CYPHA_BUILD_QT=1 + qt6-base-dev;
+        # optional CYPHA_QT_CHARTS=1 + qt6-charts-dev for -DCYPHA_QT_CHARTS=ON; drift pytest when python3 has pytest)
+      - name: Pytest
+        env:
+          QT_QPA_PLATFORM: offscreen
+          CYPHA_REST_BIN: ${{ github.workspace }}/native/build/cypha_rest
+        run: python -m pytest tests/ -q
+
+  mingw_cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW + CMake
+        run: sudo apt-get update && sudo apt-get install -y cmake g++-mingw-w64-x86-64
+      - name: Configure + build (Windows PE)
+        run: |
+          cmake -S native -B native/build-mingw-w64 \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/native/toolchains/mingw-w64-x86_64.cmake" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/build-mingw-w64 -j 2
+      - name: CTest (paths rewritten to C:/ for /mnt/c checkouts)
+        run: ctest --test-dir native/build-mingw-w64 --output-on-failure

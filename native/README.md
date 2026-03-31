@@ -1,0 +1,196 @@
+# Native runtime (C++ / OpenCL / Qt)
+
+Monorepo C++ core for [`docs/port/PORT_FULL_STACK.md`](../docs/port/PORT_FULL_STACK.md). **Vendored:** `third_party/nlohmann/json.hpp`, `third_party/httplib.h` (no OpenSSL — do not `#define CPPHTTPLIB_OPENSSL_SUPPORT` unless you link libssl).
+
+## Targets
+
+| Binary / lib | Milestone | Role |
+|--------------|-----------|------|
+| **`cypha_core`** | M1–M3 | `.cypha` **load** + **`load_cypha_from_buffer`** / **`save_cypha_file`** / **`save_cypha_to_buffer`** / **`clone_cnode`** (Python **`cypha_save_binary`** / **`cypha_load_binary`** / **`cypha_save_binary_to_bytes`** / **`cypha_load_binary_from_bytes`** v3 layout), `mid_trans`, `llr_scale_*`, `field_W_T`, optional **`field_a_eff`**, `w_inject`, …, CPU infer, full **Tier-1+2** `context_prior` / `context_record_step`, preprocessor JSON, `memory_train` + **`merge_state_into_root_for_save`** + `dedup_check`, `sync_infer`, replay, contrastive + deliberate + **`encoder_align_to_offsets`**, NIG field, `dif_train_step_vector`, **`dif_train_classify_sequence`**, **`dif_gh_train_classify_sequence`** (GH online loop), **`mke_scalar_train_step`**, **`registry_scan`** + **`registry_register_bundle`** |
+| **`cypha_parity`** | M1 | `reference.cypha` + `native_parity.bin` → LLR / probs / gates; **v2** sidecar tail checks **`batch_infer_full`** entropy + confidence. **`CyphaInferModel::from_root`** restores **Tier-1** from **`ctx_hist_packed`** / co-occurrence / last label; see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §4. CTest **`native_parity`**. Pytest **`tests/test_cypha_parity_native.py`**; env **`CYPHA_CYPHA_PARITY_BIN`**. |
+| **`batch_llr_parity`** | M7 | **`batch_llr_from_x`** vs `parity_fixtures/batch_llr/sidecar.json` (same **X**/**LLR** as **`expected.npz`**) |
+| **`memory_train_parity`** | M3 | `parity_fixtures/memory_train/` — one `DIFMemory.train` step vs `after.cypha`; CTest **`native_memory_train`**. Pytest **`tests/test_memory_train_native_parity.py`**; env **`CYPHA_MEMORY_TRAIN_PARITY_BIN`**. |
+| **`memory_train_roundtrip`** | M3 | Same fixture: train → **`merge_state_into_root_for_save`** → **`patch_field_a_eff_into_root`** (aligns with Python **`field_a_eff`**) → **`save_cypha_to_buffer`** (bytes) + **`save_cypha_file`** → on-disk bytes **`memcmp`** with buffer → **`load_cypha_file`** / **`load_cypha_from_buffer`** vs file reload. Tree ≈ **`after.cypha`** (CTest **`native_memory_train_roundtrip`**). Pytest **`tests/test_memory_train_roundtrip_native.py`**; env **`CYPHA_MEMORY_TRAIN_ROUNDTRIP_BIN`**. Optional 2nd arg: output path (default `<dir>/roundtrip_native.cypha`). |
+| **`preprocessor_parity`** | M2 | `parity_fixtures/preprocessor/` — `transform_one` vs Python; CTest **`native_preprocessor`**. Pytest **`tests/test_preprocessor_native_parity.py`**; env **`CYPHA_PREPROCESSOR_PARITY_BIN`**. |
+| **`preprocessor_fit_parity`** | M2 | **`preprocessor_fit/`** + **`preprocessor_fit_no_scale/`** — **`PreprocessorState::fit_from_design_matrix`** (scale on/off + PCA) vs Python **`Preprocessor.fit`** + probe **`transform_one`**; CTest **`native_preprocessor_fit`**. Pytest **`tests/test_preprocessor_fit_native_parity.py`**; env **`CYPHA_PREPROCESSOR_FIT_PARITY_BIN`**. |
+| **`csv_ingest_parity`** | M2 | **`csv_ingest/`** — **`cypha::load_csv_dense`** vs **`CSVDataset.from_file`** (**`target_col_name`** / **`feature_col_names`** and/or indices; multiline quoted fields); CTest **`native_csv_ingest`**. Pytest **`tests/test_csv_ingest_native_parity.py`**; env **`CYPHA_CSV_INGEST_PARITY_BIN`**. |
+| **`dif_regressor_train_step_parity`** | M4 | **`dif_regressor_train_step/`** — **`dif_train_step_vector`** + **`expert_target_ema_step`** + mixture predict vs Python **`DIFRegressor`** (cold hash then **`score_matrix_use_field`** argmax = **`infer()`** routing; **`replay_ratio>0`** + **`replay_u01`** / **`TrainStepExtras`**); CTest **`native_dif_regressor_train_step`**. Pytest **`tests/test_dif_regressor_train_step_native_parity.py`**; env **`CYPHA_DIF_REGRESSOR_TRAIN_STEP_PARITY_BIN`**. |
+| **`preprocess_train_classify_parity`** | M3 | **`studio_trainer_preprocess_classify_hotpath/`** — `preprocessor.json` + raw **`x_raw`** (or **`csv_preprocess_classify_hotpath/`** + **`train.csv`** / **`csv_spec`** → **`load_csv_dense`**) → **`transform_one`** → **`dif_train_classify_sequence`** + **`batch_llr_from_x`**. CTests **`native_studio_trainer_preprocess_classify_hotpath`**, **`native_csv_preprocess_classify_hotpath`**. **`studio_trainer_preprocess_gh_classify_hotpath/`** — same tool, sidecar **`use_gh: true`** → **`dif_gh_train_classify_sequence`**; CTest **`native_studio_trainer_preprocess_gh_classify_hotpath`**. Pytest **`tests/test_studio_trainer_preprocess_classify_hotpath_native_parity.py`**, **`tests/test_csv_preprocess_classify_hotpath_native_parity.py`**, **`tests/test_studio_trainer_preprocess_gh_classify_hotpath_native_parity.py`**; env **`CYPHA_PREPROCESS_TRAIN_CLASSIFY_PARITY_BIN`**. |
+| **`nig_adapt_parity`** | M5 | `nig_adapt_session_chi` vs Cypha `_nig_adapt` (3 fixed cases); CTest **`native_nig_adapt`**. Pytest **`tests/test_nig_adapt_native_parity.py`**; env **`CYPHA_NIG_ADAPT_PARITY_BIN`**. |
+| **`train_step_vector_parity`** | M3 | `parity_fixtures/train_step_vector/` — one `dif_train_step_vector` loss vs Python `train_step`; CTest **`native_train_step_vector`**. Pytest **`tests/test_train_step_vector_native_parity.py`**; env **`CYPHA_TRAIN_STEP_VECTOR_PARITY_BIN`**. |
+| **`quantile_dif_train_parity`** | M3 | `parity_fixtures/quantile_dif_train/` (`replay_ratio=0`), **`dif_train_replay/`** (`replay_ratio>0` + `replay_u01`), **`studio_trainer_classify_hotpath/`** (Studio **`Trainer.fit`** + `enc_lr>0` + `replay_u01`), **`studio_trainer_gh_classify_hotpath/`** (`use_gh` + **`dif_gh_train_classify_sequence`**) — multi-step train + `batch_llr_from_x` vs Python |
+| **`mke_train_step_parity`** | M4–M5 | `parity_fixtures/mke_train_step/` — one **`MKERegressor.train_step`**: RFF φ, **`score_matrix_use_field(φ)`** (matches Python `_route`), expert RLS, **`dif_train_step_vector`** (`enc_lr=0`, `replay_ratio=0`); CTest **`native_mke_train_step`**. **`parity_fixtures/mke_train_extended/`** — multi-step (**`steps`**), **`replay_warmup`** + **`replay_u01`**, **`enc_lr>0`**, **`replay_ratio>0`**; CTest **`native_mke_train_extended`** |
+| **`regression_mixture_parity`** | M4 | Fixed scalar mixture — `predict_mixture_scalar` vs reference values (`DIFRegressor.predict` d=1); CTest **`native_regression_mixture`**. Pytest **`tests/test_regression_mixture_native_parity.py`**; env **`CYPHA_REGRESSION_MIXTURE_PARITY_BIN`**. |
+| **`regression_m4_parity`** | M4–M6 | MoE batch + EMA + RLS + two-stage combine + **`MKERegressor`** routing softmax / scalar predict vs `parity_fixtures/regression_m4/sidecar.json` (**`native_regression_milestone()` ≥ 5**; library may report **6**) |
+| **`regression_two_stage_pipeline_parity`** | M5 | **`two_stage_dif_predict_with_clf`**: native LLR from **`reference.cypha`** + stage-2 RFF vs `parity_fixtures/two_stage_pipeline/sidecar.json` |
+| **`regression_two_stage_ridge_fit_parity`** | M6–M7 | **`two_stage_dif_ridge_fit_from_llr`** + **`two_stage_dif_predict_batch`** vs `parity_fixtures/two_stage_ridge_fit/sidecar.json` or **`two_stage_e2e_ridge/`** (quantile-DIF LLR); CTests **`native_regression_two_stage_ridge_fit`**, **`native_regression_two_stage_e2e_ridge`** (**`k_native_regression_milestone` ≥ 7**) |
+| **`regression_rff_parity`** | M4 | **`RFFRegressor` / `MKERegressor` math kernels:** `rff_encode_batch_rowmajor`, `ridge_fit_bias`, `linear_predict_with_bias`, `mke_expert_linear_dots` (+ mixture sanity) vs `parity_fixtures/rff_regression/sidecar.json` |
+| **`registry_register`** | M5 | Copy **`model.cypha`** + **`card.json`** (+ optional **`--pre preprocessor.json`**) into `<root>/<name>/<version>/`; **`--and-verify`** runs **`registry_scan`**. CTest **`native_registry_register`**. Pytest **`tests/test_registry_register_native_parity.py`**; env **`CYPHA_REGISTRY_REGISTER_BIN`**. |
+| **`cypha_rest`** | M5 | HTTP routes mirroring [`cypha_studio/server/api.py`](../../cypha_studio/server/api.py): **`/health`**, **`/ready`**, **`/metrics`**, **`/predict`**, **`/update`** (native `dif_train_step_vector` / GH wrapper + sync), **`/adapt_temperature`** (ECE grid, Python `adapt_temperature`), **`/session`**, **`DELETE /session`**, **`/classes`**, **`/models`**, **`/load`**, **`/register`** (copy **`model.cypha`** + **`card.json`** into registry — needs **`--registry`**). Optional **`--regression-json`** / `regression_head.json` → `/predict` **`regression_val`** + **`uncertainty`** (scalar MoE; optional **`mke`** block → RFF routing features + **`POST /update`** with **`regression_y`** = `mke_scalar_train_step`; see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §3). One-shot checks: **`python3 native/scripts/smoke_mke_rest_update.py`** (MKE **`/update`**); **`python3 native/scripts/smoke_registry_rest_chain.py`** (**`/register`** → **`/load`** → **`/predict`**) — both need built **`cypha_rest`**. |
+| **`experiment_db_smoke`** | M6 | **Optional** — needs **Python 3** at configure for DDL. **SQLite:** system **`find_package(SQLite3)`** or default **`CYPHA_FETCH_SQLITE3_AMALGAMATION=ON`** (downloads official amalgamation). Uses **`cypha/experiment_db.hpp`** (`ExperimentDb`, `experiment_sqlite_exec`, …). CTests **`native_experiment_db_smoke`** / **`native_experiment_db_file`**. Pytest **`tests/test_experiment_db_smoke_native_parity.py`** (subprocess parity for both modes; DDL via **`tests/experiment_schema_ddl.py`**), **`tests/test_experiment_native_seed.py`** (Python reads native-seeded file); env **`CYPHA_EXPERIMENT_DB_SMOKE_BIN`**. |
+| **`experiment_db_crud_parity`** | M6 | **`cypha/experiment_db_crud.hpp`** — insert/finish, append metrics, fail/delete, get/list, best/leaderboard, **`compare_runs`**, **`update_run_notes`** vs canonical DDL; CTest **`native_experiment_db_crud`**. Pytest **`tests/test_experiment_db_crud_native_parity.py`** (DDL from **`experiment.py`** **`_SCHEMA`** via AST — no **`numpy`** import); env **`CYPHA_EXPERIMENT_DB_CRUD_PARITY_BIN`**. |
+| **`cypha_qt_stub`** | M5 | Optional Qt6 **Core** + **`cypha_core`**: optional arg **`reference.cypha`** → **`QFile`** → **`load_cypha_from_buffer`**. **`${BUILD_DIR}/qt/cypha_qt_stub`**. CTest **`native_qt_stub_load_reference`**. Pytest **`tests/test_qt_stub_native.py`**; env **`CYPHA_QT_STUB_BIN`**. |
+| **`cypha_qt_shell`** | M5–M6 | Qt6 **Widgets** + **Network** + **`cypha_core`**: **Dataset panel** — column picker (`QComboBox` target + `QListWidget` feature checkboxes), raw CSV preview table (first 8 rows), val-split % hold-out with post-train accuracy eval; **Fit preprocessor dialog** — scale on/off, PCA dim, fit via `fit_from_design_matrix`, save `preprocessor.json` (no Python needed); train CSV + REST/native bulk; **training progress panel** (per-class accuracy + rolling stats); loss chart REST vs native + optional EMA + **PNG/SVG/CSV** export (optional **`-DCYPHA_QT_CHARTS=ON`**); **`POST /predict`** **`return_explanation`**; **save `.cypha`** (merge + infer snapshot incl. **`feat_dim`**, context, **`mid_trans`**, **`field_W_T`**, **`field_a_eff`**); **train hparams** + auto **`train_hparams.json`**; **`replay_u01`**; MKE regressor loop + `regression_y` bulk; registry + **`POST /load`**; **`GET /health`**, **`/ready`**, **`/models`**; Experiments DB panel (M6: open `.db`, start/finish runs, list table); spawn **`cypha_rest`**; **`--smoke`**. CTest **`native_qt_shell_smoke`**. Pytest **`tests/test_qt_shell_native.py`**. See [`qt/README.md`](qt/README.md). |
+
+**Qt:** [`cmake -DCYPHA_BUILD_QT=ON`](qt/README.md) builds **`cypha_qt_stub`** (Core) and **`cypha_qt_shell`** (Widgets). Optional **`-DCYPHA_QT_CHARTS=ON`** links Qt Charts for the shell loss widget when **`Qt6::Charts`** is installed. **GitHub CI** installs **`qt6-base-dev`** (Charts off) and passes **`-DCYPHA_BUILD_QT=ON`** so **`native_qt_stub_load_reference`** and **`native_qt_shell_smoke`** run. Local **`scripts/ci_native_linux.sh`** defaults Qt OFF unless **`CYPHA_BUILD_QT=1`**; optional **`CYPHA_QT_CHARTS=1`** passes **`-DCYPHA_QT_CHARTS=ON`** (install **`qt6-charts-dev`** first).
+
+## Build
+
+```bash
+cd native
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --output-on-failure   # includes native_train_step_vector, native_regression_mixture, …
+```
+
+From repo root, **`pytest tests/test_native_ctest_pytest_registry.py`** checks that every **`NAME native_*`** in **`native/CMakeLists.txt`** still maps to a subprocess pytest module (update **`_NATIVE_CTEST_TO_PYTEST`** when you add CTests).
+
+Linux/WSL one-liner matching CI’s native step: **`bash scripts/ci_native_linux.sh`** (optional **`CYPHA_NATIVE_BUILD_DIR`** / **`CMAKE_BUILD_TYPE`**). When **`python3 -m pytest`** is available, the script also runs **`tests/test_native_ctest_pytest_registry.py`** (CMake vs subprocess drift guard); set **`SKIP_NATIVE_CTEST_REGISTRY_PYTEST=1`** to skip.
+
+### Build and test from Windows via WSL (Linux ELF)
+
+Use WSL’s GCC/CMake when the Windows host has no toolchain, or when you want Linux binaries on `/mnt/c/...`:
+
+```powershell
+# From repo root (adjust path if needed)
+powershell -ExecutionPolicy Bypass -File scripts/build_native_wsl.ps1
+```
+
+Options: **`-SkipTests`**, **`-ConfigureOnly`**, **`-CtestRegex native_experiment_db`**, **`-BuildType Debug`**. Output goes to **`native/build-wsl/`** (ignored by git).
+
+Run a built tool manually (ELF — must execute inside WSL):
+
+```powershell
+wsl -e bash -lc "/mnt/c/Users/you/path/to/Cypha/native/build-wsl/experiment_db_crud_parity /mnt/c/Users/you/path/to/Cypha/native/build-wsl/experiment_ddl.sql"
+```
+
+**Install SQLite (development files) — copy/paste**
+
+- **WSL / Ubuntu / Debian:** `sudo apt-get update && sudo apt-get install -y libsqlite3-dev`
+- **Fedora:** `sudo dnf install -y sqlite-devel`
+- **macOS (Homebrew):** `brew install sqlite`
+- **Windows (vcpkg, x64):** `vcpkg install sqlite3:x64-windows` then configure CMake with `-DCMAKE_TOOLCHAIN_FILE=<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake`
+
+*(There is no package named “Cslite” — you want **SQLite**.)*
+
+### SQLite for **`experiment_db_smoke`** (optional)
+
+CMake uses **`find_package(SQLite3)`** first. If it is missing and **`CYPHA_FETCH_SQLITE3_AMALGAMATION`** is **ON** (default), CMake **downloads** the official **SQLite 3.47.2 amalgamation** at configure time (needs network) and builds static **`cypha_sqlite3_amalg`** — no **`libsqlite3-dev`** / vcpkg required. Set **`-DCYPHA_FETCH_SQLITE3_AMALGAMATION=OFF`** to disable (then install a system SQLite3 dev package or skip the target).
+
+The Python export script still runs at **configure** time, so you need **Python 3** on the PATH.
+
+When using a **system** SQLite3, you still need the **library + headers** (not only the `sqlite3` CLI).
+
+| Environment | Install |
+|-------------|---------|
+| **Ubuntu / Debian / WSL** | `sudo apt-get install -y libsqlite3-dev` |
+| **Fedora / RHEL** | `sudo dnf install sqlite-devel` |
+| **macOS (Homebrew)** | `brew install sqlite` — then re-run CMake; if not found, pass `-DCMAKE_PREFIX_PATH="$(brew --prefix sqlite)"` |
+| **Windows (MSVC)** | **Default:** CMake can **fetch** the amalgamation (**network** at configure). **Or** **vcpkg** `sqlite3:x64-windows` + `-DCMAKE_TOOLCHAIN_FILE=.../vcpkg.cmake` for **`find_package(SQLite3)`**. |
+
+With **no** system SQLite3 dev package, **`CYPHA_FETCH_SQLITE3_AMALGAMATION=ON`** (default) is enough. If you install **libsqlite3-dev** / vcpkg / Homebrew sqlite, CMake prefers **`SQLite::SQLite3`** and skips the download.
+
+After a successful configure, the build includes **`experiment_db_smoke`** and CTests **`native_experiment_db_smoke`** + **`native_experiment_db_file`**.
+
+**Pytest on Windows:** parity tools built as **Linux ELF** under **`native/build*/**` or **`native/build*/qt/**` are run via **`wsl -e`** from **`tests/native_subprocess.py`**, which chooses the **newest** matching binary by modification time when several trees contain the same tool (``cypha_parity``, ``preprocessor_parity``, ``nig_adapt_parity``, ``regression_mixture_parity``, ``registry_register``, ``experiment_db_smoke`` ×2 modes, ``experiment_db_crud_parity``, ``batch_llr_parity``, ``memory_train_parity``, ``memory_train_roundtrip``, ``train_step_vector_parity``, ``quantile_dif_train_parity``, ``preprocess_train_classify_parity``, ``mke_train_step_parity``, ``regression_m4_parity``, ``regression_rff_parity``, ``regression_two_stage_pipeline_parity``, ``regression_two_stage_ridge_fit_parity``, ``cypha_qt_stub``, ``cypha_qt_shell`` when built with **Qt6**). Full **`CYPHA_*_BIN`** list: **`native/README.md`** (this section + target table). Common overrides: **`CYPHA_CYPHA_PARITY_BIN`**, **`CYPHA_PREPROCESSOR_PARITY_BIN`**, **`CYPHA_PREPROCESS_TRAIN_CLASSIFY_PARITY_BIN`**, **`CYPHA_NIG_ADAPT_PARITY_BIN`**, **`CYPHA_REGRESSION_MIXTURE_PARITY_BIN`**, **`CYPHA_REGISTRY_REGISTER_BIN`**, **`CYPHA_EXPERIMENT_DB_SMOKE_BIN`**, **`CYPHA_EXPERIMENT_DB_CRUD_PARITY_BIN`**, **`CYPHA_BATCH_LLR_PARITY_BIN`**, **`CYPHA_MEMORY_TRAIN_PARITY_BIN`**, **`CYPHA_MEMORY_TRAIN_ROUNDTRIP_BIN`**, **`CYPHA_TRAIN_STEP_VECTOR_PARITY_BIN`**, **`CYPHA_QUANTILE_DIF_TRAIN_PARITY_BIN`**, **`CYPHA_DIF_TRAIN_REPLAY_PARITY_BIN`**, **`CYPHA_MKE_TRAIN_STEP_PARITY_BIN`**, **`CYPHA_REGRESSION_M4_PARITY_BIN`**, **`CYPHA_REGRESSION_RFF_PARITY_BIN`**, **`CYPHA_TWO_STAGE_PIPELINE_PARITY_BIN`**, **`CYPHA_TWO_STAGE_RIDGE_FIT_PARITY_BIN`**, **`CYPHA_STUDIO_TRAINER_CLASSIFY_HOTPATH_BIN`**, **`CYPHA_STUDIO_TRAINER_GH_CLASSIFY_HOTPATH_BIN`**, **`CYPHA_QT_STUB_BIN`**, **`CYPHA_QT_SHELL_BIN`**.
+
+Manual runs:
+
+**Python smoke:** from repo root, after building `cypha_rest`, run `CYPHA_REST_BIN=native/build/cypha_rest pytest tests/test_cypha_rest_smoke.py -v` (on Windows set the path to your `cypha_rest.exe`).
+
+```bash
+./build/cypha_parity ../parity_fixtures/reference.cypha ../parity_fixtures/native_parity.bin
+./build/memory_train_parity ../parity_fixtures/memory_train
+./build/preprocessor_parity ../parity_fixtures/preprocessor
+./build/cypha_rest --listen 127.0.0.1:8099 \
+  --cypha ../parity_fixtures/reference.cypha \
+  --f-field-json ../parity_fixtures/f_field.json
+# Optional: --train-hparams path.json (else auto-loads train_hparams.json next to model.cypha).
+# Optional keys: `align_every` (default 500), `temp_recalib_every` (default 0) — temperature auto-recal every N `/update` steps when > 0.
+# curl -s http://127.0.0.1:8099/ready
+# curl -s http://127.0.0.1:8099/metrics
+# curl -s http://127.0.0.1:8099/predict -H 'Content-Type: application/json' \
+#   -d '{"input":[0,0,0,0,0,0,0,0],"use_gh":true,"return_explanation":false}'
+# Registry + hot load: copy f_field.json into each `<root>/<name>/<version>/` next to model.cypha, then:
+# ./build/cypha_rest ... --registry ~/.cypha/models
+# curl -s http://127.0.0.1:8099/models?summary=true
+# curl -s http://127.0.0.1:8099/load -H 'Content-Type: application/json' -d '{"name":"my","version":"latest"}'
+```
+
+On Windows, link **`ws2_32`** for `cypha_rest` (already in CMake).
+
+### Cross-compile Windows `.exe` from WSL (MinGW-w64)
+
+Requires: `g++-mingw-w64-x86-64` (e.g. `sudo apt-get install -y g++-mingw-w64-x86-64`).
+
+**CMake layout:** MinGW-specific options and link flags live in **`native/cmake/CyphaMinGW.cmake`** (included from **`native/CMakeLists.txt`**). Toolchain file: **`native/toolchains/mingw-w64-x86_64.cmake`** (cache **`CYPHA_MINGW_TOOLCHAIN_PREFIX`**, default **`x86_64-w64-mingw32`**, for non-Debian triplet layouts).
+
+**Cache toggles (MinGW targets only):**
+
+- **`CYPHA_MINGW_STATIC_CXX_RUNTIME`** (default **ON**) — **`-static-libgcc -static-libstdc++`**
+- **`CYPHA_MINGW_FULLY_STATIC_EXECUTABLES`** (default **OFF**) — add **`-static`** (fully static where linking allows)
+
+```bash
+cd native
+cmake --preset mingw-w64-cross
+cmake --build --preset mingw-w64-cross-release
+ctest --preset mingw-w64-cross
+```
+
+Equivalent manual configure (from repo root; use an absolute toolchain path if CMake cannot resolve this file):
+
+```bash
+cmake -S native -B native/build-mingw-w64 \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/native/toolchains/mingw-w64-x86_64.cmake" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build native/build-mingw-w64 -j$(nproc)
+cmake --test-dir native/build-mingw-w64 --output-on-failure
+```
+
+Or: `bash native/scripts/build-windows-mingw.sh`
+
+Outputs **`*.exe`** under `native/build-mingw-w64/`. With defaults, MinGW links **`-static-libgcc -static-libstdc++`** so binaries usually run on a stock Windows install without those runtime DLLs on **PATH**.
+
+**Windows pytest** auto-discovers **`native/build-mingw-w64/cypha_rest.exe`** for **`tests/test_cypha_rest_smoke.py`** (before MSVC **`native/build/`** paths). Set **`CYPHA_REST_BIN`** only to override.
+
+When the repo lives under **`/mnt/c/...`**, CMake rewrites parity fixture paths to **`C:/...`** for `ctest` so Windows can open them.
+
+**Console check (Windows `cmd`):**
+
+```bat
+cd native\build-mingw-w64
+cypha_parity.exe ..\..\parity_fixtures\reference.cypha ..\..\parity_fixtures\native_parity.bin
+```
+
+(`..\\..\\parity_fixtures` from `native\build-mingw-w64`; or use absolute `C:\...\parity_fixtures\...`.)
+
+**REST smoke (Windows, MinGW binary):** `powershell -File native/scripts/smoke_cypha_rest_mingw.ps1` (add `-WithRegression` to assert `/predict` **`regression_val`** with `parity_fixtures/regression_head.json`).
+
+**One-shot MinGW build from PowerShell + optional pytest:** `powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1` (add `-RunPytest` to set **`CYPHA_REST_BIN`** and run `tests/test_cypha_rest_smoke.py`).
+
+## Regenerate fixtures
+
+```bash
+python scripts/generate_parity_fixtures.py
+python scripts/generate_memory_train_parity.py
+python scripts/generate_preprocessor_parity.py
+python scripts/export_f_field_json.py
+python scripts/export_regression_head.py   # demo DIFRegressor → regression_head.json (MoE sidecar)
+python scripts/gen_native_bessel_table.py   # K₂/K₁ + K₀/K₁ grids if SciPy kv tables change
+```
+
+## Specs
+
+- [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) — `.cypha` v3, inference math, REST JSON  
+- [`PREPROCESSOR_CONTRACT.md`](../docs/port/PREPROCESSOR_CONTRACT.md) + [`schemas/preprocessor.schema.json`](../docs/port/schemas/preprocessor.schema.json)  
+- [`schemas/regression_head.schema.json`](../docs/port/schemas/regression_head.schema.json) — optional MoE sidecar for `/predict` **`regression_val`**  
+- [`EXPERIMENTS_SCHEMA.md`](../docs/port/EXPERIMENTS_SCHEMA.md) — SQLite (M6). DDL: `python scripts/export_experiment_schema_sql.py` (or `-o file.sql`). Native **`experiment_db_smoke`** + **`native_experiment_db_smoke`** (CTest) validate that DDL when SQLite dev is installed; full C++ **ExperimentDB** I/O is still future work.  
+- [`regression_stub.hpp`](include/cypha/regression_stub.hpp) — M4 placeholder  
+
+## Next engineering waves
+
+- **OpenCL/CUDA** for `batch_encode` + LLR GEMM — WSL2 NVIDIA driver (`libnvidia-compute-595`) not yet in Ubuntu PPAs; activates with `-DCYPHA_ENABLE_OPENCL=ON` once available. See [`docs/FUTURE.md`](../docs/FUTURE.md) §1.  
+- **Qt shell streaming** — move bulk training to a `QThread`; emit per-step loss/accuracy signals; live loss chart update during training. See [`docs/FUTURE.md`](../docs/FUTURE.md) §2a.  
+- **Packaged binary** — AppImage (Linux) or `windeployqt` folder / `.msi` (Windows) distributing Qt shell as a self-contained executable. See [`docs/FUTURE.md`](../docs/FUTURE.md) §3.  
+- **REST multi-model** — `cypha_rest --registry <root>` serving N models; per-model mutex; LRU eviction. See [`docs/FUTURE.md`](../docs/FUTURE.md) §5.  
+- **Full future directions** — Web UI, curriculum/active learning, ONNX export, federated training: [`docs/FUTURE.md`](../docs/FUTURE.md).  

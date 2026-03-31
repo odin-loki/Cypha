@@ -1,0 +1,16 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+filterwarnings = ["ignore"]
+markers = [
+    "slow: long-running (e.g. full cypha_studio/test_cypha_studio.py subprocess)",
+]
+
+[tool.coverage.run]
+source = ["cypha_studio", "cypha_accel"]
+omit = ["*/test_*.py", "*/tests/*"]
+
+[tool.coverage.report]
+skip_empty = true
+precision = 2

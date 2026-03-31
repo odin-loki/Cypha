@@ -1,0 +1,24 @@
+# CyphaStudio requirements
+# One-file install (verify + this stack + pytest-qt): pip install -r requirements-pip-merged.txt (repo root; see CONTRIBUTING.md).
+# Core (required)
+numpy>=1.24
+scikit-learn>=1.3
+scipy>=1.10
+
+# GUI (required for desktop app)
+PySide6>=6.5
+
+# Charts in training monitor
+pyqtgraph>=0.13
+
+# REST API (optional — for headless/external access)
+fastapi>=0.100
+uvicorn[standard]>=0.23
+pydantic>=2.0
+
+# Optional: sentence embeddings for text classification
+# sentence-transformers>=2.2
+
+# Dev / testing (not needed at runtime)
+# pytest
+# pytest-qt   # GUI interaction tests: qtbot (pip install pytest-qt)

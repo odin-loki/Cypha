@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cypha.local/schemas/regression_head.schema.json",
+  "title": "Cypha regression_head.json (scalar MoE sidecar)",
+  "description": "Optional sidecar for native cypha_rest --regression-json and FastAPI CYPHA_REGRESSION_HEAD. Expert keys must match classifier label strings (routing / all_scores keys).",
+  "type": "object",
+  "required": ["experts"],
+  "additionalProperties": true,
+  "properties": {
+    "schema": { "type": "integer", "description": "Optional format version (exporters use 1)" },
+    "experts": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["mu"],
+        "additionalProperties": true,
+        "properties": {
+          "mu": {
+            "description": "Scalar target EMA or [d] for first component only in native v1",
+            "oneOf": [
+              { "type": "number" },
+              { "type": "array", "minItems": 1, "items": { "type": "number" } }
+            ]
+          },
+          "var_ema": { "type": "number", "default": 0 }
+        }
+      }
+    },
+    "mke": {
+      "description": "Native cypha_rest only: RFF + per-expert RLS + router dif_train_step_vector (see PORT_CONTRACT §3)",
+      "type": "object",
+      "required": ["d_in", "D_rff", "rff_W_rowmajor", "rff_b", "w", "P", "temperature", "forgetting_factor"],
+      "additionalProperties": true,
+      "properties": {
+        "d_in": { "type": "integer", "minimum": 1 },
+        "D_rff": { "type": "integer", "minimum": 1 },
+        "rff_W_rowmajor": { "type": "array", "items": { "type": "number" } },
+        "rff_b": { "type": "array", "items": { "type": "number" } },
+        "temperature": { "type": "number" },
+        "forgetting_factor": { "type": "number" },
+        "pi_floor": { "type": "number", "default": 0.02 },
+        "gh_scales": { "type": "array", "items": { "type": "number" } },
+        "w": {
+          "type": "object",
+          "description": "Per class label: RLS weight vector length D_rff",
+          "additionalProperties": { "type": "array", "items": { "type": "number" } }
+        },
+        "P": {
+          "type": "object",
+          "description": "Per class label: RLS P matrix D_rff×D_rff row-major",
+          "additionalProperties": { "type": "array", "items": { "type": "number" } }
+        }
+      }
+    }
+  }
+}

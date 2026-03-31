@@ -1,0 +1,54 @@
+{
+  "fixture_schema": 3,
+  "cases": [
+    {
+      "description": "header names for target + features (classification)",
+      "csv": "classify.csv",
+      "has_header": true,
+      "delimiter": ",",
+      "target_col_name": "label",
+      "feature_col_names": [
+        "f0",
+        "f1",
+        "f2"
+      ],
+      "task": "classification",
+      "expected": "classify_expected.json"
+    },
+    {
+      "description": "header names for target + features (regression)",
+      "csv": "regression.csv",
+      "has_header": true,
+      "delimiter": ",",
+      "target_col_name": "y",
+      "feature_col_names": [
+        "x0",
+        "x1"
+      ],
+      "task": "regression",
+      "expected": "regression_expected.json"
+    },
+    {
+      "description": "integer target_col_index=-1, default features (all except target)",
+      "csv": "classify.csv",
+      "has_header": true,
+      "delimiter": ",",
+      "target_col_index": -1,
+      "task": "classification",
+      "expected": "classify_expected.json"
+    },
+    {
+      "description": "quoted field with embedded newline (RFC4180-style label cell)",
+      "csv": "multiline_label.csv",
+      "has_header": true,
+      "delimiter": ",",
+      "target_col_name": "label",
+      "feature_col_names": [
+        "f0",
+        "f1"
+      ],
+      "task": "classification",
+      "expected": "multiline_label_expected.json"
+    }
+  ]
+}

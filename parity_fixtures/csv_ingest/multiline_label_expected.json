@@ -1,0 +1,17 @@
+{
+  "n_rows": 3,
+  "n_features": 2,
+  "x_rowmajor": [
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    0.0,
+    0.0
+  ],
+  "y_class": [
+    "alpha",
+    "beta\ngamma",
+    "delta"
+  ]
+}

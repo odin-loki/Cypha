@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cypha.local/schemas/preprocessor.schema.json",
+  "title": "Cypha preprocessor.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["fitted", "input_dim", "output_dim"],
+  "properties": {
+    "scale": { "type": "boolean" },
+    "pca_dim": { "type": ["integer", "null"] },
+    "rff_dim": { "type": ["integer", "null"] },
+    "rff_gamma": { "type": "number" },
+    "seed": { "type": "integer" },
+    "mean": { "type": ["array", "null"], "items": { "type": "number" } },
+    "std": { "type": ["array", "null"], "items": { "type": "number" } },
+    "pca_components": { "type": ["array", "null"] },
+    "pca_mean": { "type": ["array", "null"], "items": { "type": "number" } },
+    "rff_W": { "type": ["array", "null"] },
+    "rff_b": { "type": ["array", "null"], "items": { "type": "number" } },
+    "fitted": { "type": "boolean" },
+    "input_dim": { "type": "integer" },
+    "output_dim": { "type": "integer" }
+  }
+}

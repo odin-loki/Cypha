@@ -1,0 +1,16 @@
+{
+  "scale": false,
+  "pca_dim": null,
+  "rff_dim": null,
+  "rff_gamma": 1.0,
+  "seed": 42,
+  "mean": null,
+  "std": null,
+  "pca_components": null,
+  "pca_mean": null,
+  "rff_W": null,
+  "rff_b": null,
+  "fitted": true,
+  "input_dim": 4,
+  "output_dim": 4
+}
