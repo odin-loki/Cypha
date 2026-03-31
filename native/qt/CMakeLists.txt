@@ -51,3 +51,38 @@ else()
   target_compile_options(cypha_qt_stub PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_qt_shell PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+# ── Windows install + windeployqt packaging ───────────────────────────────────
+# cmake --install <build> --prefix <dest>   copies cypha_qt_shell + cypha_rest
+# then scripts/package_windows_qt.ps1 runs windeployqt on top of that folder.
+install(TARGETS cypha_qt_shell RUNTIME DESTINATION .)
+if(TARGET cypha_rest)
+  install(TARGETS cypha_rest RUNTIME DESTINATION .)
+endif()
+if(WIN32)
+  # Post-install step: find windeployqt and run it automatically.
+  # Only active when Qt6_DIR is known (i.e. Qt is installed on Windows, not cross-compiled).
+  find_program(WINDEPLOYQT_EXECUTABLE windeployqt
+    HINTS "${Qt6_DIR}/../../../bin" ENV PATH
+    NO_DEFAULT_PATH
+  )
+  if(WINDEPLOYQT_EXECUTABLE)
+    install(CODE "
+      message(STATUS \"Running windeployqt on cypha_qt_shell.exe ...\")
+      execute_process(
+        COMMAND \"${WINDEPLOYQT_EXECUTABLE}\"
+                --no-translations
+                --no-system-d3d-compiler
+                --no-opengl-sw
+                \"\${CMAKE_INSTALL_PREFIX}/cypha_qt_shell.exe\"
+        RESULT_VARIABLE _wdq_rc
+      )
+      if(NOT _wdq_rc EQUAL 0)
+        message(WARNING \"windeployqt exited with \${_wdq_rc}\")
+      endif()
+    ")
+    message(STATUS "windeployqt found: ${WINDEPLOYQT_EXECUTABLE}")
+  else()
+    message(STATUS "windeployqt not found — run scripts/package_windows_qt.ps1 manually after install")
+  endif()
+endif()

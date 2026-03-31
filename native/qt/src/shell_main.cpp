@@ -25,7 +25,10 @@
 #include <QPaintEvent>
 #include <QPolygonF>
 #include <QPointF>
+#include <QMutex>
 #include <QProgressDialog>
+#include <QThread>
+#include <QTimer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -1234,6 +1237,30 @@ using LossChartPanel = SimpleLossChart;
 
 enum class LossPlotSource { RestBulk, NativeBulk };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BulkTrainState — shared between the training thread and the main thread.
+// The background thread writes results; the main thread polls via QTimer.
+// ─────────────────────────────────────────────────────────────────────────────
+struct BulkLogEntry { int step_n{}; QString label; double loss{}; bool correct{}; };
+
+struct BulkTrainState {
+  std::atomic<int>  step_count{0};
+  std::atomic<bool> cancel{false};
+  std::atomic<bool> done{false};
+  QMutex            steps_mutex;
+  QVector<BulkLogEntry> new_steps;  // guarded by steps_mutex
+  // Final scalars — written once (before done=true), read by main thread after
+  int    final_total_steps{};
+  double final_ema_loss{};
+  double final_llr_ema{};
+  int    final_win_total{};
+  int    final_win_correct{};
+  double final_gh_chi{1.0};
+  double final_gh_psi{1.0};
+  int    final_enc_updates{};
+  QString error_msg;
+};
+
 class MainWindow final : public QMainWindow {
  public:
   MainWindow() {
@@ -2317,6 +2344,10 @@ class MainWindow final : public QMainWindow {
         QMessageBox::information(this, QStringLiteral("Bulk native"), QStringLiteral("Choose a training CSV first."));
         return;
       }
+      if (bulk_thread_ != nullptr) {
+        QMessageBox::information(this, QStringLiteral("Bulk native"), QStringLiteral("Training already in progress."));
+        return;
+      }
       cypha::CsvDenseResult data;
       try {
         data = cypha::load_csv_dense(qstring_to_fs_path(csv_path_), build_csv_spec());
@@ -2336,103 +2367,146 @@ class MainWindow final : public QMainWindow {
       }
       int total_n = data.n_rows;
       const int cap = csv_bulk_max_rows_spin_->value();
-      if (cap > 0 && cap < total_n) {
-        total_n = cap;
-      }
-
-      // Val split: hold out last val_pct% of rows for accuracy eval (no train)
+      if (cap > 0 && cap < total_n) total_n = cap;
       const int val_pct = (val_split_spin_ != nullptr) ? val_split_spin_->value() : 0;
       const int val_n   = (val_pct > 0) ? std::max(1, static_cast<int>(total_n * val_pct / 100.0)) : 0;
       const int train_n = total_n - val_n;
-
-      QProgressDialog prog(QStringLiteral("Native train per CSV row…"), QStringLiteral("Cancel"), 0, train_n, this);
-      prog.setWindowModality(Qt::WindowModal);
-      prog.setMinimumDuration(0);
-      QVector<double> losses;
-      losses.reserve(train_n);
-      struct BulkLogEntry { int step_n; QString label; double loss; bool correct; };
-      QVector<BulkLogEntry> bulk_log;
-      bulk_log.reserve(train_n);
-      for (int i = 0; i < train_n; ++i) {
-        prog.setValue(i);
-        QCoreApplication::processEvents();
-        if (prog.wasCanceled()) {
-          break;
-        }
-        std::vector<double> x_raw(static_cast<std::size_t>(data.n_features));
-        const std::size_t row_base =
-            static_cast<std::size_t>(i) * static_cast<std::size_t>(data.n_features);
-        for (int j = 0; j < data.n_features; ++j) {
-          x_raw[static_cast<std::size_t>(j)] = data.x_rowmajor[row_base + static_cast<std::size_t>(j)];
-        }
-        std::vector<double> x_latent = x_raw;
-        if (pre_ != nullptr) {
-          x_latent = pre_->transform_one(x_raw);
-        }
-        double loss = 0.0;
-        const std::string yl = data.y_class[static_cast<std::size_t>(i)];
-        cypha::MemoryTrainMeta meta{};
-        if (!run_native_train_on_latent(x_latent, yl, &loss, &meta)) {
-          QMessageBox::warning(this, QStringLiteral("Bulk native"),
-                               QStringLiteral("train_step failed (dim mismatch after preprocessor?)."));
-          break;
-        }
-        losses.append(loss);
-        bulk_log.append({native_total_steps_, QString::fromStdString(yl), loss, meta.correct});
+      if (train_n <= 0) {
+        QMessageBox::information(this, QStringLiteral("Bulk native"), QStringLiteral("No training rows."));
+        return;
       }
-      if (train_log_table_ != nullptr && !bulk_log.isEmpty()) {
-        train_log_table_->setUpdatesEnabled(false);
-        for (const auto& e : bulk_log) {
-          append_train_log_entry(e.step_n, e.label, e.loss, e.correct);
-        }
-        train_log_table_->setUpdatesEnabled(true);
-        train_log_table_->scrollToBottom();
-      }
-      prog.setValue(train_n);
-      apply_losses_to_chart(LossPlotSource::NativeBulk, std::move(losses));
-      refresh_train_progress(true);
 
-      // Val accuracy evaluation (read-only predict on held-out rows)
-      QString val_suffix;
-      if (val_n > 0 && model_ != nullptr) {
-        int val_correct = 0;
-        for (int i = train_n; i < total_n; ++i) {
+      // ── Snapshot all hyperparams before handing off to thread ──────────────
+      const bool     use_gh_snap     = use_gh_chk_->isChecked();
+      const double   world_lr_snap   = native_world_lr_;
+      const double   delta_lr_snap   = native_delta_lr_;
+      const double   ood_sigma_snap  = native_ood_sigma_;
+      const auto     gh_inv_v_snap   = native_gh_inv_v_;
+      const double   gh_R_base_snap  = native_gh_R_base_;
+      const auto     tsp_snap        = native_tsp_;
+      const auto     replay_u01_snap = replay_u01_cache_;
+      int            total_steps_w   = native_total_steps_;
+      double         llr_ema_w       = native_llr_ema_;
+      double         ema_loss_w      = train_prog_ema_loss_;
+      int            win_total_w     = train_prog_win_total_;
+      int            win_correct_w   = train_prog_win_correct_;
+      double         gh_chi_w        = native_gh_chi_;
+      double         gh_psi_w        = native_gh_psi_;
+      int            enc_updates_w   = native_enc_updates_;
+      std::mt19937   rng_w           = native_rng_;
+
+      // ── Prepare shared state + keep data for val eval ──────────────────────
+      bulk_val_n_    = val_n;
+      bulk_total_n_  = total_n;
+      bulk_train_data_ = data;   // copy — main thread needs it for val eval
+      bulk_accum_losses_.clear();
+      bulk_accum_log_.clear();
+
+      auto bulk_state = std::make_shared<BulkTrainState>();
+      bulk_state_ = bulk_state;
+
+      // ── Disable UI ─────────────────────────────────────────────────────────
+      set_bulk_training_ui(true);
+      result_label_->setText(QStringLiteral("Training 0 / %1…").arg(train_n));
+
+      // ── Launch background thread ───────────────────────────────────────────
+      // Safety: model_, native_mem_, native_replay_, pre_ are unique_ptrs owned
+      // by MainWindow. During training all buttons that touch them are disabled.
+      // The thread is joined (wait()) before MainWindow destructs.
+      bulk_thread_ = QThread::create([
+          this, data = std::move(data), bulk_state, train_n,
+          use_gh_snap, world_lr_snap, delta_lr_snap, ood_sigma_snap,
+          gh_inv_v_snap, gh_R_base_snap, tsp_snap, replay_u01_snap,
+          total_steps_w, llr_ema_w, ema_loss_w, win_total_w, win_correct_w,
+          gh_chi_w, gh_psi_w, enc_updates_w, rng_w
+      ]() mutable {
+        double ema_loss    = ema_loss_w;
+        int    win_total   = win_total_w;
+        int    win_correct = win_correct_w;
+        double gh_chi      = gh_chi_w;
+        double gh_psi      = gh_psi_w;
+        int    enc_updates = enc_updates_w;
+        double llr_ema     = llr_ema_w;
+        int    total_steps = total_steps_w;
+        double ood_sigma   = ood_sigma_snap;
+
+        for (int i = 0; i < train_n; ++i) {
+          if (bulk_state->cancel.load(std::memory_order_relaxed)) break;
+
           std::vector<double> x_raw(static_cast<std::size_t>(data.n_features));
           const std::size_t row_base =
               static_cast<std::size_t>(i) * static_cast<std::size_t>(data.n_features);
-          for (int j = 0; j < data.n_features; ++j) {
+          for (int j = 0; j < data.n_features; ++j)
             x_raw[static_cast<std::size_t>(j)] = data.x_rowmajor[row_base + static_cast<std::size_t>(j)];
-          }
-          std::string pred_label;
-          double conf = 0.0;
-          const int rc = best_label_and_conf(*model_, pre_.get(), x_raw, &pred_label, &conf);
-          if (rc == 0 && pred_label == data.y_class[static_cast<std::size_t>(i)]) {
-            ++val_correct;
-          }
-        }
-        const double val_acc = static_cast<double>(val_correct) / static_cast<double>(val_n);
-        val_suffix = QStringLiteral("  val_acc=%1/%2 (%3%)")
-                         .arg(val_correct)
-                         .arg(val_n)
-                         .arg(static_cast<int>(std::round(val_acc * 100.0)));
-        if (csv_stats_label_ != nullptr) {
-          const QString old_stats = csv_stats_label_->text().split(QStringLiteral("  val_acc")).first();
-          csv_stats_label_->setText(old_stats + val_suffix);
-        }
-      }
 
-      if (!last_loss_plot_native_.isEmpty()) {
-        double sum = 0.0;
-        for (double v : last_loss_plot_native_) {
-          sum += v;
+          std::vector<double> x_lat = x_raw;
+          if (pre_ != nullptr) x_lat = pre_->transform_one(x_raw);
+
+          const std::string yl = data.y_class[static_cast<std::size_t>(i)];
+          cypha::MemoryTrainMeta meta{};
+          double loss = 0.0;
+
+          cypha::TrainStepExtras extras{};
+          extras.total_steps = &total_steps;
+          extras.ood_sigma   = &ood_sigma;
+          extras.llr_ema     = &llr_ema;
+          std::vector<double> ru = replay_u01_snap;
+          std::size_t ru_pos = 0;
+          if (!ru.empty()) {
+            extras.replay_u01     = ru.data();
+            extras.replay_u01_len = ru.size();
+            extras.replay_u01_pos = &ru_pos;
+          }
+
+          if (use_gh_snap && static_cast<int>(gh_inv_v_snap.size()) == model_->d_latent) {
+            const auto gh = cypha::dif_gh_train_step_vector(
+                *model_, *native_mem_, *native_replay_,
+                x_lat.data(), model_->d_latent, yl,
+                gh_inv_v_snap, gh_R_base_snap, gh_chi, gh_psi,
+                kGhNigAdaptAlphaShell, world_lr_snap, delta_lr_snap,
+                ood_sigma, tsp_snap, rng_w, enc_updates, &meta, &extras);
+            loss   = gh.loss;
+            gh_chi = gh.chi_new;
+            gh_psi = gh.psi_new;
+          } else {
+            loss = cypha::dif_train_step_vector(
+                *model_, *native_mem_, *native_replay_,
+                x_lat.data(), model_->d_latent, yl,
+                world_lr_snap, delta_lr_snap, world_lr_snap, delta_lr_snap,
+                ood_sigma, tsp_snap, rng_w, enc_updates, &meta, &extras);
+          }
+          if (meta.correct) model_->total_correct += 1;
+
+          if (win_total < 200) ++win_total;
+          win_correct = static_cast<int>(
+              win_correct * (win_total == 200 ? 199.0 / 200.0 : 1.0) + (meta.correct ? 1 : 0));
+          ema_loss = 0.97 * ema_loss + 0.03 * loss;
+          ++total_steps;
+
+          {
+            QMutexLocker lock(&bulk_state->steps_mutex);
+            bulk_state->new_steps.append({total_steps, QString::fromStdString(yl), loss, meta.correct});
+          }
+          bulk_state->step_count.fetch_add(1, std::memory_order_relaxed);
         }
-        result_label_->setText(
-            QStringLiteral("[bulk native] steps=%1 mean_loss=%2 last=%3%4")
-                .arg(last_loss_plot_native_.size())
-                .arg(sum / static_cast<double>(last_loss_plot_native_.size()), 0, 'g', 8)
-                .arg(last_loss_plot_native_.last(), 0, 'g', 8)
-                .arg(val_suffix));
-      }
+
+        bulk_state->final_total_steps = total_steps;
+        bulk_state->final_ema_loss    = ema_loss;
+        bulk_state->final_llr_ema     = llr_ema;
+        bulk_state->final_win_total   = win_total;
+        bulk_state->final_win_correct = win_correct;
+        bulk_state->final_gh_chi      = gh_chi;
+        bulk_state->final_gh_psi      = gh_psi;
+        bulk_state->final_enc_updates = enc_updates;
+        bulk_state->done.store(true, std::memory_order_release);
+      });
+
+      bulk_poll_timer_ = new QTimer(this);
+      connect(bulk_poll_timer_, &QTimer::timeout, this, [this, train_n]() {
+        on_bulk_poll(train_n);
+      });
+      bulk_poll_timer_->start(80);
+      bulk_thread_->start();
     });
 
     // ── MKE Regressor connects ─────────────────────────────────────────────────
@@ -3396,6 +3470,10 @@ class MainWindow final : public QMainWindow {
 
  protected:
   void closeEvent(QCloseEvent* e) override {
+    // Stop any in-progress bulk training before closing
+    if (bulk_state_ != nullptr) bulk_state_->cancel.store(true);
+    if (bulk_poll_timer_ != nullptr) { bulk_poll_timer_->stop(); }
+    if (bulk_thread_ != nullptr) { bulk_thread_->wait(); }
     if (rest_proc_.state() != QProcess::NotRunning) {
       rest_proc_.terminate();
       rest_proc_.waitForFinished(3000);
@@ -3802,6 +3880,119 @@ class MainWindow final : public QMainWindow {
 
   /// Refresh the training progress label + optionally the class distribution table.
   /// ``update_class_table`` is expensive (O(K)); only call it after bulk or single step completes.
+  // ── Bulk training thread helpers ─────────────────────────────────────────
+  void set_bulk_training_ui(bool training) {
+    if (csv_bulk_native_btn_ != nullptr) csv_bulk_native_btn_->setEnabled(!training);
+    if (csv_bulk_train_btn_  != nullptr) csv_bulk_train_btn_->setEnabled(!training);
+    if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(!training);
+    if (save_native_btn_     != nullptr) save_native_btn_->setEnabled(!training);
+    if (load_btn_            != nullptr) load_btn_->setEnabled(!training);
+  }
+
+  void on_bulk_poll(int train_n) {
+    if (bulk_state_ == nullptr) return;
+
+    // Drain new steps from the worker
+    QVector<BulkLogEntry> drained;
+    {
+      QMutexLocker lock(&bulk_state_->steps_mutex);
+      drained.swap(bulk_state_->new_steps);
+    }
+    for (const auto& e : drained) {
+      bulk_accum_losses_.append(e.loss);
+      bulk_accum_log_.append(e);
+    }
+
+    const int done_so_far = bulk_state_->step_count.load(std::memory_order_relaxed);
+    result_label_->setText(
+        QStringLiteral("Training %1 / %2…").arg(done_so_far).arg(train_n));
+
+    // Live chart refresh every 200 steps
+    if (!bulk_accum_losses_.isEmpty() && done_so_far % 200 == 0) {
+      apply_losses_to_chart(LossPlotSource::NativeBulk, QVector<double>(bulk_accum_losses_));
+    }
+
+    if (bulk_state_->done.load(std::memory_order_acquire)) {
+      bulk_poll_timer_->stop();
+      bulk_poll_timer_->deleteLater();
+      bulk_poll_timer_ = nullptr;
+      bulk_thread_->wait();
+      bulk_thread_->deleteLater();
+      bulk_thread_ = nullptr;
+      on_bulk_finish(train_n);
+    }
+  }
+
+  void on_bulk_finish(int train_n) {
+    if (bulk_state_ == nullptr) return;
+    const bool cancelled = bulk_state_->cancel.load();
+
+    // Sync final scalar state back to MainWindow
+    native_total_steps_     = bulk_state_->final_total_steps;
+    native_llr_ema_         = bulk_state_->final_llr_ema;
+    train_prog_ema_loss_    = bulk_state_->final_ema_loss;
+    train_prog_win_total_   = bulk_state_->final_win_total;
+    train_prog_win_correct_ = bulk_state_->final_win_correct;
+    native_gh_chi_          = bulk_state_->final_gh_chi;
+    native_gh_psi_          = bulk_state_->final_gh_psi;
+    native_enc_updates_     = bulk_state_->final_enc_updates;
+    bulk_state_.reset();
+
+    // Final chart update
+    if (!bulk_accum_losses_.isEmpty()) {
+      apply_losses_to_chart(LossPlotSource::NativeBulk, std::move(bulk_accum_losses_));
+    }
+    bulk_accum_losses_.clear();
+
+    // Write training log table (all at once, updates disabled for speed)
+    if (train_log_table_ != nullptr && !bulk_accum_log_.isEmpty()) {
+      train_log_table_->setUpdatesEnabled(false);
+      for (const auto& e : bulk_accum_log_)
+        append_train_log_entry(e.step_n, e.label, e.loss, e.correct);
+      train_log_table_->setUpdatesEnabled(true);
+      train_log_table_->scrollToBottom();
+    }
+    bulk_accum_log_.clear();
+
+    refresh_train_progress(true);
+
+    // Val accuracy on held-out rows
+    QString val_suffix;
+    if (bulk_val_n_ > 0 && model_ != nullptr) {
+      const int val_start = bulk_total_n_ - bulk_val_n_;
+      int val_correct = 0;
+      for (int i = val_start; i < bulk_total_n_; ++i) {
+        std::vector<double> xr(static_cast<std::size_t>(bulk_train_data_.n_features));
+        const std::size_t rb =
+            static_cast<std::size_t>(i) * static_cast<std::size_t>(bulk_train_data_.n_features);
+        for (int j = 0; j < bulk_train_data_.n_features; ++j)
+          xr[static_cast<std::size_t>(j)] = bulk_train_data_.x_rowmajor[rb + static_cast<std::size_t>(j)];
+        std::string pred; double conf = 0.0;
+        if (best_label_and_conf(*model_, pre_.get(), xr, &pred, &conf) == 0 &&
+            pred == bulk_train_data_.y_class[static_cast<std::size_t>(i)])
+          ++val_correct;
+      }
+      const double acc = static_cast<double>(val_correct) / static_cast<double>(bulk_val_n_);
+      val_suffix = QStringLiteral("  val_acc=%1/%2 (%3%)")
+          .arg(val_correct).arg(bulk_val_n_)
+          .arg(static_cast<int>(std::round(acc * 100.0)));
+      if (csv_stats_label_ != nullptr) {
+        const QString base = csv_stats_label_->text().split(QStringLiteral("  val_acc")).first();
+        csv_stats_label_->setText(base + val_suffix);
+      }
+    }
+
+    const int steps_done = native_total_steps_ - (native_total_steps_ - train_n);
+    (void)steps_done;  // informational
+    const QString status = cancelled
+        ? QStringLiteral("Bulk native cancelled.  steps=%1").arg(native_total_steps_)
+        : QStringLiteral("Bulk native done.  steps=%1  ema_loss=%.4f")
+              .arg(native_total_steps_).arg(train_prog_ema_loss_);
+    result_label_->setText(status + val_suffix);
+
+    set_bulk_training_ui(false);
+  }
+
   void refresh_train_progress(bool update_class_table = false) {
     if (train_prog_label_ == nullptr) return;
 
@@ -4318,6 +4509,15 @@ class MainWindow final : public QMainWindow {
   QPushButton*  fit_pre_btn_{};
   QStringList   csv_col_headers_;
   bool          col_picker_updating_{false};
+  // ── Bulk training thread state ────────────────────────────────────────────
+  QThread*                       bulk_thread_{};
+  QTimer*                        bulk_poll_timer_{};
+  std::shared_ptr<BulkTrainState> bulk_state_;
+  QVector<double>                bulk_accum_losses_;
+  QVector<BulkLogEntry>          bulk_accum_log_;
+  int                            bulk_val_n_{};
+  int                            bulk_total_n_{};
+  cypha::CsvDenseResult          bulk_train_data_{};
   QString cypha_path_;
   QString ff_path_;
   QString pre_path_;

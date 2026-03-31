@@ -6,7 +6,6 @@ Start here, then open the section that matches what you need.
 
 | Doc | What it is |
 |-----|------------|
-| [Studio master plan](studio/CYPHA_STUDIO_MASTER_PLAN.md) | Profiling, tests, UX backlog, Studio checklist |
 | [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry, API host/port, CORS, CSV chunking, optional `CYPHA_REGRESSION_HEAD`, REST routes overview |
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | tracemalloc, memray, `ab`/Locust notes |
 | [GUI threading](studio/STUDIO_THREADING.md) | `QThread` + `SignalBus` rules |
@@ -23,7 +22,6 @@ Start here, then open the section that matches what you need.
 | [Future directions](FUTURE.md) | **Depth**: OpenCL GPU, Qt packaging, Web UI, multi-model, ONNX |
 | [Maintenance](verify/MAINTENANCE.md) | **When to regen fixtures / rebuild native / align schema & REST** |
 | [Verify plan](verify/VERIFY_PLAN.md) | **Checklist**: debug, profile, benchmark, WSL flows |
-| [Repo layout plan](verify/REPO_LAYOUT_PLAN.md) | How docs + `artifacts/` were organized (maintenance reference) |
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, extended verify commands |
 
 **Quick tests:** `pytest tests/` (set **`QT_QPA_PLATFORM=offscreen`** when running GUI modules without a display; **`make test`** does this on Unix), `python test_cypha.py`, `python cypha_studio/test_cypha_studio.py` (see Contributing for GUI subsets). **Regression gate:** `scripts/run_all_regressions.sh` / `.ps1`. **Pip:** prefer **`requirements-verify.txt`** + **`cypha_studio/requirements.txt`**; if **`pip install -r`** fails on encoding, use **`requirements-pip-merged.txt`** or Contributing’s one-liner. **After contract or parity changes:** [Maintenance checklist](verify/MAINTENANCE.md).

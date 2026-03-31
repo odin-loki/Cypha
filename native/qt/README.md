@@ -79,6 +79,45 @@ Optional **`preprocessor.json`** (same schema as Python / REST). When loaded, th
 
 The server must have a model loaded for REST predict/update (via **`/load`** or **`--cypha`** at startup). Native predict does not require the server.
 
+## Bulk native training — streaming thread
+
+**Bulk native train** now runs the training loop on a **background `QThread`**. The main thread stays fully responsive during long CSV runs:
+
+- A `QTimer` fires every 80 ms to drain completed steps from a mutex-protected queue.
+- The **loss chart** updates live every 200 steps (instead of only at the end).
+- The **result label** shows `Training N / total…` progress.
+- The **Cancel** button on the progress UI sets a `std::atomic<bool>` flag; the worker exits at the next step boundary — no data corruption.
+- Final chart, training log table, val accuracy, and scalar state (EMA loss, rolling accuracy window, GH chi/psi) are all synced back to the main thread in the `on_bulk_finish()` handler.
+- Load / Save / Train-one buttons are disabled for the duration of the run and re-enabled on finish.
+
+## Windows packaging (standalone distributable)
+
+Requires **Qt 6 installed natively on Windows** (from [qt.io](https://www.qt.io/download)) and `windeployqt.exe` on PATH.
+
+```powershell
+# 1. Build with Qt 6 (MSVC or MinGW toolchain, Qt installed on Windows)
+cmake -S native -B native\build `
+      -DCMAKE_BUILD_TYPE=Release `
+      -DCYPHA_BUILD_QT=ON
+cmake --build native\build --target cypha_qt_shell
+
+# 2. Package (copies Qt DLLs alongside the exe)
+powershell -ExecutionPolicy Bypass `
+  -File native\scripts\package_windows_qt.ps1 `
+  -WithFixtures   # optional: copies parity fixtures for a demo
+
+# Output folder: native\dist\cypha_qt_shell_windows\
+# Run:
+native\dist\cypha_qt_shell_windows\cypha_qt_shell.exe
+```
+
+The script (`native/scripts/package_windows_qt.ps1`) will:
+1. Copy `cypha_qt_shell.exe` (and `cypha_rest.exe` if present) into the dist folder.
+2. Run `windeployqt --no-translations --no-system-d3d-compiler --no-opengl-sw` to pull in all required Qt DLLs.
+3. Optionally copy `parity_fixtures/reference.cypha` + `f_field.json` for a headless smoke test.
+
+**Cross-compilation note:** the MinGW cross-build from WSL (`cmake --preset mingw-w64-cross`) does **not** produce a Qt shell — Qt on Windows requires the native Windows Qt DLLs which aren't available in the WSL cross-toolchain. Build natively on Windows for the packaged GUI.
+
 ## Roadmap (parity with PySide Studio)
 
 1. **Rich charts** — With **`-DCYPHA_QT_CHARTS=ON`** (Qt6 Charts installed), loss uses **`QChartView`** with legend; else painted dual polyline (CI default). **REST vs native** overlaid with optional **EMA** (α=0.08); **PNG**, hand-written **SVG**, and **CSV** (raw + EMA columns). **Y lock** for manual Y axis range. Done.
@@ -89,4 +128,5 @@ The server must have a model loaded for REST predict/update (via **`/load`** or 
 6. ~~**Bulk REST + regression/MKE + replay_u01 + `/ready`**~~ — in **`cypha_qt_shell`**.
 7. ~~**Dataset CSV + registry + `/load`**~~ — in **`cypha_qt_shell`**.
 8. ~~**Native train log table**~~ — per-step step #, label, loss, correct + Export CSV.
-9. Keep REST JSON aligned with [`PORT_CONTRACT.md`](../../docs/port/PORT_CONTRACT.md) §3.
+9. ~~**Streaming bulk training thread**~~ — `QThread` worker, live chart + responsive UI.
+10. Keep REST JSON aligned with [`PORT_CONTRACT.md`](../../docs/port/PORT_CONTRACT.md) §3.
