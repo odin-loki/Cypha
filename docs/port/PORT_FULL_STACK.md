@@ -1,4 +1,4 @@
-# Full native stack — replacement plan (Python reference → C++ / OpenCL / Qt)
+# Full native stack — replacement plan (Python reference → C++ / CUDA / Qt)
 
 This document turns **“replace the full Python stack”** into ordered work, frozen interfaces, and acceptance tests. The Python tree remains the **golden reference** until each slice is signed off.
 
@@ -11,7 +11,7 @@ This document turns **“replace the full Python stack”** into ordered work, f
 | Layer today (Python) | Native target | Notes |
 |------------------------|---------------|--------|
 | **`Cypha.py`** — `CyphaDIF`, `DIFRegressor`, encoders, GH, NIG, generation, `train_step`, save/load | **Core runtime** (inference + training + binary I/O) | Largest body of work; split by milestone below. |
-| **`cypha_accel/`** | **Same math, your backend** (OpenCL/CUDA/CPU BLAS) | Reference for fused LLR / projection; not a second spec. |
+| **`cypha_accel/`** | **Same math, your backend** (CUDA/CPU BLAS) | Reference for fused LLR / projection; not a second spec. |
 | **`cypha_studio/core/dataset.py`** | **Data ingest + splits** (Qt or native + CSV/Arrow) | Preprocessing rules must match `Preprocessor` (scale, PCA, RFF options) or document deltas. |
 | **`cypha_studio/core/trainer.py`** | **Training orchestration** | Loop, epochs, callbacks, metrics — can stay a **thin Qt/C++ shell** calling `train_step` on native model. |
 | **`cypha_studio/core/registry.py`** | **Registry** | On-disk layout is already simple (see §4). |
@@ -64,7 +64,7 @@ Each milestone has **exit criteria** you can run without Python in the hot path 
 
 **Python off path:** run a small native test harness that reads `reference.cypha` + `expected.npz`.
 
-**Native tree (CPU):** `native/` — M1 **`cypha_parity`**, M2 **`preprocessor_parity`** + **`preprocessor_fit_parity`** + **`csv_ingest_parity`** + `registry_scan`, M3 **`memory_train_parity`** + **`memory_train_roundtrip`** (`.cypha` save slice), M5 **`cypha_rest`** prototype. OpenCL/GPU not started. `F_field` still via sidecar / `f_field.json` until a future `.cypha` revision stores it.
+**Native tree (CPU):** `native/` — M1 **`cypha_parity`**, M2 **`preprocessor_parity`** + **`preprocessor_fit_parity`** + **`csv_ingest_parity`** + `registry_scan`, M3 **`memory_train_parity`** + **`memory_train_roundtrip`** (`.cypha` save slice), M5 **`cypha_rest`** prototype. Optional **`cypha::accel`** CUDA + **`cuda_smoke`**. `F_field` still via sidecar / `f_field.json` until a future `.cypha` revision stores it.
 
 ### M2 — Registry + preprocessor contract
 
@@ -192,10 +192,10 @@ Keep generating fixtures with **`python scripts/generate_parity_fixtures.py`** w
 ## 8. Risk register (planning)
 
 1. **Numerical drift** — fp32 vs fp64; fix rules per layer (inference fp64 until proven safe).
-2. **RFF + Ridge** — heavy linear algebra; share one LAPACK/OpenCL solver path.
+2. **RFF + Ridge** — heavy linear algebra; share one LAPACK/CUDA solver path.
 3. **Threading** — Python uses locks around memory; native must document thread-safety of `train_step` vs `infer`.
 4. **Generation / sampling** — large surface; defer past M5 unless product-critical.
-5. **CuPy paths** — reference only; native OpenCL/CUDA replaces them.
+5. **CuPy paths** — reference only; native CUDA / CPU accel replaces them.
 
 ---
 
@@ -215,7 +215,7 @@ Keep generating fixtures with **`python scripts/generate_parity_fixtures.py`** w
 **All milestones M1–M6 complete.** The native hot path covers encode → LLR → gate → train → I/O → REST → Qt UI → Experiments DB. Python remains the golden reference for math and offline fixture generation.
 
 **Next horizons** — see **[`docs/FUTURE.md`](../FUTURE.md)**:
-- **§1** OpenCL GPU activation (WSL2 NVIDIA driver package pending PPA release)
+- **§1** CUDA tuning (batch thresholds, persistent device buffers) if serving latency matters
 - **§2–3** Qt streaming training thread + packaged binary (AppImage / Windows `.exe`)
 - **§4–5** Web UI + multi-model `cypha_rest` serving
 - **§6** Curriculum / active learning in the training loop

@@ -1,0 +1,48 @@
+{
+  "upgrade": "U5",
+  "classification": {
+    "accuracy_mean": 0.13466666666666668,
+    "accuracy_std": 0.010559461265719109,
+    "train_ms_mean": 0.4478863777773869,
+    "infer_ms_mean": 0.06021925332800796,
+    "gng_nodes_mean": 0.0,
+    "runs": [
+      {
+        "accuracy": 0.1464,
+        "train_ms": 0.45145647999985766,
+        "infer_ms": 0.06042315999511629,
+        "gng_nodes": 0,
+        "acc_curve": {
+          "acc_at_100": 0.125,
+          "acc_at_1000": 0.205
+        }
+      },
+      {
+        "accuracy": 0.1368,
+        "train_ms": 0.4473900133355831,
+        "infer_ms": 0.06080608000047505,
+        "gng_nodes": 0,
+        "acc_curve": {
+          "acc_at_100": 0.165,
+          "acc_at_1000": 0.105
+        }
+      },
+      {
+        "accuracy": 0.1208,
+        "train_ms": 0.4448126399967198,
+        "infer_ms": 0.05942851998843253,
+        "gng_nodes": 0,
+        "acc_curve": {
+          "acc_at_100": 0.215,
+          "acc_at_1000": 0.1
+        }
+      }
+    ]
+  },
+  "checks": {
+    "accuracy": true,
+    "train_time": true,
+    "variance": true,
+    "all_pass": true
+  }
+}

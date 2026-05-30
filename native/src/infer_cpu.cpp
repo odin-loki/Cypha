@@ -4,13 +4,16 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
-#include "cypha/bessel_table.hpp"
+#include "cypha/accel_backend.hpp"
 #include "cypha/nig_field.hpp"
+#include "cypha/nig_gig_math.hpp"
 
 namespace cypha {
 
@@ -37,100 +40,6 @@ std::int64_t as_int64(const CNode& n) {
     return static_cast<std::int64_t>(n.f);
   }
   throw std::runtime_error("Expected integer node");
-}
-
-double np_interp(double x) {
-  using cypha::detail::kBesselK2K1;
-  using cypha::detail::kBesselN;
-  using cypha::detail::kBesselX0;
-  using cypha::detail::kBesselX1;
-  if (x <= kBesselX0) {
-    return kBesselK2K1[0];
-  }
-  if (x >= kBesselX1) {
-    return kBesselK2K1[kBesselN - 1];
-  }
-  const double step = (kBesselX1 - kBesselX0) / static_cast<double>(kBesselN - 1);
-  double pos = (x - kBesselX0) / step;
-  std::size_t i = static_cast<std::size_t>(pos);
-  if (i >= kBesselN - 1) {
-    i = kBesselN - 2;
-  }
-  double t = pos - static_cast<double>(i);
-  return kBesselK2K1[i] * (1.0 - t) + kBesselK2K1[i + 1] * t;
-}
-
-double gig_e_inv_v_lam_neg1(double chi0, double psi) {
-  if (chi0 < kEps || psi < kEps) {
-    return psi / std::max(chi0, kEps);
-  }
-  double chi_g = std::max(chi0, kEps);
-  double x = std::sqrt(chi_g * psi);
-  if (x < 1e-6) {
-    return psi / chi_g;
-  }
-  double chi_b = chi_g;
-  double x_b = x;
-  if (x_b <= 120.0) {
-    double xt = std::clamp(x_b, cypha::detail::kBesselX0, cypha::detail::kBesselX1);
-    double ratio = np_interp(xt);
-    return std::sqrt(psi / chi_b) * ratio;
-  }
-  return psi / chi_b;
-}
-
-double np_interp_k0k1(double x) {
-  using cypha::detail::kBesselK0K1;
-  using cypha::detail::kBesselN;
-  using cypha::detail::kBesselX0;
-  using cypha::detail::kBesselX1;
-  if (x <= kBesselX0) {
-    return kBesselK0K1[0];
-  }
-  if (x >= kBesselX1) {
-    return kBesselK0K1[kBesselN - 1];
-  }
-  const double step = (kBesselX1 - kBesselX0) / static_cast<double>(kBesselN - 1);
-  double pos = (x - kBesselX0) / step;
-  std::size_t i = static_cast<std::size_t>(pos);
-  if (i >= kBesselN - 1) {
-    i = kBesselN - 2;
-  }
-  double t = pos - static_cast<double>(i);
-  return kBesselK0K1[i] * (1.0 - t) + kBesselK0K1[i + 1] * t;
-}
-
-/// E[V] for V ~ GIG(λ=-1, chi, psi); table path matches Cypha.py `_gig_E_V`.
-double gig_e_v_lam_neg1(double chi0, double psi) {
-  if (chi0 < kEps || psi < kEps) {
-    return chi0 / std::max(psi, kEps);
-  }
-  double chi_g = std::max(chi0, kEps);
-  double x = std::sqrt(chi_g * psi);
-  if (x < 1e-6) {
-    return chi_g / std::max(psi, kEps);
-  }
-  double chi_b = chi_g;
-  double x_b = x;
-  if (x_b <= 120.0) {
-    double xt = std::clamp(x_b, cypha::detail::kBesselX0, cypha::detail::kBesselX1);
-    double ratio = np_interp_k0k1(xt);
-    return std::sqrt(chi_b / psi) * ratio;
-  }
-  return std::sqrt(chi_b / std::max(psi, kEps));
-}
-
-double nig_adapt_chi_impl(double chi, double psi, double innovation_sq, double R, double alpha) {
-  double chi_post = chi + innovation_sq / std::max(R, kEps);
-  double ev = gig_e_v_lam_neg1(chi_post, psi);
-  return std::clamp(alpha * ev, 1e-4, 1e3);
-}
-
-double nig_r_eff_scalar(double mp, double r, double chi, double psi) {
-  mp = std::max(mp, 0.0);
-  double chi_post = chi + mp / std::max(r, kEps);
-  double e_inv = gig_e_inv_v_lam_neg1(chi_post, psi);
-  return r / std::max(e_inv, kEps);
 }
 
 void softmax_row_like_python(const double* x, int k, double eps, double* out) {
@@ -164,6 +73,50 @@ void softmax_row_like_python(const double* x, int k, double eps, double* out) {
   }
 }
 
+static std::once_flag g_infer_accel_once;
+
+static void ensure_infer_accel() {
+  std::call_once(g_infer_accel_once, [] { cypha::accel::init(); });
+}
+
+static int infer_thread_workers() {
+  unsigned t = std::thread::hardware_concurrency();
+  return t ? static_cast<int>(t) : 4;
+}
+
+template <class F>
+static void infer_parallel_rows(int begin, int end, F&& f) {
+  const int nrows = end - begin;
+  if (nrows <= 0) {
+    return;
+  }
+  int nt = std::min(infer_thread_workers(), nrows);
+  if (nt <= 1) {
+    for (int i = begin; i < end; ++i) {
+      f(i);
+    }
+    return;
+  }
+  const int chunk = (nrows + nt - 1) / nt;
+  std::vector<std::thread> th;
+  th.reserve(static_cast<std::size_t>(nt));
+  for (int t = 0; t < nt; ++t) {
+    int lo = begin + t * chunk;
+    int hi = std::min(end, lo + chunk);
+    if (lo >= hi) {
+      break;
+    }
+    th.emplace_back([lo, hi, &f]() {
+      for (int i = lo; i < hi; ++i) {
+        f(i);
+      }
+    });
+  }
+  for (auto& x : th) {
+    x.join();
+  }
+}
+
 }  // namespace
 
 double gh_train_lr_scale(double mahal_sq, double r_base, double chi, double psi) {
@@ -177,7 +130,7 @@ double nig_R_eff_gh(double mahal_sq, double r_base, double chi, double psi) {
 
 std::pair<double, double> nig_adapt_session_chi(double chi, double psi, double innovation_sq, double r_base,
                                                 double alpha) {
-  double chi_new = nig_adapt_chi_impl(chi, psi, innovation_sq, r_base, alpha);
+  double chi_new = cypha::nig_adapt_chi_impl(chi, psi, innovation_sq, r_base, alpha);
   return {chi_new, psi};
 }
 
@@ -626,17 +579,11 @@ CyphaInferModel CyphaInferModel::from_root(const CNode& root, const double* f_fi
 void batch_encode(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& h_out) {
   const int d = m.d_latent;
   h_out.assign(static_cast<std::size_t>(n * d), 0.0);
-  for (int i = 0; i < n; ++i) {
-    for (int j = 0; j < d; ++j) {
-      double acc = 0.0;
-      for (int kk = 0; kk < d; ++kk) {
-        const double f_ik = x_row_major[i * d + kk];
-        const double w_jk = m.enc_w[static_cast<std::size_t>(j * d + kk)];
-        acc += f_ik * w_jk;
-      }
-      h_out[static_cast<std::size_t>(i * d + j)] = acc;
-    }
+  if (n <= 0 || d <= 0) {
+    return;
   }
+  ensure_infer_accel();
+  cypha::accel::batch_encode(x_row_major, n, d, m.enc_w.data(), h_out.data());
 }
 
 void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& llr_out) {
@@ -691,31 +638,20 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
     u_k[static_cast<std::size_t>(k)] = m.v_mean / (nk + 1.0);
   }
 
-  for (int i = 0; i < n; ++i) {
-    for (int k = 0; k < K; ++k) {
-      double cross = 0.0;
-      for (int j = 0; j < d; ++j) {
-        double Rij = (h_row_major[i * d + j] - mu0[static_cast<std::size_t>(j)]) *
-                     m.inv_v[static_cast<std::size_t>(j)];
-        cross += Rij * m.D[static_cast<std::size_t>(k * d + j)];
-      }
-      double bias = -0.5 * d_sq[static_cast<std::size_t>(k)] - u_k[static_cast<std::size_t>(k)] +
-                    ctx[static_cast<std::size_t>(k)];
-      llr_out[static_cast<std::size_t>(i * K + k)] = cross + bias;
-    }
-  }
+  ensure_infer_accel();
+  cypha::accel::score_matrix(h_row_major, n, d, K, mu0.data(), m.inv_v.data(), m.D.data(), d_sq.data(),
+                             u_k.data(), ctx.data(), llr_out.data());
 }
 
 void softmax_batch_like_python(const double* z_row_major, int n, int k, double eps,
                                std::vector<double>& probs_out) {
   probs_out.assign(static_cast<std::size_t>(n * k), 0.0);
-  std::vector<double> row(static_cast<std::size_t>(k));
-  for (int i = 0; i < n; ++i) {
-    for (int j = 0; j < k; ++j) {
-      row[static_cast<std::size_t>(j)] = z_row_major[i * k + j];
-    }
-    softmax_row_like_python(row.data(), k, eps, probs_out.data() + i * k);
+  if (n <= 0 || k <= 0) {
+    return;
   }
+  infer_parallel_rows(0, n, [&](int i) {
+    softmax_row_like_python(z_row_major + i * k, k, eps, probs_out.data() + i * k);
+  });
 }
 
 namespace {
@@ -839,19 +775,9 @@ void world_gate_vector_use_field(const CyphaInferModel& m, const double* h_row_m
     r_base = m.mahal_ema;
   }
 
-  const double denom_d = std::max(d, 1);
-  for (int i = 0; i < n; ++i) {
-    double mahal_per_dim = 0.0;
-    for (int j = 0; j < d; ++j) {
-      double diff = h_row_major[i * d + j] - mu0[static_cast<std::size_t>(j)];
-      double rj = diff * m.inv_v[static_cast<std::size_t>(j)];
-      mahal_per_dim += diff * rj;
-    }
-    mahal_per_dim /= denom_d;
-    double mp = std::max(mahal_per_dim, 0.0);
-    double r_eff = nig_r_eff_scalar(mp, r_base, gh_chi, gh_psi);
-    gates_out[static_cast<std::size_t>(i)] = r_base / std::max(r_eff, r_base);
-  }
+  ensure_infer_accel();
+  cypha::accel::world_gate_nig_field_batch(h_row_major, n, d, mu0.data(), m.inv_v.data(), r_base, gh_chi,
+                                           gh_psi, gates_out.data());
 }
 
 }  // namespace cypha

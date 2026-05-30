@@ -1,0 +1,104 @@
+{
+  "domain": "cross_alpha_spectrum_global",
+  "timestamp": "2026-05-30T09:57:37.191042+00:00",
+  "experiments": {
+    "alpha_rows": [
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression",
+        "mean_alpha": [
+          0.9180395387149918,
+          0.8547445255474453,
+          0.9128721541155866,
+          0.8701044386422977,
+          0.930126404494382,
+          0.09,
+          0.9149572649572649,
+          0.8829411764705882,
+          0.9336666666666666,
+          0.9321745057941377,
+          0.9179719703215169
+        ],
+        "fraction_edge_of_chaos": null
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_0",
+        "mean_alpha": 0.9180395387149918,
+        "gzip_ratio": 2.804104133633246
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_1",
+        "mean_alpha": 0.8547445255474453,
+        "gzip_ratio": 2.5615740361790946
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_2",
+        "mean_alpha": 0.9128721541155866,
+        "gzip_ratio": 3.0803806185050706
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_3",
+        "mean_alpha": 0.8701044386422977,
+        "gzip_ratio": 3.562300319488818
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_4",
+        "mean_alpha": 0.930126404494382,
+        "gzip_ratio": 3.0153970826580228
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_5",
+        "mean_alpha": 0.09,
+        "gzip_ratio": 4.973575537448743
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_6",
+        "mean_alpha": 0.9149572649572649,
+        "gzip_ratio": 2.955503383127991
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_7",
+        "mean_alpha": 0.8829411764705882,
+        "gzip_ratio": 2.4737841847761914
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_8",
+        "mean_alpha": 0.9336666666666666,
+        "gzip_ratio": 9.738259236067627
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_9",
+        "mean_alpha": 0.9321745057941377,
+        "gzip_ratio": 2.9657204901504577
+      },
+      {
+        "domain": "d13",
+        "experiment": "13A_alpha_vs_compression_file_10",
+        "mean_alpha": 0.9179719703215169,
+        "gzip_ratio": 2.418192219679634
+      },
+      {
+        "domain": "d17",
+        "experiment": "17B_alpha_spectrum",
+        "mean_alpha": 0.18746543135662633,
+        "fraction_edge_of_chaos": 0.0
+      }
+    ],
+    "summary": {
+      "n_measurements": 13,
+      "global_mean_alpha": 0.778755339756792,
+      "global_std_alpha": 0.28791624624114476,
+      "within_gul_band_fraction": 0.0
+    }
+  }
+}

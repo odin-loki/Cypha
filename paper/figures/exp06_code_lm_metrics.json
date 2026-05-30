@@ -1,0 +1,8 @@
+{
+  "n_steps": 20000,
+  "bits_per_char": 0.6146004630343317,
+  "test_bits_per_token": 4.3022032412403215,
+  "n_experts": 1,
+  "mean_ood_epistemic": 4.930087659087901e-05,
+  "generated_sample": "\n\n_d3c  f:udd tt\ndtn)1 r(nuf +tuc:cc: ff"
+}

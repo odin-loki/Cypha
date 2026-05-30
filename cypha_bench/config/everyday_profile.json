@@ -1,0 +1,88 @@
+{
+  "source": "diagnostic-driven upgrade 2026-05-30 — deliberation disabled, delta_lr tuned, multipass added",
+  "generated_utc": "2026-05-30T07:00:00.000000+00:00",
+  "default_regime": "tabular",
+  "regimes": {
+    "tabular": {
+      "world_lr": 0.008,
+      "delta_lr": 0.03,
+      "enc_lr": 0.002,
+      "mdl_lambda": 0.0015,
+      "temperature": 0.9974999999999999,
+      "field_dim": 128,
+      "context_win": 32,
+      "n_epochs": 4,
+      "train_passes_cap": 800
+    },
+    "vision": {
+      "world_lr": 0.008,
+      "delta_lr": 0.03,
+      "enc_lr": 0.002,
+      "mdl_lambda": 0.0015,
+      "temperature": 0.9974999999999999,
+      "field_dim": 128,
+      "context_win": 32,
+      "n_epochs": 4,
+      "train_passes_cap": 0,
+      "replay_ratio": 0.22000000000000003,
+      "ood_sigma": 12.0
+    },
+    "regression": {
+      "world_lr": 0.015,
+      "delta_lr": 0.05,
+      "enc_lr": 0.003,
+      "mdl_lambda": 0.0015,
+      "temperature": 1.1025,
+      "field_dim": 128,
+      "context_win": 16,
+      "target_lr": 0.08800000000000001,
+      "n_experts": 10,
+      "n_epochs": 3,
+      "train_passes_cap": 1200
+    }
+  },
+  "architecture": {
+    "replay_ratio": 0.22000000000000003,
+    "ood_sigma": 12.0
+  },
+  "regime_merge_sources": {
+    "tabular_cls_combo_id": 154,
+    "mnist_hog_combo_id": 27,
+    "mnist_hog_acc": 0.9366666666666666,
+    "california_r2_combo_id": 107,
+    "reg_california_r2": 0.32553000225680806
+  },
+  "converge_iterations_total": 8,
+  "notes": [
+    "Auto-routing: tabular dim<256, vision dim>=256, regression for DIFRegressor",
+    "Multi-pass online training uses n_epochs from profile when CYPHA_BENCH_USE_PROFILE=1",
+    "DIAGNOSTIC 2026-05-30: deliberation DISABLED (lo>hi). Phase 1 confirmed +11pp penalty on binary.",
+    "DIAGNOSTIC 2026-05-30: delta_lr reduced 0.06->0.03 (Phase 3 found +4pp on R3_digits).",
+    "DIAGNOSTIC 2026-05-30: multi-pass kept at n_epochs=4 (Phase 4 showed +2.8pp R3_digits on 3 passes)."
+  ],
+  "algorithm_variants": {
+    "cold_start_steps": 25,
+    "min_experts_floor": 6,
+    "online_passes_extra": 0,
+    "temperature_scale": 1.05,
+    "mdl_lambda_scale": 0.75,
+    "replay_ratio_scale": 1.1,
+    "target_lr_scale": 1.1,
+    "deliberation_lo": 1.0,
+    "deliberation_hi": 0.0,
+    "reg_hash_routing": false
+  },
+  "rescore_score": 2.7791908675542705,
+  "fast_validate_score": 5.4021,
+  "diagnostic_upgrade_notes": {
+    "phase1_deliberation_penalty": {"S1_2class": 0.118, "R1_iris": 0.079, "S4_multimodal": 0.028},
+    "phase3_best_lr_digits": "delta=0.03 world=0.008 gives 0.922 vs 0.882 default (+4pp)",
+    "phase4_forgetting_ratio": 0.0,
+    "phase4_multipass_3x_digits": "0.925 vs 0.897 default (+2.8pp)",
+    "phase2_fdr_2class": 0.019,
+    "phase2_bottleneck_2class": "ENCODER_QUALITY",
+    "phase2_nonlin_gap_2class": 0.156,
+    "phase2_nonlin_gap_xor": 0.323,
+    "verdict": "Primary fixes: disable deliberation + lower delta_lr. Secondary: multi-pass. Hard limit: XOR/nonlinear boundaries need kernel LLR (architectural change)."
+  }
+}

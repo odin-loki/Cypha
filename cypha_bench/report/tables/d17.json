@@ -1,0 +1,24 @@
+{
+  "domain": "d17",
+  "timestamp": "2026-05-30T09:53:48.834603+00:00",
+  "experiments": {
+    "17A_bits_per_character": {
+      "cyphalm_bpc": 4.496868376010399,
+      "online_train_bpc": 4.757149180548958,
+      "final_train_bpc": 4.528193980690455,
+      "bigram_bpc": 3.69111980736394,
+      "source": "gutenberg",
+      "train_tokens": 40000
+    },
+    "17B_alpha_spectrum": {
+      "mean_alpha": 0.18746543135662633,
+      "fraction_edge_of_chaos": 0.0,
+      "n_experts": 1
+    },
+    "17D_online_adaptation": {
+      "bpc_ood_before_adapt": 5.011150880555683,
+      "bpc_ood_after_adapt": 4.761647736485714,
+      "bpc_improvement": 0.2495031440699691
+    }
+  }
+}

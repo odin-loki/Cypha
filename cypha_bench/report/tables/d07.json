@@ -1,0 +1,55 @@
+{
+  "domain": "d07_poker",
+  "timestamp": "2026-05-30T09:37:05.723824+00:00",
+  "experiments": {
+    "summary": {
+      "domain": "d07_poker",
+      "n_hands": 3000,
+      "cypha_scores": {
+        "accuracy": 0.9333333333333333,
+        "f1_macro": 0.8858703057123014
+      },
+      "cypha_metrics": {
+        "mean_epistemic_var": 0.0060359393334173846,
+        "std_epistemic_var": 0.053776447743757325,
+        "mean_aleatoric_var": 0.02090614790700256,
+        "expert_count": 3,
+        "mean_alpha": 0.9425217679727244,
+        "alpha_distribution": [
+          0.946946451748881,
+          0.9390932347103469,
+          0.9415256174589455
+        ],
+        "fraction_edge_of_chaos": 0.0,
+        "uncertainty_rank_correlation": 0.5309040281746117
+      },
+      "baselines": {
+        "dummy_majority": {
+          "accuracy": 0.6233333333333333,
+          "f1_macro": 0.25598904859685145
+        },
+        "knn_5": {
+          "accuracy": 0.8916666666666667,
+          "f1_macro": 0.8848734308752483
+        },
+        "logistic_regression": {
+          "accuracy": 0.9866666666666667,
+          "f1_macro": 0.9613879858056564
+        },
+        "random_forest": {
+          "accuracy": 0.9983333333333333,
+          "f1_macro": 0.9986695973401415
+        },
+        "gradient_boosting": {
+          "accuracy": 0.9983333333333333,
+          "f1_macro": 0.9986695973401415
+        }
+      },
+      "sgd_online": {
+        "accuracy": 0.94,
+        "f1_macro": 0.9118262467266431
+      },
+      "boundary_uncertainty_spearman": -0.22091707930984728
+    }
+  }
+}

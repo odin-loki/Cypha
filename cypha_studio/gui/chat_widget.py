@@ -132,6 +132,7 @@ class ChatWidget(QWidget):
         self._bus   = SignalBus.instance()
         self._setup_ui()
         self._connect_signals()
+        self.refresh_inference_banner()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -144,6 +145,11 @@ class ChatWidget(QWidget):
             "font-size: 13px; font-weight: bold; color: #aaa; padding: 4px;"
         )
         layout.addWidget(self._header)
+
+        self._infer_lbl = QLabel("")
+        self._infer_lbl.setStyleSheet("color: #777; font-size: 11px; padding: 0 4px;")
+        self._infer_lbl.setWordWrap(True)
+        layout.addWidget(self._infer_lbl)
 
         self._empty_tip = QLabel(
             "Load a model: <b>File → Open Model…</b> or train from <b>Dataset</b> + <b>Train</b>. "
@@ -197,9 +203,30 @@ class ChatWidget(QWidget):
 
     def _connect_signals(self):
         self._bus.model_loaded.connect(self._on_model_loaded)
+        self._bus.preferences_changed.connect(self.refresh_inference_banner)
+
+    def refresh_inference_banner(self):
+        p = self._state.preferences
+        try:
+            ood = float(p.inference_ood_threshold)
+        except Exception:
+            ood = 0.0
+        try:
+            chi = float(p.inference_chi)
+        except Exception:
+            chi = 1.0
+        try:
+            psi = float(p.inference_psi)
+        except Exception:
+            psi = 1.0
+        self._infer_lbl.setText(
+            f"Inference: {'GH path' if p.inference_use_gh else 'plain infer'}  ·  "
+            f"OOD threshold {ood:g}  ·  χ={chi:g} ψ={psi:g}"
+        )
 
     def _on_model_loaded(self, card):
         self._empty_tip.hide()
+        self.refresh_inference_banner()
         self._header.setText(
             f"CyphaStudio Chat  —  {card.name} v{card.version}  "
             f"[{card.task}]"
@@ -233,7 +260,9 @@ class ChatWidget(QWidget):
                 # Text input
                 x = text
 
-            pred = self._state.session.predict(x, use_gh=True)
+            pred = self._state.session.predict(
+                x, use_gh=self._state.preferences.inference_use_gh
+            )
             self._add_prediction(pred)
             self._bus.emit_prediction(pred)
             self._update_stats()

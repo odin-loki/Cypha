@@ -1,0 +1,52 @@
+{
+  "domain": "d15",
+  "timestamp": "2026-05-30T09:36:59.709854+00:00",
+  "experiments": {
+    "15A_gaussian_noise": {
+      "0.0": {
+        "accuracy": 0.8466666666666667,
+        "mean_epistemic_var": 0.4043750391033481
+      },
+      "0.1": {
+        "accuracy": 0.8288888888888889,
+        "mean_epistemic_var": 0.40381751146928907
+      },
+      "0.2": {
+        "accuracy": 0.8155555555555556,
+        "mean_epistemic_var": 0.39846322742615026
+      },
+      "0.5": {
+        "accuracy": 0.6222222222222222,
+        "mean_epistemic_var": 0.38172510390830766
+      },
+      "1.0": {
+        "accuracy": 0.3711111111111111,
+        "mean_epistemic_var": 0.4622153040224274
+      }
+    },
+    "15B_feature_dropout": {
+      "0.1": {
+        "accuracy": 0.7422222222222222,
+        "mean_epistemic_var": 0.44395711678976446
+      },
+      "0.25": {
+        "accuracy": 0.6,
+        "mean_epistemic_var": 0.4849026666716705
+      },
+      "0.5": {
+        "accuracy": 0.4088888888888889,
+        "mean_epistemic_var": 0.5476703091878429
+      },
+      "0.75": {
+        "accuracy": 0.2733333333333333,
+        "mean_epistemic_var": 0.6152149377639929
+      }
+    },
+    "15C_adversarial_fgsm_proxy": {
+      "accuracy_natural": 0.8577777777777778,
+      "accuracy_adversarial": 0.8666666666666667,
+      "mean_epistemic_natural": 0.40929344976414717,
+      "mean_epistemic_adversarial": 0.4048253564417471
+    }
+  }
+}

@@ -21,6 +21,15 @@ def dataset_dialog_start_dir() -> str:
     return v if isinstance(v, str) else str(v or "")
 
 
+def dataset_dialog_start_dir_preferred(prefs=None) -> str:
+    """Prefer ``StudioPreferences.dataset_dialog_start_dir`` when it exists on disk."""
+    if prefs is not None:
+        d = (getattr(prefs, "dataset_dialog_start_dir", "") or "").strip()
+        if d and Path(d).is_dir():
+            return d
+    return dataset_dialog_start_dir()
+
+
 def _load_recent(s: QSettings) -> List[str]:
     raw = s.value(KEY_RECENT, "[]")
     if raw is None:

@@ -6,6 +6,7 @@ confidence histogram, and world-prior health indicator.
 """
 from __future__ import annotations
 from collections import deque
+from functools import partial
 from typing import List, Sequence, Tuple, Union
 
 import numpy as np
@@ -13,7 +14,7 @@ from PySide6.QtCore    import Qt, QElapsedTimer, QTimer
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget,
     QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView,
-    QSplitter, QFrame,
+    QSplitter, QFrame, QScrollArea,
     QPushButton, QComboBox, QSpinBox, QCheckBox, QGroupBox, QFormLayout,
     QLineEdit, QTextEdit, QDialogButtonBox, QDialog, QDoubleSpinBox,
 )
@@ -455,31 +456,71 @@ class DatasetWidget(QWidget):
         self._setup_ui()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
         layout.setContentsMargins(4, 4, 4, 4)
 
-        # Header + load button
-        hdr = QHBoxLayout()
         self._ds_lbl = QLabel("No dataset loaded")
-        self._ds_lbl.setStyleSheet("font-weight: bold;")
-        load_btn = QPushButton("Load…")
-        load_btn.setFixedWidth(60)
-        load_btn.clicked.connect(self._on_load)
-        hdr.addWidget(self._ds_lbl)
-        hdr.addStretch()
-        hdr.addWidget(load_btn)
-        layout.addLayout(hdr)
+        self._ds_lbl.setStyleSheet(
+            "font-weight: bold; color: #e8e8e8; font-size: 12px; padding: 2px 0;"
+        )
+        layout.addWidget(self._ds_lbl)
 
-        # Quick-load sklearn datasets
-        sklearn_row = QHBoxLayout()
-        sklearn_row.addWidget(QLabel("Quick load:"))
-        for name in ('iris', 'wine', 'breast_cancer', 'digits', 'diabetes'):
+        your_grp = QGroupBox("Your data")
+        your_grp.setToolTip("Load real datasets from disk (CSV, NPZ, NPY).")
+        your_lay = QVBoxLayout(your_grp)
+        hint_you = QLabel(
+            "Use <b>Browse for file…</b> for your own CSV, NPZ, or NPY — this is the path "
+            "you will use for production-style work."
+        )
+        hint_you.setWordWrap(True)
+        hint_you.setTextFormat(Qt.TextFormat.RichText)
+        hint_you.setStyleSheet("color: #b0b0b0; font-size: 11px;")
+        your_lay.addWidget(hint_you)
+        load_btn = QPushButton("Browse for file…")
+        load_btn.setToolTip("Open a dataset from your computer.")
+        load_btn.clicked.connect(self._on_load)
+        your_lay.addWidget(load_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(your_grp)
+
+        demo_grp = QGroupBox("Demo datasets (sklearn)")
+        demo_grp.setToolTip(
+            "Tiny built-in examples only — good for trying the UI, not representative of real data."
+        )
+        demo_lay = QVBoxLayout(demo_grp)
+        hint_demo = QLabel(
+            "Small toy sets bundled for exploration. For experiments and deployment, "
+            "use <b>Your data</b> above."
+        )
+        hint_demo.setWordWrap(True)
+        hint_demo.setTextFormat(Qt.TextFormat.RichText)
+        hint_demo.setStyleSheet("color: #a8a8a8; font-size: 11px;")
+        demo_lay.addWidget(hint_demo)
+        demo_row = QHBoxLayout()
+        demo_row.setSpacing(6)
+        for name in ("iris", "wine", "breast_cancer", "digits", "diabetes"):
             btn = QPushButton(name)
-            btn.setFixedHeight(24)
-            btn.clicked.connect(lambda _, n=name: self._load_sklearn(n))
-            sklearn_row.addWidget(btn)
-        sklearn_row.addStretch()
-        layout.addLayout(sklearn_row)
+            btn.setFixedHeight(26)
+            btn.setAutoDefault(False)
+            btn.setDefault(False)
+            btn.setStyleSheet(
+                "QPushButton { font-size: 11px; padding: 2px 8px; color: #d4d4d4; "
+                "background: #353535; border: 1px solid #555; }"
+                "QPushButton:hover { background: #404040; }"
+            )
+            # Use partial — PySide6's clicked(bool) slot arity can break naive lambdas.
+            btn.clicked.connect(partial(self._load_sklearn, name))
+            demo_row.addWidget(btn)
+        demo_row.addStretch()
+        demo_lay.addLayout(demo_row)
+        layout.addWidget(demo_grp)
 
         # Stats
         self._stats_lbl = QLabel("")
@@ -494,17 +535,127 @@ class DatasetWidget(QWidget):
         self._dist_table.setMaximumHeight(180)
         layout.addWidget(self._dist_table)
 
+        split_grp = QGroupBox("Train / validation / test split")
+        split_grp.setToolTip(
+            "Fractions are percentages; test is the remainder. "
+            "Stratify keeps class proportions per split (classification only)."
+        )
+        split_form = QFormLayout(split_grp)
+        self._sp_train = QSpinBox()
+        self._sp_train.setRange(5, 90)
+        self._sp_train.setSuffix(" %")
+        self._sp_train.setToolTip("Training portion of the dataset (percent).")
+        self._sp_val = QSpinBox()
+        self._sp_val.setRange(5, 90)
+        self._sp_val.setSuffix(" %")
+        self._sp_val.setToolTip("Validation portion (percent).")
+        self._sp_test_lbl = QLabel("—")
+        self._sp_shuffle = QCheckBox("Shuffle before split")
+        self._sp_shuffle.setToolTip("Randomize row order before cutting indices.")
+        self._sp_strat = QCheckBox("Stratify (classification)")
+        self._sp_strat.setToolTip("Per-class splits; ignored automatically for regression.")
+        self._sp_seed = QSpinBox()
+        self._sp_seed.setRange(0, 2_000_000_000)
+        self._sp_seed.setToolTip("RNG seed for shuffling and stratified index draws.")
+        split_form.addRow("Train:", self._sp_train)
+        split_form.addRow("Validation:", self._sp_val)
+        split_form.addRow("Test (computed):", self._sp_test_lbl)
+        split_form.addRow("", self._sp_shuffle)
+        split_form.addRow("", self._sp_strat)
+        split_form.addRow("Random seed:", self._sp_seed)
+        layout.addWidget(split_grp)
+
+        self._sp_train.valueChanged.connect(self._on_split_changed)
+        self._sp_val.valueChanged.connect(self._on_split_changed)
+        self._sp_shuffle.toggled.connect(self._on_split_toggle)
+        self._sp_strat.toggled.connect(self._on_split_toggle)
+        self._sp_seed.valueChanged.connect(self._on_split_changed)
+
+        self._load_split_widgets_from_state()
+        self._update_test_pct_label()
+
         layout.addStretch()
+        scroll.setWidget(inner)
+        root.addWidget(scroll)
+
+    def _raise_dataset_dock(self) -> None:
+        win = self.window()
+        if win is None:
+            return
+        dock = getattr(win, "_dataset_dock", None)
+        if dock is not None:
+            dock.show()
+            dock.raise_()
+
+    def _load_split_widgets_from_state(self):
+        cfg = self._state.split_config
+        self._sp_train.blockSignals(True)
+        self._sp_val.blockSignals(True)
+        self._sp_shuffle.blockSignals(True)
+        self._sp_strat.blockSignals(True)
+        self._sp_seed.blockSignals(True)
+        self._sp_train.setValue(int(round(cfg.train_frac * 100)))
+        self._sp_val.setValue(int(round(cfg.val_frac * 100)))
+        self._sp_shuffle.setChecked(cfg.shuffle)
+        self._sp_strat.setChecked(cfg.stratify)
+        self._sp_seed.setValue(int(cfg.seed))
+        self._sp_train.blockSignals(False)
+        self._sp_val.blockSignals(False)
+        self._sp_shuffle.blockSignals(False)
+        self._sp_strat.blockSignals(False)
+        self._sp_seed.blockSignals(False)
+
+    def _update_test_pct_label(self):
+        te = 100 - self._sp_train.value() - self._sp_val.value()
+        self._sp_test_lbl.setText(f"{te} %")
+
+    def _on_split_changed(self, *args):
+        self._update_test_pct_label()
+        self._apply_split_if_ready()
+
+    def _on_split_toggle(self, checked: bool = False):
+        self._apply_split_if_ready()
+
+    def _apply_split_if_ready(self):
+        if self._dataset is None:
+            return
+        tr = self._sp_train.value() / 100.0
+        va = self._sp_val.value() / 100.0
+        te = 1.0 - tr - va
+        if tr <= 0 or va <= 0 or te < 0.05:
+            self._bus.emit_status(
+                "Split not applied: need positive train/val and at least 5% test."
+            )
+            return
+        from ..core.dataset import SplitConfig
+
+        st = self._dataset.task == "classification"
+        cfg = SplitConfig(
+            train_frac=tr,
+            val_frac=va,
+            test_frac=te,
+            shuffle=self._sp_shuffle.isChecked(),
+            stratify=self._sp_strat.isChecked() and st,
+            seed=int(self._sp_seed.value()),
+        )
+        self._state.split_config = cfg
+        train_ds, val_ds, test_ds = self._dataset.split(cfg)
+        self._state._train_ds = train_ds
+        self._state._val_ds = val_ds
+        self._state._test_ds = test_ds
+        self._bus.emit_status(
+            f"Split updated: train={len(train_ds)} val={len(val_ds)} test={len(test_ds)}"
+        )
 
     def _on_load(self):
         from PySide6.QtWidgets import QFileDialog
 
-        from .path_history import dataset_dialog_start_dir
+        from .path_history import dataset_dialog_start_dir_preferred
 
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Load Dataset",
-            dataset_dialog_start_dir(),
+            dataset_dialog_start_dir_preferred(getattr(self._state, "preferences", None)),
             "CSV files (*.csv);;NumPy (*.npy *.npz);;All (*)",
         )
         if path:
@@ -516,9 +667,7 @@ class DatasetWidget(QWidget):
 
             lp = path.lower()
             if lp.endswith('.csv'):
-                from ..env_config import csv_read_chunk_rows
-
-                cr = csv_read_chunk_rows()
+                cr = self._state.preferences.effective_csv_chunk_rows()
                 ds = (
                     CSVDataset.from_file(path, read_chunk_rows=cr)
                     if cr > 0
@@ -534,17 +683,24 @@ class DatasetWidget(QWidget):
         except Exception as e:
             self._bus.emit_error(f"Dataset load failed: {e}")
 
-    def _load_sklearn(self, name: str):
+    def _load_sklearn(self, name: str, *_args) -> None:
+        """Load a bundled sklearn toy set. Accepts extra args from ``clicked`` signal."""
         try:
             from ..core.dataset import SklearnDataset
-            task = 'regression' if name == 'diabetes' else 'classification'
+
+            task = "regression" if name == "diabetes" else "classification"
             ds = SklearnDataset.load(name, task=task)
             self._set_dataset(ds)
+            self._raise_dataset_dock()
+        except ImportError as e:
+            self._bus.emit_error(
+                f"Demo datasets require scikit-learn. Install with:\n"
+                f"  pip install scikit-learn\n\n{e}"
+            )
         except Exception as e:
             self._bus.emit_error(f"Failed to load {name}: {e}")
 
     def _set_dataset(self, ds):
-        from ..core.dataset import SplitConfig
         self._dataset = ds
         self._ds_lbl.setText(f"{ds.name}  ({ds.n_samples} × {ds.n_features})")
 
@@ -557,7 +713,7 @@ class DatasetWidget(QWidget):
             f"Missing: {stats.missing_values}"
         )
 
-        # Class distribution
+        # Class distribution (clear stale rows for regression / empty)
         if stats.class_counts:
             self._dist_table.setRowCount(len(stats.class_counts))
             for row, (lbl, cnt) in enumerate(
@@ -565,9 +721,14 @@ class DatasetWidget(QWidget):
             ):
                 self._dist_table.setItem(row, 0, QTableWidgetItem(str(lbl)))
                 self._dist_table.setItem(row, 1, QTableWidgetItem(str(cnt)))
+        else:
+            self._dist_table.setRowCount(0)
 
-        # Split and store on state
-        train_ds, val_ds, test_ds = ds.split(SplitConfig())
+        self._sp_strat.setEnabled(ds.task == "classification")
+        if ds.task != "classification":
+            self._sp_strat.setChecked(False)
+
+        train_ds, val_ds, test_ds = ds.split(self._state.split_config)
         self._state._train_ds = train_ds
         self._state._val_ds   = val_ds
         self._state._test_ds  = test_ds
@@ -836,9 +997,14 @@ class LoadModelDialog(QDialog):
             return
         try:
             from ..core.inference import InferenceEngine, InferenceSession
+
             model, pre, card = self._state.registry.load(name, version)
-            self._state.engine  = InferenceEngine(model, pre)
+            p = self._state.preferences
+            self._state.engine = InferenceEngine(
+                model, pre, ood_threshold=p.inference_ood_threshold
+            )
             self._state.session = InferenceSession(self._state.engine)
+            self._state.session.set_gh_params(p.inference_chi, p.inference_psi)
             SignalBus.instance().emit_model_loaded(card)
             self.accept()
         except Exception as e:
@@ -846,46 +1012,76 @@ class LoadModelDialog(QDialog):
 
 
 class TrainConfigDialog(QDialog):
-    """Configure TrainerConfig fields before starting training."""
+    """Configure all ``TrainerConfig`` fields (tabbed)."""
 
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self._state = state
         self.setWindowTitle("Training Configuration")
-        self.resize(440, 620)
+        self.resize(520, 640)
         from ..core.trainer import TrainerConfig
-        self._cfg = getattr(state, '_train_config', TrainerConfig())
+
+        self._cfg = getattr(state, "_train_config", TrainerConfig())
 
         layout = QVBoxLayout(self)
+        tabs = QTabWidget()
 
-        # Model group
-        model_grp = QGroupBox("Model")
-        model_form = QFormLayout(model_grp)
+        # ── Tab: Model & encoder ──────────────────────────────────────────
+        t1 = QWidget()
+        f1 = QFormLayout(t1)
         self._model_type = QComboBox()
-        self._model_type.addItems(['CyphaDIF', 'RFFRegressor', 'TwoStageDIF', 'MKE'])
+        self._model_type.addItems(["CyphaDIF", "RFFRegressor", "TwoStageDIF", "MKE"])
         self._model_type.setCurrentText(self._cfg.model_type)
+        self._model_type.setToolTip("CyphaDIF / RFF / two-stage / mixture-of-experts routing.")
         self._encoder = QComboBox()
-        self._encoder.addItems(['VectorEncoder', 'RFFEncoder'])
+        self._encoder.addItems(["VectorEncoder", "RFFEncoder"])
         self._encoder.setCurrentText(self._cfg.encoder_type)
-        self._feat_dim  = QSpinBox(); self._feat_dim.setRange(16, 2048)
+        self._encoder.setToolTip("Dense encoder vs random Fourier features.")
+        self._feat_dim = QSpinBox()
+        self._feat_dim.setRange(16, 2048)
         self._feat_dim.setValue(self._cfg.feat_dim)
-        self._field_dim = QSpinBox(); self._field_dim.setRange(16, 2048)
+        self._field_dim = QSpinBox()
+        self._field_dim.setRange(16, 2048)
         self._field_dim.setValue(self._cfg.field_dim)
-        model_form.addRow("Model type:", self._model_type)
-        model_form.addRow("Encoder:",    self._encoder)
-        model_form.addRow("Feat dim:",   self._feat_dim)
-        model_form.addRow("Field dim:",  self._field_dim)
-        layout.addWidget(model_grp)
+        self._rff_D = QSpinBox()
+        self._rff_D.setRange(32, 4096)
+        self._rff_D.setValue(self._cfg.rff_D)
+        self._rff_D.setToolTip("RFF projection dimension (RFFEncoder).")
+        self._rff_gamma = QDoubleSpinBox()
+        self._rff_gamma.setRange(0.0001, 100.0)
+        self._rff_gamma.setDecimals(4)
+        self._rff_gamma.setValue(self._cfg.rff_gamma)
+        self._rff_gamma.setToolTip("RFF kernel bandwidth scale.")
+        self._auto_gamma = QCheckBox("Auto γ (CV)")
+        self._auto_gamma.setChecked(self._cfg.auto_gamma_cv)
+        self._auto_ard = QCheckBox("Auto ARD")
+        self._auto_ard.setChecked(self._cfg.auto_ard)
+        self._n_experts = QSpinBox()
+        self._n_experts.setRange(2, 64)
+        self._n_experts.setValue(self._cfg.n_experts)
+        self._n_experts.setToolTip("Expert count for MKE routing.")
+        f1.addRow("Model type:", self._model_type)
+        f1.addRow("Encoder:", self._encoder)
+        f1.addRow("Feat dim:", self._feat_dim)
+        f1.addRow("Field dim:", self._field_dim)
+        f1.addRow("RFF D:", self._rff_D)
+        f1.addRow("RFF γ:", self._rff_gamma)
+        f1.addRow("", self._auto_gamma)
+        f1.addRow("", self._auto_ard)
+        f1.addRow("N experts (MKE):", self._n_experts)
+        tabs.addTab(t1, "Model & encoder")
 
-        # Learning rates
-        lr_grp = QGroupBox("Learning Rates")
-        lr_form = QFormLayout(lr_grp)
-        self._world_lr = QDoubleSpinBox(); self._world_lr.setRange(0.0001, 1.0)
-        self._world_lr.setDecimals(4); self._world_lr.setValue(self._cfg.world_lr)
-        self._delta_lr = QDoubleSpinBox(); self._delta_lr.setRange(0.001, 1.0)
-        self._delta_lr.setDecimals(4); self._delta_lr.setValue(self._cfg.delta_lr)
-        self._gh_chk = QCheckBox("GH adversarial protection")
-        self._gh_chk.setChecked(self._cfg.gh_protect)
+        # ── Tab: Optimization ───────────────────────────────────────────────
+        t2 = QWidget()
+        f2 = QFormLayout(t2)
+        self._world_lr = QDoubleSpinBox()
+        self._world_lr.setRange(0.0001, 1.0)
+        self._world_lr.setDecimals(4)
+        self._world_lr.setValue(self._cfg.world_lr)
+        self._delta_lr = QDoubleSpinBox()
+        self._delta_lr.setRange(0.001, 1.0)
+        self._delta_lr.setDecimals(4)
+        self._delta_lr.setValue(self._cfg.delta_lr)
         self._enc_lr = QDoubleSpinBox()
         self._enc_lr.setRange(0.0001, 1.0)
         self._enc_lr.setDecimals(4)
@@ -894,6 +1090,11 @@ class TrainConfigDialog(QDialog):
         self._mdl_lambda.setRange(0.0, 1.0)
         self._mdl_lambda.setDecimals(4)
         self._mdl_lambda.setValue(self._cfg.mdl_lambda)
+        self._forget = QDoubleSpinBox()
+        self._forget.setRange(0.0, 1.0)
+        self._forget.setDecimals(4)
+        self._forget.setValue(self._cfg.forgetting_factor)
+        self._forget.setToolTip("1.0 = no forgetting; lower down-weights old evidence.")
         self._temperature = QDoubleSpinBox()
         self._temperature.setRange(0.05, 8.0)
         self._temperature.setDecimals(3)
@@ -901,31 +1102,72 @@ class TrainConfigDialog(QDialog):
         self._context_win = QSpinBox()
         self._context_win.setRange(4, 512)
         self._context_win.setValue(self._cfg.context_win)
-        lr_form.addRow("World LR:", self._world_lr)
-        lr_form.addRow("Delta LR:", self._delta_lr)
-        lr_form.addRow("Encoder LR:", self._enc_lr)
-        lr_form.addRow("MDL λ:", self._mdl_lambda)
-        lr_form.addRow("Temperature:", self._temperature)
-        lr_form.addRow("Context window:", self._context_win)
-        lr_form.addRow("", self._gh_chk)
-        layout.addWidget(lr_grp)
+        self._gh_chk = QCheckBox("GH adversarial protection (training)")
+        self._gh_chk.setChecked(self._cfg.gh_protect)
+        self._gh_chk.setToolTip("Regularizer during training; separate from GH inference in chat.")
+        f2.addRow("World LR:", self._world_lr)
+        f2.addRow("Delta LR:", self._delta_lr)
+        f2.addRow("Encoder LR:", self._enc_lr)
+        f2.addRow("MDL λ:", self._mdl_lambda)
+        f2.addRow("Forgetting factor:", self._forget)
+        f2.addRow("Temperature:", self._temperature)
+        f2.addRow("Context window:", self._context_win)
+        f2.addRow("", self._gh_chk)
+        tabs.addTab(t2, "Optimization")
 
-        # Training
-        train_grp = QGroupBox("Training")
-        train_form = QFormLayout(train_grp)
-        self._n_epochs  = QSpinBox(); self._n_epochs.setRange(1, 100)
+        # ── Tab: Schedule & preprocessing ───────────────────────────────────
+        t3 = QWidget()
+        f3 = QFormLayout(t3)
+        self._mode = QComboBox()
+        self._mode.addItems(["online", "batch"])
+        self._mode.setCurrentText(self._cfg.mode)
+        self._mode.setToolTip("Sample streaming vs batched epochs.")
+        self._n_epochs = QSpinBox()
+        self._n_epochs.setRange(1, 500)
         self._n_epochs.setValue(self._cfg.n_epochs)
-        self._eval_every = QSpinBox(); self._eval_every.setRange(10, 10000)
+        self._batch_sz = QSpinBox()
+        self._batch_sz.setRange(0, 65536)
+        self._batch_sz.setMinimum(0)
+        self._batch_sz.setSpecialValueText("default (None)")
+        bs = self._cfg.batch_size
+        self._batch_sz.setValue(0 if bs is None else int(bs))
+        self._batch_sz.setToolTip("0 lets the trainer pick batching automatically.")
+        self._eval_every = QSpinBox()
+        self._eval_every.setRange(10, 100000)
         self._eval_every.setValue(self._cfg.eval_every_n)
+        self._save_every = QSpinBox()
+        self._save_every.setRange(10, 100000)
+        self._save_every.setValue(self._cfg.save_every_n)
         self._early_stop = QCheckBox("Early stopping")
         self._early_stop.setChecked(self._cfg.early_stopping)
-        self._patience = QSpinBox(); self._patience.setRange(1, 50)
+        self._patience = QSpinBox()
+        self._patience.setRange(1, 100)
         self._patience.setValue(self._cfg.early_stopping_patience)
-        train_form.addRow("Epochs:", self._n_epochs)
-        train_form.addRow("Eval every N steps:", self._eval_every)
-        train_form.addRow("", self._early_stop)
-        train_form.addRow("Patience:", self._patience)
-        layout.addWidget(train_grp)
+        self._pre_scale = QCheckBox("Scale features (preprocessor)")
+        self._pre_scale.setChecked(self._cfg.preprocess_scale)
+        self._pre_pca = QSpinBox()
+        self._pre_pca.setRange(0, 512)
+        self._pre_pca.setMinimum(0)
+        self._pre_pca.setSpecialValueText("off")
+        pc = self._cfg.preprocess_pca
+        self._pre_pca.setValue(0 if pc is None else int(pc))
+        self._pre_pca.setToolTip("0 = no PCA; else number of PCA components.")
+        self._seed = QSpinBox()
+        self._seed.setRange(0, 2_000_000_000)
+        self._seed.setValue(self._cfg.seed)
+        f3.addRow("Mode:", self._mode)
+        f3.addRow("Epochs:", self._n_epochs)
+        f3.addRow("Batch size:", self._batch_sz)
+        f3.addRow("Eval every N steps:", self._eval_every)
+        f3.addRow("Save checkpoint every N:", self._save_every)
+        f3.addRow("", self._early_stop)
+        f3.addRow("Early-stop patience:", self._patience)
+        f3.addRow("", self._pre_scale)
+        f3.addRow("PCA components:", self._pre_pca)
+        f3.addRow("Random seed:", self._seed)
+        tabs.addTab(t3, "Schedule & preprocessing")
+
+        layout.addWidget(tabs)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(self._on_ok)
@@ -937,23 +1179,40 @@ class TrainConfigDialog(QDialog):
 
         from ..core.trainer import TrainerConfig
 
+        bs = self._batch_sz.value()
+        bs_v = None if bs <= 0 else int(bs)
+        pc = self._pre_pca.value()
+        pc_v = None if pc <= 0 else int(pc)
+
         cfg = replace(
             self._cfg,
             model_type=self._model_type.currentText(),
             encoder_type=self._encoder.currentText(),
             feat_dim=self._feat_dim.value(),
             field_dim=self._field_dim.value(),
+            rff_D=self._rff_D.value(),
+            rff_gamma=self._rff_gamma.value(),
+            auto_gamma_cv=self._auto_gamma.isChecked(),
+            auto_ard=self._auto_ard.isChecked(),
+            n_experts=self._n_experts.value(),
             world_lr=self._world_lr.value(),
             delta_lr=self._delta_lr.value(),
             enc_lr=self._enc_lr.value(),
             mdl_lambda=self._mdl_lambda.value(),
+            forgetting_factor=self._forget.value(),
             temperature=self._temperature.value(),
             context_win=self._context_win.value(),
             gh_protect=self._gh_chk.isChecked(),
+            mode=self._mode.currentText(),
             n_epochs=self._n_epochs.value(),
+            batch_size=bs_v,
             eval_every_n=self._eval_every.value(),
+            save_every_n=self._save_every.value(),
             early_stopping=self._early_stop.isChecked(),
             early_stopping_patience=self._patience.value(),
+            preprocess_scale=self._pre_scale.isChecked(),
+            preprocess_pca=pc_v,
+            seed=self._seed.value(),
         )
         self._state._train_config = cfg
         SignalBus.instance().emit_status("Training config updated")

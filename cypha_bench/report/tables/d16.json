@@ -1,0 +1,52 @@
+{
+  "domain": "d16",
+  "timestamp": "2026-05-30T09:30:06.165366+00:00",
+  "experiments": {
+    "16A_task_discovery": {
+      "routing_ari": 1.0,
+      "per_task_accuracy": {
+        "iris": 0.8421052631578947,
+        "wine": 0.8,
+        "digits": 0.8111111111111111
+      },
+      "expert_count": 16
+    },
+    "16B_forgetting_resistance": {
+      "task_a_accuracy_before": 0.8421052631578947,
+      "task_a_accuracy_after": 0.15789473684210525,
+      "forgetting_score": 0.8124999999999999
+    },
+    "16D_interleaving_comparison": {
+      "round_robin": {
+        "iris": 0.7894736842105263,
+        "wine": 0.8222222222222222,
+        "digits": 0.8488888888888889
+      },
+      "random": {
+        "iris": 0.8157894736842105,
+        "wine": 0.8888888888888888,
+        "digits": 0.8333333333333334
+      },
+      "block": {
+        "iris": 0.8421052631578947,
+        "wine": 0.8444444444444444,
+        "digits": 0.8688888888888889
+      }
+    },
+    "16E_save_restore": {
+      "task_a_before": 0.8421052631578947,
+      "task_a_corrupted": 0.6578947368421053,
+      "task_a_restored": 0.8421052631578947,
+      "retention_ratio": 1.0
+    },
+    "16F_per_task_models": {
+      "per_task_accuracy": {
+        "iris": 0.8157894736842105,
+        "wine": 0.9777777777777777,
+        "digits": 0.8533333333333334
+      },
+      "forgetting_score": 0.0,
+      "note": "per-task isolated models \u2014 zero forgetting by architecture"
+    }
+  }
+}

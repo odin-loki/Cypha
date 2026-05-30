@@ -4,26 +4,23 @@ Cypha's native port (M1–M6) is complete — inference, training, REST server, 
 
 ---
 
-## §1 — OpenCL GPU activation
+## §1 — CUDA GPU path (`cypha::accel`)
 
-**Status:** Native OpenCL backend implemented (`native/src/opencl_backend.cpp`); kernels for `batch_encode`, `softmax_rows`, and GH gate tested against CPU reference. Blocked by driver availability in WSL2.
+**Status:** Native **CUDA** in `native/src/accel_cuda.cu` (pooled device memory + Bessel table for GH–NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ≥ **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default 16). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
 
-**Blocker:** `libnvidia-compute-595` (matching the host Windows driver) is not yet in Ubuntu PPAs or the `ppa:graphics-drivers` channel. The package lands within weeks of each new driver release.
-
-**What to do once the package is available:**
-```bash
-sudo add-apt-repository ppa:graphics-drivers/ppa -y && sudo apt-get update
-sudo apt-get install -y libnvidia-compute-595
-sudo ldconfig
-clinfo -l   # should list both NVIDIA + POCL platforms
-cmake -S native -B build-opencl -DCMAKE_BUILD_TYPE=Release -DCYPHA_ENABLE_OPENCL=ON
-cmake --build build-opencl -j$(nproc)
-./build-opencl/opencl_smoke   # exit 0 = GPU fp64 path verified
+**Windows (native MSVC):** install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads), then:
+```powershell
+cd native
+cmake --preset windows-msvc-release -DCYPHA_ENABLE_CUDA=ON
+cmake --build --preset windows-msvc-release-build
+.\build-windows-msvc\Release\cuda_smoke.exe
 ```
 
-**Performance target:** at typical training batch sizes (`N=1–16`, `d=32–128`, `K=8–32`) the GPU kernel overhead dominates; OpenCL pays off at `N≥64` or when training on large CSV files without per-row synchronisation. Profile with `./build-opencl/opencl_smoke --bench` before committing to a GPU-first path.
+**WSL2 / Linux:** install NVIDIA driver on Windows + CUDA toolkit inside WSL (`nvidia-cuda-toolkit` or NVIDIA’s `.run` installer). Use preset **`wsl-gcc-release`** and add `-DCYPHA_ENABLE_CUDA=ON`. Set `-DCMAKE_CUDA_ARCHITECTURES=` to your GPU (e.g. `89`, `86`, `75`).
 
-**Longer term:** if OpenCL driver stability remains an issue, a CUDA backend (`cuBLAS` + custom kernels) or a Vulkan compute backend may be preferable for production. The `opencl_backend.hpp` interface is abstract enough to swap backends.
+**Not supported:** MinGW cross-compiles cannot enable `CYPHA_ENABLE_CUDA` (CMake will error).
+
+**Performance:** profile with `./cuda_smoke --bench` on GPU; small batches may be CPU-faster due to launch overhead.
 
 ---
 
@@ -171,7 +168,7 @@ Both require new network coordination code outside `cypha_core` — the local tr
 |------|--------|
 | Legacy sigmoid (`gh_chi <= 0`) | Remove with a version bump + changelog entry; unused in-tree |
 | Python FastAPI server in production | Keep as golden reference; mark clearly as "reference only" once Qt shell covers all Studio workflows |
-| `cypha_accel/` CuPy path | Keep for Python-side profiling; not needed once OpenCL GPU path is active |
+| `cypha_accel/` CuPy path | Keep for Python-side profiling; native `cypha::accel` covers batch hot paths |
 | `test_cypha.py` (root) | Fold into `pytest tests/` with a `@slow` marker; remove the custom runner |
 | `cypha_studio/test_cypha_studio.py` | Same — already mirrored by `tests/test_cypha_studio_runner.py`; keep as a convenience script |
 
@@ -181,7 +178,7 @@ Both require new network coordination code outside `cypha_core` — the local tr
 
 | When | What |
 |------|------|
-| **Weeks** | OpenCL GPU driver lands in WSL PPA → activate `-DCYPHA_ENABLE_OPENCL=ON` |
+| **Weeks** | Optional: second CUDA stream / pinned host memory for HPC serving |
 | **1–2 months** | Qt shell streaming training thread; chart interactivity; packaged AppImage |
 | **2–4 months** | Multi-model `cypha_rest`; Web UI (SPA or htmx) |
 | **4–8 months** | Curriculum / active learning; ONNX export |

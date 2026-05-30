@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFrame>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -27,6 +28,10 @@
 #include <QPointF>
 #include <QMutex>
 #include <QProgressDialog>
+#include <QScrollArea>
+#include <QSettings>
+#include <QSizePolicy>
+#include <QTabWidget>
 #include <QThread>
 #include <QTimer>
 #include <QNetworkAccessManager>
@@ -52,6 +57,7 @@
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QFrame>
 
 #include <algorithm>
 #include <array>
@@ -1264,48 +1270,119 @@ struct BulkTrainState {
 class MainWindow final : public QMainWindow {
  public:
   MainWindow() {
-    setWindowTitle(QStringLiteral("Cypha — Qt shell (native + REST)"));
+    setWindowTitle(QStringLiteral("Cypha — Qt shell"));
     auto* central = new QWidget(this);
-    auto* layout = new QVBoxLayout(central);
+    auto* main_layout = new QVBoxLayout(central);
+    main_layout->setSpacing(8);
+    main_layout->setContentsMargins(10, 10, 10, 10);
+    setMinimumSize(920, 920);
 
-    auto* row1 = new QHBoxLayout();
-    load_btn_ = new QPushButton(QStringLiteral("Load model…"), central);
-    new_model_btn_ = new QPushButton(QStringLiteral("New model…"), central);
+    workflow_banner_ = new QLabel(
+        QStringLiteral(
+            "<p style='margin:0'><b>Workflow</b> &mdash; <b>1 Data</b> &rarr; <b>2 Model</b> &rarr; "
+            "<b>3 Train</b> &rarr; <b>4 Predict</b> &rarr; <b>5 Server</b>"
+            " &rarr; <b>6 Experiments</b> (when enabled)</p>"
+            "<p style='margin:8px 0 0 0; color:#c8d6e8; font-size:12px'>Work left to right. The window "
+            "geometry and active tab are saved when you quit.</p>"),
+        central);
+    workflow_banner_->setWordWrap(true);
+    workflow_banner_->setTextFormat(Qt::RichText);
+    workflow_banner_->setStyleSheet(
+        QStringLiteral("QLabel { background-color: #152535; color: #f0f5fa; padding: 14px 18px; "
+                       "border-radius: 10px; border: 1px solid #2a4158; }"));
+    main_layout->addWidget(workflow_banner_);
+
+    auto* header_bar = new QWidget(central);
+    auto* row1 = new QHBoxLayout(header_bar);
+    load_btn_ = new QPushButton(QStringLiteral("Load model…"), header_bar);
+    new_model_btn_ = new QPushButton(QStringLiteral("New model…"), header_bar);
     new_model_btn_->setToolTip(QStringLiteral(
         "Create a fresh empty model in-memory (no existing .cypha needed).\n"
         "Specify input_dim and field_dim, then train directly from CSV."));
-    path_label_ = new QLabel(QStringLiteral("(no model)"), central);
+    path_label_ = new QLabel(QStringLiteral("(no model)"), header_bar);
     path_label_->setWordWrap(true);
     row1->addWidget(load_btn_);
     row1->addWidget(new_model_btn_);
     row1->addWidget(path_label_, 1);
-    layout->addLayout(row1);
+    main_layout->addWidget(header_bar);
+
+    main_tabs_ = new QTabWidget(central);
+    main_tabs_->setMovable(false);
+    main_tabs_->setDocumentMode(true);
+    main_tabs_->setUsesScrollButtons(true);
+    main_layout->addWidget(main_tabs_, 1);
+
+    auto make_page = [&](const QString& title) -> std::pair<QWidget*, QVBoxLayout*> {
+      auto* scr = new QScrollArea(main_tabs_);
+      scr->setWidgetResizable(true);
+      scr->setFrameShape(QFrame::NoFrame);
+      scr->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+      auto* inner = new QWidget(scr);
+      auto* lay = new QVBoxLayout(inner);
+      lay->setSpacing(10);
+      lay->setContentsMargins(6, 6, 6, 14);
+      inner->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
+      scr->setWidget(inner);
+      main_tabs_->addTab(scr, title);
+      return {inner, lay};
+    };
+
+    const auto pg_data = make_page(QStringLiteral("1 · Data"));
+    QWidget* const inner_data = pg_data.first;
+    QVBoxLayout* const lay_data = pg_data.second;
+
+    const auto pg_model = make_page(QStringLiteral("2 · Model"));
+    QWidget* const inner_model = pg_model.first;
+    QVBoxLayout* const lay_model = pg_model.second;
+
+    const auto pg_train = make_page(QStringLiteral("3 · Train"));
+    QWidget* const inner_train = pg_train.first;
+    QVBoxLayout* const lay_train = pg_train.second;
+
+    const auto pg_predict = make_page(QStringLiteral("4 · Predict"));
+    QWidget* const inner_predict = pg_predict.first;
+    QVBoxLayout* const lay_predict = pg_predict.second;
+
+    const auto pg_server = make_page(QStringLiteral("5 · Server & registry"));
+    QWidget* const inner_server = pg_server.first;
+    QVBoxLayout* const lay_server = pg_server.second;
+
+    {
+      auto* model_intro = new QLabel(
+          QStringLiteral("<b>Sidecars</b> &mdash; add <tt>F_field</tt> JSON if the blob has no embedded "
+                         "<tt>world.F_field</tt>; <tt>preprocessor.json</tt> matches <tt>cypha_rest --pre</tt>."),
+          inner_model);
+      model_intro->setWordWrap(true);
+      model_intro->setTextFormat(Qt::RichText);
+      lay_model->addWidget(model_intro);
+    }
 
     auto* row_ff = new QHBoxLayout();
-    ff_btn_ = new QPushButton(QStringLiteral("F field JSON…"), central);
-    ff_label_ = new QLabel(QStringLiteral("(optional, if world.F_field not in .cypha)"), central);
+    ff_btn_ = new QPushButton(QStringLiteral("F field JSON…"), inner_model);
+    ff_label_ = new QLabel(QStringLiteral("(optional, if world.F_field not in .cypha)"), inner_model);
     ff_label_->setWordWrap(true);
     row_ff->addWidget(ff_btn_);
     row_ff->addWidget(ff_label_, 1);
-    layout->addLayout(row_ff);
+    lay_model->addLayout(row_ff);
 
     auto* row_pre = new QHBoxLayout();
-    pre_btn_ = new QPushButton(QStringLiteral("Preprocessor JSON…"), central);
-    pre_clear_btn_ = new QPushButton(QStringLiteral("Clear pre"), central);
-    fit_pre_btn_ = new QPushButton(QStringLiteral("Fit preprocessor…"), central);
+    pre_btn_ = new QPushButton(QStringLiteral("Preprocessor JSON…"), inner_model);
+    pre_clear_btn_ = new QPushButton(QStringLiteral("Clear pre"), inner_model);
+    fit_pre_btn_ = new QPushButton(QStringLiteral("Fit preprocessor…"), inner_model);
     fit_pre_btn_->setToolTip(QStringLiteral(
         "Fit a new preprocessor (scale + optional PCA) from the loaded CSV.\n"
         "RFF requires Python — use Python toolchain to add RFF weights."));
-    pre_label_ = new QLabel(QStringLiteral("(optional, same as cypha_rest --pre)"), central);
+    pre_label_ = new QLabel(QStringLiteral("(optional, same as cypha_rest --pre)"), inner_model);
     pre_label_->setWordWrap(true);
     row_pre->addWidget(pre_btn_);
     row_pre->addWidget(pre_clear_btn_);
     row_pre->addWidget(fit_pre_btn_);
     row_pre->addWidget(pre_label_, 1);
-    layout->addLayout(row_pre);
+    lay_model->addLayout(row_pre);
+    lay_model->addStretch(1);
 
     // ── Dataset panel ────────────────────────────────────────────────────────
-    auto* ds_grp = new QGroupBox(QStringLiteral("Dataset"), central);
+    auto* ds_grp = new QGroupBox(QStringLiteral("Dataset"), inner_data);
     auto* ds_vbox = new QVBoxLayout(ds_grp);
 
     // CSV file picker row
@@ -1395,54 +1472,76 @@ class MainWindow final : public QMainWindow {
     row_csv_act->addStretch(1);
     ds_vbox->addLayout(row_csv_act);
 
-    layout->addWidget(ds_grp);
+    lay_data->addWidget(ds_grp);
+
+    dataset_info_ = new QPlainTextEdit(inner_data);
+    dataset_info_->setReadOnly(true);
+    dataset_info_->setPlaceholderText(QStringLiteral("CSV inspect summary and registry scan notes."));
+    dataset_info_->setMaximumBlockCount(80);
+    dataset_info_->setMinimumHeight(120);
+    lay_data->addWidget(dataset_info_);
+    lay_data->addStretch(1);
 
     csv_regression_chk_ = new QCheckBox(
-        QStringLiteral("CSV target is numeric regression (MKE: send regression_y on /update)"), central);
-    layout->addWidget(csv_regression_chk_);
+        QStringLiteral("CSV target is numeric regression (MKE: send regression_y on /update)"), inner_train);
+    lay_train->addWidget(csv_regression_chk_);
 
     auto* row_bulk = new QHBoxLayout();
-    csv_bulk_train_btn_ = new QPushButton(QStringLiteral("Bulk REST /update"), central);
-    csv_bulk_native_btn_ = new QPushButton(QStringLiteral("Bulk native train"), central);
+    csv_bulk_train_btn_ = new QPushButton(QStringLiteral("Bulk REST /update"), inner_train);
+    csv_bulk_native_btn_ = new QPushButton(QStringLiteral("Bulk native train"), inner_train);
     csv_bulk_native_btn_->setEnabled(false);
     csv_bulk_native_btn_->setToolTip(
         QStringLiteral("Classification CSV only — in-process dif_train_step (needs F_field in .cypha or JSON)"));
     row_bulk->addWidget(csv_bulk_train_btn_);
     row_bulk->addWidget(csv_bulk_native_btn_);
-    row_bulk->addWidget(new QLabel(QStringLiteral("max rows"), central));
-    csv_bulk_max_rows_spin_ = new QSpinBox(central);
+    row_bulk->addWidget(new QLabel(QStringLiteral("max rows"), inner_train));
+    csv_bulk_max_rows_spin_ = new QSpinBox(inner_train);
     csv_bulk_max_rows_spin_->setRange(0, 99000000);
     csv_bulk_max_rows_spin_->setValue(0);
     csv_bulk_max_rows_spin_->setToolTip(QStringLiteral("0 = all rows in the CSV"));
     csv_bulk_max_rows_spin_->setMaximumWidth(120);
     row_bulk->addWidget(csv_bulk_max_rows_spin_);
     row_bulk->addStretch(1);
-    layout->addLayout(row_bulk);
+    lay_train->addLayout(row_bulk);
 
     auto* row_ru01 = new QHBoxLayout();
-    replay_u01_btn_ = new QPushButton(QStringLiteral("replay_u01 JSON…"), central);
-    replay_u01_label_ = new QLabel(QStringLiteral("(optional array for REST /update + native replay)"), central);
+    replay_u01_btn_ = new QPushButton(QStringLiteral("replay_u01 JSON…"), inner_train);
+    replay_u01_label_ = new QLabel(QStringLiteral("(optional array for REST /update + native replay)"), inner_train);
     replay_u01_label_->setWordWrap(true);
     row_ru01->addWidget(replay_u01_btn_);
     row_ru01->addWidget(replay_u01_label_, 1);
-    layout->addLayout(row_ru01);
+    lay_train->addLayout(row_ru01);
 
     auto* row_mke = new QHBoxLayout();
-    row_mke->addWidget(new QLabel(QStringLiteral("MKE correct_label"), central));
-    mke_correct_label_edit_ = new QLineEdit(central);
+    row_mke->addWidget(new QLabel(QStringLiteral("MKE correct_label"), inner_train));
+    mke_correct_label_edit_ = new QLineEdit(inner_train);
     mke_correct_label_edit_->setPlaceholderText(QStringLiteral("empty → first class in model"));
     row_mke->addWidget(mke_correct_label_edit_, 1);
-    row_mke->addWidget(new QLabel(QStringLiteral("router_train_label"), central));
-    mke_router_label_edit_ = new QLineEdit(central);
+    row_mke->addWidget(new QLabel(QStringLiteral("router_train_label"), inner_train));
+    mke_router_label_edit_ = new QLineEdit(inner_train);
     mke_router_label_edit_->setPlaceholderText(QStringLiteral("optional"));
     mke_router_label_edit_->setMaximumWidth(140);
     row_mke->addWidget(mke_router_label_edit_);
-    layout->addLayout(row_mke);
+    lay_train->addLayout(row_mke);
 
     // ── Experiments panel (M6) ────────────────────────────────────────────────
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
+    QWidget* inner_experiment = nullptr;
+    QVBoxLayout* lay_experiment = nullptr;
     {
-      auto* exp_grp = new QGroupBox(QStringLiteral("Experiments (M6 — SQLite tracking)"), central);
+      auto* scr_exp = new QScrollArea(main_tabs_);
+      scr_exp->setWidgetResizable(true);
+      scr_exp->setFrameShape(QFrame::NoFrame);
+      inner_experiment = new QWidget(scr_exp);
+      lay_experiment = new QVBoxLayout(inner_experiment);
+      lay_experiment->setSpacing(10);
+      lay_experiment->setContentsMargins(6, 6, 6, 14);
+      inner_experiment->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
+      scr_exp->setWidget(inner_experiment);
+      main_tabs_->addTab(scr_exp, QStringLiteral("6 · Experiments"));
+    }
+    {
+      auto* exp_grp = new QGroupBox(QStringLiteral("Experiments (M6 — SQLite tracking)"), inner_experiment);
       auto* exp_form = new QFormLayout(exp_grp);
 
       auto* exp_db_row = new QHBoxLayout();
@@ -1493,221 +1592,64 @@ class MainWindow final : public QMainWindow {
       exp_runs_table_->setAlternatingRowColors(true);
       exp_form->addRow(exp_runs_table_);
 
-      layout->addWidget(exp_grp);
+      lay_experiment->addWidget(exp_grp);
     }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
-    layout->addWidget(new QLabel(QStringLiteral("Model registry (on-disk layout = Python ModelRegistry):"), central));
+    lay_server->addWidget(
+        new QLabel(QStringLiteral("Model registry (on-disk layout = Python ModelRegistry):"), inner_server));
     auto* row_reg = new QHBoxLayout();
-    reg_root_btn_ = new QPushButton(QStringLiteral("Registry root…"), central);
-    reg_root_label_ = new QLabel(QStringLiteral("(none — optional for cypha_rest --registry)"), central);
+    reg_root_btn_ = new QPushButton(QStringLiteral("Registry root…"), inner_server);
+    reg_root_label_ = new QLabel(QStringLiteral("(none — optional for cypha_rest --registry)"), inner_server);
     reg_root_label_->setWordWrap(true);
     row_reg->addWidget(reg_root_btn_);
     row_reg->addWidget(reg_root_label_, 1);
-    layout->addLayout(row_reg);
+    lay_server->addLayout(row_reg);
 
     auto* row_reg_act = new QHBoxLayout();
-    reg_scan_btn_ = new QPushButton(QStringLiteral("Scan"), central);
-    reg_load_btn_ = new QPushButton(QStringLiteral("Load selected bundle"), central);
-    reg_register_btn_ = new QPushButton(QStringLiteral("Register current…"), central);
+    reg_scan_btn_ = new QPushButton(QStringLiteral("Scan"), inner_server);
+    reg_load_btn_ = new QPushButton(QStringLiteral("Load selected bundle"), inner_server);
+    reg_register_btn_ = new QPushButton(QStringLiteral("Register current…"), inner_server);
     row_reg_act->addWidget(reg_scan_btn_);
     row_reg_act->addWidget(reg_load_btn_);
     row_reg_act->addWidget(reg_register_btn_);
     row_reg_act->addStretch(1);
-    layout->addLayout(row_reg_act);
+    lay_server->addLayout(row_reg_act);
 
-    reg_combo_ = new QComboBox(central);
+    reg_combo_ = new QComboBox(inner_server);
     reg_combo_->setMinimumContentsLength(28);
-    layout->addWidget(reg_combo_);
+    lay_server->addWidget(reg_combo_);
 
     auto* row_card = new QHBoxLayout();
-    card_btn_ = new QPushButton(QStringLiteral("card.json…"), central);
-    card_label_ = new QLabel(QStringLiteral("(optional — for Register; else card.json next to .cypha)"), central);
+    card_btn_ = new QPushButton(QStringLiteral("card.json…"), inner_server);
+    card_label_ = new QLabel(QStringLiteral("(optional — for Register; else card.json next to .cypha)"), inner_server);
     card_label_->setWordWrap(true);
     row_card->addWidget(card_btn_);
     row_card->addWidget(card_label_, 1);
-    layout->addLayout(row_card);
+    lay_server->addLayout(row_card);
 
-    dataset_info_ = new QPlainTextEdit(central);
-    dataset_info_->setReadOnly(true);
-    dataset_info_->setPlaceholderText(QStringLiteral("CSV inspect summary and registry scan notes."));
-    dataset_info_->setMaximumBlockCount(80);
-    dataset_info_->setMinimumHeight(88);
-    layout->addWidget(dataset_info_);
+    {
+      auto* rest_intro = new QLabel(
+          QStringLiteral("<b>REST server</b> &mdash; spawn <tt>cypha_rest</tt> or set base URL below."),
+          inner_server);
+      rest_intro->setWordWrap(true);
+      rest_intro->setTextFormat(Qt::RichText);
+      lay_server->addWidget(rest_intro);
+    }
 
-    auto* row_loss = new QHBoxLayout();
-    loss_chart_ = new LossChartPanel(central);
-    row_loss->addWidget(loss_chart_, 1);
-    auto* loss_btn_col = new QVBoxLayout();
-    loss_chart_save_btn_ = new QPushButton(QStringLiteral("Save chart PNG…"), central);
-    loss_chart_save_btn_->setToolTip(
-        QStringLiteral("Raster export — REST (blue) and native (orange) when both bulks were run."));
-    loss_btn_col->addWidget(loss_chart_save_btn_);
-    loss_csv_save_btn_ = new QPushButton(QStringLiteral("Save loss CSV…"), central);
-    loss_csv_save_btn_->setToolTip(QStringLiteral(
-        "step, loss_rest, loss_rest_ema, loss_native, loss_native_ema (α=0.08 EMA; blank if no bulk)."));
-    loss_btn_col->addWidget(loss_csv_save_btn_);
-    loss_svg_save_btn_ = new QPushButton(QStringLiteral("Save chart SVG…"), central);
-    loss_svg_save_btn_->setToolTip(
-        QStringLiteral("Vector export (embedded polyline — no Qt Svg module required)."));
-    loss_btn_col->addWidget(loss_svg_save_btn_);
-    loss_chart_clear_btn_ = new QPushButton(QStringLiteral("Clear chart"), central);
-    loss_btn_col->addWidget(loss_chart_clear_btn_);
-    loss_ema_chk_ = new QCheckBox(QStringLiteral("EMA overlay (α=0.08)"), central);
-    loss_ema_chk_->setChecked(true);
-    loss_btn_col->addWidget(loss_ema_chk_);
-    loss_y_lock_chk_ = new QCheckBox(QStringLiteral("Y lock"), central);
-    loss_y_lock_chk_->setToolTip(QStringLiteral("Pin Y axis to manual min/max instead of auto-ranging."));
-    loss_btn_col->addWidget(loss_y_lock_chk_);
-    auto* yrw = new QHBoxLayout();
-    loss_y_min_spin_ = new QDoubleSpinBox(central);
-    loss_y_min_spin_->setRange(-1e9, 1e9);
-    loss_y_min_spin_->setValue(-10.0);
-    loss_y_min_spin_->setDecimals(3);
-    loss_y_min_spin_->setToolTip(QStringLiteral("Y axis minimum (active when Y lock is on)"));
-    loss_y_min_spin_->setEnabled(false);
-    loss_y_max_spin_ = new QDoubleSpinBox(central);
-    loss_y_max_spin_->setRange(-1e9, 1e9);
-    loss_y_max_spin_->setValue(0.0);
-    loss_y_max_spin_->setDecimals(3);
-    loss_y_max_spin_->setToolTip(QStringLiteral("Y axis maximum (active when Y lock is on)"));
-    loss_y_max_spin_->setEnabled(false);
-    yrw->addWidget(new QLabel(QStringLiteral("min"), central));
-    yrw->addWidget(loss_y_min_spin_);
-    yrw->addWidget(new QLabel(QStringLiteral("max"), central));
-    yrw->addWidget(loss_y_max_spin_);
-    loss_btn_col->addLayout(yrw);
-    loss_btn_col->addStretch(1);
-    row_loss->addLayout(loss_btn_col);
-    layout->addLayout(row_loss);
-
-    connect(loss_chart_save_btn_, &QPushButton::clicked, this, [this]() {
-      const QPixmap pm = loss_chart_->grab();
-      if (pm.isNull()) {
-        QMessageBox::warning(this, QStringLiteral("Export"), QStringLiteral("Could not capture the chart."));
-        return;
-      }
-      const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save loss chart"),
-                                                          QStringLiteral("cypha_loss.png"),
-                                                          QStringLiteral("PNG image (*.png);;All (*)"));
-      if (path.isEmpty()) {
-        return;
-      }
-      if (!pm.save(path, "PNG")) {
-        QMessageBox::warning(this, QStringLiteral("Export"),
-                             QStringLiteral("Failed to write PNG:\n%1").arg(path));
-      }
-    });
-
-    connect(loss_csv_save_btn_, &QPushButton::clicked, this, [this]() {
-      if (last_loss_plot_rest_.isEmpty() && last_loss_plot_native_.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("Export"),
-                                 QStringLiteral("Run bulk REST /update or bulk native train first."));
-        return;
-      }
-      const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save loss series"),
-                                                          QStringLiteral("cypha_loss.csv"),
-                                                          QStringLiteral("CSV (*.csv);;All (*)"));
-      if (path.isEmpty()) {
-        return;
-      }
-      QFile f(path);
-      if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, QStringLiteral("Export"), QStringLiteral("Cannot open file for write."));
-        return;
-      }
-      QTextStream out(&f);
-      out << QStringLiteral("step,loss_rest,loss_rest_ema,loss_native,loss_native_ema\n");
-      constexpr double kEmaAlpha = 0.08;
-      const QVector<double> er = loss_ema_series(last_loss_plot_rest_, kEmaAlpha);
-      const QVector<double> en = loss_ema_series(last_loss_plot_native_, kEmaAlpha);
-      const int nr = last_loss_plot_rest_.size();
-      const int nn = last_loss_plot_native_.size();
-      const int nm = std::max(nr, nn);
-      for (int i = 0; i < nm; ++i) {
-        out << i << QLatin1Char(',');
-        if (i < nr) {
-          out << QString::number(last_loss_plot_rest_[i], 'g', 17);
-        }
-        out << QLatin1Char(',');
-        if (i < er.size()) {
-          out << QString::number(er[i], 'g', 17);
-        }
-        out << QLatin1Char(',');
-        if (i < nn) {
-          out << QString::number(last_loss_plot_native_[i], 'g', 17);
-        }
-        out << QLatin1Char(',');
-        if (i < en.size()) {
-          out << QString::number(en[i], 'g', 17);
-        }
-        out << QLatin1Char('\n');
-      }
-    });
-
-    connect(loss_svg_save_btn_, &QPushButton::clicked, this, [this]() {
-      if (last_loss_plot_rest_.isEmpty() && last_loss_plot_native_.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("Export"),
-                                 QStringLiteral("Run bulk REST /update or bulk native train first."));
-        return;
-      }
-      const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save loss chart SVG"),
-                                                          QStringLiteral("cypha_loss.svg"),
-                                                          QStringLiteral("SVG (*.svg);;All (*)"));
-      if (path.isEmpty()) {
-        return;
-      }
-      constexpr double alpha = 0.08;
-      QVector<double> er;
-      QVector<double> en;
-      if (loss_ema_chk_->isChecked()) {
-        er = loss_ema_series(last_loss_plot_rest_, alpha);
-        en = loss_ema_series(last_loss_plot_native_, alpha);
-      }
-      if (!write_loss_chart_svg(path, last_loss_plot_rest_, last_loss_plot_native_, er, en)) {
-        QMessageBox::warning(this, QStringLiteral("Export"),
-                             QStringLiteral("Could not write SVG:\n%1").arg(path));
-      }
-    });
-
-    connect(loss_chart_clear_btn_, &QPushButton::clicked, this, [this]() {
-      last_loss_plot_rest_.clear();
-      last_loss_plot_native_.clear();
-      refresh_loss_chart();
-    });
-
-    connect(loss_ema_chk_, &QCheckBox::stateChanged, this, [this](int) { refresh_loss_chart(); });
-    connect(loss_y_lock_chk_, &QCheckBox::stateChanged, this, [this](int state) {
-      const bool locked = (state == Qt::Checked);
-      loss_y_min_spin_->setEnabled(locked);
-      loss_y_max_spin_->setEnabled(locked);
-      refresh_loss_chart();
-    });
-    connect(loss_y_min_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            [this](double) { refresh_loss_chart(); });
-    connect(loss_y_max_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            [this](double) { refresh_loss_chart(); });
-
-    features_hint_ = new QLabel(QStringLiteral("Features: comma-separated values"), central);
+    features_hint_ = new QLabel(QStringLiteral("Features: comma-separated values"), inner_predict);
     features_hint_->setWordWrap(true);
-    layout->addWidget(features_hint_);
+    lay_predict->addWidget(features_hint_);
 
-    features_edit_ = new QLineEdit(central);
+    features_edit_ = new QLineEdit(inner_predict);
     features_edit_->setPlaceholderText(QStringLiteral("0,0,0,…"));
-    layout->addWidget(features_edit_);
+    lay_predict->addWidget(features_edit_);
 
-    predict_btn_ = new QPushButton(QStringLiteral("Predict (native)"), central);
+    predict_btn_ = new QPushButton(QStringLiteral("Predict (native)"), inner_predict);
     predict_btn_->setEnabled(false);
-    layout->addWidget(predict_btn_);
+    lay_predict->addWidget(predict_btn_);
 
-    native_train_one_btn_ = new QPushButton(QStringLiteral("Train 1 row (native, from feature box + correct_label)"),
-                                            central);
-    native_train_one_btn_->setEnabled(false);
-    native_train_one_btn_->setToolTip(
-        QStringLiteral("dif_train_step_vector / GH — mutates loaded model in memory (not saved to disk)"));
-    layout->addWidget(native_train_one_btn_);
-
-    auto* hp_group = new QGroupBox(QStringLiteral("Native train hyperparameters"), central);
+    auto* hp_group = new QGroupBox(QStringLiteral("Native train hyperparameters"), inner_train);
     auto* hp_form = new QFormLayout(hp_group);
     hp_world_lr_edit_ = new QLineEdit(QStringLiteral("0.008"), hp_group);
     hp_delta_lr_edit_ = new QLineEdit(QStringLiteral("0.05"), hp_group);
@@ -1738,18 +1680,25 @@ class MainWindow final : public QMainWindow {
     hp_row->addWidget(hp_defaults_btn_);
     hp_row->addStretch(1);
     hp_form->addRow(hp_row);
-    layout->addWidget(hp_group);
+    lay_train->addWidget(hp_group);
 
-    save_native_btn_ = new QPushButton(QStringLiteral("Save trained model (.cypha)…"), central);
+    native_train_one_btn_ = new QPushButton(QStringLiteral("Train 1 row (native, from feature box + correct_label)"),
+                                            inner_train);
+    native_train_one_btn_->setEnabled(false);
+    native_train_one_btn_->setToolTip(
+        QStringLiteral("dif_train_step_vector / GH — mutates loaded model in memory (not saved to disk)"));
+    lay_train->addWidget(native_train_one_btn_);
+
+    save_native_btn_ = new QPushButton(QStringLiteral("Save trained model (.cypha)…"), inner_train);
     save_native_btn_->setEnabled(false);
     save_native_btn_->setToolTip(
         QStringLiteral("merge_state_into_root_for_save + infer snapshot: enc/field/temp/context/mid_trans/"
                        "field_W_T/w_inject/scalars — see native/qt/README.md for remaining Python gaps"));
-    layout->addWidget(save_native_btn_);
+    lay_train->addWidget(save_native_btn_);
 
     // ── MKE Regressor panel ───────────────────────────────────────────────────
     {
-      auto* mke_grp = new QGroupBox(QStringLiteral("MKE Regressor (native, online — regression mode)"), central);
+      auto* mke_grp = new QGroupBox(QStringLiteral("MKE Regressor (native, online — regression mode)"), inner_train);
       auto* mke_form = new QFormLayout(mke_grp);
       mke_ff_spin_ = new QDoubleSpinBox(mke_grp);
       mke_ff_spin_->setRange(0.9, 1.0);
@@ -1787,12 +1736,167 @@ class MainWindow final : public QMainWindow {
       mke_result_label_->setWordWrap(true);
       mke_form->addRow(mke_result_label_);
 
-      layout->addWidget(mke_grp);
+      lay_train->addWidget(mke_grp);
+    }
+
+    {
+      auto* row_loss = new QHBoxLayout();
+      loss_chart_ = new LossChartPanel(inner_train);
+      row_loss->addWidget(loss_chart_, 1);
+      auto* loss_btn_col = new QVBoxLayout();
+      loss_chart_save_btn_ = new QPushButton(QStringLiteral("Save chart PNG…"), inner_train);
+      loss_chart_save_btn_->setToolTip(
+          QStringLiteral("Raster export — REST (blue) and native (orange) when both bulks were run."));
+      loss_btn_col->addWidget(loss_chart_save_btn_);
+      loss_csv_save_btn_ = new QPushButton(QStringLiteral("Save loss CSV…"), inner_train);
+      loss_csv_save_btn_->setToolTip(QStringLiteral(
+          "step, loss_rest, loss_rest_ema, loss_native, loss_native_ema (α=0.08 EMA; blank if no bulk)."));
+      loss_btn_col->addWidget(loss_csv_save_btn_);
+      loss_svg_save_btn_ = new QPushButton(QStringLiteral("Save chart SVG…"), inner_train);
+      loss_svg_save_btn_->setToolTip(
+          QStringLiteral("Vector export (embedded polyline — no Qt Svg module required)."));
+      loss_btn_col->addWidget(loss_svg_save_btn_);
+      loss_chart_clear_btn_ = new QPushButton(QStringLiteral("Clear chart"), inner_train);
+      loss_btn_col->addWidget(loss_chart_clear_btn_);
+      loss_ema_chk_ = new QCheckBox(QStringLiteral("EMA overlay (α=0.08)"), inner_train);
+      loss_ema_chk_->setChecked(true);
+      loss_btn_col->addWidget(loss_ema_chk_);
+      loss_y_lock_chk_ = new QCheckBox(QStringLiteral("Y lock"), inner_train);
+      loss_y_lock_chk_->setToolTip(QStringLiteral("Pin Y axis to manual min/max instead of auto-ranging."));
+      loss_btn_col->addWidget(loss_y_lock_chk_);
+      auto* yrw = new QHBoxLayout();
+      loss_y_min_spin_ = new QDoubleSpinBox(inner_train);
+      loss_y_min_spin_->setRange(-1e9, 1e9);
+      loss_y_min_spin_->setValue(-10.0);
+      loss_y_min_spin_->setDecimals(3);
+      loss_y_min_spin_->setToolTip(QStringLiteral("Y axis minimum (active when Y lock is on)"));
+      loss_y_min_spin_->setEnabled(false);
+      loss_y_max_spin_ = new QDoubleSpinBox(inner_train);
+      loss_y_max_spin_->setRange(-1e9, 1e9);
+      loss_y_max_spin_->setValue(0.0);
+      loss_y_max_spin_->setDecimals(3);
+      loss_y_max_spin_->setToolTip(QStringLiteral("Y axis maximum (active when Y lock is on)"));
+      loss_y_max_spin_->setEnabled(false);
+      yrw->addWidget(new QLabel(QStringLiteral("min"), inner_train));
+      yrw->addWidget(loss_y_min_spin_);
+      yrw->addWidget(new QLabel(QStringLiteral("max"), inner_train));
+      yrw->addWidget(loss_y_max_spin_);
+      loss_btn_col->addLayout(yrw);
+      loss_btn_col->addStretch(1);
+      row_loss->addLayout(loss_btn_col);
+      lay_train->addLayout(row_loss);
+
+      connect(loss_chart_save_btn_, &QPushButton::clicked, this, [this]() {
+        const QPixmap pm = loss_chart_->grab();
+        if (pm.isNull()) {
+          QMessageBox::warning(this, QStringLiteral("Export"), QStringLiteral("Could not capture the chart."));
+          return;
+        }
+        const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save loss chart"),
+                                                          QStringLiteral("cypha_loss.png"),
+                                                          QStringLiteral("PNG image (*.png);;All (*)"));
+        if (path.isEmpty()) {
+          return;
+        }
+        if (!pm.save(path, "PNG")) {
+          QMessageBox::warning(this, QStringLiteral("Export"),
+                               QStringLiteral("Failed to write PNG:\n%1").arg(path));
+        }
+      });
+
+      connect(loss_csv_save_btn_, &QPushButton::clicked, this, [this]() {
+        if (last_loss_plot_rest_.isEmpty() && last_loss_plot_native_.isEmpty()) {
+          QMessageBox::information(this, QStringLiteral("Export"),
+                                   QStringLiteral("Run bulk REST /update or bulk native train first."));
+          return;
+        }
+        const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save loss series"),
+                                                          QStringLiteral("cypha_loss.csv"),
+                                                          QStringLiteral("CSV (*.csv);;All (*)"));
+        if (path.isEmpty()) {
+          return;
+        }
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+          QMessageBox::warning(this, QStringLiteral("Export"), QStringLiteral("Cannot open file for write."));
+          return;
+        }
+        QTextStream out(&f);
+        out << QStringLiteral("step,loss_rest,loss_rest_ema,loss_native,loss_native_ema\n");
+        constexpr double kEmaAlpha = 0.08;
+        const QVector<double> er = loss_ema_series(last_loss_plot_rest_, kEmaAlpha);
+        const QVector<double> en = loss_ema_series(last_loss_plot_native_, kEmaAlpha);
+        const int nr = last_loss_plot_rest_.size();
+        const int nn = last_loss_plot_native_.size();
+        const int nm = std::max(nr, nn);
+        for (int i = 0; i < nm; ++i) {
+          out << i << QLatin1Char(',');
+          if (i < nr) {
+            out << QString::number(last_loss_plot_rest_[i], 'g', 17);
+          }
+          out << QLatin1Char(',');
+          if (i < er.size()) {
+            out << QString::number(er[i], 'g', 17);
+          }
+          out << QLatin1Char(',');
+          if (i < nn) {
+            out << QString::number(last_loss_plot_native_[i], 'g', 17);
+          }
+          out << QLatin1Char(',');
+          if (i < en.size()) {
+            out << QString::number(en[i], 'g', 17);
+          }
+          out << QLatin1Char('\n');
+        }
+      });
+
+      connect(loss_svg_save_btn_, &QPushButton::clicked, this, [this]() {
+        if (last_loss_plot_rest_.isEmpty() && last_loss_plot_native_.isEmpty()) {
+          QMessageBox::information(this, QStringLiteral("Export"),
+                                   QStringLiteral("Run bulk REST /update or bulk native train first."));
+          return;
+        }
+        const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Save loss chart SVG"),
+                                                          QStringLiteral("cypha_loss.svg"),
+                                                          QStringLiteral("SVG (*.svg);;All (*)"));
+        if (path.isEmpty()) {
+          return;
+        }
+        constexpr double alpha = 0.08;
+        QVector<double> er;
+        QVector<double> en;
+        if (loss_ema_chk_->isChecked()) {
+          er = loss_ema_series(last_loss_plot_rest_, alpha);
+          en = loss_ema_series(last_loss_plot_native_, alpha);
+        }
+        if (!write_loss_chart_svg(path, last_loss_plot_rest_, last_loss_plot_native_, er, en)) {
+          QMessageBox::warning(this, QStringLiteral("Export"),
+                               QStringLiteral("Could not write SVG:\n%1").arg(path));
+        }
+      });
+
+      connect(loss_chart_clear_btn_, &QPushButton::clicked, this, [this]() {
+        last_loss_plot_rest_.clear();
+        last_loss_plot_native_.clear();
+        refresh_loss_chart();
+      });
+
+      connect(loss_ema_chk_, &QCheckBox::stateChanged, this, [this](int) { refresh_loss_chart(); });
+      connect(loss_y_lock_chk_, &QCheckBox::stateChanged, this, [this](int state) {
+        const bool locked = (state == Qt::Checked);
+        loss_y_min_spin_->setEnabled(locked);
+        loss_y_max_spin_->setEnabled(locked);
+        refresh_loss_chart();
+      });
+      connect(loss_y_min_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+              [this](double) { refresh_loss_chart(); });
+      connect(loss_y_max_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+              [this](double) { refresh_loss_chart(); });
     }
 
     // ── Batch predict panel ───────────────────────────────────────────────────
     {
-      auto* bp_grp = new QGroupBox(QStringLiteral("Batch predict (native)"), central);
+      auto* bp_grp = new QGroupBox(QStringLiteral("Batch predict (native)"), inner_predict);
       auto* bp_vbox = new QVBoxLayout(bp_grp);
 
       auto* bp_row1 = new QHBoxLayout();
@@ -1816,19 +1920,19 @@ class MainWindow final : public QMainWindow {
       batch_predict_table_->setMaximumHeight(200);
       bp_vbox->addWidget(batch_predict_table_);
 
-      layout->addWidget(bp_grp);
+      lay_predict->addWidget(bp_grp);
     }
 
     {
       auto* tlog_hdr = new QHBoxLayout();
-      tlog_hdr->addWidget(new QLabel(QStringLiteral("Native train log:"), central));
+      tlog_hdr->addWidget(new QLabel(QStringLiteral("Native train log:"), inner_train));
       tlog_hdr->addStretch(1);
-      train_log_clear_btn_ = new QPushButton(QStringLiteral("Clear log"), central);
-      train_log_export_btn_ = new QPushButton(QStringLiteral("Export CSV…"), central);
+      train_log_clear_btn_ = new QPushButton(QStringLiteral("Clear log"), inner_train);
+      train_log_export_btn_ = new QPushButton(QStringLiteral("Export CSV…"), inner_train);
       tlog_hdr->addWidget(train_log_clear_btn_);
       tlog_hdr->addWidget(train_log_export_btn_);
-      layout->addLayout(tlog_hdr);
-      train_log_table_ = new QTableWidget(0, 4, central);
+      lay_train->addLayout(tlog_hdr);
+      train_log_table_ = new QTableWidget(0, 4, inner_train);
       train_log_table_->setHorizontalHeaderLabels({QStringLiteral("#"),
                                                    QStringLiteral("Label"),
                                                    QStringLiteral("Loss"),
@@ -1844,12 +1948,12 @@ class MainWindow final : public QMainWindow {
       train_log_table_->setToolTip(
           QStringLiteral("Per-step native train history: #=cumulative step, Correct=✓/✗. "
                          "Capped at 2000 rows; older rows removed."));
-      layout->addWidget(train_log_table_);
+      lay_train->addWidget(train_log_table_);
     }
 
     // ── Training progress panel ───────────────────────────────────────────────
     {
-      auto* prog_grp = new QGroupBox(QStringLiteral("Training progress (native)"), central);
+      auto* prog_grp = new QGroupBox(QStringLiteral("Training progress (native)"), inner_train);
       auto* prog_vbox = new QVBoxLayout(prog_grp);
 
       auto* prog_row1 = new QHBoxLayout();
@@ -1877,103 +1981,123 @@ class MainWindow final : public QMainWindow {
       train_prog_acc_bar_ = new PerClassAccuracyBar(prog_grp);
       prog_vbox->addWidget(train_prog_acc_bar_);
 
-      layout->addWidget(prog_grp);
+      lay_train->addWidget(prog_grp);
     }
 
-    layout->addWidget(new QLabel(QStringLiteral("Spawn cypha_rest (optional):"), central));
+    lay_train->addStretch(1);
+    lay_predict->addStretch(1);
+    lay_server->addStretch(1);
+
+    lay_server->addWidget(new QLabel(QStringLiteral("Spawn cypha_rest (optional):"), inner_server));
     auto* row_bin = new QHBoxLayout();
-    rest_browse_btn_ = new QPushButton(QStringLiteral("cypha_rest binary…"), central);
-    rest_bin_edit_ = new QLineEdit(central);
+    rest_browse_btn_ = new QPushButton(QStringLiteral("cypha_rest binary…"), inner_server);
+    rest_bin_edit_ = new QLineEdit(inner_server);
     rest_bin_edit_->setPlaceholderText(QStringLiteral("path/to/cypha_rest"));
     row_bin->addWidget(rest_browse_btn_);
     row_bin->addWidget(rest_bin_edit_, 1);
-    layout->addLayout(row_bin);
+    lay_server->addLayout(row_bin);
 
     auto* row_listen = new QHBoxLayout();
-    row_listen->addWidget(new QLabel(QStringLiteral("--listen"), central));
-    rest_listen_edit_ = new QLineEdit(central);
+    row_listen->addWidget(new QLabel(QStringLiteral("--listen"), inner_server));
+    rest_listen_edit_ = new QLineEdit(inner_server);
     rest_listen_edit_->setText(QStringLiteral("127.0.0.1:8765"));
     row_listen->addWidget(rest_listen_edit_, 1);
-    layout->addLayout(row_listen);
+    lay_server->addLayout(row_listen);
 
     auto* row_srv = new QHBoxLayout();
-    rest_start_btn_ = new QPushButton(QStringLiteral("Start server"), central);
-    rest_stop_btn_ = new QPushButton(QStringLiteral("Stop server"), central);
+    rest_start_btn_ = new QPushButton(QStringLiteral("Start server"), inner_server);
+    rest_stop_btn_ = new QPushButton(QStringLiteral("Stop server"), inner_server);
     rest_stop_btn_->setEnabled(false);
-    rest_status_label_ = new QLabel(QStringLiteral("Server: stopped"), central);
+    rest_status_label_ = new QLabel(QStringLiteral("Server: stopped"), inner_server);
     row_srv->addWidget(rest_start_btn_);
     row_srv->addWidget(rest_stop_btn_);
     row_srv->addWidget(rest_status_label_, 1);
-    layout->addLayout(row_srv);
+    lay_server->addLayout(row_srv);
 
     auto* row_log_hdr = new QHBoxLayout();
-    row_log_hdr->addWidget(new QLabel(QStringLiteral("cypha_rest log:"), central));
-    rest_health_btn_ = new QPushButton(QStringLiteral("GET /health"), central);
-    rest_ready_btn_ = new QPushButton(QStringLiteral("GET /ready"), central);
-    rest_models_btn_ = new QPushButton(QStringLiteral("GET /models"), central);
-    rest_clear_log_btn_ = new QPushButton(QStringLiteral("Clear log"), central);
+    row_log_hdr->addWidget(new QLabel(QStringLiteral("cypha_rest log:"), inner_server));
+    rest_health_btn_ = new QPushButton(QStringLiteral("GET /health"), inner_server);
+    rest_ready_btn_ = new QPushButton(QStringLiteral("GET /ready"), inner_server);
+    rest_models_btn_ = new QPushButton(QStringLiteral("GET /models"), inner_server);
+    rest_clear_log_btn_ = new QPushButton(QStringLiteral("Clear log"), inner_server);
     row_log_hdr->addStretch(1);
     row_log_hdr->addWidget(rest_health_btn_);
     row_log_hdr->addWidget(rest_ready_btn_);
     row_log_hdr->addWidget(rest_models_btn_);
     row_log_hdr->addWidget(rest_clear_log_btn_);
-    layout->addLayout(row_log_hdr);
+    lay_server->addLayout(row_log_hdr);
 
-    rest_log_ = new QPlainTextEdit(central);
+    rest_log_ = new QPlainTextEdit(inner_server);
     rest_log_->setReadOnly(true);
     rest_log_->setMaximumBlockCount(500);
     rest_log_->setPlaceholderText(QStringLiteral("stdout/stderr from spawned cypha_rest appear here."));
     rest_log_->setMinimumHeight(120);
-    layout->addWidget(rest_log_);
+    lay_server->addWidget(rest_log_);
 
-    layout->addWidget(new QLabel(QStringLiteral("REST base URL (must match --listen):"), central));
-    rest_base_edit_ = new QLineEdit(central);
+    lay_server->addWidget(new QLabel(QStringLiteral("REST base URL (must match --listen):"), inner_server));
+    rest_base_edit_ = new QLineEdit(inner_server);
     rest_base_edit_->setPlaceholderText(QStringLiteral("http://127.0.0.1:8765"));
-    layout->addWidget(rest_base_edit_);
+    lay_server->addWidget(rest_base_edit_);
 
-    use_gh_chk_ = new QCheckBox(QStringLiteral("use_gh for REST predict, /update, and bulk train"), central);
+    use_gh_chk_ = new QCheckBox(QStringLiteral("use_gh for REST predict, /update, and bulk train"), inner_server);
     use_gh_chk_->setChecked(true);
-    layout->addWidget(use_gh_chk_);
+    lay_server->addWidget(use_gh_chk_);
 
     predict_return_explanation_chk_ =
-        new QCheckBox(QStringLiteral("POST /predict return_explanation (class_details, world distance)"), central);
+        new QCheckBox(QStringLiteral("POST /predict return_explanation (class_details, world distance)"),
+                      inner_server);
     predict_return_explanation_chk_->setChecked(false);
-    layout->addWidget(predict_return_explanation_chk_);
+    lay_server->addWidget(predict_return_explanation_chk_);
 
     auto* row_rest_load = new QHBoxLayout();
-    row_rest_load->addWidget(new QLabel(QStringLiteral("POST /load"), central));
-    rest_load_name_edit_ = new QLineEdit(central);
+    row_rest_load->addWidget(new QLabel(QStringLiteral("POST /load"), inner_server));
+    rest_load_name_edit_ = new QLineEdit(inner_server);
     rest_load_name_edit_->setPlaceholderText(QStringLiteral("registry name"));
-    rest_load_version_edit_ = new QLineEdit(central);
+    rest_load_version_edit_ = new QLineEdit(inner_server);
     rest_load_version_edit_->setPlaceholderText(QStringLiteral("version"));
     rest_load_version_edit_->setText(QStringLiteral("latest"));
     rest_load_version_edit_->setMaximumWidth(100);
-    rest_post_load_btn_ = new QPushButton(QStringLiteral("Load"), central);
+    rest_post_load_btn_ = new QPushButton(QStringLiteral("Load"), inner_server);
     row_rest_load->addWidget(rest_load_name_edit_, 1);
     row_rest_load->addWidget(rest_load_version_edit_);
     row_rest_load->addWidget(rest_post_load_btn_);
-    layout->addLayout(row_rest_load);
+    lay_server->addLayout(row_rest_load);
 
-    predict_rest_btn_ = new QPushButton(QStringLiteral("Predict (REST POST /predict)"), central);
+    predict_rest_btn_ = new QPushButton(QStringLiteral("Predict (REST POST /predict)"), inner_server);
     predict_rest_btn_->setEnabled(false);
-    layout->addWidget(predict_rest_btn_);
+    lay_server->addWidget(predict_rest_btn_);
 
     auto* row_upd = new QHBoxLayout();
-    row_upd->addWidget(new QLabel(QStringLiteral("correct_label"), central));
-    update_label_edit_ = new QLineEdit(central);
+    row_upd->addWidget(new QLabel(QStringLiteral("correct_label"), inner_server));
+    update_label_edit_ = new QLineEdit(inner_server);
     update_label_edit_->setPlaceholderText(QStringLiteral("class name for POST /update"));
     row_upd->addWidget(update_label_edit_, 1);
-    update_rest_btn_ = new QPushButton(QStringLiteral("POST /update (train step)"), central);
+    update_rest_btn_ = new QPushButton(QStringLiteral("POST /update (train step)"), inner_server);
     update_rest_btn_->setEnabled(false);
     row_upd->addWidget(update_rest_btn_);
-    layout->addLayout(row_upd);
+    lay_server->addLayout(row_upd);
 
     result_label_ = new QLabel(QStringLiteral("—"), central);
     result_label_->setWordWrap(true);
-    layout->addWidget(result_label_);
+    result_label_->setFrameShape(QFrame::StyledPanel);
+    result_label_->setMinimumHeight(48);
+    result_label_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+    main_layout->addWidget(result_label_);
 
     setCentralWidget(central);
-    resize(700, 1020);
+
+    QSettings ui_settings(QStringLiteral("Cypha"), QStringLiteral("CyphaQtShell"));
+    if (ui_settings.contains(QStringLiteral("geometry"))) {
+      restoreGeometry(ui_settings.value(QStringLiteral("geometry")).toByteArray());
+    } else {
+      resize(980, 980);
+    }
+    if (main_tabs_ != nullptr) {
+      const int tab = ui_settings.value(QStringLiteral("mainTab"), 0).toInt();
+      if (tab >= 0 && tab < main_tabs_->count()) {
+        main_tabs_->setCurrentIndex(tab);
+      }
+    }
 
     rest_proc_.setProcessChannelMode(QProcess::SeparateChannels);
     connect(&rest_proc_, &QProcess::readyReadStandardOutput, this, [this]() {
@@ -3478,6 +3602,11 @@ class MainWindow final : public QMainWindow {
       rest_proc_.terminate();
       rest_proc_.waitForFinished(3000);
     }
+    QSettings ui_settings(QStringLiteral("Cypha"), QStringLiteral("CyphaQtShell"));
+    ui_settings.setValue(QStringLiteral("geometry"), saveGeometry());
+    if (main_tabs_ != nullptr) {
+      ui_settings.setValue(QStringLiteral("mainTab"), main_tabs_->currentIndex());
+    }
     QMainWindow::closeEvent(e);
   }
 
@@ -4377,6 +4506,8 @@ class MainWindow final : public QMainWindow {
   }
 
   QProcess rest_proc_;
+  QTabWidget* main_tabs_{};
+  QLabel* workflow_banner_{};
   QPushButton* load_btn_{};
   QPushButton* new_model_btn_{};
   QPushButton* ff_btn_{};

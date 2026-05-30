@@ -71,6 +71,10 @@ class InferenceEngine:
         self._n_corrections = 0
         self._task = self._detect_task()
 
+    def set_ood_threshold(self, t: float) -> None:
+        """Update OOD decision boundary (anomaly_score > t → is_ood)."""
+        self._ood_threshold = float(t)
+
     def _detect_task(self) -> str:
         """Infer task type from model class name."""
         name = type(self._model).__name__
@@ -139,7 +143,7 @@ class InferenceEngine:
             confidence=float(conf),
             all_scores=all_scores,
             anomaly_score=anomaly,
-            is_ood=(anomaly > self._ood_threshold),
+            is_ood=(anomaly > float(self._ood_threshold)),
             r_eff=float(r_eff),
             input_vector=x_pp,
             raw_input=raw_input,
@@ -304,6 +308,11 @@ class InferenceSession:
         self._chi      : float = 1.0
         self._psi      : float = 1.0
         self._started  : float = time.time()
+
+    def set_gh_params(self, chi: float, psi: float) -> None:
+        """Set GH gate prior strengths for subsequent ``predict`` calls."""
+        self._chi = float(chi)
+        self._psi = float(psi)
 
     def predict(self, raw_input: Any, use_gh: bool = True) -> Prediction:
         """Predict and update session GH state."""

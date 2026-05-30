@@ -1,0 +1,23 @@
+{
+  "domain": "cross_forgetting_resistance",
+  "timestamp": "2026-05-30T09:57:37.179207+00:00",
+  "experiments": {
+    "forgetting_rows": [
+      {
+        "domain": "d16",
+        "experiment": "16B_forgetting_resistance",
+        "forgetting_score": 0.8124999999999999,
+        "accuracy_before": 0.8421052631578947,
+        "accuracy_after": 0.15789473684210525
+      },
+      {
+        "domain": "d16",
+        "experiment": "16F_per_task_models",
+        "forgetting_score": 0.0,
+        "accuracy_before": null,
+        "accuracy_after": null
+      }
+    ],
+    "mean_forgetting_score": 0.40624999999999994
+  }
+}

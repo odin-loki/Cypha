@@ -1,12 +1,38 @@
-# Native runtime (C++ / OpenCL / Qt)
+# Native runtime (C++ / CUDA / Qt)
 
 Monorepo C++ core for [`docs/port/PORT_FULL_STACK.md`](../docs/port/PORT_FULL_STACK.md). **Vendored:** `third_party/nlohmann/json.hpp`, `third_party/httplib.h` (no OpenSSL — do not `#define CPPHTTPLIB_OPENSSL_SUPPORT` unless you link libssl).
+
+**Accel** (`cypha/accel_backend.hpp`): optional **CUDA** (`-DCYPHA_ENABLE_CUDA=ON`, NVIDIA toolkit + driver); otherwise **ISO C++** parallel CPU via `std::thread`. **`cuda_smoke`** checks correctness vs a serial reference; **`cuda_smoke --bench`** compares CUDA vs CPU when a GPU is present (exit 2 skip otherwise).
+
+## CMake presets (Windows + WSL trees)
+
+| Preset | Binary directory | Use |
+|--------|------------------|-----|
+| **`windows-msvc-release`** | `native/build-windows-msvc/` | Native Windows: Visual Studio **2022** generator, x64. `cmake --preset windows-msvc-release` then `cmake --build build-windows-msvc --config Release`. |
+| **`windows-vs2026-release`** | `native/build-windows-vs2026/` | Visual Studio **18 2026** / Build Tools 18 (MSVC 14.5x). Same workflow; use if preset **windows-msvc-release** fails (no VS 2022). |
+| **`wsl-gcc-release`** | `native/build-wsl-gcc/` | WSL/Linux: **Ninja** + Release. Needs `ninja-build` (or use **`wsl-gcc-release-make`** for Makefiles). |
+| **`mingw-w64-cross`** | `native/build-mingw-w64/` | Cross-compile `.exe` from Linux/WSL (no CUDA). |
+
+**Qt shell on Windows:** after a Release build with **`-DCYPHA_BUILD_QT=ON`** and **`-DCMAKE_PREFIX_PATH=`** pointing at your Qt **msvc*_64** kit, run **`windeployqt`** on `qt/Release/cypha_qt_shell.exe`, then from the repo root: **`powershell -ExecutionPolicy Bypass -File scripts/run_cypha_qt_windows.ps1`** (starts **`cypha_rest`** with `parity_fixtures/reference.cypha` and opens **`cypha_qt_shell`**). Use **`-NoServer`** for GUI only.
+
+```bash
+cd native
+cmake --list-presets
+cmake --preset wsl-gcc-release
+cmake --build --preset wsl-gcc-release-build
+ctest --test-dir build-wsl-gcc --output-on-failure
+```
+
+**CUDA (Windows or WSL with NVIDIA):** add `-DCYPHA_ENABLE_CUDA=ON` at configure (requires `nvcc` + `CUDA::cudart`). Override arch: `-DCMAKE_CUDA_ARCHITECTURES=89` (Ada), `86` (Ampere), etc. Optional: `-DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=8` to dispatch smaller batches to the GPU (default **16** avoids tiny-batch launch + copy overhead).
+
+Device memory: CUDA accel reuses one **growing device pool** plus a one-time **Bessel K₂/K₁ table** upload for the GH–NIG world gate (no per-call `cudaMalloc` for the main buffers once warmed up).
 
 ## Targets
 
 | Binary / lib | Milestone | Role |
 |--------------|-----------|------|
 | **`cypha_core`** | M1–M3 | `.cypha` **load** + **`load_cypha_from_buffer`** / **`save_cypha_file`** / **`save_cypha_to_buffer`** / **`clone_cnode`** (Python **`cypha_save_binary`** / **`cypha_load_binary`** / **`cypha_save_binary_to_bytes`** / **`cypha_load_binary_from_bytes`** v3 layout), `mid_trans`, `llr_scale_*`, `field_W_T`, optional **`field_a_eff`**, `w_inject`, …, CPU infer, full **Tier-1+2** `context_prior` / `context_record_step`, preprocessor JSON, `memory_train` + **`merge_state_into_root_for_save`** + `dedup_check`, `sync_infer`, replay, contrastive + deliberate + **`encoder_align_to_offsets`**, NIG field, `dif_train_step_vector`, **`dif_train_classify_sequence`**, **`dif_gh_train_classify_sequence`** (GH online loop), **`mke_scalar_train_step`**, **`registry_scan`** + **`registry_register_bundle`** |
+| **`cuda_smoke`** | Accel | **`cypha::accel`**: CUDA if `-DCYPHA_ENABLE_CUDA=ON` + GPU; else parallel CPU (`std::thread`). CTest **`native_cuda_smoke`** / **`native_cuda_bench`** (bench exit 2 without GPU). Pytest **`tests/test_cuda_smoke_native.py`**; **`CYPHA_CUDA_SMOKE_BIN`**. |
 | **`cypha_parity`** | M1 | `reference.cypha` + `native_parity.bin` → LLR / probs / gates; **v2** sidecar tail checks **`batch_infer_full`** entropy + confidence. **`CyphaInferModel::from_root`** restores **Tier-1** from **`ctx_hist_packed`** / co-occurrence / last label; see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §4. CTest **`native_parity`**. Pytest **`tests/test_cypha_parity_native.py`**; env **`CYPHA_CYPHA_PARITY_BIN`**. |
 | **`batch_llr_parity`** | M7 | **`batch_llr_from_x`** vs `parity_fixtures/batch_llr/sidecar.json` (same **X**/**LLR** as **`expected.npz`**) |
 | **`memory_train_parity`** | M3 | `parity_fixtures/memory_train/` — one `DIFMemory.train` step vs `after.cypha`; CTest **`native_memory_train`**. Pytest **`tests/test_memory_train_native_parity.py`**; env **`CYPHA_MEMORY_TRAIN_PARITY_BIN`**. |
@@ -26,7 +52,7 @@ Monorepo C++ core for [`docs/port/PORT_FULL_STACK.md`](../docs/port/PORT_FULL_ST
 | **`regression_two_stage_ridge_fit_parity`** | M6–M7 | **`two_stage_dif_ridge_fit_from_llr`** + **`two_stage_dif_predict_batch`** vs `parity_fixtures/two_stage_ridge_fit/sidecar.json` or **`two_stage_e2e_ridge/`** (quantile-DIF LLR); CTests **`native_regression_two_stage_ridge_fit`**, **`native_regression_two_stage_e2e_ridge`** (**`k_native_regression_milestone` ≥ 7**) |
 | **`regression_rff_parity`** | M4 | **`RFFRegressor` / `MKERegressor` math kernels:** `rff_encode_batch_rowmajor`, `ridge_fit_bias`, `linear_predict_with_bias`, `mke_expert_linear_dots` (+ mixture sanity) vs `parity_fixtures/rff_regression/sidecar.json` |
 | **`registry_register`** | M5 | Copy **`model.cypha`** + **`card.json`** (+ optional **`--pre preprocessor.json`**) into `<root>/<name>/<version>/`; **`--and-verify`** runs **`registry_scan`**. CTest **`native_registry_register`**. Pytest **`tests/test_registry_register_native_parity.py`**; env **`CYPHA_REGISTRY_REGISTER_BIN`**. |
-| **`cypha_rest`** | M5 | HTTP routes mirroring [`cypha_studio/server/api.py`](../../cypha_studio/server/api.py): **`/health`**, **`/ready`**, **`/metrics`**, **`/predict`**, **`/update`** (native `dif_train_step_vector` / GH wrapper + sync), **`/adapt_temperature`** (ECE grid, Python `adapt_temperature`), **`/session`**, **`DELETE /session`**, **`/classes`**, **`/models`**, **`/load`**, **`/register`** (copy **`model.cypha`** + **`card.json`** into registry — needs **`--registry`**). Optional **`--regression-json`** / `regression_head.json` → `/predict` **`regression_val`** + **`uncertainty`** (scalar MoE; optional **`mke`** block → RFF routing features + **`POST /update`** with **`regression_y`** = `mke_scalar_train_step`; see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §3). One-shot checks: **`python3 native/scripts/smoke_mke_rest_update.py`** (MKE **`/update`**); **`python3 native/scripts/smoke_registry_rest_chain.py`** (**`/register`** → **`/load`** → **`/predict`**) — both need built **`cypha_rest`**. |
+| **`cypha_rest`** | M5 | HTTP routes mirroring [`cypha_studio/server/api.py`](../cypha_studio/server/api.py): **`/health`**, **`/ready`**, **`/metrics`**, **`/predict`**, **`/update`** (native `dif_train_step_vector` / GH wrapper + sync), **`/adapt_temperature`** (ECE grid, Python `adapt_temperature`), **`/session`**, **`DELETE /session`**, **`/classes`**, **`/models`**, **`/load`**, **`/register`** (copy **`model.cypha`** + **`card.json`** into registry — needs **`--registry`**). Optional **`--regression-json`** / `regression_head.json` → `/predict` **`regression_val`** + **`uncertainty`** (scalar MoE; optional **`mke`** block → RFF routing features + **`POST /update`** with **`regression_y`** = `mke_scalar_train_step`; see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §3). One-shot checks: **`python3 native/scripts/smoke_mke_rest_update.py`** (MKE **`/update`**); **`python3 native/scripts/smoke_registry_rest_chain.py`** (**`/register`** → **`/load`** → **`/predict`**) — both need built **`cypha_rest`**. |
 | **`experiment_db_smoke`** | M6 | **Optional** — needs **Python 3** at configure for DDL. **SQLite:** system **`find_package(SQLite3)`** or default **`CYPHA_FETCH_SQLITE3_AMALGAMATION=ON`** (downloads official amalgamation). Uses **`cypha/experiment_db.hpp`** (`ExperimentDb`, `experiment_sqlite_exec`, …). CTests **`native_experiment_db_smoke`** / **`native_experiment_db_file`**. Pytest **`tests/test_experiment_db_smoke_native_parity.py`** (subprocess parity for both modes; DDL via **`tests/experiment_schema_ddl.py`**), **`tests/test_experiment_native_seed.py`** (Python reads native-seeded file); env **`CYPHA_EXPERIMENT_DB_SMOKE_BIN`**. |
 | **`experiment_db_crud_parity`** | M6 | **`cypha/experiment_db_crud.hpp`** — insert/finish, append metrics, fail/delete, get/list, best/leaderboard, **`compare_runs`**, **`update_run_notes`** vs canonical DDL; CTest **`native_experiment_db_crud`**. Pytest **`tests/test_experiment_db_crud_native_parity.py`** (DDL from **`experiment.py`** **`_SCHEMA`** via AST — no **`numpy`** import); env **`CYPHA_EXPERIMENT_DB_CRUD_PARITY_BIN`**. |
 | **`cypha_qt_stub`** | M5 | Optional Qt6 **Core** + **`cypha_core`**: optional arg **`reference.cypha`** → **`QFile`** → **`load_cypha_from_buffer`**. **`${BUILD_DIR}/qt/cypha_qt_stub`**. CTest **`native_qt_stub_load_reference`**. Pytest **`tests/test_qt_stub_native.py`**; env **`CYPHA_QT_STUB_BIN`**. |
@@ -189,7 +215,7 @@ python scripts/gen_native_bessel_table.py   # K₂/K₁ + K₀/K₁ grids if Sci
 
 ## Next engineering waves
 
-- **OpenCL/CUDA** for `batch_encode` + LLR GEMM — WSL2 NVIDIA driver (`libnvidia-compute-595`) not yet in Ubuntu PPAs; activates with `-DCYPHA_ENABLE_OPENCL=ON` once available. See [`docs/FUTURE.md`](../docs/FUTURE.md) §1.  
+- **CUDA accel** — `-DCYPHA_ENABLE_CUDA=ON` + NVIDIA toolkit/driver; see **`cuda_smoke`** and presets above. See [`docs/FUTURE.md`](../docs/FUTURE.md) §1.  
 - **Qt shell streaming** — move bulk training to a `QThread`; emit per-step loss/accuracy signals; live loss chart update during training. See [`docs/FUTURE.md`](../docs/FUTURE.md) §2a.  
 - **Packaged binary** — AppImage (Linux) or `windeployqt` folder / `.msi` (Windows) distributing Qt shell as a self-contained executable. See [`docs/FUTURE.md`](../docs/FUTURE.md) §3.  
 - **REST multi-model** — `cypha_rest --registry <root>` serving N models; per-model mutex; LRU eviction. See [`docs/FUTURE.md`](../docs/FUTURE.md) §5.  

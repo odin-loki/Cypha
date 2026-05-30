@@ -1,6 +1,6 @@
-# Cypha prototype — debug, profile, verify (pre C++ / OpenCL / Qt port)
+# Cypha prototype — debug, profile, verify (pre C++ / CUDA / Qt port)
 
-This document is the **master checklist** for proving the Python reference implementation before porting core numerics to C++/OpenCL and the shell to Qt.
+This document is the **master checklist** for proving the Python reference implementation before porting core numerics to C++/CUDA (or parallel CPU) and the shell to Qt.
 
 For a **living snapshot** of automated tests and known gaps, see [`VERIFICATION_STATUS.md`](VERIFICATION_STATUS.md). For **what to regen and rebuild** after contract changes, see [`MAINTENANCE.md`](MAINTENANCE.md).
 
@@ -79,7 +79,7 @@ Linux ELF build + CTest (inside WSL): `bash scripts/ci_native_linux.sh` (or `cma
 5. **API**: start `uvicorn` (or studio server entry) and hit health/train/predict routes per `api.py`.
 6. **Binary round-trip**: save with `cypha_save_binary` / registry, load, compare predictions on fixed seeds. **Buffer parity:** `pytest tests/test_cypha_binary_buffer_api.py` — **`cypha_load_binary_from_bytes(Path.read_bytes())`** vs **`cypha_load_binary(path)`**, and **`cypha_save_binary_to_bytes`** vs on-disk **`reference.cypha`** bytes (same v3 layout as native **`load_cypha_from_buffer`** / **`save_cypha_to_buffer`**).
 
-## 4. Profiling (what to measure before OpenCL)
+## 4. Profiling (what to measure before native GPU)
 
 Goal: know **which kernels** to port first (hot loops in NumPy/Python).
 
@@ -97,7 +97,7 @@ Goal: know **which kernels** to port first (hot loops in NumPy/Python).
 - `RFFEncoder.auto_gamma_cv`, `auto_ard`, `from_data`, `fit`
 - `CyphaDIF.train_step`, `RFFRegressor.train_step`, `WorldPrior.update`
 
-**Porting hint**: put `score_matrix`, batched softmax/GH gate, and RFF feature maps on the OpenCL/C++ short list; keep orchestration in Python until parity tests pass.
+**Porting hint**: put `score_matrix`, batched softmax/GH gate, and RFF feature maps on the CUDA/C++ short list; keep orchestration in Python until parity tests pass.
 
 ### Batch vs serial inference (parity)
 
@@ -121,7 +121,7 @@ Goal: know **which kernels** to port first (hot loops in NumPy/Python).
 
 ## 7. Suggested order of port
 
-1. **Numerics core** (`Cypha.py` hot paths) → C++/OpenCL with Python bindings or subprocess, validated by shared tests.
+1. **Numerics core** (`Cypha.py` hot paths) → C++/CUDA with Python bindings or subprocess, validated by shared tests.
 2. **Training loop** — optional second phase once inference parity is proven.
 3. **Qt shell** — replace PySide6 UI while keeping the same core/API contracts.
 

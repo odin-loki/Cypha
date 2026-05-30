@@ -84,6 +84,7 @@ if QT_AVAILABLE:
         error_occurred      = Signal(str)
         status_message      = Signal(str)
         dataset_opened      = Signal(str)      # filesystem path (CSV / npy / npz)
+        preferences_changed = Signal()         # Studio settings saved (File → Settings)
 
         _instance = None
 
@@ -141,6 +142,9 @@ if QT_AVAILABLE:
         def emit_dataset_opened(self, path: str):
             self.dataset_opened.emit(path)
 
+        def emit_preferences_changed(self):
+            self.preferences_changed.emit()
+
 else:
     # Headless fallback: no Qt, use plain callable lists
     class SignalBus:  # type: ignore
@@ -178,6 +182,7 @@ else:
         def emit_error(self, msg):            self._emit('error_occurred', msg)
         def emit_status(self, msg):           self._emit('status_message', msg)
         def emit_dataset_opened(self, path: str): self._emit('dataset_opened', path)
+        def emit_preferences_changed(self):     self._emit('preferences_changed')
 
         def connect(self, signal_name: str, handler):
             self._get(signal_name).append(handler)

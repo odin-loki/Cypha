@@ -1,4 +1,4 @@
-# Cypha → C++ / OpenCL / Qt — frozen reference contracts
+# Cypha → C++ / CUDA / Qt — frozen reference contracts
 
 This document is the **normative checklist** for native ports. Behavior must match this Python reference unless you explicitly version and document a breaking change.
 

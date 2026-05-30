@@ -1,0 +1,14 @@
+{
+  "knn_accuracy": {
+    "Izaac (zero-param)": 0.0125,
+    "Random learned": 0.0025,
+    "Frequency-init learned": 0.01
+  },
+  "collision_rate": {
+    "Izaac (zero-param)": 0.0,
+    "Random learned": 0.0,
+    "Frequency-init learned": 0.0
+  },
+  "gf_rank_spearman": 0.14336362321514695,
+  "vocab_size": 512
+}

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cypha_lm"
+version = "0.1.0"
+description = "CyphaLM — explicit-mechanism online language model"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Odin Loch" }]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "matplotlib",
+    "pandas",
+    "tqdm",
+    "galois",
+]
+
+[project.optional-dependencies]
+benchmark = [
+    "torch>=2.3",
+    "pytest>=8.0",
+    "pytest-benchmark",
+]
+dev = [
+    "cypha_lm[benchmark]",
+    "pytest>=8.0",
+    "pytest-benchmark",
+]
+
+[tool.setuptools]
+package-dir = { "cypha_lm" = "." }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cypha_lm*"]
+
+[tool.pytest.ini_options]
+testpaths = ["embeddings/tests", "temporal/tests", "expert_field/tests", "projection/tests", "model/tests", "analysis/tests"]
+pythonpath = [".."]

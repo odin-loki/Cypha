@@ -9,10 +9,51 @@
     {
       "name": "mingw-w64-cross",
       "displayName": "MinGW-w64 → Windows x64 (cross from Linux/WSL)",
-      "description": "Uses native/toolchains/mingw-w64-x86_64.cmake; outputs *.exe under build-mingw-w64/. Requires g++-mingw-w64-x86-64 (or matching CYPHA_MINGW_TOOLCHAIN_PREFIX).",
+      "description": "Uses native/toolchains/mingw-w64-x86_64.cmake; outputs *.exe under build-mingw-w64/. Requires g++-mingw-w64-x86-64 (or matching CYPHA_MINGW_TOOLCHAIN_PREFIX). No CUDA (MinGW + nvcc unsupported).",
       "binaryDir": "${sourceDir}/build-mingw-w64",
       "generator": "Unix Makefiles",
       "toolchainFile": "${sourceDir}/toolchains/mingw-w64-x86_64.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "wsl-gcc-release",
+      "displayName": "WSL / Linux — GCC Release (recommended native tree)",
+      "description": "Single build directory native/build-wsl-gcc. Install: build-essential cmake ninja-build libsqlite3-dev. Optional Qt: qt6-base-dev; optional CUDA: nvidia-cuda-toolkit + -DCYPHA_ENABLE_CUDA=ON.",
+      "binaryDir": "${sourceDir}/build-wsl-gcc",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "wsl-gcc-release-make",
+      "displayName": "WSL / Linux — GCC Release (Unix Makefiles)",
+      "binaryDir": "${sourceDir}/build-wsl-gcc",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Windows — MSVC x64 (Visual Studio 2022)",
+      "description": "Build tree native/build-windows-msvc. Requires VS 2022 + CMake. Optional Qt: add -DCYPHA_BUILD_QT=ON -DCMAKE_PREFIX_PATH=C:/Qt/6.x.x/msvc2022_64",
+      "binaryDir": "${sourceDir}/build-windows-msvc",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-vs2026-release",
+      "displayName": "Windows — MSVC x64 (Visual Studio 2026 / Build Tools 18)",
+      "description": "Same as windows-msvc-release but generator Visual Studio 18 2026 (MSVC 14.5x). Use a separate binaryDir if both VS versions are installed.",
+      "binaryDir": "${sourceDir}/build-windows-vs2026",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -23,12 +64,34 @@
       "name": "mingw-w64-cross-release",
       "configurePreset": "mingw-w64-cross",
       "configuration": "Release"
+    },
+    {
+      "name": "wsl-gcc-release-build",
+      "configurePreset": "wsl-gcc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-msvc-release-build",
+      "configurePreset": "windows-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-vs2026-release-build",
+      "configurePreset": "windows-vs2026-release",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
     {
       "name": "mingw-w64-cross",
       "configurePreset": "mingw-w64-cross",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "wsl-gcc-release",
+      "configurePreset": "wsl-gcc-release",
       "output": {
         "outputOnFailure": true
       }

@@ -1,0 +1,6 @@
+{
+  "n_steps": 1000,
+  "expert_purity": 1.0,
+  "n_experts": 1,
+  "expected_purity_threshold": 0.85
+}

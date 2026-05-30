@@ -39,6 +39,9 @@ from .experiment_widget import ExperimentWidget
 from .log_widget       import LogDockWidget
 from .dialogs          import (NewExperimentDialog, LoadModelDialog,
                                 TrainConfigDialog, ExportModelDialog)
+from .settings_dialog  import SettingsDialog
+from .help_widget      import HelpWidget
+from .studio_preferences import apply_preferences_to_inference_state
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -50,9 +53,12 @@ class AppState:
     def __init__(self):
         from ..core.registry  import ModelRegistry
         from ..core.experiment import ExperimentDB
-        from ..env_config import registry_root
+        from ..core.dataset import SplitConfig
+        from .studio_preferences import load_studio_preferences
 
-        self.registry  = ModelRegistry(registry_root())
+        self.preferences = load_studio_preferences()
+        self.split_config = SplitConfig()
+        self.registry  = ModelRegistry(self.preferences.effective_registry_root())
         self.db        = ExperimentDB()
         self.engine    = None   # InferenceEngine, set when model loads
         self.session   = None   # InferenceSession
@@ -151,6 +157,115 @@ class MainWindow(QMainWindow):
         app_inst = QApplication.instance()
         if app_inst is not None:
             app_inst.setPalette(palette)
+            # Windows often leaves widgets on default (black) text; force readable contrast.
+            app_inst.setStyleSheet(
+                """
+                QWidget { color: #e6e6e6; }
+                QMainWindow { background: #1e1e1e; }
+                QMenuBar {
+                    background: #2d2d2d;
+                    color: #ececec;
+                    border-bottom: 1px solid #404040;
+                }
+                QMenuBar::item:selected { background: #3d5a80; }
+                QMenu {
+                    background: #2d2d2d;
+                    color: #ececec;
+                    border: 1px solid #505050;
+                }
+                QMenu::item:selected { background: #3d5a80; }
+                QToolBar {
+                    background: #252526;
+                    border: none;
+                    spacing: 4px;
+                }
+                QToolBar QLabel { color: #c8c8c8; }
+                QDockWidget::title {
+                    background: #333333;
+                    color: #ececec;
+                    padding: 5px;
+                }
+                QStatusBar { background: #252526; color: #c0c0c0; }
+                QStatusBar QLabel { color: #c0c0c0; }
+                QGroupBox {
+                    color: #e6e6e6;
+                    border: 1px solid #505050;
+                    border-radius: 4px;
+                    margin-top: 10px;
+                    padding: 8px 4px 4px 4px;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    left: 10px;
+                    padding: 0 6px;
+                    color: #b8d4f0;
+                }
+                QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+                    background: #3c3c3c;
+                    color: #f2f2f2;
+                    border: 1px solid #555;
+                    border-radius: 2px;
+                    padding: 2px 6px;
+                    min-height: 18px;
+                }
+                QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
+                    border: 1px solid #569cd6;
+                }
+                QComboBox QAbstractItemView {
+                    background: #3c3c3c;
+                    color: #f2f2f2;
+                    selection-background-color: #3d5a80;
+                }
+                QCheckBox { color: #e6e6e6; }
+                QCheckBox::indicator { width: 16px; height: 16px; }
+                QPushButton {
+                    background: #404040;
+                    color: #f5f5f5;
+                    border: 1px solid #5a5a5a;
+                    border-radius: 3px;
+                    padding: 4px 12px;
+                    min-height: 20px;
+                }
+                QPushButton:hover { background: #4a4a4a; }
+                QPushButton:pressed { background: #353535; }
+                QPushButton:disabled { color: #888; background: #353535; }
+                QTableWidget {
+                    background: #2a2a2a;
+                    alternate-background-color: #323232;
+                    color: #ececec;
+                    gridline-color: #454545;
+                    border: 1px solid #505050;
+                }
+                QTableWidget::item:selected {
+                    background: #3d5a80;
+                    color: #ffffff;
+                }
+                QHeaderView::section {
+                    background: #3a3a3a;
+                    color: #e8e8e8;
+                    padding: 4px;
+                    border: 1px solid #505050;
+                }
+                QTabWidget::pane { border: 1px solid #505050; background: #252526; }
+                QTabBar::tab {
+                    background: #333;
+                    color: #ccc;
+                    padding: 6px 12px;
+                    border: 1px solid #505050;
+                }
+                QTabBar::tab:selected { background: #3d5a80; color: #fff; }
+                QTextBrowser, QTextEdit {
+                    background: #1e1e1e;
+                    color: #e6e6e6;
+                    border: 1px solid #505050;
+                }
+                QScrollArea { border: none; }
+                QMessageBox { background: #2d2d2d; }
+                QMessageBox QLabel { color: #ececec; min-width: 240px; }
+                QDialogButtonBox QPushButton { min-width: 72px; }
+                """
+            )
 
     # ── Window geometry (QSettings) ─────────────────────────────────────────
 
@@ -229,6 +344,8 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Import Dataset…",  self._on_import_dataset)
         self._recent_menu = file_menu.addMenu("Recent Datasets")
         file_menu.addSeparator()
+        file_menu.addAction("Settings…",        self._on_settings)
+        file_menu.addSeparator()
         file_menu.addAction("Export test predictions (CSV)…", self._on_export_test_predictions)
         file_menu.addAction("Export Model…",    self._on_export_model)
         file_menu.addSeparator()
@@ -257,11 +374,13 @@ class MainWindow(QMainWindow):
         view_menu.addAction("Dataset",    lambda: self._toggle_dock('dataset'))
         view_menu.addAction("Experiments",lambda: self._toggle_dock('experiment'))
         view_menu.addAction("Studio Log", lambda: self._toggle_dock('log'))
+        view_menu.addAction("User Guide", lambda: self._toggle_dock('help'))
         view_menu.addSeparator()
         view_menu.addAction("Reset Layout", self._reset_layout)
 
         # Help
         help_menu = mb.addMenu("Help")
+        help_menu.addAction("User Guide",       self._on_user_guide)
         help_menu.addAction("Keyboard Shortcuts…", self._on_keyboard_shortcuts)
         help_menu.addAction("About CyphaStudio", self._on_about)
 
@@ -314,6 +433,13 @@ class MainWindow(QMainWindow):
         )
         self.tabifyDockWidget(self._train_dock, self._log_dock)
 
+        self.help_widget = HelpWidget(self)
+        self._help_dock = self._make_dock(
+            "User Guide", self.help_widget, Qt.BottomDockWidgetArea,
+            "dock_user_guide",
+        )
+        self.tabifyDockWidget(self._train_dock, self._help_dock)
+
         self._train_dock.raise_()
 
         self._docks = {
@@ -324,6 +450,7 @@ class MainWindow(QMainWindow):
             'experiment': self._exp_dock,
             'model'     : self._model_dock,
             'log'       : self._log_dock,
+            'help'      : self._help_dock,
         }
 
     def _make_dock(self, title: str, widget: QWidget,
@@ -342,7 +469,11 @@ class MainWindow(QMainWindow):
         self.lbl_status  = QLabel("Ready")
         self.lbl_model   = QLabel("No model")
         self.lbl_acc     = QLabel("acc: —")
+        self.lbl_infer   = QLabel("")
+        self.lbl_infer.setStyleSheet("color: #888;")
         sb.addWidget(self.lbl_status, 1)
+        sb.addPermanentWidget(self.lbl_infer)
+        sb.addPermanentWidget(QLabel("  |  "))
         sb.addPermanentWidget(self.lbl_model)
         sb.addPermanentWidget(QLabel("  |  "))
         sb.addPermanentWidget(self.lbl_acc)
@@ -369,7 +500,9 @@ class MainWindow(QMainWindow):
         # Refresh model combo on registry change
         bus.registry_changed.connect(self._refresh_model_combo)
         bus.dataset_opened.connect(lambda _: self._refresh_recent_dataset_menu())
+        bus.preferences_changed.connect(self._on_preferences_changed)
         self._refresh_model_combo()
+        self._update_inference_status_label()
 
     # ── Slots ────────────────────────────────────────────────────────────────
 
@@ -412,10 +545,16 @@ class MainWindow(QMainWindow):
     def _load_model_by_name(self, name: str, version: str):
         try:
             from ..core.inference import InferenceEngine, InferenceSession
+
             model, pre, card = self.state.registry.load(name, version)
-            self.state.engine  = InferenceEngine(model, pre)
+            p = self.state.preferences
+            self.state.engine = InferenceEngine(
+                model, pre, ood_threshold=p.inference_ood_threshold
+            )
             self.state.session = InferenceSession(self.state.engine)
+            self.state.session.set_gh_params(p.inference_chi, p.inference_psi)
             self.bus.emit_model_loaded(card)
+            self._update_inference_status_label()
         except Exception as e:
             self.bus.emit_error(f"Failed to load {name}: {e}")
 
@@ -445,12 +584,12 @@ class MainWindow(QMainWindow):
             self._refresh_model_combo()
 
     def _on_import_dataset(self):
-        from .path_history import dataset_dialog_start_dir
+        from .path_history import dataset_dialog_start_dir_preferred
 
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Import Dataset",
-            dataset_dialog_start_dir(),
+            dataset_dialog_start_dir_preferred(self.state.preferences),
             "Data files (*.csv *.npy *.npz);;All files (*)",
         )
         if path:
@@ -497,8 +636,56 @@ class MainWindow(QMainWindow):
             "Ctrl+L — Focus chat input\n"
             "Enter — Send (when chat input is focused)\n\n"
             "File → Recent Datasets lists recently opened CSV/NPZ/NPY paths.\n"
-            "View → Studio Log shows status and error history.",
+            "View → Studio Log shows status and error history.\n"
+            "View → User Guide opens the in-app documentation.",
         )
+
+    def _on_settings(self):
+        SettingsDialog(self.state, self).exec()
+
+    def _on_user_guide(self):
+        self._help_dock.show()
+        self._help_dock.raise_()
+
+    def _apply_ui_font_from_preferences(self):
+        pt = int(self.state.preferences.ui_font_pt)
+        app_inst = QApplication.instance()
+        if app_inst is None:
+            return
+        if pt <= 0:
+            app_inst.setFont(QFont())
+            return
+        f = app_inst.font()
+        f.setPointSize(pt)
+        app_inst.setFont(f)
+
+    def _update_inference_status_label(self):
+        p = self.state.preferences
+        gh = "GH on" if p.inference_use_gh else "GH off"
+        self.lbl_infer.setText(
+            f"Infer: {gh}  ·  OOD≤{p.inference_ood_threshold:g}  ·  χ={p.inference_chi:g} ψ={p.inference_psi:g}"
+        )
+
+    def _on_preferences_changed(self):
+        from pathlib import Path
+
+        from ..core.registry import ModelRegistry
+
+        apply_preferences_to_inference_state(self.state)
+        self._apply_ui_font_from_preferences()
+        self._update_inference_status_label()
+        self.chat_widget.refresh_inference_banner()
+
+        want = Path(self.state.preferences.effective_registry_root()).expanduser().resolve()
+        have = self.state.registry.root.resolve()
+        if want != have:
+            self.state.registry = ModelRegistry(str(want))
+            self.state.engine = None
+            self.state.session = None
+            self.state.current_card = None
+            self.lbl_model.setText("No model")
+            self._refresh_model_combo()
+            self.bus.emit_status("Registry root updated — load a model from the new location.")
 
     def _on_export_test_predictions(self):
         import csv
@@ -532,7 +719,9 @@ class MainWindow(QMainWindow):
                 if is_reg:
                     w.writerow(["index", "y_true", "y_pred", "uncertainty"])
                     for i in range(len(te)):
-                        pred = self.state.session.predict(te.X[i], use_gh=False)
+                        pred = self.state.session.predict(
+                            te.X[i], use_gh=self.state.preferences.inference_use_gh
+                        )
                         yt = float(te.y[i])
                         yp = (
                             pred.regression_val
@@ -552,7 +741,9 @@ class MainWindow(QMainWindow):
                         ]
                     )
                     for i in range(len(te)):
-                        pred = self.state.session.predict(te.X[i], use_gh=True)
+                        pred = self.state.session.predict(
+                            te.X[i], use_gh=self.state.preferences.inference_use_gh
+                        )
                         w.writerow(
                             [
                                 i,
@@ -691,8 +882,9 @@ class MainWindow(QMainWindow):
             )
             return
         y_true, y_pred = [], []
+        ugh = self.state.preferences.inference_use_gh
         for i in range(len(te)):
-            pred = self.state.session.predict(te.X[i], use_gh=True)
+            pred = self.state.session.predict(te.X[i], use_gh=ugh)
             y_true.append(str(te.y[i]))
             y_pred.append(pred.label)
         show_confusion_dialog(self, y_true, y_pred)
@@ -712,4 +904,4 @@ class MainWindow(QMainWindow):
             "Training, inference, and monitoring for Cypha DIF models.<br><br>"
             "Built on CyphaDIF — online learning, GH adversarial protection,<br>"
             "RFF universal approximation, and NIG posterior uncertainty.<br><br>"
-            "Binary format: <code>CYPHA\\x00</code> v3 (C++/OpenCL compatible)")
+            "Binary format: <code>CYPHA\\x00</code> v3 (C++/native compatible)")

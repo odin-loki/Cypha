@@ -1,0 +1,218 @@
+{
+  "domain": "d14",
+  "timestamp": "2026-05-30T09:55:10.312742+00:00",
+  "experiments": {
+    "14A_feynman_all_equations": {
+      "per_equation": {
+        "newton_second_law": {
+          "rmse": 3.3472535510300236,
+          "mae": 1.7599209027761373,
+          "r2": 0.0005194028156466635,
+          "mean_epistemic_var": 7.2547457803683,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.3998700616878855,
+          "ridge_rmse": 2.680344581604004
+        },
+        "kinetic_energy": {
+          "rmse": 12.175289599803646,
+          "mae": 9.291214635053896,
+          "r2": -0.0026933545009042437,
+          "mean_epistemic_var": 189.37650626039152,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.09557347233420209,
+          "ridge_rmse": 5.76370906829834
+        },
+        "gravitational_pe": {
+          "rmse": 16.75238728638017,
+          "mae": 12.723604458638807,
+          "r2": -0.001993839378181539,
+          "mean_epistemic_var": 320.1275287056169,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": 0.0011529447059044117,
+          "ridge_rmse": 8.59034252166748
+        },
+        "ohms_law": {
+          "rmse": 3.3472535510300236,
+          "mae": 1.7599209027761373,
+          "r2": 0.0005194028156466635,
+          "mean_epistemic_var": 7.2547457803683,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.3998700616878855,
+          "ridge_rmse": 2.680344581604004
+        },
+        "ideal_gas": {
+          "rmse": 26.722677388364453,
+          "mae": 14.147403120899314,
+          "r2": -0.0032075689444031052,
+          "mean_epistemic_var": 602.0454266934394,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.025271782948643427,
+          "ridge_rmse": 21.293354034423828
+        },
+        "coulombs_law": {
+          "rmse": 500578175178.79456,
+          "mae": 209748158895.43875,
+          "r2": -0.004375435094682967,
+          "mean_epistemic_var": 5.376729202042699e+23,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": 0.20538390864942904,
+          "ridge_rmse": 457387311104.0
+        },
+        "wave_speed": {
+          "rmse": 5.553005025418444,
+          "mae": 4.4454551848411255,
+          "r2": -0.015275005924157092,
+          "mean_epistemic_var": 36.501121095240904,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.07565203532522077,
+          "ridge_rmse": 2.006803035736084
+        },
+        "relativistic_KE": {
+          "rmse": 339985.7196130934,
+          "mae": 208383.06182605968,
+          "r2": -0.0001457284964383465,
+          "mean_epistemic_var": 122458855058.36742,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.09040744004650028,
+          "ridge_rmse": 293617.75
+        },
+        "lens_equation": {
+          "rmse": 0.6085075657759471,
+          "mae": 0.5120116919755203,
+          "r2": -0.03906037069969348,
+          "mean_epistemic_var": 0.43474421085921144,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": 0.00457165357283483,
+          "ridge_rmse": 0.2359144538640976
+        },
+        "bernoulli": {
+          "rmse": 11.73621119186624,
+          "mae": 8.584502982428434,
+          "r2": -0.018948146137440336,
+          "mean_epistemic_var": 100.42896006363516,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": 0.28814392589953686,
+          "ridge_rmse": 5.49959135055542
+        },
+        "hooke": {
+          "rmse": 12.175289599803646,
+          "mae": 9.291214635053896,
+          "r2": -0.0026933545009042437,
+          "mean_epistemic_var": 189.37650626039152,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.09557347233420209,
+          "ridge_rmse": 5.76370906829834
+        },
+        "snell": {
+          "rmse": 3.1894517114018988,
+          "mae": 1.7135903563315766,
+          "r2": -0.07965563983293333,
+          "mean_epistemic_var": 19.222296347892424,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": 0.1761479759248495,
+          "ridge_rmse": 2.800046920776367
+        },
+        "Stefan_Boltzmann": {
+          "rmse": 492.5691972081722,
+          "mae": 351.98543038401453,
+          "r2": 0.0007887812614479905,
+          "mean_epistemic_var": 352525.30277265556,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.09369002306264412,
+          "ridge_rmse": 310.1590270996094
+        },
+        "thermal_expansion": {
+          "rmse": 16.75238728638017,
+          "mae": 12.723604458638807,
+          "r2": -0.001993839378181539,
+          "mean_epistemic_var": 320.1275287056169,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": 0.0011529447059044117,
+          "ridge_rmse": 8.59034252166748
+        },
+        "capacitor_energy": {
+          "rmse": 12.175289599803646,
+          "mae": 9.291214635053896,
+          "r2": -0.0026933545009042437,
+          "mean_epistemic_var": 189.37650626039152,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.09557347233420209,
+          "ridge_rmse": 5.76370906829834
+        },
+        "log_decay": {
+          "rmse": 0.6062786782925662,
+          "mae": 0.4175926687453205,
+          "r2": -0.004766515445304487,
+          "mean_epistemic_var": 0.454387817102339,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.08024581403633771,
+          "ridge_rmse": 0.4508620500564575
+        },
+        "centripetal": {
+          "rmse": 45.64227180425109,
+          "mae": 17.103209546131456,
+          "r2": -0.019723323440287155,
+          "mean_epistemic_var": 554.5241697149543,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": 0.13986631166444788,
+          "ridge_rmse": 37.078060150146484
+        },
+        "diffraction": {
+          "rmse": 0.550501333744127,
+          "mae": 0.5027955915419985,
+          "r2": -0.0011602392315226417,
+          "mean_epistemic_var": 0.31584489531857834,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.3944029025181407,
+          "ridge_rmse": 0.25966858863830566
+        },
+        "entropy_ideal_gas": {
+          "rmse": 7.669304593201241,
+          "mae": 5.442212686207724,
+          "r2": -0.009250696721082363,
+          "mean_epistemic_var": 52.27342251589964,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.08322295764348527,
+          "ridge_rmse": 5.30930757522583
+        },
+        "drag_force": {
+          "rmse": 120.81092745106261,
+          "mae": 82.93569039059992,
+          "r2": -0.00011161858506869571,
+          "mean_epistemic_var": 12258.872314732474,
+          "expert_count": 8,
+          "uncertainty_rank_correlation": -0.01667804173776086,
+          "ridge_rmse": 77.69170379638672
+        }
+      },
+      "mean_rmse": 25028925797.844883,
+      "mean_r2": -0.010296022195967425
+    },
+    "14B_extrapolation_uncertainty": {
+      "extrapolation_auroc": 1.0,
+      "regressor_uncertainty_auroc": 0.0
+    },
+    "14C_noise_vs_aleatoric": {
+      "0.0": {
+        "rmse": 3.3465681722324714,
+        "mean_epistemic_var": 7.248856771239612
+      },
+      "0.05": {
+        "rmse": 3.3514450078021967,
+        "mean_epistemic_var": 7.284816764705095
+      },
+      "0.1": {
+        "rmse": 3.3599345693089346,
+        "mean_epistemic_var": 7.337063345950939
+      },
+      "0.2": {
+        "rmse": 3.3876317023505966,
+        "mean_epistemic_var": 7.490416790999794
+      },
+      "0.5": {
+        "rmse": 3.552490203079874,
+        "mean_epistemic_var": 8.341360846477833
+      }
+    }
+  }
+}

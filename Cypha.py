@@ -176,10 +176,10 @@ def _kde_sample(vectors: List[np.ndarray], n: int,
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# API Surface — Core (C++/OpenCL port) vs Convenience (Python-only wrapper)
+# API Surface — Core (C++/CUDA native port) vs Convenience (Python-only wrapper)
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# CORE — implement these in C++/OpenCL first:
+# CORE — implement these in C++/CUDA (or parallel CPU) first:
 #
 #   CyphaDIF.train_step(x, label)          Online learning kernel
 #   CyphaDIF.infer(x)                      Single-sample inference
@@ -225,12 +225,11 @@ def _kde_sample(vectors: List[np.ndarray], n: int,
 #   PerformanceMonitor, SimilarityIndex    Monitoring utilities
 #   cypha_save_binary*, cypha_load_binary* I/O (thin wrappers around core)
 #
-# OPENCL KERNEL MAP:
-#   RFFEncoder.batch_encode  →  cl_rff_encode.cl   (GEMM + cos, one workgroup/sample)
-#   DIFMemory.classify       →  cl_classify.cl      (GEMV per class + softmax reduction)
-#   WorldPrior.update        →  cl_world_update.cl  (vectorised EMA, atomic float adds)
-#   CausalField.step         →  cl_field_step.cl    (SGEMV with fp16 A_eff)
-#   _gig_E_inv_V             →  constant buffer     (16384-point table in __constant)
+# NATIVE ACCEL MAP (cypha::accel — CUDA optional, else std::thread CPU):
+#   infer_cpu batch_encode + score_matrix_use_field + world_gate_vector_use_field → accel
+#   (CUDA if enabled and batch rows ≥ CYPHA_ACCEL_GPU_MIN_BATCH_ROWS, default 16; pooled device buffers)
+#   softmax_batch_like_python → ISO C++ row-parallel (Python eps semantics; not CUDA softmax_rows)
+#   Full CyphaDIF hot path still primarily infer_cpu.cpp; wire accel where batching matters.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1305,6 +1304,113 @@ class PriorityReplayBuffer:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# KernelMemory  —  Nyström RBF kernel discriminant (non-linear LLR)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class KernelMemory:
+    """
+    Nyström RBF kernel memory for non-linear class discrimination.
+
+    Maintains M basis vectors via reservoir sampling and per-class weight
+    vectors w_k ∈ R^M.  Kernel feature map:
+        phi(h) = exp(-gamma * ||h - b_i||^2)  for i = 0..n_basis-1
+    Kernel LLR score for class k:
+        score_k = w_k @ phi(h) - 0.5 * ||w_k||^2
+    where gamma = 1.0 / feat_dim (auto-set).
+
+    Online update uses softmax cross-entropy gradient (one step per sample).
+    """
+
+    def __init__(self, feat_dim: int, M: int = 64,
+                 rng: Optional[np.random.Generator] = None):
+        self.feat_dim = feat_dim
+        self.M        = M
+        self.gamma    = 1.0 / max(feat_dim, 1)
+        self._rng     = rng or np.random.default_rng(0)
+        self._basis   = np.zeros((M, feat_dim), dtype=np.float64)
+        self._n_basis = 0     # slots filled
+        self._n_seen  = 0     # total samples seen (reservoir denominator)
+        self._weights : Dict[str, np.ndarray] = {}
+        self._lock    = threading.Lock()
+
+    # ── kernel features ───────────────────────────────────────────────────────
+
+    def _phi(self, h: np.ndarray) -> np.ndarray:
+        """RBF kernel features phi(h) ∈ R^M (zeros for unfilled slots)."""
+        nb = self._n_basis
+        if nb == 0:
+            return np.zeros(self.M, dtype=np.float64)
+        diff    = self._basis[:nb] - h          # (nb, d)
+        sq_dist = np.einsum('ij,ij->i', diff, diff)  # (nb,)
+        phi     = np.exp(-self.gamma * sq_dist)       # (nb,)
+        if nb < self.M:
+            out       = np.zeros(self.M, dtype=np.float64)
+            out[:nb]  = phi
+            return out
+        return phi
+
+    # ── reservoir update ──────────────────────────────────────────────────────
+
+    def _reservoir_update(self, h: np.ndarray) -> None:
+        """Standard reservoir sampling: keep a random sample of M latents."""
+        self._n_seen += 1
+        if self._n_basis < self.M:
+            self._basis[self._n_basis] = h
+            self._n_basis += 1
+        else:
+            j = int(self._rng.integers(0, self._n_seen))
+            if j < self.M:
+                self._basis[j] = h
+
+    # ── scoring ───────────────────────────────────────────────────────────────
+
+    def score_all(self, h: np.ndarray, labels: List[str]) -> np.ndarray:
+        """Kernel LLR scores for a list of classes. Returns zeros if basis thin."""
+        scores = np.zeros(len(labels), dtype=np.float64)
+        if self._n_basis < 4:
+            return scores
+        phi = self._phi(h)
+        for i, lbl in enumerate(labels):
+            w = self._weights.get(lbl)
+            if w is not None:
+                scores[i] = float(w @ phi) - 0.5 * float(w @ w)
+        return scores
+
+    # ── online weight update ──────────────────────────────────────────────────
+
+    def update(self, h: np.ndarray, label: str,
+               all_labels: List[str], lr: float = 0.05) -> None:
+        """One-step softmax gradient update given true label."""
+        with self._lock:
+            self._reservoir_update(h)
+            if self._n_basis < 4:
+                return
+
+            # Ensure weight vectors exist for all known classes
+            for lbl in all_labels:
+                if lbl not in self._weights:
+                    self._weights[lbl] = np.zeros(self.M, dtype=np.float64)
+
+            phi = self._phi(h)
+
+            # Kernel scores → softmax probabilities
+            K      = len(all_labels)
+            raw    = np.zeros(K, dtype=np.float64)
+            for i, lbl in enumerate(all_labels):
+                w      = self._weights[lbl]
+                raw[i] = float(w @ phi)
+
+            raw   -= raw.max()              # numerical stability
+            exp_r  = np.exp(raw)
+            probs  = exp_r / (exp_r.sum() + _EPS)
+
+            # Cross-entropy gradient: Δw_k = (target_k - p_k) * phi
+            for i, lbl in enumerate(all_labels):
+                target = 1.0 if lbl == label else 0.0
+                self._weights[lbl] += lr * (target - probs[i]) * phi
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # CyphaDIF  —  Differential Information Field main system  (all 5 phases)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1351,16 +1457,17 @@ class CyphaDIF:
     """
 
     def __init__(self,
-                 encoder     : Encoder,
-                 field_dim   : int   = _FIELD_DIM,
-                 enc_lr      : float = _ENC_LR,
-                 delta_lr    : float = _DELTA_LR,
-                 world_lr    : float = _WORLD_LR,
-                 mdl_lambda  : float = _MDL_LAMBDA,
-                 context_win : int   = _CONTEXT_WIN,
-                 replay_ratio: float = _REPLAY_RATIO,
-                 rng         : Optional[np.random.Generator] = None,
-                 replay_rng  : Optional[np.random.Generator] = None):
+                 encoder        : Encoder,
+                 field_dim      : int   = _FIELD_DIM,
+                 enc_lr         : float = _ENC_LR,
+                 delta_lr       : float = _DELTA_LR,
+                 world_lr       : float = _WORLD_LR,
+                 mdl_lambda     : float = _MDL_LAMBDA,
+                 context_win    : int   = _CONTEXT_WIN,
+                 replay_ratio   : float = _REPLAY_RATIO,
+                 rng            : Optional[np.random.Generator] = None,
+                 replay_rng     : Optional[np.random.Generator] = None,
+                 use_kernel_llr : bool  = False):
 
         if not isinstance(encoder, Encoder):
             raise TypeError(
@@ -1421,6 +1528,38 @@ class CyphaDIF:
         self._llr_scale_n   = 0        # count for bootstrap stabilisation
         self._base_temp     = _TEMP_INIT   # reference temperature at training time
         self._buf_len_cache = 0   # cached replay buffer length (avoids lock per step)
+        # Deliberation band: abstain when confidence falls in [lo, hi] (disabled when lo >= hi).
+        # Default is DISABLED to preserve inference parity and determinism.
+        self.deliberation_lo = 1.0
+        self.deliberation_hi = 0.0
+        self._som_hooks = None
+        try:
+            from cypha_som import config as _som_cfg
+            from cypha_som.hooks import CyphaSOMHooks
+            if any((
+                _som_cfg.USE_GNG,
+                _som_cfg.USE_SOM_ENCODER,
+                _som_cfg.USE_GRIA_CONTROLLER,
+                _som_cfg.USE_DISCRIM_FEEDBACK,
+            )):
+                self._som_hooks = CyphaSOMHooks(self.feat_dim)
+        except ImportError:
+            pass
+
+        # Nyström RBF kernel LLR (optional non-linear discriminant)
+        self.use_kernel_llr : bool = bool(use_kernel_llr)
+        self._kernel_mem    : Optional[KernelMemory] = (
+            KernelMemory(self.feat_dim, M=64, rng=self._rng)
+            if use_kernel_llr else None
+        )
+        self._kernel_blend  : float = 0.5   # blend weight: (1-b)*linear + b*kernel
+
+    def _apply_deliberation(self, pred: str, conf: float) -> Tuple[str, float]:
+        lo = float(getattr(self, 'deliberation_lo', 0.0))
+        hi = float(getattr(self, 'deliberation_hi', 1.0))
+        if lo < hi and lo <= conf <= hi:
+            return '__unknown__', conf * 0.5
+        return pred, conf
 
     @property
     def replay_ratio(self) -> float:
@@ -1436,7 +1575,42 @@ class CyphaDIF:
     def _encode(self, x: Any) -> Tuple[np.ndarray, np.ndarray]:
         f = self.encoder_fn(x).astype(np.float64)
         h = self.encoder.project(f)
+        if self._som_hooks is not None:
+            h = self._som_hooks.post_encode(h, train=True)
         return f, h
+
+    def _contrastive_with_som(self, f: np.ndarray, h: np.ndarray,
+                              mu_k: np.ndarray, v_k: np.ndarray,
+                              mu_j: np.ndarray, v_j: np.ndarray,
+                              weight: float = 1.0) -> None:
+        """Encoder contrastive step with optional discriminative feedback (U4)."""
+        use_fb = False
+        if self._som_hooks is not None:
+            try:
+                from cypha_som import config as _som_cfg
+                use_fb = bool(_som_cfg.USE_DISCRIM_FEEDBACK)
+            except ImportError:
+                use_fb = False
+        if not use_fb:
+            self.encoder.contrastive_update(
+                f, h, mu_k, v_k, mu_j, v_j, weight=weight, lr=self.enc_lr)
+            return
+        if getattr(self.encoder, '_frozen', False):
+            return
+        if not (np.all(np.isfinite(f)) and np.all(np.isfinite(h))):
+            return
+        r_k = _fisher_rao_residual(h, mu_k, v_k)
+        r_j = _fisher_rao_residual(h, mu_j, v_j)
+        grad = np.outer(r_j - r_k, f)
+        if not np.all(np.isfinite(grad)):
+            return
+        grad = self._som_hooks.modulate_encoder_update(self, grad)
+        with self.encoder._lock:
+            self.encoder.W += self.enc_lr * weight * grad
+            self.encoder._update_count += 1
+            sv = float(np.linalg.norm(self.encoder.W, 'fro'))
+            if np.isfinite(sv) and sv > 8.0:
+                self.encoder.W *= 8.0 / sv
 
     def _to_field_dim(self, h: np.ndarray) -> np.ndarray:
         h_norm = h / (float(h @ h) ** 0.5 + _EPS)
@@ -1563,7 +1737,7 @@ class CyphaDIF:
         with self.memory._lock:
             classes = list(self.memory._classes.keys())
         ctx_prior = self._ctx_prior(classes) if classes else {}
-        pred, conf, _ = self.memory.classify(
+        pred, conf, llrs = self.memory.classify(
             h, h_field=h_field, context_prior=ctx_prior,
             temperature=self.temperature, ood_sigma=self.ood_sigma,
             mahal_ema=getattr(self, '_mahal_ema', None),
@@ -1571,7 +1745,26 @@ class CyphaDIF:
             gh_chi=1.0,   # uninformative NIG prior — R_base=_mahal_ema already calibrated
             gh_psi=1.0,
         )
-        return pred, conf
+
+        # Kernel LLR blend: non-linear discriminant via Nyström RBF features
+        km = getattr(self, '_kernel_mem', None)
+        if (km is not None and self.use_kernel_llr and classes
+                and km._n_basis >= 4):
+            blend = self._kernel_blend
+            temp  = self.temperature + _EPS
+            linear_arr = np.array([llrs.get(c, 0.0) for c in classes], dtype=np.float64)
+            kernel_arr = km.score_all(h, classes)
+            blended    = (1.0 - blend) * linear_arr + blend * kernel_arr
+            best_i     = int(blended.argmax())
+            pred       = classes[best_i]
+            # Recover OOD gate from original conf/disc and apply to new disc
+            lin_probs  = _softmax(linear_arr / temp)
+            disc_orig  = float(lin_probs[int(linear_arr.argmax())])
+            ood_gate   = conf / max(disc_orig, _EPS)
+            disc_new   = float(_softmax(blended / temp)[best_i])
+            conf       = disc_new * ood_gate
+
+        return self._apply_deliberation(pred, conf)
 
     def infer_full(self, x: Any, use_field: bool = True) -> Dict:
         """
@@ -1593,6 +1786,7 @@ class CyphaDIF:
             gh_chi=1.0,   # uninformative NIG prior — R_base=_mahal_ema already calibrated
             gh_psi=1.0,
         )
+        pred, conf = self._apply_deliberation(pred, conf)
 
         if llrs:
             llr_arr   = np.array(list(llrs.values()))
@@ -2239,6 +2433,10 @@ class CyphaDIF:
         if label not in classes:
             classes.append(label)
         ctx_prior = self._ctx_prior(classes)
+        if self._som_hooks is not None and self._som_hooks.gng is not None:
+            self._som_hooks._last_bmu = self._som_hooks.gng.step(h)
+            ctx_prior = self._som_hooks.merge_context(
+                ctx_prior, self._som_hooks.gng.context_bias(h, classes))
         h_field   = self.field.h
 
         pred, correct, loss, post_llrs, post_conf = self.memory.train(
@@ -2247,6 +2445,16 @@ class CyphaDIF:
             world_lr=self.world_lr,
             delta_lr=self.delta_lr,
         )
+
+        # Kernel LLR update: online gradient step on Nyström RBF weights
+        km = getattr(self, '_kernel_mem', None)
+        if km is not None and self.use_kernel_llr:
+            km.update(h, label, classes, lr=self.delta_lr)
+
+        if self._som_hooks is not None and self._som_hooks.gria is not None and self._som_hooks.gng is not None:
+            self._som_hooks.gria.push(h, np.array(list(post_llrs.values()), dtype=np.float64)
+                                      if post_llrs else h)
+            self._som_hooks.gria.act(self._som_hooks._last_bmu, self._som_hooks.gng)
 
         # Phase 4: priority push
         self.replay.push(h, f, label, loss=loss)
@@ -2266,9 +2474,9 @@ class CyphaDIF:
             params_k = self.memory.get_class_params(label)
             params_j = self.memory.get_class_params(pred)
             if params_k is not None and params_j is not None:
-                self.encoder.contrastive_update(
+                self._contrastive_with_som(
                     f, h, params_k[0], params_k[1], params_j[0], params_j[1],
-                    lr=self.enc_lr,
+                    weight=1.0,
                 )
 
         # Deliberate mode: use post-update llrs returned by train() — no extra classify call
@@ -2277,9 +2485,9 @@ class CyphaDIF:
             p_top = self.memory.get_class_params(ss[0][0])
             p_sec = self.memory.get_class_params(ss[1][0])
             if p_top is not None and p_sec is not None:
-                self.encoder.contrastive_update(
+                self._contrastive_with_som(
                     f, h, p_top[0], p_top[1], p_sec[0], p_sec[1],
-                    weight=0.3, lr=self.enc_lr,
+                    weight=0.3,
                 )
 
         if self._total_steps % 5 == 0:
@@ -3818,6 +4026,182 @@ class CyphaDIF:
             'replay_size'          : len(self.replay),
         }
 
+    def save_state(self) -> Dict:
+        """Serialise full CyphaDIF state to a plain dict (deepcopyable, picklable).
+
+        Captures encoder, memory (world prior + all class differentials),
+        field, and all hyperparameters. Use with :meth:`load_state` to snapshot
+        and restore models — supports sequential multi-task learning without
+        catastrophic interference between tasks.
+
+        Example::
+
+            # Train on Task A
+            for x, y in task_a:
+                clf.train_step(x, y)
+            snapshot_a = clf.save_state()
+
+            # Continue training on Task B
+            for x, y in task_b:
+                clf.train_step(x, y)
+
+            # Restore Task A knowledge
+            clf.load_state(snapshot_a)
+        """
+        w = self.memory.world
+        with self.memory._lock, w._lock, self.encoder._lock:
+            classes_state = {
+                lbl: {
+                    'delta_mu': cd.delta_mu.copy(),
+                    'n_obs'   : int(cd.n_obs),
+                    'n_correct': int(cd.n_correct),
+                }
+                for lbl, cd in self.memory._classes.items()
+            }
+            label_order = list(self.memory._label_order)
+            world_state = {
+                'mu'        : w.mu.copy(),
+                'v'         : w.v.copy(),
+                'inv_v'     : w.inv_v.copy(),
+                'v_mean'    : float(w.v_mean),
+                '_n'        : int(w._n),
+                '_M2'       : w._M2.copy(),
+                '_drift_ema': float(w._drift_ema),
+                'F_field'   : w.F_field.copy(),
+            }
+            enc_W = self.encoder.W.copy()
+
+        enc_fn = self.encoder_fn
+        enc_fn_state: Dict = {'type': enc_fn.__class__.__name__}
+        if hasattr(enc_fn, '_input_dim'):
+            enc_fn_state['input_dim'] = int(enc_fn._input_dim)
+        if hasattr(enc_fn, 'W'):
+            enc_fn_state['W'] = enc_fn.W.copy()
+        if hasattr(enc_fn, 'b'):
+            enc_fn_state['b'] = enc_fn.b.copy()
+        if hasattr(enc_fn, '_gamma'):
+            enc_fn_state['gamma'] = float(enc_fn._gamma)
+
+        return {
+            'encoder_W'     : enc_W,
+            'encoder_fn'    : enc_fn_state,
+            'world'         : world_state,
+            'classes'       : classes_state,
+            'label_order'   : label_order,
+            'field_h'       : self.field.h.copy(),
+            'field_step'    : int(self.field.step),
+            'temperature'   : float(self.temperature),
+            'ood_sigma'     : float(self.ood_sigma),
+            'delta_lr'      : float(self.delta_lr),
+            'world_lr'      : float(self.world_lr),
+            'enc_lr'        : float(self.enc_lr),
+            'mdl_lambda'    : float(self.mdl_lambda),
+            'deliberation_lo': float(self.deliberation_lo),
+            'deliberation_hi': float(self.deliberation_hi),
+            'total_steps'   : int(self._total_steps),
+            'total_correct' : int(self._total_correct),
+            'mahal_ema'     : float(getattr(self, '_mahal_ema', 1.0)),
+            'mahal_std_ema' : float(getattr(self, '_mahal_std_ema', 0.5)),
+            'llr_ema'       : float(getattr(self, '_llr_ema', 0.0)),
+            'llr_scale_ema' : float(getattr(self, '_llr_scale_ema', 0.0)),
+        }
+
+    def load_state(self, state: Dict) -> None:
+        """Restore CyphaDIF from a dict produced by :meth:`save_state`.
+
+        All parameters, world prior, class differentials, and encoder weights
+        are fully restored.  The replay buffer and field evolution history are
+        NOT restored (not needed for inference or continued training).
+
+        Raises ``ValueError`` if the state dimensions are incompatible.
+        """
+        # Validate dimensions
+        enc_W = np.asarray(state['encoder_W'], dtype=np.float64)
+        if enc_W.shape != self.encoder.W.shape:
+            raise ValueError(
+                f"Encoder W shape mismatch: got {enc_W.shape}, "
+                f"expected {self.encoder.W.shape}."
+            )
+
+        # Restore encoder projection
+        with self.encoder._lock:
+            self.encoder.W = enc_W.copy()
+
+        # Restore encoder_fn weights if compatible (RFFEncoder)
+        enc_fn_state = state.get('encoder_fn', {})
+        enc_fn = self.encoder_fn
+        if (enc_fn_state.get('type') == enc_fn.__class__.__name__
+                and enc_fn_state.get('type') != 'VectorEncoder'):
+            if 'W' in enc_fn_state and hasattr(enc_fn, 'W'):
+                enc_fn.W = np.asarray(enc_fn_state['W'], dtype=np.float64).copy()
+            if 'b' in enc_fn_state and hasattr(enc_fn, 'b'):
+                enc_fn.b = np.asarray(enc_fn_state['b'], dtype=np.float64).copy()
+            if 'gamma' in enc_fn_state and hasattr(enc_fn, '_gamma'):
+                enc_fn._gamma = float(enc_fn_state['gamma'])
+
+        # Restore world prior
+        ws = state['world']
+        w  = self.memory.world
+        with w._lock:
+            w.mu         = np.asarray(ws['mu'],   dtype=np.float64).copy()
+            w.v          = np.asarray(ws['v'],    dtype=np.float64).copy()
+            w.inv_v      = np.asarray(ws['inv_v'], dtype=np.float64).copy()
+            w.v_mean     = float(ws['v_mean'])
+            w._n         = int(ws['_n'])
+            w._M2        = np.asarray(ws['_M2'],  dtype=np.float64).copy()
+            w._drift_ema = float(ws['_drift_ema'])
+            if 'F_field' in ws:
+                w.F_field = np.asarray(ws['F_field'], dtype=np.float64).copy()
+
+        # Restore class differentials
+        with self.memory._lock:
+            self.memory._classes    = {}
+            self.memory._label_order = []
+            self.memory._label_idx  = {}
+            self.memory._D_buf[:]   = 0.0
+
+            for k, lbl in enumerate(state['label_order']):
+                cs = state['classes'][lbl]
+                cd = ClassDifferential(label=lbl, dim=self.memory.d)
+                dm = np.asarray(cs['delta_mu'], dtype=np.float64)
+                if k < _MAX_CLASSES:
+                    self.memory._D_buf[k, :len(dm)] = dm
+                    cd.delta_mu = self.memory._D_buf[k]
+                else:
+                    cd.delta_mu = dm.copy()
+                cd.n_obs     = int(cs['n_obs'])
+                cd.n_correct = int(cs['n_correct'])
+                self.memory._classes[lbl]   = cd
+                self.memory._label_order.append(lbl)
+                self.memory._label_idx[lbl] = k
+                n = min(k, _MAX_CLASSES - 1)
+                self.memory._n_obs_buf[n] = float(cd.n_obs)
+
+        # Restore field (best-effort, non-critical)
+        try:
+            h_saved = np.asarray(state['field_h'], dtype=np.float64)
+            with self.field._lock:
+                self.field._h    = h_saved.copy()
+                self.field._step = int(state.get('field_step', 0))
+        except Exception:
+            pass
+
+        # Restore scalars
+        self.temperature     = float(state.get('temperature', self.temperature))
+        self.ood_sigma       = float(state.get('ood_sigma', self.ood_sigma))
+        self.delta_lr        = float(state.get('delta_lr', self.delta_lr))
+        self.world_lr        = float(state.get('world_lr', self.world_lr))
+        self.enc_lr          = float(state.get('enc_lr', self.enc_lr))
+        self.mdl_lambda      = float(state.get('mdl_lambda', self.mdl_lambda))
+        self.deliberation_lo = float(state.get('deliberation_lo', self.deliberation_lo))
+        self.deliberation_hi = float(state.get('deliberation_hi', self.deliberation_hi))
+        self._total_steps    = int(state.get('total_steps', self._total_steps))
+        self._total_correct  = int(state.get('total_correct', self._total_correct))
+        self._mahal_ema      = float(state.get('mahal_ema', 1.0))
+        self._mahal_std_ema  = float(state.get('mahal_std_ema', 0.5))
+        self._llr_ema        = float(state.get('llr_ema', 0.0))
+        self._llr_scale_ema  = float(state.get('llr_scale_ema', 0.0))
+
     def reset_field(self) -> None:
         self.field.reset()
 
@@ -5269,7 +5653,12 @@ class DIFRegressor:
                  target_lr : float = 0.06, # EMA rate for target means (profiled)
                  rng       : Optional[np.random.Generator] = None,
                  replay_ratio: float = _REPLAY_RATIO,
-                 replay_rng: Any = None):
+                 replay_rng: Any = None,
+                 cold_start_steps: int = 20,
+                 min_experts_floor: int = 4,
+                 reg_hash_routing: bool = True,
+                 use_soft_mixture: bool = False,
+                 use_linear_head: bool = False):
         # Regression-tuned DIF head: slightly higher world_lr + lower temperature than cls defaults.
         # ``replay_ratio`` / ``replay_rng`` are forwarded to ``CyphaDIF`` so priority replay uses the
         # intended RNG (parity harnesses record ``replay_rng.random()`` draws into ``replay_u01``).
@@ -5288,6 +5677,16 @@ class DIFRegressor:
         self.clf.temperature = 1.05
         self.n_experts= n_experts
         self.target_lr= target_lr
+        self.cold_start_steps = cold_start_steps
+        self.min_experts_floor = min_experts_floor
+        self.reg_hash_routing = reg_hash_routing
+        self.use_soft_mixture = use_soft_mixture
+        self.use_linear_head = use_linear_head
+        self._linear_head_lam = 1.0
+        self._w1: Optional[np.ndarray] = None
+        self._b1: Optional[float] = None
+        self._linear_labels: List[str] = []
+        self._y_buf: List[float] = []
         self._rng     = rng or np.random.default_rng(42)
 
         # Per-expert target statistics (updated incrementally)
@@ -5299,6 +5698,73 @@ class DIFRegressor:
 
     def _label_for_expert(self, k_idx: int) -> str:
         return f'_e{k_idx}'
+
+    def _cold_start_hash_expert(self, k_target: int) -> str:
+        return self._label_for_expert(self._step_count % k_target)
+
+    def _y_quantile_expert(self, y_scalar: float, k_target: int) -> str:
+        buf = self._y_buf
+        if len(buf) < k_target:
+            return self._label_for_expert(len(buf) % k_target)
+        edges = np.quantile(np.asarray(buf, dtype=np.float64), np.linspace(0.0, 1.0, k_target + 1))
+        k = int(np.searchsorted(edges[1:-1], y_scalar))
+        return self._label_for_expert(min(k, k_target - 1))
+
+    def _pick_router_expert(self, x: Any, y_arr: np.ndarray, k_target: int, n_existing: int) -> str:
+        use_hash = (
+            self.reg_hash_routing
+            and n_existing < k_target
+            and self._step_count <= k_target * self.cold_start_steps
+        )
+        if use_hash:
+            return self._cold_start_hash_expert(k_target)
+        if not self.reg_hash_routing:
+            return self._y_quantile_expert(float(y_arr.ravel()[0]), k_target)
+        if n_existing > 0:
+            pred, _conf = self.clf.infer(x)
+            return pred if pred != '__unknown__' else '_e0'
+        return '_e0'
+
+    def _ema_expert(self, expert: str, y_arr: np.ndarray, lr: float) -> None:
+        if expert not in self._expert_mu:
+            self._expert_mu[expert]  = y_arr.copy()
+            self._expert_var[expert] = 0.0
+            self._expert_n[expert]   = 1
+        else:
+            old_mu  = self._expert_mu[expert]
+            delta   = y_arr - old_mu
+            self._expert_mu[expert]  = old_mu + lr * delta
+            self._expert_var[expert] = (1 - lr) * self._expert_var[expert] + lr * float(delta @ delta)
+            self._expert_n[expert]  += 1
+
+    def _soft_mixture_update(self, x: Any, y_arr: np.ndarray, lr: float) -> None:
+        _, h = self.clf._encode(x)
+        llr, labels = self.clf.score_matrix(h.reshape(1, -1))
+        if not labels:
+            return
+        probs = _softmax_batch(llr / (self.clf.temperature + _EPS))[0]
+        for i, lbl in enumerate(labels):
+            p = float(probs[i])
+            if p < 0.02:
+                continue
+            self._ema_expert(lbl, y_arr, lr * p)
+
+    def fit_linear_head(self, X: np.ndarray, y: np.ndarray) -> None:
+        """Closed-form ridge on [LLR | x | 1] after online router training."""
+        if not self._expert_mu:
+            return
+        x_arr = np.asarray(X, dtype=np.float64)
+        y_arr = np.asarray(y, dtype=np.float64).ravel()
+        n = len(y_arr)
+        if n == 0:
+            return
+        llr, labels = self.clf.score_matrix(self.clf.batch_encode(x_arr))
+        self._linear_labels = list(labels)
+        f1 = np.c_[llr, x_arr, np.ones(n)]
+        lam = self._linear_head_lam * n
+        w1 = np.linalg.solve(f1.T @ f1 + lam * np.eye(f1.shape[1]), f1.T @ y_arr)
+        self._w1 = w1[:-1]
+        self._b1 = float(w1[-1])
 
     def train_step(self, x: Any, y: Union[float, np.ndarray]) -> float:
         """
@@ -5323,41 +5789,30 @@ class DIFRegressor:
             self._target_dim = len(y_arr)
 
         self._step_count = getattr(self, '_step_count', 0) + 1
-        K_target = max(self.n_experts, 4)  # default 4 experts if n_experts=0
+        k_target = max(self.n_experts, self.min_experts_floor)
+
+        y_scalar = float(y_arr.ravel()[0])
+        self._y_buf.append(y_scalar)
+        if len(self._y_buf) > 2048:
+            self._y_buf = self._y_buf[-2048:]
 
         with self.clf.memory._lock:
             n_existing = len(self.clf.memory._classes)
 
-        # Cold-start: hash-assign to spread data across experts
-        if n_existing < K_target and self._step_count <= K_target * 20:
-            expert = f'_e{self._step_count % K_target}'
-        else:
-            # Warm routing: use DIF classifier
-            if n_existing > 0:
-                pred, conf = self.clf.infer(x)
-                expert = pred if pred != '__unknown__' else '_e0'
-            else:
-                expert = '_e0'
+        expert = self._pick_router_expert(x, y_arr, k_target, n_existing)
 
         # Update DIF classifier (learns the routing)
         loss = self.clf.train_step(x, expert)
 
-        # Update expert target statistics via EMA
         lr = self.target_lr
-        if expert not in self._expert_mu:
-            self._expert_mu[expert]  = y_arr.copy()
-            self._expert_var[expert] = 0.0
-            self._expert_n[expert]   = 1
+        if self.use_soft_mixture and n_existing > 0:
+            self._soft_mixture_update(x, y_arr, lr)
         else:
-            old_mu  = self._expert_mu[expert]
-            delta   = y_arr - old_mu
-            self._expert_mu[expert]  = old_mu + lr * delta
-            self._expert_var[expert] = (1-lr)*self._expert_var[expert] + lr*float(delta@delta)
-            self._expert_n[expert]  += 1
+            self._ema_expert(expert, y_arr, lr)
 
         return loss
 
-    def predict(self, x: Any) -> Tuple[np.ndarray, float]:
+    def _predict_mixture(self, x: Any) -> Tuple[np.ndarray, float]:
         """
         Predict target value for input x.
 
@@ -5387,6 +5842,31 @@ class DIFRegressor:
 
         return y_pred, float(np.sqrt(max(var, 0.0)))
 
+    def predict(self, x: Any) -> Tuple[np.ndarray, float]:
+        """
+        Predict target value for input x.
+
+        Returns
+        -------
+        y_pred       : weighted mean prediction  E[y|x]
+        uncertainty  : predictive std (mixture of expert variances)
+        """
+        if self.use_linear_head and self._w1 is not None:
+            x_vec = np.asarray(self.clf.encoder_fn(x), dtype=np.float64).ravel()
+            _, h = self.clf._encode(x)
+            llr, labels = self.clf.score_matrix(h.reshape(1, -1))
+            llr_map = dict(zip(labels, np.asarray(llr, dtype=np.float64).reshape(-1)))
+            llr_vec = np.array(
+                [float(llr_map.get(lbl, 0.0)) for lbl in self._linear_labels],
+                dtype=np.float64,
+            )
+            feat = np.r_[llr_vec, x_vec]
+            y_scalar = float(feat @ self._w1 + self._b1)
+            d = self._target_dim or 1
+            _, unc = self._predict_mixture(x)
+            return np.full(d, y_scalar, dtype=np.float64), unc
+        return self._predict_mixture(x)
+
     def save_state(self) -> Dict:
         """Serialise DIF router (``CyphaDIF``) + per-expert target EMAs for ``cypha_save_binary`` / registry."""
         return {
@@ -5399,6 +5879,15 @@ class DIFRegressor:
             'target_lr': float(self.target_lr),
             'n_experts': int(self.n_experts),
             '_step_count': int(getattr(self, '_step_count', 0)),
+            'cold_start_steps': int(self.cold_start_steps),
+            'min_experts_floor': int(self.min_experts_floor),
+            'reg_hash_routing': bool(self.reg_hash_routing),
+            'use_soft_mixture': bool(self.use_soft_mixture),
+            'use_linear_head': bool(self.use_linear_head),
+            'linear_w1': None if self._w1 is None else np.ascontiguousarray(self._w1, dtype=np.float64).copy(),
+            'linear_b1': self._b1,
+            # Lists are not a native cypha_save_binary dtype; store as dict for stable round-trips.
+            'linear_labels': {str(i): str(lbl) for i, lbl in enumerate(self._linear_labels)},
         }
 
     def load_state(self, state: Dict) -> None:
@@ -5421,6 +5910,32 @@ class DIFRegressor:
         self.target_lr = float(state.get('target_lr', self.target_lr))
         self.n_experts = int(state.get('n_experts', self.n_experts))
         self._step_count = int(state.get('_step_count', 0))
+        self.cold_start_steps = int(state.get('cold_start_steps', self.cold_start_steps))
+        self.min_experts_floor = int(state.get('min_experts_floor', self.min_experts_floor))
+        self.reg_hash_routing = bool(state.get('reg_hash_routing', self.reg_hash_routing))
+        self.use_soft_mixture = bool(state.get('use_soft_mixture', self.use_soft_mixture))
+        self.use_linear_head = bool(state.get('use_linear_head', self.use_linear_head))
+        w1 = state.get('linear_w1')
+        self._w1 = None if w1 is None else np.asarray(w1, dtype=np.float64).copy()
+        b1 = state.get('linear_b1')
+        self._b1 = None if b1 is None else float(b1)
+        ll = state.get('linear_labels')
+        if isinstance(ll, dict):
+            items = []
+            for k, v in ll.items():
+                try:
+                    items.append((int(k), str(v)))
+                except Exception:
+                    continue
+            items.sort(key=lambda t: t[0])
+            self._linear_labels = [v for _, v in items]
+        elif isinstance(ll, list):
+            self._linear_labels = [str(v) for v in ll]
+        elif isinstance(ll, str):
+            # legacy fallback: repr(list) got stored as a string in older builds
+            self._linear_labels = []
+        else:
+            self._linear_labels = []
 
     def predict_batch(self, xs: List[Any]) -> Tuple[np.ndarray, np.ndarray]:
         """

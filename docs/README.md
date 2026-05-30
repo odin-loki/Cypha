@@ -19,7 +19,7 @@ Start here, then open the section that matches what you need.
 |-----|------------|
 | [Verification status](verify/VERIFICATION_STATUS.md) | **Snapshot**: test counts (188 pytest / 33 CTest), known gaps |
 | [Roadmap](verify/ROADMAP.md) | All milestones M1–M6 complete; current engineering horizon |
-| [Future directions](FUTURE.md) | **Depth**: OpenCL GPU, Qt packaging, Web UI, multi-model, ONNX |
+| [Future directions](FUTURE.md) | **Depth**: CUDA GPU, Qt packaging, Web UI, multi-model, ONNX |
 | [Maintenance](verify/MAINTENANCE.md) | **When to regen fixtures / rebuild native / align schema & REST** |
 | [Verify plan](verify/VERIFY_PLAN.md) | **Checklist**: debug, profile, benchmark, WSL flows |
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, extended verify commands |

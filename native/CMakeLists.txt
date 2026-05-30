@@ -5,21 +5,31 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 
 option(CYPHA_BUILD_QT "Build optional Qt targets under qt/: cypha_qt_stub (Core), cypha_qt_shell (Widgets)" OFF)
 option(CYPHA_QT_CHARTS "When CYPHA_BUILD_QT is ON, link Qt Charts for cypha_qt_shell if found (default OFF for qt6-base-only CI)" OFF)
-option(CYPHA_ENABLE_OPENCL "Build OpenCL GPU backend (batch_encode / score_matrix / softmax)" OFF)
+option(CYPHA_ENABLE_CUDA "Build CUDA GPU path in accel backend (NVIDIA toolkit + driver); CPU uses std::thread" OFF)
+set(CYPHA_ACCEL_GPU_MIN_BATCH_ROWS "16" CACHE STRING "Minimum batch row count (n) to use CUDA in cypha::accel (smaller batches use CPU threads)")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# OpenCL backend — always compiled into cypha_core (stub path when OFF).
-if(CYPHA_ENABLE_OPENCL)
-  find_package(OpenCL REQUIRED)
-  message(STATUS "OpenCL found: ${OpenCL_VERSION_STRING}")
+if(CYPHA_ENABLE_CUDA)
+  if(MINGW)
+    message(FATAL_ERROR "CYPHA_ENABLE_CUDA is not supported for MinGW targets (use native MSVC or Linux + nvcc).")
+  endif()
+  enable_language(CUDA)
+  set(CMAKE_CUDA_STANDARD 17)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 75)
+  endif()
+  find_package(CUDAToolkit REQUIRED)
+  message(STATUS "CUDA toolkit: ${CUDAToolkit_VERSION}")
 endif()
 
 add_library(cypha_core STATIC
   src/load_cypha.cpp
   src/save_cypha.cpp
   src/infer_cpu.cpp
+  src/nig_gig_math.cpp
   src/bessel_table_data.cpp
   src/preprocessor.cpp
   src/preprocessor_fit.cpp
@@ -34,18 +44,24 @@ add_library(cypha_core STATIC
   src/regression_stub.cpp
   src/mke_scalar_train_step.cpp
   src/generation.cpp
-  src/opencl_backend.cpp
+  src/accel_backend.cpp
   src/create_model.cpp
 )
 
-if(CYPHA_ENABLE_OPENCL)
-  target_compile_definitions(cypha_core PUBLIC CYPHA_ENABLE_OPENCL)
-  target_link_libraries(cypha_core PUBLIC OpenCL::OpenCL)
+if(CYPHA_ENABLE_CUDA)
+  target_sources(cypha_core PRIVATE src/accel_cuda.cu)
+  target_compile_definitions(cypha_core PUBLIC CYPHA_ENABLE_CUDA)
+  target_link_libraries(cypha_core PUBLIC CUDA::cudart)
+  set_target_properties(cypha_core PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 endif()
 
 target_include_directories(cypha_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+)
+
+target_compile_definitions(cypha_core PRIVATE
+  CYPHA_ACCEL_GPU_MIN_BATCH_ROWS=${CYPHA_ACCEL_GPU_MIN_BATCH_ROWS}
 )
 
 add_executable(cypha_parity tools/parity_main.cpp)
@@ -111,8 +127,8 @@ target_link_libraries(mke_train_step_parity PRIVATE cypha_core)
 add_executable(generation_parity tools/generation_parity.cpp)
 target_link_libraries(generation_parity PRIVATE cypha_core)
 
-add_executable(opencl_smoke tools/opencl_smoke.cpp)
-target_link_libraries(opencl_smoke PRIVATE cypha_core)
+add_executable(cuda_smoke tools/cuda_smoke.cpp)
+target_link_libraries(cuda_smoke PRIVATE cypha_core)
 
 add_executable(create_model_smoke tools/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
@@ -144,7 +160,7 @@ set(
   quantile_dif_train_parity
   mke_train_step_parity
   generation_parity
-  opencl_smoke
+  cuda_smoke
   create_model_smoke
 )
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
@@ -251,7 +267,7 @@ if(MSVC)
   target_compile_options(quantile_dif_train_parity PRIVATE /W4 /permissive-)
   target_compile_options(mke_train_step_parity PRIVATE /W4 /permissive-)
   target_compile_options(generation_parity PRIVATE /W4 /permissive-)
-  target_compile_options(opencl_smoke PRIVATE /W4 /permissive-)
+  target_compile_options(cuda_smoke PRIVATE /W4 /permissive-)
 else()
   target_compile_options(cypha_core PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -275,7 +291,7 @@ else()
   target_compile_options(quantile_dif_train_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(mke_train_step_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(generation_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(opencl_smoke PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Parity fixture paths: MinGW .exe run on Windows cannot open /mnt/c/... (WSL cross-build).
@@ -416,16 +432,15 @@ add_test(
 )
 
 add_test(
-  NAME native_opencl_smoke
-  COMMAND "$<TARGET_FILE:opencl_smoke>"
+  NAME native_cuda_smoke
+  COMMAND "$<TARGET_FILE:cuda_smoke>"
 )
-set_tests_properties(native_opencl_smoke PROPERTIES SKIP_RETURN_CODE 2)
 
 add_test(
-  NAME native_opencl_bench
-  COMMAND "$<TARGET_FILE:opencl_smoke>" --bench
+  NAME native_cuda_bench
+  COMMAND "$<TARGET_FILE:cuda_smoke>" --bench
 )
-set_tests_properties(native_opencl_bench PROPERTIES SKIP_RETURN_CODE 2)
+set_tests_properties(native_cuda_bench PROPERTIES SKIP_RETURN_CODE 2)
 
 add_test(
   NAME native_registry_register

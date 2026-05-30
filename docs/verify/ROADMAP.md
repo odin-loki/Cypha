@@ -21,7 +21,7 @@ The **Python tree** is the spec: tests, parity blobs, fixture generators. The **
 | Experiments DB (SQLite, M6) | ✅ `experiment_db_crud`, Qt M6 panel |
 | Deterministic REST replay (`/session/rng`) | ✅ cross-runtime state transfer |
 | Autoregressive / generation path | ✅ native `generation_parity`, CTest |
-| Test suite | ✅ 33 CTests + 188 pytest (WSL + Windows), 2 opencl skips expected |
+| Test suite | ✅ 33 CTests + ~189 pytest (WSL + Windows); `native_cuda_bench` skipped without CUDA GPU |
 
 ---
 
@@ -56,7 +56,7 @@ Profiling infrastructure complete:
 
 `cypha_accel` provides CuPy-accelerated `fused_score_llr`, `project_features`, `softmax_rows_llr` — CPU NumPy fallback when CuPy is absent. GPU microbench and full pipeline bench are scripted.
 
-Native OpenCL kernels (`batch_encode`, `score_matrix`, softmax) are implemented in `native/src/opencl_backend.cpp`; CI currently uses POCL CPU fallback (OpenCL GPU driver not available in WSL CI). Production GPU path activates when an fp64 OpenCL device is present (`-DCYPHA_ENABLE_OPENCL=ON`).
+Native **`cypha::accel`**: optional **CUDA** (`native/src/accel_cuda.cu`, `-DCYPHA_ENABLE_CUDA=ON`) or **parallel CPU** (`std::thread` in `accel_backend.cpp`). CI builds without CUDA; **`cuda_smoke`** still passes on CPU threads.
 
 ---
 
@@ -70,7 +70,7 @@ All milestones complete — see [`PORT_FULL_STACK.md`](../port/PORT_FULL_STACK.m
 
 The native hot path is complete. The next priorities are about depth and distribution:
 
-1. **OpenCL GPU activation** — WSL2 NVIDIA driver `libnvidia-compute-595` not yet packaged in Ubuntu PPAs. Once available: `cmake -DCYPHA_ENABLE_OPENCL=ON` unlocks `batch_encode` + softmax on GPU. See [`docs/FUTURE.md`](../FUTURE.md) §1.
+1. **CUDA in CI (optional)** — add a matrix job with NVIDIA runner + `-DCYPHA_ENABLE_CUDA=ON` to exercise `cuda_smoke --bench`. See [`docs/FUTURE.md`](../FUTURE.md) §1.
 
 2. **Qt shell polish** — streaming progress updates during long CSV training, chart zoom/pan, optional dark theme, export to ONNX. See [`docs/FUTURE.md`](../FUTURE.md) §2.
 

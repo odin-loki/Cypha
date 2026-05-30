@@ -1,0 +1,8 @@
+{
+  "n_steps": 5000,
+  "perplexity": 12.903219250212402,
+  "bigram_perplexity": 4.081204351469884,
+  "bits_per_token": 3.756468154731451,
+  "syntax_valid_rate": 0.0,
+  "lossless_fraction": 0.00019992003198684728
+}
