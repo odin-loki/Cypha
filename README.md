@@ -187,16 +187,4 @@ These defaults come from a profiled medium-grid tuning programme (`scripts/tune_
 
 ---
 
-## 🔗 Related work in this repo
-
-- [`../Compression Algorithms/`](../Compression%20Algorithms/) — **HRNA / NMP theoretical home** (`NMP_neural_compression_research_paper.md`)
-- [`../Cell AI/`](../Cell%20AI/) — sister neural architecture (CellularAI)
-- [`../Long Reasoning and Thinking NN/`](../Long%20Reasoning%20and%20Thinking%20NN/) — UHPM long-context architecture
-- [`../Statistical Generation/`](../Statistical%20Generation/) — Universal Statistical Generator framework
-- [`../GF2 Algebra and Applications/`](../GF2%20Algebra%20and%20Applications/) — Paper 7 explicitly bridges to Cypha
-- [`../Statistical Scheduler/`](../Statistical%20Scheduler/) — sister Python+monitoring stack
-- [`../New Classes of Electrical Components/`](../New%20Classes%20of%20Electrical%20Components/) — adjacent `Cypha.py` (Omega DIF encoder, separate work)
-
----
-
 [← Back to main README](../README.md)
