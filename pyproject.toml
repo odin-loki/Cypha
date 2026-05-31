@@ -77,3 +77,39 @@ omit = ["*/test_*.py", "*/tests/*"]
 [tool.coverage.report]
 skip_empty = true
 precision = 2
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    "__pycache__",
+    ".venv",
+    ".venv-win",
+    ".venv-wsl",
+    "native/",
+    "paper/",
+    "artifacts/",
+    "data_cache/",
+    "bessel_table_data.cpp",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (undefined names, unused imports)
+    "I",   # isort
+    "UP",  # pyupgrade (modernise syntax)
+    "B",   # flake8-bugbear (likely bugs)
+    "N",   # pep8 naming
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "N803",  # argument name should be lowercase (NumPy convention uses uppercase)
+    "N806",  # variable in function should be lowercase (ditto)
+    "B007",  # loop control variable not used in loop body
+    "B008",  # do not perform function calls in default argument
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cypha_studio", "cypha_accel", "cypha_lm", "cypha_bench", "cypha_som"]

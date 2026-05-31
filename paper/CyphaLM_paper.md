@@ -7,21 +7,19 @@
 
 ## Abstract
 
-<!-- TARGET: ~250 words. Auto-fill after experiments complete. -->
+Conventional neural language models entangle lossy distribution compression, lossless residual encoding, statistical density estimation, and self-organised feature discovery in a single optimisation process. We present **CyphaLM**, which makes each mechanism explicit: Izaac GF(2^n) embeddings (zero embedding parameters, kNN accuracy 0.0125, collision rate 0.0), CellAI multi-scale SSM (O(1) per-token inference), CyphaDIF NIG expert fields (exact epistemic / aleatoric uncertainty decomposition, expert purity 1.00 on synthetic routing tasks), and GRIA alpha-projection. On a character-level language modelling task (D17, Gutenberg corpus, 40k training tokens), CyphaLM achieves 4.50 bits per character held-out versus a bigram baseline of 3.69 bpc. Online adaptation reduces OOD perplexity by 0.25 bpc on a new text domain. Toy vocabulary perplexity reaches 12.90 at convergence. The architecture is fully NumPy-based, supports online training, and requires no gradient computation.
 
-Conventional neural language models entangle lossy distribution compression, lossless residual encoding, statistical density estimation, and self-organised feature discovery in a single optimisation process. We present **CyphaLM**, which makes each mechanism explicit: Izaac GF(2^n) embeddings (zero embedding parameters), CellAI multi-scale SSM (O(n) sequence processing), CyphaDIF NIG expert fields (exact epistemic/aleatoric uncertainty), and GRIA alpha-projection (edge-of-chaos alpha ~ 0.5).
+**Key results (from `cypha_lm/REPORT.md`):**
 
-**Placeholder metrics:**
-- Embedding kNN accuracy (Izaac vs learned): `{{EXP01_KNN}}`
-- SSM long-range accuracy vs transformer: `{{EXP02_LONG_ACC}}`
-- Expert self-organisation purity: `{{EXP03_PURITY}}`
-- Edge-of-chaos fraction at convergence: `{{EXP04_EDGE_FRAC}}`
-- Toy LM perplexity: `{{EXP05_PPL}}`
-- Code corpus bits/char: `{{EXP06_BPC}}`
-- Uncertainty calibration ECE: `{{EXP07_ECE}}`
-- Online adaptation improvement: `{{EXP08_PPL_DELTA}}`
-- Catastrophic forgetting retention: `{{EXP09_RETENTION}}`
-- Parameter efficiency vs transformer: `{{EXP10_BPC_RATIO}}`
+| Experiment | Metric | Value |
+|------------|--------|-------|
+| Embedding (E01) | Izaac kNN acc | 0.0125 |
+| Embedding (E01) | GF-rank Spearman | 0.1434 |
+| Expert routing (E03) | Purity (2-topic) | 1.0000 |
+| Toy LM (E05) | Final perplexity | 12.9032 |
+| Code LM (E06) | Bits per char | 0.6146 |
+| D17 held-out BPC | Moby Dick char-LM | 4.50 |
+| D17 online adapt | BPC improvement | 0.25 |
 
 ---
 
@@ -56,25 +54,25 @@ Explicit mechanisms are more efficient and interpretable.
 
 See Figure 1 (`paper/figures/fig1_embedding_benchmark.png`).
 
-**Result placeholder:** Izaac collision rate = `{{EXP01_COLLISION}}`; GF-rank Spearman = `{{EXP01_SPEARMAN}}`.
+**Result:** Izaac collision rate = `0.0000`; GF-rank Spearman = `0.1434`.
 
 ### 3.2 CellAI SSM temporal layer
 
 See Figure 2 (`paper/figures/fig2_ssm_capacity.png`).
 
-**Result placeholder:** CellAI O(n) runtime advantage at n > 100: `{{EXP02_RUNTIME_RATIO}}`.
+**Result:** CellAI O(n) runtime advantage at n > 100: `N/A`.
 
 ### 3.3 CyphaDIF expert field
 
 See Figure 3 (`paper/figures/fig3_expert_self_organisation.png`).
 
-**Result placeholder:** Expert purity = `{{EXP03_PURITY}}` (target > 0.85).
+**Result:** Expert purity = `1.0000` (target > 0.85).
 
 ### 3.4 GRIA alpha-projection
 
 See Figure 4 (`paper/figures/fig4_alpha_spectrum.png`).
 
-**Result placeholder:** Mean alpha at 20k steps = `{{EXP04_MEAN_ALPHA}}`.
+**Result:** Mean alpha at 20k steps = `N/A`.
 
 ### 3.5 End-to-end pipeline
 
@@ -97,9 +95,9 @@ Token -> Izaac -> CellAI -> CyphaDIF -> GRIA -> P(next token).
 
 | Method | kNN accuracy | Collision rate |
 |--------|-------------|----------------|
-| Izaac | `{{EXP01_KNN_IZAAC}}` | `{{EXP01_COLLISION_IZAAC}}` |
-| Random learned | `{{EXP01_KNN_RANDOM}}` | `{{EXP01_COLLISION_RANDOM}}` |
-| Freq-init learned | `{{EXP01_KNN_FREQ}}` | `{{EXP01_COLLISION_FREQ}}` |
+| Izaac | `0.0125` | `0.0000` |
+| Random learned | `0.0025` | `0.0000` |
+| Freq-init learned | `0.0100` | `0.0000` |
 
 ### 5.2 SSM sequence capacity (Fig 2)
 
@@ -107,29 +105,29 @@ Lag-1 and lag-50 accuracy vs sequence length; runtime scaling.
 
 ### 5.3 Expert self-organisation (Fig 3)
 
-Two-topic synthetic corpus; purity score `{{EXP03_PURITY}}`.
+Two-topic synthetic corpus; purity score `1.0000`.
 
 ### 5.4 Alpha spectrum emergence (Fig 4)
 
-Alpha histograms at checkpoints; edge-of-chaos fraction `{{EXP04_EDGE_FRAC}}`.
+Alpha histograms at checkpoints; edge-of-chaos fraction `N/A`.
 
 ### 5.5 Language modelling (Figs 5–6)
 
-**Toy vocabulary (Fig 5):** perplexity `{{EXP05_PPL}}`, syntax validity `{{EXP05_SYNTAX}}`.
+**Toy vocabulary (Fig 5):** perplexity `12.9032`, syntax validity `N/A`.
 
-**Code corpus (Fig 6):** bits/char `{{EXP06_BPC}}`, expert count `{{EXP06_EXPERTS}}`.
+**Code corpus (Fig 6):** bits/char `0.6146`, expert count `1`.
 
 ### 5.6 Uncertainty calibration (Fig 7)
 
-ECE (NIG) = `{{EXP07_ECE}}` vs dropout baseline `{{EXP07_ECE_DROPOUT}}`.
+ECE (NIG) = `N/A` vs dropout baseline `N/A`.
 
 ### 5.7 Online adaptation (Fig 8)
 
-JSON perplexity after Python pretrain; improvement `{{EXP08_PPL_DELTA}}`.
+JSON perplexity after Python pretrain; improvement `N/A`.
 
 ### 5.8 Catastrophic forgetting (Fig 9)
 
-Task A retention ratio `{{EXP09_RETENTION}}` (target <= 1.10).
+Task A retention ratio `N/A` (target <= 1.10).
 
 ### 5.9 Parameter efficiency (Fig 10)
 
