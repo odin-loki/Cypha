@@ -6,6 +6,26 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased] — 2026-05-31 CyphaLM + LLM features
+
+### Added
+- **D04 rewritten for CyphaLM** — char-LM domain now runs Izaac → CellAI SSM → CyphaDIF → GRIA (not raw CyphaDIF + CharNgramEncoder).
+- **`cypha_bench/adapters/cyphalm_bench.py`** — shared LM helpers for D04/D17: BPC eval, context-length curve, save/restore fidelity, sampling comparison, expert routing trace.
+- **D04 experiments:** BPC vs context length, CyphaDIF expert routing during generation, checkpoint round-trip parity, sampling strategy bar chart (`fig04_context_bpc`, `fig04_expert_routing`, `fig04_sampling_strategies`).
+- **CyphaLM generation:** `top_p_sample` (nucleus), unified `autoregressive_decode`, `stream_generate` SSE chunks; `predict_next` exposes `routing_probs`, `dominant_expert`, `active_experts`.
+- **CyphaStudio LM REST (FastAPI-only):** `POST /lm/load`, `GET /lm/metrics`, `POST /lm/predict_next`, `POST /generate`, `POST /generate/stream` (SSE with epistemic gating).
+- **`cypha_studio/core/lm_engine.py`** — `LMEngine` wrapper for CyphaLM inference and streaming.
+- **`CYPHA_LM_CHECKPOINT`** env var — auto-load CyphaLM at FastAPI startup.
+- **`tests/test_lm_api.py`** — generation utilities + REST route tests.
+- **`examples/lm_generate_body.json`**, `curl_lm_generate_stream.sh/.ps1`.
+- **`docs/port/PORT_CONTRACT.md` §4** — CyphaLM REST contract.
+
+### Changed
+- **`cypha_lm/model/cypha_lm.py`** — `generate()` accepts `strategy`, `top_k`, `top_p`; adds `stream_generate()`.
+- **Documentation:** `cypha_lm/README.md`, `cypha_bench/README.md`, `cypha_studio/README.md`, `docs/studio/CYPHA_ENV.md`, `examples/README.md`, `docs/RESEARCH_STATUS.md`.
+
+---
+
 ## [Unreleased] — 2026-05-31 polish pass
 
 ### Added

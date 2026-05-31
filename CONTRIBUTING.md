@@ -69,6 +69,7 @@ pytest tests/test_studio_trainer_preprocess_classify_hotpath_native_parity.py te
 ```bash
 pytest cypha_som/tests/ -v    # SOM/GNG/GRIA hooks (7 tests; flags default OFF)
 pytest cypha_lm/ -v           # CyphaLM stack (~70 tests across subpackages)
+pytest tests/test_lm_api.py -v  # CyphaLM generation + FastAPI /generate routes
 ```
 
 Optional profiling (local):

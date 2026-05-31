@@ -29,6 +29,37 @@ uvicorn cypha_studio.server.api:app --host 127.0.0.1 --port 7749
 | `cypha_load_body.json` | `/load` | POST |
 | `curl_predict.ps1` | `/predict` | one-liner curl (PowerShell) |
 | `curl_predict.sh` | `/predict` | one-liner curl (bash) |
+| `lm_generate_body.json` | `/generate`, `/generate/stream` | POST (CyphaLM) |
+| `curl_lm_generate_stream.ps1` | `/generate/stream` | SSE streaming (PowerShell) |
+| `curl_lm_generate_stream.sh` | `/generate/stream` | SSE streaming (bash) |
+
+> **CyphaLM routes** (`/generate`, `/lm/*`) are **FastAPI-only**. Load a checkpoint first:
+> `POST /lm/load` with `{"checkpoint_path": "path/to/ckpt"}` or set `CYPHA_LM_CHECKPOINT` before starting uvicorn.
+
+---
+
+## CyphaLM generation (FastAPI)
+
+**Load checkpoint:**
+```bash
+curl -s -X POST http://127.0.0.1:7749/lm/load \
+  -H "Content-Type: application/json" \
+  -d '{"checkpoint_path": "/path/to/my_ckpt"}'
+```
+
+**Batch generate (top-p nucleus sampling):**
+```bash
+curl -s -X POST http://127.0.0.1:7749/generate \
+  -H "Content-Type: application/json" \
+  -d @examples/lm_generate_body.json
+```
+
+**Stream tokens (SSE):**
+```bash
+bash examples/curl_lm_generate_stream.sh
+```
+
+Each SSE `data:` line includes `token_id`, `epistemic_var`, `dominant_expert`, and `routing_probs` from CyphaDIF.
 
 ---
 

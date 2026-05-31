@@ -148,14 +148,20 @@ class CyphaLM:
     def predict_next(self, token_id: int) -> dict[str, Any]:
         fwd = self._forward_context(int(token_id))
         log_probs = fwd["log_probs"]
+        dif_out = fwd["dif_out"]
+        routing = np.asarray(dif_out["routing_probs"], dtype=np.float64)
         top_k = 10
         idx = np.argsort(log_probs)[::-1][:top_k]
+        dominant = int(np.argmax(routing)) if routing.size else 0
         return {
             "log_probs": log_probs,
             "epistemic_var": self._last_epistemic,
             "aleatoric_var": self._last_aleatoric,
             "top_k_tokens": [int(i) for i in idx],
             "top_k_probs": [float(np.exp(log_probs[i])) for i in idx],
+            "active_experts": int(dif_out["active_experts"]),
+            "routing_probs": routing.tolist(),
+            "dominant_expert": dominant,
         }
 
     def generate(
@@ -164,45 +170,69 @@ class CyphaLM:
         max_tokens: int = 100,
         temperature: float = 1.0,
         uncertainty_threshold: float | None = None,
+        *,
+        strategy: str = "temperature",
+        top_k: int = 40,
+        top_p: float = 0.9,
     ) -> dict[str, Any]:
-        from cypha_lm.model.generation import (
-            temperature_sample,
-            uncertainty_gated_sample,
-        )
+        from cypha_lm.model.generation import autoregressive_decode
 
-        self.reset_context()
-        prompt = [int(t) for t in prompt_ids]
-        for tid in prompt[:-1]:
-            self._forward_context(tid)
-        generated: list[int] = []
-        losses, epi, ale = [], [], []
-        last = prompt[-1] if prompt else 0
-        temp = max(float(temperature), 1e-6)
-        for _ in range(max_tokens):
-            pred = self.predict_next(last)
-            ep = float(pred["epistemic_var"])
-            epi.append(ep)
-            ale.append(float(pred["aleatoric_var"]))
-            if uncertainty_threshold is not None and ep > float(uncertainty_threshold):
-                break
-            log_probs = np.asarray(pred["log_probs"], dtype=np.float64)
-            if temperature <= 1e-6:
-                tid = int(pred["top_k_tokens"][0])
-            else:
-                probs = np.exp(log_probs / temp)
-                probs /= probs.sum() + 1e-12
-                tid = int(self._rng.choice(self.config.vocab_size, p=probs))
-            generated.append(tid)
-            losses.append(float(-log_probs[tid]))
-            last = tid
+        strat = str(strategy)
+        if uncertainty_threshold is not None and strat == "temperature":
+            strat = "uncertainty_gated"
+        out = autoregressive_decode(
+            self,
+            [int(t) for t in prompt_ids],
+            int(max_tokens),
+            strategy=strat,  # type: ignore[arg-type]
+            temperature=float(temperature),
+            top_k=int(top_k),
+            top_p=float(top_p),
+            epistemic_threshold=uncertainty_threshold,
+        )
+        steps = out["per_step"]
+        losses = [s["loss"] for s in steps if s.get("token_id") is not None]
+        epi = [s["epistemic_var"] for s in steps]
+        ale = [s["aleatoric_var"] for s in steps]
         return {
-            "generated_ids": generated,
+            "generated_ids": out["generated_ids"],
             "per_step_metrics": {
                 "loss": np.asarray(losses, dtype=np.float64),
                 "epistemic_var": np.asarray(epi, dtype=np.float64),
                 "aleatoric_var": np.asarray(ale, dtype=np.float64),
             },
+            "per_step": steps,
+            "halted_on_uncertainty": out["halted_on_uncertainty"],
+            "strategy": out["strategy"],
         }
+
+    def stream_generate(
+        self,
+        prompt_ids: list[int],
+        max_tokens: int = 100,
+        temperature: float = 1.0,
+        uncertainty_threshold: float | None = None,
+        *,
+        strategy: str = "temperature",
+        top_k: int = 40,
+        top_p: float = 0.9,
+    ):
+        """Yield one chunk dict per token (for REST SSE / NDJSON)."""
+        from cypha_lm.model.generation import stream_generate as _stream
+
+        strat = str(strategy)
+        if uncertainty_threshold is not None and strat == "temperature":
+            strat = "uncertainty_gated"
+        yield from _stream(
+            self,
+            [int(t) for t in prompt_ids],
+            int(max_tokens),
+            strategy=strat,  # type: ignore[arg-type]
+            temperature=float(temperature),
+            top_k=int(top_k),
+            top_p=float(top_p),
+            epistemic_threshold=uncertainty_threshold,
+        )
 
     def compression_profile(self) -> dict[str, Any]:
         spec = self.gria.alpha_spectrum()

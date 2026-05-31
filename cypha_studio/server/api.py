@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 try:
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import JSONResponse, StreamingResponse
     from pydantic import BaseModel
     FASTAPI_AVAILABLE = True
 except ImportError:
@@ -194,6 +194,23 @@ if FASTAPI_AVAILABLE:
         state: Optional[List[int]] = None
         pos: int = 0
 
+    class LMLoadRequest(BaseModel):
+        """Load CyphaLM from a checkpoint base path (writes ``.json`` + ``.npz``)."""
+        checkpoint_path: str
+
+    class LMPredictNextRequest(BaseModel):
+        token_id: int
+
+    class LMGenerateRequest(BaseModel):
+        prompt_ids: List[int]
+        max_tokens: int = 64
+        temperature: float = 0.9
+        strategy: str = "temperature"  # greedy | temperature | top_k | top_p | uncertainty_gated
+        top_k: int = 40
+        top_p: float = 0.9
+        uncertainty_threshold: Optional[float] = None
+        stream: bool = False
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App factory
@@ -205,6 +222,7 @@ def create_app(
     session=None,
     cors_allow_origins: Optional[Sequence[str]] = None,
     regression_head_path: Optional[str] = None,
+    lm_engine=None,
 ) -> 'FastAPI':
     """
     Create the FastAPI app with the given inference engine and registry.
@@ -241,7 +259,18 @@ def create_app(
     app.state.engine   = engine
     app.state.registry = registry
     app.state.session  = session
+    app.state.lm_engine = lm_engine
     app.state.started  = time.time()
+
+    # Optional CyphaLM checkpoint on startup (FastAPI-only; not in native cypha_rest).
+    if lm_engine is None:
+        lm_ckpt = os.environ.get("CYPHA_LM_CHECKPOINT", "").strip()
+        if lm_ckpt:
+            try:
+                from ..core.lm_engine import LMEngine
+                app.state.lm_engine = LMEngine.from_checkpoint(lm_ckpt)
+            except ImportError:
+                pass
 
     reg_path = regression_head_path
     if reg_path is None:
@@ -261,6 +290,7 @@ def create_app(
         return {
             "status" : "ok",
             "model"  : model_name,
+            "lm_loaded": app.state.lm_engine is not None,
             "uptime" : time.time() - app.state.started,
             "n_predictions": eng.n_predictions if eng else 0,
         }
@@ -309,6 +339,10 @@ def create_app(
             payload["session"] = None
         experts = getattr(app.state, "regression_experts", {}) or {}
         payload["regression_head_loaded"] = eng is not None and bool(experts)
+        lm = app.state.lm_engine
+        payload["lm_loaded"] = lm is not None
+        if lm is not None:
+            payload["lm"] = lm.summary()
         return payload
 
     @app.post("/predict", response_model=PredictResponse)
@@ -599,6 +633,103 @@ def create_app(
             return {"classes": classes}
         except Exception as e:
             raise HTTPException(500, str(e))
+
+    # ── CyphaLM language-model routes (FastAPI-only) ─────────────────────
+
+    @app.post("/lm/load")
+    def lm_load(req: LMLoadRequest):
+        """Load CyphaLM from checkpoint (``.json`` + ``.npz`` pair)."""
+        try:
+            from ..core.lm_engine import LMEngine
+            app.state.lm_engine = LMEngine.from_checkpoint(req.checkpoint_path)
+        except ImportError as exc:
+            raise HTTPException(501, f"cypha_lm not installed: {exc}") from exc
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"loaded": True, "summary": app.state.lm_engine.summary()}
+
+    @app.get("/lm/metrics")
+    def lm_metrics():
+        lm = app.state.lm_engine
+        if lm is None:
+            raise HTTPException(503, "No CyphaLM loaded")
+        return lm.summary()
+
+    @app.post("/lm/predict_next")
+    def lm_predict_next(req: LMPredictNextRequest):
+        """Single-token forward with CyphaDIF routing probabilities."""
+        lm = app.state.lm_engine
+        if lm is None:
+            raise HTTPException(503, "No CyphaLM loaded")
+        return lm.predict_next(req.token_id)
+
+    @app.post("/generate")
+    def lm_generate(req: LMGenerateRequest):
+        """
+        Autoregressive generation with CyphaLM.
+
+        Set ``stream=true`` for Server-Sent Events (one JSON object per token).
+        Strategies: ``greedy``, ``temperature``, ``top_k``, ``top_p``,
+        ``uncertainty_gated`` (use ``uncertainty_threshold``).
+        """
+        lm = app.state.lm_engine
+        if lm is None:
+            raise HTTPException(503, "No CyphaLM loaded")
+
+        if req.stream:
+            def _sse():
+                for chunk in lm.stream_generate(
+                    req.prompt_ids,
+                    max_tokens=req.max_tokens,
+                    temperature=req.temperature,
+                    strategy=req.strategy,
+                    top_k=req.top_k,
+                    top_p=req.top_p,
+                    uncertainty_threshold=req.uncertainty_threshold,
+                ):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                yield "data: {\"done\": true}\n\n"
+
+            return StreamingResponse(_sse(), media_type="text/event-stream")
+
+        out = lm.generate(
+            req.prompt_ids,
+            max_tokens=req.max_tokens,
+            temperature=req.temperature,
+            strategy=req.strategy,
+            top_k=req.top_k,
+            top_p=req.top_p,
+            uncertainty_threshold=req.uncertainty_threshold,
+        )
+        # JSON-safe: convert numpy arrays in per_step_metrics if present
+        if "per_step_metrics" in out:
+            pm = out["per_step_metrics"]
+            out["per_step_metrics"] = {
+                k: (v.tolist() if hasattr(v, "tolist") else v) for k, v in pm.items()
+            }
+        return out
+
+    @app.post("/generate/stream")
+    def lm_generate_stream(req: LMGenerateRequest):
+        """Streaming generation (SSE). Same body as ``POST /generate``."""
+        lm = app.state.lm_engine
+        if lm is None:
+            raise HTTPException(503, "No CyphaLM loaded")
+
+        def _sse():
+            for chunk in lm.stream_generate(
+                req.prompt_ids,
+                max_tokens=req.max_tokens,
+                temperature=req.temperature,
+                strategy=req.strategy,
+                top_k=req.top_k,
+                top_p=req.top_p,
+                uncertainty_threshold=req.uncertainty_threshold,
+            ):
+                yield f"data: {json.dumps(chunk)}\n\n"
+            yield "data: {\"done\": true}\n\n"
+
+        return StreamingResponse(_sse(), media_type="text/event-stream")
 
     return app
 

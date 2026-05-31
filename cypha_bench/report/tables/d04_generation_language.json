@@ -1,39 +1,256 @@
 {
   "domain": "d04_generation_language",
-  "timestamp": "2026-05-31T04:36:38.063859+00:00",
+  "timestamp": "2026-05-31T05:06:03.377229+00:00",
   "experiments": {
     "summary": {
       "domain": "d04_generation_language",
       "corpus_source": "moby_dick.txt",
       "char_lm": {
+        "model": "CyphaLM",
+        "pipeline": "Izaac -> CellAI SSM -> CyphaDIF -> GRIA",
+        "vocab_size": 89,
+        "eval_method": "held_out_20pct_suffix",
         "steps": [
           500,
-          1000
+          1000,
+          1500,
+          2000,
+          2500,
+          3000
         ],
-        "bits_per_char": [
-          32.77338456029815,
-          32.77338456029815
-        ],
-        "sgd_bits_per_char": [
-          8.215069115163782,
-          7.401769497401426
-        ],
-        "epistemic_var": [
-          1.106240844614963e-05,
-          1.1430822061028679e-05
+        "held_out_bpc": [
+          5.583237900718079,
+          5.611692641504824,
+          5.355936271678674,
+          5.668799186205642,
+          5.117985226099168,
+          5.218064295465471
         ],
         "expert_count": [
-          61,
-          63
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
         ],
-        "vocab_size": 100,
-        "trained_steps": 1500,
-        "final_bpc": 32.60574948392959,
-        "final_sgd_bpc": 6.635747134702008,
-        "eval_method": "held_out_20pct_suffix"
+        "epistemic_var": [
+          0.0033570059630275532,
+          0.001364610955476389,
+          0.0008388060291015638,
+          0.0006000797775766535,
+          0.00046788905414876417,
+          0.00038310786279466854
+        ],
+        "alpha_gria": [
+          0.48758946643951706,
+          0.5187240163370014,
+          0.6164626899406002,
+          0.6357879662525178,
+          0.5308195119445694,
+          0.6012375863920016
+        ],
+        "trained_steps": 3000,
+        "online_train_bpc": 5.553232136405073,
+        "final_train_bpc": 5.465697999658171,
+        "final_bpc": 5.192262957024839,
+        "bigram_bpc": 4.151481004181981,
+        "cypha_dif": {
+          "n_experts": 1,
+          "mean_alpha": 0.18761912065361458,
+          "mean_epistemic_var": 0.0003829399874378491,
+          "mean_aleatoric_var": 1.149202902300985,
+          "lossless_fraction": 0.0003331112591602699
+        },
+        "context_length_bpc": {
+          "8": 5.0413024817914796,
+          "16": 5.027938143539012,
+          "32": 4.84292854604659,
+          "64": 5.0879733830207785,
+          "128": 5.5630041191451465,
+          "256": 5.28693663614489
+        },
+        "expert_routing": {
+          "dominant_expert_per_step": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "active_experts_per_step": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "epistemic_var_per_step": [
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491,
+            0.0003829399874378491
+          ],
+          "unique_experts_used": [
+            0
+          ],
+          "mean_active_experts": 1.0
+        },
+        "save_restore": {
+          "bpc_before": 5.218064295465471,
+          "bpc_after": 5.218064295465471,
+          "bpc_delta": 0.0,
+          "logprob_max_abs_diff": 0.0,
+          "parity_ok": true,
+          "checkpoint_base": "C:\\Users\\odinl\\AppData\\Local\\Temp\\tmpn9isoa21\\d04_cyphalm_ckpt"
+        },
+        "sampling_strategies": {
+          "greedy": {
+            "tokens_generated": 40,
+            "mean_bpc": 3.2355106722877975,
+            "halted_on_uncertainty": false,
+            "sample_text": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          },
+          "temperature_0.9": {
+            "tokens_generated": 40,
+            "mean_bpc": 4.927923652886719,
+            "halted_on_uncertainty": false,
+            "sample_text": "\n TdPd  eTsdd8oo\ndoiELAnChreAHpsaTadT6ee"
+          },
+          "top_k_20": {
+            "tokens_generated": 40,
+            "mean_bpc": 4.513898200355281,
+            "halted_on_uncertainty": false,
+            "sample_text": "CCoPetdHeTPCT\nPC.EeatdoeeE.e.Hoao.EhRei "
+          },
+          "top_p_0.92": {
+            "tokens_generated": 40,
+            "mean_bpc": 4.699941956500648,
+            "halted_on_uncertainty": false,
+            "sample_text": " PtieePdc\n\nid  oT .Tdro .t9Hho\nCTsEEheFM"
+          },
+          "uncertainty_gated": {
+            "tokens_generated": 40,
+            "mean_bpc": 5.049071562204556,
+            "halted_on_uncertainty": false,
+            "sample_text": "rso5-  hCEh.deESSdTHridRRRei9eeP d ud0ec"
+          }
+        },
+        "generation_preview": {
+          "prompt_text": " seldom venture to attac",
+          "greedy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "top_p": " PtieePdc\n\nid  oT .Tdro .t9Hho\nCTsEEheFM"
+        }
       },
-      "final_bpc": 32.60574948392959,
-      "final_sgd_bpc": 6.635747134702008
+      "final_bpc": 5.192262957024839,
+      "bigram_bpc": 4.151481004181981,
+      "save_restore_parity_ok": true
     }
   }
 }

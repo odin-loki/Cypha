@@ -1,0 +1,10 @@
+{
+  "prompt_ids": [1, 2, 3, 4, 5],
+  "max_tokens": 32,
+  "temperature": 0.9,
+  "strategy": "top_p",
+  "top_p": 0.92,
+  "top_k": 40,
+  "uncertainty_threshold": null,
+  "stream": false
+}

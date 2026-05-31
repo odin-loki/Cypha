@@ -30,7 +30,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`inst
 
 | Doc | What it covers |
 |-----|----------------|
-| [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, CORS, CSV chunking, `CYPHA_REGRESSION_HEAD`, REST routes |
+| [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, CORS, **`CYPHA_LM_CHECKPOINT`**, REST routes |
 | [GUI threading](studio/STUDIO_THREADING.md) | `QThread` + `SignalBus` rules for the PySide6 Studio |
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | tracemalloc, memray, `ab` / Locust notes |
 
@@ -66,7 +66,7 @@ make test                             # Unix: sets QT_QPA_PLATFORM=offscreen + r
 
 | Doc | What it covers |
 |-----|----------------|
-| [Port contract](port/PORT_CONTRACT.md) | Normative: `.cypha` v3 binary format, LLR/softmax/GH shapes, REST JSON |
+| [Port contract](port/PORT_CONTRACT.md) | Normative: `.cypha` v3, LLR/softmax/GH, CyphaDIF REST, **CyphaLM `/generate` §4** |
 | [Full stack port](port/PORT_FULL_STACK.md) | Per-milestone record M1–M6 (complete) |
 | [Preprocessor contract](port/PREPROCESSOR_CONTRACT.md) | `preprocessor.json` format next to `model.cypha` |
 | [Experiments schema](port/EXPERIMENTS_SCHEMA.md) | SQLite layout for `ExperimentDB` |

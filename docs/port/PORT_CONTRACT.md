@@ -107,6 +107,26 @@ For each loaded class label (same strings as routing / `all_scores` keys), `mu` 
 
 Qt or C++ clients should treat these JSON shapes as **stable** for v1; add fields additively rather than renaming.
 
+## 4. CyphaLM REST (FastAPI only — not in native `cypha_rest`)
+
+CyphaStudio FastAPI exposes **language-model** routes when a `CyphaLM` checkpoint is loaded via `app.state.lm_engine` or `CYPHA_LM_CHECKPOINT`. These are **Python-only**; native `cypha_rest` has no LM equivalent.
+
+| Method | Path | Role |
+|--------|------|------|
+| POST | `/lm/load` | Body `{ "checkpoint_path": str }` → load CyphaLM (``.json`` + ``.npz`` pair). **200** `{ "loaded": true, "summary": {...} }`; **503** if `cypha_lm` missing. |
+| GET | `/lm/metrics` | CyphaLM summary: vocab, experts, generation counts. **503** if no LM loaded. |
+| POST | `/lm/predict_next` | Body `{ "token_id": int }` → `{ log_probs, epistemic_var, aleatoric_var, routing_probs, dominant_expert, active_experts, top_k_tokens, top_k_probs }`. |
+| POST | `/generate` | Body `{ "prompt_ids": [int,...], "max_tokens", "temperature", "strategy", "top_k", "top_p", "uncertainty_threshold", "stream" }`. Strategies: `greedy`, `temperature`, `top_k`, `top_p`, `uncertainty_gated`. **200** batch JSON with `generated_ids`, `per_step`, `per_step_metrics`; or **SSE** when `stream=true`. |
+| POST | `/generate/stream` | Same body as `/generate`; always returns **SSE** (`text/event-stream`, one JSON object per token). |
+
+**Environment:** `CYPHA_LM_CHECKPOINT` — optional path to load CyphaLM at app startup.
+
+**Streaming chunk shape (SSE `data:` lines):** `{ "index", "token_id", "loss", "epistemic_var", "aleatoric_var", "active_experts", "dominant_expert", "routing_probs", "done" }`. Final line: `{ "done": true }`.
+
+**CyphaDIF integration:** each `predict_next` / generation step runs the CyphaLM pipeline (Izaac → CellAI SSM → **CyphaDIF expert routing** → GRIA). `routing_probs` and `dominant_expert` expose per-token expert field behaviour.
+
+See [`cypha_studio/README.md`](../../cypha_studio/README.md), [`cypha_lm/README.md`](../../cypha_lm/README.md), and [`examples/README.md`](../../examples/README.md).
+
 ## 4. Parity fixtures (machine-checked)
 
 - Directory: `parity_fixtures/`

@@ -188,7 +188,8 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: hard ceiling at 48.2%. Gap is **32.3 pp** vs kernel SVM — requires Kernel LLR (Nyström). Confirmed highest-priority architectural upgrade.
-- **Note on D04:** the `cypha_bench` D04 domain runs `CyphaDIF + CharNgramEncoder` (not CyphaLM) and has a probability-indexing bug that yields a nonsensical 33.2 bpc floor. The real CyphaLM evaluation is **D17: 4.50 bpc** (bigram baseline 3.69).
+- **D04** runs **CyphaLM** (Izaac → CellAI SSM → CyphaDIF → GRIA): held-out BPC, context-length curve, expert routing, save/restore parity, and sampling benchmarks. Install with `pip install -e cypha_lm/`. **D17** adds WikiText integration and online adaptation.
+- **CyphaLM REST:** FastAPI `POST /generate` and `/generate/stream` (SSE) with per-token CyphaDIF routing — see [`cypha_studio/README.md`](cypha_studio/README.md) and [`examples/`](examples/).
 
 ---
 

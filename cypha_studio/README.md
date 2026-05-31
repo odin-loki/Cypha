@@ -100,7 +100,21 @@ Matches the native `cypha_rest` C++ server. Key routes:
 | GET/POST | `/session/rng` | RNG snapshot / restore |
 | GET | `/classes` | Class observation counts |
 
-Full contract: [`docs/port/PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md).
+### CyphaLM language model (FastAPI only)
+
+Requires `pip install -e cypha_lm/` and a loaded checkpoint (`POST /lm/load` or `CYPHA_LM_CHECKPOINT`).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/lm/load` | Load CyphaLM from checkpoint |
+| GET | `/lm/metrics` | LM stats (experts, vocab, generation counts) |
+| POST | `/lm/predict_next` | Single token + CyphaDIF routing probs |
+| POST | `/generate` | Batch or SSE streaming generation |
+| POST | `/generate/stream` | SSE streaming (one JSON chunk per token) |
+
+Sampling strategies: `greedy`, `temperature`, `top_k`, `top_p` (nucleus), `uncertainty_gated`.
+
+Full contract: [`docs/port/PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §4.
 
 ---
 
@@ -116,10 +130,11 @@ main.py
         └── ExperimentTab  → core/experiment.py (ExperimentDB → SQLite)
 
 server/api.py (FastAPI)
-  └── create_app(engine, registry, session, regression_head_path)
-        ├── /predict  → InferenceEngine.predict
-        ├── /update   → InferenceEngine.train_step
-        └── ...
+  └── create_app(engine, registry, session, lm_engine, regression_head_path)
+        ├── /predict       → InferenceEngine.predict (CyphaDIF)
+        ├── /update        → InferenceEngine.train_step
+        ├── /generate      → LMEngine → CyphaLM (Izaac→SSM→CyphaDIF→GRIA)
+        └── /lm/*          → CyphaLM load / predict_next / metrics
 ```
 
 Threading: all GUI ↔ core communication goes through `QThread` workers and a `SignalBus`. See [`docs/studio/STUDIO_THREADING.md`](../docs/studio/STUDIO_THREADING.md).
