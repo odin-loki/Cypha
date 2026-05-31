@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -183,6 +184,36 @@ def experiment_17e_multi_view():
     return out
 
 
+def experiment_17f_iteration_view_sweep() -> dict:
+    """Train-length × view-schedule sweep (optimal iterations per presentation mode)."""
+    from cypha_bench.tuning.cyphalm_view_iteration_sweep import (
+        FAST_N_TRAIN,
+        TRAINING_MODES,
+        _OUT,
+        run_sweep,
+    )
+
+    if is_fast():
+        grid = FAST_N_TRAIN
+        n_eval = 300
+    else:
+        grid = [2000, 4000, 8000, 12000, 16000, 24000, 32000, 40000]
+        n_eval = 2000
+
+    out = run_sweep(n_train_grid=grid, n_eval=n_eval, modes=TRAINING_MODES)
+    if not is_fast():
+        _OUT.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+    return {
+        "grid_n_train": grid,
+        "n_eval": n_eval,
+        "best_per_mode": out.get("best_per_mode"),
+        "winner_by_n_train": out.get("winner_by_n_train"),
+        "global_best": out.get("global_best"),
+        "elapsed_s": out.get("elapsed_s"),
+        "output_path": str(_OUT) if not is_fast() else None,
+    }
+
+
 def experiment_17d_online_adaptation():
     from cypha_bench.adapters.cyphalm_bench import encode_text
     from cypha_bench.common.paths import DATA_DIR
@@ -242,6 +273,7 @@ def run() -> dict:
             "17B_alpha_spectrum": experiment_17b_alpha_spectrum(),
             "17D_online_adaptation": experiment_17d_online_adaptation(),
             "17E_multi_view": experiment_17e_multi_view(),
+            "17F_iteration_view_sweep": experiment_17f_iteration_view_sweep(),
         }
     except ImportError as exc:
         experiments = {

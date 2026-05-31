@@ -307,9 +307,24 @@ _Update this section as phases complete._
 |-------|------|--------|-------|
 | **0** | 2026-05-31 | ✅ Done | `cypha_views/` package + 6 unit tests |
 | **1a** | 2026-05-31 | ✅ Fast | D17 **17E**: `schedule_a` **4.329** vs `same_order` **4.399** BPC (3k, Δ **−0.07**) |
-| **1a** | 2026-05-31 | ⚠ Full 40k | D17 **17E**: `same_order` **4.067** beats `schedule_a` **4.089** (+0.022) and `schedule_b` **4.146** (+0.079) — block shuffle needs tuning at scale |
+| **1a sweep** | 2026-05-31 | ✅ 32-run grid | **n_train × view** sweep — see [`cyphalm_view_iteration_sweep.json`](../cypha_bench/config/cyphalm_view_iteration_sweep.json) |
 | **2a** | 2026-05-31 | ⚠ Mixed | D16 **16G** fast: task-block-shuffle **hurts** accuracy (0.58 mean vs RR 0.81); forgetting 0.0 but wine/digits collapse — needs tuning |
-| **1** | 2026-05-31 | ✅ Core | `CyphaLM.train_sequence_views()`, profile `view_schedule=schedule_a` on D17 |
+| **1** | 2026-05-31 | ✅ Core | `CyphaLM.train_sequence_views()`, profile `view_schedule=same_order` on D17 |
+
+### Iteration × view sweep (D17 17F, 2026-05-31)
+
+Grid: `n_train` 2k–40k × `same_order_e1`, `same_order_e2`, `schedule_a`, `schedule_b`. Artifact: `cypha_bench/config/cyphalm_view_iteration_sweep.json`.
+
+| Finding | Detail |
+|---------|--------|
+| Multi-view wins mid-train | `schedule_b` beats `same_order_e2` at every **n_train ≤ 32k** (16k: 4.230 vs 4.357 BPC) |
+| 40k same-order global best | `same_order_e2` @ 40k: **4.067** BPC (+0.15 vs bigram) |
+| Overtrain on one pass | `same_order_e1` crosses **above** bigram between 12k–16k |
+| schedule_b sweet spot | Best at **32k** (4.121 BPC), not 40k |
+
+**Recommendation:** `schedule_b` for training ≤24k tokens; `same_order` + 2 epochs only when committing to full 40k. Early-stop ~12–16k with multi-view when targeting bigram.
+
+Re-run: `python cypha_bench/tuning/cyphalm_view_iteration_sweep.py --write`
 
 ---
 

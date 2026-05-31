@@ -294,8 +294,7 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 **Idea:** Structure-preserving reorderings (block shuffle, rotated start, bidirectional passes, task-block permutations) each macro-epoch, with explicit `view_id` and memory policy (reset fast / carry slow). Exploits online routing, replay, and expert growth instead of single static stream training.
 
 **Phase 1 (LM):** `cypha_views/` module → D17 **17E_multi_view** → beat bigram or ≥0.05 BPC improvement.  
-**Phase 1a result:** 3k fast favored `schedule_a` (−0.07 BPC); **40k head-to-head favors `same_order`** (4.067 vs 4.089). Default D17 profile reverted to `same_order`; multi-view remains opt-in for sweeps.  
-**Phase 2a:** D16 **16G** — task-block-shuffle hurts accuracy on fast run; needs block size / steps tuning.
+**Phase 1a iteration sweep (32 runs, 2k–40k):** `schedule_b` wins at all **n_train ≤ 32k**; global best remains **`same_order_e2` @ 40k** (4.067 BPC). One-pass same-order overtrains vs bigram after ~12–16k. See `cyphalm_view_iteration_sweep.json`.
 
 ### Priority 5 — Shared-model continual learning
 
