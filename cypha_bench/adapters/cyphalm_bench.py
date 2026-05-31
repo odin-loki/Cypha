@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from cypha_bench.common.paths import scale
+from cypha_bench.common.paths import is_fast, scale
 
 _REPO = Path(__file__).resolve().parents[2]
+_BENCH = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
+
+from cypha_bench.config.load_cyphalm_profile import load_cyphalm_profile_file, resolve_cyphalm_profile_path
 
 DEFAULT_CYPHALM_CONFIG: dict[str, Any] = {
     "vocab_size": 128,
@@ -28,7 +34,29 @@ DEFAULT_CYPHALM_CONFIG: dict[str, Any] = {
     "seed": 42,
     "gria_lr": 0.06,
     "online": True,
+    "device": "auto",
+    "use_spectral_pde": False,
+    "use_sparse_hebbian": False,
+    "use_multiscale": True,
+    "n_experts": 0,
+    "train_ssm": False,
+    "ssm_lr": 0.001,
 }
+
+
+def load_cyphalm_config(
+    overrides: dict[str, Any] | None = None,
+    *,
+    profile: str | None = None,
+) -> dict[str, Any]:
+    """Merge defaults ← domain profile JSON ← overrides."""
+    cfg = dict(DEFAULT_CYPHALM_CONFIG)
+    path = resolve_cyphalm_profile_path(profile)
+    if path.exists():
+        cfg.update(load_cyphalm_profile_file(path))
+    if overrides:
+        cfg.update(overrides)
+    return cfg
 
 
 def cyphalm_bench_limits() -> dict[str, int]:
@@ -43,12 +71,33 @@ def cyphalm_bench_limits() -> dict[str, int]:
     }
 
 
-def make_cyphalm(config: dict[str, Any] | None = None):
+def make_cyphalm(
+    config: dict[str, Any] | None = None,
+    *,
+    profile: str | None = None,
+):
     from cypha_lm.config import CyphaLMConfig
     from cypha_lm.model.cypha_lm import CyphaLM
 
-    cfg = CyphaLMConfig(**(config or DEFAULT_CYPHALM_CONFIG))
+    merged = load_cyphalm_config(config, profile=profile)
+    cfg = CyphaLMConfig(**merged)
     return CyphaLM(cfg), cfg
+
+
+def _allow_synthetic_corpus() -> bool:
+    return is_fast() or os.environ.get("CYPHA_BENCH_ALLOW_SYNTHETIC", "0") == "1"
+
+
+def require_real_corpus(source: str, *, domain: str) -> None:
+    if source != "synthetic":
+        return
+    if _allow_synthetic_corpus():
+        return
+    raise RuntimeError(
+        f"{domain}: corpus fell back to synthetic text. Install real data:\n"
+        "  python cypha_bench/setup/acquire_data.py\n"
+        "Or set CYPHA_BENCH_FAST=1 / CYPHA_BENCH_ALLOW_SYNTHETIC=1 for dev runs."
+    )
 
 
 def load_char_corpus(
@@ -73,10 +122,100 @@ def load_char_corpus(
     if wt.exists():
         return wt.read_text(encoding="utf-8")[:max_chars], "wikitext2"
 
+    if not _allow_synthetic_corpus():
+        raise RuntimeError(
+            "No Gutenberg or WikiText-2 corpus found under cypha_bench/data/. "
+            "Run: python cypha_bench/setup/acquire_data.py"
+        )
     rng = np.random.default_rng(42)
     alphabet = "abcdefghijklmnopqrstuvwxyz .,\n"
     synthetic = "".join(rng.choice(list(alphabet)) for _ in range(max_chars))
     return synthetic, "synthetic"
+
+
+def _read_corpus_file(path: Path, max_chars: int | None) -> str:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if max_chars is not None:
+        return text[:max_chars]
+    return text
+
+
+@dataclass
+class LMCorpus:
+    source: str
+    train_ids: list[int]
+    eval_ids: list[int]
+    test_ids: list[int]
+    char2id: dict[str, int]
+    id2char: dict[int, str]
+    vocab_size: int
+    split: str
+
+
+def prepare_lm_corpus(
+    *,
+    prefer_wikitext: bool = False,
+    max_train_chars: int | None = None,
+) -> LMCorpus:
+    """
+    Build train/eval/test id lists.
+
+    WikiText-2: official train / valid / test files when present.
+    Gutenberg: single book, 80/20 train/eval (test = eval tail).
+    """
+    from cypha_bench.common.paths import DATA_DIR
+
+    limits = cyphalm_bench_limits()
+    if max_train_chars is None:
+        max_train_chars = limits["max_corpus_chars"]
+
+    wt_dir = DATA_DIR / "wikitext2" / "wikitext-2"
+    wt_train = wt_dir / "wiki.train.tokens"
+    wt_valid = wt_dir / "wiki.valid.tokens"
+    wt_test = wt_dir / "wiki.test.tokens"
+
+    if prefer_wikitext and wt_train.exists() and wt_valid.exists():
+        train_text = _read_corpus_file(wt_train, max_train_chars)
+        valid_text = _read_corpus_file(wt_valid, limits["max_corpus_chars"] // 4)
+        test_text = (
+            _read_corpus_file(wt_test, limits["max_corpus_chars"] // 4)
+            if wt_test.exists()
+            else valid_text
+        )
+        combined = train_text + valid_text + test_text
+        vocab_size = int(load_cyphalm_config()["vocab_size"])
+        char2id, id2char = build_char_vocab(combined, vocab_size=vocab_size - 1)
+        return LMCorpus(
+            source="wikitext2",
+            train_ids=encode_text(train_text, char2id),
+            eval_ids=encode_text(valid_text, char2id),
+            test_ids=encode_text(test_text, char2id),
+            char2id=char2id,
+            id2char=id2char,
+            vocab_size=vocab_size,
+            split="wikitext_official",
+        )
+
+    text, source = load_char_corpus(max_chars=max_train_chars, prefer_gutenberg=not prefer_wikitext)
+    require_real_corpus(source, domain="LM corpus")
+    vocab_size = int(load_cyphalm_config()["vocab_size"])
+    char2id, id2char = build_char_vocab(text, vocab_size=vocab_size - 1)
+    ids = encode_text(text, char2id)
+    if len(ids) < 512:
+        raise ValueError("corpus too short after encoding")
+    split_at = int(len(ids) * 0.8)
+    train_ids = ids[:split_at]
+    eval_ids = ids[split_at:]
+    return LMCorpus(
+        source=source,
+        train_ids=train_ids,
+        eval_ids=eval_ids,
+        test_ids=eval_ids,
+        char2id=char2id,
+        id2char=id2char,
+        vocab_size=vocab_size,
+        split="holdout_20pct",
+    )
 
 
 def build_char_vocab(text: str, vocab_size: int = 128) -> tuple[dict[str, int], dict[int, str]]:
@@ -97,23 +236,77 @@ def decode_ids(ids: list[int], id2char: dict[int, str]) -> str:
     return "".join(id2char.get(int(i), "?") for i in ids)
 
 
+def _ngram_counts(train_ids: list[int], n: int, vocab_size: int) -> dict[tuple[int, ...], np.ndarray]:
+    counts: dict[tuple[int, ...], np.ndarray] = {}
+    for i in range(len(train_ids) - n):
+        ctx = tuple(train_ids[i : i + n])
+        nxt = int(train_ids[i + n])
+        if any(t < 0 or t >= vocab_size for t in ctx) or not (0 <= nxt < vocab_size):
+            continue
+        if ctx not in counts:
+            counts[ctx] = np.zeros(vocab_size, dtype=np.float64)
+        counts[ctx][nxt] += 1.0
+    return counts
+
+
+def ngram_baseline_bpc(
+    train_ids: list[int],
+    test_ids: list[int],
+    vocab_size: int,
+    n: int = 2,
+) -> float:
+    """Character n-gram baseline BPC (n=2 bigram, n=3 trigram)."""
+    if n < 1:
+        raise ValueError("n must be >= 1")
+    if n == 1:
+        counts = np.zeros(vocab_size, dtype=np.float64)
+        for t in train_ids:
+            if 0 <= t < vocab_size:
+                counts[t] += 1.0
+        probs = (counts + 1.0) / (counts.sum() + vocab_size)
+        bits: list[float] = []
+        for t in test_ids:
+            if 0 <= t < vocab_size:
+                bits.append(-np.log2(max(float(probs[t]), 1e-12)))
+        return float(np.mean(bits)) if bits else float("nan")
+
+    table = _ngram_counts(train_ids, n - 1, vocab_size)
+    global_counts = np.zeros(vocab_size, dtype=np.float64)
+    for t in train_ids:
+        if 0 <= t < vocab_size:
+            global_counts[t] += 1.0
+    global_probs = (global_counts + 1.0) / (global_counts.sum() + vocab_size)
+
+    bits: list[float] = []
+    for i in range(len(test_ids) - n + 1):
+        ctx = tuple(test_ids[i : i + n - 1])
+        nxt = int(test_ids[i + n - 1])
+        if not (0 <= nxt < vocab_size):
+            continue
+        if ctx in table:
+            row = table[ctx]
+            probs = (row + 1.0) / (row.sum() + vocab_size)
+            p = max(float(probs[nxt]), 1e-12)
+        else:
+            p = max(float(global_probs[nxt]), 1e-12)
+        bits.append(-np.log2(p))
+    return float(np.mean(bits)) if bits else float("nan")
+
+
 def bigram_baseline_bpc(
     train_ids: list[int],
     test_ids: list[int],
     vocab_size: int,
 ) -> float:
-    counts = np.zeros((vocab_size, vocab_size), dtype=np.float64)
-    for a, b in zip(train_ids, train_ids[1:]):
-        if 0 <= a < vocab_size and 0 <= b < vocab_size:
-            counts[a, b] += 1.0
-    row_sums = counts.sum(axis=1, keepdims=True) + 1e-12
-    probs = counts / row_sums
-    bits: list[float] = []
-    for a, b in zip(test_ids, test_ids[1:]):
-        if 0 <= a < vocab_size and 0 <= b < vocab_size:
-            p = max(float(probs[a, b]), 1e-12)
-            bits.append(-np.log2(p))
-    return float(np.mean(bits)) if bits else float("nan")
+    return ngram_baseline_bpc(train_ids, test_ids, vocab_size, n=2)
+
+
+def trigram_baseline_bpc(
+    train_ids: list[int],
+    test_ids: list[int],
+    vocab_size: int,
+) -> float:
+    return ngram_baseline_bpc(train_ids, test_ids, vocab_size, n=3)
 
 
 def eval_held_out_bpc(model, test_ids: list[int], n_eval: int | None = None) -> float:
@@ -132,25 +325,28 @@ def eval_held_out_bpc(model, test_ids: list[int], n_eval: int | None = None) -> 
 
 
 def snapshot_model_state(model) -> dict[str, Any]:
+    from cypha_lm.array_backend import asnumpy
+
     return {
         "ssm": model.ssm.get_state(),
         "dif": model.dif.get_state(),
         "gria": model.gria.get_state(),
         "token_counts": np.asarray(model._token_counts, dtype=np.float64).copy(),
-        "proj_ssm": np.asarray(model._proj_ssm, dtype=np.float64).copy(),
-        "proj_dif": np.asarray(model._proj_dif, dtype=np.float64).copy(),
-        "proj_embed": np.asarray(model._proj_embed, dtype=np.float64).copy(),
+        "proj_ssm": asnumpy(model._proj_ssm),
+        "proj_dif": asnumpy(model._proj_dif),
+        "proj_embed": asnumpy(model._proj_embed),
     }
 
 
 def restore_model_state(model, snap: dict[str, Any]) -> None:
+    xp = model._backend.xp
     model.ssm.set_state(snap["ssm"])
     model.dif.set_state(snap["dif"])
     model.gria.set_state(snap["gria"])
     model._token_counts = np.asarray(snap["token_counts"], dtype=np.float64).copy()
-    model._proj_ssm = np.asarray(snap["proj_ssm"], dtype=np.float64).copy()
-    model._proj_dif = np.asarray(snap["proj_dif"], dtype=np.float64).copy()
-    model._proj_embed = np.asarray(snap["proj_embed"], dtype=np.float64).copy()
+    model._proj_ssm = xp.asarray(snap["proj_ssm"], dtype=xp.float64)
+    model._proj_dif = xp.asarray(snap["proj_dif"], dtype=xp.float64)
+    model._proj_embed = xp.asarray(snap["proj_embed"], dtype=xp.float64)
 
 
 def eval_held_out_bpc_preserve_training(model, test_ids: list[int], n_eval: int) -> float:
@@ -160,6 +356,49 @@ def eval_held_out_bpc_preserve_training(model, test_ids: list[int], n_eval: int)
     restore_model_state(model, snap)
     model.reset_context()
     return bpc
+
+
+def train_with_learning_curve(
+    model,
+    train_ids: list[int],
+    eval_ids: list[int],
+    *,
+    n_train: int,
+    snapshot_every: int,
+    n_eval_snapshot: int,
+) -> dict[str, Any]:
+    """Online train with periodic held-out BPC snapshots (D04/D17)."""
+    steps: list[int] = []
+    bpc_curve: list[float] = []
+    expert_curve: list[int] = []
+    train_losses: list[float] = []
+
+    model.reset_context()
+    limit = min(n_train, len(train_ids) - 1)
+    for t in range(limit):
+        metrics = model.train_step(int(train_ids[t]), int(train_ids[t + 1]))
+        train_losses.append(float(metrics["loss"]))
+        trained = t + 1
+        if trained % snapshot_every == 0 or trained == limit:
+            snap_bpc = eval_held_out_bpc_preserve_training(
+                model, eval_ids, n_eval=n_eval_snapshot
+            )
+            steps.append(trained)
+            bpc_curve.append(snap_bpc)
+            expert_curve.append(int(metrics.get("active_experts", 0)))
+
+    tail = max(1, len(train_losses) // 10)
+    online_train_bpc = float(np.mean(train_losses) / np.log(2)) if train_losses else float("nan")
+    final_train_bpc = float(np.mean(train_losses[-tail:]) / np.log(2)) if train_losses else float("nan")
+
+    return {
+        "steps": steps,
+        "held_out_bpc": bpc_curve,
+        "expert_count": expert_curve,
+        "trained_steps": limit,
+        "online_train_bpc": online_train_bpc,
+        "final_train_bpc": final_train_bpc,
+    }
 
 
 def cyphalm_dif_metrics(model) -> dict[str, Any]:
@@ -230,12 +469,10 @@ def eval_save_restore_fidelity(
     loaded = CyphaLM.load(base)
 
     loaded.reset_context()
-    after_lps: list[np.ndarray] = []
     max_diff = 0.0
     for tid, lp_before in zip(probe_ids, before_lps):
         pred = loaded.predict_next(int(tid))
         lp_after = np.asarray(pred["log_probs"], dtype=np.float64)
-        after_lps.append(lp_after)
         max_diff = max(max_diff, float(np.max(np.abs(lp_before - lp_after))))
 
     bpc_after = eval_held_out_bpc(loaded, test_ids, n_eval=n)

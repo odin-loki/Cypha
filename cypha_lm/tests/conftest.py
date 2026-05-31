@@ -17,6 +17,7 @@ TEST_CONFIG = CyphaLMConfig(
     ssm_layers=1,
     max_experts=32,
     seed=42,
+    device="cpu",
 )
 
 

@@ -1,10 +1,14 @@
-"""Domain 17 — CyphaLM integration (WikiText / Gutenberg / synthetic)."""
+"""Domain 17 — CyphaLM integration (WikiText / Gutenberg)."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 
 _BENCH = Path(__file__).resolve().parents[1]
@@ -13,68 +17,76 @@ for path in (_REPO, _BENCH):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from bench_common import finalize_domain, rng
+from bench_common import finalize_domain
 
 from cypha_bench.adapters.cyphalm_bench import (
-    DEFAULT_CYPHALM_CONFIG,
     bigram_baseline_bpc,
-    build_char_vocab,
     cyphalm_bench_limits,
     cyphalm_dif_metrics,
-    encode_text,
     eval_held_out_bpc,
-    load_char_corpus,
+    load_cyphalm_config,
     make_cyphalm,
+    prepare_lm_corpus,
+    require_real_corpus,
+    train_with_learning_curve,
+    trigram_baseline_bpc,
 )
+from cypha_bench.common.metrics import save_figure
 
 
-def _load_text_corpus(max_chars: int | None = None) -> tuple[str, str]:
-    """Prefer WikiText for D17; fall back to Gutenberg / synthetic."""
-    text, source = load_char_corpus(max_chars=max_chars, prefer_gutenberg=False)
-    return text, source
+def _load_corpus():
+    limits = cyphalm_bench_limits()
+    corpus = prepare_lm_corpus(prefer_wikitext=True, max_train_chars=limits["max_corpus_chars"])
+    require_real_corpus(corpus.source, domain="D17")
+    return corpus
 
 
 def experiment_17a_bpc():
     limits = cyphalm_bench_limits()
-    text, source = _load_text_corpus(limits["max_corpus_chars"])
-    char2id, _ = build_char_vocab(text, DEFAULT_CYPHALM_CONFIG["vocab_size"] - 1)
-    ids = encode_text(text, char2id)
-    if len(ids) < 512:
-        return {"bpc": float("nan"), "source": source, "skipped": True}
+    corpus = _load_corpus()
+    if len(corpus.train_ids) < 512:
+        return {"skipped": True, "source": corpus.source}
 
-    model, _ = make_cyphalm()
-    train_ids = ids[: int(0.8 * len(ids))]
-    test_ids = ids[int(0.8 * len(ids)) :]
-
-    n_train = min(limits["n_train"], len(train_ids) - 1)
-    stats = model.train_sequence(train_ids[:n_train])
-    online_losses = stats["loss"]
-    online_bpc = float(np.mean(online_losses) / np.log(2))
-    tail = max(1, len(online_losses) // 10)
-    final_train_bpc = float(np.mean(online_losses[-tail:]) / np.log(2))
-
-    held_out_bpc = eval_held_out_bpc(model, test_ids, n_eval=limits["n_eval"])
-    bigram_bpc = bigram_baseline_bpc(
-        train_ids[:n_train], test_ids, DEFAULT_CYPHALM_CONFIG["vocab_size"]
+    model, cfg = make_cyphalm(profile="d17")
+    n_train = min(limits["n_train"], len(corpus.train_ids) - 1)
+    curve = train_with_learning_curve(
+        model,
+        corpus.train_ids,
+        corpus.eval_ids,
+        n_train=n_train,
+        snapshot_every=limits["snapshot_every"],
+        n_eval_snapshot=min(200, limits["n_eval"]),
     )
+
+    held_out_bpc = eval_held_out_bpc(model, corpus.eval_ids, n_eval=limits["n_eval"])
+    train_slice = corpus.train_ids[:n_train]
+    bigram_bpc = bigram_baseline_bpc(train_slice, corpus.eval_ids, corpus.vocab_size)
+    trigram_bpc = trigram_baseline_bpc(train_slice, corpus.eval_ids, corpus.vocab_size)
 
     return {
         "cyphalm_bpc": held_out_bpc,
-        "online_train_bpc": online_bpc,
-        "final_train_bpc": final_train_bpc,
+        "online_train_bpc": curve["online_train_bpc"],
+        "final_train_bpc": curve["final_train_bpc"],
         "bigram_bpc": bigram_bpc,
-        "source": source,
+        "trigram_bpc": trigram_bpc,
+        "delta_vs_bigram": held_out_bpc - bigram_bpc,
+        "delta_vs_trigram": held_out_bpc - trigram_bpc,
+        "source": corpus.source,
+        "split": corpus.split,
         "train_tokens": n_train,
+        "learning_curve": curve,
+        "device": model.device,
+        "profile": load_cyphalm_config(profile="d17"),
         "cypha_dif": cyphalm_dif_metrics(model),
     }
 
 
 def experiment_17b_alpha_spectrum():
-    text, _ = _load_text_corpus(max_chars=min(30_000, cyphalm_bench_limits()["max_corpus_chars"]))
-    char2id, _ = build_char_vocab(text)
-    ids = encode_text(text, char2id)
-    model, _ = make_cyphalm()
-    model.train_sequence(ids[: min(3000, len(ids) - 1)])
+    limits = cyphalm_bench_limits()
+    corpus = _load_corpus()
+    model, _ = make_cyphalm(profile="d17")
+    n = min(limits["n_train"], len(corpus.train_ids) - 1)
+    model.train_sequence(corpus.train_ids[:n])
     profile = model.compression_profile()
     expert_alpha = np.asarray(profile.get("expert_alpha_spectrum", []), dtype=np.float64)
     if expert_alpha.size == 0:
@@ -89,21 +101,20 @@ def experiment_17b_alpha_spectrum():
 
 
 def experiment_17d_online_adaptation():
+    from cypha_bench.adapters.cyphalm_bench import encode_text
     from cypha_bench.common.paths import DATA_DIR
 
-    text_a, _ = _load_text_corpus(max_chars=20_000)
+    corpus = _load_corpus()
     holmes = DATA_DIR / "gutenberg" / "sherlock_holmes.txt"
-    text_b = (
-        holmes.read_text(encoding="utf-8", errors="ignore")[:20_000]
-        if holmes.exists()
-        else text_a[::-1]
-    )
-    char2id, _ = build_char_vocab(text_a + text_b)
-    ids_a = encode_text(text_a, char2id)
-    ids_b = encode_text(text_b, char2id)
+    if holmes.exists():
+        text_b = holmes.read_text(encoding="utf-8", errors="ignore")[:20_000]
+        ids_b = encode_text(text_b, corpus.char2id)
+    else:
+        ids_b = list(reversed(corpus.train_ids[:4000]))
 
-    model, _ = make_cyphalm()
-    model.train_sequence(ids_a[:2000])
+    model, _ = make_cyphalm(profile="d17")
+    warm = min(2000, len(corpus.train_ids) - 1)
+    model.train_sequence(corpus.train_ids[:warm])
     pre = model.train_sequence(ids_b[:500])
     bpc_before = float(np.sum(pre["loss"]) / max(len(pre["loss"]), 1) / np.log(2))
     model.train_sequence(ids_b[500:3500])
@@ -116,10 +127,35 @@ def experiment_17d_online_adaptation():
     }
 
 
+def _save_learning_figure(result: dict) -> None:
+    curve = result.get("learning_curve") or {}
+    steps = curve.get("steps") or []
+    if not steps:
+        return
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(steps, curve["held_out_bpc"], marker="o", label="CyphaLM held-out")
+    bb = result.get("bigram_bpc")
+    tb = result.get("trigram_bpc")
+    if bb is not None:
+        ax.axhline(bb, color="gray", linestyle="--", label=f"Bigram ({bb:.2f})")
+    if tb is not None:
+        ax.axhline(tb, color="orange", linestyle=":", label=f"Trigram ({tb:.2f})")
+    ax.set_xlabel("Training tokens")
+    ax.set_ylabel("Bits per character")
+    ax.set_title(f"D17 CyphaLM ({result.get('source', '?')})")
+    ax.legend()
+    plt.tight_layout()
+    save_figure(fig, "fig17_learning_curve")
+    plt.close(fig)
+
+
 def run() -> dict:
     try:
+        exp17a = experiment_17a_bpc()
+        if not exp17a.get("skipped"):
+            _save_learning_figure(exp17a)
         experiments = {
-            "17A_bits_per_character": experiment_17a_bpc(),
+            "17A_bits_per_character": exp17a,
             "17B_alpha_spectrum": experiment_17b_alpha_spectrum(),
             "17D_online_adaptation": experiment_17d_online_adaptation(),
         }
@@ -127,6 +163,11 @@ def run() -> dict:
         experiments = {
             "skipped": True,
             "reason": f"cypha_lm not available: {exc}",
+        }
+    except RuntimeError as exc:
+        experiments = {
+            "skipped": True,
+            "reason": str(exc),
         }
     return finalize_domain("d17", experiments)
 

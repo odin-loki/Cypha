@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from cypha_lm.array_backend import ArrayBackend, asnumpy
 from cypha_lm.config import CyphaLMConfig
 from cypha_lm.embeddings.izaac_embed import IzaacEmbedding
 from cypha_lm.expert_field.cypha_dif import CyphaDIF
@@ -25,11 +26,14 @@ class CyphaLM:
 
     def __init__(self, config: CyphaLMConfig) -> None:
         self.config = config
+        self._backend = ArrayBackend(config.device)
+        xp = self._backend.xp
         self._rng = np.random.default_rng(config.seed)
         self.embed = IzaacEmbedding(
             vocab_size=config.vocab_size,
             d_embed=config.d_embed,
             seed=config.seed,
+            xp=xp,
         )
         self.ssm = CellAISSM(
             d_input=config.d_embed,
@@ -38,14 +42,18 @@ class CyphaLM:
             tau_slow=config.tau_slow,
             n_layers=config.ssm_layers,
             seed=config.seed + 1,
+            use_spectral_pde=config.use_spectral_pde,
+            use_multiscale=config.use_multiscale,
+            use_sparse_hebbian=config.use_sparse_hebbian,
+            xp=xp,
         )
         self.dif = CyphaDIF(config)
         ctx_dim = self.ssm.context_dim
         fd = config.field_dim
         rng = self._rng
-        self._proj_ssm = rng.standard_normal((fd, ctx_dim)) * 0.02
-        self._proj_dif = rng.standard_normal((fd, fd)) * 0.02
-        self._proj_embed = rng.standard_normal((fd, config.d_embed)) * 0.02
+        self._proj_ssm = xp.asarray(rng.standard_normal((fd, ctx_dim)) * 0.02)
+        self._proj_dif = xp.asarray(rng.standard_normal((fd, fd)) * 0.02)
+        self._proj_embed = xp.asarray(rng.standard_normal((fd, config.d_embed)) * 0.02)
         gria_in = fd
         self.gria = GRIAProjection(
             d_input=gria_in,
@@ -53,21 +61,29 @@ class CyphaLM:
             alpha_init=config.alpha_init,
             alpha_learnable=config.alpha_learnable,
             seed=config.seed + 2,
+            xp=xp,
         )
         self._token_counts = np.ones(config.vocab_size, dtype=np.float64)
         self.gria.set_unigram_prior(self._token_counts)
         self._last_epistemic = 0.0
         self._last_aleatoric = 0.0
 
+    @property
+    def device(self) -> str:
+        return self._backend.device
+
     def reset_context(self) -> None:
         self.ssm.reset()
 
-    def _project_context(self, context: np.ndarray) -> np.ndarray:
-        return self._proj_ssm @ np.asarray(context, dtype=np.float64).ravel()
+    def _project_context(self, context) -> Any:
+        xp = self._backend.xp
+        ctx = xp.asarray(context, dtype=xp.float64).ravel()
+        return self._proj_ssm @ ctx
 
-    def _gria_input(self, field_x: np.ndarray, dif_out: dict) -> np.ndarray:
-        mean = np.asarray(dif_out["mean"], dtype=np.float64).ravel()
-        mean = self._proj_dif @ np.resize(mean, self.config.field_dim)
+    def _gria_input(self, field_x, dif_out: dict) -> Any:
+        xp = self._backend.xp
+        mean = xp.asarray(dif_out["mean"], dtype=xp.float64).ravel()
+        mean = self._proj_dif @ xp.resize(mean, self.config.field_dim)
         u = float(dif_out["epistemic_var"])
         return mean + u * field_x * 0.01
 
@@ -75,7 +91,7 @@ class CyphaLM:
         e = self.embed.embed(token_id)
         ctx = self.ssm.step(e)
         field_x = self._project_context(ctx)
-        dif_out = self.dif.predict(field_x)
+        dif_out = self.dif.predict(asnumpy(field_x))
         v = self._gria_input(field_x, dif_out)
         log_probs = self.gria.forward(v)
         self._last_epistemic = float(dif_out["epistemic_var"])
@@ -89,16 +105,21 @@ class CyphaLM:
             "embedding": e,
         }
 
-    def _ssm_online_update(self, e: np.ndarray, ctx: np.ndarray) -> None:
-        """Simple Hebbian-style nudge on fast weights (optional)."""
+    def _ssm_online_update(self, e, ctx) -> None:
+        """Simple Hebbian-style nudge on fast weights (optional, layer 0 only)."""
         if not self.config.train_ssm:
             return
+        xp = self._backend.xp
         lr = self.config.ssm_lr
-        e = np.asarray(e, dtype=np.float64).ravel()
-        for layer in range(self.ssm.n_layers):
-            h = self.ssm._h[layer]
-            delta = lr * np.outer(h, e)
-            self.ssm.W_fast[layer] += delta * 0.01
+        e = xp.asarray(e, dtype=xp.float64).ravel()
+        if self.ssm.n_layers < 1:
+            return
+        h = self.ssm._h[0]
+        in_dim = self.ssm._layer_input_dims[0]
+        if e.size != in_dim:
+            return
+        delta = lr * xp.outer(h, e)
+        self.ssm.W_fast[0] += delta * 0.01
 
     def train_step(self, token_id: int, next_token_id: int) -> dict[str, Any]:
         fwd = self._forward_context(token_id, update_dif=False)
@@ -106,7 +127,10 @@ class CyphaLM:
         field_x = fwd["field_x"]
         nxt = int(next_token_id)
         log_probs = fwd["log_probs"]
-        loss = float(-log_probs[nxt])
+        if self._backend.is_cuda:
+            loss = float(-asnumpy(log_probs)[nxt])
+        else:
+            loss = float(-log_probs[nxt])
         gw, ga, gb = self.gria.cross_entropy_gradients(v, nxt)
         lr = self.config.gria_lr
         self.gria.update_weights(gw, lr)
@@ -114,10 +138,12 @@ class CyphaLM:
         self.gria.update_bias(gb, lr)
         if self.config.online:
             target_vec = self._proj_embed @ self.embed.embed(nxt)
-            self.dif.train_step(field_x, target_vec)
+            self.dif.train_step(asnumpy(field_x), asnumpy(target_vec))
         self._ssm_online_update(fwd["embedding"], fwd["ctx"])
         self._token_counts[nxt] += 1.0
-        alpha_gria = self.gria.grand_unified_law_alpha(fwd["field_x"], np.exp(log_probs))
+        alpha_gria = self.gria.grand_unified_law_alpha(
+            asnumpy(fwd["field_x"]), np.exp(asnumpy(log_probs))
+        )
         return {
             "loss": loss,
             "epistemic_var": self._last_epistemic,
@@ -147,7 +173,7 @@ class CyphaLM:
 
     def predict_next(self, token_id: int) -> dict[str, Any]:
         fwd = self._forward_context(int(token_id))
-        log_probs = fwd["log_probs"]
+        log_probs = asnumpy(fwd["log_probs"])
         dif_out = fwd["dif_out"]
         routing = np.asarray(dif_out["routing_probs"], dtype=np.float64)
         top_k = 10
@@ -279,9 +305,9 @@ class CyphaLM:
             json.dump(meta, f, indent=2)
         np.savez(
             npz_path,
-            proj_ssm=self._proj_ssm,
-            proj_dif=self._proj_dif,
-            proj_embed=self._proj_embed,
+            proj_ssm=asnumpy(self._proj_ssm),
+            proj_dif=asnumpy(self._proj_dif),
+            proj_embed=asnumpy(self._proj_embed),
         )
 
     @classmethod
@@ -299,8 +325,9 @@ class CyphaLM:
         npz_path = json_path.with_suffix(".npz")
         if npz_path.exists():
             data = np.load(npz_path)
-            model._proj_ssm = np.asarray(data["proj_ssm"], dtype=np.float64)
-            model._proj_dif = np.asarray(data["proj_dif"], dtype=np.float64)
+            xp = model._backend.xp
+            model._proj_ssm = xp.asarray(data["proj_ssm"], dtype=xp.float64)
+            model._proj_dif = xp.asarray(data["proj_dif"], dtype=xp.float64)
             if "proj_embed" in data:
-                model._proj_embed = np.asarray(data["proj_embed"], dtype=np.float64)
+                model._proj_embed = xp.asarray(data["proj_embed"], dtype=xp.float64)
         return model

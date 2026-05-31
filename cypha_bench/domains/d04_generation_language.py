@@ -27,88 +27,32 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from cypha_bench.adapters.cyphalm_bench import (
-    DEFAULT_CYPHALM_CONFIG,
     bigram_baseline_bpc,
-    build_char_vocab,
     compare_sampling_strategies,
     cyphalm_bench_limits,
     cyphalm_dif_metrics,
     decode_ids,
-    encode_text,
     eval_bpc_by_context_length,
     eval_held_out_bpc,
-    eval_held_out_bpc_preserve_training,
     eval_save_restore_fidelity,
     expert_routing_trace,
-    load_char_corpus,
+    load_cyphalm_config,
     make_cyphalm,
+    prepare_lm_corpus,
+    require_real_corpus,
+    train_with_learning_curve,
+    trigram_baseline_bpc,
 )
 from cypha_bench.common.metrics import save_figure, save_table
 
 
-def _train_with_snapshots(
-    model,
-    train_ids: list[int],
-    test_ids: list[int],
-    *,
-    n_train: int,
-    snapshot_every: int,
-    n_eval_snapshot: int,
-) -> dict:
-    steps: list[int] = []
-    bpc_curve: list[float] = []
-    expert_curve: list[int] = []
-    epistemic_curve: list[float] = []
-    alpha_curve: list[float] = []
-    train_losses: list[float] = []
-
-    model.reset_context()
-    limit = min(n_train, len(train_ids) - 1)
-    for t in range(limit):
-        metrics = model.train_step(int(train_ids[t]), int(train_ids[t + 1]))
-        train_losses.append(float(metrics["loss"]))
-        trained = t + 1
-        if trained % snapshot_every == 0 or trained == limit:
-            snap_bpc = eval_held_out_bpc_preserve_training(
-                model, test_ids, n_eval=n_eval_snapshot
-            )
-            dif = cyphalm_dif_metrics(model)
-            steps.append(trained)
-            bpc_curve.append(snap_bpc)
-            expert_curve.append(int(dif["n_experts"]))
-            epistemic_curve.append(float(metrics["epistemic_var"]))
-            alpha_curve.append(float(metrics["alpha_gria"]))
-
-    tail = max(1, len(train_losses) // 10)
-    online_train_bpc = float(np.mean(train_losses) / np.log(2)) if train_losses else float("nan")
-    final_train_bpc = float(np.mean(train_losses[-tail:]) / np.log(2)) if train_losses else float("nan")
-
-    return {
-        "steps": steps,
-        "held_out_bpc": bpc_curve,
-        "expert_count": expert_curve,
-        "epistemic_var": epistemic_curve,
-        "alpha_gria": alpha_curve,
-        "trained_steps": limit,
-        "online_train_bpc": online_train_bpc,
-        "final_train_bpc": final_train_bpc,
-    }
-
-
-def _run_cyphalm_char_lm(text: str) -> dict:
+def _run_cyphalm_char_lm(corpus) -> dict:
     limits = cyphalm_bench_limits()
-    vocab_size = int(DEFAULT_CYPHALM_CONFIG["vocab_size"])
-    char2id, id2char = build_char_vocab(text, vocab_size=vocab_size - 1)
-    ids = encode_text(text, char2id)
-    if len(ids) < 512:
-        return {"skipped": True, "reason": "corpus too short after encoding"}
+    train_ids = corpus.train_ids
+    test_ids = corpus.eval_ids
 
-    split = int(len(ids) * 0.8)
-    train_ids = ids[:split]
-    test_ids = ids[split:]
-
-    model, _ = make_cyphalm()
-    train_metrics = _train_with_snapshots(
+    model, _ = make_cyphalm(profile="d04")
+    train_metrics = train_with_learning_curve(
         model,
         train_ids,
         test_ids,
@@ -117,8 +61,11 @@ def _run_cyphalm_char_lm(text: str) -> dict:
         n_eval_snapshot=min(200, limits["n_eval"]),
     )
 
+    n_train = train_metrics["trained_steps"]
+    train_slice = train_ids[:n_train]
     final_bpc = eval_held_out_bpc(model, test_ids, n_eval=limits["n_eval"])
-    bigram_bpc_val = bigram_baseline_bpc(train_ids, test_ids, vocab_size)
+    bigram_bpc_val = bigram_baseline_bpc(train_slice, test_ids, corpus.vocab_size)
+    trigram_bpc_val = trigram_baseline_bpc(train_slice, test_ids, corpus.vocab_size)
     dif_final = cyphalm_dif_metrics(model)
 
     prompt_len = min(limits["prompt_len"], len(test_ids) - 1)
@@ -127,7 +74,7 @@ def _run_cyphalm_char_lm(text: str) -> dict:
     context_bpc = eval_bpc_by_context_length(model, test_ids)
     routing = expert_routing_trace(model, prompt_ids, max_tokens=limits["max_generate"])
     sampling = compare_sampling_strategies(
-        model, prompt_ids, id2char, max_tokens=limits["max_generate"]
+        model, prompt_ids, corpus.id2char, max_tokens=limits["max_generate"]
     )
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -141,18 +88,23 @@ def _run_cyphalm_char_lm(text: str) -> dict:
     return {
         "model": "CyphaLM",
         "pipeline": "Izaac -> CellAI SSM -> CyphaDIF -> GRIA",
-        "vocab_size": len(char2id) + 1,
-        "eval_method": "held_out_20pct_suffix",
+        "vocab_size": len(corpus.char2id) + 1,
+        "eval_method": corpus.split,
+        "device": model.device,
+        "profile": load_cyphalm_config(profile="d04"),
         **train_metrics,
         "final_bpc": final_bpc,
         "bigram_bpc": bigram_bpc_val,
+        "trigram_bpc": trigram_bpc_val,
+        "delta_vs_bigram": final_bpc - bigram_bpc_val,
+        "delta_vs_trigram": final_bpc - trigram_bpc_val,
         "cypha_dif": dif_final,
         "context_length_bpc": context_bpc,
         "expert_routing": routing,
         "save_restore": save_restore,
         "sampling_strategies": sampling,
         "generation_preview": {
-            "prompt_text": decode_ids(prompt_ids, id2char)[:120],
+            "prompt_text": decode_ids(prompt_ids, corpus.id2char)[:120],
             "greedy": sampling.get("greedy", {}).get("sample_text", ""),
             "top_p": sampling.get("top_p_0.92", {}).get("sample_text", ""),
         },
@@ -163,7 +115,6 @@ def _save_figures(lm_metrics: dict, source: str) -> None:
     if not lm_metrics.get("steps"):
         return
 
-    # Fig 1: training BPC + expert growth (existing)
     fig1, axes = plt.subplots(1, 2, figsize=(10, 4))
     axes[0].plot(
         lm_metrics["steps"],
@@ -172,8 +123,11 @@ def _save_figures(lm_metrics: dict, source: str) -> None:
         marker="o",
     )
     bb = lm_metrics.get("bigram_bpc")
+    tb = lm_metrics.get("trigram_bpc")
     if bb is not None and not np.isnan(bb):
         axes[0].axhline(bb, color="gray", linestyle="--", label=f"Bigram ({bb:.2f})")
+    if tb is not None and not np.isnan(tb):
+        axes[0].axhline(tb, color="orange", linestyle=":", label=f"Trigram ({tb:.2f})")
     axes[0].set_xlabel("Training tokens")
     axes[0].set_ylabel("Bits per character")
     axes[0].set_title(f"CyphaLM char LM ({source})")
@@ -186,7 +140,6 @@ def _save_figures(lm_metrics: dict, source: str) -> None:
     save_figure(fig1, "fig04_char_lm_training")
     plt.close(fig1)
 
-    # Fig 2: BPC vs context length
     ctx = lm_metrics.get("context_length_bpc") or {}
     if ctx:
         xs = sorted(int(k) for k in ctx)
@@ -201,7 +154,6 @@ def _save_figures(lm_metrics: dict, source: str) -> None:
         save_figure(fig2, "fig04_context_bpc")
         plt.close(fig2)
 
-    # Fig 3: expert routing during generation
     routing = lm_metrics.get("expert_routing") or {}
     dom = routing.get("dominant_expert_per_step") or []
     epi = routing.get("epistemic_var_per_step") or []
@@ -218,7 +170,6 @@ def _save_figures(lm_metrics: dict, source: str) -> None:
         save_figure(fig3, "fig04_expert_routing")
         plt.close(fig3)
 
-    # Fig 4: sampling strategy BPC comparison
     sampling = lm_metrics.get("sampling_strategies") or {}
     if sampling:
         names = list(sampling.keys())
@@ -240,13 +191,22 @@ def _save_figures(lm_metrics: dict, source: str) -> None:
 
 def run() -> dict:
     try:
-        text, source = load_char_corpus(prefer_gutenberg=True)
-        lm_metrics = _run_cyphalm_char_lm(text)
+        limits = cyphalm_bench_limits()
+        corpus = prepare_lm_corpus(prefer_wikitext=False, max_train_chars=limits["max_corpus_chars"])
+        require_real_corpus(corpus.source, domain="D04")
+        lm_metrics = _run_cyphalm_char_lm(corpus)
+        source = corpus.source
     except ImportError as exc:
         return {
             "domain": "d04_generation_language",
             "skipped": True,
             "reason": f"cypha_lm not available: {exc}",
+        }
+    except RuntimeError as exc:
+        return {
+            "domain": "d04_generation_language",
+            "skipped": True,
+            "reason": str(exc),
         }
 
     metrics = {
@@ -255,6 +215,7 @@ def run() -> dict:
         "char_lm": lm_metrics,
         "final_bpc": lm_metrics.get("final_bpc"),
         "bigram_bpc": lm_metrics.get("bigram_bpc"),
+        "trigram_bpc": lm_metrics.get("trigram_bpc"),
         "save_restore_parity_ok": (lm_metrics.get("save_restore") or {}).get("parity_ok"),
     }
 

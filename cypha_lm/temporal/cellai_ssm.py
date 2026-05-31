@@ -6,6 +6,8 @@ from typing import Any
 
 import numpy as np
 
+from cypha_lm.array_backend import asnumpy, to_xp
+
 
 class CellAISSM:
     """
@@ -46,6 +48,7 @@ class CellAISSM:
         use_spectral_pde: bool = True,
         use_multiscale: bool = True,
         use_sparse_hebbian: bool = True,
+        xp: Any = None,
     ) -> None:
         if d_input < 1 or d_state < 1 or n_layers < 1:
             raise ValueError("d_input, d_state, and n_layers must be >= 1")
@@ -62,7 +65,9 @@ class CellAISSM:
         self.use_spectral_pde = use_spectral_pde
         self.use_multiscale = use_multiscale
         self.use_sparse_hebbian = use_sparse_hebbian
+        self._xp = xp if xp is not None else np
 
+        xp_mod = self._xp
         self.lambda_fast = float(np.exp(-1.0 / tau_fast))
         self.lambda_slow = float(np.exp(-1.0 / tau_slow))
         self.context_dim = 2 * d_state * n_layers
@@ -70,36 +75,32 @@ class CellAISSM:
         rng = np.random.default_rng(seed)
         self._layer_input_dims = [d_input] + [2 * d_state] * (n_layers - 1)
         self.W_fast = [
-            rng.standard_normal((d_state, in_dim)).astype(np.float64) * 0.05
+            xp_mod.asarray(rng.standard_normal((d_state, in_dim)).astype(np.float64) * 0.05)
             for in_dim in self._layer_input_dims
         ]
         self.W_slow = [
-            rng.standard_normal((d_state, in_dim)).astype(np.float64) * 0.05
+            xp_mod.asarray(rng.standard_normal((d_state, in_dim)).astype(np.float64) * 0.05)
             for in_dim in self._layer_input_dims
         ]
 
-        # SpectralPDE: per-layer state-transition kernels.
-        # Initialised as impulse at index 0 (scalar-equiv to original lambda decay).
-        self._a_kernel_fast: list[np.ndarray] = []
-        self._a_kernel_slow: list[np.ndarray] = []
+        self._a_kernel_fast: list[Any] = []
+        self._a_kernel_slow: list[Any] = []
         for _ in range(n_layers):
-            kf = np.zeros(d_state, dtype=np.float64)
+            kf = xp_mod.zeros(d_state, dtype=xp_mod.float64)
             kf[0] = self.lambda_fast
             self._a_kernel_fast.append(kf)
-            ks = np.zeros(d_state, dtype=np.float64)
+            ks = xp_mod.zeros(d_state, dtype=xp_mod.float64)
             ks[0] = self.lambda_slow
             self._a_kernel_slow.append(ks)
 
-        # MultiScalePartitions: per-layer blend weight (0=slow-only, 1=fast-only).
-        self._alpha = np.full(n_layers, 0.5, dtype=np.float64)
+        self._alpha = xp_mod.full(n_layers, 0.5, dtype=xp_mod.float64)
 
-        # SparseHebbian: per-layer weight matrix (d_state × d_state).
-        self._W: list[np.ndarray] = [
-            np.zeros((d_state, d_state), dtype=np.float64) for _ in range(n_layers)
+        self._W: list[Any] = [
+            xp_mod.zeros((d_state, d_state), dtype=xp_mod.float64) for _ in range(n_layers)
         ]
 
-        self._h: list[np.ndarray] | None = None
-        self._s: list[np.ndarray] | None = None
+        self._h: list[Any] | None = None
+        self._s: list[Any] | None = None
         self._lam_fast_scale = 1.0
         self._lam_slow_scale = 1.0
         self.reset()
@@ -126,42 +127,34 @@ class CellAISSM:
     # ------------------------------------------------------------------
 
     def reset(self) -> None:
-        self._h = [np.zeros(self.d_state, dtype=np.float64) for _ in range(self.n_layers)]
-        self._s = [np.zeros(self.d_state, dtype=np.float64) for _ in range(self.n_layers)]
+        xp = self._xp
+        self._h = [xp.zeros(self.d_state, dtype=xp.float64) for _ in range(self.n_layers)]
+        self._s = [xp.zeros(self.d_state, dtype=xp.float64) for _ in range(self.n_layers)]
 
     # ------------------------------------------------------------------
     # SpectralPDE helpers
     # ------------------------------------------------------------------
 
-    def spectral_step(self, s: np.ndarray, kernel: np.ndarray) -> np.ndarray:
-        """O(D log D) state transition via FFT circular convolution.
-
-        Replaces the scalar decay A @ s (where A = lambda * I) with a learned
-        circulant operator represented in the frequency domain.  When the kernel
-        is a unit impulse at index 0 with value lambda, this is exactly
-        equivalent to the original scalar decay.
-        """
+    def spectral_step(self, s: Any, kernel: Any) -> Any:
+        xp = self._xp
         D = len(s)
-        S_fft = np.fft.rfft(s)
-        A_fft = np.fft.rfft(kernel, n=D)
-        return np.fft.irfft(S_fft * A_fft, n=D)
+        S_fft = xp.fft.rfft(s)
+        A_fft = xp.fft.rfft(kernel, n=D)
+        return xp.fft.irfft(S_fft * A_fft, n=D)
 
     # ------------------------------------------------------------------
     # SparseHebbian helper
     # ------------------------------------------------------------------
 
     def sparse_hebbian_update(
-        self, pre: np.ndarray, post: np.ndarray, lr: float, layer: int = 0
+        self, pre: Any, post: Any, lr: float, layer: int = 0
     ) -> None:
-        """Top-k/8 sparse Hebbian weight update (12.5% activity threshold).
-
-        Only the k most-active pre-synaptic neurons participate in the outer
-        product, reducing Hebbian write cost from O(D²) to O(D log D).
-        """
-        k = max(1, len(pre) // 8)
-        top_k_idx = np.argpartition(np.abs(pre), -k)[-k:]
-        grad = np.outer(post, pre)
-        mask = np.zeros_like(grad)
+        xp = self._xp
+        pre_np = asnumpy(pre)
+        k = max(1, len(pre_np) // 8)
+        top_k_idx = np.argpartition(np.abs(pre_np), -k)[-k:]
+        grad = xp.outer(post, pre)
+        mask = xp.zeros_like(grad)
         mask[:, top_k_idx] = 1.0
         self._W[layer] += lr * (grad * mask)
 
@@ -169,8 +162,9 @@ class CellAISSM:
     # Core step
     # ------------------------------------------------------------------
 
-    def step(self, e_t: np.ndarray) -> np.ndarray:
-        e_t = np.asarray(e_t, dtype=np.float64).ravel()
+    def step(self, e_t: Any) -> Any:
+        xp = self._xp
+        e_t = xp.asarray(e_t, dtype=xp.float64).ravel()
         if e_t.shape[0] != self._layer_input_dims[0]:
             raise ValueError(
                 f"Expected input of shape ({self._layer_input_dims[0]},), got {e_t.shape}"
@@ -181,7 +175,7 @@ class CellAISSM:
             _, lf, ls = self._temporal_som.step(e_t, train=True)
             self._lam_fast_scale = lf
             self._lam_slow_scale = ls
-        contexts: list[np.ndarray] = []
+        contexts: list[Any] = []
 
         for layer in range(self.n_layers):
             h = self._h[layer]
@@ -214,9 +208,9 @@ class CellAISSM:
             if self.use_multiscale:
                 # Blend fast and slow tracks via learned alpha
                 alpha = float(np.clip(self._alpha[layer], 0.0, 1.0))
-                ctx = np.concatenate([alpha * h + (1.0 - alpha) * s, s])
+                ctx = xp.concatenate([alpha * h + (1.0 - alpha) * s, s])
             else:
-                ctx = np.concatenate([h, s])
+                ctx = xp.concatenate([h, s])
 
             if hasattr(self, "_hebb_graph"):
                 ctx = self._hebb_graph.diffuse(ctx)
@@ -228,14 +222,11 @@ class CellAISSM:
             contexts.append(ctx)
             layer_input = ctx
 
-        return np.concatenate(contexts)
+        return xp.concatenate(contexts)
 
-    # ------------------------------------------------------------------
-    # Sequence processing
-    # ------------------------------------------------------------------
-
-    def process_sequence(self, embeddings: np.ndarray) -> np.ndarray:
-        embeddings = np.asarray(embeddings, dtype=np.float64)
+    def process_sequence(self, embeddings: Any) -> np.ndarray:
+        xp = self._xp
+        embeddings = xp.asarray(embeddings, dtype=xp.float64)
         if embeddings.ndim != 2:
             raise ValueError("embeddings must have shape (T, d_input)")
         if embeddings.shape[1] != self._layer_input_dims[0]:
@@ -243,10 +234,10 @@ class CellAISSM:
                 f"Expected d_input={self._layer_input_dims[0]}, got {embeddings.shape[1]}"
             )
 
-        outputs = np.zeros((embeddings.shape[0], self.context_dim), dtype=np.float64)
+        outputs = xp.zeros((embeddings.shape[0], self.context_dim), dtype=xp.float64)
         for t in range(embeddings.shape[0]):
             outputs[t] = self.step(embeddings[t])
-        return outputs
+        return asnumpy(outputs)
 
     # ------------------------------------------------------------------
     # State serialisation
@@ -254,8 +245,8 @@ class CellAISSM:
 
     def get_state(self) -> dict[str, Any]:
         return {
-            "h": [h.copy() for h in self._h],
-            "s": [s.copy() for s in self._s],
+            "h": [asnumpy(h) for h in self._h],
+            "s": [asnumpy(s) for s in self._s],
             "d_input": self.d_input,
             "d_state": self.d_state,
             "tau_fast": self.tau_fast,
@@ -265,7 +256,8 @@ class CellAISSM:
         }
 
     def set_state(self, state: dict[str, Any]) -> None:
-        self._h = [np.asarray(h, dtype=np.float64).copy() for h in state["h"]]
-        self._s = [np.asarray(s, dtype=np.float64).copy() for s in state["s"]]
+        xp = self._xp
+        self._h = [xp.asarray(h, dtype=xp.float64) for h in state["h"]]
+        self._s = [xp.asarray(s, dtype=xp.float64) for s in state["s"]]
         if len(self._h) != self.n_layers or len(self._s) != self.n_layers:
             raise ValueError("State layer count does not match n_layers")

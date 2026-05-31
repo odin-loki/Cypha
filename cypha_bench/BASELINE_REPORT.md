@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-05-31 05:32 UTC
+Generated: 2026-05-31 06:24 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -185,46 +185,44 @@ Default parameters only — no hyperparameter tuning.
 
 ## D04
 
-*Timestamp:* 2026-05-31T05:31:56.570271+00:00
+*Timestamp:* 2026-05-31T06:12:43.457927+00:00
 
 ### summary
 
 | Metric | Value |
 | --- | --- |
-| `bigram_bpc` | 4.1515 |
-| `char_lm.alpha_gria` | [0.5379799990785696, 0.520853312262717, 0.6376445249679783, 0.6193310412653261, 0.5235014976159404, 0.6222204492421046] |
-| `char_lm.bigram_bpc` | 4.1515 |
-| `char_lm.context_length_bpc.128` | 5.5856 |
-| `char_lm.context_length_bpc.16` | 5.0495 |
-| `char_lm.context_length_bpc.256` | 5.2932 |
-| `char_lm.context_length_bpc.32` | 4.8483 |
-| `char_lm.context_length_bpc.64` | 5.0789 |
-| `char_lm.context_length_bpc.8` | 5.0508 |
-| `char_lm.cypha_dif.lossless_fraction` | 3.33e-04 |
-| `char_lm.cypha_dif.mean_aleatoric_var` | 1.1492 |
-| `char_lm.cypha_dif.mean_alpha` | 0.1799 |
-| `char_lm.cypha_dif.mean_epistemic_var` | 3.83e-04 |
-| `char_lm.cypha_dif.n_experts` | 1 |
-| `char_lm.epistemic_var` | [0.0033570059630275532, 0.001364610955476389, 0.0008388060291015638, 0.0006000797775766535, 0.00046788905414876417, 0.00038310786279466854] |
-| `char_lm.eval_method` | held_out_20pct_suffix |
-| `char_lm.expert_count` | [1, 1, 1, 1, 1, 1] |
-| `char_lm.expert_routing.active_experts_per_step` | [40 items] |
-| `char_lm.expert_routing.dominant_expert_per_step` | [40 items] |
-| `char_lm.expert_routing.epistemic_var_per_step` | [40 items] |
+| `bigram_bpc` | 3.8411 |
+| `char_lm.bigram_bpc` | 3.8411 |
+| `char_lm.context_length_bpc.128` | 4.8561 |
+| `char_lm.context_length_bpc.16` | 4.7851 |
+| `char_lm.context_length_bpc.256` | 4.9045 |
+| `char_lm.context_length_bpc.32` | 4.7728 |
+| `char_lm.context_length_bpc.64` | 4.7279 |
+| `char_lm.context_length_bpc.8` | 4.7961 |
+| `char_lm.cypha_dif.lossless_fraction` | 4.57e-05 |
+| `char_lm.cypha_dif.mean_aleatoric_var` | 0.9429 |
+| `char_lm.cypha_dif.mean_alpha` | 0.0904 |
+| `char_lm.cypha_dif.mean_epistemic_var` | 4.31e-05 |
+| `char_lm.cypha_dif.n_experts` | 13 |
+| `char_lm.delta_vs_bigram` | 1.1595 |
+| `char_lm.delta_vs_trigram` | 0.0210 |
+| `char_lm.device` | cpu |
+| `char_lm.eval_method` | holdout_20pct |
+| `char_lm.expert_count` | [20 items] |
+| `char_lm.expert_routing.active_experts_per_step` | [120 items] |
+| `char_lm.expert_routing.dominant_expert_per_step` | [120 items] |
+| `char_lm.expert_routing.epistemic_var_per_step` | [120 items] |
 | `char_lm.expert_routing.mean_active_experts` | 1.0000 |
-| `char_lm.expert_routing.unique_experts_used` | [0] |
-| `char_lm.final_bpc` | 5.2020 |
-| `char_lm.final_train_bpc` | 5.4902 |
-| `char_lm.generation_preview.greedy` |                                          |
-| `char_lm.generation_preview.prompt_text` |  seldom venture to attac |
-| `char_lm.generation_preview.top_p` | e.R9  .o-d
-9deeoTePTdroePt9H
-o
-sTEEE
- uM |
-| `char_lm.held_out_bpc` | [5.593182356363305, 5.651240044870056, 5.364497787967796, 5.708395859587843, 5.129276293888361, 5.227170380140231] |
+| `char_lm.expert_routing.unique_experts_used` | [12] |
+| `char_lm.final_bpc` | 5.0007 |
+| `char_lm.final_train_bpc` | 4.5755 |
+| `char_lm.generation_preview.greedy` | tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt |
+| `char_lm.generation_preview.prompt_text` | exion,
+landlord, which is an intimate and confidential one in th |
+| `char_lm.generation_preview.top_p` | ttotttot tttt t ttttntettr tlno tltoae tet
+ft t ftt t nttttdahacy to ttntt ti tttatittht tottthtte tttttitfttttteohdsttt |
+| `char_lm.held_out_bpc` | [20 items] |
 | `char_lm.model` | CyphaLM |
-| `char_lm.online_train_bpc` | 5.5956 |
 
 ## D05
 
@@ -727,39 +725,58 @@ sTEEE
 
 ## D17
 
-*Timestamp:* 2026-05-31T05:32:46.964042+00:00
+*Timestamp:* 2026-05-31T06:24:49.528509+00:00
 
 ### 17A_bits_per_character
 
 | Metric | Value |
 | --- | --- |
-| `bigram_bpc` | 6.2082 |
-| `cypha_dif.lossless_fraction` | 3.33e-04 |
-| `cypha_dif.mean_aleatoric_var` | 1.1690 |
-| `cypha_dif.mean_alpha` | 0.1572 |
-| `cypha_dif.mean_epistemic_var` | 3.90e-04 |
-| `cypha_dif.n_experts` | 1 |
-| `cyphalm_bpc` | 5.2751 |
-| `final_train_bpc` | 5.3311 |
-| `online_train_bpc` | 5.4223 |
-| `source` | synthetic |
-| `train_tokens` | 3000 |
+| `bigram_bpc` | 3.9142 |
+| `cypha_dif.lossless_fraction` | 4.20e-05 |
+| `cypha_dif.mean_aleatoric_var` | 0.9144 |
+| `cypha_dif.mean_alpha` | 0.1068 |
+| `cypha_dif.mean_epistemic_var` | 3.84e-05 |
+| `cypha_dif.n_experts` | 13 |
+| `cyphalm_bpc` | 4.6583 |
+| `delta_vs_bigram` | 0.7440 |
+| `delta_vs_trigram` | 0.2606 |
+| `device` | cpu |
+| `final_train_bpc` | 4.6673 |
+| `learning_curve.expert_count` | [20 items] |
+| `learning_curve.final_train_bpc` | 4.6673 |
+| `learning_curve.held_out_bpc` | [20 items] |
+| `learning_curve.online_train_bpc` | 4.7193 |
+| `learning_curve.steps` | [20 items] |
+| `learning_curve.trained_steps` | 40000 |
+| `online_train_bpc` | 4.7193 |
+| `profile.alpha_init` | 0.5000 |
+| `profile.context_length` | 256 |
+| `profile.d_embed` | 64 |
+| `profile.d_state` | 128 |
+| `profile.device` | auto |
+| `profile.field_dim` | 160 |
+| `profile.gria_lr` | 0.0600 |
+| `profile.max_experts` | 128 |
+| `profile.n_experts` | 4 |
+| `profile.online` | True |
+| `profile.seed` | 42 |
+| `profile.ssm_layers` | 2 |
 
 ### 17B_alpha_spectrum
 
 | Metric | Value |
 | --- | --- |
 | `fraction_edge_of_chaos` | 0.0000 |
-| `mean_alpha` | 0.1572 |
-| `n_experts` | 1 |
+| `mean_alpha` | 0.1068 |
+| `n_experts` | 11 |
 
 ### 17D_online_adaptation
 
 | Metric | Value |
 | --- | --- |
-| `bpc_improvement` | 0.2949 |
-| `bpc_ood_after_adapt` | 4.7438 |
-| `bpc_ood_before_adapt` | 5.0387 |
+| `bpc_improvement` | 0.2870 |
+| `bpc_ood_after_adapt` | 4.8186 |
+| `bpc_ood_before_adapt` | 5.1057 |
 
 ## Cross-Domain Analyses
 
@@ -767,8 +784,8 @@ sTEEE
 
 | Metric | Value |
 | --- | --- |
-| `summary.global_mean_alpha` | 0.7762 |
-| `summary.global_std_alpha` | 0.2932 |
+| `summary.global_mean_alpha` | 0.7720 |
+| `summary.global_std_alpha` | 0.3022 |
 | `summary.n_measurements` | 13 |
 | `summary.within_gul_band_fraction` | 0.0000 |
 

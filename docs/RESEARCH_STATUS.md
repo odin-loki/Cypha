@@ -82,28 +82,17 @@ Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation
 
 ### Language model (D04 + D17)
 
-| Domain | Task | CyphaLM BPC | Bigram | Verdict |
-|--------|------|-------------|--------|---------|
-| D04 | Char LM — held-out 20% (Gutenberg) | **5.202** | 4.151 | ⚠ Above bigram; full CyphaLM stack |
-| D17 | Char LM — held-out (WikiText/Gutenberg†) | 5.275‡ / **4.497**† | 6.208‡ / 3.691† | ⚠ Above bigram on real text; beats bigram on synthetic |
-| D17D | Online adaptation BPC gain | ΔBPC −0.295 | — | ✅ Adapts online |
+| Domain | Task | CyphaLM BPC | Bigram | Trigram | Verdict |
+|--------|------|-------------|--------|---------|---------|
+| D04 | Char LM — Gutenberg hold-out 20% | **5.001** | 3.841 | 4.980 | ⚠ Above bigram; 40k train |
+| D17 | Char LM — WikiText-2 official valid | **4.658** | 3.914 | 4.398 | ⚠ Above bigram/trigram; 40k train |
+| D17D | Online adaptation BPC gain | ΔBPC −0.288 | — | — | ✅ Adapts online |
 
-† D17 prefers WikiText-2, then Gutenberg; without `cypha_bench/data/wikitext2/` it falls back to synthetic.  
-‡ Latest full bench run (2026-05-31, synthetic fallback). Moby Dick / WikiText numbers from prior corpus install.
+Config: `cypha_bench/config/cyphalm_profile.json` (vocab 256, n_experts=4 warm-start, train_ssm, τ_slow=50, CPU auto).
 
-D04 now runs the full **CyphaLM** stack (Izaac → CellAI → CyphaDIF → GRIA). Experiments (2026-05-31):
+D04 runs the full **CyphaLM** stack with learning curve, trigram baseline, context-length BPC, expert routing, save/restore, and sampling comparison.
 
-| Experiment | Key output |
-|------------|------------|
-| Held-out BPC | `final_bpc` **5.202**, bigram **4.151** (Gutenberg Moby Dick) |
-| Context-length curve | BPC vs SSM warm-up window (8–256 tokens) |
-| Expert routing | `dominant_expert_per_step` during greedy generation |
-| Save/restore | `parity_ok=true` (log-prob diff < 1e-9) |
-| Sampling | greedy, temperature, top-k, top-p, uncertainty-gated compared |
-
-**REST streaming:** CyphaStudio FastAPI exposes `POST /generate/stream` with per-token CyphaDIF routing in SSE chunks. See `docs/port/PORT_CONTRACT.md` §4.
-
-D17 adds alpha-spectrum and cross-corpus online adaptation on WikiText/Gutenberg.
+D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Requires `cypha_bench/data/wikitext2/` — CI fetches via Hugging Face; bench fails loudly on synthetic fallback unless `CYPHA_BENCH_FAST=1`.
 
 ### Known weak domains
 

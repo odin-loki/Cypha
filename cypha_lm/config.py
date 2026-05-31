@@ -12,6 +12,9 @@ class CyphaLMConfig:
     tau_fast: float = 1.0
     tau_slow: float = 20.0
     ssm_layers: int = 2
+    use_spectral_pde: bool = False  # FFT path; slower for small d_state sequential LM
+    use_multiscale: bool = True
+    use_sparse_hebbian: bool = False  # off by default — adds overhead per step
 
     # CyphaDIF Expert Field
     n_experts: int = 0
@@ -32,3 +35,7 @@ class CyphaLMConfig:
     ssm_lr: float = 0.001
     train_ssm: bool = False
     seed: int = 42
+
+    # Compute: auto | cpu | cuda  (env CYPHA_LM_DEVICE overrides default)
+    # ``auto`` picks CPU for sequential online LM (GPU hurts small per-token ops).
+    device: str = "auto"

@@ -1,6 +1,6 @@
 # CyphaLM
 
-Explicit-mechanism language model integrated with **CyphaDIF**: Izaac GF(2^n) embeddings → CellAI SSM → **CyphaDIF expert field** → GRIA alpha-projection. Core modules use NumPy only; PyTorch is optional for baseline benchmarks.
+Explicit-mechanism language model integrated with **CyphaDIF**: Izaac GF(2^n) embeddings → CellAI SSM → **CyphaDIF expert field** → GRIA alpha-projection. Core path uses NumPy; optional **CUDA** via CuPy (`device="cuda"` or `CYPHA_LM_DEVICE`). PyTorch is optional for baseline benchmarks.
 
 ## Architecture
 
@@ -18,9 +18,24 @@ From the repository root:
 
 ```bash
 pip install -e cypha_lm/
-pip install -e "cypha_lm/[benchmark]"   # torch + pytest-benchmark
-pip install -e ".[studio]"            # optional: FastAPI streaming /generate routes
+pip install -e "cypha_lm[benchmark]"   # torch + pytest-benchmark
+pip install -e "cypha_lm[gpu]"         # CuPy (pick cupy-cuda12x / 11x for your driver)
+pip install -e ".[studio]"             # optional: FastAPI streaming /generate routes
 ```
+
+### GPU (CUDA)
+
+CyphaLM supports optional CuPy for matmul/SSM on GPU (`device="cuda"`). **For sequential char-LM, CPU is faster** — `device="auto"` (default) selects CPU. GPU per-token kernel launch + CPU CyphaDIF sync dominates; use CPU unless you add batched training/eval.
+
+```python
+model = CyphaLM(CyphaLMConfig(vocab_size=128, device="auto"))  # CPU
+model = CyphaLM(CyphaLMConfig(vocab_size=128, device="cuda"))  # explicit GPU experiment
+print(model.device)
+```
+
+Benchmark: `python scripts/bench_cyphalm.py --steps 3000 --breakdown`
+
+Environment override: `CYPHA_LM_DEVICE=cpu|cuda|auto`. Performance flags: `use_spectral_pde=False`, `use_sparse_hebbian=False` (defaults).
 
 ## Quick start
 

@@ -67,10 +67,7 @@ class CyphaDIF:
 
         self._input_dim: int | None = None
         self._experts: list[_DIFExpert] = []
-
-        if config.n_experts > 0:
-            for _ in range(config.n_experts):
-                self._experts.append(self._make_expert())
+        self._warm_start_experts = max(0, int(config.n_experts))
 
     def _make_expert(self, input_dim: int | None = None) -> _DIFExpert:
         dim = input_dim if input_dim is not None else self._input_dim
@@ -89,6 +86,9 @@ class CyphaDIF:
         x = np.asarray(x, dtype=np.float64).ravel()
         if self._input_dim is None:
             self._input_dim = x.shape[0]
+            if self._warm_start_experts > 0 and not self._experts:
+                for _ in range(self._warm_start_experts):
+                    self._experts.append(self._make_expert())
         elif x.shape[0] != self._input_dim:
             raise ValueError(
                 f"Expected input dim {self._input_dim}, got {x.shape[0]}"
@@ -139,6 +139,10 @@ class CyphaDIF:
         if not self._experts:
             self._experts.append(self._make_expert())
 
+        if len(self._experts) == 1:
+            probs = np.array([1.0], dtype=np.float64)
+            return self._maybe_grow(x, probs)
+
         probs = self._softmax(self._llr(x))
         probs = self._maybe_grow(x, probs)
         return probs
@@ -169,6 +173,21 @@ class CyphaDIF:
         """
         x = np.asarray(x, dtype=np.float64).ravel()
         probs = self.route(x)
+
+        if len(self._experts) == 1:
+            expert = self._experts[0]
+            mean = np.asarray(expert.output_nig.predict()[0], dtype=np.float64).ravel()
+            epistemic = np.asarray(expert.output_nig.epistemic_variance(), dtype=np.float64)
+            aleatoric = np.asarray(expert.output_nig.aleatoric_variance(), dtype=np.float64)
+            epistemic_var = float(np.mean(epistemic))
+            aleatoric_var = float(np.mean(aleatoric))
+            return {
+                "mean": mean,
+                "epistemic_var": epistemic_var,
+                "aleatoric_var": aleatoric_var,
+                "routing_probs": probs,
+                "active_experts": 1,
+            }
 
         means = np.stack(
             [np.asarray(expert.output_nig.predict()[0], dtype=np.float64) for expert in self._experts],
@@ -223,12 +242,16 @@ class CyphaDIF:
 
     def reset(self) -> None:
         saved_input_dim = self._input_dim
+        warm = self._warm_start_experts
         self._experts.clear()
-        if self.config.n_experts > 0 and saved_input_dim is not None:
-            for _ in range(self.config.n_experts):
+        self._input_dim = None
+        self._warm_start_experts = warm
+        if warm > 0 and saved_input_dim is not None:
+            self._input_dim = saved_input_dim
+            for _ in range(warm):
                 self._experts.append(self._make_expert())
-        elif self.config.n_experts == 0:
-            self._input_dim = None
+        elif warm == 0:
+            self._input_dim = saved_input_dim if self.config.n_experts > 0 else None
 
     def get_state(self) -> dict:
         return {

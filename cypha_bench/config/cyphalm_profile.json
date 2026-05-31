@@ -1,0 +1,22 @@
+{
+  "vocab_size": 256,
+  "d_embed": 64,
+  "d_state": 128,
+  "tau_fast": 1.0,
+  "tau_slow": 20.0,
+  "ssm_layers": 2,
+  "field_dim": 160,
+  "max_experts": 128,
+  "alpha_init": 0.5,
+  "context_length": 256,
+  "seed": 42,
+  "gria_lr": 0.08,
+  "online": true,
+  "device": "auto",
+  "use_spectral_pde": false,
+  "use_sparse_hebbian": false,
+  "use_multiscale": true,
+  "n_experts": 0,
+  "train_ssm": false,
+  "ssm_lr": 0.002
+}

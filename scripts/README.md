@@ -10,6 +10,8 @@ Utility and verification scripts for the Cypha repo. Narrative “when to run wh
 | `export_experiment_schema_sql.py` | Print `experiment._SCHEMA` DDL (M6); **`-o path.sql`** to write file; used by CMake when building **`experiment_db_smoke`** | stdout / disk |
 | `generate_parity_fixtures.py` | Regenerate `parity_fixtures/` (incl. `train_hparams.json` for `cypha_rest`) | disk |
 | `generate_demo_lm_checkpoint.py` | Train tiny CyphaLM → `examples/demo_cyphalm/demo.{json,npz}` for REST/Studio smoke | disk |
+| `bench_cyphalm.py` | CyphaLM CPU vs CUDA train/predict timing + optional stage breakdown | stdout |
+| `cypha_bench/tuning/cyphalm_sweep.py` | Grid search CyphaLM configs on WikiText valid BPC | `cypha_bench/config/cyphalm_profile_sweep.json` |
 | `generate_regression_m4_fixture.py` | `parity_fixtures/regression_m4/sidecar.json` for CTest `native_regression_m4` | disk |
 | `generate_rff_regression_fixture.py` | `parity_fixtures/rff_regression/sidecar.json` — RFF encode + ridge + expert dots (CTest **`native_regression_rff`**) | disk |
 | `generate_memory_train_parity.py` | Regenerate `parity_fixtures/memory_train/` (native `DIFMemory.train`) | disk |

@@ -1,6 +1,6 @@
 {
   "domain": "cross_alpha_spectrum_global",
-  "timestamp": "2026-05-31T05:32:47.028807+00:00",
+  "timestamp": "2026-05-31T06:24:49.598195+00:00",
   "experiments": {
     "alpha_rows": [
       {
@@ -90,14 +90,14 @@
       {
         "domain": "d17",
         "experiment": "17B_alpha_spectrum",
-        "mean_alpha": 0.1572464120026432,
+        "mean_alpha": 0.10676098631921022,
         "fraction_edge_of_chaos": 0.0
       }
     ],
     "summary": {
       "n_measurements": 13,
-      "global_mean_alpha": 0.7762370881439601,
-      "global_std_alpha": 0.29316131375676474,
+      "global_mean_alpha": 0.7720299693370074,
+      "global_std_alpha": 0.3022359820548362,
       "within_gul_band_fraction": 0.0
     }
   }

@@ -1,0 +1,29 @@
+{
+  "vocab_size": 256,
+  "d_embed": 64,
+  "d_state": 128,
+  "tau_fast": 1.0,
+  "tau_slow": 50.0,
+  "ssm_layers": 2,
+  "field_dim": 160,
+  "max_experts": 128,
+  "alpha_init": 0.5,
+  "context_length": 256,
+  "seed": 42,
+  "gria_lr": 0.08,
+  "online": true,
+  "device": "auto",
+  "use_spectral_pde": false,
+  "use_sparse_hebbian": false,
+  "use_multiscale": true,
+  "n_experts": 4,
+  "train_ssm": false,
+  "ssm_lr": 0.002,
+  "_meta": {
+    "source": "cyphalm_sweep",
+    "corpus": "gutenberg",
+    "delta_vs_bigram": -0.3008194182790582,
+    "cyphalm_bpc": 4.616188905756305,
+    "bigram_bpc": 4.917008324035363
+  }
+}

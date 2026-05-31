@@ -1,0 +1,35 @@
+{
+  "description": "Cypha bench profile registry — domain-specific hyperparameter bundles.",
+  "classification": {
+    "path": "everyday_profile.json",
+    "regime": "tabular",
+    "loader": "cypha_bench.config.load_profile.classification_params"
+  },
+  "vision": {
+    "path": "everyday_profile.json",
+    "regime": "vision",
+    "loader": "cypha_bench.config.load_profile.classification_params"
+  },
+  "regression": {
+    "path": "everyday_profile.json",
+    "regime": "regression",
+    "loader": "cypha_bench.config.load_profile.regression_params"
+  },
+  "llm": {
+    "path": "profiles/cyphalm_llm.json",
+    "env": "CYPHALM_PROFILE=llm",
+    "domains": ["d04", "d17"]
+  },
+  "llm_d04": {
+    "path": "profiles/cyphalm_d04_gutenberg.json",
+    "env": "CYPHALM_PROFILE=d04",
+    "domain": "d04",
+    "corpus": "gutenberg"
+  },
+  "llm_d17": {
+    "path": "profiles/cyphalm_d17_wikitext.json",
+    "env": "CYPHALM_PROFILE=d17",
+    "domain": "d17",
+    "corpus": "wikitext2"
+  }
+}

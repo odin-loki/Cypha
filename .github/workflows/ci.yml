@@ -42,9 +42,12 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements-verify.txt
           pip install -e cypha_lm/
+          pip install datasets
           pip install PySide6 pyqtgraph pytest-qt ruff
+      - name: WikiText-2 corpus (CyphaLM D17)
+        run: python -c "import sys; sys.path.insert(0,'.'); from cypha_bench.setup.acquire_data import acquire_wikitext2; acquire_wikitext2()"
       - name: Ruff
-        run: ruff check cypha_studio cypha_lm cypha_bench/adapters cypha_bench/domains/d04_generation_language.py tests/test_lm_api.py scripts/generate_demo_lm_checkpoint.py
+        run: ruff check cypha_studio cypha_lm cypha_bench/adapters cypha_bench/domains/d04_generation_language.py cypha_bench/domains/d17_cyphalm_integration.py tests/test_lm_api.py scripts/generate_demo_lm_checkpoint.py scripts/bench_cyphalm.py
       - name: Native build + CTest
         run: |
           cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON

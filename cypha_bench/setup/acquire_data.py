@@ -126,6 +126,30 @@ def acquire_wikitext2() -> None:
     if token_dir.exists() and (token_dir / "wiki.train.tokens").exists():
         print("  skip (exists): wikitext-2/wiki.train.tokens")
         return
+
+    def _from_huggingface() -> bool:
+        try:
+            from datasets import load_dataset
+        except ImportError:
+            print("  Hugging Face fallback skipped (pip install datasets)")
+            return False
+        try:
+            ds = load_dataset("Salesforce/wikitext", "wikitext-2-v1")
+        except Exception as exc:
+            print(f"  Hugging Face load failed: {exc}")
+            return False
+        token_dir.mkdir(parents=True, exist_ok=True)
+        for split, fname in (
+            ("train", "wiki.train.tokens"),
+            ("validation", "wiki.valid.tokens"),
+            ("test", "wiki.test.tokens"),
+        ):
+            path = token_dir / fname
+            lines = [row["text"] for row in ds[split]]
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            print(f"  wrote: {path.relative_to(BENCH_ROOT)} ({len(lines)} lines)")
+        return True
+
     urls = [
         "https://blog.salesforceairesearch.com/wp-content/uploads/2019/09/wikitext-2-v1.zip",
         "https://s3.amazonaws.com/research.metamind.io/wikitext/wikitext-2-v1.zip",
@@ -145,6 +169,13 @@ def acquire_wikitext2() -> None:
                 print(f"  failed {url}: {exc}")
     if zip_path.exists() and _valid_zip(zip_path):
         _extract_zip(zip_path, wt_dir)
+        return
+    if _from_huggingface():
+        return
+    raise RuntimeError(
+        "WikiText-2 unavailable: zip mirrors failed and Hugging Face fallback did not run. "
+        "Try: pip install datasets && python cypha_bench/setup/acquire_data.py"
+    )
 
 
 def acquire_nsl_kdd() -> None:
