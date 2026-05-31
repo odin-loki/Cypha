@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 """
-Cypha SOM upgrade benchmark (cypha_som_upgrades.md §3).
+Cypha SOM upgrade benchmark.
+
+Compares CyphaDIF classification accuracy, train latency, and optional drift /
+adversarial checks with ``cypha_som`` upgrade flags U1–U6 enabled or disabled.
 
 Usage:
   python benchmark_baseline.py --dataset classification --seeds 3
   python benchmark_baseline.py --dataset all --upgrade U2 --seeds 3
+  python benchmark_baseline.py --compare results/baseline.json --output results/u2.json
+
+Output: JSON metrics written to ``--output`` (default ``results/baseline.json``).
+When ``--compare`` is set, prints pass/fail gates (accuracy within 2%, train time
+≤125% of baseline, variance ≤150% of baseline). Used by ``scripts/run_som_upgrade_eval.py``;
+permanent summary: ``docs/reports/SOM_UPGRADE_REPORT.md``.
 """
 
 from __future__ import annotations
@@ -212,7 +221,11 @@ def compare_to_baseline(metrics: dict, baseline: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="CyphaDIF + cypha_som upgrade A/B benchmark (writes JSON metrics).",
+        epilog="See module docstring for output format and compare gates.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--dataset", default="classification",
                         choices=["classification", "drift", "adversarial", "all"])
     parser.add_argument("--seeds", type=int, default=3)

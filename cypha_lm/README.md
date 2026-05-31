@@ -54,4 +54,4 @@ pytest benchmarks/ --benchmark-autosave
 | `model/` | Full CyphaLM stack and generation |
 | `analysis/` | Alpha spectrum and compression profiling |
 
-See [CyphaLM_Plan.md](../CyphaLM_Plan.md) for the full research plan.
+See [docs/RESEARCH_STATUS.md](../docs/RESEARCH_STATUS.md) for research status and roadmap.

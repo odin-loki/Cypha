@@ -1,10 +1,32 @@
-.PHONY: test regen-parity experiment-ddl bench profile-fast cov gpu-bench bench-gpu-prod
+# Cypha root Makefile — convenience wrappers (see `make help`).
 
+.PHONY: help test regen-parity experiment-ddl bench profile-fast cov gpu-bench gpu-fullbench e2e-profile e2e-profile-fast tune-coarse tune-medium tune-gpu-heavy bench-gpu-prod
+
+help:
+	@echo "Cypha Makefile targets:"
+	@echo "  help              — list targets (this message)"
+	@echo "  test              — pytest tests/ + legacy test_cypha.py + cypha_studio tests"
+	@echo "  regen-parity      — regenerate parity_fixtures/ (generate_parity_fixtures.py)"
+	@echo "  experiment-ddl    — export ExperimentDB DDL to artifacts/experiment_schema.sql"
+	@echo "  bench             — run benchmark.py"
+	@echo "  profile-fast      — quick real-dataset profile (profile_real_datasets.py --fast)"
+	@echo "  cov               — pytest with coverage (cypha_studio, cypha_accel)"
+	@echo "  gpu-bench         — GPU microbench (scripts/gpu_microbench.py)"
+	@echo "  gpu-fullbench     — full GPU bench (scripts/gpu_fullbench.py)"
+	@echo "  e2e-profile       — download + profile e2e datasets"
+	@echo "  e2e-profile-fast  — e2e profile with --fast"
+	@echo "  tune-coarse       — coarse quality/performance tune (includes generation)"
+	@echo "  tune-medium       — medium preset tune (max 150 combos)"
+	@echo "  tune-gpu-heavy    — coarse tune with heavy GPU burn settings"
+	@echo "  bench-gpu-prod    — microbench + fullbench + coarse tune (needs CuPy)"
+
+# Run Python + Studio test suites (headless Qt).
 test:
 	QT_QPA_PLATFORM=offscreen pytest tests/ -v --tb=short
 	python test_cypha.py
 	python cypha_studio/test_cypha_studio.py
 
+# Regenerate core parity fixtures under parity_fixtures/.
 regen-parity:
 	python scripts/generate_parity_fixtures.py
 

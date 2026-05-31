@@ -79,7 +79,6 @@ desktop.ini
 # Cypha-specific data files (large)
 bessel_ratios.npz
 *.npz
-bessel_ratios.npz
 *.bin
 
 # Config files (keep only examples)
@@ -117,7 +116,8 @@ native/build/
 # Large Binary Data Files
 # =====================================================
 
-# Raw MNIST binary image/label files (47MB uncompressed — use .gz instead)
+# MNIST data files (both compressed and raw — downloaded at benchmark time)
+cypha_bench/data/mnist/*.gz
 cypha_bench/data/mnist/*-ubyte
 cypha_bench/data/mnist/*.idx3-ubyte
 cypha_bench/data/mnist/*.idx1-ubyte
@@ -128,6 +128,10 @@ cypha_bench/artifacts/tuning/
 # Data cache
 data_cache/
 
+# Raw experiment output (JSON results from benchmark/diagnostic runs)
+results/*.json
+cypha_diagnostics/results/
+
 # =====================================================
 # Temporary Files
 # =====================================================
@@ -137,7 +141,6 @@ data_cache/
 *.bak
 *.backup
 *.cache
-*.tmp
 *.swp
 *.swo
 *~
@@ -165,8 +168,7 @@ docs/site/
 *.pem
 *.key
 *.secret
-*.sh
-*.bash_history
+.bash_history
 
 # =====================================================
 # Notes for Cypha .gitignore

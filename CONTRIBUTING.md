@@ -1,8 +1,22 @@
 # Contributing
 
-**Documentation hub:** [`docs/README.md`](docs/README.md) (organized by use / verify / port). **Script index:** [`scripts/README.md`](scripts/README.md). **Regen / native / schema upkeep:** [`docs/verify/MAINTENANCE.md`](docs/verify/MAINTENANCE.md).
+**Documentation hub:** [`docs/README.md`](docs/README.md) (organized by use / verify / port). **Research journal:** [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md). **Script index:** [`scripts/README.md`](scripts/README.md). **Regen / native / schema upkeep:** [`docs/verify/MAINTENANCE.md`](docs/verify/MAINTENANCE.md).
 
 ## Setup
+
+**Quick install (recommended):** platform scripts under [`install/`](install/) set up a venv and dependencies. See [`install/README.md`](install/README.md).
+
+```powershell
+# Windows (headless verify deps)
+powershell -ExecutionPolicy Bypass -File install\install_windows.ps1
+```
+
+```bash
+# Linux / WSL
+bash install/install_linux.sh
+```
+
+**Manual setup:**
 
 ```bash
 python3 -m venv .venv
@@ -46,9 +60,15 @@ pytest tests/test_qt_stub_native.py -v   # cypha_qt_stub + reference.cypha (need
 pytest tests/test_studio_trainer_classify_hotpath_native_parity.py -v   # native online loop vs Trainer.fit-shaped fixture
 pytest tests/test_studio_trainer_gh_classify_hotpath_native_parity.py -v   # gh_train_step + chi/psi vs native
 pytest tests/test_studio_trainer_preprocess_classify_hotpath_native_parity.py tests/test_studio_trainer_preprocess_gh_classify_hotpath_native_parity.py -v   # preprocessor + train / GH native
-# Studio backlog + profiling: docs/studio/CYPHA_STUDIO_MASTER_PLAN.md
-# Env (registry, API, CORS): docs/studio/CYPHA_ENV.md
+# Studio environment: docs/studio/CYPHA_ENV.md, docs/studio/STUDIO_THREADING.md
 # Default ASGI app ``cypha_studio.server.api:app`` uses ``CYPHA_REGISTRY_ROOT`` for ``/models``, ``/load``, ``/register``.
+```
+
+**Research packages (not in CI — run before LM/SOM changes):**
+
+```bash
+pytest cypha_som/tests/ -v    # SOM/GNG/GRIA hooks (7 tests; flags default OFF)
+pytest cypha_lm/ -v           # CyphaLM stack (~70 tests across subpackages)
 ```
 
 Optional profiling (local):
@@ -67,7 +87,7 @@ Or: `make test` (Unix/WSL; Makefile sets **`QT_QPA_PLATFORM=offscreen`** for pyt
 
 ## Native `cypha_rest` (optional)
 
-CI builds the Linux binary and runs **`pytest tests/`** with **`CYPHA_REST_BIN`** so REST smokes are not skipped.
+CI runs **two jobs** (`.github/workflows/ci.yml`): **`build_and_test`** (Ubuntu native build + CTest + `pytest tests/` with **`CYPHA_REST_BIN`**) and **`mingw_cross`** (MinGW Windows PE cross-build). The Linux binary gates REST smokes so they are not skipped.
 
 **Local (Linux / WSL ELF):** from repo root, install **`sudo apt-get install -y libsqlite3-dev`** (optional M6 CTest **`native_experiment_db_smoke`**), then either **`bash scripts/ci_native_linux.sh`** (CTest + optional drift pytest when **`python3 -m pytest`** is available) or manually: `cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release && cmake --build native/build -j$(nproc) && ctest --test-dir native/build --output-on-failure`.
 
@@ -90,7 +110,41 @@ pytest tests/test_cypha_rest_smoke.py -v
 - Prefer **`cypha_save_binary`** over ad-hoc pickle for anything that must load in native code.
 - If you add a feature, add a **test** and, when it affects numbers, refresh **`parity_fixtures/`** and note it in the PR.
 
+## Diagnostics and research scripts
+
+**Re-running the empirical diagnostic** (phase-by-phase accuracy/calibration/encoder analysis):
+```bash
+python cypha_diagnostics/run_diagnostics.py
+```
+Output: JSON phases written to `cypha_diagnostics/results/` (gitignored). The permanent
+summary is [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/reports/DIAGNOSTIC_REPORT.md).
+
+**Re-running the SOM upgrade evaluation:**
+```bash
+python scripts/run_som_upgrade_eval.py
+```
+Output: JSON upgrade results in `results/` (gitignored). The permanent summary is
+[`docs/reports/SOM_UPGRADE_REPORT.md`](docs/reports/SOM_UPGRADE_REPORT.md).
+
+**Applying diagnostic-confirmed upgrades** (deliberation fix, delta_lr, auto-RFF):
+```bash
+python cypha_diagnostics/apply_upgrades.py
+```
+These are already applied in the current `cypha_bench/config/everyday_profile.json`.
+
+## Changelog
+
+Update [`CHANGELOG.md`](CHANGELOG.md) when:
+- A bug is fixed that affects numeric outputs.
+- A parity fixture is regenerated.
+- A new domain / encoder / regressor is added.
+- A milestone benchmark is completed.
+
 ## Layout
 
 - `Cypha.py` — engine (keep changes focused; native port will mirror this file first).
 - `cypha_studio/` — studio only (no duplicate copies at repo root).
+- `cypha_diagnostics/` — diagnostic investigation scripts (`run_diagnostics.py`,
+  `apply_upgrades.py`) and their results (`results/` — gitignored).
+- `docs/reports/` — permanent experiment records; committed, not regenerated.
+- `docs/RESEARCH_STATUS.md` — benchmark journal and research priorities (Kernel LLR, CyphaLM D17).

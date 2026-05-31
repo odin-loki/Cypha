@@ -87,7 +87,7 @@ Goal: know **which kernels** to port first (hot loops in NumPy/Python).
 |------|----------------|
 | **cProfile** | `python3 -m cProfile -o profile_stats.cprof test_cypha.py` then `python3 scripts/print_profile_hotspots.py` — top cumulative time. |
 | **GUI cold start** | `python scripts/profile_gui_startup.py` — one `MainWindow` build + `processEvents` under `QT_QPA_PLATFORM=offscreen`; use `-o` to save pstats text. |
-| **Studio hot paths** | `python scripts/profile_studio_hotpaths.py --help` — subcommands `training`, `chat`, `dataset`, `registry`, `api`; checklist in [`CYPHA_STUDIO_MASTER_PLAN.md`](../studio/CYPHA_STUDIO_MASTER_PLAN.md) §Phase 1. |
+| **Studio hot paths** | `python scripts/profile_studio_hotpaths.py --help` — subcommands `training`, `chat`, `dataset`, `registry`, `api`; historical checklist in [`CYPHA_STUDIO_MASTER_PLAN.md`](../studio/CYPHA_STUDIO_MASTER_PLAN.md) (superseded — see [`STUDIO_THREADING.md`](../studio/STUDIO_THREADING.md)). |
 | **line_profiler** (optional) | Decorate hottest functions in `Cypha.py`, run `kernprof -l -v script.py` for line-level hotspots. |
 | **memory** (optional) | `tracemalloc` or `memory_profiler` on long training loops if RAM growth is suspected. |
 

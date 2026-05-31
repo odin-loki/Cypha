@@ -4,6 +4,59 @@ Cypha's native port (M1–M6) is complete — inference, training, REST server, 
 
 ---
 
+## §0 — Evidence-confirmed upgrades (post-diagnostic, highest priority)
+
+These come directly from the 2026-05-30 diagnostic run
+([`docs/reports/DIAGNOSTIC_REPORT.md`](reports/DIAGNOSTIC_REPORT.md)). Every
+item has a measured effect size; nothing is speculative.
+
+### §0a — Kernel LLR via Nyström approximation (CONFIRMED HIGHEST PRIORITY)
+
+**Evidence:** FDR=0.001 on XOR; `linear(h)=0.512` (chance) vs `kernel(h)=0.835`.
+Nonlinearity gap = **32.3 pp** — unreachable with the current linear LLR discriminant.
+
+**What to build:** Replace `score_matrix` with a Nyström-approximated kernel
+inner product in the LLR computation:
+1. Sample `m ≈ 200` landmark points from the replay buffer at fit time.
+2. Compute `Φ(h) = K(h, landmarks) · K(landmarks, landmarks)^{-1/2}` (Nyström features).
+3. Run existing LLR update on `Φ(h)` instead of `h`.
+
+**Expected gain:** +30 pp on XOR-style tasks. Closes the hard nonlinear ceiling
+without touching the online update rule.
+
+**Scope:** Python prototype in `Cypha.py` first; parity fixture + C++ port after
+the numbers are confirmed.
+
+### §0b — Auto-gamma for RFF bandwidth
+
+**Evidence:** `D_rff` sweep showed high variance between D=256 and D=512, suggesting
+the gamma bandwidth is not well-tuned for all datasets.
+
+**What to build:** After the first 200 training samples, estimate the median
+pairwise distance in raw feature space, then set `gamma = 1 / (2 · median_dist²)`.
+Update `RFFEncoder` to support a `fit(X)` call that sets gamma from data.
+
+**Expected gain:** +2–4 pp on small-dimensional datasets.
+
+### §0c — D10/D17 CellAI SSM investigation
+
+**Evidence:**
+- D10 ECG: 17–20% accuracy on 5-class temporal classification (chance = 20%); CellAI/SSM
+  integration not yet tuned for this domain.
+- D17 CyphaLM held-out BPC = 4.50 vs bigram baseline 3.69 — LM stack produces a real
+  distribution but is weaker than bigram on held-out text.
+- **D04 "33.2 bpc" is a benchmark bug** (wrong probability indexing in `d04_generation_language.py`,
+  not a CyphaLM failure) — do not use it as evidence.
+
+**What to do:** Run Phase 5 of the diagnostic plan on the CellAI SSM independently
+of the CyphaDIF classifier. Instrument `CellAISSM` to verify that:
+- State norms do not collapse or explode over long sequences.
+- Multi-scale decay rates (τ_fast=1.0, τ_slow=20.0) are appropriate for the domain.
+- Output projections are properly connected to the expert routing head.
+- Fix `d04_generation_language.py` probability indexing bug before interpreting that benchmark.
+
+---
+
 ## §1 — CUDA GPU path (`cypha::accel`)
 
 **Status:** Native **CUDA** in `native/src/accel_cuda.cu` (pooled device memory + Bessel table for GH–NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ≥ **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default 16). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
@@ -176,10 +229,14 @@ Both require new network coordination code outside `cypha_core` — the local tr
 
 ## Horizon summary
 
-| When | What |
-|------|------|
-| **Weeks** | Optional: second CUDA stream / pinned host memory for HPC serving |
-| **1–2 months** | Qt shell streaming training thread; chart interactivity; packaged AppImage |
-| **2–4 months** | Multi-model `cypha_rest`; Web UI (SPA or htmx) |
-| **4–8 months** | Curriculum / active learning; ONNX export |
-| **Longer** | Federated training; GGUF; full Vulkan/CUDA backend |
+| When | What | Evidence |
+|------|------|----------|
+| **Now — highest priority** | Kernel LLR (Nyström) — §0a | Diagnostic: 32.3 pp gap on XOR; FDR=0.001 |
+| **Now** | Auto-gamma RFF bandwidth — §0b | Diagnostic: sweep variance; expected +2–4 pp |
+| **Now** | D10/D17 CellAI SSM investigation — §0c | D10: 17–20% ECG; D17: 4.50 bpc above bigram |
+| **Weeks** | Qt shell streaming training thread; chart interactivity — §2a/2b | UX |
+| **Weeks** | Packaged AppImage (Linux) / NSIS installer (Windows) — §3 | Distribution |
+| **1–2 months** | CUDA CI matrix job; second CUDA stream — §1 | Performance |
+| **2–4 months** | Multi-model `cypha_rest`; Web UI (SPA or htmx) — §4/5 | Deployment |
+| **4–8 months** | Curriculum / active learning; ONNX export — §6/7 | Research |
+| **Longer** | Federated training; GGUF; full Vulkan/CUDA backend — §8 | Research |

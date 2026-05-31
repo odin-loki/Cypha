@@ -34,3 +34,48 @@ Utility and verification scripts for the Cypha repo. Narrative “when to run wh
 | `print_profile_hotspots.py` | Helper to summarize cProfile dumps | stdout |
 | `download_profile_e2e.py` | (see above) | |
 | `wsl_bench_gpu.sh` | WSL GPU bench helper | console |
+
+## Parity fixture generators (supplementary)
+
+All are also invoked by `generate_parity_fixtures.py`. Full regen docs: [`docs/verify/MAINTENANCE.md`](../docs/verify/MAINTENANCE.md).
+
+| Script | Fixture produced | CTest name |
+|--------|-----------------|------------|
+| `generate_batch_llr_fixture.py` | `parity_fixtures/batch_llr/` | `native_batch_llr` |
+| `generate_quantile_dif_train_fixture.py` | `parity_fixtures/quantile_dif_train/` | `native_quantile_dif_train` |
+| `generate_dif_train_replay_fixture.py` | `parity_fixtures/dif_train_replay/` | `native_dif_train_replay` |
+| `generate_mke_train_step_fixture.py` | `parity_fixtures/mke_train_step/` | `native_mke_train_step` |
+| `generate_mke_train_extended_fixture.py` | `parity_fixtures/mke_train_extended/` | `native_mke_train_extended` |
+| `generate_two_stage_pipeline_fixture.py` | `parity_fixtures/two_stage_pipeline/` | `native_two_stage_pipeline` |
+| `generate_two_stage_ridge_fit_fixture.py` | `parity_fixtures/two_stage_ridge_fit/` | `native_two_stage_ridge_fit` |
+| `generate_two_stage_e2e_ridge_fixture.py` | `parity_fixtures/two_stage_e2e_ridge/` | `native_two_stage_e2e_ridge` |
+| `generate_generation_fixture.py` | `parity_fixtures/generation/sidecar.json` | `native_generation` |
+
+## CyphaLM report and SOM evaluation
+
+| Script | Purpose | Output |
+|--------|---------|--------|
+| `run_cypha_lm_report.py` | Run all `experiments/` + `benchmarks/` to regenerate `cypha_lm/REPORT.md` + `paper/figures/` | `cypha_lm/REPORT.md` |
+| `run_som_upgrade_eval.py` | Batch SOM upgrade eval (U1-U6 + all) via `benchmark_baseline.py` | `artifacts/` |
+
+## Analysis utilities
+
+| Script | Purpose | Output |
+|--------|---------|--------|
+| `diff_cypha_state.py` | Shallow diff of two `.cypha` binary states (key / shape / mean) | stdout |
+| `merge_final_profile.py` | Merge `cypha_bench/config/everyday_profile.json` with `profiled_medium.json` regression | disk |
+
+## Windows PowerShell extras
+
+| Script | Purpose |
+|--------|---------|
+| `build_native_wsl.ps1` | WSL CMake build in `native/build-wsl` + optional ctest |
+| `run_cypha_qt_windows.ps1` | Launch `cypha_rest` + Qt shell on Windows |
+| `setup_and_test.ps1` | Windows equivalent of `setup_and_test.sh` |
+| `run_all_regressions.ps1` | Windows equivalent of `run_all_regressions.sh` |
+| `loadtest_ab_predict_example.ps1` | Windows equivalent of `loadtest_ab_predict_example.sh` |
+
+> **Note on .sh scripts:** `setup_and_test.sh`, `run_all_regressions.sh`, `wsl_verify.sh`,
+> `wsl_bench_gpu.sh`, `loadtest_ab_predict_example.sh`, and `ci_native_linux.sh` were
+> historically gitignored by a blanket `*.sh` rule (removed May 2026). The `.sh` files now
+> exist on disk and are tracked. PowerShell equivalents exist for all Windows workflows.

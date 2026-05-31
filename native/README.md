@@ -210,7 +210,7 @@ python scripts/gen_native_bessel_table.py   # K₂/K₁ + K₀/K₁ grids if Sci
 - [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) — `.cypha` v3, inference math, REST JSON  
 - [`PREPROCESSOR_CONTRACT.md`](../docs/port/PREPROCESSOR_CONTRACT.md) + [`schemas/preprocessor.schema.json`](../docs/port/schemas/preprocessor.schema.json)  
 - [`schemas/regression_head.schema.json`](../docs/port/schemas/regression_head.schema.json) — optional MoE sidecar for `/predict` **`regression_val`**  
-- [`EXPERIMENTS_SCHEMA.md`](../docs/port/EXPERIMENTS_SCHEMA.md) — SQLite (M6). DDL: `python scripts/export_experiment_schema_sql.py` (or `-o file.sql`). Native **`experiment_db_smoke`** + **`native_experiment_db_smoke`** (CTest) validate that DDL when SQLite dev is installed; full C++ **ExperimentDB** I/O is still future work.  
+- [`EXPERIMENTS_SCHEMA.md`](../docs/port/EXPERIMENTS_SCHEMA.md) — SQLite (M6). DDL: `python scripts/export_experiment_schema_sql.py` (or `-o file.sql`). Native **`experiment_db_smoke`** + **`experiment_db_crud_parity`** (CTests **`native_experiment_db_smoke`** / **`native_experiment_db_crud`**) validate DDL and core run/metrics CRUD when SQLite is available; see [`PORT_FULL_STACK.md`](../docs/port/PORT_FULL_STACK.md) M6 for any remaining optional API surface.  
 - [`regression_stub.hpp`](include/cypha/regression_stub.hpp) — M4 placeholder  
 
 ## Next engineering waves

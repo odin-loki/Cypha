@@ -57,6 +57,7 @@ Honest snapshot for **port planning**. “Debugged” here means *automated chec
 | `tests/test_batch_llr_native_parity.py` | Sidecar vs **`expected.npz`** + subprocess **`batch_llr_parity`** (**`CYPHA_BATCH_LLR_PARITY_BIN`**) | **2** pytest |
 | `tests/test_quantile_dif_train_native_parity.py` | Sidecar geometry + subprocess **`quantile_dif_train_parity`** vs `parity_fixtures/quantile_dif_train/` (**`CYPHA_QUANTILE_DIF_TRAIN_PARITY_BIN`**) | **2** pytest |
 | `tests/test_dif_train_replay_native_parity.py` | **`replay_u01`** sidecar + subprocess vs `parity_fixtures/dif_train_replay/` (**`CYPHA_DIF_TRAIN_REPLAY_PARITY_BIN`**) | **2** pytest |
+| `tests/test_generation_native_parity.py` | Subprocess **`generation_parity`** vs `parity_fixtures/generation/sidecar.json` (all generation methods) | **3** pytest |
 | `tests/test_studio_trainer_classify_hotpath_native_parity.py` | Studio **`Trainer.fit`** loop fixture + **`quantile_dif_train_parity`** (**`CYPHA_STUDIO_TRAINER_CLASSIFY_HOTPATH_BIN`** or **`CYPHA_QUANTILE_DIF_TRAIN_PARITY_BIN`**) | **2** pytest |
 | `tests/test_studio_trainer_gh_classify_hotpath_native_parity.py` | **`gh_train_step`** / **`chi`**/**`psi`** fixture + **`quantile_dif_train_parity`** (**`CYPHA_STUDIO_TRAINER_GH_CLASSIFY_HOTPATH_BIN`** or **`CYPHA_QUANTILE_DIF_TRAIN_PARITY_BIN`**) | **2** pytest |
 | `tests/test_studio_trainer_preprocess_classify_hotpath_native_parity.py` | **`preprocess_train_classify_parity`** + **`CYPHA_PREPROCESS_TRAIN_CLASSIFY_PARITY_BIN`** | **2** pytest |
@@ -76,14 +77,54 @@ Honest snapshot for **port planning**. “Debugged” here means *automated chec
 
 **Current totals (typical):** ~`189 passed, 1 skipped` (`test_cuda_bench` when no CUDA GPU). `pytest-qt` must be installed for `test_training_plot_compress.py`; the tests error with "fixture 'qapp' not found" when it is absent — install it: `pip install pytest-qt`.
 
-**Native CTest** (after `cmake` in `native/build`; **~34 tests**, **`native_cuda_bench` skipped** without CUDA GPU): `native_parity`, **`native_batch_llr`**, **`native_memory_train`**, **`native_memory_train_roundtrip`** (on-disk **`.cypha`** bytes **`memcmp`** vs **`save_cypha_to_buffer`** + buffer reload vs file), **`native_preprocessor`**, **`native_preprocessor_fit`**, **`native_csv_ingest`**, **`native_studio_trainer_preprocess_classify_hotpath`**, **`native_studio_trainer_preprocess_gh_classify_hotpath`**, **`native_csv_preprocess_classify_hotpath`**, **`native_nig_adapt`**, **`native_train_step_vector`**, **`native_dif_regressor_train_step`**, **`native_regression_mixture`**, **`native_regression_m4`**, **`native_regression_rff`**, **`native_regression_two_stage_pipeline`**, **`native_regression_two_stage_ridge_fit`**, **`native_regression_two_stage_e2e_ridge`**, **`native_quantile_dif_train`**, **`native_dif_train_replay`**, **`native_studio_trainer_classify_hotpath`**, **`native_studio_trainer_gh_classify_hotpath`**, **`native_mke_train_step`**, **`native_mke_train_extended`**, **`native_registry_register`**, **`native_experiment_db_smoke`**, **`native_experiment_db_file`**, **`native_experiment_db_crud`** (last three when SQLite target is enabled — CI **`libsqlite3-dev`** or amalgamation), **`native_qt_stub_load_reference`** when **`-DCYPHA_BUILD_QT=ON`** and Qt6 is installed (CI: **`qt6-base-dev`**), **`native_cuda_smoke`** (accel vs serial CPU; **`native_cuda_bench`** needs **`CYPHA_ENABLE_CUDA=ON`** + GPU). Details: [`native/README.md`](../../native/README.md). Subprocess pytest mirror + drift guard: **`tests/test_native_ctest_pytest_registry.py`**. **GitHub Actions:** `.github/workflows/ci.yml` builds **`native/`** with **`CYPHA_BUILD_QT=ON`**, runs **`ctest`**, then **`pytest tests/`** with **`CYPHA_REST_BIN`** so [`test_cypha_rest_smoke.py`](../../tests/test_cypha_rest_smoke.py) is not skipped.
+**Native CTest** (after `cmake` in `native/build`; **~34 tests**, **`native_cuda_bench` skipped** without CUDA GPU): `native_parity`, **`native_batch_llr`**, **`native_memory_train`**, **`native_memory_train_roundtrip`** (on-disk **`.cypha`** bytes **`memcmp`** vs **`save_cypha_to_buffer`** + buffer reload vs file), **`native_preprocessor`**, **`native_preprocessor_fit`**, **`native_csv_ingest`**, **`native_studio_trainer_preprocess_classify_hotpath`**, **`native_studio_trainer_preprocess_gh_classify_hotpath`**, **`native_csv_preprocess_classify_hotpath`**, **`native_nig_adapt`**, **`native_train_step_vector`**, **`native_dif_regressor_train_step`**, **`native_regression_mixture`**, **`native_regression_m4`**, **`native_regression_rff`**, **`native_regression_two_stage_pipeline`**, **`native_regression_two_stage_ridge_fit`**, **`native_regression_two_stage_e2e_ridge`**, **`native_quantile_dif_train`**, **`native_dif_train_replay`**, **`native_studio_trainer_classify_hotpath`**, **`native_studio_trainer_gh_classify_hotpath`**, **`native_mke_train_step`**, **`native_mke_train_extended`**, **`native_registry_register`**, **`native_generation`**, **`native_experiment_db_smoke`**, **`native_experiment_db_file`**, **`native_experiment_db_crud`** (last three when SQLite target is enabled — CI **`libsqlite3-dev`** or amalgamation), **`native_qt_stub_load_reference`** when **`-DCYPHA_BUILD_QT=ON`** and Qt6 is installed (CI: **`qt6-base-dev`**), **`native_cuda_smoke`** (accel vs serial CPU; **`native_cuda_bench`** needs **`CYPHA_ENABLE_CUDA=ON`** + GPU). Details: [`native/README.md`](../../native/README.md). Subprocess pytest mirror + drift guard: **`tests/test_native_ctest_pytest_registry.py`**. **GitHub Actions** (`.github/workflows/ci.yml`): **two jobs** — **`build_and_test`** (Ubuntu: native build with **`CYPHA_BUILD_QT=ON`**, **`ctest`**, then **`pytest tests/`** with **`CYPHA_REST_BIN`** so [`test_cypha_rest_smoke.py`](../../tests/test_cypha_rest_smoke.py) is not skipped) and **`mingw_cross`** (MinGW cross-build of Windows PE binaries + CTest path rewrite).
+
+**Not in CI** (run locally before LM/SOM changes):
+
+| Package | Command | Notes |
+|---------|---------|--------|
+| **`cypha_som/`** | `pytest cypha_som/tests/ -v` | **7** tests — GNG/SOM/GRIA/Hebbian/temporal hooks; flags default OFF |
+| **`cypha_lm/`** | `pytest cypha_lm/ -v` | **~70** tests across embeddings, experts, projection, temporal, model, integration |
 
 **Not covered automatically today:** interactive GUI workflows, long-run memory leaks, multi-thread stress, real KDD-scale files (benchmark Section 9 uses synthetic unless you drop `.npy` in `/tmp`). Typical local runs have **no GPU**; `cypha_accel` falls back to NumPy. Use `scripts/gpu_fullbench.py` on a CUDA box for encode+LLR+softmax+gate timing and fp64 LLR parity vs CPU.
+
+**D04 benchmark bug (not a CyphaLM failure):** domain D04 in `cypha_bench` runs **`CyphaDIF + CharNgramEncoder`**, not CyphaLM. The reported **33.2 bpc** comes from wrong probability indexing (`probs[next_idx]` uses char ID into a label-ordered array → **`1e-10` floor** → −log₂(1e-10) ≈ 33.2). Real CyphaLM held-out BPC is **D17 = 4.50** (bigram baseline 3.69). See [`CHANGELOG.md`](../../CHANGELOG.md) §1.0.0 and [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md).
 
 ## Contracts frozen for the port
 
 - **[`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md)** — `.cypha` v3, LLR/softmax/GH/temperature, REST JSON.
-- **`parity_fixtures/`** — one committed model + vectors; native code should reproduce within tolerance.
+- **`parity_fixtures/`** — committed golden models + vectors; native code should reproduce within tolerance.
+
+### Parity fixture inventory (24 directories + root artifacts)
+
+**Root files:** `reference.cypha`, `native_parity.bin`, `expected.npz`, `train_hparams.json`, `regression_head.json`, `manifest.json`.
+
+| Directory | Primary gate |
+|-----------|----------------|
+| `batch_llr` | `native_batch_llr`, `test_batch_llr_native_parity` |
+| `csv_ingest` | `native_csv_ingest` |
+| `csv_preprocess_classify_hotpath` | `native_csv_preprocess_classify_hotpath` |
+| `dif_regressor_train_step` | `native_dif_regressor_train_step` |
+| `dif_train_replay` | `native_dif_train_replay` |
+| `generation` | `native_generation`, `test_generation_native_parity` |
+| `memory_train` | `native_memory_train`, `native_memory_train_roundtrip` |
+| `mke_train_extended` | `native_mke_train_extended` |
+| `mke_train_step` | `native_mke_train_step` |
+| `preprocessor` | `native_preprocessor`, `test_preprocessor_fixture` |
+| `preprocessor_fit` | `native_preprocessor_fit` |
+| `preprocessor_fit_no_scale` | `native_preprocessor_fit` |
+| `quantile_dif_train` | `native_quantile_dif_train` |
+| `registry_register` | `native_registry_register` |
+| `regression_m4` | `native_regression_m4` |
+| `rff_regression` | `native_regression_rff` |
+| `studio_trainer_classify_hotpath` | `native_studio_trainer_classify_hotpath` |
+| `studio_trainer_gh_classify_hotpath` | `native_studio_trainer_gh_classify_hotpath` |
+| `studio_trainer_preprocess_classify_hotpath` | `native_studio_trainer_preprocess_classify_hotpath` |
+| `studio_trainer_preprocess_gh_classify_hotpath` | `native_studio_trainer_preprocess_gh_classify_hotpath` |
+| `train_step_vector` | `native_train_step_vector` |
+| `two_stage_e2e_ridge` | `native_regression_two_stage_e2e_ridge` |
+| `two_stage_pipeline` | `native_regression_two_stage_pipeline` |
+| `two_stage_ridge_fit` | `native_regression_two_stage_ridge_fit` |
 
 ## Known gaps (before you trust production scale)
 

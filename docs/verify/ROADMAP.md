@@ -68,7 +68,9 @@ All milestones complete — see [`PORT_FULL_STACK.md`](../port/PORT_FULL_STACK.m
 
 ## Phase 5 — Current engineering horizon
 
-The native hot path is complete. The next priorities are about depth and distribution:
+The native hot path is complete. **Highest priority:** **Kernel LLR (Nyström)** — closes the ~32 pp gap on nonlinear boundaries (XOR FDR=0.001: kernel h=0.835 vs linear h=0.512). Confirmed in diagnostics and [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md). Python-only today; native port follows once the reference kernel path is frozen.
+
+Secondary priorities (depth and distribution):
 
 1. **CUDA in CI (optional)** — add a matrix job with NVIDIA runner + `-DCYPHA_ENABLE_CUDA=ON` to exercise `cuda_smoke --bench`. See [`docs/FUTURE.md`](../FUTURE.md) §1.
 
@@ -82,6 +84,19 @@ The native hot path is complete. The next priorities are about depth and distrib
 
 ---
 
+## Phase 6 — CyphaLM research prototype
+
+**`cypha_lm/`** — language-model stack (Izaac embeddings, NIG experts, GRIA projection, CellAI SSM). Not in CI; run `pytest cypha_lm/ -v` locally.
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| **D17 held-out BPC** | **4.50** | Gutenberg; bigram baseline 3.69 |
+| **D04 “33.2 bpc”** | benchmark bug | Wrong prob indexing on `CyphaDIF + CharNgramEncoder` — not CyphaLM |
+
+See [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) § Language model and [`CHANGELOG.md`](../../CHANGELOG.md) §1.0.0 (D04 note).
+
+---
+
 ## Doc index
 
 | File | Purpose |
@@ -90,5 +105,6 @@ The native hot path is complete. The next priorities are about depth and distrib
 | [PORT_CONTRACT.md](../port/PORT_CONTRACT.md) | Frozen binary/REST contracts |
 | [PORT_FULL_STACK.md](../port/PORT_FULL_STACK.md) | Per-milestone record (M1–M6) |
 | [FUTURE.md](../FUTURE.md) | Future directions in depth |
+| [RESEARCH_STATUS.md](../RESEARCH_STATUS.md) | Benchmark journal, D04/D17, Kernel LLR priority |
 | [VERIFY_PLAN.md](VERIFY_PLAN.md) | WSL, benchmark, cProfile workflow |
 | [MAINTENANCE.md](MAINTENANCE.md) | When to regen fixtures, rebuild native, sync DDL |

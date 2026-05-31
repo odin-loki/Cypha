@@ -1,8 +1,14 @@
-# Cypha Bench Baseline Report
+# Cypha Bench — Post-Diagnostic Tuned Results
 
 Generated: 2026-05-30 09:57 UTC
 
-Default parameters only — no hyperparameter tuning.
+> **Labelling note:** This report is named `BASELINE_REPORT` but was generated **after**
+> the post-diagnostic tuning run using `cypha_bench/config/everyday_profile.json`
+> (deliberation disabled, `delta_lr=0.03`). It is **not** a default-parameters baseline.
+> For the true untuned baseline, run `benchmark_baseline.py --profile none` and compare
+> against the results in `TUNING_REPORT.md` (which shows before/after tuning deltas).
+>
+> See [`docs/RESEARCH_STATUS.md`](../docs/RESEARCH_STATUS.md) for the full benchmark history.
 
 ## Executive Summary
 

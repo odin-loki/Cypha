@@ -2,6 +2,8 @@
 
 Saved next to `model.cypha` in the registry (`cypha_studio.core.registry`). Native loaders must reproduce **`Preprocessor.transform_one`** / **`transform`** behaviour for the same file.
 
+**Not the same as training `sidecar.json`:** parity fixtures under `parity_fixtures/*/sidecar.json` hold numeric goldens for native training/inference harnesses (see [`PORT_CONTRACT.md`](PORT_CONTRACT.md)). This document covers only the registry artifact **`preprocessor.json`**.
+
 **Source of truth:** `Preprocessor.save_state` / `load_state` in `cypha_studio/core/dataset.py`.
 
 ## Fields (JSON object)

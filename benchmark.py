@@ -1,12 +1,32 @@
 """
 CyphaDIF Universal Benchmark
 ============================
-Full benchmark: classification, regression, generation, all features.
-Compares against: Random Forest, Gradient Boosting, SVM, MLP, Logistic/Ridge.
+
+End-to-end Python benchmark comparing CyphaDIF (VectorEncoder and RFF variants)
+against sklearn baselines on standard tabular datasets.
+
+Sections (printed in order):
+  1. Classification — iris, wine, breast cancer, digits (accuracy, F1, timing)
+  2. Regression — diabetes and synthetic sets (R², RMSE vs RF/GB/SVM/MLP/Ridge)
+  3. Feature matrix — online learning, OOD, generation, scenario planning smoke tests
+  4. Grand summary — side-by-side Cypha vs best baseline per dataset
+
+Output: human-readable tables to stdout (no JSON file). Relative bars show
+performance within each row; ``< best`` marks the top scorer. Use for local
+regression smoke after engine changes — not the multi-domain ``cypha_bench/`` harness.
+
+Usage:
+  python benchmark.py
+  python benchmark.py --help
 """
 
 import os
 import sys
+
+if any(a in sys.argv for a in ("-h", "--help")):
+    print(__doc__)
+    raise SystemExit(0)
+
 import warnings
 import time
 import math

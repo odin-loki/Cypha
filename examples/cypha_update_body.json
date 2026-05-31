@@ -1,0 +1,8 @@
+{
+  "input": [0.1, 0.2, -0.1, 0.3],
+  "correct_label": "class_a",
+  "use_gh": false,
+  "regression_y": null,
+  "router_train_label": null,
+  "replay_u01": null
+}

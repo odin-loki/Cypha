@@ -1,5 +1,68 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "cypha"
+version = "1.0.0"
+description = "CyphaDIF — Differential Information Field Classifier: a custom AI architecture unifying AIXI/Solomonoff, information geometry, the Free Energy Principle, and the Information Bottleneck."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [
+    { name = "Odin Loch" },
+]
+keywords = [
+    "machine-learning",
+    "online-learning",
+    "information-geometry",
+    "bayesian",
+    "classifier",
+    "CyphaDIF",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-learn>=1.3",
+]
+
+[project.optional-dependencies]
+studio = [
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.23",
+    "httpx>=0.24",
+    "pydantic>=2.0",
+    "PySide6>=6.5",
+    "pyqtgraph>=0.13",
+]
+gpu = [
+    "cupy-cuda12x>=12.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-qt",
+]
+
+[project.urls]
+Repository = "https://github.com/odin-loki/Cypha"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cypha_studio*", "cypha_accel*", "cypha_lm*", "cypha_bench*", "cypha_som*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Note: cypha_lm/ and cypha_som/tests/ have their own test suites — run them explicitly:
+#   pytest cypha_lm/ -v --tb=short
+#   pytest cypha_som/tests/ -q
 pythonpath = ["."]
 addopts = "-ra"
 filterwarnings = ["ignore"]

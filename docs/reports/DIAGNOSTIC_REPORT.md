@@ -223,8 +223,13 @@ Effect: Additional ~3pp improvement on per-benchmark basis.
 - **Upgrade required:** Investigate whether a second encoding pass or kernel LLR closes this
 
 ### CellAI / SSM (not tested — requires temporal benchmarks)
-- D10 ECG accuracy = 0.0% (structural failure, not tested in this session)
-- D04 CyphaLM: 33.2 bits/char vs SGD 0.66 bits/char (6× worse)
+- D10 ECG accuracy: 17–20% on 5-class (temporal domain, CellAI SSM not yet tuned here)
+- **D04 "33.2 bpc" is a benchmark bug** — D04 uses `CyphaDIF + CharNgramEncoder`, not CyphaLM.
+  The metric hits 33.2 because `probs[next_idx]` indexes by char ID into a label-ordered
+  probability array, bottoming out at the 1e-10 floor. Fix: correct the indexing in
+  `cypha_bench/domains/d04_generation_language.py`. The SGD "0.66 bpc" comparison was
+  cherry-picked from step 1000; SGD final is 1.51 bpc.
+- Real CyphaLM evaluation: **D17 held-out BPC = 4.50** (bigram baseline 3.69)
 - These require dedicated temporal benchmarks per Phase 5 of the diagnostic plan
 
 ---

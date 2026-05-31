@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(cypha_native LANGUAGES CXX C)
+project(cypha_native VERSION 0.1.0 LANGUAGES CXX C)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 

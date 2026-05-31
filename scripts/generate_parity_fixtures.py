@@ -240,7 +240,21 @@ def main() -> None:
         "- `mke_train_step/` — one `MKERegressor.train_step` vs `mke_train_step_parity` (from `generate_mke_train_step_fixture.py`)\n"
         "- `mke_train_extended/` — multi-step `MKERegressor.train_step` + `replay_u01` / `replay_warmup` (from `generate_mke_train_extended_fixture.py`)\n"
         "- `regression_head.json` — optional scalar MoE targets per class label; "
-        "see `docs/port/schemas/regression_head.schema.json`\n",
+        "see `docs/port/schemas/regression_head.schema.json`\n"
+        "- `memory_train/` — one `DIFMemory.train` step (`before.cypha`, `after.cypha`, `sidecar.json`; `generate_memory_train_parity.py`)\n"
+        "- `preprocessor/` — `preprocessor.json` + `sidecar.json` for `preprocessor_parity` (from main generator)\n"
+        "- `f_field.json` — exported `F_field` sidecar for REST / NIG tests (`export_f_field_json.py`)\n"
+        "- `regression_m4/sidecar.json` — MoE batch + EMA + RLS + two-stage combine + MKE routing (`generate_regression_m4_fixture.py`)\n"
+        "- `rff_regression/sidecar.json` — RFF / MKE math kernels (`generate_rff_regression_fixture.py`)\n"
+        "- `two_stage_pipeline/sidecar.json` — `two_stage_dif_predict_with_clf` (`generate_two_stage_pipeline_fixture.py`)\n"
+        "- `two_stage_ridge_fit/sidecar.json` — ridge fit from LLR (`generate_two_stage_ridge_fit_fixture.py`)\n"
+        "- `two_stage_e2e_ridge/sidecar.json` — quantile-DIF LLR → ridge e2e (`generate_two_stage_e2e_ridge_fixture.py`)\n"
+        "- `generation/sidecar.json` — `CyphaDIF.generate` goldens (`generate_generation_fixture.py`)\n"
+        "- `registry_register/card.json` — sample model card for `registry_register` CTest\n"
+        "\n"
+        "Standalone generators (not invoked by `generate_parity_fixtures.py`): "
+        "`memory_train_parity`, `regression_m4`, `rff_regression`, `two_stage_*`, `generation`, "
+        "`export_f_field_json.py`, `export_regression_head.py`.\n",
         encoding="utf-8",
     )
 

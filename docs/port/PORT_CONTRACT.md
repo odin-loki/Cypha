@@ -29,6 +29,7 @@ After native training, **`patch_infer_training_snapshot`** in `native/qt/src/she
 | `field_W_T`, `w_inject`, `field_step`, `field_a_eff` | `root_map_assign` | field_a_eff as float64 tensor |
 | `ll_world_ema` | `root_map_assign` | hardcoded **`-1.5`** — matches Python `_save_state` (also always writes -1.5) |
 | `total_correct`, `feat_dim` | `root_map_assign` | |
+|| `field_sr_vec` | `root_map_assign` (optional) | spectral-radius vector, shape `(field_dim,)` float64 — written when causal field is present; native reads if present, otherwise recomputes from `field_W_T`; older v3 without it still load cleanly |
 | `ood_sigma`, `gh_chi_session`, `gh_psi_session`, `gh_R_base`, `gh_inv_v_clean` | `root_map_assign` (via `NativeSessionSnapshotPatch`) | `gh_R_base` always float 1.0 if GH unused; Python writes `None` → no functional diff (load checks `gh_inv_v_clean` first) |
 
 **Known remaining gaps (non-functional):**
@@ -49,7 +50,17 @@ Treat this as the **single spec** shared by `infer`, `batch_infer`, `batch_infer
 4. **World gate**: GH–NIG gate as in `DIFMemory.classify` / `world_gate_vector(..., gh_chi=1, gh_psi=1)` — **not** the legacy sigmoid-only path when GH is active.
 5. **Confidence**: `conf_i = probs[i, argmax_i] * gate_i` (same as returned `(label, confidence)` from `infer` / `batch_infer`).
 
-**Parity rule**: For the same loaded state, `temperature`, `use_field`, and inputs, `batch_infer` and `infer` must agree on **label and confidence** within floating tolerance (`tests/test_parity_fixtures.py`). The batch GH gate calls `_nig_R_eff` row-wise, matching `DIFMemory.classify`.
+**Parity rule**: For the same loaded state, `temperature`, `use_field`, and inputs, `batch_infer` and `infer` must agree on **label and confidence** within floating tolerance (`tests/test_parity_fixtures.py`). The batch GH gate calls `_nig_R_eff` row-wise, matching `DIFMemory.classify`. Fixtures assume `use_kernel_llr=False` and deliberation disabled (`deliberation_lo >= deliberation_hi`).
+
+### Optional Python-only inference modifiers (not in native M1–M6)
+
+These features exist in `Cypha.py` but are **not implemented** in the native C++ / `cypha_rest` / Qt shell. Parity fixtures are generated with both disabled.
+
+- **Kernel LLR** (`CyphaDIF(use_kernel_llr=True)`): blends Nyström RBF scores from `KernelMemory` with linear LLRs inside `infer` / `train_step`. `KernelMemory` maintains a reservoir of landmark points and computes kernel-lifted scores at inference time. Not serialised in `.cypha` v3; native `score_matrix_use_field` has no equivalent. Added in commit `1dbfa13` (2026-05-30). Priority-1 architectural upgrade — see [`docs/FUTURE.md §0a`](../FUTURE.md).
+
+- **Deliberation** (`deliberation_lo`, `deliberation_hi`): when `lo < hi` and the inferred confidence falls in `[lo, hi]`, `infer` / `infer_full` return label `__unknown__` and halve the confidence. Default is **`deliberation_lo=1.0`, `deliberation_hi=0.0`** (disabled; `lo >= hi` → no abstention). Not implemented in native REST/Qt/C++. With defaults there is no numeric difference from native.
+
+- **`gh_infer` vs native REST `use_gh`:** FastAPI `InferenceEngine` with `use_gh=True` calls `CyphaDIF.gh_infer` (NIG-adjusted temperature `T_adj`, `ood_sigma=inf` classify path). Native `cypha_rest` with `use_gh=True` applies `world_gate_vector_use_field` at χ=ψ=1 on the standard LLR+softmax path. Label/confidence may differ for the same model and input — treat as a known cross-runtime gap until implementations are aligned.
 
 ## 3. REST API (FastAPI)
 
@@ -68,6 +79,8 @@ Base: `cypha_studio.server.api.create_app`. Typical routes:
 | POST | `/load` | Body: `{ "name": str, "version"?: str }` (`version` defaults to **`latest`**). FastAPI returns **`422`** if **`name`** is missing. On success: **`200`** `{ "loaded": <ModelCard dict> }` — **`loaded`** must expose **every** `ModelCard` field (stable key set for Qt/native); **`503`** `{ "detail": "No registry configured" }` if no registry (`cypha_rest` without **`--registry`**, or FastAPI **`create_app(..., registry=None)`** — the default **`api:app`** has a registry from **`CYPHA_REGISTRY_ROOT`**); **`404`** — native `{ "detail": "model not found" }`; FastAPI `{ "detail": "<exception message>" }` (typically a missing card path — not byte-identical to native) |
 | GET | `/session` | `n_predictions`, `n_corrections`, `correction_accuracy`, `mean_confidence`, `mean_anomaly`, `n_ood_flagged`, `label_distribution`, `session_duration_s` (same keys in `/metrics` → `session` when a session exists). FastAPI: if `create_app(..., session=None)`, returns **200** with zeros / empty `label_distribution` (no `InferenceSession` attached); native `cypha_rest` always has an in-process session buffer when a model is loaded. |
 | DELETE | `/session` | → `{ "cleared": true }` (**200** always on FastAPI); clears prediction history and session GH χ/ψ when an `InferenceSession` exists (native matches `InferenceSession.clear`). If `session=None` on `create_app`, FastAPI treats delete as a no-op but still returns **`cleared: true`**. |
+| GET | `/session/rng` | `{ "state": [uint32 × 624], "pos": int }` — snapshot of session RNG for deterministic replay cross-runtime. |
+| POST | `/session/rng` | Body `{ "seed": int }` or `{ "state": [...], "pos": int }` — re-seed or restore; returns GET shape. Tested in `tests/test_cypha_rest_smoke.py`. |
 | GET | `/classes` | `{ "classes": { label: { "n_obs": float } } }`; **`503`** `{ "detail": "No model loaded" }` when no model |
 
 **Malformed request body:** if the client sends **invalid JSON** on `POST /predict`, `/update`, or `/adapt_temperature`, native `cypha_rest` responds with **`400`** and `{"detail":"bad json"}`. The same applies to **`POST /load`** when a registry is configured (parse fails before lookup). **Note:** with **no** registry, native **`POST /load`** returns **`503`** before parsing the body, so a garbage body still yields **`{"detail":"No registry configured"}`** rather than **`bad json`**. FastAPI parses the body first and typically responds with **`422`** and a structured `detail` (validation / JSON decode) — not byte-identical to native.
@@ -105,6 +118,8 @@ Qt or C++ clients should treat these JSON shapes as **stable** for v1; add field
 - **`mke_train_step/`** (`before.cypha`, `f_field.json`, `sidecar.json`): one scalar **`MKERegressor.train_step`** vs native **`mke_train_step_parity`** (CTest **`native_mke_train_step`**). Regenerate: **`python scripts/generate_mke_train_step_fixture.py`** (also invoked from **`generate_parity_fixtures.py`**).
 - **`mke_train_extended/`**: same layout; sidecar **`fixture_schema` ≥ 2** with **`steps`**, optional **`replay_warmup`** + **`replay_u01`** when **`replay_ratio > 0`** — sequential **`MKERegressor.train_step`** checks vs **`mke_train_step_parity`** (CTest **`native_mke_train_extended`**). Regenerate: **`python scripts/generate_mke_train_extended_fixture.py`** (also invoked from **`generate_parity_fixtures.py`**).
 - **`regression_head.json`** (optional): expert `mu` / `var_ema` per class label — native `cypha_rest` `/predict` regression fields (`tests/test_cypha_rest_smoke.py`).
+
+**Staleness note (as of 2026-05-31):** fixtures in `parity_fixtures/` were last committed 2026-03-31. `Cypha.py` received updates on 2026-05-30 (commit `1dbfa13`) that added `KernelMemory` and deliberation. **These additions do not affect fixture numerics** when generated with `use_kernel_llr=False` (the default) and `deliberation_lo >= deliberation_hi` (the default) — both are off in all current fixture generators. However, you should regenerate fixtures after any further changes to `score_matrix`, `train_step_vector`, or world-prior update paths.
 
 Regenerate after intentional numerical changes:
 

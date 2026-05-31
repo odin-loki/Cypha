@@ -68,7 +68,12 @@ def _run_char_lm(text: str, n_steps: int = 5000, context_length: int = 50) -> di
 
         if n_trained % 500 == 0:
             _, probs, ep_var = clf.predict(x)
-            true_prob = float(probs[next_idx]) if next_idx < len(probs) else 1e-10
+            # probs follows memory class-key order, not char index — map label string to slot.
+            label_str = str(next_idx)
+            with clf.dif.memory._lock:
+                ordered_labels = list(clf.dif.memory._classes.keys())
+            slot = ordered_labels.index(label_str) if label_str in ordered_labels else -1
+            true_prob = float(probs[slot]) if 0 <= slot < len(probs) else 1e-10
             bpc = float(-np.log2(max(true_prob, 1e-10)))
             sgd_probs = sgd.predict_proba(x.reshape(1, -1))[0]
             sgd_true = float(sgd_probs[next_idx]) if next_idx < len(sgd_probs) else 1e-10

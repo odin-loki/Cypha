@@ -1,7 +1,5 @@
 # CyphaDIF Upgrades: Regression-Competent DIF Routing, Variant-Aware Profiles, and Reproducible Architecture Search
 
-> **Archived copy:** also at [`docs/reports/BENCH_PAPER.md`](../docs/reports/BENCH_PAPER.md). See [`docs/RESEARCH_STATUS.md`](../docs/RESEARCH_STATUS.md) for the full research history.
-
 **Authors:** Cypha project contributors  
 **Date:** 2026-05-26  
 **Repo:** `Cypha` (Windows)  

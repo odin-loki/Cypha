@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("fastapi")
-pytest.importorskip("pydantic")
+pytest.importorskip("fastapi", reason="FastAPI not installed (cypha_studio/requirements.txt)")
+pytest.importorskip("pydantic", reason="Pydantic not installed (cypha_studio/requirements.txt)")
 
 from cypha_studio.server import api as api_mod
 
@@ -32,7 +32,7 @@ def test_create_app_without_arguments_leaves_registry_none():
 
 def test_default_module_app_get_models_returns_200():
     """``GET /models`` on ``uvicorn … api:app`` scans ``CYPHA_REGISTRY_ROOT`` (may be empty)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     client = TestClient(api_mod.app)
@@ -45,7 +45,7 @@ def test_default_module_app_get_models_returns_200():
 
 def test_default_module_app_metrics_includes_registry_model_count():
     """``GET /metrics`` reports ``registry_model_count`` when the default app has a registry."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     client = TestClient(api_mod.app)
@@ -117,7 +117,7 @@ def test_predict_post_roundtrip_with_engine():
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
 
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
 
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
     from cypha_studio.core.registry import ModelRegistry
@@ -149,7 +149,7 @@ def test_predict_update_adapt_malformed_json_returns_422(route):
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
 
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
 
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
     from cypha_studio.core.registry import ModelRegistry
@@ -178,7 +178,7 @@ def test_predict_update_adapt_wrong_input_dim_returns_400():
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
 
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
 
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
     from cypha_studio.core.registry import ModelRegistry
@@ -235,7 +235,7 @@ def test_adapt_temperature_post_roundtrip_with_engine():
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
 
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
 
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
     from cypha_studio.core.registry import ModelRegistry
@@ -270,7 +270,7 @@ def test_update_post_roundtrip_with_engine():
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
 
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
 
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
     from cypha_studio.core.registry import ModelRegistry
@@ -307,7 +307,7 @@ def test_update_regression_y_returns_501_native_only():
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
 
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
 
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
     from cypha_studio.core.registry import ModelRegistry
@@ -456,7 +456,7 @@ def test_metrics_registry_model_count_updates_after_register(tmp_path):
 
 def test_post_load_success_returns_full_modelcard_keys(tmp_path):
     """``POST /load`` → ``loaded`` matches ``ModelCard`` field names (native clients rely on stable keys)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from dataclasses import fields
@@ -490,7 +490,7 @@ def test_post_load_success_returns_full_modelcard_keys(tmp_path):
 
 def test_predict_update_adapt_classes_503_detail_without_engine():
     """Matches native ``cypha_rest`` JSON for missing model (``503`` + ``detail``)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     app = api_mod.create_app(engine=None, registry=None, session=None)
@@ -525,7 +525,7 @@ def test_predict_update_adapt_classes_503_detail_without_engine():
 
 def test_session_get_without_inference_session_returns_empty_summary():
     """``session=None`` on ``create_app``: ``GET /session`` is still **200** with zeroed summary."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -555,7 +555,7 @@ def test_session_get_without_inference_session_returns_empty_summary():
 
 def test_metrics_session_null_when_inference_session_not_attached():
     """``/metrics`` → ``session: null`` when no ``InferenceSession`` on the app."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -577,7 +577,7 @@ def test_metrics_session_null_when_inference_session_not_attached():
 
 def test_delete_session_noop_when_inference_session_not_attached():
     """``DELETE /session`` is always **200** with ``cleared`` (no-op if there is no ``InferenceSession``)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -599,7 +599,7 @@ def test_delete_session_noop_when_inference_session_not_attached():
 
 def test_predict_increments_engine_metrics_without_inference_session():
     """``POST /predict`` updates engine counters in ``/metrics``; ``GET /session`` stays zeroed without ``InferenceSession``."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -629,7 +629,7 @@ def test_predict_increments_engine_metrics_without_inference_session():
 
 def test_delete_session_when_no_engine_returns_cleared():
     """``DELETE /session`` is **200** + ``cleared`` even when there is no loaded model."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     app = api_mod.create_app(engine=None, registry=None, session=None)
@@ -640,7 +640,7 @@ def test_delete_session_when_no_engine_returns_cleared():
 
 def test_load_missing_name_returns_422():
     """``POST /load`` body must include ``name`` (``version`` defaults to ``latest``)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     from cypha_studio.core.registry import ModelRegistry
@@ -654,7 +654,7 @@ def test_load_missing_name_returns_422():
 
 def test_load_malformed_json_returns_422():
     """Invalid JSON on ``POST /load`` → **422** (native ``cypha_rest`` uses **400** ``{"detail":"bad json"}``)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     from cypha_studio.core.registry import ModelRegistry
@@ -671,7 +671,7 @@ def test_load_malformed_json_returns_422():
 
 def test_load_with_valid_body_but_no_registry_returns_503():
     """``registry=None`` on ``create_app``: ``POST /load`` is **503** before any disk lookup."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     app = api_mod.create_app(engine=None, registry=None, session=None)
@@ -681,7 +681,7 @@ def test_load_with_valid_body_but_no_registry_returns_503():
 
 
 def test_metrics_and_ready_endpoints():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     app = api_mod.create_app(engine=None, registry=None, session=None)
@@ -701,7 +701,7 @@ def test_metrics_and_ready_endpoints():
 
 
 def test_ready_ok_with_engine():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -756,7 +756,7 @@ def test_ready_ok_with_engine():
 
 
 def test_health_get_ok():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     app = api_mod.create_app(engine=None, registry=None, session=None)
@@ -771,7 +771,7 @@ def test_health_get_ok():
 
 def test_health_n_predictions_matches_metrics_after_predict():
     """``GET /health`` and ``GET /metrics`` use the same engine counter (``PORT_CONTRACT`` §3)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -801,7 +801,7 @@ def test_health_n_predictions_matches_metrics_after_predict():
 
 def test_get_models_empty_registry_returns_empty_lists(tmp_path):
     """Fresh registry root with no saved models → ``models: []`` (full and summary)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from fastapi.testclient import TestClient
 
     from cypha_studio.core.registry import ModelRegistry
@@ -815,7 +815,7 @@ def test_get_models_empty_registry_returns_empty_lists(tmp_path):
 
 
 def test_session_get_and_delete_roundtrip():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -845,7 +845,7 @@ def test_session_get_and_delete_roundtrip():
 
 
 def test_classes_get_with_engine():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -869,7 +869,7 @@ def test_classes_get_with_engine():
 
 
 def test_models_summary_vs_full(tmp_path):
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -907,7 +907,7 @@ def test_models_summary_vs_full(tmp_path):
 
 def test_predict_regression_head_overlay(tmp_path):
     """Optional ``regression_head.json`` fills ``regression_val`` / ``uncertainty`` on ``/predict``."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     import json
 
     import numpy as np
@@ -975,7 +975,7 @@ def test_session_rng_get_no_engine_returns_503():
 
 
 def test_session_rng_get_returns_mt19937_shape():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     app, client = _make_trained_app()
     r = client.get("/session/rng")
     assert r.status_code == 200, r.text
@@ -987,7 +987,7 @@ def test_session_rng_get_returns_mt19937_shape():
 
 
 def test_session_rng_post_seed_changes_state():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     app, client = _make_trained_app(seed=10)
     s0 = client.get("/session/rng").json()["state"]
     r = client.post("/session/rng", json={"seed": 999})
@@ -1007,14 +1007,14 @@ def test_session_rng_post_no_engine_returns_503():
 
 
 def test_session_rng_post_bad_request_returns_400():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     app, client = _make_trained_app()
     r = client.post("/session/rng", json={})
     assert r.status_code in (400, 422)
 
 
 def test_session_rng_post_wrong_state_length_returns_400():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     app, client = _make_trained_app()
     r = client.post("/session/rng", json={"state": [0] * 100, "pos": 0})
     assert r.status_code == 400
@@ -1023,7 +1023,7 @@ def test_session_rng_post_wrong_state_length_returns_400():
 def test_session_rng_roundtrip_seed_to_state_matches_numpy():
     """After POST /session/rng with seed S, GET returns the same state as numpy MT19937(S)."""
     import numpy as np
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     app, client = _make_trained_app()
     seed = 424242
     r = client.post("/session/rng", json={"seed": seed})
@@ -1042,7 +1042,7 @@ def test_session_rng_roundtrip_seed_to_state_matches_numpy():
 
 def test_session_rng_full_state_restore_roundtrip():
     """GET /session/rng → POST /session/rng with that state → GET again returns identical state."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     app, client = _make_trained_app(seed=31)
     s1 = client.get("/session/rng").json()
     # Seed to something different

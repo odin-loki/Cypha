@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-pytest.importorskip("httpx")
+pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
 
 _ROOT = Path(__file__).resolve().parents[1]
 _FIX = _ROOT / "parity_fixtures"
@@ -619,7 +619,7 @@ def test_cypha_rest_adapt_temperature_matches_python(rest_server):
 
 def test_cypha_rest_fastapi_json_shape_parity(rest_server):
     """Same fixture model: native `cypha_rest` and FastAPI share JSON key trees (empty session)."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from cypha_studio.server import api as api_mod
 
     if not getattr(api_mod, "FASTAPI_AVAILABLE", False):
@@ -1000,7 +1000,7 @@ def test_cypha_rest_predict_regression_sidecar(rest_server_regression):
 
 def test_cypha_rest_fastapi_regression_numeric_parity(rest_server_regression):
     """FastAPI ``regression_head_path`` matches native ``cypha_rest`` ``/predict`` MoE numbers."""
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
     from cypha_studio.server import api as api_mod
 
     if not getattr(api_mod, "FASTAPI_AVAILABLE", False):
