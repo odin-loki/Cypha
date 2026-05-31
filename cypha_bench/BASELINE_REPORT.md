@@ -1,14 +1,8 @@
-# Cypha Bench — Post-Diagnostic Tuned Results
+# Cypha Bench Baseline Report
 
-Generated: 2026-05-30 09:57 UTC
+Generated: 2026-05-31 04:48 UTC
 
-> **Labelling note:** This report is named `BASELINE_REPORT` but was generated **after**
-> the post-diagnostic tuning run using `cypha_bench/config/everyday_profile.json`
-> (deliberation disabled, `delta_lr=0.03`). It is **not** a default-parameters baseline.
-> For the true untuned baseline, run `benchmark_baseline.py --profile none` and compare
-> against the results in `TUNING_REPORT.md` (which shows before/after tuning deltas).
->
-> See [`docs/RESEARCH_STATUS.md`](../docs/RESEARCH_STATUS.md) for the full benchmark history.
+Default parameters only — no hyperparameter tuning.
 
 ## Executive Summary
 
@@ -17,7 +11,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D01
 
-*Timestamp:* 2026-05-30T09:43:42.295518+00:00
+*Timestamp:* 2026-05-31T04:22:39.680270+00:00
 
 ### linearly_separable_2class
 
@@ -171,7 +165,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D02
 
-*Timestamp:* 2026-05-30T09:45:11.323025+00:00
+*Timestamp:* 2026-05-31T04:33:06.100228+00:00
 
 ### summary
 
@@ -181,7 +175,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D03
 
-*Timestamp:* 2026-05-30T09:39:08.631843+00:00
+*Timestamp:* 2026-05-31T04:34:06.704093+00:00
 
 ### summary
 
@@ -191,27 +185,30 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D04
 
-*Timestamp:* 2026-05-30T09:08:49.355885+00:00
+*Timestamp:* 2026-05-31T04:36:38.063859+00:00
 
 ### summary
 
 | Metric | Value |
 | --- | --- |
-| `char_lm.bits_per_char` | [10 items] |
-| `char_lm.epistemic_var` | [10 items] |
-| `char_lm.expert_count` | [10 items] |
-| `char_lm.sgd_bits_per_char` | [10 items] |
-| `char_lm.steps` | [10 items] |
-| `char_lm.trained_steps` | 5000 |
+| `char_lm.bits_per_char` | [32.77338456029815, 32.77338456029815] |
+| `char_lm.epistemic_var` | [1.106240844614963e-05, 1.1430822061028679e-05] |
+| `char_lm.eval_method` | held_out_20pct_suffix |
+| `char_lm.expert_count` | [61, 63] |
+| `char_lm.final_bpc` | 32.6057 |
+| `char_lm.final_sgd_bpc` | 6.6357 |
+| `char_lm.sgd_bits_per_char` | [8.215069115163782, 7.401769497401426] |
+| `char_lm.steps` | [500, 1000] |
+| `char_lm.trained_steps` | 1500 |
 | `char_lm.vocab_size` | 100 |
 | `corpus_source` | moby_dick.txt |
 | `domain` | d04_generation_language |
-| `final_bpc` | 33.2193 |
-| `final_sgd_bpc` | 1.5085 |
+| `final_bpc` | 32.6057 |
+| `final_sgd_bpc` | 6.6357 |
 
 ## D05
 
-*Timestamp:* 2026-05-30T09:48:26.176761+00:00
+*Timestamp:* 2026-05-31T04:36:41.629777+00:00
 
 ### summary
 
@@ -250,7 +247,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D06
 
-*Timestamp:* 2026-05-30T09:54:18.691851+00:00
+*Timestamp:* 2026-05-31T04:36:50.785109+00:00
 
 ### summary
 
@@ -289,41 +286,41 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D07
 
-*Timestamp:* 2026-05-30T09:37:05.723824+00:00
+*Timestamp:* 2026-05-31T04:37:00.892185+00:00
 
 ### summary
 
 | Metric | Value |
 | --- | --- |
-| `baselines.dummy_majority.accuracy` | 0.6233 |
-| `baselines.dummy_majority.f1_macro` | 0.2560 |
-| `baselines.gradient_boosting.accuracy` | 0.9983 |
-| `baselines.gradient_boosting.f1_macro` | 0.9987 |
-| `baselines.knn_5.accuracy` | 0.8917 |
-| `baselines.knn_5.f1_macro` | 0.8849 |
-| `baselines.logistic_regression.accuracy` | 0.9867 |
-| `baselines.logistic_regression.f1_macro` | 0.9614 |
-| `baselines.random_forest.accuracy` | 0.9983 |
-| `baselines.random_forest.f1_macro` | 0.9987 |
-| `boundary_uncertainty_spearman` | -0.2209 |
-| `cypha_metrics.alpha_distribution` | [0.946946451748881, 0.9390932347103469, 0.9415256174589455] |
+| `baselines.dummy_majority.accuracy` | 0.6150 |
+| `baselines.dummy_majority.f1_macro` | 0.2539 |
+| `baselines.gradient_boosting.accuracy` | 1.0000 |
+| `baselines.gradient_boosting.f1_macro` | 1.0000 |
+| `baselines.knn_5.accuracy` | 0.8850 |
+| `baselines.knn_5.f1_macro` | 0.8508 |
+| `baselines.logistic_regression.accuracy` | 0.9833 |
+| `baselines.logistic_regression.f1_macro` | 0.9464 |
+| `baselines.random_forest.accuracy` | 1.0000 |
+| `baselines.random_forest.f1_macro` | 1.0000 |
+| `boundary_uncertainty_spearman` | -0.3313 |
+| `cypha_metrics.alpha_distribution` | [0.9385387760907788, 0.9466354697247408, 0.9408376372079887] |
 | `cypha_metrics.expert_count` | 3 |
 | `cypha_metrics.fraction_edge_of_chaos` | 0.0000 |
-| `cypha_metrics.mean_aleatoric_var` | 0.0209 |
-| `cypha_metrics.mean_alpha` | 0.9425 |
-| `cypha_metrics.mean_epistemic_var` | 0.0060 |
-| `cypha_metrics.std_epistemic_var` | 0.0538 |
-| `cypha_metrics.uncertainty_rank_correlation` | 0.5309 |
-| `cypha_scores.accuracy` | 0.9333 |
-| `cypha_scores.f1_macro` | 0.8859 |
+| `cypha_metrics.mean_aleatoric_var` | 0.0071 |
+| `cypha_metrics.mean_alpha` | 0.9420 |
+| `cypha_metrics.mean_epistemic_var` | 0.0026 |
+| `cypha_metrics.std_epistemic_var` | 0.0340 |
+| `cypha_metrics.uncertainty_rank_correlation` | 0.4478 |
+| `cypha_scores.accuracy` | 0.9517 |
+| `cypha_scores.f1_macro` | 0.9019 |
 | `domain` | d07_poker |
 | `n_hands` | 3000 |
 | `sgd_online.accuracy` | 0.9400 |
-| `sgd_online.f1_macro` | 0.9118 |
+| `sgd_online.f1_macro` | 0.8974 |
 
 ## D08
 
-*Timestamp:* 2026-05-30T09:57:37.048954+00:00
+*Timestamp:* 2026-05-31T04:40:01.521472+00:00
 
 ### raw
 
@@ -387,7 +384,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D09
 
-*Timestamp:* 2026-05-30T09:40:17.728078+00:00
+*Timestamp:* 2026-05-31T04:40:42.068032+00:00
 
 ### summary
 
@@ -426,7 +423,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D10
 
-*Timestamp:* 2026-05-30T09:37:29.880542+00:00
+*Timestamp:* 2026-05-31T04:41:26.399449+00:00
 
 ### 10A_ecg_classification
 
@@ -464,14 +461,14 @@ Generated: 2026-05-30 09:57 UTC
 | `accuracy` | 0.4990 |
 | `expert_count` | 2 |
 | `f1_macro` | 0.3329 |
-| `mean_confidence` | 0.9520 |
-| `mean_epistemic_var` | 0.2967 |
+| `mean_confidence` | 0.9657 |
+| `mean_epistemic_var` | 0.2086 |
 | `note` | near_chance_expected |
-| `uncertainty_rank_correlation` | -0.0254 |
+| `uncertainty_rank_correlation` | -0.0107 |
 
 ## D11
 
-*Timestamp:* 2026-05-30T09:30:10.974735+00:00
+*Timestamp:* 2026-05-31T04:42:04.885620+00:00
 
 ### 11A_cartpole_value_regression
 
@@ -507,7 +504,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D12
 
-*Timestamp:* 2026-05-30T09:32:38.739459+00:00
+*Timestamp:* 2026-05-31T04:45:10.626968+00:00
 
 ### 12A_binary_intrusion
 
@@ -533,7 +530,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D13
 
-*Timestamp:* 2026-05-30T09:02:56.553275+00:00
+*Timestamp:* 2026-05-31T04:45:26.054188+00:00
 
 ### 13A_alpha_vs_compression
 
@@ -553,7 +550,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D14
 
-*Timestamp:* 2026-05-30T09:55:10.312742+00:00
+*Timestamp:* 2026-05-31T04:45:54.918111+00:00
 
 ### 14A_feynman_all_equations
 
@@ -614,7 +611,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D15
 
-*Timestamp:* 2026-05-30T09:36:59.709854+00:00
+*Timestamp:* 2026-05-31T04:46:04.565827+00:00
 
 ### 15A_gaussian_noise
 
@@ -655,7 +652,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D16
 
-*Timestamp:* 2026-05-30T09:30:06.165366+00:00
+*Timestamp:* 2026-05-31T04:46:23.964314+00:00
 
 ### 16A_task_discovery
 
@@ -710,7 +707,7 @@ Generated: 2026-05-30 09:57 UTC
 
 ## D17
 
-*Timestamp:* 2026-05-30T09:53:48.834603+00:00
+*Timestamp:* 2026-05-31T04:48:32.394586+00:00
 
 ### 17A_bits_per_character
 

@@ -1,6 +1,6 @@
 {
   "domain": "d10",
-  "timestamp": "2026-05-30T09:37:29.880542+00:00",
+  "timestamp": "2026-05-31T04:41:26.399449+00:00",
   "experiments": {
     "10A_ecg_classification": {
       "accuracy": 0.2,
@@ -25,10 +25,10 @@
     "10D_financial_return_sign": {
       "accuracy": 0.49898785425101216,
       "f1_macro": 0.3328831870357866,
-      "mean_epistemic_var": 0.29667860757611964,
-      "mean_confidence": 0.952001010070304,
+      "mean_epistemic_var": 0.20861930529322398,
+      "mean_confidence": 0.9656595973669787,
       "expert_count": 2,
-      "uncertainty_rank_correlation": -0.02541983910043885,
+      "uncertainty_rank_correlation": -0.010742126616924249,
       "note": "near_chance_expected"
     }
   }

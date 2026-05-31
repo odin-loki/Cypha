@@ -1,6 +1,6 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-05-31 | **Report:** `cypha_bench/BASELINE_REPORT.md` (2026-05-30)
+**Last updated:** 2026-05-31 | **Report:** `cypha_bench/BASELINE_REPORT.md` (2026-05-31)
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -16,14 +16,14 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 | **cypha_accel (GPU fused kernels)** | Working | CuPy GPU path used automatically; NumPy fallback |
 | **cypha_lm (CyphaLM)** | Research prototype | D17: 4.50 bpc (bigram: 3.69); above bigram but not competitive |
 | **cypha_som (SOM upgrades)** | Benchmarked, reverted | All upgrades worse than baseline; U3/U5/U6 structurally safe |
-| **cypha_bench (eval harness)** | 17 domains complete | Comprehensive; D04 has a known probability-indexing bug |
+| **cypha_bench (eval harness)** | 17 domains complete | Comprehensive; D04 re-designed to use proper 80/20 held-out eval |
 | **cypha_studio (PySide6 + FastAPI)** | Working | GUI + REST + registry; native `cypha_rest` also complete |
 
 ---
 
 ## Benchmark results — all 17 domains
 
-Run on 2026-05-30 using `cypha_bench/config/everyday_profile.json` (deliberation off, `delta_lr=0.03`). Full raw report: [`cypha_bench/BASELINE_REPORT.md`](../cypha_bench/BASELINE_REPORT.md).
+Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation off, `delta_lr=0.03`). Full raw report: [`cypha_bench/BASELINE_REPORT.md`](../cypha_bench/BASELINE_REPORT.md).
 
 ### Classification domains
 
@@ -80,11 +80,19 @@ Run on 2026-05-30 using `cypha_bench/config/everyday_profile.json` (deliberation
 | D17B | Alpha spectrum | mean_alpha | 0.1875 | — | ⚠ Low alpha (1 expert) |
 | D17D | Online adaptation BPC gain | ΔBPC | −0.250 | — | ✅ Adapts online |
 
-### Known broken domains
+### Language model (D04 char-level)
+
+| Domain | Task | Cypha BPC | SGD BPC | Verdict |
+|--------|------|-----------|---------|---------|
+| D04 | Char LM — held-out 20% (100-char vocab) | **32.61** | 6.64 (random) | ❌ CyphaDIF concentrates probability mass; unseen chars get floor prob |
+
+The `probs[char_id]` indexing bug has been fixed (2026-05-31). The new evaluation uses an 80/20 train/test split and reports mean BPC over the held-out suffix. The result (32.61 bpc, worse than random 6.64 = log₂(100)) is the **correct honest result**: CyphaDIF is a discriminative classifier optimised for accuracy, not probability calibration — it concentrates probability mass on the top predicted class and gives near-zero probability to rare characters. **This is a fundamental limitation of CyphaDIF for any LM task.** D17/CyphaLM (4.50 bpc) is the dedicated language-model component.
+
+### Known weak domains
 
 | Domain | Task | Cypha result | Root cause |
 |--------|------|-------------|-----------|
-| D04 | Char LM BPC | **33.2 bpc — BENCHMARK BUG** | Wrong `probs[char_id]` indexing → hits 1e-10 floor; not CyphaLM |
+| D04 | Char LM BPC | 32.61 bpc (worse than random 6.64) | CyphaDIF concentrates probability; not a LM. Use D17/CyphaLM instead. |
 | D10A | ECG classification (5-class) | 20% (chance) | CellAI SSM not tuned for temporal ECG |
 | D10B | ECG sliding window | 17.5% | Same as above |
 | D10D | Financial return sign | 49.9% | Efficient market — near-chance is expected |

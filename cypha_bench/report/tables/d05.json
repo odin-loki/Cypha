@@ -1,6 +1,6 @@
 {
   "domain": "d05_chess",
-  "timestamp": "2026-05-30T09:48:26.176761+00:00",
+  "timestamp": "2026-05-31T04:36:41.629777+00:00",
   "experiments": {
     "summary": {
       "domain": "d05_chess",
@@ -50,7 +50,7 @@
         },
         "random_forest": {
           "rmse": 0.6785296582282188,
-          "mae": 0.596885621350864,
+          "mae": 0.5968856213508639,
           "r2": 0.5017639488001697
         },
         "gradient_boosting": {

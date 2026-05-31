@@ -1,6 +1,6 @@
 {
   "domain": "cross_uncertainty_calibration",
-  "timestamp": "2026-05-30T09:57:37.147168+00:00",
+  "timestamp": "2026-05-31T04:48:32.413072+00:00",
   "experiments": {
     "calibration_rows": [
       {
@@ -128,9 +128,9 @@
         "domain": "d10",
         "experiment": "10D_financial_return_sign",
         "task_type": "classification",
-        "ece_proxy": 0.45301315581929186,
-        "mean_epistemic_var": 0.29667860757611964,
-        "uncertainty_rank_correlation": -0.02541983910043885
+        "ece_proxy": 0.46667174311596654,
+        "mean_epistemic_var": 0.20861930529322398,
+        "uncertainty_rank_correlation": -0.010742126616924249
       },
       {
         "domain": "d11",
