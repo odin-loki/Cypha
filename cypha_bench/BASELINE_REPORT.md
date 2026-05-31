@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-05-31 04:48 UTC
+Generated: 2026-05-31 05:32 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -185,26 +185,46 @@ Default parameters only — no hyperparameter tuning.
 
 ## D04
 
-*Timestamp:* 2026-05-31T04:36:38.063859+00:00
+*Timestamp:* 2026-05-31T05:31:56.570271+00:00
 
 ### summary
 
 | Metric | Value |
 | --- | --- |
-| `char_lm.bits_per_char` | [32.77338456029815, 32.77338456029815] |
-| `char_lm.epistemic_var` | [1.106240844614963e-05, 1.1430822061028679e-05] |
+| `bigram_bpc` | 4.1515 |
+| `char_lm.alpha_gria` | [0.5379799990785696, 0.520853312262717, 0.6376445249679783, 0.6193310412653261, 0.5235014976159404, 0.6222204492421046] |
+| `char_lm.bigram_bpc` | 4.1515 |
+| `char_lm.context_length_bpc.128` | 5.5856 |
+| `char_lm.context_length_bpc.16` | 5.0495 |
+| `char_lm.context_length_bpc.256` | 5.2932 |
+| `char_lm.context_length_bpc.32` | 4.8483 |
+| `char_lm.context_length_bpc.64` | 5.0789 |
+| `char_lm.context_length_bpc.8` | 5.0508 |
+| `char_lm.cypha_dif.lossless_fraction` | 3.33e-04 |
+| `char_lm.cypha_dif.mean_aleatoric_var` | 1.1492 |
+| `char_lm.cypha_dif.mean_alpha` | 0.1799 |
+| `char_lm.cypha_dif.mean_epistemic_var` | 3.83e-04 |
+| `char_lm.cypha_dif.n_experts` | 1 |
+| `char_lm.epistemic_var` | [0.0033570059630275532, 0.001364610955476389, 0.0008388060291015638, 0.0006000797775766535, 0.00046788905414876417, 0.00038310786279466854] |
 | `char_lm.eval_method` | held_out_20pct_suffix |
-| `char_lm.expert_count` | [61, 63] |
-| `char_lm.final_bpc` | 32.6057 |
-| `char_lm.final_sgd_bpc` | 6.6357 |
-| `char_lm.sgd_bits_per_char` | [8.215069115163782, 7.401769497401426] |
-| `char_lm.steps` | [500, 1000] |
-| `char_lm.trained_steps` | 1500 |
-| `char_lm.vocab_size` | 100 |
-| `corpus_source` | moby_dick.txt |
-| `domain` | d04_generation_language |
-| `final_bpc` | 32.6057 |
-| `final_sgd_bpc` | 6.6357 |
+| `char_lm.expert_count` | [1, 1, 1, 1, 1, 1] |
+| `char_lm.expert_routing.active_experts_per_step` | [40 items] |
+| `char_lm.expert_routing.dominant_expert_per_step` | [40 items] |
+| `char_lm.expert_routing.epistemic_var_per_step` | [40 items] |
+| `char_lm.expert_routing.mean_active_experts` | 1.0000 |
+| `char_lm.expert_routing.unique_experts_used` | [0] |
+| `char_lm.final_bpc` | 5.2020 |
+| `char_lm.final_train_bpc` | 5.4902 |
+| `char_lm.generation_preview.greedy` |                                          |
+| `char_lm.generation_preview.prompt_text` |  seldom venture to attac |
+| `char_lm.generation_preview.top_p` | e.R9  .o-d
+9deeoTePTdroePt9H
+o
+sTEEE
+ uM |
+| `char_lm.held_out_bpc` | [5.593182356363305, 5.651240044870056, 5.364497787967796, 5.708395859587843, 5.129276293888361, 5.227170380140231] |
+| `char_lm.model` | CyphaLM |
+| `char_lm.online_train_bpc` | 5.5956 |
 
 ## D05
 
@@ -707,34 +727,39 @@ Default parameters only — no hyperparameter tuning.
 
 ## D17
 
-*Timestamp:* 2026-05-31T04:48:32.394586+00:00
+*Timestamp:* 2026-05-31T05:32:46.964042+00:00
 
 ### 17A_bits_per_character
 
 | Metric | Value |
 | --- | --- |
-| `bigram_bpc` | 3.6911 |
-| `cyphalm_bpc` | 4.4969 |
-| `final_train_bpc` | 4.5282 |
-| `online_train_bpc` | 4.7571 |
-| `source` | gutenberg |
-| `train_tokens` | 40000 |
+| `bigram_bpc` | 6.2082 |
+| `cypha_dif.lossless_fraction` | 3.33e-04 |
+| `cypha_dif.mean_aleatoric_var` | 1.1690 |
+| `cypha_dif.mean_alpha` | 0.1572 |
+| `cypha_dif.mean_epistemic_var` | 3.90e-04 |
+| `cypha_dif.n_experts` | 1 |
+| `cyphalm_bpc` | 5.2751 |
+| `final_train_bpc` | 5.3311 |
+| `online_train_bpc` | 5.4223 |
+| `source` | synthetic |
+| `train_tokens` | 3000 |
 
 ### 17B_alpha_spectrum
 
 | Metric | Value |
 | --- | --- |
 | `fraction_edge_of_chaos` | 0.0000 |
-| `mean_alpha` | 0.1875 |
+| `mean_alpha` | 0.1572 |
 | `n_experts` | 1 |
 
 ### 17D_online_adaptation
 
 | Metric | Value |
 | --- | --- |
-| `bpc_improvement` | 0.2495 |
-| `bpc_ood_after_adapt` | 4.7616 |
-| `bpc_ood_before_adapt` | 5.0112 |
+| `bpc_improvement` | 0.2949 |
+| `bpc_ood_after_adapt` | 4.7438 |
+| `bpc_ood_before_adapt` | 5.0387 |
 
 ## Cross-Domain Analyses
 
@@ -742,8 +767,8 @@ Default parameters only — no hyperparameter tuning.
 
 | Metric | Value |
 | --- | --- |
-| `summary.global_mean_alpha` | 0.7788 |
-| `summary.global_std_alpha` | 0.2879 |
+| `summary.global_mean_alpha` | 0.7762 |
+| `summary.global_std_alpha` | 0.2932 |
 | `summary.n_measurements` | 13 |
 | `summary.within_gul_band_fraction` | 0.0000 |
 

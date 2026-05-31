@@ -9,6 +9,7 @@ Utility and verification scripts for the Cypha repo. Narrative “when to run wh
 | `wsl_verify.sh` | WSL verify + optional benchmark; default **`QT_QPA_PLATFORM=offscreen`**; always **`requirements-verify.txt`**, then **`FULL_STUDIO_DEPS=1`** adds **`cypha_studio/requirements.txt`** + **`pytest-qt`** (CI-like GUI/qtbot); **`PYTEST_MARK='not slow'`** → `pytest -m …`; **`RUN_NATIVE=1`** → `native/build`, ctest, `CYPHA_REST_BIN` + `test_cypha_rest_smoke`; without **`RUN_NATIVE`**, tip for **`native/scripts/build_cypha_rest_mingw_wsl.ps1`** | console; `BENCHMARK_LOG` → `artifacts/profiles/benchmark_baseline.txt` (default) |
 | `export_experiment_schema_sql.py` | Print `experiment._SCHEMA` DDL (M6); **`-o path.sql`** to write file; used by CMake when building **`experiment_db_smoke`** | stdout / disk |
 | `generate_parity_fixtures.py` | Regenerate `parity_fixtures/` (incl. `train_hparams.json` for `cypha_rest`) | disk |
+| `generate_demo_lm_checkpoint.py` | Train tiny CyphaLM → `examples/demo_cyphalm/demo.{json,npz}` for REST/Studio smoke | disk |
 | `generate_regression_m4_fixture.py` | `parity_fixtures/regression_m4/sidecar.json` for CTest `native_regression_m4` | disk |
 | `generate_rff_regression_fixture.py` | `parity_fixtures/rff_regression/sidecar.json` — RFF encode + ridge + expert dots (CTest **`native_regression_rff`**) | disk |
 | `generate_memory_train_parity.py` | Regenerate `parity_fixtures/memory_train/` (native `DIFMemory.train`) | disk |

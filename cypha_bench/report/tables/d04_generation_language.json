@@ -1,6 +1,6 @@
 {
   "domain": "d04_generation_language",
-  "timestamp": "2026-05-31T05:06:03.377229+00:00",
+  "timestamp": "2026-05-31T05:31:56.570271+00:00",
   "experiments": {
     "summary": {
       "domain": "d04_generation_language",
@@ -19,12 +19,12 @@
           3000
         ],
         "held_out_bpc": [
-          5.583237900718079,
-          5.611692641504824,
-          5.355936271678674,
-          5.668799186205642,
-          5.117985226099168,
-          5.218064295465471
+          5.593182356363305,
+          5.651240044870056,
+          5.364497787967796,
+          5.708395859587843,
+          5.129276293888361,
+          5.227170380140231
         ],
         "expert_count": [
           1,
@@ -43,32 +43,32 @@
           0.00038310786279466854
         ],
         "alpha_gria": [
-          0.48758946643951706,
-          0.5187240163370014,
-          0.6164626899406002,
-          0.6357879662525178,
-          0.5308195119445694,
-          0.6012375863920016
+          0.5379799990785696,
+          0.520853312262717,
+          0.6376445249679783,
+          0.6193310412653261,
+          0.5235014976159404,
+          0.6222204492421046
         ],
         "trained_steps": 3000,
-        "online_train_bpc": 5.553232136405073,
-        "final_train_bpc": 5.465697999658171,
-        "final_bpc": 5.192262957024839,
+        "online_train_bpc": 5.595605664562474,
+        "final_train_bpc": 5.49017518869447,
+        "final_bpc": 5.20195860451787,
         "bigram_bpc": 4.151481004181981,
         "cypha_dif": {
           "n_experts": 1,
-          "mean_alpha": 0.18761912065361458,
+          "mean_alpha": 0.17988303119907978,
           "mean_epistemic_var": 0.0003829399874378491,
           "mean_aleatoric_var": 1.149202902300985,
           "lossless_fraction": 0.0003331112591602699
         },
         "context_length_bpc": {
-          "8": 5.0413024817914796,
-          "16": 5.027938143539012,
-          "32": 4.84292854604659,
-          "64": 5.0879733830207785,
-          "128": 5.5630041191451465,
-          "256": 5.28693663614489
+          "8": 5.050831560660129,
+          "16": 5.04951852584329,
+          "32": 4.848269518338362,
+          "64": 5.0789064397452215,
+          "128": 5.58564711765276,
+          "256": 5.293193318059773
         },
         "expert_routing": {
           "dominant_expert_per_step": [
@@ -203,52 +203,52 @@
           "mean_active_experts": 1.0
         },
         "save_restore": {
-          "bpc_before": 5.218064295465471,
-          "bpc_after": 5.218064295465471,
+          "bpc_before": 5.227170380140231,
+          "bpc_after": 5.227170380140231,
           "bpc_delta": 0.0,
           "logprob_max_abs_diff": 0.0,
           "parity_ok": true,
-          "checkpoint_base": "C:\\Users\\odinl\\AppData\\Local\\Temp\\tmpn9isoa21\\d04_cyphalm_ckpt"
+          "checkpoint_base": "C:\\Users\\odinl\\AppData\\Local\\Temp\\tmp34yehd74\\d04_cyphalm_ckpt"
         },
         "sampling_strategies": {
           "greedy": {
             "tokens_generated": 40,
-            "mean_bpc": 3.2355106722877975,
+            "mean_bpc": 3.1630390258202197,
             "halted_on_uncertainty": false,
-            "sample_text": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            "sample_text": "                                        "
           },
           "temperature_0.9": {
             "tokens_generated": 40,
-            "mean_bpc": 4.927923652886719,
+            "mean_bpc": 4.843213860354608,
             "halted_on_uncertainty": false,
-            "sample_text": "\n TdPd  eTsdd8oo\ndoiELAnChreAHpsaTadT6ee"
+            "sample_text": "\n TdPd  eTsdd5oo\ndoiEHAnChreAHosaTadS1ee"
           },
           "top_k_20": {
             "tokens_generated": 40,
-            "mean_bpc": 4.513898200355281,
+            "mean_bpc": 4.497112367920732,
             "halted_on_uncertainty": false,
-            "sample_text": "CCoPetdHeTPCT\nPC.EeatdoeeE.e.Hoao.EhRei "
+            "sample_text": "CCo. RdH T.9T\nTCPE atdo  EP PHoaoPE\nH 9e"
           },
           "top_p_0.92": {
             "tokens_generated": 40,
-            "mean_bpc": 4.699941956500648,
+            "mean_bpc": 4.658687350263101,
             "halted_on_uncertainty": false,
-            "sample_text": " PtieePdc\n\nid  oT .Tdro .t9Hho\nCTsEEheFM"
+            "sample_text": "e.R9  .o-d\n9deeoTePTdroePt9H\no\nsTEEE\n uM"
           },
           "uncertainty_gated": {
             "tokens_generated": 40,
-            "mean_bpc": 5.049071562204556,
+            "mean_bpc": 4.8194418536527435,
             "halted_on_uncertainty": false,
-            "sample_text": "rso5-  hCEh.deESSdTHridRRRei9eeP d ud0ec"
+            "sample_text": "rso1   fCEh.deERRdTHridRRRei9eeP d ud.ec"
           }
         },
         "generation_preview": {
           "prompt_text": " seldom venture to attac",
-          "greedy": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-          "top_p": " PtieePdc\n\nid  oT .Tdro .t9Hho\nCTsEEheFM"
+          "greedy": "                                        ",
+          "top_p": "e.R9  .o-d\n9deeoTePTdroePt9H\no\nsTEEE\n uM"
         }
       },
-      "final_bpc": 5.192262957024839,
+      "final_bpc": 5.20195860451787,
       "bigram_bpc": 4.151481004181981,
       "save_restore_parity_ok": true
     }

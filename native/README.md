@@ -219,4 +219,5 @@ python scripts/gen_native_bessel_table.py   # K₂/K₁ + K₀/K₁ grids if Sci
 - **Qt shell streaming** — move bulk training to a `QThread`; emit per-step loss/accuracy signals; live loss chart update during training. See [`docs/FUTURE.md`](../docs/FUTURE.md) §2a.  
 - **Packaged binary** — AppImage (Linux) or `windeployqt` folder / `.msi` (Windows) distributing Qt shell as a self-contained executable. See [`docs/FUTURE.md`](../docs/FUTURE.md) §3.  
 - **REST multi-model** — `cypha_rest --registry <root>` serving N models; per-model mutex; LRU eviction. See [`docs/FUTURE.md`](../docs/FUTURE.md) §5.  
+- **CyphaLM native inference** — C++ decode path for `.cypha` LM checkpoints (generation + REST parity with Python); training remains Python-only. See [`docs/port/PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §4.  
 - **Full future directions** — Web UI, curriculum/active learning, ONNX export, federated training: [`docs/FUTURE.md`](../docs/FUTURE.md).  

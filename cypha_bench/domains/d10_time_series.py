@@ -65,11 +65,11 @@ def _encode_ecg_rows(rows: np.ndarray, enc: TimeSeriesEncoder) -> np.ndarray:
 
 def experiment_10a_ecg():
     X_train, y_train, X_test, y_test = load_ecg5000()
-    enc = TimeSeriesEncoder(window_size=min(50, X_train.shape[1]), n_fft_coeffs=10)
+    enc = TimeSeriesEncoder(window_size=min(32, X_train.shape[1]), n_fft_coeffs=16)
     Xtr = _encode_ecg_rows(X_train, enc)
     Xte = _encode_ecg_rows(X_test, enc)
     clf = make_classifier(Xtr.shape[1])
-    train_classifier_online(clf, Xtr, y_train, passes=4)
+    train_classifier_online(clf, Xtr, y_train, passes=8)
     m = clf_metrics(clf, Xte, y_test)
     m["data_source"] = "ecg5000" if data_path("ecg5000", "ECG5000_TRAIN.txt").exists() else "synthetic"
     return m

@@ -14,6 +14,16 @@ from PySide6.QtWidgets import (
     QMenu, QDialog, QListWidget, QDialogButtonBox,
 )
 from ..server.local_server import SignalBus
+from .lm_generation_worker import LMGenerationWorker
+
+
+def _encode_prompt_chars(text: str, vocab_size: int = 128) -> tuple[list[int], dict[int, str]]:
+    chars = sorted(set(text))[: max(vocab_size - 1, 1)]
+    char2id = {c: i + 1 for i, c in enumerate(chars)}
+    id2char = {i + 1: c for i, c in enumerate(chars)}
+    id2char[0] = "?"
+    ids = [char2id.get(c, 0) for c in text]
+    return ids, id2char
 
 
 class MessageBubble(QFrame):
@@ -130,9 +140,13 @@ class ChatWidget(QWidget):
         super().__init__(parent)
         self._state = state
         self._bus   = SignalBus.instance()
+        self._lm_worker: LMGenerationWorker | None = None
+        self._lm_reply_lbl: QLabel | None = None
+        self._lm_id2char: dict[int, str] = {}
         self._setup_ui()
         self._connect_signals()
         self.refresh_inference_banner()
+        self._refresh_mode_banner()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -203,7 +217,38 @@ class ChatWidget(QWidget):
 
     def _connect_signals(self):
         self._bus.model_loaded.connect(self._on_model_loaded)
+        self._bus.lm_loaded.connect(self.on_lm_loaded)
         self._bus.preferences_changed.connect(self.refresh_inference_banner)
+
+    def on_lm_loaded(self, summary: dict):
+        self._empty_tip.hide()
+        self._refresh_mode_banner()
+        self._add_system(
+            f"CyphaLM loaded — vocab {summary.get('vocab_size', '?')}, "
+            f"{summary.get('n_experts', 0)} CyphaDIF experts. "
+            "Type a prompt for char-level generation (top-p sampling)."
+        )
+
+    def _refresh_mode_banner(self):
+        if self._state.lm_engine is not None:
+            s = self._state.lm_engine.summary()
+            self._header.setText(
+                f"CyphaStudio Chat  —  CyphaLM  "
+                f"({s.get('n_experts', 0)} experts, vocab {s.get('vocab_size', '?')})"
+            )
+            self._input.setPlaceholderText(
+                "CyphaLM prompt — type text and press Send for streamed char generation…"
+            )
+        elif self._state.current_card:
+            card = self._state.current_card
+            self._header.setText(
+                f"CyphaStudio Chat  —  {card.name} v{card.version}  [{card.task}]"
+            )
+        else:
+            self._header.setText("CyphaStudio Chat  —  no model loaded")
+            self._input.setPlaceholderText(
+                "Enter a comma-separated feature vector or text (if text model)…"
+            )
 
     def refresh_inference_banner(self):
         p = self._state.preferences
@@ -227,10 +272,8 @@ class ChatWidget(QWidget):
     def _on_model_loaded(self, card):
         self._empty_tip.hide()
         self.refresh_inference_banner()
-        self._header.setText(
-            f"CyphaStudio Chat  —  {card.name} v{card.version}  "
-            f"[{card.task}]"
-        )
+        if self._state.lm_engine is None:
+            self._refresh_mode_banner()
         self._add_system(f"Model loaded: {card.name} v{card.version}. "
                          f"Task: {card.task}. "
                          f"Classes: {', '.join(card.class_labels) or 'unknown'}")
@@ -241,10 +284,12 @@ class ChatWidget(QWidget):
             return
         self._input.clear()
 
-        # Display user message
         self._add_message('user', text)
 
-        # Parse input
+        if self._state.lm_engine is not None:
+            self._on_send_lm(text)
+            return
+
         engine = self._state.engine
         if engine is None:
             self._add_message('error', "No model loaded. Load a model first.")
@@ -269,6 +314,79 @@ class ChatWidget(QWidget):
 
         except Exception as e:
             self._add_message('error', f"Inference error: {e}")
+
+    def _on_send_lm(self, text: str) -> None:
+        lm = self._state.lm_engine
+        if lm is None:
+            self._add_message('error', "No CyphaLM loaded.")
+            return
+        if self._lm_worker is not None and self._lm_worker.isRunning():
+            self._add_message('error', "Generation already in progress.")
+            return
+
+        vocab = int(getattr(lm.model.config, "vocab_size", 128))
+        prompt_ids, id2char = _encode_prompt_chars(text, vocab_size=vocab)
+        if len(prompt_ids) < 1:
+            self._add_message('error', "Prompt is empty after encoding.")
+            return
+
+        self._lm_id2char = id2char
+        bubble = MessageBubble("model", "▌", None, self._msg_container)
+        self._lm_reply_lbl = bubble._content_lbl
+        count = self._msg_layout.count()
+        self._msg_layout.insertWidget(count - 1, bubble)
+        QTimer.singleShot(50, self._scroll_to_bottom)
+
+        self._send_btn.setEnabled(False)
+        self._lm_worker = LMGenerationWorker(
+            lm,
+            prompt_ids,
+            max_tokens=120,
+            strategy="top_p",
+            top_p=0.92,
+            temperature=0.9,
+        )
+        self._lm_worker.token_generated.connect(self._on_lm_token)
+        self._lm_worker.finished_generation.connect(self._on_lm_finished)
+        self._lm_worker.error_occurred.connect(self._on_lm_error)
+        self._lm_worker.start()
+
+    def _on_lm_token(self, chunk: dict) -> None:
+        if chunk.get("done"):
+            if chunk.get("halted_on_uncertainty"):
+                self._append_lm_text("\n[halted: high epistemic uncertainty]")
+            return
+        tid = chunk.get("token_id")
+        if tid is None or self._lm_reply_lbl is None:
+            return
+        ch = self._lm_id2char.get(int(tid), "?")
+        self._append_lm_text(ch)
+        dom = chunk.get("dominant_expert")
+        ep = chunk.get("epistemic_var")
+        if dom is not None and ep is not None:
+            self._stats_lbl.setText(
+                f"LM gen  ·  expert {dom}  ·  epistemic {float(ep):.4f}"
+            )
+
+    def _append_lm_text(self, piece: str) -> None:
+        if self._lm_reply_lbl is None:
+            return
+        cur = self._lm_reply_lbl.text()
+        if cur == "▌":
+            cur = ""
+        self._lm_reply_lbl.setText(cur + piece)
+        QTimer.singleShot(10, self._scroll_to_bottom)
+
+    def _on_lm_finished(self) -> None:
+        self._send_btn.setEnabled(True)
+        self._lm_worker = None
+        self._lm_reply_lbl = None
+
+    def _on_lm_error(self, msg: str) -> None:
+        self._send_btn.setEnabled(True)
+        self._lm_worker = None
+        self._lm_reply_lbl = None
+        self._add_message('error', f"CyphaLM generation error: {msg}")
 
     def _is_number(self, s: str) -> bool:
         try: float(s); return True

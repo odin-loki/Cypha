@@ -85,6 +85,9 @@ if QT_AVAILABLE:
         status_message      = Signal(str)
         dataset_opened      = Signal(str)      # filesystem path (CSV / npy / npz)
         preferences_changed = Signal()         # Studio settings saved (File → Settings)
+        lm_loaded           = Signal(object)   # LMEngine summary dict
+        lm_unloaded         = Signal()
+        lm_token            = Signal(dict)     # streaming generation chunk
 
         _instance = None
 

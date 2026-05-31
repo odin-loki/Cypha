@@ -117,7 +117,8 @@ native/build/
 # =====================================================
 
 # MNIST data files (both compressed and raw — downloaded at benchmark time)
-cypha_bench/data/mnist/*.gz
+examples/demo_cyphalm/demo.json
+examples/demo_cyphalm/demo.npz
 cypha_bench/data/mnist/*-ubyte
 cypha_bench/data/mnist/*.idx3-ubyte
 cypha_bench/data/mnist/*.idx1-ubyte

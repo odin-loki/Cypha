@@ -61,6 +61,7 @@ class AppState:
         self.registry  = ModelRegistry(self.preferences.effective_registry_root())
         self.db        = ExperimentDB()
         self.engine    = None   # InferenceEngine, set when model loads
+        self.lm_engine = None   # LMEngine (CyphaLM), optional
         self.session   = None   # InferenceSession
         self.trainer   = None   # active Trainer
         self.train_thread = None
@@ -341,6 +342,7 @@ class MainWindow(QMainWindow):
         file_menu = mb.addMenu("File")
         file_menu.addAction("New Experiment…",  self._on_new_experiment)
         file_menu.addAction("Open Model…",      self._on_load_model)
+        file_menu.addAction("Load CyphaLM…",     self._on_load_cyphalm)
         file_menu.addAction("Import Dataset…",  self._on_import_dataset)
         self._recent_menu = file_menu.addMenu("Recent Datasets")
         file_menu.addSeparator()
@@ -583,6 +585,34 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self._refresh_model_combo()
 
+    def _on_load_cyphalm(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load CyphaLM checkpoint",
+            "",
+            "CyphaLM JSON (*.json);;All files (*)",
+        )
+        if not path:
+            return
+        try:
+            from ..core.lm_engine import LMEngine
+
+            self.state.lm_engine = LMEngine.from_checkpoint(path)
+            summary = self.state.lm_engine.summary()
+            SignalBus.instance().lm_loaded.emit(summary)
+            SignalBus.instance().emit_status(
+                f"CyphaLM loaded ({summary.get('n_experts', 0)} experts)"
+            )
+            self.chat_widget.on_lm_loaded(summary)
+        except ImportError as exc:
+            QMessageBox.warning(
+                self,
+                "CyphaLM",
+                f"cypha_lm is not installed:\n{exc}\n\nRun: pip install -e cypha_lm/",
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "CyphaLM", f"Failed to load checkpoint:\n{exc}")
+
     def _on_import_dataset(self):
         from .path_history import dataset_dialog_start_dir_preferred
 
@@ -635,6 +665,7 @@ class MainWindow(QMainWindow):
             "Ctrl+Enter — Send chat message\n"
             "Ctrl+L — Focus chat input\n"
             "Enter — Send (when chat input is focused)\n\n"
+            "File → Load CyphaLM… — char-level LM generation in Chat (streamed).\n"
             "File → Recent Datasets lists recently opened CSV/NPZ/NPY paths.\n"
             "View → Studio Log shows status and error history.\n"
             "View → User Guide opens the in-app documentation.",

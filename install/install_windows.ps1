@@ -155,7 +155,7 @@ if ($Native) {
 if (-not $SkipTests) {
     Step "Running pytest health check"
     $env:QT_QPA_PLATFORM = "offscreen"
-    & $python -m pytest tests/ -m "not slow" -q --tb=short
+    & $python -m pytest tests/test_lm_api.py cypha_lm/model/tests/test_cypha_lm.py tests/ -m "not slow" -q --tb=short --ignore=tests/test_gui_qtbot.py
     if ($LASTEXITCODE -ne 0) {
         Die "pytest failed. See output above."
     }
@@ -176,6 +176,10 @@ Run the Python Studio GUI:
 
 Run the headless REST server:
     python -m uvicorn cypha_studio.server.api:app --host 0.0.0.0 --port 8765
+
+Generate + load a demo CyphaLM checkpoint:
+    python scripts\generate_demo_lm_checkpoint.py
+    set CYPHA_LM_CHECKPOINT=examples\demo_cyphalm\demo
 
 Run the native Qt shell (if -Native -Qt was used):
     powershell -ExecutionPolicy Bypass -File scripts\run_cypha_qt_windows.ps1

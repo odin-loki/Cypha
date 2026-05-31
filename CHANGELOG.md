@@ -19,10 +19,17 @@ milestone or a significant self-contained change.
 - **`tests/test_lm_api.py`** — generation utilities + REST route tests.
 - **`examples/lm_generate_body.json`**, `curl_lm_generate_stream.sh/.ps1`.
 - **`docs/port/PORT_CONTRACT.md` §4** — CyphaLM REST contract.
+- **CyphaStudio GUI CyphaLM chat** — File → Load CyphaLM…; streamed char generation in chat with expert/epistemic status (`lm_generation_worker.py`, `chat_widget.py`).
+- **`scripts/generate_demo_lm_checkpoint.py`** — trains a tiny demo checkpoint for Studio/REST smoke tests (`examples/demo_cyphalm/README.md`).
+- **CI** — `pip install -e cypha_lm/`, scoped ruff, `cypha_lm/model/tests/` in pytest matrix.
+- **Installers** — Windows/Linux scripts run `test_lm_api` and document demo checkpoint generation.
 
 ### Changed
 - **`cypha_lm/model/cypha_lm.py`** — `generate()` accepts `strategy`, `top_k`, `top_p`; adds `stream_generate()`.
 - **Documentation:** `cypha_lm/README.md`, `cypha_bench/README.md`, `cypha_studio/README.md`, `docs/studio/CYPHA_ENV.md`, `examples/README.md`, `docs/RESEARCH_STATUS.md`.
+- **D10 time-series tuning** — ECG passes 4→8, encoder window 50→32, n_fft 10→16.
+- **`DEFAULT_CYPHALM_CONFIG`** — `gria_lr: 0.06`, `online: True` for bench training.
+- **Full D04/D17 benchmark refresh** — updated figures, tables, and `BASELINE_REPORT.md`.
 
 ---
 

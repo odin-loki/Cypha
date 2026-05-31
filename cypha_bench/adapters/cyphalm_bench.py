@@ -26,6 +26,8 @@ DEFAULT_CYPHALM_CONFIG: dict[str, Any] = {
     "alpha_init": 0.5,
     "context_length": 256,
     "seed": 42,
+    "gria_lr": 0.06,
+    "online": True,
 }
 
 

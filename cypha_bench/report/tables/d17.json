@@ -1,24 +1,31 @@
 {
   "domain": "d17",
-  "timestamp": "2026-05-31T04:48:32.394586+00:00",
+  "timestamp": "2026-05-31T05:32:46.964042+00:00",
   "experiments": {
     "17A_bits_per_character": {
-      "cyphalm_bpc": 4.496868376010399,
-      "online_train_bpc": 4.757149180548958,
-      "final_train_bpc": 4.528193980690455,
-      "bigram_bpc": 3.69111980736394,
-      "source": "gutenberg",
-      "train_tokens": 40000
+      "cyphalm_bpc": 5.275095659175261,
+      "online_train_bpc": 5.4222975772594575,
+      "final_train_bpc": 5.331080572098933,
+      "bigram_bpc": 6.2081833200035925,
+      "source": "synthetic",
+      "train_tokens": 3000,
+      "cypha_dif": {
+        "n_experts": 1,
+        "mean_alpha": 0.1572464120026432,
+        "mean_epistemic_var": 0.00038967223848065306,
+        "mean_aleatoric_var": 1.169016715441959,
+        "lossless_fraction": 0.0003332222592466328
+      }
     },
     "17B_alpha_spectrum": {
-      "mean_alpha": 0.18746543135662633,
+      "mean_alpha": 0.1572464120026432,
       "fraction_edge_of_chaos": 0.0,
       "n_experts": 1
     },
     "17D_online_adaptation": {
-      "bpc_ood_before_adapt": 5.011150880555683,
-      "bpc_ood_after_adapt": 4.761647736485714,
-      "bpc_improvement": 0.2495031440699691
+      "bpc_ood_before_adapt": 5.038731534141672,
+      "bpc_ood_after_adapt": 4.743820848919193,
+      "bpc_improvement": 0.29491068522247854
     }
   }
 }
