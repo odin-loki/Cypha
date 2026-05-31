@@ -1,6 +1,6 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-05-31 | **Report:** `cypha_bench/BASELINE_REPORT.md` (2026-05-31)
+**Last updated:** 2026-05-31 (CyphaLM upgrade + multi-view plan docs) | **Report:** `cypha_bench/BASELINE_REPORT.md` (2026-05-31; re-run after upgrade)
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -14,7 +14,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
 | **C++ / CUDA / Qt port** | M1–M6 complete | Parity with Python on all ported ops; deliberation and kernel LLR Python-only |
 | **cypha_accel (GPU fused kernels)** | Working | CuPy GPU path used automatically; NumPy fallback |
-| **cypha_lm (CyphaLM)** | Research + REST | D04/D17 benchmarks; FastAPI `/generate` SSE; CyphaDIF per-token routing |
+| **cypha_lm (CyphaLM)** | Beats trigram at 40k | D17 **4.154** / D04 **4.122** BPC; +0.19–0.24 vs bigram; char-LSTM still best; **multi-view training planned** → [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md) |
 | **cypha_som (SOM upgrades)** | Benchmarked, reverted | All upgrades worse than baseline; U3/U5/U6 structurally safe |
 | **cypha_bench (eval harness)** | 17 domains complete | D04 full LLM suite; D17 extended integration; `adapters/cyphalm_bench.py` |
 | **cypha_studio (PySide6 + FastAPI)** | Working | GUI + REST + registry; **CyphaLM `/generate` SSE** (FastAPI-only) |
@@ -72,27 +72,41 @@ Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation
 
 **Key finding on forgetting:** CyphaDIF does NOT have zero forgetting in a shared-model multi-task scenario. `task_a_accuracy_before=0.842` → `task_a_accuracy_after=0.158` after block training on task B. Zero forgetting holds **only** for per-task isolated model files (save + reload). Documentation has been updated to reflect this.
 
-### Language model (D17)
-
-| Domain | Task | Metric | CyphaLM | Bigram | Verdict |
-|--------|------|--------|---------|--------|---------|
-| D17 — CyphaLM | Held-out BPC (Gutenberg) | bits/char | 4.497 | 3.691 | ⚠ Above bigram |
-| D17B | Alpha spectrum | mean_alpha | 0.1875 | — | ⚠ Low alpha (1 expert) |
-| D17D | Online adaptation BPC gain | ΔBPC | −0.295 | — | ✅ Adapts online |
-
 ### Language model (D04 + D17)
 
-| Domain | Task | CyphaLM BPC | Bigram | Trigram | Verdict |
-|--------|------|-------------|--------|---------|---------|
-| D04 | Char LM — Gutenberg hold-out 20% | **5.001** | 3.841 | 4.980 | ⚠ Above bigram; 40k train |
-| D17 | Char LM — WikiText-2 official valid | **4.658** | 3.914 | 4.398 | ⚠ Above bigram/trigram; 40k train |
-| D17D | Online adaptation BPC gain | ΔBPC −0.288 | — | — | ✅ Adapts online |
+**Pre-upgrade pin (40k train, `context_mode=full`):**
 
-Config: `cypha_bench/config/cyphalm_profile.json` (vocab 256, n_experts=4 warm-start, train_ssm, τ_slow=50, CPU auto).
+| Domain | CyphaLM | Bigram | Trigram |
+|--------|---------|--------|---------|
+| D04 Gutenberg | 5.001 | 3.841 | 4.980 |
+| D17 WikiText-2 valid | 4.658 | 3.914 | 4.398 |
 
-D04 runs the full **CyphaLM** stack with learning curve, trigram baseline, context-length BPC, expert routing, save/restore, and sampling comparison.
+**Post-upgrade (2026-05-31, `gria_ngram`, 2 epochs, BPTT-64, Laplace prior):**
 
-D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Requires `cypha_bench/data/wikitext2/` — CI fetches via Hugging Face; bench fails loudly on synthetic fallback unless `CYPHA_BENCH_FAST=1`.
+| Domain | Train | CyphaLM | Bigram | Trigram | 4-gram | 5-gram | Char-LSTM | Δ vs bi | Δ vs tri |
+|--------|-------|---------|--------|---------|--------|--------|-----------|---------|----------|
+| D17 | 3k fast | **4.565** | 5.037 | 6.223 | — | — | — | **−0.47** | **−1.66** |
+| D04 | 3k fast | **5.233** | 6.201 | 6.675 | — | — | — | **−0.97** | **−1.44** |
+| D17 | 40k full | **4.154** | 3.914 | **4.398** | 5.286 | 5.579 | 3.589 | +0.24 | **−0.24** |
+| D04 | 40k full | **4.122** | 3.931 | **4.522** | 5.592 | 5.879 | 3.505 | +0.19 | **−0.40** |
+| D17 | full corpus (`CYPHA_BENCH_FULL_CORPUS=1`) | *run bench* | *run bench* | *run bench* | *run bench* | *run bench* | *run bench* | — | — |
+
+**Ablation (40k, D17):** `gria_ngram` **4.154** &lt; `full` **4.725** &lt; `ssm_only` **4.451**; `ablation_no_ssm` **4.165** ≈ gria_ngram — explicit n-gram embeds carry most of the gain.
+
+**40k verdict:** CyphaLM **beats trigram** on WikiText valid (−0.24 BPC); still **+0.24 BPC vs bigram**. NumPy char-LSTM (**3.589**) remains strongest baseline — target for next upgrade pass.
+
+| Domain | Task | Metric | Value | Verdict |
+|--------|------|--------|-------|---------|
+| D17B | Alpha spectrum | mean_alpha | 0.095 (post-upgrade) | ⚠ Still low alpha; 1 active expert |
+| D17D | Online adaptation BPC gain | ΔBPC | −0.288 (WikiText) | ✅ Adapts online |
+
+**CyphaLM upgrade (2026 Q2):** config adds `context_mode`, `ngram_context`, `train_epochs`, `bptt_steps`, `laplace_smoothing`, `gria_lr_decay`. Bench adds 4-gram / 5-gram / NumPy char-LSTM baselines and `run_lm_ablations()` (`full`, `gria_ngram`, `ssm_only`, `ablation_no_dif`, `ablation_no_ssm`). Profiles: `cyphalm_d04_gutenberg.json`, `cyphalm_d17_wikitext.json`. Details: [`cypha_lm/README.md`](../cypha_lm/README.md), [`cypha_bench/README.md`](../cypha_bench/README.md).
+
+Config (legacy pin): `cypha_bench/config/cyphalm_profile.json` and per-domain profiles under `config/profiles/`.
+
+D04 runs the full **CyphaLM** stack: learning curve, n-gram + LSTM baselines, context-length BPC, expert routing, save/restore, sampling comparison, ablation summary.
+
+D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Requires `cypha_bench/data/wikitext2/` — CI fetches via Hugging Face; bench fails loudly on synthetic fallback unless `CYPHA_BENCH_FAST=1`. Set `CYPHA_BENCH_FULL_CORPUS=1` to train on the entire `wiki.train.tokens` file for beat-bigram runs.
 
 ### Known weak domains
 
@@ -128,7 +142,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
 | **Feynman equations** | Mean R²=−0.010 on nonlinear physics | Same — Kernel LLR |
 | **ECG / temporal** | D10 20% accuracy (chance) | CellAI SSM tuning; temporal-aware features |
-| **CyphaLM BPC** | D04: 5.20 vs bigram 4.15; D17: ~4.50 vs 3.69 (real corpus) | Longer training; SSM decay tuning; multi-expert |
+| **CyphaLM BPC** | D17 beats trigram at 40k (−0.24 BPC); +0.24 vs bigram; char-LSTM 3.589 | Full WikiText train; close bigram gap; match char-LSTM |
 | **MNIST raw** | 72% vs 95% (LR+HOG) | Feature engineering (HOG) bridges most of the gap |
 
 ---
@@ -182,8 +196,10 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 ### Phase 6 — CyphaLM (2026)
 
 - **CyphaLM implemented:** Izaac GF(2^n) embeddings + CellAI SSM + CyphaDIF expert routing + GRIA projection.
-- **Real evaluation (D17):** 4.50 bpc held-out vs bigram 3.69. LM stack is functional but above bigram.
+- **Real evaluation (D17):** 4.50 bpc held-out vs bigram 3.69 (40k train). LM stack is functional but above bigram.
 - **Online adaptation works:** D17D shows −0.250 bpc improvement after online adaptation on OOD text.
+- **Upgrade track (2026-05):** `context_mode` ablations, Laplace GRIA prior, multi-epoch + BPTT, extended n-gram and char-LSTM baselines, `CYPHA_BENCH_FULL_CORPUS` for full WikiText train.
+- **Post-upgrade (40k):** D17 **4.154** BPC (beats trigram **4.398** by −0.24; +0.24 vs bigram). D04 **4.122** BPC (beats trigram **4.522** by −0.40; +0.19 vs bigram). `gria_ngram` ablation wins over `full` on both domains.
 - **Paper figures generated** (`paper/figures/`); paper draft `paper/CyphaLM_paper.md` still has `{{EXP0N_*}}` placeholders.
 - **Report:** `cypha_lm/REPORT.md` (generated by `scripts/run_cypha_lm_report.py`)
 
@@ -208,7 +224,9 @@ Each hypothesis we have investigated with the result:
 | Shared-model multi-task = no forgetting | No | D16B: 81.25% forgetting — **refuted** |
 | Adversarial robustness is good | Yes | D15C: FGSM minimal drop |
 | OOD detection works | Yes | Cross-domain mean AUROC=0.844 |
-| CyphaLM can learn language structure | Partial | D04: 5.20 bpc; D17 adapts online; above bigram on Gutenberg |
+| CyphaLM can learn language structure | Yes (partial) | D17 **beats trigram** at 40k (4.154 vs 4.398); +0.24 vs bigram; char-LSTM still best |
+| Multi-view online training helps LM/DIF | Planned | Spec: [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md) — not yet implemented |
+| `gria_ngram` beats `full` on char-LM | In progress | Ablation runner — *run bench to refresh* |
 | D04 "33.2 bpc" proves CyphaLM failure | No | **Old benchmark bug — refuted; D04 now CyphaLM** |
 
 ---
@@ -235,20 +253,51 @@ Each hypothesis we have investigated with the result:
 2. Add to the parity fixture generators.
 3. Re-run D08 (MNIST) and D14 (Feynman) with auto-gamma.
 
-### Priority 3 — CyphaLM BPC improvement
+### Priority 3 — CyphaLM: beat-bigram roadmap
 
-**Evidence:** D04 held-out **5.202 bpc** vs bigram **4.151**; D17 **~4.50 bpc** on installed corpora vs bigram **3.69**. The gap is likely from:
-- Short context window (CellAI SSM τ values not tuned for text).
-- Single expert (`n_experts=1` in D17B; mean_alpha=0.1875 — very low, near-zero experts active).
-- Gutenberg tokenization is character-level — bigram is a strong baseline here.
+**Status:** Partial success — **beats trigram at 40k** on D17; bigram and char-LSTM still ahead.
 
-**What to do:**
-1. Try `n_experts > 1` in D17 config (current D17B shows only 1 active expert — routing is collapsed).
-2. Tune SSM decay constants (τ_fast, τ_slow) for character-level LM.
-3. Ship WikiText-2 / Gutenberg in bench data or document download step so D17 never silently falls back to synthetic.
-4. Fill paper figures from `cypha_bench/report/figures/fig04_*` and D17 tables.
+**Evidence (40k train, post-upgrade `gria_ngram`):** D17 **4.154** vs bigram **3.914** (Δ +0.24); vs trigram **4.398** (Δ **−0.24** ✅). Char-LSTM **3.589**. Pre-upgrade D04 **5.001** vs bigram **3.841**; full D04 re-bench pending.
 
-### Priority 4 — Shared-model continual learning
+**Root causes (unchanged):**
+- Most learning in GRIA; SSM/DIF under-trained at default single-pass online loop.
+- Warm-started experts under-reported in D17B (`mean_alpha` low).
+- Char-level LM: bigram/trigram are strong; 4/5-gram set an upper practical bound.
+
+**Beat-bigram roadmap (ordered):**
+
+| Step | Action | Success criterion |
+|------|--------|-------------------|
+| 1 | Profile `context_mode=gria_ngram`, `ngram_context=2`, `train_epochs=2`, `laplace_smoothing=1` | D17 ablation: `gria_ngram` **4.154** &lt; `full` **4.725** ✅ |
+| 2 | D17: `bptt_steps=64`, tune `gria_lr` / `tau_slow` via `cyphalm_sweep.py` | Held-out BPC &lt; bigram on 40k — **+0.24 remaining** |
+| 3 | `CYPHA_BENCH_FULL_CORPUS=1` WikiText train | BPC &lt; bigram on official valid — *next* |
+| 4 | Compare vs **4-gram, 5-gram, char-LSTM** (new baselines) | **&lt; trigram** ✅; char-LSTM **3.589** still best |
+| 5 | Fix CyphaDIF warm-start `active_experts` reporting; re-run D17B | `n_experts` matches profile when warm-started |
+| 6 | Regenerate `BASELINE_REPORT.md`, paper `fig04_*`, update this doc | All placeholder cells filled |
+| 7 | **Multi-view online training** (Phase 1) | See [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md): block shuffle + view_id; BPC &lt; bigram or ≥0.05 ↓ vs 4.154 |
+
+**Commands:**
+
+```powershell
+pip install -e cypha_lm/
+python cypha_bench/run_all.py --domain 17
+$env:CYPHA_BENCH_FULL_CORPUS="1"; python cypha_bench/run_all.py --domain 17
+python cypha_bench/tuning/cyphalm_sweep.py --corpus both --n-train 8000 --write-profile
+```
+
+See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, baseline table) and [`cypha_lm/README.md`](../cypha_lm/README.md) (config fields).
+
+### Priority 4 — Multi-view online training (CyphaLM → CyphaDIF)
+
+**Status:** Planned — full spec in [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md).
+
+**Idea:** Structure-preserving reorderings (block shuffle, rotated start, bidirectional passes, task-block permutations) each macro-epoch, with explicit `view_id` and memory policy (reset fast / carry slow). Exploits online routing, replay, and expert growth instead of single static stream training.
+
+**Phase 1 (LM):** `cypha_views/` module → D17 **17E_multi_view** → beat bigram or ≥0.05 BPC improvement.  
+**Phase 1a result:** 3k fast favored `schedule_a` (−0.07 BPC); **40k head-to-head favors `same_order`** (4.067 vs 4.089). Default D17 profile reverted to `same_order`; multi-view remains opt-in for sweeps.  
+**Phase 2a:** D16 **16G** — task-block-shuffle hurts accuracy on fast run; needs block size / steps tuning.
+
+### Priority 5 — Shared-model continual learning
 
 **Evidence:** D16B forgetting_score=0.813. This is a significant architectural gap if the claim is "no forgetting". The current architecture only achieves zero forgetting with per-task isolated model files (D16F).
 
@@ -257,7 +306,7 @@ Each hypothesis we have investigated with the result:
 2. Alternatively, redesign the expert routing so task-specific experts are not overwritten.
 3. Update the marketing claim: "no forgetting **per isolated model file**; shared-model continual learning is an open problem."
 
-### Priority 5 — CellAI / ECG / temporal
+### Priority 6 — CellAI / ECG / temporal
 
 **Evidence:** D10 ECG: 20% accuracy (5-class chance). The SSM integration is not tuned for temporal signals.
 
@@ -273,9 +322,10 @@ Each hypothesis we have investigated with the result:
 ```
 2026 Q3 — Priority 1: Kernel LLR prototype → benchmark → port decision
 2026 Q3 — Priority 2: Auto-gamma RFF default → D08/D14 re-benchmark
-2026 Q4 — Priority 3: CyphaLM n_experts tuning → D17 re-eval → paper draft
-2026 Q4 — Priority 4: Continual learning investigation → EWC overlay
-2027 Q1 — Priority 5: CellAI SSM temporal tuning → D10 re-eval
+2026 Q4 — Priority 3: CyphaLM beat-bigram (gria_ngram + full WikiText) → D17 re-eval → paper draft
+2026 Q4 — Priority 4: Multi-view online training — Phase 1 LM (`MULTI_VIEW_TRAINING_PLAN.md`) → Phase 2 D16/DIF
+2026 Q4 — Priority 5: Continual learning investigation → EWC overlay
+2027 Q1 — Priority 6: CellAI SSM temporal tuning → D10 re-eval
 2027 Q1 — Paper: fill {{EXP0N_*}} placeholders → narrative reconciliation → submit
 ```
 
@@ -305,7 +355,15 @@ python benchmark_baseline.py
 # Individual domain
 python cypha_bench/run_bench.py --domain d17
 
-# CyphaLM evaluation only
+# CyphaLM domains only
+python cypha_bench/run_all.py --domain 4
+python cypha_bench/run_all.py --domain 17
+
+# Full WikiText train (beat-bigram)
+# PowerShell: $env:CYPHA_BENCH_FULL_CORPUS="1"
+python cypha_bench/run_all.py --domain 17
+
+# Legacy perplexity script
 python benchmarks/perplexity_eval.py
 
 # Regenerate CyphaLM report + figures

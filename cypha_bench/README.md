@@ -24,6 +24,8 @@ Multi-domain evaluation suite for CyphaDIF, **CyphaLM**, and related components.
 | d16 | `d16_multitask` | Multi-task learning |
 | **d17** | **`d17_cyphalm_integration`** | **CyphaLM extended integration (WikiText, alpha, OOD adapt)** |
 
+Per-domain notes: [`domains/README.md`](domains/README.md).
+
 Cross-domain analyses (`cross_domain/`): uncertainty calibration, online adaptation, forgetting resistance, alpha spectrum.
 
 ## D04 — CyphaLM language model domain
@@ -38,9 +40,95 @@ Cross-domain analyses (`cross_domain/`): uncertainty calibration, online adaptat
 | BPC vs context length | `context_length_bpc` | `fig04_context_bpc.png` |
 | CyphaDIF expert routing during generation | `expert_routing` | `fig04_expert_routing.png` |
 | Save/restore checkpoint fidelity | `save_restore.parity_ok` | — |
-| Sampling strategies (greedy, temp, top-k, top-p, uncertainty-gated) | `sampling_strategies` | `fig04_sampling_strategies.png` |
+| Sampling strategies | `sampling_strategies` | `fig04_sampling_strategies.png` |
+| N-gram + char-LSTM baselines | `bigram_bpc`, …, `char_lstm_bpc` | — |
+| Context-mode ablations | `ablations` | — |
 
-Shared LM helpers: `cypha_bench/adapters/cyphalm_bench.py`
+Shared LM helpers: `cypha_bench/adapters/cyphalm_bench.py`, `cyphalm_ablations.py`, `char_lstm_baseline.py`.
+
+## Language-model baselines (D04 / D17)
+
+All baselines are scored on the **same held-out split** as CyphaLM, using the training slice seen by the model.
+
+| Baseline | Function | Notes |
+|----------|----------|-------|
+| Bigram | `bigram_baseline_bpc()` | Character 2-gram (Laplace +1 in `ngram_baseline_bpc`) |
+| Trigram | `trigram_baseline_bpc()` | Character 3-gram |
+| 4-gram | `fourgram_baseline_bpc()` | Character 4-gram |
+| 5-gram | `fivegram_baseline_bpc()` | Character 5-gram |
+| Char-LSTM | `char_lstm_baseline_bpc()` | 1-layer NumPy LSTM; no PyTorch |
+
+### Baseline table (held-out BPC, bits/char)
+
+Refresh after a full bench run: `python cypha_bench/run_all.py --domain 4` and `--domain 17`.
+
+| Corpus | CyphaLM | Bigram | Trigram | 4-gram | 5-gram | Char-LSTM |
+|--------|---------|--------|---------|--------|--------|-----------|
+| D04 Gutenberg (40k train) | **4.122** | 3.931 | **4.522** | 5.592 | 5.949 | 3.505 |
+| D17 WikiText valid (40k train) | **4.154** | 3.914 | **4.398** | 5.286 | 5.579 | 3.589 |
+| D17 WikiText valid (**full train**, `CYPHA_BENCH_FULL_CORPUS=1`) | *run bench* | *run bench* | *run bench* | *run bench* | *run bench* | *run bench* |
+
+Last pinned numbers (pre-upgrade sweep, 2026-05-31): see [docs/RESEARCH_STATUS.md](../docs/RESEARCH_STATUS.md) and `BASELINE_REPORT.md`.
+
+## CyphaLM ablations
+
+Ablation modes map to `CyphaLMConfig.context_mode` (see [`cypha_lm/README.md`](../cypha_lm/README.md)).
+
+| Mode | What is measured |
+|------|------------------|
+| `full` | Default stack: SSM + CyphaDIF + GRIA |
+| `gria_ngram` | SSM projection + last *K* token embeddings (`ngram_context`) |
+| `ssm_only` | SSM path only; DIF contribution zeroed in GRIA input |
+| `ablation_no_dif` | Field mean only; no expert routing |
+| `ablation_no_ssm` | N-gram embed concat only; SSM state zeroed |
+
+Runner: `cypha_bench/adapters/cyphalm_ablations.py` — `run_lm_ablations(corpus, limits, modes)`.
+
+D04/D17 include an `ablations` block in domain JSON when not in fast mode.
+
+### Run ablations only (dev)
+
+```powershell
+pip install -e cypha_lm/
+python -c "
+from cypha_bench.adapters.cyphalm_bench import cyphalm_bench_limits, prepare_lm_corpus
+from cypha_bench.adapters.cyphalm_ablations import run_lm_ablations
+corpus = prepare_lm_corpus(prefer_wikitext=True)
+limits = cyphalm_bench_limits()
+modes = ['full', 'gria_ngram', 'ssm_only', 'ablation_no_dif', 'ablation_no_ssm']
+print(run_lm_ablations(corpus, limits, modes, profile='d17'))
+"
+```
+
+Fast bench (`CYPHA_BENCH_FAST=1`): runs **`full`** and **`gria_ngram`** only; skips 4/5-gram, char-LSTM, and other ablation modes.
+
+## Environment variables
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `CYPHA_BENCH_FAST` | `0` | Smaller corpora and train caps; LM skips heavy baselines/ablations |
+| `CYPHA_BENCH_FULL_CORPUS` | `0` | WikiText D17: `n_train` ≈ full `wiki.train.tokens`; larger `n_eval` |
+| `CYPHA_BENCH_ALLOW_SYNTHETIC` | `0` | Allow synthetic corpus if data files missing |
+| `CYPHA_BENCH_USE_PROFILE` | `1` | Use everyday profile for D01–D16 (not CyphaLM profiles) |
+| `CYPHA_BENCH_PROFILE_PATH` | — | Override everyday profile JSON path |
+| `CYPHALM_PROFILE` | — | CyphaLM profile id: `d04`, `d17`, `llm`, or path via loader |
+| `CYPHA_LM_DEVICE` | `auto` | CyphaLM compute device |
+| `CYPHA_LM_FAST` | `0` | Shorter `cypha_lm` experiment scripts |
+
+### Examples
+
+```powershell
+# Quick smoke (3k train, ablations: full + gria_ngram only)
+$env:CYPHA_BENCH_FAST="1"
+python cypha_bench/run_all.py --domain 17
+
+# Full WikiText train for beat-bigram experiments
+$env:CYPHA_BENCH_FULL_CORPUS="1"
+python cypha_bench/run_all.py --domain 17
+
+# Gutenberg CyphaLM only
+python cypha_bench/run_all.py --domain 4
+```
 
 ## Install
 
@@ -66,6 +154,8 @@ Hyperparameters are **domain-specific**, not one global bundle. Registry: `cypha
 | `d04` | `profiles/cyphalm_d04_gutenberg.json` | D04 Gutenberg char-LM |
 | `d17` | `profiles/cyphalm_d17_wikitext.json` | D17 WikiText integration |
 
+CyphaLM profile fields (upgrade): `context_mode`, `ngram_context`, `train_epochs`, `bptt_steps`, `laplace_smoothing`, `gria_lr_decay` — see `cypha_lm/README.md`.
+
 Override at runtime: `$env:CYPHALM_PROFILE="d17"` or `make_cyphalm(profile="d04")`.
 
 Tune CyphaLM profiles:
@@ -81,20 +171,31 @@ python cypha_bench/tuning/cyphalm_sweep.py --corpus both --skip-full   # all axe
 
 Outputs: `cypha_bench/config/cyphalm_profile_sweep.json`, `cyphalm_profile_axis_sweeps.json`.
 
+### Multi-view online training
+
+Structure-preserving corpus reorderings per macro-epoch (`cypha_views/`). Spec: [`docs/MULTI_VIEW_TRAINING_PLAN.md`](../docs/MULTI_VIEW_TRAINING_PLAN.md).
+
+| Env / profile | Effect |
+|---------------|--------|
+| `view_schedule` in CyphaLM profile | `same_order`, `schedule_a`, `schedule_b`, `schedule_c` |
+| `view_block_size` | Block size for shuffle/segment resets (default 512) |
+
+D17 experiment **17E_multi_view** compares schedules vs `same_order` BPC. D16 **16G_view_streams** compares task-block shuffle vs round-robin.
+
 ## Run the full benchmark
 
 ```powershell
 python cypha_bench/run_all.py
 python cypha_bench/run_all.py --domain 4          # CyphaLM char-LM only
+python cypha_bench/run_all.py --domain 17         # CyphaLM integration
 python cypha_bench/run_all.py --from-domain 10    # resume
 python cypha_bench/run_all.py --report-only
 ```
 
-Fast mode (smaller corpora / fewer train steps):
+Regenerate `BASELINE_REPORT.md` after a run:
 
 ```powershell
-$env:CYPHA_BENCH_FAST="1"
-python cypha_bench/run_all.py --domain 4
+python cypha_bench/report/generate_report.py
 ```
 
 ## Results

@@ -26,6 +26,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from cypha_bench.adapters.char_lstm_baseline import char_lstm_baseline_bpc
+from cypha_bench.adapters.cyphalm_ablations import run_lm_ablations
 from cypha_bench.adapters.cyphalm_bench import (
     bigram_baseline_bpc,
     compare_sampling_strategies,
@@ -36,6 +38,8 @@ from cypha_bench.adapters.cyphalm_bench import (
     eval_held_out_bpc,
     eval_save_restore_fidelity,
     expert_routing_trace,
+    fivegram_baseline_bpc,
+    fourgram_baseline_bpc,
     load_cyphalm_config,
     make_cyphalm,
     prepare_lm_corpus,
@@ -44,6 +48,24 @@ from cypha_bench.adapters.cyphalm_bench import (
     trigram_baseline_bpc,
 )
 from cypha_bench.common.metrics import save_figure, save_table
+from cypha_bench.common.paths import is_fast
+
+
+def _lm_baseline_metrics(train_slice, test_ids, vocab_size, limits) -> dict:
+    metrics = {
+        "bigram_bpc": bigram_baseline_bpc(train_slice, test_ids, vocab_size),
+        "trigram_bpc": trigram_baseline_bpc(train_slice, test_ids, vocab_size),
+    }
+    if not is_fast():
+        metrics["fourgram_bpc"] = fourgram_baseline_bpc(train_slice, test_ids, vocab_size)
+        metrics["fivegram_bpc"] = fivegram_baseline_bpc(train_slice, test_ids, vocab_size)
+        metrics["char_lstm_bpc"] = char_lstm_baseline_bpc(
+            train_slice,
+            test_ids,
+            vocab_size,
+            n_train_steps=limits["n_train"],
+        )
+    return metrics
 
 
 def _run_cyphalm_char_lm(corpus) -> dict:
@@ -64,9 +86,17 @@ def _run_cyphalm_char_lm(corpus) -> dict:
     n_train = train_metrics["trained_steps"]
     train_slice = train_ids[:n_train]
     final_bpc = eval_held_out_bpc(model, test_ids, n_eval=limits["n_eval"])
-    bigram_bpc_val = bigram_baseline_bpc(train_slice, test_ids, corpus.vocab_size)
-    trigram_bpc_val = trigram_baseline_bpc(train_slice, test_ids, corpus.vocab_size)
+    baselines = _lm_baseline_metrics(train_slice, test_ids, corpus.vocab_size, limits)
+    bigram_bpc_val = baselines["bigram_bpc"]
+    trigram_bpc_val = baselines["trigram_bpc"]
     dif_final = cyphalm_dif_metrics(model)
+
+    ablation_modes = (
+        ["full", "gria_ngram"]
+        if is_fast()
+        else ["full", "gria_ngram", "ssm_only", "ablation_no_dif", "ablation_no_ssm"]
+    )
+    ablations = run_lm_ablations(corpus, limits, ablation_modes, profile="d04")
 
     prompt_len = min(limits["prompt_len"], len(test_ids) - 1)
     prompt_ids = test_ids[:prompt_len]
@@ -96,8 +126,10 @@ def _run_cyphalm_char_lm(corpus) -> dict:
         "final_bpc": final_bpc,
         "bigram_bpc": bigram_bpc_val,
         "trigram_bpc": trigram_bpc_val,
+        **baselines,
         "delta_vs_bigram": final_bpc - bigram_bpc_val,
         "delta_vs_trigram": final_bpc - trigram_bpc_val,
+        "ablations": ablations,
         "cypha_dif": dif_final,
         "context_length_bpc": context_bpc,
         "expert_routing": routing,
@@ -216,6 +248,10 @@ def run() -> dict:
         "final_bpc": lm_metrics.get("final_bpc"),
         "bigram_bpc": lm_metrics.get("bigram_bpc"),
         "trigram_bpc": lm_metrics.get("trigram_bpc"),
+        "fourgram_bpc": lm_metrics.get("fourgram_bpc"),
+        "fivegram_bpc": lm_metrics.get("fivegram_bpc"),
+        "char_lstm_bpc": lm_metrics.get("char_lstm_bpc"),
+        "ablations": lm_metrics.get("ablations"),
         "save_restore_parity_ok": (lm_metrics.get("save_restore") or {}).get("parity_ok"),
     }
 

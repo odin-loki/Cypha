@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from cypha_views.runner import iter_view_epochs
+from cypha_views.schedule import resolve_schedule
+from cypha_views.types import ViewSchedule, ViewSpec
 
 from cypha_lm.array_backend import ArrayBackend, asnumpy
 from cypha_lm.config import CyphaLMConfig
@@ -54,6 +59,9 @@ class CyphaLM:
         self._proj_ssm = xp.asarray(rng.standard_normal((fd, ctx_dim)) * 0.02)
         self._proj_dif = xp.asarray(rng.standard_normal((fd, fd)) * 0.02)
         self._proj_embed = xp.asarray(rng.standard_normal((fd, config.d_embed)) * 0.02)
+        n_embeds = 1 + max(0, int(config.ngram_context))
+        ngram_in = (0 if config.context_mode == "ablation_no_ssm" else fd) + n_embeds * config.d_embed
+        self._proj_ngram = xp.asarray(rng.standard_normal((fd, ngram_in)) * 0.02)
         gria_in = fd
         self.gria = GRIAProjection(
             d_input=gria_in,
@@ -64,9 +72,17 @@ class CyphaLM:
             xp=xp,
         )
         self._token_counts = np.ones(config.vocab_size, dtype=np.float64)
-        self.gria.set_unigram_prior(self._token_counts)
+        if config.laplace_smoothing > 0:
+            self.gria.set_laplace_prior(
+                self._token_counts, smoothing=config.laplace_smoothing
+            )
+        else:
+            self.gria.set_unigram_prior(self._token_counts)
+        self._embed_history: deque[Any] = deque(maxlen=1 + max(0, int(config.ngram_context)))
+        self._bptt_buffer: list[tuple[Any, Any, Any]] = []
         self._last_epistemic = 0.0
         self._last_aleatoric = 0.0
+        self._current_view_id = 0
 
     @property
     def device(self) -> str:
@@ -74,24 +90,77 @@ class CyphaLM:
 
     def reset_context(self) -> None:
         self.ssm.reset()
+        self._embed_history.clear()
+        self._bptt_buffer.clear()
 
     def _project_context(self, context) -> Any:
         xp = self._backend.xp
         ctx = xp.asarray(context, dtype=xp.float64).ravel()
         return self._proj_ssm @ ctx
 
+    def _record_embedding(self, embedding) -> None:
+        self._embed_history.appendleft(embedding)
+
+    def _ngram_embedding_vector(self) -> Any:
+        xp = self._backend.xp
+        fd = self.config.field_dim
+        d = self.config.d_embed
+        n_prev = max(0, int(self.config.ngram_context))
+        parts: list[Any] = []
+        for i in range(n_prev + 1):
+            if i < len(self._embed_history):
+                parts.append(xp.asarray(self._embed_history[i], dtype=xp.float64).ravel())
+            else:
+                parts.append(xp.zeros(d, dtype=xp.float64))
+        return xp.concatenate(parts)
+
+    def _ngram_gria_vector(self, field_x) -> Any:
+        xp = self._backend.xp
+        mode = self.config.context_mode
+        embeds = self._ngram_embedding_vector()
+        if mode == "ablation_no_ssm":
+            concat = embeds
+        else:
+            concat = xp.concatenate(
+                [xp.asarray(field_x, dtype=xp.float64).ravel(), embeds]
+            )
+        return self._proj_ngram @ concat
+
     def _gria_input(self, field_x, dif_out: dict) -> Any:
         xp = self._backend.xp
+        mode = self.config.context_mode
+        if mode in ("gria_ngram", "ablation_no_ssm"):
+            return self._ngram_gria_vector(field_x)
+        if mode == "ssm_only":
+            return xp.asarray(field_x, dtype=xp.float64).ravel()
         mean = xp.asarray(dif_out["mean"], dtype=xp.float64).ravel()
         mean = self._proj_dif @ xp.resize(mean, self.config.field_dim)
+        if mode == "ablation_no_dif":
+            return mean
         u = float(dif_out["epistemic_var"])
         return mean + u * field_x * 0.01
 
     def _forward_context(self, token_id: int, update_dif: bool = False) -> dict[str, Any]:
+        xp = self._backend.xp
+        mode = self.config.context_mode
         e = self.embed.embed(token_id)
-        ctx = self.ssm.step(e)
-        field_x = self._project_context(ctx)
-        dif_out = self.dif.predict(asnumpy(field_x))
+        self._record_embedding(e)
+        if mode == "ablation_no_ssm":
+            ctx = xp.zeros(self.ssm.context_dim, dtype=xp.float64)
+            field_x = xp.zeros(self.config.field_dim, dtype=xp.float64)
+        else:
+            ctx = self.ssm.step(e)
+            field_x = self._project_context(ctx)
+        if mode in ("ssm_only", "ablation_no_ssm"):
+            dif_out = {
+                "mean": xp.zeros(self.config.field_dim, dtype=xp.float64),
+                "epistemic_var": 0.0,
+                "aleatoric_var": 0.0,
+                "routing_probs": np.array([], dtype=np.float64),
+                "active_experts": 0,
+            }
+        else:
+            dif_out = self.dif.predict(asnumpy(field_x))
         v = self._gria_input(field_x, dif_out)
         log_probs = self.gria.forward(v)
         self._last_epistemic = float(dif_out["epistemic_var"])
@@ -121,7 +190,51 @@ class CyphaLM:
         delta = lr * xp.outer(h, e)
         self.ssm.W_fast[0] += delta * 0.01
 
-    def train_step(self, token_id: int, next_token_id: int) -> dict[str, Any]:
+    def _bptt_ssm_update(self, fwd: dict[str, Any], next_token_id: int) -> None:
+        """Approximate truncated BPTT: backprop GRIA loss to SSM layer-0 fast weights."""
+        steps = int(self.config.bptt_steps)
+        if steps <= 0 or self.config.context_mode == "ablation_no_ssm":
+            return
+        xp = self._backend.xp
+        v = fwd["v"]
+        nxt = int(next_token_id)
+        grad_v = self.gria.grad_v_cross_entropy(v, nxt)
+        mode = self.config.context_mode
+        fd = self.config.field_dim
+
+        if mode == "ssm_only":
+            grad_field = grad_v
+        elif mode == "gria_ngram":
+            grad_concat = self._proj_ngram.T @ grad_v
+            grad_field = grad_concat[:fd]
+        elif mode == "full":
+            u = float(fwd["dif_out"]["epistemic_var"])
+            grad_field = grad_v * (u * 0.01)
+        else:
+            return
+
+        grad_ctx = self._proj_ssm.T @ grad_field
+        if self.ssm.n_layers < 1:
+            return
+        e = xp.asarray(fwd["embedding"], dtype=xp.float64).ravel()
+        in_dim = self.ssm._layer_input_dims[0]
+        d_state = self.ssm.d_state
+        if e.size != in_dim or grad_ctx.size != self.ssm.context_dim:
+            return
+        grad_h = grad_ctx[:d_state]
+        lf = float(np.clip(self.ssm.lambda_fast, 0.01, 0.999))
+        delta = (1.0 - lf) * xp.outer(grad_h, e)
+        self._bptt_buffer.append(delta.copy())
+        if len(self._bptt_buffer) < steps:
+            return
+        avg = xp.zeros_like(self.ssm.W_fast[0])
+        for d in self._bptt_buffer:
+            avg += d
+        avg /= float(len(self._bptt_buffer))
+        self.ssm.W_fast[0] -= float(self.config.ssm_lr) * avg * 0.001
+        self._bptt_buffer.clear()
+
+    def train_step(self, token_id: int, next_token_id: int, *, gria_lr: float | None = None) -> dict[str, Any]:
         fwd = self._forward_context(token_id, update_dif=False)
         v = fwd["v"]
         field_x = fwd["field_x"]
@@ -132,15 +245,25 @@ class CyphaLM:
         else:
             loss = float(-log_probs[nxt])
         gw, ga, gb = self.gria.cross_entropy_gradients(v, nxt)
-        lr = self.config.gria_lr
+        lr = float(self.config.gria_lr if gria_lr is None else gria_lr)
         self.gria.update_weights(gw, lr)
         self.gria.update_alpha(ga, lr)
         self.gria.update_bias(gb, lr)
-        if self.config.online:
+        if self.config.online and self.config.context_mode not in (
+            "ssm_only",
+            "ablation_no_ssm",
+        ):
             target_vec = self._proj_embed @ self.embed.embed(nxt)
             self.dif.train_step(asnumpy(field_x), asnumpy(target_vec))
-        self._ssm_online_update(fwd["embedding"], fwd["ctx"])
+        if self.config.bptt_steps > 0:
+            self._bptt_ssm_update(fwd, nxt)
+        else:
+            self._ssm_online_update(fwd["embedding"], fwd["ctx"])
         self._token_counts[nxt] += 1.0
+        if self.config.laplace_smoothing > 0:
+            self.gria.set_laplace_prior(
+                self._token_counts, smoothing=self.config.laplace_smoothing
+            )
         alpha_gria = self.gria.grand_unified_law_alpha(
             asnumpy(fwd["field_x"]), np.exp(asnumpy(log_probs))
         )
@@ -152,17 +275,50 @@ class CyphaLM:
             "alpha_gria": float(alpha_gria),
         }
 
-    def train_sequence(self, token_ids: list[int]) -> dict[str, Any]:
+    def train_sequence_views(
+        self,
+        token_ids: list[int],
+        schedule: list[ViewSpec] | ViewSchedule | None = None,
+    ) -> dict[str, Any]:
+        """Train over an explicit or config-resolved multi-view schedule."""
         ids = [int(t) for t in token_ids]
+        if schedule is None:
+            view_schedule = resolve_schedule(
+                self.config.view_schedule,
+                seed=self.config.seed,
+                train_epochs=self.config.train_epochs,
+            )
+        elif isinstance(schedule, ViewSchedule):
+            view_schedule = schedule
+        else:
+            view_schedule = ViewSchedule(views=list(schedule), seed=self.config.seed)
+
         losses, epi, ale, active, alpha = [], [], [], [], []
-        self.reset_context()
-        for t in range(len(ids) - 1):
-            m = self.train_step(ids[t], ids[t + 1])
-            losses.append(m["loss"])
-            epi.append(m["epistemic_var"])
-            ale.append(m["aleatoric_var"])
-            active.append(m["active_experts"])
-            alpha.append(m["alpha_gria"])
+        base_lr = float(self.config.gria_lr)
+        block_size = max(1, int(self.config.view_block_size))
+        last_macro = -1
+        for view_spec, macro_index, segment, reset_before in iter_view_epochs(
+            ids,
+            view_schedule,
+            char_newline_id=None,
+            block_size=block_size,
+        ):
+            macro_lr = base_lr * (float(self.config.gria_lr_decay) ** macro_index)
+            self._current_view_id = hash(view_spec.view_id) & 0x7FFFFFFF
+            if macro_index != last_macro:
+                self.reset_context()
+                last_macro = macro_index
+            elif reset_before:
+                self.reset_context()
+                self._embed_history.clear()
+                self._bptt_buffer.clear()
+            for t in range(len(segment) - 1):
+                m = self.train_step(segment[t], segment[t + 1], gria_lr=macro_lr)
+                losses.append(m["loss"])
+                epi.append(m["epistemic_var"])
+                ale.append(m["aleatoric_var"])
+                active.append(m["active_experts"])
+                alpha.append(m["alpha_gria"])
         return {
             "loss": np.asarray(losses, dtype=np.float64),
             "epistemic_var": np.asarray(epi, dtype=np.float64),
@@ -170,6 +326,9 @@ class CyphaLM:
             "active_experts": np.asarray(active, dtype=np.int64),
             "alpha_gria": np.asarray(alpha, dtype=np.float64),
         }
+
+    def train_sequence(self, token_ids: list[int]) -> dict[str, Any]:
+        return self.train_sequence_views(token_ids)
 
     def predict_next(self, token_id: int) -> dict[str, Any]:
         fwd = self._forward_context(int(token_id))
@@ -308,6 +467,7 @@ class CyphaLM:
             proj_ssm=asnumpy(self._proj_ssm),
             proj_dif=asnumpy(self._proj_dif),
             proj_embed=asnumpy(self._proj_embed),
+            proj_ngram=asnumpy(self._proj_ngram),
         )
 
     @classmethod
@@ -330,4 +490,6 @@ class CyphaLM:
             model._proj_dif = xp.asarray(data["proj_dif"], dtype=xp.float64)
             if "proj_embed" in data:
                 model._proj_embed = xp.asarray(data["proj_embed"], dtype=xp.float64)
+            if "proj_ngram" in data:
+                model._proj_ngram = xp.asarray(data["proj_ngram"], dtype=xp.float64)
         return model

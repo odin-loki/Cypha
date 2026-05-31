@@ -10,8 +10,8 @@ import numpy as np
 from cypha_lm.config import CyphaLMConfig
 from cypha_lm.expert_field.nig_expert import NIGExpert
 
-NOVELTY_THRESHOLD = 0.1
-ACTIVE_EXPERT_THRESHOLD = 0.01
+NOVELTY_THRESHOLD = 0.05
+ACTIVE_EXPERT_THRESHOLD = 0.001
 _ENTROPY_BINS = 16
 
 
@@ -117,6 +117,14 @@ class CyphaDIF:
             return np.full(k, 1.0 / k, dtype=np.float64)
         return exp_logits / total
 
+    def _active_expert_count(self, probs: np.ndarray) -> int:
+        active = int(np.sum(probs > ACTIVE_EXPERT_THRESHOLD))
+        if self._warm_start_experts > 0 and len(self._experts) == self._warm_start_experts:
+            spread = float(np.max(probs) - np.min(probs)) if probs.size else 0.0
+            if spread < 0.05 or active < self._warm_start_experts:
+                active = max(active, self._warm_start_experts)
+        return active
+
     def _maybe_grow(self, x: np.ndarray, probs: np.ndarray) -> np.ndarray:
         llrs = self._llr(x)
         max_llr = float(np.max(llrs)) if llrs.size else -np.inf
@@ -211,7 +219,7 @@ class CyphaDIF:
 
         epistemic_var = float(np.sum(probs[:, np.newaxis] * epistemic))
         aleatoric_var = float(np.sum(probs[:, np.newaxis] * aleatoric))
-        active_experts = int(np.sum(probs > ACTIVE_EXPERT_THRESHOLD))
+        active_experts = self._active_expert_count(probs)
 
         return {
             "mean": mean,

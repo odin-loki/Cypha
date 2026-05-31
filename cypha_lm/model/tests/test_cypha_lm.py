@@ -123,6 +123,90 @@ def test_context_reset(model: CyphaLM) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "context_mode",
+    ["full", "ssm_only", "gria_ngram", "ablation_no_dif", "ablation_no_ssm"],
+)
+def test_context_mode_forward(context_mode: str) -> None:
+    cfg = CyphaLMConfig(
+        vocab_size=64,
+        d_embed=64,
+        field_dim=32,
+        d_state=16,
+        ssm_layers=1,
+        max_experts=8,
+        n_experts=4,
+        seed=42,
+        device="cpu",
+        context_mode=context_mode,
+        ngram_context=2,
+    )
+    model = CyphaLM(cfg)
+    out = model.train_step(0, 1)
+    assert np.isfinite(out["loss"])
+    pred = model.predict_next(1)
+    assert pred["log_probs"].shape == (cfg.vocab_size,)
+    assert np.all(np.isfinite(pred["log_probs"]))
+
+
+def test_train_sequence_view_schedule() -> None:
+    cfg = CyphaLMConfig(
+        vocab_size=64,
+        d_embed=64,
+        field_dim=32,
+        d_state=16,
+        ssm_layers=1,
+        max_experts=8,
+        seed=42,
+        device="cpu",
+        view_schedule="schedule_a",
+        view_block_size=4,
+    )
+    model = CyphaLM(cfg)
+    seq = list(range(20))
+    metrics = model.train_sequence(seq)
+    assert metrics["loss"].size > 0
+    assert np.all(np.isfinite(metrics["loss"]))
+
+
+def test_train_epochs_multi_pass() -> None:
+    cfg = CyphaLMConfig(
+        vocab_size=64,
+        d_embed=64,
+        field_dim=32,
+        d_state=16,
+        ssm_layers=1,
+        max_experts=8,
+        seed=42,
+        device="cpu",
+        train_epochs=3,
+        gria_lr_decay=0.5,
+    )
+    model = CyphaLM(cfg)
+    seq = [0, 1, 2, 3, 4, 5]
+    metrics = model.train_sequence(seq)
+    expected_steps = (len(seq) - 1) * cfg.train_epochs
+    assert metrics["loss"].shape[0] == expected_steps
+    assert np.all(np.isfinite(metrics["loss"]))
+
+
+def test_warm_started_active_experts() -> None:
+    cfg = CyphaLMConfig(
+        vocab_size=64,
+        d_embed=64,
+        field_dim=32,
+        d_state=16,
+        ssm_layers=1,
+        max_experts=32,
+        n_experts=8,
+        seed=42,
+        device="cpu",
+    )
+    model = CyphaLM(cfg)
+    out = model.train_step(0, 1)
+    assert out["active_experts"] >= cfg.n_experts
+
+
 def _sequence_perplexity(model: CyphaLM, token_ids: list[int]) -> float:
     model.reset_context()
     nll = 0.0

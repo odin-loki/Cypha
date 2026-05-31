@@ -56,7 +56,7 @@ Repository = "https://github.com/odin-loki/Cypha"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["cypha_studio*", "cypha_accel*", "cypha_lm*", "cypha_bench*", "cypha_som*"]
+include = ["cypha_studio*", "cypha_accel*", "cypha_lm*", "cypha_bench*", "cypha_som*", "cypha_views*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -112,4 +112,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["cypha_studio", "cypha_accel", "cypha_lm", "cypha_bench", "cypha_som"]
+known-first-party = ["cypha_studio", "cypha_accel", "cypha_lm", "cypha_bench", "cypha_som", "cypha_views"]

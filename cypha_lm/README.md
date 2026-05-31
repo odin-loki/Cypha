@@ -12,6 +12,52 @@ token_id → IzaacEmbedding → CellAISSM → CyphaDIF.predict(field_x) → GRIA
 
 CyphaDIF is not a separate bolt-on — it routes and predicts in the expert field on every forward step. Training updates GRIA (CE gradients) and optionally CyphaDIF experts online (`config.online=True`).
 
+## Training and context modes (upgrade)
+
+`CyphaLMConfig` supports architectural ablations and stronger char-LM training:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `context_mode` | `"full"` | How GRIA input `v` is built (see table below) |
+| `ngram_context` | `2` | Previous token embeds to concat when `context_mode="gria_ngram"` |
+| `train_epochs` | `1` | Full passes over `train_sequence` / bench train loop |
+| `gria_lr_decay` | `0.5` | Multiply `gria_lr` after each epoch when `train_epochs > 1` |
+| `bptt_steps` | `0` | If &gt; 0, truncated BPTT window for optional SSM fast-weight updates |
+| `laplace_smoothing` | `1.0` | Laplace prior on GRIA bias via `set_laplace_prior()` |
+
+### `context_mode` values
+
+| Mode | GRIA input |
+|------|------------|
+| `full` | SSM context + CyphaDIF field (default) |
+| `gria_ngram` | SSM projection + last *K* Izaac embeddings (n-gram-like shortcut) |
+| `ssm_only` | SSM path; DIF contribution zeroed |
+| `ablation_no_dif` | Field mean only; routing ablated |
+| `ablation_no_ssm` | N-gram embed stack only; SSM zeroed |
+
+Bench profiles (`d04`, `d17`) set recommended modes — e.g. `gria_ngram` on WikiText with `ngram_context: 2`, `train_epochs: 2`, `bptt_steps: 64` on D17.
+
+### Laplace bias init
+
+When `laplace_smoothing > 0`, token counts from training initialize GRIA bias to log-smoothed unigram probabilities, giving a strong char-LM prior before online CE updates.
+
+```python
+from cypha_lm.config import CyphaLMConfig
+from cypha_lm.model.cypha_lm import CyphaLM
+
+cfg = CyphaLMConfig(
+    vocab_size=256,
+    context_mode="gria_ngram",
+    ngram_context=2,
+    train_epochs=2,
+    bptt_steps=64,
+    laplace_smoothing=1.0,
+    gria_lr=0.08,
+)
+model = CyphaLM(cfg)
+model.train_sequence(train_ids)  # respects train_epochs + lr decay
+```
+
 ## Install
 
 From the repository root:
@@ -109,16 +155,21 @@ See [`cypha_studio/README.md`](../cypha_studio/README.md) and [`docs/port/PORT_C
 
 | Domain | Focus |
 |--------|-------|
-| **D04** | Char-LM: held-out BPC, context-length curve, expert routing trace, save/restore, sampling comparison |
-| **D17** | Extended integration: WikiText, alpha spectrum, cross-corpus online adaptation |
+| **D04** | Char-LM: held-out BPC, context-length curve, expert routing, save/restore, sampling, **4/5-gram + char-LSTM baselines**, ablations |
+| **D17** | WikiText integration: alpha spectrum, cross-corpus online adaptation, full-corpus mode |
 
-Shared helpers: `cypha_bench/adapters/cyphalm_bench.py`
+Shared helpers: `cypha_bench/adapters/cyphalm_bench.py`, `cyphalm_ablations.py`, `char_lstm_baseline.py`
 
 ```bash
 pip install -e cypha_lm/
 python cypha_bench/domains/d04_generation_language.py
 python cypha_bench/run_all.py --domain 4
+
+# Full WikiText train
+CYPHA_BENCH_FULL_CORPUS=1 python cypha_bench/run_all.py --domain 17
 ```
+
+See [`cypha_bench/README.md`](../cypha_bench/README.md) for env vars and baseline tables.
 
 ## Run tests
 
@@ -150,12 +201,13 @@ Set `CYPHA_LM_FAST=1` for reduced steps.
 | `model/` | CyphaLM stack, `generation.py` decoding |
 | `analysis/` | Alpha spectrum and compression profiling |
 
-## Empirical results (2026-05-31)
+## Empirical results
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| D04 / D17 held-out BPC | ~4.5–5.2 | Depends on corpus and train steps |
-| Bigram baseline | ~3.7–4.2 | Gutenberg / WikiText |
-| Save/restore parity | ✅ | log-prob max diff < 1e-9 |
+| D04 / D17 held-out BPC (40k train) | *run bench to refresh* | Pre-upgrade pinned: ~4.66–5.00 vs bigram ~3.84–3.91 |
+| 4-gram / 5-gram / char-LSTM | *run bench to refresh* | New baselines in D04/D17 JSON |
+| Ablation `gria_ngram` vs `full` | *run bench to refresh* | Target: beat bigram on D17 full corpus |
+| Save/restore parity | ✅ | log-prob max diff &lt; 1e-9 |
 
-See [docs/RESEARCH_STATUS.md](../docs/RESEARCH_STATUS.md) for full benchmark tables and roadmap.
+See [docs/RESEARCH_STATUS.md](../docs/RESEARCH_STATUS.md) for beat-bigram roadmap and full benchmark tables.

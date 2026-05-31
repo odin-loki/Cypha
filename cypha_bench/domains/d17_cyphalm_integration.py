@@ -19,11 +19,15 @@ for path in (_REPO, _BENCH):
 
 from bench_common import finalize_domain
 
+from cypha_bench.adapters.char_lstm_baseline import char_lstm_baseline_bpc
+from cypha_bench.adapters.cyphalm_ablations import run_lm_ablations
 from cypha_bench.adapters.cyphalm_bench import (
     bigram_baseline_bpc,
     cyphalm_bench_limits,
     cyphalm_dif_metrics,
     eval_held_out_bpc,
+    fivegram_baseline_bpc,
+    fourgram_baseline_bpc,
     load_cyphalm_config,
     make_cyphalm,
     prepare_lm_corpus,
@@ -32,6 +36,7 @@ from cypha_bench.adapters.cyphalm_bench import (
     trigram_baseline_bpc,
 )
 from cypha_bench.common.metrics import save_figure
+from cypha_bench.common.paths import is_fast
 
 
 def _load_corpus():
@@ -39,6 +44,23 @@ def _load_corpus():
     corpus = prepare_lm_corpus(prefer_wikitext=True, max_train_chars=limits["max_corpus_chars"])
     require_real_corpus(corpus.source, domain="D17")
     return corpus
+
+
+def _lm_baseline_metrics(train_slice, test_ids, vocab_size, limits) -> dict:
+    metrics = {
+        "bigram_bpc": bigram_baseline_bpc(train_slice, test_ids, vocab_size),
+        "trigram_bpc": trigram_baseline_bpc(train_slice, test_ids, vocab_size),
+    }
+    if not is_fast():
+        metrics["fourgram_bpc"] = fourgram_baseline_bpc(train_slice, test_ids, vocab_size)
+        metrics["fivegram_bpc"] = fivegram_baseline_bpc(train_slice, test_ids, vocab_size)
+        metrics["char_lstm_bpc"] = char_lstm_baseline_bpc(
+            train_slice,
+            test_ids,
+            vocab_size,
+            n_train_steps=limits["n_train"],
+        )
+    return metrics
 
 
 def experiment_17a_bpc():
@@ -60,8 +82,16 @@ def experiment_17a_bpc():
 
     held_out_bpc = eval_held_out_bpc(model, corpus.eval_ids, n_eval=limits["n_eval"])
     train_slice = corpus.train_ids[:n_train]
-    bigram_bpc = bigram_baseline_bpc(train_slice, corpus.eval_ids, corpus.vocab_size)
-    trigram_bpc = trigram_baseline_bpc(train_slice, corpus.eval_ids, corpus.vocab_size)
+    baselines = _lm_baseline_metrics(train_slice, corpus.eval_ids, corpus.vocab_size, limits)
+    bigram_bpc = baselines["bigram_bpc"]
+    trigram_bpc = baselines["trigram_bpc"]
+
+    ablation_modes = (
+        ["full", "gria_ngram"]
+        if is_fast()
+        else ["full", "gria_ngram", "ssm_only", "ablation_no_dif", "ablation_no_ssm"]
+    )
+    ablations = run_lm_ablations(corpus, limits, ablation_modes, profile="d17")
 
     return {
         "cyphalm_bpc": held_out_bpc,
@@ -69,8 +99,10 @@ def experiment_17a_bpc():
         "final_train_bpc": curve["final_train_bpc"],
         "bigram_bpc": bigram_bpc,
         "trigram_bpc": trigram_bpc,
+        **baselines,
         "delta_vs_bigram": held_out_bpc - bigram_bpc,
         "delta_vs_trigram": held_out_bpc - trigram_bpc,
+        "ablations": ablations,
         "source": corpus.source,
         "split": corpus.split,
         "train_tokens": n_train,
@@ -98,6 +130,57 @@ def experiment_17b_alpha_spectrum():
         "fraction_edge_of_chaos": frac_edge,
         "n_experts": int(profile.get("n_experts", 0)),
     }
+
+
+def _eval_view_schedule_bpc(
+    view_schedule: str,
+    corpus,
+    *,
+    n_train: int,
+    n_eval: int,
+) -> float:
+    """Train CyphaLM with a view-schedule preset and return held-out BPC."""
+    merged = load_cyphalm_config({"view_schedule": view_schedule}, profile="d17")
+    model, _ = make_cyphalm(merged, profile=None)
+    train_slice = corpus.train_ids[: min(n_train + 1, len(corpus.train_ids))]
+    model.train_sequence(train_slice)
+    return eval_held_out_bpc(model, corpus.eval_ids, n_eval=n_eval)
+
+
+def experiment_17e_multi_view():
+    """Compare multi-view schedules vs same-order baseline on WikiText."""
+    limits = cyphalm_bench_limits()
+    corpus = _load_corpus()
+    if len(corpus.train_ids) < 512:
+        return {"skipped": True, "source": corpus.source}
+
+    n_train = min(limits["n_train"], len(corpus.train_ids) - 1)
+    n_eval = limits["n_eval"]
+
+    same_order_bpc = _eval_view_schedule_bpc(
+        "same_order", corpus, n_train=n_train, n_eval=n_eval
+    )
+    schedule_a_bpc = _eval_view_schedule_bpc(
+        "schedule_a", corpus, n_train=n_train, n_eval=n_eval
+    )
+
+    out: dict = {
+        "same_order_bpc": same_order_bpc,
+        "schedule_a_bpc": schedule_a_bpc,
+        "delta_schedule_a": schedule_a_bpc - same_order_bpc,
+        "n_train": n_train,
+        "source": corpus.source,
+        "view_block_size": int(load_cyphalm_config(profile="d17").get("view_block_size", 512)),
+    }
+
+    if not is_fast():
+        schedule_b_bpc = _eval_view_schedule_bpc(
+            "schedule_b", corpus, n_train=n_train, n_eval=n_eval
+        )
+        out["schedule_b_bpc"] = schedule_b_bpc
+        out["delta_schedule_b"] = schedule_b_bpc - same_order_bpc
+
+    return out
 
 
 def experiment_17d_online_adaptation():
@@ -158,6 +241,7 @@ def run() -> dict:
             "17A_bits_per_character": exp17a,
             "17B_alpha_spectrum": experiment_17b_alpha_spectrum(),
             "17D_online_adaptation": experiment_17d_online_adaptation(),
+            "17E_multi_view": experiment_17e_multi_view(),
         }
     except ImportError as exc:
         experiments = {

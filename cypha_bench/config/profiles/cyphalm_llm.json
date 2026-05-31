@@ -9,6 +9,11 @@
   "max_experts": 128,
   "alpha_init": 0.5,
   "context_length": 256,
+  "context_mode": "gria_ngram",
+  "ngram_context": 2,
+  "train_epochs": 2,
+  "bptt_steps": 64,
+  "laplace_smoothing": 1.0,
   "seed": 42,
   "gria_lr": 0.08,
   "online": true,
@@ -18,12 +23,5 @@
   "use_multiscale": true,
   "n_experts": 0,
   "train_ssm": false,
-  "ssm_lr": 0.002,
-  "_meta": {
-    "source": "cyphalm_sweep",
-    "corpus": "wikitext2",
-    "delta_vs_bigram": 0.3327766812619757,
-    "cyphalm_bpc": 4.915723686944205,
-    "bigram_bpc": 4.58294700568223
-  }
+  "ssm_lr": 0.002
 }

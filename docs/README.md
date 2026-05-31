@@ -101,6 +101,8 @@ For the full picture of where the project stands — benchmark numbers, confirme
 
 **[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** — the canonical research journal.
 
+**[`docs/MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md)** — planned multi-view online training (CyphaLM Phase 1, CyphaDIF Phase 2): structure-preserving reorderings, view schedules, execution roadmap.
+
 Permanent investigation reports:
 
 | Report | What happened |

@@ -30,6 +30,15 @@ class CyphaLMConfig:
 
     # Training
     context_length: int = 256
+    context_mode: str = "full"  # full | ssm_only | gria_ngram | ablation_no_dif | ablation_no_ssm
+    ngram_context: int = 2  # previous token embeds to concat (gria_ngram / ablation_no_ssm)
+    train_epochs: int = 1  # multi-pass over corpus
+    view_schedule: str = "same_order"  # preset name or JSON list of view transforms
+    view_block_size: int = 512
+    view_id_dim: int = 0  # if >0, optional view embedding (reserved)
+    gria_lr_decay: float = 0.5  # multiply gria lr each epoch after the first
+    bptt_steps: int = 0  # truncated BPTT window for SSM fast weights via GRIA loss
+    laplace_smoothing: float = 1.0  # unigram-style GRIA bias init / online prior
     online: bool = True
     gria_lr: float = 0.05
     ssm_lr: float = 0.001

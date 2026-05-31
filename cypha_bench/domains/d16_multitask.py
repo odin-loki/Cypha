@@ -25,6 +25,8 @@ from bench_common import (
     rng,
 )
 
+from cypha_bench.common.paths import scale
+
 from Cypha import CyphaDIF, VectorEncoder
 
 
@@ -225,6 +227,120 @@ def experiment_16e_save_restore():
     }
 
 
+def task_block_shuffle_stream(
+    task_datasets,
+    *,
+    max_steps: int = 3000,
+    steps_per_block: int | None = None,
+    macro_epochs: int = 2,
+    seed: int = DEFAULT_SEED,
+):
+    """Permute task-block order each macro-epoch (DIF-V5a prototype)."""
+    g = rng(seed)
+    task_ids = list(task_datasets.keys())
+    if steps_per_block is None:
+        steps_per_block = max(1, max_steps // max(len(task_ids) * macro_epochs, 1))
+    step = 0
+    for _ in range(macro_epochs):
+        order = list(task_ids)
+        g.shuffle(order)
+        for tid in order:
+            X, y = task_datasets[tid]
+            perm = g.permutation(len(X))
+            for k in range(steps_per_block):
+                if step >= max_steps:
+                    return
+                i = int(perm[k % len(perm)])
+                yield X[i], y[i], tid
+                step += 1
+
+
+def _multitask_forgetting_with_stream(stream_factory, tasks, max_dim, seed, max_steps):
+    """16B-style forgetting: warm task A, interleave others, measure A retention."""
+    clf = _make_multitask_clf(max_dim, seed=seed)
+    warm_steps = max(1, max_steps // 6)
+
+    def _train_stream(stream, limit):
+        n = 0
+        for x, y, tid in stream:
+            clf.train_step(x.astype(np.float32), f"{tid}_{y}")
+            n += 1
+            if n >= limit:
+                break
+
+    X_iris, y_iris, Xte_iris, yte_iris = tasks["iris"]
+    Xp_iris = _pad_to_max(X_iris, max_dim)
+    g = rng(seed + 1)
+    for i in g.permutation(len(Xp_iris))[:warm_steps]:
+        clf.train_step(Xp_iris[i].astype(np.float32), f"iris_{y_iris[i]}")
+
+    def _iris_acc():
+        Xp = _pad_to_max(Xte_iris, max_dim)
+        return clf_metrics(clf, Xp, [f"iris_{y}" for y in yte_iris])["accuracy"]
+
+    acc_before = _iris_acc()
+    train_sets = {
+        tid: (_pad_to_max(X, max_dim), y) for tid, (X, y, _, _) in tasks.items()
+    }
+    _train_stream(stream_factory(train_sets), max_steps - warm_steps)
+    acc_after = _iris_acc()
+    forgetting = (acc_before - acc_after) / max(acc_before, 1e-6)
+
+    per_task_acc = {}
+    for tid, (_, _, Xte, yte) in tasks.items():
+        Xp = _pad_to_max(Xte, max_dim)
+        per_task_acc[tid] = clf_metrics(clf, Xp, [f"{tid}_{y}" for y in yte])["accuracy"]
+
+    return {
+        "task_a_accuracy_before": acc_before,
+        "task_a_accuracy_after": acc_after,
+        "forgetting_score": float(forgetting),
+        "per_task_accuracy": per_task_acc,
+    }
+
+
+def experiment_16g_view_streams():
+    """Compare round-robin vs task-block-shuffle multitask streams (~3k steps)."""
+    tasks = _load_tasks()
+    max_dim = max(t[0].shape[1] for t in tasks.values())
+    max_steps = scale(3000, 1500)
+    macro_epochs = 2
+
+    train_sets = {tid: (_pad_to_max(X, max_dim), y) for tid, (X, y, _, _) in tasks.items()}
+
+    def _round_robin_stream(datasets):
+        return multitask_stream(
+            datasets, interleave="round_robin", max_steps=max_steps, seed=DEFAULT_SEED + 20
+        )
+
+    def _task_block_stream(datasets):
+        return task_block_shuffle_stream(
+            datasets,
+            max_steps=max_steps,
+            macro_epochs=macro_epochs,
+            seed=DEFAULT_SEED + 21,
+        )
+
+    round_robin = _multitask_forgetting_with_stream(
+        _round_robin_stream, tasks, max_dim, DEFAULT_SEED + 22, max_steps
+    )
+    task_block = _multitask_forgetting_with_stream(
+        _task_block_stream, tasks, max_dim, DEFAULT_SEED + 23, max_steps
+    )
+
+    return {
+        "max_steps": max_steps,
+        "macro_epochs": macro_epochs,
+        "round_robin": round_robin,
+        "task_block_shuffle": task_block,
+        "forgetting_delta": task_block["forgetting_score"] - round_robin["forgetting_score"],
+        "mean_accuracy_round_robin": float(np.mean(list(round_robin["per_task_accuracy"].values()))),
+        "mean_accuracy_task_block_shuffle": float(
+            np.mean(list(task_block["per_task_accuracy"].values()))
+        ),
+    }
+
+
 def experiment_16f_per_task_models():
     """Per-task model ensemble: zero catastrophic forgetting by design.
 
@@ -266,6 +382,7 @@ def run() -> dict:
         "16D_interleaving_comparison": experiment_16d_interleaving(),
         "16E_save_restore"           : experiment_16e_save_restore(),
         "16F_per_task_models"        : experiment_16f_per_task_models(),
+        "16G_view_streams"           : experiment_16g_view_streams(),
     }
     return finalize_domain("d16", experiments)
 

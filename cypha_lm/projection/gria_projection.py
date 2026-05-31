@@ -110,14 +110,32 @@ class GRIAProjection:
             g = xp.resize(g, self.vocab_size)
         self.bias -= lr * g
 
-    def set_unigram_prior(self, token_counts: np.ndarray) -> None:
+    def set_laplace_prior(
+        self, token_counts: np.ndarray, smoothing: float = 1.0
+    ) -> None:
+        """Bias = log(count + smooth) - log(Z) (Laplace-smoothed unigram)."""
         xp = self._xp
         counts = xp.asarray(token_counts, dtype=xp.float64).ravel()
         if counts.size < self.vocab_size:
             counts = xp.resize(counts, self.vocab_size)
-        counts = counts[: self.vocab_size] + 1.0
-        probs = counts / counts.sum()
-        self.bias = xp.log(probs + 1e-12)
+        counts = counts[: self.vocab_size] + float(smoothing)
+        log_z = xp.log(xp.sum(counts))
+        self.bias = xp.log(counts + 1e-12) - log_z
+
+    def set_unigram_prior(self, token_counts: np.ndarray) -> None:
+        self.set_laplace_prior(token_counts, smoothing=1.0)
+
+    def grad_v_cross_entropy(self, v: Any, target_id: int) -> Any:
+        """Gradient of cross-entropy loss w.r.t. input vector v."""
+        xp = self._xp
+        v = xp.asarray(v, dtype=xp.float64).ravel()
+        if v.size != self.d_input:
+            v = xp.resize(v, self.d_input)
+        logits = self.logits(v)
+        probs = _softmax_logits(logits, xp=xp)
+        d_logits = probs.copy()
+        d_logits[int(target_id)] -= 1.0
+        return self.W.T @ (d_logits * self.alpha)
 
     def alpha_spectrum(self) -> dict:
         a = asnumpy(self.alpha)

@@ -1,15 +1,41 @@
 {
   "domain": "d17",
-  "timestamp": "2026-05-31T06:24:49.528509+00:00",
+  "timestamp": "2026-05-31T07:52:35.027012+00:00",
   "experiments": {
     "17A_bits_per_character": {
-      "cyphalm_bpc": 4.658256356834166,
-      "online_train_bpc": 4.7192581846345005,
-      "final_train_bpc": 4.667336639315936,
+      "cyphalm_bpc": 4.1540598049383695,
+      "online_train_bpc": 4.156126176912785,
+      "final_train_bpc": 4.095636278031173,
       "bigram_bpc": 3.914244595910738,
       "trigram_bpc": 4.397618529088474,
-      "delta_vs_bigram": 0.7440117609234282,
-      "delta_vs_trigram": 0.26063782774569244,
+      "fourgram_bpc": 5.285955223572003,
+      "fivegram_bpc": 5.5789256290585785,
+      "char_lstm_bpc": 3.588927001247708,
+      "delta_vs_bigram": 0.23981520902763132,
+      "delta_vs_trigram": -0.2435587241501045,
+      "ablations": {
+        "modes_run": [
+          "full",
+          "gria_ngram",
+          "ssm_only",
+          "ablation_no_dif",
+          "ablation_no_ssm"
+        ],
+        "n_train": 40000,
+        "n_eval": 2000,
+        "bigram_bpc": 3.914244595910738,
+        "trigram_bpc": 4.397618529088474,
+        "fourgram_bpc": 5.285955223572003,
+        "fivegram_bpc": 5.5789256290585785,
+        "char_lstm_bpc": 3.588927001247708,
+        "ablation_bpc": {
+          "full": 4.7249850432211025,
+          "gria_ngram": 4.1540598049383695,
+          "ssm_only": 4.450673733565567,
+          "ablation_no_dif": 4.724983585149694,
+          "ablation_no_ssm": 4.164613996725149
+        }
+      },
       "source": "wikitext2",
       "split": "wikitext_official",
       "train_tokens": 40000,
@@ -37,26 +63,26 @@
           40000
         ],
         "held_out_bpc": [
-          4.986781935032673,
-          4.961670330441446,
-          5.151767341624651,
-          4.872413236763884,
-          5.012923022569091,
-          4.821283648975705,
-          6.95616421580984,
-          6.272465445865294,
-          4.902064518619864,
-          4.87612007230376,
-          4.638585993537702,
-          4.760705821386908,
-          4.725963100899552,
-          4.73897552201145,
-          4.645017393695309,
-          4.637872858255915,
-          4.637518441983744,
-          4.6242591052342785,
-          4.618085717722661,
-          4.669085302353794
+          4.734865339792143,
+          4.567338292284187,
+          4.76071151811384,
+          4.424882924824222,
+          4.388272293671196,
+          4.523094376908952,
+          4.528242029686471,
+          4.516385392810281,
+          4.398862301724386,
+          4.841453597667921,
+          4.24801920854798,
+          4.33521505132631,
+          4.294112789929365,
+          4.274722332763735,
+          4.236595865826135,
+          4.288755974721068,
+          4.215968370949217,
+          4.194780091380518,
+          4.174358913790217,
+          4.264089523483955
         ],
         "expert_count": [
           1,
@@ -81,8 +107,8 @@
           1
         ],
         "trained_steps": 40000,
-        "online_train_bpc": 4.7192581846345005,
-        "final_train_bpc": 4.667336639315936
+        "online_train_bpc": 4.156126176912785,
+        "final_train_bpc": 4.095636278031173
       },
       "device": "cpu",
       "profile": {
@@ -90,40 +116,45 @@
         "d_embed": 64,
         "d_state": 128,
         "tau_fast": 1.0,
-        "tau_slow": 50.0,
+        "tau_slow": 20.0,
         "ssm_layers": 2,
         "field_dim": 160,
         "max_experts": 128,
         "alpha_init": 0.5,
         "context_length": 256,
         "seed": 42,
-        "gria_lr": 0.06,
+        "gria_lr": 0.08,
         "online": true,
         "device": "auto",
         "use_spectral_pde": false,
         "use_sparse_hebbian": false,
         "use_multiscale": true,
-        "n_experts": 4,
-        "train_ssm": true,
-        "ssm_lr": 0.002
+        "n_experts": 0,
+        "train_ssm": false,
+        "ssm_lr": 0.002,
+        "context_mode": "gria_ngram",
+        "ngram_context": 2,
+        "train_epochs": 2,
+        "bptt_steps": 64,
+        "laplace_smoothing": 1.0
       },
       "cypha_dif": {
-        "n_experts": 13,
-        "mean_alpha": 0.10681433847901023,
-        "mean_epistemic_var": 3.844376977114597e-05,
-        "mean_aleatoric_var": 0.9144235077764781,
-        "lossless_fraction": 4.20397696220165e-05
+        "n_experts": 2,
+        "mean_alpha": 0.0969005395430291,
+        "mean_epistemic_var": 2.2782138195129564e-05,
+        "mean_aleatoric_var": 0.9084149783925963,
+        "lossless_fraction": 2.5078369905928506e-05
       }
     },
     "17B_alpha_spectrum": {
-      "mean_alpha": 0.10676098631921022,
+      "mean_alpha": 0.12391890965019445,
       "fraction_edge_of_chaos": 0.0,
-      "n_experts": 11
+      "n_experts": 2
     },
     "17D_online_adaptation": {
-      "bpc_ood_before_adapt": 5.105685671817241,
-      "bpc_ood_after_adapt": 4.818639492249035,
-      "bpc_improvement": 0.2870461795682058
+      "bpc_ood_before_adapt": 4.36173475609089,
+      "bpc_ood_after_adapt": 4.142526603296323,
+      "bpc_improvement": 0.2192081527945664
     }
   }
 }

@@ -41,6 +41,8 @@ DEFAULT_CYPHALM_CONFIG: dict[str, Any] = {
     "n_experts": 0,
     "train_ssm": False,
     "ssm_lr": 0.001,
+    "view_schedule": "same_order",
+    "view_block_size": 512,
 }
 
 
@@ -61,6 +63,15 @@ def load_cyphalm_config(
 
 def cyphalm_bench_limits() -> dict[str, int]:
     """Scale corpus / train / eval sizes for full vs CYPHA_BENCH_FAST runs."""
+    if os.environ.get("CYPHA_BENCH_FULL_CORPUS", "0") == "1":
+        return {
+            "max_corpus_chars": 10_000_000,
+            "n_train": 999_999_999,
+            "n_eval": scale(8_000, 500),
+            "snapshot_every": scale(10_000, 500),
+            "max_generate": scale(120, 40),
+            "prompt_len": scale(64, 24),
+        }
     return {
         "max_corpus_chars": scale(80_000, 20_000),
         "n_train": scale(40_000, 3_000),
@@ -309,6 +320,22 @@ def trigram_baseline_bpc(
     return ngram_baseline_bpc(train_ids, test_ids, vocab_size, n=3)
 
 
+def fourgram_baseline_bpc(
+    train_ids: list[int],
+    test_ids: list[int],
+    vocab_size: int,
+) -> float:
+    return ngram_baseline_bpc(train_ids, test_ids, vocab_size, n=4)
+
+
+def fivegram_baseline_bpc(
+    train_ids: list[int],
+    test_ids: list[int],
+    vocab_size: int,
+) -> float:
+    return ngram_baseline_bpc(train_ids, test_ids, vocab_size, n=5)
+
+
 def eval_held_out_bpc(model, test_ids: list[int], n_eval: int | None = None) -> float:
     """Sequential held-out BPC: predict token t, score token t+1."""
     n = min(n_eval or len(test_ids) - 1, len(test_ids) - 1)
@@ -335,6 +362,7 @@ def snapshot_model_state(model) -> dict[str, Any]:
         "proj_ssm": asnumpy(model._proj_ssm),
         "proj_dif": asnumpy(model._proj_dif),
         "proj_embed": asnumpy(model._proj_embed),
+        "proj_ngram": asnumpy(model._proj_ngram),
     }
 
 
@@ -347,6 +375,8 @@ def restore_model_state(model, snap: dict[str, Any]) -> None:
     model._proj_ssm = xp.asarray(snap["proj_ssm"], dtype=xp.float64)
     model._proj_dif = xp.asarray(snap["proj_dif"], dtype=xp.float64)
     model._proj_embed = xp.asarray(snap["proj_embed"], dtype=xp.float64)
+    if "proj_ngram" in snap:
+        model._proj_ngram = xp.asarray(snap["proj_ngram"], dtype=xp.float64)
 
 
 def eval_held_out_bpc_preserve_training(model, test_ids: list[int], n_eval: int) -> float:
