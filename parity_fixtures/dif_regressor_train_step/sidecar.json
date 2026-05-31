@@ -172,7 +172,7 @@
     -1.4311029837963556
   ],
   "expected_y_pred": 0.8513819953035893,
-  "expected_uncertainty": 0.17389967614374585,
+  "expected_uncertainty": 0.17389967614374582,
   "final_expert_mu": {
     "_e1": [
       2.5594577984058473

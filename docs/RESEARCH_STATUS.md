@@ -78,21 +78,24 @@ Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation
 |--------|------|--------|---------|--------|---------|
 | D17 — CyphaLM | Held-out BPC (Gutenberg) | bits/char | 4.497 | 3.691 | ⚠ Above bigram |
 | D17B | Alpha spectrum | mean_alpha | 0.1875 | — | ⚠ Low alpha (1 expert) |
-| D17D | Online adaptation BPC gain | ΔBPC | −0.250 | — | ✅ Adapts online |
+| D17D | Online adaptation BPC gain | ΔBPC | −0.295 | — | ✅ Adapts online |
 
 ### Language model (D04 + D17)
 
 | Domain | Task | CyphaLM BPC | Bigram | Verdict |
 |--------|------|-------------|--------|---------|
-| D04 | Char LM — held-out 20% (Gutenberg) | ~4.5 bpc | ~3.7 bpc | ⚠ Above bigram; CyphaLM + CyphaDIF integrated |
-| D17 | Char LM — held-out (WikiText/Gutenberg) | **4.497** | 3.691 | ⚠ Above bigram |
-| D17D | Online adaptation BPC gain | ΔBPC −0.250 | — | ✅ Adapts online |
+| D04 | Char LM — held-out 20% (Gutenberg) | **5.202** | 4.151 | ⚠ Above bigram; full CyphaLM stack |
+| D17 | Char LM — held-out (WikiText/Gutenberg†) | 5.275‡ / **4.497**† | 6.208‡ / 3.691† | ⚠ Above bigram on real text; beats bigram on synthetic |
+| D17D | Online adaptation BPC gain | ΔBPC −0.295 | — | ✅ Adapts online |
 
-D04 now runs the full **CyphaLM** stack. Experiments (2026-05-31):
+† D17 prefers WikiText-2, then Gutenberg; without `cypha_bench/data/wikitext2/` it falls back to synthetic.  
+‡ Latest full bench run (2026-05-31, synthetic fallback). Moby Dick / WikiText numbers from prior corpus install.
+
+D04 now runs the full **CyphaLM** stack (Izaac → CellAI → CyphaDIF → GRIA). Experiments (2026-05-31):
 
 | Experiment | Key output |
 |------------|------------|
-| Held-out BPC | `final_bpc` ~4.5–5.2 (full train), bigram ~3.7–4.2 |
+| Held-out BPC | `final_bpc` **5.202**, bigram **4.151** (Gutenberg Moby Dick) |
 | Context-length curve | BPC vs SSM warm-up window (8–256 tokens) |
 | Expert routing | `dominant_expert_per_step` during greedy generation |
 | Save/restore | `parity_ok=true` (log-prob diff < 1e-9) |
@@ -136,7 +139,7 @@ D17 adds alpha-spectrum and cross-corpus online adaptation on WikiText/Gutenberg
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
 | **Feynman equations** | Mean R²=−0.010 on nonlinear physics | Same — Kernel LLR |
 | **ECG / temporal** | D10 20% accuracy (chance) | CellAI SSM tuning; temporal-aware features |
-| **CyphaLM BPC** | 4.50 bpc vs bigram 3.69 | Longer training; SSM decay tuning; multi-expert |
+| **CyphaLM BPC** | D04: 5.20 vs bigram 4.15; D17: ~4.50 vs 3.69 (real corpus) | Longer training; SSM decay tuning; multi-expert |
 | **MNIST raw** | 72% vs 95% (LR+HOG) | Feature engineering (HOG) bridges most of the gap |
 
 ---
@@ -169,8 +172,8 @@ D17 adds alpha-spectrum and cross-corpus online adaptation on WikiText/Gutenberg
 
 - **cypha_bench launched:** 17-domain evaluation harness covering statistical baselines, regression, classification, tabular, images, text, RL, intrusion, information geometry, physics, robustness, continual learning, and language modelling.
 - **Tuning run:** `cypha_bench/config/everyday_profile.json` (post-diagnostic). Key change: deliberation disabled, `delta_lr=0.03`.
-- **D04 bug discovered:** `d04_generation_language.py` runs `CyphaDIF + CharNgramEncoder` not `CyphaLM`; probability indexing bug yields 33.2 bpc floor. All references to "33.2 bpc CyphaLM failure" in prior docs were incorrect — fixed.
-- **Key result:** D17 is the real CyphaLM benchmark: **4.50 bpc** (Moby Dick, held-out), bigram baseline 3.69.
+- **D04 rewritten for CyphaLM (2026-05-31):** prior D04 used `CyphaDIF + CharNgramEncoder` with a probability-indexing bug (33.2 bpc floor). Domain now runs the full CyphaLM stack; held-out **5.202 bpc** vs bigram **4.151** on Gutenberg.
+- **Key result:** D17 is the integration benchmark: **~4.50 bpc** on real corpora (Moby Dick / WikiText when installed); online adaptation gain **−0.295 bpc** (D17D).
 
 ### Phase 4 — SOM upgrade evaluation (Q2 2026)
 
@@ -216,8 +219,8 @@ Each hypothesis we have investigated with the result:
 | Shared-model multi-task = no forgetting | No | D16B: 81.25% forgetting — **refuted** |
 | Adversarial robustness is good | Yes | D15C: FGSM minimal drop |
 | OOD detection works | Yes | Cross-domain mean AUROC=0.844 |
-| CyphaLM can learn language structure | Partial | D17: 4.50 bpc; adapts online; above bigram |
-| D04 "33.2 bpc" proves CyphaLM failure | No | **Benchmark bug — refuted** |
+| CyphaLM can learn language structure | Partial | D04: 5.20 bpc; D17 adapts online; above bigram on Gutenberg |
+| D04 "33.2 bpc" proves CyphaLM failure | No | **Old benchmark bug — refuted; D04 now CyphaLM** |
 
 ---
 
@@ -245,7 +248,7 @@ Each hypothesis we have investigated with the result:
 
 ### Priority 3 — CyphaLM BPC improvement
 
-**Evidence:** D17 BPC=4.50 vs bigram 3.69. The gap is likely from:
+**Evidence:** D04 held-out **5.202 bpc** vs bigram **4.151**; D17 **~4.50 bpc** on installed corpora vs bigram **3.69**. The gap is likely from:
 - Short context window (CellAI SSM τ values not tuned for text).
 - Single expert (`n_experts=1` in D17B; mean_alpha=0.1875 — very low, near-zero experts active).
 - Gutenberg tokenization is character-level — bigram is a strong baseline here.
@@ -253,8 +256,8 @@ Each hypothesis we have investigated with the result:
 **What to do:**
 1. Try `n_experts > 1` in D17 config (current D17B shows only 1 active expert — routing is collapsed).
 2. Tune SSM decay constants (τ_fast, τ_slow) for character-level LM.
-3. Fix D04 probability indexing bug in `cypha_bench/domains/d04_generation_language.py`.
-4. Fill paper placeholders from `cypha_lm/REPORT.md` and `paper/figures/`.
+3. Ship WikiText-2 / Gutenberg in bench data or document download step so D17 never silently falls back to synthetic.
+4. Fill paper figures from `cypha_bench/report/figures/fig04_*` and D17 tables.
 
 ### Priority 4 — Shared-model continual learning
 
