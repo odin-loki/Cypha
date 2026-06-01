@@ -326,6 +326,19 @@ Grid: `n_train` 2k–40k × `same_order_e1`, `same_order_e2`, `schedule_a`, `sch
 
 Re-run: `python cypha_bench/tuning/cyphalm_view_iteration_sweep.py --write`
 
+### Convergence limit sweep (2026-06-01)
+
+Extended to **250k tokens** (10M-token WikiText cap). Artifact: `cyphalm_convergence_limit.json`. Re-run: `python cypha_bench/tuning/cyphalm_convergence_limit.py --write`
+
+| Mode | Training limit | Best BPC | @ n_train | vs bigram | Status |
+|------|----------------|----------|-----------|-----------|--------|
+| **same_order_e2** | **~40k** (overtrain by 50k) | **4.094** | 40k | +0.18 | **Converged** — BPC rises after 40k |
+| **schedule_b** | **Not yet** (still improving at 250k) | **3.936** | 250k | +0.36 | No plateau — keep extending or stop ~70–150k for local minima |
+
+**Prior 40k cap was too low** to see same-order overtrain; it looked like the optimum because the bench default stopped there.
+
+**Recommendation:** `same_order` → **40k max**. `schedule_b` → train to **70k–150k** for best held-out in this run (local min 3.958 @ 150k); full corpus may need **500k+** to plateau.
+
 ---
 
 ## References
