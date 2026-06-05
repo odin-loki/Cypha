@@ -22,6 +22,7 @@ from cypha_bench.common.paths import is_fast
 from cypha_bench.tuning.cyphalm_view_iteration_sweep import TRAINING_MODES, _eval_bpc
 
 _OUT = _REPO / "cypha_bench" / "config" / "cyphalm_convergence_limit.json"
+_OUT_CONTINUE = _REPO / "cypha_bench" / "config" / "cyphalm_convergence_continue.json"
 
 CONVERGENCE_MODES = [
     {"label": "same_order_e2", "view_schedule": "same_order", "train_epochs": 2},
@@ -41,8 +42,12 @@ EXTENDED_N_TRAIN = [
     150000,
     200000,
     250000,
+    300000,
+    400000,
+    500000,
 ]
 FAST_N_TRAIN = [40000, 60000, 80000, 100000, 120000]
+CONTINUE_N_TRAIN = [300000, 400000, 500000]
 
 PLATEAU_TOL = 0.004
 
@@ -167,19 +172,30 @@ def main() -> int:
     ap.add_argument("--n-eval", type=int, default=2000)
     ap.add_argument("--fast", action="store_true")
     ap.add_argument("--no-early-stop", action="store_true")
+    ap.add_argument(
+        "--continue-schedule-b",
+        action="store_true",
+        help="Only schedule_b on 300k–500k grid (skip same_order)",
+    )
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args()
 
     grid = FAST_N_TRAIN if (args.fast or is_fast()) else EXTENDED_N_TRAIN
+    modes = CONVERGENCE_MODES
+    if args.continue_schedule_b:
+        grid = CONTINUE_N_TRAIN
+        modes = [CONVERGENCE_MODES[1]]
 
     out = run_convergence(
         grid=grid,
         n_eval=args.n_eval,
         early_stop=not args.no_early_stop,
+        modes=modes,
     )
+    out_path = _OUT_CONTINUE if args.continue_schedule_b else _OUT
     if args.write or not is_fast():
-        _OUT.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
-        print(f"\nWrote {_OUT}")
+        out_path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+        print(f"\nWrote {out_path}")
 
     for label, data in out["modes"].items():
         b = data.get("best") or {}

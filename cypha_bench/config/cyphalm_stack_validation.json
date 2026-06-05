@@ -1,0 +1,195 @@
+{
+  "corpus": "wikitext2",
+  "grid_n_train": [
+    40000,
+    70000,
+    300000
+  ],
+  "n_eval": 2000,
+  "stacks": [
+    "profile_d17",
+    "schedule_b_profile",
+    "axes_best",
+    "axes_frozen_alpha",
+    "component_frozen"
+  ],
+  "elapsed_s": 13207.739557299938,
+  "results": [
+    {
+      "held_out_bpc": 4.093980836745881,
+      "n_train": 40000,
+      "train_seconds": 197.64264139998704,
+      "view_schedule": "same_order",
+      "train_epochs": 2,
+      "label": "D17 profile (gria_ngram, same_order)",
+      "stack_id": "profile_d17",
+      "bigram_bpc": 3.914251072406641,
+      "delta_vs_bigram": 0.17972976433923993
+    },
+    {
+      "held_out_bpc": 4.11663679465966,
+      "n_train": 40000,
+      "train_seconds": 332.8309116999735,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "D17 + schedule_b",
+      "stack_id": "schedule_b_profile",
+      "bigram_bpc": 3.914251072406641,
+      "delta_vs_bigram": 0.20238572225301876
+    },
+    {
+      "held_out_bpc": 4.07512193457662,
+      "n_train": 40000,
+      "train_seconds": 329.91597899998305,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "schedule_b + gria_lr_decay=0.3 + ngram_context=3",
+      "stack_id": "axes_best",
+      "bigram_bpc": 3.914251072406641,
+      "delta_vs_bigram": 0.16087086216997903
+    },
+    {
+      "held_out_bpc": 4.0216658401780165,
+      "n_train": 40000,
+      "train_seconds": 338.50449449999724,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "axes_best + frozen alpha",
+      "stack_id": "axes_frozen_alpha",
+      "bigram_bpc": 3.914251072406641,
+      "delta_vs_bigram": 0.10741476777137571
+    },
+    {
+      "held_out_bpc": 4.043176267321048,
+      "n_train": 40000,
+      "train_seconds": 194.43289900000673,
+      "view_schedule": "same_order",
+      "train_epochs": 2,
+      "label": "gria_ngram + frozen alpha (component study winner @ 8k)",
+      "stack_id": "component_frozen",
+      "bigram_bpc": 3.914251072406641,
+      "delta_vs_bigram": 0.12892519491440702
+    },
+    {
+      "held_out_bpc": 4.009790783308801,
+      "n_train": 70000,
+      "train_seconds": 349.31011650001165,
+      "view_schedule": "same_order",
+      "train_epochs": 2,
+      "label": "D17 profile (gria_ngram, same_order)",
+      "stack_id": "profile_d17",
+      "bigram_bpc": 3.7490305491710405,
+      "delta_vs_bigram": 0.26076023413776017
+    },
+    {
+      "held_out_bpc": 3.9850217706828035,
+      "n_train": 70000,
+      "train_seconds": 573.7396904000198,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "D17 + schedule_b",
+      "stack_id": "schedule_b_profile",
+      "bigram_bpc": 3.7490305491710405,
+      "delta_vs_bigram": 0.235991221511763
+    },
+    {
+      "held_out_bpc": 3.9481801040482747,
+      "n_train": 70000,
+      "train_seconds": 565.424828600022,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "schedule_b + gria_lr_decay=0.3 + ngram_context=3",
+      "stack_id": "axes_best",
+      "bigram_bpc": 3.7490305491710405,
+      "delta_vs_bigram": 0.19914955487723418
+    },
+    {
+      "held_out_bpc": 3.9195593786322362,
+      "n_train": 70000,
+      "train_seconds": 552.8739844000665,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "axes_best + frozen alpha",
+      "stack_id": "axes_frozen_alpha",
+      "bigram_bpc": 3.7490305491710405,
+      "delta_vs_bigram": 0.17052882946119574
+    },
+    {
+      "held_out_bpc": 3.9547777514435176,
+      "n_train": 70000,
+      "train_seconds": 326.14897660003044,
+      "view_schedule": "same_order",
+      "train_epochs": 2,
+      "label": "gria_ngram + frozen alpha (component study winner @ 8k)",
+      "stack_id": "component_frozen",
+      "bigram_bpc": 3.7490305491710405,
+      "delta_vs_bigram": 0.20574720227247711
+    },
+    {
+      "held_out_bpc": 4.030448363095404,
+      "n_train": 300000,
+      "train_seconds": 1392.7194338999689,
+      "view_schedule": "same_order",
+      "train_epochs": 2,
+      "label": "D17 profile (gria_ngram, same_order)",
+      "stack_id": "profile_d17",
+      "bigram_bpc": 3.56478641138363,
+      "delta_vs_bigram": 0.46566195171177416
+    },
+    {
+      "held_out_bpc": 3.9053776539375775,
+      "n_train": 300000,
+      "train_seconds": 2227.05564149993,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "D17 + schedule_b",
+      "stack_id": "schedule_b_profile",
+      "bigram_bpc": 3.56478641138363,
+      "delta_vs_bigram": 0.34059124255394746
+    },
+    {
+      "held_out_bpc": 3.8438167323516548,
+      "n_train": 300000,
+      "train_seconds": 2214.2689316999167,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "schedule_b + gria_lr_decay=0.3 + ngram_context=3",
+      "stack_id": "axes_best",
+      "bigram_bpc": 3.56478641138363,
+      "delta_vs_bigram": 0.2790303209680247
+    },
+    {
+      "held_out_bpc": 3.838027297882999,
+      "n_train": 300000,
+      "train_seconds": 2200.835546599934,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "axes_best + frozen alpha",
+      "stack_id": "axes_frozen_alpha",
+      "bigram_bpc": 3.56478641138363,
+      "delta_vs_bigram": 0.27324088649936895
+    },
+    {
+      "held_out_bpc": 3.917404564477066,
+      "n_train": 300000,
+      "train_seconds": 1367.149170699995,
+      "view_schedule": "same_order",
+      "train_epochs": 2,
+      "label": "gria_ngram + frozen alpha (component study winner @ 8k)",
+      "stack_id": "component_frozen",
+      "bigram_bpc": 3.56478641138363,
+      "delta_vs_bigram": 0.3526181530934358
+    }
+  ],
+  "best": {
+    "held_out_bpc": 3.838027297882999,
+    "n_train": 300000,
+    "train_seconds": 2200.835546599934,
+    "view_schedule": "schedule_b",
+    "train_epochs": 2,
+    "label": "axes_best + frozen alpha",
+    "stack_id": "axes_frozen_alpha",
+    "bigram_bpc": 3.56478641138363,
+    "delta_vs_bigram": 0.27324088649936895
+  }
+}

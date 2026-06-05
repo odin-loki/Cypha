@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 import matplotlib
@@ -22,6 +24,7 @@ from bench_common import finalize_domain
 
 from cypha_bench.adapters.char_lstm_baseline import char_lstm_baseline_bpc
 from cypha_bench.adapters.cyphalm_ablations import run_lm_ablations
+from cypha_bench.adapters.cyphalm_component_study import run_component_study
 from cypha_bench.adapters.cyphalm_bench import (
     bigram_baseline_bpc,
     cyphalm_bench_limits,
@@ -184,6 +187,92 @@ def experiment_17e_multi_view():
     return out
 
 
+def experiment_17g_beat_bigram_schedule_b() -> dict:
+    """schedule_b at 70k/150k train steps — beat-bigram gate for Phase 1."""
+    limits = cyphalm_bench_limits()
+    max_chars = limits["max_corpus_chars"]
+    if not is_fast():
+        max_chars = max(max_chars, 10_000_000)
+    corpus = prepare_lm_corpus(prefer_wikitext=True, max_train_chars=max_chars)
+    require_real_corpus(corpus.source, domain="D17")
+    if len(corpus.train_ids) < 512:
+        return {"skipped": True, "source": corpus.source}
+
+    env_grid = os.environ.get("CYPHA_BEAT_BIGRAM_N_TRAIN", "").strip()
+    if env_grid:
+        n_train_grid = [int(x.strip()) for x in env_grid.split(",") if x.strip()]
+    elif is_fast():
+        n_train_grid = [min(8000, limits["n_train"], len(corpus.train_ids) - 1)]
+    else:
+        n_train_grid = [70000, 150000]
+
+    n_eval = limits["n_eval"]
+    merged = load_cyphalm_config({"view_schedule": "schedule_b"}, profile="d17")
+    runs: list[dict] = []
+    for n_train in n_train_grid:
+        limit = min(n_train, len(corpus.train_ids) - 1)
+        t0 = time.perf_counter()
+        model, _ = make_cyphalm(merged, profile=None)
+        train_slice = corpus.train_ids[:limit]
+        model.train_sequence(train_slice)
+        cyphalm_bpc = eval_held_out_bpc(model, corpus.eval_ids, n_eval=n_eval)
+        train_seconds = time.perf_counter() - t0
+        bigram_bpc = bigram_baseline_bpc(train_slice, corpus.eval_ids, corpus.vocab_size)
+        runs.append(
+            {
+                "n_train": limit,
+                "cyphalm_bpc": float(cyphalm_bpc),
+                "bigram_bpc": float(bigram_bpc),
+                "delta_vs_bigram": float(cyphalm_bpc - bigram_bpc),
+                "train_seconds": train_seconds,
+            }
+        )
+
+    return {
+        "view_schedule": "schedule_b",
+        "runs": runs,
+        "fast_reduced": is_fast(),
+        "n_eval": n_eval,
+        "source": corpus.source,
+    }
+
+
+def experiment_17h_component_ablation() -> dict:
+    """Systematic subsystem ablation — architecture, toggles, SSM combos, upgrades."""
+    limits = cyphalm_bench_limits()
+    max_chars = limits["max_corpus_chars"]
+    if not is_fast():
+        max_chars = max(max_chars, 10_000_000)
+    corpus = prepare_lm_corpus(prefer_wikitext=True, max_train_chars=max_chars)
+    require_real_corpus(corpus.source, domain="D17")
+    if len(corpus.train_ids) < 512:
+        return {"skipped": True, "source": corpus.source}
+
+    n_train = limits["n_train"]
+    n_eval = limits["n_eval"]
+    out = run_component_study(
+        corpus,
+        n_train=n_train,
+        n_eval=n_eval,
+        fast=is_fast(),
+        default_profile="d17",
+    )
+    if not is_fast():
+        from cypha_bench.tuning.cyphalm_component_ablation import _OUT
+
+        _OUT.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+    return {
+        "n_train": n_train,
+        "n_eval": n_eval,
+        "cells_run": out.get("cells_run"),
+        "global_best": out.get("global_best"),
+        "comparisons": out.get("comparisons"),
+        "phase_best": out.get("phase_best"),
+        "fast_reduced": is_fast(),
+        "source": corpus.source,
+    }
+
+
 def experiment_17f_iteration_view_sweep() -> dict:
     """Train-length × view-schedule sweep (optimal iterations per presentation mode)."""
     from cypha_bench.tuning.cyphalm_view_iteration_sweep import (
@@ -274,6 +363,8 @@ def run() -> dict:
             "17D_online_adaptation": experiment_17d_online_adaptation(),
             "17E_multi_view": experiment_17e_multi_view(),
             "17F_iteration_view_sweep": experiment_17f_iteration_view_sweep(),
+            "17G_beat_bigram_schedule_b": experiment_17g_beat_bigram_schedule_b(),
+            "17H_component_ablation": experiment_17h_component_ablation(),
         }
     except ImportError as exc:
         experiments = {

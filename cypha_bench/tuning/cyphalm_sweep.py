@@ -42,6 +42,10 @@ AXIS_VALUES: dict[str, list] = {
     "n_experts": [0, 1, 2, 4, 8],
     "train_ssm": [False, True],
     "ssm_lr": [0.0005, 0.001, 0.002, 0.005],
+    "gria_lr_decay": [0.0, 0.3, 0.5, 0.7, 0.9, 1.0],
+    "laplace_smoothing": [0.01, 0.1, 0.5, 1.0, 5.0, 20.0],
+    "ngram_context": [1, 2, 3, 4],
+    "bptt_steps": [0, 32, 64, 128],
 }
 
 
@@ -127,9 +131,17 @@ def main() -> int:
     ap.add_argument("--write-profile", action="store_true")
     ap.add_argument("--skip-full", action="store_true")
     ap.add_argument("--skip-axis", action="store_true")
+    ap.add_argument(
+        "--view-schedule",
+        default=None,
+        help="view_schedule preset for training (default: profile value or same_order)",
+    )
     args = ap.parse_args()
 
-    base = {**DEFAULT_CYPHALM_CONFIG, **load_cyphalm_config()}
+    profile_cfg = load_cyphalm_config()
+    base = {**DEFAULT_CYPHALM_CONFIG, **profile_cfg}
+    view_sched = args.view_schedule or profile_cfg.get("view_schedule", "same_order")
+    base["view_schedule"] = view_sched
     full_out: dict[str, Any] = {}
     axis_out: dict[str, Any] = {}
 

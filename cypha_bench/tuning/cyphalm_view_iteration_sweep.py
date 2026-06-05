@@ -34,6 +34,7 @@ TRAINING_MODES: list[dict[str, Any]] = [
     {"label": "same_order_e2", "view_schedule": "same_order", "train_epochs": 2},
     {"label": "schedule_a", "view_schedule": "schedule_a", "train_epochs": 2},
     {"label": "schedule_b", "view_schedule": "schedule_b", "train_epochs": 2},
+    {"label": "schedule_c", "view_schedule": "schedule_c", "train_epochs": 2},
 ]
 
 
@@ -43,11 +44,14 @@ def _eval_bpc(
     n_train: int,
     n_eval: int,
     mode: dict[str, Any],
+    extra_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     overrides = {
         "view_schedule": mode["view_schedule"],
         "train_epochs": int(mode.get("train_epochs", 2)),
     }
+    if extra_overrides:
+        overrides.update(extra_overrides)
     merged = load_cyphalm_config(overrides, profile="d17")
     model, _ = make_cyphalm(merged, profile=None)
     limit = min(n_train, len(corpus.train_ids) - 1)

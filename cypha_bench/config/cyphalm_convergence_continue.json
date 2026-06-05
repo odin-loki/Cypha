@@ -1,0 +1,73 @@
+{
+  "corpus": "wikitext2",
+  "corpus_train_tokens": 10000000,
+  "grid_n_train": [
+    300000,
+    400000,
+    500000
+  ],
+  "n_eval": 2000,
+  "plateau_tol_bpc": 0.004,
+  "prior_sweep_cap": 40000,
+  "elapsed_s": 9192.794397000049,
+  "modes": {
+    "schedule_b": {
+      "label": "schedule_b",
+      "history": [
+        {
+          "held_out_bpc": 3.9053776539375775,
+          "n_train": 300000,
+          "train_seconds": 2316.31110240001,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.56478641138363,
+          "delta_vs_bigram": 0.34059124255394746
+        },
+        {
+          "held_out_bpc": 3.9161421906300293,
+          "n_train": 400000,
+          "train_seconds": 3032.758102800057,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.5148738902027374,
+          "delta_vs_bigram": 0.4012683004272919
+        },
+        {
+          "held_out_bpc": 3.9475683325169175,
+          "n_train": 500000,
+          "train_seconds": 3831.401610400004,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.5059510600212676,
+          "delta_vs_bigram": 0.44161727249564997
+        }
+      ],
+      "plateau": null,
+      "best": {
+        "held_out_bpc": 3.9053776539375775,
+        "n_train": 300000,
+        "train_seconds": 2316.31110240001,
+        "view_schedule": "schedule_b",
+        "train_epochs": 2,
+        "label": "schedule_b",
+        "bigram_bpc": 3.56478641138363,
+        "delta_vs_bigram": 0.34059124255394746
+      },
+      "final": {
+        "held_out_bpc": 3.9475683325169175,
+        "n_train": 500000,
+        "train_seconds": 3831.401610400004,
+        "view_schedule": "schedule_b",
+        "train_epochs": 2,
+        "label": "schedule_b",
+        "bigram_bpc": 3.5059510600212676,
+        "delta_vs_bigram": 0.44161727249564997
+      },
+      "still_improving_at_end": false,
+      "elapsed_s": 9192.794330000004
+    }
+  }
+}

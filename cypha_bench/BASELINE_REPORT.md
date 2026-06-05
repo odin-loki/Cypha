@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-05-31 06:24 UTC
+Generated: 2026-05-31 08:07 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -185,44 +185,42 @@ Default parameters only — no hyperparameter tuning.
 
 ## D04
 
-*Timestamp:* 2026-05-31T06:12:43.457927+00:00
+*Timestamp:* 2026-05-31T08:07:19.360217+00:00
 
 ### summary
 
 | Metric | Value |
 | --- | --- |
-| `bigram_bpc` | 3.8411 |
-| `char_lm.bigram_bpc` | 3.8411 |
-| `char_lm.context_length_bpc.128` | 4.8561 |
-| `char_lm.context_length_bpc.16` | 4.7851 |
-| `char_lm.context_length_bpc.256` | 4.9045 |
-| `char_lm.context_length_bpc.32` | 4.7728 |
-| `char_lm.context_length_bpc.64` | 4.7279 |
-| `char_lm.context_length_bpc.8` | 4.7961 |
-| `char_lm.cypha_dif.lossless_fraction` | 4.57e-05 |
-| `char_lm.cypha_dif.mean_aleatoric_var` | 0.9429 |
-| `char_lm.cypha_dif.mean_alpha` | 0.0904 |
-| `char_lm.cypha_dif.mean_epistemic_var` | 4.31e-05 |
-| `char_lm.cypha_dif.n_experts` | 13 |
-| `char_lm.delta_vs_bigram` | 1.1595 |
-| `char_lm.delta_vs_trigram` | 0.0210 |
-| `char_lm.device` | cpu |
-| `char_lm.eval_method` | holdout_20pct |
-| `char_lm.expert_count` | [20 items] |
-| `char_lm.expert_routing.active_experts_per_step` | [120 items] |
-| `char_lm.expert_routing.dominant_expert_per_step` | [120 items] |
-| `char_lm.expert_routing.epistemic_var_per_step` | [120 items] |
-| `char_lm.expert_routing.mean_active_experts` | 1.0000 |
-| `char_lm.expert_routing.unique_experts_used` | [12] |
-| `char_lm.final_bpc` | 5.0007 |
-| `char_lm.final_train_bpc` | 4.5755 |
-| `char_lm.generation_preview.greedy` | tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt |
-| `char_lm.generation_preview.prompt_text` | exion,
-landlord, which is an intimate and confidential one in th |
-| `char_lm.generation_preview.top_p` | ttotttot tttt t ttttntettr tlno tltoae tet
-ft t ftt t nttttdahacy to ttntt ti tttatittht tottthtte tttttitfttttteohdsttt |
-| `char_lm.held_out_bpc` | [20 items] |
-| `char_lm.model` | CyphaLM |
+| `ablations.ablation_bpc.ablation_no_dif` | 4.5834 |
+| `ablations.ablation_bpc.ablation_no_ssm` | 4.1200 |
+| `ablations.ablation_bpc.full` | 4.5834 |
+| `ablations.ablation_bpc.gria_ngram` | 4.1220 |
+| `ablations.ablation_bpc.ssm_only` | 4.3230 |
+| `ablations.bigram_bpc` | 3.9307 |
+| `ablations.char_lstm_bpc` | 3.5052 |
+| `ablations.fivegram_bpc` | 5.9491 |
+| `ablations.fourgram_bpc` | 5.5919 |
+| `ablations.modes_run` | ['full', 'gria_ngram', 'ssm_only', 'ablation_no_dif', 'ablation_no_ssm'] |
+| `ablations.n_eval` | 2000 |
+| `ablations.n_train` | 40000 |
+| `ablations.trigram_bpc` | 4.5218 |
+| `bigram_bpc` | 3.9307 |
+| `char_lm.ablations.ablation_bpc.ablation_no_dif` | 4.5834 |
+| `char_lm.ablations.ablation_bpc.ablation_no_ssm` | 4.1200 |
+| `char_lm.ablations.ablation_bpc.full` | 4.5834 |
+| `char_lm.ablations.ablation_bpc.gria_ngram` | 4.1220 |
+| `char_lm.ablations.ablation_bpc.ssm_only` | 4.3230 |
+| `char_lm.ablations.bigram_bpc` | 3.9307 |
+| `char_lm.ablations.char_lstm_bpc` | 3.5052 |
+| `char_lm.ablations.fivegram_bpc` | 5.9491 |
+| `char_lm.ablations.fourgram_bpc` | 5.5919 |
+| `char_lm.ablations.modes_run` | ['full', 'gria_ngram', 'ssm_only', 'ablation_no_dif', 'ablation_no_ssm'] |
+| `char_lm.ablations.n_eval` | 2000 |
+| `char_lm.ablations.n_train` | 40000 |
+| `char_lm.ablations.trigram_bpc` | 4.5218 |
+| `char_lm.bigram_bpc` | 3.9307 |
+| `char_lm.char_lstm_bpc` | 3.5052 |
+| `char_lm.context_length_bpc.128` | 3.7160 |
 
 ## D05
 
@@ -725,58 +723,58 @@ ft t ftt t nttttdahacy to ttntt ti tttatittht tottthtte tttttitfttttteohdsttt |
 
 ## D17
 
-*Timestamp:* 2026-05-31T06:24:49.528509+00:00
+*Timestamp:* 2026-05-31T07:52:35.027012+00:00
 
 ### 17A_bits_per_character
 
 | Metric | Value |
 | --- | --- |
+| `ablations.ablation_bpc.ablation_no_dif` | 4.7250 |
+| `ablations.ablation_bpc.ablation_no_ssm` | 4.1646 |
+| `ablations.ablation_bpc.full` | 4.7250 |
+| `ablations.ablation_bpc.gria_ngram` | 4.1541 |
+| `ablations.ablation_bpc.ssm_only` | 4.4507 |
+| `ablations.bigram_bpc` | 3.9142 |
+| `ablations.char_lstm_bpc` | 3.5889 |
+| `ablations.fivegram_bpc` | 5.5789 |
+| `ablations.fourgram_bpc` | 5.2860 |
+| `ablations.modes_run` | ['full', 'gria_ngram', 'ssm_only', 'ablation_no_dif', 'ablation_no_ssm'] |
+| `ablations.n_eval` | 2000 |
+| `ablations.n_train` | 40000 |
+| `ablations.trigram_bpc` | 4.3976 |
 | `bigram_bpc` | 3.9142 |
-| `cypha_dif.lossless_fraction` | 4.20e-05 |
-| `cypha_dif.mean_aleatoric_var` | 0.9144 |
-| `cypha_dif.mean_alpha` | 0.1068 |
-| `cypha_dif.mean_epistemic_var` | 3.84e-05 |
-| `cypha_dif.n_experts` | 13 |
-| `cyphalm_bpc` | 4.6583 |
-| `delta_vs_bigram` | 0.7440 |
-| `delta_vs_trigram` | 0.2606 |
+| `char_lstm_bpc` | 3.5889 |
+| `cypha_dif.lossless_fraction` | 2.51e-05 |
+| `cypha_dif.mean_aleatoric_var` | 0.9084 |
+| `cypha_dif.mean_alpha` | 0.0969 |
+| `cypha_dif.mean_epistemic_var` | 2.28e-05 |
+| `cypha_dif.n_experts` | 2 |
+| `cyphalm_bpc` | 4.1541 |
+| `delta_vs_bigram` | 0.2398 |
+| `delta_vs_trigram` | -0.2436 |
 | `device` | cpu |
-| `final_train_bpc` | 4.6673 |
+| `final_train_bpc` | 4.0956 |
+| `fivegram_bpc` | 5.5789 |
+| `fourgram_bpc` | 5.2860 |
 | `learning_curve.expert_count` | [20 items] |
-| `learning_curve.final_train_bpc` | 4.6673 |
+| `learning_curve.final_train_bpc` | 4.0956 |
 | `learning_curve.held_out_bpc` | [20 items] |
-| `learning_curve.online_train_bpc` | 4.7193 |
-| `learning_curve.steps` | [20 items] |
-| `learning_curve.trained_steps` | 40000 |
-| `online_train_bpc` | 4.7193 |
-| `profile.alpha_init` | 0.5000 |
-| `profile.context_length` | 256 |
-| `profile.d_embed` | 64 |
-| `profile.d_state` | 128 |
-| `profile.device` | auto |
-| `profile.field_dim` | 160 |
-| `profile.gria_lr` | 0.0600 |
-| `profile.max_experts` | 128 |
-| `profile.n_experts` | 4 |
-| `profile.online` | True |
-| `profile.seed` | 42 |
-| `profile.ssm_layers` | 2 |
 
 ### 17B_alpha_spectrum
 
 | Metric | Value |
 | --- | --- |
 | `fraction_edge_of_chaos` | 0.0000 |
-| `mean_alpha` | 0.1068 |
-| `n_experts` | 11 |
+| `mean_alpha` | 0.1239 |
+| `n_experts` | 2 |
 
 ### 17D_online_adaptation
 
 | Metric | Value |
 | --- | --- |
-| `bpc_improvement` | 0.2870 |
-| `bpc_ood_after_adapt` | 4.8186 |
-| `bpc_ood_before_adapt` | 5.1057 |
+| `bpc_improvement` | 0.2192 |
+| `bpc_ood_after_adapt` | 4.1425 |
+| `bpc_ood_before_adapt` | 4.3617 |
 
 ## Cross-Domain Analyses
 
@@ -784,8 +782,8 @@ ft t ftt t nttttdahacy to ttntt ti tttatittht tottthtte tttttitfttttteohdsttt |
 
 | Metric | Value |
 | --- | --- |
-| `summary.global_mean_alpha` | 0.7720 |
-| `summary.global_std_alpha` | 0.3022 |
+| `summary.global_mean_alpha` | 0.7735 |
+| `summary.global_std_alpha` | 0.2991 |
 | `summary.n_measurements` | 13 |
 | `summary.within_gul_band_fraction` | 0.0000 |
 

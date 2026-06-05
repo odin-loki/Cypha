@@ -294,7 +294,11 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 **Idea:** Structure-preserving reorderings (block shuffle, rotated start, bidirectional passes, task-block permutations) each macro-epoch, with explicit `view_id` and memory policy (reset fast / carry slow). Exploits online routing, replay, and expert growth instead of single static stream training.
 
 **Phase 1 (LM):** `cypha_views/` module → D17 **17E_multi_view** → beat bigram or ≥0.05 BPC improvement.  
-**Convergence (250k sweep):** `same_order_e2` **peaks @ 40k** then overtrains; `schedule_b` still improving at 250k (best **3.936** BPC). See `cyphalm_convergence_limit.json`.
+**Convergence (250k sweep):** `same_order_e2` **peaks @ 40k** then overtrains; `schedule_b` still improving at 250k (best **3.936** BPC). Full write-up: [`FINDINGS_CYPHALM_TRAINING.md`](FINDINGS_CYPHALM_TRAINING.md). Artifacts: `cyphalm_convergence_limit.json`, `cyphalm_beat_bigram_sweep.json` (in progress).
+
+**Next (beat-bigram):** (1b) `cyphalm_beat_bigram_sweep.py` — schedule_b × 70k–150k × hyperparams; (1c) full WikiText + schedule_b; fast axes: laplace, ngram_context, schedule_c, gria_lr_decay.
+
+**Component ablation study:** systematic isolation + combinatorics — [`CYPHALM_ALGORITHM_STUDY.md`](CYPHALM_ALGORITHM_STUDY.md), `cyphalm_component_ablation.py`, D17 **17H**. Prior @ 40k: `full` **4.725** vs `gria_ngram` **4.154**; epistemic DIF term unused (`full` == `ablation_no_dif`).
 
 ### Priority 5 — Shared-model continual learning
 

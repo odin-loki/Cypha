@@ -1,0 +1,376 @@
+{
+  "corpus": "wikitext2",
+  "n_train": 70000,
+  "n_eval": 2000,
+  "base_mode": {
+    "label": "schedule_b",
+    "view_schedule": "schedule_b",
+    "train_epochs": 2
+  },
+  "axes": {
+    "gria_lr_decay": {
+      "history": [
+        {
+          "held_out_bpc": 4.10453438124189,
+          "n_train": 70000,
+          "train_seconds": 521.8684136999655,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.35550383207084923,
+          "overrides": {
+            "gria_lr_decay": 0.0
+          }
+        },
+        {
+          "held_out_bpc": 3.9656417591631956,
+          "n_train": 70000,
+          "train_seconds": 550.4113238000427,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.2166112099921551,
+          "overrides": {
+            "gria_lr_decay": 0.3
+          }
+        },
+        {
+          "held_out_bpc": 3.9850217706828035,
+          "n_train": 70000,
+          "train_seconds": 521.9748737000045,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.235991221511763,
+          "overrides": {
+            "gria_lr_decay": 0.5
+          }
+        },
+        {
+          "held_out_bpc": 4.008317749690086,
+          "n_train": 70000,
+          "train_seconds": 516.4007608999964,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.2592872005190454,
+          "overrides": {
+            "gria_lr_decay": 0.7
+          }
+        },
+        {
+          "held_out_bpc": 4.0333346108221235,
+          "n_train": 70000,
+          "train_seconds": 518.2585594999837,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.284304061651083,
+          "overrides": {
+            "gria_lr_decay": 0.9
+          }
+        },
+        {
+          "held_out_bpc": 4.043694304404014,
+          "n_train": 70000,
+          "train_seconds": 527.511136599991,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.29466375523297383,
+          "overrides": {
+            "gria_lr_decay": 1.0
+          }
+        }
+      ],
+      "best": {
+        "held_out_bpc": 3.9656417591631956,
+        "n_train": 70000,
+        "train_seconds": 550.4113238000427,
+        "view_schedule": "schedule_b",
+        "train_epochs": 2,
+        "label": "schedule_b",
+        "bigram_bpc": 3.7490305491710405,
+        "delta_vs_bigram": 0.2166112099921551,
+        "overrides": {
+          "gria_lr_decay": 0.3
+        }
+      }
+    },
+    "laplace_smoothing": {
+      "history": [
+        {
+          "held_out_bpc": 3.983478558795599,
+          "n_train": 70000,
+          "train_seconds": 510.6441211999627,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.23444800962455847,
+          "overrides": {
+            "laplace_smoothing": 0.01
+          }
+        },
+        {
+          "held_out_bpc": 3.983625553560348,
+          "n_train": 70000,
+          "train_seconds": 514.6830458000186,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.2345950043893077,
+          "overrides": {
+            "laplace_smoothing": 0.1
+          }
+        },
+        {
+          "held_out_bpc": 3.9842614038538424,
+          "n_train": 70000,
+          "train_seconds": 523.0418704000185,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.23523085468280192,
+          "overrides": {
+            "laplace_smoothing": 0.5
+          }
+        },
+        {
+          "held_out_bpc": 3.9850217706828035,
+          "n_train": 70000,
+          "train_seconds": 533.1957978000282,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.235991221511763,
+          "overrides": {
+            "laplace_smoothing": 1.0
+          }
+        },
+        {
+          "held_out_bpc": 3.9901258863497335,
+          "n_train": 70000,
+          "train_seconds": 532.5031043000054,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.24109533717869303,
+          "overrides": {
+            "laplace_smoothing": 5.0
+          }
+        },
+        {
+          "held_out_bpc": 4.003923439295678,
+          "n_train": 70000,
+          "train_seconds": 534.2202759999782,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.2548928901246379,
+          "overrides": {
+            "laplace_smoothing": 20.0
+          }
+        }
+      ],
+      "best": {
+        "held_out_bpc": 3.983478558795599,
+        "n_train": 70000,
+        "train_seconds": 510.6441211999627,
+        "view_schedule": "schedule_b",
+        "train_epochs": 2,
+        "label": "schedule_b",
+        "bigram_bpc": 3.7490305491710405,
+        "delta_vs_bigram": 0.23444800962455847,
+        "overrides": {
+          "laplace_smoothing": 0.01
+        }
+      }
+    },
+    "ngram_context": {
+      "history": [
+        {
+          "held_out_bpc": 4.040751670111351,
+          "n_train": 70000,
+          "train_seconds": 524.1238803000306,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.2917211209403101,
+          "overrides": {
+            "ngram_context": 1
+          }
+        },
+        {
+          "held_out_bpc": 3.9850217706828035,
+          "n_train": 70000,
+          "train_seconds": 531.7507707999903,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.235991221511763,
+          "overrides": {
+            "ngram_context": 2
+          }
+        },
+        {
+          "held_out_bpc": 3.9666110339729577,
+          "n_train": 70000,
+          "train_seconds": 538.0101098000305,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.21758048480191716,
+          "overrides": {
+            "ngram_context": 3
+          }
+        },
+        {
+          "held_out_bpc": 3.968866968603039,
+          "n_train": 70000,
+          "train_seconds": 537.4916841000086,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.2198364194319984,
+          "overrides": {
+            "ngram_context": 4
+          }
+        }
+      ],
+      "best": {
+        "held_out_bpc": 3.9666110339729577,
+        "n_train": 70000,
+        "train_seconds": 538.0101098000305,
+        "view_schedule": "schedule_b",
+        "train_epochs": 2,
+        "label": "schedule_b",
+        "bigram_bpc": 3.7490305491710405,
+        "delta_vs_bigram": 0.21758048480191716,
+        "overrides": {
+          "ngram_context": 3
+        }
+      }
+    },
+    "train_ssm": {
+      "history": [
+        {
+          "held_out_bpc": 3.9850217706828035,
+          "n_train": 70000,
+          "train_seconds": 539.7766998999869,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.235991221511763,
+          "overrides": {
+            "train_ssm": false
+          }
+        },
+        {
+          "held_out_bpc": 3.9850217706828035,
+          "n_train": 70000,
+          "train_seconds": 546.2201028999989,
+          "view_schedule": "schedule_b",
+          "train_epochs": 2,
+          "label": "schedule_b",
+          "bigram_bpc": 3.7490305491710405,
+          "delta_vs_bigram": 0.235991221511763,
+          "overrides": {
+            "train_ssm": true
+          }
+        }
+      ],
+      "best": {
+        "held_out_bpc": 3.9850217706828035,
+        "n_train": 70000,
+        "train_seconds": 539.7766998999869,
+        "view_schedule": "schedule_b",
+        "train_epochs": 2,
+        "label": "schedule_b",
+        "bigram_bpc": 3.7490305491710405,
+        "delta_vs_bigram": 0.235991221511763,
+        "overrides": {
+          "train_ssm": false
+        }
+      }
+    }
+  },
+  "schedules": {
+    "history": [
+      {
+        "held_out_bpc": 3.9850217706828035,
+        "n_train": 70000,
+        "train_seconds": 546.1091934000142,
+        "view_schedule": "schedule_b",
+        "train_epochs": 2,
+        "label": "schedule_b",
+        "bigram_bpc": 3.7490305491710405,
+        "delta_vs_bigram": 0.235991221511763,
+        "overrides": {}
+      },
+      {
+        "held_out_bpc": 4.540424887109928,
+        "n_train": 70000,
+        "train_seconds": 544.1949118999764,
+        "view_schedule": "schedule_c",
+        "train_epochs": 2,
+        "label": "schedule_c",
+        "bigram_bpc": 3.7490305491710405,
+        "delta_vs_bigram": 0.7913943379388879,
+        "overrides": {}
+      },
+      {
+        "held_out_bpc": 4.062988906252695,
+        "n_train": 70000,
+        "train_seconds": 330.9839819999761,
+        "view_schedule": "schedule_a",
+        "train_epochs": 2,
+        "label": "schedule_a",
+        "bigram_bpc": 3.7490305491710405,
+        "delta_vs_bigram": 0.3139583570816544,
+        "overrides": {}
+      }
+    ],
+    "best": {
+      "held_out_bpc": 3.9850217706828035,
+      "n_train": 70000,
+      "train_seconds": 546.1091934000142,
+      "view_schedule": "schedule_b",
+      "train_epochs": 2,
+      "label": "schedule_b",
+      "bigram_bpc": 3.7490305491710405,
+      "delta_vs_bigram": 0.235991221511763,
+      "overrides": {}
+    }
+  },
+  "best_held_out": {
+    "held_out_bpc": 3.9656417591631956,
+    "n_train": 70000,
+    "train_seconds": 550.4113238000427,
+    "view_schedule": "schedule_b",
+    "train_epochs": 2,
+    "label": "schedule_b",
+    "bigram_bpc": 3.7490305491710405,
+    "delta_vs_bigram": 0.2166112099921551,
+    "overrides": {
+      "gria_lr_decay": 0.3
+    }
+  },
+  "elapsed_s": 11005.789764599991
+}

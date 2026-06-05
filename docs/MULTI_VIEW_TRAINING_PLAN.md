@@ -1,7 +1,7 @@
 # Multi-View Online Training Plan
 
-**Status:** Phase 0 + 1a implemented (2026-05-31); 1b full-scale eval in progress  
-**Last updated:** 2026-05-31  
+**Status:** Phase 0 + 1a implemented (2026-05-31); see [`FINDINGS_CYPHALM_TRAINING.md`](FINDINGS_CYPHALM_TRAINING.md); next **1b** (`schedule_b` hyperparam sweep @ 70k–150k) and **1c** full-corpus eval  
+**Last updated:** 2026-06-01  
 **Owner track:** CyphaLM (Phase 1) → CyphaDIF (Phase 2)
 
 This document is the canonical plan for **structure-preserving multi-view online training**: presenting the same underlying data in different traversals each epoch, with explicit **view metadata**, so Cypha’s online routing, replay, drift, and fast/slow memory are used deliberately—not as afterthoughts.
