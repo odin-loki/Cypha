@@ -8,14 +8,18 @@
   "field_dim": 160,
   "max_experts": 128,
   "alpha_init": 0.5,
+  "alpha_learnable": false,
   "context_length": 256,
   "context_mode": "gria_ngram",
-  "ngram_context": 2,
+  "ngram_context": 3,
+  "ngram_fuse_split": true,
   "train_epochs": 2,
-  "view_schedule": "same_order",
+  "view_schedule": "schedule_b",
   "view_block_size": 512,
+  "view_id_dim": 8,
   "bptt_steps": 64,
   "laplace_smoothing": 1.0,
+  "gria_lr_decay": 0.3,
   "seed": 42,
   "gria_lr": 0.08,
   "online": true,
@@ -27,10 +31,11 @@
   "train_ssm": false,
   "ssm_lr": 0.002,
   "_meta": {
-    "source": "cyphalm_sweep",
+    "source": "stack_validation_300k",
     "corpus": "wikitext2",
-    "delta_vs_bigram": 0.3327766812619757,
-    "cyphalm_bpc": 4.915723686944205,
-    "bigram_bpc": 4.58294700568223
+    "held_out_bpc": 3.838,
+    "delta_vs_bigram": 0.273,
+    "recommended_n_train": 300000,
+    "notes": "schedule_b + gria_lr_decay=0.3 + ngram3 + frozen alpha"
   }
 }

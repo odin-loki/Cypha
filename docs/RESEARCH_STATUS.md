@@ -298,7 +298,7 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 
 **Next (beat-bigram):** (1b) `cyphalm_beat_bigram_sweep.py` — schedule_b × 70k–150k × hyperparams; (1c) full WikiText + schedule_b; fast axes: laplace, ngram_context, schedule_c, gria_lr_decay.
 
-**Component ablation study:** systematic isolation + combinatorics — [`CYPHALM_ALGORITHM_STUDY.md`](CYPHALM_ALGORITHM_STUDY.md), `cyphalm_component_ablation.py`, D17 **17H**. Prior @ 40k: `full` **4.725** vs `gria_ngram` **4.154**; epistemic DIF term unused (`full` == `ablation_no_dif`).
+**Component ablation study:** systematic isolation + combinatorics — [`CYPHALM_ALGORITHM_STUDY.md`](CYPHALM_ALGORITHM_STUDY.md). **Profile updated (2026-06):** `schedule_b`, `alpha_learnable=false`, `gria_lr_decay=0.3`, `ngram_context=3`, `view_id_dim=8`. Phase 1c full-corpus D17 run in progress.
 
 ### Priority 5 — Shared-model continual learning
 

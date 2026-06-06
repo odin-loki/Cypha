@@ -142,7 +142,8 @@ _Update after each study run._
 |-----|---------|-----------|-----|-----------|-------------|
 | Prior D17 ablations | 40k | `gria_ngram` | 4.154 | +0.24 | `full` pipeline broken for char-LM |
 | **Fast component study** | **8k** | **`toggle_frozen_alpha`** | **4.288** | **−0.29** | See below |
-| **Full component study** | **40k** | **`toggle_frozen_alpha`** | **4.043** | **+0.13** | See below |
+| **Full component study** | **40k** | **`toggle_frozen_alpha`** | **4.043** | **+0.13** | D17 — see below |
+| **D04 component study** | **40k** | **`toggle_frozen_alpha`** | **4.029** | **+0.07** | Gutenberg — same pattern |
 
 ### Fast study (8k, 23 cells, 2026-06-05)
 

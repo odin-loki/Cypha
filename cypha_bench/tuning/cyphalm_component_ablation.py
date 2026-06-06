@@ -16,6 +16,7 @@ from cypha_bench.adapters.cyphalm_component_study import all_cells, run_componen
 from cypha_bench.common.paths import is_fast
 
 _OUT = _REPO / "cypha_bench" / "config" / "cyphalm_component_ablation.json"
+_OUT_D04 = _REPO / "cypha_bench" / "config" / "cyphalm_component_ablation_d04.json"
 
 PHASE_CHOICES = ("architecture", "toggle", "ssm_combo", "upgrade")
 
@@ -32,6 +33,12 @@ def main() -> int:
         help="Run only these phases (repeatable); default: all",
     )
     ap.add_argument("--profile", default="d17", help="Default profile for cells without explicit profile")
+    ap.add_argument(
+        "--corpus",
+        choices=("d17", "d04"),
+        default="d17",
+        help="WikiText (d17) or Gutenberg (d04)",
+    )
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args()
 
@@ -45,10 +52,19 @@ def main() -> int:
     if phases:
         cells = [c for c in cells if c["phase"] in phases]
 
-    print(f"Component ablation: {len(cells)} cells | n_train={n_train} | fast={use_fast}")
+    profile = "d04" if args.corpus == "d04" else args.profile
+    out_path = _OUT_D04 if args.corpus == "d04" else _OUT
 
-    corpus = prepare_lm_corpus(prefer_wikitext=True, max_train_chars=10_000_000)
-    require_real_corpus(corpus.source, domain="cyphalm_component_ablation")
+    print(
+        f"Component ablation: {len(cells)} cells | corpus={args.corpus} | "
+        f"n_train={n_train} | fast={use_fast}"
+    )
+
+    corpus = prepare_lm_corpus(
+        prefer_wikitext=(args.corpus == "d17"),
+        max_train_chars=10_000_000,
+    )
+    require_real_corpus(corpus.source, domain=f"cyphalm_component_ablation_{args.corpus}")
 
     out = run_component_study(
         corpus,
@@ -56,12 +72,13 @@ def main() -> int:
         n_eval=args.n_eval,
         phases=phases,
         fast=use_fast,
-        default_profile=args.profile,
+        default_profile=profile,
     )
+    out["corpus_domain"] = args.corpus
 
     if args.write or not is_fast():
-        _OUT.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
-        print(f"\nWrote {_OUT}")
+        out_path.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+        print(f"\nWrote {out_path}")
 
     best = out.get("global_best")
     if best:

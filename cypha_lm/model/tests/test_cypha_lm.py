@@ -207,6 +207,45 @@ def test_warm_started_active_experts() -> None:
     assert out["active_experts"] >= cfg.n_experts
 
 
+def test_view_id_dim_forward() -> None:
+    cfg = CyphaLMConfig(
+        vocab_size=64,
+        d_embed=64,
+        field_dim=32,
+        d_state=16,
+        ssm_layers=1,
+        max_experts=8,
+        seed=42,
+        device="cpu",
+        context_mode="gria_ngram",
+        view_id_dim=4,
+        view_schedule="schedule_a",
+    )
+    model = CyphaLM(cfg)
+    out = model.train_step(0, 1)
+    assert np.isfinite(out["loss"])
+
+
+def test_ngram_fuse_split_forward() -> None:
+    cfg = CyphaLMConfig(
+        vocab_size=64,
+        d_embed=64,
+        field_dim=32,
+        d_state=16,
+        ssm_layers=1,
+        max_experts=8,
+        seed=42,
+        device="cpu",
+        context_mode="gria_ngram",
+        ngram_fuse_split=True,
+        ngram_context=2,
+    )
+    model = CyphaLM(cfg)
+    assert model._proj_ngram_field is not None
+    out = model.train_step(1, 2)
+    assert np.isfinite(out["loss"])
+
+
 def _sequence_perplexity(model: CyphaLM, token_ids: list[int]) -> float:
     model.reset_context()
     nll = 0.0

@@ -61,8 +61,31 @@ class CyphaLM:
         self._proj_embed = xp.asarray(rng.standard_normal((fd, config.d_embed)) * 0.02)
         n_embeds = 1 + max(0, int(config.ngram_context))
         ngram_in = (0 if config.context_mode == "ablation_no_ssm" else fd) + n_embeds * config.d_embed
-        self._proj_ngram = xp.asarray(rng.standard_normal((fd, ngram_in)) * 0.02)
-        gria_in = fd
+        self._ngram_fuse_split = bool(config.ngram_fuse_split) and config.context_mode in (
+            "gria_ngram",
+            "ablation_no_ssm",
+        )
+        if self._ngram_fuse_split:
+            embed_in = n_embeds * config.d_embed if config.context_mode != "ablation_no_ssm" else ngram_in
+            field_in = fd if config.context_mode != "ablation_no_ssm" else 0
+            self._proj_ngram_field = (
+                xp.asarray(rng.standard_normal((fd, field_in)) * 0.02) if field_in > 0 else None
+            )
+            self._proj_ngram_embed = xp.asarray(rng.standard_normal((fd, embed_in)) * 0.02)
+            self._proj_ngram = xp.asarray(rng.standard_normal((fd, ngram_in)) * 0.02)
+        else:
+            self._proj_ngram_field = None
+            self._proj_ngram_embed = None
+            self._proj_ngram = xp.asarray(rng.standard_normal((fd, ngram_in)) * 0.02)
+        vid = max(0, int(config.view_id_dim))
+        self._view_slots = 16 if vid > 0 else 0
+        if vid > 0:
+            self._view_embed = xp.asarray(
+                rng.standard_normal((self._view_slots, vid)) * 0.02
+            )
+        else:
+            self._view_embed = None
+        gria_in = fd + vid
         self.gria = GRIAProjection(
             d_input=gria_in,
             vocab_size=config.vocab_size,
@@ -118,6 +141,12 @@ class CyphaLM:
         xp = self._backend.xp
         mode = self.config.context_mode
         embeds = self._ngram_embedding_vector()
+        if self._ngram_fuse_split and self._proj_ngram_field is not None:
+            field_part = self._proj_ngram_field @ xp.asarray(
+                field_x, dtype=xp.float64
+            ).ravel()
+            embed_part = self._proj_ngram_embed @ embeds
+            return field_part + embed_part
         if mode == "ablation_no_ssm":
             concat = embeds
         else:
@@ -125,6 +154,22 @@ class CyphaLM:
                 [xp.asarray(field_x, dtype=xp.float64).ravel(), embeds]
             )
         return self._proj_ngram @ concat
+
+    def _view_vector(self) -> Any:
+        xp = self._backend.xp
+        if self._view_embed is None or self._view_slots <= 0:
+            return xp.zeros(max(0, int(self.config.view_id_dim)), dtype=xp.float64)
+        slot = int(self._current_view_id) % self._view_slots
+        return xp.asarray(self._view_embed[slot], dtype=xp.float64).ravel()
+
+    def _augment_gria_input(self, v: Any) -> Any:
+        xp = self._backend.xp
+        vid = max(0, int(self.config.view_id_dim))
+        if vid <= 0:
+            return v
+        return xp.concatenate(
+            [xp.asarray(v, dtype=xp.float64).ravel(), self._view_vector()]
+        )
 
     def _gria_input(self, field_x, dif_out: dict) -> Any:
         xp = self._backend.xp
@@ -162,6 +207,7 @@ class CyphaLM:
         else:
             dif_out = self.dif.predict(asnumpy(field_x))
         v = self._gria_input(field_x, dif_out)
+        v = self._augment_gria_input(v)
         log_probs = self.gria.forward(v)
         self._last_epistemic = float(dif_out["epistemic_var"])
         self._last_aleatoric = float(dif_out["aleatoric_var"])
@@ -188,7 +234,17 @@ class CyphaLM:
         if e.size != in_dim:
             return
         delta = lr * xp.outer(h, e)
+        norm = float(xp.linalg.norm(delta))
+        if norm > 0.1:
+            delta = delta * (0.1 / norm)
         self.ssm.W_fast[0] += delta * 0.01
+
+    def _grad_v_field_core(self, grad_v: Any) -> Any:
+        """GRIA input may include view_id tail; backprop to field path uses core dims only."""
+        xp = self._backend.xp
+        g = xp.asarray(grad_v, dtype=xp.float64).ravel()
+        fd = self.config.field_dim
+        return g[:fd]
 
     def _bptt_ssm_update(self, fwd: dict[str, Any], next_token_id: int) -> None:
         """Approximate truncated BPTT: backprop GRIA loss to SSM layer-0 fast weights."""
@@ -198,15 +254,18 @@ class CyphaLM:
         xp = self._backend.xp
         v = fwd["v"]
         nxt = int(next_token_id)
-        grad_v = self.gria.grad_v_cross_entropy(v, nxt)
+        grad_v = self._grad_v_field_core(self.gria.grad_v_cross_entropy(v, nxt))
         mode = self.config.context_mode
         fd = self.config.field_dim
 
         if mode == "ssm_only":
             grad_field = grad_v
         elif mode == "gria_ngram":
-            grad_concat = self._proj_ngram.T @ grad_v
-            grad_field = grad_concat[:fd]
+            if self._ngram_fuse_split and self._proj_ngram_field is not None:
+                grad_field = self._proj_ngram_field.T @ grad_v
+            else:
+                grad_concat = self._proj_ngram.T @ grad_v
+                grad_field = grad_concat[:fd]
         elif mode == "full":
             u = float(fwd["dif_out"]["epistemic_var"])
             grad_field = grad_v * (u * 0.01)
@@ -257,7 +316,7 @@ class CyphaLM:
             self.dif.train_step(asnumpy(field_x), asnumpy(target_vec))
         if self.config.bptt_steps > 0:
             self._bptt_ssm_update(fwd, nxt)
-        else:
+        elif self.config.train_ssm:
             self._ssm_online_update(fwd["embedding"], fwd["ctx"])
         self._token_counts[nxt] += 1.0
         if self.config.laplace_smoothing > 0:
@@ -462,13 +521,19 @@ class CyphaLM:
         )
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
-        np.savez(
-            npz_path,
+        npz_kwargs = dict(
             proj_ssm=asnumpy(self._proj_ssm),
             proj_dif=asnumpy(self._proj_dif),
             proj_embed=asnumpy(self._proj_embed),
             proj_ngram=asnumpy(self._proj_ngram),
         )
+        if self._proj_ngram_field is not None:
+            npz_kwargs["proj_ngram_field"] = asnumpy(self._proj_ngram_field)
+        if self._proj_ngram_embed is not None:
+            npz_kwargs["proj_ngram_embed"] = asnumpy(self._proj_ngram_embed)
+        if self._view_embed is not None:
+            npz_kwargs["view_embed"] = asnumpy(self._view_embed)
+        np.savez(npz_path, **npz_kwargs)
 
     @classmethod
     def load(cls, path: str) -> "CyphaLM":
@@ -492,4 +557,14 @@ class CyphaLM:
                 model._proj_embed = xp.asarray(data["proj_embed"], dtype=xp.float64)
             if "proj_ngram" in data:
                 model._proj_ngram = xp.asarray(data["proj_ngram"], dtype=xp.float64)
+            if "proj_ngram_field" in data and model._proj_ngram_field is not None:
+                model._proj_ngram_field = xp.asarray(
+                    data["proj_ngram_field"], dtype=xp.float64
+                )
+            if "proj_ngram_embed" in data and model._proj_ngram_embed is not None:
+                model._proj_ngram_embed = xp.asarray(
+                    data["proj_ngram_embed"], dtype=xp.float64
+                )
+            if "view_embed" in data and model._view_embed is not None:
+                model._view_embed = xp.asarray(data["view_embed"], dtype=xp.float64)
         return model

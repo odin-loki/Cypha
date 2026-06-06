@@ -117,11 +117,8 @@ native/build/
 # =====================================================
 
 # MNIST data files (both compressed and raw — downloaded at benchmark time)
-examples/demo_cyphalm/demo.json
-examples/demo_cyphalm/demo.npz
-cypha_bench/data/mnist/*-ubyte
-cypha_bench/data/mnist/*.idx3-ubyte
-cypha_bench/data/mnist/*.idx1-ubyte
+cypha_bench/data/mnist/
+cypha_bench/data/wikitext2/
 
 # Benchmark tuning artifacts (large JSON blobs from swarm runs)
 cypha_bench/artifacts/tuning/

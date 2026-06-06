@@ -35,7 +35,8 @@ class CyphaLMConfig:
     train_epochs: int = 1  # multi-pass over corpus
     view_schedule: str = "same_order"  # preset name or JSON list of view transforms
     view_block_size: int = 512
-    view_id_dim: int = 0  # if >0, optional view embedding (reserved)
+    view_id_dim: int = 0  # if >0, concat view embedding into GRIA input
+    ngram_fuse_split: bool = True  # separate field/embed projections (sum) vs single concat matmul
     gria_lr_decay: float = 0.5  # multiply gria lr each epoch after the first
     bptt_steps: int = 0  # truncated BPTT window for SSM fast weights via GRIA loss
     laplace_smoothing: float = 1.0  # unigram-style GRIA bias init / online prior

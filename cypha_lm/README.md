@@ -23,7 +23,8 @@ CyphaDIF is not a separate bolt-on — it routes and predicts in the expert fiel
 | `train_epochs` | `1` | Full passes over `train_sequence` / bench train loop |
 | `gria_lr_decay` | `0.5` | Multiply `gria_lr` after each epoch when `train_epochs > 1` |
 | `bptt_steps` | `0` | If &gt; 0, truncated BPTT window for optional SSM fast-weight updates |
-| `laplace_smoothing` | `1.0` | Laplace prior on GRIA bias via `set_laplace_prior()` |
+| `view_id_dim` | `0` | If &gt; 0, concat per-view embedding into GRIA input |
+| `ngram_fuse_split` | `True` | Separate field/embed n-gram projections (sum) vs single concat matmul |
 
 ### `context_mode` values
 
@@ -35,7 +36,7 @@ CyphaDIF is not a separate bolt-on — it routes and predicts in the expert fiel
 | `ablation_no_dif` | Field mean only; routing ablated |
 | `ablation_no_ssm` | N-gram embed stack only; SSM zeroed |
 
-Bench profiles (`d04`, `d17`) set recommended modes — e.g. `gria_ngram` on WikiText with `ngram_context: 2`, `train_epochs: 2`, `bptt_steps: 64` on D17.
+Bench profiles (`d04`, `d17`) use **`gria_ngram`** + **`schedule_b`** + frozen α + `gria_lr_decay=0.3` + `ngram_context=3` + `view_id_dim=8` (D17, post stack-validation @ 300k).
 
 ### Laplace bias init
 
