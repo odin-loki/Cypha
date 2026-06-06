@@ -104,9 +104,20 @@ embed history → LSTM → h_n → fuse with field_x → GRIA
 
 ### Phase M1 — Benchmark parity (1–2 days)
 
-- [ ] Script `cyphalm_char_lstm_extended.py` — char-LSTM @ 40k/70k/300k/full corpus
-- [ ] Add results to `cyphalm_model_class_baseline.json`
-- [ ] Confirm char-LSTM still beats bigram @ 300k
+- [x] Script `cyphalm_char_lstm_extended.py` — char-LSTM @ 40k/70k/150k/300k
+- [x] Results in `cyphalm_char_lstm_extended.json`
+- [ ] Confirm char-LSTM @ full corpus (Phase 1c companion)
+
+**M1 results (WikiText valid, 2026-06-06):**
+
+| n_train | Char-LSTM BPC | vs bigram | CyphaLM stack ref |
+|---------|---------------|-----------|-------------------|
+| 40k | 3.615 | **−0.30** | ~4.04 (frozen α) |
+| 70k | 3.390 | **−0.36** | ~3.92 |
+| 150k | 3.193 | **−0.42** | — |
+| **300k** | **3.098** | **−0.47** | **3.838 (+0.27)** |
+
+Char-LSTM **beats bigram at every budget** and improves monotonically to 300k. Gap vs CyphaLM best @ 300k: **~0.74 BPC** — hybrid/LSTM head justified.
 
 ### Phase M2 — Dual head prototype (3–5 days)
 
