@@ -73,9 +73,10 @@ Script: `python cypha_bench/tuning/cyphalm_convergence_limit.py --write`
 | Multi-view (`schedule_b`) | ✅ Helps vs same-order; extends useful train budget beyond 40k |
 | Same-order + 2 epochs | ❌ Overtrains after 40k — cap or switch schedule |
 | More tokens alone | ❌ Peaks @ 300k for schedule_b; not a path to beat bigram |
-| Hyperparams (`gria_lr`, `tau_slow`, SSM) | Not yet swept **with** `schedule_b` at 70k–150k |
-| Full official WikiText train | Not yet run with `schedule_b` |
-| Replay / Laplace / ngram order | Untested in combination with best view schedule |
+| Full official WikiText train | Phase 1c — run with updated profile |
+| Learnable view embeddings | Planned — [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md) Track A |
+| Stronger n-gram fusion | Planned — [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md) Track B |
+| Char-LSTM / hybrid class | Research — [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 
 ## Beat-bigram hyperparam sweep (2026-06-01)
 

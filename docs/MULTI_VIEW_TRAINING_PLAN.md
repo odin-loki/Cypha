@@ -333,7 +333,7 @@ Extended to **250k tokens** (10M-token WikiText cap). Artifact: `cyphalm_converg
 | Mode | Training limit | Best BPC | @ n_train | vs bigram | Status |
 |------|----------------|----------|-----------|-----------|--------|
 | **same_order_e2** | **~40k** (overtrain by 50k) | **4.094** | 40k | +0.18 | **Converged** — BPC rises after 40k |
-| **schedule_b** | **Not yet** (still improving at 250k) | **3.936** | 250k | +0.36 | No plateau — keep extending or stop ~70–150k for local minima |
+| **schedule_b** | **Yes** | **~300k** (worse by 400k) | **3.905** | 300k | +0.34 |
 
 **Prior 40k cap was too low** to see same-order overtrain; it looked like the optimum because the bench default stopped there.
 

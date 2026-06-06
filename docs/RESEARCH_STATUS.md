@@ -1,6 +1,6 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-05-31 (CyphaLM upgrade + multi-view plan docs) | **Report:** `cypha_bench/BASELINE_REPORT.md` (2026-05-31; re-run after upgrade)
+**Last updated:** 2026-06-06 (CyphaLM profile v2, component ablation, Upgrade V2 + model-class plans) | **Report:** `cypha_bench/BASELINE_REPORT.md` (2026-05-31; re-run after upgrade)
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -14,7 +14,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
 | **C++ / CUDA / Qt port** | M1–M6 complete | Parity with Python on all ported ops; deliberation and kernel LLR Python-only |
 | **cypha_accel (GPU fused kernels)** | Working | CuPy GPU path used automatically; NumPy fallback |
-| **cypha_lm (CyphaLM)** | Beats trigram at 40k | D17 **4.154** / D04 **4.122** BPC; +0.19–0.24 vs bigram; char-LSTM still best; **multi-view training planned** → [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md) |
+| **cypha_lm (CyphaLM)** | Best @ 300k: **3.838 BPC** | Still +0.27 vs bigram; char-LSTM **3.589**; **Upgrade V2** + **model-class** tracks → [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Benchmarked, reverted | All upgrades worse than baseline; U3/U5/U6 structurally safe |
 | **cypha_bench (eval harness)** | 17 domains complete | D04 full LLM suite; D17 extended integration; `adapters/cyphalm_bench.py` |
 | **cypha_studio (PySide6 + FastAPI)** | Working | GUI + REST + registry; **CyphaLM `/generate` SSE** (FastAPI-only) |
@@ -293,10 +293,8 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 
 **Idea:** Structure-preserving reorderings (block shuffle, rotated start, bidirectional passes, task-block permutations) each macro-epoch, with explicit `view_id` and memory policy (reset fast / carry slow). Exploits online routing, replay, and expert growth instead of single static stream training.
 
-**Phase 1 (LM):** `cypha_views/` module → D17 **17E_multi_view** → beat bigram or ≥0.05 BPC improvement.  
-**Convergence (250k sweep):** `same_order_e2` **peaks @ 40k** then overtrains; `schedule_b` still improving at 250k (best **3.936** BPC). Full write-up: [`FINDINGS_CYPHALM_TRAINING.md`](FINDINGS_CYPHALM_TRAINING.md). Artifacts: `cyphalm_convergence_limit.json`, `cyphalm_beat_bigram_sweep.json` (in progress).
-
-**Next (beat-bigram):** (1b) `cyphalm_beat_bigram_sweep.py` — schedule_b × 70k–150k × hyperparams; (1c) full WikiText + schedule_b; fast axes: laplace, ngram_context, schedule_c, gria_lr_decay.
+**Phase 1 (LM):** Multi-view + convergence complete. Stack best **3.838 BPC @ 300k**.  
+**Next (parallel):** [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md) (learnable views + n-gram fusion) + [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) (char-LSTM / hybrid). Phase 1c full-corpus eval in progress.
 
 **Component ablation study:** systematic isolation + combinatorics — [`CYPHALM_ALGORITHM_STUDY.md`](CYPHALM_ALGORITHM_STUDY.md). **Profile updated (2026-06):** `schedule_b`, `alpha_learnable=false`, `gria_lr_decay=0.3`, `ngram_context=3`, `view_id_dim=8`. Phase 1c full-corpus D17 run in progress.
 
@@ -325,7 +323,7 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 ```
 2026 Q3 — Priority 1: Kernel LLR prototype → benchmark → port decision
 2026 Q3 — Priority 2: Auto-gamma RFF default → D08/D14 re-benchmark
-2026 Q4 — Priority 3: CyphaLM beat-bigram (gria_ngram + full WikiText) → D17 re-eval → paper draft
+2026 Q4 — Priority 3: CyphaLM — Phase 1c full corpus; **Upgrade V2** (learnable views + fusion) + **model-class** (char-LSTM hybrid) in parallel
 2026 Q4 — Priority 4: Multi-view online training — Phase 1 LM (`MULTI_VIEW_TRAINING_PLAN.md`) → Phase 2 D16/DIF
 2026 Q4 — Priority 5: Continual learning investigation → EWC overlay
 2027 Q1 — Priority 6: CellAI SSM temporal tuning → D10 re-eval
