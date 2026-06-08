@@ -149,6 +149,12 @@ def run() -> dict:
         },
     }
 
+    if os.environ.get("CYPHA_BENCH_BRANCH_A", "0") == "1":
+        from cypha_bench.adapters.branch_a_documents import run_branch_a_documents
+
+        backend = os.environ.get("CYPHA_BRANCH_A_BACKEND", "auto")
+        metrics["branch_a_frozen_embed"] = run_branch_a_documents(backend=backend)
+
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     axes[0].bar(
         ["CyphaDIF", "SGD", "LogReg"],

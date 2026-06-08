@@ -44,6 +44,23 @@ Encoder: **sentence-transformers/all-MiniLM-L6-v2** (384-d, frozen)
 
 **Verdict:** Frozen semantic embeddings unlock CyphaDIF on text — **+28.5pp vs TF-IDF** at 2k samples. Freezing `EncoderProjection` (**62.5%**) beats online projection tuning (**49.3%**) and matches/beats batch LogReg on this split.
 
+### Gutenberg OOD epistemic (D09 Branch A run)
+
+Artifact: `cypha_bench/config/d09_branch_a_summary.json`
+
+| Split | Mean epistemic var |
+|-------|-------------------|
+| 20news held-out (in-domain) | **0.170** |
+| Gutenberg segments (OOD) | **1.077** |
+
+Mann-Whitney **p ≈ 2.8×10⁻¹⁰²** — CyphaDIF uncertainty **rises on out-of-domain book text** when trained on newsgroup MiniLM vectors. Use for routing / abstain before LLM generation.
+
+```powershell
+python cypha_bench/tuning/run_d09_branch_a.py
+# or full D09 with Branch A block:
+$env:CYPHA_BENCH_BRANCH_A="1"; python cypha_bench/run_all.py --domain 9
+```
+
 Hashing fallback @ same protocol: **16–19%** (not semantic — use only for offline CI smoke).
 
 ---
@@ -71,9 +88,9 @@ python cypha_bench/tuning/cypha_branch_a_sweep.py --n-samples 800 --backend hash
 
 ## Next steps
 
-1. Wire frozen-ST path into **D09** as optional experiment (`CYPHA_BENCH_BRANCH_A=1`).
-2. OOD eval: Gutenberg segments vs 20news (epistemic separation) on ST vectors.
-3. **Local LLM routing:** embed user query → CyphaDIF route → Ollama/Mistral generate (REST stub).
+1. ~~Wire frozen-ST path into **D09**~~ — `run_d09_branch_a.py` + `CYPHA_BENCH_BRANCH_A=1`.
+2. ~~OOD eval: Gutenberg vs 20news epistemic~~ — **done** (see above).
+3. **Local LLM routing:** embed user query → CyphaDIF route/abstain → Ollama/Mistral generate (REST stub).
 4. Compare **RFF vs VectorEncoder** on 384-d ST inputs for small-dim regime.
 
 ---

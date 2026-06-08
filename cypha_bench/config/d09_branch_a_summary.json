@@ -1,0 +1,25 @@
+{
+  "n_samples": 2000,
+  "n_classes": 20,
+  "embedding": {
+    "backend": "sentence_transformers",
+    "model_name": "all-MiniLM-L6-v2",
+    "dim": 384
+  },
+  "freeze_encoder_proj": true,
+  "cypha_scores": {
+    "accuracy": 0.625,
+    "f1_macro": 0.6074266197537617
+  },
+  "cypha_accuracy": 0.625,
+  "logreg_accuracy": 0.6025,
+  "train_seconds": 3.7287351000122726,
+  "gutenberg_ood": {
+    "n_segments": 1089,
+    "mean_epistemic_in": 0.17018833109249154,
+    "mean_epistemic_ood": 1.076951500713571,
+    "mannwhitney_u": 212644.0,
+    "p_value": 2.82181864507606e-102,
+    "ood_epistemic_higher": true
+  }
+}

@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-08 07:36 UTC
+Generated: 2026-06-08 07:43 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -400,7 +400,7 @@ Default parameters only — no hyperparameter tuning.
 
 ## D09
 
-*Timestamp:* 2026-05-31T04:40:42.068032+00:00
+*Timestamp:* 2026-06-08T07:43:12.512730+00:00
 
 ### summary
 
@@ -429,13 +429,13 @@ Default parameters only — no hyperparameter tuning.
 | `20news.n_samples` | 800 |
 | `20news.sgd_online.accuracy` | 0.3563 |
 | `20news.sgd_online.f1_macro` | 0.3209 |
-| `domain` | d09_documents |
-| `gutenberg_book_classification.cypha_scores.accuracy` | 0.6458 |
-| `gutenberg_book_classification.cypha_scores.f1_macro` | 0.6431 |
-| `gutenberg_book_classification.n_segments` | 240 |
-| `gutenberg_book_classification.sgd_online.accuracy` | 0.3333 |
-| `gutenberg_book_classification.sgd_online.f1_macro` | 0.1667 |
-| `gutenberg_ood.mannwhitney_u` | 36960.0000 |
+| `branch_a_frozen_embed.cypha_accuracy` | 0.6250 |
+| `branch_a_frozen_embed.cypha_scores.accuracy` | 0.6250 |
+| `branch_a_frozen_embed.cypha_scores.f1_macro` | 0.6074 |
+| `branch_a_frozen_embed.embedding.backend` | sentence_transformers |
+| `branch_a_frozen_embed.embedding.dim` | 384 |
+| `branch_a_frozen_embed.embedding.model_name` | all-MiniLM-L6-v2 |
+| `branch_a_frozen_embed.freeze_encoder_proj` | True |
 
 ## D10
 

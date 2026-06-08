@@ -14,6 +14,10 @@ milestone or a significant self-contained change.
 
 ### Changed
 - Branch A @ 2k samples: CyphaDIF + frozen MiniLM **62.5%** vs TF-IDF path **34.0%**.
+- D09 integration: `run_d09_branch_a.py`, Gutenberg OOD epistemic **6.3×** in-domain.
+
+### Added (follow-up)
+- `branch_a_documents.py`, `run_d09_branch_a.py`, `scripts/demo_branch_a_route.py`.
 
 ---
 
