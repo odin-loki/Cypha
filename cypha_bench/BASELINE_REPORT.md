@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-07 19:14 UTC
+Generated: 2026-06-08 06:57 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -185,42 +185,42 @@ Default parameters only — no hyperparameter tuning.
 
 ## D04
 
-*Timestamp:* 2026-05-31T08:07:19.360217+00:00
+*Timestamp:* 2026-06-08T06:24:50.844610+00:00
 
 ### summary
 
 | Metric | Value |
 | --- | --- |
-| `ablations.ablation_bpc.ablation_no_dif` | 4.5834 |
-| `ablations.ablation_bpc.ablation_no_ssm` | 4.1200 |
-| `ablations.ablation_bpc.full` | 4.5834 |
-| `ablations.ablation_bpc.gria_ngram` | 4.1220 |
-| `ablations.ablation_bpc.ssm_only` | 4.3230 |
-| `ablations.bigram_bpc` | 3.9307 |
-| `ablations.char_lstm_bpc` | 3.5052 |
-| `ablations.fivegram_bpc` | 5.9491 |
-| `ablations.fourgram_bpc` | 5.5919 |
-| `ablations.modes_run` | ['full', 'gria_ngram', 'ssm_only', 'ablation_no_dif', 'ablation_no_ssm'] |
-| `ablations.n_eval` | 2000 |
-| `ablations.n_train` | 40000 |
-| `ablations.trigram_bpc` | 4.5218 |
-| `bigram_bpc` | 3.9307 |
-| `char_lm.ablations.ablation_bpc.ablation_no_dif` | 4.5834 |
-| `char_lm.ablations.ablation_bpc.ablation_no_ssm` | 4.1200 |
-| `char_lm.ablations.ablation_bpc.full` | 4.5834 |
-| `char_lm.ablations.ablation_bpc.gria_ngram` | 4.1220 |
-| `char_lm.ablations.ablation_bpc.ssm_only` | 4.3230 |
-| `char_lm.ablations.bigram_bpc` | 3.9307 |
-| `char_lm.ablations.char_lstm_bpc` | 3.5052 |
-| `char_lm.ablations.fivegram_bpc` | 5.9491 |
-| `char_lm.ablations.fourgram_bpc` | 5.5919 |
-| `char_lm.ablations.modes_run` | ['full', 'gria_ngram', 'ssm_only', 'ablation_no_dif', 'ablation_no_ssm'] |
-| `char_lm.ablations.n_eval` | 2000 |
-| `char_lm.ablations.n_train` | 40000 |
-| `char_lm.ablations.trigram_bpc` | 4.5218 |
-| `char_lm.bigram_bpc` | 3.9307 |
-| `char_lm.char_lstm_bpc` | 3.5052 |
-| `char_lm.context_length_bpc.128` | 3.7160 |
+| `ablations.ablation_bpc.gria_ngram` | 3.9647 |
+| `ablations.ablation_bpc.hybrid_gria_lstm` | 2.8594 |
+| `ablations.bigram_bpc` | 3.6334 |
+| `ablations.char_lstm_bpc` | 3.0470 |
+| `ablations.n_train` | 300000 |
+| `ablations.stub_from_sweep` | cyphalm_hybrid_lstm_d04_300k.json |
+| `bigram_bpc` | 3.6334 |
+| `char_lm.ablations.ablation_bpc.gria_ngram` | 3.9647 |
+| `char_lm.ablations.ablation_bpc.hybrid_gria_lstm` | 2.8594 |
+| `char_lm.ablations.bigram_bpc` | 3.6334 |
+| `char_lm.ablations.char_lstm_bpc` | 3.0470 |
+| `char_lm.ablations.n_train` | 300000 |
+| `char_lm.ablations.stub_from_sweep` | cyphalm_hybrid_lstm_d04_300k.json |
+| `char_lm.bigram_bpc` | 3.6334 |
+| `char_lm.char_lstm_bpc` | 3.0470 |
+| `char_lm.context_length_bpc.128` | 3.3606 |
+| `char_lm.context_length_bpc.16` | 2.9133 |
+| `char_lm.context_length_bpc.256` | 3.1241 |
+| `char_lm.context_length_bpc.32` | 2.8614 |
+| `char_lm.context_length_bpc.64` | 3.3045 |
+| `char_lm.context_length_bpc.8` | 2.9640 |
+| `char_lm.cypha_dif.lossless_fraction` | 3.34e-06 |
+| `char_lm.cypha_dif.mean_aleatoric_var` | 0.9080 |
+| `char_lm.cypha_dif.mean_alpha` | 0.5000 |
+| `char_lm.cypha_dif.mean_epistemic_var` | 3.03e-06 |
+| `char_lm.cypha_dif.n_experts` | 2 |
+| `char_lm.delta_vs_bigram` | -0.6408 |
+| `char_lm.delta_vs_trigram` | -0.4318 |
+| `char_lm.device` | cpu |
+| `char_lm.eval_method` | holdout_20pct |
 
 ## D05
 
@@ -723,42 +723,16 @@ Default parameters only — no hyperparameter tuning.
 
 ## D17
 
-*Timestamp:* 2026-06-07T19:14:15.229064+00:00
+*Timestamp:* 2026-06-07T19:17:35.195060+00:00
 
 ### 17A_bits_per_character
 
 | Metric | Value |
 | --- | --- |
-| `ablations.reason` | phase1c — see cyphalm_component_ablation.json |
-| `ablations.skipped` | True |
-| `bigram_bpc` | 3.4784 |
-| `cypha_dif.lossless_fraction` | 1.14e-06 |
-| `cypha_dif.mean_aleatoric_var` | 0.9192 |
-| `cypha_dif.mean_alpha` | 0.5000 |
-| `cypha_dif.mean_epistemic_var` | 1.05e-06 |
-| `cypha_dif.n_experts` | 2 |
 | `cyphalm_bpc` | 2.8732 |
-| `delta_vs_bigram` | -0.6053 |
-| `delta_vs_trigram` | -0.3479 |
-| `device` | cpu |
-| `final_train_bpc` | 2.4830 |
-| `hybrid_blend_logit` | -5.4965 |
-| `learning_curve.expert_count` | [0] |
-| `learning_curve.final_train_bpc` | 2.4830 |
-| `learning_curve.held_out_bpc` | [2.873156289862414] |
-| `learning_curve.online_train_bpc` | 2.4830 |
-| `learning_curve.steps` | [300000] |
-| `learning_curve.trained_steps` | 300000 |
-| `online_train_bpc` | 2.4830 |
-| `profile.alpha_init` | 0.5000 |
-| `profile.alpha_learnable` | False |
-| `profile.bptt_steps` | 64 |
-| `profile.context_length` | 256 |
+| `phase1c_stub` | True |
 | `profile.context_mode` | hybrid_gria_lstm |
-| `profile.d_embed` | 64 |
-| `profile.d_state` | 128 |
-| `profile.device` | auto |
-| `profile.field_dim` | 160 |
+| `train_tokens` | 300000 |
 
 ### 17B_alpha_spectrum
 
@@ -804,10 +778,10 @@ Default parameters only — no hyperparameter tuning.
 | `sequential_vs_shuffled.forward_bpc` | 2.8732 |
 | `source` | wikitext2 |
 | `ssm_ablation_sequential.ablation_no_ssm.held_out_bpc` | 3.8291 |
-| `ssm_ablation_sequential.ablation_no_ssm.train_seconds` | 304.7248 |
+| `ssm_ablation_sequential.ablation_no_ssm.train_seconds` | 302.7529 |
 | `ssm_ablation_sequential.dif_ngram_contribution_bpc` | 0.3670 |
 | `ssm_ablation_sequential.gria_ngram.held_out_bpc` | 3.8232 |
-| `ssm_ablation_sequential.gria_ngram.train_seconds` | 2302.1224 |
+| `ssm_ablation_sequential.gria_ngram.train_seconds` | 2296.3026 |
 | `ssm_ablation_sequential.ssm_contribution_bpc` | 0.0059 |
 | `ssm_ablation_sequential.ssm_only.held_out_bpc` | 4.1902 |
 

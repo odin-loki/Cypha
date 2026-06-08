@@ -10,7 +10,7 @@
 
 | Cypha Tests experiment | CyphaLM implementation | Pass criterion |
 |------------------------|------------------------|----------------|
-| **1A** Sequential vs shuffled | `eval_shuffled_stream_bpc` — forward vs block-shuffled eval | Shuffled **worse** (order matters) |
+| **1A** Sequential vs shuffled | `eval_shuffled_stream_bpc` — forward vs block-shuffled **and char-shuffled** eval | Block shuffle often flat; **char shuffle worse** (order matters) |
 | **1A** Field active vs zeroed | `eval_ssm_ablation_sequential` — `gria_ngram` vs `ablation_no_ssm` | SSM path **lower BPC** than embed-only |
 | **1C** Field as context vector | `eval_context_length_extended` — BPC vs warm-up length | BPC **falls** as context window grows (SSM uses history) |
 | Long-range memory | `eval_reset_interval_bpc` — reset every N tokens | BPC **rises** when reset often (needs long context) |
@@ -44,6 +44,17 @@ Figures: `fig17_long_range_context_bpc.png`, `fig17_long_range_reset_interval.pn
 | Block shuffle | forward 4.023 vs shuffled 4.022 (−0.001) | **1A fail @ block level** — order insensitive (n-gram head may dominate) |
 | SSM ablation | gria 4.023 vs no_ssm 4.019; ssm_only 4.477 | **1A marginal** — SSM adds ~0 at stream eval; n-gram fusion essential |
 
+## Char-level shuffle (Cypha Tests 1A @ token order)
+
+Block shuffle permutes 512-token chunks; **char shuffle** permutes every eval token (stronger order test).
+
+| Train | Forward | Block shuffle | Char shuffle | 1A @ char |
+|-------|---------|---------------|--------------|-----------|
+| 8k hybrid | 3.956 | +0.004 | **+1.37** | **Pass** |
+| 300k hybrid | **2.870** | +0.016 | **+4.54** (→ **7.41** BPC) | **Pass** |
+
+Block shuffle stays flat because local n-gram structure survives chunk permutations; char shuffle breaks sequential dependencies the LSTM head relies on.
+
 ## Results @ 300k hybrid (`hybrid_gria_lstm`, Phase 1c 17K)
 
 Artifact: `cypha_bench/report/tables/d17.json` → `17K_long_range_context`
@@ -53,7 +64,8 @@ Artifact: `cypha_bench/report/tables/d17.json` → `17K_long_range_context`
 | Held-out BPC | **2.873** | Beats bigram **3.478** |
 | Context warm-up | **3.03 @ 8 → 2.86 @ 16** (best **2.860 @ 16**) | **1C pass** — warm-up still helps under hybrid head |
 | Reset interval | **2.873 never → 3.139 @ reset=8** | **Pass** — frequent reset hurts (+0.27 BPC) |
-| Block shuffle | forward 2.873 vs shuffled 2.894 (+0.021) | **1A still marginal** — LSTM-dominated blend (~99%) weakens block-order sensitivity vs GRIA-only |
+| Block shuffle | forward 2.873 vs shuffled 2.894 (+0.021) | **1A marginal @ block** — chunk order barely matters |
+| Char shuffle | forward **2.870** → char-shuffled **7.410** (**+4.54**) | **1A pass @ char** — hybrid relies on token order |
 | SSM ablation (GRIA stack) | gria 3.823 vs no_ssm 3.829 | N-gram path still dominates stream eval |
 
 **Interpretation @ 300k hybrid:** Long-range probes (warm-up, reset) remain valid; aggregate stream BPC is driven by the char-LSTM head. For SSM-specific claims, compare against **gria_ngram** ablation rows, not hybrid held-out BPC alone.

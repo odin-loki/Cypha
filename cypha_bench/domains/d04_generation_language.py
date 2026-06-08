@@ -12,6 +12,8 @@ Experiments:
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -96,7 +98,27 @@ def _run_cyphalm_char_lm(corpus) -> dict:
         if is_fast()
         else ["full", "gria_ngram", "ssm_only", "ablation_no_dif", "ablation_no_ssm"]
     )
-    ablations = run_lm_ablations(corpus, limits, ablation_modes, profile="d04")
+    if os.environ.get("CYPHA_BENCH_SKIP_LM_ABLATIONS", "0") == "1":
+        sweep_path = _REPO / "cypha_bench" / "config" / "cyphalm_hybrid_lstm_d04_300k.json"
+        if sweep_path.exists():
+            sweep = json.loads(sweep_path.read_text(encoding="utf-8"))
+            ablation_bpc = {
+                row["cell_id"]: row["held_out_bpc"]
+                for row in sweep.get("cells", [])
+                if row.get("cell_id") in {"gria_ngram", "hybrid_gria_lstm"}
+            }
+            ablation_bpc.setdefault("hybrid_gria_lstm", final_bpc)
+            ablations = {
+                "stub_from_sweep": sweep_path.name,
+                "n_train": sweep.get("n_train"),
+                "bigram_bpc": sweep.get("bigram_bpc"),
+                "char_lstm_bpc": sweep.get("char_lstm_baseline_bpc"),
+                "ablation_bpc": ablation_bpc,
+            }
+        else:
+            ablations = {"skipped": True, "reason": "CYPHA_BENCH_SKIP_LM_ABLATIONS without sweep artifact"}
+    else:
+        ablations = run_lm_ablations(corpus, limits, ablation_modes, profile="d04")
 
     prompt_len = min(limits["prompt_len"], len(test_ids) - 1)
     prompt_ids = test_ids[:prompt_len]

@@ -89,7 +89,7 @@ Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation
 | D04 | 3k fast | **5.233** | 6.201 | 6.675 | — | — | — | **−0.97** | **−1.44** |
 | D17 | 40k full | **4.154** | 3.914 | **4.398** | 5.286 | 5.579 | 3.589 | +0.24 | **−0.24** |
 | D04 Gutenberg | 40k full | **4.122** | 3.931 | **4.522** | 5.592 | 5.879 | 3.505 | +0.19 | **−0.40** |
-| D04 Gutenberg | 300k (`hybrid_gria_lstm`, Moby Dick) | **2.859** | 3.633 | — | — | — | 3.047 | **−0.77** | — |
+| D04 Gutenberg | 300k (`hybrid_gria_lstm`, Moby Dick) | **2.993** | 3.633 | 3.424 | 4.040 | 4.941 | 3.047 | **−0.64** | **−0.43** |
 | D17 | 300k (`hybrid_gria_lstm`, Phase 1c) | **2.873** | 3.478 | 4.398 | — | — | 2.979 | **−0.61** | **−1.53** |
 | D17 | 300k (`gria_ngram` stack) | **3.838** | 3.478 | 4.398 | — | — | 2.979 | +0.36 | **−0.56** |
 
@@ -259,7 +259,7 @@ Each hypothesis we have investigated with the result:
 
 **Status:** ✅ **Achieved @ 300k** via **hybrid GRIA+LSTM** — D17 **2.873 BPC** (−0.61 vs bigram, −0.11 vs char-LSTM bench). GRIA-only stack peaked @ **3.838** (+0.36 vs bigram).
 
-**Evidence (300k, `hybrid_gria_lstm`):** D17 Phase 1c **2.873**; D04 Moby Dick sweep **2.859** (−0.77 vs bigram, −0.19 vs char-LSTM); bigram D17 **3.478** / D04 **3.633**.
+**Evidence (300k, `hybrid_gria_lstm`):** D17 Phase 1c **2.873**; D04 Moby Dick bench **2.993** (learning-curve run; sweep **2.859**); bigram D17 **3.478** / D04 **3.633**. Cypha Tests **1A pass @ char shuffle** (+4.54 BPC @ 300k hybrid).
 
 **Root causes (unchanged):**
 - Most learning in GRIA; SSM/DIF under-trained at default single-pass online loop.

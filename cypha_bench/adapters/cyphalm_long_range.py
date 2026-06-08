@@ -53,8 +53,9 @@ def eval_shuffled_stream_bpc(
     n_eval: int = 2000,
     block_size: int = 512,
     seed: int = 42,
+    include_char_shuffle: bool = True,
 ) -> dict[str, float]:
-    """Sequential vs block-shuffled eval on same token multiset (Cypha Tests 1A)."""
+    """Sequential vs shuffled eval on same token multiset (Cypha Tests 1A)."""
     n = min(n_eval, len(test_ids) - 1)
     slice_ids = test_ids[: n + 1]
 
@@ -78,11 +79,19 @@ def eval_shuffled_stream_bpc(
     shuffled = [tok for idx in order for tok in blocks[idx]]
     shuffled_bpc = _eval_stream(shuffled[: len(slice_ids)])
 
-    return {
+    out: dict[str, float] = {
         "forward_bpc": forward_bpc,
         "block_shuffled_bpc": shuffled_bpc,
         "delta_shuffled_minus_forward": shuffled_bpc - forward_bpc,
     }
+    if include_char_shuffle:
+        char_rng = random.Random(seed + 1)
+        char_ids = list(slice_ids)
+        char_rng.shuffle(char_ids)
+        char_shuffled_bpc = _eval_stream(char_ids)
+        out["char_shuffled_bpc"] = char_shuffled_bpc
+        out["delta_char_shuffled_minus_forward"] = char_shuffled_bpc - forward_bpc
+    return out
 
 
 def eval_context_length_extended(

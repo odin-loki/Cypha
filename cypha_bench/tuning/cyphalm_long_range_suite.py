@@ -23,6 +23,12 @@ def main() -> int:
     ap.add_argument("--n-train", type=int, default=None)
     ap.add_argument("--n-eval", type=int, default=2000)
     ap.add_argument("--profile", default="d17")
+    ap.add_argument(
+        "--corpus",
+        choices=("wikitext", "gutenberg"),
+        default=None,
+        help="Training corpus (default: wikitext for d17, gutenberg for d04)",
+    )
     ap.add_argument("--fast", action="store_true")
     ap.add_argument("--skip-ablation", action="store_true", help="Skip 3× SSM ablation retrains")
     ap.add_argument("--figures", action="store_true", help="Write report figures")
@@ -33,8 +39,12 @@ def main() -> int:
     use_fast = args.fast or is_fast()
     n_train = args.n_train or (8000 if use_fast else 40000)
     out_path = args.out or _OUT
+    corpus_name = args.corpus or ("gutenberg" if args.profile == "d04" else "wikitext")
 
-    corpus = prepare_lm_corpus(prefer_wikitext=True, max_train_chars=10_000_000)
+    corpus = prepare_lm_corpus(
+        prefer_wikitext=(corpus_name == "wikitext"),
+        max_train_chars=10_000_000,
+    )
     require_real_corpus(corpus.source, domain="cyphalm_long_range_suite")
 
     print(
@@ -67,9 +77,15 @@ def main() -> int:
     if sh:
         print(
             f"Forward {sh.get('forward_bpc', float('nan')):.4f} vs "
-            f"shuffled {sh.get('block_shuffled_bpc', float('nan')):.4f} BPC",
+            f"block-shuffled {sh.get('block_shuffled_bpc', float('nan')):.4f} BPC",
             flush=True,
         )
+        if sh.get("char_shuffled_bpc") is not None:
+            print(
+                f"  char-shuffled {sh['char_shuffled_bpc']:.4f} BPC "
+                f"(delta {sh.get('delta_char_shuffled_minus_forward', float('nan')):+.4f})",
+                flush=True,
+            )
     ab = out.get("ssm_ablation_sequential") or {}
     if ab.get("ssm_contribution_bpc") is not None:
         print(f"SSM contribution (no_ssm - gria): {ab['ssm_contribution_bpc']:.4f} BPC", flush=True)
