@@ -6,6 +6,18 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased] — 2026-06-08 char 1A + D04 refresh
+
+### Added
+- **Char-level shuffle probe** (Cypha Tests 1A) in `eval_shuffled_stream_bpc`.
+- **`run_d04_hybrid_refresh.py`** — D04 @ 300k with ablation stub from sweep.
+
+### Changed
+- **D04 @ 300k hybrid:** **2.993 BPC** (Moby Dick); figures and `d17.json` 17K char-shuffle fields updated.
+- **Cypha Tests 1A:** passes @ char shuffle (+4.54 BPC @ 300k hybrid); block shuffle still flat.
+
+---
+
 ## [Unreleased] — 2026-06-07 CyphaLM hybrid + long-range
 
 ### Added

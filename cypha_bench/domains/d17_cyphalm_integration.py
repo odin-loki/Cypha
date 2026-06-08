@@ -355,8 +355,10 @@ def experiment_17k_long_range_context() -> dict:
     fast = is_fast()
 
     if _phase1c_mode():
-        prior = _BENCH / "config" / "cyphalm_long_range_300k.json"
-        if prior.exists():
+        for name in ("cyphalm_long_range_300k_char1a.json", "cyphalm_long_range_300k.json"):
+            prior = _BENCH / "config" / name
+            if not prior.exists():
+                continue
             print(f"[17K] loading prior long-range artifact {prior}", flush=True)
             out = json.loads(prior.read_text(encoding="utf-8"))
             return {
@@ -369,6 +371,7 @@ def experiment_17k_long_range_context() -> dict:
                 "ssm_ablation_sequential": out.get("ssm_ablation_sequential"),
                 "phase1c_stub": True,
                 "source": out.get("corpus"),
+                "artifact": name,
             }
 
     out = run_long_range_suite(

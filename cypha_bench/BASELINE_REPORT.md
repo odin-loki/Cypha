@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-08 06:57 UTC
+Generated: 2026-06-08 06:59 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -754,6 +754,7 @@ Default parameters only — no hyperparameter tuning.
 
 | Metric | Value |
 | --- | --- |
+| `artifact` | cyphalm_long_range_300k_char1a.json |
 | `context_length_bpc.1024` | 2.9357 |
 | `context_length_bpc.128` | 3.1097 |
 | `context_length_bpc.16` | 2.8597 |
@@ -765,7 +766,7 @@ Default parameters only — no hyperparameter tuning.
 | `held_out_bpc` | 2.8732 |
 | `n_eval` | 8000 |
 | `n_train` | 300000 |
-| `output_path` | C:\Users\odinl\OneDrive\Desktop\Cypha\cypha_bench\config\cyphalm_long_range_suite.json |
+| `output_path` | cypha_bench/config/cyphalm_long_range_300k_char1a.json |
 | `reset_interval_bpc.128` | 2.8866 |
 | `reset_interval_bpc.256` | 2.8793 |
 | `reset_interval_bpc.32` | 2.9372 |
@@ -773,17 +774,16 @@ Default parameters only — no hyperparameter tuning.
 | `reset_interval_bpc.64` | 2.9039 |
 | `reset_interval_bpc.8` | 3.1394 |
 | `reset_interval_bpc.never` | 2.8732 |
-| `sequential_vs_shuffled.block_shuffled_bpc` | 2.8943 |
-| `sequential_vs_shuffled.delta_shuffled_minus_forward` | 0.0211 |
-| `sequential_vs_shuffled.forward_bpc` | 2.8732 |
+| `sequential_vs_shuffled.block_shuffled_bpc` | 2.8868 |
+| `sequential_vs_shuffled.char_shuffled_bpc` | 7.4096 |
+| `sequential_vs_shuffled.delta_char_shuffled_minus_forward` | 4.5392 |
+| `sequential_vs_shuffled.delta_shuffled_minus_forward` | 0.0165 |
+| `sequential_vs_shuffled.forward_bpc` | 2.8704 |
 | `source` | wikitext2 |
 | `ssm_ablation_sequential.ablation_no_ssm.held_out_bpc` | 3.8291 |
 | `ssm_ablation_sequential.ablation_no_ssm.train_seconds` | 302.7529 |
 | `ssm_ablation_sequential.dif_ngram_contribution_bpc` | 0.3670 |
 | `ssm_ablation_sequential.gria_ngram.held_out_bpc` | 3.8232 |
-| `ssm_ablation_sequential.gria_ngram.train_seconds` | 2296.3026 |
-| `ssm_ablation_sequential.ssm_contribution_bpc` | 0.0059 |
-| `ssm_ablation_sequential.ssm_only.held_out_bpc` | 4.1902 |
 
 ## Cross-Domain Analyses
 

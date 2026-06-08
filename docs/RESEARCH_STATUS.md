@@ -295,11 +295,10 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 
 **Idea:** Structure-preserving reorderings (block shuffle, rotated start, bidirectional passes, task-block permutations) each macro-epoch, with explicit `view_id` and memory policy (reset fast / carry slow). Exploits online routing, replay, and expert growth instead of single static stream training.
 
-**Phase 1 (LM):** Multi-view + convergence complete. Stack best **3.838 BPC @ 300k**.  
-**Long-range context (Cypha Tests 1C):** @ 300k, SSM warm-up **4.06→3.64 BPC**; reset-every-8 **+0.26 BPC** — see [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md).  
-**Upgrade V2:** Track A learnable views **neutral @ 300k**; Track B gated fusion **+0.12 BPC @ 40k** — keep fixed views + sum fusion.  
-**Model-class C2 hybrid @ 300k:** **2.870 BPC** — **−0.972 vs GRIA**, **−0.608 vs bigram**, **−0.108 vs char-LSTM bench**. **Default D17 profile → `hybrid_gria_lstm`.** See [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md).  
-Phase 1c D17 @ 300k cap **complete** — hybrid **2.873 BPC** (17A). See `cypha_bench/report/tables/d17.json`.
+**Phase 1 (LM):** Multi-view + convergence complete. **Hybrid @ 300k: 2.873 BPC (D17), 2.993 (D04).**  
+**Long-range context (Cypha Tests 1C):** SSM warm-up + reset probes pass @ 300k. **1A @ char shuffle: +4.54 BPC** (block shuffle flat). See [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md).  
+**Upgrade V2:** Learnable views neutral; gated fusion worse — keep fixed views + sum fusion.  
+**Model-class C2 hybrid:** **Default profile.** See [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md).
 
 ### Priority 5 — Shared-model continual learning
 

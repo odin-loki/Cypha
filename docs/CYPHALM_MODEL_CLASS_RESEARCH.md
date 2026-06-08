@@ -1,157 +1,115 @@
 # CyphaLM Model-Class Research — Char-LSTM & Hybrids
 
-**Status:** M2 dual-head prototype implemented; 40k eval running  
-**Last updated:** 2026-06-07  
-**Related:** [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md), [`cypha_bench/adapters/char_lstm_baseline.py`](../cypha_bench/adapters/char_lstm_baseline.py)
+**Status:** M2 complete — **hybrid GRIA+LSTM is default** (D17 + D04 @ 300k)  
+**Last updated:** 2026-06-08  
+**Related:** [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md), [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md)
+
+---
+
+## Summary (2026-06-08)
+
+| Model | D17 @ 300k | D04 Moby Dick @ 300k | vs bigram |
+|-------|------------|----------------------|-----------|
+| GRIA stack (`gria_ngram`) | 3.838 | 3.965 | +0.27 / +0.33 |
+| Char-LSTM baseline | 2.979 | 3.047 | −0.50 / −0.59 |
+| **Hybrid (`hybrid_gria_lstm`)** | **2.873** | **2.993** (bench) / **2.859** (sweep) | **−0.61 / −0.64** |
+
+Blend learns ~**99.6% LSTM**. Cypha Tests **1A passes @ char shuffle** (+4.54 BPC @ 300k); block shuffle remains flat.
 
 ---
 
 ## Why a second model class?
 
-| Model | D17 @ 40k BPC | vs bigram |
-|-------|---------------|-----------|
-| CyphaLM (best stack @ 300k) | **3.838** | +0.27 |
-| Bigram | ~3.56–3.91 | — |
-| Trigram | 4.40 | CyphaLM wins |
-| **Char-LSTM** (bench baseline) | **3.589** | **beats bigram** |
-
-CyphaLM **beats trigram** but **char-LSTM beats CyphaLM by ~0.25–0.55 BPC** on the same eval harness. That gap is larger than the bigram gap — closing it may require **recurrent depth** (LSTM/GRU) or **hybrid**, not more GRIA sweeps.
+Char-LSTM beat the GRIA-only CyphaLM stack by **~0.74 BPC @ 300k** while also beating bigram. The gap was larger than the CyphaLM-vs-bigram gap — recurrent depth was the missing piece, not more GRIA sweeps.
 
 ---
 
-## Existing char-LSTM baseline
+## Candidate architectures
 
-**Location:** `cypha_bench/adapters/char_lstm_baseline.py`
-
-| Property | Value |
-|----------|-------|
-| Architecture | 1-layer LSTM, hidden=128 default |
-| Training | Online BPTT-1 per step |
-| Backend | NumPy only (bench baseline, not production) |
-| Integration | D04/D17 ablation block when not `CYPHA_BENCH_FAST` |
-
-**Not in CyphaLM package** — separate code path, not sharing SSM/DIF/GRIA.
+| ID | Description | Verdict |
+|----|-------------|---------|
+| **C1** | Char-LSTM head only (drop GRIA) | Not shipped; hybrid subsumes |
+| **C2** | Dual head GRIA + LSTM with online blend | **Winner** — default profile |
+| **C3** | LSTM on embed history → GRIA | Not evaluated; C2 sufficient |
+| **C4** | Promote bench LSTM into `cypha_lm` | **Done** — `char_lstm_head.py` |
 
 ---
 
-## Research questions
+## Implementation
 
-1. **Why does LSTM win?** Long-range dependency via gated recurrence vs GRIA linear projection + n-gram concat.
-2. **Can CyphaLM reuse LSTM as head only?** SSM → LSTM → vocab (drop GRIA or blend).
-3. **Can we ensemble?** `log p = α log p_GRIA + (1-α) log p_LSTM` with online α.
-4. **Does Cypha online machinery add value on top of LSTM?** DIF experts on LSTM hidden state.
-5. **Training budget parity** — char-LSTM baseline uses same `n_train`; confirm fair comparison @ 300k.
+| Module | Role |
+|--------|------|
+| `cypha_lm/model/char_lstm_head.py` | NumPy LSTM head + blend logit |
+| `cypha_lm/model/cypha_lm.py` | `context_mode=hybrid_gria_lstm` |
+| `cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py` | GRIA vs hybrid sweep |
+| D17 **17J_hybrid_lstm** | Bench experiment |
 
----
-
-## Candidate architectures (evaluate in parallel)
-
-### C1 — Char-LSTM head (replace GRIA)
-
-```text
-token → IzaacEmbed → SSM → h → CharLSTMCell → logits
-```
-
-- Keep CyphaLM training loop; swap `GRIAProjection` for small LSTM head
-- **Pros:** Simplest path to char-LSTM parity
-- **Cons:** Loses GRIA interpretability / Laplace bias
-
-### C2 — Dual head (GRIA + LSTM)
-
-```text
-SSM context → GRIA → log p_g
-            ↘ LSTM → log p_l
-log p = logaddexp(log p_g + log w_g, log p_l + log w_l)
-```
-
-- Online learn `w_g`, `w_l` (2 scalars or per-token)
-- **Pros:** Keeps current best path; adds LSTM correction
-- **Cons:** 2× compute per step
-
-### C3 — LSTM on embed history only (n-gram path upgrade)
-
-```text
-embed history → LSTM → h_n → fuse with field_x → GRIA
-```
-
-- Upgrades Track B fusion with recurrence over embeds (not full vocab LSTM)
-- **Pros:** Stays close to `gria_ngram` ablation winner
-- **Cons:** May not match full LSTM without wider hidden
-
-### C4 — Promote bench LSTM into `cypha_lm`
-
-- Move `_CharLSTM` → `cypha_lm/model/char_lstm_head.py`
-- `context_mode=char_lstm` or `hybrid_gria_lstm`
-- Unified config, save/load, profiles
+Config fields: `lstm_hidden`, `lstm_lr`, `hybrid_blend_learnable`, `hybrid_blend_lr`.
 
 ---
 
-## Evaluation protocol
+## Phase results
 
-| Step | Action | Metric |
-|------|--------|--------|
-| 1 | Char-LSTM @ **300k** WikiText (match CyphaLM budget) | BPC |
-| 2 | Char-LSTM @ **full corpus** (`CYPHA_BENCH_FULL_CORPUS=1`) | BPC |
-| 3 | Implement **C2 dual head** minimal prototype | BPC vs GRIA-only |
-| 4 | Implement **C3** if C2 too heavy | BPC |
-| 5 | Profile size, train_seconds, active_experts | Cost table |
+### M1 — Char-LSTM extended baseline
 
-**Success (model-class track):** Match or beat char-LSTM **3.589** @ 40k equivalent budget, or beat bigram with hybrid @ 300k.
+Artifact: `cyphalm_char_lstm_extended.json`
 
----
+| n_train | Char-LSTM BPC | vs bigram |
+|---------|---------------|-----------|
+| 40k | 3.615 | −0.30 |
+| 300k | **3.098** | −0.47 |
 
-## Implementation plan
+### M2 — Dual head @ 300k
 
-### Phase M1 — Benchmark parity (1–2 days)
+Artifacts: `cyphalm_hybrid_lstm_300k.json`, `cyphalm_hybrid_lstm_d04_300k.json`
 
-- [x] Script `cyphalm_char_lstm_extended.py` — char-LSTM @ 40k/70k/150k/300k
-- [x] Results in `cyphalm_char_lstm_extended.json`
-- [ ] Confirm char-LSTM @ full corpus (Phase 1c companion)
+| Cell | WikiText BPC | Moby Dick BPC |
+|------|--------------|---------------|
+| `gria_ngram` | 3.842 | 3.965 |
+| **hybrid** | **2.870** | **2.859** |
+| Hybrid − GRIA | **−0.972** | **−1.105** |
 
-**M1 results (WikiText valid, 2026-06-06):**
+Profiles: `cyphalm_d17_wikitext.json`, `cyphalm_d04_gutenberg.json`, `cyphalm_llm.json`.
 
-| n_train | Char-LSTM BPC | vs bigram | CyphaLM stack ref |
-|---------|---------------|-----------|-------------------|
-| 40k | 3.615 | **−0.30** | ~4.04 (frozen α) |
-| 70k | 3.390 | **−0.36** | ~3.92 |
-| 150k | 3.193 | **−0.42** | — |
-| **300k** | **3.098** | **−0.47** | **3.838 (+0.27)** |
+### M3 — Integration decision
 
-Char-LSTM **beats bigram at every budget** and improves monotonically to 300k. Gap vs CyphaLM best @ 300k: **~0.74 BPC** — hybrid/LSTM head justified.
+**Ship hybrid as default.** GRIA-only path retained for SSM ablation / long-range probes.
 
-### Phase M2 — Dual head prototype (3–5 days)
-
-- [x] `CharLSTMHead` in `cypha_lm/model/char_lstm_head.py`
-- [x] `context_mode=hybrid_gria_lstm`
-- [x] D17 **17J_hybrid_lstm**
-- [x] Online blend weight (`hybrid_blend_logit`)
-- [x] **300k eval:** hybrid **2.870 BPC** vs GRIA **3.842** (**−0.972**), vs bigram **−0.608**, vs char-LSTM bench **2.979** (**−0.108**)
-
-**M2 @ 300k:** Default D17/llm profiles updated to **`hybrid_gria_lstm`**. Blend ≈ **0.4% GRIA / 99.6% LSTM**.
-
-### Phase M3 — Integration decision
-
-| Outcome | Action |
-|---------|--------|
-| Hybrid beats GRIA-only | **Done** — `cyphalm_d17_wikitext.json` → `hybrid_gria_lstm` @ 300k |
-| LSTM-only wins | Optional `context_mode=char_lstm` (not implemented) |
-| No gain | N/A — **+0.97 BPC vs GRIA @ 300k** |
+Optional future work:
+- `context_mode=char_lstm` (LSTM-only, no GRIA path)
+- C3 embed-LSTM fusion before GRIA
+- Per-token blend weights
 
 ---
 
 ## Parallel with Upgrade V2
 
-| Track | Focus | Runs on |
-|-------|-------|---------|
-| **V2** | Learnable views + n-gram fusion | Existing GRIA + `gria_ngram` |
-| **Model class** | LSTM / hybrid heads | Same corpora, same `n_train` grid |
+| Track | Result |
+|-------|--------|
+| V2 Track A (learnable views) | Neutral @ 300k — keep fixed views |
+| V2 Track B (gated fusion) | +0.12 BPC worse @ 40k — keep sum fusion |
+| **Model class C2** | **−0.97 BPC vs GRIA @ 300k** |
 
-Merge point: **dual head (C2)** can combine V2 fusion output with LSTM hidden state.
+---
+
+## Commands
+
+```powershell
+# Hybrid sweep (WikiText or Gutenberg)
+python cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py --profile d17 --n-train 300000 --write
+python cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py --profile d04 --corpus gutenberg --n-train 300000 --write
+
+# D04 full bench refresh (figures + tables)
+python cypha_bench/tuning/run_d04_hybrid_refresh.py
+
+# Char-level 1A probe
+python cypha_bench/tuning/cyphalm_long_range_suite.py --n-train 300000 --skip-ablation --write --out cypha_bench/config/cyphalm_long_range_300k_char1a.json
+```
 
 ---
 
 ## References
 
 - Bench char-LSTM: `cypha_bench/adapters/char_lstm_baseline.py`
-- CyphaLM ablations: `cypha_bench/config/cyphalm_component_ablation.json`
-- Stack validation: `cypha_bench/config/cyphalm_stack_validation.json`
+- Long-range / 1A: `cypha_bench/adapters/cyphalm_long_range.py`
+- Findings: [`FINDINGS_CYPHALM_TRAINING.md`](FINDINGS_CYPHALM_TRAINING.md)

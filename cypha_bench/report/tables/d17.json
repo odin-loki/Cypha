@@ -1,6 +1,6 @@
 {
   "domain": "d17",
-  "timestamp": "2026-06-07T19:17:35.195060+00:00",
+  "timestamp": "2026-06-08T06:30:00+00:00",
   "experiments": {
     "17A_bits_per_character": {
       "cyphalm_bpc": 2.8732,
@@ -44,9 +44,11 @@
         "512": 2.876601579308242
       },
       "sequential_vs_shuffled": {
-        "forward_bpc": 2.873156289862414,
-        "block_shuffled_bpc": 2.8942736151183595,
-        "delta_shuffled_minus_forward": 0.021117325255945563
+        "forward_bpc": 2.8703821900707482,
+        "block_shuffled_bpc": 2.886833095041339,
+        "delta_shuffled_minus_forward": 0.016450904970590763,
+        "char_shuffled_bpc": 7.409595723811504,
+        "delta_char_shuffled_minus_forward": 4.539213533740757
       },
       "ssm_ablation_sequential": {
         "gria_ngram": {
@@ -64,7 +66,8 @@
         "ssm_contribution_bpc": 0.0059437236155912565,
         "dif_ngram_contribution_bpc": 0.36702097549862067
       },
-      "output_path": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\cypha_bench\\config\\cyphalm_long_range_suite.json",
+      "output_path": "cypha_bench/config/cyphalm_long_range_300k_char1a.json",
+      "artifact": "cyphalm_long_range_300k_char1a.json",
       "source": "wikitext2"
     }
   }
