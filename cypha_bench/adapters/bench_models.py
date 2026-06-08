@@ -76,6 +76,9 @@ def _build_classifier(
     variants = load_algorithm_variants(prof)
     clf.deliberation_lo = float(variants.get("deliberation_lo", 0.45))
     clf.deliberation_hi = float(variants.get("deliberation_hi", 0.55))
+    enc_mode = os.environ.get("CYPHA_ENCODER_UPDATE", "contrastive").strip().lower()
+    if enc_mode in ("hebbian", "contrastive"):
+        clf.encoder_update_mode = enc_mode
     return clf
 
 

@@ -6,6 +6,17 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased] — 2026-06-08 Cypha Tests Phase 2A encoder
+
+### Added
+- **`EncoderProjection.hebbian_update`** and `CyphaDIF.encoder_update_mode` (`contrastive` | `hebbian`).
+- **`cypha_encoder_phase2a_sweep.py`** — D01 + 20 Newsgroups contrastive vs Hebbian benchmark.
+
+### Changed
+- Phase 2A baseline: competitive Hebbian **underperforms** contrastive on all 4 tasks; keep contrastive default.
+
+---
+
 ## [Unreleased] — 2026-06-08 char_lstm mode + Phase 2 Hebbian
 
 ### Added

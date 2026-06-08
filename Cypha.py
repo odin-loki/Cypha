@@ -456,6 +456,32 @@ class EncoderProjection:
                 if sv > cap:
                     self.W *= cap / sv
 
+    def hebbian_update(self, f: np.ndarray, h: np.ndarray,
+                       mu_k: np.ndarray, v_k: np.ndarray,
+                       mu_j: np.ndarray, v_j: np.ndarray,
+                       weight: float = 1.0, lr: float = _ENC_LR) -> None:
+        """Competitive Hebbian baseline (Cypha Tests 2A): co-activation modulated by class residual."""
+        if getattr(self, '_frozen', False):
+            return
+        if not (np.all(np.isfinite(f)) and np.all(np.isfinite(h))):
+            return
+        r_k = _fisher_rao_residual(h, mu_k, v_k)
+        r_j = _fisher_rao_residual(h, mu_j, v_j)
+        signal = float(np.tanh(float(np.asarray(r_k).ravel()[0]) - float(np.asarray(r_j).ravel()[0])))
+        grad = signal * np.outer(h, f)
+        if not np.all(np.isfinite(grad)):
+            return
+        with self._lock:
+            self.W += lr * weight * grad
+            self._update_count += 1
+            sv = float(np.linalg.norm(self.W, 'fro'))
+            if not np.isfinite(sv) or sv == 0:
+                self.W[:] = 0.0
+                return
+            cap = 8.0
+            if sv > cap:
+                self.W *= cap / sv
+
     def align_to_offsets(self, delta_mus: List[np.ndarray]) -> None:
         if len(delta_mus) < 2:
             return
@@ -1467,7 +1493,8 @@ class CyphaDIF:
                  replay_ratio   : float = _REPLAY_RATIO,
                  rng            : Optional[np.random.Generator] = None,
                  replay_rng     : Optional[np.random.Generator] = None,
-                 use_kernel_llr : bool  = False):
+                 use_kernel_llr : bool  = False,
+                 encoder_update_mode: str = "contrastive"):
 
         if not isinstance(encoder, Encoder):
             raise TypeError(
@@ -1484,6 +1511,7 @@ class CyphaDIF:
         self.world_lr    = world_lr
         self.mdl_lambda  = mdl_lambda
         self._replay_ratio = float(replay_ratio)
+        self.encoder_update_mode = str(encoder_update_mode)
 
         self.encoder  = EncoderProjection(dim=self.feat_dim, rng=self._rng)
         self.memory   = DIFMemory(dim=self.feat_dim, field_dim=field_dim, rng=self._rng)
@@ -1592,8 +1620,13 @@ class CyphaDIF:
             except ImportError:
                 use_fb = False
         if not use_fb:
-            self.encoder.contrastive_update(
-                f, h, mu_k, v_k, mu_j, v_j, weight=weight, lr=self.enc_lr)
+            mode = getattr(self, "encoder_update_mode", "contrastive")
+            if mode == "hebbian":
+                self.encoder.hebbian_update(
+                    f, h, mu_k, v_k, mu_j, v_j, weight=weight, lr=self.enc_lr)
+            else:
+                self.encoder.contrastive_update(
+                    f, h, mu_k, v_k, mu_j, v_j, weight=weight, lr=self.enc_lr)
             return
         if getattr(self.encoder, '_frozen', False):
             return
@@ -1601,7 +1634,12 @@ class CyphaDIF:
             return
         r_k = _fisher_rao_residual(h, mu_k, v_k)
         r_j = _fisher_rao_residual(h, mu_j, v_j)
-        grad = np.outer(r_j - r_k, f)
+        mode = getattr(self, "encoder_update_mode", "contrastive")
+        if mode == "hebbian":
+            signal = float(np.tanh(float(np.asarray(r_k).ravel()[0]) - float(np.asarray(r_j).ravel()[0])))
+            grad = signal * np.outer(h, f)
+        else:
+            grad = np.outer(r_j - r_k, f)
         if not np.all(np.isfinite(grad)):
             return
         grad = self._som_hooks.modulate_encoder_update(self, grad)

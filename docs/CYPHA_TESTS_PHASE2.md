@@ -21,9 +21,28 @@ Phase 1 for **CyphaDIF classifier** (fixed-vector tasks) remains in [`docs/repor
 
 | Cypha Tests | Question | Cypha implementation | Status |
 |-------------|----------|----------------------|--------|
-| **2A** Replace `contrastive_update` with Hebbian | Does Hebbian encoder converge on classification? | `Cypha.py` → `Encoder.contrastive_update`; compare vs external Hebbian rule | **Planned** — needs user biochem rule API |
+| **2A** Replace `contrastive_update` with Hebbian | Does Hebbian encoder converge on classification? | `EncoderProjection.hebbian_update` + `encoder_update_mode`; `cypha_encoder_phase2a_sweep.py` | **Baseline run** — Hebbian **worse** on all 4 tasks (see below) |
 | **2B** Hebbian encoder → DIF input | Are Hebbian features useful to CyphaDIF? | `cypha_som/hebbian_topology.py`; optional encoder hook | **Planned** |
 | **2C** Hebbian lateral field | Richer temporal dynamics vs `A_eff @ h`? | `CellAISSM.sparse_hebbian_update` (`use_sparse_hebbian`) | **Partial** — flag exists, not LM-benchmarked |
+
+---
+
+## 2A — Competitive Hebbian encoder (baseline)
+
+**Code:** `Cypha.py` → `EncoderProjection.hebbian_update`; `CyphaDIF.encoder_update_mode` (`contrastive` | `hebbian`); env `CYPHA_ENCODER_UPDATE`.
+
+**Runner:** `python cypha_bench/tuning/cypha_encoder_phase2a_sweep.py --write`
+
+Artifact: `cypha_bench/config/cypha_encoder_phase2a_sweep.json`
+
+| Task | Contrastive acc | Hebbian acc | Δ (Hebb − Contr) |
+|------|-----------------|-------------|------------------|
+| Linear 2-class | 0.783 | 0.585 | **−0.198** |
+| 4 Gaussian blobs | 0.998 | 0.965 | **−0.033** |
+| High-dim noisy | 0.785 | 0.533 | **−0.253** |
+| 20 Newsgroups (SVD-100) | 0.346 | 0.275 | **−0.071** |
+
+**Verdict:** Generic competitive Hebbian (co-activation × tanh(Δresidual)) **does not replace** Fisher-Rao contrastive updates on tabular/text-SVD classification. **Keep contrastive as default.** Plug in your biochemical Hebbian rule via the same `hebbian_update` hook when ready.
 
 ---
 

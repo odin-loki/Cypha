@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-08 06:59 UTC
+Generated: 2026-06-08 07:36 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -723,7 +723,7 @@ Default parameters only — no hyperparameter tuning.
 
 ## D17
 
-*Timestamp:* 2026-06-07T19:17:35.195060+00:00
+*Timestamp:* 2026-06-08T06:30:00+00:00
 
 ### 17A_bits_per_character
 

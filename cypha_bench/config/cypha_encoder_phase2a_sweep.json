@@ -1,0 +1,104 @@
+{
+  "encoder_update_modes": [
+    "contrastive",
+    "hebbian"
+  ],
+  "passes": 4,
+  "rows": [
+    {
+      "task": "linearly_separable_2class",
+      "encoder_update_mode": "contrastive",
+      "accuracy": 0.7825,
+      "f1_macro": 0.7754244671171084,
+      "train_seconds": 2.6916885999962687,
+      "n_train": 1600,
+      "n_features": 10
+    },
+    {
+      "task": "4_gaussian_blobs",
+      "encoder_update_mode": "contrastive",
+      "accuracy": 0.9975,
+      "f1_macro": 0.9974999374984375,
+      "train_seconds": 2.4712378999684006,
+      "n_train": 1600,
+      "n_features": 8
+    },
+    {
+      "task": "high_dim_noisy",
+      "encoder_update_mode": "contrastive",
+      "accuracy": 0.785,
+      "f1_macro": 0.7847363019699132,
+      "train_seconds": 1.7577368000056595,
+      "n_train": 1600,
+      "n_features": 100
+    },
+    {
+      "task": "20newsgroups_svd100",
+      "encoder_update_mode": "contrastive",
+      "accuracy": 0.3458333333333333,
+      "f1_macro": 0.33924833384223946,
+      "train_seconds": 1.521841699955985,
+      "n_train": 960,
+      "n_features": 100
+    },
+    {
+      "task": "linearly_separable_2class",
+      "encoder_update_mode": "hebbian",
+      "accuracy": 0.585,
+      "f1_macro": 0.5191750666203221,
+      "train_seconds": 4.776616199989803,
+      "n_train": 1600,
+      "n_features": 10
+    },
+    {
+      "task": "4_gaussian_blobs",
+      "encoder_update_mode": "hebbian",
+      "accuracy": 0.965,
+      "f1_macro": 0.9645089681425185,
+      "train_seconds": 3.6425670000026003,
+      "n_train": 1600,
+      "n_features": 8
+    },
+    {
+      "task": "high_dim_noisy",
+      "encoder_update_mode": "hebbian",
+      "accuracy": 0.5325,
+      "f1_macro": 0.5324269417096421,
+      "train_seconds": 2.0051777000771835,
+      "n_train": 1600,
+      "n_features": 100
+    },
+    {
+      "task": "20newsgroups_svd100",
+      "encoder_update_mode": "hebbian",
+      "accuracy": 0.275,
+      "f1_macro": 0.26622231360848897,
+      "train_seconds": 1.6145122000016272,
+      "n_train": 960,
+      "n_features": 100
+    }
+  ],
+  "summary": {
+    "linearly_separable_2class": {
+      "hebbian_minus_contrastive_acc": -0.1975,
+      "contrastive_acc": 0.7825,
+      "hebbian_acc": 0.585
+    },
+    "4_gaussian_blobs": {
+      "hebbian_minus_contrastive_acc": -0.032500000000000084,
+      "contrastive_acc": 0.9975,
+      "hebbian_acc": 0.965
+    },
+    "high_dim_noisy": {
+      "hebbian_minus_contrastive_acc": -0.25250000000000006,
+      "contrastive_acc": 0.785,
+      "hebbian_acc": 0.5325
+    },
+    "20newsgroups_svd100": {
+      "hebbian_minus_contrastive_acc": -0.0708333333333333,
+      "contrastive_acc": 0.3458333333333333,
+      "hebbian_acc": 0.275
+    }
+  },
+  "elapsed_s": 29.801524900016375
+}
