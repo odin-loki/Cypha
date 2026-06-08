@@ -1,0 +1,29 @@
+{
+  "corpus": "moby_dick.txt",
+  "n_train": 300000,
+  "n_eval": 2000,
+  "bigram_bpc": 3.6333578662568105,
+  "char_lstm_baseline_bpc": 3.0470321410212056,
+  "cells": [
+    {
+      "cell_id": "gria_ngram",
+      "held_out_bpc": 3.964668109517669,
+      "train_seconds": 2446.9125376999145,
+      "n_train": 300000,
+      "context_mode": "gria_ngram",
+      "delta_vs_bigram": 0.33131024326085834
+    },
+    {
+      "cell_id": "hybrid_gria_lstm",
+      "held_out_bpc": 2.8594436976559217,
+      "train_seconds": 3134.478469399968,
+      "n_train": 300000,
+      "context_mode": "hybrid_gria_lstm",
+      "hybrid_blend_logit": -6.062735915500402,
+      "hybrid_gria_weight": 0.0023226157900322745,
+      "delta_vs_bigram": -0.7739141686008888
+    }
+  ],
+  "hybrid_minus_gria_bpc": 1.1052244118617471,
+  "elapsed_s": 5807.247397399973
+}

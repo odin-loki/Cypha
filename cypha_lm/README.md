@@ -209,7 +209,8 @@ Set `CYPHA_LM_FAST=1` for reduced steps.
 |--------|-------|-------|
 | D17 held-out BPC @ 300k (`hybrid_gria_lstm`) | **2.873** | Beats bigram **3.478** and char-LSTM bench **2.979** |
 | D17 held-out BPC @ 300k (`gria_ngram` stack) | **3.838** | +0.36 vs bigram; hybrid resolves gap |
-| D04 Gutenberg @ 40k (prior `gria_ngram`) | **4.122** | Profile now hybrid; re-bench pending |
+| D04 Gutenberg @ 300k (`hybrid_gria_lstm`, Moby Dick) | **2.859** | Beats bigram **3.633** and char-LSTM **3.047** |
+| D04 Gutenberg @ 40k (prior `gria_ngram`) | **4.122** | Superseded by hybrid @ 300k |
 | 4-gram / 5-gram / char-LSTM | see D17 JSON | Baselines in bench tables |
 | Ablation `gria_ngram` vs `full` @ 40k | **4.154** vs **4.725** | N-gram embed path carries most gain |
 | Save/restore parity | ✅ | log-prob max diff &lt; 1e-9 |

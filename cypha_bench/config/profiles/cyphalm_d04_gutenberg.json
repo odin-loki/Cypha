@@ -37,10 +37,17 @@
   "train_ssm": false,
   "ssm_lr": 0.002,
   "_meta": {
-    "source": "hybrid_c2_d17_transfer",
+    "source": "hybrid_c2_d04_300k",
     "corpus": "gutenberg",
-    "prior_gria_ngram_bpc": 4.122,
-    "prior_bigram_bpc": 3.931,
-    "notes": "Architecture aligned to D17 hybrid winner; D04 full re-bench pending"
+    "corpus_file": "moby_dick.txt",
+    "held_out_bpc": 2.859,
+    "gria_ngram_bpc": 3.965,
+    "bigram_bpc": 3.633,
+    "char_lstm_baseline_bpc": 3.047,
+    "delta_vs_bigram": -0.774,
+    "delta_vs_char_lstm": -0.188,
+    "hybrid_minus_gria_bpc": 1.105,
+    "artifact": "cyphalm_hybrid_lstm_d04_300k.json",
+    "n_train": 300000
   }
 }

@@ -90,6 +90,8 @@ Artifact: `cypha_bench/config/cyphalm_hybrid_lstm_300k.json`
 
 Blend weight learns ~**99.6% LSTM**. Profile: `cyphalm_d17_wikitext.json` → `context_mode=hybrid_gria_lstm`.
 
+**D04 Gutenberg @ 300k (2026-06-08):** Moby Dick eval **2.859 BPC** — **−0.77 vs bigram**, **−0.19 vs char-LSTM**; GRIA-only **3.965**. Artifact: `cyphalm_hybrid_lstm_d04_300k.json`.
+
 **Phase 1c 17A confirm (2026-06-07):** **2.873 BPC** @ 300k hybrid via streamlined 17A (`train_sequence`, ~50 min).
 
 ## Beat-bigram hyperparam sweep (2026-06-01)

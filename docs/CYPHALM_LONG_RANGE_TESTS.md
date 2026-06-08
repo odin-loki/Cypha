@@ -44,7 +44,23 @@ Figures: `fig17_long_range_context_bpc.png`, `fig17_long_range_reset_interval.pn
 | Block shuffle | forward 4.023 vs shuffled 4.022 (−0.001) | **1A fail @ block level** — order insensitive (n-gram head may dominate) |
 | SSM ablation | gria 4.023 vs no_ssm 4.019; ssm_only 4.477 | **1A marginal** — SSM adds ~0 at stream eval; n-gram fusion essential |
 
-## Results @ 300k (convergence peak, context-only)
+## Results @ 300k hybrid (`hybrid_gria_lstm`, Phase 1c 17K)
+
+Artifact: `cypha_bench/report/tables/d17.json` → `17K_long_range_context`
+
+| Test | Result | Cypha Tests verdict |
+|------|--------|---------------------|
+| Held-out BPC | **2.873** | Beats bigram **3.478** |
+| Context warm-up | **3.03 @ 8 → 2.86 @ 16** (best **2.860 @ 16**) | **1C pass** — warm-up still helps under hybrid head |
+| Reset interval | **2.873 never → 3.139 @ reset=8** | **Pass** — frequent reset hurts (+0.27 BPC) |
+| Block shuffle | forward 2.873 vs shuffled 2.894 (+0.021) | **1A still marginal** — LSTM-dominated blend (~99%) weakens block-order sensitivity vs GRIA-only |
+| SSM ablation (GRIA stack) | gria 3.823 vs no_ssm 3.829 | N-gram path still dominates stream eval |
+
+**Interpretation @ 300k hybrid:** Long-range probes (warm-up, reset) remain valid; aggregate stream BPC is driven by the char-LSTM head. For SSM-specific claims, compare against **gria_ngram** ablation rows, not hybrid held-out BPC alone.
+
+---
+
+## Results @ 300k (convergence peak, GRIA stack, context-only)
 
 Artifact: `cypha_bench/config/cyphalm_long_range_300k.json`
 
@@ -70,6 +86,9 @@ python cypha_bench/tuning/cyphalm_long_range_suite.py --write --figures
 
 # Convergence peak — context only (~40 min train)
 python cypha_bench/tuning/cyphalm_long_range_suite.py --n-train 300000 --skip-ablation --write --figures --out cypha_bench/config/cyphalm_long_range_300k.json
+
+# D04 Gutenberg hybrid @ 300k (Moby Dick)
+python cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py --profile d04 --corpus gutenberg --n-train 300000 --write --out cypha_bench/config/cyphalm_hybrid_lstm_d04_300k.json
 
 # D17 bench (includes 17K when not fast)
 python cypha_bench/run_all.py --domain 17

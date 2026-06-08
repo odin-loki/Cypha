@@ -66,6 +66,12 @@ def main() -> int:
     ap.add_argument("--n-train", type=int, default=None)
     ap.add_argument("--n-eval", type=int, default=2000)
     ap.add_argument("--profile", default="d17")
+    ap.add_argument(
+        "--corpus",
+        choices=("wikitext", "gutenberg"),
+        default=None,
+        help="Training corpus (default: wikitext for d17, gutenberg for d04)",
+    )
     ap.add_argument("--fast", action="store_true")
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--out", type=Path, default=None)
@@ -74,8 +80,12 @@ def main() -> int:
     use_fast = args.fast or is_fast()
     n_train = args.n_train or (40_000 if use_fast else 300_000)
     out_path = args.out or _OUT
+    corpus_name = args.corpus or ("gutenberg" if args.profile == "d04" else "wikitext")
 
-    corpus = prepare_lm_corpus(prefer_wikitext=True, max_train_chars=10_000_000)
+    corpus = prepare_lm_corpus(
+        prefer_wikitext=(corpus_name == "wikitext"),
+        max_train_chars=10_000_000,
+    )
     require_real_corpus(corpus.source, domain="cyphalm_hybrid_lstm_sweep")
     train_slice = corpus.train_ids[: min(n_train, len(corpus.train_ids) - 1)]
     bigram = bigram_baseline_bpc(train_slice, corpus.eval_ids, corpus.vocab_size)
