@@ -37,6 +37,7 @@ Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation
 | D08 — MNIST (raw) | Digit class | 72.0% | kNN 91%, LR 94.8% | −22pp | ⚠ Weak (raw pixels) |
 | D08 — MNIST (HOG) | Digit class | **89.6%** | LR 94.8% | −5.2pp | ✅ Good |
 | D09 — Documents | 20 Newsgroups (16cl) | 33.12% | LR 33.12% | 0pp | ✅ Tied (hard task) |
+| D09 — Branch A (frozen MiniLM, 2k) | 20 Newsgroups | **62.5%** | LogReg 60.3% | +2.2pp | ✅ CyphaDIF on ST embeddings |
 | D09 — Documents | Gutenberg book cls. | **64.58%** | SGD 33.33% | +31pp | ✅ Beats SGD |
 | D11C — RL | Trajectory preference | **92.0%** | — | — | ✅ Strong |
 | D12C — Intrusion | Online attack detect | **99.5%** | — | 5-step latency | ✅ Strong |

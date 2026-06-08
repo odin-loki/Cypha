@@ -6,6 +6,17 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased] — 2026-06-08 Branch A frozen embeddings
+
+### Added
+- **`frozen_text_embeddings.py`** — MiniLM or hashing frozen text vectors.
+- **`cypha_branch_a_sweep.py`** — CyphaDIF on frozen ST vs TF-IDF on 20 Newsgroups.
+
+### Changed
+- Branch A @ 2k samples: CyphaDIF + frozen MiniLM **62.5%** vs TF-IDF path **34.0%**.
+
+---
+
 ## [Unreleased] — 2026-06-08 Cypha Tests Phase 2A encoder
 
 ### Added

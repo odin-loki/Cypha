@@ -114,4 +114,5 @@ python cypha_bench/tuning/cyphalm_long_range_suite.py --n-train 300000 --skip-ab
 
 - Bench char-LSTM: `cypha_bench/adapters/char_lstm_baseline.py`
 - Long-range / 1A: `cypha_bench/adapters/cyphalm_long_range.py`
+- Branch A embeddings: [`CYPHA_BRANCH_A_EMBEDDINGS.md`](CYPHA_BRANCH_A_EMBEDDINGS.md)
 - Findings: [`FINDINGS_CYPHALM_TRAINING.md`](FINDINGS_CYPHALM_TRAINING.md)

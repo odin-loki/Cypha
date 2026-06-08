@@ -1,0 +1,44 @@
+{
+  "n_samples": 2000,
+  "n_classes": 20,
+  "embedding": {
+    "backend": "hashing_svd",
+    "n_features": 512,
+    "n_components": 128,
+    "explained_variance_ratio": 0.5747223784098928
+  },
+  "cells": [
+    {
+      "accuracy": 0.1625,
+      "f1_macro": 0.14821079656851105,
+      "mean_epistemic_in": 1.4246880952258454,
+      "train_seconds": 3.0791731000645086,
+      "freeze_encoder_proj": false,
+      "cell_id": "cypha_frozen_embed_online_proj"
+    },
+    {
+      "accuracy": 0.1875,
+      "f1_macro": 0.16981277640709927,
+      "mean_epistemic_in": 1.7976972767448565,
+      "train_seconds": 2.3585933999856934,
+      "freeze_encoder_proj": true,
+      "cell_id": "cypha_frozen_embed_frozen_proj"
+    },
+    {
+      "accuracy": 0.2325,
+      "f1_macro": 0.2325,
+      "train_seconds": 0.07643809996079654,
+      "cell_id": "logreg_frozen_embed"
+    },
+    {
+      "accuracy": 0.34,
+      "f1_macro": 0.31471338822508804,
+      "mean_epistemic_in": 1.2515123961461116,
+      "train_seconds": 2.6326364000560716,
+      "freeze_encoder_proj": false,
+      "cell_id": "cypha_tfidf_svd_reference"
+    }
+  ],
+  "frozen_embed_minus_tfidf_acc": -0.17750000000000002,
+  "elapsed_s": 11.913977999938652
+}
