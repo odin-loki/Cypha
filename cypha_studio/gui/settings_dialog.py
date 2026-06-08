@@ -94,6 +94,26 @@ class SettingsDialog(QDialog):
         self._psi.setToolTip("GH prior strength ψ passed to gh_infer.")
         form.addRow("GH ψ:", self._psi)
 
+        ba_grp = QGroupBox("Branch A text routing (CyphaDIF + epistemic gate)")
+        ba_grp.setToolTip(
+            "Embed natural-language queries with frozen MiniLM, classify with CyphaDIF, "
+            "and abstain to Ollama when epistemic variance is high."
+        )
+        ba_form = QFormLayout(ba_grp)
+        self._branch_a = QCheckBox("Enable Branch A routing for text chat")
+        self._branch_a.setChecked(p.branch_a_routing_enabled)
+        ba_form.addRow(self._branch_a)
+        self._branch_a_thr = QDoubleSpinBox()
+        self._branch_a_thr.setRange(0.0, 10.0)
+        self._branch_a_thr.setDecimals(3)
+        self._branch_a_thr.setSingleStep(0.05)
+        self._branch_a_thr.setValue(p.branch_a_epistemic_threshold)
+        self._branch_a_thr.setToolTip(
+            "Queries with epistemic variance above this threshold use Ollama fallback."
+        )
+        ba_form.addRow("Epistemic threshold:", self._branch_a_thr)
+        lay.addWidget(ba_grp)
+
         lay.addWidget(grp)
         note = QLabel(
             "Changes apply to the next prediction and to the loaded model immediately "
@@ -185,6 +205,9 @@ class SettingsDialog(QDialog):
             "<tr><td><code>CYPHA_CORS_ORIGINS</code></td><td>CORS allow list</td></tr>"
             "<tr><td><code>CYPHA_CSV_CHUNK_ROWS</code></td><td>CSV streaming chunk size</td></tr>"
             "<tr><td><code>CYPHA_REGRESSION_HEAD</code></td><td>Optional regression head JSON</td></tr>"
+            "<tr><td><code>CYPHA_BRANCH_A_EPISTEMIC_THRESHOLD</code></td><td>Route abstain gate</td></tr>"
+            "<tr><td><code>CYPHA_OLLAMA_URL</code></td><td>Ollama base URL</td></tr>"
+            "<tr><td><code>CYPHA_OLLAMA_MODEL</code></td><td>Ollama model tag</td></tr>"
             "</table>"
             "<p><b>Effective REST defaults</b> (read-only):<br>"
             f"{api_default_host()}:{api_default_port()} &nbsp; CORS: {cors_s}<br>"
@@ -215,6 +238,8 @@ class SettingsDialog(QDialog):
         p.inference_ood_threshold = self._ood.value()
         p.inference_chi = self._chi.value()
         p.inference_psi = self._psi.value()
+        p.branch_a_routing_enabled = self._branch_a.isChecked()
+        p.branch_a_epistemic_threshold = self._branch_a_thr.value()
         p.registry_root_override = self._reg_edit.text().strip()
         cr = self._csv_chunk.value()
         p.csv_chunk_rows_override = cr if cr > 0 else 0
@@ -230,6 +255,8 @@ class SettingsDialog(QDialog):
         self._ood.setValue(d.inference_ood_threshold)
         self._chi.setValue(d.inference_chi)
         self._psi.setValue(d.inference_psi)
+        self._branch_a.setChecked(d.branch_a_routing_enabled)
+        self._branch_a_thr.setValue(d.branch_a_epistemic_threshold)
         self._reg_edit.clear()
         self._csv_chunk.setValue(0)
         self._ds_dir.clear()

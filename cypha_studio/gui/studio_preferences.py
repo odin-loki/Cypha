@@ -21,6 +21,9 @@ class StudioPreferences:
     inference_chi: float = 1.0
     inference_psi: float = 1.0
 
+    branch_a_routing_enabled: bool = False
+    branch_a_epistemic_threshold: float = 0.5
+
     registry_root_override: str = ""
     csv_chunk_rows_override: int = 0
     dataset_dialog_start_dir: str = ""

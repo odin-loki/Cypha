@@ -9,6 +9,14 @@
 | `CYPHA_CSV_CHUNK_ROWS` | Stream large CSV imports in chunks of this row count (unset = load whole file into memory first) | *(unset)* |
 | `CYPHA_REGRESSION_HEAD` | Path to optional `regression_head.json` (same schema as native `cypha_rest --regression-json`) — FastAPI `POST /predict` fills `regression_val` / `uncertainty` for **classification** models via softmax-routed scalar MoE | *(unset)* |
 | `CYPHA_LM_CHECKPOINT` | Path to CyphaLM checkpoint base (``.json`` + ``.npz``). FastAPI-only: auto-loads CyphaLM for **`/generate`**, **`/lm/*`** routes at startup. Requires `pip install -e cypha_lm/`. | *(unset)* |
+| `CYPHA_BRANCH_A_EPISTEMIC_THRESHOLD` | Epistemic variance gate for **`POST /route/text`** and **`POST /route/generate`** (abstain → Ollama) | `0.5` |
+| `CYPHA_BRANCH_A_N_TRAIN` | 20 Newsgroups samples for lazy Branch A router training on first `/route/*` call | `1200` |
+| `CYPHA_BRANCH_A_EMBED_BACKEND` | Text embedder: `auto`, `sentence_transformers`, or `hashing` | `auto` |
+| `CYPHA_OLLAMA_URL` | Ollama base URL for OOD **`fallback_llm`** generation | `http://127.0.0.1:11434` |
+| `CYPHA_OLLAMA_MODEL` | Ollama model tag (e.g. `mistral`, `llama3`) | `mistral` |
+| `CYPHA_OLLAMA_TIMEOUT_S` | HTTP timeout for Ollama generate | `120` |
+| `CYPHA_BRANCH_A_CHECKPOINT` | Branch A router checkpoint base (``.json`` + ``.npz``); loaded on first `/route/*` | `~/.cypha/branch_a_router` |
+| `CYPHA_BRANCH_A_AUTO_SAVE` | When `1`, save checkpoint after router training | *(off)* |
 | `CYPHA_REST_BIN` | *(Dev / CI only.)* Absolute path to a built `cypha_rest` executable (Linux ELF or Windows `.exe`). When set, `pytest tests/test_cypha_rest_smoke.py` runs subprocess REST checks instead of skipping. See `native/README.md` and `scripts/wsl_verify.sh` (`RUN_NATIVE=1`). | *(unset)* |
 | `CYPHA_QT_STUB_BIN` | Override path for `cypha_qt_stub` (pytest `tests/test_qt_stub_native.py`; build with `-DCYPHA_BUILD_QT=ON` and Qt6). | *(unset)* |
 | `CYPHA_PREPROCESSOR_PARITY_BIN` | Override for `preprocessor_parity` (pytest `test_preprocessor_native_parity`) | *(unset)* |

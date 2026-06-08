@@ -211,6 +211,21 @@ if FASTAPI_AVAILABLE:
         uncertainty_threshold: Optional[float] = None
         stream: bool = False
 
+    class RouteTextRequest(BaseModel):
+        """Branch A: embed text → CyphaDIF classify + epistemic gate."""
+        text: str
+        epistemic_threshold: Optional[float] = None
+
+    class RouteGenerateRequest(BaseModel):
+        """Branch A: route then CyphaLM (in-domain) or Ollama fallback (OOD)."""
+        text: str
+        epistemic_threshold: Optional[float] = None
+        max_tokens: int = 128
+        ollama_model: Optional[str] = None
+        ollama_system: Optional[str] = None
+        cypha_lm_strategy: str = "top_p"
+        cypha_lm_temperature: float = 0.9
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App factory
@@ -260,6 +275,7 @@ def create_app(
     app.state.registry = registry
     app.state.session  = session
     app.state.lm_engine = lm_engine
+    app.state.branch_a_router = None
     app.state.started  = time.time()
 
     # Optional CyphaLM checkpoint on startup (FastAPI-only; not in native cypha_rest).
@@ -343,6 +359,8 @@ def create_app(
         payload["lm_loaded"] = lm is not None
         if lm is not None:
             payload["lm"] = lm.summary()
+        router = getattr(app.state, "branch_a_router", None)
+        payload["branch_a_router"] = router.summary() if router is not None else {"trained": False}
         return payload
 
     @app.post("/predict", response_model=PredictResponse)
@@ -730,6 +748,84 @@ def create_app(
             yield "data: {\"done\": true}\n\n"
 
         return StreamingResponse(_sse(), media_type="text/event-stream")
+
+    # ── Branch A text routing (FastAPI-only) ─────────────────────────────
+
+    def _get_branch_a_router():
+        router = app.state.branch_a_router
+        if router is None:
+            from ..core.branch_a_router import BranchARouter
+
+            router = BranchARouter()
+            router.try_load_checkpoint()
+            app.state.branch_a_router = router
+        return router
+
+    @app.get("/route/health")
+    def route_health():
+        """Branch A router status and optional Ollama reachability."""
+        from ..core.ollama_client import ollama_available, ollama_base_url, ollama_model
+
+        router = getattr(app.state, "branch_a_router", None)
+        return {
+            "router_trained": router.is_trained if router is not None else False,
+            "router_summary": router.summary() if router is not None else None,
+            "ollama_url": ollama_base_url(),
+            "ollama_model": ollama_model(),
+            "ollama_reachable": ollama_available(),
+            "lm_loaded": app.state.lm_engine is not None,
+        }
+
+    @app.post("/route/text")
+    def route_text(req: RouteTextRequest):
+        """Embed user text → CyphaDIF label + epistemic gate (no generation)."""
+        if not req.text.strip():
+            raise HTTPException(400, "text must be non-empty")
+        t0 = time.perf_counter()
+        router = _get_branch_a_router()
+        try:
+            result = router.route(req.text, epistemic_threshold=req.epistemic_threshold)
+        except Exception as exc:
+            raise HTTPException(500, f"Branch A route failed: {exc}") from exc
+        result["latency_ms"] = (time.perf_counter() - t0) * 1000.0
+        return result
+
+    @app.post("/route/generate")
+    def route_generate(req: RouteGenerateRequest):
+        """
+        Route then generate: in-domain → CyphaLM if loaded; OOD abstain → Ollama.
+        """
+        if not req.text.strip():
+            raise HTTPException(400, "text must be non-empty")
+        t0 = time.perf_counter()
+        router = _get_branch_a_router()
+        try:
+            out = router.dispatch_generate(
+                req.text,
+                app.state.lm_engine,
+                epistemic_threshold=req.epistemic_threshold,
+                max_tokens=req.max_tokens,
+                ollama_model=req.ollama_model,
+                ollama_system=req.ollama_system,
+                cypha_lm_strategy=req.cypha_lm_strategy,
+                cypha_lm_temperature=req.cypha_lm_temperature,
+            )
+        except Exception as exc:
+            raise HTTPException(500, f"Branch A dispatch failed: {exc}") from exc
+        out["latency_ms"] = (time.perf_counter() - t0) * 1000.0
+        return out
+
+    @app.post("/route/save")
+    def route_save():
+        """Persist trained Branch A router to ``CYPHA_BRANCH_A_CHECKPOINT`` (``.json`` + ``.npz``)."""
+        router = _get_branch_a_router()
+        if not router.is_trained:
+            raise HTTPException(400, "Router not trained — call /route/text or /route/generate first")
+        try:
+            path = router.save_checkpoint()
+        except OSError as exc:
+            raise HTTPException(500, f"Failed to save checkpoint: {exc}") from exc
+        return {"saved": True, "checkpoint": str(path), "summary": router.summary()}
 
     return app
 

@@ -1,0 +1,25 @@
+{
+  "n_samples": 2000,
+  "input_dim": 384,
+  "embedding": {
+    "backend": "sentence_transformers",
+    "model_name": "all-MiniLM-L6-v2",
+    "dim": 384
+  },
+  "encoders": {
+    "vector": {
+      "accuracy": 0.595,
+      "train_seconds": 4.607095499988645,
+      "encoder_dim": 384
+    },
+    "rff": {
+      "accuracy": 0.045,
+      "train_seconds": 4.12964059994556,
+      "encoder_dim": 256
+    },
+    "logreg": {
+      "accuracy": 0.6025
+    }
+  },
+  "vector_minus_rff_pp": 54.99999999999999
+}

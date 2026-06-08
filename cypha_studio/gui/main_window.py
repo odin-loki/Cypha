@@ -62,6 +62,7 @@ class AppState:
         self.db        = ExperimentDB()
         self.engine    = None   # InferenceEngine, set when model loads
         self.lm_engine = None   # LMEngine (CyphaLM), optional
+        self.branch_a_router = None  # BranchARouter, lazy
         self.session   = None   # InferenceSession
         self.trainer   = None   # active Trainer
         self.train_thread = None

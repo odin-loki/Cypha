@@ -15,6 +15,9 @@ from PySide6.QtWidgets import (
 )
 from ..server.local_server import SignalBus
 from .lm_generation_worker import LMGenerationWorker
+from .branch_a_route_worker import BranchADispatchWorker
+from ..core.branch_a_router import BranchARouter
+from ..core.ollama_client import ollama_available
 
 
 def _encode_prompt_chars(text: str, vocab_size: int = 128) -> tuple[list[int], dict[int, str]]:
@@ -141,6 +144,7 @@ class ChatWidget(QWidget):
         self._state = state
         self._bus   = SignalBus.instance()
         self._lm_worker: LMGenerationWorker | None = None
+        self._branch_a_worker: BranchADispatchWorker | None = None
         self._lm_reply_lbl: QLabel | None = None
         self._lm_id2char: dict[int, str] = {}
         self._setup_ui()
@@ -230,7 +234,17 @@ class ChatWidget(QWidget):
         )
 
     def _refresh_mode_banner(self):
-        if self._state.lm_engine is not None:
+        p = self._state.preferences
+        if p.branch_a_routing_enabled:
+            ollama_ok = ollama_available()
+            self._header.setText(
+                "CyphaStudio Chat  —  Branch A routing"
+                + ("  ·  Ollama OK" if ollama_ok else "  ·  Ollama offline")
+            )
+            self._input.setPlaceholderText(
+                "Natural-language query — Branch A routes in-domain to CyphaLM, OOD to Ollama…"
+            )
+        elif self._state.lm_engine is not None:
             s = self._state.lm_engine.summary()
             self._header.setText(
                 f"CyphaStudio Chat  —  CyphaLM  "
@@ -267,7 +281,13 @@ class ChatWidget(QWidget):
         self._infer_lbl.setText(
             f"Inference: {'GH path' if p.inference_use_gh else 'plain infer'}  ·  "
             f"OOD threshold {ood:g}  ·  χ={chi:g} ψ={psi:g}"
+            + (
+                f"  ·  Branch A ε≤{p.branch_a_epistemic_threshold:g}"
+                if p.branch_a_routing_enabled
+                else ""
+            )
         )
+        self._refresh_mode_banner()
 
     def _on_model_loaded(self, card):
         self._empty_tip.hide()
@@ -285,6 +305,14 @@ class ChatWidget(QWidget):
         self._input.clear()
 
         self._add_message('user', text)
+
+        p = self._state.preferences
+        parts = [x.strip() for x in text.split(',')]
+        is_vector = len(parts) > 1 and all(self._is_number(x) for x in parts)
+
+        if p.branch_a_routing_enabled and not is_vector:
+            self._on_send_branch_a(text)
+            return
 
         if self._state.lm_engine is not None:
             self._on_send_lm(text)
@@ -314,6 +342,85 @@ class ChatWidget(QWidget):
 
         except Exception as e:
             self._add_message('error', f"Inference error: {e}")
+
+    def _get_branch_a_router(self) -> BranchARouter:
+        router = self._state.branch_a_router
+        if router is None:
+            p = self._state.preferences
+            router = BranchARouter(epistemic_threshold=p.branch_a_epistemic_threshold)
+            self._state.branch_a_router = router
+        else:
+            router.epistemic_threshold = float(self._state.preferences.branch_a_epistemic_threshold)
+        return router
+
+    def _on_send_branch_a(self, text: str) -> None:
+        if self._branch_a_worker is not None and self._branch_a_worker.isRunning():
+            self._add_message('error', "Branch A dispatch already in progress.")
+            return
+        if self._lm_worker is not None and self._lm_worker.isRunning():
+            self._add_message('error', "Generation already in progress.")
+            return
+
+        lm = self._state.lm_engine
+        vocab = int(getattr(lm.model.config, "vocab_size", 128)) if lm is not None else 128
+        _, id2char = _encode_prompt_chars(text, vocab_size=vocab)
+        self._lm_id2char = id2char
+
+        bubble = MessageBubble("model", "▌", None, self._msg_container)
+        self._lm_reply_lbl = bubble._content_lbl
+        count = self._msg_layout.count()
+        self._msg_layout.insertWidget(count - 1, bubble)
+        QTimer.singleShot(50, self._scroll_to_bottom)
+
+        self._send_btn.setEnabled(False)
+        p = self._state.preferences
+        self._branch_a_worker = BranchADispatchWorker(
+            self._get_branch_a_router(),
+            text,
+            lm,
+            epistemic_threshold=p.branch_a_epistemic_threshold,
+        )
+        self._branch_a_worker.status.connect(self._on_branch_a_status)
+        self._branch_a_worker.route_done.connect(self._on_branch_a_route)
+        self._branch_a_worker.token_generated.connect(self._on_lm_token)
+        self._branch_a_worker.ollama_text.connect(self._on_branch_a_ollama)
+        self._branch_a_worker.finished_generation.connect(self._on_branch_a_finished)
+        self._branch_a_worker.error_occurred.connect(self._on_branch_a_error)
+        self._branch_a_worker.start()
+
+    def _on_branch_a_status(self, msg: str) -> None:
+        self._stats_lbl.setText(msg)
+
+    def _on_branch_a_route(self, route: dict) -> None:
+        action = route.get("action", "?")
+        ep = float(route.get("epistemic_var", 0.0))
+        conf = float(route.get("confidence", 0.0))
+        lbl = route.get("label", "?")
+        self._add_system(
+            f"Branch A: label <b>{lbl}</b>  conf {conf:.2f}  epistemic {ep:.3f}  →  <b>{action}</b>"
+        )
+
+    def _on_branch_a_ollama(self, text: str) -> None:
+        if self._lm_reply_lbl is not None:
+            self._lm_reply_lbl.setText(text or "(empty Ollama response)")
+        self._stats_lbl.setText("Branch A  ·  Ollama fallback")
+
+    def _on_branch_a_finished(self) -> None:
+        if self._lm_reply_lbl is not None and self._lm_reply_lbl.text() == "▌":
+            self._lm_reply_lbl.setText(
+                "(in-domain route — load CyphaLM for generation, or routing-only reply)"
+            )
+        self._send_btn.setEnabled(True)
+        self._branch_a_worker = None
+        self._lm_reply_lbl = None
+
+    def _on_branch_a_error(self, msg: str) -> None:
+        self._send_btn.setEnabled(True)
+        self._branch_a_worker = None
+        if self._lm_reply_lbl is not None:
+            self._lm_reply_lbl.setText(f"[error: {msg}]")
+        self._lm_reply_lbl = None
+        self._add_message('error', f"Branch A error: {msg}")
 
     def _on_send_lm(self, text: str) -> None:
         lm = self._state.lm_engine

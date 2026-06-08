@@ -18,6 +18,10 @@ milestone or a significant self-contained change.
 
 ### Added (follow-up)
 - `branch_a_documents.py`, `run_d09_branch_a.py`, `scripts/demo_branch_a_route.py`.
+- **REST Branch A routing:** `POST /route/text`, `POST /route/generate`, Ollama fallback client.
+- **Studio chat:** Branch A mode in Settings → Inference; `BranchADispatchWorker` routes text in chat.
+- **Router checkpoint:** `save_checkpoint` / `load_checkpoint`, `scripts/save_branch_a_router.py`, `POST /route/save`.
+- **Encoder sweep:** VectorEncoder **59.5%** vs RFF **4.5%** @ 384-d MiniLM — keep VectorEncoder.
 
 ---
 

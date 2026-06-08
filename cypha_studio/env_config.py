@@ -14,6 +14,13 @@ Variables (all optional):
   file as before.
 - **CYPHA_REGRESSION_HEAD** — optional path to ``regression_head.json`` for FastAPI ``/predict``
   (scalar mixture regression overlay; mirrors native ``cypha_rest``). See ``docs/studio/CYPHA_ENV.md``.
+- **CYPHA_BRANCH_A_EPISTEMIC_THRESHOLD** — epistemic variance gate for ``POST /route/*`` (default ``0.5``).
+- **CYPHA_BRANCH_A_N_TRAIN** — 20 Newsgroups samples for lazy Branch A router training (default ``1200``).
+- **CYPHA_BRANCH_A_EMBED_BACKEND** — ``auto`` | ``sentence_transformers`` | ``hashing`` for text embedder.
+- **CYPHA_BRANCH_A_CHECKPOINT** — checkpoint base path (``.json`` + ``.npz`` pair) to load/skip retrain.
+- **CYPHA_BRANCH_A_AUTO_SAVE** — when ``1``, save checkpoint after training (default off).
+- **CYPHA_OLLAMA_URL** — Ollama base URL for ``fallback_llm`` generation (default ``http://127.0.0.1:11434``).
+- **CYPHA_OLLAMA_MODEL** — Ollama model tag (default ``mistral``).
 
 CLI flags in ``cypha_studio/main.py`` override these when explicitly parsed after ``os.environ``
 is applied to defaults at parse time.
@@ -64,3 +71,15 @@ def csv_read_chunk_rows() -> int:
     if n <= 0:
         return 0
     return n
+
+
+def branch_a_checkpoint_base() -> str:
+    """Base path for Branch A router checkpoint (``.json`` + ``.npz`` siblings)."""
+    raw = os.environ.get("CYPHA_BRANCH_A_CHECKPOINT", "").strip()
+    if raw:
+        return os.path.expanduser(raw)
+    return os.path.expanduser("~/.cypha/branch_a_router")
+
+
+def branch_a_auto_save() -> bool:
+    return os.environ.get("CYPHA_BRANCH_A_AUTO_SAVE", "").strip().lower() in ("1", "true", "yes")

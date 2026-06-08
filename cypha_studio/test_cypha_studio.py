@@ -722,6 +722,9 @@ def _():
     assert '/adapt_temperature' in routes
     assert '/load' in routes
     assert '/classes' in routes
+    assert '/route/text' in routes
+    assert '/route/generate' in routes
+    assert '/route/health' in routes
     c = TestClient(app)
     rd = c.get("/ready")
     assert rd.status_code == 200

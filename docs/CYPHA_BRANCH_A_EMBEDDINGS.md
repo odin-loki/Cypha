@@ -90,10 +90,65 @@ python cypha_bench/tuning/cypha_branch_a_sweep.py --n-samples 800 --backend hash
 
 1. ~~Wire frozen-ST path into **D09**~~ — `run_d09_branch_a.py` + `CYPHA_BENCH_BRANCH_A=1`.
 2. ~~OOD eval: Gutenberg vs 20news epistemic~~ — **done** (see above).
-3. **Local LLM routing:** embed user query → CyphaDIF route/abstain → Ollama/Mistral generate (REST stub).
-4. Compare **RFF vs VectorEncoder** on 384-d ST inputs for small-dim regime.
+3. ~~**Local LLM routing**~~ — REST `/route/text`, `/route/generate` + Ollama stub (`cypha_studio/core/ollama_client.py`).
+4. ~~Compare **RFF vs VectorEncoder** on 384-d ST inputs~~ — **VectorEncoder 59.5%** vs RFF **4.5%** @ 2k MiniLM (`cypha_branch_a_encoder_sweep.json`). Keep VectorEncoder for Branch A.
 
 ---
+
+## Encoder sweep (384-d MiniLM @ 2k)
+
+Artifact: `cypha_bench/config/cypha_branch_a_encoder_sweep.json`
+
+| Encoder | Accuracy | Notes |
+|---------|----------|-------|
+| **VectorEncoder** (frozen W_enc) | **59.5%** | Default Branch A path |
+| RFFEncoder D=256 | 4.5% | Wrong tool for 384-d semantic vectors |
+| LogReg baseline | 60.3% | Batch reference |
+
+**Verdict:** RFF is for small tabular dims (≤30); frozen **VectorEncoder** is required for sentence-transformer inputs.
+
+---
+
+## REST routing (CyphaStudio)
+
+| Route | Purpose |
+|-------|---------|
+| `GET /route/health` | Router trained?, Ollama reachable?, CyphaLM loaded? |
+| `POST /route/text` | Embed → classify → epistemic gate (no generation) |
+| `POST /route/generate` | Route then **CyphaLM** (in-domain) or **Ollama** (OOD abstain) |
+
+Environment (see [`docs/studio/CYPHA_ENV.md`](studio/CYPHA_ENV.md)):
+
+| Variable | Default |
+|----------|---------|
+| `CYPHA_BRANCH_A_EPISTEMIC_THRESHOLD` | `0.5` |
+| `CYPHA_BRANCH_A_N_TRAIN` | `1200` |
+| `CYPHA_BRANCH_A_EMBED_BACKEND` | `auto` |
+| `CYPHA_OLLAMA_URL` | `http://127.0.0.1:11434` |
+| `CYPHA_OLLAMA_MODEL` | `mistral` |
+| `CYPHA_BRANCH_A_CHECKPOINT` | `~/.cypha/branch_a_router` (``.json`` + ``.npz``) |
+| `CYPHA_BRANCH_A_AUTO_SAVE` | Save checkpoint after train when `1` |
+| `CYPHA_LM_CHECKPOINT` | *(optional CyphaLM for in-domain gen)* |
+
+```powershell
+uvicorn cypha_studio.server.api:app --port 7749
+
+curl -s -X POST http://127.0.0.1:7749/route/text `
+  -H "Content-Type: application/json" `
+  -d '{"text":"How do I compile Linux kernel modules?"}'
+
+curl -s -X POST http://127.0.0.1:7749/route/generate `
+  -H "Content-Type: application/json" `
+  -d '{"text":"quantum gardening on Mars","max_tokens":64}'
+
+python scripts/demo_branch_a_route.py "your query" --generate
+
+# Pre-train checkpoint (skip ~30s retrain on REST cold-start)
+python scripts/save_branch_a_router.py --n-train 1200 --out ~/.cypha/branch_a_router
+$env:CYPHA_BRANCH_A_CHECKPOINT="$HOME/.cypha/branch_a_router"
+```
+
+**Studio GUI:** File → Settings → Inference → enable **Branch A text routing**. Chat embeds queries, shows route label/epistemic, streams CyphaLM in-domain or calls Ollama on abstain.
 
 ## References
 
