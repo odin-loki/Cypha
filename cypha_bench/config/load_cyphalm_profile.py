@@ -17,6 +17,8 @@ PROFILE_ALIASES: dict[str, str] = {
     "gutenberg": "profiles/cyphalm_d04_gutenberg.json",
     "d17": "profiles/cyphalm_d17_wikitext.json",
     "wikitext": "profiles/cyphalm_d17_wikitext.json",
+    "d17_hybrid": "profiles/cyphalm_d17_hybrid.json",
+    "hybrid": "profiles/cyphalm_d17_hybrid.json",
 }
 
 LEGACY_PROFILE = CONFIG_DIR / "cyphalm_profile.json"

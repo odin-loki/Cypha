@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-05-31 08:07 UTC
+Generated: 2026-06-07 19:14 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -723,58 +723,93 @@ Default parameters only — no hyperparameter tuning.
 
 ## D17
 
-*Timestamp:* 2026-05-31T07:52:35.027012+00:00
+*Timestamp:* 2026-06-07T19:14:15.229064+00:00
 
 ### 17A_bits_per_character
 
 | Metric | Value |
 | --- | --- |
-| `ablations.ablation_bpc.ablation_no_dif` | 4.7250 |
-| `ablations.ablation_bpc.ablation_no_ssm` | 4.1646 |
-| `ablations.ablation_bpc.full` | 4.7250 |
-| `ablations.ablation_bpc.gria_ngram` | 4.1541 |
-| `ablations.ablation_bpc.ssm_only` | 4.4507 |
-| `ablations.bigram_bpc` | 3.9142 |
-| `ablations.char_lstm_bpc` | 3.5889 |
-| `ablations.fivegram_bpc` | 5.5789 |
-| `ablations.fourgram_bpc` | 5.2860 |
-| `ablations.modes_run` | ['full', 'gria_ngram', 'ssm_only', 'ablation_no_dif', 'ablation_no_ssm'] |
-| `ablations.n_eval` | 2000 |
-| `ablations.n_train` | 40000 |
-| `ablations.trigram_bpc` | 4.3976 |
-| `bigram_bpc` | 3.9142 |
-| `char_lstm_bpc` | 3.5889 |
-| `cypha_dif.lossless_fraction` | 2.51e-05 |
-| `cypha_dif.mean_aleatoric_var` | 0.9084 |
-| `cypha_dif.mean_alpha` | 0.0969 |
-| `cypha_dif.mean_epistemic_var` | 2.28e-05 |
+| `ablations.reason` | phase1c — see cyphalm_component_ablation.json |
+| `ablations.skipped` | True |
+| `bigram_bpc` | 3.4784 |
+| `cypha_dif.lossless_fraction` | 1.14e-06 |
+| `cypha_dif.mean_aleatoric_var` | 0.9192 |
+| `cypha_dif.mean_alpha` | 0.5000 |
+| `cypha_dif.mean_epistemic_var` | 1.05e-06 |
 | `cypha_dif.n_experts` | 2 |
-| `cyphalm_bpc` | 4.1541 |
-| `delta_vs_bigram` | 0.2398 |
-| `delta_vs_trigram` | -0.2436 |
+| `cyphalm_bpc` | 2.8732 |
+| `delta_vs_bigram` | -0.6053 |
+| `delta_vs_trigram` | -0.3479 |
 | `device` | cpu |
-| `final_train_bpc` | 4.0956 |
-| `fivegram_bpc` | 5.5789 |
-| `fourgram_bpc` | 5.2860 |
-| `learning_curve.expert_count` | [20 items] |
-| `learning_curve.final_train_bpc` | 4.0956 |
-| `learning_curve.held_out_bpc` | [20 items] |
+| `final_train_bpc` | 2.4830 |
+| `hybrid_blend_logit` | -5.4965 |
+| `learning_curve.expert_count` | [0] |
+| `learning_curve.final_train_bpc` | 2.4830 |
+| `learning_curve.held_out_bpc` | [2.873156289862414] |
+| `learning_curve.online_train_bpc` | 2.4830 |
+| `learning_curve.steps` | [300000] |
+| `learning_curve.trained_steps` | 300000 |
+| `online_train_bpc` | 2.4830 |
+| `profile.alpha_init` | 0.5000 |
+| `profile.alpha_learnable` | False |
+| `profile.bptt_steps` | 64 |
+| `profile.context_length` | 256 |
+| `profile.context_mode` | hybrid_gria_lstm |
+| `profile.d_embed` | 64 |
+| `profile.d_state` | 128 |
+| `profile.device` | auto |
+| `profile.field_dim` | 160 |
 
 ### 17B_alpha_spectrum
 
 | Metric | Value |
 | --- | --- |
 | `fraction_edge_of_chaos` | 0.0000 |
-| `mean_alpha` | 0.1239 |
+| `mean_alpha` | 0.5000 |
 | `n_experts` | 2 |
 
 ### 17D_online_adaptation
 
 | Metric | Value |
 | --- | --- |
-| `bpc_improvement` | 0.2192 |
-| `bpc_ood_after_adapt` | 4.1425 |
-| `bpc_ood_before_adapt` | 4.3617 |
+| `bpc_improvement` | 0.4050 |
+| `bpc_ood_after_adapt` | 3.9050 |
+| `bpc_ood_before_adapt` | 4.3100 |
+
+### 17K_long_range_context
+
+| Metric | Value |
+| --- | --- |
+| `context_length_bpc.1024` | 2.9357 |
+| `context_length_bpc.128` | 3.1097 |
+| `context_length_bpc.16` | 2.8597 |
+| `context_length_bpc.256` | 3.3350 |
+| `context_length_bpc.32` | 2.9171 |
+| `context_length_bpc.512` | 2.9126 |
+| `context_length_bpc.64` | 3.2468 |
+| `context_length_bpc.8` | 3.0289 |
+| `held_out_bpc` | 2.8732 |
+| `n_eval` | 8000 |
+| `n_train` | 300000 |
+| `output_path` | C:\Users\odinl\OneDrive\Desktop\Cypha\cypha_bench\config\cyphalm_long_range_suite.json |
+| `reset_interval_bpc.128` | 2.8866 |
+| `reset_interval_bpc.256` | 2.8793 |
+| `reset_interval_bpc.32` | 2.9372 |
+| `reset_interval_bpc.512` | 2.8766 |
+| `reset_interval_bpc.64` | 2.9039 |
+| `reset_interval_bpc.8` | 3.1394 |
+| `reset_interval_bpc.never` | 2.8732 |
+| `sequential_vs_shuffled.block_shuffled_bpc` | 2.8943 |
+| `sequential_vs_shuffled.delta_shuffled_minus_forward` | 0.0211 |
+| `sequential_vs_shuffled.forward_bpc` | 2.8732 |
+| `source` | wikitext2 |
+| `ssm_ablation_sequential.ablation_no_ssm.held_out_bpc` | 3.8291 |
+| `ssm_ablation_sequential.ablation_no_ssm.train_seconds` | 304.7248 |
+| `ssm_ablation_sequential.dif_ngram_contribution_bpc` | 0.3670 |
+| `ssm_ablation_sequential.gria_ngram.held_out_bpc` | 3.8232 |
+| `ssm_ablation_sequential.gria_ngram.train_seconds` | 2302.1224 |
+| `ssm_ablation_sequential.ssm_contribution_bpc` | 0.0059 |
+| `ssm_ablation_sequential.ssm_only.held_out_bpc` | 4.1902 |
 
 ## Cross-Domain Analyses
 
@@ -782,10 +817,10 @@ Default parameters only — no hyperparameter tuning.
 
 | Metric | Value |
 | --- | --- |
-| `summary.global_mean_alpha` | 0.7735 |
-| `summary.global_std_alpha` | 0.2991 |
+| `summary.global_mean_alpha` | 0.8048 |
+| `summary.global_std_alpha` | 0.2440 |
 | `summary.n_measurements` | 13 |
-| `summary.within_gul_band_fraction` | 0.0000 |
+| `summary.within_gul_band_fraction` | 0.0833 |
 
 ### cross_forgetting_resistance
 
@@ -804,4 +839,4 @@ Default parameters only — no hyperparameter tuning.
 | Metric | Value |
 | --- | --- |
 | `summary.mean_ood_auroc` | 0.8438 |
-| `summary.n_experiments` | 43 |
+| `summary.n_experiments` | 44 |

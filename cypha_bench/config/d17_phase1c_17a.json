@@ -1,0 +1,9 @@
+{
+  "experiment": "17A_bits_per_character",
+  "phase1c": true,
+  "n_train": 300000,
+  "context_mode": "hybrid_gria_lstm",
+  "cyphalm_bpc": 2.8732,
+  "train_seconds": 3007,
+  "note": "Matches cyphalm_hybrid_lstm_300k.json sweep (2.870)"
+}

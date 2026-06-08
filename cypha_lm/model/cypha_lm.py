@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections import deque
 from dataclasses import asdict
 from pathlib import Path
@@ -17,8 +18,11 @@ from cypha_views.types import ViewSchedule, ViewSpec
 from cypha_lm.array_backend import ArrayBackend, asnumpy
 from cypha_lm.config import CyphaLMConfig
 from cypha_lm.embeddings.izaac_embed import IzaacEmbedding
+from cypha_lm.embeddings.view_embed import ViewEmbedding
 from cypha_lm.expert_field.cypha_dif import CyphaDIF
 from cypha_lm.projection.gria_projection import GRIAProjection
+from cypha_lm.projection.ngram_fusion import NgramFusion
+from cypha_lm.model.char_lstm_head import CharLSTMHead, blend_log_probs, blend_logit_grad
 from cypha_lm.temporal.cellai_ssm import CellAISSM
 
 
@@ -63,28 +67,47 @@ class CyphaLM:
         ngram_in = (0 if config.context_mode == "ablation_no_ssm" else fd) + n_embeds * config.d_embed
         self._ngram_fuse_split = bool(config.ngram_fuse_split) and config.context_mode in (
             "gria_ngram",
+            "hybrid_gria_lstm",
             "ablation_no_ssm",
         )
+        self._ngram_fusion: NgramFusion | None = None
         if self._ngram_fuse_split:
             embed_in = n_embeds * config.d_embed if config.context_mode != "ablation_no_ssm" else ngram_in
             field_in = fd if config.context_mode != "ablation_no_ssm" else 0
-            self._proj_ngram_field = (
-                xp.asarray(rng.standard_normal((fd, field_in)) * 0.02) if field_in > 0 else None
-            )
-            self._proj_ngram_embed = xp.asarray(rng.standard_normal((fd, embed_in)) * 0.02)
+            fuse_mode = config.ngram_fusion if config.ngram_fusion in ("sum", "gated") else "sum"
+            if field_in > 0:
+                self._ngram_fusion = NgramFusion(
+                    fd,
+                    field_in,
+                    embed_in,
+                    mode=fuse_mode,
+                    n_positions=n_embeds,
+                    position_weights=bool(config.ngram_position_weights),
+                    seed=config.seed + 4,
+                    xp=xp,
+                )
+                self._proj_ngram_field = None
+                self._proj_ngram_embed = None
+            else:
+                self._proj_ngram_field = None
+                self._proj_ngram_embed = xp.asarray(rng.standard_normal((fd, embed_in)) * 0.02)
             self._proj_ngram = xp.asarray(rng.standard_normal((fd, ngram_in)) * 0.02)
         else:
             self._proj_ngram_field = None
             self._proj_ngram_embed = None
             self._proj_ngram = xp.asarray(rng.standard_normal((fd, ngram_in)) * 0.02)
         vid = max(0, int(config.view_id_dim))
-        self._view_slots = 16 if vid > 0 else 0
+        self._view_slots = max(1, int(config.max_view_slots)) if vid > 0 else 0
         if vid > 0:
-            self._view_embed = xp.asarray(
-                rng.standard_normal((self._view_slots, vid)) * 0.02
+            self.view_emb = ViewEmbedding(
+                self._view_slots,
+                vid,
+                seed=config.seed + 3,
+                learnable=bool(config.view_learnable),
+                xp=xp,
             )
         else:
-            self._view_embed = None
+            self.view_emb = None
         gria_in = fd + vid
         self.gria = GRIAProjection(
             d_input=gria_in,
@@ -106,6 +129,19 @@ class CyphaLM:
         self._last_epistemic = 0.0
         self._last_aleatoric = 0.0
         self._current_view_id = 0
+        self._current_view_slot = 0
+        self._hybrid_blend_logit = float(config.hybrid_blend_logit)
+        if config.context_mode == "hybrid_gria_lstm":
+            self.lstm_head = CharLSTMHead(
+                config.vocab_size,
+                int(config.lstm_hidden),
+                seed=config.seed + 5,
+            )
+            self._lstm_h, self._lstm_c = self.lstm_head.reset_state()
+        else:
+            self.lstm_head = None
+            self._lstm_h = None
+            self._lstm_c = None
 
     @property
     def device(self) -> str:
@@ -115,6 +151,8 @@ class CyphaLM:
         self.ssm.reset()
         self._embed_history.clear()
         self._bptt_buffer.clear()
+        if self.lstm_head is not None:
+            self._lstm_h, self._lstm_c = self.lstm_head.reset_state()
 
     def _project_context(self, context) -> Any:
         xp = self._backend.xp
@@ -141,10 +179,14 @@ class CyphaLM:
         xp = self._backend.xp
         mode = self.config.context_mode
         embeds = self._ngram_embedding_vector()
-        if self._ngram_fuse_split and self._proj_ngram_field is not None:
+        if self._ngram_fusion is not None:
+            return self._ngram_fusion.forward(
+                xp.asarray(field_x, dtype=xp.float64).ravel(), embeds
+            )
+        if self._ngram_fuse_split and self._proj_ngram_embed is not None:
             field_part = self._proj_ngram_field @ xp.asarray(
                 field_x, dtype=xp.float64
-            ).ravel()
+            ).ravel() if self._proj_ngram_field is not None else xp.zeros(self.config.field_dim)
             embed_part = self._proj_ngram_embed @ embeds
             return field_part + embed_part
         if mode == "ablation_no_ssm":
@@ -157,10 +199,9 @@ class CyphaLM:
 
     def _view_vector(self) -> Any:
         xp = self._backend.xp
-        if self._view_embed is None or self._view_slots <= 0:
+        if self.view_emb is None:
             return xp.zeros(max(0, int(self.config.view_id_dim)), dtype=xp.float64)
-        slot = int(self._current_view_id) % self._view_slots
-        return xp.asarray(self._view_embed[slot], dtype=xp.float64).ravel()
+        return self.view_emb.forward(self._current_view_slot)
 
     def _augment_gria_input(self, v: Any) -> Any:
         xp = self._backend.xp
@@ -174,7 +215,7 @@ class CyphaLM:
     def _gria_input(self, field_x, dif_out: dict) -> Any:
         xp = self._backend.xp
         mode = self.config.context_mode
-        if mode in ("gria_ngram", "ablation_no_ssm"):
+        if mode in ("gria_ngram", "hybrid_gria_lstm", "ablation_no_ssm"):
             return self._ngram_gria_vector(field_x)
         if mode == "ssm_only":
             return xp.asarray(field_x, dtype=xp.float64).ravel()
@@ -209,10 +250,25 @@ class CyphaLM:
         v = self._gria_input(field_x, dif_out)
         v = self._augment_gria_input(v)
         log_probs = self.gria.forward(v)
+        log_probs_gria = log_probs
+        log_probs_lstm = None
+        if self.lstm_head is not None and self._lstm_h is not None and self._lstm_c is not None:
+            log_l, self._lstm_h, self._lstm_c = self.lstm_head.forward(
+                int(token_id), self._lstm_h, self._lstm_c
+            )
+            log_probs_lstm = log_l
+            log_g = asnumpy(log_probs_gria)
+            log_probs = blend_log_probs(log_g, log_l, self._hybrid_blend_logit)
+            if self._backend.is_cuda:
+                log_probs = self._backend.xp.asarray(log_probs, dtype=self._backend.xp.float64)
+            else:
+                log_probs = np.asarray(log_probs, dtype=np.float64)
         self._last_epistemic = float(dif_out["epistemic_var"])
         self._last_aleatoric = float(dif_out["aleatoric_var"])
         return {
             "log_probs": log_probs,
+            "log_probs_gria": log_probs_gria,
+            "log_probs_lstm": log_probs_lstm,
             "v": v,
             "field_x": field_x,
             "ctx": ctx,
@@ -260,8 +316,10 @@ class CyphaLM:
 
         if mode == "ssm_only":
             grad_field = grad_v
-        elif mode == "gria_ngram":
-            if self._ngram_fuse_split and self._proj_ngram_field is not None:
+        elif mode in ("gria_ngram", "hybrid_gria_lstm"):
+            if self._ngram_fusion is not None:
+                grad_field = self._ngram_fusion.grad_field_x(grad_v)
+            elif self._ngram_fuse_split and self._proj_ngram_field is not None:
                 grad_field = self._proj_ngram_field.T @ grad_v
             else:
                 grad_concat = self._proj_ngram.T @ grad_v
@@ -308,6 +366,19 @@ class CyphaLM:
         self.gria.update_weights(gw, lr)
         self.gria.update_alpha(ga, lr)
         self.gria.update_bias(gb, lr)
+        if self.view_emb is not None and self.config.view_learnable:
+            fd = self.config.field_dim
+            xp = self._backend.xp
+            grad_v = self.gria.grad_v_cross_entropy(v, nxt)
+            grad_view = xp.asarray(grad_v, dtype=xp.float64).ravel()[fd:]
+            norm = float(xp.linalg.norm(grad_view))
+            if norm > 0.05:
+                grad_view = grad_view * (0.05 / norm)
+            if gria_lr is not None and self.config.gria_lr > 0:
+                view_lr = float(self.config.view_lr) * (float(gria_lr) / float(self.config.gria_lr))
+            else:
+                view_lr = float(self.config.view_lr)
+            self.view_emb.update(self._current_view_slot, grad_view, view_lr)
         if self.config.online and self.config.context_mode not in (
             "ssm_only",
             "ablation_no_ssm",
@@ -318,6 +389,13 @@ class CyphaLM:
             self._bptt_ssm_update(fwd, nxt)
         elif self.config.train_ssm:
             self._ssm_online_update(fwd["embedding"], fwd["ctx"])
+        if self.lstm_head is not None and fwd.get("log_probs_lstm") is not None:
+            self.lstm_head.backward(nxt, float(self.config.lstm_lr))
+            if self.config.hybrid_blend_learnable:
+                log_g = asnumpy(fwd["log_probs_gria"])
+                log_l = asnumpy(fwd["log_probs_lstm"])
+                grad_logit = blend_logit_grad(log_g, log_l, self._hybrid_blend_logit, nxt)
+                self._hybrid_blend_logit -= float(self.config.hybrid_blend_lr) * grad_logit
         self._token_counts[nxt] += 1.0
         if self.config.laplace_smoothing > 0:
             self.gria.set_laplace_prior(
@@ -356,6 +434,8 @@ class CyphaLM:
         base_lr = float(self.config.gria_lr)
         block_size = max(1, int(self.config.view_block_size))
         last_macro = -1
+        log_every = int(os.environ.get("CYPHA_LM_TRAIN_LOG_EVERY", "25000"))
+        step_i = 0
         for view_spec, macro_index, segment, reset_before in iter_view_epochs(
             ids,
             view_schedule,
@@ -364,6 +444,8 @@ class CyphaLM:
         ):
             macro_lr = base_lr * (float(self.config.gria_lr_decay) ** macro_index)
             self._current_view_id = hash(view_spec.view_id) & 0x7FFFFFFF
+            if self.view_emb is not None:
+                self._current_view_slot = self.view_emb.slot_for_view(view_spec.name)
             if macro_index != last_macro:
                 self.reset_context()
                 last_macro = macro_index
@@ -378,6 +460,13 @@ class CyphaLM:
                 ale.append(m["aleatoric_var"])
                 active.append(m["active_experts"])
                 alpha.append(m["alpha_gria"])
+                step_i += 1
+                if log_every > 0 and step_i % log_every == 0:
+                    print(
+                        f"[CyphaLM] train step {step_i} view={view_spec.name} "
+                        f"loss={m['loss']:.4f}",
+                        flush=True,
+                    )
         return {
             "loss": np.asarray(losses, dtype=np.float64),
             "epistemic_var": np.asarray(epi, dtype=np.float64),
@@ -517,6 +606,9 @@ class CyphaLM:
                 "gria": self.gria.get_state(),
                 "ssm": self.ssm.get_state(),
                 "dif": self.dif.get_state(),
+                "view_emb": self.view_emb.get_state() if self.view_emb is not None else None,
+                "hybrid_blend_logit": self._hybrid_blend_logit,
+                "lstm": self.lstm_head.get_state() if self.lstm_head is not None else None,
             }
         )
         with open(json_path, "w", encoding="utf-8") as f:
@@ -531,8 +623,15 @@ class CyphaLM:
             npz_kwargs["proj_ngram_field"] = asnumpy(self._proj_ngram_field)
         if self._proj_ngram_embed is not None:
             npz_kwargs["proj_ngram_embed"] = asnumpy(self._proj_ngram_embed)
-        if self._view_embed is not None:
-            npz_kwargs["view_embed"] = asnumpy(self._view_embed)
+        if self._ngram_fusion is not None:
+            nf = self._ngram_fusion
+            npz_kwargs["ngram_W_field"] = asnumpy(nf.W_field)
+            npz_kwargs["ngram_W_embed"] = asnumpy(nf.W_embed)
+            npz_kwargs["ngram_W_gate"] = asnumpy(nf.W_gate)
+            if nf.pos_weights is not None:
+                npz_kwargs["ngram_pos_weights"] = asnumpy(nf.pos_weights)
+        if self.view_emb is not None:
+            npz_kwargs["view_embed"] = asnumpy(self.view_emb.table)
         np.savez(npz_path, **npz_kwargs)
 
     @classmethod
@@ -565,6 +664,22 @@ class CyphaLM:
                 model._proj_ngram_embed = xp.asarray(
                     data["proj_ngram_embed"], dtype=xp.float64
                 )
-            if "view_embed" in data and model._view_embed is not None:
-                model._view_embed = xp.asarray(data["view_embed"], dtype=xp.float64)
+            if model._ngram_fusion is not None:
+                nf = model._ngram_fusion
+                if "ngram_W_field" in data:
+                    nf.W_field = xp.asarray(data["ngram_W_field"], dtype=xp.float64)
+                if "ngram_W_embed" in data:
+                    nf.W_embed = xp.asarray(data["ngram_W_embed"], dtype=xp.float64)
+                if "ngram_W_gate" in data:
+                    nf.W_gate = xp.asarray(data["ngram_W_gate"], dtype=xp.float64)
+                if "ngram_pos_weights" in data and nf.pos_weights is not None:
+                    nf.pos_weights = xp.asarray(data["ngram_pos_weights"], dtype=xp.float64)
+            if "view_embed" in data and model.view_emb is not None:
+                model.view_emb.table = xp.asarray(data["view_embed"], dtype=xp.float64)
+        if meta.get("view_emb") is not None and model.view_emb is not None:
+            model.view_emb.set_state(meta["view_emb"])
+        if meta.get("hybrid_blend_logit") is not None:
+            model._hybrid_blend_logit = float(meta["hybrid_blend_logit"])
+        if meta.get("lstm") is not None and model.lstm_head is not None:
+            model.lstm_head.set_state(meta["lstm"])
         return model

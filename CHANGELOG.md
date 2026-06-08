@@ -6,6 +6,21 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased] — 2026-06-07 CyphaLM hybrid + long-range
+
+### Added
+- **`hybrid_gria_lstm`** context mode — GRIA + char-LSTM dual head with online blend (`cypha_lm/model/char_lstm_head.py`).
+- **Long-range context suite** — `cyphalm_long_range.py`, `cyphalm_long_range_suite.py`, D17 **17K**, `docs/CYPHALM_LONG_RANGE_TESTS.md`.
+- **Upgrade V2** — learnable views (`view_embed.py`), gated n-gram fusion (`ngram_fusion.py`); sweeps + D17 **17I/17J**.
+- **Phase 1c runner** — `run_d17_phase1c.py`; 300k train cap via `cyphalm_bench_limits()`.
+- **Profiles** — `cyphalm_d17_hybrid.json`; D17/D04/llm defaults → `hybrid_gria_lstm`.
+
+### Changed
+- **D17 @ 300k:** hybrid **2.873 BPC** (Phase 1c 17A) — beats bigram and char-LSTM bench.
+- **`d17.json`**, **`BASELINE_REPORT.md`**, research docs refreshed for hybrid + 17K long-range.
+
+---
+
 ## [Unreleased] — 2026-05-31 CyphaLM + LLM features
 
 ### Added

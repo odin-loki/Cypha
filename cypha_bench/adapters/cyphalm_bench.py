@@ -64,9 +64,10 @@ def load_cyphalm_config(
 def cyphalm_bench_limits() -> dict[str, int]:
     """Scale corpus / train / eval sizes for full vs CYPHA_BENCH_FAST runs."""
     if os.environ.get("CYPHA_BENCH_FULL_CORPUS", "0") == "1":
+        n_train = int(os.environ.get("CYPHA_BENCH_FULL_N_TRAIN", "300000"))
         return {
             "max_corpus_chars": 10_000_000,
-            "n_train": 999_999_999,
+            "n_train": n_train,
             "n_eval": scale(8_000, 500),
             "snapshot_every": scale(10_000, 500),
             "max_generate": scale(120, 40),
@@ -405,10 +406,13 @@ def train_with_learning_curve(
 
     model.reset_context()
     limit = min(n_train, len(train_ids) - 1)
+    log_every = max(5000, snapshot_every)
     for t in range(limit):
         metrics = model.train_step(int(train_ids[t]), int(train_ids[t + 1]))
         train_losses.append(float(metrics["loss"]))
         trained = t + 1
+        if trained % log_every == 0:
+            print(f"[train] {trained}/{limit} loss={train_losses[-1]:.4f}", flush=True)
         if trained % snapshot_every == 0 or trained == limit:
             snap_bpc = eval_held_out_bpc_preserve_training(
                 model, eval_ids, n_eval=n_eval_snapshot

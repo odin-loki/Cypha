@@ -1,6 +1,6 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-06-06 (CyphaLM profile v2, component ablation, Upgrade V2 + model-class plans) | **Report:** `cypha_bench/BASELINE_REPORT.md` (2026-05-31; re-run after upgrade)
+**Last updated:** 2026-06-07 (hybrid GRIA+LSTM @ 300k, Phase 1c D17, long-range probes) | **Report:** `cypha_bench/BASELINE_REPORT.md` (D17 hybrid refresh)
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -14,7 +14,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
 | **C++ / CUDA / Qt port** | M1–M6 complete | Parity with Python on all ported ops; deliberation and kernel LLR Python-only |
 | **cypha_accel (GPU fused kernels)** | Working | CuPy GPU path used automatically; NumPy fallback |
-| **cypha_lm (CyphaLM)** | Best @ 300k: **3.838 BPC** | Still +0.27 vs bigram; char-LSTM **3.589**; **Upgrade V2** + **model-class** tracks → [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
+| **cypha_lm (CyphaLM)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Benchmarked, reverted | All upgrades worse than baseline; U3/U5/U6 structurally safe |
 | **cypha_bench (eval harness)** | 17 domains complete | D04 full LLM suite; D17 extended integration; `adapters/cyphalm_bench.py` |
 | **cypha_studio (PySide6 + FastAPI)** | Working | GUI + REST + registry; **CyphaLM `/generate` SSE** (FastAPI-only) |
@@ -89,11 +89,12 @@ Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation
 | D04 | 3k fast | **5.233** | 6.201 | 6.675 | — | — | — | **−0.97** | **−1.44** |
 | D17 | 40k full | **4.154** | 3.914 | **4.398** | 5.286 | 5.579 | 3.589 | +0.24 | **−0.24** |
 | D04 | 40k full | **4.122** | 3.931 | **4.522** | 5.592 | 5.879 | 3.505 | +0.19 | **−0.40** |
-| D17 | full corpus (`CYPHA_BENCH_FULL_CORPUS=1`) | *run bench* | *run bench* | *run bench* | *run bench* | *run bench* | *run bench* | — | — |
+| D17 | 300k (`hybrid_gria_lstm`, Phase 1c) | **2.873** | 3.478 | 4.398 | — | — | 2.979 | **−0.61** | **−1.53** |
+| D17 | 300k (`gria_ngram` stack) | **3.838** | 3.478 | 4.398 | — | — | 2.979 | +0.36 | **−0.56** |
 
 **Ablation (40k, D17):** `gria_ngram` **4.154** &lt; `full` **4.725** &lt; `ssm_only` **4.451**; `ablation_no_ssm` **4.165** ≈ gria_ngram — explicit n-gram embeds carry most of the gain.
 
-**40k verdict:** CyphaLM **beats trigram** on WikiText valid (−0.24 BPC); still **+0.24 BPC vs bigram**. NumPy char-LSTM (**3.589**) remains strongest baseline — target for next upgrade pass.
+**300k verdict (2026-06-07):** **Hybrid GRIA+LSTM** (`hybrid_gria_lstm`) **beats bigram, trigram, and char-LSTM bench** on WikiText valid. Blend learns ~**99.6% LSTM**. Default D17 profile updated; Phase 1c cap **300k** (`CYPHA_BENCH_FULL_N_TRAIN`).
 
 | Domain | Task | Metric | Value | Verdict |
 |--------|------|--------|-------|---------|
@@ -142,7 +143,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
 | **Feynman equations** | Mean R²=−0.010 on nonlinear physics | Same — Kernel LLR |
 | **ECG / temporal** | D10 20% accuracy (chance) | CellAI SSM tuning; temporal-aware features |
-| **CyphaLM BPC** | D17 beats trigram at 40k (−0.24 BPC); +0.24 vs bigram; char-LSTM 3.589 | Full WikiText train; close bigram gap; match char-LSTM |
+| **CyphaLM BPC (GRIA-only)** | GRIA stack @ 300k **3.838** (+0.36 vs bigram); hybrid **2.873** resolves gap | Hybrid is default; GRIA-only path for ablation / long-range SSM probes |
 | **MNIST raw** | 72% vs 95% (LR+HOG) | Feature engineering (HOG) bridges most of the gap |
 
 ---
@@ -255,9 +256,9 @@ Each hypothesis we have investigated with the result:
 
 ### Priority 3 — CyphaLM: beat-bigram roadmap
 
-**Status:** Partial success — **beats trigram at 40k** on D17; bigram and char-LSTM still ahead.
+**Status:** ✅ **Achieved @ 300k** via **hybrid GRIA+LSTM** — D17 **2.873 BPC** (−0.61 vs bigram, −0.11 vs char-LSTM bench). GRIA-only stack peaked @ **3.838** (+0.36 vs bigram).
 
-**Evidence (40k train, post-upgrade `gria_ngram`):** D17 **4.154** vs bigram **3.914** (Δ +0.24); vs trigram **4.398** (Δ **−0.24** ✅). Char-LSTM **3.589**. Pre-upgrade D04 **5.001** vs bigram **3.841**; full D04 re-bench pending.
+**Evidence (300k, `hybrid_gria_lstm`):** Phase 1c 17A **2.873**; sweep **2.870**; bigram **3.478**; char-LSTM bench **2.979**. Pre-upgrade D04 **5.001** vs bigram **3.841**; D04 profile aligned to hybrid — **re-bench pending**.
 
 **Root causes (unchanged):**
 - Most learning in GRIA; SSM/DIF under-trained at default single-pass online loop.
@@ -294,9 +295,10 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 **Idea:** Structure-preserving reorderings (block shuffle, rotated start, bidirectional passes, task-block permutations) each macro-epoch, with explicit `view_id` and memory policy (reset fast / carry slow). Exploits online routing, replay, and expert growth instead of single static stream training.
 
 **Phase 1 (LM):** Multi-view + convergence complete. Stack best **3.838 BPC @ 300k**.  
-**Next (parallel):** [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md) (learnable views + n-gram fusion) + [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) (char-LSTM / hybrid). Phase 1c full-corpus eval in progress.
-
-**Component ablation study:** systematic isolation + combinatorics — [`CYPHALM_ALGORITHM_STUDY.md`](CYPHALM_ALGORITHM_STUDY.md). **Profile updated (2026-06):** `schedule_b`, `alpha_learnable=false`, `gria_lr_decay=0.3`, `ngram_context=3`, `view_id_dim=8`. Phase 1c full-corpus D17 run in progress.
+**Long-range context (Cypha Tests 1C):** @ 300k, SSM warm-up **4.06→3.64 BPC**; reset-every-8 **+0.26 BPC** — see [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md).  
+**Upgrade V2:** Track A learnable views **neutral @ 300k**; Track B gated fusion **+0.12 BPC @ 40k** — keep fixed views + sum fusion.  
+**Model-class C2 hybrid @ 300k:** **2.870 BPC** — **−0.972 vs GRIA**, **−0.608 vs bigram**, **−0.108 vs char-LSTM bench**. **Default D17 profile → `hybrid_gria_lstm`.** See [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md).  
+Phase 1c D17 @ 300k cap **complete** — hybrid **2.873 BPC** (17A). See `cypha_bench/report/tables/d17.json`.
 
 ### Priority 5 — Shared-model continual learning
 

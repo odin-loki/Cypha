@@ -1,0 +1,44 @@
+{
+  "corpus": "wikitext2",
+  "n_train": 40000,
+  "n_eval": 2000,
+  "profile": "d17",
+  "bigram_bpc": 3.914244595910738,
+  "cells": [
+    {
+      "cell_id": "baseline",
+      "held_out_bpc": 4.023495564694261,
+      "train_seconds": 299.1286643000785,
+      "n_train": 40000,
+      "view_learnable": false,
+      "ngram_fusion": "sum",
+      "context_mode": "gria_ngram",
+      "view_schedule": "schedule_b",
+      "delta_vs_bigram": 0.10925096878352258
+    },
+    {
+      "cell_id": "gated",
+      "held_out_bpc": 4.139632195399151,
+      "train_seconds": 306.96061530010775,
+      "n_train": 40000,
+      "view_learnable": false,
+      "ngram_fusion": "gated",
+      "context_mode": "gria_ngram",
+      "view_schedule": "schedule_b",
+      "delta_vs_bigram": 0.2253875994884127
+    }
+  ],
+  "best": {
+    "cell_id": "baseline",
+    "held_out_bpc": 4.023495564694261,
+    "train_seconds": 299.1286643000785,
+    "n_train": 40000,
+    "view_learnable": false,
+    "ngram_fusion": "sum",
+    "context_mode": "gria_ngram",
+    "view_schedule": "schedule_b",
+    "delta_vs_bigram": 0.10925096878352258
+  },
+  "learnable_minus_baseline_bpc": null,
+  "elapsed_s": 613.6087417000672
+}

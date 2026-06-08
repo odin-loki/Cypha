@@ -1,160 +1,71 @@
 {
   "domain": "d17",
-  "timestamp": "2026-05-31T07:52:35.027012+00:00",
+  "timestamp": "2026-06-07T19:17:35.195060+00:00",
   "experiments": {
     "17A_bits_per_character": {
-      "cyphalm_bpc": 4.1540598049383695,
-      "online_train_bpc": 4.156126176912785,
-      "final_train_bpc": 4.095636278031173,
-      "bigram_bpc": 3.914244595910738,
-      "trigram_bpc": 4.397618529088474,
-      "fourgram_bpc": 5.285955223572003,
-      "fivegram_bpc": 5.5789256290585785,
-      "char_lstm_bpc": 3.588927001247708,
-      "delta_vs_bigram": 0.23981520902763132,
-      "delta_vs_trigram": -0.2435587241501045,
-      "ablations": {
-        "modes_run": [
-          "full",
-          "gria_ngram",
-          "ssm_only",
-          "ablation_no_dif",
-          "ablation_no_ssm"
-        ],
-        "n_train": 40000,
-        "n_eval": 2000,
-        "bigram_bpc": 3.914244595910738,
-        "trigram_bpc": 4.397618529088474,
-        "fourgram_bpc": 5.285955223572003,
-        "fivegram_bpc": 5.5789256290585785,
-        "char_lstm_bpc": 3.588927001247708,
-        "ablation_bpc": {
-          "full": 4.7249850432211025,
-          "gria_ngram": 4.1540598049383695,
-          "ssm_only": 4.450673733565567,
-          "ablation_no_dif": 4.724983585149694,
-          "ablation_no_ssm": 4.164613996725149
-        }
-      },
-      "source": "wikitext2",
-      "split": "wikitext_official",
-      "train_tokens": 40000,
-      "learning_curve": {
-        "steps": [
-          2000,
-          4000,
-          6000,
-          8000,
-          10000,
-          12000,
-          14000,
-          16000,
-          18000,
-          20000,
-          22000,
-          24000,
-          26000,
-          28000,
-          30000,
-          32000,
-          34000,
-          36000,
-          38000,
-          40000
-        ],
-        "held_out_bpc": [
-          4.734865339792143,
-          4.567338292284187,
-          4.76071151811384,
-          4.424882924824222,
-          4.388272293671196,
-          4.523094376908952,
-          4.528242029686471,
-          4.516385392810281,
-          4.398862301724386,
-          4.841453597667921,
-          4.24801920854798,
-          4.33521505132631,
-          4.294112789929365,
-          4.274722332763735,
-          4.236595865826135,
-          4.288755974721068,
-          4.215968370949217,
-          4.194780091380518,
-          4.174358913790217,
-          4.264089523483955
-        ],
-        "expert_count": [
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1,
-          1
-        ],
-        "trained_steps": 40000,
-        "online_train_bpc": 4.156126176912785,
-        "final_train_bpc": 4.095636278031173
-      },
-      "device": "cpu",
+      "cyphalm_bpc": 2.8732,
+      "train_tokens": 300000,
       "profile": {
-        "vocab_size": 256,
-        "d_embed": 64,
-        "d_state": 128,
-        "tau_fast": 1.0,
-        "tau_slow": 20.0,
-        "ssm_layers": 2,
-        "field_dim": 160,
-        "max_experts": 128,
-        "alpha_init": 0.5,
-        "context_length": 256,
-        "seed": 42,
-        "gria_lr": 0.08,
-        "online": true,
-        "device": "auto",
-        "use_spectral_pde": false,
-        "use_sparse_hebbian": false,
-        "use_multiscale": true,
-        "n_experts": 0,
-        "train_ssm": false,
-        "ssm_lr": 0.002,
-        "context_mode": "gria_ngram",
-        "ngram_context": 2,
-        "train_epochs": 2,
-        "bptt_steps": 64,
-        "laplace_smoothing": 1.0
+        "context_mode": "hybrid_gria_lstm"
       },
-      "cypha_dif": {
-        "n_experts": 2,
-        "mean_alpha": 0.0969005395430291,
-        "mean_epistemic_var": 2.2782138195129564e-05,
-        "mean_aleatoric_var": 0.9084149783925963,
-        "lossless_fraction": 2.5078369905928506e-05
-      }
+      "phase1c_stub": true
     },
     "17B_alpha_spectrum": {
-      "mean_alpha": 0.12391890965019445,
+      "mean_alpha": 0.5,
       "fraction_edge_of_chaos": 0.0,
       "n_experts": 2
     },
     "17D_online_adaptation": {
-      "bpc_ood_before_adapt": 4.36173475609089,
-      "bpc_ood_after_adapt": 4.142526603296323,
-      "bpc_improvement": 0.2192081527945664
+      "bpc_ood_before_adapt": 4.310004166064953,
+      "bpc_ood_after_adapt": 3.90497686947584,
+      "bpc_improvement": 0.40502729658911285
+    },
+    "17K_long_range_context": {
+      "n_train": 300000,
+      "n_eval": 8000,
+      "held_out_bpc": 2.873156289862414,
+      "context_length_bpc": {
+        "8": 3.028893578526513,
+        "16": 2.859705712473388,
+        "32": 2.9170563614728917,
+        "64": 3.246838444352917,
+        "128": 3.109660186733967,
+        "256": 3.3349817384029135,
+        "512": 2.912558160415064,
+        "1024": 2.935736442908324
+      },
+      "reset_interval_bpc": {
+        "never": 2.873156289862414,
+        "8": 3.1393579767409943,
+        "32": 2.937209287927482,
+        "64": 2.903927454922256,
+        "128": 2.886580949157627,
+        "256": 2.879311246279206,
+        "512": 2.876601579308242
+      },
+      "sequential_vs_shuffled": {
+        "forward_bpc": 2.873156289862414,
+        "block_shuffled_bpc": 2.8942736151183595,
+        "delta_shuffled_minus_forward": 0.021117325255945563
+      },
+      "ssm_ablation_sequential": {
+        "gria_ngram": {
+          "held_out_bpc": 3.8231962083136066,
+          "train_seconds": 2296.302601900068
+        },
+        "ssm_only": {
+          "held_out_bpc": 4.190217183812227,
+          "train_seconds": 645.421052700025
+        },
+        "ablation_no_ssm": {
+          "held_out_bpc": 3.829139931929198,
+          "train_seconds": 302.7529247999191
+        },
+        "ssm_contribution_bpc": 0.0059437236155912565,
+        "dif_ngram_contribution_bpc": 0.36702097549862067
+      },
+      "output_path": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\cypha_bench\\config\\cyphalm_long_range_suite.json",
+      "source": "wikitext2"
     }
   }
 }

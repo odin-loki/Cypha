@@ -1,0 +1,10 @@
+{
+  "corpus": "wikitext2",
+  "n_train": 40000,
+  "cells": [
+    {"cell_id": "baseline", "ngram_fusion": "sum", "held_out_bpc": 4.023495564694261},
+    {"cell_id": "gated", "ngram_fusion": "gated", "held_out_bpc": 4.139632195399151}
+  ],
+  "gated_minus_sum_bpc": 0.1161366307048899,
+  "verdict": "gated worse at 40k with fixed fusion weights; keep sum"
+}

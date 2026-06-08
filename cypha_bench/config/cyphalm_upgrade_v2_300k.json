@@ -1,0 +1,35 @@
+{
+  "corpus": "wikitext2",
+  "n_train": 300000,
+  "n_eval": 2000,
+  "profile": "d17",
+  "bigram_bpc": 3.5647854851130796,
+  "cells": [
+    {
+      "cell_id": "baseline",
+      "held_out_bpc": 3.838250009460604,
+      "train_seconds": 2351.2950502999593,
+      "n_train": 300000,
+      "view_learnable": false,
+      "context_mode": "gria_ngram",
+      "view_schedule": "schedule_b",
+      "delta_vs_bigram": 0.2734645243475242
+    },
+    {
+      "cell_id": "learnable_view",
+      "held_out_bpc": 3.8383022375129445,
+      "train_seconds": 2257.148741799989,
+      "n_train": 300000,
+      "view_learnable": true,
+      "context_mode": "gria_ngram",
+      "view_schedule": "schedule_b",
+      "delta_vs_bigram": 0.27351675239986495
+    }
+  ],
+  "best": {
+    "cell_id": "baseline",
+    "held_out_bpc": 3.838250009460604
+  },
+  "learnable_minus_baseline_bpc": -5.222805234073036e-05,
+  "note": "Track A: learnable views neutral at 300k; keep fixed view_id_dim=8"
+}

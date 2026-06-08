@@ -38,13 +38,8 @@
   "ssm_lr": 0.002,
   "_meta": {
     "source": "hybrid_c2_300k",
-    "corpus": "wikitext2",
     "held_out_bpc": 2.87,
-    "delta_vs_bigram": -0.608,
     "delta_vs_gria_ngram": -0.972,
-    "delta_vs_char_lstm_baseline": -0.108,
-    "recommended_n_train": 300000,
-    "hybrid_gria_weight": 0.004,
-    "notes": "C2 dual head; blend ~99.6% LSTM @ 300k"
+    "alias_of": "cyphalm_d17_wikitext.json"
   }
 }

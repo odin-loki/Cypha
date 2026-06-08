@@ -1,7 +1,7 @@
 # CyphaLM Model-Class Research — Char-LSTM & Hybrids
 
-**Status:** Research started (parallel with Upgrade V2)  
-**Last updated:** 2026-06-06  
+**Status:** M2 dual-head prototype implemented; 40k eval running  
+**Last updated:** 2026-06-07  
 **Related:** [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md), [`cypha_bench/adapters/char_lstm_baseline.py`](../cypha_bench/adapters/char_lstm_baseline.py)
 
 ---
@@ -121,18 +121,21 @@ Char-LSTM **beats bigram at every budget** and improves monotonically to 300k. G
 
 ### Phase M2 — Dual head prototype (3–5 days)
 
-- [ ] `CharLSTMHead` in `cypha_lm/model/char_lstm_head.py`
-- [ ] `context_mode=hybrid_gria_lstm`
-- [ ] D17 **17J_hybrid_lstm**
-- [ ] Online blend weights
+- [x] `CharLSTMHead` in `cypha_lm/model/char_lstm_head.py`
+- [x] `context_mode=hybrid_gria_lstm`
+- [x] D17 **17J_hybrid_lstm**
+- [x] Online blend weight (`hybrid_blend_logit`)
+- [x] **300k eval:** hybrid **2.870 BPC** vs GRIA **3.842** (**−0.972**), vs bigram **−0.608**, vs char-LSTM bench **2.979** (**−0.108**)
+
+**M2 @ 300k:** Default D17/llm profiles updated to **`hybrid_gria_lstm`**. Blend ≈ **0.4% GRIA / 99.6% LSTM**.
 
 ### Phase M3 — Integration decision
 
 | Outcome | Action |
 |---------|--------|
-| Hybrid beats GRIA-only | New default profile `hybrid_gria_lstm` |
-| LSTM-only wins | `context_mode=char_lstm` profile |
-| No gain | Document ceiling; focus on Upgrade V2 only |
+| Hybrid beats GRIA-only | **Done** — `cyphalm_d17_wikitext.json` → `hybrid_gria_lstm` @ 300k |
+| LSTM-only wins | Optional `context_mode=char_lstm` (not implemented) |
+| No gain | N/A — **+0.97 BPC vs GRIA @ 300k** |
 
 ---
 

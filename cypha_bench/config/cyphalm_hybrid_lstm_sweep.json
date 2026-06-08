@@ -1,0 +1,29 @@
+{
+  "corpus": "wikitext2",
+  "n_train": 40000,
+  "n_eval": 2000,
+  "bigram_bpc": 3.7904600086871802,
+  "char_lstm_baseline_bpc": 3.4786787729161928,
+  "cells": [
+    {
+      "cell_id": "gria_ngram",
+      "held_out_bpc": 4.031169354776623,
+      "train_seconds": 298.3336038000416,
+      "n_train": 40000,
+      "context_mode": "gria_ngram",
+      "delta_vs_bigram": 0.24070934608944317
+    },
+    {
+      "cell_id": "hybrid_gria_lstm",
+      "held_out_bpc": 3.3464173114656974,
+      "train_seconds": 383.2082170000067,
+      "n_train": 40000,
+      "context_mode": "hybrid_gria_lstm",
+      "hybrid_blend_logit": -3.8864552870257474,
+      "hybrid_gria_weight": 0.02010542545658573,
+      "delta_vs_bigram": -0.4440426972214828
+    }
+  ],
+  "hybrid_minus_gria_bpc": 0.684752043310926,
+  "elapsed_s": 838.7273613999132
+}

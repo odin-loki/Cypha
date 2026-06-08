@@ -32,11 +32,12 @@ CyphaDIF is not a separate bolt-on — it routes and predicts in the expert fiel
 |------|------------|
 | `full` | SSM context + CyphaDIF field (default) |
 | `gria_ngram` | SSM projection + last *K* Izaac embeddings (n-gram-like shortcut) |
+| `hybrid_gria_lstm` | GRIA path + char-LSTM head; online blend (best @ D17 300k) |
 | `ssm_only` | SSM path; DIF contribution zeroed |
 | `ablation_no_dif` | Field mean only; routing ablated |
 | `ablation_no_ssm` | N-gram embed stack only; SSM zeroed |
 
-Bench profiles (`d04`, `d17`) use **`gria_ngram`** + **`schedule_b`** + frozen α + `gria_lr_decay=0.3` + `ngram_context=3` + `view_id_dim=8` (D17, post stack-validation @ 300k).
+Bench profiles (`d04`, `d17`) use **`hybrid_gria_lstm`** (D17 @ 300k: **2.87 BPC**) or **`gria_ngram`** on D04 + **`schedule_b`** + frozen α + `gria_lr_decay=0.3` + `ngram_context=3` + `view_id_dim=8`.
 
 ### Laplace bias init
 
@@ -206,9 +207,11 @@ Set `CYPHA_LM_FAST=1` for reduced steps.
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| D04 / D17 held-out BPC (40k train) | *run bench to refresh* | Pre-upgrade pinned: ~4.66–5.00 vs bigram ~3.84–3.91 |
-| 4-gram / 5-gram / char-LSTM | *run bench to refresh* | New baselines in D04/D17 JSON |
-| Ablation `gria_ngram` vs `full` | *run bench to refresh* | Target: beat bigram on D17 full corpus |
+| D17 held-out BPC @ 300k (`hybrid_gria_lstm`) | **2.873** | Beats bigram **3.478** and char-LSTM bench **2.979** |
+| D17 held-out BPC @ 300k (`gria_ngram` stack) | **3.838** | +0.36 vs bigram; hybrid resolves gap |
+| D04 Gutenberg @ 40k (prior `gria_ngram`) | **4.122** | Profile now hybrid; re-bench pending |
+| 4-gram / 5-gram / char-LSTM | see D17 JSON | Baselines in bench tables |
+| Ablation `gria_ngram` vs `full` @ 40k | **4.154** vs **4.725** | N-gram embed path carries most gain |
 | Save/restore parity | ✅ | log-prob max diff &lt; 1e-9 |
 
 See [docs/RESEARCH_STATUS.md](../docs/RESEARCH_STATUS.md) for beat-bigram roadmap and full benchmark tables.

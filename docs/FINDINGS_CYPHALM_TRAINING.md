@@ -73,10 +73,24 @@ Script: `python cypha_bench/tuning/cyphalm_convergence_limit.py --write`
 | Multi-view (`schedule_b`) | ✅ Helps vs same-order; extends useful train budget beyond 40k |
 | Same-order + 2 epochs | ❌ Overtrains after 40k — cap or switch schedule |
 | More tokens alone | ❌ Peaks @ 300k for schedule_b; not a path to beat bigram |
-| Full official WikiText train | Phase 1c — run with updated profile |
-| Learnable view embeddings | Planned — [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md) Track A |
-| Stronger n-gram fusion | Planned — [`CYPHALM_UPGRADE_V2.md`](CYPHALM_UPGRADE_V2.md) Track B |
-| Char-LSTM / hybrid class | Research — [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
+| Full official WikiText train | Phase 1c — `CYPHA_BENCH_FULL_CORPUS=1` runs **17A/17B/17D/17K** @ 300k |
+| Learnable view embeddings | ❌ Neutral @ 300k — keep fixed (`CYPHALM_UPGRADE_V2` Track A) |
+| Stronger n-gram fusion (gated) | ❌ Worse @ 40k — keep sum fusion (Track B) |
+| **Hybrid GRIA+LSTM (C2)** | ✅ **2.870 BPC @ 300k** — beats bigram & char-LSTM; **default D17 profile** |
+
+## Hybrid dual head @ 300k (2026-06-07)
+
+Artifact: `cypha_bench/config/cyphalm_hybrid_lstm_300k.json`
+
+| Model | BPC @ 300k | vs bigram |
+|-------|------------|-----------|
+| GRIA-only (`gria_ngram`) | 3.842 | +0.364 |
+| **Hybrid (`hybrid_gria_lstm`)** | **2.870** | **−0.608** |
+| Char-LSTM baseline | 2.979 | −0.108 vs hybrid |
+
+Blend weight learns ~**99.6% LSTM**. Profile: `cyphalm_d17_wikitext.json` → `context_mode=hybrid_gria_lstm`.
+
+**Phase 1c 17A confirm (2026-06-07):** **2.873 BPC** @ 300k hybrid via streamlined 17A (`train_sequence`, ~50 min).
 
 ## Beat-bigram hyperparam sweep (2026-06-01)
 

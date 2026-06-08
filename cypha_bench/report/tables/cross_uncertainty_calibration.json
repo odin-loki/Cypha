@@ -1,6 +1,6 @@
 {
   "domain": "cross_uncertainty_calibration",
-  "timestamp": "2026-05-31T08:07:19.389406+00:00",
+  "timestamp": "2026-06-07T19:14:15.413163+00:00",
   "experiments": {
     "calibration_rows": [
       {
@@ -249,10 +249,15 @@
         "domain": "d17",
         "experiment": "17D_online_adaptation",
         "task_type": "unknown"
+      },
+      {
+        "domain": "d17",
+        "experiment": "17K_long_range_context",
+        "task_type": "unknown"
       }
     ],
     "summary": {
-      "n_experiments": 43,
+      "n_experiments": 44,
       "mean_ood_auroc": 0.8438009806546
     }
   }

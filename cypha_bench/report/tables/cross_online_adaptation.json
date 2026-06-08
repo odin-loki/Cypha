@@ -1,6 +1,6 @@
 {
   "domain": "cross_online_adaptation",
-  "timestamp": "2026-05-31T08:07:19.404981+00:00",
+  "timestamp": "2026-06-07T19:14:15.431490+00:00",
   "experiments": {
     "adaptation_rows": [
       {
@@ -12,10 +12,10 @@
       {
         "domain": "d17",
         "experiment": "17D_online_adaptation",
-        "T_adapt_steps": 0.2192081527945664,
+        "T_adapt_steps": 0.40502729658911285,
         "metric": "bpc_improvement",
-        "pre_drift_metric": 4.36173475609089,
-        "post_adapt_metric": 4.142526603296323
+        "pre_drift_metric": 4.310004166064953,
+        "post_adapt_metric": 3.90497686947584
       }
     ],
     "n_domains_with_adaptation_signal": 2

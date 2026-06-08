@@ -1,7 +1,7 @@
 # CyphaLM Upgrade Track V2 — Learnable Views + Stronger N-Gram Fusion
 
-**Status:** Planned (parallel with model-class research)  
-**Last updated:** 2026-06-06  
+**Status:** Track A complete (neutral @ 300k); Track B gated fusion implemented  
+**Last updated:** 2026-06-07  
 **Prerequisite:** Phase 1c full-corpus eval with current profile (`1a16d89`)  
 **Related:** [`CYPHALM_ALGORITHM_STUDY.md`](CYPHALM_ALGORITHM_STUDY.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md), [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md)
 
@@ -109,17 +109,22 @@ Backprop through fusion to SSM must use `_grad_v_field_core` then chain through 
 
 ## Combined experiment matrix
 
-Run after Phase 1c baseline with **profile v1** (`1a16d89`):
-
-| ID | view | fusion | n_train |
-|----|------|--------|---------|
-| baseline | fixed | sum | 300k |
-| A | learnable | sum | 300k |
-| B | fixed | gated | 300k |
-| AB | learnable | gated | 300k |
-
 Artifact: `cypha_bench/config/cyphalm_upgrade_v2_sweep.json`  
-Script: `cypha_bench/tuning/cyphalm_upgrade_v2_sweep.py` (to implement)
+Script: `cypha_bench/tuning/cyphalm_upgrade_v2_sweep.py` — D17 **17I_view_learnable**
+
+| ID | view | fusion | n_train | BPC | vs fixed |
+|----|------|--------|---------|-----|----------|
+| baseline | fixed | sum | 40k | **4.023** | — |
+| A | learnable | sum | 300k | **3.838** | **−0.00005** (neutral — **keep fixed views**) |
+
+**Track A conclusion:** Learnable view embeddings do not improve BPC at 40k or 300k under `schedule_b`. Keep **`view_learnable=false`**, fixed random `view_id_dim=8`.
+
+| ID | view | fusion | n_train | BPC | vs sum |
+|----|------|--------|---------|-----|--------|
+| baseline | fixed | sum | 40k | **4.023** | — |
+| B gated | fixed | gated | 40k | **4.140** | **+0.116** (worse — keep `ngram_fusion=sum`) |
+
+**Track B @ 40k:** Gated fusion **hurts** vs sum with fixed random fusion weights (GRIA-only learning). **300k gated sweep skipped** unless fusion weights get online updates.
 
 ---
 
