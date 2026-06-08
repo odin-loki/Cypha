@@ -1,0 +1,20 @@
+{
+  "corpus": "wikitext2",
+  "n_train": 300000,
+  "n_eval": 2000,
+  "bigram_bpc": 3.4784232390340675,
+  "char_lstm_baseline_bpc": 2.978775799615417,
+  "cells": [
+    {
+      "cell_id": "char_lstm",
+      "held_out_bpc": 2.8757213733971243,
+      "train_seconds": 565.6856713000452,
+      "n_train": 300000,
+      "context_mode": "char_lstm",
+      "delta_vs_bigram": -0.6027018656369432
+    }
+  ],
+  "hybrid_minus_gria_bpc": null,
+  "char_lstm_minus_hybrid_bpc": null,
+  "elapsed_s": 881.2341258999659
+}

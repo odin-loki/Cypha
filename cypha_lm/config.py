@@ -30,7 +30,7 @@ class CyphaLMConfig:
 
     # Training
     context_length: int = 256
-    context_mode: str = "full"  # full | ssm_only | gria_ngram | hybrid_gria_lstm | ...
+    context_mode: str = "full"  # full | ssm_only | gria_ngram | hybrid_gria_lstm | char_lstm | ...
     ngram_context: int = 2  # previous token embeds to concat (gria_ngram / ablation_no_ssm)
     train_epochs: int = 1  # multi-pass over corpus
     view_schedule: str = "same_order"  # preset name or JSON list of view transforms

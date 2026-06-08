@@ -131,7 +131,7 @@ class CyphaLM:
         self._current_view_id = 0
         self._current_view_slot = 0
         self._hybrid_blend_logit = float(config.hybrid_blend_logit)
-        if config.context_mode == "hybrid_gria_lstm":
+        if config.context_mode in ("hybrid_gria_lstm", "char_lstm"):
             self.lstm_head = CharLSTMHead(
                 config.vocab_size,
                 int(config.lstm_hidden),
@@ -229,6 +229,30 @@ class CyphaLM:
     def _forward_context(self, token_id: int, update_dif: bool = False) -> dict[str, Any]:
         xp = self._backend.xp
         mode = self.config.context_mode
+        if mode == "char_lstm":
+            assert self.lstm_head is not None and self._lstm_h is not None and self._lstm_c is not None
+            log_l, self._lstm_h, self._lstm_c = self.lstm_head.forward(
+                int(token_id), self._lstm_h, self._lstm_c
+            )
+            log_probs = np.asarray(log_l, dtype=np.float64)
+            self._last_epistemic = 0.0
+            self._last_aleatoric = 0.0
+            return {
+                "log_probs": log_probs,
+                "log_probs_gria": None,
+                "log_probs_lstm": log_l,
+                "v": xp.zeros(self.config.field_dim, dtype=xp.float64),
+                "field_x": xp.zeros(self.config.field_dim, dtype=xp.float64),
+                "ctx": xp.zeros(self.ssm.context_dim, dtype=xp.float64),
+                "dif_out": {
+                    "mean": xp.zeros(self.config.field_dim, dtype=xp.float64),
+                    "epistemic_var": 0.0,
+                    "aleatoric_var": 0.0,
+                    "routing_probs": np.array([], dtype=np.float64),
+                    "active_experts": 0,
+                },
+                "embedding": xp.zeros(self.config.d_embed, dtype=xp.float64),
+            }
         e = self.embed.embed(token_id)
         self._record_embedding(e)
         if mode == "ablation_no_ssm":
@@ -352,6 +376,21 @@ class CyphaLM:
         self._bptt_buffer.clear()
 
     def train_step(self, token_id: int, next_token_id: int, *, gria_lr: float | None = None) -> dict[str, Any]:
+        if self.config.context_mode == "char_lstm":
+            assert self.lstm_head is not None
+            fwd = self._forward_context(token_id, update_dif=False)
+            nxt = int(next_token_id)
+            log_probs = fwd["log_probs"]
+            loss = float(-log_probs[nxt])
+            self.lstm_head.backward(nxt, float(self.config.lstm_lr))
+            self._token_counts[nxt] += 1.0
+            return {
+                "loss": loss,
+                "epistemic_var": 0.0,
+                "aleatoric_var": 0.0,
+                "active_experts": 0,
+                "alpha_gria": 0.0,
+            }
         fwd = self._forward_context(token_id, update_dif=False)
         v = fwd["v"]
         field_x = fwd["field_x"]

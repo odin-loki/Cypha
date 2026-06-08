@@ -6,6 +6,19 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased] — 2026-06-08 char_lstm mode + Phase 2 Hebbian
+
+### Added
+- **`context_mode=char_lstm`** — LSTM-only path in `CyphaLM` (C1 model-class).
+- **`cyphalm_hebbian_phase2_sweep.py`** — Cypha Tests 2C sparse Hebbian toggle.
+- **`docs/CYPHA_TESTS_PHASE2.md`** — Phase 2 experiment map (2A–2C).
+
+### Changed
+- Hybrid sweep supports `--cells` filter; third cell `char_lstm`.
+- **Char-LSTM @ 300k:** **2.876 BPC** (≈ hybrid 2.873); Hebbian SSM **neutral @ 40k**.
+
+---
+
 ## [Unreleased] — 2026-06-08 char 1A + D04 refresh
 
 ### Added

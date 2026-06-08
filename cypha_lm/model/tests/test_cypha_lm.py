@@ -268,6 +268,28 @@ def test_ngram_gated_forward() -> None:
     assert np.isfinite(out["loss"])
 
 
+def test_char_lstm_mode_forward() -> None:
+    cfg = CyphaLMConfig(
+        vocab_size=64,
+        d_embed=64,
+        field_dim=32,
+        d_state=16,
+        ssm_layers=1,
+        max_experts=8,
+        seed=42,
+        device="cpu",
+        context_mode="char_lstm",
+        lstm_hidden=32,
+    )
+    model = CyphaLM(cfg)
+    assert model.lstm_head is not None
+    out = model.train_step(1, 2)
+    assert np.isfinite(out["loss"])
+    pred = model.predict_next(3)
+    assert pred["log_probs"].shape == (cfg.vocab_size,)
+    assert np.all(np.isfinite(pred["log_probs"]))
+
+
 def test_hybrid_gria_lstm_forward() -> None:
     cfg = CyphaLMConfig(
         vocab_size=64,

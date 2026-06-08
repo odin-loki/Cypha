@@ -13,6 +13,7 @@
 | GRIA stack (`gria_ngram`) | 3.838 | 3.965 | +0.27 / +0.33 |
 | Char-LSTM baseline | 2.979 | 3.047 | −0.50 / −0.59 |
 | **Hybrid (`hybrid_gria_lstm`)** | **2.873** | **2.993** (bench) / **2.859** (sweep) | **−0.61 / −0.64** |
+| **Char-LSTM in-package (`char_lstm`)** | **2.876** | — | **−0.60** |
 
 Blend learns ~**99.6% LSTM**. Cypha Tests **1A passes @ char shuffle** (+4.54 BPC @ 300k); block shuffle remains flat.
 
@@ -28,8 +29,8 @@ Char-LSTM beat the GRIA-only CyphaLM stack by **~0.74 BPC @ 300k** while also be
 
 | ID | Description | Verdict |
 |----|-------------|---------|
-| **C1** | Char-LSTM head only (drop GRIA) | Not shipped; hybrid subsumes |
-| **C2** | Dual head GRIA + LSTM with online blend | **Winner** — default profile |
+| **C1** | Char-LSTM head only (drop GRIA) | **Shipped** — `char_lstm` @ 300k **2.876** ≈ hybrid |
+| **C2** | Dual head GRIA + LSTM with online blend | **Default profile** |
 | **C3** | LSTM on embed history → GRIA | Not evaluated; C2 sufficient |
 | **C4** | Promote bench LSTM into `cypha_lm` | **Done** — `char_lstm_head.py` |
 
@@ -76,9 +77,10 @@ Profiles: `cyphalm_d17_wikitext.json`, `cyphalm_d04_gutenberg.json`, `cyphalm_ll
 **Ship hybrid as default.** GRIA-only path retained for SSM ablation / long-range probes.
 
 Optional future work:
-- `context_mode=char_lstm` (LSTM-only, no GRIA path)
+- **`context_mode=char_lstm`** — LSTM-only shipped; bench via hybrid sweep `--cells char_lstm`
 - C3 embed-LSTM fusion before GRIA
 - Per-token blend weights
+- **Cypha Tests Phase 2** (Hebbian) — see [`CYPHA_TESTS_PHASE2.md`](CYPHA_TESTS_PHASE2.md)
 
 ---
 

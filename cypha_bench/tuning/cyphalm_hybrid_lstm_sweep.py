@@ -28,6 +28,7 @@ _OUT = _REPO / "cypha_bench" / "config" / "cyphalm_hybrid_lstm_sweep.json"
 CELLS = [
     {"id": "gria_ngram", "context_mode": "gria_ngram"},
     {"id": "hybrid_gria_lstm", "context_mode": "hybrid_gria_lstm"},
+    {"id": "char_lstm", "context_mode": "char_lstm"},
 ]
 
 
@@ -72,6 +73,11 @@ def main() -> int:
         default=None,
         help="Training corpus (default: wikitext for d17, gutenberg for d04)",
     )
+    ap.add_argument(
+        "--cells",
+        default=None,
+        help="Comma-separated cell ids (default: all)",
+    )
     ap.add_argument("--fast", action="store_true")
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--out", type=Path, default=None)
@@ -92,7 +98,13 @@ def main() -> int:
 
     rows: list[dict[str, Any]] = []
     t0 = time.perf_counter()
-    for cell in CELLS:
+    cell_list = CELLS
+    if args.cells:
+        wanted = {c.strip() for c in args.cells.split(",") if c.strip()}
+        cell_list = [c for c in CELLS if c["id"] in wanted]
+        if not cell_list:
+            raise SystemExit(f"No matching cells in {wanted}")
+    for cell in cell_list:
         print(f"  cell={cell['id']} n_train={n_train}", flush=True)
         row = _run_cell(corpus, cell=cell, n_train=n_train, n_eval=args.n_eval, profile=args.profile)
         row["delta_vs_bigram"] = row["held_out_bpc"] - bigram
@@ -102,8 +114,9 @@ def main() -> int:
     char_lstm = char_lstm_baseline_bpc(
         train_slice, corpus.eval_ids, corpus.vocab_size, n_train_steps=len(train_slice)
     )
-    gria = next(r for r in rows if r["cell_id"] == "gria_ngram")
+    gria = next((r for r in rows if r["cell_id"] == "gria_ngram"), None)
     hybrid = next((r for r in rows if r["cell_id"] == "hybrid_gria_lstm"), None)
+    char_only = next((r for r in rows if r["cell_id"] == "char_lstm"), None)
     out = {
         "corpus": corpus.source,
         "n_train": n_train,
@@ -112,7 +125,12 @@ def main() -> int:
         "char_lstm_baseline_bpc": float(char_lstm),
         "cells": rows,
         "hybrid_minus_gria_bpc": (
-            float(gria["held_out_bpc"] - hybrid["held_out_bpc"]) if hybrid else None
+            float(gria["held_out_bpc"] - hybrid["held_out_bpc"]) if gria and hybrid else None
+        ),
+        "char_lstm_minus_hybrid_bpc": (
+            float(char_only["held_out_bpc"] - hybrid["held_out_bpc"])
+            if char_only and hybrid
+            else None
         ),
         "elapsed_s": time.perf_counter() - t0,
     }

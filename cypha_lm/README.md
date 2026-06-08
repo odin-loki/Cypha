@@ -33,6 +33,7 @@ CyphaDIF is not a separate bolt-on — it routes and predicts in the expert fiel
 | `full` | SSM context + CyphaDIF field (default) |
 | `gria_ngram` | SSM projection + last *K* Izaac embeddings (n-gram-like shortcut) |
 | `hybrid_gria_lstm` | GRIA path + char-LSTM head; online blend (best @ D17 300k) |
+| `char_lstm` | Char-LSTM head only (C1 baseline inside CyphaLM package) |
 | `ssm_only` | SSM path; DIF contribution zeroed |
 | `ablation_no_dif` | Field mean only; routing ablated |
 | `ablation_no_ssm` | N-gram embed stack only; SSM zeroed |
