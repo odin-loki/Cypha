@@ -7,6 +7,34 @@ Platform-specific setup scripts for Cypha.
 | [`install_windows.ps1`](install_windows.ps1) | Windows (PowerShell) | Python venv, dependencies, optional MSVC native build + windeployqt |
 | [`install_linux.sh`](install_linux.sh) | Linux / WSL (bash) | Python venv, dependencies, optional GCC/CMake native build + CTest gate |
 
+| [`install_release_linux.sh`](install_release_linux.sh) | Linux tarball | Install prebuilt `bin/` from a GitHub Release bundle |
+| [`install_release_windows.ps1`](install_release_windows.ps1) | Windows zip | Install prebuilt `bin/` from a GitHub Release bundle |
+
+---
+
+## GitHub Releases (prebuilt native)
+
+Tagged releases (`v*`) build **Linux** and **Windows** installer archives via [`.github/workflows/release.yml`](../.github/workflows/release.yml):
+
+| Asset | Platform |
+|-------|----------|
+| `cypha-<ver>-linux-x86_64.tar.gz` | Linux x86_64 (glibc + OpenMP) |
+| `cypha-<ver>-windows-x86_64.zip` | Windows x86_64 (MinGW PE, static libgcc/libstdc++) |
+
+```bash
+# Linux
+tar xzf cypha-1.1.0-linux-x86_64.tar.gz && cd cypha-1.1.0-linux-x86_64 && bash install.sh
+```
+
+```powershell
+# Windows
+Expand-Archive cypha-1.1.0-windows-x86_64.zip
+cd cypha-1.1.0-windows-x86_64
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+Full Python Studio: use the source installers below (clone repo).
+
 ---
 
 ## Quick start

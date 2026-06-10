@@ -1,0 +1,134 @@
+# Build Linux + Windows (MinGW cross) installer archives and publish a GitHub Release on tag push.
+#
+# Create a release:
+#   git tag v1.1.0
+#   git push origin v1.1.0
+#
+# Artifacts:
+#   cypha-<version>-linux-x86_64.tar.gz
+#   cypha-<version>-windows-x86_64.zip
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CMAKE_BUILD_TYPE: Release
+
+jobs:
+  build-linux:
+    name: Linux x86_64 package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ libsqlite3-dev
+
+      - name: Configure + build
+        run: |
+          cmake -S native -B native/build-release \
+            -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
+            -DCYPHA_BUILD_QT=OFF \
+            -G Ninja
+          cmake --build native/build-release --parallel
+
+      - name: Smoke CTest (CyphaLM parity suite)
+        run: ctest --test-dir native/build-release -R native_cyphalm_parity_suite --output-on-failure
+
+      - name: Package tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash scripts/package_release_linux.sh "$VERSION" native/build-release dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: dist/cypha-*-linux-x86_64.tar.gz
+
+  build-windows:
+    name: Windows x86_64 package (MinGW cross)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW + CMake
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++-mingw-w64-x86-64 zip
+
+      - name: Configure + build (Windows PE)
+        run: |
+          cmake -S native -B native/build-mingw-release \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/native/toolchains/mingw-w64-x86_64.cmake" \
+            -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
+            -G Ninja
+          cmake --build native/build-mingw-release --parallel
+
+      - name: Package zip
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash scripts/package_release_windows.sh "$VERSION" native/build-mingw-release dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: dist/cypha-*-windows-x86_64.zip
+
+  publish:
+    name: Publish GitHub Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find dist -type f | sort
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/cypha-*-linux-x86_64.tar.gz
+            dist/cypha-*-windows-x86_64.zip
+          body: |
+            ## Cypha native installer bundles
+
+            Prebuilt **native C++** tools (CyphaDIF REST + CyphaLM bench/parity). Python Studio is not included — clone the repo and run `install/install_linux.sh` or `install/install_windows.ps1` for the full Python stack.
+
+            ### Linux (`cypha-*-linux-x86_64.tar.gz`)
+
+            ```bash
+            tar xzf cypha-*-linux-x86_64.tar.gz
+            cd cypha-*-linux-x86_64
+            bash install.sh
+            ```
+
+            Requires: `libgomp1`, glibc 2.31+.
+
+            ### Windows (`cypha-*-windows-x86_64.zip`)
+
+            ```powershell
+            Expand-Archive cypha-*-windows-x86_64.zip
+            cd cypha-*-windows-x86_64
+            powershell -ExecutionPolicy Bypass -File install.ps1
+            ```
+
+            MinGW PE binaries with static libgcc/libstdc++ (no separate MinGW runtime install).
+
+            ### Included binaries
+
+            - `cypha_rest` — native REST server (classifier + `/lm/*`, `/generate`)
+            - `cyphalm_bench_native` — WikiText BPC bench CLI
+            - `cyphalm_parity`, `cyphalm_checkpoint_parity` — parity smoke tools
+            - `registry_register`, `create_model_smoke`

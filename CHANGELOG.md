@@ -6,6 +6,20 @@ milestone or a significant self-contained change.
 
 ---
 
+## [1.1.0] — 2026-05-31 · CyphaLM native release
+
+### Added
+- **`cypha_lm_native`** — C++ CyphaLM Tiers 0–2–4 (hybrid **2.892 BPC @ 300k** vs Python 2.873).
+- Native REST LM routes in **`cypha_rest`**: `/lm/load`, `/lm/metrics`, `/lm/predict_next`, `/generate`, `/generate/stream`.
+- Checkpoint save/load with DIF + SSM state; Python GRIA import via `load_from_full_w`.
+- GitHub Release workflow: Linux `.tar.gz` + Windows `.zip` installer bundles (`scripts/package_release_*.sh`).
+
+### Installers
+- **Linux:** `cypha-1.1.0-linux-x86_64.tar.gz` → `bash install.sh`
+- **Windows:** `cypha-1.1.0-windows-x86_64.zip` → `powershell -File install.ps1`
+
+---
+
 ## [Unreleased] — 2026-06-10 CyphaLM native Tier 0–2–4 integration
 
 ### Added
@@ -274,7 +288,8 @@ First committed state of the project. All six native port milestones signed off:
 
 ---
 
-[Unreleased]: https://github.com/odin-loki/Cypha/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/odin-loki/Cypha/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/odin-loki/Cypha/releases/tag/v1.1.0
 [1.0.0]: https://github.com/odin-loki/Cypha/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/odin-loki/Cypha/compare/v0.1.0...v0.9.0
 [0.1.0]: https://github.com/odin-loki/Cypha/releases/tag/v0.1.0
