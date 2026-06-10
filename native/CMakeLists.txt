@@ -55,6 +55,40 @@ if(CYPHA_ENABLE_CUDA)
   set_target_properties(cypha_core PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 endif()
 
+file(GLOB CYPHALM_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/*.cpp")
+if(NOT CYPHALM_SOURCES)
+  message(FATAL_ERROR "cypha_lm_native: no sources under native/src/cyphalm/")
+endif()
+add_library(cypha_lm_native STATIC ${CYPHALM_SOURCES})
+
+target_include_directories(cypha_lm_native PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+)
+
+target_link_libraries(cypha_lm_native PUBLIC cypha_core)
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(cypha_lm_native PUBLIC OpenMP::OpenMP_CXX)
+  message(STATUS "cypha_lm_native: OpenMP enabled")
+else()
+  message(STATUS "cypha_lm_native: OpenMP not found; batch uses std::thread")
+endif()
+
+if(MSVC)
+  target_compile_options(cypha_lm_native PRIVATE /W4 /permissive-)
+else()
+  target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_executable(cyphalm_model_parity tools/cyphalm_model_parity.cpp)
+target_link_libraries(cyphalm_model_parity PRIVATE cypha_lm_native)
+
+add_executable(cyphalm_bench_native tools/cyphalm_bench_native.cpp)
+target_link_libraries(cyphalm_bench_native PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_bench_native)
+
 target_include_directories(cypha_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
@@ -63,6 +97,9 @@ target_include_directories(cypha_core PUBLIC
 target_compile_definitions(cypha_core PRIVATE
   CYPHA_ACCEL_GPU_MIN_BATCH_ROWS=${CYPHA_ACCEL_GPU_MIN_BATCH_ROWS}
 )
+
+add_executable(cyphalm_ssm_parity tools/cyphalm_ssm_parity.cpp)
+target_link_libraries(cyphalm_ssm_parity PRIVATE cypha_lm_native)
 
 add_executable(cypha_parity tools/parity_main.cpp)
 target_link_libraries(cypha_parity PRIVATE cypha_core)
@@ -88,8 +125,8 @@ target_link_libraries(csv_ingest_parity PRIVATE cypha_core)
 add_executable(preprocess_train_classify_parity tools/preprocess_train_classify_parity.cpp)
 target_link_libraries(preprocess_train_classify_parity PRIVATE cypha_core)
 
-add_executable(cypha_rest tools/cypha_rest.cpp)
-target_link_libraries(cypha_rest PRIVATE cypha_core)
+add_executable(cypha_rest tools/cypha_rest.cpp tools/cyphalm_rest_routes.cpp)
+target_link_libraries(cypha_rest PRIVATE cypha_core cypha_lm_native)
 
 add_executable(registry_register tools/registry_register.cpp)
 target_link_libraries(registry_register PRIVATE cypha_core)
@@ -133,12 +170,25 @@ target_link_libraries(cuda_smoke PRIVATE cypha_core)
 add_executable(create_model_smoke tools/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
 
+add_executable(cyphalm_hebbian_parity tools/cyphalm_hebbian_parity.cpp)
+target_link_libraries(cyphalm_hebbian_parity PRIVATE cypha_lm_native)
+
+add_executable(cyphalm_char_lstm_parity tools/cyphalm_char_lstm_parity.cpp)
+target_link_libraries(cyphalm_char_lstm_parity PRIVATE cypha_lm_native)
+
+add_executable(cyphalm_checkpoint_parity tools/cyphalm_checkpoint_parity.cpp)
+target_link_libraries(cyphalm_checkpoint_parity PRIVATE cypha_lm_native)
+
+add_executable(cyphalm_parity tools/cyphalm_parity.cpp)
+target_link_libraries(cyphalm_parity PRIVATE cypha_lm_native)
+
 if(WIN32)
   target_link_libraries(cypha_rest PRIVATE ws2_32)
 endif()
 
 set(
   _cypha_mingw_exe_targets
+  cyphalm_ssm_parity
   cypha_parity
   batch_llr_parity
   memory_train_parity
@@ -162,6 +212,12 @@ set(
   generation_parity
   cuda_smoke
   create_model_smoke
+  cyphalm_hebbian_parity
+  cyphalm_char_lstm_parity
+  cyphalm_checkpoint_parity
+  cyphalm_model_parity
+  cyphalm_bench_native
+  cyphalm_parity
 )
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
   cypha_mingw_apply_exe_link_options("${_cypha_t}")
@@ -200,7 +256,7 @@ elseif(Python3_Interpreter_FOUND AND CYPHA_FETCH_SQLITE3_AMALGAMATION)
 endif()
 
 set(_cypha_experiment_ddl_sql "${CMAKE_CURRENT_BINARY_DIR}/experiment_ddl.sql")
-if(Python3_Interpreter_FOUND AND _cypha_exp_sqlite_link)
+if(CYPHA_BUILD_EXPERIMENT_DB AND Python3_Interpreter_FOUND AND _cypha_exp_sqlite_link)
   execute_process(
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/../scripts/export_experiment_schema_sql.py"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
@@ -268,8 +324,18 @@ if(MSVC)
   target_compile_options(mke_train_step_parity PRIVATE /W4 /permissive-)
   target_compile_options(generation_parity PRIVATE /W4 /permissive-)
   target_compile_options(cuda_smoke PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_lm_native PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_hebbian_parity PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_model_parity PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_char_lstm_parity PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_checkpoint_parity PRIVATE /W4 /permissive-)
 else()
   target_compile_options(cypha_core PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_hebbian_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_model_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_bench_native PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(memory_train_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -292,6 +358,8 @@ else()
   target_compile_options(mke_train_step_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(generation_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_char_lstm_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_checkpoint_parity PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Parity fixture paths: MinGW .exe run on Windows cannot open /mnt/c/... (WSL cross-build).
@@ -427,8 +495,50 @@ add_test(
 )
 
 add_test(
+  NAME native_cyphalm_char_lstm
+  COMMAND "$<TARGET_FILE:cyphalm_char_lstm_parity>"
+    "${_parity_fix}/cyphalm_char_lstm/sidecar.json"
+)
+if(NOT EXISTS "${_parity_fix}/cyphalm_char_lstm/sidecar.json")
+  set_tests_properties(native_cyphalm_char_lstm PROPERTIES DISABLED TRUE)
+endif()
+
+add_test(
+  NAME native_cyphalm_model_parity
+  COMMAND "$<TARGET_FILE:cyphalm_model_parity>"
+)
+
+add_test(
+  NAME native_cyphalm_checkpoint_parity
+  COMMAND "$<TARGET_FILE:cyphalm_checkpoint_parity>"
+    "${_parity_fix}/cyphalm_checkpoint/char_lstm/sidecar.json"
+)
+if(NOT EXISTS "${_parity_fix}/cyphalm_checkpoint/char_lstm/sidecar.json")
+  set_tests_properties(native_cyphalm_checkpoint_parity PROPERTIES DISABLED TRUE)
+endif()
+
+add_test(
   NAME native_create_model
   COMMAND "$<TARGET_FILE:create_model_smoke>"
+)
+
+add_test(
+  NAME native_cyphalm_hebbian
+  COMMAND "$<TARGET_FILE:cyphalm_hebbian_parity>"
+)
+
+add_test(NAME native_cyphalm_ssm COMMAND "$<TARGET_FILE:cyphalm_ssm_parity>")
+
+if(EXISTS "${_parity_fix}/cyphalm_ssm/sidecar.json")
+  add_test(
+    NAME native_cyphalm_ssm_fixture
+    COMMAND "$<TARGET_FILE:cyphalm_parity>" "${_parity_fix}/cyphalm_ssm/sidecar.json"
+  )
+endif()
+
+add_test(
+  NAME native_cyphalm_parity_suite
+  COMMAND "$<TARGET_FILE:cyphalm_parity>"
 )
 
 add_test(

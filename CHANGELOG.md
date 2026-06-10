@@ -6,6 +6,19 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased] — 2026-06-10 CyphaLM native Tier 0–2–4 integration
+
+### Added
+- **`cypha_lm_native`** static library — `native/src/cyphalm/*.cpp` (CMake `GLOB`), OpenMP optional.
+- **`cyphalm_bench_native`** — BPC bench CLI (`--mode`, `--profile d17|d04`, `--n-train`, `--n-eval`, `--threads`).
+- **`cyphalm_parity`** — meta-runner for native CyphaLM parity tools.
+- **`scripts/generate_cyphalm_native_fixtures.py`** — one-time Python → `parity_fixtures/cyphalm_*/sidecar.json`.
+- **`tests/test_cyphalm_native_parity.py`** — subprocess parity (skip if binary missing).
+- **`native/include/cypha/cyphalm/cyphalm_config.hpp`** — unified config + bench mode mapping.
+- PORT_CONTRACT **§4b** and `CYPHALM_NATIVE_UPGRADE_MASTER.md` integration / build notes.
+
+---
+
 ## [Unreleased] — 2026-06-08 Branch A frozen embeddings
 
 ### Added

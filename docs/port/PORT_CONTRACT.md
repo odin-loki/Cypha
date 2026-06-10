@@ -107,9 +107,11 @@ For each loaded class label (same strings as routing / `all_scores` keys), `mu` 
 
 Qt or C++ clients should treat these JSON shapes as **stable** for v1; add fields additively rather than renaming.
 
-## 4. CyphaLM REST (FastAPI only — not in native `cypha_rest`)
+## 4. CyphaLM REST
 
-CyphaStudio FastAPI exposes **language-model** routes when a `CyphaLM` checkpoint is loaded via `app.state.lm_engine` or `CYPHA_LM_CHECKPOINT`. These are **Python-only**; native `cypha_rest` has no LM equivalent.
+**FastAPI (CyphaStudio):** language-model routes when `lm_engine` or `CYPHALM_LM_CHECKPOINT` is set — see table below.
+
+**Native `cypha_rest`:** same LM surface (`/lm/load`, `/lm/metrics`, `/lm/predict_next`, `/generate`) when built with `cypha_lm_native`. Classifier routes unchanged.
 
 | Method | Path | Role |
 |--------|------|------|
@@ -127,7 +129,74 @@ CyphaStudio FastAPI exposes **language-model** routes when a `CyphaLM` checkpoin
 
 See [`cypha_studio/README.md`](../../cypha_studio/README.md), [`cypha_lm/README.md`](../../cypha_lm/README.md), and [`examples/README.md`](../../examples/README.md).
 
-## 4. Parity fixtures (machine-checked)
+## 4b. Native CyphaLM (C++ — not in `cypha_rest`)
+
+Native char-LM lives in **`native/`** as **`cypha_lm_native`** (Tiers 0–2–4). Sources: `native/include/cypha/cyphalm/`, `native/src/cyphalm/`. Build notes: [`docs/native/CYPHALM_NATIVE_BUILD.md`](../native/CYPHALM_NATIVE_BUILD.md); tracker: [`CYPHALM_NATIVE_UPGRADE_MASTER.md`](../native/CYPHALM_NATIVE_UPGRADE_MASTER.md).
+
+### Reference parity rule
+
+**Python `CyphaLM` (`cypha_lm/`) remains the golden reference** for numerics, BPC targets, and checkpoint layout until native parity is explicitly locked in CI. Native tools may PASS component fixtures (char LSTM, SSM step, Hebbian hooks, model scaffold) without claiming full end-to-end BPC equivalence to a trained Python checkpoint. Do not treat native BPC from `cyphalm_bench_native` as authoritative for product decisions until checkpoint parity is recorded in the master tracker.
+
+Fixtures are generated once from Python: `python scripts/generate_cyphalm_native_fixtures.py` → `parity_fixtures/cyphalm_*/sidecar.json`.
+
+### `cyphalm_bench_native` — BPC bench CLI
+
+Trains and evaluates `CyphaLMModel` on a corpus profile, prints **JSON** (BPC, mode, thread count, corpus source) to stdout. Falls back to a deterministic synthetic corpus when bench data files are unavailable.
+
+```
+usage: cyphalm_bench_native --mode MODE --profile PROFILE
+       [--n-train N] [--n-eval M] [--threads T]
+```
+
+| Flag | Values | Default | Role |
+|------|--------|---------|------|
+| `--mode` | see table below | `hybrid` | Selects `ContextMode` + tier flags via `apply_bench_mode` |
+| `--profile` | `d17`, `d04` | `d17` | Corpus profile (`d17` → vocab 256; `d04` → vocab 128) |
+| `--n-train` | int | `40000` | Training tokens |
+| `--n-eval` | int | `2000` | Eval tokens for BPC |
+| `--threads` | int | `0` | OpenMP / worker count (`0` = hardware default) |
+
+**Bench modes** (`--mode` → native `ContextMode` / flags):
+
+| `--mode` | `ContextMode` | Tier flags enabled |
+|----------|---------------|-------------------|
+| `char_lstm` | `CharLstm` | Char LSTM head only |
+| `ssm` | `SsmGria` | CellAI SSM → GRIA |
+| `hybrid` | `Hybrid` | GRIA + CharLSTM log-prob blend |
+| `ssm_gria` | `GriaNgram` | SSM field + n-gram embed history → GRIA |
+| `context_bank` | `GriaNgram` | + `use_context_bank` (linear attention ring, K=512) |
+| `spectral` | `SsmGria` | + `use_spectral_pde` (FFT circulant SSM step) |
+
+Example (smoke, synthetic corpus):
+
+```powershell
+cmake --build C:\Temp\cypha_native_build --target cyphalm_bench_native
+C:\Temp\cypha_native_build\cyphalm_bench_native.exe --mode hybrid --profile d17 --n-train 500 --n-eval 100 --threads 4
+```
+
+Example output keys: `mode`, `profile`, `context_mode`, `bpc`, `threads`, `corpus`, `synthetic`, `vocab_size`.
+
+### Parity and bench binaries
+
+| Binary | Role |
+|--------|------|
+| **`cyphalm_bench_native`** | BPC sweep CLI (above). |
+| **`cyphalm_parity`** | Meta-runner: `cyphalm_ssm_parity`, `cyphalm_model_parity`, `cyphalm_hebbian_parity`, and `cyphalm_char_lstm_parity` when `parity_fixtures/cyphalm_*/sidecar.json` exist. |
+| **`cyphalm_char_lstm_parity`** | Numeric check vs `parity_fixtures/cyphalm_char_lstm/sidecar.json`. |
+| **`cyphalm_ssm_parity`** | One-step SSM vs Python-exported golden (`cyphalm_ssm_golden.inc`). |
+| **`cyphalm_model_parity`** | 10-token forward/train scaffold for `CyphaLMModel` modes. |
+| **`cyphalm_hebbian_parity`** | Encoder + sparse SSM + graph diffuse vs Python-derived goldens. |
+| **`cyphalm_checkpoint_parity`** | Save/load roundtrip + Python checkpoint BPC lock (char_lstm + hybrid GRIA `W`). |
+
+**CTest:** `native_cyphalm_char_lstm`, `native_cyphalm_ssm`, `native_cyphalm_model_parity`, `native_cyphalm_hebbian`, `native_cyphalm_checkpoint_parity`, `native_cyphalm_parity_suite`.
+
+**Pytest:** `tests/test_cyphalm_native_parity.py` — skip if binaries missing; env **`CYPHALM_PARITY_BIN`**, **`CYPHALM_BENCH_NATIVE_BIN`**, **`CYPHALM_CHAR_LSTM_PARITY_BIN`**.
+
+**Checkpoint format:** v2 **`CyphaLM.save()`** / **`CyphaLMModel::save()`** JSON + NPZ; native loads Python full-rank GRIA via **`load_from_full_w`**. Native roundtrip also persists **`dif`** (NIG expert states) and **`ssm`** (h/s layer states). Fixtures: `python scripts/generate_cyphalm_checkpoint_fixture.py` and `generate_cyphalm_hybrid_checkpoint_fixture.py`.
+
+**Native REST LM:** `cypha_rest` exposes **`POST /lm/load`**, **`GET /lm/metrics`**, **`POST /lm/predict_next`**, **`POST /generate`**, **`POST /generate/stream`** (see master tracker). Startup: **`--cyphalm-checkpoint`** or env **`CYPHALM_CHECKPOINT`**. `/health` reports `lm_loaded`.
+
+## 5. Parity fixtures (machine-checked)
 
 - Directory: `parity_fixtures/`
 - **`manifest.json`**: model geometry, seeds, label order.

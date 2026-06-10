@@ -13,6 +13,7 @@
 //        fills `regression_val` and `uncertainty` (mixture of expert EMAs; see PORT_CONTRACT §3).
 //        Optional top-level `mke` object in that JSON → RFF + expert RLS + router `dif_train_step_vector` on
 //        `POST /update` when the body includes numeric `regression_y` (see PORT_CONTRACT §3).
+//        Optional `--cyphalm-checkpoint base` or env `CYPHALM_CHECKPOINT` → auto-load CyphaLM at startup.
 
 #include <algorithm>
 #include <chrono>
@@ -41,6 +42,7 @@
 #include "cypha/regression_stub.hpp"
 #include "cypha/registry.hpp"
 #include "cypha/train_step_vector.hpp"
+#include "cypha/cyphalm/cyphalm_rest.hpp"
 
 namespace fs = std::filesystem;
 
@@ -799,6 +801,7 @@ int main(int argc, char** argv) {
   std::string ff_json;
   std::string train_hparams_path;
   std::string regression_json_path;
+  std::string cyphalm_checkpoint_path;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     if (a == "--listen" && i + 1 < argc) {
@@ -822,6 +825,13 @@ int main(int argc, char** argv) {
       train_hparams_path = argv[++i];
     } else if (a == "--regression-json" && i + 1 < argc) {
       regression_json_path = argv[++i];
+    } else if (a == "--cyphalm-checkpoint" && i + 1 < argc) {
+      cyphalm_checkpoint_path = argv[++i];
+    }
+  }
+  if (cyphalm_checkpoint_path.empty()) {
+    if (const char* env_ckpt = std::getenv("CYPHALM_CHECKPOINT")) {
+      cyphalm_checkpoint_path = env_ckpt;
     }
   }
 
@@ -830,7 +840,8 @@ int main(int argc, char** argv) {
   if (cypha_path.empty()) {
     std::cerr << "usage: cypha_rest --listen host:port --cypha model.cypha [--f-field-json f_field.json] "
                  "[--pre preprocessor.json] [--train-hparams train_hparams.json] "
-                 "[--regression-json regression_head.json] [--registry models_root]  (POST /register needs --registry)\n";
+                 "[--regression-json regression_head.json] [--cyphalm-checkpoint ckpt_base] "
+                 "[--registry models_root]  (POST /register needs --registry)\n";
     return 2;
   }
   {
@@ -847,6 +858,7 @@ int main(int argc, char** argv) {
     nlohmann::json j;
     j["status"] = "ok";
     j["model"] = (g_model) ? "CyphaDIF" : "none";
+    j["lm_loaded"] = cypha::cyphalm::cyphalm_rest_lm_loaded();
     j["uptime"] = std::chrono::duration<double>(std::chrono::steady_clock::now() - g_started).count();
     j["n_predictions"] = g_predictions;
     res.set_content(j.dump(), "application/json");
@@ -1147,6 +1159,18 @@ int main(int argc, char** argv) {
     out["classes"] = classes;
     res.set_content(out.dump(), "application/json");
   });
+
+  cypha::cyphalm::register_cyphalm_rest_routes(svr);
+
+  if (!cyphalm_checkpoint_path.empty()) {
+    try {
+      cypha::cyphalm::cyphalm_rest_lm_load(cyphalm_checkpoint_path);
+      std::cout << "CyphaLM loaded from " << cyphalm_checkpoint_path << "\n";
+    } catch (const std::exception& ex) {
+      std::cerr << "CyphaLM checkpoint load failed: " << ex.what() << "\n";
+      return 1;
+    }
+  }
 
   std::cout << "cypha_rest listening on http://" << listen << ":" << port << "\n";
   if (!svr.listen(listen.c_str(), port)) {

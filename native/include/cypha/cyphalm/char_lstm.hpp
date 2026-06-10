@@ -1,0 +1,88 @@
+#pragma once
+
+#include <cstdint>
+#include <vector>
+
+namespace cypha {
+namespace cyphalm {
+
+struct CharLSTMGrad {
+  std::vector<double> dE;
+  std::vector<double> dWx;
+  std::vector<double> dWh;
+  std::vector<double> db;
+  std::vector<double> dWy;
+  std::vector<double> dby;
+  std::vector<double> dh_prev;
+  std::vector<double> dc_prev;
+};
+
+struct CharLSTMCache {
+  int token_id{0};
+  std::vector<double> x;
+  std::vector<double> h;
+  std::vector<double> c;
+  std::vector<double> i;
+  std::vector<double> f;
+  std::vector<double> g;
+  std::vector<double> o;
+  std::vector<double> c_new;
+  std::vector<double> h_new;
+  std::vector<double> logits;
+  std::vector<double> probs;
+};
+
+/// Single-layer char LSTM head (online BPTT-1). Weight layout matches Python ``CharLSTMHead``.
+class CharLSTMHead {
+ public:
+  int vocab_size{256};
+  int hidden{128};
+
+  std::vector<double> E;    // vocab_size x hidden
+  std::vector<double> Wx;   // (4*hidden) x hidden
+  std::vector<double> Wh;   // (4*hidden) x hidden
+  std::vector<double> b;    // 4*hidden
+  std::vector<double> Wy;   // vocab_size x hidden
+  std::vector<double> by;   // vocab_size
+
+  CharLSTMHead() = default;
+  CharLSTMHead(int vocab_size_in, int hidden_in, std::uint64_t seed = 42);
+
+  /// Reset internal h/c (stateful online API).
+  void reset_state();
+
+  /// Stateful forward — updates internal h/c; returns log_probs.
+  std::vector<double> forward(int token_id);
+
+  /// Stateful backward (BPTT-1) with weight update.
+  void backward(int target_id, double lr);
+
+  void load_state(const std::vector<double>& E_in, const std::vector<double>& Wx_in,
+                  const std::vector<double>& Wh_in, const std::vector<double>& b_in,
+                  const std::vector<double>& Wy_in, const std::vector<double>& by_in);
+
+  /// External-state forward step (batch / parity).
+  void forward_step(int token_id, const double* h, const double* c, double* log_probs, std::vector<double>& h_out,
+                    std::vector<double>& c_out, CharLSTMCache* cache_out = nullptr) const;
+
+  CharLSTMGrad backward_step(const CharLSTMCache& cache, int target_id) const;
+
+  void apply_grads(const CharLSTMGrad& grads, double lr);
+
+  double train_step(int token_id, int target_id, std::vector<double>& h, std::vector<double>& c, double lr);
+
+ private:
+  std::vector<double> h_;
+  std::vector<double> c_;
+  CharLSTMCache cache_;
+  bool has_cache_{false};
+};
+
+using CharLSTM = CharLSTMHead;
+
+/// Vector blend helper for ``CyphaLMNative`` (returns sigmoid(blend_logit)).
+double blend_log_probs(const std::vector<double>& log_g, const std::vector<double>& log_l, double blend_logit,
+                       std::vector<double>& out);
+
+}  // namespace cyphalm
+}  // namespace cypha

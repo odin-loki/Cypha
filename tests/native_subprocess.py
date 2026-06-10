@@ -40,6 +40,7 @@ def _argv_for_wsl(str_argv: list[str]) -> list[str]:
 
 def _windows_exe_candidates(stem: str) -> list[Path]:
     bases = [
+        Path(r"C:\Temp\cypha_native_build6"),
         _ROOT / "native" / "build-mingw-w64",
         _ROOT / "native" / "build" / "Release",
         _ROOT / "native" / "build" / "Debug",
@@ -98,6 +99,7 @@ def run_native_executable(
     timeout: int = 60,
     env_override: str | None = None,
     extra_env: dict[str, str] | None = None,
+    cwd: str | Path | None = None,
 ) -> subprocess.CompletedProcess | None:
     """
     Run ``native/.../{stem}`` or ``{stem}.exe``.
@@ -108,21 +110,23 @@ def run_native_executable(
     """
     str_argv = [str(x) for x in argv]
     env = _merged_env(extra_env)
+    run_kw: dict = {
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "timeout": timeout,
+        "env": env,
+    }
+    if cwd is not None:
+        run_kw["cwd"] = str(cwd)
 
     if env_override:
         raw = os.environ.get(env_override, "").strip()
         if raw:
             p = Path(raw)
             if p.is_file():
-                return subprocess.run(
-                    [str(p), *str_argv],
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=timeout,
-                    env=env,
-                )
+                return subprocess.run([str(p), *str_argv], **run_kw)
 
     if sys.platform == "win32":
         # Prefer WSL ELF (e.g. native/build-wsl) when present: matches Linux CTest and avoids
@@ -134,38 +138,14 @@ def run_native_executable(
                     cmd = [wsl, "-e", win_path_to_wsl(elf), *_argv_for_wsl(str_argv)]
                 except ValueError:
                     continue
-                return subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=timeout + 30,
-                    env=env,
-                )
+                return subprocess.run(cmd, timeout=timeout + 30, **{k: v for k, v in run_kw.items() if k != "timeout"})
 
         for exe in _windows_exe_candidates(stem):
             if exe.is_file():
-                return subprocess.run(
-                    [str(exe), *str_argv],
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=timeout,
-                    env=env,
-                )
+                return subprocess.run([str(exe), *str_argv], **run_kw)
 
     else:
         for elf in _elf_candidates(stem):
-            return subprocess.run(
-                [str(elf), *str_argv],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout,
-                env=env,
-            )
+            return subprocess.run([str(elf), *str_argv], **run_kw)
 
     return None
