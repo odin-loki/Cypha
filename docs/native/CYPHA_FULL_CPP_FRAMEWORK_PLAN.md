@@ -2,7 +2,7 @@
 
 **Goal:** Python becomes prototyping-only; **all production runtime, bench, REST, and validation** runs in native C++.
 
-**Status:** **v2.5 complete — SHIPPED** ([`v2.2.3` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.3) — Linux + Windows installers published; CI green).
+**Status:** **v2.5 complete — SHIPPED** ([`v2.2.4` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.4) — Linux + Windows installers; **CI green** on `main`).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).  
@@ -14,8 +14,10 @@ Changelog: [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ```
 scripts/cypha_native_validate_all.ps1  → OK
-  52 CTests │ 155 pytest │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
+  52 CTests │ ~274 pytest (CI) │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
+
+GitHub Actions **CI #37+**: Linux CTest + pytest, MinGW PE smoke, optional GCC CUDA.
 
 Build: `C:\Temp\cypha_full_cpp_build`
 
@@ -29,7 +31,8 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Shipped (git)
 
-| **`v2.2.3`** tag | **Latest release** — Linux + Windows native installers on GitHub Releases |
+| **`v2.2.4`** tag | **Latest release** — CI green; portable checkpoint fixtures; Studio GUI import shims |
+| **`v2.2.3`** tag | Release packaging hardening — Linux + Windows native installers on GitHub Releases |
 | **`v2.2.0`** tag | Core framework release (236 files) |
 
 **Published:** `git push origin main --tags` ✅

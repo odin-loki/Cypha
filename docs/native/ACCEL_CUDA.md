@@ -36,6 +36,8 @@ cmake --build build-windows-msvc --config Release `
 
 **VS 2026 / Build Tools 18:** use preset `windows-vs2026-release` and `build-windows-vs2026` instead.
 
+**GitHub Actions (optional job):** if Visual Studio multi-config generators fail on `windows-latest`, CI falls back to **Ninja + VsDevShell** (`Enter-VsDevShell` then `cmake -G Ninja -DCYPHA_ENABLE_CUDA=ON`). See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) job `windows_cuda_msvc`.
+
 **Architecture flags:** set `-DCMAKE_CUDA_ARCHITECTURES` to your GPU SM version, e.g. `75` (Turing), `86` (Ampere), `89` (Ada). Default in `CMakeLists.txt` is **75** when unset.
 
 **Optional CMake cache:**

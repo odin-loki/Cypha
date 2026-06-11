@@ -6,11 +6,15 @@ milestone or a significant self-contained change.
 
 ---
 
-## [Unreleased]
+## [2.2.4] — 2026-06-11 · CI green (Linux CTest + pytest)
 
 ### Fixed
-- **Linux CI CTest:** CyphaLM checkpoint sidecars use portable relative `checkpoint.json` paths; `cyphalm_checkpoint_parity` resolves paths against the sidecar directory (fixes `native_cyphalm_checkpoint_parity` on ubuntu-latest).
-- **Linux CI pytest:** restore empty Studio GUI shim modules (`confidence_widget`, `dataset_widget`, …) as re-exports from `widgets.py`; extend CTest↔pytest registry; add bench/tune/diagnostics/SOM/GH infer subprocess tests; Qt shell `--help` documents PNG/SVG/CSV export keywords.
+- **Linux CI CTest:** CyphaLM checkpoint sidecars use portable relative `checkpoint.json` paths; `cyphalm_checkpoint_parity` resolves paths against the sidecar directory.
+- **Linux CI pytest:** restore empty Studio GUI shim modules as re-exports from `widgets.py`; extend CTest↔pytest registry; add bench/tune/diagnostics/SOM/GH infer subprocess tests; Qt shell `--help` documents PNG/SVG/CSV export keywords.
+- **Linux CI Qt:** compile Qt targets on ubuntu-latest; exclude headless-incompatible GUI CTest exec (`native_qt_shell_smoke`, `native_qt_stub_load_reference`).
+
+### Changed
+- **`scripts/ci_native_linux.sh`:** skip Qt GUI CTests when `CYPHA_BUILD_QT=1` on headless hosts (matches CI).
 
 ---
 
