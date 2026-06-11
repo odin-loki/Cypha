@@ -9,7 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Fixed
-- **MSVC + CUDA CI:** use VS generator + explicit `CMAKE_CUDA_COMPILER` under `ilammy/msvc-dev-cmd` (drop Ninja on GHA).
+- **MSVC + CUDA CI:** Jimver `nvcc`+`cudart` subpackages + `-T cuda=$CUDA_PATH` for VS toolset (no Nsight VSE hang).
 - **CyphaLM hybrid checkpoint parity:** tighten `atol_bpc` from 0.35 → **0.02** (measured load delta ~0.002 BPC).
 
 ### Changed

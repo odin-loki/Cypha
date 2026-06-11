@@ -103,7 +103,8 @@ jobs:
         with:
           cuda: "12.6.0"
           method: network
-          sub-packages: '["nvcc"]'
+          # nvcc-only: skip Nsight VSE / VS integration (installer hang on GHA). CMake needs -T cuda=...
+          sub-packages: '["nvcc", "cudart"]'
 
       - name: Probe GPU (informational)
         id: gpu
@@ -129,11 +130,13 @@ jobs:
           if (-not $cuda) { throw "CUDA_PATH not set after cuda-toolkit install" }
           $nvcc = Join-Path $cuda "bin\nvcc.exe"
           if (-not (Test-Path $nvcc)) { throw "nvcc not found at $nvcc" }
-          cmake -S native -B native/build-cuda-msvc -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
+          # Jimver nvcc-only install omits VS CUDA integration; -T cuda= wires the toolset.
+          cmake -S native -B native/build-cuda-msvc -G "Visual Studio 17 2022" -A x64 `
+            -T "cuda=$cuda" `
             -DCYPHA_ENABLE_CUDA=ON `
             -DCMAKE_CUDA_ARCHITECTURES=75 `
-            -DCMAKE_CUDA_COMPILER="$nvcc"
+            -DCMAKE_CUDA_COMPILER="$nvcc" `
+            -DCUDAToolkit_ROOT="$cuda"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build native/build-cuda-msvc --config Release --parallel `
             --target score_batch_parity cuda_smoke cypha_core
