@@ -52,7 +52,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`inst
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, full test command reference |
 | [CHANGELOG](../CHANGELOG.md) | Release history and what changed in each milestone |
 
-**Quick gate (matches GitHub Actions CI — four jobs, all green on `main`):**
+**Quick gate (matches GitHub Actions CI — four blocking jobs, green on `main` @ CI #51+):**
 ```bash
 bash scripts/ci_native_linux.sh                    # native CTest (+ optional drift pytest)
 pytest tests/ cypha_lm/model/tests/ -q             # full CI pytest (ignore test_gui_qtbot.py on headless)

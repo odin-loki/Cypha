@@ -17,7 +17,7 @@ scripts/cypha_native_validate_all.ps1  → OK
   52 CTests │ ~274 pytest (CI) │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
 
-GitHub Actions **CI #50+**: Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**.
+GitHub Actions **CI #51+** (`a3b48c4`): Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**. Release **v2.2.8** installers published.
 
 Build: `C:\Temp\cypha_full_cpp_build`
 

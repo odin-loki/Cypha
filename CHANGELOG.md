@@ -8,6 +8,9 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Changed
+- Docs: CI #51 green confirmation; native/README four-job CUDA note; scripts index gate scripts.
+
 ---
 
 ## [2.2.8] — 2026-06-11 · All four CI jobs blocking
