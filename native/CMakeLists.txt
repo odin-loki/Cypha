@@ -1,8 +1,14 @@
 cmake_minimum_required(VERSION 3.19)
-project(cypha_native VERSION 0.1.0 LANGUAGES CXX C)
+project(cypha_native VERSION 2.0.0 LANGUAGES CXX C)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 
+option(CYPHA_BUILD_EXPERIMENT_DB "Build experiment_db_smoke / experiment_db_crud_parity (requires SQLite3)" OFF)
+option(
+  CYPHA_CHECK_EXPERIMENT_SCHEMA_DRIFT
+  "At configure time, compare native/sql/experiment_schema.sql to scripts/export_experiment_schema_sql.py (requires Python 3)"
+  OFF
+)
 option(CYPHA_BUILD_QT "Build optional Qt targets under qt/: cypha_qt_stub (Core), cypha_qt_shell (Widgets)" OFF)
 option(CYPHA_QT_CHARTS "When CYPHA_BUILD_QT is ON, link Qt Charts for cypha_qt_shell if found (default OFF for qt6-base-only CI)" OFF)
 option(CYPHA_ENABLE_CUDA "Build CUDA GPU path in accel backend (NVIDIA toolkit + driver); CPU uses std::thread" OFF)
@@ -33,6 +39,7 @@ add_library(cypha_core STATIC
   src/bessel_table_data.cpp
   src/preprocessor.cpp
   src/preprocessor_fit.cpp
+  src/numpy_default_rng.cpp
   src/csv_ingest.cpp
   src/memory_train.cpp
   src/registry.cpp
@@ -46,6 +53,11 @@ add_library(cypha_core STATIC
   src/generation.cpp
   src/accel_backend.cpp
   src/create_model.cpp
+  src/kernel_memory.cpp
+  src/branch_a_router.cpp
+  src/som/som_encoder.cpp
+  src/multilabel_dif.cpp
+  src/similarity_index.cpp
 )
 
 if(CYPHA_ENABLE_CUDA)
@@ -68,6 +80,31 @@ target_include_directories(cypha_lm_native PUBLIC
 
 target_link_libraries(cypha_lm_native PUBLIC cypha_core)
 
+add_library(cypha_bench_native STATIC
+  src/bench/bench_profile.cpp
+  src/bench/bench_paths.cpp
+  src/bench/bench_metrics.cpp
+  src/bench/bench_baselines.cpp
+  src/bench/bench_report_json.cpp
+  src/bench/bench_encoder_text.cpp
+  src/bench/bench_encoder_image.cpp
+  src/bench/bench_encoder_chess.cpp
+  src/bench/bench_encoder_go.cpp
+  src/bench/bench_encoder_poker.cpp
+  src/bench/bench_encoder_document.cpp
+  src/bench/bench_encoder_timeseries.cpp
+  src/bench/bench_cross_domain.cpp
+  src/bench/bench_report.cpp
+  src/bench/bench_figures.cpp
+)
+
+target_include_directories(cypha_bench_native PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+)
+
+target_link_libraries(cypha_bench_native PUBLIC cypha_core cypha_lm_native)
+
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
   target_link_libraries(cypha_lm_native PUBLIC OpenMP::OpenMP_CXX)
@@ -89,6 +126,20 @@ add_executable(cyphalm_bench_native tools/cyphalm_bench_native.cpp)
 target_link_libraries(cyphalm_bench_native PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_bench_native)
 
+add_executable(cypha_bench_run tools/cypha_bench_run.cpp)
+target_link_libraries(cypha_bench_run PRIVATE cypha_bench_native)
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+  target_link_libraries(cypha_bench_run PRIVATE ZLIB::ZLIB)
+else()
+  target_link_libraries(cypha_bench_run PRIVATE z)
+endif()
+cypha_mingw_apply_exe_link_options(cypha_bench_run)
+
+add_executable(cypha_bench_report tools/cypha_bench_report.cpp)
+target_link_libraries(cypha_bench_report PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(cypha_bench_report)
+
 target_include_directories(cypha_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
@@ -107,8 +158,23 @@ target_link_libraries(cypha_parity PRIVATE cypha_core)
 add_executable(batch_llr_parity tools/batch_llr_parity.cpp)
 target_link_libraries(batch_llr_parity PRIVATE cypha_core)
 
+add_executable(score_batch_parity tools/score_batch_parity.cpp)
+target_link_libraries(score_batch_parity PRIVATE cypha_core)
+
+add_executable(kernel_llr_parity tools/kernel_llr_parity.cpp)
+target_link_libraries(kernel_llr_parity PRIVATE cypha_core)
+
 add_executable(memory_train_parity tools/memory_train_parity.cpp)
 target_link_libraries(memory_train_parity PRIVATE cypha_core)
+
+add_executable(multilabel_dif_parity tools/multilabel_dif_parity.cpp)
+target_link_libraries(multilabel_dif_parity PRIVATE cypha_core)
+
+add_executable(merge_from_parity tools/merge_from_parity.cpp)
+target_link_libraries(merge_from_parity PRIVATE cypha_core)
+
+add_executable(similarity_index_parity tools/similarity_index_parity.cpp)
+target_link_libraries(similarity_index_parity PRIVATE cypha_core)
 
 add_executable(memory_train_roundtrip tools/memory_train_roundtrip.cpp)
 target_link_libraries(memory_train_roundtrip PRIVATE cypha_core)
@@ -125,7 +191,7 @@ target_link_libraries(csv_ingest_parity PRIVATE cypha_core)
 add_executable(preprocess_train_classify_parity tools/preprocess_train_classify_parity.cpp)
 target_link_libraries(preprocess_train_classify_parity PRIVATE cypha_core)
 
-add_executable(cypha_rest tools/cypha_rest.cpp tools/cyphalm_rest_routes.cpp)
+add_executable(cypha_rest tools/cypha_rest.cpp tools/cyphalm_rest_routes.cpp tools/branch_a_rest_routes.cpp)
 target_link_libraries(cypha_rest PRIVATE cypha_core cypha_lm_native)
 
 add_executable(registry_register tools/registry_register.cpp)
@@ -164,11 +230,17 @@ target_link_libraries(mke_train_step_parity PRIVATE cypha_core)
 add_executable(generation_parity tools/generation_parity.cpp)
 target_link_libraries(generation_parity PRIVATE cypha_core)
 
+add_executable(gh_infer_deliberation_parity tools/gh_infer_deliberation_parity.cpp)
+target_link_libraries(gh_infer_deliberation_parity PRIVATE cypha_core)
+
 add_executable(cuda_smoke tools/cuda_smoke.cpp)
 target_link_libraries(cuda_smoke PRIVATE cypha_core)
 
 add_executable(create_model_smoke tools/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
+
+add_executable(cypha_diagnostics_run tools/cypha_diagnostics_run.cpp)
+target_link_libraries(cypha_diagnostics_run PRIVATE cypha_core)
 
 add_executable(cyphalm_hebbian_parity tools/cyphalm_hebbian_parity.cpp)
 target_link_libraries(cyphalm_hebbian_parity PRIVATE cypha_lm_native)
@@ -190,8 +262,14 @@ set(
   _cypha_mingw_exe_targets
   cyphalm_ssm_parity
   cypha_parity
+  gh_infer_deliberation_parity
   batch_llr_parity
+  score_batch_parity
+  kernel_llr_parity
   memory_train_parity
+  multilabel_dif_parity
+  merge_from_parity
+  similarity_index_parity
   memory_train_roundtrip
   preprocessor_parity
   preprocessor_fit_parity
@@ -210,6 +288,7 @@ set(
   quantile_dif_train_parity
   mke_train_step_parity
   generation_parity
+  gh_infer_deliberation_parity
   cuda_smoke
   create_model_smoke
   cyphalm_hebbian_parity
@@ -218,6 +297,8 @@ set(
   cyphalm_model_parity
   cyphalm_bench_native
   cyphalm_parity
+  cypha_bench_run
+  cypha_diagnostics_run
 )
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
   cypha_mingw_apply_exe_link_options("${_cypha_t}")
@@ -235,7 +316,7 @@ option(
 set(_cypha_exp_sqlite_link "")
 if(SQLite3_FOUND)
   set(_cypha_exp_sqlite_link SQLite::SQLite3)
-elseif(Python3_Interpreter_FOUND AND CYPHA_FETCH_SQLITE3_AMALGAMATION)
+elseif(CYPHA_FETCH_SQLITE3_AMALGAMATION)
   include(FetchContent)
   FetchContent_Declare(
     sqlite_amalgamation
@@ -255,19 +336,38 @@ elseif(Python3_Interpreter_FOUND AND CYPHA_FETCH_SQLITE3_AMALGAMATION)
   message(STATUS "experiment_db_smoke: using fetched SQLite amalgamation 3.47.2")
 endif()
 
-set(_cypha_experiment_ddl_sql "${CMAKE_CURRENT_BINARY_DIR}/experiment_ddl.sql")
-if(CYPHA_BUILD_EXPERIMENT_DB AND Python3_Interpreter_FOUND AND _cypha_exp_sqlite_link)
+set(_cypha_experiment_ddl_sql "${CMAKE_CURRENT_SOURCE_DIR}/sql/experiment_schema.sql")
+if(NOT EXISTS "${_cypha_experiment_ddl_sql}")
+  message(FATAL_ERROR "Missing canonical experiment DDL: ${_cypha_experiment_ddl_sql}")
+endif()
+
+if(CYPHA_CHECK_EXPERIMENT_SCHEMA_DRIFT)
+  if(NOT Python3_Interpreter_FOUND)
+    message(FATAL_ERROR "CYPHA_CHECK_EXPERIMENT_SCHEMA_DRIFT=ON requires Python3 Interpreter")
+  endif()
   execute_process(
     COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/../scripts/export_experiment_schema_sql.py"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
-    OUTPUT_VARIABLE _cypha_exp_ddl_body
+    OUTPUT_VARIABLE _cypha_exp_ddl_exported
     RESULT_VARIABLE _cypha_exp_ddl_rc
   )
   if(NOT _cypha_exp_ddl_rc EQUAL 0)
     message(FATAL_ERROR "scripts/export_experiment_schema_sql.py failed (exit ${_cypha_exp_ddl_rc})")
   endif()
-  file(WRITE "${_cypha_experiment_ddl_sql}" "${_cypha_exp_ddl_body}")
+  file(READ "${_cypha_experiment_ddl_sql}" _cypha_exp_ddl_committed)
+  string(STRIP "${_cypha_exp_ddl_committed}" _cypha_exp_ddl_committed)
+  string(STRIP "${_cypha_exp_ddl_exported}" _cypha_exp_ddl_exported)
+  if(NOT _cypha_exp_ddl_committed STREQUAL _cypha_exp_ddl_exported)
+    message(FATAL_ERROR
+      "native/sql/experiment_schema.sql drifted from cypha_studio.core.experiment._SCHEMA; "
+      "re-export with: python scripts/export_experiment_schema_sql.py "
+      "-o native/sql/experiment_schema.sql"
+    )
+  endif()
+  message(STATUS "experiment_schema.sql: matches Python _SCHEMA (drift check passed)")
+endif()
 
+if(CYPHA_BUILD_EXPERIMENT_DB AND _cypha_exp_sqlite_link)
   add_executable(experiment_db_smoke tools/experiment_db_smoke.cpp src/experiment_db.cpp)
   target_link_libraries(experiment_db_smoke PRIVATE ${_cypha_exp_sqlite_link})
   target_include_directories(experiment_db_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -289,22 +389,23 @@ if(CYPHA_BUILD_EXPERIMENT_DB AND Python3_Interpreter_FOUND AND _cypha_exp_sqlite
   else()
     target_compile_options(experiment_db_crud_parity PRIVATE -Wall -Wextra -Wpedantic)
   endif()
-else()
-  if(NOT Python3_Interpreter_FOUND)
-    message(STATUS "experiment_db_smoke: skipped (Python3 Interpreter not found)")
-  elseif(NOT _cypha_exp_sqlite_link)
-    message(
-      STATUS
-      "experiment_db_smoke: skipped (no SQLite3: install dev package, or leave CYPHA_FETCH_SQLITE3_AMALGAMATION=ON)"
-    )
-  endif()
+elseif(CYPHA_BUILD_EXPERIMENT_DB AND NOT _cypha_exp_sqlite_link)
+  message(
+    STATUS
+    "experiment_db_smoke: skipped (no SQLite3: install dev package, or leave CYPHA_FETCH_SQLITE3_AMALGAMATION=ON)"
+  )
 endif()
 
 if(MSVC)
   target_compile_options(cypha_core PRIVATE /W4 /permissive-)
   target_compile_options(cypha_parity PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
+  target_compile_options(score_batch_parity PRIVATE /W4 /permissive-)
+  target_compile_options(kernel_llr_parity PRIVATE /W4 /permissive-)
   target_compile_options(memory_train_parity PRIVATE /W4 /permissive-)
+  target_compile_options(multilabel_dif_parity PRIVATE /W4 /permissive-)
+  target_compile_options(merge_from_parity PRIVATE /W4 /permissive-)
+  target_compile_options(similarity_index_parity PRIVATE /W4 /permissive-)
   target_compile_options(memory_train_roundtrip PRIVATE /W4 /permissive-)
   target_compile_options(preprocessor_parity PRIVATE /W4 /permissive-)
   target_compile_options(preprocessor_fit_parity PRIVATE /W4 /permissive-)
@@ -323,22 +424,34 @@ if(MSVC)
   target_compile_options(quantile_dif_train_parity PRIVATE /W4 /permissive-)
   target_compile_options(mke_train_step_parity PRIVATE /W4 /permissive-)
   target_compile_options(generation_parity PRIVATE /W4 /permissive-)
+  target_compile_options(gh_infer_deliberation_parity PRIVATE /W4 /permissive-)
   target_compile_options(cuda_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_lm_native PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_bench_native PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_hebbian_parity PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_model_parity PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_char_lstm_parity PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_checkpoint_parity PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_bench_run PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_diagnostics_run PRIVATE /W4 /permissive-)
 else()
   target_compile_options(cypha_core PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_bench_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_hebbian_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_model_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_bench_native PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_bench_run PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_diagnostics_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(score_batch_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(kernel_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(memory_train_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(multilabel_dif_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(merge_from_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(similarity_index_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(memory_train_roundtrip PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(preprocessor_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(preprocessor_fit_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -357,6 +470,7 @@ else()
   target_compile_options(quantile_dif_train_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(mke_train_step_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(generation_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(gh_infer_deliberation_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_char_lstm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_checkpoint_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -375,14 +489,44 @@ add_test(
     "${_parity_fix}/native_parity.bin"
 )
 add_test(
+  NAME native_gh_infer_deliberation
+  COMMAND "$<TARGET_FILE:gh_infer_deliberation_parity>"
+    "${_parity_fix}/gh_infer_deliberation"
+)
+add_test(
   NAME native_batch_llr
   COMMAND "$<TARGET_FILE:batch_llr_parity>"
     "${_parity_fix}/batch_llr/sidecar.json"
 )
 add_test(
+  NAME native_score_batch
+  COMMAND "$<TARGET_FILE:score_batch_parity>"
+    "${_parity_fix}/score_batch/sidecar.json"
+)
+add_test(
+  NAME native_kernel_llr
+  COMMAND "$<TARGET_FILE:kernel_llr_parity>"
+    "${_parity_fix}/kernel_llr/sidecar.json"
+)
+add_test(
   NAME native_memory_train
   COMMAND "$<TARGET_FILE:memory_train_parity>"
     "${_parity_fix}/memory_train"
+)
+add_test(
+  NAME native_multilabel_dif
+  COMMAND "$<TARGET_FILE:multilabel_dif_parity>"
+    "${_parity_fix}/multilabel_dif"
+)
+add_test(
+  NAME native_merge_from
+  COMMAND "$<TARGET_FILE:merge_from_parity>"
+    "${_parity_fix}/merge_from"
+)
+add_test(
+  NAME native_similarity_index
+  COMMAND "$<TARGET_FILE:similarity_index_parity>"
+    "${_parity_fix}/similarity_index"
 )
 add_test(
   NAME native_memory_train_roundtrip
@@ -400,6 +544,7 @@ add_test(
   COMMAND "$<TARGET_FILE:preprocessor_fit_parity>"
     "${_parity_fix}/preprocessor_fit"
     "${_parity_fix}/preprocessor_fit_no_scale"
+    "${_parity_fix}/preprocessor_fit_rff"
 )
 add_test(
   NAME native_csv_ingest
@@ -518,8 +663,20 @@ if(NOT EXISTS "${_parity_fix}/cyphalm_checkpoint/char_lstm/sidecar.json")
 endif()
 
 add_test(
+  NAME native_bench_run_list_domains
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --list-domains
+)
+
+add_test(
   NAME native_create_model
   COMMAND "$<TARGET_FILE:create_model_smoke>"
+)
+
+add_test(
+  NAME native_diagnostics_run
+  COMMAND "$<TARGET_FILE:cypha_diagnostics_run>"
+    --fixtures "${_parity_fix}"
+    --out "${CMAKE_CURRENT_BINARY_DIR}/diagnostics_results"
 )
 
 add_test(

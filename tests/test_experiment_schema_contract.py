@@ -97,3 +97,12 @@ def test_experiment_schema_ddl_ast_matches_module():
     from tests.experiment_schema_ddl import experiment_schema_sql
 
     assert experiment_schema_sql() == exp_mod._SCHEMA.strip() + "\n"
+
+
+def test_native_experiment_schema_sql_matches_module():
+    """Committed ``native/sql/experiment_schema.sql`` must track ``experiment._SCHEMA``."""
+    from cypha_studio.core import experiment as exp_mod
+
+    sql_path = _ROOT / "native" / "sql" / "experiment_schema.sql"
+    assert sql_path.is_file(), "native/sql/experiment_schema.sql missing"
+    assert sql_path.read_text(encoding="utf-8").strip() == exp_mod._SCHEMA.strip()
