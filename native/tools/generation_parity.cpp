@@ -111,6 +111,7 @@ int main(int argc, char** argv) {
         const double atol = j.at("atol").get<double>();
         const int d = j.at("d_latent").get<int>();
         const int fd = j.at("field_dim").get<int>();
+        const int input_dim = j.value("input_dim", d);
 
         // Load reference.cypha
         fs::path cypha_path = fix_root / "reference.cypha";
@@ -324,6 +325,51 @@ int main(int argc, char** argv) {
             }
             if (ok) std::cout << "PASS rollout (" << n_steps << " steps)\n";
             all_pass &= ok;
+        }
+
+        // ── 11. generate_from_observation ─────────────────────────────────────
+        {
+            const auto& c = cases.at("generate_from_observation");
+            std::string lbl = c.at("label").get<std::string>();
+            int n = c.at("n").get<int>();
+            double T = c.at("temperature").get<double>();
+            int n_steps = c.at("n_steps").get<int>();
+            std::vector<double> h_obs = c.at("h_obs").get<std::vector<double>>();
+            std::vector<double> z_noise = flatten_3d(c.at("z_noise"));
+            auto got = cypha::generate_from_observation(
+                m, h_obs.data(), lbl, n, T, n_steps, nullptr, z_noise.data());
+            all_pass &= check_case("generate_from_observation", got,
+                                   c.at("expected_h"), atol, d);
+        }
+
+        // ── 12. generate_retrieval_augmented ──────────────────────────────────
+        {
+            const auto& c = cases.at("generate_retrieval_augmented");
+            int n = c.at("n").get<int>();
+            int k_neighbors = c.at("k_neighbors").get<int>();
+            double T = c.at("temperature").get<double>();
+            int n_steps = c.at("n_steps").get<int>();
+            std::vector<double> query = c.at("query_x").get<std::vector<double>>();
+            std::vector<double> z_noise = flatten_3d(c.at("z_noise"));
+            std::vector<double> db_flat;
+            for (const auto& row : c.at("database_x")) {
+                auto rv = row.get<std::vector<double>>();
+                db_flat.insert(db_flat.end(), rv.begin(), rv.end());
+            }
+            const int n_db = static_cast<int>(c.at("database_x").size());
+            cypha::CyphaInferOptions opt;
+            opt.use_field = true;
+            auto got = cypha::generate_retrieval_augmented(
+                m, query.data(), db_flat.data(), n_db, input_dim, k_neighbors,
+                n, T, n_steps, opt, nullptr, z_noise.data());
+            all_pass &= check_case("generate_retrieval_augmented", got,
+                                   c.at("expected_h"), atol, d);
+            if (c.contains("expected_label")) {
+                std::string exp_lbl = c.at("expected_label").get<std::string>();
+                if (!exp_lbl.empty()) {
+                    std::cout << "  retrieval label=" << exp_lbl << "\n";
+                }
+            }
         }
 
         if (all_pass) {

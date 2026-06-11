@@ -40,7 +40,9 @@ def _argv_for_wsl(str_argv: list[str]) -> list[str]:
 
 def _windows_exe_candidates(stem: str) -> list[Path]:
     bases = [
+        Path(r"C:\Temp\cypha_full_cpp_build"),
         Path(r"C:\Temp\cypha_native_build6"),
+        _ROOT / "native" / "build_win",
         _ROOT / "native" / "build-mingw-w64",
         _ROOT / "native" / "build" / "Release",
         _ROOT / "native" / "build" / "Debug",

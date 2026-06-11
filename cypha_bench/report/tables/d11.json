@@ -1,29 +1,24 @@
 {
   "domain": "d11",
-  "timestamp": "2026-05-31T04:42:04.885620+00:00",
   "experiments": {
     "11A_cartpole_value_regression": {
-      "rmse": 11.119249401440657,
-      "mae": 8.682745554089621,
-      "r2": 0.012015957199065341,
-      "mean_epistemic_var": 102.85520654225276,
-      "expert_count": 8,
-      "uncertainty_rank_correlation": -0.0670048956378929,
-      "ridge_rmse": 11.440359115600586,
-      "ridge_r2": -0.04587137699127197,
-      "mean_epistemic_near_tip": 107.44921439414045
+      "expert_count": 10,
+      "mae": 7.856361294972916,
+      "mean_epistemic_var": 73.85130636009532,
+      "r2": -0.006435424163401482,
+      "ridge_rmse": 9.593051502103739,
+      "rmse": 9.620529451537505
     },
     "11B_gridworld_q_estimation": {
-      "q_value_mae": 0.299776531910455,
-      "n_pairs": 13
+      "n_pairs": 13,
+      "q_value_mae": 0.2986972446823203
     },
     "11C_trajectory_preference": {
-      "accuracy": 0.92,
-      "f1_macro": 0.9184006527947777,
-      "mean_epistemic_var": 0.7372274274697597,
-      "mean_confidence": 0.9154464058098902,
-      "expert_count": 2,
-      "uncertainty_rank_correlation": 0.32051410993682833
-    }
-  }
+      "accuracy": 1.0,
+      "expert_count": 1,
+      "mean_epistemic_var": 0.0
+    },
+    "backend": "cypha_core"
+  },
+  "timestamp": "2026-06-11T08:29:04.843+00:00"
 }

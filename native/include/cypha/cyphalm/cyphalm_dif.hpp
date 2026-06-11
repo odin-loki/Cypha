@@ -26,15 +26,23 @@ class CyphaDIF {
     DIFPredictOutput predict(const double* x, int dim);
     void train_step(const double* x, int x_dim, const double* y, int y_dim);
     int expert_count() const { return static_cast<int>(experts_.size()); }
+    std::vector<double> alpha_per_expert() const;
 
     nlohmann::json get_state() const;
     void set_state(const nlohmann::json& state);
+
+    /// Expert-centered output means (K×field_dim row-major) + pooled inv variance for U4 feedback.
+    bool discriminative_state(std::vector<double>& delta_mu_rows,
+                              std::vector<double>& inv_v) const;
 
  private:
     struct Expert {
         NIGExpert input_nig;
         NIGExpert output_nig;
+        std::vector<std::vector<double>> activation_history;
         Expert(double k0, double a0, double b0, int in_dim, int out_dim);
+        double input_entropy() const;
+        void record_activation(const double* x, int dim, int max_history = 256);
     };
 
     int field_dim_;

@@ -8,7 +8,10 @@
 #include <random>
 #include <sstream>
 #include <stdexcept>
+#include <memory>
 #include <unordered_map>
+
+#include "cypha/cyphalm/bpe_tokenizer.hpp"
 
 namespace fs = std::filesystem;
 
@@ -63,11 +66,27 @@ std::vector<int> encode(const std::string& text, const std::unordered_map<char, 
     return out;
 }
 
+std::vector<int> bpe_encode_ids(const std::string& text, const BpeTokenizer& tok) {
+    const auto uids = tok.encode(text);
+    std::vector<int> out;
+    out.reserve(uids.size());
+    for (std::uint32_t id : uids) out.push_back(static_cast<int>(id));
+    return out;
+}
+
 LMCorpus from_text(const std::string& text, const std::string& source,
-                   const std::string& profile, int vocab_size) {
-    std::unordered_map<char, int> c2i;
-    build_vocab(text, vocab_size, c2i);
-    auto ids = encode(text, c2i);
+                   const std::string& profile, int vocab_size,
+                   const BpeTokenizer* bpe = nullptr) {
+    std::vector<int> ids;
+    int effective_vocab = vocab_size;
+    if (bpe != nullptr) {
+        ids = bpe_encode_ids(text, *bpe);
+        effective_vocab = static_cast<int>(bpe->vocab_size());
+    } else {
+        std::unordered_map<char, int> c2i;
+        build_vocab(text, vocab_size, c2i);
+        ids = encode(text, c2i);
+    }
     if (ids.size() < 512) {
         throw std::runtime_error("corpus too short after encoding");
     }
@@ -75,7 +94,7 @@ LMCorpus from_text(const std::string& text, const std::string& source,
     LMCorpus c;
     c.source = source;
     c.profile = profile;
-    c.vocab_size = vocab_size;
+    c.vocab_size = effective_vocab;
     c.train_ids.assign(ids.begin(), ids.begin() + static_cast<std::ptrdiff_t>(split));
     c.eval_ids.assign(ids.begin() + static_cast<std::ptrdiff_t>(split), ids.end());
     return c;
@@ -83,19 +102,28 @@ LMCorpus from_text(const std::string& text, const std::string& source,
 
 }  // namespace
 
-LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_size) {
+LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_size,
+                           const std::string& bpe_merges, const std::string& bpe_vocab) {
+    std::unique_ptr<BpeTokenizer> bpe;
+    if (!bpe_merges.empty() && !bpe_vocab.empty() &&
+        fs::is_regular_file(bpe_merges) && fs::is_regular_file(bpe_vocab)) {
+        bpe = std::make_unique<BpeTokenizer>(BpeTokenizer::load(bpe_merges, bpe_vocab));
+    }
+    const BpeTokenizer* bpe_ptr = bpe.get();
     const fs::path root = fs::path(repo_root_from_native()) / "cypha_bench" / "data";
     if (profile == "d17") {
         const fs::path wt = root / "wikitext2" / "wikitext-2" / "wiki.train.tokens";
         if (fs::is_regular_file(wt)) {
-            return from_text(read_text_file(wt, max_chars), "wikitext2", profile, vocab_size);
+            return from_text(read_text_file(wt, max_chars), "wikitext2", profile, vocab_size,
+                             bpe_ptr);
         }
     }
     if (profile == "d04") {
         for (const char* name : {"moby_dick.txt", "alice.txt", "sherlock_holmes.txt"}) {
             const fs::path p = root / "gutenberg" / name;
             if (fs::is_regular_file(p)) {
-                return from_text(read_text_file(p, max_chars), name, profile, vocab_size);
+                return from_text(read_text_file(p, max_chars), name, profile, vocab_size,
+                                 bpe_ptr);
             }
         }
     }

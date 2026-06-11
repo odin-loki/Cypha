@@ -1,0 +1,31 @@
+{
+  "sweep_id": "cyphalm_hybrid_lstm_tune_smoke",
+  "description": "Smoke sweep mirroring cyphalm_hybrid_lstm_sweep.py (3 cells, tiny train)",
+  "runner": "cyphalm_bench_native",
+  "defaults": {
+    "profile": "d17",
+    "n_train": 2000,
+    "n_eval": 200,
+    "threads": 1
+  },
+  "cells": [
+    {
+      "id": "gria_ngram",
+      "args": {
+        "mode": "ssm_gria"
+      }
+    },
+    {
+      "id": "hybrid_gria_lstm",
+      "args": {
+        "mode": "hybrid"
+      }
+    },
+    {
+      "id": "char_lstm",
+      "args": {
+        "mode": "char_lstm"
+      }
+    }
+  ]
+}

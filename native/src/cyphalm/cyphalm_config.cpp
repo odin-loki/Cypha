@@ -28,6 +28,8 @@ ContextMode parse_context_mode(const std::string& s) {
     if (k == "char_lstm") return ContextMode::CharLstm;
     if (k == "ssm_gria" || k == "ssm_only" || k == "ssm-only") return ContextMode::SsmGria;
     if (k == "ssm_gria_no_lstm") return ContextMode::SsmGriaNoLstm;
+    if (k == "ablation_no_dif") return ContextMode::AblationNoDif;
+    if (k == "ablation_no_ssm") return ContextMode::AblationNoSsm;
     throw std::runtime_error("unknown context mode: " + s);
 }
 
@@ -39,6 +41,8 @@ std::string context_mode_name(ContextMode mode) {
         case ContextMode::CharLstm: return "char_lstm";
         case ContextMode::SsmGria: return "ssm_gria";
         case ContextMode::SsmGriaNoLstm: return "ssm_gria_no_lstm";
+        case ContextMode::AblationNoDif: return "ablation_no_dif";
+        case ContextMode::AblationNoSsm: return "ablation_no_ssm";
     }
     return "unknown";
 }
@@ -166,6 +170,8 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_s("ngram_fusion", cfg.ngram_fusion);
     set_b("ngram_position_weights", cfg.ngram_position_weights);
     set_b("ngram_fuse_split", cfg.ngram_fuse_split);
+    set_s("bpe_merges_path", cfg.bpe_merges_path);
+    set_s("bpe_vocab_path", cfg.bpe_vocab_path);
 }
 
 }  // namespace

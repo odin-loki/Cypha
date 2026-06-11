@@ -77,3 +77,108 @@ jobs:
           cmake --build native/build-mingw-w64 -j 2
       - name: CTest (paths rewritten to C:/ for /mnt/c checkouts)
         run: ctest --test-dir native/build-mingw-w64 --output-on-failure
+
+  # MSVC + CYPHA_ENABLE_CUDA=ON compile smoke (MinGW cannot build CUDA).
+  # cuda_smoke / native_cuda_smoke pass on CPU threads when the runner has no GPU;
+  # native_cuda_bench (--bench) is skipped (exit 2) without a device.
+  # See docs/native/ACCEL_CUDA.md
+  windows_cuda_msvc:
+    name: MSVC + CUDA smoke (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CUDA toolkit (nvcc + VS integration)
+        uses: Jimver/cuda-toolkit@v0.2.35
+        id: cuda-toolkit
+        with:
+          cuda: "12.6.0"
+          method: network
+          sub-packages: '["nvcc", "visual_studio_integration"]'
+
+      - name: Probe GPU (informational)
+        id: gpu
+        shell: bash
+        run: |
+          if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+            echo "has_gpu=true" >> "$GITHUB_OUTPUT"
+            nvidia-smi -L || true
+          else
+            echo "has_gpu=false" >> "$GITHUB_OUTPUT"
+            echo "No GPU on runner — native_cuda_smoke still exercises CPU thread path."
+          fi
+
+      - name: Configure (MSVC + CUDA)
+        shell: pwsh
+        run: |
+          $cudaRoot = $env:CUDA_PATH
+          if (-not $cudaRoot) { throw "CUDA_PATH not set after cuda-toolkit install" }
+          cmake -S native -B native/build-cuda-msvc `
+            -G "Visual Studio 17 2022" -A x64 `
+            -DCYPHA_ENABLE_CUDA=ON `
+            -DCMAKE_CUDA_ARCHITECTURES=75 `
+            -DCMAKE_GENERATOR_TOOLSET="cuda=$cudaRoot"
+
+      - name: Build score_batch_parity + cuda_smoke
+        run: >
+          cmake --build native/build-cuda-msvc --config Release
+          --target score_batch_parity cuda_smoke cypha_core
+
+      - name: CTest native_cuda_smoke + native_score_batch
+        run: >
+          ctest --test-dir native/build-cuda-msvc -C Release
+          -R "native_cuda_smoke|native_score_batch" --output-on-failure
+
+      - name: CTest native_cuda_bench (GPU only)
+        if: steps.gpu.outputs.has_gpu == 'true'
+        continue-on-error: true
+        run: ctest --test-dir native/build-cuda-msvc -C Release -R native_cuda_bench --output-on-failure
+
+  # Optional Linux nvcc compile smoke; does not block PRs when CUDA install or link fails.
+  linux_cuda:
+    name: GCC + CUDA smoke (Linux, optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CUDA toolkit (nvcc)
+        uses: Jimver/cuda-toolkit@v0.2.35
+        id: cuda-toolkit
+        with:
+          cuda: "12.6.0"
+          method: network
+          sub-packages: '["nvcc"]'
+
+      - name: Install Ninja + GCC
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++
+
+      - name: Probe GPU (informational)
+        id: gpu
+        run: |
+          if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+            echo "has_gpu=true" >> "$GITHUB_OUTPUT"
+            nvidia-smi -L || true
+          else
+            echo "has_gpu=false" >> "$GITHUB_OUTPUT"
+            echo "No GPU on runner — native_cuda_smoke still exercises CPU thread path."
+          fi
+
+      - name: Configure + build
+        run: |
+          cmake -S native -B native/build-cuda-linux -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCYPHA_ENABLE_CUDA=ON \
+            -DCMAKE_CUDA_ARCHITECTURES=75
+          cmake --build native/build-cuda-linux --parallel \
+            --target score_batch_parity cuda_smoke cypha_core
+
+      - name: CTest native_cuda_smoke + native_score_batch
+        run: ctest --test-dir native/build-cuda-linux -R "native_cuda_smoke|native_score_batch" --output-on-failure
+
+      - name: CTest native_cuda_bench (GPU only)
+        if: steps.gpu.outputs.has_gpu == 'true'
+        continue-on-error: true
+        run: ctest --test-dir native/build-cuda-linux -R native_cuda_bench --output-on-failure

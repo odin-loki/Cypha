@@ -58,7 +58,7 @@ Source can stay in OneDrive; only the **binary directory** (`-B`) should be loca
 | `CYPHA_BUILD_EXPERIMENT_DB` | OFF (unset) | Set **OFF** to skip SQLite experiment targets — not needed for LM bench/parity |
 | `CYPHA_FETCH_SQLITE3_AMALGAMATION` | ON | Set **OFF** on Windows when you have no network or want faster configure; LM targets do not need SQLite |
 | `CMAKE_BUILD_TYPE` | — | Use **Release** for bench timings |
-| `CYPHA_ENABLE_CUDA` | OFF | CyphaLM native is CPU-only today |
+| `CYPHA_ENABLE_CUDA` | OFF | Optional GPU path for **`cypha::accel`** (encode / fused LLR / softmax / gate). **Windows: MSVC only** — see [`ACCEL_CUDA.md`](ACCEL_CUDA.md). CyphaLM (`cypha_lm_native`) remains CPU-only. |
 | `CYPHA_BUILD_QT` | OFF | Unrelated to CyphaLM |
 
 `cypha_lm_native` is always built when configuring `native/`; sources are collected via `file(GLOB … src/cyphalm/*.cpp)`.

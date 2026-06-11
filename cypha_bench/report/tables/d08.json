@@ -1,119 +1,45 @@
 {
-  "domain": "d08_computer_vision",
-  "timestamp": "2026-05-31T04:40:01.521472+00:00",
+  "domain": "d08",
   "experiments": {
-    "raw": {
-      "encoding": "raw",
-      "cypha_scores": {
-        "accuracy": 0.72,
-        "f1_macro": 0.7052916424908025
-      },
-      "cypha_metrics": {
-        "mean_epistemic_var": 0.014348397490758759,
-        "std_epistemic_var": 0.08051012073305108,
-        "mean_aleatoric_var": 0.008865842758299894,
+    "backend": "cypha_core",
+    "data_source": "mnist",
+    "domain": "d08_computer_vision",
+    "experiments": [
+      {
+        "backend": "cypha_core",
+        "baselines": {
+          "logistic_regression": {
+            "accuracy": 0.857,
+            "f1_macro": 0.8532772761062708
+          }
+        },
+        "cypha_scores": {
+          "accuracy": 0.7675
+        },
+        "dataset": "raw",
+        "encoding": "raw",
         "expert_count": 10,
-        "mean_alpha": 0.848033845322063,
-        "alpha_distribution": [
-          0.8308543873287133,
-          0.8726839176985368,
-          0.8909752181180368,
-          0.8730349376015037,
-          0.8861181568929491,
-          0.817228055418151,
-          0.7918855154985255,
-          0.8604542129221471,
-          0.8210291259795777,
-          0.8360749257624882
-        ],
-        "fraction_edge_of_chaos": 0.0,
-        "uncertainty_rank_correlation": 0.4711603224858268
+        "n_test": 2000,
+        "n_train": 10000
       },
-      "baselines": {
-        "dummy_majority": {
-          "accuracy": 0.112,
-          "f1_macro": 0.02014388489208633
+      {
+        "backend": "cypha_core",
+        "baselines": {
+          "logistic_regression": {
+            "accuracy": 0.92,
+            "f1_macro": 0.9192285196235247
+          }
         },
-        "knn_5": {
-          "accuracy": 0.91,
-          "f1_macro": 0.9089805965414708
+        "cypha_scores": {
+          "accuracy": 0.8505
         },
-        "logistic_regression": {
-          "accuracy": 0.884,
-          "f1_macro": 0.8827275930988401
-        },
-        "random_forest": {
-          "accuracy": 0.912,
-          "f1_macro": 0.9098095409144262
-        },
-        "gradient_boosting": {
-          "accuracy": 0.884,
-          "f1_macro": 0.8822355289038551
-        }
-      },
-      "sgd_online": {
-        "accuracy": 0.85,
-        "f1_macro": 0.8389284005230747
-      },
-      "n_train": 2000,
-      "n_test": 500
-    },
-    "hog": {
-      "encoding": "hog",
-      "cypha_scores": {
-        "accuracy": 0.896,
-        "f1_macro": 0.8932073366791803
-      },
-      "cypha_metrics": {
-        "mean_epistemic_var": 0.00960843135901134,
-        "std_epistemic_var": 0.06530893185456106,
-        "mean_aleatoric_var": 0.005833989061491184,
+        "dataset": "hog",
+        "encoding": "hog",
         "expert_count": 10,
-        "mean_alpha": 0.770353028372081,
-        "alpha_distribution": [
-          0.7753814271626535,
-          0.7990867590271243,
-          0.7784204882463737,
-          0.7917969631984251,
-          0.7810553186414155,
-          0.7739866120254911,
-          0.7358063786028386,
-          0.7570656379187014,
-          0.7460408273725783,
-          0.7648898715252084
-        ],
-        "fraction_edge_of_chaos": 0.0,
-        "uncertainty_rank_correlation": 0.49576860891564883
-      },
-      "baselines": {
-        "dummy_majority": {
-          "accuracy": 0.112,
-          "f1_macro": 0.02014388489208633
-        },
-        "knn_5": {
-          "accuracy": 0.934,
-          "f1_macro": 0.9345063450308186
-        },
-        "logistic_regression": {
-          "accuracy": 0.948,
-          "f1_macro": 0.9488902968095688
-        },
-        "random_forest": {
-          "accuracy": 0.94,
-          "f1_macro": 0.9411086776524314
-        },
-        "gradient_boosting": {
-          "accuracy": 0.922,
-          "f1_macro": 0.920912000713837
-        }
-      },
-      "sgd_online": {
-        "accuracy": 0.92,
-        "f1_macro": 0.9183129711574729
-      },
-      "n_train": 2000,
-      "n_test": 500
-    }
+        "n_test": 2000,
+        "n_train": 10000
+      }
+    ]
   },
-  "data_source": "mnist"
+  "timestamp": "2026-06-11T08:28:59.179+00:00"
 }

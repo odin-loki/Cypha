@@ -307,6 +307,82 @@ def _case_predict_next(dif: CyphaDIF, last_label: str):
     }
 
 
+def _case_from_observation(dif: CyphaDIF, h_obs: np.ndarray, label: str, n: int,
+                            temperature: float, n_steps: int, rng: np.random.Generator):
+    """Observation-anchored Langevin in latent space (native ``generate_from_observation``)."""
+    mu_k, inv_v, _, _ = _class_params(dif, label)
+    d = len(mu_k)
+    lr = temperature * 0.05
+    noise_scale = math.sqrt(2.0 * lr)
+    z_noise = rng.standard_normal((n, n_steps, d))
+    expected_h = []
+    for i in range(n):
+        h = np.asarray(h_obs, dtype=np.float64).copy()
+        for s in range(n_steps):
+            grad = -(h - mu_k) * inv_v
+            h = h + lr * grad + noise_scale * z_noise[i, s]
+        expected_h.append(h.tolist())
+    return {
+        "h_obs": np.asarray(h_obs, dtype=np.float64).tolist(),
+        "label": label,
+        "n": n,
+        "temperature": temperature,
+        "n_steps": n_steps,
+        "z_noise": z_noise.tolist(),
+        "expected_h": expected_h,
+    }
+
+
+def _native_retrieval_augmented_h(
+    dif: CyphaDIF,
+    query_x: np.ndarray,
+    database_x: list[np.ndarray],
+    k_neighbors: int,
+    n: int,
+    temperature: float,
+    n_steps: int,
+    rng: np.random.Generator,
+):
+    """Mirror native ``generate_retrieval_augmented`` (retrieve_from_x + centroid + from_obs)."""
+    hits = dif.retrieve(query_x, database_x, top_k=k_neighbors)
+    _, h_query = dif._encode(query_x)
+    d = h_query.shape[0]
+
+    if not hits:
+        pred, _ = dif.infer(query_x)
+        if pred == "__unknown__":
+            return [h_query.tolist()] * n, pred, "empty_fallback"
+        H = dif.generate_langevin(pred, n=n, n_steps=n_steps, step_size=0.05,
+                                  temperature=temperature, rng=rng)
+        return [h.tolist() for h in H], pred, "empty_fallback"
+
+    h_db = [dif._encode(x)[1] for x in database_x]
+    dists2 = []
+    H_hits = []
+    for _idx, _ll, _lbl in hits:
+        h_i = h_db[_idx]
+        H_hits.append(h_i)
+        dists2.append(float(np.sum((h_i - h_query) ** 2)))
+    dists2 = np.asarray(dists2, dtype=np.float64)
+    H_hits = np.stack(H_hits)
+
+    d_max = float(dists2.max()) if len(dists2) else 0.0
+    weights = np.exp(-dists2 / max(d_max * 0.1, _EPS))
+    weights = weights / (weights.sum() + _EPS)
+    h_anchor = sum(float(weights[j]) * H_hits[j] for j in range(len(hits)))
+
+    nearest_j = int(np.argmin(dists2))
+    label = hits[nearest_j][2]
+
+    case = _case_from_observation(dif, h_anchor, label, n, temperature, n_steps, rng)
+    case["query_x"] = np.asarray(query_x, dtype=np.float64).tolist()
+    case["database_x"] = [np.asarray(x, dtype=np.float64).tolist() for x in database_x]
+    case["k_neighbors"] = int(k_neighbors)
+    case["expected_label"] = label
+    case["expected_h_anchor"] = h_anchor.tolist()
+    return case["expected_h"], label, case
+
+
 def _case_rollout(dif: CyphaDIF, seed_label: str, n_steps: int, temperature: float,
                    exploration: float, rng: np.random.Generator):
     """Run rollout with pre-drawn randoms; record z and u for native replay."""
@@ -396,12 +472,28 @@ def main() -> None:
     target = labels[0]
     label_b = labels[1]
 
+    exp = np.load(_FIX / "expected.npz")
+    xs = exp["x_input"].astype(np.float64)
+    db_x = [xs[i] for i in range(min(8, len(xs)))]
+    query_x = xs[0]
+
+    _, h_obs = dif._encode(xs[1])
+    from_obs_case = _case_from_observation(
+        dif, h_obs, target, n=3, temperature=1.0, n_steps=15, rng=rng)
+
+    _, _, rag_case = _native_retrieval_augmented_h(
+        dif, query_x, db_x, k_neighbors=4, n=3, temperature=1.0, n_steps=12, rng=rng)
+
+    manifest = json.loads((_FIX / "manifest.json").read_text(encoding="utf-8"))
+    input_dim = int(manifest["model"]["input_dim"])
+
     doc = {
         "fixture_schema": 1,
         "generator": "scripts/generate_generation_fixture.py",
         "seed": 424242,
         "d_latent": d,
         "field_dim": field_dim,
+        "input_dim": input_dim,
         "labels": labels,
         "atol": _ATOL,
         "cases": {
@@ -425,6 +517,8 @@ def main() -> None:
             "rollout": _case_rollout(
                 dif, seed_label=target, n_steps=6, temperature=0.8,
                 exploration=0.15, rng=rng),
+            "generate_from_observation": from_obs_case,
+            "generate_retrieval_augmented": rag_case,
         },
     }
 

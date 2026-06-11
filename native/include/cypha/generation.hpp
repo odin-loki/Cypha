@@ -171,4 +171,52 @@ std::vector<RolloutStep> rollout(
     const double*      z_generate   = nullptr,
     const double*      u_transition = nullptr);
 
+// ---------------------------------------------------------------------------
+// Observation-anchored & retrieval-augmented generation
+// ---------------------------------------------------------------------------
+
+/// Conditional generation warm-started from a latent observation ``h_obs``.
+///
+/// Langevin walk anchored to ``h_obs``: ``∇_h log p(h|k) = -(h - mu_k) ⊙ inv_v``,
+/// step size ``lr = temperature * 0.05``, noise ``√(2·lr)``.
+///
+/// ``z_noise_override`` — ``(n × n_steps × d)`` standard normals; nullptr → draw.
+std::vector<std::vector<double>> generate_from_observation(
+    const CyphaInferModel& m,
+    const double*          h_obs,
+    const std::string&     label,
+    int                    n,
+    double                 temperature,
+    int                    n_steps,
+    std::mt19937*          rng,
+    const double*          z_noise_override = nullptr);
+
+/// Retrieval-augmented generation (RAG) on raw inputs.
+///
+/// 1. ``retrieve_from_x`` → top ``k_neighbors`` database rows
+/// 2. Distance-weighted latent centroid among hits (Euclidean to query ``h``)
+/// 3. ``generate_from_observation`` from the centroid with the nearest-hit label
+///
+/// Empty database → ``generate_langevin`` on the inferred query class (Python
+/// ``generate_real`` fallback).
+///
+/// ``z_noise_override`` — ``(n × n_steps × d)`` for the observation Langevin;
+/// ``z_init_override`` / ``z_langevin_noise_override`` — used only on empty-db
+/// fallback (same layout as ``generate_langevin``).
+std::vector<std::vector<double>> generate_retrieval_augmented(
+    const CyphaInferModel& m,
+    const double*          query_x,
+    const double*          database_x,
+    int                    n_db,
+    int                    input_dim,
+    int                    k_neighbors,
+    int                    n,
+    double                 temperature,
+    int                    n_steps,
+    const CyphaInferOptions& opt,
+    std::mt19937*          rng,
+    const double*          z_noise_override            = nullptr,
+    const double*          z_init_override               = nullptr,
+    const double*          z_langevin_noise_override     = nullptr);
+
 }  // namespace cypha

@@ -635,6 +635,95 @@ CNode patch_world_node(const CNode& world_in, const CyphaDifMemoryState& s) {
 
 }  // namespace
 
+double class_fisher_rao_norm(const double* delta_mu, int d, const double* v0) {
+  double sum = 0.0;
+  for (int j = 0; j < d; ++j) {
+    const double vj = std::max(v0[static_cast<std::size_t>(j)], kMinVar);
+    const double dm = delta_mu[static_cast<std::size_t>(j)];
+    sum += dm * dm / vj;
+  }
+  return sum;
+}
+
+std::vector<std::string> memory_merge_from(CyphaDifMemoryState& self, const CyphaDifMemoryState& other,
+                                           double weight_self, double weight_other) {
+  if (self.d_latent != other.d_latent || self.field_dim != other.field_dim) {
+    throw std::runtime_error("memory_merge_from: dimension mismatch");
+  }
+
+  std::vector<double> self_v0 = self.world_v;
+  std::vector<double> other_v0 = other.world_v;
+
+  const double n_self = static_cast<double>(self.world_n);
+  const double n_other = static_cast<double>(other.world_n);
+  const double n_total = n_self + n_other + kEps;
+  const int d = self.d_latent;
+
+  for (int j = 0; j < d; ++j) {
+    self.world_mu[static_cast<std::size_t>(j)] =
+        (n_self * self.world_mu[static_cast<std::size_t>(j)] + n_other * other.world_mu[static_cast<std::size_t>(j)]) /
+        n_total;
+    self.world_v[static_cast<std::size_t>(j)] =
+        (n_self * self.world_v[static_cast<std::size_t>(j)] + n_other * other.world_v[static_cast<std::size_t>(j)]) /
+        n_total;
+    self.world_inv_v[static_cast<std::size_t>(j)] =
+        1.0 / std::max(self.world_v[static_cast<std::size_t>(j)], kMinVar);
+  }
+  self.world_n = self.world_n + other.world_n;
+  self.refresh_world_log_norm_from_v();
+  double sum_v = 0.0;
+  for (int j = 0; j < d; ++j) {
+    sum_v += self.world_v[static_cast<std::size_t>(j)];
+  }
+  self.world_v_mean = sum_v / static_cast<double>(d);
+
+  auto get_or_create = [&](const std::string& lbl) -> int {
+    auto it = self.label_index.find(lbl);
+    if (it != self.label_index.end()) {
+      return it->second;
+    }
+    const int k = static_cast<int>(self.labels.size());
+    self.labels.push_back(lbl);
+    self.label_index[lbl] = k;
+    self.n_obs_buf.push_back(0.0);
+    self.n_correct.push_back(0);
+    self.D.resize(static_cast<std::size_t>((k + 1) * d), 0.0);
+    return k;
+  };
+
+  std::vector<std::string> new_labels;
+  for (const std::string& lbl : other.labels) {
+    auto oit = other.label_index.find(lbl);
+    if (oit == other.label_index.end()) {
+      continue;
+    }
+    const int ok = oit->second;
+    if (self.label_index.find(lbl) != self.label_index.end()) {
+      const int sk = self.label_index.at(lbl);
+      double norm_s = class_fisher_rao_norm(self.D.data() + static_cast<std::size_t>(sk * d), d, self_v0.data());
+      double norm_o = class_fisher_rao_norm(other.D.data() + static_cast<std::size_t>(ok * d), d, other_v0.data());
+      const double total = norm_s * weight_self + norm_o * weight_other + kEps;
+      const double w_s = norm_s * weight_self / total;
+      const double w_o = norm_o * weight_other / total;
+      for (int j = 0; j < d; ++j) {
+        self.D[static_cast<std::size_t>(sk * d + j)] =
+            w_s * self.D[static_cast<std::size_t>(sk * d + j)] + w_o * other.D[static_cast<std::size_t>(ok * d + j)];
+      }
+      self.n_obs_buf[static_cast<std::size_t>(sk)] += other.n_obs_buf[static_cast<std::size_t>(ok)];
+      self.n_correct[static_cast<std::size_t>(sk)] += other.n_correct[static_cast<std::size_t>(ok)];
+    } else {
+      const int nk = get_or_create(lbl);
+      for (int j = 0; j < d; ++j) {
+        self.D[static_cast<std::size_t>(nk * d + j)] = other.D[static_cast<std::size_t>(ok * d + j)];
+      }
+      self.n_obs_buf[static_cast<std::size_t>(nk)] = other.n_obs_buf[static_cast<std::size_t>(ok)];
+      self.n_correct[static_cast<std::size_t>(nk)] = other.n_correct[static_cast<std::size_t>(ok)];
+      new_labels.push_back(lbl);
+    }
+  }
+  return new_labels;
+}
+
 CNode CyphaDifMemoryState::merge_state_into_root_for_save(const CNode& root, const CyphaDifMemoryState& s) {
   CNode out = clone_cnode(root);
   for (auto& kv : out.map) {

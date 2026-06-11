@@ -1,4 +1,4 @@
-// Native PreprocessorState::fit_from_design_matrix vs Python golden (scale + PCA only).
+// Native PreprocessorState::fit_from_design_matrix vs Python golden (scale + PCA + RFF).
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -142,6 +142,20 @@ int run_one_case(const fs::path& dir) {
     }
   } else if (!jexp.at("pca_components").is_null()) {
     std::cerr << dir << ": expected PCA components but native fit produced none\n";
+    return 1;
+  }
+
+  if (!pre.rff_w.empty()) {
+    if (!mat_near(pre.rff_w, jexp.at("rff_W"), kTol)) {
+      std::cerr << dir << ": rff_W mismatch\n";
+      return 1;
+    }
+    if (!vec_near(pre.rff_b, jexp.at("rff_b"), kTol)) {
+      std::cerr << dir << ": rff_b mismatch\n";
+      return 1;
+    }
+  } else if (!jexp.at("rff_W").is_null()) {
+    std::cerr << dir << ": expected RFF weights but native fit produced none\n";
     return 1;
   }
 

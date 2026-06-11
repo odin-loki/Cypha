@@ -1,52 +1,78 @@
 {
   "domain": "d16",
-  "timestamp": "2026-05-31T04:46:23.964314+00:00",
   "experiments": {
     "16A_task_discovery": {
-      "routing_ari": 1.0,
+      "expert_count": 16,
       "per_task_accuracy": {
-        "iris": 0.8421052631578947,
-        "wine": 0.8,
-        "digits": 0.8111111111111111
+        "digits": 0.6307,
+        "iris": 0.9230769230769231,
+        "wine": 0.7111111111111111
       },
-      "expert_count": 16
+      "routing_ari": 0.0
     },
     "16B_forgetting_resistance": {
-      "task_a_accuracy_before": 0.8421052631578947,
-      "task_a_accuracy_after": 0.15789473684210525,
-      "forgetting_score": 0.8124999999999999
+      "forgetting_score": 0.2702702702702703,
+      "task_a_accuracy_after": 0.6923076923076923,
+      "task_a_accuracy_before": 0.9487179487179487
     },
     "16D_interleaving_comparison": {
-      "round_robin": {
-        "iris": 0.7894736842105263,
-        "wine": 0.8222222222222222,
-        "digits": 0.8488888888888889
+      "block": {
+        "digits": 0.6559,
+        "iris": 0.8974358974358975,
+        "wine": 0.8222222222222222
       },
       "random": {
-        "iris": 0.8157894736842105,
-        "wine": 0.8888888888888888,
-        "digits": 0.8333333333333334
+        "digits": 0.6082,
+        "iris": 0.6153846153846154,
+        "wine": 0.8
       },
-      "block": {
-        "iris": 0.8421052631578947,
-        "wine": 0.8444444444444444,
-        "digits": 0.8688888888888889
+      "round_robin": {
+        "digits": 0.6325,
+        "iris": 0.717948717948718,
+        "wine": 0.8666666666666667
       }
     },
     "16E_save_restore": {
-      "task_a_before": 0.8421052631578947,
-      "task_a_corrupted": 0.6578947368421053,
-      "task_a_restored": 0.8421052631578947,
-      "retention_ratio": 1.0
+      "retention_ratio": 1.0,
+      "task_a_before": 0.9230769230769231,
+      "task_a_corrupted": 0.6923076923076923,
+      "task_a_restored": 0.9230769230769231
     },
     "16F_per_task_models": {
-      "per_task_accuracy": {
-        "iris": 0.8157894736842105,
-        "wine": 0.9777777777777777,
-        "digits": 0.8533333333333334
-      },
       "forgetting_score": 0.0,
-      "note": "per-task isolated models \u2014 zero forgetting by architecture"
-    }
-  }
+      "note": "per-task isolated models — zero forgetting by architecture",
+      "per_task_accuracy": {
+        "digits": 0.7018,
+        "iris": 0.9487179487179487,
+        "wine": 1.0
+      }
+    },
+    "16G_view_streams": {
+      "forgetting_delta": -0.003003003003003102,
+      "macro_epochs": 2,
+      "max_steps": 3000,
+      "round_robin": {
+        "forgetting_score": 0.11111111111111119,
+        "per_task_accuracy": {
+          "digits": 0.6332,
+          "iris": 0.8205128205128205,
+          "wine": 0.8222222222222222
+        },
+        "task_a_accuracy_after": 0.8205128205128205,
+        "task_a_accuracy_before": 0.9230769230769231
+      },
+      "task_block_shuffle": {
+        "forgetting_score": 0.10810810810810809,
+        "per_task_accuracy": {
+          "digits": 0.6325,
+          "iris": 0.8461538461538461,
+          "wine": 0.8222222222222222
+        },
+        "task_a_accuracy_after": 0.8461538461538461,
+        "task_a_accuracy_before": 0.9487179487179487
+      }
+    },
+    "backend": "cypha_core"
+  },
+  "timestamp": "2026-06-11T08:30:10.557+00:00"
 }

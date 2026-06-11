@@ -1,74 +1,20 @@
 {
   "domain": "d17",
-  "timestamp": "2026-06-08T06:30:00+00:00",
   "experiments": {
-    "17A_bits_per_character": {
-      "cyphalm_bpc": 2.8732,
-      "train_tokens": 300000,
-      "profile": {
-        "context_mode": "hybrid_gria_lstm"
-      },
-      "phase1c_stub": true
-    },
     "17B_alpha_spectrum": {
-      "mean_alpha": 0.5,
-      "fraction_edge_of_chaos": 0.0,
-      "n_experts": 2
+      "fraction_edge_of_chaos": 0.9961089494163424,
+      "mean_alpha": 0.4980544747081712,
+      "n_experts": 1
     },
-    "17D_online_adaptation": {
-      "bpc_ood_before_adapt": 4.310004166064953,
-      "bpc_ood_after_adapt": 3.90497686947584,
-      "bpc_improvement": 0.40502729658911285
-    },
-    "17K_long_range_context": {
-      "n_train": 300000,
-      "n_eval": 8000,
-      "held_out_bpc": 2.873156289862414,
-      "context_length_bpc": {
-        "8": 3.028893578526513,
-        "16": 2.859705712473388,
-        "32": 2.9170563614728917,
-        "64": 3.246838444352917,
-        "128": 3.109660186733967,
-        "256": 3.3349817384029135,
-        "512": 2.912558160415064,
-        "1024": 2.935736442908324
-      },
-      "reset_interval_bpc": {
-        "never": 2.873156289862414,
-        "8": 3.1393579767409943,
-        "32": 2.937209287927482,
-        "64": 2.903927454922256,
-        "128": 2.886580949157627,
-        "256": 2.879311246279206,
-        "512": 2.876601579308242
-      },
-      "sequential_vs_shuffled": {
-        "forward_bpc": 2.8703821900707482,
-        "block_shuffled_bpc": 2.886833095041339,
-        "delta_shuffled_minus_forward": 0.016450904970590763,
-        "char_shuffled_bpc": 7.409595723811504,
-        "delta_char_shuffled_minus_forward": 4.539213533740757
-      },
-      "ssm_ablation_sequential": {
-        "gria_ngram": {
-          "held_out_bpc": 3.8231962083136066,
-          "train_seconds": 2296.302601900068
-        },
-        "ssm_only": {
-          "held_out_bpc": 4.190217183812227,
-          "train_seconds": 645.421052700025
-        },
-        "ablation_no_ssm": {
-          "held_out_bpc": 3.829139931929198,
-          "train_seconds": 302.7529247999191
-        },
-        "ssm_contribution_bpc": 0.0059437236155912565,
-        "dif_ngram_contribution_bpc": 0.36702097549862067
-      },
-      "output_path": "cypha_bench/config/cyphalm_long_range_300k_char1a.json",
-      "artifact": "cyphalm_long_range_300k_char1a.json",
-      "source": "wikitext2"
-    }
-  }
+    "backend": "cypha_lm_native",
+    "bpc": 4.38248836513683,
+    "corpus": "wikitext2",
+    "mode": "hybrid",
+    "n_eval": 500,
+    "n_train": 4000,
+    "profile": "d17",
+    "synthetic": false,
+    "vocab_size": 256
+  },
+  "timestamp": "2026-06-11T09:17:28.287+00:00"
 }

@@ -1,14 +1,58 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "cypha/kernel_memory.hpp"
 #include "cypha/load_cypha.hpp"
+#include "cypha/retrieval.hpp"
 
 namespace cypha {
+
+/// Python ``CyphaDIF.deliberation_lo/hi`` defaults (disabled: lo >= hi).
+constexpr double kDeliberationLoDefault = 1.0;
+constexpr double kDeliberationHiDefault = 0.0;
+constexpr const char* kUnknownLabel = "__unknown__";
+
+/// Runtime inference modifiers (Python ``infer`` / ``gh_infer`` / REST ``POST /predict``).
+struct CyphaInferOptions {
+  double deliberation_lo{kDeliberationLoDefault};
+  double deliberation_hi{kDeliberationHiDefault};
+  bool use_field{true};
+  double gh_chi{1.0};
+  double gh_psi{1.0};
+  double gh_alpha{0.98};
+};
+
+struct ClassifyAtHResult {
+  std::string label;
+  double confidence{};
+  double disc{};
+  double world_gate{1.0};
+  double r_eff{};
+  double mahal_per_dim{};
+  std::vector<double> llrs;
+};
+
+struct GhInferAtHResult {
+  std::string label;
+  double confidence{};
+  double r_eff{};
+  double chi_new{1.0};
+  double psi_new{1.0};
+  double t_adj{};
+  std::vector<double> llrs;
+};
+
+struct InferAtHResult {
+  std::string label;
+  double confidence{};
+  std::vector<double> llrs;
+};
 
 /// M1 inference state for CyphaDIF + VectorEncoder (CPU float64).
 struct CyphaInferModel {
@@ -58,6 +102,9 @@ struct CyphaInferModel {
   double base_temp{0.0};
   /// Python `CausalField._step` — NIG field `evolve` count (native: incremented when `nig_field_evolve` runs).
   std::int64_t field_step{0};
+  /// Python ``deliberation_lo`` / ``deliberation_hi`` (defaults disable abstention).
+  double deliberation_lo{kDeliberationLoDefault};
+  double deliberation_hi{kDeliberationHiDefault};
 
   /// Load inference buffers from a `.cypha` root. If `world.F_field` is stored in the blob (same layout
   /// as Python `WorldPrior.F_field`), pass `f_field_row_major == nullptr`. Otherwise pass row-major floats.
@@ -68,7 +115,9 @@ struct CyphaInferModel {
 void batch_encode(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& h_out);
 
 void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
-                            std::vector<double>& llr_out);
+                            std::vector<double>& llr_out,
+                            const KernelMemory* kernel_mem = nullptr, bool use_kernel_llr = false,
+                            double kernel_blend = 0.5);
 
 /// Convenience: ``batch_encode`` then ``score_matrix_use_field`` — ``llr_out`` is **n×K** row-major (``K = len(labels)``).
 void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& llr_out);
@@ -104,5 +153,28 @@ void auto_recalibrate_temperature(CyphaInferModel& m, double decay = 0.995);
 /// `true_class_idx[i]` ∈ [0, K). Updates `infer.temperature` and returns the chosen T.
 double adapt_temperature_ece(CyphaInferModel& infer, const double* h_row_major, int n_cal, const int* true_class_idx,
                              int n_grid = 20, double T_min = 0.3, double T_max = 8.0, int n_bins = 10);
+
+/// Python ``CyphaDIF._apply_deliberation``.
+std::pair<std::string, double> apply_deliberation(const std::string& pred, double conf, double lo, double hi);
+
+/// Python ``DIFMemory.classify`` for one latent row (optional ``h_field`` → μ₀ shift).
+ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const double* h_field,
+                                double temperature, const std::optional<double>& mahal_ema, double mahal_std_ema,
+                                double gh_chi, double gh_psi, bool use_context_prior = true);
+
+/// Python ``CyphaDIF.gh_infer`` (no field in μ₀ / T_adj; classify with ``ood_sigma=inf`` analogue — gate only).
+GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double chi, double psi,
+                               double alpha = 0.98);
+
+/// Python ``CyphaDIF.infer`` (``use_field`` + deliberation; no kernel LLR).
+InferAtHResult infer_at_h(const CyphaInferModel& m, const double* h, const CyphaInferOptions& opt);
+
+/// Python ``CyphaDIF.retrieve`` on raw ``x`` rows (encode then rank by class log-likelihood).
+std::vector<RetrieveHit> retrieve_from_x(const CyphaInferModel& m, const double* query_x, const double* database_x,
+                                         int n_db, int input_dim, int top_k, const CyphaInferOptions& opt,
+                                         const std::optional<std::string>& label = std::nullopt);
+
+/// FastAPI ``InferenceEngine`` anomaly from ``gh_infer`` ``R_eff`` and ``_mahal_ema``.
+double gh_infer_anomaly_score(double r_eff, double mahal_ema_fallback);
 
 }  // namespace cypha

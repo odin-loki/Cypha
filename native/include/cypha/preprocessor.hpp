@@ -30,7 +30,7 @@ struct PreprocessorState {
   [[nodiscard]] std::vector<double> transform_one(const std::vector<double>& x) const;
 
   /// Fit from ``n_rows``×``n_cols`` row-major design matrix (matches Python ``Preprocessor.fit`` for
-  /// **scale + PCA** only). ``rff_dim`` must be unset (≤0); RFF weights must be produced in Python.
+  /// scale + PCA + optional RFF). RFF weights use NumPy-compatible ``default_rng(seed)``.
   void fit_from_design_matrix(const std::vector<double>& row_major, int n_rows, int n_cols);
 };
 

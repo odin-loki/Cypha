@@ -5,11 +5,11 @@
 #   bash scripts/package_release_linux.sh <VERSION> <BUILD_DIR> [OUT_DIR]
 #
 # Example (CI):
-#   bash scripts/package_release_linux.sh 1.1.0 native/build dist
+#   bash scripts/package_release_linux.sh 2.0.0 native/build dist
 
 set -euo pipefail
 
-VERSION="${1:?version required, e.g. 1.1.0}"
+VERSION="${1:?version required, e.g. 2.0.0}"
 BUILD_DIR="${2:?build dir required, e.g. native/build}"
 OUT_DIR="${3:-dist}"
 
@@ -17,17 +17,35 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGING="$REPO_ROOT/$OUT_DIR/cypha-${VERSION}-linux-x86_64"
 ARCHIVE="$REPO_ROOT/$OUT_DIR/cypha-${VERSION}-linux-x86_64.tar.gz"
 
+# Production binaries (symlinked to PATH by install.sh)
 BINARIES=(
   cypha_rest
+  cypha_bench_run
+  cypha_bench_report
+  cypha_diagnostics_run
+  cypha_tune_run
   cyphalm_bench_native
   cyphalm_parity
   cyphalm_checkpoint_parity
+  gh_infer_deliberation_parity
+  kernel_llr_parity
   registry_register
   create_model_smoke
 )
 
+# Dev / research parity tools (installed under bin/dev/, not on PATH)
+DEV_BINARIES=(
+  score_batch_parity
+  multilabel_dif_parity
+  merge_from_parity
+  similarity_index_parity
+  embed_table_parity
+  retrieval_parity
+  som_parity
+)
+
 rm -rf "$STAGING"
-mkdir -p "$STAGING/bin" "$STAGING/share/demo_fixtures" "$STAGING/share/examples"
+mkdir -p "$STAGING/bin/dev" "$STAGING/share/demo_fixtures" "$STAGING/share/examples"
 
 echo "$VERSION" >"$STAGING/VERSION"
 
@@ -41,22 +59,50 @@ for bin in "${BINARIES[@]}"; do
   fi
 done
 
+for bin in "${DEV_BINARIES[@]}"; do
+  src="$REPO_ROOT/$BUILD_DIR/$bin"
+  if [[ -x "$src" ]]; then
+    install -m 755 "$src" "$STAGING/bin/dev/$bin"
+    echo "  + bin/dev/$bin"
+  else
+    echo "  skip missing dev/$bin"
+  fi
+done
+
 cp "$REPO_ROOT/install/install_release_linux.sh" "$STAGING/install.sh"
 chmod +x "$STAGING/install.sh"
 
 cat >"$STAGING/README.txt" <<EOF
-Cypha ${VERSION} — Linux x86_64 native tools
-============================================
+Cypha ${VERSION} — Linux x86_64 native tools (full C++ framework)
+=================================================================
 
-Quick install (adds ~/.local/bin/cypha-${VERSION} and symlinks):
+Quick install (adds ~/.local/bin symlinks for bin/; dev tools stay in bin/dev/):
   bash install.sh
 
-Run native REST (classifier + CyphaLM routes):
+Run native REST (classifier + CyphaLM + CyphaDIF routes):
   cypha_rest --listen 127.0.0.1:8099 --cypha share/demo_fixtures/reference.cypha \\
     --f-field-json share/demo_fixtures/f_field.json
 
-Run CyphaLM bench (WikiText profile; needs corpus on PATH or synthetic fallback):
+CyphaDIF REST routes (POST JSON):
+  /dif/retrieve   — ranked database hits (input, database, top_k, optional label)
+  /dif/generate   — latent samples (mode: langevin | from_observation | retrieval_augmented)
+
+Run native bench domains (d01–d17):
+  cypha_bench_run --domain 17
+
+Rebuild bench report from saved tables:
+  cypha_bench_report --output ./bench_report
+
+Run native diagnostics (phases 1–4 parity orchestrator):
+  cypha_diagnostics_run --fixtures /path/to/parity_fixtures
+
+Run CyphaLM bench CLI (WikiText profile; needs corpus on PATH or synthetic fallback):
   cyphalm_bench_native --mode hybrid --profile d17 --n-train 5000 --n-eval 500 --threads 1
+
+Run native tuning sweep (dry-run):
+  cypha_tune_run --config ../../cypha_bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run
+
+Dev parity tools (not on PATH): bin/dev/score_batch_parity, multilabel_dif_parity, merge_from_parity, similarity_index_parity, embed_table_parity, retrieval_parity, som_parity
 
 Python Studio / full stack: clone the repo and run install/install_linux.sh --studio
 

@@ -1,23 +1,15 @@
 {
   "domain": "cross_online_adaptation",
-  "timestamp": "2026-06-08T07:36:20.128783+00:00",
   "experiments": {
     "adaptation_rows": [
       {
+        "T_adapt_steps": 1,
         "domain": "d12",
         "experiment": "12C_online_detection",
-        "T_adapt_steps": 5,
-        "recovery_accuracy": 0.995
-      },
-      {
-        "domain": "d17",
-        "experiment": "17D_online_adaptation",
-        "T_adapt_steps": 0.40502729658911285,
-        "metric": "bpc_improvement",
-        "pre_drift_metric": 4.310004166064953,
-        "post_adapt_metric": 3.90497686947584
+        "recovery_accuracy": 0.905
       }
     ],
-    "n_domains_with_adaptation_signal": 2
-  }
+    "n_domains_with_adaptation_signal": 1
+  },
+  "timestamp": "2026-06-11T09:17:28.702+00:00"
 }

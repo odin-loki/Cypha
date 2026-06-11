@@ -1,0 +1,39 @@
+{
+  "sweep_id": "cyphalm_d17_phase1c_tune_smoke",
+  "description": "Smoke mirroring run_d17_phase1c.py (17A/17B/17D/17K proxies, tiny train)",
+  "runner": "cyphalm_bench_native",
+  "defaults": {
+    "profile": "d17",
+    "n_train": 2000,
+    "n_eval": 200,
+    "threads": 1
+  },
+  "cells": [
+    {
+      "id": "17A_bits_per_character",
+      "args": {
+        "mode": "hybrid"
+      }
+    },
+    {
+      "id": "17B_alpha_spectrum",
+      "args": {
+        "mode": "hybrid",
+        "analysis": true,
+        "analysis_steps": 128
+      }
+    },
+    {
+      "id": "17D_online_adaptation",
+      "args": {
+        "mode": "ssm"
+      }
+    },
+    {
+      "id": "17K_long_range_context",
+      "args": {
+        "mode": "context_bank"
+      }
+    }
+  ]
+}

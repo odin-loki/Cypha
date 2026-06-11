@@ -1,19 +1,24 @@
 #include "cypha/infer_cpu.hpp"
 
+#include "cypha/kernel_memory.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "cypha/accel_backend.hpp"
 #include "cypha/nig_field.hpp"
 #include "cypha/nig_gig_math.hpp"
+#include "cypha/retrieval.hpp"
 
 namespace cypha {
 
@@ -511,6 +516,15 @@ CyphaInferModel CyphaInferModel::from_root(const CNode& root, const double* f_fi
     m.field_step = as_int64(*fstep);
   }
 
+  const CNode* dlo = map_get(root, "deliberation_lo");
+  if (dlo != nullptr && dlo->kind != CNode::Nil) {
+    m.deliberation_lo = as_double(*dlo);
+  }
+  const CNode* dhi = map_get(root, "deliberation_hi");
+  if (dhi != nullptr && dhi->kind != CNode::Nil) {
+    m.deliberation_hi = as_double(*dhi);
+  }
+
   // Tier-1 sliding window + co-occurrence (Python `TieredContextBuffer` in `save_state`).
   const CNode* ctx_hp = map_get(root, "ctx_hist_packed");
   if (ctx_hp != nullptr && ctx_hp->kind == CNode::Map) {
@@ -593,7 +607,8 @@ void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n
 }
 
 void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
-                            std::vector<double>& llr_out) {
+                            std::vector<double>& llr_out, const KernelMemory* kernel_mem,
+                            bool use_kernel_llr, double kernel_blend) {
   const int d = m.d_latent;
   const int K = static_cast<int>(m.labels.size());
   llr_out.assign(static_cast<std::size_t>(n * K), 0.0);
@@ -641,6 +656,19 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
   ensure_infer_accel();
   cypha::accel::score_matrix(h_row_major, n, d, K, mu0.data(), m.inv_v.data(), m.D.data(), d_sq.data(),
                              u_k.data(), ctx.data(), llr_out.data());
+
+  if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
+    std::vector<double> kernel_scores(static_cast<std::size_t>(K));
+    for (int i = 0; i < n; ++i) {
+      kernel_mem->score_all(h_row_major + static_cast<std::size_t>(i * d), m.labels, kernel_scores);
+      for (int k = 0; k < K; ++k) {
+        const double lin = llr_out[static_cast<std::size_t>(i * K + k)];
+        const double ker = kernel_scores[static_cast<std::size_t>(k)];
+        llr_out[static_cast<std::size_t>(i * K + k)] =
+            (1.0 - kernel_blend) * lin + kernel_blend * ker;
+      }
+    }
+  }
 }
 
 void softmax_batch_like_python(const double* z_row_major, int n, int k, double eps,
@@ -778,6 +806,221 @@ void world_gate_vector_use_field(const CyphaInferModel& m, const double* h_row_m
   ensure_infer_accel();
   cypha::accel::world_gate_nig_field_batch(h_row_major, n, d, mu0.data(), m.inv_v.data(), r_base, gh_chi,
                                            gh_psi, gates_out.data());
+}
+
+std::pair<std::string, double> apply_deliberation(const std::string& pred, double conf, double lo, double hi) {
+  if (lo < hi && conf >= lo && conf <= hi) {
+    return {kUnknownLabel, conf * 0.5};
+  }
+  return {pred, conf};
+}
+
+namespace {
+
+void mu0_with_optional_field(const CyphaInferModel& m, const double* h_field, std::vector<double>& mu0_out) {
+  const int d = m.d_latent;
+  mu0_out.resize(static_cast<std::size_t>(d));
+  for (int j = 0; j < d; ++j) {
+    mu0_out[static_cast<std::size_t>(j)] = m.mu_world[static_cast<std::size_t>(j)];
+  }
+  if (h_field == nullptr) {
+    return;
+  }
+  double h_sq = 0.0;
+  for (int t = 0; t < m.field_dim; ++t) {
+    h_sq += h_field[t] * h_field[t];
+  }
+  if (std::isfinite(h_sq) && h_sq <= 1e8) {
+    for (int j = 0; j < d; ++j) {
+      double acc = 0.0;
+      for (int t = 0; t < m.field_dim; ++t) {
+        acc += m.f_field[static_cast<std::size_t>(j * m.field_dim + t)] * h_field[t];
+      }
+      mu0_out[static_cast<std::size_t>(j)] += acc;
+    }
+  }
+}
+
+double mean_inv_v(const CyphaInferModel& m) {
+  const int d = m.d_latent;
+  if (d <= 0) {
+    return 1.0;
+  }
+  double sum = 0.0;
+  for (int j = 0; j < d; ++j) {
+    sum += m.inv_v[static_cast<std::size_t>(j)];
+  }
+  return sum / static_cast<double>(d);
+}
+
+double legacy_sigmoid_gate(double mahal_per_dim, double mahal_ema, double mahal_std_ema) {
+  const double std_safe = std::max(mahal_std_ema, 0.05);
+  const double threshold = mahal_ema + 5.0 * std_safe;
+  const double scale = 2.0 / std_safe;
+  const double margin = std::clamp((threshold - mahal_per_dim) * scale, -500.0, 500.0);
+  return 1.0 / (1.0 + std::exp(-margin));
+}
+
+}  // namespace
+
+ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const double* h_field,
+                                double temperature, const std::optional<double>& mahal_ema,
+                                double mahal_std_ema, double gh_chi, double gh_psi,
+                                bool use_context_prior) {
+  ClassifyAtHResult out;
+  const int d = m.d_latent;
+  const int K = static_cast<int>(m.labels.size());
+  if (K == 0 || d <= 0) {
+    out.label = kUnknownLabel;
+    return out;
+  }
+
+  std::vector<double> mu0;
+  mu0_with_optional_field(m, h_field, mu0);
+
+  std::vector<double> ctx;
+  if (use_context_prior) {
+    context_prior_for_labels(m, m.labels, ctx);
+  } else {
+    ctx.assign(static_cast<std::size_t>(K), 0.0);
+  }
+
+  out.llrs.assign(static_cast<std::size_t>(K), 0.0);
+  int best_i = 0;
+  double best_llr = -1e300;
+  double mahal_num = 0.0;
+  for (int j = 0; j < d; ++j) {
+    const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
+    mahal_num += dj * dj * m.inv_v[static_cast<std::size_t>(j)];
+  }
+  out.mahal_per_dim = mahal_num / static_cast<double>(std::max(d, 1));
+
+  for (int k = 0; k < K; ++k) {
+    double cross = 0.0;
+    double d_sq = 0.0;
+    for (int j = 0; j < d; ++j) {
+      const double Dkj = m.D[static_cast<std::size_t>(k * d + j)];
+      const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
+      const double rj = dj * m.inv_v[static_cast<std::size_t>(j)];
+      cross += Dkj * rj;
+      d_sq += Dkj * Dkj * m.inv_v[static_cast<std::size_t>(j)];
+    }
+    const double u_arr = m.v_mean / (m.n_obs[static_cast<std::size_t>(k)] + 1.0);
+    const double llr = cross - 0.5 * d_sq - u_arr + ctx[static_cast<std::size_t>(k)];
+    out.llrs[static_cast<std::size_t>(k)] = llr;
+    if (llr > best_llr) {
+      best_llr = llr;
+      best_i = k;
+    }
+  }
+
+  out.label = m.labels[static_cast<std::size_t>(best_i)];
+  std::vector<double> z(static_cast<std::size_t>(K));
+  for (int k = 0; k < K; ++k) {
+    z[static_cast<std::size_t>(k)] = out.llrs[static_cast<std::size_t>(k)] / (temperature + kEps);
+  }
+  std::vector<double> probs;
+  softmax_batch_like_python(z.data(), 1, K, kEps, probs);
+  out.disc = probs[static_cast<std::size_t>(best_i)];
+
+  double r_base = m.v_mean;
+  if (mahal_ema.has_value() && std::isfinite(*mahal_ema) && *mahal_ema > kEps) {
+    r_base = *mahal_ema;
+  }
+  if (gh_chi > 0.0 && gh_psi > 0.0) {
+    out.r_eff = nig_r_eff_scalar(out.mahal_per_dim, r_base, gh_chi, gh_psi);
+    out.world_gate = r_base / std::max(out.r_eff, r_base);
+  } else if (mahal_ema.has_value()) {
+    out.world_gate = legacy_sigmoid_gate(out.mahal_per_dim, *mahal_ema, mahal_std_ema);
+    out.r_eff = r_base;
+  } else {
+    out.world_gate = 1.0;
+    out.r_eff = r_base;
+  }
+
+  out.confidence = out.disc * out.world_gate;
+  return out;
+}
+
+GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double chi, double psi, double alpha) {
+  GhInferAtHResult out;
+  const int d = m.d_latent;
+  const int K = static_cast<int>(m.labels.size());
+  if (K == 0 || d <= 0) {
+    out.label = kUnknownLabel;
+    out.chi_new = chi;
+    out.psi_new = psi;
+    out.r_eff = 1.0;
+    return out;
+  }
+
+  double mahal_sq = 0.0;
+  for (int j = 0; j < d; ++j) {
+    const double dj = h[j] - m.mu_world[static_cast<std::size_t>(j)];
+    mahal_sq += dj * dj * m.inv_v[static_cast<std::size_t>(j)];
+  }
+  mahal_sq /= static_cast<double>(d);
+
+  const double inv_mean = mean_inv_v(m);
+  const double r_base = 1.0 / (inv_mean + kEps);
+  out.r_eff = nig_r_eff_scalar(std::max(mahal_sq, 0.0), r_base, chi, psi);
+  const double gh_scale = r_base / std::max(out.r_eff, r_base);
+  out.t_adj = m.temperature / std::max(gh_scale, 0.01);
+
+  const ClassifyAtHResult cls =
+      classify_at_h(m, h, nullptr, out.t_adj, std::nullopt, 0.5, 1.0, 1.0, true);
+  out.label = cls.label;
+  out.confidence = cls.confidence;
+  out.llrs = std::move(cls.llrs);
+
+  auto adapted = nig_adapt_session_chi(chi, psi, mahal_sq, r_base, alpha);
+  out.chi_new = adapted.first;
+  out.psi_new = adapted.second;
+  return out;
+}
+
+InferAtHResult infer_at_h(const CyphaInferModel& m, const double* h, const CyphaInferOptions& opt) {
+  InferAtHResult out;
+  const int K = static_cast<int>(m.labels.size());
+  if (K == 0) {
+    out.label = kUnknownLabel;
+    return out;
+  }
+
+  const double* h_field = opt.use_field ? m.field_h.data() : nullptr;
+  std::optional<double> mahal_ema_opt;
+  if (m.has_mahal_ema && std::isfinite(m.mahal_ema) && m.mahal_ema > kEps) {
+    mahal_ema_opt = m.mahal_ema;
+  }
+
+  const ClassifyAtHResult cls = classify_at_h(m, h, h_field, m.temperature, mahal_ema_opt, m.mahal_std_ema, 1.0, 1.0,
+                                              true);
+  out.llrs = cls.llrs;
+  const auto deliberated = apply_deliberation(cls.label, cls.confidence, opt.deliberation_lo, opt.deliberation_hi);
+  out.label = deliberated.first;
+  out.confidence = deliberated.second;
+  return out;
+}
+
+std::vector<RetrieveHit> retrieve_from_x(const CyphaInferModel& m, const double* query_x, const double* database_x,
+                                         int n_db, int, int top_k, const CyphaInferOptions& opt,
+                                         const std::optional<std::string>& label) {
+  std::vector<double> h_q;
+  batch_encode(m, query_x, 1, h_q);
+  std::vector<double> h_db;
+  batch_encode(m, database_x, n_db, h_db);
+  return retrieve_at_h(m, h_q.data(), h_db.data(), n_db, top_k, opt, label);
+}
+
+double gh_infer_anomaly_score(double r_eff, double mahal_ema_fallback) {
+  if (!(r_eff > 0.0) || !std::isfinite(r_eff)) {
+    return 0.0;
+  }
+  const double r_base = (mahal_ema_fallback > 0.0 && std::isfinite(mahal_ema_fallback)) ? mahal_ema_fallback : 1.0;
+  if (r_base <= 0.0) {
+    return 0.0;
+  }
+  return std::max(0.0, (r_eff - r_base) / r_base);
 }
 
 }  // namespace cypha

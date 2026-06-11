@@ -35,8 +35,62 @@ std::vector<double> softmax(const std::vector<double>& logits) {
 
 }  // namespace
 
+namespace {
+
+double histogram_entropy(const std::vector<double>& values) {
+    if (values.empty()) return 1.0;
+    double mn = values[0];
+    double mx = values[0];
+    for (double v : values) {
+        mn = std::min(mn, v);
+        mx = std::max(mx, v);
+    }
+    if (mx - mn < 1e-12) return 0.0;
+    constexpr int kBins = 16;
+    std::vector<int> hist(static_cast<std::size_t>(kBins), 0);
+    for (double v : values) {
+        int b = static_cast<int>((v - mn) / (mx - mn) * (kBins - 1));
+        b = std::max(0, std::min(kBins - 1, b));
+        ++hist[static_cast<std::size_t>(b)];
+    }
+    const double n = static_cast<double>(values.size());
+    double ent = 0.0;
+    for (int c : hist) {
+        if (c <= 0) continue;
+        const double p = static_cast<double>(c) / n;
+        ent -= p * std::log(p);
+    }
+    return ent;
+}
+
+}  // namespace
+
 CyphaDIF::Expert::Expert(double k0, double a0, double b0, int in_dim, int out_dim)
     : input_nig(k0, a0, b0, in_dim), output_nig(k0, a0, b0, out_dim) {}
+
+double CyphaDIF::Expert::input_entropy() const {
+    if (activation_history.empty()) return 1.0;
+    const int dims = static_cast<int>(activation_history.front().size());
+    double total = 0.0;
+    for (int d = 0; d < dims; ++d) {
+        std::vector<double> col;
+        col.reserve(activation_history.size());
+        for (const auto& row : activation_history) {
+            if (d < static_cast<int>(row.size())) col.push_back(row[static_cast<std::size_t>(d)]);
+        }
+        total += histogram_entropy(col);
+    }
+    return total / static_cast<double>(std::max(1, dims));
+}
+
+void CyphaDIF::Expert::record_activation(const double* x, int dim, int max_history) {
+    std::vector<double> row(static_cast<std::size_t>(dim));
+    for (int i = 0; i < dim; ++i) row[static_cast<std::size_t>(i)] = x[i];
+    activation_history.push_back(std::move(row));
+    if (static_cast<int>(activation_history.size()) > max_history) {
+        activation_history.erase(activation_history.begin());
+    }
+}
 
 CyphaDIF::CyphaDIF(const CyphaLMConfig& cfg)
     : field_dim_(cfg.field_dim),
@@ -118,6 +172,11 @@ DIFPredictOutput CyphaDIF::predict(const double* x, int dim) {
     DIFPredictOutput out;
     out.mean.assign(static_cast<std::size_t>(field_dim_), 0.0);
     const auto probs = route(x, dim);
+    for (std::size_t k = 0; k < experts_.size(); ++k) {
+        if (k < probs.size() && probs[k] > kActiveThreshold) {
+            experts_[k].record_activation(x, dim);
+        }
+    }
     out.routing_probs = probs;
     if (experts_.empty()) {
         return out;
@@ -183,6 +242,54 @@ nlohmann::json CyphaDIF::get_state() const {
     }
     j["experts"] = experts;
     return j;
+}
+
+std::vector<double> CyphaDIF::alpha_per_expert() const {
+    std::vector<double> alphas;
+    alphas.reserve(experts_.size());
+    for (const auto& expert : experts_) {
+        const double h_x = std::max(expert.input_entropy(), 1e-8);
+        const double h_f = std::max(expert.output_nig.predictive_entropy(), 1e-8);
+        const double alpha = std::max(0.0, std::min(1.0, 1.0 - h_f / h_x));
+        alphas.push_back(alpha);
+    }
+    return alphas;
+}
+
+bool CyphaDIF::discriminative_state(std::vector<double>& delta_mu_rows,
+                                    std::vector<double>& inv_v) const {
+    const int K = static_cast<int>(experts_.size());
+    if (K <= 0 || field_dim_ <= 0) {
+        return false;
+    }
+    delta_mu_rows.assign(static_cast<std::size_t>(K * field_dim_), 0.0);
+    inv_v.assign(static_cast<std::size_t>(field_dim_), 0.0);
+    std::vector<double> pooled(static_cast<std::size_t>(field_dim_), 0.0);
+    for (const auto& ex : experts_) {
+        std::vector<double> mean;
+        ex.output_nig.predictive_mean(mean);
+        for (int i = 0; i < field_dim_; ++i) {
+            pooled[static_cast<std::size_t>(i)] += mean[static_cast<std::size_t>(i)];
+        }
+    }
+    const double inv_k = 1.0 / static_cast<double>(K);
+    for (double& v : pooled) {
+        v *= inv_k;
+    }
+    for (int k = 0; k < K; ++k) {
+        std::vector<double> mean;
+        experts_[static_cast<std::size_t>(k)].output_nig.predictive_mean(mean);
+        for (int i = 0; i < field_dim_; ++i) {
+            delta_mu_rows[static_cast<std::size_t>(k * field_dim_ + i)] =
+                mean[static_cast<std::size_t>(i)] - pooled[static_cast<std::size_t>(i)];
+        }
+        std::vector<double> inv_k_dim;
+        experts_[static_cast<std::size_t>(k)].output_nig.predictive_inv_variance(inv_k_dim);
+        for (int i = 0; i < field_dim_; ++i) {
+            inv_v[static_cast<std::size_t>(i)] += inv_k_dim[static_cast<std::size_t>(i)] * inv_k;
+        }
+    }
+    return true;
 }
 
 void CyphaDIF::set_state(const nlohmann::json& state) {

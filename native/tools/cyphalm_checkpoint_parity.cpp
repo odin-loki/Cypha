@@ -49,6 +49,9 @@ int test_native_roundtrip(ContextMode mode, const char* label) {
     cfg.lstm_lr = 0.05;
     cfg.train_epochs = 1;
     cfg.bptt_steps = (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram) ? 8 : 0;
+    if (mode == ContextMode::AblationNoSsm || mode == ContextMode::AblationNoDif) {
+        cfg.bptt_steps = 0;
+    }
 
     const auto train_ids = synthetic_ids(220, cfg.vocab_size, 42);
     const auto eval_ids = synthetic_ids(80, cfg.vocab_size, 99);
@@ -102,6 +105,37 @@ int main(int argc, char** argv) {
     int failures = 0;
     failures += test_native_roundtrip(ContextMode::CharLstm, "char_lstm") != 0 ? 1 : 0;
     failures += test_native_roundtrip(ContextMode::Hybrid, "hybrid") != 0 ? 1 : 0;
+    failures += test_native_roundtrip(ContextMode::AblationNoDif, "ablation_no_dif") != 0 ? 1 : 0;
+    failures += test_native_roundtrip(ContextMode::AblationNoSsm, "ablation_no_ssm") != 0 ? 1 : 0;
+
+    {
+        CyphaLMConfig cfg;
+        cfg.vocab_size = 32;
+        cfg.d_embed = 8;
+        cfg.d_state = 16;
+        cfg.ssm_layers = 1;
+        cfg.field_dim = 16;
+        cfg.context_mode = ContextMode::SsmGria;
+        cfg.use_hierarchical_ssm = true;
+        cfg.compress_interval = 4;
+        cfg.seed = 42;
+        const auto train_ids = synthetic_ids(120, cfg.vocab_size, 7);
+        const auto eval_ids = synthetic_ids(40, cfg.vocab_size, 11);
+        CyphaLMModel model(cfg);
+        model.train_sequence(train_ids, static_cast<int>(train_ids.size()) - 1, 1);
+        const double bpc_before = eval_bpc(model, eval_ids, static_cast<int>(eval_ids.size()) - 1);
+        const std::string base = "C:/Temp/cyphalm_ckpt_parity_hier";
+        model.save(base);
+        CyphaLMModel loaded = cypha::cyphalm::load_cyphalm_model(base + ".json");
+        const double bpc_after = eval_bpc(loaded, eval_ids, static_cast<int>(eval_ids.size()) - 1);
+        if (!near(bpc_before, bpc_after, 1e-9)) {
+            std::cerr << "FAIL hierarchical_ssm roundtrip bpc before=" << bpc_before
+                      << " after=" << bpc_after << "\n";
+            ++failures;
+        } else {
+            std::cout << "OK hierarchical_ssm roundtrip bpc=" << bpc_before << "\n";
+        }
+    }
 
     std::string fixture;
     if (argc >= 2) {

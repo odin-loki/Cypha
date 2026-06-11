@@ -1,26 +1,32 @@
 # Full native stack — replacement plan (Python reference → C++ / CUDA / Qt)
 
-This document turns **“replace the full Python stack”** into ordered work, frozen interfaces, and acceptance tests. The Python tree remains the **golden reference** until each slice is signed off.
+This document turns **“replace the full Python stack”** into ordered work, frozen interfaces, and acceptance tests.
 
-**Prerequisites:** read [`PORT_CONTRACT.md`](PORT_CONTRACT.md) (inference + `.cypha` v3 + REST shapes) and [`ROADMAP.md`](../verify/ROADMAP.md) (phases 0–4).
+**v2.2 status:** **Python is prototyping-only.** Production runtime — train, infer, bench, tune, diagnostics, REST, Qt — runs in **native C++** (`native/`). Python remains the **golden math reference** and **offline fixture generator** only; it is not required on the hot path after install. Quick start: [`docs/native/NATIVE_QUICKSTART.md`](../native/NATIVE_QUICKSTART.md). Master tracker: [`docs/native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md`](../native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md).
+
+**Prerequisites:** read [`PORT_CONTRACT.md`](PORT_CONTRACT.md) (inference + `.cypha` v3 + REST shapes + bench §6) and [`ROADMAP.md`](../verify/ROADMAP.md) (phases 0–4).
 
 ---
 
 ## 1. What “full stack” means here
 
-| Layer today (Python) | Native target | Notes |
-|------------------------|---------------|--------|
-| **`Cypha.py`** — `CyphaDIF`, `DIFRegressor`, encoders, GH, NIG, generation, `train_step`, save/load | **Core runtime** (inference + training + binary I/O) | Largest body of work; split by milestone below. |
-| **`cypha_accel/`** | **Same math, your backend** (CUDA/CPU BLAS) | Reference for fused LLR / projection; not a second spec. |
-| **`cypha_studio/core/dataset.py`** | **Data ingest + splits** (Qt or native + CSV/Arrow) | Preprocessing rules must match `Preprocessor` (scale, PCA, RFF options) or document deltas. |
-| **`cypha_studio/core/trainer.py`** | **Training orchestration** | Loop, epochs, callbacks, metrics — can stay a **thin Qt/C++ shell** calling `train_step` on native model. |
-| **`cypha_studio/core/registry.py`** | **Registry** | On-disk layout is already simple (see §4). |
-| **`cypha_studio/core/experiment.py`** | **Experiments** (optional v1) | SQLite schema; defer or reimplement after registry + inference. |
-| **`cypha_studio/core/inference.py`** | **Inference façade** | Must match `PredictResponse` / explanation fields per `PORT_CONTRACT`. |
-| **`cypha_studio/server/api.py`** | **REST** (FastAPI in C++ via proxy, or **cpp-httplib**, or **Qt HTTP**) | JSON must stay compatible with [`PORT_CONTRACT.md` §3](PORT_CONTRACT.md). |
-| **`cypha_studio/gui/`** | **Qt 6 UI** | Replace PySide6; keep same user flows where possible. |
+| Layer (Python reference) | Native target (production) | v2.2 notes |
+|------------------------|----------------------------|------------|
+| **`Cypha.py`** — `CyphaDIF`, `DIFRegressor`, encoders, GH, NIG, generation, `train_step`, save/load | **`cypha_core`** + parity CTests | **Shipped.** Hot-path math in C++; Python for fixture gen only. |
+| **`cypha_accel/`** | **`cypha::accel`** (CUDA / parallel CPU) | **`score_batch_parity`**, **`cuda_smoke`**. |
+| **`cypha_studio/core/dataset.py`** | **`csv_ingest`**, **`preprocessor_*`**, Qt shell dataset panel | Native CSV + preprocessor fit/transform; no Python import at runtime. |
+| **`cypha_studio/core/trainer.py`** | **`dif_train_classify_sequence`**, Qt shell bulk train | Studio-shaped loops in native; Python **`Trainer`** = reference only. |
+| **`cypha_studio/core/registry.py`** | **`registry_register`**, REST **`/register`** / **`/load`** | Copy-bundle layout frozen; see §4. |
+| **`cypha_studio/core/experiment.py`** | **`experiment_db_*`** (optional) | SQLite DDL + CRUD in C++ when **`CYPHA_BUILD_EXPERIMENT_DB=ON`**. |
+| **`cypha_studio/core/inference.py`** | **`cypha_rest`** **`/predict`** | JSON per [`PORT_CONTRACT.md` §3](PORT_CONTRACT.md). |
+| **`cypha_studio/server/api.py`** | **`cypha_rest`** (cpp-httplib) | CyphaDIF + CyphaLM + Branch A routes; see [`native/README.md`](../../native/README.md). |
+| **`cypha_studio/gui/`** | **`cypha_qt_shell`** | PySide6 replaced for production; Python GUI = prototyping. |
+| **`cypha_bench/run_all.py`** | **`cypha_bench_run`**, **`cypha_bench_report`** | d01–d17 + cross-domain + figures; see PORT_CONTRACT §6. |
+| **`cypha_bench/tuning/*.py`** | **`cypha_tune_run`** | Sweep JSON → per-cell native bench. |
+| **`cypha_diagnostics/`** | **`cypha_diagnostics_run`** | Phases 1–4 parity orchestration. |
+| **CyphaLM (Python)** | **`cypha_lm_native`**, **`cyphalm_bench_native`**, REST **`/lm/*`**, **`/generate`** | Training remains Python-led; inference/bench native. |
 
-**Intentionally keep in Python (research / golden):** `scripts/tune_*`, `generate_parity_fixtures`, benchmark scripts, and pytest that generates `expected.npz`. Native CI consumes **artifacts**, not these scripts at runtime.
+**Python prototyping-only (not production runtime):** `Cypha.py` experiments, PySide6 Studio, `cypha_bench/run_all.py`, `scripts/tune_*`, `generate_parity_fixtures`, FastAPI dev server, and pytest that emits `expected.npz` / sidecars. Native CI and release bundles consume **pre-built binaries + fixtures**, not Python imports at runtime.
 
 ---
 
@@ -69,7 +75,7 @@ Each milestone has **exit criteria** you can run without Python in the hot path 
 ### M2 — Registry + preprocessor contract
 
 - [x] Read **`model.cypha`** + **`preprocessor.json`** + **`card.json`** layout (`registry_scan` + docs). **Write:** Python **`ModelRegistry.register`** remains the reference for train-then-save; native **`registry_register`** / **`registry_register_bundle`** copies pre-built artifacts into the same directory layout (CTest **`native_registry_register`**, pytest **`tests/test_registry_register_native_parity.py`**).
-- [x] **`preprocessor.json`** — JSON Schema [`schemas/preprocessor.schema.json`](schemas/preprocessor.schema.json); native `transform_one` checked by **`preprocessor_parity`** + `parity_fixtures/preprocessor/`; CTest **`native_preprocessor`**, pytest **`tests/test_preprocessor_native_parity.py`**. Native **`fit_from_design_matrix`** (scale on/off + PCA) vs Python **`fit`**: CTest **`native_preprocessor_fit`**, **`parity_fixtures/preprocessor_fit/`** + **`preprocessor_fit_no_scale/`**, **`scripts/generate_preprocessor_fit_fixture.py`**, pytest **`tests/test_preprocessor_fit_native_parity.py`** (RFF fitting remains Python-only).
+- [x] **`preprocessor.json`** — JSON Schema [`schemas/preprocessor.schema.json`](schemas/preprocessor.schema.json); native `transform_one` checked by **`preprocessor_parity`** + `parity_fixtures/preprocessor/`; CTest **`native_preprocessor`**, pytest **`tests/test_preprocessor_native_parity.py`**. Native **`fit_from_design_matrix`** (scale on/off + PCA + RFF) vs Python **`fit`**: CTest **`native_preprocessor_fit`**, **`parity_fixtures/preprocessor_fit/`** + **`preprocessor_fit_no_scale/`** + **`preprocessor_fit_rff/`**, **`scripts/generate_preprocessor_fit_fixture.py`**, pytest **`tests/test_preprocessor_fit_native_parity.py`**.
 - [x] **CSV dense load (Studio `CSVDataset` subset):** **`cypha::load_csv_dense`** + **`parse_csv_utf8`** (Excel dialect) vs **`CSVDataset.from_file`** — **`cases.json`** may supply **`target_col_name`** / **`feature_col_names`** (header lookup, first match per name) or **`target_col_index`** / **`feature_col_indices`** (negative indices count from end, matching Python); **`fixture_schema` 3** adds a **multiline quoted field** (newline inside quotes). Generator self-checks **`read_chunk_rows`** vs full load for numeric fixtures. CTest **`native_csv_ingest`**, **`parity_fixtures/csv_ingest/`**, **`scripts/generate_csv_ingest_fixture.py`**, pytest **`tests/test_csv_ingest_native_parity.py`**. **`preprocess_train_classify_parity`** **`csv_spec`** accepts the same optional name fields.
 
 ### M3 — Online training (`train_step`) — CyphaDIF
@@ -163,9 +169,9 @@ Keep generating fixtures with **`python scripts/generate_parity_fixtures.py`** w
 
 ---
 
-## 7. Native cutover sequence (target: Python out of the hot path)
+## 7. Native cutover sequence (Python out of the hot path — **achieved v2.2**)
 
-**Yes — this is the direction:** milestones M1–M7 and parity fixtures exist so **one native core** (`CyphaCore` in the diagram above) eventually owns **encode → LLR → gate → train → I/O**, with Qt/REST as thin clients. Python remains the **golden reference** for math and for **offline** fixture generation until each slice is signed off — not as the long-term production training runtime if your goal is full native.
+**Done for production:** milestones M1–M7, native bench/tune/diagnostics, and parity fixtures mean **one native core** (`cypha_core` + `cypha_lm_native`) owns **encode → LLR → gate → train → I/O → bench**, with Qt/REST as thin clients. Python is **prototyping-only** — golden math reference and **offline** fixture generation, not the shipped runtime.
 
 **Already aligned with “all native” (hot-path math in C++, CI-gated):**
 
@@ -207,12 +213,15 @@ Keep generating fixtures with **`python scripts/generate_parity_fixtures.py`** w
 | Change REST fields → `PORT_CONTRACT.md` §3 + `tests/test_api_contract.py` |
 | Change registry layout → this file §4 + `registry.py` docstring |
 | Add training golden → new script under `scripts/` + native CI hook |
-| Plan “Python off hot path” → **§7 Native cutover sequence** (this file) |
+| Plan “Python off hot path” → **§7** (achieved); quick start → [`NATIVE_QUICKSTART.md`](../native/NATIVE_QUICKSTART.md) |
+| Native bench/tune contract → [`PORT_CONTRACT.md`](PORT_CONTRACT.md) §6 |
 
 ---
 
 
-**All milestones M1–M6 complete.** The native hot path covers encode → LLR → gate → train → I/O → REST → Qt UI → Experiments DB. Python remains the golden reference for math and offline fixture generation.
+**All milestones M1–M7 complete (v2.2 release readiness).** The native hot path covers encode → LLR → gate → train → I/O → REST (CyphaDIF + CyphaLM + Branch A) → Qt UI → Experiments DB → bench/tune/diagnostics. **Python is prototyping-only** — golden math reference and offline fixture generation.
+
+**Validation gate:** `powershell -File scripts/cypha_native_validate_all.ps1` (or build + `ctest -R native_` + pytest parity). Install: `install/install_release_windows.ps1` / `install/install_release_linux.sh`.
 
 **Next horizons** — see **[`docs/FUTURE.md`](../FUTURE.md)**:
 - **§1** CUDA tuning (batch thresholds, persistent device buffers) if serving latency matters

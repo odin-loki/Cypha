@@ -301,8 +301,8 @@ def test_update_post_roundtrip_with_engine():
     assert eng.n_corrections >= 1
 
 
-def test_update_regression_y_returns_501_native_only():
-    """Optional /update keys for native ``cypha_rest`` + ``mke`` are rejected on FastAPI (classification-only)."""
+def test_update_regression_y_requires_mke_block():
+    """``regression_y`` without ``mke`` in regression head returns 400 (same as native)."""
     import numpy as np
     from Cypha import CyphaDIF, VectorEncoder
     from fastapi.testclient import TestClient
@@ -321,11 +321,130 @@ def test_update_regression_y_returns_501_native_only():
     client = TestClient(app)
     base = {"input": [0.1, 0.2, 0.3, 0.4], "correct_label": "0", "use_gh": False}
     r = client.post("/update", json={**base, "regression_y": 1.0})
-    assert r.status_code == 501
-    r2 = client.post("/update", json={**base, "replay_u01": [0.1, 0.2]})
-    assert r2.status_code == 501
-    r3 = client.post("/update", json={**base, "router_train_label": "_e_0"})
-    assert r3.status_code == 501
+    assert r.status_code == 400
+    assert "mke block" in r.json()["detail"]
+
+
+def test_update_replay_u01_classification_ok():
+    """``replay_u01`` on classification ``/update`` is accepted (no longer 501)."""
+    import numpy as np
+    from Cypha import CyphaDIF, VectorEncoder
+    from fastapi.testclient import TestClient
+
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
+
+    from cypha_studio.core.inference import InferenceEngine, InferenceSession
+    from cypha_studio.core.registry import ModelRegistry
+
+    rng = np.random.default_rng(45)
+    clf = CyphaDIF(VectorEncoder(4), field_dim=48, rng=rng, replay_ratio=0.3)
+    for i in range(50):
+        clf.train_step(rng.standard_normal(4), str(i % 3))
+    eng = InferenceEngine(clf, None)
+    app = api_mod.create_app(engine=eng, registry=ModelRegistry(), session=InferenceSession(eng))
+    client = TestClient(app)
+    r = client.post(
+        "/update",
+        json={
+            "input": [0.5, -0.2, 0.1, 0.0],
+            "correct_label": "1",
+            "use_gh": False,
+            "replay_u01": [0.99, 0.01, 0.5, 0.5],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert np.isfinite(float(r.json()["loss"]))
+
+
+def test_update_router_train_label_ignored_without_regression_y():
+    """``router_train_label`` without ``regression_y`` follows plain classification (native ignores it)."""
+    import numpy as np
+    from Cypha import CyphaDIF, VectorEncoder
+    from fastapi.testclient import TestClient
+
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
+
+    from cypha_studio.core.inference import InferenceEngine, InferenceSession
+    from cypha_studio.core.registry import ModelRegistry
+
+    rng = np.random.default_rng(46)
+    clf = CyphaDIF(VectorEncoder(4), field_dim=48, rng=rng)
+    for i in range(20):
+        clf.train_step(rng.standard_normal(4), str(i % 2))
+    eng = InferenceEngine(clf, None)
+    app = api_mod.create_app(engine=eng, registry=ModelRegistry(), session=InferenceSession(eng))
+    client = TestClient(app)
+    r = client.post(
+        "/update",
+        json={
+            "input": [0.1, 0.2, 0.3, 0.4],
+            "correct_label": "0",
+            "use_gh": False,
+            "router_train_label": "_e_0",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_fastapi_mke_update_router_loss_matches_fixture(tmp_path):
+    """FastAPI ``POST /update`` with ``regression_y`` + ``mke`` matches ``mke_train_step`` sidecar."""
+    import json
+    from pathlib import Path
+
+    import numpy as np
+    from Cypha import CyphaDIF, RFFEncoder, cypha_load_binary
+    from fastapi.testclient import TestClient
+
+    pytest.importorskip("httpx", reason="httpx not installed (requirements-verify.txt)")
+
+    from cypha_studio.core.inference import InferenceEngine, InferenceSession
+    from cypha_studio.core.registry import ModelRegistry
+    from tests.test_cypha_rest_smoke import _mke_regression_head_from_sidecar
+
+    fix = Path(__file__).resolve().parents[1] / "parity_fixtures" / "mke_train_step"
+    side_path = fix / "sidecar.json"
+    if not side_path.is_file() or not (fix / "before.cypha").is_file():
+        pytest.skip("mke_train_step fixture missing")
+
+    side = json.loads(side_path.read_text(encoding="utf-8"))
+    reg_path = tmp_path / "regression_head.json"
+    reg_path.write_text(json.dumps(_mke_regression_head_from_sidecar(side)), encoding="utf-8")
+
+    enc = RFFEncoder(int(side["d_in"]), D=int(side["D_rff"]), gamma=1.0, seed=901)
+    clf = CyphaDIF(
+        enc,
+        field_dim=24,
+        rng=np.random.default_rng(997),
+        enc_lr=0.0,
+        replay_ratio=0.0,
+    )
+    clf.load_state(cypha_load_binary(str(fix / "before.cypha")))
+
+    eng = InferenceEngine(clf, None)
+    app = api_mod.create_app(
+        engine=eng,
+        registry=ModelRegistry(),
+        session=InferenceSession(eng),
+        regression_head_path=str(reg_path),
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/update",
+        json={
+            "input": side["x"],
+            "correct_label": side["router_train_label"],
+            "use_gh": True,
+            "regression_y": side["y"],
+            "router_train_label": side["router_train_label"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    np.testing.assert_allclose(
+        float(r.json()["loss"]),
+        float(side["expected_router_loss"]),
+        rtol=0,
+        atol=1e-8,
+    )
 
 
 def test_register_post_no_registry_returns_503():

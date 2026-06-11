@@ -1,115 +1,26 @@
 {
-  "domain": "d06_go",
-  "timestamp": "2026-05-31T04:36:50.785109+00:00",
+  "domain": "d06",
   "experiments": {
-    "summary": {
-      "domain": "d06_go",
-      "n_samples": 2000,
-      "regression": {
-        "cypha_scores": {
-          "rmse": 0.07964104465221333,
-          "mae": 0.06313507854452961,
-          "r2": 0.974613349370173
-        },
-        "cypha_metrics": {
-          "mean_epistemic_var": 0.00015662478333519755,
-          "std_epistemic_var": 0.0007706742754673816,
-          "mean_aleatoric_var": 3.915619583379939e-05,
-          "expert_count": 10,
-          "mean_alpha": 0.739789527279837,
-          "alpha_distribution": [
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837,
-            0.739789527279837
-          ],
-          "fraction_edge_of_chaos": 0.0,
-          "uncertainty_rank_correlation": 0.2498171863574147
-        },
-        "baselines": {
-          "dummy_mean": {
-            "rmse": 0.49984411632528,
-            "mae": 0.4997031250000001,
-            "r2": -1.5634771730610453e-06
-          },
-          "knn_5": {
-            "rmse": 0.4626013402488151,
-            "mae": 0.396,
-            "r2": 0.1434646654158851
-          },
-          "ridge": {
-            "rmse": 0.00034397822590616806,
-            "mae": 0.000327368965401596,
-            "r2": 0.9999995264199328
-          },
-          "random_forest": {
-            "rmse": 0.0,
-            "mae": 0.0,
-            "r2": 1.0
-          },
-          "gradient_boosting": {
-            "rmse": 1.327655895538313e-05,
-            "mae": 1.3272814028553934e-05,
-            "r2": 0.999999999294491
-          }
-        },
-        "sgd_online": {
-          "rmse": 0.16837364746182215,
-          "mae": 0.13476563296829766,
-          "r2": 0.8865303408246236
-        }
-      },
-      "classification": {
-        "cypha_scores": {
-          "accuracy": 0.995,
-          "f1_macro": 0.9949954959463517
-        },
-        "cypha_metrics": {
-          "mean_epistemic_var": 0.00406209642790034,
-          "std_epistemic_var": 0.04340225857718327,
-          "mean_aleatoric_var": 0.0018347787313247289,
-          "expert_count": 2,
-          "mean_alpha": 0.8677554186717342,
-          "alpha_distribution": [
-            0.8765419022643489,
-            0.8589689350791195
-          ],
-          "fraction_edge_of_chaos": 0.0,
-          "uncertainty_rank_correlation": 0.12188094134829768
-        },
-        "baselines": {
-          "dummy_majority": {
-            "accuracy": 0.5125,
-            "f1_macro": 0.33884297520661155
-          },
-          "knn_5": {
-            "accuracy": 0.6675,
-            "f1_macro": 0.6532824119031015
-          },
-          "logistic_regression": {
-            "accuracy": 1.0,
-            "f1_macro": 1.0
-          },
-          "random_forest": {
-            "accuracy": 1.0,
-            "f1_macro": 1.0
-          },
-          "gradient_boosting": {
-            "accuracy": 1.0,
-            "f1_macro": 1.0
-          }
-        },
-        "sgd_online": {
-          "accuracy": 1.0,
-          "f1_macro": 1.0
-        }
+    "backend": "cypha_core",
+    "classification": {
+      "cypha_scores": {
+        "accuracy": 0.986875,
+        "expert_count": 2,
+        "mean_epistemic_var": 0.010463165722060776
       }
+    },
+    "domain": "d06_go",
+    "n_samples": 8000,
+    "regression": {
+      "cypha_scores": {
+        "expert_count": 10,
+        "mae": 0.49120780406516956,
+        "mean_epistemic_var": 0.25159902881433555,
+        "r2": -0.027226638159966177,
+        "rmse": 0.5065863240368312
+      },
+      "ridge_rmse": 0.5031447939804136
     }
-  }
+  },
+  "timestamp": "2026-06-11T08:25:29.314+00:00"
 }

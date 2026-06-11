@@ -123,6 +123,17 @@ void cyphalm_rest_lm_load(const std::string& checkpoint_path) {
     g_lm_loaded = std::chrono::steady_clock::now();
 }
 
+nlohmann::json cyphalm_rest_generate_json(const std::vector<int>& prompt_ids, int max_tokens,
+                                          const DecodeParams& params) {
+    std::lock_guard<std::mutex> lk(g_lm_mu);
+    if (!g_lm) {
+        throw std::runtime_error("No LM loaded");
+    }
+    const GenerateOutput gen = generate_decode(*g_lm, prompt_ids, max_tokens, params);
+    ++g_lm_generations;
+    return generate_response_json(gen);
+}
+
 void register_cyphalm_rest_routes(httplib::Server& svr) {
     svr.Post("/lm/load", [](const httplib::Request& req, httplib::Response& res) {
         try {

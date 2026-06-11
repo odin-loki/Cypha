@@ -134,6 +134,12 @@ void CellAISSM::enable_hebb_graph(const HebbianGraphConfig& cfg) {
   hebb_graph_ = std::make_unique<HebbianGraph>(gc);
 }
 
+void CellAISSM::enable_temporal_som(cypha::som::TemporalSOMConfig cfg) {
+  temporal_som_ = std::make_unique<cypha::som::TemporalSOM>(cfg);
+  lam_fast_scale_ = 1.0;
+  lam_slow_scale_ = 1.0;
+}
+
 void CellAISSM::set_projection_weights(int layer, const std::vector<double>& w_fast,
                                        const std::vector<double>& w_slow) {
   if (layer < 0 || layer >= cfg_.n_layers) {
@@ -184,6 +190,13 @@ std::vector<double> CellAISSM::step(const std::vector<double>& e_t) {
   }
 
   std::vector<double> layer_input = e_t;
+  if (temporal_som_) {
+    const auto [bmu, lf, ls] = temporal_som_->step(e_t, true);
+    (void)bmu;
+    lam_fast_scale_ = lf;
+    lam_slow_scale_ = ls;
+  }
+
   std::vector<double> contexts;
   contexts.reserve(static_cast<std::size_t>(context_dim()));
 
@@ -195,8 +208,8 @@ std::vector<double> CellAISSM::step(const std::vector<double>& e_t) {
     const auto wh = matvec(W_fast_[static_cast<std::size_t>(layer)], cfg_.d_state, in_dim, layer_input);
     const auto ws = matvec(W_slow_[static_cast<std::size_t>(layer)], cfg_.d_state, in_dim, layer_input);
 
-    const double lf = clip(lambda_fast_, 0.01, 0.999);
-    const double ls = clip(lambda_slow_, 0.01, 0.999);
+    const double lf = clip(lambda_fast_ * lam_fast_scale_, 0.01, 0.999);
+    const double ls = clip(lambda_slow_ * lam_slow_scale_, 0.01, 0.999);
 
     if (cfg_.use_spectral_pde) {
       h = spectral_step(h, a_kernel_fast_[static_cast<std::size_t>(layer)]);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(cypha_native VERSION 2.0.0 LANGUAGES CXX C)
+project(cypha_native VERSION 2.2.0 LANGUAGES CXX C)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 
@@ -35,6 +35,7 @@ add_library(cypha_core STATIC
   src/load_cypha.cpp
   src/save_cypha.cpp
   src/infer_cpu.cpp
+  src/retrieval.cpp
   src/nig_gig_math.cpp
   src/bessel_table_data.cpp
   src/preprocessor.cpp
@@ -56,6 +57,10 @@ add_library(cypha_core STATIC
   src/kernel_memory.cpp
   src/branch_a_router.cpp
   src/som/som_encoder.cpp
+  src/som/temporal_som.cpp
+  src/som/gng_expert.cpp
+  src/som/gria_controller.cpp
+  src/som/discriminative_feedback.cpp
   src/multilabel_dif.cpp
   src/similarity_index.cpp
 )
@@ -96,6 +101,8 @@ add_library(cypha_bench_native STATIC
   src/bench/bench_cross_domain.cpp
   src/bench/bench_report.cpp
   src/bench/bench_figures.cpp
+  src/bench/bench_figure_render.cpp
+  src/bench/bench_tune.cpp
 )
 
 target_include_directories(cypha_bench_native PUBLIC
@@ -139,6 +146,10 @@ cypha_mingw_apply_exe_link_options(cypha_bench_run)
 add_executable(cypha_bench_report tools/cypha_bench_report.cpp)
 target_link_libraries(cypha_bench_report PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cypha_bench_report)
+
+add_executable(cypha_tune_run tools/cypha_tune_run.cpp)
+target_link_libraries(cypha_tune_run PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(cypha_tune_run)
 
 target_include_directories(cypha_core PUBLIC
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -191,7 +202,7 @@ target_link_libraries(csv_ingest_parity PRIVATE cypha_core)
 add_executable(preprocess_train_classify_parity tools/preprocess_train_classify_parity.cpp)
 target_link_libraries(preprocess_train_classify_parity PRIVATE cypha_core)
 
-add_executable(cypha_rest tools/cypha_rest.cpp tools/cyphalm_rest_routes.cpp tools/branch_a_rest_routes.cpp)
+add_executable(cypha_rest tools/cypha_rest.cpp tools/cyphalm_rest_routes.cpp tools/branch_a_rest_routes.cpp tools/dif_rest_routes.cpp)
 target_link_libraries(cypha_rest PRIVATE cypha_core cypha_lm_native)
 
 add_executable(registry_register tools/registry_register.cpp)
@@ -233,6 +244,12 @@ target_link_libraries(generation_parity PRIVATE cypha_core)
 add_executable(gh_infer_deliberation_parity tools/gh_infer_deliberation_parity.cpp)
 target_link_libraries(gh_infer_deliberation_parity PRIVATE cypha_core)
 
+add_executable(embed_table_parity tools/embed_table_parity.cpp)
+target_link_libraries(embed_table_parity PRIVATE cypha_lm_native)
+
+add_executable(retrieval_parity tools/retrieval_parity.cpp)
+target_link_libraries(retrieval_parity PRIVATE cypha_core)
+
 add_executable(cuda_smoke tools/cuda_smoke.cpp)
 target_link_libraries(cuda_smoke PRIVATE cypha_core)
 
@@ -244,6 +261,9 @@ target_link_libraries(cypha_diagnostics_run PRIVATE cypha_core)
 
 add_executable(cyphalm_hebbian_parity tools/cyphalm_hebbian_parity.cpp)
 target_link_libraries(cyphalm_hebbian_parity PRIVATE cypha_lm_native)
+
+add_executable(som_parity tools/som_parity.cpp)
+target_link_libraries(som_parity PRIVATE cypha_lm_native)
 
 add_executable(cyphalm_char_lstm_parity tools/cyphalm_char_lstm_parity.cpp)
 target_link_libraries(cyphalm_char_lstm_parity PRIVATE cypha_lm_native)
@@ -263,6 +283,8 @@ set(
   cyphalm_ssm_parity
   cypha_parity
   gh_infer_deliberation_parity
+  embed_table_parity
+  retrieval_parity
   batch_llr_parity
   score_batch_parity
   kernel_llr_parity
@@ -292,12 +314,14 @@ set(
   cuda_smoke
   create_model_smoke
   cyphalm_hebbian_parity
+  som_parity
   cyphalm_char_lstm_parity
   cyphalm_checkpoint_parity
   cyphalm_model_parity
   cyphalm_bench_native
   cyphalm_parity
   cypha_bench_run
+  cypha_tune_run
   cypha_diagnostics_run
 )
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
@@ -425,23 +449,29 @@ if(MSVC)
   target_compile_options(mke_train_step_parity PRIVATE /W4 /permissive-)
   target_compile_options(generation_parity PRIVATE /W4 /permissive-)
   target_compile_options(gh_infer_deliberation_parity PRIVATE /W4 /permissive-)
+  target_compile_options(embed_table_parity PRIVATE /W4 /permissive-)
+  target_compile_options(retrieval_parity PRIVATE /W4 /permissive-)
   target_compile_options(cuda_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_lm_native PRIVATE /W4 /permissive-)
   target_compile_options(cypha_bench_native PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_hebbian_parity PRIVATE /W4 /permissive-)
+  target_compile_options(som_parity PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_model_parity PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_char_lstm_parity PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_checkpoint_parity PRIVATE /W4 /permissive-)
   target_compile_options(cypha_bench_run PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_tune_run PRIVATE /W4 /permissive-)
   target_compile_options(cypha_diagnostics_run PRIVATE /W4 /permissive-)
 else()
   target_compile_options(cypha_core PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_bench_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_hebbian_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(som_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_model_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_bench_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_bench_run PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_tune_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_diagnostics_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -471,6 +501,8 @@ else()
   target_compile_options(mke_train_step_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(generation_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(gh_infer_deliberation_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(embed_table_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(retrieval_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_char_lstm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_checkpoint_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -640,6 +672,24 @@ add_test(
 )
 
 add_test(
+  NAME native_embed_table
+  COMMAND "$<TARGET_FILE:embed_table_parity>"
+    "${_parity_fix}/embed_table/sidecar.json"
+)
+if(NOT EXISTS "${_parity_fix}/embed_table/sidecar.json")
+  set_tests_properties(native_embed_table PROPERTIES DISABLED TRUE)
+endif()
+
+add_test(
+  NAME native_retrieval
+  COMMAND "$<TARGET_FILE:retrieval_parity>"
+    "${_parity_fix}/retrieval/sidecar.json"
+)
+if(NOT EXISTS "${_parity_fix}/retrieval/sidecar.json")
+  set_tests_properties(native_retrieval PROPERTIES DISABLED TRUE)
+endif()
+
+add_test(
   NAME native_cyphalm_char_lstm
   COMMAND "$<TARGET_FILE:cyphalm_char_lstm_parity>"
     "${_parity_fix}/cyphalm_char_lstm/sidecar.json"
@@ -668,6 +718,13 @@ add_test(
 )
 
 add_test(
+  NAME native_tune_run_smoke
+  COMMAND "$<TARGET_FILE:cypha_tune_run>"
+    --config "${CMAKE_SOURCE_DIR}/../cypha_bench/config/cyphalm_hybrid_lstm_tune_smoke.json"
+    --max-cells 2
+)
+
+add_test(
   NAME native_create_model
   COMMAND "$<TARGET_FILE:create_model_smoke>"
 )
@@ -682,6 +739,11 @@ add_test(
 add_test(
   NAME native_cyphalm_hebbian
   COMMAND "$<TARGET_FILE:cyphalm_hebbian_parity>"
+)
+
+add_test(
+  NAME native_som_parity
+  COMMAND "$<TARGET_FILE:som_parity>"
 )
 
 add_test(NAME native_cyphalm_ssm COMMAND "$<TARGET_FILE:cyphalm_ssm_parity>")

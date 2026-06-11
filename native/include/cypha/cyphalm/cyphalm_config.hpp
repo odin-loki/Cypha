@@ -15,6 +15,8 @@ enum class ContextMode {
     CharLstm,
     SsmGria,
     SsmGriaNoLstm,
+    AblationNoDif,
+    AblationNoSsm,
 };
 
 /// Bench / CLI mode aliases (mapped to ``ContextMode`` + tier flags).
@@ -80,11 +82,26 @@ struct CyphaLMConfig {
     bool use_context_bank = false;
     int context_bank_slots = 64;
     bool use_hierarchical_ssm = false;
+    bool use_hebb_graph = false;
+    bool use_hebbian_stack = false;
+    /// Mirrors ``cypha_som.config.USE_TEMPORAL_SOM`` / ``wire_cellai`` (U6; off by default).
+    bool use_temporal_som = false;
+    /// Mirrors ``cypha_som.config.USE_GNG`` (U1; off by default).
+    bool use_gng = false;
+    /// Mirrors ``cypha_som.config.USE_GRIA_CONTROLLER`` (U3; requires ``use_gng``).
+    bool use_gria_controller = false;
+    /// Mirrors ``cypha_som.config.USE_DISCRIM_FEEDBACK`` (U4; modulates encoder/BPTT grads).
+    bool use_discriminative_feedback = false;
+    double ssm_hebb_lr = 1e-4;
 
     int compress_interval = 64;
     int max_memory_slots = 256;
 
     std::uint64_t seed = 42;
+
+    /// Optional BPE tokenizer paths (inference encode/decode when both set).
+    std::string bpe_merges_path;
+    std::string bpe_vocab_path;
 };
 
 ContextMode parse_context_mode(const std::string& s);

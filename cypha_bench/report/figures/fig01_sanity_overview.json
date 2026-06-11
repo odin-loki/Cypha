@@ -1,0 +1,27 @@
+{
+  "categories": [
+    "linearly_separable_2class",
+    "4_gaussian_blobs"
+  ],
+  "chart_type": "grouped_bar",
+  "figure": "fig01_sanity_overview",
+  "format": "figure_data_v1",
+  "series": [
+    {
+      "name": "CyphaDIF",
+      "values": [
+        0.9875,
+        0.8875
+      ]
+    },
+    {
+      "name": "Logistic Regression",
+      "values": [
+        0.8875,
+        0.725
+      ]
+    }
+  ],
+  "title": "Classification accuracy (D01 subset)",
+  "y_label": "accuracy"
+}

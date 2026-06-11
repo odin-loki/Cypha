@@ -1,0 +1,18 @@
+{
+  "categories": [
+    "CyphaLM"
+  ],
+  "chart_type": "bar",
+  "figure": "fig04_char_lm_training",
+  "format": "figure_data_v1",
+  "series": [
+    {
+      "name": "BPC",
+      "values": [
+        4.223326535737092
+      ]
+    }
+  ],
+  "title": "CyphaLM char LM (moby_dick.txt)",
+  "y_label": "bits per character"
+}

@@ -4,6 +4,8 @@
 
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 namespace cypha::cyphalm {
 
 /// Fast CellAI tier + slow tier stepped every compress_every tokens (Tier 1 A5).
@@ -18,6 +20,9 @@ class HierarchicalSSM {
   int token_count() const { return token_count_; }
   const CellAISSM& fast_tier() const { return fast_; }
   const CellAISSM& slow_tier() const { return slow_; }
+
+  nlohmann::json get_state() const;
+  void set_state(const nlohmann::json& state);
 
  private:
   int compress_every_;

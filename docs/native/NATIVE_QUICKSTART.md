@@ -1,0 +1,168 @@
+# Native quick start (v2.4)
+
+One-page guide: **install → validate → bench → tune → REST**. Python is **not** required for production runtime after install; use it only for fixture generation and research prototyping.
+
+**Deeper docs:** [`native/README.md`](../../native/README.md) (all targets), [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md) (API + bench §6), [`CYPHALM_NATIVE_BUILD.md`](CYPHALM_NATIVE_BUILD.md) (CyphaLM build).
+
+---
+
+## 1. Build (developers)
+
+Use a build directory **outside OneDrive** (cloud sync locks object files).
+
+```powershell
+# Windows — from repo root
+cmake -S native -B C:\Temp\cypha_full_cpp_build -DCMAKE_BUILD_TYPE=Release -G Ninja
+cmake --build C:\Temp\cypha_full_cpp_build --parallel
+```
+
+```bash
+# Linux / WSL
+cmake -S native -B /tmp/cypha_full_cpp_build -DCMAKE_BUILD_TYPE=Release -G Ninja
+cmake --build /tmp/cypha_full_cpp_build --parallel
+```
+
+Optional: **`-DCYPHA_ENABLE_CUDA=ON`** (MSVC or Linux + NVIDIA), **`-DCYPHA_BUILD_QT=ON`** (Studio shell), **`-DCYPHA_BUILD_EXPERIMENT_DB=ON`** (SQLite experiments).
+
+---
+
+## 2. Install (release bundle)
+
+After packaging with `scripts/package_release_windows.sh` / `scripts/package_release_linux.sh`:
+
+```powershell
+# Windows — from extracted tarball
+powershell -ExecutionPolicy Bypass -File install\install_release_windows.ps1
+```
+
+```bash
+# Linux
+bash install/install_release_linux.sh
+```
+
+Adds **`cypha_rest`**, **`cypha_bench_run`**, **`cypha_bench_report`**, **`cypha_tune_run`**, **`cypha_diagnostics_run`** to PATH. Parity tools (if bundled) live in **`bin/dev/`**.
+
+---
+
+## 3. Validate
+
+**Full gate (recommended):**
+
+```powershell
+powershell -File scripts\cypha_native_validate_all.ps1
+```
+
+Runs: Release build → **`ctest -R native_`** → pytest native parity + REST contract → bench smoke (d01, d04, d17) → **`--report-only`** figures → tune dry-run (all smoke configs). Pass **`-TuneSmoke`** for a live **`cypha_tune_run`** sweep.
+
+**Manual subset:**
+
+```bash
+ctest --test-dir C:/Temp/cypha_full_cpp_build -R native_ --output-on-failure
+python -m pytest tests/test_*_native*.py tests/test_cypha_rest_smoke.py -q
+C:/Temp/cypha_full_cpp_build/cypha_diagnostics_run --fixtures parity_fixtures --exe-dir C:/Temp/cypha_full_cpp_build
+```
+
+Set **`CYPHA_*_BIN`** env vars to point pytest at your build tree (see `scripts/cypha_native_validate_all.ps1`).
+
+---
+
+## 4. Bench
+
+From repo root (so **`cypha_bench/report/`** paths resolve):
+
+```bash
+cypha_bench_run --list-domains
+cypha_bench_run --domain 1          # d01 only
+cypha_bench_run --from-domain 1     # d01 … d17
+cypha_bench_run --report-only       # cross-domain + BASELINE_REPORT.md + figures
+```
+
+Fast smoke: **`CYPHA_BENCH_FAST=1`** (smaller subsamples).
+
+Outputs:
+
+| Path | Content |
+|------|---------|
+| `cypha_bench/report/tables/dXX.json` | Per-domain results |
+| `cypha_bench/report/summary.json` | Roll-up |
+| `cypha_bench/BASELINE_REPORT.md` | Human-readable report |
+| `cypha_bench/report/figures/` | Figure JSON + PNG (`figures_manifest.json`) |
+
+Report-only without re-running domains: **`cypha_bench_report --output ./bench_report`**.
+
+---
+
+## 5. Tune
+
+Native sweep configs (ported from **`cypha_bench/tuning/*.py`**):
+
+| Config | Python source | Runner |
+|--------|---------------|--------|
+| `cyphalm_hybrid_lstm_tune_smoke.json` | `cyphalm_hybrid_lstm_sweep.py` | `cyphalm_bench_native` |
+| `cyphalm_d17_phase1c_tune_smoke.json` | `run_d17_phase1c.py` | `cyphalm_bench_native` |
+| `cypha_branch_a_encoder_tune_smoke.json` | `cypha_branch_a_encoder_sweep.py` | `cypha_bench_run` |
+
+```powershell
+# Dry-run all smoke sweeps (default in validate_all)
+powershell -File scripts\cypha_tune_smoke.ps1 -DryRun -MaxCells 4
+
+# Live smoke (writes results under cypha_bench/artifacts/tuning/)
+powershell -File scripts\cypha_tune_smoke.ps1 -Write -MaxCells 4
+
+# Or single sweep
+cypha_tune_run --config cypha_bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run
+cypha_tune_run --config path/to/sweep.json --write --max-cells 4
+```
+
+Sweep JSON specifies **`runner`** (`cyphalm_bench_native` or `cypha_bench_run`), **`defaults`**, and explicit **`cells`** or cartesian **`grid`**. Boolean cell args (e.g. **`analysis`**) emit flag-only CLI tokens. Results JSON written under **`cypha_bench/artifacts/tuning/`** (gitignored).
+
+---
+
+## 6. REST
+
+```bash
+cypha_rest --listen 127.0.0.1:8099 \
+  --cypha parity_fixtures/reference.cypha \
+  --f-field-json parity_fixtures/f_field.json
+```
+
+**CyphaDIF:** `GET /health`, `GET /ready`, `POST /predict`, `POST /update`, `GET /models`, `POST /load`, `POST /register`, …
+
+**CyphaLM:** `POST /lm/load`, `GET /lm/metrics`, `POST /lm/predict_next`, `POST /generate`, `POST /generate/stream`
+
+**Branch A** (optional `--branch-a-json branch_a_router.json`): `GET /route/health`, `POST /route/text`, `POST /route/generate`, `POST /route/save`
+
+```bash
+curl -s http://127.0.0.1:8099/ready
+curl -s http://127.0.0.1:8099/predict -H 'Content-Type: application/json' \
+  -d '{"input":[0,0,0,0,0,0,0,0],"use_gh":true}'
+```
+
+Optional regression sidecar: **`--regression-json regression_head.json`**. Registry: **`--registry ~/.cypha/models`**.
+
+**Qt Studio shell** (separate build with **`-DCYPHA_BUILD_QT=ON`**): see [`native/qt/README.md`](../../native/qt/README.md) and `scripts/run_cypha_qt_windows.ps1`.
+
+---
+
+## 7. Diagnostics
+
+```bash
+cypha_diagnostics_run --fixtures parity_fixtures --exe-dir C:/Temp/cypha_full_cpp_build
+cypha_diagnostics_run --phases 1,2 --list
+```
+
+Orchestrates parity executables + inline checks; writes JSON under **`cypha_diagnostics/results/`** (gitignored).
+
+---
+
+## Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| Slow / failed links on Windows | Build under `C:\Temp\`, not OneDrive |
+| `ctest` cannot find fixtures | Run from configured build; MinGW cross-build rewrites `/mnt/c/` paths |
+| Bench cannot find repo | Set **`CYPHA_REPO_ROOT`** to checkout root |
+| CUDA on Windows | MSVC only — see [`ACCEL_CUDA.md`](ACCEL_CUDA.md) |
+| Missing embed/retrieval CTests | Fixture sidecar not generated yet — CTest auto-disabled |
+
+**Regenerate parity fixtures (Python, offline):** `python scripts/generate_parity_fixtures.py` and domain-specific generators under `scripts/`.

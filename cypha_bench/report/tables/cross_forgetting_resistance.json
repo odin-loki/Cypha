@@ -1,23 +1,23 @@
 {
   "domain": "cross_forgetting_resistance",
-  "timestamp": "2026-06-08T07:36:25.051466+00:00",
   "experiments": {
     "forgetting_rows": [
       {
+        "accuracy_after": 0.6923076923076923,
+        "accuracy_before": 0.9487179487179487,
         "domain": "d16",
         "experiment": "16B_forgetting_resistance",
-        "forgetting_score": 0.8124999999999999,
-        "accuracy_before": 0.8421052631578947,
-        "accuracy_after": 0.15789473684210525
+        "forgetting_score": 0.2702702702702703
       },
       {
+        "accuracy_after": null,
+        "accuracy_before": null,
         "domain": "d16",
         "experiment": "16F_per_task_models",
-        "forgetting_score": 0.0,
-        "accuracy_before": null,
-        "accuracy_after": null
+        "forgetting_score": 0.0
       }
     ],
-    "mean_forgetting_score": 0.40624999999999994
-  }
+    "mean_forgetting_score": 0.13513513513513514
+  },
+  "timestamp": "2026-06-11T09:17:28.712+00:00"
 }

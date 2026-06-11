@@ -323,6 +323,74 @@ def rest_server_mke_train_step(rest_bin, tmp_path):
 
 
 @pytest.fixture
+def rest_server_dif_train_replay(rest_bin, tmp_path):
+    """``cypha_rest`` with ``dif_train_replay`` fixture (``replay_ratio>0``)."""
+    import httpx
+
+    replay_dir = _FIX / "dif_train_replay"
+    side_path = replay_dir / "sidecar.json"
+    if not side_path.is_file() or not (replay_dir / "before.cypha").is_file():
+        pytest.skip("dif_train_replay parity fixture missing")
+
+    side = json.loads(side_path.read_text(encoding="utf-8"))
+    hp = {
+        "world_lr": side["world_lr"],
+        "delta_lr": side["delta_lr"],
+        "ood_sigma": side["ood_sigma"],
+        "enc_lr": side["enc_lr"],
+        "replay_ratio": side["replay_ratio"],
+        "replay_cap": side["replay_cap"],
+        "align_every": side["align_every"],
+        "temp_recalib_every": side["temp_recalib_every"],
+    }
+    (tmp_path / "train_hparams.json").write_text(json.dumps(hp), encoding="utf-8")
+
+    port = _free_port()
+    host = "127.0.0.1"
+    cmd = [
+        str(rest_bin),
+        "--listen",
+        f"{host}:{port}",
+        "--cypha",
+        str(replay_dir / "before.cypha"),
+        "--f-field-json",
+        str(replay_dir / "f_field.json"),
+        "--train-hparams",
+        str(tmp_path / "train_hparams.json"),
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        cwd=str(_ROOT),
+    )
+    base = f"http://{host}:{port}"
+    deadline = time.time() + 15.0
+    last_err = None
+    try:
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                err = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+                pytest.fail(f"cypha_rest exited early ({proc.returncode}): {err[:500]}")
+            try:
+                r = httpx.get(f"{base}/health", timeout=1.0)
+                if r.status_code == 200:
+                    break
+            except httpx.HTTPError as e:
+                last_err = e
+            time.sleep(0.05)
+        else:
+            pytest.fail(f"cypha_rest did not become ready: {last_err}")
+        yield base
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+@pytest.fixture
 def rest_server_with_registry(rest_bin, tmp_path):
     """``cypha_rest`` with ``--registry`` (initial scan may be empty until ``POST /register``)."""
     import httpx
@@ -1065,6 +1133,112 @@ def test_cypha_rest_mke_update_router_loss_matches_fixture(rest_server_mke_train
     np.testing.assert_allclose(loss, float(side["expected_router_loss"]), rtol=0, atol=1e-8)
 
 
+def test_fastapi_native_mke_update_agree(rest_server_mke_train_step, tmp_path):
+    """FastAPI and native ``cypha_rest`` return the same MKE ``/update`` router loss."""
+    import httpx
+    from Cypha import CyphaDIF, RFFEncoder, cypha_load_binary
+    from fastapi.testclient import TestClient
+
+    from cypha_studio.core.inference import InferenceEngine, InferenceSession
+    from cypha_studio.core.registry import ModelRegistry
+    from cypha_studio.server import api as api_mod
+
+    side = json.loads((_FIX / "mke_train_step" / "sidecar.json").read_text(encoding="utf-8"))
+    reg_path = tmp_path / "regression_head.json"
+    reg_path.write_text(json.dumps(_mke_regression_head_from_sidecar(side)), encoding="utf-8")
+
+    enc = RFFEncoder(int(side["d_in"]), D=int(side["D_rff"]), gamma=1.0, seed=901)
+    clf = CyphaDIF(
+        enc,
+        field_dim=24,
+        rng=np.random.default_rng(997),
+        enc_lr=0.0,
+        replay_ratio=0.0,
+    )
+    clf.load_state(cypha_load_binary(str(_FIX / "mke_train_step" / "before.cypha")))
+    app = api_mod.create_app(
+        engine=InferenceEngine(clf, None),
+        registry=ModelRegistry(),
+        session=InferenceSession(InferenceEngine(clf, None)),
+        regression_head_path=str(reg_path),
+    )
+    body = {
+        "input": side["x"],
+        "correct_label": side["router_train_label"],
+        "use_gh": True,
+        "regression_y": side["y"],
+        "router_train_label": side["router_train_label"],
+    }
+    pf = TestClient(app).post("/update", json=body)
+    pn = httpx.Client(base_url=rest_server_mke_train_step, timeout=15.0).post("/update", json=body)
+    assert pf.status_code == 200, pf.text
+    assert pn.status_code == 200, pn.text
+    np.testing.assert_allclose(float(pf.json()["loss"]), float(pn.json()["loss"]), rtol=0, atol=1e-8)
+
+
+def test_cypha_rest_classification_replay_u01_first_step(rest_server_dif_train_replay):
+    """Native ``POST /update`` with ``replay_u01`` matches fixture step-0 loss (classification path)."""
+    import httpx
+
+    side = json.loads((_FIX / "dif_train_replay" / "sidecar.json").read_text(encoding="utf-8"))
+    step0 = side["steps"][0]
+    c = httpx.Client(base_url=rest_server_dif_train_replay, timeout=15.0)
+    r = c.post(
+        "/update",
+        json={
+            "input": step0["x"],
+            "correct_label": step0["label"],
+            "use_gh": False,
+            "replay_u01": side["replay_u01"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    np.testing.assert_allclose(
+        float(r.json()["loss"]),
+        float(side["expected_step_losses"][0]),
+        rtol=0,
+        atol=1e-9,
+    )
+
+
+def test_fastapi_native_classification_replay_u01_agree(rest_server_dif_train_replay, tmp_path):
+    """FastAPI and native agree on classification ``/update`` with ``replay_u01`` (step 0)."""
+    import httpx
+    from Cypha import CyphaDIF, VectorEncoder, cypha_load_binary
+    from fastapi.testclient import TestClient
+
+    from cypha_studio.core.inference import InferenceEngine, InferenceSession
+    from cypha_studio.core.registry import ModelRegistry
+    from cypha_studio.server import api as api_mod
+
+    side = json.loads((_FIX / "dif_train_replay" / "sidecar.json").read_text(encoding="utf-8"))
+    step0 = side["steps"][0]
+    d_in = int(side["d_in"])
+    clf = CyphaDIF(
+        VectorEncoder(d_in),
+        field_dim=int(side["field_dim"]),
+        rng=np.random.default_rng(int(side["rng_seed"])),
+        enc_lr=float(side["enc_lr"]),
+        replay_ratio=float(side["replay_ratio"]),
+    )
+    clf.load_state(cypha_load_binary(str(_FIX / "dif_train_replay" / "before.cypha")))
+    app = api_mod.create_app(
+        engine=InferenceEngine(clf, None),
+        registry=ModelRegistry(),
+        session=InferenceSession(InferenceEngine(clf, None)),
+    )
+    body = {
+        "input": step0["x"],
+        "correct_label": step0["label"],
+        "use_gh": False,
+        "replay_u01": side["replay_u01"],
+    }
+    pf = TestClient(app).post("/update", json=body)
+    pn = httpx.Client(base_url=rest_server_dif_train_replay, timeout=15.0).post("/update", json=body)
+    assert pf.status_code == 200 and pn.status_code == 200
+    np.testing.assert_allclose(float(pf.json()["loss"]), float(pn.json()["loss"]), rtol=0, atol=1e-9)
+
+
 # ─── /session/rng — native parity ──────────────────────────────────────────────
 
 def test_cypha_rest_session_rng_get_shape(rest_server):
@@ -1113,6 +1287,107 @@ def test_cypha_rest_session_rng_state_restore_roundtrip(rest_server):
     s2 = c.get("/session/rng").json()
     assert s2["state"] == s1["state"], "state restore roundtrip failed (native)"
     assert s2["pos"] == s1["pos"], "pos restore roundtrip failed (native)"
+
+
+def _export_native_branch_a_checkpoint(out_dir: Path, n_train: int = 200) -> Path:
+    """Train hashing Branch A router and write native JSON + router_model.cypha."""
+    import subprocess
+
+    script = _ROOT / "scripts" / "export_branch_a_native_checkpoint.py"
+    if not script.is_file():
+        pytest.skip("export_branch_a_native_checkpoint.py missing")
+    subprocess.run(
+        [sys.executable, str(script), "--out-dir", str(out_dir), "--n-train", str(n_train)],
+        check=True,
+        cwd=str(_ROOT),
+    )
+    json_path = out_dir / "branch_a_router.json"
+    if not json_path.is_file():
+        pytest.fail("branch_a_router.json not written")
+    return json_path
+
+
+@pytest.fixture
+def rest_server_branch_a(rest_bin, tmp_path):
+    """``cypha_rest`` with ``--branch-a-json`` native router checkpoint."""
+    import httpx
+
+    ckpt_dir = tmp_path / "branch_a_ckpt"
+    json_path = _export_native_branch_a_checkpoint(ckpt_dir, n_train=200)
+
+    port = _free_port()
+    host = "127.0.0.1"
+    cmd = [
+        str(rest_bin),
+        "--listen",
+        f"{host}:{port}",
+        "--cypha",
+        str(_FIX / "reference.cypha"),
+        "--f-field-json",
+        str(_FIX / "f_field.json"),
+        "--branch-a-json",
+        str(json_path),
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        cwd=str(_ROOT),
+    )
+    base = f"http://{host}:{port}"
+    deadline = time.time() + 45.0
+    last_err = None
+    try:
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                err = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+                pytest.fail(f"cypha_rest exited early ({proc.returncode}): {err[:800]}")
+            try:
+                r = httpx.get(f"{base}/health", timeout=1.0)
+                if r.status_code == 200:
+                    break
+            except httpx.HTTPError as e:
+                last_err = e
+            time.sleep(0.05)
+        else:
+            pytest.fail(f"cypha_rest did not become ready: {last_err}")
+        yield base
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def test_cypha_rest_branch_a_route_endpoints(rest_server_branch_a):
+    """Native ``/route/*`` smoke (health + text route)."""
+    import httpx
+
+    c = httpx.Client(base_url=rest_server_branch_a, timeout=30.0)
+    h = c.get("/route/health")
+    assert h.status_code == 200, h.text
+    body = h.json()
+    assert body.get("router_trained") is True
+    assert "ollama_reachable" in body
+    assert "lm_loaded" in body
+
+    m = c.get("/metrics")
+    assert m.status_code == 200
+    assert "branch_a_router" in m.json()
+
+    r = c.post("/route/text", json={"text": "Windows NT driver development help"})
+    assert r.status_code == 200, r.text
+    route = r.json()
+    assert route["action"] in ("cypha_route", "fallback_llm")
+    assert "label" in route and "epistemic_var" in route
+    assert "latency_ms" in route
+
+    g = c.post("/route/generate", json={"text": "Linux kernel module compile", "max_tokens": 8})
+    assert g.status_code == 200, g.text
+    gen_body = g.json()
+    assert "route" in gen_body and "generation" in gen_body
+    assert gen_body["generation"]["provider"] in ("none", "ollama", "cypha_lm")
 
 
 def test_cypha_rest_session_rng_cross_runtime_state_restore(rest_server):
@@ -1172,3 +1447,173 @@ def test_cypha_rest_session_rng_cross_runtime_state_restore(rest_server):
         "Reverse cross-runtime restore failed: native state differs from FastAPI snapshot"
     )
     assert native_restored["pos"] == native_state["pos"]
+
+
+def test_cypha_rest_dif_retrieve(rest_server):
+    """``POST /dif/retrieve`` ranked hits (retrieval parity fixture case)."""
+    import httpx
+
+    sidecar = json.loads((_FIX / "retrieval" / "sidecar.json").read_text(encoding="utf-8"))
+    case = sidecar["cases"][0]
+    c = httpx.Client(base_url=rest_server, timeout=30.0)
+    r = c.post(
+        "/dif/retrieve",
+        json={
+            "input": case["query_x"],
+            "database": case["database_x"],
+            "top_k": case["top_k"],
+            "label": case.get("label"),
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "hits" in body and len(body["hits"]) > 0
+    assert body["hits"][0]["index"] == case["expected"][0]["index"]
+    assert body["hits"][0]["predicted_label"] == case["expected"][0]["predicted_label"]
+    assert abs(body["hits"][0]["log_likelihood"] - case["expected"][0]["log_likelihood"]) < 1e-6
+
+
+def test_cypha_rest_dif_generate_langevin(rest_server):
+    """``POST /dif/generate`` langevin mode returns latent samples."""
+    import httpx
+
+    sidecar = json.loads((_FIX / "generation" / "sidecar.json").read_text(encoding="utf-8"))
+    d_latent = int(sidecar["d_latent"])
+    case = sidecar["cases"]["generate_langevin"]
+    query = [1.8, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    c = httpx.Client(base_url=rest_server, timeout=30.0)
+    r = c.post(
+        "/dif/generate",
+        json={
+            "input": query,
+            "mode": "langevin",
+            "label": case["label"],
+            "n_samples": case["n"],
+            "n_steps": case["n_steps"],
+            "temperature": case["temperature"],
+            "seed": sidecar["seed"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "langevin"
+    assert body["space"] == "latent"
+    assert len(body["samples"]) == case["n"]
+    assert len(body["samples"][0]) == d_latent
+
+
+def test_cypha_rest_dif_generate_from_observation(rest_server):
+    """``POST /dif/generate`` from_observation mode returns latent samples."""
+    import httpx
+
+    sidecar = json.loads((_FIX / "generation" / "sidecar.json").read_text(encoding="utf-8"))
+    case = sidecar["cases"]["generate_from_observation"]
+    d_latent = int(sidecar["d_latent"])
+    query = [1.8, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    c = httpx.Client(base_url=rest_server, timeout=30.0)
+    r = c.post(
+        "/dif/generate",
+        json={
+            "input": query,
+            "mode": "from_observation",
+            "label": case["label"],
+            "n_samples": case["n"],
+            "n_steps": case["n_steps"],
+            "temperature": case["temperature"],
+            "seed": sidecar["seed"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "from_observation"
+    assert len(body["samples"]) == case["n"]
+    assert len(body["samples"][0]) == d_latent
+
+
+def test_cypha_rest_dif_generate_retrieval_augmented(rest_server):
+    """``POST /dif/generate`` retrieval_augmented requires database."""
+    import httpx
+
+    sidecar = json.loads((_FIX / "generation" / "sidecar.json").read_text(encoding="utf-8"))
+    case = sidecar["cases"]["generate_retrieval_augmented"]
+    c = httpx.Client(base_url=rest_server, timeout=30.0)
+    r = c.post(
+        "/dif/generate",
+        json={
+            "input": case["query_x"],
+            "mode": "retrieval_augmented",
+            "database": case["database_x"],
+            "k_neighbors": 4,
+            "n_samples": case["n"],
+            "n_steps": case["n_steps"],
+            "temperature": case["temperature"],
+            "seed": sidecar["seed"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "retrieval_augmented"
+    assert len(body["samples"]) == case["n"]
+
+
+def test_cypha_rest_dif_malformed_and_validation(rest_server):
+    """``/dif/*`` bad JSON, dim mismatch, missing database."""
+    import httpx
+
+    c = httpx.Client(base_url=rest_server, timeout=10.0)
+    bad = c.post("/dif/generate", content=b"{not json")
+    assert bad.status_code == 400
+    assert bad.json()["detail"] == "bad json"
+
+    dim = c.post("/dif/generate", json={"input": [1.0], "mode": "langevin"})
+    assert dim.status_code == 400
+    assert "dim mismatch" in dim.json()["detail"]
+
+    rag = c.post(
+        "/dif/generate",
+        json={"input": [0.0] * 8, "mode": "retrieval_augmented"},
+    )
+    assert rag.status_code == 400
+    assert "database" in rag.json()["detail"]
+
+
+def test_cypha_rest_dif_fastapi_json_shape_parity(rest_server):
+    """Native ``/dif/*`` and FastAPI share top-level JSON keys."""
+    from cypha_studio.server import api as api_mod
+    from Cypha import CyphaDIF, VectorEncoder, cypha_load_binary
+    from cypha_studio.core.inference import InferenceEngine, InferenceSession
+    from cypha_studio.core.registry import ModelRegistry
+    from fastapi.testclient import TestClient
+
+    if not getattr(api_mod, "FASTAPI_AVAILABLE", False):
+        pytest.skip("FastAPI not installed")
+
+    import httpx
+
+    sidecar = json.loads((_FIX / "retrieval" / "sidecar.json").read_text(encoding="utf-8"))
+    case = sidecar["cases"][0]
+    payload = {
+        "input": case["query_x"],
+        "database": case["database_x"],
+        "top_k": 3,
+    }
+
+    nc = httpx.Client(base_url=rest_server, timeout=30.0)
+    native = nc.post("/dif/retrieve", json=payload).json()
+
+    manifest = json.loads((_FIX / "manifest.json").read_text(encoding="utf-8"))
+    raw_state = cypha_load_binary(str(_FIX / "reference.cypha"))
+    m = manifest["model"]
+    enc = VectorEncoder(int(m["input_dim"]))
+    clf = CyphaDIF(enc, field_dim=int(m["field_dim"]),
+                   rng=np.random.default_rng(424242))
+    clf.load_state(raw_state)
+    eng = InferenceEngine(clf, None)
+    app = api_mod.create_app(engine=eng, registry=ModelRegistry(), session=InferenceSession(eng))
+    fc = TestClient(app)
+    fast = fc.post("/dif/retrieve", json=payload).json()
+
+    assert set(native.keys()) == set(fast.keys()) == {"top_k", "hits"}
+    assert len(native["hits"]) == len(fast["hits"])
+    for nh, fh in zip(native["hits"], fast["hits"]):
+        assert set(nh.keys()) == set(fh.keys()) == {"index", "log_likelihood", "predicted_label"}

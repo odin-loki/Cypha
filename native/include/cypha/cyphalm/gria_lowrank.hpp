@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
+#include <string>
 #include <vector>
 
 namespace cypha {
@@ -53,6 +55,8 @@ class GRIALowRank {
 
   /// Approximate Python full-rank ``W`` (vocab × d_input row-major flat) as low-rank U/V.
   void load_from_full_w(const std::vector<double>& w_vocab_x_d, int d_input, int target_rank);
+
+  std::map<std::string, double> alpha_spectrum() const;
 };
 
 }  // namespace cyphalm

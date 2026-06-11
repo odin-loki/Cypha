@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/cyphalm/cyphalm_alpha_spectrum.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
@@ -19,12 +20,15 @@ struct Args {
     int n_train = 40000;
     int n_eval = 2000;
     int threads = 0;
+    bool analysis = false;
+    int analysis_steps = 256;
 };
 
 void usage() {
     std::cerr
         << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral}\n"
-        << "       --profile {d17,d04} --n-train N --n-eval M --threads T\n";
+        << "       --profile {d17,d04} --n-train N --n-eval M --threads T\n"
+        << "       --analysis [--analysis-steps N]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -40,6 +44,8 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--n-train") a.n_train = std::stoi(need("--n-train"));
         else if (k == "--n-eval") a.n_eval = std::stoi(need("--n-eval"));
         else if (k == "--threads") a.threads = std::stoi(need("--threads"));
+        else if (k == "--analysis") a.analysis = true;
+        else if (k == "--analysis-steps") a.analysis_steps = std::stoi(need("--analysis-steps"));
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -67,7 +73,8 @@ int main(int argc, char** argv) {
         cypha::cyphalm::LMCorpus corpus;
         bool synthetic = false;
         try {
-            corpus = cypha::cyphalm::load_bench_corpus(args.profile, 10'000'000, cfg.vocab_size);
+            corpus = cypha::cyphalm::load_bench_corpus(args.profile, 10'000'000, cfg.vocab_size,
+                                                       cfg.bpe_merges_path, cfg.bpe_vocab_path);
         } catch (const std::exception&) {
             synthetic = true;
             corpus.profile = args.profile;
@@ -80,6 +87,11 @@ int main(int argc, char** argv) {
             corpus.eval_ids.assign(corpus.train_ids.begin() + static_cast<std::ptrdiff_t>(split),
                                    corpus.train_ids.end());
             corpus.train_ids.resize(split);
+        }
+
+        cfg.vocab_size = corpus.vocab_size;
+        if (!cfg.bpe_merges_path.empty() && !cfg.bpe_vocab_path.empty()) {
+            corpus.source += "+bpe";
         }
 
         cypha::cyphalm::CyphaLMModel model(cfg);
@@ -100,6 +112,18 @@ int main(int argc, char** argv) {
             {"vocab_size", cfg.vocab_size},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;
+        if (args.analysis) {
+            const auto profile = model.compression_profile();
+            out["alpha_spectrum"] = {
+                {"mean_alpha", profile.value("mean_alpha", 0.0)},
+                {"fraction_edge_of_chaos", profile.value("fraction_near_edge_of_chaos", 0.0)},
+                {"n_experts", profile.value("n_experts", 0)},
+            };
+            const auto track =
+                cypha::cyphalm::alpha_spectrum_track(model, args.analysis_steps, corpus.train_ids);
+            out["alpha_track_steps"] = track.size();
+            if (!track.empty()) out["alpha_track_last"] = track.back();
+        }
         if (cfg.context_mode == cypha::cyphalm::ContextMode::Hybrid) {
             out["hybrid_blend_logit"] = model.hybrid_blend_logit();
             out["hybrid_gria_weight"] = model.hybrid_gria_weight();

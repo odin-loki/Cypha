@@ -8,6 +8,7 @@
 
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/cyphalm/hierarchical_ssm.hpp"
 #include "cypha/cyphalm/npz_util.hpp"
 
 namespace cypha::cyphalm {
@@ -73,7 +74,19 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"hybrid_blend_lr", cfg.hybrid_blend_lr},
         {"use_context_bank", cfg.use_context_bank},
         {"context_bank_slots", cfg.context_bank_slots},
+        {"use_hierarchical_ssm", cfg.use_hierarchical_ssm},
+        {"use_hebb_graph", cfg.use_hebb_graph},
+        {"use_hebbian_stack", cfg.use_hebbian_stack},
+        {"use_temporal_som", cfg.use_temporal_som},
+        {"use_gng", cfg.use_gng},
+        {"use_gria_controller", cfg.use_gria_controller},
+        {"use_discriminative_feedback", cfg.use_discriminative_feedback},
+        {"ssm_hebb_lr", cfg.ssm_hebb_lr},
+        {"compress_interval", cfg.compress_interval},
+        {"max_memory_slots", cfg.max_memory_slots},
         {"seed", cfg.seed},
+        {"bpe_merges_path", cfg.bpe_merges_path},
+        {"bpe_vocab_path", cfg.bpe_vocab_path},
     };
 }
 
@@ -130,7 +143,19 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_d("hybrid_blend_lr", cfg.hybrid_blend_lr);
     get_b("use_context_bank", cfg.use_context_bank);
     get_i("context_bank_slots", cfg.context_bank_slots);
+    get_b("use_hierarchical_ssm", cfg.use_hierarchical_ssm);
+    get_b("use_hebb_graph", cfg.use_hebb_graph);
+    get_b("use_hebbian_stack", cfg.use_hebbian_stack);
+    get_b("use_temporal_som", cfg.use_temporal_som);
+    get_b("use_gng", cfg.use_gng);
+    get_b("use_gria_controller", cfg.use_gria_controller);
+    get_b("use_discriminative_feedback", cfg.use_discriminative_feedback);
+    get_d("ssm_hebb_lr", cfg.ssm_hebb_lr);
+    get_i("compress_interval", cfg.compress_interval);
+    get_i("max_memory_slots", cfg.max_memory_slots);
     get_u64("seed", cfg.seed);
+    if (c.contains("bpe_merges_path")) cfg.bpe_merges_path = c.at("bpe_merges_path").get<std::string>();
+    if (c.contains("bpe_vocab_path")) cfg.bpe_vocab_path = c.at("bpe_vocab_path").get<std::string>();
     return cfg;
 }
 
@@ -188,7 +213,9 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
             {"by", vec_to_json(model.lstm_->by)},
         };
     }
-    if (model.ssm_) {
+    if (model.hierarchical_ssm_) {
+        meta["hierarchical_ssm"] = model.hierarchical_ssm_->get_state();
+    } else if (model.ssm_) {
         meta["ssm"] = model.ssm_->get_state();
     }
     if (model.dif_) {
@@ -201,7 +228,13 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
 
     NpzWriter npz;
     if (!model.proj_ssm_.empty()) {
-        add_matrix(npz, "proj_ssm", model.proj_ssm_, cfg.field_dim, model.ssm_ ? model.ssm_->context_dim() : cfg.field_dim);
+        const int ctx_dim = model.hierarchical_ssm_
+                                ? model.hierarchical_ssm_->fast_tier().context_dim()
+                                : (model.ssm_ ? model.ssm_->context_dim() : cfg.field_dim);
+        add_matrix(npz, "proj_ssm", model.proj_ssm_, cfg.field_dim, ctx_dim);
+    }
+    if (!model.proj_dif_.empty()) {
+        add_matrix(npz, "proj_dif", model.proj_dif_, cfg.field_dim, cfg.field_dim);
     }
     if (!model.proj_embed_.empty()) {
         add_matrix(npz, "proj_embed", model.proj_embed_, cfg.field_dim, cfg.d_embed);
@@ -266,7 +299,9 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
         model.lstm_->load_state(json_to_vec(l.at("E")), json_to_vec(l.at("Wx")), json_to_vec(l.at("Wh")),
                                 json_to_vec(l.at("b")), json_to_vec(l.at("Wy")), json_to_vec(l.at("by")));
     }
-    if (meta.contains("ssm") && model.ssm_) {
+    if (meta.contains("hierarchical_ssm") && model.hierarchical_ssm_) {
+        model.hierarchical_ssm_->set_state(meta.at("hierarchical_ssm"));
+    } else if (meta.contains("ssm") && model.ssm_) {
         model.ssm_->set_state(meta.at("ssm"));
     }
     if (meta.contains("dif") && model.dif_) {
@@ -278,6 +313,7 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
     if (fs::is_regular_file(npz_path)) {
         const NpzReader npz = NpzReader::open(npz_path.string());
         if (npz.has("proj_ssm")) model.proj_ssm_ = npz.read_f64("proj_ssm");
+        if (npz.has("proj_dif")) model.proj_dif_ = npz.read_f64("proj_dif");
         if (npz.has("proj_embed")) model.proj_embed_ = npz.read_f64("proj_embed");
         if (model.ngram_fusion_) {
             std::vector<double> pw;

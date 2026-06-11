@@ -1,181 +1,45 @@
 {
-  "domain": "d01_statistical_baselines",
-  "timestamp": "2026-05-31T04:22:39.680270+00:00",
+  "domain": "d01",
   "experiments": {
-    "linearly_separable_2class": {
-      "accuracy": 0.7825,
-      "f1_macro": 0.7754244671171084,
-      "cypha_mean_epistemic_var": 0.011965838237354672,
-      "cypha_std_epistemic_var": 0.06324978913004806,
-      "cypha_mean_aleatoric_var": 0.009871087509445719,
-      "cypha_expert_count": 2,
-      "cypha_mean_alpha": 0.9523677605682355,
-      "cypha_alpha_distribution": [
-        0.9494238522466439,
-        0.955311668889827
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": 0.25639884860218515,
-      "sgd_accuracy": 0.7925,
-      "sgd_f1_macro": 0.7922077922077922
-    },
-    "4_gaussian_blobs": {
-      "accuracy": 0.9975,
-      "f1_macro": 0.9974999374984375,
-      "cypha_mean_epistemic_var": 5.626219509116107e-07,
-      "cypha_std_epistemic_var": 3.053805244616083e-11,
-      "cypha_mean_aleatoric_var": 0.008313992727079514,
-      "cypha_expert_count": 4,
-      "cypha_mean_alpha": 0.9377571391974321,
-      "cypha_alpha_distribution": [
-        0.9551265532326512,
-        0.9125826618457499,
-        0.9463752626879252,
-        0.9369440790234022
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": 0.1148969979242852,
-      "sgd_accuracy": 1.0,
-      "sgd_f1_macro": 1.0
-    },
-    "high_dim_noisy": {
-      "accuracy": 0.785,
-      "f1_macro": 0.7847363019699132,
-      "cypha_mean_epistemic_var": 0.1151358326202772,
-      "cypha_std_epistemic_var": 0.20908965925095516,
-      "cypha_mean_aleatoric_var": 0.05333034292704472,
-      "cypha_expert_count": 2,
-      "cypha_mean_alpha": 0.8497875449638791,
-      "cypha_alpha_distribution": [
-        0.854709318311907,
-        0.8448657716158512
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": 0.32959137367495034,
-      "sgd_accuracy": 0.8325,
-      "sgd_f1_macro": 0.8321969056608499
-    },
-    "linear_regression": {
-      "rmse": 86.59278594309168,
-      "mae": 69.22457124429424,
-      "r2": 0.7562628410222105,
-      "cypha_mean_epistemic_var": 11047.552316356818,
-      "cypha_std_epistemic_var": 416.59319346960183,
-      "cypha_mean_aleatoric_var": 2761.8880790892044,
-      "cypha_expert_count": 10,
-      "cypha_mean_alpha": 0.739789527279837,
-      "cypha_alpha_distribution": [
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837,
-        0.739789527279837
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": -0.0032064575403596266,
-      "sgd_rmse": 0.11392857864819098,
-      "sgd_mae": 0.09232407070901746,
-      "sgd_r2": 0.9999995780862507
-    },
-    "nonlinear_regression_sinusoidal": {
-      "rmse": 0.7398630089259534,
-      "mae": 0.6515163747999925,
-      "r2": -0.03655196296931673,
-      "cypha_mean_epistemic_var": 0.553793337443658,
-      "cypha_std_epistemic_var": 1.1102230246251565e-16,
-      "cypha_mean_aleatoric_var": 0.1384483343609145,
-      "cypha_expert_count": 9,
-      "cypha_mean_alpha": 0.7302585092994046,
-      "cypha_alpha_distribution": [
-        0.7302585092994046,
-        0.7302585092994046,
-        0.7302585092994046,
-        0.7302585092994046,
-        0.7302585092994046,
-        0.7302585092994046,
-        0.7302585092994046,
-        0.7302585092994046,
-        0.7302585092994046
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": 0.0,
-      "sgd_rmse": 0.728369932608084,
-      "sgd_mae": 0.6433045203483946,
-      "sgd_r2": -0.004598369613418418
-    },
-    "single_concept_drift": {
-      "accuracy": 0.555,
-      "f1_macro": 0.4451198603447738,
-      "cypha_mean_epistemic_var": 0.010686764510878117,
-      "cypha_std_epistemic_var": 0.06814520436724128,
-      "cypha_mean_aleatoric_var": 0.016763423502368396,
-      "cypha_expert_count": 2,
-      "cypha_mean_alpha": 0.9829344071824857,
-      "cypha_alpha_distribution": [
-        0.9766947020279926,
-        0.9891741123369787
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": 0.23937738063125483,
-      "sgd_accuracy": 0.745,
-      "sgd_f1_macro": 0.7435575109993715
-    },
-    "pure_noise": {
-      "accuracy": 0.5,
-      "f1_macro": 0.4959169271095877,
-      "cypha_mean_epistemic_var": 0.09571388519137937,
-      "cypha_std_epistemic_var": 0.18564984365798953,
-      "cypha_mean_aleatoric_var": 0.041530545451596075,
-      "cypha_expert_count": 2,
-      "cypha_mean_alpha": 0.9817739793641622,
-      "cypha_alpha_distribution": [
-        0.9860345208626262,
-        0.9775134378656982
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": 0.060795743297208535,
-      "sgd_accuracy": 0.5,
-      "sgd_f1_macro": 0.4967793880837359
-    },
-    "identical_inputs_different_labels": {
-      "accuracy": 0.49,
-      "f1_macro": 0.4782608695652174,
-      "cypha_mean_epistemic_var": 0.04558252670732845,
-      "cypha_std_epistemic_var": 0.1351027534511477,
-      "cypha_mean_aleatoric_var": 0.020781421875722513,
-      "cypha_expert_count": 2,
-      "cypha_mean_alpha": 0.9865543844089664,
-      "cypha_alpha_distribution": [
-        0.9885391456919566,
-        0.9845696231259763
-      ],
-      "cypha_fraction_edge_of_chaos": 0.0,
-      "cypha_uncertainty_rank_correlation": 0.004851246167158315,
-      "sgd_accuracy": 0.41,
-      "sgd_f1_macro": 0.4085213032581454
-    },
-    "_assertions": {
-      "epistemic_higher_on_noise": true,
-      "aleatoric_dominates_on_contradictory": false,
-      "drift_epistemic_spike": false,
-      "blob_expert_count_ok": true,
-      "noise_expert_pathology_flag": false
-    }
+    "backend": "cypha_core",
+    "tasks": [
+      {
+        "accuracy": 0.9875,
+        "backend": "cypha_core",
+        "baselines": {
+          "logistic_regression": {
+            "accuracy": 0.8875,
+            "f1_macro": 0.8870588235294117
+          }
+        },
+        "cypha_scores": {
+          "accuracy": 0.9875
+        },
+        "dataset": "linearly_separable_2class",
+        "expert_count": 2,
+        "n_test": 80,
+        "n_train": 320,
+        "task": "linearly_separable_2class"
+      },
+      {
+        "accuracy": 0.8875,
+        "backend": "cypha_core",
+        "baselines": {
+          "logistic_regression": {
+            "accuracy": 0.725,
+            "f1_macro": 0.6978021978021978
+          }
+        },
+        "cypha_scores": {
+          "accuracy": 0.8875
+        },
+        "dataset": "4_gaussian_blobs",
+        "expert_count": 2,
+        "n_test": 80,
+        "n_train": 320,
+        "task": "4_gaussian_blobs"
+      }
+    ]
   },
-  "summary": {
-    "domain": "d01_statistical_baselines",
-    "assertions": {
-      "epistemic_higher_on_noise": true,
-      "aleatoric_dominates_on_contradictory": false,
-      "drift_epistemic_spike": false,
-      "blob_expert_count_ok": true,
-      "noise_expert_pathology_flag": false
-    },
-    "all_assertions_pass": false
-  }
+  "timestamp": "2026-06-11T09:16:30.359+00:00"
 }

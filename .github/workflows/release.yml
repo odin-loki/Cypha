@@ -1,8 +1,8 @@
 # Build Linux + Windows (MinGW cross) installer archives and publish a GitHub Release on tag push.
 #
 # Create a release:
-#   git tag v1.1.0
-#   git push origin v1.1.0
+#   git tag v2.0.0
+#   git push origin v2.0.0
 #
 # Artifacts:
 #   cypha-<version>-linux-x86_64.tar.gz
@@ -39,13 +39,37 @@ jobs:
             -G Ninja
           cmake --build native/build-release --parallel
 
-      - name: Smoke CTest (CyphaLM parity suite)
-        run: ctest --test-dir native/build-release -R native_cyphalm_parity_suite --output-on-failure
+      - name: Smoke CTest (native suite + bench runner)
+        run: |
+          ctest --test-dir native/build-release -R native_cyphalm_parity_suite --output-on-failure
+          ctest --test-dir native/build-release -R native_bench_run_list_domains --output-on-failure
+
+      - name: Smoke CLI (v2.2.0 release binaries)
+        run: |
+          native/build-release/cypha_bench_run --list-domains
+          native/build-release/cypha_bench_report --help
+          native/build-release/cypha_diagnostics_run --list
+          native/build-release/cypha_tune_run --help
 
       - name: Package tarball
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/package_release_linux.sh "$VERSION" native/build-release dist
+
+      - name: Verify release bundle contents
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          tar xzf "dist/cypha-${VERSION}-linux-x86_64.tar.gz" -C dist
+          STAGE="dist/cypha-${VERSION}-linux-x86_64"
+          for bin in cypha_rest cypha_bench_run cypha_bench_report cypha_diagnostics_run cypha_tune_run \
+                     cyphalm_bench_native cyphalm_parity cyphalm_checkpoint_parity \
+                     gh_infer_deliberation_parity kernel_llr_parity registry_register create_model_smoke; do
+            test -x "$STAGE/bin/$bin"
+          done
+          for bin in score_batch_parity multilabel_dif_parity merge_from_parity similarity_index_parity \
+                     embed_table_parity retrieval_parity som_parity; do
+            test -x "$STAGE/bin/dev/$bin"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
@@ -73,6 +97,21 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/package_release_windows.sh "$VERSION" native/build-mingw-release dist
+
+      - name: Verify release bundle contents
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGE="dist/cypha-${VERSION}-windows-x86_64"
+          unzip -q "dist/cypha-${VERSION}-windows-x86_64.zip" -d dist
+          for bin in cypha_rest.exe cypha_bench_run.exe cypha_bench_report.exe cypha_diagnostics_run.exe cypha_tune_run.exe \
+                     cyphalm_bench_native.exe cyphalm_parity.exe cyphalm_checkpoint_parity.exe \
+                     gh_infer_deliberation_parity.exe kernel_llr_parity.exe registry_register.exe create_model_smoke.exe; do
+            test -f "$STAGE/bin/$bin"
+          done
+          for bin in score_batch_parity.exe multilabel_dif_parity.exe merge_from_parity.exe similarity_index_parity.exe \
+                     embed_table_parity.exe retrieval_parity.exe som_parity.exe; do
+            test -f "$STAGE/bin/dev/$bin"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
@@ -102,9 +141,9 @@ jobs:
             dist/cypha-*-linux-x86_64.tar.gz
             dist/cypha-*-windows-x86_64.zip
           body: |
-            ## Cypha native installer bundles
+            ## Cypha v2.2.0 — full native C++ framework
 
-            Prebuilt **native C++** tools (CyphaDIF REST + CyphaLM bench/parity). Python Studio is not included — clone the repo and run `install/install_linux.sh` or `install/install_windows.ps1` for the full Python stack.
+            Prebuilt **native C++** runtime: CyphaDIF REST (`/dif/retrieve`, `/dif/generate`), native bench (d01–d17), CyphaLM, diagnostics orchestrator, and parity smoke tools. Python Studio is not included — clone the repo and run `install/install_linux.sh` or `install/install_windows.ps1` for the full Python stack.
 
             ### Linux (`cypha-*-linux-x86_64.tar.gz`)
 
@@ -126,9 +165,21 @@ jobs:
 
             MinGW PE binaries with static libgcc/libstdc++ (no separate MinGW runtime install).
 
-            ### Included binaries
+            ### Production binaries (`bin/`, on PATH after install)
 
-            - `cypha_rest` — native REST server (classifier + `/lm/*`, `/generate`)
-            - `cyphalm_bench_native` — WikiText BPC bench CLI
-            - `cyphalm_parity`, `cyphalm_checkpoint_parity` — parity smoke tools
-            - `registry_register`, `create_model_smoke`
+            | Binary | Role |
+            |--------|------|
+            | `cypha_rest` | Native REST server (classifier + `/lm/*`, `/generate`, `/dif/*`) |
+            | `cypha_bench_run` | Bench master runner (domains d01–d17) |
+            | `cypha_bench_report` | Report-only rebuild (`BASELINE_REPORT.md` + `summary.json`) |
+            | `cypha_diagnostics_run` | Phases 1–4 diagnostics orchestrator |
+            | `cypha_tune_run` | Native tuning sweep runner |
+            | `cyphalm_bench_native` | WikiText BPC bench CLI |
+            | `cyphalm_parity`, `cyphalm_checkpoint_parity` | CyphaLM parity smoke tools |
+            | `gh_infer_deliberation_parity`, `kernel_llr_parity` | CyphaDIF parity (used by diagnostics) |
+            | `registry_register`, `create_model_smoke` | Registry + model creation smoke |
+
+            ### Dev parity tools (`bin/dev/`, not on PATH)
+
+            - `score_batch_parity`, `multilabel_dif_parity`, `merge_from_parity`, `similarity_index_parity`
+            - `embed_table_parity`, `retrieval_parity`, `som_parity`

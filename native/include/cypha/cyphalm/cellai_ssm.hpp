@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 
 #include "cypha/cyphalm/hebbian_graph.hpp"
+#include "cypha/som/temporal_som.hpp"
 
 namespace cypha::cyphalm {
 
@@ -59,6 +60,10 @@ class CellAISSM {
   void enable_hebb_graph(const HebbianGraphConfig& cfg);
   bool has_hebb_graph() const { return hebb_graph_ != nullptr; }
 
+  /// U6: autocorrelation SOM decay scaling (matches `wire_cellai` / `_temporal_som`).
+  void enable_temporal_som(cypha::som::TemporalSOMConfig cfg = {});
+  bool has_temporal_som() const { return temporal_som_ != nullptr; }
+
   /// Parity / checkpoint load: replace generated projection weights.
   void set_projection_weights(int layer, const std::vector<double>& w_fast,
                               const std::vector<double>& w_slow);
@@ -77,6 +82,8 @@ class CellAISSM {
   CellAISSMConfig cfg_;
   double lambda_fast_{};
   double lambda_slow_{};
+  double lam_fast_scale_{1.0};
+  double lam_slow_scale_{1.0};
 
   std::vector<int> layer_input_dims_;
   std::vector<std::vector<double>> W_fast_;
@@ -89,6 +96,7 @@ class CellAISSM {
   std::vector<std::vector<double>> h_;
   std::vector<std::vector<double>> s_;
   std::unique_ptr<HebbianGraph> hebb_graph_;
+  std::unique_ptr<cypha::som::TemporalSOM> temporal_som_;
 
   static std::vector<double> matvec(const std::vector<double>& mat, int rows, int cols,
                                     const std::vector<double>& x);

@@ -17,7 +17,7 @@ target_link_libraries(cypha_qt_stub PRIVATE Qt6::Core cypha_core)
 add_executable(cypha_qt_shell
   src/shell_main.cpp
 )
-target_link_libraries(cypha_qt_shell PRIVATE Qt6::Widgets Qt6::Network cypha_core)
+target_link_libraries(cypha_qt_shell PRIVATE Qt6::Widgets Qt6::Network cypha_core cypha_lm_native)
 
 # M6: Optionally embed the experiment DB directly into the Qt shell.
 # Requires SQLite (same detection logic as native/CMakeLists.txt, which already ran).

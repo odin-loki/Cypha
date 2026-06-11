@@ -230,6 +230,7 @@ def main() -> None:
         "- `csv_ingest/` — `cases.json` + CSVs + expected JSON for native `load_csv_dense` vs `CSVDataset.from_file` (names/indices, multiline quotes, `generate_csv_ingest_fixture.py`)\n"
         "- `dif_regressor_train_step/` — `before.cypha` + `f_field.json` + `sidecar.json` for native `DIFRegressor` (cold hash + warm LLR routing + `replay_u01`; `generate_dif_regressor_train_step_fixture.py`)\n"
         "- `batch_llr/sidecar.json` — `x_input` + `llr` slice for native `batch_llr_parity` (also from `generate_batch_llr_fixture.py`)\n"
+        "- `score_batch/sidecar.json` — accel `project_features` + `fused_score_llr` tensors for native `score_batch_parity` (from `generate_score_batch_fixture.py`)\n"
         "- `quantile_dif_train/` — `before.cypha` + `f_field.json` + `sidecar.json` for native `quantile_dif_train_parity` (from `generate_quantile_dif_train_fixture.py`)\n"
         "- `dif_train_replay/` — same tool + `replay_u01` recorded stream for `replay_ratio>0` (from `generate_dif_train_replay_fixture.py`)\n"
         "- `studio_trainer_classify_hotpath/` — `Trainer.fit`-order online loop + `enc_lr>0` + `replay_u01` (from `generate_studio_trainer_classify_hotpath_fixture.py`)\n"
@@ -260,7 +261,7 @@ def main() -> None:
 
     print(
         f"Wrote {_FIXTURE_DIR}/ (reference.cypha, expected.npz, native_parity.bin, manifest.json, "
-        "train_hparams.json, train_step_vector/, batch_llr/, quantile_dif_train/, dif_train_replay/, "
+        "train_hparams.json, train_step_vector/, batch_llr/, score_batch/, quantile_dif_train/, dif_train_replay/, "
         "studio_trainer_classify_hotpath/, studio_trainer_gh_classify_hotpath/, "
         "studio_trainer_preprocess_classify_hotpath/, csv_preprocess_classify_hotpath/, studio_trainer_preprocess_gh_classify_hotpath/, "
         "mke_train_step/, mke_train_extended/)"
@@ -273,6 +274,10 @@ def main() -> None:
     batch_script = _ROOT / "scripts" / "generate_batch_llr_fixture.py"
     if batch_script.is_file():
         subprocess.run([sys.executable, str(batch_script)], check=True, cwd=str(_ROOT), env=sub_env)
+
+    score_batch_script = _ROOT / "scripts" / "generate_score_batch_fixture.py"
+    if score_batch_script.is_file():
+        subprocess.run([sys.executable, str(score_batch_script)], check=True, cwd=str(_ROOT), env=sub_env)
 
     pre_fit_script = _ROOT / "scripts" / "generate_preprocessor_fit_fixture.py"
     if pre_fit_script.is_file():

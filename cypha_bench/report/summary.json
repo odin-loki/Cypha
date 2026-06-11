@@ -1,0 +1,9 @@
+{
+  "cross_domain_analyses": 4,
+  "domains_run": 17,
+  "figures_dir": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\cypha_bench\\report\\figures",
+  "figures_note": "Native figure JSON and PNG under cypha_bench/report/figures/ (see figures_manifest.json).",
+  "generated_utc": "2026-06-11 09:17 UTC",
+  "report_markdown": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\cypha_bench\\BASELINE_REPORT.md",
+  "tables_dir": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\cypha_bench\\report\\tables"
+}

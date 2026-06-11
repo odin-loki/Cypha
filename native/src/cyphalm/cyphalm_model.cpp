@@ -6,6 +6,8 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <map>
+#include <numeric>
 #include <random>
 #include <stdexcept>
 
@@ -51,11 +53,13 @@ void init_proj_from_rng(std::vector<double>& proj, int rows, int cols, std::mt19
     for (auto& v : proj) v = nd(rng);
 }
 
-void consume_proj_from_rng(int rows, int cols, std::mt19937_64& rng, double scale) {
-    std::normal_distribution<double> nd(0.0, scale);
-    for (int i = 0; i < rows * cols; ++i) {
-        (void)nd(rng);
+std::vector<double> resize_to_field(const std::vector<double>& v, int field_dim) {
+    std::vector<double> out(static_cast<std::size_t>(field_dim), 0.0);
+    const int n = std::min(field_dim, static_cast<int>(v.size()));
+    for (int i = 0; i < n; ++i) {
+        out[static_cast<std::size_t>(i)] = v[static_cast<std::size_t>(i)];
     }
+    return out;
 }
 
 std::vector<double> matvec(const std::vector<double>& m, int rows, int cols,
@@ -110,18 +114,60 @@ void CyphaLMModel::init_components() {
         sc.seed = static_cast<int>(cfg_.seed + 1);
         sc.use_spectral_pde = cfg_.use_spectral_pde;
         sc.use_multiscale = cfg_.use_multiscale;
-        sc.use_sparse_hebbian = cfg_.use_sparse_hebbian;
-        ssm_ = std::make_unique<CellAISSM>(sc);
+        sc.use_sparse_hebbian = cfg_.use_sparse_hebbian && !cfg_.use_hebbian_stack;
+        if (cfg_.use_hierarchical_ssm) {
+            hierarchical_ssm_ = std::make_unique<HierarchicalSSM>(sc, cfg_.compress_interval);
+        } else {
+            ssm_ = std::make_unique<CellAISSM>(sc);
+        }
+        if (cfg_.use_hebb_graph && !cfg_.use_hebbian_stack) {
+            HebbianGraphConfig gc;
+            gc.n = 2 * cfg_.d_state;
+            if (auto* active = active_ssm()) {
+                active->enable_hebb_graph(gc);
+            }
+        }
+        if (cfg_.use_temporal_som) {
+            cypha::som::TemporalSOMConfig tc;
+            tc.M = 8;
+            tc.L_max = 16;
+            if (auto* active = active_ssm()) {
+                active->enable_temporal_som(tc);
+            }
+        }
+        if (cfg_.use_hebbian_stack) {
+            hebbian_stack_ = std::make_unique<HebbianStack>();
+            HebbianStackConfig hcfg;
+            hcfg.use_sparse_hebbian = cfg_.use_sparse_hebbian;
+            hcfg.use_hebb_graph = cfg_.use_hebb_graph;
+            hcfg.ssm_hebb_lr = cfg_.ssm_hebb_lr;
+            hcfg.d_state = cfg_.d_state;
+            hcfg.n_layers = cfg_.ssm_layers;
+            hcfg.graph.n = 2 * cfg_.d_state;
+            hebbian_stack_->configure(hcfg);
+        }
         {
             std::mt19937_64 rng(cfg_.seed);
             constexpr double kScale = 0.02;
-            init_proj_from_rng(proj_ssm_, cfg_.field_dim, ssm_->context_dim(), rng, kScale);
-            consume_proj_from_rng(cfg_.field_dim, cfg_.field_dim, rng, kScale);
+            init_proj_from_rng(proj_ssm_, cfg_.field_dim, ssm_context_dim(), rng, kScale);
+            init_proj_from_rng(proj_dif_, cfg_.field_dim, cfg_.field_dim, rng, kScale);
             init_proj_from_rng(proj_embed_, cfg_.field_dim, cfg_.d_embed, rng, kScale);
             const int n_pos = 1 + std::max(0, cfg_.ngram_context);
             const int ngram_in = cfg_.field_dim + n_pos * cfg_.d_embed;
-            consume_proj_from_rng(cfg_.field_dim, ngram_in, rng, kScale);
+            std::normal_distribution<double> nd(0.0, kScale);
+            for (int i = 0; i < cfg_.field_dim * ngram_in; ++i) {
+                (void)nd(rng);
+            }
         }
+    }
+    if (cfg_.use_gng) {
+        gng_ = std::make_unique<cypha::som::GNGExpertManager>(cfg_.field_dim);
+        if (cfg_.use_gria_controller) {
+            gria_controller_ = std::make_unique<cypha::som::GRIAController>();
+        }
+    }
+    if (cfg_.use_discriminative_feedback) {
+        discriminative_feedback_ = std::make_unique<cypha::som::DiscriminativeFeedback>();
     }
     if (uses_gria(mode)) {
         gria_d_in_ = cfg_.field_dim;
@@ -141,15 +187,26 @@ void CyphaLMModel::init_components() {
     if (mode != ContextMode::CharLstm) {
         dif_ = std::make_unique<CyphaDIF>(cfg_);
     }
-    const bool ngram_path = mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram;
-    if (cfg_.ngram_fuse_split && ngram_path) {
-        const int n_pos = 1 + std::max(0, cfg_.ngram_context);
-        const int embed_in = n_pos * cfg_.d_embed;
-        ngram_fusion_ = std::make_unique<NgramFusion>(
-            cfg_.field_dim, cfg_.field_dim, embed_in, cfg_.ngram_fusion, n_pos,
-            cfg_.ngram_position_weights, cfg_.seed + 4);
+    const bool ngram_path = mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
+                            mode == ContextMode::AblationNoSsm;
+    const int n_pos = 1 + std::max(0, cfg_.ngram_context);
+    if (ngram_path) {
         embed_history_.assign(static_cast<std::size_t>(n_pos),
                               std::vector<double>(static_cast<std::size_t>(cfg_.d_embed), 0.0));
+    }
+    if (cfg_.ngram_fuse_split && ngram_path) {
+        const int embed_in = n_pos * cfg_.d_embed;
+        const int field_in = (mode == ContextMode::AblationNoSsm) ? 0 : cfg_.field_dim;
+        if (field_in > 0) {
+            ngram_fusion_ = std::make_unique<NgramFusion>(
+                cfg_.field_dim, field_in, embed_in, cfg_.ngram_fusion, n_pos,
+                cfg_.ngram_position_weights, cfg_.seed + 4);
+        } else {
+            std::mt19937_64 rng(cfg_.seed + 4);
+            init_proj_from_rng(proj_ngram_embed_, cfg_.field_dim, embed_in, rng, 0.02);
+            const int ngram_in = embed_in;
+            init_proj_from_rng(proj_ngram_, cfg_.field_dim, ngram_in, rng, 0.02);
+        }
     }
     if (uses_lstm(mode)) {
         lstm_ = std::make_unique<CharLSTMHead>(cfg_.vocab_size, cfg_.lstm_hidden, cfg_.seed + 5);
@@ -176,6 +233,10 @@ void CyphaLMModel::init_components() {
     if (gria_in_.empty()) {
         gria_in_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
     }
+    if (!cfg_.bpe_merges_path.empty() && !cfg_.bpe_vocab_path.empty()) {
+        bpe_ = std::make_unique<BpeTokenizer>(
+            BpeTokenizer::load(cfg_.bpe_merges_path, cfg_.bpe_vocab_path));
+    }
 }
 
 CyphaLMModel CyphaLMModel::from_json_npz(const std::string& json_path) {
@@ -187,6 +248,7 @@ void CyphaLMModel::save(const std::string& base_path) const {
 }
 
 void CyphaLMModel::reset_context() {
+    if (hierarchical_ssm_) hierarchical_ssm_->reset();
     if (ssm_) ssm_->reset();
     if (selective_) selective_->reset();
     if (memory_) memory_->reset();
@@ -241,18 +303,79 @@ std::vector<double> CyphaLMModel::augment_gria_input(const std::vector<double>& 
     return out;
 }
 
-std::vector<double> CyphaLMModel::project_field(const std::vector<double>& ctx) {
-    return matvec(proj_ssm_, cfg_.field_dim, ssm_->context_dim(), ctx);
+int CyphaLMModel::ssm_context_dim() const {
+    if (hierarchical_ssm_) return hierarchical_ssm_->fast_tier().context_dim();
+    if (ssm_) return ssm_->context_dim();
+    return 0;
 }
 
-std::vector<double> CyphaLMModel::build_gria_input(const std::vector<double>& field) {
-    const auto mode = cfg_.context_mode;
-    std::vector<double> v;
-    if (ngram_fusion_ && (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram)) {
-        v = ngram_fusion_->forward(field, ngram_embedding_vector());
-    } else {
-        v = field;
+CellAISSM* CyphaLMModel::active_ssm() {
+    if (hierarchical_ssm_) {
+        return const_cast<CellAISSM*>(&hierarchical_ssm_->fast_tier());
     }
+    return ssm_.get();
+}
+
+const CellAISSM* CyphaLMModel::active_ssm() const {
+    if (hierarchical_ssm_) return &hierarchical_ssm_->fast_tier();
+    return ssm_.get();
+}
+
+std::vector<double> CyphaLMModel::ssm_step(const std::vector<double>& e) {
+    if (hierarchical_ssm_) return hierarchical_ssm_->step(e);
+    if (ssm_) return ssm_->step(e);
+    return {};
+}
+
+void CyphaLMModel::apply_hebbian_hooks(std::vector<double>& ctx) {
+    if (!hebbian_stack_) return;
+    const CellAISSM* active = active_ssm();
+    if (!active || active->n_layers() < 1) return;
+    const auto& h = active->h_states();
+    const auto& s = active->s_states();
+    hebbian_stack_->on_ssm_layer_context(ctx, 0, h[0].data(), s[0].data());
+}
+
+std::vector<double> CyphaLMModel::project_field(const std::vector<double>& ctx) {
+    return matvec(proj_ssm_, cfg_.field_dim, ssm_context_dim(), ctx);
+}
+
+std::vector<double> CyphaLMModel::gria_input_core(const std::vector<double>& field,
+                                                  const DIFPredictOutput* dif_out) const {
+    const auto mode = cfg_.context_mode;
+    if (ngram_fusion_ &&
+        (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
+         mode == ContextMode::AblationNoSsm)) {
+        return ngram_fusion_->forward(field, ngram_embedding_vector());
+    }
+    if (mode == ContextMode::AblationNoSsm && !proj_ngram_.empty()) {
+        const auto embeds = ngram_embedding_vector();
+        if (!proj_ngram_embed_.empty()) {
+            return matvec(proj_ngram_embed_, cfg_.field_dim, static_cast<int>(embeds.size()),
+                          embeds);
+        }
+        return matvec(proj_ngram_, cfg_.field_dim, static_cast<int>(embeds.size()), embeds);
+    }
+    if (mode == ContextMode::SsmGria) {
+        return field;
+    }
+    if (dif_out != nullptr && !proj_dif_.empty()) {
+        const auto mean_resized = resize_to_field(dif_out->mean, cfg_.field_dim);
+        std::vector<double> mean = matvec(proj_dif_, cfg_.field_dim, cfg_.field_dim, mean_resized);
+        if (mode == ContextMode::Full || mode == ContextMode::SsmGriaNoLstm) {
+            const double u = dif_out->epistemic_var;
+            for (std::size_t i = 0; i < mean.size() && i < field.size(); ++i) {
+                mean[i] += u * field[i] * 0.01;
+            }
+        }
+        return mean;
+    }
+    return field;
+}
+
+std::vector<double> CyphaLMModel::build_gria_input(const std::vector<double>& field,
+                                                   const DIFPredictOutput* dif_out) {
+    std::vector<double> v = gria_input_core(field, dif_out);
     if (memory_ && !field.empty()) {
         const auto bias = memory_->retrieve(field.data(), static_cast<std::uint32_t>(field.size()));
         for (std::size_t i = 0; i < bias.size() && i < v.size(); ++i) {
@@ -302,17 +425,28 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
     }
 
     std::vector<double> log_g(cfg_.vocab_size);
-    if (embed_ && ssm_) {
+    if (embed_ && (active_ssm() || mode == ContextMode::AblationNoSsm)) {
         const auto e = embed_->embed_vec(token_id);
         record_embedding(e);
         last_e_ = e;
-        const auto ctx = ssm_->step(e);
-        last_ctx_ = ctx;
-        field_x_ = project_field(ctx);
-        if (dif_) {
-            const auto dif_out = dif_->predict(field_x_.data(), static_cast<int>(field_x_.size()));
-            out.epistemic_var = dif_out.epistemic_var;
-            out.aleatoric_var = dif_out.aleatoric_var;
+        if (mode == ContextMode::AblationNoSsm) {
+            last_ctx_.assign(static_cast<std::size_t>(ssm_context_dim()), 0.0);
+            field_x_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+        } else {
+            auto ctx = ssm_step(e);
+            apply_hebbian_hooks(ctx);
+            last_ctx_ = ctx;
+            field_x_ = project_field(ctx);
+        }
+        const bool skip_dif =
+            mode == ContextMode::SsmGria || mode == ContextMode::AblationNoSsm;
+        if (dif_ && !skip_dif) {
+            last_dif_out_ = dif_->predict(field_x_.data(), static_cast<int>(field_x_.size()));
+            out.epistemic_var = last_dif_out_.epistemic_var;
+            out.aleatoric_var = last_dif_out_.aleatoric_var;
+        } else {
+            last_dif_out_ = {};
+            last_dif_out_.mean.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
         }
         if (selective_ && (mode == ContextMode::SsmGriaNoLstm || mode == ContextMode::Full)) {
             const auto sel = selective_->step(e.data(), static_cast<std::uint32_t>(e.size()));
@@ -328,7 +462,10 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
             memory_->maybe_store(step_count_, field_x_.data(),
                                  static_cast<std::uint32_t>(field_x_.size()));
         }
-        gria_in_ = build_gria_input(field_x_);
+        gria_in_ = build_gria_input(field_x_, skip_dif ? nullptr : &last_dif_out_);
+        if (gng_ && !field_x_.empty()) {
+            last_gng_bmu_ = gng_->step(field_x_);
+        }
         if (gria_) {
             gria_->forward(gria_in_.data(), log_g.data());
         }
@@ -363,6 +500,7 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     m.loss = -pred.log_probs[static_cast<std::size_t>(next_token_id)];
     m.epistemic_var = pred.epistemic_var;
     m.aleatoric_var = pred.aleatoric_var;
+    m.active_experts = last_dif_out_.active_experts;
 
     const auto mode = cfg_.context_mode;
     if (mode == ContextMode::CharLstm && lstm_) {
@@ -390,6 +528,11 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         dif_->train_step(field_x_.data(), static_cast<int>(field_x_.size()), target.data(),
                          static_cast<int>(target.size()));
     }
+    if (hebbian_stack_ && cfg_.train_ssm && !field_x_.empty() && !last_e_.empty()) {
+        const int nxt = static_cast<int>(next_token_id);
+        hebbian_stack_->encoder_train_step(field_x_.data(), last_e_.data(), std::to_string(nxt),
+                                           std::to_string(nxt), cfg_.ssm_lr);
+    }
     bptt_ssm_update(next_token_id);
     if (mode == ContextMode::Hybrid && lstm_) {
         if (hybrid_lstm_has_cache_) {
@@ -408,17 +551,34 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     if (next_token_id < token_counts_.size()) {
         token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
     }
+    if (gria_controller_ && gng_ && !field_x_.empty()) {
+        std::vector<double> act;
+        if (!last_dif_out_.mean.empty()) {
+            act = last_dif_out_.mean;
+        } else if (!pred.log_probs.empty()) {
+            act = pred.log_probs;
+        } else {
+            act = field_x_;
+        }
+        gria_controller_->push(field_x_, act);
+        (void)gria_controller_->act(last_gng_bmu_, *gng_);
+    }
     refresh_laplace_prior();
     return m;
 }
 
 void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
-    (void)next_token_id;
-    if (cfg_.bptt_steps <= 0 || !ssm_ || !gria_ || last_e_.empty() || last_ctx_.empty()) {
+    CellAISSM* active = active_ssm();
+    if (cfg_.bptt_steps <= 0 || !active || !gria_ || last_e_.empty() || last_ctx_.empty()) {
         return;
     }
     const auto mode = cfg_.context_mode;
-    if (mode != ContextMode::Hybrid && mode != ContextMode::GriaNgram && mode != ContextMode::SsmGria) {
+    if (mode == ContextMode::AblationNoSsm || mode == ContextMode::AblationNoDif) {
+        return;
+    }
+    if (mode != ContextMode::Hybrid && mode != ContextMode::GriaNgram &&
+        mode != ContextMode::SsmGria && mode != ContextMode::Full &&
+        mode != ContextMode::SsmGriaNoLstm) {
         return;
     }
     auto grad_v = gria_->grad_v_cross_entropy(gria_in_.data(), static_cast<int>(next_token_id));
@@ -427,19 +587,40 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         grad_core[static_cast<std::size_t>(i)] = grad_v[static_cast<std::size_t>(i)];
     }
     std::vector<double> grad_field;
-    if (ngram_fusion_ && (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram)) {
+    if (ngram_fusion_ &&
+        (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
+         mode == ContextMode::AblationNoSsm)) {
         grad_field = ngram_fusion_->grad_field_x(grad_core);
+    } else if (mode == ContextMode::AblationNoSsm && !proj_ngram_embed_.empty()) {
+        grad_field = matvec_transpose(proj_ngram_embed_, cfg_.field_dim,
+                                      static_cast<int>(proj_ngram_embed_.size()) / cfg_.field_dim,
+                                      grad_core);
+    } else if (mode == ContextMode::Full || mode == ContextMode::SsmGriaNoLstm) {
+        const double u = last_dif_out_.epistemic_var;
+        grad_field.resize(grad_core.size());
+        for (std::size_t i = 0; i < grad_core.size(); ++i) {
+            grad_field[i] = grad_core[i] * (u * 0.01);
+        }
     } else {
         grad_field = std::move(grad_core);
     }
-    const int ctx_dim = ssm_->context_dim();
+    if (discriminative_feedback_ && dif_ && !grad_field.empty()) {
+        std::vector<double> delta_rows;
+        std::vector<double> inv_v;
+        if (dif_->discriminative_state(delta_rows, inv_v)) {
+            const int K = static_cast<int>(delta_rows.size()) / cfg_.field_dim;
+            const auto d = discriminative_feedback_->compute_d(delta_rows, K, cfg_.field_dim, inv_v);
+            discriminative_feedback_->modulate_inplace(grad_field, d);
+        }
+    }
+    const int ctx_dim = active->context_dim();
     std::vector<double> grad_ctx =
         matvec_transpose(proj_ssm_, cfg_.field_dim, ctx_dim, grad_field);
-    if (static_cast<int>(grad_ctx.size()) < ssm_->d_state()) return;
-    std::vector<double> grad_h(grad_ctx.begin(), grad_ctx.begin() + ssm_->d_state());
-    const double lf = ssm_->lambda_fast();
-    std::vector<double> delta(static_cast<std::size_t>(ssm_->d_state() * cfg_.d_embed), 0.0);
-    for (int r = 0; r < ssm_->d_state(); ++r) {
+    if (static_cast<int>(grad_ctx.size()) < active->d_state()) return;
+    std::vector<double> grad_h(grad_ctx.begin(), grad_ctx.begin() + active->d_state());
+    const double lf = active->lambda_fast();
+    std::vector<double> delta(static_cast<std::size_t>(active->d_state() * cfg_.d_embed), 0.0);
+    for (int r = 0; r < active->d_state(); ++r) {
         for (int c = 0; c < cfg_.d_embed; ++c) {
             delta[static_cast<std::size_t>(r * cfg_.d_embed + c)] =
                 (1.0 - lf) * grad_h[static_cast<std::size_t>(r)] * last_e_[static_cast<std::size_t>(c)];
@@ -454,7 +635,7 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         }
     }
     for (double& v : avg) v /= static_cast<double>(bptt_buffer_.size());
-    ssm_->apply_bptt_delta_avg(avg, cfg_.ssm_lr);
+    active->apply_bptt_delta_avg(avg, cfg_.ssm_lr);
     bptt_buffer_.clear();
 }
 
@@ -476,39 +657,55 @@ int view_slot_for_name(const std::string& name) {
 
 void CyphaLMModel::train_sequence_views(const std::vector<int>& ids) {
     if (ids.size() < 2) return;
-    const auto view_names =
-        resolve_view_schedule(cfg_.view_schedule, std::max(1, cfg_.train_epochs));
-    const auto segments = iter_view_segments(ids, view_names, cfg_.view_block_size, cfg_.seed);
+    const auto schedule =
+        resolve_view_schedule_struct(cfg_.view_schedule, cfg_.seed, std::max(1, cfg_.train_epochs));
+    const auto epochs = iter_view_epochs(ids, schedule, std::nullopt, cfg_.view_block_size);
     const double base_gria_lr = cfg_.gria_lr;
     int last_macro = -1;
     int step_i = 0;
     const char* log_env = std::getenv("CYPHALM_TRAIN_LOG_EVERY");
     const int log_every = log_env ? std::max(0, std::atoi(log_env)) : 0;
-    for (const auto& seg : segments) {
+    for (const auto& item : epochs) {
         if (view_emb_) {
-            set_view_slot(view_emb_->slot_for_view(seg.view_name));
+            set_view_slot(view_emb_->slot_for_view(item.view_spec.name));
         } else {
-            set_view_slot(view_slot_for_name(seg.view_name));
+            set_view_slot(view_slot_for_name(item.view_spec.name));
         }
-        if (seg.macro_index != last_macro) {
+        if (item.epoch_idx != last_macro) {
             reset_context();
-            last_macro = seg.macro_index;
-        } else if (seg.reset_before) {
+            last_macro = item.epoch_idx;
+        } else if (item.reset_before) {
             reset_context();
         }
-        cfg_.gria_lr = base_gria_lr * std::pow(cfg_.gria_lr_decay, static_cast<double>(seg.macro_index));
-        const int steps = static_cast<int>(seg.ids.size()) - 1;
+        cfg_.gria_lr =
+            base_gria_lr * std::pow(cfg_.gria_lr_decay, static_cast<double>(item.epoch_idx));
+        const int steps = static_cast<int>(item.segment_ids.size()) - 1;
         for (int i = 0; i < steps; ++i) {
-            const auto m = train_step(static_cast<std::uint32_t>(seg.ids[static_cast<std::size_t>(i)]),
-                                      static_cast<std::uint32_t>(seg.ids[static_cast<std::size_t>(i + 1)]));
+            const auto m = train_step(
+                static_cast<std::uint32_t>(item.segment_ids[static_cast<std::size_t>(i)]),
+                static_cast<std::uint32_t>(item.segment_ids[static_cast<std::size_t>(i + 1)]));
             ++step_i;
             if (log_every > 0 && step_i % log_every == 0) {
-                std::cerr << "[CyphaLM] train step " << step_i << " view=" << seg.view_name
+                std::cerr << "[CyphaLM] train step " << step_i << " view=" << item.view_spec.name
                           << " loss=" << m.loss << std::endl;
             }
         }
     }
     cfg_.gria_lr = base_gria_lr;
+}
+
+std::vector<std::uint32_t> CyphaLMModel::encode_text(const std::string& text) const {
+    if (!bpe_) {
+        throw std::runtime_error("CyphaLMModel: BPE tokenizer not configured");
+    }
+    return bpe_->encode(text);
+}
+
+std::string CyphaLMModel::decode_tokens(const std::vector<std::uint32_t>& ids) const {
+    if (!bpe_) {
+        throw std::runtime_error("CyphaLMModel: BPE tokenizer not configured");
+    }
+    return bpe_->decode(ids);
 }
 
 void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int epochs) {
@@ -535,6 +732,48 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
 
 double CyphaLMModel::hybrid_gria_weight() const {
     return sigmoid(hybrid_blend_logit_);
+}
+
+AlphaSpectrumSnapshot CyphaLMModel::alpha_spectrum_snapshot() const {
+    AlphaSpectrumSnapshot snap;
+    if (gria_) snap.gria_projection_alpha = gria_->alpha;
+    if (dif_) snap.expert_alpha = dif_->alpha_per_expert();
+    std::vector<double> all = snap.gria_projection_alpha;
+    all.insert(all.end(), snap.expert_alpha.begin(), snap.expert_alpha.end());
+    if (!all.empty()) {
+        double sum = 0.0;
+        int near = 0;
+        for (double a : all) {
+            sum += a;
+            if (std::abs(a - 0.5) < 0.1) ++near;
+        }
+        snap.mean_alpha = sum / static_cast<double>(all.size());
+        snap.fraction_near_edge_of_chaos =
+            static_cast<double>(near) / static_cast<double>(all.size());
+    }
+    return snap;
+}
+
+nlohmann::json CyphaLMModel::compression_profile() const {
+    const auto snap = alpha_spectrum_snapshot();
+    nlohmann::json gria_spec = nlohmann::json::object();
+    if (gria_) {
+        for (const auto& kv : gria_->alpha_spectrum()) {
+            gria_spec[kv.first] = kv.second;
+        }
+    }
+    const double total = last_dif_out_.epistemic_var + last_dif_out_.aleatoric_var + 1e-12;
+    return {
+        {"mean_epistemic_var", last_dif_out_.epistemic_var},
+        {"mean_aleatoric_var", last_dif_out_.aleatoric_var},
+        {"mean_alpha", snap.mean_alpha},
+        {"expert_alpha_spectrum", snap.expert_alpha},
+        {"gria_alpha_spectrum", gria_spec},
+        {"n_experts", dif_ ? dif_->expert_count() : 0},
+        {"lossless_fraction", last_dif_out_.epistemic_var / total},
+        {"lossy_fraction", 1.0 - last_dif_out_.epistemic_var / total},
+        {"fraction_near_edge_of_chaos", snap.fraction_near_edge_of_chaos},
+    };
 }
 
 double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval) {

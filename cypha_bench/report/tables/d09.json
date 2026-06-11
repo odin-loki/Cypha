@@ -1,115 +1,30 @@
 {
-  "domain": "d09_documents",
-  "timestamp": "2026-06-08T07:43:12.512730+00:00",
+  "domain": "d09",
   "experiments": {
-    "summary": {
-      "domain": "d09_documents",
-      "20news": {
-        "n_samples": 800,
-        "cypha_scores": {
-          "accuracy": 0.33125,
-          "f1_macro": 0.30864144495319623
-        },
-        "cypha_metrics": {
-          "mean_epistemic_var": 1.0719427004574187,
-          "std_epistemic_var": 0.6870780228114307,
-          "mean_aleatoric_var": 0.3464881782982635,
-          "expert_count": 20,
-          "mean_alpha": 0.8796454030825863,
-          "alpha_distribution": [
-            0.8553441625924235,
-            0.8896222850489147,
-            0.8829701893464802,
-            0.893601529280084,
-            0.8828088728525783,
-            0.8581326683477879,
-            0.872781081218592,
-            0.8805928739145789,
-            0.88869658116557,
-            0.8843338974887409,
-            0.8849749860170948,
-            0.8737544334825419,
-            0.8992913652011221,
-            0.8628777329410068,
-            0.8728956355250146,
-            0.8796041157505167,
-            0.8982753178477599,
-            0.8750689284850411,
-            0.8742346645916101,
-            0.8830467405542661
-          ],
-          "fraction_edge_of_chaos": 0.0,
-          "uncertainty_rank_correlation": 0.4092775324659422
-        },
-        "baselines": {
-          "dummy_majority": {
-            "accuracy": 0.0625,
-            "f1_macro": 0.0058823529411764705
-          },
-          "knn_5": {
-            "accuracy": 0.15,
-            "f1_macro": 0.13472381483251047
-          },
-          "logistic_regression": {
-            "accuracy": 0.33125,
-            "f1_macro": 0.33430580204109617
-          },
-          "random_forest": {
-            "accuracy": 0.31875,
-            "f1_macro": 0.29441614500051033
-          },
-          "gradient_boosting": {
-            "accuracy": 0.1875,
-            "f1_macro": 0.18103631404714995
-          }
-        },
-        "sgd_online": {
-          "accuracy": 0.35625,
-          "f1_macro": 0.32086534619715396
-        }
+    "20news": {
+      "cypha_scores": {
+        "accuracy": 0.5,
+        "expert_count": 20,
+        "mean_epistemic_var": 0.4743179184095307
       },
-      "gutenberg_ood": {
-        "mean_epistemic_in": 1.0719427004574187,
-        "mean_epistemic_ood": 2.7503676187059423,
-        "mannwhitney_u": 36960.0,
-        "p_value": 1.0733060387328605e-55
+      "data_source": "synthetic_newsgroups",
+      "n_samples": 2000
+    },
+    "backend": "cypha_core",
+    "domain": "d09_documents",
+    "gutenberg_book_classification": {
+      "cypha_scores": {
+        "accuracy": 0.8090909090909091,
+        "expert_count": 3,
+        "mean_epistemic_var": 0.1343694027619202
       },
-      "gutenberg_book_classification": {
-        "n_segments": 240,
-        "cypha_scores": {
-          "accuracy": 0.6458333333333334,
-          "f1_macro": 0.6430892573353258
-        },
-        "sgd_online": {
-          "accuracy": 0.3333333333333333,
-          "f1_macro": 0.16666666666666666
-        }
-      },
-      "branch_a_frozen_embed": {
-        "n_samples": 2000,
-        "n_classes": 20,
-        "embedding": {
-          "backend": "sentence_transformers",
-          "model_name": "all-MiniLM-L6-v2",
-          "dim": 384
-        },
-        "freeze_encoder_proj": true,
-        "cypha_scores": {
-          "accuracy": 0.625,
-          "f1_macro": 0.6074266197537617
-        },
-        "cypha_accuracy": 0.625,
-        "logreg_accuracy": 0.6025,
-        "train_seconds": 3.7287351000122726,
-        "gutenberg_ood": {
-          "n_segments": 1089,
-          "mean_epistemic_in": 0.17018833109249154,
-          "mean_epistemic_ood": 1.076951500713571,
-          "mannwhitney_u": 212644.0,
-          "p_value": 2.82181864507606e-102,
-          "ood_epistemic_higher": true
-        }
-      }
+      "n_segments": 1102
+    },
+    "gutenberg_ood": {
+      "mean_epistemic_in": 0.49997365383055753,
+      "mean_epistemic_ood": 2.1250393438257853,
+      "n_ood": 1102
     }
-  }
+  },
+  "timestamp": "2026-06-11T09:12:32.287+00:00"
 }

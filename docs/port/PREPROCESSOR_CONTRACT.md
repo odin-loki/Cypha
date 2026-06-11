@@ -34,7 +34,7 @@ Saved next to `model.cypha` in the registry (`cypha_studio.core.registry`). Nati
 ## Native notes
 
 - Arrays are **JSON lists**; treat as **float64** row-major when reshaping to matrices.
-- **`PreprocessorState::fit_from_design_matrix`** (C++): matches Python **`Preprocessor.fit`** for **PCA** with optional **StandardScaler** (`scale=True` / `False`; PCA always uses a **centered** design matrix). NumPy **`np.linalg.svd`** vs symmetric Jacobi on **`Xc^T Xc`**: same subspace; per-component **sign** may differ and is aligned in **`preprocessor_fit_parity`**. **RFF** weights use NumPy **`default_rng(seed)`** — not reproduced natively; keep **`rff_dim`** unset in native fit or fit in Python and load JSON.
+- **`PreprocessorState::fit_from_design_matrix`** (C++): matches Python **`Preprocessor.fit`** for **PCA** with optional **StandardScaler** (`scale=True` / `False`; PCA always uses a **centered** design matrix) and optional **RFF** (`rff_dim` > 0). NumPy **`np.linalg.svd`** vs symmetric Jacobi on **`Xc^T Xc`**: same subspace; per-component **sign** may differ and is aligned in **`preprocessor_fit_parity`**. **RFF** weights use NumPy **`default_rng(seed)`** via native **`NumpyDefaultRng`** (PCG64 + SeedSequence + ziggurat normal); parity: **`parity_fixtures/preprocessor_fit_rff/`**, CTest **`native_preprocessor_fit`**.
 - If you add fields, bump a **`preprocessor_schema_version`** in JSON (future) and document here; do not silently rename keys.
 
 ## JSON Schema (draft)

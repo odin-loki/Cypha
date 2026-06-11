@@ -1,3 +1,4 @@
+#include "cypha/numpy_default_rng.hpp"
 #include "cypha/preprocessor.hpp"
 
 #include <algorithm>
@@ -82,11 +83,6 @@ void PreprocessorState::fit_from_design_matrix(const std::vector<double>& row_ma
   if (static_cast<int>(row_major.size()) != n_rows * n_cols) {
     throw std::invalid_argument("fit_from_design_matrix: row_major size != n_rows * n_cols");
   }
-  if (rff_dim > 0) {
-    throw std::runtime_error(
-        "fit_from_design_matrix: RFF fitting is not implemented natively; fit in Python and load preprocessor.json");
-  }
-
   mean.clear();
   stddev.clear();
   pca_components.clear();
@@ -174,8 +170,26 @@ void PreprocessorState::fit_from_design_matrix(const std::vector<double>& row_ma
       }
     }
     output_dim = pca_dim;
+    d_work = pca_dim;
   } else {
     output_dim = d_work;
+  }
+
+  if (rff_dim > 0) {
+    NumpyDefaultRng rng(seed);
+    rff_w.resize(static_cast<std::size_t>(rff_dim));
+    for (int r = 0; r < rff_dim; ++r) {
+      rff_w[static_cast<std::size_t>(r)].resize(static_cast<std::size_t>(d_work));
+      for (int c = 0; c < d_work; ++c) {
+        rff_w[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)] = rng.normal(0.0, rff_gamma);
+      }
+    }
+    rff_b.resize(static_cast<std::size_t>(rff_dim));
+    constexpr double kTwoPi = 2.0 * 3.14159265358979323846264338328;
+    for (int r = 0; r < rff_dim; ++r) {
+      rff_b[static_cast<std::size_t>(r)] = rng.uniform(0.0, kTwoPi);
+    }
+    output_dim = rff_dim;
   }
 
   fitted = true;

@@ -6,6 +6,22 @@ milestone or a significant self-contained change.
 
 ---
 
+## [2.2.0] — 2026-06-11 · Full C++ framework release
+
+### Added
+- **Full native production framework** — bench (`cypha_bench_run`, `cypha_bench_report`), tune (`cypha_tune_run`), diagnostics (`cypha_diagnostics_run`), and REST **`/dif/*`** routes in **`cypha_rest`**; Python required only for fixture generation and research prototyping.
+- **`cypha_qt_shell`** — Qt Studio shell with **9 tabs** (Data, Model, Train, Predict, Registry, Server, Experiments, CyphaLM, Help).
+- **Native validation gate** — `scripts/cypha_native_validate_all.ps1` orchestrates CTest, pytest parity, bench smoke, tune dry-run, and REST contract checks.
+
+### Changed
+- **CyphaLM 300k baseline lock** — native hybrid **2.897 BPC** on D17 @ 300k (Python reference 2.873; Δ +0.024 ~0.8%).
+- **Test coverage** — **52 CTests** (`native_*`) and **155 pytest** cases green on the full native gate.
+
+### Installers
+- Release bundles via `scripts/package_release_windows.sh` / `scripts/package_release_linux.sh`; see [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md).
+
+---
+
 ## [1.1.0] — 2026-05-31 · CyphaLM native release
 
 ### Added
@@ -288,7 +304,8 @@ First committed state of the project. All six native port milestones signed off:
 
 ---
 
-[Unreleased]: https://github.com/odin-loki/Cypha/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/odin-loki/Cypha/releases/tag/v2.2.0
 [1.1.0]: https://github.com/odin-loki/Cypha/releases/tag/v1.1.0
 [1.0.0]: https://github.com/odin-loki/Cypha/compare/v0.9.0...v1.0.0
 [0.9.0]: https://github.com/odin-loki/Cypha/compare/v0.1.0...v0.9.0

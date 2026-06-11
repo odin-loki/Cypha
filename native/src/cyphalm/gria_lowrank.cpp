@@ -328,5 +328,28 @@ void GRIALowRank::load_from_full_w(const std::vector<double>& w_vocab_x_d, int d
   }
 }
 
+std::map<std::string, double> GRIALowRank::alpha_spectrum() const {
+  if (alpha.empty()) {
+    return {{"mean", 0.5}, {"std", 0.0}, {"min", 0.5}, {"max", 0.5}};
+  }
+  double sum = 0.0;
+  double sum_sq = 0.0;
+  double mn = alpha[0];
+  double mx = alpha[0];
+  for (double a : alpha) {
+    sum += a;
+    sum_sq += a * a;
+    mn = std::min(mn, a);
+    mx = std::max(mx, a);
+  }
+  const double n = static_cast<double>(alpha.size());
+  const double mean = sum / n;
+  const double var = std::max(0.0, sum_sq / n - mean * mean);
+  return {{"mean", mean},
+          {"std", std::sqrt(var)},
+          {"min", mn},
+          {"max", mx}};
+}
+
 }  // namespace cyphalm
 }  // namespace cypha

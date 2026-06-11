@@ -1,0 +1,14 @@
+{
+  "sweep_id": "cypha_branch_a_encoder_tune_smoke",
+  "description": "Minimal smoke for cypha_branch_a_encoder_sweep.py (native d09 documents bench)",
+  "runner": "cypha_bench_run",
+  "defaults": {},
+  "cells": [
+    {
+      "id": "d09_documents_smoke",
+      "args": {
+        "domain": 9
+      }
+    }
+  ]
+}

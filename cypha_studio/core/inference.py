@@ -230,9 +230,12 @@ class InferenceEngine:
 
     def update(self, raw_input: Union[np.ndarray, str],
                correct_label: str,
-               use_gh: bool = True) -> float:
+               use_gh: bool = True,
+               replay_u01: Optional[List[float]] = None) -> float:
         """
         Online update: train model on (input, correct_label).
+
+        Optional ``replay_u01`` fixes priority-replay U(0,1) draws (native ``cypha_rest`` parity).
 
         Returns training loss.
         """
@@ -244,11 +247,26 @@ class InferenceEngine:
         x_pp = self._preprocess(vec)
         self._n_corrections += 1
 
-        if use_gh and hasattr(self._model, 'gh_train_step'):
-            loss, _, _, _ = self._model.gh_train_step(x_pp, str(correct_label),
-                                                        1.0, 1.0)
-        else:
-            loss = self._model.train_step(x_pp, str(correct_label))
+        old_rng = None
+        if replay_u01 is not None:
+            from .replay_rng import ListReplayRng
+            old_rng = getattr(self._model, "_replay_rng", None)
+            lr = ListReplayRng([float(v) for v in replay_u01])
+            self._model._replay_rng = lr
+            if hasattr(self._model, "replay") and hasattr(self._model.replay, "_rng"):
+                self._model.replay._rng = lr
+
+        try:
+            if use_gh and hasattr(self._model, 'gh_train_step'):
+                loss, _, _, _ = self._model.gh_train_step(x_pp, str(correct_label),
+                                                            1.0, 1.0)
+            else:
+                loss = self._model.train_step(x_pp, str(correct_label))
+        finally:
+            if old_rng is not None:
+                self._model._replay_rng = old_rng
+                if hasattr(self._model, "replay") and hasattr(self._model.replay, "_rng"):
+                    self._model.replay._rng = old_rng
         return float(loss)
 
     # ── Anomaly score ────────────────────────────────────────────────────────

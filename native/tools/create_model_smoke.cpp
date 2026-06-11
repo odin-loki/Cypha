@@ -3,6 +3,7 @@
 /// roundtrip.  Exit 0 on success.
 #include <cassert>
 #include <cstdio>
+#include <filesystem>
 
 #include "cypha/create_model.hpp"
 #include "cypha/infer_cpu.hpp"
@@ -29,10 +30,12 @@ int main() {
     assert(s.labels.empty());
     assert(static_cast<int>(m.enc_w.size()) == p.input_dim * p.input_dim);
 
-    // Save + reload roundtrip
-    const char* tmp_path = "/tmp/cypha_create_model_smoke.cypha";
-    cypha::save_cypha_file(tmp_path, root);
-    cypha::CNode root2 = cypha::load_cypha_file(tmp_path);
+    // Save + reload roundtrip (portable temp dir — /tmp fails on Windows)
+    const std::filesystem::path tmp_path =
+        std::filesystem::temp_directory_path() / "cypha_create_model_smoke.cypha";
+    const std::string tmp_str = tmp_path.string();
+    cypha::save_cypha_file(tmp_str.c_str(), root);
+    cypha::CNode root2 = cypha::load_cypha_file(tmp_str.c_str());
     auto m2 = cypha::CyphaInferModel::from_root(root2, nullptr, p.field_dim);
     assert(m2.d_latent == p.input_dim);
     assert(m2.labels.empty());

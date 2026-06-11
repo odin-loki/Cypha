@@ -15,7 +15,11 @@ struct LMCorpus {
 };
 
 /// Load train/eval token ids for bench profile ``d17`` (WikiText-2) or ``d04`` (Gutenberg).
-LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_size);
+/// When ``bpe_merges`` and ``bpe_vocab`` are set and readable, corpus text is BPE-encoded
+/// and ``vocab_size`` is taken from the tokenizer.
+LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_size,
+                           const std::string& bpe_merges = "",
+                           const std::string& bpe_vocab = "");
 
 std::vector<int> synthetic_corpus(int n_tokens, int vocab_size, std::uint64_t seed);
 

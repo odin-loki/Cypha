@@ -7,7 +7,9 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileDialog>
+#include <QDir>
 #include <QFileInfo>
+#include <QFont>
 #include <QFrame>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -27,8 +29,10 @@
 #include <QPolygonF>
 #include <QPointF>
 #include <QMutex>
+#include <QProgressBar>
 #include <QProgressDialog>
 #include <QScrollArea>
+#include <QTextBrowser>
 #include <QSettings>
 #include <QSizePolicy>
 #include <QTabWidget>
@@ -59,6 +63,15 @@
 #include <QWidget>
 #include <QFrame>
 
+#if defined(CYPHA_SHELL_QT_CHARTS)
+#include <QBrush>
+#include <QtCharts/QAbstractAxis>
+#include <QtCharts/QChart>
+#include <QtCharts/QChartView>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QValueAxis>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -85,6 +98,9 @@
 #include "cypha/regression_stub.hpp"
 #include "cypha/replay_buffer.hpp"
 #include "cypha/train_step_vector.hpp"
+#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
+#include "cypha/cyphalm/cyphalm_generation.hpp"
+#include "cypha/cyphalm/cyphalm_model.hpp"
 
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
 #include "cypha/experiment_db.hpp"
@@ -253,7 +269,8 @@ bool try_load_cypha_paths(const QString& cypha_path, const QString& ff_json_path
 }
 
 int best_label_and_conf(const cypha::CyphaInferModel& m, const cypha::PreprocessorState* pre,
-                        const std::vector<double>& x_in, std::string* label_out, double* conf_out) {
+                        const std::vector<double>& x_in, std::string* label_out, double* conf_out,
+                        bool use_gh = true, double gh_chi = 1.0, double gh_psi = 1.0) {
   std::vector<double> x_latent;
   const double* x_ptr = nullptr;
   if (pre != nullptr) {
@@ -272,31 +289,27 @@ int best_label_and_conf(const cypha::CyphaInferModel& m, const cypha::Preprocess
     x_ptr = x_in.data();
   }
 
-  std::vector<double> H;
-  cypha::batch_encode(m, x_ptr, 1, H);
-  std::vector<double> llr;
-  cypha::score_matrix_use_field(m, H.data(), 1, llr);
-  const int k = static_cast<int>(m.labels.size());
-  if (k <= 0) {
+  if (m.labels.empty()) {
     return -2;
   }
-  constexpr double kEps = 1e-8;
-  std::vector<double> z(static_cast<std::size_t>(k));
-  for (int j = 0; j < k; ++j) {
-    z[static_cast<std::size_t>(j)] = llr[static_cast<std::size_t>(j)] / (m.temperature + kEps);
+
+  std::vector<double> H;
+  cypha::batch_encode(m, x_ptr, 1, H);
+
+  if (use_gh) {
+    const cypha::GhInferAtHResult gh =
+        cypha::gh_infer_at_h(m, H.data(), gh_chi, gh_psi, kGhNigAdaptAlphaShell);
+    *label_out = gh.label;
+    *conf_out = gh.confidence;
+  } else {
+    cypha::CyphaInferOptions iopt{};
+    iopt.deliberation_lo = m.deliberation_lo;
+    iopt.deliberation_hi = m.deliberation_hi;
+    iopt.use_field = true;
+    const cypha::InferAtHResult inf = cypha::infer_at_h(m, H.data(), iopt);
+    *label_out = inf.label;
+    *conf_out = inf.confidence;
   }
-  std::vector<double> probs;
-  cypha::softmax_batch_like_python(z.data(), 1, k, kEps, probs);
-  std::vector<double> gates;
-  cypha::world_gate_vector_use_field(m, H.data(), 1, 1.0, 1.0, gates);
-  int bi = 0;
-  for (int j = 1; j < k; ++j) {
-    if (probs[static_cast<std::size_t>(j)] > probs[static_cast<std::size_t>(bi)]) {
-      bi = j;
-    }
-  }
-  *label_out = m.labels[static_cast<std::size_t>(bi)];
-  *conf_out = probs[static_cast<std::size_t>(bi)] * gates[0];
   return 0;
 }
 
@@ -340,6 +353,31 @@ bool parse_feature_vector(const QString& t, int expected_d, std::vector<double>&
       *err = QStringLiteral("Expected %1 values, got %2.").arg(expected_d).arg(static_cast<int>(x.size()));
     }
     return false;
+  }
+  return true;
+}
+
+bool parse_token_ids(const QString& t, std::vector<int>& ids, QString* err) {
+  ids.clear();
+  const QString trimmed = t.trimmed();
+  if (trimmed.isEmpty()) {
+    if (err != nullptr) {
+      *err = QStringLiteral("Enter at least one token id.");
+    }
+    return false;
+  }
+  const QStringList parts = trimmed.split(QLatin1Char(','), Qt::SkipEmptyParts);
+  ids.reserve(static_cast<std::size_t>(parts.size()));
+  for (const QString& p : parts) {
+    bool ok = false;
+    const int v = p.trimmed().toInt(&ok);
+    if (!ok || v < 0) {
+      if (err != nullptr) {
+        *err = QStringLiteral("Not a non-negative integer: \"%1\"").arg(p.trimmed());
+      }
+      return false;
+    }
+    ids.push_back(v);
   }
   return true;
 }
@@ -1085,24 +1123,18 @@ class PerClassAccuracyBar final : public QWidget {
 };
 
 #if defined(CYPHA_SHELL_QT_CHARTS)
-#include <QBrush>
-#include <QtCharts/QAbstractAxis>
-#include <QtCharts/QChart>
-#include <QtCharts/QChartView>
-#include <QtCharts/QLineSeries>
-#include <QtCharts/QValueAxis>
 
-class LossChartPanel final : public QtCharts::QChartView {
+class LossChartPanel final : public QChartView {
  public:
   explicit LossChartPanel(QWidget* parent = nullptr) : QChartView(parent) {
     setMinimumHeight(128);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setRenderHint(QPainter::Antialiasing, true);
-    auto* ch = new QtCharts::QChart();
+    auto* ch = new QChart();
     ch->setBackgroundBrush(QBrush(QColor(32, 34, 38)));
     ch->setBackgroundRoundness(0);
     ch->setTitleBrush(QBrush(QColor(200, 200, 210)));
-    series_rest_ema_ = new QtCharts::QLineSeries();
+    series_rest_ema_ = new QLineSeries();
     series_rest_ema_->setName(QStringLiteral("REST EMA"));
     {
       QPen pr(QColor(110, 180, 255, 200));
@@ -1110,7 +1142,7 @@ class LossChartPanel final : public QtCharts::QChartView {
       pr.setWidthF(1.2);
       series_rest_ema_->setPen(pr);
     }
-    series_native_ema_ = new QtCharts::QLineSeries();
+    series_native_ema_ = new QLineSeries();
     series_native_ema_->setName(QStringLiteral("Native EMA"));
     {
       QPen pn(QColor(255, 170, 90, 200));
@@ -1118,10 +1150,10 @@ class LossChartPanel final : public QtCharts::QChartView {
       pn.setWidthF(1.2);
       series_native_ema_->setPen(pn);
     }
-    series_rest_ = new QtCharts::QLineSeries();
+    series_rest_ = new QLineSeries();
     series_rest_->setName(QStringLiteral("REST /update"));
     series_rest_->setPen(QPen(QColor(110, 180, 255), 2));
-    series_native_ = new QtCharts::QLineSeries();
+    series_native_ = new QLineSeries();
     series_native_->setName(QStringLiteral("Native train"));
     series_native_->setPen(QPen(QColor(255, 170, 90), 2));
     ch->addSeries(series_rest_ema_);
@@ -1140,13 +1172,13 @@ class LossChartPanel final : public QtCharts::QChartView {
     series_native_->clear();
     series_rest_ema_->clear();
     series_native_ema_->clear();
-    QtCharts::QChart* ch = chart();
+QChart* ch = chart();
     const bool have_r = !rest.isEmpty();
     const bool have_n = !natv.isEmpty();
     if (!have_r && !have_n) {
       ch->setTitle(QStringLiteral("Per-step loss — bulk REST vs bulk native (dashed = EMA)"));
-      const QList<QtCharts::QAbstractAxis*> ax = ch->axes();
-      for (QtCharts::QAbstractAxis* a : ax) {
+      const QList<QAbstractAxis*> ax = ch->axes();
+      for (QAbstractAxis* a : ax) {
         ch->removeAxis(a);
         a->deleteLater();
       }
@@ -1169,11 +1201,11 @@ class LossChartPanel final : public QtCharts::QChartView {
     if (ch->axes().isEmpty()) {
       ch->createDefaultAxes();
       // Style axes for dark background
-      for (QtCharts::QAbstractAxis* ax : ch->axes()) {
+      for (QAbstractAxis* ax : ch->axes()) {
         ax->setLabelsColor(QColor(190, 190, 200));
         ax->setLinePenColor(QColor(80, 85, 95));
         ax->setGridLinePen(QPen(QColor(55, 58, 65), 1, Qt::SolidLine));
-        if (auto* va = qobject_cast<QtCharts::QValueAxis*>(ax)) {
+        if (auto* va = qobject_cast<QValueAxis*>(ax)) {
           va->setTickCount(6);
           va->setLabelFormat(QStringLiteral("%.3g"));
         }
@@ -1203,15 +1235,15 @@ class LossChartPanel final : public QtCharts::QChartView {
       hi = lo + 1e-9;
     }
     const int max_n = std::max(rest.size(), natv.size());
-    const QList<QtCharts::QAbstractAxis*> vy = ch->axes(Qt::Vertical);
+    const QList<QAbstractAxis*> vy = ch->axes(Qt::Vertical);
     if (!vy.isEmpty()) {
-      if (auto* va = qobject_cast<QtCharts::QValueAxis*>(vy.front())) {
+      if (auto* va = qobject_cast<QValueAxis*>(vy.front())) {
         va->setRange(lo, hi);
       }
     }
-    const QList<QtCharts::QAbstractAxis*> hx = ch->axes(Qt::Horizontal);
+    const QList<QAbstractAxis*> hx = ch->axes(Qt::Horizontal);
     if (!hx.isEmpty()) {
-      if (auto* ha = qobject_cast<QtCharts::QValueAxis*>(hx.front())) {
+      if (auto* ha = qobject_cast<QValueAxis*>(hx.front())) {
         ha->setRange(0.0, max_n > 1 ? static_cast<double>(max_n - 1) : 1.0);
       }
     }
@@ -1220,11 +1252,11 @@ class LossChartPanel final : public QtCharts::QChartView {
 
   void clear_losses() { set_loss_runs({}, {}, {}, {}); }
   void set_y_range_lock(bool locked, double lo, double hi) {
-    QtCharts::QChart* ch = chart();
+QChart* ch = chart();
     if (!ch) return;
-    const QList<QtCharts::QAbstractAxis*> vy = ch->axes(Qt::Vertical);
+    const QList<QAbstractAxis*> vy = ch->axes(Qt::Vertical);
     if (vy.isEmpty()) return;
-    if (auto* va = qobject_cast<QtCharts::QValueAxis*>(vy.front())) {
+    if (auto* va = qobject_cast<QValueAxis*>(vy.front())) {
       if (locked) {
         va->setRange(lo, hi);
       }
@@ -1232,14 +1264,208 @@ class LossChartPanel final : public QtCharts::QChartView {
   }
 
  private:
-  QtCharts::QLineSeries* series_rest_ema_{};
-  QtCharts::QLineSeries* series_native_ema_{};
-  QtCharts::QLineSeries* series_rest_{};
-  QtCharts::QLineSeries* series_native_{};
+QLineSeries* series_rest_ema_{};
+QLineSeries* series_native_ema_{};
+QLineSeries* series_rest_{};
+QLineSeries* series_native_{};
 };
-#else
-using LossChartPanel = SimpleLossChart;
+
+/// Rolling accuracy (window=200, matches training progress panel) — Qt Charts only.
+class RollingAccChartPanel final : public QChartView {
+ public:
+  explicit RollingAccChartPanel(QWidget* parent = nullptr) : QChartView(parent) {
+    setMinimumHeight(128);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setRenderHint(QPainter::Antialiasing, true);
+    auto* ch = new QChart();
+    ch->setBackgroundBrush(QBrush(QColor(32, 34, 38)));
+    ch->setBackgroundRoundness(0);
+    ch->setTitleBrush(QBrush(QColor(200, 200, 210)));
+    ch->setTitle(QStringLiteral("Rolling accuracy (window=200)"));
+    series_ = new QLineSeries();
+    series_->setName(QStringLiteral("Native"));
+    series_->setPen(QPen(QColor(120, 220, 130), 2));
+    ch->addSeries(series_);
+    ch->legend()->hide();
+    setChart(ch);
+  }
+
+  void set_series(const QVector<double>& acc_frac) {
+    series_->clear();
+QChart* ch = chart();
+    if (acc_frac.isEmpty()) {
+      ch->setTitle(QStringLiteral("Rolling accuracy (window=200)"));
+      const QList<QAbstractAxis*> ax = ch->axes();
+      for (QAbstractAxis* a : ax) {
+        ch->removeAxis(a);
+        a->deleteLater();
+      }
+      return;
+    }
+    ch->setTitle(QString());
+    for (int i = 0; i < acc_frac.size(); ++i) {
+      series_->append(i, acc_frac[i]);
+    }
+    if (ch->axes().isEmpty()) {
+      ch->createDefaultAxes();
+      for (QAbstractAxis* ax : ch->axes()) {
+        ax->setLabelsColor(QColor(190, 190, 200));
+        ax->setLinePenColor(QColor(80, 85, 95));
+        ax->setGridLinePen(QPen(QColor(55, 58, 65), 1, Qt::SolidLine));
+        if (auto* va = qobject_cast<QValueAxis*>(ax)) {
+          va->setTickCount(6);
+          va->setLabelFormat(QStringLiteral("%.2f"));
+        }
+      }
+    }
+    const QList<QAbstractAxis*> vy = ch->axes(Qt::Vertical);
+    if (!vy.isEmpty()) {
+      if (auto* va = qobject_cast<QValueAxis*>(vy.front())) {
+        va->setRange(0.0, 1.0);
+      }
+    }
+    const QList<QAbstractAxis*> hx = ch->axes(Qt::Horizontal);
+    if (!hx.isEmpty()) {
+      if (auto* ha = qobject_cast<QValueAxis*>(hx.front())) {
+        ha->setRange(0.0, acc_frac.size() > 1 ? static_cast<double>(acc_frac.size() - 1) : 1.0);
+      }
+    }
+  }
+
+ private:
+QLineSeries* series_{};
+};
 #endif
+
+/// Text metrics log when Qt Charts is not linked (CI qt6-base-only builds).
+class MetricsHistoryPanel final : public QPlainTextEdit {
+ public:
+  explicit MetricsHistoryPanel(QWidget* parent = nullptr) : QPlainTextEdit(parent) {
+    setReadOnly(true);
+    setMaximumBlockCount(500);
+    setMinimumHeight(96);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setPlaceholderText(QStringLiteral(
+        "Per-step metrics — run bulk REST /update or bulk native train.\n"
+        "Columns: step | loss | roll_acc (native) | source"));
+    QFont mono = font();
+    mono.setStyleHint(QFont::Monospace);
+    mono.setFamily(QStringLiteral("Consolas"));
+    setFont(mono);
+  }
+
+  void append_entry(int step, double loss, double roll_acc_frac, bool have_roll_acc,
+                    const QString& source, bool correct) {
+    QString line = QStringLiteral("step %1 | loss %2").arg(step).arg(loss, 0, 'g', 6);
+    if (have_roll_acc) {
+      line += QStringLiteral(" | roll_acc %1%").arg(roll_acc_frac * 100.0, 0, 'f', 1);
+    }
+    line += QStringLiteral(" | %1").arg(source);
+    if (source == QStringLiteral("native")) {
+      line += correct ? QStringLiteral(" \u2713") : QStringLiteral(" \u2717");
+    }
+    appendPlainText(line);
+    moveCursor(QTextCursor::End);
+  }
+
+  void clear_history() { clear(); }
+};
+
+/// Loss + metrics: Qt Charts tabs when available; painted loss + text history otherwise.
+class LossMetricsPanel final : public QWidget {
+ public:
+  explicit LossMetricsPanel(QWidget* parent = nullptr) : QWidget(parent) {
+    auto* lay = new QVBoxLayout(this);
+    lay->setContentsMargins(0, 0, 0, 0);
+#if defined(CYPHA_SHELL_QT_CHARTS)
+    tabs_ = new QTabWidget(this);
+    loss_chart_ = new LossChartPanel(tabs_);
+    acc_chart_  = new RollingAccChartPanel(tabs_);
+    tabs_->addTab(loss_chart_, QStringLiteral("Loss"));
+    tabs_->addTab(acc_chart_, QStringLiteral("Rolling accuracy"));
+    lay->addWidget(tabs_);
+#else
+    loss_chart_ = new SimpleLossChart(this);
+    metrics_text_ = new MetricsHistoryPanel(this);
+    lay->addWidget(loss_chart_);
+    lay->addWidget(metrics_text_);
+#endif
+  }
+
+  QWidget* capture_widget() const {
+#if defined(CYPHA_SHELL_QT_CHARTS)
+    return tabs_->currentWidget();
+#else
+    return loss_chart_;
+#endif
+  }
+
+  void set_loss_runs(const QVector<double>& rest, const QVector<double>& natv, const QVector<double>& rest_ema,
+                     const QVector<double>& natv_ema) {
+    loss_chart_->set_loss_runs(rest, natv, rest_ema, natv_ema);
+  }
+
+  void clear_losses() {
+    loss_chart_->clear_losses();
+    roll_acc_.clear();
+    roll_correct_window_.clear();
+#if defined(CYPHA_SHELL_QT_CHARTS)
+    acc_chart_->set_series({});
+#else
+    metrics_text_->clear_history();
+#endif
+  }
+
+  void set_y_range_lock(bool locked, double lo, double hi) { loss_chart_->set_y_range_lock(locked, lo, hi); }
+
+  void append_rest_step(int step_idx, double loss) {
+#if !defined(CYPHA_SHELL_QT_CHARTS)
+    metrics_text_->append_entry(step_idx, loss, 0.0, false, QStringLiteral("REST"), false);
+#else
+    Q_UNUSED(step_idx);
+    Q_UNUSED(loss);
+#endif
+  }
+
+  void append_native_step(int step, double loss, bool correct) {
+    roll_correct_window_.append(correct ? 1 : 0);
+    while (roll_correct_window_.size() > kRollWin) {
+      roll_correct_window_.removeFirst();
+    }
+    int sum = 0;
+    for (int v : roll_correct_window_) {
+      sum += v;
+    }
+    const double roll = static_cast<double>(sum) / static_cast<double>(roll_correct_window_.size());
+    roll_acc_.append(roll);
+#if defined(CYPHA_SHELL_QT_CHARTS)
+    acc_chart_->set_series(roll_acc_);
+#else
+    metrics_text_->append_entry(step, loss, roll, true, QStringLiteral("native"), correct);
+#endif
+  }
+
+  void reset_native_roll_window() { roll_correct_window_.clear(); roll_acc_.clear(); }
+
+  void refresh_acc_chart() {
+#if defined(CYPHA_SHELL_QT_CHARTS)
+    acc_chart_->set_series(roll_acc_);
+#endif
+  }
+
+ private:
+  static constexpr int kRollWin = 200;
+  QVector<double> roll_acc_{};
+  QVector<int>    roll_correct_window_{};
+#if defined(CYPHA_SHELL_QT_CHARTS)
+  QTabWidget*           tabs_{};
+  LossChartPanel*       loss_chart_{};
+  RollingAccChartPanel* acc_chart_{};
+#else
+  SimpleLossChart*      loss_chart_{};
+  MetricsHistoryPanel*  metrics_text_{};
+#endif
+};
 
 enum class LossPlotSource { RestBulk, NativeBulk };
 
@@ -1267,6 +1493,41 @@ struct BulkTrainState {
   QString error_msg;
 };
 
+constexpr double kShellOodThreshold = 3.0;
+
+QString native_quickstart_html() {
+  return QStringLiteral(
+      "<h1>Native quick start (v2.4)</h1>"
+      "<p>Install &rarr; validate &rarr; bench &rarr; tune &rarr; REST. Python is optional after install.</p>"
+      "<h2>1. Build</h2>"
+      "<pre>cmake -S native -B C:\\Temp\\cypha_full_cpp_build -DCMAKE_BUILD_TYPE=Release "
+      "-DCYPHA_BUILD_QT=ON -DCYPHA_BUILD_EXPERIMENT_DB=ON -G Ninja\ncmake --build C:\\Temp\\cypha_full_cpp_build --parallel</pre>"
+      "<p>Build outside OneDrive on Windows (cloud sync locks object files).</p>"
+      "<h2>2. Validate</h2>"
+      "<pre>powershell -File scripts\\cypha_native_validate_all.ps1</pre>"
+      "<p>Or: <code>ctest -R native_</code> + pytest native parity + REST smoke.</p>"
+      "<h2>3. Bench</h2>"
+      "<pre>cypha_bench_run --list-domains\ncypha_bench_run --domain 1\ncypha_bench_run --report-only</pre>"
+      "<h2>4. Tune</h2>"
+      "<pre>cypha_tune_run --config cypha_bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run</pre>"
+      "<h2>5. REST</h2>"
+      "<pre>cypha_rest --listen 127.0.0.1:8765 --cypha model.cypha --registry ~/.cypha/models</pre>"
+      "<p>CyphaDIF: <code>GET /health</code>, <code>GET /ready</code>, <code>POST /predict</code>, "
+      "<code>POST /update</code>, <code>GET /models</code>, <code>POST /load</code>.</p>"
+      "<p>CyphaLM: <code>POST /lm/load</code>, <code>POST /generate</code>.</p>"
+      "<h2>6. Qt shell tabs</h2>"
+      "<ol><li>Data &mdash; CSV inspect (dataset_widget)</li>"
+      "<li>Model &mdash; F_field / preprocessor sidecars</li>"
+      "<li>Train &mdash; bulk native/REST, loss charts</li>"
+      "<li>Predict &mdash; confidence + explanation panel</li>"
+      "<li>Registry &mdash; ModelRegistry scan / load / REST /load</li>"
+      "<li>Server &mdash; spawn cypha_rest</li>"
+      "<li>Experiments &mdash; SQLite experiment DB (when enabled)</li>"
+      "<li>CyphaLM &mdash; checkpoint decode</li>"
+      "<li>Help &mdash; this page</li></ol>"
+      "<p>Full doc: <code>docs/native/NATIVE_QUICKSTART.md</code></p>");
+}
+
 class MainWindow final : public QMainWindow {
  public:
   MainWindow() {
@@ -1280,8 +1541,8 @@ class MainWindow final : public QMainWindow {
     workflow_banner_ = new QLabel(
         QStringLiteral(
             "<p style='margin:0'><b>Workflow</b> &mdash; <b>1 Data</b> &rarr; <b>2 Model</b> &rarr; "
-            "<b>3 Train</b> &rarr; <b>4 Predict</b> &rarr; <b>5 Server</b>"
-            " &rarr; <b>6 Experiments</b> (when enabled)</p>"
+            "<b>3 Train</b> &rarr; <b>4 Predict</b> &rarr; <b>5 Registry</b> &rarr; <b>6 Server</b>"
+            " &rarr; <b>7 Experiments</b> (when enabled) &rarr; <b>8 CyphaLM</b> &rarr; <b>9 Help</b></p>"
             "<p style='margin:8px 0 0 0; color:#c8d6e8; font-size:12px'>Work left to right. The window "
             "geometry and active tab are saved when you quit.</p>"),
         central);
@@ -1343,7 +1604,11 @@ class MainWindow final : public QMainWindow {
     QWidget* const inner_predict = pg_predict.first;
     QVBoxLayout* const lay_predict = pg_predict.second;
 
-    const auto pg_server = make_page(QStringLiteral("5 · Server & registry"));
+    const auto pg_registry = make_page(QStringLiteral("5 · Registry"));
+    QWidget* const inner_registry = pg_registry.first;
+    QVBoxLayout* const lay_registry = pg_registry.second;
+
+    const auto pg_server = make_page(QStringLiteral("6 · Server"));
     QWidget* const inner_server = pg_server.first;
     QVBoxLayout* const lay_server = pg_server.second;
 
@@ -1538,10 +1803,11 @@ class MainWindow final : public QMainWindow {
       lay_experiment->setContentsMargins(6, 6, 6, 14);
       inner_experiment->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
       scr_exp->setWidget(inner_experiment);
-      main_tabs_->addTab(scr_exp, QStringLiteral("6 · Experiments"));
+      main_tabs_->addTab(scr_exp, QStringLiteral("7 · Experiments"));
     }
     {
-      auto* exp_grp = new QGroupBox(QStringLiteral("Experiments (M6 — SQLite tracking)"), inner_experiment);
+      auto* exp_grp = new QGroupBox(QStringLiteral("Experiment DB (SQLite — mirrors cypha_studio ExperimentWidget)"),
+                                    inner_experiment);
       auto* exp_form = new QFormLayout(exp_grp);
 
       auto* exp_db_row = new QHBoxLayout();
@@ -1576,19 +1842,43 @@ class MainWindow final : public QMainWindow {
       exp_status_label_->setWordWrap(true);
       exp_form->addRow(exp_status_label_);
 
+      auto* exp_hdr_row = new QHBoxLayout();
+      exp_hdr_row->addWidget(new QLabel(QStringLiteral("Experiments:"), exp_grp));
+      exp_hdr_row->addStretch(1);
+      exp_refresh_btn_ = new QPushButton(QStringLiteral("Refresh"), exp_grp);
+      exp_hdr_row->addWidget(exp_refresh_btn_);
+      exp_form->addRow(exp_hdr_row);
+
+      exp_experiments_table_ = new QTableWidget(0, 4, exp_grp);
+      exp_experiments_table_->setHorizontalHeaderLabels(
+          {QStringLiteral("Experiment ID"), QStringLiteral("Name"), QStringLiteral("Task"),
+           QStringLiteral("Created")});
+      exp_experiments_table_->horizontalHeader()->setStretchLastSection(false);
+      exp_experiments_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+      exp_experiments_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+      exp_experiments_table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+      exp_experiments_table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+      exp_experiments_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+      exp_experiments_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+      exp_experiments_table_->setSelectionMode(QAbstractItemView::SingleSelection);
+      exp_experiments_table_->setMaximumHeight(120);
+      exp_experiments_table_->setAlternatingRowColors(true);
+      exp_form->addRow(exp_experiments_table_);
+
       // Recent runs table
-      exp_runs_table_ = new QTableWidget(0, 5, exp_grp);
+      exp_runs_table_ = new QTableWidget(0, 6, exp_grp);
       exp_runs_table_->setHorizontalHeaderLabels(
           {QStringLiteral("Run ID"), QStringLiteral("Name"), QStringLiteral("Status"),
-           QStringLiteral("Acc %"), QStringLiteral("Steps")});
+           QStringLiteral("Acc %"), QStringLiteral("Steps"), QStringLiteral("Checkpoint")});
       exp_runs_table_->horizontalHeader()->setStretchLastSection(false);
       exp_runs_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
       exp_runs_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
       exp_runs_table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
       exp_runs_table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
       exp_runs_table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+      exp_runs_table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
       exp_runs_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-      exp_runs_table_->setMaximumHeight(140);
+      exp_runs_table_->setMaximumHeight(160);
       exp_runs_table_->setAlternatingRowColors(true);
       exp_form->addRow(exp_runs_table_);
 
@@ -1596,37 +1886,199 @@ class MainWindow final : public QMainWindow {
     }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
-    lay_server->addWidget(
-        new QLabel(QStringLiteral("Model registry (on-disk layout = Python ModelRegistry):"), inner_server));
+    // ── CyphaLM panel (native decode + optional REST /lm/*) ───────────────────
+    const auto pg_lm = make_page(QStringLiteral("8 · CyphaLM"));
+    QWidget* const inner_lm = pg_lm.first;
+    QVBoxLayout* const lay_lm = pg_lm.second;
+    {
+      auto* lm_intro = new QLabel(
+          QStringLiteral("<b>CyphaLM</b> &mdash; load a <tt>.json</tt> checkpoint (+ sibling <tt>.npz</tt>) "
+                         "for in-process decode, or tick REST to use <tt>cypha_rest</tt> "
+                         "<tt>/lm/load</tt> and <tt>/generate</tt>."),
+          inner_lm);
+      lm_intro->setWordWrap(true);
+      lm_intro->setTextFormat(Qt::RichText);
+      lay_lm->addWidget(lm_intro);
+    }
+    {
+      auto* lm_ckpt_grp = new QGroupBox(QStringLiteral("Checkpoint"), inner_lm);
+      auto* lm_ckpt_form = new QFormLayout(lm_ckpt_grp);
+      auto* lm_path_row = new QHBoxLayout();
+      lm_path_edit_ = new QLineEdit(lm_ckpt_grp);
+      lm_path_edit_->setPlaceholderText(QStringLiteral("path/to/checkpoint.json"));
+      lm_browse_btn_ = new QPushButton(QStringLiteral("Browse…"), lm_ckpt_grp);
+      lm_path_row->addWidget(lm_path_edit_, 1);
+      lm_path_row->addWidget(lm_browse_btn_);
+      lm_ckpt_form->addRow(QStringLiteral("Path:"), lm_path_row);
+
+      lm_use_rest_chk_ = new QCheckBox(
+          QStringLiteral("Use REST (base URL from Server tab — start cypha_rest first)"), lm_ckpt_grp);
+      lm_ckpt_form->addRow(lm_use_rest_chk_);
+
+      auto* lm_load_row = new QHBoxLayout();
+      lm_load_btn_ = new QPushButton(QStringLiteral("Load checkpoint"), lm_ckpt_grp);
+      lm_status_label_ = new QLabel(QStringLiteral("(not loaded)"), lm_ckpt_grp);
+      lm_status_label_->setWordWrap(true);
+      lm_load_row->addWidget(lm_load_btn_);
+      lm_load_row->addWidget(lm_status_label_, 1);
+      lm_ckpt_form->addRow(lm_load_row);
+      lay_lm->addWidget(lm_ckpt_grp);
+    }
+    {
+      auto* lm_gen_grp = new QGroupBox(QStringLiteral("Generate"), inner_lm);
+      auto* lm_gen_form = new QFormLayout(lm_gen_grp);
+      lm_prompt_edit_ = new QLineEdit(lm_gen_grp);
+      lm_prompt_edit_->setPlaceholderText(QStringLiteral("comma-separated token ids, e.g. 1,2,3"));
+      lm_gen_form->addRow(QStringLiteral("prompt_ids:"), lm_prompt_edit_);
+
+      lm_n_tokens_spin_ = new QSpinBox(lm_gen_grp);
+      lm_n_tokens_spin_->setRange(1, 4096);
+      lm_n_tokens_spin_->setValue(64);
+      lm_gen_form->addRow(QStringLiteral("n_tokens (max_tokens):"), lm_n_tokens_spin_);
+
+      lm_strategy_combo_ = new QComboBox(lm_gen_grp);
+      lm_strategy_combo_->addItems({QStringLiteral("top_p"), QStringLiteral("temperature"),
+                                    QStringLiteral("greedy"), QStringLiteral("top_k")});
+      lm_strategy_combo_->setCurrentText(QStringLiteral("top_p"));
+      lm_gen_form->addRow(QStringLiteral("strategy:"), lm_strategy_combo_);
+
+      lm_top_p_spin_ = new QDoubleSpinBox(lm_gen_grp);
+      lm_top_p_spin_->setRange(0.01, 1.0);
+      lm_top_p_spin_->setSingleStep(0.05);
+      lm_top_p_spin_->setValue(0.92);
+      lm_gen_form->addRow(QStringLiteral("top_p:"), lm_top_p_spin_);
+
+      lm_temperature_spin_ = new QDoubleSpinBox(lm_gen_grp);
+      lm_temperature_spin_->setRange(0.01, 5.0);
+      lm_temperature_spin_->setSingleStep(0.05);
+      lm_temperature_spin_->setValue(0.9);
+      lm_gen_form->addRow(QStringLiteral("temperature:"), lm_temperature_spin_);
+
+      lm_generate_btn_ = new QPushButton(QStringLiteral("Generate"), lm_gen_grp);
+      lm_generate_btn_->setEnabled(false);
+      lm_gen_form->addRow(lm_generate_btn_);
+
+      lm_output_edit_ = new QPlainTextEdit(lm_gen_grp);
+      lm_output_edit_->setReadOnly(true);
+      lm_output_edit_->setPlaceholderText(QStringLiteral("generated_ids and decoded text appear here"));
+      lm_output_edit_->setMinimumHeight(100);
+      lm_gen_form->addRow(lm_output_edit_);
+      lay_lm->addWidget(lm_gen_grp);
+    }
+    {
+      auto* bench_grp = new QGroupBox(QStringLiteral("Bench (optional)"), inner_lm);
+      auto* bench_form = new QFormLayout(bench_grp);
+      auto* bench_bin_row = new QHBoxLayout();
+      bench_bin_edit_ = new QLineEdit(bench_grp);
+      bench_bin_edit_->setPlaceholderText(QStringLiteral("path/to/cypha_bench_run"));
+#if defined(_WIN32)
+      {
+        const QString guess =
+            QApplication::applicationDirPath() + QStringLiteral("/cypha_bench_run.exe");
+        if (QFileInfo::exists(guess)) {
+          bench_bin_edit_->setText(guess);
+        }
+      }
+#endif
+      bench_browse_btn_ = new QPushButton(QStringLiteral("Browse…"), bench_grp);
+      bench_bin_row->addWidget(bench_bin_edit_, 1);
+      bench_bin_row->addWidget(bench_browse_btn_);
+      bench_form->addRow(QStringLiteral("Binary:"), bench_bin_row);
+
+      bench_run_d17_btn_ = new QPushButton(QStringLiteral("Run cypha_bench_run --domain 17"), bench_grp);
+      bench_form->addRow(bench_run_d17_btn_);
+
+      bench_log_edit_ = new QPlainTextEdit(bench_grp);
+      bench_log_edit_->setReadOnly(true);
+      bench_log_edit_->setMaximumBlockCount(800);
+      bench_log_edit_->setPlaceholderText(QStringLiteral("bench stdout/stderr"));
+      bench_log_edit_->setMinimumHeight(120);
+      bench_form->addRow(bench_log_edit_);
+      lay_lm->addWidget(bench_grp);
+    }
+    lay_lm->addStretch(1);
+
+    // ── Registry tab (ModelRegistry parity) ───────────────────────────────────
+    {
+      auto* reg_intro = new QLabel(
+          QStringLiteral("<b>Model registry</b> &mdash; on-disk layout matches Python <tt>ModelRegistry</tt> "
+                         "(<tt>&lt;root&gt;/&lt;name&gt;/&lt;version&gt;/model.cypha</tt>). "
+                         "Scan locally or <tt>GET /models</tt> from a running <tt>cypha_rest</tt>."),
+          inner_registry);
+      reg_intro->setWordWrap(true);
+      reg_intro->setTextFormat(Qt::RichText);
+      lay_registry->addWidget(reg_intro);
+    }
     auto* row_reg = new QHBoxLayout();
-    reg_root_btn_ = new QPushButton(QStringLiteral("Registry root…"), inner_server);
-    reg_root_label_ = new QLabel(QStringLiteral("(none — optional for cypha_rest --registry)"), inner_server);
+    reg_root_btn_ = new QPushButton(QStringLiteral("Registry root…"), inner_registry);
+    reg_root_label_ = new QLabel(QStringLiteral("(none — passed to cypha_rest --registry when set)"), inner_registry);
     reg_root_label_->setWordWrap(true);
     row_reg->addWidget(reg_root_btn_);
     row_reg->addWidget(reg_root_label_, 1);
-    lay_server->addLayout(row_reg);
+    lay_registry->addLayout(row_reg);
 
     auto* row_reg_act = new QHBoxLayout();
-    reg_scan_btn_ = new QPushButton(QStringLiteral("Scan"), inner_server);
-    reg_load_btn_ = new QPushButton(QStringLiteral("Load selected bundle"), inner_server);
-    reg_register_btn_ = new QPushButton(QStringLiteral("Register current…"), inner_server);
+    reg_scan_btn_ = new QPushButton(QStringLiteral("Scan (native)"), inner_registry);
+    reg_rest_models_btn_ = new QPushButton(QStringLiteral("GET /models (REST)"), inner_registry);
+    reg_load_btn_ = new QPushButton(QStringLiteral("Load bundle (local .cypha)"), inner_registry);
+    reg_rest_load_btn_ = new QPushButton(QStringLiteral("POST /load (REST)"), inner_registry);
+    reg_register_btn_ = new QPushButton(QStringLiteral("Register current…"), inner_registry);
     row_reg_act->addWidget(reg_scan_btn_);
+    row_reg_act->addWidget(reg_rest_models_btn_);
     row_reg_act->addWidget(reg_load_btn_);
+    row_reg_act->addWidget(reg_rest_load_btn_);
     row_reg_act->addWidget(reg_register_btn_);
     row_reg_act->addStretch(1);
-    lay_server->addLayout(row_reg_act);
+    lay_registry->addLayout(row_reg_act);
 
-    reg_combo_ = new QComboBox(inner_server);
+    reg_models_table_ = new QTableWidget(0, 4, inner_registry);
+    reg_models_table_->setHorizontalHeaderLabels(
+        {QStringLiteral("Name"), QStringLiteral("Version"), QStringLiteral("Model path"),
+         QStringLiteral("Preprocessor")});
+    reg_models_table_->horizontalHeader()->setStretchLastSection(true);
+    reg_models_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    reg_models_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    reg_models_table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    reg_models_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    reg_models_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    reg_models_table_->setSelectionMode(QAbstractItemView::SingleSelection);
+    reg_models_table_->setAlternatingRowColors(true);
+    reg_models_table_->setMinimumHeight(160);
+    lay_registry->addWidget(reg_models_table_);
+
+    reg_combo_ = new QComboBox(inner_registry);
     reg_combo_->setMinimumContentsLength(28);
-    lay_server->addWidget(reg_combo_);
+    reg_combo_->setVisible(false);
+    lay_registry->addWidget(reg_combo_);
 
     auto* row_card = new QHBoxLayout();
-    card_btn_ = new QPushButton(QStringLiteral("card.json…"), inner_server);
-    card_label_ = new QLabel(QStringLiteral("(optional — for Register; else card.json next to .cypha)"), inner_server);
+    card_btn_ = new QPushButton(QStringLiteral("card.json…"), inner_registry);
+    card_label_ = new QLabel(QStringLiteral("(optional — for Register; else card.json next to .cypha)"), inner_registry);
     card_label_->setWordWrap(true);
     row_card->addWidget(card_btn_);
     row_card->addWidget(card_label_, 1);
-    lay_server->addLayout(row_card);
+    lay_registry->addLayout(row_card);
+    lay_registry->addStretch(1);
+
+    // ── Help / About tab ────────────────────────────────────────────────────────
+    {
+      auto* scr_help = new QScrollArea(main_tabs_);
+      scr_help->setWidgetResizable(true);
+      scr_help->setFrameShape(QFrame::NoFrame);
+      auto* inner_help = new QWidget(scr_help);
+      auto* lay_help = new QVBoxLayout(inner_help);
+      lay_help->setContentsMargins(6, 6, 6, 14);
+      help_browser_ = new QTextBrowser(inner_help);
+      help_browser_->setOpenExternalLinks(true);
+      help_browser_->setStyleSheet(QStringLiteral("QTextBrowser { background-color: #1e1e1e; color: #e6e6e6; }"));
+      help_browser_->document()->setDefaultStyleSheet(
+          QStringLiteral("body { color: #e0e0e0; } h1 { color: #7eb8ff; } h2 { color: #9cdcfe; } "
+                         "code, pre { color: #e0c896; background: #2d2d2d; } a { color: #6cb6ff; }"));
+      help_browser_->setHtml(native_quickstart_html());
+      lay_help->addWidget(help_browser_);
+      scr_help->setWidget(inner_help);
+      main_tabs_->addTab(scr_help, QStringLiteral("9 · Help"));
+    }
 
     {
       auto* rest_intro = new QLabel(
@@ -1648,6 +2100,54 @@ class MainWindow final : public QMainWindow {
     predict_btn_ = new QPushButton(QStringLiteral("Predict (native)"), inner_predict);
     predict_btn_->setEnabled(false);
     lay_predict->addWidget(predict_btn_);
+
+    predict_return_explanation_chk_ =
+        new QCheckBox(QStringLiteral("return_explanation (class_details, world_mu_distance, all_scores)"),
+                      inner_predict);
+    predict_return_explanation_chk_->setChecked(true);
+    lay_predict->addWidget(predict_return_explanation_chk_);
+
+    predict_rest_btn_ = new QPushButton(QStringLiteral("Predict (REST POST /predict)"), inner_predict);
+    predict_rest_btn_->setEnabled(false);
+    lay_predict->addWidget(predict_rest_btn_);
+
+    {
+      auto* conf_grp = new QGroupBox(QStringLiteral("Confidence & explanation (confidence_widget parity)"),
+                                     inner_predict);
+      auto* conf_vbox = new QVBoxLayout(conf_grp);
+
+      conf_pred_label_ = new QLabel(QStringLiteral("Prediction: —"), conf_grp);
+      conf_pred_label_->setStyleSheet(QStringLiteral("font-weight: bold;"));
+      conf_vbox->addWidget(conf_pred_label_);
+
+      auto* ood_row = new QHBoxLayout();
+      conf_ood_label_ = new QLabel(QStringLiteral("OOD score: —"), conf_grp);
+      conf_ood_bar_ = new QProgressBar(conf_grp);
+      conf_ood_bar_->setRange(0, 100);
+      conf_ood_bar_->setTextVisible(false);
+      conf_ood_bar_->setFixedHeight(14);
+      ood_row->addWidget(conf_ood_label_);
+      ood_row->addWidget(conf_ood_bar_, 1);
+      conf_vbox->addLayout(ood_row);
+
+      conf_scores_table_ = new QTableWidget(0, 2, conf_grp);
+      conf_scores_table_->setHorizontalHeaderLabels(
+          {QStringLiteral("Class"), QStringLiteral("Score / confidence")});
+      conf_scores_table_->horizontalHeader()->setStretchLastSection(true);
+      conf_scores_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+      conf_scores_table_->setMaximumHeight(140);
+      conf_scores_table_->setAlternatingRowColors(true);
+      conf_vbox->addWidget(conf_scores_table_);
+
+      conf_explanation_edit_ = new QPlainTextEdit(conf_grp);
+      conf_explanation_edit_->setReadOnly(true);
+      conf_explanation_edit_->setPlaceholderText(
+          QStringLiteral("explanation JSON (return_explanation) — class_details, world_mu_distance, r_eff"));
+      conf_explanation_edit_->setMinimumHeight(100);
+      conf_vbox->addWidget(conf_explanation_edit_);
+
+      lay_predict->addWidget(conf_grp);
+    }
 
     auto* hp_group = new QGroupBox(QStringLiteral("Native train hyperparameters"), inner_train);
     auto* hp_form = new QFormLayout(hp_group);
@@ -1741,7 +2241,7 @@ class MainWindow final : public QMainWindow {
 
     {
       auto* row_loss = new QHBoxLayout();
-      loss_chart_ = new LossChartPanel(inner_train);
+      loss_chart_ = new LossMetricsPanel(inner_train);
       row_loss->addWidget(loss_chart_, 1);
       auto* loss_btn_col = new QVBoxLayout();
       loss_chart_save_btn_ = new QPushButton(QStringLiteral("Save chart PNG…"), inner_train);
@@ -1787,7 +2287,7 @@ class MainWindow final : public QMainWindow {
       lay_train->addLayout(row_loss);
 
       connect(loss_chart_save_btn_, &QPushButton::clicked, this, [this]() {
-        const QPixmap pm = loss_chart_->grab();
+        const QPixmap pm = loss_chart_->capture_widget()->grab();
         if (pm.isNull()) {
           QMessageBox::warning(this, QStringLiteral("Export"), QStringLiteral("Could not capture the chart."));
           return;
@@ -1878,6 +2378,9 @@ class MainWindow final : public QMainWindow {
       connect(loss_chart_clear_btn_, &QPushButton::clicked, this, [this]() {
         last_loss_plot_rest_.clear();
         last_loss_plot_native_.clear();
+        if (loss_chart_ != nullptr) {
+          loss_chart_->clear_losses();
+        }
         refresh_loss_chart();
       });
 
@@ -2039,15 +2542,10 @@ class MainWindow final : public QMainWindow {
     rest_base_edit_->setPlaceholderText(QStringLiteral("http://127.0.0.1:8765"));
     lay_server->addWidget(rest_base_edit_);
 
-    use_gh_chk_ = new QCheckBox(QStringLiteral("use_gh for REST predict, /update, and bulk train"), inner_server);
+    use_gh_chk_ = new QCheckBox(
+        QStringLiteral("use_gh for native/REST predict, /update, and bulk train"), inner_server);
     use_gh_chk_->setChecked(true);
     lay_server->addWidget(use_gh_chk_);
-
-    predict_return_explanation_chk_ =
-        new QCheckBox(QStringLiteral("POST /predict return_explanation (class_details, world distance)"),
-                      inner_server);
-    predict_return_explanation_chk_->setChecked(false);
-    lay_server->addWidget(predict_return_explanation_chk_);
 
     auto* row_rest_load = new QHBoxLayout();
     row_rest_load->addWidget(new QLabel(QStringLiteral("POST /load"), inner_server));
@@ -2062,10 +2560,6 @@ class MainWindow final : public QMainWindow {
     row_rest_load->addWidget(rest_load_version_edit_);
     row_rest_load->addWidget(rest_post_load_btn_);
     lay_server->addLayout(row_rest_load);
-
-    predict_rest_btn_ = new QPushButton(QStringLiteral("Predict (REST POST /predict)"), inner_server);
-    predict_rest_btn_->setEnabled(false);
-    lay_server->addWidget(predict_rest_btn_);
 
     auto* row_upd = new QHBoxLayout();
     row_upd->addWidget(new QLabel(QStringLiteral("correct_label"), inner_server));
@@ -2433,6 +2927,9 @@ class MainWindow final : public QMainWindow {
           break;
         }
         losses.append(r.obj.value(QStringLiteral("loss")).toDouble());
+        if (loss_chart_ != nullptr) {
+          loss_chart_->append_rest_step(i, losses.last());
+        }
       }
       prog.setValue(n);
       apply_losses_to_chart(LossPlotSource::RestBulk, std::move(losses));
@@ -2525,6 +3022,9 @@ class MainWindow final : public QMainWindow {
       bulk_train_data_ = data;   // copy — main thread needs it for val eval
       bulk_accum_losses_.clear();
       bulk_accum_log_.clear();
+      if (loss_chart_ != nullptr) {
+        loss_chart_->reset_native_roll_window();
+      }
 
       auto bulk_state = std::make_shared<BulkTrainState>();
       bulk_state_ = bulk_state;
@@ -2842,6 +3342,9 @@ class MainWindow final : public QMainWindow {
         return;
       }
       append_train_log_entry(native_total_steps_, clab, loss, meta.correct);
+      if (loss_chart_ != nullptr) {
+        loss_chart_->append_native_step(native_total_steps_, loss, meta.correct);
+      }
       refresh_train_progress(true);  // update progress panel after single step
       result_label_->setText(QStringLiteral("[native train] step=%1 loss=%2 %3")
                                  .arg(native_total_steps_)
@@ -2884,6 +3387,9 @@ class MainWindow final : public QMainWindow {
       train_prog_win_correct_ = 0;
       train_prog_win_total_   = 0;
       train_prog_ema_loss_    = 0.0;
+      if (loss_chart_ != nullptr) {
+        loss_chart_->reset_native_roll_window();
+      }
       if (train_prog_class_table_ != nullptr) {
         train_prog_class_table_->setRowCount(0);
       }
@@ -2959,7 +3465,7 @@ class MainWindow final : public QMainWindow {
       exp_db_label_->setText(path);
       exp_start_run_btn_->setEnabled(true);
       exp_status_label_->setText(QStringLiteral("DB opened: %1").arg(path));
-      experiment_refresh_runs_table();
+      experiment_refresh_all();
     });
 
     connect(exp_start_run_btn_, &QPushButton::clicked, this, [this]() {
@@ -3003,6 +3509,28 @@ class MainWindow final : public QMainWindow {
       exp_status_label_->setText(QStringLiteral("Active run: %1 (%2)")
                                      .arg(QString::fromStdString(run_id))
                                      .arg(run_name));
+      experiment_refresh_all();
+    });
+
+    connect(exp_refresh_btn_, &QPushButton::clicked, this, [this]() { experiment_refresh_all(); });
+
+    connect(exp_experiments_table_, &QTableWidget::itemSelectionChanged, this, [this]() {
+      if (exp_experiments_table_ == nullptr || exp_experiments_table_->currentRow() < 0) {
+        return;
+      }
+      auto* id_item = exp_experiments_table_->item(exp_experiments_table_->currentRow(), 0);
+      if (id_item != nullptr) {
+        const QString full_id = id_item->data(Qt::UserRole).toString();
+        if (!full_id.isEmpty()) {
+          exp_active_experiment_id_ = full_id.toStdString();
+          if (exp_name_edit_ != nullptr) {
+            auto* name_item = exp_experiments_table_->item(exp_experiments_table_->currentRow(), 1);
+            if (name_item != nullptr) {
+              exp_name_edit_->setText(name_item->text());
+            }
+          }
+        }
+      }
       experiment_refresh_runs_table();
     });
 
@@ -3057,7 +3585,7 @@ class MainWindow final : public QMainWindow {
               .arg(K));
       exp_active_run_id_.clear();
       exp_finish_run_btn_->setEnabled(false);
-      experiment_refresh_runs_table();
+      experiment_refresh_all();
     });
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
@@ -3081,21 +3609,52 @@ class MainWindow final : public QMainWindow {
         reg_combo_->addItem(QStringLiteral("%1 / %2").arg(QString::fromStdString(r.name),
                                                             QString::fromStdString(r.version)));
       }
+      refresh_registry_table_scan();
       dataset_info_->setPlainText(QStringLiteral("registry_scan: %1 bundle(s) under\n%2")
                                       .arg(reg_refs_.size())
                                       .arg(registry_root_));
     });
 
+    connect(reg_models_table_, &QTableWidget::itemSelectionChanged, this, [this]() {
+      sync_registry_selection_to_rest_load();
+    });
+
     connect(reg_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
       if (idx >= 0 && idx < static_cast<int>(reg_refs_.size())) {
-        const cypha::RegistryModelRef& r = reg_refs_[static_cast<std::size_t>(idx)];
-        rest_load_name_edit_->setText(QString::fromStdString(r.name));
-        rest_load_version_edit_->setText(QString::fromStdString(r.version));
+        sync_registry_selection_to_rest_load();
+      }
+    });
+
+    connect(reg_rest_models_btn_, &QPushButton::clicked, this, [this]() {
+      QString base = rest_base_edit_->text().trimmed();
+      if (base.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("/models"),
+                                 QStringLiteral("Enter REST base URL on the Server tab (or start cypha_rest)."));
+        return;
+      }
+      while (base.endsWith(QLatin1Char('/'))) {
+        base.chop(1);
+      }
+      const QUrl url(base + QStringLiteral("/models?summary=1"));
+      const HttpJsonResult r = http_get_json(url);
+      if (!r.ok) {
+        QMessageBox::warning(this, QStringLiteral("/models"), r.err);
+        return;
+      }
+      const QJsonArray models = r.obj.value(QStringLiteral("models")).toArray();
+      refresh_registry_table_rest(models);
+      dataset_info_->setPlainText(QStringLiteral("GET /models: %1 entries from %2").arg(models.size()).arg(base));
+    });
+
+    connect(reg_rest_load_btn_, &QPushButton::clicked, this, [this]() {
+      sync_registry_selection_to_rest_load();
+      if (rest_post_load_btn_ != nullptr) {
+        QMetaObject::invokeMethod(rest_post_load_btn_, "click", Qt::QueuedConnection);
       }
     });
 
     connect(reg_load_btn_, &QPushButton::clicked, this, [this]() {
-      const int i = reg_combo_->currentIndex();
+      const int i = selected_registry_index();
       if (i < 0 || i >= static_cast<int>(reg_refs_.size())) {
         QMessageBox::information(this, QStringLiteral("Registry"),
                                  QStringLiteral("Scan the registry and pick an entry."));
@@ -3190,6 +3749,7 @@ class MainWindow final : public QMainWindow {
         reg_combo_->addItem(QStringLiteral("%1 / %2").arg(QString::fromStdString(r.name),
                                                             QString::fromStdString(r.version)));
       }
+      refresh_registry_table_scan();
     });
 
     connect(rest_browse_btn_, &QPushButton::clicked, this, [this]() {
@@ -3322,7 +3882,72 @@ class MainWindow final : public QMainWindow {
       const QString pretty = QString::fromUtf8(QJsonDocument(r.obj).toJson(QJsonDocument::Indented));
       append_server_log(QStringLiteral("[GET /models]\n%1\n").arg(pretty));
       const QJsonArray models = r.obj.value(QStringLiteral("models")).toArray();
+      refresh_registry_table_rest(models);
       result_label_->setText(QStringLiteral("[REST /models] entries: %1").arg(models.size()));
+    });
+
+    bench_proc_.setProcessChannelMode(QProcess::SeparateChannels);
+    connect(&bench_proc_, &QProcess::readyReadStandardOutput, this, [this]() {
+      append_bench_log(QString::fromUtf8(bench_proc_.readAllStandardOutput()));
+    });
+    connect(&bench_proc_, &QProcess::readyReadStandardError, this, [this]() {
+      append_bench_log(QString::fromUtf8(bench_proc_.readAllStandardError()));
+    });
+    connect(&bench_proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [this](int code, QProcess::ExitStatus st) {
+              bench_run_d17_btn_->setEnabled(true);
+              append_bench_log(QStringLiteral("\n[bench] exited code=%1 status=%2\n")
+                                   .arg(code)
+                                   .arg(st == QProcess::NormalExit ? QStringLiteral("normal")
+                                                                   : QStringLiteral("crash")));
+            });
+
+    connect(lm_browse_btn_, &QPushButton::clicked, this, [this]() {
+      const QString path = QFileDialog::getOpenFileName(
+          this, QStringLiteral("Open CyphaLM checkpoint"), QString(),
+          QStringLiteral("CyphaLM checkpoint (*.json);;All (*)"));
+      if (!path.isEmpty()) {
+        lm_path_edit_->setText(path);
+      }
+    });
+    connect(lm_load_btn_, &QPushButton::clicked, this, [this]() { lm_do_load(); });
+    connect(lm_generate_btn_, &QPushButton::clicked, this, [this]() { lm_do_generate(); });
+    connect(lm_use_rest_chk_, &QCheckBox::stateChanged, this, [this](int) { lm_refresh_generate_enabled(); });
+    connect(bench_browse_btn_, &QPushButton::clicked, this, [this]() {
+      const QString path = QFileDialog::getOpenFileName(
+          this, QStringLiteral("cypha_bench_run binary"), QString(),
+#if defined(_WIN32)
+          QStringLiteral("Executable (*.exe);;All (*)"));
+#else
+          QString());
+#endif
+      if (!path.isEmpty()) {
+        bench_bin_edit_->setText(path);
+      }
+    });
+    connect(bench_run_d17_btn_, &QPushButton::clicked, this, [this]() {
+      if (bench_proc_.state() != QProcess::NotRunning) {
+        QMessageBox::information(this, QStringLiteral("Bench"),
+                                 QStringLiteral("A bench run is already in progress."));
+        return;
+      }
+      const QString bin = bench_bin_edit_->text().trimmed();
+      if (bin.isEmpty() || !QFileInfo::exists(bin)) {
+        QMessageBox::warning(this, QStringLiteral("Bench"),
+                             QStringLiteral("Set a valid cypha_bench_run binary path."));
+        return;
+      }
+      bench_log_edit_->clear();
+      append_bench_log(QStringLiteral("[bench] starting: %1 --domain 17\n").arg(bin));
+      bench_run_d17_btn_->setEnabled(false);
+      bench_proc_.setProgram(bin);
+      bench_proc_.setArguments({QStringLiteral("--domain"), QStringLiteral("17")});
+      bench_proc_.setWorkingDirectory(QFileInfo(bin).absolutePath());
+      bench_proc_.start();
+      if (!bench_proc_.waitForStarted(5000)) {
+        append_bench_log(QStringLiteral("[bench] waitForStarted failed: %1\n").arg(bench_proc_.errorString()));
+        bench_run_d17_btn_->setEnabled(true);
+      }
     });
 
     connect(rest_post_load_btn_, &QPushButton::clicked, this, [this]() {
@@ -3382,14 +4007,20 @@ class MainWindow final : public QMainWindow {
       }
       std::string label;
       double conf = 0.0;
-      const int rc = best_label_and_conf(*model_, pre_.get(), x, &label, &conf);
-      if (rc != 0) {
-        QMessageBox::warning(this, QStringLiteral("Infer failed"), QStringLiteral("Code %1").arg(rc));
+      QJsonObject scores;
+      double anomaly = 0.0;
+      bool is_ood = false;
+      QJsonObject expl;
+      if (!native_predict_detail(x, &label, &conf, &scores, &anomaly, &is_ood, &expl)) {
+        QMessageBox::warning(this, QStringLiteral("Infer failed"), QStringLiteral("Native predict failed."));
         return;
       }
-      result_label_->setText(QStringLiteral("[native] label: %1\nconfidence: %2")
-                                 .arg(QString::fromStdString(label))
-                                 .arg(conf, 0, 'g', 8));
+      const QString qlab = QString::fromStdString(label);
+      update_confidence_panel(qlab, conf, anomaly, is_ood, scores, expl);
+      result_label_->setText(QStringLiteral("[native] label: %1\nconfidence: %2\nanomaly: %3")
+                                 .arg(qlab)
+                                 .arg(conf, 0, 'g', 8)
+                                 .arg(anomaly, 0, 'g', 8));
     });
 
     // ── Batch predict: load CSV → run native infer on each row ────────────────
@@ -3433,7 +4064,8 @@ class MainWindow final : public QMainWindow {
 
         std::string lbl;
         double conf = 0.0;
-        const int rc = best_label_and_conf(*model_, pre_.get(), xvec, &lbl, &conf);
+        const int rc = best_label_and_conf(*model_, pre_.get(), xvec, &lbl, &conf, use_gh_chk_->isChecked(),
+                                           native_gh_chi_, native_gh_psi_);
         if (rc != 0) {
           lbl  = "(error)";
           conf = 0.0;
@@ -3514,6 +4146,7 @@ class MainWindow final : public QMainWindow {
       const QString pretty = QString::fromUtf8(QJsonDocument(r.obj).toJson(QJsonDocument::Indented));
       append_server_log(QStringLiteral("[POST /predict]\n%1\n").arg(pretty));
 
+      update_confidence_from_predict_json(r.obj);
       const QString lab = r.obj.value(QStringLiteral("label")).toString();
       const double conf = r.obj.value(QStringLiteral("confidence")).toDouble();
       const double anomaly = r.obj.value(QStringLiteral("anomaly_score")).toDouble();
@@ -3531,10 +4164,6 @@ class MainWindow final : public QMainWindow {
         lines += QStringLiteral("regression_val: %1\nuncertainty: %2\n")
                      .arg(rv.toDouble(), 0, 'g', 8)
                      .arg(r.obj.value(QStringLiteral("uncertainty")).toDouble(), 0, 'g', 8);
-      }
-      const QJsonValue expl = r.obj.value(QStringLiteral("explanation"));
-      if (expl.isObject()) {
-        lines += QStringLiteral("explanation: (see cypha_rest log above — class_details / world_mu_distance)\n");
       }
       result_label_->setText(lines);
     });
@@ -3601,6 +4230,10 @@ class MainWindow final : public QMainWindow {
     if (rest_proc_.state() != QProcess::NotRunning) {
       rest_proc_.terminate();
       rest_proc_.waitForFinished(3000);
+    }
+    if (bench_proc_.state() != QProcess::NotRunning) {
+      bench_proc_.terminate();
+      bench_proc_.waitForFinished(3000);
     }
     QSettings ui_settings(QStringLiteral("Cypha"), QStringLiteral("CyphaQtShell"));
     ui_settings.setValue(QStringLiteral("geometry"), saveGeometry());
@@ -4030,6 +4663,9 @@ class MainWindow final : public QMainWindow {
     for (const auto& e : drained) {
       bulk_accum_losses_.append(e.loss);
       bulk_accum_log_.append(e);
+      if (loss_chart_ != nullptr) {
+        loss_chart_->append_native_step(e.step_n, e.loss, e.correct);
+      }
     }
 
     const int done_so_far = bulk_state_->step_count.load(std::memory_order_relaxed);
@@ -4097,7 +4733,8 @@ class MainWindow final : public QMainWindow {
         for (int j = 0; j < bulk_train_data_.n_features; ++j)
           xr[static_cast<std::size_t>(j)] = bulk_train_data_.x_rowmajor[rb + static_cast<std::size_t>(j)];
         std::string pred; double conf = 0.0;
-        if (best_label_and_conf(*model_, pre_.get(), xr, &pred, &conf) == 0 &&
+        if (best_label_and_conf(*model_, pre_.get(), xr, &pred, &conf, use_gh_chk_->isChecked(),
+                                native_gh_chi_, native_gh_psi_) == 0 &&
             pred == bulk_train_data_.y_class[static_cast<std::size_t>(i)])
           ++val_correct;
       }
@@ -4311,6 +4948,7 @@ class MainWindow final : public QMainWindow {
       en = loss_ema_series(last_loss_plot_native_, kEmaAlpha);
     }
     loss_chart_->set_loss_runs(last_loss_plot_rest_, last_loss_plot_native_, er, en);
+    loss_chart_->refresh_acc_chart();
     if (loss_y_lock_chk_ != nullptr && loss_y_lock_chk_->isChecked() &&
         loss_y_min_spin_ != nullptr && loss_y_max_spin_ != nullptr) {
       loss_chart_->set_y_range_lock(true, loss_y_min_spin_->value(), loss_y_max_spin_->value());
@@ -4392,6 +5030,227 @@ class MainWindow final : public QMainWindow {
     rest_log_->moveCursor(QTextCursor::End);
   }
 
+  void append_bench_log(const QString& chunk) {
+    if (bench_log_edit_ == nullptr || chunk.isEmpty()) {
+      return;
+    }
+    bench_log_edit_->moveCursor(QTextCursor::End);
+    bench_log_edit_->insertPlainText(chunk);
+    bench_log_edit_->moveCursor(QTextCursor::End);
+  }
+
+  void lm_refresh_generate_enabled() {
+    if (lm_generate_btn_ == nullptr) {
+      return;
+    }
+    const bool rest_mode = lm_use_rest_chk_ != nullptr && lm_use_rest_chk_->isChecked();
+    lm_generate_btn_->setEnabled(lm_loaded_ || rest_mode);
+  }
+
+  QString rest_base_normalized() const {
+    QString base = rest_base_edit_ != nullptr ? rest_base_edit_->text().trimmed() : QString();
+    while (base.endsWith(QLatin1Char('/'))) {
+      base.chop(1);
+    }
+    return base;
+  }
+
+  void lm_do_load() {
+    const QString path = lm_path_edit_ != nullptr ? lm_path_edit_->text().trimmed() : QString();
+    if (path.isEmpty()) {
+      QMessageBox::information(this, QStringLiteral("CyphaLM"), QStringLiteral("Enter a checkpoint path."));
+      return;
+    }
+    if (!QFileInfo::exists(path)) {
+      QMessageBox::warning(this, QStringLiteral("CyphaLM"),
+                           QStringLiteral("File not found:\n%1").arg(path));
+      return;
+    }
+
+    const bool rest_mode = lm_use_rest_chk_ != nullptr && lm_use_rest_chk_->isChecked();
+    if (rest_mode) {
+      const QString base = rest_base_normalized();
+      if (base.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("CyphaLM"),
+                                 QStringLiteral("Set REST base URL on the Server tab (or start cypha_rest)."));
+        return;
+      }
+      QJsonObject body;
+      body[QStringLiteral("checkpoint_path")] = path;
+      const HttpJsonResult r = http_post_json(QUrl(base + QStringLiteral("/lm/load")), body);
+      if (!r.ok) {
+        QMessageBox::warning(this, QStringLiteral("CyphaLM /lm/load"), r.err);
+        return;
+      }
+      if (r.obj.contains(QStringLiteral("detail"))) {
+        QMessageBox::warning(this, QStringLiteral("CyphaLM /lm/load"),
+                             r.obj.value(QStringLiteral("detail")).toString());
+        return;
+      }
+      lm_model_.reset();
+      lm_loaded_ = true;
+      lm_source_path_ = path;
+      lm_n_generations_ = 0;
+      const QJsonObject summary = r.obj.value(QStringLiteral("summary")).toObject();
+      const QString status =
+          QStringLiteral("REST loaded — vocab %1, field_dim %2")
+              .arg(summary.value(QStringLiteral("vocab_size")).toInt())
+              .arg(summary.value(QStringLiteral("field_dim")).toInt());
+      if (lm_status_label_ != nullptr) {
+        lm_status_label_->setText(status);
+      }
+      if (lm_output_edit_ != nullptr) {
+        lm_output_edit_->setPlainText(QString::fromUtf8(
+            QJsonDocument(r.obj).toJson(QJsonDocument::Indented)));
+      }
+    } else {
+      try {
+        lm_model_ = std::make_unique<cypha::cyphalm::CyphaLMModel>(
+            cypha::cyphalm::load_cyphalm_model(qstring_to_fs_path(path).string()));
+        lm_loaded_ = true;
+        lm_source_path_ = path;
+        lm_n_generations_ = 0;
+        const auto& cfg = lm_model_->config();
+        if (lm_status_label_ != nullptr) {
+          lm_status_label_->setText(QStringLiteral("Native loaded — vocab %1, field_dim %2, experts %3")
+                                        .arg(cfg.vocab_size)
+                                        .arg(cfg.field_dim)
+                                        .arg(cfg.n_experts));
+        }
+        if (lm_output_edit_ != nullptr) {
+          lm_output_edit_->clear();
+        }
+      } catch (const std::exception& ex) {
+        lm_model_.reset();
+        lm_loaded_ = false;
+        lm_source_path_.clear();
+        QMessageBox::warning(this, QStringLiteral("CyphaLM load"),
+                             QString::fromUtf8(ex.what()));
+        if (lm_status_label_ != nullptr) {
+          lm_status_label_->setText(QStringLiteral("(load failed)"));
+        }
+        lm_refresh_generate_enabled();
+        return;
+      }
+    }
+    lm_refresh_generate_enabled();
+    result_label_->setText(QStringLiteral("[CyphaLM] loaded %1").arg(path));
+  }
+
+  void lm_do_generate() {
+    std::vector<int> prompt_ids;
+    QString perr;
+    if (!parse_token_ids(lm_prompt_edit_ != nullptr ? lm_prompt_edit_->text() : QString(), prompt_ids,
+                         &perr)) {
+      QMessageBox::warning(this, QStringLiteral("CyphaLM generate"), perr);
+      return;
+    }
+    const int max_tokens = lm_n_tokens_spin_ != nullptr ? lm_n_tokens_spin_->value() : 64;
+    const QString strategy =
+        lm_strategy_combo_ != nullptr ? lm_strategy_combo_->currentText() : QStringLiteral("top_p");
+    const double top_p = lm_top_p_spin_ != nullptr ? lm_top_p_spin_->value() : 0.92;
+    const double temperature =
+        lm_temperature_spin_ != nullptr ? lm_temperature_spin_->value() : 0.9;
+
+    const bool rest_mode = lm_use_rest_chk_ != nullptr && lm_use_rest_chk_->isChecked();
+    if (rest_mode) {
+      const QString base = rest_base_normalized();
+      if (base.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("CyphaLM"),
+                                 QStringLiteral("Set REST base URL on the Server tab."));
+        return;
+      }
+      QJsonArray prompt_arr;
+      for (int id : prompt_ids) {
+        prompt_arr.append(id);
+      }
+      QJsonObject body;
+      body[QStringLiteral("prompt_ids")] = prompt_arr;
+      body[QStringLiteral("max_tokens")] = max_tokens;
+      body[QStringLiteral("strategy")] = strategy;
+      body[QStringLiteral("top_p")] = top_p;
+      body[QStringLiteral("temperature")] = temperature;
+      const auto t0 = std::chrono::steady_clock::now();
+      const HttpJsonResult r = http_post_json(QUrl(base + QStringLiteral("/generate")), body);
+      const double latency_ms =
+          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      if (!r.ok) {
+        QMessageBox::warning(this, QStringLiteral("CyphaLM /generate"), r.err);
+        return;
+      }
+      if (r.obj.contains(QStringLiteral("detail"))) {
+        QMessageBox::warning(this, QStringLiteral("CyphaLM /generate"),
+                             r.obj.value(QStringLiteral("detail")).toString());
+        return;
+      }
+      ++lm_n_generations_;
+      if (lm_output_edit_ != nullptr) {
+        QString out = QString::fromUtf8(QJsonDocument(r.obj).toJson(QJsonDocument::Indented));
+        out += QStringLiteral("\n\nlatency_ms: %1").arg(latency_ms, 0, 'f', 2);
+        lm_output_edit_->setPlainText(out);
+      }
+      result_label_->setText(
+          QStringLiteral("[CyphaLM REST] generated %1 tokens in %2 ms")
+              .arg(r.obj.value(QStringLiteral("n_tokens")).toInt())
+              .arg(latency_ms, 0, 'f', 1));
+      return;
+    }
+
+    if (!lm_model_) {
+      QMessageBox::information(this, QStringLiteral("CyphaLM"),
+                               QStringLiteral("Load a checkpoint first."));
+      return;
+    }
+
+    cypha::cyphalm::DecodeParams params;
+    params.strategy = cypha::cyphalm::decode_strategy_from_string(strategy.toStdString());
+    params.top_p = top_p;
+    params.temperature = temperature;
+    params.top_k = 40;
+
+    const auto t0 = std::chrono::steady_clock::now();
+    try {
+      const cypha::cyphalm::GenerateOutput gen =
+          cypha::cyphalm::generate_decode(*lm_model_, prompt_ids, max_tokens, params);
+      const double latency_ms =
+          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      ++lm_n_generations_;
+
+      QStringList id_parts;
+      id_parts.reserve(static_cast<int>(gen.generated_ids.size()));
+      for (int id : gen.generated_ids) {
+        id_parts << QString::number(id);
+      }
+      QString decoded;
+      try {
+        std::vector<std::uint32_t> uids;
+        uids.reserve(gen.generated_ids.size());
+        for (int id : gen.generated_ids) {
+          uids.push_back(static_cast<std::uint32_t>(id));
+        }
+        decoded = QString::fromStdString(lm_model_->decode_tokens(uids));
+      } catch (...) {
+        decoded = QStringLiteral("(decode unavailable)");
+      }
+
+      QString out = QStringLiteral("generated_ids: [%1]\n").arg(id_parts.join(QStringLiteral(", ")));
+      out += QStringLiteral("n_tokens: %1\n").arg(static_cast<int>(gen.generated_ids.size()));
+      out += QStringLiteral("strategy: %1\n").arg(strategy);
+      out += QStringLiteral("halted_on_uncertainty: %1\n")
+                 .arg(gen.halted_on_uncertainty ? QStringLiteral("true") : QStringLiteral("false"));
+      out += QStringLiteral("latency_ms: %1\n\n").arg(latency_ms, 0, 'f', 2);
+      out += QStringLiteral("decoded: %1").arg(decoded);
+      if (lm_output_edit_ != nullptr) {
+        lm_output_edit_->setPlainText(out);
+      }
+      result_label_->setText(QStringLiteral("[CyphaLM native] %1 tokens, %2 ms")
+                                 .arg(static_cast<int>(gen.generated_ids.size()))
+                                 .arg(latency_ms, 0, 'f', 1));
+    } catch (const std::exception& ex) {
+      QMessageBox::warning(this, QStringLiteral("CyphaLM generate"), QString::fromUtf8(ex.what()));
+    }
+  }
+
   int feature_input_dim() const {
     if (pre_) {
       return pre_->input_dim;
@@ -4431,19 +5290,293 @@ class MainWindow final : public QMainWindow {
     update_features_hint();
   }
 
+  void refresh_registry_table_scan() {
+    if (reg_models_table_ == nullptr) {
+      return;
+    }
+    reg_models_table_->setRowCount(0);
+    for (const cypha::RegistryModelRef& r : reg_refs_) {
+      const int row = reg_models_table_->rowCount();
+      reg_models_table_->insertRow(row);
+      reg_models_table_->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(r.name)));
+      reg_models_table_->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(r.version)));
+      reg_models_table_->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(r.model_path)));
+      reg_models_table_->setItem(row, 3,
+                                 new QTableWidgetItem(QString::fromStdString(r.preprocessor_path)));
+    }
+  }
+
+  void refresh_registry_table_rest(const QJsonArray& models) {
+    if (reg_models_table_ == nullptr) {
+      return;
+    }
+    reg_models_table_->setRowCount(0);
+    reg_refs_.clear();
+    for (const QJsonValue& v : models) {
+      if (!v.isObject()) {
+        continue;
+      }
+      const QJsonObject o = v.toObject();
+      cypha::RegistryModelRef ref;
+      ref.name = o.value(QStringLiteral("name")).toString().toStdString();
+      ref.version = o.value(QStringLiteral("version")).toString().toStdString();
+      ref.model_path = o.value(QStringLiteral("model_path")).toString().toStdString();
+      ref.preprocessor_path = o.value(QStringLiteral("preprocessor_path")).toString().toStdString();
+      ref.card_path = o.value(QStringLiteral("card_path")).toString().toStdString();
+      reg_refs_.push_back(ref);
+      const int row = reg_models_table_->rowCount();
+      reg_models_table_->insertRow(row);
+      reg_models_table_->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(ref.name)));
+      reg_models_table_->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(ref.version)));
+      reg_models_table_->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(ref.model_path)));
+      reg_models_table_->setItem(row, 3,
+                                 new QTableWidgetItem(QString::fromStdString(ref.preprocessor_path)));
+    }
+    if (reg_combo_ != nullptr) {
+      reg_combo_->clear();
+      for (const cypha::RegistryModelRef& r : reg_refs_) {
+        reg_combo_->addItem(QStringLiteral("%1 / %2").arg(QString::fromStdString(r.name),
+                                                            QString::fromStdString(r.version)));
+      }
+    }
+  }
+
+  int selected_registry_index() const {
+    if (reg_models_table_ != nullptr && reg_models_table_->currentRow() >= 0) {
+      return reg_models_table_->currentRow();
+    }
+    if (reg_combo_ != nullptr) {
+      return reg_combo_->currentIndex();
+    }
+    return -1;
+  }
+
+  void sync_registry_selection_to_rest_load() {
+    const int idx = selected_registry_index();
+    if (idx < 0 || idx >= static_cast<int>(reg_refs_.size())) {
+      return;
+    }
+    const cypha::RegistryModelRef& r = reg_refs_[static_cast<std::size_t>(idx)];
+    if (rest_load_name_edit_ != nullptr) {
+      rest_load_name_edit_->setText(QString::fromStdString(r.name));
+    }
+    if (rest_load_version_edit_ != nullptr) {
+      rest_load_version_edit_->setText(QString::fromStdString(r.version));
+    }
+  }
+
+  void update_confidence_panel(const QString& label, double conf, double anomaly, bool is_ood,
+                               const QJsonObject& all_scores, const QJsonObject& explanation) {
+    if (conf_pred_label_ != nullptr) {
+      conf_pred_label_->setText(QStringLiteral("Prediction: %1  (confidence %2)")
+                                    .arg(label)
+                                    .arg(conf, 0, 'g', 6));
+    }
+    if (conf_ood_label_ != nullptr && conf_ood_bar_ != nullptr) {
+      const int pct = std::clamp(static_cast<int>(anomaly / kShellOodThreshold * 100.0), 0, 100);
+      conf_ood_bar_->setValue(pct);
+      conf_ood_label_->setText(QStringLiteral("OOD score: %1  %2")
+                                   .arg(anomaly, 0, 'g', 4)
+                                   .arg(is_ood ? QStringLiteral("[OOD]") : QStringLiteral("[in-distribution]")));
+      const QString bar_style = is_ood
+                                    ? QStringLiteral("QProgressBar::chunk { background-color: #e05050; }")
+                                    : QStringLiteral("QProgressBar::chunk { background-color: #40a060; }");
+      conf_ood_bar_->setStyleSheet(bar_style);
+    }
+    if (conf_scores_table_ != nullptr) {
+      conf_scores_table_->setRowCount(0);
+      const QStringList keys = all_scores.keys();
+      QStringList sorted = keys;
+      std::sort(sorted.begin(), sorted.end(), [&](const QString& a, const QString& b) {
+        return all_scores.value(a).toDouble() > all_scores.value(b).toDouble();
+      });
+      for (const QString& k : sorted) {
+        const int row = conf_scores_table_->rowCount();
+        conf_scores_table_->insertRow(row);
+        conf_scores_table_->setItem(row, 0, new QTableWidgetItem(k));
+        conf_scores_table_->setItem(row, 1,
+                                    new QTableWidgetItem(QString::number(all_scores.value(k).toDouble(), 'g', 6)));
+      }
+    }
+    if (conf_explanation_edit_ != nullptr) {
+      if (explanation.isEmpty()) {
+        conf_explanation_edit_->clear();
+      } else {
+        conf_explanation_edit_->setPlainText(
+            QString::fromUtf8(QJsonDocument(explanation).toJson(QJsonDocument::Indented)));
+      }
+    }
+  }
+
+  void update_confidence_from_predict_json(const QJsonObject& obj) {
+    const QString lab = obj.value(QStringLiteral("label")).toString();
+    const double conf = obj.value(QStringLiteral("confidence")).toDouble();
+    const double anomaly = obj.value(QStringLiteral("anomaly_score")).toDouble();
+    const bool ood = obj.value(QStringLiteral("is_ood")).toBool();
+    QJsonObject scores;
+    const QJsonValue sc = obj.value(QStringLiteral("all_scores"));
+    if (sc.isObject()) {
+      scores = sc.toObject();
+    }
+    QJsonObject expl;
+    const QJsonValue ex = obj.value(QStringLiteral("explanation"));
+    if (ex.isObject()) {
+      expl = ex.toObject();
+    } else if (predict_return_explanation_chk_ != nullptr && predict_return_explanation_chk_->isChecked()) {
+      expl = obj;
+      expl.remove(QStringLiteral("latency_ms"));
+    }
+    update_confidence_panel(lab, conf, anomaly, ood, scores, expl);
+  }
+
+  bool native_predict_detail(const std::vector<double>& x_in, std::string* label_out, double* conf_out,
+                             QJsonObject* scores_out, double* anomaly_out, bool* is_ood_out,
+                             QJsonObject* explanation_out) {
+    if (!model_ || label_out == nullptr || conf_out == nullptr) {
+      return false;
+    }
+    std::vector<double> x_latent;
+    const double* x_ptr = nullptr;
+    if (pre_ != nullptr) {
+      if (static_cast<int>(x_in.size()) != pre_->input_dim) {
+        return false;
+      }
+      x_latent = pre_->transform_one(x_in);
+      if (static_cast<int>(x_latent.size()) != model_->d_latent) {
+        return false;
+      }
+      x_ptr = x_latent.data();
+    } else {
+      if (static_cast<int>(x_in.size()) != model_->d_latent) {
+        return false;
+      }
+      x_ptr = x_in.data();
+    }
+    if (model_->labels.empty()) {
+      return false;
+    }
+    std::vector<double> H;
+    cypha::batch_encode(*model_, x_ptr, 1, H);
+    const int k = static_cast<int>(model_->labels.size());
+    std::vector<double> llrs;
+    double anomaly = 0.0;
+    bool is_ood = false;
+    double r_eff = 0.0;
+    if (use_gh_chk_ != nullptr && use_gh_chk_->isChecked()) {
+      const cypha::GhInferAtHResult gh =
+          cypha::gh_infer_at_h(*model_, H.data(), native_gh_chi_, native_gh_psi_, kGhNigAdaptAlphaShell);
+      *label_out = gh.label;
+      *conf_out = gh.confidence;
+      llrs = gh.llrs;
+      r_eff = gh.r_eff;
+      const double r_base =
+          (model_->has_mahal_ema && model_->mahal_ema > 0.0) ? model_->mahal_ema : 1.0;
+      anomaly = cypha::gh_infer_anomaly_score(r_eff, r_base);
+      is_ood = anomaly > kShellOodThreshold;
+    } else {
+      cypha::CyphaInferOptions iopt{};
+      iopt.deliberation_lo = model_->deliberation_lo;
+      iopt.deliberation_hi = model_->deliberation_hi;
+      iopt.use_field = true;
+      const cypha::InferAtHResult inf = cypha::infer_at_h(*model_, H.data(), iopt);
+      *label_out = inf.label;
+      *conf_out = inf.confidence;
+      llrs = inf.llrs;
+    }
+    if (scores_out != nullptr) {
+      QJsonObject scores;
+      for (int j = 0; j < k && j < static_cast<int>(llrs.size()); ++j) {
+        scores[QString::fromStdString(model_->labels[static_cast<std::size_t>(j)])] = llrs[static_cast<std::size_t>(j)];
+      }
+      *scores_out = scores;
+    }
+    if (anomaly_out != nullptr) {
+      *anomaly_out = anomaly;
+    }
+    if (is_ood_out != nullptr) {
+      *is_ood_out = is_ood;
+    }
+    const bool want_expl =
+        predict_return_explanation_chk_ != nullptr && predict_return_explanation_chk_->isChecked();
+    if (want_expl && explanation_out != nullptr) {
+      QJsonObject expl;
+      expl[QStringLiteral("label")] = QString::fromStdString(*label_out);
+      expl[QStringLiteral("confidence")] = *conf_out;
+      expl[QStringLiteral("anomaly_score")] = anomaly;
+      expl[QStringLiteral("is_ood")] = is_ood;
+      expl[QStringLiteral("r_eff")] = r_eff;
+      QJsonObject cdet;
+      const int d = model_->d_latent;
+      for (int ci = 0; ci < k; ++ci) {
+        double sumsq = 0.0;
+        for (int j = 0; j < d; ++j) {
+          const double v = model_->D[static_cast<std::size_t>(ci * d + j)];
+          sumsq += v * v;
+        }
+        QJsonObject row;
+        row[QStringLiteral("n_obs")] = model_->n_obs[static_cast<std::size_t>(ci)];
+        row[QStringLiteral("delta_mu_norm")] = std::sqrt(sumsq);
+        cdet[QString::fromStdString(model_->labels[static_cast<std::size_t>(ci)])] = row;
+      }
+      expl[QStringLiteral("class_details")] = cdet;
+      double wh = 0.0;
+      for (int j = 0; j < d; ++j) {
+        const double t = H[static_cast<std::size_t>(j)] - model_->mu_world[static_cast<std::size_t>(j)];
+        wh += t * t;
+      }
+      expl[QStringLiteral("world_mu_distance")] = std::sqrt(wh);
+      if (scores_out != nullptr) {
+        expl[QStringLiteral("all_scores")] = *scores_out;
+      }
+      *explanation_out = expl;
+    }
+    return true;
+  }
+
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
+  void experiment_refresh_experiments_table() {
+    if (exp_experiments_table_ == nullptr || !exp_db_) {
+      return;
+    }
+    exp_experiments_table_->setRowCount(0);
+    std::vector<cypha::ExperimentDbExperimentRow> rows;
+    std::string err;
+    if (!experiment_db_list_experiments(*exp_db_, &rows, &err)) {
+      return;
+    }
+    for (const auto& e : rows) {
+      const int row = exp_experiments_table_->rowCount();
+      exp_experiments_table_->insertRow(row);
+      const QString id_short = QString::fromStdString(e.experiment_id).right(16);
+      exp_experiments_table_->setItem(row, 0, new QTableWidgetItem(id_short));
+      auto* id_item = exp_experiments_table_->item(row, 0);
+      id_item->setData(Qt::UserRole, QString::fromStdString(e.experiment_id));
+      exp_experiments_table_->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(e.name)));
+      exp_experiments_table_->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(e.task)));
+      exp_experiments_table_->setItem(row, 3,
+                                      new QTableWidgetItem(QString::number(e.created_at, 'f', 1)));
+    }
+  }
+
   void experiment_refresh_runs_table() {
     if (exp_runs_table_ == nullptr || !exp_db_) return;
     exp_runs_table_->setRowCount(0);
-    // Query last 30 runs ordered by created_at DESC
+    std::string filter_exp = exp_active_experiment_id_;
+    if (exp_experiments_table_ != nullptr && exp_experiments_table_->currentRow() >= 0) {
+      auto* id_item = exp_experiments_table_->item(exp_experiments_table_->currentRow(), 0);
+      if (id_item != nullptr) {
+        const QString full_id = id_item->data(Qt::UserRole).toString();
+        if (!full_id.isEmpty()) {
+          filter_exp = full_id.toStdString();
+        }
+      }
+    }
     std::vector<cypha::ExperimentDbRunRow> rows;
     std::string err;
     if (!experiment_db_list_runs(*exp_db_,
-                                 exp_active_experiment_id_.empty()
-                                     ? nullptr
-                                     : exp_active_experiment_id_.c_str(),
-                                 nullptr,   // status filter
-                                 30, 0,     // limit, offset
+                                 filter_exp.empty() ? nullptr : filter_exp.c_str(),
+                                 nullptr,
+                                 50, 0,
                                  &rows, &err)) {
       return;
     }
@@ -4459,7 +5592,13 @@ class MainWindow final : public QMainWindow {
                                   : QStringLiteral("—");
       exp_runs_table_->setItem(row, 3, new QTableWidgetItem(acc_str));
       exp_runs_table_->setItem(row, 4, new QTableWidgetItem(QString::number(r.n_steps)));
+      exp_runs_table_->setItem(row, 5, new QTableWidgetItem(QString::fromStdString(r.checkpoint_path)));
     }
+  }
+
+  void experiment_refresh_all() {
+    experiment_refresh_experiments_table();
+    experiment_refresh_runs_table();
   }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
@@ -4506,6 +5645,7 @@ class MainWindow final : public QMainWindow {
   }
 
   QProcess rest_proc_;
+  QProcess bench_proc_;
   QTabWidget* main_tabs_{};
   QLabel* workflow_banner_{};
   QPushButton* load_btn_{};
@@ -4552,7 +5692,9 @@ class MainWindow final : public QMainWindow {
   QLineEdit*   exp_run_name_edit_{};
   QPushButton* exp_start_run_btn_{};
   QPushButton* exp_finish_run_btn_{};
+  QPushButton* exp_refresh_btn_{};
   QLabel*      exp_status_label_{};
+  QTableWidget* exp_experiments_table_{};
   QTableWidget* exp_runs_table_{};
 #else
   // Stub pointers so guards are not needed in non-DB code paths
@@ -4583,7 +5725,7 @@ class MainWindow final : public QMainWindow {
   int    train_prog_win_total_{0};
   double train_prog_ema_loss_{0.0};
   QSpinBox* csv_bulk_max_rows_spin_{};
-  LossChartPanel* loss_chart_{};
+  LossMetricsPanel* loss_chart_{};
   QPushButton* loss_chart_save_btn_{};
   QPushButton* loss_csv_save_btn_{};
   QPushButton* loss_svg_save_btn_{};
@@ -4620,8 +5762,11 @@ class MainWindow final : public QMainWindow {
   QPushButton* rest_post_load_btn_{};
   QPushButton* reg_root_btn_{};
   QPushButton* reg_scan_btn_{};
+  QPushButton* reg_rest_models_btn_{};
   QPushButton* reg_load_btn_{};
+  QPushButton* reg_rest_load_btn_{};
   QPushButton* reg_register_btn_{};
+  QTableWidget* reg_models_table_{};
   QPushButton* card_btn_{};
   QLineEdit* csv_target_name_edit_{};
   QLineEdit* csv_target_index_edit_{};
@@ -4630,6 +5775,12 @@ class MainWindow final : public QMainWindow {
   QLabel* reg_root_label_{};
   QLabel* card_label_{};
   QComboBox* reg_combo_{};
+  QLabel* conf_pred_label_{};
+  QLabel* conf_ood_label_{};
+  QProgressBar* conf_ood_bar_{};
+  QTableWidget* conf_scores_table_{};
+  QPlainTextEdit* conf_explanation_edit_{};
+  QTextBrowser* help_browser_{};
   QPlainTextEdit* dataset_info_{};
   // ── Dataset panel ────────────────────────────────────────────────────────
   QComboBox*    col_target_combo_{};
@@ -4678,6 +5829,27 @@ class MainWindow final : public QMainWindow {
   double native_gh_psi_{1.0};
   bool native_train_ok_{false};
   int native_replay_cap_applied_{10000};
+  // ── CyphaLM tab ─────────────────────────────────────────────────────────────
+  QLineEdit* lm_path_edit_{};
+  QPushButton* lm_browse_btn_{};
+  QPushButton* lm_load_btn_{};
+  QCheckBox* lm_use_rest_chk_{};
+  QLabel* lm_status_label_{};
+  QLineEdit* lm_prompt_edit_{};
+  QSpinBox* lm_n_tokens_spin_{};
+  QComboBox* lm_strategy_combo_{};
+  QDoubleSpinBox* lm_top_p_spin_{};
+  QDoubleSpinBox* lm_temperature_spin_{};
+  QPushButton* lm_generate_btn_{};
+  QPlainTextEdit* lm_output_edit_{};
+  QLineEdit* bench_bin_edit_{};
+  QPushButton* bench_browse_btn_{};
+  QPushButton* bench_run_d17_btn_{};
+  QPlainTextEdit* bench_log_edit_{};
+  std::unique_ptr<cypha::cyphalm::CyphaLMModel> lm_model_;
+  bool lm_loaded_{false};
+  QString lm_source_path_;
+  int lm_n_generations_{0};
 };
 
 }  // namespace
@@ -4700,16 +5872,15 @@ int main(int argc, char** argv) {
   if (args.contains(QStringLiteral("--help")) || args.contains(QStringLiteral("-h"))) {
     std::printf(
         "cypha_qt_shell [options]\n"
-        "  GUI: load .cypha; CSV inspect + bulk REST /update + loss chart; registry;\n"
+        "  GUI: tabs — Data, Model, Train, Predict (confidence+explanation), Registry, Server,\n"
+        "       Experiments (SQLite when built), CyphaLM, Help (NATIVE_QUICKSTART).\n"
+        "       load .cypha; CSV inspect + bulk REST /update + loss chart;\n"
         "       optional F_field JSON; preprocessor.json; native predict; spawn cypha_rest\n"
         "       (--registry when set); REST /health, /ready, /models, /load, /predict, /update;\n"
         "       native train_step + bulk CSV; save .cypha (merge + infer patch); train hparams UI;\n"
-        "       auto-load train_hparams.json beside the .cypha (when present);\n"
-        "       loss chart (REST vs native + optional EMA) → PNG / SVG / CSV; Clear chart;\n"
-        "       Y lock (manual Y axis min/max for loss chart);\n"
-        "       training log table (step, label, loss, correct / EMA — Export CSV);\n"
-        "       POST /predict return_explanation + full JSON in cypha_rest log;\n"
+        "       POST /predict return_explanation → confidence panel (class_details, OOD meter);\n"
         "       optional replay_u01 JSON; regression_y bulk for MKE.\n"
+        "       CyphaLM: native checkpoint + generate; REST /lm/load + /generate; bench --domain 17.\n"
         "  --smoke <path.cypha> [f_field.json]  headless load + zero-vector native predict (CI).\n"
         "  -h, --help            this message\n");
     return 0;

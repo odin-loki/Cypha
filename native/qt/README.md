@@ -8,7 +8,7 @@ From `native/`:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON
-# Optional: loss chart uses Qt Charts (needs qt6-charts-dev / Qt6 Charts) instead of QPainter:
+# Optional: loss/metrics panel uses Qt Charts (needs qt6-charts-dev / Qt6 Charts) instead of painted loss + text log:
 #   -DCYPHA_QT_CHARTS=ON
 cmake --build build
 ./build/qt/cypha_qt_stub --help   # Qt Core + cypha_core link check
@@ -26,7 +26,7 @@ Targets:
 | Binary | Role |
 |--------|------|
 | **`cypha_qt_stub`** | Qt **Core** only — link + optional `load_cypha_from_buffer` on a file |
-| **`cypha_qt_shell`** | Qt **Widgets** + **Network** — CSV + REST/native bulk train + loss plot (REST vs native + optional EMA; PNG/SVG/CSV); **Y lock** (manual Y axis range); **native train log** table; **save `.cypha`** after native train (**`merge_state` + infer patch**, see caveats); **train hparams** UI; registry + **`POST /load`**; **`GET /health`**, **`/ready`**, **`/models`**; **`/predict`** with optional **`return_explanation`**; spawn **`cypha_rest`**; **`--smoke`** |
+| **`cypha_qt_shell`** | Qt **Widgets** + **Network** — CSV + REST/native bulk train + **loss/metrics panel** (REST vs native loss + optional EMA; **Qt Charts** tabbed loss + rolling-accuracy when **`-DCYPHA_QT_CHARTS=ON`**, else painted loss + **text metrics history**); PNG/SVG/CSV export; **Y lock**; **native train log** table; **save `.cypha`** after native train (**`merge_state` + infer patch**, see caveats); **train hparams** UI; registry + **`POST /load`**; **`GET /health`**, **`/ready`**, **`/models`**; **`/predict`** with optional **`return_explanation`**; spawn **`cypha_rest`**; **`--smoke`** |
 
 If Qt6 is missing, CMake prints a warning and skips Qt targets (other native targets still build).
 
@@ -84,7 +84,7 @@ The server must have a model loaded for REST predict/update (via **`/load`** or 
 **Bulk native train** now runs the training loop on a **background `QThread`**. The main thread stays fully responsive during long CSV runs:
 
 - A `QTimer` fires every 80 ms to drain completed steps from a mutex-protected queue.
-- The **loss chart** updates live every 200 steps (instead of only at the end).
+- The **loss/metrics panel** updates live: loss chart every 200 steps; per-step **rolling accuracy** (window=200) appended on each drained step (Qt Charts **Rolling accuracy** tab when **`-DCYPHA_QT_CHARTS=ON`**, else scrollable **text metrics history** below the painted loss curve).
 - The **result label** shows `Training N / total…` progress.
 - The **Cancel** button on the progress UI sets a `std::atomic<bool>` flag; the worker exits at the next step boundary — no data corruption.
 - Final chart, training log table, val accuracy, and scalar state (EMA loss, rolling accuracy window, GH chi/psi) are all synced back to the main thread in the `on_bulk_finish()` handler.
@@ -120,7 +120,7 @@ The script (`native/scripts/package_windows_qt.ps1`) will:
 
 ## Roadmap (parity with PySide Studio)
 
-1. **Rich charts** — With **`-DCYPHA_QT_CHARTS=ON`** (Qt6 Charts installed), loss uses **`QChartView`** with legend; else painted dual polyline (CI default). **REST vs native** overlaid with optional **EMA** (α=0.08); **PNG**, hand-written **SVG**, and **CSV** (raw + EMA columns). **Y lock** for manual Y axis range. Done.
+1. **Rich charts** — With **`-DCYPHA_QT_CHARTS=ON`** (Qt6 Charts installed), the **Loss / Metrics** panel uses a tabbed **`QChartView`**: **Loss** tab (`QLineSeries` REST vs native + optional EMA) and **Rolling accuracy** tab (native, window=200). Without Charts (CI default), a painted dual polyline loss curve plus a **text metrics history** (`step | loss | roll_acc | source`) replaces the Charts tabs. **PNG**, hand-written **SVG**, and **CSV** export; **Y lock** for manual Y axis range. Done.
 2. **Full native save parity** — all Python **`save_state`** fields used by native reload are patched (incl. **`field_a_eff`**, **`ll_world_ema`=-1.5**, all GH/session keys); remaining deltas are key ordering and in-place-only keys (non-functional for Python-generated roots).
 3. ~~**Train hparams UI**~~ — form + Apply + replay cap rebuild in **`cypha_qt_shell`**.
 4. ~~**Save `.cypha` after native train**~~ — merge + encoder/field/temperature/scalars (**`save_cypha_file`**).

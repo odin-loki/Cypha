@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
+#include "cypha/cyphalm/bpe_tokenizer.hpp"
+#include "cypha/cyphalm/cyphalm_alpha_spectrum.hpp"
 #include "cypha/cyphalm/cellai_ssm.hpp"
 #include "cypha/cyphalm/char_lstm.hpp"
 #include "cypha/cyphalm/compressive_memory.hpp"
@@ -13,9 +17,14 @@
 #include "cypha/cyphalm/cyphalm_dif.hpp"
 #include "cypha/cyphalm/embed_table.hpp"
 #include "cypha/cyphalm/gria_lowrank.hpp"
+#include "cypha/cyphalm/hebbian_stack.hpp"
+#include "cypha/cyphalm/hierarchical_ssm.hpp"
 #include "cypha/cyphalm/ngram_fusion.hpp"
 #include "cypha/cyphalm/selective_ssm.hpp"
 #include "cypha/cyphalm/view_embedding.hpp"
+#include "cypha/som/discriminative_feedback.hpp"
+#include "cypha/som/gng_expert.hpp"
+#include "cypha/som/gria_controller.hpp"
 
 namespace cypha {
 namespace cyphalm {
@@ -66,9 +75,16 @@ class CyphaLMModel {
     void train_sequence_views(const std::vector<int>& ids);
     double eval_bpc(const std::vector<int>& ids, int n_eval);
 
+    std::vector<std::uint32_t> encode_text(const std::string& text) const;
+    std::string decode_tokens(const std::vector<std::uint32_t>& ids) const;
+    bool has_bpe_tokenizer() const { return bpe_ != nullptr; }
+
     double hybrid_blend_logit() const { return hybrid_blend_logit_; }
     double hybrid_gria_weight() const;
     void set_hybrid_blend_logit(double logit) { hybrid_blend_logit_ = logit; }
+
+    AlphaSpectrumSnapshot alpha_spectrum_snapshot() const;
+    nlohmann::json compression_profile() const;
 
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
@@ -76,18 +92,28 @@ class CyphaLMModel {
     CyphaLMConfig cfg_;
     std::unique_ptr<EmbedTable> embed_;
     std::unique_ptr<CellAISSM> ssm_;
+    std::unique_ptr<HierarchicalSSM> hierarchical_ssm_;
+    std::unique_ptr<HebbianStack> hebbian_stack_;
+    std::unique_ptr<BpeTokenizer> bpe_;
     std::unique_ptr<GRIALowRank> gria_;
     std::unique_ptr<CharLSTMHead> lstm_;
     std::unique_ptr<SelectiveSSM> selective_;
     std::unique_ptr<CompressiveMemory> memory_;
     std::unique_ptr<ContextBank> context_bank_;
     std::unique_ptr<NgramFusion> ngram_fusion_;
+    std::unique_ptr<cypha::som::GNGExpertManager> gng_;
+    std::unique_ptr<cypha::som::GRIAController> gria_controller_;
+    std::unique_ptr<cypha::som::DiscriminativeFeedback> discriminative_feedback_;
 
     std::unique_ptr<CyphaDIF> dif_;
     std::unique_ptr<ViewEmbedding> view_emb_;
 
     std::vector<double> proj_ssm_;
+    std::vector<double> proj_dif_;
     std::vector<double> proj_embed_;
+    std::vector<double> proj_ngram_;
+    std::vector<double> proj_ngram_embed_;
+    DIFPredictOutput last_dif_out_;
     std::vector<double> field_x_;
     std::vector<double> gria_in_;
     std::vector<double> lstm_h_;
@@ -98,6 +124,7 @@ class CyphaLMModel {
     std::vector<double> last_ctx_;
     std::vector<std::vector<double>> bptt_buffer_;
     int gria_d_in_ = 160;
+    int last_gng_bmu_ = 0;
     int current_view_slot_ = 0;
     std::uint32_t step_count_ = 0;
     double hybrid_blend_logit_ = 0.0;
@@ -109,8 +136,16 @@ class CyphaLMModel {
     void init_components();
     void record_embedding(const std::vector<double>& e);
     std::vector<double> ngram_embedding_vector() const;
-    std::vector<double> build_gria_input(const std::vector<double>& field);
+    std::vector<double> build_gria_input(const std::vector<double>& field,
+                                         const DIFPredictOutput* dif_out);
     std::vector<double> augment_gria_input(const std::vector<double>& v) const;
+    std::vector<double> gria_input_core(const std::vector<double>& field,
+                                        const DIFPredictOutput* dif_out) const;
+    int ssm_context_dim() const;
+    std::vector<double> ssm_step(const std::vector<double>& e);
+    CellAISSM* active_ssm();
+    const CellAISSM* active_ssm() const;
+    void apply_hebbian_hooks(std::vector<double>& ctx);
     void fill_top_k(const std::vector<double>& log_probs, PredictNextOutput& out, int k = 5) const;
     std::vector<double> project_field(const std::vector<double>& ctx);
     void bptt_ssm_update(std::uint32_t next_token_id);

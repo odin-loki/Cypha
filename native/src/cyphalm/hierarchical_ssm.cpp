@@ -3,10 +3,16 @@
 #include <numeric>
 #include <stdexcept>
 
+#include <nlohmann/json.hpp>
+
 namespace cypha::cyphalm {
 
 HierarchicalSSM::HierarchicalSSM(CellAISSMConfig fast_cfg, int compress_every)
-    : compress_every_(compress_every), fast_(fast_cfg), slow_(fast_cfg) {
+    : compress_every_(compress_every), fast_(fast_cfg) {
+  CellAISSMConfig slow_cfg = fast_cfg;
+  slow_cfg.d_input = fast_cfg.d_state;
+  slow_cfg.seed = fast_cfg.seed + 97;
+  slow_ = CellAISSM(slow_cfg);
   if (compress_every_ < 1) {
     throw std::invalid_argument("HierarchicalSSM: compress_every must be >= 1");
   }
@@ -44,6 +50,38 @@ std::vector<double> HierarchicalSSM::step(const std::vector<double>& e_t) {
   }
 
   return ctx;
+}
+
+nlohmann::json HierarchicalSSM::get_state() const {
+  return {
+      {"compress_every", compress_every_},
+      {"token_count", token_count_},
+      {"pool_count", pool_count_},
+      {"pool_accum", pool_accum_},
+      {"fast", fast_.get_state()},
+      {"slow", slow_.get_state()},
+  };
+}
+
+void HierarchicalSSM::set_state(const nlohmann::json& state) {
+  if (state.contains("compress_every")) {
+    compress_every_ = state.at("compress_every").get<int>();
+  }
+  if (state.contains("token_count")) {
+    token_count_ = state.at("token_count").get<int>();
+  }
+  if (state.contains("pool_count")) {
+    pool_count_ = state.at("pool_count").get<int>();
+  }
+  if (state.contains("pool_accum")) {
+    pool_accum_ = state.at("pool_accum").get<std::vector<double>>();
+  }
+  if (state.contains("fast")) {
+    fast_.set_state(state.at("fast"));
+  }
+  if (state.contains("slow")) {
+    slow_.set_state(state.at("slow"));
+  }
 }
 
 }  // namespace cypha::cyphalm

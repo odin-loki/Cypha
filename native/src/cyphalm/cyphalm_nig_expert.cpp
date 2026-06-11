@@ -3,6 +3,25 @@
 #include <cmath>
 #include <stdexcept>
 
+namespace {
+
+double digamma(double x) {
+    if (x < 1e-6) return -1e6;
+    double result = 0.0;
+    while (x < 6.0) {
+        result -= 1.0 / x;
+        x += 1.0;
+    }
+    const double inv = 1.0 / x;
+    const double inv2 = inv * inv;
+    const double inv4 = inv2 * inv2;
+    const double inv6 = inv4 * inv2;
+    result += std::log(x) - 0.5 * inv - inv2 / 12.0 + inv4 / 120.0 - inv6 / 252.0;
+    return result;
+}
+
+}  // namespace
+
 #include <nlohmann/json.hpp>
 
 namespace cypha::cyphalm {
@@ -37,6 +56,18 @@ void NIGExpert::predictive_mean(std::vector<double>& out) const {
     out = mu_n_;
 }
 
+void NIGExpert::predictive_inv_variance(std::vector<double>& out) const {
+    out.assign(static_cast<std::size_t>(dim_), 0.0);
+    constexpr double kMinVar = 1e-9;
+    for (int i = 0; i < dim_; ++i) {
+        const double kn = kappa_n_[static_cast<std::size_t>(i)];
+        const double an = alpha_n_[static_cast<std::size_t>(i)];
+        const double bn = beta_n_[static_cast<std::size_t>(i)];
+        const double v = bn / (kn * (an - 1.0));
+        out[static_cast<std::size_t>(i)] = 1.0 / std::max(v, kMinVar);
+    }
+}
+
 double NIGExpert::epistemic_variance_mean() const {
     double s = 0.0;
     for (int i = 0; i < dim_; ++i) {
@@ -56,6 +87,22 @@ double NIGExpert::aleatoric_variance_mean() const {
         s += bn / (an - 1.0);
     }
     return s / static_cast<double>(dim_);
+}
+
+double NIGExpert::predictive_entropy() const {
+    double total = 0.0;
+    for (int i = 0; i < dim_; ++i) {
+        const double kn = kappa_n_[static_cast<std::size_t>(i)];
+        const double an = alpha_n_[static_cast<std::size_t>(i)];
+        const double bn = beta_n_[static_cast<std::size_t>(i)];
+        const double scale_sq = bn * (kn + 1.0) / (an * kn);
+        const double df = 2.0 * an;
+        const double ent = 0.5 * std::log(std::max(scale_sq, 1e-12)) +
+                           0.5 * (df + 1.0) * (digamma((df + 1.0) / 2.0) - digamma(df / 2.0)) +
+                           std::log(std::sqrt(df * 3.141592653589793));
+        total += ent;
+    }
+    return total;
 }
 
 double NIGExpert::predictive_log_prob(const double* x) const {

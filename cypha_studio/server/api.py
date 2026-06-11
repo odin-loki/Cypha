@@ -132,7 +132,7 @@ if FASTAPI_AVAILABLE:
         input        : List[float]
         correct_label: str
         use_gh       : bool = True
-        # Native cypha_rest only (PORT_CONTRACT §3); FastAPI classification path ignores / rejects below.
+        # Optional native ``cypha_rest`` parity keys (see PORT_CONTRACT §3).
         regression_y: Optional[float] = None
         router_train_label: Optional[str] = None
         replay_u01: Optional[List[float]] = None
@@ -226,6 +226,24 @@ if FASTAPI_AVAILABLE:
         cypha_lm_strategy: str = "top_p"
         cypha_lm_temperature: float = 0.9
 
+    class DIFGenerateRequest(BaseModel):
+        """CyphaDIF latent generation (``POST /dif/generate`` — not CyphaLM ``POST /generate``)."""
+        input: List[float]
+        mode: str  # langevin | from_observation | retrieval_augmented
+        database: Optional[List[List[float]]] = None
+        label: Optional[str] = None
+        k_neighbors: int = 5
+        n_samples: int = 10
+        n_steps: int = 30
+        temperature: float = 1.0
+        seed: Optional[int] = None
+
+    class DIFRetrieveRequest(BaseModel):
+        input: List[float]
+        database: List[List[float]]
+        top_k: int = 5
+        label: Optional[str] = None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # App factory
@@ -292,8 +310,14 @@ def create_app(
     if reg_path is None:
         reg_path = os.environ.get("CYPHA_REGRESSION_HEAD", "").strip() or None
     app.state.regression_experts: Dict[str, Tuple[float, float]] = {}
+    app.state.mke_state = None
     if reg_path:
         app.state.regression_experts = _parse_regression_head_file(reg_path)
+        try:
+            from .mke_update import parse_mke_from_regression_file
+            app.state.mke_state = parse_mke_from_regression_file(reg_path)
+        except (ValueError, KeyError, TypeError):
+            app.state.mke_state = None
 
     # ── Endpoints ────────────────────────────────────────────────────────────
 
@@ -354,7 +378,7 @@ def create_app(
         else:
             payload["session"] = None
         experts = getattr(app.state, "regression_experts", {}) or {}
-        payload["regression_head_loaded"] = eng is not None and bool(experts)
+        payload["regression_head_loaded"] = eng is not None and (bool(experts) or getattr(app.state, "mke_state", None) is not None)
         lm = app.state.lm_engine
         payload["lm_loaded"] = lm is not None
         if lm is not None:
@@ -411,28 +435,50 @@ def create_app(
         eng = app.state.engine
         if eng is None:
             raise HTTPException(503, "No model loaded")
+        x = np.array(req.input, dtype=np.float64)
         if req.regression_y is not None:
-            raise HTTPException(
-                501,
-                "regression_y (MKERegressor-style train step) is implemented in native cypha_rest "
-                "with regression_head.json mke block; FastAPI update is classification-only",
-            )
-        if req.replay_u01 is not None:
-            raise HTTPException(
-                501,
-                "replay_u01 on /update is native cypha_rest only; FastAPI uses in-process RNG for replay",
-            )
-        if req.router_train_label is not None:
-            raise HTTPException(
-                501,
-                "router_train_label on /update is native cypha_rest only (mke router override)",
-            )
-        try:
-            loss = eng.update(np.array(req.input, dtype=np.float64),
-                              req.correct_label, use_gh=req.use_gh)
-        except (ValueError, TypeError) as e:
-            _maybe_raise_input_dim_mismatch(e)
-            raise
+            mke = getattr(app.state, "mke_state", None)
+            if mke is None:
+                raise HTTPException(
+                    400,
+                    "regression_y requires mke block in regression_head.json",
+                )
+            try:
+                from .mke_update import mke_rest_update
+                x_pp = eng._preprocess(x)
+                _, router_loss = mke_rest_update(
+                    eng.model,
+                    mke,
+                    x_pp,
+                    float(req.regression_y),
+                    router_train_label=req.router_train_label,
+                    replay_u01=req.replay_u01,
+                    use_gh=req.use_gh,
+                )
+                eng._n_corrections += 1
+                loss = router_loss
+            except (ValueError, TypeError) as e:
+                _maybe_raise_input_dim_mismatch(e)
+                raise
+            except RuntimeError as e:
+                if "ListReplayRng exhausted" in str(e):
+                    raise HTTPException(400, str(e)) from e
+                raise
+        else:
+            try:
+                loss = eng.update(
+                    x,
+                    req.correct_label,
+                    use_gh=req.use_gh,
+                    replay_u01=req.replay_u01,
+                )
+            except (ValueError, TypeError) as e:
+                _maybe_raise_input_dim_mismatch(e)
+                raise
+            except RuntimeError as e:
+                if "ListReplayRng exhausted" in str(e):
+                    raise HTTPException(400, str(e)) from e
+                raise
         return UpdateResponse(loss=loss, n_corrections=eng.n_corrections)
 
     @app.post("/adapt_temperature", response_model=AdaptTemperatureResponse)
@@ -826,6 +872,142 @@ def create_app(
         except OSError as exc:
             raise HTTPException(500, f"Failed to save checkpoint: {exc}") from exc
         return {"saved": True, "checkpoint": str(path), "summary": router.summary()}
+
+    # ── CyphaDIF generation / retrieval (FastAPI parity with native ``/dif/*``) ──
+
+    def _dif_model_rng(eng: Any, seed: Optional[int]):
+        import numpy as np
+        model = getattr(eng, "model", None) or getattr(eng, "_model", None)
+        if model is None:
+            raise HTTPException(503, "No model loaded")
+        rng = getattr(model, "_rng", None)
+        if rng is None:
+            rng = np.random.default_rng(424242)
+        if seed is not None:
+            rng = np.random.default_rng(int(seed))
+        return model, rng
+
+    def _dif_preprocess_vector(eng: Any, inp: List[float]) -> np.ndarray:
+        vec = np.array(inp, dtype=np.float64)
+        try:
+            return eng._preprocess(vec)
+        except (ValueError, TypeError) as e:
+            _maybe_raise_input_dim_mismatch(e)
+            raise
+
+    def _dif_latent_from_observation(model: Any, h_obs: np.ndarray, label: str, n: int,
+                                     temperature: float, n_steps: int, rng: Any) -> List[List[float]]:
+        """Latent-space ``generate_from_observation`` (matches native REST ``samples``)."""
+        import math
+        with model.memory._lock:
+            if label not in model.memory._classes:
+                return [np.asarray(h_obs, dtype=np.float64).tolist()] * n
+            cd = model.memory._classes[label]
+            mu0 = model.memory.world.mu.copy()
+            inv_v = model.memory.world.inv_v.copy()
+        mu_k = mu0 + cd.delta_mu
+        lr = float(temperature) * 0.05
+        noise_scale = math.sqrt(2.0 * lr)
+        out: List[List[float]] = []
+        for _ in range(n):
+            h = np.asarray(h_obs, dtype=np.float64).copy()
+            for _ in range(n_steps):
+                grad = -(h - mu_k) * inv_v
+                h = h + lr * grad + rng.standard_normal(len(h)) * noise_scale
+            out.append(h.tolist())
+        return out
+
+    @app.post("/dif/generate")
+    def dif_generate(req: DIFGenerateRequest):
+        """
+        CyphaDIF latent generation (Langevin / observation-anchored / retrieval-augmented).
+
+        Returns latent vectors in ``samples`` (``space: latent``). This is **not** CyphaLM
+        ``POST /generate`` (token autoregression) — use ``/lm/*`` and ``POST /generate`` for LM.
+        """
+        eng = app.state.engine
+        if eng is None:
+            raise HTTPException(503, "No model loaded")
+        mode = req.mode.strip().lower()
+        if mode not in ("langevin", "from_observation", "retrieval_augmented"):
+            raise HTTPException(
+                400,
+                "mode must be langevin, from_observation, or retrieval_augmented",
+            )
+        x = _dif_preprocess_vector(eng, req.input)
+        model, rng = _dif_model_rng(eng, req.seed)
+        _, h_query = model._encode(x)
+        label = req.label
+        if not label:
+            label, _ = model.classify_latent(np.asarray(h_query, dtype=np.float64))
+
+        if mode == "langevin":
+            H = model.generate_langevin(
+                label, n=req.n_samples, n_steps=req.n_steps, step_size=0.05,
+                temperature=req.temperature, rng=rng,
+            )
+            samples = [np.asarray(h, dtype=np.float64).tolist() for h in H]
+        elif mode == "from_observation":
+            samples = _dif_latent_from_observation(
+                model, np.asarray(h_query, dtype=np.float64), label,
+                req.n_samples, req.temperature, req.n_steps, rng,
+            )
+        else:
+            if not req.database:
+                raise HTTPException(400, "database required for retrieval_augmented")
+            db_rows = [_dif_preprocess_vector(eng, row) for row in req.database]
+            hits = model.retrieve(x, db_rows, top_k=req.k_neighbors)
+            if hits:
+                h_db = [model._encode(row)[1] for row in db_rows]
+                dists2 = []
+                h_hits = []
+                for idx, _ll, _lbl in hits:
+                    h_i = np.asarray(h_db[idx], dtype=np.float64)
+                    h_hits.append(h_i)
+                    dists2.append(float(np.sum((h_i - h_query) ** 2)))
+                dists2_arr = np.asarray(dists2, dtype=np.float64)
+                d_max = float(dists2_arr.max()) if len(dists2_arr) else 0.0
+                weights = np.exp(-dists2_arr / max(d_max * 0.1, 1e-8))
+                weights = weights / (weights.sum() + 1e-8)
+                h_anchor = sum(float(weights[j]) * h_hits[j] for j in range(len(hits)))
+                nearest_j = int(np.argmin(dists2_arr))
+                label = hits[nearest_j][2]
+                samples = _dif_latent_from_observation(
+                    model, np.asarray(h_anchor, dtype=np.float64), label,
+                    req.n_samples, req.temperature, req.n_steps, rng,
+                )
+            else:
+                H = model.generate_langevin(
+                    label, n=req.n_samples, n_steps=req.n_steps, step_size=0.05,
+                    temperature=req.temperature, rng=rng,
+                )
+                samples = [np.asarray(h, dtype=np.float64).tolist() for h in H]
+
+        return {
+            "mode": mode,
+            "label": label,
+            "n_samples": req.n_samples,
+            "space": "latent",
+            "samples": samples,
+        }
+
+    @app.post("/dif/retrieve")
+    def dif_retrieve(req: DIFRetrieveRequest):
+        """Log-likelihood ranked retrieval over a caller-supplied database."""
+        eng = app.state.engine
+        if eng is None:
+            raise HTTPException(503, "No model loaded")
+        x = _dif_preprocess_vector(eng, req.input)
+        db_rows = [_dif_preprocess_vector(eng, row) for row in req.database]
+        model, _rng = _dif_model_rng(eng, None)
+        hits = model.retrieve(x, db_rows, top_k=req.top_k, label=req.label)
+        return {
+            "top_k": req.top_k,
+            "hits": [
+                {"index": idx, "log_likelihood": ll, "predicted_label": lbl}
+                for idx, ll, lbl in hits
+            ],
+        }
 
     return app
 

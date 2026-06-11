@@ -11,6 +11,8 @@ Covers all native generation methods:
   generate_ancestral
   predict_next_probs
   rollout (autoregressive label/latent sequence)
+  generate_from_observation
+  generate_retrieval_augmented (retrieve_from_x + centroid RAG)
 
 All cases use pre-drawn random variates stored in the sidecar so
 correctness is independent of C++ vs Python RNG implementation.
@@ -48,6 +50,8 @@ _EXPECTED_CASES = {
     "generate_ancestral",
     "predict_next",
     "rollout",
+    "generate_from_observation",
+    "generate_retrieval_augmented",
 }
 
 

@@ -1,144 +1,93 @@
 {
   "domain": "cross_uncertainty_calibration",
-  "timestamp": "2026-06-08T07:36:22.555024+00:00",
   "experiments": {
     "calibration_rows": [
       {
-        "domain": "d01",
-        "experiment": "linearly_separable_2class",
-        "task_type": "classification",
-        "ece_proxy": null,
-        "mean_epistemic_var": 0.011965838237354672
-      },
-      {
-        "domain": "d01",
-        "experiment": "4_gaussian_blobs",
-        "task_type": "classification",
-        "ece_proxy": null,
-        "mean_epistemic_var": 5.626219509116107e-07
-      },
-      {
-        "domain": "d01",
-        "experiment": "high_dim_noisy",
-        "task_type": "classification",
-        "ece_proxy": null,
-        "mean_epistemic_var": 0.1151358326202772
-      },
-      {
-        "domain": "d01",
-        "experiment": "linear_regression",
-        "task_type": "regression",
-        "mean_epistemic_var": 11047.552316356818
-      },
-      {
-        "domain": "d01",
-        "experiment": "nonlinear_regression_sinusoidal",
-        "task_type": "regression",
-        "mean_epistemic_var": 0.553793337443658
-      },
-      {
-        "domain": "d01",
-        "experiment": "single_concept_drift",
-        "task_type": "classification",
-        "ece_proxy": null,
-        "mean_epistemic_var": 0.010686764510878117
-      },
-      {
-        "domain": "d01",
-        "experiment": "pure_noise",
-        "task_type": "classification",
-        "ece_proxy": null,
-        "mean_epistemic_var": 0.09571388519137937
-      },
-      {
-        "domain": "d01",
-        "experiment": "identical_inputs_different_labels",
-        "task_type": "classification",
-        "ece_proxy": null,
-        "mean_epistemic_var": 0.04558252670732845
+        "domain": "d02",
+        "experiment": "baselines",
+        "task_type": "unknown"
       },
       {
         "domain": "d02",
-        "experiment": "summary",
-        "task_type": "unknown"
-      },
-      {
-        "domain": "d03",
-        "experiment": "summary",
-        "task_type": "unknown"
+        "experiment": "cypha_scores",
+        "task_type": "regression"
       },
       {
         "domain": "d04",
-        "experiment": "summary",
+        "experiment": "17B_alpha_spectrum",
         "task_type": "unknown"
       },
       {
         "domain": "d05",
-        "experiment": "summary",
+        "experiment": "baselines",
+        "task_type": "unknown"
+      },
+      {
+        "domain": "d05",
+        "experiment": "cypha_scores",
+        "mean_epistemic_var": 0.9142107003503382,
+        "task_type": "classification"
+      },
+      {
+        "domain": "d06",
+        "experiment": "classification",
         "task_type": "unknown"
       },
       {
         "domain": "d06",
-        "experiment": "summary",
+        "experiment": "regression",
         "task_type": "unknown"
       },
       {
         "domain": "d07",
-        "experiment": "summary",
-        "task_type": "unknown"
+        "experiment": "cypha_scores",
+        "mean_epistemic_var": 0.4599081559994658,
+        "task_type": "classification"
       },
       {
-        "domain": "d08",
-        "experiment": "raw",
-        "task_type": "unknown"
-      },
-      {
-        "domain": "d08",
-        "experiment": "hog",
+        "domain": "d09",
+        "experiment": "20news",
         "task_type": "unknown"
       },
       {
         "domain": "d09",
-        "experiment": "summary",
+        "experiment": "gutenberg_book_classification",
+        "task_type": "unknown"
+      },
+      {
+        "domain": "d09",
+        "experiment": "gutenberg_ood",
         "task_type": "unknown"
       },
       {
         "domain": "d10",
         "experiment": "10A_ecg_classification",
-        "task_type": "classification",
-        "ece_proxy": 0.1497634248051577,
-        "mean_epistemic_var": 0.8160132756213647,
-        "uncertainty_rank_correlation": 0.4886961345126752
+        "mean_epistemic_var": 0.4227588339073002,
+        "task_type": "classification"
       },
       {
         "domain": "d10",
         "experiment": "10B_ecg_sliding_window",
-        "task_type": "classification",
-        "ece_proxy": 0.13125794771458826,
-        "mean_epistemic_var": 0.8465293791474894,
-        "uncertainty_rank_correlation": 0.19054675379045025
+        "mean_epistemic_var": 1.3952589364641292,
+        "task_type": "classification"
       },
       {
         "domain": "d10",
         "experiment": "10C_ecg_ood_detection",
-        "task_type": "unknown",
-        "ood_auroc": 0.6421604938271605
+        "ood_auroc": 0.5,
+        "task_type": "unknown"
       },
       {
         "domain": "d10",
         "experiment": "10D_financial_return_sign",
-        "task_type": "classification",
-        "ece_proxy": 0.46667174311596654,
-        "mean_epistemic_var": 0.20861930529322398,
-        "uncertainty_rank_correlation": -0.010742126616924249
+        "mean_epistemic_var": null,
+        "task_type": "classification"
       },
       {
         "domain": "d11",
         "experiment": "11A_cartpole_value_regression",
-        "task_type": "classification",
-        "ece_proxy": null,
-        "mean_epistemic_var": 102.85520654225276,
-        "uncertainty_rank_correlation": -0.0670048956378929
+        "mean_epistemic_var": 73.85130636009532,
+        "task_type": "classification"
       },
       {
         "domain": "d11",
@@ -148,16 +97,14 @@
       {
         "domain": "d11",
         "experiment": "11C_trajectory_preference",
-        "task_type": "classification",
-        "ece_proxy": 0.004553594190109811,
-        "mean_epistemic_var": 0.7372274274697597,
-        "uncertainty_rank_correlation": 0.32051410993682833
+        "mean_epistemic_var": 0.0,
+        "task_type": "classification"
       },
       {
         "domain": "d12",
         "experiment": "12A_binary_intrusion",
-        "task_type": "unknown",
-        "ood_auroc": 0.8892424481366393
+        "ood_auroc": 0.5,
+        "task_type": "unknown"
       },
       {
         "domain": "d12",
@@ -187,8 +134,8 @@
       {
         "domain": "d14",
         "experiment": "14B_extrapolation_uncertainty",
-        "task_type": "unknown",
-        "ood_auroc": 1.0
+        "ood_auroc": 1.0,
+        "task_type": "unknown"
       },
       {
         "domain": "d14",
@@ -236,29 +183,20 @@
         "task_type": "unknown"
       },
       {
-        "domain": "d17",
-        "experiment": "17A_bits_per_character",
+        "domain": "d16",
+        "experiment": "16G_view_streams",
         "task_type": "unknown"
       },
       {
         "domain": "d17",
         "experiment": "17B_alpha_spectrum",
         "task_type": "unknown"
-      },
-      {
-        "domain": "d17",
-        "experiment": "17D_online_adaptation",
-        "task_type": "unknown"
-      },
-      {
-        "domain": "d17",
-        "experiment": "17K_long_range_context",
-        "task_type": "unknown"
       }
     ],
     "summary": {
-      "n_experiments": 44,
-      "mean_ood_auroc": 0.8438009806546
+      "mean_ood_auroc": 0.6666666666666666,
+      "n_experiments": 36
     }
-  }
+  },
+  "timestamp": "2026-06-11T09:17:28.690+00:00"
 }

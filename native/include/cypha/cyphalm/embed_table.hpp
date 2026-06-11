@@ -5,7 +5,7 @@
 
 namespace cypha::cyphalm {
 
-/// Fixed lookup-table token embedding (IzaacEmbedding stub).
+/// Fixed lookup-table token embedding (Izaac GF(2^n) permutation polynomial).
 class EmbedTable {
 public:
     EmbedTable(std::uint32_t vocab_size, std::uint32_t d_embed, std::uint32_t seed);

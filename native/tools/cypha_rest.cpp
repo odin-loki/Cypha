@@ -42,7 +42,9 @@
 #include "cypha/regression_stub.hpp"
 #include "cypha/registry.hpp"
 #include "cypha/train_step_vector.hpp"
+#include "cypha/branch_a_rest.hpp"
 #include "cypha/cyphalm/cyphalm_rest.hpp"
+#include "cypha/dif_rest.hpp"
 
 namespace fs = std::filesystem;
 
@@ -78,6 +80,8 @@ double g_gh_R_base{1.0};
 double g_gh_chi{1.0};
 double g_gh_psi{1.0};
 constexpr double kGhNigAdaptAlpha = 0.98;
+/// Python ``InferenceEngine.OOD_THRESHOLD`` (anomaly_score > threshold → is_ood).
+constexpr double kOodThreshold = 3.0;
 
 std::unique_ptr<cypha::ReplayBuffer> g_replay;
 std::mt19937 g_rng{424242};
@@ -443,48 +447,85 @@ std::string json_predict(const nlohmann::json& body) {
     }
     cypha::batch_encode(*g_model, x.data(), 1, H);
   }
-  std::vector<double> llr;
-  cypha::score_matrix_use_field(*g_model, H.data(), 1, llr);
+
   const int k = static_cast<int>(g_model->labels.size());
-  double eps = 1e-8;
-  double T = g_mke_active ? g_mke_temperature : g_model->temperature;
-  std::vector<double> z(static_cast<std::size_t>(k));
-  for (int j = 0; j < k; ++j) {
-    z[static_cast<std::size_t>(j)] = llr[static_cast<std::size_t>(j)] / (T + eps);
-  }
-  std::vector<double> probs;
-  cypha::softmax_batch_like_python(z.data(), 1, k, eps, probs);
-  std::vector<double> gates;
   bool use_gh = body.value("use_gh", true);
-  if (use_gh) {
-    cypha::world_gate_vector_use_field(*g_model, H.data(), 1, 1.0, 1.0, gates);
-  } else {
-    gates.assign(1, 1.0);
-  }
-  int bi = 0;
-  for (int j = 1; j < k; ++j) {
-    if (probs[static_cast<std::size_t>(j)] > probs[static_cast<std::size_t>(bi)]) {
-      bi = j;
+  cypha::CyphaInferOptions iopt{};
+  iopt.deliberation_lo = body.value("deliberation_lo", g_model->deliberation_lo);
+  iopt.deliberation_hi = body.value("deliberation_hi", g_model->deliberation_hi);
+  iopt.use_field = true;
+
+  std::string pred_label;
+  double conf = 0.0;
+  double r_eff = 0.0;
+  std::vector<double> llr_for_scores;
+  double anomaly = 0.0;
+  bool is_ood = false;
+
+  if (g_mke_active) {
+    std::vector<double> llr;
+    cypha::score_matrix_use_field(*g_model, H.data(), 1, llr);
+    double eps = 1e-8;
+    double T = g_mke_temperature;
+    std::vector<double> z(static_cast<std::size_t>(k));
+    for (int j = 0; j < k; ++j) {
+      z[static_cast<std::size_t>(j)] = llr[static_cast<std::size_t>(j)] / (T + eps);
     }
+    std::vector<double> probs;
+    cypha::softmax_batch_like_python(z.data(), 1, k, eps, probs);
+    int bi = 0;
+    for (int j = 1; j < k; ++j) {
+      if (probs[static_cast<std::size_t>(j)] > probs[static_cast<std::size_t>(bi)]) {
+        bi = j;
+      }
+    }
+    pred_label = g_model->labels[static_cast<std::size_t>(bi)];
+    conf = probs[static_cast<std::size_t>(bi)];
+    llr_for_scores = std::move(llr);
+  } else if (use_gh) {
+    iopt.gh_chi = g_gh_chi;
+    iopt.gh_psi = g_gh_psi;
+    cypha::GhInferAtHResult gh = cypha::gh_infer_at_h(*g_model, H.data(), g_gh_chi, g_gh_psi, kGhNigAdaptAlpha);
+    pred_label = gh.label;
+    conf = gh.confidence;
+    r_eff = gh.r_eff;
+    llr_for_scores = std::move(gh.llrs);
+    const double r_base =
+        (g_model->has_mahal_ema && g_model->mahal_ema > 0.0) ? g_model->mahal_ema : 1.0;
+    anomaly = cypha::gh_infer_anomaly_score(r_eff, r_base);
+    is_ood = anomaly > kOodThreshold;
+  } else {
+    cypha::InferAtHResult inf = cypha::infer_at_h(*g_model, H.data(), iopt);
+    pred_label = inf.label;
+    conf = inf.confidence;
+    llr_for_scores = std::move(inf.llrs);
+    anomaly = 0.0;
+    is_ood = false;
   }
-  double conf = probs[static_cast<std::size_t>(bi)] * gates[0];
+
   nlohmann::json scores = nlohmann::json::object();
   for (int j = 0; j < k; ++j) {
-    scores[g_model->labels[static_cast<std::size_t>(j)]] = llr[static_cast<std::size_t>(j)];
+    scores[g_model->labels[static_cast<std::size_t>(j)]] = llr_for_scores[static_cast<std::size_t>(j)];
   }
   double latency = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   g_predictions += 1;
-  double anomaly = 1.0 - gates[0];
-  bool is_ood = gates[0] < 0.5;
-  g_sess.push_back(SessPred{g_model->labels[static_cast<std::size_t>(bi)], conf, anomaly, is_ood});
+  g_sess.push_back(SessPred{pred_label, conf, anomaly, is_ood});
 
   nlohmann::json out;
-  out["label"] = g_model->labels[static_cast<std::size_t>(bi)];
+  out["label"] = pred_label;
   out["confidence"] = conf;
   out["all_scores"] = scores;
   out["anomaly_score"] = anomaly;
   out["is_ood"] = is_ood;
   if (g_mke_active) {
+    double eps = 1e-8;
+    double T = g_mke_temperature;
+    std::vector<double> z(static_cast<std::size_t>(k));
+    for (int j = 0; j < k; ++j) {
+      z[static_cast<std::size_t>(j)] = llr_for_scores[static_cast<std::size_t>(j)] / (T + eps);
+    }
+    std::vector<double> probs;
+    cypha::softmax_batch_like_python(z.data(), 1, k, eps, probs);
     double y_mix = 0.0;
     const int d_rff = g_model->d_latent;
     for (int j = 0; j < k; ++j) {
@@ -510,6 +551,14 @@ std::string json_predict(const nlohmann::json& body) {
       out["uncertainty"] = 0.0;
     }
   } else if (static_cast<int>(g_reg_mu.size()) == k && static_cast<int>(g_reg_var.size()) == k) {
+    double eps = 1e-8;
+    double T = g_model->temperature;
+    std::vector<double> z(static_cast<std::size_t>(k));
+    for (int j = 0; j < k; ++j) {
+      z[static_cast<std::size_t>(j)] = llr_for_scores[static_cast<std::size_t>(j)] / (T + eps);
+    }
+    std::vector<double> probs;
+    cypha::softmax_batch_like_python(z.data(), 1, k, eps, probs);
     double y_mix = 0.0;
     double u_mix = 0.0;
     cypha::regression::predict_mixture_scalar(probs.data(), g_reg_mu.data(), g_reg_var.data(),
@@ -528,7 +577,7 @@ std::string json_predict(const nlohmann::json& body) {
     expl["all_scores"] = scores;
     expl["anomaly_score"] = anomaly;
     expl["is_ood"] = is_ood;
-    expl["r_eff"] = use_gh ? anomaly : 0.0;
+    expl["r_eff"] = use_gh ? r_eff : 0.0;
     nlohmann::json cdet = nlohmann::json::object();
     const int d = g_model->d_latent;
     for (int ci = 0; ci < k; ++ci) {
@@ -802,6 +851,7 @@ int main(int argc, char** argv) {
   std::string train_hparams_path;
   std::string regression_json_path;
   std::string cyphalm_checkpoint_path;
+  std::string branch_a_json_path;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     if (a == "--listen" && i + 1 < argc) {
@@ -827,11 +877,18 @@ int main(int argc, char** argv) {
       regression_json_path = argv[++i];
     } else if (a == "--cyphalm-checkpoint" && i + 1 < argc) {
       cyphalm_checkpoint_path = argv[++i];
+    } else if (a == "--branch-a-json" && i + 1 < argc) {
+      branch_a_json_path = argv[++i];
     }
   }
   if (cyphalm_checkpoint_path.empty()) {
     if (const char* env_ckpt = std::getenv("CYPHALM_CHECKPOINT")) {
       cyphalm_checkpoint_path = env_ckpt;
+    }
+  }
+  if (branch_a_json_path.empty()) {
+    if (const char* env_ba = std::getenv("CYPHA_BRANCH_A_CHECKPOINT")) {
+      branch_a_json_path = env_ba;
     }
   }
 
@@ -841,7 +898,8 @@ int main(int argc, char** argv) {
     std::cerr << "usage: cypha_rest --listen host:port --cypha model.cypha [--f-field-json f_field.json] "
                  "[--pre preprocessor.json] [--train-hparams train_hparams.json] "
                  "[--regression-json regression_head.json] [--cyphalm-checkpoint ckpt_base] "
-                 "[--registry models_root]  (POST /register needs --registry)\n";
+                 "[--branch-a-json branch_a_router.json] [--registry models_root]  "
+                 "(POST /register needs --registry)\n";
     return 2;
   }
   {
@@ -897,6 +955,8 @@ int main(int argc, char** argv) {
       payload["session"] = nullptr;
       payload["regression_head_loaded"] = false;
     }
+    payload["lm_loaded"] = cypha::cyphalm::cyphalm_rest_lm_loaded();
+    payload["branch_a_router"] = cypha::branch_a_rest_summary_json();
     res.set_content(payload.dump(), "application/json");
   });
 
@@ -1160,7 +1220,11 @@ int main(int argc, char** argv) {
     res.set_content(out.dump(), "application/json");
   });
 
+  cypha::dif_rest_configure(&g_mu, &g_model, &g_pre, &g_rng);
+  cypha::register_dif_rest_routes(svr);
   cypha::cyphalm::register_cyphalm_rest_routes(svr);
+  cypha::branch_a_rest_configure(branch_a_json_path);
+  cypha::register_branch_a_rest_routes(svr);
 
   if (!cyphalm_checkpoint_path.empty()) {
     try {

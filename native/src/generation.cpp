@@ -822,4 +822,151 @@ std::vector<RolloutStep> rollout(
     return result;
 }
 
+// ── generate_from_observation ────────────────────────────────────────────────
+
+std::vector<std::vector<double>> generate_from_observation(
+    const CyphaInferModel& m,
+    const double*          h_obs,
+    const std::string&     label,
+    int                    n,
+    double                 temperature,
+    int                    n_steps,
+    std::mt19937*          rng,
+    const double*          z_noise_override) {
+    int d = m.d_latent;
+    int k_idx = label_index(m, label);
+    if (k_idx < 0)
+        throw std::runtime_error("generate_from_observation: unknown label '" + label + "'");
+
+    std::vector<double> mu_k;
+    mu_k_for(m, k_idx, mu_k);
+
+    const double lr = temperature * 0.05;
+    const double noise_scale = std::sqrt(2.0 * lr);
+
+    std::vector<std::vector<double>> result;
+    result.reserve(static_cast<std::size_t>(n));
+    std::vector<double> z_noise_buf(static_cast<std::size_t>(d));
+
+    for (int i = 0; i < n; i++) {
+        std::vector<double> h(h_obs, h_obs + d);
+        for (int s = 0; s < n_steps; s++) {
+            const double* z_noise = nullptr;
+            if (z_noise_override) {
+                z_noise = z_noise_override
+                    + static_cast<std::ptrdiff_t>(i) * n_steps * d
+                    + static_cast<std::ptrdiff_t>(s) * d;
+            } else {
+                draw_normal(*rng, d, z_noise_buf.data());
+                z_noise = z_noise_buf.data();
+            }
+            for (int j = 0; j < d; j++) {
+                double grad = -(h[static_cast<std::size_t>(j)] - mu_k[static_cast<std::size_t>(j)])
+                    * m.inv_v[static_cast<std::size_t>(j)];
+                h[static_cast<std::size_t>(j)] =
+                    h[static_cast<std::size_t>(j)] + lr * grad + noise_scale * z_noise[j];
+            }
+        }
+        result.push_back(std::move(h));
+    }
+    return result;
+}
+
+// ── generate_retrieval_augmented ─────────────────────────────────────────────
+
+std::vector<std::vector<double>> generate_retrieval_augmented(
+    const CyphaInferModel& m,
+    const double*          query_x,
+    const double*          database_x,
+    int                    n_db,
+    int                    input_dim,
+    int                    k_neighbors,
+    int                    n,
+    double                 temperature,
+    int                    n_steps,
+    const CyphaInferOptions& opt,
+    std::mt19937*          rng,
+    const double*          z_noise_override,
+    const double*          z_init_override,
+    const double*          z_langevin_noise_override) {
+    const int d = m.d_latent;
+
+    std::vector<RetrieveHit> hits =
+        retrieve_from_x(m, query_x, database_x, n_db, input_dim, k_neighbors, opt);
+
+    if (hits.empty()) {
+        std::vector<double> h_q;
+        batch_encode(m, query_x, 1, h_q);
+        const InferAtHResult inf = infer_at_h(m, h_q.data(), opt);
+        if (inf.label == kUnknownLabel || label_index(m, inf.label) < 0) {
+            std::vector<std::vector<double>> fallback;
+            fallback.reserve(static_cast<std::size_t>(n));
+            for (int i = 0; i < n; i++) {
+                fallback.push_back(std::vector<double>(h_q.begin(), h_q.end()));
+            }
+            return fallback;
+        }
+        constexpr double kFallbackStep = 0.05;
+        return generate_langevin(m, inf.label, n, n_steps, kFallbackStep, temperature, rng,
+                                 z_init_override, z_langevin_noise_override);
+    }
+
+    std::vector<double> h_query;
+    batch_encode(m, query_x, 1, h_query);
+
+    std::vector<double> h_db;
+    batch_encode(m, database_x, n_db, h_db);
+
+    const int k_actual = static_cast<int>(hits.size());
+    std::vector<double> dists2(static_cast<std::size_t>(k_actual), 0.0);
+    for (int j = 0; j < k_actual; j++) {
+        const int idx = hits[static_cast<std::size_t>(j)].index;
+        const double* h_i = h_db.data() + static_cast<std::ptrdiff_t>(idx) * d;
+        double s = 0.0;
+        for (int t = 0; t < d; t++) {
+            double diff = h_i[t] - h_query[static_cast<std::size_t>(t)];
+            s += diff * diff;
+        }
+        dists2[static_cast<std::size_t>(j)] = s;
+    }
+
+    double d_max = 0.0;
+    for (int j = 0; j < k_actual; j++) {
+        d_max = std::max(d_max, dists2[static_cast<std::size_t>(j)]);
+    }
+    const double denom = std::max(d_max * 0.1, kGenEps);
+
+    std::vector<double> weights(static_cast<std::size_t>(k_actual), 0.0);
+    double w_sum = 0.0;
+    for (int j = 0; j < k_actual; j++) {
+        weights[static_cast<std::size_t>(j)] =
+            std::exp(-dists2[static_cast<std::size_t>(j)] / denom);
+        w_sum += weights[static_cast<std::size_t>(j)];
+    }
+    w_sum += kGenEps;
+
+    std::vector<double> h_anchor(static_cast<std::size_t>(d), 0.0);
+    for (int j = 0; j < k_actual; j++) {
+        const int idx = hits[static_cast<std::size_t>(j)].index;
+        const double* h_i = h_db.data() + static_cast<std::ptrdiff_t>(idx) * d;
+        const double w = weights[static_cast<std::size_t>(j)] / w_sum;
+        for (int t = 0; t < d; t++) {
+            h_anchor[static_cast<std::size_t>(t)] += w * h_i[t];
+        }
+    }
+
+    int nearest_j = 0;
+    double best_d = dists2[0];
+    for (int j = 1; j < k_actual; j++) {
+        if (dists2[static_cast<std::size_t>(j)] < best_d) {
+            best_d = dists2[static_cast<std::size_t>(j)];
+            nearest_j = j;
+        }
+    }
+    const std::string& label = hits[static_cast<std::size_t>(nearest_j)].predicted_label;
+
+    return generate_from_observation(m, h_anchor.data(), label, n, temperature, n_steps, rng,
+                                     z_noise_override);
+}
+
 }  // namespace cypha

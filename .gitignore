@@ -101,6 +101,7 @@ MANIFEST
 
 # Native / CMake build directories (compiled binaries, object files, DLLs)
 native/build-*/
+native/build_*/
 native/build/
 
 # Windows compiled binaries
@@ -122,6 +123,9 @@ cypha_bench/data/wikitext2/
 
 # Benchmark tuning artifacts (large JSON blobs from swarm runs)
 cypha_bench/artifacts/tuning/
+
+# Locked baseline snapshots from overnight / full bench runs (generated)
+cypha_bench/report/baselines/
 
 # Data cache
 data_cache/

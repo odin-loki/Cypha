@@ -1,0 +1,27 @@
+{
+  "categories": [
+    "iris",
+    "wine"
+  ],
+  "chart_type": "grouped_bar",
+  "figure": "fig03_classification_accuracy",
+  "format": "figure_data_v1",
+  "series": [
+    {
+      "name": "CyphaDIF",
+      "values": [
+        0.9666666666666667,
+        1.0
+      ]
+    },
+    {
+      "name": "Logistic Regression",
+      "values": [
+        0.7333333333333333,
+        0.8888888888888888
+      ]
+    }
+  ],
+  "title": "Classification accuracy by dataset",
+  "y_label": "accuracy"
+}

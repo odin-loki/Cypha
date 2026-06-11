@@ -14,9 +14,12 @@ class NIGExpert {
     int dim() const { return dim_; }
     void update(const double* y);
     void predictive_mean(std::vector<double>& out) const;
+    /// Per-dimension ``1 / predictive_variance`` (clamped).
+    void predictive_inv_variance(std::vector<double>& out) const;
     double epistemic_variance_mean() const;
     double aleatoric_variance_mean() const;
     double predictive_log_prob(const double* x) const;
+    double predictive_entropy() const;
 
     nlohmann::json state_dict() const;
     void load_state_dict(const nlohmann::json& state);

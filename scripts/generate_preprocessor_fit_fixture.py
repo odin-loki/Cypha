@@ -4,9 +4,10 @@ Emit parity fixtures for native ``PreprocessorState::fit_from_design_matrix``:
 
 - ``parity_fixtures/preprocessor_fit/`` — ``scale=True``, PCA
 - ``parity_fixtures/preprocessor_fit_no_scale/`` — ``scale=False``, PCA
+- ``parity_fixtures/preprocessor_fit_rff/`` — ``scale=True``, PCA + RFF
 
-``rff_dim=None`` (RFF fit stays Python-only). Native Jacobi PCA vs NumPy SVD: sign-aligned in
-``preprocessor_fit_parity``.
+Native Jacobi PCA vs NumPy SVD: sign-aligned in ``preprocessor_fit_parity``.
+RFF weights use NumPy ``default_rng(seed)`` — reproduced natively via ``NumpyDefaultRng``.
 """
 from __future__ import annotations
 
@@ -28,6 +29,8 @@ def _write_case(
     *,
     scale: bool,
     pca_dim: int,
+    rff_dim: int | None,
+    rff_gamma: float,
     seed_fit: int,
     n_rows: int,
     n_cols: int,
@@ -36,7 +39,7 @@ def _write_case(
     probe_scale: float,
 ) -> None:
     X = rng.standard_normal((n_rows, n_cols)).astype(np.float64)
-    pre = Preprocessor(scale=scale, pca_dim=pca_dim, rff_dim=None, seed=seed_fit)
+    pre = Preprocessor(scale=scale, pca_dim=pca_dim, rff_dim=rff_dim, rff_gamma=rff_gamma, seed=seed_fit)
     pre.fit(X)
     state = pre.save_state()
 
@@ -49,9 +52,9 @@ def _write_case(
         "fixture_schema": 1,
         "scale": scale,
         "pca_dim": pca_dim,
-        "rff_dim": None,
+        "rff_dim": rff_dim,
         "seed": seed_fit,
-        "rff_gamma": 1.0,
+        "rff_gamma": rff_gamma,
         "n_rows": n_rows,
         "n_cols": n_cols,
         "rowmajor": X.ravel(order="C").tolist(),
@@ -69,6 +72,8 @@ def main() -> None:
         _ROOT / "parity_fixtures" / "preprocessor_fit",
         scale=True,
         pca_dim=3,
+        rff_dim=None,
+        rff_gamma=1.0,
         seed_fit=99,
         n_rows=75,
         n_cols=6,
@@ -83,6 +88,8 @@ def main() -> None:
         _ROOT / "parity_fixtures" / "preprocessor_fit_no_scale",
         scale=False,
         pca_dim=2,
+        rff_dim=None,
+        rff_gamma=1.0,
         seed_fit=101,
         n_rows=55,
         n_cols=7,
@@ -91,6 +98,22 @@ def main() -> None:
         probe_scale=0.65,
     )
     print(f"Wrote {_ROOT / 'parity_fixtures' / 'preprocessor_fit_no_scale'}/")
+
+    rng3 = np.random.default_rng(5511)
+    _write_case(
+        _ROOT / "parity_fixtures" / "preprocessor_fit_rff",
+        scale=True,
+        pca_dim=3,
+        rff_dim=8,
+        rff_gamma=0.5,
+        seed_fit=99,
+        n_rows=75,
+        n_cols=6,
+        rng=rng3,
+        n_probes=6,
+        probe_scale=0.7,
+    )
+    print(f"Wrote {_ROOT / 'parity_fixtures' / 'preprocessor_fit_rff'}/")
 
 
 if __name__ == "__main__":

@@ -77,4 +77,12 @@ double memory_max_classify_llr(const CyphaDifMemoryState& s, const double* h, co
 /// `(h−μ_world)ᵀ diag(inv_v)(h−μ_world) / (d+ε)` for OOD EMA (Python `train_step` block).
 double memory_mahal_world_scalar(const CyphaDifMemoryState& s, const double* h);
 
+/// Fisher–Rao norm ``Σ Δμ²/v₀`` (Python ``ClassDifferential.fisher_rao_norm``).
+double class_fisher_rao_norm(const double* delta_mu, int d, const double* v0);
+
+/// Merge class differentials from ``other`` into ``self`` (Python ``CyphaDIF.merge_from``).
+/// Returns labels newly copied from ``other``.
+std::vector<std::string> memory_merge_from(CyphaDifMemoryState& self, const CyphaDifMemoryState& other,
+                                           double weight_self = 0.5, double weight_other = 0.5);
+
 }  // namespace cypha
