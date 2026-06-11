@@ -75,8 +75,12 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/native/toolchains/mingw-w64-x86_64.cmake" \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build native/build-mingw-w64 --parallel --target all
-      - name: CTest (paths rewritten to C:/ for /mnt/c checkouts)
-        run: ctest --test-dir native/build-mingw-w64 --output-on-failure
+      - name: Verify MinGW cross build (PE artifacts)
+        run: |
+          ls -la native/build-mingw-w64/*.exe | sort
+          for bin in cypha_rest.exe cypha_bench_run.exe cypha_bench_report.exe cypha_diagnostics_run.exe cypha_tune_run.exe; do
+            test -f "native/build-mingw-w64/$bin"
+          done
 
   # MSVC + CYPHA_ENABLE_CUDA=ON compile smoke (MinGW cannot build CUDA).
   # cuda_smoke / native_cuda_smoke pass on CPU threads when the runner has no GPU;

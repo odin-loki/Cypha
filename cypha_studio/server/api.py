@@ -108,7 +108,7 @@ def _scalar_moe_from_pred(
 if FASTAPI_AVAILABLE:
     def _maybe_raise_input_dim_mismatch(exc: BaseException) -> None:
         """Raise HTTP 400 with the same ``detail`` string as native ``cypha_rest`` for bad lengths."""
-        if isinstance(exc, (ValueError, TypeError)):
+        if isinstance(exc, ValueError | TypeError):
             s = str(exc).lower()
             if "got length" in s or ("shape" in s and "mismatch" in s):
                 raise HTTPException(400, "input dim mismatch after preprocessor") from exc

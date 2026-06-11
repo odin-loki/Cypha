@@ -4,6 +4,10 @@ All notable changes to Cypha are recorded here. The project follows a
 **milestone** release model: each entry corresponds to a named engineering
 milestone or a significant self-contained change.
 
+### Fixed
+- **CI MinGW job:** replace PE CTest (cannot run on Linux) with artifact existence smoke.
+- **Ruff UP038:** `isinstance(exc, ValueError | TypeError)` for ruff 0.9 pin compatibility.
+
 ---
 
 ## [2.2.3] — 2026-05-31 · Release packaging hardening
