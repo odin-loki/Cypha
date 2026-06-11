@@ -23,9 +23,7 @@ except ImportError:
     QT_AVAILABLE = False
 
 if TYPE_CHECKING:
-    from ..core.inference import Prediction
-    from ..core.trainer import EvalMetrics, TrainerConfig
-    from ..core.registry import ModelCard
+    pass
 
 
 if QT_AVAILABLE:
@@ -97,7 +95,7 @@ if QT_AVAILABLE:
             return cls._instance
 
         @classmethod
-        def instance(cls) -> 'SignalBus':
+        def instance(cls) -> SignalBus:
             if cls._instance is None:
                 cls._instance = cls()
             return cls._instance
@@ -163,7 +161,7 @@ else:
             return cls._instance
 
         @classmethod
-        def instance(cls) -> 'SignalBus':
+        def instance(cls) -> SignalBus:
             if cls._instance is None:
                 cls._instance = cls()
             return cls._instance

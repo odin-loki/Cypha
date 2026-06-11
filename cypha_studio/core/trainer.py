@@ -6,22 +6,21 @@ and hyperparameter search.
 """
 from __future__ import annotations
 
+import math
 import os
 import sys
-import time
-import math
 import threading
+import time
 
 _CYPHA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if _CYPHA_ROOT not in sys.path:
     sys.path.insert(0, _CYPHA_ROOT)
-from dataclasses import dataclass, field, asdict
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
-from .dataset import CyphaDataset, Preprocessor, SplitConfig
-
+from .dataset import CyphaDataset, Preprocessor
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TrainerConfig
@@ -63,7 +62,7 @@ class TrainerConfig:
     # Training mode
     mode          : str   = 'online'    # 'online' or 'batch'
     n_epochs      : int   = 3
-    batch_size    : Optional[int] = None
+    batch_size    : int | None = None
 
     # Evaluation
     eval_every_n  : int   = 100         # steps between validation evaluations
@@ -75,7 +74,7 @@ class TrainerConfig:
 
     # Preprocessing
     preprocess_scale : bool = True
-    preprocess_pca   : Optional[int] = None
+    preprocess_pca   : int | None = None
 
     # Reproducibility
     seed : int = 42
@@ -97,7 +96,7 @@ class EvalMetrics:
     macro_f1       : float = 0.0
     macro_recall   : float = 0.0
     macro_precision: float = 0.0
-    per_class      : Dict[str, Dict[str, float]] = field(default_factory=dict)
+    per_class      : dict[str, dict[str, float]] = field(default_factory=dict)
     calibration_error : float = 0.0
     ood_auroc      : float = 0.0
 
@@ -123,14 +122,14 @@ def _compute_classification_metrics(y_true, y_pred, y_conf) -> EvalMetrics:
     if n == 0:
         return m
 
-    m.accuracy = sum(p == t for p, t in zip(y_pred, y_true)) / n
+    m.accuracy = sum(p == t for p, t in zip(y_pred, y_true, strict=False)) / n
     m.conf_mean = float(np.mean(y_conf)) if len(y_conf) > 0 else 0.0
     m.conf_std  = float(np.std(y_conf))  if len(y_conf) > 0 else 0.0
 
     for lbl in unique_labels:
-        tp = sum(1 for p, t in zip(y_pred, y_true) if p == lbl and t == lbl)
-        fp = sum(1 for p, t in zip(y_pred, y_true) if p == lbl and t != lbl)
-        fn = sum(1 for p, t in zip(y_pred, y_true) if p != lbl and t == lbl)
+        tp = sum(1 for p, t in zip(y_pred, y_true, strict=False) if p == lbl and t == lbl)
+        fp = sum(1 for p, t in zip(y_pred, y_true, strict=False) if p == lbl and t != lbl)
+        fn = sum(1 for p, t in zip(y_pred, y_true, strict=False) if p != lbl and t == lbl)
         prec = tp / max(tp + fp, 1)
         rec  = tp / max(tp + fn, 1)
         f1   = 2 * prec * rec / max(prec + rec, 1e-9)
@@ -144,7 +143,7 @@ def _compute_classification_metrics(y_true, y_pred, y_conf) -> EvalMetrics:
     # Calibration error (ECE)
     if len(y_conf) > 0:
         confs = np.array(y_conf)
-        correct = np.array([int(p == t) for p, t in zip(y_pred, y_true)], dtype=float)
+        correct = np.array([int(p == t) for p, t in zip(y_pred, y_true, strict=False)], dtype=float)
         ece = 0.0
         for b in range(10):
             lo, hi = b / 10, (b + 1) / 10
@@ -177,10 +176,10 @@ class MetricsCallback(TrainerCallback):
     """Collects training metrics for plotting."""
 
     def __init__(self):
-        self.step_losses     : List[Tuple[int, float]] = []
-        self.step_accuracies : List[Tuple[int, float]] = []
-        self.eval_history    : List[EvalMetrics]       = []
-        self._window_correct : List[int]   = []
+        self.step_losses     : list[tuple[int, float]] = []
+        self.step_accuracies : list[tuple[int, float]] = []
+        self.eval_history    : list[EvalMetrics]       = []
+        self._window_correct : list[int]   = []
         self._window_size    : int         = 50
 
     def on_step(self, step, loss, label, correct):
@@ -233,12 +232,14 @@ class CheckpointCallback(TrainerCallback):
     """Saves model checkpoints."""
 
     def __init__(self, save_dir: str, monitor: str = 'accuracy', mode: str = 'max'):
-        import os; os.makedirs(save_dir, exist_ok=True)
+        import os
+
+        os.makedirs(save_dir, exist_ok=True)
         self.save_dir  = save_dir
         self.monitor   = monitor
         self.mode      = mode
         self.best_val  = -math.inf if mode == 'max' else math.inf
-        self.best_path : Optional[str] = None
+        self.best_path : str | None = None
 
     def on_evaluate(self, metrics: EvalMetrics):
         val = getattr(metrics, self.monitor, 0.0)
@@ -269,16 +270,16 @@ class Trainer:
     """
 
     def __init__(self):
-        self._callbacks   : List[TrainerCallback] = []
+        self._callbacks   : list[TrainerCallback] = []
         self._stop_flag   = threading.Event()
         self._model       = None
-        self._preprocessor : Optional[Preprocessor] = None
+        self._preprocessor : Preprocessor | None = None
         self._step        = 0
         self._epoch       = 0
         self._best_metric = -math.inf
         self._patience_count = 0
 
-    def add_callback(self, cb: TrainerCallback) -> 'Trainer':
+    def add_callback(self, cb: TrainerCallback) -> Trainer:
         self._callbacks.append(cb)
         return self
 
@@ -348,8 +349,8 @@ class Trainer:
 
     def fit(self,
             train_ds   : CyphaDataset,
-            val_ds     : Optional[CyphaDataset] = None,
-            config     : Optional[TrainerConfig] = None) -> 'Trainer':
+            val_ds     : CyphaDataset | None = None,
+            config     : TrainerConfig | None = None) -> Trainer:
         """
         Train on train_ds, evaluate on val_ds periodically.
         Returns self for chaining.
@@ -387,7 +388,7 @@ class Trainer:
             for x, label in zip(X_tr_pp[np.random.default_rng(config.seed + epoch)
                                          .permutation(len(X_tr_pp))],
                                  train_ds.y[np.random.default_rng(config.seed + epoch)
-                                            .permutation(len(train_ds.y))]):
+                                            .permutation(len(train_ds.y))], strict=False):
                 if self._stop_flag.is_set():
                     break
 
@@ -437,7 +438,6 @@ class Trainer:
         return self
 
     def _fit_batch_regressor(self, X_pp, train_ds, val_ds, config):
-        from sklearn.metrics import r2_score
         self._emit('on_train_begin', config)
         y_tr = train_ds.y.astype(float)
 
@@ -495,7 +495,7 @@ class Trainer:
     # ── Evaluate ─────────────────────────────────────────────────────────────
 
     def evaluate(self, ds: CyphaDataset,
-                 config: Optional[TrainerConfig] = None) -> EvalMetrics:
+                 config: TrainerConfig | None = None) -> EvalMetrics:
         """Evaluate model on dataset. Returns EvalMetrics."""
         if self._model is None:
             return EvalMetrics()
@@ -518,7 +518,7 @@ class Trainer:
 
         # Classification
         y_true, y_pred, y_conf = [], [], []
-        for x, label in zip(X_pp, ds.y):
+        for x, label in zip(X_pp, ds.y, strict=False):
             pred, conf = self._model.infer(x)
             y_true.append(str(label))
             y_pred.append(pred)
@@ -543,7 +543,7 @@ class Trainer:
         return self._model
 
     @property
-    def preprocessor(self) -> Optional[Preprocessor]:
+    def preprocessor(self) -> Preprocessor | None:
         return self._preprocessor
 
     @property
@@ -564,28 +564,29 @@ class HyperparameterSearch:
     results = search.run(train_ds, val_ds, base_config)
     """
 
-    def __init__(self, param_grid: Dict[str, List[Any]],
+    def __init__(self, param_grid: dict[str, list[Any]],
                  n_jobs: int = 1,
                  verbose: bool = True):
         self.param_grid = param_grid
         self.n_jobs     = n_jobs
         self.verbose    = verbose
-        self.results_   : List[Dict] = []
+        self.results_   : list[dict] = []
 
-    def _generate_configs(self, base: TrainerConfig) -> List[TrainerConfig]:
-        import itertools, copy
+    def _generate_configs(self, base: TrainerConfig) -> list[TrainerConfig]:
+        import copy
+        import itertools
         keys = list(self.param_grid.keys())
         vals = list(self.param_grid.values())
         configs = []
         for combo in itertools.product(*vals):
             cfg = copy.deepcopy(base)
-            for k, v in zip(keys, combo):
+            for k, v in zip(keys, combo, strict=False):
                 setattr(cfg, k, v)
-            configs.append((cfg, dict(zip(keys, combo))))
+            configs.append((cfg, dict(zip(keys, combo, strict=False))))
         return configs
 
     def run(self, train_ds: CyphaDataset, val_ds: CyphaDataset,
-            base_config: Optional[TrainerConfig] = None) -> List[Dict]:
+            base_config: TrainerConfig | None = None) -> list[dict]:
         if base_config is None:
             base_config = TrainerConfig()
 
@@ -621,7 +622,7 @@ class HyperparameterSearch:
         return self.results_
 
     @property
-    def best_config(self) -> Optional[TrainerConfig]:
+    def best_config(self) -> TrainerConfig | None:
         if not self.results_:
             return None
         for r in self.results_:
@@ -630,7 +631,7 @@ class HyperparameterSearch:
         return None
 
     @property
-    def best_params(self) -> Optional[Dict]:
+    def best_params(self) -> dict | None:
         if not self.results_:
             return None
         for r in self.results_:
@@ -649,7 +650,7 @@ class RandomSearch(HyperparameterSearch):
                            n_iter=20)
     """
 
-    def __init__(self, param_distributions: Dict[str, Tuple],
+    def __init__(self, param_distributions: dict[str, tuple],
                  n_iter: int = 20,
                  seed: int = 42,
                  verbose: bool = True):
@@ -658,7 +659,7 @@ class RandomSearch(HyperparameterSearch):
         self.n_iter = n_iter
         self.seed   = seed
 
-    def _sample(self, rng: np.random.Generator) -> Dict[str, Any]:
+    def _sample(self, rng: np.random.Generator) -> dict[str, Any]:
         sample = {}
         for k, spec in self.param_distributions.items():
             dist = spec[0]

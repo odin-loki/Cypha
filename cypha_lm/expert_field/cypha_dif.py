@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Union
 
 import numpy as np
 
@@ -155,7 +154,7 @@ class CyphaDIF:
         probs = self._maybe_grow(x, probs)
         return probs
 
-    def train_step(self, x: np.ndarray, y: Union[float, np.ndarray]) -> None:
+    def train_step(self, x: np.ndarray, y: float | np.ndarray) -> None:
         """Online update: route x, update winning expert's NIG posterior."""
         x = np.asarray(x, dtype=np.float64).ravel()
         y_arr = np.asarray(y, dtype=np.float64).ravel()

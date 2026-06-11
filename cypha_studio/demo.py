@@ -14,16 +14,23 @@ Shows the complete workflow:
 
 Run: python demo.py
 """
-import os, sys, tempfile, time
+import os
+import sys
+import tempfile
+import time
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-import numpy as np, warnings
+import warnings
+
+import numpy as np
+
 warnings.filterwarnings('ignore')
 
-from cypha_studio.core.dataset    import SklearnDataset, Preprocessor, SplitConfig
-from cypha_studio.core.trainer    import TrainerConfig, Trainer, MetricsCallback
+from cypha_studio.core.dataset import Preprocessor, SklearnDataset, SplitConfig
 from cypha_studio.core.experiment import ExperimentDB
-from cypha_studio.core.registry   import ModelRegistry, ModelCard
-from cypha_studio.core.inference  import InferenceEngine, InferenceSession
+from cypha_studio.core.inference import InferenceEngine, InferenceSession
+from cypha_studio.core.registry import ModelCard, ModelRegistry
+from cypha_studio.core.trainer import MetricsCallback, Trainer, TrainerConfig
 
 print("═" * 60)
 print("  CyphaStudio — Headless Demo")
@@ -109,7 +116,7 @@ with tempfile.TemporaryDirectory() as workdir:
 
     n_correct = 0
     corrections = 0
-    for x, y_true in zip(te.X, te.y):
+    for x, y_true in zip(te.X, te.y, strict=False):
         pred = session.predict(x)
         if pred.label == str(y_true):
             n_correct += 1
@@ -128,13 +135,13 @@ with tempfile.TemporaryDirectory() as workdir:
     # Detailed prediction example
     x_ex = te.X[0]
     pred_ex = engine.predict(x_ex, use_gh=True)
-    print(f"\n    Example prediction:")
+    print("\n    Example prediction:")
     print(f"      True:   {te.y[0]}")
     print(f"      Pred:   {pred_ex.label}  conf={pred_ex.confidence:.4f}")
     print(f"      OOD:    {pred_ex.is_ood}  anomaly={pred_ex.anomaly_score:.4f}")
     expl = engine.explain(x_ex)
     top_scores = sorted(expl['all_scores'].items(), key=lambda kv: -kv[1])[:3]
-    print(f"      Top LLRs: " + "  ".join(f"{l}:{s:+.2f}" for l, s in top_scores))
+    print("      Top LLRs: " + "  ".join(f"{l}:{s:+.2f}" for l, s in top_scores))
 
     # ── 6. Adversarial protection demo ───────────────────────────────────────
     print("\n[6] Adversarial protection demo…")
@@ -146,7 +153,7 @@ with tempfile.TemporaryDirectory() as workdir:
         _, _, chi, psi = m2.gh_train_step(x_adv, str(ds.labels[0]), chi, psi)
 
     acc_after_adv = sum(
-        1 for x, y in zip(te.X, te.y)
+        1 for x, y in zip(te.X, te.y, strict=False)
         if engine.predict(x).label == str(y)
     ) / len(te)
     print(f"    Accuracy after {n_adv} adversarial injections: {acc_after_adv:.4f}")

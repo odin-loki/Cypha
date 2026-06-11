@@ -7,13 +7,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from cypha_lm.model.cypha_lm import CyphaLM
 
 
 class AlphaSpectrumAnalyser:
     """Snapshot and track alpha evolution during training."""
 
-    def __init__(self, model: "CyphaLM") -> None:
+    def __init__(self, model: CyphaLM) -> None:
         self.model = model
 
     def snapshot(self) -> dict:
@@ -28,7 +30,7 @@ class AlphaSpectrumAnalyser:
             "fraction_near_edge_of_chaos": near,
         }
 
-    def track(self, n_steps: int, train_data: list[int]) -> "pd.DataFrame":
+    def track(self, n_steps: int, train_data: list[int]) -> pd.DataFrame:
         import pandas as pd
 
         records: list[dict] = []

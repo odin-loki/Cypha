@@ -99,7 +99,7 @@ def test_slow_track_decay() -> None:
 
 def test_temporal_separation() -> None:
     ssm = _make_ssm(seed=5)
-    rng = np.random.default_rng(5)
+    np.random.default_rng(5)
     impulse = np.zeros(ssm.d_input)
     impulse[0] = 1.0
     ssm.step(impulse)

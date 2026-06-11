@@ -7,7 +7,7 @@ import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -24,12 +24,12 @@ class MkeRestState:
     d_rff: int
     W: np.ndarray
     b: np.ndarray
-    w: Dict[str, np.ndarray] = field(default_factory=dict)
-    P: Dict[str, np.ndarray] = field(default_factory=dict)
+    w: dict[str, np.ndarray] = field(default_factory=dict)
+    P: dict[str, np.ndarray] = field(default_factory=dict)
     temperature: float = 1.0
     forgetting_factor: float = 1.0
     pi_floor: float = 0.02
-    gh_scales: Optional[np.ndarray] = None
+    gh_scales: np.ndarray | None = None
 
 
 def _rff_encode(x: np.ndarray, W: np.ndarray, b: np.ndarray, d_rff: int) -> np.ndarray:
@@ -46,7 +46,6 @@ def _mke_expert_rls_scalar_step(
     w: np.ndarray,
     P: np.ndarray,
 ) -> None:
-    d = phi.shape[0]
     if pi < 0.02:
         return
     if forgetting_factor > 0.0 and forgetting_factor < 1.0:
@@ -60,7 +59,7 @@ def _mke_expert_rls_scalar_step(
     P -= pi * np.outer(Kg, phi) @ P
 
 
-def parse_mke_from_regression_file(path: str) -> Optional[MkeRestState]:
+def parse_mke_from_regression_file(path: str) -> MkeRestState | None:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     mk = raw.get("mke")
     if not isinstance(mk, dict):
@@ -92,7 +91,7 @@ def parse_mke_from_regression_file(path: str) -> Optional[MkeRestState]:
     )
 
 
-def _apply_replay_u01(model: Any, replay_u01: Optional[List[float]]):
+def _apply_replay_u01(model: Any, replay_u01: list[float] | None):
     if not replay_u01:
         return None
     old_rng = getattr(model, "_replay_rng", None)
@@ -146,10 +145,10 @@ def mke_rest_update(
     x_pp: np.ndarray,
     y: float,
     *,
-    router_train_label: Optional[str] = None,
-    replay_u01: Optional[List[float]] = None,
+    router_train_label: str | None = None,
+    replay_u01: list[float] | None = None,
     use_gh: bool = True,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     One scalar MKE update. Returns ``(err_sq, router_loss)``.
 

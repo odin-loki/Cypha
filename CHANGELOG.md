@@ -6,6 +6,15 @@ milestone or a significant self-contained change.
 
 ---
 
+## [2.2.2] — 2026-05-31 · CI / release pipeline fixes
+
+### Fixed
+- **MinGW cross-compile:** vendored zlib via CMake FetchContent when system `ZLIB` is missing (fixes `cypha_bench_run` on release Windows PE builds).
+- **Ruff CI:** auto-format + targeted `per-file-ignores`; all lint paths green.
+- **MSVC + CUDA CI:** auto-detect VS 2026 vs 2022 generator on `windows-latest`.
+
+---
+
 ## [2.2.1] — 2026-06-11 · Qt Studio dialogs + doc sync
 
 ### Added

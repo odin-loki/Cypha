@@ -1,7 +1,7 @@
 """Simple confusion-matrix dialog for classification on a held-out set."""
 from __future__ import annotations
 
-from typing import Iterable, List, Sequence, Union
+from collections.abc import Iterable, Sequence
 
 import numpy as np
 from PySide6.QtWidgets import (
@@ -13,10 +13,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-Scalar = Union[str, int, float]
+Scalar = str | int | float
 
 
-def _labels(y_true: Sequence[Scalar], y_pred: Sequence[Scalar]) -> List[str]:
+def _labels(y_true: Sequence[Scalar], y_pred: Sequence[Scalar]) -> list[str]:
     s = set(str(x) for x in y_true) | set(str(x) for x in y_pred)
     return sorted(s)
 
@@ -30,7 +30,7 @@ def confusion_counts(
     idx = {lb: i for i, lb in enumerate(labels)}
     n = len(labels)
     cm = np.zeros((n, n), dtype=int)
-    for t, p in zip(yt, yp):
+    for t, p in zip(yt, yp, strict=False):
         cm[idx[t], idx[p]] += 1
     return labels, cm
 

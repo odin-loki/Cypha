@@ -114,8 +114,15 @@ jobs:
         run: |
           $cudaRoot = $env:CUDA_PATH
           if (-not $cudaRoot) { throw "CUDA_PATH not set after cuda-toolkit install" }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $gen = "Visual Studio 17 2022"
+          if (Test-Path $vswhere) {
+            $ver = & $vswhere -latest -property catalog_productLineVersion 2>$null
+            if ($ver -eq "2026") { $gen = "Visual Studio 18 2026" }
+          }
+          Write-Host "Using generator: $gen"
           cmake -S native -B native/build-cuda-msvc `
-            -G "Visual Studio 17 2022" -A x64 `
+            -G $gen -A x64 `
             -DCYPHA_ENABLE_CUDA=ON `
             -DCMAKE_CUDA_ARCHITECTURES=75 `
             -DCMAKE_GENERATOR_TOOLSET="cuda=$cudaRoot"

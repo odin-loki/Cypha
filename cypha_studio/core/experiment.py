@@ -14,12 +14,10 @@ import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any
 
 from .trainer import EvalMetrics, TrainerConfig
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data classes
@@ -31,11 +29,11 @@ class Run:
     run_id      : str
     experiment  : str
     name        : str
-    config      : Dict[str, Any]
+    config      : dict[str, Any]
     status      : str           = 'pending'   # pending | running | done | failed
     created_at  : float         = field(default_factory=time.time)
     updated_at  : float         = field(default_factory=time.time)
-    finished_at : Optional[float] = None
+    finished_at : float | None = None
     duration_s  : float         = 0.0
 
     # Scalar summary metrics (best / final)
@@ -47,14 +45,14 @@ class Run:
     n_classes   : int   = 0
 
     # Paths
-    checkpoint_path   : Optional[str] = None
-    preprocessor_path : Optional[str] = None
+    checkpoint_path   : str | None = None
+    preprocessor_path : str | None = None
 
     # Full metrics history — stored as JSON in DB
-    metrics_history : List[Dict] = field(default_factory=list)
+    metrics_history : list[dict] = field(default_factory=list)
 
     # Tags for filtering
-    tags : List[str] = field(default_factory=list)
+    tags : list[str] = field(default_factory=list)
     notes: str = ''
 
 
@@ -67,7 +65,7 @@ class Experiment:
     dataset_name  : str  = ''
     task          : str  = 'classification'
     created_at    : float = field(default_factory=time.time)
-    tags          : List[str] = field(default_factory=list)
+    tags          : list[str] = field(default_factory=list)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -153,7 +151,7 @@ class ExperimentDB:
                           description: str = '',
                           dataset_name: str = '',
                           task: str = 'classification',
-                          tags: Optional[List[str]] = None) -> Experiment:
+                          tags: list[str] | None = None) -> Experiment:
         exp = Experiment(
             experiment_id=str(uuid.uuid4())[:8],
             name=name, description=description,
@@ -169,7 +167,7 @@ class ExperimentDB:
             )
         return exp
 
-    def get_experiment(self, experiment_id: str) -> Optional[Experiment]:
+    def get_experiment(self, experiment_id: str) -> Experiment | None:
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM experiments WHERE experiment_id=?",
@@ -184,7 +182,7 @@ class ExperimentDB:
             tags=json.loads(row['tags']),
         )
 
-    def list_experiments(self) -> List[Experiment]:
+    def list_experiments(self) -> list[Experiment]:
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM experiments ORDER BY created_at DESC"
@@ -204,8 +202,8 @@ class ExperimentDB:
     # ── Runs ─────────────────────────────────────────────────────────────────
 
     def create_run(self, experiment_id: str, name: str,
-                   config: Optional[TrainerConfig] = None,
-                   tags: Optional[List[str]] = None,
+                   config: TrainerConfig | None = None,
+                   tags: list[str] | None = None,
                    notes: str = '') -> Run:
         cfg_dict = {}
         if config is not None:
@@ -233,7 +231,7 @@ class ExperimentDB:
             )
         return run
 
-    def get_run(self, run_id: str) -> Optional[Run]:
+    def get_run(self, run_id: str) -> Run | None:
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM runs WHERE run_id=?", (run_id,)
@@ -242,12 +240,12 @@ class ExperimentDB:
             return None
         return self._row_to_run(row)
 
-    def list_runs(self, experiment_id: Optional[str] = None,
-                  status: Optional[str] = None,
+    def list_runs(self, experiment_id: str | None = None,
+                  status: str | None = None,
                   limit: int = 100,
-                  offset: int = 0) -> List[Run]:
+                  offset: int = 0) -> list[Run]:
         query = "SELECT * FROM runs"
-        params: List[Any] = []
+        params: list[Any] = []
         conditions = []
         if experiment_id:
             conditions.append("experiment_id=?"); params.append(experiment_id)
@@ -318,8 +316,8 @@ class ExperimentDB:
             )
 
     def finish_run(self, run_id: str, final_metrics: EvalMetrics,
-                   checkpoint_path: Optional[str] = None,
-                   preprocessor_path: Optional[str] = None):
+                   checkpoint_path: str | None = None,
+                   preprocessor_path: str | None = None):
         """Mark run as done and store final metrics."""
         now = time.time()
         run = self.get_run(run_id)
@@ -350,7 +348,7 @@ class ExperimentDB:
 
     # ── Comparisons ──────────────────────────────────────────────────────────
 
-    def compare_runs(self, run_ids: List[str]) -> List[Dict]:
+    def compare_runs(self, run_ids: list[str]) -> list[dict]:
         """Return a summary table of multiple runs for side-by-side comparison."""
         rows = []
         for rid in run_ids:
@@ -371,7 +369,7 @@ class ExperimentDB:
         return rows
 
     def best_run(self, experiment_id: str,
-                 metric: str = 'accuracy') -> Optional[Run]:
+                 metric: str = 'accuracy') -> Run | None:
         """Return the run with the highest value of metric."""
         runs = self.list_runs(experiment_id=experiment_id, status='done')
         if not runs:
@@ -380,7 +378,7 @@ class ExperimentDB:
 
     def leaderboard(self, experiment_id: str,
                     metric: str = 'accuracy',
-                    top_n: int = 10) -> List[Run]:
+                    top_n: int = 10) -> list[Run]:
         runs = self.list_runs(experiment_id=experiment_id, status='done')
         return sorted(runs, key=lambda r: getattr(r, metric, 0.0),
                       reverse=True)[:top_n]

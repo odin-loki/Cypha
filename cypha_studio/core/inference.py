@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
 from .dataset import Preprocessor
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Prediction result
@@ -24,15 +23,15 @@ class Prediction:
     """Result of a single inference call."""
     label          : str
     confidence     : float
-    all_scores     : Dict[str, float]    = field(default_factory=dict)
+    all_scores     : dict[str, float]    = field(default_factory=dict)
     anomaly_score  : float               = 0.0   # 0=normal, 1=OOD
     is_ood         : bool                = False
     r_eff          : float               = 0.0
     uncertainty    : float               = 0.0   # regression: posterior std
-    regression_val : Optional[float]     = None  # for regression models
+    regression_val : float | None     = None  # for regression models
     timestamp      : float               = field(default_factory=time.time)
-    input_vector   : Optional[np.ndarray]= None
-    raw_input      : Optional[Any]       = None  # original text / dict
+    input_vector   : np.ndarray | None= None
+    raw_input      : Any | None       = None  # original text / dict
 
 
 @dataclass
@@ -62,7 +61,7 @@ class InferenceEngine:
 
     OOD_THRESHOLD = 3.0   # anomaly_score > this → is_ood=True
 
-    def __init__(self, model, preprocessor: Optional[Preprocessor] = None,
+    def __init__(self, model, preprocessor: Preprocessor | None = None,
                  ood_threshold: float = OOD_THRESHOLD):
         self._model       = model
         self._preprocessor = preprocessor
@@ -94,7 +93,7 @@ class InferenceEngine:
 
     # ── Single prediction ────────────────────────────────────────────────────
 
-    def predict(self, raw_input: Union[np.ndarray, List[float], str],
+    def predict(self, raw_input: np.ndarray | list[float] | str,
                 use_gh: bool = False,
                 chi: float = 1.0, psi: float = 1.0) -> Prediction:
         """
@@ -174,7 +173,7 @@ class InferenceEngine:
 
     # ── Batch prediction ─────────────────────────────────────────────────────
 
-    def predict_batch(self, inputs: Union[np.ndarray, List]) -> List[Prediction]:
+    def predict_batch(self, inputs: np.ndarray | list) -> list[Prediction]:
         X = np.array(inputs, dtype=np.float64)
         X_pp = self._preprocess_batch(X)
         results = []
@@ -184,7 +183,7 @@ class InferenceEngine:
 
     # ── Explanation ──────────────────────────────────────────────────────────
 
-    def explain(self, raw_input: Union[np.ndarray, str]) -> Dict:
+    def explain(self, raw_input: np.ndarray | str) -> dict:
         """
         Return a detailed explanation of a prediction.
 
@@ -228,10 +227,10 @@ class InferenceEngine:
 
     # ── Online correction ────────────────────────────────────────────────────
 
-    def update(self, raw_input: Union[np.ndarray, str],
+    def update(self, raw_input: np.ndarray | str,
                correct_label: str,
                use_gh: bool = True,
-               replay_u01: Optional[List[float]] = None) -> float:
+               replay_u01: list[float] | None = None) -> float:
         """
         Online update: train model on (input, correct_label).
 
@@ -271,7 +270,7 @@ class InferenceEngine:
 
     # ── Anomaly score ────────────────────────────────────────────────────────
 
-    def anomaly_score(self, raw_input: Union[np.ndarray, str]) -> float:
+    def anomaly_score(self, raw_input: np.ndarray | str) -> float:
         """Return anomaly score in [0, ∞). > OOD_THRESHOLD = likely OOD."""
         pred = self.predict(raw_input, use_gh=True)
         return pred.anomaly_score
@@ -287,7 +286,7 @@ class InferenceEngine:
             "Call attach_text_preprocessor() first."
         )
 
-    def attach_text_preprocessor(self, tp: 'TextPreprocessor'):
+    def attach_text_preprocessor(self, tp: TextPreprocessor):
         self._text_preprocessor = tp
 
     # ── Stats ────────────────────────────────────────────────────────────────
@@ -321,8 +320,8 @@ class InferenceSession:
 
     def __init__(self, engine: InferenceEngine):
         self._engine   = engine
-        self._history  : List[Prediction]       = []
-        self._corrections : List[CorrectionRecord] = []
+        self._history  : list[Prediction]       = []
+        self._corrections : list[CorrectionRecord] = []
         self._chi      : float = 1.0
         self._psi      : float = 1.0
         self._started  : float = time.time()
@@ -365,7 +364,7 @@ class InferenceSession:
         self._chi = 1.0
         self._psi = 1.0
 
-    def summary(self) -> Dict:
+    def summary(self) -> dict:
         n = len(self._history)
         n_corr = len(self._corrections)
         if n == 0:
@@ -412,11 +411,11 @@ class InferenceSession:
         }
 
     @property
-    def history(self) -> List[Prediction]:
+    def history(self) -> list[Prediction]:
         return list(self._history)
 
     @property
-    def corrections(self) -> List[CorrectionRecord]:
+    def corrections(self) -> list[CorrectionRecord]:
         return list(self._corrections)
 
 
@@ -438,16 +437,16 @@ class TextPreprocessor:
 
     def __init__(self, mode: str = 'tfidf',
                  max_features: int = 512,
-                 model_name: Optional[str] = None):
+                 model_name: str | None = None):
         self.mode         = mode
         self.max_features = max_features
         self.model_name   = model_name
         self._vectorizer  = None
         self._model       = None
         self._fitted      = False
-        self._out_dim     : Optional[int] = None
+        self._out_dim     : int | None = None
 
-    def fit(self, texts: List[str]) -> 'TextPreprocessor':
+    def fit(self, texts: list[str]) -> TextPreprocessor:
         if self.mode == 'tfidf':
             from sklearn.feature_extraction.text import TfidfVectorizer
             self._vectorizer = TfidfVectorizer(
@@ -472,7 +471,7 @@ class TextPreprocessor:
                 raise ImportError(
                     "Install sentence-transformers for sentence embedding mode: "
                     "pip install sentence-transformers"
-                )
+                ) from None
         else:
             raise ValueError(f"Unknown mode {self.mode!r}")
 
@@ -487,17 +486,18 @@ class TextPreprocessor:
         else:
             return self._model.encode([text])[0].astype(np.float64)
 
-    def fit_transform(self, texts: List[str]) -> np.ndarray:
+    def fit_transform(self, texts: list[str]) -> np.ndarray:
         self.fit(texts)
         return np.array([self.transform(t) for t in texts], dtype=np.float64)
 
     @property
-    def output_dim(self) -> Optional[int]:
+    def output_dim(self) -> int | None:
         return self._out_dim
 
-    def save_state(self) -> Dict:
-        import pickle, base64
-        state: Dict[str, Any] = {
+    def save_state(self) -> dict:
+        import base64
+        import pickle
+        state: dict[str, Any] = {
             'mode': self.mode,
             'max_features': self.max_features,
             'model_name': self.model_name,
@@ -510,8 +510,9 @@ class TextPreprocessor:
             ).decode('ascii')
         return state
 
-    def load_state(self, state: Dict) -> None:
-        import pickle, base64
+    def load_state(self, state: dict) -> None:
+        import base64
+        import pickle
         self.mode         = state['mode']
         self.max_features = state['max_features']
         self.model_name   = state.get('model_name')

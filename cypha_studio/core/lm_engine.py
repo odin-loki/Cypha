@@ -26,14 +26,14 @@ class LMEngine:
         self._loaded_at = time.time()
 
     @classmethod
-    def from_checkpoint(cls, path: str) -> "LMEngine":
+    def from_checkpoint(cls, path: str) -> LMEngine:
         from cypha_lm.model.cypha_lm import CyphaLM
 
         model = CyphaLM.load(path)
         return cls(model, source_path=str(Path(path).resolve()))
 
     @classmethod
-    def from_config(cls, config: dict[str, Any] | None = None) -> "LMEngine":
+    def from_config(cls, config: dict[str, Any] | None = None) -> LMEngine:
         from cypha_lm.config import CyphaLMConfig
         from cypha_lm.model.cypha_lm import CyphaLM
 

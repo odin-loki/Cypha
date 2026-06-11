@@ -8,8 +8,6 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
-
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT))
 
@@ -49,7 +47,6 @@ def _bench_predict(model: CyphaLM, n_steps: int, warmup: int) -> float:
 
 def _bench_components(model: CyphaLM, n_steps: int) -> dict[str, float]:
     """Rough per-stage timing (CUDA sync after each stage on GPU)."""
-    xp = model._backend.xp
     ids = list(range(1, model.config.vocab_size)) * 10
     acc = {"embed": 0.0, "ssm": 0.0, "proj": 0.0, "dif": 0.0, "gria": 0.0, "gria_train": 0.0}
     model.reset_context()
@@ -79,7 +76,7 @@ def _bench_components(model: CyphaLM, n_steps: int) -> dict[str, float]:
 
         t0 = time.perf_counter()
         v = model._gria_input(field_x, dif_out)
-        log_probs = model.gria.forward(v)
+        model.gria.forward(v)
         if model.device == "cuda":
             model._backend.sync()
         acc["gria"] += time.perf_counter() - t0

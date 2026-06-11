@@ -5,19 +5,38 @@ Live training monitor with loss/accuracy curves, per-class recall heatmap,
 confidence histogram, and world-prior health indicator.
 """
 from __future__ import annotations
+
 from collections import deque
+from collections.abc import Sequence
 from functools import partial
-from typing import List, Sequence, Tuple, Union
 
 import numpy as np
-from PySide6.QtCore    import Qt, QElapsedTimer, QTimer
+from PySide6.QtCore import QElapsedTimer, Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabWidget,
-    QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView,
-    QSplitter, QFrame, QScrollArea,
-    QPushButton, QComboBox, QSpinBox, QCheckBox, QGroupBox, QFormLayout,
-    QLineEdit, QTextEdit, QDialogButtonBox, QDialog, QDoubleSpinBox,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
+
 from ..server.local_server import SignalBus
 
 try:
@@ -134,7 +153,7 @@ class TrainingWidget(QWidget):
 
     @staticmethod
     def _compress_xy(xs: Sequence[float], ys: Sequence[float],
-                     cap: int) -> Tuple[List[float], List[float]]:
+                     cap: int) -> tuple[list[float], list[float]]:
         n = len(xs)
         if n <= cap:
             return list(xs), list(ys)
@@ -845,7 +864,7 @@ class ExperimentWidget(QWidget):
         self._load_more.setEnabled(len(runs) >= self._RUN_PAGE)
         self._runs_table.setSortingEnabled(True)
 
-    def show_comparison(self, models: Sequence[Union[Tuple[str, str], object]]):
+    def show_comparison(self, models: Sequence[tuple[str, str] | object]):
         test_ds = getattr(self._state, '_test_ds', None)
         pairs = []
         for m in models:
@@ -915,11 +934,6 @@ class ExperimentWidget(QWidget):
 cypha_studio.gui.dialogs
 """
 
-from PySide6.QtWidgets import (
-    QDialog, QFormLayout, QDialogButtonBox, QLineEdit,
-    QComboBox, QCheckBox, QSpinBox, QDoubleSpinBox,
-    QTextEdit, QGroupBox,
-)
 
 
 class NewExperimentDialog(QDialog):
@@ -1177,7 +1191,6 @@ class TrainConfigDialog(QDialog):
     def _on_ok(self):
         from dataclasses import replace
 
-        from ..core.trainer import TrainerConfig
 
         bs = self._batch_sz.value()
         bs_v = None if bs <= 0 else int(bs)

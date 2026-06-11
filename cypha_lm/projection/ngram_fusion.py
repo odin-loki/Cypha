@@ -90,7 +90,7 @@ class NgramFusion:
             gate = self._cache["g"]
             grad_field_part = g * gate
             grad_fx = self.W_field.T @ grad_field_part
-            gate_in = xp.concatenate([self._cache["fx"], self._cache["em"]])
+            xp.concatenate([self._cache["fx"], self._cache["em"]])
             grad_gate_in = self.W_gate.T @ (g * gate * (1.0 - gate) * (self._cache["field_part"] - self._cache["embed_part"]))
             grad_fx = grad_fx + grad_gate_in[: self.field_in]
             return grad_fx

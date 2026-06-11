@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from dataclasses import asdict
 from typing import Any
 
 from cypha_bench.adapters.cyphalm_bench import (

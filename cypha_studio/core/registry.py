@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import shutil
+import sys
 import time
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -51,7 +52,7 @@ class ModelCard:
     feat_dim     : int  = 128
     field_dim    : int  = 160
     n_classes    : int  = 0
-    class_labels : List[str] = field(default_factory=list)
+    class_labels : list[str] = field(default_factory=list)
     input_dim    : int  = 0
 
     # Training context
@@ -120,7 +121,7 @@ class ModelRegistry:
     # ── Register ─────────────────────────────────────────────────────────────
 
     def register(self, model, card: ModelCard,
-                 preprocessor: Optional[Preprocessor] = None,
+                 preprocessor: Preprocessor | None = None,
                  overwrite: bool = False) -> Path:
         """
         Save a model + preprocessor + card to the registry.
@@ -157,15 +158,15 @@ class ModelRegistry:
 
     # ── Load ─────────────────────────────────────────────────────────────────
 
-    def load(self, name: str, version: str = 'latest') -> Tuple[Any, Optional[Preprocessor], ModelCard]:
+    def load(self, name: str, version: str = 'latest') -> tuple[Any, Preprocessor | None, ModelCard]:
         """
         Load (model, preprocessor, card) from registry.
 
         If version='latest', loads the most recent version.
         """
-        from Cypha import (cypha_load_binary, CyphaDIF, VectorEncoder,
-                            RFFEncoder, RFFRegressor, TwoStageDIFRegressor,
-                            MKERegressor, DIFRegressor)
+        from Cypha import (
+            cypha_load_binary,
+        )
 
         if version == 'latest':
             version = self._latest_version(name)
@@ -187,11 +188,17 @@ class ModelRegistry:
 
         return model, preprocessor, card
 
-    def _reconstruct_model(self, card: ModelCard, state: Dict):
+    def _reconstruct_model(self, card: ModelCard, state: dict):
         """Reconstruct the right model class from card metadata and state."""
-        from Cypha import (CyphaDIF, VectorEncoder, RFFEncoder,
-                            RFFRegressor, TwoStageDIFRegressor, MKERegressor,
-                            DIFRegressor)
+        from Cypha import (
+            CyphaDIF,
+            DIFRegressor,
+            MKERegressor,
+            RFFEncoder,
+            RFFRegressor,
+            TwoStageDIFRegressor,
+            VectorEncoder,
+        )
 
         if card.model_type == 'CyphaDIF':
             # Infer field_dim from saved state: field_W_T is (field_dim, field_dim)
@@ -272,7 +279,7 @@ class ModelRegistry:
 
     # ── Listing ──────────────────────────────────────────────────────────────
 
-    def list_model_names(self) -> List[str]:
+    def list_model_names(self) -> list[str]:
         """Registry top-level model names (subdirectories); no ``card.json`` read."""
         if not self.root.exists():
             return []
@@ -281,12 +288,12 @@ class ModelRegistry:
             if d.is_dir() and not d.name.startswith('.')
         )
 
-    def registered_versions(self, name: str) -> List[str]:
+    def registered_versions(self, name: str) -> list[str]:
         """Version dirs under ``name`` that contain ``card.json``."""
         base = self.root / name
         if not base.is_dir():
             return []
-        out: List[str] = []
+        out: list[str] = []
         for vd in sorted(base.iterdir()):
             if vd.is_dir() and (vd / 'card.json').exists():
                 out.append(vd.name)
@@ -298,13 +305,13 @@ class ModelRegistry:
             len(self.registered_versions(n)) for n in self.list_model_names()
         )
 
-    def iter_registered_pairs(self) -> Iterator[Tuple[str, str]]:
+    def iter_registered_pairs(self) -> Iterator[tuple[str, str]]:
         """Yield ``(name, version)`` for each ``card.json`` under the registry root."""
         for name in self.list_model_names():
             for version in self.registered_versions(name):
                 yield name, version
 
-    def list_models(self) -> List[ModelCard]:
+    def list_models(self) -> list[ModelCard]:
         """List all models across all versions."""
         cards = []
         for model_dir in sorted(self.root.iterdir()):
@@ -324,7 +331,7 @@ class ModelRegistry:
                         pass
         return cards
 
-    def list_versions(self, name: str) -> List[str]:
+    def list_versions(self, name: str) -> list[str]:
         model_root = self.root / name
         if not model_root.exists():
             return []
@@ -354,8 +361,8 @@ class ModelRegistry:
 
     # ── Compare ──────────────────────────────────────────────────────────────
 
-    def compare(self, models: List[Tuple[str, str]],
-                test_ds=None) -> List[Dict]:
+    def compare(self, models: list[tuple[str, str]],
+                test_ds=None) -> list[dict]:
         """
         Head-to-head comparison of multiple (name, version) pairs.
         If test_ds provided, evaluates each on it.

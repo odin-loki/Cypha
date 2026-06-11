@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from dataclasses import dataclass
@@ -18,7 +17,10 @@ _BENCH = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from cypha_bench.config.load_cyphalm_profile import load_cyphalm_profile_file, resolve_cyphalm_profile_path
+from cypha_bench.config.load_cyphalm_profile import (
+    load_cyphalm_profile_file,
+    resolve_cyphalm_profile_path,
+)
 
 DEFAULT_CYPHALM_CONFIG: dict[str, Any] = {
     "vocab_size": 128,
@@ -504,7 +506,7 @@ def eval_save_restore_fidelity(
 
     loaded.reset_context()
     max_diff = 0.0
-    for tid, lp_before in zip(probe_ids, before_lps):
+    for tid, lp_before in zip(probe_ids, before_lps, strict=False):
         pred = loaded.predict_next(int(tid))
         lp_after = np.asarray(pred["log_probs"], dtype=np.float64)
         max_diff = max(max_diff, float(np.max(np.abs(lp_before - lp_after))))

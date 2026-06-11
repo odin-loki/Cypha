@@ -225,7 +225,7 @@ def save_long_range_figures(result: dict[str, Any], *, prefix: str = "fig17_long
     reset = result.get("reset_interval_bpc") or {}
     if reset:
         xs = [0 if k == "never" else int(k) for k in reset]
-        pairs = sorted(zip(xs, reset.values()), key=lambda t: t[0])
+        pairs = sorted(zip(xs, reset.values(), strict=False), key=lambda t: t[0])
         xs_o = [p[0] if p[0] > 0 else 1 for p in pairs]
         ys = [p[1] for p in pairs]
         n_train = result.get("n_train", "")

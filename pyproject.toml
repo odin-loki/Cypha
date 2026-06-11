@@ -113,3 +113,16 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["cypha_studio", "cypha_accel", "cypha_lm", "cypha_bench", "cypha_som", "cypha_views"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E402"]
+"scripts/**" = ["E402"]
+"cypha_bench/domains/**" = ["E402"]
+"cypha_bench/adapters/cyphalm_bench.py" = ["E402"]
+"cypha_studio/demo.py" = ["E402", "E702", "E741"]
+"cypha_studio/core/trainer.py" = ["E402", "E702", "E701", "E741", "N815"]
+"cypha_studio/test_cypha_studio.py" = ["E701", "E702", "E741"]
+"cypha_studio/gui/**" = ["E701", "E702", "N802"]
+"cypha_studio/core/experiment.py" = ["E702"]
+"cypha_studio/core/registry.py" = ["E702"]
+"cypha_studio/server/local_server.py" = ["E701"]

@@ -26,8 +26,9 @@ import json
 import os
 import shutil
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any
 
 try:
     from fastapi import FastAPI, HTTPException
@@ -42,13 +43,13 @@ except ImportError:
 import numpy as np
 
 
-def _parse_regression_head_file(path: str) -> Dict[str, Tuple[float, float]]:
+def _parse_regression_head_file(path: str) -> dict[str, tuple[float, float]]:
     """Load native-style ``regression_head.json`` → ``label -> (mu, var_ema)`` (scalar ``mu``)."""
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     ex = raw.get("experts")
     if not isinstance(ex, dict):
         raise ValueError("regression head JSON must contain an object 'experts'")
-    out: Dict[str, Tuple[float, float]] = {}
+    out: dict[str, tuple[float, float]] = {}
     for lbl, row in ex.items():
         if not isinstance(row, dict):
             continue
@@ -74,8 +75,8 @@ def _softmax_llr_native_style(llr: np.ndarray, temperature: float, eps: float = 
 def _scalar_moe_from_pred(
     eng: Any,
     pred: Any,
-    experts: Dict[str, Tuple[float, float]],
-) -> Optional[Tuple[float, float]]:
+    experts: dict[str, tuple[float, float]],
+) -> tuple[float, float] | None:
     """
     If ``pred`` is classification (no ``regression_val``), blend expert μ/σ² with routing
     softmax — same contract as ``cypha_rest`` + ``regression_head.json``.
@@ -113,40 +114,40 @@ if FASTAPI_AVAILABLE:
                 raise HTTPException(400, "input dim mismatch after preprocessor") from exc
 
     class PredictRequest(BaseModel):
-        input       : List[float]
+        input       : list[float]
         use_gh      : bool = False
         return_explanation : bool = False
 
     class PredictResponse(BaseModel):
         label        : str
         confidence   : float
-        all_scores   : Dict[str, float] = {}
+        all_scores   : dict[str, float] = {}
         anomaly_score: float = 0.0
         is_ood       : bool  = False
-        regression_val: Optional[float] = None
+        regression_val: float | None = None
         uncertainty  : float = 0.0
-        explanation  : Optional[Dict] = None
+        explanation  : dict | None = None
         latency_ms   : float = 0.0
 
     class UpdateRequest(BaseModel):
-        input        : List[float]
+        input        : list[float]
         correct_label: str
         use_gh       : bool = True
         # Optional native ``cypha_rest`` parity keys (see PORT_CONTRACT §3).
-        regression_y: Optional[float] = None
-        router_train_label: Optional[str] = None
-        replay_u01: Optional[List[float]] = None
+        regression_y: float | None = None
+        router_train_label: str | None = None
+        replay_u01: list[float] | None = None
 
     class UpdateResponse(BaseModel):
         loss         : float
         n_corrections: int
 
     class AdaptTemperatureCalibrationRow(BaseModel):
-        input         : List[float]
+        input         : list[float]
         correct_label : str
 
     class AdaptTemperatureRequest(BaseModel):
-        calibration: List[AdaptTemperatureCalibrationRow]
+        calibration: list[AdaptTemperatureCalibrationRow]
         n_grid     : int = 20
         T_min      : float = 0.3
         T_max      : float = 8.0
@@ -167,7 +168,7 @@ if FASTAPI_AVAILABLE:
         mean_confidence   : float
         mean_anomaly      : float
         n_ood_flagged     : int
-        label_distribution: Dict[str, int]
+        label_distribution: dict[str, int]
         session_duration_s: float
 
     class RegisterRequest(BaseModel):
@@ -177,21 +178,21 @@ if FASTAPI_AVAILABLE:
         version: str
         model_cypha: str
         card_json: str
-        preprocessor_json: Optional[str] = None
+        preprocessor_json: str | None = None
         overwrite: bool = False
 
     class RngStateResponse(BaseModel):
         """Snapshot of the active replay-RNG MT19937 state (numpy ``bit_generator.state`` shape)."""
         bit_generator: str
-        state: List[int]
+        state: list[int]
         pos: int
 
     class RngSeedRequest(BaseModel):
         """Seed or restore the replay-RNG.
         Provide either ``seed`` (re-seed from scratch) or ``state`` + ``pos`` (full restore).
         """
-        seed: Optional[int] = None
-        state: Optional[List[int]] = None
+        seed: int | None = None
+        state: list[int] | None = None
         pos: int = 0
 
     class LMLoadRequest(BaseModel):
@@ -202,47 +203,47 @@ if FASTAPI_AVAILABLE:
         token_id: int
 
     class LMGenerateRequest(BaseModel):
-        prompt_ids: List[int]
+        prompt_ids: list[int]
         max_tokens: int = 64
         temperature: float = 0.9
         strategy: str = "temperature"  # greedy | temperature | top_k | top_p | uncertainty_gated
         top_k: int = 40
         top_p: float = 0.9
-        uncertainty_threshold: Optional[float] = None
+        uncertainty_threshold: float | None = None
         stream: bool = False
 
     class RouteTextRequest(BaseModel):
         """Branch A: embed text → CyphaDIF classify + epistemic gate."""
         text: str
-        epistemic_threshold: Optional[float] = None
+        epistemic_threshold: float | None = None
 
     class RouteGenerateRequest(BaseModel):
         """Branch A: route then CyphaLM (in-domain) or Ollama fallback (OOD)."""
         text: str
-        epistemic_threshold: Optional[float] = None
+        epistemic_threshold: float | None = None
         max_tokens: int = 128
-        ollama_model: Optional[str] = None
-        ollama_system: Optional[str] = None
+        ollama_model: str | None = None
+        ollama_system: str | None = None
         cypha_lm_strategy: str = "top_p"
         cypha_lm_temperature: float = 0.9
 
     class DIFGenerateRequest(BaseModel):
         """CyphaDIF latent generation (``POST /dif/generate`` — not CyphaLM ``POST /generate``)."""
-        input: List[float]
+        input: list[float]
         mode: str  # langevin | from_observation | retrieval_augmented
-        database: Optional[List[List[float]]] = None
-        label: Optional[str] = None
+        database: list[list[float]] | None = None
+        label: str | None = None
         k_neighbors: int = 5
         n_samples: int = 10
         n_steps: int = 30
         temperature: float = 1.0
-        seed: Optional[int] = None
+        seed: int | None = None
 
     class DIFRetrieveRequest(BaseModel):
-        input: List[float]
-        database: List[List[float]]
+        input: list[float]
+        database: list[list[float]]
         top_k: int = 5
-        label: Optional[str] = None
+        label: str | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -253,10 +254,10 @@ def create_app(
     engine=None,
     registry=None,
     session=None,
-    cors_allow_origins: Optional[Sequence[str]] = None,
-    regression_head_path: Optional[str] = None,
+    cors_allow_origins: Sequence[str] | None = None,
+    regression_head_path: str | None = None,
     lm_engine=None,
-) -> 'FastAPI':
+) -> FastAPI:
     """
     Create the FastAPI app with the given inference engine and registry.
     These can be replaced at runtime via app.state.
@@ -274,7 +275,7 @@ def create_app(
     if cors_allow_origins is None:
         from ..env_config import cors_allow_origins as _cors
 
-        origins: List[str] = list(_cors())
+        origins: list[str] = list(_cors())
     else:
         origins = list(cors_allow_origins)
 
@@ -309,7 +310,7 @@ def create_app(
     reg_path = regression_head_path
     if reg_path is None:
         reg_path = os.environ.get("CYPHA_REGRESSION_HEAD", "").strip() or None
-    app.state.regression_experts: Dict[str, Tuple[float, float]] = {}
+    app.state.regression_experts: dict[str, tuple[float, float]] = {}
     app.state.mke_state = None
     if reg_path:
         app.state.regression_experts = _parse_regression_head_file(reg_path)
@@ -362,7 +363,7 @@ def create_app(
         eng = app.state.engine
         reg = app.state.registry
         sess = app.state.session
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "uptime_seconds": round(now - app.state.started, 3),
             "model_loaded": eng is not None,
             "model_type": type(eng.model).__name__ if eng else None,
@@ -548,7 +549,7 @@ def create_app(
         dest = root / req.name / req.version
         cypha_src = Path(req.model_cypha).expanduser()
         card_src = Path(req.card_json).expanduser()
-        pre_src: Optional[Path] = None
+        pre_src: Path | None = None
         if req.preprocessor_json:
             pre_src = Path(req.preprocessor_json).expanduser()
 
@@ -585,7 +586,7 @@ def create_app(
             from dataclasses import asdict
             return {"loaded": asdict(card)}
         except Exception as e:
-            raise HTTPException(404, str(e))
+            raise HTTPException(404, str(e)) from e
 
     @app.get("/session", response_model=SessionResponse)
     def session_info():
@@ -696,7 +697,7 @@ def create_app(
                 }
             return {"classes": classes}
         except Exception as e:
-            raise HTTPException(500, str(e))
+            raise HTTPException(500, str(e)) from e
 
     # ── CyphaLM language-model routes (FastAPI-only) ─────────────────────
 
@@ -875,7 +876,7 @@ def create_app(
 
     # ── CyphaDIF generation / retrieval (FastAPI parity with native ``/dif/*``) ──
 
-    def _dif_model_rng(eng: Any, seed: Optional[int]):
+    def _dif_model_rng(eng: Any, seed: int | None):
         import numpy as np
         model = getattr(eng, "model", None) or getattr(eng, "_model", None)
         if model is None:
@@ -887,7 +888,7 @@ def create_app(
             rng = np.random.default_rng(int(seed))
         return model, rng
 
-    def _dif_preprocess_vector(eng: Any, inp: List[float]) -> np.ndarray:
+    def _dif_preprocess_vector(eng: Any, inp: list[float]) -> np.ndarray:
         vec = np.array(inp, dtype=np.float64)
         try:
             return eng._preprocess(vec)
@@ -896,7 +897,7 @@ def create_app(
             raise
 
     def _dif_latent_from_observation(model: Any, h_obs: np.ndarray, label: str, n: int,
-                                     temperature: float, n_steps: int, rng: Any) -> List[List[float]]:
+                                     temperature: float, n_steps: int, rng: Any) -> list[list[float]]:
         """Latent-space ``generate_from_observation`` (matches native REST ``samples``)."""
         import math
         with model.memory._lock:
@@ -908,7 +909,7 @@ def create_app(
         mu_k = mu0 + cd.delta_mu
         lr = float(temperature) * 0.05
         noise_scale = math.sqrt(2.0 * lr)
-        out: List[List[float]] = []
+        out: list[list[float]] = []
         for _ in range(n):
             h = np.asarray(h_obs, dtype=np.float64).copy()
             for _ in range(n_steps):
@@ -1029,7 +1030,7 @@ if FASTAPI_AVAILABLE:
 def start_server(engine=None, registry=None, session=None,
                   host: str = '127.0.0.1', port: int = 7749,
                   log_level: str = 'info',
-                  regression_head_path: Optional[str] = None):
+                  regression_head_path: str | None = None):
     """
     Start the REST API server in the current thread (blocking).
 
@@ -1046,7 +1047,7 @@ def start_server(engine=None, registry=None, session=None,
 
 def start_server_async(engine=None, registry=None, session=None,
                         host: str = '127.0.0.1', port: int = 7749,
-                        regression_head_path: Optional[str] = None):
+                        regression_head_path: str | None = None):
     """
     Start the REST API server in a background thread (non-blocking).
     Returns the thread.

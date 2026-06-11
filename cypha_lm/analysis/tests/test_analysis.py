@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from cypha_lm.analysis.alpha_spectrum import AlphaSpectrumAnalyser

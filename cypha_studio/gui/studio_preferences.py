@@ -7,7 +7,7 @@ effective_* helpers and in-dialog notes for CYPHA_* names.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
-from typing import Any, Dict
+from typing import Any
 
 from ..env_config import csv_read_chunk_rows, registry_root
 
@@ -41,11 +41,11 @@ class StudioPreferences:
             return self.csv_chunk_rows_override
         return csv_read_chunk_rows()
 
-    def to_settings_dict(self) -> Dict[str, Any]:
+    def to_settings_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_settings_dict(cls, d: Dict[str, Any]) -> StudioPreferences:
+    def from_settings_dict(cls, d: dict[str, Any]) -> StudioPreferences:
         b = StudioPreferences()
         return cls(**{fn.name: d.get(fn.name, getattr(b, fn.name)) for fn in fields(cls)})
 
@@ -58,7 +58,7 @@ def _qsettings():
 
 def load_studio_preferences() -> StudioPreferences:
     s = _qsettings()
-    d: Dict[str, Any] = {}
+    d: dict[str, Any] = {}
     for f in fields(StudioPreferences):
         key = f"studio/{f.name}"
         default = getattr(StudioPreferences(), f.name)

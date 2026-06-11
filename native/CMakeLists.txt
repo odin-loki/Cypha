@@ -136,10 +136,27 @@ cypha_mingw_apply_exe_link_options(cyphalm_bench_native)
 add_executable(cypha_bench_run tools/cypha_bench_run.cpp)
 target_link_libraries(cypha_bench_run PRIVATE cypha_bench_native)
 find_package(ZLIB QUIET)
-if(ZLIB_FOUND)
-  target_link_libraries(cypha_bench_run PRIVATE ZLIB::ZLIB)
+if(NOT ZLIB_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    cypha_zlib
+    GIT_REPOSITORY https://github.com/madler/zlib.git
+    GIT_TAG v1.3.1
+    GIT_SHALLOW TRUE
+  )
+  set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(ZLIB_INSTALL OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(cypha_zlib)
+  if(TARGET zlibstatic)
+    add_library(CyphaZlib::Zlib ALIAS zlibstatic)
+  elseif(TARGET zlib)
+    add_library(CyphaZlib::Zlib ALIAS zlib)
+  else()
+    message(FATAL_ERROR "FetchContent zlib did not define zlibstatic or zlib")
+  endif()
+  target_link_libraries(cypha_bench_run PRIVATE CyphaZlib::Zlib)
 else()
-  target_link_libraries(cypha_bench_run PRIVATE z)
+  target_link_libraries(cypha_bench_run PRIVATE ZLIB::ZLIB)
 endif()
 cypha_mingw_apply_exe_link_options(cypha_bench_run)
 

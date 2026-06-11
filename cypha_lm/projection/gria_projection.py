@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from cypha_lm.array_backend import asnumpy, to_xp
+from cypha_lm.array_backend import asnumpy
 
 
 def _softmax_logits(logits: Any, *, xp: Any = np) -> Any:

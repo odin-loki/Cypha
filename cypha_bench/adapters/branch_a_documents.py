@@ -12,8 +12,12 @@ from sklearn.model_selection import train_test_split
 
 from cypha_bench.adapters.bench_models import BenchClassifier
 from cypha_bench.adapters.frozen_text_embeddings import embed_texts
-from cypha_bench.common.metrics import evaluate_classification, online_train_classifier, standardize_train_test
-from cypha_bench.common.paths import DATA_DIR, scale
+from cypha_bench.common.metrics import (
+    evaluate_classification,
+    online_train_classifier,
+    standardize_train_test,
+)
+from cypha_bench.common.paths import scale
 from cypha_bench.config.load_profile import classification_params, load_profile
 from cypha_bench.domains.d09_documents import _gutenberg_segments, _load_20news
 

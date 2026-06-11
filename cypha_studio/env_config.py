@@ -29,10 +29,8 @@ is applied to defaults at parse time.
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from typing import List
 
 
 def registry_root() -> str:
@@ -51,7 +49,7 @@ def api_default_port() -> int:
     return int(os.environ.get("CYPHA_API_PORT", "7749"))
 
 
-def cors_allow_origins() -> List[str]:
+def cors_allow_origins() -> list[str]:
     raw = os.environ.get("CYPHA_CORS_ORIGINS", "*").strip()
     if raw == "*":
         return ["*"]

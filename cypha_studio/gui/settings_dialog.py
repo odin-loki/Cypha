@@ -22,11 +22,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .studio_preferences import StudioPreferences, save_studio_preferences
 from ..env_config import api_default_host, api_default_port, cors_allow_origins
 from ..env_config import csv_read_chunk_rows as env_csv_chunk_rows
 from ..env_config import registry_root as env_registry_root
 from ..server.local_server import SignalBus
+from .studio_preferences import StudioPreferences, save_studio_preferences
 
 
 class SettingsDialog(QDialog):
@@ -169,7 +169,7 @@ class SettingsDialog(QDialog):
         lay.addLayout(ds_row)
 
         env_note = QLabel(
-            f"<span style='color:#888'>Env: CYPHA_REGISTRY_ROOT, CYPHA_CSV_CHUNK_ROWS</span>"
+            "<span style='color:#888'>Env: CYPHA_REGISTRY_ROOT, CYPHA_CSV_CHUNK_ROWS</span>"
         )
         env_note.setTextFormat(Qt.RichText)
         lay.addWidget(env_note)

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List
 
 from PySide6.QtCore import QSettings
 
@@ -30,7 +29,7 @@ def dataset_dialog_start_dir_preferred(prefs=None) -> str:
     return dataset_dialog_start_dir()
 
 
-def _load_recent(s: QSettings) -> List[str]:
+def _load_recent(s: QSettings) -> list[str]:
     raw = s.value(KEY_RECENT, "[]")
     if raw is None:
         return []
@@ -42,7 +41,7 @@ def _load_recent(s: QSettings) -> List[str]:
         return []
 
 
-def recent_dataset_paths(max_n: int = 12) -> List[str]:
+def recent_dataset_paths(max_n: int = 12) -> list[str]:
     return _load_recent(studio_settings())[:max_n]
 
 

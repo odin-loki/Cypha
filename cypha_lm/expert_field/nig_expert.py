@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Union
-
 import numpy as np
 from scipy import special, stats
 
@@ -30,7 +28,7 @@ class NIGExpert:
         kappa0: float,
         alpha0: float,
         beta0: float,
-        mu0: Union[float, np.ndarray] = 0.0,
+        mu0: float | np.ndarray = 0.0,
         dim: int = 1,
     ) -> None:
         if kappa0 <= 0 or alpha0 <= 1 or beta0 <= 0:
@@ -60,7 +58,7 @@ class NIGExpert:
         self.beta_n = np.full(dim, beta0, dtype=np.float64)
         self._n_updates = 0
 
-    def update(self, y: Union[float, np.ndarray]) -> None:
+    def update(self, y: float | np.ndarray) -> None:
         y_arr = np.atleast_1d(np.asarray(y, dtype=np.float64))
         if y_arr.shape != (self.dim,):
             raise ValueError(f"Expected observation shape ({self.dim},)")
@@ -78,14 +76,14 @@ class NIGExpert:
             self.mu_n = float(self.mu_n[0])
         self._n_updates += 1
 
-    def _as_scalar_or_array(self, arr: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    def _as_scalar_or_array(self, arr: float | np.ndarray) -> float | np.ndarray:
         if self.dim == 1:
             if np.isscalar(arr):
                 return float(arr)
             return float(np.asarray(arr).ravel()[0])
         return np.asarray(arr, dtype=np.float64).copy()
 
-    def predict(self) -> tuple[Union[float, np.ndarray], Union[float, np.ndarray], Union[float, np.ndarray]]:
+    def predict(self) -> tuple[float | np.ndarray, float | np.ndarray, float | np.ndarray]:
         """Returns (mean, epistemic_variance, aleatoric_variance)."""
         epistemic = self.beta_n / (self.kappa_n * (self.alpha_n - 1.0))
         aleatoric = self.beta_n / (self.alpha_n - 1.0)
@@ -95,7 +93,7 @@ class NIGExpert:
             self._as_scalar_or_array(aleatoric),
         )
 
-    def predictive_log_prob(self, y: Union[float, np.ndarray]) -> float:
+    def predictive_log_prob(self, y: float | np.ndarray) -> float:
         """Log predictive density p(y | posterior), summed over dimensions."""
         y_arr = np.atleast_1d(np.asarray(y, dtype=np.float64))
         if y_arr.shape != (self.dim,):
@@ -108,7 +106,7 @@ class NIGExpert:
         log_probs = stats.t.logpdf(y_arr, df=df, loc=self.mu_n, scale=scale)
         return float(np.sum(log_probs))
 
-    def prior_predictive_log_prob(self, y: Union[float, np.ndarray]) -> float:
+    def prior_predictive_log_prob(self, y: float | np.ndarray) -> float:
         """Log predictive density under the prior hyperparameters."""
         y_arr = np.atleast_1d(np.asarray(y, dtype=np.float64))
         if y_arr.shape != (self.dim,):
@@ -125,12 +123,12 @@ class NIGExpert:
         log_probs = stats.t.logpdf(y_arr, df=df, loc=mu0, scale=scale)
         return float(np.sum(log_probs))
 
-    def epistemic_variance(self) -> Union[float, np.ndarray]:
+    def epistemic_variance(self) -> float | np.ndarray:
         return self._as_scalar_or_array(
             self.beta_n / (self.kappa_n * (self.alpha_n - 1.0))
         )
 
-    def aleatoric_variance(self) -> Union[float, np.ndarray]:
+    def aleatoric_variance(self) -> float | np.ndarray:
         return self._as_scalar_or_array(self.beta_n / (self.alpha_n - 1.0))
 
     def predictive_entropy(self) -> float:

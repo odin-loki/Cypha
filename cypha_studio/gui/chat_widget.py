@@ -5,19 +5,28 @@ Chat interface: type input → model responds with label + confidence.
 Right-click to correct. Expandable LLR breakdown. OOD highlighting.
 """
 from __future__ import annotations
-import time
-from PySide6.QtCore    import Qt, Signal, QTimer
-from PySide6.QtGui     import QColor, QTextCursor, QFont
+
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLineEdit,
-    QPushButton, QLabel, QFrame, QScrollArea, QSizePolicy,
-    QMenu, QDialog, QListWidget, QDialogButtonBox,
+    QDialog,
+    QDialogButtonBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QMenu,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
-from ..server.local_server import SignalBus
-from .lm_generation_worker import LMGenerationWorker
-from .branch_a_route_worker import BranchADispatchWorker
+
 from ..core.branch_a_router import BranchARouter
 from ..core.ollama_client import ollama_available
+from ..server.local_server import SignalBus
+from .branch_a_route_worker import BranchADispatchWorker
+from .lm_generation_worker import LMGenerationWorker
 
 
 def _encode_prompt_chars(text: str, vocab_size: int = 128) -> tuple[list[int], dict[int, str]]:

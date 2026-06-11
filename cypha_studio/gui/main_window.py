@@ -18,31 +18,39 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from PySide6.QtCore    import Qt, QThread, Signal, QTimer, QSettings
-from PySide6.QtGui     import (
-    QAction, QIcon, QFont, QPalette, QColor, QShortcut, QKeySequence,
+from PySide6.QtCore import QSettings, Qt, QThread
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QKeySequence,
+    QPalette,
+    QShortcut,
 )
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QDockWidget, QWidget,
-    QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QComboBox, QStatusBar, QToolBar, QMessageBox,
-    QFileDialog, QSplitter, QTabWidget,
+    QApplication,
+    QComboBox,
+    QDockWidget,
+    QFileDialog,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QToolBar,
+    QWidget,
 )
 
 from ..server.local_server import SignalBus
-from .chat_widget      import ChatWidget
-from .training_widget  import TrainingWidget
-from .model_widget     import ModelWidget
+from .chat_widget import ChatWidget
 from .confidence_widget import ConfidenceWidget
-from .dataset_widget   import DatasetWidget
+from .dataset_widget import DatasetWidget
+from .dialogs import ExportModelDialog, LoadModelDialog, NewExperimentDialog, TrainConfigDialog
 from .experiment_widget import ExperimentWidget
-from .log_widget       import LogDockWidget
-from .dialogs          import (NewExperimentDialog, LoadModelDialog,
-                                TrainConfigDialog, ExportModelDialog)
-from .settings_dialog  import SettingsDialog
-from .help_widget      import HelpWidget
+from .help_widget import HelpWidget
+from .log_widget import LogDockWidget
+from .model_widget import ModelWidget
+from .settings_dialog import SettingsDialog
 from .studio_preferences import apply_preferences_to_inference_state
-
+from .training_widget import TrainingWidget
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Application state (shared across widgets via bus)
@@ -51,9 +59,9 @@ from .studio_preferences import apply_preferences_to_inference_state
 class AppState:
     """Global mutable state — one instance, passed to widgets that need it."""
     def __init__(self):
-        from ..core.registry  import ModelRegistry
-        from ..core.experiment import ExperimentDB
         from ..core.dataset import SplitConfig
+        from ..core.experiment import ExperimentDB
+        from ..core.registry import ModelRegistry
         from .studio_preferences import load_studio_preferences
 
         self.preferences = load_studio_preferences()
@@ -86,7 +94,7 @@ class TrainingWorker(QThread):
         self._db       = db
 
     def run(self):
-        from ..core.trainer import TrainerCallback, EvalMetrics
+        from ..core.trainer import EvalMetrics, TrainerCallback
         bus = SignalBus.instance()
 
         class BusCallback(TrainerCallback):

@@ -82,7 +82,6 @@ class _CharLSTM:
 
         do = dh_new * np.tanh(c_new)
         dc_new = dh_new * o * (1.0 - np.tanh(c_new) ** 2)
-        dc = dc_new
         df = dc_new * c
         di = dc_new * g
         dg = dc_new * i

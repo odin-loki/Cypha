@@ -11,19 +11,18 @@ from typing import Any
 
 import numpy as np
 
-from cypha_views.runner import iter_view_epochs
-from cypha_views.schedule import resolve_schedule
-from cypha_views.types import ViewSchedule, ViewSpec
-
 from cypha_lm.array_backend import ArrayBackend, asnumpy
 from cypha_lm.config import CyphaLMConfig
 from cypha_lm.embeddings.izaac_embed import IzaacEmbedding
 from cypha_lm.embeddings.view_embed import ViewEmbedding
 from cypha_lm.expert_field.cypha_dif import CyphaDIF
+from cypha_lm.model.char_lstm_head import CharLSTMHead, blend_log_probs, blend_logit_grad
 from cypha_lm.projection.gria_projection import GRIAProjection
 from cypha_lm.projection.ngram_fusion import NgramFusion
-from cypha_lm.model.char_lstm_head import CharLSTMHead, blend_log_probs, blend_logit_grad
 from cypha_lm.temporal.cellai_ssm import CellAISSM
+from cypha_views.runner import iter_view_epochs
+from cypha_views.schedule import resolve_schedule
+from cypha_views.types import ViewSchedule, ViewSpec
 
 
 class CyphaLM:
@@ -164,7 +163,6 @@ class CyphaLM:
 
     def _ngram_embedding_vector(self) -> Any:
         xp = self._backend.xp
-        fd = self.config.field_dim
         d = self.config.d_embed
         n_prev = max(0, int(self.config.ngram_context))
         parts: list[Any] = []
@@ -674,7 +672,7 @@ class CyphaLM:
         np.savez(npz_path, **npz_kwargs)
 
     @classmethod
-    def load(cls, path: str) -> "CyphaLM":
+    def load(cls, path: str) -> CyphaLM:
         p = Path(path)
         json_path = p if p.suffix == ".json" else p.with_suffix(".json")
         with open(json_path, encoding="utf-8") as f:

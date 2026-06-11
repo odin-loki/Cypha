@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import math
 import os
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 
-from Cypha import CyphaDIF, DIFRegressor, TieredContextBuffer, VectorEncoder, RFFEncoder
-
+from Cypha import CyphaDIF, DIFRegressor, RFFEncoder, TieredContextBuffer, VectorEncoder
+from cypha_bench.config.algorithm_variants import load_algorithm_variants
 from cypha_bench.config.load_profile import (
     architecture_params,
     classification_params,
@@ -15,7 +15,6 @@ from cypha_bench.config.load_profile import (
     regression_params,
     select_classification_regime,
 )
-from cypha_bench.config.algorithm_variants import apply_algorithm_variants, load_algorithm_variants
 
 
 def _profile_enabled() -> bool:
@@ -140,7 +139,7 @@ class BenchClassifier:
             else CyphaDIF(encoder=_make_encoder(input_dim, seed), rng=self._rng)
         )
 
-    def train_step(self, x: Any, label: Union[str, int]) -> float:
+    def train_step(self, x: Any, label: str | int) -> float:
         return float(self.dif.train_step(x, str(label)))
 
     def predict(self, x: Any) -> tuple[str, np.ndarray, float]:
@@ -214,7 +213,7 @@ class BenchRegressor:
             else DIFRegressor(encoder=VectorEncoder(input_dim), rng=self._rng)
         )
 
-    def train_step(self, x: Any, y: Union[float, np.ndarray]) -> float:
+    def train_step(self, x: Any, y: float | np.ndarray) -> float:
         return float(self.reg.train_step(x, y))
 
     def predict(self, x: Any) -> tuple[float, float, float]:

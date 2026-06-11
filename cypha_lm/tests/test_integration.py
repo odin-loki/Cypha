@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 
 import numpy as np
-import pytest
 
 from cypha_lm.config import CyphaLMConfig
 from cypha_lm.model.cypha_lm import CyphaLM
@@ -27,7 +26,7 @@ def _count_learnable_params(model: CyphaLM) -> int:
     total = model.gria.W.size + model.gria.alpha.size + model.gria.bias.size
     total += model._proj_ssm.size + model._proj_dif.size + model._proj_embed.size
     if model.config.train_ssm:
-        for wf, ws in zip(model.ssm.W_fast, model.ssm.W_slow):
+        for wf, ws in zip(model.ssm.W_fast, model.ssm.W_slow, strict=False):
             total += wf.size + ws.size
     return int(total)
 
@@ -97,8 +96,8 @@ def test_uncertainty_is_informative() -> None:
         losses.append(m["loss"])
         epi.append(m["epistemic_var"])
     median = float(np.median(losses))
-    high_epi = float(np.mean([e for l, e in zip(losses, epi) if l >= median]))
-    low_epi = float(np.mean([e for l, e in zip(losses, epi) if l < median]))
+    high_epi = float(np.mean([e for loss, e in zip(losses, epi, strict=False) if loss >= median]))
+    low_epi = float(np.mean([e for loss, e in zip(losses, epi, strict=False) if loss < median]))
     assert high_epi >= low_epi * 0.85
 
 
@@ -154,7 +153,7 @@ def test_no_forgetting() -> None:
     task_b = [50, 51, 52, 53, 54] * 15
     for _ in range(80):
         model.train_sequence(task_a)
-    ppl_a1 = _perplexity(model, task_a)
+    _perplexity(model, task_a)
     for _ in range(40):
         model.train_sequence(task_b)
     ppl_a2 = _perplexity(model, task_a)

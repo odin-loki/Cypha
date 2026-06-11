@@ -58,10 +58,10 @@ def parse_args():
 
 def run_headless(args):
     """Start the REST API without a GUI."""
-    from cypha_studio.core.registry  import ModelRegistry
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
-    from cypha_studio.env_config     import registry_root
-    from cypha_studio.server.api     import start_server
+    from cypha_studio.core.registry import ModelRegistry
+    from cypha_studio.env_config import registry_root
+    from cypha_studio.server.api import start_server
 
     registry = ModelRegistry(registry_root())
     engine   = None
@@ -88,6 +88,7 @@ def run_headless(args):
 def run_gui(args):
     """Launch the Qt GUI application."""
     from PySide6.QtWidgets import QApplication
+
     from cypha_studio.gui.main_window import MainWindow
 
     app = QApplication(sys.argv)

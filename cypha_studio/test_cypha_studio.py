@@ -15,11 +15,10 @@ Run from repo root: python cypha_studio/test_cypha_studio.py
   7. Inference (6)   — predict, batch, explain, correct, session, OOD
   8. API (2)         — app creation, headless bus
 """
+import math
 import os
 import sys
-import math
 import tempfile
-import time
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -67,7 +66,7 @@ def _diabetes():
 def _quick_clf(ds=None, feat_dim=32, field_dim=32):
     """Train a quick CyphaDIF on iris."""
     from cypha_studio.core.dataset import Preprocessor, SplitConfig
-    from cypha_studio.core.trainer import TrainerConfig, Trainer
+    from cypha_studio.core.trainer import Trainer, TrainerConfig
     if ds is None: ds = _iris()
     tr, val, te = ds.split(SplitConfig(seed=42))
     pre = Preprocessor(); pre.fit(tr.X)
@@ -138,7 +137,7 @@ def _():
         y = rng.integers(0, 2, 40)
         with open(path, 'w') as f:
             f.write("a,b,c,label\n")
-            for row, lbl in zip(X, y):
+            for row, lbl in zip(X, y, strict=False):
                 f.write(','.join(map(str, row)) + f',{lbl}\n')
         ds = CSVDataset.from_file(path, target_col='label')
         assert ds.n_samples == 40
@@ -241,7 +240,7 @@ def _():
 
 @test("Trainer: MetricsCallback collects step losses")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, Trainer, MetricsCallback
+    from cypha_studio.core.trainer import MetricsCallback, Trainer, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     cb = MetricsCallback()
     cfg = TrainerConfig(feat_dim=32, field_dim=32, n_epochs=1, eval_every_n=9999)
@@ -254,7 +253,7 @@ def _():
 
 @test("Trainer: RFFRegressor regression gives finite R²")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, Trainer
+    from cypha_studio.core.trainer import Trainer, TrainerConfig
     ds = _diabetes(); tr, val, _ = ds.split()
     cfg = TrainerConfig(model_type='RFFRegressor', rff_D=128)
     t = Trainer(); t.fit(tr, val, cfg)
@@ -264,7 +263,7 @@ def _():
 
 @test("Trainer: TwoStageDIF regression gives finite R²")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, Trainer
+    from cypha_studio.core.trainer import Trainer, TrainerConfig
     ds = _diabetes(); tr, val, _ = ds.split()
     cfg = TrainerConfig(model_type='TwoStageDIF', rff_D=128, n_experts=6)
     t = Trainer(); t.fit(tr, val, cfg)
@@ -273,7 +272,7 @@ def _():
 
 @test("Trainer: MKE regression gives finite R²")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, Trainer
+    from cypha_studio.core.trainer import Trainer, TrainerConfig
     ds = _diabetes(); tr, val, _ = ds.split()
     cfg = TrainerConfig(model_type='MKE', rff_D=128, n_experts=4)
     t = Trainer(); t.fit(tr, val, cfg)
@@ -282,7 +281,7 @@ def _():
 
 @test("Trainer: GH protection trains without error")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, Trainer
+    from cypha_studio.core.trainer import Trainer, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     cfg = TrainerConfig(feat_dim=32, field_dim=32, n_epochs=1,
                         eval_every_n=9999, gh_protect=True)
@@ -292,8 +291,8 @@ def _():
 
 @test("Trainer: stop() halts training mid-run")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, Trainer, TrainerCallback
-    import threading
+
+    from cypha_studio.core.trainer import Trainer, TrainerCallback, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     cfg = TrainerConfig(feat_dim=64, field_dim=64, n_epochs=10, eval_every_n=9999)
     t = Trainer()
@@ -318,7 +317,7 @@ def _():
 
 @test("Trainer: step count increases correctly across epochs")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, Trainer
+    from cypha_studio.core.trainer import Trainer, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     n_tr = len(tr)
     cfg = TrainerConfig(feat_dim=32, field_dim=32, n_epochs=2, eval_every_n=9999)
@@ -334,7 +333,7 @@ print("\n Section 4: Search")
 
 @test("GridSearch: runs all combinations and returns sorted results")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, GridSearch
+    from cypha_studio.core.trainer import GridSearch, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     cfg = TrainerConfig(feat_dim=32, field_dim=32, n_epochs=1, eval_every_n=9999)
     search = GridSearch({'world_lr': [0.01, 0.05]}, verbose=False)
@@ -346,7 +345,7 @@ def _():
 
 @test("GridSearch: best_config has the highest accuracy")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, GridSearch
+    from cypha_studio.core.trainer import GridSearch, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     cfg = TrainerConfig(feat_dim=32, field_dim=32, n_epochs=1, eval_every_n=9999)
     search = GridSearch({'delta_lr': [0.04, 0.08, 0.12]}, verbose=False)
@@ -357,7 +356,7 @@ def _():
 
 @test("RandomSearch: samples from distributions correctly")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, RandomSearch
+    from cypha_studio.core.trainer import RandomSearch, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     cfg = TrainerConfig(feat_dim=32, field_dim=32, n_epochs=1, eval_every_n=9999)
     search = RandomSearch(
@@ -374,7 +373,7 @@ def _():
 
 @test("RandomSearch: choice distribution selects from list")
 def _():
-    from cypha_studio.core.trainer import TrainerConfig, RandomSearch
+    from cypha_studio.core.trainer import RandomSearch, TrainerConfig
     ds = _iris(); tr, val, _ = ds.split()
     cfg = TrainerConfig(feat_dim=32, field_dim=32, n_epochs=1, eval_every_n=9999)
     search = RandomSearch(
@@ -466,7 +465,7 @@ def _():
         db = ExperimentDB(os.path.join(td,'e.db'))
         exp = db.create_experiment('e5')
         for acc in [0.6, 0.85, 0.75]:
-            run = db.create_run(exp.experiment_id, f'r')
+            run = db.create_run(exp.experiment_id, 'r')
             db.finish_run(run.run_id, EvalMetrics(accuracy=acc, step=100))
         best = db.best_run(exp.experiment_id)
         assert abs(best.accuracy - 0.85) < 1e-6
@@ -496,8 +495,7 @@ print("\n Section 6: Registry")
 
 @test("ModelRegistry: register and load preserves predictions")
 def _():
-    from cypha_studio.core.registry import ModelRegistry, ModelCard
-    from cypha_studio.core.dataset import Preprocessor
+    from cypha_studio.core.registry import ModelCard, ModelRegistry
     t, pre, tr, val, te, ds = _quick_clf()
     with tempfile.TemporaryDirectory() as td:
         reg = ModelRegistry(td)
@@ -514,7 +512,7 @@ def _():
 
 @test("ModelRegistry: list_models returns all saved models")
 def _():
-    from cypha_studio.core.registry import ModelRegistry, ModelCard
+    from cypha_studio.core.registry import ModelCard, ModelRegistry
     t, pre, tr, val, te, ds = _quick_clf()
     with tempfile.TemporaryDirectory() as td:
         reg = ModelRegistry(td)
@@ -529,7 +527,7 @@ def _():
 
 @test("ModelRegistry: next_version bumps correctly")
 def _():
-    from cypha_studio.core.registry import ModelRegistry, ModelCard
+    from cypha_studio.core.registry import ModelCard, ModelRegistry
     t, pre, tr, val, te, ds = _quick_clf()
     with tempfile.TemporaryDirectory() as td:
         reg = ModelRegistry(td)
@@ -543,7 +541,7 @@ def _():
 
 @test("ModelRegistry: promote updates stage field in card")
 def _():
-    from cypha_studio.core.registry import ModelRegistry, ModelCard
+    from cypha_studio.core.registry import ModelCard, ModelRegistry
     t, pre, tr, val, te, ds = _quick_clf()
     with tempfile.TemporaryDirectory() as td:
         reg = ModelRegistry(td)
@@ -557,7 +555,7 @@ def _():
 
 @test("ModelRegistry: delete removes model from disk")
 def _():
-    from cypha_studio.core.registry import ModelRegistry, ModelCard
+    from cypha_studio.core.registry import ModelCard, ModelRegistry
     t, pre, tr, val, te, ds = _quick_clf()
     with tempfile.TemporaryDirectory() as td:
         reg = ModelRegistry(td)
@@ -571,7 +569,7 @@ def _():
 
 @test("ModelRegistry: overwrite=False raises if model exists")
 def _():
-    from cypha_studio.core.registry import ModelRegistry, ModelCard
+    from cypha_studio.core.registry import ModelCard, ModelRegistry
     t, pre, tr, val, te, ds = _quick_clf()
     with tempfile.TemporaryDirectory() as td:
         reg = ModelRegistry(td)
@@ -588,9 +586,9 @@ def _():
 
 @test("ModelRegistry: RFFRegressor saves and loads correctly")
 def _():
-    from cypha_studio.core.registry import ModelRegistry, ModelCard
-    from cypha_studio.core.trainer  import TrainerConfig, Trainer
     from cypha_studio.core.inference import InferenceEngine
+    from cypha_studio.core.registry import ModelCard, ModelRegistry
+    from cypha_studio.core.trainer import Trainer, TrainerConfig
     ds = _diabetes(); tr, val, _ = ds.split()
     cfg = TrainerConfig(model_type='RFFRegressor', rff_D=64)
     t = Trainer(); t.fit(tr, val, cfg)
@@ -703,8 +701,9 @@ def _():
 
 @test("REST API: create_app returns FastAPI app with correct routes")
 def _():
-    from cypha_studio.server.api import create_app
     from fastapi.testclient import TestClient
+
+    from cypha_studio.server.api import create_app
     t, pre, tr, val, te, ds = _quick_clf()
     from cypha_studio.core.inference import InferenceEngine, InferenceSession
     eng  = InferenceEngine(t.model, pre)

@@ -15,7 +15,7 @@ class CompressionProfiler:
     Estimates distributional (lossy) vs epistemic residual (lossless) information split.
     """
 
-    def measure(self, model: "CyphaLM", test_sequences: list[list[int]]) -> dict:
+    def measure(self, model: CyphaLM, test_sequences: list[list[int]]) -> dict:
         per_token: list[float] = []
         losses: list[float] = []
         unigram = model.gria.bias.copy()

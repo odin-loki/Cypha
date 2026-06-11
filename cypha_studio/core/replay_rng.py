@@ -1,13 +1,11 @@
 """Fixed U(0,1) replay stream for parity-style deterministic priority replay."""
 from __future__ import annotations
 
-from typing import List
-
 
 class ListReplayRng:
     """Replays a fixed stream (must match recorded draw order)."""
 
-    def __init__(self, xs: List[float]) -> None:
+    def __init__(self, xs: list[float]) -> None:
         self.xs = list(xs)
         self.i = 0
 

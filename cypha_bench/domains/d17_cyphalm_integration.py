@@ -24,7 +24,6 @@ from bench_common import finalize_domain
 
 from cypha_bench.adapters.char_lstm_baseline import char_lstm_baseline_bpc
 from cypha_bench.adapters.cyphalm_ablations import run_lm_ablations
-from cypha_bench.adapters.cyphalm_component_study import run_component_study
 from cypha_bench.adapters.cyphalm_bench import (
     bigram_baseline_bpc,
     cyphalm_bench_limits,
@@ -39,6 +38,7 @@ from cypha_bench.adapters.cyphalm_bench import (
     train_with_learning_curve,
     trigram_baseline_bpc,
 )
+from cypha_bench.adapters.cyphalm_component_study import run_component_study
 from cypha_bench.common.metrics import save_figure
 from cypha_bench.common.paths import is_fast
 
@@ -316,9 +316,9 @@ def experiment_17h_component_ablation() -> dict:
 def experiment_17f_iteration_view_sweep() -> dict:
     """Train-length × view-schedule sweep (optimal iterations per presentation mode)."""
     from cypha_bench.tuning.cyphalm_view_iteration_sweep import (
+        _OUT,
         FAST_N_TRAIN,
         TRAINING_MODES,
-        _OUT,
         run_sweep,
     )
 
@@ -423,8 +423,8 @@ def experiment_17i_view_learnable() -> dict:
 
 def experiment_17j_hybrid_lstm() -> dict:
     """Model-class C2: GRIA-only vs hybrid GRIA + char-LSTM."""
-    from cypha_bench.tuning.cyphalm_hybrid_lstm_sweep import _OUT, CELLS
     import cypha_bench.tuning.cyphalm_hybrid_lstm_sweep as sweep_mod
+    from cypha_bench.tuning.cyphalm_hybrid_lstm_sweep import _OUT, CELLS
 
     limits = cyphalm_bench_limits()
     n_train = min(limits["n_train"], 40_000 if is_fast() else 300_000)

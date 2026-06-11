@@ -15,16 +15,13 @@ compatible with CyphaDIF.train_step() / RFFRegressor.fit().
 from __future__ import annotations
 
 import csv
-import io
-import json
 import math
-import pickle
-from dataclasses import dataclass, field, asdict
+from collections.abc import Generator
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Generator, Iterator, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Preprocessor — fit on train, apply consistently at inference time
@@ -40,8 +37,8 @@ class Preprocessor:
 
     def __init__(self,
                  scale     : bool = True,
-                 pca_dim   : Optional[int] = None,
-                 rff_dim   : Optional[int] = None,
+                 pca_dim   : int | None = None,
+                 rff_dim   : int | None = None,
                  rff_gamma : float = 1.0,
                  seed      : int = 42):
         self.scale     = scale
@@ -50,17 +47,17 @@ class Preprocessor:
         self.rff_gamma = rff_gamma
         self.seed      = seed
 
-        self._mean : Optional[np.ndarray] = None
-        self._std  : Optional[np.ndarray] = None
-        self._pca_components : Optional[np.ndarray] = None
-        self._pca_mean       : Optional[np.ndarray] = None
-        self._rff_W : Optional[np.ndarray] = None
-        self._rff_b : Optional[np.ndarray] = None
+        self._mean : np.ndarray | None = None
+        self._std  : np.ndarray | None = None
+        self._pca_components : np.ndarray | None = None
+        self._pca_mean       : np.ndarray | None = None
+        self._rff_W : np.ndarray | None = None
+        self._rff_b : np.ndarray | None = None
         self._fitted = False
-        self._input_dim  : Optional[int] = None
-        self._output_dim : Optional[int] = None
+        self._input_dim  : int | None = None
+        self._output_dim : int | None = None
 
-    def fit(self, X: np.ndarray) -> 'Preprocessor':
+    def fit(self, X: np.ndarray) -> Preprocessor:
         X = np.asarray(X, dtype=np.float64)
         self._input_dim = X.shape[1]
 
@@ -106,10 +103,10 @@ class Preprocessor:
         return self.transform(x.reshape(1, -1))[0]
 
     @property
-    def output_dim(self) -> Optional[int]:
+    def output_dim(self) -> int | None:
         return self._output_dim
 
-    def save_state(self) -> Dict:
+    def save_state(self) -> dict:
         return dict(
             scale=self.scale, pca_dim=self.pca_dim,
             rff_dim=self.rff_dim, rff_gamma=self.rff_gamma, seed=self.seed,
@@ -122,7 +119,7 @@ class Preprocessor:
             fitted=self._fitted, input_dim=self._input_dim, output_dim=self._output_dim,
         )
 
-    def load_state(self, state: Dict) -> None:
+    def load_state(self, state: dict) -> None:
         self.scale     = state['scale']
         self.pca_dim   = state['pca_dim']
         self.rff_dim   = state['rff_dim']
@@ -149,11 +146,11 @@ class DatasetStats:
     n_samples    : int = 0
     n_features   : int = 0
     n_classes    : int = 0
-    class_counts : Dict[str, int] = field(default_factory=dict)
-    feature_means : Optional[List[float]] = None
-    feature_stds  : Optional[List[float]] = None
-    feature_mins  : Optional[List[float]] = None
-    feature_maxs  : Optional[List[float]] = None
+    class_counts : dict[str, int] = field(default_factory=dict)
+    feature_means : list[float] | None = None
+    feature_stds  : list[float] | None = None
+    feature_mins  : list[float] | None = None
+    feature_maxs  : list[float] | None = None
     class_balance : float = 0.0   # 1.0 = perfectly balanced, 0 = one class dominates
     missing_values : int  = 0
 
@@ -192,7 +189,7 @@ class CyphaDataset:
 
     def __init__(self, X: np.ndarray, y: np.ndarray,
                  name: str = "dataset",
-                 feature_names: Optional[List[str]] = None,
+                 feature_names: list[str] | None = None,
                  task: str = 'classification'):
         self.X = np.asarray(X, dtype=np.float64)
         self.y = np.asarray(y)
@@ -201,12 +198,12 @@ class CyphaDataset:
         self.task = task  # 'classification' or 'regression'
 
         # Split indices — populated by split()
-        self._train_idx : Optional[np.ndarray] = None
-        self._val_idx   : Optional[np.ndarray] = None
-        self._test_idx  : Optional[np.ndarray] = None
+        self._train_idx : np.ndarray | None = None
+        self._val_idx   : np.ndarray | None = None
+        self._test_idx  : np.ndarray | None = None
 
         # Preprocessor — fit on train split
-        self.preprocessor : Optional[Preprocessor] = None
+        self.preprocessor : Preprocessor | None = None
 
     # ── Properties ──────────────────────────────────────────────────────────
 
@@ -219,7 +216,7 @@ class CyphaDataset:
         return self.X.shape[1]
 
     @property
-    def labels(self) -> List[str]:
+    def labels(self) -> list[str]:
         return [str(v) for v in sorted(set(self.y))]
 
     @property
@@ -228,7 +225,7 @@ class CyphaDataset:
 
     # ── Splitting ────────────────────────────────────────────────────────────
 
-    def split(self, config: Optional[SplitConfig] = None) -> Tuple['CyphaDataset', 'CyphaDataset', 'CyphaDataset']:
+    def split(self, config: SplitConfig | None = None) -> tuple[CyphaDataset, CyphaDataset, CyphaDataset]:
         if config is None:
             config = SplitConfig()
         rng = np.random.default_rng(config.seed)
@@ -278,7 +275,7 @@ class CyphaDataset:
     # ── Streaming ────────────────────────────────────────────────────────────
 
     def stream(self, shuffle: bool = False,
-               seed: int = 42) -> Generator[Tuple[np.ndarray, str], None, None]:
+               seed: int = 42) -> Generator[tuple[np.ndarray, str], None, None]:
         """Yield (x_vector, label_string) pairs for train_step()."""
         idx = np.arange(self.n_samples)
         if shuffle:
@@ -290,7 +287,7 @@ class CyphaDataset:
             yield x, str(self.y[i])
 
     def stream_xy(self, shuffle: bool = False,
-                  seed: int = 42) -> Generator[Tuple[np.ndarray, Any], None, None]:
+                  seed: int = 42) -> Generator[tuple[np.ndarray, Any], None, None]:
         """Yield (x_vector, raw_y) for regression (y is float, not string)."""
         idx = np.arange(self.n_samples)
         if shuffle:
@@ -347,14 +344,14 @@ class CSVDataset(CyphaDataset):
     """
 
     @classmethod
-    def from_file(cls, path: Union[str, Path],
-                  target_col : Union[str, int] = -1,
-                  feature_cols: Optional[List[Union[str, int]]] = None,
+    def from_file(cls, path: str | Path,
+                  target_col : str | int = -1,
+                  feature_cols: list[str | int] | None = None,
                   has_header : bool = True,
                   delimiter  : str = ',',
-                  name       : Optional[str] = None,
+                  name       : str | None = None,
                   task       : str = 'classification',
-                  read_chunk_rows: Optional[int] = None) -> 'CSVDataset':
+                  read_chunk_rows: int | None = None) -> CSVDataset:
         """
         Load CSV into dense ``X``, ``y``.
 
@@ -363,13 +360,13 @@ class CSVDataset(CyphaDataset):
         """
         path = Path(path)
         chunk = max(0, int(read_chunk_rows or 0))
-        header: Optional[List[str]] = None
+        header: list[str] | None = None
 
         def _batch_to_arrays(
-            batch: List[List[str]],
+            batch: list[list[str]],
             target_idx: int,
-            feat_indices: List[int],
-        ) -> Tuple[np.ndarray, np.ndarray]:
+            feat_indices: list[int],
+        ) -> tuple[np.ndarray, np.ndarray]:
             X_raw = [[row[i] for i in feat_indices] for row in batch]
             y_raw = [row[target_idx] for row in batch]
             Xb = np.array([[float(v) for v in row] for row in X_raw],
@@ -384,7 +381,7 @@ class CSVDataset(CyphaDataset):
             reader = csv.reader(f, delimiter=delimiter)
             if has_header:
                 header = next(reader)
-            first: Optional[List[str]] = None
+            first: list[str] | None = None
             for row in reader:
                 if row:
                     first = row
@@ -419,9 +416,9 @@ class CSVDataset(CyphaDataset):
                 rows = [first] + rest
                 X, y = _batch_to_arrays(rows, target_idx, feat_indices)
             else:
-                X_parts: List[np.ndarray] = []
-                y_parts: List[np.ndarray] = []
-                buf: List[List[str]] = [first]
+                X_parts: list[np.ndarray] = []
+                y_parts: list[np.ndarray] = []
+                buf: list[list[str]] = [first]
                 for row in reader:
                     if not row:
                         continue
@@ -452,14 +449,14 @@ class NumpyDataset(CyphaDataset):
     @classmethod
     def from_arrays(cls, X: np.ndarray, y: np.ndarray,
                     name: str = 'numpy_dataset',
-                    feature_names: Optional[List[str]] = None,
-                    task: str = 'classification') -> 'NumpyDataset':
+                    feature_names: list[str] | None = None,
+                    task: str = 'classification') -> NumpyDataset:
         return cls(X, y, name=name, feature_names=feature_names, task=task)
 
     @classmethod
-    def from_npz(cls, path: Union[str, Path],
+    def from_npz(cls, path: str | Path,
                  x_key: str = 'X', y_key: str = 'y',
-                 task: str = 'classification') -> 'NumpyDataset':
+                 task: str = 'classification') -> NumpyDataset:
         data = np.load(path, allow_pickle=True)
         return cls(data[x_key], data[y_key],
                    name=Path(path).stem, task=task)
@@ -470,7 +467,7 @@ class SklearnDataset(CyphaDataset):
 
     @classmethod
     def load(cls, name: str,
-             task: str = 'classification') -> 'SklearnDataset':
+             task: str = 'classification') -> SklearnDataset:
         """
         name: 'iris', 'wine', 'breast_cancer', 'digits', 'diabetes'
         """
@@ -511,5 +508,5 @@ class StreamingDataset:
         self._generator_fn = generator_fn
         self.name = name
 
-    def stream(self) -> Generator[Tuple[np.ndarray, str], None, None]:
+    def stream(self) -> Generator[tuple[np.ndarray, str], None, None]:
         yield from self._generator_fn()
