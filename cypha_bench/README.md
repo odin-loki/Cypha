@@ -198,6 +198,8 @@ Regenerate `BASELINE_REPORT.md` after a run:
 python cypha_bench/report/generate_report.py
 ```
 
+Committed `cypha_bench/report/` JSON/PNG files are **baseline snapshots** for docs and native `cypha_bench_report` smoke. Re-commit only when intentionally refreshing the published baseline; casual local reruns can leave git dirty — use `git restore cypha_bench/report cypha_bench/BASELINE_REPORT.md` to discard.
+
 ## Results
 
 Baseline numbers: [docs/RESEARCH_STATUS.md](../docs/RESEARCH_STATUS.md). Per-domain tables: `cypha_bench/report/tables/`; figures: `cypha_bench/report/figures/`.

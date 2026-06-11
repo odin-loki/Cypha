@@ -127,15 +127,13 @@ jobs:
         continue-on-error: true
 
       - name: Configure, build, and CTest (Ninja + CUDA)
+        shell: cmd
         run: |
-          cmake -S native -B native/build-cuda-msvc -G Ninja ^
-            -DCMAKE_BUILD_TYPE=Release ^
-            -DCYPHA_ENABLE_CUDA=ON ^
-            -DCMAKE_CUDA_ARCHITECTURES=75
-          cmake --build native/build-cuda-msvc --parallel ^
-            --target score_batch_parity cuda_smoke cypha_core
-          ctest --test-dir native/build-cuda-msvc ^
-            -R "native_cuda_smoke|native_score_batch" --output-on-failure
+          cmake -S native -B native/build-cuda-msvc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCYPHA_ENABLE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75
+          if errorlevel 1 exit /b 1
+          cmake --build native/build-cuda-msvc --parallel --target score_batch_parity cuda_smoke cypha_core
+          if errorlevel 1 exit /b 1
+          ctest --test-dir native/build-cuda-msvc -R "native_cuda_smoke|native_score_batch" --output-on-failure
 
       - name: CTest native_cuda_bench (GPU only)
         if: steps.gpu.outputs.has_gpu == 'true'

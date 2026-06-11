@@ -8,6 +8,12 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Fixed
+- **MSVC + CUDA CI:** run Ninja configure/build/ctest under `shell: cmd` (was PowerShell with invalid `^` continuations).
+
+### Changed
+- Native CMake project version **2.2.5**; CyphaLM tracker marks `proj_dif` GRIA wiring complete.
+
 ---
 
 ## [2.2.5] — 2026-06-11 · Docs sync + MSVC CUDA CI fix
