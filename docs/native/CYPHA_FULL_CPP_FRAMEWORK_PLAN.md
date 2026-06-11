@@ -17,7 +17,7 @@ scripts/cypha_native_validate_all.ps1  → OK
   52 CTests │ ~274 pytest (CI) │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
 
-GitHub Actions **CI #37+**: Linux CTest + pytest, MinGW PE smoke, optional GCC CUDA.
+GitHub Actions **CI #48+**: Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (blocking)**, optional Linux GCC CUDA.
 
 Build: `C:\Temp\cypha_full_cpp_build`
 
@@ -59,8 +59,8 @@ Phases 0–14 complete including Qt Studio parity (Settings, Confusion Matrix), 
 
 ## Optional future work
 
-- CUDA GPU runtime on self-hosted runner
 - PySide6 chat widget (Qt Predict tab is feature-vector, not chat)
+- Local GPU microbench on a CUDA box (`scripts/gpu_microbench.py`, `scripts/gpu_fullbench.py`)
 
 ---
 

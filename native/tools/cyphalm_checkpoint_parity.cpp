@@ -107,7 +107,8 @@ int test_python_fixture(const fs::path& sidecar_path, const char* label) {
                   << " atol=" << atol << "\n";
         return 1;
     }
-    std::cout << "OK " << label << " checkpoint bpc=" << got << " (expected " << expected << ")\n";
+    std::cout << "OK " << label << " checkpoint bpc=" << got << " (expected " << expected
+              << ", delta=" << (got - expected) << ")\n";
     return 0;
 }
 

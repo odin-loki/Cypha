@@ -8,6 +8,10 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Changed
+- Docs: VERIFICATION_STATUS, ROADMAP, framework plan synced to **four-job CI** (MSVC CUDA blocking).
+- `cyphalm_checkpoint_parity`: log BPC delta on Python checkpoint load.
+
 ---
 
 ## [2.2.7] — 2026-06-11 · MSVC CUDA CI green
