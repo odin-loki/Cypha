@@ -36,7 +36,7 @@ cmake --build build-windows-msvc --config Release `
 
 **VS 2026 / Build Tools 18:** use preset `windows-vs2026-release` and `build-windows-vs2026` instead.
 
-**GitHub Actions (optional job):** **`Jimver/cuda-toolkit`** with `sub-packages: ["nvcc","cudart"]` (skips Nsight VSE hang), then **`ilammy/msvc-dev-cmd`** + **`cmake -G "Visual Studio 17 2022" -A x64 -T cuda=$env:CUDA_PATH`** — required when VS CUDA integration is not installed. CTest uses `-C Release`. See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) job `windows_cuda_msvc`.
+**GitHub Actions (optional job):** **`Jimver/cuda-toolkit`** with `sub-packages: ["nvcc","cudart"]`, **`ilammy/msvc-dev-cmd`**, **Ninja**, and explicit `-DCMAKE_CUDA_COMPILER` (avoids missing VS CUDA toolset when Nsight integration is skipped). See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) job `windows_cuda_msvc`.
 
 **Architecture flags:** set `-DCMAKE_CUDA_ARCHITECTURES` to your GPU SM version, e.g. `75` (Turing), `86` (Ampere), `89` (Ada). Default in `CMakeLists.txt` is **75** when unset.
 
