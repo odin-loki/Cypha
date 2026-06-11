@@ -141,7 +141,7 @@ jobs:
             dist/cypha-*-linux-x86_64.tar.gz
             dist/cypha-*-windows-x86_64.zip
           body: |
-            ## Cypha v2.2.0 — full native C++ framework
+            ## Cypha ${{ github.ref_name }} — full native C++ framework
 
             Prebuilt **native C++** runtime: CyphaDIF REST (`/dif/retrieve`, `/dif/generate`), native bench (d01–d17), CyphaLM, diagnostics orchestrator, and parity smoke tools. Python Studio is not included — clone the repo and run `install/install_linux.sh` or `install/install_windows.ps1` for the full Python stack.
 

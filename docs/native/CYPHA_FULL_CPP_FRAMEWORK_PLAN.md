@@ -2,7 +2,7 @@
 
 **Goal:** Python becomes prototyping-only; **all production runtime, bench, REST, and validation** runs in native C++.
 
-**Status:** **v2.5 complete — SHIPPED** (`v2.2.0` tag + v2.5 follow-up commit).
+**Status:** **v2.5 complete — SHIPPED** (`v2.2.2` tag — CI/release pipeline green).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).  
