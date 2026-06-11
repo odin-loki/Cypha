@@ -56,7 +56,7 @@ Profiling infrastructure complete:
 
 `cypha_accel` provides CuPy-accelerated `fused_score_llr`, `project_features`, `softmax_rows_llr` — CPU NumPy fallback when CuPy is absent. GPU microbench and full pipeline bench are scripted.
 
-Native **`cypha::accel`**: optional **CUDA** (`native/src/accel_cuda.cu`, `-DCYPHA_ENABLE_CUDA=ON`) or **parallel CPU** (`std::thread` in `accel_backend.cpp`). CI builds without CUDA; **`cuda_smoke`** still passes on CPU threads.
+Native **`cypha::accel`**: optional **CUDA** (`native/src/accel_cuda.cu`, `-DCYPHA_ENABLE_CUDA=ON`) or **parallel CPU** (`std::thread` in `accel_backend.cpp`). CI **`build_and_test`** builds without CUDA; dedicated **`windows_cuda_msvc`** and **`linux_cuda`** jobs compile with **`-DCYPHA_ENABLE_CUDA=ON`** — **`cuda_smoke`** still passes on CPU threads when no GPU is present.
 
 ---
 
@@ -72,7 +72,7 @@ The native hot path is complete. **Highest priority:** **Kernel LLR (Nyström)**
 
 Secondary priorities (depth and distribution):
 
-1. **CUDA in CI (optional)** — add a matrix job with NVIDIA runner + `-DCYPHA_ENABLE_CUDA=ON` to exercise `cuda_smoke --bench`. See [`docs/FUTURE.md`](../FUTURE.md) §1.
+1. **CUDA GPU bench in CI** — compile smoke is green on **`windows_cuda_msvc`** and **`linux_cuda`**; optional GPU runner for **`native_cuda_bench`** (`cuda_smoke --bench`) when hardware is available. See [`docs/FUTURE.md`](../FUTURE.md) §1.
 
 2. **Qt shell polish** — streaming progress updates during long CSV training, chart zoom/pan, optional dark theme, export to ONNX. See [`docs/FUTURE.md`](../FUTURE.md) §2.
 

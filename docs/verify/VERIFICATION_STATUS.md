@@ -77,7 +77,7 @@ Honest snapshot for **port planning**. “Debugged” here means *automated chec
 
 **Current totals (typical):** ~`189 passed, 1 skipped` (`test_cuda_bench` when no CUDA GPU). `pytest-qt` must be installed for `test_training_plot_compress.py`; the tests error with "fixture 'qapp' not found" when it is absent — install it: `pip install pytest-qt`.
 
-GitHub Actions **CI** (`.github/workflows/ci.yml`): **four jobs** — **`build_and_test`** (Ubuntu: Ruff, **`CYPHA_BUILD_QT=ON`**, **`ctest`** excluding headless Qt GUI exec, WikiText-2, **`pytest tests/`** + **`cypha_lm/model/tests/`** with **`CYPHA_REST_BIN`**), **`mingw_cross`** (MinGW Windows PE smoke), **`windows_cuda_msvc`** (MSVC + CUDA compile + **`native_cuda_smoke`** / **`native_score_batch`**), **`linux_cuda`** (optional GCC + nvcc). Subprocess pytest mirror + drift guard: **`tests/test_native_ctest_pytest_registry.py`**.
+GitHub Actions **CI** (`.github/workflows/ci.yml`): **four blocking jobs** — **`build_and_test`** (Ubuntu: Ruff, **`CYPHA_BUILD_QT=ON`**, **`ctest`** excluding headless Qt GUI exec, WikiText-2, **`pytest tests/`** + **`cypha_lm/model/tests/`** with **`CYPHA_REST_BIN`**), **`mingw_cross`** (MinGW Windows PE smoke), **`windows_cuda_msvc`** (MSVC + CUDA compile + **`native_cuda_smoke`** / **`native_score_batch`**), **`linux_cuda`** (GCC + nvcc compile smoke). **`native_cuda_bench`** is GPU-only and non-blocking when a device is present. Subprocess pytest mirror + drift guard: **`tests/test_native_ctest_pytest_registry.py`**.
 
 **Not in CI** (run locally before LM/SOM changes):
 

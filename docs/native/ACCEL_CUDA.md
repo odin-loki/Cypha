@@ -36,7 +36,14 @@ cmake --build build-windows-msvc --config Release `
 
 **VS 2026 / Build Tools 18:** use preset `windows-vs2026-release` and `build-windows-vs2026` instead.
 
-**GitHub Actions (optional job):** **`Jimver/cuda-toolkit`** (`sub-packages: ["nvcc","cudart","thrust"]`), **`ilammy/msvc-dev-cmd`**, **Ninja 1.12.1** (pinned), explicit **`CUDA_PATH`** from step outputs, optional copy of `extras/visual_studio_integration` into VS `BuildCustomizations`. See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) job `windows_cuda_msvc`.
+**GitHub Actions (blocking CI jobs):**
+
+| Job | Platform | Recipe |
+|-----|----------|--------|
+| **`windows_cuda_msvc`** | Windows | **`Jimver/cuda-toolkit`** (`sub-packages: ["nvcc","cudart","thrust"]`), **`ilammy/msvc-dev-cmd`**, **Ninja 1.12.1** (pinned), explicit **`CUDA_PATH`** from step outputs, optional copy of `extras/visual_studio_integration` into VS `BuildCustomizations`. |
+| **`linux_cuda`** | Ubuntu | Same Jimver toolkit + **`CUDAToolkit_ROOT=$CUDA_PATH`**, GCC + Ninja. |
+
+See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml). **`native_cuda_bench`** (`--bench`) remains optional (GPU-only, `continue-on-error` when a device is present).
 
 **Architecture flags:** set `-DCMAKE_CUDA_ARCHITECTURES` to your GPU SM version, e.g. `75` (Turing), `86` (Ampere), `89` (Ada). Default in `CMakeLists.txt` is **75** when unset.
 

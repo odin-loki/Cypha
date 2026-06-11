@@ -9,7 +9,8 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Changed
-- Docs: VERIFICATION_STATUS, ROADMAP, framework plan synced to **four-job CI** (MSVC CUDA blocking).
+- **`linux_cuda`** CI job is now **blocking** (was `continue-on-error`); Jimver **`cudart`/`thrust`** + **`CUDAToolkit_ROOT`**; failure log artifact.
+- Docs: CONTRIBUTING, VERIFY_PLAN §5, ROADMAP, ACCEL_CUDA, framework plan synced to **four blocking CI jobs**.
 - `cyphalm_checkpoint_parity`: log BPC delta on Python checkpoint load.
 
 ---

@@ -99,7 +99,7 @@ Or: `make test` (Unix/WSL; Makefile sets **`QT_QPA_PLATFORM=offscreen`** for pyt
 
 ## Native `cypha_rest` (optional)
 
-CI runs **two jobs** (`.github/workflows/ci.yml`): **`build_and_test`** (Ubuntu native build + CTest + `pytest tests/` with **`CYPHA_REST_BIN`**) and **`mingw_cross`** (MinGW Windows PE cross-build). The Linux binary gates REST smokes so they are not skipped.
+CI runs **four jobs** (`.github/workflows/ci.yml`): **`build_and_test`** (Ubuntu native build + CTest + `pytest tests/` with **`CYPHA_REST_BIN`**), **`mingw_cross`** (MinGW Windows PE cross-build), **`windows_cuda_msvc`** (MSVC + CUDA compile smoke), and **`linux_cuda`** (GCC + nvcc compile smoke). The Linux **`build_and_test`** binary gates REST smokes so they are not skipped; both CUDA jobs exercise **`native_cuda_smoke`** / **`native_score_batch`** on CPU threads when the runner has no GPU.
 
 **Local (Linux / WSL ELF):** from repo root, install **`sudo apt-get install -y libsqlite3-dev`** (optional M6 CTest **`native_experiment_db_smoke`**), then either **`bash scripts/ci_native_linux.sh`** (CTest + optional drift pytest when **`python3 -m pytest`** is available) or manually: `cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release && cmake --build native/build -j$(nproc) && ctest --test-dir native/build --output-on-failure`.
 

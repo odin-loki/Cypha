@@ -28,6 +28,8 @@
 - [ ] `cmake -S native -B native/build && cmake --build native/build -j4` succeeds
 - [ ] `ctest --test-dir native/build --output-on-failure` passes
 - [ ] Subprocess parity tests pass: `pytest tests/test_*_native*.py -v`
+- [ ] Windows: `powershell -File scripts\cypha_native_validate_all.ps1` (or `-SkipBuild` after rebuild)
+- [ ] CUDA changes: local `-DCYPHA_ENABLE_CUDA=ON` build or rely on **`windows_cuda_msvc`** + **`linux_cuda`** CI jobs
 
 ### Documentation
 - [ ] `CHANGELOG.md` [Unreleased] section updated

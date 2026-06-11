@@ -176,11 +176,10 @@ jobs:
         shell: pwsh
         run: ctest --test-dir native/build-cuda-msvc -R native_cuda_bench --output-on-failure
 
-  # Optional Linux nvcc compile smoke; does not block PRs when CUDA install or link fails.
+  # GCC + nvcc compile smoke (same targets as windows_cuda_msvc).
   linux_cuda:
-    name: GCC + CUDA smoke (Linux, optional)
+    name: GCC + CUDA smoke (Linux)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -191,7 +190,7 @@ jobs:
         with:
           cuda: "12.6.0"
           method: network
-          sub-packages: '["nvcc"]'
+          sub-packages: '["nvcc", "cudart", "thrust"]'
 
       - name: Install Ninja + GCC
         run: sudo apt-get update && sudo apt-get install -y ninja-build g++
@@ -208,16 +207,32 @@ jobs:
           fi
 
       - name: Configure + build
+        env:
+          CUDA_PATH: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}
         run: |
+          set -euo pipefail
+          if [ -z "${CUDA_PATH:-}" ]; then echo "CUDA_PATH missing"; exit 1; fi
+          nvcc -V
           cmake -S native -B native/build-cuda-linux -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCYPHA_ENABLE_CUDA=ON \
-            -DCMAKE_CUDA_ARCHITECTURES=75
+            -DCMAKE_CUDA_ARCHITECTURES=75 \
+            -DCUDAToolkit_ROOT="$CUDA_PATH"
           cmake --build native/build-cuda-linux --parallel \
             --target score_batch_parity cuda_smoke cypha_core
 
       - name: CTest native_cuda_smoke + native_score_batch
         run: ctest --test-dir native/build-cuda-linux -R "native_cuda_smoke|native_score_batch" --output-on-failure
+
+      - name: Upload CUDA build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-cuda-gcc-logs
+          path: |
+            native/build-cuda-linux/CMakeFiles/CMakeOutput.log
+            native/build-cuda-linux/CMakeFiles/CMakeError.log
+          if-no-files-found: ignore
 
       - name: CTest native_cuda_bench (GPU only)
         if: steps.gpu.outputs.has_gpu == 'true'

@@ -8,7 +8,7 @@ For a **living snapshot** of automated tests and known gaps, see [`VERIFICATION_
 1. **`build_and_test`** (Ubuntu) — Ruff; `cmake -DCYPHA_BUILD_QT=ON` + CTest (GUI exec tests excluded on headless); WikiText-2 corpus; **`pytest tests/ cypha_lm/model/tests/`** with `CYPHA_REST_BIN` and `QT_QPA_PLATFORM=offscreen`.
 2. **`mingw_cross`** — MinGW Windows PE artifact smoke (`cypha_rest.exe`, `cypha_bench_run.exe`, …).
 3. **`windows_cuda_msvc`** — MSVC + CUDA compile smoke (**blocking**; Ninja 1.12.1 + Jimver nvcc).
-4. **`linux_cuda`** (optional, non-blocking) — GCC + nvcc smoke.
+4. **`linux_cuda`** — GCC + nvcc compile smoke (**blocking**).
 
 **Release:** tag `v*` → [`.github/workflows/release.yml`](../../.github/workflows/release.yml) publishes Linux + Windows installer archives (latest: **v2.2.7**).
 
@@ -111,12 +111,12 @@ Goal: know **which kernels** to port first (hot loops in NumPy/Python).
 
 ## 5. Debugging checklist
 
-- [ ] All `test_cypha.py` tests green (fixed seeds).
-- [ ] All `cypha_studio` tests green.
-- [ ] Benchmark within expected bands vs last known good (store a short log in `artifacts/profiles/benchmark_baseline.txt` when satisfied).
-- [ ] No silent `sys.path` hacks to non-existent dirs (repo root only).
-- [ ] Registry save/load identical inference on sample batch.
-- [ ] Document any **known limitations** (e.g. headless GUI, optional sentence-transformers).
+- [x] All `test_cypha.py` tests green (fixed seeds) — CI + local gate.
+- [x] All `cypha_studio` tests green — `pytest tests/` + `test_cypha_studio_runner.py` in CI.
+- [ ] Benchmark within expected bands vs last known good (store a short log in `artifacts/profiles/benchmark_baseline.txt` when satisfied; optional `RUN_BENCHMARK=1` in `wsl_verify.sh`).
+- [x] No silent `sys.path` hacks to non-existent dirs — inserts target repo root only (`test_cypha.py`, `tests/conftest.py`, `cypha_studio/test_cypha_studio.py`, scripts).
+- [x] Registry save/load identical inference on sample batch — `pytest tests/test_studio_data_registry.py`, native registry parity tests.
+- [x] Document any **known limitations** — see [`VERIFICATION_STATUS.md`](VERIFICATION_STATUS.md) § gaps + headless GUI notes above.
 
 ## 6. Definition of “ready to port”
 
