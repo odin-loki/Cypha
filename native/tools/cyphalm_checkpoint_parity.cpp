@@ -1,5 +1,6 @@
 // cyphalm_checkpoint_parity — save/load roundtrip + optional Python char_lstm checkpoint lock.
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -11,7 +12,17 @@
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 
+namespace fs = std::filesystem;
+
 namespace {
+
+fs::path resolve_checkpoint_json(const fs::path& sidecar_path, const std::string& ckpt_json) {
+    fs::path p(ckpt_json);
+    if (p.is_absolute()) {
+        return p;
+    }
+    return (sidecar_path.parent_path() / p).lexically_normal();
+}
 
 using cypha::cyphalm::ContextMode;
 using cypha::cyphalm::CyphaLMConfig;
@@ -74,7 +85,7 @@ int test_native_roundtrip(ContextMode mode, const char* label) {
     return 0;
 }
 
-int test_python_fixture(const std::string& sidecar_path, const char* label) {
+int test_python_fixture(const fs::path& sidecar_path, const char* label) {
     nlohmann::json j;
     {
         std::ifstream in(sidecar_path);
@@ -84,7 +95,8 @@ int test_python_fixture(const std::string& sidecar_path, const char* label) {
     }
         in >> j;
     }
-    const std::string ckpt = j.at("checkpoint_json").get<std::string>();
+    const std::string ckpt = resolve_checkpoint_json(sidecar_path, j.at("checkpoint_json").get<std::string>())
+                                 .string();
     CyphaLMModel model = cypha::cyphalm::load_cyphalm_model(ckpt);
     const auto eval_ids = j.at("eval_ids").get<std::vector<int>>();
     const double expected = j.at("expected_bpc").get<double>();
@@ -137,15 +149,15 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::string fixture;
+    fs::path fixture;
     if (argc >= 2) {
-        fixture = argv[1];
+        fixture = fs::path(argv[1]);
     } else {
-        fixture = "parity_fixtures/cyphalm_checkpoint/char_lstm/sidecar.json";
+        fixture = fs::path("parity_fixtures/cyphalm_checkpoint/char_lstm/sidecar.json");
     }
     failures += test_python_fixture(fixture, "python char") != 0 ? 1 : 0;
 
-    const std::string hybrid_fixture = "parity_fixtures/cyphalm_checkpoint/hybrid/sidecar.json";
+    const fs::path hybrid_fixture = fs::path("parity_fixtures/cyphalm_checkpoint/hybrid/sidecar.json");
     failures += test_python_fixture(hybrid_fixture, "python hybrid") != 0 ? 1 : 0;
 
     if (failures == 0) {

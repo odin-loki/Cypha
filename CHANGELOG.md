@@ -6,6 +6,13 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Linux CI CTest:** CyphaLM checkpoint sidecars use portable relative `checkpoint.json` paths; `cyphalm_checkpoint_parity` resolves paths against the sidecar directory (fixes `native_cyphalm_checkpoint_parity` on ubuntu-latest).
+
+---
+
 ## [2.2.3] — 2026-05-31 · Release packaging hardening
 
 ### Fixed

@@ -66,7 +66,7 @@ def main() -> None:
     sidecar = {
         "fixture_schema": 1,
         "name": "cyphalm_checkpoint_hybrid",
-        "checkpoint_json": str(ckpt_base.with_suffix(".json")),
+        "checkpoint_json": "checkpoint.json",
         "eval_ids": eval_ids,
         "expected_bpc": bpc,
         "atol_bpc": 0.35,

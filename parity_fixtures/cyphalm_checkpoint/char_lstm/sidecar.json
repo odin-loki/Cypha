@@ -1,7 +1,7 @@
 {
   "fixture_schema": 1,
   "name": "cyphalm_checkpoint_char_lstm",
-  "checkpoint_json": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\parity_fixtures\\cyphalm_checkpoint\\char_lstm\\checkpoint.json",
+  "checkpoint_json": "checkpoint.json",
   "eval_ids": [
     30,
     16,

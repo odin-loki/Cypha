@@ -18,7 +18,12 @@ if [[ "${CYPHA_QT_CHARTS:-0}" == "1" ]]; then
 fi
 cmake -S "$ROOT/native" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}" "${CMAKE_EXTRA[@]}"
 cmake --build "$BUILD_DIR" -j"$J"
-ctest --test-dir "$BUILD_DIR" --output-on-failure
+CTEST_EXCLUDE=()
+if [[ "${CYPHA_BUILD_QT:-0}" == "1" ]]; then
+  # Headless runners cannot exec Qt Widgets smoke; compile-check Qt, skip GUI CTests.
+  CTEST_EXCLUDE+=(-E 'native_qt_shell_smoke|native_qt_stub_load_reference')
+fi
+ctest --test-dir "$BUILD_DIR" --output-on-failure "${CTEST_EXCLUDE[@]}"
 if [[ "${SKIP_NATIVE_CTEST_REGISTRY_PYTEST:-0}" != "1" ]] && PYTHONPATH="$ROOT" python3 -m pytest --version >/dev/null 2>&1; then
   echo "---- pytest tests/test_native_ctest_pytest_registry.py ----"
   PYTHONPATH="$ROOT" python3 -m pytest "$ROOT/tests/test_native_ctest_pytest_registry.py" -q
