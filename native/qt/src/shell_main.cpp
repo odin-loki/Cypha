@@ -6289,6 +6289,7 @@ int main(int argc, char** argv) {
         "       optional F_field JSON; preprocessor.json; native predict; spawn cypha_rest\n"
         "       (--registry when set); REST /health, /ready, /models, /load, /predict, /update;\n"
         "       native train_step + bulk CSV; save .cypha (merge + infer patch); train hparams UI;\n"
+        "       loss chart export PNG/SVG/CSV; EMA smoothing; Y lock; training log table;\n"
         "       POST /predict return_explanation → confidence panel (class_details, OOD meter);\n"
         "       optional replay_u01 JSON; regression_y bulk for MKE.\n"
         "       CyphaLM: native checkpoint + generate; REST /lm/load + /generate; bench --domain 17.\n"

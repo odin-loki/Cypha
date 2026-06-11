@@ -10,6 +10,7 @@ milestone or a significant self-contained change.
 
 ### Fixed
 - **Linux CI CTest:** CyphaLM checkpoint sidecars use portable relative `checkpoint.json` paths; `cyphalm_checkpoint_parity` resolves paths against the sidecar directory (fixes `native_cyphalm_checkpoint_parity` on ubuntu-latest).
+- **Linux CI pytest:** restore empty Studio GUI shim modules (`confidence_widget`, `dataset_widget`, …) as re-exports from `widgets.py`; extend CTest↔pytest registry; add bench/tune/diagnostics/SOM/GH infer subprocess tests; Qt shell `--help` documents PNG/SVG/CSV export keywords.
 
 ---
 

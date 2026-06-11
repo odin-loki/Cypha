@@ -86,3 +86,57 @@ def test_cyphalm_checkpoint_parity():
         pytest.skip("cyphalm_checkpoint_parity binary not built")
     assert r.returncode == 0, r.stdout + r.stderr
     assert "OK" in r.stdout
+
+
+def test_cyphalm_model_parity():
+    r = run_native_executable(
+        "cyphalm_model_parity",
+        [],
+        timeout=60,
+        env_override="CYPHALM_MODEL_PARITY_BIN",
+    )
+    if r is None:
+        pytest.skip("cyphalm_model_parity binary not built")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_cyphalm_hebbian_parity():
+    r = run_native_executable(
+        "cyphalm_hebbian_parity",
+        [],
+        timeout=60,
+        env_override="CYPHALM_HEBBIAN_PARITY_BIN",
+    )
+    if r is None:
+        pytest.skip("cyphalm_hebbian_parity binary not built")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_cyphalm_ssm_parity():
+    r = run_native_executable(
+        "cyphalm_ssm_parity",
+        [],
+        timeout=60,
+        env_override="CYPHALM_SSM_PARITY_BIN",
+    )
+    if r is None:
+        pytest.skip("cyphalm_ssm_parity binary not built")
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+_SSM_SIDE = _ROOT / "parity_fixtures" / "cyphalm_ssm" / "sidecar.json"
+
+
+def test_cyphalm_ssm_fixture_parity():
+    if not _SSM_SIDE.is_file():
+        pytest.skip("run scripts/generate_cyphalm_native_fixtures.py (ssm sidecar)")
+    r = run_native_executable(
+        "cyphalm_parity",
+        [str(_SSM_SIDE)],
+        timeout=60,
+        env_override="CYPHALM_PARITY_BIN",
+        cwd=str(_ROOT),
+    )
+    if r is None:
+        pytest.skip("cyphalm_parity binary not built")
+    assert r.returncode == 0, r.stdout + r.stderr

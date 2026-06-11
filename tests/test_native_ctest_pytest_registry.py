@@ -57,6 +57,22 @@ _NATIVE_CTEST_TO_PYTEST: dict[str, list[str]] = {
     "native_experiment_db_crud": ["tests/test_experiment_db_crud_native_parity.py"],
     "native_qt_stub_load_reference": ["tests/test_qt_stub_native.py"],
     "native_qt_shell_smoke": ["tests/test_qt_shell_native.py"],
+    "native_score_batch": ["tests/test_score_batch_native_parity.py"],
+    "native_kernel_llr": ["tests/test_kernel_llr_native_parity.py"],
+    "native_embed_table": ["tests/test_embed_table_native_parity.py"],
+    "native_retrieval": ["tests/test_retrieval_native_parity.py"],
+    "native_gh_infer_deliberation": ["tests/test_gh_infer_deliberation_native_parity.py"],
+    "native_bench_run_list_domains": ["tests/test_native_bench_cli_smoke.py"],
+    "native_tune_run_smoke": ["tests/test_native_bench_cli_smoke.py"],
+    "native_diagnostics_run": ["tests/test_native_bench_cli_smoke.py"],
+    "native_cyphalm_char_lstm": ["tests/test_cyphalm_native_parity.py"],
+    "native_cyphalm_model_parity": ["tests/test_cyphalm_native_parity.py"],
+    "native_cyphalm_checkpoint_parity": ["tests/test_cyphalm_native_parity.py"],
+    "native_cyphalm_hebbian": ["tests/test_cyphalm_native_parity.py"],
+    "native_cyphalm_ssm": ["tests/test_cyphalm_native_parity.py"],
+    "native_cyphalm_ssm_fixture": ["tests/test_cyphalm_native_parity.py"],
+    "native_cyphalm_parity_suite": ["tests/test_cyphalm_native_parity.py"],
+    "native_som_parity": ["tests/test_som_native_parity.py"],
 }
 
 
