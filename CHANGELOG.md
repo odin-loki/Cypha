@@ -6,6 +6,16 @@ milestone or a significant self-contained change.
 
 ---
 
+## [2.2.1] — 2026-06-11 · Qt Studio dialogs + doc sync
+
+### Added
+- **Qt shell:** Settings dialog (QSettings, Studio-compatible prefs) and Confusion Matrix view after labeled batch predict.
+
+### Changed
+- Master plan and quickstart marked **v2.5 complete**; validation gate unchanged (52 CTests, 155 pytest).
+
+---
+
 ## [2.2.0] — 2026-06-11 · Full C++ framework release
 
 ### Added

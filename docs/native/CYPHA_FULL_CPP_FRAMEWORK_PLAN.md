@@ -29,12 +29,10 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Shipped (git)
 
-| Tag / commit | Contents |
-|--------------|----------|
-| **`v2.2.0`** (`ee9b46e`) | Full C++ framework — 236 files |
-| **v2.5 follow-up** | Qt Settings + Confusion Matrix dialogs, doc sync |
+| **`v2.2.1`** tag | Latest — includes Qt Settings + Confusion Matrix |
+| **`v2.2.0`** tag | Core framework release (236 files) |
 
-**Push:** `git push origin main --tags` when ready for GitHub Release.
+**Published:** `git push origin main --tags` ✅
 
 ---
 
