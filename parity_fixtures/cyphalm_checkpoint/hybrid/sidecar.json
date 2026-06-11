@@ -85,6 +85,6 @@
     30
   ],
   "expected_bpc": 4.902568964992661,
-  "atol_bpc": 0.35,
-  "note": "Python full-rank GRIA; native loads via rank-32 factorization"
+  "atol_bpc": 0.02,
+  "note": "Python full-rank GRIA; native loads via rank-32 factorization (measured delta ~0.002 BPC)"
 }

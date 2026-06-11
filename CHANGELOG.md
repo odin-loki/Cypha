@@ -9,7 +9,8 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Fixed
-- **MSVC + CUDA CI:** run Ninja configure/build/ctest under `shell: cmd` (was PowerShell with invalid `^` continuations).
+- **MSVC + CUDA CI:** use VS generator + explicit `CMAKE_CUDA_COMPILER` under `ilammy/msvc-dev-cmd` (drop Ninja on GHA).
+- **CyphaLM hybrid checkpoint parity:** tighten `atol_bpc` from 0.35 → **0.02** (measured load delta ~0.002 BPC).
 
 ### Changed
 - Native CMake project version **2.2.5**; CyphaLM tracker marks `proj_dif` GRIA wiring complete.

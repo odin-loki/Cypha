@@ -69,8 +69,8 @@ def main() -> None:
         "checkpoint_json": "checkpoint.json",
         "eval_ids": eval_ids,
         "expected_bpc": bpc,
-        "atol_bpc": 0.35,
-        "note": "Python full-rank GRIA; native loads via rank-32 factorization",
+        "atol_bpc": 0.02,
+        "note": "Python full-rank GRIA; native loads via rank-32 factorization (measured delta ~0.002 BPC)",
     }
     (_OUT / "sidecar.json").write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
     print(f"wrote {_OUT / 'sidecar.json'} bpc={bpc:.4f}")
