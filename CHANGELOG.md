@@ -8,8 +8,16 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+---
+
+## [2.2.7] — 2026-06-11 · MSVC CUDA CI green
+
 ### Fixed
-- **MSVC + CUDA CI:** `ilammy/msvc-dev-cmd` + explicit `CUDA_PATH` output, Ninja **1.12.1** pin, `thrust` subpackage, optional VS integration copy.
+- **MSVC + CUDA CI (Windows):** green on GHA — `ilammy/msvc-dev-cmd`, explicit `CUDA_PATH` from Jimver output, Ninja **1.12.1** pin, `thrust` subpackage, optional CUDA VS integration copy; failure log artifact.
+
+### Changed
+- **`windows_cuda_msvc`** is now a **blocking** CI job (was `continue-on-error`).
+- Native CMake project version **2.2.7**.
 
 ---
 

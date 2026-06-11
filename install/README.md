@@ -21,17 +21,17 @@ Tagged releases (`v*`) build **Linux** and **Windows** installer archives via [`
 | `cypha-<ver>-linux-x86_64.tar.gz` | Linux x86_64 (glibc + OpenMP) |
 | `cypha-<ver>-windows-x86_64.zip` | Windows x86_64 (MinGW PE, static libgcc/libstdc++) |
 
-Prebuilt native installers: **[GitHub Releases — latest `v2.2.6`](https://github.com/odin-loki/Cypha/releases/latest)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
+Prebuilt native installers: **[GitHub Releases — latest `v2.2.7`](https://github.com/odin-loki/Cypha/releases/latest)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
 
 ```bash
 # Linux (example)
-tar xzf cypha-2.2.6-linux-x86_64.tar.gz && cd cypha-2.2.6-linux-x86_64 && bash install.sh
+tar xzf cypha-2.2.7-linux-x86_64.tar.gz && cd cypha-2.2.7-linux-x86_64 && bash install.sh
 ```
 
 ```powershell
 # Windows (example)
-Expand-Archive cypha-2.2.6-windows-x86_64.zip
-cd cypha-2.2.6-windows-x86_64
+Expand-Archive cypha-2.2.7-windows-x86_64.zip
+cd cypha-2.2.7-windows-x86_64
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 

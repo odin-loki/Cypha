@@ -92,7 +92,6 @@ jobs:
   windows_cuda_msvc:
     name: MSVC + CUDA smoke (Windows)
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
