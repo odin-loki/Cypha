@@ -73,6 +73,8 @@ cmake --build --preset windows-msvc-release-build
 
 **Not supported:** MinGW cross-compiles cannot enable `CYPHA_ENABLE_CUDA` (CMake will error).
 
+**CI:** **`windows_cuda_msvc`** and **`linux_cuda`** are **blocking** jobs on every push — Jimver nvcc install, compile with `-DCYPHA_ENABLE_CUDA=ON`, run **`native_cuda_smoke`** and **`native_score_batch`**. Runners without a GPU still pass (CPU thread fallback); **`native_cuda_bench`** is optional when hardware is present. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
+
 **Performance:** profile with `./cuda_smoke --bench` on GPU; small batches may be CPU-faster due to launch overhead.
 
 ---

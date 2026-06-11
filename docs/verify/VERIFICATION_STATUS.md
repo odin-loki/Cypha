@@ -137,7 +137,7 @@ GitHub Actions **CI** (`.github/workflows/ci.yml`): **four blocking jobs** — *
 
 All items below are currently green. They form the CI gate:
 
-- [x] GitHub Actions **CI green** on `main` — **four jobs**: Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (Windows)**, optional Linux GCC CUDA
+- [x] GitHub Actions **CI green** on `main` — **four blocking jobs**: Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (Windows)**, **Linux GCC CUDA**
 - [x] `pytest tests/` + `cypha_lm/model/tests/` — **~274 passed** on CI (headless; `test_gui_qtbot.py` ignored)
 - [x] Native **`ctest`** green: **52** `native_*` tests (Qt GUI exec excluded on headless Linux CI); drift guard **`pytest tests/test_native_ctest_pytest_registry.py`**
 - [x] `pytest tests/test_parity_fixtures.py` and `python test_cypha.py` clean on reference branch

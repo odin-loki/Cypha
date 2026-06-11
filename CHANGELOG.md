@@ -8,10 +8,15 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+---
+
+## [2.2.8] — 2026-06-11 · All four CI jobs blocking
+
 ### Changed
 - **`linux_cuda`** CI job is now **blocking** (was `continue-on-error`); Jimver **`cudart`/`thrust`** + **`CUDAToolkit_ROOT`**; failure log artifact.
-- Docs: CONTRIBUTING, VERIFY_PLAN §5, ROADMAP, ACCEL_CUDA, framework plan synced to **four blocking CI jobs**.
+- Docs: CONTRIBUTING, VERIFY_PLAN §5, ROADMAP, ACCEL_CUDA, framework plan, README test counts synced to **four blocking CI jobs**.
 - `cyphalm_checkpoint_parity`: log BPC delta on Python checkpoint load.
+- Native CMake project version **2.2.8**.
 
 ---
 
@@ -383,11 +388,19 @@ First committed state of the project. All six native port milestones signed off:
 - `cypha_bench/` evaluation harness (17 domains, encoders, reports).
 - `cypha_som/` optional SOM/GNG/GRIA hooks.
 - `cypha_accel/` CuPy-accelerated LLR / projection / NIG helpers.
-- GitHub Actions CI: Linux native build (CTest) + pytest on every push.
+- GitHub Actions CI: **four blocking jobs** — Linux CTest + pytest, MinGW PE, MSVC + CUDA, GCC + CUDA.
 
 ---
 
-[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.2.8...HEAD
+[2.2.8]: https://github.com/odin-loki/Cypha/compare/v2.2.7...v2.2.8
+[2.2.7]: https://github.com/odin-loki/Cypha/compare/v2.2.6...v2.2.7
+[2.2.6]: https://github.com/odin-loki/Cypha/compare/v2.2.5...v2.2.6
+[2.2.5]: https://github.com/odin-loki/Cypha/compare/v2.2.4...v2.2.5
+[2.2.4]: https://github.com/odin-loki/Cypha/compare/v2.2.3...v2.2.4
+[2.2.3]: https://github.com/odin-loki/Cypha/compare/v2.2.2...v2.2.3
+[2.2.2]: https://github.com/odin-loki/Cypha/compare/v2.2.1...v2.2.2
+[2.2.1]: https://github.com/odin-loki/Cypha/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/odin-loki/Cypha/releases/tag/v2.2.0
 [1.1.0]: https://github.com/odin-loki/Cypha/releases/tag/v1.1.0
 [1.0.0]: https://github.com/odin-loki/Cypha/compare/v0.9.0...v1.0.0

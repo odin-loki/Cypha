@@ -44,7 +44,7 @@ jobs:
           ctest --test-dir native/build-release -R native_cyphalm_parity_suite --output-on-failure
           ctest --test-dir native/build-release -R native_bench_run_list_domains --output-on-failure
 
-      - name: Smoke CLI (v2.2.0 release binaries)
+      - name: Smoke CLI (release binaries)
         run: |
           native/build-release/cypha_bench_run --list-domains
           native/build-release/cypha_bench_report --help

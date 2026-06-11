@@ -21,7 +21,7 @@ Tagged releases (`v*`) build **Linux** and **Windows** installer archives via [`
 | `cypha-<ver>-linux-x86_64.tar.gz` | Linux x86_64 (glibc + OpenMP) |
 | `cypha-<ver>-windows-x86_64.zip` | Windows x86_64 (MinGW PE, static libgcc/libstdc++) |
 
-Prebuilt native installers: **[GitHub Releases — latest `v2.2.7`](https://github.com/odin-loki/Cypha/releases/latest)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
+Prebuilt native installers: **[GitHub Releases — latest `v2.2.8`](https://github.com/odin-loki/Cypha/releases/latest)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
 
 ```bash
 # Linux (example)

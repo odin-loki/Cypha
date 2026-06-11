@@ -2,7 +2,7 @@
 
 **Goal:** Python becomes prototyping-only; **all production runtime, bench, REST, and validation** runs in native C++.
 
-**Status:** **v2.5 complete — SHIPPED** ([`v2.2.7` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.7) — Linux + Windows installers; **CI fully green** — all four jobs including MSVC CUDA).
+**Status:** **v2.5 complete — SHIPPED** ([`v2.2.8` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.8) — Linux + Windows installers; **CI fully green** — all four blocking jobs).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).  
@@ -17,7 +17,7 @@ scripts/cypha_native_validate_all.ps1  → OK
   52 CTests │ ~274 pytest (CI) │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
 
-GitHub Actions **CI #48+**: Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**.
+GitHub Actions **CI #50+**: Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**.
 
 Build: `C:\Temp\cypha_full_cpp_build`
 
@@ -31,7 +31,8 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Shipped (git)
 
-| **`v2.2.7`** tag | **Latest release** — MSVC CUDA CI green; all four CI jobs pass |
+| **`v2.2.8`** tag | **Latest release** — all four CI jobs blocking (incl. Linux GCC CUDA) |
+| **`v2.2.7`** tag | MSVC CUDA CI green |
 | **`v2.2.4`** tag | CI green; portable checkpoint fixtures; Studio GUI import shims |
 | **`v2.2.3`** tag | Release packaging hardening — Linux + Windows native installers on GitHub Releases |
 | **`v2.2.0`** tag | Core framework release (236 files) |
@@ -69,5 +70,5 @@ Phases 0–14 complete including Qt Studio parity (Settings, Confusion Matrix), 
 ```powershell
 powershell -File scripts\cypha_native_validate_all.ps1
 powershell -File scripts\cypha_bench_full_baseline.ps1
-git push origin main --tags   # publish release (see v2.2.7 on GitHub Releases)
+git push origin main --tags   # publish release (see v2.2.8 on GitHub Releases)
 ```

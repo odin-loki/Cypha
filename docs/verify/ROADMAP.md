@@ -21,7 +21,7 @@ The **Python tree** is the spec: tests, parity blobs, fixture generators. The **
 | Experiments DB (SQLite, M6) | ✅ `experiment_db_crud`, Qt M6 panel |
 | Deterministic REST replay (`/session/rng`) | ✅ cross-runtime state transfer |
 | Autoregressive / generation path | ✅ native `generation_parity`, CTest |
-| Test suite | ✅ **52 CTest** + **~274 pytest** (GitHub Actions CI — all four jobs green incl. MSVC CUDA) |
+| Test suite | ✅ **52 CTest** + **~274 pytest** (GitHub Actions — **four blocking jobs** green incl. MSVC + Linux CUDA) |
 
 ---
 

@@ -28,7 +28,7 @@ Optional: **`-DCYPHA_ENABLE_CUDA=ON`** (MSVC or Linux + NVIDIA), **`-DCYPHA_BUIL
 
 ## 2. Install (release bundle)
 
-Prebuilt installers: **[GitHub Releases `v2.2.7`](https://github.com/odin-loki/Cypha/releases/tag/v2.2.7)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
+Prebuilt installers: **[GitHub Releases `v2.2.8`](https://github.com/odin-loki/Cypha/releases/tag/v2.2.8)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
 
 After download, or after local packaging with `scripts/package_release_windows.sh` / `scripts/package_release_linux.sh`:
 

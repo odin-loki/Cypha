@@ -10,7 +10,7 @@ For a **living snapshot** of automated tests and known gaps, see [`VERIFICATION_
 3. **`windows_cuda_msvc`** — MSVC + CUDA compile smoke (**blocking**; Ninja 1.12.1 + Jimver nvcc).
 4. **`linux_cuda`** — GCC + nvcc compile smoke (**blocking**).
 
-**Release:** tag `v*` → [`.github/workflows/release.yml`](../../.github/workflows/release.yml) publishes Linux + Windows installer archives (latest: **v2.2.7**).
+**Release:** tag `v*` → [`.github/workflows/release.yml`](../../.github/workflows/release.yml) publishes Linux + Windows installer archives (latest: **v2.2.8**).
 
 ## 1. Scope
 
