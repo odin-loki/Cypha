@@ -118,39 +118,33 @@ jobs:
             echo "No GPU on runner — native_cuda_smoke still exercises CPU thread path."
           fi
 
-      - name: MSVC dev environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Install Ninja
-        run: choco install ninja -y --no-progress
-
       - name: Configure, build, and CTest (Ninja + CUDA)
-        shell: pwsh
+        shell: cmd
         run: |
-          $cuda = $env:CUDA_PATH
-          if (-not $cuda) { throw "CUDA_PATH not set after cuda-toolkit install" }
-          $nvcc = Join-Path $cuda "bin/nvcc.exe"
-          if (-not (Test-Path $nvcc)) { throw "nvcc not found at $nvcc" }
-          # Ninja + nvcc avoids VS CUDA toolset (not installed with nvcc-only Jimver sub-packages).
-          cmake -S native -B native/build-cuda-msvc -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCYPHA_ENABLE_CUDA=ON `
-            -DCMAKE_CUDA_ARCHITECTURES=75 `
-            -DCMAKE_CUDA_COMPILER="$nvcc" `
-            -DCUDAToolkit_ROOT="$cuda"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build native/build-cuda-msvc --parallel `
-            --target score_batch_parity cuda_smoke cypha_core
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ctest --test-dir native/build-cuda-msvc `
-            -R "native_cuda_smoke|native_score_batch" --output-on-failure
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSWDIR=%%i"
+          if not defined VSWDIR (
+            echo vswhere: no MSVC installation
+            exit /b 1
+          )
+          call "%VSWDIR%\VC\Auxiliary\Build\vcvars64.bat"
+          if errorlevel 1 exit /b 1
+          if not defined CUDA_PATH (
+            echo CUDA_PATH not set after cuda-toolkit install
+            exit /b 1
+          )
+          where cl
+          where nvcc
+          set "CUDACXX=%CUDA_PATH%\bin\nvcc.exe"
+          cmake -S native -B native/build-cuda-msvc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCYPHA_ENABLE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75 -DCMAKE_CUDA_COMPILER=%CUDA_PATH%\bin\nvcc.exe -DCUDAToolkit_ROOT=%CUDA_PATH% -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER=cl
+          if errorlevel 1 exit /b 1
+          cmake --build native/build-cuda-msvc --parallel --target score_batch_parity cuda_smoke cypha_core
+          if errorlevel 1 exit /b 1
+          ctest --test-dir native/build-cuda-msvc -R "native_cuda_smoke|native_score_batch" --output-on-failure
 
       - name: CTest native_cuda_bench (GPU only)
         if: steps.gpu.outputs.has_gpu == 'true'
         continue-on-error: true
-        shell: pwsh
+        shell: cmd
         run: ctest --test-dir native/build-cuda-msvc -R native_cuda_bench --output-on-failure
 
   # Optional Linux nvcc compile smoke; does not block PRs when CUDA install or link fails.

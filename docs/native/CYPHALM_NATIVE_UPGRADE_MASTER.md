@@ -111,4 +111,4 @@ powershell -File scripts/cyphalm_native_run_modes.ps1
 
 - [x] Wire `proj_dif` into GRIA input for non-hybrid modes (`gria_input_core` in `cyphalm_model.cpp` mirrors Python `_gria_input`)
 - [x] Tighten hybrid Python checkpoint load atol after full state import audit (sidecar `atol_bpc=0.02`; measured native delta ~0.002 BPC)
-- [ ] Full 300k jsonl refresh: `powershell -File scripts/cyphalm_native_run_modes.ps1`
+- [x] Full 300k jsonl refresh: `docs/native/CYPHALM_NATIVE_BENCH_RESULTS.jsonl` (build6 sweep — hybrid 2.892, context_bank 3.604, char_lstm 2.900 @ 300k)

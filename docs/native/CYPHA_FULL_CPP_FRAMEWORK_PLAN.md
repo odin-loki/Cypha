@@ -2,7 +2,7 @@
 
 **Goal:** Python becomes prototyping-only; **all production runtime, bench, REST, and validation** runs in native C++.
 
-**Status:** **v2.5 complete — SHIPPED** ([`v2.2.5` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.5) — Linux + Windows installers; **CI green** on `main`).
+**Status:** **v2.5 complete — SHIPPED** ([`v2.2.6` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.6) — Linux + Windows installers; **CI green** on `main`).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).  
@@ -31,7 +31,7 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Shipped (git)
 
-| **`v2.2.5`** tag | **Latest release** — docs/CI polish; MSVC CUDA Ninja job fix |
+| **`v2.2.6`** tag | **Latest release** — hybrid checkpoint atol; MSVC CUDA vcvars CI |
 | **`v2.2.4`** tag | CI green; portable checkpoint fixtures; Studio GUI import shims |
 | **`v2.2.3`** tag | Release packaging hardening — Linux + Windows native installers on GitHub Releases |
 | **`v2.2.0`** tag | Core framework release (236 files) |

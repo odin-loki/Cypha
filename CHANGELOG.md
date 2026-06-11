@@ -8,12 +8,17 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+---
+
+## [2.2.6] — 2026-06-11 · Hybrid checkpoint atol + MSVC CUDA CI hardening
+
 ### Fixed
-- **MSVC + CUDA CI:** Jimver `nvcc`+`cudart` subpackages + `-T cuda=$CUDA_PATH` for VS toolset (no Nsight VSE hang).
-- **CyphaLM hybrid checkpoint parity:** tighten `atol_bpc` from 0.35 → **0.02** (measured load delta ~0.002 BPC).
+- **MSVC + CUDA CI:** `vswhere` + `vcvars64.bat` + Ninja with explicit `cl`/`nvcc` (Jimver nvcc-only install; no Nsight VSE hang).
+- **CyphaLM hybrid checkpoint parity:** tighten `atol_bpc` from 0.35 → **0.02** (measured native load delta ~0.002 BPC).
 
 ### Changed
-- Native CMake project version **2.2.5**; CyphaLM tracker marks `proj_dif` GRIA wiring complete.
+- Native CMake project version **2.2.6**; CyphaLM tracker marks `proj_dif` GRIA wiring complete.
+- `cypha_bench/README.md`: note on when to commit `report/` baseline snapshots.
 
 ---
 
