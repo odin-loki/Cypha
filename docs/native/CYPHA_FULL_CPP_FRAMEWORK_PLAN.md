@@ -68,5 +68,5 @@ Phases 0–14 complete including Qt Studio parity (Settings, Confusion Matrix), 
 ```powershell
 powershell -File scripts\cypha_native_validate_all.ps1
 powershell -File scripts\cypha_bench_full_baseline.ps1
-git push origin main --tags   # publish release (see v2.2.3 on GitHub Releases)
+git push origin main --tags   # publish release (see v2.2.4 on GitHub Releases)
 ```

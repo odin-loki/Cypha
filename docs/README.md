@@ -44,7 +44,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`inst
 
 | Doc | What it covers |
 |-----|----------------|
-| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: test counts (~189 pytest / ~34 CTest), per-fixture inventory, known gaps |
+| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: test counts (~274 pytest on CI / 52 CTest), per-fixture inventory, known gaps |
 | [Roadmap](verify/ROADMAP.md) | Milestones M1–M6 complete; current engineering horizon (Phase 5) |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
 | [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / WSL workflow checklist |
@@ -52,12 +52,18 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`inst
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, full test command reference |
 | [CHANGELOG](../CHANGELOG.md) | Release history and what changed in each milestone |
 
-**Quick gate:**
+**Quick gate (matches GitHub Actions CI):**
 ```bash
-pytest tests/ -m "not slow"          # ~189 tests, skip slow studio subprocess
-python test_cypha.py                  # 54 deterministic checks on Cypha.py math
-python cypha_studio/test_cypha_studio.py  # 48 pipeline checks
-make test                             # Unix: sets QT_QPA_PLATFORM=offscreen + runs pytest
+bash scripts/ci_native_linux.sh                    # native CTest (+ optional drift pytest)
+pytest tests/ cypha_lm/model/tests/ -q             # full CI pytest (ignore test_gui_qtbot.py on headless)
+python test_cypha.py                               # 54 deterministic checks on Cypha.py math
+python cypha_studio/test_cypha_studio.py           # 48 pipeline checks
+make test                                          # Unix: QT_QPA_PLATFORM=offscreen + pytest
+```
+
+**Full native production gate (Windows):**
+```powershell
+powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
 ---

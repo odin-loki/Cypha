@@ -6,6 +6,13 @@ milestone or a significant self-contained change.
 
 ---
 
+## [Unreleased]
+
+### Changed
+- Docs hub, VERIFY_PLAN, VERIFICATION_STATUS, install guide, and CONTRIBUTING synced to **v2.2.4** / green CI (~274 pytest, 52 CTest).
+
+---
+
 ## [2.2.4] — 2026-06-11 · CI green (Linux CTest + pytest)
 
 ### Fixed

@@ -172,6 +172,9 @@ docs/site/
 *.secret
 .bash_history
 
+# Local scratch (not part of the repo)
+Cypha Tests.txt
+
 # =====================================================
 # Notes for Cypha .gitignore
 # =====================================================

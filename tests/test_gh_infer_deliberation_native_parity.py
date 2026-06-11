@@ -1,7 +1,7 @@
 """
 ``gh_infer_deliberation_parity`` vs ``parity_fixtures/gh_infer_deliberation/``.
 
-CTest: ``native_gh_infer_deliberation``. Override: ``CYPHA_GH_INFER_PARITY_BIN``.
+CTest: ``native_gh_infer_deliberation``. Override: ``CYPHA_GH_INFER_DELIBERATION_PARITY_BIN``.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def test_gh_infer_deliberation_parity_subprocess():
         "gh_infer_deliberation_parity",
         [_FIX],
         timeout=60,
-        env_override="CYPHA_GH_INFER_PARITY_BIN",
+        env_override="CYPHA_GH_INFER_DELIBERATION_PARITY_BIN",
     )
     if r is None:
         pytest.skip("gh_infer_deliberation_parity not built")

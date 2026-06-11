@@ -137,10 +137,11 @@ Honest snapshot for **port planning**. “Debugged” here means *automated chec
 
 All items below are currently green. They form the CI gate:
 
+- [x] GitHub Actions **CI green** on `main` (Linux CTest + pytest, MinGW PE smoke; optional CUDA jobs non-blocking)
+- [x] `pytest tests/` + `cypha_lm/model/tests/` — **~274 passed** on CI (headless; `test_gui_qtbot.py` ignored)
+- [x] Native **`ctest`** green: **52** `native_*` tests (Qt GUI exec excluded on headless Linux CI); drift guard **`pytest tests/test_native_ctest_pytest_registry.py`**
 - [x] `pytest tests/test_parity_fixtures.py` and `python test_cypha.py` clean on reference branch
 - [x] `python scripts/profile_real_datasets.py` — no exceptions; top `cumtime` reviewed
-- [x] Native **`ctest`** green: all **`NAME native_*`** tests pass (`native_cuda_bench` skipped without CUDA); drift guard **`pytest tests/test_native_ctest_pytest_registry.py`**
-- [x] `pytest tests/` — ~189 passed, ~1 skipped (cuda bench) on CPU-only hosts
 - [ ] Optional: `python scripts/gpu_microbench.py` and `python scripts/gpu_fullbench.py` on a GPU box (see [`docs/FUTURE.md`](../FUTURE.md) §1)
 
 ## Full Python stack replacement (product port) — COMPLETE

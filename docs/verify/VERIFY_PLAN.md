@@ -1,10 +1,16 @@
-# Cypha prototype — debug, profile, verify (pre C++ / CUDA / Qt port)
+# Cypha prototype — debug, profile, verify
 
-This document is the **master checklist** for proving the Python reference implementation before porting core numerics to C++/CUDA (or parallel CPU) and the shell to Qt.
+This document is the **master checklist** for proving the Python reference implementation and the **native C++ production stack** stay aligned.
 
 For a **living snapshot** of automated tests and known gaps, see [`VERIFICATION_STATUS.md`](VERIFICATION_STATUS.md). For **what to regen and rebuild** after contract changes, see [`MAINTENANCE.md`](MAINTENANCE.md).
 
-**Remote CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — single Ubuntu job: `cmake` + `ctest` in `native/`, then `pytest tests/` with `CYPHA_REST_BIN` set so `test_cypha_rest_smoke` runs, plus `QT_QPA_PLATFORM=offscreen` and PySide6.
+**Remote CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — **four jobs** on push to `main`:
+1. **`build_and_test`** (Ubuntu) — Ruff; `cmake -DCYPHA_BUILD_QT=ON` + CTest (GUI exec tests excluded on headless); WikiText-2 corpus; **`pytest tests/ cypha_lm/model/tests/`** with `CYPHA_REST_BIN` and `QT_QPA_PLATFORM=offscreen`.
+2. **`mingw_cross`** — MinGW Windows PE artifact smoke (`cypha_rest.exe`, `cypha_bench_run.exe`, …).
+3. **`windows_cuda_msvc`** (optional, non-blocking) — MSVC + CUDA compile smoke.
+4. **`linux_cuda`** (optional, non-blocking) — GCC + nvcc smoke.
+
+**Release:** tag `v*` → [`.github/workflows/release.yml`](../../.github/workflows/release.yml) publishes Linux + Windows installer archives (latest: **v2.2.4**).
 
 ## 1. Scope
 

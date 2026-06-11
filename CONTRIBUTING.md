@@ -39,6 +39,17 @@ pip install "numpy>=1.24" "scipy>=1.10" "scikit-learn>=1.3" "fastapi>=0.100" "uv
 
 When you bump pins in `requirements-verify.txt` or `cypha_studio/requirements.txt`, update **`requirements-pip-merged.txt`** to match.
 
+## Native production gate (recommended after C++ changes)
+
+```powershell
+# Windows — full gate: rebuild + 52 CTests + native pytest + bench fig01–09 + tune dry-run + REST smoke
+powershell -File scripts\cypha_native_validate_all.ps1
+
+# Linux / WSL mirror of CI native step
+bash scripts/ci_native_linux.sh
+# With Qt compile-check: CYPHA_BUILD_QT=1 bash scripts/ci_native_linux.sh
+```
+
 ## Before you share or archive changes
 
 ```bash
