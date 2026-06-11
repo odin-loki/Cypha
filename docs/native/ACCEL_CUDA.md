@@ -36,7 +36,7 @@ cmake --build build-windows-msvc --config Release `
 
 **VS 2026 / Build Tools 18:** use preset `windows-vs2026-release` and `build-windows-vs2026` instead.
 
-**GitHub Actions (optional job):** **`Jimver/cuda-toolkit`** (`sub-packages: ["nvcc","cudart"]`), then **`vswhere` + `vcvars64.bat` + Ninja** with explicit `cl` and `nvcc` (Jimver omits VS CUDA integration to avoid Nsight hang). See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) job `windows_cuda_msvc`.
+**GitHub Actions (optional job):** **`Jimver/cuda-toolkit`** (`sub-packages: ["nvcc","cudart","thrust"]`), **`ilammy/msvc-dev-cmd`**, **Ninja 1.12.1** (pinned), explicit **`CUDA_PATH`** from step outputs, optional copy of `extras/visual_studio_integration` into VS `BuildCustomizations`. See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) job `windows_cuda_msvc`.
 
 **Architecture flags:** set `-DCMAKE_CUDA_ARCHITECTURES` to your GPU SM version, e.g. `75` (Turing), `86` (Ampere), `89` (Ada). Default in `CMakeLists.txt` is **75** when unset.
 

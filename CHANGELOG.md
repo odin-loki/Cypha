@@ -8,6 +8,9 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Fixed
+- **MSVC + CUDA CI:** `ilammy/msvc-dev-cmd` + explicit `CUDA_PATH` output, Ninja **1.12.1** pin, `thrust` subpackage, optional VS integration copy.
+
 ---
 
 ## [2.2.6] — 2026-06-11 · Hybrid checkpoint atol + MSVC CUDA CI hardening
