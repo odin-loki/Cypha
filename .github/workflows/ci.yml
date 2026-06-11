@@ -32,7 +32,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Install toolchain
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev qt6-base-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev qt6-base-dev libxkbcommon-x11-0 libxcb-cursor0 libegl1 libgl1-mesa-dri libglib2.0-0
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -49,6 +49,8 @@ jobs:
       - name: Ruff
         run: ruff check cypha_studio cypha_lm cypha_bench/adapters cypha_bench/domains/d04_generation_language.py cypha_bench/domains/d17_cyphalm_integration.py tests/test_lm_api.py scripts/generate_demo_lm_checkpoint.py scripts/bench_cyphalm.py
       - name: Native build + CTest
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON
           cmake --build native/build -j 2

@@ -2,7 +2,7 @@
 
 **Goal:** Python becomes prototyping-only; **all production runtime, bench, REST, and validation** runs in native C++.
 
-**Status:** **v2.5 complete — SHIPPED** (`v2.2.2` tag — CI/release pipeline green).
+**Status:** **v2.5 complete — SHIPPED** ([`v2.2.3` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.3) — Linux + Windows installers published; CI green).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).  
@@ -29,7 +29,7 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Shipped (git)
 
-| **`v2.2.1`** tag | Latest — includes Qt Settings + Confusion Matrix |
+| **`v2.2.3`** tag | **Latest release** — Linux + Windows native installers on GitHub Releases |
 | **`v2.2.0`** tag | Core framework release (236 files) |
 
 **Published:** `git push origin main --tags` ✅
@@ -65,5 +65,5 @@ Phases 0–14 complete including Qt Studio parity (Settings, Confusion Matrix), 
 ```powershell
 powershell -File scripts\cypha_native_validate_all.ps1
 powershell -File scripts\cypha_bench_full_baseline.ps1
-git push origin main --tags   # publish v2.2.0 release
+git push origin main --tags   # publish release (see v2.2.3 on GitHub Releases)
 ```
