@@ -54,7 +54,8 @@ jobs:
         run: |
           cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON
           cmake --build native/build -j 2
-          ctest --test-dir native/build --output-on-failure
+          # Qt Widgets smoke needs a full desktop stack; compile-check Qt here, run parity CTests without GUI exec.
+          ctest --test-dir native/build --output-on-failure -E 'native_qt_shell_smoke|native_qt_stub_load_reference'
         # Local equivalent: bash scripts/ci_native_linux.sh (optional CYPHA_BUILD_QT=1 + qt6-base-dev;
         # optional CYPHA_QT_CHARTS=1 + qt6-charts-dev for -DCYPHA_QT_CHARTS=ON; drift pytest when python3 has pytest)
       - name: Pytest

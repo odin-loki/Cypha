@@ -14,7 +14,7 @@ milestone or a significant self-contained change.
 - **Ruff CI:** pin `ruff>=0.9,<0.10` for reproducible lint.
 - **CI MinGW job:** replace PE CTest (cannot run on Linux) with artifact existence smoke.
 - **Ruff UP038:** `isinstance(exc, ValueError | TypeError)` for ruff 0.9 pin compatibility.
-- **Linux CI Qt/CTest:** install XCB/EGL/GL runtime deps; `QT_QPA_PLATFORM=offscreen` for native build + CTest.
+- **Linux CI Qt/CTest:** install XCB/EGL/GL runtime deps; compile Qt targets; exclude GUI exec tests from CTest on headless runners.
 
 ---
 
