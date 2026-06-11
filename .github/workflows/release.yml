@@ -91,7 +91,10 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/native/toolchains/mingw-w64-x86_64.cmake" \
             -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
             -G Ninja
-          cmake --build native/build-mingw-release --parallel
+          cmake --build native/build-mingw-release --parallel --target all
+
+      - name: List Windows PE binaries (pre-package)
+        run: ls -la native/build-mingw-release/*.exe | sort
 
       - name: Package zip
         run: |
@@ -101,17 +104,27 @@ jobs:
       - name: Verify release bundle contents
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE="dist/cypha-${VERSION}-windows-x86_64.zip"
           STAGE="dist/cypha-${VERSION}-windows-x86_64"
-          unzip -q "dist/cypha-${VERSION}-windows-x86_64.zip" -d dist
+          rm -rf "$STAGE"
+          unzip -q "$ARCHIVE" -d dist
+          missing=0
           for bin in cypha_rest.exe cypha_bench_run.exe cypha_bench_report.exe cypha_diagnostics_run.exe cypha_tune_run.exe \
                      cyphalm_bench_native.exe cyphalm_parity.exe cyphalm_checkpoint_parity.exe \
                      gh_infer_deliberation_parity.exe kernel_llr_parity.exe registry_register.exe create_model_smoke.exe; do
-            test -f "$STAGE/bin/$bin"
+            if ! test -f "$STAGE/bin/$bin"; then
+              echo "MISSING $STAGE/bin/$bin"
+              missing=1
+            fi
           done
           for bin in score_batch_parity.exe multilabel_dif_parity.exe merge_from_parity.exe similarity_index_parity.exe \
                      embed_table_parity.exe retrieval_parity.exe som_parity.exe; do
-            test -f "$STAGE/bin/dev/$bin"
+            if ! test -f "$STAGE/bin/dev/$bin"; then
+              echo "MISSING $STAGE/bin/dev/$bin"
+              missing=1
+            fi
           done
+          test "$missing" -eq 0
 
       - uses: actions/upload-artifact@v4
         with:

@@ -51,22 +51,22 @@ echo "$VERSION" >"$STAGING/VERSION"
 
 for bin in "${BINARIES[@]}"; do
   src="$REPO_ROOT/$BUILD_DIR/$bin"
-  if [[ -x "$src" ]]; then
-    install -m 755 "$src" "$STAGING/bin/$bin"
-    echo "  + bin/$bin"
-  else
-    echo "  skip missing $bin"
+  if [[ ! -x "$src" ]]; then
+    echo "ERROR: required release binary missing from build dir: $bin (looked in $BUILD_DIR)" >&2
+    exit 1
   fi
+  install -m 755 "$src" "$STAGING/bin/$bin"
+  echo "  + bin/$bin"
 done
 
 for bin in "${DEV_BINARIES[@]}"; do
   src="$REPO_ROOT/$BUILD_DIR/$bin"
-  if [[ -x "$src" ]]; then
-    install -m 755 "$src" "$STAGING/bin/dev/$bin"
-    echo "  + bin/dev/$bin"
-  else
-    echo "  skip missing dev/$bin"
+  if [[ ! -x "$src" ]]; then
+    echo "ERROR: required dev release binary missing from build dir: $bin (looked in $BUILD_DIR)" >&2
+    exit 1
   fi
+  install -m 755 "$src" "$STAGING/bin/dev/$bin"
+  echo "  + bin/dev/$bin"
 done
 
 cp "$REPO_ROOT/install/install_release_linux.sh" "$STAGING/install.sh"

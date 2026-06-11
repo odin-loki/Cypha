@@ -338,6 +338,7 @@ set(
   cyphalm_bench_native
   cyphalm_parity
   cypha_bench_run
+  cypha_bench_report
   cypha_tune_run
   cypha_diagnostics_run
 )

@@ -48,22 +48,35 @@ echo "$VERSION" >"$STAGING/VERSION"
 
 for bin in "${BINARIES[@]}"; do
   src="$REPO_ROOT/$BUILD_DIR/$bin"
-  if [[ -f "$src" ]]; then
-    cp "$src" "$STAGING/bin/$bin"
-    echo "  + bin/$bin"
-  else
-    echo "  skip missing $bin"
+  if [[ ! -f "$src" ]]; then
+    # Some cross-toolchains emit PE without .exe in the build tree.
+    src_alt="${src%.exe}"
+    if [[ -f "$src_alt" ]]; then
+      src="$src_alt"
+    fi
   fi
+  if [[ ! -f "$src" ]]; then
+    echo "ERROR: required release binary missing from build dir: $bin (looked in $BUILD_DIR)" >&2
+    exit 1
+  fi
+  cp "$src" "$STAGING/bin/$bin"
+  echo "  + bin/$bin"
 done
 
 for bin in "${DEV_BINARIES[@]}"; do
   src="$REPO_ROOT/$BUILD_DIR/$bin"
-  if [[ -f "$src" ]]; then
-    cp "$src" "$STAGING/bin/dev/$bin"
-    echo "  + bin/dev/$bin"
-  else
-    echo "  skip missing dev/$bin"
+  if [[ ! -f "$src" ]]; then
+    src_alt="${src%.exe}"
+    if [[ -f "$src_alt" ]]; then
+      src="$src_alt"
+    fi
   fi
+  if [[ ! -f "$src" ]]; then
+    echo "ERROR: required dev release binary missing from build dir: $bin (looked in $BUILD_DIR)" >&2
+    exit 1
+  fi
+  cp "$src" "$STAGING/bin/dev/$bin"
+  echo "  + bin/dev/$bin"
 done
 
 cp "$REPO_ROOT/install/install_release_windows.ps1" "$STAGING/install.ps1"

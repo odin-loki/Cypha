@@ -6,6 +6,15 @@ milestone or a significant self-contained change.
 
 ---
 
+## [2.2.3] — 2026-05-31 · Release packaging hardening
+
+### Fixed
+- **Windows release verify:** fail-fast packaging when required PE binaries are missing; clearer verify step; build `--target all`; rm staging before unzip check.
+- **MSVC + CUDA CI:** try VS 2026 then VS 2022 generators; job marked non-blocking (`continue-on-error`).
+- **Ruff CI:** pin `ruff>=0.9,<0.10` for reproducible lint.
+
+---
+
 ## [2.2.2] — 2026-05-31 · CI / release pipeline fixes
 
 ### Fixed

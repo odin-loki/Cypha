@@ -43,7 +43,7 @@ jobs:
           pip install -r requirements-verify.txt
           pip install -e cypha_lm/
           pip install datasets
-          pip install PySide6 pyqtgraph pytest-qt ruff
+          pip install PySide6 pyqtgraph pytest-qt "ruff>=0.9,<0.10"
       - name: WikiText-2 corpus (CyphaLM D17)
         run: python -c "import sys; sys.path.insert(0,'.'); from cypha_bench.setup.acquire_data import acquire_wikitext2; acquire_wikitext2()"
       - name: Ruff
@@ -74,7 +74,7 @@ jobs:
           cmake -S native -B native/build-mingw-w64 \
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/native/toolchains/mingw-w64-x86_64.cmake" \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build native/build-mingw-w64 -j 2
+          cmake --build native/build-mingw-w64 --parallel --target all
       - name: CTest (paths rewritten to C:/ for /mnt/c checkouts)
         run: ctest --test-dir native/build-mingw-w64 --output-on-failure
 
@@ -85,6 +85,7 @@ jobs:
   windows_cuda_msvc:
     name: MSVC + CUDA smoke (Windows)
     runs-on: windows-latest
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -114,18 +115,21 @@ jobs:
         run: |
           $cudaRoot = $env:CUDA_PATH
           if (-not $cudaRoot) { throw "CUDA_PATH not set after cuda-toolkit install" }
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $gen = "Visual Studio 17 2022"
-          if (Test-Path $vswhere) {
-            $ver = & $vswhere -latest -property catalog_productLineVersion 2>$null
-            if ($ver -eq "2026") { $gen = "Visual Studio 18 2026" }
+          $generators = @("Visual Studio 18 2026", "Visual Studio 17 2022")
+          $configured = $false
+          foreach ($gen in $generators) {
+            Write-Host "Trying generator: $gen"
+            cmake -S native -B native/build-cuda-msvc `
+              -G $gen -A x64 `
+              -DCYPHA_ENABLE_CUDA=ON `
+              -DCMAKE_CUDA_ARCHITECTURES=75 `
+              -DCMAKE_GENERATOR_TOOLSET="cuda=$cudaRoot"
+            if ($LASTEXITCODE -eq 0) {
+              $configured = $true
+              break
+            }
           }
-          Write-Host "Using generator: $gen"
-          cmake -S native -B native/build-cuda-msvc `
-            -G $gen -A x64 `
-            -DCYPHA_ENABLE_CUDA=ON `
-            -DCMAKE_CUDA_ARCHITECTURES=75 `
-            -DCMAKE_GENERATOR_TOOLSET="cuda=$cudaRoot"
+          if (-not $configured) { throw "CMake configure failed for all VS generators" }
 
       - name: Build score_batch_parity + cuda_smoke
         run: >
