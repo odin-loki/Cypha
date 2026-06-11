@@ -1,4 +1,4 @@
-# Native quick start (v2.4)
+# Native quick start (v2.4 / v2.5)
 
 One-page guide: **install → validate → bench → tune → REST**. Python is **not** required for production runtime after install; use it only for fixture generation and research prototyping.
 

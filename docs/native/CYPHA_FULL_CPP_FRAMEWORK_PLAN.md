@@ -2,7 +2,7 @@
 
 **Goal:** Python becomes prototyping-only; **all production runtime, bench, REST, and validation** runs in native C++.
 
-**Status:** **v2.4.0 ready** — full framework + Studio Qt shell + 300k baseline (June 2026).
+**Status:** **v2.5 complete** — full framework + Studio Qt shell + 300k baseline + release docs (June 2026).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).
@@ -53,6 +53,7 @@ cypha_rest (/dif/*, /lm/*, /route/*) │ cypha_bench_run │ cypha_tune_run │ 
 | **0–11** v2.0–v2.2 | Core framework, REST, baseline, release | ✅ |
 | **12** v2.3 | DiscriminativeFeedback, Qt Charts, 300k lock | ✅ |
 | **13** v2.4 | Qt Registry/Help/Confidence, fig04–09, tune configs | ✅ |
+| **14** v2.5 | Release docs, CHANGELOG v2.2.0, validate gate lock | ✅ |
 
 ---
 
@@ -70,17 +71,16 @@ cypha_rest (/dif/*, /lm/*, /route/*) │ cypha_bench_run │ cypha_tune_run │ 
 | 8 · CyphaLM | lm_generation_worker |
 | 9 · Help | help_widget |
 
-Not ported: settings_dialog, confusion_dialog (optional v2.5)
+Not ported: settings_dialog, confusion_dialog (deferred)
 
 ---
 
-## Remaining (v2.5+)
+## Remaining (future)
 
 | Item | Notes |
 |------|-------|
 | Settings/confusion dialogs | Qt optional dialogs |
 | CUDA GPU runtime validation | CI compile-smoke only |
-| Git commit + tag v2.2.0 | 223 files staged-ready; say "commit" |
 
 ---
 
@@ -101,4 +101,4 @@ powershell -File scripts\cypha_bench_full_baseline.ps1
 cmake -S native -B build_qt -DCYPHA_BUILD_QT=ON -DCYPHA_QT_CHARTS=ON -DCYPHA_BUILD_EXPERIMENT_DB=ON
 ```
 
-**Tag (ready):** `v2.2.0`
+**Tag:** `v2.2.0`

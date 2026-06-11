@@ -13,7 +13,9 @@
 #include <QFrame>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHash>
 #include <QHBoxLayout>
+#include <QSet>
 #include <QInputDialog>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -45,8 +47,12 @@
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
+#include <QAction>
+#include <QBrush>
+#include <QColor>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QMenuBar>
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QTemporaryFile>
@@ -1493,8 +1499,6 @@ struct BulkTrainState {
   QString error_msg;
 };
 
-constexpr double kShellOodThreshold = 3.0;
-
 QString native_quickstart_html() {
   return QStringLiteral(
       "<h1>Native quick start (v2.4)</h1>"
@@ -1528,9 +1532,347 @@ QString native_quickstart_html() {
       "<p>Full doc: <code>docs/native/NATIVE_QUICKSTART.md</code></p>");
 }
 
+QString default_registry_root() {
+  const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+  return home + QStringLiteral("/.cypha/models");
+}
+
+struct StudioPreferences {
+  bool inference_use_gh = true;
+  double inference_ood_threshold = 3.0;
+  double inference_chi = 1.0;
+  double inference_psi = 1.0;
+  QString registry_root_override;
+  int csv_chunk_rows_override = 0;
+  QString dataset_dialog_start_dir;
+  int ui_font_pt = 0;
+
+  QString effective_registry_root() const {
+    const QString r = registry_root_override.trimmed();
+    return r.isEmpty() ? default_registry_root() : r;
+  }
+};
+
+QSettings studio_qsettings() { return QSettings(QStringLiteral("Cypha"), QStringLiteral("CyphaStudio")); }
+
+StudioPreferences load_studio_preferences() {
+  StudioPreferences p;
+  QSettings s = studio_qsettings();
+  const auto read_bool = [&](const char* key, bool def) {
+    const QVariant v = s.value(QString::fromLatin1(key), def);
+    if (v.typeId() == QMetaType::Bool) {
+      return v.toBool();
+    }
+    return QString(v.toString()).toLower() == QLatin1String("true") ||
+           QString(v.toString()) == QLatin1String("1");
+  };
+  const auto read_int = [&](const char* key, int def) {
+    bool ok = false;
+    const int v = s.value(QString::fromLatin1(key), def).toInt(&ok);
+    return ok ? v : def;
+  };
+  const auto read_dbl = [&](const char* key, double def) {
+    bool ok = false;
+    const double v = s.value(QString::fromLatin1(key), def).toDouble(&ok);
+    return ok ? v : def;
+  };
+  p.inference_use_gh = read_bool("studio/inference_use_gh", p.inference_use_gh);
+  p.inference_ood_threshold = read_dbl("studio/inference_ood_threshold", p.inference_ood_threshold);
+  p.inference_chi = read_dbl("studio/inference_chi", p.inference_chi);
+  p.inference_psi = read_dbl("studio/inference_psi", p.inference_psi);
+  p.registry_root_override = s.value(QStringLiteral("studio/registry_root_override"), QString()).toString();
+  p.csv_chunk_rows_override = read_int("studio/csv_chunk_rows_override", 0);
+  p.dataset_dialog_start_dir = s.value(QStringLiteral("studio/dataset_dialog_start_dir"), QString()).toString();
+  p.ui_font_pt = read_int("studio/ui_font_pt", 0);
+  return p;
+}
+
+void save_studio_preferences(const StudioPreferences& p) {
+  QSettings s = studio_qsettings();
+  s.setValue(QStringLiteral("studio/inference_use_gh"), p.inference_use_gh);
+  s.setValue(QStringLiteral("studio/inference_ood_threshold"), p.inference_ood_threshold);
+  s.setValue(QStringLiteral("studio/inference_chi"), p.inference_chi);
+  s.setValue(QStringLiteral("studio/inference_psi"), p.inference_psi);
+  s.setValue(QStringLiteral("studio/registry_root_override"), p.registry_root_override);
+  s.setValue(QStringLiteral("studio/csv_chunk_rows_override"), p.csv_chunk_rows_override);
+  s.setValue(QStringLiteral("studio/dataset_dialog_start_dir"), p.dataset_dialog_start_dir);
+  s.setValue(QStringLiteral("studio/ui_font_pt"), p.ui_font_pt);
+}
+
+struct ConfusionMatrix {
+  QStringList labels;
+  QVector<QVector<int>> counts;
+};
+
+ConfusionMatrix confusion_counts(const QVector<QString>& y_true, const QVector<QString>& y_pred) {
+  QSet<QString> label_set;
+  for (const QString& s : y_true) {
+    label_set.insert(s);
+  }
+  for (const QString& s : y_pred) {
+    label_set.insert(s);
+  }
+  QStringList labels = label_set.values();
+  std::sort(labels.begin(), labels.end());
+  const int n = labels.size();
+  QHash<QString, int> idx;
+  for (int i = 0; i < n; ++i) {
+    idx[labels[i]] = i;
+  }
+  QVector<QVector<int>> cm(n, QVector<int>(n, 0));
+  const int m = std::min(y_true.size(), y_pred.size());
+  for (int k = 0; k < m; ++k) {
+    const int ti = idx.value(y_true[k], -1);
+    const int pi = idx.value(y_pred[k], -1);
+    if (ti >= 0 && pi >= 0) {
+      cm[ti][pi] += 1;
+    }
+  }
+  return {labels, cm};
+}
+
+void show_confusion_dialog(QWidget* parent, const QVector<QString>& y_true, const QVector<QString>& y_pred,
+                           const QString& title = QStringLiteral("Confusion matrix (test set)")) {
+  if (y_true.isEmpty() || y_pred.isEmpty()) {
+    QMessageBox::information(parent, QStringLiteral("Confusion matrix"),
+                             QStringLiteral("No labeled batch-predict results. Use a CSV with a target column."));
+    return;
+  }
+  const ConfusionMatrix cm = confusion_counts(y_true, y_pred);
+  const int n = cm.labels.size();
+  if (n == 0) {
+    return;
+  }
+  int max_count = 0;
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      max_count = std::max(max_count, cm.counts[i][j]);
+    }
+  }
+  QDialog dlg(parent);
+  dlg.setWindowTitle(title);
+  dlg.resize(std::min(80 + n * 72, 900), std::min(120 + n * 28, 700));
+  auto* lay = new QVBoxLayout(&dlg);
+  auto* tbl = new QTableWidget(n, n, &dlg);
+  QStringList hhdr;
+  QStringList vhdr;
+  for (const QString& lb : cm.labels) {
+    hhdr << QStringLiteral("pred %1").arg(lb);
+    vhdr << QStringLiteral("true %1").arg(lb);
+  }
+  tbl->setHorizontalHeaderLabels(hhdr);
+  tbl->setVerticalHeaderLabels(vhdr);
+  tbl->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+  tbl->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      const int c = cm.counts[i][j];
+      auto* item = new QTableWidgetItem(QString::number(c));
+      item->setTextAlignment(Qt::AlignCenter);
+      if (c > 0 && max_count > 0) {
+        const double t = static_cast<double>(c) / static_cast<double>(max_count);
+        const int alpha = static_cast<int>(40 + t * 180);
+        if (i == j) {
+          item->setBackground(QBrush(QColor(40, 160, 90, alpha)));
+        } else {
+          item->setBackground(QBrush(QColor(200, 70, 70, alpha)));
+        }
+      }
+      tbl->setItem(i, j, item);
+    }
+  }
+  lay->addWidget(tbl);
+  auto* box = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+  QObject::connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+  QObject::connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  lay->addWidget(box);
+  dlg.exec();
+}
+
+class SettingsDialog final : public QDialog {
+ public:
+  explicit SettingsDialog(StudioPreferences prefs, QWidget* parent = nullptr) : QDialog(parent), prefs_(std::move(prefs)) {
+    setWindowTitle(QStringLiteral("Studio Settings"));
+    resize(520, 420);
+    auto* root = new QVBoxLayout(this);
+    auto* tabs = new QTabWidget(this);
+    root->addWidget(tabs);
+    tabs->addTab(build_inference_tab(), QStringLiteral("Inference"));
+    tabs->addTab(build_paths_tab(), QStringLiteral("Paths & data"));
+    tabs->addTab(build_appearance_tab(), QStringLiteral("Appearance"));
+    tabs->addTab(build_environment_tab(), QStringLiteral("Environment"));
+    auto* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel |
+                                          QDialogButtonBox::RestoreDefaults,
+                                      this);
+    connect(btns, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
+    connect(btns->button(QDialogButtonBox::RestoreDefaults), &QPushButton::clicked, this,
+            &SettingsDialog::restore_defaults);
+    root->addWidget(btns);
+  }
+
+  StudioPreferences result_preferences() const { return prefs_; }
+
+ private:
+  QWidget* build_inference_tab() {
+    auto* w = new QWidget(this);
+    auto* lay = new QVBoxLayout(w);
+    auto* grp = new QGroupBox(QStringLiteral("Classification inference pipeline"), w);
+    auto* form = new QFormLayout(grp);
+    use_gh_ = new QCheckBox(QStringLiteral("Use GH inference path (when model supports it)"), grp);
+    use_gh_->setChecked(prefs_.inference_use_gh);
+    form->addRow(use_gh_);
+    ood_ = new QDoubleSpinBox(grp);
+    ood_->setRange(0.1, 100.0);
+    ood_->setDecimals(2);
+    ood_->setValue(prefs_.inference_ood_threshold);
+    form->addRow(QStringLiteral("OOD threshold:"), ood_);
+    chi_ = new QDoubleSpinBox(grp);
+    chi_->setRange(0.01, 100.0);
+    chi_->setDecimals(4);
+    chi_->setValue(prefs_.inference_chi);
+    form->addRow(QStringLiteral("GH χ:"), chi_);
+    psi_ = new QDoubleSpinBox(grp);
+    psi_->setRange(0.01, 100.0);
+    psi_->setDecimals(4);
+    psi_->setValue(prefs_.inference_psi);
+    form->addRow(QStringLiteral("GH ψ:"), psi_);
+    lay->addWidget(grp);
+    auto* note = new QLabel(QStringLiteral("Changes apply to the next prediction (OOD threshold and χ/ψ)."), w);
+    note->setWordWrap(true);
+    note->setStyleSheet(QStringLiteral("color: #888; font-size: 11px;"));
+    lay->addWidget(note);
+    lay->addStretch();
+    return w;
+  }
+
+  QWidget* build_paths_tab() {
+    auto* w = new QWidget(this);
+    auto* lay = new QVBoxLayout(w);
+    lay->addWidget(new QLabel(QStringLiteral("<b>Model registry root</b>"), w));
+    auto* reg_row = new QHBoxLayout();
+    reg_edit_ = new QLineEdit(prefs_.registry_root_override, w);
+    reg_edit_->setPlaceholderText(QStringLiteral("Default: %1").arg(default_registry_root()));
+    auto* reg_br = new QPushButton(QStringLiteral("Browse…"), w);
+    connect(reg_br, &QPushButton::clicked, this, [this]() {
+      const QString path = QFileDialog::getExistingDirectory(this, QStringLiteral("Registry root"), reg_edit_->text());
+      if (!path.isEmpty()) {
+        reg_edit_->setText(path);
+      }
+    });
+    reg_row->addWidget(reg_edit_);
+    reg_row->addWidget(reg_br);
+    lay->addLayout(reg_row);
+    csv_chunk_ = new QSpinBox(w);
+    csv_chunk_->setRange(0, 10'000'000);
+    csv_chunk_->setSpecialValueText(QStringLiteral("From env / full file"));
+    csv_chunk_->setValue(prefs_.csv_chunk_rows_override > 0 ? prefs_.csv_chunk_rows_override : 0);
+    auto* form = new QFormLayout();
+    form->addRow(QStringLiteral("CSV chunk rows (0 = auto):"), csv_chunk_);
+    lay->addLayout(form);
+    lay->addWidget(new QLabel(QStringLiteral("<b>Dataset file dialog start folder</b>"), w));
+    auto* ds_row = new QHBoxLayout();
+    ds_dir_ = new QLineEdit(prefs_.dataset_dialog_start_dir, w);
+    ds_dir_->setPlaceholderText(QStringLiteral("Use recent-path history"));
+    auto* ds_br = new QPushButton(QStringLiteral("Browse…"), w);
+    connect(ds_br, &QPushButton::clicked, this, [this]() {
+      const QString path = QFileDialog::getExistingDirectory(this, QStringLiteral("Dataset dialog folder"),
+                                                             ds_dir_->text());
+      if (!path.isEmpty()) {
+        ds_dir_->setText(path);
+      }
+    });
+    ds_row->addWidget(ds_dir_);
+    ds_row->addWidget(ds_br);
+    lay->addLayout(ds_row);
+    lay->addStretch();
+    return w;
+  }
+
+  QWidget* build_appearance_tab() {
+    auto* w = new QWidget(this);
+    auto* lay = new QVBoxLayout(w);
+    font_pt_ = new QSpinBox(w);
+    font_pt_->setRange(0, 24);
+    font_pt_->setValue(prefs_.ui_font_pt);
+    font_pt_->setToolTip(QStringLiteral("0 = do not change application font. 9–14 recommended."));
+    auto* form = new QFormLayout();
+    form->addRow(QStringLiteral("UI font size (pt, 0 = default):"), font_pt_);
+    lay->addLayout(form);
+    lay->addStretch();
+    return w;
+  }
+
+  QWidget* build_environment_tab() {
+    auto* w = new QWidget(this);
+    auto* lay = new QVBoxLayout(w);
+    const QString txt = QStringLiteral(
+        "<p><b>Variables</b> (see <code>docs/studio/CYPHA_ENV.md</code>)</p>"
+        "<table cellspacing='8' style='font-size:12px'>"
+        "<tr><td><code>CYPHA_REGISTRY_ROOT</code></td><td>Model tree root</td></tr>"
+        "<tr><td><code>CYPHA_API_HOST</code></td><td>REST bind host</td></tr>"
+        "<tr><td><code>CYPHA_API_PORT</code></td><td>REST port</td></tr>"
+        "<tr><td><code>CYPHA_CORS_ORIGINS</code></td><td>CORS allow list</td></tr>"
+        "<tr><td><code>CYPHA_CSV_CHUNK_ROWS</code></td><td>CSV streaming chunk size</td></tr>"
+        "</table>"
+        "<p><b>Effective registry</b> (read-only):<br><code>%1</code></p>")
+                            .arg(default_registry_root());
+    auto* lbl = new QLabel(txt, w);
+    lbl->setWordWrap(true);
+    lbl->setTextFormat(Qt::RichText);
+    lay->addWidget(lbl);
+    lay->addStretch();
+    return w;
+  }
+
+  void restore_defaults() {
+    const StudioPreferences d;
+    use_gh_->setChecked(d.inference_use_gh);
+    ood_->setValue(d.inference_ood_threshold);
+    chi_->setValue(d.inference_chi);
+    psi_->setValue(d.inference_psi);
+    reg_edit_->clear();
+    csv_chunk_->setValue(0);
+    ds_dir_->clear();
+    font_pt_->setValue(0);
+  }
+
+  void accept() override {
+    prefs_.inference_use_gh = use_gh_->isChecked();
+    prefs_.inference_ood_threshold = ood_->value();
+    prefs_.inference_chi = chi_->value();
+    prefs_.inference_psi = psi_->value();
+    prefs_.registry_root_override = reg_edit_->text().trimmed();
+    const int cr = csv_chunk_->value();
+    prefs_.csv_chunk_rows_override = cr > 0 ? cr : 0;
+    prefs_.dataset_dialog_start_dir = ds_dir_->text().trimmed();
+    prefs_.ui_font_pt = font_pt_->value();
+    save_studio_preferences(prefs_);
+    QDialog::accept();
+  }
+
+  StudioPreferences prefs_;
+  QCheckBox* use_gh_{};
+  QDoubleSpinBox* ood_{};
+  QDoubleSpinBox* chi_{};
+  QDoubleSpinBox* psi_{};
+  QLineEdit* reg_edit_{};
+  QSpinBox* csv_chunk_{};
+  QLineEdit* ds_dir_{};
+  QSpinBox* font_pt_{};
+};
+
 class MainWindow final : public QMainWindow {
  public:
   MainWindow() {
+    studio_prefs_ = load_studio_preferences();
+    native_gh_chi_ = studio_prefs_.inference_chi;
+    native_gh_psi_ = studio_prefs_.inference_psi;
+    if (studio_prefs_.ui_font_pt > 0) {
+      QFont f = QApplication::font();
+      f.setPointSize(studio_prefs_.ui_font_pt);
+      QApplication::setFont(f);
+    }
     setWindowTitle(QStringLiteral("Cypha — Qt shell"));
     auto* central = new QWidget(this);
     auto* main_layout = new QVBoxLayout(central);
@@ -2544,7 +2886,7 @@ class MainWindow final : public QMainWindow {
 
     use_gh_chk_ = new QCheckBox(
         QStringLiteral("use_gh for native/REST predict, /update, and bulk train"), inner_server);
-    use_gh_chk_->setChecked(true);
+    use_gh_chk_->setChecked(studio_prefs_.inference_use_gh);
     lay_server->addWidget(use_gh_chk_);
 
     auto* row_rest_load = new QHBoxLayout();
@@ -2579,6 +2921,31 @@ class MainWindow final : public QMainWindow {
     main_layout->addWidget(result_label_);
 
     setCentralWidget(central);
+
+    registry_root_ = studio_prefs_.effective_registry_root();
+    if (reg_root_label_ != nullptr) {
+      reg_root_label_->setText(registry_root_.isEmpty() ? QStringLiteral("(none)") : registry_root_);
+    }
+
+    auto* file_menu = menuBar()->addMenu(QStringLiteral("&File"));
+    auto* settings_act = file_menu->addAction(QStringLiteral("Settings…"));
+    connect(settings_act, &QAction::triggered, this, [this]() {
+      SettingsDialog dlg(studio_prefs_, this);
+      if (dlg.exec() != QDialog::Accepted) {
+        return;
+      }
+      studio_prefs_ = dlg.result_preferences();
+      apply_studio_preferences();
+    });
+
+    auto* view_menu = menuBar()->addMenu(QStringLiteral("&View"));
+    view_confusion_action_ = view_menu->addAction(QStringLiteral("Confusion Matrix…"));
+    view_confusion_action_->setEnabled(false);
+    view_confusion_action_->setToolTip(
+        QStringLiteral("Show confusion matrix after batch predict on a labeled CSV."));
+    connect(view_confusion_action_, &QAction::triggered, this, [this]() {
+      show_confusion_dialog(this, batch_predict_y_true_, batch_predict_y_pred_);
+    });
 
     QSettings ui_settings(QStringLiteral("Cypha"), QStringLiteral("CyphaQtShell"));
     if (ui_settings.contains(QStringLiteral("geometry"))) {
@@ -2743,7 +3110,8 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(csv_btn_, &QPushButton::clicked, this, [this]() {
-      const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Training CSV"), QString(),
+      const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Training CSV"),
+                                                        file_dialog_start_dir(),
                                                         QStringLiteral("CSV (*.csv);;All (*)"));
       if (path.isEmpty()) {
         return;
@@ -4027,16 +4395,13 @@ class MainWindow final : public QMainWindow {
     connect(batch_predict_csv_btn_, &QPushButton::clicked, this, [this]() {
       if (!model_) return;
       const QString csv_path = QFileDialog::getOpenFileName(this, QStringLiteral("Batch predict CSV"),
-                                                            QString(), QStringLiteral("CSV (*.csv);;All (*)"));
+                                                            file_dialog_start_dir(),
+                                                            QStringLiteral("CSV (*.csv);;All (*)"));
       if (csv_path.isEmpty()) return;
 
-      // Load CSV — no target column required; all numeric columns become features.
-      cypha::CsvDenseSpec spec;
-      // target_col_index = -1 means last column is target by default, but we still
-      // have all data in x_rowmajor minus that one column.  Use x_rowmajor directly.
       cypha::CsvDenseResult mat;
       try {
-        mat = cypha::load_csv_dense(qstring_to_fs_path(csv_path), spec);
+        mat = cypha::load_csv_dense(qstring_to_fs_path(csv_path), build_csv_spec());
       } catch (const std::exception& e) {
         QMessageBox::warning(this, QStringLiteral("Batch predict"), QString::fromUtf8(e.what()));
         return;
@@ -4052,9 +4417,15 @@ class MainWindow final : public QMainWindow {
       prog.setMinimumDuration(500);
 
       batch_predict_results_.clear();
+      batch_predict_y_true_.clear();
+      batch_predict_y_pred_.clear();
       batch_predict_table_->setRowCount(0);
+      if (view_confusion_action_ != nullptr) {
+        view_confusion_action_->setEnabled(false);
+      }
 
       const int feat_per_row = mat.n_features;
+      const bool has_labels = !mat.y_class.empty();
       for (int i = 0; i < rows; i++) {
         if (prog.wasCanceled()) break;
         prog.setValue(i);
@@ -4070,19 +4441,29 @@ class MainWindow final : public QMainWindow {
           lbl  = "(error)";
           conf = 0.0;
         }
-        batch_predict_results_.push_back({QString::number(i), QString::fromStdString(lbl),
-                                          QString::number(conf, 'g', 6)});
+        const QString pred_lbl = QString::fromStdString(lbl);
+        batch_predict_results_.push_back({QString::number(i), pred_lbl, QString::number(conf, 'g', 6)});
+        batch_predict_y_pred_.push_back(pred_lbl);
+        if (has_labels) {
+          batch_predict_y_true_.push_back(QString::fromStdString(mat.y_class[static_cast<std::size_t>(i)]));
+        }
 
         const int trow = batch_predict_table_->rowCount();
         batch_predict_table_->insertRow(trow);
         batch_predict_table_->setItem(trow, 0, new QTableWidgetItem(QString::number(i)));
-        batch_predict_table_->setItem(trow, 1, new QTableWidgetItem(QString::fromStdString(lbl)));
+        batch_predict_table_->setItem(trow, 1, new QTableWidgetItem(pred_lbl));
         batch_predict_table_->setItem(trow, 2, new QTableWidgetItem(QString::number(conf, 'g', 6)));
       }
       prog.setValue(rows);
       batch_predict_export_btn_->setEnabled(!batch_predict_results_.empty());
-      result_label_->setText(QStringLiteral("Batch predict: %1 rows classified").arg(
-          static_cast<int>(batch_predict_results_.size())));
+      if (view_confusion_action_ != nullptr) {
+        view_confusion_action_->setEnabled(has_labels && !batch_predict_y_true_.isEmpty() &&
+                                           batch_predict_y_true_.size() == batch_predict_y_pred_.size());
+      }
+      result_label_->setText(QStringLiteral("Batch predict: %1 rows classified%2")
+                                 .arg(static_cast<int>(batch_predict_results_.size()))
+                                 .arg(has_labels ? QStringLiteral(" (labels available for confusion matrix)")
+                                                 : QString()));
     });
 
     connect(batch_predict_export_btn_, &QPushButton::clicked, this, [this]() {
@@ -4460,6 +4841,31 @@ class MainWindow final : public QMainWindow {
     connect(fit_save_btn, &QPushButton::clicked, dlg, [&]() { do_fit(true); });
 
     dlg->exec();
+  }
+
+  QString file_dialog_start_dir() const {
+    const QString d = studio_prefs_.dataset_dialog_start_dir.trimmed();
+    if (!d.isEmpty() && QFileInfo(d).isDir()) {
+      return d;
+    }
+    return QString();
+  }
+
+  void apply_studio_preferences() {
+    native_gh_chi_ = studio_prefs_.inference_chi;
+    native_gh_psi_ = studio_prefs_.inference_psi;
+    if (use_gh_chk_ != nullptr) {
+      use_gh_chk_->setChecked(studio_prefs_.inference_use_gh);
+    }
+    registry_root_ = studio_prefs_.effective_registry_root();
+    if (reg_root_label_ != nullptr) {
+      reg_root_label_->setText(registry_root_);
+    }
+    if (studio_prefs_.ui_font_pt > 0) {
+      QFont f = QApplication::font();
+      f.setPointSize(studio_prefs_.ui_font_pt);
+      QApplication::setFont(f);
+    }
   }
 
   cypha::CsvDenseSpec build_csv_spec() const {
@@ -5373,7 +5779,8 @@ class MainWindow final : public QMainWindow {
                                     .arg(conf, 0, 'g', 6));
     }
     if (conf_ood_label_ != nullptr && conf_ood_bar_ != nullptr) {
-      const int pct = std::clamp(static_cast<int>(anomaly / kShellOodThreshold * 100.0), 0, 100);
+      const int pct = std::clamp(
+          static_cast<int>(anomaly / std::max(studio_prefs_.inference_ood_threshold, 1e-6) * 100.0), 0, 100);
       conf_ood_bar_->setValue(pct);
       conf_ood_label_->setText(QStringLiteral("OOD score: %1  %2")
                                    .arg(anomaly, 0, 'g', 4)
@@ -5472,7 +5879,7 @@ class MainWindow final : public QMainWindow {
       const double r_base =
           (model_->has_mahal_ema && model_->mahal_ema > 0.0) ? model_->mahal_ema : 1.0;
       anomaly = cypha::gh_infer_anomaly_score(r_eff, r_base);
-      is_ood = anomaly > kShellOodThreshold;
+      is_ood = anomaly > studio_prefs_.inference_ood_threshold;
     } else {
       cypha::CyphaInferOptions iopt{};
       iopt.deliberation_lo = model_->deliberation_lo;
@@ -5716,6 +6123,10 @@ class MainWindow final : public QMainWindow {
   QPushButton* batch_predict_export_btn_{};
   QTableWidget* batch_predict_table_{};
   std::vector<std::array<QString,3>> batch_predict_results_;
+  QVector<QString> batch_predict_y_true_;
+  QVector<QString> batch_predict_y_pred_;
+  QAction* view_confusion_action_{};
+  StudioPreferences studio_prefs_;
   // ── Training progress panel ─────────────────────────────────────────────────
   QLabel*              train_prog_label_{};
   QPushButton*         train_prog_reset_btn_{};
