@@ -8,8 +8,13 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+---
+
+## [2.2.5] — 2026-06-11 · Docs sync + MSVC CUDA CI fix
+
 ### Changed
-- Docs hub, VERIFY_PLAN, VERIFICATION_STATUS, install guide, and CONTRIBUTING synced to **v2.2.4** / green CI (~274 pytest, 52 CTest).
+- Verify hub, ROADMAP, README test counts aligned with green CI (~274 pytest, 52 CTest).
+- **MSVC + CUDA CI:** `ilammy/msvc-dev-cmd` + Ninja single-config (configure/build/ctest in one step so `cl`/`nvcc` env persists).
 
 ---
 
