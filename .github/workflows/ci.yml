@@ -118,6 +118,9 @@ jobs:
             echo "No GPU on runner — native_cuda_smoke still exercises CPU thread path."
           fi
 
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+
       - name: Configure, build, and CTest (Ninja + CUDA)
         shell: cmd
         run: |
