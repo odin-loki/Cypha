@@ -30,12 +30,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install toolchain + Qt
+      - name: Install toolchain + Qt + AppImage deps
         run: |
           sudo apt-get update && sudo apt-get install -y \
             cmake ninja-build g++ libsqlite3-dev \
             qt6-base-dev libxkbcommon-x11-0 libxcb-cursor0 libegl1 libgl1-mesa-dri libglib2.0-0 \
-            wget file
+            wget file patchelf libfuse2 fuse
 
       - name: Configure + build (Release, Qt shell)
         run: |
@@ -63,6 +63,7 @@ jobs:
       - name: Package tarball
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
           bash scripts/package_release_linux.sh "$VERSION" native/build-release dist
 
       - name: Install linuxdeploy (AppImage)
@@ -81,6 +82,9 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          test -x native/build-release/cypha_qt_shell || test -x native/build-release/qt/cypha_qt_shell
+          test -x native/build-release/cypha_rest || test -x native/build-release/qt/cypha_rest
           bash packaging/build_appimage.sh "$VERSION" native/build-release dist
 
       - name: Verify release bundle contents

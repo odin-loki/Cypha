@@ -182,6 +182,9 @@ target_link_libraries(create_model_smoke PRIVATE cypha_core)
 add_executable(cypha_onnx_export tools/cypha_onnx_export.cpp)
 target_link_libraries(cypha_onnx_export PRIVATE cypha_core)
 
+add_executable(cypha_export_gguf tools/cypha_export_gguf.cpp)
+target_link_libraries(cypha_export_gguf PRIVATE cypha_core)
+
 add_executable(intelligence_profiler_smoke tools/intelligence_profiler_smoke.cpp)
 target_link_libraries(intelligence_profiler_smoke PRIVATE cypha_core)
 
@@ -203,6 +206,7 @@ set(
   cuda_smoke
   create_model_smoke
   cypha_onnx_export
+  cypha_export_gguf
   intelligence_profiler_smoke
   intelligence_profiler_papers
   cyphalm_bench_native
@@ -331,6 +335,7 @@ if(MSVC)
   target_compile_options(cypha_diagnostics_run PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_train PRIVATE /W4 /permissive-)
   target_compile_options(cypha_onnx_export PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_export_gguf PRIVATE /W4 /permissive-)
 else()
   target_compile_options(cypha_core PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
@@ -382,6 +387,7 @@ else()
   target_compile_options(retrieval_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_onnx_export PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_export_gguf PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_char_lstm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_checkpoint_parity PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -662,6 +668,11 @@ add_test(
     --cypha "${_parity_fix}/reference.cypha"
     --out "${CMAKE_CURRENT_BINARY_DIR}/onnx_export_smoke.onnx"
     --dry-run
+)
+
+add_test(
+  NAME native_export_gguf_help
+  COMMAND "$<TARGET_FILE:cypha_export_gguf>" --help
 )
 
 add_test(

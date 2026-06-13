@@ -41,7 +41,7 @@ void usage() {
       << "options:\n"
       << "  --format onnx|json   output format (default onnx)\n"
       << "  --activation tanh|none post-encode activation (default none; VectorEncoder)\n"
-      << "  --with-softmax       append temperature-scaled Softmax output \"probs\"\n"
+      << "  --with-softmax       append temperature-scaled Softmax output \"probs\" (default: off)\n"
       << "  --dry-run            load model and print graph summary; do not write file\n"
       << "  --help               show this message\n\n"
       << "notes:\n"
