@@ -56,12 +56,12 @@ We introduced:
 
 We report results from the project’s validation script:
 
-- Script: `cypha_bench/tuning/validate_profile.py`
+- Script: `bench/tuning/validate_profile.py`
 - Artifacts:
-  - `cypha_bench/artifacts/tuning/validation_compare.json`
-  - `cypha_bench/TUNING_REPORT.md`
+  - `bench/artifacts/tuning/validation_compare.json`
+  - `bench/TUNING_REPORT.md`
 
-Baseline is library defaults (`CYPHA_BENCH_USE_PROFILE=0`). Tuned uses the everyday profile (`cypha_bench/config/everyday_profile.json`) with regime routing enabled.
+Baseline is library defaults (`CYPHA_BENCH_USE_PROFILE=0`). Tuned uses the everyday profile (`bench/config/everyday_profile.json`) with regime routing enabled.
 
 ## 5. Results
 
@@ -102,14 +102,14 @@ While improved, HOG remains below classic baselines on this harness (kNN/logreg/
 - Validate current profile:
 
 ```bash
-python cypha_bench/tuning/validate_profile.py
+cypha_tune_run --config bench/config/validate_profile.py
 ```
 
 - Full bench run:
 
 ```bash
-python cypha_bench/run_all.py
+cypha_bench_run
 ```
 
-Artifacts are written under `cypha_bench/artifacts/tuning/`.
+Artifacts are written under `bench/artifacts/tuning/`.
 

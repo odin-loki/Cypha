@@ -23,7 +23,7 @@ bool near_eq(double a, double b, double atol) { return std::abs(a - b) <= atol; 
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: multilabel_dif_parity <parity_fixtures/multilabel_dif>\n";
+      std::cerr << "usage: multilabel_dif_parity <fixtures/multilabel_dif>\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);

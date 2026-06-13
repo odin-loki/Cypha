@@ -1,6 +1,6 @@
 #pragma once
 
-/// Growing Neural Gas auxiliary latent prototypes (mirrors cypha_som.gng_expert.GNGExpertManager).
+/// Growing Neural Gas auxiliary latent prototypes (U1; off by default).
 
 #include <cstdint>
 #include <map>

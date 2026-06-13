@@ -295,4 +295,19 @@ int NumpyDefaultRng::integers(int low, int high) {
   return static_cast<int>(v);
 }
 
+std::vector<int> NumpyDefaultRng::permutation(int n) {
+  if (n < 0) {
+    throw std::invalid_argument("permutation: n must be non-negative");
+  }
+  std::vector<int> out(static_cast<std::size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    out[static_cast<std::size_t>(i)] = i;
+  }
+  for (int i = n - 1; i > 0; --i) {
+    const int j = integers(0, i + 1);
+    std::swap(out[static_cast<std::size_t>(i)], out[static_cast<std::size_t>(j)]);
+  }
+  return out;
+}
+
 }  // namespace cypha

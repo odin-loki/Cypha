@@ -1,3 +1,0 @@
-task,cypha_accuracy,logistic_regression_accuracy
-linearly_separable_2class,0.987500,0.887500
-4_gaussian_blobs,0.887500,0.725000

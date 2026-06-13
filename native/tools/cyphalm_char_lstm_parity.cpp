@@ -1,4 +1,4 @@
-// Char-LSTM + low-rank GRIA + hybrid blend vs parity_fixtures/cyphalm_char_lstm/sidecar.json
+// Char-LSTM + low-rank GRIA + hybrid blend vs fixtures/cyphalm_char_lstm/sidecar.json
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -57,7 +57,7 @@ void load_gria(cypha::cyphalm::GRIALowRank& g, const nlohmann::json& j) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: cyphalm_char_lstm_parity <parity_fixtures/cyphalm_char_lstm/sidecar.json>\n";
+      std::cerr << "usage: cyphalm_char_lstm_parity <fixtures/cyphalm_char_lstm/sidecar.json>\n";
       return 2;
     }
     std::ifstream sf(argv[1]);

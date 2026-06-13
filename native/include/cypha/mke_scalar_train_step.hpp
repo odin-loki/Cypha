@@ -4,7 +4,7 @@
 ///
 /// Pipeline: ``refresh_world_log_norm_from_v`` → ``score_matrix_use_field(φ)`` → routing softmax →
 /// weighted expert RLS (``mke_expert_rls_scalar_step``) → ``dif_train_step_vector`` on φ with the router label.
-/// Matches ``mke_train_step_parity`` and ``Cypha.py`` ``MKERegressor.train_step`` (experts + router).
+/// Matches ``mke_train_step_parity`` golden fixture (experts + router).
 ///
 /// **Router label:** if ``router_train_label_override`` is non-null and non-empty, uses it (Python ``infer`` /
 /// sidecar). Otherwise uses **argmax routing softmax** ``p`` (Python fallback when pred is ``__unknown__``).

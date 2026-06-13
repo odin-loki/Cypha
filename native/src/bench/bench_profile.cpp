@@ -63,7 +63,7 @@ std::string resolve_regime(const ProfileJson& profile, const std::string& regime
 ProfileJson load_profile(const fs::path& path) {
     const fs::path env = profile_path_from_env();
     const fs::path everyday = config_dir() / "everyday_profile.json";
-    const fs::path fallback = repo_root() / "config" / "profiled_medium.json";
+    const fs::path fallback = config_dir() / "profiled_medium.json";
 
     const fs::path* candidates[] = {&path, &env, &everyday, &fallback};
     for (const fs::path* p : candidates) {

@@ -2,7 +2,7 @@
 
 Generated: 2026-05-26
 
-This report summarizes the upgrades applied across the core model (`Cypha.py`), bench adapters, tuning/scoring, and the selected tuned profile (`cypha_bench/config/everyday_profile.json`). Metrics are taken from the latest `cypha_bench/tuning/validate_profile.py` run.
+This report summarizes the upgrades applied across the core model (`cypha_core`), bench adapters, tuning/scoring, and the selected tuned profile (`bench/config/everyday_profile.json`). Metrics are taken from the latest `bench/tuning/validate_profile.py` run.
 
 ## What changed (high-impact)
 
@@ -20,11 +20,11 @@ This report summarizes the upgrades applied across the core model (`Cypha.py`), 
 
 ## Current tuned profile (everyday)
 
-Active: `cypha_bench/config/everyday_profile.json` (regime-based: tabular / vision / regression) + `algorithm_variants` (including `reg_hash_routing=false`).
+Active: `bench/config/everyday_profile.json` (regime-based: tabular / vision / regression) + `algorithm_variants` (including `reg_hash_routing=false`).
 
 ## Measured improvements (validate_profile)
 
-Source: `cypha_bench/TUNING_REPORT.md` and `cypha_bench/artifacts/tuning/validation_compare.json`
+Source: `bench/TUNING_REPORT.md` and `bench/artifacts/tuning/validation_compare.json`
 
 ### Regression (d02)
 

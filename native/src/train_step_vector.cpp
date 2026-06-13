@@ -5,6 +5,7 @@
 
 #include "cypha/encoder_contrastive.hpp"
 #include "cypha/infer_cpu.hpp"
+#include "cypha/kernel_memory.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/nig_field.hpp"
 #include "cypha/sync_infer.hpp"
@@ -85,6 +86,10 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
   double loss = mem.memory_train(H.data(), y_label, infer.field_h.data(), ctx_map, infer.temperature,
                                   ood_sigma, world_lr_step, delta_lr_step, meta);
   sync_infer_model_from_memory(infer, mem);
+
+  if (extras != nullptr && extras->use_kernel_llr && extras->kernel_mem != nullptr) {
+    extras->kernel_mem->update(H.data(), y_label, classes_for_ctx, delta_lr_step);
+  }
 
   replay.push(H.data(), x_preprocessed, d, y_label, loss);
 

@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <vector>
 
+#include "cypha/numpy_default_rng.hpp"
+
 namespace cypha {
 
 namespace {
@@ -140,6 +142,43 @@ void contrastive_update_encoder_w(std::vector<double>& w_row_major, int d, const
   update_count_for_fro_cap += 1;
   if (update_count_for_fro_cap % 50 == 0) {
     frobenius_cap(w_row_major);
+  }
+}
+
+void init_encoder_projection_w(int d, std::uint64_t seed, std::vector<double>& w_row_major) {
+  if (d <= 0) {
+    w_row_major.clear();
+    return;
+  }
+  NumpyDefaultRng rng(static_cast<int>(seed & 0xffffffffu));
+  const std::size_t n = static_cast<std::size_t>(d) * static_cast<std::size_t>(d);
+  std::vector<double> a(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    a[i] = rng.normal(0.0, 1.0);
+  }
+  w_row_major.assign(n, 0.0);
+  std::vector<double> col(static_cast<std::size_t>(d));
+  for (int j = 0; j < d; ++j) {
+    for (int i = 0; i < d; ++i) {
+      col[static_cast<std::size_t>(i)] = a[static_cast<std::size_t>(i * d + j)];
+    }
+    for (int k = 0; k < j; ++k) {
+      double dot = 0.0;
+      for (int i = 0; i < d; ++i) {
+        dot += col[static_cast<std::size_t>(i)] * w_row_major[static_cast<std::size_t>(i * d + k)];
+      }
+      for (int i = 0; i < d; ++i) {
+        col[static_cast<std::size_t>(i)] -= dot * w_row_major[static_cast<std::size_t>(i * d + k)];
+      }
+    }
+    double norm = 0.0;
+    for (int i = 0; i < d; ++i) {
+      norm += col[static_cast<std::size_t>(i)] * col[static_cast<std::size_t>(i)];
+    }
+    norm = std::sqrt(std::max(norm, 1e-18));
+    for (int i = 0; i < d; ++i) {
+      w_row_major[static_cast<std::size_t>(i * d + j)] = 0.5 * col[static_cast<std::size_t>(i)] / norm;
+    }
   }
 }
 

@@ -1,10 +1,10 @@
 # Preprocessor JSON contract (`preprocessor.json`)
 
-Saved next to `model.cypha` in the registry (`cypha_studio.core.registry`). Native loaders must reproduce **`Preprocessor.transform_one`** / **`transform`** behaviour for the same file.
+Saved next to `model.cypha` in the registry. Native loaders must reproduce **`PreprocessorState::transform_one`** behaviour for the same file.
 
-**Not the same as training `sidecar.json`:** parity fixtures under `parity_fixtures/*/sidecar.json` hold numeric goldens for native training/inference harnesses (see [`PORT_CONTRACT.md`](PORT_CONTRACT.md)). This document covers only the registry artifact **`preprocessor.json`**.
+**Not the same as training `sidecar.json`:** parity fixtures under `fixtures/*/sidecar.json` hold numeric goldens for native training/inference harnesses (see [`PORT_CONTRACT.md`](PORT_CONTRACT.md)). This document covers only the registry artifact **`preprocessor.json`**.
 
-**Source of truth:** `Preprocessor.save_state` / `load_state` in `cypha_studio/core/dataset.py`.
+**Source of truth:** [`schemas/preprocessor.schema.json`](schemas/preprocessor.schema.json) and **PREPROCESSOR_CONTRACT** field table below.
 
 ## Fields (JSON object)
 
@@ -14,6 +14,8 @@ Saved next to `model.cypha` in the registry (`cypha_studio.core.registry`). Nati
 | `pca_dim` | int or null | If set, PCA projection dimension after scaling. |
 | `rff_dim` | int or null | If set, RFF feature dimension (studio preprocessor path). |
 | `rff_gamma` | number | RFF bandwidth scalar. |
+| `auto_rff_gamma` | bool (optional) | When true, set `rff_gamma` from median pairwise distance (Python `RFFEncoder.auto_gamma`). |
+| `auto_rff_gamma_cv` | bool (optional) | When true, set `rff_gamma` via CV grid search (Python `RFFEncoder.auto_gamma_cv`; overrides `auto_rff_gamma`). |
 | `seed` | int | RNG seed used when fitting RFF weights. |
 | `mean` | list of float or null | Per-feature mean (length = input dim). |
 | `std` | list of float or null | Per-feature std (same length; avoid div-by-zero in reference). |
@@ -34,7 +36,7 @@ Saved next to `model.cypha` in the registry (`cypha_studio.core.registry`). Nati
 ## Native notes
 
 - Arrays are **JSON lists**; treat as **float64** row-major when reshaping to matrices.
-- **`PreprocessorState::fit_from_design_matrix`** (C++): matches Python **`Preprocessor.fit`** for **PCA** with optional **StandardScaler** (`scale=True` / `False`; PCA always uses a **centered** design matrix) and optional **RFF** (`rff_dim` > 0). NumPy **`np.linalg.svd`** vs symmetric Jacobi on **`Xc^T Xc`**: same subspace; per-component **sign** may differ and is aligned in **`preprocessor_fit_parity`**. **RFF** weights use NumPy **`default_rng(seed)`** via native **`NumpyDefaultRng`** (PCG64 + SeedSequence + ziggurat normal); parity: **`parity_fixtures/preprocessor_fit_rff/`**, CTest **`native_preprocessor_fit`**.
+- **`PreprocessorState::fit_from_design_matrix`** (C++): matches frozen contract for **PCA** with optional **StandardScaler** and optional **RFF**. **`auto_rff_gamma`** (median pairwise) and **`auto_rff_gamma_cv`** (ridge CV on optional targets, else 5-fold reconstruction MSE) select bandwidth before RFF weight init. Parity: **`fixtures/preprocessor_fit_rff/`**, CTest **`native_preprocessor_fit`** + **`native_preprocessor_rff_gamma_cv`**.
 - If you add fields, bump a **`preprocessor_schema_version`** in JSON (future) and document here; do not silently rename keys.
 
 ## JSON Schema (draft)

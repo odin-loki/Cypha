@@ -1,4 +1,4 @@
-// cypha_tune_run — native tuning/sweep orchestrator mirroring cypha_bench/tuning/*.py.
+// cypha_tune_run — native tuning/sweep orchestrator mirroring bench/tuning/*.py.
 #include <algorithm>
 #include <chrono>
 #include <filesystem>

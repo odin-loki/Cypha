@@ -154,11 +154,11 @@ int main(int argc, char** argv) {
     if (argc >= 2) {
         fixture = fs::path(argv[1]);
     } else {
-        fixture = fs::path("parity_fixtures/cyphalm_checkpoint/char_lstm/sidecar.json");
+        fixture = fs::path("fixtures/cyphalm_checkpoint/char_lstm/sidecar.json");
     }
     failures += test_python_fixture(fixture, "python char") != 0 ? 1 : 0;
 
-    const fs::path hybrid_fixture = fs::path("parity_fixtures/cyphalm_checkpoint/hybrid/sidecar.json");
+    const fs::path hybrid_fixture = fs::path("fixtures/cyphalm_checkpoint/hybrid/sidecar.json");
     failures += test_python_fixture(hybrid_fixture, "python hybrid") != 0 ? 1 : 0;
 
     if (failures == 0) {

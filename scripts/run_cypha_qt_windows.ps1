@@ -23,7 +23,7 @@
   CMake binary directory (default: native\build-windows-msvc under repo root).
 
 .PARAMETER Model
-  .cypha file passed to cypha_rest --cypha (default: parity_fixtures\reference.cypha).
+  .cypha file passed to cypha_rest --cypha (default: fixtures\reference.cypha).
 
 .PARAMETER Listen
   cypha_rest --listen value (default: 127.0.0.1:8099).
@@ -55,7 +55,7 @@ $RestExe = Join-Path $BuildDir "Release\cypha_rest.exe"
 $ShellExe = Join-Path $BuildDir "qt\Release\cypha_qt_shell.exe"
 
 if (-not $Model) {
-  $Model = Join-Path $RepoRoot "parity_fixtures\reference.cypha"
+  $Model = Join-Path $RepoRoot "fixtures\reference.cypha"
 }
 
 if (-not (Test-Path $RestExe)) {

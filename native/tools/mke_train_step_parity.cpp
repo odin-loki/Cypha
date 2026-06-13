@@ -1,4 +1,4 @@
-// CTest: MKERegressor.train_step vs parity_fixtures/mke_train_step/ (single) or mke_train_extended/ (multi).
+// CTest: MKERegressor.train_step vs fixtures/mke_train_step/ (single) or mke_train_extended/ (multi).
 // RFF φ from sidecar x + enc; score_matrix_use_field(φ); expert RLS; dif_train_step_vector(pred).
 // Extended: refresh_world_log_norm_from_v each step; optional replay_warmup + TrainStepExtras.replay_u01.
 #include <cmath>
@@ -456,7 +456,7 @@ int run_extended_mke(const nlohmann::json& j, const fs::path& dir) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: mke_train_step_parity <parity_fixtures/mke_train_step|mke_train_extended_dir>\n";
+      std::cerr << "usage: mke_train_step_parity <fixtures/mke_train_step|mke_train_extended_dir>\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);

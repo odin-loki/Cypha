@@ -1,8 +1,9 @@
-// cypha_bench_run — native master runner mirroring cypha_bench/run_all.py.
+// cypha_bench_run — native master runner mirroring bench/run_all.py.
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -18,6 +19,14 @@
 #include <vector>
 
 #include <zlib.h>
+
+#ifdef _WIN32
+#include <io.h>
+#ifndef popen
+#define popen _popen
+#define pclose _pclose
+#endif
+#endif
 
 #include <nlohmann/json.hpp>
 
@@ -53,9 +62,12 @@ namespace {
 
 using Json = nlohmann::json;
 
+namespace fs = std::filesystem;
+
 struct Args {
     int domain = 0;
     int from_domain = 1;
+    std::string domain_tag;
     bool report_only = false;
     bool list_domains = false;
 };
@@ -67,7 +79,8 @@ struct DomainSpec {
 };
 
 void usage() {
-    std::cerr << "usage: cypha_bench_run [--domain N] [--from-domain N] [--report-only] [--list-domains]\n";
+    std::cerr << "usage: cypha_bench_run [--domain N] [--domain-tag TAG] [--from-domain N] "
+                 "[--report-only] [--list-domains]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -79,6 +92,7 @@ Args parse_args(int argc, char** argv) {
             return argv[++i];
         };
         if (k == "--domain") a.domain = std::stoi(need("--domain"));
+        else if (k == "--domain-tag") a.domain_tag = need("--domain-tag");
         else if (k == "--from-domain") a.from_domain = std::stoi(need("--from-domain"));
         else if (k == "--report-only") a.report_only = true;
         else if (k == "--list-domains") a.list_domains = true;
@@ -92,7 +106,38 @@ Args parse_args(int argc, char** argv) {
     return a;
 }
 
-int domain_number(const std::string& tag) { return std::stoi(tag.substr(1)); }
+int domain_number(const std::string& tag) {
+    int n = 0;
+    for (std::size_t i = 1; i < tag.size() && std::isdigit(static_cast<unsigned char>(tag[i])); ++i) {
+        n = n * 10 + (tag[i] - '0');
+    }
+    return n;
+}
+
+fs::path g_tool_dir;
+
+bool bench_fast_mode() {
+    const char* v = std::getenv("CYPHA_BENCH_FAST");
+    if (v == nullptr) {
+        return false;
+    }
+    const std::string s(v);
+    return s == "1" || s == "true" || s == "True" || s == "yes";
+}
+
+std::string capture_process_output(const std::string& cmd) {
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (fp == nullptr) {
+        throw std::runtime_error("popen failed");
+    }
+    std::string out;
+    char buf[4096];
+    while (std::fgets(buf, sizeof(buf), fp) != nullptr) {
+        out += buf;
+    }
+    pclose(fp);
+    return out;
+}
 
 std::mt19937 make_rng(std::uint64_t seed) {
     return std::mt19937(static_cast<std::mt19937::result_type>(seed));
@@ -400,7 +445,7 @@ double online_clf_epistemic(const cypha::CyphaInferModel& m, const std::vector<d
     const int k = static_cast<int>(m.labels.size());
     if (k <= 1) return 0.0;
     std::vector<double> probs;
-    cypha::softmax_batch_like_python(llr.data(), 1, k, 1e-12, probs);
+    cypha::softmax_batch_reference(llr.data(), 1, k, 1e-12, probs);
     return cypha::regression::mke_routing_entropy(probs.data(), k, 1e-12);
 }
 
@@ -736,7 +781,7 @@ void online_reg_predict(const OnlineRegressor& r, const std::vector<double>& x, 
         return;
     }
     std::vector<double> probs;
-    cypha::softmax_batch_like_python(llr.data(), 1, k, 1e-12, probs);
+    cypha::softmax_batch_reference(llr.data(), 1, k, 1e-12, probs);
     std::vector<double> mu;
     std::vector<double> var;
     mu.reserve(static_cast<std::size_t>(k));
@@ -919,7 +964,7 @@ Json run_d02() {
         std::vector<double> llr;
         cypha::batch_llr_from_x(infer, xrow.data(), 1, llr);
         std::vector<double> probs;
-        cypha::softmax_batch_like_python(llr.data(), 1, static_cast<int>(infer.labels.size()), 1e-12, probs);
+        cypha::softmax_batch_reference(llr.data(), 1, static_cast<int>(infer.labels.size()), 1e-12, probs);
         std::vector<double> mu;
         std::vector<double> var;
         mu.reserve(infer.labels.size());
@@ -2504,11 +2549,40 @@ Json run_d12() {
     return experiments;
 }
 
+Json run_d03_xor() {
+    const int seeds = bench_fast_mode() ? 1 : 3;
+    const int passes = bench_fast_mode() ? 2 : 8;
+#if defined(_WIN32)
+    const fs::path bench_exe = g_tool_dir / "xor_kernel_bench.exe";
+#else
+    const fs::path bench_exe = g_tool_dir / "xor_kernel_bench";
+#endif
+    if (!fs::is_regular_file(bench_exe)) {
+        throw std::runtime_error("xor_kernel_bench not found beside cypha_bench_run: " + bench_exe.string());
+    }
+    std::ostringstream cmd;
+    cmd << "\"" << bench_exe.string() << "\""
+        << " --seeds " << seeds << " --passes " << passes << " --kernel-blend 1.0 --kernel-m 256";
+    const Json j = Json::parse(capture_process_output(cmd.str()));
+    const Json experiments{
+        {"S3_xor_linear",
+         Json{{"accuracy", j.at("linear_mean_acc")}, {"seeds", seeds}, {"passes", passes}}},
+        {"S3_xor_kernel_llr",
+         Json{{"accuracy", j.at("kernel_mean_acc")},
+              {"delta_pp", j.at("delta_pp")},
+              {"kernel_m", j.value("kernel_m", 256)},
+              {"backend", "xor_kernel_bench_native"}}},
+    };
+    cypha::bench::finalize_domain("d03_xor_kernel", experiments);
+    return experiments;
+}
+
 std::vector<DomainSpec> all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
         {"d02", "cypha_bench.domains.d02_regression", run_d02},
         {"d03", "cypha_bench.domains.d03_classification", run_d03},
+        {"d03_xor", "cypha_bench.domains.d03_xor_kernel", run_d03_xor},
         {"d04", "cypha_bench.domains.d04_generation_language", run_d04},
         {"d05", "cypha_bench.domains.d05_chess", run_d05},
         {"d06", "cypha_bench.domains.d06_go", run_d06},
@@ -2530,6 +2604,13 @@ std::vector<DomainSpec> all_domains() {
 
 int main(int argc, char** argv) {
     try {
+        if (argc >= 1 && argv[0] != nullptr) {
+            std::error_code ec;
+            const fs::path self = fs::absolute(fs::path(argv[0]), ec);
+            if (!ec) {
+                g_tool_dir = self.parent_path();
+            }
+        }
         const Args args = parse_args(argc, argv);
         const auto domains = all_domains();
 
@@ -2555,12 +2636,29 @@ int main(int argc, char** argv) {
         }
 
         std::vector<DomainSpec> selected = domains;
-        if (args.domain > 0) {
+        if (!args.domain_tag.empty()) {
             selected.clear();
             for (const auto& d : domains) {
-                if (domain_number(d.tag) == args.domain) selected.push_back(d);
+                if (d.tag == args.domain_tag) {
+                    selected.push_back(d);
+                }
             }
-            if (selected.empty()) throw std::runtime_error("unknown domain: " + std::to_string(args.domain));
+            if (selected.empty()) {
+                throw std::runtime_error("unknown domain tag: " + args.domain_tag);
+            }
+        } else if (args.domain > 0) {
+            selected.clear();
+            char buf[16];
+            std::snprintf(buf, sizeof(buf), "d%02d", args.domain);
+            const std::string want = buf;
+            for (const auto& d : domains) {
+                if (d.tag == want) {
+                    selected.push_back(d);
+                }
+            }
+            if (selected.empty()) {
+                throw std::runtime_error("unknown domain: " + std::to_string(args.domain));
+            }
         } else if (args.from_domain > 1) {
             selected.clear();
             for (const auto& d : domains) {

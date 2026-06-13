@@ -1,6 +1,6 @@
 #pragma once
 
-/// Minimal online SOM grid over encoder features (mirrors cypha_som.som_encoder.OnlineSOMEncoder).
+/// Minimal online SOM grid over encoder features (U2; off by default).
 
 #include <cstdint>
 #include <random>

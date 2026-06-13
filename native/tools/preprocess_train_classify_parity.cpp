@@ -41,9 +41,9 @@ int main(int argc, char** argv) {
   try {
     if (argc != 2) {
       std::cerr << "usage: preprocess_train_classify_parity <fixture_dir>\n"
-                   "  e.g. parity_fixtures/studio_trainer_preprocess_classify_hotpath\n"
-                   "       parity_fixtures/csv_preprocess_classify_hotpath (CSV ingest + preprocess train)\n"
-                   "       parity_fixtures/studio_trainer_preprocess_gh_classify_hotpath (sidecar use_gh)\n";
+                   "  e.g. fixtures/studio_trainer_preprocess_classify_hotpath\n"
+                   "       fixtures/csv_preprocess_classify_hotpath (CSV ingest + preprocess train)\n"
+                   "       fixtures/studio_trainer_preprocess_gh_classify_hotpath (sidecar use_gh)\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);

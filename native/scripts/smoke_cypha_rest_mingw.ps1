@@ -11,11 +11,11 @@ if (-not (Test-Path $exe)) { throw "Missing $exe; build MinGW first (see build_c
 
 $args = @(
     "--listen", "127.0.0.1:18099",
-    "--cypha", (Join-Path $root "parity_fixtures/reference.cypha"),
-    "--f-field-json", (Join-Path $root "parity_fixtures/f_field.json")
+    "--cypha", (Join-Path $root "fixtures/reference.cypha"),
+    "--f-field-json", (Join-Path $root "fixtures/f_field.json")
 )
 if ($WithRegression) {
-    $reg = Join-Path $root "parity_fixtures/regression_head.json"
+    $reg = Join-Path $root "fixtures/regression_head.json"
     if (-not (Test-Path $reg)) { throw "Missing $reg" }
     $args += @("--regression-json", $reg)
 }

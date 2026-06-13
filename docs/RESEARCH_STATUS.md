@@ -1,6 +1,6 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-06-07 (hybrid GRIA+LSTM @ 300k, Phase 1c D17, long-range probes) | **Report:** `cypha_bench/BASELINE_REPORT.md` (D17 hybrid refresh)
+**Last updated:** 2026-06-13 (P7 native-only stack; hybrid GRIA+LSTM @ 300k) | **Report:** `bench/BASELINE_REPORT.md` (D17 hybrid refresh) | **Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **53 CTests**
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -12,18 +12,18 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **C++ / CUDA / Qt port** | M1–M6 complete | Parity with Python on all ported ops; deliberation and kernel LLR Python-only |
-| **cypha_accel (GPU fused kernels)** | Working | CuPy GPU path used automatically; NumPy fallback |
-| **cypha_lm (CyphaLM)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
-| **cypha_som (SOM upgrades)** | Benchmarked, reverted | All upgrades worse than baseline; U3/U5/U6 structurally safe |
-| **cypha_bench (eval harness)** | 17 domains complete | D04 full LLM suite; D17 extended integration; `adapters/cyphalm_bench.py` |
-| **cypha_studio (PySide6 + FastAPI)** | Working | GUI + REST + registry; **CyphaLM `/generate` SSE** (FastAPI-only) |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **53 CTests** gate CI |
+| **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
+| **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
+| **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
+| **Bench harness (`cypha_bench_run`)** | 17 domains complete | D04 full LLM suite; D17 extended integration; configs + reports under `bench/` |
+| **cypha_qt_shell / cypha_rest (native)** | Working | Qt Studio + cpp-httplib REST + registry; **CyphaLM `/generate` + `/generate/stream` (SSE)** on native `cypha_rest` |
 
 ---
 
 ## Benchmark results — all 17 domains
 
-Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation off, `delta_lr=0.03`). Full raw report: [`cypha_bench/BASELINE_REPORT.md`](../cypha_bench/BASELINE_REPORT.md).
+Run on 2026-05-31 using `bench/config/everyday_profile.json` (deliberation off, `delta_lr=0.03`). Full raw report: [`bench/BASELINE_REPORT.md`](../bench/BASELINE_REPORT.md).
 
 ### Classification domains
 
@@ -103,13 +103,13 @@ Run on 2026-05-31 using `cypha_bench/config/everyday_profile.json` (deliberation
 | D17B | Alpha spectrum | mean_alpha | 0.095 (post-upgrade) | ⚠ Still low alpha; 1 active expert |
 | D17D | Online adaptation BPC gain | ΔBPC | −0.288 (WikiText) | ✅ Adapts online |
 
-**CyphaLM upgrade (2026 Q2):** config adds `context_mode`, `ngram_context`, `train_epochs`, `bptt_steps`, `laplace_smoothing`, `gria_lr_decay`. Bench adds 4-gram / 5-gram / NumPy char-LSTM baselines and `run_lm_ablations()` (`full`, `gria_ngram`, `ssm_only`, `ablation_no_dif`, `ablation_no_ssm`). Profiles: `cyphalm_d04_gutenberg.json`, `cyphalm_d17_wikitext.json`. Details: [`cypha_lm/README.md`](../cypha_lm/README.md), [`cypha_bench/README.md`](../cypha_bench/README.md).
+**CyphaLM upgrade (2026 Q2):** config adds `context_mode`, `ngram_context`, `train_epochs`, `bptt_steps`, `laplace_smoothing`, `gria_lr_decay`. Native bench adds 4-gram / 5-gram / char-LSTM baselines and LM ablations (`full`, `gria_ngram`, `ssm_only`, `ablation_no_dif`, `ablation_no_ssm`). Profiles: `bench/config/profiles/cyphalm_d04_gutenberg.json`, `cyphalm_d17_wikitext.json`. Details: [`docs/native/CYPHALM_NATIVE_BUILD.md`](native/CYPHALM_NATIVE_BUILD.md), [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6.
 
-Config (legacy pin): `cypha_bench/config/cyphalm_profile.json` and per-domain profiles under `config/profiles/`.
+Config (legacy pin): `bench/config/cyphalm_profile.json` and per-domain profiles under `config/profiles/`.
 
 D04 runs the full **CyphaLM** stack: learning curve, n-gram + LSTM baselines, context-length BPC, expert routing, save/restore, sampling comparison, ablation summary.
 
-D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Requires `cypha_bench/data/wikitext2/` — CI fetches via Hugging Face; bench fails loudly on synthetic fallback unless `CYPHA_BENCH_FAST=1`. Set `CYPHA_BENCH_FULL_CORPUS=1` to train on the entire `wiki.train.tokens` file for beat-bigram runs.
+D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Requires `bench/data/wikitext2/` — CI fetches via Hugging Face; bench fails loudly on synthetic fallback unless `CYPHA_BENCH_FAST=1`. Set `CYPHA_BENCH_FULL_CORPUS=1` to train on the entire `wiki.train.tokens` file for beat-bigram runs.
 
 ### Known weak domains
 
@@ -155,29 +155,29 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 ### Phase 0 — Foundation (2025)
 
 - **CyphaDIF architecture designed:** DIF classifier combining AIXI/Solomonoff, information geometry, Free Energy Principle, and Information Bottleneck.
-- **Python reference implementation:** `Cypha.py` (~7.1k lines). Encoders: Vector, RFF, NIG. Expert system: normal-inverse-gamma Bayesian field. Training: online, replay buffer, continual.
+- **Python reference implementation:** `cypha_core` (~7.1k lines). Encoders: Vector, RFF, NIG. Expert system: normal-inverse-gamma Bayesian field. Training: online, replay buffer, continual.
 - **Core algorithms proven:** GH–NIG world gate, field-conditioned inference, temperature calibration, DIFRegressor, MKERegressor.
 
 ### Phase 1 — Studio and REST (early 2026)
 
-- **CyphaStudio built:** PySide6 desktop app with dataset, trainer, experiment, registry, and inference tabs.
-- **FastAPI REST server:** `/predict`, `/update`, `/load`, `/register`, `/adapt_temperature` and supporting routes.
-- **Binary format v3:** `.cypha` little-endian keyed format; stable across Python and C++.
-- **Result:** full Python reference product (studio + API + model).
+- **CyphaStudio built (Python reference, removed P7):** PySide6 desktop app with dataset, trainer, experiment, registry, and inference tabs — superseded by **`cypha_qt_shell`**.
+- **REST server:** `/predict`, `/update`, `/load`, `/register`, `/adapt_temperature` and supporting routes — now **`cypha_rest`** (cpp-httplib); Python FastAPI removed P7.
+- **Binary format v3:** `.cypha` little-endian keyed format; authoritative in native C++.
+- **Result:** native Qt shell + REST + model runtime (P7 decommission).
 
 ### Phase 2 — Native C++ port (Q1 2026)
 
-- **Milestones M1–M6 completed:** `cypha_parity`, `cypha_rest`, `cypha_qt_stub` built.
-- **Parity tests:** 20+ CTests and subprocess pytest cases. All pass within float64 tolerance.
-- **GPU acceleration:** `cypha_accel` fused LLR pipeline (CuPy/NumPy).
+- **Milestones M1–M6 completed:** `cypha_parity`, `cypha_rest`, `cypha_qt_shell` built.
+- **Parity tests:** **53 CTests** (`ctest -R native_`) and subprocess cases. All pass within float64 tolerance.
+- **GPU acceleration:** `cypha::accel` fused LLR pipeline (CUDA / parallel CPU).
 - **MinGW cross-build:** Windows PE from WSL; CI job `mingw_cross`.
 - **Verified:** binary format round-trip, registry, experiment DB (SQLite), model card, preprocessor, regression head, MKE regressor, two-stage pipeline.
-- **Known gap:** deliberation (`deliberation_lo/hi`) and Kernel LLR are Python-only; not in C++.
+- **Kernel LLR:** Nyström whitening in C++ (`native/src/kernel_memory.cpp`, CTest `native_kernel_llr`); deliberation native (`native_gh_infer_deliberation`).
 
 ### Phase 3 — Comprehensive benchmarking (Q2 2026)
 
-- **cypha_bench launched:** 17-domain evaluation harness covering statistical baselines, regression, classification, tabular, images, text, RL, intrusion, information geometry, physics, robustness, continual learning, and language modelling.
-- **Tuning run:** `cypha_bench/config/everyday_profile.json` (post-diagnostic). Key change: deliberation disabled, `delta_lr=0.03`.
+- **`bench/` launched:** 17-domain evaluation harness covering statistical baselines, regression, classification, tabular, images, text, RL, intrusion, information geometry, physics, robustness, continual learning, and language modelling.
+- **Tuning run:** `bench/config/everyday_profile.json` (post-diagnostic). Key change: deliberation disabled, `delta_lr=0.03`.
 - **D04 rewritten for CyphaLM (2026-05-31):** prior D04 used `CyphaDIF + CharNgramEncoder` with a probability-indexing bug (33.2 bpc floor). Domain now runs the full CyphaLM stack; held-out **5.202 bpc** vs bigram **4.151** on Gutenberg.
 - **Key result:** D17 is the integration benchmark: **~4.50 bpc** on real corpora (Moby Dick / WikiText when installed); online adaptation gain **−0.295 bpc** (D17D).
 
@@ -185,7 +185,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 
 - **6 upgrades designed:** U1 GNG, U2 SOM encoder, U3 GRIA controller, U4 discriminative feedback, U5 Hebbian topology, U6 temporal SOM.
 - **Benchmark result:** All upgrades degraded accuracy on 7/9 standard domains. U2 SOM encoder was worst. U3/U5/U6 safe but CellAI-specific (no effect on CyphaDIF classification).
-- **Decision:** Reverted all. Flags remain in `cypha_som/` (all OFF by default) for CellAI research.
+- **Decision:** Reverted all. Python package removed; native SOM smoke tests remain under `native/src/som/`.
 - **Report:** [`docs/reports/SOM_UPGRADE_REPORT.md`](reports/SOM_UPGRADE_REPORT.md)
 
 ### Phase 5 — Diagnostics and architecture audit (Q2 2026)
@@ -204,7 +204,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Upgrade track (2026-05):** `context_mode` ablations, Laplace GRIA prior, multi-epoch + BPTT, extended n-gram and char-LSTM baselines, `CYPHA_BENCH_FULL_CORPUS` for full WikiText train.
 - **Post-upgrade (40k):** D17 **4.154** BPC (beats trigram **4.398** by −0.24; +0.24 vs bigram). D04 **4.122** BPC (beats trigram **4.522** by −0.40; +0.19 vs bigram). `gria_ngram` ablation wins over `full` on both domains.
 - **Paper figures generated** (`paper/figures/`); paper draft `paper/CyphaLM_paper.md` still has `{{EXP0N_*}}` placeholders.
-- **Report:** `cypha_lm/REPORT.md` (generated by `scripts/run_cypha_lm_report.py`)
+- **Report:** `bench/BASELINE_REPORT.md` (regenerated via `cypha_bench_run --report-only`)
 
 ---
 
@@ -222,7 +222,7 @@ Each hypothesis we have investigated with the result:
 | Temporal SOM improves SSM decay | Structural (U6) | Safe; CellAI-only |
 | Combining all SOM upgrades (U1–U6) | Yes | Worst overall; upgrades interact adversely |
 | LLR ceiling explains XOR gap | Yes | Confirmed at 32.3pp — highest-priority fix |
-| CupyAccel matches NumPy float64 | Yes | Confirmed in parity tests |
+| Native CUDA accel matches CPU float64 | Yes | Confirmed in `native_score_batch` / `native_cuda_smoke` |
 | Save/restore is lossless | Yes | D16E retention_ratio=1.0 |
 | Shared-model multi-task = no forgetting | No | D16B: 81.25% forgetting — **refuted** |
 | Adversarial robustness is good | Yes | D15C: FGSM minimal drop |
@@ -241,11 +241,11 @@ Each hypothesis we have investigated with the result:
 **Evidence:** 32.3pp XOR gap. This is a hard LLR-linearity ceiling that affects all nonlinear domains: XOR, Feynman equations (R²=-0.01), and sinusoidal regression.
 
 **What to do:**
-1. Implement `KernelMemory` reservoir + Nyström sketch in `Cypha.py` (prototype exists — `use_kernel_llr=True` flag added 2026-05-30).
-2. Benchmark on XOR suite and Feynman D14.
-3. If +5pp on XOR, port to C++.
+1. ~~Implement `KernelMemory` reservoir + Nyström sketch~~ — **done** (native C++, median-γ whitening).
+2. Benchmark on XOR suite and Feynman D14 — `cypha_bench_run --domain-tag d03_xor`; `xor_kernel_bench` CTest smoke.
+3. ~~Wire native kernel train in `memory_train.cpp`~~ — **done**; online XOR bench via `xor_kernel_bench`.
 
-**Prototype state:** Python-only, `use_kernel_llr=True` in `CyphaDIF(...)`. Not in C++. Not in parity fixtures.
+**Current state:** Nyström whitening native-only; M=256; XOR **+10.6 pp** (61.1% kernel vs 50.5% linear, 5 seeds); sklearn RBF ceiling **~79%** on same splits — **~18 pp** gap remains.
 
 ### Priority 2 — Auto-gamma RFF
 
@@ -282,13 +282,13 @@ Each hypothesis we have investigated with the result:
 **Commands:**
 
 ```powershell
-pip install -e cypha_lm/
-python cypha_bench/run_all.py --domain 17
-$env:CYPHA_BENCH_FULL_CORPUS="1"; python cypha_bench/run_all.py --domain 17
-python cypha_bench/tuning/cyphalm_sweep.py --corpus both --n-train 8000 --write-profile
+cmake --build native/build --target cyphalm_bench_native
+cypha_bench_run --domain 17
+$env:CYPHA_BENCH_FULL_CORPUS="1"; cypha_bench_run --domain 17
+cypha_tune_run --config bench/config/cyphalm_sweep.json --corpus both --n-train 8000 --write-profile
 ```
 
-See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, baseline table) and [`cypha_lm/README.md`](../cypha_lm/README.md) (config fields).
+See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, domain tags) and [`docs/native/NATIVE_QUICKSTART.md`](native/NATIVE_QUICKSTART.md) (bench/tune commands).
 
 ### Priority 4 — Multi-view online training (CyphaLM → CyphaDIF)
 
@@ -339,14 +339,14 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 
 | Report | Location | Generated | Contents |
 |--------|----------|-----------|---------|
-| Post-diagnostic tuned results (main) | [`cypha_bench/BASELINE_REPORT.md`](../cypha_bench/BASELINE_REPORT.md) | 2026-05-30 | 17 domains, full metric tables |
-| Tuning history | [`cypha_bench/TUNING_REPORT.md`](../cypha_bench/TUNING_REPORT.md) → [`docs/reports/BENCH_TUNING_REPORT.md`](reports/BENCH_TUNING_REPORT.md) | 2026-05 | Before/after tuning deltas |
-| Arch tuning | [`cypha_bench/ARCH_TUNING_REPORT.md`](../cypha_bench/ARCH_TUNING_REPORT.md) → [`docs/reports/BENCH_ARCH_TUNING_REPORT.md`](reports/BENCH_ARCH_TUNING_REPORT.md) | 2026-05 | Architecture grid |
-| Arch rescore | [`cypha_bench/ARCH_RESCORE_REPORT.md`](../cypha_bench/ARCH_RESCORE_REPORT.md) → [`docs/reports/BENCH_ARCH_RESCORE_REPORT.md`](reports/BENCH_ARCH_RESCORE_REPORT.md) | 2026-05 | Post-architecture rescore |
-| Upgrade evaluation | [`cypha_bench/UPGRADE_REPORT.md`](../cypha_bench/UPGRADE_REPORT.md) → [`docs/reports/BENCH_UPGRADE_REPORT.md`](reports/BENCH_UPGRADE_REPORT.md) | 2026-05 | SOM upgrade + deliberation effects |
+| Post-diagnostic tuned results (main) | [`bench/BASELINE_REPORT.md`](../bench/BASELINE_REPORT.md) | 2026-05-30 | 17 domains, full metric tables |
+| Tuning history | [`bench/TUNING_REPORT.md`](../bench/TUNING_REPORT.md) → [`docs/reports/BENCH_TUNING_REPORT.md`](reports/BENCH_TUNING_REPORT.md) | 2026-05 | Before/after tuning deltas |
+| Arch tuning | [`bench/ARCH_TUNING_REPORT.md`](../bench/ARCH_TUNING_REPORT.md) → [`docs/reports/BENCH_ARCH_TUNING_REPORT.md`](reports/BENCH_ARCH_TUNING_REPORT.md) | 2026-05 | Architecture grid |
+| Arch rescore | [`bench/ARCH_RESCORE_REPORT.md`](../bench/ARCH_RESCORE_REPORT.md) → [`docs/reports/BENCH_ARCH_RESCORE_REPORT.md`](reports/BENCH_ARCH_RESCORE_REPORT.md) | 2026-05 | Post-architecture rescore |
+| Upgrade evaluation | [`bench/UPGRADE_REPORT.md`](../bench/UPGRADE_REPORT.md) → [`docs/reports/BENCH_UPGRADE_REPORT.md`](reports/BENCH_UPGRADE_REPORT.md) | 2026-05 | SOM upgrade + deliberation effects |
 | SOM upgrade deep dive | [`docs/reports/SOM_UPGRADE_REPORT.md`](reports/SOM_UPGRADE_REPORT.md) | 2026-05 | U1–U6 detailed results |
 | Diagnostic session | [`docs/reports/DIAGNOSTIC_REPORT.md`](reports/DIAGNOSTIC_REPORT.md) | 2026-05 | XOR, noise, uncertainty investigation |
-| CyphaLM experiments | `cypha_lm/REPORT.md` | 2026-05-23 | D01–D10 LM experiments, figures |
+| CyphaLM experiments | `bench/BASELINE_REPORT.md` (D04/D17 sections) | 2026-05-31 | LM BPC, context curves, ablations |
 
 ---
 
@@ -354,34 +354,32 @@ See [`cypha_bench/README.md`](../cypha_bench/README.md) (ablations, env vars, ba
 
 ```bash
 # Full 17-domain benchmark
-python benchmark_baseline.py
+cypha_bench_run
 
 # Individual domain
-python cypha_bench/run_bench.py --domain d17
+cypha_bench_run --domain-tag d17
 
 # CyphaLM domains only
-python cypha_bench/run_all.py --domain 4
-python cypha_bench/run_all.py --domain 17
+cypha_bench_run --domain 4
+cypha_bench_run --domain 17
 
 # Full WikiText train (beat-bigram)
 # PowerShell: $env:CYPHA_BENCH_FULL_CORPUS="1"
-python cypha_bench/run_all.py --domain 17
+cypha_bench_run --domain 17
 
 # Legacy perplexity script
-python benchmarks/perplexity_eval.py
+cyphalm_bench_native --profile d17
 
 # Regenerate CyphaLM report + figures
-python scripts/run_cypha_lm_report.py
-
-# SOM upgrade evaluation
-python scripts/run_som_upgrade_eval.py
+cypha_bench_run --report-only
 ```
 
-Fixture regeneration (after intentional `Cypha.py` changes):
-```bash
-python scripts/generate_parity_fixtures.py
-pytest tests/test_parity_fixtures.py -v
+Full native validation gate:
+```powershell
+powershell -File scripts\cypha_native_validate_all.ps1
 ```
+
+Parity fixture updates (after intentional contract changes): see [`docs/verify/MAINTENANCE.md`](verify/MAINTENANCE.md) — update `fixtures/` sidecars, then `ctest -R native_<fixture>`.
 
 ---
 

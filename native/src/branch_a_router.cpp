@@ -368,7 +368,7 @@ BranchARouteResult BranchARouter::route(const std::string& text,
             llr[static_cast<std::size_t>(i)] =
                 i < static_cast<int>(pred.llrs.size()) ? pred.llrs[static_cast<std::size_t>(i)] : 0.0;
         }
-        softmax_batch_like_python(llr.data(), 1, k, kEps, probs);
+        softmax_batch_reference(llr.data(), 1, k, kEps, probs);
     }
 
     const double threshold =

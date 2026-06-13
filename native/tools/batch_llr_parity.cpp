@@ -1,4 +1,4 @@
-// batch_llr_from_x vs parity_fixtures/batch_llr/sidecar.json (LLR from expected.npz)
+// batch_llr_from_x vs fixtures/batch_llr/sidecar.json (LLR from expected.npz)
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -34,7 +34,7 @@ std::vector<double> flatten_f_field(const nlohmann::json& j) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: batch_llr_parity <parity_fixtures/batch_llr/sidecar.json>\n";
+      std::cerr << "usage: batch_llr_parity <fixtures/batch_llr/sidecar.json>\n";
       return 2;
     }
     fs::path side = fs::path(argv[1]);

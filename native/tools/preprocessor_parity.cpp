@@ -16,7 +16,7 @@ bool near(double a, double b) { return std::abs(a - b) <= 1e-10; }
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: preprocessor_parity <parity_fixtures/preprocessor_dir>\n";
+      std::cerr << "usage: preprocessor_parity <fixtures/preprocessor_dir>\n";
       return 2;
     }
     std::string dir = argv[1];

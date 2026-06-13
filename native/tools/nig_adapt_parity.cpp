@@ -1,4 +1,4 @@
-// Golden χ_new values from Cypha.py `_nig_adapt(chi, psi, innovation_sq, R, alpha=0.98)` (same α as gh_train_step).
+// Golden χ_new values from reference parity fixture `_nig_adapt(chi, psi, innovation_sq, R, alpha=0.98)` (same α as gh_train_step).
 #include <cmath>
 #include <cstdlib>
 #include <iostream>

@@ -1,4 +1,4 @@
-// cypha_bench_report — native report generator mirroring cypha_bench/report/generate_report.py
+// cypha_bench_report — native report generator mirroring bench/report/generate_report.py
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>

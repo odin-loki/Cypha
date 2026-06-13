@@ -11,7 +11,7 @@ namespace cypha::bench {
 
 using ProfileJson = nlohmann::json;
 
-/// Write ``cypha_bench/report/tables/<domain_id>.json`` (mirrors ``save_domain_table``).
+/// Write ``bench/report/tables/<domain_id>.json`` (mirrors ``save_domain_table``).
 std::filesystem::path save_domain_table(const std::string& domain_id, const ProfileJson& metrics);
 
 std::optional<ProfileJson> load_domain_table(const std::string& domain_id);

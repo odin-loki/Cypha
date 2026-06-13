@@ -2,7 +2,7 @@
 
 namespace cypha {
 
-/// GIG / NIG scalars shared by ``infer_cpu``, ``accel``, and CUDA host paths (matches Cypha.py).
+/// GIG / NIG scalars shared by ``infer_cpu``, ``accel``, and CUDA host paths (reference parity fixture).
 
 double gig_e_inv_v_lam_neg1(double chi0, double psi);
 double gig_e_v_lam_neg1(double chi0, double psi);

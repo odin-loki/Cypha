@@ -3,7 +3,7 @@
 /// M4 — Regression stack (native port in progress).
 ///
 /// Python reference: `DIFRegressor`, `RFFRegressor`, `MKERegressor`,
-/// `TwoStageDIFRegressor` in `Cypha.py`. Classification + `.cypha` v3 remain
+/// `TwoStageDIFRegressor` reference. Classification + `.cypha` v3 remain
 /// the shipping path; this header is the native hook for mixture-of-experts
 /// regression (`E[y|x] = Σ_k p(k|x) · μ_y,k`). See `docs/port/PORT_FULL_STACK.md` §M4.
 ///
@@ -11,13 +11,13 @@
 /// **Milestone 6:** two-stage ridge fit from LLR. **Milestone 7:** batched two-stage predict
 /// (``two_stage_dif_predict_batch``). Use ``cypha::batch_llr_from_x`` for **N×K** LLR from raw **X**.
 /// **E2E workflow (Python router):** fit quantile ``CyphaDIF`` in Python → export **LLR** + **X**, **y** →
-/// ``two_stage_dif_ridge_fit_from_llr`` + ``two_stage_dif_predict_batch`` (see ``parity_fixtures/two_stage_e2e_ridge/``).
+/// ``two_stage_dif_ridge_fit_from_llr`` + ``two_stage_dif_predict_batch`` (see ``fixtures/two_stage_e2e_ridge/``).
 /// **Full scalar MKE train step (router + experts):** ``mke_scalar_train_step.hpp`` — ``mke_scalar_train_step`` /
 /// ``mke_scalar_train_step_from_phi`` compose RFF → LLR → expert RLS → ``dif_train_step_vector`` (same as
 /// ``mke_train_step_parity``).
 ///
 /// `predict_mixture_scalar` matches `DIFRegressor.predict` for **scalar** targets
-/// (same Σ p·μ and √(Σ p·var) combination as `Cypha.py`).
+/// (same Σ p·μ and √(Σ p·var) combination as reference parity fixture).
 
 #include <algorithm>
 #include <cstddef>

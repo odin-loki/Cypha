@@ -1,7 +1,10 @@
 # SOM Upgrade Evaluation Report
 
 **Date:** 2026-05-26  
-**Spec:** `cypha_som_upgrades.md`  
+**Spec:** `cypha_som_upgrades.md` (historical)
+
+> **Note (2026-05-31):** Python `cypha_som/` package removed. This report is archival only.
+
 **Baseline:** `results/baseline.json` (10-class, 50-feat, 10k samples, 3 seeds, RFF+CyphaDIF online)
 
 ## Summary
@@ -17,15 +20,13 @@
 | U6 Temporal SOM | 0.1347 | 0.0 | 0.45 | **KEEP** (CellAI-only; neutral here) |
 | all combined | 0.0997 | **−3.5%** | 2.80 | **REVERT** |
 
-**Default flags remain OFF** (`cypha_som/config.py`). No upgrade ships enabled.
+All upgrade flags remain **OFF**. Native SOM smoke tests live under `native/src/som/` for CyphaLM config parity only.
 
-## What was implemented
+## What was implemented (historical)
 
-- Package `cypha_som/`: GNG, online SOM, GRIA controller, discriminative feedback, Hebbian graph, temporal SOM, hooks.
-- `CyphaDIF` hooks: GNG context bias, GRIA control, SOM-on-`h`, modulated contrastive updates (U4).
-- `CellAISSM`: optional dynamic diffusion (U5) and temporal decay scaling (U6).
-- `benchmark_baseline.py` + `scripts/run_som_upgrade_eval.py`.
-- Unit tests: `cypha_som/tests/test_som_upgrades.py` (7 tests); CellAI tests still pass.
+- Python `cypha_som/` package (removed): GNG, online SOM, GRIA controller, discriminative feedback, Hebbian graph, temporal SOM, hooks.
+- `CyphaDIF` hooks (removed): GNG context bias, GRIA control, SOM-on-`h`, modulated contrastive updates (U4).
+- `CellAISSM`: optional dynamic diffusion (U5) and temporal decay scaling (U6) — hooks removed from Python; native flags in `cyphalm_config.hpp`.
 
 ## Findings
 
@@ -36,18 +37,7 @@
 5. **U5/U6** do not affect `CyphaDIF` classification benchmarks; enable for CyphaLM / CellAI sequence experiments only.
 6. **Combined `all`** inherits U2’s regression — do not enable all flags together without retuning SOM/GNG.
 
-## How to re-run
+## Recommended next steps (post-mortem)
 
-```bash
-python benchmark_baseline.py --dataset classification --seeds 3 --upgrade none --output results/baseline.json
-python scripts/run_som_upgrade_eval.py
-python -m pytest cypha_som/tests/test_som_upgrades.py cypha_lm/temporal/tests/test_cellai_ssm.py -q
-```
-
-Enable one upgrade: `CYPHA_SOM_USE_GNG=1` or `python benchmark_baseline.py --upgrade U1`.
-
-## Recommended next steps
-
-- Tune U2 (`k`, `T_eta`) on **drift** benchmark before re-enabling.
-- Pair U3 with U1 and measure drift recovery (per MD §Upgrade 1 Test 3).
-- Evaluate U4/U5/U6 on **CyphaLM** WikiText/perplexity and long-context needle tests, not sklearn classification.
+- For nonlinear tabular boundaries (XOR): use **Nyström kernel LLR** (`use_kernel_llr=True`) — see `scripts/benchmark_xor_kernel_llr.py`.
+- Evaluate U5/U6 on **CyphaLM** WikiText/perplexity and long-context needle tests, not sklearn classification.

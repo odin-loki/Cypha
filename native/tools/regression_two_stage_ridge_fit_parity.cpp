@@ -1,4 +1,4 @@
-// two_stage_dif_ridge_fit_from_llr vs parity_fixtures/two_stage_ridge_fit/sidecar.json
+// two_stage_dif_ridge_fit_from_llr vs fixtures/two_stage_ridge_fit/sidecar.json
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -30,7 +30,7 @@ std::string read_all(const char* path) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: regression_two_stage_ridge_fit_parity <parity_fixtures/two_stage_ridge_fit/sidecar.json>\n";
+      std::cerr << "usage: regression_two_stage_ridge_fit_parity <fixtures/two_stage_ridge_fit/sidecar.json>\n";
       return 2;
     }
     if (cypha::regression::native_regression_milestone() < 7) {

@@ -6,7 +6,7 @@
 
 This document is the canonical plan for **structure-preserving multi-view online training**: presenting the same underlying data in different traversals each epoch, with explicit **view metadata**, so Cypha’s online routing, replay, drift, and fast/slow memory are used deliberately—not as afterthoughts.
 
-Related: [`RESEARCH_STATUS.md`](RESEARCH_STATUS.md) (current numbers and priorities), [`cypha_bench/README.md`](../cypha_bench/README.md), [`cypha_lm/README.md`](../cypha_lm/README.md).
+Related: [`RESEARCH_STATUS.md`](RESEARCH_STATUS.md) (current numbers and priorities), [`bench/README.md`](../bench/README.md), [`cypha_lm/README.md`](../cypha_lm/README.md).
 
 ---
 
@@ -170,7 +170,7 @@ Compare each to current `gria_ngram` + `train_epochs=2` **same order**.
 ## Phase 2 — CyphaDIF multi-view training
 
 **Duration:** ~4–6 weeks  
-**Scope:** Main classifier `Cypha.py` `CyphaDIF` / `DIFRegressor`; LM field in `cypha_lm/expert_field/cypha_dif.py` partially wired in Phase 1.
+**Scope:** Main classifier `cypha_core` `CyphaDIF` / `DIFRegressor`; LM field in `cypha_lm/expert_field/cypha_dif.py` partially wired in Phase 1.
 
 ### 2.1 View taxonomy (classification / regression)
 
@@ -200,7 +200,7 @@ Compare each to current `gria_ngram` + `train_epochs=2` **same order**.
 | **D12** anomaly | V6 | OOD interleaving |
 | **D15** robustness | V4 | Noise as presentation view |
 
-### 2.3 `Cypha.py` changes
+### 2.3 `cypha_core` changes
 
 | Component | Extension |
 |-----------|-----------|
@@ -235,7 +235,7 @@ D16 already has `multitask_stream(interleave=round_robin|random)`. Add:
 
 ### 2.6 Phase 2c — Cross-domain report
 
-Artifact: `cypha_bench/report/tables/cross_view_gain_matrix.json`
+Artifact: `bench/report/tables/cross_view_gain_matrix.json`
 
 - Rows: domains  
 - Columns: view schedules  
@@ -307,13 +307,13 @@ _Update this section as phases complete._
 |-------|------|--------|-------|
 | **0** | 2026-05-31 | ✅ Done | `cypha_views/` package + 6 unit tests |
 | **1a** | 2026-05-31 | ✅ Fast | D17 **17E**: `schedule_a` **4.329** vs `same_order` **4.399** BPC (3k, Δ **−0.07**) |
-| **1a sweep** | 2026-05-31 | ✅ 32-run grid | **n_train × view** sweep — see [`cyphalm_view_iteration_sweep.json`](../cypha_bench/config/cyphalm_view_iteration_sweep.json) |
+| **1a sweep** | 2026-05-31 | ✅ 32-run grid | **n_train × view** sweep — see [`cyphalm_view_iteration_sweep.json`](../bench/config/cyphalm_view_iteration_sweep.json) |
 | **2a** | 2026-05-31 | ⚠ Mixed | D16 **16G** fast: task-block-shuffle **hurts** accuracy (0.58 mean vs RR 0.81); forgetting 0.0 but wine/digits collapse — needs tuning |
 | **1** | 2026-05-31 | ✅ Core | `CyphaLM.train_sequence_views()`, profile `view_schedule=same_order` on D17 |
 
 ### Iteration × view sweep (D17 17F, 2026-05-31)
 
-Grid: `n_train` 2k–40k × `same_order_e1`, `same_order_e2`, `schedule_a`, `schedule_b`. Artifact: `cypha_bench/config/cyphalm_view_iteration_sweep.json`.
+Grid: `n_train` 2k–40k × `same_order_e1`, `same_order_e2`, `schedule_a`, `schedule_b`. Artifact: `bench/config/cyphalm_view_iteration_sweep.json`.
 
 | Finding | Detail |
 |---------|--------|
@@ -324,11 +324,11 @@ Grid: `n_train` 2k–40k × `same_order_e1`, `same_order_e2`, `schedule_a`, `sch
 
 **Recommendation:** `schedule_b` for training ≤24k tokens; `same_order` + 2 epochs only when committing to full 40k. Early-stop ~12–16k with multi-view when targeting bigram.
 
-Re-run: `python cypha_bench/tuning/cyphalm_view_iteration_sweep.py --write`
+Re-run: `cypha_tune_run --config bench/config/cyphalm_view_iteration_sweep.py --write`
 
 ### Convergence limit sweep (2026-06-01)
 
-Extended to **250k tokens** (10M-token WikiText cap). Artifact: `cyphalm_convergence_limit.json`. Re-run: `python cypha_bench/tuning/cyphalm_convergence_limit.py --write`
+Extended to **250k tokens** (10M-token WikiText cap). Artifact: `cyphalm_convergence_limit.json`. Re-run: `cypha_tune_run --config bench/config/cyphalm_convergence_limit.py --write`
 
 | Mode | Training limit | Best BPC | @ n_train | vs bigram | Status |
 |------|----------------|----------|-----------|-----------|--------|
@@ -344,7 +344,7 @@ Extended to **250k tokens** (10M-token WikiText cap). Artifact: `cyphalm_converg
 ## References
 
 - Online adaptation (existing): D17D ΔBPC ≈ −0.29 on OOD text  
-- Multitask stream (existing): `cypha_bench/domains/d16_multitask.py` `multitask_stream()`  
+- Multitask stream (existing): `bench/domains/d16_multitask.py` `multitask_stream()`  
 - CyphaLM training (existing): `cypha_lm/model/cypha_lm.py` `train_sequence()`, `train_epochs`  
-- Replay (existing): `Cypha.py` `PriorityReplayBuffer`, `replay_ratio`  
+- Replay (existing): `cypha_core` `PriorityReplayBuffer`, `replay_ratio`  
 - Beat-bigram context: [`RESEARCH_STATUS.md`](RESEARCH_STATUS.md) Priority 3  

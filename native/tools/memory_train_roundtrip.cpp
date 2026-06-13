@@ -1,4 +1,4 @@
-// Train one DIFMemory step (parity_fixtures/memory_train), merge state, save .cypha, reload and compare to after.cypha.
+// Train one DIFMemory step (fixtures/memory_train), merge state, save .cypha, reload and compare to after.cypha.
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
   try {
     if (argc != 2 && argc != 3) {
       std::fprintf(stderr,
-                   "usage: memory_train_roundtrip <parity_fixtures/memory_train_dir> [out.cypha]\n"
+                   "usage: memory_train_roundtrip <fixtures/memory_train_dir> [out.cypha]\n"
                    "  default out: <dir>/roundtrip_native.cypha\n");
       return 2;
     }

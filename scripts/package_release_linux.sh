@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Package Linux x86_64 release tarball from a native CMake build directory.
 #
 # Usage:
@@ -69,11 +69,11 @@ for bin in "${DEV_BINARIES[@]}"; do
   echo "  + bin/dev/$bin"
 done
 
-cp "$REPO_ROOT/install/install_release_linux.sh" "$STAGING/install.sh"
+cp "$REPO_ROOT/packaging/install_release_linux.sh" "$STAGING/install.sh"
 chmod +x "$STAGING/install.sh"
 
 cat >"$STAGING/README.txt" <<EOF
-Cypha ${VERSION} — Linux x86_64 native tools (full C++ framework)
+Cypha ${VERSION} â€” Linux x86_64 native tools (full C++ framework)
 =================================================================
 
 Quick install (adds ~/.local/bin symlinks for bin/; dev tools stay in bin/dev/):
@@ -84,34 +84,34 @@ Run native REST (classifier + CyphaLM + CyphaDIF routes):
     --f-field-json share/demo_fixtures/f_field.json
 
 CyphaDIF REST routes (POST JSON):
-  /dif/retrieve   — ranked database hits (input, database, top_k, optional label)
-  /dif/generate   — latent samples (mode: langevin | from_observation | retrieval_augmented)
+  /dif/retrieve   â€” ranked database hits (input, database, top_k, optional label)
+  /dif/generate   â€” latent samples (mode: langevin | from_observation | retrieval_augmented)
 
-Run native bench domains (d01–d17):
+Run native bench domains (d01â€“d17):
   cypha_bench_run --domain 17
 
 Rebuild bench report from saved tables:
   cypha_bench_report --output ./bench_report
 
-Run native diagnostics (phases 1–4 parity orchestrator):
-  cypha_diagnostics_run --fixtures /path/to/parity_fixtures
+Run native diagnostics (phases 1â€“4 parity orchestrator):
+  cypha_diagnostics_run --fixtures /path/to/fixtures
 
 Run CyphaLM bench CLI (WikiText profile; needs corpus on PATH or synthetic fallback):
   cyphalm_bench_native --mode hybrid --profile d17 --n-train 5000 --n-eval 500 --threads 1
 
 Run native tuning sweep (dry-run):
-  cypha_tune_run --config ../../cypha_bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run
+  cypha_tune_run --config ../../bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run
 
 Dev parity tools (not on PATH): bin/dev/score_batch_parity, multilabel_dif_parity, merge_from_parity, similarity_index_parity, embed_table_parity, retrieval_parity, som_parity
 
-Python Studio / full stack: clone the repo and run install/install_linux.sh --studio
+Qt shell: build `cypha_qt_shell` from `native/` (see `docs/native/qt/README.md`).
 
 Runtime deps: libgomp1 (OpenMP), libstdc++6, glibc 2.31+
 EOF
 
 for f in reference.cypha f_field.json train_hparams.json; do
-  if [[ -f "$REPO_ROOT/parity_fixtures/$f" ]]; then
-    cp "$REPO_ROOT/parity_fixtures/$f" "$STAGING/share/demo_fixtures/"
+  if [[ -f "$REPO_ROOT/fixtures/$f" ]]; then
+    cp "$REPO_ROOT/fixtures/$f" "$STAGING/share/demo_fixtures/"
   fi
 done
 
@@ -122,3 +122,4 @@ fi
 mkdir -p "$REPO_ROOT/$OUT_DIR"
 tar -C "$(dirname "$STAGING")" -czf "$ARCHIVE" "$(basename "$STAGING")"
 echo "Created $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))"
+

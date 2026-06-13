@@ -34,7 +34,7 @@ std::vector<double> flatten_f_field(const nlohmann::json& j) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: similarity_index_parity <parity_fixtures/similarity_index>\n";
+      std::cerr << "usage: similarity_index_parity <fixtures/similarity_index>\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);

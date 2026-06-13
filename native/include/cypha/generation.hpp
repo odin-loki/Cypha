@@ -20,7 +20,7 @@
 
 namespace cypha {
 
-/// Constants matching Cypha.py.
+/// Constants matching reference parity fixture.
 constexpr double kGenMinVar = 1e-4;
 constexpr double kGenEps    = 1e-8;
 

@@ -50,7 +50,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"alpha_init", cfg.alpha_init},
         {"alpha_learnable", cfg.alpha_learnable},
         {"gria_rank", cfg.gria_rank},
-        {"context_mode", context_mode_python_name(cfg.context_mode)},
+        {"context_mode", context_mode_string(cfg.context_mode)},
         {"ngram_context", cfg.ngram_context},
         {"train_epochs", cfg.train_epochs},
         {"view_schedule", cfg.view_schedule},

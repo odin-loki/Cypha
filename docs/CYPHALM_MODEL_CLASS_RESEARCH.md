@@ -42,7 +42,7 @@ Char-LSTM beat the GRIA-only CyphaLM stack by **~0.74 BPC @ 300k** while also be
 |--------|------|
 | `cypha_lm/model/char_lstm_head.py` | NumPy LSTM head + blend logit |
 | `cypha_lm/model/cypha_lm.py` | `context_mode=hybrid_gria_lstm` |
-| `cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py` | GRIA vs hybrid sweep |
+| `bench/tuning/cyphalm_hybrid_lstm_sweep.py` | GRIA vs hybrid sweep |
 | D17 **17J_hybrid_lstm** | Bench experiment |
 
 Config fields: `lstm_hidden`, `lstm_lr`, `hybrid_blend_learnable`, `hybrid_blend_lr`.
@@ -98,21 +98,21 @@ Optional future work:
 
 ```powershell
 # Hybrid sweep (WikiText or Gutenberg)
-python cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py --profile d17 --n-train 300000 --write
-python cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py --profile d04 --corpus gutenberg --n-train 300000 --write
+cypha_tune_run --config bench/config/cyphalm_hybrid_lstm_sweep.py --profile d17 --n-train 300000 --write
+cypha_tune_run --config bench/config/cyphalm_hybrid_lstm_sweep.py --profile d04 --corpus gutenberg --n-train 300000 --write
 
 # D04 full bench refresh (figures + tables)
-python cypha_bench/tuning/run_d04_hybrid_refresh.py
+cypha_tune_run --config bench/config/run_d04_hybrid_refresh.py
 
 # Char-level 1A probe
-python cypha_bench/tuning/cyphalm_long_range_suite.py --n-train 300000 --skip-ablation --write --out cypha_bench/config/cyphalm_long_range_300k_char1a.json
+cypha_tune_run --config bench/config/cyphalm_long_range_suite.py --n-train 300000 --skip-ablation --write --out bench/config/cyphalm_long_range_300k_char1a.json
 ```
 
 ---
 
 ## References
 
-- Bench char-LSTM: `cypha_bench/adapters/char_lstm_baseline.py`
-- Long-range / 1A: `cypha_bench/adapters/cyphalm_long_range.py`
+- Bench char-LSTM: `bench/adapters/char_lstm_baseline.py`
+- Long-range / 1A: `bench/adapters/cyphalm_long_range.py`
 - Branch A embeddings: [`CYPHA_BRANCH_A_EMBEDDINGS.md`](CYPHA_BRANCH_A_EMBEDDINGS.md)
 - Findings: [`FINDINGS_CYPHALM_TRAINING.md`](FINDINGS_CYPHALM_TRAINING.md)

@@ -1,20 +1,18 @@
-# Examples
+﻿# Examples
 
-Request/response examples for the Cypha REST API (`cypha_rest` native or FastAPI).
+Request/response examples for the native Cypha REST API (`cypha_rest`).
 
-All examples assume the server is running on `http://127.0.0.1:7749`. Start it with:
+Default listen port is **8099** (override with `CYPHA_REST_PORT` in the curl helpers).
 
 ```bash
-# FastAPI (Python)
-uvicorn cypha_studio.server.api:app --host 127.0.0.1 --port 7749
-
-# Native cypha_rest (after building native/)
-./native/build/cypha_rest --port 7749 --registry /path/to/registry
+./native/build/cypha_rest --listen 127.0.0.1:8099 \
+  --cypha fixtures/reference.cypha \
+  --f-field-json fixtures/f_field.json
 ```
 
 > **Dimension note:** the 4-float `input` arrays in these examples only work if your loaded
 > model has a latent dim of 4 (e.g. after a 4-feature preprocessor). Adjust to match your
-> model's `feat_dim`. For `parity_fixtures/reference.cypha`, the latent dim differs — these
+> model's `feat_dim`. For `fixtures/reference.cypha`, the latent dim differs — these
 > examples are illustrative.
 
 ---
@@ -32,24 +30,17 @@ uvicorn cypha_studio.server.api:app --host 127.0.0.1 --port 7749
 | `lm_generate_body.json` | `/generate`, `/generate/stream` | POST (CyphaLM) |
 | `curl_lm_generate_stream.ps1` | `/generate/stream` | SSE streaming (PowerShell) |
 | `curl_lm_generate_stream.sh` | `/generate/stream` | SSE streaming (bash) |
+| `demo_cyphalm/` | CyphaLM demo checkpoint | see `demo_cyphalm/README.md` |
 
-> **CyphaLM routes** (`/generate`, `/lm/*`) are **FastAPI-only**. Load a checkpoint first:
-> `POST /lm/load` with `{"checkpoint_path": "path/to/ckpt"}` or set `CYPHA_LM_CHECKPOINT` before starting uvicorn.
+Load CyphaLM at startup with `--cyphalm-checkpoint <base>` or env `CYPHALM_CHECKPOINT` (`.json` + `.npz`).
 
 ---
 
-## CyphaLM generation (FastAPI)
-
-**Load checkpoint:**
-```bash
-curl -s -X POST http://127.0.0.1:7749/lm/load \
-  -H "Content-Type: application/json" \
-  -d '{"checkpoint_path": "/path/to/my_ckpt"}'
-```
+## CyphaLM generation
 
 **Batch generate (top-p nucleus sampling):**
 ```bash
-curl -s -X POST http://127.0.0.1:7749/generate \
+curl -s -X POST http://127.0.0.1:8099/generate \
   -H "Content-Type: application/json" \
   -d @examples/lm_generate_body.json
 ```
@@ -67,28 +58,28 @@ Each SSE `data:` line includes `token_id`, `epistemic_var`, `dominant_expert`, a
 
 **Predict:**
 ```bash
-curl -s -X POST http://127.0.0.1:7749/predict \
+curl -s -X POST http://127.0.0.1:8099/predict \
   -H "Content-Type: application/json" \
   -d @examples/cypha_predict_body.json
 ```
 
 **Update (online training):**
 ```bash
-curl -s -X POST http://127.0.0.1:7749/update \
+curl -s -X POST http://127.0.0.1:8099/update \
   -H "Content-Type: application/json" \
   -d @examples/cypha_update_body.json
 ```
 
 **Load a model from the registry:**
 ```bash
-curl -s -X POST http://127.0.0.1:7749/load \
+curl -s -X POST http://127.0.0.1:8099/load \
   -H "Content-Type: application/json" \
   -d @examples/cypha_load_body.json
 ```
 
 **Health check:**
 ```bash
-curl -s http://127.0.0.1:7749/health
+curl -s http://127.0.0.1:8099/health
 ```
 
 For load-testing, see `scripts/loadtest_ab_predict_example.sh` / `.ps1` (uses Apache Bench).

@@ -93,6 +93,8 @@ int run_one_case(const fs::path& dir) {
   pre.rff_dim = jd.contains("rff_dim") && !jd["rff_dim"].is_null() ? jd["rff_dim"].get<int>() : -1;
   pre.seed = jd.value("seed", 42);
   pre.rff_gamma = jd.value("rff_gamma", 1.0);
+  pre.auto_rff_gamma = jd.value("auto_rff_gamma", false);
+  pre.auto_rff_gamma_cv = jd.value("auto_rff_gamma_cv", false);
 
   pre.fit_from_design_matrix(data, n, d);
 
@@ -188,7 +190,7 @@ int main(int argc, char** argv) {
   try {
     if (argc < 2) {
       std::cerr << "usage: preprocessor_fit_parity <fixture_dir> [fixture_dir ...]\n"
-                   "  e.g. parity_fixtures/preprocessor_fit parity_fixtures/preprocessor_fit_no_scale\n";
+                   "  e.g. fixtures/preprocessor_fit fixtures/preprocessor_fit_no_scale\n";
       return 2;
     }
     for (int i = 1; i < argc; ++i) {

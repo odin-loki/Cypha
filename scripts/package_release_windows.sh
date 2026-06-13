@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Package Windows x86_64 release ZIP from a MinGW cross-build directory.
 #
 # Usage:
@@ -79,10 +79,10 @@ for bin in "${DEV_BINARIES[@]}"; do
   echo "  + bin/dev/$bin"
 done
 
-cp "$REPO_ROOT/install/install_release_windows.ps1" "$STAGING/install.ps1"
+cp "$REPO_ROOT/packaging/install_release_windows.ps1" "$STAGING/install.ps1"
 
 cat >"$STAGING/README.txt" <<EOF
-Cypha ${VERSION} — Windows x86_64 native tools (MinGW PE, full C++ framework)
+Cypha ${VERSION} â€” Windows x86_64 native tools (MinGW PE, full C++ framework)
 =============================================================================
 
 Quick install (adds %LOCALAPPDATA%\\Cypha\\${VERSION}\\bin to user PATH):
@@ -93,34 +93,34 @@ Run native REST (classifier + CyphaLM + CyphaDIF routes):
     --f-field-json share\\demo_fixtures\\f_field.json
 
 CyphaDIF REST routes (POST JSON):
-  /dif/retrieve   — ranked database hits (input, database, top_k, optional label)
-  /dif/generate   — latent samples (mode: langevin | from_observation | retrieval_augmented)
+  /dif/retrieve   â€” ranked database hits (input, database, top_k, optional label)
+  /dif/generate   â€” latent samples (mode: langevin | from_observation | retrieval_augmented)
 
-Run native bench domains (d01–d17):
+Run native bench domains (d01â€“d17):
   cypha_bench_run.exe --domain 17
 
 Rebuild bench report from saved tables:
   cypha_bench_report.exe --output .\\bench_report
 
-Run native diagnostics (phases 1–4 parity orchestrator):
-  cypha_diagnostics_run.exe --fixtures share\\demo_fixtures\\..\\..\\parity_fixtures
+Run native diagnostics (phases 1â€“4 parity orchestrator):
+  cypha_diagnostics_run.exe --fixtures share\\demo_fixtures\\..\\..\\fixtures
 
 Run CyphaLM bench CLI:
   cyphalm_bench_native.exe --mode hybrid --profile d17 --n-train 5000 --n-eval 500 --threads 1
 
 Run native tuning sweep (dry-run):
-  cypha_tune_run.exe --config share\\..\\..\\cypha_bench\\config\\cyphalm_hybrid_lstm_tune_smoke.json --dry-run
+  cypha_tune_run.exe --config share\\..\\..\\bench\\config\\cyphalm_hybrid_lstm_tune_smoke.json --dry-run
 
 Dev parity tools (not on PATH): bin\\dev\\score_batch_parity.exe, multilabel_dif_parity.exe, merge_from_parity.exe, similarity_index_parity.exe, embed_table_parity.exe, retrieval_parity.exe, som_parity.exe
 
-Python Studio: clone the repo and run install\\install_windows.ps1 -Studio
+Qt shell: build `cypha_qt_shell` from `native/` (see `docs/native/qt/README.md`).
 
 These binaries are cross-built with static libgcc/libstdc++ (no separate MinGW DLLs required).
 EOF
 
 for f in reference.cypha f_field.json train_hparams.json; do
-  if [[ -f "$REPO_ROOT/parity_fixtures/$f" ]]; then
-    cp "$REPO_ROOT/parity_fixtures/$f" "$STAGING/share/demo_fixtures/"
+  if [[ -f "$REPO_ROOT/fixtures/$f" ]]; then
+    cp "$REPO_ROOT/fixtures/$f" "$STAGING/share/demo_fixtures/"
   fi
 done
 
@@ -129,18 +129,14 @@ if [[ -d "$REPO_ROOT/examples/demo_cyphalm" ]]; then
 fi
 
 mkdir -p "$REPO_ROOT/$OUT_DIR"
-rm -f "$ARCHIVE"
 (
   cd "$(dirname "$STAGING")"
   if command -v zip >/dev/null 2>&1; then
     zip -rq "$ARCHIVE" "$(basename "$STAGING")"
   else
-    python3 - <<PY
-import pathlib, shutil, sys
-root = pathlib.Path(r"$(dirname "$STAGING")")
-base = pathlib.Path(r"$(basename "$STAGING")")
-shutil.make_archive(r"${ARCHIVE%.zip}", "zip", root, base)
-PY
+    echo "ERROR: zip required to create release archive (install zip or 7z)" >&2
+    exit 1
   fi
 )
 echo "Created $ARCHIVE"
+

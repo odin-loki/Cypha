@@ -227,7 +227,7 @@ Effect: Additional ~3pp improvement on per-benchmark basis.
 - **D04 "33.2 bpc" is a benchmark bug** — D04 uses `CyphaDIF + CharNgramEncoder`, not CyphaLM.
   The metric hits 33.2 because `probs[next_idx]` indexes by char ID into a label-ordered
   probability array, bottoming out at the 1e-10 floor. Fix: correct the indexing in
-  `cypha_bench/domains/d04_generation_language.py`. The SGD "0.66 bpc" comparison was
+  `bench/domains/d04_generation_language.py`. The SGD "0.66 bpc" comparison was
   cherry-picked from step 1000; SGD final is 1.51 bpc.
 - Real CyphaLM evaluation: **D17 held-out BPC = 4.50** (bigram baseline 3.69)
 - These require dedicated temporal benchmarks per Phase 5 of the diagnostic plan
@@ -255,9 +255,9 @@ Following the upgrade decision tree from cypha_diagnostic_plan.md:
 
 | File | Change | Reason |
 |------|--------|--------|
-| `cypha_bench/config/everyday_profile.json` | `deliberation_lo=1.0`, `deliberation_hi=0.0`, `delta_lr=0.03` | Bugs 1 & 2 |
-| `cypha_bench/adapters/bench_models.py` | `_make_encoder()` auto-selects RFF for dim≤30 | Bug 3 |
-| `cypha_bench/domains/d01_statistical_baselines.py` | Multi-pass using `n_epochs` from profile | Multi-pass benefit |
+| `bench/config/everyday_profile.json` | `deliberation_lo=1.0`, `deliberation_hi=0.0`, `delta_lr=0.03` | Bugs 1 & 2 |
+| `bench/adapters/bench_models.py` | `_make_encoder()` auto-selects RFF for dim≤30 | Bug 3 |
+| `bench/domains/d01_statistical_baselines.py` | Multi-pass using `n_epochs` from profile | Multi-pass benefit |
 | `cypha_diagnostics/` | Diagnostic scripts (new files, not in existing codebase) | Investigation |
 
 ---

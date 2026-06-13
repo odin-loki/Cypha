@@ -1,5 +1,5 @@
 // retrieval_parity — CyphaDIF.retrieve vs native retrieve_from_x.
-// Usage: retrieval_parity <parity_fixtures/retrieval/sidecar.json>
+// Usage: retrieval_parity <fixtures/retrieval/sidecar.json>
 #include <cmath>
 #include <fstream>
 #include <iostream>

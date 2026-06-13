@@ -11,4 +11,4 @@ Output: `arch_rescore_20260524_181012.json`
 - **new_score: 2.8186**
 - source: arch_swarm_20260524_113225.json
 
-Applied to `C:\Users\odinl\OneDrive\Desktop\Ideas\Cypha\cypha_bench\config\everyday_profile.json`
+Applied to `C:\Users\odinl\OneDrive\Desktop\Ideas\Cypha\bench\config\everyday_profile.json`

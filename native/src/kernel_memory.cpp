@@ -2,13 +2,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
+#include <utility>
+
+#include "cypha/load_cypha.hpp"
 
 namespace cypha {
 
 namespace {
 
 constexpr double kEps = 1e-8;
+constexpr double kRidge = 1e-6;
 
 double dot(const double* a, const double* b, int n) {
   double s = 0.0;
@@ -16,6 +21,70 @@ double dot(const double* a, const double* b, int n) {
     s += a[i] * b[i];
   }
   return s;
+}
+
+double sq_dist(const double* a, const double* b, int n) {
+  double s = 0.0;
+  for (int i = 0; i < n; ++i) {
+    const double d = a[i] - b[i];
+    s += d * d;
+  }
+  return s;
+}
+
+double rbf(const double* a, const double* b, int n, double gamma) {
+  return std::exp(-gamma * sq_dist(a, b, n));
+}
+
+bool cholesky_lower(const double* sym_row_major, int n, double* L_row_major) {
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      L_row_major[i * n + j] = 0.0;
+    }
+  }
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j <= i; ++j) {
+      double sum = sym_row_major[i * n + j];
+      for (int k = 0; k < j; ++k) {
+        sum -= L_row_major[i * n + k] * L_row_major[j * n + k];
+      }
+      if (i == j) {
+        if (sum <= kEps) {
+          return false;
+        }
+        L_row_major[i * n + j] = std::sqrt(sum);
+      } else {
+        L_row_major[i * n + j] = sum / L_row_major[j * n + j];
+      }
+    }
+  }
+  return true;
+}
+
+void invert_lower_triangular(const double* L, int n, double* Linv) {
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      Linv[i * n + j] = 0.0;
+    }
+  }
+  for (int i = 0; i < n; ++i) {
+    Linv[i * n + i] = 1.0 / L[i * n + i];
+    for (int j = 0; j < i; ++j) {
+      double sum = 0.0;
+      for (int k = j; k < i; ++k) {
+        sum += L[i * n + k] * Linv[k * n + j];
+      }
+      Linv[i * n + j] = -sum / L[i * n + i];
+    }
+  }
+}
+
+void transpose(const double* A, int n, double* At) {
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      At[j * n + i] = A[i * n + j];
+    }
+  }
 }
 
 }  // namespace
@@ -26,6 +95,61 @@ KernelMemory::KernelMemory(int feat_dim, int M, std::uint64_t rng_seed)
       gamma_(1.0 / static_cast<double>(std::max(feat_dim, 1))),
       basis_(static_cast<std::size_t>(M) * static_cast<std::size_t>(feat_dim), 0.0),
       rng_(static_cast<std::uint32_t>(rng_seed & 0xffffffffu)) {}
+
+void KernelMemory::recompute_nystrom() {
+  const int nb = n_basis_;
+  whitening_.clear();
+  if (nb <= 0) {
+    return;
+  }
+
+  if (nb >= 2) {
+    std::vector<double> sq_dists;
+    sq_dists.reserve(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb - 1) / 2);
+    for (int i = 0; i < nb; ++i) {
+      const double* bi = basis_.data() + static_cast<std::size_t>(i * feat_dim_);
+      for (int j = i + 1; j < nb; ++j) {
+        const double* bj = basis_.data() + static_cast<std::size_t>(j * feat_dim_);
+        sq_dists.push_back(sq_dist(bi, bj, feat_dim_));
+      }
+    }
+    if (!sq_dists.empty()) {
+      const std::size_t mid = sq_dists.size() / 2;
+      std::nth_element(sq_dists.begin(), sq_dists.begin() + static_cast<std::ptrdiff_t>(mid),
+                       sq_dists.end());
+      const double med = sq_dists[mid];
+      gamma_ = 1.0 / (2.0 * std::max(med, kEps));
+    }
+  } else {
+    gamma_ = 1.0 / static_cast<double>(std::max(feat_dim_, 1));
+  }
+
+  std::vector<double> K(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+  for (int i = 0; i < nb; ++i) {
+    const double* bi = basis_.data() + static_cast<std::size_t>(i * feat_dim_);
+    for (int j = 0; j <= i; ++j) {
+      const double* bj = basis_.data() + static_cast<std::size_t>(j * feat_dim_);
+      const double kij = (i == j) ? 1.0 : rbf(bi, bj, feat_dim_, gamma_);
+      K[static_cast<std::size_t>(i * nb + j)] = kij;
+      K[static_cast<std::size_t>(j * nb + i)] = kij;
+    }
+    K[static_cast<std::size_t>(i * nb + i)] += kRidge;
+  }
+
+  std::vector<double> L(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+  if (!cholesky_lower(K.data(), nb, L.data())) {
+    whitening_.assign(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+    for (int i = 0; i < nb; ++i) {
+      whitening_[static_cast<std::size_t>(i * nb + i)] = 1.0;
+    }
+    return;
+  }
+
+  std::vector<double> Linv(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+  invert_lower_triangular(L.data(), nb, Linv.data());
+  whitening_.assign(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+  transpose(Linv.data(), nb, whitening_.data());
+}
 
 void KernelMemory::load_state(int n_basis, int n_seen, const double* basis_row_major, int basis_rows,
                               const std::map<std::string, std::vector<double>>& weights) {
@@ -45,6 +169,7 @@ void KernelMemory::load_state(int n_basis, int n_seen, const double* basis_row_m
       throw std::runtime_error("KernelMemory::load_state weight length mismatch");
     }
   }
+  recompute_nystrom();
 }
 
 void KernelMemory::phi(const double* h, std::vector<double>& out) const {
@@ -53,14 +178,25 @@ void KernelMemory::phi(const double* h, std::vector<double>& out) const {
   if (nb <= 0) {
     return;
   }
+
+  std::vector<double> k_hm(static_cast<std::size_t>(nb), 0.0);
   for (int i = 0; i < nb; ++i) {
-    double sq = 0.0;
     const double* bi = basis_.data() + static_cast<std::size_t>(i * feat_dim_);
-    for (int j = 0; j < feat_dim_; ++j) {
-      const double diff = bi[j] - h[j];
-      sq += diff * diff;
+    k_hm[static_cast<std::size_t>(i)] = rbf(bi, h, feat_dim_, gamma_);
+  }
+
+  if (static_cast<int>(whitening_.size()) == nb * nb) {
+    for (int j = 0; j < nb; ++j) {
+      double s = 0.0;
+      for (int i = 0; i < nb; ++i) {
+        s += k_hm[static_cast<std::size_t>(i)] * whitening_[static_cast<std::size_t>(i * nb + j)];
+      }
+      out[static_cast<std::size_t>(j)] = s;
     }
-    out[static_cast<std::size_t>(i)] = std::exp(-gamma_ * sq);
+  } else {
+    for (int i = 0; i < nb; ++i) {
+      out[static_cast<std::size_t>(i)] = k_hm[static_cast<std::size_t>(i)];
+    }
   }
 }
 
@@ -93,6 +229,7 @@ void KernelMemory::reservoir_update(const double* h, std::optional<int> fixed_j)
       slot[j] = h[j];
     }
     n_basis_ += 1;
+    recompute_nystrom();
     return;
   }
   int j = 0;
@@ -107,6 +244,7 @@ void KernelMemory::reservoir_update(const double* h, std::optional<int> fixed_j)
     for (int d = 0; d < feat_dim_; ++d) {
       slot[d] = h[d];
     }
+    recompute_nystrom();
   }
 }
 
@@ -156,6 +294,162 @@ void KernelMemory::update(const double* h, const std::string& label, const std::
       w[static_cast<std::size_t>(m)] += lr * (target - probs[static_cast<std::size_t>(i)]) * phi_vec[m];
     }
   }
+}
+
+KernelMemory::Snapshot KernelMemory::export_snapshot() const {
+  Snapshot snap;
+  snap.feat_dim = feat_dim_;
+  snap.M = M_;
+  snap.gamma = gamma_;
+  snap.n_basis = n_basis_;
+  snap.n_seen = n_seen_;
+  snap.basis_rowmajor = basis_;
+  snap.weights = weights_;
+  return snap;
+}
+
+void KernelMemory::import_snapshot(const Snapshot& snap) {
+  if (snap.feat_dim != feat_dim_ || snap.M != M_) {
+    throw std::runtime_error("KernelMemory::import_snapshot shape mismatch");
+  }
+  load_state(snap.n_basis, snap.n_seen, snap.basis_rowmajor.data(), M_, snap.weights);
+}
+
+namespace {
+
+double cypha_node_as_double(const CNode& n) {
+  if (n.kind == CNode::Float) {
+    return n.f;
+  }
+  if (n.kind == CNode::Int) {
+    return static_cast<double>(n.i);
+  }
+  throw std::runtime_error("kernel cypha: expected numeric node");
+}
+
+CNode cypha_node_f64(double v) {
+  CNode n;
+  n.kind = CNode::Float;
+  n.f = v;
+  return n;
+}
+
+CNode cypha_node_i64(std::int64_t v) {
+  CNode n;
+  n.kind = CNode::Int;
+  n.i = v;
+  return n;
+}
+
+CNode cypha_node_bool(bool v) {
+  CNode n;
+  n.kind = CNode::Bool;
+  n.b = v;
+  return n;
+}
+
+CNode cypha_tensor_1d(const std::vector<double>& data) {
+  CNode t;
+  t.kind = CNode::Tensor;
+  t.shape = {static_cast<std::uint32_t>(data.size())};
+  t.tensor = data;
+  return t;
+}
+
+CNode cypha_tensor_2d_rowmajor(const std::vector<double>& data, int rows, int cols) {
+  CNode t;
+  t.kind = CNode::Tensor;
+  t.shape = {static_cast<std::uint32_t>(rows), static_cast<std::uint32_t>(cols)};
+  t.tensor = data;
+  return t;
+}
+
+void root_map_assign(std::vector<std::pair<std::string, CNode>>& map, std::string key, CNode val) {
+  for (auto& kv : map) {
+    if (kv.first == key) {
+      kv.second = std::move(val);
+      return;
+    }
+  }
+  map.emplace_back(std::move(key), std::move(val));
+}
+
+}  // namespace
+
+void patch_kernel_into_root(CNode& root, const KernelMemory& km, bool use_kernel_llr, double kernel_blend) {
+  if (root.kind != CNode::Map) {
+    throw std::runtime_error("patch_kernel_into_root: root must be map");
+  }
+  root_map_assign(root.map, "use_kernel_llr", cypha_node_bool(use_kernel_llr));
+  root_map_assign(root.map, "kernel_blend", cypha_node_f64(kernel_blend));
+  if (!use_kernel_llr) {
+    return;
+  }
+  const KernelMemory::Snapshot snap = km.export_snapshot();
+  CNode km_node;
+  km_node.kind = CNode::Map;
+  km_node.map.emplace_back("feat_dim", cypha_node_i64(snap.feat_dim));
+  km_node.map.emplace_back("M", cypha_node_i64(snap.M));
+  km_node.map.emplace_back("gamma", cypha_node_f64(snap.gamma));
+  km_node.map.emplace_back("n_basis", cypha_node_i64(snap.n_basis));
+  km_node.map.emplace_back("n_seen", cypha_node_i64(snap.n_seen));
+  km_node.map.emplace_back("basis_rowmajor",
+                           cypha_tensor_2d_rowmajor(snap.basis_rowmajor, snap.M, snap.feat_dim));
+  CNode weights_map;
+  weights_map.kind = CNode::Map;
+  for (const auto& pr : snap.weights) {
+    weights_map.map.emplace_back(pr.first, cypha_tensor_1d(pr.second));
+  }
+  km_node.map.emplace_back("weights", std::move(weights_map));
+  root_map_assign(root.map, "kernel_mem", std::move(km_node));
+}
+
+bool try_load_kernel_from_root(const CNode& root, KernelMemory& km, bool& use_kernel_llr_out,
+                               double& kernel_blend_out) {
+  use_kernel_llr_out = false;
+  kernel_blend_out = 0.5;
+  if (root.kind != CNode::Map) {
+    return false;
+  }
+  if (const CNode* u = map_get(root, "use_kernel_llr"); u != nullptr && u->kind == CNode::Bool) {
+    use_kernel_llr_out = u->b;
+  }
+  if (const CNode* b = map_get(root, "kernel_blend"); b != nullptr) {
+    kernel_blend_out = cypha_node_as_double(*b);
+  }
+  if (!use_kernel_llr_out) {
+    return false;
+  }
+  const CNode* kmn = map_get(root, "kernel_mem");
+  if (kmn == nullptr || kmn->kind != CNode::Map) {
+    return false;
+  }
+  const CNode& st = *kmn;
+  const int feat_dim = static_cast<int>(cypha_node_as_double(map_get_required(st, "feat_dim")));
+  const int M = static_cast<int>(cypha_node_as_double(map_get_required(st, "M")));
+  const int n_basis = static_cast<int>(cypha_node_as_double(map_get_required(st, "n_basis")));
+  const int n_seen = static_cast<int>(cypha_node_as_double(map_get_required(st, "n_seen")));
+  const CNode& basis_node = map_get_required(st, "basis_rowmajor");
+  if (basis_node.kind != CNode::Tensor || static_cast<int>(basis_node.tensor.size()) != M * feat_dim) {
+    throw std::runtime_error("try_load_kernel_from_root: basis shape mismatch");
+  }
+  std::map<std::string, std::vector<double>> weights;
+  const CNode& wmap = map_get_required(st, "weights");
+  if (wmap.kind != CNode::Map) {
+    throw std::runtime_error("try_load_kernel_from_root: weights must be map");
+  }
+  for (const auto& pr : wmap.map) {
+    if (pr.second.kind != CNode::Tensor ||
+        static_cast<int>(pr.second.tensor.size()) != M) {
+      throw std::runtime_error("try_load_kernel_from_root: weight length mismatch");
+    }
+    weights[pr.first] = pr.second.tensor;
+  }
+  if (km.feat_dim() != feat_dim || km.M() != M) {
+    km = KernelMemory(feat_dim, M, 0);
+  }
+  km.load_state(n_basis, n_seen, basis_node.tensor.data(), M, weights);
+  return true;
 }
 
 }  // namespace cypha

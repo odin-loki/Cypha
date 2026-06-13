@@ -1,4 +1,4 @@
-// CTest: TemporalSOM decay-range smoke + GNG node growth (mirrors cypha_som/tests/test_som_upgrades.py).
+// CTest: TemporalSOM decay-range smoke + GNG node growth (native SOM smoke; archived experiment).
 #include <cmath>
 #include <cstdlib>
 #include <iostream>

@@ -47,7 +47,7 @@ std::int64_t as_int64(const CNode& n) {
   throw std::runtime_error("Expected integer node");
 }
 
-void softmax_row_like_python(const double* x, int k, double eps, double* out) {
+void softmax_row_reference(const double* x, int k, double eps, double* out) {
   if (k <= 8) {
     double mx = x[0];
     for (int i = 1; i < k; ++i) {
@@ -671,14 +671,14 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
   }
 }
 
-void softmax_batch_like_python(const double* z_row_major, int n, int k, double eps,
+void softmax_batch_reference(const double* z_row_major, int n, int k, double eps,
                                std::vector<double>& probs_out) {
   probs_out.assign(static_cast<std::size_t>(n * k), 0.0);
   if (n <= 0 || k <= 0) {
     return;
   }
   infer_parallel_rows(0, n, [&](int i) {
-    softmax_row_like_python(z_row_major + i * k, k, eps, probs_out.data() + i * k);
+    softmax_row_reference(z_row_major + i * k, k, eps, probs_out.data() + i * k);
   });
 }
 
@@ -733,7 +733,7 @@ double adapt_temperature_ece(CyphaInferModel& infer, const double* h_row_major, 
             llr[static_cast<std::size_t>(i * K + k)] / (T + kEps);
       }
     }
-    softmax_batch_like_python(z.data(), n_cal, K, kEps, probs);
+    softmax_batch_reference(z.data(), n_cal, K, kEps, probs);
     for (int i = 0; i < n_cal; ++i) {
       int bi = 0;
       double pmax = probs[static_cast<std::size_t>(i * K)];
@@ -866,7 +866,8 @@ double legacy_sigmoid_gate(double mahal_per_dim, double mahal_ema, double mahal_
 ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const double* h_field,
                                 double temperature, const std::optional<double>& mahal_ema,
                                 double mahal_std_ema, double gh_chi, double gh_psi,
-                                bool use_context_prior) {
+                                bool use_context_prior, const KernelMemory* kernel_mem, bool use_kernel_llr,
+                                double kernel_blend) {
   ClassifyAtHResult out;
   const int d = m.d_latent;
   const int K = static_cast<int>(m.labels.size());
@@ -886,8 +887,6 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
   }
 
   out.llrs.assign(static_cast<std::size_t>(K), 0.0);
-  int best_i = 0;
-  double best_llr = -1e300;
   double mahal_num = 0.0;
   for (int j = 0; j < d; ++j) {
     const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
@@ -908,8 +907,41 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
     const double u_arr = m.v_mean / (m.n_obs[static_cast<std::size_t>(k)] + 1.0);
     const double llr = cross - 0.5 * d_sq - u_arr + ctx[static_cast<std::size_t>(k)];
     out.llrs[static_cast<std::size_t>(k)] = llr;
-    if (llr > best_llr) {
-      best_llr = llr;
+  }
+
+  std::vector<double> linear_llrs = out.llrs;
+  int linear_best = 0;
+  double linear_best_llr = linear_llrs[0];
+  for (int k = 1; k < K; ++k) {
+    if (linear_llrs[static_cast<std::size_t>(k)] > linear_best_llr) {
+      linear_best_llr = linear_llrs[static_cast<std::size_t>(k)];
+      linear_best = k;
+    }
+  }
+
+  std::vector<double> z_lin(static_cast<std::size_t>(K));
+  for (int k = 0; k < K; ++k) {
+    z_lin[static_cast<std::size_t>(k)] = linear_llrs[static_cast<std::size_t>(k)] / (temperature + kEps);
+  }
+  std::vector<double> p_lin;
+  softmax_batch_reference(z_lin.data(), 1, K, kEps, p_lin);
+  const double disc_lin = p_lin[static_cast<std::size_t>(linear_best)];
+
+  if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4) {
+    std::vector<double> kernel_scores(static_cast<std::size_t>(K));
+    kernel_mem->score_all(h, m.labels, kernel_scores);
+    for (int k = 0; k < K; ++k) {
+      const double lin = linear_llrs[static_cast<std::size_t>(k)];
+      const double ker = kernel_scores[static_cast<std::size_t>(k)];
+      out.llrs[static_cast<std::size_t>(k)] = (1.0 - kernel_blend) * lin + kernel_blend * ker;
+    }
+  }
+
+  int best_i = 0;
+  double best_llr = out.llrs[0];
+  for (int k = 1; k < K; ++k) {
+    if (out.llrs[static_cast<std::size_t>(k)] > best_llr) {
+      best_llr = out.llrs[static_cast<std::size_t>(k)];
       best_i = k;
     }
   }
@@ -920,7 +952,7 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
     z[static_cast<std::size_t>(k)] = out.llrs[static_cast<std::size_t>(k)] / (temperature + kEps);
   }
   std::vector<double> probs;
-  softmax_batch_like_python(z.data(), 1, K, kEps, probs);
+  softmax_batch_reference(z.data(), 1, K, kEps, probs);
   out.disc = probs[static_cast<std::size_t>(best_i)];
 
   double r_base = m.v_mean;
@@ -938,11 +970,18 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
     out.r_eff = r_base;
   }
 
+  if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0 && disc_lin > kEps) {
+    const double conf_lin = disc_lin * out.world_gate;
+    const double disc_new = probs[static_cast<std::size_t>(best_i)];
+    out.disc = disc_new * (conf_lin / disc_lin);
+  }
+
   out.confidence = out.disc * out.world_gate;
   return out;
 }
 
-GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double chi, double psi, double alpha) {
+GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double chi, double psi, double alpha,
+                               const CyphaInferOptions* kernel_opt) {
   GhInferAtHResult out;
   const int d = m.d_latent;
   const int K = static_cast<int>(m.labels.size());
@@ -967,8 +1006,17 @@ GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double
   const double gh_scale = r_base / std::max(out.r_eff, r_base);
   out.t_adj = m.temperature / std::max(gh_scale, 0.01);
 
-  const ClassifyAtHResult cls =
-      classify_at_h(m, h, nullptr, out.t_adj, std::nullopt, 0.5, 1.0, 1.0, true);
+  const KernelMemory* km = nullptr;
+  bool use_kernel = false;
+  double kernel_blend = 0.5;
+  if (kernel_opt != nullptr) {
+    km = kernel_opt->kernel_mem;
+    use_kernel = kernel_opt->use_kernel_llr;
+    kernel_blend = kernel_opt->kernel_blend;
+  }
+
+  const ClassifyAtHResult cls = classify_at_h(m, h, nullptr, out.t_adj, std::nullopt, 0.5, 1.0, 1.0, true, km,
+                                              use_kernel, kernel_blend);
   out.label = cls.label;
   out.confidence = cls.confidence;
   out.llrs = std::move(cls.llrs);
@@ -993,8 +1041,9 @@ InferAtHResult infer_at_h(const CyphaInferModel& m, const double* h, const Cypha
     mahal_ema_opt = m.mahal_ema;
   }
 
-  const ClassifyAtHResult cls = classify_at_h(m, h, h_field, m.temperature, mahal_ema_opt, m.mahal_std_ema, 1.0, 1.0,
-                                              true);
+  const ClassifyAtHResult cls =
+      classify_at_h(m, h, h_field, m.temperature, mahal_ema_opt, m.mahal_std_ema, 1.0, 1.0, true, opt.kernel_mem,
+                    opt.use_kernel_llr, opt.kernel_blend);
   out.llrs = cls.llrs;
   const auto deliberated = apply_deliberation(cls.label, cls.confidence, opt.deliberation_lo, opt.deliberation_hi);
   out.label = deliberated.first;

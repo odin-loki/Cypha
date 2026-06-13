@@ -195,19 +195,19 @@ if (-not $SkipLmBench) {
 }
 
 # --- Snapshot tables + metrics ---
-$tablesSrc = Join-Path $root "cypha_bench\report\tables"
-$baselineRoot = Join-Path $root "cypha_bench\report\baselines"
+$tablesSrc = Join-Path $root "bench\report\tables"
+$baselineRoot = Join-Path $root "bench\report\baselines"
 $baselineDir = Join-Path $baselineRoot "native_$stamp"
 New-Item -ItemType Directory -Force -Path $baselineDir | Out-Null
 
 Write-Host ""
 Write-Host "== Saving baseline snapshot: $baselineDir ==" -ForegroundColor Yellow
 Copy-Item -Path (Join-Path $tablesSrc "*.json") -Destination $baselineDir -Force
-$summarySrc = Join-Path $root "cypha_bench\report\summary.json"
+$summarySrc = Join-Path $root "bench\report\summary.json"
 if (Test-Path $summarySrc) {
     Copy-Item $summarySrc (Join-Path $baselineDir "summary.json") -Force
 }
-$manifestSrc = Join-Path $root "cypha_bench\report\figures\figures_manifest.json"
+$manifestSrc = Join-Path $root "bench\report\figures\figures_manifest.json"
 if (Test-Path $manifestSrc) {
     Copy-Item $manifestSrc (Join-Path $baselineDir "figures_manifest.json") -Force
 }

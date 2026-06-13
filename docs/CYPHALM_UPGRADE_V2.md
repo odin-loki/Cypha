@@ -109,8 +109,8 @@ Backprop through fusion to SSM must use `_grad_v_field_core` then chain through 
 
 ## Combined experiment matrix
 
-Artifact: `cypha_bench/config/cyphalm_upgrade_v2_sweep.json`  
-Script: `cypha_bench/tuning/cyphalm_upgrade_v2_sweep.py` — D17 **17I_view_learnable**
+Artifact: `bench/config/cyphalm_upgrade_v2_sweep.json`  
+Script: `bench/tuning/cyphalm_upgrade_v2_sweep.py` — D17 **17I_view_learnable**
 
 | ID | view | fusion | n_train | BPC | vs fixed |
 |----|------|--------|---------|-----|----------|
@@ -137,6 +137,6 @@ Script: `cypha_bench/tuning/cyphalm_upgrade_v2_sweep.py` — D17 **17I_view_lear
 ## Commands (after implementation)
 
 ```powershell
-python cypha_bench/tuning/cyphalm_upgrade_v2_sweep.py --write
-python cypha_bench/run_all.py --domain 17
+cypha_tune_run --config bench/config/cyphalm_upgrade_v2_sweep.py --write
+cypha_bench_run --domain 17
 ```

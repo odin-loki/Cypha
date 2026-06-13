@@ -233,7 +233,7 @@ std::string build_markdown(const std::unordered_map<std::string, ProfileJson>* t
         }
     }
 
-    lines.push_back("> **Note:** Report figures (JSON + native PNG) live in `cypha_bench/report/figures/` (`generate_figure_data`).");
+    lines.push_back("> **Note:** Report figures (JSON + native PNG) live in `bench/report/figures/` (`generate_figure_data`).");
     lines.push_back("");
 
     std::ostringstream out;
@@ -270,7 +270,7 @@ fs::path build_report_summary(const fs::path& output_path) {
         {"cross_domain_analyses", cross_count},
         {"tables_dir", tables_dir().string()},
         {"figures_dir", figures_dir().string()},
-        {"figures_note", "Native figure JSON and PNG under cypha_bench/report/figures/ (see figures_manifest.json)."},
+        {"figures_note", "Native figure JSON and PNG under bench/report/figures/ (see figures_manifest.json)."},
         {"report_markdown", (bench_root() / "BASELINE_REPORT.md").string()},
     };
 

@@ -10,6 +10,6 @@
 | Qt threading / streaming training | [`STUDIO_THREADING.md`](STUDIO_THREADING.md) |
 | Environment variables | [`CYPHA_ENV.md`](CYPHA_ENV.md) |
 | Future UX / packaging | [`docs/FUTURE.md`](../FUTURE.md) §2–3 |
-| Profiling hot paths | `python scripts/profile_studio_hotpaths.py --help` |
+| Profiling hot paths | native parity fixture workflow (see MAINTENANCE.md) |
 
-The PySide6 Studio (`cypha_studio/`) remains the **Python golden reference** for dataset → trainer → registry → API flows; it is not the primary product UI path.
+The PySide6 Studio (``) remains the **Python golden reference** for dataset → trainer → registry → API flows; it is not the primary product UI path.

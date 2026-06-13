@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
   try {
     if (argc != 2) {
       std::cerr
-          << "usage: quantile_dif_train_parity <parity_fixtures/quantile_dif_train|dif_train_replay_dir>\n";
+          << "usage: quantile_dif_train_parity <fixtures/quantile_dif_train|dif_train_replay_dir>\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);

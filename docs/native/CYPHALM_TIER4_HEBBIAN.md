@@ -4,9 +4,9 @@ Native C++ mirrors for Cypha Tests **2B** (encoder), **2C** (sparse SSM lateral)
 
 | Hook | Python |
 |------|--------|
-| Biochemical encoder | `Cypha.py` → `EncoderProjection.hebbian_update` |
+| Biochemical encoder | `cypha_core` → `EncoderProjection.hebbian_update` |
 | Sparse SSM | `cypha_lm/temporal/cellai_ssm.py` → `sparse_hebbian_update` |
-| Lateral graph | `cypha_som/hebbian_topology.py` → `DynamicHebbianGraph` |
+| Lateral graph | `native/src/som/` (Hebbian topology smoke) |
 
 ## Library
 

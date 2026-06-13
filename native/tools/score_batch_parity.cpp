@@ -1,5 +1,5 @@
 // score_batch_parity — cypha::accel batch_encode + score_matrix vs
-// parity_fixtures/score_batch/sidecar.json (cypha_accel fused LLR path).
+// fixtures/score_batch/sidecar.json (cypha_accel fused LLR path).
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -24,7 +24,7 @@ bool near_eq(double a, double b, double atol) { return std::abs(a - b) <= atol; 
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: score_batch_parity <parity_fixtures/score_batch/sidecar.json>\n";
+      std::cerr << "usage: score_batch_parity <fixtures/score_batch/sidecar.json>\n";
       return 2;
     }
     fs::path side = fs::path(argv[1]);

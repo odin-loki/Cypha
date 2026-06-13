@@ -1,19 +1,17 @@
-# Demo CyphaLM checkpoint
+﻿# Demo CyphaLM checkpoint
 
-Generate the checkpoint (not committed — run after clone):
+This directory ships a small Moby-Dick snippet checkpoint (`demo.json` + `demo.npz`) for native CyphaLM REST demos.
 
-```bash
-python scripts/generate_demo_lm_checkpoint.py
-```
-
-This writes `demo.json` + `demo.npz` here (~Moby-Dick snippet, 2000 train steps).
-
-Load for REST:
+Load with **native `cypha_rest`** (from a `native/` build):
 
 ```bash
-export CYPHA_LM_CHECKPOINT=examples/demo_cyphalm/demo
-uvicorn cypha_studio.server.api:app --port 7749
+export CYPHALM_CHECKPOINT=examples/demo_cyphalm/demo
+./native/build/cypha_rest --listen 127.0.0.1:8099 \
+  --cypha fixtures/reference.cypha \
+  --cyphalm-checkpoint "$CYPHALM_CHECKPOINT"
 bash examples/curl_lm_generate_stream.sh
 ```
 
-Or in Studio: **File → Load CyphaLM…** and select `demo.json`.
+Or pass `--cyphalm-checkpoint examples/demo_cyphalm/demo` directly (same as `CYPHALM_CHECKPOINT`).
+
+The Qt shell can load the same checkpoint via **File → Load CyphaLM…** when built with LM support.

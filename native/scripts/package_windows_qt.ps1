@@ -21,7 +21,7 @@
     Default: auto-detected from PATH.
 
 .PARAMETER WithFixtures
-    If set, copies parity_fixtures\reference.cypha and parity_fixtures\f_field.json
+    If set, copies fixtures\reference.cypha and fixtures\f_field.json
     into the package for a quick demo.
 
 .EXAMPLE
@@ -129,7 +129,7 @@ Write-Host "windeployqt complete."
 
 # ── Optional: copy parity fixtures for demo ──────────────────────────────
 if ($WithFixtures) {
-    $FixturesDir = Join-Path $RepoRoot "parity_fixtures"
+    $FixturesDir = Join-Path $RepoRoot "fixtures"
     $DemoDir     = Join-Path $OutDir "demo_fixtures"
     New-Item -ItemType Directory -Path $DemoDir -Force | Out-Null
     foreach ($f in @("reference.cypha", "f_field.json", "train_hparams.json")) {

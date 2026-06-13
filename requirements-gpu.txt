@@ -1,6 +1,0 @@
-# Optional: GPU micro-benchmark only (scripts/gpu_microbench.py).
-# Pick ONE wheel that matches your CUDA toolkit — see https://docs.cupy.dev/en/stable/install.html
-#
-# Examples (uncomment one):
-# cupy-cuda12x>=13.0
-# cupy-cuda11x>=13.0

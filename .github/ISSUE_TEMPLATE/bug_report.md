@@ -1,4 +1,4 @@
----
+﻿---
 name: Bug report
 about: Something is broken or producing wrong results
 labels: bug
@@ -10,14 +10,14 @@ labels: bug
 
 ## Steps to reproduce
 
-```python
+```text
 # Minimal reproducible example
 ```
 
 ## Environment
 
 - OS:
-- Python version:
+- Cypha native build (compiler / OS):
 - NumPy version:
 - CuPy version (if GPU path):
 - Native build (yes/no, and if yes, CMake preset):
@@ -30,5 +30,7 @@ paste error or unexpected output here
 
 ## Additional context
 
-<!-- Parity fixture name if this is a Python ↔ C++ discrepancy.
-     Domain ID (D01–D17) if this is a benchmark issue. -->
+<!-- Parity fixture name if this is a native parity discrepancy.
+     Domain ID (D01â€“D17) if this is a benchmark issue. -->
+
+

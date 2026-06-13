@@ -1,5 +1,5 @@
 // generation_parity — verify native generation math against Python fixture.
-// Usage: generation_parity <parity_fixtures/generation/sidecar.json>
+// Usage: generation_parity <fixtures/generation/sidecar.json>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -95,7 +95,7 @@ bool check_case(const std::string& name,
 int main(int argc, char** argv) {
     try {
         if (argc != 2) {
-            std::cerr << "usage: generation_parity <parity_fixtures/generation/sidecar.json>\n";
+            std::cerr << "usage: generation_parity <fixtures/generation/sidecar.json>\n";
             return 2;
         }
 

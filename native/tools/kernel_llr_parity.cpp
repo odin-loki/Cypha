@@ -1,4 +1,4 @@
-// kernel_llr_parity vs parity_fixtures/kernel_llr/sidecar.json
+// kernel_llr_parity vs fixtures/kernel_llr/sidecar.json
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -47,7 +47,7 @@ cypha::KernelMemory load_kernel_from_json(const nlohmann::json& st) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: kernel_llr_parity <parity_fixtures/kernel_llr/sidecar.json>\n";
+      std::cerr << "usage: kernel_llr_parity <fixtures/kernel_llr/sidecar.json>\n";
       return 2;
     }
     std::ifstream sf(argv[1]);

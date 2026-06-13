@@ -2,12 +2,12 @@
 
 **Maps:** [`Cypha Tests.txt`](../Cypha%20Tests.txt) Branch A → CyphaDIF as NLP routing/classification layer on top of a frozen encoder.
 
-**Runner:** `python cypha_bench/tuning/cypha_branch_a_sweep.py --write`
+**Runner:** `cypha_tune_run --config bench/config/cypha_branch_a_sweep.py --write`
 
 Optional dependency for semantic embeddings:
 
 ```powershell
-pip install sentence-transformers
+native build (`cmake --build`) sentence-transformers
 ```
 
 Without it, the sweep falls back to deterministic hashing+SVD (weaker; for pipeline smoke only).
@@ -32,7 +32,7 @@ text → [frozen encoder] → vector x → CyphaDIF(VectorEncoder) → label + e
 
 ## Results @ 2000 Newsgroups (20 classes)
 
-Artifact: `cypha_bench/config/cypha_branch_a_sweep.json`  
+Artifact: `bench/config/cypha_branch_a_sweep.json`  
 Encoder: **sentence-transformers/all-MiniLM-L6-v2** (384-d, frozen)
 
 | Method | Accuracy | Notes |
@@ -46,7 +46,7 @@ Encoder: **sentence-transformers/all-MiniLM-L6-v2** (384-d, frozen)
 
 ### Gutenberg OOD epistemic (D09 Branch A run)
 
-Artifact: `cypha_bench/config/d09_branch_a_summary.json`
+Artifact: `bench/config/d09_branch_a_summary.json`
 
 | Split | Mean epistemic var |
 |-------|-------------------|
@@ -56,9 +56,9 @@ Artifact: `cypha_bench/config/d09_branch_a_summary.json`
 Mann-Whitney **p ≈ 2.8×10⁻¹⁰²** — CyphaDIF uncertainty **rises on out-of-domain book text** when trained on newsgroup MiniLM vectors. Use for routing / abstain before LLM generation.
 
 ```powershell
-python cypha_bench/tuning/run_d09_branch_a.py
+cypha_tune_run --config bench/config/run_d09_branch_a.py
 # or full D09 with Branch A block:
-$env:CYPHA_BENCH_BRANCH_A="1"; python cypha_bench/run_all.py --domain 9
+$env:CYPHA_BENCH_BRANCH_A="1"; cypha_bench_run --domain 9
 ```
 
 Hashing fallback @ same protocol: **16–19%** (not semantic — use only for offline CI smoke).
@@ -78,10 +78,10 @@ Hashing fallback @ same protocol: **16–19%** (not semantic — use only for of
 
 ```powershell
 # Semantic (requires sentence-transformers)
-python cypha_bench/tuning/cypha_branch_a_sweep.py --n-samples 2000 --backend sentence_transformers --write
+cypha_tune_run --config bench/config/cypha_branch_a_sweep.py --n-samples 2000 --backend sentence_transformers --write
 
 # Offline smoke
-python cypha_bench/tuning/cypha_branch_a_sweep.py --n-samples 800 --backend hashing --write --out cypha_bench/config/cypha_branch_a_hashing.json
+cypha_tune_run --config bench/config/cypha_branch_a_sweep.py --n-samples 800 --backend hashing --write --out bench/config/cypha_branch_a_hashing.json
 ```
 
 ---
@@ -90,14 +90,14 @@ python cypha_bench/tuning/cypha_branch_a_sweep.py --n-samples 800 --backend hash
 
 1. ~~Wire frozen-ST path into **D09**~~ — `run_d09_branch_a.py` + `CYPHA_BENCH_BRANCH_A=1`.
 2. ~~OOD eval: Gutenberg vs 20news epistemic~~ — **done** (see above).
-3. ~~**Local LLM routing**~~ — REST `/route/text`, `/route/generate` + Ollama stub (`cypha_studio/core/ollama_client.py`).
+3. ~~**Local LLM routing**~~ — REST `/route/text`, `/route/generate` + Ollama stub (`cypha_core / cypha_qt_shell ollama_client.py`).
 4. ~~Compare **RFF vs VectorEncoder** on 384-d ST inputs~~ — **VectorEncoder 59.5%** vs RFF **4.5%** @ 2k MiniLM (`cypha_branch_a_encoder_sweep.json`). Keep VectorEncoder for Branch A.
 
 ---
 
 ## Encoder sweep (384-d MiniLM @ 2k)
 
-Artifact: `cypha_bench/config/cypha_branch_a_encoder_sweep.json`
+Artifact: `bench/config/cypha_branch_a_encoder_sweep.json`
 
 | Encoder | Accuracy | Notes |
 |---------|----------|-------|
@@ -131,7 +131,7 @@ Environment (see [`docs/studio/CYPHA_ENV.md`](studio/CYPHA_ENV.md)):
 | `CYPHA_LM_CHECKPOINT` | *(optional CyphaLM for in-domain gen)* |
 
 ```powershell
-uvicorn cypha_studio.server.api:app --port 7749
+uvicorn cypha_qt_shell / cypha_rest.server.api:app --port 7749
 
 curl -s -X POST http://127.0.0.1:7749/route/text `
   -H "Content-Type: application/json" `
@@ -141,10 +141,8 @@ curl -s -X POST http://127.0.0.1:7749/route/generate `
   -H "Content-Type: application/json" `
   -d '{"text":"quantum gardening on Mars","max_tokens":64}'
 
-python scripts/demo_branch_a_route.py "your query" --generate
 
 # Pre-train checkpoint (skip ~30s retrain on REST cold-start)
-python scripts/save_branch_a_router.py --n-train 1200 --out ~/.cypha/branch_a_router
 $env:CYPHA_BRANCH_A_CHECKPOINT="$HOME/.cypha/branch_a_router"
 ```
 
@@ -152,6 +150,6 @@ $env:CYPHA_BRANCH_A_CHECKPOINT="$HOME/.cypha/branch_a_router"
 
 ## References
 
-- Embeddings adapter: `cypha_bench/adapters/frozen_text_embeddings.py`
-- D09 documents: `cypha_bench/domains/d09_documents.py`
+- Embeddings adapter: `bench/adapters/frozen_text_embeddings.py`
+- D09 documents: `bench/domains/d09_documents.py`
 - Phase 2 encoder study: [`CYPHA_TESTS_PHASE2.md`](CYPHA_TESTS_PHASE2.md)

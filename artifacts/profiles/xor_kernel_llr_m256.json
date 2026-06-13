@@ -1,0 +1,110 @@
+{
+  "dataset": "S3_nonlinear_xor",
+  "n_samples": 4000,
+  "n_dims": 20,
+  "passes": 8,
+  "kernel_blend": 1.0,
+  "kernel_m": 256,
+  "use_rff": false,
+  "rff_d": null,
+  "replay_ratio": 0.0,
+  "linear_mean_acc": 0.5054000000000001,
+  "kernel_mean_acc": 0.611,
+  "delta_pp": 10.559999999999992,
+  "per_seed": {
+    "linear": [
+      {
+        "seed": 0,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.54,
+        "train_sec": 3.980543100013165,
+        "n_basis": 0
+      },
+      {
+        "seed": 1,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.486,
+        "train_sec": 3.992800799984252,
+        "n_basis": 0
+      },
+      {
+        "seed": 2,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.486,
+        "train_sec": 3.957643100002315,
+        "n_basis": 0
+      },
+      {
+        "seed": 3,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.526,
+        "train_sec": 4.034126899990952,
+        "n_basis": 0
+      },
+      {
+        "seed": 4,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.489,
+        "train_sec": 4.332781000004616,
+        "n_basis": 0
+      }
+    ],
+    "kernel": [
+      {
+        "seed": 0,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.624,
+        "train_sec": 68.92306600001757,
+        "n_basis": 256
+      },
+      {
+        "seed": 1,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.574,
+        "train_sec": 67.74350579999737,
+        "n_basis": 256
+      },
+      {
+        "seed": 2,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.604,
+        "train_sec": 69.82327359999181,
+        "n_basis": 256
+      },
+      {
+        "seed": 3,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.614,
+        "train_sec": 70.72417939998559,
+        "n_basis": 256
+      },
+      {
+        "seed": 4,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.639,
+        "train_sec": 69.00646179998876,
+        "n_basis": 256
+      }
+    ]
+  }
+}

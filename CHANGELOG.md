@@ -8,14 +8,26 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
-### Added
-- **Intelligence Profiler (C++):** `native/include/cypha/intelligence/` — NIG statistic states, 7-stat measurers, κ, health signal; CTest `native_intelligence_profiler_smoke`.
-- **XOR benchmark:** `scripts/benchmark_xor_kernel_llr.py`; kernel blend wired into `CyphaDIF.score_matrix()`.
+### Removed
+- **Python runtime decommissioned (P7):** `Cypha.py`, `cypha_studio/`, `cypha_core/`, `cypha_accel/`, `bench/` (Python package removed), `cypha_lm/`, and related packages removed from the product path. Native C++ (`cypha_core` library, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`) is the sole runtime.
+- **pytest CI gate:** ~274 pytest tests no longer run in CI; validation is CTest-only.
+- **`run_all.py`:** replaced by `cypha_bench_run`.
 
 ### Changed
+- **CI gate:** native-only — **53 CTests** (`ctest -R native_`) across four blocking jobs.
+- **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
+- **C++23** standard for native build (`native/CMakeLists.txt`).
+- **`cyphalm_parity`:** Windows subprocess fix (`CreateProcess` instead of `std::system`).
 - **Intelligence Stats papers** moved to `docs/research/intelligence_stats/`.
-- **cypha_som** documented as failed experiment under `docs/archive/failed_experiments/cypha_som/`.
+- **cypha_som** removed; documented as failed experiment under `docs/archive/failed_experiments/cypha_som/`.
 - **C++2023 migration plan:** `docs/native/migration/CPLUSPLUS_2023_MASTER_PLAN.md`.
+- **Repo layout (Phase A):** `cypha_bench/` → `bench/`, `parity_fixtures/` → `fixtures/`, `install/` → `packaging/`.
+- **Release install scripts:** under `packaging/` (`install_release_linux.sh`, `install_release_windows.ps1`).
+
+### Added
+- **Auto-γ RFF (§0b):** native `PreprocessorState::auto_rff_gamma`; bench + Qt shell wired.
+- **Nyström kernel LLR (native):** `KernelMemory` in C++ with train/infer wiring, `.cypha` persistence, XOR bench (`xor_kernel_bench`, CTest `native_xor_kernel_bench_smoke`), bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`), opt-in profile `bench/config/kernel_llr_profile.json`.
+- **Intelligence Profiler (C++):** `native/include/cypha/intelligence/` — NIG statistic states, 7-stat measurers, κ, health signal; CTest `native_intelligence_profiler_smoke`.
 
 ---
 
@@ -48,7 +60,7 @@ milestone or a significant self-contained change.
 
 ### Changed
 - Native CMake project version **2.2.6**; CyphaLM tracker marks `proj_dif` GRIA wiring complete.
-- `cypha_bench/README.md`: note on when to commit `report/` baseline snapshots.
+- `bench/README.md`: note on when to commit `report/` baseline snapshots.
 
 ---
 
@@ -139,7 +151,7 @@ milestone or a significant self-contained change.
 - **`cypha_lm_native`** static library — `native/src/cyphalm/*.cpp` (CMake `GLOB`), OpenMP optional.
 - **`cyphalm_bench_native`** — BPC bench CLI (`--mode`, `--profile d17|d04`, `--n-train`, `--n-eval`, `--threads`).
 - **`cyphalm_parity`** — meta-runner for native CyphaLM parity tools.
-- **`scripts/generate_cyphalm_native_fixtures.py`** — one-time Python → `parity_fixtures/cyphalm_*/sidecar.json`.
+- **`scripts/generate_cyphalm_native_fixtures.py`** — one-time Python → `fixtures/cyphalm_*/sidecar.json`.
 - **`tests/test_cyphalm_native_parity.py`** — subprocess parity (skip if binary missing).
 - **`native/include/cypha/cyphalm/cyphalm_config.hpp`** — unified config + bench mode mapping.
 - PORT_CONTRACT **§4b** and `CYPHALM_NATIVE_UPGRADE_MASTER.md` integration / build notes.
@@ -220,7 +232,7 @@ milestone or a significant self-contained change.
 
 ### Added
 - **D04 rewritten for CyphaLM** — char-LM domain now runs Izaac → CellAI SSM → CyphaDIF → GRIA (not raw CyphaDIF + CharNgramEncoder).
-- **`cypha_bench/adapters/cyphalm_bench.py`** — shared LM helpers for D04/D17: BPC eval, context-length curve, save/restore fidelity, sampling comparison, expert routing trace.
+- **`bench/adapters/cyphalm_bench.py`** — shared LM helpers for D04/D17: BPC eval, context-length curve, save/restore fidelity, sampling comparison, expert routing trace.
 - **D04 experiments:** BPC vs context length, CyphaDIF expert routing during generation, checkpoint round-trip parity, sampling strategy bar chart (`fig04_context_bpc`, `fig04_expert_routing`, `fig04_sampling_strategies`).
 - **CyphaLM generation:** `top_p_sample` (nucleus), unified `autoregressive_decode`, `stream_generate` SSE chunks; `predict_next` exposes `routing_probs`, `dominant_expert`, `active_experts`.
 - **CyphaStudio LM REST (FastAPI-only):** `POST /lm/load`, `GET /lm/metrics`, `POST /lm/predict_next`, `POST /generate`, `POST /generate/stream` (SSE with epistemic gating).
@@ -236,7 +248,7 @@ milestone or a significant self-contained change.
 
 ### Changed
 - **`cypha_lm/model/cypha_lm.py`** — `generate()` accepts `strategy`, `top_k`, `top_p`; adds `stream_generate()`.
-- **Documentation:** `cypha_lm/README.md`, `cypha_bench/README.md`, `cypha_studio/README.md`, `docs/studio/CYPHA_ENV.md`, `examples/README.md`, `docs/RESEARCH_STATUS.md`.
+- **Documentation:** `cypha_lm/README.md`, `bench/README.md`, `cypha_studio/README.md`, `docs/studio/CYPHA_ENV.md`, `examples/README.md`, `docs/RESEARCH_STATUS.md`.
 - **D10 time-series tuning** — ECG passes 4→8, encoder window 50→32, n_fft 10→16.
 - **`DEFAULT_CYPHALM_CONFIG`** — `gria_lr: 0.06`, `online: True` for bench training.
 - **Full D04/D17 benchmark refresh** — updated figures, tables, and `BASELINE_REPORT.md`.
@@ -255,10 +267,10 @@ milestone or a significant self-contained change.
 - **Package READMEs:** `cypha_som/README.md`, `cypha_accel/README.md`;
   major rewrite of `cypha_lm/README.md` (architecture table, D04 bug warning,
   known limitations, configuration guide, empirical results).
-- **`cypha_bench/README.md`** — 17-domain structure, run instructions, single-domain usage.
+- **`bench/README.md`** — 17-domain structure, run instructions, single-domain usage.
 - **`examples/`** — `README.md`, `cypha_update_body.json`, `cypha_load_body.json`,
   `cypha_adapt_temperature_body.json`, `curl_predict.sh`, `curl_predict.ps1`.
-- **`install/`** — `install_windows.ps1`, `install_linux.sh`, `README.md`.
+- **`packaging/`** — `install_windows.ps1`, `install_linux.sh`, `README.md`.
 - **`docs/studio/CYPHA_STUDIO_MASTER_PLAN.md`** — historical stub fixing broken links.
 - `cypha_diagnostics/README.md` — explains package purpose and confirmed findings.
 - Proper `[project]` metadata in `pyproject.toml` (name, version, description,
@@ -277,7 +289,7 @@ milestone or a significant self-contained change.
   "33.2 bpc CyphaLM failure" updated to reflect this was a benchmark bug.
 - **D04 clarification propagated** to `CHANGELOG [1.0.0]`, `DIAGNOSTIC_REPORT.md`,
   `docs/FUTURE.md`, `README.md`, `cypha_lm/README.md`.
-- `cypha_bench/BASELINE_REPORT.md` header clarified: this is the **post-diagnostic
+- `bench/BASELINE_REPORT.md` header clarified: this is the **post-diagnostic
   tuned** run, not a default-parameters baseline.
 - `docs/port/PORT_FULL_STACK.md` M6 ExperimentDB API checkbox marked complete.
 - 36 `pytest.importorskip` calls in `test_api_contract.py` and
@@ -302,7 +314,7 @@ milestone or a significant self-contained change.
 - `CONTRIBUTING.md` — install scripts, `cypha_lm`/`cypha_som` test commands,
   2-job CI, `RESEARCH_STATUS.md` link.
 - `docs/README.md` — research status section, bench report index, benchmark commands.
-- `parity_fixtures/README.md` — missing fixtures added (memory_train, preprocessor,
+- `fixtures/README.md` — missing fixtures added (memory_train, preprocessor,
   f_field, regression_m4, rff_regression, two_stage_*, generation, registry_register).
 - `benchmark.py` and `benchmark_baseline.py` — expanded docstrings and `--help`.
 - `native/README.md` — M6 experiments section updated to reference CRUD parity.
@@ -351,9 +363,9 @@ milestone or a significant self-contained change.
 - **CellAI / D10 ECG:** 17–20% accuracy on 5-class time-series; temporal SSM domain not yet tuned.
 
 ### Files changed
-- `cypha_bench/config/everyday_profile.json` — deliberation disabled, delta_lr=0.03.
-- `cypha_bench/adapters/bench_models.py` — auto-RFF for `input_dim ≤ 30`.
-- `cypha_bench/domains/d01_statistical_baselines.py` — multi-pass with `n_epochs`.
+- `bench/config/everyday_profile.json` — deliberation disabled, delta_lr=0.03.
+- `bench/adapters/bench_models.py` — auto-RFF for `input_dim ≤ 30`.
+- `bench/domains/d01_statistical_baselines.py` — multi-pass with `n_epochs`.
 - `cypha_diagnostics/` — new diagnostic package (`run_diagnostics.py`, `apply_upgrades.py`).
 - `cypha_som/` — SOM/GNG/GRIA/Hebbian/temporal hooks (all flags OFF by default).
 - `benchmark_baseline.py` — baseline runner for SOM upgrade evaluation.
@@ -384,7 +396,7 @@ First committed state of the project. All six native port milestones signed off:
 
 | Milestone | Description |
 |-----------|-------------|
-| M1 | Inference kernel: encode + LLR + GH gate + softmax vs `parity_fixtures/`. |
+| M1 | Inference kernel: encode + LLR + GH gate + softmax vs `fixtures/`. |
 | M2 | Registry + preprocessor: fit (scale/PCA), transform, CSV load. |
 | M3 | Online `train_step`: DIF, GH, replay, NIG, context, OOD. |
 | M4 | Regression stack: MKE / RFF / two-stage / ridge / EMA. |
@@ -394,7 +406,7 @@ First committed state of the project. All six native port milestones signed off:
 - **188 pytest + 33 CTest** cases across 13 named parity fixtures.
 - Python reference (`Cypha.py`, `cypha_studio/`) serving as golden spec.
 - `cypha_lm/` research package (LM stack, embeddings, SSM, experts).
-- `cypha_bench/` evaluation harness (17 domains, encoders, reports).
+- `bench/` evaluation harness (17 domains, encoders, reports).
 - `cypha_som/` optional SOM/GNG/GRIA hooks.
 - `cypha_accel/` CuPy-accelerated LLR / projection / NIG helpers.
 - GitHub Actions CI: **four blocking jobs** — Linux CTest + pytest, MinGW PE, MSVC + CUDA, GCC + CUDA.

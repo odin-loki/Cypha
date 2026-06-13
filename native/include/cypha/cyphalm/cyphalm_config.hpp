@@ -84,13 +84,13 @@ struct CyphaLMConfig {
     bool use_hierarchical_ssm = false;
     bool use_hebb_graph = false;
     bool use_hebbian_stack = false;
-    /// Mirrors ``cypha_som.config.USE_TEMPORAL_SOM`` / ``wire_cellai`` (U6; off by default).
+    /// Optional temporal SOM decay scaling (U6; off by default).
     bool use_temporal_som = false;
-    /// Mirrors ``cypha_som.config.USE_GNG`` (U1; off by default).
+    /// Growing Neural Gas auxiliary prototypes (U1; off by default).
     bool use_gng = false;
-    /// Mirrors ``cypha_som.config.USE_GRIA_CONTROLLER`` (U3; requires ``use_gng``).
+    /// GRIA alpha live topology controller (U3; requires ``use_gng``).
     bool use_gria_controller = false;
-    /// Mirrors ``cypha_som.config.USE_DISCRIM_FEEDBACK`` (U4; modulates encoder/BPTT grads).
+    /// Discriminative feedback on encoder/BPTT grads (U4; off by default).
     bool use_discriminative_feedback = false;
     double ssm_hebb_lr = 1e-4;
 
@@ -106,13 +106,13 @@ struct CyphaLMConfig {
 
 ContextMode parse_context_mode(const std::string& s);
 std::string context_mode_name(ContextMode mode);
-std::string context_mode_python_name(ContextMode mode);
+std::string context_mode_string(ContextMode mode);
 
 BenchMode parse_bench_mode(const std::string& s);
 void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg);
 std::string bench_mode_name(BenchMode mode);
 
-/// Load ``cypha_bench/config/profiles/cyphalm_<profile>_wikitext.json`` (or gutenberg for d04).
+/// Load ``bench/config/profiles/cyphalm_<profile>_wikitext.json`` (or gutenberg for d04).
 void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg);
 
 }  // namespace cypha::cyphalm

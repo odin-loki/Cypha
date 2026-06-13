@@ -1,4 +1,4 @@
-// Native CyphaDIF LLR + RFF stage-2 + two-stage combine vs parity_fixtures/two_stage_pipeline/sidecar.json
+// Native CyphaDIF LLR + RFF stage-2 + two-stage combine vs fixtures/two_stage_pipeline/sidecar.json
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -45,7 +45,7 @@ std::vector<double> flatten_f_field(const nlohmann::json& j) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: regression_two_stage_pipeline_parity <parity_fixtures/two_stage_pipeline/sidecar.json>\n";
+      std::cerr << "usage: regression_two_stage_pipeline_parity <fixtures/two_stage_pipeline/sidecar.json>\n";
       return 2;
     }
     if (cypha::regression::native_regression_milestone() < 5) {

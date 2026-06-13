@@ -1,4 +1,4 @@
----
+﻿---
 name: Feature request / research proposal
 about: Suggest an architectural upgrade, new benchmark domain, or engineering improvement
 labels: enhancement
@@ -16,13 +16,14 @@ labels: enhancement
 ## Proposed approach
 
 <!-- Rough implementation sketch. For architecture changes, describe the
-     Python reference change first. For native changes, note parity implications. -->
+     Note native parity / CTest implications for core behavior changes. -->
 
 ## Expected impact
 
-<!-- Which benchmark domains (D01–D17) would improve? By how much?
+<!-- Which benchmark domains (D01â€“D17) would improve? By how much?
      What is the risk of regression on other domains? -->
 
 ## Related
 
 <!-- Links to relevant research papers, issues, or sections in docs/. -->
+

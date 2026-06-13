@@ -30,7 +30,7 @@ bool vec_near(const std::vector<double>& got, const std::vector<double>& want) {
 }  // namespace
 
 int main() {
-  // Golden from Cypha.py EncoderProjection.hebbian_update (d=4 fixture).
+  // Golden fixture: EncoderProjection.hebbian_update (d=4 fixture).
   const double f[kD] = {0.1, 0.2, -0.3, 0.4};
   const double h[kD] = {0.8, -0.2, 0.4, 0.3};
   const double mu_k[kD] = {0.1, 0.0, 0.0, 0.0};

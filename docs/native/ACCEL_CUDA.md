@@ -31,7 +31,7 @@ cmake --build build-windows-msvc --config Release `
 
 # Smoke (CPU path still passes without GPU; CUDA activates when driver + GPU present)
 .\build-windows-msvc\Release\cuda_smoke.exe
-.\build-windows-msvc\Release\score_batch_parity.exe ..\parity_fixtures\score_batch\sidecar.json
+.\build-windows-msvc\Release\score_batch_parity.exe ..\fixtures\score_batch\sidecar.json
 ```
 
 **VS 2026 / Build Tools 18:** use preset `windows-vs2026-release` and `build-windows-vs2026` instead.
@@ -79,16 +79,14 @@ WSL2 needs the Windows NVIDIA driver with WSL CUDA support; verify with `nvidia-
 |-------|---------|
 | Accel self-test | `cuda_smoke` — CTest **`native_cuda_smoke`** |
 | CUDA bench (skip without GPU) | `cuda_smoke --bench` — CTest **`native_cuda_bench`** (exit 2 = skip) |
-| Fused LLR parity | `score_batch_parity parity_fixtures/score_batch/sidecar.json` — CTest **`native_score_batch`** |
-| Pytest | `pytest tests/test_cuda_smoke_native.py tests/test_score_batch_native_parity.py -v` |
+| Fused LLR parity | `score_batch_parity fixtures/score_batch/sidecar.json` — CTest **`native_score_batch`** |
+| ctest | `ctest --test-dir native/build -R native_ test_cuda_smoke_native.py tests/test_score_batch_native_parity.py -v` |
 
 Override binary paths: `CYPHA_CUDA_SMOKE_BIN`, `CYPHA_SCORE_BATCH_PARITY_BIN`.
 
 Regenerate fixtures after inference numerics change:
 
 ```bash
-python scripts/generate_parity_fixtures.py
-python scripts/generate_score_batch_fixture.py
 ```
 
 ## Implementation notes

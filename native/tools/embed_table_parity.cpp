@@ -1,5 +1,5 @@
 // embed_table_parity — Izaac GF(2^n) EmbedTable vs Python IzaacEmbedding fixture.
-// Usage: embed_table_parity <parity_fixtures/embed_table/sidecar.json>
+// Usage: embed_table_parity <fixtures/embed_table/sidecar.json>
 #include <cmath>
 #include <fstream>
 #include <iostream>

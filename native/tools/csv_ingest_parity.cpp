@@ -1,4 +1,4 @@
-// Native CSV dense load vs Python ``CSVDataset.from_file`` golden (``parity_fixtures/csv_ingest/``).
+// Native CSV dense load vs Python ``CSVDataset.from_file`` golden (``fixtures/csv_ingest/``).
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -118,7 +118,7 @@ int run_case(const fs::path& fixture_dir, const nlohmann::json& c) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: csv_ingest_parity <parity_fixtures/csv_ingest>\n";
+      std::cerr << "usage: csv_ingest_parity <fixtures/csv_ingest>\n";
       return 2;
     }
     fs::path fixture_dir = fs::path(argv[1]);

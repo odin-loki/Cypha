@@ -1,5 +1,5 @@
-// Parity: Cypha.py gh_infer + deliberation vs native infer_cpu (infer_at_h / gh_infer_at_h).
-// Fixture: parity_fixtures/gh_infer_deliberation/sidecar.json
+// Reference parity fixture: gh_infer + deliberation vs native infer_cpu (infer_at_h / gh_infer_at_h).
+// Fixture: fixtures/gh_infer_deliberation/sidecar.json
 // Generate: python scripts/generate_gh_infer_deliberation_fixture.py
 
 #include <cmath>

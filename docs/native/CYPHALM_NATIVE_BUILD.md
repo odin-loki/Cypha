@@ -125,7 +125,7 @@ WSL builds against a repo on `/mnt/c/...` work but are slower than a clone under
 
 ```powershell
 ctest --test-dir C:\Temp\cypha_native_build -R native_cyphalm --output-on-failure
-pytest tests/test_cyphalm_native_parity.py -v
+ctest --test-dir native/build -R native_qt --output-on-failure
 ```
 
 Override binary paths: `CYPHALM_BENCH_NATIVE_BIN`, `CYPHALM_PARITY_BIN`, `CYPHALM_CHAR_LSTM_PARITY_BIN`.
@@ -138,4 +138,4 @@ Override binary paths: `CYPHALM_BENCH_NATIVE_BIN`, `CYPHALM_PARITY_BIN`, `CYPHAL
 | Configure hangs on SQLite download | `-DCYPHA_FETCH_SQLITE3_AMALGAMATION=OFF` |
 | `ninja: error: loading build.ninja` | Re-run `cmake -S native -B <dir>` after moving the build tree |
 | Bench prints `"synthetic": true` | Expected when bench corpus files are missing; BPC is still finite for smoke |
-| Parity CTest disabled | Run `python scripts/generate_cyphalm_native_fixtures.py` for char_lstm sidecar |
+| Parity CTest disabled | Run native parity fixture workflow (see MAINTENANCE.md) for char_lstm sidecar |

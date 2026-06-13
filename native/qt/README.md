@@ -12,13 +12,13 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON
 #   -DCYPHA_QT_CHARTS=ON
 cmake --build build
 ./build/qt/cypha_qt_stub --help   # Qt Core + cypha_core link check
-./build/qt/cypha_qt_stub ../../parity_fixtures/reference.cypha   # buffer load parity
+./build/qt/cypha_qt_stub ../../fixtures/reference.cypha   # buffer load parity
 
 # Widgets shell: CSV inspect, registry scan/load/register, load .cypha, optional sidecars,
 # native + REST predict/update, spawn cypha_rest
 ./build/qt/cypha_qt_shell
 # Headless CI smoke (same infer path as cypha_rest classify)
-QT_QPA_PLATFORM=offscreen ./build/qt/cypha_qt_shell --smoke ../../parity_fixtures/reference.cypha
+QT_QPA_PLATFORM=offscreen ./build/qt/cypha_qt_shell --smoke ../../fixtures/reference.cypha
 ```
 
 Targets:
@@ -70,7 +70,7 @@ Optional **`preprocessor.json`** (same schema as Python / REST). When loaded, th
 - **Fit & use** — fits the preprocessor, installs it in RAM (replaces any loaded `preprocessor.json`), and closes the dialog.
 - **Fit & save…** — fits and saves a `preprocessor.json` with the full schema (scale stats, PCA components / mean; RFF fields left empty). The saved file can be loaded directly by `cypha_rest --pre` or from Python.
 
-**RFF note:** RFF weights require Python-side generation (`Preprocessor.fit` with `rff_dim > 0`). The native fitter only covers scale + PCA. After saving, run `cypha_studio.core.dataset.Preprocessor.from_json` → set `rff_dim` → re-save if you need RFF.
+**RFF note:** RFF weights require Python-side generation (`Preprocessor.fit` with `rff_dim > 0`). The native fitter only covers scale + PCA. After saving, run `native preprocessor_fit_parity + manual RFF sidecar edit` → set `rff_dim` → re-save if you need RFF.
 
 ## REST and local server
 
@@ -114,13 +114,13 @@ native\dist\cypha_qt_shell_windows\cypha_qt_shell.exe
 The script (`native/scripts/package_windows_qt.ps1`) will:
 1. Copy `cypha_qt_shell.exe` (and `cypha_rest.exe` if present) into the dist folder.
 2. Run `windeployqt --no-translations --no-system-d3d-compiler --no-opengl-sw` to pull in all required Qt DLLs.
-3. Optionally copy `parity_fixtures/reference.cypha` + `f_field.json` for a headless smoke test.
+3. Optionally copy `fixtures/reference.cypha` + `f_field.json` for a headless smoke test.
 
 **Cross-compilation note:** the MinGW cross-build from WSL (`cmake --preset mingw-w64-cross`) does **not** produce a Qt shell — Qt on Windows requires the native Windows Qt DLLs which aren't available in the WSL cross-toolchain. Build natively on Windows for the packaged GUI.
 
 ## Roadmap (parity with PySide Studio)
 
-1. **Rich charts** — With **`-DCYPHA_QT_CHARTS=ON`** (Qt6 Charts installed), the **Loss / Metrics** panel uses a tabbed **`QChartView`**: **Loss** tab (`QLineSeries` REST vs native + optional EMA) and **Rolling accuracy** tab (native, window=200). Without Charts (CI default), a painted dual polyline loss curve plus a **text metrics history** (`step | loss | roll_acc | source`) replaces the Charts tabs. **PNG**, hand-written **SVG**, and **CSV** export; **Y lock** for manual Y axis range. Done.
+1. **Rich charts** — With **`-DCYPHA_QT_CHARTS=ON`** (Qt6 Charts installed), the **Loss / Metrics** panel uses a tabbed **`QChartView`**: **Loss** tab (`QLineSeries` REST vs native + optional EMA) and **Rolling accuracy** tab (native, window=200). Without Charts (CI default), a painted dual polyline loss curve plus a **text metrics history** (`step | loss | roll_acc | source`) replaces the Charts tabs. **PNG**, hand-written **SVG**, and **CSV** export; **Y lock** for manual Y axis range. **Loss chart interactivity** (both painted and Qt Charts paths): mouse-over tooltip `(step, loss)`, scroll-wheel zoom, click-drag pan (clamped to data extents). Done.
 2. **Full native save parity** — all Python **`save_state`** fields used by native reload are patched (incl. **`field_a_eff`**, **`ll_world_ema`=-1.5**, all GH/session keys); remaining deltas are key ordering and in-place-only keys (non-functional for Python-generated roots).
 3. ~~**Train hparams UI**~~ — form + Apply + replay cap rebuild in **`cypha_qt_shell`**.
 4. ~~**Save `.cypha` after native train**~~ — merge + encoder/field/temperature/scalars (**`save_cypha_file`**).

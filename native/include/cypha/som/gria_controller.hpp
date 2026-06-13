@@ -1,6 +1,6 @@
 #pragma once
 
-/// GRIA alpha live topology controller (mirrors cypha_som.gria_controller.GRIAController).
+/// GRIA alpha live topology controller (U3; off by default).
 
 #include <cstdint>
 #include <deque>

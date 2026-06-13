@@ -1,4 +1,4 @@
-// CTest: DIFRegressor predict_batch + expert EMA vs parity_fixtures/regression_m4/sidecar.json
+// CTest: DIFRegressor predict_batch + expert EMA vs fixtures/regression_m4/sidecar.json
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -30,7 +30,7 @@ std::string read_all(const char* path) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: regression_m4_parity <parity_fixtures/regression_m4/sidecar.json>\n";
+      std::cerr << "usage: regression_m4_parity <fixtures/regression_m4/sidecar.json>\n";
       return 2;
     }
     if (cypha::regression::native_regression_milestone() < 5) {

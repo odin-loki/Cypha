@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
         nlohmann::json out = {
             {"mode", args.mode},
             {"profile", args.profile},
-            {"context_mode", cypha::cyphalm::context_mode_python_name(cfg.context_mode)},
+            {"context_mode", cypha::cyphalm::context_mode_string(cfg.context_mode)},
             {"n_train", args.n_train},
             {"n_eval", args.n_eval},
             {"train_epochs", cfg.train_epochs},

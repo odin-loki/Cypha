@@ -45,7 +45,7 @@ std::vector<double> flatten_f_field(const nlohmann::json& j) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: merge_from_parity <parity_fixtures/merge_from>\n";
+      std::cerr << "usage: merge_from_parity <fixtures/merge_from>\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);

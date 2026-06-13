@@ -6,23 +6,23 @@ Start here, then open the section that matches what you need.
 
 ## Quick start
 
-```bash
-# Python reference stack (headless, no GUI)
-python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements-verify.txt
+**Native only.** See [`docs/native/NATIVE_QUICKSTART.md`](native/NATIVE_QUICKSTART.md) for install → validate → bench → tune → REST.
 
-# Full Studio (GUI + REST)
-pip install -r cypha_studio/requirements.txt
-python cypha_studio/main.py
-
-# Native C++ core (Linux / WSL)
-bash scripts/ci_native_linux.sh          # builds + runs CTest + optional pytest drift check
-
-# Windows installer (builds Qt shell + cypha_rest)
-# See install/install_windows.ps1
+```powershell
+# Windows — build + validate
+cmake -S native -B C:\Temp\cypha_build -DCMAKE_BUILD_TYPE=Release -G Ninja
+cmake --build C:\Temp\cypha_build --parallel
+ctest --test-dir C:\Temp\cypha_build -R native_ --output-on-failure
+powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
-For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`install/`](../install/).
+```bash
+# Linux / WSL
+bash scripts/ci_native_linux.sh
+# With Qt compile-check: CYPHA_BUILD_QT=1 bash scripts/ci_native_linux.sh
+```
+
+For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`packaging/`](../packaging/).
 
 ---
 
@@ -30,13 +30,12 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`inst
 
 | Doc | What it covers |
 |-----|----------------|
-| [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, CORS, **`CYPHA_LM_CHECKPOINT`**, REST routes |
-| [GUI threading](studio/STUDIO_THREADING.md) | `QThread` + `SignalBus` rules for the PySide6 Studio |
-| [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | tracemalloc, memray, `ab` / Locust notes |
+| [Native quick start](native/NATIVE_QUICKSTART.md) | Build, CTest, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run` |
+| [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, REST routes |
+| [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | Load-testing notes for REST |
 
-**Run GUI:** `python cypha_studio/main.py`  
-**Run headless REST:** `python -m uvicorn cypha_studio.server.api:app --host 0.0.0.0 --port 8765`  
-**Run native REST:** `./native/build/cypha_rest --model parity_fixtures/reference.cypha`
+**Run native REST:** `./native/build/cypha_rest --model fixtures/reference.cypha`  
+**Run Qt shell:** build with `-DCYPHA_BUILD_QT=ON`, then `cypha_qt_shell` (see [`native/qt/README.md`](../native/qt/README.md))
 
 ---
 
@@ -44,23 +43,20 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`inst
 
 | Doc | What it covers |
 |-----|----------------|
-| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: test counts (~274 pytest on CI / 52 CTest), per-fixture inventory, known gaps |
-| [Roadmap](verify/ROADMAP.md) | Milestones M1–M6 complete; current engineering horizon (Phase 5) |
+| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: **52 CTest** inventory, per-fixture status, known gaps |
+| [Roadmap](verify/ROADMAP.md) | Milestones M1–M6 complete; current engineering horizon |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
 | [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / WSL workflow checklist |
 | [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I–V); C++ in `native/include/cypha/intelligence/` |
 | [Failed experiments](archive/failed_experiments/cypha_som/README.md) | cypha_som SOM upgrade post-mortem |
-| [C++2023 migration](native/migration/CPLUSPLUS_2023_MASTER_PLAN.md) | Python decommission phases |
-| [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, full test command reference |
+| [C++2023 migration](native/migration/CPLUSPLUS_2023_MASTER_PLAN.md) | Python decommission phases (P7 complete) |
+| [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, CTest gate reference |
 | [CHANGELOG](../CHANGELOG.md) | Release history and what changed in each milestone |
 
-**Quick gate (matches GitHub Actions CI — four blocking jobs, green on `main` @ CI #51+):**
+**Quick gate (matches GitHub Actions CI — four blocking jobs):**
 ```bash
-bash scripts/ci_native_linux.sh                    # native CTest (+ optional drift pytest)
-pytest tests/ cypha_lm/model/tests/ -q             # full CI pytest (ignore test_gui_qtbot.py on headless)
-python test_cypha.py                               # 54 deterministic checks on Cypha.py math
-python cypha_studio/test_cypha_studio.py           # 48 pipeline checks
-make test                                          # Unix: QT_QPA_PLATFORM=offscreen + pytest
+bash scripts/ci_native_linux.sh                    # native CTest
+ctest --test-dir native/build -R native_ --output-on-failure
 ```
 
 **Full native production gate (Windows):**
@@ -75,10 +71,10 @@ powershell -File scripts\cypha_native_validate_all.ps1
 | Doc | What it covers |
 |-----|----------------|
 | [Port contract](port/PORT_CONTRACT.md) | Normative: `.cypha` v3, LLR/softmax/GH, CyphaDIF REST, **CyphaLM `/generate` §4** |
-| [Full stack port](port/PORT_FULL_STACK.md) | Per-milestone record M1–M6 (complete) |
+| [Full stack port](port/PORT_FULL_STACK.md) | Per-milestone record M1–M6 (complete); Python runtime decommissioned |
 | [Preprocessor contract](port/PREPROCESSOR_CONTRACT.md) | `preprocessor.json` format next to `model.cypha` |
-| [Experiments schema](port/EXPERIMENTS_SCHEMA.md) | SQLite layout for `ExperimentDB` |
-| [parity_fixtures/README.md](../parity_fixtures/README.md) | Committed parity assets — inputs + expected outputs |
+| [Experiments schema](port/EXPERIMENTS_SCHEMA.md) | SQLite layout for experiments DB |
+| [fixtures/README.md](../fixtures/README.md) | Committed parity assets — inputs + expected outputs |
 | [native/README.md](../native/README.md) | C++ build guide: CMake presets, CTest inventory, CUDA, Qt |
 
 ---
@@ -87,16 +83,15 @@ powershell -File scripts\cypha_native_validate_all.ps1
 
 | Doc | What it covers |
 |-----|----------------|
-| [BENCHMARK_GPU.md](benchmarks/BENCHMARK_GPU.md) | GPU bench bundle, CuPy notes |
+| [BENCHMARK_GPU.md](benchmarks/BENCHMARK_GPU.md) | GPU bench bundle notes |
 | [Profile improvements (2026-03-21 WSL GPU)](benchmarks/PROFILE_IMPROVEMENTS_20260321_WSL_GPU.md) | Example captured run analysis |
 
-**Run benchmarks:**
+**Run benchmarks (native):**
 ```bash
-python benchmark_baseline.py                     # 17-domain benchmark (writes cypha_bench/BASELINE_REPORT.md)
-python benchmark.py                              # full sklearn regression oracle
-python scripts/profile_real_datasets.py --fast   # sklearn tabular profiling
-python scripts/gpu_fullbench.py                  # encode+LLR+softmax GPU vs CPU timing
-python scripts/run_cypha_lm_report.py            # CyphaLM experiments + figures
+cypha_bench_run --list-domains
+cypha_bench_run --from-domain 1          # d01 … d17
+cypha_bench_run --report-only            # cross-domain + BASELINE_REPORT.md + figures
+native/build/xor_kernel_bench --seeds 3 --passes 8 --kernel-blend 1.0
 ```
 
 See [RESEARCH_STATUS.md](RESEARCH_STATUS.md) for the interpretation of all benchmark numbers.
@@ -129,8 +124,8 @@ Permanent investigation reports:
 
 | Path | Purpose |
 |------|---------|
-| `artifacts/profiles/` | cProfile / tracemalloc text (output from `scripts/profile_*.py`) |
-| `artifacts/bench/` | JSON timing reports (e.g. `bench_gpu_production`) |
-| `artifacts/tuning/` | Tuning grid CSV / JSON from `tune_quality_performance.py` |
+| `artifacts/profiles/` | Timing / profiling JSON (e.g. XOR kernel LLR sweeps) |
+| `artifacts/bench/` | JSON timing reports |
+| `artifacts/tuning/` | Tuning grid output from `cypha_tune_run` |
 
-See [scripts/README.md](../scripts/README.md) for the full script index.
+See [scripts/README.md](../scripts/README.md) for the script index (fixture generators, packaging, validation).

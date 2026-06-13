@@ -1,7 +1,7 @@
 # CyphaLM Long-Range Context Tests
 
 **Maps:** [`Cypha Tests.txt`](../Cypha%20Tests.txt) Phase 1 → CyphaLM empirical verification  
-**Runner:** `python cypha_bench/tuning/cyphalm_long_range_suite.py --write --figures`  
+**Runner:** `cypha_tune_run --config bench/config/cyphalm_long_range_suite.py --write --figures`  
 **D17:** experiment **17K_long_range_context**
 
 ---
@@ -21,7 +21,7 @@ Phase 2–3 (Hebbian biochem, next-token head) → [`CYPHALM_UPGRADE_V2.md`](CYP
 
 ## Suite outputs
 
-Artifact: `cypha_bench/config/cyphalm_long_range_suite.json`
+Artifact: `bench/config/cyphalm_long_range_suite.json`
 
 | Block | Meaning |
 |-------|---------|
@@ -57,7 +57,7 @@ Block shuffle stays flat because local n-gram structure survives chunk permutati
 
 ## Results @ 300k hybrid (`hybrid_gria_lstm`, Phase 1c 17K)
 
-Artifact: `cypha_bench/report/tables/d17.json` → `17K_long_range_context`
+Artifact: `bench/report/tables/d17.json` → `17K_long_range_context`
 
 | Test | Result | Cypha Tests verdict |
 |------|--------|---------------------|
@@ -74,7 +74,7 @@ Artifact: `cypha_bench/report/tables/d17.json` → `17K_long_range_context`
 
 ## Results @ 300k (convergence peak, GRIA stack, context-only)
 
-Artifact: `cypha_bench/config/cyphalm_long_range_300k.json`
+Artifact: `bench/config/cyphalm_long_range_300k.json`
 
 | Test | Result | vs 40k |
 |------|--------|--------|
@@ -91,19 +91,19 @@ Artifact: `cypha_bench/config/cyphalm_long_range_300k.json`
 
 ```powershell
 # Fast smoke (8k train)
-python cypha_bench/tuning/cyphalm_long_range_suite.py --fast --write --figures
+cypha_tune_run --config bench/config/cyphalm_long_range_suite.py --fast --write --figures
 
 # Full (40k train + SSM ablation)
-python cypha_bench/tuning/cyphalm_long_range_suite.py --write --figures
+cypha_tune_run --config bench/config/cyphalm_long_range_suite.py --write --figures
 
 # Convergence peak — context only (~40 min train)
-python cypha_bench/tuning/cyphalm_long_range_suite.py --n-train 300000 --skip-ablation --write --figures --out cypha_bench/config/cyphalm_long_range_300k.json
+cypha_tune_run --config bench/config/cyphalm_long_range_suite.py --n-train 300000 --skip-ablation --write --figures --out bench/config/cyphalm_long_range_300k.json
 
 # D04 Gutenberg hybrid @ 300k (Moby Dick)
-python cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py --profile d04 --corpus gutenberg --n-train 300000 --write --out cypha_bench/config/cyphalm_hybrid_lstm_d04_300k.json
+cypha_tune_run --config bench/config/cyphalm_hybrid_lstm_sweep.py --profile d04 --corpus gutenberg --n-train 300000 --write --out bench/config/cyphalm_hybrid_lstm_d04_300k.json
 
 # D17 bench (includes 17K when not fast)
-python cypha_bench/run_all.py --domain 17
+cypha_bench_run --domain 17
 ```
 
 Phase 1c full corpus: set `CYPHA_BENCH_FULL_N_TRAIN=300000` (default) with `CYPHA_BENCH_FULL_CORPUS=1`.

@@ -1,6 +1,6 @@
 # Cypha Full C++ Framework — Master Port Plan
 
-**Goal:** Python becomes prototyping-only; **all production runtime, bench, REST, and validation** runs in native C++.
+**Goal:** **P7 complete** — all production runtime, bench, REST, and validation runs in native C++ only.
 
 **Status:** **v2.5 complete — SHIPPED** ([`v2.2.8` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.8) — Linux + Windows installers; **CI fully green** — all four blocking jobs).
 
@@ -14,10 +14,10 @@ Changelog: [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ```
 scripts/cypha_native_validate_all.ps1  → OK
-  52 CTests │ ~274 pytest (CI) │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
+  53 CTests │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
 
-GitHub Actions **CI #51+** (`a3b48c4`): Linux CTest + pytest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**. Release **v2.2.8** installers published.
+GitHub Actions **CI #51+** (`a3b48c4`): Linux CTest + ctest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**. Release **v2.2.8** installers published.
 
 Build: `C:\Temp\cypha_full_cpp_build`
 
@@ -46,9 +46,11 @@ Build: `C:\Temp\cypha_full_cpp_build`
 ```
 cypha_qt_shell (9 tabs + Settings/Confusion dialogs)
 cypha_rest (/dif/*, /lm/*, /route/*)
-cypha_bench_run │ cypha_tune_run │ cypha_diagnostics_run
-cypha_bench_native │ cypha_lm_native │ cypha_som │ cypha_core
+cypha_bench_run │ cypha_bench_report │ cypha_tune_run │ cypha_diagnostics_run
+cyphalm_bench_native │ cypha_lm_native │ cypha_core (C++ library)
 ```
+
+Bench configs, data, and reports live under **`bench/`**; parity goldens under **`fixtures/`**.
 
 ---
 
@@ -61,7 +63,7 @@ Phases 0–14 complete including Qt Studio parity (Settings, Confusion Matrix), 
 ## Optional future work
 
 - PySide6 chat widget (Qt Predict tab is feature-vector, not chat)
-- Local GPU microbench on a CUDA box (`scripts/gpu_microbench.py`, `scripts/gpu_fullbench.py`)
+- Local GPU microbench on a CUDA box (`cuda_smoke --bench`)
 
 ---
 

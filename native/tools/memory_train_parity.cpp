@@ -52,7 +52,7 @@ std::vector<double> flatten_f_field(const nlohmann::json& j) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: memory_train_parity <parity_fixtures/memory_train_dir>\n";
+      std::cerr << "usage: memory_train_parity <fixtures/memory_train_dir>\n";
       return 2;
     }
     std::string dir = argv[1];

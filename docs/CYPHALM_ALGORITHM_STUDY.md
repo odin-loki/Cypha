@@ -2,9 +2,9 @@
 
 **Purpose:** Understand the AI-generated baseline, what each subsystem contributes, and which upgrade combinations help — recorded systematically, not by guesswork.
 
-**Artifact:** `cypha_bench/config/cyphalm_component_ablation.json`  
-**Runner:** `python cypha_bench/tuning/cyphalm_component_ablation.py --write`  
-**Library:** `cypha_bench/adapters/cyphalm_component_study.py`
+**Artifact:** `bench/config/cyphalm_component_ablation.json`  
+**Runner:** `cypha_tune_run --config bench/config/cyphalm_component_ablation.py --write`  
+**Library:** `bench/adapters/cyphalm_component_study.py`
 
 Related: [`cypha_lm/README.md`](../cypha_lm/README.md), [`FINDINGS_CYPHALM_TRAINING.md`](FINDINGS_CYPHALM_TRAINING.md)
 
@@ -117,19 +117,19 @@ All combinations of `{spectral, multiscale, hebbian}` on `gria_ngram`.
 
 ```powershell
 # Fast smoke (~10 cells, 8k tokens)
-python cypha_bench/tuning/cyphalm_component_ablation.py --fast --write
+cypha_tune_run --config bench/config/cyphalm_component_ablation.py --fast --write
 
 # Full study (~37 cells, 40k tokens) — ~4–8 hours
-python cypha_bench/tuning/cyphalm_component_ablation.py --write
+cypha_tune_run --config bench/config/cyphalm_component_ablation.py --write
 
 # Single phase
-python cypha_bench/tuning/cyphalm_component_ablation.py --phase architecture --write
-python cypha_bench/tuning/cyphalm_component_ablation.py --phase toggle --write
-python cypha_bench/tuning/cyphalm_component_ablation.py --phase ssm_combo --write
-python cypha_bench/tuning/cyphalm_component_ablation.py --phase upgrade --write
+cypha_tune_run --config bench/config/cyphalm_component_ablation.py --phase architecture --write
+cypha_tune_run --config bench/config/cyphalm_component_ablation.py --phase toggle --write
+cypha_tune_run --config bench/config/cyphalm_component_ablation.py --phase ssm_combo --write
+cypha_tune_run --config bench/config/cyphalm_component_ablation.py --phase upgrade --write
 
 # D17 bench experiment
-python cypha_bench/run_all.py --domain 17   # includes 17H when not fast
+cypha_bench_run --domain 17   # includes 17H when not fast
 ```
 
 ---

@@ -30,8 +30,10 @@ fs::path find_repo_root(const fs::path& start) {
     }
     fs::path cur = fs::absolute(start);
     for (int i = 0; i < 12 && !cur.empty(); ++i) {
-        if (fs::is_directory(cur / "parity_fixtures")) return cur;
-        if (fs::is_directory(cur / "cypha_bench") && fs::is_directory(cur / "native")) return cur;
+        if (fs::is_directory(cur / "fixtures") && fs::is_directory(cur / "bench") &&
+            fs::is_directory(cur / "native")) {
+            return cur;
+        }
         cur = cur.parent_path();
     }
     return repo_root_from_source();
@@ -39,7 +41,7 @@ fs::path find_repo_root(const fs::path& start) {
 
 fs::path repo_root() { return find_repo_root(fs::current_path()); }
 
-fs::path bench_root() { return repo_root() / "cypha_bench"; }
+fs::path bench_root() { return repo_root() / "bench"; }
 
 fs::path config_dir() { return bench_root() / "config"; }
 

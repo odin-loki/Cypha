@@ -1,0 +1,76 @@
+{
+  "dataset": "S3_nonlinear_xor",
+  "n_samples": 4000,
+  "n_dims": 20,
+  "passes": 8,
+  "kernel_blend": 1.0,
+  "kernel_m": 256,
+  "use_rff": false,
+  "rff_d": null,
+  "replay_ratio": 0.0,
+  "linear_mean_acc": 0.504,
+  "kernel_mean_acc": 0.6006666666666667,
+  "delta_pp": 9.666666666666668,
+  "per_seed": {
+    "linear": [
+      {
+        "seed": 0,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.54,
+        "train_sec": 4.0076178000017535,
+        "n_basis": 0
+      },
+      {
+        "seed": 1,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.486,
+        "train_sec": 3.9465096999774687,
+        "n_basis": 0
+      },
+      {
+        "seed": 2,
+        "use_kernel_llr": false,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.486,
+        "train_sec": 3.9458193000173196,
+        "n_basis": 0
+      }
+    ],
+    "kernel": [
+      {
+        "seed": 0,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.624,
+        "train_sec": 66.40142209999613,
+        "n_basis": 256
+      },
+      {
+        "seed": 1,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.574,
+        "train_sec": 67.47289630002342,
+        "n_basis": 256
+      },
+      {
+        "seed": 2,
+        "use_kernel_llr": true,
+        "kernel_blend": 1.0,
+        "use_rff": false,
+        "accuracy": 0.604,
+        "train_sec": 73.17880749999313,
+        "n_basis": 256
+      }
+    ]
+  },
+  "sklearn_rbf_mean_acc": 0.7923333333333332,
+  "gap_to_sklearn_pp": 19.166666666666654
+}

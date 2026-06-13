@@ -110,7 +110,7 @@ LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_
         bpe = std::make_unique<BpeTokenizer>(BpeTokenizer::load(bpe_merges, bpe_vocab));
     }
     const BpeTokenizer* bpe_ptr = bpe.get();
-    const fs::path root = fs::path(repo_root_from_native()) / "cypha_bench" / "data";
+    const fs::path root = fs::path(repo_root_from_native()) / "bench" / "data";
     if (profile == "d17") {
         const fs::path wt = root / "wikitext2" / "wikitext-2" / "wiki.train.tokens";
         if (fs::is_regular_file(wt)) {
@@ -127,7 +127,7 @@ LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_
             }
         }
     }
-    throw std::runtime_error("no corpus for profile " + profile + " under cypha_bench/data");
+    throw std::runtime_error("no corpus for profile " + profile + " under bench/data");
 }
 
 std::vector<int> synthetic_corpus(int n_tokens, int vocab_size, std::uint64_t seed) {

@@ -10,8 +10,8 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 $tuneExe = Join-Path $BuildDir "cypha_tune_run.exe"
-$configDir = Join-Path $root "cypha_bench\config"
-$outDir = Join-Path $root "cypha_bench\artifacts\tuning"
+$configDir = Join-Path $root "bench\config"
+$outDir = Join-Path $root "bench\artifacts\tuning"
 
 $configs = @(
     "cyphalm_hybrid_lstm_tune_smoke.json",

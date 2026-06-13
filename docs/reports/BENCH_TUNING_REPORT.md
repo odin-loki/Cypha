@@ -42,4 +42,4 @@ Generated: 2026-05-26T07:43:04.840531+00:00
 ## Notes
 
 - Baseline: `CYPHA_BENCH_USE_PROFILE=0`
-- Tuned: profile from `cypha_bench/config/everyday_profile.json` (fallback `config/profiled_medium.json`)
+- Tuned: profile from `bench/config/everyday_profile.json` (fallback `bench/config/profiled_medium.json`)

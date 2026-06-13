@@ -46,7 +46,7 @@ Observed: **GPU slower than CPU** (~32 ms vs ~11 ms per iter), zero numeric erro
 
 - **Fused encode → score on device**: `batch_infer` keeps `H`/`LLR` on GPU through softmax+gate when **K > 8** (`fused_features_to_device_latent_llr` + `fused_batch_infer_indices_confs_cupy`); only small per-row outputs hit the host.
 - **`batch_infer_full`**: when **K > 8**, downloads **LLR** only (for `llrs` / `probs` dicts) plus precomputed **gates** from the device tail — **no full `H` D2H** on that path.
-- **True `batch_encode` for VectorEncoder**: one GEMM `(N, d_in) @ W.T` instead of a Python loop (matches comments in `Cypha.py` API map).
+- **True `batch_encode` for VectorEncoder**: one GEMM `(N, d_in) @ W.T` instead of a Python loop (matches comments in `cypha_core` API map).
 
 ### 2.3 CuPy burn + tuner probe
 
@@ -72,7 +72,7 @@ Observed: **GPU slower than CPU** (~32 ms vs ~11 ms per iter), zero numeric erro
 **Quality improvements (data / protocol)**
 
 - Run **`--preset medium`** (or `fine` with `--max-combos`) for stronger models; coarse is a sanity grid.
-- Align production hyperparameters with **`config/profiled_medium.json`** (already stronger than this coarse best on the earlier full-medium search).
+- Align production hyperparameters with **`bench/config/profiled_medium.json`** (already stronger than this coarse best on the earlier full-medium search).
 - Generation: require **minimum `gen_n_calls * gen_n_per_call`** when selecting “best”, or report confidence intervals.
 
 **Benchmark hygiene**

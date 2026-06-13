@@ -1,4 +1,4 @@
-// CTest: RFF encode + ridge/bias + MKE expert dots vs parity_fixtures/rff_regression/sidecar.json
+// CTest: RFF encode + ridge/bias + MKE expert dots vs fixtures/rff_regression/sidecar.json
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -30,7 +30,7 @@ std::string read_all(const char* path) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: regression_rff_parity <parity_fixtures/rff_regression/sidecar.json>\n";
+      std::cerr << "usage: regression_rff_parity <fixtures/rff_regression/sidecar.json>\n";
       return 2;
     }
     if (cypha::regression::native_regression_milestone() < 3) {

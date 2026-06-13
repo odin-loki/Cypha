@@ -135,7 +135,7 @@ int main(int argc, char** argv) {
       z[i] = llr[i] / (model.temperature + eps);
     }
     std::vector<double> probs;
-    cypha::softmax_batch_like_python(z.data(), static_cast<int>(n), static_cast<int>(k), eps, probs);
+    cypha::softmax_batch_reference(z.data(), static_cast<int>(n), static_cast<int>(k), eps, probs);
     constexpr double kAtolProb = 1e-12;
     for (std::size_t i = 0; i < probs.size(); ++i) {
       if (!near_eq(probs[i], exp_probs[i], kAtolProb)) {

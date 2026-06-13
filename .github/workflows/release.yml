@@ -1,4 +1,4 @@
-# Build Linux + Windows (MinGW cross) installer archives and publish a GitHub Release on tag push.
+﻿# Build Linux + Windows (MinGW cross) installer archives and publish a GitHub Release on tag push.
 #
 # Create a release:
 #   git tag v2.0.0
@@ -154,9 +154,9 @@ jobs:
             dist/cypha-*-linux-x86_64.tar.gz
             dist/cypha-*-windows-x86_64.zip
           body: |
-            ## Cypha ${{ github.ref_name }} — full native C++ framework
+            ## Cypha ${{ github.ref_name }} â€” full native C++ framework
 
-            Prebuilt **native C++** runtime: CyphaDIF REST (`/dif/retrieve`, `/dif/generate`), native bench (d01–d17), CyphaLM, diagnostics orchestrator, and parity smoke tools. Python Studio is not included — clone the repo and run `install/install_linux.sh` or `install/install_windows.ps1` for the full Python stack.
+            Prebuilt **native C++** runtime: CyphaDIF REST (`/dif/retrieve`, `/dif/generate`), native bench (d01â€“d17), CyphaLM, diagnostics orchestrator, and parity smoke tools. GUI: build `cypha_qt_shell` from source (`docs/native/qt/README.md`).
 
             ### Linux (`cypha-*-linux-x86_64.tar.gz`)
 
@@ -183,9 +183,9 @@ jobs:
             | Binary | Role |
             |--------|------|
             | `cypha_rest` | Native REST server (classifier + `/lm/*`, `/generate`, `/dif/*`) |
-            | `cypha_bench_run` | Bench master runner (domains d01–d17) |
+            | `cypha_bench_run` | Bench master runner (domains d01â€“d17) |
             | `cypha_bench_report` | Report-only rebuild (`BASELINE_REPORT.md` + `summary.json`) |
-            | `cypha_diagnostics_run` | Phases 1–4 diagnostics orchestrator |
+            | `cypha_diagnostics_run` | Phases 1â€“4 diagnostics orchestrator |
             | `cypha_tune_run` | Native tuning sweep runner |
             | `cyphalm_bench_native` | WikiText BPC bench CLI |
             | `cyphalm_parity`, `cyphalm_checkpoint_parity` | CyphaLM parity smoke tools |
@@ -196,3 +196,4 @@ jobs:
 
             - `score_batch_parity`, `multilabel_dif_parity`, `merge_from_parity`, `similarity_index_parity`
             - `embed_table_parity`, `retrieval_parity`, `som_parity`
+

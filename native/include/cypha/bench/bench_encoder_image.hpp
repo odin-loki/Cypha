@@ -30,7 +30,7 @@ class ImageEncoder {
                                                  const std::string& mode) const;
 };
 
-/// Load MNIST IDX files from ``cypha_bench/data/mnist`` or synthesize digits-like data.
+/// Load MNIST IDX files from ``bench/data/mnist`` or synthesize digits-like data.
 VisionDataset load_vision_dataset();
 
 /// Read IDX3 image file (big-endian header).

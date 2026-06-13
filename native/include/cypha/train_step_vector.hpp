@@ -33,6 +33,10 @@ struct TrainStepExtras {
   const double* replay_u01{nullptr};
   std::size_t replay_u01_len{0};
   std::size_t* replay_u01_pos{nullptr};
+  /// Optional Nyström kernel LLR (Python ``CyphaDIF._kernel_mem`` + ``use_kernel_llr``).
+  KernelMemory* kernel_mem{nullptr};
+  bool use_kernel_llr{false};
+  double kernel_blend{0.5};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).

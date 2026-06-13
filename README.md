@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows installers — latest **v2.2.8**)
 
-> **A custom AI architecture invented from first principles by unifying four otherwise-disconnected threads of theory: AIXI / Solomonoff (minimum-description-length priors over class complexity, `‖Δk‖_F ≤ C`), information geometry (natural gradients on the Gaussian manifold, Cramér–Rao efficient), the Free Energy Principle / active inference (a shared world prior `θ₀` plus differential class offsets `Δk`), and the Information Bottleneck (contrastive encoder feedback via Fisher–Rao residuals). The core invariant is that every class `k` is represented as `θ₀ ⊕ Δk` — a shared world prior plus a small class-specific offset in natural parameter space — and classification is `y* = argmax_k [log p(h | θ₀ ⊕ Δk) + log p(k | context)]`. The architecture is domain-agnostic (any input is reduced to a latent vector by a pluggable `Encoder`), handles heavy-tailed inputs through a Generalised-Hyperbolic / NIG gate, detects out-of-distribution inputs natively, supports online corrections, and reports calibrated regression uncertainty. The engineering layer wrapping the AI — Python reference, CMake-built C++ native core, REST server, Qt desktop Studio, optional CUDA acceleration, SQLite-backed persistent state — is held to byte-identical Python ↔ C++ parity by **52 CTest** + **~274 pytest** cases across named fixtures (`cypha_parity`, `memory_train_parity`, `quantile_dif_train_parity`, `mke_train_step_parity`, `regression_m4_parity`, …).** The unusual move is the dual-stack trust model: every research-grade Python feature has a byte-for-byte native equivalent, validated by the parity matrix, so the research code and the runtime production code are *the same artefact*.
+> **A custom AI architecture invented from first principles by unifying four otherwise-disconnected threads of theory: AIXI / Solomonoff (minimum-description-length priors over class complexity, `‖Δk‖_F ≤ C`), information geometry (natural gradients on the Gaussian manifold, Cramér–Rao efficient), the Free Energy Principle / active inference (a shared world prior `θ₀` plus differential class offsets `Δk`), and the Information Bottleneck (contrastive encoder feedback via Fisher–Rao residuals). The core invariant is that every class `k` is represented as `θ₀ ⊕ Δk` — a shared world prior plus a small class-specific offset in natural parameter space — and classification is `y* = argmax_k [log p(h | θ₀ ⊕ Δk) + log p(k | context)]`. The architecture is domain-agnostic (any input is reduced to a latent vector by a pluggable `Encoder`), handles heavy-tailed inputs through a Generalised-Hyperbolic / NIG gate, detects out-of-distribution inputs natively, supports online corrections, and reports calibrated regression uncertainty. The engineering layer — CMake-built C++ native core, REST server, Qt desktop Studio, optional CUDA acceleration, SQLite-backed persistent state — is validated by **53 CTest** cases across named fixtures (`cypha_parity`, `memory_train_parity`, `quantile_dif_train_parity`, `mke_train_step_parity`, `regression_m4_parity`, …).**
 
 ---
 
@@ -27,7 +27,49 @@ Five enhancement phases sit on top of the v1 foundation:
 - **Phase 4 — Priority replay.** Recency-and-surprise weighted buffer of capacity `10 000`, replay rate `0.30`, with KDE generation from stored latents.
 - **Phase 5 — Sequence & multi-modal.** `predict_next(label)` for next-label distributions, `ConcatEncoder` for feature concatenation, `MultiModalCyphaDIF` for per-modality LLR fusion.
 
-The folder is the **engineering implementation** of this AI architecture. The harmonic-spectrum theoretical backbone (the `σ_k ∝ 1/k` and `α ≈ 0.85` SGD-narrative claims) lives separately at [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md). Cypha is the *implementation leg*: write the same AI twice (once in Python for research velocity, once in C++ for deployment speed) and prove with a parity matrix that they are the same model.
+The folder is the **native C++ implementation** of this AI architecture. The harmonic-spectrum theoretical backbone (the `σ_k ∝ 1/k` and `α ≈ 0.85` SGD-narrative claims) lives separately at [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md). Cypha is the *implementation leg*: one authoritative runtime in `native/`, validated by CTest parity fixtures.
+
+---
+
+## Quick start (native)
+
+Build outside OneDrive on Windows (cloud sync locks object files). Full guide: [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md).
+
+```powershell
+# Windows — configure + build
+cmake -S native -B C:\Temp\cypha_build -DCMAKE_BUILD_TYPE=Release -G Ninja
+cmake --build C:\Temp\cypha_build --parallel
+
+# Validate (53 CTests)
+ctest --test-dir C:\Temp\cypha_build -R native_ --output-on-failure
+
+# Full production gate (rebuild + CTest + bench smoke + tune dry-run)
+powershell -File scripts\cypha_native_validate_all.ps1
+```
+
+```bash
+# Linux / WSL
+cmake -S native -B /tmp/cypha_build -DCMAKE_BUILD_TYPE=Release -G Ninja
+cmake --build /tmp/cypha_build --parallel
+ctest --test-dir /tmp/cypha_build -R native_ --output-on-failure
+bash scripts/ci_native_linux.sh
+```
+
+**Run services** (after build or release install):
+
+```bash
+# REST API (CyphaDIF + CyphaLM + Branch A)
+cypha_rest --listen 127.0.0.1:8099 --cypha fixtures/reference.cypha
+
+# Qt Studio shell (build with -DCYPHA_BUILD_QT=ON)
+cypha_qt_shell
+
+# Benchmarks (d01–d17)
+cypha_bench_run --list-domains
+cypha_bench_run --from-domain 1
+```
+
+Prebuilt bundles: **[GitHub Releases](https://github.com/odin-loki/Cypha/releases)** → `packaging/install_release_windows.ps1` or `packaging/install_release_linux.sh`.
 
 ---
 
@@ -37,24 +79,18 @@ The folder is the **engineering implementation** of this AI architecture. The ha
 |---|---|
 | [`README.md`](README.md) | This file. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history — milestones, bug fixes, benchmark deltas. |
-| [`Cypha.py`](Cypha.py) | **The AI itself.** `CyphaDIF`, `WorldPrior`, `ClassDifferential`, `DIFMemory`, `EncoderProjection`, `TieredContextBuffer`, `NIGField`, `PriorityReplayBuffer`, `RFFEncoder`, `MKERegressor`, `DIFRegressor`, `RFFRegressor`, `TwoStageDIFRegressor`, `MultiLabelDIF`, `SimilarityIndex`, `PerformanceMonitor`, `MultiModalCyphaDIF`, `ClassifierDistillation`. ≈ `7 100` lines. |
-| [`test_cypha.py`](test_cypha.py) | Top-level Python test suite for the architecture. |
-| [`benchmark.py`](benchmark.py) | Multi-domain benchmarking harness (17 domains). |
-| [`benchmark_baseline.py`](benchmark_baseline.py) | Baseline runner for SOM/self-organising upgrade evaluation. |
 | [`bessel_ratios.npz`](bessel_ratios.npz) | Pre-computed `K_n` Bessel ratios (`16 384` uniform points, `x ∈ [10⁻⁶, 120]`, max rel-err `< 5 × 10⁻³`) — replaces per-call `scipy.special.kv` in the GH-posterior hot path. |
 | [`native/README.md`](native/README.md) | Native C++ core build & test guide — CTest harness, parity test inventory, SQLite amalgamation, CUDA smoke test. |
 | [`docs/README.md`](docs/README.md) | Documentation hub — all sub-documents indexed by purpose. |
-| [`docs/port/PORT_CONTRACT.md`](docs/port/PORT_CONTRACT.md) | The parity contract — what Python and native must agree on, fixture by fixture. |
-| [`docs/verify/VERIFICATION_STATUS.md`](docs/verify/VERIFICATION_STATUS.md) | Current parity test results across all fixtures. |
+| [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md) | One-page native install → validate → bench → tune → REST. |
+| [`docs/port/PORT_CONTRACT.md`](docs/port/PORT_CONTRACT.md) | The parity contract — `.cypha` v3, REST shapes, bench §6. |
+| [`docs/verify/VERIFICATION_STATUS.md`](docs/verify/VERIFICATION_STATUS.md) | Current CTest parity results across all fixtures. |
 | [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/reports/DIAGNOSTIC_REPORT.md) | 2026-05-30 full diagnostic: three root-cause bugs found, +23.5 pp on linearly-separable 2-class. |
 | [`docs/reports/SOM_UPGRADE_REPORT.md`](docs/reports/SOM_UPGRADE_REPORT.md) | SOM/GNG/GRIA/Hebbian upgrade evaluation: all six upgrades benchmarked; default flags remain OFF. |
-| [`cypha_studio/core/inference.py`](cypha_studio/core/inference.py) | Python `InferenceEngine` wrapper — batch + single predict, GH gate, OOD detection, online corrections, regression uncertainty. |
-| [`cypha_studio/core/trainer.py`](cypha_studio/core/trainer.py) | Python `Trainer` wrapper — `TrainerConfig` defaults, online + batch training. |
-| [`cypha_studio/server/api.py`](cypha_studio/server/api.py) | REST API server (FastAPI reference implementation). |
-| [`cypha_studio/`](cypha_studio/) | Python Studio: PySide6 desktop GUI + FastAPI REST + training/registry/experiments core. |
 | [`native/`](native/) | C++ native core. CMake build. Milestones M1–M6 complete. |
-| [`parity_fixtures/`](parity_fixtures/) | Committed parity assets — input vectors and expected outputs the two implementations must agree on. |
-| [`install/`](install/) | Platform installers: `install_windows.ps1` (Qt shell + `cypha_rest`) and `install_linux.sh` (Python stack + native build). |
+| [`fixtures/`](fixtures/) | Committed parity assets — input vectors and expected outputs for CTest validation. |
+| [`bench/`](bench/) | Native benchmark tree: config, data, report, artifacts. |
+| [`packaging/`](packaging/) | Release install scripts; bundles built via `scripts/package_release_*.sh`. |
 
 > **Note on file paths.** The repository's HRNA / NMP research paper is *not* inside `Cypha/`; it lives at [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md). Cypha is the engineering implementation; that paper is the theoretical home.
 
@@ -114,13 +150,13 @@ Training is the same machinery in reverse:
 4. The replay buffer stores `(x, h, label)` weighted by surprise (high LLR-residual = high priority); a fraction `replay_ratio = 0.30` of subsequent steps come from the buffer.
 5. Every `_ALIGN_EVERY = 500` steps, the encoder is realigned to the dominant `Δk` directions, ensuring the latent space remains expressive.
 
-A separate **`CausalField`** runs alongside as a recurrent SGEMV update for sequential context, and the **regressor variants** (`DIFRegressor`, `RFFRegressor`, `TwoStageDIFRegressor`, `MKERegressor`) replace the LLR-argmax with a ridge-regression / RLS posterior so the same architecture handles regression with calibrated uncertainty (`predict_with_uncertainty(X)` returns posterior std).
+A separate **`CausalField`** runs alongside as a recurrent SGEMV update for sequential context, and the **regressor variants** (`DIFRegressor`, `RFFRegressor`, `TwoStageDIFRegressor`, `MKERegressor`) replace the LLR-argmax with a ridge-regression / RLS posterior so the same architecture handles regression with calibrated uncertainty.
 
 ---
 
 ## ⚙️ Reference defaults
 
-These defaults come from a profiled medium-grid tuning programme (`scripts/tune_quality_performance.py`), not from guesses.
+These defaults come from a profiled medium-grid tuning programme, not from guesses.
 
 ### `CyphaDIF`
 
@@ -143,30 +179,20 @@ These defaults come from a profiled medium-grid tuning programme (`scripts/tune_
 | `OOD_SIGMA` | `15.0` | OOD distribution width |
 | `align_every` | `500` | encoder-realignment cadence |
 
-### `InferenceEngine`
-
-| Parameter | Default |
-|---|---|
-| `OOD_THRESHOLD` | `3.0` |
-| Batch / single prediction | both supported |
-| GH gate | yes (heavy-tailed input handling) |
-| Online corrections | yes |
-| Regression uncertainty | yes (posterior std) |
-
 ---
 
 ## 🧪 Parity test inventory (selected, from `native/README.md`)
 
 | Test | What it verifies |
 |---|---|
-| `cypha_parity` | Top-level Python ↔ native parity |
+| `cypha_parity` | Top-level infer vs `fixtures/` |
 | `memory_train_parity` | `DIFMemory` training step |
 | `quantile_dif_train_parity` | Quantile-DIF training step |
 | `mke_train_step_parity` | Mixture-of-experts training step |
 | `regression_m4_parity` | M4 regression |
 | `cuda_smoke` | CUDA path smoke test |
 
-(Full inventory in [`native/README.md`](native/README.md). CI gate: **four blocking jobs** — Linux **52 CTest** + **~274 pytest**, MinGW PE smoke, MSVC + CUDA, GCC + CUDA; Windows local gate via `scripts/cypha_native_validate_all.ps1`.)
+(Full inventory in [`native/README.md`](native/README.md). CI gate: **four blocking jobs** — Linux **53 CTests**, MinGW PE smoke, MSVC + CUDA, GCC + CUDA; Windows local gate via `scripts/cypha_native_validate_all.ps1`.)
 
 ---
 
@@ -181,26 +207,26 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 | R1 — Iris | 0.900 | 0.821 | 0.968 | Auto-RFF for dim≤30 |
 | R2 — Wine | 0.969 | 0.964 | 0.987 | Near-saturated |
 | R3 — Digits (10-class) | **0.922** | 0.900 | 0.982 | delta_lr=0.03 fix |
-| R4 — Breast cancer | 0.957 | 0.950 | 0.983 | |
+| R4 — Breast cancer | 0.957 | 0.950 | 0.983 | | |
 
 **Key findings:**
 - Catastrophic forgetting ratio: **0.000** (perfect retention; sufficient-statistics design).
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
-- XOR / nonlinear boundaries: hard ceiling at 48.2%. Gap is **32.3 pp** vs kernel SVM — requires Kernel LLR (Nyström). Confirmed highest-priority architectural upgrade.
-- **D04** runs **CyphaLM** (Izaac → CellAI SSM → CyphaDIF → GRIA): held-out BPC, context-length curve, expert routing, save/restore parity, and sampling benchmarks. Install with `pip install -e cypha_lm/`. **D17** adds WikiText integration and online adaptation.
-- **CyphaLM REST:** FastAPI `POST /generate` and `/generate/stream` (SSE) with per-token CyphaDIF routing — see [`cypha_studio/README.md`](cypha_studio/README.md) and [`examples/`](examples/).
+- XOR / nonlinear boundaries: linear LLR ~50%; **Nyström kernel LLR ~61%** (+10.6 pp, M=256) on S3 XOR. Diagnostic ceiling (~83% kernel SVM) still open — see [`docs/FUTURE.md`](docs/FUTURE.md) §0a.
+- **D04 / D17:** CyphaLM benchmarks (Izaac → CellAI SSM → CyphaDIF → GRIA) via **`cypha_bench_run`** — held-out BPC, context-length curve, expert routing, save/restore parity, and sampling benchmarks.
+- **CyphaLM REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE) with per-token CyphaDIF routing.
 
 ---
 
 ## 🚧 Honest framing
 
 - **The AI is bespoke.** CyphaDIF is not a fork, not a wrapper, not a tuning of an existing model. It is a from-first-principles architecture whose learning rule is derived from the intersection of four formal programmes (AIXI / Solomonoff, information geometry, FEP, IB).
-- **The proof surface is parity correctness, not leaderboard ML accuracy.** No "we beat X on benchmark Y" claim. Instead: "the Python and native paths produce byte-identical results across this fixture matrix." Benchmark numbers (§ above) are honest measurements on standard sklearn datasets, not cherry-picked.
-- **Known architectural limit: nonlinear decision boundaries.** The LLR discriminant is linear in latent space. XOR-style tasks have a hard ceiling of ~48% without a Kernel LLR extension (Nyström approximation). This is confirmed by diagnostic evidence (FDR=0.001 on XOR; kernel SVM reaches 83.5%). See [`docs/FUTURE.md`](docs/FUTURE.md) for the upgrade plan.
+- **The proof surface is parity correctness, not leaderboard ML accuracy.** No "we beat X on benchmark Y" claim. Instead: "the native runtime matches committed fixture goldens across this CTest matrix." Benchmark numbers (§ above) are honest measurements on standard sklearn datasets, not cherry-picked.
+- **Nonlinear decision boundaries:** Linear LLR caps XOR near ~50%. **Nyström kernel LLR** (M=256 landmarks) reaches **~61%** (+10.6 pp) — implemented in C++; diagnostic ~83% kernel-SVM ceiling remains. See [`docs/FUTURE.md`](docs/FUTURE.md) §0a.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
 - **Optional CUDA.** The native core works without GPU; CUDA is a build flag. **`windows_cuda_msvc`** and **`linux_cuda`** CI jobs compile with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`** on every push.
-- **Future waves.** Kernel LLR (Nyström), Qt UX polish, packaged binaries, multi-model REST, ONNX export — see [`docs/FUTURE.md`](docs/FUTURE.md) and [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) for the full hypothesis ledger and priority ranking.
+- **Future waves.** RFF auto-gamma, Qt UX polish, packaged binaries, multi-model REST, ONNX export — see [`docs/FUTURE.md`](docs/FUTURE.md) and [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md).
 
 ---
 
@@ -208,12 +234,12 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 
 | Standard | Limitation | What Cypha offers |
 |---|---|---|
-| Python-only research repo | Slow at deploy time | Native C++ core with parity-validated Python ↔ C++ outputs |
-| C++-only production runtime | Hard to iterate on | Python reference is canonical; native must match it |
+| Python-only research repo | Slow at deploy time | Native C++ core with CTest-validated parity fixtures |
+| C++-only production runtime | Hard to iterate on | Qt shell + REST for train/infer without a second stack |
 | Off-the-shelf classifier (sklearn, XGBoost, …) | Black-box training rule | First-principles architecture; every constant is derivable |
 | Transformer + softmax classifier | Calibration is an afterthought | GH gate gives natively-calibrated heavy-tail handling and OOD flag |
 | Notebook + Flask script | No persistence | SQLite-backed state (amalgamated `3.47.2`) |
-| Custom REST + Python | No GUI | Qt Studio integration |
+| Custom REST + Python | No GUI | `cypha_qt_shell` + `cypha_rest` |
 | Standalone classifier | No regression path | `DIFRegressor` / `TwoStageDIFRegressor` reuse the same machinery |
 
 ---

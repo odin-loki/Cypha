@@ -1,14 +1,9 @@
-# Cypha — Comprehensive .gitignore for the Cypha/HRNA Universe
-
-# =====================================================
-# NEVER UPLOAD TO GIT — Large Binary & Data Files
-# =====================================================
+﻿# Cypha — .gitignore
 
 # =====================================================
 # Large Dataset & Model Files
 # =====================================================
 
-# Neural network weights (source-only repo — users generate these)
 *.pt
 *.pth
 *.ckpt
@@ -28,39 +23,24 @@ experiments/
 # Log Files
 # =====================================================
 
-# Log files (text-based but large)
 logs/*.log
 logs/*.txt
 *.log
 logs/
 
 # =====================================================
-# Python Cache & Bytecode
+# Python (legacy — runtime removed; cache only)
 # =====================================================
 
-# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyo
 .pytest_cache/
-.mypy_cache/
-.hypothesis/
-.coverage
-htmlcov/
+.ruff_cache/
+.benchmarks/
 
 # =====================================================
-# Python Environment
-# =====================================================
-
-# Python virtual environment (install with pip, not commit)
-.venv/
-venv/
-ENV/
-env/
-
-# =====================================================
-# IDE Files (Don't Share These)
+# IDE / OS
 # =====================================================
 
 .vscode/
@@ -73,24 +53,22 @@ Thumbs.db
 desktop.ini
 
 # =====================================================
-# Cypha-Specific Exclusions
+# Cypha-specific data
 # =====================================================
 
-# Cypha-specific data files (large)
 bessel_ratios.npz
 *.npz
 *.bin
+kernel_*_roundtrip_out.cypha
 
-# Config files (keep only examples)
 config/*.jsonl
 config/*.yaml
 config/*.yml
 
 # =====================================================
-# Build Artifacts
+# Build artifacts
 # =====================================================
 
-# Build artifacts
 build/
 dist/
 *.egg-info/
@@ -99,12 +77,11 @@ MANIFEST
 *.so
 *.pyd
 
-# Native / CMake build directories (compiled binaries, object files, DLLs)
+native/build*/
 native/build-*/
 native/build_*/
 native/build/
 
-# Windows compiled binaries
 *.dll
 *.lib
 *.obj
@@ -114,56 +91,35 @@ native/build/
 *.exe
 
 # =====================================================
-# Large Binary Data Files
+# Bench data & generated reports
 # =====================================================
 
-# MNIST data files (both compressed and raw — downloaded at benchmark time)
-cypha_bench/data/mnist/
-cypha_bench/data/wikitext2/
+bench/data/mnist/
+bench/data/wikitext2/
+bench/artifacts/
+bench/report/baselines/
+bench/report/figures/
+bench/report/tables/
+bench/report/summary.json
 
-# Benchmark tuning artifacts (large JSON blobs from swarm runs)
-cypha_bench/artifacts/tuning/
+# Legacy paths (pre bench/ rename)
+bench/data/mnist/
+bench/data/wikitext2/
+bench/artifacts/tuning/
+bench/report/baselines/
 
-# Locked baseline snapshots from overnight / full bench runs (generated)
-cypha_bench/report/baselines/
-
-# Data cache
 data_cache/
-
-# Raw experiment output (JSON results from benchmark/diagnostic runs)
 results/*.json
 cypha_diagnostics/results/
 
 # =====================================================
-# Temporary Files
+# Temporary / local scratch
 # =====================================================
 
-# Temporary files
 *.tmp
 *.bak
 *.backup
 *.cache
-*.swp
-*.swo
-*~
-
-# =====================================================
-# Documentation Build Artifacts (Optional)
-# =====================================================
-
-# If you want to generate docs locally, exclude generated files:
-docs/site/
-*.html
-*.md.html
-*_test.html
-*_demo.html
-*.pickle
-*.joblib
-
-# =====================================================
-# Environment & Configuration (Local Only)
-# =====================================================
-
 .env
 .env.local
 .env.*.local
@@ -172,24 +128,19 @@ docs/site/
 *.secret
 .bash_history
 
-# Local scratch (not part of the repo)
 Cypha Tests.txt
 
 # Accidental Windows path artifact (e.g. mkdir C: from bad script)
 /C?/
 
 # =====================================================
-# Notes for Cypha .gitignore
+# Documentation build (optional)
 # =====================================================
 
-# This .gitignore is designed to:
-# - Prevent uploading gigabytes of data (models, logs, data files)
-# - Keep only source code, documentation, and configuration
-# - Exclude build artifacts and temporary files
-# - Exclude environment configurations
-
-# IMPORTANT:
-# - Cypha.py, Cypha.py — ARE tracked
-# - Markdown files (.md) — ARE tracked
-# - Research papers (.pdf) — ARE tracked
-# - Only binary, cache, and generated files are ignored
+docs/site/
+*.html
+*.md.html
+*_test.html
+*_demo.html
+*.pickle
+*.joblib

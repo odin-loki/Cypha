@@ -1,4 +1,4 @@
-# One-shot native CyphaLM validation: build, CTest, pytest, REST LM smoke, optional 40k bench.
+# One-shot native CyphaLM validation: build, CTest, REST LM smoke, optional 40k bench.
 param(
     [string]$BuildDir = "C:\Temp\cypha_native_build6",
     [switch]$SkipBuild,
@@ -16,16 +16,24 @@ if (-not $SkipBuild) {
 ctest --test-dir $BuildDir -R native_cyphalm --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "CTest failed" }
 
-$env:CYPHALM_PARITY_BIN = Join-Path $BuildDir "cyphalm_parity.exe"
-$env:CYPHALM_CHECKPOINT_PARITY_BIN = Join-Path $BuildDir "cyphalm_checkpoint_parity.exe"
-$env:CYPHALM_BENCH_NATIVE_BIN = Join-Path $BuildDir "cyphalm_bench_native.exe"
-$env:CYPHA_REST_BIN = Join-Path $BuildDir "cypha_rest.exe"
+$restExe = Join-Path $BuildDir "cypha_rest.exe"
+if (-not (Test-Path $restExe)) { throw "missing $restExe" }
 
-python -m pytest (Join-Path $root "tests\test_cyphalm_native_parity.py") (Join-Path $root "tests\test_cyphalm_rest_lm_smoke.py") -q
-if ($LASTEXITCODE -ne 0) { throw "pytest failed" }
-
-python (Join-Path $root "native\scripts\smoke_cyphalm_rest_lm.py")
-if ($LASTEXITCODE -ne 0) { throw "REST LM smoke failed" }
+Write-Host "== cypha_rest /health smoke ==" -ForegroundColor Yellow
+$refCypha = Join-Path $root "fixtures\reference.cypha"
+$fField = Join-Path $root "fixtures\f_field.json"
+$restArgs = @("--listen", "127.0.0.1:18765", "--cypha", $refCypha, "--f-field-json", $fField)
+$restProc = Start-Process -FilePath $restExe -ArgumentList $restArgs -PassThru -WindowStyle Hidden
+try {
+    Start-Sleep -Seconds 2
+    $health = curl.exe -s -o NUL -w "%{http_code}" "http://127.0.0.1:18765/health"
+    if ($health -ne "200") { throw "cypha_rest /health returned $health" }
+    Write-Host "cypha_rest /health: OK"
+} finally {
+    if (-not $restProc.HasExited) {
+        Stop-Process -Id $restProc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
 
 if ($Run40kHybrid) {
     $runExe = "C:\Temp\cyphalm_validate_hybrid40k.exe"

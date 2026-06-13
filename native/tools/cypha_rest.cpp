@@ -4,11 +4,14 @@
 // Build: cypha_rest --listen host:port --cypha model.cypha [--f-field-json ff.json] [--pre preprocessor.json]
 //        [--train-hparams path] [--registry <root>]
 //        `--train-hparams` JSON may include `align_every` (encoder align period; default 500) and
-//        `temp_recalib_every` (0 = off), matching `parity_fixtures/train_hparams.json`.
+//        `temp_recalib_every` (0 = off), matching `fixtures/train_hparams.json`.
 //        If `world.F_field` is in the .cypha blob, `--f-field-json` is optional. Registry `/load` uses
 //        `f_field.json` next to the model when the blob has no embedded `F_field`.
 //        With `--registry <root>`, `POST /register` copies `model_cypha` + `card_json` (+ optional `preprocessor_json`)
 //        paths into `<root>/<name>/<version>/` (see PORT_CONTRACT §3).
+//        Multi-model (FUTURE.md §5): `--preload-registry` loads all registry bundles into RAM;
+//        `POST /predict` and `POST /update` accept optional `"model":"name/version"`; `GET /models` adds
+//        `loaded` / `active`; `POST /load` hot-swaps active model and fills the in-memory map.
 //        Optional `--regression-json regression_head.json`: scalar MoE targets per class label → `/predict`
 //        fills `regression_val` and `uncertainty` (mixture of expert EMAs; see PORT_CONTRACT §3).
 //        Optional top-level `mke` object in that JSON → RFF + expert RLS + router `dif_train_step_vector` on
@@ -35,6 +38,7 @@
 #include <nlohmann/json.hpp>
 
 #include "cypha/infer_cpu.hpp"
+#include "cypha/kernel_memory.hpp"
 #include "cypha/load_cypha.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/preprocessor.hpp"
@@ -53,6 +57,9 @@ namespace {
 std::mutex g_mu;
 std::unique_ptr<cypha::CyphaInferModel> g_model;
 std::unique_ptr<cypha::CyphaDifMemoryState> g_mem;
+std::unique_ptr<cypha::KernelMemory> g_kernel_mem;
+bool g_use_kernel_llr{false};
+double g_kernel_blend{0.5};
 std::unique_ptr<cypha::PreprocessorState> g_pre;
 std::string g_registry_root;
 std::vector<cypha::RegistryModelRef> g_registry_cache;
@@ -106,6 +113,175 @@ std::vector<double> g_mke_gh_scales;
 std::unordered_map<std::string, std::vector<double>> g_mke_w;
 std::unordered_map<std::string, std::vector<double>> g_mke_p;
 
+/// In-memory model slot keyed by registry ``name/version`` (FUTURE.md §5).
+struct LoadedModelBundle {
+  std::mutex mu;
+  std::unique_ptr<cypha::CyphaInferModel> model;
+  std::unique_ptr<cypha::CyphaDifMemoryState> mem;
+  std::unique_ptr<cypha::KernelMemory> kernel_mem;
+  bool use_kernel_llr{false};
+  double kernel_blend{0.5};
+  std::unique_ptr<cypha::PreprocessorState> pre;
+  std::unique_ptr<cypha::ReplayBuffer> replay;
+  int enc_updates{0};
+  cypha::TrainStepParams tsp{};
+  int total_steps{0};
+  double llr_ema{0.0};
+  double world_lr{0.008};
+  double delta_lr{0.05};
+  double ood_sigma{15.0};
+  std::vector<double> gh_inv_v_clean;
+  double gh_R_base{1.0};
+  double gh_chi{1.0};
+  double gh_psi{1.0};
+  std::vector<double> reg_mu;
+  std::vector<double> reg_var;
+  bool mke_active{false};
+  int mke_d_in{0};
+  std::vector<double> mke_W;
+  std::vector<double> mke_b;
+  double mke_temperature{1.0};
+  double mke_forgetting{1.0};
+  double mke_pi_floor{0.02};
+  std::vector<double> mke_gh_scales;
+  std::unordered_map<std::string, std::vector<double>> mke_w;
+  std::unordered_map<std::string, std::vector<double>> mke_p;
+};
+
+std::unordered_map<std::string, LoadedModelBundle> g_models;
+std::string g_active_model_key;
+bool g_preload_registry{false};
+
+std::string model_registry_key(const std::string& name, const std::string& version) {
+  return name + "/" + version;
+}
+
+bool parse_model_registry_key(const std::string& s, std::string& name, std::string& version) {
+  const auto slash = s.find('/');
+  if (slash == std::string::npos || slash == 0 || slash + 1 >= s.size()) {
+    return false;
+  }
+  name = s.substr(0, slash);
+  version = s.substr(slash + 1);
+  return true;
+}
+
+/// Non-owning view so predict/update can run on globals or a map slot.
+struct ModelView {
+  std::unique_ptr<cypha::CyphaInferModel>* model{};
+  std::unique_ptr<cypha::CyphaDifMemoryState>* mem{};
+  std::unique_ptr<cypha::KernelMemory>* kernel_mem{};
+  bool* use_kernel_llr{};
+  double* kernel_blend{};
+  std::unique_ptr<cypha::PreprocessorState>* pre{};
+  std::unique_ptr<cypha::ReplayBuffer>* replay{};
+  int* enc_updates{};
+  cypha::TrainStepParams* tsp{};
+  int* total_steps{};
+  double* llr_ema{};
+  double* world_lr{};
+  double* delta_lr{};
+  double* ood_sigma{};
+  std::vector<double>* gh_inv_v_clean{};
+  double* gh_R_base{};
+  double* gh_chi{};
+  double* gh_psi{};
+  std::vector<double>* reg_mu{};
+  std::vector<double>* reg_var{};
+  bool* mke_active{};
+  int* mke_d_in{};
+  std::vector<double>* mke_W{};
+  std::vector<double>* mke_b{};
+  double* mke_temperature{};
+  double* mke_forgetting{};
+  double* mke_pi_floor{};
+  std::vector<double>* mke_gh_scales{};
+  std::unordered_map<std::string, std::vector<double>>* mke_w{};
+  std::unordered_map<std::string, std::vector<double>>* mke_p{};
+};
+
+ModelView view_from_globals() {
+  return ModelView{&g_model,
+                   &g_mem,
+                   &g_kernel_mem,
+                   &g_use_kernel_llr,
+                   &g_kernel_blend,
+                   &g_pre,
+                   &g_replay,
+                   &g_enc_updates,
+                   &g_tsp,
+                   &g_total_steps,
+                   &g_llr_ema,
+                   &g_world_lr,
+                   &g_delta_lr,
+                   &g_ood_sigma,
+                   &g_gh_inv_v_clean,
+                   &g_gh_R_base,
+                   &g_gh_chi,
+                   &g_gh_psi,
+                   &g_reg_mu,
+                   &g_reg_var,
+                   &g_mke_active,
+                   &g_mke_d_in,
+                   &g_mke_W,
+                   &g_mke_b,
+                   &g_mke_temperature,
+                   &g_mke_forgetting,
+                   &g_mke_pi_floor,
+                   &g_mke_gh_scales,
+                   &g_mke_w,
+                   &g_mke_p};
+}
+
+ModelView view_from_bundle(LoadedModelBundle& b) {
+  return ModelView{&b.model,
+                   &b.mem,
+                   &b.kernel_mem,
+                   &b.use_kernel_llr,
+                   &b.kernel_blend,
+                   &b.pre,
+                   &b.replay,
+                   &b.enc_updates,
+                   &b.tsp,
+                   &b.total_steps,
+                   &b.llr_ema,
+                   &b.world_lr,
+                   &b.delta_lr,
+                   &b.ood_sigma,
+                   &b.gh_inv_v_clean,
+                   &b.gh_R_base,
+                   &b.gh_chi,
+                   &b.gh_psi,
+                   &b.reg_mu,
+                   &b.reg_var,
+                   &b.mke_active,
+                   &b.mke_d_in,
+                   &b.mke_W,
+                   &b.mke_b,
+                   &b.mke_temperature,
+                   &b.mke_forgetting,
+                   &b.mke_pi_floor,
+                   &b.mke_gh_scales,
+                   &b.mke_w,
+                   &b.mke_p};
+}
+
+void apply_default_train_hparams_view(ModelView v);
+bool try_load_train_hparams_file_view(const std::string& path, ModelView v);
+
+void clear_mke_state_in(ModelView v) {
+  *v.mke_active = false;
+  *v.mke_d_in = 0;
+  v.mke_W->clear();
+  v.mke_b->clear();
+  *v.mke_temperature = 1.0;
+  *v.mke_forgetting = 1.0;
+  *v.mke_pi_floor = 0.02;
+  v.mke_gh_scales->clear();
+  v.mke_w->clear();
+  v.mke_p->clear();
+}
+
 void clear_mke_state() {
   g_mke_active = false;
   g_mke_d_in = 0;
@@ -127,77 +303,96 @@ void reset_session_counters() {
 }
 
 void apply_default_train_hparams() {
-  g_world_lr = 0.008;
-  g_delta_lr = 0.05;
-  g_ood_sigma = 15.0;
-  g_tsp.enc_lr = 0.002;
-  g_tsp.replay_ratio = 0.30;
-  g_tsp.replay_cap = 10000;
-  g_tsp.align_every = 500;
-  g_tsp.temp_recalib_every = 0;
+  apply_default_train_hparams_view(view_from_globals());
 }
 
 bool try_load_train_hparams_file(const std::string& path) {
-  std::ifstream f(path);
-  if (!f) {
-    return false;
-  }
-  std::stringstream b;
-  b << f.rdbuf();
-  nlohmann::json j = nlohmann::json::parse(b.str());
-  if (j.contains("world_lr")) {
-    g_world_lr = j["world_lr"].get<double>();
-  }
-  if (j.contains("delta_lr")) {
-    g_delta_lr = j["delta_lr"].get<double>();
-  }
-  if (j.contains("ood_sigma")) {
-    g_ood_sigma = j["ood_sigma"].get<double>();
-  }
-  if (j.contains("enc_lr")) {
-    g_tsp.enc_lr = j["enc_lr"].get<double>();
-  }
-  if (j.contains("replay_ratio")) {
-    g_tsp.replay_ratio = j["replay_ratio"].get<double>();
-  }
-  if (j.contains("replay_cap")) {
-    g_tsp.replay_cap = j["replay_cap"].get<int>();
-    if (g_tsp.replay_cap < 8) {
-      g_tsp.replay_cap = 8;
-    }
-  }
-  if (j.contains("temp_recalib_every")) {
-    g_tsp.temp_recalib_every = j["temp_recalib_every"].get<int>();
-    if (g_tsp.temp_recalib_every < 0) {
-      g_tsp.temp_recalib_every = 0;
-    }
-  }
-  if (j.contains("align_every")) {
-    g_tsp.align_every = j["align_every"].get<int>();
-    if (g_tsp.align_every < 0) {
-      g_tsp.align_every = 0;
-    }
-  }
-  return true;
+  return try_load_train_hparams_file_view(path, view_from_globals());
 }
 
-void snapshot_gh_clean_metric() {
-  g_gh_chi = 1.0;
-  g_gh_psi = 1.0;
-  if (!g_model) {
-    g_gh_inv_v_clean.clear();
-    g_gh_R_base = 1.0;
+void snapshot_gh_clean_metric_view(ModelView v) {
+  *v.gh_chi = 1.0;
+  *v.gh_psi = 1.0;
+  if (!*v.model) {
+    v.gh_inv_v_clean->clear();
+    *v.gh_R_base = 1.0;
     return;
   }
-  const int d = g_model->d_latent;
-  g_gh_inv_v_clean = g_model->inv_v;
+  const int d = (*v.model)->d_latent;
+  *v.gh_inv_v_clean = (*v.model)->inv_v;
   double mean_inv = 0.0;
   for (int j = 0; j < d; ++j) {
-    mean_inv += g_gh_inv_v_clean[static_cast<std::size_t>(j)];
+    mean_inv += (*v.gh_inv_v_clean)[static_cast<std::size_t>(j)];
   }
   mean_inv /= static_cast<double>(std::max(d, 1));
   constexpr double kEps = 1e-8;
-  g_gh_R_base = 1.0 / (mean_inv + kEps);
+  *v.gh_R_base = 1.0 / (mean_inv + kEps);
+}
+
+void snapshot_gh_clean_metric() {
+  snapshot_gh_clean_metric_view(view_from_globals());
+}
+
+void load_kernel_from_root_view(ModelView v, const cypha::CNode& root, int d) {
+  v.kernel_mem->reset();
+  *v.use_kernel_llr = false;
+  *v.kernel_blend = 0.5;
+  if (d <= 0) {
+    return;
+  }
+  cypha::KernelMemory km(d, 256, 0);
+  if (cypha::try_load_kernel_from_root(root, km, *v.use_kernel_llr, *v.kernel_blend)) {
+    v.kernel_mem->reset(new cypha::KernelMemory(std::move(km)));
+  }
+}
+
+void load_kernel_from_root(const cypha::CNode& root, int d) {
+  load_kernel_from_root_view(view_from_globals(), root, d);
+}
+
+void apply_kernel_to_options_view(ModelView v, cypha::CyphaInferOptions& opt) {
+  opt.kernel_mem = v.kernel_mem->get();
+  opt.use_kernel_llr = *v.use_kernel_llr && *v.kernel_mem != nullptr;
+  opt.kernel_blend = *v.kernel_blend;
+}
+
+void apply_global_kernel_to_options(cypha::CyphaInferOptions& opt) {
+  apply_kernel_to_options_view(view_from_globals(), opt);
+}
+
+void apply_kernel_to_extras_view(ModelView v, cypha::TrainStepExtras& extras) {
+  if (*v.use_kernel_llr && *v.kernel_mem != nullptr) {
+    extras.kernel_mem = v.kernel_mem->get();
+    extras.use_kernel_llr = true;
+    extras.kernel_blend = *v.kernel_blend;
+  }
+}
+
+void apply_global_kernel_to_extras(cypha::TrainStepExtras& extras) {
+  apply_kernel_to_extras_view(view_from_globals(), extras);
+}
+
+void sync_kernel_from_json_view(ModelView v, const nlohmann::json& body) {
+  if (!*v.model) {
+    return;
+  }
+  if (body.contains("use_kernel_llr")) {
+    *v.use_kernel_llr = body["use_kernel_llr"].get<bool>();
+  }
+  if (body.contains("kernel_blend") && body["kernel_blend"].is_number()) {
+    *v.kernel_blend = body["kernel_blend"].get<double>();
+  }
+  if (!*v.use_kernel_llr) {
+    return;
+  }
+  const int d = (*v.model)->d_latent;
+  if (*v.kernel_mem == nullptr || (*v.kernel_mem)->feat_dim() != d) {
+    v.kernel_mem->reset(new cypha::KernelMemory(d, 256, static_cast<std::uint64_t>(g_rng())));
+  }
+}
+
+void sync_kernel_from_json(const nlohmann::json& body) {
+  sync_kernel_from_json_view(view_from_globals(), body);
 }
 
 bool load_ff_json(const std::string& path, int d, int fd, std::vector<double>& fflat) {
@@ -229,10 +424,10 @@ bool cypha_has_embedded_world_f_field(const cypha::CNode& root, int d, int fd) {
          static_cast<int>(wff->tensor.size()) == expected;
 }
 
-bool try_load_regression_head_json(const std::string& path, const cypha::CyphaInferModel& model) {
-  g_reg_mu.clear();
-  g_reg_var.clear();
-  clear_mke_state();
+bool try_load_regression_head_json_view(const std::string& path, ModelView v) {
+  v.reg_mu->clear();
+  v.reg_var->clear();
+  clear_mke_state_in(v);
   if (path.empty()) {
     return true;
   }
@@ -247,24 +442,24 @@ bool try_load_regression_head_json(const std::string& path, const cypha::CyphaIn
     return false;
   }
   const auto& ex = j["experts"];
-  const int k = static_cast<int>(model.labels.size());
-  g_reg_mu.assign(static_cast<std::size_t>(k), 0.0);
-  g_reg_var.assign(static_cast<std::size_t>(k), 0.0);
+  const int k = static_cast<int>((*v.model)->labels.size());
+  v.reg_mu->assign(static_cast<std::size_t>(k), 0.0);
+  v.reg_var->assign(static_cast<std::size_t>(k), 0.0);
   for (int i = 0; i < k; ++i) {
-    const std::string& lbl = model.labels[static_cast<std::size_t>(i)];
+    const std::string& lbl = (*v.model)->labels[static_cast<std::size_t>(i)];
     if (!ex.contains(lbl)) {
       continue;
     }
     const auto& row = ex[lbl];
     if (row.contains("mu")) {
       if (row["mu"].is_number()) {
-        g_reg_mu[static_cast<std::size_t>(i)] = row["mu"].get<double>();
+        (*v.reg_mu)[static_cast<std::size_t>(i)] = row["mu"].get<double>();
       } else if (row["mu"].is_array() && !row["mu"].empty()) {
-        g_reg_mu[static_cast<std::size_t>(i)] = row["mu"][0].get<double>();
+        (*v.reg_mu)[static_cast<std::size_t>(i)] = row["mu"][0].get<double>();
       }
     }
     if (row.contains("var_ema") && row["var_ema"].is_number()) {
-      g_reg_var[static_cast<std::size_t>(i)] = row["var_ema"].get<double>();
+      (*v.reg_var)[static_cast<std::size_t>(i)] = row["var_ema"].get<double>();
     }
   }
 
@@ -276,20 +471,20 @@ bool try_load_regression_head_json(const std::string& path, const cypha::CyphaIn
   }
   const auto& mk = j["mke"];
   try {
-    g_mke_d_in = mk.at("d_in").get<int>();
+    *v.mke_d_in = mk.at("d_in").get<int>();
     const int d_rff = mk.at("D_rff").get<int>();
-    if (d_rff != model.d_latent) {
+    if (d_rff != (*v.model)->d_latent) {
       return false;
     }
-    g_mke_W = mk.at("rff_W_rowmajor").get<std::vector<double>>();
-    g_mke_b = mk.at("rff_b").get<std::vector<double>>();
-    if (static_cast<int>(g_mke_W.size()) != d_rff * g_mke_d_in ||
-        static_cast<int>(g_mke_b.size()) != d_rff) {
+    *v.mke_W = mk.at("rff_W_rowmajor").get<std::vector<double>>();
+    *v.mke_b = mk.at("rff_b").get<std::vector<double>>();
+    if (static_cast<int>(v.mke_W->size()) != d_rff * *v.mke_d_in ||
+        static_cast<int>(v.mke_b->size()) != d_rff) {
       return false;
     }
-    g_mke_temperature = mk.value("temperature", 1.0);
-    g_mke_forgetting = mk.value("forgetting_factor", 1.0);
-    g_mke_pi_floor = mk.value("pi_floor", 0.02);
+    *v.mke_temperature = mk.value("temperature", 1.0);
+    *v.mke_forgetting = mk.value("forgetting_factor", 1.0);
+    *v.mke_pi_floor = mk.value("pi_floor", 0.02);
 
     const auto& wj = mk.at("w");
     const auto& pj = mk.at("P");
@@ -297,10 +492,10 @@ bool try_load_regression_head_json(const std::string& path, const cypha::CyphaIn
       return false;
     }
     const std::size_t p_expect = static_cast<std::size_t>(d_rff) * static_cast<std::size_t>(d_rff);
-    g_mke_w.clear();
-    g_mke_p.clear();
+    v.mke_w->clear();
+    v.mke_p->clear();
     for (int i = 0; i < k; ++i) {
-      const std::string& lbl = model.labels[static_cast<std::size_t>(i)];
+      const std::string& lbl = (*v.model)->labels[static_cast<std::size_t>(i)];
       if (!wj.contains(lbl) || !pj.contains(lbl)) {
         return false;
       }
@@ -309,31 +504,91 @@ bool try_load_regression_head_json(const std::string& path, const cypha::CyphaIn
       if (static_cast<int>(ww.size()) != d_rff || pp.size() != p_expect) {
         return false;
       }
-      g_mke_w[lbl] = std::move(ww);
-      g_mke_p[lbl] = std::move(pp);
+      (*v.mke_w)[lbl] = std::move(ww);
+      (*v.mke_p)[lbl] = std::move(pp);
     }
-    g_mke_gh_scales.clear();
+    v.mke_gh_scales->clear();
     if (mk.contains("gh_scales") && mk["gh_scales"].is_array()) {
-      g_mke_gh_scales = mk["gh_scales"].get<std::vector<double>>();
-      if (static_cast<int>(g_mke_gh_scales.size()) != k) {
+      *v.mke_gh_scales = mk["gh_scales"].get<std::vector<double>>();
+      if (static_cast<int>(v.mke_gh_scales->size()) != k) {
         return false;
       }
     }
-    g_mke_active = true;
+    *v.mke_active = true;
   } catch (...) {
-    clear_mke_state();
+    clear_mke_state_in(v);
     return false;
   }
   return true;
 }
 
-bool load_bundle_paths(const std::string& cypha_path, const std::string& pre_path,
-                       const std::string& ff_json_path, const std::string& train_hparams_path_opt,
-                       const std::string& regression_json_path_opt) {
-  apply_default_train_hparams();
-  g_reg_mu.clear();
-  g_reg_var.clear();
-  clear_mke_state();
+bool try_load_regression_head_json(const std::string& path, const cypha::CyphaInferModel& model) {
+  (void)model;
+  return try_load_regression_head_json_view(path, view_from_globals());
+}
+
+void apply_default_train_hparams_view(ModelView v) {
+  *v.world_lr = 0.008;
+  *v.delta_lr = 0.05;
+  *v.ood_sigma = 15.0;
+  v.tsp->enc_lr = 0.002;
+  v.tsp->replay_ratio = 0.30;
+  v.tsp->replay_cap = 10000;
+  v.tsp->align_every = 500;
+  v.tsp->temp_recalib_every = 0;
+}
+
+bool try_load_train_hparams_file_view(const std::string& path, ModelView v) {
+  std::ifstream f(path);
+  if (!f) {
+    return false;
+  }
+  std::stringstream b;
+  b << f.rdbuf();
+  nlohmann::json j = nlohmann::json::parse(b.str());
+  if (j.contains("world_lr")) {
+    *v.world_lr = j["world_lr"].get<double>();
+  }
+  if (j.contains("delta_lr")) {
+    *v.delta_lr = j["delta_lr"].get<double>();
+  }
+  if (j.contains("ood_sigma")) {
+    *v.ood_sigma = j["ood_sigma"].get<double>();
+  }
+  if (j.contains("enc_lr")) {
+    v.tsp->enc_lr = j["enc_lr"].get<double>();
+  }
+  if (j.contains("replay_ratio")) {
+    v.tsp->replay_ratio = j["replay_ratio"].get<double>();
+  }
+  if (j.contains("replay_cap")) {
+    v.tsp->replay_cap = j["replay_cap"].get<int>();
+    if (v.tsp->replay_cap < 8) {
+      v.tsp->replay_cap = 8;
+    }
+  }
+  if (j.contains("temp_recalib_every")) {
+    v.tsp->temp_recalib_every = j["temp_recalib_every"].get<int>();
+    if (v.tsp->temp_recalib_every < 0) {
+      v.tsp->temp_recalib_every = 0;
+    }
+  }
+  if (j.contains("align_every")) {
+    v.tsp->align_every = j["align_every"].get<int>();
+    if (v.tsp->align_every < 0) {
+      v.tsp->align_every = 0;
+    }
+  }
+  return true;
+}
+
+bool load_bundle_into(ModelView v, const std::string& cypha_path, const std::string& pre_path,
+                      const std::string& ff_json_path, const std::string& train_hparams_path_opt,
+                      const std::string& regression_json_path_opt, bool reset_session) {
+  apply_default_train_hparams_view(v);
+  v.reg_mu->clear();
+  v.reg_var->clear();
+  clear_mke_state_in(v);
   cypha::CNode root = cypha::load_cypha_file(cypha_path.c_str());
   const cypha::CNode& fh = cypha::map_get_required(root, "field_h");
   int fd = static_cast<int>(fh.shape[0]);
@@ -352,40 +607,90 @@ bool load_bundle_paths(const std::string& cypha_path, const std::string& pre_pat
     return false;
   }
 
-  g_model.reset(new cypha::CyphaInferModel(cypha::CyphaInferModel::from_root(root, ff_ptr, fd)));
-  g_mem.reset(
+  v.model->reset(new cypha::CyphaInferModel(cypha::CyphaInferModel::from_root(root, ff_ptr, fd)));
+  v.mem->reset(
       new cypha::CyphaDifMemoryState(cypha::CyphaDifMemoryState::from_cypha_root(root, ff_ptr, fd)));
+  load_kernel_from_root_view(v, root, d);
 
-  g_pre.reset();
+  v.pre->reset();
   if (!pre_path.empty()) {
-    g_pre.reset(
+    v.pre->reset(
         new cypha::PreprocessorState(cypha::PreprocessorState::from_json_file(pre_path.c_str())));
   }
 
   if (!train_hparams_path_opt.empty()) {
-    if (!try_load_train_hparams_file(train_hparams_path_opt)) {
+    if (!try_load_train_hparams_file_view(train_hparams_path_opt, v)) {
       std::cerr << "warning: could not read --train-hparams " << train_hparams_path_opt << "\n";
     }
   } else {
     fs::path auto_hp = fs::path(cypha_path).parent_path() / "train_hparams.json";
     if (fs::exists(auto_hp)) {
-      try_load_train_hparams_file(auto_hp.string());
+      try_load_train_hparams_file_view(auto_hp.string(), v);
     }
   }
 
-  snapshot_gh_clean_metric();
-  g_enc_updates = 0;
-  g_replay = std::make_unique<cypha::ReplayBuffer>(g_tsp.replay_cap);
-  g_total_steps = g_model->saved_total_steps;
-  g_llr_ema = g_model->llr_ema;
-  reset_session_counters();
+  snapshot_gh_clean_metric_view(v);
+  *v.enc_updates = 0;
+  *v.replay = std::make_unique<cypha::ReplayBuffer>(v.tsp->replay_cap);
+  *v.total_steps = (*v.model)->saved_total_steps;
+  *v.llr_ema = (*v.model)->llr_ema;
+  if (reset_session) {
+    reset_session_counters();
+  }
   if (!regression_json_path_opt.empty()) {
-    if (!try_load_regression_head_json(regression_json_path_opt, *g_model)) {
+    if (!try_load_regression_head_json_view(regression_json_path_opt, v)) {
       std::cerr << "failed to read --regression-json " << regression_json_path_opt << "\n";
       return false;
     }
   }
   return true;
+}
+
+bool load_registry_ref_into_map(const cypha::RegistryModelRef& ref, bool set_active, bool reset_session) {
+  const std::string key = model_registry_key(ref.name, ref.version);
+  fs::path dir = fs::path(ref.model_path).parent_path();
+  fs::path ff_path = dir / "f_field.json";
+  std::string ff_p = fs::exists(ff_path) ? ff_path.string() : "";
+  fs::path reg_path = dir / "regression_head.json";
+  std::string reg_p = fs::exists(reg_path) ? reg_path.string() : "";
+
+  if (set_active) {
+    if (!load_bundle_into(view_from_globals(), ref.model_path, ref.preprocessor_path, ff_p, "", reg_p,
+                          reset_session)) {
+      return false;
+    }
+    g_active_model_key = key;
+  }
+
+  LoadedModelBundle& slot = g_models[key];
+  std::lock_guard<std::mutex> slot_lk(slot.mu);
+  return load_bundle_into(view_from_bundle(slot), ref.model_path, ref.preprocessor_path, ff_p, "", reg_p,
+                          false);
+}
+
+void preload_registry_models() {
+  if (g_registry_root.empty() || g_registry_cache.empty()) {
+    return;
+  }
+  for (const auto& ref : g_registry_cache) {
+    const std::string key = model_registry_key(ref.name, ref.version);
+    if (key == g_active_model_key) {
+      continue;
+    }
+    if (g_models.find(key) != g_models.end()) {
+      continue;
+    }
+    if (!load_registry_ref_into_map(ref, false, false)) {
+      std::cerr << "warning: preload failed for " << key << "\n";
+    }
+  }
+}
+
+bool load_bundle_paths(const std::string& cypha_path, const std::string& pre_path,
+                       const std::string& ff_json_path, const std::string& train_hparams_path_opt,
+                       const std::string& regression_json_path_opt) {
+  return load_bundle_into(view_from_globals(), cypha_path, pre_path, ff_json_path,
+                          train_hparams_path_opt, regression_json_path_opt, true);
 }
 
 const cypha::RegistryModelRef* find_registry_ref(const std::string& name, std::string version) {
@@ -420,40 +725,79 @@ void refresh_registry_cache() {
   }
 }
 
-std::string json_predict(const nlohmann::json& body) {
-  std::lock_guard<std::mutex> lock(g_mu);
-  if (!g_model || !g_mem) {
+/// Resolve ``body["model"]`` (``name/version``) to a loaded slot; default = active globals.
+bool resolve_model_view(const nlohmann::json& body, ModelView& out_view, LoadedModelBundle** out_slot,
+                        std::string* detail_out) {
+  std::string req_key;
+  if (body.contains("model") && body["model"].is_string()) {
+    req_key = body["model"].get<std::string>();
+  }
+  if (req_key.empty() || req_key == g_active_model_key) {
+    out_view = view_from_globals();
+    *out_slot = nullptr;
+    if (!g_model || !g_mem) {
+      if (detail_out) {
+        *detail_out = R"({"detail":"No model loaded"})";
+      }
+      return false;
+    }
+    return true;
+  }
+  auto it = g_models.find(req_key);
+  if (it == g_models.end()) {
+    if (detail_out) {
+      *detail_out = R"({"detail":"model not loaded"})";
+    }
+    return false;
+  }
+  *out_slot = &it->second;
+  out_view = view_from_bundle(it->second);
+  if (!it->second.model || !it->second.mem) {
+    if (detail_out) {
+      *detail_out = R"({"detail":"model not loaded"})";
+    }
+    return false;
+  }
+  return true;
+}
+
+std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
+  if (!*v.model || !*v.mem) {
     return R"({"detail":"No model loaded"})";
   }
+  cypha::CyphaInferModel& model = **v.model;
   auto t0 = std::chrono::steady_clock::now();
   std::vector<double> x;
-  for (const auto& v : body.at("input")) {
-    x.push_back(v.get<double>());
+  for (const auto& val : body.at("input")) {
+    x.push_back(val.get<double>());
   }
-  if (g_pre) {
-    x = g_pre->transform_one(x);
+  if (*v.pre) {
+    x = (*v.pre)->transform_one(x);
   }
   std::vector<double> H;
-  if (g_mke_active) {
-    if (static_cast<int>(x.size()) != g_mke_d_in) {
+  if (*v.mke_active) {
+    if (static_cast<int>(x.size()) != *v.mke_d_in) {
       return R"({"detail":"input dim mismatch after preprocessor"})";
     }
-    H.resize(static_cast<std::size_t>(g_model->d_latent));
-    cypha::regression::rff_encode_batch_rowmajor(x.data(), 1, g_mke_d_in, g_mke_W.data(), g_mke_b.data(),
-                                                  g_model->d_latent, H.data());
+    H.resize(static_cast<std::size_t>(model.d_latent));
+    cypha::regression::rff_encode_batch_rowmajor(x.data(), 1, *v.mke_d_in, v.mke_W->data(), v.mke_b->data(),
+                                                  model.d_latent, H.data());
   } else {
-    if (static_cast<int>(x.size()) != g_model->d_latent) {
+    if (static_cast<int>(x.size()) != model.d_latent) {
       return R"({"detail":"input dim mismatch after preprocessor"})";
     }
-    cypha::batch_encode(*g_model, x.data(), 1, H);
+    cypha::batch_encode(model, x.data(), 1, H);
   }
 
-  const int k = static_cast<int>(g_model->labels.size());
+  const int k = static_cast<int>(model.labels.size());
   bool use_gh = body.value("use_gh", true);
+  sync_kernel_from_json_view(v, body);
+
   cypha::CyphaInferOptions iopt{};
-  iopt.deliberation_lo = body.value("deliberation_lo", g_model->deliberation_lo);
-  iopt.deliberation_hi = body.value("deliberation_hi", g_model->deliberation_hi);
+  iopt.deliberation_lo = body.value("deliberation_lo", model.deliberation_lo);
+  iopt.deliberation_hi = body.value("deliberation_hi", model.deliberation_hi);
   iopt.use_field = true;
+  apply_kernel_to_options_view(v, iopt);
 
   std::string pred_label;
   double conf = 0.0;
@@ -462,40 +806,40 @@ std::string json_predict(const nlohmann::json& body) {
   double anomaly = 0.0;
   bool is_ood = false;
 
-  if (g_mke_active) {
+  if (*v.mke_active) {
     std::vector<double> llr;
-    cypha::score_matrix_use_field(*g_model, H.data(), 1, llr);
+    cypha::score_matrix_use_field(model, H.data(), 1, llr);
     double eps = 1e-8;
-    double T = g_mke_temperature;
+    double T = *v.mke_temperature;
     std::vector<double> z(static_cast<std::size_t>(k));
     for (int j = 0; j < k; ++j) {
       z[static_cast<std::size_t>(j)] = llr[static_cast<std::size_t>(j)] / (T + eps);
     }
     std::vector<double> probs;
-    cypha::softmax_batch_like_python(z.data(), 1, k, eps, probs);
+    cypha::softmax_batch_reference(z.data(), 1, k, eps, probs);
     int bi = 0;
     for (int j = 1; j < k; ++j) {
       if (probs[static_cast<std::size_t>(j)] > probs[static_cast<std::size_t>(bi)]) {
         bi = j;
       }
     }
-    pred_label = g_model->labels[static_cast<std::size_t>(bi)];
+    pred_label = model.labels[static_cast<std::size_t>(bi)];
     conf = probs[static_cast<std::size_t>(bi)];
     llr_for_scores = std::move(llr);
   } else if (use_gh) {
-    iopt.gh_chi = g_gh_chi;
-    iopt.gh_psi = g_gh_psi;
-    cypha::GhInferAtHResult gh = cypha::gh_infer_at_h(*g_model, H.data(), g_gh_chi, g_gh_psi, kGhNigAdaptAlpha);
+    iopt.gh_chi = *v.gh_chi;
+    iopt.gh_psi = *v.gh_psi;
+    cypha::GhInferAtHResult gh =
+        cypha::gh_infer_at_h(model, H.data(), *v.gh_chi, *v.gh_psi, kGhNigAdaptAlpha, &iopt);
     pred_label = gh.label;
     conf = gh.confidence;
     r_eff = gh.r_eff;
     llr_for_scores = std::move(gh.llrs);
-    const double r_base =
-        (g_model->has_mahal_ema && g_model->mahal_ema > 0.0) ? g_model->mahal_ema : 1.0;
+    const double r_base = (model.has_mahal_ema && model.mahal_ema > 0.0) ? model.mahal_ema : 1.0;
     anomaly = cypha::gh_infer_anomaly_score(r_eff, r_base);
     is_ood = anomaly > kOodThreshold;
   } else {
-    cypha::InferAtHResult inf = cypha::infer_at_h(*g_model, H.data(), iopt);
+    cypha::InferAtHResult inf = cypha::infer_at_h(model, H.data(), iopt);
     pred_label = inf.label;
     conf = inf.confidence;
     llr_for_scores = std::move(inf.llrs);
@@ -505,7 +849,7 @@ std::string json_predict(const nlohmann::json& body) {
 
   nlohmann::json scores = nlohmann::json::object();
   for (int j = 0; j < k; ++j) {
-    scores[g_model->labels[static_cast<std::size_t>(j)]] = llr_for_scores[static_cast<std::size_t>(j)];
+    scores[model.labels[static_cast<std::size_t>(j)]] = llr_for_scores[static_cast<std::size_t>(j)];
   }
   double latency = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   g_predictions += 1;
@@ -517,21 +861,21 @@ std::string json_predict(const nlohmann::json& body) {
   out["all_scores"] = scores;
   out["anomaly_score"] = anomaly;
   out["is_ood"] = is_ood;
-  if (g_mke_active) {
+  if (*v.mke_active) {
     double eps = 1e-8;
-    double T = g_mke_temperature;
+    double T = *v.mke_temperature;
     std::vector<double> z(static_cast<std::size_t>(k));
     for (int j = 0; j < k; ++j) {
       z[static_cast<std::size_t>(j)] = llr_for_scores[static_cast<std::size_t>(j)] / (T + eps);
     }
     std::vector<double> probs;
-    cypha::softmax_batch_like_python(z.data(), 1, k, eps, probs);
+    cypha::softmax_batch_reference(z.data(), 1, k, eps, probs);
     double y_mix = 0.0;
-    const int d_rff = g_model->d_latent;
+    const int d_rff = model.d_latent;
     for (int j = 0; j < k; ++j) {
-      const std::string& lbl = g_model->labels[static_cast<std::size_t>(j)];
-      auto it = g_mke_w.find(lbl);
-      if (it == g_mke_w.end() || static_cast<int>(it->second.size()) != d_rff) {
+      const std::string& lbl = model.labels[static_cast<std::size_t>(j)];
+      auto it = v.mke_w->find(lbl);
+      if (it == v.mke_w->end() || static_cast<int>(it->second.size()) != d_rff) {
         continue;
       }
       double dp = 0.0;
@@ -541,27 +885,27 @@ std::string json_predict(const nlohmann::json& body) {
       y_mix += probs[static_cast<std::size_t>(j)] * dp;
     }
     out["regression_val"] = y_mix;
-    if (static_cast<int>(g_reg_var.size()) == k) {
+    if (static_cast<int>(v.reg_var->size()) == k) {
       double v_mix = 0.0;
       for (int j = 0; j < k; ++j) {
-        v_mix += probs[static_cast<std::size_t>(j)] * g_reg_var[static_cast<std::size_t>(j)];
+        v_mix += probs[static_cast<std::size_t>(j)] * (*v.reg_var)[static_cast<std::size_t>(j)];
       }
       out["uncertainty"] = std::sqrt(std::max(v_mix, 0.0));
     } else {
       out["uncertainty"] = 0.0;
     }
-  } else if (static_cast<int>(g_reg_mu.size()) == k && static_cast<int>(g_reg_var.size()) == k) {
+  } else if (static_cast<int>(v.reg_mu->size()) == k && static_cast<int>(v.reg_var->size()) == k) {
     double eps = 1e-8;
-    double T = g_model->temperature;
+    double T = model.temperature;
     std::vector<double> z(static_cast<std::size_t>(k));
     for (int j = 0; j < k; ++j) {
       z[static_cast<std::size_t>(j)] = llr_for_scores[static_cast<std::size_t>(j)] / (T + eps);
     }
     std::vector<double> probs;
-    cypha::softmax_batch_like_python(z.data(), 1, k, eps, probs);
+    cypha::softmax_batch_reference(z.data(), 1, k, eps, probs);
     double y_mix = 0.0;
     double u_mix = 0.0;
-    cypha::regression::predict_mixture_scalar(probs.data(), g_reg_mu.data(), g_reg_var.data(),
+    cypha::regression::predict_mixture_scalar(probs.data(), v.reg_mu->data(), v.reg_var->data(),
                                               static_cast<std::size_t>(k), y_mix, u_mix);
     out["regression_val"] = y_mix;
     out["uncertainty"] = u_mix;
@@ -579,22 +923,22 @@ std::string json_predict(const nlohmann::json& body) {
     expl["is_ood"] = is_ood;
     expl["r_eff"] = use_gh ? r_eff : 0.0;
     nlohmann::json cdet = nlohmann::json::object();
-    const int d = g_model->d_latent;
+    const int d = model.d_latent;
     for (int ci = 0; ci < k; ++ci) {
       double sumsq = 0.0;
       for (int j = 0; j < d; ++j) {
-        double v = g_model->D[static_cast<std::size_t>(ci * d + j)];
-        sumsq += v * v;
+        double dv = model.D[static_cast<std::size_t>(ci * d + j)];
+        sumsq += dv * dv;
       }
       nlohmann::json row;
-      row["n_obs"] = g_model->n_obs[static_cast<std::size_t>(ci)];
+      row["n_obs"] = model.n_obs[static_cast<std::size_t>(ci)];
       row["delta_mu_norm"] = std::sqrt(sumsq);
-      cdet[g_model->labels[static_cast<std::size_t>(ci)]] = row;
+      cdet[model.labels[static_cast<std::size_t>(ci)]] = row;
     }
     expl["class_details"] = cdet;
     double wh = 0.0;
     for (int j = 0; j < d; ++j) {
-      double t = H[static_cast<std::size_t>(j)] - g_model->mu_world[static_cast<std::size_t>(j)];
+      double t = H[static_cast<std::size_t>(j)] - model.mu_world[static_cast<std::size_t>(j)];
       wh += t * t;
     }
     expl["world_mu_distance"] = std::sqrt(wh);
@@ -606,59 +950,77 @@ std::string json_predict(const nlohmann::json& body) {
   return out.dump();
 }
 
-std::string json_update(const nlohmann::json& body) {
+std::string json_predict(const nlohmann::json& body) {
   std::lock_guard<std::mutex> lock(g_mu);
-  if (!g_model || !g_mem) {
+  ModelView view{};
+  LoadedModelBundle* slot = nullptr;
+  std::string detail;
+  if (!resolve_model_view(body, view, &slot, &detail)) {
+    return detail;
+  }
+  if (slot != nullptr) {
+    std::lock_guard<std::mutex> slot_lk(slot->mu);
+    return json_predict_impl(body, view);
+  }
+  return json_predict_impl(body, view);
+}
+
+std::string json_update_impl(const nlohmann::json& body, ModelView v) {
+  if (!*v.model || !*v.mem) {
     return R"({"detail":"No model loaded"})";
   }
+  cypha::CyphaInferModel& model = **v.model;
+  cypha::CyphaDifMemoryState& mem = **v.mem;
   std::vector<double> x;
-  for (const auto& v : body.at("input")) {
-    x.push_back(v.get<double>());
+  for (const auto& val : body.at("input")) {
+    x.push_back(val.get<double>());
   }
-  if (g_pre) {
-    x = g_pre->transform_one(x);
+  if (*v.pre) {
+    x = (*v.pre)->transform_one(x);
   }
   std::string label = body.at("correct_label").get<std::string>();
   bool use_gh = body.value("use_gh", true);
-  const int d = g_model->d_latent;
+  const int d = model.d_latent;
 
   const bool has_regr_y = body.contains("regression_y") && !body["regression_y"].is_null();
   if (has_regr_y && !body["regression_y"].is_number()) {
     return R"({"detail":"regression_y must be a number"})";
   }
-  if (has_regr_y && !g_mke_active) {
+  if (has_regr_y && !*v.mke_active) {
     return R"({"detail":"regression_y requires mke block in regression_head.json"})";
   }
   constexpr double kSoftmaxEps = 1e-8;
-  const bool want_mke = g_mke_active && has_regr_y;
+  const bool want_mke = *v.mke_active && has_regr_y;
 
   if (want_mke) {
-    if (static_cast<int>(x.size()) != g_mke_d_in) {
+    if (static_cast<int>(x.size()) != *v.mke_d_in) {
       return R"({"detail":"input dim mismatch after preprocessor"})";
     }
   } else {
-    if (static_cast<int>(x.size()) != g_model->d_latent) {
+    if (static_cast<int>(x.size()) != model.d_latent) {
       return R"({"detail":"input dim mismatch after preprocessor"})";
     }
   }
 
-  if (!g_replay) {
-    g_replay = std::make_unique<cypha::ReplayBuffer>(g_tsp.replay_cap);
+  if (!*v.replay) {
+    *v.replay = std::make_unique<cypha::ReplayBuffer>(v.tsp->replay_cap);
   }
   cypha::TrainStepExtras extras{};
-  extras.total_steps = &g_total_steps;
-  extras.ood_sigma = &g_ood_sigma;
-  extras.llr_ema = &g_llr_ema;
+  extras.total_steps = v.total_steps;
+  extras.ood_sigma = v.ood_sigma;
+  extras.llr_ema = v.llr_ema;
   std::vector<double> replay_u01_storage;
   std::size_t replay_u01_pos = 0;
   if (body.contains("replay_u01") && body["replay_u01"].is_array()) {
-    for (const auto& v : body["replay_u01"]) {
-      replay_u01_storage.push_back(v.get<double>());
+    for (const auto& rv : body["replay_u01"]) {
+      replay_u01_storage.push_back(rv.get<double>());
     }
     extras.replay_u01 = replay_u01_storage.data();
     extras.replay_u01_len = replay_u01_storage.size();
     extras.replay_u01_pos = &replay_u01_pos;
   }
+  sync_kernel_from_json_view(v, body);
+  apply_kernel_to_extras_view(v, extras);
 
   double loss = std::numeric_limits<double>::quiet_NaN();
   if (want_mke) {
@@ -672,27 +1034,27 @@ std::string json_update(const nlohmann::json& body) {
       }
     }
     const double* gh_ptr = nullptr;
-    if (use_gh && static_cast<int>(g_mke_gh_scales.size()) == static_cast<int>(g_model->labels.size())) {
-      gh_ptr = g_mke_gh_scales.data();
+    if (use_gh && static_cast<int>(v.mke_gh_scales->size()) == static_cast<int>(model.labels.size())) {
+      gh_ptr = v.mke_gh_scales->data();
     }
     cypha::regression::MkeScalarTrainStepOutputs step_out{};
     (void)cypha::regression::mke_scalar_train_step(
-        *g_model, *g_mem, *g_replay, x.data(), g_mke_d_in, y, g_mke_W.data(), g_mke_b.data(), g_model->d_latent,
-        g_mke_w, g_mke_p, gh_ptr, g_mke_temperature, g_mke_forgetting, g_mke_pi_floor, g_tsp, g_world_lr,
-        g_delta_lr, g_ood_sigma, g_rng, g_enc_updates, &extras, router_ov, kSoftmaxEps, &step_out);
+        model, mem, **v.replay, x.data(), *v.mke_d_in, y, v.mke_W->data(), v.mke_b->data(), model.d_latent,
+        *v.mke_w, *v.mke_p, gh_ptr, *v.mke_temperature, *v.mke_forgetting, *v.mke_pi_floor, *v.tsp, *v.world_lr,
+        *v.delta_lr, *v.ood_sigma, g_rng, *v.enc_updates, &extras, router_ov, kSoftmaxEps, &step_out);
     loss = step_out.router_loss;
     (void)label;
-  } else if (use_gh && static_cast<int>(g_gh_inv_v_clean.size()) == d) {
+  } else if (use_gh && static_cast<int>(v.gh_inv_v_clean->size()) == d) {
     cypha::GhTrainStepResult gh = cypha::dif_gh_train_step_vector(
-        *g_model, *g_mem, *g_replay, x.data(), d, label, g_gh_inv_v_clean, g_gh_R_base, g_gh_chi, g_gh_psi,
-        kGhNigAdaptAlpha, g_world_lr, g_delta_lr, g_ood_sigma, g_tsp, g_rng, g_enc_updates, nullptr, &extras);
+        model, mem, **v.replay, x.data(), d, label, *v.gh_inv_v_clean, *v.gh_R_base, *v.gh_chi, *v.gh_psi,
+        kGhNigAdaptAlpha, *v.world_lr, *v.delta_lr, *v.ood_sigma, *v.tsp, g_rng, *v.enc_updates, nullptr, &extras);
     loss = gh.loss;
-    g_gh_chi = gh.chi_new;
-    g_gh_psi = gh.psi_new;
+    *v.gh_chi = gh.chi_new;
+    *v.gh_psi = gh.psi_new;
   } else {
-    loss = cypha::dif_train_step_vector(*g_model, *g_mem, *g_replay, x.data(), d, label, g_world_lr, g_delta_lr,
-                                        g_world_lr, g_delta_lr, g_ood_sigma, g_tsp, g_rng, g_enc_updates, nullptr,
-                                        &extras);
+    loss = cypha::dif_train_step_vector(model, mem, **v.replay, x.data(), d, label, *v.world_lr, *v.delta_lr,
+                                        *v.world_lr, *v.delta_lr, *v.ood_sigma, *v.tsp, g_rng, *v.enc_updates,
+                                        nullptr, &extras);
   }
   g_engine_corrections += 1;
 
@@ -700,6 +1062,21 @@ std::string json_update(const nlohmann::json& body) {
   out["loss"] = loss;
   out["n_corrections"] = g_engine_corrections;
   return out.dump();
+}
+
+std::string json_update(const nlohmann::json& body) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  ModelView view{};
+  LoadedModelBundle* slot = nullptr;
+  std::string detail;
+  if (!resolve_model_view(body, view, &slot, &detail)) {
+    return detail;
+  }
+  if (slot != nullptr) {
+    std::lock_guard<std::mutex> slot_lk(slot->mu);
+    return json_update_impl(body, view);
+  }
+  return json_update_impl(body, view);
 }
 
 std::string json_adapt_temperature(const nlohmann::json& body) {
@@ -871,6 +1248,8 @@ int main(int argc, char** argv) {
       ff_json = argv[++i];
     } else if (a == "--registry" && i + 1 < argc) {
       g_registry_root = argv[++i];
+    } else if (a == "--preload-registry") {
+      g_preload_registry = true;
     } else if (a == "--train-hparams" && i + 1 < argc) {
       train_hparams_path = argv[++i];
     } else if (a == "--regression-json" && i + 1 < argc) {
@@ -898,7 +1277,7 @@ int main(int argc, char** argv) {
     std::cerr << "usage: cypha_rest --listen host:port --cypha model.cypha [--f-field-json f_field.json] "
                  "[--pre preprocessor.json] [--train-hparams train_hparams.json] "
                  "[--regression-json regression_head.json] [--cyphalm-checkpoint ckpt_base] "
-                 "[--branch-a-json branch_a_router.json] [--registry models_root]  "
+                 "[--branch-a-json branch_a_router.json] [--registry models_root] [--preload-registry] "
                  "(POST /register needs --registry)\n";
     return 2;
   }
@@ -906,6 +1285,35 @@ int main(int argc, char** argv) {
     std::lock_guard<std::mutex> lock(g_mu);
     if (!load_bundle_paths(cypha_path, pre_path, ff_json, train_hparams_path, regression_json_path)) {
       return 1;
+    }
+    if (!g_registry_root.empty()) {
+      const fs::path cypha_abs = fs::absolute(fs::path(cypha_path));
+      const fs::path reg_abs = fs::absolute(fs::path(g_registry_root));
+      for (const auto& r : g_registry_cache) {
+        try {
+          if (fs::equivalent(fs::path(r.model_path), cypha_abs)) {
+            g_active_model_key = model_registry_key(r.name, r.version);
+            load_registry_ref_into_map(r, false, false);
+            break;
+          }
+        } catch (...) {
+        }
+      }
+      if (g_active_model_key.empty()) {
+        fs::path rel = cypha_abs.lexically_relative(reg_abs);
+        const fs::path parts = rel.parent_path();
+        if (parts.has_parent_path()) {
+          const std::string name = parts.parent_path().filename().string();
+          const std::string version = parts.filename().string();
+          if (const cypha::RegistryModelRef* ref = find_registry_ref(name, version)) {
+            g_active_model_key = model_registry_key(name, version);
+            load_registry_ref_into_map(*ref, false, false);
+          }
+        }
+      }
+    }
+    if (g_preload_registry) {
+      preload_registry_models();
     }
   }
 
@@ -946,6 +1354,12 @@ int main(int argc, char** argv) {
     payload["n_predictions"] = g_predictions;
     payload["n_corrections"] = g_engine_corrections;
     payload["registry_model_count"] = static_cast<int>(g_registry_cache.size());
+    payload["loaded_model_count"] = static_cast<int>(g_models.size());
+    if (g_active_model_key.empty()) {
+      payload["active_model"] = nullptr;
+    } else {
+      payload["active_model"] = g_active_model_key;
+    }
     if (g_model) {
       payload["gh_chi_session"] = g_gh_chi;
       payload["gh_psi_session"] = g_gh_psi;
@@ -966,6 +1380,8 @@ int main(int argc, char** argv) {
       std::string out = json_predict(body);
       if (out.find("No model loaded") != std::string::npos) {
         res.status = 503;
+      } else if (out.find("model not loaded") != std::string::npos) {
+        res.status = 404;
       } else if (out.find("\"detail\"") != std::string::npos) {
         res.status = 400;
       }
@@ -982,6 +1398,8 @@ int main(int argc, char** argv) {
       std::string out = json_update(body);
       if (out.find("No model loaded") != std::string::npos) {
         res.status = 503;
+      } else if (out.find("model not loaded") != std::string::npos) {
+        res.status = 404;
       } else if (out.find("\"detail\"") != std::string::npos) {
         res.status = 400;
       }
@@ -1035,15 +1453,26 @@ int main(int argc, char** argv) {
     if (g_registry_cache.empty()) {
       nlohmann::json j;
       j["models"] = arr;
+      if (g_active_model_key.empty()) {
+        j["active_model"] = nullptr;
+      } else {
+        j["active_model"] = g_active_model_key;
+      }
       res.set_content(j.dump(), "application/json");
       return;
     }
+    auto annotate = [](nlohmann::json row, const std::string& name, const std::string& version) {
+      const std::string key = model_registry_key(name, version);
+      row["loaded"] = g_models.find(key) != g_models.end();
+      row["active"] = key == g_active_model_key;
+      return row;
+    };
     if (summary) {
       for (const auto& r : g_registry_cache) {
         nlohmann::json row;
         row["name"] = r.name;
         row["version"] = r.version;
-        arr.push_back(row);
+        arr.push_back(annotate(std::move(row), r.name, r.version));
       }
     } else {
       for (const auto& r : g_registry_cache) {
@@ -1051,18 +1480,24 @@ int main(int argc, char** argv) {
           std::ifstream f(r.card_path);
           std::stringstream b;
           b << f.rdbuf();
-          arr.push_back(nlohmann::json::parse(b.str()));
+          nlohmann::json row = nlohmann::json::parse(b.str());
+          arr.push_back(annotate(std::move(row), r.name, r.version));
         } catch (...) {
           nlohmann::json row;
           row["name"] = r.name;
           row["version"] = r.version;
           row["error"] = "card_parse_failed";
-          arr.push_back(row);
+          arr.push_back(annotate(std::move(row), r.name, r.version));
         }
       }
     }
     nlohmann::json j;
     j["models"] = arr;
+    if (g_active_model_key.empty()) {
+      j["active_model"] = nullptr;
+    } else {
+      j["active_model"] = g_active_model_key;
+    }
     res.set_content(j.dump(), "application/json");
   });
 
@@ -1073,9 +1508,36 @@ int main(int argc, char** argv) {
       return;
     }
     try {
-      auto body = nlohmann::json::parse(req.body);
-      std::string name = body.at("name").get<std::string>();
-      std::string version = body.value("version", "latest");
+      nlohmann::json body =
+          req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+
+      if (body.empty() || (!body.contains("name") && !body.contains("model"))) {
+        std::lock_guard<std::mutex> lk(g_mu);
+        nlohmann::json keys = nlohmann::json::array();
+        for (const auto& ref : g_registry_cache) {
+          if (load_registry_ref_into_map(ref, false, false)) {
+            keys.push_back(model_registry_key(ref.name, ref.version));
+          }
+        }
+        nlohmann::json wrap;
+        wrap["loaded"] = std::move(keys);
+        res.set_content(wrap.dump(), "application/json");
+        return;
+      }
+
+      std::string name;
+      std::string version;
+      if (body.contains("model") && body["model"].is_string()) {
+        if (!parse_model_registry_key(body["model"].get<std::string>(), name, version)) {
+          res.status = 400;
+          res.set_content(R"({"detail":"model must be name/version"})", "application/json");
+          return;
+        }
+      } else {
+        name = body.at("name").get<std::string>();
+        version = body.value("version", "latest");
+      }
+
       const cypha::RegistryModelRef* ref = nullptr;
       {
         std::lock_guard<std::mutex> lk(g_mu);
@@ -1086,14 +1548,8 @@ int main(int argc, char** argv) {
         res.set_content(R"({"detail":"model not found"})", "application/json");
         return;
       }
-      fs::path dir = fs::path(ref->model_path).parent_path();
-      fs::path ff_path = dir / "f_field.json";
-      std::string ff_p = fs::exists(ff_path) ? ff_path.string() : "";
-      fs::path reg_path = dir / "regression_head.json";
-      std::string reg_p = fs::exists(reg_path) ? reg_path.string() : "";
-      std::string pre = ref->preprocessor_path;
       std::lock_guard<std::mutex> lk(g_mu);
-      if (!load_bundle_paths(ref->model_path, pre, ff_p, "", reg_p)) {
+      if (!load_registry_ref_into_map(*ref, true, true)) {
         res.status = 500;
         res.set_content(R"({"detail":"load failed"})", "application/json");
         return;
@@ -1104,6 +1560,7 @@ int main(int argc, char** argv) {
       nlohmann::json card = nlohmann::json::parse(cb.str());
       nlohmann::json wrap;
       wrap["loaded"] = std::move(card);
+      wrap["model"] = model_registry_key(ref->name, ref->version);
       res.set_content(wrap.dump(), "application/json");
     } catch (...) {
       res.status = 400;

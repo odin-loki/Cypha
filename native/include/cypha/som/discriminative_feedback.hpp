@@ -1,7 +1,7 @@
 #pragma once
 
 /// Encoder update modulation from class separation + inverse variance (mirrors
-/// cypha_som.discriminative_feedback.DiscriminativeFeedback, upgrade U4).
+/// Discriminative feedback helper (upgrade U4; off by default).
 
 #include <vector>
 

@@ -28,7 +28,7 @@ using Json = nlohmann::json;
 namespace {
 
 struct Args {
-    fs::path fixtures = "parity_fixtures";
+    fs::path fixtures = "fixtures";
     fs::path out = "cypha_diagnostics/results";
     fs::path exe_dir;
     std::vector<int> phases{1, 2, 3, 4};

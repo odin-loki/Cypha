@@ -10,11 +10,11 @@ Generated: 2026-05-24T07:30:08+00:00 (post-run recovery)
 - Final score: 0.0000
 - Runtime: ~17 hours (200-combo swarm × 5 iterations + full-bench validations)
 
-The orchestrator completed all five swarm/validation cycles and wrote `everyday_profile.json`, but the min-ratio scorer returned 0.0 every iteration (likely baseline key mismatch during fast swarm eval, not zero accuracy). Final `validate_profile.py` ran successfully; see `cypha_bench/artifacts/tuning/validation_compare.json`.
+The orchestrator completed all five swarm/validation cycles and wrote `everyday_profile.json`, but the min-ratio scorer returned 0.0 every iteration (likely baseline key mismatch during fast swarm eval, not zero accuracy). Final `validate_profile.py` ran successfully; see `bench/artifacts/tuning/validation_compare.json`.
 
 ## Winning profile
 
-Written to `cypha_bench/config/everyday_profile.json` with `algorithm_variants`:
+Written to `bench/config/everyday_profile.json` with `algorithm_variants`:
 
 - `reg_hash_routing`: false (y-quantile routing)
 - `deliberation_lo/hi`: 0.45 / 0.55
@@ -38,4 +38,4 @@ Written to `cypha_bench/config/everyday_profile.json` with `algorithm_variants`:
 
 ## Note
 
-Run crashed on report generation (`AttributeError` in `write_arch_tuning_report` — fixed in code). Log: `cypha_bench/artifacts/tuning/arch_iterate_20260524_004541.log`.
+Run crashed on report generation (`AttributeError` in `write_arch_tuning_report` — fixed in code). Log: `bench/artifacts/tuning/arch_iterate_20260524_004541.log`.

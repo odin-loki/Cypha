@@ -1,7 +1,7 @@
-# CyphaLM: Explicit Compression, Uncertainty, and Self-Organisation for Online Language Modelling
+﻿# CyphaLM: Explicit Compression, Uncertainty, and Self-Organisation for Online Language Modelling
 
 **Author:** Odin Loch  
-**Status:** Draft — results populated by `experiments/` scripts
+**Status:** Draft — metrics from native bench/report tooling (P7: native-only runtime; legacy Python cypha_lm/ removed).
 
 ---
 
@@ -111,7 +111,7 @@ Two-topic synthetic corpus; purity score `1.0000`.
 
 Alpha histograms at checkpoints; edge-of-chaos fraction `N/A`.
 
-### 5.5 Language modelling (Figs 5–6)
+### 5.5 Language modelling (Figs 5â€“6)
 
 **Toy vocabulary (Fig 5):** perplexity `12.9032`, syntax validity `N/A`.
 
@@ -123,7 +123,7 @@ ECE (NIG) = `N/A` vs dropout baseline `N/A`.
 
 ### 5.7 Online adaptation (Fig 8)
 
-JSON perplexity after Python pretrain; improvement `N/A`.
+JSON perplexity after native pretrain; improvement `N/A`.
 
 ### 5.8 Catastrophic forgetting (Fig 9)
 
@@ -153,13 +153,15 @@ CyphaLM makes the lossless residual a first-class measurable quantity.
 ## References
 
 <!-- Placeholder bibliography -->
-- Gu & Dao (2023) — Mamba
-- Amini et al. (2020) — Deep Evidential Regression
-- Grunwald (2007) — MDL
-- Shazeer et al. (2017) — Mixture of Experts
-- Langton (1990); Poole et al. (2016) — Edge of chaos
-- Tishby et al. (2000) — Information Bottleneck
+- Gu & Dao (2023) â€” Mamba
+- Amini et al. (2020) â€” Deep Evidential Regression
+- Grunwald (2007) â€” MDL
+- Shazeer et al. (2017) â€” Mixture of Experts
+- Langton (1990); Poole et al. (2016) â€” Edge of chaos
+- Tishby et al. (2000) â€” Information Bottleneck
 
 ---
 
-*Generated skeleton. Run `python scripts/run_cypha_lm_report.py` to populate metrics in `cypha_lm/REPORT.md`.*
+*Generated skeleton. Populate metrics from native bench (`cyphalm_bench_native`, `cypha_bench_run`) and `bench/report/` tables (native-only runtime as of P7).*
+
+

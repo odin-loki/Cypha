@@ -1,6 +1,6 @@
 #pragma once
 
-/// Autocorrelation-based fast/slow decay scaling for SSM (mirrors cypha_som.temporal_som.TemporalSOM).
+/// Autocorrelation-based fast/slow decay scaling for SSM (U6; off by default).
 
 #include <cstdint>
 #include <tuple>

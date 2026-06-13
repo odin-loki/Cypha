@@ -3,14 +3,14 @@
 # Usage (repo root):
 #   powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1
 #   powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1 -AllTargets
-#   powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1 -RunPytest
+#   powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1 -RunSmoke
 #
 # Requires: WSL with cmake, g++-mingw-w64-x86-64, make. Uses single-quoted bash -lc
 # so PowerShell does not expand $(nproc).
 
 param(
     [switch]$AllTargets,
-    [switch]$RunPytest
+    [switch]$RunSmoke
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,12 +43,6 @@ if (-not (Test-Path $exe)) { throw "Build finished but missing $exe" }
 Write-Host "Built: $exe"
 if ($AllTargets) { Write-Host "All MinGW targets under native\build-mingw-w64\ (run ctest from WSL if desired)." }
 
-if ($RunPytest) {
-    $env:CYPHA_REST_BIN = $exe
-    Set-Location $repoRoot
-    if (Get-Command py -ErrorAction SilentlyContinue) {
-        & py -3 -m pytest tests/test_cypha_rest_smoke.py -v --tb=short
-    } else {
-        python -m pytest tests/test_cypha_rest_smoke.py -v --tb=short
-    }
+if ($RunSmoke) {
+    & (Join-Path $repoRoot "native\scripts\smoke_cypha_rest_mingw.ps1")
 }

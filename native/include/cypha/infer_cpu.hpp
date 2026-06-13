@@ -26,6 +26,10 @@ struct CyphaInferOptions {
   double gh_chi{1.0};
   double gh_psi{1.0};
   double gh_alpha{0.98};
+  /// Nyström kernel LLR (Python ``use_kernel_llr`` / ``_kernel_mem``).
+  const KernelMemory* kernel_mem{nullptr};
+  bool use_kernel_llr{false};
+  double kernel_blend{0.5};
 };
 
 struct ClassifyAtHResult {
@@ -122,8 +126,8 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
 /// Convenience: ``batch_encode`` then ``score_matrix_use_field`` — ``llr_out`` is **n×K** row-major (``K = len(labels)``).
 void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& llr_out);
 
-void softmax_batch_like_python(const double* z_row_major, int n, int k, double eps,
-                               std::vector<double>& probs_out);
+void softmax_batch_reference(const double* z_row_major, int n, int k, double eps,
+                             std::vector<double>& probs_out);
 
 void world_gate_vector_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
                                  double gh_chi, double gh_psi, std::vector<double>& gates_out);
@@ -160,14 +164,17 @@ std::pair<std::string, double> apply_deliberation(const std::string& pred, doubl
 /// Python ``DIFMemory.classify`` for one latent row (optional ``h_field`` → μ₀ shift).
 ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const double* h_field,
                                 double temperature, const std::optional<double>& mahal_ema, double mahal_std_ema,
-                                double gh_chi, double gh_psi, bool use_context_prior = true);
+                                double gh_chi, double gh_psi, bool use_context_prior = true,
+                                const KernelMemory* kernel_mem = nullptr, bool use_kernel_llr = false,
+                                double kernel_blend = 0.5);
 
-/// Python ``CyphaDIF.gh_infer`` (no field in μ₀ / T_adj; classify with ``ood_sigma=inf`` analogue — gate only).
-GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double chi, double psi,
-                               double alpha = 0.98);
-
-/// Python ``CyphaDIF.infer`` (``use_field`` + deliberation; no kernel LLR).
+/// Python ``CyphaDIF.infer`` (``use_field`` + deliberation + optional kernel LLR blend).
 InferAtHResult infer_at_h(const CyphaInferModel& m, const double* h, const CyphaInferOptions& opt);
+
+/// Python ``CyphaDIF.gh_infer`` (no field in μ₀ / T_adj; classify with GH gate).
+/// When ``kernel_opt`` is non-null and ``use_kernel_llr``, blends Nyström kernel LLR in ``classify_at_h``.
+GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double chi, double psi,
+                               double alpha = 0.98, const CyphaInferOptions* kernel_opt = nullptr);
 
 /// Python ``CyphaDIF.retrieve`` on raw ``x`` rows (encode then rank by class log-likelihood).
 std::vector<RetrieveHit> retrieve_from_x(const CyphaInferModel& m, const double* query_x, const double* database_x,

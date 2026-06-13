@@ -28,8 +28,13 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QCursor>
+#include <QMouseEvent>
+#include <QToolTip>
+#include <QWheelEvent>
 #include <QPolygonF>
 #include <QPointF>
+#include <QHeaderView>
 #include <QMutex>
 #include <QProgressBar>
 #include <QProgressDialog>
@@ -58,7 +63,6 @@
 #include <QTemporaryFile>
 #include <QTextStream>
 #include <QDoubleSpinBox>
-#include <QHeaderView>
 #include <QSpinBox>
 #include <QStringList>
 #include <QTableWidget>
@@ -80,6 +84,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <optional>
@@ -96,6 +101,7 @@
 #include "cypha/create_model.hpp"
 #include "cypha/csv_ingest.hpp"
 #include "cypha/infer_cpu.hpp"
+#include "cypha/kernel_memory.hpp"
 #include "cypha/load_cypha.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/mke_scalar_train_step.hpp"
@@ -107,6 +113,8 @@
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
+
+#include "bulk_train_worker.h"
 
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
 #include "cypha/experiment_db.hpp"
@@ -276,7 +284,9 @@ bool try_load_cypha_paths(const QString& cypha_path, const QString& ff_json_path
 
 int best_label_and_conf(const cypha::CyphaInferModel& m, const cypha::PreprocessorState* pre,
                         const std::vector<double>& x_in, std::string* label_out, double* conf_out,
-                        bool use_gh = true, double gh_chi = 1.0, double gh_psi = 1.0) {
+                        bool use_gh = true, double gh_chi = 1.0, double gh_psi = 1.0,
+                        const cypha::KernelMemory* kernel_mem = nullptr, bool use_kernel_llr = false,
+                        double kernel_blend = 0.5) {
   std::vector<double> x_latent;
   const double* x_ptr = nullptr;
   if (pre != nullptr) {
@@ -303,8 +313,12 @@ int best_label_and_conf(const cypha::CyphaInferModel& m, const cypha::Preprocess
   cypha::batch_encode(m, x_ptr, 1, H);
 
   if (use_gh) {
+    cypha::CyphaInferOptions kopt{};
+    kopt.kernel_mem = kernel_mem;
+    kopt.use_kernel_llr = use_kernel_llr && kernel_mem != nullptr;
+    kopt.kernel_blend = kernel_blend;
     const cypha::GhInferAtHResult gh =
-        cypha::gh_infer_at_h(m, H.data(), gh_chi, gh_psi, kGhNigAdaptAlphaShell);
+        cypha::gh_infer_at_h(m, H.data(), gh_chi, gh_psi, kGhNigAdaptAlphaShell, &kopt);
     *label_out = gh.label;
     *conf_out = gh.confidence;
   } else {
@@ -312,6 +326,9 @@ int best_label_and_conf(const cypha::CyphaInferModel& m, const cypha::Preprocess
     iopt.deliberation_lo = m.deliberation_lo;
     iopt.deliberation_hi = m.deliberation_hi;
     iopt.use_field = true;
+    iopt.kernel_mem = kernel_mem;
+    iopt.use_kernel_llr = use_kernel_llr && kernel_mem != nullptr;
+    iopt.kernel_blend = kernel_blend;
     const cypha::InferAtHResult inf = cypha::infer_at_h(m, H.data(), iopt);
     *label_out = inf.label;
     *conf_out = inf.confidence;
@@ -874,6 +891,7 @@ class SimpleLossChart final : public QWidget {
   explicit SimpleLossChart(QWidget* parent = nullptr) : QWidget(parent) {
     setMinimumHeight(128);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setMouseTracking(true);
   }
   void set_loss_runs(const QVector<double>& rest, const QVector<double>& native_v,
                      const QVector<double>& rest_ema, const QVector<double>& native_ema) {
@@ -881,6 +899,8 @@ class SimpleLossChart final : public QWidget {
     losses_native_ = native_v;
     losses_rest_ema_ = rest_ema;
     losses_native_ema_ = native_ema;
+    recompute_data_extents();
+    reset_view_to_data();
     update();
   }
   void clear_losses() {
@@ -888,12 +908,15 @@ class SimpleLossChart final : public QWidget {
     losses_native_.clear();
     losses_rest_ema_.clear();
     losses_native_ema_.clear();
+    view_initialized_ = false;
     update();
   }
   void set_y_range_lock(bool locked, double lo, double hi) {
     y_range_locked_ = locked;
     y_lock_lo_ = lo;
     y_lock_hi_ = hi;
+    recompute_data_extents();
+    clamp_view_to_data();
     update();
   }
 
@@ -913,29 +936,14 @@ class SimpleLossChart final : public QWidget {
       return;
     }
 
-    // ── Compute range ────────────────────────────────────────────────────────
-    auto expand_range = [](double& lo, double& hi, const QVector<double>& v) {
-      for (double x : v) {
-        lo = std::min(lo, x);
-        hi = std::max(hi, x);
-      }
-    };
-    double lo = y_range_locked_ ? y_lock_lo_ : (have_r ? losses_rest_[0] : losses_native_[0]);
-    double hi = y_range_locked_ ? y_lock_hi_ : lo;
-    if (!y_range_locked_) {
-      if (have_r)  expand_range(lo, hi, losses_rest_);
-      if (have_n)  expand_range(lo, hi, losses_native_);
-      if (!losses_rest_ema_.isEmpty())   expand_range(lo, hi, losses_rest_ema_);
-      if (!losses_native_ema_.isEmpty()) expand_range(lo, hi, losses_native_ema_);
+    if (!view_initialized_) {
+      reset_view_to_data();
     }
-    if (!(hi > lo)) hi = lo + 1e-9;
 
+    const double lo = view_y0_;
+    const double hi = view_y1_;
     const int max_n = std::max(losses_rest_.size(), losses_native_.size());
-
-    // Margins: left=54 (Y labels), right=12, top=10, bottom=22 (X labels) + 22 (legend)
-    const int legend_h = 20;
-    const int x_label_h = 22;
-    const QRect plot = full.adjusted(54, 10, -12, -(x_label_h + legend_h));
+    const QRect plot = plot_rect(full);
 
     // ── Grid lines + Y-axis ticks ─────────────────────────────────────────────
     const int kYTicks = 5;
@@ -946,10 +954,8 @@ class SimpleLossChart final : public QWidget {
       const double frac = static_cast<double>(ti) / kYTicks;
       const double val  = lo + frac * (hi - lo);
       const int    py   = static_cast<int>(plot.bottom() - frac * plot.height());
-      // Grid line
       painter.setPen(QPen(QColor(55, 58, 65), 1, Qt::SolidLine));
       painter.drawLine(plot.left(), py, plot.right(), py);
-      // Tick label (right-aligned in left margin)
       painter.setPen(QColor(150, 150, 160));
       const QString lbl = QString::number(val, 'g', 3);
       const QRect lr(full.left(), py - 9, plot.left() - 4, 18);
@@ -960,17 +966,17 @@ class SimpleLossChart final : public QWidget {
     const int kXTicks = 4;
     for (int ti = 0; ti <= kXTicks; ++ti) {
       const double frac = static_cast<double>(ti) / kXTicks;
-      const int    step = static_cast<int>(std::round(frac * (max_n - 1)));
-      const int    px   = static_cast<int>(plot.left() + frac * plot.width());
+      const double step_val = view_x0_ + frac * (view_x1_ - view_x0_);
+      const int    px       = static_cast<int>(plot.left() + frac * plot.width());
       painter.setPen(QPen(QColor(55, 58, 65), 1, Qt::SolidLine));
       painter.drawLine(px, plot.top(), px, plot.bottom());
       painter.setPen(QColor(150, 150, 160));
-      const QString lbl = QString::number(step);
+      const QString lbl = QString::number(std::round(step_val));
       const QRect xr(px - 20, plot.bottom() + 4, 40, 16);
       painter.drawText(xr, Qt::AlignHCenter | Qt::AlignTop, lbl);
     }
 
-    // ── Plot border ───────────────────────────────────────────────────────────
+  // ── Plot border ───────────────────────────────────────────────────────────
     painter.setPen(QPen(QColor(90, 90, 100), 1));
     painter.drawRect(plot);
 
@@ -982,19 +988,14 @@ class SimpleLossChart final : public QWidget {
       if (dashed) pen.setStyle(Qt::DashLine);
       painter.setPen(pen);
       if (v.size() == 1) {
-        const double ynorm = (v[0] - lo) / (hi - lo);
-        const double py    = plot.bottom() - ynorm * plot.height();
-        painter.drawEllipse(QPointF(plot.center().x(), py), 3.0, 3.0);
+        const QPointF pt = data_to_pixel(plot, 0.0, v[0], view_x0_, view_x1_, lo, hi);
+        painter.drawEllipse(pt, 3.0, 3.0);
         return;
       }
       QPolygonF poly;
-      const int    n     = v.size();
-      const double denom = max_n > 1 ? static_cast<double>(max_n - 1) : 1.0;
+      const int n = v.size();
       for (int i = 0; i < n; ++i) {
-        const double tx    = static_cast<double>(i) / denom;
-        const double ynorm = (v[i] - lo) / (hi - lo);
-        poly << QPointF(plot.left() + tx * plot.width(),
-                        plot.bottom() - ynorm * plot.height());
+        poly << data_to_pixel(plot, static_cast<double>(i), v[i], view_x0_, view_x1_, lo, hi);
       }
       painter.drawPolyline(poly);
     };
@@ -1004,6 +1005,7 @@ class SimpleLossChart final : public QWidget {
     draw_series(losses_rest_,       QColor(110, 180, 255), false, 2);
 
     // ── Legend ────────────────────────────────────────────────────────────────
+    const int legend_h = 20;
     const int ley  = full.bottom() - legend_h + 2;
     const int leh  = legend_h - 4;
     struct LegItem { QColor col; bool dashed; QString text; };
@@ -1026,7 +1028,236 @@ class SimpleLossChart final : public QWidget {
     }
   }
 
+  void mouseMoveEvent(QMouseEvent* e) override {
+    if (panning_) {
+      const QRect plot = plot_rect(rect());
+      if (plot.width() > 0 && plot.height() > 0) {
+        const double dx =
+            -static_cast<double>(e->pos().x() - pan_anchor_.x()) / plot.width() * (view_x1_ - view_x0_);
+        const double dy =
+            static_cast<double>(e->pos().y() - pan_anchor_.y()) / plot.height() * (view_y1_ - view_y0_);
+        view_x0_ += dx;
+        view_x1_ += dx;
+        view_y0_ += dy;
+        view_y1_ += dy;
+        clamp_view_to_data();
+        pan_anchor_ = e->pos();
+        update();
+      }
+    }
+    update_tooltip(e->pos());
+    QWidget::mouseMoveEvent(e);
+  }
+
+  void mousePressEvent(QMouseEvent* e) override {
+    if (e->button() == Qt::LeftButton && has_data()) {
+      panning_ = true;
+      pan_anchor_ = e->pos();
+      setCursor(Qt::ClosedHandCursor);
+    }
+    QWidget::mousePressEvent(e);
+  }
+
+  void mouseReleaseEvent(QMouseEvent* e) override {
+    if (e->button() == Qt::LeftButton && panning_) {
+      panning_ = false;
+      unsetCursor();
+    }
+    QWidget::mouseReleaseEvent(e);
+  }
+
+  void leaveEvent(QEvent* e) override {
+    Q_UNUSED(e);
+    QToolTip::hideText();
+    if (!panning_) {
+      unsetCursor();
+    }
+    QWidget::leaveEvent(e);
+  }
+
+  void wheelEvent(QWheelEvent* e) override {
+    if (!has_data()) {
+      e->ignore();
+      return;
+    }
+    const QRect plot = plot_rect(rect());
+    if (!plot.contains(e->position().toPoint()) || plot.width() <= 0 || plot.height() <= 0) {
+      e->ignore();
+      return;
+    }
+    const double factor = e->angleDelta().y() > 0 ? 0.85 : 1.15;
+    const double frac_x = (e->position().x() - plot.left()) / plot.width();
+    const double frac_y = (plot.bottom() - e->position().y()) / plot.height();
+    const double cx = view_x0_ + frac_x * (view_x1_ - view_x0_);
+    const double cy = view_y0_ + frac_y * (view_y1_ - view_y0_);
+    const double half_w = (view_x1_ - view_x0_) * factor * 0.5;
+    const double half_h = (view_y1_ - view_y0_) * factor * 0.5;
+    view_x0_ = cx - half_w;
+    view_x1_ = cx + half_w;
+    view_y0_ = cy - half_h;
+    view_y1_ = cy + half_h;
+    clamp_view_to_data();
+    update();
+    e->accept();
+  }
+
  private:
+  static QRect plot_rect(const QRect& full) {
+    constexpr int legend_h = 20;
+    constexpr int x_label_h = 22;
+    return full.adjusted(54, 10, -12, -(x_label_h + legend_h));
+  }
+
+  static QPointF data_to_pixel(const QRect& plot, double x, double y, double x0, double x1, double y0, double y1) {
+    const double xspan = x1 - x0;
+    const double yspan = y1 - y0;
+    const double tx = xspan > 0.0 ? (x - x0) / xspan : 0.0;
+    const double ty = yspan > 0.0 ? (y - y0) / yspan : 0.0;
+    return QPointF(plot.left() + tx * plot.width(), plot.bottom() - ty * plot.height());
+  }
+
+  bool has_data() const { return !losses_rest_.isEmpty() || !losses_native_.isEmpty(); }
+
+  void recompute_data_extents() {
+    const bool have_r = !losses_rest_.isEmpty();
+    const bool have_n = !losses_native_.isEmpty();
+    if (!have_r && !have_n) {
+      return;
+    }
+    auto expand_range = [](double& lo, double& hi, const QVector<double>& v) {
+      for (double x : v) {
+        lo = std::min(lo, x);
+        hi = std::max(hi, x);
+      }
+    };
+    const int max_n = std::max(losses_rest_.size(), losses_native_.size());
+    data_x0_ = 0.0;
+    data_x1_ = max_n > 1 ? static_cast<double>(max_n - 1) : 1.0;
+    if (y_range_locked_) {
+      data_y0_ = y_lock_lo_;
+      data_y1_ = y_lock_hi_;
+    } else {
+      double lo = have_r ? losses_rest_[0] : losses_native_[0];
+      double hi = lo;
+      if (have_r) expand_range(lo, hi, losses_rest_);
+      if (have_n) expand_range(lo, hi, losses_native_);
+      if (!losses_rest_ema_.isEmpty()) expand_range(lo, hi, losses_rest_ema_);
+      if (!losses_native_ema_.isEmpty()) expand_range(lo, hi, losses_native_ema_);
+      if (!(hi > lo)) hi = lo + 1e-9;
+      data_y0_ = lo;
+      data_y1_ = hi;
+    }
+  }
+
+  void reset_view_to_data() {
+    if (!has_data()) {
+      view_initialized_ = false;
+      return;
+    }
+    recompute_data_extents();
+    view_x0_ = data_x0_;
+    view_x1_ = data_x1_;
+    view_y0_ = data_y0_;
+    view_y1_ = data_y1_;
+    view_initialized_ = true;
+  }
+
+  void clamp_view_to_data() {
+    if (!has_data()) {
+      return;
+    }
+    recompute_data_extents();
+    const double min_x_span = std::max((data_x1_ - data_x0_) / 200.0, 1.0);
+    const double min_y_span = std::max((data_y1_ - data_y0_) / 200.0, 1e-9);
+    double vw = view_x1_ - view_x0_;
+    double vh = view_y1_ - view_y0_;
+    if (vw < min_x_span) {
+      const double cx = (view_x0_ + view_x1_) * 0.5;
+      vw = min_x_span;
+      view_x0_ = cx - vw * 0.5;
+      view_x1_ = cx + vw * 0.5;
+    }
+    if (vh < min_y_span) {
+      const double cy = (view_y0_ + view_y1_) * 0.5;
+      vh = min_y_span;
+      view_y0_ = cy - vh * 0.5;
+      view_y1_ = cy + vh * 0.5;
+    }
+    vw = view_x1_ - view_x0_;
+    vh = view_y1_ - view_y0_;
+    const double dw = data_x1_ - data_x0_;
+    const double dh = data_y1_ - data_y0_;
+    if (vw >= dw) {
+      view_x0_ = data_x0_;
+      view_x1_ = data_x1_;
+    } else {
+      if (view_x0_ < data_x0_) {
+        view_x0_ = data_x0_;
+        view_x1_ = view_x0_ + vw;
+      }
+      if (view_x1_ > data_x1_) {
+        view_x1_ = data_x1_;
+        view_x0_ = view_x1_ - vw;
+      }
+    }
+    if (vh >= dh) {
+      view_y0_ = data_y0_;
+      view_y1_ = data_y1_;
+    } else {
+      if (view_y0_ < data_y0_) {
+        view_y0_ = data_y0_;
+        view_y1_ = view_y0_ + vh;
+      }
+      if (view_y1_ > data_y1_) {
+        view_y1_ = data_y1_;
+        view_y0_ = view_y1_ - vh;
+      }
+    }
+    view_initialized_ = true;
+  }
+
+  void update_tooltip(const QPoint& pos) {
+    if (!has_data()) {
+      QToolTip::hideText();
+      return;
+    }
+    const QRect plot = plot_rect(rect());
+    if (!plot.contains(pos)) {
+      QToolTip::hideText();
+      return;
+    }
+    const double lo = view_y0_;
+    const double hi = view_y1_;
+    double best_dist = 1e30;
+    int best_step = 0;
+    double best_loss = 0.0;
+    QString best_label;
+
+    auto check_series = [&](const QVector<double>& v, const QString& label) {
+      if (v.isEmpty()) return;
+      for (int i = 0; i < v.size(); ++i) {
+        const QPointF pt = data_to_pixel(plot, static_cast<double>(i), v[i], view_x0_, view_x1_, lo, hi);
+        const double dx = pos.x() - pt.x();
+        const double dy = pos.y() - pt.y();
+        const double dist = dx * dx + dy * dy;
+        if (dist < best_dist) {
+          best_dist = dist;
+          best_step = i;
+          best_loss = v[i];
+          best_label = label;
+        }
+      }
+    };
+    check_series(losses_rest_, QStringLiteral("REST"));
+    check_series(losses_native_, QStringLiteral("Native"));
+    check_series(losses_rest_ema_, QStringLiteral("REST EMA"));
+    check_series(losses_native_ema_, QStringLiteral("Native EMA"));
+
+    const QString tip =
+        QStringLiteral("(%1, %2) %3").arg(best_step).arg(best_loss, 0, 'g', 6).arg(best_label);
+    QToolTip::showText(mapToGlobal(pos), tip, this);
+  }
+
   QVector<double> losses_rest_{};
   QVector<double> losses_native_{};
   QVector<double> losses_rest_ema_{};
@@ -1034,6 +1265,17 @@ class SimpleLossChart final : public QWidget {
   bool y_range_locked_{false};
   double y_lock_lo_{-10.0};
   double y_lock_hi_{0.0};
+  double data_x0_{0.0};
+  double data_x1_{1.0};
+  double data_y0_{0.0};
+  double data_y1_{1.0};
+  double view_x0_{0.0};
+  double view_x1_{1.0};
+  double view_y0_{0.0};
+  double view_y1_{1.0};
+  bool view_initialized_{false};
+  bool panning_{false};
+  QPoint pan_anchor_{};
 };
 
 // ── Per-class accuracy bar chart (painted, no Qt Charts dependency) ──────────
@@ -1136,6 +1378,7 @@ class LossChartPanel final : public QChartView {
     setMinimumHeight(128);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setRenderHint(QPainter::Antialiasing, true);
+    setMouseTracking(true);
     auto* ch = new QChart();
     ch->setBackgroundBrush(QBrush(QColor(32, 34, 38)));
     ch->setBackgroundRoundness(0);
@@ -1157,10 +1400,10 @@ class LossChartPanel final : public QChartView {
       series_native_ema_->setPen(pn);
     }
     series_rest_ = new QLineSeries();
-    series_rest_->setName(QStringLiteral("REST /update"));
+    series_rest_->setName(QStringLiteral("REST"));
     series_rest_->setPen(QPen(QColor(110, 180, 255), 2));
     series_native_ = new QLineSeries();
-    series_native_->setName(QStringLiteral("Native train"));
+    series_native_->setName(QStringLiteral("Native"));
     series_native_->setPen(QPen(QColor(255, 170, 90), 2));
     ch->addSeries(series_rest_ema_);
     ch->addSeries(series_native_ema_);
@@ -1170,6 +1413,21 @@ class LossChartPanel final : public QChartView {
     ch->legend()->setLabelColor(QColor(200, 200, 210));
     ch->legend()->hide();
     setChart(ch);
+    const auto connect_hover = [this](QLineSeries* s) {
+      connect(s, &QLineSeries::hovered, this, [s, this](const QPointF& pt, bool state) {
+        if (state) {
+          QToolTip::showText(QCursor::pos(),
+                             QStringLiteral("(%1, %2) %3").arg(static_cast<int>(pt.x())).arg(pt.y(), 0, 'g', 6)
+                                 .arg(s->name()));
+        } else {
+          QToolTip::hideText();
+        }
+      });
+    };
+    connect_hover(series_rest_);
+    connect_hover(series_native_);
+    connect_hover(series_rest_ema_);
+    connect_hover(series_native_ema_);
   }
 
   void set_loss_runs(const QVector<double>& rest, const QVector<double>& natv, const QVector<double>& rest_ema,
@@ -1178,9 +1436,10 @@ class LossChartPanel final : public QChartView {
     series_native_->clear();
     series_rest_ema_->clear();
     series_native_ema_->clear();
-QChart* ch = chart();
+    QChart* ch = chart();
     const bool have_r = !rest.isEmpty();
     const bool have_n = !natv.isEmpty();
+    has_data_ = have_r || have_n;
     if (!have_r && !have_n) {
       ch->setTitle(QStringLiteral("Per-step loss — bulk REST vs bulk native (dashed = EMA)"));
       const QList<QAbstractAxis*> ax = ch->axes();
@@ -1189,6 +1448,7 @@ QChart* ch = chart();
         a->deleteLater();
       }
       ch->legend()->hide();
+      view_initialized_ = false;
       return;
     }
     ch->setTitle(QString());
@@ -1206,7 +1466,6 @@ QChart* ch = chart();
     }
     if (ch->axes().isEmpty()) {
       ch->createDefaultAxes();
-      // Style axes for dark background
       for (QAbstractAxis* ax : ch->axes()) {
         ax->setLabelsColor(QColor(190, 190, 200));
         ax->setLinePenColor(QColor(80, 85, 95));
@@ -1217,6 +1476,111 @@ QChart* ch = chart();
         }
       }
     }
+    recompute_data_extents(rest, natv, rest_ema, natv_ema);
+    reset_view_to_data();
+    apply_view_to_axes();
+    ch->legend()->setVisible(true);
+  }
+
+  void clear_losses() { set_loss_runs({}, {}, {}, {}); }
+
+  void set_y_range_lock(bool locked, double lo, double hi) {
+    y_range_locked_ = locked;
+    y_lock_lo_ = lo;
+    y_lock_hi_ = hi;
+    if (!has_data_) {
+      return;
+    }
+    recompute_data_extents_from_series();
+    clamp_view_to_data();
+    apply_view_to_axes();
+  }
+
+ protected:
+  void mouseMoveEvent(QMouseEvent* e) override {
+    if (panning_ && chart() != nullptr) {
+      const QRect plot = chart()->plotArea();
+      if (plot.width() > 0 && plot.height() > 0) {
+        const double dx =
+            -static_cast<double>(e->pos().x() - pan_anchor_.x()) / plot.width() * (view_x1_ - view_x0_);
+        const double dy =
+            static_cast<double>(e->pos().y() - pan_anchor_.y()) / plot.height() * (view_y1_ - view_y0_);
+        view_x0_ += dx;
+        view_x1_ += dx;
+        view_y0_ += dy;
+        view_y1_ += dy;
+        clamp_view_to_data();
+        apply_view_to_axes();
+        pan_anchor_ = e->pos();
+      }
+    }
+    QChartView::mouseMoveEvent(e);
+  }
+
+  void mousePressEvent(QMouseEvent* e) override {
+    if (e->button() == Qt::LeftButton && has_data_) {
+      panning_ = true;
+      pan_anchor_ = e->pos();
+      setCursor(Qt::ClosedHandCursor);
+    }
+    QChartView::mousePressEvent(e);
+  }
+
+  void mouseReleaseEvent(QMouseEvent* e) override {
+    if (e->button() == Qt::LeftButton && panning_) {
+      panning_ = false;
+      unsetCursor();
+    }
+    QChartView::mouseReleaseEvent(e);
+  }
+
+  void leaveEvent(QEvent* e) override {
+    QToolTip::hideText();
+    if (!panning_) {
+      unsetCursor();
+    }
+    QChartView::leaveEvent(e);
+  }
+
+  void wheelEvent(QWheelEvent* e) override {
+    if (!has_data_ || chart() == nullptr) {
+      e->ignore();
+      return;
+    }
+    const QRect plot = chart()->plotArea();
+    if (!plot.contains(e->position().toPoint()) || plot.width() <= 0 || plot.height() <= 0) {
+      e->ignore();
+      return;
+    }
+    const double factor = e->angleDelta().y() > 0 ? 0.85 : 1.15;
+    const double frac_x = (e->position().x() - plot.left()) / plot.width();
+    const double frac_y = (plot.bottom() - e->position().y()) / plot.height();
+    const double cx = view_x0_ + frac_x * (view_x1_ - view_x0_);
+    const double cy = view_y0_ + frac_y * (view_y1_ - view_y0_);
+    const double half_w = (view_x1_ - view_x0_) * factor * 0.5;
+    const double half_h = (view_y1_ - view_y0_) * factor * 0.5;
+    view_x0_ = cx - half_w;
+    view_x1_ = cx + half_w;
+    view_y0_ = cy - half_h;
+    view_y1_ = cy + half_h;
+    clamp_view_to_data();
+    apply_view_to_axes();
+    e->accept();
+  }
+
+ private:
+  void recompute_data_extents(const QVector<double>& rest, const QVector<double>& natv,
+                              const QVector<double>& rest_ema, const QVector<double>& natv_ema) {
+    const bool have_r = !rest.isEmpty();
+    const bool have_n = !natv.isEmpty();
+    const int max_n = std::max(rest.size(), natv.size());
+    data_x0_ = 0.0;
+    data_x1_ = max_n > 1 ? static_cast<double>(max_n - 1) : 1.0;
+    if (y_range_locked_) {
+      data_y0_ = y_lock_lo_;
+      data_y1_ = y_lock_hi_;
+      return;
+    }
     double lo = have_r ? rest[0] : natv[0];
     double hi = lo;
     auto expand = [&](const QVector<double>& v) {
@@ -1225,55 +1589,127 @@ QChart* ch = chart();
         hi = std::max(hi, x);
       }
     };
-    if (have_r) {
-      expand(rest);
+    if (have_r) expand(rest);
+    if (have_n) expand(natv);
+    if (!rest_ema.isEmpty()) expand(rest_ema);
+    if (!natv_ema.isEmpty()) expand(natv_ema);
+    if (!(hi > lo)) hi = lo + 1e-9;
+    data_y0_ = lo;
+    data_y1_ = hi;
+  }
+
+  void recompute_data_extents_from_series() {
+    QVector<double> rest;
+    QVector<double> natv;
+    QVector<double> rest_ema;
+    QVector<double> natv_ema;
+    for (const QPointF& p : series_rest_->points()) rest.append(p.y());
+    for (const QPointF& p : series_native_->points()) natv.append(p.y());
+    for (const QPointF& p : series_rest_ema_->points()) rest_ema.append(p.y());
+    for (const QPointF& p : series_native_ema_->points()) natv_ema.append(p.y());
+    recompute_data_extents(rest, natv, rest_ema, natv_ema);
+  }
+
+  void reset_view_to_data() {
+    view_x0_ = data_x0_;
+    view_x1_ = data_x1_;
+    view_y0_ = data_y0_;
+    view_y1_ = data_y1_;
+    view_initialized_ = true;
+  }
+
+  void clamp_view_to_data() {
+    if (!has_data_) {
+      return;
     }
-    if (have_n) {
-      expand(natv);
+    recompute_data_extents_from_series();
+    const double min_x_span = std::max((data_x1_ - data_x0_) / 200.0, 1.0);
+    const double min_y_span = std::max((data_y1_ - data_y0_) / 200.0, 1e-9);
+    double vw = view_x1_ - view_x0_;
+    double vh = view_y1_ - view_y0_;
+    if (vw < min_x_span) {
+      const double cx = (view_x0_ + view_x1_) * 0.5;
+      vw = min_x_span;
+      view_x0_ = cx - vw * 0.5;
+      view_x1_ = cx + vw * 0.5;
     }
-    if (!rest_ema.isEmpty()) {
-      expand(rest_ema);
+    if (vh < min_y_span) {
+      const double cy = (view_y0_ + view_y1_) * 0.5;
+      vh = min_y_span;
+      view_y0_ = cy - vh * 0.5;
+      view_y1_ = cy + vh * 0.5;
     }
-    if (!natv_ema.isEmpty()) {
-      expand(natv_ema);
+    vw = view_x1_ - view_x0_;
+    vh = view_y1_ - view_y0_;
+    const double dw = data_x1_ - data_x0_;
+    const double dh = data_y1_ - data_y0_;
+    if (vw >= dw) {
+      view_x0_ = data_x0_;
+      view_x1_ = data_x1_;
+    } else {
+      if (view_x0_ < data_x0_) {
+        view_x0_ = data_x0_;
+        view_x1_ = view_x0_ + vw;
+      }
+      if (view_x1_ > data_x1_) {
+        view_x1_ = data_x1_;
+        view_x0_ = view_x1_ - vw;
+      }
     }
-    if (!(hi > lo)) {
-      hi = lo + 1e-9;
+    if (vh >= dh) {
+      view_y0_ = data_y0_;
+      view_y1_ = data_y1_;
+    } else {
+      if (view_y0_ < data_y0_) {
+        view_y0_ = data_y0_;
+        view_y1_ = view_y0_ + vh;
+      }
+      if (view_y1_ > data_y1_) {
+        view_y1_ = data_y1_;
+        view_y0_ = view_y1_ - vh;
+      }
     }
-    const int max_n = std::max(rest.size(), natv.size());
+    view_initialized_ = true;
+  }
+
+  void apply_view_to_axes() {
+    QChart* ch = chart();
+    if (!ch) {
+      return;
+    }
     const QList<QAbstractAxis*> vy = ch->axes(Qt::Vertical);
     if (!vy.isEmpty()) {
       if (auto* va = qobject_cast<QValueAxis*>(vy.front())) {
-        va->setRange(lo, hi);
+        va->setRange(view_y0_, view_y1_);
       }
     }
     const QList<QAbstractAxis*> hx = ch->axes(Qt::Horizontal);
     if (!hx.isEmpty()) {
       if (auto* ha = qobject_cast<QValueAxis*>(hx.front())) {
-        ha->setRange(0.0, max_n > 1 ? static_cast<double>(max_n - 1) : 1.0);
-      }
-    }
-    ch->legend()->setVisible(true);
-  }
-
-  void clear_losses() { set_loss_runs({}, {}, {}, {}); }
-  void set_y_range_lock(bool locked, double lo, double hi) {
-QChart* ch = chart();
-    if (!ch) return;
-    const QList<QAbstractAxis*> vy = ch->axes(Qt::Vertical);
-    if (vy.isEmpty()) return;
-    if (auto* va = qobject_cast<QValueAxis*>(vy.front())) {
-      if (locked) {
-        va->setRange(lo, hi);
+        ha->setRange(view_x0_, view_x1_);
       }
     }
   }
 
- private:
-QLineSeries* series_rest_ema_{};
-QLineSeries* series_native_ema_{};
-QLineSeries* series_rest_{};
-QLineSeries* series_native_{};
+  QLineSeries* series_rest_ema_{};
+  QLineSeries* series_native_ema_{};
+  QLineSeries* series_rest_{};
+  QLineSeries* series_native_{};
+  bool has_data_{false};
+  bool y_range_locked_{false};
+  double y_lock_lo_{-10.0};
+  double y_lock_hi_{0.0};
+  double data_x0_{0.0};
+  double data_x1_{1.0};
+  double data_y0_{0.0};
+  double data_y1_{1.0};
+  double view_x0_{0.0};
+  double view_x1_{1.0};
+  double view_y0_{0.0};
+  double view_y1_{1.0};
+  bool view_initialized_{false};
+  bool panning_{false};
+  QPoint pan_anchor_{};
 };
 
 /// Rolling accuracy (window=200, matches training progress panel) — Qt Charts only.
@@ -1475,29 +1911,10 @@ class LossMetricsPanel final : public QWidget {
 
 enum class LossPlotSource { RestBulk, NativeBulk };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BulkTrainState — shared between the training thread and the main thread.
-// The background thread writes results; the main thread polls via QTimer.
-// ─────────────────────────────────────────────────────────────────────────────
-struct BulkLogEntry { int step_n{}; QString label; double loss{}; bool correct{}; };
+constexpr int kBulkChartRefreshEvery = 50;
+constexpr int kBulkProgressRefreshEvery = 10;
 
-struct BulkTrainState {
-  std::atomic<int>  step_count{0};
-  std::atomic<bool> cancel{false};
-  std::atomic<bool> done{false};
-  QMutex            steps_mutex;
-  QVector<BulkLogEntry> new_steps;  // guarded by steps_mutex
-  // Final scalars — written once (before done=true), read by main thread after
-  int    final_total_steps{};
-  double final_ema_loss{};
-  double final_llr_ema{};
-  int    final_win_total{};
-  int    final_win_correct{};
-  double final_gh_chi{1.0};
-  double final_gh_psi{1.0};
-  int    final_enc_updates{};
-  QString error_msg;
-};
+using BulkLogEntry = BulkNativeTrainLogEntry;
 
 QString native_quickstart_html() {
   return QStringLiteral(
@@ -1509,11 +1926,11 @@ QString native_quickstart_html() {
       "<p>Build outside OneDrive on Windows (cloud sync locks object files).</p>"
       "<h2>2. Validate</h2>"
       "<pre>powershell -File scripts\\cypha_native_validate_all.ps1</pre>"
-      "<p>Or: <code>ctest -R native_</code> + pytest native parity + REST smoke.</p>"
+      "<p>Or: <code>ctest -R native_</code> and REST smoke.</p>"
       "<h2>3. Bench</h2>"
       "<pre>cypha_bench_run --list-domains\ncypha_bench_run --domain 1\ncypha_bench_run --report-only</pre>"
       "<h2>4. Tune</h2>"
-      "<pre>cypha_tune_run --config cypha_bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run</pre>"
+      "<pre>cypha_tune_run --config bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run</pre>"
       "<h2>5. REST</h2>"
       "<pre>cypha_rest --listen 127.0.0.1:8765 --cypha model.cypha --registry ~/.cypha/models</pre>"
       "<p>CyphaDIF: <code>GET /health</code>, <code>GET /ready</code>, <code>POST /predict</code>, "
@@ -2099,8 +2516,12 @@ class MainWindow final : public QMainWindow {
     csv_bulk_native_btn_->setEnabled(false);
     csv_bulk_native_btn_->setToolTip(
         QStringLiteral("Classification CSV only — in-process dif_train_step (needs F_field in .cypha or JSON)"));
+    bulk_native_cancel_btn_ = new QPushButton(QStringLiteral("Cancel train"), inner_train);
+    bulk_native_cancel_btn_->setEnabled(false);
+    bulk_native_cancel_btn_->setToolTip(QStringLiteral("Stop bulk native training (finishes current step first)"));
     row_bulk->addWidget(csv_bulk_train_btn_);
     row_bulk->addWidget(csv_bulk_native_btn_);
+    row_bulk->addWidget(bulk_native_cancel_btn_);
     row_bulk->addWidget(new QLabel(QStringLiteral("max rows"), inner_train));
     csv_bulk_max_rows_spin_ = new QSpinBox(inner_train);
     csv_bulk_max_rows_spin_->setRange(0, 99000000);
@@ -2515,6 +2936,16 @@ class MainWindow final : public QMainWindow {
     hp_form->addRow(QStringLiteral("replay_cap"), hp_replay_cap_spin_);
     hp_form->addRow(QStringLiteral("align_every"), hp_align_every_spin_);
     hp_form->addRow(QStringLiteral("temp_recalib_every"), hp_temp_recalib_spin_);
+    use_kernel_llr_chk_ = new QCheckBox(QStringLiteral("Nyström kernel LLR (nonlinear boundaries)"), hp_group);
+    use_kernel_llr_chk_->setToolTip(
+        QStringLiteral("Train/infer with KernelMemory; persisted via patch_kernel_into_root on save"));
+    kernel_blend_spin_ = new QDoubleSpinBox(hp_group);
+    kernel_blend_spin_->setRange(0.0, 1.0);
+    kernel_blend_spin_->setSingleStep(0.05);
+    kernel_blend_spin_->setDecimals(2);
+    kernel_blend_spin_->setValue(0.5);
+    hp_form->addRow(use_kernel_llr_chk_);
+    hp_form->addRow(QStringLiteral("kernel_blend"), kernel_blend_spin_);
     auto* hp_row = new QHBoxLayout();
     hp_apply_btn_ = new QPushButton(QStringLiteral("Apply to native train"), hp_group);
     hp_defaults_btn_ = new QPushButton(QStringLiteral("Reset defaults"), hp_group);
@@ -2534,8 +2965,8 @@ class MainWindow final : public QMainWindow {
     save_native_btn_ = new QPushButton(QStringLiteral("Save trained model (.cypha)…"), inner_train);
     save_native_btn_->setEnabled(false);
     save_native_btn_->setToolTip(
-        QStringLiteral("merge_state_into_root_for_save + infer snapshot: enc/field/temp/context/mid_trans/"
-                       "field_W_T/w_inject/scalars — see native/qt/README.md for remaining Python gaps"));
+        QStringLiteral("merge_state_into_root_for_save + infer snapshot + optional kernel_mem "
+                       "(patch_kernel_into_root) — see native/qt/README.md"));
     lay_train->addWidget(save_native_btn_);
 
     // ── MKE Regressor panel ───────────────────────────────────────────────────
@@ -3365,140 +3796,89 @@ class MainWindow final : public QMainWindow {
         return;
       }
 
-      // ── Snapshot all hyperparams before handing off to thread ──────────────
-      const bool     use_gh_snap     = use_gh_chk_->isChecked();
-      const double   world_lr_snap   = native_world_lr_;
-      const double   delta_lr_snap   = native_delta_lr_;
-      const double   ood_sigma_snap  = native_ood_sigma_;
-      const auto     gh_inv_v_snap   = native_gh_inv_v_;
-      const double   gh_R_base_snap  = native_gh_R_base_;
-      const auto     tsp_snap        = native_tsp_;
-      const auto     replay_u01_snap = replay_u01_cache_;
-      int            total_steps_w   = native_total_steps_;
-      double         llr_ema_w       = native_llr_ema_;
-      double         ema_loss_w      = train_prog_ema_loss_;
-      int            win_total_w     = train_prog_win_total_;
-      int            win_correct_w   = train_prog_win_correct_;
-      double         gh_chi_w        = native_gh_chi_;
-      double         gh_psi_w        = native_gh_psi_;
-      int            enc_updates_w   = native_enc_updates_;
-      std::mt19937   rng_w           = native_rng_;
-
-      // ── Prepare shared state + keep data for val eval ──────────────────────
       bulk_val_n_    = val_n;
       bulk_total_n_  = total_n;
-      bulk_train_data_ = data;   // copy — main thread needs it for val eval
+      bulk_train_data_ = data;
       bulk_accum_losses_.clear();
       bulk_accum_log_.clear();
+      bulk_train_n_ = train_n;
       if (loss_chart_ != nullptr) {
         loss_chart_->reset_native_roll_window();
       }
 
-      auto bulk_state = std::make_shared<BulkTrainState>();
-      bulk_state_ = bulk_state;
+      BulkNativeTrainJob job{};
+      job.data = std::move(data);
+      job.train_n = train_n;
+      job.model = model_.get();
+      job.mem = native_mem_.get();
+      job.replay = native_replay_.get();
+      job.pre = pre_.get();
+      job.kernel_mem = native_kernel_mem_.get();
+      job.use_gh = use_gh_chk_->isChecked();
+      job.use_kernel_llr = native_use_kernel_llr_;
+      job.kernel_blend = native_kernel_blend_;
+      job.world_lr = native_world_lr_;
+      job.delta_lr = native_delta_lr_;
+      job.ood_sigma = native_ood_sigma_;
+      job.gh_inv_v = native_gh_inv_v_;
+      job.gh_R_base = native_gh_R_base_;
+      job.tsp = native_tsp_;
+      job.replay_u01 = replay_u01_cache_;
+      job.total_steps_start = native_total_steps_;
+      job.llr_ema_start = native_llr_ema_;
+      job.ema_loss_start = train_prog_ema_loss_;
+      job.win_total_start = train_prog_win_total_;
+      job.win_correct_start = train_prog_win_correct_;
+      job.gh_chi_start = native_gh_chi_;
+      job.gh_psi_start = native_gh_psi_;
+      job.enc_updates_start = native_enc_updates_;
+      job.rng = native_rng_;
+      job.cancel_flag = &bulk_cancel_flag_;
 
-      // ── Disable UI ─────────────────────────────────────────────────────────
+      bulk_cancel_flag_.store(false);
       set_bulk_training_ui(true);
       result_label_->setText(QStringLiteral("Training 0 / %1…").arg(train_n));
+      sync_native_kernel_from_ui();
 
-      // ── Launch background thread ───────────────────────────────────────────
-      // Safety: model_, native_mem_, native_replay_, pre_ are unique_ptrs owned
-      // by MainWindow. During training all buttons that touch them are disabled.
-      // The thread is joined (wait()) before MainWindow destructs.
-      bulk_thread_ = QThread::create([
-          this, data = std::move(data), bulk_state, train_n,
-          use_gh_snap, world_lr_snap, delta_lr_snap, ood_sigma_snap,
-          gh_inv_v_snap, gh_R_base_snap, tsp_snap, replay_u01_snap,
-          total_steps_w, llr_ema_w, ema_loss_w, win_total_w, win_correct_w,
-          gh_chi_w, gh_psi_w, enc_updates_w, rng_w
-      ]() mutable {
-        double ema_loss    = ema_loss_w;
-        int    win_total   = win_total_w;
-        int    win_correct = win_correct_w;
-        double gh_chi      = gh_chi_w;
-        double gh_psi      = gh_psi_w;
-        int    enc_updates = enc_updates_w;
-        double llr_ema     = llr_ema_w;
-        int    total_steps = total_steps_w;
-        double ood_sigma   = ood_sigma_snap;
+      bulk_thread_ = new QThread(this);
+      bulk_worker_ = new BulkNativeTrainWorker();
+      bulk_worker_->moveToThread(bulk_thread_);
 
-        for (int i = 0; i < train_n; ++i) {
-          if (bulk_state->cancel.load(std::memory_order_relaxed)) break;
-
-          std::vector<double> x_raw(static_cast<std::size_t>(data.n_features));
-          const std::size_t row_base =
-              static_cast<std::size_t>(i) * static_cast<std::size_t>(data.n_features);
-          for (int j = 0; j < data.n_features; ++j)
-            x_raw[static_cast<std::size_t>(j)] = data.x_rowmajor[row_base + static_cast<std::size_t>(j)];
-
-          std::vector<double> x_lat = x_raw;
-          if (pre_ != nullptr) x_lat = pre_->transform_one(x_raw);
-
-          const std::string yl = data.y_class[static_cast<std::size_t>(i)];
-          cypha::MemoryTrainMeta meta{};
-          double loss = 0.0;
-
-          cypha::TrainStepExtras extras{};
-          extras.total_steps = &total_steps;
-          extras.ood_sigma   = &ood_sigma;
-          extras.llr_ema     = &llr_ema;
-          std::vector<double> ru = replay_u01_snap;
-          std::size_t ru_pos = 0;
-          if (!ru.empty()) {
-            extras.replay_u01     = ru.data();
-            extras.replay_u01_len = ru.size();
-            extras.replay_u01_pos = &ru_pos;
-          }
-
-          if (use_gh_snap && static_cast<int>(gh_inv_v_snap.size()) == model_->d_latent) {
-            const auto gh = cypha::dif_gh_train_step_vector(
-                *model_, *native_mem_, *native_replay_,
-                x_lat.data(), model_->d_latent, yl,
-                gh_inv_v_snap, gh_R_base_snap, gh_chi, gh_psi,
-                kGhNigAdaptAlphaShell, world_lr_snap, delta_lr_snap,
-                ood_sigma, tsp_snap, rng_w, enc_updates, &meta, &extras);
-            loss   = gh.loss;
-            gh_chi = gh.chi_new;
-            gh_psi = gh.psi_new;
-          } else {
-            loss = cypha::dif_train_step_vector(
-                *model_, *native_mem_, *native_replay_,
-                x_lat.data(), model_->d_latent, yl,
-                world_lr_snap, delta_lr_snap, world_lr_snap, delta_lr_snap,
-                ood_sigma, tsp_snap, rng_w, enc_updates, &meta, &extras);
-          }
-          if (meta.correct) model_->total_correct += 1;
-
-          if (win_total < 200) ++win_total;
-          win_correct = static_cast<int>(
-              win_correct * (win_total == 200 ? 199.0 / 200.0 : 1.0) + (meta.correct ? 1 : 0));
-          ema_loss = 0.97 * ema_loss + 0.03 * loss;
-          ++total_steps;
-
-          {
-            QMutexLocker lock(&bulk_state->steps_mutex);
-            bulk_state->new_steps.append({total_steps, QString::fromStdString(yl), loss, meta.correct});
-          }
-          bulk_state->step_count.fetch_add(1, std::memory_order_relaxed);
+      connect(bulk_thread_, &QThread::started, bulk_worker_, [job = std::move(job), w = bulk_worker_]() mutable {
+        w->run(std::move(job));
+      });
+      connect(bulk_worker_, &BulkNativeTrainWorker::progress, this,
+              [this](int step, int total) { on_bulk_progress(step, total); });
+      connect(bulk_worker_, &BulkNativeTrainWorker::lossReported, this,
+              [this](int step, double loss) { on_bulk_loss(step, loss); });
+      connect(bulk_worker_, &BulkNativeTrainWorker::valAccReported, this,
+              [this](int step, double acc) { on_bulk_val_acc(step, acc); });
+      connect(bulk_worker_, &BulkNativeTrainWorker::stepLogged, this,
+              [this](int step, double loss, bool correct) { on_bulk_step_logged(step, loss, correct); });
+      connect(bulk_worker_, &BulkNativeTrainWorker::error, this,
+              [this](const QString& msg) { on_bulk_error(msg); });
+      connect(bulk_worker_, &BulkNativeTrainWorker::finished, this,
+              [this](bool ok, BulkNativeTrainResult result, QVector<BulkLogEntry> log) {
+                on_bulk_worker_finished(ok, result, std::move(log));
+              });
+      connect(bulk_worker_, &BulkNativeTrainWorker::finished, bulk_thread_, &QThread::quit);
+      connect(bulk_thread_, &QThread::finished, bulk_thread_, &QObject::deleteLater);
+      connect(bulk_thread_, &QThread::finished, this, [this]() {
+        bulk_thread_ = nullptr;
+        if (bulk_worker_ != nullptr) {
+          bulk_worker_->deleteLater();
+          bulk_worker_ = nullptr;
         }
-
-        bulk_state->final_total_steps = total_steps;
-        bulk_state->final_ema_loss    = ema_loss;
-        bulk_state->final_llr_ema     = llr_ema;
-        bulk_state->final_win_total   = win_total;
-        bulk_state->final_win_correct = win_correct;
-        bulk_state->final_gh_chi      = gh_chi;
-        bulk_state->final_gh_psi      = gh_psi;
-        bulk_state->final_enc_updates = enc_updates;
-        bulk_state->done.store(true, std::memory_order_release);
       });
 
-      bulk_poll_timer_ = new QTimer(this);
-      connect(bulk_poll_timer_, &QTimer::timeout, this, [this, train_n]() {
-        on_bulk_poll(train_n);
-      });
-      bulk_poll_timer_->start(80);
       bulk_thread_->start();
+    });
+
+    connect(bulk_native_cancel_btn_, &QPushButton::clicked, this, [this]() {
+      bulk_cancel_flag_.store(true, std::memory_order_relaxed);
+      if (bulk_worker_ != nullptr) {
+        QMetaObject::invokeMethod(bulk_worker_, "requestCancel", Qt::QueuedConnection);
+      }
     });
 
     // ── MKE Regressor connects ─────────────────────────────────────────────────
@@ -4604,10 +4984,14 @@ class MainWindow final : public QMainWindow {
 
  protected:
   void closeEvent(QCloseEvent* e) override {
-    // Stop any in-progress bulk training before closing
-    if (bulk_state_ != nullptr) bulk_state_->cancel.store(true);
-    if (bulk_poll_timer_ != nullptr) { bulk_poll_timer_->stop(); }
-    if (bulk_thread_ != nullptr) { bulk_thread_->wait(); }
+    bulk_cancel_flag_.store(true, std::memory_order_relaxed);
+    if (bulk_worker_ != nullptr) {
+      QMetaObject::invokeMethod(bulk_worker_, "requestCancel", Qt::QueuedConnection);
+    }
+    if (bulk_thread_ != nullptr) {
+      bulk_thread_->quit();
+      bulk_thread_->wait(30000);
+    }
     if (rest_proc_.state() != QProcess::NotRunning) {
       rest_proc_.terminate();
       rest_proc_.waitForFinished(3000);
@@ -4741,21 +5125,53 @@ class MainWindow final : public QMainWindow {
     pca_spin->setToolTip(QStringLiteral("0 = no PCA. Max = %1 (n_features).").arg(n_cols));
     form->addRow(QStringLiteral("PCA dim (0 = none):"), pca_spin);
 
+    auto* rff_spin = new QSpinBox(dlg);
+    rff_spin->setRange(0, 4096);
+    rff_spin->setValue(0);
+    rff_spin->setToolTip(QStringLiteral("0 = no RFF. Typical: 64–256."));
+    form->addRow(QStringLiteral("RFF dim (0 = none):"), rff_spin);
+
+    auto* gamma_spin = new QDoubleSpinBox(dlg);
+    gamma_spin->setRange(0.001, 1000.0);
+    gamma_spin->setDecimals(4);
+    gamma_spin->setValue(1.0);
+    gamma_spin->setSingleStep(0.1);
+    form->addRow(QStringLiteral("RFF gamma:"), gamma_spin);
+
+    auto* auto_gamma_combo = new QComboBox(dlg);
+    auto_gamma_combo->addItem(QStringLiteral("Manual gamma"), 0);
+    auto_gamma_combo->addItem(QStringLiteral("Auto: median pairwise"), 1);
+    auto_gamma_combo->addItem(QStringLiteral("Auto: cross-validation"), 2);
+    auto_gamma_combo->setToolTip(
+        QStringLiteral("CV uses regression targets when loaded; otherwise 5-fold reconstruction MSE."));
+    form->addRow(QStringLiteral("RFF gamma mode:"), auto_gamma_combo);
+
+    auto update_gamma_enabled = [&]() {
+      gamma_spin->setEnabled(auto_gamma_combo->currentData().toInt() == 0);
+    };
+    update_gamma_enabled();
+    connect(auto_gamma_combo, QOverload<int>::of(&QComboBox::currentIndexChanged), dlg,
+            [update_gamma_enabled](int) { update_gamma_enabled(); });
+
     auto* info_lbl = new QLabel(dlg);
     auto update_info = [&]() {
       const int pca_d = pca_spin->value();
-      const int out_d = (pca_d > 0 && pca_d < n_cols) ? pca_d : n_cols;
-      info_lbl->setText(QStringLiteral("input_dim = %1   →   output_dim = %2\n"
-                                       "Note: RFF requires Python — add RFF weights after saving.")
+      const int rff_d = rff_spin->value();
+      int out_d = (pca_d > 0 && pca_d < n_cols) ? pca_d : n_cols;
+      if (rff_d > 0) {
+        out_d = rff_d;
+      }
+      info_lbl->setText(QStringLiteral("input_dim = %1   →   output_dim = %2")
                             .arg(n_cols)
                             .arg(out_d));
     };
     update_info();
     connect(pca_spin, QOverload<int>::of(&QSpinBox::valueChanged), dlg, [update_info](int) { update_info(); });
+    connect(rff_spin, QOverload<int>::of(&QSpinBox::valueChanged), dlg, [update_info](int) { update_info(); });
     form->addRow(info_lbl);
 
     auto* note_lbl = new QLabel(
-        QStringLiteral("<i>Fits scale + PCA (when dim > 0) from the %1 rows × %2 cols feature matrix.</i>")
+        QStringLiteral("<i>Fits scale + PCA (when dim > 0) + optional RFF from the %1 rows × %2 cols feature matrix.</i>")
             .arg(n_rows)
             .arg(n_cols),
         dlg);
@@ -4775,10 +5191,20 @@ class MainWindow final : public QMainWindow {
       ps.scale   = scale_chk->isChecked();
       const int pca_d = pca_spin->value();
       ps.pca_dim = (pca_d > 0 && pca_d < n_cols) ? pca_d : -1;
-      ps.rff_dim = -1;
+      const int rff_d = rff_spin->value();
+      ps.rff_dim = rff_d > 0 ? rff_d : -1;
+      ps.rff_gamma = gamma_spin->value();
+      const int gamma_mode = auto_gamma_combo->currentData().toInt();
+      ps.auto_rff_gamma = (gamma_mode == 1);
+      ps.auto_rff_gamma_cv = (gamma_mode == 2);
       ps.seed    = 42;
+      const std::vector<double>* y_ptr = nullptr;
+      if (ps.auto_rff_gamma_cv && !last_csv_.y_regression.empty() &&
+          static_cast<int>(last_csv_.y_regression.size()) == n_rows) {
+        y_ptr = &last_csv_.y_regression;
+      }
       try {
-        ps.fit_from_design_matrix(last_csv_.x_rowmajor, n_rows, n_cols);
+        ps.fit_from_design_matrix(last_csv_.x_rowmajor, n_rows, n_cols, y_ptr, 1);
       } catch (const std::exception& ex) {
         QMessageBox::critical(dlg, QStringLiteral("Fit failed"), QString::fromUtf8(ex.what()));
         return false;
@@ -4797,6 +5223,8 @@ class MainWindow final : public QMainWindow {
         j[QStringLiteral("pca_dim")] = ps.pca_dim;
         j[QStringLiteral("rff_dim")] = ps.rff_dim;
         j[QStringLiteral("rff_gamma")] = ps.rff_gamma;
+        j[QStringLiteral("auto_rff_gamma")] = ps.auto_rff_gamma;
+        j[QStringLiteral("auto_rff_gamma_cv")] = ps.auto_rff_gamma_cv;
         j[QStringLiteral("seed")]    = ps.seed;
         j[QStringLiteral("fitted")]  = ps.fitted;
         j[QStringLiteral("input_dim")]  = ps.input_dim;
@@ -4932,6 +5360,9 @@ class MainWindow final : public QMainWindow {
   void reinit_native_train_state() {
     native_mem_.reset();
     native_replay_.reset();
+    native_kernel_mem_.reset();
+    native_use_kernel_llr_ = false;
+    native_kernel_blend_ = 0.5;
     native_enc_updates_ = 0;
     native_total_steps_ = 0;
     native_llr_ema_ = 0.0;
@@ -4973,6 +5404,7 @@ class MainWindow final : public QMainWindow {
         return;
       }
       native_mem_.reset(new cypha::CyphaDifMemoryState(cypha::CyphaDifMemoryState::from_cypha_root(root, ff_ptr, fd)));
+      load_native_kernel_from_cypha_root(root, d);
       load_native_hparams_from_widgets_silent();
       native_replay_.reset(new cypha::ReplayBuffer(native_tsp_.replay_cap));
       native_replay_cap_applied_ = native_tsp_.replay_cap;
@@ -5009,6 +5441,7 @@ class MainWindow final : public QMainWindow {
       extras.replay_u01_len = ru.size();
       extras.replay_u01_pos = &ru_pos;
     }
+    fill_kernel_train_extras(extras);
     cypha::MemoryTrainMeta meta_local{};
     cypha::MemoryTrainMeta* meta = (meta_out != nullptr) ? meta_out : &meta_local;
     double loss = 0.0;
@@ -5051,69 +5484,92 @@ class MainWindow final : public QMainWindow {
   // ── Bulk training thread helpers ─────────────────────────────────────────
   void set_bulk_training_ui(bool training) {
     if (csv_bulk_native_btn_ != nullptr) csv_bulk_native_btn_->setEnabled(!training);
+    if (bulk_native_cancel_btn_ != nullptr) bulk_native_cancel_btn_->setEnabled(training);
     if (csv_bulk_train_btn_  != nullptr) csv_bulk_train_btn_->setEnabled(!training);
     if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(!training);
     if (save_native_btn_     != nullptr) save_native_btn_->setEnabled(!training);
     if (load_btn_            != nullptr) load_btn_->setEnabled(!training);
   }
 
-  void on_bulk_poll(int train_n) {
-    if (bulk_state_ == nullptr) return;
+  void on_bulk_progress(int step, int total) {
+    result_label_->setText(QStringLiteral("Training %1 / %2…").arg(step).arg(total));
+  }
 
-    // Drain new steps from the worker
-    QVector<BulkLogEntry> drained;
-    {
-      QMutexLocker lock(&bulk_state_->steps_mutex);
-      drained.swap(bulk_state_->new_steps);
-    }
-    for (const auto& e : drained) {
-      bulk_accum_losses_.append(e.loss);
-      bulk_accum_log_.append(e);
-      if (loss_chart_ != nullptr) {
-        loss_chart_->append_native_step(e.step_n, e.loss, e.correct);
-      }
-    }
+  void on_bulk_loss(int step, double loss) {
+    Q_UNUSED(step);
+    bulk_accum_losses_.append(loss);
+    train_prog_ema_loss_ = 0.97 * train_prog_ema_loss_ + 0.03 * loss;
 
-    const int done_so_far = bulk_state_->step_count.load(std::memory_order_relaxed);
-    result_label_->setText(
-        QStringLiteral("Training %1 / %2…").arg(done_so_far).arg(train_n));
-
-    // Live chart refresh every 200 steps
-    if (!bulk_accum_losses_.isEmpty() && done_so_far % 200 == 0) {
+    const int n = bulk_accum_losses_.size();
+    if (n % kBulkChartRefreshEvery == 0 || n == bulk_train_n_) {
       apply_losses_to_chart(LossPlotSource::NativeBulk, QVector<double>(bulk_accum_losses_));
-    }
-
-    if (bulk_state_->done.load(std::memory_order_acquire)) {
-      bulk_poll_timer_->stop();
-      bulk_poll_timer_->deleteLater();
-      bulk_poll_timer_ = nullptr;
-      bulk_thread_->wait();
-      bulk_thread_->deleteLater();
-      bulk_thread_ = nullptr;
-      on_bulk_finish(train_n);
     }
   }
 
-  void on_bulk_finish(int train_n) {
-    if (bulk_state_ == nullptr) return;
-    const bool cancelled = bulk_state_->cancel.load();
+  void on_bulk_step_logged(int step, double loss, bool correct) {
+    Q_UNUSED(step);
+    Q_UNUSED(loss);
+    if (loss_chart_ == nullptr) {
+      return;
+    }
+    const int n = bulk_accum_losses_.size();
+    if (n % kBulkChartRefreshEvery == 0 || n == bulk_train_n_) {
+      loss_chart_->append_native_step(step, loss, correct);
+    }
+  }
 
-    // Sync final scalar state back to MainWindow
-    native_total_steps_     = bulk_state_->final_total_steps;
-    native_llr_ema_         = bulk_state_->final_llr_ema;
-    train_prog_ema_loss_    = bulk_state_->final_ema_loss;
-    train_prog_win_total_   = bulk_state_->final_win_total;
-    train_prog_win_correct_ = bulk_state_->final_win_correct;
-    native_gh_chi_          = bulk_state_->final_gh_chi;
-    native_gh_psi_          = bulk_state_->final_gh_psi;
-    native_enc_updates_     = bulk_state_->final_enc_updates;
-    bulk_state_.reset();
+  void on_bulk_val_acc(int step, double acc_percent) {
+    native_total_steps_ = step;
+    if (step % kBulkProgressRefreshEvery != 0 && step != bulk_train_n_) {
+      return;
+    }
+    if (train_prog_label_ == nullptr) {
+      return;
+    }
+    const int K = (model_ != nullptr) ? static_cast<int>(model_->labels.size()) : 0;
+    const QString loss_str =
+        (step > 0) ? QString::number(train_prog_ema_loss_, 'f', 4) : QStringLiteral("—");
+    train_prog_label_->setText(
+        QStringLiteral("Steps: %1  |  Acc(win200): %2%  |  EMA loss: %3  |  Classes: %4")
+            .arg(step)
+            .arg(QString::number(acc_percent, 'f', 1))
+            .arg(loss_str)
+            .arg(K));
+  }
 
-    // Final chart update
+  void on_bulk_error(const QString& msg) {
+    QMessageBox::warning(this, QStringLiteral("Bulk native"), msg);
+  }
+
+  void on_bulk_worker_finished(bool /*success*/, BulkNativeTrainResult result, QVector<BulkLogEntry> log) {
+    native_total_steps_     = result.total_steps;
+    native_llr_ema_         = result.llr_ema;
+    train_prog_ema_loss_    = result.ema_loss;
+    train_prog_win_total_   = result.win_total;
+    train_prog_win_correct_ = result.win_correct;
+    native_gh_chi_          = result.gh_chi;
+    native_gh_psi_          = result.gh_psi;
+    native_enc_updates_     = result.enc_updates;
+
+    bulk_accum_log_ = std::move(log);
+    on_bulk_finish(result.cancelled);
+  }
+
+  void on_bulk_finish(bool cancelled) {
+
+    // Final chart update + metrics panel catch-up
     if (!bulk_accum_losses_.isEmpty()) {
       apply_losses_to_chart(LossPlotSource::NativeBulk, std::move(bulk_accum_losses_));
     }
     bulk_accum_losses_.clear();
+
+    if (loss_chart_ != nullptr && !bulk_accum_log_.isEmpty()) {
+      loss_chart_->reset_native_roll_window();
+      for (const auto& e : bulk_accum_log_) {
+        loss_chart_->append_native_step(e.step_n, e.loss, e.correct);
+      }
+      loss_chart_->refresh_acc_chart();
+    }
 
     // Write training log table (all at once, updates disabled for speed)
     if (train_log_table_ != nullptr && !bulk_accum_log_.isEmpty()) {
@@ -5154,12 +5610,11 @@ class MainWindow final : public QMainWindow {
       }
     }
 
-    const int steps_done = native_total_steps_ - (native_total_steps_ - train_n);
-    (void)steps_done;  // informational
     const QString status = cancelled
         ? QStringLiteral("Bulk native cancelled.  steps=%1").arg(native_total_steps_)
-        : QStringLiteral("Bulk native done.  steps=%1  ema_loss=%.4f")
-              .arg(native_total_steps_).arg(train_prog_ema_loss_);
+        : QStringLiteral("Bulk native done.  steps=%1  ema_loss=%2")
+              .arg(native_total_steps_)
+              .arg(train_prog_ema_loss_, 0, 'f', 4);
     result_label_->setText(status + val_suffix);
 
     set_bulk_training_ui(false);
@@ -5206,7 +5661,7 @@ class MainWindow final : public QMainWindow {
   }
 
   /// If `train_hparams.json` exists next to the loaded `.cypha`, fill the hparams form (same keys as
-  /// `cypha_rest` / `parity_fixtures/train_hparams.json`). Returns whether the file was read successfully.
+  /// `cypha_rest` / `fixtures/train_hparams.json`). Returns whether the file was read successfully.
   bool try_load_train_hparams_adjacent() {
     if (cypha_path_.isEmpty() || hp_world_lr_edit_ == nullptr) {
       return false;
@@ -5340,6 +5795,78 @@ class MainWindow final : public QMainWindow {
     hp_replay_cap_spin_->setValue(10000);
     hp_align_every_spin_->setValue(500);
     hp_temp_recalib_spin_->setValue(0);
+    if (use_kernel_llr_chk_ != nullptr) {
+      use_kernel_llr_chk_->setChecked(false);
+    }
+    if (kernel_blend_spin_ != nullptr) {
+      kernel_blend_spin_->setValue(0.5);
+    }
+  }
+
+  void load_native_kernel_from_cypha_root(const cypha::CNode& root, int d) {
+    native_kernel_mem_.reset();
+    native_use_kernel_llr_ = false;
+    native_kernel_blend_ = 0.5;
+    if (d <= 0) {
+      if (use_kernel_llr_chk_ != nullptr) {
+        use_kernel_llr_chk_->setChecked(false);
+      }
+      if (kernel_blend_spin_ != nullptr) {
+        kernel_blend_spin_->setValue(0.5);
+      }
+      return;
+    }
+    cypha::KernelMemory km(d, 256, 0);
+    bool use = false;
+    double blend = 0.5;
+    if (cypha::try_load_kernel_from_root(root, km, use, blend)) {
+      native_use_kernel_llr_ = use;
+      native_kernel_blend_ = blend;
+      native_kernel_mem_.reset(new cypha::KernelMemory(std::move(km)));
+    }
+    if (use_kernel_llr_chk_ != nullptr) {
+      use_kernel_llr_chk_->setChecked(native_use_kernel_llr_);
+    }
+    if (kernel_blend_spin_ != nullptr) {
+      kernel_blend_spin_->setValue(native_kernel_blend_);
+    }
+  }
+
+  void sync_native_kernel_from_ui() {
+    if (use_kernel_llr_chk_ == nullptr || model_ == nullptr) {
+      native_use_kernel_llr_ = false;
+      return;
+    }
+    native_use_kernel_llr_ = use_kernel_llr_chk_->isChecked();
+    native_kernel_blend_ =
+        kernel_blend_spin_ != nullptr ? kernel_blend_spin_->value() : native_kernel_blend_;
+    if (!native_use_kernel_llr_) {
+      return;
+    }
+    const int d = model_->d_latent;
+    if (native_kernel_mem_ == nullptr || native_kernel_mem_->feat_dim() != d) {
+      native_kernel_mem_.reset(new cypha::KernelMemory(d, 256, static_cast<std::uint64_t>(native_rng_())));
+    }
+  }
+
+  void fill_kernel_train_extras(cypha::TrainStepExtras& extras) {
+    sync_native_kernel_from_ui();
+    if (native_use_kernel_llr_ && native_kernel_mem_ != nullptr) {
+      extras.kernel_mem = native_kernel_mem_.get();
+      extras.use_kernel_llr = true;
+      extras.kernel_blend = native_kernel_blend_;
+    }
+  }
+
+  void fill_kernel_infer_options(cypha::CyphaInferOptions& opt) const {
+    opt.kernel_mem = nullptr;
+    opt.use_kernel_llr = false;
+    opt.kernel_blend = native_kernel_blend_;
+    if (native_use_kernel_llr_ && native_kernel_mem_ != nullptr) {
+      opt.kernel_mem = native_kernel_mem_.get();
+      opt.use_kernel_llr = true;
+      opt.kernel_blend = native_kernel_blend_;
+    }
   }
 
   void refresh_loss_chart() {
@@ -5402,6 +5929,13 @@ class MainWindow final : public QMainWindow {
       sess.gh_inv_v_clean = native_gh_inv_v_.empty() ? nullptr : &native_gh_inv_v_;
       sess.feat_dim = pre_ != nullptr ? pre_->input_dim : -1;
       patch_infer_training_snapshot(merged, *model_, ts, native_llr_ema_, &sess);
+      sync_native_kernel_from_ui();
+      if (native_kernel_mem_ != nullptr) {
+        cypha::patch_kernel_into_root(merged, *native_kernel_mem_, native_use_kernel_llr_, native_kernel_blend_);
+      } else if (model_ != nullptr) {
+        cypha::KernelMemory dummy(model_->d_latent, 256, 0);
+        cypha::patch_kernel_into_root(merged, dummy, false, native_kernel_blend_);
+      }
       cypha::save_cypha_file(path.toUtf8().constData(), merged);
       return true;
     } catch (const std::exception& ex) {
@@ -5870,8 +6404,10 @@ class MainWindow final : public QMainWindow {
     bool is_ood = false;
     double r_eff = 0.0;
     if (use_gh_chk_ != nullptr && use_gh_chk_->isChecked()) {
-      const cypha::GhInferAtHResult gh =
-          cypha::gh_infer_at_h(*model_, H.data(), native_gh_chi_, native_gh_psi_, kGhNigAdaptAlphaShell);
+      cypha::CyphaInferOptions kopt{};
+      fill_kernel_infer_options(kopt);
+      const cypha::GhInferAtHResult gh = cypha::gh_infer_at_h(*model_, H.data(), native_gh_chi_, native_gh_psi_,
+                                                              kGhNigAdaptAlphaShell, &kopt);
       *label_out = gh.label;
       *conf_out = gh.confidence;
       llrs = gh.llrs;
@@ -5885,6 +6421,7 @@ class MainWindow final : public QMainWindow {
       iopt.deliberation_lo = model_->deliberation_lo;
       iopt.deliberation_hi = model_->deliberation_hi;
       iopt.use_field = true;
+      fill_kernel_infer_options(iopt);
       const cypha::InferAtHResult inf = cypha::infer_at_h(*model_, H.data(), iopt);
       *label_out = inf.label;
       *conf_out = inf.confidence;
@@ -6088,6 +6625,7 @@ class MainWindow final : public QMainWindow {
   QPushButton* csv_fill_row0_btn_{};
   QPushButton* csv_bulk_train_btn_{};
   QPushButton* csv_bulk_native_btn_{};
+  QPushButton* bulk_native_cancel_btn_{};
   // ── Experiment DB (M6) ──────────────────────────────────────────────────────
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
   std::unique_ptr<cypha::ExperimentDb> exp_db_;
@@ -6163,6 +6701,8 @@ class MainWindow final : public QMainWindow {
   QLineEdit* hp_ood_sigma_edit_{};
   QLineEdit* hp_enc_lr_edit_{};
   QLineEdit* hp_replay_ratio_edit_{};
+  QCheckBox* use_kernel_llr_chk_{};
+  QDoubleSpinBox* kernel_blend_spin_{};
   QSpinBox* hp_replay_cap_spin_{};
   QSpinBox* hp_align_every_spin_{};
   QSpinBox* hp_temp_recalib_spin_{};
@@ -6203,9 +6743,10 @@ class MainWindow final : public QMainWindow {
   QStringList   csv_col_headers_;
   bool          col_picker_updating_{false};
   // ── Bulk training thread state ────────────────────────────────────────────
-  QThread*                       bulk_thread_{};
-  QTimer*                        bulk_poll_timer_{};
-  std::shared_ptr<BulkTrainState> bulk_state_;
+  QThread*               bulk_thread_{};
+  BulkNativeTrainWorker* bulk_worker_{};
+  std::atomic<bool>      bulk_cancel_flag_{false};
+  int                    bulk_train_n_{0};
   QVector<double>                bulk_accum_losses_;
   QVector<BulkLogEntry>          bulk_accum_log_;
   int                            bulk_val_n_{};
@@ -6225,6 +6766,9 @@ class MainWindow final : public QMainWindow {
   std::unique_ptr<cypha::PreprocessorState> pre_;
   std::vector<double> replay_u01_cache_;
   std::unique_ptr<cypha::CyphaDifMemoryState> native_mem_;
+  std::unique_ptr<cypha::KernelMemory> native_kernel_mem_;
+  bool native_use_kernel_llr_{false};
+  double native_kernel_blend_{0.5};
   std::unique_ptr<cypha::ReplayBuffer> native_replay_;
   std::mt19937 native_rng_{424242u};
   cypha::TrainStepParams native_tsp_{};

@@ -257,7 +257,7 @@ std::unordered_map<std::string, std::vector<double>> MultiLabelDif::predict_batc
       for (int i = 0; i < n * K; ++i) {
         scaled[static_cast<std::size_t>(i)] = llr[static_cast<std::size_t>(i)] / (clf.infer.temperature + kEps);
       }
-      softmax_batch_like_python(scaled.data(), n, K, kEps, probs);
+      softmax_batch_reference(scaled.data(), n, K, kEps, probs);
     }
     const int pi = find_label_index(clf.infer.labels, "pos");
     std::vector<double> gates;

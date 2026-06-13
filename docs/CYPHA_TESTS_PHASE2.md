@@ -22,18 +22,18 @@ Phase 1 for **CyphaDIF classifier** (fixed-vector tasks) remains in [`docs/repor
 | Cypha Tests | Question | Cypha implementation | Status |
 |-------------|----------|----------------------|--------|
 | **2A** Replace `contrastive_update` with Hebbian | Does Hebbian encoder converge on classification? | `EncoderProjection.hebbian_update` + `encoder_update_mode`; `cypha_encoder_phase2a_sweep.py` | **Baseline run** — Hebbian **worse** on all 4 tasks (see below) |
-| **2B** Hebbian encoder → DIF input | Are Hebbian features useful to CyphaDIF? | `cypha_som/hebbian_topology.py`; optional encoder hook | **Planned** |
+| **2B** Hebbian encoder → DIF input | Are Hebbian features useful to CyphaDIF? | `native/src/som/` smoke + future encoder hook | **Planned** |
 | **2C** Hebbian lateral field | Richer temporal dynamics vs `A_eff @ h`? | `CellAISSM.sparse_hebbian_update` (`use_sparse_hebbian`) | **Partial** — flag exists, not LM-benchmarked |
 
 ---
 
 ## 2A — Competitive Hebbian encoder (baseline)
 
-**Code:** `Cypha.py` → `EncoderProjection.hebbian_update`; `CyphaDIF.encoder_update_mode` (`contrastive` | `hebbian`); env `CYPHA_ENCODER_UPDATE`.
+**Code:** `cypha_core` → `EncoderProjection.hebbian_update`; `CyphaDIF.encoder_update_mode` (`contrastive` | `hebbian`); env `CYPHA_ENCODER_UPDATE`.
 
-**Runner:** `python cypha_bench/tuning/cypha_encoder_phase2a_sweep.py --write`
+**Runner:** `cypha_tune_run --config bench/config/cypha_encoder_phase2a_sweep.py --write`
 
-Artifact: `cypha_bench/config/cypha_encoder_phase2a_sweep.json`
+Artifact: `bench/config/cypha_encoder_phase2a_sweep.json`
 
 | Task | Contrastive acc | Hebbian acc | Δ (Hebb − Contr) |
 |------|-----------------|-------------|------------------|
@@ -57,10 +57,10 @@ Artifact: `cypha_bench/config/cypha_encoder_phase2a_sweep.json`
 
 ```powershell
 # Toggle sparse Hebbian on hybrid @ 40k (fast)
-python cypha_bench/tuning/cyphalm_hebbian_phase2_sweep.py --profile d17 --n-train 40000 --write
+cypha_tune_run --config bench/config/cyphalm_hebbian_phase2_sweep.py --profile d17 --n-train 40000 --write
 
 # @ 300k if 40k shows ≥0.05 BPC gain
-python cypha_bench/tuning/cyphalm_hebbian_phase2_sweep.py --profile d17 --n-train 300000 --write
+cypha_tune_run --config bench/config/cyphalm_hebbian_phase2_sweep.py --profile d17 --n-train 300000 --write
 ```
 
 Success criterion: held-out BPC **≥0.05 lower** than hybrid baseline with `use_sparse_hebbian=False`.
@@ -104,7 +104,7 @@ Phase 3 minimal LM is **done** via hybrid + char-LSTM head. Frontier scale (Bran
 **Shipped:** `context_mode=char_lstm` — LSTM-only inside `cypha_lm` (no GRIA/SSM/DIF path).
 
 ```powershell
-python cypha_bench/tuning/cyphalm_hybrid_lstm_sweep.py --cells char_lstm --profile d17 --n-train 300000 --write --out cypha_bench/config/cyphalm_char_lstm_300k.json
+cypha_tune_run --config bench/config/cyphalm_hybrid_lstm_sweep.py --cells char_lstm --profile d17 --n-train 300000 --write --out bench/config/cyphalm_char_lstm_300k.json
 ```
 
 Compare to hybrid and bench `char_lstm_baseline_bpc` to quantify GRIA path value.
@@ -118,4 +118,4 @@ Compare to hybrid and bench `char_lstm_baseline_bpc` to quantify GRIA path value
 - Phase 1 LM: [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md)
 - Model class C2: [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md)
 - SSM Hebbian: [`cypha_lm/temporal/cellai_ssm.py`](../cypha_lm/temporal/cellai_ssm.py)
-- CyphaDIF encoder: [`Cypha.py`](../Cypha.py) `contrastive_update`
+- CyphaDIF encoder: [`cypha_core`](../cypha_core) `contrastive_update`

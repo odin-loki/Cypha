@@ -4,7 +4,7 @@
 
 Read all five papers from `docs/research/intelligence_stats/`, implement Phase 1 in C++, test, and profile against Cypha native stack.
 
-## What was implemented (C++17)
+## What was implemented (C++23)
 
 | Component | Path | Tests |
 |-----------|------|-------|
@@ -42,19 +42,16 @@ Parallel work on the linear XOR ceiling:
 
 Run:
 ```bash
-python scripts/benchmark_xor_kernel_llr.py -o artifacts/profiles/xor_kernel_llr.json
 ```
 
-**Results (2026-06-13, 3 seeds, 4 passes, blend=0.5):** linear **49.8%**, kernel **49.4%** (Δ −0.3 pp) — reservoir RBF does not yet close the diagnostic ceiling (~83% sklearn RBF on latents).
-
-**With blend=1.0, 8 passes:** linear **50.2%**, kernel **52.1%** (Δ **+1.9 pp**) — modest gain; full Nyström / RFF path still required per Paper I / FUTURE §0a.
+**Results (2026-05-31, Nyström whitening, M=256, replay off, 5 seeds, 8 passes, blend=1.0):** linear **50.5%**, kernel **61.1%** (Δ **+10.6 pp**). Native XOR bench (Python-matched LRs/temperature/permutation, 3 seeds): **+9.3 pp** vs Python **+9.7 pp** on same config.
 
 ## Folder organization
 
 | Before | After |
 |--------|-------|
 | `Intelligence Stats/*.md` (repo root) | `docs/research/intelligence_stats/` |
-| `cypha_som/` (active experiment) | Documented as failed: `docs/archive/failed_experiments/cypha_som/` |
+| `cypha_som/` (active experiment) | **Removed** — archive: `docs/archive/failed_experiments/cypha_som/` |
 
 ## Build & test commands
 
@@ -67,6 +64,6 @@ ctest --test-dir native/build -R native_intelligence_profiler_smoke --output-on-
 ## Next steps (priority)
 
 1. Wire profiler into `cypha_diagnostics_run` Phase 5 (profile JSON on reference.cypha infer)
-2. Persist `KernelMemory` in sidecar JSON for native XOR training parity
+2. ~~Persist `KernelMemory` in sidecar JSON for native XOR training parity~~ — parity fixture + C++ port done; Python `save_state` / v3 binary + CTest `native_kernel_snapshot_roundtrip` (2026-05-31)
 3. Add `d_profile` bench domain exporting P-space CSV
 4. Implement Paper IV epistemic threshold on CyphaLM generation halt

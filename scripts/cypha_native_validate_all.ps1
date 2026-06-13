@@ -1,4 +1,4 @@
-# Full native Cypha validation: Release build outside OneDrive, CTest, pytest parity, bench smoke.
+# Full native Cypha validation: Release build outside OneDrive, CTest, bench smoke.
 param(
     [string]$BuildDir = "C:\Temp\cypha_full_cpp_build",
     [switch]$SkipBuild,
@@ -18,60 +18,6 @@ function Step-Result {
 function BinPath {
     param([string]$Stem)
     Join-Path $BuildDir "$Stem.exe"
-}
-
-function Set-ParityEnv {
-    $map = @{
-        CYPHA_REST_BIN                          = "cypha_rest"
-        CYPHA_CYPHA_PARITY_BIN                  = "cypha_parity"
-        CYPHA_BATCH_LLR_PARITY_BIN              = "batch_llr_parity"
-        CYPHA_KERNEL_LLR_PARITY_BIN             = "kernel_llr_parity"
-        CYPHA_GH_INFER_DELIBERATION_PARITY_BIN    = "gh_infer_deliberation_parity"
-        CYPHA_SCORE_BATCH_PARITY_BIN              = "score_batch_parity"
-        CYPHA_MULTILABEL_DIF_PARITY_BIN           = "multilabel_dif_parity"
-        CYPHA_MERGE_FROM_PARITY_BIN               = "merge_from_parity"
-        CYPHA_SIMILARITY_INDEX_PARITY_BIN         = "similarity_index_parity"
-        CYPHA_EMBED_TABLE_PARITY_BIN              = "embed_table_parity"
-        CYPHA_RETRIEVAL_PARITY_BIN                = "retrieval_parity"
-        CYPHA_DIAGNOSTICS_RUN_BIN                 = "cypha_diagnostics_run"
-        CYPHA_MEMORY_TRAIN_PARITY_BIN           = "memory_train_parity"
-        CYPHA_MEMORY_TRAIN_ROUNDTRIP_BIN        = "memory_train_roundtrip"
-        CYPHA_PREPROCESSOR_PARITY_BIN           = "preprocessor_parity"
-        CYPHA_PREPROCESSOR_FIT_PARITY_BIN       = "preprocessor_fit_parity"
-        CYPHA_CSV_INGEST_PARITY_BIN             = "csv_ingest_parity"
-        CYPHA_PREPROCESS_TRAIN_CLASSIFY_PARITY_BIN = "preprocess_train_classify_parity"
-        CYPHA_REGISTRY_REGISTER_BIN             = "registry_register"
-        CYPHA_NIG_ADAPT_PARITY_BIN              = "nig_adapt_parity"
-        CYPHA_TRAIN_STEP_VECTOR_PARITY_BIN      = "train_step_vector_parity"
-        CYPHA_DIF_REGRESSOR_TRAIN_STEP_PARITY_BIN = "dif_regressor_train_step_parity"
-        CYPHA_REGRESSION_MIXTURE_PARITY_BIN     = "regression_mixture_parity"
-        CYPHA_REGRESSION_M4_PARITY_BIN          = "regression_m4_parity"
-        CYPHA_REGRESSION_RFF_PARITY_BIN         = "regression_rff_parity"
-        CYPHA_TWO_STAGE_PIPELINE_PARITY_BIN     = "regression_two_stage_pipeline_parity"
-        CYPHA_TWO_STAGE_RIDGE_FIT_PARITY_BIN    = "regression_two_stage_ridge_fit_parity"
-        CYPHA_QUANTILE_DIF_TRAIN_PARITY_BIN     = "quantile_dif_train_parity"
-        CYPHA_DIF_TRAIN_REPLAY_PARITY_BIN       = "quantile_dif_train_parity"
-        CYPHA_STUDIO_TRAINER_CLASSIFY_HOTPATH_BIN = "quantile_dif_train_parity"
-        CYPHA_STUDIO_TRAINER_GH_CLASSIFY_HOTPATH_BIN = "quantile_dif_train_parity"
-        CYPHA_MKE_TRAIN_STEP_PARITY_BIN         = "mke_train_step_parity"
-        CYPHA_GENERATION_PARITY_BIN             = "generation_parity"
-        CYPHA_CREATE_MODEL_SMOKE_BIN            = "create_model_smoke"
-        CYPHA_CUDA_SMOKE_BIN                    = "cuda_smoke"
-        CYPHA_EXPERIMENT_DB_SMOKE_BIN           = "experiment_db_smoke"
-        CYPHA_EXPERIMENT_DB_CRUD_PARITY_BIN     = "experiment_db_crud_parity"
-        CYPHALM_PARITY_BIN                      = "cyphalm_parity"
-        CYPHALM_CHAR_LSTM_PARITY_BIN            = "cyphalm_char_lstm_parity"
-        CYPHALM_CHECKPOINT_PARITY_BIN           = "cyphalm_checkpoint_parity"
-        CYPHALM_BENCH_NATIVE_BIN                = "cyphalm_bench_native"
-        CYPHA_BENCH_RUN_BIN                     = "cypha_bench_run"
-        CYPHA_TUNE_RUN_BIN                      = "cypha_tune_run"
-    }
-    foreach ($entry in $map.GetEnumerator()) {
-        $path = BinPath $entry.Value
-        if (Test-Path $path) {
-            Set-Item -Path "env:$($entry.Key)" -Value $path
-        }
-    }
 }
 
 Write-Host "Cypha full native validation" -ForegroundColor Cyan
@@ -107,9 +53,7 @@ if (-not $SkipBuild) {
     Step-Result "build" $true "skipped (-SkipBuild)"
 }
 
-Set-ParityEnv
 $env:QT_QPA_PLATFORM = "offscreen"
-$env:PYTHONUTF8 = "1"
 
 # --- CTest ---
 Write-Host ""
@@ -124,25 +68,6 @@ try {
 }
 $ctestOut | Write-Host
 Step-Result "ctest_native" ($ctestCode -eq 0) $(if ($ctestCode -eq 0) { "all native_ tests passed" } else { "exit $ctestCode" })
-
-# --- Pytest ---
-Write-Host ""
-Write-Host "== Pytest (native parity + REST contract) ==" -ForegroundColor Yellow
-$pytestFiles = @(
-    (Get-ChildItem (Join-Path $root "tests") -Filter "test_*_native*.py" | ForEach-Object { $_.FullName })
-    (Join-Path $root "tests\test_cypha_rest_smoke.py")
-    (Join-Path $root "tests\test_api_contract.py")
-    (Join-Path $root "tests\test_cyphalm_rest_lm_smoke.py")
-)
-$prevEap = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-try {
-    python -m pytest @pytestFiles -q --tb=line
-    $pytestCode = $LASTEXITCODE
-} finally {
-    $ErrorActionPreference = $prevEap
-}
-Step-Result "pytest_native" ($pytestCode -eq 0) $(if ($pytestCode -eq 0) { "$($pytestFiles.Count) files" } else { "exit $pytestCode" })
 
 # --- Bench smoke ---
 if (-not $SkipBench) {
@@ -172,6 +97,24 @@ if (-not $SkipBench) {
                 $benchDetail += "$dTag`: ok"
             }
         }
+
+        Write-Host ""
+        Write-Host "== d03_xor kernel LLR smoke (fast) ==" -ForegroundColor Yellow
+        $env:CYPHA_BENCH_FAST = "1"
+        Push-Location $root
+        try {
+            & $benchExe --domain-tag d03_xor
+            $xorCode = $LASTEXITCODE
+        } finally {
+            Pop-Location
+            Remove-Item Env:CYPHA_BENCH_FAST -ErrorAction SilentlyContinue
+        }
+        if ($xorCode -ne 0) {
+            $benchOk = $false
+            $benchDetail += "d03_xor: exit $xorCode"
+        } else {
+            $benchDetail += "d03_xor: ok"
+        }
         Step-Result "bench_smoke" $benchOk ($benchDetail -join "; ")
 
         Write-Host ""
@@ -186,7 +129,7 @@ if (-not $SkipBench) {
         if ($reportCode -ne 0) {
             Step-Result "bench_report_png" $false "exit $reportCode"
         } else {
-            $figuresDir = Join-Path $root "cypha_bench\report\figures"
+            $figuresDir = Join-Path $root "bench\report\figures"
             $manifestPath = Join-Path $figuresDir "figures_manifest.json"
             $pngOk = $true
             $pngDetail = @()
@@ -241,13 +184,13 @@ if ($TuneSmoke) {
 Write-Host ""
 Write-Host "== cypha_rest /dif/retrieve smoke (curl) ==" -ForegroundColor Yellow
 $restExe = BinPath "cypha_rest"
-$refCypha = Join-Path $root "parity_fixtures\reference.cypha"
-$fField = Join-Path $root "parity_fixtures\f_field.json"
-$retrievalSidecar = Join-Path $root "parity_fixtures\retrieval\sidecar.json"
+$refCypha = Join-Path $root "fixtures\reference.cypha"
+$fField = Join-Path $root "fixtures\f_field.json"
+$retrievalSidecar = Join-Path $root "fixtures\retrieval\sidecar.json"
 if (-not (Test-Path $restExe)) {
     Step-Result "rest_dif_smoke" $false "missing $restExe"
 } elseif (-not (Test-Path $refCypha) -or -not (Test-Path $fField) -or -not (Test-Path $retrievalSidecar)) {
-    Step-Result "rest_dif_smoke" $false "missing parity_fixtures (reference.cypha, f_field.json, retrieval/sidecar.json)"
+    Step-Result "rest_dif_smoke" $false "missing fixtures (reference.cypha, f_field.json, retrieval/sidecar.json)"
 } else {
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
     $listener.Start()

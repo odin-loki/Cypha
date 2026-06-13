@@ -5,6 +5,13 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace {
@@ -21,7 +28,7 @@ fs::path exe_dir(int argc, char** argv) {
 fs::path find_repo_root(const fs::path& start) {
     fs::path cur = start;
     for (int i = 0; i < 8 && !cur.empty(); ++i) {
-        if (fs::is_directory(cur / "parity_fixtures")) return cur;
+        if (fs::is_directory(cur / "fixtures")) return cur;
         cur = cur.parent_path();
     }
     return start;
@@ -38,15 +45,59 @@ std::string sibling_exe(const fs::path& dir, const char* stem) {
     return name;
 }
 
-int run_cmd(const std::string& cmd) {
-    std::cerr << "cyphalm_parity: run " << cmd << "\n";
+std::string quote_arg(const std::string& s) {
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '"') {
+            out += "\\\"";
+        } else {
+            out += c;
+        }
+    }
+    out += "\"";
+    return out;
+}
+
+int run_process(const fs::path& exe, const std::vector<std::string>& args) {
+#ifdef _WIN32
+    std::string cmd = quote_arg(exe.string());
+    for (const auto& a : args) {
+        cmd += ' ';
+        cmd += quote_arg(a);
+    }
+    std::vector<char> buf(cmd.begin(), cmd.end());
+    buf.push_back('\0');
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessA(nullptr, buf.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        return 127;
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return static_cast<int>(code);
+#else
+    std::string cmd = quote_arg(exe.string());
+    for (const auto& a : args) {
+        cmd += ' ';
+        cmd += quote_arg(a);
+    }
     return std::system(cmd.c_str());
+#endif
 }
 
 int run_tool(const fs::path& dir, const char* stem, const std::vector<std::string>& args = {}) {
-    std::string cmd = "\"" + sibling_exe(dir, stem) + "\"";
-    for (const auto& a : args) cmd += " \"" + a + "\"";
-    return run_cmd(cmd);
+    const fs::path exe = fs::path(sibling_exe(dir, stem));
+    std::cerr << "cyphalm_parity: run " << quote_arg(exe.string());
+    for (const auto& a : args) {
+        std::cerr << ' ' << quote_arg(a);
+    }
+    std::cerr << "\n";
+    return run_process(exe, args);
 }
 
 std::vector<fs::path> discover_sidecars(int argc, char** argv, const fs::path& repo_root) {
@@ -57,7 +108,7 @@ std::vector<fs::path> discover_sidecars(int argc, char** argv, const fs::path& r
         out.push_back(fs::absolute(p));
         return out;
     }
-    const fs::path root = repo_root / "parity_fixtures";
+    const fs::path root = repo_root / "fixtures";
     if (!fs::is_directory(root)) return out;
     for (const auto& ent : fs::directory_iterator(root)) {
         if (!ent.is_directory()) continue;

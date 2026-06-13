@@ -32,7 +32,7 @@ The **40k token train cap** was a bench default, not a convergence study.
 
 ## Iteration × view sweep (2k–40k, 32 runs)
 
-Artifact: `cypha_bench/config/cyphalm_view_iteration_sweep.json`
+Artifact: `bench/config/cyphalm_view_iteration_sweep.json`
 
 1. **`schedule_b` wins mid-train** — beats `same_order_e2` at every **n_train ≤ 32k**.
 2. **One-pass overtrains** — `same_order_e1` crosses above bigram between ~12k–16k.
@@ -42,8 +42,8 @@ Artifact: `cypha_bench/config/cyphalm_view_iteration_sweep.json`
 
 ## Convergence limit sweep (40k–250k, 10M-token WikiText cap)
 
-Artifact: `cypha_bench/config/cyphalm_convergence_limit.json`  
-Script: `python cypha_bench/tuning/cyphalm_convergence_limit.py --write`
+Artifact: `bench/config/cyphalm_convergence_limit.json`  
+Script: `cypha_tune_run --config bench/config/cyphalm_convergence_limit.py --write`
 
 | Mode | Converged? | Training limit | Best BPC | @ n_train | vs bigram @ that n |
 |------|------------|----------------|----------|-----------|---------------------|
@@ -80,7 +80,7 @@ Script: `python cypha_bench/tuning/cyphalm_convergence_limit.py --write`
 
 ## Hybrid dual head @ 300k (2026-06-07)
 
-Artifact: `cypha_bench/config/cyphalm_hybrid_lstm_300k.json`
+Artifact: `bench/config/cyphalm_hybrid_lstm_300k.json`
 
 | Model | BPC @ 300k | vs bigram |
 |-------|------------|-----------|
@@ -96,8 +96,8 @@ Blend weight learns ~**99.6% LSTM**. Profile: `cyphalm_d17_wikitext.json` → `c
 
 ## Beat-bigram hyperparam sweep (2026-06-01)
 
-Artifact: `cypha_bench/config/cyphalm_beat_bigram_sweep.json`  
-Script: `python cypha_bench/tuning/cyphalm_beat_bigram_sweep.py --write`
+Artifact: `bench/config/cyphalm_beat_bigram_sweep.json`  
+Script: `cypha_tune_run --config bench/config/cyphalm_beat_bigram_sweep.py --write`
 
 | n_train | Best BPC | vs bigram | Notes |
 |---------|----------|-----------|-------|
@@ -118,7 +118,7 @@ Script: `python cypha_bench/tuning/cyphalm_beat_bigram_sweep.py --write`
 ## Commands
 
 ```powershell
-python cypha_bench/tuning/cyphalm_view_iteration_sweep.py --write
-python cypha_bench/tuning/cyphalm_convergence_limit.py --write
-python cypha_bench/tuning/cyphalm_sweep.py --corpus wikitext --n-train 8000 --write-profile
+cypha_tune_run --config bench/config/cyphalm_view_iteration_sweep.py --write
+cypha_tune_run --config bench/config/cyphalm_convergence_limit.py --write
+cypha_tune_run --config bench/config/cyphalm_sweep.py --corpus wikitext --n-train 8000 --write-profile
 ```

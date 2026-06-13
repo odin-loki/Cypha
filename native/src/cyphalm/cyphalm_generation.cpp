@@ -267,7 +267,7 @@ nlohmann::json lm_summary_json(const CyphaLMModel& model, const std::string& sou
     j["source_path"] = source_path;
     j["vocab_size"] = model.config().vocab_size;
     j["field_dim"] = model.config().field_dim;
-    j["context_mode"] = context_mode_python_name(model.config().context_mode);
+    j["context_mode"] = context_mode_string(model.config().context_mode);
     j["n_generations"] = n_generations;
     j["hybrid_gria_weight"] = model.hybrid_gria_weight();
     return j;

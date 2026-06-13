@@ -1,14 +1,6 @@
-# Native CTest + Python pytest (headless Qt + optional cypha_rest subprocess smoke).
+# Native CTest (headless Qt compile-check when CYPHA_BUILD_QT=ON).
 #
-# Fixture regeneration:
-#   After any change to CyphaDIF._save_state / cypha_save_binary / v3 layout (adding or removing keys,
-#   changing dtypes/shapes, or changing the binary encoding), regenerate ALL parity fixtures:
-#     python scripts/generate_parity_fixtures.py     # re-generates parity_fixtures/{reference.cypha,
-#                                                    #   native_parity.bin, memory_train/after.cypha, …}
-#     python scripts/generate_memory_train_parity.py # (called above; run standalone to update just memory_train/)
-#   Then commit the updated fixture files alongside the code change.
-#   The following tests rely on these golden files: tests/test_parity_fixtures.py,
-#   tests/test_cypha_binary_buffer_api.py, tests/test_memory_train_fixture.py.
+# Parity fixtures live under fixtures/ (regenerate offline if core math changes).
 name: CI
 
 on:
@@ -21,9 +13,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PYTHON_VERSION: "3.11"
-
 jobs:
   build_and_test:
     name: Build and test (Linux)
@@ -33,21 +22,6 @@ jobs:
         uses: actions/checkout@v4
       - name: Install toolchain
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev qt6-base-dev libxkbcommon-x11-0 libxcb-cursor0 libegl1 libgl1-mesa-dri libglib2.0-0
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install Python deps
-        run: |
-          python -m pip install -U pip
-          pip install -r requirements-verify.txt
-          pip install -e cypha_lm/
-          pip install datasets
-          pip install PySide6 pyqtgraph pytest-qt "ruff>=0.9,<0.10"
-      - name: WikiText-2 corpus (CyphaLM D17)
-        run: python -c "import sys; sys.path.insert(0,'.'); from cypha_bench.setup.acquire_data import acquire_wikitext2; acquire_wikitext2()"
-      - name: Ruff
-        run: ruff check cypha_studio cypha_lm cypha_bench/adapters cypha_bench/domains/d04_generation_language.py cypha_bench/domains/d17_cyphalm_integration.py tests/test_lm_api.py scripts/generate_demo_lm_checkpoint.py scripts/bench_cyphalm.py
       - name: Native build + CTest
         env:
           QT_QPA_PLATFORM: offscreen
@@ -55,14 +29,8 @@ jobs:
           cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON
           cmake --build native/build -j 2
           # Qt Widgets smoke needs a full desktop stack; compile-check Qt here, run parity CTests without GUI exec.
-          ctest --test-dir native/build --output-on-failure -E 'native_qt_shell_smoke|native_qt_stub_load_reference'
-        # Local equivalent: bash scripts/ci_native_linux.sh (optional CYPHA_BUILD_QT=1 + qt6-base-dev;
-        # optional CYPHA_QT_CHARTS=1 + qt6-charts-dev for -DCYPHA_QT_CHARTS=ON; drift pytest when python3 has pytest)
-      - name: Pytest
-        env:
-          QT_QPA_PLATFORM: offscreen
-          CYPHA_REST_BIN: ${{ github.workspace }}/native/build/cypha_rest
-        run: python -m pytest tests/ cypha_lm/model/tests/ -q --ignore=tests/test_gui_qtbot.py
+          ctest --test-dir native/build --output-on-failure -R native_ -E 'native_qt_shell_smoke|native_qt_stub_load_reference'
+        # Local equivalent: bash scripts/ci_native_linux.sh
 
   mingw_cross:
     name: MinGW cross-compile (Windows PE)
@@ -71,7 +39,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Install MinGW + CMake
-        run: sudo apt-get update && sudo apt-get install -y cmake g++-mingw-w64-x86-64
+        run: sudo apt-get update && sudo apt-get install -y cmake g++-mingw-w64-x86_64
       - name: Configure + build (Windows PE)
         run: |
           cmake -S native -B native/build-mingw-w64 \

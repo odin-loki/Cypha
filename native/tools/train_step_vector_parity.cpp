@@ -1,4 +1,4 @@
-// One `dif_train_step_vector` from `reference.cypha` vs Python-recorded loss (parity_fixtures/train_step_vector/).
+// One `dif_train_step_vector` from `reference.cypha` vs Python-recorded loss (fixtures/train_step_vector/).
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -36,7 +36,7 @@ std::vector<double> flatten_f_field(const nlohmann::json& j) {
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: train_step_vector_parity <parity_fixtures/train_step_vector_dir>\n";
+      std::cerr << "usage: train_step_vector_parity <fixtures/train_step_vector_dir>\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);

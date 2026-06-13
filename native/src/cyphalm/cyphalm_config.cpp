@@ -47,7 +47,7 @@ std::string context_mode_name(ContextMode mode) {
     return "unknown";
 }
 
-std::string context_mode_python_name(ContextMode mode) {
+std::string context_mode_string(ContextMode mode) {
     switch (mode) {
         case ContextMode::Hybrid: return "hybrid_gria_lstm";
         case ContextMode::SsmGria: return "ssm_only";
@@ -178,7 +178,7 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
 
 void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
     namespace fs = std::filesystem;
-    const fs::path root = fs::path(repo_root_from_config()) / "cypha_bench" / "config" / "profiles";
+    const fs::path root = fs::path(repo_root_from_config()) / "bench" / "config" / "profiles";
     fs::path path;
     if (profile == "d17") {
         path = root / "cyphalm_d17_wikitext.json";

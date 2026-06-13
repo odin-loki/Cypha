@@ -73,7 +73,7 @@ std::string pick_dif_regressor_expert(int python_step, int n_existing, int k_tar
 int main(int argc, char** argv) {
   try {
     if (argc != 2) {
-      std::cerr << "usage: dif_regressor_train_step_parity <parity_fixtures/dif_regressor_train_step>\n";
+      std::cerr << "usage: dif_regressor_train_step_parity <fixtures/dif_regressor_train_step>\n";
       return 2;
     }
     fs::path dir = fs::path(argv[1]);
@@ -235,7 +235,7 @@ int main(int argc, char** argv) {
       z[static_cast<std::size_t>(i)] = llr[static_cast<std::size_t>(i)] / (infer.temperature + 1e-8);
     }
     std::vector<double> probs;
-    cypha::softmax_batch_like_python(z.data(), 1, K, 1e-8, probs);
+    cypha::softmax_batch_reference(z.data(), 1, K, 1e-8, probs);
 
     std::vector<double> mu_k(static_cast<std::size_t>(K), 0.0);
     std::vector<double> var_k(static_cast<std::size_t>(K), 0.0);
