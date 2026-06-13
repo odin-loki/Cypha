@@ -14,7 +14,7 @@ Changelog: [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ```
 scripts/cypha_native_validate_all.ps1  → OK
-  53 CTests │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
+  64 CTests │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
 
 GitHub Actions **CI #51+** (`a3b48c4`): Linux CTest + ctest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**. Release **v2.2.8** installers published.
@@ -62,6 +62,7 @@ Phases 0–14 complete including Qt Studio parity (Settings, Confusion Matrix), 
 
 ## Optional future work
 
+- **RPSM Option A — CyphaDIF matrix refactor:** unified Ψ_mu / Ψ_var state, batched LLR/GEMM, parity-validated. Spec: [`docs/research/upgrades/RPSM_COMBINED_SPEC.md`](../research/upgrades/RPSM_COMBINED_SPEC.md). Leads to Option B (CyphaLM sequence layer) in [`docs/FUTURE.md`](../FUTURE.md) §10.
 - PySide6 chat widget (Qt Predict tab is feature-vector, not chat)
 - Local GPU microbench on a CUDA box (`cuda_smoke --bench`)
 

@@ -92,6 +92,8 @@
 #include <optional>
 #include <cstdint>
 #include <cstdio>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <random>
@@ -118,6 +120,7 @@
 
 #include "bulk_train_worker.h"
 #include "bulk_rest_update_worker.h"
+#include "bulk_mke_train_worker.h"
 
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
 #include "cypha/experiment_db.hpp"
@@ -1592,7 +1595,7 @@ class LossChartPanel final : public QChartView {
  protected:
   void mouseMoveEvent(QMouseEvent* e) override {
     if (panning_ && chart() != nullptr) {
-      const QRect plot = chart()->plotArea();
+      const QRectF plot = chart()->plotArea();
       if (plot.width() > 0 && plot.height() > 0) {
         const double dx =
             -static_cast<double>(e->pos().x() - pan_anchor_.x()) / plot.width() * (view_x1_ - view_x0_);
@@ -1640,7 +1643,7 @@ class LossChartPanel final : public QChartView {
       e->ignore();
       return;
     }
-    const QRect plot = chart()->plotArea();
+    const QRectF plot = chart()->plotArea();
     if (!plot.contains(e->position().toPoint()) || plot.width() <= 0 || plot.height() <= 0) {
       e->ignore();
       return;
@@ -2812,6 +2815,14 @@ class MainWindow final : public QMainWindow {
         QStringLiteral("CSV target is numeric regression (MKE: send regression_y on /update)"), inner_train);
     lay_train->addWidget(csv_regression_chk_);
 
+    sort_by_uncertainty_chk_ = new QCheckBox(
+        QStringLiteral("Sort by uncertainty (active learning — entropy from batch LLR before bulk native train)"),
+        inner_train);
+    sort_by_uncertainty_chk_->setToolTip(QStringLiteral(
+        "Reorders training rows by descending softmax entropy (native batch_encode + score_matrix_use_field). "
+        "Val split rows are unchanged."));
+    lay_train->addWidget(sort_by_uncertainty_chk_);
+
     auto* row_bulk = new QHBoxLayout();
     csv_bulk_train_btn_ = new QPushButton(QStringLiteral("Bulk REST /update"), inner_train);
     csv_bulk_native_btn_ = new QPushButton(QStringLiteral("Bulk native train"), inner_train);
@@ -3979,7 +3990,7 @@ class MainWindow final : public QMainWindow {
                                  QStringLiteral("Choose a training CSV first."));
         return;
       }
-      if (bulk_rest_thread_ != nullptr || bulk_thread_ != nullptr) {
+      if (bulk_rest_thread_ != nullptr || bulk_thread_ != nullptr || bulk_mke_thread_ != nullptr) {
         QMessageBox::information(this, QStringLiteral("Bulk /update"),
                                  QStringLiteral("Bulk training already in progress."));
         return;
@@ -4093,26 +4104,32 @@ class MainWindow final : public QMainWindow {
         QMessageBox::information(this, QStringLiteral("Bulk native"), QStringLiteral("Training already in progress."));
         return;
       }
-      cypha::CsvDenseResult data;
+      const cypha::CsvDenseSpec spec = build_csv_spec();
+      if (spec.regression) {
+        QMessageBox::information(this, QStringLiteral("Bulk native"),
+                                 QStringLiteral("Need a classification CSV with string targets."));
+        return;
+      }
+      int total_n = 0;
       try {
-        data = cypha::load_csv_dense(qstring_to_fs_path(csv_path_), build_csv_spec());
+        total_n = cypha::count_csv_dense_rows(qstring_to_fs_path(csv_path_), spec);
       } catch (const std::exception& ex) {
         QMessageBox::warning(this, QStringLiteral("Bulk native"), QString::fromUtf8(ex.what()));
         return;
       }
-      if (data.y_class.empty()) {
-        QMessageBox::information(this, QStringLiteral("Bulk native"),
-                                 QStringLiteral("Need a classification CSV with string targets."));
+      if (total_n <= 0) {
+        QMessageBox::information(this, QStringLiteral("Bulk native"), QStringLiteral("CSV has no data rows."));
         return;
+      }
+      const int cap = csv_bulk_max_rows_spin_->value();
+      if (cap > 0 && cap < total_n) {
+        total_n = cap;
       }
       if (!native_train_ok_) {
         QMessageBox::warning(this, QStringLiteral("Bulk native"),
                              QStringLiteral("Native training state not ready (need F_field + successful model load)."));
         return;
       }
-      int total_n = data.n_rows;
-      const int cap = csv_bulk_max_rows_spin_->value();
-      if (cap > 0 && cap < total_n) total_n = cap;
       const int val_pct = (val_split_spin_ != nullptr) ? val_split_spin_->value() : 0;
       const int val_n   = (val_pct > 0) ? std::max(1, static_cast<int>(total_n * val_pct / 100.0)) : 0;
       const int train_n = total_n - val_n;
@@ -4123,7 +4140,7 @@ class MainWindow final : public QMainWindow {
 
       bulk_val_n_    = val_n;
       bulk_total_n_  = total_n;
-      bulk_train_data_ = data;
+      bulk_train_data_ = {};
       bulk_accum_losses_.clear();
       bulk_accum_log_.clear();
       bulk_train_n_ = train_n;
@@ -4132,8 +4149,13 @@ class MainWindow final : public QMainWindow {
       }
 
       BulkNativeTrainJob job{};
-      job.data = std::move(data);
+      job.csv_path = qstring_to_fs_path(csv_path_);
+      job.csv_spec = spec;
+      job.total_rows = total_n;
       job.train_n = train_n;
+      job.chunk_rows = effective_csv_chunk_rows();
+      job.sort_by_uncertainty =
+          sort_by_uncertainty_chk_ != nullptr && sort_by_uncertainty_chk_->isChecked();
       job.model = model_.get();
       job.mem = native_mem_.get();
       job.replay = native_replay_.get();
@@ -4231,73 +4253,79 @@ class MainWindow final : public QMainWindow {
                                             "regression\" and Inspect CSV again."));
         return;
       }
+      if (bulk_mke_thread_ != nullptr || bulk_thread_ != nullptr || bulk_rest_thread_ != nullptr) {
+        QMessageBox::information(this, QStringLiteral("MKE bulk"), QStringLiteral("Bulk training already in progress."));
+        return;
+      }
+
       const int n = last_csv_.n_rows;
-      const int d = model_->d_latent;
+      BulkMkeTrainJob job{};
+      job.data = last_csv_;
+      job.n_rows = n;
+      job.model = model_.get();
+      job.mem = native_mem_.get();
+      job.replay = native_replay_.get();
+      job.pre = pre_.get();
+      job.w_by_label = &mke_w_by_label_;
+      job.p_by_label = &mke_p_by_label_;
+      job.forgetting_factor = mke_ff_spin_->value();
+      job.pi_floor = mke_pi_spin_->value();
+      job.tsp = native_tsp_;
+      job.world_lr = native_world_lr_;
+      job.delta_lr = native_delta_lr_;
+      job.ood_sigma = native_ood_sigma_;
+      job.rng = native_rng_;
+      job.enc_updates_start = native_enc_updates_;
+      job.enc_updates = &native_enc_updates_;
+      job.total_steps = &native_total_steps_;
+      job.router_train_label = mke_router_label_edit_ != nullptr ? mke_router_label_edit_->text().trimmed() : QString{};
+      job.cancel_flag = &bulk_mke_cancel_flag_;
 
-      QProgressDialog prog(QStringLiteral("MKE bulk train…"), QStringLiteral("Cancel"), 0, n, this);
-      prog.setWindowModality(Qt::WindowModal);
-      prog.setMinimumDuration(300);
-
-      const double ff     = mke_ff_spin_->value();
-      const double pi_flr = mke_pi_spin_->value();
-      const QString router_lbl = mke_router_label_edit_ != nullptr
-                                     ? mke_router_label_edit_->text().trimmed()
-                                     : QString{};
-
-      double sum_err_sq = 0.0;
-      int n_ok = 0;
-
-      for (int i = 0; i < n; i++) {
-        if (prog.wasCanceled()) break;
-        prog.setValue(i);
-
-        const double* xraw = last_csv_.x_rowmajor.data() + static_cast<std::size_t>(i) * last_csv_.n_features;
-        std::vector<double> phi(xraw, xraw + last_csv_.n_features);
-        if (pre_ != nullptr) {
-          phi = pre_->transform_one(phi);
-        }
-        if (static_cast<int>(phi.size()) != d) {
-          if (mke_result_label_ != nullptr)
-            mke_result_label_->setText(
-                QStringLiteral("Dim mismatch: phi.size=%1 model.d_latent=%2").arg(phi.size()).arg(d));
-          break;
-        }
-        const double y_target = last_csv_.y_regression[static_cast<std::size_t>(i)];
-        cypha::TrainStepExtras extras{};
-        extras.total_steps = &native_total_steps_;
-
-        const std::string* router_override = nullptr;
-        std::string router_str;
-        if (!router_lbl.isEmpty()) {
-          router_str    = router_lbl.toStdString();
-          router_override = &router_str;
-        }
-
-        cypha::regression::MkeScalarTrainStepOutputs mke_out{};
-        cypha::regression::mke_scalar_train_step_from_phi(
-            *model_, *native_mem_, *native_replay_,
-            phi.data(), d, y_target,
-            mke_w_by_label_, mke_p_by_label_,
-            nullptr,  // gh_scales: null → uniform 1
-            model_->temperature, ff, pi_flr,
-            native_tsp_, native_world_lr_, native_delta_lr_, native_ood_sigma_,
-            native_rng_, native_enc_updates_, &extras,
-            router_override, 1e-9, &mke_out);
-
-        sum_err_sq += mke_out.err_sq;
-        ++n_ok;
+      bulk_mke_cancel_flag_.store(false);
+      set_bulk_training_ui(true);
+      if (mke_result_label_ != nullptr) {
+        mke_result_label_->setText(QStringLiteral("MKE bulk train 0 / %1…").arg(n));
       }
-      prog.setValue(n);
 
-      if (n_ok > 0) {
-        const double mse  = sum_err_sq / n_ok;
-        const double rmse = std::sqrt(mse);
-        if (mke_result_label_ != nullptr)
-          mke_result_label_->setText(
-              QStringLiteral("MKE bulk done: %1 steps  MSE=%2  RMSE=%3")
-                  .arg(n_ok).arg(mse, 0, 'g', 6).arg(rmse, 0, 'g', 6));
-        refresh_train_progress(true);
-      }
+      auto* prog = new QProgressDialog(QStringLiteral("MKE bulk train…"), QStringLiteral("Cancel"), 0, n, this);
+      prog->setWindowModality(Qt::WindowModal);
+      prog->setMinimumDuration(0);
+      prog->setAttribute(Qt::WA_DeleteOnClose);
+
+      bulk_mke_thread_ = new QThread(this);
+      bulk_mke_worker_ = new BulkMkeTrainWorker();
+      bulk_mke_worker_->moveToThread(bulk_mke_thread_);
+
+      connect(bulk_mke_thread_, &QThread::started, bulk_mke_worker_,
+              [job = std::move(job), w = bulk_mke_worker_]() mutable { w->run(std::move(job)); });
+      connect(bulk_mke_worker_, &BulkMkeTrainWorker::progress, prog,
+              [prog](int step, int total) {
+                prog->setMaximum(total);
+                prog->setValue(step);
+              });
+      connect(bulk_mke_worker_, &BulkMkeTrainWorker::progress, this,
+              [this, n](int step, int /*total*/) {
+                if (mke_result_label_ != nullptr) {
+                  mke_result_label_->setText(QStringLiteral("MKE bulk train %1 / %2…").arg(step).arg(n));
+                }
+              });
+      connect(prog, &QProgressDialog::canceled, bulk_mke_worker_, &BulkMkeTrainWorker::requestCancel);
+      connect(bulk_mke_worker_, &BulkMkeTrainWorker::finished, this,
+              [this, prog](bool ok, int n_ok, double mse, double rmse, bool cancelled, QString error) {
+                prog->close();
+                on_bulk_mke_finished(ok, n_ok, mse, rmse, cancelled, std::move(error));
+              });
+      connect(bulk_mke_worker_, &BulkMkeTrainWorker::finished, bulk_mke_thread_, &QThread::quit);
+      connect(bulk_mke_thread_, &QThread::finished, bulk_mke_thread_, &QObject::deleteLater);
+      connect(bulk_mke_thread_, &QThread::finished, this, [this]() {
+        bulk_mke_thread_ = nullptr;
+        if (bulk_mke_worker_ != nullptr) {
+          bulk_mke_worker_->deleteLater();
+          bulk_mke_worker_ = nullptr;
+        }
+      });
+
+      bulk_mke_thread_->start();
     });
 
     connect(mke_predict_btn_, &QPushButton::clicked, this, [this]() {
@@ -5319,11 +5347,15 @@ class MainWindow final : public QMainWindow {
   void closeEvent(QCloseEvent* e) override {
     bulk_cancel_flag_.store(true, std::memory_order_relaxed);
     bulk_rest_cancel_flag_.store(true, std::memory_order_relaxed);
+    bulk_mke_cancel_flag_.store(true, std::memory_order_relaxed);
     if (bulk_worker_ != nullptr) {
       QMetaObject::invokeMethod(bulk_worker_, "requestCancel", Qt::QueuedConnection);
     }
     if (bulk_rest_worker_ != nullptr) {
       QMetaObject::invokeMethod(bulk_rest_worker_, "requestCancel", Qt::QueuedConnection);
+    }
+    if (bulk_mke_worker_ != nullptr) {
+      QMetaObject::invokeMethod(bulk_mke_worker_, "requestCancel", Qt::QueuedConnection);
     }
     if (bulk_thread_ != nullptr) {
       bulk_thread_->quit();
@@ -5332,6 +5364,10 @@ class MainWindow final : public QMainWindow {
     if (bulk_rest_thread_ != nullptr) {
       bulk_rest_thread_->quit();
       bulk_rest_thread_->wait(30000);
+    }
+    if (bulk_mke_thread_ != nullptr) {
+      bulk_mke_thread_->quit();
+      bulk_mke_thread_->wait(30000);
     }
     if (rest_proc_.state() != QProcess::NotRunning) {
       rest_proc_.terminate();
@@ -5663,6 +5699,20 @@ class MainWindow final : public QMainWindow {
     return s;
   }
 
+  int effective_csv_chunk_rows() const {
+    if (studio_prefs_.csv_chunk_rows_override > 0) {
+      return studio_prefs_.csv_chunk_rows_override;
+    }
+    if (const char* env = std::getenv("CYPHA_CSV_CHUNK_ROWS")) {
+      bool ok = false;
+      const int v = QString::fromLocal8Bit(env).trimmed().toInt(&ok);
+      if (ok && v > 0) {
+        return v;
+      }
+    }
+    return 4096;
+  }
+
   void add_replay_u01_to_json(QJsonObject& body) const {
     if (replay_u01_cache_.empty()) {
       return;
@@ -5831,6 +5881,8 @@ class MainWindow final : public QMainWindow {
     if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(!training);
     if (save_native_btn_     != nullptr) save_native_btn_->setEnabled(!training);
     if (load_btn_            != nullptr) load_btn_->setEnabled(!training);
+    if (mke_bulk_btn_        != nullptr) mke_bulk_btn_->setEnabled(!training && native_train_ok_ && last_csv_ok_);
+    if (sort_by_uncertainty_chk_ != nullptr) sort_by_uncertainty_chk_->setEnabled(!training);
   }
 
   void on_bulk_progress(int step, int total) {
@@ -5928,9 +5980,34 @@ class MainWindow final : public QMainWindow {
     native_gh_chi_          = result.gh_chi;
     native_gh_psi_          = result.gh_psi;
     native_enc_updates_     = result.enc_updates;
+    bulk_train_data_        = std::move(result.val_holdout);
 
     bulk_accum_log_ = std::move(log);
     on_bulk_finish(result.cancelled);
+  }
+
+  void on_bulk_mke_finished(bool ok, int n_ok, double mse, double rmse, bool cancelled, QString error) {
+    set_bulk_training_ui(false);
+    if (!error.isEmpty()) {
+      if (mke_result_label_ != nullptr) {
+        mke_result_label_->setText(error);
+      }
+      QMessageBox::warning(this, QStringLiteral("MKE bulk"), error);
+      return;
+    }
+    if (cancelled) {
+      if (mke_result_label_ != nullptr) {
+        mke_result_label_->setText(QStringLiteral("MKE bulk cancelled (%1 steps done).").arg(n_ok));
+      }
+      return;
+    }
+    if (ok && n_ok > 0 && mke_result_label_ != nullptr) {
+      mke_result_label_->setText(QStringLiteral("MKE bulk done: %1 steps  MSE=%2  RMSE=%3")
+                                     .arg(n_ok)
+                                     .arg(mse, 0, 'g', 6)
+                                     .arg(rmse, 0, 'g', 6));
+      refresh_train_progress(true);
+    }
   }
 
   void on_bulk_finish(bool cancelled) {
@@ -5963,10 +6040,9 @@ class MainWindow final : public QMainWindow {
 
     // Val accuracy on held-out rows
     QString val_suffix;
-    if (bulk_val_n_ > 0 && model_ != nullptr) {
-      const int val_start = bulk_total_n_ - bulk_val_n_;
+    if (bulk_val_n_ > 0 && model_ != nullptr && bulk_train_data_.n_rows > 0) {
       int val_correct = 0;
-      for (int i = val_start; i < bulk_total_n_; ++i) {
+      for (int i = 0; i < bulk_train_data_.n_rows; ++i) {
         std::vector<double> xr(static_cast<std::size_t>(bulk_train_data_.n_features));
         const std::size_t rb =
             static_cast<std::size_t>(i) * static_cast<std::size_t>(bulk_train_data_.n_features);
@@ -5978,9 +6054,10 @@ class MainWindow final : public QMainWindow {
             pred == bulk_train_data_.y_class[static_cast<std::size_t>(i)])
           ++val_correct;
       }
-      const double acc = static_cast<double>(val_correct) / static_cast<double>(bulk_val_n_);
+      const int val_n = bulk_train_data_.n_rows;
+      const double acc = static_cast<double>(val_correct) / static_cast<double>(val_n);
       val_suffix = QStringLiteral("  val_acc=%1/%2 (%3%)")
-          .arg(val_correct).arg(bulk_val_n_)
+          .arg(val_correct).arg(val_n)
           .arg(static_cast<int>(std::round(acc * 100.0)));
       if (csv_stats_label_ != nullptr) {
         const QString base = csv_stats_label_->text().split(QStringLiteral("  val_acc")).first();
@@ -7175,6 +7252,7 @@ class MainWindow final : public QMainWindow {
   QVector<double> last_loss_plot_rest_{};
   QVector<double> last_loss_plot_native_{};
   QCheckBox* csv_regression_chk_{};
+  QCheckBox* sort_by_uncertainty_chk_{};
   QCheckBox* use_gh_chk_{};
   QPushButton* replay_u01_btn_{};
   QLabel* replay_u01_label_{};
@@ -7236,6 +7314,9 @@ class MainWindow final : public QMainWindow {
   BulkRestUpdateWorker*     bulk_rest_worker_{};
   std::atomic<bool>         bulk_rest_cancel_flag_{false};
   QVector<double>           bulk_rest_accum_losses_;
+  QThread*                  bulk_mke_thread_{};
+  BulkMkeTrainWorker*       bulk_mke_worker_{};
+  std::atomic<bool>         bulk_mke_cancel_flag_{false};
   int                    bulk_train_n_{0};
   QVector<double>                bulk_accum_losses_;
   QVector<BulkLogEntry>          bulk_accum_log_;

@@ -1,6 +1,6 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-06-13 (P7 native-only stack; hybrid GRIA+LSTM @ 300k) | **Report:** `bench/BASELINE_REPORT.md` (D17 hybrid refresh) | **Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **53 CTests**
+**Last updated:** 2026-06-13 (P7 native-only stack; hybrid GRIA+LSTM @ 300k) | **Report:** `bench/BASELINE_REPORT.md` (D17 hybrid refresh) | **Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **64 CTests**
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -12,7 +12,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **53 CTests** gate CI |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **64 CTests** gate CI |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -141,7 +141,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 
 | Limit | Evidence | Proposed fix |
 |-------|----------|-------------|
-| **Nonlinear decision boundaries (XOR etc.)** | 48.2% vs 80.5% kernel SVM — 32.3pp gap | Kernel LLR (Nyström) — top priority |
+| **Nonlinear decision boundaries (XOR etc.)** | 48.2% vs 80.5% kernel SVM — 32.3pp gap | Kernel LLR (Nyström) — **partially shipped**; tuning continues ([`upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md)) |
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
 | **Feynman equations** | Mean R²=−0.010 on nonlinear physics | Same — Kernel LLR |
 | **ECG / temporal** | D10 20% accuracy (chance) | CellAI SSM tuning; temporal-aware features |
@@ -168,7 +168,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 ### Phase 2 — Native C++ port (Q1 2026)
 
 - **Milestones M1–M6 completed:** `cypha_parity`, `cypha_rest`, `cypha_qt_shell` built.
-- **Parity tests:** **53 CTests** (`ctest -R native_`) and subprocess cases. All pass within float64 tolerance.
+- **Parity tests:** **64 CTests** (`ctest -R native_`) and subprocess cases. All pass within float64 tolerance.
 - **GPU acceleration:** `cypha::accel` fused LLR pipeline (CUDA / parallel CPU).
 - **MinGW cross-build:** Windows PE from WSL; CI job `mingw_cross`.
 - **Verified:** binary format round-trip, registry, experiment DB (SQLite), model card, preprocessor, regression head, MKE regressor, two-stage pipeline.
@@ -234,6 +234,22 @@ Each hypothesis we have investigated with the result:
 
 ---
 
+## Possible upgrades
+
+Planned engineering directions distilled from research specs. Full index: [`docs/research/upgrades/README.md`](research/upgrades/README.md). Roadmap: [`docs/FUTURE.md`](FUTURE.md) §10.
+
+| Upgrade | Doc | Status | Success criterion |
+|---------|-----|--------|-------------------|
+| CyphaDIF matrix refactor (RPSM Option A) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) | **Planned** | Parity green; batched LLR; faster infer |
+| RPSM sequence layer (Option B) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) + [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Planned** | D17 BPC < **2.873** (hybrid baseline) |
+| Nyström / nonlinear boundary fixes | [`NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md) | **Partially shipped** | Native kernel LLR live; close ~18 pp sklearn XOR gap |
+| Cell hypothesis testbench (28 variants) | [`CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) | **Planned** | Beat char-LSTM / hybrid on D17 @ 300k |
+| RPSM core fixes (spectral α, norm η, orthogonal init) | [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Planned** | Forgetting ratio < 0.01; α ∈ [0.3, 0.6] |
+
+**Execution order (RPSM track):** Option A → kernel LLR into A (tuning) → Option B → global memory → D17 benchmark.
+
+---
+
 ## Current priorities (ranked by evidence)
 
 ### Priority 1 — Kernel LLR (Nyström RBF)
@@ -244,8 +260,9 @@ Each hypothesis we have investigated with the result:
 1. ~~Implement `KernelMemory` reservoir + Nyström sketch~~ — **done** (native C++, median-γ whitening).
 2. Benchmark on XOR suite and Feynman D14 — `cypha_bench_run --domain-tag d03_xor`; `xor_kernel_bench` CTest smoke.
 3. ~~Wire native kernel train in `memory_train.cpp`~~ — **done**; online XOR bench via `xor_kernel_bench`.
+4. **Tuning:** diverse landmarks, M=512 profile, close sklearn RBF gap — see [`NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md).
 
-**Current state:** Nyström whitening native-only; M=256; XOR **+10.6 pp** (61.1% kernel vs 50.5% linear, 5 seeds); sklearn RBF ceiling **~79%** on same splits — **~18 pp** gap remains.
+**Current state:** Nyström whitening native-only; M=256 default; XOR **+9–10 pp** vs linear; sklearn RBF ceiling **~79%** — **~18 pp** gap remains.
 
 ### Priority 2 — Auto-gamma RFF
 
@@ -324,10 +341,11 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 ## Forward research map
 
 ```
-2026 Q3 — Priority 1: Kernel LLR prototype → benchmark → port decision
+2026 Q3 — Priority 1: Kernel LLR tuning → close sklearn XOR gap
 2026 Q3 — Priority 2: Auto-gamma RFF default → D08/D14 re-benchmark
-2026 Q4 — Priority 3: CyphaLM — Phase 1c full corpus; **Upgrade V2** (learnable views + fusion) + **model-class** (char-LSTM hybrid) in parallel
-2026 Q4 — Priority 4: Multi-view online training — Phase 1 LM (`MULTI_VIEW_TRAINING_PLAN.md`) → Phase 2 D16/DIF
+2026 Q4 — RPSM Option A (matrix refactor) → Option B sequence layer — see upgrades/
+2026 Q4 — Cell hypothesis testbench Tier 1–2
+2026 Q4 — Multi-view online training Phase 2 D16/DIF
 2026 Q4 — Priority 5: Continual learning investigation → EWC overlay
 2027 Q1 — Priority 6: CellAI SSM temporal tuning → D10 re-eval
 2027 Q1 — Paper: fill {{EXP0N_*}} placeholders → narrative reconciliation → submit

@@ -18,6 +18,7 @@ add_executable(cypha_qt_shell
   src/shell_main.cpp
   src/bulk_train_worker.cpp
   src/bulk_rest_update_worker.cpp
+  src/bulk_mke_train_worker.cpp
 )
 set_target_properties(cypha_qt_shell PROPERTIES AUTOMOC ON)
 target_link_libraries(cypha_qt_shell PRIVATE Qt6::Widgets Qt6::Network cypha_core cypha_lm_native)

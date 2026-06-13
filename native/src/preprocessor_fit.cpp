@@ -1,4 +1,4 @@
-#include "cypha/numpy_default_rng.hpp"
+#include "cypha/mt19937_rng.hpp"
 #include "cypha/preprocessor.hpp"
 #include "cypha/regression_stub.hpp"
 

@@ -53,6 +53,9 @@ cypha_add_parity_exe(cyphalm_char_lstm_parity LINK cypha_lm_native)
 cypha_add_parity_exe(cyphalm_checkpoint_parity LINK cypha_lm_native)
 cypha_add_parity_exe(cyphalm_parity LINK cypha_lm_native)
 
+add_executable(cypha_parity_run "${CMAKE_CURRENT_SOURCE_DIR}/apps/cypha_parity_run.cpp")
+target_link_libraries(cypha_parity_run PRIVATE cypha_core)
+
 set(
   CYPHA_PARITY_EXE_TARGETS
   cyphalm_model_parity
@@ -88,4 +91,5 @@ set(
   cyphalm_char_lstm_parity
   cyphalm_checkpoint_parity
   cyphalm_parity
+  cypha_parity_run
 )

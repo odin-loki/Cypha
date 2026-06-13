@@ -557,4 +557,18 @@ bool try_load_kernel_from_root(const CNode& root, KernelMemory& km, bool& use_ke
   return true;
 }
 
+std::vector<double> build_xor_pair_features(const double* x, int d) {
+  std::vector<double> out(5, 0.0);
+  if (d >= 1) {
+    out[0] = x[0];
+  }
+  if (d >= 2) {
+    out[1] = x[1];
+    out[2] = x[0] * x[1];
+    out[3] = x[0] * x[0];
+    out[4] = x[1] * x[1];
+  }
+  return out;
+}
+
 }  // namespace cypha

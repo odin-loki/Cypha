@@ -29,4 +29,8 @@ nlohmann::json diagnose_model_tokens(CyphaLMModel& model, const std::vector<int>
 /// Pad or truncate a feature row to ``d_input`` (zero fill).
 std::vector<double> fit_input_dim(const std::vector<double>& row, int d_input);
 
+/// Actionable tuning hints from Phase-5 SSM diagnostic JSON fragments.
+nlohmann::json build_ssm_recommendations(const nlohmann::json& summary, const nlohmann::json& decay_rates,
+                                           const nlohmann::json* projection = nullptr);
+
 }  // namespace cypha::cyphalm

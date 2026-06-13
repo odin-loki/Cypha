@@ -1,6 +1,7 @@
 #include "cypha/infer_cpu.hpp"
 
 #include "cypha/kernel_memory.hpp"
+#include "cypha/preprocessor.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -682,6 +683,82 @@ void softmax_batch_reference(const double* z_row_major, int n, int k, double eps
   });
 }
 
+double row_entropy_from_probs(const double* p, int k, double eps) {
+  double s = 0.0;
+  for (int j = 0; j < k; ++j) {
+    s -= p[static_cast<std::size_t>(j)] * std::log(p[static_cast<std::size_t>(j)] + eps);
+  }
+  return s;
+}
+
+std::vector<int> uncertainty_rank_indices(const CyphaInferModel& m, const PreprocessorState* pre,
+                                          const double* x_rowmajor, int n_rows, int n_features,
+                                          double temperature) {
+  std::vector<int> order;
+  if (n_rows <= 0 || n_features <= 0) {
+    return order;
+  }
+  const int k = static_cast<int>(m.labels.size());
+  if (k <= 0) {
+    order.resize(static_cast<std::size_t>(n_rows));
+    for (int i = 0; i < n_rows; ++i) {
+      order[static_cast<std::size_t>(i)] = i;
+    }
+    return order;
+  }
+
+  std::vector<double> x_latent;
+  x_latent.reserve(static_cast<std::size_t>(n_rows) * static_cast<std::size_t>(m.d_latent));
+  for (int i = 0; i < n_rows; ++i) {
+    std::vector<double> x(x_rowmajor + static_cast<std::size_t>(i) * static_cast<std::size_t>(n_features),
+                          x_rowmajor + static_cast<std::size_t>(i + 1) * static_cast<std::size_t>(n_features));
+    if (pre != nullptr) {
+      x = pre->transform_one(x);
+    }
+    if (static_cast<int>(x.size()) != m.d_latent) {
+      throw std::runtime_error("uncertainty_rank_indices: input dim mismatch after preprocessor");
+    }
+    x_latent.insert(x_latent.end(), x.begin(), x.end());
+  }
+
+  std::vector<double> H;
+  batch_encode(m, x_latent.data(), n_rows, H);
+  std::vector<double> llr;
+  score_matrix_use_field(m, H.data(), n_rows, llr);
+
+  const double eps = 1e-8;
+  const double T = temperature > 0.0 ? temperature : m.temperature;
+  std::vector<double> z(static_cast<std::size_t>(n_rows) * static_cast<std::size_t>(k));
+  for (int i = 0; i < n_rows * k; ++i) {
+    z[static_cast<std::size_t>(i)] = llr[static_cast<std::size_t>(i)] / (T + eps);
+  }
+  std::vector<double> probs;
+  softmax_batch_reference(z.data(), n_rows, k, eps, probs);
+
+  struct RankRow {
+    int index;
+    double entropy;
+  };
+  std::vector<RankRow> ranked;
+  ranked.reserve(static_cast<std::size_t>(n_rows));
+  for (int i = 0; i < n_rows; ++i) {
+    const double* prow = probs.data() + static_cast<std::size_t>(i) * static_cast<std::size_t>(k);
+    ranked.push_back({i, row_entropy_from_probs(prow, k, eps)});
+  }
+  std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
+    if (a.entropy != b.entropy) {
+      return a.entropy > b.entropy;
+    }
+    return a.index < b.index;
+  });
+
+  order.reserve(ranked.size());
+  for (const RankRow& row : ranked) {
+    order.push_back(row.index);
+  }
+  return order;
+}
+
 namespace {
 
 double compute_ece_bins(const double* confs, const double* correct, int n, int n_bins) {
@@ -867,7 +944,7 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
                                 double temperature, const std::optional<double>& mahal_ema,
                                 double mahal_std_ema, double gh_chi, double gh_psi,
                                 bool use_context_prior, const KernelMemory* kernel_mem, bool use_kernel_llr,
-                                double kernel_blend) {
+                                double kernel_blend, const double* kernel_feat) {
   ClassifyAtHResult out;
   const int d = m.d_latent;
   const int K = static_cast<int>(m.labels.size());
@@ -929,7 +1006,8 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
 
   if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4) {
     std::vector<double> kernel_scores(static_cast<std::size_t>(K));
-    kernel_mem->score_all(h, m.labels, kernel_scores);
+    const double* kvec = kernel_feat != nullptr ? kernel_feat : h;
+    kernel_mem->score_all(kvec, m.labels, kernel_scores);
     for (int k = 0; k < K; ++k) {
       const double lin = linear_llrs[static_cast<std::size_t>(k)];
       const double ker = kernel_scores[static_cast<std::size_t>(k)];
@@ -1016,7 +1094,8 @@ GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double
   }
 
   const ClassifyAtHResult cls = classify_at_h(m, h, nullptr, out.t_adj, std::nullopt, 0.5, 1.0, 1.0, true, km,
-                                              use_kernel, kernel_blend);
+                                              use_kernel, kernel_blend,
+                                              kernel_opt != nullptr ? kernel_opt->kernel_x : nullptr);
   out.label = cls.label;
   out.confidence = cls.confidence;
   out.llrs = std::move(cls.llrs);
@@ -1043,7 +1122,7 @@ InferAtHResult infer_at_h(const CyphaInferModel& m, const double* h, const Cypha
 
   const ClassifyAtHResult cls =
       classify_at_h(m, h, h_field, m.temperature, mahal_ema_opt, m.mahal_std_ema, 1.0, 1.0, true, opt.kernel_mem,
-                    opt.use_kernel_llr, opt.kernel_blend);
+                    opt.use_kernel_llr, opt.kernel_blend, opt.kernel_x);
   out.llrs = cls.llrs;
   const auto deliberated = apply_deliberation(cls.label, cls.confidence, opt.deliberation_lo, opt.deliberation_hi);
   out.label = deliberated.first;

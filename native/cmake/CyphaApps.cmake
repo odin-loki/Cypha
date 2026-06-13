@@ -13,6 +13,7 @@ add_executable(
   "${CYPHA_APPS_DIR}/cyphalm_rest_routes.cpp"
   "${CYPHA_APPS_DIR}/branch_a_rest_routes.cpp"
   "${CYPHA_APPS_DIR}/dif_rest_routes.cpp"
+  "${CYPHA_APPS_DIR}/intelligence_rest_routes.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/tools/cypha_rest_static_ui.cpp"
 )
 target_include_directories(cypha_rest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tools")
@@ -21,18 +22,21 @@ if(WIN32)
   target_link_libraries(cypha_rest PRIVATE ws2_32)
 endif()
 
+add_executable(embed_static_ui "${CMAKE_CURRENT_SOURCE_DIR}/tools/embed_static_ui.cpp")
+target_include_directories(embed_static_ui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+cypha_mingw_apply_exe_link_options(embed_static_ui)
+
 set(_cypha_static_embed_h "${CMAKE_CURRENT_BINARY_DIR}/cypha_rest_static_embed.hpp")
 if(CYPHA_EMBED_STATIC_UI)
-  find_package(Python3 COMPONENTS Interpreter REQUIRED)
   add_custom_command(
     OUTPUT "${_cypha_static_embed_h}"
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_static_ui.py"
+    COMMAND "$<TARGET_FILE:embed_static_ui>"
       --static-dir "${CYPHA_STATIC_UI_DIR}"
       --out "${_cypha_static_embed_h}"
     DEPENDS
+      embed_static_ui
       "${CYPHA_STATIC_UI_DIR}/index.html"
       "${CYPHA_STATIC_UI_DIR}/app.js"
-      "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_static_ui.py"
     COMMENT "Generating embedded Studio Web UI for cypha_rest"
     VERBATIM
   )
@@ -74,8 +78,10 @@ if(NOT ZLIB_FOUND)
   else()
     message(FATAL_ERROR "FetchContent zlib did not define zlibstatic or zlib")
   endif()
+  target_link_libraries(cypha_bench_native PRIVATE CyphaZlib::Zlib)
   target_link_libraries(cypha_bench_run PRIVATE CyphaZlib::Zlib)
 else()
+  target_link_libraries(cypha_bench_native PRIVATE ZLIB::ZLIB)
   target_link_libraries(cypha_bench_run PRIVATE ZLIB::ZLIB)
 endif()
 

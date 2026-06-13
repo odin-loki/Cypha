@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "cypha/cyphalm/cellai_ssm.hpp"
-#include "cypha/numpy_default_rng.hpp"
+#include "cypha/mt19937_rng.hpp"
 #include "cypha/som/discriminative_feedback.hpp"
 #include "cypha/som/gng_expert.hpp"
 #include "cypha/som/gria_controller.hpp"

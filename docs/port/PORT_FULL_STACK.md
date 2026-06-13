@@ -216,11 +216,12 @@ Keep **fixtures/** aligned with native math when the frozen contract changes ? s
 
 **Validation gate:** `powershell -File scripts/cypha_native_validate_all.ps1` (or build + `ctest -R native_`). Install: `packaging/install_release_windows.ps1` / `packaging/install_release_linux.sh`.
 
-**Next horizons** ? see **[`docs/FUTURE.md`](../FUTURE.md)**:
-- **?1** CUDA tuning (batch thresholds, persistent device buffers) if serving latency matters
-- **?2?3** Qt streaming training thread + packaged binary (AppImage / Windows `.exe`)
-- **?4?5** Web UI + multi-model `cypha_rest` serving
-- **?6** Curriculum / active learning in the training loop
-- **?7** ONNX export for inference-only deployments
+**Next horizons** — see **[`docs/FUTURE.md`](../FUTURE.md)**:
+- **§0a** Kernel LLR tuning (Nyström shipped; close sklearn XOR gap)
+- **§3** Packaged AppImage / Windows bundle (`packaging/`)
+- **§5** Multi-model `cypha_rest` serving
+- **§6** Curriculum / active learning in the training loop
+- **§7** ONNX export for inference-only deployments
+- **§10** RPSM matrix refactor (Option A) + CyphaLM sequence layer (Option B) — [`docs/research/upgrades/`](../research/upgrades/README.md)
 
 **Ongoing hygiene:** [`docs/verify/MAINTENANCE.md`](../verify/MAINTENANCE.md) (fixtures, **`ctest`**, experiment DDL, **`CYPHA_REST_BIN`**).

@@ -13,6 +13,8 @@
 
 namespace cypha {
 
+struct PreprocessorState;
+
 /// Python ``CyphaDIF.deliberation_lo/hi`` defaults (disabled: lo >= hi).
 constexpr double kDeliberationLoDefault = 1.0;
 constexpr double kDeliberationHiDefault = 0.0;
@@ -30,6 +32,8 @@ struct CyphaInferOptions {
   const KernelMemory* kernel_mem{nullptr};
   bool use_kernel_llr{false};
   double kernel_blend{0.5};
+  /// Optional kernel feature vector (raw ``x`` or XOR pair features); defaults to ``h``.
+  const double* kernel_x{nullptr};
 };
 
 struct ClassifyAtHResult {
@@ -129,6 +133,15 @@ void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n
 void softmax_batch_reference(const double* z_row_major, int n, int k, double eps,
                              std::vector<double>& probs_out);
 
+/// Shannon entropy of one softmax row (nats).
+double row_entropy_from_probs(const double* p, int k, double eps = 1e-8);
+
+/// Active-learning order: row indices sorted by descending predictive entropy (``batch_encode`` +
+/// ``score_matrix_use_field`` + temperature-scaled softmax). ``n_rows`` rows of raw features in ``x_rowmajor``.
+std::vector<int> uncertainty_rank_indices(const CyphaInferModel& m, const PreprocessorState* pre,
+                                          const double* x_rowmajor, int n_rows, int n_features,
+                                          double temperature = -1.0);
+
 void world_gate_vector_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
                                  double gh_chi, double gh_psi, std::vector<double>& gates_out);
 
@@ -166,7 +179,7 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
                                 double temperature, const std::optional<double>& mahal_ema, double mahal_std_ema,
                                 double gh_chi, double gh_psi, bool use_context_prior = true,
                                 const KernelMemory* kernel_mem = nullptr, bool use_kernel_llr = false,
-                                double kernel_blend = 0.5);
+                                double kernel_blend = 0.5, const double* kernel_feat = nullptr);
 
 /// Python ``CyphaDIF.infer`` (``use_field`` + deliberation + optional kernel LLR blend).
 InferAtHResult infer_at_h(const CyphaInferModel& m, const double* h, const CyphaInferOptions& opt);

@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <random>
 #include <string>
@@ -24,8 +25,12 @@ class KernelMemory;
 
 /// Parameters for one bulk-native-train run (copied/snapshotted on the main thread).
 struct BulkNativeTrainJob {
-  cypha::CsvDenseResult data;
+  std::filesystem::path csv_path;
+  cypha::CsvDenseSpec csv_spec;
+  int total_rows{0};
   int train_n{0};
+  int chunk_rows{4096};
+  bool sort_by_uncertainty{false};
 
   cypha::CyphaInferModel* model{nullptr};
   cypha::CyphaDifMemoryState* mem{nullptr};
@@ -69,6 +74,7 @@ struct BulkNativeTrainResult {
   int enc_updates{0};
   int steps_completed{0};
   bool cancelled{false};
+  cypha::CsvDenseResult val_holdout{};
 };
 
 /// Per-step log row for the native train log table (batched on main thread at end).

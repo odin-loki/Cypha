@@ -39,6 +39,8 @@ struct TrainStepExtras {
   double kernel_blend{0.5};
   /// Scales ``delta_lr`` for kernel weight updates only (default 1.0).
   double kernel_lr_scale{1.0};
+  /// When non-null, Nyström reservoir/score/update use this vector instead of latent ``H``.
+  const double* kernel_features{nullptr};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).

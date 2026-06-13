@@ -9,12 +9,13 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Removed
+- **`Cypha Possible Upgrades/`** root folder — content backported to [`docs/research/upgrades/`](docs/research/upgrades/README.md).
 - **Python runtime decommissioned (P7):** `Cypha.py`, `cypha_studio/`, `cypha_core/`, `cypha_accel/`, `bench/` (Python package removed), `cypha_lm/`, and related packages removed from the product path. Native C++ (`cypha_core` library, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`) is the sole runtime.
 - **pytest CI gate:** ~274 pytest tests no longer run in CI; validation is CTest-only.
 - **`run_all.py`:** replaced by `cypha_bench_run`.
 
 ### Changed
-- **CI gate:** native-only — **54+ CTests** (`ctest -R native_`) across four blocking jobs.
+- **CI gate:** native-only — **67 CTests** (`ctest -R native_`) across four blocking jobs.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
 - **`cyphalm_parity`:** Windows subprocess fix (`CreateProcess` instead of `std::system`).
@@ -46,6 +47,21 @@ milestone or a significant self-contained change.
 - **Auto-γ RFF (§0b):** native `PreprocessorState::auto_rff_gamma`; bench + Qt shell wired.
 - **Nyström kernel LLR (native):** `KernelMemory` in C++ with train/infer wiring, `.cypha` persistence, XOR bench (`xor_kernel_bench`, CTest `native_xor_kernel_bench_smoke`), bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`), opt-in profile `bench/config/kernel_llr_profile.json`.
 - **Intelligence Profiler (C++):** `native/include/cypha/intelligence/` — NIG statistic states, 7-stat measurers, κ, health signal; CTest `native_intelligence_profiler_smoke`.
+- **Research upgrades hub:** RPSM, nonlinear boundary, cell hypothesis specs under `docs/research/upgrades/`.
+- **`cypha_fixture_gen`:** all **32** sidecar parity fixtures regenerable; CTest `native_fixture_gen_list`.
+- **`cypha_parity_run`:** unified parity driver `--fixture NAME`; CTest `native_parity_run_list`.
+- **`bench_domains.cpp`:** domain runners split from `cypha_bench_run` CLI.
+- **`mt19937_rng`:** renamed from `numpy_default_rng` (parity MT19937).
+- **REST schema contract:** `native_rest_schema_contract` replaces pytest `test_api_contract`.
+- **Studio Web UI tabs:** Update, Models/Load, LM generate, Session RNG, Metrics chart.
+- **`embed_static_ui`:** C++ tool replaces Python embed script.
+- **Kernel XOR pair features:** raw XOR polynomial kernel path (~97% acc smoke); `kernel_x` / `kernel_features` API.
+- **`bench/config/auto_rff_gamma_cv_profile.json`** for d01 RFF CV preprocessor.
+- **Diagnostics phase 5:** intelligence profiler inline + SSM recommendations JSON.
+- **`GET /intelligence/profile`** on `cypha_rest`.
+- **Qt:** chunked CSV train, MKE bulk worker, uncertainty sort checkbox, Qt Charts `QRectF` fix.
+- **`cypha_export_gguf`:** GGUF header + manifest stub; CTest `native_export_gguf_help`.
+- **`packaging/macos_bundle.sh`:** macOS `.app` skeleton via `macdeployqt`.
 
 ---
 

@@ -1,4 +1,4 @@
-// cypha_diagnostics_run — native orchestrator for cypha_diagnostics phases 1–4.
+// cypha_diagnostics_run — native orchestrator for cypha_diagnostics phases 1–5.
 // Runs parity exes + inline cypha_core checks; reports pass/fail (no sklearn).
 #include <chrono>
 #include <cstdio>
@@ -21,6 +21,8 @@
 #include <nlohmann/json.hpp>
 
 #include "cypha/som/som_encoder.hpp"
+#include "cypha/intelligence/intelligence_profile_json.hpp"
+#include "cypha/intelligence/intelligence_profiler.hpp"
 
 namespace fs = std::filesystem;
 using Json = nlohmann::json;
@@ -44,12 +46,13 @@ struct CheckResult {
     int exit_code{-1};
     double seconds{0.0};
     std::string detail;
+    Json payload;
 };
 
 void usage() {
     std::cerr
         << "usage: cypha_diagnostics_run [--fixtures DIR] [--out DIR] [--exe-dir DIR]\n"
-        << "       [--phases 1,2,3,4] [--list] [--inline-only]\n";
+        << "       [--phases 1,2,3,4,5] [--list] [--inline-only]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -225,6 +228,64 @@ CheckResult run_som_encoder_smoke() {
     return r;
 }
 
+CheckResult run_intelligence_profiler_summary() {
+    CheckResult r;
+    r.phase = "5";
+    r.kind = "inline";
+    r.name = "intelligence_profiler_summary";
+    try {
+        cypha::intelligence::IntelligenceProfiler profiler;
+        const auto targets = cypha::intelligence::IntelligenceProfiler::critical_targets();
+        cypha::intelligence::ProfileObservation obs;
+        obs.alpha = targets[0];
+        obs.d_eff = targets[1];
+        obs.sigma_branch = targets[2];
+        obs.tau = targets[3];
+        obs.r_eu = targets[4];
+        obs.lipschitz = targets[5];
+        obs.calibration = targets[6];
+        for (int step = 0; step < 4; ++step) {
+            profiler.update(obs);
+        }
+
+        const std::vector<double> input(12, 0.5);
+        std::vector<double> output = input;
+        for (std::size_t i = 0; i < output.size(); ++i) {
+            output[i] += static_cast<double>(i % 3) * 0.04;
+        }
+        const std::vector<double> conf = {0.25, 0.85};
+        const std::vector<int> labels = {0, 1};
+        std::vector<double> perturb = output;
+        std::vector<double> out_pert = output;
+        for (std::size_t i = 0; i < perturb.size(); ++i) {
+            perturb[i] += 0.01;
+            out_pert[i] += 0.05;
+        }
+        cypha::intelligence::ProfileBatch batch;
+        batch.input = input.data();
+        batch.output = output.data();
+        batch.n_samples = 4;
+        batch.n_dims = 3;
+        batch.confidences = conf.data();
+        batch.correct = labels.data();
+        batch.n_labels = static_cast<int>(conf.size());
+        batch.epistemic_var = 0.55;
+        batch.aleatoric_var = 0.45;
+        batch.perturbed_input = perturb.data();
+        batch.perturbed_output = out_pert.data();
+        profiler.update_from_batch(batch);
+
+        const Json profile = cypha::intelligence::intelligence_profile_to_json(profiler);
+        r.pass = profile.value("criticality_score", 0.0) > 0.0;
+        r.exit_code = r.pass ? 0 : 1;
+        r.detail = "kappa=" + std::to_string(profile.value("criticality_score", 0.0));
+        r.payload = profile;
+    } catch (const std::exception& ex) {
+        r.detail = ex.what();
+    }
+    return r;
+}
+
 struct ParityJob {
     std::string phase;
     std::string exe;
@@ -263,6 +324,7 @@ std::vector<ParityJob> build_jobs(const fs::path& fix) {
 void write_json_report(const fs::path& out_dir, const std::vector<CheckResult>& results) {
     fs::create_directories(out_dir);
     Json by_phase = Json::object();
+    Json intelligence_summary;
     int passed = 0;
     int failed = 0;
     for (const auto& r : results) {
@@ -273,6 +335,12 @@ void write_json_report(const fs::path& out_dir, const std::vector<CheckResult>& 
                      {"seconds", r.seconds}};
         if (!r.detail.empty()) {
             item["detail"] = r.detail;
+        }
+        if (!r.payload.empty()) {
+            item["payload"] = r.payload;
+            if (r.name == "intelligence_profiler_summary") {
+                intelligence_summary = r.payload;
+            }
         }
         by_phase[r.phase].push_back(item);
         if (r.pass) {
@@ -287,7 +355,10 @@ void write_json_report(const fs::path& out_dir, const std::vector<CheckResult>& 
                           {"all_pass", failed == 0},
                           {"orchestrator", "cypha_diagnostics_run"},
                           {"note", "sklearn baselines omitted; native parity + inline checks only"}};
-    const Json root = {{"summary", summary}, {"phases", by_phase}};
+    Json root = {{"summary", summary}, {"phases", by_phase}};
+    if (!intelligence_summary.empty()) {
+        root["intelligence_profiler"] = intelligence_summary;
+    }
     const fs::path out_path = out_dir / "native_diagnostics_summary.json";
     std::ofstream f(out_path);
     if (!f) {
@@ -328,6 +399,7 @@ int main(int argc, char** argv) {
                 std::cout << '\n';
             }
             std::cout << "phase 2  som_encoder_smoke (inline)\n";
+            std::cout << "phase 5  intelligence_profiler_summary (inline)\n";
             return 0;
         }
 
@@ -352,6 +424,17 @@ int main(int argc, char** argv) {
         if (phase_enabled(args, 2)) {
             std::cout << "\n== phase 2 :: som_encoder_smoke (inline) ==\n";
             CheckResult r = run_som_encoder_smoke();
+            std::cout << (r.pass ? "[PASS] " : "[FAIL] ") << r.name;
+            if (!r.detail.empty()) {
+                std::cout << " — " << r.detail;
+            }
+            std::cout << '\n';
+            results.push_back(std::move(r));
+        }
+
+        if (phase_enabled(args, 5)) {
+            std::cout << "\n== phase 5 :: intelligence_profiler_summary (inline) ==\n";
+            CheckResult r = run_intelligence_profiler_summary();
             std::cout << (r.pass ? "[PASS] " : "[FAIL] ") << r.name;
             if (!r.detail.empty()) {
                 std::cout << " — " << r.detail;

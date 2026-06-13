@@ -81,4 +81,7 @@ void patch_kernel_into_root(CNode& root, const KernelMemory& km, bool use_kernel
 bool try_load_kernel_from_root(const CNode& root, KernelMemory& km, bool& use_kernel_llr_out,
                                double& kernel_blend_out);
 
+/// XOR-aware kernel features: ``[x0, x1, x0·x1, x0², x1²]`` (5 dims when ``d >= 2``).
+std::vector<double> build_xor_pair_features(const double* x, int d);
+
 }  // namespace cypha

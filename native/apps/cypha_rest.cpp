@@ -49,6 +49,8 @@
 #include "cypha/branch_a_rest.hpp"
 #include "cypha/cyphalm/cyphalm_rest.hpp"
 #include "cypha/dif_rest.hpp"
+#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence_rest.hpp"
 #include "cypha_rest_static_ui.hpp"
 
 namespace fs = std::filesystem;
@@ -62,6 +64,7 @@ std::unique_ptr<cypha::KernelMemory> g_kernel_mem;
 bool g_use_kernel_llr{false};
 double g_kernel_blend{0.5};
 std::unique_ptr<cypha::PreprocessorState> g_pre;
+cypha::intelligence::IntelligenceProfiler g_intelligence_profiler;
 std::string g_registry_root;
 std::vector<cypha::RegistryModelRef> g_registry_cache;
 
@@ -855,6 +858,14 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
   double latency = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   g_predictions += 1;
   g_sess.push_back(SessPred{pred_label, conf, anomaly, is_ood});
+
+  {
+    cypha::intelligence::ProfileObservation obs;
+    obs.calibration = std::clamp(conf, 0.0, 1.0);
+    obs.r_eu = is_ood ? 0.35 : 0.65;
+    obs.alpha = std::clamp(r_eff > 0.0 ? r_eff / (r_eff + 1.0) : 0.5, 0.0, 1.0);
+    g_intelligence_profiler.update(obs);
+  }
 
   nlohmann::json out;
   out["label"] = pred_label;
@@ -1859,6 +1870,8 @@ int main(int argc, char** argv) {
   cypha::cyphalm::register_cyphalm_rest_routes(svr);
   cypha::branch_a_rest_configure(branch_a_json_path);
   cypha::register_branch_a_rest_routes(svr);
+  cypha::intelligence_rest_configure(&g_mu, &g_intelligence_profiler);
+  cypha::register_intelligence_rest_routes(svr);
 
   if (!cyphalm_checkpoint_path.empty()) {
     try {

@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-13 08:18 UTC
+Generated: 2026-06-13 08:47 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -11,7 +11,7 @@ Default parameters only — no hyperparameter tuning.
 
 ## D01
 
-*Timestamp:* 2026-06-13T06:35:41.231+00:00
+*Timestamp:* 2026-06-13T08:47:54.098+00:00
 
 ### backend
 

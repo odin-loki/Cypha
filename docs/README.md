@@ -48,6 +48,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
 | [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / WSL workflow checklist |
 | [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I–V); C++ in `native/include/cypha/intelligence/` |
+| [Possible upgrades](research/upgrades/README.md) | RPSM Option A/B, nonlinear boundary, cell hypothesis testbench (planned) |
 | [Failed experiments](archive/failed_experiments/cypha_som/README.md) | cypha_som SOM upgrade post-mortem |
 | [C++2023 migration](native/migration/CPLUSPLUS_2023_MASTER_PLAN.md) | Python decommission phases (P7 complete) |
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, CTest gate reference |
@@ -105,6 +106,8 @@ For the full picture of where the project stands — benchmark numbers, confirme
 **[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** — the canonical research journal.
 
 **[`docs/MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md)** — planned multi-view online training (CyphaLM Phase 1, CyphaDIF Phase 2): structure-preserving reorderings, view schedules, execution roadmap.
+
+**[`docs/research/upgrades/README.md`](research/upgrades/README.md)** — planned RPSM refactor (Option A), CyphaLM sequence layer (Option B), nonlinear boundary fixes, cell hypothesis testbench.
 
 Permanent investigation reports:
 

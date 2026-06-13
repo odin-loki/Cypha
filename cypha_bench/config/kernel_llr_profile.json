@@ -65,11 +65,11 @@
   },
   "converge_iterations_total": 8,
   "notes": [
-    "Opt-in via CYPHA_BENCH_PROFILE_PATH=bench/config/kernel_llr_profile.json",
+    "Opt-in via CYPHA_BENCH_PROFILE_PATH=cypha_bench/config/kernel_llr_profile.json",
     "Tabular: Nyström kernel LLR M=512, gamma_scale=2.0, kernel_lr_scale=2.0, blend=1.0",
     "Tuned with native cypha_kernel_tune / xor_kernel_bench --tune (3 seeds, 8 passes, replay off)",
     "Native XOR kernel_mean_acc 71.1% vs linear 51.2% (+19.9 pp); up from ~59% pre-tune",
-    "2026-06-13 raw-feature paths (1 seed, 4 passes, M=512): latent +18.2 pp; --kernel-raw-x 68.0% (+18.2 pp); --kernel-xor-features 97.0% (+47.2 pp, ~sklearn RBF ceiling 79%)",
+    "2026-06-13 raw-feature paths (1 seed, 4 passes, M=512): latent +16.2 pp; --kernel-raw-x 68.0% (+18.2 pp); --kernel-xor-features 97.0% (+47.2 pp, ~sklearn RBF ceiling 79%)",
     "Recommended XOR kernel mode: xor_pair features via build_xor_pair_features() + TrainStepExtras.kernel_features"
   ],
   "algorithm_variants": {

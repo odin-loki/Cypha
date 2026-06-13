@@ -14,7 +14,7 @@
 #include "cypha/infer_cpu.hpp"
 #include "cypha/kernel_memory.hpp"
 #include "cypha/memory_train.hpp"
-#include "cypha/numpy_default_rng.hpp"
+#include "cypha/mt19937_rng.hpp"
 #include "cypha/replay_buffer.hpp"
 #include "cypha/sync_infer.hpp"
 #include "cypha/train_step_vector.hpp"
@@ -36,6 +36,8 @@ struct BenchConfig {
   double gamma_scale = 1.0;
   double kernel_lr_scale = 1.0;
   bool shuffle_train = true;
+  /// ``latent`` (default), ``raw_x``, or ``xor_pair`` kernel features.
+  std::string kernel_feature_mode = "latent";
 };
 
 struct SeedResult {
@@ -103,22 +105,53 @@ Split scale_split(const std::vector<std::vector<double>>& x, const std::vector<i
 }
 
 double eval_acc(cypha::CyphaInferModel& infer, const Split& sp, cypha::KernelMemory* km, bool use_kernel,
-                double kernel_blend) {
+                double kernel_blend, const BenchConfig& cfg, int raw_d) {
   int correct = 0;
   cypha::CyphaInferOptions opt;
   opt.use_field = true;
   opt.kernel_mem = km;
   opt.use_kernel_llr = use_kernel;
   opt.kernel_blend = kernel_blend;
+  std::vector<double> kfeat_buf;
   for (std::size_t i = 0; i < sp.x_te.size(); ++i) {
     std::vector<double> h;
     cypha::batch_encode(infer, sp.x_te[i].data(), 1, h);
+    if (use_kernel && cfg.kernel_feature_mode == "raw_x") {
+      opt.kernel_x = sp.x_te[i].data();
+    } else if (use_kernel && cfg.kernel_feature_mode == "xor_pair") {
+      kfeat_buf = cypha::build_xor_pair_features(sp.x_te[i].data(), raw_d);
+      opt.kernel_x = kfeat_buf.data();
+    } else {
+      opt.kernel_x = nullptr;
+    }
     const cypha::InferAtHResult res = cypha::infer_at_h(infer, h.data(), opt);
     if (res.label == sp.y_te[i]) {
       correct += 1;
     }
   }
   return static_cast<double>(correct) / static_cast<double>(sp.x_te.size());
+}
+
+int kernel_feature_dim(const BenchConfig& cfg, int input_dim, int latent_dim) {
+  if (cfg.kernel_feature_mode == "raw_x") {
+    return input_dim;
+  }
+  if (cfg.kernel_feature_mode == "xor_pair") {
+    return 5;
+  }
+  return latent_dim;
+}
+
+const double* kernel_features_for_x(const BenchConfig& cfg, const double* x, int d,
+                                    std::vector<double>& buf) {
+  if (cfg.kernel_feature_mode == "raw_x") {
+    return x;
+  }
+  if (cfg.kernel_feature_mode == "xor_pair") {
+    buf = cypha::build_xor_pair_features(x, d);
+    return buf.data();
+  }
+  return nullptr;
 }
 
 double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
@@ -146,12 +179,14 @@ double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
   cypha::TrainStepExtras extras;
   int total_steps = 0;
   extras.total_steps = &total_steps;
-  cypha::KernelMemory km(infer.d_latent, cfg.kernel_m, static_cast<std::uint64_t>(seed));
+  const int kdim = use_kernel ? kernel_feature_dim(cfg, d, infer.d_latent) : infer.d_latent;
+  cypha::KernelMemory km(kdim, cfg.kernel_m, static_cast<std::uint64_t>(seed));
   km.set_gamma_scale(cfg.gamma_scale);
   extras.kernel_mem = use_kernel ? &km : nullptr;
   extras.use_kernel_llr = use_kernel;
   extras.kernel_blend = cfg.kernel_blend;
   extras.kernel_lr_scale = cfg.kernel_lr_scale;
+  std::vector<double> kernel_feat_buf;
 
   std::mt19937 rng(static_cast<std::uint32_t>(seed));
   int enc_updates = 0;
@@ -170,6 +205,12 @@ double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
       std::shuffle(order.begin(), order.end(), rng);
     }
     for (const std::size_t i : order) {
+      if (use_kernel && cfg.kernel_feature_mode != "latent") {
+        extras.kernel_features =
+            kernel_features_for_x(cfg, sp.x_tr[i].data(), d, kernel_feat_buf);
+      } else {
+        extras.kernel_features = nullptr;
+      }
       cypha::dif_train_step_vector(infer, mem, replay, sp.x_tr[i].data(), d, sp.y_tr[i], kWorldLr, kDeltaLr,
                                    kWorldLr, kDeltaLr, kOodSigma, tsp, rng, enc_updates, nullptr, &extras);
     }
@@ -177,9 +218,10 @@ double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
   cypha::sync_infer_model_from_memory(infer, mem);
   const double sec =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-  const double acc = eval_acc(infer, sp, use_kernel ? &km : nullptr, use_kernel, cfg.kernel_blend);
-  std::cerr << "  seed=" << seed << " kernel=" << (use_kernel ? "1" : "0") << " acc=" << acc
-            << " train_sec=" << sec << " n_basis=" << km.n_basis() << " gamma=" << km.gamma() << "\n";
+  const double acc = eval_acc(infer, sp, use_kernel ? &km : nullptr, use_kernel, cfg.kernel_blend, cfg, d);
+  std::cerr << "  seed=" << seed << " kernel=" << (use_kernel ? "1" : "0") << " mode=" << cfg.kernel_feature_mode
+            << " acc=" << acc << " train_sec=" << sec << " n_basis=" << km.n_basis() << " gamma=" << km.gamma()
+            << "\n";
   return acc;
 }
 
@@ -208,6 +250,12 @@ BenchConfig parse_bench_config(int argc, char** argv) {
       cfg.kernel_lr_scale = std::atof(argv[++i]);
     } else if (arg == "--no-shuffle") {
       cfg.shuffle_train = false;
+    } else if (arg == "--kernel-raw-x") {
+      cfg.kernel_feature_mode = "raw_x";
+    } else if (arg == "--kernel-xor-features") {
+      cfg.kernel_feature_mode = "xor_pair";
+    } else if (arg == "--kernel-feature-mode" && i + 1 < argc) {
+      cfg.kernel_feature_mode = argv[++i];
     }
   }
   return cfg;
@@ -221,6 +269,9 @@ void usage() {
             << "  --kernel-m M         Nyström landmarks (default 256)\n"
             << "  --gamma-scale G      RBF bandwidth multiplier (default 1.0)\n"
             << "  --kernel-lr-scale S  kernel weight lr scale (default 1.0)\n"
+            << "  --kernel-raw-x       Nyström kernel on standardized raw x (not latent h)\n"
+            << "  --kernel-xor-features  kernel on [x0,x1,x0*x1,x0^2,x1^2] (5-d)\n"
+            << "  --kernel-feature-mode {latent,raw_x,xor_pair}\n"
             << "  --no-shuffle         disable per-pass train shuffle\n"
             << "  --tune               grid search M x gamma_scale x blend\n"
             << "  --tune-seeds N       seeds per tune cell (default 2)\n";
@@ -361,7 +412,8 @@ int xor_kernel_bench_main(int argc, char** argv) {
   std::cout << "{\n  \"dataset\": \"S3_nonlinear_xor_native\",\n  \"seeds\": " << cfg.seeds
             << ",\n  \"passes\": " << cfg.passes << ",\n  \"kernel_blend\": " << cfg.kernel_blend
             << ",\n  \"kernel_m\": " << cfg.kernel_m << ",\n  \"gamma_scale\": " << cfg.gamma_scale
-            << ",\n  \"kernel_lr_scale\": " << cfg.kernel_lr_scale << ",\n  \"shuffle_train\": "
+            << ",\n  \"kernel_lr_scale\": " << cfg.kernel_lr_scale << ",\n  \"kernel_feature_mode\": \""
+            << cfg.kernel_feature_mode << "\",\n  \"shuffle_train\": "
             << (cfg.shuffle_train ? "true" : "false") << ",\n  \"linear\": [\n";
   for (int s = 0; s < cfg.seeds; ++s) {
     if (s) {

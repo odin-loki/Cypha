@@ -35,7 +35,7 @@ add_library(cypha_core STATIC
   src/bessel_table_data.cpp
   src/preprocessor.cpp
   src/preprocessor_fit.cpp
-  src/numpy_default_rng.cpp
+  src/mt19937_rng.cpp
   src/csv_ingest.cpp
   src/memory_train.cpp
   src/registry.cpp
@@ -61,6 +61,7 @@ add_library(cypha_core STATIC
   src/intelligence/nig_statistic_state.cpp
   src/intelligence/measurers.cpp
   src/intelligence/intelligence_profiler.cpp
+  src/intelligence/intelligence_profile_json.cpp
   src/intelligence/epistemic_threshold.cpp
   src/intelligence/soft_world_monitor.cpp
 )
@@ -103,6 +104,7 @@ add_library(cypha_bench_native STATIC
   src/bench/bench_figures.cpp
   src/bench/bench_figure_render.cpp
   src/bench/bench_tune.cpp
+  src/bench/bench_domains.cpp
 )
 
 target_include_directories(cypha_bench_native PUBLIC
@@ -150,7 +152,7 @@ target_compile_definitions(cypha_core PRIVATE
 )
 
 add_executable(cypha_fixture_gen tools/fixture_generate.cpp)
-target_link_libraries(cypha_fixture_gen PRIVATE cypha_core)
+target_link_libraries(cypha_fixture_gen PRIVATE cypha_core cypha_lm_native)
 
 add_executable(xor_kernel_bench tools/xor_kernel_bench.cpp)
 target_link_libraries(xor_kernel_bench PRIVATE cypha_core)
@@ -172,6 +174,12 @@ target_link_libraries(preprocessor_rff_gamma_cv_test PRIVATE cypha_core)
 
 add_executable(registry_register tools/registry_register.cpp)
 target_link_libraries(registry_register PRIVATE cypha_core)
+
+add_executable(rest_schema_contract tests/rest_schema_contract.cpp)
+target_include_directories(rest_schema_contract PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+if(WIN32)
+  target_link_libraries(rest_schema_contract PRIVATE ws2_32)
+endif()
 
 add_executable(cuda_smoke tools/cuda_smoke.cpp)
 target_link_libraries(cuda_smoke PRIVATE cypha_core)
@@ -203,6 +211,7 @@ set(
   preprocessor_rff_gamma_cv_test
   ${CYPHA_APP_EXE_TARGETS}
   registry_register
+  rest_schema_contract
   cuda_smoke
   create_model_smoke
   cypha_onnx_export
@@ -287,6 +296,7 @@ endif()
 if(MSVC)
   target_compile_options(cypha_core PRIVATE /W4 /permissive-)
   target_compile_options(cypha_parity PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_parity_run PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
   target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
   target_compile_options(score_batch_parity PRIVATE /W4 /permissive-)
@@ -351,6 +361,7 @@ else()
   target_compile_options(cyphalm_train PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_parity_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(score_batch_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -405,6 +416,10 @@ add_test(
     "${_parity_fix}/native_parity.bin"
 )
 add_test(
+  NAME native_parity_run_list
+  COMMAND "$<TARGET_FILE:cypha_parity_run>" --list
+)
+add_test(
   NAME native_gh_infer_deliberation
   COMMAND "$<TARGET_FILE:gh_infer_deliberation_parity>"
     "${_parity_fix}/gh_infer_deliberation"
@@ -422,7 +437,7 @@ set_tests_properties(
   native_fixture_gen_list
   PROPERTIES
     PASS_REGULAR_EXPRESSION
-      "batch_llr[\t ]+batch LLR from raw X;memory_train[\t ]+one DIFMemory.train step;preprocessor[\t ]+Preprocessor transform;train_step_vector[\t ]+one dif_train_step_vector loss;quantile_dif_train[\t ]+quantile DIF train replay;regression_m4[\t ]+M4 regression golden"
+      "batch_llr[\t ]+;memory_train[\t ]+;preprocessor[\t ]+;train_step_vector[\t ]+;quantile_dif_train[\t ]+;regression_m4[\t ]+;score_batch[\t ]+;kernel_llr[\t ]+;gh_infer_deliberation[\t ]+;generation[\t ]+;embed_table[\t ]+;retrieval[\t ]+;multilabel_dif[\t ]+;merge_from[\t ]+;similarity_index[\t ]+;dif_regressor_train_step[\t ]+;mke_train_step[\t ]+;mke_train_extended[\t ]+;dif_train_replay[\t ]+;studio_trainer_classify_hotpath[\t ]+;studio_trainer_gh_classify_hotpath[\t ]+;rff_regression[\t ]+;two_stage_pipeline[\t ]+;two_stage_ridge_fit[\t ]+;two_stage_e2e_ridge[\t ]+;csv_preprocess_classify_hotpath[\t ]+;studio_trainer_preprocess_classify_hotpath[\t ]+;studio_trainer_preprocess_gh_classify_hotpath[\t ]+;cyphalm_char_lstm[\t ]+;cyphalm_checkpoint_char_lstm[\t ]+;cyphalm_checkpoint_hybrid[\t ]+;cyphalm_ssm[\t ]+"
 )
 add_test(
   NAME native_score_batch
@@ -762,6 +777,25 @@ if(WIN32)
   )
   set_tests_properties(native_rest_ui_smoke PROPERTIES RUN_SERIAL TRUE)
 endif()
+
+if(WIN32)
+  add_test(
+    NAME native_rest_schema_contract
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+      -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_rest_schema_contract.ps1"
+      -BuildDir "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+else()
+  add_test(
+    NAME native_rest_schema_contract
+    COMMAND "$<TARGET_FILE:rest_schema_contract>"
+      --cypha-rest "$<TARGET_FILE:cypha_rest>"
+      --registry-register "$<TARGET_FILE:registry_register>"
+      --repo-root "${CMAKE_CURRENT_SOURCE_DIR}/.."
+      --build-dir "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+endif()
+set_tests_properties(native_rest_schema_contract PROPERTIES RUN_SERIAL TRUE)
 
 if(TARGET experiment_db_smoke)
   add_test(

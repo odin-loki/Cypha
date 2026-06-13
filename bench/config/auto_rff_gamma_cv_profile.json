@@ -1,0 +1,60 @@
+{
+  "source": "auto_rff_gamma_cv profile 2026-06-13 — RFF encoder with CV bandwidth for tabular d01",
+  "generated_utc": "2026-06-13T12:00:00.000000+00:00",
+  "default_regime": "tabular",
+  "regimes": {
+    "tabular": {
+      "world_lr": 0.008,
+      "delta_lr": 0.03,
+      "enc_lr": 0.002,
+      "mdl_lambda": 0.0015,
+      "temperature": 0.9974999999999999,
+      "field_dim": 128,
+      "context_win": 32,
+      "n_epochs": 4,
+      "train_passes_cap": 800,
+      "preprocessor": {
+        "scale": true,
+        "rff_dim": 256,
+        "auto_rff_gamma_cv": true,
+        "seed": 42
+      }
+    },
+    "vision": {
+      "world_lr": 0.008,
+      "delta_lr": 0.03,
+      "enc_lr": 0.002,
+      "mdl_lambda": 0.0015,
+      "temperature": 0.9974999999999999,
+      "field_dim": 128,
+      "context_win": 32,
+      "n_epochs": 4,
+      "train_passes_cap": 0,
+      "replay_ratio": 0.22000000000000003,
+      "ood_sigma": 12.0
+    },
+    "regression": {
+      "world_lr": 0.015,
+      "delta_lr": 0.05,
+      "enc_lr": 0.003,
+      "mdl_lambda": 0.0015,
+      "temperature": 1.1025,
+      "field_dim": 128,
+      "context_win": 16,
+      "target_lr": 0.08800000000000001,
+      "n_experts": 10,
+      "n_epochs": 3,
+      "train_passes_cap": 1200
+    }
+  },
+  "architecture": {
+    "replay_ratio": 0.22000000000000003,
+    "ood_sigma": 12.0
+  },
+  "notes": [
+    "Opt-in via CYPHA_BENCH_PROFILE_PATH=bench/config/auto_rff_gamma_cv_profile.json",
+    "Tabular d01: fit PreprocessorState with auto_rff_gamma_cv before online CyphaDIF train",
+    "2026-06-13 fast d01 smoke: linearly_separable 98.75%, 4_gaussian_blobs 88.75% (same as everyday_profile; tasks already at ceiling)",
+    "RFF CV selects gamma=0.1 on synthetic d01; benefit expected on harder tabular (dim<=30) per FUTURE.md §0b"
+  ]
+}

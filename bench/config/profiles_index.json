@@ -5,6 +5,12 @@
     "regime": "tabular",
     "loader": "cypha_bench.config.load_profile.classification_params"
   },
+  "auto_rff_gamma_cv": {
+    "path": "auto_rff_gamma_cv_profile.json",
+    "regime": "tabular",
+    "env": "CYPHA_BENCH_PROFILE_PATH=bench/config/auto_rff_gamma_cv_profile.json",
+    "domains": ["d01"]
+  },
   "vision": {
     "path": "everyday_profile.json",
     "regime": "vision",

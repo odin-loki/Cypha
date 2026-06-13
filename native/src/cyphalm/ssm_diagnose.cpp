@@ -64,6 +64,70 @@ nlohmann::json decay_json(const CellAISSM& ssm) {
 
 }  // namespace
 
+nlohmann::json build_ssm_recommendations(const nlohmann::json& summary, const nlohmann::json& decay_rates,
+                                         const nlohmann::json* projection) {
+    nlohmann::json recs = nlohmann::json::array();
+
+    auto json_double = [](const nlohmann::json& j, const char* key, double def) {
+        if (j.contains(key) && !j[key].is_null() && j[key].is_number()) {
+            return j[key].get<double>();
+        }
+        return def;
+    };
+
+    auto push = [&](const char* id, const char* severity, const char* action, const nlohmann::json& detail) {
+        recs.push_back(nlohmann::json{{"id", id},
+                                      {"severity", severity},
+                                      {"action", action},
+                                      {"detail", detail}});
+    };
+
+    const bool collapsed = summary.value("collapsed", false);
+    const bool exploded = summary.value("exploded", false);
+    if (collapsed) {
+        const auto fast = summary.value("fast", nlohmann::json::object());
+        const auto slow = summary.value("slow", nlohmann::json::object());
+        push("ssm_state_collapse", "high", "Increase tau_slow or reduce spectral_pde gain; verify input scaling",
+             nlohmann::json{{"fast_final", json_double(fast, "final", 0.0)},
+                            {"slow_final", json_double(slow, "final", 0.0)}});
+    }
+    if (exploded) {
+        const auto fast = summary.value("fast", nlohmann::json::object());
+        const auto slow = summary.value("slow", nlohmann::json::object());
+        push("ssm_state_explosion", "high", "Enable gradient clipping on SSM projections; lower world_lr / delta_lr",
+             nlohmann::json{{"fast_max", json_double(fast, "max", 0.0)},
+                            {"slow_max", json_double(slow, "max", 0.0)}});
+    }
+
+    const double lambda_fast = json_double(decay_rates, "fast", json_double(decay_rates, "lambda_fast", 0.0));
+    const double lambda_slow = json_double(decay_rates, "slow", json_double(decay_rates, "lambda_slow", 0.0));
+    if (lambda_fast > 0.995) {
+        push("ssm_fast_decay_too_slow", "medium", "Reduce tau_fast for faster context turnover on short sequences",
+             nlohmann::json{{"lambda_fast", lambda_fast}});
+    }
+    if (lambda_slow < 0.90) {
+        push("ssm_slow_decay_too_fast", "medium", "Increase tau_slow to retain long-range structure",
+             nlohmann::json{{"lambda_slow", lambda_slow}});
+    }
+
+    if (projection != nullptr) {
+        const bool connected = projection->value("connected_to_routing", true);
+        const double proj_rms = json_double(*projection, "proj_weight_rms", 0.0);
+        if (!connected || proj_rms <= 1e-8) {
+            push("ssm_routing_disconnect", "high",
+                 "Re-init SSM→field projection; confirm GRIA routing is enabled in CyphaLM config",
+                 nlohmann::json{{"proj_weight_rms", proj_rms},
+                                {"connected_to_routing", connected}});
+        }
+    }
+
+    if (recs.empty()) {
+        push("ssm_healthy", "info", "No SSM tuning actions required for this probe window",
+             nlohmann::json{{"checks_passed", true}});
+    }
+    return recs;
+}
+
 double vector_l2_norm(const std::vector<double>& v) {
     double acc = 0.0;
     for (double x : v) acc += x * x;
@@ -120,6 +184,12 @@ nlohmann::json diagnose_cellai_sequence(CellAISSM& ssm,
         fast_summary.value("exploded", false) || slow_summary.value("exploded", false);
 
     nlohmann::json decay = decay_json(ssm);
+    const nlohmann::json summary_json =
+        nlohmann::json{{"fast", fast_summary},
+                       {"slow", slow_summary},
+                       {"context", ctx_summary},
+                       {"collapsed", collapsed},
+                       {"exploded", exploded}};
     return nlohmann::json{
         {"domain", domain_tag},
         {"steps", static_cast<int>(inputs.size())},
@@ -135,12 +205,9 @@ nlohmann::json diagnose_cellai_sequence(CellAISSM& ssm,
                         {"slow_track", slow_track},
                         {"context_track", ctx_track},
                         {"context_samples", ctx_samples}}},
-        {"summary",
-         nlohmann::json{{"fast", fast_summary},
-                        {"slow", slow_summary},
-                        {"context", ctx_summary},
-                        {"collapsed", collapsed},
-                        {"exploded", exploded}}},
+        {"summary", summary_json},
+        {"recommendations",
+         build_ssm_recommendations(summary_json, decay["decay_rates"], nullptr)},
         {"checks_passed", !collapsed && !exploded},
         {"tool", "cyphalm_ssm_diagnose"},
     };
@@ -193,6 +260,8 @@ nlohmann::json diagnose_model_tokens(CyphaLMModel& model, const std::vector<int>
                    static_cast<double>(field_rms.size())},
         {"connected_to_routing", routing_connected},
     };
+    report["recommendations"] =
+        build_ssm_recommendations(report["summary"], report["decay_rates"], &report["projection"]);
     if (!routing_connected) {
         report["checks_passed"] = false;
     }
