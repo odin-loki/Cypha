@@ -904,11 +904,38 @@ class SimpleLossChart final : public QWidget {
     update();
   }
   void clear_losses() {
+    compare_mode_ = false;
+    compare_series_.clear();
     losses_rest_.clear();
     losses_native_.clear();
     losses_rest_ema_.clear();
     losses_native_ema_.clear();
     view_initialized_ = false;
+    update();
+  }
+
+  /// Overlay multiple named loss curves (experiment run comparison).
+  void set_compare_loss_runs(const QVector<QPair<QString, QVector<double>>>& runs) {
+    compare_mode_ = true;
+    compare_series_.clear();
+    static const QList<QColor> kPalette = {
+        QColor(110, 180, 255), QColor(255, 170, 90),  QColor(140, 220, 140),
+        QColor(220, 140, 220), QColor(255, 220, 100), QColor(100, 200, 200),
+        QColor(255, 130, 130), QColor(180, 180, 255),
+    };
+    for (int i = 0; i < runs.size(); ++i) {
+      CompareSeries s;
+      s.label = runs[i].first;
+      s.losses = runs[i].second;
+      s.color = kPalette[i % kPalette.size()];
+      compare_series_.append(s);
+    }
+    losses_rest_.clear();
+    losses_native_.clear();
+    losses_rest_ema_.clear();
+    losses_native_ema_.clear();
+    recompute_data_extents();
+    reset_view_to_data();
     update();
   }
   void set_y_range_lock(bool locked, double lo, double hi) {
@@ -929,10 +956,13 @@ class SimpleLossChart final : public QWidget {
     painter.fillRect(full, QColor(32, 34, 38));
     const bool have_r = !losses_rest_.isEmpty();
     const bool have_n = !losses_native_.isEmpty();
-    if (!have_r && !have_n) {
+    const bool have_cmp = compare_mode_ && !compare_series_.isEmpty();
+    if (!have_r && !have_n && !have_cmp) {
       painter.setPen(QColor(140, 140, 150));
       painter.drawText(full.adjusted(8, 0, -8, 0), Qt::AlignCenter,
-                       QStringLiteral("Per-step loss — bulk REST (blue) vs native (orange); dashed = EMA"));
+                       compare_mode_
+                           ? QStringLiteral("Compare runs — select rows in Experiments and click Compare")
+                           : QStringLiteral("Per-step loss — bulk REST (blue) vs native (orange); dashed = EMA"));
       return;
     }
 
@@ -942,7 +972,12 @@ class SimpleLossChart final : public QWidget {
 
     const double lo = view_y0_;
     const double hi = view_y1_;
-    const int max_n = std::max(losses_rest_.size(), losses_native_.size());
+    int max_n = std::max(losses_rest_.size(), losses_native_.size());
+    if (have_cmp) {
+      for (const CompareSeries& s : compare_series_) {
+        max_n = std::max(max_n, static_cast<int>(s.losses.size()));
+      }
+    }
     const QRect plot = plot_rect(full);
 
     // ── Grid lines + Y-axis ticks ─────────────────────────────────────────────
@@ -999,32 +1034,45 @@ class SimpleLossChart final : public QWidget {
       }
       painter.drawPolyline(poly);
     };
-    draw_series(losses_native_ema_, QColor(255, 170, 90), true, 1);
-    draw_series(losses_rest_ema_,   QColor(110, 180, 255), true, 1);
-    draw_series(losses_native_,     QColor(255, 170, 90), false, 2);
-    draw_series(losses_rest_,       QColor(110, 180, 255), false, 2);
+    if (have_cmp) {
+      for (const CompareSeries& s : compare_series_) {
+        draw_series(s.losses, s.color, false, 2);
+      }
+    } else {
+      draw_series(losses_native_ema_, QColor(255, 170, 90), true, 1);
+      draw_series(losses_rest_ema_,   QColor(110, 180, 255), true, 1);
+      draw_series(losses_native_,     QColor(255, 170, 90), false, 2);
+      draw_series(losses_rest_,       QColor(110, 180, 255), false, 2);
+    }
 
     // ── Legend ────────────────────────────────────────────────────────────────
     const int legend_h = 20;
     const int ley  = full.bottom() - legend_h + 2;
     const int leh  = legend_h - 4;
     struct LegItem { QColor col; bool dashed; QString text; };
-    const QList<LegItem> items = {
-        {QColor(110, 180, 255), false, QStringLiteral("REST")},
-        {QColor(110, 180, 255), true,  QStringLiteral("REST EMA")},
-        {QColor(255, 170, 90),  false, QStringLiteral("Native")},
-        {QColor(255, 170, 90),  true,  QStringLiteral("Native EMA")},
-    };
+    QList<LegItem> items;
+    if (have_cmp) {
+      for (const CompareSeries& s : compare_series_) {
+        items.append({s.color, false, s.label});
+      }
+    } else {
+      items = {
+          {QColor(110, 180, 255), false, QStringLiteral("REST")},
+          {QColor(110, 180, 255), true,  QStringLiteral("REST EMA")},
+          {QColor(255, 170, 90),  false, QStringLiteral("Native")},
+          {QColor(255, 170, 90),  true,  QStringLiteral("Native EMA")},
+      };
+    }
     int lx = 56;
     for (const auto& item : items) {
       QPen pen(item.col, item.dashed ? 1 : 2);
       if (item.dashed) pen.setStyle(Qt::DashLine);
       painter.setPen(pen);
-      painter.drawLine(lx, ley + leh/2, lx + 18, ley + leh/2);
+      painter.drawLine(lx, ley + leh / 2, lx + 18, ley + leh / 2);
       painter.setPen(QColor(200, 200, 210));
-      const QRect tr(lx + 22, ley, 80, leh);
+      const QRect tr(lx + 22, ley, 120, leh);
       painter.drawText(tr, Qt::AlignLeft | Qt::AlignVCenter, item.text);
-      lx += 104;
+      lx += std::min(144, static_cast<int>(56 + item.text.size() * 7));
     }
   }
 
@@ -1116,12 +1164,16 @@ class SimpleLossChart final : public QWidget {
     return QPointF(plot.left() + tx * plot.width(), plot.bottom() - ty * plot.height());
   }
 
-  bool has_data() const { return !losses_rest_.isEmpty() || !losses_native_.isEmpty(); }
+  bool has_data() const {
+    return !losses_rest_.isEmpty() || !losses_native_.isEmpty() ||
+           (compare_mode_ && !compare_series_.isEmpty());
+  }
 
   void recompute_data_extents() {
     const bool have_r = !losses_rest_.isEmpty();
     const bool have_n = !losses_native_.isEmpty();
-    if (!have_r && !have_n) {
+    const bool have_cmp = compare_mode_ && !compare_series_.isEmpty();
+    if (!have_r && !have_n && !have_cmp) {
       return;
     }
     auto expand_range = [](double& lo, double& hi, const QVector<double>& v) {
@@ -1130,19 +1182,43 @@ class SimpleLossChart final : public QWidget {
         hi = std::max(hi, x);
       }
     };
-    const int max_n = std::max(losses_rest_.size(), losses_native_.size());
+    int max_n = std::max(losses_rest_.size(), losses_native_.size());
+    if (have_cmp) {
+      for (const CompareSeries& s : compare_series_) {
+        max_n = std::max(max_n, static_cast<int>(s.losses.size()));
+      }
+    }
     data_x0_ = 0.0;
     data_x1_ = max_n > 1 ? static_cast<double>(max_n - 1) : 1.0;
     if (y_range_locked_) {
       data_y0_ = y_lock_lo_;
       data_y1_ = y_lock_hi_;
     } else {
-      double lo = have_r ? losses_rest_[0] : losses_native_[0];
-      double hi = lo;
-      if (have_r) expand_range(lo, hi, losses_rest_);
-      if (have_n) expand_range(lo, hi, losses_native_);
+      double lo = 0.0;
+      double hi = 1.0;
+      bool seeded = false;
+      auto seed_range = [&](const QVector<double>& v) {
+        if (v.isEmpty()) return;
+        if (!seeded) {
+          lo = v[0];
+          hi = lo;
+          seeded = true;
+        }
+        expand_range(lo, hi, v);
+      };
+      seed_range(losses_rest_);
+      seed_range(losses_native_);
+      if (have_cmp) {
+        for (const CompareSeries& s : compare_series_) {
+          seed_range(s.losses);
+        }
+      }
       if (!losses_rest_ema_.isEmpty()) expand_range(lo, hi, losses_rest_ema_);
       if (!losses_native_ema_.isEmpty()) expand_range(lo, hi, losses_native_ema_);
+      if (!seeded) {
+        lo = 0.0;
+        hi = 1.0;
+      }
       if (!(hi > lo)) hi = lo + 1e-9;
       data_y0_ = lo;
       data_y1_ = hi;
@@ -1248,20 +1324,34 @@ class SimpleLossChart final : public QWidget {
         }
       }
     };
-    check_series(losses_rest_, QStringLiteral("REST"));
-    check_series(losses_native_, QStringLiteral("Native"));
-    check_series(losses_rest_ema_, QStringLiteral("REST EMA"));
-    check_series(losses_native_ema_, QStringLiteral("Native EMA"));
+    if (compare_mode_) {
+      for (const CompareSeries& s : compare_series_) {
+        check_series(s.losses, s.label);
+      }
+    } else {
+      check_series(losses_rest_, QStringLiteral("REST"));
+      check_series(losses_native_, QStringLiteral("Native"));
+      check_series(losses_rest_ema_, QStringLiteral("REST EMA"));
+      check_series(losses_native_ema_, QStringLiteral("Native EMA"));
+    }
 
     const QString tip =
         QStringLiteral("(%1, %2) %3").arg(best_step).arg(best_loss, 0, 'g', 6).arg(best_label);
     QToolTip::showText(mapToGlobal(pos), tip, this);
   }
 
+  struct CompareSeries {
+    QString label;
+    QVector<double> losses;
+    QColor color;
+  };
+
   QVector<double> losses_rest_{};
   QVector<double> losses_native_{};
   QVector<double> losses_rest_ema_{};
   QVector<double> losses_native_ema_{};
+  bool compare_mode_{false};
+  QVector<CompareSeries> compare_series_{};
   bool y_range_locked_{false};
   double y_lock_lo_{-10.0};
   double y_lock_hi_{0.0};
@@ -2641,9 +2731,31 @@ class MainWindow final : public QMainWindow {
       exp_runs_table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
       exp_runs_table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
       exp_runs_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+      exp_runs_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+      exp_runs_table_->setSelectionMode(QAbstractItemView::ExtendedSelection);
       exp_runs_table_->setMaximumHeight(160);
       exp_runs_table_->setAlternatingRowColors(true);
       exp_form->addRow(exp_runs_table_);
+
+      auto* exp_cmp_row = new QHBoxLayout();
+      exp_compare_btn_ = new QPushButton(QStringLiteral("Compare selected runs"), exp_grp);
+      exp_compare_btn_->setEnabled(false);
+      exp_compare_btn_->setToolTip(
+          QStringLiteral("Plot metrics_history loss curves for selected runs (one colour per run)"));
+      exp_compare_clear_btn_ = new QPushButton(QStringLiteral("Clear compare chart"), exp_grp);
+      exp_compare_clear_btn_->setEnabled(false);
+      exp_cmp_row->addWidget(exp_compare_btn_);
+      exp_cmp_row->addWidget(exp_compare_clear_btn_);
+      exp_cmp_row->addStretch(1);
+      exp_form->addRow(exp_cmp_row);
+
+      exp_compare_summary_label_ = new QLabel(QStringLiteral("(select 2+ runs with loss history)"), exp_grp);
+      exp_compare_summary_label_->setWordWrap(true);
+      exp_form->addRow(exp_compare_summary_label_);
+
+      exp_compare_chart_ = new SimpleLossChart(exp_grp);
+      exp_compare_chart_->setMinimumHeight(160);
+      exp_form->addRow(exp_compare_chart_);
 
       lay_experiment->addWidget(exp_grp);
     }
@@ -4261,6 +4373,28 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(exp_refresh_btn_, &QPushButton::clicked, this, [this]() { experiment_refresh_all(); });
+
+    connect(exp_runs_table_, &QTableWidget::itemSelectionChanged, this, [this]() {
+      if (exp_compare_btn_ == nullptr || exp_runs_table_ == nullptr) {
+        return;
+      }
+      exp_compare_btn_->setEnabled(exp_db_ != nullptr && exp_runs_table_->selectionModel() != nullptr &&
+                                   !exp_runs_table_->selectionModel()->selectedRows().isEmpty());
+    });
+
+    connect(exp_compare_btn_, &QPushButton::clicked, this, [this]() { experiment_compare_selected_runs(); });
+
+    connect(exp_compare_clear_btn_, &QPushButton::clicked, this, [this]() {
+      if (exp_compare_chart_ != nullptr) {
+        exp_compare_chart_->clear_losses();
+      }
+      if (exp_compare_summary_label_ != nullptr) {
+        exp_compare_summary_label_->setText(QStringLiteral("(select 2+ runs with loss history)"));
+      }
+      if (exp_compare_clear_btn_ != nullptr) {
+        exp_compare_clear_btn_->setEnabled(false);
+      }
+    });
 
     connect(exp_experiments_table_, &QTableWidget::itemSelectionChanged, this, [this]() {
       if (exp_experiments_table_ == nullptr || exp_experiments_table_->currentRow() < 0) {
@@ -6528,7 +6662,9 @@ class MainWindow final : public QMainWindow {
       const int row = exp_runs_table_->rowCount();
       exp_runs_table_->insertRow(row);
       const QString run_id_short = QString::fromStdString(r.run_id).right(12);
-      exp_runs_table_->setItem(row, 0, new QTableWidgetItem(run_id_short));
+      auto* id_item = new QTableWidgetItem(run_id_short);
+      id_item->setData(Qt::UserRole, QString::fromStdString(r.run_id));
+      exp_runs_table_->setItem(row, 0, id_item);
       exp_runs_table_->setItem(row, 1, new QTableWidgetItem(QString::fromStdString(r.name)));
       exp_runs_table_->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(r.status)));
       const QString acc_str = (r.accuracy >= 0.0)
@@ -6543,6 +6679,108 @@ class MainWindow final : public QMainWindow {
   void experiment_refresh_all() {
     experiment_refresh_experiments_table();
     experiment_refresh_runs_table();
+  }
+
+  static QVector<double> parse_loss_curve_from_metrics_json(const std::string& metrics_json) {
+    QVector<double> losses;
+    QJsonParseError err;
+    const QJsonDocument doc =
+        QJsonDocument::fromJson(QByteArray::fromStdString(metrics_json), &err);
+    if (!doc.isArray()) {
+      return losses;
+    }
+    for (const QJsonValue& v : doc.array()) {
+      if (!v.isObject()) {
+        continue;
+      }
+      const QJsonObject o = v.toObject();
+      if (o.contains(QStringLiteral("loss"))) {
+        losses.append(o.value(QStringLiteral("loss")).toDouble());
+      }
+    }
+    return losses;
+  }
+
+  void experiment_compare_selected_runs() {
+    if (!exp_db_ || exp_runs_table_ == nullptr || exp_compare_chart_ == nullptr) {
+      return;
+    }
+    const auto selected = exp_runs_table_->selectionModel()->selectedRows();
+    if (selected.isEmpty()) {
+      QMessageBox::information(this, QStringLiteral("Compare runs"),
+                               QStringLiteral("Select one or more runs in the table."));
+      return;
+    }
+
+    std::vector<std::string> run_ids;
+    run_ids.reserve(static_cast<std::size_t>(selected.size()));
+    for (const QModelIndex& idx : selected) {
+      auto* id_item = exp_runs_table_->item(idx.row(), 0);
+      if (id_item == nullptr) {
+        continue;
+      }
+      const QString rid = id_item->data(Qt::UserRole).toString();
+      if (!rid.isEmpty()) {
+        run_ids.push_back(rid.toStdString());
+      }
+    }
+    if (run_ids.empty()) {
+      return;
+    }
+
+    std::vector<cypha::ExperimentDbRunCompareRow> cmp;
+    std::string err;
+    if (!experiment_db_compare_runs(*exp_db_, run_ids, &cmp, &err)) {
+      QMessageBox::warning(this, QStringLiteral("Compare runs"),
+                           QStringLiteral("compare_runs failed: %1").arg(QString::fromStdString(err)));
+      return;
+    }
+
+    QVector<QPair<QString, QVector<double>>> series;
+    QStringList summary_bits;
+    for (const std::string& rid : run_ids) {
+      cypha::ExperimentDbRunRow row{};
+      bool found = false;
+      if (!experiment_db_get_run(*exp_db_, rid.c_str(), &row, &found, &err) || !found) {
+        continue;
+      }
+      const QVector<double> losses = parse_loss_curve_from_metrics_json(row.metrics_history_json);
+      if (losses.isEmpty()) {
+        continue;
+      }
+      QString label = QString::fromStdString(row.name);
+      if (label.isEmpty()) {
+        label = QString::fromStdString(rid).right(12);
+      }
+      series.append(qMakePair(label, losses));
+
+      for (const auto& c : cmp) {
+        if (c.run_id == rid) {
+          summary_bits.append(QStringLiteral("%1 acc=%2 steps=%3")
+                                  .arg(label)
+                                  .arg(c.accuracy >= 0.0 ? QString::number(c.accuracy * 100.0, 'f', 1) + QLatin1Char('%')
+                                                         : QStringLiteral("—"))
+                                  .arg(c.n_steps));
+          break;
+        }
+      }
+    }
+
+    if (series.isEmpty()) {
+      QMessageBox::information(this, QStringLiteral("Compare runs"),
+                               QStringLiteral("Selected runs have no loss entries in metrics_history."));
+      return;
+    }
+
+    exp_compare_chart_->set_compare_loss_runs(series);
+    if (exp_compare_clear_btn_ != nullptr) {
+      exp_compare_clear_btn_->setEnabled(true);
+    }
+    if (exp_compare_summary_label_ != nullptr) {
+      exp_compare_summary_label_->setText(summary_bits.isEmpty()
+                                              ? QStringLiteral("%1 run(s) plotted").arg(series.size())
+                                              : summary_bits.join(QStringLiteral("  |  ")));
+    }
   }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
@@ -6641,6 +6879,10 @@ class MainWindow final : public QMainWindow {
   QLabel*      exp_status_label_{};
   QTableWidget* exp_experiments_table_{};
   QTableWidget* exp_runs_table_{};
+  QPushButton*  exp_compare_btn_{};
+  QPushButton*  exp_compare_clear_btn_{};
+  QLabel*       exp_compare_summary_label_{};
+  SimpleLossChart* exp_compare_chart_{};
 #else
   // Stub pointers so guards are not needed in non-DB code paths
   void* exp_db_btn_{};

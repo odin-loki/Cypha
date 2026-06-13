@@ -965,6 +965,130 @@ std::string json_predict(const nlohmann::json& body) {
   return json_predict_impl(body, view);
 }
 
+double row_entropy_from_probs(const double* p, int k, double eps) {
+  double s = 0.0;
+  for (int j = 0; j < k; ++j) {
+    s -= p[static_cast<std::size_t>(j)] * std::log(p[static_cast<std::size_t>(j)] + eps);
+  }
+  return s;
+}
+
+std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) {
+  if (!*v.model || !*v.mem) {
+    return R"({"detail":"No model loaded"})";
+  }
+  if (*v.mke_active) {
+    return R"({"detail":"uncertainty-rank not supported in MKE mode"})";
+  }
+  if (!body.contains("rows") || !body["rows"].is_array()) {
+    return std::string(R"json({"detail":"rows required (array of feature vectors)"})json");
+  }
+  const auto& rows_j = body["rows"];
+  const int n = static_cast<int>(rows_j.size());
+  if (n == 0) {
+    nlohmann::json out;
+    out["indices"] = nlohmann::json::array();
+    out["entropies"] = nlohmann::json::array();
+    out["top_n"] = 0;
+    return out.dump();
+  }
+  if (!rows_j[0].is_array() || rows_j[0].empty()) {
+    return R"({"detail":"each row must be a non-empty feature array"})";
+  }
+  const int d_row = static_cast<int>(rows_j[0].size());
+  for (int i = 1; i < n; ++i) {
+    if (!rows_j[i].is_array() || static_cast<int>(rows_j[i].size()) != d_row) {
+      return R"({"detail":"rows must be uniform-length feature arrays"})";
+    }
+  }
+
+  cypha::CyphaInferModel& model = **v.model;
+  std::vector<double> x_latent;
+  x_latent.reserve(static_cast<std::size_t>(n) * static_cast<std::size_t>(model.d_latent));
+  for (int i = 0; i < n; ++i) {
+    std::vector<double> x;
+    x.reserve(static_cast<std::size_t>(d_row));
+    for (const auto& val : rows_j[i]) {
+      x.push_back(val.get<double>());
+    }
+    if (*v.pre) {
+      x = (*v.pre)->transform_one(x);
+    }
+    if (static_cast<int>(x.size()) != model.d_latent) {
+      return R"({"detail":"input dim mismatch after preprocessor"})";
+    }
+    x_latent.insert(x_latent.end(), x.begin(), x.end());
+  }
+
+  const int k = static_cast<int>(model.labels.size());
+  std::vector<double> H(static_cast<std::size_t>(n) * static_cast<std::size_t>(model.d_latent));
+  cypha::batch_encode(model, x_latent.data(), n, H);
+
+  std::vector<double> llr(static_cast<std::size_t>(n) * static_cast<std::size_t>(k));
+  cypha::score_matrix_use_field(model, H.data(), n, llr);
+
+  const double eps = 1e-8;
+  const double T = body.value("temperature", model.temperature);
+  std::vector<double> z(static_cast<std::size_t>(n) * static_cast<std::size_t>(k));
+  for (int i = 0; i < n * k; ++i) {
+    z[static_cast<std::size_t>(i)] = llr[static_cast<std::size_t>(i)] / (T + eps);
+  }
+  std::vector<double> probs(static_cast<std::size_t>(n) * static_cast<std::size_t>(k));
+  cypha::softmax_batch_reference(z.data(), n, k, eps, probs);
+
+  struct RankRow {
+    int index;
+    double entropy;
+  };
+  std::vector<RankRow> ranked;
+  ranked.reserve(static_cast<std::size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    const double* prow = probs.data() + static_cast<std::size_t>(i) * static_cast<std::size_t>(k);
+    ranked.push_back({i, row_entropy_from_probs(prow, k, eps)});
+  }
+  std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
+    if (a.entropy != b.entropy) {
+      return a.entropy > b.entropy;
+    }
+    return a.index < b.index;
+  });
+
+  int top_n = body.value("top_n", n);
+  if (top_n < 0) {
+    top_n = 0;
+  }
+  if (top_n > n) {
+    top_n = n;
+  }
+
+  nlohmann::json out;
+  nlohmann::json indices = nlohmann::json::array();
+  nlohmann::json entropies = nlohmann::json::array();
+  for (int i = 0; i < top_n; ++i) {
+    indices.push_back(ranked[static_cast<std::size_t>(i)].index);
+    entropies.push_back(ranked[static_cast<std::size_t>(i)].entropy);
+  }
+  out["indices"] = std::move(indices);
+  out["entropies"] = std::move(entropies);
+  out["top_n"] = top_n;
+  return out.dump();
+}
+
+std::string json_uncertainty_rank(const nlohmann::json& body) {
+  std::lock_guard<std::mutex> lock(g_mu);
+  ModelView view{};
+  LoadedModelBundle* slot = nullptr;
+  std::string detail;
+  if (!resolve_model_view(body, view, &slot, &detail)) {
+    return detail;
+  }
+  if (slot != nullptr) {
+    std::lock_guard<std::mutex> slot_lk(slot->mu);
+    return json_uncertainty_rank_impl(body, view);
+  }
+  return json_uncertainty_rank_impl(body, view);
+}
+
 std::string json_update_impl(const nlohmann::json& body, ModelView v) {
   if (!*v.model || !*v.mem) {
     return R"({"detail":"No model loaded"})";
@@ -1675,6 +1799,58 @@ int main(int argc, char** argv) {
     nlohmann::json out;
     out["classes"] = classes;
     res.set_content(out.dump(), "application/json");
+  });
+
+  svr.Get("/uncertainty-rank", [](const httplib::Request& req, httplib::Response& res) {
+    try {
+      nlohmann::json body;
+      if (req.has_param("payload")) {
+        body = nlohmann::json::parse(req.get_param_value("payload"));
+      } else if (!req.body.empty()) {
+        body = nlohmann::json::parse(req.body);
+      } else {
+        res.status = 400;
+        res.set_content(
+            std::string(R"msg({"detail":"JSON body or ?payload=<urlencoded-json> required (GET bodies are not read by the HTTP stack)"})msg"),
+            "application/json");
+        return;
+      }
+      std::string out = json_uncertainty_rank(body);
+      if (out.find("No model loaded") != std::string::npos) {
+        res.status = 503;
+      } else if (out.find("model not loaded") != std::string::npos) {
+        res.status = 404;
+      } else if (out.find("\"detail\"") != std::string::npos) {
+        res.status = 400;
+      }
+      res.set_content(out, "application/json");
+    } catch (...) {
+      res.status = 400;
+      res.set_content(R"({"detail":"bad json"})", "application/json");
+    }
+  });
+
+  svr.Post("/uncertainty-rank", [](const httplib::Request& req, httplib::Response& res) {
+    try {
+      if (req.body.empty()) {
+        res.status = 400;
+        res.set_content(R"({"detail":"JSON body required"})", "application/json");
+        return;
+      }
+      auto body = nlohmann::json::parse(req.body);
+      std::string out = json_uncertainty_rank(body);
+      if (out.find("No model loaded") != std::string::npos) {
+        res.status = 503;
+      } else if (out.find("model not loaded") != std::string::npos) {
+        res.status = 404;
+      } else if (out.find("\"detail\"") != std::string::npos) {
+        res.status = 400;
+      }
+      res.set_content(out, "application/json");
+    } catch (...) {
+      res.status = 400;
+      res.set_content(R"({"detail":"bad json"})", "application/json");
+    }
   });
 
   cypha::dif_rest_configure(&g_mu, &g_model, &g_pre, &g_rng);

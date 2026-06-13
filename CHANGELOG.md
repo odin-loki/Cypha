@@ -14,7 +14,7 @@ milestone or a significant self-contained change.
 - **`run_all.py`:** replaced by `cypha_bench_run`.
 
 ### Changed
-- **CI gate:** native-only — **53 CTests** (`ctest -R native_`) across four blocking jobs.
+- **CI gate:** native-only — **54+ CTests** (`ctest -R native_`) across four blocking jobs.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
 - **`cyphalm_parity`:** Windows subprocess fix (`CreateProcess` instead of `std::system`).
@@ -25,6 +25,13 @@ milestone or a significant self-contained change.
 - **Release install scripts:** under `packaging/` (`install_release_linux.sh`, `install_release_windows.ps1`).
 
 ### Added
+- **`auto_rff_gamma_cv`:** RFF bandwidth grid CV in native preprocessor; Qt Fit Preprocessor gamma mode combo; CTest `native_preprocessor_rff_gamma_cv`.
+- **`cypha_fixture_gen`:** native fixture regeneration CLI (`--fixture batch_llr`); CTest `native_fixture_gen_list`.
+- **Multi-model REST:** registry map, optional `"model"` on predict/update, `--preload-registry`; CTest `native_rest_multi_model`.
+- **Qt bulk train worker:** background `QThread` with live loss chart and cancel.
+- **Qt chart UX (§2b):** zoom, pan, tooltips on loss charts.
+- **Experiment compare (§2c):** multi-run loss overlay in Experiments panel.
+- **`/uncertainty-rank`:** active-learning entropy ranking; CTest `native_rest_uncertainty_rank`.
 - **Auto-γ RFF (§0b):** native `PreprocessorState::auto_rff_gamma`; bench + Qt shell wired.
 - **Nyström kernel LLR (native):** `KernelMemory` in C++ with train/infer wiring, `.cypha` persistence, XOR bench (`xor_kernel_bench`, CTest `native_xor_kernel_bench_smoke`), bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`), opt-in profile `bench/config/kernel_llr_profile.json`.
 - **Intelligence Profiler (C++):** `native/include/cypha/intelligence/` — NIG statistic states, 7-stat measurers, κ, health signal; CTest `native_intelligence_profiler_smoke`.

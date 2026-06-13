@@ -837,6 +837,13 @@ if(WIN32)
       -BuildDir "${CMAKE_CURRENT_BINARY_DIR}"
   )
   set_tests_properties(native_rest_multi_model PROPERTIES RUN_SERIAL TRUE)
+  add_test(
+    NAME native_rest_uncertainty_rank
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+      -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_cypha_rest_uncertainty_rank.ps1"
+      -BuildDir "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+  set_tests_properties(native_rest_uncertainty_rank PROPERTIES RUN_SERIAL TRUE)
 endif()
 
 if(TARGET experiment_db_smoke)
