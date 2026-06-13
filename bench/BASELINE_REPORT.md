@@ -1,6 +1,6 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-13 06:36 UTC
+Generated: 2026-06-13 08:18 UTC
 
 Default parameters only — no hyperparameter tuning.
 
@@ -92,7 +92,7 @@ Default parameters only — no hyperparameter tuning.
 
 ## D17
 
-*Timestamp:* 2026-06-13T06:36:39.256+00:00
+*Timestamp:* 2026-06-13T08:18:10.838+00:00
 
 ### 17B_alpha_spectrum
 
@@ -130,6 +130,41 @@ Default parameters only — no hyperparameter tuning.
 
 - result: d17
 
+### ssm_diagnose
+
+| Metric | Value |
+| --- | --- |
+| `checks_passed` | true |
+| `decay_rates.fast` | 0.3679 |
+| `decay_rates.slow` | 0.9512 |
+| `domain` | cyphalm |
+| `lambda_fast` | 0.3679 |
+| `lambda_slow` | 0.9512 |
+| `projection.connected_to_routing` | true |
+| `projection.context_dim` | 512.0000 |
+| `projection.field_dim` | 160.0000 |
+| `projection.field_output_mean_rms` | 0.7846 |
+| `projection.proj_weight_rms` | 0.0200 |
+| `sample_stride` | 8.0000 |
+| `state_norms.context_track` | [128 items] |
+| `state_norms.fast_track` | [128 items] |
+| `state_norms.slow_track` | [128 items] |
+| `steps` | 128.0000 |
+| `summary.collapsed` | false |
+| `summary.context.collapsed` | false |
+| `summary.context.exploded` | false |
+| `summary.context.final` | 3.4363 |
+| `summary.context.max` | 3.8067 |
+| `summary.context.min` | 0.8885 |
+| `summary.exploded` | false |
+| `summary.fast.collapsed` | false |
+| `summary.fast.exploded` | false |
+| `summary.fast.final` | 2.1179 |
+| `summary.fast.max` | 2.8594 |
+| `summary.fast.min` | 1.0112 |
+| `summary.slow.collapsed` | false |
+| `summary.slow.exploded` | false |
+
 ### synthetic
 
 - result: true
@@ -166,6 +201,6 @@ Default parameters only — no hyperparameter tuning.
 | Metric | Value |
 | --- | --- |
 | `summary.mean_ood_auroc` | — |
-| `summary.n_experiments` | 4.0000 |
+| `summary.n_experiments` | 5.0000 |
 
 > **Note:** Report figures (JSON + native PNG) live in `bench/report/figures/` (`generate_figure_data`).

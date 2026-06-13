@@ -25,6 +25,17 @@ milestone or a significant self-contained change.
 - **Release install scripts:** under `packaging/` (`install_release_linux.sh`, `install_release_windows.ps1`).
 
 ### Added
+- **Phase B native layout:** `native/apps/`, `native/tests/parity/`, `cmake/CyphaApps.cmake` + `CyphaParity.cmake`.
+- **Web UI (§4):** vanilla SPA at `GET /` served by `cypha_rest`; CTest `native_rest_ui_smoke`.
+- **Fixture generators:** `cypha_fixture_gen` for batch_llr, memory_train, preprocessor, train_step_vector, quantile_dif_train, regression_m4.
+- **`cypha_onnx_export`:** header-only ONNX ModelProto writer for VectorEncoder+LLR inference path.
+- **`cyphalm_train`:** native CyphaLM training CLI + checkpoint save; CTest `native_cyphalm_train_smoke`.
+- **`cyphalm_ssm_diagnose`:** CellAI/SSM probe tool; `--ssm-diagnose` on `cypha_bench_run` for d10/d17.
+- **Intelligence Profiler Papers II–V:** extended measurers + CTest `native_intelligence_profiler_papers`.
+- **Kernel LLR tuning:** diverse landmarks, whitening fallback, M=512 tuned profile (XOR ~71% kernel acc).
+- **`cypha_kernel_tune`:** grid search wrapper for XOR kernel bench.
+- **Packaging (§3):** `packaging/build_appimage.sh`, `packaging/build_windows_bundle.ps1`; release workflow AppImage + native-only assets.
+- **Qt dark theme + model card editor (§2d–e);** threaded bulk REST `/update`.
 - **`auto_rff_gamma_cv`:** RFF bandwidth grid CV in native preprocessor; Qt Fit Preprocessor gamma mode combo; CTest `native_preprocessor_rff_gamma_cv`.
 - **`cypha_fixture_gen`:** native fixture regeneration CLI (`--fixture batch_llr`); CTest `native_fixture_gen_list`.
 - **Multi-model REST:** registry map, optional `"model"` on predict/update, `--preload-registry`; CTest `native_rest_multi_model`.

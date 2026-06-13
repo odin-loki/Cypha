@@ -14,6 +14,7 @@ namespace {
 
 constexpr double kEps = 1e-8;
 constexpr double kRidge = 1e-6;
+constexpr int kCholeskyRetries = 6;
 
 double dot(const double* a, const double* b, int n) {
   double s = 0.0;
@@ -87,6 +88,81 @@ void transpose(const double* A, int n, double* At) {
   }
 }
 
+bool sym_eigh_whitening(const double* sym_row_major, int n, double ridge, double* whiten_row_major) {
+  std::vector<double> a(static_cast<std::size_t>(n) * static_cast<std::size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      a[static_cast<std::size_t>(i * n + j)] = sym_row_major[i * n + j];
+    }
+    a[static_cast<std::size_t>(i * n + i)] += ridge;
+  }
+  std::vector<double> evecs(static_cast<std::size_t>(n) * static_cast<std::size_t>(n), 0.0);
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      evecs[static_cast<std::size_t>(i * n + j)] = (i == j) ? 1.0 : 0.0;
+    }
+  }
+  for (int sweep = 0; sweep < 40; ++sweep) {
+    double off = 0.0;
+    for (int p = 0; p < n; ++p) {
+      for (int q = p + 1; q < n; ++q) {
+        off += std::abs(a[static_cast<std::size_t>(p * n + q)]);
+      }
+    }
+    if (off <= 1e-12 * static_cast<double>(n * n)) {
+      break;
+    }
+    for (int p = 0; p < n; ++p) {
+      for (int q = p + 1; q < n; ++q) {
+        const double apq = a[static_cast<std::size_t>(p * n + q)];
+        if (std::abs(apq) <= 1e-15) {
+          continue;
+        }
+        const double app = a[static_cast<std::size_t>(p * n + p)];
+        const double aqq = a[static_cast<std::size_t>(q * n + q)];
+        const double tau = (aqq - app) / (2.0 * apq);
+        const double t = (tau >= 0.0) ? 1.0 / (tau + std::sqrt(1.0 + tau * tau))
+                                       : -1.0 / (-tau + std::sqrt(1.0 + tau * tau));
+        const double c = 1.0 / std::sqrt(1.0 + t * t);
+        const double s = t * c;
+        for (int k = 0; k < n; ++k) {
+          const double akp = a[static_cast<std::size_t>(k * n + p)];
+          const double akq = a[static_cast<std::size_t>(k * n + q)];
+          a[static_cast<std::size_t>(k * n + p)] = c * akp - s * akq;
+          a[static_cast<std::size_t>(p * n + k)] = a[static_cast<std::size_t>(k * n + p)];
+          a[static_cast<std::size_t>(k * n + q)] = s * akp + c * akq;
+          a[static_cast<std::size_t>(q * n + k)] = a[static_cast<std::size_t>(k * n + q)];
+        }
+        a[static_cast<std::size_t>(p * n + q)] = 0.0;
+        a[static_cast<std::size_t>(q * n + p)] = 0.0;
+        for (int k = 0; k < n; ++k) {
+          const double vkp = evecs[static_cast<std::size_t>(k * n + p)];
+          const double vkq = evecs[static_cast<std::size_t>(k * n + q)];
+          evecs[static_cast<std::size_t>(k * n + p)] = c * vkp - s * vkq;
+          evecs[static_cast<std::size_t>(k * n + q)] = s * vkp + c * vkq;
+        }
+      }
+    }
+  }
+  const double floor = std::max(ridge, 1e-10);
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      whiten_row_major[i * n + j] = 0.0;
+    }
+  }
+  for (int k = 0; k < n; ++k) {
+    const double lam = std::max(a[static_cast<std::size_t>(k * n + k)], floor);
+    const double inv_sqrt = 1.0 / std::sqrt(lam);
+    for (int i = 0; i < n; ++i) {
+      const double vik = evecs[static_cast<std::size_t>(i * n + k)];
+      for (int j = 0; j < n; ++j) {
+        whiten_row_major[i * n + j] += vik * evecs[static_cast<std::size_t>(j * n + k)] * inv_sqrt;
+      }
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 KernelMemory::KernelMemory(int feat_dim, int M, std::uint64_t rng_seed)
@@ -118,37 +194,53 @@ void KernelMemory::recompute_nystrom() {
       std::nth_element(sq_dists.begin(), sq_dists.begin() + static_cast<std::ptrdiff_t>(mid),
                        sq_dists.end());
       const double med = sq_dists[mid];
-      gamma_ = 1.0 / (2.0 * std::max(med, kEps));
+      gamma_ = gamma_scale_ / (2.0 * std::max(med, kEps));
     }
   } else {
-    gamma_ = 1.0 / static_cast<double>(std::max(feat_dim_, 1));
+    gamma_ = gamma_scale_ / static_cast<double>(std::max(feat_dim_, 1));
   }
 
-  std::vector<double> K(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+  std::vector<double> K_base(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
   for (int i = 0; i < nb; ++i) {
     const double* bi = basis_.data() + static_cast<std::size_t>(i * feat_dim_);
     for (int j = 0; j <= i; ++j) {
       const double* bj = basis_.data() + static_cast<std::size_t>(j * feat_dim_);
       const double kij = (i == j) ? 1.0 : rbf(bi, bj, feat_dim_, gamma_);
-      K[static_cast<std::size_t>(i * nb + j)] = kij;
-      K[static_cast<std::size_t>(j * nb + i)] = kij;
+      K_base[static_cast<std::size_t>(i * nb + j)] = kij;
+      K_base[static_cast<std::size_t>(j * nb + i)] = kij;
     }
-    K[static_cast<std::size_t>(i * nb + i)] += kRidge;
   }
 
-  std::vector<double> L(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
-  if (!cholesky_lower(K.data(), nb, L.data())) {
-    whitening_.assign(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+  double ridge = kRidge;
+  bool whitened = false;
+  for (int attempt = 0; attempt < kCholeskyRetries; ++attempt) {
+    std::vector<double> K = K_base;
     for (int i = 0; i < nb; ++i) {
-      whitening_[static_cast<std::size_t>(i * nb + i)] = 1.0;
+      K[static_cast<std::size_t>(i * nb + i)] += ridge;
     }
+    std::vector<double> L(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+    if (!cholesky_lower(K.data(), nb, L.data())) {
+      ridge *= 10.0;
+      continue;
+    }
+    std::vector<double> Linv(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+    invert_lower_triangular(L.data(), nb, Linv.data());
+    whitening_.assign(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
+    transpose(Linv.data(), nb, whitening_.data());
+    whitened = true;
+    break;
+  }
+  if (whitened) {
     return;
   }
 
-  std::vector<double> Linv(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
-  invert_lower_triangular(L.data(), nb, Linv.data());
   whitening_.assign(static_cast<std::size_t>(nb) * static_cast<std::size_t>(nb), 0.0);
-  transpose(Linv.data(), nb, whitening_.data());
+  if (sym_eigh_whitening(K_base.data(), nb, ridge, whitening_.data())) {
+    return;
+  }
+  for (int i = 0; i < nb; ++i) {
+    whitening_[static_cast<std::size_t>(i * nb + i)] = 1.0;
+  }
 }
 
 void KernelMemory::load_state(int n_basis, int n_seen, const double* basis_row_major, int basis_rows,
@@ -240,9 +332,22 @@ void KernelMemory::reservoir_update(const double* h, std::optional<int> fixed_j)
     j = dist(rng_);
   }
   if (j < M_) {
-    double* slot = basis_.data() + static_cast<std::size_t>(j * feat_dim_);
+    int slot = j;
+    if (n_basis_ >= M_) {
+      slot = 0;
+      double best_d = sq_dist(basis_.data(), h, feat_dim_);
+      for (int i = 1; i < M_; ++i) {
+        const double* bi = basis_.data() + static_cast<std::size_t>(i * feat_dim_);
+        const double d2 = sq_dist(bi, h, feat_dim_);
+        if (d2 < best_d) {
+          best_d = d2;
+          slot = i;
+        }
+      }
+    }
+    double* dest = basis_.data() + static_cast<std::size_t>(slot * feat_dim_);
     for (int d = 0; d < feat_dim_; ++d) {
-      slot[d] = h[d];
+      dest[d] = h[d];
     }
     recompute_nystrom();
   }

@@ -1,0 +1,16 @@
+{
+  "sweep_id": "kernel_llr_xor_tune_smoke",
+  "description": "Small XOR kernel LLR grid — invoke xor_kernel_bench --tune manually",
+  "runner": "xor_kernel_bench",
+  "defaults": {
+    "passes": 8,
+    "tune_seeds": 2
+  },
+  "grid": {
+    "tune_m": [256, 512],
+    "tune_gamma": [1.0, 2.0],
+    "tune_blend": [1.0],
+    "tune_lr": [1.0, 2.0]
+  },
+  "cli_example": "xor_kernel_bench --tune --tune-seeds 2 --passes 8 --tune-m 256,512 --tune-gamma 1.0,2.0 --tune-blend 1.0 --tune-lr 1.0,2.0"
+}

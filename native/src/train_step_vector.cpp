@@ -88,7 +88,8 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
   sync_infer_model_from_memory(infer, mem);
 
   if (extras != nullptr && extras->use_kernel_llr && extras->kernel_mem != nullptr) {
-    extras->kernel_mem->update(H.data(), y_label, classes_for_ctx, delta_lr_step);
+    const double klr = delta_lr_step * extras->kernel_lr_scale;
+    extras->kernel_mem->update(H.data(), y_label, classes_for_ctx, klr);
   }
 
   replay.push(H.data(), x_preprocessed, d, y_label, loss);

@@ -1,9 +1,11 @@
 // XOR linear vs Nyström kernel LLR benchmark (native CyphaDIF train path).
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -24,6 +26,21 @@ struct Split {
   std::vector<std::vector<double>> x_te;
   std::vector<std::string> y_tr;
   std::vector<std::string> y_te;
+};
+
+struct BenchConfig {
+  int seeds = 3;
+  int passes = 8;
+  double kernel_blend = 1.0;
+  int kernel_m = 256;
+  double gamma_scale = 1.0;
+  double kernel_lr_scale = 1.0;
+  bool shuffle_train = true;
+};
+
+struct SeedResult {
+  double linear_acc = 0.0;
+  double kernel_acc = 0.0;
 };
 
 void make_xor(int n, int d, cypha::NumpyDefaultRng& rng, std::vector<std::vector<double>>& x,
@@ -104,7 +121,7 @@ double eval_acc(cypha::CyphaInferModel& infer, const Split& sp, cypha::KernelMem
   return static_cast<double>(correct) / static_cast<double>(sp.x_te.size());
 }
 
-double run_seed(int seed, bool use_kernel, double kernel_blend, int passes, int kernel_m) {
+double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
   constexpr int n = 4000;
   constexpr int d = 20;
   cypha::NumpyDefaultRng data_rng(42);
@@ -129,10 +146,12 @@ double run_seed(int seed, bool use_kernel, double kernel_blend, int passes, int 
   cypha::TrainStepExtras extras;
   int total_steps = 0;
   extras.total_steps = &total_steps;
-  cypha::KernelMemory km(d, kernel_m, static_cast<std::uint64_t>(seed));
+  cypha::KernelMemory km(infer.d_latent, cfg.kernel_m, static_cast<std::uint64_t>(seed));
+  km.set_gamma_scale(cfg.gamma_scale);
   extras.kernel_mem = use_kernel ? &km : nullptr;
   extras.use_kernel_llr = use_kernel;
-  extras.kernel_blend = kernel_blend;
+  extras.kernel_blend = cfg.kernel_blend;
+  extras.kernel_lr_scale = cfg.kernel_lr_scale;
 
   std::mt19937 rng(static_cast<std::uint32_t>(seed));
   int enc_updates = 0;
@@ -140,69 +159,234 @@ double run_seed(int seed, bool use_kernel, double kernel_blend, int passes, int 
   constexpr double kDeltaLr = 0.05;
   constexpr double kOodSigma = 15.0;
   const auto t0 = std::chrono::steady_clock::now();
-  for (int p = 0; p < passes; ++p) {
-    for (std::size_t i = 0; i < sp.x_tr.size(); ++i) {
-      cypha::dif_train_step_vector(infer, mem, replay, sp.x_tr[i].data(), d, sp.y_tr[i], kWorldLr, kDeltaLr, kWorldLr,
-                                   kDeltaLr, kOodSigma, tsp, rng, enc_updates, nullptr, &extras);
+
+  std::vector<std::size_t> order(sp.x_tr.size());
+  for (std::size_t i = 0; i < order.size(); ++i) {
+    order[i] = i;
+  }
+
+  for (int p = 0; p < cfg.passes; ++p) {
+    if (cfg.shuffle_train) {
+      std::shuffle(order.begin(), order.end(), rng);
+    }
+    for (const std::size_t i : order) {
+      cypha::dif_train_step_vector(infer, mem, replay, sp.x_tr[i].data(), d, sp.y_tr[i], kWorldLr, kDeltaLr,
+                                   kWorldLr, kDeltaLr, kOodSigma, tsp, rng, enc_updates, nullptr, &extras);
     }
   }
   cypha::sync_infer_model_from_memory(infer, mem);
   const double sec =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-  const double acc = eval_acc(infer, sp, use_kernel ? &km : nullptr, use_kernel, kernel_blend);
+  const double acc = eval_acc(infer, sp, use_kernel ? &km : nullptr, use_kernel, cfg.kernel_blend);
   std::cerr << "  seed=" << seed << " kernel=" << (use_kernel ? "1" : "0") << " acc=" << acc
-            << " train_sec=" << sec << " n_basis=" << km.n_basis() << "\n";
+            << " train_sec=" << sec << " n_basis=" << km.n_basis() << " gamma=" << km.gamma() << "\n";
   return acc;
+}
+
+SeedResult run_seed_pair(int seed, const BenchConfig& cfg) {
+  SeedResult out;
+  out.linear_acc = run_seed_mode(seed, false, cfg);
+  out.kernel_acc = run_seed_mode(seed, true, cfg);
+  return out;
+}
+
+BenchConfig parse_bench_config(int argc, char** argv) {
+  BenchConfig cfg;
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--seeds" && i + 1 < argc) {
+      cfg.seeds = std::atoi(argv[++i]);
+    } else if (arg == "--passes" && i + 1 < argc) {
+      cfg.passes = std::atoi(argv[++i]);
+    } else if (arg == "--kernel-blend" && i + 1 < argc) {
+      cfg.kernel_blend = std::atof(argv[++i]);
+    } else if (arg == "--kernel-m" && i + 1 < argc) {
+      cfg.kernel_m = std::atoi(argv[++i]);
+    } else if (arg == "--gamma-scale" && i + 1 < argc) {
+      cfg.gamma_scale = std::atof(argv[++i]);
+    } else if (arg == "--kernel-lr-scale" && i + 1 < argc) {
+      cfg.kernel_lr_scale = std::atof(argv[++i]);
+    } else if (arg == "--no-shuffle") {
+      cfg.shuffle_train = false;
+    }
+  }
+  return cfg;
+}
+
+void usage() {
+  std::cout << "usage: xor_kernel_bench [options]\n"
+            << "  --seeds N            number of seeds (default 3)\n"
+            << "  --passes N           training passes (default 8)\n"
+            << "  --kernel-blend B     kernel LLR blend in [0,1] (default 1.0)\n"
+            << "  --kernel-m M         Nyström landmarks (default 256)\n"
+            << "  --gamma-scale G      RBF bandwidth multiplier (default 1.0)\n"
+            << "  --kernel-lr-scale S  kernel weight lr scale (default 1.0)\n"
+            << "  --no-shuffle         disable per-pass train shuffle\n"
+            << "  --tune               grid search M x gamma_scale x blend\n"
+            << "  --tune-seeds N       seeds per tune cell (default 2)\n";
+}
+
+struct TuneCell {
+  int kernel_m;
+  double gamma_scale;
+  double kernel_blend;
+  double kernel_lr_scale;
+  double kernel_mean = 0.0;
+  double linear_mean = 0.0;
+  double delta_pp = 0.0;
+};
+
+std::vector<int> parse_int_list(const char* csv) {
+  std::vector<int> out;
+  std::stringstream ss(csv);
+  std::string tok;
+  while (std::getline(ss, tok, ',')) {
+    if (!tok.empty()) {
+      out.push_back(std::atoi(tok.c_str()));
+    }
+  }
+  return out;
+}
+
+std::vector<double> parse_double_list(const char* csv) {
+  std::vector<double> out;
+  std::stringstream ss(csv);
+  std::string tok;
+  while (std::getline(ss, tok, ',')) {
+    if (!tok.empty()) {
+      out.push_back(std::atof(tok.c_str()));
+    }
+  }
+  return out;
+}
+
+int run_tune(int argc, char** argv) {
+  BenchConfig base = parse_bench_config(argc, argv);
+  int tune_seeds = 2;
+  std::vector<int> m_grid = {128, 256, 512};
+  std::vector<double> gamma_grid = {0.25, 0.5, 1.0, 2.0, 4.0};
+  std::vector<double> blend_grid = {0.75, 1.0};
+  std::vector<double> lr_grid = {1.0, 2.0};
+
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--tune-seeds" && i + 1 < argc) {
+      tune_seeds = std::atoi(argv[++i]);
+    } else if (arg == "--tune-m" && i + 1 < argc) {
+      m_grid = parse_int_list(argv[++i]);
+    } else if (arg == "--tune-gamma" && i + 1 < argc) {
+      gamma_grid = parse_double_list(argv[++i]);
+    } else if (arg == "--tune-blend" && i + 1 < argc) {
+      blend_grid = parse_double_list(argv[++i]);
+    } else if (arg == "--tune-lr" && i + 1 < argc) {
+      lr_grid = parse_double_list(argv[++i]);
+    }
+  }
+
+  std::vector<TuneCell> cells;
+  for (int m : m_grid) {
+    for (double g : gamma_grid) {
+      for (double b : blend_grid) {
+        for (double lr : lr_grid) {
+          TuneCell cell{m, g, b, lr};
+          BenchConfig cfg = base;
+          cfg.seeds = tune_seeds;
+          cfg.kernel_m = m;
+          cfg.gamma_scale = g;
+          cfg.kernel_blend = b;
+          cfg.kernel_lr_scale = lr;
+          double lin_sum = 0.0;
+          double ker_sum = 0.0;
+          for (int s = 0; s < tune_seeds; ++s) {
+            const SeedResult r = run_seed_pair(s, cfg);
+            lin_sum += r.linear_acc;
+            ker_sum += r.kernel_acc;
+          }
+          cell.linear_mean = lin_sum / static_cast<double>(tune_seeds);
+          cell.kernel_mean = ker_sum / static_cast<double>(tune_seeds);
+          cell.delta_pp = 100.0 * (cell.kernel_mean - cell.linear_mean);
+          cells.push_back(cell);
+        }
+      }
+    }
+  }
+
+  std::sort(cells.begin(), cells.end(), [](const TuneCell& a, const TuneCell& b) {
+    if (a.kernel_mean != b.kernel_mean) {
+      return a.kernel_mean > b.kernel_mean;
+    }
+    return a.delta_pp > b.delta_pp;
+  });
+
+  std::cout << "{\n  \"mode\": \"tune\",\n  \"tune_seeds\": " << tune_seeds << ",\n  \"passes\": " << base.passes
+            << ",\n  \"cells\": [\n";
+  for (std::size_t i = 0; i < cells.size(); ++i) {
+    const TuneCell& c = cells[i];
+    if (i) {
+      std::cout << ",\n";
+    }
+    std::cout << "    {\"kernel_m\": " << c.kernel_m << ", \"gamma_scale\": " << c.gamma_scale
+              << ", \"kernel_blend\": " << c.kernel_blend << ", \"kernel_lr_scale\": " << c.kernel_lr_scale
+              << ", \"linear_mean_acc\": " << c.linear_mean << ", \"kernel_mean_acc\": " << c.kernel_mean
+              << ", \"delta_pp\": " << c.delta_pp << "}";
+  }
+  if (!cells.empty()) {
+    const TuneCell& best = cells.front();
+    std::cout << "\n  ],\n  \"best\": {\"kernel_m\": " << best.kernel_m << ", \"gamma_scale\": "
+              << best.gamma_scale << ", \"kernel_blend\": " << best.kernel_blend << ", \"kernel_lr_scale\": "
+              << best.kernel_lr_scale << ", \"kernel_mean_acc\": " << best.kernel_mean
+              << ", \"delta_pp\": " << best.delta_pp << "}\n}\n";
+  } else {
+    std::cout << "\n  ],\n  \"best\": null\n}\n";
+  }
+  return 0;
 }
 
 }  // namespace
 
-int main(int argc, char** argv) {
-  int seeds = 3;
-  int passes = 8;
-  double kernel_blend = 1.0;
-  int kernel_m = 256;
+int xor_kernel_bench_main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
-    const std::string arg = argv[i];
-    if (arg == "--seeds" && i + 1 < argc) {
-      seeds = std::atoi(argv[++i]);
-    } else if (arg == "--passes" && i + 1 < argc) {
-      passes = std::atoi(argv[++i]);
-    } else if (arg == "--kernel-blend" && i + 1 < argc) {
-      kernel_blend = std::atof(argv[++i]);
-    } else if (arg == "--kernel-m" && i + 1 < argc) {
-      kernel_m = std::atoi(argv[++i]);
-    } else if (arg == "--help" || arg == "-h") {
-      std::cout << "usage: xor_kernel_bench [--seeds N] [--passes N] [--kernel-blend B] [--kernel-m M]\n";
+    if (std::string(argv[i]) == "--help" || std::string(argv[i]) == "-h") {
+      usage();
       return 0;
+    }
+    if (std::string(argv[i]) == "--tune") {
+      return run_tune(argc, argv);
     }
   }
 
+  const BenchConfig cfg = parse_bench_config(argc, argv);
   double lin_sum = 0.0;
   double ker_sum = 0.0;
-  std::cout << "{\n  \"dataset\": \"S3_nonlinear_xor_native\",\n  \"seeds\": " << seeds
-            << ",\n  \"passes\": " << passes << ",\n  \"kernel_blend\": " << kernel_blend
-            << ",\n  \"kernel_m\": " << kernel_m << ",\n  \"linear\": [\n";
-  for (int s = 0; s < seeds; ++s) {
+  std::cout << "{\n  \"dataset\": \"S3_nonlinear_xor_native\",\n  \"seeds\": " << cfg.seeds
+            << ",\n  \"passes\": " << cfg.passes << ",\n  \"kernel_blend\": " << cfg.kernel_blend
+            << ",\n  \"kernel_m\": " << cfg.kernel_m << ",\n  \"gamma_scale\": " << cfg.gamma_scale
+            << ",\n  \"kernel_lr_scale\": " << cfg.kernel_lr_scale << ",\n  \"shuffle_train\": "
+            << (cfg.shuffle_train ? "true" : "false") << ",\n  \"linear\": [\n";
+  for (int s = 0; s < cfg.seeds; ++s) {
     if (s) {
       std::cout << ",\n";
     }
-    const double acc = run_seed(s, false, kernel_blend, passes, kernel_m);
+    const double acc = run_seed_mode(s, false, cfg);
     std::cout << "    " << acc;
     lin_sum += acc;
   }
   std::cout << "\n  ],\n  \"kernel\": [\n";
-  for (int s = 0; s < seeds; ++s) {
+  for (int s = 0; s < cfg.seeds; ++s) {
     if (s) {
       std::cout << ",\n";
     }
-    const double acc = run_seed(s, true, kernel_blend, passes, kernel_m);
+    const double acc = run_seed_mode(s, true, cfg);
     std::cout << "    " << acc;
     ker_sum += acc;
   }
-  const double lin_mean = lin_sum / static_cast<double>(seeds);
-  const double ker_mean = ker_sum / static_cast<double>(seeds);
+  const double lin_mean = lin_sum / static_cast<double>(cfg.seeds);
+  const double ker_mean = ker_sum / static_cast<double>(cfg.seeds);
   std::cout << "\n  ],\n  \"linear_mean_acc\": " << lin_mean << ",\n  \"kernel_mean_acc\": " << ker_mean
             << ",\n  \"delta_pp\": " << 100.0 * (ker_mean - lin_mean) << "\n}\n";
   return 0;
 }
+
+#ifndef CYPHA_KERNEL_TUNE_STANDALONE
+int main(int argc, char** argv) { return xor_kernel_bench_main(argc, argv); }
+#endif

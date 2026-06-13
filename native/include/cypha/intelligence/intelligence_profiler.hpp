@@ -25,6 +25,12 @@ struct ProfileBatch {
   const double* output = nullptr;
   int n_samples = 0;
   int n_dims = 0;
+  const double* perturbed_input = nullptr;
+  const double* perturbed_output = nullptr;
+  const double* sequence = nullptr;
+  int n_timesteps = 0;
+  int tau_max_lag = 32;
+  int tau_max_steps = 512;
   const double* confidences = nullptr;
   const int* correct = nullptr;
   int n_labels = 0;
@@ -33,6 +39,28 @@ struct ProfileBatch {
   std::optional<double> sigma_branch;
   std::optional<double> tau;
   std::optional<double> lipschitz;
+};
+
+/// Paper III landscape reference classes (estimated profiles from Paper III §3).
+enum class LandscapeSystemClass {
+  SimpleFfn,
+  LargeTransformer,
+  CyphaAugmented,
+  SelfCorrectingCypha,
+  SoftWorldCypha,
+  HumanMedian,
+};
+
+/// Paper II failure-mode flags from P-space signature (Paper II §4.1).
+struct FailureModeFlags {
+  bool low_calibration = false;
+  bool high_lipschitz = false;
+  bool low_tau = false;
+  bool explosive_branching = false;
+  bool damped_branching = false;
+  bool low_d_eff = false;
+  bool low_r_eu = false;
+  bool extreme_alpha = false;
 };
 
 /// Online 7×3 intelligence profile matrix (point, epistemic, aleatoric per statistic).
@@ -56,8 +84,31 @@ class IntelligenceProfiler {
 
   static std::array<double, kProfileStatisticCount> critical_targets();
 
+  /// Paper III estimated reference profile for a system class.
+  static ProfileObservation landscape_reference(LandscapeSystemClass system);
+
+  /// Paper II: unweighted Euclidean distance in P-space.
+  static double profile_distance(const ProfileObservation& a, const ProfileObservation& b);
+
+  /// Paper III: distance normalised by ``sqrt(7)``.
+  static double profile_distance_normalized(const ProfileObservation& a, const ProfileObservation& b);
+
+  /// Paper II: ``||P - P*||²`` navigation loss toward critical targets.
+  static double navigation_loss(const ProfileObservation& obs);
+
+  /// Paper II: predict failure modes from marginal thresholds.
+  static FailureModeFlags predict_failure_modes(const ProfileObservation& obs);
+
+  /// Paper III: ``A ≻ B`` if A is closer to critical on every axis.
+  static bool dominates(const ProfileObservation& a, const ProfileObservation& b);
+
+  /// Criticality score for an arbitrary observation vs targets.
+  static double criticality_score_for(const ProfileObservation& obs);
+
  private:
   void update_statistic(ProfileStatistic stat, double value);
+
+  static double axis_distance(double value, double target);
 
   std::array<NigStatisticState, kProfileStatisticCount> nig_states_;
 };

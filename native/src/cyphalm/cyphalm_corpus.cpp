@@ -130,6 +130,32 @@ LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_
     throw std::runtime_error("no corpus for profile " + profile + " under bench/data");
 }
 
+LMCorpus load_corpus_file(const std::string& corpus_path, const std::string& profile, int max_chars,
+                          int vocab_size, const std::string& bpe_merges,
+                          const std::string& bpe_vocab) {
+    std::unique_ptr<BpeTokenizer> bpe;
+    if (!bpe_merges.empty() && !bpe_vocab.empty() &&
+        fs::is_regular_file(bpe_merges) && fs::is_regular_file(bpe_vocab)) {
+        bpe = std::make_unique<BpeTokenizer>(BpeTokenizer::load(bpe_merges, bpe_vocab));
+    }
+    const BpeTokenizer* bpe_ptr = bpe.get();
+
+    fs::path p(corpus_path);
+    if (!p.is_absolute()) {
+        const fs::path root = fs::path(repo_root_from_native());
+        const fs::path under_root = root / p;
+        if (fs::is_regular_file(under_root)) {
+            p = under_root;
+        } else if (!fs::is_regular_file(p)) {
+            p = fs::current_path() / corpus_path;
+        }
+    }
+    if (!fs::is_regular_file(p)) {
+        throw std::runtime_error("cannot open corpus: " + corpus_path);
+    }
+    return from_text(read_text_file(p, max_chars), p.filename().string(), profile, vocab_size, bpe_ptr);
+}
+
 std::vector<int> synthetic_corpus(int n_tokens, int vocab_size, std::uint64_t seed) {
     std::mt19937_64 rng(seed);
     std::uniform_int_distribution<int> dist(1, std::max(1, vocab_size - 1));

@@ -51,6 +51,15 @@ void test_measurers() {
   const double alpha =
       cypha::intelligence::compute_alpha_gria(input.data(), output.data(), 3, 2);
   assert(alpha >= 0.0 && alpha <= 1.0);
+
+  const double sigma_norm = cypha::intelligence::normalize_branching_ratio(1.0);
+  assert(near(sigma_norm, 0.5));
+
+  const std::vector<double> perturb = {0.01, 0.11, 0.21, 0.31, 0.41, 0.51};
+  const std::vector<double> out_pert = {0.25, 0.45, 0.65, 0.85, 1.05, 1.25};
+  const double lipschitz =
+      cypha::intelligence::compute_lipschitz_sensitivity(output.data(), out_pert.data(), 3, 2);
+  assert(lipschitz > 0.0 && lipschitz <= 1.0);
 }
 
 void test_profiler() {
@@ -92,6 +101,12 @@ void test_profiler() {
   }
   const std::vector<double> conf = {0.2, 0.8};
   const std::vector<int> labels = {0, 1};
+  std::vector<double> perturb = output;
+  std::vector<double> out_pert = output;
+  for (std::size_t i = 0; i < perturb.size(); ++i) {
+    perturb[i] += 0.01;
+    out_pert[i] += 0.05;
+  }
 
   cypha::intelligence::ProfileBatch batch;
   batch.input = input.data();
@@ -103,9 +118,8 @@ void test_profiler() {
   batch.n_labels = static_cast<int>(conf.size());
   batch.epistemic_var = 0.6;
   batch.aleatoric_var = 0.4;
-  batch.sigma_branch = 0.5;
-  batch.tau = 0.65;
-  batch.lipschitz = 0.5;
+  batch.perturbed_input = perturb.data();
+  batch.perturbed_output = out_pert.data();
   profiler.update_from_batch(batch);
 }
 

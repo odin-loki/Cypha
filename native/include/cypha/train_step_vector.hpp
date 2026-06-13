@@ -37,6 +37,8 @@ struct TrainStepExtras {
   KernelMemory* kernel_mem{nullptr};
   bool use_kernel_llr{false};
   double kernel_blend{0.5};
+  /// Scales ``delta_lr`` for kernel weight updates only (default 1.0).
+  double kernel_lr_scale{1.0};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).

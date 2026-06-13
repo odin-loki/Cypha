@@ -21,6 +21,11 @@ LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_
                            const std::string& bpe_merges = "",
                            const std::string& bpe_vocab = "");
 
+/// Load train/eval token ids from a text file (80/20 split). Relative paths resolve under repo root.
+LMCorpus load_corpus_file(const std::string& corpus_path, const std::string& profile, int max_chars,
+                          int vocab_size, const std::string& bpe_merges = "",
+                          const std::string& bpe_vocab = "");
+
 std::vector<int> synthetic_corpus(int n_tokens, int vocab_size, std::uint64_t seed);
 
 }  // namespace cypha::cyphalm

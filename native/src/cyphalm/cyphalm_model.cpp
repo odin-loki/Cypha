@@ -18,6 +18,7 @@
 #include "cypha/cyphalm/hybrid_blend.hpp"
 #include "cypha/cyphalm/npz_util.hpp"
 #include "cypha/cyphalm/cyphalm_views.hpp"
+#include "cypha/cyphalm/ssm_diagnose.hpp"
 
 namespace cypha {
 namespace cyphalm {
@@ -780,13 +781,40 @@ double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval) {
     reset_context();
     const int n = std::min(n_eval, static_cast<int>(ids.size()) - 1);
     if (n <= 0) return std::numeric_limits<double>::quiet_NaN();
+    const int vocab = static_cast<int>(cfg_.vocab_size);
     double bits = 0.0;
+    int scored = 0;
     for (int i = 0; i < n; ++i) {
         const auto pred = predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]));
         const int nxt = ids[static_cast<std::size_t>(i + 1)];
+        // Index log_probs by vocab token id (not label/class order — legacy D04 bug).
+        if (nxt < 0 || nxt >= vocab ||
+            static_cast<std::size_t>(nxt) >= pred.log_probs.size()) {
+            continue;
+        }
         bits += -pred.log_probs[static_cast<std::size_t>(nxt)] / kLog2;
+        ++scored;
     }
-    return bits / static_cast<double>(n);
+    if (scored <= 0) return std::numeric_limits<double>::quiet_NaN();
+    return bits / static_cast<double>(scored);
+}
+
+std::vector<double> CyphaLMModel::embed_vector(std::uint32_t token_id) const {
+    if (!embed_) {
+        throw std::runtime_error("CyphaLMModel: embed table unavailable");
+    }
+    return embed_->embed_vec(token_id);
+}
+
+double CyphaLMModel::ssm_projection_rms() const {
+    if (proj_ssm_.empty()) return 0.0;
+    double acc = 0.0;
+    for (double v : proj_ssm_) acc += v * v;
+    return std::sqrt(acc / static_cast<double>(proj_ssm_.size()));
+}
+
+nlohmann::json CyphaLMModel::ssm_diagnostic_report(const std::vector<int>& token_ids, int max_steps) {
+    return diagnose_model_tokens(*this, token_ids, max_steps, "cyphalm");
 }
 
 }  // namespace cyphalm

@@ -51,6 +51,7 @@
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
+#include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/regression_stub.hpp"
@@ -70,6 +71,7 @@ struct Args {
     std::string domain_tag;
     bool report_only = false;
     bool list_domains = false;
+    bool ssm_diagnose = false;
 };
 
 struct DomainSpec {
@@ -80,7 +82,7 @@ struct DomainSpec {
 
 void usage() {
     std::cerr << "usage: cypha_bench_run [--domain N] [--domain-tag TAG] [--from-domain N] "
-                 "[--report-only] [--list-domains]\n";
+                 "[--report-only] [--list-domains] [--ssm-diagnose]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -96,6 +98,7 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--from-domain") a.from_domain = std::stoi(need("--from-domain"));
         else if (k == "--report-only") a.report_only = true;
         else if (k == "--list-domains") a.list_domains = true;
+        else if (k == "--ssm-diagnose") a.ssm_diagnose = true;
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -115,9 +118,22 @@ int domain_number(const std::string& tag) {
 }
 
 fs::path g_tool_dir;
+bool g_ssm_diagnose = false;
 
 bool bench_fast_mode() {
     const char* v = std::getenv("CYPHA_BENCH_FAST");
+    if (v == nullptr) {
+        return false;
+    }
+    const std::string s(v);
+    return s == "1" || s == "true" || s == "True" || s == "yes";
+}
+
+bool ssm_diagnose_enabled(const Args& args) {
+    if (args.ssm_diagnose) {
+        return true;
+    }
+    const char* v = std::getenv("CYPHA_SSM_DIAGNOSE");
     if (v == nullptr) {
         return false;
     }
@@ -1080,6 +1096,43 @@ Json run_d08() {
     return payload;
 }
 
+Json run_d10_ssm_diagnose() {
+    cypha::bench::TimeSeriesEncoder enc(32, 16);
+    const auto ecg = cypha::bench::load_ecg5000(kBenchSeed);
+    cypha::cyphalm::CellAISSMConfig cfg;
+    cfg.d_input = enc.feature_dim();
+    cfg.d_state = 128;
+    cfg.tau_fast = 10.0;
+    cfg.tau_slow = 100.0;
+    cfg.n_layers = 2;
+    cfg.seed = static_cast<int>(kBenchSeed + 1);
+    cfg.use_spectral_pde = true;
+    cfg.use_multiscale = true;
+    cfg.use_sparse_hebbian = true;
+    cypha::cyphalm::CellAISSM ssm(cfg);
+
+    const int steps = cypha::bench::bench_scale(512, 128);
+    std::vector<std::vector<double>> inputs;
+    inputs.reserve(static_cast<std::size_t>(steps));
+    for (const auto& series : ecg.x_train) {
+        const auto feat = enc.encode_series(series);
+        inputs.push_back(cypha::cyphalm::fit_input_dim(
+            std::vector<double>(feat.begin(), feat.end()), ssm.d_input()));
+        if (static_cast<int>(inputs.size()) >= steps) break;
+    }
+    while (static_cast<int>(inputs.size()) < steps && !ecg.x_train.empty()) {
+        const auto& series = ecg.x_train[inputs.size() % ecg.x_train.size()];
+        const auto feat = enc.encode_series(series);
+        inputs.push_back(cypha::cyphalm::fit_input_dim(
+            std::vector<double>(feat.begin(), feat.end()), ssm.d_input()));
+    }
+
+    auto report = cypha::cyphalm::diagnose_cellai_sequence(ssm, inputs, std::max(1, steps / 16), "d10");
+    report["data_source"] = ecg.source;
+    report["encoder"] = Json{{"window", 32}, {"n_fft", 16}, {"feature_dim", enc.feature_dim()}};
+    return report;
+}
+
 Json run_cyphalm_domain(const std::string& domain_id, const std::string& profile) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(profile, cfg);
@@ -1127,8 +1180,13 @@ Json run_cyphalm_domain(const std::string& domain_id, const std::string& profile
               {"n_experts", alpha_profile.value("n_experts", 0)}}},
         {"backend", "cypha_lm_native"},
     };
-    cypha::bench::finalize_domain(domain_id, experiments);
-    return experiments;
+    Json payload = experiments;
+    if (g_ssm_diagnose) {
+        const int diag_steps = cypha::bench::bench_scale(512, 128);
+        payload["ssm_diagnose"] = model.ssm_diagnostic_report(corpus.eval_ids, diag_steps);
+    }
+    cypha::bench::finalize_domain(domain_id, payload);
+    return payload;
 }
 
 Json run_d04() { return run_cyphalm_domain("d04", "d04"); }
@@ -2231,13 +2289,16 @@ Json run_d10_experiment_d() {
 }
 
 Json run_d10() {
-    const Json experiments{
+    Json experiments{
         {"10A_ecg_classification", run_d10_experiment_a()},
         {"10B_ecg_sliding_window", run_d10_experiment_b()},
         {"10C_ecg_ood_detection", run_d10_experiment_c()},
         {"10D_financial_return_sign", run_d10_experiment_d()},
         {"backend", "cypha_core"},
     };
+    if (g_ssm_diagnose) {
+        experiments["10E_ssm_diagnose"] = run_d10_ssm_diagnose();
+    }
     cypha::bench::finalize_domain("d10", experiments);
     return experiments;
 }
@@ -2612,6 +2673,7 @@ int main(int argc, char** argv) {
             }
         }
         const Args args = parse_args(argc, argv);
+        g_ssm_diagnose = ssm_diagnose_enabled(args);
         const auto domains = all_domains();
 
         if (args.list_domains) {

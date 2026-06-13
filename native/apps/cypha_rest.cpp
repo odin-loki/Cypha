@@ -49,6 +49,7 @@
 #include "cypha/branch_a_rest.hpp"
 #include "cypha/cyphalm/cyphalm_rest.hpp"
 #include "cypha/dif_rest.hpp"
+#include "cypha_rest_static_ui.hpp"
 
 namespace fs = std::filesystem;
 
@@ -1868,6 +1869,8 @@ int main(int argc, char** argv) {
       return 1;
     }
   }
+
+  cypha_rest_ui::configure_static_ui(svr, (argc > 0) ? argv[0] : nullptr);
 
   std::cout << "cypha_rest listening on http://" << listen << ":" << port << "\n";
   if (!svr.listen(listen.c_str(), port)) {

@@ -72,6 +72,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QFrame>
+#include <QStyle>
+#include <QPalette>
 
 #if defined(CYPHA_SHELL_QT_CHARTS)
 #include <QBrush>
@@ -115,6 +117,7 @@
 #include "cypha/cyphalm/cyphalm_model.hpp"
 
 #include "bulk_train_worker.h"
+#include "bulk_rest_update_worker.h"
 
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
 #include "cypha/experiment_db.hpp"
@@ -2044,6 +2047,35 @@ QString default_registry_root() {
   return home + QStringLiteral("/.cypha/models");
 }
 
+QString cypha_config_dir() {
+  return QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + QStringLiteral("/.cypha");
+}
+
+QString shell_settings_path() { return cypha_config_dir() + QStringLiteral("/shell_settings.json"); }
+
+void apply_cypha_theme(bool dark) {
+  QApplication::setStyle(QStringLiteral("Fusion"));
+  if (!dark) {
+    QApplication::setPalette(QApplication::style()->standardPalette());
+    return;
+  }
+  QPalette palette;
+  palette.setColor(QPalette::Window, QColor(53, 53, 53));
+  palette.setColor(QPalette::WindowText, Qt::white);
+  palette.setColor(QPalette::Base, QColor(25, 25, 25));
+  palette.setColor(QPalette::AlternateBase, QColor(53, 53, 53));
+  palette.setColor(QPalette::ToolTipBase, Qt::white);
+  palette.setColor(QPalette::ToolTipText, Qt::white);
+  palette.setColor(QPalette::Text, Qt::white);
+  palette.setColor(QPalette::Button, QColor(53, 53, 53));
+  palette.setColor(QPalette::ButtonText, Qt::white);
+  palette.setColor(QPalette::BrightText, Qt::red);
+  palette.setColor(QPalette::Link, QColor(42, 130, 218));
+  palette.setColor(QPalette::Highlight, QColor(42, 130, 218));
+  palette.setColor(QPalette::HighlightedText, Qt::black);
+  QApplication::setPalette(palette);
+}
+
 struct StudioPreferences {
   bool inference_use_gh = true;
   double inference_ood_threshold = 3.0;
@@ -2053,6 +2085,7 @@ struct StudioPreferences {
   int csv_chunk_rows_override = 0;
   QString dataset_dialog_start_dir;
   int ui_font_pt = 0;
+  bool dark_theme = false;
 
   QString effective_registry_root() const {
     const QString r = registry_root_override.trimmed();
@@ -2061,6 +2094,32 @@ struct StudioPreferences {
 };
 
 QSettings studio_qsettings() { return QSettings(QStringLiteral("Cypha"), QStringLiteral("CyphaStudio")); }
+
+void merge_shell_settings_json(StudioPreferences& p) {
+  QFile f(shell_settings_path());
+  if (!f.open(QIODevice::ReadOnly)) {
+    return;
+  }
+  QJsonParseError pe{};
+  const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &pe);
+  if (pe.error != QJsonParseError::NoError || !doc.isObject()) {
+    return;
+  }
+  const QJsonObject o = doc.object();
+  if (o.contains(QStringLiteral("dark_theme"))) {
+    p.dark_theme = o.value(QStringLiteral("dark_theme")).toBool();
+  }
+}
+
+void write_shell_settings_json(const StudioPreferences& p) {
+  QDir().mkpath(cypha_config_dir());
+  QJsonObject o;
+  o[QStringLiteral("dark_theme")] = p.dark_theme;
+  QFile f(shell_settings_path());
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
+  }
+}
 
 StudioPreferences load_studio_preferences() {
   StudioPreferences p;
@@ -2091,6 +2150,8 @@ StudioPreferences load_studio_preferences() {
   p.csv_chunk_rows_override = read_int("studio/csv_chunk_rows_override", 0);
   p.dataset_dialog_start_dir = s.value(QStringLiteral("studio/dataset_dialog_start_dir"), QString()).toString();
   p.ui_font_pt = read_int("studio/ui_font_pt", 0);
+  p.dark_theme = read_bool("studio/dark_theme", p.dark_theme);
+  merge_shell_settings_json(p);
   return p;
 }
 
@@ -2104,6 +2165,8 @@ void save_studio_preferences(const StudioPreferences& p) {
   s.setValue(QStringLiteral("studio/csv_chunk_rows_override"), p.csv_chunk_rows_override);
   s.setValue(QStringLiteral("studio/dataset_dialog_start_dir"), p.dataset_dialog_start_dir);
   s.setValue(QStringLiteral("studio/ui_font_pt"), p.ui_font_pt);
+  s.setValue(QStringLiteral("studio/dark_theme"), p.dark_theme);
+  write_shell_settings_json(p);
 }
 
 struct ConfusionMatrix {
@@ -2195,6 +2258,148 @@ void show_confusion_dialog(QWidget* parent, const QVector<QString>& y_true, cons
   lay->addWidget(box);
   dlg.exec();
 }
+
+struct ModelCardEditResult {
+  QString name;
+  QString version;
+};
+
+class ModelCardEditorDialog final : public QDialog {
+ public:
+  explicit ModelCardEditorDialog(const QString& card_path, const QString& default_name,
+                                 QWidget* parent = nullptr)
+      : QDialog(parent), card_path_(card_path) {
+    setWindowTitle(QStringLiteral("Model card editor"));
+    resize(480, 360);
+
+    QFile f(card_path_);
+    if (f.open(QIODevice::ReadOnly)) {
+      QJsonParseError pe{};
+      const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &pe);
+      if (pe.error == QJsonParseError::NoError && doc.isObject()) {
+        card_obj_ = doc.object();
+      }
+    }
+
+    auto* root = new QVBoxLayout(this);
+    auto* form = new QFormLayout();
+    name_edit_ = new QLineEdit(this);
+    name_edit_->setText(card_obj_.value(QStringLiteral("name")).toString(default_name));
+    form->addRow(QStringLiteral("Name:"), name_edit_);
+
+    version_edit_ = new QLineEdit(this);
+    version_edit_->setText(card_obj_.value(QStringLiteral("version")).toString(QStringLiteral("1.0.0")));
+    form->addRow(QStringLiteral("Version:"), version_edit_);
+
+    desc_edit_ = new QPlainTextEdit(this);
+    desc_edit_->setPlainText(card_obj_.value(QStringLiteral("description")).toString());
+    desc_edit_->setMaximumHeight(100);
+    form->addRow(QStringLiteral("Description:"), desc_edit_);
+
+    tags_edit_ = new QLineEdit(this);
+    QStringList tag_parts;
+    const QJsonValue tags_v = card_obj_.value(QStringLiteral("tags"));
+    if (tags_v.isArray()) {
+      for (const QJsonValue& tv : tags_v.toArray()) {
+        const QString t = tv.toString().trimmed();
+        if (!t.isEmpty()) {
+          tag_parts << t;
+        }
+      }
+    } else if (tags_v.isString()) {
+      tag_parts = tags_v.toString().split(QLatin1Char(','), Qt::SkipEmptyParts);
+      for (QString& t : tag_parts) {
+        t = t.trimmed();
+      }
+    }
+    tags_edit_->setText(tag_parts.join(QStringLiteral(", ")));
+    tags_edit_->setPlaceholderText(QStringLiteral("comma-separated tags"));
+    form->addRow(QStringLiteral("Tags:"), tags_edit_);
+
+    task_combo_ = new QComboBox(this);
+    task_combo_->addItems({QStringLiteral("classification"), QStringLiteral("regression"),
+                           QStringLiteral("generation"), QStringLiteral("other")});
+    const QString task = card_obj_.value(QStringLiteral("task")).toString(QStringLiteral("classification"));
+    const int ti = task_combo_->findText(task);
+    task_combo_->setCurrentIndex(ti >= 0 ? ti : 0);
+    form->addRow(QStringLiteral("Task type:"), task_combo_);
+
+    root->addLayout(form);
+    auto* note = new QLabel(
+        QStringLiteral("Edits are written to card.json before registry register."), this);
+    note->setWordWrap(true);
+    note->setStyleSheet(QStringLiteral("color: #888; font-size: 11px;"));
+    root->addWidget(note);
+
+    auto* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    connect(btns, &QDialogButtonBox::accepted, this, &ModelCardEditorDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, this, &ModelCardEditorDialog::reject);
+    root->addWidget(btns);
+  }
+
+  ModelCardEditResult edit_result() const { return result_; }
+
+  bool write_card(QString* err = nullptr) const {
+    QFileInfo fi(card_path_);
+    if (!fi.absoluteDir().exists() && !QDir().mkpath(fi.absolutePath())) {
+      if (err != nullptr) {
+        *err = QStringLiteral("Could not create directory for card.json");
+      }
+      return false;
+    }
+    QFile f(card_path_);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+      if (err != nullptr) {
+        *err = QStringLiteral("Could not write %1").arg(card_path_);
+      }
+      return false;
+    }
+    f.write(QJsonDocument(card_obj_).toJson(QJsonDocument::Indented));
+    return true;
+  }
+
+ private:
+  void accept() override {
+    const QString name = name_edit_->text().trimmed();
+    const QString version = version_edit_->text().trimmed();
+    if (name.isEmpty() || version.isEmpty()) {
+      QMessageBox::warning(this, QStringLiteral("Model card"),
+                           QStringLiteral("Name and version are required."));
+      return;
+    }
+    card_obj_[QStringLiteral("name")] = name;
+    card_obj_[QStringLiteral("version")] = version;
+    card_obj_[QStringLiteral("description")] = desc_edit_->toPlainText();
+    card_obj_[QStringLiteral("task")] = task_combo_->currentText();
+
+    QJsonArray tags_arr;
+    for (const QString& part : tags_edit_->text().split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+      const QString t = part.trimmed();
+      if (!t.isEmpty()) {
+        tags_arr.append(t);
+      }
+    }
+    card_obj_[QStringLiteral("tags")] = tags_arr;
+
+    result_.name = name;
+    result_.version = version;
+    QString write_err;
+    if (!write_card(&write_err)) {
+      QMessageBox::warning(this, QStringLiteral("Model card"), write_err);
+      return;
+    }
+    QDialog::accept();
+  }
+
+  QString card_path_;
+  ModelCardEditResult result_;
+  QJsonObject card_obj_;
+  QLineEdit* name_edit_{};
+  QLineEdit* version_edit_{};
+  QPlainTextEdit* desc_edit_{};
+  QLineEdit* tags_edit_{};
+  QComboBox* task_combo_{};
+};
 
 class SettingsDialog final : public QDialog {
  public:
@@ -2299,6 +2504,9 @@ class SettingsDialog final : public QDialog {
   QWidget* build_appearance_tab() {
     auto* w = new QWidget(this);
     auto* lay = new QVBoxLayout(w);
+    dark_theme_ = new QCheckBox(QStringLiteral("Dark theme (Fusion palette)"), w);
+    dark_theme_->setChecked(prefs_.dark_theme);
+    lay->addWidget(dark_theme_);
     font_pt_ = new QSpinBox(w);
     font_pt_->setRange(0, 24);
     font_pt_->setValue(prefs_.ui_font_pt);
@@ -2342,6 +2550,7 @@ class SettingsDialog final : public QDialog {
     csv_chunk_->setValue(0);
     ds_dir_->clear();
     font_pt_->setValue(0);
+    dark_theme_->setChecked(d.dark_theme);
   }
 
   void accept() override {
@@ -2354,6 +2563,7 @@ class SettingsDialog final : public QDialog {
     prefs_.csv_chunk_rows_override = cr > 0 ? cr : 0;
     prefs_.dataset_dialog_start_dir = ds_dir_->text().trimmed();
     prefs_.ui_font_pt = font_pt_->value();
+    prefs_.dark_theme = dark_theme_->isChecked();
     save_studio_preferences(prefs_);
     QDialog::accept();
   }
@@ -2367,12 +2577,14 @@ class SettingsDialog final : public QDialog {
   QSpinBox* csv_chunk_{};
   QLineEdit* ds_dir_{};
   QSpinBox* font_pt_{};
+  QCheckBox* dark_theme_{};
 };
 
 class MainWindow final : public QMainWindow {
  public:
   MainWindow() {
     studio_prefs_ = load_studio_preferences();
+    apply_cypha_theme(studio_prefs_.dark_theme);
     native_gh_chi_ = studio_prefs_.inference_chi;
     native_gh_psi_ = studio_prefs_.inference_psi;
     if (studio_prefs_.ui_font_pt > 0) {
@@ -2928,7 +3140,8 @@ class MainWindow final : public QMainWindow {
 
     auto* row_card = new QHBoxLayout();
     card_btn_ = new QPushButton(QStringLiteral("card.json…"), inner_registry);
-    card_label_ = new QLabel(QStringLiteral("(optional — for Register; else card.json next to .cypha)"), inner_registry);
+    card_label_ = new QLabel(QStringLiteral("(optional path — Register opens card editor; default beside .cypha)"),
+                             inner_registry);
     card_label_->setWordWrap(true);
     row_card->addWidget(card_btn_);
     row_card->addWidget(card_label_, 1);
@@ -3766,6 +3979,11 @@ class MainWindow final : public QMainWindow {
                                  QStringLiteral("Choose a training CSV first."));
         return;
       }
+      if (bulk_rest_thread_ != nullptr || bulk_thread_ != nullptr) {
+        QMessageBox::information(this, QStringLiteral("Bulk /update"),
+                                 QStringLiteral("Bulk training already in progress."));
+        return;
+      }
       cypha::CsvDenseResult data;
       try {
         data = cypha::load_csv_dense(qstring_to_fs_path(csv_path_), build_csv_spec());
@@ -3789,81 +4007,76 @@ class MainWindow final : public QMainWindow {
       if (cap > 0 && cap < n) {
         n = cap;
       }
-      QProgressDialog prog(QStringLiteral("POST /update per CSV row…"), QStringLiteral("Cancel"), 0, n, this);
-      prog.setWindowModality(Qt::WindowModal);
-      prog.setMinimumDuration(0);
-      QVector<double> losses;
-      losses.reserve(n);
-      const QUrl update_url(base + QStringLiteral("/update"));
-      const bool use_gh = use_gh_chk_->isChecked();
+
       QString mke_clab = mke_correct_label_edit_->text().trimmed();
       if (mke_clab.isEmpty()) {
         mke_clab = default_mke_correct_label();
       }
-      const QString router_ov = mke_router_label_edit_->text().trimmed();
-      for (int i = 0; i < n; ++i) {
-        prog.setValue(i);
-        QCoreApplication::processEvents();
-        if (prog.wasCanceled()) {
-          break;
-        }
-        QJsonArray arr;
-        const std::size_t row_base =
-            static_cast<std::size_t>(i) * static_cast<std::size_t>(data.n_features);
-        for (int j = 0; j < data.n_features; ++j) {
-          arr.append(data.x_rowmajor[row_base + static_cast<std::size_t>(j)]);
-        }
-        QJsonObject body;
-        body[QStringLiteral("input")] = arr;
-        body[QStringLiteral("use_gh")] = use_gh;
-        if (reg_mode) {
-          body[QStringLiteral("correct_label")] = mke_clab;
-          body[QStringLiteral("regression_y")] = data.y_regression[static_cast<std::size_t>(i)];
-          if (!router_ov.isEmpty()) {
-            body[QStringLiteral("router_train_label")] = router_ov;
-          }
-        } else {
-          body[QStringLiteral("correct_label")] =
-              QString::fromStdString(data.y_class[static_cast<std::size_t>(i)]);
-        }
-        add_replay_u01_to_json(body);
-        const HttpJsonResult r = http_post_json(update_url, body);
-        if (!r.ok) {
-          QMessageBox::warning(this, QStringLiteral("Bulk /update"), r.err);
-          break;
-        }
-        if (r.obj.contains(QStringLiteral("detail"))) {
-          QMessageBox::warning(this, QStringLiteral("Bulk /update"),
-                               r.obj.value(QStringLiteral("detail")).toString());
-          break;
-        }
-        losses.append(r.obj.value(QStringLiteral("loss")).toDouble());
-        if (loss_chart_ != nullptr) {
-          loss_chart_->append_rest_step(i, losses.last());
-        }
+
+      BulkRestUpdateJob job{};
+      job.base_url = base;
+      job.data = std::move(data);
+      job.n_rows = n;
+      job.regression = reg_mode;
+      job.use_gh = use_gh_chk_->isChecked();
+      job.mke_correct_label = mke_clab;
+      job.router_train_label = mke_router_label_edit_->text().trimmed();
+      for (double u : replay_u01_cache_) {
+        job.replay_u01.append(u);
       }
-      prog.setValue(n);
-      apply_losses_to_chart(LossPlotSource::RestBulk, std::move(losses));
-      if (!last_loss_plot_rest_.isEmpty()) {
-        double sum = 0.0;
-        for (double v : last_loss_plot_rest_) {
-          sum += v;
+      job.cancel_flag = &bulk_rest_cancel_flag_;
+
+      bulk_rest_cancel_flag_.store(false);
+      bulk_rest_accum_losses_.clear();
+      set_bulk_training_ui(true);
+      result_label_->setText(QStringLiteral("Bulk REST /update 0 / %1…").arg(n));
+
+      auto* prog = new QProgressDialog(QStringLiteral("POST /update per CSV row…"),
+                                       QStringLiteral("Cancel"), 0, n, this);
+      prog->setWindowModality(Qt::WindowModal);
+      prog->setMinimumDuration(0);
+      prog->setAttribute(Qt::WA_DeleteOnClose);
+
+      bulk_rest_thread_ = new QThread(this);
+      bulk_rest_worker_ = new BulkRestUpdateWorker();
+      bulk_rest_worker_->moveToThread(bulk_rest_thread_);
+
+      connect(bulk_rest_thread_, &QThread::started, bulk_rest_worker_,
+              [job = std::move(job), w = bulk_rest_worker_]() mutable { w->run(std::move(job)); });
+      connect(bulk_rest_worker_, &BulkRestUpdateWorker::progress, prog,
+              [prog](int step, int total) {
+                prog->setMaximum(total);
+                prog->setValue(step);
+              });
+      connect(bulk_rest_worker_, &BulkRestUpdateWorker::progress, this,
+              [this, n](int step, int /*total*/) {
+                result_label_->setText(QStringLiteral("Bulk REST /update %1 / %2…").arg(step).arg(n));
+              });
+      connect(bulk_rest_worker_, &BulkRestUpdateWorker::stepLoss, this,
+              [this](int step, double loss) {
+                bulk_rest_accum_losses_.append(loss);
+                if (loss_chart_ != nullptr) {
+                  loss_chart_->append_rest_step(step, loss);
+                }
+              });
+      connect(prog, &QProgressDialog::canceled, bulk_rest_worker_,
+              &BulkRestUpdateWorker::requestCancel);
+      connect(bulk_rest_worker_, &BulkRestUpdateWorker::finished, this,
+              [this, prog](bool ok, QVector<double> losses, bool cancelled, QString error) {
+                prog->close();
+                on_bulk_rest_finished(ok, std::move(losses), cancelled, std::move(error));
+              });
+      connect(bulk_rest_worker_, &BulkRestUpdateWorker::finished, bulk_rest_thread_, &QThread::quit);
+      connect(bulk_rest_thread_, &QThread::finished, bulk_rest_thread_, &QObject::deleteLater);
+      connect(bulk_rest_thread_, &QThread::finished, this, [this]() {
+        bulk_rest_thread_ = nullptr;
+        if (bulk_rest_worker_ != nullptr) {
+          bulk_rest_worker_->deleteLater();
+          bulk_rest_worker_ = nullptr;
         }
-        result_label_->setText(QStringLiteral("[bulk /update] steps=%1 mean_loss=%2 last_loss=%3")
-                                   .arg(last_loss_plot_rest_.size())
-                                   .arg(sum / static_cast<double>(last_loss_plot_rest_.size()), 0, 'g', 8)
-                                   .arg(last_loss_plot_rest_.last(), 0, 'g', 8));
-        QString extra = dataset_info_->toPlainText();
-        if (!extra.isEmpty() && !extra.endsWith(QLatin1Char('\n'))) {
-          extra += QLatin1Char('\n');
-        }
-        extra += QStringLiteral("bulk /update: %1 steps, mean_loss=%2\n")
-                     .arg(last_loss_plot_rest_.size())
-                     .arg(sum / static_cast<double>(last_loss_plot_rest_.size()), 0, 'g', 8);
-        dataset_info_->setPlainText(extra);
-      } else if (prog.wasCanceled()) {
-        result_label_->setText(QStringLiteral("[bulk /update] canceled"));
-      }
+      });
+
+      bulk_rest_thread_->start();
     });
 
     connect(csv_bulk_native_btn_, &QPushButton::clicked, this, [this]() {
@@ -4576,39 +4789,25 @@ class MainWindow final : public QMainWindow {
       QString card = card_path_;
       if (card.isEmpty()) {
         const QFileInfo fi(cypha_path_);
-        const QString guess = fi.absoluteDir().filePath(QStringLiteral("card.json"));
-        if (QFile::exists(guess)) {
-          card = guess;
-        }
+        card = fi.absoluteDir().filePath(QStringLiteral("card.json"));
       }
-      if (card.isEmpty() || !QFile::exists(card)) {
-        QMessageBox::warning(this, QStringLiteral("Register"),
-                             QStringLiteral("Need card.json — use “card.json…” or place it beside the .cypha."));
+      const QString default_name = QFileInfo(cypha_path_).completeBaseName();
+      ModelCardEditorDialog dlg(card, default_name, this);
+      if (dlg.exec() != QDialog::Accepted) {
         return;
       }
-      bool ok_n = false;
-      const QString name =
-          QInputDialog::getText(this, QStringLiteral("Register"), QStringLiteral("Model name:"),
-                                QLineEdit::Normal, QString(), &ok_n);
-      if (!ok_n || name.trimmed().isEmpty()) {
-        return;
-      }
-      bool ok_v = false;
-      const QString version =
-          QInputDialog::getText(this, QStringLiteral("Register"), QStringLiteral("Version:"),
-                                QLineEdit::Normal, QStringLiteral("1.0.0"), &ok_v);
-      if (!ok_v || version.trimmed().isEmpty()) {
-        return;
-      }
+      card_path_ = card;
+      card_label_->setText(card);
+      const ModelCardEditResult er = dlg.edit_result();
       const auto ow =
           QMessageBox::question(this, QStringLiteral("Register"),
                                 QStringLiteral("Overwrite if %1/%2 already exists?")
-                                    .arg(name.trimmed(), version.trimmed()),
+                                    .arg(er.name, er.version),
                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
       const bool overwrite = (ow == QMessageBox::Yes);
       std::string root_u8 = registry_root_.toStdString();
-      std::string name_u8 = name.trimmed().toStdString();
-      std::string ver_u8 = version.trimmed().toStdString();
+      std::string name_u8 = er.name.toStdString();
+      std::string ver_u8 = er.version.toStdString();
       std::string cy_u8 = cypha_path_.toStdString();
       std::string card_u8 = card.toStdString();
       std::string pre_u8;
@@ -4624,7 +4823,7 @@ class MainWindow final : public QMainWindow {
         return;
       }
       QMessageBox::information(this, QStringLiteral("Register"),
-                               QStringLiteral("Registered %1 / %2").arg(name.trimmed(), version.trimmed()));
+                               QStringLiteral("Registered %1 / %2").arg(er.name, er.version));
       reg_refs_ = cypha::registry_scan(registry_root_.toUtf8().constData());
       reg_combo_->clear();
       for (const cypha::RegistryModelRef& r : reg_refs_) {
@@ -5119,12 +5318,20 @@ class MainWindow final : public QMainWindow {
  protected:
   void closeEvent(QCloseEvent* e) override {
     bulk_cancel_flag_.store(true, std::memory_order_relaxed);
+    bulk_rest_cancel_flag_.store(true, std::memory_order_relaxed);
     if (bulk_worker_ != nullptr) {
       QMetaObject::invokeMethod(bulk_worker_, "requestCancel", Qt::QueuedConnection);
+    }
+    if (bulk_rest_worker_ != nullptr) {
+      QMetaObject::invokeMethod(bulk_rest_worker_, "requestCancel", Qt::QueuedConnection);
     }
     if (bulk_thread_ != nullptr) {
       bulk_thread_->quit();
       bulk_thread_->wait(30000);
+    }
+    if (bulk_rest_thread_ != nullptr) {
+      bulk_rest_thread_->quit();
+      bulk_rest_thread_->wait(30000);
     }
     if (rest_proc_.state() != QProcess::NotRunning) {
       rest_proc_.terminate();
@@ -5416,6 +5623,7 @@ class MainWindow final : public QMainWindow {
   void apply_studio_preferences() {
     native_gh_chi_ = studio_prefs_.inference_chi;
     native_gh_psi_ = studio_prefs_.inference_psi;
+    apply_cypha_theme(studio_prefs_.dark_theme);
     if (use_gh_chk_ != nullptr) {
       use_gh_chk_->setChecked(studio_prefs_.inference_use_gh);
     }
@@ -5673,6 +5881,42 @@ class MainWindow final : public QMainWindow {
 
   void on_bulk_error(const QString& msg) {
     QMessageBox::warning(this, QStringLiteral("Bulk native"), msg);
+  }
+
+  void on_bulk_rest_finished(bool ok, QVector<double> losses, bool cancelled, QString error) {
+    set_bulk_training_ui(false);
+    if (!error.isEmpty()) {
+      QMessageBox::warning(this, QStringLiteral("Bulk /update"), error);
+    }
+    if (!losses.isEmpty()) {
+      apply_losses_to_chart(LossPlotSource::RestBulk, std::move(losses));
+    } else if (!bulk_rest_accum_losses_.isEmpty()) {
+      apply_losses_to_chart(LossPlotSource::RestBulk, QVector<double>(bulk_rest_accum_losses_));
+    }
+    bulk_rest_accum_losses_.clear();
+
+    if (!last_loss_plot_rest_.isEmpty()) {
+      double sum = 0.0;
+      for (double v : last_loss_plot_rest_) {
+        sum += v;
+      }
+      result_label_->setText(QStringLiteral("[bulk /update] steps=%1 mean_loss=%2 last_loss=%3")
+                                 .arg(last_loss_plot_rest_.size())
+                                 .arg(sum / static_cast<double>(last_loss_plot_rest_.size()), 0, 'g', 8)
+                                 .arg(last_loss_plot_rest_.last(), 0, 'g', 8));
+      QString extra = dataset_info_->toPlainText();
+      if (!extra.isEmpty() && !extra.endsWith(QLatin1Char('\n'))) {
+        extra += QLatin1Char('\n');
+      }
+      extra += QStringLiteral("bulk /update: %1 steps, mean_loss=%2\n")
+                   .arg(last_loss_plot_rest_.size())
+                   .arg(sum / static_cast<double>(last_loss_plot_rest_.size()), 0, 'g', 8);
+      dataset_info_->setPlainText(extra);
+    } else if (cancelled) {
+      result_label_->setText(QStringLiteral("[bulk /update] canceled"));
+    } else if (!ok) {
+      result_label_->setText(QStringLiteral("[bulk /update] failed"));
+    }
   }
 
   void on_bulk_worker_finished(bool /*success*/, BulkNativeTrainResult result, QVector<BulkLogEntry> log) {
@@ -6988,6 +7232,10 @@ class MainWindow final : public QMainWindow {
   QThread*               bulk_thread_{};
   BulkNativeTrainWorker* bulk_worker_{};
   std::atomic<bool>      bulk_cancel_flag_{false};
+  QThread*                  bulk_rest_thread_{};
+  BulkRestUpdateWorker*     bulk_rest_worker_{};
+  std::atomic<bool>         bulk_rest_cancel_flag_{false};
+  QVector<double>           bulk_rest_accum_losses_;
   int                    bulk_train_n_{0};
   QVector<double>                bulk_accum_losses_;
   QVector<BulkLogEntry>          bulk_accum_log_;
@@ -7054,6 +7302,7 @@ class MainWindow final : public QMainWindow {
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
   QApplication::setApplicationName(QStringLiteral("Cypha Qt shell"));
+  apply_cypha_theme(load_studio_preferences().dark_theme);
 
   const QStringList args = QApplication::arguments();
   for (int i = 1; i + 1 < args.size(); ++i) {

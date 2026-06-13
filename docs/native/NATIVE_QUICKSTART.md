@@ -119,6 +119,32 @@ Sweep JSON specifies **`runner`** (`cyphalm_bench_native` or `cypha_bench_run`),
 
 ---
 
+## 5b. CyphaLM training (native)
+
+Train a checkpoint from corpus text (profiles **`d17`** / **`d04`** load bench JSON from **`bench/config/profiles/`**):
+
+```bash
+# WikiText-style profile (requires bench/data/wikitext2/... or use synthetic smoke)
+cyphalm_train --profile d17 --corpus bench/data/wikitext2/wikitext-2/wiki.train.tokens \
+  --epochs 2 --out bench/artifacts/checkpoints/d17_run/
+
+# Gutenberg char-LM (d04)
+cyphalm_train --profile d04 --corpus bench/data/gutenberg/moby_dick.txt \
+  --epochs 2 --out bench/artifacts/checkpoints/d04_run/
+
+# Fast smoke (synthetic tokens — same path CTest uses)
+cyphalm_train --profile d04 --epochs 1 --synthetic-tokens 512 \
+  --max-train-steps 128 --out /tmp/cyphalm_train_smoke/
+```
+
+Writes **`checkpoint.json`** + **`checkpoint.npz`** under **`--out`**. Load in REST: **`cypha_rest --cyphalm-checkpoint path/to/checkpoint.json`**.
+
+```bash
+ctest --test-dir C:/Temp/cypha_full_cpp_build -R native_cyphalm_train_smoke --output-on-failure
+```
+
+---
+
 ## 6. REST
 
 ```bash

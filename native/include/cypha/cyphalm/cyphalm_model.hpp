@@ -86,6 +86,16 @@ class CyphaLMModel {
     AlphaSpectrumSnapshot alpha_spectrum_snapshot() const;
     nlohmann::json compression_profile() const;
 
+    /// Phase-5 CellAI probe (state norms, decay rates, routing connectivity).
+    nlohmann::json ssm_diagnostic_report(const std::vector<int>& token_ids, int max_steps);
+
+    CellAISSM* active_ssm();
+    const CellAISSM* active_ssm() const;
+    std::vector<double> embed_vector(std::uint32_t token_id) const;
+    const std::vector<double>& field_vector() const { return field_x_; }
+    double ssm_projection_rms() const;
+    bool has_gria_routing() const { return gria_ != nullptr; }
+
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
  private:
@@ -143,8 +153,6 @@ class CyphaLMModel {
                                         const DIFPredictOutput* dif_out) const;
     int ssm_context_dim() const;
     std::vector<double> ssm_step(const std::vector<double>& e);
-    CellAISSM* active_ssm();
-    const CellAISSM* active_ssm() const;
     void apply_hebbian_hooks(std::vector<double>& ctx);
     void fill_top_k(const std::vector<double>& log_probs, PredictNextOutput& out, int k = 5) const;
     std::vector<double> project_field(const std::vector<double>& ctx);

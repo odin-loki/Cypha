@@ -1,4 +1,5 @@
-﻿# Build Linux + Windows (MinGW cross) installer archives and publish a GitHub Release on tag push.
+﻿# Build Linux + Windows (MinGW cross) native release archives and publish a GitHub Release on tag push.
+# Native-only assets — no Python venv. Linux also ships a Qt AppImage (cypha_qt_shell + cypha_rest).
 #
 # Create a release:
 #   git tag v2.0.0
@@ -6,6 +7,7 @@
 #
 # Artifacts:
 #   cypha-<version>-linux-x86_64.tar.gz
+#   cypha-<version>-linux-x86_64.AppImage
 #   cypha-<version>-windows-x86_64.zip
 
 name: Release
@@ -28,18 +30,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install toolchain
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ libsqlite3-dev
+      - name: Install toolchain + Qt
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            cmake ninja-build g++ libsqlite3-dev \
+            qt6-base-dev libxkbcommon-x11-0 libxcb-cursor0 libegl1 libgl1-mesa-dri libglib2.0-0 \
+            wget file
 
-      - name: Configure + build
+      - name: Configure + build (Release, Qt shell)
         run: |
           cmake -S native -B native/build-release \
             -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
-            -DCYPHA_BUILD_QT=OFF \
+            -DCYPHA_BUILD_QT=ON \
             -G Ninja
           cmake --build native/build-release --parallel
 
       - name: Smoke CTest (native suite + bench runner)
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
           ctest --test-dir native/build-release -R native_cyphalm_parity_suite --output-on-failure
           ctest --test-dir native/build-release -R native_bench_run_list_domains --output-on-failure
@@ -50,11 +58,30 @@ jobs:
           native/build-release/cypha_bench_report --help
           native/build-release/cypha_diagnostics_run --list
           native/build-release/cypha_tune_run --help
+          test -x native/build-release/qt/cypha_qt_shell || test -x native/build-release/cypha_qt_shell
 
       - name: Package tarball
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           bash scripts/package_release_linux.sh "$VERSION" native/build-release dist
+
+      - name: Install linuxdeploy (AppImage)
+        run: |
+          wget -q -O /tmp/linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q -O /tmp/linuxdeploy-plugin-qt-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x /tmp/linuxdeploy-x86_64.AppImage /tmp/linuxdeploy-plugin-qt-x86_64.AppImage
+
+      - name: Package AppImage (cypha_qt_shell + cypha_rest)
+        env:
+          SKIP_BUILD: "1"
+          LINUXDEPLOY: /tmp/linuxdeploy-x86_64.AppImage
+          LINUXDEPLOY_QT: /tmp/linuxdeploy-plugin-qt-x86_64.AppImage
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          bash packaging/build_appimage.sh "$VERSION" native/build-release dist
 
       - name: Verify release bundle contents
         run: |
@@ -70,11 +97,16 @@ jobs:
                      embed_table_parity retrieval_parity som_parity; do
             test -x "$STAGE/bin/dev/$bin"
           done
+          APPIMAGE="dist/cypha-${VERSION}-linux-x86_64.AppImage"
+          test -x "$APPIMAGE"
+          file "$APPIMAGE" | grep -qi 'AppImage\|ELF'
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x86_64
-          path: dist/cypha-*-linux-x86_64.tar.gz
+          path: |
+            dist/cypha-*-linux-x86_64.tar.gz
+            dist/cypha-*-linux-x86_64.AppImage
 
   build-windows:
     name: Windows x86_64 package (MinGW cross)
@@ -152,13 +184,14 @@ jobs:
           generate_release_notes: true
           files: |
             dist/cypha-*-linux-x86_64.tar.gz
+            dist/cypha-*-linux-x86_64.AppImage
             dist/cypha-*-windows-x86_64.zip
           body: |
-            ## Cypha ${{ github.ref_name }} â€” full native C++ framework
+            ## Cypha ${{ github.ref_name }} — native C++ framework
 
-            Prebuilt **native C++** runtime: CyphaDIF REST (`/dif/retrieve`, `/dif/generate`), native bench (d01â€“d17), CyphaLM, diagnostics orchestrator, and parity smoke tools. GUI: build `cypha_qt_shell` from source (`docs/native/qt/README.md`).
+            Prebuilt **native C++** runtime only (no Python venv): CyphaDIF REST (`/dif/retrieve`, `/dif/generate`), native bench (d01–d17), CyphaLM, diagnostics orchestrator, parity smoke tools, and a **standalone Qt shell AppImage** on Linux.
 
-            ### Linux (`cypha-*-linux-x86_64.tar.gz`)
+            ### Linux CLI (`cypha-*-linux-x86_64.tar.gz`)
 
             ```bash
             tar xzf cypha-*-linux-x86_64.tar.gz
@@ -168,7 +201,18 @@ jobs:
 
             Requires: `libgomp1`, glibc 2.31+.
 
-            ### Windows (`cypha-*-windows-x86_64.zip`)
+            ### Linux Qt AppImage (`cypha-*-linux-x86_64.AppImage`)
+
+            Self-contained **`cypha_qt_shell`** with Qt libraries bundled via linuxdeploy. **`cypha_rest`** is included as a sidecar.
+
+            ```bash
+            chmod +x cypha-*-linux-x86_64.AppImage
+            ./cypha-*-linux-x86_64.AppImage
+            ```
+
+            Build locally: `bash packaging/build_appimage.sh <version>` (see [`packaging/README.md`](packaging/README.md)).
+
+            ### Windows CLI (`cypha-*-windows-x86_64.zip`)
 
             ```powershell
             Expand-Archive cypha-*-windows-x86_64.zip
@@ -178,14 +222,16 @@ jobs:
 
             MinGW PE binaries with static libgcc/libstdc++ (no separate MinGW runtime install).
 
+            **Windows Qt GUI:** build natively on Windows with `packaging/build_windows_bundle.ps1` (`windeployqt`; see [`packaging/README.md`](packaging/README.md)).
+
             ### Production binaries (`bin/`, on PATH after install)
 
             | Binary | Role |
             |--------|------|
             | `cypha_rest` | Native REST server (classifier + `/lm/*`, `/generate`, `/dif/*`) |
-            | `cypha_bench_run` | Bench master runner (domains d01â€“d17) |
+            | `cypha_bench_run` | Bench master runner (domains d01–d17) |
             | `cypha_bench_report` | Report-only rebuild (`BASELINE_REPORT.md` + `summary.json`) |
-            | `cypha_diagnostics_run` | Phases 1â€“4 diagnostics orchestrator |
+            | `cypha_diagnostics_run` | Phases 1–4 diagnostics orchestrator |
             | `cypha_tune_run` | Native tuning sweep runner |
             | `cyphalm_bench_native` | WikiText BPC bench CLI |
             | `cyphalm_parity`, `cyphalm_checkpoint_parity` | CyphaLM parity smoke tools |
@@ -196,4 +242,3 @@ jobs:
 
             - `score_batch_parity`, `multilabel_dif_parity`, `merge_from_parity`, `similarity_index_parity`
             - `embed_table_parity`, `retrieval_parity`, `som_parity`
-

@@ -20,6 +20,10 @@ class KernelMemory {
   double gamma() const { return gamma_; }
   int n_basis() const { return n_basis_; }
   int n_seen() const { return n_seen_; }
+  double gamma_scale() const { return gamma_scale_; }
+
+  /// Multiplier on median-heuristic RBF bandwidth (1.0 = legacy default).
+  void set_gamma_scale(double s) { gamma_scale_ = std::max(s, 1e-12); }
 
   /// Whitened Nyström features ``phi(h) ∈ R^M`` (zeros for unfilled slots).
   void phi(const double* h, std::vector<double>& out) const;
@@ -63,6 +67,7 @@ class KernelMemory {
   std::vector<double> basis_;
   int n_basis_{0};
   int n_seen_{0};
+  double gamma_scale_{1.0};
   /// Row-major ``n_basis × n_basis`` whitening ``K(landmarks, landmarks)^{-1/2}``.
   std::vector<double> whitening_;
   std::map<std::string, std::vector<double>> weights_;

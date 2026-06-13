@@ -14,6 +14,41 @@ Monorepo C++ core for [`docs/port/PORT_FULL_STACK.md`](../docs/port/PORT_FULL_ST
 
 **Repo root discovery:** `cypha::bench::find_repo_root()` walks upward from the current directory (or **`CYPHA_REPO_ROOT`** if set) until **`fixtures/`**, **`bench/`**, and **`native/`** all exist as directories; otherwise it falls back to the compile-time path derived from `native/src/bench/bench_paths.cpp`. Bench helpers (`bench_root()`, `config_dir()`, …) resolve under **`bench/`**.
 
+## Native source layout (Phase B)
+
+| Path | Role |
+|------|------|
+| **`include/`** | Public headers (`cypha/…`, `cypha/cyphalm/…`) — unchanged install / include paths |
+| **`src/`** | Library implementation (`cypha_core`, `cyphalm/*`, `bench/*`, …) |
+| **`apps/`** | Production entrypoint sources (binary names unchanged) |
+| **`tests/parity/`** | Python-vs-native parity harness sources (`*_parity.cpp`, `parity_main.cpp`) |
+| **`tools/`** | Dev smoke, roundtrip, fixture-gen, and LM bench CLIs not tied to CTest parity |
+| **`cmake/`** | `CyphaMinGW.cmake`, `CyphaParity.cmake`, `CyphaApps.cmake` |
+
+### Libraries (`add_library`)
+
+| Target | Sources |
+|--------|---------|
+| **`cypha_core`** | `src/*.cpp`, `src/som/*`, `src/intelligence/*` — CyphaDIF runtime |
+| **`cypha_lm_native`** | `src/cyphalm/*.cpp` — CyphaLM |
+| **`cypha_bench_native`** | `src/bench/*.cpp` — benchmark engine |
+
+### Apps (`apps/` → executables)
+
+| Binary | Sources |
+|--------|---------|
+| **`cypha_rest`** | `apps/cypha_rest.cpp` + `cyphalm_rest_routes.cpp` + `branch_a_rest_routes.cpp` + `dif_rest_routes.cpp` |
+| **`cypha_bench_run`** | `apps/cypha_bench_run.cpp` |
+| **`cypha_tune_run`** | `apps/cypha_tune_run.cpp` |
+| **`cypha_diagnostics_run`** | `apps/cypha_diagnostics_run.cpp` |
+| **`cyphalm_train`** | `apps/cyphalm_train.cpp` |
+
+(`cypha_bench_report` also lives under **`apps/`**; same CMake grouping as the runners above.)
+
+### Parity harness (`tests/parity/`)
+
+One executable per `*_parity.cpp` (plus **`parity_main.cpp`** → **`cypha_parity`**). Built via **`cmake/CyphaParity.cmake`**; CTest names and output binary names are unchanged. Remaining dev tools (roundtrip, smoke, **`cypha_fixture_gen`**, **`cyphalm_bench_native`**, …) stay under **`tools/`**.
+
 ## CMake presets (Windows + WSL trees)
 
 | Preset | Binary directory | Use |
@@ -58,6 +93,7 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 | **`cypha_tune_run`** | Native tuning/sweep orchestrator. Loads sweep JSON, invokes **`cyphalm_bench_native`** or **`cypha_bench_run`** per cell. CLI: `--config PATH`, `--out PATH`, `--exe-dir DIR`, `--max-cells N`, `--write`, `--dry-run`. CTest **`native_tune_run_smoke`**. |
 | **`cypha_diagnostics_run`** | Phases 1–4 validation orchestrator: runs parity exes + inline **`cypha_core`** checks (no sklearn). CLI: `--fixtures DIR`, `--out DIR`, `--exe-dir DIR`, `--phases 1,2,3,4`, `--list`, `--inline-only`. CTest **`native_diagnostics_run`**. |
 | **`cyphalm_bench_native`** | Per-profile LM BPC bench (char-LSTM / hybrid / ablations). Used by **`cypha_bench_run`** d04/d17 and **`cypha_tune_run`**. |
+| **`cyphalm_train`** | Train CyphaLM from corpus text via native **`train_sequence`**, save Python-compatible checkpoint (`checkpoint.json` + `.npz`). CLI: `--profile {d17,d04}`, `--corpus bench/data/...`, `--epochs N`, `--out checkpoint_dir/`, optional `--synthetic-tokens N` (smoke), `--max-train-steps S`, `--threads T`. CTest **`native_cyphalm_train_smoke`**. |
 
 ### Core parity & smoke
 
@@ -206,7 +242,7 @@ On Windows, link **`ws2_32`** for `cypha_rest` (already in CMake).
 
 Requires: `g++-mingw-w64-x86-64` (e.g. `sudo apt-get install -y g++-mingw-w64-x86-64`).
 
-**CMake layout:** MinGW-specific options and link flags live in **`native/cmake/CyphaMinGW.cmake`** (included from **`native/CMakeLists.txt`**). Toolchain file: **`native/toolchains/mingw-w64-x86_64.cmake`** (cache **`CYPHA_MINGW_TOOLCHAIN_PREFIX`**, default **`x86_64-w64-mingw32`**, for non-Debian triplet layouts).
+**CMake layout:** MinGW-specific options and link flags live in **`native/cmake/CyphaMinGW.cmake`** (included from **`native/CMakeLists.txt`**). Parity and app targets are grouped in **`native/cmake/CyphaParity.cmake`** and **`native/cmake/CyphaApps.cmake`**. Toolchain file: **`native/toolchains/mingw-w64-x86_64.cmake`** (cache **`CYPHA_MINGW_TOOLCHAIN_PREFIX`**, default **`x86_64-w64-mingw32`**, for non-Debian triplet layouts).
 
 **Cache toggles (MinGW targets only):**
 
