@@ -48,7 +48,9 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`inst
 | [Roadmap](verify/ROADMAP.md) | Milestones M1–M6 complete; current engineering horizon (Phase 5) |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
 | [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / WSL workflow checklist |
-| [Future directions](FUTURE.md) | CUDA GPU, Qt UX polish, packaged binary, Web UI, multi-model serving, ONNX |
+| [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I–V); C++ in `native/include/cypha/intelligence/` |
+| [Failed experiments](archive/failed_experiments/cypha_som/README.md) | cypha_som SOM upgrade post-mortem |
+| [C++2023 migration](native/migration/CPLUSPLUS_2023_MASTER_PLAN.md) | Python decommission phases |
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, full test command reference |
 | [CHANGELOG](../CHANGELOG.md) | Release history and what changed in each milestone |
 

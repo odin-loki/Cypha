@@ -73,6 +73,7 @@ _NATIVE_CTEST_TO_PYTEST: dict[str, list[str]] = {
     "native_cyphalm_ssm_fixture": ["tests/test_cyphalm_native_parity.py"],
     "native_cyphalm_parity_suite": ["tests/test_cyphalm_native_parity.py"],
     "native_som_parity": ["tests/test_som_native_parity.py"],
+    "native_intelligence_profiler_smoke": [],
 }
 
 

@@ -8,8 +8,14 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Added
+- **Intelligence Profiler (C++):** `native/include/cypha/intelligence/` — NIG statistic states, 7-stat measurers, κ, health signal; CTest `native_intelligence_profiler_smoke`.
+- **XOR benchmark:** `scripts/benchmark_xor_kernel_llr.py`; kernel blend wired into `CyphaDIF.score_matrix()`.
+
 ### Changed
-- Docs: CI #51 green confirmation; native/README four-job CUDA note; scripts index gate scripts.
+- **Intelligence Stats papers** moved to `docs/research/intelligence_stats/`.
+- **cypha_som** documented as failed experiment under `docs/archive/failed_experiments/cypha_som/`.
+- **C++2023 migration plan:** `docs/native/migration/CPLUSPLUS_2023_MASTER_PLAN.md`.
 
 ---
 

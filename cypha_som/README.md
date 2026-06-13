@@ -1,5 +1,7 @@
 # cypha_som — Optional Self-Organising Upgrades
 
+> **Failed experiment (archived):** [`docs/archive/failed_experiments/cypha_som/README.md`](../docs/archive/failed_experiments/cypha_som/README.md)
+
 `cypha_som` provides six experimental SOM/GNG/GRIA extensions to `CyphaDIF`. All flags are **OFF by default** — the base classifier runs without any of this code.
 
 > **Research status:** Upgrades U2/U1/U4/`"all"` were benchmarked and reverted (performance

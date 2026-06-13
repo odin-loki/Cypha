@@ -2163,7 +2163,22 @@ class CyphaDIF:
             return np.zeros((N, 0)), []
         labels, D, mu0, inv_v, D_sq, u_k, ctx_arr = parts
         LLR = fused_score_llr(H, mu0, inv_v, D, D_sq, u_k, ctx_arr)
+        LLR = self._blend_kernel_llr_matrix(H, labels, LLR)
         return LLR, labels
+
+    def _blend_kernel_llr_matrix(self, H: np.ndarray, labels: List[str],
+                                 LLR: np.ndarray) -> np.ndarray:
+        """Blend linear LLR rows with kernel-memory scores when enabled."""
+        km = getattr(self, '_kernel_mem', None)
+        if (km is None or not self.use_kernel_llr or not labels
+                or km._n_basis < 4):
+            return LLR
+        blend = self._kernel_blend
+        out = LLR.copy()
+        for i in range(H.shape[0]):
+            kernel_arr = km.score_all(H[i], labels)
+            out[i] = (1.0 - blend) * LLR[i] + blend * kernel_arr
+        return out
 
     def _feature_matrix_vector_encoder(self, xs: List[Any]) -> Optional[np.ndarray]:
         """Stack raw inputs for VectorEncoder → (N, d); None if not applicable."""

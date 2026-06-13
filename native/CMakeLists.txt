@@ -63,6 +63,9 @@ add_library(cypha_core STATIC
   src/som/discriminative_feedback.cpp
   src/multilabel_dif.cpp
   src/similarity_index.cpp
+  src/intelligence/nig_statistic_state.cpp
+  src/intelligence/measurers.cpp
+  src/intelligence/intelligence_profiler.cpp
 )
 
 if(CYPHA_ENABLE_CUDA)
@@ -273,6 +276,9 @@ target_link_libraries(cuda_smoke PRIVATE cypha_core)
 add_executable(create_model_smoke tools/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
 
+add_executable(intelligence_profiler_smoke tools/intelligence_profiler_smoke.cpp)
+target_link_libraries(intelligence_profiler_smoke PRIVATE cypha_core)
+
 add_executable(cypha_diagnostics_run tools/cypha_diagnostics_run.cpp)
 target_link_libraries(cypha_diagnostics_run PRIVATE cypha_core)
 
@@ -330,6 +336,7 @@ set(
   gh_infer_deliberation_parity
   cuda_smoke
   create_model_smoke
+  intelligence_profiler_smoke
   cyphalm_hebbian_parity
   som_parity
   cyphalm_char_lstm_parity
@@ -745,6 +752,11 @@ add_test(
 add_test(
   NAME native_create_model
   COMMAND "$<TARGET_FILE:create_model_smoke>"
+)
+
+add_test(
+  NAME native_intelligence_profiler_smoke
+  COMMAND "$<TARGET_FILE:intelligence_profiler_smoke>"
 )
 
 add_test(
