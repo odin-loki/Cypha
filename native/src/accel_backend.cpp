@@ -29,7 +29,7 @@ void cypha_accel_cuda_world_gate_nig(const double* H, int n, int d, const double
 #endif
 
 #ifndef CYPHA_ACCEL_GPU_MIN_BATCH_ROWS
-#define CYPHA_ACCEL_GPU_MIN_BATCH_ROWS 16
+#define CYPHA_ACCEL_GPU_MIN_BATCH_ROWS 1
 #endif
 
 namespace cypha {
@@ -42,8 +42,8 @@ bool g_inited = false;
 bool g_gpu = false;
 std::string g_info;
 
-/// Avoid CUDA H↔D copies for tiny batches (e.g. REST ``n=1``). Override via
-/// ``-DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=N`` at CMake configure.
+/// When CUDA is ready, use the GPU for all batch sizes ``n >= kGpuMinBatchRows`` (default 1).
+/// Override via ``-DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=N`` at CMake configure.
 static constexpr int kGpuMinBatchRows = CYPHA_ACCEL_GPU_MIN_BATCH_ROWS;
 
 #if defined(CYPHA_ENABLE_CUDA)

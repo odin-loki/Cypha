@@ -36,14 +36,7 @@ cmake --build build-windows-msvc --config Release `
 
 **VS 2026 / Build Tools 18:** use preset `windows-vs2026-release` and `build-windows-vs2026` instead.
 
-**GitHub Actions (blocking CI jobs):**
-
-| Job | Platform | Recipe |
-|-----|----------|--------|
-| **`windows_cuda_msvc`** | Windows | **`Jimver/cuda-toolkit`** (`sub-packages: ["nvcc","cudart","thrust"]`), **`ilammy/msvc-dev-cmd`**, **Ninja 1.12.1** (pinned), explicit **`CUDA_PATH`** from step outputs, optional copy of `extras/visual_studio_integration` into VS `BuildCustomizations`. |
-| **`linux_cuda`** | Ubuntu | Same Jimver toolkit + **`CUDAToolkit_ROOT=$CUDA_PATH`**, GCC + Ninja. |
-
-See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml). **`native_cuda_bench`** (`--bench`) remains optional (GPU-only, `continue-on-error` when a device is present).
+**GitHub Actions:** CUDA is **not** in CI (removed jobs: **`windows_cuda_msvc`**, **`linux_cuda`**). Validate locally with `-DCYPHA_ENABLE_CUDA=ON` and CTests **`native_cuda_smoke`** / **`native_score_batch`**. See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — two blocking jobs: **`build_and_test`**, **`mingw_cross`**.
 
 **Architecture flags:** set `-DCMAKE_CUDA_ARCHITECTURES` to your GPU SM version, e.g. `75` (Turing), `86` (Ampere), `89` (Ada). Default in `CMakeLists.txt` is **75** when unset.
 
@@ -51,7 +44,7 @@ See [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml). **`native_cuda
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` | `16` | Minimum batch rows `n` before dispatching encode/score/softmax/gate to CUDA (smaller batches stay on CPU threads to avoid launch + H↔D overhead). |
+| `CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` | `1` | Minimum batch rows `n` before dispatching encode/score/softmax/gate to CUDA (default **1** = use GPU for all n≥1 when available; raise to keep tiny batches on CPU threads and avoid launch + H↔D overhead). |
 
 ```powershell
 cmake --preset windows-msvc-release `

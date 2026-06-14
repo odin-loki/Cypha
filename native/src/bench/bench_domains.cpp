@@ -52,6 +52,7 @@
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
+#include "cypha/intelligence/profile_from_model.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/preprocessor.hpp"
@@ -2654,6 +2655,26 @@ Json run_d03_xor() {
     return experiments;
 }
 
+Json run_d18_intelligence_profile() {
+    const fs::path root = cypha::bench::repo_root();
+    const auto profiler = cypha::intelligence::profile_from_reference_fixture(root);
+    nlohmann::json report = cypha::intelligence::intelligence_profile_report_json(profiler);
+    const Json experiments = {
+        {"P1_reference_fixture_profile",
+         Json{{"criticality_score", report.at("criticality_score")},
+              {"health_signal", report.at("health_signal")},
+              {"navigation_loss", report.at("navigation_loss")},
+              {"landscape_kappa", report.at("landscape_kappa")}}},
+    };
+    cypha::bench::finalize_domain("d18_intelligence_profile", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d18_intelligence_profile.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << report.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -2674,6 +2695,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d15", "cypha_bench.domains.d15_adversarial_robustness", run_d15},
         {"d16", "cypha_bench.domains.d16_multitask", run_d16},
         {"d17", "cypha_bench.domains.d17_cyphalm_integration", run_d17},
+        {"d18", "cypha_bench.domains.d18_intelligence_profile", run_d18_intelligence_profile},
     };
 }
 

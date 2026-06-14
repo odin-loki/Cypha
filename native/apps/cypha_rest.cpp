@@ -50,6 +50,7 @@
 #include "cypha/cyphalm/cyphalm_rest.hpp"
 #include "cypha/dif_rest.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/self_correcting_infer.hpp"
 #include "cypha/intelligence_rest.hpp"
 #include "cypha_rest_static_ui.hpp"
 
@@ -65,6 +66,7 @@ bool g_use_kernel_llr{false};
 double g_kernel_blend{0.5};
 std::unique_ptr<cypha::PreprocessorState> g_pre;
 cypha::intelligence::IntelligenceProfiler g_intelligence_profiler;
+cypha::intelligence::EpistemicThreshold g_epistemic_threshold(0.5, 5.0);
 std::string g_registry_root;
 std::vector<cypha::RegistryModelRef> g_registry_cache;
 
@@ -809,6 +811,9 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
   std::vector<double> llr_for_scores;
   double anomaly = 0.0;
   bool is_ood = false;
+  bool self_corrected = false;
+  int correction_passes = 0;
+  double r_eu_proxy = 0.0;
 
   if (*v.mke_active) {
     std::vector<double> llr;
@@ -843,12 +848,29 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
     anomaly = cypha::gh_infer_anomaly_score(r_eff, r_base);
     is_ood = anomaly > kOodThreshold;
   } else {
-    cypha::InferAtHResult inf = cypha::infer_at_h(model, H.data(), iopt);
-    pred_label = inf.label;
-    conf = inf.confidence;
-    llr_for_scores = std::move(inf.llrs);
-    anomaly = 0.0;
-    is_ood = false;
+    const bool self_correct = body.value("self_correct", false);
+    const int max_passes = body.value("self_correct_max_passes", 3);
+    if (self_correct) {
+      const auto scr =
+          cypha::intelligence::self_correcting_infer_at_h(model, H.data(), iopt, g_epistemic_threshold,
+                                                          max_passes);
+      pred_label = scr.infer.label;
+      conf = scr.infer.confidence;
+      llr_for_scores = std::move(scr.infer.llrs);
+      anomaly = 0.0;
+      is_ood = false;
+      self_corrected = scr.corrected;
+      correction_passes = scr.correction_passes;
+      r_eu_proxy = scr.r_eu_proxy;
+      g_engine_corrections += scr.corrected ? 1 : 0;
+    } else {
+      cypha::InferAtHResult inf = cypha::infer_at_h(model, H.data(), iopt);
+      pred_label = inf.label;
+      conf = inf.confidence;
+      llr_for_scores = std::move(inf.llrs);
+      anomaly = 0.0;
+      is_ood = false;
+    }
   }
 
   nlohmann::json scores = nlohmann::json::object();
@@ -959,6 +981,11 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
     out["explanation"] = nullptr;
   }
   out["latency_ms"] = latency;
+  if (body.value("self_correct", false) && !*v.mke_active && !use_gh) {
+    out["self_corrected"] = self_corrected;
+    out["correction_passes"] = correction_passes;
+    out["r_eu_proxy"] = r_eu_proxy;
+  }
   return out.dump();
 }
 

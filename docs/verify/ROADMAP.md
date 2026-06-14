@@ -1,87 +1,87 @@
-# Roadmap — reference → profiled → GPU experiments → native port
-
-The **committed parity fixtures** and **PORT_CONTRACT** are the spec. The **product hot path** is C++/Qt.
-
----
-
-## Where we are (current)
-
-**All milestones M1–M6 are complete.** The full native stack is built and CI-gated:
-
-| Block | Status |
-|-------|--------|
-| Inference kernel (encode + LLR + GH + softmax) | ✅ parity vs `expected.npz` |
-| Registry + preprocessor contract (fit, transform, CSV load) | ✅ parity fixtures |
-| Online `train_step` (DIF, GH, replay, NIG, context, OOD) | ✅ parity fixtures |
-| Regression stack (MKE/RFF/two-stage/ridge/EMA) | ✅ parity fixtures |
-| `cypha_rest` native server | ✅ JSON per **PORT_CONTRACT** §3 |
-| Qt shell (`cypha_qt_shell`) | ✅ training/inference/registry/plots/experiments UI |
-| Preprocessor fit from Qt (scale + PCA) | ✅ `fit_from_design_matrix` + save `preprocessor.json` |
-| Experiments DB (SQLite, M6) | ✅ `experiment_db_crud`, Qt M6 panel |
-| Autoregressive / generation path | ✅ native `generation_parity`, CTest |
-| Test suite | ✅ **52+ CTest** (`ctest -R native_`) — GitHub Actions four blocking jobs |
-
----
-
-## Phase 0 — Debugging baseline ✅
-
-- `cypha_core`: deterministic CTests + parity fixtures.
-- REST + Qt: native smokes.
-- **`cypha_bench_run`** + sklearn CV as regression smoke.
-
----
-
-## Phase 1 — Locking behaviour before native ✅
-
-Committed CTests green: inference vs fixtures, `score_matrix` modes, preprocessor + trainer edge cases.
-
----
-
-## Phase 2 — Profile on real data (CPU) ✅
-
-- Native bench/tune binaries identify GEMM, RFF, NIG bottlenecks.
-- **`xor_kernel_bench`** — kernel LLR XOR profile.
-
----
-
-## Phase 3 — GPU (native accel) ✅
-
-Native **`cypha::accel`**: optional **CUDA** (`-DCYPHA_ENABLE_CUDA=ON`) or parallel CPU. CI CUDA jobs compile smoke on CPU threads when no GPU is present.
-
----
-
-## Phase 4 — Native port (M1–M6) ✅
-
-All milestones complete — see [`PORT_FULL_STACK.md`](../port/PORT_FULL_STACK.md).
-
----
-
-## Phase 5 — Current engineering horizon
-
-Kernel LLR (Nyström) shipped in C++ with **`xor_kernel_bench`** (+10.6 pp XOR gain at M=256). Secondary priorities: CUDA CI device runner, Qt polish, packaged binaries, web UI, multi-model serving — [`docs/FUTURE.md`](../FUTURE.md).
-
----
-
-## Phase 6 — CyphaLM research prototype
-
-Native **`cypha_lm_native`** / **`cyphalm_bench_native`**. Local gate: `ctest --test-dir native/build -R native_cyphalm --output-on-failure`.
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **D17 held-out BPC** | **4.50** | Gutenberg; bigram baseline 3.69 |
-| **D04 “33.2 bpc”** | benchmark bug | Wrong prob indexing on legacy D04 path — not CyphaLM |
-
-See [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) and [`CHANGELOG.md`](../../CHANGELOG.md).
-
----
-
-## Doc index
-
-| File | Purpose |
-|------|---------|
-| [VERIFICATION_STATUS.md](VERIFICATION_STATUS.md) | Test counts, coverage snapshot, known gaps |
-| [PORT_CONTRACT.md](../port/PORT_CONTRACT.md) | Frozen binary/REST contracts |
-| [PORT_FULL_STACK.md](../port/PORT_FULL_STACK.md) | Per-milestone record (M1–M6) |
-| [FUTURE.md](../FUTURE.md) | Future directions in depth |
-| [VERIFY_PLAN.md](VERIFY_PLAN.md) | WSL, benchmark workflow |
-| [MAINTENANCE.md](MAINTENANCE.md) | When to update fixtures, rebuild native, sync DDL |
+# Roadmap — reference → profiled → GPU experiments → native port
+
+The **committed parity fixtures** and **PORT_CONTRACT** are the spec. The **product hot path** is C++/Qt.
+
+---
+
+## Where we are (current)
+
+**All milestones M1–M6 are complete.** The full native stack is built and CI-gated:
+
+| Block | Status |
+|-------|--------|
+| Inference kernel (encode + LLR + GH + softmax) | ✅ parity vs `expected.npz` |
+| Registry + preprocessor contract (fit, transform, CSV load) | ✅ parity fixtures |
+| Online `train_step` (DIF, GH, replay, NIG, context, OOD) | ✅ parity fixtures |
+| Regression stack (MKE/RFF/two-stage/ridge/EMA) | ✅ parity fixtures |
+| `cypha_rest` native server | ✅ JSON per **PORT_CONTRACT** §3 |
+| Qt shell (`cypha_qt_shell`) | ✅ training/inference/registry/plots/experiments UI |
+| Preprocessor fit from Qt (scale + PCA) | ✅ `fit_from_design_matrix` + save `preprocessor.json` |
+| Experiments DB (SQLite, M6) | ✅ `experiment_db_crud`, Qt M6 panel |
+| Autoregressive / generation path | ✅ native `generation_parity`, CTest |
+| Test suite | ✅ **52+ CTest** (`ctest -R native_`) — GitHub Actions two blocking jobs (`build_and_test`, `mingw_cross`) |
+
+---
+
+## Phase 0 — Debugging baseline ✅
+
+- `cypha_core`: deterministic CTests + parity fixtures.
+- REST + Qt: native smokes.
+- **`cypha_bench_run`** + sklearn CV as regression smoke.
+
+---
+
+## Phase 1 — Locking behaviour before native ✅
+
+Committed CTests green: inference vs fixtures, `score_matrix` modes, preprocessor + trainer edge cases.
+
+---
+
+## Phase 2 — Profile on real data (CPU) ✅
+
+- Native bench/tune binaries identify GEMM, RFF, NIG bottlenecks.
+- **`xor_kernel_bench`** — kernel LLR XOR profile.
+
+---
+
+## Phase 3 — GPU (native accel) ✅
+
+Native **`cypha::accel`**: optional **CUDA** (`-DCYPHA_ENABLE_CUDA=ON`) or parallel CPU. CI CUDA jobs compile smoke on CPU threads when no GPU is present.
+
+---
+
+## Phase 4 — Native port (M1–M6) ✅
+
+All milestones complete — see [`PORT_FULL_STACK.md`](../port/PORT_FULL_STACK.md).
+
+---
+
+## Phase 5 — Current engineering horizon
+
+Kernel LLR (Nyström) shipped in C++ with **`xor_kernel_bench`** (+10.6 pp XOR gain at M=256). Secondary priorities: CUDA CI device runner, Qt polish, packaged binaries, web UI, multi-model serving — [`docs/FUTURE.md`](../FUTURE.md).
+
+---
+
+## Phase 6 — CyphaLM research prototype
+
+Native **`cypha_lm_native`** / **`cyphalm_bench_native`**. Local gate: `ctest --test-dir native/build -R native_cyphalm --output-on-failure`.
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| **D17 held-out BPC** | **4.50** | Gutenberg; bigram baseline 3.69 |
+| **D04 “33.2 bpc”** | benchmark bug | Wrong prob indexing on legacy D04 path — not CyphaLM |
+
+See [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) and [`CHANGELOG.md`](../../CHANGELOG.md).
+
+---
+
+## Doc index
+
+| File | Purpose |
+|------|---------|
+| [VERIFICATION_STATUS.md](VERIFICATION_STATUS.md) | Test counts, coverage snapshot, known gaps |
+| [PORT_CONTRACT.md](../port/PORT_CONTRACT.md) | Frozen binary/REST contracts |
+| [PORT_FULL_STACK.md](../port/PORT_FULL_STACK.md) | Per-milestone record (M1–M6) |
+| [FUTURE.md](../FUTURE.md) | Future directions in depth |
+| [VERIFY_PLAN.md](VERIFY_PLAN.md) | WSL, benchmark workflow |
+| [MAINTENANCE.md](MAINTENANCE.md) | When to update fixtures, rebuild native, sync DDL |

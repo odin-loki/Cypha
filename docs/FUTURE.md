@@ -1,32 +1,32 @@
 # Future directions
 
-Cypha's native port (M1–M6 + P7) is complete — inference, training, REST server, Qt shell, experiments DB, and parity fixtures all pass CI (**64 CTests**). Python runtime packages removed. This document records the most valuable next engineering directions, from near-term (months) to longer-horizon (quarters).
+Cypha's native port (M1ï¿½M6 + P7) is complete ï¿½ inference, training, REST server, Qt shell, experiments DB, and parity fixtures all pass CI (**64 CTests**). Python runtime packages removed. This document records the most valuable next engineering directions, from near-term (months) to longer-horizon (quarters).
 
 ---
 
-## §0 — Evidence-confirmed upgrades (post-diagnostic, highest priority)
+## ï¿½0 ï¿½ Evidence-confirmed upgrades (post-diagnostic, highest priority)
 
 These come directly from the 2026-05-30 diagnostic run
 ([`docs/reports/DIAGNOSTIC_REPORT.md`](reports/DIAGNOSTIC_REPORT.md)). Every
 item has a measured effect size; nothing is speculative.
 
-**RPSM roadmap (Option A + B):** see [§10](#10--rpsm-matrix-refactor--cyphalm-sequence-layer) and [`docs/research/upgrades/`](research/upgrades/README.md).
+**RPSM roadmap (Option A + B):** see [ï¿½10](#10--rpsm-matrix-refactor--cyphalm-sequence-layer) and [`docs/research/upgrades/`](research/upgrades/README.md).
 
-### §0a — Kernel LLR via Nyström approximation (SHIPPED — tuning continues)
+### ï¿½0a ï¿½ Kernel LLR via Nystrï¿½m approximation (SHIPPED ï¿½ tuning continues)
 
 **Evidence:** FDR=0.001 on XOR; `linear(h)=0.512` (chance) vs `kernel(h)=0.835`.
-Nonlinearity gap = **32.3 pp** — unreachable with the current linear LLR discriminant.
+Nonlinearity gap = **32.3 pp** ï¿½ unreachable with the current linear LLR discriminant.
 
-**Shipped (2026-05-31):** Whitened Nyström features in native C++ (`native/src/kernel_memory.cpp`):
+**Shipped (2026-05-31):** Whitened Nystrï¿½m features in native C++ (`native/src/kernel_memory.cpp`):
 1. Reservoir landmarks (**M=256** default) with median-? RBF bandwidth.
-2. `?(h) = K(h, landmarks) · K(landmarks, landmarks)^{-1/2}` via Cholesky whitening.
+2. `?(h) = K(h, landmarks) ï¿½ K(landmarks, landmarks)^{-1/2}` via Cholesky whitening.
 3. Online softmax gradient on `?(h)`; blended into `score_matrix` when kernel enabled.
 
 **Measured gain (3 seeds, 8 passes, blend=1.0, M=256, replay off, 2026-06):** native linear **49.9%** ? **59.2%** (+ **+9.3 pp**). Still below sklearn RBF ceiling (~79% on raw XOR splits). `.cypha` kernel keys via `patch_kernel_into_root`; Qt shell + native `cypha_rest` train/infer/save/load wired. Bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`). Opt-in profile: `bench/config/kernel_llr_profile.json`. Full validate includes d03_xor fast smoke + REST kernel body test.
 
 > **P7 note:** Python `cypha_core` / `KernelMemory` removed; native path is authoritative. Full fix taxonomy: [`research/upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md).
 
-### §0b — Auto-gamma for RFF bandwidth (SHIPPED — bench + studio + native fit)
+### ï¿½0b ï¿½ Auto-gamma for RFF bandwidth (SHIPPED ï¿½ bench + studio + native fit)
 
 **Evidence:** `D_rff` sweep showed high variance between D=256 and D=512, suggesting
 the gamma bandwidth is not well-tuned for all datasets.
@@ -35,15 +35,15 @@ the gamma bandwidth is not well-tuned for all datasets.
 
 > **P7 note:** Python `RFFEncoder.fit(X)` removed with `cypha_core`.
 
-**Expected gain:** +2–4 pp on small-dimensional datasets (re-benchmark d01 small tasks to confirm).
+**Expected gain:** +2ï¿½4 pp on small-dimensional datasets (re-benchmark d01 small tasks to confirm).
 
-### §0c — D10/D17 CellAI SSM investigation
+### ï¿½0c ï¿½ D10/D17 CellAI SSM investigation
 
 **Evidence:**
-- D10 ECG: 17–20% accuracy on 5-class temporal classification (chance = 20%); CellAI/SSM
+- D10 ECG: 17ï¿½20% accuracy on 5-class temporal classification (chance = 20%); CellAI/SSM
   integration not yet tuned for this domain.
 - D17 CyphaLM: **hybrid_gria_lstm @ 300k = 2.873 BPC** (beats bigram); GRIA-only stack still weaker.
-- **D04 "33.2 bpc" was a benchmark bug** (wrong probability indexing in the legacy Python D04 domain, not a CyphaLM failure) — do not use it as evidence. Native D04 runs the full CyphaLM stack via `cypha_bench_run --domain 4`.
+- **D04 "33.2 bpc" was a benchmark bug** (wrong probability indexing in the legacy Python D04 domain, not a CyphaLM failure) ï¿½ do not use it as evidence. Native D04 runs the full CyphaLM stack via `cypha_bench_run --domain 4`.
 
 **What to do:** Instrument native SSM state (`cyphalm_ssm_diagnose`, `--ssm-diagnose` on bench) to verify that:
 - State norms do not collapse or explode over long sequences.
@@ -54,9 +54,9 @@ the gamma bandwidth is not well-tuned for all datasets.
 
 ---
 
-## §1 — CUDA GPU path (`cypha::accel`)
+## ï¿½1 ï¿½ CUDA GPU path (`cypha::accel`)
 
-**Status:** Native **CUDA** in `native/src/accel_cuda.cu` (pooled device memory + Bessel table for GH–NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ? **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default 16). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
+**Status:** Native **CUDA** in `native/src/accel_cuda.cu` (pooled device memory + Bessel table for GHï¿½NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ? **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default **1** ï¿½ GPU used for all n?1 when available). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
 
 **Windows (native MSVC):** install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads), then:
 ```powershell
@@ -70,36 +70,36 @@ cmake --build --preset windows-msvc-release-build
 
 **Not supported:** MinGW cross-compiles cannot enable `CYPHA_ENABLE_CUDA` (CMake will error).
 
-**CI:** **`windows_cuda_msvc`** and **`linux_cuda`** are **blocking** jobs on every push — Jimver nvcc install, compile with `-DCYPHA_ENABLE_CUDA=ON`, run **`native_cuda_smoke`** and **`native_score_batch`**. Runners without a GPU still pass (CPU thread fallback); **`native_cuda_bench`** is optional when hardware is present. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
+**CI:** CUDA is **not** gated in GitHub Actions â€” build and test locally with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
 
 **Performance:** profile with `./cuda_smoke --bench` on GPU; small batches may be CPU-faster due to launch overhead.
 
 ---
 
-## §2 — Qt shell richer UX
+## ï¿½2 ï¿½ Qt shell richer UX
 
-The Qt shell (`cypha_qt_shell`) covers the full training/inference/registry workflow. Items **§2a–2e shipped** (2026 Q2); see [`native/qt/README.md`](../native/qt/README.md).
+The Qt shell (`cypha_qt_shell`) covers the full training/inference/registry workflow. Items **ï¿½2aï¿½2e shipped** (2026 Q2); see [`native/qt/README.md`](../native/qt/README.md).
 
-### 2a — Streaming training progress ? SHIPPED
+### 2a ï¿½ Streaming training progress ? SHIPPED
 Bulk native train runs on a **background `QThread`**. Live loss chart + rolling accuracy drain every 80 ms; cancel via atomic flag; final state synced on finish.
 
-### 2b — Chart interactivity ? SHIPPED
+### 2b ï¿½ Chart interactivity ? SHIPPED
 Painted `SimpleLossChart` and optional **`QChartView`** (`-DCYPHA_QT_CHARTS=ON`): mouse-over tooltip, pan, scroll-wheel zoom (clamped to data extents). PNG/SVG/CSV export.
 
-### 2c — Experiment run comparison view ? SHIPPED
+### 2c ï¿½ Experiment run comparison view ? SHIPPED
 Experiments panel **"Compare selected runs"** overlays `metrics_history` loss curves for 2+ runs (colour per run).
 
-### 2d — Model card editor ? SHIPPED
-**`card.json…`** dialog edits name, description, tags, task before registry register.
+### 2d ï¿½ Model card editor ? SHIPPED
+**`card.jsonï¿½`** dialog edits name, description, tags, task before registry register.
 
-### 2e — Dark theme ? SHIPPED
+### 2e ï¿½ Dark theme ? SHIPPED
 **Fusion** palette toggle in Settings; persisted to `~/.cypha/shell_settings.json` and QSettings.
 
 **Remaining Qt polish (optional):** richer compare-run statistics; experiment diff export; additional chart series types.
 
 ---
 
-## §3 — Packaged standalone binary
+## ï¿½3 ï¿½ Packaged standalone binary
 
 Goal: a single distributable executable (`cypha_qt_shell`) with no external runtime dependencies.
 
@@ -116,25 +116,22 @@ Scripts: [`packaging/build_appimage.sh`](../../packaging/build_appimage.sh).
 
 Release bundles: [`packaging/`](../../packaging/) install scripts + `scripts/package_release_*.sh`.
 
-**macOS:**
-Build natively on macOS with Qt 6 from Homebrew; `macdeployqt` produces a `.app` bundle.
-
 ---
 
-## §4 — Web UI (browser-based Studio)
+## ï¿½4 ï¿½ Web UI (browser-based Studio)
 
-Native **`cypha_rest`** (cpp-httplib; see [`PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §3) exposes the full REST API.
+Native **`cypha_rest`** (cpp-httplib; see [`PORT_CONTRACT.md`](port/PORT_CONTRACT.md) ï¿½3) exposes the full REST API.
 
 ### Minimal SPA ? SHIPPED (2026 Q2)
-Vanilla JS SPA at **`GET /`** — health, predict, update, models, session RNG. Static assets under `native/tools/static/`; optional embed via `-DCYPHA_EMBED_STATIC_UI=ON`. CTest **`native_rest_ui_smoke`**.
+Vanilla JS SPA at **`GET /`** ï¿½ health, predict, update, models, session RNG. Static assets under `native/tools/static/`; optional embed via `-DCYPHA_EMBED_STATIC_UI=ON`. CTest **`native_rest_ui_smoke`**.
 
 **Remaining (expansion):** live training charts, experiment browser, CyphaLM `/generate` chat pane, richer model registry UX.
 
-**Option B — htmx + server-side HTML:** not started; lower priority now that minimal SPA ships.
+**Option B ï¿½ htmx + server-side HTML:** not started; lower priority now that minimal SPA ships.
 
 ---
 
-## §5 — Multi-model serving in `cypha_rest`
+## ï¿½5 ï¿½ Multi-model serving in `cypha_rest`
 
 **Current:** `cypha_rest` serves one model at a time (load-then-predict; hot-swap via `POST /load`).
 
@@ -148,7 +145,7 @@ cypha_rest --registry <root> --listen 0.0.0.0:8765
 ```
 
 **Implementation sketch:**
-- `g_models: std::unordered_map<std::string, CyphaInferModel>` — keyed by `name/version`.
+- `g_models: std::unordered_map<std::string, CyphaInferModel>` ï¿½ keyed by `name/version`.
 - Per-model `std::mutex` for train vs infer serialisation.
 - `POST /load` without a body ? load all models in the registry at startup.
 - Optional LRU eviction (keep N most-recently-used models in RAM).
@@ -157,7 +154,7 @@ cypha_rest --registry <root> --listen 0.0.0.0:8765
 
 ---
 
-## §6 — Curriculum / active learning
+## ï¿½6 ï¿½ Curriculum / active learning
 
 The current training loop is purely online with a simple replay buffer. Higher-quality training on skewed datasets can use:
 
@@ -166,14 +163,14 @@ The current training loop is purely online with a simple replay buffer. Higher-q
 - Implemented as a reordering pass over the CSV before `dif_train_classify_sequence`.
 
 **Active learning (uncertainty sampling):**
-- Sort unlabelled pool by `entropy(softmax(LLR))` — highest entropy = most uncertain.
+- Sort unlabelled pool by `entropy(softmax(LLR))` ï¿½ highest entropy = most uncertain.
 - Expose `GET /uncertainty-rank` on `cypha_rest` that returns the top-N row indices from a provided feature matrix.
 
-Both require only additions to the existing hot path — no changes to `CyphaInferModel` or the binary format.
+Both require only additions to the existing hot path ï¿½ no changes to `CyphaInferModel` or the binary format.
 
 ---
 
-## §7 — Export formats
+## ï¿½7 ï¿½ Export formats
 
 ### ONNX export
 Export the inference path (encode ? LLR ? softmax) as an ONNX graph so the model can run in PyTorch, TensorFlow, or ONNX Runtime without `cypha_rest`.
@@ -189,7 +186,7 @@ Longer-horizon: pack `enc_W`, `F_field`, class centroid tensors into a GGUF cont
 
 ---
 
-## §8 — Distributed / federated training
+## ï¿½8 ï¿½ Distributed / federated training
 
 The current model trains on a single machine with a single replay buffer. For multi-device or multi-process training:
 
@@ -204,26 +201,26 @@ The current model trains on a single machine with a single replay buffer. For mu
 - `world_mu` deltas + class distribution changes are the federated payload.
 - No raw samples leave the device.
 
-Both require new network coordination code outside the native training core — the local training math in the C++ `cypha_core` library stays unchanged.
+Both require new network coordination code outside the native training core ï¿½ the local training math in the C++ `cypha_core` library stays unchanged.
 
 ---
 
-## §9 — Deprecations and clean-up (P7 complete)
+## ï¿½9 ï¿½ Deprecations and clean-up (P7 complete)
 
 | Item | Status (P7) |
 |------|-------------|
 | Legacy sigmoid (`gh_chi <= 0`) | Remove with a version bump + changelog entry; unused in-tree |
-| Python FastAPI / PySide6 Studio (`cypha_studio/`) | **Removed** — `cypha_rest` + `cypha_qt_shell` are authoritative |
-| `cypha_accel/` CuPy path | **Removed** — native `cypha::accel` (CUDA / parallel CPU) |
-| `cypha_core`, `bench/` (Python), `cypha_lm/` Python packages | **Removed** — native binaries only (`bench/` configs via `cypha_bench_run`) |
-| pytest CI gate (~274 tests) | **Removed** — **64 CTests** (`ctest -R native_`) gate releases |
-| `run_all.py` bench orchestrator | **Removed** — `cypha_bench_run` |
+| Python FastAPI / PySide6 Studio (`cypha_studio/`) | **Removed** ï¿½ `cypha_rest` + `cypha_qt_shell` are authoritative |
+| `cypha_accel/` CuPy path | **Removed** ï¿½ native `cypha::accel` (CUDA / parallel CPU) |
+| `cypha_core`, `bench/` (Python), `cypha_lm/` Python packages | **Removed** ï¿½ native binaries only (`bench/` configs via `cypha_bench_run`) |
+| pytest CI gate (~274 tests) | **Removed** ï¿½ **64 CTests** (`ctest -R native_`) gate releases |
+| `run_all.py` bench orchestrator | **Removed** ï¿½ `cypha_bench_run` |
 
 ---
 
-## §10 — RPSM matrix refactor + CyphaLM sequence layer
+## ï¿½10 ï¿½ RPSM matrix refactor + CyphaLM sequence layer
 
-**Status:** Planned — specs in [`docs/research/upgrades/`](research/upgrades/README.md).  
+**Status:** Planned ï¿½ specs in [`docs/research/upgrades/`](research/upgrades/README.md).  
 **Target:** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k.
 
 Two composed workstreams (neither replaces the other):
@@ -231,19 +228,19 @@ Two composed workstreams (neither replaces the other):
 | Track | What | Depends on |
 |-------|------|------------|
 | **Option A** | CyphaDIF matrix refactor (?_mu / ?_var, batched LLR/GEMM) | Existing parity suite + new batched fixtures |
-| **Option B** | RPSM sequence layer — CyphaDIF at level 0, hierarchy above | Option A + [RPSM_IMPLEMENTATION.md](research/upgrades/RPSM_IMPLEMENTATION.md) |
+| **Option B** | RPSM sequence layer ï¿½ CyphaDIF at level 0, hierarchy above | Option A + [RPSM_IMPLEMENTATION.md](research/upgrades/RPSM_IMPLEMENTATION.md) |
 
 **Execution order:**
 
-1. Option A — matrix refactor (parity-validated, no behaviour change)  
-2. Nyström kernel LLR into A — **partially shipped** (§0a); tuning continues  
-3. Option B — RPSM sequence layer in native CyphaLM  
-4. Global memory — Izaac episodic store + working memory + GMM world model  
+1. Option A ï¿½ matrix refactor (parity-validated, no behaviour change)  
+2. Nystrï¿½m kernel LLR into A ï¿½ **partially shipped** (ï¿½0a); tuning continues  
+3. Option B ï¿½ RPSM sequence layer in native CyphaLM  
+4. Global memory ï¿½ Izaac episodic store + working memory + GMM world model  
 5. D17 benchmark vs hybrid baseline  
 
-**Parallel track:** [Cell hypothesis testbench](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) — 28 recurrent-cell variants.
+**Parallel track:** [Cell hypothesis testbench](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) ï¿½ 28 recurrent-cell variants.
 
-**Native milestone:** Option A is the next major `cypha_core` refactor — see [`CYPHA_FULL_CPP_FRAMEWORK_PLAN.md`](native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md).
+**Native milestone:** Option A is the next major `cypha_core` refactor ï¿½ see [`CYPHA_FULL_CPP_FRAMEWORK_PLAN.md`](native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md).
 
 ---
 
@@ -251,13 +248,13 @@ Two composed workstreams (neither replaces the other):
 
 | When | What | Evidence |
 |------|------|----------|
-| **Now — tuning** | Kernel LLR (Nyström) — §0a | Shipped; ~18 pp gap vs sklearn RBF on XOR |
-| **Now — shipped** | Auto-gamma RFF — §0b | Native fit + Qt + bench |
-| **Now** | D10/D17 CellAI SSM — §0c | D10: 17–20% ECG; hybrid D17 **2.873 BPC** |
-| **Now — shipped** | Qt UX §2a–2e; minimal Web UI §4 | Threaded train, charts, compare runs, dark theme, REST SPA |
-| **Weeks** | Packaged AppImage / Windows bundle — §3 | `packaging/` scripts shipped |
-| **Ongoing** | CUDA CI + profiling — §1 | Blocking jobs green |
-| **2–4 months** | Multi-model `cypha_rest` — §5 | Deployment |
-| **4–8 months** | RPSM Option A ? B — §10 | Beat 2.873 BPC target |
-| **4–8 months** | Curriculum / active learning; ONNX — §6/7 | Research |
-| **Longer** | Cell hypothesis sweep; federated; GGUF — §8 / upgrades | Research |
+| **Now ï¿½ tuning** | Kernel LLR (Nystrï¿½m) ï¿½ ï¿½0a | Shipped; ~18 pp gap vs sklearn RBF on XOR |
+| **Now ï¿½ shipped** | Auto-gamma RFF ï¿½ ï¿½0b | Native fit + Qt + bench |
+| **Now** | D10/D17 CellAI SSM ï¿½ ï¿½0c | D10: 17ï¿½20% ECG; hybrid D17 **2.873 BPC** |
+| **Now ï¿½ shipped** | Qt UX ï¿½2aï¿½2e; minimal Web UI ï¿½4 | Threaded train, charts, compare runs, dark theme, REST SPA |
+| **Weeks** | Packaged AppImage / Windows bundle ï¿½ ï¿½3 | `packaging/` scripts shipped |
+| **Ongoing** | CUDA CI + profiling ï¿½ ï¿½1 | Blocking jobs green |
+| **2ï¿½4 months** | Multi-model `cypha_rest` ï¿½ ï¿½5 | Deployment |
+| **4ï¿½8 months** | RPSM Option A ? B ï¿½ ï¿½10 | Beat 2.873 BPC target |
+| **4ï¿½8 months** | Curriculum / active learning; ONNX ï¿½ ï¿½6/7 | Research |
+| **Longer** | Cell hypothesis sweep; federated; GGUF ï¿½ ï¿½8 / upgrades | Research |

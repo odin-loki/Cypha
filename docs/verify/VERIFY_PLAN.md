@@ -4,11 +4,11 @@ This document is the **master checklist** for proving the **native C++ productio
 
 For a **living snapshot** of automated tests and known gaps, see [`VERIFICATION_STATUS.md`](VERIFICATION_STATUS.md). For **what to regen and rebuild** after contract changes, see [`MAINTENANCE.md`](MAINTENANCE.md).
 
-**Remote CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — **four blocking jobs** on push to `main`:
+**Remote CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — **two blocking jobs** on push to `main`:
 1. **`build_and_test`** (Ubuntu) — `cmake -DCYPHA_BUILD_QT=ON` + **`ctest -R native_`** (GUI exec tests excluded on headless); WikiText-2 corpus; **`CYPHA_REST_BIN`** and `QT_QPA_PLATFORM=offscreen`.
 2. **`mingw_cross`** — MinGW Windows PE artifact smoke (`cypha_rest.exe`, `cypha_bench_run.exe`, …).
-3. **`windows_cuda_msvc`** — MSVC + CUDA compile smoke.
-4. **`linux_cuda`** — GCC + nvcc compile smoke.
+
+CUDA compile smokes (`windows_cuda_msvc`, `linux_cuda`) were removed from CI; validate CUDA locally with `-DCYPHA_ENABLE_CUDA=ON` (see [`ACCEL_CUDA.md`](../native/ACCEL_CUDA.md)).
 
 **Release:** tag `v*` → [`.github/workflows/release.yml`](../../.github/workflows/release.yml) publishes Linux + Windows installer archives.
 

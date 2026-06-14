@@ -2,14 +2,20 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <vector>
 
+#include "cypha/bench/bench_paths.hpp"
 #include "cypha/intelligence/epistemic_threshold.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/measurers.hpp"
+#include "cypha/intelligence/profile_from_model.hpp"
+#include "cypha/intelligence/self_correcting_infer.hpp"
 #include "cypha/intelligence/soft_world_monitor.hpp"
 
 namespace {
+
+namespace fs = std::filesystem;
 
 constexpr double kTol = 1e-5;
 
@@ -114,6 +120,22 @@ void test_paper_v_soft_world() {
   assert(soft_world.tau > self_correcting.tau);
 }
 
+void test_paper_iv_self_correcting_infer() {
+  const fs::path root = cypha::bench::repo_root();
+  assert(cypha::intelligence::profile_from_reference_fixture(root).criticality_score() > 0.0);
+
+  cypha::CyphaInferModel model = cypha::intelligence::load_reference_model_from_fixture(root);
+  const std::vector<double> x = cypha::intelligence::reference_fixture_first_input(root);
+  cypha::intelligence::EpistemicThreshold threshold(0.5, 5.0);
+  cypha::CyphaInferOptions opt{};
+  opt.deliberation_lo = 0.2;
+  opt.deliberation_hi = 0.8;
+  const auto result = cypha::intelligence::self_correcting_infer(
+      model, x.data(), static_cast<int>(x.size()), opt, threshold, 3);
+  assert(result.correction_passes >= 1);
+  assert(!result.infer.label.empty());
+}
+
 void test_extended_measurers_and_batch() {
   const std::vector<double> input = {0.0, 0.1, 0.2, 0.3, 0.4, 0.5};
   const std::vector<double> perturb = {0.01, 0.11, 0.21, 0.31, 0.41, 0.51};
@@ -164,6 +186,7 @@ int main() {
   test_paper_ii_applications();
   test_paper_iii_landscape();
   test_paper_iv_epistemic_threshold();
+  test_paper_iv_self_correcting_infer();
   test_paper_v_soft_world();
   test_extended_measurers_and_batch();
   std::puts("intelligence_profiler_papers: PASS");

@@ -20,7 +20,7 @@
 - [ ] `ctest --test-dir native/build --output-on-failure` passes
 - [ ] `ctest --test-dir native/build -R native_ --output-on-failure` passes (parity + smoke subset)
 - [ ] Windows: `powershell -File scripts\cypha_native_validate_all.ps1` (or `-SkipBuild` after rebuild)
-- [ ] CUDA changes: local `-DCYPHA_ENABLE_CUDA=ON` build or rely on **`windows_cuda_msvc`** + **`linux_cuda`** CI jobs
+- [ ] CUDA changes: local `-DCYPHA_ENABLE_CUDA=ON` build and **`native_cuda_smoke`** / **`native_score_batch`** (CUDA is not in CI)
 
 ### If changing `cypha_core` math or `.cypha` format
 

@@ -8,7 +8,6 @@ Standalone **native C++** distributables for Cypha — no Python runtime or venv
 | [`install_release_windows.ps1`](install_release_windows.ps1) | Windows zip | Install prebuilt `bin/` from a GitHub Release |
 | [`build_appimage.sh`](build_appimage.sh) | Linux (local/CI) | Self-contained **`cypha_qt_shell`** AppImage + **`cypha_rest`** sidecar |
 | [`build_windows_bundle.ps1`](build_windows_bundle.ps1) | Windows (native) | **`windeployqt`** folder with Qt DLLs |
-| [`macos_bundle.sh`](macos_bundle.sh) | macOS (native) | **`macdeployqt`** `.app` bundle + `cypha_rest` sidecar |
 
 Release archives are also produced by [`scripts/package_release_linux.sh`](../scripts/package_release_linux.sh) and [`scripts/package_release_windows.sh`](../scripts/package_release_windows.sh) in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 
@@ -126,45 +125,6 @@ dist\cypha-2.2.8-windows-qt\cypha_qt_shell.exe --smoke share\demo_fixtures\refer
 ```
 
 Lower-level helper (same windeployqt pattern): [`native/scripts/package_windows_qt.ps1`](../native/scripts/package_windows_qt.ps1).
-
----
-
-## macOS `.app` bundle (macdeployqt)
-
-Requires **Qt 6 installed natively on macOS** (Homebrew or qt.io installer). Cross-compiles from Linux/Windows cannot produce a macOS Qt bundle.
-
-### Prerequisites
-
-```bash
-brew install cmake ninja qt@6 sqlite3
-export PATH="$(brew --prefix qt@6)/bin:$PATH"
-```
-
-### Build
-
-```bash
-# From repo root — configures, builds, and runs macdeployqt
-bash packaging/macos_bundle.sh 2.3.1
-
-# Re-package from an existing CMake tree:
-SKIP_BUILD=1 bash packaging/macos_bundle.sh 2.3.1 native/build-release dist
-```
-
-Output: `dist/cypha-<ver>-macos/Cypha.app` with Qt frameworks embedded; **`cypha_rest`** is copied as a sidecar next to the `.app`.
-
-```bash
-open dist/cypha-2.3.1-macos/Cypha.app
-dist/cypha-2.3.1-macos/Cypha.app/Contents/MacOS/cypha_qt_shell \
-  --smoke dist/cypha-2.3.1-macos/share/demo_fixtures/reference.cypha
-```
-
-**macdeployqt steps** (automated by `macos_bundle.sh`):
-
-1. `cmake -DCYPHA_BUILD_QT=ON -DCMAKE_BUILD_TYPE=Release` → `cypha_qt_shell` + `cypha_rest`
-2. Stage `Cypha.app/Contents/MacOS/cypha_qt_shell` + `Info.plist`
-3. `macdeployqt Cypha.app` — copy Qt frameworks into the bundle
-
-Set `MACDEPLOYQT=/path/to/macdeployqt` if it is not on `PATH`. Use `WITH_FIXTURES=0` to skip demo fixture copies.
 
 ---
 

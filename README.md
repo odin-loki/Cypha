@@ -192,7 +192,7 @@ These defaults come from a profiled medium-grid tuning programme, not from guess
 | `regression_m4_parity` | M4 regression |
 | `cuda_smoke` | CUDA path smoke test |
 
-(Full inventory in [`native/README.md`](native/README.md). CI gate: **four blocking jobs** — Linux **53 CTests**, MinGW PE smoke, MSVC + CUDA, GCC + CUDA; Windows local gate via `scripts/cypha_native_validate_all.ps1`.)
+(Full inventory in [`native/README.md`](native/README.md). CI gate: **two blocking jobs** — **`build_and_test`** (Linux native + CTest) and **`mingw_cross`** (MinGW Windows PE cross-compile); Windows local gate via `scripts/cypha_native_validate_all.ps1`.)
 
 ---
 
@@ -225,7 +225,7 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 - **The proof surface is parity correctness, not leaderboard ML accuracy.** No "we beat X on benchmark Y" claim. Instead: "the native runtime matches committed fixture goldens across this CTest matrix." Benchmark numbers (§ above) are honest measurements on standard sklearn datasets, not cherry-picked.
 - **Nonlinear decision boundaries:** Linear LLR caps XOR near ~50%. **Nyström kernel LLR** (M=256 landmarks) reaches **~61%** (+10.6 pp) — implemented in C++; diagnostic ~83% kernel-SVM ceiling remains. See [`docs/FUTURE.md`](docs/FUTURE.md) §0a.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
-- **Optional CUDA.** The native core works without GPU; CUDA is a build flag. **`windows_cuda_msvc`** and **`linux_cuda`** CI jobs compile with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`** on every push.
+- **Optional CUDA.** The native core works without GPU; CUDA is a local build flag (`-DCYPHA_ENABLE_CUDA=ON`). CI does not compile CUDA — validate with **`native_cuda_smoke`** / **`native_score_batch`** locally when changing accel code (see [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md)).
 - **Future waves.** RFF auto-gamma, Qt UX polish, packaged binaries, multi-model REST, ONNX export — see [`docs/FUTURE.md`](docs/FUTURE.md) and [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md).
 
 ---

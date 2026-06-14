@@ -17,7 +17,7 @@ Honest snapshot for **native production**. “Debugged” here means *automated 
 
 **GUI smoke (optional Qt build):** `ctest --test-dir native/build -R native_qt --output-on-failure` with **`QT_QPA_PLATFORM=offscreen`**.
 
-GitHub Actions **CI** (`.github/workflows/ci.yml`): **four blocking jobs** — **`build_and_test`** (Ubuntu: cmake + **`ctest -R native_`**), **`mingw_cross`**, **`windows_cuda_msvc`**, **`linux_cuda`**.
+GitHub Actions **CI** (`.github/workflows/ci.yml`): **two blocking jobs** — **`build_and_test`** (Ubuntu: cmake + **`ctest -R native_`**) and **`mingw_cross`** (MinGW Windows PE cross-compile).
 
 **CyphaLM (research):** `ctest --test-dir native/build -R native_cyphalm --output-on-failure` locally when changing LM native code.
 
@@ -36,11 +36,11 @@ See [`fixtures/README.md`](../../fixtures/README.md) and the table in prior revi
 
 1. **Full GPU training** — not implemented; optional CUDA accel for fused LLR when built with **`-DCYPHA_ENABLE_CUDA=ON`**.
 2. **Real-data profiling** — use native bench/tune binaries on your CSV dumps.
-3. **Optional GPU CI runner** — compile smoke is green; device benchmarks are manual.
+3. **CUDA CI** — not in GitHub Actions; build locally with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`**; device benchmarks remain manual.
 
 ## Green bar (keep this clean)
 
-- [x] GitHub Actions **CI green** on `main` — four blocking jobs
+- [x] GitHub Actions **CI green** on `main` — two blocking jobs
 - [x] **`ctest -R native_`** green on CI and local validate scripts
 - [x] Committed **`fixtures/`** match native parity tools
 - [ ] Optional: GPU box profile after LM/accel changes (see [`docs/FUTURE.md`](../FUTURE.md))

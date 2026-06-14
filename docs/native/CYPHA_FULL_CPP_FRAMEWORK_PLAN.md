@@ -2,7 +2,7 @@
 
 **Goal:** **P7 complete** — all production runtime, bench, REST, and validation runs in native C++ only.
 
-**Status:** **v2.5 complete — SHIPPED** ([`v2.2.8` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.8) — Linux + Windows installers; **CI fully green** — all four blocking jobs).
+**Status:** **v2.5 complete — SHIPPED** ([`v2.2.8` release](https://github.com/odin-loki/Cypha/releases/tag/v2.2.8) — Linux + Windows installers; **CI fully green** — two blocking jobs: **`build_and_test`**, **`mingw_cross`**).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).  
@@ -17,7 +17,7 @@ scripts/cypha_native_validate_all.ps1  → OK
   64 CTests │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
 
-GitHub Actions **CI #51+** (`a3b48c4`): Linux CTest + ctest, MinGW PE smoke, **MSVC + CUDA (blocking)**, **Linux GCC CUDA (blocking)**. Release **v2.2.8** installers published.
+GitHub Actions **CI** (`a3b48c4`+): Linux CTest + ctest, MinGW PE smoke. CUDA jobs removed — validate locally. Release **v2.2.8** installers published.
 
 Build: `C:\Temp\cypha_full_cpp_build`
 
@@ -31,7 +31,7 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Shipped (git)
 
-| **`v2.2.8`** tag | **Latest release** — all four CI jobs blocking (incl. Linux GCC CUDA) |
+| **`v2.2.8`** tag | **Latest release** — two CI jobs blocking (`build_and_test`, `mingw_cross`); CUDA local-only |
 | **`v2.2.7`** tag | MSVC CUDA CI green |
 | **`v2.2.4`** tag | CI green; portable checkpoint fixtures; Studio GUI import shims |
 | **`v2.2.3`** tag | Release packaging hardening — Linux + Windows native installers on GitHub Releases |

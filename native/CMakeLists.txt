@@ -7,7 +7,7 @@ option(CYPHA_BUILD_EXPERIMENT_DB "Build experiment_db_smoke / experiment_db_crud
 option(CYPHA_BUILD_QT "Build optional Qt targets under qt/: cypha_qt_stub (Core), cypha_qt_shell (Widgets)" OFF)
 option(CYPHA_QT_CHARTS "When CYPHA_BUILD_QT is ON, link Qt Charts for cypha_qt_shell if found (default OFF for qt6-base-only CI)" OFF)
 option(CYPHA_ENABLE_CUDA "Build CUDA GPU path in accel backend (NVIDIA toolkit + driver); CPU uses std::thread" OFF)
-set(CYPHA_ACCEL_GPU_MIN_BATCH_ROWS "16" CACHE STRING "Minimum batch row count (n) to use CUDA in cypha::accel (smaller batches use CPU threads)")
+set(CYPHA_ACCEL_GPU_MIN_BATCH_ROWS "1" CACHE STRING "Minimum batch row count (n) to use CUDA in cypha::accel (1 = always batch on GPU when available)")
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -64,6 +64,9 @@ add_library(cypha_core STATIC
   src/intelligence/intelligence_profile_json.cpp
   src/intelligence/epistemic_threshold.cpp
   src/intelligence/soft_world_monitor.cpp
+  src/intelligence/self_correcting_infer.cpp
+  src/intelligence/profile_from_model.cpp
+  src/bench/bench_paths.cpp
 )
 
 if(CYPHA_ENABLE_CUDA)
@@ -88,7 +91,6 @@ target_link_libraries(cypha_lm_native PUBLIC cypha_core)
 
 add_library(cypha_bench_native STATIC
   src/bench/bench_profile.cpp
-  src/bench/bench_paths.cpp
   src/bench/bench_metrics.cpp
   src/bench/bench_baselines.cpp
   src/bench/bench_report_json.cpp
@@ -198,6 +200,9 @@ target_link_libraries(intelligence_profiler_smoke PRIVATE cypha_core)
 
 add_executable(intelligence_profiler_papers tools/intelligence_profiler_papers.cpp)
 target_link_libraries(intelligence_profiler_papers PRIVATE cypha_core)
+
+add_executable(cypha_intelligence_bench tools/cypha_intelligence_bench.cpp)
+target_link_libraries(cypha_intelligence_bench PRIVATE cypha_core cypha_bench_native)
 
 set(
   _cypha_mingw_exe_targets
@@ -698,6 +703,10 @@ add_test(
 add_test(
   NAME native_intelligence_profiler_papers
   COMMAND "$<TARGET_FILE:intelligence_profiler_papers>"
+)
+add_test(
+  NAME native_intelligence_bench_smoke
+  COMMAND "$<TARGET_FILE:cypha_intelligence_bench>"
 )
 
 add_test(

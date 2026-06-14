@@ -68,7 +68,7 @@ cmake --build --preset wsl-gcc-release-build
 ctest --test-dir build-wsl-gcc --output-on-failure
 ```
 
-**CUDA (Windows or WSL with NVIDIA):** add `-DCYPHA_ENABLE_CUDA=ON` at configure (requires `nvcc` + `CUDA::cudart`). Override arch: `-DCMAKE_CUDA_ARCHITECTURES=89` (Ada), `86` (Ampere), etc. Optional: `-DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=8` to dispatch smaller batches to the GPU (default **16** avoids tiny-batch launch + copy overhead).
+**CUDA (Windows or WSL with NVIDIA):** add `-DCYPHA_ENABLE_CUDA=ON` at configure (requires `nvcc` + `CUDA::cudart`). Override arch: `-DCMAKE_CUDA_ARCHITECTURES=89` (Ada), `86` (Ampere), etc. Default **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS=1`** (CUDA for all batch sizes n≥1 when a GPU is available). Optional: `-DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=N` to raise the threshold so smaller batches stay on CPU threads.
 
 Device memory: CUDA accel reuses one **growing device pool** plus a one-time **Bessel K₂/K₁ table** upload for the GH–NIG world gate (no per-call `cudaMalloc` for the main buffers once warmed up).
 
@@ -149,7 +149,7 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 | **`cyphalm_checkpoint_parity`** | Checkpoint save/load roundtrip. CTest **`native_cyphalm_checkpoint_parity`** (disabled until fixture). **`CYPHALM_CHECKPOINT_PARITY_BIN`**. |
 | **`embed_table_parity`** | Izaac embed table vs `fixtures/embed_table/sidecar.json`. CTest **`native_embed_table`** (disabled until fixture). **`CYPHA_EMBED_TABLE_PARITY_BIN`**. |
 
-**Qt:** [`cmake -DCYPHA_BUILD_QT=ON`](qt/README.md) builds **`cypha_qt_stub`** (Core) and **`cypha_qt_shell`** (Widgets). Optional **`-DCYPHA_QT_CHARTS=ON`** links Qt Charts for the shell loss widget when **`Qt6::Charts`** is installed. **GitHub CI** (four **blocking** jobs): **`build_and_test`** installs **`qt6-base-dev`** (Charts off), passes **`-DCYPHA_BUILD_QT=ON`**, and runs **`native_qt_stub_load_reference`**; headless Linux excludes GUI exec tests **`native_qt_shell_smoke`**. **`windows_cuda_msvc`** and **`linux_cuda`** compile with **`-DCYPHA_ENABLE_CUDA=ON`** and run **`native_cuda_smoke`** / **`native_score_batch`** (see [`ACCEL_CUDA.md`](../docs/native/ACCEL_CUDA.md)). Local **`scripts/ci_native_linux.sh`** defaults Qt OFF unless **`CYPHA_BUILD_QT=1`**; optional **`CYPHA_QT_CHARTS=1`** passes **`-DCYPHA_QT_CHARTS=ON`** (install **`qt6-charts-dev`** first).
+**Qt:** [`cmake -DCYPHA_BUILD_QT=ON`](qt/README.md) builds **`cypha_qt_stub`** (Core) and **`cypha_qt_shell`** (Widgets). Optional **`-DCYPHA_QT_CHARTS=ON`** links Qt Charts for the shell loss widget when **`Qt6::Charts`** is installed. **GitHub CI** (two **blocking** jobs): **`build_and_test`** installs **`qt6-base-dev`** (Charts off), passes **`-DCYPHA_BUILD_QT=ON`**, and runs **`native_qt_stub_load_reference`**; headless Linux excludes GUI exec tests **`native_qt_shell_smoke`**. **`mingw_cross`** verifies MinGW Windows PE artifacts. CUDA is not in CI — build locally with **`-DCYPHA_ENABLE_CUDA=ON`** and run **`native_cuda_smoke`** / **`native_score_batch`** (see [`ACCEL_CUDA.md`](../docs/native/ACCEL_CUDA.md)). Local **`scripts/ci_native_linux.sh`** defaults Qt OFF unless **`CYPHA_BUILD_QT=1`**; optional **`CYPHA_QT_CHARTS=1`** passes **`-DCYPHA_QT_CHARTS=ON`** (install **`qt6-charts-dev`** first).
 
 ## Build
 
@@ -185,7 +185,6 @@ wsl -e bash -lc "/mnt/c/Users/you/path/to/Cypha/native/build-wsl/experiment_db_c
 
 - **WSL / Ubuntu / Debian:** `sudo apt-get update && sudo apt-get install -y libsqlite3-dev`
 - **Fedora:** `sudo dnf install -y sqlite-devel`
-- **macOS (Homebrew):** `brew install sqlite`
 - **Windows (vcpkg, x64):** `vcpkg install sqlite3:x64-windows` then configure CMake with `-DCMAKE_TOOLCHAIN_FILE=<path-to-vcpkg>/scripts/buildsystems/vcpkg.cmake`
 
 *(There is no package named “Cslite” — you want **SQLite**.)*
@@ -202,7 +201,6 @@ When using a **system** SQLite3, you still need the **library + headers** (not o
 |-------------|---------|
 | **Ubuntu / Debian / WSL** | `sudo apt-get install -y libsqlite3-dev` |
 | **Fedora / RHEL** | `sudo dnf install sqlite-devel` |
-| **macOS (Homebrew)** | `brew install sqlite` — then re-run CMake; if not found, pass `-DCMAKE_PREFIX_PATH="$(brew --prefix sqlite)"` |
 | **Windows (MSVC)** | **Default:** CMake can **fetch** the amalgamation (**network** at configure). **Or** **vcpkg** `sqlite3:x64-windows` + `-DCMAKE_TOOLCHAIN_FILE=.../vcpkg.cmake` for **`find_package(SQLite3)`**. |
 
 With **no** system SQLite3 dev package, **`CYPHA_FETCH_SQLITE3_AMALGAMATION=ON`** (default) is enough. If you install **libsqlite3-dev** / vcpkg / Homebrew sqlite, CMake prefers **`SQLite::SQLite3`** and skips the download.

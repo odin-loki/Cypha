@@ -13,9 +13,11 @@ milestone or a significant self-contained change.
 - **Python runtime decommissioned (P7):** `Cypha.py`, `cypha_studio/`, `cypha_core/`, `cypha_accel/`, `bench/` (Python package removed), `cypha_lm/`, and related packages removed from the product path. Native C++ (`cypha_core` library, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`) is the sole runtime.
 - **pytest CI gate:** ~274 pytest tests no longer run in CI; validation is CTest-only.
 - **`run_all.py`:** replaced by `cypha_bench_run`.
+- **CUDA CI jobs:** **`windows_cuda_msvc`** and **`linux_cuda`** removed from `.github/workflows/ci.yml`; CUDA remains an optional local build.
 
 ### Changed
-- **CI gate:** native-only — **67 CTests** (`ctest -R native_`) across four blocking jobs.
+- **CI gate:** native-only — **67 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
+- **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` default:** **1** (was 16) — CUDA used for all batch sizes n≥1 when a GPU is available.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
 - **`cyphalm_parity`:** Windows subprocess fix (`CreateProcess` instead of `std::system`).
@@ -58,10 +60,9 @@ milestone or a significant self-contained change.
 - **Kernel XOR pair features:** raw XOR polynomial kernel path (~97% acc smoke); `kernel_x` / `kernel_features` API.
 - **`bench/config/auto_rff_gamma_cv_profile.json`** for d01 RFF CV preprocessor.
 - **Diagnostics phase 5:** intelligence profiler inline + SSM recommendations JSON.
-- **`GET /intelligence/profile`** on `cypha_rest`.
+- **`GET /intelligence/profile`** and **`GET /intelligence/report`** on `cypha_rest` (report = reference fixture P-space).
 - **Qt:** chunked CSV train, MKE bulk worker, uncertainty sort checkbox, Qt Charts `QRectF` fix.
 - **`cypha_export_gguf`:** GGUF header + manifest stub; CTest `native_export_gguf_help`.
-- **`packaging/macos_bundle.sh`:** macOS `.app` skeleton via `macdeployqt`.
 
 ---
 

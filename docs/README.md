@@ -54,7 +54,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, CTest gate reference |
 | [CHANGELOG](../CHANGELOG.md) | Release history and what changed in each milestone |
 
-**Quick gate (matches GitHub Actions CI — four blocking jobs):**
+**Quick gate (matches GitHub Actions CI — two blocking jobs: `build_and_test`, `mingw_cross`):**
 ```bash
 bash scripts/ci_native_linux.sh                    # native CTest
 ctest --test-dir native/build -R native_ --output-on-failure

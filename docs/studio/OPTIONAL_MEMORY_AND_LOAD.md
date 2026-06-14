@@ -22,7 +22,7 @@ After starting **`cypha_rest`** (or your bind host/port):
 
 - **ApacheBench (examples in repo):**  
   - JSON body: [`examples/cypha_predict_body.json`](../examples/cypha_predict_body.json)  
-  - **Linux/macOS:** `bash scripts/loadtest_ab_predict_example.sh`  
+  - **Linux:** `bash scripts/loadtest_ab_predict_example.sh`  
   - **Windows:** `powershell -File scripts/loadtest_ab_predict_example.ps1` (requires `ab` on `PATH`)
 - **Manual:** `ab -n 2000 -c 10 -T application/json -p examples/cypha_predict_body.json http://127.0.0.1:7749/predict`
 
