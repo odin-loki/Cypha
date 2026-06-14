@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.23" = @(
+    "Intelligence Stats **Phase 23** (shipped): bench **d37** overnight lock refresh validation - post-overnight baseline lock update toolchain; profile ``bench/config/d37_lock_refresh_profile.json``; CTest ``native_d37_lock_refresh_smoke``.",
+    "``scripts/migrate_inflight_overnight_artifacts.ps1`` - merge in-flight overnight cell-sweep spill from repo-root ``results/`` into ``bench/results/cell_sweep/``.",
+    "``finalize_production_overnight.ps1`` best-effort ``update_baseline_lock -Production``; ``publish_release.ps1 -NotesPath`` for offline gh.",
+    "CI gate **115 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.22" = @(
     "Intelligence Stats **Phase 22** (shipped): bench **d36** production pipeline E2E validation - full maintainer overnight-to-publish toolchain; profile ``bench/config/d36_pipeline_e2e_profile.json``; CTest ``native_d36_pipeline_e2e_smoke``.",
     "``scripts/run_post_overnight.ps1`` - poll/finalize/commit wrapper + ``verify_production_pipeline.ps1``; watch **effective_n_train** from latest variant JSON.",

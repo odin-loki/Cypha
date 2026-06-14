@@ -3797,16 +3797,20 @@ bool gh_cli_present() {
 #endif
 }
 
-bool publish_script_has_gh_auth_preflight(const fs::path& publish_script) {
-    if (!fs::is_regular_file(publish_script)) {
+bool script_text_contains(const fs::path& script_path, const std::string& needle) {
+    if (!fs::is_regular_file(script_path)) {
         return false;
     }
-    std::ifstream in(publish_script);
+    std::ifstream in(script_path);
     if (!in) {
         return false;
     }
     const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return content.find("gh auth") != std::string::npos;
+    return content.find(needle) != std::string::npos;
+}
+
+bool publish_script_has_gh_auth_preflight(const fs::path& publish_script) {
+    return script_text_contains(publish_script, "gh auth");
 }
 
 Json commit_script_has_dryrun_and_force(const fs::path& commit_script) {
@@ -4166,6 +4170,112 @@ Json run_d36_pipeline_e2e_validation() {
     return experiments;
 }
 
+Json run_d37_lock_refresh_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+
+    const std::array<const char*, 3> required_scripts{
+        "scripts/update_baseline_lock.ps1",
+        "scripts/migrate_legacy_results.ps1",
+        "scripts/finalize_production_overnight.ps1",
+    };
+    Json lock_refresh_scripts = Json::object();
+    for (const char* rel : required_scripts) {
+        const fs::path path = repo / rel;
+        const bool present = fs::is_regular_file(path);
+        lock_refresh_scripts[rel] = present;
+        if (!present) {
+            throw std::runtime_error("lock refresh script missing: " + path.string());
+        }
+    }
+
+    const fs::path inflight_path = repo / "scripts" / "migrate_inflight_overnight_artifacts.ps1";
+    lock_refresh_scripts["scripts/migrate_inflight_overnight_artifacts.ps1"] =
+        fs::is_regular_file(inflight_path);
+
+    const fs::path update_lock_path = repo / "scripts" / "update_baseline_lock.ps1";
+    const bool update_lock_has_production_switch =
+        script_text_contains(update_lock_path, "-Production");
+    if (!update_lock_has_production_switch) {
+        throw std::runtime_error("update_baseline_lock.ps1 missing -Production switch");
+    }
+
+    const fs::path lock_path = fs::current_path() / "d37_lock_refresh_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+
+    require_lock_key(lock["overnight_results"], "n_train", "overnight_results");
+    if (!lock["overnight_results"]["n_train"].is_number_integer()) {
+        throw std::runtime_error("overnight_results n_train must be an integer");
+    }
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+
+    std::vector<std::string> warnings;
+    std::string cell_sweep_artifact_path;
+    if (lock.contains("cell_sweep_results") && lock["cell_sweep_results"].is_object()) {
+        const Json& cell_sweep = lock["cell_sweep_results"];
+        if (cell_sweep.contains("artifact_path") && !cell_sweep["artifact_path"].is_null()) {
+            cell_sweep_artifact_path = cell_sweep["artifact_path"].get<std::string>();
+            if (!cell_sweep_artifact_path.empty() &&
+                is_legacy_repo_root_results_artifact_path(cell_sweep_artifact_path)) {
+                warnings.push_back(
+                    "cell_sweep_results.artifact_path uses repo-root /results; prefer "
+                    "bench/results or null/empty");
+            }
+        }
+    }
+
+    std::string production_status;
+    std::string overnight_complete_status;
+    std::string validation_status;
+
+    if (n_train < kProductionNTrainMin) {
+        validation_status = "pending_lock_refresh";
+        production_status = "pending_production";
+        overnight_complete_status = "pending_overnight_complete";
+    } else {
+        production_status = validate_production_tier_lock(lock);
+        overnight_complete_status = validate_overnight_complete_lock(lock);
+        validation_status = (production_status == "production_validated" &&
+                             overnight_complete_status == "overnight_complete_validated")
+                                ? "lock_refresh_ready"
+                                : "pending_lock_refresh";
+    }
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results", lock.contains("cell_sweep_results") ? lock["cell_sweep_results"] : Json{}},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_status", production_status},
+        {"overnight_complete_status", overnight_complete_status},
+        {"lock_refresh_scripts", lock_refresh_scripts},
+        {"update_baseline_lock_has_production_switch", update_lock_has_production_switch},
+        {"cell_sweep_artifact_path",
+         cell_sweep_artifact_path.empty() ? Json(nullptr) : Json(cell_sweep_artifact_path)},
+        {"warnings", warnings},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d37_lock_refresh_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d37_lock_refresh_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -4210,6 +4320,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d35", "cypha_bench.domains.d35_lock_commit_pipeline_validation",
          run_d35_lock_commit_pipeline_validation},
         {"d36", "cypha_bench.domains.d36_pipeline_e2e_validation", run_d36_pipeline_e2e_validation},
+        {"d37", "cypha_bench.domains.d37_lock_refresh_validation", run_d37_lock_refresh_validation},
     };
 }
 

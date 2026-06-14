@@ -1220,6 +1220,21 @@ set_tests_properties(native_d36_pipeline_e2e_smoke PROPERTIES
   TIMEOUT 60
 )
 
+configure_file(
+  "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+  "${CMAKE_CURRENT_BINARY_DIR}/d37_lock_refresh_smoke.json"
+  COPYONLY
+)
+
+add_test(
+  NAME native_d37_lock_refresh_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d37
+)
+set_tests_properties(native_d37_lock_refresh_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 60
+)
+
 add_test(
   NAME native_d25_corpus_smoke
   COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d25

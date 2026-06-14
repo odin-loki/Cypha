@@ -1,5 +1,6 @@
 # Publish a GitHub Release for a tag using maintainer notes from create_release_notes.ps1.
-# Phase 22 (v2.3.22, prep): d36 production pipeline E2E validation, run_post_overnight.ps1, CYPHA_VALIDATE_PIPELINE_E2E, 114 CTests when d36 merged.
+# Phase 23 (v2.3.23, prep): d37 lock refresh validation, -NotesPath for offline gh workflow, 115 CTests when d37 merged.
+# Phase 22 (v2.3.22, shipped): d36 production pipeline E2E validation, run_post_overnight.ps1, CYPHA_VALIDATE_PIPELINE_E2E, 114 CTests.
 # Phase 21 (v2.3.21, shipped): d35 lock commit pipeline validation, CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE, 113 CTests.
 # Phase 20 (v2.3.20, shipped): d34 repo smoke hygiene validation, CYPHA_VALIDATE_REPO_SMOKE_HYGIENE, 112 CTests.
 # Phase 19 (v2.3.19, shipped): d33 release publish validation, verify_release_publish.ps1,
@@ -20,8 +21,10 @@
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -Draft
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -DryRun          # notes to stdout + temp file; no gh
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -NotesOnly       # alias for -DryRun
+#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.23 -NotesPath release_notes.md  # offline gh
 param(
-  [string]$Tag = "v2.3.22",
+  [string]$Tag = "v2.3.23",
+  [string]$NotesPath = "",
   [switch]$Draft,
   [Alias("NotesOnly")]
   [switch]$DryRun
@@ -31,17 +34,24 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {
-  $notesScript = Join-Path $PSScriptRoot "create_release_notes.ps1"
-  if (-not (Test-Path $notesScript)) {
-    throw "missing $notesScript"
-  }
-
-  $notesFile = Join-Path $env:TEMP "cypha_release_notes_$($Tag -replace '[^a-zA-Z0-9._-]','_').md"
-  $notesRunner = Get-Command pwsh -ErrorAction SilentlyContinue
-  if ($notesRunner) {
-    & pwsh -NoProfile -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
+  if ($NotesPath) {
+    if (-not (Test-Path $NotesPath)) {
+      throw "notes file not found: $NotesPath"
+    }
+    $notesFile = (Resolve-Path $NotesPath).Path
   } else {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
+    $notesScript = Join-Path $PSScriptRoot "create_release_notes.ps1"
+    if (-not (Test-Path $notesScript)) {
+      throw "missing $notesScript"
+    }
+
+    $notesFile = Join-Path $env:TEMP "cypha_release_notes_$($Tag -replace '[^a-zA-Z0-9._-]','_').md"
+    $notesRunner = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($notesRunner) {
+      & pwsh -NoProfile -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
+    } else {
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
+    }
   }
 
   if ($DryRun) {

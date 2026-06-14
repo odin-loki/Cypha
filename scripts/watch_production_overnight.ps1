@@ -181,32 +181,38 @@ function Get-CellSweepResultsDir {
     $primary = Join-Path $root "bench\results\cell_sweep"
     $legacy = Join-Path $root "results"
 
-    $primaryVariants = @()
+    $primaryCount = 0
     if (Test-Path $primary) {
-        $primaryVariants = @(Get-ChildItem -Path $primary -Filter "variant_*.json" -File -ErrorAction SilentlyContinue)
-    }
-    if ($primaryVariants.Count -gt 0) {
-        return @{
-            Dir    = $primary
-            Source = "bench/results/cell_sweep"
-        }
+        $primaryCount = @(Get-ChildItem -Path $primary -Filter "variant_*.json" -File -ErrorAction SilentlyContinue).Count
     }
 
-    $legacyVariants = @()
+    $legacyCount = 0
     if (Test-Path $legacy) {
-        $legacyVariants = @(Get-ChildItem -Path $legacy -Filter "variant_*.json" -File -ErrorAction SilentlyContinue)
+        $legacyCount = @(Get-ChildItem -Path $legacy -Filter "variant_*.json" -File -ErrorAction SilentlyContinue).Count
     }
-    if ($legacyVariants.Count -gt 0) {
+
+    if ($legacyCount -gt $primaryCount) {
         return @{
             Dir    = $legacy
-            Source = "results (legacy)"
+            Source = "results (in-flight spill, $legacyCount variants)"
         }
     }
 
-    if (Test-Path $primary) {
+    if ($primaryCount -gt 0 -or (Test-Path $primary)) {
+        $sourceLabel = "bench/results/cell_sweep"
+        if ($legacyCount -gt 0 -and $legacyCount -eq $primaryCount) {
+            $sourceLabel = "bench/results/cell_sweep (tied with results/)"
+        }
         return @{
             Dir    = $primary
-            Source = "bench/results/cell_sweep"
+            Source = $sourceLabel
+        }
+    }
+
+    if ($legacyCount -gt 0) {
+        return @{
+            Dir    = $legacy
+            Source = "results (in-flight spill, $legacyCount variants)"
         }
     }
 
@@ -295,7 +301,7 @@ function Show-CellSweepProgress {
             Write-Host "  manifest: n_train=?" -ForegroundColor DarkGray
         }
 
-        if ($sweepInfo.Source -match "legacy") {
+        if ($sweepInfo.Source -match "in-flight|legacy|tied") {
             Write-Host ("  dir: {0}" -f $sweepInfo.Source) -ForegroundColor Yellow
         }
     } else {

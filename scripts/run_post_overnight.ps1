@@ -1,4 +1,5 @@
-# Phase 22: post-overnight maintainer pipeline - poll/finalize/commit + production verify.
+# Phase 22/23: post-overnight maintainer pipeline - poll/finalize/commit + production verify.
+# Phase 23: after poll/finalize, previews migrate_inflight_overnight_artifacts.ps1 -DryRun unless -SkipMigrate.
 # Chains poll_and_finalize_overnight.ps1 (-Once pre-check, then -Force) and verify_production_pipeline.ps1.
 # BuildDir auto-detect (from running run_production_overnight.ps1) is handled inside poll_and_finalize_overnight.ps1
 # when -BuildDir is the default native/build.
@@ -12,16 +13,19 @@
 #   pwsh -File scripts/run_post_overnight.ps1 -BuildDir native/build_p13
 #   pwsh -File scripts/run_post_overnight.ps1 -SkipPoll
 #   pwsh -File scripts/run_post_overnight.ps1 -AllowPending
+#   pwsh -File scripts/run_post_overnight.ps1 -SkipMigrate
 param(
     [string]$BuildDir = "native/build",
     [switch]$SkipPoll,
-    [switch]$AllowPending
+    [switch]$AllowPending,
+    [switch]$SkipMigrate
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 $pollScript = Join-Path $PSScriptRoot "poll_and_finalize_overnight.ps1"
 $verifyScript = Join-Path $PSScriptRoot "verify_production_pipeline.ps1"
+$migrateScript = Join-Path $PSScriptRoot "migrate_inflight_overnight_artifacts.ps1"
 
 Write-Host "== run post overnight (Phase 22) ==" -ForegroundColor Cyan
 Write-Host "  build: $BuildDir" -ForegroundColor DarkGray
@@ -58,6 +62,18 @@ if (-not $SkipPoll) {
 } else {
     Write-Host ""
     Write-Host "run_post_overnight: -SkipPoll (assuming finalize/commit already done)" -ForegroundColor DarkGray
+}
+
+if (-not $SkipMigrate) {
+    Write-Host ""
+    Write-Host "== migrate_inflight_overnight_artifacts.ps1 -DryRun (preview) ==" -ForegroundColor Cyan
+    & $migrateScript -DryRun
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "run_post_overnight: WARN migrate_inflight preview failed exit=$LASTEXITCODE (continuing)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host ""
+    Write-Host "run_post_overnight: -SkipMigrate (no in-flight spill preview)" -ForegroundColor DarkGray
 }
 
 Write-Host ""

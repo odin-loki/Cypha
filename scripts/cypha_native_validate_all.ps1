@@ -1,10 +1,11 @@
 # Full native Cypha validation: Release build outside OneDrive, CTest, bench smoke.
-# Phase 22 (v2.3.22, prep): d36 production pipeline E2E validation, CYPHA_VALIDATE_PIPELINE_E2E, 114 CTests when d36 merged.
+# Phase 23 (v2.3.23, prep): d37 overnight lock refresh validation, CYPHA_VALIDATE_LOCK_REFRESH, 115 CTests when d37 merged.
+# Phase 22 (v2.3.22, shipped): d36 production pipeline E2E validation, CYPHA_VALIDATE_PIPELINE_E2E, 114 CTests.
 # Phase 21 (v2.3.21, shipped): d35 lock commit pipeline validation, CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE, 113 CTests when d35 merged.
 # Phase 20 (v2.3.20, shipped): d34 repo smoke hygiene validation, CYPHA_VALIDATE_REPO_SMOKE_HYGIENE, 112 CTests when d34 merged.
 # Phase 19 (v2.3.19, shipped): d33 release publish validation, CYPHA_VALIDATE_RELEASE_PUBLISH, 111 CTests.
 #
-# Optional environment variables (Phase 13–22):
+# Optional environment variables (Phase 13–23):
 #   CYPHA_VALIDATE_PRODUCTION=1
 #       Run validate_baseline_lock.ps1 -Production after the standard lock check.
 #   CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1
@@ -33,9 +34,12 @@
 #   CYPHA_VALIDATE_PIPELINE_E2E=1
 #       After lock commit pipeline (d35) step, run cypha_bench_run --domain-tag d36 when its profile exists;
 #       gracefully skipped when d36 is not built/merged yet.
+#   CYPHA_VALIDATE_LOCK_REFRESH=1
+#       After pipeline E2E (d36) step, run cypha_bench_run --domain-tag d37 when its profile exists;
+#       gracefully skipped when d37 is not built/merged yet.
 #   CYPHA_STRICT_TEST_COUNT=1
 #       Fail the ctest_native step when the parsed native_ test count does not match the expected
-#       gate (114 with d36 merged, else 113 with d35 merged, else 112 with d34 merged, else 111 with d33 merged, else 110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
+#       gate (115 with d37 merged, else 114 with d36 merged, else 113 with d35 merged, else 112 with d34 merged, else 111 with d33 merged, else 110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
 #
 # Usage:
 #   pwsh -File scripts/cypha_native_validate_all.ps1
@@ -78,6 +82,7 @@ function Test-DomainTagExists {
 }
 
 function Get-ExpectedNativeTestCount {
+    if (Test-DomainTagExists -Tag "d37") { return 115 }
     if (Test-DomainTagExists -Tag "d36") { return 114 }
     if (Test-DomainTagExists -Tag "d35") { return 113 }
     if (Test-DomainTagExists -Tag "d34") { return 112 }
@@ -609,6 +614,30 @@ if ($env:CYPHA_VALIDATE_PIPELINE_E2E -eq "1") {
     } else {
         Write-Host "== cypha_bench_run --domain-tag d36 (skipped - profile not present) ==" -ForegroundColor DarkGray
         Step-Result "pipeline_e2e_d36" $true "skipped (d36 profile not present)"
+    }
+}
+
+# --- d37 lock refresh (optional) ---
+if ($env:CYPHA_VALIDATE_LOCK_REFRESH -eq "1") {
+    Write-Host ""
+    if (Test-DomainTagExists -Tag "d37") {
+        Write-Host "== cypha_bench_run --domain-tag d37 (CYPHA_VALIDATE_LOCK_REFRESH) ==" -ForegroundColor Yellow
+        $benchExe = BinPath "cypha_bench_run"
+        if (-not (Test-Path $benchExe)) {
+            Step-Result "lock_refresh_d37" $false "missing $benchExe"
+        } else {
+            Push-Location $root
+            try {
+                & $benchExe --domain-tag d37
+                $d37Code = $LASTEXITCODE
+            } finally {
+                Pop-Location
+            }
+            Step-Result "lock_refresh_d37" ($d37Code -eq 0) $(if ($d37Code -eq 0) { "d37 ok" } else { "exit $d37Code" })
+        }
+    } else {
+        Write-Host "== cypha_bench_run --domain-tag d37 (skipped - profile not present) ==" -ForegroundColor DarkGray
+        Step-Result "lock_refresh_d37" $true "skipped (d37 profile not present)"
     }
 }
 

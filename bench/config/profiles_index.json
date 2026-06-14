@@ -168,5 +168,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d36",
     "notes": "Production pipeline E2E validation; see bench/config/d36_pipeline_e2e_profile.json"
+  },
+  "lock_refresh_d37": {
+    "path": "everyday_profile.json",
+    "config": "d37_lock_refresh_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d37",
+    "notes": "Overnight lock refresh validation; see bench/config/d37_lock_refresh_profile.json"
   }
 }

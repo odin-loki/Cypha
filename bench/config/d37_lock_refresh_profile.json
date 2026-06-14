@@ -1,0 +1,32 @@
+{
+  "profile_id": "d37_lock_refresh_profile",
+  "description": "D37 overnight lock refresh validation — post-overnight baseline lock update toolchain scripts + production/overnight-complete gates",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 37,
+    "domain_tag": "d37"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d37_lock_refresh_smoke — lock refresh gate (pending_lock_refresh or lock_refresh_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 37",
+    "Or: cypha_bench_run --domain-tag d37",
+    "Verifies scripts/update_baseline_lock.ps1 (grep -Production), scripts/migrate_legacy_results.ps1, scripts/finalize_production_overnight.ps1 exist",
+    "Optional: scripts/migrate_inflight_overnight_artifacts.ps1 (present=false when missing, no throw)",
+    "When overnight_results.n_train < 300000: validation_status=pending_lock_refresh (smoke PASS)",
+    "When n_train >= 300000: validate_production_tier_lock + validate_overnight_complete_lock",
+    "When all production tiers pass: validation_status=lock_refresh_ready",
+    "Informational warning when cell_sweep_results.artifact_path uses legacy repo-root /results",
+    "Phase 23: overnight lock refresh validation gate"
+  ]
+}

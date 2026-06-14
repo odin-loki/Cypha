@@ -1,4 +1,7 @@
-# Phase 14: post-production-overnight validation — lock check + d27/d28 bench domains.
+# Phase 14/23: post-production-overnight validation - lock check + d27/d28 bench domains.
+# Phase 23: after validate_baseline_lock -Production, when overnight_results.n_train < 300000
+# and cypha_baseline_lock exists under BuildDir, best-effort refresh via
+# update_baseline_lock.ps1 -Run all -Production -BuildDir (warn on fail, continue).
 # Usage:
 #   pwsh -File scripts/finalize_production_overnight.ps1
 #   pwsh -File scripts/finalize_production_overnight.ps1 -BuildDir native/build -LockFile bench/BASELINE_LOCK.json
@@ -82,6 +85,41 @@ $validateCode = $LASTEXITCODE
 if ($validateCode -ne 0) {
     Show-LockSummary -Path $LockFile
     exit $validateCode
+}
+
+$PRODUCTION_N_TRAIN_MIN = 300000
+try {
+    if (Test-Path $LockFile) {
+        $lockForRefresh = Get-Content $LockFile -Raw | ConvertFrom-Json
+        $overnightNTrain = $null
+        if ($lockForRefresh.PSObject.Properties.Name -contains "overnight_results" -and $null -ne $lockForRefresh.overnight_results) {
+            $overnightSec = $lockForRefresh.overnight_results
+            if ($overnightSec.PSObject.Properties.Name -contains "n_train") {
+                $overnightNTrain = [int]$overnightSec.n_train
+            }
+        }
+        if ($null -ne $overnightNTrain -and $overnightNTrain -lt $PRODUCTION_N_TRAIN_MIN) {
+            $lockExe = Join-Path $root (Join-Path $BuildDir "cypha_baseline_lock.exe")
+            if (-not (Test-Path $lockExe)) {
+                $lockExe = Join-Path $root (Join-Path $BuildDir "cypha_baseline_lock")
+            }
+            if (Test-Path $lockExe) {
+                Write-Host ""
+                Write-Host "== update_baseline_lock.ps1 -Run all -Production (overnight n_train=$overnightNTrain < $PRODUCTION_N_TRAIN_MIN) ==" -ForegroundColor Cyan
+                $updateScript = Join-Path $PSScriptRoot "update_baseline_lock.ps1"
+                & $updateScript -Run all -Production -BuildDir $BuildDir
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "finalize: WARN update_baseline_lock failed exit=$LASTEXITCODE (best-effort; continuing)" -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host ""
+                Write-Host "finalize: WARN cypha_baseline_lock not found under $BuildDir (skip lock refresh)" -ForegroundColor Yellow
+            }
+        }
+    }
+} catch {
+    Write-Host ""
+    Write-Host "finalize: WARN lock refresh check failed: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 Write-Host ""
