@@ -1,11 +1,15 @@
 // cypha_cell_hypothesis_sweep — smoke runner for cell hypothesis variants (Tier 1+2).
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/bench/bench_paths.hpp"
 #include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
@@ -23,13 +27,20 @@ struct Args {
     bool tier1_only = false;
     bool tier2_only = false;
     bool tier2_smoke = false;
+    bool tier3_smoke = false;
+    bool overnight_sweep = false;
+    bool overnight_sweep_smoke = false;
     bool list_variants = false;
+    bool n_train_explicit = false;
+    bool n_eval_explicit = false;
     std::string cell_variant;
+    std::string output_dir;
 };
 
 void usage() {
     std::cerr << "usage: cypha_cell_hypothesis_sweep [--smoke] [--tier1-only] [--tier2-only]\n"
-              << "       [--tier2-smoke] [--list-variants] [--cell-variant H06]\n"
+              << "       [--tier2-smoke] [--tier3-smoke] [--overnight-sweep] [--overnight-sweep-smoke]\n"
+              << "       [--list-variants] [--cell-variant H06] [--output-dir PATH]\n"
               << "       [--profile d17] [--n-train N] [--n-eval M] [--threads T]\n";
 }
 
@@ -42,15 +53,25 @@ Args parse_args(int argc, char** argv) {
             return argv[++i];
         };
         if (k == "--profile") a.profile = need("--profile");
-        else if (k == "--n-train") a.n_train = std::stoi(need("--n-train"));
-        else if (k == "--n-eval") a.n_eval = std::stoi(need("--n-eval"));
-        else if (k == "--threads") a.threads = std::stoi(need("--threads"));
+        else if (k == "--n-train") {
+            a.n_train = std::stoi(need("--n-train"));
+            a.n_train_explicit = true;
+        } else if (k == "--n-eval") {
+            a.n_eval = std::stoi(need("--n-eval"));
+            a.n_eval_explicit = true;
+        } else if (k == "--threads") a.threads = std::stoi(need("--threads"));
         else if (k == "--smoke") a.smoke = true;
         else if (k == "--tier1-only") a.tier1_only = true;
         else if (k == "--tier2-only") a.tier2_only = true;
         else if (k == "--tier2-smoke") a.tier2_smoke = true;
+        else if (k == "--tier3-smoke") a.tier3_smoke = true;
+        else if (k == "--overnight-sweep-smoke") {
+            a.overnight_sweep = true;
+            a.overnight_sweep_smoke = true;
+        } else if (k == "--overnight-sweep") a.overnight_sweep = true;
         else if (k == "--list-variants") a.list_variants = true;
         else if (k == "--cell-variant") a.cell_variant = need("--cell-variant");
+        else if (k == "--output-dir") a.output_dir = need("--output-dir");
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -58,7 +79,7 @@ Args parse_args(int argc, char** argv) {
             throw std::runtime_error("unknown arg: " + k);
         }
     }
-    if (a.tier2_smoke) {
+    if (a.tier2_smoke || a.tier3_smoke) {
         a.n_train = 200;
         a.n_eval = 40;
     }
@@ -67,7 +88,34 @@ Args parse_args(int argc, char** argv) {
         a.n_eval = 80;
         a.tier1_only = true;
     }
+    if (a.overnight_sweep) {
+        if (a.overnight_sweep_smoke) {
+            if (!a.n_train_explicit) a.n_train = 200;
+            if (!a.n_eval_explicit) a.n_eval = 40;
+        } else {
+            if (!a.n_train_explicit) {
+                a.n_train = cypha::bench::bench_overnight_enabled() ? cypha::bench::bench_full_n_train()
+                                                                    : 500;
+            }
+            if (!a.n_eval_explicit) {
+                a.n_eval = cypha::bench::bench_overnight_enabled() ? 2000 : 80;
+            }
+        }
+    }
     return a;
+}
+
+void ensure_overnight_env() {
+    if (!cypha::bench::bench_overnight_enabled()) {
+        return;
+    }
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FULL_CORPUS", "1");
+    _putenv_s("CYPHA_BENCH_OVERNIGHT", "1");
+#else
+    setenv("CYPHA_BENCH_FULL_CORPUS", "1", 1);
+    setenv("CYPHA_BENCH_OVERNIGHT", "1", 1);
+#endif
 }
 
 bool should_run(const cypha::cyphalm::CellVariantSpec& v, const Args& args) {
@@ -77,8 +125,17 @@ bool should_run(const cypha::cyphalm::CellVariantSpec& v, const Args& args) {
     if (!args.cell_variant.empty()) {
         return v.id == args.cell_variant;
     }
+    if (args.overnight_sweep_smoke) {
+        return v.id == "B2" || v.id == "H06" || v.id == "H14";
+    }
+    if (args.overnight_sweep) {
+        return true;
+    }
     if (args.tier2_smoke) {
         return v.id == "H06" || v.id == "H08" || v.id == "H14";
+    }
+    if (args.tier3_smoke) {
+        return v.id == "H09" || v.id == "H12" || v.id == "H18";
     }
     if (args.tier2_only) {
         return v.tier == 2;
@@ -87,6 +144,22 @@ bool should_run(const cypha::cyphalm::CellVariantSpec& v, const Args& args) {
         return v.tier == 1;
     }
     return v.tier <= 2 || v.id[0] == 'B';
+}
+
+std::string csv_field(const std::string& raw) {
+    if (raw.find_first_of(",\"\n\r") == std::string::npos) {
+        return raw;
+    }
+    std::string out = "\"";
+    for (char c : raw) {
+        if (c == '"') {
+            out += "\"\"";
+        } else {
+            out += c;
+        }
+    }
+    out += '"';
+    return out;
 }
 
 nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Args& args) {
@@ -129,11 +202,68 @@ nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Ar
         {"corpus", corpus.source},
         {"synthetic", synthetic},
         {"mean_alpha", alpha_profile.value("mean_alpha", 0.0)},
+        {"n_train", args.n_train},
+        {"n_eval", args.n_eval},
     };
     if (spec.id == "B2" && !std::isnan(bpc)) {
         row["delta_vs_b2"] = 0.0;
     }
     return row;
+}
+
+void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohmann::json& results,
+                               const Args& args, double b2_bpc) {
+    std::filesystem::create_directories(out_dir);
+    for (const auto& row : results) {
+        const std::string id = row.value("id", "unknown");
+        std::ofstream variant_out(out_dir / ("variant_" + id + ".json"));
+        if (variant_out) {
+            variant_out << row.dump(2);
+        }
+    }
+
+    std::ofstream csv(out_dir / "summary.csv");
+    if (csv) {
+        csv << "id,name,tier,bench_mode,bpc,delta_vs_b2,mean_alpha,corpus,synthetic,n_train,n_eval\n";
+        for (const auto& row : results) {
+            const std::string id = row.value("id", "");
+            const std::string name = row.value("name", "");
+            const int tier = row.value("tier", 0);
+            const std::string bench_mode = row.value("bench_mode", "");
+            std::string bpc_str;
+            if (row["bpc"].is_null()) {
+                bpc_str = "";
+            } else {
+                bpc_str = std::to_string(row["bpc"].get<double>());
+            }
+            std::string delta_str;
+            if (row.contains("delta_vs_b2") && !row["delta_vs_b2"].is_null()) {
+                delta_str = std::to_string(row["delta_vs_b2"].get<double>());
+            }
+            const double mean_alpha = row.value("mean_alpha", 0.0);
+            const std::string corpus = row.value("corpus", "");
+            const bool synthetic = row.value("synthetic", false);
+            csv << csv_field(id) << ',' << csv_field(name) << ',' << tier << ','
+                << csv_field(bench_mode) << ',' << bpc_str << ',' << delta_str << ','
+                << mean_alpha << ',' << csv_field(corpus) << ',' << (synthetic ? "1" : "0") << ','
+                << args.n_train << ',' << args.n_eval << '\n';
+        }
+    }
+
+    nlohmann::json manifest = {
+        {"profile", args.profile},
+        {"n_train", args.n_train},
+        {"n_eval", args.n_eval},
+        {"overnight", cypha::bench::bench_overnight_enabled()},
+        {"overnight_sweep_smoke", args.overnight_sweep_smoke},
+        {"variant_count", results.size()},
+        {"b2_bpc", std::isnan(b2_bpc) ? nullptr : nlohmann::json(b2_bpc)},
+        {"results", results},
+    };
+    std::ofstream manifest_out(out_dir / "manifest.json");
+    if (manifest_out) {
+        manifest_out << manifest.dump(2);
+    }
 }
 
 }  // namespace
@@ -142,6 +272,10 @@ int main(int argc, char** argv) {
     try {
         const Args args = parse_args(argc, argv);
         cypha::cyphalm::set_thread_count(args.threads);
+
+        if (args.overnight_sweep && cypha::bench::bench_overnight_enabled()) {
+            ensure_overnight_env();
+        }
 
         if (args.list_variants) {
             nlohmann::json listed = nlohmann::json::array();
@@ -181,16 +315,32 @@ int main(int argc, char** argv) {
             }
         }
 
+        if (args.overnight_sweep) {
+            std::filesystem::path out_dir = args.output_dir.empty()
+                                                ? cypha::bench::repo_root() / "results"
+                                                : std::filesystem::path(args.output_dir);
+            write_overnight_artifacts(out_dir, results, args, b2_bpc);
+        }
+
         nlohmann::json out = {
             {"profile", args.profile},
             {"n_train", args.n_train},
             {"n_eval", args.n_eval},
-            {"smoke", args.smoke || args.tier1_only || args.tier2_only || args.tier2_smoke},
+            {"smoke", args.smoke || args.tier1_only || args.tier2_only || args.tier2_smoke || args.tier3_smoke},
+            {"overnight_sweep", args.overnight_sweep},
+            {"overnight_sweep_smoke", args.overnight_sweep_smoke},
+            {"overnight", cypha::bench::bench_overnight_enabled()},
             {"cell_variant", args.cell_variant.empty() ? nullptr : nlohmann::json(args.cell_variant)},
             {"results", results},
             {"skipped", skipped},
             {"variant_count", cypha::cyphalm::all_cell_variants().size()},
         };
+        if (args.overnight_sweep) {
+            const std::filesystem::path out_dir = args.output_dir.empty()
+                                                      ? cypha::bench::repo_root() / "results"
+                                                      : std::filesystem::path(args.output_dir);
+            out["output_dir"] = out_dir.string();
+        }
         std::cout << out.dump(2) << std::endl;
         return 0;
     } catch (const std::exception& e) {

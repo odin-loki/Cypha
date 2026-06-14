@@ -188,6 +188,7 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_i("rpsm_state_dim", cfg.rpsm_state_dim);
     set_i("rpsm_feat_dim", cfg.rpsm_feat_dim);
     set_b("profile_guided_loss", cfg.profile_guided_loss);
+    set_d("ewc_lambda", cfg.ewc_lambda);
 }
 
 }  // namespace

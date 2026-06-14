@@ -69,14 +69,26 @@
 | Paper V simulation loop | `causal_graph.cpp`, `intelligence_rest_routes.cpp` | `native_intelligence_profiler_papers` |
 | Release notes v2.3.5 template | `scripts/create_release_notes.ps1` | manual |
 
+## Phase 6 — shipped (2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|-------------|
+| 28-variant overnight sweep | `cypha_cell_hypothesis_sweep --overnight-sweep` | `native_cell_hypothesis_overnight_smoke` |
+| Cell modules H09–H22 | `gria_gated_mixture`, `reversible_ssm_cell`, `mdl_forget`, `axiom_activation`, `ca_state_cell`, etc. | `native_cell_hypothesis_tier3_smoke` |
+| RPSM train loop | `rpsm_sequence_layer::train_step` | `native_rpsm_train_smoke` |
+| CyphaLM EWC | `cyphalm_ewc_regularizer.hpp/cpp` | `native_ewc_cyphalm_smoke` |
+| Federated worker HTTP | `cypha_federated_worker.cpp` | `native_federated_worker_smoke` |
+| Bench domain **d20** | `bench_domains.cpp` | `cypha_bench_run --domain 20` |
+| D17 overnight runner | `scripts/run_d17_overnight.ps1` | manual |
+| Release notes v2.3.6 template | `scripts/create_release_notes.ps1` | manual |
+
 ## Still planned
 
-- **Full 28-variant** cell hypothesis overnight sweep @ 300k tokens (H09–H13, H15–H22 still proxy/config modes)
-- **RPSM Option B production** — learned W_up/W_down, Izaac grammar search, persistent global memory training
-- **EWC** full Fisher on shared CyphaLM weights (diagonal stub on vector encoder only today)
-- **Federated** secure coordinator / TLS worker transport
+- **RPSM production** — end-to-end CyphaLM rpsm mode training at 300k scale
+- **EWC** full Fisher across all CyphaLM parameters (today: W_ih/W_hh diagonal stub)
+- **Federated TLS** — `--tls-cert`/`--tls-key` when OpenSSL linked in httplib
 - **GitHub Release** publish via `gh` (needs auth)
-- **D17 300k overnight run** — config + smoke wired; full run is manual (`--overnight --n-train 300000`)
+- **D17 300k + 28-variant overnight** — wired; run manually with `CYPHA_BENCH_OVERNIGHT=1`
 
 ## Commands
 
@@ -85,5 +97,7 @@ cmake --build native/build --target intelligence_profiler_papers cypha_intellige
 ctest --test-dir native/build -R "native_intelligence|native_cell_hypothesis|native_cyphalm_bench_intelligence" --output-on-failure
 cyphalm_bench_native --profile d17 --mode hybrid --n-train 120 --n-eval 40 --intelligence-profile
 cypha_cell_hypothesis_sweep --smoke
+cypha_cell_hypothesis_sweep --overnight-sweep-smoke
+cypha_cell_hypothesis_sweep --overnight-sweep   # CYPHA_BENCH_OVERNIGHT=1 → 300k
 curl http://127.0.0.1:8099/intelligence/report
 ```

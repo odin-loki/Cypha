@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch  
 **Purpose:** Systematic sweep of **28 recurrent cell hypotheses** to find a primitive that synergises with CyphaDIF/CyphaLM better than standard LSTM.  
-**Status:** partial — Tier 1+2 smoke (native harness: `cypha_cell_hypothesis_sweep`, `cyphalm_bench_native --cell-variant`); H02 EML, H05 profile-guided backprop, H06–H08/H14 native cell paths; Tier-2 CTest `native_cell_hypothesis_tier2_smoke` (H06/H08/H14)  
+**Status:** partial — Tier 1+2+3 smoke (native harness: `cypha_cell_hypothesis_sweep`, `cyphalm_bench_native --cell-variant`); H02 EML, H05 profile-guided backprop, H06–H09/H11–H15/H18/H21/H22 native cell paths; Tier-2 CTest `native_cell_hypothesis_tier2_smoke` (H06/H08/H14); Tier-3 CTest `native_cell_hypothesis_tier3_smoke` (H09/H12/H18, `n_train=200`)  
 **Baseline:** `hybrid_gria_lstm` D17 BPC **2.873** @ 300k
 
 Alternative to Option B in [RPSM_COMBINED_SPEC.md](RPSM_COMBINED_SPEC.md); may inform RPSM level-0 design if a Cypha-derived cell wins.
@@ -81,6 +81,7 @@ Phase 2: Tier 1 (H01–H05) — 5 variants × 5 runs
 Phase 3: Tier 2 on best Tier 1 — apply modifiers
 Phase 4: Tier 3 (H15 AXIOM, H16 SR) — background / overnight
 Phase 5: Combine top-3 compatible variants → hybrid vs B2
+Phase 6: Native cell behaviors for H09–H13, H15–H22 (real modules, tier3 smoke)
 ```
 
 Run **H04** (Pure CyphaDIF LM) in parallel with Tier 1 — high variance.
@@ -105,7 +106,12 @@ Run **H04** (Pure CyphaDIF LM) in parallel with Tier 1 — high variance.
 
 All variants implement `BaseCyphaCell.forward(x, h_prev, c_prev) → (h, c)` wrapped by a common `CyphaLM` training loop (embed → cell → linear head). H04 runs standalone via native CyphaDIF path.
 
-Native implementation: `native/tools/cypha_cell_hypothesis_sweep.cpp` and `cyphalm_bench_native --cell-variant H06` map each variant to a bench mode plus `CyphaLMConfig` flags (`apply_cell_variant` in `cypha_cell_hypothesis.cpp`). Tier 2 smoke: `ctest -R native_cell_hypothesis_tier2_smoke` (H06 + H08 + H14, `n_train=200`).
+Native implementation: `native/tools/cypha_cell_hypothesis_sweep.cpp` and `cyphalm_bench_native --cell-variant H06` map each variant to a bench mode plus `CyphaLMConfig` flags (`apply_cell_variant` in `cypha_cell_hypothesis.cpp`).
+
+| Test | Command |
+|------|---------|
+| Tier 2 smoke | `ctest -R native_cell_hypothesis_tier2_smoke` (H06 + H08 + H14) |
+| Tier 3 smoke | `ctest -R native_cell_hypothesis_tier3_smoke` (H09 + H12 + H18) |
 
 | Variant | Native behavior |
 |---------|-----------------|
@@ -113,7 +119,18 @@ Native implementation: `native/tools/cypha_cell_hypothesis_sweep.cpp` and `cypha
 | H06 | `NigStateCell` one-step NIG update on field |
 | H07 | SSM differential gate: θ₀·last_ctx + Δh blend |
 | H08 | `ContextBank::tiered_linear_attention` (short/mid/long) |
+| H09 | `gria_gated_blend_logit`: α trajectory shifts ordered GRIA vs chaotic LSTM |
+| H11 | `ReversibleSSMCell` additive coupling + backward reconstruct stub |
+| H12 | `mdl_forget_project` L2 cap on field hidden state |
+| H13 | `CompressiveMemory::maybe_store_priority` replay slots |
 | H14 | OOD hybrid blend shift toward LSTM when epistemic variance high |
+| H15 | `axiom_grammar_from_seed` per-gate eml/sigmoid/tanh mix in char-LSTM |
+| H18 | `CAStateCell::step_rule110` on binarized SSM h |
+| H19 | Seed-offset hybrid init (blend logit + GRIA α prior) |
+| H21 | `free_energy_beta * epistemic_var` penalty in `train_step` |
+| H22 | `mix_algebraic_fingerprint` tag in GRIA input |
+
+**Still proxy:** H16 (symbolic regression pipeline pending).
 
 ---
 

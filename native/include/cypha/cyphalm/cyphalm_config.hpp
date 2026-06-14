@@ -117,15 +117,38 @@ struct CyphaLMConfig {
     bool use_tiered_context = false;
     /// H14: branch hybrid routing when DIF epistemic variance is high (OOD).
     bool use_ood_branching = false;
+    /// H09: GRIA α trajectory modulates ordered vs chaotic hybrid blend.
+    bool use_gria_gated_mixture = false;
+    /// H11: RevNet-style reversible additive coupling on SSM context.
+    bool use_reversible_cell = false;
+    /// H12: MDL norm projection on recurrent hidden state.
+    bool use_mdl_forget = false;
+    /// H13: priority-weighted replay slots in compressive memory.
+    bool use_priority_replay = false;
+    /// H15: seed-evolved eml/sigmoid/tanh gate grammar in char-LSTM.
+    bool use_axiom_activation = false;
+    /// H18: elementary CA rule 110 on binarized SSM hidden state.
+    bool use_ca_state_cell = false;
+    /// H21: variational free-energy penalty on epistemic variance in train_step.
+    bool use_free_energy_loss = false;
+    /// H22: algebraic fingerprint tag mixed into GRIA input.
+    bool use_algebraic_fingerprint = false;
+
+    double mdl_forget_max_norm = 4.0;
+    double free_energy_beta = 0.05;
 
     /// Option B RPSM sequence layer (level-0 CyphaDIF LLR scaffold).
     bool use_rpsm_layer = false;
     int rpsm_n_levels = 4;
     int rpsm_state_dim = 128;
     int rpsm_feat_dim = 64;
+    double rpsm_lr = 0.01;
 
     /// Paper IV: add profile-guided regularizers to per-step train loss.
     bool profile_guided_loss = false;
+
+    /// Elastic weight consolidation on char-LSTM ``Wx``/``Wh`` (0 = off).
+    double ewc_lambda = 0.0;
 };
 
 ContextMode parse_context_mode(const std::string& s);

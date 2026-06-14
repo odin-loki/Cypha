@@ -19,20 +19,20 @@ const std::vector<CellVariantSpec>& variant_table() {
         {"H06", "NIG-state cell", 2, true, "hybrid", "NigStateCell Bayesian update on field path"},
         {"H07", "Differential gate", 2, true, "hybrid", "SSM ctx = theta0 + delta-h blend (last_ctx + dh)"},
         {"H08", "TieredContext cell", 2, true, "context_bank", "short/mid/long tiered context bank attention"},
-        {"H09", "GRIA-gated mixture", 2, true, "hybrid", "ordered vs chaotic GRIA blend"},
+        {"H09", "GRIA-gated mixture", 2, true, "hybrid", "α trajectory shifts ordered GRIA vs chaotic LSTM blend"},
         {"H10", "NMP regularised", 2, true, "hybrid", "spec_alpha -> 0.485"},
-        {"H11", "Reversible cell", 2, true, "ssm", "RevNet-style SSM proxy (single-scale)"},
-        {"H12", "MDL forget", 2, true, "hybrid", "norm projection via compressive memory"},
-        {"H13", "Priority replay recurrence", 2, true, "hybrid", "compressive memory + replay slots"},
+        {"H11", "Reversible cell", 2, true, "ssm", "RevNet additive coupling + backward reconstruct stub on SSM ctx"},
+        {"H12", "MDL forget", 2, true, "hybrid", "L2 norm projection on field hidden state"},
+        {"H13", "Priority replay recurrence", 2, true, "hybrid", "compressive memory priority replay slots"},
         {"H14", "OOD-branching cell", 2, true, "hybrid", "hybrid blend shifts to LSTM when DIF epistemic high"},
-        {"H15", "AXIOM-evolved cell", 3, true, "hybrid", "proxy — hybrid stack placeholder"},
-        {"H16", "SR on trained LSTM gates", 3, true, "hybrid", "proxy — SR placeholder on hybrid"},
+        {"H15", "AXIOM-evolved cell", 3, true, "hybrid", "seed-evolved eml/sigmoid/tanh gate grammar in LSTM"},
+        {"H16", "SR on trained LSTM gates", 3, true, "hybrid", "proxy — symbolic regression pipeline pending"},
         {"H17", "Sheffer-only cell", 3, true, "char_lstm", "extreme H02 — EML-only activations"},
-        {"H18", "CA state cell", 3, true, "ssm", "proxy — Wolfram CA via SSM"},
-        {"H19", "Izaac-seeded init", 3, true, "hybrid", "proxy — seed-offset hybrid init"},
+        {"H18", "CA state cell", 3, true, "ssm", "elementary CA rule 110 one-step on binarized SSM h"},
+        {"H19", "Izaac-seeded init", 3, true, "hybrid", "seed-offset hybrid init (blend logit + GRIA α prior)"},
         {"H20", "Spectral state cell", 3, true, "spectral", "FFT-domain SSM recurrence"},
-        {"H21", "Free Energy cell", 3, true, "ssm_gria", "proxy — variational GRIA+SSM"},
-        {"H22", "Algebraic fingerprint cell", 3, true, "hybrid", "proxy — hybrid fingerprint tag"},
+        {"H21", "Free Energy cell", 3, true, "ssm_gria", "variational β·epistemic_var penalty in train_step"},
+        {"H22", "Algebraic fingerprint cell", 3, true, "hybrid", "Izaac algebraic fingerprint tag in GRIA input"},
     };
     return kVariants;
 }
@@ -68,6 +68,14 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     cfg.use_tiered_context = false;
     cfg.use_ood_branching = false;
     cfg.profile_guided_loss = false;
+    cfg.use_gria_gated_mixture = false;
+    cfg.use_reversible_cell = false;
+    cfg.use_mdl_forget = false;
+    cfg.use_priority_replay = false;
+    cfg.use_axiom_activation = false;
+    cfg.use_ca_state_cell = false;
+    cfg.use_free_energy_loss = false;
+    cfg.use_algebraic_fingerprint = false;
 
     if (id == "B0") {
         cfg.ngram_context = 4;
@@ -93,6 +101,7 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
         cfg.use_tiered_context = true;
         cfg.context_bank_slots = 32;
     } else if (id == "H09") {
+        cfg.use_gria_gated_mixture = true;
         cfg.hybrid_blend_logit = 0.5;
         cfg.hybrid_blend_learnable = true;
         cfg.alpha_learnable = true;
@@ -100,20 +109,38 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
         cfg.alpha_init = 0.485;
         cfg.alpha_learnable = true;
     } else if (id == "H11") {
+        cfg.use_reversible_cell = true;
         cfg.use_multiscale = false;
         cfg.ssm_layers = 1;
     } else if (id == "H12") {
+        cfg.use_mdl_forget = true;
         cfg.compress_interval = 32;
         cfg.max_memory_slots = 128;
     } else if (id == "H13") {
+        cfg.use_priority_replay = true;
         cfg.max_memory_slots = 256;
         cfg.compress_interval = 16;
     } else if (id == "H14") {
         cfg.n_experts = 8;
         cfg.online = true;
         cfg.use_ood_branching = true;
+    } else if (id == "H15") {
+        cfg.use_axiom_activation = true;
+        cfg.alpha_learnable = true;
+    } else if (id == "H18") {
+        cfg.use_ca_state_cell = true;
+        cfg.use_multiscale = false;
+        cfg.ssm_layers = 1;
     } else if (id == "H19") {
         cfg.seed += 991;
+        cfg.hybrid_blend_logit = 0.35;
+        cfg.alpha_init = 0.42;
+    } else if (id == "H21") {
+        cfg.use_free_energy_loss = true;
+        cfg.free_energy_beta = 0.08;
+    } else if (id == "H22") {
+        cfg.use_algebraic_fingerprint = true;
+        cfg.alpha_learnable = true;
     }
 }
 

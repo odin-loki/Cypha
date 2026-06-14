@@ -16,7 +16,7 @@ milestone or a significant self-contained change.
 - **CUDA CI jobs:** **`windows_cuda_msvc`** and **`linux_cuda`** removed from `.github/workflows/ci.yml`; CUDA remains an optional local build.
 
 ### Changed
-- **CI gate:** native-only — **84 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
+- **CI gate:** native-only — **89 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
 - **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` default:** **1** (was 16) — CUDA used for all batch sizes n≥1 when a GPU is available.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
@@ -38,7 +38,12 @@ milestone or a significant self-contained change.
 - **WikiText D17 overnight profile:** `d17_wikitext_overnight_profile.json`, `--overnight` / `CYPHA_BENCH_OVERNIGHT=1` on `cyphalm_bench_native` and `cypha_bench_run`; CTest `native_d17_wikitext_overnight_smoke`.
 - **Qt CyphaLM epistemic halt:** generate tab checkbox mirrors REST `/generate` `epistemic_halt` (Paper IV r_eu gate).
 - **Intelligence Stats Phase 5:** RPSM hierarchy (`W_up`/`W_down`, global memory, Izaac init); RPSM batched LLR default path; NIG-state cell H06 + OOD branching H14; profile-guided loss in CyphaLM train-step backprop; EWC D16B smoke + REST `ewc_lambda`; federated coordinator CLI; Paper V multi-step simulation loop.
-- **CTests +4:** `native_rpsm_hierarchy_smoke`, `native_ewc_d16b_smoke`, `native_federated_coordinator_smoke`, `native_d17_wikitext_overnight_smoke` (**84 total**).
+- **Intelligence Stats Phase 6:** 28-variant `--overnight-sweep`; bench **d20**; `scripts/run_d17_overnight.ps1`.
+- **RPSM production train loop:** `train_step` on hierarchy + surprise-gated global memory; `native_rpsm_train_smoke`.
+- **Cell variants H09–H22:** GRIA mixture, reversible SSM, MDL forget, priority replay, AXIOM activation, CA rule-110, free-energy penalty; tier3 smoke.
+- **CyphaLM EWC:** `cyphalm_ewc_regularizer` on LSTM weights; `native_ewc_cyphalm_smoke`.
+- **Federated worker transport:** `cypha_federated_worker` POST `/submit`; `native_federated_worker_smoke`.
+- **CTests +5:** `native_rpsm_train_smoke`, `native_ewc_cyphalm_smoke`, `native_federated_worker_smoke`, `native_cell_hypothesis_tier3_smoke`, `native_cell_hypothesis_overnight_smoke` (**89 total**).
 - **Preprocessor:** auto `auto_rff_gamma_cv` when tabular dim ≤30 and `rff_gamma` left at default 1.0.
 - **Release notes script:** `scripts/create_release_notes.ps1`; release workflow hook.
 - **Web UI tabs:** CyphaLM generate, Experiments (`/models`), Intelligence report (`/intelligence/report`).

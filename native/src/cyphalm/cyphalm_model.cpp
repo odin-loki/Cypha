@@ -224,6 +224,9 @@ void CyphaLMModel::init_components() {
         lstm_ = std::make_unique<CharLSTMHead>(cfg_.vocab_size, cfg_.lstm_hidden, cfg_.seed + 5);
         if (cfg_.use_eml_activation) {
             lstm_->set_activation_mode(LSTMActivationMode::Eml);
+        } else if (cfg_.use_axiom_activation) {
+            lstm_->set_activation_mode(LSTMActivationMode::Axiom);
+            lstm_->set_axiom_grammar(axiom_grammar_from_seed(cfg_.seed + 77, cfg_.lstm_hidden));
         }
         lstm_h_.assign(static_cast<std::size_t>(cfg_.lstm_hidden), 0.0);
         lstm_c_.assign(static_cast<std::size_t>(cfg_.lstm_hidden), 0.0);
@@ -240,6 +243,7 @@ void CyphaLMModel::init_components() {
             static_cast<std::uint32_t>(cfg_.max_memory_slots), cfg_.nig_kappa0, cfg_.nig_alpha0,
             cfg_.nig_beta0, static_cast<std::uint32_t>(cfg_.seed + 17));
         memory_->set_compress_interval(static_cast<std::uint32_t>(cfg_.compress_interval));
+        memory_->set_priority_replay(cfg_.use_priority_replay);
     }
     if (cfg_.use_context_bank) {
         context_bank_ = std::make_unique<ContextBank>(cfg_.d_embed, cfg_.context_bank_slots);
@@ -247,6 +251,9 @@ void CyphaLMModel::init_components() {
     if (cfg_.use_nig_state_cell) {
         nig_state_cell_ = std::make_unique<NigStateCell>(
             cfg_.nig_kappa0, cfg_.nig_alpha0, cfg_.nig_beta0, cfg_.field_dim);
+    }
+    if (cfg_.use_reversible_cell) {
+        reversible_cell_ = std::make_unique<ReversibleSSMCell>();
     }
     field_x_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
     if (gria_in_.empty()) {
@@ -263,6 +270,7 @@ void CyphaLMModel::init_components() {
         rc.feat_dim = cfg_.rpsm_feat_dim;
         rc.n_classes = cfg_.vocab_size;
         rc.seed = cfg_.seed + 29;
+        rc.use_izaac_init = (cfg_.cell_variant == "H19" || cfg_.context_mode == ContextMode::Rpsm);
         rpsm_layer_ = std::make_unique<cypha::rpsm::RpsmSequenceLayer>(rc);
         rpsm_log_probs_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
     }
@@ -286,6 +294,9 @@ void CyphaLMModel::reset_context() {
     if (memory_) memory_->reset();
     if (context_bank_) context_bank_->reset();
     if (nig_state_cell_) nig_state_cell_->reset();
+    if (reversible_cell_) reversible_cell_->reset();
+    last_mean_alpha_ = 0.5;
+    last_train_loss_ = 0.0;
     if (lstm_) {
         lstm_->reset_state();
         std::fill(lstm_h_.begin(), lstm_h_.end(), 0.0);
@@ -390,6 +401,16 @@ std::vector<double> CyphaLMModel::ssm_step(const std::vector<double>& e) {
             last_ssm_h_fast_ = active->h_states()[0];
         }
     }
+    if (cfg_.use_ca_state_cell && !ctx.empty()) {
+        const auto ca_ctx = CAStateCell::step_rule110(ctx, 1.0);
+        for (std::size_t i = 0; i < ctx.size() && i < ca_ctx.size(); ++i) {
+            ctx[i] = 0.7 * ctx[i] + 0.3 * ca_ctx[i];
+        }
+    }
+    if (cfg_.use_reversible_cell && reversible_cell_ && !ctx.empty()) {
+        const std::vector<double> delta = ctx;
+        ctx = reversible_cell_->forward(last_ctx_.empty() ? ctx : last_ctx_, delta);
+    }
     return ctx;
 }
 
@@ -458,6 +479,9 @@ std::vector<double> CyphaLMModel::build_gria_input(const std::vector<double>& fi
         }
         context_bank_->push(q.data(), cfg_.d_embed);
     }
+    if (cfg_.use_algebraic_fingerprint && !field.empty()) {
+        mix_algebraic_fingerprint(v, field.data(), static_cast<int>(field.size()));
+    }
     return augment_gria_input(v);
 }
 
@@ -504,6 +528,9 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
             apply_hebbian_hooks(ctx);
             last_ctx_ = ctx;
             field_x_ = project_field(ctx);
+            if (cfg_.use_mdl_forget) {
+                mdl_forget_project(field_x_, cfg_.mdl_forget_max_norm);
+            }
             if (nig_state_cell_) {
                 const auto nig_h = nig_state_cell_->step(field_x_.data(), cfg_.field_dim);
                 for (std::size_t i = 0; i < field_x_.size() && i < nig_h.size(); ++i) {
@@ -528,12 +555,24 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
             }
             if (memory_) {
                 const auto pooled = selective_->pooled_state();
-                memory_->maybe_store(step_count_, pooled.data(),
-                                     static_cast<std::uint32_t>(pooled.size()));
+                if (cfg_.use_priority_replay) {
+                    memory_->maybe_store_priority(step_count_, pooled.data(),
+                                                    static_cast<std::uint32_t>(pooled.size()),
+                                                    std::abs(last_train_loss_) + 1e-3);
+                } else {
+                    memory_->maybe_store(step_count_, pooled.data(),
+                                         static_cast<std::uint32_t>(pooled.size()));
+                }
             }
         } else if (memory_) {
-            memory_->maybe_store(step_count_, field_x_.data(),
-                                 static_cast<std::uint32_t>(field_x_.size()));
+            if (cfg_.use_priority_replay) {
+                memory_->maybe_store_priority(step_count_, field_x_.data(),
+                                                static_cast<std::uint32_t>(field_x_.size()),
+                                                std::abs(last_train_loss_) + 1e-3);
+            } else {
+                memory_->maybe_store(step_count_, field_x_.data(),
+                                     static_cast<std::uint32_t>(field_x_.size()));
+            }
         }
         gria_in_ = build_gria_input(field_x_, skip_dif ? nullptr : &last_dif_out_);
         if (rpsm_layer_ && !field_x_.empty()) {
@@ -564,6 +603,19 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         last_hybrid_log_g_ = log_g;
         last_hybrid_log_l_ = log_l;
         double blend_logit = hybrid_blend_logit_;
+        if (cfg_.use_gria_gated_mixture && gria_) {
+            double mean_alpha = 0.5;
+            if (!gria_->alpha.empty()) {
+                double sum = 0.0;
+                for (double a : gria_->alpha) {
+                    sum += a;
+                }
+                mean_alpha = sum / static_cast<double>(gria_->alpha.size());
+            }
+            const double delta_alpha = mean_alpha - last_mean_alpha_;
+            blend_logit = gria_gated_blend_logit(blend_logit, mean_alpha, delta_alpha);
+            last_mean_alpha_ = mean_alpha;
+        }
         if (cfg_.use_ood_branching && out.epistemic_var > 0.0) {
             constexpr double kOodThreshold = 0.05;
             if (out.epistemic_var > kOodThreshold) {
@@ -583,6 +635,32 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
     return out;
 }
 
+void CyphaLMModel::ewc_snapshot() {
+    if (lstm_) {
+        ewc_.snapshot(*lstm_);
+    }
+}
+
+double CyphaLMModel::ewc_penalty() const {
+    if (!lstm_ || !ewc_.has_snapshot()) {
+        return 0.0;
+    }
+    return ewc_.penalty(*lstm_);
+}
+
+void CyphaLMModel::apply_lstm_ewc(TrainStepMetrics& m, const CharLSTMGrad& grads) {
+    if (cfg_.ewc_lambda <= 0.0 || !lstm_) {
+        return;
+    }
+    ewc_.observe_grads(grads);
+    if (ewc_.has_snapshot()) {
+        const double pen = ewc_.penalty(*lstm_);
+        m.loss += cfg_.ewc_lambda * pen;
+        m.ewc_penalty = pen;
+        ewc_.apply_pull(*lstm_, cfg_.ewc_lambda, cfg_.lstm_lr);
+    }
+}
+
 TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t next_token_id) {
     const auto pred = predict_next(token_id);
     TrainStepMetrics m;
@@ -590,10 +668,20 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     m.epistemic_var = pred.epistemic_var;
     m.aleatoric_var = pred.aleatoric_var;
     m.active_experts = last_dif_out_.active_experts;
+    last_train_loss_ = m.loss;
+    if (cfg_.use_gria_gated_mixture) {
+        m.alpha_gria = last_mean_alpha_;
+    }
+    if (cfg_.use_free_energy_loss && m.epistemic_var > 0.0) {
+        m.free_energy_penalty = cfg_.free_energy_beta * m.epistemic_var;
+        m.loss += m.free_energy_penalty;
+    }
 
     const auto mode = cfg_.context_mode;
     if (mode == ContextMode::CharLstm && lstm_) {
-        lstm_->backward(static_cast<int>(next_token_id), cfg_.lstm_lr);
+        CharLSTMGrad grads;
+        lstm_->backward(static_cast<int>(next_token_id), cfg_.lstm_lr, &grads);
+        apply_lstm_ewc(m, grads);
         if (next_token_id < token_counts_.size()) {
             token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
         }
@@ -643,11 +731,15 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                                            std::to_string(nxt), cfg_.ssm_lr);
     }
     bptt_ssm_update(next_token_id);
+    if (cfg_.use_reversible_cell && reversible_cell_ && reversible_cell_->has_pair()) {
+        (void)reversible_cell_->backward_stub();
+    }
     if (mode == ContextMode::Hybrid && lstm_) {
         if (hybrid_lstm_has_cache_) {
             const CharLSTMGrad grads =
                 lstm_->backward_step(hybrid_lstm_cache_, static_cast<int>(next_token_id));
             lstm_->apply_grads(grads, cfg_.lstm_lr);
+            apply_lstm_ewc(m, grads);
             hybrid_lstm_has_cache_ = false;
         }
         if (cfg_.hybrid_blend_learnable && !last_hybrid_log_g_.empty() && !last_hybrid_log_l_.empty()) {
@@ -656,6 +748,11 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                                                     cfg_.vocab_size, hybrid_blend_logit_,
                                                     static_cast<int>(next_token_id));
         }
+    }
+    if (rpsm_layer_ && mode == ContextMode::Rpsm && !field_x_.empty()) {
+        const auto rpsm_m = rpsm_layer_->train_step(field_x_.data(), static_cast<int>(field_x_.size()),
+                                                    static_cast<int>(next_token_id), cfg_.rpsm_lr);
+        m.loss += rpsm_m.loss;
     }
     if (next_token_id < token_counts_.size()) {
         token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;

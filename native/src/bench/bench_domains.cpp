@@ -48,6 +48,7 @@
 #include "cypha/create_model.hpp"
 #include "cypha/csv_ingest.hpp"
 #include "cypha/ewc_regularizer.hpp"
+#include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
@@ -2812,6 +2813,57 @@ Json run_d19_cell_hypothesis_smoke() {
     return experiments;
 }
 
+Json run_d20_cell_hypothesis_overnight_smoke() {
+    struct OvernightSpec {
+        const char* id;
+        const char* bench_mode;
+    };
+    const OvernightSpec variants[] = {
+        {"B2", "hybrid"},
+        {"H06", "hybrid"},
+        {"H14", "hybrid"},
+    };
+
+    const int n_train = cypha::bench::bench_scale(200, 200);
+    const int n_eval = cypha::bench::bench_scale(40, 40);
+    Json rows = Json::array();
+    for (const auto& spec : variants) {
+        cypha::cyphalm::CyphaLMConfig cfg;
+        cypha::cyphalm::apply_bench_profile("d17", cfg);
+        cypha::cyphalm::apply_cell_variant(spec.id, cfg);
+        cypha::cyphalm::apply_bench_mode(cypha::cyphalm::parse_bench_mode(spec.bench_mode), cfg);
+        if (cfg.vocab_size < 256) cfg.vocab_size = 256;
+
+        cypha::cyphalm::LMCorpus corpus;
+        corpus.profile = "d17";
+        corpus.source = "synthetic";
+        corpus.vocab_size = cfg.vocab_size;
+        corpus.train_ids =
+            cypha::cyphalm::synthetic_corpus(n_train + n_eval + 32, cfg.vocab_size, cfg.seed);
+        const std::size_t split = static_cast<std::size_t>(n_train);
+        corpus.eval_ids.assign(corpus.train_ids.begin() + static_cast<std::ptrdiff_t>(split),
+                               corpus.train_ids.end());
+        corpus.train_ids.resize(split);
+        cfg.vocab_size = corpus.vocab_size;
+
+        cypha::cyphalm::CyphaLMModel model(cfg);
+        model.train_sequence(corpus.train_ids, n_train, cfg.train_epochs);
+        const double bpc = model.eval_bpc(corpus.eval_ids, n_eval);
+        rows.push_back(Json{{"id", spec.id},
+                            {"bench_mode", spec.bench_mode},
+                            {"n_train", n_train},
+                            {"bpc", std::isnan(bpc) ? Json(nullptr) : Json(bpc)}});
+    }
+
+    const Json experiments{
+        {"overnight_sweep_smoke", rows},
+        {"variant_count", 3},
+        {"backend", "cypha_cell_hypothesis_sweep --overnight-sweep-smoke"},
+    };
+    cypha::bench::finalize_domain("d20_cell_hypothesis_overnight", experiments);
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -2834,6 +2886,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d17", "cypha_bench.domains.d17_cyphalm_integration", run_d17},
         {"d18", "cypha_bench.domains.d18_intelligence_profile", run_d18_intelligence_profile},
         {"d19", "cypha_bench.domains.d19_cell_hypothesis", run_d19_cell_hypothesis_smoke},
+        {"d20", "cypha_bench.domains.d20_cell_hypothesis_overnight", run_d20_cell_hypothesis_overnight_smoke},
     };
 }
 

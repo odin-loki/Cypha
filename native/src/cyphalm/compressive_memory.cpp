@@ -63,21 +63,45 @@ std::vector<double> CompressiveMemory::softmax_llr(const std::vector<double>& ll
 
 void CompressiveMemory::maybe_store(std::uint32_t token_index, const double* pooled,
                                     std::uint32_t dim) {
+    maybe_store_priority(token_index, pooled, dim, 1.0);
+}
+
+void CompressiveMemory::maybe_store_priority(std::uint32_t token_index, const double* pooled,
+                                             std::uint32_t dim, double priority) {
     if (compress_interval_ == 0) return;
     if (token_index == 0 || token_index % compress_interval_ != 0) return;
     if (dim != slot_dim_) return;
 
-    if (slots_.size() < max_slots_) {
+    const double pri = std::max(priority, 1e-6);
+    std::size_t idx = 0;
+    if (priority_replay_ && slots_.size() >= max_slots_) {
+        idx = 0;
+        double min_pri = slots_[0].priority;
+        for (std::size_t i = 1; i < slots_.size(); ++i) {
+            if (slots_[i].priority < min_pri) {
+                min_pri = slots_[i].priority;
+                idx = i;
+            }
+        }
+        if (pri <= min_pri) {
+            return;
+        }
+    } else if (slots_.size() < max_slots_) {
         Slot s;
         s.mean.assign(dim, 0.0);
         s.kappa = kappa0_;
         s.alpha = alpha0_;
         s.beta = beta0_;
         s.count = 0;
+        s.priority = pri;
         slots_.push_back(std::move(s));
+        idx = slots_.size() - 1;
+    } else {
+        idx = slots_.size() - 1;
     }
-    const std::size_t idx = slots_.size() - 1;
+
     Slot& slot = slots_[idx];
+    slot.priority = std::max(slot.priority, pri);
     if (slot.count == 0) {
         slot.mean.assign(pooled, pooled + dim);
         slot.count = 1;
@@ -102,7 +126,13 @@ std::vector<double> CompressiveMemory::retrieve(const double* query, std::uint32
         const double lp = slot_log_prob(slot, query, dim);
         llrs.push_back(lp - prior_lp);
     }
-    const std::vector<double> weights = softmax_llr(llrs);
+    std::vector<double> scores = llrs;
+    if (priority_replay_) {
+        for (std::size_t s = 0; s < slots_.size(); ++s) {
+            scores[s] += std::log(slots_[s].priority + 1e-6);
+        }
+    }
+    const std::vector<double> weights = softmax_llr(scores);
     for (std::size_t s = 0; s < slots_.size(); ++s) {
         for (std::uint32_t d = 0; d < slot_dim_; ++d) bias[d] += weights[s] * slots_[s].mean[d];
     }

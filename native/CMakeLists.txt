@@ -206,8 +206,25 @@ if(WIN32)
   target_link_libraries(cypha_federated_coordinator PRIVATE ws2_32)
 endif()
 
+add_executable(cypha_federated_worker tools/cypha_federated_worker.cpp)
+target_include_directories(cypha_federated_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+target_link_libraries(cypha_federated_worker PRIVATE cypha_core)
+if(WIN32)
+  target_link_libraries(cypha_federated_worker PRIVATE ws2_32)
+endif()
+
 add_executable(ewc_d16b_smoke tools/ewc_d16b_smoke.cpp)
 target_link_libraries(ewc_d16b_smoke PRIVATE cypha_core)
+
+add_executable(ewc_cyphalm_smoke tools/ewc_cyphalm_smoke.cpp)
+target_link_libraries(ewc_cyphalm_smoke PRIVATE cypha_lm_native)
+
+add_executable(federated_worker_smoke tools/federated_worker_smoke.cpp)
+target_include_directories(federated_worker_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+target_link_libraries(federated_worker_smoke PRIVATE cypha_core)
+if(WIN32)
+  target_link_libraries(federated_worker_smoke PRIVATE ws2_32)
+endif()
 
 add_executable(cypha_onnx_export tools/cypha_onnx_export.cpp)
 target_link_libraries(cypha_onnx_export PRIVATE cypha_core)
@@ -251,11 +268,14 @@ set(
   create_model_smoke
   cypha_federated_merge
   cypha_federated_coordinator
+  cypha_federated_worker
   cypha_onnx_export
   cypha_export_gguf
   intelligence_profiler_smoke
   ewc_smoke
   ewc_d16b_smoke
+  ewc_cyphalm_smoke
+  federated_worker_smoke
   curriculum_smoke
   intelligence_profiler_papers
   cyphalm_bench_native
@@ -341,6 +361,7 @@ if(MSVC)
   target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE /W4 /permissive-)
+  target_compile_options(rpsm_train_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
   target_compile_options(score_batch_parity PRIVATE /W4 /permissive-)
   target_compile_options(kernel_llr_parity PRIVATE /W4 /permissive-)
@@ -408,6 +429,7 @@ else()
   target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(rpsm_train_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(score_batch_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -487,6 +509,10 @@ add_test(
 add_test(
   NAME native_rpsm_hierarchy_smoke
   COMMAND "$<TARGET_FILE:rpsm_hierarchy_smoke>"
+)
+add_test(
+  NAME native_rpsm_train_smoke
+  COMMAND "$<TARGET_FILE:rpsm_train_smoke>"
 )
 add_test(
   NAME native_fixture_gen_list
@@ -785,6 +811,11 @@ add_test(
 )
 
 add_test(
+  NAME native_ewc_cyphalm_smoke
+  COMMAND "$<TARGET_FILE:ewc_cyphalm_smoke>"
+)
+
+add_test(
   NAME native_curriculum_smoke
   COMMAND "$<TARGET_FILE:curriculum_smoke>"
 )
@@ -844,6 +875,14 @@ add_test(
 )
 
 add_test(
+  NAME native_federated_worker_smoke
+  COMMAND "$<TARGET_FILE:federated_worker_smoke>"
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_a.json"
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_b.json"
+    "${CMAKE_CURRENT_BINARY_DIR}/federated_worker_smoke.json"
+)
+
+add_test(
   NAME native_cyphalm_bench_rpsm_smoke
   COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
     --profile d17 --mode rpsm --n-train 100 --n-eval 32
@@ -860,6 +899,21 @@ add_test(
 add_test(
   NAME native_cell_hypothesis_tier2_smoke
   COMMAND "$<TARGET_FILE:cypha_cell_hypothesis_sweep>" --tier2-smoke
+)
+
+add_test(
+  NAME native_cell_hypothesis_tier3_smoke
+  COMMAND "$<TARGET_FILE:cypha_cell_hypothesis_sweep>" --tier3-smoke
+)
+
+add_test(
+  NAME native_cell_hypothesis_overnight_smoke
+  COMMAND "$<TARGET_FILE:cypha_cell_hypothesis_sweep>"
+    --overnight-sweep-smoke
+    --output-dir "${CMAKE_CURRENT_BINARY_DIR}/cell_hypothesis_overnight_smoke"
+)
+set_tests_properties(native_cell_hypothesis_overnight_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
 )
 
 add_test(

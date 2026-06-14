@@ -15,12 +15,19 @@
 #include "cypha/cyphalm/context_bank.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_dif.hpp"
+#include "cypha/cyphalm/cyphalm_ewc_regularizer.hpp"
 #include "cypha/cyphalm/embed_table.hpp"
 #include "cypha/cyphalm/gria_lowrank.hpp"
 #include "cypha/cyphalm/hebbian_stack.hpp"
 #include "cypha/cyphalm/hierarchical_ssm.hpp"
 #include "cypha/cyphalm/ngram_fusion.hpp"
+#include "cypha/cyphalm/algebraic_fingerprint.hpp"
+#include "cypha/cyphalm/axiom_activation.hpp"
+#include "cypha/cyphalm/ca_state_cell.hpp"
+#include "cypha/cyphalm/gria_gated_mixture.hpp"
+#include "cypha/cyphalm/mdl_forget.hpp"
 #include "cypha/cyphalm/nig_state_cell.hpp"
+#include "cypha/cyphalm/reversible_ssm_cell.hpp"
 #include "cypha/cyphalm/selective_ssm.hpp"
 #include "cypha/cyphalm/view_embedding.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
@@ -54,6 +61,8 @@ struct TrainStepMetrics {
     int active_experts = 0;
     double alpha_gria = 0.0;
     double profile_guided_loss = 0.0;
+    double ewc_penalty = 0.0;
+    double free_energy_penalty = 0.0;
 };
 
 /// Unified native CyphaLM stack (Tier 0–2–4 integration point).
@@ -105,6 +114,15 @@ class CyphaLMModel {
     double ssm_projection_rms() const;
     bool has_gria_routing() const { return gria_ != nullptr; }
 
+    /// Snapshot char-LSTM ``Wx``/``Wh`` for EWC (no-op without LSTM head).
+    void ewc_snapshot();
+
+    /// Current EWC quadratic penalty over LSTM recurrent weights (0 without snapshot/LSTM).
+    double ewc_penalty() const;
+
+    CyphaLMEwcRegularizer& ewc_regularizer() { return ewc_; }
+    const CyphaLMEwcRegularizer& ewc_regularizer() const { return ewc_; }
+
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
  private:
@@ -120,6 +138,7 @@ class CyphaLMModel {
     std::unique_ptr<CompressiveMemory> memory_;
     std::unique_ptr<ContextBank> context_bank_;
     std::unique_ptr<NigStateCell> nig_state_cell_;
+    std::unique_ptr<ReversibleSSMCell> reversible_cell_;
     std::unique_ptr<NgramFusion> ngram_fusion_;
     std::unique_ptr<cypha::som::GNGExpertManager> gng_;
     std::unique_ptr<cypha::som::GRIAController> gria_controller_;
@@ -152,10 +171,13 @@ class CyphaLMModel {
     int current_view_slot_ = 0;
     std::uint32_t step_count_ = 0;
     double hybrid_blend_logit_ = 0.0;
+    double last_mean_alpha_ = 0.5;
+    double last_train_loss_ = 0.0;
     CharLSTMCache hybrid_lstm_cache_;
     bool hybrid_lstm_has_cache_{false};
     std::vector<double> last_hybrid_log_g_;
     std::vector<double> last_hybrid_log_l_;
+    CyphaLMEwcRegularizer ewc_;
 
     void init_components();
     void record_embedding(const std::vector<double>& e);
@@ -171,6 +193,7 @@ class CyphaLMModel {
     void fill_top_k(const std::vector<double>& log_probs, PredictNextOutput& out, int k = 5) const;
     std::vector<double> project_field(const std::vector<double>& ctx);
     void bptt_ssm_update(std::uint32_t next_token_id);
+    void apply_lstm_ewc(TrainStepMetrics& m, const CharLSTMGrad& grads);
     void set_view_slot(int slot) { current_view_slot_ = slot; }
     void refresh_laplace_prior();
 

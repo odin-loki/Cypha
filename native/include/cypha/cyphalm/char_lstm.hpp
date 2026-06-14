@@ -3,12 +3,15 @@
 #include <cstdint>
 #include <vector>
 
+#include "cypha/cyphalm/axiom_activation.hpp"
+
 namespace cypha {
 namespace cyphalm {
 
 enum class LSTMActivationMode {
     Standard,
     Eml,
+    Axiom,
 };
 
 struct CharLSTMGrad {
@@ -37,6 +40,7 @@ struct CharLSTMCache {
   std::vector<double> logits;
   std::vector<double> probs;
   bool used_eml{false};
+  bool used_axiom{false};
 };
 
 /// Single-layer char LSTM head (online BPTT-1). Weight layout matches Python ``CharLSTMHead``.
@@ -57,6 +61,7 @@ class CharLSTMHead {
 
   void set_activation_mode(LSTMActivationMode mode) { activation_mode_ = mode; }
   LSTMActivationMode activation_mode() const { return activation_mode_; }
+  void set_axiom_grammar(const AxiomGateGrammar& grammar) { axiom_grammar_ = grammar; }
 
   /// Reset internal h/c (stateful online API).
   void reset_state();
@@ -64,8 +69,8 @@ class CharLSTMHead {
   /// Stateful forward — updates internal h/c; returns log_probs.
   std::vector<double> forward(int token_id);
 
-  /// Stateful backward (BPTT-1) with weight update.
-  void backward(int target_id, double lr);
+  /// Stateful backward (BPTT-1) with weight update. Optional ``grads_out`` for EWC overlays.
+  void backward(int target_id, double lr, CharLSTMGrad* grads_out = nullptr);
 
   void load_state(const std::vector<double>& E_in, const std::vector<double>& Wx_in,
                   const std::vector<double>& Wh_in, const std::vector<double>& b_in,
@@ -87,6 +92,7 @@ class CharLSTMHead {
   CharLSTMCache cache_;
   bool has_cache_{false};
   LSTMActivationMode activation_mode_{LSTMActivationMode::Standard};
+  AxiomGateGrammar axiom_grammar_;
 };
 
 using CharLSTM = CharLSTMHead;

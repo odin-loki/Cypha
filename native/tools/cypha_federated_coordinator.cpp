@@ -21,8 +21,11 @@ namespace {
 void usage() {
   std::cerr << "usage: cypha_federated_coordinator\n"
             << "  --watch-dir <dir> [--poll-ms N] [--min-workers N] [--once] --out <merged.json>\n"
-            << "  --listen <port> [--min-workers N] [--once] --out <merged.json>\n"
-            << "  --merge worker1.json [worker2.json ...] --out <merged.json>\n";
+            << "  --listen <port> [--min-workers N] [--once] [--tls-cert <pem>] [--tls-key <pem>] --out <merged.json>\n"
+            << "  --merge worker1.json [worker2.json ...] --out <merged.json>\n"
+            << "\n"
+            << "TLS: requires CPPHTTPLIB_OPENSSL_SUPPORT at build time. Without OpenSSL, pass\n"
+            << "  CYPHA_FEDERATED_INSECURE=1 to fall back to plain HTTP when --tls-cert is set.\n";
 }
 
 nlohmann::json read_json_file(const std::string& path) {
@@ -111,43 +114,68 @@ bool run_watch_dir(const fs::path& dir, const std::string& out_path, int min_wor
   }
 }
 
-bool run_http_server(int port, const std::string& out_path, int min_workers, bool once) {
-  httplib::Server svr;
+bool run_http_server(int port, const std::string& out_path, int min_workers, bool once,
+                     const std::string& tls_cert, const std::string& tls_key) {
   std::vector<nlohmann::json> payloads;
   std::mutex mu;
 
-  svr.Post("/submit", [&](const httplib::Request& req, httplib::Response& res) {
-    try {
-      const nlohmann::json body = nlohmann::json::parse(req.body);
-      std::lock_guard<std::mutex> lk(mu);
-      payloads.push_back(body);
-      nlohmann::json ack{{"accepted", true}, {"worker_count", payloads.size()}};
-      res.set_content(ack.dump(), "application/json");
-      if (static_cast<int>(payloads.size()) >= min_workers) {
-        std::vector<cypha::FederatedPayload> parsed;
-        parsed.reserve(payloads.size());
-        for (const auto& j : payloads) {
-          parsed.push_back(cypha::federated_payload_from_json(j));
+  auto register_routes = [&](auto& svr) {
+    svr.Post("/submit", [&](const httplib::Request& req, httplib::Response& res) {
+      try {
+        const nlohmann::json body = nlohmann::json::parse(req.body);
+        std::lock_guard<std::mutex> lk(mu);
+        payloads.push_back(body);
+        nlohmann::json ack{{"accepted", true}, {"worker_count", payloads.size()}};
+        res.set_content(ack.dump(), "application/json");
+        if (static_cast<int>(payloads.size()) >= min_workers) {
+          std::vector<cypha::FederatedPayload> parsed;
+          parsed.reserve(payloads.size());
+          for (const auto& j : payloads) {
+            parsed.push_back(cypha::federated_payload_from_json(j));
+          }
+          const auto merged = cypha::federated_average_payloads(parsed);
+          write_merged(merged, out_path, static_cast<int>(parsed.size()));
+          std::cout << "merged " << parsed.size() << " workers -> " << out_path << std::endl;
+          if (once) {
+            svr.stop();
+          }
         }
-        const auto merged = cypha::federated_average_payloads(parsed);
-        write_merged(merged, out_path, static_cast<int>(parsed.size()));
-        std::cout << "merged " << parsed.size() << " workers -> " << out_path << std::endl;
-        if (once) {
-          svr.stop();
-        }
+      } catch (const std::exception& ex) {
+        res.status = 400;
+        res.set_content(nlohmann::json{{"detail", ex.what()}}.dump(), "application/json");
       }
-    } catch (const std::exception& ex) {
-      res.status = 400;
-      res.set_content(nlohmann::json{{"detail", ex.what()}}.dump(), "application/json");
+    });
+
+    svr.Get("/status", [&](const httplib::Request&, httplib::Response& res) {
+      std::lock_guard<std::mutex> lk(mu);
+      res.set_content(nlohmann::json{{"workers", payloads.size()}, {"min_workers", min_workers}}.dump(),
+                      "application/json");
+    });
+  };
+
+#if defined(CPPHTTPLIB_OPENSSL_SUPPORT)
+  if (!tls_cert.empty() && !tls_key.empty()) {
+    httplib::SSLServer svr(tls_cert.c_str(), tls_key.c_str());
+    if (!svr.is_valid()) {
+      throw std::runtime_error("invalid TLS cert/key for federated coordinator");
     }
-  });
+    register_routes(svr);
+    std::cout << "coordinator listening (TLS) on port " << port << std::endl;
+    return svr.listen("127.0.0.1", port);
+  }
+#else
+  if (!tls_cert.empty() || !tls_key.empty()) {
+    const char* insecure = std::getenv("CYPHA_FEDERATED_INSECURE");
+    if (insecure == nullptr || insecure[0] != '1') {
+      throw std::runtime_error(
+          "TLS requested but OpenSSL is unavailable; set CYPHA_FEDERATED_INSECURE=1 for plain HTTP");
+    }
+    std::cerr << "warning: --tls-cert/--tls-key ignored (no OpenSSL); using plain HTTP\n";
+  }
+#endif
 
-  svr.Get("/status", [&](const httplib::Request&, httplib::Response& res) {
-    std::lock_guard<std::mutex> lk(mu);
-    res.set_content(nlohmann::json{{"workers", payloads.size()}, {"min_workers", min_workers}}.dump(),
-                    "application/json");
-  });
-
+  httplib::Server svr;
+  register_routes(svr);
   std::cout << "coordinator listening on port " << port << std::endl;
   return svr.listen("127.0.0.1", port);
 }
@@ -163,6 +191,8 @@ int main(int argc, char** argv) {
     int min_workers = 2;
     int poll_ms = 200;
     bool once = false;
+    std::string tls_cert;
+    std::string tls_key;
 
     for (int i = 1; i < argc; ++i) {
       const std::string k = argv[i];
@@ -197,6 +227,16 @@ int main(int argc, char** argv) {
         poll_ms = std::stoi(argv[++i]);
       } else if (k == "--once") {
         once = true;
+      } else if (k == "--tls-cert") {
+        if (i + 1 >= argc) {
+          throw std::runtime_error("missing value for --tls-cert");
+        }
+        tls_cert = argv[++i];
+      } else if (k == "--tls-key") {
+        if (i + 1 >= argc) {
+          throw std::runtime_error("missing value for --tls-key");
+        }
+        tls_key = argv[++i];
       } else if (k == "--help" || k == "-h") {
         usage();
         return 0;
@@ -227,7 +267,7 @@ int main(int argc, char** argv) {
     }
 
     if (listen_port > 0) {
-      const bool ok = run_http_server(listen_port, out_path, min_workers, once);
+      const bool ok = run_http_server(listen_port, out_path, min_workers, once, tls_cert, tls_key);
       return ok ? 0 : 1;
     }
 

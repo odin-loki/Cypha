@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.6" = @(
+    "Cell hypothesis **28-variant overnight sweep**: ``cypha_cell_hypothesis_sweep --overnight-sweep`` writes ``results/variant_*.json`` + ``summary.csv``.",
+    "Bench domain **d20** overnight smoke; CTest ``native_cell_hypothesis_overnight_smoke`` (3 variants @ n_train=200).",
+    "``scripts/run_d17_overnight.ps1`` — D17 WikiText 300k runner (``CYPHA_BENCH_OVERNIGHT=1``).",
+    "Intelligence Stats **Phase 6** docs; CI gate **85 CTests**."
+  )
   "2.3.5" = @(
     "Qt CyphaLM generate tab: **epistemic halt** checkbox (Paper IV r_eu gate; matches REST ``/generate``).",
     "D17 WikiText **overnight** profile @ 300k tokens: ``d17_wikitext_overnight_profile.json``, ``--overnight`` / ``CYPHA_BENCH_OVERNIGHT=1``.",

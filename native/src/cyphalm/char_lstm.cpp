@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/char_lstm.hpp"
 
+#include "cypha/cyphalm/axiom_activation.hpp"
 #include "cypha/cyphalm/eml_activation.hpp"
 #include "cypha/cyphalm/hybrid_blend.hpp"
 
@@ -101,8 +102,22 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
   std::vector<double> g_gate(static_cast<std::size_t>(hidden));
   std::vector<double> o_gate(static_cast<std::size_t>(hidden));
   const bool use_eml = activation_mode_ == LSTMActivationMode::Eml;
+  const bool use_axiom = activation_mode_ == LSTMActivationMode::Axiom;
   for (int j = 0; j < hidden; ++j) {
-    if (use_eml) {
+    if (use_axiom && static_cast<int>(axiom_grammar_.i_gate.size()) == hidden) {
+      i_gate[static_cast<std::size_t>(j)] =
+          apply_axiom_gate(axiom_grammar_.i_gate[static_cast<std::size_t>(j)],
+                           gates[static_cast<std::size_t>(j)], h[j]);
+      f_gate[static_cast<std::size_t>(j)] =
+          apply_axiom_gate(axiom_grammar_.f_gate[static_cast<std::size_t>(j)],
+                           gates[static_cast<std::size_t>(hidden + j)], c[j]);
+      g_gate[static_cast<std::size_t>(j)] =
+          apply_axiom_gate(axiom_grammar_.g_gate[static_cast<std::size_t>(j)],
+                           gates[static_cast<std::size_t>(2 * hidden + j)], h[j]);
+      o_gate[static_cast<std::size_t>(j)] =
+          apply_axiom_gate(axiom_grammar_.o_gate[static_cast<std::size_t>(j)],
+                           gates[static_cast<std::size_t>(3 * hidden + j)], c[j]);
+    } else if (use_eml) {
       i_gate[static_cast<std::size_t>(j)] =
           eml_nand(gates[static_cast<std::size_t>(j)], h[j]);
       f_gate[static_cast<std::size_t>(j)] =
@@ -127,6 +142,9 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     if (use_eml) {
       h_out[static_cast<std::size_t>(j)] =
           o_gate[static_cast<std::size_t>(j)] * eml_nand(c_out[static_cast<std::size_t>(j)], 1.0);
+    } else if (use_axiom) {
+      h_out[static_cast<std::size_t>(j)] =
+          o_gate[static_cast<std::size_t>(j)] * std::tanh(c_out[static_cast<std::size_t>(j)]);
     } else {
       h_out[static_cast<std::size_t>(j)] = o_gate[static_cast<std::size_t>(j)] * std::tanh(c_out[static_cast<std::size_t>(j)]);
     }
@@ -159,6 +177,7 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     cache_out->logits = logits;
     cache_out->probs = probs;
     cache_out->used_eml = use_eml;
+    cache_out->used_axiom = use_axiom;
   }
 }
 
@@ -332,11 +351,14 @@ std::vector<double> CharLSTMHead::forward(int token_id) {
   return log_probs;
 }
 
-void CharLSTMHead::backward(int target_id, double lr) {
+void CharLSTMHead::backward(int target_id, double lr, CharLSTMGrad* grads_out) {
   if (!has_cache_) {
     return;
   }
   CharLSTMGrad grads = backward_step(cache_, target_id);
+  if (grads_out != nullptr) {
+    *grads_out = grads;
+  }
   apply_grads(grads, lr);
   has_cache_ = false;
 }
