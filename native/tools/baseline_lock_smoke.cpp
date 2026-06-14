@@ -51,7 +51,8 @@ void validate_result_section(const Json& section, const char* name, const char* 
     if (status == "pending") {
         fail(std::string(name) + " status is pending");
     }
-    if (status != "fast_smoke" && status != "completed") {
+    if (status != "fast_smoke" && status != "medium_smoke" && status != "production" &&
+        status != "completed") {
         fail(std::string(name) + " status '" + status + "' is not recognized");
     }
     if (!section["bpc"].is_number()) {

@@ -3181,6 +3181,52 @@ std::string validate_production_tier_lock(const Json& lock) {
     return "production_validated";
 }
 
+std::string validate_overnight_complete_lock(const Json& lock) {
+    static constexpr const char* kSections[] = {"overnight_results", "rpsm_results",
+                                                "cell_sweep_results"};
+    for (const char* name : kSections) {
+        if (!lock.contains(name) || !lock[name].is_object()) {
+            throw std::runtime_error(std::string("lock JSON missing ") + name);
+        }
+        validate_overnight_lock_section(lock[name], name);
+        require_lock_key(lock[name], "n_train", name);
+        if (!lock[name]["n_train"].is_number_integer()) {
+            throw std::runtime_error(std::string(name) + " n_train must be an integer");
+        }
+    }
+
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+    for (const char* name : kSections) {
+        if (lock[name]["n_train"].get<int>() != n_train) {
+            throw std::runtime_error("overnight lock sections have mismatched n_train");
+        }
+    }
+
+    if (n_train < kProductionNTrainMin) {
+        return "pending_overnight_complete";
+    }
+
+    const int n_eval = lock["overnight_results"]["n_eval"].get<int>();
+    for (const char* name : kSections) {
+        require_lock_key(lock[name], "n_eval", name);
+        if (!lock[name]["n_eval"].is_number_integer()) {
+            throw std::runtime_error(std::string(name) + " n_eval must be an integer");
+        }
+        if (lock[name]["n_eval"].get<int>() != n_eval) {
+            throw std::runtime_error("overnight lock sections have mismatched n_eval");
+        }
+        require_lock_key(lock[name], "status", name);
+        const std::string status = lock[name]["status"].get<std::string>();
+        if (status != "production" && status != "completed") {
+            throw std::runtime_error(std::string(name) + " status '" + status +
+                                     "' invalid for overnight complete tier (n_train=" +
+                                     std::to_string(n_train) + "; expected production or completed)");
+        }
+    }
+
+    return "overnight_complete_validated";
+}
+
 Json probe_bench_corpus_profile(const std::string& profile) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(profile, cfg);
@@ -3383,6 +3429,42 @@ Json run_d27_production_lock_validation() {
     return experiments;
 }
 
+Json run_d28_overnight_complete_validation() {
+    const fs::path lock_path = fs::current_path() / "d28_overnight_complete_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+    const std::string production_status = validate_production_tier_lock(lock);
+    const std::string validation_status = validate_overnight_complete_lock(lock);
+
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results", lock["cell_sweep_results"]},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_status", production_status},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d28_overnight_complete_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d28_overnight_complete_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3413,6 +3495,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d25", "cypha_bench.domains.d25_corpus_readiness", run_d25_corpus_readiness},
         {"d26", "cypha_bench.domains.d26_medium_overnight_validation", run_d26_medium_overnight_validation},
         {"d27", "cypha_bench.domains.d27_production_lock_validation", run_d27_production_lock_validation},
+        {"d28", "cypha_bench.domains.d28_overnight_complete_validation", run_d28_overnight_complete_validation},
     };
 }
 

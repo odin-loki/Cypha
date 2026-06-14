@@ -117,9 +117,12 @@ Args parse_args(int argc, char** argv) {
     } else if (a.medium) {
         if (!a.n_train_explicit) a.n_train = 5000;
         if (!a.n_eval_explicit) a.n_eval = 256;
-    } else if (a.production) {
+    } else     if (a.production) {
         if (!a.n_train_explicit) a.n_train = 300000;
         if (!a.n_eval_explicit) a.n_eval = 2000;
+    }
+    if (a.output_dir.empty() && (a.run == RunKind::CellSweep || a.run == RunKind::All)) {
+        a.output_dir = cypha::bench::results_dir() / "cell_sweep";
     }
     return a;
 }

@@ -10,6 +10,7 @@ std::filesystem::path find_repo_root(const std::filesystem::path& start = std::f
 
 std::filesystem::path repo_root();
 std::filesystem::path bench_root();
+std::filesystem::path results_dir();
 std::filesystem::path config_dir();
 std::filesystem::path profiles_dir();
 std::filesystem::path tables_dir();

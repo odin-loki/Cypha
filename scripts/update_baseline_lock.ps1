@@ -68,6 +68,10 @@ if (-not (Test-Path $exe)) {
 
 $lockPath = if ([System.IO.Path]::IsPathRooted($LockFile)) { $LockFile } else { Join-Path $root $LockFile }
 
+if ($OutputDir -eq "" -and ($Run -eq "cell-sweep" -or $Run -eq "all")) {
+    $OutputDir = "bench/results/cell_sweep"
+}
+
 $buildAbs = Join-Path $root $BuildDir
 
 $tierCount = @($Fast, $Medium, $Production | Where-Object { $_ }).Count

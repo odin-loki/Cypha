@@ -111,6 +111,9 @@ bench/artifacts/tuning/
 bench/report/baselines/
 
 data_cache/
+/results/
+bench/results/*
+!bench/results/.gitkeep
 results/*.json
 cypha_diagnostics/results/
 

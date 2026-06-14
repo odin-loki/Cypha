@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "d17_hybrid_baseline": {
+    "bpc": 2.873,
+    "profile": "d17",
+    "mode": "hybrid",
+    "n_train": 300000,
+    "n_eval": 2000
+  },
+  "overnight_results": {
+    "status": "production",
+    "bpc": 2.873,
+    "run_at": "2026-06-14T12:00:00Z",
+    "profile": "d17",
+    "mode": "hybrid",
+    "n_train": 300000,
+    "n_eval": 2000,
+    "runner": "ctest fixture",
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_OVERNIGHT": "1",
+      "CYPHA_BENCH_FULL_N_TRAIN": "300000"
+    }
+  },
+  "rpsm_results": {
+    "status": "medium_smoke",
+    "bpc": 7.4,
+    "run_at": "2026-06-14T12:00:00Z",
+    "profile": "d21",
+    "mode": "rpsm",
+    "n_train": 5000,
+    "n_eval": 256,
+    "runner": "ctest fixture",
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_OVERNIGHT": "1"
+    }
+  }
+}

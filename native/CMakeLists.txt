@@ -958,6 +958,13 @@ add_test(
 )
 
 add_test(
+  NAME native_baseline_lock_validate_production_status
+  COMMAND "$<TARGET_FILE:baseline_lock_validate>"
+    --lock-file "${CMAKE_SOURCE_DIR}/../fixtures/baseline_lock_production_status.json"
+    --production
+)
+
+add_test(
   NAME native_federated_merge_smoke
   COMMAND "$<TARGET_FILE:cypha_federated_merge>"
     --merge
@@ -1074,6 +1081,21 @@ add_test(
   COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d27
 )
 set_tests_properties(native_d27_production_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 30
+)
+
+configure_file(
+  "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+  "${CMAKE_CURRENT_BINARY_DIR}/d28_overnight_complete_smoke.json"
+  COPYONLY
+)
+
+add_test(
+  NAME native_d28_overnight_complete_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d28
+)
+set_tests_properties(native_d28_overnight_complete_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
   TIMEOUT 30
 )

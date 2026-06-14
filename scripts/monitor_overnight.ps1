@@ -3,8 +3,10 @@
 #   pwsh -File scripts/monitor_overnight.ps1
 #   pwsh -File scripts/monitor_overnight.ps1 -IntervalSeconds 60
 #   pwsh -File scripts/monitor_overnight.ps1 -Once
+#   pwsh -File scripts/monitor_overnight.ps1 -LogFile bench/results/production_overnight_20260614_120000.log
 param(
     [string]$LockFile = "",
+    [string]$LogFile = "",
     [int]$IntervalSeconds = 30,
     [switch]$Once
 )
@@ -13,6 +15,23 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 if (-not $LockFile) {
     $LockFile = Join-Path $root "bench\BASELINE_LOCK.json"
+}
+
+function Resolve-LogFile {
+    param([string]$Path)
+
+    if ($Path) {
+        if ([System.IO.Path]::IsPathRooted($Path)) { return $Path }
+        return Join-Path $root $Path
+    }
+
+    $resultsDir = Join-Path $root "bench\results"
+    if (-not (Test-Path $resultsDir)) { return $null }
+    $latest = Get-ChildItem -Path $resultsDir -Filter "production_overnight_*.log" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($latest) { return $latest.FullName }
+    return $null
 }
 
 $sectionNames = @("overnight_results", "rpsm_results", "cell_sweep_results")
@@ -89,13 +108,39 @@ function Show-LockStatus {
     }
 }
 
+function Show-LogTail {
+    param([string]$Path)
+
+    if (-not $Path -or -not (Test-Path $Path)) {
+        Write-Host "  log: (none)" -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Host "  log: $Path" -ForegroundColor DarkGray
+    try {
+        $lines = Get-Content $Path -Tail 3 -ErrorAction Stop
+        foreach ($line in $lines) {
+            Write-Host "    $line" -ForegroundColor DarkGray
+        }
+    } catch {
+        Write-Host "    (could not read log: $($_.Exception.Message))" -ForegroundColor DarkYellow
+    }
+}
+
 Write-Host "monitor_overnight: polling $LockFile every ${IntervalSeconds}s (Ctrl+C to stop)" -ForegroundColor Cyan
+if ($LogFile) {
+    Write-Host "  tailing log: $(Resolve-LogFile -Path $LogFile)" -ForegroundColor DarkGray
+} else {
+    Write-Host "  tailing log: latest bench/results/production_overnight_*.log" -ForegroundColor DarkGray
+}
 if ($Once) {
     Show-LockStatus -Path $LockFile
+    Show-LogTail -Path (Resolve-LogFile -Path $LogFile)
     exit 0
 }
 
 while ($true) {
     Show-LockStatus -Path $LockFile
+    Show-LogTail -Path (Resolve-LogFile -Path $LogFile)
     Start-Sleep -Seconds $IntervalSeconds
 }

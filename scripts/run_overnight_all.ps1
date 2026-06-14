@@ -109,7 +109,7 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not $SkipCellSweep) {
     Write-Host "== baseline lock: cell-sweep ==" -ForegroundColor Cyan
-    & $lockScript -Run cell-sweep @lockArgs
+    & $lockScript -Run cell-sweep @lockArgs -OutputDir bench/results/cell_sweep
     if ($LASTEXITCODE -ne 0) {
         throw "cypha_baseline_lock cell-sweep failed exit=$LASTEXITCODE"
     }

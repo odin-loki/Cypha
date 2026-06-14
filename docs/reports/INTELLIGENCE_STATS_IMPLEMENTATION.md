@@ -192,9 +192,24 @@
 
 **CI gate (Phase 13 shipped):** **104 CTests** (`ctest -R native_`); +1 smoke: **`native_d27_production_lock_smoke`**. Full 300k production overnight is **not** run in CI — maintainer-only via **`run_production_overnight.ps1`**.
 
+## Phase 14 — shipped (v2.3.14, 2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Baseline lock status validator fix | `scripts/validate_baseline_lock.ps1`, `tools/baseline_lock_smoke.cpp` — accept **`medium_smoke`** and **`production`** in addition to **`fast_smoke`** / **`completed`** (fixes production/medium overnight lock validation) | `native_baseline_lock_validate_smoke` |
+| Cell sweep artifact path | `cypha_cell_hypothesis_sweep`, `cypha_baseline_lock --output-dir`, `bench_paths::results_dir()` — default overnight sweep output **`bench/results/cell_sweep`** (was repo-root **`results/`**) | manual |
+| Bench domain **d28** unified overnight completion validation | `bench_domains.cpp` → `run_d28_overnight_complete_validation` | `cypha_bench_run --domain-tag d28` |
+| D28 profile config | `bench/config/d28_overnight_complete_profile.json` | manual |
+| D28 validation report | `bench/report/tables/d28_overnight_complete_validation.json` | d28 run |
+| Post-overnight finalize script | `scripts/finalize_production_overnight.ps1` — **`validate_baseline_lock.ps1 -Production`**, d27 + d28 bench domains, lock section summary | manual (chained from **`run_production_overnight.ps1`**) |
+| Overnight script wiring | `run_overnight_all.ps1`, `update_baseline_lock.ps1`, `run_production_overnight.ps1` — cell-sweep **`OutputDir`** defaults to **`bench/results/cell_sweep`** | manual |
+| Release notes v2.3.14 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 14 shipped):** **106 CTests** (`ctest -R native_`); +2 smokes: **`native_d28_overnight_complete_smoke`**, **`native_baseline_lock_validate_production_status`**. d28 validates cross-section consistency: **`overnight_results`**, **`rpsm_results`**, and **`cell_sweep_results`** must share **`n_train`** / **`n_eval`**; if **`n_train < 300000`**, reports **`pending_overnight_complete`** (smoke pass); if **≥ 300k**, require **`status=production`** or **`completed`** on all three sections.
+
 ## Still planned
 
-- **D17 300k + 28-variant overnight** — use **`scripts/run_production_overnight.ps1`** (or **`run_overnight_all.ps1 -Production`**) for full production tier; **`-Medium`** for 5k real-corpus smoke; fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1 -Run all -Production`**
+- **D17 300k + 28-variant production overnight** — **in progress** (maintainer workflow via **`scripts/run_production_overnight.ps1`** → **`finalize_production_overnight.ps1`**); **`-Medium`** for 5k real-corpus smoke; fill **`bench/BASELINE_LOCK.json`** via **`scripts/update_baseline_lock.ps1 -Run all -Production`**
 - **GitHub Release publish** — preview with **`scripts/publish_release.ps1 -DryRun`**; actual **`gh release create`** still requires **`gh auth login`**
 - **RPSM @ 300k production benchmark** — d21 wired; full overnight not executed in CI
 
@@ -233,6 +248,9 @@ cypha_bench_run --domain-tag d27                            # Phase 13: producti
 pwsh -File scripts/validate_baseline_lock.ps1 -Production   # Phase 13: require production/completed @ 300k
 baseline_lock_validate --lock-file bench/BASELINE_LOCK.json --production  # Phase 13: C++ production validator
 ctest --test-dir native/build -R "native_d27" --output-on-failure  # Phase 13
+pwsh -File scripts/finalize_production_overnight.ps1              # Phase 14: post-overnight validate + d27/d28
+cypha_bench_run --domain-tag d28                                    # Phase 14: unified overnight completion validation (shipped)
+ctest --test-dir native/build -R "native_d28" --output-on-failure  # Phase 14
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

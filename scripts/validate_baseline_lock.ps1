@@ -15,7 +15,7 @@ $D17_PIN_BPC = 2.873
 $D17_PIN_TOLERANCE = 0.02
 $D17_PRODUCTION_PIN_TOLERANCE = 0.05
 $PRODUCTION_N_TRAIN_MIN = 300000
-$VALID_STATUSES = @("fast_smoke", "completed")
+$VALID_STATUSES = @("fast_smoke", "medium_smoke", "production", "completed")
 $PRODUCTION_STATUSES = @("production", "completed")
 
 function Fail([string]$Message) {

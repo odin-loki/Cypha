@@ -43,6 +43,8 @@ fs::path repo_root() { return find_repo_root(fs::current_path()); }
 
 fs::path bench_root() { return repo_root() / "bench"; }
 
+fs::path results_dir() { return bench_root() / "results"; }
+
 fs::path config_dir() { return bench_root() / "config"; }
 
 fs::path profiles_dir() { return config_dir() / "profiles"; }

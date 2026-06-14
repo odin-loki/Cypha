@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
 
         if (args.overnight_sweep) {
             std::filesystem::path out_dir = args.output_dir.empty()
-                                                ? cypha::bench::repo_root() / "results"
+                                                ? cypha::bench::results_dir() / "cell_sweep"
                                                 : std::filesystem::path(args.output_dir);
             write_overnight_artifacts(out_dir, results, args, b2_bpc);
         }
@@ -337,7 +337,7 @@ int main(int argc, char** argv) {
         };
         if (args.overnight_sweep) {
             const std::filesystem::path out_dir = args.output_dir.empty()
-                                                      ? cypha::bench::repo_root() / "results"
+                                                      ? cypha::bench::results_dir() / "cell_sweep"
                                                       : std::filesystem::path(args.output_dir);
             out["output_dir"] = out_dir.string();
         }

@@ -1,0 +1,31 @@
+{
+  "profile_id": "d28_overnight_complete_profile",
+  "description": "D28 unified overnight completion validation — schema + cross-section n_train gate + production tier",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 28,
+    "domain_tag": "d28"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d28_overnight_complete_smoke — unified overnight lock validator (pending or 300k cross-section check)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate", "production": true }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 28",
+    "Or: cypha_bench_run --domain-tag d28",
+    "Validates bench/BASELINE_LOCK.json schema, production tier gate, and cross-section consistency",
+    "Requires overnight_results, rpsm_results, and cell_sweep_results with matching n_train",
+    "When n_train < 300000: validation_status=pending_overnight_complete (smoke passes)",
+    "When n_train >= 300000: require status=production|completed on all three sections and matching n_train/n_eval",
+    "Also runs validate_production_tier_lock (d27 production BPC pin gate)",
+    "Phase 14: unified overnight completion validation gate"
+  ]
+}

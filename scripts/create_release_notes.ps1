@@ -9,6 +9,13 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.14" = @(
+    "Intelligence Stats **Phase 14**: **baseline lock status validator fix** — ``validate_baseline_lock.ps1`` and ``baseline_lock_validate`` accept ``medium_smoke`` and ``production`` (fixes production/medium overnight lock validation).",
+    "**Cell sweep artifact path** — default overnight output ``bench/results/cell_sweep`` (``bench_paths::results_dir()``); wired through ``cypha_baseline_lock --output-dir``, ``update_baseline_lock.ps1``, and ``run_overnight_all.ps1``.",
+    "Bench domain **d28** unified overnight completion validation — cross-check ``overnight_results``, ``rpsm_results``, and ``cell_sweep_results`` for matching ``n_train``/``n_eval``; profile ``bench/config/d28_overnight_complete_profile.json``; CTest ``native_d28_overnight_complete_smoke``.",
+    "``scripts/finalize_production_overnight.ps1`` — post-overnight gate: ``validate_baseline_lock.ps1 -Production``, d27 + d28 bench domains, lock section summary; chained from ``run_production_overnight.ps1`` on success.",
+    "CI gate **106 CTests**; full 300k production overnight **not** run in CI (maintainer workflow only)."
+  )
   "2.3.13" = @(
     "Intelligence Stats **Phase 13**: **production overnight tier** - 300k train / 2000 eval (``-Production`` on overnight scripts, ``cypha_baseline_lock --production``, ``status=production`` in lock JSON).",
     "Dedicated maintainer runner ``scripts/run_production_overnight.ps1`` - chains ``run_overnight_all.ps1 -Production``, logs to ``bench/results/production_overnight_<timestamp>.log``.",

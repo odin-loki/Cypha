@@ -54,7 +54,9 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`, `-Medium`, `-Production`) | disk |
 | `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`, `-Medium`, `-Production`) | disk |
 | `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast`, `-Medium`, or `-Production` to child scripts) | `bench/BASELINE_LOCK.json` |
-| `run_production_overnight.ps1` | Dedicated 300k production overnight wrapper — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log` | disk |
+| `run_production_overnight.ps1` | Dedicated 300k production overnight wrapper — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`, then `finalize_production_overnight.ps1` | disk |
+| `finalize_production_overnight.ps1` | Post-overnight gate: `validate_baseline_lock.ps1 -Production`, `cypha_bench_run --domain-tag d27` (+ d28 when present); prints lock section summary (`n_train`, `status`, `bpc`) | console |
+| `monitor_overnight.ps1` | Poll `bench/BASELINE_LOCK.json` sections; optional `-LogFile` (default: latest `bench/results/production_overnight_*.log`, last 3 lines per poll) | console |
 | `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`; `-Production` → `--production`) | lock JSON |
 | `validate_baseline_lock.ps1` | Validate `bench/BASELINE_LOCK.json` schema + d17 pin (`-LockFile`, `-Strict`, `-Production`) | console |
 | `publish_release.ps1` | Local `gh release create` wrapper (`-DryRun` / `-NotesOnly` preview without gh) | console |
@@ -84,7 +86,9 @@ Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/downlo
 | Script / binary | Purpose | CTest |
 |-----------------|---------|-------|
 | **`-Production`** on overnight scripts | 300k train / 2000 eval, real WikiText or gutenberg (`status=production`; mutually exclusive with `-Fast`/`-Medium`) | manual |
-| **`run_production_overnight.ps1`** | Dedicated production wrapper — `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log` | manual |
+| **`run_production_overnight.ps1`** | Dedicated production wrapper — `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`, then **`finalize_production_overnight.ps1`** | manual |
+| **`finalize_production_overnight.ps1`** | Post-overnight validation: **`validate_baseline_lock.ps1 -Production`**, **`cypha_bench_run --domain-tag d27`** (+ d28 when profile exists); lock section summary | manual |
+| **`monitor_overnight.ps1 -LogFile`** | Poll lock JSON + tail production overnight log (auto-picks latest `bench/results/production_overnight_*.log` when `-LogFile` omitted) | manual |
 | **`cypha_bench_run --domain-tag d27`** | Production overnight lock validation; profile `bench/config/d27_production_lock_profile.json` | `native_d27_production_lock_smoke` |
 | **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
 | **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |

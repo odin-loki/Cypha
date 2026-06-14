@@ -1,5 +1,6 @@
-# Phase 13: production overnight tier — 300k train / 2000 eval, real WikiText/gutenberg.
+# Phase 13/14: production overnight tier — 300k train / 2000 eval, real WikiText/gutenberg.
 # Chains D17 + d21 + cell sweep + baseline-lock refresh with status=production.
+# On success, runs finalize_production_overnight.ps1 (validate -Production + d27/d28 bench).
 # Usage:
 #   pwsh -File scripts/run_production_overnight.ps1
 #   pwsh -File scripts/run_production_overnight.ps1 -BuildDir native/build -SkipCellSweep
@@ -39,6 +40,13 @@ try {
     }
 } finally {
     Stop-Transcript | Out-Null
+}
+
+$finalizeScript = Join-Path $PSScriptRoot "finalize_production_overnight.ps1"
+Write-Host "== finalize production overnight ==" -ForegroundColor Cyan
+& $finalizeScript -BuildDir $BuildDir
+if ($LASTEXITCODE -ne 0) {
+    throw "finalize_production_overnight failed exit=$LASTEXITCODE"
 }
 
 Write-Host "Done. Updated bench/BASELINE_LOCK.json (status=production). Log: $logPath" -ForegroundColor Green
