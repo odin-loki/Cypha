@@ -115,6 +115,9 @@ class CyphaLMModel {
     double ssm_projection_rms() const;
     bool has_gria_routing() const { return gria_ != nullptr; }
 
+    /// Low-rank GRIA head when routing is enabled (nullptr otherwise).
+    const GRIALowRank* gria_routing() const { return gria_.get(); }
+
     /// Snapshot char-LSTM embed, recurrent, and lm_head weights for EWC (no-op without LSTM head).
     void ewc_snapshot();
 

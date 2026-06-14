@@ -44,6 +44,10 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `cypha_tune_smoke.ps1` | Dry-run tune sweep smoke | console |
 | `cyphalm_native_run_modes.ps1` | CyphaLM native mode matrix | console |
 | `cyphalm_native_sweep.ps1` / `cyphalm_native_sweep_safe.ps1` | CyphaLM config sweeps | disk |
+| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`) | disk |
+| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench | disk |
+| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge | `bench/BASELINE_LOCK.json` |
+| `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`) | lock JSON |
 | `wsl_bench_gpu.sh` | WSL GPU bench helper | console |
 
 ## Kernel LLR / XOR profiling

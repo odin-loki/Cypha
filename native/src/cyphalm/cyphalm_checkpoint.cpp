@@ -87,6 +87,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"seed", cfg.seed},
         {"bpe_merges_path", cfg.bpe_merges_path},
         {"bpe_vocab_path", cfg.bpe_vocab_path},
+        {"ewc_lambda", cfg.ewc_lambda},
     };
 }
 
@@ -156,6 +157,7 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_u64("seed", cfg.seed);
     if (c.contains("bpe_merges_path")) cfg.bpe_merges_path = c.at("bpe_merges_path").get<std::string>();
     if (c.contains("bpe_vocab_path")) cfg.bpe_vocab_path = c.at("bpe_vocab_path").get<std::string>();
+    get_d("ewc_lambda", cfg.ewc_lambda);
     return cfg;
 }
 
@@ -227,6 +229,9 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     }
     if (model.dif_) {
         meta["dif"] = model.dif_->get_state();
+    }
+    if (model.ewc_.has_snapshot()) {
+        meta["ewc"] = model.ewc_.get_state();
     }
 
     std::ofstream out(json_file);
@@ -319,6 +324,9 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
     }
     if (meta.contains("dif") && model.dif_) {
         model.dif_->set_state(meta.at("dif"));
+    }
+    if (meta.contains("ewc")) {
+        model.ewc_.set_state(meta.at("ewc"));
     }
 
     fs::path npz_path = jp;

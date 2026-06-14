@@ -1,0 +1,30 @@
+{
+  "profile_id": "d23_overnight_lock_profile",
+  "description": "D23 overnight baseline lock validation — cypha_baseline_lock d17+d21 fast mini runs",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 23,
+    "domain_tag": "d23"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d23_overnight_lock_smoke — wiring check for overnight baseline lock merge",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "cypha_baseline_lock", "run": "d17", "fast": true },
+      { "tool": "cypha_baseline_lock", "run": "d21", "fast": true }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 23",
+    "Or: cypha_bench_run --domain-tag d23",
+    "Runs cypha_baseline_lock --run d17 --fast and --run d21 --fast against a lock JSON copy",
+    "Validates overnight_results and rpsm_results sections are populated",
+    "Full overnight orchestration: scripts/run_overnight_all.ps1",
+    "Phase 9: overnight automation + baseline lock validation gate"
+  ]
+}

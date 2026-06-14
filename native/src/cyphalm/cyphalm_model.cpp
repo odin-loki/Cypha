@@ -877,6 +877,8 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
             stub.lstm = grads;
             if (has_gria_grad) {
                 stub.d_gria_alpha = gria_grad.d_alpha;
+                stub.d_gria_U = gria_grad.dU;
+                stub.d_gria_V = gria_grad.dV;
             }
             apply_hybrid_ewc(m, stub);
             hybrid_lstm_has_cache_ = false;
@@ -897,6 +899,8 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         mode != ContextMode::CharLstm && has_gria_grad) {
         HybridEwcGradStub stub;
         stub.d_gria_alpha = gria_grad.d_alpha;
+        stub.d_gria_U = gria_grad.dU;
+        stub.d_gria_V = gria_grad.dV;
         apply_hybrid_ewc(m, stub);
     }
     observe_ngram_count(next_token_id);
@@ -987,6 +991,11 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         }
     }
     for (double& v : avg) v /= static_cast<double>(bptt_buffer_.size());
+    if (cfg_.ewc_lambda > 0.0 && uses_hybrid_ewc(mode)) {
+        HybridEwcGradStub stub;
+        stub.d_ssm_w_fast = avg;
+        ewc_.observe_grads(stub);
+    }
     active->apply_bptt_delta_avg(avg, cfg_.ssm_lr);
     bptt_buffer_.clear();
 }

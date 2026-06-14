@@ -1,12 +1,12 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-14 08:07 UTC
+Generated: 2026-06-14 08:29 UTC
 
 Default parameters only — no hyperparameter tuning.
 
 ## Executive Summary
 
-- Domains run: **7**
+- Domains run: **8**
 - Cross-domain analyses: **4**
 
 ## D01
@@ -179,7 +179,7 @@ _No experiments recorded._
 
 ## D20
 
-*Timestamp:* 2026-06-14T08:07:37.856+00:00
+*Timestamp:* 2026-06-14T08:28:56.404+00:00
 
 ### backend
 
@@ -194,6 +194,10 @@ _No experiments recorded._
 - result: 3.0000
 
 ## D22
+
+_No experiments recorded._
+
+## D23
 
 _No experiments recorded._
 

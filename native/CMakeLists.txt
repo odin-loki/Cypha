@@ -223,6 +223,9 @@ target_link_libraries(ewc_cyphalm_smoke PRIVATE cypha_lm_native)
 add_executable(ewc_hybrid_smoke tools/ewc_hybrid_smoke.cpp)
 target_link_libraries(ewc_hybrid_smoke PRIVATE cypha_lm_native)
 
+add_executable(ewc_weights_smoke tools/ewc_weights_smoke.cpp)
+target_link_libraries(ewc_weights_smoke PRIVATE cypha_lm_native)
+
 add_executable(native_sr_gate_laws_smoke tools/native_sr_gate_laws_smoke.cpp)
 target_link_libraries(native_sr_gate_laws_smoke PRIVATE cypha_lm_native)
 
@@ -308,6 +311,7 @@ set(
   ewc_d16b_smoke
   ewc_cyphalm_smoke
   ewc_hybrid_smoke
+  ewc_weights_smoke
   native_sr_gate_laws_smoke
   federated_worker_smoke
   federated_tls_smoke
@@ -857,6 +861,11 @@ add_test(
 )
 
 add_test(
+  NAME native_ewc_weights_smoke
+  COMMAND "$<TARGET_FILE:ewc_weights_smoke>"
+)
+
+add_test(
   NAME native_sr_gate_laws_smoke
   COMMAND "$<TARGET_FILE:native_sr_gate_laws_smoke>"
 )
@@ -987,6 +996,21 @@ add_test(
 )
 set_tests_properties(native_d22_cross_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
+
+configure_file(
+  "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+  "${CMAKE_CURRENT_BINARY_DIR}/d23_overnight_lock_smoke.json"
+  COPYONLY
+)
+
+add_test(
+  NAME native_d23_overnight_lock_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d23
+)
+set_tests_properties(native_d23_overnight_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 120
 )
 
 add_test(

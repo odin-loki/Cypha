@@ -6,6 +6,8 @@
 
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 namespace cypha::cyphalm {
 
 /// EWC overlay on char-LSTM weights: embed ``E``, recurrent ``Wx``/``Wh``, lm_head ``Wy``/``by``.
@@ -30,6 +32,9 @@ class CyphaLMEwcRegularizer {
     return !anchor_E_.empty() && !anchor_Wy_.empty() && !anchor_by_.empty();
   }
 
+  nlohmann::json get_state() const;
+  void set_state(const nlohmann::json& state);
+
  private:
   std::vector<double> anchor_E_;
   std::vector<double> anchor_Wx_;
@@ -48,7 +53,10 @@ struct HybridEwcGradStub {
   CharLSTMGrad lstm;
   bool has_lstm{false};
   std::vector<double> d_gria_alpha;
+  std::vector<double> d_gria_U;
+  std::vector<double> d_gria_V;
   std::vector<double> d_ssm_alpha;
+  std::vector<double> d_ssm_w_fast;
 };
 
 /// Hybrid EWC: char-LSTM + SSM multiscale ``alpha`` + GRIA per-token ``alpha``.
@@ -63,7 +71,10 @@ class HybridEwcRegularizer {
   void apply_pull(CharLSTMHead* lstm, CellAISSM* ssm, GRIALowRank* gria, double ewc_lambda,
                   double lstm_lr, double gria_lr, double ssm_lr) const;
 
-  bool has_snapshot() const { return lstm_.has_snapshot() || !anchor_gria_alpha_.empty(); }
+  bool has_snapshot() const {
+    return lstm_.has_snapshot() || !anchor_gria_alpha_.empty() || !anchor_gria_U_.empty() ||
+           !anchor_ssm_w_fast_.empty();
+  }
 
   bool covers_embed_and_head() const { return lstm_.covers_embed_and_head(); }
 
@@ -71,17 +82,32 @@ class HybridEwcRegularizer {
 
   bool covers_gria_alpha() const { return !anchor_gria_alpha_.empty(); }
 
+  bool covers_gria_weights() const { return !anchor_gria_U_.empty() && !anchor_gria_V_.empty(); }
+
+  bool covers_ssm_w_fast() const { return !anchor_ssm_w_fast_.empty(); }
+
   CyphaLMEwcRegularizer& lstm_part() { return lstm_; }
   const CyphaLMEwcRegularizer& lstm_part() const { return lstm_; }
+
+  nlohmann::json get_state() const;
+  void set_state(const nlohmann::json& state);
 
  private:
   CyphaLMEwcRegularizer lstm_;
   std::vector<double> anchor_ssm_alpha_;
   std::vector<double> anchor_gria_alpha_;
+  std::vector<double> anchor_gria_U_;
+  std::vector<double> anchor_gria_V_;
+  std::vector<double> anchor_ssm_w_fast_;
   std::vector<double> fisher_ssm_alpha_;
   std::vector<double> fisher_gria_alpha_;
+  std::vector<double> fisher_gria_U_;
+  std::vector<double> fisher_gria_V_;
+  std::vector<double> fisher_ssm_w_fast_;
   std::size_t ssm_grad_observations_{0};
   std::size_t gria_grad_observations_{0};
+  std::size_t gria_uv_grad_observations_{0};
+  std::size_t ssm_w_fast_grad_observations_{0};
 };
 
 }  // namespace cypha::cyphalm

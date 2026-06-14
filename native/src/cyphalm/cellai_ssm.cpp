@@ -291,6 +291,18 @@ void CellAISSM::apply_bptt_delta_avg(const std::vector<double>& avg_delta, doubl
   }
 }
 
+const std::vector<double>& CellAISSM::w_fast_layer0() const {
+  static const std::vector<double> kEmpty;
+  if (cfg_.n_layers < 1 || W_fast_.empty()) {
+    return kEmpty;
+  }
+  return W_fast_[0];
+}
+
+std::vector<double>& CellAISSM::w_fast_layer0_mut() {
+  return W_fast_[0];
+}
+
 nlohmann::json CellAISSM::get_state() const {
   nlohmann::json j;
   j["h"] = h_;

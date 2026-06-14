@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **96 CTests**
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **98 CTests** *(Phase 9 target; 96 shipped at Phase 8)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **96 CTests** gate CI |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **98 CTests** gate CI *(Phase 9 target)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -221,6 +221,14 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Cross-domain bench d22:** `d22_intelligence_cross_profile.json` — d18 intelligence report + d16 EWC probe + d20 cell sweep smoke; CTest **`native_d22_cross_smoke`**.
 - **Checkpoint fix:** CyphaLM save/load persists **`ngram_count_table`** in checkpoint JSON (B0 count path).
 - **CI:** optional **`federated_tls`** job (**`-DCYPHA_ENABLE_OPENSSL=ON`**, **`native_federated_tls_smoke`**); local mirror **`scripts/ci_federated_tls_linux.sh`**. **96 CTests** in blocking gate.
+
+### Phase 9 — hybrid EWC weights + overnight lock validation (v2.3.9, planned)
+
+- **Hybrid EWC weight Fisher:** extend `HybridEwcRegularizer` beyond Phase 8 α Fisher — diagonal Fisher on GRIA low-rank **U**/**V** (`gria_lowrank.hpp`) and SSM per-layer **W_fast** (`cellai_ssm.hpp`); char-LSTM embed/head Fisher retained. CTest **`native_ewc_weight_fisher_smoke`**.
+- **EWC checkpoint persistence:** CyphaLM `checkpoint.json` save/load of EWC anchor + running Fisher blocks so overnight / continual runs resume without re-snapshot. Validated in weight-Fisher smoke round-trip.
+- **Unified overnight runner:** **`scripts/run_overnight_all.ps1`** — orchestrates D17 WikiText 300k (`run_d17_overnight.ps1`), d21 RPSM overnight (`run_rpsm_overnight.ps1`), 28-variant cell sweep, then **`update_baseline_lock.ps1`** to refresh **`bench/BASELINE_LOCK.json`**.
+- **Bench d23:** overnight lock validation — FAST smoke wiring for `BASELINE_LOCK.json` schema, mini overnight token budget, and cross-check vs D17 hybrid **2.873 BPC** pin; profile **`bench/config/d23_overnight_lock_profile.json`** *(planned)*. CTest **`native_d23_overnight_lock_smoke`**.
+- **CI:** **98 CTests** in blocking gate (+2 Phase 9 smokes).
 
 ---
 

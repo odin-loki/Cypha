@@ -115,12 +115,26 @@
 
 **CI gate:** **96 CTests** (`ctest -R native_`); optional **`federated_tls`** job runs **`native_federated_tls_smoke`** with **`-DCYPHA_ENABLE_OPENSSL=ON`**.
 
+## Phase 9 — planned (v2.3.9)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Hybrid EWC weight Fisher (GRIA **U**/**V** + SSM **W_fast**) | `cyphalm_ewc_regularizer.hpp/cpp` — extend `HybridEwcRegularizer` + `HybridEwcGradStub` (`dU`, `dV`, `d_W_fast`) | `native_ewc_weight_fisher_smoke` |
+| EWC checkpoint persistence | `cyphalm_checkpoint.cpp` — save/load `ewc_anchor` + `ewc_fisher` blocks in `checkpoint.json` | round-trip in `native_ewc_weight_fisher_smoke` |
+| Unified overnight runner | `scripts/run_overnight_all.ps1` — chains D17, d21 RPSM, cell sweep, `update_baseline_lock.ps1` | manual |
+| Overnight lock validation bench **d23** | `bench_domains.cpp` → `run_d23_overnight_lock_validation` | `cypha_bench_run --domain-tag d23` |
+| D23 profile config | `bench/config/d23_overnight_lock_profile.json` *(planned)* | manual |
+| D23 lock report | `bench/report/tables/d23_overnight_lock_validation.json` *(planned)* | d23 run |
+| Release notes v2.3.9 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 9 target):** **98 CTests** (`ctest -R native_`); +2 smokes: **`native_d23_overnight_lock_smoke`**, **`native_ewc_weight_fisher_smoke`**.
+
 ## Still planned
 
-- **D17 300k + 28-variant overnight** — run manually; fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1`**
+- **D17 300k + 28-variant overnight** — prefer **`scripts/run_overnight_all.ps1`**; fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1`**
 - **GitHub Release** publish via `gh auth login` + `scripts/publish_release.ps1`
 - **RPSM @ 300k production benchmark** — d21 wired; full overnight not executed in CI
-- **EWC full Fisher on SSM/GRIA weight tensors** — hybrid α Fisher shipped; recurrent/GRIA weight blocks still char-LSTM-only overlay
+- **EWC Fisher on SSM slow weights / GRIA bias** — Phase 9 targets GRIA **U**/**V** + SSM **W_fast**; char-LSTM recurrent + remaining SSM blocks TBD
 
 ## Commands
 
@@ -133,6 +147,9 @@ cypha_cell_hypothesis_sweep --overnight-sweep-smoke
 cypha_cell_hypothesis_sweep --overnight-sweep   # CYPHA_BENCH_OVERNIGHT=1 → 300k
 cypha_bench_run --domain-tag d22
 pwsh -File scripts/update_baseline_lock.ps1 -Run d17 -Fast
+pwsh -File scripts/run_overnight_all.ps1 -Fast          # Phase 9: unified overnight (planned)
+cypha_bench_run --domain-tag d23                        # Phase 9: overnight lock validation (planned)
+ctest --test-dir native/build -R "native_d23|native_ewc_weight" --output-on-failure
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

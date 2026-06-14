@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <vector>
 
+#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 
@@ -83,6 +84,32 @@ int main() {
   model.ewc_snapshot();
   const auto m = model.train_step(7, 8);
   assert(m.ewc_penalty > 0.0);
+
+  {
+    cypha::cyphalm::CyphaLMConfig ckpt_cfg;
+    ckpt_cfg.vocab_size = 32;
+    ckpt_cfg.field_dim = 32;
+    ckpt_cfg.d_embed = 16;
+    ckpt_cfg.d_state = 16;
+    ckpt_cfg.ssm_layers = 1;
+    ckpt_cfg.context_mode = cypha::cyphalm::ContextMode::SsmGria;
+    ckpt_cfg.ewc_lambda = 0.5;
+    ckpt_cfg.gria_lr = 0.05;
+    ckpt_cfg.ssm_lr = 0.001;
+    ckpt_cfg.seed = 41;
+    cypha::cyphalm::CyphaLMModel ckpt_model(ckpt_cfg);
+    train_sequence(ckpt_model, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 8);
+    ckpt_model.ewc_snapshot();
+    assert(ckpt_model.hybrid_ewc_regularizer().has_snapshot());
+    const std::string base = "C:/Temp/ewc_hybrid_ckpt_roundtrip";
+    ckpt_model.save(base);
+    cypha::cyphalm::CyphaLMModel loaded = cypha::cyphalm::load_cyphalm_model(base + ".json");
+    assert(loaded.config().ewc_lambda == ckpt_cfg.ewc_lambda);
+    assert(loaded.hybrid_ewc_regularizer().has_snapshot());
+    assert(loaded.hybrid_ewc_regularizer().covers_gria_alpha());
+    const auto loaded_m = loaded.train_step(11, 12);
+    assert(loaded_m.ewc_penalty > 0.0);
+  }
 
   std::printf(
       "ewc_hybrid_smoke: ssm_penalty=%.6e->%.6e hybrid_penalty=%.6e->%.6e PASS\n", baseline_ssm,

@@ -1,4 +1,4 @@
-// bench_domains — native bench domain runners (d01–d22) for cypha_bench_run.
+// bench_domains — native bench domain runners (d01–d23) for cypha_bench_run.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -45,6 +45,7 @@
 #include "cypha/bench/bench_report_json.hpp"
 #include "cypha/bench/bench_cross_domain.hpp"
 #include "cypha/bench/bench_report.hpp"
+#include "cypha/bench/bench_tune.hpp"
 #include "cypha/create_model.hpp"
 #include "cypha/csv_ingest.hpp"
 #include "cypha/ewc_regularizer.hpp"
@@ -2974,6 +2975,108 @@ Json run_d22_intelligence_cross_profile() {
     return experiments;
 }
 
+fs::path resolve_native_exe_dir() {
+    if (const char* raw = std::getenv("CYPHA_NATIVE_EXE_DIR")) {
+        if (*raw != '\0') {
+            return fs::absolute(raw);
+        }
+    }
+    return fs::current_path();
+}
+
+Json load_json_file(const fs::path& path) {
+    std::ifstream in(path);
+    if (!in) {
+        throw std::runtime_error("failed to open JSON: " + path.string());
+    }
+    Json j;
+    in >> j;
+    return j;
+}
+
+void validate_overnight_lock_section(const Json& section, const char* section_name) {
+    if (!section.is_object()) {
+        throw std::runtime_error(std::string(section_name) + " is not an object");
+    }
+    if (!section.contains("status") || !section["status"].is_string()) {
+        throw std::runtime_error(std::string(section_name) + " missing status");
+    }
+    const std::string status = section["status"].get<std::string>();
+    if (status == "pending") {
+        throw std::runtime_error(std::string(section_name) + " still pending");
+    }
+    if (!section.contains("bpc") || section["bpc"].is_null()) {
+        throw std::runtime_error(std::string(section_name) + " missing bpc");
+    }
+    if (!section.contains("run_at") || section["run_at"].is_null()) {
+        throw std::runtime_error(std::string(section_name) + " missing run_at");
+    }
+}
+
+Json run_baseline_lock_subprocess(const fs::path& exe_dir, const fs::path& lock_path,
+                                  const char* run_kind, int n_train, int n_eval) {
+    const fs::path baseline_lock_exe = cypha::bench::resolve_runner_exe("cypha_baseline_lock", exe_dir);
+    if (!fs::is_regular_file(baseline_lock_exe)) {
+        throw std::runtime_error("missing cypha_baseline_lock: " + baseline_lock_exe.string());
+    }
+    const std::vector<std::string> args = {
+        "--run", run_kind, "--fast", "--n-train", std::to_string(n_train), "--n-eval",
+        std::to_string(n_eval), "--lock-file", fs::absolute(lock_path).string(), "--exe-dir",
+        fs::absolute(exe_dir).string()};
+    const cypha::bench::RunProcessResult proc = cypha::bench::run_executable_capture(baseline_lock_exe, args);
+    if (proc.exit_code != 0) {
+        throw std::runtime_error(std::string("cypha_baseline_lock --run ") + run_kind + " exit=" +
+                                 std::to_string(proc.exit_code));
+    }
+    if (proc.stdout_text.empty()) {
+        throw std::runtime_error(std::string("cypha_baseline_lock --run ") + run_kind + " produced no stdout");
+    }
+    return Json::parse(proc.stdout_text);
+}
+
+Json run_d23_overnight_lock_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path lock_path = fs::current_path() / "d23_overnight_lock_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const int n_train = cypha::bench::bench_scale(200, 200);
+    const int n_eval = cypha::bench::bench_scale(64, 64);
+
+    const Json d17_report = run_baseline_lock_subprocess(exe_dir, lock_path, "d17", n_train, n_eval);
+    const Json d21_report = run_baseline_lock_subprocess(exe_dir, lock_path, "d21", n_train, n_eval);
+
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("overnight_results")) {
+        throw std::runtime_error("lock JSON missing overnight_results");
+    }
+    validate_overnight_lock_section(lock["overnight_results"], "overnight_results");
+    if (!lock.contains("rpsm_results")) {
+        throw std::runtime_error("lock JSON missing rpsm_results");
+    }
+    validate_overnight_lock_section(lock["rpsm_results"], "rpsm_results");
+
+    const Json experiments{
+        {"d17_baseline_lock", d17_report},
+        {"d21_baseline_lock", d21_report},
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"backend", "cypha_baseline_lock"},
+    };
+    cypha::bench::finalize_domain("d23_overnight_lock_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d23_overnight_lock_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -2999,6 +3102,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d20", "cypha_bench.domains.d20_cell_hypothesis_overnight", run_d20_cell_hypothesis_overnight_smoke},
         {"d21", "cypha_bench.domains.d21_rpsm_overnight", run_d21_rpsm_overnight_smoke},
         {"d22", "cypha_bench.domains.d22_intelligence_cross_profile", run_d22_intelligence_cross_profile},
+        {"d23", "cypha_bench.domains.d23_overnight_lock_validation", run_d23_overnight_lock_validation},
     };
 }
 
