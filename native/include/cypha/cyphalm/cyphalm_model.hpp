@@ -22,6 +22,8 @@
 #include "cypha/cyphalm/ngram_fusion.hpp"
 #include "cypha/cyphalm/selective_ssm.hpp"
 #include "cypha/cyphalm/view_embedding.hpp"
+#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/rpsm/rpsm_sequence_layer.hpp"
 #include "cypha/som/discriminative_feedback.hpp"
 #include "cypha/som/gng_expert.hpp"
 #include "cypha/som/gria_controller.hpp"
@@ -50,6 +52,7 @@ struct TrainStepMetrics {
     double aleatoric_var = 0.0;
     int active_experts = 0;
     double alpha_gria = 0.0;
+    double profile_guided_loss = 0.0;
 };
 
 /// Unified native CyphaLM stack (Tier 0–2–4 integration point).
@@ -122,6 +125,9 @@ class CyphaLMModel {
 
     std::unique_ptr<CyphaDIF> dif_;
     std::unique_ptr<ViewEmbedding> view_emb_;
+    std::unique_ptr<cypha::rpsm::RpsmSequenceLayer> rpsm_layer_;
+    std::unique_ptr<cypha::intelligence::IntelligenceProfiler> train_profiler_;
+    std::vector<double> rpsm_log_probs_;
 
     std::vector<double> proj_ssm_;
     std::vector<double> proj_dif_;

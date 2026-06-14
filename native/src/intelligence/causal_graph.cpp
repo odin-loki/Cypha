@@ -42,13 +42,41 @@ void CausalGraphMonitor::record_simulation(double resolution) {
   record_edge("simulation", "world_model", clamp01(resolution));
 }
 
+void CausalGraphMonitor::simulation_step(double r_eu_before, double r_eu_after, double resolution) {
+  soft_world_.simulation_step(r_eu_before, r_eu_after, resolution);
+  record_edge("query", "r_eu", clamp01(r_eu_before - r_eu_after));
+  record_edge("simulation", "world_model", clamp01(resolution));
+  trajectory_.push_back(SimulationStepEvent{
+      r_eu_before, r_eu_after, resolution, soft_world_.maturation_level()});
+}
+
+nlohmann::json CausalGraphMonitor::trajectory_json() const {
+  nlohmann::json steps = nlohmann::json::array();
+  for (const auto& s : trajectory_) {
+    steps.push_back({{"r_eu_before", s.r_eu_before},
+                     {"r_eu_after", s.r_eu_after},
+                     {"resolution", s.resolution},
+                     {"maturation_level", s.maturation_level}});
+  }
+  return {
+      {"trajectory", steps},
+      {"step_count", trajectory_.size()},
+      {"soft_world",
+       {{"maturation_level", soft_world_.maturation_level()},
+        {"query_quality", soft_world_.query_quality()}}},
+  };
+}
+
 nlohmann::json CausalGraphMonitor::to_json() const {
   nlohmann::json edges = nlohmann::json::array();
   for (const auto& e : edges_) {
     edges.push_back({{"from", e.from}, {"to", e.to}, {"weight", e.weight}});
   }
+  nlohmann::json traj = trajectory_json();
   return {
       {"edges", edges},
+      {"trajectory", traj.at("trajectory")},
+      {"step_count", traj.at("step_count")},
       {"soft_world",
        {{"maturation_level", soft_world_.maturation_level()},
         {"query_quality", soft_world_.query_quality()}}},

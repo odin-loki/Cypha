@@ -38,6 +38,9 @@ add_library(cypha_core STATIC
   src/mt19937_rng.cpp
   src/csv_ingest.cpp
   src/memory_train.cpp
+  src/ewc_regularizer.cpp
+  src/curriculum.cpp
+  src/federated_aggregate.cpp
   src/registry.cpp
   src/sync_infer.cpp
   src/encoder_contrastive.cpp
@@ -69,6 +72,7 @@ add_library(cypha_core STATIC
   src/intelligence/causal_graph.cpp
   src/intelligence/profile_guided_loss.cpp
   src/rpsm/psi_matrices.cpp
+  src/rpsm/rpsm_sequence_layer.cpp
   src/bench/bench_paths.cpp
 )
 
@@ -192,6 +196,9 @@ target_link_libraries(cuda_smoke PRIVATE cypha_core)
 add_executable(create_model_smoke tools/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
 
+add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
+target_link_libraries(cypha_federated_merge PRIVATE cypha_core)
+
 add_executable(cypha_onnx_export tools/cypha_onnx_export.cpp)
 target_link_libraries(cypha_onnx_export PRIVATE cypha_core)
 
@@ -200,6 +207,12 @@ target_link_libraries(cypha_export_gguf PRIVATE cypha_core)
 
 add_executable(intelligence_profiler_smoke tools/intelligence_profiler_smoke.cpp)
 target_link_libraries(intelligence_profiler_smoke PRIVATE cypha_core)
+
+add_executable(ewc_smoke tools/ewc_smoke.cpp)
+target_link_libraries(ewc_smoke PRIVATE cypha_core)
+
+add_executable(curriculum_smoke tools/curriculum_smoke.cpp)
+target_link_libraries(curriculum_smoke PRIVATE cypha_core)
 
 add_executable(intelligence_profiler_papers tools/intelligence_profiler_papers.cpp)
 target_link_libraries(intelligence_profiler_papers PRIVATE cypha_core)
@@ -226,9 +239,12 @@ set(
   rest_schema_contract
   cuda_smoke
   create_model_smoke
+  cypha_federated_merge
   cypha_onnx_export
   cypha_export_gguf
   intelligence_profiler_smoke
+  ewc_smoke
+  curriculum_smoke
   intelligence_profiler_papers
   cyphalm_bench_native
   cyphalm_ssm_diagnose
@@ -449,6 +465,10 @@ add_test(
   COMMAND "$<TARGET_FILE:rpsm_batched_llr_smoke>"
     "${_parity_fix}/reference.cypha"
     "${_parity_fix}/native_parity.bin"
+)
+add_test(
+  NAME native_rpsm_sequence_smoke
+  COMMAND "$<TARGET_FILE:rpsm_sequence_smoke>"
 )
 add_test(
   NAME native_fixture_gen_list
@@ -734,6 +754,16 @@ add_test(
 )
 
 add_test(
+  NAME native_ewc_smoke
+  COMMAND "$<TARGET_FILE:ewc_smoke>"
+)
+
+add_test(
+  NAME native_curriculum_smoke
+  COMMAND "$<TARGET_FILE:curriculum_smoke>"
+)
+
+add_test(
   NAME native_intelligence_profiler_papers
   COMMAND "$<TARGET_FILE:intelligence_profiler_papers>"
 )
@@ -749,8 +779,37 @@ add_test(
 )
 
 add_test(
+  NAME native_d17_wikitext_smoke
+  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
+    --profile d17 --mode hybrid --n-train 512 --n-eval 64
+)
+set_tests_properties(native_d17_wikitext_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1;CYPHA_BENCH_FAST=1"
+)
+
+add_test(
+  NAME native_federated_merge_smoke
+  COMMAND "$<TARGET_FILE:cypha_federated_merge>"
+    --merge
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_a.json"
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_b.json"
+    --out "${CMAKE_CURRENT_BINARY_DIR}/federated_merge_smoke.json"
+)
+
+add_test(
+  NAME native_cyphalm_bench_rpsm_smoke
+  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
+    --profile d17 --mode rpsm --n-train 100 --n-eval 32
+)
+
+add_test(
   NAME native_cell_hypothesis_sweep_smoke
   COMMAND "$<TARGET_FILE:cypha_cell_hypothesis_sweep>" --smoke
+)
+
+add_test(
+  NAME native_cell_hypothesis_tier2_smoke
+  COMMAND "$<TARGET_FILE:cypha_cell_hypothesis_sweep>" --tier2-smoke
 )
 
 add_test(

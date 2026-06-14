@@ -193,9 +193,22 @@ void test_paper_v_causal_graph() {
   graph.observe_profile(a);
   graph.observe_profile(b);
   graph.record_simulation(0.2);
+  graph.simulation_step(0.85, 0.55, 0.3);
+  graph.simulation_step(0.7, 0.4, 0.25);
   const auto j = graph.to_json();
   assert(j.contains("edges"));
+  assert(j.at("step_count").get<int>() >= 2);
+  const auto traj = graph.trajectory_json();
+  assert(traj.at("trajectory").is_array());
+  assert(traj.at("trajectory").size() >= 2);
   assert(j.at("soft_world").at("maturation_level").get<double>() >= 0.0);
+}
+
+void test_paper_v_soft_world_simulation_step() {
+  cypha::intelligence::SoftWorldMonitor monitor;
+  monitor.simulation_step(0.8, 0.5, 0.2);
+  assert(monitor.query_quality() > 0.2);
+  assert(monitor.maturation_level() > 0.2);
 }
 
 void test_paper_iv_profile_guided_loss() {
@@ -216,6 +229,7 @@ int main() {
   test_paper_iv_epistemic_threshold();
   test_paper_iv_self_correcting_infer();
   test_paper_v_soft_world();
+  test_paper_v_soft_world_simulation_step();
   test_paper_v_causal_graph();
   test_paper_iv_profile_guided_loss();
   test_extended_measurers_and_batch();

@@ -85,6 +85,10 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
   MemoryTrainMeta* meta = meta_out != nullptr ? meta_out : &meta_local;
   double loss = mem.memory_train(H.data(), y_label, infer.field_h.data(), ctx_map, infer.temperature,
                                   ood_sigma, world_lr_step, delta_lr_step, meta);
+  if (extras != nullptr && extras->ewc_lambda > 0.0 && extras->ewc != nullptr && extras->ewc->has_snapshot()) {
+    loss += extras->ewc_lambda * extras->ewc->penalty(mem, infer);
+    extras->ewc->apply_pull(mem, infer, extras->ewc_lambda, delta_lr_step);
+  }
   sync_infer_model_from_memory(infer, mem);
 
   if (extras != nullptr && extras->use_kernel_llr && extras->kernel_mem != nullptr) {

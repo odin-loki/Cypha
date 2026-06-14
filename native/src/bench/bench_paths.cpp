@@ -54,13 +54,21 @@ fs::path data_dir() { return bench_root() / "data"; }
 fs::path config_file(const std::string& rel_path) { return config_dir() / rel_path; }
 
 int bench_scale(int default_value, int fast_value) {
-    if (const char* raw = std::getenv("CYPHA_BENCH_FAST")) {
-        if (*raw == '1' || (raw[0] == 't' || raw[0] == 'T')) {
-            if (fast_value >= 0) return fast_value;
-            return std::max(default_value / 5, 1);
-        }
+    if (bench_env_truthy("CYPHA_BENCH_FAST")) {
+        if (fast_value >= 0) return fast_value;
+        return std::max(default_value / 5, 1);
     }
     return default_value;
+}
+
+bool bench_env_truthy(const char* key) {
+    if (const char* raw = std::getenv(key)) {
+        if (*raw == '\0') return false;
+        if (raw[0] == '1') return true;
+        if (raw[0] == 't' || raw[0] == 'T') return true;
+        if (raw[0] == 'y' || raw[0] == 'Y') return true;
+    }
+    return false;
 }
 
 }  // namespace cypha::bench

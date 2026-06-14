@@ -47,6 +47,7 @@
 #include "cypha/bench/bench_report.hpp"
 #include "cypha/create_model.hpp"
 #include "cypha/csv_ingest.hpp"
+#include "cypha/ewc_regularizer.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
@@ -1157,15 +1158,30 @@ Json run_cyphalm_domain(const std::string& domain_id, const std::string& profile
     if (profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
     if (profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
 
-    const int n_train = (profile == "d04") ? 8000 : 4000;
-    const int n_eval = (profile == "d04") ? 1000 : 500;
+    const bool full_corpus =
+        (profile == "d17") && cypha::cyphalm::bench_full_corpus_enabled();
+    int full_n_train = 300000;
+    if (const char* raw = std::getenv("CYPHA_BENCH_FULL_N_TRAIN")) {
+        try {
+            full_n_train = std::max(1, std::stoi(raw));
+        } catch (...) {
+        }
+    }
+    const int default_n_train = (profile == "d04") ? 8000 : (full_corpus ? full_n_train : 4000);
+    const int default_n_eval = (profile == "d04") ? 1000 : (full_corpus ? 2000 : 500);
+    const int n_train = cypha::bench::bench_scale(default_n_train, full_corpus ? 512 : 800);
+    const int n_eval = cypha::bench::bench_scale(default_n_eval, full_corpus ? 64 : 100);
 
     cypha::cyphalm::LMCorpus corpus;
     bool synthetic = false;
     try {
-        corpus = cypha::cyphalm::load_bench_corpus(profile, 2'000'000, cfg.vocab_size,
+        const int max_chars = full_corpus ? 0 : 2'000'000;
+        corpus = cypha::cyphalm::load_bench_corpus(profile, max_chars, cfg.vocab_size,
                                                    cfg.bpe_merges_path, cfg.bpe_vocab_path);
     } catch (const std::exception&) {
+        if (!bench_fast_mode()) {
+            throw;
+        }
         synthetic = true;
         corpus.profile = profile;
         corpus.source = "synthetic";
@@ -1187,6 +1203,7 @@ Json run_cyphalm_domain(const std::string& domain_id, const std::string& profile
         {"mode", "hybrid"},
         {"corpus", corpus.source},
         {"synthetic", synthetic},
+        {"full_corpus", full_corpus},
         {"n_train", n_train},
         {"n_eval", n_eval},
         {"bpc", std::isnan(bpc) ? Json(nullptr) : Json(bpc)},
@@ -1853,6 +1870,44 @@ Json run_d16() {
         };
     }
 
+    // 16H EWC overlay smoke (anchor snapshot + optional penalty during 16B-style iris train)
+    Json exp16h;
+    {
+        const MultitaskBundle* iris = nullptr;
+        for (const auto& t : tasks) {
+            if (t.name == "iris") {
+                iris = &t;
+            }
+        }
+        if (iris != nullptr && !iris->train_x.empty()) {
+            OnlineClassifier clf = make_multitask_clf(kBenchSeed + 40);
+            cypha::EwcRegularizer ewc;
+            ewc.snapshot(clf.mem, clf.infer);
+            cypha::TrainStepExtras extras{};
+            extras.ewc = &ewc;
+            extras.ewc_lambda = 0.25;
+            const int steps = std::min(cypha::bench::bench_scale(400, 100),
+                                       static_cast<int>(iris->train_x.size()));
+            for (int k = 0; k < steps; ++k) {
+                const auto x = pad_to_max(iris->train_x[static_cast<std::size_t>(k)], max_dim);
+                const std::string label = iris->name + "_" + iris->train_y[static_cast<std::size_t>(k)];
+                const int d = static_cast<int>(x.size());
+                (void)cypha::dif_train_step_vector(clf.infer, clf.mem, clf.replay, x.data(), d, label, clf.world_lr,
+                                                   clf.delta_lr, clf.world_lr, clf.delta_lr, clf.ood_sigma, clf.tsp,
+                                                   clf.rng, clf.enc_updates, nullptr, &extras);
+            }
+            cypha::sync_infer_model_from_memory(clf.infer, clf.mem);
+            exp16h = Json{
+                {"ewc_lambda", 0.25},
+                {"ewc_penalty_after_train", ewc.penalty(clf.mem, clf.infer)},
+                {"iris_accuracy", eval_task(clf, *iris)},
+                {"ewc_active", true},
+            };
+        } else {
+            exp16h = Json{{"ewc_active", false}, {"detail", "iris task missing"}};
+        }
+    }
+
     const Json experiments{
         {"16A_task_discovery", exp16a},
         {"16B_forgetting_resistance", exp16b},
@@ -1860,6 +1915,7 @@ Json run_d16() {
         {"16E_save_restore", exp16e},
         {"16F_per_task_models", exp16f},
         {"16G_view_streams", exp16g},
+        {"16H_ewc_overlay", exp16h},
         {"backend", "cypha_core"},
     };
     cypha::bench::finalize_domain("d16", experiments);

@@ -504,6 +504,10 @@ void PreprocessorState::fit_from_design_matrix(const std::vector<double>& row_ma
 
   if (rff_dim > 0) {
     double gamma = rff_gamma;
+    if (!auto_rff_gamma && !auto_rff_gamma_cv && n_cols <= 30 &&
+        std::abs(rff_gamma - 1.0) < 1e-15) {
+      auto_rff_gamma_cv = true;
+    }
     if (auto_rff_gamma_cv) {
       gamma = estimate_rff_gamma_cv(x, n_rows, d_work, rff_dim, seed, y_rowmajor, y_cols);
       rff_gamma = gamma;

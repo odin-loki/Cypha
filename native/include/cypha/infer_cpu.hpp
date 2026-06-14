@@ -122,6 +122,7 @@ struct CyphaInferModel {
 
 void batch_encode(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& h_out);
 
+/// Field-adjusted LLR matrix. When ``CYPHA_USE_RPSM_LLR=1``, uses ``rpsm_score_matrix_batched`` (opt-in only).
 void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
                             std::vector<double>& llr_out,
                             const KernelMemory* kernel_mem = nullptr, bool use_kernel_llr = false,

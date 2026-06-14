@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -28,6 +29,11 @@ namespace {
 
 constexpr double kEps = 1e-8;
 constexpr double kMinVar = 1e-4;
+
+bool use_rpsm_llr_from_env() {
+  const char* v = std::getenv("CYPHA_USE_RPSM_LLR");
+  return v != nullptr && v[0] != '\0' && v[0] != '0';
+}
 
 double as_double(const CNode& n) {
   if (n.kind == CNode::Float) {
@@ -608,6 +614,9 @@ void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n
   score_matrix_use_field(m, h.data(), n, llr_out);
 }
 
+void rpsm_score_matrix_batched(const CyphaInferModel& m, const double* h_row_major, int n,
+                               std::vector<double>& llr_out);
+
 void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
                             std::vector<double>& llr_out, const KernelMemory* kernel_mem,
                             bool use_kernel_llr, double kernel_blend) {
@@ -615,6 +624,10 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
   const int K = static_cast<int>(m.labels.size());
   llr_out.assign(static_cast<std::size_t>(n * K), 0.0);
   if (K == 0) {
+    return;
+  }
+  if (use_rpsm_llr_from_env()) {
+    rpsm_score_matrix_batched(m, h_row_major, n, llr_out);
     return;
   }
 

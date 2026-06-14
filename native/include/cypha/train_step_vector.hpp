@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cypha/ewc_regularizer.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/replay_buffer.hpp"
@@ -41,6 +42,9 @@ struct TrainStepExtras {
   double kernel_lr_scale{1.0};
   /// When non-null, Nyström reservoir/score/update use this vector instead of latent ``H``.
   const double* kernel_features{nullptr};
+  /// Optional EWC overlay (``ewc_lambda > 0`` and non-null ``ewc``).
+  double ewc_lambda{0.0};
+  EwcRegularizer* ewc{nullptr};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).

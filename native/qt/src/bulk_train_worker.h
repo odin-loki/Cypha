@@ -31,6 +31,7 @@ struct BulkNativeTrainJob {
   int train_n{0};
   int chunk_rows{4096};
   bool sort_by_uncertainty{false};
+  bool curriculum{false};
 
   cypha::CyphaInferModel* model{nullptr};
   cypha::CyphaDifMemoryState* mem{nullptr};

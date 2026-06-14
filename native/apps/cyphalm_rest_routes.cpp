@@ -12,6 +12,7 @@
 
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
+#include "cypha/intelligence/epistemic_threshold.hpp"
 
 namespace cypha::cyphalm {
 
@@ -22,6 +23,7 @@ std::unique_ptr<CyphaLMModel> g_lm;
 std::string g_lm_source;
 int g_lm_generations = 0;
 std::chrono::steady_clock::time_point g_lm_loaded = std::chrono::steady_clock::now();
+cypha::intelligence::EpistemicThreshold g_lm_epistemic_threshold(0.5, 5.0);
 
 DecodeParams decode_params_from_json(const nlohmann::json& body) {
     DecodeParams p;
@@ -33,6 +35,8 @@ DecodeParams decode_params_from_json(const nlohmann::json& body) {
     if (body.contains("uncertainty_threshold") && !body["uncertainty_threshold"].is_null()) {
         p.uncertainty_threshold = body["uncertainty_threshold"].get<double>();
     }
+    p.epistemic_halt = body.value("epistemic_halt", false);
+    p.self_correct = body.value("self_correct", false);
     return p;
 }
 
@@ -55,6 +59,10 @@ nlohmann::json generate_response_json(const GenerateOutput& gen) {
     nlohmann::json out;
     out["generated_ids"] = gen.generated_ids;
     out["halted_on_uncertainty"] = gen.halted_on_uncertainty;
+    out["halted_on_epistemic"] = gen.halted_on_epistemic;
+    out["r_eu_proxy"] = gen.r_eu_proxy;
+    out["self_corrected"] = gen.self_corrected;
+    out["self_correct_passes"] = gen.self_correct_passes;
     out["strategy"] = body_strategy_name(gen.strategy);
     nlohmann::json steps = nlohmann::json::array();
     for (const auto& s : gen.per_step) {
@@ -96,14 +104,15 @@ void handle_generate(const nlohmann::json& body, httplib::Response& res, bool fo
             [&sse](const nlohmann::json& chunk) {
                 sse << "data: " << chunk.dump() << "\n\n";
                 return true;
-            });
+            },
+            &g_lm_epistemic_threshold);
         sse << "data: {\"done\": true}\n\n";
         ++g_lm_generations;
         res.set_content(sse.str(), "text/event-stream");
         return;
     }
 
-    const GenerateOutput gen = generate_decode(*g_lm, prompt, max_tokens, params);
+    const GenerateOutput gen = generate_decode(*g_lm, prompt, max_tokens, params, &g_lm_epistemic_threshold);
     ++g_lm_generations;
     res.set_content(generate_response_json(gen).dump(), "application/json");
 }
@@ -129,7 +138,7 @@ nlohmann::json cyphalm_rest_generate_json(const std::vector<int>& prompt_ids, in
     if (!g_lm) {
         throw std::runtime_error("No LM loaded");
     }
-    const GenerateOutput gen = generate_decode(*g_lm, prompt_ids, max_tokens, params);
+    const GenerateOutput gen = generate_decode(*g_lm, prompt_ids, max_tokens, params, &g_lm_epistemic_threshold);
     ++g_lm_generations;
     return generate_response_json(gen);
 }

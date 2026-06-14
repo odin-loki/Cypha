@@ -37,5 +37,13 @@
     "env": "CYPHALM_PROFILE=d17",
     "domain": "d17",
     "corpus": "wikitext2"
+  },
+  "llm_d17_full": {
+    "path": "profiles/cyphalm_d17_wikitext.json",
+    "config": "d17_wikitext_full_profile.json",
+    "env": "CYPHA_BENCH_FULL_CORPUS=1",
+    "domain": "d17",
+    "corpus": "wikitext2",
+    "notes": "Official train/valid split; see bench/config/d17_wikitext_full_profile.json"
   }
 }

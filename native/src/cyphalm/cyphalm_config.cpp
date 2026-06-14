@@ -30,6 +30,7 @@ ContextMode parse_context_mode(const std::string& s) {
     if (k == "ssm_gria_no_lstm") return ContextMode::SsmGriaNoLstm;
     if (k == "ablation_no_dif") return ContextMode::AblationNoDif;
     if (k == "ablation_no_ssm") return ContextMode::AblationNoSsm;
+    if (k == "rpsm") return ContextMode::Rpsm;
     throw std::runtime_error("unknown context mode: " + s);
 }
 
@@ -43,6 +44,7 @@ std::string context_mode_name(ContextMode mode) {
         case ContextMode::SsmGriaNoLstm: return "ssm_gria_no_lstm";
         case ContextMode::AblationNoDif: return "ablation_no_dif";
         case ContextMode::AblationNoSsm: return "ablation_no_ssm";
+        case ContextMode::Rpsm: return "rpsm";
     }
     return "unknown";
 }
@@ -62,6 +64,7 @@ BenchMode parse_bench_mode(const std::string& s) {
     if (s == "ssm_gria") return BenchMode::SsmGria;
     if (s == "context_bank") return BenchMode::ContextBank;
     if (s == "spectral") return BenchMode::Spectral;
+    if (s == "rpsm") return BenchMode::Rpsm;
     throw std::runtime_error("unknown bench mode: " + s);
 }
 
@@ -89,6 +92,13 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
             cfg.context_mode = ContextMode::SsmGria;
             cfg.use_spectral_pde = true;
             break;
+        case BenchMode::Rpsm:
+            cfg.context_mode = ContextMode::Rpsm;
+            cfg.use_rpsm_layer = true;
+            cfg.rpsm_n_levels = 4;
+            cfg.rpsm_state_dim = 128;
+            cfg.rpsm_feat_dim = 64;
+            break;
     }
 }
 
@@ -100,6 +110,7 @@ std::string bench_mode_name(BenchMode mode) {
         case BenchMode::SsmGria: return "ssm_gria";
         case BenchMode::ContextBank: return "context_bank";
         case BenchMode::Spectral: return "spectral";
+        case BenchMode::Rpsm: return "rpsm";
     }
     return "unknown";
 }
@@ -172,6 +183,11 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_b("ngram_fuse_split", cfg.ngram_fuse_split);
     set_s("bpe_merges_path", cfg.bpe_merges_path);
     set_s("bpe_vocab_path", cfg.bpe_vocab_path);
+    set_b("use_rpsm_layer", cfg.use_rpsm_layer);
+    set_i("rpsm_n_levels", cfg.rpsm_n_levels);
+    set_i("rpsm_state_dim", cfg.rpsm_state_dim);
+    set_i("rpsm_feat_dim", cfg.rpsm_feat_dim);
+    set_b("profile_guided_loss", cfg.profile_guided_loss);
 }
 
 }  // namespace

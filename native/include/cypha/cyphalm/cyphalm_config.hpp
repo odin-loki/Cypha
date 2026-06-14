@@ -17,6 +17,7 @@ enum class ContextMode {
     SsmGriaNoLstm,
     AblationNoDif,
     AblationNoSsm,
+    Rpsm,
 };
 
 /// Bench / CLI mode aliases (mapped to ``ContextMode`` + tier flags).
@@ -27,6 +28,7 @@ enum class BenchMode {
     SsmGria,
     ContextBank,
     Spectral,
+    Rpsm,
 };
 
 struct CyphaLMConfig {
@@ -102,6 +104,22 @@ struct CyphaLMConfig {
     /// Optional BPE tokenizer paths (inference encode/decode when both set).
     std::string bpe_merges_path;
     std::string bpe_vocab_path;
+
+    /// Cell hypothesis testbench id (e.g. ``H06``); empty = default stack only.
+    std::string cell_variant;
+    /// H02/H17: Sheffer ``eml()`` activations in char-LSTM gates.
+    bool use_eml_activation = false;
+    /// H07: differential gate blends prior SSM context with delta-h.
+    bool use_differential_gate = false;
+
+    /// Option B RPSM sequence layer (level-0 CyphaDIF LLR scaffold).
+    bool use_rpsm_layer = false;
+    int rpsm_n_levels = 4;
+    int rpsm_state_dim = 128;
+    int rpsm_feat_dim = 64;
+
+    /// Paper IV: add profile-guided regularizers to per-step train loss.
+    bool profile_guided_loss = false;
 };
 
 ContextMode parse_context_mode(const std::string& s);

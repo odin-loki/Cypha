@@ -20,4 +20,7 @@ std::filesystem::path config_file(const std::string& rel_path);
 /// Mirror legacy bench path scaling (honours ``CYPHA_BENCH_FAST``).
 int bench_scale(int default_value, int fast_value = -1);
 
+/// True when env var is ``1`` / ``true`` / ``yes`` (case-insensitive prefix).
+bool bench_env_truthy(const char* key);
+
 }  // namespace cypha::bench

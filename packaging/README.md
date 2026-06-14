@@ -15,7 +15,17 @@ Release archives are also produced by [`scripts/package_release_linux.sh`](../sc
 
 ## GitHub Releases (prebuilt native)
 
-Tagged releases (`v*`) publish **native-only** assets (no Python venv):
+Tagged releases (`v*`) publish **native-only** assets (no Python venv). Maintainer helpers:
+
+```powershell
+# One-time: authenticate gh CLI for local release prep / draft notes
+gh auth login
+
+# Optional: emit markdown notes for a tag (stub — append to release body locally)
+pwsh -File scripts/create_release_notes.ps1 -Tag v2.2.8
+```
+
+CI workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) uploads tarballs/AppImage/zip on tag push; `generate_release_notes: true` fills the GitHub UI body. Use `create_release_notes.ps1` for a git-log supplement before tagging.
 
 | Asset | Platform | Contents |
 |-------|----------|----------|

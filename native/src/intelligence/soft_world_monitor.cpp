@@ -21,4 +21,9 @@ void SoftWorldMonitor::record_simulation(double resolution) {
   }
 }
 
+void SoftWorldMonitor::simulation_step(double r_eu_before, double r_eu_after, double resolution) {
+  record_acquisition(r_eu_before, r_eu_after);
+  record_simulation(resolution);
+}
+
 }  // namespace cypha::intelligence

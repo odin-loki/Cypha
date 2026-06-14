@@ -2823,6 +2823,14 @@ class MainWindow final : public QMainWindow {
         "Val split rows are unchanged."));
     lay_train->addWidget(sort_by_uncertainty_chk_);
 
+    curriculum_chk_ = new QCheckBox(
+        QStringLiteral("Curriculum (hardest-first — ascending softmax confidence before bulk native train)"),
+        inner_train);
+    curriculum_chk_->setToolTip(QStringLiteral(
+        "Reorders training rows by ascending max softmax confidence (low confidence first). "
+        "Mutually exclusive with uncertainty sort."));
+    lay_train->addWidget(curriculum_chk_);
+
     auto* row_bulk = new QHBoxLayout();
     csv_bulk_train_btn_ = new QPushButton(QStringLiteral("Bulk REST /update"), inner_train);
     csv_bulk_native_btn_ = new QPushButton(QStringLiteral("Bulk native train"), inner_train);
@@ -4163,6 +4171,7 @@ class MainWindow final : public QMainWindow {
       job.chunk_rows = effective_csv_chunk_rows();
       job.sort_by_uncertainty =
           sort_by_uncertainty_chk_ != nullptr && sort_by_uncertainty_chk_->isChecked();
+      job.curriculum = curriculum_chk_ != nullptr && curriculum_chk_->isChecked();
       job.model = model_.get();
       job.mem = native_mem_.get();
       job.replay = native_replay_.get();
@@ -5893,6 +5902,7 @@ class MainWindow final : public QMainWindow {
     if (load_btn_            != nullptr) load_btn_->setEnabled(!training);
     if (mke_bulk_btn_        != nullptr) mke_bulk_btn_->setEnabled(!training && native_train_ok_ && last_csv_ok_);
     if (sort_by_uncertainty_chk_ != nullptr) sort_by_uncertainty_chk_->setEnabled(!training);
+    if (curriculum_chk_ != nullptr) curriculum_chk_->setEnabled(!training);
   }
 
   void on_bulk_progress(int step, int total) {
@@ -7264,6 +7274,7 @@ class MainWindow final : public QMainWindow {
   QVector<double> last_loss_plot_native_{};
   QCheckBox* csv_regression_chk_{};
   QCheckBox* sort_by_uncertainty_chk_{};
+  QCheckBox* curriculum_chk_{};
   QCheckBox* use_gh_chk_{};
   QPushButton* replay_u01_btn_{};
   QLabel* replay_u01_label_{};

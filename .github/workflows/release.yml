@@ -182,6 +182,17 @@ jobs:
       - name: List artifacts
         run: find dist -type f | sort
 
+      - name: Maintainer release notes stub (optional)
+        continue-on-error: true
+        run: |
+          if command -v pwsh >/dev/null 2>&1; then
+            pwsh -File scripts/create_release_notes.ps1 -Tag "${{ github.ref_name }}" \
+              > dist/maintainer_release_notes.md
+            head -40 dist/maintainer_release_notes.md || true
+          else
+            echo "Install PowerShell (pwsh) locally to run scripts/create_release_notes.ps1"
+          fi
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:

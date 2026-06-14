@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/char_lstm.hpp"
 
+#include "cypha/cyphalm/eml_activation.hpp"
 #include "cypha/cyphalm/hybrid_blend.hpp"
 
 #include <algorithm>
@@ -99,11 +100,23 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
   std::vector<double> f_gate(static_cast<std::size_t>(hidden));
   std::vector<double> g_gate(static_cast<std::size_t>(hidden));
   std::vector<double> o_gate(static_cast<std::size_t>(hidden));
+  const bool use_eml = activation_mode_ == LSTMActivationMode::Eml;
   for (int j = 0; j < hidden; ++j) {
-    i_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(j)]);
-    f_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(hidden + j)]);
-    g_gate[static_cast<std::size_t>(j)] = std::tanh(gates[static_cast<std::size_t>(2 * hidden + j)]);
-    o_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(3 * hidden + j)]);
+    if (use_eml) {
+      i_gate[static_cast<std::size_t>(j)] =
+          eml_nand(gates[static_cast<std::size_t>(j)], h[j]);
+      f_gate[static_cast<std::size_t>(j)] =
+          eml_nand(gates[static_cast<std::size_t>(hidden + j)], c[j]);
+      g_gate[static_cast<std::size_t>(j)] =
+          eml_nand(gates[static_cast<std::size_t>(2 * hidden + j)], h[j]);
+      o_gate[static_cast<std::size_t>(j)] =
+          eml_nand(gates[static_cast<std::size_t>(3 * hidden + j)], c[j]);
+    } else {
+      i_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(j)]);
+      f_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(hidden + j)]);
+      g_gate[static_cast<std::size_t>(j)] = std::tanh(gates[static_cast<std::size_t>(2 * hidden + j)]);
+      o_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(3 * hidden + j)]);
+    }
   }
 
   c_out.assign(static_cast<std::size_t>(hidden), 0.0);
@@ -111,7 +124,12 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
   for (int j = 0; j < hidden; ++j) {
     c_out[static_cast<std::size_t>(j)] =
         f_gate[static_cast<std::size_t>(j)] * c[j] + i_gate[static_cast<std::size_t>(j)] * g_gate[static_cast<std::size_t>(j)];
-    h_out[static_cast<std::size_t>(j)] = o_gate[static_cast<std::size_t>(j)] * std::tanh(c_out[static_cast<std::size_t>(j)]);
+    if (use_eml) {
+      h_out[static_cast<std::size_t>(j)] =
+          o_gate[static_cast<std::size_t>(j)] * eml_nand(c_out[static_cast<std::size_t>(j)], 1.0);
+    } else {
+      h_out[static_cast<std::size_t>(j)] = o_gate[static_cast<std::size_t>(j)] * std::tanh(c_out[static_cast<std::size_t>(j)]);
+    }
   }
 
   std::vector<double> logits(static_cast<std::size_t>(vocab_size));
@@ -137,8 +155,10 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     cache_out->o = o_gate;
     cache_out->c_new = c_out;
     cache_out->h_new = h_out;
+    cache_out->gates = gates;
     cache_out->logits = logits;
     cache_out->probs = probs;
+    cache_out->used_eml = use_eml;
   }
 }
 
@@ -175,11 +195,24 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
 
   std::vector<double> do_gate(static_cast<std::size_t>(hidden));
   std::vector<double> dc_new(static_cast<std::size_t>(hidden));
-  for (int j = 0; j < hidden; ++j) {
-    const double tanh_c = std::tanh(cache.c_new[static_cast<std::size_t>(j)]);
-    do_gate[static_cast<std::size_t>(j)] = dh_new[static_cast<std::size_t>(j)] * tanh_c;
-    dc_new[static_cast<std::size_t>(j)] =
-        dh_new[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)] * (1.0 - tanh_c * tanh_c);
+  if (cache.used_eml) {
+    for (int j = 0; j < hidden; ++j) {
+      const double h_act = eml_nand(cache.c_new[static_cast<std::size_t>(j)], 1.0);
+      do_gate[static_cast<std::size_t>(j)] = dh_new[static_cast<std::size_t>(j)] * h_act;
+      double deml_dc = 0.0;
+      double deml_const = 0.0;
+      eml_nand_grad(cache.c_new[static_cast<std::size_t>(j)], 1.0,
+                    dh_new[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)],
+                    deml_dc, deml_const);
+      dc_new[static_cast<std::size_t>(j)] = deml_dc;
+    }
+  } else {
+    for (int j = 0; j < hidden; ++j) {
+      const double tanh_c = std::tanh(cache.c_new[static_cast<std::size_t>(j)]);
+      do_gate[static_cast<std::size_t>(j)] = dh_new[static_cast<std::size_t>(j)] * tanh_c;
+      dc_new[static_cast<std::size_t>(j)] =
+          dh_new[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)] * (1.0 - tanh_c * tanh_c);
+    }
   }
 
   std::vector<double> df_gate(static_cast<std::size_t>(hidden));
@@ -194,16 +227,44 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
 
   std::vector<double> dgates(static_cast<std::size_t>(four_h));
   for (int j = 0; j < hidden; ++j) {
-    dgates[static_cast<std::size_t>(j)] = di_gate[static_cast<std::size_t>(j)] * cache.i[static_cast<std::size_t>(j)] *
-                                          (1.0 - cache.i[static_cast<std::size_t>(j)]);
-    dgates[static_cast<std::size_t>(hidden + j)] =
-        df_gate[static_cast<std::size_t>(j)] * cache.f[static_cast<std::size_t>(j)] *
-        (1.0 - cache.f[static_cast<std::size_t>(j)]);
-    dgates[static_cast<std::size_t>(2 * hidden + j)] =
-        dg_gate[static_cast<std::size_t>(j)] * (1.0 - cache.g[static_cast<std::size_t>(j)] * cache.g[static_cast<std::size_t>(j)]);
-    dgates[static_cast<std::size_t>(3 * hidden + j)] =
-        do_gate[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)] *
-        (1.0 - cache.o[static_cast<std::size_t>(j)]);
+    if (cache.used_eml) {
+      double di_gx = 0.0;
+      double di_hy = 0.0;
+      eml_nand_grad(cache.gates[static_cast<std::size_t>(j)], cache.h[static_cast<std::size_t>(j)],
+                    di_gate[static_cast<std::size_t>(j)], di_gx, di_hy);
+      dgates[static_cast<std::size_t>(j)] = di_gx;
+
+      double df_gx = 0.0;
+      double df_cy = 0.0;
+      eml_nand_grad(cache.gates[static_cast<std::size_t>(hidden + j)], cache.c[static_cast<std::size_t>(j)],
+                    df_gate[static_cast<std::size_t>(j)], df_gx, df_cy);
+      dgates[static_cast<std::size_t>(hidden + j)] = df_gx;
+      out.dc_prev[static_cast<std::size_t>(j)] += df_cy;
+
+      double dg_gx = 0.0;
+      double dg_hy = 0.0;
+      eml_nand_grad(cache.gates[static_cast<std::size_t>(2 * hidden + j)], cache.h[static_cast<std::size_t>(j)],
+                    dg_gate[static_cast<std::size_t>(j)], dg_gx, dg_hy);
+      dgates[static_cast<std::size_t>(2 * hidden + j)] = dg_gx;
+
+      double do_gx = 0.0;
+      double do_cy = 0.0;
+      eml_nand_grad(cache.gates[static_cast<std::size_t>(3 * hidden + j)], cache.c[static_cast<std::size_t>(j)],
+                    do_gate[static_cast<std::size_t>(j)], do_gx, do_cy);
+      dgates[static_cast<std::size_t>(3 * hidden + j)] = do_gx;
+      out.dc_prev[static_cast<std::size_t>(j)] += do_cy;
+    } else {
+      dgates[static_cast<std::size_t>(j)] = di_gate[static_cast<std::size_t>(j)] * cache.i[static_cast<std::size_t>(j)] *
+                                            (1.0 - cache.i[static_cast<std::size_t>(j)]);
+      dgates[static_cast<std::size_t>(hidden + j)] =
+          df_gate[static_cast<std::size_t>(j)] * cache.f[static_cast<std::size_t>(j)] *
+          (1.0 - cache.f[static_cast<std::size_t>(j)]);
+      dgates[static_cast<std::size_t>(2 * hidden + j)] =
+          dg_gate[static_cast<std::size_t>(j)] * (1.0 - cache.g[static_cast<std::size_t>(j)] * cache.g[static_cast<std::size_t>(j)]);
+      dgates[static_cast<std::size_t>(3 * hidden + j)] =
+          do_gate[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)] *
+          (1.0 - cache.o[static_cast<std::size_t>(j)]);
+    }
   }
 
   outer_rowmajor(dgates.data(), four_h, cache.x.data(), hidden, out.dWx.data());

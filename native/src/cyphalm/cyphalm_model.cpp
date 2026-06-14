@@ -21,6 +21,7 @@
 #include "cypha/cyphalm/cyphalm_views.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_guided_loss.hpp"
 
 namespace cypha {
 namespace cyphalm {
@@ -36,6 +37,10 @@ bool uses_ssm(ContextMode m) {
 
 bool uses_gria(ContextMode m) {
     return m != ContextMode::CharLstm;
+}
+
+bool uses_rpsm(const CyphaLMConfig& cfg) {
+    return cfg.use_rpsm_layer || cfg.context_mode == ContextMode::Rpsm;
 }
 
 bool uses_lstm(ContextMode m) {
@@ -190,8 +195,8 @@ void CyphaLMModel::init_components() {
     if (mode != ContextMode::CharLstm) {
         dif_ = std::make_unique<CyphaDIF>(cfg_);
     }
-    const bool ngram_path = mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
-                            mode == ContextMode::AblationNoSsm;
+    const auto ngram_path = mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
+                            mode == ContextMode::AblationNoSsm || mode == ContextMode::Rpsm;
     const int n_pos = 1 + std::max(0, cfg_.ngram_context);
     if (ngram_path) {
         embed_history_.assign(static_cast<std::size_t>(n_pos),
@@ -213,6 +218,9 @@ void CyphaLMModel::init_components() {
     }
     if (uses_lstm(mode)) {
         lstm_ = std::make_unique<CharLSTMHead>(cfg_.vocab_size, cfg_.lstm_hidden, cfg_.seed + 5);
+        if (cfg_.use_eml_activation) {
+            lstm_->set_activation_mode(LSTMActivationMode::Eml);
+        }
         lstm_h_.assign(static_cast<std::size_t>(cfg_.lstm_hidden), 0.0);
         lstm_c_.assign(static_cast<std::size_t>(cfg_.lstm_hidden), 0.0);
     }
@@ -239,6 +247,19 @@ void CyphaLMModel::init_components() {
     if (!cfg_.bpe_merges_path.empty() && !cfg_.bpe_vocab_path.empty()) {
         bpe_ = std::make_unique<BpeTokenizer>(
             BpeTokenizer::load(cfg_.bpe_merges_path, cfg_.bpe_vocab_path));
+    }
+    if (uses_rpsm(cfg_)) {
+        cypha::rpsm::RpsmSequenceConfig rc;
+        rc.n_levels = cfg_.rpsm_n_levels;
+        rc.state_dim = cfg_.rpsm_state_dim;
+        rc.feat_dim = cfg_.rpsm_feat_dim;
+        rc.n_classes = cfg_.vocab_size;
+        rc.seed = cfg_.seed + 29;
+        rpsm_layer_ = std::make_unique<cypha::rpsm::RpsmSequenceLayer>(rc);
+        rpsm_log_probs_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
+    }
+    if (cfg_.profile_guided_loss) {
+        train_profiler_ = std::make_unique<cypha::intelligence::IntelligenceProfiler>();
     }
 }
 
@@ -270,6 +291,7 @@ void CyphaLMModel::reset_context() {
     bptt_buffer_.clear();
     last_e_.clear();
     last_ctx_.clear();
+    if (rpsm_layer_) rpsm_layer_->reset();
     // DIF experts persist across view/block resets (Python carry_dif=True).
     std::fill(field_x_.begin(), field_x_.end(), 0.0);
     step_count_ = 0;
@@ -325,9 +347,19 @@ const CellAISSM* CyphaLMModel::active_ssm() const {
 }
 
 std::vector<double> CyphaLMModel::ssm_step(const std::vector<double>& e) {
-    if (hierarchical_ssm_) return hierarchical_ssm_->step(e);
-    if (ssm_) return ssm_->step(e);
-    return {};
+    std::vector<double> ctx;
+    if (hierarchical_ssm_) {
+        ctx = hierarchical_ssm_->step(e);
+    } else if (ssm_) {
+        ctx = ssm_->step(e);
+    }
+    if (cfg_.use_differential_gate && !ctx.empty() && last_ctx_.size() == ctx.size()) {
+        constexpr double kDeltaBlend = 0.25;
+        for (std::size_t i = 0; i < ctx.size(); ++i) {
+            ctx[i] = (1.0 - kDeltaBlend) * last_ctx_[i] + kDeltaBlend * ctx[i];
+        }
+    }
+    return ctx;
 }
 
 void CyphaLMModel::apply_hebbian_hooks(std::vector<double>& ctx) {
@@ -348,7 +380,7 @@ std::vector<double> CyphaLMModel::gria_input_core(const std::vector<double>& fie
     const auto mode = cfg_.context_mode;
     if (ngram_fusion_ &&
         (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
-         mode == ContextMode::AblationNoSsm)) {
+         mode == ContextMode::AblationNoSsm || mode == ContextMode::Rpsm)) {
         return ngram_fusion_->forward(field, ngram_embedding_vector());
     }
     if (mode == ContextMode::AblationNoSsm && !proj_ngram_.empty()) {
@@ -466,6 +498,14 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
                                  static_cast<std::uint32_t>(field_x_.size()));
         }
         gria_in_ = build_gria_input(field_x_, skip_dif ? nullptr : &last_dif_out_);
+        if (rpsm_layer_ && !field_x_.empty()) {
+            (void)rpsm_layer_->step(field_x_.data(), static_cast<int>(field_x_.size()),
+                                    rpsm_log_probs_.data());
+            const auto& h = rpsm_layer_->hidden();
+            for (std::size_t i = 0; i < gria_in_.size() && !h.empty(); ++i) {
+                gria_in_[i] += 0.05 * h[i % h.size()];
+            }
+        }
         if (gng_ && !field_x_.empty()) {
             last_gng_bmu_ = gng_->step(field_x_);
         }
@@ -525,6 +565,14 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                               cfg_.view_lr);
         }
     }
+    if (cfg_.profile_guided_loss && train_profiler_) {
+        update_profiler_from_lm_token(*train_profiler_, last_e_, pred.log_probs, pred.epistemic_var,
+                                      pred.aleatoric_var);
+        const auto pg =
+            cypha::intelligence::compute_profile_guided_loss_from_profiler(*train_profiler_);
+        m.profile_guided_loss = pg.total;
+        m.loss += pg.total;
+    }
     if (cfg_.online && dif_ && embed_ && !proj_embed_.empty()) {
         const auto target = matvec(proj_embed_, cfg_.field_dim, cfg_.d_embed,
                                    embed_->embed_vec(next_token_id));
@@ -581,7 +629,7 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
     }
     if (mode != ContextMode::Hybrid && mode != ContextMode::GriaNgram &&
         mode != ContextMode::SsmGria && mode != ContextMode::Full &&
-        mode != ContextMode::SsmGriaNoLstm) {
+        mode != ContextMode::SsmGriaNoLstm && mode != ContextMode::Rpsm) {
         return;
     }
     auto grad_v = gria_->grad_v_cross_entropy(gria_in_.data(), static_cast<int>(next_token_id));

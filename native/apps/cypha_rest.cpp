@@ -50,7 +50,10 @@
 #include "cypha/cyphalm/cyphalm_rest.hpp"
 #include "cypha/dif_rest.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/causal_graph.hpp"
 #include "cypha/intelligence/self_correcting_infer.hpp"
+#include "cypha/curriculum.hpp"
+#include "cypha/ewc_regularizer.hpp"
 #include "cypha/intelligence_rest.hpp"
 #include "cypha_rest_static_ui.hpp"
 
@@ -66,7 +69,10 @@ bool g_use_kernel_llr{false};
 double g_kernel_blend{0.5};
 std::unique_ptr<cypha::PreprocessorState> g_pre;
 cypha::intelligence::IntelligenceProfiler g_intelligence_profiler;
+cypha::intelligence::CausalGraphMonitor g_causal_graph_monitor;
 cypha::intelligence::EpistemicThreshold g_epistemic_threshold(0.5, 5.0);
+std::unique_ptr<cypha::EwcRegularizer> g_ewc;
+double g_ewc_lambda{0.0};
 std::string g_registry_root;
 std::vector<cypha::RegistryModelRef> g_registry_cache;
 
@@ -205,6 +211,8 @@ struct ModelView {
   std::unordered_map<std::string, std::vector<double>>* mke_w{};
   std::unordered_map<std::string, std::vector<double>>* mke_p{};
 };
+
+std::string json_update_impl(const nlohmann::json& body, ModelView v);
 
 ModelView view_from_globals() {
   return ModelView{&g_model,
@@ -863,6 +871,12 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
       correction_passes = scr.correction_passes;
       r_eu_proxy = scr.r_eu_proxy;
       g_engine_corrections += scr.corrected ? 1 : 0;
+      if (scr.corrected) {
+        const double r_eu_after = scr.r_eu_proxy;
+        const double r_eu_before = std::min(1.0, r_eu_after + 0.2);
+        const double resolution = std::max(0.0, r_eu_before - r_eu_after);
+        g_causal_graph_monitor.simulation_step(r_eu_before, r_eu_after, resolution);
+      }
     } else {
       cypha::InferAtHResult inf = cypha::infer_at_h(model, H.data(), iopt);
       pred_label = inf.label;
@@ -1078,19 +1092,32 @@ std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) 
   struct RankRow {
     int index;
     double entropy;
+    double confidence;
   };
   std::vector<RankRow> ranked;
   ranked.reserve(static_cast<std::size_t>(n));
+  const bool curriculum = body.value("curriculum", false);
   for (int i = 0; i < n; ++i) {
     const double* prow = probs.data() + static_cast<std::size_t>(i) * static_cast<std::size_t>(k);
-    ranked.push_back({i, row_entropy_from_probs(prow, k, eps)});
+    const double entropy = row_entropy_from_probs(prow, k, eps);
+    const double confidence = cypha::row_max_softmax_confidence(prow, k);
+    ranked.push_back({i, entropy, confidence});
   }
-  std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
-    if (a.entropy != b.entropy) {
-      return a.entropy > b.entropy;
-    }
-    return a.index < b.index;
-  });
+  if (curriculum) {
+    std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
+      if (a.confidence != b.confidence) {
+        return a.confidence < b.confidence;
+      }
+      return a.index < b.index;
+    });
+  } else {
+    std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
+      if (a.entropy != b.entropy) {
+        return a.entropy > b.entropy;
+      }
+      return a.index < b.index;
+    });
+  }
 
   int top_n = body.value("top_n", n);
   if (top_n < 0) {
@@ -1103,13 +1130,19 @@ std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) 
   nlohmann::json out;
   nlohmann::json indices = nlohmann::json::array();
   nlohmann::json entropies = nlohmann::json::array();
+  nlohmann::json confidences = nlohmann::json::array();
   for (int i = 0; i < top_n; ++i) {
     indices.push_back(ranked[static_cast<std::size_t>(i)].index);
     entropies.push_back(ranked[static_cast<std::size_t>(i)].entropy);
+    confidences.push_back(ranked[static_cast<std::size_t>(i)].confidence);
   }
   out["indices"] = std::move(indices);
   out["entropies"] = std::move(entropies);
+  out["confidences"] = std::move(confidences);
   out["top_n"] = top_n;
+  if (curriculum) {
+    out["curriculum"] = true;
+  }
   return out.dump();
 }
 
@@ -1128,7 +1161,100 @@ std::string json_uncertainty_rank(const nlohmann::json& body) {
   return json_uncertainty_rank_impl(body, view);
 }
 
+std::string json_update_batch_impl(const nlohmann::json& body, ModelView v) {
+  if (!*v.model || !*v.mem) {
+    return R"({"detail":"No model loaded"})";
+  }
+  const auto& batch = body.at("batch");
+  const int n = static_cast<int>(batch.size());
+  if (n == 0) {
+    nlohmann::json out;
+    out["losses"] = nlohmann::json::array();
+    out["n_corrections"] = g_engine_corrections;
+    return out.dump();
+  }
+
+  std::vector<int> order(static_cast<std::size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    order[static_cast<std::size_t>(i)] = i;
+  }
+
+  const bool curriculum = body.value("curriculum", false);
+  if (curriculum) {
+    cypha::CyphaInferModel& model = **v.model;
+    const int k = static_cast<int>(model.labels.size());
+    const double eps = 1e-8;
+    const double T = model.temperature;
+    std::vector<double> confidences;
+    confidences.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+      const auto& item = batch[i];
+      std::vector<double> x;
+      for (const auto& val : item.at("input")) {
+        x.push_back(val.get<double>());
+      }
+      if (*v.pre) {
+        x = (*v.pre)->transform_one(x);
+      }
+      if (static_cast<int>(x.size()) != model.d_latent) {
+        return R"({"detail":"input dim mismatch after preprocessor"})";
+      }
+      std::vector<double> H;
+      cypha::batch_encode(model, x.data(), 1, H);
+      std::vector<double> llr;
+      cypha::score_matrix_use_field(model, H.data(), 1, llr);
+      if (k > 0) {
+        std::vector<double> z(static_cast<std::size_t>(k));
+        for (int j = 0; j < k; ++j) {
+          z[static_cast<std::size_t>(j)] = llr[static_cast<std::size_t>(j)] / (T + eps);
+        }
+        std::vector<double> probs;
+        cypha::softmax_batch_reference(z.data(), 1, k, eps, probs);
+        confidences.push_back(cypha::row_max_softmax_confidence(probs.data(), k));
+      } else {
+        confidences.push_back(0.0);
+      }
+    }
+    order = cypha::curriculum_order_ascending_confidence(confidences, n);
+  }
+
+  nlohmann::json losses = nlohmann::json::array();
+  for (int ord : order) {
+    nlohmann::json one = batch[ord];
+    if (body.contains("use_gh")) {
+      one["use_gh"] = body["use_gh"];
+    }
+    if (body.contains("ewc_lambda")) {
+      one["ewc_lambda"] = body["ewc_lambda"];
+    }
+    if (body.contains("ewc_snapshot")) {
+      one["ewc_snapshot"] = body["ewc_snapshot"];
+    }
+    if (body.contains("replay_u01")) {
+      one["replay_u01"] = body["replay_u01"];
+    }
+    const std::string sub = json_update_impl(one, v);
+    const auto parsed = nlohmann::json::parse(sub, nullptr, false);
+    if (!parsed.is_discarded() && parsed.contains("detail")) {
+      return sub;
+    }
+    const auto j = nlohmann::json::parse(sub);
+    losses.push_back(j.value("loss", 0.0));
+  }
+
+  nlohmann::json out;
+  out["losses"] = std::move(losses);
+  out["n_corrections"] = g_engine_corrections;
+  if (curriculum) {
+    out["curriculum"] = true;
+  }
+  return out.dump();
+}
+
 std::string json_update_impl(const nlohmann::json& body, ModelView v) {
+  if (body.contains("batch") && body.at("batch").is_array()) {
+    return json_update_batch_impl(body, v);
+  }
   if (!*v.model || !*v.mem) {
     return R"({"detail":"No model loaded"})";
   }
@@ -1184,6 +1310,22 @@ std::string json_update_impl(const nlohmann::json& body, ModelView v) {
   }
   sync_kernel_from_json_view(v, body);
   apply_kernel_to_extras_view(v, extras);
+
+  if (body.value("ewc_snapshot", false)) {
+    if (!g_ewc) {
+      g_ewc = std::make_unique<cypha::EwcRegularizer>();
+    }
+    g_ewc->snapshot(mem, model);
+  }
+  if (body.contains("ewc_lambda")) {
+    g_ewc_lambda = body["ewc_lambda"].get<double>();
+  }
+  const double step_ewc_lambda =
+      body.contains("ewc_lambda") ? body["ewc_lambda"].get<double>() : g_ewc_lambda;
+  if (step_ewc_lambda > 0.0 && g_ewc && g_ewc->has_snapshot()) {
+    extras.ewc_lambda = step_ewc_lambda;
+    extras.ewc = g_ewc.get();
+  }
 
   double loss = std::numeric_limits<double>::quiet_NaN();
   if (want_mke) {
@@ -1897,7 +2039,7 @@ int main(int argc, char** argv) {
   cypha::cyphalm::register_cyphalm_rest_routes(svr);
   cypha::branch_a_rest_configure(branch_a_json_path);
   cypha::register_branch_a_rest_routes(svr);
-  cypha::intelligence_rest_configure(&g_mu, &g_intelligence_profiler);
+  cypha::intelligence_rest_configure(&g_mu, &g_intelligence_profiler, &g_causal_graph_monitor);
   cypha::register_intelligence_rest_routes(svr);
 
   if (!cyphalm_checkpoint_path.empty()) {

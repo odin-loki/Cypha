@@ -1,4 +1,4 @@
-// cypha_cell_hypothesis_sweep — smoke runner for cell hypothesis variants (Tier 1 subset + scaffold).
+// cypha_cell_hypothesis_sweep — smoke runner for cell hypothesis variants (Tier 1+2).
 #include <iostream>
 #include <limits>
 #include <string>
@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
@@ -20,51 +21,15 @@ struct Args {
     int threads = 0;
     bool smoke = false;
     bool tier1_only = false;
+    bool tier2_only = false;
+    bool tier2_smoke = false;
     bool list_variants = false;
+    std::string cell_variant;
 };
-
-struct CellVariantSpec {
-    const char* id;
-    const char* name;
-    int tier;
-    bool runnable;
-    const char* bench_mode;
-    const char* notes;
-};
-
-const std::vector<CellVariantSpec>& all_variants() {
-    static const std::vector<CellVariantSpec> kVariants = {
-        {"B0", "4-gram", 0, false, "", "scaffold — not a CyphaLM cell"},
-        {"B1", "char-LSTM", 0, true, "char_lstm", "locked baseline"},
-        {"B2", "hybrid_gria_lstm", 0, true, "hybrid", "locked baseline"},
-        {"H01", "alpha-gate cell", 1, true, "hybrid", "GRIA alpha as forget gate proxy"},
-        {"H02", "EML activation cell", 1, false, "", "scaffold — Sheffer eml() cell TBD"},
-        {"H03", "CausalField cell", 1, true, "ssm", "SSM/SGEMV recurrence primitive"},
-        {"H04", "Pure CyphaDIF LM", 1, true, "ssm_gria", "DIF + GRIA without LSTM"},
-        {"H05", "alpha-fitness aux loss", 1, true, "hybrid", "hybrid + profile-guided loss tag"},
-        {"H06", "NIG-state cell", 2, false, "", "scaffold"},
-        {"H07", "Differential gate", 2, false, "", "scaffold"},
-        {"H08", "TieredContext cell", 2, false, "", "scaffold"},
-        {"H09", "GRIA-gated mixture", 2, false, "", "scaffold"},
-        {"H10", "NMP regularised", 2, false, "", "scaffold"},
-        {"H11", "Reversible cell", 2, false, "", "scaffold"},
-        {"H12", "MDL forget", 2, false, "", "scaffold"},
-        {"H13", "Priority replay recurrence", 2, false, "", "scaffold"},
-        {"H14", "OOD-branching cell", 2, false, "", "scaffold"},
-        {"H15", "AXIOM-evolved cell", 3, false, "", "scaffold"},
-        {"H16", "SR on trained LSTM gates", 3, false, "", "scaffold"},
-        {"H17", "Sheffer-only cell", 3, false, "", "scaffold"},
-        {"H18", "CA state cell", 3, false, "", "scaffold"},
-        {"H19", "Izaac-seeded init", 3, false, "", "scaffold"},
-        {"H20", "Spectral state cell", 3, false, "spectral", "spectral scaffold"},
-        {"H21", "Free Energy cell", 3, false, "", "scaffold"},
-        {"H22", "Algebraic fingerprint cell", 3, false, "", "scaffold"},
-    };
-    return kVariants;
-}
 
 void usage() {
-    std::cerr << "usage: cypha_cell_hypothesis_sweep [--smoke] [--tier1-only] [--list-variants]\n"
+    std::cerr << "usage: cypha_cell_hypothesis_sweep [--smoke] [--tier1-only] [--tier2-only]\n"
+              << "       [--tier2-smoke] [--list-variants] [--cell-variant H06]\n"
               << "       [--profile d17] [--n-train N] [--n-eval M] [--threads T]\n";
 }
 
@@ -82,13 +47,20 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--threads") a.threads = std::stoi(need("--threads"));
         else if (k == "--smoke") a.smoke = true;
         else if (k == "--tier1-only") a.tier1_only = true;
+        else if (k == "--tier2-only") a.tier2_only = true;
+        else if (k == "--tier2-smoke") a.tier2_smoke = true;
         else if (k == "--list-variants") a.list_variants = true;
+        else if (k == "--cell-variant") a.cell_variant = need("--cell-variant");
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
         } else {
             throw std::runtime_error("unknown arg: " + k);
         }
+    }
+    if (a.tier2_smoke) {
+        a.n_train = 200;
+        a.n_eval = 40;
     }
     if (a.smoke) {
         a.n_train = 400;
@@ -98,29 +70,30 @@ Args parse_args(int argc, char** argv) {
     return a;
 }
 
-bool should_run(const CellVariantSpec& v, bool tier1_only) {
+bool should_run(const cypha::cyphalm::CellVariantSpec& v, const Args& args) {
     if (!v.runnable) {
         return false;
     }
-    if (tier1_only) {
+    if (!args.cell_variant.empty()) {
+        return v.id == args.cell_variant;
+    }
+    if (args.tier2_smoke) {
+        return v.id == "H06" || v.id == "H08";
+    }
+    if (args.tier2_only) {
+        return v.tier == 2;
+    }
+    if (args.tier1_only) {
         return v.tier == 1;
     }
     return v.tier <= 2 || v.id[0] == 'B';
 }
 
-nlohmann::json run_variant(const CellVariantSpec& spec, const Args& args) {
+nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Args& args) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(args.profile, cfg);
-    const auto bench_mode = cypha::cyphalm::parse_bench_mode(spec.bench_mode);
-    cypha::cyphalm::apply_bench_mode(bench_mode, cfg);
+    cypha::cyphalm::apply_cell_variant(spec.id, cfg);
     if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
-    if (spec.id == std::string("H01")) {
-        cfg.alpha_init = 0.5;
-        cfg.alpha_learnable = true;
-    }
-    if (spec.id == std::string("H05")) {
-        cfg.alpha_learnable = true;
-    }
 
     cypha::cyphalm::LMCorpus corpus;
     bool synthetic = false;
@@ -157,7 +130,7 @@ nlohmann::json run_variant(const CellVariantSpec& spec, const Args& args) {
         {"synthetic", synthetic},
         {"mean_alpha", alpha_profile.value("mean_alpha", 0.0)},
     };
-    if (spec.id == std::string("B2") && !std::isnan(bpc)) {
+    if (spec.id == "B2" && !std::isnan(bpc)) {
         row["delta_vs_b2"] = 0.0;
     }
     return row;
@@ -172,7 +145,7 @@ int main(int argc, char** argv) {
 
         if (args.list_variants) {
             nlohmann::json listed = nlohmann::json::array();
-            for (const auto& v : all_variants()) {
+            for (const auto& v : cypha::cyphalm::all_cell_variants()) {
                 listed.push_back({{"id", v.id},
                                   {"name", v.name},
                                   {"tier", v.tier},
@@ -185,17 +158,16 @@ int main(int argc, char** argv) {
         }
 
         nlohmann::json results = nlohmann::json::array();
-        nlohmann::json scaffold = nlohmann::json::array();
+        nlohmann::json skipped = nlohmann::json::array();
         double b2_bpc = std::numeric_limits<double>::quiet_NaN();
 
-        for (const auto& v : all_variants()) {
-            if (!should_run(v, args.tier1_only)) {
-                scaffold.push_back(
-                    {{"id", v.id}, {"name", v.name}, {"tier", v.tier}, {"status", "scaffold"}});
+        for (const auto& v : cypha::cyphalm::all_cell_variants()) {
+            if (!should_run(v, args)) {
+                skipped.push_back({{"id", v.id}, {"name", v.name}, {"tier", v.tier}});
                 continue;
             }
             auto row = run_variant(v, args);
-            if (std::string(v.id) == "B2") {
+            if (v.id == "B2") {
                 if (!row["bpc"].is_null()) {
                     b2_bpc = row["bpc"].get<double>();
                 }
@@ -213,10 +185,11 @@ int main(int argc, char** argv) {
             {"profile", args.profile},
             {"n_train", args.n_train},
             {"n_eval", args.n_eval},
-            {"smoke", args.smoke || args.tier1_only},
+            {"smoke", args.smoke || args.tier1_only || args.tier2_only || args.tier2_smoke},
+            {"cell_variant", args.cell_variant.empty() ? nullptr : nlohmann::json(args.cell_variant)},
             {"results", results},
-            {"scaffold", scaffold},
-            {"variant_count", all_variants().size()},
+            {"skipped", skipped},
+            {"variant_count", cypha::cyphalm::all_cell_variants().size()},
         };
         std::cout << out.dump(2) << std::endl;
         return 0;

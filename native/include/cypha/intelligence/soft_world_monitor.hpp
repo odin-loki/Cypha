@@ -15,6 +15,9 @@ class SoftWorldMonitor {
   /// ``resolution`` is epistemic uncertainty reduced by simulation.
   void record_simulation(double resolution);
 
+  /// Acquisition then simulation in one Paper V maturation step.
+  void simulation_step(double r_eu_before, double r_eu_after, double resolution);
+
   /// Running mean of positive resolution events (world model quality proxy).
   double maturation_level() const { return world_model_nig_.mean(); }
 

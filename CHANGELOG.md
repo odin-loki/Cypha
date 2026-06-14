@@ -16,7 +16,7 @@ milestone or a significant self-contained change.
 - **CUDA CI jobs:** **`windows_cuda_msvc`** and **`linux_cuda`** removed from `.github/workflows/ci.yml`; CUDA remains an optional local build.
 
 ### Changed
-- **CI gate:** native-only — **73 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
+- **CI gate:** native-only — **80 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
 - **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` default:** **1** (was 16) — CUDA used for all batch sizes n≥1 when a GPU is available.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
@@ -31,6 +31,12 @@ milestone or a significant self-contained change.
 - **Kernel LLR XOR pair features:** d03_xor + smoke now use `xor_pair` kernel path — **97.8%** kernel acc (3 seeds, 8 passes); closes diagnostic 32 pp gap.
 - **RPSM Option A scaffold:** `PsiMatrices` + `rpsm_score_matrix_batched` + CTest `native_rpsm_batched_llr_smoke`.
 - **Intelligence Stats Phase 3:** CyphaLM profiler hook (`--intelligence-profile`), Qt self-correct checkbox, `CausalGraphMonitor`, `profile_guided_loss`, cell hypothesis sweep (`d19`, `cypha_cell_hypothesis_sweep`).
+- **Intelligence Stats Phase 4:** EWC regularizer stub + curriculum sampler; `GET /intelligence/simulation`; REST `/update` batch+curriculum; Qt curriculum checkbox; epistemic halt on `/generate`; federated JSON merge (`cypha_federated_merge`).
+- **RPSM Option B scaffold:** `rpsm_sequence_layer`, CyphaLM `--mode rpsm`, profile-guided loss in `train_step`; CTests `native_rpsm_sequence_smoke`, `native_cyphalm_bench_rpsm_smoke`.
+- **Cell hypothesis H02–H14:** `cypha_cell_hypothesis` + EML activation in char-LSTM; all 28 variants runnable; Tier-2 smoke (`native_cell_hypothesis_tier2_smoke`).
+- **WikiText D17 full profile:** `d17_wikitext_full_profile.json` + `CYPHA_BENCH_FULL_CORPUS`; CTest `native_d17_wikitext_smoke`.
+- **Preprocessor:** auto `auto_rff_gamma_cv` when tabular dim ≤30 and `rff_gamma` left at default 1.0.
+- **Release notes script:** `scripts/create_release_notes.ps1`; release workflow hook.
 - **Web UI tabs:** CyphaLM generate, Experiments (`/models`), Intelligence report (`/intelligence/report`).
 - **GGUF export:** tensor blobs for `enc_W`, `world.mu`, class `D`/`D_T`, `inv_v`, `llr_bias` from `.cypha`.
 - **ONNX export smoke:** CTest `native_onnx_export_smoke` writes valid graph from `reference.cypha`.

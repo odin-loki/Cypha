@@ -38,12 +38,30 @@
 | Paper IV profile-guided loss | `profile_guided_loss.hpp/cpp` | `cyphalm_train --profile-guided-loss` |
 | Cell hypothesis sweep | `cypha_cell_hypothesis_sweep`, bench **d19** | `native_cell_hypothesis_sweep_smoke` |
 
+## Phase 4 — shipped (2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|-------------|
+| EWC regularizer stub | `ewc_regularizer.hpp/cpp` | `native_ewc_smoke` |
+| Curriculum sampler | `curriculum.hpp/cpp` | `native_curriculum_smoke` |
+| Paper V simulation REST | `GET /intelligence/simulation` | manual |
+| REST `/update` batch + curriculum | `cypha_rest.cpp` | `native_rest_*` |
+| Qt curriculum checkbox | `shell_main.cpp`, `bulk_train_worker` | manual |
+| Epistemic halt on generate | `cyphalm_generation.cpp` | REST `/generate` |
+| Federated merge stub | `federated_aggregate.hpp/cpp`, `cypha_federated_merge` | `native_federated_merge_smoke` |
+| RPSM sequence layer (Option B) | `rpsm_sequence_layer.hpp/cpp` | `native_rpsm_sequence_smoke`, `native_cyphalm_bench_rpsm_smoke` |
+| Cell variants H02–H14 | `cypha_cell_hypothesis.hpp/cpp`, `eml_activation.hpp` | `native_cell_hypothesis_tier2_smoke` |
+| WikiText D17 full profile | `d17_wikitext_full_profile.json` | `native_d17_wikitext_smoke` |
+
 ## Still planned
 
-- Inject **profile_guided_loss** into per-step CyphaLM `train_step` (needs cell implementations for H02, H06–H22)
-- **Full 28-variant** cell hypothesis overnight sweep @ 300k tokens
-- **Paper V** full causal simulation loop (beyond `CausalGraphMonitor` stub)
-- **RPSM Option B** — sequence layer in CyphaLM
+- Inject **profile_guided_loss** into per-step CyphaLM backprop (currently post-train eval hook only)
+- **Full 28-variant** cell hypothesis overnight sweep @ 300k tokens (many Tier-2 modes are proxy scaffolds)
+- **Paper V** full causal simulation loop (beyond trajectory stub)
+- **RPSM Option B full** — hierarchy, W_up/W_down, Izaac, global memory
+- **EWC** wired into shared-model D16B zero-forgetting benchmark
+- **Federated** coordinator / network transport (merge stub only)
+- **GitHub Release** publish via `gh` (needs auth)
 
 ## Commands
 

@@ -4,6 +4,8 @@
 #include <cmath>
 #include <random>
 
+#include "cypha/intelligence/measurers.hpp"
+
 namespace cypha::cyphalm {
 
 namespace {
@@ -160,6 +162,25 @@ bool uncertainty_halt(const DecodeParams& params, double epistemic_var) {
            epistemic_var > *params.uncertainty_threshold;
 }
 
+double r_eu_from_pred(const PredictNextOutput& pred) {
+    return cypha::intelligence::compute_epistemic_ratio(pred.epistemic_var, pred.aleatoric_var);
+}
+
+bool epistemic_should_halt(const DecodeParams& params, const PredictNextOutput& pred,
+                           cypha::intelligence::EpistemicThreshold* threshold) {
+    if (!params.epistemic_halt) {
+        return false;
+    }
+    const double r_eu = r_eu_from_pred(pred);
+    if (threshold != nullptr) {
+        return threshold->should_correct(r_eu);
+    }
+    if (params.uncertainty_threshold.has_value()) {
+        return r_eu > *params.uncertainty_threshold;
+    }
+    return r_eu > 0.5;
+}
+
 }  // namespace
 
 DecodeStrategy decode_strategy_from_string(const std::string& name) {
@@ -171,7 +192,8 @@ DecodeStrategy decode_strategy_from_string(const std::string& name) {
 }
 
 GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens,
-                               const DecodeParams& params) {
+                               const DecodeParams& params,
+                               cypha::intelligence::EpistemicThreshold* epistemic_threshold) {
     GenerateOutput out;
     out.strategy = params.strategy;
     consume_prompt(model, prompt_ids);
@@ -179,16 +201,47 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
     std::mt19937_64 rng(params.seed);
     DecodeParams sample_params = params;
     sample_params.strategy = effective_sample_strategy(params);
+    bool self_correct_used = false;
 
     for (int i = 0; i < max_tokens; ++i) {
         const auto pred = model.predict_next(static_cast<std::uint32_t>(last));
         if (uncertainty_halt(params, pred.epistemic_var)) {
             out.halted_on_uncertainty = true;
+            out.r_eu_proxy = r_eu_from_pred(pred);
             GenerateStep halt_step;
             halt_step.epistemic_var = pred.epistemic_var;
             halt_step.aleatoric_var = pred.aleatoric_var;
             halt_step.halted = true;
             out.per_step.push_back(halt_step);
+            break;
+        }
+        if (epistemic_should_halt(params, pred, epistemic_threshold)) {
+            const double r_eu = r_eu_from_pred(pred);
+            if (params.self_correct && !self_correct_used) {
+                self_correct_used = true;
+                out.self_corrected = true;
+                out.self_correct_passes = 1;
+                if (epistemic_threshold != nullptr) {
+                    epistemic_threshold->update(r_eu, true);
+                }
+                last = argmax_log_probs(pred.log_probs);
+                const double loss =
+                    pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
+                out.generated_ids.push_back(last);
+                out.per_step.push_back(step_from_pred(pred, last, loss));
+                continue;
+            }
+            out.halted_on_epistemic = true;
+            out.halted_on_uncertainty = true;
+            out.r_eu_proxy = r_eu;
+            GenerateStep halt_step;
+            halt_step.epistemic_var = pred.epistemic_var;
+            halt_step.aleatoric_var = pred.aleatoric_var;
+            halt_step.halted = true;
+            out.per_step.push_back(halt_step);
+            if (epistemic_threshold != nullptr) {
+                epistemic_threshold->update(r_eu, false);
+            }
             break;
         }
         const int tok = sample_token(pred.log_probs, sample_params, rng);
@@ -218,17 +271,36 @@ GenerateOutput generate_sample(CyphaLMModel& model, const std::vector<int>& prom
 }
 
 void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens,
-                     const DecodeParams& params, const std::function<bool(const nlohmann::json&)>& cb) {
+                     const DecodeParams& params, const std::function<bool(const nlohmann::json&)>& cb,
+                     cypha::intelligence::EpistemicThreshold* epistemic_threshold) {
     consume_prompt(model, prompt_ids);
     int last = prompt_ids.empty() ? 0 : prompt_ids.back();
     std::mt19937_64 rng(params.seed);
     DecodeParams sample_params = params;
     sample_params.strategy = effective_sample_strategy(params);
     int index = 0;
+    bool self_correct_used = false;
 
     for (int i = 0; i < max_tokens; ++i) {
         const auto pred = model.predict_next(static_cast<std::uint32_t>(last));
         if (uncertainty_halt(params, pred.epistemic_var)) {
+            GenerateStep halt_step;
+            halt_step.epistemic_var = pred.epistemic_var;
+            halt_step.aleatoric_var = pred.aleatoric_var;
+            if (!cb(step_record_json(halt_step, index, true, true))) return;
+            return;
+        }
+        if (epistemic_should_halt(params, pred, epistemic_threshold)) {
+            if (params.self_correct && !self_correct_used) {
+                self_correct_used = true;
+                last = argmax_log_probs(pred.log_probs);
+                const double loss =
+                    pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
+                GenerateStep step = step_from_pred(pred, last, loss);
+                if (!cb(step_record_json(step, index, false, false))) return;
+                ++index;
+                continue;
+            }
             GenerateStep halt_step;
             halt_step.epistemic_var = pred.epistemic_var;
             halt_step.aleatoric_var = pred.aleatoric_var;

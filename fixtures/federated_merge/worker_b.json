@@ -1,0 +1,21 @@
+{
+  "d_latent": 2,
+  "field_dim": 8,
+  "world_n": 20,
+  "world_mu": [2.0, 3.0],
+  "world_v": [3.0, 4.0],
+  "classes": [
+    {
+      "label": "pos",
+      "n_obs": 6.0,
+      "n_correct": 5,
+      "delta_mu": [0.3, 0.2]
+    },
+    {
+      "label": "neg",
+      "n_obs": 2.0,
+      "n_correct": 1,
+      "delta_mu": [-0.2, 0.4]
+    }
+  ]
+}

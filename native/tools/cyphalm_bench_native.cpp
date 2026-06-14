@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_alpha_spectrum.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
@@ -19,6 +20,7 @@ namespace {
 struct Args {
     std::string mode = "hybrid";
     std::string profile = "d17";
+    std::string cell_variant;
     int n_train = 40000;
     int n_eval = 2000;
     int threads = 0;
@@ -30,6 +32,7 @@ struct Args {
 void usage() {
     std::cerr
         << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral}\n"
+        << "       --cell-variant {B0..H22}  (overrides --mode)\n"
         << "       --profile {d17,d04} --n-train N --n-eval M --threads T\n"
         << "       --analysis [--analysis-steps N]\n"
         << "       --intelligence-profile\n";
@@ -44,6 +47,7 @@ Args parse_args(int argc, char** argv) {
             return argv[++i];
         };
         if (k == "--mode") a.mode = need("--mode");
+        else if (k == "--cell-variant") a.cell_variant = need("--cell-variant");
         else if (k == "--profile") a.profile = need("--profile");
         else if (k == "--n-train") a.n_train = std::stoi(need("--n-train"));
         else if (k == "--n-eval") a.n_eval = std::stoi(need("--n-eval"));
@@ -70,8 +74,16 @@ int main(int argc, char** argv) {
 
         cypha::cyphalm::CyphaLMConfig cfg;
         cypha::cyphalm::apply_bench_profile(args.profile, cfg);
-        const auto bench_mode = cypha::cyphalm::parse_bench_mode(args.mode);
-        cypha::cyphalm::apply_bench_mode(bench_mode, cfg);
+        std::string mode_label = args.mode;
+        if (!args.cell_variant.empty()) {
+            cypha::cyphalm::apply_cell_variant(args.cell_variant, cfg);
+            if (const auto* spec = cypha::cyphalm::find_cell_variant(args.cell_variant)) {
+                mode_label = spec->bench_mode;
+            }
+        } else {
+            const auto bench_mode = cypha::cyphalm::parse_bench_mode(args.mode);
+            cypha::cyphalm::apply_bench_mode(bench_mode, cfg);
+        }
         if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
         if (args.profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
 
@@ -106,7 +118,8 @@ int main(int argc, char** argv) {
                                           args.intelligence_profile ? &profiler : nullptr);
 
         nlohmann::json out = {
-            {"mode", args.mode},
+            {"mode", mode_label},
+            {"cell_variant", args.cell_variant.empty() ? nullptr : nlohmann::json(args.cell_variant)},
             {"profile", args.profile},
             {"context_mode", cypha::cyphalm::context_mode_string(cfg.context_mode)},
             {"n_train", args.n_train},

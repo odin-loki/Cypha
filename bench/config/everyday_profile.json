@@ -12,7 +12,12 @@
       "field_dim": 128,
       "context_win": 32,
       "n_epochs": 4,
-      "train_passes_cap": 800
+      "train_passes_cap": 800,
+      "preprocessor": {
+        "scale": true,
+        "rff_dim": 256,
+        "seed": 42
+      }
     },
     "vision": {
       "world_lr": 0.008,
@@ -55,6 +60,7 @@
   "converge_iterations_total": 8,
   "notes": [
     "Auto-routing: tabular dim<256, vision dim>=256, regression for DIFRegressor",
+    "Tabular RFF: auto_rff_gamma_cv defaults on when input dim<=30 (preprocessor_fit)",
     "Multi-pass online training uses n_epochs from profile when CYPHA_BENCH_USE_PROFILE=1",
     "DIAGNOSTIC 2026-05-30: deliberation DISABLED (lo>hi). Phase 1 confirmed +11pp penalty on binary.",
     "DIAGNOSTIC 2026-05-30: delta_lr reduced 0.06->0.03 (Phase 3 found +4pp on R3_digits).",

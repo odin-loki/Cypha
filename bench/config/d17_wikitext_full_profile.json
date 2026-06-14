@@ -1,0 +1,30 @@
+{
+  "profile_id": "d17_wikitext_full",
+  "description": "D17 WikiText-2 with official train/valid splits when CYPHA_BENCH_FULL_CORPUS=1",
+  "runner": "cyphalm_bench_native",
+  "env": {
+    "CYPHA_BENCH_FULL_CORPUS": "1",
+    "CYPHA_BENCH_FULL_N_TRAIN": "300000"
+  },
+  "defaults": {
+    "profile": "d17",
+    "mode": "hybrid",
+    "n_train": 300000,
+    "n_eval": 2000,
+    "threads": 1
+  },
+  "fast_smoke": {
+    "description": "CTest native_d17_wikitext_smoke — tiny train, not overnight",
+    "n_train": 512,
+    "n_eval": 64,
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_FAST": "1"
+    }
+  },
+  "notes": [
+    "Requires bench/data/wikitext2/wikitext-2/wiki.{train,valid}.tokens",
+    "Without corpus files, cyphalm_bench_native falls back to synthetic when CYPHA_BENCH_FAST=1",
+    "Phase 1c beat-bigram target: hybrid_gria_lstm @ 300k on official valid"
+  ]
+}

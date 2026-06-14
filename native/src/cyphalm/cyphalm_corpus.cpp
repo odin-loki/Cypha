@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -12,6 +13,7 @@
 #include <unordered_map>
 
 #include "cypha/cyphalm/bpe_tokenizer.hpp"
+#include "cypha/bench/bench_paths.hpp"
 
 namespace fs = std::filesystem;
 
@@ -100,7 +102,37 @@ LMCorpus from_text(const std::string& text, const std::string& source,
     return c;
 }
 
+LMCorpus from_train_eval_text(const std::string& train_text, const std::string& eval_text,
+                              const std::string& source, const std::string& profile, int vocab_size,
+                              const BpeTokenizer* bpe = nullptr) {
+    std::vector<int> train_ids;
+    std::vector<int> eval_ids;
+    int effective_vocab = vocab_size;
+    if (bpe != nullptr) {
+        train_ids = bpe_encode_ids(train_text, *bpe);
+        eval_ids = bpe_encode_ids(eval_text, *bpe);
+        effective_vocab = static_cast<int>(bpe->vocab_size());
+    } else {
+        std::unordered_map<char, int> c2i;
+        build_vocab(train_text + eval_text, vocab_size, c2i);
+        train_ids = encode(train_text, c2i);
+        eval_ids = encode(eval_text, c2i);
+    }
+    if (train_ids.size() < 256 || eval_ids.size() < 64) {
+        throw std::runtime_error("official split too short after encoding");
+    }
+    LMCorpus c;
+    c.source = source + "_official_split";
+    c.profile = profile;
+    c.vocab_size = effective_vocab;
+    c.train_ids = std::move(train_ids);
+    c.eval_ids = std::move(eval_ids);
+    return c;
+}
+
 }  // namespace
+
+bool bench_full_corpus_enabled() { return cypha::bench::bench_env_truthy("CYPHA_BENCH_FULL_CORPUS"); }
 
 LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_size,
                            const std::string& bpe_merges, const std::string& bpe_vocab) {
@@ -112,10 +144,16 @@ LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_
     const BpeTokenizer* bpe_ptr = bpe.get();
     const fs::path root = fs::path(repo_root_from_native()) / "bench" / "data";
     if (profile == "d17") {
-        const fs::path wt = root / "wikitext2" / "wikitext-2" / "wiki.train.tokens";
-        if (fs::is_regular_file(wt)) {
-            return from_text(read_text_file(wt, max_chars), "wikitext2", profile, vocab_size,
-                             bpe_ptr);
+        const fs::path wt_dir = root / "wikitext2" / "wikitext-2";
+        const fs::path wt_train = wt_dir / "wiki.train.tokens";
+        const fs::path wt_valid = wt_dir / "wiki.valid.tokens";
+        if (bench_full_corpus_enabled() && fs::is_regular_file(wt_train) && fs::is_regular_file(wt_valid)) {
+            return from_train_eval_text(read_text_file(wt_train, 0), read_text_file(wt_valid, max_chars),
+                                        "wikitext2", profile, vocab_size, bpe_ptr);
+        }
+        if (fs::is_regular_file(wt_train)) {
+            const int cap = bench_full_corpus_enabled() ? 0 : max_chars;
+            return from_text(read_text_file(wt_train, cap), "wikitext2", profile, vocab_size, bpe_ptr);
         }
     }
     if (profile == "d04") {

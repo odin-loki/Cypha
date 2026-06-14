@@ -3,6 +3,7 @@
 #include <QMetaType>
 #include <QVector>
 
+#include "cypha/curriculum.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/kernel_memory.hpp"
 #include "cypha/memory_train.hpp"
@@ -22,13 +23,14 @@ std::vector<int> compute_train_order(const BulkNativeTrainJob& job, const std::a
   for (int i = 0; i < job.train_n; ++i) {
     order[static_cast<std::size_t>(i)] = i;
   }
-  if (!job.sort_by_uncertainty || job.model == nullptr || job.train_n <= 0) {
+  if ((!job.sort_by_uncertainty && !job.curriculum) || job.model == nullptr || job.train_n <= 0) {
     return order;
   }
 
   struct RankRow {
     int index;
     double entropy;
+    double confidence;
   };
   std::vector<RankRow> ranked;
   ranked.reserve(static_cast<std::size_t>(job.train_n));
@@ -84,7 +86,8 @@ std::vector<int> compute_train_order(const BulkNativeTrainJob& job, const std::a
     for (int i = 0; i < chunk_train_rows; ++i) {
       const int global_row = global_start + i;
       const double* prow = probs.data() + static_cast<std::size_t>(i) * static_cast<std::size_t>(k);
-      ranked.push_back({global_row, cypha::row_entropy_from_probs(prow, k, eps)});
+      ranked.push_back({global_row, cypha::row_entropy_from_probs(prow, k, eps),
+                        cypha::row_max_softmax_confidence(prow, k)});
     }
   }
 
@@ -92,12 +95,21 @@ std::vector<int> compute_train_order(const BulkNativeTrainJob& job, const std::a
     throw std::runtime_error("uncertainty rank: row count mismatch");
   }
 
-  std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
-    if (a.entropy != b.entropy) {
-      return a.entropy > b.entropy;
-    }
-    return a.index < b.index;
-  });
+  if (job.curriculum) {
+    std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
+      if (a.confidence != b.confidence) {
+        return a.confidence < b.confidence;
+      }
+      return a.index < b.index;
+    });
+  } else {
+    std::sort(ranked.begin(), ranked.end(), [](const RankRow& a, const RankRow& b) {
+      if (a.entropy != b.entropy) {
+        return a.entropy > b.entropy;
+      }
+      return a.index < b.index;
+    });
+  }
 
   for (std::size_t i = 0; i < ranked.size(); ++i) {
     order[i] = ranked[i].index;

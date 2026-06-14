@@ -6,6 +6,11 @@
 namespace cypha {
 namespace cyphalm {
 
+enum class LSTMActivationMode {
+    Standard,
+    Eml,
+};
+
 struct CharLSTMGrad {
   std::vector<double> dE;
   std::vector<double> dWx;
@@ -28,8 +33,10 @@ struct CharLSTMCache {
   std::vector<double> o;
   std::vector<double> c_new;
   std::vector<double> h_new;
+  std::vector<double> gates;
   std::vector<double> logits;
   std::vector<double> probs;
+  bool used_eml{false};
 };
 
 /// Single-layer char LSTM head (online BPTT-1). Weight layout matches Python ``CharLSTMHead``.
@@ -47,6 +54,9 @@ class CharLSTMHead {
 
   CharLSTMHead() = default;
   CharLSTMHead(int vocab_size_in, int hidden_in, std::uint64_t seed = 42);
+
+  void set_activation_mode(LSTMActivationMode mode) { activation_mode_ = mode; }
+  LSTMActivationMode activation_mode() const { return activation_mode_; }
 
   /// Reset internal h/c (stateful online API).
   void reset_state();
@@ -76,6 +86,7 @@ class CharLSTMHead {
   std::vector<double> c_;
   CharLSTMCache cache_;
   bool has_cache_{false};
+  LSTMActivationMode activation_mode_{LSTMActivationMode::Standard};
 };
 
 using CharLSTM = CharLSTMHead;
