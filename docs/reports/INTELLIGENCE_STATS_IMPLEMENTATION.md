@@ -129,27 +129,41 @@
 
 **CI gate (Phase 9 shipped):** **98 CTests** (`ctest -R native_`); +2 smokes: **`native_d23_overnight_lock_smoke`**, **`native_ewc_weights_smoke`**.
 
-## Phase 10 — planned/shipping (v2.3.10)
+## Phase 10 — shipped (v2.3.10, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
-| Hybrid EWC bias + W_slow Fisher | `cyphalm_ewc_regularizer.hpp/cpp` — extend Phase 9 weight Fisher (`d_gria_bias`, `d_ssm_w_slow`; anchor/Fisher on GRIA **bias** + SSM **W_slow**) | `native_ewc_weights_smoke` *(planned)* |
-| Baseline lock `--run all` | `tools/cypha_baseline_lock.cpp` — single CLI chains D17 + d21 + cell-sweep | `native_baseline_lock_smoke` (extend `--run all`) |
+| Hybrid EWC bias + W_slow Fisher | `cyphalm_ewc_regularizer.hpp/cpp` — extend Phase 9 weight Fisher (`d_gria_bias`, `d_ssm_w_slow`; anchor/Fisher on GRIA **bias** + SSM **W_slow**) | `native_ewc_weights_smoke` |
+| Baseline lock `--run all` | `tools/cypha_baseline_lock.cpp` — single CLI chains D17 + d21 + cell-sweep | `native_baseline_lock_smoke` |
 | Baseline lock PS wrapper | `scripts/update_baseline_lock.ps1` | manual (`--run d17\|d21\|cell-sweep\|all`) |
-| Production lock validation bench **d24** | `bench_domains.cpp` → `run_d24_production_lock_validation` *(planned)* | `cypha_bench_run --domain-tag d24` |
-| D24 profile config | `bench/config/d24_production_lock_profile.json` *(planned)* | manual |
-| Federated TLS Windows CI mirror | `scripts/ci_federated_tls_windows.ps1` *(planned)* | optional CI `federated_tls` job on Windows |
+| Production lock validation bench **d24** | `bench_domains.cpp` → `run_d24_production_lock_validation` | `cypha_bench_run --domain-tag d24` |
+| D24 profile config | `bench/config/d24_production_lock_profile.json` | manual |
+| Federated TLS Windows CI mirror | `scripts/ci_federated_tls_windows.ps1` | optional CI `federated_tls` job on Windows |
 | Release notes v2.3.10 template | `scripts/create_release_notes.ps1` | manual |
 
-**CI gate (Phase 10 target):** **99 CTests** (`ctest -R native_`); +2 smokes: **`native_d24_production_lock_smoke`**, **`native_ewc_weights_smoke`**.
+**CI gate (Phase 10 shipped):** **99 CTests** (`ctest -R native_`); +1 smoke: **`native_d24_production_lock_smoke`**; extended **`native_ewc_weights_smoke`** (GRIA bias + SSM W_slow Fisher).
+
+## Phase 11 — shipped (v2.3.11, 2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| WikiText-2 download scripts | `scripts/download_wikitext2.ps1`, `scripts/download_wikitext2.sh` | manual |
+| WikiText layout docs | `bench/data/wikitext2/README.md` | manual |
+| Gutenberg fallback for d17/d21 | `cyphalm_corpus.cpp` — `gutenberg_fallback` when WikiText absent (Moby Dick preferred) | `native_corpus_smoke` |
+| Corpus load smoke CLI | `tools/corpus_smoke.cpp` | `native_corpus_smoke` |
+| Bench domain **d25** corpus readiness | `bench_domains.cpp` → `run_d25_corpus_readiness` | `cypha_bench_run --domain-tag d25` |
+| D25 profile config | `bench/config/d25_corpus_readiness_profile.json` | manual |
+| D25 readiness report | `bench/report/tables/d25_corpus_readiness.json` | d25 run |
+| Overnight `-Fast` without WikiText | `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, `run_overnight_all.ps1`, `update_baseline_lock.ps1` — propagate `-Fast` + `CYPHA_BENCH_FAST=1` | manual |
+| Release notes v2.3.11 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 11 shipped):** **101 CTests** (`ctest -R native_`); +1 smoke: **`native_d25_corpus_smoke`**; also **`native_corpus_smoke`** (direct `load_bench_corpus` probe).
 
 ## Still planned
 
 - **D17 300k + 28-variant overnight** — use **`scripts/run_overnight_all.ps1`**; fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1 -Run all`**
 - **GitHub Release** publish via `gh auth login` + `scripts/publish_release.ps1`
 - **RPSM @ 300k production benchmark** — d21 wired; full overnight not executed in CI
-- **Production lock d24** — validate `BASELINE_LOCK.json` under production token budgets; Phase 10 CTest **`native_d24_production_lock_smoke`**
-- **Federated TLS on Windows** — **`scripts/ci_federated_tls_windows.ps1`** mirror for local/CI OpenSSL smoke
 
 ## Commands
 
@@ -162,13 +176,18 @@ cypha_cell_hypothesis_sweep --overnight-sweep-smoke
 cypha_cell_hypothesis_sweep --overnight-sweep   # CYPHA_BENCH_OVERNIGHT=1 → 300k
 cypha_bench_run --domain-tag d22
 pwsh -File scripts/update_baseline_lock.ps1 -Run d17 -Fast
-pwsh -File scripts/run_overnight_all.ps1 -Fast          # Phase 9: unified overnight (shipped)
+pwsh -File scripts/run_overnight_all.ps1 -Fast          # Phase 9/11: unified overnight; -Fast works without WikiText
 cypha_bench_run --domain-tag d23                        # Phase 9: overnight lock validation (shipped)
 cypha_baseline_lock --run all --fast --lock-file bench/BASELINE_LOCK.json  # Phase 10: all lock runs
-cypha_bench_run --domain-tag d24                        # Phase 10: production lock validation (planned)
-pwsh -File scripts/ci_federated_tls_windows.ps1         # Phase 10: Windows TLS smoke mirror (planned)
+cypha_bench_run --domain-tag d24                        # Phase 10: production lock validation (shipped)
+pwsh -File scripts/ci_federated_tls_windows.ps1         # Phase 10: Windows TLS smoke mirror (shipped)
+pwsh -File scripts/download_wikitext2.ps1               # Phase 11: fetch WikiText-2 into bench/data/
+bash scripts/download_wikitext2.sh                      # Phase 11: Linux/CI equivalent
+corpus_smoke                                            # Phase 11: d17+d21 load_bench_corpus probe
+cypha_bench_run --domain-tag d25                        # Phase 11: corpus readiness validation
 ctest --test-dir native/build -R "native_d23|native_ewc_weights" --output-on-failure
 ctest --test-dir native/build -R "native_d24|native_ewc_weights" --output-on-failure  # Phase 10
+ctest --test-dir native/build -R "native_d25|native_corpus" --output-on-failure     # Phase 11
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

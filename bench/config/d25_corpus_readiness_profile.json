@@ -1,0 +1,29 @@
+{
+  "profile_id": "d25_corpus_readiness_profile",
+  "description": "D25 corpus readiness validation — load_bench_corpus d17+d21 (wikitext2 or gutenberg fallback)",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 25,
+    "domain_tag": "d25"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d25_corpus_smoke — corpus load probe for d17 and d21",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "load_bench_corpus", "profiles": ["d17", "d21"] }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 25",
+    "Or: cypha_bench_run --domain-tag d25",
+    "Validates WikiText-2 or gutenberg fallback corpus is loadable for d17 and d21",
+    "Optionally runs corpus_smoke when built",
+    "Download WikiText-2: scripts/download_wikitext2.ps1 or scripts/download_wikitext2.sh",
+    "Phase 11: corpus readiness validation gate"
+  ]
+}

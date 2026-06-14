@@ -28,21 +28,31 @@ $lockScript = Join-Path $PSScriptRoot "update_baseline_lock.ps1"
 
 Write-Host "== Phase 9 overnight automation (fast=$Fast n_train=$effectiveNTrain n_eval=$effectiveNEval) ==" -ForegroundColor Cyan
 
+$overnightArgs = @{
+    BuildDir = $BuildDir
+    NTrain   = $effectiveNTrain
+    NEval    = $effectiveNEval
+    Threads  = $Threads
+}
+if ($Fast) {
+    $overnightArgs.Fast = $true
+}
+
 Write-Host "== D17 hybrid overnight ==" -ForegroundColor Cyan
-& $d17Script -BuildDir $BuildDir -NTrain $effectiveNTrain -NEval $effectiveNEval -Threads $Threads
+& $d17Script @overnightArgs
 if ($LASTEXITCODE -ne 0) {
     throw "run_d17_overnight failed exit=$LASTEXITCODE"
 }
 
 Write-Host "== D21 RPSM overnight ==" -ForegroundColor Cyan
-& $rpsmScript -BuildDir $BuildDir -NTrain $effectiveNTrain -NEval $effectiveNEval -Threads $Threads
+& $rpsmScript @overnightArgs
 if ($LASTEXITCODE -ne 0) {
     throw "run_rpsm_overnight failed exit=$LASTEXITCODE"
 }
 
 if (-not $SkipCellSweep) {
     Write-Host "== cell hypothesis overnight sweep ==" -ForegroundColor Cyan
-    & $d17Script -BuildDir $BuildDir -NTrain $effectiveNTrain -NEval $effectiveNEval -Threads $Threads -CellSweep
+    & $d17Script @overnightArgs -CellSweep
     if ($LASTEXITCODE -ne 0) {
         throw "cell sweep overnight failed exit=$LASTEXITCODE"
     }

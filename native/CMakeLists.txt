@@ -272,6 +272,9 @@ target_link_libraries(ewc_smoke PRIVATE cypha_core)
 add_executable(curriculum_smoke tools/curriculum_smoke.cpp)
 target_link_libraries(curriculum_smoke PRIVATE cypha_core)
 
+add_executable(corpus_smoke tools/corpus_smoke.cpp)
+target_link_libraries(corpus_smoke PRIVATE cypha_lm_native)
+
 add_executable(intelligence_profiler_papers tools/intelligence_profiler_papers.cpp)
 target_link_libraries(intelligence_profiler_papers PRIVATE cypha_core)
 
@@ -316,6 +319,7 @@ set(
   federated_worker_smoke
   federated_tls_smoke
   curriculum_smoke
+  corpus_smoke
   intelligence_profiler_papers
   cyphalm_bench_native
   cyphalm_ssm_diagnose
@@ -876,6 +880,11 @@ add_test(
 )
 
 add_test(
+  NAME native_corpus_smoke
+  COMMAND "$<TARGET_FILE:corpus_smoke>"
+)
+
+add_test(
   NAME native_intelligence_profiler_papers
   COMMAND "$<TARGET_FILE:intelligence_profiler_papers>"
 )
@@ -1026,6 +1035,15 @@ add_test(
 set_tests_properties(native_d24_production_lock_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
   TIMEOUT 180
+)
+
+add_test(
+  NAME native_d25_corpus_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d25
+)
+set_tests_properties(native_d25_corpus_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 60
 )
 
 add_test(

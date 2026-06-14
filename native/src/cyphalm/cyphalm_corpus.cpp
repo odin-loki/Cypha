@@ -155,6 +155,13 @@ LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_
             const int cap = bench_full_corpus_enabled() ? 0 : max_chars;
             return from_text(read_text_file(wt_train, cap), "wikitext2", profile, vocab_size, bpe_ptr);
         }
+        for (const char* name : {"moby_dick.txt", "alice.txt", "sherlock_holmes.txt"}) {
+            const fs::path p = root / "gutenberg" / name;
+            if (fs::is_regular_file(p)) {
+                return from_text(read_text_file(p, max_chars), "gutenberg_fallback", profile, vocab_size,
+                                 bpe_ptr);
+            }
+        }
     }
     if (profile == "d04") {
         for (const char* name : {"moby_dick.txt", "alice.txt", "sherlock_holmes.txt"}) {

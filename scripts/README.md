@@ -40,7 +40,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 
 | Script / binary | Purpose | Output |
 |-----------------|---------|--------|
-| **`cypha_bench_run`** (native) | Multi-domain benchmark (d01–d17 + cross-domain) | stdout / JSON |
+| **`cypha_bench_run`** (native) | Multi-domain benchmark (d01–d17 + d25 corpus readiness + cross-domain) | stdout / JSON |
 | **`cypha_bench_report`** (native) | Regenerate bench report figures from JSON artifacts | disk |
 | **`cypha_tune_run`** (native) | Sweep JSON → per-cell native bench | disk |
 | **`cypha_diagnostics_run`** (native) | Phases 1–4 validation orchestrator (parity exes + inline checks) | stdout |
@@ -48,11 +48,20 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `cypha_tune_smoke.ps1` | Dry-run tune sweep smoke | console |
 | `cyphalm_native_run_modes.ps1` | CyphaLM native mode matrix | console |
 | `cyphalm_native_sweep.ps1` / `cyphalm_native_sweep_safe.ps1` | CyphaLM config sweeps | disk |
-| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`) | disk |
-| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench | disk |
-| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge | `bench/BASELINE_LOCK.json` |
-| `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`) | lock JSON |
+| `download_wikitext2.ps1` | Download WikiText-2 raw into `bench/data/wikitext2/wikitext-2/` (PowerShell 5+) | disk |
+| `download_wikitext2.sh` | Bash equivalent for Linux/CI | disk |
+| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`) | disk |
+| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`) | disk |
+| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast` to child scripts) | `bench/BASELINE_LOCK.json` |
+| `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`) | lock JSON |
 | `wsl_bench_gpu.sh` | WSL GPU bench helper | console |
+
+## Corpus smoke (Phase 11)
+
+| Binary | Purpose | CTest |
+|--------|---------|-------|
+| **`corpus_smoke`** (native) | Probe `load_bench_corpus("d17"|"d21", …)` — WikiText-2 or gutenberg fallback | `native_corpus_smoke` |
+| **`cypha_bench_run --domain-tag d25`** | Corpus readiness validation; writes `bench/report/tables/d25_corpus_readiness.json` | `native_d25_corpus_smoke` |
 
 ## Kernel LLR / XOR profiling
 

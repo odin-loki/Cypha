@@ -1,66 +1,77 @@
 {
-  "schema_version": 1,
+  "ctest_smoke": {
+    "native_d17_wikitext_overnight_smoke": {
+      "env": {
+        "CYPHA_BENCH_FAST": "1",
+        "CYPHA_BENCH_FULL_CORPUS": "1",
+        "CYPHA_BENCH_OVERNIGHT": "1"
+      },
+      "n_eval": 64,
+      "n_train": 500
+    },
+    "native_overnight_mini_smoke": {
+      "env": {
+        "CYPHA_BENCH_FAST": "1"
+      },
+      "n_eval": 64,
+      "n_train": 800,
+      "purpose": "Fast overnight wiring sanity (not a BPC lock)"
+    }
+  },
+  "d17_hybrid_baseline": {
+    "bpc": 2.873,
+    "context_mode": "hybrid_gria_lstm",
+    "corpus": "wikitext2",
+    "mode": "hybrid",
+    "n_eval": 2000,
+    "n_train": 300000,
+    "notes": "Beat-bigram target; native reference within ~0.02 BPC of Python ref",
+    "profile": "d17",
+    "source": "Phase 1c 17A (bench/config/d17_phase1c_17a.json)",
+    "split": "official train/valid"
+  },
   "description": "Locked baselines for regression checks and overnight bench comparison",
   "locked_at": "2026-06-14",
-  "d17_hybrid_baseline": {
-    "profile": "d17",
-    "mode": "hybrid",
-    "context_mode": "hybrid_gria_lstm",
-    "n_train": 300000,
-    "n_eval": 2000,
-    "corpus": "wikitext2",
-    "split": "official train/valid",
-    "bpc": 2.873,
-    "source": "Phase 1c 17A (bench/config/d17_phase1c_17a.json)",
-    "notes": "Beat-bigram target; native reference within ~0.02 BPC of Python ref"
-  },
   "overnight_results": {
-    "status": "pending",
+    "artifact_path": null,
+    "bpc": 6.4857057859610165,
+    "context_mode": "hybrid_gria_lstm",
+    "corpus": "wikitext2_official_split",
     "description": "Fill after a real CYPHA_BENCH_OVERNIGHT=1 run (scripts/run_d17_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d17)",
-    "profile": "d17",
-    "mode": "hybrid",
-    "n_train": 300000,
-    "n_eval": null,
-    "bpc": null,
-    "run_at": null,
-    "runner": "cyphalm_bench_native --overnight",
     "env": {
+      "CYPHA_BENCH_FAST": "1",
       "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_FULL_N_TRAIN": "200",
       "CYPHA_BENCH_OVERNIGHT": "1"
     },
-    "artifact_path": null
+    "mode": "hybrid",
+    "n_eval": 64,
+    "n_train": 200,
+    "profile": "d17",
+    "run_at": "2026-06-14T09:06:02Z",
+    "runner": "cyphalm_bench_native --overnight",
+    "status": "fast_smoke",
+    "synthetic": false
   },
   "rpsm_results": {
-    "status": "pending",
+    "artifact_path": null,
+    "bpc": 7.6170703048280055,
+    "corpus": "wikitext2_official_split",
     "description": "Fill after D21 RPSM overnight (scripts/run_rpsm_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d21)",
-    "profile": "d21",
-    "mode": "rpsm",
-    "n_train": 300000,
-    "n_eval": null,
-    "bpc": null,
-    "run_at": null,
-    "runner": "cyphalm_bench_native --overnight --mode rpsm",
     "env": {
+      "CYPHA_BENCH_FAST": "1",
       "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_FULL_N_TRAIN": "200",
       "CYPHA_BENCH_OVERNIGHT": "1"
     },
-    "artifact_path": null
+    "mode": "rpsm",
+    "n_eval": 64,
+    "n_train": 200,
+    "profile": "d21",
+    "run_at": "2026-06-14T09:06:02Z",
+    "runner": "cyphalm_bench_native --overnight --mode rpsm",
+    "status": "fast_smoke",
+    "synthetic": false
   },
-  "ctest_smoke": {
-    "native_overnight_mini_smoke": {
-      "n_train": 800,
-      "n_eval": 64,
-      "env": { "CYPHA_BENCH_FAST": "1" },
-      "purpose": "Fast overnight wiring sanity (not a BPC lock)"
-    },
-    "native_d17_wikitext_overnight_smoke": {
-      "n_train": 500,
-      "n_eval": 64,
-      "env": {
-        "CYPHA_BENCH_FULL_CORPUS": "1",
-        "CYPHA_BENCH_OVERNIGHT": "1",
-        "CYPHA_BENCH_FAST": "1"
-      }
-    }
-  }
+  "schema_version": 1
 }

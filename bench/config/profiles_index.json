@@ -82,5 +82,13 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d24",
     "notes": "Production baseline lock validation; see bench/config/d24_production_lock_profile.json"
+  },
+  "corpus_readiness_d25": {
+    "path": "everyday_profile.json",
+    "config": "d25_corpus_readiness_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d25",
+    "corpus": "wikitext2|gutenberg_fallback",
+    "notes": "Corpus readiness validation; see bench/config/d25_corpus_readiness_profile.json"
   }
 }

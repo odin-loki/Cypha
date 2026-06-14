@@ -17,8 +17,10 @@
 # Phase 9 (v2.3.9, shipped): scripts/run_overnight_all.ps1 unified overnight runner;
 # d23 overnight lock validation (native_d23_overnight_lock_smoke);
 # hybrid EWC weight Fisher + checkpoint persistence (native_ewc_weights_smoke); 98 CTests.
-# Phase 10 (v2.3.10, planned/shipping): EWC bias/W_slow Fisher; d24 production lock;
-# cypha_baseline_lock --run all; scripts/ci_federated_tls_windows.ps1; 99 CTests target.
+# Phase 10 (v2.3.10, shipped): EWC bias/W_slow Fisher; d24 production lock;
+# cypha_baseline_lock --run all; scripts/ci_federated_tls_windows.ps1; 99 CTests.
+# Phase 11 (v2.3.11, shipped): WikiText download scripts; gutenberg fallback for d17/d21;
+# corpus_smoke + d25 corpus readiness; overnight -Fast fix; 101 CTests.
 
 name: Release
 
@@ -288,10 +290,18 @@ jobs:
             - **Hybrid EWC weight Fisher:** diagonal Fisher on GRIA **U**/**V** + SSM **W_fast** (extends Phase 8 α Fisher); EWC anchor/Fisher blocks persisted in CyphaLM `checkpoint.json`.
             - **CI gate:** **98 CTests** (`ctest -R native_`); smokes **`native_d23_overnight_lock_smoke`**, **`native_ewc_weights_smoke`**.
 
-            ### Phase 10 maintainer notes (v2.3.10, planned/shipping)
+            ### Phase 10 maintainer notes (v2.3.10, shipped)
 
-            - **Hybrid EWC bias + W_slow Fisher:** diagonal Fisher on GRIA **`bias`** + SSM **`W_slow`** (extends Phase 9 weight Fisher); CTest **`native_ewc_weights_smoke`** *(planned)*.
+            - **Hybrid EWC bias + W_slow Fisher:** diagonal Fisher on GRIA **`bias`** + SSM **`W_slow`** (extends Phase 9 weight Fisher); CTest **`native_ewc_weights_smoke`**.
             - **Baseline lock all runs:** `cypha_baseline_lock --run all --fast --lock-file bench/BASELINE_LOCK.json` — or `pwsh -File scripts/update_baseline_lock.ps1 -Run all -Fast`.
-            - **Production lock validation:** `cypha_bench_run --domain-tag d24` — end-to-end `BASELINE_LOCK.json` check under production profiles; profile [`bench/config/d24_production_lock_profile.json`](bench/config/d24_production_lock_profile.json) *(planned)*.
+            - **Production lock validation:** `cypha_bench_run --domain-tag d24` — end-to-end `BASELINE_LOCK.json` check under production profiles; profile [`bench/config/d24_production_lock_profile.json`](bench/config/d24_production_lock_profile.json).
             - **Federated TLS Windows mirror:** `pwsh -File scripts/ci_federated_tls_windows.ps1` — local Windows mirror of optional **`federated_tls`** CI job (`-DCYPHA_ENABLE_OPENSSL=ON`, `native_federated_tls_smoke`; skip without OpenSSL).
-            - **CI gate:** **99 CTests** target (`ctest -R native_`); new smokes **`native_d24_production_lock_smoke`**, **`native_ewc_weights_smoke`**.
+            - **CI gate:** **99 CTests** (`ctest -R native_`); smokes **`native_d24_production_lock_smoke`**, **`native_ewc_weights_smoke`**.
+
+            ### Phase 11 maintainer notes (v2.3.11, shipped)
+
+            - **WikiText-2 download:** `pwsh -File scripts/download_wikitext2.ps1` or `bash scripts/download_wikitext2.sh` — extracts to [`bench/data/wikitext2/wikitext-2/`](bench/data/wikitext2/README.md) (`wiki.{train,valid,test}.tokens`).
+            - **Gutenberg fallback:** when WikiText is absent, d17/d21 bench uses `bench/data/gutenberg/*.txt` with source tag **`gutenberg_fallback`** (Moby Dick preferred).
+            - **Corpus readiness:** `corpus_smoke` (direct d17/d21 load probe); `cypha_bench_run --domain-tag d25` — profile [`bench/config/d25_corpus_readiness_profile.json`](bench/config/d25_corpus_readiness_profile.json); report [`bench/report/tables/d25_corpus_readiness.json`](bench/report/tables/d25_corpus_readiness.json).
+            - **Overnight without WikiText:** add `-Fast` to `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, or `run_overnight_all.ps1` — sets **`CYPHA_BENCH_FAST=1`** for synthetic corpus fallback.
+            - **CI gate:** **101 CTests** (`ctest -R native_`); new smokes **`native_d25_corpus_smoke`**, **`native_corpus_smoke`**.

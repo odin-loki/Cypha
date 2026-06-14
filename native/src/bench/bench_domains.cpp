@@ -1,4 +1,4 @@
-// bench_domains — native bench domain runners (d01–d23) for cypha_bench_run.
+// bench_domains — native bench domain runners (d01–d25) for cypha_bench_run.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -3092,6 +3092,84 @@ void validate_cell_sweep_lock_section(const Json& lock) {
     validate_overnight_lock_section(section, "overnight_results (cell-sweep)");
 }
 
+Json probe_bench_corpus_profile(const std::string& profile) {
+    cypha::cyphalm::CyphaLMConfig cfg;
+    cypha::cyphalm::apply_bench_profile(profile, cfg);
+    if (profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
+
+    Json report;
+    report["profile"] = profile;
+    try {
+        const int max_chars = cypha::bench::bench_scale(500'000, 100'000);
+        const cypha::cyphalm::LMCorpus corpus = cypha::cyphalm::load_bench_corpus(
+            profile, max_chars, cfg.vocab_size, cfg.bpe_merges_path, cfg.bpe_vocab_path);
+        report["ok"] = true;
+        report["source"] = corpus.source;
+        report["train_tokens"] = corpus.train_ids.size();
+        report["eval_tokens"] = corpus.eval_ids.size();
+        report["vocab_size"] = corpus.vocab_size;
+    } catch (const std::exception& ex) {
+        report["ok"] = false;
+        report["error"] = ex.what();
+    }
+    return report;
+}
+
+Json run_d25_corpus_readiness() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path data_root = cypha::bench::data_dir();
+
+    const Json d17_report = probe_bench_corpus_profile("d17");
+    const Json d21_report = probe_bench_corpus_profile("d21");
+    if (!d17_report.value("ok", false)) {
+        throw std::runtime_error("d17 corpus readiness failed: " +
+                                 d17_report.value("error", std::string("unknown")));
+    }
+    if (!d21_report.value("ok", false)) {
+        throw std::runtime_error("d21 corpus readiness failed: " +
+                                 d21_report.value("error", std::string("unknown")));
+    }
+
+    Json corpus_smoke_report{{"invoked", false}, {"reason", "corpus_smoke not built"}};
+    const fs::path corpus_smoke_exe = cypha::bench::resolve_runner_exe("corpus_smoke", exe_dir);
+    if (fs::is_regular_file(corpus_smoke_exe)) {
+        const cypha::bench::RunProcessResult proc =
+            cypha::bench::run_executable_capture(corpus_smoke_exe, {});
+        corpus_smoke_report = Json{{"invoked", true},
+                                   {"exit_code", proc.exit_code},
+                                   {"stdout", proc.stdout_text},
+                                   {"stderr", proc.stderr_text}};
+        if (proc.exit_code != 0) {
+            throw std::runtime_error("corpus_smoke exit=" + std::to_string(proc.exit_code));
+        }
+    }
+
+    const fs::path wt_train = data_root / "wikitext2" / "wikitext-2" / "wiki.train.tokens";
+    bool gutenberg_present = false;
+    for (const char* name : {"moby_dick.txt", "alice.txt", "sherlock_holmes.txt"}) {
+        if (fs::is_regular_file(data_root / "gutenberg" / name)) {
+            gutenberg_present = true;
+            break;
+        }
+    }
+
+    const Json experiments{
+        {"d17", d17_report},
+        {"d21", d21_report},
+        {"corpus_smoke", corpus_smoke_report},
+        {"wikitext2_present", fs::is_regular_file(wt_train)},
+        {"gutenberg_present", gutenberg_present},
+        {"backend", "load_bench_corpus"},
+    };
+    cypha::bench::finalize_domain("d25_corpus_readiness", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d25_corpus_readiness.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 Json run_d24_production_lock_validation() {
     const fs::path exe_dir = resolve_native_exe_dir();
     const fs::path lock_path = fs::current_path() / "d24_production_lock_smoke.json";
@@ -3164,6 +3242,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d22", "cypha_bench.domains.d22_intelligence_cross_profile", run_d22_intelligence_cross_profile},
         {"d23", "cypha_bench.domains.d23_overnight_lock_validation", run_d23_overnight_lock_validation},
         {"d24", "cypha_bench.domains.d24_production_lock_validation", run_d24_production_lock_validation},
+        {"d25", "cypha_bench.domains.d25_corpus_readiness", run_d25_corpus_readiness},
     };
 }
 

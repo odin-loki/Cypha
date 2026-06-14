@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **99 CTests** *(Phase 10 shipped)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **101 CTests** *(Phase 11 shipped)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **99 CTests** gate CI *(Phase 10 shipped)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **101 CTests** gate CI *(Phase 11 shipped)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -110,7 +110,7 @@ Config (legacy pin): `bench/config/cyphalm_profile.json` and per-domain profiles
 
 D04 runs the full **CyphaLM** stack: learning curve, n-gram + LSTM baselines, context-length BPC, expert routing, save/restore, sampling comparison, ablation summary.
 
-D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Requires `bench/data/wikitext2/` — CI fetches via Hugging Face; bench fails loudly on synthetic fallback unless `CYPHA_BENCH_FAST=1`. Set `CYPHA_BENCH_FULL_CORPUS=1` to train on the entire `wiki.train.tokens` file with **`wiki.valid.tokens`** held out (see `bench/config/d17_wikitext_full_profile.json`). **Overnight 300k run:** `bench/config/d17_wikitext_overnight_profile.json`, `cyphalm_bench_native --overnight`, or `CYPHA_BENCH_OVERNIGHT=1`. CTests **`native_d17_wikitext_smoke`** (512 train), **`native_d17_wikitext_overnight_smoke`** (500 train), and **`native_overnight_mini_smoke`** (800 train) use FAST synthetic fallback. Baseline lock: [`bench/BASELINE_LOCK.json`](../bench/BASELINE_LOCK.json).
+D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Requires `bench/data/wikitext2/` — download via **`scripts/download_wikitext2.ps1`** or **`scripts/download_wikitext2.sh`** (see **`bench/data/wikitext2/README.md`**); CI may fetch via Hugging Face. When WikiText is absent, **`load_bench_corpus`** falls back to **`bench/data/gutenberg/*.txt`** with source tag **`gutenberg_fallback`** (Moby Dick preferred). Bench fails loudly on missing corpus unless `CYPHA_BENCH_FAST=1` (synthetic fallback in overnight/bench smokes). Set `CYPHA_BENCH_FULL_CORPUS=1` to train on the entire `wiki.train.tokens` file with **`wiki.valid.tokens`** held out (see `bench/config/d17_wikitext_full_profile.json`). **Overnight 300k run:** `bench/config/d17_wikitext_overnight_profile.json`, `cyphalm_bench_native --overnight`, or `CYPHA_BENCH_OVERNIGHT=1`; **`-Fast`** on overnight scripts sets **`CYPHA_BENCH_FAST=1`** so runs succeed without WikiText. CTests **`native_d17_wikitext_smoke`** (512 train), **`native_d17_wikitext_overnight_smoke`** (500 train), **`native_overnight_mini_smoke`** (800 train), **`native_corpus_smoke`**, and **`native_d25_corpus_smoke`** (d25 corpus readiness) use FAST synthetic or gutenberg fallback. Baseline lock: [`bench/BASELINE_LOCK.json`](../bench/BASELINE_LOCK.json).
 
 ### Known weak domains
 
@@ -237,6 +237,15 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Bench d24:** production lock validation via **`native_d24_production_lock_smoke`** (~7s fast).
 - **Federated TLS Windows CI mirror:** **`scripts/ci_federated_tls_windows.ps1`**.
 - **CI:** **99 CTests** (+1 d24 smoke; extended weight Fisher smoke).
+
+### Phase 11 — corpus readiness + overnight -Fast (v2.3.11) — shipped
+
+- **WikiText-2 download tooling:** **`scripts/download_wikitext2.ps1`** (PowerShell 5+) and **`scripts/download_wikitext2.sh`** (Linux/CI) fetch Salesforce WikiText-2 raw into **`bench/data/wikitext2/wikitext-2/`**; layout documented in **`bench/data/wikitext2/README.md`**.
+- **Gutenberg fallback:** when WikiText is absent, **`load_bench_corpus("d17"|"d21", ...)`** in **`cyphalm_corpus.cpp`** uses **`bench/data/gutenberg/*.txt`** (Moby Dick preferred) with source tag **`gutenberg_fallback`** instead of throwing.
+- **Corpus smoke:** **`corpus_smoke`** CLI probes d17 + d21 corpus load; CTest **`native_corpus_smoke`**.
+- **Bench d25:** corpus readiness validation — **`run_d25_corpus_readiness`** checks WikiText or gutenberg fallback, optionally invokes **`corpus_smoke`**, writes **`bench/report/tables/d25_corpus_readiness.json`**; profile **`bench/config/d25_corpus_readiness_profile.json`**. CTest **`native_d25_corpus_smoke`**.
+- **Overnight `-Fast` fix:** **`run_d17_overnight.ps1`**, **`run_rpsm_overnight.ps1`**, **`run_overnight_all.ps1`**, and **`update_baseline_lock.ps1`** propagate **`-Fast`** and set **`CYPHA_BENCH_FAST=1`** so overnight/baseline-lock smokes run without WikiText installed.
+- **CI:** **101 CTests** (+1 **`native_d25_corpus_smoke`**; also **`native_corpus_smoke`**).
 
 ---
 

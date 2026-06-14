@@ -2,6 +2,7 @@
 # Usage:
 #   pwsh -File scripts/run_d17_overnight.ps1
 #   pwsh -File scripts/run_d17_overnight.ps1 -BuildDir native/build -NTrain 500
+#   pwsh -File scripts/run_d17_overnight.ps1 -Fast  # synthetic corpus if WikiText missing
 param(
     [string]$BuildDir = "native/build",
     [int]$NTrain = 300000,
@@ -9,7 +10,8 @@ param(
     [int]$Threads = 1,
     [string]$Profile = "d17",
     [string]$Mode = "hybrid",
-    [switch]$CellSweep
+    [switch]$CellSweep,
+    [switch]$Fast
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +28,9 @@ if (-not (Test-Path $exe)) {
 $env:CYPHA_BENCH_FULL_CORPUS = "1"
 $env:CYPHA_BENCH_OVERNIGHT = "1"
 $env:CYPHA_BENCH_FULL_N_TRAIN = "$NTrain"
+if ($Fast -or $NTrain -ne 300000) {
+    $env:CYPHA_BENCH_FAST = "1"
+}
 
 Push-Location (Join-Path $root $BuildDir)
 try {

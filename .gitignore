@@ -96,6 +96,7 @@ native/build/
 
 bench/data/mnist/
 bench/data/wikitext2/
+!bench/data/wikitext2/README.md
 bench/artifacts/
 bench/report/baselines/
 bench/report/figures/
@@ -105,6 +106,7 @@ bench/report/summary.json
 # Legacy paths (pre bench/ rename)
 bench/data/mnist/
 bench/data/wikitext2/
+!bench/data/wikitext2/README.md
 bench/artifacts/tuning/
 bench/report/baselines/
 
