@@ -1,8 +1,9 @@
-# Phase 17/19: poll until production overnight processes exit, then finalize + commit preview.
+# Phase 17/19/20: poll until production overnight processes exit, then finalize + commit preview.
 # Reuses overnight process detection from watch_production_overnight.ps1 (+ cypha_cell_hypothesis_sweep).
 # When -BuildDir is the default native/build and overnight is running, BuildDir is auto-detected
 # from the run_production_overnight.ps1 command line (e.g. native/build_p13).
-#
+# With -LogFile, each poll cycle appends HEARTBEAT (timestamp, process count, lock n_train).
+# Poll query failures log ERROR and retry (does not treat failed query as "processes exited").#
 # Usage:
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -Once
@@ -125,9 +126,73 @@ function Show-LockSummary {
     }
 }
 
-function Test-OvernightStillRunning {
-    $procs = Get-OvernightProcessInfo
-    return ($procs -and $procs.Count -gt 0)
+function Get-LockOvernightNTrain {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return "?"
+    }
+
+    try {
+        $lock = Get-Content $Path -Raw | ConvertFrom-Json
+    } catch {
+        return "?"
+    }
+
+    if ($lock.PSObject.Properties.Name -notcontains "overnight_results" -or $null -eq $lock.overnight_results) {
+        return "?"
+    }
+
+    $section = $lock.overnight_results
+    if ($section.PSObject.Properties.Name -contains "n_train") {
+        return [string]$section.n_train
+    }
+
+    return "?"
+}
+
+function Write-PollHeartbeat {
+    param(
+        [int]$ProcessCount,
+        [string]$LockPath
+    )
+
+    $nTrain = Get-LockOvernightNTrain -Path $LockPath
+    $line = "HEARTBEAT $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') processes=$ProcessCount lock_n_train=$nTrain"
+    Write-Host $line -ForegroundColor DarkGray
+    if ($resolvedLogFile) {
+        $line | Out-File -FilePath $resolvedLogFile -Append -Encoding utf8
+    }
+}
+
+function Write-PollError {
+    param([string]$Message)
+
+    $line = "ERROR $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+    Write-Host $line -ForegroundColor Red
+    if ($resolvedLogFile) {
+        $line | Out-File -FilePath $resolvedLogFile -Append -Encoding utf8
+    }
+}
+
+function Get-OvernightProcessInfoSafe {
+    try {
+        $procs = Get-OvernightProcessInfo
+        $count = if ($procs) { $procs.Count } else { 0 }
+        return @{
+            Ok        = $true
+            Processes = $procs
+            Count     = $count
+            Error     = $null
+        }
+    } catch {
+        return @{
+            Ok        = $false
+            Processes = @()
+            Count     = -1
+            Error     = $_.Exception.Message
+        }
+    }
 }
 
 function Get-DetectedBuildDirFromOvernight {
@@ -151,7 +216,8 @@ function Resolve-PollBuildDir {
         return $Requested
     }
 
-    if (-not (Test-OvernightStillRunning)) {
+    $info = Get-OvernightProcessInfoSafe
+    if (-not $info.Ok -or $info.Count -eq 0) {
         return $Requested
     }
 
@@ -184,17 +250,46 @@ if ($Force) {
 }
 
 if ($Once) {
-    if (Test-OvernightStillRunning) {
-        Show-RunningProcesses
-        Write-Host "poll_and_finalize_overnight: processes still running (-Once)" -ForegroundColor Yellow
+    $onceInfo = Get-OvernightProcessInfoSafe
+    if (-not $onceInfo.Ok) {
+        Write-PollError -Message "poll check failed: $($onceInfo.Error)"
         $exitCode = 1
     } else {
-        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] no overnight processes (-Once)" -ForegroundColor Green
+        Write-PollHeartbeat -ProcessCount $onceInfo.Count -LockPath $LockFile
+        if ($onceInfo.Count -gt 0) {
+            Show-RunningProcesses
+            Write-Host "poll_and_finalize_overnight: processes still running (-Once)" -ForegroundColor Yellow
+            $exitCode = 1
+        } else {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] no overnight processes (-Once)" -ForegroundColor Green
+        }
     }
 } else {
-    while (Test-OvernightStillRunning) {
+    $pollHadErrors = $false
+    while ($true) {
+        $pollInfo = Get-OvernightProcessInfoSafe
+        if (-not $pollInfo.Ok) {
+            Write-PollError -Message "poll loop query failed: $($pollInfo.Error)"
+            $pollHadErrors = $true
+            Start-Sleep -Seconds $IntervalSeconds
+            continue
+        }
+
+        Write-PollHeartbeat -ProcessCount $pollInfo.Count -LockPath $LockFile
+
+        if ($pollInfo.Count -eq 0) {
+            break
+        }
+
         Show-RunningProcesses
         Start-Sleep -Seconds $IntervalSeconds
+    }
+
+    if ($pollHadErrors) {
+        Write-Host "poll_and_finalize_overnight: poll loop had query errors (continuing to finalize after clean exit)" -ForegroundColor Yellow
+        if ($resolvedLogFile) {
+            Write-PollError -Message "poll loop had query errors (continuing to finalize after clean exit)"
+        }
     }
     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] no overnight processes - finalizing" -ForegroundColor Green
 }

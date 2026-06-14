@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **110 CTests** *(Phase 18 shipped)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **111 CTests** *(Phase 19 shipped)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **110 CTests** gate CI *(Phase 18 shipped)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **111 CTests** gate CI *(Phase 19 shipped)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -305,12 +305,13 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Local validate env var:** **`CYPHA_VALIDATE_PRODUCTION_COMPLETE=1`** on **`cypha_native_validate_all.ps1`** runs d32 when profile exists.
 - **CI:** blocking gate **110 CTests** (+1 d32 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
 
-### Phase 19 — release publish gate (v2.3.19) — prep
+### Phase 19 — release publish gate (v2.3.19) — shipped
 
-- **Bench d33:** release publish validation — publish script presence (`publish_release.ps1`, `create_release_notes.ps1`, `validate_production_complete.ps1`, `commit_production_lock.ps1`) + production/overnight-complete tiers + **`gh auth`** preflight metadata; profile **`bench/config/d33_release_publish_profile.json`**; report **`bench/report/tables/d33_release_publish_validation.json`**. CTest **`native_d33_release_publish_smoke`** *(when merged)*.
+- **Bench d33:** release publish validation — publish script presence (`publish_release.ps1`, `create_release_notes.ps1`, `validate_production_complete.ps1`, `commit_production_lock.ps1`) + production/overnight-complete tiers + **`gh auth`** preflight metadata; profile **`bench/config/d33_release_publish_profile.json`**; report **`bench/report/tables/d33_release_publish_validation.json`**. CTest **`native_d33_release_publish_smoke`**.
 - **Release publish smoke:** **`scripts/verify_release_publish.ps1`** — chains **`validate_production_complete.ps1`**, **`cypha_bench_run --domain-tag d33`**, **`publish_release.ps1 -DryRun`** (no `gh` call).
 - **Poll BuildDir auto-detect:** **`poll_and_finalize_overnight.ps1`** and **`start_poll_finalize_background.ps1`** detect BuildDir from running **`run_production_overnight.ps1`** when default **`native/build`**.
-- **CI:** blocking gate **110 CTests** today; **111** when d33 smoke merges.
+- **Local validate env var:** **`CYPHA_VALIDATE_RELEASE_PUBLISH=1`** on **`cypha_native_validate_all.ps1`** runs d33 when profile exists.
+- **CI:** blocking gate **111 CTests** (+1 d33 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
 
 ---
 

@@ -59,12 +59,13 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `commit_production_lock.ps1` | Phase 15: chains `finalize_production_overnight.ps1`, shows lock diff + suggested message; `-DryRun` preview, `-Force` to commit (never pushes) | console |
 | `monitor_overnight.ps1` | Poll `bench/BASELINE_LOCK.json` sections; optional `-LogFile` (default: latest `bench/results/production_overnight_*.log`, last 3 lines per poll) | console |
 | `watch_production_overnight.ps1` | Production overnight watcher — latest log size growth + last line, running `run_production_overnight.ps1` / `cyphalm_bench_native` / `cypha_cell_hypothesis_sweep` PIDs, lock section summary; hints `poll_and_finalize_overnight.ps1` when processes exit; `-Once`, `-ProcessId`, stall warn after 30m | console |
-| `poll_and_finalize_overnight.ps1` | Phase 17/19: poll until overnight processes exit, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1` (DryRun preview by default; `-Force` to git commit); `-Once` exits 1 if still running; optional `-LogFile` append; **auto-detects `-BuildDir`** from running `run_production_overnight.ps1` when default `native/build` | console |
+| `poll_and_finalize_overnight.ps1` | Phase 17/19/20: poll until overnight processes exit, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1` (DryRun preview by default; `-Force` to git commit); `-Once` exits 1 if still running; optional `-LogFile` append with per-cycle **HEARTBEAT** (timestamp, process count, lock `n_train`); **auto-detects `-BuildDir`** from running `run_production_overnight.ps1` when default `native/build`; poll query errors are logged and retried | console |
+| `cleanup_repo_smoke_artifacts.ps1` | Phase 20: remove repo-root `d##_smoke.json` / `d##_*_smoke.json` CTest spill files (not under `native/build*`); never touches `bench/BASELINE_LOCK.json`; `-DryRun` lists, `-Force` removes | disk |
 | `start_poll_finalize_background.ps1` | Phase 18/19: start `poll_and_finalize_overnight.ps1` in background (`-BuildDir`, `-LogFile` default `bench/results/poll_finalize.log`) after manual production overnight start; **same BuildDir auto-detect** when default | console |
 | `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`; `-Production` → `--production`) | lock JSON |
 | `validate_baseline_lock.ps1` | Validate `bench/BASELINE_LOCK.json` schema + d17 pin (`-LockFile`, `-Strict`, `-Production`) | console |
 | `validate_production_complete.ps1` | Phase 18: full production-complete gate — `validate_baseline_lock.ps1 -Production`, `finalize_production_overnight.ps1`, `cypha_bench_run --domain-tag d31` + d30; requires `overnight_results.n_train >= 300000` and `status=production|completed` (`-AllowPending` for smoke) | console |
-| `verify_release_publish.ps1` | Phase 19: release publish smoke — production complete + d33 bench + `publish_release.ps1 -DryRun` preview (no `gh` call) | console |
+| `verify_release_publish.ps1` | Phase 19 (shipped): release publish smoke - production complete + d33 bench + `publish_release.ps1 -DryRun` preview (no `gh` call) | console |
 | `publish_release.ps1` | Local `gh release create` wrapper (`-DryRun` / `-NotesOnly` preview without gh; `gh auth` preflight) | console |
 | `wsl_bench_gpu.sh` | WSL GPU bench helper | console |
 
@@ -100,7 +101,7 @@ Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/downlo
 | **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
 | **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |
 
-Full 300k production overnight is **not** run in CI. Blocking gate **110 CTests** (+2 Phase 14: `native_d28_overnight_complete_smoke`, `native_baseline_lock_validate_production_status`; +1 Phase 16: `native_d30_artifact_hygiene_smoke`; +1 Phase 17: `native_d31_post_overnight_pipeline_smoke`; +1 Phase 18: `native_d32_production_complete_smoke`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
+Full 300k production overnight is **not** run in CI. Blocking gate **111 CTests** (+1 Phase 19: `native_d33_release_publish_smoke`; +2 Phase 14: `native_d28_overnight_complete_smoke`, `native_baseline_lock_validate_production_status`; +1 Phase 16: `native_d30_artifact_hygiene_smoke`; +1 Phase 17: `native_d31_post_overnight_pipeline_smoke`; +1 Phase 18: `native_d32_production_complete_smoke`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
 
 ## Overnight completion + finalize (Phase 14 — shipped)
 
@@ -119,7 +120,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate **110 CTests*
 |--------------|---------|-------|
 | **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d28`** after baseline lock validate | manual |
 | **`CYPHA_VALIDATE_RELEASE_READINESS=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d29`** when profile exists; graceful skip if not merged | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**110**); default warns only | manual |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (**111**); default warns only | manual | |
 | **`commit_production_lock.ps1`** | Run **`finalize_production_overnight.ps1`**, then preview/commit lock when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** required to commit; never pushes) | manual |
 | **`cypha_bench_run --domain-tag d29`** | Release-readiness validation (when shipped); profile `bench/config/d29_release_readiness_profile.json` | `native_d29_release_readiness_smoke` *(when merged)* |
 
@@ -138,7 +139,7 @@ pwsh -File scripts\commit_production_lock.ps1 -DryRun
 pwsh -File scripts\commit_production_lock.ps1 -Force
 ```
 
-Blocking gate **110 CTests** (+1 `native_d29_release_readiness_smoke` Phase 15; +1 `native_d30_artifact_hygiene_smoke` Phase 16; +1 `native_d31_post_overnight_pipeline_smoke` Phase 17; +1 `native_d32_production_complete_smoke` Phase 18).
+Blocking gate **111 CTests** (+1 `native_d33_release_publish_smoke` Phase 19; +1 `native_d29_release_readiness_smoke` Phase 15; +1 `native_d30_artifact_hygiene_smoke` Phase 16; +1 `native_d31_post_overnight_pipeline_smoke` Phase 17; +1 `native_d32_production_complete_smoke` Phase 18).
 
 ## Artifact path hygiene + legacy migration (Phase 16 — shipped)
 
@@ -147,7 +148,7 @@ Blocking gate **110 CTests** (+1 `native_d29_release_readiness_smoke` Phase 15; 
 | **`migrate_legacy_results.ps1`** | Merge repo-root **`results/`** cell-sweep artifacts into **`bench/results/cell_sweep/`**; never overwrites newer destination files; **`-DryRun`** prints plan only; after migration prints **`-RemoveLegacy`** / **`-ArchiveLegacy`** hints when destination has all files; **`-RemoveLegacy`** deletes legacy **`results/`**; **`-ArchiveLegacy`** moves legacy **`results/`** to **`bench/results/legacy_archive_<timestamp>/`** | manual |
 | **`cleanup_legacy_results.ps1`** | One-shot migrate + **`-RemoveLegacy`** wrapper; **`-DryRun`** previews migration only (no removal) | manual |
 | **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d30`** when profile exists | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**110**); default warns only | manual |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (**111**); default warns only | manual | |
 | **`cypha_bench_run --domain-tag d30`** | Artifact path hygiene validation; profile `bench/config/d30_artifact_hygiene_profile.json` | `native_d30_artifact_hygiene_smoke` |
 
 ```powershell
@@ -183,7 +184,7 @@ pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 | **`watch_production_overnight.ps1`** | Stall-aware watcher — also tracks `cypha_cell_hypothesis_sweep`; prints hint to run **`poll_and_finalize_overnight.ps1`** when processes disappear between polls | manual |
 | **`run_production_overnight.ps1`** | On success: **`finalize_production_overnight.ps1`** then **`commit_production_lock.ps1 -DryRun`** (preview only; manual **`commit_production_lock.ps1 -Force`** or **`poll_and_finalize_overnight.ps1 -Force`** to commit) | manual |
 
-Blocking gate **110 CTests** (+1 `native_d31_post_overnight_pipeline_smoke` Phase 17; +1 `native_d32_production_complete_smoke` Phase 18).
+Blocking gate **111 CTests** (+1 `native_d33_release_publish_smoke` Phase 19; +1 `native_d31_post_overnight_pipeline_smoke` Phase 17; +1 `native_d32_production_complete_smoke` Phase 18).
 
 ```powershell
 # Start production overnight (long-running)
@@ -236,23 +237,24 @@ $env:CYPHA_VALIDATE_PRODUCTION_COMPLETE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **110 CTests** (+1 `native_d32_production_complete_smoke`).
+Blocking gate **111 CTests** (+1 `native_d33_release_publish_smoke` Phase 19; +1 `native_d32_production_complete_smoke` Phase 18).
 
-## Release publish smoke (Phase 19 — prep)
+## Release publish smoke (Phase 19 — shipped)
 
 | Script / binary | Purpose | CTest |
 |-----------------|---------|-------|
-| **`verify_release_publish.ps1`** | Maintainer smoke gate — chains **`validate_production_complete.ps1`** (auto **`-AllowPending`** when lock `n_train < 300000`), **`cypha_bench_run --domain-tag d33`** when exe + profile exist, **`publish_release.ps1 -DryRun`** for latest tag (`v2.3.19` default or `git describe --tags --abbrev=0`); does **not** call `gh` — run **`gh auth login`** manually before real publish | manual |
+| **`verify_release_publish.ps1`** | Maintainer smoke gate — chains **`validate_production_complete.ps1`** (auto **`-AllowPending`** when lock `n_train < 300000`), **`cypha_bench_run --domain-tag d33`** when exe + profile exist, **`publish_release.ps1 -DryRun`** for latest tag (`v2.3.20` default or `git describe --tags --abbrev=0`); does **not** call `gh` — run **`gh auth login`** manually before real publish | manual |
 | **`poll_and_finalize_overnight.ps1`** | When **`-BuildDir`** is default **`native/build`** and overnight processes are running, auto-detects BuildDir from **`run_production_overnight.ps1`** command line (e.g. **`native/build_p13`**) | manual |
 | **`start_poll_finalize_background.ps1`** | Same BuildDir auto-detect when default before spawning background poll | manual |
-| **`cypha_bench_run --domain-tag d33`** | Release publish validation; profile `bench/config/d33_release_publish_profile.json` *(when merged)* | `native_d33_release_publish_smoke` *(when merged)* |
+| **`cypha_bench_run --domain-tag d33`** | Release publish validation; profile `bench/config/d33_release_publish_profile.json` | `native_d33_release_publish_smoke` |
+| **`CYPHA_VALIDATE_RELEASE_PUBLISH=1`** | Optional extended validation on `cypha_native_validate_all.ps1` — runs d33 after production complete step | manual |
 
 ```powershell
 # Full release publish smoke (no gh — DryRun notes preview only)
 pwsh -File scripts\verify_release_publish.ps1
 
 # Explicit build dir + tag
-pwsh -File scripts\verify_release_publish.ps1 -BuildDir native\build -Tag v2.3.19
+pwsh -File scripts\verify_release_publish.ps1 -BuildDir native\build -Tag v2.3.20
 
 # Force -AllowPending even when lock is at 300k
 pwsh -File scripts\verify_release_publish.ps1 -AllowPending
@@ -260,14 +262,38 @@ pwsh -File scripts\verify_release_publish.ps1 -AllowPending
 # After smoke passes — authenticate and publish manually
 gh auth login
 gh auth status
-pwsh -File scripts\publish_release.ps1 -Tag v2.3.19
+pwsh -File scripts\publish_release.ps1 -Tag v2.3.20
 
 # Poll with auto-detected BuildDir (when overnight uses native/build_p13)
 pwsh -File scripts\poll_and_finalize_overnight.ps1
 pwsh -File scripts\start_poll_finalize_background.ps1
 ```
 
-Blocking gate **110 CTests** today; **111** when **`native_d33_release_publish_smoke`** merges (Phase 19 prep).
+Blocking gate **111 CTests** (+1 `native_d33_release_publish_smoke`; Phase 19 shipped). **112** when **`native_d34_repo_smoke_hygiene_smoke`** merges (Phase 20 prep).
+
+## Repo smoke hygiene (Phase 20 — prep)
+
+| Script / binary | Purpose | CTest |
+|-----------------|---------|-------|
+| **`cleanup_repo_smoke_artifacts.ps1`** | Remove repo-root **`d##_smoke.json`** / **`d##_*_smoke.json`** spill files left by local CTest runs; skips **`native/build*`** and never touches **`bench/BASELINE_LOCK.json`**; **`-DryRun`** lists candidates (default when neither flag passed); **`-Force`** deletes | manual |
+| **`cypha_bench_run --domain-tag d34`** | Repo smoke hygiene validation; profile `bench/config/d34_repo_smoke_hygiene_profile.json` | `native_d34_repo_smoke_hygiene_smoke` |
+| **`CYPHA_VALIDATE_REPO_SMOKE_HYGIENE=1`** | Optional extended validation on `cypha_native_validate_all.ps1` — runs d34 after release publish step | manual |
+| **`poll_and_finalize_overnight.ps1 -LogFile`** | Each poll cycle appends **HEARTBEAT** line: timestamp, overnight process count, lock `overnight_results.n_train`; query failures log **ERROR** and retry (does not treat failed query as "processes exited") | manual |
+| **`start_poll_finalize_background.ps1`** | Same poll/finalize behavior when spawned in background; **restart is manual** — if the background poll process exits (crash, reboot, or poll errors), re-run **`start_poll_finalize_background.ps1`** or foreground **`poll_and_finalize_overnight.ps1 -LogFile ...`** while overnight is still running | manual |
+
+```powershell
+# Preview repo-root smoke JSON cleanup (default without -Force)
+pwsh -File scripts\cleanup_repo_smoke_artifacts.ps1 -DryRun
+
+# Remove repo-root d##_smoke.json artifacts
+pwsh -File scripts\cleanup_repo_smoke_artifacts.ps1 -Force
+
+# Foreground poll with heartbeat log (restart manually if poll process dies)
+pwsh -File scripts\poll_and_finalize_overnight.ps1 -LogFile bench/results/poll_finalize.log
+
+# Background poll (restart manually after crash/reboot if overnight still running)
+pwsh -File scripts\start_poll_finalize_background.ps1
+```
 
 ## Kernel LLR / XOR profiling
 

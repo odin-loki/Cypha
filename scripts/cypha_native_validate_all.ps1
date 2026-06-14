@@ -1,7 +1,8 @@
 # Full native Cypha validation: Release build outside OneDrive, CTest, bench smoke.
-# Phase 19 (v2.3.19): d33 release publish validation, CYPHA_VALIDATE_RELEASE_PUBLISH, 111 CTests when d33 merged.
+# Phase 20 (v2.3.20, prep): d34 repo smoke hygiene validation, CYPHA_VALIDATE_REPO_SMOKE_HYGIENE, 112 CTests when d34 merged.
+# Phase 19 (v2.3.19, shipped): d33 release publish validation, CYPHA_VALIDATE_RELEASE_PUBLISH, 111 CTests.
 #
-# Optional environment variables (Phase 13–19):
+# Optional environment variables (Phase 13–20):
 #   CYPHA_VALIDATE_PRODUCTION=1
 #       Run validate_baseline_lock.ps1 -Production after the standard lock check.
 #   CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1
@@ -21,9 +22,12 @@
 #   CYPHA_VALIDATE_RELEASE_PUBLISH=1
 #       After production complete (d32) step, run cypha_bench_run --domain-tag d33 when its profile exists;
 #       gracefully skipped when d33 is not built/merged yet.
+#   CYPHA_VALIDATE_REPO_SMOKE_HYGIENE=1
+#       After release publish (d33) step, run cypha_bench_run --domain-tag d34 when its profile exists;
+#       gracefully skipped when d34 is not built/merged yet.
 #   CYPHA_STRICT_TEST_COUNT=1
 #       Fail the ctest_native step when the parsed native_ test count does not match the expected
-#       gate (111 with d33 merged, else 110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
+#       gate (112 with d34 merged, else 111 with d33 merged, else 110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
 #
 # Usage:
 #   pwsh -File scripts/cypha_native_validate_all.ps1
@@ -66,6 +70,7 @@ function Test-DomainTagExists {
 }
 
 function Get-ExpectedNativeTestCount {
+    if (Test-DomainTagExists -Tag "d34") { return 112 }
     if (Test-DomainTagExists -Tag "d33") { return 111 }
     if (Test-DomainTagExists -Tag "d32") { return 110 }
     if (Test-DomainTagExists -Tag "d31") { return 109 }
@@ -522,6 +527,30 @@ if ($env:CYPHA_VALIDATE_RELEASE_PUBLISH -eq "1") {
     } else {
         Write-Host "== cypha_bench_run --domain-tag d33 (skipped - profile not present) ==" -ForegroundColor DarkGray
         Step-Result "release_publish_d33" $true "skipped (d33 profile not present)"
+    }
+}
+
+# --- d34 repo smoke hygiene (optional) ---
+if ($env:CYPHA_VALIDATE_REPO_SMOKE_HYGIENE -eq "1") {
+    Write-Host ""
+    if (Test-DomainTagExists -Tag "d34") {
+        Write-Host "== cypha_bench_run --domain-tag d34 (CYPHA_VALIDATE_REPO_SMOKE_HYGIENE) ==" -ForegroundColor Yellow
+        $benchExe = BinPath "cypha_bench_run"
+        if (-not (Test-Path $benchExe)) {
+            Step-Result "repo_smoke_hygiene_d34" $false "missing $benchExe"
+        } else {
+            Push-Location $root
+            try {
+                & $benchExe --domain-tag d34
+                $d34Code = $LASTEXITCODE
+            } finally {
+                Pop-Location
+            }
+            Step-Result "repo_smoke_hygiene_d34" ($d34Code -eq 0) $(if ($d34Code -eq 0) { "d34 ok" } else { "exit $d34Code" })
+        }
+    } else {
+        Write-Host "== cypha_bench_run --domain-tag d34 (skipped - profile not present) ==" -ForegroundColor DarkGray
+        Step-Result "repo_smoke_hygiene_d34" $true "skipped (d34 profile not present)"
     }
 }
 

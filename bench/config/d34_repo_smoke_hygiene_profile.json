@@ -1,0 +1,31 @@
+{
+  "profile_id": "d34_repo_smoke_hygiene_profile",
+  "description": "D34 repo root smoke artifact hygiene validation — detect leaked dNN smoke JSON and legacy results/ cell-sweep artifacts",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 34,
+    "domain_tag": "d34"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d34_repo_smoke_hygiene_smoke — repo root smoke leak scan (repo_root_smoke_ok or repo_root_smoke_leak)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "repo_root_scan" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 34",
+    "Or: cypha_bench_run --domain-tag d34",
+    "Scans repo root for d[0-9][0-9]_*_smoke.json and d[0-9][0-9]_*smoke.json leaked by cypha_bench_run cwd copy",
+    "Checks legacy repo-root results/ for cell-sweep artifacts (summary.csv, manifest.json, variant_*.json)",
+    "When clean: validation_status=repo_root_smoke_ok (smoke PASS)",
+    "When leaks found: validation_status=repo_root_smoke_leak (smoke PASS with warnings)",
+    "Optional scripts/cleanup_repo_smoke_artifacts.ps1 — reports cleanup_repo_smoke_artifacts_script_present",
+    "Phase 20: repo root smoke artifact hygiene validation gate"
+  ]
+}

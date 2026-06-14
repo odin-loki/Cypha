@@ -266,7 +266,7 @@
 
 **CI gate (Phase 18 shipped):** **110 CTests** (`ctest -R native_`); +1 smoke: **`native_d32_production_complete_smoke`**. d32 validates production tier + script presence (`validate_production_complete.ps1`, `start_poll_finalize_background.ps1`); **`pending_production_complete`** when **`n_train < 300000`** (smoke pass); **`production_complete_validated`** when **≥ 300k** and all gates pass.
 
-## Phase 19 — prep (v2.3.19)
+## Phase 19 — shipped (v2.3.19, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
@@ -275,9 +275,22 @@
 | D33 validation report | `bench/report/tables/d33_release_publish_validation.json` | d33 run |
 | Release publish smoke gate | `scripts/verify_release_publish.ps1` — production complete + d33 + `publish_release.ps1 -DryRun` | manual |
 | Poll BuildDir auto-detect | `poll_and_finalize_overnight.ps1`, `start_poll_finalize_background.ps1` | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_RELEASE_PUBLISH=1`** (d33 when profile exists) | manual |
 | Release notes v2.3.19 template | `scripts/create_release_notes.ps1` | manual |
 
-**CI gate (Phase 19 prep):** **110 CTests** today; **111** when **`native_d33_release_publish_smoke`** merges (+1). d33 validates publish script presence + production/overnight-complete tiers; **`pending_release_publish`** when **`n_train < 300000`** (smoke pass); **`release_publish_ready`** when **≥ 300k** and all gates pass.
+**CI gate (Phase 19 shipped):** **111 CTests** (`ctest -R native_`); +1 smoke: **`native_d33_release_publish_smoke`**. d33 validates publish script presence + production/overnight-complete tiers; **`pending_release_publish`** when **`n_train < 300000`** (smoke pass); **`release_publish_ready`** when **≥ 300k** and all gates pass.
+
+## Phase 20 — prep (v2.3.20)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d34** repo smoke hygiene validation | `bench_domains.cpp` → `run_d34_repo_smoke_hygiene_validation` | `cypha_bench_run --domain-tag d34` |
+| D34 profile config | `bench/config/d34_repo_smoke_hygiene_profile.json` | manual |
+| D34 validation report | `bench/report/tables/d34_repo_smoke_hygiene_validation.json` | d34 run |
+| Repo smoke cleanup helper | `scripts/cleanup_repo_smoke_artifacts.ps1` — remove repo-root `d##_smoke.json` spill files | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_REPO_SMOKE_HYGIENE=1`** (d34 when profile exists) | manual |
+
+**CI gate (Phase 20 prep):** **111 CTests** today; **112** when **`native_d34_repo_smoke_hygiene_smoke`** merges (+1). d34 validates repo-root smoke JSON leak detection + cleanup script presence; **`repo_root_smoke_ok`** or **`repo_root_smoke_leak`** (smoke pass).
 
 ## Still planned
 
@@ -342,8 +355,14 @@ pwsh -File scripts\validate_production_complete.ps1 -AllowPending   # Phase 18: 
 pwsh -File scripts\start_poll_finalize_background.ps1               # Phase 18: detached poll → finalize
 $env:CYPHA_VALIDATE_PRODUCTION_COMPLETE = "1"                       # Phase 18: d32 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d32" --output-on-failure  # Phase 18
-cypha_bench_run --domain-tag d33                                    # Phase 19: release publish validation (prep)
+cypha_bench_run --domain-tag d33                                    # Phase 19: release publish validation (shipped)
 pwsh -File scripts\verify_release_publish.ps1                       # Phase 19: production complete + d33 + publish -DryRun
+$env:CYPHA_VALIDATE_RELEASE_PUBLISH = "1"                           # Phase 19: d33 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d33" --output-on-failure  # Phase 19
+cypha_bench_run --domain-tag d34                                    # Phase 20: repo smoke hygiene validation (prep)
+pwsh -File scripts\cleanup_repo_smoke_artifacts.ps1 -DryRun         # Phase 20: preview repo-root smoke JSON cleanup
+$env:CYPHA_VALIDATE_REPO_SMOKE_HYGIENE = "1"                        # Phase 20: d34 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d34" --output-on-failure  # Phase 20
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

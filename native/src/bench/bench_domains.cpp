@@ -3256,6 +3256,52 @@ bool lock_references_legacy_summary_csv(const Json& lock) {
     return false;
 }
 
+bool is_repo_root_smoke_leak_filename(const std::string& name) {
+    if (name.size() < 14 || name[0] != 'd' || name[3] != '_') {
+        return false;
+    }
+    if (name[1] < '0' || name[1] > '9' || name[2] < '0' || name[2] > '9') {
+        return false;
+    }
+    if (name.compare(name.size() - 5, 5, ".json") != 0) {
+        return false;
+    }
+    const std::string suffix_smoke = "_smoke.json";
+    if (name.size() > 4 + suffix_smoke.size() &&
+        name.compare(name.size() - suffix_smoke.size(), suffix_smoke.size(), suffix_smoke) == 0) {
+        return true;
+    }
+    const std::string suffix_smoke_alt = "smoke.json";
+    return name.size() > 4 + suffix_smoke_alt.size() &&
+           name.compare(name.size() - suffix_smoke_alt.size(), suffix_smoke_alt.size(),
+                        suffix_smoke_alt) == 0;
+}
+
+std::vector<std::string> scan_legacy_repo_root_cell_sweep_artifacts(const fs::path& results_dir) {
+    std::vector<std::string> artifacts;
+    if (!fs::is_directory(results_dir)) {
+        return artifacts;
+    }
+    if (fs::is_regular_file(results_dir / "summary.csv")) {
+        artifacts.push_back("results/summary.csv");
+    }
+    if (fs::is_regular_file(results_dir / "manifest.json")) {
+        artifacts.push_back("results/manifest.json");
+    }
+    for (const auto& entry : fs::directory_iterator(results_dir)) {
+        if (!entry.is_regular_file()) {
+            continue;
+        }
+        const std::string name = entry.path().filename().string();
+        if (name.size() >= 13 && name.compare(0, 8, "variant_") == 0 &&
+            name.compare(name.size() - 5, 5, ".json") == 0) {
+            artifacts.push_back("results/" + name);
+        }
+    }
+    std::sort(artifacts.begin(), artifacts.end());
+    return artifacts;
+}
+
 Json probe_bench_corpus_profile(const std::string& profile) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(profile, cfg);
@@ -3850,6 +3896,75 @@ Json run_d33_release_publish_validation() {
     return experiments;
 }
 
+Json run_d34_repo_smoke_hygiene_validation() {
+    const fs::path lock_path = fs::current_path() / "d34_repo_smoke_hygiene_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    std::vector<std::string> leaked_smoke_files;
+    if (fs::is_directory(repo)) {
+        for (const auto& entry : fs::directory_iterator(repo)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            const std::string name = entry.path().filename().string();
+            if (is_repo_root_smoke_leak_filename(name)) {
+                leaked_smoke_files.push_back(name);
+            }
+        }
+    }
+    std::sort(leaked_smoke_files.begin(), leaked_smoke_files.end());
+
+    const fs::path legacy_results_dir = repo / "results";
+    const std::vector<std::string> legacy_cell_sweep_artifacts =
+        scan_legacy_repo_root_cell_sweep_artifacts(legacy_results_dir);
+
+    std::vector<std::string> warnings;
+    if (!leaked_smoke_files.empty()) {
+        warnings.push_back(
+            "repo root contains leaked dNN smoke JSON files (cypha_bench_run copied lock to cwd); "
+            "remove or run scripts/cleanup_repo_smoke_artifacts.ps1");
+    }
+    if (!legacy_cell_sweep_artifacts.empty()) {
+        warnings.push_back(
+            "repo-root results/ contains legacy cell-sweep artifacts; migrate via "
+            "scripts/migrate_legacy_results.ps1");
+    }
+
+    const bool has_leaks =
+        !leaked_smoke_files.empty() || !legacy_cell_sweep_artifacts.empty();
+    const std::string validation_status =
+        has_leaks ? "repo_root_smoke_leak" : "repo_root_smoke_ok";
+
+    const fs::path cleanup_script = repo / "scripts" / "cleanup_repo_smoke_artifacts.ps1";
+    const bool script_present = fs::is_regular_file(cleanup_script);
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"repo_root", repo.string()},
+        {"leaked_smoke_files", leaked_smoke_files},
+        {"legacy_results_dir_present", fs::is_directory(legacy_results_dir)},
+        {"legacy_cell_sweep_artifacts", legacy_cell_sweep_artifacts},
+        {"cleanup_repo_smoke_artifacts_script",
+         cleanup_script.lexically_relative(repo).generic_string()},
+        {"cleanup_repo_smoke_artifacts_script_present", script_present},
+        {"validation_status", validation_status},
+        {"warnings", warnings},
+        {"backend", "repo_root_scan"},
+    };
+    cypha::bench::finalize_domain("d34_repo_smoke_hygiene_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d34_repo_smoke_hygiene_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3889,6 +4004,8 @@ std::vector<DomainSpec> build_all_domains() {
          run_d32_production_complete_validation},
         {"d33", "cypha_bench.domains.d33_release_publish_validation",
          run_d33_release_publish_validation},
+        {"d34", "cypha_bench.domains.d34_repo_smoke_hygiene_validation",
+         run_d34_repo_smoke_hygiene_validation},
     };
 }
 

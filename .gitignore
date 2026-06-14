@@ -138,6 +138,10 @@ Cypha Tests.txt
 # Accidental Windows path artifact (e.g. mkdir C: from bad script)
 /C?/
 
+# Repo-root bench smoke leaks (Phase 20 d34 hygiene)
+/d*_smoke.json
+/d??_*_smoke.json
+
 # =====================================================
 # Documentation build (optional)
 # =====================================================

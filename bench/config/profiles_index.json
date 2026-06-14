@@ -147,5 +147,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d33",
     "notes": "Release publish validation; see bench/config/d33_release_publish_profile.json"
+  },
+  "repo_smoke_hygiene_d34": {
+    "path": "everyday_profile.json",
+    "config": "d34_repo_smoke_hygiene_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d34",
+    "notes": "Repo root smoke artifact hygiene validation; see bench/config/d34_repo_smoke_hygiene_profile.json"
   }
 }

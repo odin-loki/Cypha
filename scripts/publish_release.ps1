@@ -1,6 +1,7 @@
 # Publish a GitHub Release for a tag using maintainer notes from create_release_notes.ps1.
-# Phase 19 (v2.3.19, prep): d33 release publish validation, verify_release_publish.ps1,
-# CYPHA_VALIDATE_RELEASE_PUBLISH, 111 CTests when d33 smoke merges.
+# Phase 20 (v2.3.20, prep): d34 repo smoke hygiene validation, CYPHA_VALIDATE_REPO_SMOKE_HYGIENE, 112 CTests when d34 merged.
+# Phase 19 (v2.3.19, shipped): d33 release publish validation, verify_release_publish.ps1,
+# CYPHA_VALIDATE_RELEASE_PUBLISH, 111 CTests.
 # Phase 18 (v2.3.18, shipped): d32 production complete, validate_production_complete.ps1,
 # start_poll_finalize_background.ps1, CYPHA_VALIDATE_PRODUCTION_COMPLETE, gh auth preflight, 110 CTests.
 # Phase 17 (v2.3.17, shipped): d31 post-overnight pipeline, poll_and_finalize_overnight.ps1,
@@ -18,7 +19,7 @@
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -DryRun          # notes to stdout + temp file; no gh
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -NotesOnly       # alias for -DryRun
 param(
-  [string]$Tag = "v2.3.19",
+  [string]$Tag = "v2.3.20",
   [switch]$Draft,
   [Alias("NotesOnly")]
   [switch]$DryRun

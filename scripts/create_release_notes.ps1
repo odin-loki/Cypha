@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.20" = @(
+    "Intelligence Stats **Phase 20** (shipped): bench **d34** repo smoke hygiene validation - repo-root ``d*_smoke.json`` leak detection + ``.gitignore`` patterns; profile ``bench/config/d34_repo_smoke_hygiene_profile.json``; CTest ``native_d34_repo_smoke_hygiene_smoke``.",
+    "``scripts/cleanup_repo_smoke_artifacts.ps1`` - remove repo-root smoke JSON spill files from local CTest runs (``-DryRun`` / ``-Force``).",
+    "Poll heartbeat logging + manual restart docs; ``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_REPO_SMOKE_HYGIENE=1`**.",
+    "CI gate **112 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.19" = @(
     "Intelligence Stats **Phase 19** (shipped): bench **d33** release publish validation - publish script presence + production/overnight-complete gates; profile ``bench/config/d33_release_publish_profile.json``; CTest ``native_d33_release_publish_smoke``.",
     "``scripts/verify_release_publish.ps1`` - production-complete gate + d33 + ``publish_release.ps1 -DryRun`` preview; poll/finalize **BuildDir auto-detect** from running overnight.",
