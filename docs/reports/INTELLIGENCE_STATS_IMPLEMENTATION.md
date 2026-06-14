@@ -221,16 +221,28 @@
 
 **CI gate (Phase 15 shipped):** **107 CTests** (`ctest -R native_`); +1 smoke: **`native_d29_release_readiness_smoke`**. d29 validates schema + production tier (d27) + overnight-complete (d28) + release script presence; **`pending_release`** when production/overnight gates pending (smoke pass); **`release_ready`** when both **`production_validated`** and **`overnight_complete_validated`**.
 
-## Phase 16 — prep (v2.3.16)
+## Phase 16 — shipped (v2.3.16, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
-| Bench domain **d30** post-release lock validation | `bench_domains.cpp` → `run_d30_post_release_lock_validation` *(TBD)* | `cypha_bench_run --domain-tag d30` |
-| D30 profile config | `bench/config/d30_post_release_lock_profile.json` *(TBD)* | manual |
-| D30 validation report | `bench/report/tables/d30_post_release_lock_validation.json` *(TBD)* | d30 run |
+| Bench domain **d30** artifact path hygiene validation | `bench_domains.cpp` → `run_d30_artifact_hygiene_validation` | `cypha_bench_run --domain-tag d30` |
+| D30 profile config | `bench/config/d30_artifact_hygiene_profile.json` | manual |
+| D30 validation report | `bench/report/tables/d30_artifact_hygiene_validation.json` | d30 run |
+| Legacy results migration | `scripts/migrate_legacy_results.ps1` (`-DryRun`, `-RemoveLegacy`) | manual |
+| Overnight progress logging | `run_d17_overnight.ps1` → `bench/results/overnight_d17_<timestamp>.log`; stderr **`[cyphalm]`** / **`[cell_sweep]`** | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** (d30 when profile exists) | manual |
 | Release notes v2.3.16 template | `scripts/create_release_notes.ps1` | manual |
 
-**CI gate (Phase 16 prep):** **107 CTests** today; **108** when **`native_d30_post_release_lock_smoke`** merges (+1).
+**CI gate (Phase 16 shipped):** **108 CTests** (`ctest -R native_`); +1 smoke: **`native_d30_artifact_hygiene_smoke`**. d30 validates legacy repo-root **`results/`** path detection in **`cell_sweep_results.artifact_path`**, **`bench/results/.gitkeep`** presence; **`hygiene_ok`** or **`legacy_artifact_path`** (smoke pass).
+
+## Phase 17 — prep (v2.3.17)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d31** *(TBD)* | `bench_domains.cpp` *(TBD)* | *(TBD)* |
+| Release notes v2.3.17 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 17 prep):** **108 CTests** today; **109** when next Phase 17 smoke merges (+1).
 
 ## Still planned
 
@@ -281,6 +293,10 @@ pwsh -File scripts/watch_production_overnight.ps1 -Once             # Phase 15: 
 pwsh -File scripts/commit_production_lock.ps1 -DryRun               # Phase 15: post-overnight lock commit preview
 $env:CYPHA_VALIDATE_RELEASE_READINESS = "1"                         # Phase 15: d29 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d29" --output-on-failure  # Phase 15
+cypha_bench_run --domain-tag d30                                    # Phase 16: artifact path hygiene validation (shipped)
+pwsh -File scripts/migrate_legacy_results.ps1 -DryRun               # Phase 16: preview legacy results/ migration
+$env:CYPHA_VALIDATE_ARTIFACT_HYGIENE = "1"                          # Phase 16: d30 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d30" --output-on-failure  # Phase 16
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

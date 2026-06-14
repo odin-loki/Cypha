@@ -31,6 +31,8 @@
 # d28 overnight completion; finalize_production_overnight.ps1; 106 CTests.
 # Phase 15 (v2.3.15, shipped): d29 release readiness gate; commit_production_lock.ps1;
 # watch_production_overnight.ps1; CYPHA_VALIDATE_* env vars; 107 CTests.
+# Phase 16 (v2.3.16, shipped): d30 artifact path hygiene; migrate_legacy_results.ps1;
+# overnight progress logging; CYPHA_VALIDATE_ARTIFACT_HYGIENE; 108 CTests.
 
 name: Release
 
@@ -349,3 +351,11 @@ jobs:
             - **Production overnight watcher:** `pwsh -File scripts/watch_production_overnight.ps1` — log growth, process PIDs, lock section summary; `-Once` snapshot; stall warn after 30m without log growth.
             - **Local validate env vars:** set **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`**, **`CYPHA_VALIDATE_RELEASE_READINESS=1`**, **`CYPHA_VALIDATE_PRODUCTION=1`**, or **`CYPHA_STRICT_TEST_COUNT=1`** on **`cypha_native_validate_all.ps1`** for optional d28/d29/production gates and strict **107** CTest count check.
             - **CI gate:** **107 CTests** (`ctest -R native_`); new smoke **`native_d29_release_readiness_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.
+
+            ### Phase 16 maintainer notes (v2.3.16, shipped)
+
+            - **Artifact path hygiene validation:** `cypha_bench_run --domain-tag d30` — legacy repo-root **`results/`** path detection in **`cell_sweep_results.artifact_path`**, verifies **`bench/results/.gitkeep`**; profile [`bench/config/d30_artifact_hygiene_profile.json`](bench/config/d30_artifact_hygiene_profile.json); report [`bench/report/tables/d30_artifact_hygiene_validation.json`](bench/report/tables/d30_artifact_hygiene_validation.json).
+            - **Legacy results migration:** `pwsh -File scripts/migrate_legacy_results.ps1 -DryRun` (preview) or `-RemoveLegacy` (copy then delete repo-root **`results/`** when destination has all files).
+            - **Overnight progress logging:** **`run_d17_overnight.ps1`** tees to **`bench/results/overnight_d17_<timestamp>.log`**; stderr **`[cyphalm]`** / **`[cell_sweep]`** tags during full overnight runs.
+            - **Local validate env var:** set **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** on **`cypha_native_validate_all.ps1`** to run d30 after rebuild.
+            - **CI gate:** **108 CTests** (`ctest -R native_`); new smoke **`native_d30_artifact_hygiene_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.

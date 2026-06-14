@@ -1130,6 +1130,21 @@ set_tests_properties(native_d30_artifact_hygiene_smoke PROPERTIES
   TIMEOUT 30
 )
 
+configure_file(
+  "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+  "${CMAKE_CURRENT_BINARY_DIR}/d31_post_overnight_pipeline_smoke.json"
+  COPYONLY
+)
+
+add_test(
+  NAME native_d31_post_overnight_pipeline_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d31
+)
+set_tests_properties(native_d31_post_overnight_pipeline_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 120
+)
+
 add_test(
   NAME native_d25_corpus_smoke
   COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d25

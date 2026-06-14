@@ -1,0 +1,29 @@
+{
+  "profile_id": "d31_post_overnight_pipeline_profile",
+  "description": "D31 post-overnight pipeline validation — script presence + d27–d30 validation chain",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 31,
+    "domain_tag": "d31"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d31_post_overnight_pipeline_smoke — post-overnight pipeline gate (pipeline_ok)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 31",
+    "Or: cypha_bench_run --domain-tag d31",
+    "Verifies poll/finalize/commit/migrate pipeline scripts exist under scripts/",
+    "Runs d27 production lock, d28 overnight complete, d29 release readiness, d30 artifact hygiene sequentially",
+    "When all chain domains pass: validation_status=pipeline_ok",
+    "Phase 17: post-overnight pipeline validation gate"
+  ]
+}

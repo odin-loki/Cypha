@@ -3635,6 +3635,47 @@ Json run_d30_artifact_hygiene_validation() {
     return experiments;
 }
 
+Json run_d31_post_overnight_pipeline_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+
+    const std::array<const char*, 4> required_scripts{
+        "scripts/poll_and_finalize_overnight.ps1",
+        "scripts/finalize_production_overnight.ps1",
+        "scripts/commit_production_lock.ps1",
+        "scripts/migrate_legacy_results.ps1",
+    };
+    Json pipeline_scripts = Json::object();
+    for (const char* rel : required_scripts) {
+        const fs::path path = repo / rel;
+        const bool present = fs::is_regular_file(path);
+        pipeline_scripts[rel] = present;
+        if (!present) {
+            throw std::runtime_error("pipeline script missing: " + path.string());
+        }
+    }
+
+    Json validation_chain = Json::object();
+    validation_chain["d27"] = run_d27_production_lock_validation();
+    validation_chain["d28"] = run_d28_overnight_complete_validation();
+    validation_chain["d29"] = run_d29_release_readiness_validation();
+    validation_chain["d30"] = run_d30_artifact_hygiene_validation();
+
+    const Json experiments{
+        {"pipeline_scripts", pipeline_scripts},
+        {"validation_chain", validation_chain},
+        {"validation_status", "pipeline_ok"},
+        {"backend", "post_overnight_pipeline"},
+    };
+    cypha::bench::finalize_domain("d31_post_overnight_pipeline_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d31_post_overnight_pipeline_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3668,6 +3709,8 @@ std::vector<DomainSpec> build_all_domains() {
         {"d28", "cypha_bench.domains.d28_overnight_complete_validation", run_d28_overnight_complete_validation},
         {"d29", "cypha_bench.domains.d29_release_readiness_validation", run_d29_release_readiness_validation},
         {"d30", "cypha_bench.domains.d30_artifact_hygiene_validation", run_d30_artifact_hygiene_validation},
+        {"d31", "cypha_bench.domains.d31_post_overnight_pipeline_validation",
+         run_d31_post_overnight_pipeline_validation},
     };
 }
 

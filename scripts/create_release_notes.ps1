@@ -9,9 +9,16 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.17" = @(
+    "Intelligence Stats **Phase 17** (prep): bench **d31** *(TBD)*; profile *(TBD)*; CTest *(TBD)*.",
+    "CI gate **108 CTests** today (109 when next Phase 17 smoke merges); full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.16" = @(
-    "Intelligence Stats **Phase 16** (prep): bench **d30** post-release lock validation — committed ``bench/BASELINE_LOCK.json`` @ 300k cross-check against d29 release-ready criteria; profile ``bench/config/d30_post_release_lock_profile.json`` *(TBD)*; CTest ``native_d30_post_release_lock_smoke`` *(TBD)*.",
-    "CI gate **107 CTests** today (108 when d30 smoke merges); full 300k production overnight **in progress** (maintainer workflow only)."
+    "Intelligence Stats **Phase 16** (shipped): bench **d30** artifact path hygiene validation — legacy repo-root ``results/`` path detection in ``cell_sweep_results.artifact_path``, verifies ``bench/results/.gitkeep``; profile ``bench/config/d30_artifact_hygiene_profile.json``; CTest ``native_d30_artifact_hygiene_smoke``.",
+    "``scripts/migrate_legacy_results.ps1`` — merge repo-root ``results/`` cell-sweep artifacts into ``bench/results/cell_sweep/`` (``-DryRun`` / ``-RemoveLegacy``).",
+    "**Overnight progress logging** — stderr ``[cyphalm]`` / ``[cell_sweep]`` (full sweep only); ``run_d17_overnight.ps1`` tees to ``bench/results/overnight_d17_<timestamp>.log``.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** — runs d30 when profile exists.",
+    "CI gate **108 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
   )
   "2.3.15" = @(
     "Intelligence Stats **Phase 15** (shipped): bench **d29** release readiness validation — schema + production tier (d27) + overnight-complete (d28) + release script presence; profile ``bench/config/d29_release_readiness_profile.json``; CTest ``native_d29_release_readiness_smoke``.",

@@ -1,6 +1,8 @@
 # Phase 13/14: production overnight tier — 300k train / 2000 eval, real WikiText/gutenberg.
 # Chains D17 + d21 + cell sweep + baseline-lock refresh with status=production.
-# On success, runs finalize_production_overnight.ps1 (validate -Production + d27/d28 bench).
+# On success, runs finalize_production_overnight.ps1 (validate -Production + d27/d28 bench),
+# then commit_production_lock.ps1 -DryRun (preview only). To git-commit the lock after
+# validation, run commit_production_lock.ps1 -Force manually (or poll_and_finalize_overnight.ps1 -Force).
 # Stderr progress from native tools ([cyphalm] train steps, [cell_sweep] variant starts) is
 # captured in the transcript log alongside Write-Host output — tail the log to confirm liveness.
 # Usage:
@@ -50,6 +52,13 @@ Write-Host "== finalize production overnight ==" -ForegroundColor Cyan
 & $finalizeScript -BuildDir $BuildDir
 if ($LASTEXITCODE -ne 0) {
     throw "finalize_production_overnight failed exit=$LASTEXITCODE"
+}
+
+$commitScript = Join-Path $PSScriptRoot "commit_production_lock.ps1"
+Write-Host "== commit preview (manual step: commit_production_lock.ps1 -Force) ==" -ForegroundColor Cyan
+& $commitScript -BuildDir $BuildDir -DryRun
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "commit preview exited $LASTEXITCODE (lock may not be ready to commit yet)" -ForegroundColor Yellow
 }
 
 Write-Host "Done. Updated bench/BASELINE_LOCK.json (status=production). Log: $logPath" -ForegroundColor Green

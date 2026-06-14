@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **107 CTests** *(Phase 15 shipped)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **108 CTests** *(Phase 16 shipped)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **107 CTests** gate CI *(Phase 15 shipped)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **108 CTests** gate CI *(Phase 16 shipped)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -279,10 +279,18 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Production overnight watcher:** **`scripts/watch_production_overnight.ps1`** — log byte growth, last line, process PIDs, lock section summary; stall warn after 30m without log growth.
 - **CI:** blocking gate **107 CTests** (+1 d29 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
 
-### Phase 16 — post-release lock gate (v2.3.16) — prep
+### Phase 16 — artifact path hygiene gate (v2.3.16) — shipped
 
-- **Bench d30:** post-release lock validation — cross-check committed **`bench/BASELINE_LOCK.json`** @ 300k against d29 release-ready criteria *(TBD)*; profile **`bench/config/d30_post_release_lock_profile.json`** (TBD). CTest **`native_d30_post_release_lock_smoke`** (TBD).
-- **CI:** blocking gate **107 CTests** today; **108** when d30 smoke merges (+1).
+- **Bench d30:** artifact path hygiene validation — legacy repo-root **`results/`** path detection in **`cell_sweep_results.artifact_path`**, verifies **`bench/results/.gitkeep`**; profile **`bench/config/d30_artifact_hygiene_profile.json`**; report **`bench/report/tables/d30_artifact_hygiene_validation.json`**. CTest **`native_d30_artifact_hygiene_smoke`**.
+- **Legacy migration:** **`scripts/migrate_legacy_results.ps1`** — merge repo-root **`results/`** cell-sweep artifacts into **`bench/results/cell_sweep/`** (`-DryRun`, `-RemoveLegacy`).
+- **Overnight progress logging:** stderr **`[cyphalm]`** / **`[cell_sweep]`** (full sweep only); **`run_d17_overnight.ps1`** tees to **`bench/results/overnight_d17_<timestamp>.log`**.
+- **Local validate env var:** **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** on **`cypha_native_validate_all.ps1`** runs d30 when profile exists.
+- **CI:** blocking gate **108 CTests** (+1 d30 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+
+### Phase 17 — *(v2.3.17) — prep*
+
+- **Bench d31:** *(TBD)*.
+- **CI:** blocking gate **108 CTests** today; **109** when next Phase 17 smoke merges (+1).
 
 ---
 

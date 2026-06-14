@@ -126,5 +126,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d30",
     "notes": "Artifact path hygiene validation; see bench/config/d30_artifact_hygiene_profile.json"
+  },
+  "post_overnight_pipeline_d31": {
+    "path": "everyday_profile.json",
+    "config": "d31_post_overnight_pipeline_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d31",
+    "notes": "Post-overnight pipeline validation; see bench/config/d31_post_overnight_pipeline_profile.json"
   }
 }

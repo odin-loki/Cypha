@@ -93,6 +93,14 @@ function Get-OvernightProcessInfo {
         }
     }
 
+    foreach ($proc in Get-Process -Name "cypha_cell_hypothesis_sweep*" -ErrorAction SilentlyContinue) {
+        $found += [PSCustomObject]@{
+            Id          = $proc.Id
+            ProcessName = $proc.ProcessName
+            CommandLine = "cypha_cell_hypothesis_sweep"
+        }
+    }
+
     $cim = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
         Where-Object {
             $_.CommandLine -and $_.CommandLine -match 'run_production_overnight\.ps1'
@@ -244,12 +252,23 @@ if ($ProcessId -gt 0) {
 
 Show-MigrationNote
 
+$hadOvernightProcesses = $false
+
 if ($Once) {
     Show-Snapshot
     exit 0
 }
 
 while ($true) {
+    $procsNow = Get-OvernightProcessInfo
+    $runningNow = ($procsNow -and $procsNow.Count -gt 0)
+    if ($hadOvernightProcesses -and -not $runningNow) {
+        Write-Host ""
+        Write-Host "HINT: overnight processes finished - run poll_and_finalize_overnight.ps1 to finalize + commit preview" -ForegroundColor Green
+        Write-Host "      pwsh -File scripts/poll_and_finalize_overnight.ps1" -ForegroundColor DarkGray
+    }
+    $hadOvernightProcesses = $runningNow
+
     Show-Snapshot
     Start-Sleep -Seconds $IntervalSeconds
 }
