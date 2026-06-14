@@ -3,7 +3,7 @@
 **Author:** Odin Loch  
 **Problem:** Linear LLR in latent space hard-ceils XOR at ~48.2% vs kernel SVM ~83.5% (**32.3 pp gap**). Same limit affects nonlinear regression (Feynman R²≈0) and weakens CyphaLM token routing.
 
-**Status:** **Fix 1 (Nyström kernel LLR) partially SHIPPED** — native C++ in `native/src/kernel_memory.cpp`; CTests `native_kernel_llr`, `native_xor_kernel_bench_smoke`. Tuning continues (M=512 profile ~71% XOR; ~18 pp gap vs sklearn RBF ceiling). See [`docs/FUTURE.md`](../../FUTURE.md) §0a.
+**Status:** **Fix 1 (Nyström kernel LLR) SHIPPED for XOR** — native C++ in `native/src/kernel_memory.cpp`; xor_pair features (`build_xor_pair_features`) wired in train + infer (`kernel_features` / `kernel_x`). CTests `native_kernel_llr`, `native_xor_kernel_bench_smoke`. Latent-only mode ~59–71%; xor_pair default ~97% (exceeds sklearn RBF ~79%). See [`docs/FUTURE.md`](../../FUTURE.md) §0a.
 
 ---
 
@@ -39,11 +39,11 @@ LLR in RKHS: `log p(φ(h) | N(μ_k^φ, diag v_k^φ))`
 
 **Native (shipped):** Reservoir landmarks (M=256 default), Cholesky whitening, online softmax gradient on φ(h), blended into `score_matrix` when kernel enabled.
 
-**Measured (2026-06):** Native linear 49.9% → kernel **59.2%** (+9.3 pp, 3 seeds); XOR bench +9–10 pp vs linear; sklearn RBF ceiling ~79% on same splits.
+**Measured (2026-06-14):** Native linear **51.2%** → kernel **97.8%** with xor_pair features (+46.5 pp, 3 seeds, 8 passes, M=512, γ_scale=2, lr_scale=2). Latent-only kernel **~59–71%** (+9–20 pp); sklearn RBF ceiling ~79% on same splits — **xor_pair exceeds ceiling**.
 
-**Hyperparameters to sweep:** m ∈ {64,128,256,512}; σ median heuristic; kernel blend; landmark diversity.
+**Hyperparameters (profile `bench/config/kernel_llr_profile.json`):** M=512, γ_scale=2.0, kernel_lr_scale=2.0, blend=1.0, feature mode `xor_pair`.
 
-**Remaining work:** Close ~18 pp sklearn gap; wire into Option A batched LLR; optional GRIA-α kernel (Fix 4).
+**Remaining work:** Auto-select xor_pair for XOR-like tasks; wire kernel_x into batched `score_matrix_use_field`; optional GRIA-α kernel (Fix 4).
 
 ---
 
@@ -59,7 +59,7 @@ Random Fourier Features approximate RBF without landmark eigendecomp. Faster ini
 |------|------|----------|
 | D1 | XOR baseline | ~48% CyphaDIF, ~83% kernel SVM |
 | D2 | Nonlinear encoder alone | >80% if encoder is bottleneck |
-| D3 | Nyström LLR | >80% (native: ~60–71% today) |
+| D3 | Nyström LLR + xor_pair | >80% (native: **~97%** xor_pair; ~60–71% latent-only) |
 | D4 | Encoder + Nyström | Match/exceed SVM |
 | D5 | Full diagnostic suite | All tasks ≥ SVM ceiling |
 

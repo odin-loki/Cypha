@@ -66,6 +66,9 @@ add_library(cypha_core STATIC
   src/intelligence/soft_world_monitor.cpp
   src/intelligence/self_correcting_infer.cpp
   src/intelligence/profile_from_model.cpp
+  src/intelligence/causal_graph.cpp
+  src/intelligence/profile_guided_loss.cpp
+  src/rpsm/psi_matrices.cpp
   src/bench/bench_paths.cpp
 )
 
@@ -204,6 +207,10 @@ target_link_libraries(intelligence_profiler_papers PRIVATE cypha_core)
 add_executable(cypha_intelligence_bench tools/cypha_intelligence_bench.cpp)
 target_link_libraries(cypha_intelligence_bench PRIVATE cypha_core cypha_bench_native)
 
+add_executable(cypha_cell_hypothesis_sweep tools/cypha_cell_hypothesis_sweep.cpp)
+target_link_libraries(cypha_cell_hypothesis_sweep PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cypha_cell_hypothesis_sweep)
+
 set(
   _cypha_mingw_exe_targets
   ${CYPHA_PARITY_EXE_TARGETS}
@@ -225,6 +232,7 @@ set(
   intelligence_profiler_papers
   cyphalm_bench_native
   cyphalm_ssm_diagnose
+  cypha_cell_hypothesis_sweep
 )
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
   cypha_mingw_apply_exe_link_options("${_cypha_t}")
@@ -303,6 +311,7 @@ if(MSVC)
   target_compile_options(cypha_parity PRIVATE /W4 /permissive-)
   target_compile_options(cypha_parity_run PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
+  target_compile_options(rpsm_batched_llr_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
   target_compile_options(score_batch_parity PRIVATE /W4 /permissive-)
   target_compile_options(kernel_llr_parity PRIVATE /W4 /permissive-)
@@ -368,6 +377,7 @@ else()
   target_compile_options(cypha_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_parity_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(rpsm_batched_llr_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(score_batch_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -435,6 +445,12 @@ add_test(
     "${_parity_fix}/batch_llr/sidecar.json"
 )
 add_test(
+  NAME native_rpsm_batched_llr_smoke
+  COMMAND "$<TARGET_FILE:rpsm_batched_llr_smoke>"
+    "${_parity_fix}/reference.cypha"
+    "${_parity_fix}/native_parity.bin"
+)
+add_test(
   NAME native_fixture_gen_list
   COMMAND "$<TARGET_FILE:cypha_fixture_gen>" --list
 )
@@ -457,7 +473,10 @@ add_test(
 add_test(
   NAME native_xor_kernel_bench_smoke
   COMMAND "$<TARGET_FILE:xor_kernel_bench>" --seeds 1 --passes 2 --kernel-blend 1.0
+    --kernel-m 256 --gamma-scale 2.0 --kernel-lr-scale 2.0 --kernel-xor-features
 )
+set_tests_properties(native_xor_kernel_bench_smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "\"kernel_mean_acc\": 0\\.[7-9]")
 add_test(
   NAME native_kernel_snapshot_roundtrip
   COMMAND "$<TARGET_FILE:kernel_snapshot_roundtrip>"
@@ -691,8 +710,22 @@ add_test(
 )
 
 add_test(
+  NAME native_onnx_export_smoke
+  COMMAND "$<TARGET_FILE:cypha_onnx_export>"
+    --cypha "${_parity_fix}/reference.cypha"
+    --out "${CMAKE_CURRENT_BINARY_DIR}/onnx_export_reference.onnx"
+)
+
+add_test(
   NAME native_export_gguf_help
   COMMAND "$<TARGET_FILE:cypha_export_gguf>" --help
+)
+
+add_test(
+  NAME native_export_gguf_smoke
+  COMMAND "$<TARGET_FILE:cypha_export_gguf>"
+    --cypha "${_parity_fix}/reference.cypha"
+    --out "${CMAKE_CURRENT_BINARY_DIR}/gguf_export_reference.gguf"
 )
 
 add_test(
@@ -707,6 +740,17 @@ add_test(
 add_test(
   NAME native_intelligence_bench_smoke
   COMMAND "$<TARGET_FILE:cypha_intelligence_bench>"
+)
+
+add_test(
+  NAME native_cyphalm_bench_intelligence_profile
+  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
+    --profile d17 --mode hybrid --n-train 120 --n-eval 40 --intelligence-profile
+)
+
+add_test(
+  NAME native_cell_hypothesis_sweep_smoke
+  COMMAND "$<TARGET_FILE:cypha_cell_hypothesis_sweep>" --smoke
 )
 
 add_test(

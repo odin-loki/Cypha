@@ -1,3 +1,4 @@
+#include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 
 #include <algorithm>
@@ -19,6 +20,7 @@
 #include "cypha/cyphalm/npz_util.hpp"
 #include "cypha/cyphalm/cyphalm_views.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
+#include "cypha/intelligence/intelligence_profiler.hpp"
 
 namespace cypha {
 namespace cyphalm {
@@ -777,7 +779,8 @@ nlohmann::json CyphaLMModel::compression_profile() const {
     };
 }
 
-double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval) {
+double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval,
+                              cypha::intelligence::IntelligenceProfiler* profiler) {
     reset_context();
     const int n = std::min(n_eval, static_cast<int>(ids.size()) - 1);
     if (n <= 0) return std::numeric_limits<double>::quiet_NaN();
@@ -785,12 +788,25 @@ double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval) {
     double bits = 0.0;
     int scored = 0;
     for (int i = 0; i < n; ++i) {
-        const auto pred = predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]));
+        const std::uint32_t tok = static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]);
+        std::vector<double> embed;
+        if (embed_) {
+            try {
+                embed = embed_vector(tok);
+            } catch (const std::exception&) {
+                embed.clear();
+            }
+        }
+        const auto pred = predict_next(tok);
         const int nxt = ids[static_cast<std::size_t>(i + 1)];
         // Index log_probs by vocab token id (not label/class order — legacy D04 bug).
         if (nxt < 0 || nxt >= vocab ||
             static_cast<std::size_t>(nxt) >= pred.log_probs.size()) {
             continue;
+        }
+        if (profiler != nullptr) {
+            update_profiler_from_lm_token(*profiler, embed, pred.log_probs, pred.epistemic_var,
+                                          pred.aleatoric_var);
         }
         bits += -pred.log_probs[static_cast<std::size_t>(nxt)] / kLog2;
         ++scored;

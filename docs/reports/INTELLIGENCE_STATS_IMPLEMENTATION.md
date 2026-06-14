@@ -1,6 +1,6 @@
 # Intelligence Stats — implementation report
 
-**Last updated:** 2026-06-13  
+**Last updated:** 2026-06-14  
 **Papers:** [`docs/research/intelligence_stats/`](../research/intelligence_stats/README.md)
 
 ## Phase 1 — shipped (C++23)
@@ -28,30 +28,29 @@
 | REST | `GET /intelligence/report` | manual |
 | Diagnostics phase 5 | `cypha_diagnostics_run --phases 5` | inline profiler κ |
 
-### Formulas (all native)
+## Phase 3 — shipped (2026-06-14)
 
-- **D_eff:** participation ratio on latent activations  
-- **C:** `1 − ECE` (10-bin)  
-- **r_eu:** `σ²_e / (σ²_e + σ²_a)`  
-- **α:** `1 − H(output)/H(input)`  
-- **κ:** `1 − (1/7) Σ|P_i − P*_i|`  
-- **Navigation loss (Paper II):** `||P − P*||²` toward critical targets  
-- **Failure modes (Paper II):** marginal threshold flags on P-vector  
+| Component | Path | CTest / bench |
+|-----------|------|-------------|
+| CyphaLM live profiler hook | `cyphalm_intelligence_hook.hpp/cpp` | `native_cyphalm_bench_intelligence_profile` |
+| Qt self-correct toggle | `shell_main.cpp` predict tab | manual |
+| Paper V causal graph stub | `causal_graph.hpp/cpp` | papers + `/intelligence/report` |
+| Paper IV profile-guided loss | `profile_guided_loss.hpp/cpp` | `cyphalm_train --profile-guided-loss` |
+| Cell hypothesis sweep | `cypha_cell_hypothesis_sweep`, bench **d19** | `native_cell_hypothesis_sweep_smoke` |
 
 ## Still planned
 
-- **CyphaLM live hook:** update profiler during `cyphalm_bench_native` token eval (entropy → α)
-- **Paper IV cell regularizers** in CyphaLM training (profile-guided loss terms)
-- **Paper V** causal graph + simulation loop (beyond `SoftWorldMonitor` maturation signal)
-- **Cell hypothesis testbench** — 28 variants ([spec](../research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md))
-- **RPSM Option A/B** — matrix refactor + sequence layer ([spec](../research/upgrades/RPSM_COMBINED_SPEC.md))
+- Inject **profile_guided_loss** into per-step CyphaLM `train_step` (needs cell implementations for H02, H06–H22)
+- **Full 28-variant** cell hypothesis overnight sweep @ 300k tokens
+- **Paper V** full causal simulation loop (beyond `CausalGraphMonitor` stub)
+- **RPSM Option B** — sequence layer in CyphaLM
 
 ## Commands
 
 ```powershell
-cmake --build native/build --target intelligence_profiler_smoke intelligence_profiler_papers cypha_intelligence_bench
-ctest --test-dir native/build -R "native_intelligence" --output-on-failure
-cypha_intelligence_bench --repo . --out bench/report/tables/d18_intelligence_profile.json
-cypha_bench_run --domain-tag d18
+cmake --build native/build --target intelligence_profiler_papers cypha_intelligence_bench cypha_cell_hypothesis_sweep cyphalm_bench_native
+ctest --test-dir native/build -R "native_intelligence|native_cell_hypothesis|native_cyphalm_bench_intelligence" --output-on-failure
+cyphalm_bench_native --profile d17 --mode hybrid --n-train 120 --n-eval 40 --intelligence-profile
+cypha_cell_hypothesis_sweep --smoke
 curl http://127.0.0.1:8099/intelligence/report
 ```

@@ -32,12 +32,12 @@ struct BenchConfig {
   int seeds = 3;
   int passes = 8;
   double kernel_blend = 1.0;
-  int kernel_m = 256;
-  double gamma_scale = 1.0;
-  double kernel_lr_scale = 1.0;
+  int kernel_m = 512;
+  double gamma_scale = 2.0;
+  double kernel_lr_scale = 2.0;
   bool shuffle_train = true;
-  /// ``latent`` (default), ``raw_x``, or ``xor_pair`` kernel features.
-  std::string kernel_feature_mode = "latent";
+  /// ``latent``, ``raw_x``, or ``xor_pair`` (default) kernel features.
+  std::string kernel_feature_mode = "xor_pair";
 };
 
 struct SeedResult {
@@ -266,9 +266,9 @@ void usage() {
             << "  --seeds N            number of seeds (default 3)\n"
             << "  --passes N           training passes (default 8)\n"
             << "  --kernel-blend B     kernel LLR blend in [0,1] (default 1.0)\n"
-            << "  --kernel-m M         Nyström landmarks (default 256)\n"
-            << "  --gamma-scale G      RBF bandwidth multiplier (default 1.0)\n"
-            << "  --kernel-lr-scale S  kernel weight lr scale (default 1.0)\n"
+            << "  --kernel-m M         Nyström landmarks (default 512)\n"
+            << "  --gamma-scale G      RBF bandwidth multiplier (default 2.0)\n"
+            << "  --kernel-lr-scale S  kernel weight lr scale (default 2.0)\n"
             << "  --kernel-raw-x       Nyström kernel on standardized raw x (not latent h)\n"
             << "  --kernel-xor-features  kernel on [x0,x1,x0*x1,x0^2,x1^2] (5-d)\n"
             << "  --kernel-feature-mode {latent,raw_x,xor_pair}\n"

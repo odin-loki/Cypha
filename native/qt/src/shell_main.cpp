@@ -3206,6 +3206,13 @@ class MainWindow final : public QMainWindow {
     predict_return_explanation_chk_->setChecked(true);
     lay_predict->addWidget(predict_return_explanation_chk_);
 
+    predict_self_correct_chk_ =
+        new QCheckBox(QStringLiteral("Self-correct (REST /predict)"), inner_predict);
+    predict_self_correct_chk_->setChecked(false);
+    predict_self_correct_chk_->setToolTip(
+        QStringLiteral("POST /predict with \"self_correct\": true (Paper IV epistemic loop)."));
+    lay_predict->addWidget(predict_self_correct_chk_);
+
     predict_rest_btn_ = new QPushButton(QStringLiteral("Predict (REST POST /predict)"), inner_predict);
     predict_rest_btn_->setEnabled(false);
     lay_predict->addWidget(predict_rest_btn_);
@@ -5255,6 +5262,9 @@ class MainWindow final : public QMainWindow {
       body[QStringLiteral("input")] = arr;
       body[QStringLiteral("use_gh")] = use_gh_chk_->isChecked();
       body[QStringLiteral("return_explanation")] = predict_return_explanation_chk_->isChecked();
+      if (predict_self_correct_chk_ != nullptr) {
+        body[QStringLiteral("self_correct")] = predict_self_correct_chk_->isChecked();
+      }
       const HttpJsonResult r = http_post_json(url, body);
       if (!r.ok) {
         QMessageBox::warning(this, QStringLiteral("REST"), r.err);
@@ -7159,6 +7169,7 @@ class MainWindow final : public QMainWindow {
   QPushButton* predict_btn_{};
   QPushButton* predict_rest_btn_{};
   QCheckBox* predict_return_explanation_chk_{};
+  QCheckBox* predict_self_correct_chk_{};
   QPushButton* update_rest_btn_{};
   QPushButton* rest_browse_btn_{};
   QPushButton* rest_start_btn_{};

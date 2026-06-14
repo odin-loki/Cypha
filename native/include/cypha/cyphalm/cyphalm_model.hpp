@@ -26,6 +26,10 @@
 #include "cypha/som/gng_expert.hpp"
 #include "cypha/som/gria_controller.hpp"
 
+namespace cypha::intelligence {
+class IntelligenceProfiler;
+}  // namespace cypha::intelligence
+
 namespace cypha {
 namespace cyphalm {
 
@@ -73,7 +77,8 @@ class CyphaLMModel {
 
     void train_sequence(const std::vector<int>& ids, int n_steps, int epochs);
     void train_sequence_views(const std::vector<int>& ids);
-    double eval_bpc(const std::vector<int>& ids, int n_eval);
+    double eval_bpc(const std::vector<int>& ids, int n_eval,
+                    cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
 
     std::vector<std::uint32_t> encode_text(const std::string& text) const;
     std::string decode_tokens(const std::vector<std::uint32_t>& ids) const;

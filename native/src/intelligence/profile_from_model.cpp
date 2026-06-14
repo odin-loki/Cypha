@@ -7,6 +7,7 @@
 
 #include "cypha/bench/bench_paths.hpp"
 #include "cypha/intelligence/intelligence_profile_json.hpp"
+#include "cypha/intelligence/causal_graph.hpp"
 #include "cypha/intelligence/measurers.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/load_cypha.hpp"
@@ -217,6 +218,10 @@ nlohmann::json intelligence_profile_report_json(const IntelligenceProfiler& prof
       {"kappa", IntelligenceProfiler::criticality_score_for(
                     IntelligenceProfiler::landscape_reference(LandscapeSystemClass::HumanMedian))}};
   root["landscape_kappa"] = landscape;
+
+  CausalGraphMonitor causal;
+  causal.observe_profile(obs);
+  root["causal_graph"] = causal.to_json();
   return root;
 }
 

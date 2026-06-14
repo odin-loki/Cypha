@@ -6,10 +6,12 @@
 #include <vector>
 
 #include "cypha/bench/bench_paths.hpp"
+#include "cypha/intelligence/causal_graph.hpp"
 #include "cypha/intelligence/epistemic_threshold.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/measurers.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
+#include "cypha/intelligence/profile_guided_loss.hpp"
 #include "cypha/intelligence/self_correcting_infer.hpp"
 #include "cypha/intelligence/soft_world_monitor.hpp"
 
@@ -180,6 +182,32 @@ void test_extended_measurers_and_batch() {
   assert(matrix[static_cast<std::size_t>(cypha::intelligence::ProfileStatistic::Tau)][0] > 0.1);
 }
 
+void test_paper_v_causal_graph() {
+  cypha::intelligence::CausalGraphMonitor graph;
+  cypha::intelligence::ProfileObservation a;
+  a.alpha = 0.45;
+  a.tau = 0.55;
+  a.r_eu = 0.6;
+  cypha::intelligence::ProfileObservation b = a;
+  b.r_eu = 0.75;
+  graph.observe_profile(a);
+  graph.observe_profile(b);
+  graph.record_simulation(0.2);
+  const auto j = graph.to_json();
+  assert(j.contains("edges"));
+  assert(j.at("soft_world").at("maturation_level").get<double>() >= 0.0);
+}
+
+void test_paper_iv_profile_guided_loss() {
+  cypha::intelligence::ProfileObservation obs;
+  obs.r_eu = 0.8;
+  obs.tau = 0.2;
+  const auto loss = cypha::intelligence::compute_profile_guided_loss(obs);
+  assert(loss.r_eu_penalty > 0.0);
+  assert(loss.tau_penalty > 0.0);
+  assert(near(loss.total, loss.r_eu_penalty + loss.tau_penalty));
+}
+
 }  // namespace
 
 int main() {
@@ -188,6 +216,8 @@ int main() {
   test_paper_iv_epistemic_threshold();
   test_paper_iv_self_correcting_infer();
   test_paper_v_soft_world();
+  test_paper_v_causal_graph();
+  test_paper_iv_profile_guided_loss();
   test_extended_measurers_and_batch();
   std::puts("intelligence_profiler_papers: PASS");
   return 0;

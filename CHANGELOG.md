@@ -16,7 +16,7 @@ milestone or a significant self-contained change.
 - **CUDA CI jobs:** **`windows_cuda_msvc`** and **`linux_cuda`** removed from `.github/workflows/ci.yml`; CUDA remains an optional local build.
 
 ### Changed
-- **CI gate:** native-only — **67 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
+- **CI gate:** native-only — **73 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
 - **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` default:** **1** (was 16) — CUDA used for all batch sizes n≥1 when a GPU is available.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
@@ -28,6 +28,12 @@ milestone or a significant self-contained change.
 - **Release install scripts:** under `packaging/` (`install_release_linux.sh`, `install_release_windows.ps1`).
 
 ### Added
+- **Kernel LLR XOR pair features:** d03_xor + smoke now use `xor_pair` kernel path — **97.8%** kernel acc (3 seeds, 8 passes); closes diagnostic 32 pp gap.
+- **RPSM Option A scaffold:** `PsiMatrices` + `rpsm_score_matrix_batched` + CTest `native_rpsm_batched_llr_smoke`.
+- **Intelligence Stats Phase 3:** CyphaLM profiler hook (`--intelligence-profile`), Qt self-correct checkbox, `CausalGraphMonitor`, `profile_guided_loss`, cell hypothesis sweep (`d19`, `cypha_cell_hypothesis_sweep`).
+- **Web UI tabs:** CyphaLM generate, Experiments (`/models`), Intelligence report (`/intelligence/report`).
+- **GGUF export:** tensor blobs for `enc_W`, `world.mu`, class `D`/`D_T`, `inv_v`, `llr_bias` from `.cypha`.
+- **ONNX export smoke:** CTest `native_onnx_export_smoke` writes valid graph from `reference.cypha`.
 - **Phase B native layout:** `native/apps/`, `native/tests/parity/`, `cmake/CyphaApps.cmake` + `CyphaParity.cmake`.
 - **Web UI (§4):** vanilla SPA at `GET /` served by `cypha_rest`; CTest `native_rest_ui_smoke`.
 - **Fixture generators:** `cypha_fixture_gen` for batch_llr, memory_train, preprocessor, train_step_vector, quantile_dif_train, regression_m4.

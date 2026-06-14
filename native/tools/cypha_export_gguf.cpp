@@ -1,8 +1,7 @@
-// cypha_export_gguf — stub GGUF exporter for CyphaDIF inference tensors.
+// cypha_export_gguf — export CyphaDIF inference tensors to GGUF v3.
 //
-// Default mode writes a minimal valid GGUF v3 header + metadata (no weight blob) and a
-// companion tensor manifest JSON describing enc_W, D, inv_v, mu0, and llr_bias.
-// Use --full-gguf to embed float32 tensor bytes (optional; larger files).
+// Default mode embeds float32 tensor blobs (enc_W, world.mu, class D, inv_v, llr_bias).
+// Use --header-only for metadata-only smoke (no weight bytes).
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -31,24 +30,24 @@ struct Args {
   std::string cypha_path;
   std::string out_path;
   std::string manifest_path;
-  bool full_gguf{false};
+  bool embed_weights{true};
   bool dry_run{false};
   bool help{false};
 };
 
 void usage() {
   std::cerr
-      << "cypha_export_gguf — export CyphaDIF tensors to GGUF (stub / manifest)\n\n"
+      << "cypha_export_gguf — export CyphaDIF tensors to GGUF v3\n\n"
       << "usage: cypha_export_gguf --cypha PATH --out PATH [options]\n\n"
       << "options:\n"
       << "  --manifest PATH      tensor manifest JSON (default: <out>.manifest.json)\n"
-      << "  --full-gguf          embed float32 tensor bytes in the GGUF file (default: header-only)\n"
+      << "  --header-only        metadata + tensor info only (no weight blobs)\n"
       << "  --dry-run            load model and print summary; do not write files\n"
       << "  --help               show this message\n\n"
       << "notes:\n"
-      << "  - Default writes a minimal GGUF v3 container (metadata only) plus a sidecar manifest.\n"
-      << "  - Field-conditioned mu0 and llr_bias are frozen at export time (same as cypha_onnx_export).\n"
-      << "  - Full llama.cpp compatibility requires --full-gguf; header-only mode is for tooling smoke.\n";
+      << "  - Default embeds enc_W, world.mu (field-conditioned), D [K,d], inv_v, llr_bias.\n"
+      << "  - Field-conditioned world.mu and llr_bias are frozen at export time.\n"
+      << "  - Sidecar manifest JSON lists tensor shapes and optional inline data.\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -69,8 +68,10 @@ Args parse_args(int argc, char** argv) {
       a.out_path = need("--out");
     } else if (k == "--manifest") {
       a.manifest_path = need("--manifest");
+    } else if (k == "--header-only") {
+      a.embed_weights = false;
     } else if (k == "--full-gguf") {
-      a.full_gguf = true;
+      a.embed_weights = true;
     } else if (k == "--dry-run") {
       a.dry_run = true;
     } else {
@@ -155,11 +156,20 @@ ExportTensors build_tensors(const cypha::CyphaInferModel& m) {
   const std::vector<float> enc_w = to_f32(m.enc_w);
   out.tensors.push_back({"enc_W", {d, d}, "float32", enc_w});
 
-  const std::vector<float> mu0 = to_f32(compute_mu0_with_field(m));
-  out.tensors.push_back({"mu0", {1, d}, "float32", mu0});
+  const std::vector<float> world_mu = to_f32(compute_mu0_with_field(m));
+  out.tensors.push_back({"world.mu", {1, d}, "float32", world_mu});
 
   const std::vector<float> inv_v = to_f32(m.inv_v);
   out.tensors.push_back({"inv_v", {1, d}, "float32", inv_v});
+
+  std::vector<float> d_mat(static_cast<std::size_t>(K * d));
+  for (int kk = 0; kk < K; ++kk) {
+    for (int j = 0; j < d; ++j) {
+      d_mat[static_cast<std::size_t>(kk * d + j)] =
+          static_cast<float>(m.D[static_cast<std::size_t>(kk * d + j)]);
+    }
+  }
+  out.tensors.push_back({"D", {K, d}, "float32", d_mat});
 
   std::vector<float> d_t(static_cast<std::size_t>(d * K));
   for (int kk = 0; kk < K; ++kk) {
@@ -238,7 +248,7 @@ std::string default_manifest_path(const std::string& out_path) {
 }
 
 nlohmann::json manifest_to_json(const cypha::CyphaInferModel& m, const ExportTensors& exp,
-                                bool full_gguf) {
+                                bool embed_weights) {
   nlohmann::json j;
   j["format"] = "cypha-gguf-manifest-v1";
   j["gguf_version"] = kGgufVersion;
@@ -248,10 +258,10 @@ nlohmann::json manifest_to_json(const cypha::CyphaInferModel& m, const ExportTen
   j["labels"] = m.labels;
   j["temperature"] = m.temperature;
   j["field_dim"] = m.field_dim;
-  j["weights_embedded"] = full_gguf;
+  j["weights_embedded"] = embed_weights;
   j["notes"] =
       "Manifest for CyphaDIF VectorEncoder+LLR inference tensors. "
-      "mu0 includes baked field shift; llr_bias includes MDL/context terms.";
+      "world.mu includes baked field shift; llr_bias includes MDL/context terms.";
 
   nlohmann::json tensors = nlohmann::json::array();
   for (const auto& t : exp.tensors) {
@@ -260,8 +270,8 @@ nlohmann::json manifest_to_json(const cypha::CyphaInferModel& m, const ExportTen
     entry["dtype"] = t.dtype;
     entry["shape"] = t.shape;
     entry["num_elements"] = t.data.size();
-    if (!full_gguf) {
-      entry["data"] = "omitted — use --full-gguf to embed in .gguf";
+    if (!embed_weights) {
+      entry["data"] = "omitted — default export embeds weights in .gguf";
     } else {
       entry["data"] = t.data;
     }
@@ -275,10 +285,10 @@ std::size_t tensor_info_wire_size(const TensorManifestEntry& t) {
   return 8 + t.name.size() + 4 + 8 * t.shape.size() + 4 + 8;
 }
 
-std::vector<std::uint8_t> build_gguf(const ExportTensors& exp, bool full_gguf) {
+std::vector<std::uint8_t> build_gguf(const ExportTensors& exp, bool embed_weights) {
   std::vector<std::uint8_t> buf;
   const std::uint64_t n_tensors = static_cast<std::uint64_t>(exp.tensors.size());
-  const std::uint64_t n_kv = full_gguf ? 6 : 5;
+  const std::uint64_t n_kv = embed_weights ? 6 : 5;
 
   write_u32(buf, kGgufMagic);
   write_u32(buf, kGgufVersion);
@@ -289,8 +299,8 @@ std::vector<std::uint8_t> build_gguf(const ExportTensors& exp, bool full_gguf) {
   write_metadata_string(buf, "general.name", "cypha-dif-export");
   write_metadata_uint32(buf, "cypha.d_latent", static_cast<std::uint32_t>(exp.d));
   write_metadata_uint32(buf, "cypha.num_classes", static_cast<std::uint32_t>(exp.k));
-  write_metadata_string(buf, "cypha.export_mode", full_gguf ? "full" : "manifest-only");
-  if (full_gguf) {
+  write_metadata_string(buf, "cypha.export_mode", embed_weights ? "weights" : "header-only");
+  if (embed_weights) {
     write_metadata_uint32(buf, "general.alignment", static_cast<std::uint32_t>(kGgufAlignment));
   }
 
@@ -306,14 +316,14 @@ std::vector<std::uint8_t> build_gguf(const ExportTensors& exp, bool full_gguf) {
 
   std::uint64_t running = data_start;
   for (const auto& t : exp.tensors) {
-    const std::uint64_t offset = full_gguf ? running : 0;
+    const std::uint64_t offset = embed_weights ? running : 0;
     write_tensor_info(buf, t, offset);
-    if (full_gguf) {
+    if (embed_weights) {
       running += static_cast<std::uint64_t>(t.data.size() * sizeof(float));
     }
   }
 
-  if (full_gguf) {
+  if (embed_weights) {
     while (buf.size() % kGgufAlignment != 0) {
       buf.push_back(0);
     }
@@ -350,7 +360,7 @@ void print_summary(const cypha::CyphaInferModel& m, const ExportTensors& exp, co
             << "  field_dim:   " << m.field_dim << '\n'
             << "  temperature: " << m.temperature << '\n'
             << "  tensors:     " << exp.tensors.size() << '\n'
-            << "  mode:        " << (a.full_gguf ? "full-gguf" : "header+manifest") << '\n';
+            << "  mode:        " << (a.embed_weights ? "weights" : "header-only") << '\n';
   for (const auto& t : exp.tensors) {
     std::cout << "    - " << t.name << " [";
     for (std::size_t i = 0; i < t.shape.size(); ++i) {
@@ -387,10 +397,10 @@ int main(int argc, char** argv) {
 
     const std::string manifest_path =
         a.manifest_path.empty() ? default_manifest_path(a.out_path) : a.manifest_path;
-    const nlohmann::json manifest = manifest_to_json(model, exp, a.full_gguf);
+    const nlohmann::json manifest = manifest_to_json(model, exp, a.embed_weights);
     write_json_file(manifest_path, manifest);
 
-    const std::vector<std::uint8_t> gguf = build_gguf(exp, a.full_gguf);
+    const std::vector<std::uint8_t> gguf = build_gguf(exp, a.embed_weights);
     write_file(a.out_path, gguf);
 
     std::cout << "wrote GGUF (" << gguf.size() << " bytes): " << a.out_path << '\n'

@@ -219,10 +219,50 @@
     }
   });
 
+  function renderExperimentsList(data) {
+    const root = $("experiments-list");
+    if (!root) return;
+    const models = data && Array.isArray(data.models) ? data.models : [];
+    if (models.length === 0) {
+      root.className = "empty";
+      root.innerHTML =
+        "No experiments in registry (start cypha_rest with <code>--registry</code>).";
+      return;
+    }
+    const active = data.active_model;
+    const rows = models
+      .map((m) => {
+        const name = m.name ?? "?";
+        const ver = m.version ?? "?";
+        const loaded = m.loaded ? "yes" : "no";
+        const isActive = m.active || name + "/" + ver === active || name === active;
+        return (
+          "<tr><td>" +
+          name +
+          "</td><td>" +
+          ver +
+          "</td><td>" +
+          loaded +
+          "</td><td>" +
+          (isActive ? "● active" : "—") +
+          "</td></tr>"
+        );
+      })
+      .join("");
+    root.className = "";
+    root.innerHTML =
+      '<table class="exp-table"><thead><tr><th>name</th><th>version</th><th>loaded</th><th>status</th></tr></thead><tbody>' +
+      rows +
+      "</tbody></table>";
+  }
+
   $("btn-models").addEventListener("click", async () => {
     const q = $("models-summary").checked ? "?summary=true" : "";
     const { status, data } = await api("GET", "/models" + q);
     show($("models-out"), data, status);
+    if (status === 200) {
+      renderExperimentsList(data);
+    }
   });
 
   $("btn-load").addEventListener("click", async () => {
@@ -268,6 +308,14 @@
     }
   });
 
+  async function lmGenerate(body) {
+    let result = await api("POST", "/generate", body);
+    if (result.status === 404) {
+      result = await api("POST", "/lm/generate", body);
+    }
+    return result;
+  }
+
   $("btn-lm-generate").addEventListener("click", async () => {
     try {
       const prompt_ids = parseIntArray($("lm-prompt").value);
@@ -282,7 +330,7 @@
         uncertainty_threshold: 1.0,
         stream: false,
       };
-      const { status, data } = await api("POST", "/generate", body);
+      const { status, data } = await lmGenerate(body);
       show($("lm-out"), data, status);
     } catch (e) {
       show($("lm-out"), String(e), 0);
@@ -315,6 +363,37 @@
     fetchMetrics();
     metricsPollTimer = setInterval(fetchMetrics, 3000);
     $("btn-metrics-poll").textContent = "Stop polling";
+  });
+
+  function renderIntelligenceSummary(data) {
+    const root = $("intelligence-summary");
+    if (!root || !data || typeof data !== "object") return;
+    const items = [
+      ["navigation_loss", data.navigation_loss],
+      ["criticality_score", data.criticality_score_obs],
+      ["source", data.source],
+    ];
+    root.innerHTML =
+      '<div id="metrics-cards">' +
+      items
+        .map(
+          ([lbl, val]) =>
+            '<div class="metric-card"><div class="val">' +
+            String(val ?? "—") +
+            '</div><div class="lbl">' +
+            lbl +
+            "</div></div>"
+        )
+        .join("") +
+      "</div>";
+  }
+
+  $("btn-intelligence-report").addEventListener("click", async () => {
+    const { status, data } = await api("GET", "/intelligence/report");
+    show($("intelligence-out"), data, status);
+    if (status === 200) {
+      renderIntelligenceSummary(data);
+    }
   });
 
   drawLossChart();

@@ -57,7 +57,7 @@
   },
   "regime_merge_sources": {
     "parent": "everyday_profile.json",
-    "xor_kernel_delta_pp": 19.9,
+    "xor_kernel_delta_pp": 46.5,
     "kernel_m": 512,
     "kernel_blend": 1.0,
     "gamma_scale": 2.0,
@@ -68,9 +68,10 @@
     "Opt-in via CYPHA_BENCH_PROFILE_PATH=bench/config/kernel_llr_profile.json",
     "Tabular: Nyström kernel LLR M=512, gamma_scale=2.0, kernel_lr_scale=2.0, blend=1.0",
     "Tuned with native cypha_kernel_tune / xor_kernel_bench --tune (3 seeds, 8 passes, replay off)",
-    "Native XOR kernel_mean_acc 71.1% vs linear 51.2% (+19.9 pp); up from ~59% pre-tune",
-    "2026-06-13 raw-feature paths (1 seed, 4 passes, M=512): latent +18.2 pp; --kernel-raw-x 68.0% (+18.2 pp); --kernel-xor-features 97.0% (+47.2 pp, ~sklearn RBF ceiling 79%)",
-    "Recommended XOR kernel mode: xor_pair features via build_xor_pair_features() + TrainStepExtras.kernel_features"
+    "Native XOR kernel_mean_acc 71.1% vs linear 51.2% (+19.9 pp) with latent features; up from ~59% pre-tune",
+    "2026-06-14 xor_pair default (3 seeds, 8 passes, M=512): kernel ~97% vs linear ~51% (+46 pp); exceeds sklearn RBF ceiling ~79%",
+    "Smoke/d03_xor: xor_pair + M=512 (or M=256 fast smoke ~97%); latent mode caps ~59-71%",
+    "Recommended XOR kernel mode: xor_pair via build_xor_pair_features() + TrainStepExtras.kernel_features + CyphaInferOptions.kernel_x"
   ],
   "algorithm_variants": {
     "cold_start_steps": 25,

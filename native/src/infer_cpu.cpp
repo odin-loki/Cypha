@@ -2,6 +2,7 @@
 
 #include "cypha/kernel_memory.hpp"
 #include "cypha/preprocessor.hpp"
+#include "cypha/rpsm/psi_matrices.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -670,6 +671,19 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
       }
     }
   }
+}
+
+void rpsm_score_matrix_batched(const CyphaInferModel& m, const double* h_row_major, int n,
+                               std::vector<double>& llr_out) {
+  const int K = static_cast<int>(m.labels.size());
+  llr_out.assign(static_cast<std::size_t>(n * K), 0.0);
+  if (K == 0) {
+    return;
+  }
+  const rpsm::PsiMatrices psi = rpsm::build_psi_from_model(m);
+  std::vector<double> ctx;
+  context_prior_for_labels(m, m.labels, ctx);
+  rpsm::batched_llr_gemm(h_row_major, n, psi, ctx.data(), llr_out.data());
 }
 
 void softmax_batch_reference(const double* z_row_major, int n, int k, double eps,

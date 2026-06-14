@@ -11,6 +11,8 @@
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
+#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_from_model.hpp"
 
 namespace {
 
@@ -22,13 +24,15 @@ struct Args {
     int threads = 0;
     bool analysis = false;
     int analysis_steps = 256;
+    bool intelligence_profile = false;
 };
 
 void usage() {
     std::cerr
         << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral}\n"
         << "       --profile {d17,d04} --n-train N --n-eval M --threads T\n"
-        << "       --analysis [--analysis-steps N]\n";
+        << "       --analysis [--analysis-steps N]\n"
+        << "       --intelligence-profile\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -46,6 +50,7 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--threads") a.threads = std::stoi(need("--threads"));
         else if (k == "--analysis") a.analysis = true;
         else if (k == "--analysis-steps") a.analysis_steps = std::stoi(need("--analysis-steps"));
+        else if (k == "--intelligence-profile") a.intelligence_profile = true;
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -96,7 +101,9 @@ int main(int argc, char** argv) {
 
         cypha::cyphalm::CyphaLMModel model(cfg);
         model.train_sequence(corpus.train_ids, args.n_train, cfg.train_epochs);
-        const double bpc = model.eval_bpc(corpus.eval_ids, args.n_eval);
+        cypha::intelligence::IntelligenceProfiler profiler;
+        const double bpc = model.eval_bpc(corpus.eval_ids, args.n_eval,
+                                          args.intelligence_profile ? &profiler : nullptr);
 
         nlohmann::json out = {
             {"mode", args.mode},
@@ -112,6 +119,9 @@ int main(int argc, char** argv) {
             {"vocab_size", cfg.vocab_size},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;
+        if (args.intelligence_profile) {
+            out["intelligence_profile"] = cypha::intelligence::intelligence_profile_report_json(profiler);
+        }
         if (args.analysis) {
             const auto profile = model.compression_profile();
             out["alpha_spectrum"] = {

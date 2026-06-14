@@ -2640,7 +2640,8 @@ Json run_d03_xor() {
     }
     std::ostringstream cmd;
     cmd << "\"" << bench_exe.string() << "\""
-        << " --seeds " << seeds << " --passes " << passes << " --kernel-blend 1.0 --kernel-m 256";
+        << " --seeds " << seeds << " --passes " << passes << " --kernel-blend 1.0"
+        << " --kernel-m 512 --gamma-scale 2.0 --kernel-lr-scale 2.0 --kernel-xor-features";
     const Json j = Json::parse(capture_process_output(cmd.str()));
     const Json experiments{
         {"S3_xor_linear",
@@ -2648,7 +2649,8 @@ Json run_d03_xor() {
         {"S3_xor_kernel_llr",
          Json{{"accuracy", j.at("kernel_mean_acc")},
               {"delta_pp", j.at("delta_pp")},
-              {"kernel_m", j.value("kernel_m", 256)},
+              {"kernel_m", j.value("kernel_m", 512)},
+              {"kernel_feature_mode", j.value("kernel_feature_mode", "xor_pair")},
               {"backend", "xor_kernel_bench_native"}}},
     };
     cypha::bench::finalize_domain("d03_xor_kernel", experiments);
@@ -2675,6 +2677,58 @@ Json run_d18_intelligence_profile() {
     return experiments;
 }
 
+Json run_d19_cell_hypothesis_smoke() {
+    struct Tier1Spec {
+        const char* id;
+        const char* bench_mode;
+    };
+    const Tier1Spec tier1[] = {
+        {"H01", "hybrid"},
+        {"H03", "ssm"},
+        {"H04", "ssm_gria"},
+        {"H05", "hybrid"},
+    };
+
+    const int n_train = cypha::bench::bench_scale(400, 120);
+    const int n_eval = cypha::bench::bench_scale(80, 40);
+    Json rows = Json::array();
+    Json scaffold = Json::array();
+    for (const auto& spec : tier1) {
+        cypha::cyphalm::CyphaLMConfig cfg;
+        cypha::cyphalm::apply_bench_profile("d17", cfg);
+        cypha::cyphalm::apply_bench_mode(cypha::cyphalm::parse_bench_mode(spec.bench_mode), cfg);
+        if (cfg.vocab_size < 256) cfg.vocab_size = 256;
+
+        cypha::cyphalm::LMCorpus corpus;
+        corpus.profile = "d17";
+        corpus.source = "synthetic";
+        corpus.vocab_size = cfg.vocab_size;
+        corpus.train_ids =
+            cypha::cyphalm::synthetic_corpus(n_train + n_eval + 32, cfg.vocab_size, cfg.seed);
+        const std::size_t split = static_cast<std::size_t>(n_train);
+        corpus.eval_ids.assign(corpus.train_ids.begin() + static_cast<std::ptrdiff_t>(split),
+                               corpus.train_ids.end());
+        corpus.train_ids.resize(split);
+        cfg.vocab_size = corpus.vocab_size;
+
+        cypha::cyphalm::CyphaLMModel model(cfg);
+        model.train_sequence(corpus.train_ids, n_train, cfg.train_epochs);
+        const double bpc = model.eval_bpc(corpus.eval_ids, n_eval);
+        rows.push_back(Json{{"id", spec.id},
+                            {"bench_mode", spec.bench_mode},
+                            {"bpc", std::isnan(bpc) ? Json(nullptr) : Json(bpc)}});
+    }
+    scaffold.push_back(Json{{"status", "scaffold"}, {"remaining_variants", 24}});
+
+    const Json experiments{
+        {"tier1_smoke", rows},
+        {"scaffold", scaffold},
+        {"backend", "cypha_cell_hypothesis_sweep"},
+    };
+    cypha::bench::finalize_domain("d19_cell_hypothesis", experiments);
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -2696,6 +2750,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d16", "cypha_bench.domains.d16_multitask", run_d16},
         {"d17", "cypha_bench.domains.d17_cyphalm_integration", run_d17},
         {"d18", "cypha_bench.domains.d18_intelligence_profile", run_d18_intelligence_profile},
+        {"d19", "cypha_bench.domains.d19_cell_hypothesis", run_d19_cell_hypothesis_smoke},
     };
 }
 
