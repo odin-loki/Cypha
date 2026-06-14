@@ -3809,6 +3809,21 @@ bool publish_script_has_gh_auth_preflight(const fs::path& publish_script) {
     return content.find("gh auth") != std::string::npos;
 }
 
+Json commit_script_has_dryrun_and_force(const fs::path& commit_script) {
+    Json flags{{"DryRun", false}, {"Force", false}};
+    if (!fs::is_regular_file(commit_script)) {
+        return flags;
+    }
+    std::ifstream in(commit_script);
+    if (!in) {
+        return flags;
+    }
+    const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    flags["DryRun"] = content.find("-DryRun") != std::string::npos;
+    flags["Force"] = content.find("-Force") != std::string::npos;
+    return flags;
+}
+
 Json run_d33_release_publish_validation() {
     const fs::path repo = cypha::bench::bench_root().parent_path();
 
@@ -3965,6 +3980,87 @@ Json run_d34_repo_smoke_hygiene_validation() {
     return experiments;
 }
 
+Json run_d35_lock_commit_pipeline_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+
+    const std::array<const char*, 4> required_scripts{
+        "scripts/commit_production_lock.ps1",
+        "scripts/finalize_production_overnight.ps1",
+        "scripts/poll_and_finalize_overnight.ps1",
+        "scripts/validate_production_complete.ps1",
+    };
+    Json commit_scripts = Json::object();
+    for (const char* rel : required_scripts) {
+        const fs::path path = repo / rel;
+        const bool present = fs::is_regular_file(path);
+        commit_scripts[rel] = present;
+        if (!present) {
+            throw std::runtime_error("commit pipeline script missing: " + path.string());
+        }
+    }
+
+    const fs::path commit_script_path = repo / "scripts" / "commit_production_lock.ps1";
+    const Json dryrun_force_flags = commit_script_has_dryrun_and_force(commit_script_path);
+
+    const fs::path lock_path = fs::current_path() / "d35_lock_commit_pipeline_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+
+    require_lock_key(lock["overnight_results"], "n_train", "overnight_results");
+    if (!lock["overnight_results"]["n_train"].is_number_integer()) {
+        throw std::runtime_error("overnight_results n_train must be an integer");
+    }
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+
+    std::string production_status;
+    std::string overnight_complete_status;
+    std::string validation_status;
+
+    if (n_train < kProductionNTrainMin) {
+        validation_status = "pending_lock_commit";
+        production_status = "pending_production";
+        overnight_complete_status = "pending_overnight_complete";
+    } else {
+        production_status = validate_production_tier_lock(lock);
+        overnight_complete_status = validate_overnight_complete_lock(lock);
+        validation_status = (production_status == "production_validated" &&
+                             overnight_complete_status == "overnight_complete_validated")
+                                ? "lock_commit_ready"
+                                : "pending_lock_commit";
+    }
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results", lock.contains("cell_sweep_results") ? lock["cell_sweep_results"] : Json{}},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_status", production_status},
+        {"overnight_complete_status", overnight_complete_status},
+        {"commit_scripts", commit_scripts},
+        {"commit_script_has_dryrun_and_force", dryrun_force_flags},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d35_lock_commit_pipeline_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d35_lock_commit_pipeline_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -4006,6 +4102,8 @@ std::vector<DomainSpec> build_all_domains() {
          run_d33_release_publish_validation},
         {"d34", "cypha_bench.domains.d34_repo_smoke_hygiene_validation",
          run_d34_repo_smoke_hygiene_validation},
+        {"d35", "cypha_bench.domains.d35_lock_commit_pipeline_validation",
+         run_d35_lock_commit_pipeline_validation},
     };
 }
 

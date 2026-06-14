@@ -43,6 +43,7 @@ $lastPollSize = -1
 $lastGrowthUtc = $null
 $resolvedLogPath = Resolve-LogFile -Path $LogFile
 $cellSweepProgressPath = Join-Path $root "bench\results\cell_sweep\overnight_progress.log"
+$CELL_SWEEP_EXPECTED_VARIANTS = 28
 
 function Format-Age([datetime]$UtcWhen) {
     $age = (Get-Date).ToUniversalTime() - $UtcWhen
@@ -175,26 +176,98 @@ function Show-LogStatus {
     }
 }
 
+function Get-CellSweepResultsDir {
+    $primary = Join-Path $root "bench\results\cell_sweep"
+    $legacy = Join-Path $root "results"
+
+    $primaryVariants = @()
+    if (Test-Path $primary) {
+        $primaryVariants = @(Get-ChildItem -Path $primary -Filter "variant_*.json" -File -ErrorAction SilentlyContinue)
+    }
+    if ($primaryVariants.Count -gt 0) {
+        return @{
+            Dir    = $primary
+            Source = "bench/results/cell_sweep"
+        }
+    }
+
+    $legacyVariants = @()
+    if (Test-Path $legacy) {
+        $legacyVariants = @(Get-ChildItem -Path $legacy -Filter "variant_*.json" -File -ErrorAction SilentlyContinue)
+    }
+    if ($legacyVariants.Count -gt 0) {
+        return @{
+            Dir    = $legacy
+            Source = "results (legacy)"
+        }
+    }
+
+    if (Test-Path $primary) {
+        return @{
+            Dir    = $primary
+            Source = "bench/results/cell_sweep"
+        }
+    }
+
+    return $null
+}
+
 function Show-CellSweepProgress {
+    param([bool]$OvernightRunning = $false)
+
     Write-Host ""
     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] cell sweep progress" -ForegroundColor Cyan
 
+    $sweepInfo = Get-CellSweepResultsDir
+    if ($sweepInfo) {
+        $variants = @(Get-ChildItem -Path $sweepInfo.Dir -Filter "variant_*.json" -File -ErrorAction SilentlyContinue)
+        $variantCount = $variants.Count
+
+        if ($OvernightRunning) {
+            Write-Host ("  progress: {0}/{1}" -f $variantCount, $CELL_SWEEP_EXPECTED_VARIANTS) -ForegroundColor DarkGray
+        } elseif ($variantCount -gt 0) {
+            Write-Host ("  variants: {0} (expect {1} for full sweep)" -f $variantCount, $CELL_SWEEP_EXPECTED_VARIANTS) -ForegroundColor DarkGray
+        } else {
+            Write-Host "  variants: 0 (no variant_*.json yet)" -ForegroundColor DarkGray
+        }
+
+        if ($variantCount -gt 0) {
+            $latestVariant = $variants | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            Write-Host ("  latest: {0} mtime={1}" -f $latestVariant.Name, $latestVariant.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")) -ForegroundColor DarkGray
+        }
+
+        $manifestPath = Join-Path $sweepInfo.Dir "manifest.json"
+        if (Test-Path $manifestPath) {
+            try {
+                $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+                $manifestNTrain = if ($manifest.PSObject.Properties.Name -contains "n_train") { $manifest.n_train } else { "?" }
+                Write-Host ("  manifest: n_train={0}" -f $manifestNTrain) -ForegroundColor DarkGray
+            } catch {
+                Write-Host "  manifest: (invalid JSON)" -ForegroundColor DarkYellow
+            }
+        }
+
+        if ($sweepInfo.Source -match "legacy") {
+            Write-Host ("  dir: {0}" -f $sweepInfo.Source) -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  (no cell sweep dir yet)" -ForegroundColor DarkGray
+    }
+
     if (-not (Test-Path $cellSweepProgressPath)) {
-        Write-Host "  (no overnight_progress.log yet)" -ForegroundColor DarkGray
         return
     }
 
     try {
         $lines = @(Get-Content $cellSweepProgressPath -Tail 2 -ErrorAction Stop)
         if ($lines.Count -eq 0) {
-            Write-Host "  (empty)" -ForegroundColor DarkGray
             return
         }
         foreach ($line in $lines) {
-            Write-Host ("  {0}" -f $line) -ForegroundColor DarkGray
+            Write-Host ("  log: {0}" -f $line) -ForegroundColor DarkGray
         }
     } catch {
-        Write-Host "  (could not read: $($_.Exception.Message))" -ForegroundColor DarkYellow
+        Write-Host ("  log: (could not read overnight_progress.log: $($_.Exception.Message))") -ForegroundColor DarkYellow
     }
 }
 
@@ -258,9 +331,11 @@ function Show-LockStatus {
 }
 
 function Show-Snapshot {
+    param([bool]$OvernightRunning = $false)
+
     Show-ProcessStatus
     Show-LogStatus -Path $resolvedLogPath
-    Show-CellSweepProgress
+    Show-CellSweepProgress -OvernightRunning:$OvernightRunning
     Show-LockStatus -Path $LockFile
 }
 
@@ -280,7 +355,9 @@ Show-MigrationNote
 $hadOvernightProcesses = $false
 
 if ($Once) {
-    Show-Snapshot
+    $onceProcs = Get-OvernightProcessInfo
+    $onceRunning = ($onceProcs -and $onceProcs.Count -gt 0)
+    Show-Snapshot -OvernightRunning:$onceRunning
     exit 0
 }
 
@@ -294,6 +371,6 @@ while ($true) {
     }
     $hadOvernightProcesses = $runningNow
 
-    Show-Snapshot
+    Show-Snapshot -OvernightRunning:$runningNow
     Start-Sleep -Seconds $IntervalSeconds
 }

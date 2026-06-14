@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.21" = @(
+    "Intelligence Stats **Phase 21** (shipped): bench **d35** lock commit pipeline validation - post-overnight commit toolchain; profile ``bench/config/d35_lock_commit_pipeline_profile.json``; CTest ``native_d35_lock_commit_pipeline_smoke``.",
+    "``scripts/verify_production_pipeline.ps1`` - unified maintainer smoke gate (production complete + release publish + repo smoke cleanup + optional d35).",
+    "Overnight watch **25/28 variant progress**; poll dedupe + heartbeat log fix; ``CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE=1``.",
+    "CI gate **113 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.20" = @(
     "Intelligence Stats **Phase 20** (shipped): bench **d34** repo smoke hygiene validation - repo-root ``d*_smoke.json`` leak detection + ``.gitignore`` patterns; profile ``bench/config/d34_repo_smoke_hygiene_profile.json``; CTest ``native_d34_repo_smoke_hygiene_smoke``.",
     "``scripts/cleanup_repo_smoke_artifacts.ps1`` - remove repo-root smoke JSON spill files from local CTest runs (``-DryRun`` / ``-Force``).",

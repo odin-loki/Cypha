@@ -1,0 +1,31 @@
+{
+  "profile_id": "d35_lock_commit_pipeline_profile",
+  "description": "D35 lock commit pipeline validation — post-overnight git commit toolchain scripts + production/overnight-complete gates",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 35,
+    "domain_tag": "d35"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d35_lock_commit_pipeline_smoke — lock commit pipeline gate (pending_lock_commit or lock_commit_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 35",
+    "Or: cypha_bench_run --domain-tag d35",
+    "Verifies scripts/commit_production_lock.ps1, scripts/finalize_production_overnight.ps1, scripts/poll_and_finalize_overnight.ps1, scripts/validate_production_complete.ps1 exist",
+    "Grep commit_production_lock.ps1 for -DryRun and -Force params (commit_script_has_dryrun_and_force)",
+    "When overnight_results.n_train < 300000: validation_status=pending_lock_commit (smoke PASS)",
+    "When n_train >= 300000: validate_production_tier_lock + validate_overnight_complete_lock",
+    "When all production tiers pass: validation_status=lock_commit_ready",
+    "Phase 21: lock commit pipeline validation gate"
+  ]
+}

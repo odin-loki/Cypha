@@ -1,9 +1,9 @@
-# Phase 17/19/20: poll until production overnight processes exit, then finalize + commit preview.
+# Phase 17/19/20/21: poll until production overnight processes exit, then finalize + commit preview.
 # Reuses overnight process detection from watch_production_overnight.ps1 (+ cypha_cell_hypothesis_sweep).
 # When -BuildDir is the default native/build and overnight is running, BuildDir is auto-detected
 # from the run_production_overnight.ps1 command line (e.g. native/build_p13).
 # With -LogFile, each poll cycle appends HEARTBEAT (timestamp, process count, lock n_train).
-# Poll query failures log ERROR and retry (does not treat failed query as "processes exited").#
+# Poll query failures log ERROR and retry (does not treat failed query as "processes exited").
 # Usage:
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -Once
@@ -160,8 +160,8 @@ function Write-PollHeartbeat {
     $nTrain = Get-LockOvernightNTrain -Path $LockPath
     $line = "HEARTBEAT $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') processes=$ProcessCount lock_n_train=$nTrain"
     Write-Host $line -ForegroundColor DarkGray
-    if ($resolvedLogFile) {
-        $line | Out-File -FilePath $resolvedLogFile -Append -Encoding utf8
+    if ($script:resolvedLogFile) {
+        $line | Out-File -FilePath $script:resolvedLogFile -Append -Encoding utf8
     }
 }
 
@@ -170,8 +170,8 @@ function Write-PollError {
 
     $line = "ERROR $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
     Write-Host $line -ForegroundColor Red
-    if ($resolvedLogFile) {
-        $line | Out-File -FilePath $resolvedLogFile -Append -Encoding utf8
+    if ($script:resolvedLogFile) {
+        $line | Out-File -FilePath $script:resolvedLogFile -Append -Encoding utf8
     }
 }
 

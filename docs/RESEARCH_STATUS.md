@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **111 CTests** *(Phase 19 shipped)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **112 CTests** *(Phase 20 shipped)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **111 CTests** gate CI *(Phase 19 shipped)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **112 CTests** gate CI *(Phase 20 shipped)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -312,6 +312,21 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Poll BuildDir auto-detect:** **`poll_and_finalize_overnight.ps1`** and **`start_poll_finalize_background.ps1`** detect BuildDir from running **`run_production_overnight.ps1`** when default **`native/build`**.
 - **Local validate env var:** **`CYPHA_VALIDATE_RELEASE_PUBLISH=1`** on **`cypha_native_validate_all.ps1`** runs d33 when profile exists.
 - **CI:** blocking gate **111 CTests** (+1 d33 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+
+### Phase 20 — repo smoke hygiene gate (v2.3.20) — shipped
+
+- **Bench d34:** repo smoke hygiene validation — repo-root **`d*_smoke.json`** leak detection + **`.gitignore`** patterns; profile **`bench/config/d34_repo_smoke_hygiene_profile.json`**; report **`bench/report/tables/d34_repo_smoke_hygiene_validation.json`**. CTest **`native_d34_repo_smoke_hygiene_smoke`**.
+- **Repo smoke cleanup:** **`scripts/cleanup_repo_smoke_artifacts.ps1`** — remove repo-root smoke JSON spill files (`-DryRun` / `-Force`).
+- **Poll heartbeat:** **`poll_and_finalize_overnight.ps1`** — per-cycle **HEARTBEAT** line (timestamp, process count, lock `n_train`).
+- **Local validate env var:** **`CYPHA_VALIDATE_REPO_SMOKE_HYGIENE=1`** on **`cypha_native_validate_all.ps1`** runs d34 when profile exists.
+- **CI:** blocking gate **112 CTests** (+1 d34 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+
+### Phase 21 — lock commit pipeline gate (v2.3.21) — prep
+
+- **Bench d35:** lock commit pipeline validation — post-overnight commit toolchain script presence (`commit_production_lock.ps1`, `finalize_production_overnight.ps1`, `poll_and_finalize_overnight.ps1`, `validate_production_complete.ps1`); profile **`bench/config/d35_lock_commit_pipeline_profile.json`**; report **`bench/report/tables/d35_lock_commit_pipeline_validation.json`**. CTest **`native_d35_lock_commit_pipeline_smoke`** *(when merged)*.
+- **Production pipeline smoke:** **`scripts/verify_production_pipeline.ps1`** — chains production complete + release publish + repo smoke cleanup preview + optional d35 (`-AllowPending` for smoke when lock below 300k).
+- **Local validate env var:** **`CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE=1`** on **`cypha_native_validate_all.ps1`** runs d35 when profile exists.
+- **CI:** blocking gate **112 CTests** today; **113** when d35 merges (+1 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
 
 ---
 

@@ -154,5 +154,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d34",
     "notes": "Repo root smoke artifact hygiene validation; see bench/config/d34_repo_smoke_hygiene_profile.json"
+  },
+  "lock_commit_pipeline_d35": {
+    "path": "everyday_profile.json",
+    "config": "d35_lock_commit_pipeline_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d35",
+    "notes": "Lock commit pipeline validation; see bench/config/d35_lock_commit_pipeline_profile.json"
   }
 }

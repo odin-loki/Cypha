@@ -1,4 +1,4 @@
-# Phase 18/19: start poll_and_finalize_overnight.ps1 in the background after manually
+# Phase 18/19/21: start poll_and_finalize_overnight.ps1 in the background after manually
 # launching production overnight (e.g. run_production_overnight.ps1).
 # When -BuildDir is the default native/build and overnight is running, BuildDir is
 # auto-detected from the run_production_overnight.ps1 command line (e.g. native/build_p13).
@@ -74,6 +74,28 @@ function Resolve-PollBuildDir {
 }
 
 $BuildDir = Resolve-PollBuildDir -Requested $BuildDir
+
+function Stop-ExistingPollFinalizeProcesses {
+    $killed = @()
+    $cim = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and $_.CommandLine -match 'poll_and_finalize_overnight\.ps1'
+        }
+    foreach ($p in $cim) {
+        try {
+            Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop
+            $killed += $p.ProcessId
+        } catch {
+            Write-Host ("start_poll_finalize_background: warn: could not stop PID {0}: {1}" -f $p.ProcessId, $_.Exception.Message) -ForegroundColor Yellow
+        }
+    }
+    return $killed
+}
+
+$killedPids = @(Stop-ExistingPollFinalizeProcesses)
+if ($killedPids.Count -gt 0) {
+    Write-Host ("start_poll_finalize_background: killed existing poll_and_finalize_overnight.ps1 PID(s): {0}" -f ($killedPids -join ", ")) -ForegroundColor Yellow
+}
 
 if ([System.IO.Path]::IsPathRooted($LogFile)) {
     $resolvedLog = $LogFile

@@ -280,7 +280,7 @@
 
 **CI gate (Phase 19 shipped):** **111 CTests** (`ctest -R native_`); +1 smoke: **`native_d33_release_publish_smoke`**. d33 validates publish script presence + production/overnight-complete tiers; **`pending_release_publish`** when **`n_train < 300000`** (smoke pass); **`release_publish_ready`** when **≥ 300k** and all gates pass.
 
-## Phase 20 — prep (v2.3.20)
+## Phase 20 — shipped (v2.3.20, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
@@ -288,9 +288,23 @@
 | D34 profile config | `bench/config/d34_repo_smoke_hygiene_profile.json` | manual |
 | D34 validation report | `bench/report/tables/d34_repo_smoke_hygiene_validation.json` | d34 run |
 | Repo smoke cleanup helper | `scripts/cleanup_repo_smoke_artifacts.ps1` — remove repo-root `d##_smoke.json` spill files | manual |
+| Poll heartbeat logging | `poll_and_finalize_overnight.ps1` — per-cycle **HEARTBEAT** (timestamp, process count, lock `n_train`) | manual |
 | Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_REPO_SMOKE_HYGIENE=1`** (d34 when profile exists) | manual |
+| Release notes v2.3.20 template | `scripts/create_release_notes.ps1` | manual |
 
-**CI gate (Phase 20 prep):** **111 CTests** today; **112** when **`native_d34_repo_smoke_hygiene_smoke`** merges (+1). d34 validates repo-root smoke JSON leak detection + cleanup script presence; **`repo_root_smoke_ok`** or **`repo_root_smoke_leak`** (smoke pass).
+**CI gate (Phase 20 shipped):** **112 CTests** (`ctest -R native_`); +1 smoke: **`native_d34_repo_smoke_hygiene_smoke`**. d34 validates repo-root smoke JSON leak detection + cleanup script presence; **`repo_root_smoke_ok`** or **`repo_root_smoke_leak`** (smoke pass).
+
+## Phase 21 — prep (v2.3.21)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d35** lock commit pipeline validation | `bench_domains.cpp` → `run_d35_lock_commit_pipeline_validation` | `cypha_bench_run --domain-tag d35` |
+| D35 profile config | `bench/config/d35_lock_commit_pipeline_profile.json` | manual |
+| D35 validation report | `bench/report/tables/d35_lock_commit_pipeline_validation.json` | d35 run |
+| Production pipeline smoke gate | `scripts/verify_production_pipeline.ps1` — production complete + release publish + repo smoke cleanup preview + optional d35 | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE=1`** (d35 when profile exists) | manual |
+
+**CI gate (Phase 21 prep):** **112 CTests** today; **113** when **`native_d35_lock_commit_pipeline_smoke`** merges (+1). d35 validates post-overnight commit toolchain script presence (`commit_production_lock.ps1`, `finalize_production_overnight.ps1`, `poll_and_finalize_overnight.ps1`, `validate_production_complete.ps1`); **`pending_lock_commit`** when **`n_train < 300000`** (smoke pass); **`lock_commit_ready`** when **≥ 300k** and production + overnight-complete gates pass.
 
 ## Still planned
 
@@ -359,10 +373,14 @@ cypha_bench_run --domain-tag d33                                    # Phase 19: 
 pwsh -File scripts\verify_release_publish.ps1                       # Phase 19: production complete + d33 + publish -DryRun
 $env:CYPHA_VALIDATE_RELEASE_PUBLISH = "1"                           # Phase 19: d33 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d33" --output-on-failure  # Phase 19
-cypha_bench_run --domain-tag d34                                    # Phase 20: repo smoke hygiene validation (prep)
+cypha_bench_run --domain-tag d34                                    # Phase 20: repo smoke hygiene validation (shipped)
 pwsh -File scripts\cleanup_repo_smoke_artifacts.ps1 -DryRun         # Phase 20: preview repo-root smoke JSON cleanup
 $env:CYPHA_VALIDATE_REPO_SMOKE_HYGIENE = "1"                        # Phase 20: d34 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d34" --output-on-failure  # Phase 20
+cypha_bench_run --domain-tag d35                                    # Phase 21: lock commit pipeline validation (prep)
+pwsh -File scripts\verify_production_pipeline.ps1 -AllowPending     # Phase 21: unified production pipeline smoke
+$env:CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE = "1"                      # Phase 21: d35 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d35" --output-on-failure  # Phase 21
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```
