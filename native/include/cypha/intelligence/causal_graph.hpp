@@ -42,6 +42,9 @@ class CausalGraphMonitor {
   /// Full Paper V cycle: acquisition, simulation resolution, maturation snapshot.
   void simulation_step(double r_eu_before, double r_eu_after, double resolution);
 
+  /// Multi-step Paper V loop: profile ingest + ``n_steps`` acquisition/simulation cycles.
+  void run_simulation_trajectory(int n_steps, const ProfileObservation& obs, double resolution_scale = 0.3);
+
   const SoftWorldMonitor& soft_world() const { return soft_world_; }
   const std::vector<CausalEdge>& edges() const { return edges_; }
   const std::vector<SimulationStepEvent>& trajectory() const { return trajectory_; }

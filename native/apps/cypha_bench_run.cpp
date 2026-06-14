@@ -26,11 +26,13 @@ struct Args {
     bool report_only = false;
     bool list_domains = false;
     bool ssm_diagnose = false;
+    bool overnight = false;
 };
 
 void usage() {
     std::cerr << "usage: cypha_bench_run [--domain N] [--domain-tag TAG] [--from-domain N] "
-                 "[--report-only] [--list-domains] [--ssm-diagnose]\n";
+                 "[--report-only] [--list-domains] [--ssm-diagnose] [--overnight]\n";
+    std::cerr << "       --overnight  D17 full WikiText + 300k train (or CYPHA_BENCH_OVERNIGHT=1)\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -47,6 +49,7 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--report-only") a.report_only = true;
         else if (k == "--list-domains") a.list_domains = true;
         else if (k == "--ssm-diagnose") a.ssm_diagnose = true;
+        else if (k == "--overnight") a.overnight = true;
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -69,6 +72,13 @@ bool ssm_diagnose_enabled(const Args& args) {
     return s == "1" || s == "true" || s == "True" || s == "yes";
 }
 
+bool overnight_enabled(const Args& args) {
+    if (args.overnight) {
+        return true;
+    }
+    return cypha::bench::bench_overnight_enabled();
+}
+
 }  // namespace
 
 
@@ -82,6 +92,15 @@ int main(int argc, char** argv) {
             }
         }
         const Args args = parse_args(argc, argv);
+        if (overnight_enabled(args)) {
+#if defined(_WIN32)
+            _putenv_s("CYPHA_BENCH_OVERNIGHT", "1");
+            _putenv_s("CYPHA_BENCH_FULL_CORPUS", "1");
+#else
+            setenv("CYPHA_BENCH_OVERNIGHT", "1", 1);
+            setenv("CYPHA_BENCH_FULL_CORPUS", "1", 1);
+#endif
+        }
         cypha::bench::set_ssm_diagnose(ssm_diagnose_enabled(args));
         const auto domains = cypha::bench::all_domains();
 

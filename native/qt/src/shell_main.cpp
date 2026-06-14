@@ -116,6 +116,7 @@
 #include "cypha/train_step_vector.hpp"
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
+#include "cypha/intelligence/epistemic_threshold.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 
 #include "bulk_train_worker.h"
@@ -3059,6 +3060,14 @@ class MainWindow final : public QMainWindow {
       lm_temperature_spin_->setSingleStep(0.05);
       lm_temperature_spin_->setValue(0.9);
       lm_gen_form->addRow(QStringLiteral("temperature:"), lm_temperature_spin_);
+
+      lm_epistemic_halt_chk_ = new QCheckBox(
+          QStringLiteral("Epistemic halt (Paper IV — halt when r_eu exceeds threshold)"), lm_gen_grp);
+      lm_epistemic_halt_chk_->setChecked(false);
+      lm_epistemic_halt_chk_->setToolTip(QStringLiteral(
+          "Matches REST /generate \"epistemic_halt\": true — stops decode when epistemic ratio "
+          "r_eu is high (AdaptiveEpistemicThreshold when native)."));
+      lm_gen_form->addRow(lm_epistemic_halt_chk_);
 
       lm_generate_btn_ = new QPushButton(QStringLiteral("Generate"), lm_gen_grp);
       lm_generate_btn_->setEnabled(false);
@@ -6585,6 +6594,9 @@ class MainWindow final : public QMainWindow {
       body[QStringLiteral("strategy")] = strategy;
       body[QStringLiteral("top_p")] = top_p;
       body[QStringLiteral("temperature")] = temperature;
+      if (lm_epistemic_halt_chk_ != nullptr) {
+        body[QStringLiteral("epistemic_halt")] = lm_epistemic_halt_chk_->isChecked();
+      }
       const auto t0 = std::chrono::steady_clock::now();
       const HttpJsonResult r = http_post_json(QUrl(base + QStringLiteral("/generate")), body);
       const double latency_ms =
@@ -6622,11 +6634,14 @@ class MainWindow final : public QMainWindow {
     params.top_p = top_p;
     params.temperature = temperature;
     params.top_k = 40;
+    if (lm_epistemic_halt_chk_ != nullptr) {
+      params.epistemic_halt = lm_epistemic_halt_chk_->isChecked();
+    }
 
     const auto t0 = std::chrono::steady_clock::now();
     try {
-      const cypha::cyphalm::GenerateOutput gen =
-          cypha::cyphalm::generate_decode(*lm_model_, prompt_ids, max_tokens, params);
+      const cypha::cyphalm::GenerateOutput gen = cypha::cyphalm::generate_decode(
+          *lm_model_, prompt_ids, max_tokens, params, &lm_epistemic_threshold_);
       const double latency_ms =
           std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
       ++lm_n_generations_;
@@ -6653,6 +6668,11 @@ class MainWindow final : public QMainWindow {
       out += QStringLiteral("strategy: %1\n").arg(strategy);
       out += QStringLiteral("halted_on_uncertainty: %1\n")
                  .arg(gen.halted_on_uncertainty ? QStringLiteral("true") : QStringLiteral("false"));
+      out += QStringLiteral("halted_on_epistemic: %1\n")
+                 .arg(gen.halted_on_epistemic ? QStringLiteral("true") : QStringLiteral("false"));
+      if (gen.r_eu_proxy > 0.0) {
+        out += QStringLiteral("r_eu_proxy: %1\n").arg(gen.r_eu_proxy, 0, 'f', 4);
+      }
       out += QStringLiteral("latency_ms: %1\n\n").arg(latency_ms, 0, 'f', 2);
       out += QStringLiteral("decoded: %1").arg(decoded);
       if (lm_output_edit_ != nullptr) {
@@ -7388,6 +7408,7 @@ class MainWindow final : public QMainWindow {
   QComboBox* lm_strategy_combo_{};
   QDoubleSpinBox* lm_top_p_spin_{};
   QDoubleSpinBox* lm_temperature_spin_{};
+  QCheckBox* lm_epistemic_halt_chk_{};
   QPushButton* lm_generate_btn_{};
   QPlainTextEdit* lm_output_edit_{};
   QLineEdit* bench_bin_edit_{};
@@ -7398,6 +7419,7 @@ class MainWindow final : public QMainWindow {
   bool lm_loaded_{false};
   QString lm_source_path_;
   int lm_n_generations_{0};
+  cypha::intelligence::EpistemicThreshold lm_epistemic_threshold_{0.5, 5.0};
 };
 
 }  // namespace

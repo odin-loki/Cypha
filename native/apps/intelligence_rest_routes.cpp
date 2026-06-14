@@ -61,7 +61,7 @@ void register_intelligence_rest_routes(httplib::Server& svr) {
       return;
     }
     std::lock_guard<std::mutex> lk(*g_mu);
-    nlohmann::json payload = g_causal_graph->trajectory_json();
+    nlohmann::json payload = g_causal_graph->to_json();
     payload["source"] = "causal_graph_monitor";
     res.set_content(payload.dump(), "application/json");
   });

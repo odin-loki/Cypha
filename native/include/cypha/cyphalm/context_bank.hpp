@@ -17,6 +17,9 @@ class ContextBank {
   /// Linear attention: weighted sum of bank entries; weights = dot(query, entry).
   std::vector<double> linear_attention(const std::vector<double>& query) const;
 
+  /// H08: short / mid / long tier blend (recent slots weighted higher per tier).
+  std::vector<double> tiered_linear_attention(const std::vector<double>& query) const;
+
   int size() const { return count_; }
   int capacity() const { return capacity_; }
   int embed_dim() const { return embed_dim_; }

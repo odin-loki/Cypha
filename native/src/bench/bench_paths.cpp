@@ -71,4 +71,17 @@ bool bench_env_truthy(const char* key) {
     return false;
 }
 
+bool bench_overnight_enabled() { return bench_env_truthy("CYPHA_BENCH_OVERNIGHT"); }
+
+int bench_full_n_train() {
+    int n = 300000;
+    if (const char* raw = std::getenv("CYPHA_BENCH_FULL_N_TRAIN")) {
+        try {
+            n = std::max(1, std::stoi(raw));
+        } catch (...) {
+        }
+    }
+    return n;
+}
+
 }  // namespace cypha::bench

@@ -46,8 +46,27 @@ void CausalGraphMonitor::simulation_step(double r_eu_before, double r_eu_after, 
   soft_world_.simulation_step(r_eu_before, r_eu_after, resolution);
   record_edge("query", "r_eu", clamp01(r_eu_before - r_eu_after));
   record_edge("simulation", "world_model", clamp01(resolution));
+  record_edge("world_model", "maturation", clamp01(soft_world_.maturation_level()));
   trajectory_.push_back(SimulationStepEvent{
       r_eu_before, r_eu_after, resolution, soft_world_.maturation_level()});
+}
+
+void CausalGraphMonitor::run_simulation_trajectory(int n_steps, const ProfileObservation& obs,
+                                                   double resolution_scale) {
+  if (n_steps <= 0) {
+    return;
+  }
+  observe_profile(obs);
+  double r_eu = std::clamp(obs.r_eu, 0.1, 1.0);
+  const double scale = std::max(0.01, resolution_scale);
+  for (int i = 0; i < n_steps; ++i) {
+    const double decay = scale * (0.75 + 0.05 * static_cast<double>(i));
+    const double r_after = std::max(0.05, r_eu - decay);
+    const double resolution = std::max(0.0, r_eu - r_after);
+    simulation_step(r_eu, r_after, resolution);
+    record_edge("maturation", "tau", clamp01(obs.tau * soft_world_.maturation_level()));
+    r_eu = r_after;
+  }
 }
 
 nlohmann::json CausalGraphMonitor::trajectory_json() const {

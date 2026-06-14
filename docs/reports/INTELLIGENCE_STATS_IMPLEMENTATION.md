@@ -53,15 +53,30 @@
 | Cell variants H02–H14 | `cypha_cell_hypothesis.hpp/cpp`, `eml_activation.hpp` | `native_cell_hypothesis_tier2_smoke` |
 | WikiText D17 full profile | `d17_wikitext_full_profile.json` | `native_d17_wikitext_smoke` |
 
+## Phase 5 — shipped (2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|-------------|
+| Qt epistemic halt on generate | `shell_main.cpp` CyphaLM tab | manual |
+| D17 overnight bench profile | `d17_wikitext_overnight_profile.json` | `native_d17_wikitext_overnight_smoke` |
+| `--overnight` / `CYPHA_BENCH_OVERNIGHT` | `cyphalm_bench_native.cpp`, `cypha_bench_run.cpp` | smoke + manual 300k |
+| RPSM hierarchy + global memory | `rpsm_sequence_layer.hpp/cpp` | `native_rpsm_hierarchy_smoke` |
+| RPSM batched LLR default | `infer_cpu.cpp` (`CYPHA_USE_RPSM_LLR=0` opt-out) | `native_rpsm_batched_llr_smoke` |
+| NIG-state cell H06 | `nig_state_cell.hpp/cpp` | `native_cell_hypothesis_tier2_smoke` |
+| Profile-guided loss in train backprop | `cyphalm_model.cpp`, `profile_guided_loss.cpp` | `native_cyphalm_train_smoke` |
+| EWC D16B zero-forgetting probe | `ewc_d16b_smoke.cpp`, REST `ewc_lambda` | `native_ewc_d16b_smoke` |
+| Federated coordinator | `cypha_federated_coordinator.cpp` | `native_federated_coordinator_smoke` |
+| Paper V simulation loop | `causal_graph.cpp`, `intelligence_rest_routes.cpp` | `native_intelligence_profiler_papers` |
+| Release notes v2.3.5 template | `scripts/create_release_notes.ps1` | manual |
+
 ## Still planned
 
-- Inject **profile_guided_loss** into per-step CyphaLM backprop (currently post-train eval hook only)
-- **Full 28-variant** cell hypothesis overnight sweep @ 300k tokens (many Tier-2 modes are proxy scaffolds)
-- **Paper V** full causal simulation loop (beyond trajectory stub)
-- **RPSM Option B full** — hierarchy, W_up/W_down, Izaac, global memory
-- **EWC** wired into shared-model D16B zero-forgetting benchmark
-- **Federated** coordinator / network transport (merge stub only)
+- **Full 28-variant** cell hypothesis overnight sweep @ 300k tokens (H09–H13, H15–H22 still proxy/config modes)
+- **RPSM Option B production** — learned W_up/W_down, Izaac grammar search, persistent global memory training
+- **EWC** full Fisher on shared CyphaLM weights (diagonal stub on vector encoder only today)
+- **Federated** secure coordinator / TLS worker transport
 - **GitHub Release** publish via `gh` (needs auth)
+- **D17 300k overnight run** — config + smoke wired; full run is manual (`--overnight --n-train 300000`)
 
 ## Commands
 

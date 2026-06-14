@@ -47,6 +47,10 @@ bool uses_lstm(ContextMode m) {
     return m == ContextMode::Hybrid || m == ContextMode::CharLstm;
 }
 
+bool uses_profile_guided_backprop(const CyphaLMConfig& cfg) {
+    return cfg.profile_guided_loss || cfg.cell_variant == "H05";
+}
+
 void init_proj(std::vector<double>& proj, int rows, int cols, std::uint64_t seed, double scale) {
     std::mt19937_64 rng(seed);
     std::normal_distribution<double> nd(0.0, scale);
@@ -240,6 +244,10 @@ void CyphaLMModel::init_components() {
     if (cfg_.use_context_bank) {
         context_bank_ = std::make_unique<ContextBank>(cfg_.d_embed, cfg_.context_bank_slots);
     }
+    if (cfg_.use_nig_state_cell) {
+        nig_state_cell_ = std::make_unique<NigStateCell>(
+            cfg_.nig_kappa0, cfg_.nig_alpha0, cfg_.nig_beta0, cfg_.field_dim);
+    }
     field_x_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
     if (gria_in_.empty()) {
         gria_in_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
@@ -258,7 +266,7 @@ void CyphaLMModel::init_components() {
         rpsm_layer_ = std::make_unique<cypha::rpsm::RpsmSequenceLayer>(rc);
         rpsm_log_probs_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
     }
-    if (cfg_.profile_guided_loss) {
+    if (uses_profile_guided_backprop(cfg_) && !train_profiler_) {
         train_profiler_ = std::make_unique<cypha::intelligence::IntelligenceProfiler>();
     }
 }
@@ -277,6 +285,7 @@ void CyphaLMModel::reset_context() {
     if (selective_) selective_->reset();
     if (memory_) memory_->reset();
     if (context_bank_) context_bank_->reset();
+    if (nig_state_cell_) nig_state_cell_->reset();
     if (lstm_) {
         lstm_->reset_state();
         std::fill(lstm_h_.begin(), lstm_h_.end(), 0.0);
@@ -291,6 +300,7 @@ void CyphaLMModel::reset_context() {
     bptt_buffer_.clear();
     last_e_.clear();
     last_ctx_.clear();
+    last_ssm_h_fast_.clear();
     if (rpsm_layer_) rpsm_layer_->reset();
     // DIF experts persist across view/block resets (Python carry_dif=True).
     std::fill(field_x_.begin(), field_x_.end(), 0.0);
@@ -353,10 +363,31 @@ std::vector<double> CyphaLMModel::ssm_step(const std::vector<double>& e) {
     } else if (ssm_) {
         ctx = ssm_->step(e);
     }
-    if (cfg_.use_differential_gate && !ctx.empty() && last_ctx_.size() == ctx.size()) {
+    if (cfg_.use_differential_gate && !ctx.empty()) {
+        constexpr double kTheta0 = 0.75;
         constexpr double kDeltaBlend = 0.25;
-        for (std::size_t i = 0; i < ctx.size(); ++i) {
-            ctx[i] = (1.0 - kDeltaBlend) * last_ctx_[i] + kDeltaBlend * ctx[i];
+        const CellAISSM* active = active_ssm();
+        std::vector<double> delta;
+        if (active && !active->h_states().empty()) {
+            const auto& h0 = active->h_states()[0];
+            if (last_ssm_h_fast_.size() == h0.size()) {
+                delta.resize(h0.size());
+                for (std::size_t i = 0; i < h0.size(); ++i) {
+                    delta[i] = h0[i] - last_ssm_h_fast_[i];
+                }
+            }
+            last_ssm_h_fast_ = h0;
+        }
+        if (!last_ctx_.empty() && last_ctx_.size() == ctx.size()) {
+            for (std::size_t i = 0; i < ctx.size(); ++i) {
+                const double dh = (i < delta.size()) ? delta[i] : 0.0;
+                ctx[i] = kTheta0 * last_ctx_[i] + kDeltaBlend * (ctx[i] + dh);
+            }
+        }
+    } else {
+        const CellAISSM* active = active_ssm();
+        if (active && !active->h_states().empty()) {
+            last_ssm_h_fast_ = active->h_states()[0];
         }
     }
     return ctx;
@@ -419,7 +450,8 @@ std::vector<double> CyphaLMModel::build_gria_input(const std::vector<double>& fi
     }
     if (context_bank_ && !embed_history_.empty() && !proj_embed_.empty()) {
         const auto& q = embed_history_[0];
-        const auto attn = context_bank_->linear_attention(q);
+        const auto attn = cfg_.use_tiered_context ? context_bank_->tiered_linear_attention(q)
+                                                  : context_bank_->linear_attention(q);
         const auto attn_field = matvec(proj_embed_, cfg_.field_dim, cfg_.d_embed, attn);
         for (std::size_t i = 0; i < attn_field.size() && i < v.size(); ++i) {
             v[i] += attn_field[i] * 0.05;
@@ -472,6 +504,12 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
             apply_hebbian_hooks(ctx);
             last_ctx_ = ctx;
             field_x_ = project_field(ctx);
+            if (nig_state_cell_) {
+                const auto nig_h = nig_state_cell_->step(field_x_.data(), cfg_.field_dim);
+                for (std::size_t i = 0; i < field_x_.size() && i < nig_h.size(); ++i) {
+                    field_x_[i] = 0.6 * field_x_[i] + 0.4 * nig_h[i];
+                }
+            }
         }
         const bool skip_dif =
             mode == ContextMode::SsmGria || mode == ContextMode::AblationNoSsm;
@@ -525,7 +563,15 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         hybrid_lstm_has_cache_ = true;
         last_hybrid_log_g_ = log_g;
         last_hybrid_log_l_ = log_l;
-        out.log_probs = blend_log_probs(log_g, log_l, hybrid_blend_logit_);
+        double blend_logit = hybrid_blend_logit_;
+        if (cfg_.use_ood_branching && out.epistemic_var > 0.0) {
+            constexpr double kOodThreshold = 0.05;
+            if (out.epistemic_var > kOodThreshold) {
+                const double ood_scale = std::min(2.0, out.epistemic_var / kOodThreshold);
+                blend_logit -= 0.35 * ood_scale;
+            }
+        }
+        out.log_probs = blend_log_probs(log_g, log_l, blend_logit);
     } else if (uses_lstm(mode) && lstm_ && !gria_) {
         out.log_probs = lstm_->forward(static_cast<int>(token_id));
     } else {
@@ -554,8 +600,21 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         return m;
     }
     if (gria_ && !gria_in_.empty()) {
-        const GRIALowRankGrad grad =
+        GRIALowRankGrad grad =
             gria_->cross_entropy_gradients(gria_in_.data(), static_cast<int>(next_token_id));
+        if (uses_profile_guided_backprop(cfg_) && train_profiler_) {
+            update_profiler_from_lm_token(*train_profiler_, last_e_, pred.log_probs, pred.epistemic_var,
+                                          pred.aleatoric_var);
+            const auto pg =
+                cypha::intelligence::compute_profile_guided_loss_from_profiler(*train_profiler_);
+            m.profile_guided_loss = pg.total;
+            m.loss += pg.total;
+            const auto pg_grad =
+                cypha::intelligence::compute_profile_guided_loss_grad_from_profiler(*train_profiler_);
+            for (auto& d_alpha : grad.d_alpha) {
+                d_alpha += pg_grad.d_alpha_uniform;
+            }
+        }
         gria_->update_weights(grad, cfg_.gria_lr);
         gria_->update_alpha(grad, cfg_.gria_lr);
         gria_->update_bias(grad, cfg_.gria_lr);
@@ -564,8 +623,7 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
             view_emb_->update(current_view_slot_, grad_v.data() + cfg_.field_dim, cfg_.view_id_dim,
                               cfg_.view_lr);
         }
-    }
-    if (cfg_.profile_guided_loss && train_profiler_) {
+    } else if (uses_profile_guided_backprop(cfg_) && train_profiler_) {
         update_profiler_from_lm_token(*train_profiler_, last_e_, pred.log_probs, pred.epistemic_var,
                                       pred.aleatoric_var);
         const auto pg =

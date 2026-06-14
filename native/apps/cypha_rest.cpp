@@ -900,7 +900,9 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
     obs.calibration = std::clamp(conf, 0.0, 1.0);
     obs.r_eu = is_ood ? 0.35 : 0.65;
     obs.alpha = std::clamp(r_eff > 0.0 ? r_eff / (r_eff + 1.0) : 0.5, 0.0, 1.0);
+    obs.tau = self_corrected ? 0.62 : 0.48;
     g_intelligence_profiler.update(obs);
+    g_causal_graph_monitor.observe_profile(obs);
   }
 
   nlohmann::json out;

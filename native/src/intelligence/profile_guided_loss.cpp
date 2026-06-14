@@ -37,4 +37,18 @@ ProfileGuidedLossTerms compute_profile_guided_loss_from_profiler(
   return compute_profile_guided_loss(mean_observation(profiler), cfg);
 }
 
+ProfileGuidedLossGrad compute_profile_guided_loss_grad(const ProfileObservation& obs,
+                                                       const ProfileGuidedLossConfig& cfg) {
+  ProfileGuidedLossGrad out;
+  const double dr = obs.r_eu - cfg.target_r_eu;
+  const double dt = obs.tau - cfg.target_tau;
+  out.d_alpha_uniform = 2.0 * cfg.lambda_r_eu * dr * 0.15 + 2.0 * cfg.lambda_tau * dt * 0.08;
+  return out;
+}
+
+ProfileGuidedLossGrad compute_profile_guided_loss_grad_from_profiler(
+    const IntelligenceProfiler& profiler, const ProfileGuidedLossConfig& cfg) {
+  return compute_profile_guided_loss_grad(mean_observation(profiler), cfg);
+}
+
 }  // namespace cypha::intelligence

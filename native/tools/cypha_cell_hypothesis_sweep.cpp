@@ -78,7 +78,7 @@ bool should_run(const cypha::cyphalm::CellVariantSpec& v, const Args& args) {
         return v.id == args.cell_variant;
     }
     if (args.tier2_smoke) {
-        return v.id == "H06" || v.id == "H08";
+        return v.id == "H06" || v.id == "H08" || v.id == "H14";
     }
     if (args.tier2_only) {
         return v.tier == 2;

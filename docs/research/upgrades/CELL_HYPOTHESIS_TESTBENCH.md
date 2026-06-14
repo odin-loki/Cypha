@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch  
 **Purpose:** Systematic sweep of **28 recurrent cell hypotheses** to find a primitive that synergises with CyphaDIF/CyphaLM better than standard LSTM.  
-**Status:** partial — Tier 1+2 smoke (native harness: `cypha_cell_hypothesis_sweep`, `cyphalm_bench_native --cell-variant`); H02 EML + H06–H14 proxy modes wired; Tier-2 CTest `native_cell_hypothesis_tier2_smoke`  
+**Status:** partial — Tier 1+2 smoke (native harness: `cypha_cell_hypothesis_sweep`, `cyphalm_bench_native --cell-variant`); H02 EML, H05 profile-guided backprop, H06–H08/H14 native cell paths; Tier-2 CTest `native_cell_hypothesis_tier2_smoke` (H06/H08/H14)  
 **Baseline:** `hybrid_gria_lstm` D17 BPC **2.873** @ 300k
 
 Alternative to Option B in [RPSM_COMBINED_SPEC.md](RPSM_COMBINED_SPEC.md); may inform RPSM level-0 design if a Cypha-derived cell wins.
@@ -105,7 +105,15 @@ Run **H04** (Pure CyphaDIF LM) in parallel with Tier 1 — high variance.
 
 All variants implement `BaseCyphaCell.forward(x, h_prev, c_prev) → (h, c)` wrapped by a common `CyphaLM` training loop (embed → cell → linear head). H04 runs standalone via native CyphaDIF path.
 
-Native implementation: `native/tools/cypha_cell_hypothesis_sweep.cpp` and `cyphalm_bench_native --cell-variant H06` map each variant to a bench mode plus `CyphaLMConfig` flags (`apply_cell_variant` in `cypha_cell_hypothesis.cpp`). Tier 2 smoke: `ctest -R native_cell_hypothesis_tier2_smoke` (H06 + H08, `n_train=200`).
+Native implementation: `native/tools/cypha_cell_hypothesis_sweep.cpp` and `cyphalm_bench_native --cell-variant H06` map each variant to a bench mode plus `CyphaLMConfig` flags (`apply_cell_variant` in `cypha_cell_hypothesis.cpp`). Tier 2 smoke: `ctest -R native_cell_hypothesis_tier2_smoke` (H06 + H08 + H14, `n_train=200`).
+
+| Variant | Native behavior |
+|---------|-----------------|
+| H05 | `profile_guided_loss` penalty + GRIA α backprop nudge |
+| H06 | `NigStateCell` one-step NIG update on field |
+| H07 | SSM differential gate: θ₀·last_ctx + Δh blend |
+| H08 | `ContextBank::tiered_linear_attention` (short/mid/long) |
+| H14 | OOD hybrid blend shift toward LSTM when epistemic variance high |
 
 ---
 

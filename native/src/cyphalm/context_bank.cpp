@@ -69,4 +69,46 @@ std::vector<double> ContextBank::linear_attention(const std::vector<double>& que
   return out;
 }
 
+std::vector<double> ContextBank::tiered_linear_attention(const std::vector<double>& query) const {
+  if (static_cast<int>(query.size()) != embed_dim_) {
+    throw std::invalid_argument("ContextBank::tiered_linear_attention: query dimension mismatch");
+  }
+  if (count_ == 0) {
+    return std::vector<double>(static_cast<std::size_t>(embed_dim_), 0.0);
+  }
+
+  const int short_span = std::max(1, capacity_ / 8);
+  const int mid_span = std::max(short_span, capacity_ / 4);
+
+  std::vector<double> out(static_cast<std::size_t>(embed_dim_), 0.0);
+  double weight_sum = 0.0;
+
+  for (int i = 0; i < count_; ++i) {
+    const int age = count_ - 1 - i;
+    double tier_w = 0.25;
+    if (age < short_span) {
+      tier_w = 1.0;
+    } else if (age < mid_span) {
+      tier_w = 0.5;
+    }
+    const int slot = (head_ - count_ + i + capacity_) % capacity_;
+    const std::size_t off = static_cast<std::size_t>(slot * embed_dim_);
+    double w = tier_w;
+    for (int d = 0; d < embed_dim_; ++d) {
+      w += query[static_cast<std::size_t>(d)] * storage_[off + static_cast<std::size_t>(d)];
+    }
+    weight_sum += w;
+    for (int d = 0; d < embed_dim_; ++d) {
+      out[static_cast<std::size_t>(d)] += w * storage_[off + static_cast<std::size_t>(d)];
+    }
+  }
+
+  if (std::abs(weight_sum) > 1e-12) {
+    for (double& v : out) {
+      v /= weight_sum;
+    }
+  }
+  return out;
+}
+
 }  // namespace cypha::cyphalm

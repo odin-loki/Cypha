@@ -220,7 +220,7 @@ nlohmann::json intelligence_profile_report_json(const IntelligenceProfiler& prof
   root["landscape_kappa"] = landscape;
 
   CausalGraphMonitor causal;
-  causal.observe_profile(obs);
+  causal.run_simulation_trajectory(4, obs);
   root["causal_graph"] = causal.to_json();
   return root;
 }

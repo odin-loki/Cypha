@@ -23,4 +23,10 @@ int bench_scale(int default_value, int fast_value = -1);
 /// True when env var is ``1`` / ``true`` / ``yes`` (case-insensitive prefix).
 bool bench_env_truthy(const char* key);
 
+/// True when ``CYPHA_BENCH_OVERNIGHT=1`` (D17 300k token budget; implies full corpus).
+bool bench_overnight_enabled();
+
+/// Default train token budget for overnight / full-corpus D17 (``CYPHA_BENCH_FULL_N_TRAIN`` override).
+int bench_full_n_train();
+
 }  // namespace cypha::bench

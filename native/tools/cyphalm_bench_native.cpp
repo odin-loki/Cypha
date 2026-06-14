@@ -1,5 +1,6 @@
 // cyphalm_bench_native — char-LM BPC benchmark CLI for native CyphaLM tiers.
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -12,6 +13,7 @@
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
+#include "cypha/bench/bench_paths.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
 
@@ -27,6 +29,9 @@ struct Args {
     bool analysis = false;
     int analysis_steps = 256;
     bool intelligence_profile = false;
+    bool overnight = false;
+    bool n_train_explicit = false;
+    bool n_eval_explicit = false;
 };
 
 void usage() {
@@ -34,6 +39,7 @@ void usage() {
         << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral}\n"
         << "       --cell-variant {B0..H22}  (overrides --mode)\n"
         << "       --profile {d17,d04} --n-train N --n-eval M --threads T\n"
+        << "       --overnight  (D17: full WikiText + 300k train budget; or CYPHA_BENCH_OVERNIGHT=1)\n"
         << "       --analysis [--analysis-steps N]\n"
         << "       --intelligence-profile\n";
 }
@@ -49,9 +55,14 @@ Args parse_args(int argc, char** argv) {
         if (k == "--mode") a.mode = need("--mode");
         else if (k == "--cell-variant") a.cell_variant = need("--cell-variant");
         else if (k == "--profile") a.profile = need("--profile");
-        else if (k == "--n-train") a.n_train = std::stoi(need("--n-train"));
-        else if (k == "--n-eval") a.n_eval = std::stoi(need("--n-eval"));
-        else if (k == "--threads") a.threads = std::stoi(need("--threads"));
+        else if (k == "--n-train") {
+            a.n_train = std::stoi(need("--n-train"));
+            a.n_train_explicit = true;
+        } else if (k == "--n-eval") {
+            a.n_eval = std::stoi(need("--n-eval"));
+            a.n_eval_explicit = true;
+        } else if (k == "--threads") a.threads = std::stoi(need("--threads"));
+        else if (k == "--overnight") a.overnight = true;
         else if (k == "--analysis") a.analysis = true;
         else if (k == "--analysis-steps") a.analysis_steps = std::stoi(need("--analysis-steps"));
         else if (k == "--intelligence-profile") a.intelligence_profile = true;
@@ -69,7 +80,19 @@ Args parse_args(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     try {
-        const Args args = parse_args(argc, argv);
+        Args args = parse_args(argc, argv);
+        const bool overnight = args.overnight || cypha::bench::bench_overnight_enabled();
+        if (overnight) {
+            if (!args.n_train_explicit) args.n_train = cypha::bench::bench_full_n_train();
+            if (!args.n_eval_explicit) args.n_eval = 2000;
+#if defined(_WIN32)
+            _putenv_s("CYPHA_BENCH_OVERNIGHT", "1");
+            _putenv_s("CYPHA_BENCH_FULL_CORPUS", "1");
+#else
+            setenv("CYPHA_BENCH_OVERNIGHT", "1", 1);
+            setenv("CYPHA_BENCH_FULL_CORPUS", "1", 1);
+#endif
+        }
         cypha::cyphalm::set_thread_count(args.threads);
 
         cypha::cyphalm::CyphaLMConfig cfg;
@@ -89,10 +112,16 @@ int main(int argc, char** argv) {
 
         cypha::cyphalm::LMCorpus corpus;
         bool synthetic = false;
+        const bool full_corpus = (args.profile == "d17") &&
+                                 (cypha::cyphalm::bench_full_corpus_enabled() || overnight);
         try {
-            corpus = cypha::cyphalm::load_bench_corpus(args.profile, 10'000'000, cfg.vocab_size,
+            const int max_chars = full_corpus ? 0 : 10'000'000;
+            corpus = cypha::cyphalm::load_bench_corpus(args.profile, max_chars, cfg.vocab_size,
                                                        cfg.bpe_merges_path, cfg.bpe_vocab_path);
         } catch (const std::exception&) {
+            if (!cypha::bench::bench_env_truthy("CYPHA_BENCH_FAST")) {
+                throw;
+            }
             synthetic = true;
             corpus.profile = args.profile;
             corpus.source = "synthetic";
@@ -128,6 +157,8 @@ int main(int argc, char** argv) {
             {"threads", cypha::cyphalm::effective_thread_count()},
             {"corpus", corpus.source},
             {"synthetic", synthetic},
+            {"full_corpus", full_corpus},
+            {"overnight", overnight},
             {"bpc", bpc},
             {"vocab_size", cfg.vocab_size},
         };

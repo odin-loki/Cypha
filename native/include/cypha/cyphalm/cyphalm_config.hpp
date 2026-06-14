@@ -111,6 +111,12 @@ struct CyphaLMConfig {
     bool use_eml_activation = false;
     /// H07: differential gate blends prior SSM context with delta-h.
     bool use_differential_gate = false;
+    /// H06: NIG sufficient statistics as recurrent cell state on field path.
+    bool use_nig_state_cell = false;
+    /// H08: tiered short/mid/long context bank attention.
+    bool use_tiered_context = false;
+    /// H14: branch hybrid routing when DIF epistemic variance is high (OOD).
+    bool use_ood_branching = false;
 
     /// Option B RPSM sequence layer (level-0 CyphaDIF LLR scaffold).
     bool use_rpsm_layer = false;

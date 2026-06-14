@@ -20,6 +20,7 @@
 #include "cypha/cyphalm/hebbian_stack.hpp"
 #include "cypha/cyphalm/hierarchical_ssm.hpp"
 #include "cypha/cyphalm/ngram_fusion.hpp"
+#include "cypha/cyphalm/nig_state_cell.hpp"
 #include "cypha/cyphalm/selective_ssm.hpp"
 #include "cypha/cyphalm/view_embedding.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
@@ -118,6 +119,7 @@ class CyphaLMModel {
     std::unique_ptr<SelectiveSSM> selective_;
     std::unique_ptr<CompressiveMemory> memory_;
     std::unique_ptr<ContextBank> context_bank_;
+    std::unique_ptr<NigStateCell> nig_state_cell_;
     std::unique_ptr<NgramFusion> ngram_fusion_;
     std::unique_ptr<cypha::som::GNGExpertManager> gng_;
     std::unique_ptr<cypha::som::GRIAController> gria_controller_;
@@ -143,6 +145,7 @@ class CyphaLMModel {
     std::vector<double> token_counts_;
     std::vector<double> last_e_;
     std::vector<double> last_ctx_;
+    std::vector<double> last_ssm_h_fast_;
     std::vector<std::vector<double>> bptt_buffer_;
     int gria_d_in_ = 160;
     int last_gng_bmu_ = 0;

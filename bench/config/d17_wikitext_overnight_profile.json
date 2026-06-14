@@ -1,0 +1,35 @@
+{
+  "profile_id": "d17_wikitext_overnight",
+  "description": "D17 WikiText-2 overnight run — official train/valid @ 300k token budget",
+  "runner": "cyphalm_bench_native",
+  "env": {
+    "CYPHA_BENCH_FULL_CORPUS": "1",
+    "CYPHA_BENCH_OVERNIGHT": "1",
+    "CYPHA_BENCH_FULL_N_TRAIN": "300000"
+  },
+  "defaults": {
+    "profile": "d17",
+    "mode": "hybrid",
+    "n_train": 300000,
+    "n_eval": 2000,
+    "threads": 1,
+    "overnight": true
+  },
+  "fast_smoke": {
+    "description": "CTest native_d17_wikitext_overnight_smoke — wiring check, not 300k runtime",
+    "n_train": 500,
+    "n_eval": 64,
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_OVERNIGHT": "1",
+      "CYPHA_BENCH_FAST": "1"
+    }
+  },
+  "notes": [
+    "CLI: cyphalm_bench_native --profile d17 --mode hybrid --overnight",
+    "Or: cypha_bench_run --domain 17 --overnight",
+    "Env-only: CYPHA_BENCH_OVERNIGHT=1 (implies CYPHA_BENCH_FULL_CORPUS=1)",
+    "Requires bench/data/wikitext2/wikitext-2/wiki.{train,valid}.tokens for real corpus",
+    "Phase 1c beat-bigram target: hybrid_gria_lstm @ 300k on official valid"
+  ]
+}

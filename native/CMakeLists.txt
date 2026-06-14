@@ -199,6 +199,16 @@ target_link_libraries(create_model_smoke PRIVATE cypha_core)
 add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
 target_link_libraries(cypha_federated_merge PRIVATE cypha_core)
 
+add_executable(cypha_federated_coordinator tools/cypha_federated_coordinator.cpp)
+target_include_directories(cypha_federated_coordinator PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+target_link_libraries(cypha_federated_coordinator PRIVATE cypha_core)
+if(WIN32)
+  target_link_libraries(cypha_federated_coordinator PRIVATE ws2_32)
+endif()
+
+add_executable(ewc_d16b_smoke tools/ewc_d16b_smoke.cpp)
+target_link_libraries(ewc_d16b_smoke PRIVATE cypha_core)
+
 add_executable(cypha_onnx_export tools/cypha_onnx_export.cpp)
 target_link_libraries(cypha_onnx_export PRIVATE cypha_core)
 
@@ -240,10 +250,12 @@ set(
   cuda_smoke
   create_model_smoke
   cypha_federated_merge
+  cypha_federated_coordinator
   cypha_onnx_export
   cypha_export_gguf
   intelligence_profiler_smoke
   ewc_smoke
+  ewc_d16b_smoke
   curriculum_smoke
   intelligence_profiler_papers
   cyphalm_bench_native
@@ -328,6 +340,7 @@ if(MSVC)
   target_compile_options(cypha_parity_run PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE /W4 /permissive-)
+  target_compile_options(rpsm_hierarchy_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
   target_compile_options(score_batch_parity PRIVATE /W4 /permissive-)
   target_compile_options(kernel_llr_parity PRIVATE /W4 /permissive-)
@@ -394,6 +407,7 @@ else()
   target_compile_options(cypha_parity_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(rpsm_hierarchy_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(score_batch_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -469,6 +483,10 @@ add_test(
 add_test(
   NAME native_rpsm_sequence_smoke
   COMMAND "$<TARGET_FILE:rpsm_sequence_smoke>"
+)
+add_test(
+  NAME native_rpsm_hierarchy_smoke
+  COMMAND "$<TARGET_FILE:rpsm_hierarchy_smoke>"
 )
 add_test(
   NAME native_fixture_gen_list
@@ -710,6 +728,9 @@ add_test(
     --config "${CMAKE_SOURCE_DIR}/../bench/config/cyphalm_hybrid_lstm_tune_smoke.json"
     --max-cells 2
 )
+set_tests_properties(native_tune_run_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
 
 add_test(
   NAME native_create_model
@@ -759,6 +780,11 @@ add_test(
 )
 
 add_test(
+  NAME native_ewc_d16b_smoke
+  COMMAND "$<TARGET_FILE:ewc_d16b_smoke>"
+)
+
+add_test(
   NAME native_curriculum_smoke
   COMMAND "$<TARGET_FILE:curriculum_smoke>"
 )
@@ -777,6 +803,9 @@ add_test(
   COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
     --profile d17 --mode hybrid --n-train 120 --n-eval 40 --intelligence-profile
 )
+set_tests_properties(native_cyphalm_bench_intelligence_profile PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
 
 add_test(
   NAME native_d17_wikitext_smoke
@@ -785,6 +814,15 @@ add_test(
 )
 set_tests_properties(native_d17_wikitext_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1;CYPHA_BENCH_FAST=1"
+)
+
+add_test(
+  NAME native_d17_wikitext_overnight_smoke
+  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
+    --profile d17 --mode hybrid --overnight --n-train 500 --n-eval 64
+)
+set_tests_properties(native_d17_wikitext_overnight_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1;CYPHA_BENCH_OVERNIGHT=1;CYPHA_BENCH_FAST=1"
 )
 
 add_test(
@@ -797,9 +835,21 @@ add_test(
 )
 
 add_test(
+  NAME native_federated_coordinator_smoke
+  COMMAND "$<TARGET_FILE:cypha_federated_coordinator>"
+    --watch-dir "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge"
+    --min-workers 2
+    --once
+    --out "${CMAKE_CURRENT_BINARY_DIR}/federated_coordinator_smoke.json"
+)
+
+add_test(
   NAME native_cyphalm_bench_rpsm_smoke
   COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
     --profile d17 --mode rpsm --n-train 100 --n-eval 32
+)
+set_tests_properties(native_cyphalm_bench_rpsm_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
 )
 
 add_test(

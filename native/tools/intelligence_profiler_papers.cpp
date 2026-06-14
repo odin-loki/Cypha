@@ -195,12 +195,15 @@ void test_paper_v_causal_graph() {
   graph.record_simulation(0.2);
   graph.simulation_step(0.85, 0.55, 0.3);
   graph.simulation_step(0.7, 0.4, 0.25);
+  cypha::intelligence::ProfileObservation traj_obs = b;
+  traj_obs.r_eu = 0.72;
+  graph.run_simulation_trajectory(3, traj_obs, 0.25);
   const auto j = graph.to_json();
   assert(j.contains("edges"));
-  assert(j.at("step_count").get<int>() >= 2);
+  assert(j.at("step_count").get<int>() >= 5);
   const auto traj = graph.trajectory_json();
   assert(traj.at("trajectory").is_array());
-  assert(traj.at("trajectory").size() >= 2);
+  assert(traj.at("trajectory").size() >= 5);
   assert(j.at("soft_world").at("maturation_level").get<double>() >= 0.0);
 }
 

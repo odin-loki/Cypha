@@ -32,7 +32,10 @@ constexpr double kMinVar = 1e-4;
 
 bool use_rpsm_llr_from_env() {
   const char* v = std::getenv("CYPHA_USE_RPSM_LLR");
-  return v != nullptr && v[0] != '\0' && v[0] != '0';
+  if (v == nullptr || v[0] == '\0') {
+    return true;
+  }
+  return v[0] != '0';
 }
 
 double as_double(const CNode& n) {

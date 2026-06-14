@@ -45,5 +45,13 @@
     "domain": "d17",
     "corpus": "wikitext2",
     "notes": "Official train/valid split; see bench/config/d17_wikitext_full_profile.json"
+  },
+  "llm_d17_overnight": {
+    "path": "profiles/cyphalm_d17_wikitext.json",
+    "config": "d17_wikitext_overnight_profile.json",
+    "env": "CYPHA_BENCH_OVERNIGHT=1;CYPHA_BENCH_FULL_CORPUS=1",
+    "domain": "d17",
+    "corpus": "wikitext2",
+    "notes": "300k token budget overnight run; see bench/config/d17_wikitext_overnight_profile.json"
   }
 }

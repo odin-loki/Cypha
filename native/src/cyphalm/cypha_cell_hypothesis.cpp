@@ -15,16 +15,16 @@ const std::vector<CellVariantSpec>& variant_table() {
         {"H02", "EML activation cell", 1, true, "char_lstm", "Sheffer eml() replaces sigmoid/tanh"},
         {"H03", "CausalField cell", 1, true, "ssm", "SSM/SGEMV recurrence primitive"},
         {"H04", "Pure CyphaDIF LM", 1, true, "ssm_gria", "DIF + GRIA without LSTM"},
-        {"H05", "alpha-fitness aux loss", 1, true, "hybrid", "hybrid + profile-guided loss tag"},
-        {"H06", "NIG-state cell", 2, true, "hybrid", "DIF NIG expert state one-step update"},
-        {"H07", "Differential gate", 2, true, "hybrid", "theta0 + delta-h recurrent gate proxy"},
-        {"H08", "TieredContext cell", 2, true, "context_bank", "short/mid/long context bank"},
+        {"H05", "alpha-fitness aux loss", 1, true, "hybrid", "hybrid + profile-guided loss in train_step backprop"},
+        {"H06", "NIG-state cell", 2, true, "hybrid", "NigStateCell Bayesian update on field path"},
+        {"H07", "Differential gate", 2, true, "hybrid", "SSM ctx = theta0 + delta-h blend (last_ctx + dh)"},
+        {"H08", "TieredContext cell", 2, true, "context_bank", "short/mid/long tiered context bank attention"},
         {"H09", "GRIA-gated mixture", 2, true, "hybrid", "ordered vs chaotic GRIA blend"},
         {"H10", "NMP regularised", 2, true, "hybrid", "spec_alpha -> 0.485"},
         {"H11", "Reversible cell", 2, true, "ssm", "RevNet-style SSM proxy (single-scale)"},
         {"H12", "MDL forget", 2, true, "hybrid", "norm projection via compressive memory"},
         {"H13", "Priority replay recurrence", 2, true, "hybrid", "compressive memory + replay slots"},
-        {"H14", "OOD-branching cell", 2, true, "hybrid", "NIG expert branching on hybrid path"},
+        {"H14", "OOD-branching cell", 2, true, "hybrid", "hybrid blend shifts to LSTM when DIF epistemic high"},
         {"H15", "AXIOM-evolved cell", 3, true, "hybrid", "proxy — hybrid stack placeholder"},
         {"H16", "SR on trained LSTM gates", 3, true, "hybrid", "proxy — SR placeholder on hybrid"},
         {"H17", "Sheffer-only cell", 3, true, "char_lstm", "extreme H02 — EML-only activations"},
@@ -64,6 +64,10 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
 
     cfg.use_eml_activation = false;
     cfg.use_differential_gate = false;
+    cfg.use_nig_state_cell = false;
+    cfg.use_tiered_context = false;
+    cfg.use_ood_branching = false;
+    cfg.profile_guided_loss = false;
 
     if (id == "B0") {
         cfg.ngram_context = 4;
@@ -75,15 +79,18 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
         cfg.use_eml_activation = true;
     } else if (id == "H05") {
         cfg.alpha_learnable = true;
+        cfg.profile_guided_loss = true;
     } else if (id == "H06") {
         cfg.n_experts = 4;
         cfg.online = true;
+        cfg.use_nig_state_cell = true;
     } else if (id == "H07") {
         cfg.use_differential_gate = true;
         cfg.bptt_steps = 4;
         cfg.train_ssm = true;
     } else if (id == "H08") {
         cfg.use_context_bank = true;
+        cfg.use_tiered_context = true;
         cfg.context_bank_slots = 32;
     } else if (id == "H09") {
         cfg.hybrid_blend_logit = 0.5;
@@ -104,6 +111,7 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     } else if (id == "H14") {
         cfg.n_experts = 8;
         cfg.online = true;
+        cfg.use_ood_branching = true;
     } else if (id == "H19") {
         cfg.seed += 991;
     }

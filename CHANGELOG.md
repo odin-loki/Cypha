@@ -16,7 +16,7 @@ milestone or a significant self-contained change.
 - **CUDA CI jobs:** **`windows_cuda_msvc`** and **`linux_cuda`** removed from `.github/workflows/ci.yml`; CUDA remains an optional local build.
 
 ### Changed
-- **CI gate:** native-only — **80 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
+- **CI gate:** native-only — **84 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`).
 - **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` default:** **1** (was 16) — CUDA used for all batch sizes n≥1 when a GPU is available.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
@@ -35,6 +35,10 @@ milestone or a significant self-contained change.
 - **RPSM Option B scaffold:** `rpsm_sequence_layer`, CyphaLM `--mode rpsm`, profile-guided loss in `train_step`; CTests `native_rpsm_sequence_smoke`, `native_cyphalm_bench_rpsm_smoke`.
 - **Cell hypothesis H02–H14:** `cypha_cell_hypothesis` + EML activation in char-LSTM; all 28 variants runnable; Tier-2 smoke (`native_cell_hypothesis_tier2_smoke`).
 - **WikiText D17 full profile:** `d17_wikitext_full_profile.json` + `CYPHA_BENCH_FULL_CORPUS`; CTest `native_d17_wikitext_smoke`.
+- **WikiText D17 overnight profile:** `d17_wikitext_overnight_profile.json`, `--overnight` / `CYPHA_BENCH_OVERNIGHT=1` on `cyphalm_bench_native` and `cypha_bench_run`; CTest `native_d17_wikitext_overnight_smoke`.
+- **Qt CyphaLM epistemic halt:** generate tab checkbox mirrors REST `/generate` `epistemic_halt` (Paper IV r_eu gate).
+- **Intelligence Stats Phase 5:** RPSM hierarchy (`W_up`/`W_down`, global memory, Izaac init); RPSM batched LLR default path; NIG-state cell H06 + OOD branching H14; profile-guided loss in CyphaLM train-step backprop; EWC D16B smoke + REST `ewc_lambda`; federated coordinator CLI; Paper V multi-step simulation loop.
+- **CTests +4:** `native_rpsm_hierarchy_smoke`, `native_ewc_d16b_smoke`, `native_federated_coordinator_smoke`, `native_d17_wikitext_overnight_smoke` (**84 total**).
 - **Preprocessor:** auto `auto_rff_gamma_cv` when tabular dim ≤30 and `rff_gamma` left at default 1.0.
 - **Release notes script:** `scripts/create_release_notes.ps1`; release workflow hook.
 - **Web UI tabs:** CyphaLM generate, Experiments (`/models`), Intelligence report (`/intelligence/report`).
