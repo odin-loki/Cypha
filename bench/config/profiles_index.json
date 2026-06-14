@@ -119,5 +119,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d29",
     "notes": "Release readiness validation gate; see bench/config/d29_release_readiness_profile.json"
+  },
+  "artifact_hygiene_d30": {
+    "path": "everyday_profile.json",
+    "config": "d30_artifact_hygiene_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d30",
+    "notes": "Artifact path hygiene validation; see bench/config/d30_artifact_hygiene_profile.json"
   }
 }

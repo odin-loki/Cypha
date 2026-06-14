@@ -3227,6 +3227,35 @@ std::string validate_overnight_complete_lock(const Json& lock) {
     return "overnight_complete_validated";
 }
 
+std::string normalize_path_slashes(std::string path) {
+    std::replace(path.begin(), path.end(), '\\', '/');
+    return path;
+}
+
+bool is_legacy_repo_root_results_artifact_path(const std::string& path) {
+    if (path.empty()) {
+        return false;
+    }
+    const std::string norm = normalize_path_slashes(path);
+    if (norm.find("bench/results") != std::string::npos) {
+        return false;
+    }
+    return norm.size() >= 8 && norm.compare(norm.size() - 8, 8, "/results") == 0;
+}
+
+bool lock_references_legacy_summary_csv(const Json& lock) {
+    const std::string dump = normalize_path_slashes(lock.dump());
+    const std::string needle = "/results/summary.csv";
+    std::size_t pos = 0;
+    while ((pos = dump.find(needle, pos)) != std::string::npos) {
+        if (pos < 6 || dump.compare(pos - 6, 6, "bench/") != 0) {
+            return true;
+        }
+        pos += needle.size();
+    }
+    return false;
+}
+
 Json probe_bench_corpus_profile(const std::string& profile) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(profile, cfg);
@@ -3540,6 +3569,72 @@ Json run_d29_release_readiness_validation() {
     return experiments;
 }
 
+Json run_d30_artifact_hygiene_validation() {
+    const fs::path lock_path = fs::current_path() / "d30_artifact_hygiene_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path gitkeep_path = repo / "bench" / "results" / ".gitkeep";
+    const bool gitkeep_present = fs::is_regular_file(gitkeep_path);
+    if (!gitkeep_present) {
+        throw std::runtime_error("bench/results/.gitkeep missing");
+    }
+
+    std::vector<std::string> warnings;
+    std::string cell_sweep_artifact_path;
+    bool legacy_artifact = false;
+
+    if (lock.contains("cell_sweep_results") && lock["cell_sweep_results"].is_object()) {
+        const Json& cell_sweep = lock["cell_sweep_results"];
+        if (cell_sweep.contains("artifact_path") && !cell_sweep["artifact_path"].is_null()) {
+            cell_sweep_artifact_path = cell_sweep["artifact_path"].get<std::string>();
+            if (!cell_sweep_artifact_path.empty()) {
+                if (is_legacy_repo_root_results_artifact_path(cell_sweep_artifact_path)) {
+                    legacy_artifact = true;
+                    warnings.push_back(
+                        "cell_sweep_results.artifact_path uses repo-root /results; prefer "
+                        "bench/results or null/empty");
+                }
+            }
+        }
+    }
+
+    const bool legacy_summary_csv = lock_references_legacy_summary_csv(lock);
+    if (legacy_summary_csv) {
+        warnings.push_back(
+            "lock references repo-root results/summary.csv (informational; migrate to "
+            "bench/results)");
+    }
+
+    const std::string validation_status =
+        legacy_artifact ? "legacy_artifact_path" : "hygiene_ok";
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"cell_sweep_results", lock.contains("cell_sweep_results") ? lock["cell_sweep_results"] : Json{}},
+        {"cell_sweep_artifact_path",
+         cell_sweep_artifact_path.empty() ? Json(nullptr) : Json(cell_sweep_artifact_path)},
+        {"bench_results_gitkeep", gitkeep_present},
+        {"legacy_summary_csv_referenced", legacy_summary_csv},
+        {"validation_status", validation_status},
+        {"warnings", warnings},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d30_artifact_hygiene_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d30_artifact_hygiene_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3572,6 +3667,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d27", "cypha_bench.domains.d27_production_lock_validation", run_d27_production_lock_validation},
         {"d28", "cypha_bench.domains.d28_overnight_complete_validation", run_d28_overnight_complete_validation},
         {"d29", "cypha_bench.domains.d29_release_readiness_validation", run_d29_release_readiness_validation},
+        {"d30", "cypha_bench.domains.d30_artifact_hygiene_validation", run_d30_artifact_hygiene_validation},
     };
 }
 

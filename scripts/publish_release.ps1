@@ -1,5 +1,6 @@
 # Publish a GitHub Release for a tag using maintainer notes from create_release_notes.ps1.
-# Phase 14/15 (v2.3.14+): d28 overnight completion, finalize_production_overnight.ps1, 106 CTests; Phase 15 prep d29 release gate.
+# Phase 15 (v2.3.15, shipped): d29 release readiness, commit_production_lock.ps1, watch_production_overnight.ps1, 107 CTests.
+# Phase 14 (v2.3.14): d28 overnight completion, finalize_production_overnight.ps1, 106 CTests.
 # Phase 13 (v2.3.13): production overnight tier (300k), run_production_overnight.ps1, d27, validate -Production, 104 CTests.
 # Phase 12 (v2.3.12): medium overnight tier, d26, validate_baseline_lock.ps1, publish -DryRun, corpus_and_d25 CI job.
 # Phase 11 (v2.3.11): WikiText download, gutenberg fallback, corpus_smoke, d25, 101 CTests.
@@ -10,7 +11,7 @@
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -DryRun          # notes to stdout + temp file; no gh
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -NotesOnly       # alias for -DryRun
 param(
-  [string]$Tag = "v2.3.15",
+  [string]$Tag = "v2.3.16",
   [switch]$Draft,
   [Alias("NotesOnly")]
   [switch]$DryRun

@@ -293,6 +293,19 @@ void write_lock_file(const fs::path& path, const Json& j) {
     out << j.dump(2) << '\n';
 }
 
+std::string extract_json_blob(const std::string& mixed) {
+    const std::size_t last_brace = mixed.rfind("\n{");
+    if (last_brace != std::string::npos) {
+        return mixed.substr(last_brace + 1);
+    }
+    const std::size_t start = mixed.find('{');
+    const std::size_t end = mixed.rfind('}');
+    if (start != std::string::npos && end != std::string::npos && end >= start) {
+        return mixed.substr(start, end - start + 1);
+    }
+    return mixed;
+}
+
 double extract_bpc_bench(const Json& j) {
     if (!j.contains("bpc") || j["bpc"].is_null()) {
         throw std::runtime_error("bench JSON missing bpc");
@@ -531,7 +544,7 @@ RunOutcome execute_run_kind(const Args& args, RunKind kind, const fs::path& exe_
     }
 
     RunOutcome outcome;
-    outcome.bench_json = Json::parse(proc.stdout_text);
+    outcome.bench_json = Json::parse(extract_json_blob(proc.stdout_text));
     outcome.report = {{"run", run_kind_name(kind)},
                         {"n_train", step.n_train},
                         {"n_eval", step.n_eval},

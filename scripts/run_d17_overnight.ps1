@@ -26,6 +26,12 @@ if ($tierCount -gt 1) {
 }
 
 $root = Split-Path $PSScriptRoot -Parent
+$resultsDir = Join-Path $root "bench/results"
+New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logPath = Join-Path $resultsDir "overnight_d17_$timestamp.log"
+Write-Host "Log: $logPath" -ForegroundColor Yellow
+
 $exe = Join-Path $root (Join-Path $BuildDir "cyphalm_bench_native.exe")
 if (-not (Test-Path $exe)) {
     $exe = Join-Path $root (Join-Path $BuildDir "cyphalm_bench_native")
@@ -54,10 +60,12 @@ try {
             throw "missing cypha_cell_hypothesis_sweep in $BuildDir"
         }
         Write-Host "== cell hypothesis overnight sweep (28 variants, n_train=$NTrain) ==" -ForegroundColor Cyan
-        & $sweepExe --overnight-sweep --profile $Profile --n-train $NTrain --n-eval $NEval --threads $Threads
+        & $sweepExe --overnight-sweep --profile $Profile --n-train $NTrain --n-eval $NEval --threads $Threads 2>&1 |
+            Tee-Object -FilePath $logPath -Append
     } else {
         Write-Host "== D17 overnight bench (profile=$Profile mode=$Mode n_train=$NTrain) ==" -ForegroundColor Cyan
-        & $exe --profile $Profile --mode $Mode --overnight --n-train $NTrain --n-eval $NEval --threads $Threads
+        & $exe --profile $Profile --mode $Mode --overnight --n-train $NTrain --n-eval $NEval --threads $Threads 2>&1 |
+            Tee-Object -FilePath $logPath -Append
     }
     if ($LASTEXITCODE -ne 0) {
         throw "overnight run failed exit=$LASTEXITCODE"
@@ -66,4 +74,4 @@ try {
     Pop-Location
 }
 
-Write-Host "Done. Results under bench/results or repo results/ (cell sweep)." -ForegroundColor Green
+Write-Host "Done. Results under bench/results (cell sweep: bench/results/cell_sweep). Log: $logPath" -ForegroundColor Green

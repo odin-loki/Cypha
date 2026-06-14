@@ -8,9 +8,12 @@
 #   CYPHA_VALIDATE_RELEASE_READINESS=1
 #       After baseline lock validate, run cypha_bench_run --domain-tag d29 when its profile exists;
 #       gracefully skipped when d29 is not built/merged yet.
+#   CYPHA_VALIDATE_ARTIFACT_HYGIENE=1
+#       After baseline lock validate, run cypha_bench_run --domain-tag d30 when its profile exists;
+#       gracefully skipped when d30 is not built/merged yet.
 #   CYPHA_STRICT_TEST_COUNT=1
 #       Fail the ctest_native step when the parsed native_ test count does not match the expected
-#       gate (107 with d29 merged, else 106). Default: warn in step detail only.
+#       gate (108 with d30 merged, else 107). Default: warn in step detail only.
 #
 # Usage:
 #   pwsh -File scripts/cypha_native_validate_all.ps1
@@ -53,8 +56,8 @@ function Test-DomainTagExists {
 }
 
 function Get-ExpectedNativeTestCount {
-    if (Test-DomainTagExists -Tag "d29") { return 107 }
-    return 106
+    if (Test-DomainTagExists -Tag "d30") { return 108 }
+    return 107
 }
 
 function Get-CtestPassedCount {
@@ -410,6 +413,30 @@ if ($env:CYPHA_VALIDATE_RELEASE_READINESS -eq "1") {
     } else {
         Write-Host "== cypha_bench_run --domain-tag d29 (skipped - profile not present) ==" -ForegroundColor DarkGray
         Step-Result "release_readiness_d29" $true "skipped (d29 profile not present)"
+    }
+}
+
+# --- d30 artifact hygiene (optional) ---
+if ($env:CYPHA_VALIDATE_ARTIFACT_HYGIENE -eq "1") {
+    Write-Host ""
+    if (Test-DomainTagExists -Tag "d30") {
+        Write-Host "== cypha_bench_run --domain-tag d30 (CYPHA_VALIDATE_ARTIFACT_HYGIENE) ==" -ForegroundColor Yellow
+        $benchExe = BinPath "cypha_bench_run"
+        if (-not (Test-Path $benchExe)) {
+            Step-Result "artifact_hygiene_d30" $false "missing $benchExe"
+        } else {
+            Push-Location $root
+            try {
+                & $benchExe --domain-tag d30
+                $d30Code = $LASTEXITCODE
+            } finally {
+                Pop-Location
+            }
+            Step-Result "artifact_hygiene_d30" ($d30Code -eq 0) $(if ($d30Code -eq 0) { "d30 ok" } else { "exit $d30Code" })
+        }
+    } else {
+        Write-Host "== cypha_bench_run --domain-tag d30 (skipped - profile not present) ==" -ForegroundColor DarkGray
+        Step-Result "artifact_hygiene_d30" $true "skipped (d30 profile not present)"
     }
 }
 

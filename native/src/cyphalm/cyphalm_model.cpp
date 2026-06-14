@@ -21,6 +21,7 @@
 #include "cypha/cyphalm/sr_gate_laws.hpp"
 #include "cypha/cyphalm/cyphalm_views.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
+#include "cypha/bench/bench_paths.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/profile_guided_loss.hpp"
 
@@ -1184,13 +1185,22 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
     }
     const int ep_count = std::max(1, epochs);
     const double base_gria_lr = cfg_.gria_lr;
+    const bool overnight_progress = cypha::bench::bench_overnight_enabled();
+    const int steps_per_epoch = std::min(n_steps, static_cast<int>(ids.size()) - 1);
+    const int total_steps = steps_per_epoch * ep_count;
+    int step_total = 0;
     for (int ep = 0; ep < ep_count; ++ep) {
         cfg_.gria_lr = base_gria_lr * std::pow(cfg_.gria_lr_decay, static_cast<double>(ep));
         reset_context();
-        const int steps = std::min(n_steps, static_cast<int>(ids.size()) - 1);
+        const int steps = steps_per_epoch;
         for (int i = 0; i < steps; ++i) {
             train_step(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]),
                        static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i + 1)]));
+            ++step_total;
+            if (overnight_progress && step_total % 10000 == 0) {
+                std::cerr << "[cyphalm] overnight train progress: step " << step_total << "/"
+                          << total_steps << " epoch " << (ep + 1) << "/" << ep_count << std::endl;
+            }
         }
     }
     cfg_.gria_lr = base_gria_lr;

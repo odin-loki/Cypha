@@ -1,0 +1,32 @@
+{
+  "profile_id": "d30_artifact_hygiene_profile",
+  "description": "D30 artifact path hygiene validation — lock schema + bench/results path gate + .gitkeep presence",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 30,
+    "domain_tag": "d30"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d30_artifact_hygiene_smoke — artifact path hygiene gate (hygiene_ok or legacy_artifact_path)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 30",
+    "Or: cypha_bench_run --domain-tag d30",
+    "Validates bench/BASELINE_LOCK.json schema and bench/results/.gitkeep presence",
+    "Rejects repo-root /results artifact paths on cell_sweep_results (legacy passes with warning)",
+    "Prefers cell_sweep_results.artifact_path containing bench/results or null/empty",
+    "Reports repo-root results/summary.csv references in lock (informational only)",
+    "When legacy repo-root /results path: validation_status=legacy_artifact_path (smoke passes)",
+    "When paths clean or null: validation_status=hygiene_ok",
+    "Phase 16: artifact path hygiene validation gate"
+  ]
+}

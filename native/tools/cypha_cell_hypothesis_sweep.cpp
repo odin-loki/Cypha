@@ -295,10 +295,22 @@ int main(int argc, char** argv) {
         nlohmann::json skipped = nlohmann::json::array();
         double b2_bpc = std::numeric_limits<double>::quiet_NaN();
 
+        int variant_total = 0;
+        for (const auto& v : cypha::cyphalm::all_cell_variants()) {
+            if (should_run(v, args)) {
+                ++variant_total;
+            }
+        }
+        int variant_index = 0;
         for (const auto& v : cypha::cyphalm::all_cell_variants()) {
             if (!should_run(v, args)) {
                 skipped.push_back({{"id", v.id}, {"name", v.name}, {"tier", v.tier}});
                 continue;
+            }
+            if (args.overnight_sweep && !args.overnight_sweep_smoke) {
+                ++variant_index;
+                std::cerr << "[cell_sweep] variant " << v.id << " (" << variant_index << "/"
+                          << variant_total << ")" << std::endl;
             }
             auto row = run_variant(v, args);
             if (v.id == "B2") {

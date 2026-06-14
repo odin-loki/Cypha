@@ -29,7 +29,8 @@
 # validate_baseline_lock.ps1 -Production; 104 CTests (production tier not run in CI).
 # Phase 14 (v2.3.14, shipped): status validator fix (medium_smoke/production);
 # d28 overnight completion; finalize_production_overnight.ps1; 106 CTests.
-# Phase 15 (v2.3.15, prep): d29 release readiness gate; CYPHA_VALIDATE_* env vars.
+# Phase 15 (v2.3.15, shipped): d29 release readiness gate; commit_production_lock.ps1;
+# watch_production_overnight.ps1; CYPHA_VALIDATE_* env vars; 107 CTests.
 
 name: Release
 
@@ -340,3 +341,11 @@ jobs:
             - **Post-overnight finalize:** `pwsh -File scripts/finalize_production_overnight.ps1` — **`validate_baseline_lock.ps1 -Production`**, d27 + d28 bench domains, lock section summary; chained from **`run_production_overnight.ps1`** on success.
             - **Optional local gate:** set **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** on **`cypha_native_validate_all.ps1`** to run d28 after baseline lock validate.
             - **CI gate:** **106 CTests** (`ctest -R native_`); new smokes **`native_d28_overnight_complete_smoke`**, **`native_baseline_lock_validate_production_status`**. Full 300k production overnight remains maintainer workflow.
+
+            ### Phase 15 maintainer notes (v2.3.15, shipped)
+
+            - **Release readiness validation:** `cypha_bench_run --domain-tag d29` — schema + production tier (d27) + overnight-complete (d28) + release script presence; profile [`bench/config/d29_release_readiness_profile.json`](bench/config/d29_release_readiness_profile.json); report [`bench/report/tables/d29_release_readiness_validation.json`](bench/report/tables/d29_release_readiness_validation.json). **`pending_release`** when gates pending (smoke pass); **`release_ready`** when both production and overnight-complete validated @ 300k.
+            - **Lock commit helper:** `pwsh -File scripts/commit_production_lock.ps1` — chains **`finalize_production_overnight.ps1`**, then stage/commit **`bench/BASELINE_LOCK.json`** when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** to commit; never pushes).
+            - **Production overnight watcher:** `pwsh -File scripts/watch_production_overnight.ps1` — log growth, process PIDs, lock section summary; `-Once` snapshot; stall warn after 30m without log growth.
+            - **Local validate env vars:** set **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`**, **`CYPHA_VALIDATE_RELEASE_READINESS=1`**, **`CYPHA_VALIDATE_PRODUCTION=1`**, or **`CYPHA_STRICT_TEST_COUNT=1`** on **`cypha_native_validate_all.ps1`** for optional d28/d29/production gates and strict **107** CTest count check.
+            - **CI gate:** **107 CTests** (`ctest -R native_`); new smoke **`native_d29_release_readiness_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.

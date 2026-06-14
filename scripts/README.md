@@ -106,6 +106,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate **107 CTests*
 | **`finalize_production_overnight.ps1`** | Post-overnight gate: `validate_baseline_lock.ps1 -Production`, d27 + d28 bench domains, lock section summary | manual (chained from `run_production_overnight.ps1`) |
 | Status validator fix | `validate_baseline_lock.ps1` / `baseline_lock_validate` accept `medium_smoke` and `production` | `native_baseline_lock_validate_production_status` |
 | Cell sweep artifact path | Default overnight output `bench/results/cell_sweep` via `bench_paths::results_dir()` | manual |
+| `migrate_legacy_results.ps1` | Copy repo-root `results/` (`summary.csv`, `variant_*.json`, `manifest.json`) into `bench/results/cell_sweep/`; merge without overwriting newer dest files; `-DryRun` plan only; `-RemoveLegacy` deletes legacy `results/` after copy when destination has all files | disk |
 
 ## Release readiness + production lock commit (Phase 15)
 
@@ -113,7 +114,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate **107 CTests*
 |--------------|---------|-------|
 | **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d28`** after baseline lock validate | manual |
 | **`CYPHA_VALIDATE_RELEASE_READINESS=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d29`** when profile exists; graceful skip if not merged | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**107** with d29, else **106**); default warns only | manual |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**108** with d30, else **107**); default warns only | manual |
 | **`commit_production_lock.ps1`** | Run **`finalize_production_overnight.ps1`**, then preview/commit lock when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** required to commit; never pushes) | manual |
 | **`cypha_bench_run --domain-tag d29`** | Release-readiness validation (when shipped); profile `bench/config/d29_release_readiness_profile.json` | `native_d29_release_readiness_smoke` *(when merged)* |
 
@@ -122,6 +123,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate **107 CTests*
 $env:CYPHA_VALIDATE_PRODUCTION = "1"
 $env:CYPHA_VALIDATE_OVERNIGHT_COMPLETE = "1"
 $env:CYPHA_VALIDATE_RELEASE_READINESS = "1"
+$env:CYPHA_VALIDATE_ARTIFACT_HYGIENE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 
 # Preview production lock commit (diff + message; no git write)
@@ -131,7 +133,28 @@ pwsh -File scripts\commit_production_lock.ps1 -DryRun
 pwsh -File scripts\commit_production_lock.ps1 -Force
 ```
 
-Blocking gate **107 CTests** when d29 ships (+1 `native_d29_release_readiness_smoke`); **106** until then.
+Blocking gate **107 CTests** when d29 ships (+1 `native_d29_release_readiness_smoke`); **108** when d30 ships (+1 `native_d30_artifact_hygiene_smoke`).
+
+## Artifact path hygiene + legacy migration (Phase 16)
+
+| Script / env | Purpose | CTest |
+|--------------|---------|-------|
+| **`migrate_legacy_results.ps1`** | Merge repo-root **`results/`** cell-sweep artifacts into **`bench/results/cell_sweep/`**; never overwrites newer destination files; **`-DryRun`** prints plan only; **`-RemoveLegacy`** deletes legacy **`results/`** after successful copy when destination has all migrated files | manual |
+| **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d30`** when profile exists; graceful skip if not merged | manual |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**108** with d30, else **107**); default warns only | manual |
+| **`cypha_bench_run --domain-tag d30`** | Artifact path hygiene validation (when shipped); profile `bench/config/d30_artifact_hygiene_profile.json` | `native_d30_artifact_hygiene_smoke` *(when merged)* |
+
+```powershell
+# Preview legacy results/ migration (no writes)
+pwsh -File scripts\migrate_legacy_results.ps1 -DryRun
+
+# Migrate legacy cell-sweep artifacts, then remove repo-root results/
+pwsh -File scripts\migrate_legacy_results.ps1 -RemoveLegacy
+
+# Optional extended validation (after -SkipBuild rebuild)
+$env:CYPHA_VALIDATE_ARTIFACT_HYGIENE = "1"
+pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
+```
 
 ## Kernel LLR / XOR profiling
 

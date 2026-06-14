@@ -1,6 +1,8 @@
 # Phase 13/14: production overnight tier — 300k train / 2000 eval, real WikiText/gutenberg.
 # Chains D17 + d21 + cell sweep + baseline-lock refresh with status=production.
 # On success, runs finalize_production_overnight.ps1 (validate -Production + d27/d28 bench).
+# Stderr progress from native tools ([cyphalm] train steps, [cell_sweep] variant starts) is
+# captured in the transcript log alongside Write-Host output — tail the log to confirm liveness.
 # Usage:
 #   pwsh -File scripts/run_production_overnight.ps1
 #   pwsh -File scripts/run_production_overnight.ps1 -BuildDir native/build -SkipCellSweep
@@ -21,6 +23,7 @@ $logPath = Join-Path $resultsDir "production_overnight_$timestamp.log"
 Write-Host "== Cypha production overnight (300k train / 2000 eval) ==" -ForegroundColor Cyan
 Write-Host "Log: $logPath" -ForegroundColor Yellow
 Write-Host "ETA: plan 8-24 hours wall-clock (D17 + D21 + 28-variant cell sweep @ 300k, single thread). Run overnight and tail this log." -ForegroundColor Yellow
+Write-Host "Progress: stderr lines [cyphalm] and [cell_sweep] appear in the transcript log every ~10k train steps / per variant." -ForegroundColor Yellow
 
 $allScript = Join-Path $PSScriptRoot "run_overnight_all.ps1"
 $invokeArgs = @{

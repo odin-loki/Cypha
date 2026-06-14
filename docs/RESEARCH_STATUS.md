@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **106 CTests** *(Phase 14 shipped)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **107 CTests** *(Phase 15 shipped)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **106 CTests** gate CI *(Phase 14 shipped)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **107 CTests** gate CI *(Phase 15 shipped)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -269,14 +269,20 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Cell sweep artifact path:** default overnight output **`bench/results/cell_sweep`** via **`bench_paths::results_dir()`**; wired through **`cypha_baseline_lock --output-dir`**, **`update_baseline_lock.ps1`**, and **`run_overnight_all.ps1`**.
 - **Bench d28:** unified overnight completion validation — **`run_d28_overnight_complete_validation`** checks **`overnight_results`**, **`rpsm_results`**, and **`cell_sweep_results`** share **`n_train`** / **`n_eval`**; **`pending_overnight_complete`** when **< 300k** (smoke pass); full gate when **≥ 300k**; profile **`bench/config/d28_overnight_complete_profile.json`**. CTest **`native_d28_overnight_complete_smoke`**.
 - **Post-overnight finalize:** **`scripts/finalize_production_overnight.ps1`** — **`validate_baseline_lock.ps1 -Production`**, d27 + d28 bench domains, lock section summary; chained from **`run_production_overnight.ps1`** on success.
-- **CI:** blocking gate **106 CTests** (+2 Phase 14 smokes). Full 300k production overnight remains maintainer workflow; **300k overnight run in progress**.
+- **CI:** blocking gate **106 CTests** (+2 Phase 14 smokes). Full 300k production overnight remains maintainer workflow.
 
-### Phase 15 — release readiness gate (v2.3.15) — prep
+### Phase 15 — release readiness gate (v2.3.15) — shipped
 
-- **Bench d29:** release readiness validation — schema + production tier + overnight-complete cross-check + maintainer script presence (`scripts/finalize_production_overnight.ps1`, `scripts/run_production_overnight.ps1`); profile **`bench/config/d29_release_readiness_profile.json`** (TBD). CTest **`native_d29_release_readiness_smoke`** (TBD).
-- **Local validate env vars:** **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** on **`cypha_native_validate_all.ps1`** runs d28 after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** runs d29 when profile present (graceful skip if not built yet).
-- **Lock commit helper:** **`scripts/commit_production_lock.ps1`** — post-finalize helper to stage/commit updated **`bench/BASELINE_LOCK.json`** after 300k overnight (maintainer-only).
-- **CI:** blocking gate **106 CTests** today; **107** when d29 smoke merges (+1).
+- **Bench d29:** release readiness validation — schema + production tier (d27) + overnight-complete (d28) + release script presence (`scripts/finalize_production_overnight.ps1`, `scripts/run_production_overnight.ps1`, `bench/results/.gitkeep`); optional **`baseline_lock_validate --production`**; profile **`bench/config/d29_release_readiness_profile.json`**. CTest **`native_d29_release_readiness_smoke`**.
+- **Local validate env vars:** **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** on **`cypha_native_validate_all.ps1`** runs d28 after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** runs d29; **`CYPHA_VALIDATE_PRODUCTION=1`** runs production lock validate; **`CYPHA_STRICT_TEST_COUNT=1`** fails when native_ count ≠ **107**.
+- **Lock commit helper:** **`scripts/commit_production_lock.ps1`** — chains **`finalize_production_overnight.ps1`**, then stage/commit updated **`bench/BASELINE_LOCK.json`** after 300k overnight (`-DryRun` / `-Force`; maintainer-only; never pushes).
+- **Production overnight watcher:** **`scripts/watch_production_overnight.ps1`** — log byte growth, last line, process PIDs, lock section summary; stall warn after 30m without log growth.
+- **CI:** blocking gate **107 CTests** (+1 d29 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+
+### Phase 16 — post-release lock gate (v2.3.16) — prep
+
+- **Bench d30:** post-release lock validation — cross-check committed **`bench/BASELINE_LOCK.json`** @ 300k against d29 release-ready criteria *(TBD)*; profile **`bench/config/d30_post_release_lock_profile.json`** (TBD). CTest **`native_d30_post_release_lock_smoke`** (TBD).
+- **CI:** blocking gate **107 CTests** today; **108** when d30 smoke merges (+1).
 
 ---
 

@@ -9,11 +9,16 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.16" = @(
+    "Intelligence Stats **Phase 16** (prep): bench **d30** post-release lock validation — committed ``bench/BASELINE_LOCK.json`` @ 300k cross-check against d29 release-ready criteria; profile ``bench/config/d30_post_release_lock_profile.json`` *(TBD)*; CTest ``native_d30_post_release_lock_smoke`` *(TBD)*.",
+    "CI gate **107 CTests** today (108 when d30 smoke merges); full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.15" = @(
-    "Intelligence Stats **Phase 15**: bench **d29** release readiness validation — schema + production tier + overnight-complete cross-check + maintainer script presence; profile ``bench/config/d29_release_readiness_profile.json``; CTest ``native_d29_release_readiness_smoke``.",
-    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** — runs **`cypha_bench_run --domain-tag d28`** after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** — runs d29 when profile present (graceful skip if not built yet).",
-    "``scripts/commit_production_lock.ps1`` — post-finalize helper to stage/commit updated ``bench/BASELINE_LOCK.json`` after 300k overnight (maintainer-only).",
-    "CI gate **106 CTests** (107 when d29 smoke merged); full 300k production overnight **not** run in CI (maintainer workflow only)."
+    "Intelligence Stats **Phase 15** (shipped): bench **d29** release readiness validation — schema + production tier (d27) + overnight-complete (d28) + release script presence; profile ``bench/config/d29_release_readiness_profile.json``; CTest ``native_d29_release_readiness_smoke``.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** — runs **`cypha_bench_run --domain-tag d28`** after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** — runs d29; **`CYPHA_VALIDATE_PRODUCTION=1`** — production lock validate; **`CYPHA_STRICT_TEST_COUNT=1`** — fail when count ≠ **107**.",
+    "``scripts/commit_production_lock.ps1`` — chains ``finalize_production_overnight.ps1``, then stage/commit updated ``bench/BASELINE_LOCK.json`` after 300k overnight (``-DryRun`` / ``-Force``; maintainer-only; never pushes).",
+    "``scripts/watch_production_overnight.ps1`` — stall-aware production overnight log/process watcher.",
+    "CI gate **107 CTests**; full 300k production overnight **not** run in CI (maintainer workflow; **in progress**); ``gh auth login`` required for GitHub Release publish."
   )
   "2.3.14" = @(
     "Intelligence Stats **Phase 14**: **baseline lock status validator fix** — ``validate_baseline_lock.ps1`` and ``baseline_lock_validate`` accept ``medium_smoke`` and ``production`` (fixes production/medium overnight lock validation).",
