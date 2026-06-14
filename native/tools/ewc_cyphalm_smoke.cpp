@@ -124,6 +124,24 @@ int main() {
   assert(ewc_embed_head.embed < baseline_embed_head.embed);
   assert(ewc_embed_head.lm_w < baseline_embed_head.lm_w);
 
+  cypha::cyphalm::CyphaLMConfig hybrid_cfg;
+  hybrid_cfg.vocab_size = 32;
+  hybrid_cfg.lstm_hidden = 16;
+  hybrid_cfg.field_dim = 32;
+  hybrid_cfg.d_embed = 16;
+  hybrid_cfg.d_state = 16;
+  hybrid_cfg.ssm_layers = 1;
+  hybrid_cfg.context_mode = cypha::cyphalm::ContextMode::Hybrid;
+  hybrid_cfg.ewc_lambda = 0.5;
+  hybrid_cfg.seed = 17;
+  cypha::cyphalm::CyphaLMModel hybrid_model(hybrid_cfg);
+  train_sequence(hybrid_model, warm, 4);
+  hybrid_model.ewc_snapshot();
+  assert(hybrid_model.hybrid_ewc_regularizer().covers_gria_alpha());
+  assert(hybrid_model.hybrid_ewc_regularizer().covers_ssm_alpha());
+  const auto hybrid_m = hybrid_model.train_step(7, 8);
+  assert(hybrid_m.ewc_penalty > 0.0);
+
   std::printf(
       "ewc_cyphalm_smoke: baseline_penalty=%.6e ewc_penalty=%.6e "
       "embed_drift=%.6e->%.6e lm_w_drift=%.6e->%.6e PASS\n",

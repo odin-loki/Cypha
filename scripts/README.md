@@ -8,6 +8,7 @@ Native build, validation, and release helpers. Narrative “when to run what” 
 |--------|---------|----------------|
 | `cypha_native_validate_all.ps1` | Windows full gate: rebuild + CTest (`-R native_`) + bench fig01–09 + tune dry-run + REST smoke (`-SkipBuild` after rebuild) | console |
 | `ci_native_linux.sh` | Linux/WSL mirror of CI **`build_and_test`**: cmake + `ctest -R native_` | console |
+| `ci_federated_tls_linux.sh` | Linux/WSL mirror of optional CI **`federated_tls`**: `-DCYPHA_ENABLE_OPENSSL=ON` + `ctest -R native_federated_tls` | console |
 | `cyphalm_native_validate.ps1` | CyphaLM native CTest subset + checkpoint smoke | console |
 | `wsl_verify.sh` | WSL: native build + CTest + optional REST smoke (`RUN_NATIVE=1`) | console |
 | `build_native_wsl.ps1` | WSL CMake build in `native/build-wsl` + optional ctest | console |

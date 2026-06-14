@@ -295,6 +295,12 @@ nlohmann::json CellAISSM::get_state() const {
   nlohmann::json j;
   j["h"] = h_;
   j["s"] = s_;
+  j["alpha"] = alpha_;
+  j["W_fast"] = W_fast_;
+  j["W_slow"] = W_slow_;
+  j["W_hebb"] = W_hebb_;
+  j["lam_fast_scale"] = lam_fast_scale_;
+  j["lam_slow_scale"] = lam_slow_scale_;
   j["d_input"] = cfg_.d_input;
   j["d_state"] = cfg_.d_state;
   j["tau_fast"] = cfg_.tau_fast;
@@ -310,6 +316,24 @@ void CellAISSM::set_state(const nlohmann::json& state) {
   }
   if (state.contains("s")) {
     s_ = state.at("s").get<std::vector<std::vector<double>>>();
+  }
+  if (state.contains("alpha")) {
+    alpha_ = state.at("alpha").get<std::vector<double>>();
+  }
+  if (state.contains("W_fast")) {
+    W_fast_ = state.at("W_fast").get<std::vector<std::vector<double>>>();
+  }
+  if (state.contains("W_slow")) {
+    W_slow_ = state.at("W_slow").get<std::vector<std::vector<double>>>();
+  }
+  if (state.contains("W_hebb")) {
+    W_hebb_ = state.at("W_hebb").get<std::vector<std::vector<double>>>();
+  }
+  if (state.contains("lam_fast_scale")) {
+    lam_fast_scale_ = state.at("lam_fast_scale").get<double>();
+  }
+  if (state.contains("lam_slow_scale")) {
+    lam_slow_scale_ = state.at("lam_slow_scale").get<double>();
   }
   if (static_cast<int>(h_.size()) != cfg_.n_layers || static_cast<int>(s_.size()) != cfg_.n_layers) {
     throw std::invalid_argument("CellAISSM::set_state: layer count mismatch");

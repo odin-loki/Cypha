@@ -1,0 +1,26 @@
+{
+  "profile_id": "d22_intelligence_cross_profile",
+  "description": "D22 cross-domain intelligence — d18 profile + d16 EWC probe + d20 cell sweep smoke in one JSON report",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_PROFILE_PATH": "bench/config/everyday_profile.json",
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 22,
+    "domain_tag": "d22"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d22_cross_smoke — wiring check for cross-domain intelligence bench",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    }
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 22",
+    "Or: cypha_bench_run --domain-tag d22",
+    "Runs d18 intelligence profile + d16 EWC forgetting probe + d20 cell overnight sweep smoke",
+    "Combined report: bench/report/tables/d22_intelligence_cross_profile.json",
+    "Phase 8: cross-domain intelligence validation gate"
+  ]
+}

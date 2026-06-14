@@ -3,7 +3,7 @@
 #   pwsh -File scripts/publish_release.ps1
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.7 -Draft
 param(
-  [string]$Tag = "v2.3.7",
+  [string]$Tag = "v2.3.8",
   [switch]$Draft
 )
 
@@ -24,8 +24,15 @@ try {
   $ErrorActionPreference = $prevEap
   if (-not $authOk) {
     Write-Warning "gh is not authenticated. Run 'gh auth login' then retry."
+    Write-Warning "After auth: verify with 'gh auth status' and list existing releases via 'gh release list'."
     Write-Warning ($auth | Out-String)
     exit 2
+  }
+
+  Write-Host "Authenticated. Existing releases:" -ForegroundColor Cyan
+  gh release list --limit 5
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "gh release list failed (non-fatal); continuing with release create."
   }
 
   $notesScript = Join-Path $PSScriptRoot "create_release_notes.ps1"

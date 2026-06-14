@@ -12,6 +12,7 @@
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -125,6 +126,9 @@ int main(int argc, char** argv) {
     fs::create_directories(cert_dir);
     const fs::path cert_path = cert_dir / "cert.pem";
     const fs::path key_path = cert_dir / "key.pem";
+    std::error_code rm_ec;
+    fs::remove(cert_path, rm_ec);
+    fs::remove(key_path, rm_ec);
     if (!generate_self_signed_cert(cert_path, key_path)) {
       std::printf("SKIP: openssl req failed to generate self-signed cert\n");
       return 2;

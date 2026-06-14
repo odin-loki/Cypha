@@ -8,10 +8,10 @@ namespace {
 
 const std::vector<CellVariantSpec>& variant_table() {
     static const std::vector<CellVariantSpec> kVariants = {
-        {"B0", "4-gram", 0, true, "ssm_gria", "n-gram proxy via GRIA ngram path"},
+        {"B0", "4-gram", 0, true, "ssm_gria", "SSM+GRIA with ngram_context embed fusion and count prior"},
         {"B1", "char-LSTM", 0, true, "char_lstm", "locked baseline"},
         {"B2", "hybrid_gria_lstm", 0, true, "hybrid", "locked baseline"},
-        {"H01", "alpha-gate cell", 1, true, "hybrid", "GRIA alpha as forget gate proxy"},
+        {"H01", "alpha-gate cell", 1, true, "hybrid", "GRIA mean α scales LSTM forget gate in hybrid forward"},
         {"H02", "EML activation cell", 1, true, "char_lstm", "Sheffer eml() replaces sigmoid/tanh"},
         {"H03", "CausalField cell", 1, true, "ssm", "SSM/SGEMV recurrence primitive"},
         {"H04", "Pure CyphaDIF LM", 1, true, "ssm_gria", "DIF + GRIA without LSTM"},
@@ -85,6 +85,7 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     } else if (id == "H01") {
         cfg.alpha_init = 0.5;
         cfg.alpha_learnable = true;
+        cfg.use_alpha_forget_gate = true;
     } else if (id == "H02" || id == "H17") {
         cfg.use_eml_activation = true;
     } else if (id == "H05") {

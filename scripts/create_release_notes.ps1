@@ -9,11 +9,17 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.8" = @(
+    "Intelligence Stats **Phase 8**: bench domain **d22** cross-profile (d18 intelligence + d16 EWC probe + d20 cell sweep smoke).",
+    "``bench/config/d22_intelligence_cross_profile.json`` + combined report ``bench/report/tables/d22_intelligence_cross_profile.json``.",
+    "CTest ``native_d22_cross_smoke`` via ``cypha_bench_run --domain-tag d22``.",
+    "CI gate **94 CTests**; release notes v2.3.8 template."
+  )
   "2.3.7" = @(
     "Intelligence Stats **Phase 7**: baseline lock ``bench/BASELINE_LOCK.json`` (D17 hybrid **2.873 BPC** @ 300k).",
     "``scripts/publish_release.ps1`` - local ``gh release create`` wrapper (graceful fail if ``gh`` not authed).",
     "CTest ``native_overnight_mini_smoke`` (800-train overnight wiring, ``CYPHA_BENCH_FAST=1``).",
-    "CI gate **90 CTests**; release workflow Phase 7 asset notes."
+    "CI gate **93 CTests**; optional federated TLS job; release workflow Phase 7 asset notes."
   )
   "2.3.6" = @(
     "Cell hypothesis **28-variant overnight sweep**: ``cypha_cell_hypothesis_sweep --overnight-sweep`` writes ``results/variant_*.json`` + ``summary.csv``.",

@@ -220,6 +220,9 @@ target_link_libraries(ewc_d16b_smoke PRIVATE cypha_core)
 add_executable(ewc_cyphalm_smoke tools/ewc_cyphalm_smoke.cpp)
 target_link_libraries(ewc_cyphalm_smoke PRIVATE cypha_lm_native)
 
+add_executable(ewc_hybrid_smoke tools/ewc_hybrid_smoke.cpp)
+target_link_libraries(ewc_hybrid_smoke PRIVATE cypha_lm_native)
+
 add_executable(native_sr_gate_laws_smoke tools/native_sr_gate_laws_smoke.cpp)
 target_link_libraries(native_sr_gate_laws_smoke PRIVATE cypha_lm_native)
 
@@ -276,6 +279,10 @@ add_executable(cypha_cell_hypothesis_sweep tools/cypha_cell_hypothesis_sweep.cpp
 target_link_libraries(cypha_cell_hypothesis_sweep PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cypha_cell_hypothesis_sweep)
 
+add_executable(cypha_baseline_lock tools/cypha_baseline_lock.cpp)
+target_link_libraries(cypha_baseline_lock PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(cypha_baseline_lock)
+
 set(
   _cypha_mingw_exe_targets
   ${CYPHA_PARITY_EXE_TARGETS}
@@ -300,6 +307,7 @@ set(
   ewc_smoke
   ewc_d16b_smoke
   ewc_cyphalm_smoke
+  ewc_hybrid_smoke
   native_sr_gate_laws_smoke
   federated_worker_smoke
   federated_tls_smoke
@@ -308,6 +316,7 @@ set(
   cyphalm_bench_native
   cyphalm_ssm_diagnose
   cypha_cell_hypothesis_sweep
+  cypha_baseline_lock
 )
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
   cypha_mingw_apply_exe_link_options("${_cypha_t}")
@@ -843,6 +852,11 @@ add_test(
 )
 
 add_test(
+  NAME native_ewc_hybrid_smoke
+  COMMAND "$<TARGET_FILE:ewc_hybrid_smoke>"
+)
+
+add_test(
   NAME native_sr_gate_laws_smoke
   COMMAND "$<TARGET_FILE:native_sr_gate_laws_smoke>"
 )
@@ -897,6 +911,23 @@ set_tests_properties(native_overnight_mini_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
 )
 
+configure_file(
+  "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+  "${CMAKE_CURRENT_BINARY_DIR}/baseline_lock_smoke.json"
+  COPYONLY
+)
+
+add_test(
+  NAME native_baseline_lock_smoke
+  COMMAND "$<TARGET_FILE:cypha_baseline_lock>"
+    --run d17 --fast --n-train 200
+    --lock-file "${CMAKE_CURRENT_BINARY_DIR}/baseline_lock_smoke.json"
+    --exe-dir "${CMAKE_CURRENT_BINARY_DIR}"
+)
+set_tests_properties(native_baseline_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
+
 add_test(
   NAME native_federated_merge_smoke
   COMMAND "$<TARGET_FILE:cypha_federated_merge>"
@@ -948,6 +979,14 @@ add_test(
 )
 set_tests_properties(native_d21_rpsm_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1;CYPHA_BENCH_OVERNIGHT=1;CYPHA_BENCH_FAST=1"
+)
+
+add_test(
+  NAME native_d22_cross_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d22
+)
+set_tests_properties(native_d22_cross_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
 )
 
 add_test(

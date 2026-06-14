@@ -188,6 +188,13 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     nlohmann::json meta;
     meta["config"] = config_to_json(cfg);
     meta["token_counts"] = vec_to_json(model.token_counts_);
+    if (!model.ngram_count_table_.empty()) {
+        nlohmann::json ngram_counts = nlohmann::json::object();
+        for (const auto& [key, counts] : model.ngram_count_table_) {
+            ngram_counts[std::to_string(key)] = vec_to_json(counts);
+        }
+        meta["ngram_count_table"] = std::move(ngram_counts);
+    }
     meta["hybrid_blend_logit"] = model.hybrid_blend_logit_;
 
     if (model.gria_) {
@@ -268,6 +275,12 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
 
     if (meta.contains("token_counts")) {
         model.token_counts_ = json_to_vec(meta.at("token_counts"));
+    }
+    if (meta.contains("ngram_count_table")) {
+        model.ngram_count_table_.clear();
+        for (const auto& [key_str, counts_json] : meta.at("ngram_count_table").items()) {
+            model.ngram_count_table_[std::stoull(key_str)] = json_to_vec(counts_json);
+        }
     }
     if (meta.contains("hybrid_blend_logit")) {
         model.hybrid_blend_logit_ = meta.at("hybrid_blend_logit").get<double>();

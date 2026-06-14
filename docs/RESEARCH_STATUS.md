@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **93 CTests**
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **96 CTests**
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **93 CTests** gate CI |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **96 CTests** gate CI |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -206,6 +206,21 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Post-upgrade (40k):** D17 **4.154** BPC (beats trigram **4.398** by −0.24; +0.24 vs bigram). D04 **4.122** BPC (beats trigram **4.522** by −0.40; +0.19 vs bigram). `gria_ngram` ablation wins over `full` on both domains.
 - **Paper figures generated** (`paper/figures/`); paper draft `paper/CyphaLM_paper.md` still has `{{EXP0N_*}}` placeholders.
 - **Report:** `bench/BASELINE_REPORT.md` (regenerated via `cypha_bench_run --report-only`)
+
+### Phase 7 — Intelligence Stats baseline lock (2026-06-14)
+
+- **`bench/BASELINE_LOCK.json`:** D17 hybrid **2.873 BPC** @ 300k reference pin; **`scripts/publish_release.ps1`** for local `gh release create`.
+- **Overnight wiring:** CTest **`native_overnight_mini_smoke`** (800-train `--overnight` check).
+- **Cell / RPSM / EWC:** H16 SR gate laws; bench **d21** RPSM end-to-end; CyphaLM EWC embed + lm_head Fisher; optional federated TLS smoke.
+- **CI gate:** **93 CTests** (`ctest -R native_`); optional **`federated_tls`** job (`continue-on-error`).
+
+### Phase 8 — Hybrid EWC + cross-profile intelligence (2026-06-14)
+
+- **Hybrid EWC:** `HybridEwcRegularizer` snapshots SSM multiscale **α** + GRIA per-token **α** with diagonal Fisher penalty; B0 **`ngram_count_table`** online prior when `ngram_context > 0`; H01 **`use_alpha_forget_gate`** scales char-LSTM forget gate by mean GRIA α. CTest **`native_ewc_hybrid_smoke`**.
+- **Baseline lock tooling:** **`cypha_baseline_lock`** merges D17 / d21 / cell-sweep BPC into **`bench/BASELINE_LOCK.json`**; **`scripts/update_baseline_lock.ps1`** wrapper; CTest **`native_baseline_lock_smoke`**.
+- **Cross-domain bench d22:** `d22_intelligence_cross_profile.json` — d18 intelligence report + d16 EWC probe + d20 cell sweep smoke; CTest **`native_d22_cross_smoke`**.
+- **Checkpoint fix:** CyphaLM save/load persists **`ngram_count_table`** in checkpoint JSON (B0 count path).
+- **CI:** optional **`federated_tls`** job (**`-DCYPHA_ENABLE_OPENSSL=ON`**, **`native_federated_tls_smoke`**); local mirror **`scripts/ci_federated_tls_linux.sh`**. **96 CTests** in blocking gate.
 
 ---
 

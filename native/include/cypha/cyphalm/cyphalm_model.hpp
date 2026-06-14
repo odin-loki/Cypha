@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -120,8 +121,11 @@ class CyphaLMModel {
     /// Current EWC quadratic penalty over snapshotted LSTM weights (0 without snapshot/LSTM).
     double ewc_penalty() const;
 
-    CyphaLMEwcRegularizer& ewc_regularizer() { return ewc_; }
-    const CyphaLMEwcRegularizer& ewc_regularizer() const { return ewc_; }
+    CyphaLMEwcRegularizer& ewc_regularizer() { return ewc_.lstm_part(); }
+    const CyphaLMEwcRegularizer& ewc_regularizer() const { return ewc_.lstm_part(); }
+
+    HybridEwcRegularizer& hybrid_ewc_regularizer() { return ewc_; }
+    const HybridEwcRegularizer& hybrid_ewc_regularizer() const { return ewc_; }
 
     /// Char-LSTM head when ``context_mode == CharLstm`` (nullptr otherwise).
     const CharLSTMHead* char_lstm() const { return lstm_.get(); }
@@ -165,6 +169,8 @@ class CyphaLMModel {
     std::vector<double> lstm_c_;
     std::vector<std::vector<double>> embed_history_;
     std::vector<double> token_counts_;
+    std::vector<std::uint32_t> token_history_;
+    std::unordered_map<std::uint64_t, std::vector<double>> ngram_count_table_;
     std::vector<double> last_e_;
     std::vector<double> last_ctx_;
     std::vector<double> last_ssm_h_fast_;
@@ -180,10 +186,14 @@ class CyphaLMModel {
     bool hybrid_lstm_has_cache_{false};
     std::vector<double> last_hybrid_log_g_;
     std::vector<double> last_hybrid_log_l_;
-    CyphaLMEwcRegularizer ewc_;
+    HybridEwcRegularizer ewc_;
 
     void init_components();
     void record_embedding(const std::vector<double>& e);
+    void record_token_history(std::uint32_t token_id);
+    std::vector<double> ngram_count_log_prior() const;
+    std::uint64_t ngram_context_key() const;
+    void observe_ngram_count(std::uint32_t next_token_id);
     std::vector<double> ngram_embedding_vector() const;
     std::vector<double> build_gria_input(const std::vector<double>& field,
                                          const DIFPredictOutput* dif_out);
@@ -197,6 +207,7 @@ class CyphaLMModel {
     std::vector<double> project_field(const std::vector<double>& ctx);
     void bptt_ssm_update(std::uint32_t next_token_id);
     void apply_lstm_ewc(TrainStepMetrics& m, const CharLSTMGrad& grads);
+    void apply_hybrid_ewc(TrainStepMetrics& m, const HybridEwcGradStub& grads);
     TrainStepMetrics train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id);
     void train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs);
     void rpsm_embed_backprop_stub(std::uint32_t token_id);

@@ -61,5 +61,12 @@
     "domain": "d21",
     "corpus": "wikitext2",
     "notes": "300k RPSM end-to-end train; see bench/config/d21_rpsm_profile.json"
+  },
+  "intelligence_cross_d22": {
+    "path": "everyday_profile.json",
+    "config": "d22_intelligence_cross_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d22",
+    "notes": "Cross-domain intelligence bench; see bench/config/d22_intelligence_cross_profile.json"
   }
 }

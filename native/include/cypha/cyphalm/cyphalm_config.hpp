@@ -119,6 +119,8 @@ struct CyphaLMConfig {
     bool use_ood_branching = false;
     /// H09: GRIA α trajectory modulates ordered vs chaotic hybrid blend.
     bool use_gria_gated_mixture = false;
+    /// H01: scale char-LSTM forget gate by mean GRIA α.
+    bool use_alpha_forget_gate = false;
     /// H11: RevNet-style reversible additive coupling on SSM context.
     bool use_reversible_cell = false;
     /// H12: MDL norm projection on recurrent hidden state.

@@ -1,4 +1,4 @@
-// bench_domains — native bench domain runners (d01–d21) for cypha_bench_run.
+// bench_domains — native bench domain runners (d01–d22) for cypha_bench_run.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -1659,6 +1659,98 @@ Json run_d15() {
     return experiments;
 }
 
+Json run_d16_ewc_probe() {
+    const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
+    const cypha::bench::ProfileJson regime = cypha::bench::classification_params(&profile);
+    const auto tasks = load_multitask_datasets();
+    int max_dim = 0;
+    for (const auto& t : tasks) {
+        max_dim = std::max(max_dim, static_cast<int>(t.train_x.empty() ? 0 : t.train_x.front().size()));
+    }
+
+    auto make_multitask_clf = [&](std::uint64_t seed) {
+        return make_online_classifier(max_dim, seed, 0.0, regime);
+    };
+
+    auto eval_task = [&](const OnlineClassifier& c, const MultitaskBundle& task) {
+        std::vector<std::vector<double>> xp;
+        std::vector<std::string> labels;
+        xp.reserve(task.test_x.size());
+        labels.reserve(task.test_y.size());
+        for (std::size_t i = 0; i < task.test_x.size(); ++i) {
+            xp.push_back(pad_to_max(task.test_x[i], max_dim));
+            labels.push_back(task.name + "_" + task.test_y[i]);
+        }
+        return clf_metrics_native(c.infer, xp, labels)["accuracy"].get<double>();
+    };
+
+    const int steps = cypha::bench::bench_scale(3000, 800);
+    auto train_task = [&](OnlineClassifier& clf, const MultitaskBundle& task, cypha::TrainStepExtras* extras) {
+        std::vector<int> order(static_cast<int>(task.train_x.size()));
+        for (int i = 0; i < static_cast<int>(order.size()); ++i) {
+            order[static_cast<std::size_t>(i)] = i;
+        }
+        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 2));
+        const int limit = std::min(steps, static_cast<int>(order.size()));
+        for (int k = 0; k < limit; ++k) {
+            const int i = order[static_cast<std::size_t>(k)];
+            const auto x = pad_to_max(task.train_x[static_cast<std::size_t>(i)], max_dim);
+            const std::string label = task.name + "_" + task.train_y[static_cast<std::size_t>(i)];
+            const int d = static_cast<int>(x.size());
+            (void)cypha::dif_train_step_vector(clf.infer, clf.mem, clf.replay, x.data(), d, label, clf.world_lr,
+                                               clf.delta_lr, clf.world_lr, clf.delta_lr, clf.ood_sigma, clf.tsp,
+                                               clf.rng, clf.enc_updates, nullptr, extras);
+        }
+    };
+    const MultitaskBundle* iris = nullptr;
+    const MultitaskBundle* wine = nullptr;
+    const MultitaskBundle* digits = nullptr;
+    for (const auto& t : tasks) {
+        if (t.name == "iris") iris = &t;
+        if (t.name == "wine") wine = &t;
+        if (t.name == "digits") digits = &t;
+    }
+    auto forgetting_probe = [&](bool use_ewc, std::uint64_t seed) {
+        OnlineClassifier clf = make_multitask_clf(seed);
+        cypha::EwcRegularizer ewc;
+        cypha::TrainStepExtras extras{};
+        if (use_ewc) {
+            extras.ewc = &ewc;
+            extras.ewc_lambda = 0.5;
+        }
+        train_task(clf, *iris, use_ewc ? &extras : nullptr);
+        if (use_ewc) {
+            ewc.snapshot(clf.mem, clf.infer);
+        }
+        const double acc_before = eval_task(clf, *iris);
+        train_task(clf, *wine, use_ewc ? &extras : nullptr);
+        train_task(clf, *digits, use_ewc ? &extras : nullptr);
+        cypha::sync_infer_model_from_memory(clf.infer, clf.mem);
+        const double acc_after = eval_task(clf, *iris);
+        const double forgetting = (acc_before - acc_after) / std::max(acc_before, 1e-6);
+        Json row{
+            {"task_a_accuracy_before", acc_before},
+            {"task_a_accuracy_after", acc_after},
+            {"forgetting_score", forgetting},
+        };
+        if (use_ewc) {
+            row["ewc_lambda"] = extras.ewc_lambda;
+            row["ewc_penalty_final"] = ewc.penalty(clf.mem, clf.infer);
+        }
+        return row;
+    };
+    const Json baseline = forgetting_probe(false, kBenchSeed + 1);
+    const Json ewc_row = forgetting_probe(true, kBenchSeed + 51);
+    const double baseline_forgetting = baseline["forgetting_score"].get<double>();
+    const double ewc_forgetting = ewc_row["forgetting_score"].get<double>();
+    return Json{
+        {"baseline", baseline},
+        {"ewc", ewc_row},
+        {"ewc_reduces_forgetting", ewc_forgetting <= baseline_forgetting},
+        {"forgetting_delta", baseline_forgetting - ewc_forgetting},
+    };
+}
+
 Json run_d16() {
     const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
     const cypha::bench::ProfileJson regime = cypha::bench::classification_params(&profile);
@@ -1716,74 +1808,7 @@ Json run_d16() {
     }
 
     // 16B forgetting (baseline vs EWC zero-forgetting probe)
-    Json exp16b;
-    {
-        const int steps = cypha::bench::bench_scale(3000, 800);
-        auto train_task = [&](OnlineClassifier& clf, const MultitaskBundle& task, cypha::TrainStepExtras* extras) {
-            std::vector<int> order(static_cast<int>(task.train_x.size()));
-            for (int i = 0; i < static_cast<int>(order.size()); ++i) {
-                order[static_cast<std::size_t>(i)] = i;
-            }
-            std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 2));
-            const int limit = std::min(steps, static_cast<int>(order.size()));
-            for (int k = 0; k < limit; ++k) {
-                const int i = order[static_cast<std::size_t>(k)];
-                const auto x = pad_to_max(task.train_x[static_cast<std::size_t>(i)], max_dim);
-                const std::string label = task.name + "_" + task.train_y[static_cast<std::size_t>(i)];
-                const int d = static_cast<int>(x.size());
-                (void)cypha::dif_train_step_vector(clf.infer, clf.mem, clf.replay, x.data(), d, label, clf.world_lr,
-                                                   clf.delta_lr, clf.world_lr, clf.delta_lr, clf.ood_sigma, clf.tsp,
-                                                   clf.rng, clf.enc_updates, nullptr, extras);
-            }
-        };
-        const MultitaskBundle* iris = nullptr;
-        const MultitaskBundle* wine = nullptr;
-        const MultitaskBundle* digits = nullptr;
-        for (const auto& t : tasks) {
-            if (t.name == "iris") iris = &t;
-            if (t.name == "wine") wine = &t;
-            if (t.name == "digits") digits = &t;
-        }
-        auto forgetting_probe = [&](bool use_ewc, std::uint64_t seed) {
-            OnlineClassifier clf = make_multitask_clf(seed);
-            cypha::EwcRegularizer ewc;
-            cypha::TrainStepExtras extras{};
-            if (use_ewc) {
-                extras.ewc = &ewc;
-                extras.ewc_lambda = 0.5;
-            }
-            train_task(clf, *iris, use_ewc ? &extras : nullptr);
-            if (use_ewc) {
-                ewc.snapshot(clf.mem, clf.infer);
-            }
-            const double acc_before = eval_task(clf, *iris);
-            train_task(clf, *wine, use_ewc ? &extras : nullptr);
-            train_task(clf, *digits, use_ewc ? &extras : nullptr);
-            cypha::sync_infer_model_from_memory(clf.infer, clf.mem);
-            const double acc_after = eval_task(clf, *iris);
-            const double forgetting = (acc_before - acc_after) / std::max(acc_before, 1e-6);
-            Json row{
-                {"task_a_accuracy_before", acc_before},
-                {"task_a_accuracy_after", acc_after},
-                {"forgetting_score", forgetting},
-            };
-            if (use_ewc) {
-                row["ewc_lambda"] = extras.ewc_lambda;
-                row["ewc_penalty_final"] = ewc.penalty(clf.mem, clf.infer);
-            }
-            return row;
-        };
-        const Json baseline = forgetting_probe(false, kBenchSeed + 1);
-        const Json ewc_row = forgetting_probe(true, kBenchSeed + 51);
-        const double baseline_forgetting = baseline["forgetting_score"].get<double>();
-        const double ewc_forgetting = ewc_row["forgetting_score"].get<double>();
-        exp16b = Json{
-            {"baseline", baseline},
-            {"ewc", ewc_row},
-            {"ewc_reduces_forgetting", ewc_forgetting <= baseline_forgetting},
-            {"forgetting_delta", baseline_forgetting - ewc_forgetting},
-        };
-    }
+    const Json exp16b = run_d16_ewc_probe();
 
     // 16D interleaving
     Json exp16d = Json::object();
@@ -2928,6 +2953,27 @@ Json run_d20_cell_hypothesis_overnight_smoke() {
     return experiments;
 }
 
+Json run_d22_intelligence_cross_profile() {
+    const Json d18 = run_d18_intelligence_profile();
+    const Json d16_ewc = run_d16_ewc_probe();
+    const Json d20 = run_d20_cell_hypothesis_overnight_smoke();
+
+    const Json experiments{
+        {"d18_intelligence_profile", d18},
+        {"d16_ewc_probe", d16_ewc},
+        {"d20_cell_sweep_smoke", d20},
+        {"sub_domains", Json::array({"d18", "d16", "d20"})},
+        {"backend", "cypha_bench_cross_intelligence"},
+    };
+    cypha::bench::finalize_domain("d22_intelligence_cross_profile", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d22_intelligence_cross_profile.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -2952,6 +2998,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d19", "cypha_bench.domains.d19_cell_hypothesis", run_d19_cell_hypothesis_smoke},
         {"d20", "cypha_bench.domains.d20_cell_hypothesis_overnight", run_d20_cell_hypothesis_overnight_smoke},
         {"d21", "cypha_bench.domains.d21_rpsm_overnight", run_d21_rpsm_overnight_smoke},
+        {"d22", "cypha_bench.domains.d22_intelligence_cross_profile", run_d22_intelligence_cross_profile},
     };
 }
 

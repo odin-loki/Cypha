@@ -39,6 +39,23 @@ void pull_toward_anchor(std::vector<double>& theta, const std::vector<double>& a
   }
 }
 
+void observe_block_grads(const std::vector<double>& grad, std::vector<double>& fisher,
+                         std::size_t& observations) {
+  if (grad.size() != fisher.size()) {
+    return;
+  }
+  const std::size_t next_count = observations + 1;
+  const double inv_n = 1.0 / static_cast<double>(next_count);
+  for (std::size_t i = 0; i < fisher.size(); ++i) {
+    const double g2 = grad[i] * grad[i];
+    fisher[i] = fisher[i] * static_cast<double>(observations) * inv_n + g2 * inv_n;
+    if (fisher[i] < kFisherEps) {
+      fisher[i] = kFisherEps;
+    }
+  }
+  observations = next_count;
+}
+
 }  // namespace
 
 void CyphaLMEwcRegularizer::snapshot(const CharLSTMHead& lstm) {
@@ -104,6 +121,72 @@ void CyphaLMEwcRegularizer::apply_pull(CharLSTMHead& lstm, double ewc_lambda, do
   pull_toward_anchor(lstm.Wh, anchor_Wh_, fisher_Wh_, strength);
   pull_toward_anchor(lstm.Wy, anchor_Wy_, fisher_Wy_, strength);
   pull_toward_anchor(lstm.by, anchor_by_, fisher_by_, strength);
+}
+
+void HybridEwcRegularizer::snapshot(const CharLSTMHead* lstm, const CellAISSM* ssm,
+                                    const GRIALowRank* gria) {
+  if (lstm != nullptr) {
+    lstm_.snapshot(*lstm);
+  }
+  anchor_ssm_alpha_.clear();
+  fisher_ssm_alpha_.clear();
+  if (ssm != nullptr) {
+    anchor_ssm_alpha_ = ssm->multiscale_alpha();
+    build_diagonal_fisher_from_anchor(anchor_ssm_alpha_, fisher_ssm_alpha_);
+    ssm_grad_observations_ = 0;
+  }
+  anchor_gria_alpha_.clear();
+  fisher_gria_alpha_.clear();
+  if (gria != nullptr) {
+    anchor_gria_alpha_ = gria->alpha;
+    build_diagonal_fisher_from_anchor(anchor_gria_alpha_, fisher_gria_alpha_);
+    gria_grad_observations_ = 0;
+  }
+}
+
+void HybridEwcRegularizer::observe_grads(const HybridEwcGradStub& grads) {
+  if (grads.has_lstm) {
+    lstm_.observe_grads(grads.lstm);
+  }
+  if (!anchor_ssm_alpha_.empty() && !grads.d_ssm_alpha.empty()) {
+    observe_block_grads(grads.d_ssm_alpha, fisher_ssm_alpha_, ssm_grad_observations_);
+  }
+  if (!anchor_gria_alpha_.empty() && !grads.d_gria_alpha.empty()) {
+    observe_block_grads(grads.d_gria_alpha, fisher_gria_alpha_, gria_grad_observations_);
+  }
+}
+
+double HybridEwcRegularizer::penalty(const CharLSTMHead* lstm, const CellAISSM* ssm,
+                                     const GRIALowRank* gria) const {
+  double sum = 0.0;
+  if (lstm != nullptr && lstm_.has_snapshot()) {
+    sum += lstm_.penalty(*lstm);
+  }
+  if (ssm != nullptr && !anchor_ssm_alpha_.empty()) {
+    sum += squared_penalty(ssm->multiscale_alpha(), anchor_ssm_alpha_, fisher_ssm_alpha_);
+  }
+  if (gria != nullptr && !anchor_gria_alpha_.empty()) {
+    sum += squared_penalty(gria->alpha, anchor_gria_alpha_, fisher_gria_alpha_);
+  }
+  return sum;
+}
+
+void HybridEwcRegularizer::apply_pull(CharLSTMHead* lstm, CellAISSM* ssm, GRIALowRank* gria,
+                                      double ewc_lambda, double lstm_lr, double gria_lr,
+                                      double ssm_lr) const {
+  if (ewc_lambda <= 0.0) {
+    return;
+  }
+  if (lstm != nullptr && lstm_.has_snapshot() && lstm_lr > 0.0) {
+    lstm_.apply_pull(*lstm, ewc_lambda, lstm_lr);
+  }
+  if (ssm != nullptr && !anchor_ssm_alpha_.empty() && ssm_lr > 0.0) {
+    pull_toward_anchor(ssm->multiscale_alpha_mut(), anchor_ssm_alpha_, fisher_ssm_alpha_,
+                       ewc_lambda * ssm_lr);
+  }
+  if (gria != nullptr && !anchor_gria_alpha_.empty() && gria_lr > 0.0) {
+    pull_toward_anchor(gria->alpha, anchor_gria_alpha_, fisher_gria_alpha_, ewc_lambda * gria_lr);
+  }
 }
 
 }  // namespace cypha::cyphalm

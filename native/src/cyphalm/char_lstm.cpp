@@ -82,7 +82,7 @@ void CharLSTMHead::reset_state() {
 
 void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, double* log_probs,
                                 std::vector<double>& h_out, std::vector<double>& c_out,
-                                CharLSTMCache* cache_out) const {
+                                CharLSTMCache* cache_out, double forget_gate_scale) const {
   if (token_id < 0 || token_id >= vocab_size) {
     throw std::runtime_error("char_lstm: token_id out of range");
   }
@@ -147,6 +147,11 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
       f_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(hidden + j)]);
       g_gate[static_cast<std::size_t>(j)] = std::tanh(gates[static_cast<std::size_t>(2 * hidden + j)]);
       o_gate[static_cast<std::size_t>(j)] = sigmoid(gates[static_cast<std::size_t>(3 * hidden + j)]);
+    }
+  }
+  if (forget_gate_scale != 1.0) {
+    for (int j = 0; j < hidden; ++j) {
+      f_gate[static_cast<std::size_t>(j)] *= forget_gate_scale;
     }
   }
 

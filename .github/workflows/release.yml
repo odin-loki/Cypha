@@ -12,6 +12,8 @@
 #
 # Phase 7 (v2.3.7+): maintainer may also attach bench/BASELINE_LOCK.json snapshot
 # or overnight result JSON via scripts/publish_release.ps1 after local gh auth.
+# Phase 8 (v2.3.8+): update BASELINE_LOCK via scripts/update_baseline_lock.ps1
+# (cypha_baseline_lock CLI); d22 cross-profile bench smoke in CI via native_d22_cross_smoke.
 
 name: Release
 
@@ -266,4 +268,10 @@ jobs:
             - **Baseline lock:** [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json) — D17 hybrid **2.873 BPC** @ 300k (Phase 1c reference).
             - **Local publish:** `pwsh -File scripts/publish_release.ps1 -Tag ${{ github.ref_name }}` (requires `gh auth login`; CI publish uses this workflow).
             - **Overnight bench:** `pwsh -File scripts/run_d17_overnight.ps1` — update `overnight_results` in `BASELINE_LOCK.json` after a real 300k run.
-            - **CI gate:** **90 CTests** (`ctest -R native_`).
+
+            ### Phase 8 maintainer notes
+
+            - **Baseline lock update:** `pwsh -File scripts/update_baseline_lock.ps1 -Run d17` (or `-Run d21`, `-Run cell-sweep`; add `-Fast` for smoke) — wraps **`cypha_baseline_lock`** CLI.
+            - **Cross-profile bench:** `cypha_bench_run --domain-tag d22` — d18 intelligence + d16 EWC probe + d20 cell sweep; profile [`bench/config/d22_intelligence_cross_profile.json`](bench/config/d22_intelligence_cross_profile.json).
+            - **Hybrid EWC:** SSM/GRIA α Fisher overlay + B0 **`ngram_count_table`** prior; H01 α forget gate; CyphaLM checkpoint persists ngram counts.
+            - **CI gate:** **96 CTests** (`ctest -R native_`); optional **`federated_tls`** job runs **`native_federated_tls_smoke`** with **`-DCYPHA_ENABLE_OPENSSL=ON`** (`bash scripts/ci_federated_tls_linux.sh` locally).

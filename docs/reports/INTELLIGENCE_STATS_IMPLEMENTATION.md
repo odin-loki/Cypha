@@ -95,13 +95,32 @@
 | Release publish helper | `scripts/publish_release.ps1` | manual (`gh auth login`) |
 | Release notes v2.3.7 template | `scripts/create_release_notes.ps1` | manual |
 
+## Phase 8 — shipped (2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|-------------|
+| Cross-domain intelligence bench **d22** | `bench_domains.cpp` → `run_d22_intelligence_cross_profile` | `cypha_bench_run --domain 22` or `--domain-tag d22` |
+| D16 EWC probe helper | `run_d16_ewc_probe` (shared with d16 16B) | nested in d22 |
+| D22 profile config | `bench/config/d22_intelligence_cross_profile.json` | manual |
+| Cross-profile JSON report | `bench/report/tables/d22_intelligence_cross_profile.json` | d22 run |
+| Hybrid EWC (SSM/GRIA α) | `cyphalm_ewc_regularizer.hpp/cpp`, `HybridEwcGradStub` | `native_ewc_hybrid_smoke` |
+| B0 ngram count prior | `cyphalm_model.cpp` (`ngram_count_table_`, `uses_ngram_count_path`) | hybrid / GRIA-ngram train path |
+| H01 α forget gate | `char_lstm.cpp` (`forget_gate_scale`), `cyphalm_config.hpp` `use_alpha_forget_gate` | cell hypothesis H01 |
+| CyphaLM checkpoint ngram table | `cyphalm_checkpoint.cpp` save/load `ngram_count_table` | B0 count path round-trip |
+| Baseline lock CLI | `tools/cypha_baseline_lock.cpp` | `native_baseline_lock_smoke` |
+| Baseline lock PS wrapper | `scripts/update_baseline_lock.ps1` | manual (`--run d17\|d21\|cell-sweep`) |
+| CI federated TLS mirror | `scripts/ci_federated_tls_linux.sh` | optional CI `federated_tls` job |
+| CTest wiring smoke | `native_d22_cross_smoke` | `ctest -R native_d22` |
+| Release notes v2.3.8 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate:** **96 CTests** (`ctest -R native_`); optional **`federated_tls`** job runs **`native_federated_tls_smoke`** with **`-DCYPHA_ENABLE_OPENSSL=ON`**.
+
 ## Still planned
 
-- **D17 300k + 28-variant overnight** — run manually; fill `bench/BASELINE_LOCK.json` → `overnight_results`
+- **D17 300k + 28-variant overnight** — run manually; fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1`**
 - **GitHub Release** publish via `gh auth login` + `scripts/publish_release.ps1`
 - **RPSM @ 300k production benchmark** — d21 wired; full overnight not executed in CI
-- **EWC full Fisher** — SSM/GRIA weights not yet snapshotted
-- **Federated TLS in CI** — requires `-DCYPHA_ENABLE_OPENSSL=ON` + OpenSSL on runner
+- **EWC full Fisher on SSM/GRIA weight tensors** — hybrid α Fisher shipped; recurrent/GRIA weight blocks still char-LSTM-only overlay
 
 ## Commands
 
@@ -112,5 +131,8 @@ cyphalm_bench_native --profile d17 --mode hybrid --n-train 120 --n-eval 40 --int
 cypha_cell_hypothesis_sweep --smoke
 cypha_cell_hypothesis_sweep --overnight-sweep-smoke
 cypha_cell_hypothesis_sweep --overnight-sweep   # CYPHA_BENCH_OVERNIGHT=1 → 300k
+cypha_bench_run --domain-tag d22
+pwsh -File scripts/update_baseline_lock.ps1 -Run d17 -Fast
+bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

@@ -1,0 +1,522 @@
+// cypha_baseline_lock — run bench subprocesses and merge BPC into bench/BASELINE_LOCK.json.
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <sys/wait.h>
+#endif
+
+#include <nlohmann/json.hpp>
+
+#include "cypha/bench/bench_paths.hpp"
+
+namespace fs = std::filesystem;
+using Json = nlohmann::json;
+
+namespace {
+
+enum class RunKind { D17, D21, CellSweep };
+
+struct Args {
+    RunKind run = RunKind::D17;
+    int n_train = 300000;
+    int n_eval = 2000;
+    int threads = 1;
+    bool fast = false;
+    bool n_train_explicit = false;
+    bool n_eval_explicit = false;
+    fs::path lock_file;
+    fs::path exe_dir;
+    fs::path output_dir;
+};
+
+void usage() {
+    std::cerr
+        << "usage: cypha_baseline_lock --run {d17,d21,cell-sweep}\n"
+        << "       [--n-train N] [--n-eval M] [--threads T] [--fast]\n"
+        << "       [--lock-file PATH] [--exe-dir DIR] [--output-dir DIR]\n";
+}
+
+RunKind parse_run_kind(const std::string& s) {
+    if (s == "d17") return RunKind::D17;
+    if (s == "d21") return RunKind::D21;
+    if (s == "cell-sweep") return RunKind::CellSweep;
+    throw std::runtime_error("unknown --run: " + s + " (expected d17, d21, or cell-sweep)");
+}
+
+Args parse_args(int argc, char** argv) {
+    Args a;
+    bool run_set = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string k = argv[i];
+        auto need = [&](const char* name) -> std::string {
+            if (i + 1 >= argc) {
+                throw std::runtime_error(std::string("missing value for ") + name);
+            }
+            return argv[++i];
+        };
+        if (k == "--run") {
+            a.run = parse_run_kind(need("--run"));
+            run_set = true;
+        } else if (k == "--n-train") {
+            a.n_train = std::stoi(need("--n-train"));
+            a.n_train_explicit = true;
+        } else if (k == "--n-eval") {
+            a.n_eval = std::stoi(need("--n-eval"));
+            a.n_eval_explicit = true;
+        } else if (k == "--threads") {
+            a.threads = std::stoi(need("--threads"));
+        } else if (k == "--fast") {
+            a.fast = true;
+        } else if (k == "--lock-file") {
+            a.lock_file = need("--lock-file");
+        } else if (k == "--exe-dir") {
+            a.exe_dir = need("--exe-dir");
+        } else if (k == "--output-dir") {
+            a.output_dir = need("--output-dir");
+        } else if (k == "--help" || k == "-h") {
+            usage();
+            std::exit(0);
+        } else {
+            throw std::runtime_error("unknown arg: " + k);
+        }
+    }
+    if (!run_set) {
+        throw std::runtime_error("missing required --run");
+    }
+    if (a.fast) {
+        if (!a.n_train_explicit) a.n_train = 200;
+        if (!a.n_eval_explicit) a.n_eval = 64;
+    }
+    return a;
+}
+
+void set_env_var(const char* key, const char* value) {
+#if defined(_WIN32)
+    _putenv_s(key, value);
+#else
+    setenv(key, value, 1);
+#endif
+}
+
+std::string quote_shell(const std::string& s) {
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '"') {
+            out += "\\\"";
+        } else {
+            out += c;
+        }
+    }
+    out += '"';
+    return out;
+}
+
+std::string exe_name(const std::string& base) {
+#ifdef _WIN32
+    return base + ".exe";
+#else
+    return base;
+#endif
+}
+
+struct ProcessResult {
+    int exit_code{127};
+    std::string stdout_text;
+};
+
+ProcessResult run_capture(const fs::path& exe, const std::vector<std::string>& args,
+                          const fs::path& work_dir) {
+    ProcessResult r;
+#ifdef _WIN32
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    HANDLE read_pipe = nullptr;
+    HANDLE write_pipe = nullptr;
+    if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
+        throw std::runtime_error("CreatePipe failed");
+    }
+    SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
+
+    std::string cmd = quote_shell(exe.string());
+    for (const auto& a : args) {
+        cmd += ' ';
+        cmd += quote_shell(a);
+    }
+    std::vector<char> buf(cmd.begin(), cmd.end());
+    buf.push_back('\0');
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.hStdOutput = write_pipe;
+    si.hStdError = write_pipe;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.wShowWindow = SW_HIDE;
+    PROCESS_INFORMATION pi{};
+
+    const std::string work = work_dir.empty() ? exe.parent_path().string() : work_dir.string();
+    const BOOL ok =
+        CreateProcessA(nullptr, buf.data(), nullptr, nullptr, TRUE, 0, nullptr,
+                       work.empty() ? nullptr : work.c_str(), &si, &pi);
+    CloseHandle(write_pipe);
+    if (!ok) {
+        CloseHandle(read_pipe);
+        throw std::runtime_error("CreateProcess failed for " + exe.string());
+    }
+
+    char chunk[4096];
+    DWORD nread = 0;
+    while (ReadFile(read_pipe, chunk, sizeof(chunk), &nread, nullptr) && nread > 0) {
+        r.stdout_text.append(chunk, chunk + nread);
+    }
+    CloseHandle(read_pipe);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    r.exit_code = static_cast<int>(code);
+#else
+    std::ostringstream cmd;
+    if (!work_dir.empty()) {
+        cmd << "cd " << quote_shell(fs::absolute(work_dir).string()) << " && ";
+    }
+    cmd << quote_shell(fs::absolute(exe).string());
+    for (const auto& a : args) {
+        cmd << ' ' << quote_shell(a);
+    }
+    cmd << " 2>&1";
+    FILE* fp = popen(cmd.str().c_str(), "r");
+    if (fp == nullptr) {
+        throw std::runtime_error("popen failed for " + exe.string());
+    }
+    char buf[4096];
+    while (std::fgets(buf, sizeof(buf), fp) != nullptr) {
+        r.stdout_text += buf;
+    }
+    const int status = pclose(fp);
+    if (WIFEXITED(status)) {
+        r.exit_code = WEXITSTATUS(status);
+    }
+#endif
+    return r;
+}
+
+fs::path resolve_exe_dir(const Args& a, char** argv) {
+    if (!a.exe_dir.empty()) {
+        return fs::absolute(a.exe_dir);
+    }
+    if (argv && argv[0]) {
+        const fs::path self = fs::absolute(argv[0]);
+        if (self.has_parent_path()) {
+            return self.parent_path();
+        }
+    }
+    return fs::current_path();
+}
+
+std::string iso_timestamp_now() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#ifdef _WIN32
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+    return oss.str();
+}
+
+Json load_lock_file(const fs::path& path) {
+    std::ifstream in(path);
+    if (!in) {
+        throw std::runtime_error("cannot read lock file: " + path.string());
+    }
+    Json j;
+    in >> j;
+    return j;
+}
+
+void write_lock_file(const fs::path& path, const Json& j) {
+    fs::create_directories(path.parent_path());
+    std::ofstream out(path);
+    if (!out) {
+        throw std::runtime_error("cannot write lock file: " + path.string());
+    }
+    out << j.dump(2) << '\n';
+}
+
+double extract_bpc_bench(const Json& j) {
+    if (!j.contains("bpc") || j["bpc"].is_null()) {
+        throw std::runtime_error("bench JSON missing bpc");
+    }
+    const double bpc = j["bpc"].get<double>();
+    if (std::isnan(bpc)) {
+        throw std::runtime_error("bench JSON bpc is NaN");
+    }
+    return bpc;
+}
+
+struct CellSweepSummary {
+    double bpc;
+    double b2_bpc{std::numeric_limits<double>::quiet_NaN()};
+    int variant_count{0};
+    std::string output_dir;
+};
+
+CellSweepSummary extract_cell_sweep_summary(const Json& j) {
+    CellSweepSummary s;
+    s.variant_count = j.value("variant_count", 0);
+    if (j.contains("output_dir") && j["output_dir"].is_string()) {
+        s.output_dir = j["output_dir"].get<std::string>();
+    }
+    if (!j.contains("results") || !j["results"].is_array()) {
+        throw std::runtime_error("cell sweep JSON missing results array");
+    }
+    bool found = false;
+    for (const auto& row : j["results"]) {
+        if (row.value("id", "") == "B2" && row.contains("bpc") && !row["bpc"].is_null()) {
+            s.b2_bpc = row["bpc"].get<double>();
+            s.bpc = s.b2_bpc;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        for (const auto& row : j["results"]) {
+            if (row.contains("bpc") && !row["bpc"].is_null()) {
+                s.bpc = row["bpc"].get<double>();
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found || std::isnan(s.bpc)) {
+        throw std::runtime_error("cell sweep JSON has no usable bpc");
+    }
+    return s;
+}
+
+void apply_bench_env(const Args& args) {
+    if (args.fast) {
+        set_env_var("CYPHA_BENCH_FAST", "1");
+    }
+    set_env_var("CYPHA_BENCH_FULL_CORPUS", "1");
+    set_env_var("CYPHA_BENCH_OVERNIGHT", "1");
+    set_env_var("CYPHA_BENCH_FULL_N_TRAIN", std::to_string(args.n_train).c_str());
+}
+
+Json make_env_snapshot(const Args& args) {
+    Json env = {{"CYPHA_BENCH_FULL_CORPUS", "1"}, {"CYPHA_BENCH_OVERNIGHT", "1"}};
+    if (args.fast) {
+        env["CYPHA_BENCH_FAST"] = "1";
+    }
+    env["CYPHA_BENCH_FULL_N_TRAIN"] = std::to_string(args.n_train);
+    return env;
+}
+
+ProcessResult run_d17_bench(const fs::path& exe_dir, const Args& args) {
+    apply_bench_env(args);
+    const fs::path exe = exe_dir / exe_name("cyphalm_bench_native");
+    if (!fs::is_regular_file(exe)) {
+        throw std::runtime_error("missing executable: " + exe.string());
+    }
+    return run_capture(exe, {"--profile", "d17", "--mode", "hybrid", "--overnight", "--n-train",
+                             std::to_string(args.n_train), "--n-eval", std::to_string(args.n_eval),
+                             "--threads", std::to_string(args.threads)},
+                     exe_dir);
+}
+
+ProcessResult run_d21_bench(const fs::path& exe_dir, const Args& args) {
+    apply_bench_env(args);
+    const fs::path exe = exe_dir / exe_name("cyphalm_bench_native");
+    if (!fs::is_regular_file(exe)) {
+        throw std::runtime_error("missing executable: " + exe.string());
+    }
+    return run_capture(exe, {"--profile", "d21", "--mode", "rpsm", "--overnight", "--n-train",
+                             std::to_string(args.n_train), "--n-eval", std::to_string(args.n_eval),
+                             "--threads", std::to_string(args.threads)},
+                     exe_dir);
+}
+
+ProcessResult run_cell_sweep(const fs::path& exe_dir, const Args& args) {
+    apply_bench_env(args);
+    const fs::path exe = exe_dir / exe_name("cypha_cell_hypothesis_sweep");
+    if (!fs::is_regular_file(exe)) {
+        throw std::runtime_error("missing executable: " + exe.string());
+    }
+    std::vector<std::string> sweep_args;
+    if (args.fast) {
+        sweep_args.push_back("--overnight-sweep-smoke");
+    } else {
+        sweep_args.push_back("--overnight-sweep");
+    }
+    sweep_args.push_back("--profile");
+    sweep_args.push_back("d17");
+    sweep_args.push_back("--n-train");
+    sweep_args.push_back(std::to_string(args.n_train));
+    sweep_args.push_back("--n-eval");
+    sweep_args.push_back(std::to_string(args.n_eval));
+    sweep_args.push_back("--threads");
+    sweep_args.push_back(std::to_string(args.threads));
+    if (!args.output_dir.empty()) {
+        sweep_args.push_back("--output-dir");
+        sweep_args.push_back(fs::absolute(args.output_dir).string());
+    }
+    return run_capture(exe, sweep_args, exe_dir);
+}
+
+void merge_overnight_results(Json& lock, const Args& args, double bpc, const Json& bench_json,
+                             const CellSweepSummary* cell_summary) {
+    Json& section = lock["overnight_results"];
+    section["status"] = args.fast ? "fast_smoke" : "completed";
+    section["n_train"] = args.n_train;
+    section["n_eval"] = args.n_eval;
+    section["bpc"] = bpc;
+    section["run_at"] = iso_timestamp_now();
+    section["env"] = make_env_snapshot(args);
+    if (args.run == RunKind::CellSweep) {
+        section["profile"] = "d17";
+        section["mode"] = "cell-sweep";
+        section["runner"] = args.fast ? "cypha_cell_hypothesis_sweep --overnight-sweep-smoke"
+                                      : "cypha_cell_hypothesis_sweep --overnight-sweep";
+        if (cell_summary) {
+            section["variant_count"] = cell_summary->variant_count;
+            if (!std::isnan(cell_summary->b2_bpc)) {
+                section["b2_bpc"] = cell_summary->b2_bpc;
+            }
+            if (!cell_summary->output_dir.empty()) {
+                section["artifact_path"] = cell_summary->output_dir;
+            }
+        }
+    } else {
+        section["profile"] = "d17";
+        section["mode"] = "hybrid";
+        section["runner"] = "cyphalm_bench_native --overnight";
+        if (bench_json.contains("context_mode")) {
+            section["context_mode"] = bench_json["context_mode"];
+        }
+        if (bench_json.contains("corpus")) {
+            section["corpus"] = bench_json["corpus"];
+        }
+        if (bench_json.contains("synthetic")) {
+            section["synthetic"] = bench_json["synthetic"];
+        }
+    }
+}
+
+void merge_rpsm_results(Json& lock, const Args& args, double bpc, const Json& bench_json) {
+    if (!lock.contains("rpsm_results")) {
+        lock["rpsm_results"] = Json::object();
+    }
+    Json& section = lock["rpsm_results"];
+    section["status"] = args.fast ? "fast_smoke" : "completed";
+    section["profile"] = "d21";
+    section["mode"] = "rpsm";
+    section["n_train"] = args.n_train;
+    section["n_eval"] = args.n_eval;
+    section["bpc"] = bpc;
+    section["run_at"] = iso_timestamp_now();
+    section["runner"] = "cyphalm_bench_native --overnight --mode rpsm";
+    section["env"] = make_env_snapshot(args);
+    if (bench_json.contains("corpus")) {
+        section["corpus"] = bench_json["corpus"];
+    }
+    if (bench_json.contains("synthetic")) {
+        section["synthetic"] = bench_json["synthetic"];
+    }
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    try {
+        Args args = parse_args(argc, argv);
+        const fs::path exe_dir = resolve_exe_dir(args, argv);
+        const fs::path lock_path =
+            args.lock_file.empty() ? cypha::bench::bench_root() / "BASELINE_LOCK.json"
+                                   : fs::absolute(args.lock_file);
+
+        ProcessResult proc;
+        Json bench_json;
+        CellSweepSummary cell_summary;
+        const CellSweepSummary* cell_ptr = nullptr;
+
+        if (args.run == RunKind::D17) {
+            proc = run_d17_bench(exe_dir, args);
+        } else if (args.run == RunKind::D21) {
+            proc = run_d21_bench(exe_dir, args);
+        } else {
+            proc = run_cell_sweep(exe_dir, args);
+        }
+
+        if (proc.exit_code != 0) {
+            std::cerr << "cypha_baseline_lock: subprocess exit=" << proc.exit_code << "\n";
+            if (!proc.stdout_text.empty()) {
+                std::cerr << proc.stdout_text << "\n";
+            }
+            return proc.exit_code != 0 ? proc.exit_code : 1;
+        }
+        if (proc.stdout_text.empty()) {
+            throw std::runtime_error("subprocess produced no stdout");
+        }
+
+        bench_json = Json::parse(proc.stdout_text);
+        double bpc = 0.0;
+        if (args.run == RunKind::CellSweep) {
+            cell_summary = extract_cell_sweep_summary(bench_json);
+            cell_ptr = &cell_summary;
+            bpc = cell_summary.bpc;
+        } else {
+            bpc = extract_bpc_bench(bench_json);
+        }
+
+        Json lock = load_lock_file(lock_path);
+        if (args.run == RunKind::D21) {
+            merge_rpsm_results(lock, args, bpc, bench_json);
+        } else {
+            merge_overnight_results(lock, args, bpc, bench_json, cell_ptr);
+        }
+        write_lock_file(lock_path, lock);
+
+        Json report = {{"run", args.run == RunKind::D17     ? "d17"
+                                : args.run == RunKind::D21 ? "d21"
+                                                           : "cell-sweep"},
+                       {"lock_file", lock_path.string()},
+                       {"bpc", bpc},
+                       {"n_train", args.n_train},
+                       {"n_eval", args.n_eval},
+                       {"fast", args.fast},
+                       {"status", args.fast ? "fast_smoke" : "completed"}};
+        if (cell_ptr != nullptr) {
+            report["b2_bpc"] = cell_ptr->b2_bpc;
+            report["variant_count"] = cell_ptr->variant_count;
+        }
+        std::cout << report.dump(2) << std::endl;
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "cypha_baseline_lock: " << e.what() << "\n";
+        usage();
+        return 1;
+    }
+}

@@ -86,7 +86,8 @@ class CharLSTMHead {
 
   /// External-state forward step (batch / parity).
   void forward_step(int token_id, const double* h, const double* c, double* log_probs, std::vector<double>& h_out,
-                    std::vector<double>& c_out, CharLSTMCache* cache_out = nullptr) const;
+                    std::vector<double>& c_out, CharLSTMCache* cache_out = nullptr,
+                    double forget_gate_scale = 1.0) const;
 
   CharLSTMGrad backward_step(const CharLSTMCache& cache, int target_id) const;
 

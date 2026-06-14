@@ -1,12 +1,12 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-13 08:47 UTC
+Generated: 2026-06-14 08:07 UTC
 
 Default parameters only — no hyperparameter tuning.
 
 ## Executive Summary
 
-- Domains run: **4**
+- Domains run: **7**
 - Cross-domain analyses: **4**
 
 ## D01
@@ -172,6 +172,30 @@ Default parameters only — no hyperparameter tuning.
 ### vocab_size
 
 - result: 256.0000
+
+## D18
+
+_No experiments recorded._
+
+## D20
+
+*Timestamp:* 2026-06-14T08:07:37.856+00:00
+
+### backend
+
+- result: cypha_cell_hypothesis_sweep --overnight-sweep-smoke
+
+### overnight_sweep_smoke
+
+- result: [{"bench_mode":"hybrid","bpc":7.967382408140876,"id":"B2","n_train":200},{"bench_mode":"hybrid","bpc":7.9673824687505554,"id":"H06","n_train":200},{"bench_mode":"hybrid","bpc":7.967382408140876,"id":"H14","n_train":200}]
+
+### variant_count
+
+- result: 3.0000
+
+## D22
+
+_No experiments recorded._
 
 ## Cross-Domain Analyses
 

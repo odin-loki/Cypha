@@ -1,6 +1,8 @@
 # Native CTest (headless Qt compile-check when CYPHA_BUILD_QT=ON).
 #
 # Two blocking jobs: Linux native build+test, MinGW Windows PE cross-compile.
+# Optional third job: federated TLS smoke (OpenSSL; continue-on-error — does not gate merges).
+# CI gate: 93 CTests (`ctest -R native_`, Qt GUI exec excluded on headless Linux).
 # CUDA is optional for local builds only (see docs/native/ACCEL_CUDA.md).
 #
 # Parity fixtures live under fixtures/ (regenerate offline if core math changes).
@@ -55,3 +57,16 @@ jobs:
           for bin in cypha_rest.exe cypha_bench_run.exe cypha_bench_report.exe cypha_diagnostics_run.exe cypha_tune_run.exe; do
             test -f "native/build-mingw-w64/$bin"
           done
+
+  federated_tls:
+    name: Federated TLS smoke (OpenSSL, optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install OpenSSL toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libssl-dev openssl
+      - name: Federated TLS CTest (OpenSSL)
+        run: bash scripts/ci_federated_tls_linux.sh
+        # Local equivalent: bash scripts/ci_federated_tls_linux.sh

@@ -16,7 +16,7 @@
   },
   "overnight_results": {
     "status": "pending",
-    "description": "Fill after a real CYPHA_BENCH_OVERNIGHT=1 run (scripts/run_d17_overnight.ps1)",
+    "description": "Fill after a real CYPHA_BENCH_OVERNIGHT=1 run (scripts/run_d17_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d17)",
     "profile": "d17",
     "mode": "hybrid",
     "n_train": 300000,
@@ -24,6 +24,22 @@
     "bpc": null,
     "run_at": null,
     "runner": "cyphalm_bench_native --overnight",
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_OVERNIGHT": "1"
+    },
+    "artifact_path": null
+  },
+  "rpsm_results": {
+    "status": "pending",
+    "description": "Fill after D21 RPSM overnight (scripts/run_rpsm_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d21)",
+    "profile": "d21",
+    "mode": "rpsm",
+    "n_train": 300000,
+    "n_eval": null,
+    "bpc": null,
+    "run_at": null,
+    "runner": "cyphalm_bench_native --overnight --mode rpsm",
     "env": {
       "CYPHA_BENCH_FULL_CORPUS": "1",
       "CYPHA_BENCH_OVERNIGHT": "1"
