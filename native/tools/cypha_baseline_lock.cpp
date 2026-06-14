@@ -31,7 +31,7 @@ using Json = nlohmann::json;
 
 namespace {
 
-enum class RunKind { D17, D21, CellSweep };
+enum class RunKind { D17, D21, CellSweep, All };
 
 struct Args {
     RunKind run = RunKind::D17;
@@ -48,7 +48,7 @@ struct Args {
 
 void usage() {
     std::cerr
-        << "usage: cypha_baseline_lock --run {d17,d21,cell-sweep}\n"
+        << "usage: cypha_baseline_lock --run {d17,d21,cell-sweep,all}\n"
         << "       [--n-train N] [--n-eval M] [--threads T] [--fast]\n"
         << "       [--lock-file PATH] [--exe-dir DIR] [--output-dir DIR]\n";
 }
@@ -57,7 +57,9 @@ RunKind parse_run_kind(const std::string& s) {
     if (s == "d17") return RunKind::D17;
     if (s == "d21") return RunKind::D21;
     if (s == "cell-sweep") return RunKind::CellSweep;
-    throw std::runtime_error("unknown --run: " + s + " (expected d17, d21, or cell-sweep)");
+    if (s == "all") return RunKind::All;
+    throw std::runtime_error("unknown --run: " + s +
+                             " (expected d17, d21, cell-sweep, or all)");
 }
 
 Args parse_args(int argc, char** argv) {
@@ -386,8 +388,7 @@ ProcessResult run_cell_sweep(const fs::path& exe_dir, const Args& args) {
     return run_capture(exe, sweep_args, exe_dir);
 }
 
-void merge_overnight_results(Json& lock, const Args& args, double bpc, const Json& bench_json,
-                             const CellSweepSummary* cell_summary) {
+void merge_overnight_results(Json& lock, const Args& args, double bpc, const Json& bench_json) {
     Json& section = lock["overnight_results"];
     section["status"] = args.fast ? "fast_smoke" : "completed";
     section["n_train"] = args.n_train;
@@ -395,33 +396,42 @@ void merge_overnight_results(Json& lock, const Args& args, double bpc, const Jso
     section["bpc"] = bpc;
     section["run_at"] = iso_timestamp_now();
     section["env"] = make_env_snapshot(args);
-    if (args.run == RunKind::CellSweep) {
-        section["profile"] = "d17";
-        section["mode"] = "cell-sweep";
-        section["runner"] = args.fast ? "cypha_cell_hypothesis_sweep --overnight-sweep-smoke"
-                                      : "cypha_cell_hypothesis_sweep --overnight-sweep";
-        if (cell_summary) {
-            section["variant_count"] = cell_summary->variant_count;
-            if (!std::isnan(cell_summary->b2_bpc)) {
-                section["b2_bpc"] = cell_summary->b2_bpc;
-            }
-            if (!cell_summary->output_dir.empty()) {
-                section["artifact_path"] = cell_summary->output_dir;
-            }
-        }
-    } else {
-        section["profile"] = "d17";
-        section["mode"] = "hybrid";
-        section["runner"] = "cyphalm_bench_native --overnight";
-        if (bench_json.contains("context_mode")) {
-            section["context_mode"] = bench_json["context_mode"];
-        }
-        if (bench_json.contains("corpus")) {
-            section["corpus"] = bench_json["corpus"];
-        }
-        if (bench_json.contains("synthetic")) {
-            section["synthetic"] = bench_json["synthetic"];
-        }
+    section["profile"] = "d17";
+    section["mode"] = "hybrid";
+    section["runner"] = "cyphalm_bench_native --overnight";
+    if (bench_json.contains("context_mode")) {
+        section["context_mode"] = bench_json["context_mode"];
+    }
+    if (bench_json.contains("corpus")) {
+        section["corpus"] = bench_json["corpus"];
+    }
+    if (bench_json.contains("synthetic")) {
+        section["synthetic"] = bench_json["synthetic"];
+    }
+}
+
+void merge_cell_sweep_results(Json& lock, const Args& args, double bpc,
+                              const CellSweepSummary& cell_summary) {
+    if (!lock.contains("cell_sweep_results")) {
+        lock["cell_sweep_results"] = Json::object();
+    }
+    Json& section = lock["cell_sweep_results"];
+    section["status"] = args.fast ? "fast_smoke" : "completed";
+    section["profile"] = "d17";
+    section["mode"] = "cell-sweep";
+    section["n_train"] = args.n_train;
+    section["n_eval"] = args.n_eval;
+    section["bpc"] = bpc;
+    section["run_at"] = iso_timestamp_now();
+    section["runner"] = args.fast ? "cypha_cell_hypothesis_sweep --overnight-sweep-smoke"
+                                  : "cypha_cell_hypothesis_sweep --overnight-sweep";
+    section["env"] = make_env_snapshot(args);
+    section["variant_count"] = cell_summary.variant_count;
+    if (!std::isnan(cell_summary.b2_bpc)) {
+        section["b2_bpc"] = cell_summary.b2_bpc;
+    }
+    if (!cell_summary.output_dir.empty()) {
+        section["artifact_path"] = cell_summary.output_dir;
     }
 }
 
@@ -447,6 +457,88 @@ void merge_rpsm_results(Json& lock, const Args& args, double bpc, const Json& be
     }
 }
 
+std::string run_kind_name(RunKind kind) {
+    switch (kind) {
+        case RunKind::D17:
+            return "d17";
+        case RunKind::D21:
+            return "d21";
+        case RunKind::CellSweep:
+            return "cell-sweep";
+        case RunKind::All:
+            return "all";
+    }
+    return "unknown";
+}
+
+struct RunOutcome {
+    Json report;
+    Json bench_json;
+    double bpc{0.0};
+    CellSweepSummary cell_summary;
+    bool has_cell_summary{false};
+};
+
+RunOutcome execute_run_kind(const Args& args, RunKind kind, const fs::path& exe_dir) {
+    Args step = args;
+    step.run = kind;
+
+    ProcessResult proc;
+    if (kind == RunKind::D17) {
+        proc = run_d17_bench(exe_dir, step);
+    } else if (kind == RunKind::D21) {
+        proc = run_d21_bench(exe_dir, step);
+    } else {
+        proc = run_cell_sweep(exe_dir, step);
+    }
+
+    if (proc.exit_code != 0) {
+        std::cerr << "cypha_baseline_lock: subprocess exit=" << proc.exit_code
+                  << " (run=" << run_kind_name(kind) << ")\n";
+        if (!proc.stdout_text.empty()) {
+            std::cerr << proc.stdout_text << "\n";
+        }
+        throw std::runtime_error("subprocess failed for run=" + run_kind_name(kind) + " exit=" +
+                                 std::to_string(proc.exit_code));
+    }
+    if (proc.stdout_text.empty()) {
+        throw std::runtime_error("subprocess produced no stdout for run=" + run_kind_name(kind));
+    }
+
+    RunOutcome outcome;
+    outcome.bench_json = Json::parse(proc.stdout_text);
+    outcome.report = {{"run", run_kind_name(kind)},
+                        {"n_train", step.n_train},
+                        {"n_eval", step.n_eval},
+                        {"fast", step.fast},
+                        {"status", step.fast ? "fast_smoke" : "completed"}};
+
+    if (kind == RunKind::CellSweep) {
+        outcome.cell_summary = extract_cell_sweep_summary(outcome.bench_json);
+        outcome.has_cell_summary = true;
+        outcome.bpc = outcome.cell_summary.bpc;
+        outcome.report["bpc"] = outcome.bpc;
+        outcome.report["b2_bpc"] = outcome.cell_summary.b2_bpc;
+        outcome.report["variant_count"] = outcome.cell_summary.variant_count;
+    } else {
+        outcome.bpc = extract_bpc_bench(outcome.bench_json);
+        outcome.report["bpc"] = outcome.bpc;
+    }
+    return outcome;
+}
+
+void merge_run_result(Json& lock, const Args& args, RunKind kind, const RunOutcome& outcome) {
+    if (kind == RunKind::D21) {
+        merge_rpsm_results(lock, args, outcome.bpc, outcome.bench_json);
+        return;
+    }
+    if (kind == RunKind::CellSweep) {
+        merge_cell_sweep_results(lock, args, outcome.bpc, outcome.cell_summary);
+        return;
+    }
+    merge_overnight_results(lock, args, outcome.bpc, outcome.bench_json);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -457,60 +549,30 @@ int main(int argc, char** argv) {
             args.lock_file.empty() ? cypha::bench::bench_root() / "BASELINE_LOCK.json"
                                    : fs::absolute(args.lock_file);
 
-        ProcessResult proc;
-        Json bench_json;
-        CellSweepSummary cell_summary;
-        const CellSweepSummary* cell_ptr = nullptr;
-
-        if (args.run == RunKind::D17) {
-            proc = run_d17_bench(exe_dir, args);
-        } else if (args.run == RunKind::D21) {
-            proc = run_d21_bench(exe_dir, args);
-        } else {
-            proc = run_cell_sweep(exe_dir, args);
-        }
-
-        if (proc.exit_code != 0) {
-            std::cerr << "cypha_baseline_lock: subprocess exit=" << proc.exit_code << "\n";
-            if (!proc.stdout_text.empty()) {
-                std::cerr << proc.stdout_text << "\n";
-            }
-            return proc.exit_code != 0 ? proc.exit_code : 1;
-        }
-        if (proc.stdout_text.empty()) {
-            throw std::runtime_error("subprocess produced no stdout");
-        }
-
-        bench_json = Json::parse(proc.stdout_text);
-        double bpc = 0.0;
-        if (args.run == RunKind::CellSweep) {
-            cell_summary = extract_cell_sweep_summary(bench_json);
-            cell_ptr = &cell_summary;
-            bpc = cell_summary.bpc;
-        } else {
-            bpc = extract_bpc_bench(bench_json);
-        }
-
         Json lock = load_lock_file(lock_path);
-        if (args.run == RunKind::D21) {
-            merge_rpsm_results(lock, args, bpc, bench_json);
-        } else {
-            merge_overnight_results(lock, args, bpc, bench_json, cell_ptr);
+        Json reports = Json::array();
+
+        const std::vector<RunKind> sequence =
+            args.run == RunKind::All
+                ? std::vector<RunKind>{RunKind::D17, RunKind::D21, RunKind::CellSweep}
+                : std::vector<RunKind>{args.run};
+
+        for (RunKind kind : sequence) {
+            const RunOutcome outcome = execute_run_kind(args, kind, exe_dir);
+            merge_run_result(lock, args, kind, outcome);
+            reports.push_back(outcome.report);
         }
         write_lock_file(lock_path, lock);
 
-        Json report = {{"run", args.run == RunKind::D17     ? "d17"
-                                : args.run == RunKind::D21 ? "d21"
-                                                           : "cell-sweep"},
+        Json report = {{"run", run_kind_name(args.run)},
                        {"lock_file", lock_path.string()},
-                       {"bpc", bpc},
                        {"n_train", args.n_train},
                        {"n_eval", args.n_eval},
                        {"fast", args.fast},
-                       {"status", args.fast ? "fast_smoke" : "completed"}};
-        if (cell_ptr != nullptr) {
-            report["b2_bpc"] = cell_ptr->b2_bpc;
-            report["variant_count"] = cell_ptr->variant_count;
+                       {"status", args.fast ? "fast_smoke" : "completed"},
+                       {"runs", reports}};
+        if (reports.size() == 1 && reports[0].contains("bpc")) {
+            report["bpc"] = reports[0]["bpc"];
         }
         std::cout << report.dump(2) << std::endl;
         return 0;

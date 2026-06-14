@@ -81,7 +81,9 @@ WeightDrift probe_weight_drift(double ewc_lambda) {
   const auto anchor_w_fast = ssm->w_fast_layer0();
   model.ewc_snapshot();
   assert(model.hybrid_ewc_regularizer().covers_gria_weights());
+  assert(model.hybrid_ewc_regularizer().covers_gria_bias());
   assert(model.hybrid_ewc_regularizer().covers_ssm_w_fast());
+  assert(model.hybrid_ewc_regularizer().covers_ssm_w_slow());
   train_sequence(model, task_b, 80);
   return measure_weight_drift(model, anchor_u, anchor_v, anchor_w_fast);
 }
@@ -128,7 +130,9 @@ int main() {
   train_sequence(model, {1, 2, 3, 4, 5, 6}, 6);
   model.ewc_snapshot();
   assert(model.hybrid_ewc_regularizer().covers_gria_weights());
+  assert(model.hybrid_ewc_regularizer().covers_gria_bias());
   assert(model.hybrid_ewc_regularizer().covers_ssm_w_fast());
+  assert(model.hybrid_ewc_regularizer().covers_ssm_w_slow());
   const auto m = model.train_step(7, 8);
   assert(m.ewc_penalty > 0.0);
 

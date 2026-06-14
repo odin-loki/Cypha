@@ -3077,6 +3077,66 @@ Json run_d23_overnight_lock_validation() {
     return experiments;
 }
 
+void validate_cell_sweep_lock_section(const Json& lock) {
+    if (lock.contains("cell_sweep_results")) {
+        validate_overnight_lock_section(lock["cell_sweep_results"], "cell_sweep_results");
+        return;
+    }
+    if (!lock.contains("overnight_results")) {
+        throw std::runtime_error("lock JSON missing cell_sweep_results and overnight_results");
+    }
+    const Json& section = lock["overnight_results"];
+    if (!section.is_object() || section.value("mode", "") != "cell-sweep") {
+        throw std::runtime_error("lock JSON missing populated cell_sweep_results");
+    }
+    validate_overnight_lock_section(section, "overnight_results (cell-sweep)");
+}
+
+Json run_d24_production_lock_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path lock_path = fs::current_path() / "d24_production_lock_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const int n_train = cypha::bench::bench_scale(200, 200);
+    const int n_eval = cypha::bench::bench_scale(64, 64);
+
+    const Json all_report =
+        run_baseline_lock_subprocess(exe_dir, lock_path, "all", n_train, n_eval);
+
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("overnight_results")) {
+        throw std::runtime_error("lock JSON missing overnight_results");
+    }
+    validate_overnight_lock_section(lock["overnight_results"], "overnight_results");
+    if (!lock.contains("rpsm_results")) {
+        throw std::runtime_error("lock JSON missing rpsm_results");
+    }
+    validate_overnight_lock_section(lock["rpsm_results"], "rpsm_results");
+    validate_cell_sweep_lock_section(lock);
+
+    const Json experiments{
+        {"all_baseline_lock", all_report},
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results",
+         lock.contains("cell_sweep_results") ? lock["cell_sweep_results"] : lock["overnight_results"]},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"backend", "cypha_baseline_lock"},
+    };
+    cypha::bench::finalize_domain("d24_production_lock_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d24_production_lock_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3103,6 +3163,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d21", "cypha_bench.domains.d21_rpsm_overnight", run_d21_rpsm_overnight_smoke},
         {"d22", "cypha_bench.domains.d22_intelligence_cross_profile", run_d22_intelligence_cross_profile},
         {"d23", "cypha_bench.domains.d23_overnight_lock_validation", run_d23_overnight_lock_validation},
+        {"d24", "cypha_bench.domains.d24_production_lock_validation", run_d24_production_lock_validation},
     };
 }
 

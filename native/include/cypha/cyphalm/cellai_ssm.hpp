@@ -69,6 +69,7 @@ class CellAISSM {
                               const std::vector<double>& w_slow);
 
   double lambda_fast() const { return lambda_fast_; }
+  double lambda_slow() const { return lambda_slow_; }
 
   /// Per-layer fast/slow blend scale (multiscale SSM).
   const std::vector<double>& multiscale_alpha() const { return alpha_; }
@@ -77,6 +78,9 @@ class CellAISSM {
   /// Layer-0 fast projection weights (``d_state x d_input`` row-major flat).
   const std::vector<double>& w_fast_layer0() const;
   std::vector<double>& w_fast_layer0_mut();
+  /// Layer-0 slow projection weights (``d_state x d_input`` row-major flat).
+  const std::vector<double>& w_slow_layer0() const;
+  std::vector<double>& w_slow_layer0_mut();
   /// Truncated BPTT nudge on layer-0 fast weights (matches Python ``_bptt_ssm_update``).
   void apply_bptt_fast_layer0(const std::vector<double>& grad_h, const std::vector<double>& e,
                               double ssm_lr, double scale = 0.001);

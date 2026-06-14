@@ -879,6 +879,7 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                 stub.d_gria_alpha = gria_grad.d_alpha;
                 stub.d_gria_U = gria_grad.dU;
                 stub.d_gria_V = gria_grad.dV;
+                stub.d_gria_bias = gria_grad.d_bias;
             }
             apply_hybrid_ewc(m, stub);
             hybrid_lstm_has_cache_ = false;
@@ -901,6 +902,7 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         stub.d_gria_alpha = gria_grad.d_alpha;
         stub.d_gria_U = gria_grad.dU;
         stub.d_gria_V = gria_grad.dV;
+        stub.d_gria_bias = gria_grad.d_bias;
         apply_hybrid_ewc(m, stub);
     }
     observe_ngram_count(next_token_id);
@@ -975,6 +977,7 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
     if (static_cast<int>(grad_ctx.size()) < active->d_state()) return;
     std::vector<double> grad_h(grad_ctx.begin(), grad_ctx.begin() + active->d_state());
     const double lf = active->lambda_fast();
+    const double ls = active->lambda_slow();
     std::vector<double> delta(static_cast<std::size_t>(active->d_state() * cfg_.d_embed), 0.0);
     for (int r = 0; r < active->d_state(); ++r) {
         for (int c = 0; c < cfg_.d_embed; ++c) {
@@ -982,7 +985,23 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
                 (1.0 - lf) * grad_h[static_cast<std::size_t>(r)] * last_e_[static_cast<std::size_t>(c)];
         }
     }
+    // Slow tier: mirror outer-product delta for Fisher observe only (W_slow is not BPTT-updated).
+    std::vector<double> delta_slow;
+    if (static_cast<int>(grad_ctx.size()) >= 2 * active->d_state()) {
+        std::vector<double> grad_s(grad_ctx.begin() + active->d_state(),
+                                   grad_ctx.begin() + 2 * active->d_state());
+        delta_slow.assign(static_cast<std::size_t>(active->d_state() * cfg_.d_embed), 0.0);
+        for (int r = 0; r < active->d_state(); ++r) {
+            for (int c = 0; c < cfg_.d_embed; ++c) {
+                delta_slow[static_cast<std::size_t>(r * cfg_.d_embed + c)] =
+                    (1.0 - ls) * grad_s[static_cast<std::size_t>(r)] * last_e_[static_cast<std::size_t>(c)];
+            }
+        }
+    }
     bptt_buffer_.push_back(std::move(delta));
+    if (!delta_slow.empty()) {
+        bptt_slow_buffer_.push_back(std::move(delta_slow));
+    }
     if (static_cast<int>(bptt_buffer_.size()) < cfg_.bptt_steps) return;
     std::vector<double> avg = bptt_buffer_.front();
     for (std::size_t i = 1; i < bptt_buffer_.size(); ++i) {
@@ -991,13 +1010,27 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         }
     }
     for (double& v : avg) v /= static_cast<double>(bptt_buffer_.size());
+    std::vector<double> avg_slow;
+    if (bptt_slow_buffer_.size() == bptt_buffer_.size() && !bptt_slow_buffer_.empty()) {
+        avg_slow = bptt_slow_buffer_.front();
+        for (std::size_t i = 1; i < bptt_slow_buffer_.size(); ++i) {
+            for (std::size_t j = 0; j < avg_slow.size(); ++j) {
+                avg_slow[j] += bptt_slow_buffer_[i][j];
+            }
+        }
+        for (double& v : avg_slow) v /= static_cast<double>(bptt_slow_buffer_.size());
+    }
     if (cfg_.ewc_lambda > 0.0 && uses_hybrid_ewc(mode)) {
         HybridEwcGradStub stub;
         stub.d_ssm_w_fast = avg;
+        if (!avg_slow.empty()) {
+            stub.d_ssm_w_slow = avg_slow;
+        }
         ewc_.observe_grads(stub);
     }
     active->apply_bptt_delta_avg(avg, cfg_.ssm_lr);
     bptt_buffer_.clear();
+    bptt_slow_buffer_.clear();
 }
 
 std::vector<double> CyphaLMModel::forward_log_probs(std::uint32_t token_id) {

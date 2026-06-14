@@ -16,7 +16,7 @@ milestone or a significant self-contained change.
 - **CUDA CI jobs:** **`windows_cuda_msvc`** and **`linux_cuda`** removed from `.github/workflows/ci.yml`; CUDA remains an optional local build.
 
 ### Changed
-- **CI gate:** native-only — **98 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`); optional **`federated_tls`** job (**`-DCYPHA_ENABLE_OPENSSL=ON`**, `native_federated_tls_smoke`, `continue-on-error`; local mirror **`scripts/ci_federated_tls_linux.sh`**). *(Phase 9: +2 smokes — see below.)*
+- **CI gate:** native-only — **99 CTests** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`); optional **`federated_tls`** job (**`-DCYPHA_ENABLE_OPENSSL=ON`**, `native_federated_tls_smoke`, `continue-on-error`; local mirrors **`scripts/ci_federated_tls_linux.sh`**, **`scripts/ci_federated_tls_windows.ps1`**).
 - **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` default:** **1** (was 16) — CUDA used for all batch sizes n≥1 when a GPU is available.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).
@@ -41,7 +41,8 @@ milestone or a significant self-contained change.
 - **Intelligence Stats Phase 6:** 28-variant `--overnight-sweep`; bench **d20**; `scripts/run_d17_overnight.ps1`.
 - **Intelligence Stats Phase 7:** `bench/BASELINE_LOCK.json`; `scripts/publish_release.ps1`; `native_overnight_mini_smoke`.
 - **Intelligence Stats Phase 8:** bench **d22** cross-domain intelligence profile (d18 + d16 EWC + d20 cell sweep); `d22_intelligence_cross_profile.json`; **`cypha_baseline_lock`** + `scripts/update_baseline_lock.ps1`; hybrid EWC (SSM/GRIA α + B0 ngram count path, H01 α forget gate); CTests `native_d22_cross_smoke`, `native_ewc_hybrid_smoke`, `native_baseline_lock_smoke`.
-- **Intelligence Stats Phase 9 (v2.3.9):** hybrid EWC **weight** Fisher on GRIA **U**/**V** + SSM **W_fast** (extends Phase 8 α Fisher); **`scripts/run_overnight_all.ps1`** unified overnight runner (D17 + d21 RPSM + 28-variant cell sweep + baseline-lock refresh); bench **d23** overnight lock validation; EWC anchor/Fisher persistence in CyphaLM **`checkpoint.json`**; CTests `native_d23_overnight_lock_smoke`, `native_ewc_weight_fisher_smoke`.
+- **Intelligence Stats Phase 9 (v2.3.9) — shipped:** hybrid EWC **weight** Fisher on GRIA **U**/**V** + SSM **W_fast** (extends Phase 8 α Fisher); **`scripts/run_overnight_all.ps1`** unified overnight runner (D17 + d21 RPSM + 28-variant cell sweep + baseline-lock refresh); bench **d23** overnight lock validation; EWC anchor/Fisher persistence in CyphaLM **`checkpoint.json`**; CTests `native_d23_overnight_lock_smoke`, `native_ewc_weights_smoke`.
+- **Intelligence Stats Phase 10 (v2.3.10) — shipped:** hybrid EWC Fisher on GRIA **bias** + SSM **W_slow** (extends Phase 9 weight Fisher); bench **d24** production lock validation; **`cypha_baseline_lock --run all`** (D17 + d21 + cell-sweep in one CLI); Windows TLS CI mirror **`scripts/ci_federated_tls_windows.ps1`**; CTests `native_d24_production_lock_smoke`, `native_ewc_weights_smoke` (**99 total**).
 - **H16 SR gate laws:** `sr_gate_laws.hpp/cpp` — fit closed-form forget-gate laws, apply in char_lstm; `native_sr_gate_laws_smoke`.
 - **RPSM d21 bench:** end-to-end CyphaLM rpsm `train_sequence`; bench **d21**; `scripts/run_rpsm_overnight.ps1`; `native_d21_rpsm_smoke`.
 - **CyphaLM EWC full:** embed + lm_head Fisher (diagonal grad²); extended `native_ewc_cyphalm_smoke`.
@@ -50,7 +51,8 @@ milestone or a significant self-contained change.
 - **`cypha_baseline_lock`:** CLI merges D17/d21/cell-sweep BPC into **`bench/BASELINE_LOCK.json`**; wrapper **`scripts/update_baseline_lock.ps1`**; CTest `native_baseline_lock_smoke`.
 - **CyphaLM checkpoint:** save/load **`ngram_count_table`** in checkpoint JSON (B0 ngram count path round-trip).
 - **CTests +3 (Phase 8):** `native_d22_cross_smoke`, `native_ewc_hybrid_smoke`, `native_baseline_lock_smoke` (**96 total** at Phase 8).
-- **CTests +2 (Phase 9):** `native_d23_overnight_lock_smoke`, `native_ewc_weight_fisher_smoke` (**98 total**).
+- **CTests +2 (Phase 9, shipped):** `native_d23_overnight_lock_smoke`, `native_ewc_weights_smoke` (**98 total**).
+- **CTests +1 (Phase 10):** `native_d24_production_lock_smoke` (**99 total**); extended `native_ewc_weights_smoke` (GRIA bias + SSM W_slow Fisher).
 - **CTests +3 (Phase 7):** `native_sr_gate_laws_smoke`, `native_d21_rpsm_smoke`, `native_federated_tls_smoke` (**93 total** at Phase 7).
 - **Preprocessor:** auto `auto_rff_gamma_cv` when tabular dim ≤30 and `rff_gamma` left at default 1.0.
 - **Release notes script:** `scripts/create_release_notes.ps1`; release workflow hook.

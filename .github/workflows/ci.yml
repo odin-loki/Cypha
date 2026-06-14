@@ -2,7 +2,7 @@
 #
 # Two blocking jobs: Linux native build+test, MinGW Windows PE cross-compile.
 # Optional third job: federated TLS smoke (OpenSSL; continue-on-error — does not gate merges).
-# CI gate: 93 CTests (`ctest -R native_`, Qt GUI exec excluded on headless Linux).
+# CI gate: 99 CTests (`ctest -R native_`, Qt GUI exec excluded on headless Linux).
 # CUDA is optional for local builds only (see docs/native/ACCEL_CUDA.md).
 #
 # Parity fixtures live under fixtures/ (regenerate offline if core math changes).

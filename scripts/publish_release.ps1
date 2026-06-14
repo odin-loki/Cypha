@@ -1,9 +1,11 @@
 # Publish a GitHub Release for a tag using maintainer notes from create_release_notes.ps1.
+# Phase 10 (v2.3.10+): highlights from create_release_notes.ps1 — d24 production lock,
+# cypha_baseline_lock --run all, hybrid EWC bias/W_slow, ci_federated_tls_windows.ps1, 99 CTests.
 # Usage:
 #   pwsh -File scripts/publish_release.ps1
-#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.7 -Draft
+#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.10 -Draft
 param(
-  [string]$Tag = "v2.3.8",
+  [string]$Tag = "v2.3.10",
   [switch]$Draft
 )
 

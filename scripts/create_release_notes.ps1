@@ -9,6 +9,19 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.10" = @(
+    "Intelligence Stats **Phase 10**: hybrid EWC **GRIA bias** + SSM **W_slow** layer-0 Fisher (extends Phase 9 U/V + W_fast + α).",
+    "Bench domain **d24** production lock validation — ``cypha_bench_run --domain-tag d24``; profile ``bench/config/d24_production_lock_profile.json``.",
+    "``cypha_baseline_lock --run all`` (d17 + d21 + cell-sweep); CTest ``native_d24_production_lock_smoke``.",
+    "Windows federated TLS mirror: ``scripts/ci_federated_tls_windows.ps1`` (vcpkg / ``OPENSSL_ROOT_DIR``).",
+    "CI gate **99 CTests**; release notes v2.3.10 Phase 10 template."
+  )
+  "2.3.9" = @(
+    "Intelligence Stats **Phase 9**: hybrid EWC **weight** Fisher on GRIA **U**/**V** + SSM **W_fast**; EWC anchor/Fisher in CyphaLM ``checkpoint.json``.",
+    "``scripts/run_overnight_all.ps1`` — unified overnight runner (D17 + d21 RPSM + cell sweep + baseline-lock refresh).",
+    "Bench **d23** overnight lock validation; CTest ``native_d23_overnight_lock_smoke``.",
+    "CI gate **98 CTests**; optional federated TLS job (``scripts/ci_federated_tls_linux.sh``)."
+  )
   "2.3.8" = @(
     "Intelligence Stats **Phase 8**: bench domain **d22** cross-profile (d18 intelligence + d16 EWC probe + d20 cell sweep smoke).",
     "``bench/config/d22_intelligence_cross_profile.json`` + combined report ``bench/report/tables/d22_intelligence_cross_profile.json``.",

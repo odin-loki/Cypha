@@ -75,5 +75,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d23",
     "notes": "Overnight baseline lock validation; see bench/config/d23_overnight_lock_profile.json"
+  },
+  "production_lock_d24": {
+    "path": "everyday_profile.json",
+    "config": "d24_production_lock_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d24",
+    "notes": "Production baseline lock validation; see bench/config/d24_production_lock_profile.json"
   }
 }

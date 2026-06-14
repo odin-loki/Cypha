@@ -1013,6 +1013,21 @@ set_tests_properties(native_d23_overnight_lock_smoke PROPERTIES
   TIMEOUT 120
 )
 
+configure_file(
+  "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+  "${CMAKE_CURRENT_BINARY_DIR}/d24_production_lock_smoke.json"
+  COPYONLY
+)
+
+add_test(
+  NAME native_d24_production_lock_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d24
+)
+set_tests_properties(native_d24_production_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 180
+)
+
 add_test(
   NAME native_cell_hypothesis_sweep_smoke
   COMMAND "$<TARGET_FILE:cypha_cell_hypothesis_sweep>" --smoke

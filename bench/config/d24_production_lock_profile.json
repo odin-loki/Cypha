@@ -1,0 +1,29 @@
+{
+  "profile_id": "d24_production_lock_profile",
+  "description": "D24 production baseline lock validation — cypha_baseline_lock --run all fast smoke",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 24,
+    "domain_tag": "d24"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d24_production_lock_smoke — full lock validation gate (d17 + d21 + cell-sweep)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "cypha_baseline_lock", "run": "all", "fast": true }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 24",
+    "Or: cypha_bench_run --domain-tag d24",
+    "Runs cypha_baseline_lock --run all --fast against a lock JSON copy",
+    "Validates overnight_results, rpsm_results, and cell_sweep_results are populated",
+    "Full overnight orchestration: scripts/run_overnight_all.ps1 or scripts/update_baseline_lock.ps1 -Run all",
+    "Phase 10: production baseline lock validation gate"
+  ]
+}

@@ -303,6 +303,18 @@ std::vector<double>& CellAISSM::w_fast_layer0_mut() {
   return W_fast_[0];
 }
 
+const std::vector<double>& CellAISSM::w_slow_layer0() const {
+  static const std::vector<double> kEmpty;
+  if (cfg_.n_layers < 1 || W_slow_.empty()) {
+    return kEmpty;
+  }
+  return W_slow_[0];
+}
+
+std::vector<double>& CellAISSM::w_slow_layer0_mut() {
+  return W_slow_[0];
+}
+
 nlohmann::json CellAISSM::get_state() const {
   nlohmann::json j;
   j["h"] = h_;

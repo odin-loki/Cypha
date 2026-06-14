@@ -178,6 +178,7 @@ class CyphaLMModel {
     std::vector<double> last_ctx_;
     std::vector<double> last_ssm_h_fast_;
     std::vector<std::vector<double>> bptt_buffer_;
+    std::vector<std::vector<double>> bptt_slow_buffer_;
     int gria_d_in_ = 160;
     int last_gng_bmu_ = 0;
     int current_view_slot_ = 0;

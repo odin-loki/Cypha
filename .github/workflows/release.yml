@@ -14,9 +14,11 @@
 # or overnight result JSON via scripts/publish_release.ps1 after local gh auth.
 # Phase 8 (v2.3.8+): update BASELINE_LOCK via scripts/update_baseline_lock.ps1
 # (cypha_baseline_lock CLI); d22 cross-profile bench smoke in CI via native_d22_cross_smoke.
-# Phase 9 (v2.3.9+): scripts/run_overnight_all.ps1 unified overnight runner;
+# Phase 9 (v2.3.9, shipped): scripts/run_overnight_all.ps1 unified overnight runner;
 # d23 overnight lock validation (native_d23_overnight_lock_smoke);
-# hybrid EWC weight Fisher + checkpoint persistence (native_ewc_weight_fisher_smoke); 98 CTests.
+# hybrid EWC weight Fisher + checkpoint persistence (native_ewc_weights_smoke); 98 CTests.
+# Phase 10 (v2.3.10, planned/shipping): EWC bias/W_slow Fisher; d24 production lock;
+# cypha_baseline_lock --run all; scripts/ci_federated_tls_windows.ps1; 99 CTests target.
 
 name: Release
 
@@ -279,9 +281,17 @@ jobs:
             - **Hybrid EWC:** SSM/GRIA α Fisher overlay + B0 **`ngram_count_table`** prior; H01 α forget gate; CyphaLM checkpoint persists ngram counts.
             - **CI gate:** **96 CTests** (`ctest -R native_`); optional **`federated_tls`** job runs **`native_federated_tls_smoke`** with **`-DCYPHA_ENABLE_OPENSSL=ON`** (`bash scripts/ci_federated_tls_linux.sh` locally).
 
-            ### Phase 9 maintainer notes (v2.3.9)
+            ### Phase 9 maintainer notes (v2.3.9, shipped)
 
             - **Unified overnight:** `pwsh -File scripts/run_overnight_all.ps1` — D17 + d21 RPSM + 28-variant cell sweep + `update_baseline_lock.ps1` refresh of [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json). Add `-Fast` for smoke token budgets.
-            - **Overnight lock validation:** `cypha_bench_run --domain-tag d23` — FAST wiring check for baseline-lock schema and mini overnight path; profile [`bench/config/d23_overnight_lock_profile.json`](bench/config/d23_overnight_lock_profile.json) *(planned)*.
+            - **Overnight lock validation:** `cypha_bench_run --domain-tag d23` — FAST wiring check for baseline-lock schema and mini overnight path; profile [`bench/config/d23_overnight_lock_profile.json`](bench/config/d23_overnight_lock_profile.json).
             - **Hybrid EWC weight Fisher:** diagonal Fisher on GRIA **U**/**V** + SSM **W_fast** (extends Phase 8 α Fisher); EWC anchor/Fisher blocks persisted in CyphaLM `checkpoint.json`.
-            - **CI gate:** **98 CTests** (`ctest -R native_`); new smokes **`native_d23_overnight_lock_smoke`**, **`native_ewc_weight_fisher_smoke`**.
+            - **CI gate:** **98 CTests** (`ctest -R native_`); smokes **`native_d23_overnight_lock_smoke`**, **`native_ewc_weights_smoke`**.
+
+            ### Phase 10 maintainer notes (v2.3.10, planned/shipping)
+
+            - **Hybrid EWC bias + W_slow Fisher:** diagonal Fisher on GRIA **`bias`** + SSM **`W_slow`** (extends Phase 9 weight Fisher); CTest **`native_ewc_weights_smoke`** *(planned)*.
+            - **Baseline lock all runs:** `cypha_baseline_lock --run all --fast --lock-file bench/BASELINE_LOCK.json` — or `pwsh -File scripts/update_baseline_lock.ps1 -Run all -Fast`.
+            - **Production lock validation:** `cypha_bench_run --domain-tag d24` — end-to-end `BASELINE_LOCK.json` check under production profiles; profile [`bench/config/d24_production_lock_profile.json`](bench/config/d24_production_lock_profile.json) *(planned)*.
+            - **Federated TLS Windows mirror:** `pwsh -File scripts/ci_federated_tls_windows.ps1` — local Windows mirror of optional **`federated_tls`** CI job (`-DCYPHA_ENABLE_OPENSSL=ON`, `native_federated_tls_smoke`; skip without OpenSSL).
+            - **CI gate:** **99 CTests** target (`ctest -R native_`); new smokes **`native_d24_production_lock_smoke`**, **`native_ewc_weights_smoke`**.

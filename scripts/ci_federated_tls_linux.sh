@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Local mirror of the optional "Federated TLS smoke (OpenSSL)" job from .github/workflows/ci.yml.
+# Blocking CI gate elsewhere: 98+ CTests (`ctest -R native_`; see scripts/ci_native_linux.sh).
 # Builds with -DCYPHA_ENABLE_OPENSSL=ON and runs ctest -R native_federated_tls.
 # Exits 0 (skip) when OpenSSL dev libs or the openssl CLI are unavailable; exits non-zero on test failure.
 set -euo pipefail

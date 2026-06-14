@@ -9,6 +9,7 @@ Native build, validation, and release helpers. Narrative “when to run what” 
 | `cypha_native_validate_all.ps1` | Windows full gate: rebuild + CTest (`-R native_`) + bench fig01–09 + tune dry-run + REST smoke (`-SkipBuild` after rebuild) | console |
 | `ci_native_linux.sh` | Linux/WSL mirror of CI **`build_and_test`**: cmake + `ctest -R native_` | console |
 | `ci_federated_tls_linux.sh` | Linux/WSL mirror of optional CI **`federated_tls`**: `-DCYPHA_ENABLE_OPENSSL=ON` + `ctest -R native_federated_tls` | console |
+| `ci_federated_tls_windows.ps1` | Windows mirror of optional CI **`federated_tls`**: OpenSSL via vcpkg / `OPENSSL_ROOT_DIR`, `ctest -R native_federated_tls_smoke` | console |
 | `cyphalm_native_validate.ps1` | CyphaLM native CTest subset + checkpoint smoke | console |
 | `wsl_verify.sh` | WSL: native build + CTest + optional REST smoke (`RUN_NATIVE=1`) | console |
 | `build_native_wsl.ps1` | WSL CMake build in `native/build-wsl` + optional ctest | console |
@@ -16,6 +17,9 @@ Native build, validation, and release helpers. Narrative “when to run what” 
 ```powershell
 # Windows — full production gate
 powershell -File scripts\cypha_native_validate_all.ps1
+
+# Windows — optional federated TLS smoke (OpenSSL via vcpkg or OPENSSL_ROOT_DIR)
+pwsh -File scripts\ci_federated_tls_windows.ps1
 ```
 
 ```bash

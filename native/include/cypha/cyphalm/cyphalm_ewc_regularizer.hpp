@@ -55,8 +55,10 @@ struct HybridEwcGradStub {
   std::vector<double> d_gria_alpha;
   std::vector<double> d_gria_U;
   std::vector<double> d_gria_V;
+  std::vector<double> d_gria_bias;
   std::vector<double> d_ssm_alpha;
   std::vector<double> d_ssm_w_fast;
+  std::vector<double> d_ssm_w_slow;
 };
 
 /// Hybrid EWC: char-LSTM + SSM multiscale ``alpha`` + GRIA per-token ``alpha``.
@@ -73,7 +75,8 @@ class HybridEwcRegularizer {
 
   bool has_snapshot() const {
     return lstm_.has_snapshot() || !anchor_gria_alpha_.empty() || !anchor_gria_U_.empty() ||
-           !anchor_ssm_w_fast_.empty();
+           !anchor_gria_bias_.empty() || !anchor_ssm_w_fast_.empty() ||
+           !anchor_ssm_w_slow_.empty();
   }
 
   bool covers_embed_and_head() const { return lstm_.covers_embed_and_head(); }
@@ -85,6 +88,10 @@ class HybridEwcRegularizer {
   bool covers_gria_weights() const { return !anchor_gria_U_.empty() && !anchor_gria_V_.empty(); }
 
   bool covers_ssm_w_fast() const { return !anchor_ssm_w_fast_.empty(); }
+
+  bool covers_gria_bias() const { return !anchor_gria_bias_.empty(); }
+
+  bool covers_ssm_w_slow() const { return !anchor_ssm_w_slow_.empty(); }
 
   CyphaLMEwcRegularizer& lstm_part() { return lstm_; }
   const CyphaLMEwcRegularizer& lstm_part() const { return lstm_; }
@@ -98,16 +105,22 @@ class HybridEwcRegularizer {
   std::vector<double> anchor_gria_alpha_;
   std::vector<double> anchor_gria_U_;
   std::vector<double> anchor_gria_V_;
+  std::vector<double> anchor_gria_bias_;
   std::vector<double> anchor_ssm_w_fast_;
+  std::vector<double> anchor_ssm_w_slow_;
   std::vector<double> fisher_ssm_alpha_;
   std::vector<double> fisher_gria_alpha_;
   std::vector<double> fisher_gria_U_;
   std::vector<double> fisher_gria_V_;
+  std::vector<double> fisher_gria_bias_;
   std::vector<double> fisher_ssm_w_fast_;
+  std::vector<double> fisher_ssm_w_slow_;
   std::size_t ssm_grad_observations_{0};
   std::size_t gria_grad_observations_{0};
   std::size_t gria_uv_grad_observations_{0};
+  std::size_t gria_bias_grad_observations_{0};
   std::size_t ssm_w_fast_grad_observations_{0};
+  std::size_t ssm_w_slow_grad_observations_{0};
 };
 
 }  // namespace cypha::cyphalm

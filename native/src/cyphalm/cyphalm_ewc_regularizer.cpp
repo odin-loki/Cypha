@@ -216,13 +216,23 @@ void HybridEwcRegularizer::snapshot(const CharLSTMHead* lstm, const CellAISSM* s
     anchor_gria_V_ = gria->V;
     build_diagonal_fisher_from_anchor(anchor_gria_V_, fisher_gria_V_);
     gria_uv_grad_observations_ = 0;
+    anchor_gria_bias_ = gria->bias;
+    build_diagonal_fisher_from_anchor(anchor_gria_bias_, fisher_gria_bias_);
+    gria_bias_grad_observations_ = 0;
   }
   anchor_ssm_w_fast_.clear();
   fisher_ssm_w_fast_.clear();
+  anchor_ssm_w_slow_.clear();
+  fisher_ssm_w_slow_.clear();
   if (ssm != nullptr && !ssm->w_fast_layer0().empty()) {
     anchor_ssm_w_fast_ = ssm->w_fast_layer0();
     build_diagonal_fisher_from_anchor(anchor_ssm_w_fast_, fisher_ssm_w_fast_);
     ssm_w_fast_grad_observations_ = 0;
+  }
+  if (ssm != nullptr && !ssm->w_slow_layer0().empty()) {
+    anchor_ssm_w_slow_ = ssm->w_slow_layer0();
+    build_diagonal_fisher_from_anchor(anchor_ssm_w_slow_, fisher_ssm_w_slow_);
+    ssm_w_slow_grad_observations_ = 0;
   }
 }
 
@@ -256,8 +266,14 @@ void HybridEwcRegularizer::observe_grads(const HybridEwcGradStub& grads) {
     update_block(grads.d_gria_V, fisher_gria_V_);
     gria_uv_grad_observations_ = next_count;
   }
+  if (!anchor_gria_bias_.empty() && !grads.d_gria_bias.empty()) {
+    observe_block_grads(grads.d_gria_bias, fisher_gria_bias_, gria_bias_grad_observations_);
+  }
   if (!anchor_ssm_w_fast_.empty() && !grads.d_ssm_w_fast.empty()) {
     observe_block_grads(grads.d_ssm_w_fast, fisher_ssm_w_fast_, ssm_w_fast_grad_observations_);
+  }
+  if (!anchor_ssm_w_slow_.empty() && !grads.d_ssm_w_slow.empty()) {
+    observe_block_grads(grads.d_ssm_w_slow, fisher_ssm_w_slow_, ssm_w_slow_grad_observations_);
   }
 }
 
@@ -279,8 +295,14 @@ double HybridEwcRegularizer::penalty(const CharLSTMHead* lstm, const CellAISSM* 
   if (gria != nullptr && !anchor_gria_V_.empty()) {
     sum += squared_penalty(gria->V, anchor_gria_V_, fisher_gria_V_);
   }
+  if (gria != nullptr && !anchor_gria_bias_.empty()) {
+    sum += squared_penalty(gria->bias, anchor_gria_bias_, fisher_gria_bias_);
+  }
   if (ssm != nullptr && !anchor_ssm_w_fast_.empty()) {
     sum += squared_penalty(ssm->w_fast_layer0(), anchor_ssm_w_fast_, fisher_ssm_w_fast_);
+  }
+  if (ssm != nullptr && !anchor_ssm_w_slow_.empty()) {
+    sum += squared_penalty(ssm->w_slow_layer0(), anchor_ssm_w_slow_, fisher_ssm_w_slow_);
   }
   return sum;
 }
@@ -307,8 +329,15 @@ void HybridEwcRegularizer::apply_pull(CharLSTMHead* lstm, CellAISSM* ssm, GRIALo
   if (gria != nullptr && !anchor_gria_V_.empty() && gria_lr > 0.0) {
     pull_toward_anchor(gria->V, anchor_gria_V_, fisher_gria_V_, ewc_lambda * gria_lr);
   }
+  if (gria != nullptr && !anchor_gria_bias_.empty() && gria_lr > 0.0) {
+    pull_toward_anchor(gria->bias, anchor_gria_bias_, fisher_gria_bias_, ewc_lambda * gria_lr);
+  }
   if (ssm != nullptr && !anchor_ssm_w_fast_.empty() && ssm_lr > 0.0) {
     pull_toward_anchor(ssm->w_fast_layer0_mut(), anchor_ssm_w_fast_, fisher_ssm_w_fast_,
+                       ewc_lambda * ssm_lr);
+  }
+  if (ssm != nullptr && !anchor_ssm_w_slow_.empty() && ssm_lr > 0.0) {
+    pull_toward_anchor(ssm->w_slow_layer0_mut(), anchor_ssm_w_slow_, fisher_ssm_w_slow_,
                        ewc_lambda * ssm_lr);
   }
 }
@@ -320,16 +349,22 @@ nlohmann::json HybridEwcRegularizer::get_state() const {
       {"anchor_gria_alpha", anchor_gria_alpha_},
       {"anchor_gria_U", anchor_gria_U_},
       {"anchor_gria_V", anchor_gria_V_},
+      {"anchor_gria_bias", anchor_gria_bias_},
       {"anchor_ssm_w_fast", anchor_ssm_w_fast_},
+      {"anchor_ssm_w_slow", anchor_ssm_w_slow_},
       {"fisher_ssm_alpha", fisher_ssm_alpha_},
       {"fisher_gria_alpha", fisher_gria_alpha_},
       {"fisher_gria_U", fisher_gria_U_},
       {"fisher_gria_V", fisher_gria_V_},
+      {"fisher_gria_bias", fisher_gria_bias_},
       {"fisher_ssm_w_fast", fisher_ssm_w_fast_},
+      {"fisher_ssm_w_slow", fisher_ssm_w_slow_},
       {"ssm_grad_observations", ssm_grad_observations_},
       {"gria_grad_observations", gria_grad_observations_},
       {"gria_uv_grad_observations", gria_uv_grad_observations_},
+      {"gria_bias_grad_observations", gria_bias_grad_observations_},
       {"ssm_w_fast_grad_observations", ssm_w_fast_grad_observations_},
+      {"ssm_w_slow_grad_observations", ssm_w_slow_grad_observations_},
   };
 }
 
@@ -349,8 +384,14 @@ void HybridEwcRegularizer::set_state(const nlohmann::json& state) {
   if (state.contains("anchor_gria_V")) {
     anchor_gria_V_ = json_to_vec(state.at("anchor_gria_V"));
   }
+  if (state.contains("anchor_gria_bias")) {
+    anchor_gria_bias_ = json_to_vec(state.at("anchor_gria_bias"));
+  }
   if (state.contains("anchor_ssm_w_fast")) {
     anchor_ssm_w_fast_ = json_to_vec(state.at("anchor_ssm_w_fast"));
+  }
+  if (state.contains("anchor_ssm_w_slow")) {
+    anchor_ssm_w_slow_ = json_to_vec(state.at("anchor_ssm_w_slow"));
   }
   if (state.contains("fisher_ssm_alpha")) {
     fisher_ssm_alpha_ = json_to_vec(state.at("fisher_ssm_alpha"));
@@ -364,8 +405,14 @@ void HybridEwcRegularizer::set_state(const nlohmann::json& state) {
   if (state.contains("fisher_gria_V")) {
     fisher_gria_V_ = json_to_vec(state.at("fisher_gria_V"));
   }
+  if (state.contains("fisher_gria_bias")) {
+    fisher_gria_bias_ = json_to_vec(state.at("fisher_gria_bias"));
+  }
   if (state.contains("fisher_ssm_w_fast")) {
     fisher_ssm_w_fast_ = json_to_vec(state.at("fisher_ssm_w_fast"));
+  }
+  if (state.contains("fisher_ssm_w_slow")) {
+    fisher_ssm_w_slow_ = json_to_vec(state.at("fisher_ssm_w_slow"));
   }
   if (state.contains("ssm_grad_observations")) {
     ssm_grad_observations_ = state.at("ssm_grad_observations").get<std::size_t>();
@@ -376,8 +423,14 @@ void HybridEwcRegularizer::set_state(const nlohmann::json& state) {
   if (state.contains("gria_uv_grad_observations")) {
     gria_uv_grad_observations_ = state.at("gria_uv_grad_observations").get<std::size_t>();
   }
+  if (state.contains("gria_bias_grad_observations")) {
+    gria_bias_grad_observations_ = state.at("gria_bias_grad_observations").get<std::size_t>();
+  }
   if (state.contains("ssm_w_fast_grad_observations")) {
     ssm_w_fast_grad_observations_ = state.at("ssm_w_fast_grad_observations").get<std::size_t>();
+  }
+  if (state.contains("ssm_w_slow_grad_observations")) {
+    ssm_w_slow_grad_observations_ = state.at("ssm_w_slow_grad_observations").get<std::size_t>();
   }
 }
 
