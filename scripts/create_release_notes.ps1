@@ -1,4 +1,4 @@
-# Emit markdown release notes for a tag (local maintainer helper).
+﻿# Emit markdown release notes for a tag (local maintainer helper).
 # Usage: pwsh -File scripts/create_release_notes.ps1 -Tag v2.3.5
 param(
   [Parameter(Mandatory = $true)]
@@ -9,36 +9,44 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.19" = @(
+    "Intelligence Stats **Phase 19** (shipped): bench **d33** release publish validation - publish script presence + production/overnight-complete gates; profile ``bench/config/d33_release_publish_profile.json``; CTest ``native_d33_release_publish_smoke``.",
+    "``scripts/verify_release_publish.ps1`` - production-complete gate + d33 + ``publish_release.ps1 -DryRun`` preview; poll/finalize **BuildDir auto-detect** from running overnight.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_RELEASE_PUBLISH=1`** - runs d33 when profile exists.",
+    "CI gate **111 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.18" = @(
-    "Intelligence Stats **Phase 18** (prep): bench **d32** *(TBD)*; profile *(TBD)*; CTest *(TBD)*.",
-    "CI gate **109 CTests** today (110 when next Phase 18 smoke merges); full 300k production overnight **in progress** (maintainer workflow only)."
+    "Intelligence Stats **Phase 18** (shipped): bench **d32** production complete validation - full production tier gate when ``overnight_results.n_train >= 300000``; profile ``bench/config/d32_production_complete_profile.json``; CTest ``native_d32_production_complete_smoke``.",
+    "``scripts/validate_production_complete.ps1`` - unified post-overnight validator (baseline lock + finalize + d31/d30); ``scripts/start_poll_finalize_background.ps1``; cell sweep ``overnight_progress.log`` sidecar.",
+    "``publish_release.ps1`` ``gh auth`` preflight; ``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_PRODUCTION_COMPLETE=1`** - runs d32 when profile exists.",
+    "CI gate **110 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
   )
   "2.3.17" = @(
-    "Intelligence Stats **Phase 17** (shipped): bench **d31** post-overnight pipeline validation — d27→d30 chain + pipeline script presence gate; profile ``bench/config/d31_post_overnight_pipeline_profile.json``; CTest ``native_d31_post_overnight_pipeline_smoke``.",
-    "``scripts/poll_and_finalize_overnight.ps1`` — poll until overnight processes exit, then ``finalize_production_overnight.ps1`` + ``commit_production_lock.ps1`` (``-DryRun`` preview; ``-Force`` to commit; never pushes).",
-    "``scripts/cleanup_legacy_results.ps1`` + ``migrate_legacy_results.ps1 -ArchiveLegacy`` — one-shot legacy ``results/`` migrate + remove or archive.",
-    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1`** — runs d31 when profile exists.",
+    "Intelligence Stats **Phase 17** (shipped): bench **d31** post-overnight pipeline validation - d27->d30 chain + pipeline script presence gate; profile ``bench/config/d31_post_overnight_pipeline_profile.json``; CTest ``native_d31_post_overnight_pipeline_smoke``.",
+    "``scripts/poll_and_finalize_overnight.ps1`` - poll until overnight processes exit, then ``finalize_production_overnight.ps1`` + ``commit_production_lock.ps1`` (``-DryRun`` preview; ``-Force`` to commit; never pushes).",
+    "``scripts/cleanup_legacy_results.ps1`` + ``migrate_legacy_results.ps1 -ArchiveLegacy`` - one-shot legacy ``results/`` migrate + remove or archive.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1`** - runs d31 when profile exists.",
     "CI gate **109 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
   )
   "2.3.16" = @(
-    "Intelligence Stats **Phase 16** (shipped): bench **d30** artifact path hygiene validation — legacy repo-root ``results/`` path detection in ``cell_sweep_results.artifact_path``, verifies ``bench/results/.gitkeep``; profile ``bench/config/d30_artifact_hygiene_profile.json``; CTest ``native_d30_artifact_hygiene_smoke``.",
-    "``scripts/migrate_legacy_results.ps1`` — merge repo-root ``results/`` cell-sweep artifacts into ``bench/results/cell_sweep/`` (``-DryRun`` / ``-RemoveLegacy``).",
-    "**Overnight progress logging** — stderr ``[cyphalm]`` / ``[cell_sweep]`` (full sweep only); ``run_d17_overnight.ps1`` tees to ``bench/results/overnight_d17_<timestamp>.log``.",
-    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** — runs d30 when profile exists.",
+    "Intelligence Stats **Phase 16** (shipped): bench **d30** artifact path hygiene validation - legacy repo-root ``results/`` path detection in ``cell_sweep_results.artifact_path``, verifies ``bench/results/.gitkeep``; profile ``bench/config/d30_artifact_hygiene_profile.json``; CTest ``native_d30_artifact_hygiene_smoke``.",
+    "``scripts/migrate_legacy_results.ps1`` - merge repo-root ``results/`` cell-sweep artifacts into ``bench/results/cell_sweep/`` (``-DryRun`` / ``-RemoveLegacy``).",
+    "**Overnight progress logging** - stderr ``[cyphalm]`` / ``[cell_sweep]`` (full sweep only); ``run_d17_overnight.ps1`` tees to ``bench/results/overnight_d17_<timestamp>.log``.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** - runs d30 when profile exists.",
     "CI gate **108 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
   )
   "2.3.15" = @(
-    "Intelligence Stats **Phase 15** (shipped): bench **d29** release readiness validation — schema + production tier (d27) + overnight-complete (d28) + release script presence; profile ``bench/config/d29_release_readiness_profile.json``; CTest ``native_d29_release_readiness_smoke``.",
-    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** — runs **`cypha_bench_run --domain-tag d28`** after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** — runs d29; **`CYPHA_VALIDATE_PRODUCTION=1`** — production lock validate; **`CYPHA_STRICT_TEST_COUNT=1`** — fail when count ≠ **107**.",
-    "``scripts/commit_production_lock.ps1`` — chains ``finalize_production_overnight.ps1``, then stage/commit updated ``bench/BASELINE_LOCK.json`` after 300k overnight (``-DryRun`` / ``-Force``; maintainer-only; never pushes).",
-    "``scripts/watch_production_overnight.ps1`` — stall-aware production overnight log/process watcher.",
+    "Intelligence Stats **Phase 15** (shipped): bench **d29** release readiness validation - schema + production tier (d27) + overnight-complete (d28) + release script presence; profile ``bench/config/d29_release_readiness_profile.json``; CTest ``native_d29_release_readiness_smoke``.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** - runs **`cypha_bench_run --domain-tag d28`** after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** - runs d29; **`CYPHA_VALIDATE_PRODUCTION=1`** - production lock validate; **`CYPHA_STRICT_TEST_COUNT=1`** - fail when count â‰  **107**.",
+    "``scripts/commit_production_lock.ps1`` - chains ``finalize_production_overnight.ps1``, then stage/commit updated ``bench/BASELINE_LOCK.json`` after 300k overnight (``-DryRun`` / ``-Force``; maintainer-only; never pushes).",
+    "``scripts/watch_production_overnight.ps1`` - stall-aware production overnight log/process watcher.",
     "CI gate **107 CTests**; full 300k production overnight **not** run in CI (maintainer workflow; **in progress**); ``gh auth login`` required for GitHub Release publish."
   )
   "2.3.14" = @(
-    "Intelligence Stats **Phase 14**: **baseline lock status validator fix** — ``validate_baseline_lock.ps1`` and ``baseline_lock_validate`` accept ``medium_smoke`` and ``production`` (fixes production/medium overnight lock validation).",
-    "**Cell sweep artifact path** — default overnight output ``bench/results/cell_sweep`` (``bench_paths::results_dir()``); wired through ``cypha_baseline_lock --output-dir``, ``update_baseline_lock.ps1``, and ``run_overnight_all.ps1``.",
-    "Bench domain **d28** unified overnight completion validation — cross-check ``overnight_results``, ``rpsm_results``, and ``cell_sweep_results`` for matching ``n_train``/``n_eval``; profile ``bench/config/d28_overnight_complete_profile.json``; CTest ``native_d28_overnight_complete_smoke``.",
-    "``scripts/finalize_production_overnight.ps1`` — post-overnight gate: ``validate_baseline_lock.ps1 -Production``, d27 + d28 bench domains, lock section summary; chained from ``run_production_overnight.ps1`` on success.",
+    "Intelligence Stats **Phase 14**: **baseline lock status validator fix** - ``validate_baseline_lock.ps1`` and ``baseline_lock_validate`` accept ``medium_smoke`` and ``production`` (fixes production/medium overnight lock validation).",
+    "**Cell sweep artifact path** - default overnight output ``bench/results/cell_sweep`` (``bench_paths::results_dir()``); wired through ``cypha_baseline_lock --output-dir``, ``update_baseline_lock.ps1``, and ``run_overnight_all.ps1``.",
+    "Bench domain **d28** unified overnight completion validation - cross-check ``overnight_results``, ``rpsm_results``, and ``cell_sweep_results`` for matching ``n_train``/``n_eval``; profile ``bench/config/d28_overnight_complete_profile.json``; CTest ``native_d28_overnight_complete_smoke``.",
+    "``scripts/finalize_production_overnight.ps1`` - post-overnight gate: ``validate_baseline_lock.ps1 -Production``, d27 + d28 bench domains, lock section summary; chained from ``run_production_overnight.ps1`` on success.",
     "CI gate **106 CTests**; full 300k production overnight **not** run in CI (maintainer workflow only)."
   )
   "2.3.13" = @(
@@ -63,7 +71,7 @@ $highlights = @{
     "CI gate **101 CTests**; release notes v2.3.11 Phase 11 template."
   )
   "2.3.10" = @(
-    "Intelligence Stats **Phase 10**: hybrid EWC **GRIA bias** + SSM **W_slow** layer-0 Fisher (extends Phase 9 U/V + W_fast + α).",
+    "Intelligence Stats **Phase 10**: hybrid EWC **GRIA bias** + SSM **W_slow** layer-0 Fisher (extends Phase 9 U/V + W_fast + Î±).",
     "Bench domain **d24** production lock validation - ``cypha_bench_run --domain-tag d24``; profile ``bench/config/d24_production_lock_profile.json``.",
     "``cypha_baseline_lock --run all`` (d17 + d21 + cell-sweep); CTest ``native_d24_production_lock_smoke``.",
     "Windows federated TLS mirror: ``scripts/ci_federated_tls_windows.ps1`` (vcpkg / ``OPENSSL_ROOT_DIR``).",

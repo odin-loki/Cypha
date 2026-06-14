@@ -140,5 +140,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d32",
     "notes": "Production-complete validation; see bench/config/d32_production_complete_profile.json"
+  },
+  "release_publish_d33": {
+    "path": "everyday_profile.json",
+    "config": "d33_release_publish_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d33",
+    "notes": "Release publish validation; see bench/config/d33_release_publish_profile.json"
   }
 }

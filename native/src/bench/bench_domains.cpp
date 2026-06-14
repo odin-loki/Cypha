@@ -3743,6 +3743,113 @@ Json run_d32_production_complete_validation() {
     return experiments;
 }
 
+bool gh_cli_present() {
+#ifdef _WIN32
+    return std::system("gh --version >NUL 2>&1") == 0;
+#else
+    return std::system("gh --version >/dev/null 2>&1") == 0;
+#endif
+}
+
+bool publish_script_has_gh_auth_preflight(const fs::path& publish_script) {
+    if (!fs::is_regular_file(publish_script)) {
+        return false;
+    }
+    std::ifstream in(publish_script);
+    if (!in) {
+        return false;
+    }
+    const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return content.find("gh auth") != std::string::npos;
+}
+
+Json run_d33_release_publish_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+
+    const std::array<const char*, 4> required_scripts{
+        "scripts/publish_release.ps1",
+        "scripts/create_release_notes.ps1",
+        "scripts/validate_production_complete.ps1",
+        "scripts/commit_production_lock.ps1",
+    };
+    Json publish_scripts = Json::object();
+    for (const char* rel : required_scripts) {
+        const fs::path path = repo / rel;
+        const bool present = fs::is_regular_file(path);
+        publish_scripts[rel] = present;
+        if (!present) {
+            throw std::runtime_error("publish script missing: " + path.string());
+        }
+    }
+
+    const fs::path publish_script_path = repo / "scripts" / "publish_release.ps1";
+    const bool gh_publish_script_present = fs::is_regular_file(publish_script_path);
+    const bool gh_auth_required =
+        gh_publish_script_present && publish_script_has_gh_auth_preflight(publish_script_path);
+
+    const fs::path lock_path = fs::current_path() / "d33_release_publish_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+
+    require_lock_key(lock["overnight_results"], "n_train", "overnight_results");
+    if (!lock["overnight_results"]["n_train"].is_number_integer()) {
+        throw std::runtime_error("overnight_results n_train must be an integer");
+    }
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+
+    std::string production_status;
+    std::string overnight_complete_status;
+    std::string validation_status;
+
+    if (n_train < kProductionNTrainMin) {
+        validation_status = "pending_release_publish";
+        production_status = "pending_production";
+        overnight_complete_status = "pending_overnight_complete";
+    } else {
+        production_status = validate_production_tier_lock(lock);
+        overnight_complete_status = validate_overnight_complete_lock(lock);
+        validation_status = (production_status == "production_validated" &&
+                             overnight_complete_status == "overnight_complete_validated")
+                                ? "release_publish_ready"
+                                : "pending_release_publish";
+    }
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results", lock.contains("cell_sweep_results") ? lock["cell_sweep_results"] : Json{}},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_status", production_status},
+        {"overnight_complete_status", overnight_complete_status},
+        {"publish_scripts", publish_scripts},
+        {"gh_cli_present", gh_cli_present()},
+        {"gh_publish_script_present", gh_publish_script_present},
+        {"gh_auth_required", gh_auth_required},
+        {"gh_auth_note",
+         "scripts/publish_release.ps1 runs gh auth status preflight before gh release create"},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d33_release_publish_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d33_release_publish_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3780,6 +3887,8 @@ std::vector<DomainSpec> build_all_domains() {
          run_d31_post_overnight_pipeline_validation},
         {"d32", "cypha_bench.domains.d32_production_complete_validation",
          run_d32_production_complete_validation},
+        {"d33", "cypha_bench.domains.d33_release_publish_validation",
+         run_d33_release_publish_validation},
     };
 }
 

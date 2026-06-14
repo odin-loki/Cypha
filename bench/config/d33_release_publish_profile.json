@@ -1,0 +1,31 @@
+{
+  "profile_id": "d33_release_publish_profile",
+  "description": "D33 release publish validation — publish toolchain scripts + production/overnight-complete gates + gh preflight metadata",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 33,
+    "domain_tag": "d33"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d33_release_publish_smoke — release publish gate (pending_release_publish or release_publish_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 33",
+    "Or: cypha_bench_run --domain-tag d33",
+    "Verifies scripts/publish_release.ps1, scripts/create_release_notes.ps1, scripts/validate_production_complete.ps1, scripts/commit_production_lock.ps1 exist",
+    "When overnight_results.n_train < 300000: validation_status=pending_release_publish (smoke PASS)",
+    "When n_train >= 300000: validate_baseline_lock_schema + validate_production_tier_lock + validate_overnight_complete_lock",
+    "When all production tiers pass: validation_status=release_publish_ready",
+    "Documents gh_cli_present (PATH heuristic) and gh_auth_required from publish_release.ps1 gh auth preflight",
+    "Phase 19: release publish validation gate"
+  ]
+}

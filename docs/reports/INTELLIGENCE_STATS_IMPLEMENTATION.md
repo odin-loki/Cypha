@@ -250,14 +250,34 @@
 
 **CI gate (Phase 17 shipped):** **109 CTests** (`ctest -R native_`); +1 smoke: **`native_d31_post_overnight_pipeline_smoke`**. d31 validates d27→d30 chain + pipeline script presence (`poll_and_finalize_overnight.ps1`, `finalize_production_overnight.ps1`, `commit_production_lock.ps1`, `migrate_legacy_results.ps1`); **`pipeline_ok`** (smoke pass).
 
-## Phase 18 — prep (v2.3.18)
+## Phase 18 — shipped (v2.3.18, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
-| Bench domain **d32** *(TBD)* | `bench_domains.cpp` *(TBD)* | *(TBD)* |
+| Bench domain **d32** production complete validation | `bench_domains.cpp` → `run_d32_production_complete_validation` | `cypha_bench_run --domain-tag d32` |
+| D32 profile config | `bench/config/d32_production_complete_profile.json` | manual |
+| D32 validation report | `bench/report/tables/d32_production_complete_validation.json` | d32 run |
+| Unified post-overnight validator | `scripts/validate_production_complete.ps1` — baseline lock + finalize + d31/d30 | manual |
+| Background poll + finalize | `scripts/start_poll_finalize_background.ps1` | manual |
+| Cell sweep progress sidecar | `cypha_cell_hypothesis_sweep` → `overnight_progress.log` | manual |
+| Release publish gh auth preflight | `scripts/publish_release.ps1` | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_PRODUCTION_COMPLETE=1`** (d32 when profile exists) | manual |
 | Release notes v2.3.18 template | `scripts/create_release_notes.ps1` | manual |
 
-**CI gate (Phase 18 prep):** **109 CTests** today; **110** when next Phase 18 smoke merges (+1).
+**CI gate (Phase 18 shipped):** **110 CTests** (`ctest -R native_`); +1 smoke: **`native_d32_production_complete_smoke`**. d32 validates production tier + script presence (`validate_production_complete.ps1`, `start_poll_finalize_background.ps1`); **`pending_production_complete`** when **`n_train < 300000`** (smoke pass); **`production_complete_validated`** when **≥ 300k** and all gates pass.
+
+## Phase 19 — prep (v2.3.19)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d33** release publish validation | `bench_domains.cpp` → `run_d33_release_publish_validation` | `cypha_bench_run --domain-tag d33` |
+| D33 profile config | `bench/config/d33_release_publish_profile.json` | manual |
+| D33 validation report | `bench/report/tables/d33_release_publish_validation.json` | d33 run |
+| Release publish smoke gate | `scripts/verify_release_publish.ps1` — production complete + d33 + `publish_release.ps1 -DryRun` | manual |
+| Poll BuildDir auto-detect | `poll_and_finalize_overnight.ps1`, `start_poll_finalize_background.ps1` | manual |
+| Release notes v2.3.19 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 19 prep):** **110 CTests** today; **111** when **`native_d33_release_publish_smoke`** merges (+1). d33 validates publish script presence + production/overnight-complete tiers; **`pending_release_publish`** when **`n_train < 300000`** (smoke pass); **`release_publish_ready`** when **≥ 300k** and all gates pass.
 
 ## Still planned
 
@@ -317,6 +337,13 @@ pwsh -File scripts/poll_and_finalize_overnight.ps1 -Once            # Phase 17: 
 pwsh -File scripts/cleanup_legacy_results.ps1 -DryRun               # Phase 17: preview migrate + remove legacy results/
 $env:CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE = "1"                   # Phase 17: d31 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d31" --output-on-failure  # Phase 17
+cypha_bench_run --domain-tag d32                                    # Phase 18: production complete validation (shipped)
+pwsh -File scripts\validate_production_complete.ps1 -AllowPending   # Phase 18: smoke when lock below 300k
+pwsh -File scripts\start_poll_finalize_background.ps1               # Phase 18: detached poll → finalize
+$env:CYPHA_VALIDATE_PRODUCTION_COMPLETE = "1"                       # Phase 18: d32 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d32" --output-on-failure  # Phase 18
+cypha_bench_run --domain-tag d33                                    # Phase 19: release publish validation (prep)
+pwsh -File scripts\verify_release_publish.ps1                       # Phase 19: production complete + d33 + publish -DryRun
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

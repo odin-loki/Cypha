@@ -1,5 +1,7 @@
-# Phase 18: start poll_and_finalize_overnight.ps1 in the background after manually
+# Phase 18/19: start poll_and_finalize_overnight.ps1 in the background after manually
 # launching production overnight (e.g. run_production_overnight.ps1).
+# When -BuildDir is the default native/build and overnight is running, BuildDir is
+# auto-detected from the run_production_overnight.ps1 command line (e.g. native/build_p13).
 #
 # Usage:
 #   pwsh -File scripts/start_poll_finalize_background.ps1
@@ -12,11 +14,66 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
+$DEFAULT_BUILD_DIR = "native/build"
 $pollScript = Join-Path $PSScriptRoot "poll_and_finalize_overnight.ps1"
 
 if (-not (Test-Path $pollScript)) {
     throw "missing $pollScript"
 }
+
+function Test-OvernightStillRunning {
+    foreach ($name in @("cyphalm_bench_native", "cypha_cell_hypothesis_sweep")) {
+        if (Get-Process -Name "${name}*" -ErrorAction SilentlyContinue) {
+            return $true
+        }
+    }
+
+    $cim = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and $_.CommandLine -match 'run_production_overnight\.ps1'
+        }
+    if ($cim) {
+        return $true
+    }
+
+    return $false
+}
+
+function Get-DetectedBuildDirFromOvernight {
+    $cim = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and $_.CommandLine -match 'run_production_overnight\.ps1'
+        }
+    foreach ($p in $cim) {
+        if ($p.CommandLine -match '-BuildDir\s+("([^"]+)"|[^\s]+)') {
+            $raw = if ($Matches[2]) { $Matches[2] } else { $Matches[1] }
+            if ($raw) { return $raw }
+        }
+    }
+    return $null
+}
+
+function Resolve-PollBuildDir {
+    param([string]$Requested)
+
+    if ($Requested -ne $DEFAULT_BUILD_DIR) {
+        return $Requested
+    }
+
+    if (-not (Test-OvernightStillRunning)) {
+        return $Requested
+    }
+
+    $detected = Get-DetectedBuildDirFromOvernight
+    if ($detected) {
+        Write-Host "start_poll_finalize_background: auto-detected BuildDir from run_production_overnight.ps1: $detected" -ForegroundColor Yellow
+        return $detected
+    }
+
+    return $Requested
+}
+
+$BuildDir = Resolve-PollBuildDir -Requested $BuildDir
 
 if ([System.IO.Path]::IsPathRooted($LogFile)) {
     $resolvedLog = $LogFile

@@ -1,5 +1,7 @@
-# Phase 17: poll until production overnight processes exit, then finalize + commit preview.
+# Phase 17/19: poll until production overnight processes exit, then finalize + commit preview.
 # Reuses overnight process detection from watch_production_overnight.ps1 (+ cypha_cell_hypothesis_sweep).
+# When -BuildDir is the default native/build and overnight is running, BuildDir is auto-detected
+# from the run_production_overnight.ps1 command line (e.g. native/build_p13).
 #
 # Usage:
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1
@@ -17,6 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
+$DEFAULT_BUILD_DIR = "native/build"
 $transcriptTemp = $null
 $resolvedLogFile = $null
 
@@ -126,6 +129,42 @@ function Test-OvernightStillRunning {
     $procs = Get-OvernightProcessInfo
     return ($procs -and $procs.Count -gt 0)
 }
+
+function Get-DetectedBuildDirFromOvernight {
+    $cim = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and $_.CommandLine -match 'run_production_overnight\.ps1'
+        }
+    foreach ($p in $cim) {
+        if ($p.CommandLine -match '-BuildDir\s+("([^"]+)"|[^\s]+)') {
+            $raw = if ($Matches[2]) { $Matches[2] } else { $Matches[1] }
+            if ($raw) { return $raw }
+        }
+    }
+    return $null
+}
+
+function Resolve-PollBuildDir {
+    param([string]$Requested)
+
+    if ($Requested -ne $DEFAULT_BUILD_DIR) {
+        return $Requested
+    }
+
+    if (-not (Test-OvernightStillRunning)) {
+        return $Requested
+    }
+
+    $detected = Get-DetectedBuildDirFromOvernight
+    if ($detected) {
+        Write-Host "poll_and_finalize_overnight: auto-detected BuildDir from run_production_overnight.ps1: $detected" -ForegroundColor Yellow
+        return $detected
+    }
+
+    return $Requested
+}
+
+$BuildDir = Resolve-PollBuildDir -Requested $BuildDir
 
 $finalizeScript = Join-Path $PSScriptRoot "finalize_production_overnight.ps1"
 $commitScript = Join-Path $PSScriptRoot "commit_production_lock.ps1"
