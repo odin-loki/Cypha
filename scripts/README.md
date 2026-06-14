@@ -59,9 +59,11 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `commit_production_lock.ps1` | Phase 15: chains `finalize_production_overnight.ps1`, shows lock diff + suggested message; `-DryRun` preview, `-Force` to commit (never pushes) | console |
 | `monitor_overnight.ps1` | Poll `bench/BASELINE_LOCK.json` sections; optional `-LogFile` (default: latest `bench/results/production_overnight_*.log`, last 3 lines per poll) | console |
 | `watch_production_overnight.ps1` | Production overnight watcher — latest log size growth + last line, running `run_production_overnight.ps1` / `cyphalm_bench_native` / `cypha_cell_hypothesis_sweep` PIDs, lock section summary; hints `poll_and_finalize_overnight.ps1` when processes exit; `-Once`, `-ProcessId`, stall warn after 30m | console |
-| `poll_and_finalize_overnight.ps1` | Phase 17: poll until overnight processes exit, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1` (DryRun preview by default; `-Force` to git commit); `-Once` exits 1 if still running | console |
+| `poll_and_finalize_overnight.ps1` | Phase 17: poll until overnight processes exit, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1` (DryRun preview by default; `-Force` to git commit); `-Once` exits 1 if still running; optional `-LogFile` append | console |
+| `start_poll_finalize_background.ps1` | Phase 18: start `poll_and_finalize_overnight.ps1` in background (`-BuildDir`, `-LogFile` default `bench/results/poll_finalize.log`) after manual production overnight start | console |
 | `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`; `-Production` → `--production`) | lock JSON |
 | `validate_baseline_lock.ps1` | Validate `bench/BASELINE_LOCK.json` schema + d17 pin (`-LockFile`, `-Strict`, `-Production`) | console |
+| `validate_production_complete.ps1` | Phase 18: full production-complete gate — `validate_baseline_lock.ps1 -Production`, `finalize_production_overnight.ps1`, `cypha_bench_run --domain-tag d31` + d30; requires `overnight_results.n_train >= 300000` and `status=production|completed` (`-AllowPending` for smoke) | console |
 | `publish_release.ps1` | Local `gh release create` wrapper (`-DryRun` / `-NotesOnly` preview without gh) | console |
 | `wsl_bench_gpu.sh` | WSL GPU bench helper | console |
 
@@ -97,7 +99,7 @@ Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/downlo
 | **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
 | **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |
 
-Full 300k production overnight is **not** run in CI. Blocking gate **108 CTests** (+2 Phase 14: `native_d28_overnight_complete_smoke`, `native_baseline_lock_validate_production_status`; +1 Phase 16: `native_d30_artifact_hygiene_smoke`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
+Full 300k production overnight is **not** run in CI. Blocking gate **110 CTests** (+2 Phase 14: `native_d28_overnight_complete_smoke`, `native_baseline_lock_validate_production_status`; +1 Phase 16: `native_d30_artifact_hygiene_smoke`; +1 Phase 17: `native_d31_post_overnight_pipeline_smoke`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
 
 ## Overnight completion + finalize (Phase 14 — shipped)
 
@@ -116,7 +118,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate **108 CTests*
 |--------------|---------|-------|
 | **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d28`** after baseline lock validate | manual |
 | **`CYPHA_VALIDATE_RELEASE_READINESS=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d29`** when profile exists; graceful skip if not merged | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**108**); default warns only | manual |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**109**); default warns only | manual |
 | **`commit_production_lock.ps1`** | Run **`finalize_production_overnight.ps1`**, then preview/commit lock when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** required to commit; never pushes) | manual |
 | **`cypha_bench_run --domain-tag d29`** | Release-readiness validation (when shipped); profile `bench/config/d29_release_readiness_profile.json` | `native_d29_release_readiness_smoke` *(when merged)* |
 
@@ -135,7 +137,7 @@ pwsh -File scripts\commit_production_lock.ps1 -DryRun
 pwsh -File scripts\commit_production_lock.ps1 -Force
 ```
 
-Blocking gate **108 CTests** (+1 `native_d29_release_readiness_smoke` Phase 15; +1 `native_d30_artifact_hygiene_smoke` Phase 16).
+Blocking gate **110 CTests** (+1 `native_d29_release_readiness_smoke` Phase 15; +1 `native_d30_artifact_hygiene_smoke` Phase 16; +1 `native_d31_post_overnight_pipeline_smoke` Phase 17).
 
 ## Artifact path hygiene + legacy migration (Phase 16 — shipped)
 
@@ -144,7 +146,7 @@ Blocking gate **108 CTests** (+1 `native_d29_release_readiness_smoke` Phase 15; 
 | **`migrate_legacy_results.ps1`** | Merge repo-root **`results/`** cell-sweep artifacts into **`bench/results/cell_sweep/`**; never overwrites newer destination files; **`-DryRun`** prints plan only; after migration prints **`-RemoveLegacy`** / **`-ArchiveLegacy`** hints when destination has all files; **`-RemoveLegacy`** deletes legacy **`results/`**; **`-ArchiveLegacy`** moves legacy **`results/`** to **`bench/results/legacy_archive_<timestamp>/`** | manual |
 | **`cleanup_legacy_results.ps1`** | One-shot migrate + **`-RemoveLegacy`** wrapper; **`-DryRun`** previews migration only (no removal) | manual |
 | **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d30`** when profile exists | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**108**); default warns only | manual |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**109**); default warns only | manual |
 | **`cypha_bench_run --domain-tag d30`** | Artifact path hygiene validation; profile `bench/config/d30_artifact_hygiene_profile.json` | `native_d30_artifact_hygiene_smoke` |
 
 ```powershell
@@ -169,13 +171,18 @@ $env:CYPHA_VALIDATE_ARTIFACT_HYGIENE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-## Overnight finalize + lock commit automation (Phase 17)
+## Overnight finalize + lock commit automation (Phase 17 — shipped)
 
-| Script | Purpose | CTest |
-|--------|---------|-------|
+| Script / env | Purpose | CTest |
+|--------------|---------|-------|
 | **`poll_and_finalize_overnight.ps1`** | Poll until `run_production_overnight.ps1` / `cyphalm_bench_native` / `cypha_cell_hypothesis_sweep` processes exit; then **`finalize_production_overnight.ps1`** + **`commit_production_lock.ps1`** (DryRun commit preview by default; **`-Force`** for git add/commit, never pushes) | manual |
+| **`cleanup_legacy_results.ps1`** | One-shot **`migrate_legacy_results.ps1`** + **`RemoveLegacy`**; **`-DryRun`** previews migration only | manual |
+| **`CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d31`** when profile exists | manual |
+| **`cypha_bench_run --domain-tag d31`** | Post-overnight pipeline validation — d27→d30 chain + script presence; profile `bench/config/d31_post_overnight_pipeline_profile.json` | `native_d31_post_overnight_pipeline_smoke` |
 | **`watch_production_overnight.ps1`** | Stall-aware watcher — also tracks `cypha_cell_hypothesis_sweep`; prints hint to run **`poll_and_finalize_overnight.ps1`** when processes disappear between polls | manual |
 | **`run_production_overnight.ps1`** | On success: **`finalize_production_overnight.ps1`** then **`commit_production_lock.ps1 -DryRun`** (preview only; manual **`commit_production_lock.ps1 -Force`** or **`poll_and_finalize_overnight.ps1 -Force`** to commit) | manual |
+
+Blocking gate **110 CTests** (+1 `native_d31_post_overnight_pipeline_smoke`).
 
 ```powershell
 # Start production overnight (long-running)
@@ -192,6 +199,40 @@ pwsh -File scripts\poll_and_finalize_overnight.ps1 -Once
 
 # After validation passes, git-commit lock locally (does not push)
 pwsh -File scripts\poll_and_finalize_overnight.ps1 -Force
+```
+
+## Production-complete validation (Phase 18)
+
+| Script / binary | Purpose | CTest |
+|-----------------|---------|-------|
+| **`start_poll_finalize_background.ps1`** | Launch **`poll_and_finalize_overnight.ps1`** in the background via `Start-Process` after manually starting production overnight; **`-LogFile`** defaults to **`bench/results/poll_finalize.log`** | manual |
+| **`poll_and_finalize_overnight.ps1 -LogFile`** | Append session transcript to log (start banner + transcript + exit footer per run); omit **`-LogFile`** for console-only | manual |
+| **`validate_production_complete.ps1`** | Maintainer gate: **`validate_baseline_lock.ps1 -Production`**, **`finalize_production_overnight.ps1`**, **`cypha_bench_run --domain-tag d31`** + d30; requires `overnight_results.n_train >= 300000` and `status=production\|completed` (`-AllowPending` for smoke when lock is below production tier) | manual |
+| **`cypha_bench_run --domain-tag d32`** | Production-complete lock validation; profile `bench/config/d32_production_complete_profile.json` | `native_d32_production_complete_smoke` |
+| **`CYPHA_VALIDATE_PRODUCTION_COMPLETE=1`** | Optional extended validation on `cypha_native_validate_all.ps1` — runs d32 bench domain after baseline lock validate | manual |
+
+```powershell
+# Start production overnight (long-running; separate terminal)
+pwsh -File scripts\run_production_overnight.ps1
+
+# Detached poll → finalize → commit preview (default log bench/results/poll_finalize.log)
+pwsh -File scripts\start_poll_finalize_background.ps1
+
+# Custom build dir + log path
+pwsh -File scripts\start_poll_finalize_background.ps1 -BuildDir native/build -LogFile bench/results/poll_finalize.log
+
+# Foreground poll with append log (same -LogFile behavior)
+pwsh -File scripts\poll_and_finalize_overnight.ps1 -LogFile bench/results/poll_finalize.log
+
+# Full production-complete gate (fails when lock below 300k unless -AllowPending)
+pwsh -File scripts\validate_production_complete.ps1 -BuildDir native\build
+
+# Smoke / CI lock — pass when n_train < 300k (pending_production)
+pwsh -File scripts\validate_production_complete.ps1 -AllowPending
+
+# Optional extended validation (after -SkipBuild rebuild)
+$env:CYPHA_VALIDATE_PRODUCTION_COMPLETE = "1"
+pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
 ## Kernel LLR / XOR profiling

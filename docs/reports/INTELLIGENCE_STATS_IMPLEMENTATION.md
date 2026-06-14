@@ -235,14 +235,29 @@
 
 **CI gate (Phase 16 shipped):** **108 CTests** (`ctest -R native_`); +1 smoke: **`native_d30_artifact_hygiene_smoke`**. d30 validates legacy repo-root **`results/`** path detection in **`cell_sweep_results.artifact_path`**, **`bench/results/.gitkeep`** presence; **`hygiene_ok`** or **`legacy_artifact_path`** (smoke pass).
 
-## Phase 17 — prep (v2.3.17)
+## Phase 17 — shipped (v2.3.17, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
-| Bench domain **d31** *(TBD)* | `bench_domains.cpp` *(TBD)* | *(TBD)* |
+| Bench domain **d31** post-overnight pipeline validation | `bench_domains.cpp` → `run_d31_post_overnight_pipeline_validation` | `cypha_bench_run --domain-tag d31` |
+| D31 profile config | `bench/config/d31_post_overnight_pipeline_profile.json` | manual |
+| D31 validation report | `bench/report/tables/d31_post_overnight_pipeline_validation.json` | d31 run |
+| Poll + finalize automation | `scripts/poll_and_finalize_overnight.ps1` | manual |
+| Legacy cleanup wrapper | `scripts/cleanup_legacy_results.ps1` (+ `migrate_legacy_results.ps1 -ArchiveLegacy`) | manual |
+| Production overnight chain | `run_production_overnight.ps1` → `finalize_production_overnight.ps1` → `commit_production_lock.ps1 -DryRun` | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1`** (d31 when profile exists) | manual |
 | Release notes v2.3.17 template | `scripts/create_release_notes.ps1` | manual |
 
-**CI gate (Phase 17 prep):** **108 CTests** today; **109** when next Phase 17 smoke merges (+1).
+**CI gate (Phase 17 shipped):** **109 CTests** (`ctest -R native_`); +1 smoke: **`native_d31_post_overnight_pipeline_smoke`**. d31 validates d27→d30 chain + pipeline script presence (`poll_and_finalize_overnight.ps1`, `finalize_production_overnight.ps1`, `commit_production_lock.ps1`, `migrate_legacy_results.ps1`); **`pipeline_ok`** (smoke pass).
+
+## Phase 18 — prep (v2.3.18)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d32** *(TBD)* | `bench_domains.cpp` *(TBD)* | *(TBD)* |
+| Release notes v2.3.18 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 18 prep):** **109 CTests** today; **110** when next Phase 18 smoke merges (+1).
 
 ## Still planned
 
@@ -297,6 +312,11 @@ cypha_bench_run --domain-tag d30                                    # Phase 16: 
 pwsh -File scripts/migrate_legacy_results.ps1 -DryRun               # Phase 16: preview legacy results/ migration
 $env:CYPHA_VALIDATE_ARTIFACT_HYGIENE = "1"                          # Phase 16: d30 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d30" --output-on-failure  # Phase 16
+cypha_bench_run --domain-tag d31                                    # Phase 17: post-overnight pipeline validation (shipped)
+pwsh -File scripts/poll_and_finalize_overnight.ps1 -Once            # Phase 17: poll snapshot (exit 1 if still running)
+pwsh -File scripts/cleanup_legacy_results.ps1 -DryRun               # Phase 17: preview migrate + remove legacy results/
+$env:CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE = "1"                   # Phase 17: d31 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d31" --output-on-failure  # Phase 17
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

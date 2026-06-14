@@ -14,9 +14,12 @@
 #   CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1
 #       After baseline lock validate, run cypha_bench_run --domain-tag d31 when its profile exists;
 #       gracefully skipped when d31 is not built/merged yet.
+#   CYPHA_VALIDATE_PRODUCTION_COMPLETE=1
+#       After baseline lock validate, run cypha_bench_run --domain-tag d32 when its profile exists;
+#       gracefully skipped when d32 is not built/merged yet.
 #   CYPHA_STRICT_TEST_COUNT=1
 #       Fail the ctest_native step when the parsed native_ test count does not match the expected
-#       gate (109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
+#       gate (110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
 #
 # Usage:
 #   pwsh -File scripts/cypha_native_validate_all.ps1
@@ -59,6 +62,7 @@ function Test-DomainTagExists {
 }
 
 function Get-ExpectedNativeTestCount {
+    if (Test-DomainTagExists -Tag "d32") { return 110 }
     if (Test-DomainTagExists -Tag "d31") { return 109 }
     if (Test-DomainTagExists -Tag "d30") { return 108 }
     return 107
@@ -465,6 +469,30 @@ if ($env:CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE -eq "1") {
     } else {
         Write-Host "== cypha_bench_run --domain-tag d31 (skipped - profile not present) ==" -ForegroundColor DarkGray
         Step-Result "post_overnight_pipeline_d31" $true "skipped (d31 profile not present)"
+    }
+}
+
+# --- d32 production complete (optional) ---
+if ($env:CYPHA_VALIDATE_PRODUCTION_COMPLETE -eq "1") {
+    Write-Host ""
+    if (Test-DomainTagExists -Tag "d32") {
+        Write-Host "== cypha_bench_run --domain-tag d32 (CYPHA_VALIDATE_PRODUCTION_COMPLETE) ==" -ForegroundColor Yellow
+        $benchExe = BinPath "cypha_bench_run"
+        if (-not (Test-Path $benchExe)) {
+            Step-Result "production_complete_d32" $false "missing $benchExe"
+        } else {
+            Push-Location $root
+            try {
+                & $benchExe --domain-tag d32
+                $d32Code = $LASTEXITCODE
+            } finally {
+                Pop-Location
+            }
+            Step-Result "production_complete_d32" ($d32Code -eq 0) $(if ($d32Code -eq 0) { "d32 ok" } else { "exit $d32Code" })
+        }
+    } else {
+        Write-Host "== cypha_bench_run --domain-tag d32 (skipped - profile not present) ==" -ForegroundColor DarkGray
+        Step-Result "production_complete_d32" $true "skipped (d32 profile not present)"
     }
 }
 

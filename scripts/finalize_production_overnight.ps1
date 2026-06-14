@@ -112,7 +112,7 @@ if (Test-DomainTagExists -Tag "d28") {
     }
 } else {
     Write-Host ""
-    Write-Host "== cypha_bench_run --domain-tag d28 (skipped — domain not present) ==" -ForegroundColor DarkGray
+    Write-Host "== cypha_bench_run --domain-tag d28 (skipped - domain not present) ==" -ForegroundColor DarkGray
 }
 
 Show-LockSummary -Path $LockFile

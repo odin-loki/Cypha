@@ -33,6 +33,8 @@
 # watch_production_overnight.ps1; CYPHA_VALIDATE_* env vars; 107 CTests.
 # Phase 16 (v2.3.16, shipped): d30 artifact path hygiene; migrate_legacy_results.ps1;
 # overnight progress logging; CYPHA_VALIDATE_ARTIFACT_HYGIENE; 108 CTests.
+# Phase 17 (v2.3.17, shipped): d31 post-overnight pipeline; poll_and_finalize_overnight.ps1;
+# cleanup_legacy_results.ps1; CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE; 109 CTests.
 
 name: Release
 
@@ -359,3 +361,11 @@ jobs:
             - **Overnight progress logging:** **`run_d17_overnight.ps1`** tees to **`bench/results/overnight_d17_<timestamp>.log`**; stderr **`[cyphalm]`** / **`[cell_sweep]`** tags during full overnight runs.
             - **Local validate env var:** set **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** on **`cypha_native_validate_all.ps1`** to run d30 after rebuild.
             - **CI gate:** **108 CTests** (`ctest -R native_`); new smoke **`native_d30_artifact_hygiene_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.
+
+            ### Phase 17 maintainer notes (v2.3.17, shipped)
+
+            - **Post-overnight pipeline validation:** `cypha_bench_run --domain-tag d31` — d27→d30 chain + pipeline script presence (`poll_and_finalize_overnight.ps1`, `finalize_production_overnight.ps1`, `commit_production_lock.ps1`, `migrate_legacy_results.ps1`); profile [`bench/config/d31_post_overnight_pipeline_profile.json`](bench/config/d31_post_overnight_pipeline_profile.json); report [`bench/report/tables/d31_post_overnight_pipeline_validation.json`](bench/report/tables/d31_post_overnight_pipeline_validation.json).
+            - **Poll + finalize:** `pwsh -File scripts/poll_and_finalize_overnight.ps1` — poll until overnight processes exit, then **`finalize_production_overnight.ps1`** + **`commit_production_lock.ps1`** (`-DryRun` preview by default; **`-Force`** to git commit; never pushes); **`watch_production_overnight.ps1`** hints this when processes disappear.
+            - **Legacy cleanup:** `pwsh -File scripts/cleanup_legacy_results.ps1 -DryRun` (preview) or without `-DryRun` (migrate + remove repo-root **`results/`**); **`migrate_legacy_results.ps1 -ArchiveLegacy`** archives legacy **`results/`** to **`bench/results/legacy_archive_<timestamp>/`**.
+            - **Local validate env var:** set **`CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1`** on **`cypha_native_validate_all.ps1`** to run d31 after rebuild.
+            - **CI gate:** **109 CTests** (`ctest -R native_`); new smoke **`native_d31_post_overnight_pipeline_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.

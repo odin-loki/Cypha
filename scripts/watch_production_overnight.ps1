@@ -42,6 +42,7 @@ $lastRunAts = @{}
 $lastPollSize = -1
 $lastGrowthUtc = $null
 $resolvedLogPath = Resolve-LogFile -Path $LogFile
+$cellSweepProgressPath = Join-Path $root "bench\results\cell_sweep\overnight_progress.log"
 
 function Format-Age([datetime]$UtcWhen) {
     $age = (Get-Date).ToUniversalTime() - $UtcWhen
@@ -174,6 +175,29 @@ function Show-LogStatus {
     }
 }
 
+function Show-CellSweepProgress {
+    Write-Host ""
+    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] cell sweep progress" -ForegroundColor Cyan
+
+    if (-not (Test-Path $cellSweepProgressPath)) {
+        Write-Host "  (no overnight_progress.log yet)" -ForegroundColor DarkGray
+        return
+    }
+
+    try {
+        $lines = @(Get-Content $cellSweepProgressPath -Tail 2 -ErrorAction Stop)
+        if ($lines.Count -eq 0) {
+            Write-Host "  (empty)" -ForegroundColor DarkGray
+            return
+        }
+        foreach ($line in $lines) {
+            Write-Host ("  {0}" -f $line) -ForegroundColor DarkGray
+        }
+    } catch {
+        Write-Host "  (could not read: $($_.Exception.Message))" -ForegroundColor DarkYellow
+    }
+}
+
 function Show-LockStatus {
     param([string]$Path)
 
@@ -236,6 +260,7 @@ function Show-LockStatus {
 function Show-Snapshot {
     Show-ProcessStatus
     Show-LogStatus -Path $resolvedLogPath
+    Show-CellSweepProgress
     Show-LockStatus -Path $LockFile
 }
 

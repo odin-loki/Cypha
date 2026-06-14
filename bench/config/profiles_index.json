@@ -133,5 +133,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d31",
     "notes": "Post-overnight pipeline validation; see bench/config/d31_post_overnight_pipeline_profile.json"
+  },
+  "production_complete_d32": {
+    "path": "everyday_profile.json",
+    "config": "d32_production_complete_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d32",
+    "notes": "Production-complete validation; see bench/config/d32_production_complete_profile.json"
   }
 }

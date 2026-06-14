@@ -1,6 +1,9 @@
 // cypha_cell_hypothesis_sweep — smoke runner for cell hypothesis variants (Tier 1+2).
+#include <chrono>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -211,6 +214,31 @@ nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Ar
     return row;
 }
 
+std::string iso_timestamp_now() {
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+#ifdef _WIN32
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    std::ostringstream oss;
+    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
+    return oss.str();
+}
+
+void append_overnight_progress_log(const std::string& variant_id, int index, int total) {
+    const std::filesystem::path log_path =
+        cypha::bench::results_dir() / "cell_sweep" / "overnight_progress.log";
+    std::filesystem::create_directories(log_path.parent_path());
+    std::ofstream log(log_path, std::ios::app);
+    if (log) {
+        log << iso_timestamp_now() << " variant=" << variant_id << ' ' << index << '/' << total
+            << '\n';
+    }
+}
+
 void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohmann::json& results,
                                const Args& args, double b2_bpc) {
     std::filesystem::create_directories(out_dir);
@@ -311,6 +339,7 @@ int main(int argc, char** argv) {
                 ++variant_index;
                 std::cerr << "[cell_sweep] variant " << v.id << " (" << variant_index << "/"
                           << variant_total << ")" << std::endl;
+                append_overnight_progress_log(v.id, variant_index, variant_total);
             }
             auto row = run_variant(v, args);
             if (v.id == "B2") {

@@ -5,9 +5,11 @@
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -Once
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -Force
+#   pwsh -File scripts/poll_and_finalize_overnight.ps1 -LogFile bench/results/poll_finalize.log
 param(
     [string]$BuildDir = "native/build",
     [string]$LockFile = "",
+    [string]$LogFile = "",
     [int]$IntervalSeconds = 60,
     [switch]$Force,
     [switch]$Once
@@ -15,6 +17,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
+$transcriptTemp = $null
+$resolvedLogFile = $null
+
+if ($LogFile) {
+    if ([System.IO.Path]::IsPathRooted($LogFile)) {
+        $resolvedLogFile = $LogFile
+    } else {
+        $resolvedLogFile = Join-Path $root $LogFile
+    }
+    $logDir = Split-Path $resolvedLogFile -Parent
+    if ($logDir) {
+        New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    }
+    "=== poll_and_finalize_overnight started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===" |
+        Out-File -FilePath $resolvedLogFile -Append -Encoding utf8
+    $transcriptTemp = Join-Path $env:TEMP "cypha_poll_finalize_$([Guid]::NewGuid().ToString('N')).log"
+    Start-Transcript -Path $transcriptTemp | Out-Null
+}
 
 if (-not $LockFile) {
     $LockFile = Join-Path $root "bench\BASELINE_LOCK.json"
@@ -109,10 +129,15 @@ function Test-OvernightStillRunning {
 
 $finalizeScript = Join-Path $PSScriptRoot "finalize_production_overnight.ps1"
 $commitScript = Join-Path $PSScriptRoot "commit_production_lock.ps1"
+$exitCode = 0
 
+try {
 Write-Host "poll_and_finalize_overnight: polling every ${IntervalSeconds}s for overnight process exit" -ForegroundColor Cyan
 Write-Host "  lock:  $LockFile" -ForegroundColor DarkGray
 Write-Host "  build: $BuildDir" -ForegroundColor DarkGray
+if ($resolvedLogFile) {
+    Write-Host "  log:   $resolvedLogFile (append)" -ForegroundColor DarkGray
+}
 if ($Force) {
     Write-Host "  commit: -Force (git add + commit after finalize)" -ForegroundColor DarkGray
 } else {
@@ -123,9 +148,10 @@ if ($Once) {
     if (Test-OvernightStillRunning) {
         Show-RunningProcesses
         Write-Host "poll_and_finalize_overnight: processes still running (-Once)" -ForegroundColor Yellow
-        exit 1
+        $exitCode = 1
+    } else {
+        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] no overnight processes (-Once)" -ForegroundColor Green
     }
-    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] no overnight processes (-Once)" -ForegroundColor Green
 } else {
     while (Test-OvernightStillRunning) {
         Show-RunningProcesses
@@ -134,14 +160,14 @@ if ($Once) {
     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] no overnight processes - finalizing" -ForegroundColor Green
 }
 
+if ($exitCode -eq 0) {
 Write-Host ""
 Write-Host "== finalize_production_overnight.ps1 ==" -ForegroundColor Cyan
 & $finalizeScript -BuildDir $BuildDir -LockFile $LockFile
 if ($LASTEXITCODE -ne 0) {
     Show-LockSummary -Path $LockFile
-    exit $LASTEXITCODE
-}
-
+    $exitCode = $LASTEXITCODE
+} else {
 Write-Host ""
 if ($Force) {
     Write-Host "== commit_production_lock.ps1 -Force ==" -ForegroundColor Cyan
@@ -153,9 +179,22 @@ if ($Force) {
 $commitCode = $LASTEXITCODE
 Show-LockSummary -Path $LockFile
 if ($commitCode -ne 0) {
-    exit $commitCode
-}
-
+    $exitCode = $commitCode
+} else {
 Write-Host ""
 Write-Host "poll_and_finalize_overnight: OK" -ForegroundColor Green
-exit 0
+}
+}
+}
+} finally {
+    if ($transcriptTemp) {
+        Stop-Transcript | Out-Null
+        if (Test-Path $transcriptTemp) {
+            Get-Content -Path $transcriptTemp | Add-Content -Path $resolvedLogFile -Encoding utf8
+            Remove-Item -Path $transcriptTemp -Force -ErrorAction SilentlyContinue
+        }
+        "=== poll_and_finalize_overnight finished $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') exit=$exitCode ===" |
+            Out-File -FilePath $resolvedLogFile -Append -Encoding utf8
+    }
+}
+exit $exitCode

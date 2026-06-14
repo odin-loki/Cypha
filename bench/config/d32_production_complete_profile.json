@@ -1,0 +1,31 @@
+{
+  "profile_id": "d32_production_complete_profile",
+  "description": "D32 production-complete validation — lock tier + script presence + production/overnight-complete gates",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 32,
+    "domain_tag": "d32"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d32_production_complete_smoke — production complete gate (pending_production_complete or production_complete_validated)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 32",
+    "Or: cypha_bench_run --domain-tag d32",
+    "Verifies scripts/validate_production_complete.ps1 exists",
+    "When overnight_results.n_train < 300000: validation_status=pending_production_complete (smoke PASS)",
+    "When n_train >= 300000: validate_baseline_lock_schema + validate_production_tier_lock + validate_overnight_complete_lock",
+    "When all production tiers pass: validation_status=production_complete_validated",
+    "Maintainer gate: scripts/validate_production_complete.ps1 chains finalize + d31 + d30 bench domains",
+    "Phase 18: production-complete validation gate"
+  ]
+}

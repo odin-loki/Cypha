@@ -60,8 +60,18 @@ try {
             throw "missing cypha_cell_hypothesis_sweep in $BuildDir"
         }
         Write-Host "== cell hypothesis overnight sweep (28 variants, n_train=$NTrain) ==" -ForegroundColor Cyan
-        & $sweepExe --overnight-sweep --profile $Profile --n-train $NTrain --n-eval $NEval --threads $Threads 2>&1 |
-            Tee-Object -FilePath $logPath -Append
+        $sweepArgs = @(
+            "--overnight-sweep"
+            "--profile", $Profile
+            "--n-train", $NTrain
+            "--n-eval", $NEval
+            "--threads", $Threads
+        )
+        if ($NTrain -ge 5000) {
+            $cellSweepOut = Join-Path $root "bench\results\cell_sweep"
+            $sweepArgs += @("--output-dir", $cellSweepOut)
+        }
+        & $sweepExe @sweepArgs 2>&1 | Tee-Object -FilePath $logPath -Append
     } else {
         Write-Host "== D17 overnight bench (profile=$Profile mode=$Mode n_train=$NTrain) ==" -ForegroundColor Cyan
         & $exe --profile $Profile --mode $Mode --overnight --n-train $NTrain --n-eval $NEval --threads $Threads 2>&1 |

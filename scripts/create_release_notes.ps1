@@ -9,9 +9,16 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.18" = @(
+    "Intelligence Stats **Phase 18** (prep): bench **d32** *(TBD)*; profile *(TBD)*; CTest *(TBD)*.",
+    "CI gate **109 CTests** today (110 when next Phase 18 smoke merges); full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.17" = @(
-    "Intelligence Stats **Phase 17** (prep): bench **d31** *(TBD)*; profile *(TBD)*; CTest *(TBD)*.",
-    "CI gate **108 CTests** today (109 when next Phase 17 smoke merges); full 300k production overnight **in progress** (maintainer workflow only)."
+    "Intelligence Stats **Phase 17** (shipped): bench **d31** post-overnight pipeline validation — d27→d30 chain + pipeline script presence gate; profile ``bench/config/d31_post_overnight_pipeline_profile.json``; CTest ``native_d31_post_overnight_pipeline_smoke``.",
+    "``scripts/poll_and_finalize_overnight.ps1`` — poll until overnight processes exit, then ``finalize_production_overnight.ps1`` + ``commit_production_lock.ps1`` (``-DryRun`` preview; ``-Force`` to commit; never pushes).",
+    "``scripts/cleanup_legacy_results.ps1`` + ``migrate_legacy_results.ps1 -ArchiveLegacy`` — one-shot legacy ``results/`` migrate + remove or archive.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1`** — runs d31 when profile exists.",
+    "CI gate **109 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
   )
   "2.3.16" = @(
     "Intelligence Stats **Phase 16** (shipped): bench **d30** artifact path hygiene validation — legacy repo-root ``results/`` path detection in ``cell_sweep_results.artifact_path``, verifies ``bench/results/.gitkeep``; profile ``bench/config/d30_artifact_hygiene_profile.json``; CTest ``native_d30_artifact_hygiene_smoke``.",
