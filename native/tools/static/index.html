@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cypha Studio</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4f;
+      --text: #e6edf3;
+      --muted: #8b9cb3;
+      --accent: #3d8bfd;
+      --ok: #3dd68c;
+      --err: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    #health-badge {
+      font-size: 0.85rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+    }
+    #health-badge.ok { border-color: var(--ok); color: var(--ok); }
+    #health-badge.err { border-color: var(--err); color: var(--err); }
+    nav.tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      padding: 0.45rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--border); }
+    .tab-btn.active {
+      color: var(--text);
+      background: var(--bg);
+      border-color: var(--accent);
+    }
+    main { padding: 1rem 1.25rem 2rem; max-width: 960px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    section h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    textarea, input[type="text"], input[type="number"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.5rem;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.85rem;
+    }
+    textarea { min-height: 4rem; resize: vertical; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin: 0.5rem 0; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.45rem 0.85rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    button:hover { filter: brightness(1.08); }
+    button.secondary { background: var(--border); color: var(--text); }
+    pre.out {
+      margin: 0.75rem 0 0;
+      padding: 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 320px;
+      overflow: auto;
+    }
+    pre.out.ok { border-color: var(--ok); }
+    pre.out.err { border-color: var(--err); }
+    .hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem; }
+    #loss-chart { width: 100%; max-width: 640px; height: 200px; border: 1px solid var(--border); border-radius: 6px; }
+    #metrics-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .metric-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem;
+      text-align: center;
+    }
+    .metric-card .val { font-size: 1.1rem; font-weight: 600; color: var(--accent); }
+    .metric-card .lbl { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+    table.exp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-top: 0.75rem;
+    }
+    table.exp-table th, table.exp-table td {
+      border: 1px solid var(--border);
+      padding: 0.4rem 0.5rem;
+      text-align: left;
+    }
+    table.exp-table th { color: var(--muted); font-weight: 500; }
+    #experiments-list.empty { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Cypha Studio</h1>
+    <span id="health-badge">checking…</span>
+  </header>
+
+  <nav class="tabs">
+    <button type="button" class="tab-btn active" data-tab="server">Server</button>
+    <button type="button" class="tab-btn" data-tab="predict">Predict</button>
+    <button type="button" class="tab-btn" data-tab="update">Update</button>
+    <button type="button" class="tab-btn" data-tab="models">Experiments</button>
+    <button type="button" class="tab-btn" data-tab="lm">CyphaLM</button>
+    <button type="button" class="tab-btn" data-tab="session">Session</button>
+    <button type="button" class="tab-btn" data-tab="metrics">Metrics</button>
+    <button type="button" class="tab-btn" data-tab="intelligence">Intelligence</button>
+  </nav>
+
+  <main>
+    <div id="tab-server" class="tab-panel active">
+      <section>
+        <h2>Health &amp; readiness</h2>
+        <div class="row">
+          <button type="button" id="btn-health">GET /health</button>
+          <button type="button" id="btn-ready" class="secondary">GET /ready</button>
+        </div>
+        <pre id="health-out" class="out"></pre>
+      </section>
+    </div>
+
+    <div id="tab-predict" class="tab-panel">
+      <section>
+        <h2>POST /predict</h2>
+        <label for="predict-input">input (JSON array)</label>
+        <textarea id="predict-input">[0.1, 0.2, 0.3, 0.4]</textarea>
+        <div class="row">
+          <label><input type="checkbox" id="predict-gh"> use_gh</label>
+          <button type="button" id="btn-predict">Predict</button>
+        </div>
+        <pre id="predict-out" class="out"></pre>
+      </section>
+    </div>
+
+    <div id="tab-update" class="tab-panel">
+      <section>
+        <h2>POST /update</h2>
+        <label for="update-input">input (JSON array)</label>
+        <textarea id="update-input">[0.1, 0.2, 0.3, 0.4]</textarea>
+        <label for="update-label">correct_label</label>
+        <input type="text" id="update-label" value="class_a">
+        <div class="row">
+          <label><input type="checkbox" id="update-gh"> use_gh</label>
+          <button type="button" id="btn-update">Update</button>
+        </div>
+        <pre id="update-out" class="out"></pre>
+      </section>
+      <section>
+        <h2>Loss history</h2>
+        <canvas id="loss-chart" width="640" height="200"></canvas>
+      </section>
+    </div>
+
+    <div id="tab-models" class="tab-panel">
+      <section>
+        <h2>GET /models — experiment list</h2>
+        <p class="hint">Registry models from cypha_rest. Use summary mode for a compact list.</p>
+        <div class="row">
+          <label><input type="checkbox" id="models-summary" checked> summary=true</label>
+          <button type="button" id="btn-models">Refresh list</button>
+        </div>
+        <div id="experiments-list" class="empty">Click Refresh list to load experiments.</div>
+        <pre id="models-out" class="out"></pre>
+      </section>
+      <section>
+        <h2>POST /load</h2>
+        <label for="load-name">name</label>
+        <input type="text" id="load-name" placeholder="model name">
+        <label for="load-version">version (optional)</label>
+        <input type="text" id="load-version" placeholder="v1">
+        <div class="row">
+          <button type="button" id="btn-load">Load model</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="tab-lm" class="tab-panel">
+      <section>
+        <h2>CyphaLM generate</h2>
+        <p class="hint">POST /generate (falls back to /lm/generate if unavailable).</p>
+        <label for="lm-prompt">prompt_ids (JSON array of integers)</label>
+        <textarea id="lm-prompt">[1, 2, 3]</textarea>
+        <label for="lm-max-tokens">max_tokens</label>
+        <input type="number" id="lm-max-tokens" value="8" min="1" max="512">
+        <div class="row">
+          <button type="button" id="btn-lm-generate">Generate</button>
+          <button type="button" id="btn-lm-metrics" class="secondary">GET /lm/metrics</button>
+        </div>
+        <pre id="lm-out" class="out"></pre>
+      </section>
+    </div>
+
+    <div id="tab-session" class="tab-panel">
+      <section>
+        <h2>Session RNG</h2>
+        <div class="row">
+          <button type="button" id="btn-rng-get">GET /session/rng</button>
+          <button type="button" id="btn-rng-seed" class="secondary">POST seed 424242</button>
+        </div>
+        <p id="session-rng-display" class="hint"></p>
+        <pre id="session-out" class="out"></pre>
+      </section>
+    </div>
+
+    <div id="tab-metrics" class="tab-panel">
+      <section>
+        <h2>GET /metrics</h2>
+        <div id="metrics-cards"></div>
+        <div class="row">
+          <button type="button" id="btn-metrics">Fetch metrics</button>
+          <button type="button" id="btn-metrics-poll" class="secondary">Poll metrics</button>
+        </div>
+        <pre id="metrics-out" class="out"></pre>
+      </section>
+    </div>
+
+    <div id="tab-intelligence" class="tab-panel">
+      <section>
+        <h2>GET /intelligence/report</h2>
+        <p class="hint">Reference-fixture intelligence profile report (navigation loss, failure modes, landscape κ).</p>
+        <div class="row">
+          <button type="button" id="btn-intelligence-report">Fetch report</button>
+        </div>
+        <div id="intelligence-summary"></div>
+        <pre id="intelligence-out" class="out"></pre>
+      </section>
+    </div>
+  </main>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>
