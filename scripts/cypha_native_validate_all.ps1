@@ -287,9 +287,20 @@ $baselineLockScript = Join-Path $root "scripts\validate_baseline_lock.ps1"
 if (-not (Test-Path $baselineLockScript)) {
     Step-Result "baseline_lock_validate" $true "skipped (script missing)"
 } else {
-    & $baselineLockScript
+    $baselineLockArgs = @{}
+    $productionValidate = ($env:CYPHA_VALIDATE_PRODUCTION -eq "1")
+    if ($productionValidate) {
+        $baselineLockArgs.Production = $true
+        Write-Host "  CYPHA_VALIDATE_PRODUCTION=1 -> -Production tier checks" -ForegroundColor DarkGray
+    }
+    & $baselineLockScript @baselineLockArgs
     $lockCode = $LASTEXITCODE
-    Step-Result "baseline_lock_validate" ($lockCode -eq 0) $(if ($lockCode -eq 0) { "bench/BASELINE_LOCK.json ok" } else { "exit $lockCode" })
+    $lockDetail = if ($lockCode -eq 0) {
+        if ($productionValidate) { "bench/BASELINE_LOCK.json ok (-Production)" } else { "bench/BASELINE_LOCK.json ok" }
+    } else {
+        "exit $lockCode"
+    }
+    Step-Result "baseline_lock_validate" ($lockCode -eq 0) $lockDetail
 }
 
 # --- Summary ---

@@ -41,7 +41,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 
 | Script / binary | Purpose | Output |
 |-----------------|---------|--------|
-| **`cypha_bench_run`** (native) | Multi-domain benchmark (d01–d17 + d25 corpus readiness + d26 medium overnight + cross-domain) | stdout / JSON |
+| **`cypha_bench_run`** (native) | Multi-domain benchmark (d01–d17 + d25 corpus readiness + d26 medium overnight + d27 production overnight + cross-domain) | stdout / JSON |
 | **`cypha_bench_report`** (native) | Regenerate bench report figures from JSON artifacts | disk |
 | **`cypha_tune_run`** (native) | Sweep JSON → per-cell native bench | disk |
 | **`cypha_diagnostics_run`** (native) | Phases 1–4 validation orchestrator (parity exes + inline checks) | stdout |
@@ -51,11 +51,12 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `cyphalm_native_sweep.ps1` / `cyphalm_native_sweep_safe.ps1` | CyphaLM config sweeps | disk |
 | `download_wikitext2.ps1` | Download WikiText-2 raw into `bench/data/wikitext2/wikitext-2/` (PowerShell 5+) | disk |
 | `download_wikitext2.sh` | Bash equivalent for Linux/CI | disk |
-| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`, `-Medium`) | disk |
-| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`, `-Medium`) | disk |
-| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast` or `-Medium` to child scripts) | `bench/BASELINE_LOCK.json` |
-| `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`) | lock JSON |
-| `validate_baseline_lock.ps1` | Validate `bench/BASELINE_LOCK.json` schema + d17 pin (`-LockFile`, `-Strict`) | console |
+| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`, `-Medium`, `-Production`) | disk |
+| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`, `-Medium`, `-Production`) | disk |
+| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast`, `-Medium`, or `-Production` to child scripts) | `bench/BASELINE_LOCK.json` |
+| `run_production_overnight.ps1` | Dedicated 300k production overnight wrapper — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log` | disk |
+| `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`; `-Production` → `--production`) | lock JSON |
+| `validate_baseline_lock.ps1` | Validate `bench/BASELINE_LOCK.json` schema + d17 pin (`-LockFile`, `-Strict`, `-Production`) | console |
 | `publish_release.ps1` | Local `gh release create` wrapper (`-DryRun` / `-NotesOnly` preview without gh) | console |
 | `wsl_bench_gpu.sh` | WSL GPU bench helper | console |
 
@@ -66,7 +67,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | **`corpus_smoke`** (native) | Probe `load_bench_corpus("d17"|"d21", …)` — WikiText-2 or gutenberg fallback | `native_corpus_smoke` |
 | **`cypha_bench_run --domain-tag d25`** | Corpus readiness validation; writes `bench/report/tables/d25_corpus_readiness.json` | `native_d25_corpus_smoke` |
 
-## Medium overnight + baseline lock validator (Phase 12)
+## Medium overnight + baseline lock validator (Phase 12 — shipped everywhere)
 
 | Script / binary | Purpose | CTest |
 |-----------------|---------|-------|
@@ -77,6 +78,18 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | **`publish_release.ps1 -DryRun`** | Preview release notes without calling `gh` | manual |
 
 Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/download_wikitext2.sh` + `ctest -R "native_corpus_smoke|native_d25_corpus_smoke"`.
+
+## Production overnight tier (Phase 13)
+
+| Script / binary | Purpose | CTest |
+|-----------------|---------|-------|
+| **`-Production`** on overnight scripts | 300k train / 2000 eval, real WikiText or gutenberg (`status=production`; mutually exclusive with `-Fast`/`-Medium`) | manual |
+| **`run_production_overnight.ps1`** | Dedicated production wrapper — `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log` | manual |
+| **`cypha_bench_run --domain-tag d27`** | Production overnight lock validation; profile `bench/config/d27_production_lock_profile.json` | `native_d27_production_lock_smoke` |
+| **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
+| **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |
+
+Full 300k production overnight is **not** run in CI. Blocking gate **104 CTests** (+1 `native_d27_production_lock_smoke`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`.
 
 ## Kernel LLR / XOR profiling
 

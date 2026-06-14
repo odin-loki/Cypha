@@ -18,6 +18,8 @@ namespace {
 
 constexpr double kD17PinBpc = 2.873;
 constexpr double kD17PinTolerance = 0.05;
+constexpr double kD17ProductionPinTolerance = 0.05;
+constexpr int kProductionNTrainMin = 300000;
 
 [[noreturn]] void fail(const std::string& msg) {
     std::fprintf(stderr, "baseline_lock_validate: FAIL - %s\n", msg.c_str());
@@ -92,12 +94,17 @@ fs::path default_lock_path() {
     return fs::absolute(here / "bench" / "BASELINE_LOCK.json");
 }
 
-fs::path parse_lock_path(int argc, char** argv) {
+fs::path parse_lock_path(int argc, char** argv, bool* production) {
+    *production = false;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--help" || arg == "-h") {
-            std::fprintf(stderr, "usage: baseline_lock_validate [--lock-file PATH]\n");
+            std::fprintf(stderr, "usage: baseline_lock_validate [--lock-file PATH] [--production]\n");
             std::exit(0);
+        }
+        if (arg == "--production") {
+            *production = true;
+            continue;
         }
         if (arg == "--lock-file") {
             if (i + 1 >= argc) {
@@ -110,7 +117,43 @@ fs::path parse_lock_path(int argc, char** argv) {
     return default_lock_path();
 }
 
-void validate_lock(const Json& lock) {
+void validate_production_tier(const Json& lock) {
+    if (!lock.contains("overnight_results") || !lock["overnight_results"].is_object()) {
+        fail("overnight_results is not an object (-Production)");
+    }
+    const Json& overnight = lock["overnight_results"];
+    require_key(overnight, "n_train", "overnight_results");
+    if (!overnight["n_train"].is_number_integer()) {
+        fail("overnight_results n_train must be an integer (-Production)");
+    }
+    const int n_train = overnight["n_train"].get<int>();
+    if (n_train < kProductionNTrainMin) {
+        std::printf("  (-Production: n_train=%d < %d, pending_production)\n", n_train,
+                    kProductionNTrainMin);
+        return;
+    }
+    require_key(overnight, "status", "overnight_results");
+    const std::string status = overnight["status"].get<std::string>();
+    if (status != "production" && status != "completed") {
+        fail("overnight_results status '" + status +
+             "' invalid for production tier (n_train=" + std::to_string(n_train) +
+             "; expected production or completed)");
+    }
+    require_key(overnight, "bpc", "overnight_results");
+    if (!overnight["bpc"].is_number()) {
+        fail("overnight_results bpc must be numeric (-Production)");
+    }
+    const double bpc = overnight["bpc"].get<double>();
+    const double prod_delta = std::abs(bpc - kD17PinBpc);
+    if (prod_delta > kD17ProductionPinTolerance) {
+        fail("overnight_results bpc out of production pin tolerance (~" +
+             std::to_string(kD17PinBpc) + ", delta " + std::to_string(prod_delta) + ", max " +
+             std::to_string(kD17ProductionPinTolerance) + ")");
+    }
+    std::printf("  (-Production: n_train=%d status=%s bpc pin OK)\n", n_train, status.c_str());
+}
+
+void validate_lock(const Json& lock, bool production) {
     if (!lock.contains("schema_version") || !lock["schema_version"].is_number_integer() ||
         lock["schema_version"].get<int>() != 1) {
         fail("schema_version must be 1");
@@ -147,15 +190,20 @@ void validate_lock(const Json& lock) {
     if (lock.contains("cell_sweep_results") && !lock["cell_sweep_results"].is_null()) {
         validate_result_section(lock["cell_sweep_results"], "cell_sweep_results", "d17", "cell-sweep");
     }
+
+    if (production) {
+        validate_production_tier(lock);
+    }
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     try {
-        const fs::path lock_path = parse_lock_path(argc, argv);
+        bool production = false;
+        const fs::path lock_path = parse_lock_path(argc, argv, &production);
         const Json lock = load_lock(lock_path);
-        validate_lock(lock);
+        validate_lock(lock, production);
         std::printf("baseline_lock_validate: OK %s\n", lock_path.string().c_str());
         return 0;
     } catch (const std::exception& ex) {

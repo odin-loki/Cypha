@@ -159,7 +159,7 @@
 
 **CI gate (Phase 11 shipped):** **101 CTests** (`ctest -R native_`); +1 smoke: **`native_d25_corpus_smoke`**; also **`native_corpus_smoke`** (direct `load_bench_corpus` probe).
 
-## Phase 12 — shipped (v2.3.12, 2026-06-14)
+## Phase 12 — shipped everywhere (v2.3.12, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
@@ -174,11 +174,27 @@
 | Optional CI corpus job | `.github/workflows/ci.yml` → `corpus_and_d25` | optional (`continue-on-error`) |
 | Release notes v2.3.12 template | `scripts/create_release_notes.ps1` | manual |
 
-**CI gate (Phase 12 shipped):** **103 CTests** (`ctest -R native_`); +2 smokes: **`native_d26_medium_overnight_smoke`**, **`native_baseline_lock_validate_smoke`**.
+**CI gate (Phase 12 shipped everywhere):** **103 CTests** (`ctest -R native_`); +2 smokes: **`native_d26_medium_overnight_smoke`**, **`native_baseline_lock_validate_smoke`**.
+
+## Phase 13 — shipped (v2.3.13, 2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Production overnight tier | `-Production` on `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, `run_overnight_all.ps1`, `update_baseline_lock.ps1` — 300k train / 2000 eval, real corpus (mutually exclusive with `-Fast`/`-Medium`) | manual |
+| `cypha_baseline_lock --production` | `tools/cypha_baseline_lock.cpp` — `status=production`, `CYPHA_BENCH_FULL_CORPUS=1`, `CYPHA_BENCH_OVERNIGHT=1`, `CYPHA_BENCH_FULL_N_TRAIN=300000` | `native_baseline_lock_smoke` |
+| Dedicated production runner | `scripts/run_production_overnight.ps1` — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log` | manual |
+| Bench domain **d27** production overnight validation | `bench_domains.cpp` → `run_d27_production_lock_validation` | `cypha_bench_run --domain-tag d27` |
+| D27 profile config | `bench/config/d27_production_lock_profile.json` | manual |
+| D27 validation report | `bench/report/tables/d27_production_lock_validation.json` | d27 run |
+| Baseline lock PS production validator | `scripts/validate_baseline_lock.ps1 -Production` — when `n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
+| Baseline lock C++ production validator | `tools/baseline_lock_smoke.cpp` → `baseline_lock_validate --production` | `native_baseline_lock_validate_smoke` |
+| Release notes v2.3.13 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 13 shipped):** **104 CTests** (`ctest -R native_`); +1 smoke: **`native_d27_production_lock_smoke`**. Full 300k production overnight is **not** run in CI — maintainer-only via **`run_production_overnight.ps1`**.
 
 ## Still planned
 
-- **D17 300k + 28-variant overnight** — use **`scripts/run_overnight_all.ps1`** (or **`-Medium`** for 5k real-corpus smoke); fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1 -Run all`**
+- **D17 300k + 28-variant overnight** — use **`scripts/run_production_overnight.ps1`** (or **`run_overnight_all.ps1 -Production`**) for full production tier; **`-Medium`** for 5k real-corpus smoke; fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1 -Run all -Production`**
 - **GitHub Release publish** — preview with **`scripts/publish_release.ps1 -DryRun`**; actual **`gh release create`** still requires **`gh auth login`**
 - **RPSM @ 300k production benchmark** — d21 wired; full overnight not executed in CI
 
@@ -211,6 +227,12 @@ pwsh -File scripts/validate_baseline_lock.ps1 -Strict     # Phase 12: reject fas
 baseline_lock_validate --lock-file bench/BASELINE_LOCK.json  # Phase 12: C++ validator CLI
 pwsh -File scripts/publish_release.ps1 -Tag v2.3.12 -DryRun  # Phase 12: notes preview, no gh
 ctest --test-dir native/build -R "native_d26|native_baseline_lock_validate" --output-on-failure  # Phase 12
+pwsh -File scripts/run_production_overnight.ps1             # Phase 13: 300k production overnight (maintainer)
+pwsh -File scripts/run_overnight_all.ps1 -Production          # Phase 13: 300k train, real WikiText/gutenberg
+cypha_bench_run --domain-tag d27                            # Phase 13: production overnight lock validation (shipped)
+pwsh -File scripts/validate_baseline_lock.ps1 -Production   # Phase 13: require production/completed @ 300k
+baseline_lock_validate --lock-file bench/BASELINE_LOCK.json --production  # Phase 13: C++ production validator
+ctest --test-dir native/build -R "native_d27" --output-on-failure  # Phase 13
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

@@ -40,6 +40,7 @@ struct Args {
     int threads = 1;
     bool fast = false;
     bool medium = false;
+    bool production = false;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
     fs::path lock_file;
@@ -50,7 +51,7 @@ struct Args {
 void usage() {
     std::cerr
         << "usage: cypha_baseline_lock --run {d17,d21,cell-sweep,all}\n"
-        << "       [--n-train N] [--n-eval M] [--threads T] [--fast] [--medium]\n"
+        << "       [--n-train N] [--n-eval M] [--threads T] [--fast] [--medium] [--production]\n"
         << "       [--lock-file PATH] [--exe-dir DIR] [--output-dir DIR]\n";
 }
 
@@ -89,6 +90,8 @@ Args parse_args(int argc, char** argv) {
             a.fast = true;
         } else if (k == "--medium") {
             a.medium = true;
+        } else if (k == "--production") {
+            a.production = true;
         } else if (k == "--lock-file") {
             a.lock_file = need("--lock-file");
         } else if (k == "--exe-dir") {
@@ -105,8 +108,8 @@ Args parse_args(int argc, char** argv) {
     if (!run_set) {
         throw std::runtime_error("missing required --run");
     }
-    if (a.fast && a.medium) {
-        throw std::runtime_error("cannot use --fast and --medium together");
+    if ((a.fast && a.medium) || (a.fast && a.production) || (a.medium && a.production)) {
+        throw std::runtime_error("cannot combine --fast, --medium, and --production");
     }
     if (a.fast) {
         if (!a.n_train_explicit) a.n_train = 200;
@@ -114,6 +117,9 @@ Args parse_args(int argc, char** argv) {
     } else if (a.medium) {
         if (!a.n_train_explicit) a.n_train = 5000;
         if (!a.n_eval_explicit) a.n_eval = 256;
+    } else if (a.production) {
+        if (!a.n_train_explicit) a.n_train = 300000;
+        if (!a.n_eval_explicit) a.n_eval = 2000;
     }
     return a;
 }
@@ -121,6 +127,7 @@ Args parse_args(int argc, char** argv) {
 std::string run_status_label(const Args& args) {
     if (args.fast) return "fast_smoke";
     if (args.medium) return "medium_smoke";
+    if (args.production) return "production";
     return "completed";
 }
 
@@ -527,6 +534,7 @@ RunOutcome execute_run_kind(const Args& args, RunKind kind, const fs::path& exe_
                         {"n_eval", step.n_eval},
                         {"fast", step.fast},
                         {"medium", step.medium},
+                        {"production", step.production},
                         {"status", run_status_label(step)}};
 
     if (kind == RunKind::CellSweep) {
@@ -586,6 +594,7 @@ int main(int argc, char** argv) {
                        {"n_eval", args.n_eval},
                        {"fast", args.fast},
                        {"medium", args.medium},
+                       {"production", args.production},
                        {"status", run_status_label(args)},
                        {"runs", reports}};
         if (reports.size() == 1 && reports[0].contains("bpc")) {

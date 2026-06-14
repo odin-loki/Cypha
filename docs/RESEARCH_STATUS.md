@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **103 CTests** *(Phase 12 shipped)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **104 CTests** *(Phase 13 shipped)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **103 CTests** gate CI *(Phase 12 shipped)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **104 CTests** gate CI *(Phase 13 shipped)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -247,13 +247,21 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Overnight `-Fast` fix:** **`run_d17_overnight.ps1`**, **`run_rpsm_overnight.ps1`**, **`run_overnight_all.ps1`**, and **`update_baseline_lock.ps1`** propagate **`-Fast`** and set **`CYPHA_BENCH_FAST=1`** so overnight/baseline-lock smokes run without WikiText installed.
 - **CI:** **101 CTests** (+1 **`native_d25_corpus_smoke`**; also **`native_corpus_smoke`**).
 
-### Phase 12 — medium overnight tier + baseline lock validator (v2.3.12) — shipped
+### Phase 12 — medium overnight tier + baseline lock validator (v2.3.12) — shipped everywhere
 
 - **Medium overnight tier:** **`-Medium`** on **`run_d17_overnight.ps1`**, **`run_rpsm_overnight.ps1`**, **`run_overnight_all.ps1`**, and **`update_baseline_lock.ps1`** — 5k train / 256 eval, real WikiText or gutenberg fallback (no **`CYPHA_BENCH_FAST`**). **`cypha_baseline_lock --medium`** writes **`status=medium_smoke`** to **`overnight_results`**.
 - **Bench d26:** medium overnight lock validation — **`run_d26_medium_overnight_validation`** runs **`cypha_baseline_lock --run d17 --medium`**, checks finite BPC and **`medium_smoke`** status; profile **`bench/config/d26_medium_overnight_profile.json`**. CTest **`native_d26_medium_overnight_smoke`**.
 - **Baseline lock validator:** **`scripts/validate_baseline_lock.ps1`** (`-LockFile`, `-Strict`) and **`baseline_lock_validate`** CLI — schema_version, d17 hybrid **2.873 BPC** pin, overnight/rpsm/cell-sweep sections. CTest **`native_baseline_lock_validate_smoke`**.
 - **Release preview:** **`scripts/publish_release.ps1 -DryRun`** / **`-NotesOnly`** — generate release notes without calling **`gh`**.
-- **CI:** optional **`corpus_and_d25`** job (WikiText fetch + **`native_corpus_smoke`** / **`native_d25_corpus_smoke`**, `continue-on-error`). Blocking gate **103 CTests** (+2 d26 + baseline-lock validate smokes).
+- **CI:** optional **`corpus_and_d25`** job (WikiText fetch + **`native_corpus_smoke`** / **`native_d25_corpus_smoke`**, `continue-on-error`). Blocking gate **103 CTests** at Phase 12 (+2 d26 + baseline-lock validate smokes).
+
+### Phase 13 — production overnight tier (v2.3.13) — shipped
+
+- **Production overnight tier:** **`-Production`** on **`run_d17_overnight.ps1`**, **`run_rpsm_overnight.ps1`**, **`run_overnight_all.ps1`**, and **`update_baseline_lock.ps1`** — 300k train / 2000 eval, real WikiText or gutenberg (mutually exclusive with **`-Fast`** / **`-Medium`**). **`cypha_baseline_lock --production`** sets **`CYPHA_BENCH_FULL_CORPUS=1`**, **`CYPHA_BENCH_OVERNIGHT=1`**, **`CYPHA_BENCH_FULL_N_TRAIN=300000`**, writes **`status=production`** to **`overnight_results`**.
+- **Dedicated production runner:** **`scripts/run_production_overnight.ps1`** — chains **`run_overnight_all.ps1 -Production`**, logs to **`bench/results/production_overnight_<timestamp>.log`**. Maintainer-only; not run in CI.
+- **Bench d27:** production overnight lock validation — **`run_d27_production_lock_validation`** validates **`bench/BASELINE_LOCK.json`** for production tier; if **`overnight_results.n_train < 300000`**, reports **`status=pending_production`** (smoke pass); if **≥ 300k**, validates BPC within **0.05** of d17 hybrid **2.873** pin; profile **`bench/config/d27_production_lock_profile.json`**. CTest **`native_d27_production_lock_smoke`**.
+- **Production validator:** **`scripts/validate_baseline_lock.ps1 -Production`** and **`baseline_lock_validate --production`** — when **`overnight_results.n_train >= 300000`**, require **`status=production`** or **`completed`** and BPC within **0.05** of pin.
+- **CI:** blocking gate **104 CTests** (+1 d27 smoke). Full 300k production overnight remains maintainer workflow via **`run_production_overnight.ps1`**.
 
 ---
 

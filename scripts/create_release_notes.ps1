@@ -9,6 +9,14 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.13" = @(
+    "Intelligence Stats **Phase 13**: **production overnight tier** - 300k train / 2000 eval (``-Production`` on overnight scripts, ``cypha_baseline_lock --production``, ``status=production`` in lock JSON).",
+    "Dedicated maintainer runner ``scripts/run_production_overnight.ps1`` - chains ``run_overnight_all.ps1 -Production``, logs to ``bench/results/production_overnight_<timestamp>.log``.",
+    "Bench domain **d27** production overnight lock validation - ``cypha_bench_run --domain-tag d27``; profile ``bench/config/d27_production_lock_profile.json``; CTest ``native_d27_production_lock_smoke``.",
+    "``scripts/validate_baseline_lock.ps1 -Production`` and ``baseline_lock_validate --production`` - when ``overnight_results.n_train >= 300000``, require ``status=production`` or ``completed`` and BPC within **0.05** of d17 hybrid **2.873** pin; ``CYPHA_VALIDATE_PRODUCTION=1`` in ``cypha_native_validate_all.ps1``.",
+    "``scripts/monitor_overnight.ps1`` - lightweight poll of ``bench/BASELINE_LOCK.json`` ``run_at`` / status while overnight jobs run.",
+    "CI gate **104 CTests**; full 300k production overnight **not** run in CI (maintainer workflow only)."
+  )
   "2.3.12" = @(
     "Intelligence Stats **Phase 12**: **medium overnight** profile - between mini smoke and full 300k (``CYPHA_BENCH_MEDIUM_OVERNIGHT=1``; profile ``bench/config/d26_medium_overnight_profile.json``).",
     "Bench domain **d26** medium overnight lock validation - ``cypha_bench_run --domain-tag d26``; CTest ``native_d26_medium_overnight_smoke``.",

@@ -1,0 +1,30 @@
+{
+  "profile_id": "d27_production_lock_profile",
+  "description": "D27 production tier baseline lock validation — schema + 300k BPC pin gate",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 27,
+    "domain_tag": "d27"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d27_production_lock_smoke — production tier lock validator (pending or 300k pin check)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate", "production": true }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 27",
+    "Or: cypha_bench_run --domain-tag d27",
+    "Validates bench/BASELINE_LOCK.json schema and production tier gate",
+    "When overnight_results.n_train < 300000: validation_status=pending_production (smoke passes)",
+    "When n_train >= 300000: require status=production|completed and BPC within 0.05 of d17 pin (2.873)",
+    "CLI validators: scripts/validate_baseline_lock.ps1 -Production; baseline_lock_validate --production",
+    "Phase 13: production tier baseline lock validation gate"
+  ]
+}

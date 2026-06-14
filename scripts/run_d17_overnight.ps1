@@ -4,6 +4,7 @@
 #   pwsh -File scripts/run_d17_overnight.ps1 -BuildDir native/build -NTrain 500
 #   pwsh -File scripts/run_d17_overnight.ps1 -Fast  # synthetic corpus if WikiText missing
 #   pwsh -File scripts/run_d17_overnight.ps1 -Medium  # 5k train, real WikiText/gutenberg
+#   pwsh -File scripts/run_d17_overnight.ps1 -Production  # 300k train, status=production in lock
 param(
     [string]$BuildDir = "native/build",
     [int]$NTrain = 300000,
@@ -13,10 +14,16 @@ param(
     [string]$Mode = "hybrid",
     [switch]$CellSweep,
     [switch]$Fast,
-    [switch]$Medium
+    [switch]$Medium,
+    [switch]$Production
 )
 
 $ErrorActionPreference = "Stop"
+
+$tierCount = @($Fast, $Medium, $Production | Where-Object { $_ }).Count
+if ($tierCount -gt 1) {
+    throw "cannot combine -Fast, -Medium, and -Production"
+}
 
 $root = Split-Path $PSScriptRoot -Parent
 $exe = Join-Path $root (Join-Path $BuildDir "cyphalm_bench_native.exe")
@@ -32,7 +39,7 @@ $env:CYPHA_BENCH_OVERNIGHT = "1"
 $env:CYPHA_BENCH_FULL_N_TRAIN = "$NTrain"
 if ($Fast) {
     $env:CYPHA_BENCH_FAST = "1"
-} elseif ($NTrain -ne 300000 -and -not $Medium) {
+} elseif ($NTrain -ne 300000 -and -not $Medium -and -not $Production) {
     $env:CYPHA_BENCH_FAST = "1"
 }
 

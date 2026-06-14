@@ -3098,6 +3098,89 @@ void validate_cell_sweep_lock_section(const Json& lock) {
     validate_overnight_lock_section(section, "overnight_results (cell-sweep)");
 }
 
+constexpr double kD17HybridPinBpc = 2.873;
+constexpr double kD17HybridPinTolerance = 0.02;
+constexpr double kD17ProductionPinTolerance = 0.05;
+constexpr int kProductionNTrainMin = 300000;
+
+void require_lock_key(const Json& obj, const char* key, const char* ctx) {
+    if (!obj.contains(key) || obj[key].is_null()) {
+        throw std::runtime_error(std::string(ctx) + " missing '" + key + "'");
+    }
+}
+
+void validate_baseline_lock_schema(const Json& lock) {
+    if (!lock.contains("schema_version") || !lock["schema_version"].is_number_integer() ||
+        lock["schema_version"].get<int>() != 1) {
+        throw std::runtime_error("schema_version must be 1");
+    }
+
+    require_lock_key(lock, "d17_hybrid_baseline", "lock");
+    const Json& d17 = lock["d17_hybrid_baseline"];
+    if (!d17.is_object()) {
+        throw std::runtime_error("d17_hybrid_baseline is not an object");
+    }
+    for (const char* key : {"bpc", "profile", "mode", "n_train", "n_eval"}) {
+        require_lock_key(d17, key, "d17_hybrid_baseline");
+    }
+    if (d17["profile"].get<std::string>() != "d17") {
+        throw std::runtime_error("d17_hybrid_baseline profile must be d17");
+    }
+    if (d17["mode"].get<std::string>() != "hybrid") {
+        throw std::runtime_error("d17_hybrid_baseline mode must be hybrid");
+    }
+    if (!d17["bpc"].is_number()) {
+        throw std::runtime_error("d17_hybrid_baseline bpc must be numeric");
+    }
+    const double pin_delta = std::abs(d17["bpc"].get<double>() - kD17HybridPinBpc);
+    if (pin_delta > kD17HybridPinTolerance) {
+        throw std::runtime_error("d17_hybrid_baseline bpc pin out of reference tolerance");
+    }
+
+    require_lock_key(lock, "overnight_results", "lock");
+    require_lock_key(lock, "rpsm_results", "lock");
+    validate_overnight_lock_section(lock["overnight_results"], "overnight_results");
+    validate_overnight_lock_section(lock["rpsm_results"], "rpsm_results");
+
+    if (lock.contains("cell_sweep_results") && !lock["cell_sweep_results"].is_null()) {
+        validate_overnight_lock_section(lock["cell_sweep_results"], "cell_sweep_results");
+    }
+}
+
+std::string validate_production_tier_lock(const Json& lock) {
+    if (!lock.contains("overnight_results") || !lock["overnight_results"].is_object()) {
+        throw std::runtime_error("overnight_results is not an object");
+    }
+    const Json& overnight = lock["overnight_results"];
+    require_lock_key(overnight, "n_train", "overnight_results");
+    if (!overnight["n_train"].is_number_integer()) {
+        throw std::runtime_error("overnight_results n_train must be an integer");
+    }
+    const int n_train = overnight["n_train"].get<int>();
+    if (n_train < kProductionNTrainMin) {
+        return "pending_production";
+    }
+
+    require_lock_key(overnight, "status", "overnight_results");
+    const std::string status = overnight["status"].get<std::string>();
+    if (status != "production" && status != "completed") {
+        throw std::runtime_error("overnight_results status '" + status +
+                                 "' invalid for production tier (n_train=" + std::to_string(n_train) +
+                                 "; expected production or completed)");
+    }
+    require_lock_key(overnight, "bpc", "overnight_results");
+    if (!overnight["bpc"].is_number()) {
+        throw std::runtime_error("overnight_results bpc must be numeric");
+    }
+    const double bpc = overnight["bpc"].get<double>();
+    const double prod_delta = std::abs(bpc - kD17HybridPinBpc);
+    if (prod_delta > kD17ProductionPinTolerance) {
+        throw std::runtime_error("overnight_results bpc out of production pin tolerance (delta " +
+                                 std::to_string(prod_delta) + ")");
+    }
+    return "production_validated";
+}
+
 Json probe_bench_corpus_profile(const std::string& profile) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(profile, cfg);
@@ -3268,6 +3351,38 @@ Json run_d26_medium_overnight_validation() {
     return experiments;
 }
 
+Json run_d27_production_lock_validation() {
+    const fs::path lock_path = fs::current_path() / "d27_production_lock_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+    const std::string validation_status = validate_production_tier_lock(lock);
+
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d27_production_lock_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d27_production_lock_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3297,6 +3412,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d24", "cypha_bench.domains.d24_production_lock_validation", run_d24_production_lock_validation},
         {"d25", "cypha_bench.domains.d25_corpus_readiness", run_d25_corpus_readiness},
         {"d26", "cypha_bench.domains.d26_medium_overnight_validation", run_d26_medium_overnight_validation},
+        {"d27", "cypha_bench.domains.d27_production_lock_validation", run_d27_production_lock_validation},
     };
 }
 

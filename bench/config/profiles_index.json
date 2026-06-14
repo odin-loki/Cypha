@@ -98,5 +98,12 @@
     "domain": "d26",
     "corpus": "wikitext2|gutenberg_fallback",
     "notes": "Medium overnight tier validation; see bench/config/d26_medium_overnight_profile.json"
+  },
+  "production_tier_d27": {
+    "path": "everyday_profile.json",
+    "config": "d27_production_lock_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d27",
+    "notes": "Production tier baseline lock validation; see bench/config/d27_production_lock_profile.json"
   }
 }

@@ -1,7 +1,8 @@
 # Validate bench/BASELINE_LOCK.json schema, d17 pin, and overnight/rpsm/cell-sweep sections.
 param(
     [string]$LockFile = "",
-    [switch]$Strict
+    [switch]$Strict,
+    [switch]$Production
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +13,10 @@ if (-not $LockFile) {
 
 $D17_PIN_BPC = 2.873
 $D17_PIN_TOLERANCE = 0.02
+$D17_PRODUCTION_PIN_TOLERANCE = 0.05
+$PRODUCTION_N_TRAIN_MIN = 300000
 $VALID_STATUSES = @("fast_smoke", "completed")
+$PRODUCTION_STATUSES = @("production", "completed")
 
 function Fail([string]$Message) {
     Write-Host "validate_baseline_lock: FAIL - $Message" -ForegroundColor Red
@@ -124,6 +128,38 @@ Validate-ResultSection $lock.rpsm_results "rpsm_results" "d21" "rpsm"
 
 if ($lock.PSObject.Properties.Name -contains "cell_sweep_results" -and $null -ne $lock.cell_sweep_results) {
     Validate-ResultSection $lock.cell_sweep_results "cell_sweep_results" "d17" "cell-sweep"
+}
+
+if ($Production) {
+    $overnight = $lock.overnight_results
+    if ($null -eq $overnight -or $overnight -isnot [pscustomobject]) {
+        Fail "overnight_results is not an object (-Production)"
+    }
+    $nTrain = Require-Object $overnight "n_train" "overnight_results"
+    try {
+        [void][int]$nTrain
+    } catch {
+        Fail "overnight_results n_train must be an integer (-Production)"
+    }
+    if ([int]$nTrain -ge $PRODUCTION_N_TRAIN_MIN) {
+        $prodStatus = Require-Object $overnight "status" "overnight_results"
+        if ($PRODUCTION_STATUSES -notcontains $prodStatus) {
+            Fail ("overnight_results status '{0}' invalid for production tier (n_train={1}; expected {2})" -f $prodStatus, $nTrain, ($PRODUCTION_STATUSES -join ', '))
+        }
+        $prodBpc = Require-Object $overnight "bpc" "overnight_results"
+        try {
+            [void][double]$prodBpc
+        } catch {
+            Fail "overnight_results bpc must be numeric (-Production)"
+        }
+        $prodDelta = [Math]::Abs([double]$prodBpc - $D17_PIN_BPC)
+        if ($prodDelta -gt $D17_PRODUCTION_PIN_TOLERANCE) {
+            Fail ("overnight_results bpc {0} out of production pin tolerance (expected ~{1}, delta {2:F4}, max {3})" -f $prodBpc, $D17_PIN_BPC, $prodDelta, $D17_PRODUCTION_PIN_TOLERANCE)
+        }
+        Write-Host "  (-Production: n_train=$nTrain status=$prodStatus bpc pin OK)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "  (-Production: n_train=$nTrain < $PRODUCTION_N_TRAIN_MIN, pending_production)" -ForegroundColor DarkGray
+    }
 }
 
 Write-Host "validate_baseline_lock: OK $LockFile" -ForegroundColor Green

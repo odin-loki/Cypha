@@ -4,6 +4,7 @@
 #   powershell -File scripts/run_overnight_all.ps1
 #   powershell -File scripts/run_overnight_all.ps1 -Fast -SkipCellSweep -NTrain 500
 #   powershell -File scripts/run_overnight_all.ps1 -Medium  # 5k train, real WikiText/gutenberg
+#   powershell -File scripts/run_overnight_all.ps1 -Production  # 300k train, status=production in lock
 param(
     [string]$BuildDir = "native/build",
     [int]$NTrain = 300000,
@@ -11,14 +12,16 @@ param(
     [int]$Threads = 1,
     [switch]$SkipCellSweep,
     [switch]$Fast,
-    [switch]$Medium
+    [switch]$Medium,
+    [switch]$Production
 )
 
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path $PSScriptRoot -Parent
-if ($Fast -and $Medium) {
-    throw "cannot use -Fast and -Medium together"
+$tierCount = @($Fast, $Medium, $Production | Where-Object { $_ }).Count
+if ($tierCount -gt 1) {
+    throw "cannot combine -Fast, -Medium, and -Production"
 }
 
 $effectiveNTrain = $NTrain
@@ -29,13 +32,16 @@ if ($Fast) {
 } elseif ($Medium) {
     if ($NTrain -eq 300000) { $effectiveNTrain = 5000 }
     if ($NEval -eq 2000) { $effectiveNEval = 256 }
+} elseif ($Production) {
+    if ($NTrain -eq 300000) { $effectiveNTrain = 300000 }
+    if ($NEval -eq 2000) { $effectiveNEval = 2000 }
 }
 
 $d17Script = Join-Path $PSScriptRoot "run_d17_overnight.ps1"
 $rpsmScript = Join-Path $PSScriptRoot "run_rpsm_overnight.ps1"
 $lockScript = Join-Path $PSScriptRoot "update_baseline_lock.ps1"
 
-Write-Host "== Phase 9 overnight automation (fast=$Fast medium=$Medium n_train=$effectiveNTrain n_eval=$effectiveNEval) ==" -ForegroundColor Cyan
+Write-Host "== Phase 9 overnight automation (fast=$Fast medium=$Medium production=$Production n_train=$effectiveNTrain n_eval=$effectiveNEval) ==" -ForegroundColor Cyan
 
 $overnightArgs = @{
     BuildDir = $BuildDir
@@ -48,6 +54,9 @@ if ($Fast) {
 }
 if ($Medium) {
     $overnightArgs.Medium = $true
+}
+if ($Production) {
+    $overnightArgs.Production = $true
 }
 
 Write-Host "== D17 hybrid overnight ==" -ForegroundColor Cyan
@@ -81,6 +90,9 @@ if ($Fast) {
 }
 if ($Medium) {
     $lockArgs.Medium = $true
+}
+if ($Production) {
+    $lockArgs.Production = $true
 }
 
 Write-Host "== baseline lock: d17 ==" -ForegroundColor Cyan
