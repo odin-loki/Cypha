@@ -27,6 +27,9 @@
 # Phase 13 (v2.3.13, shipped): production overnight -Production tier (300k/2000);
 # run_production_overnight.ps1; d27 production lock validation;
 # validate_baseline_lock.ps1 -Production; 104 CTests (production tier not run in CI).
+# Phase 14 (v2.3.14, shipped): status validator fix (medium_smoke/production);
+# d28 overnight completion; finalize_production_overnight.ps1; 106 CTests.
+# Phase 15 (v2.3.15, prep): d29 release readiness gate; CYPHA_VALIDATE_* env vars.
 
 name: Release
 
@@ -328,3 +331,12 @@ jobs:
             - **Production lock validation:** `cypha_bench_run --domain-tag d27` — profile [`bench/config/d27_production_lock_profile.json`](bench/config/d27_production_lock_profile.json); report [`bench/report/tables/d27_production_lock_validation.json`](bench/report/tables/d27_production_lock_validation.json). Smoke passes with `pending_production` when lock has no 300k run yet.
             - **Production validator:** `pwsh -File scripts/validate_baseline_lock.ps1 -Production` — when `overnight_results.n_train >= 300000`, require `status=production` or `completed` and BPC within 0.05 of d17 hybrid **2.873** pin; C++ CLI `baseline_lock_validate --production`.
             - **CI gate:** **104 CTests** (`ctest -R native_`); new smoke **`native_d27_production_lock_smoke`**. Full 300k production overnight remains maintainer workflow.
+
+            ### Phase 14 maintainer notes (v2.3.14, shipped)
+
+            - **Status validator fix:** `pwsh -File scripts/validate_baseline_lock.ps1` and **`baseline_lock_validate`** accept **`medium_smoke`** and **`production`** (fixes lock validation after medium/production overnight runs).
+            - **Cell sweep artifact path:** default overnight output **`bench/results/cell_sweep`** via **`bench_paths::results_dir()`**; wired through **`cypha_baseline_lock --output-dir`**, **`update_baseline_lock.ps1`**, and **`run_overnight_all.ps1`**.
+            - **Unified overnight completion:** `cypha_bench_run --domain-tag d28` — cross-check **`overnight_results`**, **`rpsm_results`**, and **`cell_sweep_results`** for matching **`n_train`** / **`n_eval`**; profile [`bench/config/d28_overnight_complete_profile.json`](bench/config/d28_overnight_complete_profile.json).
+            - **Post-overnight finalize:** `pwsh -File scripts/finalize_production_overnight.ps1` — **`validate_baseline_lock.ps1 -Production`**, d27 + d28 bench domains, lock section summary; chained from **`run_production_overnight.ps1`** on success.
+            - **Optional local gate:** set **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** on **`cypha_native_validate_all.ps1`** to run d28 after baseline lock validate.
+            - **CI gate:** **106 CTests** (`ctest -R native_`); new smokes **`native_d28_overnight_complete_smoke`**, **`native_baseline_lock_validate_production_status`**. Full 300k production overnight remains maintainer workflow.

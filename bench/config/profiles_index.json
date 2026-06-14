@@ -112,5 +112,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d28",
     "notes": "Unified overnight completion validation; see bench/config/d28_overnight_complete_profile.json"
+  },
+  "release_readiness_d29": {
+    "path": "everyday_profile.json",
+    "config": "d29_release_readiness_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d29",
+    "notes": "Release readiness validation gate; see bench/config/d29_release_readiness_profile.json"
   }
 }

@@ -1,4 +1,20 @@
 # Full native Cypha validation: Release build outside OneDrive, CTest, bench smoke.
+#
+# Optional environment variables (Phase 13–15):
+#   CYPHA_VALIDATE_PRODUCTION=1
+#       Run validate_baseline_lock.ps1 -Production after the standard lock check.
+#   CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1
+#       After baseline lock validate, run cypha_bench_run --domain-tag d28 (overnight completion).
+#   CYPHA_VALIDATE_RELEASE_READINESS=1
+#       After baseline lock validate, run cypha_bench_run --domain-tag d29 when its profile exists;
+#       gracefully skipped when d29 is not built/merged yet.
+#   CYPHA_STRICT_TEST_COUNT=1
+#       Fail the ctest_native step when the parsed native_ test count does not match the expected
+#       gate (107 with d29 merged, else 106). Default: warn in step detail only.
+#
+# Usage:
+#   pwsh -File scripts/cypha_native_validate_all.ps1
+#   $env:CYPHA_VALIDATE_PRODUCTION = "1"; pwsh -File scripts/cypha_native_validate_all.ps1 -SkipBuild
 param(
     [string]$BuildDir = "C:\Temp\cypha_full_cpp_build",
     [switch]$SkipBuild,
@@ -18,6 +34,41 @@ function Step-Result {
 function BinPath {
     param([string]$Stem)
     Join-Path $BuildDir "$Stem.exe"
+}
+
+function Test-DomainTagExists {
+    param([string]$Tag)
+    $profiles = Get-ChildItem -Path (Join-Path $root "bench\config") -Filter "${Tag}_*_profile.json" -ErrorAction SilentlyContinue
+    if ($profiles) { return $true }
+    $indexPath = Join-Path $root "bench\config\profiles_index.json"
+    if (Test-Path $indexPath) {
+        try {
+            $index = Get-Content $indexPath -Raw | ConvertFrom-Json
+            foreach ($prop in $index.PSObject.Properties) {
+                if ($prop.Value.domain -eq $Tag) { return $true }
+            }
+        } catch { }
+    }
+    return $false
+}
+
+function Get-ExpectedNativeTestCount {
+    if (Test-DomainTagExists -Tag "d29") { return 107 }
+    return 106
+}
+
+function Get-CtestPassedCount {
+    param([object]$Output)
+    $text = if ($Output -is [array]) { $Output -join "`n" } else { [string]$Output }
+    foreach ($line in ($text -split "`n")) {
+        if ($line -match '(\d+)\s+tests?\s+failed out of (\d+)' -and $line -match 'tests passed') {
+            return [int]$Matches[2]
+        }
+    }
+    if ($text -match '(?m)(\d+)\s+tests?\s+passed') {
+        return [int]$Matches[1]
+    }
+    return $null
 }
 
 Write-Host "Cypha full native validation" -ForegroundColor Cyan
@@ -67,7 +118,23 @@ try {
     $ErrorActionPreference = $prevEap
 }
 $ctestOut | Write-Host
-Step-Result "ctest_native" ($ctestCode -eq 0) $(if ($ctestCode -eq 0) { "all native_ tests passed" } else { "exit $ctestCode" })
+$ctestDetail = if ($ctestCode -eq 0) { "all native_ tests passed" } else { "exit $ctestCode" }
+$expectedTestCount = Get-ExpectedNativeTestCount
+$parsedTestCount = Get-CtestPassedCount -Output $ctestOut
+if ($null -ne $parsedTestCount -and $parsedTestCount -ne $expectedTestCount) {
+    $countWarn = "expected $expectedTestCount native_ tests, parsed $parsedTestCount"
+    $ctestDetail = if ($ctestDetail) { "$ctestDetail; warn: $countWarn" } else { "warn: $countWarn" }
+    if ($env:CYPHA_STRICT_TEST_COUNT -eq "1") {
+        Step-Result "ctest_native" $false $ctestDetail
+    } else {
+        Step-Result "ctest_native" ($ctestCode -eq 0) $ctestDetail
+    }
+} else {
+    if ($null -ne $parsedTestCount) {
+        $ctestDetail = if ($ctestDetail) { "$ctestDetail ($parsedTestCount/$expectedTestCount)" } else { "$parsedTestCount/$expectedTestCount" }
+    }
+    Step-Result "ctest_native" ($ctestCode -eq 0) $ctestDetail
+}
 
 # --- Bench smoke ---
 if (-not $SkipBench) {
@@ -301,6 +368,49 @@ if (-not (Test-Path $baselineLockScript)) {
         "exit $lockCode"
     }
     Step-Result "baseline_lock_validate" ($lockCode -eq 0) $lockDetail
+}
+
+# --- d28 overnight completion (optional) ---
+if ($env:CYPHA_VALIDATE_OVERNIGHT_COMPLETE -eq "1") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d28 (CYPHA_VALIDATE_OVERNIGHT_COMPLETE) ==" -ForegroundColor Yellow
+    $benchExe = BinPath "cypha_bench_run"
+    if (-not (Test-Path $benchExe)) {
+        Step-Result "overnight_complete_d28" $false "missing $benchExe"
+    } else {
+        Push-Location $root
+        try {
+            & $benchExe --domain-tag d28
+            $d28Code = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
+        Step-Result "overnight_complete_d28" ($d28Code -eq 0) $(if ($d28Code -eq 0) { "d28 ok" } else { "exit $d28Code" })
+    }
+}
+
+# --- d29 release readiness (optional) ---
+if ($env:CYPHA_VALIDATE_RELEASE_READINESS -eq "1") {
+    Write-Host ""
+    if (Test-DomainTagExists -Tag "d29") {
+        Write-Host "== cypha_bench_run --domain-tag d29 (CYPHA_VALIDATE_RELEASE_READINESS) ==" -ForegroundColor Yellow
+        $benchExe = BinPath "cypha_bench_run"
+        if (-not (Test-Path $benchExe)) {
+            Step-Result "release_readiness_d29" $false "missing $benchExe"
+        } else {
+            Push-Location $root
+            try {
+                & $benchExe --domain-tag d29
+                $d29Code = $LASTEXITCODE
+            } finally {
+                Pop-Location
+            }
+            Step-Result "release_readiness_d29" ($d29Code -eq 0) $(if ($d29Code -eq 0) { "d29 ok" } else { "exit $d29Code" })
+        }
+    } else {
+        Write-Host "== cypha_bench_run --domain-tag d29 (skipped - profile not present) ==" -ForegroundColor DarkGray
+        Step-Result "release_readiness_d29" $true "skipped (d29 profile not present)"
+    }
 }
 
 # --- Summary ---

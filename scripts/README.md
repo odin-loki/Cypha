@@ -56,7 +56,9 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast`, `-Medium`, or `-Production` to child scripts) | `bench/BASELINE_LOCK.json` |
 | `run_production_overnight.ps1` | Dedicated 300k production overnight wrapper — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`, then `finalize_production_overnight.ps1` | disk |
 | `finalize_production_overnight.ps1` | Post-overnight gate: `validate_baseline_lock.ps1 -Production`, `cypha_bench_run --domain-tag d27` (+ d28 when present); prints lock section summary (`n_train`, `status`, `bpc`) | console |
+| `commit_production_lock.ps1` | Phase 15: chains `finalize_production_overnight.ps1`, shows lock diff + suggested message; `-DryRun` preview, `-Force` to commit (never pushes) | console |
 | `monitor_overnight.ps1` | Poll `bench/BASELINE_LOCK.json` sections; optional `-LogFile` (default: latest `bench/results/production_overnight_*.log`, last 3 lines per poll) | console |
+| `watch_production_overnight.ps1` | Production overnight watcher — latest log size growth + last line, running `run_production_overnight.ps1` / `cyphalm_bench_native` PIDs, lock section summary; `-Once`, `-ProcessId`, stall warn after 30m | console |
 | `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`; `-Production` → `--production`) | lock JSON |
 | `validate_baseline_lock.ps1` | Validate `bench/BASELINE_LOCK.json` schema + d17 pin (`-LockFile`, `-Strict`, `-Production`) | console |
 | `publish_release.ps1` | Local `gh release create` wrapper (`-DryRun` / `-NotesOnly` preview without gh) | console |
@@ -89,11 +91,47 @@ Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/downlo
 | **`run_production_overnight.ps1`** | Dedicated production wrapper — `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`, then **`finalize_production_overnight.ps1`** | manual |
 | **`finalize_production_overnight.ps1`** | Post-overnight validation: **`validate_baseline_lock.ps1 -Production`**, **`cypha_bench_run --domain-tag d27`** (+ d28 when profile exists); lock section summary | manual |
 | **`monitor_overnight.ps1 -LogFile`** | Poll lock JSON + tail production overnight log (auto-picks latest `bench/results/production_overnight_*.log` when `-LogFile` omitted) | manual |
+| **`watch_production_overnight.ps1`** | Watch production run — log byte growth, last line, process PIDs, lock sections; `-Once` snapshot; warns if log stalled 30m+; notes legacy `results/summary.csv` | manual |
 | **`cypha_bench_run --domain-tag d27`** | Production overnight lock validation; profile `bench/config/d27_production_lock_profile.json` | `native_d27_production_lock_smoke` |
 | **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
 | **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |
 
-Full 300k production overnight is **not** run in CI. Blocking gate **104 CTests** (+1 `native_d27_production_lock_smoke`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`.
+Full 300k production overnight is **not** run in CI. Blocking gate **107 CTests** (+2 Phase 14: `native_d28_overnight_complete_smoke`, `native_baseline_lock_validate_production_status`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
+
+## Overnight completion + finalize (Phase 14 — shipped)
+
+| Script / binary | Purpose | CTest |
+|-----------------|---------|-------|
+| **`cypha_bench_run --domain-tag d28`** | Unified overnight completion validation — cross-check `overnight_results`, `rpsm_results`, `cell_sweep_results` share `n_train`/`n_eval`; profile `bench/config/d28_overnight_complete_profile.json` | `native_d28_overnight_complete_smoke` |
+| **`finalize_production_overnight.ps1`** | Post-overnight gate: `validate_baseline_lock.ps1 -Production`, d27 + d28 bench domains, lock section summary | manual (chained from `run_production_overnight.ps1`) |
+| Status validator fix | `validate_baseline_lock.ps1` / `baseline_lock_validate` accept `medium_smoke` and `production` | `native_baseline_lock_validate_production_status` |
+| Cell sweep artifact path | Default overnight output `bench/results/cell_sweep` via `bench_paths::results_dir()` | manual |
+
+## Release readiness + production lock commit (Phase 15)
+
+| Script / env | Purpose | CTest |
+|--------------|---------|-------|
+| **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d28`** after baseline lock validate | manual |
+| **`CYPHA_VALIDATE_RELEASE_READINESS=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d29`** when profile exists; graceful skip if not merged | manual |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count ≠ expected (**107** with d29, else **106**); default warns only | manual |
+| **`commit_production_lock.ps1`** | Run **`finalize_production_overnight.ps1`**, then preview/commit lock when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** required to commit; never pushes) | manual |
+| **`cypha_bench_run --domain-tag d29`** | Release-readiness validation (when shipped); profile `bench/config/d29_release_readiness_profile.json` | `native_d29_release_readiness_smoke` *(when merged)* |
+
+```powershell
+# Optional extended validation (after -SkipBuild rebuild)
+$env:CYPHA_VALIDATE_PRODUCTION = "1"
+$env:CYPHA_VALIDATE_OVERNIGHT_COMPLETE = "1"
+$env:CYPHA_VALIDATE_RELEASE_READINESS = "1"
+pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
+
+# Preview production lock commit (diff + message; no git write)
+pwsh -File scripts\commit_production_lock.ps1 -DryRun
+
+# Commit lock after successful finalize (-Force required; does not push)
+pwsh -File scripts\commit_production_lock.ps1 -Force
+```
+
+Blocking gate **107 CTests** when d29 ships (+1 `native_d29_release_readiness_smoke`); **106** until then.
 
 ## Kernel LLR / XOR profiling
 

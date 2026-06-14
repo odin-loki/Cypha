@@ -14,7 +14,7 @@ Changelog: [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ```
 scripts/cypha_native_validate_all.ps1  → OK
-  106 CTests │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
+  107 CTests │ fig01–fig09 PNG │ /dif/retrieve │ tune dry-run
 ```
 
 GitHub Actions **CI** (`a3b48c4`+): Linux CTest + ctest, MinGW PE smoke. CUDA jobs removed — validate locally. Release **v2.2.8** installers published.

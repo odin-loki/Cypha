@@ -1,0 +1,31 @@
+{
+  "profile_id": "d29_release_readiness_profile",
+  "description": "D29 release readiness validation — schema + production tier + overnight complete + release artifact gate",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 29,
+    "domain_tag": "d29"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d29_release_readiness_smoke — release readiness gate (pending or full production validation)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate", "production": true }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 29",
+    "Or: cypha_bench_run --domain-tag d29",
+    "Validates bench/BASELINE_LOCK.json schema, production tier (d27), and overnight complete (d28)",
+    "Verifies release workflow scripts and bench/results/.gitkeep exist",
+    "When production or overnight complete pending: validation_status=pending_release (smoke passes)",
+    "When both production_validated and overnight_complete_validated: validation_status=release_ready",
+    "Optionally invokes baseline_lock_validate --production when built",
+    "Phase 15: release readiness validation gate"
+  ]
+}

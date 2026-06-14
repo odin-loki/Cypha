@@ -207,6 +207,19 @@
 
 **CI gate (Phase 14 shipped):** **106 CTests** (`ctest -R native_`); +2 smokes: **`native_d28_overnight_complete_smoke`**, **`native_baseline_lock_validate_production_status`**. d28 validates cross-section consistency: **`overnight_results`**, **`rpsm_results`**, and **`cell_sweep_results`** must share **`n_train`** / **`n_eval`**; if **`n_train < 300000`**, reports **`pending_overnight_complete`** (smoke pass); if **≥ 300k**, require **`status=production`** or **`completed`** on all three sections.
 
+## Phase 15 — prep (v2.3.15)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d29** release readiness validation | `bench_domains.cpp` → `run_d29_release_readiness_validation` *(TBD)* | `cypha_bench_run --domain-tag d29` |
+| D29 profile config | `bench/config/d29_release_readiness_profile.json` *(TBD)* | manual |
+| D29 validation report | `bench/report/tables/d29_release_readiness_validation.json` *(TBD)* | d29 run |
+| Validate-all env hooks | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** (d28 after lock validate), **`CYPHA_VALIDATE_RELEASE_READINESS=1`** (d29 when present) | manual |
+| Lock commit helper | `scripts/commit_production_lock.ps1` *(TBD)* — post-finalize stage/commit of **`bench/BASELINE_LOCK.json`** @ 300k | manual |
+| Release notes v2.3.15 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 15 prep):** **106 CTests** today; **107** when **`native_d29_release_readiness_smoke`** merges (+1).
+
 ## Still planned
 
 - **D17 300k + 28-variant production overnight** — **in progress** (maintainer workflow via **`scripts/run_production_overnight.ps1`** → **`finalize_production_overnight.ps1`**); **`-Medium`** for 5k real-corpus smoke; fill **`bench/BASELINE_LOCK.json`** via **`scripts/update_baseline_lock.ps1 -Run all -Production`**

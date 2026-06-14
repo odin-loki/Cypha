@@ -3465,6 +3465,81 @@ Json run_d28_overnight_complete_validation() {
     return experiments;
 }
 
+Json run_d29_release_readiness_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path lock_path = fs::current_path() / "d29_release_readiness_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+    const std::string production_status = validate_production_tier_lock(lock);
+    const std::string overnight_complete_status = validate_overnight_complete_lock(lock);
+
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const std::array<fs::path, 3> required_files{
+        repo / "scripts" / "finalize_production_overnight.ps1",
+        repo / "scripts" / "run_production_overnight.ps1",
+        repo / "bench" / "results" / ".gitkeep",
+    };
+    Json release_files = Json::object();
+    for (const fs::path& path : required_files) {
+        const bool present = fs::is_regular_file(path);
+        release_files[path.lexically_relative(repo).generic_string()] = present;
+        if (!present) {
+            throw std::runtime_error("release readiness file missing: " + path.string());
+        }
+    }
+
+    Json baseline_lock_validate_report{{"invoked", false},
+                                       {"reason", "baseline_lock_validate not built"}};
+    const fs::path validate_exe = cypha::bench::resolve_runner_exe("baseline_lock_validate", exe_dir);
+    if (fs::is_regular_file(validate_exe)) {
+        const cypha::bench::RunProcessResult proc = cypha::bench::run_executable_capture(
+            validate_exe,
+            {"--lock-file", fs::absolute(lock_path).string(), "--production"});
+        baseline_lock_validate_report = Json{{"invoked", true},
+                                             {"exit_code", proc.exit_code},
+                                             {"stdout", proc.stdout_text},
+                                             {"stderr", proc.stderr_text}};
+        if (proc.exit_code != 0) {
+            throw std::runtime_error("baseline_lock_validate exit=" + std::to_string(proc.exit_code));
+        }
+    }
+
+    const bool release_ready = production_status == "production_validated" &&
+                               overnight_complete_status == "overnight_complete_validated";
+    const std::string validation_status = release_ready ? "release_ready" : "pending_release";
+
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results", lock["cell_sweep_results"]},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_status", production_status},
+        {"overnight_complete_status", overnight_complete_status},
+        {"release_files", release_files},
+        {"baseline_lock_validate", baseline_lock_validate_report},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d29_release_readiness_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d29_release_readiness_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3496,6 +3571,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d26", "cypha_bench.domains.d26_medium_overnight_validation", run_d26_medium_overnight_validation},
         {"d27", "cypha_bench.domains.d27_production_lock_validation", run_d27_production_lock_validation},
         {"d28", "cypha_bench.domains.d28_overnight_complete_validation", run_d28_overnight_complete_validation},
+        {"d29", "cypha_bench.domains.d29_release_readiness_validation", run_d29_release_readiness_validation},
     };
 }
 

@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.15" = @(
+    "Intelligence Stats **Phase 15**: bench **d29** release readiness validation — schema + production tier + overnight-complete cross-check + maintainer script presence; profile ``bench/config/d29_release_readiness_profile.json``; CTest ``native_d29_release_readiness_smoke``.",
+    "``cypha_native_validate_all.ps1`` env **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** — runs **`cypha_bench_run --domain-tag d28`** after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** — runs d29 when profile present (graceful skip if not built yet).",
+    "``scripts/commit_production_lock.ps1`` — post-finalize helper to stage/commit updated ``bench/BASELINE_LOCK.json`` after 300k overnight (maintainer-only).",
+    "CI gate **106 CTests** (107 when d29 smoke merged); full 300k production overnight **not** run in CI (maintainer workflow only)."
+  )
   "2.3.14" = @(
     "Intelligence Stats **Phase 14**: **baseline lock status validator fix** — ``validate_baseline_lock.ps1`` and ``baseline_lock_validate`` accept ``medium_smoke`` and ``production`` (fixes production/medium overnight lock validation).",
     "**Cell sweep artifact path** — default overnight output ``bench/results/cell_sweep`` (``bench_paths::results_dir()``); wired through ``cypha_baseline_lock --output-dir``, ``update_baseline_lock.ps1``, and ``run_overnight_all.ps1``.",

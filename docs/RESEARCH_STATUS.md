@@ -271,6 +271,13 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Post-overnight finalize:** **`scripts/finalize_production_overnight.ps1`** — **`validate_baseline_lock.ps1 -Production`**, d27 + d28 bench domains, lock section summary; chained from **`run_production_overnight.ps1`** on success.
 - **CI:** blocking gate **106 CTests** (+2 Phase 14 smokes). Full 300k production overnight remains maintainer workflow; **300k overnight run in progress**.
 
+### Phase 15 — release readiness gate (v2.3.15) — prep
+
+- **Bench d29:** release readiness validation — schema + production tier + overnight-complete cross-check + maintainer script presence (`scripts/finalize_production_overnight.ps1`, `scripts/run_production_overnight.ps1`); profile **`bench/config/d29_release_readiness_profile.json`** (TBD). CTest **`native_d29_release_readiness_smoke`** (TBD).
+- **Local validate env vars:** **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** on **`cypha_native_validate_all.ps1`** runs d28 after baseline lock validate; **`CYPHA_VALIDATE_RELEASE_READINESS=1`** runs d29 when profile present (graceful skip if not built yet).
+- **Lock commit helper:** **`scripts/commit_production_lock.ps1`** — post-finalize helper to stage/commit updated **`bench/BASELINE_LOCK.json`** after 300k overnight (maintainer-only).
+- **CI:** blocking gate **106 CTests** today; **107** when d29 smoke merges (+1).
+
 ---
 
 ## Hypothesis ledger
