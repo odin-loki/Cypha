@@ -168,7 +168,8 @@ class RpsmSequenceLayer {
 
   RpsmTrainStepMetrics train_step(const double* input, int input_dim, int target_class, double lr);
 
-
+  /// Gradient w.r.t. last ``train_step`` input (length ``state_dim``; stub for embed backprop).
+  const std::vector<double>& input_grad() const { return input_grad_; }
 
   /// Level-0 carry (CyphaLM GRIA injection).
 
@@ -227,6 +228,8 @@ class RpsmSequenceLayer {
   std::vector<double> enc_pre_;
 
   std::vector<double> enc_grad_;
+
+  std::vector<double> input_grad_;
 
   double last_surprise_{0.0};
 

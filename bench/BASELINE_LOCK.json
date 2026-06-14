@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "description": "Locked baselines for regression checks and overnight bench comparison",
+  "locked_at": "2026-06-14",
+  "d17_hybrid_baseline": {
+    "profile": "d17",
+    "mode": "hybrid",
+    "context_mode": "hybrid_gria_lstm",
+    "n_train": 300000,
+    "n_eval": 2000,
+    "corpus": "wikitext2",
+    "split": "official train/valid",
+    "bpc": 2.873,
+    "source": "Phase 1c 17A (bench/config/d17_phase1c_17a.json)",
+    "notes": "Beat-bigram target; native reference within ~0.02 BPC of Python ref"
+  },
+  "overnight_results": {
+    "status": "pending",
+    "description": "Fill after a real CYPHA_BENCH_OVERNIGHT=1 run (scripts/run_d17_overnight.ps1)",
+    "profile": "d17",
+    "mode": "hybrid",
+    "n_train": 300000,
+    "n_eval": null,
+    "bpc": null,
+    "run_at": null,
+    "runner": "cyphalm_bench_native --overnight",
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_OVERNIGHT": "1"
+    },
+    "artifact_path": null
+  },
+  "ctest_smoke": {
+    "native_overnight_mini_smoke": {
+      "n_train": 800,
+      "n_eval": 64,
+      "env": { "CYPHA_BENCH_FAST": "1" },
+      "purpose": "Fast overnight wiring sanity (not a BPC lock)"
+    },
+    "native_d17_wikitext_overnight_smoke": {
+      "n_train": 500,
+      "n_eval": 64,
+      "env": {
+        "CYPHA_BENCH_FULL_CORPUS": "1",
+        "CYPHA_BENCH_OVERNIGHT": "1",
+        "CYPHA_BENCH_FAST": "1"
+      }
+    }
+  }
+}

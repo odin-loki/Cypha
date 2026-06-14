@@ -26,7 +26,8 @@ const std::vector<CellVariantSpec>& variant_table() {
         {"H13", "Priority replay recurrence", 2, true, "hybrid", "compressive memory priority replay slots"},
         {"H14", "OOD-branching cell", 2, true, "hybrid", "hybrid blend shifts to LSTM when DIF epistemic high"},
         {"H15", "AXIOM-evolved cell", 3, true, "hybrid", "seed-evolved eml/sigmoid/tanh gate grammar in LSTM"},
-        {"H16", "SR on trained LSTM gates", 3, true, "hybrid", "proxy — symbolic regression pipeline pending"},
+        {"H16", "SR on trained LSTM gates", 3, true, "hybrid",
+         "fit linear gate laws on LSTM trace; optional SR gate override"},
         {"H17", "Sheffer-only cell", 3, true, "char_lstm", "extreme H02 — EML-only activations"},
         {"H18", "CA state cell", 3, true, "ssm", "elementary CA rule 110 one-step on binarized SSM h"},
         {"H19", "Izaac-seeded init", 3, true, "hybrid", "seed-offset hybrid init (blend logit + GRIA α prior)"},
@@ -73,6 +74,7 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     cfg.use_mdl_forget = false;
     cfg.use_priority_replay = false;
     cfg.use_axiom_activation = false;
+    cfg.use_sr_gates = false;
     cfg.use_ca_state_cell = false;
     cfg.use_free_energy_loss = false;
     cfg.use_algebraic_fingerprint = false;
@@ -127,6 +129,8 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     } else if (id == "H15") {
         cfg.use_axiom_activation = true;
         cfg.alpha_learnable = true;
+    } else if (id == "H16") {
+        cfg.use_sr_gates = true;
     } else if (id == "H18") {
         cfg.use_ca_state_cell = true;
         cfg.use_multiscale = false;

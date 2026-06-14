@@ -1,4 +1,4 @@
-// bench_domains — native bench domain runners (d01–d17) for cypha_bench_run.
+// bench_domains — native bench domain runners (d01–d21) for cypha_bench_run.
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -1221,6 +1221,70 @@ Json run_cyphalm_domain(const std::string& domain_id, const std::string& profile
 Json run_d04() { return run_cyphalm_domain("d04", "d04"); }
 
 Json run_d17() { return run_cyphalm_domain("d17", "d17"); }
+
+Json run_d21_rpsm_overnight_smoke() {
+    cypha::cyphalm::CyphaLMConfig cfg;
+    cypha::cyphalm::apply_bench_profile("d21", cfg);
+    cypha::cyphalm::apply_bench_mode(cypha::cyphalm::BenchMode::Rpsm, cfg);
+    if (cfg.vocab_size < 256) cfg.vocab_size = 256;
+    cfg.view_schedule = "same_order";
+
+    const bool full_corpus = cypha::cyphalm::bench_full_corpus_enabled() ||
+                             cypha::bench::bench_overnight_enabled();
+    const int full_n_train = cypha::bench::bench_full_n_train();
+    const int default_n_train = full_corpus ? full_n_train : 500;
+    const int default_n_eval = full_corpus ? 2000 : 500;
+    const int n_train = cypha::bench::bench_scale(default_n_train, 500);
+    const int n_eval = cypha::bench::bench_scale(default_n_eval, 64);
+
+    cypha::cyphalm::LMCorpus corpus;
+    bool synthetic = false;
+    try {
+        const int max_chars = full_corpus ? 0 : 2'000'000;
+        corpus = cypha::cyphalm::load_bench_corpus("d21", max_chars, cfg.vocab_size,
+                                                   cfg.bpe_merges_path, cfg.bpe_vocab_path);
+    } catch (const std::exception&) {
+        if (!bench_fast_mode()) {
+            throw;
+        }
+        synthetic = true;
+        corpus.profile = "d21";
+        corpus.source = "synthetic";
+        corpus.vocab_size = cfg.vocab_size;
+        corpus.train_ids = cypha::cyphalm::synthetic_corpus(n_train + n_eval + 64, cfg.vocab_size, cfg.seed);
+        corpus.eval_ids.assign(corpus.train_ids.begin() + n_train, corpus.train_ids.end());
+        corpus.train_ids.resize(static_cast<std::size_t>(n_train));
+    }
+
+    cfg.vocab_size = corpus.vocab_size;
+
+    cypha::cyphalm::CyphaLMModel model(cfg);
+    model.train_sequence(corpus.train_ids, n_train, cfg.train_epochs);
+    const double bpc = model.eval_bpc(corpus.eval_ids, n_eval);
+    const auto alpha_profile = model.compression_profile();
+
+    const Json experiments{
+        {"profile", "d21"},
+        {"mode", "rpsm"},
+        {"corpus", corpus.source},
+        {"synthetic", synthetic},
+        {"full_corpus", full_corpus},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"bpc", std::isnan(bpc) ? Json(nullptr) : Json(bpc)},
+        {"vocab_size", cfg.vocab_size},
+        {"rpsm_n_levels", cfg.rpsm_n_levels},
+        {"rpsm_state_dim", cfg.rpsm_state_dim},
+        {"rpsm_feat_dim", cfg.rpsm_feat_dim},
+        {"17B_alpha_spectrum",
+         Json{{"mean_alpha", alpha_profile.value("mean_alpha", 0.0)},
+              {"fraction_edge_of_chaos", alpha_profile.value("fraction_near_edge_of_chaos", 0.0)},
+              {"n_experts", alpha_profile.value("n_experts", 0)}}},
+        {"backend", "cypha_lm_native"},
+    };
+    cypha::bench::finalize_domain("d21_rpsm_overnight", experiments);
+    return experiments;
+}
 
 Json run_d13() {
     const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
@@ -2887,6 +2951,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d18", "cypha_bench.domains.d18_intelligence_profile", run_d18_intelligence_profile},
         {"d19", "cypha_bench.domains.d19_cell_hypothesis", run_d19_cell_hypothesis_smoke},
         {"d20", "cypha_bench.domains.d20_cell_hypothesis_overnight", run_d20_cell_hypothesis_overnight_smoke},
+        {"d21", "cypha_bench.domains.d21_rpsm_overnight", run_d21_rpsm_overnight_smoke},
     };
 }
 

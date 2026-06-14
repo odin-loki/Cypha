@@ -18,6 +18,7 @@
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/hybrid_blend.hpp"
 #include "cypha/cyphalm/npz_util.hpp"
+#include "cypha/cyphalm/sr_gate_laws.hpp"
 #include "cypha/cyphalm/cyphalm_views.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
@@ -72,6 +73,24 @@ std::vector<double> resize_to_field(const std::vector<double>& v, int field_dim)
         out[static_cast<std::size_t>(i)] = v[static_cast<std::size_t>(i)];
     }
     return out;
+}
+
+void fit_sr_gate_laws_on_lstm(CharLSTMHead& lstm, int vocab_size, std::uint64_t seed) {
+    std::vector<int> probe_ids;
+    const int probe_count = std::min(32, vocab_size);
+    for (int i = 0; i < probe_count; ++i) {
+        probe_ids.push_back(i);
+    }
+    if (probe_ids.empty()) {
+        probe_ids.push_back(0);
+    }
+    std::mt19937_64 rng(seed + 811);
+    for (int t = 0; t < 8; ++t) {
+        probe_ids.push_back(static_cast<int>(rng() % static_cast<std::uint64_t>(std::max(1, vocab_size))));
+    }
+    const SrGateTrace trace = collect_lstm_gate_trace(lstm, probe_ids, 24);
+    SrGateLaws laws = fit_sr_gate_laws(trace, lstm.hidden);
+    lstm.set_sr_gate_laws(laws);
 }
 
 std::vector<double> matvec(const std::vector<double>& m, int rows, int cols,
@@ -230,6 +249,10 @@ void CyphaLMModel::init_components() {
         }
         lstm_h_.assign(static_cast<std::size_t>(cfg_.lstm_hidden), 0.0);
         lstm_c_.assign(static_cast<std::size_t>(cfg_.lstm_hidden), 0.0);
+        if (cfg_.use_sr_gates) {
+            lstm_->set_use_sr_gates(true);
+            fit_sr_gate_laws_on_lstm(*lstm_, cfg_.vocab_size, cfg_.seed);
+        }
     }
     if (mode == ContextMode::SsmGriaNoLstm || mode == ContextMode::Full) {
         selective_ = std::make_unique<SelectiveSSM>(
@@ -626,6 +649,8 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         out.log_probs = blend_log_probs(log_g, log_l, blend_logit);
     } else if (uses_lstm(mode) && lstm_ && !gria_) {
         out.log_probs = lstm_->forward(static_cast<int>(token_id));
+    } else if (mode == ContextMode::Rpsm && rpsm_layer_ && !rpsm_log_probs_.empty()) {
+        out.log_probs = rpsm_log_probs_;
     } else {
         out.log_probs = std::move(log_g);
     }
@@ -914,8 +939,80 @@ std::string CyphaLMModel::decode_tokens(const std::vector<std::uint32_t>& ids) c
     return bpe_->decode(ids);
 }
 
+void CyphaLMModel::rpsm_embed_backprop_stub(std::uint32_t token_id) {
+    if (!embed_ || !rpsm_layer_) return;
+    const auto& field_grad = rpsm_layer_->input_grad();
+    if (field_grad.empty()) return;
+
+    const double lr = cfg_.rpsm_lr * 0.1;
+    auto& table = embed_->table();
+    const std::uint32_t de = embed_->dim();
+    if (token_id >= embed_->vocab_size()) return;
+    double* row = table.data() + static_cast<std::size_t>(token_id) * de;
+
+    // Stub: map RPSM input gradient onto the leading embed dims (full chain deferred).
+    const int n = std::min(static_cast<int>(de), static_cast<int>(field_grad.size()));
+    for (int i = 0; i < n; ++i) {
+        row[static_cast<std::size_t>(i)] -= lr * field_grad[static_cast<std::size_t>(i)];
+    }
+}
+
+TrainStepMetrics CyphaLMModel::train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id) {
+    TrainStepMetrics m;
+    if (!embed_ || !rpsm_layer_) {
+        return train_step(token_id, next_token_id);
+    }
+
+    const auto e = embed_->embed_vec(token_id);
+    record_embedding(e);
+    last_e_ = e;
+    auto ctx = ssm_step(e);
+    apply_hebbian_hooks(ctx);
+    last_ctx_ = ctx;
+    field_x_ = project_field(ctx);
+
+    const auto rpsm_m = rpsm_layer_->train_step(field_x_.data(), static_cast<int>(field_x_.size()),
+                                                static_cast<int>(next_token_id), cfg_.rpsm_lr);
+    m.loss = rpsm_m.loss;
+    last_train_loss_ = m.loss;
+
+    rpsm_embed_backprop_stub(token_id);
+
+    if (next_token_id < token_counts_.size()) {
+        token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
+    }
+    ++step_count_;
+    return m;
+}
+
+void CyphaLMModel::train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs) {
+    if (ids.size() < 2 || !rpsm_layer_) return;
+    const int ep_count = std::max(1, epochs);
+    const char* log_env = std::getenv("CYPHALM_TRAIN_LOG_EVERY");
+    const int log_every = log_env ? std::max(0, std::atoi(log_env)) : 0;
+    int step_i = 0;
+    for (int ep = 0; ep < ep_count; ++ep) {
+        reset_context();
+        const int steps = std::min(n_steps, static_cast<int>(ids.size()) - 1);
+        for (int i = 0; i < steps; ++i) {
+            const auto m = train_step_rpsm(
+                static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]),
+                static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i + 1)]));
+            ++step_i;
+            if (log_every > 0 && step_i % log_every == 0) {
+                std::cerr << "[CyphaLM] rpsm train step " << step_i << " loss=" << m.loss
+                          << std::endl;
+            }
+        }
+    }
+}
+
 void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int epochs) {
     if (ids.size() < 2) return;
+    if (cfg_.context_mode == ContextMode::Rpsm && rpsm_layer_) {
+        train_sequence_rpsm(ids, n_steps, epochs);
+        return;
+    }
     if (cfg_.view_schedule != "same_order") {
         const std::size_t take =
             std::min(ids.size(), static_cast<std::size_t>(std::max(1, n_steps) + 1));
@@ -934,6 +1031,9 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
         }
     }
     cfg_.gria_lr = base_gria_lr;
+    if (cfg_.use_sr_gates && lstm_) {
+        fit_sr_gate_laws_on_lstm(*lstm_, cfg_.vocab_size, cfg_.seed);
+    }
 }
 
 double CyphaLMModel::hybrid_gria_weight() const {

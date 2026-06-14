@@ -135,7 +135,7 @@ bool should_run(const cypha::cyphalm::CellVariantSpec& v, const Args& args) {
         return v.id == "H06" || v.id == "H08" || v.id == "H14";
     }
     if (args.tier3_smoke) {
-        return v.id == "H09" || v.id == "H12" || v.id == "H18";
+        return v.id == "H09" || v.id == "H12" || v.id == "H18" || v.id == "H16";
     }
     if (args.tier2_only) {
         return v.tier == 2;

@@ -97,6 +97,22 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     gates[static_cast<std::size_t>(i)] += wh[static_cast<std::size_t>(i)] + b[static_cast<std::size_t>(i)];
   }
 
+  const bool use_sr =
+      use_sr_gates_ && sr_laws_.fitted && sr_laws_.hidden == hidden &&
+      static_cast<int>(sr_laws_.f_gate.size()) == hidden;
+  if (use_sr) {
+    for (int j = 0; j < hidden; ++j) {
+      gates[static_cast<std::size_t>(j)] =
+          sr_laws_.i_gate[static_cast<std::size_t>(j)].predict(h[j], x[j], h[j]);
+      gates[static_cast<std::size_t>(hidden + j)] =
+          sr_laws_.f_gate[static_cast<std::size_t>(j)].predict(h[j], x[j], c[j]);
+      gates[static_cast<std::size_t>(2 * hidden + j)] =
+          sr_laws_.g_gate[static_cast<std::size_t>(j)].predict(h[j], x[j], h[j]);
+      gates[static_cast<std::size_t>(3 * hidden + j)] =
+          sr_laws_.o_gate[static_cast<std::size_t>(j)].predict(h[j], x[j], c[j]);
+    }
+  }
+
   std::vector<double> i_gate(static_cast<std::size_t>(hidden));
   std::vector<double> f_gate(static_cast<std::size_t>(hidden));
   std::vector<double> g_gate(static_cast<std::size_t>(hidden));
@@ -178,6 +194,7 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     cache_out->probs = probs;
     cache_out->used_eml = use_eml;
     cache_out->used_axiom = use_axiom;
+    cache_out->used_sr_gates = use_sr;
   }
 }
 

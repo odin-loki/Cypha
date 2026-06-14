@@ -1,0 +1,36 @@
+{
+  "profile_id": "d21_rpsm_overnight",
+  "description": "D21 RPSM overnight run — WikiText-2 @ 300k token budget (CyphaLM rpsm mode)",
+  "runner": "cyphalm_bench_native",
+  "env": {
+    "CYPHA_BENCH_FULL_CORPUS": "1",
+    "CYPHA_BENCH_OVERNIGHT": "1",
+    "CYPHA_BENCH_FULL_N_TRAIN": "300000"
+  },
+  "defaults": {
+    "profile": "d21",
+    "mode": "rpsm",
+    "n_train": 300000,
+    "n_eval": 2000,
+    "threads": 1,
+    "overnight": true
+  },
+  "fast_smoke": {
+    "description": "CTest native_d21_rpsm_smoke — wiring check, not 300k runtime",
+    "n_train": 500,
+    "n_eval": 64,
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1",
+      "CYPHA_BENCH_OVERNIGHT": "1",
+      "CYPHA_BENCH_FAST": "1"
+    }
+  },
+  "notes": [
+    "CLI: cyphalm_bench_native --profile d21 --mode rpsm --overnight",
+    "Or: cypha_bench_run --domain 21 --overnight",
+    "Or: pwsh -File scripts/run_rpsm_overnight.ps1",
+    "Env-only: CYPHA_BENCH_OVERNIGHT=1 (implies CYPHA_BENCH_FULL_CORPUS=1)",
+    "Requires bench/data/wikitext2/wikitext-2/wiki.{train,valid}.tokens for real corpus",
+    "Phase 7: RPSM hierarchy + global memory train loop at scale"
+  ]
+}

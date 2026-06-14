@@ -1,6 +1,6 @@
 # Native runtime (C++ / CUDA / Qt)
 
-Monorepo C++ core for [`docs/port/PORT_FULL_STACK.md`](../docs/port/PORT_FULL_STACK.md). **Vendored:** `third_party/nlohmann/json.hpp`, `third_party/httplib.h` (no OpenSSL — do not `#define CPPHTTPLIB_OPENSSL_SUPPORT` unless you link libssl).
+Monorepo C++ core for [`docs/port/PORT_FULL_STACK.md`](../docs/port/PORT_FULL_STACK.md). **Vendored:** `third_party/nlohmann/json.hpp`, `third_party/httplib.h` (OpenSSL is optional — see **Federated TLS** below).
 
 **Accel** (`cypha/accel_backend.hpp`): optional **CUDA** (`-DCYPHA_ENABLE_CUDA=ON`, NVIDIA toolkit + driver); otherwise **ISO C++** parallel CPU via `std::thread`. **`cuda_smoke`** checks correctness vs a serial reference; **`cuda_smoke --bench`** compares CUDA vs CPU when a GPU is present (exit 2 skip otherwise).
 
@@ -148,6 +148,39 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 | **`cyphalm_char_lstm_parity`** | Char-LSTM forward. CTest **`native_cyphalm_char_lstm`** (disabled until fixture). **`CYPHALM_CHAR_LSTM_PARITY_BIN`**. |
 | **`cyphalm_checkpoint_parity`** | Checkpoint save/load roundtrip. CTest **`native_cyphalm_checkpoint_parity`** (disabled until fixture). **`CYPHALM_CHECKPOINT_PARITY_BIN`**. |
 | **`embed_table_parity`** | Izaac embed table vs `fixtures/embed_table/sidecar.json`. CTest **`native_embed_table`** (disabled until fixture). **`CYPHA_EMBED_TABLE_PARITY_BIN`**. |
+
+### Federated merge & TLS
+
+| Binary | Role |
+|--------|------|
+| **`cypha_federated_merge`** | Offline merge of worker JSON payloads via **`federated_average_payloads`**. CTest **`native_federated_merge_smoke`**. |
+| **`cypha_federated_coordinator`** | Watch-dir or HTTP **`/submit`** coordinator; optional **`--listen <port> --tls-cert <pem> --tls-key <pem>`**. CTest **`native_federated_coordinator_smoke`**. |
+| **`cypha_federated_worker`** | POST worker JSON to coordinator (**`--scheme http|https`**). Used with coordinator listen mode. |
+| **`federated_worker_smoke`** | In-process HTTP loopback (no TLS). CTest **`native_federated_worker_smoke`**. |
+| **`federated_tls_smoke`** | HTTPS loopback with self-signed cert (requires OpenSSL build + **`openssl`** CLI on PATH). CTest **`native_federated_tls_smoke`** (exit **2** = skip). |
+| **`ewc_cyphalm_smoke`** | CyphaLM char-LSTM EWC on embed + recurrent + lm_head. CTest **`native_ewc_cyphalm_smoke`**. |
+
+**Federated TLS (optional OpenSSL):** default build uses plain HTTP only. Enable HTTPS with **`-DCYPHA_ENABLE_OPENSSL=ON`** at configure (requires OpenSSL dev libs; links **`OpenSSL::SSL`** + **`OpenSSL::Crypto`** and defines **`CPPHTTPLIB_OPENSSL_SUPPORT`** on **`cypha_federated_coordinator`**, **`cypha_federated_worker`**, and **`federated_tls_smoke`**).
+
+```bash
+cmake -S native -B native/build -DCYPHA_ENABLE_OPENSSL=ON
+cmake --build native/build --target cypha_federated_coordinator cypha_federated_worker federated_tls_smoke
+```
+
+Coordinator TLS listen example:
+
+```bash
+cypha_federated_coordinator --listen 8443 --tls-cert cert.pem --tls-key key.pem \
+  --min-workers 2 --once --out merged.json
+```
+
+Worker HTTPS submit:
+
+```bash
+cypha_federated_worker --payload worker_a.json --coordinator 127.0.0.1:8443 --scheme https
+```
+
+Without OpenSSL at build time, **`--tls-cert`** / **`https`** fall back only when **`CYPHA_FEDERATED_INSECURE=1`** is set (plain HTTP with a warning). Run **`ctest -R native_federated_tls_smoke`** — skipped when OpenSSL is off or the **`openssl`** CLI is missing; passes when TLS loopback merge succeeds.
 
 **Qt:** [`cmake -DCYPHA_BUILD_QT=ON`](qt/README.md) builds **`cypha_qt_stub`** (Core) and **`cypha_qt_shell`** (Widgets). Optional **`-DCYPHA_QT_CHARTS=ON`** links Qt Charts for the shell loss widget when **`Qt6::Charts`** is installed. **GitHub CI** (two **blocking** jobs): **`build_and_test`** installs **`qt6-base-dev`** (Charts off), passes **`-DCYPHA_BUILD_QT=ON`**, and runs **`native_qt_stub_load_reference`**; headless Linux excludes GUI exec tests **`native_qt_shell_smoke`**. **`mingw_cross`** verifies MinGW Windows PE artifacts. CUDA is not in CI — build locally with **`-DCYPHA_ENABLE_CUDA=ON`** and run **`native_cuda_smoke`** / **`native_score_batch`** (see [`ACCEL_CUDA.md`](../docs/native/ACCEL_CUDA.md)). Local **`scripts/ci_native_linux.sh`** defaults Qt OFF unless **`CYPHA_BUILD_QT=1`**; optional **`CYPHA_QT_CHARTS=1`** passes **`-DCYPHA_QT_CHARTS=ON`** (install **`qt6-charts-dev`** first).
 

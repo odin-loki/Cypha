@@ -199,6 +199,8 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
     fs::path path;
     if (profile == "d17") {
         path = root / "cyphalm_d17_wikitext.json";
+    } else if (profile == "d21") {
+        path = root / "cyphalm_d21_rpsm.json";
     } else if (profile == "d04") {
         path = root / "cyphalm_d04_gutenberg.json";
         if (!fs::is_regular_file(path)) {

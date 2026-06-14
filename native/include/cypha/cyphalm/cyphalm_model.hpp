@@ -114,14 +114,17 @@ class CyphaLMModel {
     double ssm_projection_rms() const;
     bool has_gria_routing() const { return gria_ != nullptr; }
 
-    /// Snapshot char-LSTM ``Wx``/``Wh`` for EWC (no-op without LSTM head).
+    /// Snapshot char-LSTM embed, recurrent, and lm_head weights for EWC (no-op without LSTM head).
     void ewc_snapshot();
 
-    /// Current EWC quadratic penalty over LSTM recurrent weights (0 without snapshot/LSTM).
+    /// Current EWC quadratic penalty over snapshotted LSTM weights (0 without snapshot/LSTM).
     double ewc_penalty() const;
 
     CyphaLMEwcRegularizer& ewc_regularizer() { return ewc_; }
     const CyphaLMEwcRegularizer& ewc_regularizer() const { return ewc_; }
+
+    /// Char-LSTM head when ``context_mode == CharLstm`` (nullptr otherwise).
+    const CharLSTMHead* char_lstm() const { return lstm_.get(); }
 
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
@@ -194,6 +197,9 @@ class CyphaLMModel {
     std::vector<double> project_field(const std::vector<double>& ctx);
     void bptt_ssm_update(std::uint32_t next_token_id);
     void apply_lstm_ewc(TrainStepMetrics& m, const CharLSTMGrad& grads);
+    TrainStepMetrics train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id);
+    void train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs);
+    void rpsm_embed_backprop_stub(std::uint32_t token_id);
     void set_view_slot(int slot) { current_view_slot_ = slot; }
     void refresh_laplace_prior();
 

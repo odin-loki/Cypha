@@ -82,13 +82,26 @@
 | D17 overnight runner | `scripts/run_d17_overnight.ps1` | manual |
 | Release notes v2.3.6 template | `scripts/create_release_notes.ps1` | manual |
 
+## Phase 7 — shipped (2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|-------------|
+| Baseline lock (D17 hybrid @ 300k) | `bench/BASELINE_LOCK.json` | manual compare |
+| Overnight mini-bench smoke | `cyphalm_bench_native --overnight` | `native_overnight_mini_smoke` |
+| H16 SR gate laws | `sr_gate_laws.hpp/cpp` | `native_sr_gate_laws_smoke` |
+| RPSM d21 end-to-end | `bench d21`, `run_rpsm_overnight.ps1` | `native_d21_rpsm_smoke` |
+| CyphaLM EWC embed+head | `cyphalm_ewc_regularizer.cpp` | `native_ewc_cyphalm_smoke` |
+| Federated TLS (optional) | `CYPHA_ENABLE_OPENSSL=ON` | `native_federated_tls_smoke` (skip w/o OpenSSL) |
+| Release publish helper | `scripts/publish_release.ps1` | manual (`gh auth login`) |
+| Release notes v2.3.7 template | `scripts/create_release_notes.ps1` | manual |
+
 ## Still planned
 
-- **RPSM production** — end-to-end CyphaLM rpsm mode training at 300k scale
-- **EWC** full Fisher across all CyphaLM parameters (today: W_ih/W_hh diagonal stub)
-- **Federated TLS** — `--tls-cert`/`--tls-key` when OpenSSL linked in httplib
-- **GitHub Release** publish via `gh` (needs auth)
-- **D17 300k + 28-variant overnight** — wired; run manually with `CYPHA_BENCH_OVERNIGHT=1`
+- **D17 300k + 28-variant overnight** — run manually; fill `bench/BASELINE_LOCK.json` → `overnight_results`
+- **GitHub Release** publish via `gh auth login` + `scripts/publish_release.ps1`
+- **RPSM @ 300k production benchmark** — d21 wired; full overnight not executed in CI
+- **EWC full Fisher** — SSM/GRIA weights not yet snapshotted
+- **Federated TLS in CI** — requires `-DCYPHA_ENABLE_OPENSSL=ON` + OpenSSL on runner
 
 ## Commands
 

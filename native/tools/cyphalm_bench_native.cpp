@@ -36,10 +36,10 @@ struct Args {
 
 void usage() {
     std::cerr
-        << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral}\n"
+        << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral,rpsm}\n"
         << "       --cell-variant {B0..H22}  (overrides --mode)\n"
-        << "       --profile {d17,d04} --n-train N --n-eval M --threads T\n"
-        << "       --overnight  (D17: full WikiText + 300k train budget; or CYPHA_BENCH_OVERNIGHT=1)\n"
+        << "       --profile {d17,d21,d04} --n-train N --n-eval M --threads T\n"
+        << "       --overnight  (D17/D21: full WikiText + 300k train budget; or CYPHA_BENCH_OVERNIGHT=1)\n"
         << "       --analysis [--analysis-steps N]\n"
         << "       --intelligence-profile\n";
 }
@@ -108,11 +108,12 @@ int main(int argc, char** argv) {
             cypha::cyphalm::apply_bench_mode(bench_mode, cfg);
         }
         if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
+        if (args.profile == "d21" && cfg.vocab_size < 256) cfg.vocab_size = 256;
         if (args.profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
 
         cypha::cyphalm::LMCorpus corpus;
         bool synthetic = false;
-        const bool full_corpus = (args.profile == "d17") &&
+        const bool full_corpus = (args.profile == "d17" || args.profile == "d21") &&
                                  (cypha::cyphalm::bench_full_corpus_enabled() || overnight);
         try {
             const int max_chars = full_corpus ? 0 : 10'000'000;

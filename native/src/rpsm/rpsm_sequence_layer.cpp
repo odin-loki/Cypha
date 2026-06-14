@@ -260,6 +260,7 @@ RpsmSequenceLayer::RpsmSequenceLayer(RpsmSequenceConfig cfg)
   mem_read_.assign(static_cast<std::size_t>(sd), 0.0);
   enc_pre_.assign(static_cast<std::size_t>(cfg_.feat_dim), 0.0);
   enc_grad_.assign(static_cast<std::size_t>(cfg_.feat_dim), 0.0);
+  input_grad_.assign(static_cast<std::size_t>(sd), 0.0);
 }
 
 const std::vector<double>& RpsmSequenceLayer::level_hidden(int level) const {
@@ -446,11 +447,14 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
   }
 
   const auto& h0 = h_levels_[0];
+  std::fill(input_grad_.begin(), input_grad_.end(), 0.0);
   for (int j = 0; j < d; ++j) {
     const double pre = enc_pre_[static_cast<std::size_t>(j)];
     const double chain =
         enc_grad_[static_cast<std::size_t>(j)] * activation_derivative(activation_mix_, pre);
     for (int i = 0; i < sd; ++i) {
+      input_grad_[static_cast<std::size_t>(i)] +=
+          chain * w_enc_[static_cast<std::size_t>(j * sd + i)];
       double x_in = 0.0;
       if (i < in_n) {
         x_in = input[i];

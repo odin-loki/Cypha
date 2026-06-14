@@ -143,7 +143,7 @@ LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_
     }
     const BpeTokenizer* bpe_ptr = bpe.get();
     const fs::path root = fs::path(repo_root_from_native()) / "bench" / "data";
-    if (profile == "d17") {
+    if (profile == "d17" || profile == "d21") {
         const fs::path wt_dir = root / "wikitext2" / "wikitext-2";
         const fs::path wt_train = wt_dir / "wiki.train.tokens";
         const fs::path wt_valid = wt_dir / "wiki.valid.tokens";

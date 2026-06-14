@@ -127,6 +127,8 @@ struct CyphaLMConfig {
     bool use_priority_replay = false;
     /// H15: seed-evolved eml/sigmoid/tanh gate grammar in char-LSTM.
     bool use_axiom_activation = false;
+    /// H16: symbolic-regression gate pre-activation laws fitted on LSTM trace.
+    bool use_sr_gates = false;
     /// H18: elementary CA rule 110 on binarized SSM hidden state.
     bool use_ca_state_cell = false;
     /// H21: variational free-energy penalty on epistemic variance in train_step.

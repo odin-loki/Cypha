@@ -42,10 +42,16 @@ void pull_toward_anchor(std::vector<double>& theta, const std::vector<double>& a
 }  // namespace
 
 void CyphaLMEwcRegularizer::snapshot(const CharLSTMHead& lstm) {
+  anchor_E_ = lstm.E;
   anchor_Wx_ = lstm.Wx;
   anchor_Wh_ = lstm.Wh;
+  anchor_Wy_ = lstm.Wy;
+  anchor_by_ = lstm.by;
+  build_diagonal_fisher_from_anchor(anchor_E_, fisher_E_);
   build_diagonal_fisher_from_anchor(anchor_Wx_, fisher_Wx_);
   build_diagonal_fisher_from_anchor(anchor_Wh_, fisher_Wh_);
+  build_diagonal_fisher_from_anchor(anchor_Wy_, fisher_Wy_);
+  build_diagonal_fisher_from_anchor(anchor_by_, fisher_by_);
   grad_observations_ = 0;
 }
 
@@ -69,8 +75,11 @@ void CyphaLMEwcRegularizer::observe_grads(const CharLSTMGrad& grads) {
     }
   };
 
+  update_block(grads.dE, fisher_E_);
   update_block(grads.dWx, fisher_Wx_);
   update_block(grads.dWh, fisher_Wh_);
+  update_block(grads.dWy, fisher_Wy_);
+  update_block(grads.dby, fisher_by_);
   grad_observations_ = next_count;
 }
 
@@ -78,8 +87,11 @@ double CyphaLMEwcRegularizer::penalty(const CharLSTMHead& lstm) const {
   if (!has_snapshot()) {
     return 0.0;
   }
-  return squared_penalty(lstm.Wx, anchor_Wx_, fisher_Wx_) +
-         squared_penalty(lstm.Wh, anchor_Wh_, fisher_Wh_);
+  return squared_penalty(lstm.E, anchor_E_, fisher_E_) +
+         squared_penalty(lstm.Wx, anchor_Wx_, fisher_Wx_) +
+         squared_penalty(lstm.Wh, anchor_Wh_, fisher_Wh_) +
+         squared_penalty(lstm.Wy, anchor_Wy_, fisher_Wy_) +
+         squared_penalty(lstm.by, anchor_by_, fisher_by_);
 }
 
 void CyphaLMEwcRegularizer::apply_pull(CharLSTMHead& lstm, double ewc_lambda, double lr) const {
@@ -87,8 +99,11 @@ void CyphaLMEwcRegularizer::apply_pull(CharLSTMHead& lstm, double ewc_lambda, do
     return;
   }
   const double strength = ewc_lambda * lr;
+  pull_toward_anchor(lstm.E, anchor_E_, fisher_E_, strength);
   pull_toward_anchor(lstm.Wx, anchor_Wx_, fisher_Wx_, strength);
   pull_toward_anchor(lstm.Wh, anchor_Wh_, fisher_Wh_, strength);
+  pull_toward_anchor(lstm.Wy, anchor_Wy_, fisher_Wy_, strength);
+  pull_toward_anchor(lstm.by, anchor_by_, fisher_by_, strength);
 }
 
 }  // namespace cypha::cyphalm

@@ -7,6 +7,7 @@ option(CYPHA_BUILD_EXPERIMENT_DB "Build experiment_db_smoke / experiment_db_crud
 option(CYPHA_BUILD_QT "Build optional Qt targets under qt/: cypha_qt_stub (Core), cypha_qt_shell (Widgets)" OFF)
 option(CYPHA_QT_CHARTS "When CYPHA_BUILD_QT is ON, link Qt Charts for cypha_qt_shell if found (default OFF for qt6-base-only CI)" OFF)
 option(CYPHA_ENABLE_CUDA "Build CUDA GPU path in accel backend (NVIDIA toolkit + driver); CPU uses std::thread" OFF)
+option(CYPHA_ENABLE_OPENSSL "Enable CPPHTTPLIB_OPENSSL_SUPPORT for federated coordinator/worker TLS" OFF)
 set(CYPHA_ACCEL_GPU_MIN_BATCH_ROWS "1" CACHE STRING "Minimum batch row count (n) to use CUDA in cypha::accel (1 = always batch on GPU when available)")
 
 set(CMAKE_CXX_STANDARD 23)
@@ -219,11 +220,35 @@ target_link_libraries(ewc_d16b_smoke PRIVATE cypha_core)
 add_executable(ewc_cyphalm_smoke tools/ewc_cyphalm_smoke.cpp)
 target_link_libraries(ewc_cyphalm_smoke PRIVATE cypha_lm_native)
 
+add_executable(native_sr_gate_laws_smoke tools/native_sr_gate_laws_smoke.cpp)
+target_link_libraries(native_sr_gate_laws_smoke PRIVATE cypha_lm_native)
+
 add_executable(federated_worker_smoke tools/federated_worker_smoke.cpp)
 target_include_directories(federated_worker_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(federated_worker_smoke PRIVATE cypha_core)
 if(WIN32)
   target_link_libraries(federated_worker_smoke PRIVATE ws2_32)
+endif()
+
+add_executable(federated_tls_smoke tools/federated_tls_smoke.cpp)
+target_include_directories(federated_tls_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+target_link_libraries(federated_tls_smoke PRIVATE cypha_core)
+if(WIN32)
+  target_link_libraries(federated_tls_smoke PRIVATE ws2_32)
+endif()
+
+if(CYPHA_ENABLE_OPENSSL)
+  find_package(OpenSSL REQUIRED)
+  foreach(_cypha_fed_tls_target cypha_federated_coordinator cypha_federated_worker federated_tls_smoke)
+    target_compile_definitions(${_cypha_fed_tls_target} PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+    target_link_libraries(${_cypha_fed_tls_target} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    if(WIN32)
+      target_link_libraries(${_cypha_fed_tls_target} PRIVATE crypt32)
+    endif()
+  endforeach()
+  message(STATUS "Federated TLS: OpenSSL enabled (CPPHTTPLIB_OPENSSL_SUPPORT)")
+else()
+  message(STATUS "Federated TLS: OpenSSL disabled (default); pass -DCYPHA_ENABLE_OPENSSL=ON to enable HTTPS")
 endif()
 
 add_executable(cypha_onnx_export tools/cypha_onnx_export.cpp)
@@ -275,7 +300,9 @@ set(
   ewc_smoke
   ewc_d16b_smoke
   ewc_cyphalm_smoke
+  native_sr_gate_laws_smoke
   federated_worker_smoke
+  federated_tls_smoke
   curriculum_smoke
   intelligence_profiler_papers
   cyphalm_bench_native
@@ -816,6 +843,11 @@ add_test(
 )
 
 add_test(
+  NAME native_sr_gate_laws_smoke
+  COMMAND "$<TARGET_FILE:native_sr_gate_laws_smoke>"
+)
+
+add_test(
   NAME native_curriculum_smoke
   COMMAND "$<TARGET_FILE:curriculum_smoke>"
 )
@@ -857,6 +889,15 @@ set_tests_properties(native_d17_wikitext_overnight_smoke PROPERTIES
 )
 
 add_test(
+  NAME native_overnight_mini_smoke
+  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
+    --profile d17 --mode hybrid --overnight --n-train 800 --n-eval 64
+)
+set_tests_properties(native_overnight_mini_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
+
+add_test(
   NAME native_federated_merge_smoke
   COMMAND "$<TARGET_FILE:cypha_federated_merge>"
     --merge
@@ -883,12 +924,30 @@ add_test(
 )
 
 add_test(
+  NAME native_federated_tls_smoke
+  COMMAND "$<TARGET_FILE:federated_tls_smoke>"
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_a.json"
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_b.json"
+    "${CMAKE_CURRENT_BINARY_DIR}/federated_tls_smoke.json"
+)
+set_tests_properties(native_federated_tls_smoke PROPERTIES SKIP_RETURN_CODE 2)
+
+add_test(
   NAME native_cyphalm_bench_rpsm_smoke
   COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
     --profile d17 --mode rpsm --n-train 100 --n-eval 32
 )
 set_tests_properties(native_cyphalm_bench_rpsm_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
+
+add_test(
+  NAME native_d21_rpsm_smoke
+  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
+    --profile d21 --mode rpsm --overnight --n-train 500 --n-eval 64
+)
+set_tests_properties(native_d21_rpsm_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1;CYPHA_BENCH_OVERNIGHT=1;CYPHA_BENCH_FAST=1"
 )
 
 add_test(

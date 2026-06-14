@@ -9,6 +9,9 @@
 #   cypha-<version>-linux-x86_64.tar.gz
 #   cypha-<version>-linux-x86_64.AppImage
 #   cypha-<version>-windows-x86_64.zip
+#
+# Phase 7 (v2.3.7+): maintainer may also attach bench/BASELINE_LOCK.json snapshot
+# or overnight result JSON via scripts/publish_release.ps1 after local gh auth.
 
 name: Release
 
@@ -257,3 +260,10 @@ jobs:
 
             - `score_batch_parity`, `multilabel_dif_parity`, `merge_from_parity`, `similarity_index_parity`
             - `embed_table_parity`, `retrieval_parity`, `som_parity`
+
+            ### Phase 7 maintainer notes
+
+            - **Baseline lock:** [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json) — D17 hybrid **2.873 BPC** @ 300k (Phase 1c reference).
+            - **Local publish:** `pwsh -File scripts/publish_release.ps1 -Tag ${{ github.ref_name }}` (requires `gh auth login`; CI publish uses this workflow).
+            - **Overnight bench:** `pwsh -File scripts/run_d17_overnight.ps1` — update `overnight_results` in `BASELINE_LOCK.json` after a real 300k run.
+            - **CI gate:** **90 CTests** (`ctest -R native_`).

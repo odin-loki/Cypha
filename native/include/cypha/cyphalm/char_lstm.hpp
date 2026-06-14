@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "cypha/cyphalm/axiom_activation.hpp"
+#include "cypha/cyphalm/sr_gate_laws.hpp"
 
 namespace cypha {
 namespace cyphalm {
@@ -41,6 +42,7 @@ struct CharLSTMCache {
   std::vector<double> probs;
   bool used_eml{false};
   bool used_axiom{false};
+  bool used_sr_gates{false};
 };
 
 /// Single-layer char LSTM head (online BPTT-1). Weight layout matches Python ``CharLSTMHead``.
@@ -62,6 +64,12 @@ class CharLSTMHead {
   void set_activation_mode(LSTMActivationMode mode) { activation_mode_ = mode; }
   LSTMActivationMode activation_mode() const { return activation_mode_; }
   void set_axiom_grammar(const AxiomGateGrammar& grammar) { axiom_grammar_ = grammar; }
+
+  /// H16: optional symbolic-regression gate pre-activation override.
+  void set_use_sr_gates(bool enabled) { use_sr_gates_ = enabled; }
+  bool use_sr_gates() const { return use_sr_gates_; }
+  void set_sr_gate_laws(const SrGateLaws& laws) { sr_laws_ = laws; }
+  const SrGateLaws& sr_gate_laws() const { return sr_laws_; }
 
   /// Reset internal h/c (stateful online API).
   void reset_state();
@@ -93,6 +101,8 @@ class CharLSTMHead {
   bool has_cache_{false};
   LSTMActivationMode activation_mode_{LSTMActivationMode::Standard};
   AxiomGateGrammar axiom_grammar_;
+  bool use_sr_gates_{false};
+  SrGateLaws sr_laws_;
 };
 
 using CharLSTM = CharLSTMHead;
