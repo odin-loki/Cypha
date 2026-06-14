@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.24" = @(
+    "Intelligence Stats **Phase 24** (shipped): bench **d38** production overnight completion certificate - full 300k cross-section + 28-variant cell sweep; profile ``bench/config/d38_overnight_certificate_profile.json``; CTest ``native_d38_overnight_certificate_smoke``.",
+    "``poll_and_finalize_overnight.ps1 -AutoCommit`` - post-finalize lock commit when ``n_train >= 300000``; watch variant **STALL_WARNING** detector.",
+    "``CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`` - runs d38 when profile exists.",
+    "CI gate **116 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.23" = @(
     "Intelligence Stats **Phase 23** (shipped): bench **d37** overnight lock refresh validation - post-overnight baseline lock update toolchain; profile ``bench/config/d37_lock_refresh_profile.json``; CTest ``native_d37_lock_refresh_smoke``.",
     "``scripts/migrate_inflight_overnight_artifacts.ps1`` - merge in-flight overnight cell-sweep spill from repo-root ``results/`` into ``bench/results/cell_sweep/``.",

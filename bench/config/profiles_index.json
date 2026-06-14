@@ -175,5 +175,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d37",
     "notes": "Overnight lock refresh validation; see bench/config/d37_lock_refresh_profile.json"
+  },
+  "overnight_certificate_d38": {
+    "path": "everyday_profile.json",
+    "config": "d38_overnight_certificate_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d38",
+    "notes": "Production overnight completion certificate; see bench/config/d38_overnight_certificate_profile.json"
   }
 }

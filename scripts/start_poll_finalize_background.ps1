@@ -1,4 +1,4 @@
-# Phase 18/19/21: start poll_and_finalize_overnight.ps1 in the background after manually
+# Phase 18/19/21/24: start poll_and_finalize_overnight.ps1 in the background after manually
 # launching production overnight (e.g. run_production_overnight.ps1).
 # When -BuildDir is the default native/build and overnight is running, BuildDir is
 # auto-detected from the run_production_overnight.ps1 command line (e.g. native/build_p13).
@@ -7,9 +7,11 @@
 #   pwsh -File scripts/start_poll_finalize_background.ps1
 #   pwsh -File scripts/start_poll_finalize_background.ps1 -BuildDir native/build
 #   pwsh -File scripts/start_poll_finalize_background.ps1 -LogFile bench/results/poll_finalize.log
+#   pwsh -File scripts/start_poll_finalize_background.ps1 -AutoCommit
 param(
     [string]$BuildDir = "native/build",
-    [string]$LogFile = "bench/results/poll_finalize.log"
+    [string]$LogFile = "bench/results/poll_finalize.log",
+    [switch]$AutoCommit
 )
 
 $ErrorActionPreference = "Stop"
@@ -117,6 +119,9 @@ if ($pwsh) {
         "-BuildDir", $BuildDir,
         "-LogFile", $resolvedLog
     )
+    if ($AutoCommit) {
+        $argList += "-AutoCommit"
+    }
 } else {
     $exe = "powershell.exe"
     $argList = @(
@@ -126,6 +131,9 @@ if ($pwsh) {
         "-BuildDir", $BuildDir,
         "-LogFile", $resolvedLog
     )
+    if ($AutoCommit) {
+        $argList += "-AutoCommit"
+    }
 }
 
 $proc = Start-Process -FilePath $exe -ArgumentList $argList -WorkingDirectory $root -PassThru -WindowStyle Hidden
@@ -136,4 +144,7 @@ if (-not $proc) {
 Write-Host "Started poll_and_finalize_overnight.ps1 in background (PID $($proc.Id))" -ForegroundColor Green
 Write-Host "  build: $BuildDir" -ForegroundColor DarkGray
 Write-Host "  log:   $resolvedLog" -ForegroundColor DarkGray
+if ($AutoCommit) {
+    Write-Host "  autocommit: enabled (-Force when lock n_train >= 300000 after finalize)" -ForegroundColor DarkGray
+}
 Write-Host "Tail the log or run watch_production_overnight.ps1 while overnight processes run." -ForegroundColor Yellow

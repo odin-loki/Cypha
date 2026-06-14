@@ -1,11 +1,12 @@
 # Full native Cypha validation: Release build outside OneDrive, CTest, bench smoke.
-# Phase 23 (v2.3.23, prep): d37 overnight lock refresh validation, CYPHA_VALIDATE_LOCK_REFRESH, 115 CTests when d37 merged.
+# Phase 24 (v2.3.24, prep): d38 overnight completion certificate validation, CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE, 116 CTests when d38 merged.
+# Phase 23 (v2.3.23, shipped): d37 overnight lock refresh validation, CYPHA_VALIDATE_LOCK_REFRESH, 115 CTests.
 # Phase 22 (v2.3.22, shipped): d36 production pipeline E2E validation, CYPHA_VALIDATE_PIPELINE_E2E, 114 CTests.
 # Phase 21 (v2.3.21, shipped): d35 lock commit pipeline validation, CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE, 113 CTests when d35 merged.
 # Phase 20 (v2.3.20, shipped): d34 repo smoke hygiene validation, CYPHA_VALIDATE_REPO_SMOKE_HYGIENE, 112 CTests when d34 merged.
 # Phase 19 (v2.3.19, shipped): d33 release publish validation, CYPHA_VALIDATE_RELEASE_PUBLISH, 111 CTests.
 #
-# Optional environment variables (Phase 13–23):
+# Optional environment variables (Phase 13–24):
 #   CYPHA_VALIDATE_PRODUCTION=1
 #       Run validate_baseline_lock.ps1 -Production after the standard lock check.
 #   CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1
@@ -37,9 +38,12 @@
 #   CYPHA_VALIDATE_LOCK_REFRESH=1
 #       After pipeline E2E (d36) step, run cypha_bench_run --domain-tag d37 when its profile exists;
 #       gracefully skipped when d37 is not built/merged yet.
+#   CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1
+#       After lock refresh (d37) step, run cypha_bench_run --domain-tag d38 when its profile exists;
+#       gracefully skipped when d38 is not built/merged yet.
 #   CYPHA_STRICT_TEST_COUNT=1
 #       Fail the ctest_native step when the parsed native_ test count does not match the expected
-#       gate (115 with d37 merged, else 114 with d36 merged, else 113 with d35 merged, else 112 with d34 merged, else 111 with d33 merged, else 110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
+#       gate (116 with d38 merged, else 115 with d37 merged, else 114 with d36 merged, else 113 with d35 merged, else 112 with d34 merged, else 111 with d33 merged, else 110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
 #
 # Usage:
 #   pwsh -File scripts/cypha_native_validate_all.ps1
@@ -82,6 +86,7 @@ function Test-DomainTagExists {
 }
 
 function Get-ExpectedNativeTestCount {
+    if (Test-DomainTagExists -Tag "d38") { return 116 }
     if (Test-DomainTagExists -Tag "d37") { return 115 }
     if (Test-DomainTagExists -Tag "d36") { return 114 }
     if (Test-DomainTagExists -Tag "d35") { return 113 }
@@ -638,6 +643,30 @@ if ($env:CYPHA_VALIDATE_LOCK_REFRESH -eq "1") {
     } else {
         Write-Host "== cypha_bench_run --domain-tag d37 (skipped - profile not present) ==" -ForegroundColor DarkGray
         Step-Result "lock_refresh_d37" $true "skipped (d37 profile not present)"
+    }
+}
+
+# --- d38 overnight certificate (optional) ---
+if ($env:CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE -eq "1") {
+    Write-Host ""
+    if (Test-DomainTagExists -Tag "d38") {
+        Write-Host "== cypha_bench_run --domain-tag d38 (CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE) ==" -ForegroundColor Yellow
+        $benchExe = BinPath "cypha_bench_run"
+        if (-not (Test-Path $benchExe)) {
+            Step-Result "overnight_certificate_d38" $false "missing $benchExe"
+        } else {
+            Push-Location $root
+            try {
+                & $benchExe --domain-tag d38
+                $d38Code = $LASTEXITCODE
+            } finally {
+                Pop-Location
+            }
+            Step-Result "overnight_certificate_d38" ($d38Code -eq 0) $(if ($d38Code -eq 0) { "d38 ok" } else { "exit $d38Code" })
+        }
+    } else {
+        Write-Host "== cypha_bench_run --domain-tag d38 (skipped - profile not present) ==" -ForegroundColor DarkGray
+        Step-Result "overnight_certificate_d38" $true "skipped (d38 profile not present)"
     }
 }
 

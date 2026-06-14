@@ -1,4 +1,4 @@
-# Phase 17/19/20/21: poll until production overnight processes exit, then finalize + commit preview.
+# Phase 17/19/20/21/24: poll until production overnight processes exit, then finalize + commit preview.
 # Reuses overnight process detection from watch_production_overnight.ps1 (+ cypha_cell_hypothesis_sweep).
 # When -BuildDir is the default native/build and overnight is running, BuildDir is auto-detected
 # from the run_production_overnight.ps1 command line (e.g. native/build_p13).
@@ -9,18 +9,21 @@
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -Once
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -Force
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -LogFile bench/results/poll_finalize.log
+#   pwsh -File scripts/poll_and_finalize_overnight.ps1 -AutoCommit
 param(
     [string]$BuildDir = "native/build",
     [string]$LockFile = "",
     [string]$LogFile = "",
     [int]$IntervalSeconds = 60,
     [switch]$Force,
+    [switch]$AutoCommit,
     [switch]$Once
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 $DEFAULT_BUILD_DIR = "native/build"
+$PRODUCTION_N_TRAIN_MIN = 300000
 $transcriptTemp = $null
 $resolvedLogFile = $null
 
@@ -129,26 +132,37 @@ function Show-LockSummary {
 function Get-LockOvernightNTrain {
     param([string]$Path)
 
-    if (-not (Test-Path $Path)) {
+    $value = Get-LockOvernightNTrainValue -Path $Path
+    if ($null -eq $value) {
         return "?"
+    }
+
+    return [string]$value
+}
+
+function Get-LockOvernightNTrainValue {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return $null
     }
 
     try {
         $lock = Get-Content $Path -Raw | ConvertFrom-Json
     } catch {
-        return "?"
+        return $null
     }
 
     if ($lock.PSObject.Properties.Name -notcontains "overnight_results" -or $null -eq $lock.overnight_results) {
-        return "?"
+        return $null
     }
 
     $section = $lock.overnight_results
     if ($section.PSObject.Properties.Name -contains "n_train") {
-        return [string]$section.n_train
+        return [int]$section.n_train
     }
 
-    return "?"
+    return $null
 }
 
 function Write-PollHeartbeat {
@@ -170,6 +184,16 @@ function Write-PollError {
 
     $line = "ERROR $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
     Write-Host $line -ForegroundColor Red
+    if ($script:resolvedLogFile) {
+        $line | Out-File -FilePath $script:resolvedLogFile -Append -Encoding utf8
+    }
+}
+
+function Write-PollAutoCommit {
+    param([string]$Message)
+
+    $line = "AUTO_COMMIT $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+    Write-Host $line -ForegroundColor DarkGray
     if ($script:resolvedLogFile) {
         $line | Out-File -FilePath $script:resolvedLogFile -Append -Encoding utf8
     }
@@ -245,8 +269,10 @@ if ($resolvedLogFile) {
 }
 if ($Force) {
     Write-Host "  commit: -Force (git add + commit after finalize)" -ForegroundColor DarkGray
+} elseif ($AutoCommit) {
+    Write-Host "  commit: AutoCommit (-Force when lock n_train >= $PRODUCTION_N_TRAIN_MIN, else DryRun preview)" -ForegroundColor DarkGray
 } else {
-    Write-Host "  commit: DryRun preview (pass -Force to git add + commit)" -ForegroundColor DarkGray
+    Write-Host "  commit: DryRun preview (pass -Force or -AutoCommit)" -ForegroundColor DarkGray
 }
 
 if ($Once) {
@@ -306,6 +332,17 @@ Write-Host ""
 if ($Force) {
     Write-Host "== commit_production_lock.ps1 -Force ==" -ForegroundColor Cyan
     & $commitScript -BuildDir $BuildDir -LockFile $LockFile -Force
+} elseif ($AutoCommit) {
+    $autoNTrain = Get-LockOvernightNTrainValue -Path $LockFile
+    $autoNTrainLabel = if ($null -eq $autoNTrain) { "?" } else { [string]$autoNTrain }
+    Write-PollAutoCommit -Message "attempt n_train=$autoNTrainLabel threshold=$PRODUCTION_N_TRAIN_MIN"
+    if ($null -ne $autoNTrain -and $autoNTrain -ge $PRODUCTION_N_TRAIN_MIN) {
+        Write-Host "== commit_production_lock.ps1 -Force (AutoCommit) ==" -ForegroundColor Cyan
+        & $commitScript -BuildDir $BuildDir -LockFile $LockFile -Force
+    } else {
+        Write-Host "== commit_production_lock.ps1 -DryRun (AutoCommit: n_train below threshold) ==" -ForegroundColor Cyan
+        & $commitScript -BuildDir $BuildDir -LockFile $LockFile -DryRun
+    }
 } else {
     Write-Host "== commit_production_lock.ps1 -DryRun ==" -ForegroundColor Cyan
     & $commitScript -BuildDir $BuildDir -LockFile $LockFile -DryRun

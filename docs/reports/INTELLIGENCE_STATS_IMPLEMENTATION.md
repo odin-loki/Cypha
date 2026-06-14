@@ -319,7 +319,7 @@
 
 **CI gate (Phase 22 shipped):** **114 CTests** (`ctest -R native_`); +1 smoke: **`native_d36_pipeline_e2e_smoke`**. d36 validates full maintainer overnight→publish toolchain script presence + **d27–d35** bench profiles; **`pending_pipeline_e2e`** when **`n_train < 300000`** (smoke pass); **`pipeline_e2e_ready`** when **≥ 300k** and production + overnight-complete gates pass.
 
-## Phase 23 — prep (v2.3.23)
+## Phase 23 — shipped (v2.3.23)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
@@ -330,7 +330,21 @@
 | Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_LOCK_REFRESH=1`** (d37 when profile exists) | manual |
 | Offline release notes | `scripts/publish_release.ps1` — **`-NotesPath`** for offline **`gh release create`** workflow | manual |
 
-**CI gate (Phase 23 prep):** **114 CTests** today; **115** when **`native_d37_lock_refresh_smoke`** merges (+1). d37 validates post-overnight baseline lock update toolchain (`update_baseline_lock.ps1`, migrate scripts, `finalize_production_overnight.ps1`); **`pending_lock_refresh`** when **`n_train < 300000`** (smoke pass); **`lock_refresh_ready`** when **≥ 300k** and production + overnight-complete gates pass.
+**CI gate (Phase 23 shipped):** **115 CTests** (`ctest -R native_`); +1 smoke: **`native_d37_lock_refresh_smoke`**. d37 validates post-overnight baseline lock update toolchain (`update_baseline_lock.ps1`, migrate scripts, `finalize_production_overnight.ps1`); **`pending_lock_refresh`** when **`n_train < 300000`** (smoke pass); **`lock_refresh_ready`** when **≥ 300k** and production + overnight-complete gates pass.
+
+## Phase 24 — prep (v2.3.24)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d38** production overnight completion certificate | `bench_domains.cpp` → `run_d38_overnight_certificate_validation` | `cypha_bench_run --domain-tag d38` |
+| D38 profile config | `bench/config/d38_overnight_certificate_profile.json` | manual |
+| D38 validation report | `bench/report/tables/d38_overnight_certificate_validation.json` | d38 run |
+| Poll auto-commit | `scripts/poll_and_finalize_overnight.ps1` — **`-AutoCommit`** (post-finalize **`commit_production_lock.ps1 -Force`** when **`n_train >= 300000`**) | manual |
+| Background poll auto-commit | `scripts/start_poll_finalize_background.ps1` — **`-AutoCommit`** passthrough | manual |
+| Variant stall detector | `scripts/watch_production_overnight.ps1` — **`-StallMinutes`**, **`-LogFile`** | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`** (d38 when profile exists) | manual |
+
+**CI gate (Phase 24 prep):** **115 CTests** today; **116** when **`native_d38_overnight_certificate_smoke`** merges (+1). d38 validates full 300k overnight completion (overnight/RPSM/cell-sweep alignment, **≥ 28** variants); **`pending_overnight_certificate`** when **`n_train < 300000`** (smoke pass); **`overnight_certificate_ready`** when **≥ 300k** and production + overnight-complete + variant gates pass.
 
 ## Still planned
 
@@ -411,10 +425,14 @@ cypha_bench_run --domain-tag d36                                    # Phase 22: 
 pwsh -File scripts\run_post_overnight.ps1 -AllowPending             # Phase 22: poll/finalize + production verify
 $env:CYPHA_VALIDATE_PIPELINE_E2E = "1"                              # Phase 22: d36 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d36" --output-on-failure  # Phase 22
-cypha_bench_run --domain-tag d37                                    # Phase 23: overnight lock refresh validation (prep)
+cypha_bench_run --domain-tag d37                                    # Phase 23: overnight lock refresh validation (shipped)
 pwsh -File scripts\migrate_inflight_overnight_artifacts.ps1 -DryRun # Phase 23: preview in-flight results/ migration
 $env:CYPHA_VALIDATE_LOCK_REFRESH = "1"                              # Phase 23: d37 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d37" --output-on-failure  # Phase 23
+cypha_bench_run --domain-tag d38                                    # Phase 24: overnight completion certificate (prep)
+pwsh -File scripts\poll_and_finalize_overnight.ps1 -AutoCommit       # Phase 24: auto-commit when n_train >= 300k
+$env:CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE = "1"                     # Phase 24: d38 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d38" --output-on-failure  # Phase 24
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

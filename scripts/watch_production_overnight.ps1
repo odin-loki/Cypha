@@ -1,10 +1,13 @@
 # Watch production overnight run: process + log growth + BASELINE_LOCK sections.
+# Phase 24: variant-count stall detector (STALL_WARNING) while overnight processes run.
 # Usage:
 #   pwsh -File scripts/watch_production_overnight.ps1
 #   pwsh -File scripts/watch_production_overnight.ps1 -Once
 #   pwsh -File scripts/watch_production_overnight.ps1 -IntervalSeconds 120 -ProcessId 12345
+#   pwsh -File scripts/watch_production_overnight.ps1 -LogFile bench/results/watch_stall.log
 param(
     [string]$LockFile = "",
+    [string]$ProductionLogFile = "",
     [string]$LogFile = "",
     [int]$IntervalSeconds = 60,
     [int]$StallMinutes = 30,
@@ -41,10 +44,25 @@ $sectionNames = @("overnight_results", "rpsm_results", "cell_sweep_results")
 $lastRunAts = @{}
 $lastPollSize = -1
 $lastGrowthUtc = $null
-$resolvedLogPath = Resolve-LogFile -Path $LogFile
+$lastVariantCount = -1
+$lastVariantGrowthUtc = $null
+$resolvedLogPath = Resolve-LogFile -Path $ProductionLogFile
+$resolvedStallLogFile = $null
 $cellSweepProgressPath = Join-Path $root "bench\results\cell_sweep\overnight_progress.log"
 $CELL_SWEEP_EXPECTED_VARIANTS = 28
 $PRODUCTION_N_TRAIN_MIN = 300000
+
+if ($LogFile) {
+    if ([System.IO.Path]::IsPathRooted($LogFile)) {
+        $resolvedStallLogFile = $LogFile
+    } else {
+        $resolvedStallLogFile = Join-Path $root $LogFile
+    }
+    $stallLogDir = Split-Path $resolvedStallLogFile -Parent
+    if ($stallLogDir) {
+        New-Item -ItemType Directory -Force -Path $stallLogDir | Out-Null
+    }
+}
 
 function Format-Age([datetime]$UtcWhen) {
     $age = (Get-Date).ToUniversalTime() - $UtcWhen
@@ -219,6 +237,54 @@ function Get-CellSweepResultsDir {
     return $null
 }
 
+function Get-CellSweepVariantCount {
+    $sweepInfo = Get-CellSweepResultsDir
+    if (-not $sweepInfo) {
+        return 0
+    }
+
+    return @(Get-ChildItem -Path $sweepInfo.Dir -Filter "variant_*.json" -File -ErrorAction SilentlyContinue).Count
+}
+
+function Write-StallWarning {
+    param([string]$Message)
+
+    $line = "STALL_WARNING $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+    Write-Host $line -ForegroundColor Yellow
+    if ($script:resolvedStallLogFile) {
+        $line | Out-File -FilePath $script:resolvedStallLogFile -Append -Encoding utf8
+    }
+}
+
+function Test-VariantCountStall {
+    param(
+        [bool]$OvernightRunning,
+        [int]$VariantCount
+    )
+
+    if (-not $OvernightRunning) {
+        $script:lastVariantCount = -1
+        $script:lastVariantGrowthUtc = $null
+        return
+    }
+
+    if ($script:lastVariantCount -lt 0 -or $VariantCount -ne $script:lastVariantCount) {
+        $script:lastVariantCount = $VariantCount
+        $script:lastVariantGrowthUtc = Get-Date
+        return
+    }
+
+    if ($null -eq $script:lastVariantGrowthUtc) {
+        $script:lastVariantGrowthUtc = Get-Date
+        return
+    }
+
+    $stallMin = [math]::Floor(((Get-Date) - $script:lastVariantGrowthUtc).TotalMinutes)
+    if ($stallMin -ge $StallMinutes) {
+        Write-StallWarning -Message "variant_count=$VariantCount unchanged for ${stallMin}m (threshold ${StallMinutes}m) while overnight running"
+    }
+}
+
 function Get-VariantNTrain {
     param([System.IO.FileInfo]$VariantFile)
 
@@ -390,15 +456,19 @@ function Show-Snapshot {
     Show-ProcessStatus
     Show-LogStatus -Path $resolvedLogPath
     Show-CellSweepProgress -OvernightRunning:$OvernightRunning
+    Test-VariantCountStall -OvernightRunning:$OvernightRunning -VariantCount (Get-CellSweepVariantCount)
     Show-LockStatus -Path $LockFile
 }
 
-Write-Host "watch_production_overnight: polling every ${IntervalSeconds}s (stall warn after ${StallMinutes}m without log growth)" -ForegroundColor Cyan
+Write-Host "watch_production_overnight: polling every ${IntervalSeconds}s (stall warn after ${StallMinutes}m without log growth or variant progress)" -ForegroundColor Cyan
 Write-Host "  lock: $LockFile" -ForegroundColor DarkGray
 if ($resolvedLogPath) {
     Write-Host "  log:  $resolvedLogPath" -ForegroundColor DarkGray
 } else {
     Write-Host "  log:  (no bench/results/production_overnight_*.log yet)" -ForegroundColor DarkGray
+}
+if ($resolvedStallLogFile) {
+    Write-Host "  stall log: $resolvedStallLogFile (append STALL_WARNING)" -ForegroundColor DarkGray
 }
 if ($ProcessId -gt 0) {
     Write-Host "  tracking PID: $ProcessId" -ForegroundColor DarkGray

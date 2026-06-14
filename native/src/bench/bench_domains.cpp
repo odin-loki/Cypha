@@ -3102,6 +3102,7 @@ constexpr double kD17HybridPinBpc = 2.873;
 constexpr double kD17HybridPinTolerance = 0.02;
 constexpr double kD17ProductionPinTolerance = 0.05;
 constexpr int kProductionNTrainMin = 300000;
+constexpr int kExpectedCellSweepVariants = 28;
 
 void require_lock_key(const Json& obj, const char* key, const char* ctx) {
     if (!obj.contains(key) || obj[key].is_null()) {
@@ -4276,6 +4277,131 @@ Json run_d37_lock_refresh_validation() {
     return experiments;
 }
 
+Json run_d38_overnight_certificate_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+
+    const std::array<const char*, 2> required_scripts{
+        "scripts/run_post_overnight.ps1",
+        "scripts/validate_production_complete.ps1",
+    };
+    Json certificate_scripts = Json::object();
+    for (const char* rel : required_scripts) {
+        const fs::path path = repo / rel;
+        const bool present = fs::is_regular_file(path);
+        certificate_scripts[rel] = present;
+        if (!present) {
+            throw std::runtime_error("overnight certificate script missing: " + path.string());
+        }
+    }
+
+    const fs::path lock_path = fs::current_path() / "d38_overnight_certificate_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+
+    require_lock_key(lock["overnight_results"], "n_train", "overnight_results");
+    if (!lock["overnight_results"]["n_train"].is_number_integer()) {
+        throw std::runtime_error("overnight_results n_train must be an integer");
+    }
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+
+    std::vector<std::string> warnings;
+    int variant_count = -1;
+    bool variant_count_sufficient = false;
+    if (lock.contains("cell_sweep_results") && lock["cell_sweep_results"].is_object()) {
+        const Json& cell_sweep = lock["cell_sweep_results"];
+        if (cell_sweep.contains("variant_count") && cell_sweep["variant_count"].is_number_integer()) {
+            variant_count = cell_sweep["variant_count"].get<int>();
+            variant_count_sufficient = variant_count >= kExpectedCellSweepVariants;
+        } else {
+            warnings.push_back("cell_sweep_results missing variant_count key");
+        }
+    } else {
+        warnings.push_back("cell_sweep_results missing variant_count key");
+    }
+
+    std::string production_status;
+    std::string overnight_complete_status;
+    std::string validation_status;
+
+    if (n_train < kProductionNTrainMin) {
+        validation_status = "pending_overnight_certificate";
+        production_status = "pending_production";
+        overnight_complete_status = "pending_overnight_complete";
+    } else {
+        static constexpr const char* kSections[] = {"overnight_results", "rpsm_results",
+                                                    "cell_sweep_results"};
+        int ref_n_eval = -1;
+        for (const char* name : kSections) {
+            if (!lock.contains(name) || !lock[name].is_object()) {
+                throw std::runtime_error(std::string("lock JSON missing ") + name);
+            }
+            const Json& section = lock[name];
+            require_lock_key(section, "n_train", name);
+            if (!section["n_train"].is_number_integer()) {
+                throw std::runtime_error(std::string(name) + " n_train must be an integer");
+            }
+            if (section["n_train"].get<int>() < kProductionNTrainMin) {
+                throw std::runtime_error(std::string(name) + " n_train below production minimum");
+            }
+            require_lock_key(section, "n_eval", name);
+            if (!section["n_eval"].is_number_integer()) {
+                throw std::runtime_error(std::string(name) + " n_eval must be an integer");
+            }
+            const int section_n_eval = section["n_eval"].get<int>();
+            if (ref_n_eval < 0) {
+                ref_n_eval = section_n_eval;
+            } else if (section_n_eval != ref_n_eval) {
+                throw std::runtime_error("overnight lock sections have mismatched n_eval");
+            }
+            if (section["n_train"].get<int>() != n_train) {
+                throw std::runtime_error("overnight lock sections have mismatched n_train");
+            }
+        }
+
+        production_status = validate_production_tier_lock(lock);
+        overnight_complete_status = validate_overnight_complete_lock(lock);
+        const bool tiers_ready = production_status == "production_validated" &&
+                                 overnight_complete_status == "overnight_complete_validated";
+        validation_status = (tiers_ready && variant_count_sufficient)
+                                ? "overnight_certificate_ready"
+                                : "pending_overnight_certificate";
+    }
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results", lock.contains("cell_sweep_results") ? lock["cell_sweep_results"] : Json{}},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_status", production_status},
+        {"overnight_complete_status", overnight_complete_status},
+        {"certificate_scripts", certificate_scripts},
+        {"expected_cell_sweep_variants", kExpectedCellSweepVariants},
+        {"variant_count", variant_count >= 0 ? Json(variant_count) : Json(nullptr)},
+        {"variant_count_sufficient", variant_count_sufficient},
+        {"warnings", warnings},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d38_overnight_certificate_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d38_overnight_certificate_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -4321,6 +4447,8 @@ std::vector<DomainSpec> build_all_domains() {
          run_d35_lock_commit_pipeline_validation},
         {"d36", "cypha_bench.domains.d36_pipeline_e2e_validation", run_d36_pipeline_e2e_validation},
         {"d37", "cypha_bench.domains.d37_lock_refresh_validation", run_d37_lock_refresh_validation},
+        {"d38", "cypha_bench.domains.d38_overnight_certificate_validation",
+         run_d38_overnight_certificate_validation},
     };
 }
 

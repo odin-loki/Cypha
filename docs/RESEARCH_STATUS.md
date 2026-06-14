@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-06-14  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **114 CTests** *(Phase 22 shipped; 115 when d37 merges)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **115 CTests** *(Phase 23 shipped; 116 when d38 merges)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **114 CTests** gate CI *(Phase 22 shipped; 115 when d37 merges)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **115 CTests** gate CI *(Phase 23 shipped; 116 when d38 merges)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -336,13 +336,21 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Local validate env var:** **`CYPHA_VALIDATE_PIPELINE_E2E=1`** on **`cypha_native_validate_all.ps1`** runs d36 when profile exists.
 - **CI:** blocking gate **114 CTests** (+1 d36 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
 
-### Phase 23 — overnight lock refresh gate (v2.3.23) — prep
+### Phase 23 — overnight lock refresh gate (v2.3.23) — shipped
 
-- **Bench d37:** overnight lock refresh validation — post-overnight baseline lock update toolchain (`update_baseline_lock.ps1`, migrate scripts, `finalize_production_overnight.ps1`); profile **`bench/config/d37_lock_refresh_profile.json`**; report **`bench/report/tables/d37_lock_refresh_validation.json`**. CTest **`native_d37_lock_refresh_smoke`** *(when merged)*.
+- **Bench d37:** overnight lock refresh validation — post-overnight baseline lock update toolchain (`update_baseline_lock.ps1`, migrate scripts, `finalize_production_overnight.ps1`); profile **`bench/config/d37_lock_refresh_profile.json`**; report **`bench/report/tables/d37_lock_refresh_validation.json`**. CTest **`native_d37_lock_refresh_smoke`**.
 - **In-flight migrate:** **`scripts/migrate_inflight_overnight_artifacts.ps1`** — merge repo-root **`results/`** spill into **`bench/results/cell_sweep/`**; chained from **`run_post_overnight.ps1`** (`-DryRun` preview unless **`-SkipMigrate`**).
 - **Local validate env var:** **`CYPHA_VALIDATE_LOCK_REFRESH=1`** on **`cypha_native_validate_all.ps1`** runs d37 when profile exists.
 - **Offline release notes:** **`publish_release.ps1 -NotesPath`** for offline **`gh release create`** workflow.
-- **CI:** blocking gate **114 CTests** today; **115** when d37 merges (+1 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+- **CI:** blocking gate **115 CTests** (+1 d37 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+
+### Phase 24 — overnight completion certificate gate (v2.3.24) — prep
+
+- **Bench d38:** production overnight completion certificate — full 300k cross-section + 28-variant cell sweep + production/overnight-complete gates; profile **`bench/config/d38_overnight_certificate_profile.json`**; report **`bench/report/tables/d38_overnight_certificate_validation.json`**. CTest **`native_d38_overnight_certificate_smoke`** *(when merged)*.
+- **Poll auto-commit:** **`scripts/poll_and_finalize_overnight.ps1 -AutoCommit`** — post-finalize **`commit_production_lock.ps1 -Force`** when **`overnight_results.n_train >= 300000`**; **`start_poll_finalize_background.ps1 -AutoCommit`** passthrough.
+- **Variant stall detector:** **`scripts/watch_production_overnight.ps1`** — **`-StallMinutes`**, **`-LogFile`** append for **STALL_WARNING** when variant count unchanged while overnight running.
+- **Local validate env var:** **`CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`** on **`cypha_native_validate_all.ps1`** runs d38 when profile exists.
+- **CI:** blocking gate **115 CTests** today; **116** when d38 merges (+1 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
 
 ---
 

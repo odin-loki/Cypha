@@ -1,6 +1,6 @@
 # Future directions
 
-Cypha's native port (M1-M6 + P7) is complete - inference, training, REST server, Qt shell, experiments DB, and parity fixtures all pass CI (**114 CTests**; **115** when d37 merges). Python runtime packages removed. This document records the most valuable next engineering directions, from near-term (months) to longer-horizon (quarters).
+Cypha's native port (M1-M6 + P7) is complete - inference, training, REST server, Qt shell, experiments DB, and parity fixtures all pass CI (**115 CTests**; **116** when d38 merges). Python runtime packages removed. This document records the most valuable next engineering directions, from near-term (months) to longer-horizon (quarters).
 
 ---
 
@@ -213,7 +213,7 @@ Both require new network coordination code outside the native training core � 
 | Python FastAPI / PySide6 Studio (`cypha_studio/`) | **Removed** � `cypha_rest` + `cypha_qt_shell` are authoritative |
 | `cypha_accel/` CuPy path | **Removed** � native `cypha::accel` (CUDA / parallel CPU) |
 | `cypha_core`, `bench/` (Python), `cypha_lm/` Python packages | **Removed** � native binaries only (`bench/` configs via `cypha_bench_run`) |
-| pytest CI gate (~274 tests) | **Removed** - **114 CTests** (`ctest -R native_`; **115** when d37 merges) gate releases |
+| pytest CI gate (~274 tests) | **Removed** - **115 CTests** (`ctest -R native_`; **116** when d38 merges) gate releases |
 | `run_all.py` bench orchestrator | **Removed** � `cypha_bench_run` |
 
 ---

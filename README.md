@@ -40,7 +40,7 @@ Build outside OneDrive on Windows (cloud sync locks object files). Full guide: [
 cmake -S native -B C:\Temp\cypha_build -DCMAKE_BUILD_TYPE=Release -G Ninja
 cmake --build C:\Temp\cypha_build --parallel
 
-# Validate (115 CTests)
+# Validate (116 CTests)
 ctest --test-dir C:\Temp\cypha_build -R native_ --output-on-failure
 
 # Full production gate (rebuild + CTest + bench smoke + tune dry-run)

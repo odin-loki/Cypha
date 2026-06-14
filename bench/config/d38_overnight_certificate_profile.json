@@ -1,0 +1,33 @@
+{
+  "profile_id": "d38_overnight_certificate_profile",
+  "description": "D38 production overnight completion certificate — full 300k cross-section + 28-variant cell sweep + production/overnight-complete gates",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 38,
+    "domain_tag": "d38"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d38_overnight_certificate_smoke — overnight certificate gate (pending_overnight_certificate or overnight_certificate_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 38",
+    "Or: cypha_bench_run --domain-tag d38",
+    "Verifies scripts/run_post_overnight.ps1 and scripts/validate_production_complete.ps1 exist",
+    "When overnight_results.n_train < 300000: validation_status=pending_overnight_certificate (smoke PASS)",
+    "When n_train >= 300000: require overnight_results, rpsm_results, cell_sweep_results each n_train >= 300000 with matching n_eval",
+    "When n_train >= 300000: cell_sweep_results.variant_count >= 28 (warn if key missing)",
+    "When n_train >= 300000: validate_production_tier_lock + validate_overnight_complete_lock",
+    "When all tiers pass and variant_count >= 28: validation_status=overnight_certificate_ready",
+    "Phase 24: production overnight completion certificate gate"
+  ]
+}
+
