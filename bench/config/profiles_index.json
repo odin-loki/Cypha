@@ -161,5 +161,12 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d35",
     "notes": "Lock commit pipeline validation; see bench/config/d35_lock_commit_pipeline_profile.json"
+  },
+  "pipeline_e2e_d36": {
+    "path": "everyday_profile.json",
+    "config": "d36_pipeline_e2e_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d36",
+    "notes": "Production pipeline E2E validation; see bench/config/d36_pipeline_e2e_profile.json"
   }
 }

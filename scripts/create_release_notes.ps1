@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.22" = @(
+    "Intelligence Stats **Phase 22** (shipped): bench **d36** production pipeline E2E validation - full maintainer overnight-to-publish toolchain; profile ``bench/config/d36_pipeline_e2e_profile.json``; CTest ``native_d36_pipeline_e2e_smoke``.",
+    "``scripts/run_post_overnight.ps1`` - poll/finalize/commit wrapper + ``verify_production_pipeline.ps1``; watch **effective_n_train** from latest variant JSON.",
+    "``CYPHA_VALIDATE_PIPELINE_E2E=1`` - runs d36 when profile exists.",
+    "CI gate **114 CTests**; full 300k production overnight **in progress** (maintainer workflow only)."
+  )
   "2.3.21" = @(
     "Intelligence Stats **Phase 21** (shipped): bench **d35** lock commit pipeline validation - post-overnight commit toolchain; profile ``bench/config/d35_lock_commit_pipeline_profile.json``; CTest ``native_d35_lock_commit_pipeline_smoke``.",
     "``scripts/verify_production_pipeline.ps1`` - unified maintainer smoke gate (production complete + release publish + repo smoke cleanup + optional d35).",

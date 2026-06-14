@@ -1,8 +1,8 @@
-# Phase 21 (prep): full production pipeline smoke — production complete + release publish + repo smoke cleanup + optional d35.
+# Phase 21 (shipped): full production pipeline smoke - production complete + release publish + repo smoke cleanup + optional d35.
 # Does not call gh; authenticate manually before a real publish:
 #   gh auth login
 #   gh auth status
-# Then: pwsh -File scripts/publish_release.ps1 -Tag v2.3.21
+# Then: pwsh -File scripts/publish_release.ps1 -Tag v2.3.22
 #
 # Usage:
 #   pwsh -File scripts/verify_production_pipeline.ps1
@@ -15,7 +15,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
-$DEFAULT_TAG = "v2.3.21"
+$DEFAULT_TAG = "v2.3.22"
 $PRODUCTION_N_TRAIN_MIN = 300000
 
 $validateCompleteScript = Join-Path $PSScriptRoot "validate_production_complete.ps1"

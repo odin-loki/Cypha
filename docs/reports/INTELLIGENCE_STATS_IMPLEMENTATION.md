@@ -294,7 +294,7 @@
 
 **CI gate (Phase 20 shipped):** **112 CTests** (`ctest -R native_`); +1 smoke: **`native_d34_repo_smoke_hygiene_smoke`**. d34 validates repo-root smoke JSON leak detection + cleanup script presence; **`repo_root_smoke_ok`** or **`repo_root_smoke_leak`** (smoke pass).
 
-## Phase 21 — prep (v2.3.21)
+## Phase 21 — shipped (v2.3.21, 2026-06-14)
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
@@ -302,9 +302,22 @@
 | D35 profile config | `bench/config/d35_lock_commit_pipeline_profile.json` | manual |
 | D35 validation report | `bench/report/tables/d35_lock_commit_pipeline_validation.json` | d35 run |
 | Production pipeline smoke gate | `scripts/verify_production_pipeline.ps1` — production complete + release publish + repo smoke cleanup preview + optional d35 | manual |
+| Overnight watch variant progress | `scripts/watch_production_overnight.ps1` — **`done/28`** cell sweep progress; poll dedupe + heartbeat fix | manual |
 | Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE=1`** (d35 when profile exists) | manual |
 
-**CI gate (Phase 21 prep):** **112 CTests** today; **113** when **`native_d35_lock_commit_pipeline_smoke`** merges (+1). d35 validates post-overnight commit toolchain script presence (`commit_production_lock.ps1`, `finalize_production_overnight.ps1`, `poll_and_finalize_overnight.ps1`, `validate_production_complete.ps1`); **`pending_lock_commit`** when **`n_train < 300000`** (smoke pass); **`lock_commit_ready`** when **≥ 300k** and production + overnight-complete gates pass.
+**CI gate (Phase 21 shipped):** **113 CTests** (`ctest -R native_`); +1 smoke: **`native_d35_lock_commit_pipeline_smoke`**. d35 validates post-overnight commit toolchain script presence (`commit_production_lock.ps1`, `finalize_production_overnight.ps1`, `poll_and_finalize_overnight.ps1`, `validate_production_complete.ps1`); **`pending_lock_commit`** when **`n_train < 300000`** (smoke pass); **`lock_commit_ready`** when **≥ 300k** and production + overnight-complete gates pass.
+
+## Phase 22 — prep (v2.3.22)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Bench domain **d36** production pipeline E2E validation | `bench_domains.cpp` → `run_d36_pipeline_e2e_validation` | `cypha_bench_run --domain-tag d36` |
+| D36 profile config | `bench/config/d36_pipeline_e2e_profile.json` | manual |
+| D36 validation report | `bench/report/tables/d36_pipeline_e2e_validation.json` | d36 run |
+| Post-overnight maintainer wrapper | `scripts/run_post_overnight.ps1` — poll/finalize/commit + **`verify_production_pipeline.ps1`** | manual |
+| Validate-all env hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_PIPELINE_E2E=1`** (d36 when profile exists) | manual |
+
+**CI gate (Phase 22 prep):** **113 CTests** today; **114** when **`native_d36_pipeline_e2e_smoke`** merges (+1). d36 validates full maintainer overnight→publish toolchain script presence + **d27–d35** bench profiles; **`pending_pipeline_e2e`** when **`n_train < 300000`** (smoke pass); **`pipeline_e2e_ready`** when **≥ 300k** and production + overnight-complete gates pass.
 
 ## Still planned
 
@@ -377,10 +390,14 @@ cypha_bench_run --domain-tag d34                                    # Phase 20: 
 pwsh -File scripts\cleanup_repo_smoke_artifacts.ps1 -DryRun         # Phase 20: preview repo-root smoke JSON cleanup
 $env:CYPHA_VALIDATE_REPO_SMOKE_HYGIENE = "1"                        # Phase 20: d34 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d34" --output-on-failure  # Phase 20
-cypha_bench_run --domain-tag d35                                    # Phase 21: lock commit pipeline validation (prep)
+cypha_bench_run --domain-tag d35                                    # Phase 21: lock commit pipeline validation (shipped)
 pwsh -File scripts\verify_production_pipeline.ps1 -AllowPending     # Phase 21: unified production pipeline smoke
 $env:CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE = "1"                      # Phase 21: d35 in cypha_native_validate_all.ps1
 ctest --test-dir native/build -R "native_d35" --output-on-failure  # Phase 21
+cypha_bench_run --domain-tag d36                                    # Phase 22: production pipeline E2E validation (prep)
+pwsh -File scripts\run_post_overnight.ps1 -AllowPending             # Phase 22: poll/finalize + production verify
+$env:CYPHA_VALIDATE_PIPELINE_E2E = "1"                              # Phase 22: d36 in cypha_native_validate_all.ps1
+ctest --test-dir native/build -R "native_d36" --output-on-failure  # Phase 22
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

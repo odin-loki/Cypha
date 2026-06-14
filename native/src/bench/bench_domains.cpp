@@ -4061,6 +4061,111 @@ Json run_d35_lock_commit_pipeline_validation() {
     return experiments;
 }
 
+Json run_d36_pipeline_e2e_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path config = cypha::bench::config_dir();
+
+    const std::array<const char*, 9> required_scripts{
+        "scripts/verify_production_pipeline.ps1",
+        "scripts/run_production_overnight.ps1",
+        "scripts/update_baseline_lock.ps1",
+        "scripts/poll_and_finalize_overnight.ps1",
+        "scripts/finalize_production_overnight.ps1",
+        "scripts/commit_production_lock.ps1",
+        "scripts/validate_production_complete.ps1",
+        "scripts/verify_release_publish.ps1",
+        "scripts/cleanup_repo_smoke_artifacts.ps1",
+    };
+    Json pipeline_scripts = Json::object();
+    for (const char* rel : required_scripts) {
+        const fs::path path = repo / rel;
+        const bool present = fs::is_regular_file(path);
+        pipeline_scripts[rel] = present;
+        if (!present) {
+            throw std::runtime_error("pipeline E2E script missing: " + path.string());
+        }
+    }
+
+    const std::array<const char*, 9> required_domain_profiles{
+        "d27_production_lock_profile.json",
+        "d28_overnight_complete_profile.json",
+        "d29_release_readiness_profile.json",
+        "d30_artifact_hygiene_profile.json",
+        "d31_post_overnight_pipeline_profile.json",
+        "d32_production_complete_profile.json",
+        "d33_release_publish_profile.json",
+        "d34_repo_smoke_hygiene_profile.json",
+        "d35_lock_commit_pipeline_profile.json",
+    };
+    Json bench_profiles = Json::object();
+    for (const char* rel : required_domain_profiles) {
+        const fs::path path = config / rel;
+        const bool present = fs::is_regular_file(path);
+        bench_profiles[rel] = present;
+        if (!present) {
+            throw std::runtime_error("bench profile missing: " + path.string());
+        }
+    }
+
+    const fs::path lock_path = fs::current_path() / "d36_pipeline_e2e_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const Json lock = load_json_file(lock_path);
+    validate_baseline_lock_schema(lock);
+
+    require_lock_key(lock["overnight_results"], "n_train", "overnight_results");
+    if (!lock["overnight_results"]["n_train"].is_number_integer()) {
+        throw std::runtime_error("overnight_results n_train must be an integer");
+    }
+    const int n_train = lock["overnight_results"]["n_train"].get<int>();
+
+    std::string production_status;
+    std::string overnight_complete_status;
+    std::string validation_status;
+
+    if (n_train < kProductionNTrainMin) {
+        validation_status = "pending_pipeline_e2e";
+        production_status = "pending_production";
+        overnight_complete_status = "pending_overnight_complete";
+    } else {
+        production_status = validate_production_tier_lock(lock);
+        overnight_complete_status = validate_overnight_complete_lock(lock);
+        validation_status = (production_status == "production_validated" &&
+                             overnight_complete_status == "overnight_complete_validated")
+                                ? "pipeline_e2e_ready"
+                                : "pending_pipeline_e2e";
+    }
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"rpsm_results", lock["rpsm_results"]},
+        {"cell_sweep_results", lock.contains("cell_sweep_results") ? lock["cell_sweep_results"] : Json{}},
+        {"d17_hybrid_baseline", lock["d17_hybrid_baseline"]},
+        {"n_train", n_train},
+        {"validation_status", validation_status},
+        {"production_status", production_status},
+        {"overnight_complete_status", overnight_complete_status},
+        {"pipeline_scripts", pipeline_scripts},
+        {"bench_profiles", bench_profiles},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_pin_bpc", kD17HybridPinBpc},
+        {"production_pin_tolerance", kD17ProductionPinTolerance},
+        {"backend", "baseline_lock_validate"},
+    };
+    cypha::bench::finalize_domain("d36_pipeline_e2e_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d36_pipeline_e2e_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -4104,6 +4209,7 @@ std::vector<DomainSpec> build_all_domains() {
          run_d34_repo_smoke_hygiene_validation},
         {"d35", "cypha_bench.domains.d35_lock_commit_pipeline_validation",
          run_d35_lock_commit_pipeline_validation},
+        {"d36", "cypha_bench.domains.d36_pipeline_e2e_validation", run_d36_pipeline_e2e_validation},
     };
 }
 

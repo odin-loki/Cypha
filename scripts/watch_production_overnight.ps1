@@ -44,6 +44,7 @@ $lastGrowthUtc = $null
 $resolvedLogPath = Resolve-LogFile -Path $LogFile
 $cellSweepProgressPath = Join-Path $root "bench\results\cell_sweep\overnight_progress.log"
 $CELL_SWEEP_EXPECTED_VARIANTS = 28
+$PRODUCTION_N_TRAIN_MIN = 300000
 
 function Format-Age([datetime]$UtcWhen) {
     $age = (Get-Date).ToUniversalTime() - $UtcWhen
@@ -212,6 +213,22 @@ function Get-CellSweepResultsDir {
     return $null
 }
 
+function Get-VariantNTrain {
+    param([System.IO.FileInfo]$VariantFile)
+
+    try {
+        $json = Get-Content $VariantFile.FullName -Raw | ConvertFrom-Json
+    } catch {
+        return $null
+    }
+
+    if ($json.PSObject.Properties.Name -contains "n_train") {
+        return [int]$json.n_train
+    }
+
+    return $null
+}
+
 function Show-CellSweepProgress {
     param([bool]$OvernightRunning = $false)
 
@@ -222,29 +239,60 @@ function Show-CellSweepProgress {
     if ($sweepInfo) {
         $variants = @(Get-ChildItem -Path $sweepInfo.Dir -Filter "variant_*.json" -File -ErrorAction SilentlyContinue)
         $variantCount = $variants.Count
-
-        if ($OvernightRunning) {
-            Write-Host ("  progress: {0}/{1}" -f $variantCount, $CELL_SWEEP_EXPECTED_VARIANTS) -ForegroundColor DarkGray
-        } elseif ($variantCount -gt 0) {
-            Write-Host ("  variants: {0} (expect {1} for full sweep)" -f $variantCount, $CELL_SWEEP_EXPECTED_VARIANTS) -ForegroundColor DarkGray
-        } else {
-            Write-Host "  variants: 0 (no variant_*.json yet)" -ForegroundColor DarkGray
-        }
+        $manifestNTrain = $null
+        $variantNTrain = $null
+        $effectiveNTrain = $null
+        $latestVariant = $null
 
         if ($variantCount -gt 0) {
             $latestVariant = $variants | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-            Write-Host ("  latest: {0} mtime={1}" -f $latestVariant.Name, $latestVariant.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")) -ForegroundColor DarkGray
+            $variantNTrain = Get-VariantNTrain -VariantFile $latestVariant
         }
 
         $manifestPath = Join-Path $sweepInfo.Dir "manifest.json"
         if (Test-Path $manifestPath) {
             try {
                 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-                $manifestNTrain = if ($manifest.PSObject.Properties.Name -contains "n_train") { $manifest.n_train } else { "?" }
-                Write-Host ("  manifest: n_train={0}" -f $manifestNTrain) -ForegroundColor DarkGray
+                if ($manifest.PSObject.Properties.Name -contains "n_train") {
+                    $manifestNTrain = [int]$manifest.n_train
+                }
             } catch {
                 Write-Host "  manifest: (invalid JSON)" -ForegroundColor DarkYellow
             }
+        }
+
+        if ($OvernightRunning -and $null -ne $manifestNTrain -and $manifestNTrain -lt $PRODUCTION_N_TRAIN_MIN -and $null -ne $variantNTrain) {
+            $effectiveNTrain = $variantNTrain
+        } elseif ($null -ne $manifestNTrain) {
+            $effectiveNTrain = $manifestNTrain
+        } elseif ($null -ne $variantNTrain) {
+            $effectiveNTrain = $variantNTrain
+        }
+
+        if ($OvernightRunning) {
+            $progressLine = "  progress: {0}/{1}" -f $variantCount, $CELL_SWEEP_EXPECTED_VARIANTS
+            if ($null -ne $effectiveNTrain) {
+                $progressLine += " effective_n_train=$effectiveNTrain"
+            }
+            Write-Host $progressLine -ForegroundColor DarkGray
+        } elseif ($variantCount -gt 0) {
+            $variantLine = "  variants: {0} (expect {1} for full sweep)" -f $variantCount, $CELL_SWEEP_EXPECTED_VARIANTS
+            if ($null -ne $effectiveNTrain) {
+                $variantLine += " effective_n_train=$effectiveNTrain"
+            }
+            Write-Host $variantLine -ForegroundColor DarkGray
+        } else {
+            Write-Host "  variants: 0 (no variant_*.json yet)" -ForegroundColor DarkGray
+        }
+
+        if ($latestVariant) {
+            Write-Host ("  latest: {0} mtime={1}" -f $latestVariant.Name, $latestVariant.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")) -ForegroundColor DarkGray
+        }
+
+        if ($null -ne $manifestNTrain) {
+            Write-Host ("  manifest: n_train={0}" -f $manifestNTrain) -ForegroundColor DarkGray
+        } elseif (Test-Path $manifestPath) {
+            Write-Host "  manifest: n_train=?" -ForegroundColor DarkGray
         }
 
         if ($sweepInfo.Source -match "legacy") {

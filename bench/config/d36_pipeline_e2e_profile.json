@@ -1,0 +1,31 @@
+{
+  "profile_id": "d36_pipeline_e2e_profile",
+  "description": "D36 production pipeline E2E validation — full maintainer overnight→publish toolchain scripts + d27–d35 bench profiles + production/overnight-complete gates",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 36,
+    "domain_tag": "d36"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d36_pipeline_e2e_smoke — production pipeline E2E gate (pending_pipeline_e2e or pipeline_e2e_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      { "tool": "baseline_lock_validate" }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 36",
+    "Or: cypha_bench_run --domain-tag d36",
+    "Verifies scripts/verify_production_pipeline.ps1, scripts/run_production_overnight.ps1, scripts/update_baseline_lock.ps1, scripts/poll_and_finalize_overnight.ps1, scripts/finalize_production_overnight.ps1, scripts/commit_production_lock.ps1, scripts/validate_production_complete.ps1, scripts/verify_release_publish.ps1, scripts/cleanup_repo_smoke_artifacts.ps1 exist",
+    "Verifies bench/config/d27–d35 *_profile.json files exist",
+    "When overnight_results.n_train < 300000: validation_status=pending_pipeline_e2e (smoke PASS)",
+    "When n_train >= 300000: validate_production_tier_lock + validate_overnight_complete_lock",
+    "When all production tiers pass: validation_status=pipeline_e2e_ready",
+    "Phase 22: production pipeline E2E validation gate"
+  ]
+}
