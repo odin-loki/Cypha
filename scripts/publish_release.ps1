@@ -1,18 +1,44 @@
 # Publish a GitHub Release for a tag using maintainer notes from create_release_notes.ps1.
-# Phase 10 (v2.3.10+): highlights from create_release_notes.ps1 — d24 production lock,
-# cypha_baseline_lock --run all, hybrid EWC bias/W_slow, ci_federated_tls_windows.ps1, 99 CTests.
+# Phase 12 (v2.3.12+): -DryRun / -NotesOnly preview notes without gh; optional corpus_and_d25 CI job.
+# Phase 11 (v2.3.11): WikiText download, gutenberg fallback, corpus_smoke, d25, 101 CTests.
+# Phase 10 (v2.3.10): d24 production lock, cypha_baseline_lock --run all, hybrid EWC bias/W_slow.
 # Usage:
 #   pwsh -File scripts/publish_release.ps1
-#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.10 -Draft
+#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.12 -Draft
+#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.12 -DryRun          # notes to stdout + temp file; no gh
+#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.12 -NotesOnly       # alias for -DryRun
 param(
-  [string]$Tag = "v2.3.10",
-  [switch]$Draft
+  [string]$Tag = "v2.3.12",
+  [switch]$Draft,
+  [Alias("NotesOnly")]
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 Push-Location $root
 try {
+  $notesScript = Join-Path $PSScriptRoot "create_release_notes.ps1"
+  if (-not (Test-Path $notesScript)) {
+    throw "missing $notesScript"
+  }
+
+  $notesFile = Join-Path $env:TEMP "cypha_release_notes_$($Tag -replace '[^a-zA-Z0-9._-]','_').md"
+  $notesRunner = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($notesRunner) {
+    & pwsh -NoProfile -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
+  } else {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
+  }
+
+  if ($DryRun) {
+    Write-Host "== release notes preview ($Tag) ==" -ForegroundColor Cyan
+    Get-Content -Path $notesFile -Raw | Write-Host
+    Write-Host "Notes written to: $notesFile" -ForegroundColor Green
+    Write-Host "Dry run - skipped gh release create." -ForegroundColor Yellow
+    exit 0
+  }
+
   $gh = Get-Command gh -ErrorAction SilentlyContinue
   if (-not $gh) {
     Write-Warning "GitHub CLI (gh) not found on PATH. Install from https://cli.github.com/ and run 'gh auth login'."
@@ -35,19 +61,6 @@ try {
   gh release list --limit 5
   if ($LASTEXITCODE -ne 0) {
     Write-Warning "gh release list failed (non-fatal); continuing with release create."
-  }
-
-  $notesScript = Join-Path $PSScriptRoot "create_release_notes.ps1"
-  if (-not (Test-Path $notesScript)) {
-    throw "missing $notesScript"
-  }
-
-  $notesFile = Join-Path $env:TEMP "cypha_release_notes_$($Tag -replace '[^a-zA-Z0-9._-]','_').md"
-  $notesRunner = Get-Command pwsh -ErrorAction SilentlyContinue
-  if ($notesRunner) {
-    & pwsh -NoProfile -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
-  } else {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $notesScript -Tag $Tag | Out-File -FilePath $notesFile -Encoding utf8
   }
 
   $ghArgs = @(

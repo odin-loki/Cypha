@@ -2,7 +2,8 @@
 #
 # Two blocking jobs: Linux native build+test, MinGW Windows PE cross-compile.
 # Optional third job: federated TLS smoke (OpenSSL; continue-on-error — does not gate merges).
-# CI gate: 101 CTests (`ctest -R native_`, Qt GUI exec excluded on headless Linux).
+# Optional fourth job: corpus_and_d25 (WikiText fetch + corpus smokes; continue-on-error).
+# CI gate: 103 CTests (`ctest -R native_`, Qt GUI exec excluded on headless Linux).
 # CUDA is optional for local builds only (see docs/native/ACCEL_CUDA.md).
 #
 # Parity fixtures live under fixtures/ (regenerate offline if core math changes).
@@ -70,3 +71,21 @@ jobs:
       - name: Federated TLS CTest (OpenSSL)
         run: bash scripts/ci_federated_tls_linux.sh
         # Local equivalent: bash scripts/ci_federated_tls_linux.sh
+
+  corpus_and_d25:
+    name: Corpus + d25 smoke (WikiText, optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev unzip
+      - name: Download WikiText-2 (best effort)
+        run: bash scripts/download_wikitext2.sh || true
+      - name: Native build + corpus CTests
+        run: |
+          cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/build -j 2
+          ctest --test-dir native/build --output-on-failure -R "native_corpus_smoke|native_d25_corpus_smoke"
+        # Local equivalent: bash scripts/download_wikitext2.sh; ctest -R "native_corpus_smoke|native_d25_corpus_smoke"

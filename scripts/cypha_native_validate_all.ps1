@@ -280,6 +280,18 @@ if (-not (Test-Path $restExe)) {
     Step-Result "rest_dif_smoke" $difOk $difDetail
 }
 
+# --- BASELINE_LOCK.json validation ---
+Write-Host ""
+Write-Host "== validate_baseline_lock.ps1 ==" -ForegroundColor Yellow
+$baselineLockScript = Join-Path $root "scripts\validate_baseline_lock.ps1"
+if (-not (Test-Path $baselineLockScript)) {
+    Step-Result "baseline_lock_validate" $true "skipped (script missing)"
+} else {
+    & $baselineLockScript
+    $lockCode = $LASTEXITCODE
+    Step-Result "baseline_lock_validate" ($lockCode -eq 0) $(if ($lockCode -eq 0) { "bench/BASELINE_LOCK.json ok" } else { "exit $lockCode" })
+}
+
 # --- Summary ---
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

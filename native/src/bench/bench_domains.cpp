@@ -3014,15 +3014,21 @@ void validate_overnight_lock_section(const Json& section, const char* section_na
 }
 
 Json run_baseline_lock_subprocess(const fs::path& exe_dir, const fs::path& lock_path,
-                                  const char* run_kind, int n_train, int n_eval) {
+                                  const char* run_kind, int n_train, int n_eval,
+                                  bool fast = true, bool medium = false) {
     const fs::path baseline_lock_exe = cypha::bench::resolve_runner_exe("cypha_baseline_lock", exe_dir);
     if (!fs::is_regular_file(baseline_lock_exe)) {
         throw std::runtime_error("missing cypha_baseline_lock: " + baseline_lock_exe.string());
     }
-    const std::vector<std::string> args = {
-        "--run", run_kind, "--fast", "--n-train", std::to_string(n_train), "--n-eval",
+    std::vector<std::string> args = {
+        "--run", run_kind, "--n-train", std::to_string(n_train), "--n-eval",
         std::to_string(n_eval), "--lock-file", fs::absolute(lock_path).string(), "--exe-dir",
         fs::absolute(exe_dir).string()};
+    if (fast) {
+        args.insert(args.begin() + 2, "--fast");
+    } else if (medium) {
+        args.insert(args.begin() + 2, "--medium");
+    }
     const cypha::bench::RunProcessResult proc = cypha::bench::run_executable_capture(baseline_lock_exe, args);
     if (proc.exit_code != 0) {
         throw std::runtime_error(std::string("cypha_baseline_lock --run ") + run_kind + " exit=" +
@@ -3215,6 +3221,53 @@ Json run_d24_production_lock_validation() {
     return experiments;
 }
 
+Json run_d26_medium_overnight_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path lock_path = fs::current_path() / "d26_medium_overnight_smoke.json";
+    if (!fs::exists(lock_path)) {
+        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                      fs::copy_options::overwrite_existing);
+    }
+
+    const int n_train = cypha::bench::bench_scale(5000, 5000);
+    const int n_eval = cypha::bench::bench_scale(256, 256);
+
+    const Json d17_report =
+        run_baseline_lock_subprocess(exe_dir, lock_path, "d17", n_train, n_eval, false, true);
+
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("overnight_results")) {
+        throw std::runtime_error("lock JSON missing overnight_results");
+    }
+    validate_overnight_lock_section(lock["overnight_results"], "overnight_results");
+    const std::string status = lock["overnight_results"]["status"].get<std::string>();
+    if (status != "medium_smoke") {
+        throw std::runtime_error("overnight_results status expected medium_smoke, got " + status);
+    }
+    const double bpc = lock["overnight_results"]["bpc"].get<double>();
+    if (!std::isfinite(bpc)) {
+        throw std::runtime_error("overnight_results bpc is not finite");
+    }
+
+    const Json experiments{
+        {"d17_baseline_lock", d17_report},
+        {"lock_file", lock_path.string()},
+        {"overnight_results", lock["overnight_results"]},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"bpc", bpc},
+        {"status", status},
+        {"backend", "cypha_baseline_lock"},
+    };
+    cypha::bench::finalize_domain("d26_medium_overnight_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d26_medium_overnight_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -3243,6 +3296,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d23", "cypha_bench.domains.d23_overnight_lock_validation", run_d23_overnight_lock_validation},
         {"d24", "cypha_bench.domains.d24_production_lock_validation", run_d24_production_lock_validation},
         {"d25", "cypha_bench.domains.d25_corpus_readiness", run_d25_corpus_readiness},
+        {"d26", "cypha_bench.domains.d26_medium_overnight_validation", run_d26_medium_overnight_validation},
     };
 }
 

@@ -289,6 +289,10 @@ add_executable(cypha_baseline_lock tools/cypha_baseline_lock.cpp)
 target_link_libraries(cypha_baseline_lock PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cypha_baseline_lock)
 
+add_executable(baseline_lock_validate tools/baseline_lock_smoke.cpp)
+target_include_directories(baseline_lock_validate PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+cypha_mingw_apply_exe_link_options(baseline_lock_validate)
+
 set(
   _cypha_mingw_exe_targets
   ${CYPHA_PARITY_EXE_TARGETS}
@@ -325,6 +329,7 @@ set(
   cyphalm_ssm_diagnose
   cypha_cell_hypothesis_sweep
   cypha_baseline_lock
+  baseline_lock_validate
 )
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
   cypha_mingw_apply_exe_link_options("${_cypha_t}")
@@ -947,6 +952,12 @@ set_tests_properties(native_baseline_lock_smoke PROPERTIES
 )
 
 add_test(
+  NAME native_baseline_lock_validate_smoke
+  COMMAND "$<TARGET_FILE:baseline_lock_validate>"
+    --lock-file "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+)
+
+add_test(
   NAME native_federated_merge_smoke
   COMMAND "$<TARGET_FILE:cypha_federated_merge>"
     --merge
@@ -1035,6 +1046,21 @@ add_test(
 set_tests_properties(native_d24_production_lock_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
   TIMEOUT 180
+)
+
+configure_file(
+  "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
+  "${CMAKE_CURRENT_BINARY_DIR}/d26_medium_overnight_smoke.json"
+  COPYONLY
+)
+
+add_test(
+  NAME native_d26_medium_overnight_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d26
+)
+set_tests_properties(native_d26_medium_overnight_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1"
+  TIMEOUT 300
 )
 
 add_test(

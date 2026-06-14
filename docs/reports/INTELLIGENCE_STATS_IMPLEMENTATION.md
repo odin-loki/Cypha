@@ -159,10 +159,27 @@
 
 **CI gate (Phase 11 shipped):** **101 CTests** (`ctest -R native_`); +1 smoke: **`native_d25_corpus_smoke`**; also **`native_corpus_smoke`** (direct `load_bench_corpus` probe).
 
+## Phase 12 — shipped (v2.3.12, 2026-06-14)
+
+| Component | Path | CTest / bench |
+|-----------|------|---------------|
+| Medium overnight tier | `-Medium` on `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, `run_overnight_all.ps1`, `update_baseline_lock.ps1` — 5k train / 256 eval, real corpus | manual |
+| `cypha_baseline_lock --medium` | `tools/cypha_baseline_lock.cpp` — `status=medium_smoke` in lock JSON | `native_baseline_lock_smoke` |
+| Bench domain **d26** medium overnight validation | `bench_domains.cpp` → `run_d26_medium_overnight_validation` | `cypha_bench_run --domain-tag d26` |
+| D26 profile config | `bench/config/d26_medium_overnight_profile.json` | manual |
+| D26 validation report | `bench/report/tables/d26_medium_overnight_validation.json` | d26 run |
+| Baseline lock PS validator | `scripts/validate_baseline_lock.ps1` (`-LockFile`, `-Strict`) | manual |
+| Baseline lock C++ validator | `tools/baseline_lock_smoke.cpp` → `baseline_lock_validate` | `native_baseline_lock_validate_smoke` |
+| Release notes preview | `scripts/publish_release.ps1 -DryRun` / `-NotesOnly` | manual |
+| Optional CI corpus job | `.github/workflows/ci.yml` → `corpus_and_d25` | optional (`continue-on-error`) |
+| Release notes v2.3.12 template | `scripts/create_release_notes.ps1` | manual |
+
+**CI gate (Phase 12 shipped):** **103 CTests** (`ctest -R native_`); +2 smokes: **`native_d26_medium_overnight_smoke`**, **`native_baseline_lock_validate_smoke`**.
+
 ## Still planned
 
-- **D17 300k + 28-variant overnight** — use **`scripts/run_overnight_all.ps1`**; fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1 -Run all`**
-- **GitHub Release** publish via `gh auth login` + `scripts/publish_release.ps1`
+- **D17 300k + 28-variant overnight** — use **`scripts/run_overnight_all.ps1`** (or **`-Medium`** for 5k real-corpus smoke); fill `bench/BASELINE_LOCK.json` → `overnight_results` via **`scripts/update_baseline_lock.ps1 -Run all`**
+- **GitHub Release publish** — preview with **`scripts/publish_release.ps1 -DryRun`**; actual **`gh release create`** still requires **`gh auth login`**
 - **RPSM @ 300k production benchmark** — d21 wired; full overnight not executed in CI
 
 ## Commands
@@ -187,7 +204,13 @@ corpus_smoke                                            # Phase 11: d17+d21 load
 cypha_bench_run --domain-tag d25                        # Phase 11: corpus readiness validation
 ctest --test-dir native/build -R "native_d23|native_ewc_weights" --output-on-failure
 ctest --test-dir native/build -R "native_d24|native_ewc_weights" --output-on-failure  # Phase 10
-ctest --test-dir native/build -R "native_d25|native_corpus" --output-on-failure     # Phase 11
+pwsh -File scripts/run_overnight_all.ps1 -Medium          # Phase 12: 5k train, real WikiText/gutenberg
+cypha_bench_run --domain-tag d26                        # Phase 12: medium overnight lock validation (shipped)
+pwsh -File scripts/validate_baseline_lock.ps1             # Phase 12: schema + d17 pin check
+pwsh -File scripts/validate_baseline_lock.ps1 -Strict     # Phase 12: reject fast_smoke-only overnight
+baseline_lock_validate --lock-file bench/BASELINE_LOCK.json  # Phase 12: C++ validator CLI
+pwsh -File scripts/publish_release.ps1 -Tag v2.3.12 -DryRun  # Phase 12: notes preview, no gh
+ctest --test-dir native/build -R "native_d26|native_baseline_lock_validate" --output-on-failure  # Phase 12
 bash scripts/ci_federated_tls_linux.sh   # optional TLS smoke (skip without OpenSSL)
 curl http://127.0.0.1:8099/intelligence/report
 ```

@@ -9,6 +9,7 @@
 #   pwsh -File scripts/update_baseline_lock.ps1 -Run cell-sweep -Fast -NTrain 200
 
 #   pwsh -File scripts/update_baseline_lock.ps1 -Run all -Fast
+#   pwsh -File scripts/update_baseline_lock.ps1 -Run d17 -Medium
 
 param(
 
@@ -27,6 +28,8 @@ param(
     [int]$Threads = 1,
 
     [switch]$Fast,
+
+    [switch]$Medium,
 
     [string]$BuildDir = "native/build",
 
@@ -64,6 +67,10 @@ $lockPath = if ([System.IO.Path]::IsPathRooted($LockFile)) { $LockFile } else { 
 
 $buildAbs = Join-Path $root $BuildDir
 
+if ($Fast -and $Medium) {
+    throw "cannot use -Fast and -Medium together"
+}
+
 if ($Fast -and -not $env:CYPHA_BENCH_FAST) {
     $env:CYPHA_BENCH_FAST = "1"
 }
@@ -94,11 +101,25 @@ function Invoke-BaselineLockRun {
 
     }
 
+    if ($Medium) {
+
+        $args += "--medium"
+
+    }
+
     if ($NTrain -gt 0) {
 
         $args += @("--n-train", "$NTrain")
 
-    } elseif (-not $Fast) {
+    } elseif ($Fast) {
+
+        # cypha_baseline_lock --fast default n_train=200
+
+    } elseif ($Medium) {
+
+        $args += @("--n-train", "5000")
+
+    } else {
 
         $args += @("--n-train", "300000")
 
@@ -108,7 +129,15 @@ function Invoke-BaselineLockRun {
 
         $args += @("--n-eval", "$NEval")
 
-    } elseif (-not $Fast) {
+    } elseif ($Fast) {
+
+        # cypha_baseline_lock --fast default n_eval=64
+
+    } elseif ($Medium) {
+
+        $args += @("--n-eval", "256")
+
+    } else {
 
         $args += @("--n-eval", "2000")
 
@@ -124,7 +153,8 @@ function Invoke-BaselineLockRun {
 
 
 
-    Write-Host "== baseline lock update (run=$RunName n_train=$(if ($NTrain -gt 0) { $NTrain } elseif ($Fast) { '200 (fast default)' } else { '300000' }) fast=$Fast) ==" -ForegroundColor Cyan
+    $tierLabel = if ($Fast) { '200 (fast default)' } elseif ($Medium) { '5000 (medium default)' } else { '300000' }
+    Write-Host "== baseline lock update (run=$RunName n_train=$(if ($NTrain -gt 0) { $NTrain } else { $tierLabel }) fast=$Fast medium=$Medium) ==" -ForegroundColor Cyan
 
     & $exe @args
 

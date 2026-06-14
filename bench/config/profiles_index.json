@@ -90,5 +90,13 @@
     "domain": "d25",
     "corpus": "wikitext2|gutenberg_fallback",
     "notes": "Corpus readiness validation; see bench/config/d25_corpus_readiness_profile.json"
+  },
+  "medium_overnight_d26": {
+    "path": "everyday_profile.json",
+    "config": "d26_medium_overnight_profile.json",
+    "env": "CYPHA_BENCH_FULL_CORPUS=1",
+    "domain": "d26",
+    "corpus": "wikitext2|gutenberg_fallback",
+    "notes": "Medium overnight tier validation; see bench/config/d26_medium_overnight_profile.json"
   }
 }

@@ -21,6 +21,9 @@
 # cypha_baseline_lock --run all; scripts/ci_federated_tls_windows.ps1; 99 CTests.
 # Phase 11 (v2.3.11, shipped): WikiText download scripts; gutenberg fallback for d17/d21;
 # corpus_smoke + d25 corpus readiness; overnight -Fast fix; 101 CTests.
+# Phase 12 (v2.3.12, shipped): medium overnight -Medium tier; d26 lock validation;
+# validate_baseline_lock.ps1 + baseline_lock_validate; publish_release -DryRun;
+# optional corpus_and_d25 CI job; 103 CTests.
 
 name: Release
 
@@ -305,3 +308,12 @@ jobs:
             - **Corpus readiness:** `corpus_smoke` (direct d17/d21 load probe); `cypha_bench_run --domain-tag d25` — profile [`bench/config/d25_corpus_readiness_profile.json`](bench/config/d25_corpus_readiness_profile.json); report [`bench/report/tables/d25_corpus_readiness.json`](bench/report/tables/d25_corpus_readiness.json).
             - **Overnight without WikiText:** add `-Fast` to `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, or `run_overnight_all.ps1` — sets **`CYPHA_BENCH_FAST=1`** for synthetic corpus fallback.
             - **CI gate:** **101 CTests** (`ctest -R native_`); new smokes **`native_d25_corpus_smoke`**, **`native_corpus_smoke`**.
+
+            ### Phase 12 maintainer notes (v2.3.12, shipped)
+
+            - **Medium overnight tier:** add `-Medium` to `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, or `run_overnight_all.ps1` — 5k train / 256 eval with real WikiText or gutenberg (no `CYPHA_BENCH_FAST`). `cypha_baseline_lock --medium` writes `status=medium_smoke`.
+            - **Medium lock validation:** `cypha_bench_run --domain-tag d26` — profile [`bench/config/d26_medium_overnight_profile.json`](bench/config/d26_medium_overnight_profile.json); report [`bench/report/tables/d26_medium_overnight_validation.json`](bench/report/tables/d26_medium_overnight_validation.json).
+            - **Baseline lock validator:** `pwsh -File scripts/validate_baseline_lock.ps1` (add `-Strict` to reject `fast_smoke`-only overnight); C++ CLI `baseline_lock_validate --lock-file bench/BASELINE_LOCK.json`.
+            - **Release preview:** `pwsh -File scripts/publish_release.ps1 -Tag v2.3.12 -DryRun` (or `-NotesOnly`) — notes to stdout without `gh`.
+            - **Optional CI:** `corpus_and_d25` job — WikiText fetch + `native_corpus_smoke` / `native_d25_corpus_smoke` (`continue-on-error`).
+            - **CI gate:** **103 CTests** (`ctest -R native_`); new smokes **`native_d26_medium_overnight_smoke`**, **`native_baseline_lock_validate_smoke`**.

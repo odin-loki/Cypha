@@ -1,0 +1,32 @@
+{
+  "profile_id": "d26_medium_overnight_profile",
+  "description": "D26 medium overnight validation — cypha_baseline_lock d17 @ 5k train with real corpus",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FULL_CORPUS": "1"
+  },
+  "defaults": {
+    "domain": 26,
+    "domain_tag": "d26"
+  },
+  "medium_smoke": {
+    "description": "CTest native_d26_medium_overnight_smoke — medium-tier overnight lock wiring (5k train, real WikiText/gutenberg)",
+    "n_train": 5000,
+    "n_eval": 256,
+    "env": {
+      "CYPHA_BENCH_FULL_CORPUS": "1"
+    },
+    "runs": [
+      { "tool": "cypha_baseline_lock", "run": "d17", "medium": true }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 26",
+    "Or: cypha_bench_run --domain-tag d26",
+    "Runs cypha_baseline_lock --run d17 --medium against a lock JSON copy",
+    "Validates overnight_results has status=medium_smoke and finite BPC",
+    "Medium tier sits between Fast (200 train, synthetic) and production (300k)",
+    "Overnight scripts: -Medium on run_d17_overnight.ps1, run_rpsm_overnight.ps1, run_overnight_all.ps1",
+    "Phase 12: medium overnight tier validation gate"
+  ]
+}

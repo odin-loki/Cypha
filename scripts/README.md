@@ -35,12 +35,13 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `package_release_linux.sh` | Bundle Linux release tarball |
 | `package_release_windows.sh` | Bundle Windows release zip |
 | `native/scripts/package_windows_qt.ps1` | Windows Qt deployment helper |
+| `publish_release.ps1` | Local `gh release create` (`-DryRun` / `-NotesOnly` preview without gh) |
 
 ## Bench / tune / diagnostics
 
 | Script / binary | Purpose | Output |
 |-----------------|---------|--------|
-| **`cypha_bench_run`** (native) | Multi-domain benchmark (d01–d17 + d25 corpus readiness + cross-domain) | stdout / JSON |
+| **`cypha_bench_run`** (native) | Multi-domain benchmark (d01–d17 + d25 corpus readiness + d26 medium overnight + cross-domain) | stdout / JSON |
 | **`cypha_bench_report`** (native) | Regenerate bench report figures from JSON artifacts | disk |
 | **`cypha_tune_run`** (native) | Sweep JSON → per-cell native bench | disk |
 | **`cypha_diagnostics_run`** (native) | Phases 1–4 validation orchestrator (parity exes + inline checks) | stdout |
@@ -50,10 +51,12 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `cyphalm_native_sweep.ps1` / `cyphalm_native_sweep_safe.ps1` | CyphaLM config sweeps | disk |
 | `download_wikitext2.ps1` | Download WikiText-2 raw into `bench/data/wikitext2/wikitext-2/` (PowerShell 5+) | disk |
 | `download_wikitext2.sh` | Bash equivalent for Linux/CI | disk |
-| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`) | disk |
-| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`) | disk |
-| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast` to child scripts) | `bench/BASELINE_LOCK.json` |
-| `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`) | lock JSON |
+| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`, `-Medium`) | disk |
+| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`, `-Medium`) | disk |
+| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast` or `-Medium` to child scripts) | `bench/BASELINE_LOCK.json` |
+| `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`) | lock JSON |
+| `validate_baseline_lock.ps1` | Validate `bench/BASELINE_LOCK.json` schema + d17 pin (`-LockFile`, `-Strict`) | console |
+| `publish_release.ps1` | Local `gh release create` wrapper (`-DryRun` / `-NotesOnly` preview without gh) | console |
 | `wsl_bench_gpu.sh` | WSL GPU bench helper | console |
 
 ## Corpus smoke (Phase 11)
@@ -62,6 +65,18 @@ ctest --test-dir native/build -R native_ --output-on-failure
 |--------|---------|-------|
 | **`corpus_smoke`** (native) | Probe `load_bench_corpus("d17"|"d21", …)` — WikiText-2 or gutenberg fallback | `native_corpus_smoke` |
 | **`cypha_bench_run --domain-tag d25`** | Corpus readiness validation; writes `bench/report/tables/d25_corpus_readiness.json` | `native_d25_corpus_smoke` |
+
+## Medium overnight + baseline lock validator (Phase 12)
+
+| Script / binary | Purpose | CTest |
+|-----------------|---------|-------|
+| **`-Medium`** on overnight scripts | 5k train / 256 eval, real WikiText or gutenberg (no `CYPHA_BENCH_FAST`) | manual |
+| **`cypha_bench_run --domain-tag d26`** | Medium overnight lock validation; profile `bench/config/d26_medium_overnight_profile.json` | `native_d26_medium_overnight_smoke` |
+| **`validate_baseline_lock.ps1`** | PS validator for `bench/BASELINE_LOCK.json` (`-Strict` rejects `fast_smoke`-only overnight) | manual |
+| **`baseline_lock_validate`** (native) | C++ schema + d17 pin validator | `native_baseline_lock_validate_smoke` |
+| **`publish_release.ps1 -DryRun`** | Preview release notes without calling `gh` | manual |
+
+Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/download_wikitext2.sh` + `ctest -R "native_corpus_smoke|native_d25_corpus_smoke"`.
 
 ## Kernel LLR / XOR profiling
 

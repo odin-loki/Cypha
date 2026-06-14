@@ -39,6 +39,7 @@ struct Args {
     int n_eval = 2000;
     int threads = 1;
     bool fast = false;
+    bool medium = false;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
     fs::path lock_file;
@@ -49,7 +50,7 @@ struct Args {
 void usage() {
     std::cerr
         << "usage: cypha_baseline_lock --run {d17,d21,cell-sweep,all}\n"
-        << "       [--n-train N] [--n-eval M] [--threads T] [--fast]\n"
+        << "       [--n-train N] [--n-eval M] [--threads T] [--fast] [--medium]\n"
         << "       [--lock-file PATH] [--exe-dir DIR] [--output-dir DIR]\n";
 }
 
@@ -86,6 +87,8 @@ Args parse_args(int argc, char** argv) {
             a.threads = std::stoi(need("--threads"));
         } else if (k == "--fast") {
             a.fast = true;
+        } else if (k == "--medium") {
+            a.medium = true;
         } else if (k == "--lock-file") {
             a.lock_file = need("--lock-file");
         } else if (k == "--exe-dir") {
@@ -102,11 +105,23 @@ Args parse_args(int argc, char** argv) {
     if (!run_set) {
         throw std::runtime_error("missing required --run");
     }
+    if (a.fast && a.medium) {
+        throw std::runtime_error("cannot use --fast and --medium together");
+    }
     if (a.fast) {
         if (!a.n_train_explicit) a.n_train = 200;
         if (!a.n_eval_explicit) a.n_eval = 64;
+    } else if (a.medium) {
+        if (!a.n_train_explicit) a.n_train = 5000;
+        if (!a.n_eval_explicit) a.n_eval = 256;
     }
     return a;
+}
+
+std::string run_status_label(const Args& args) {
+    if (args.fast) return "fast_smoke";
+    if (args.medium) return "medium_smoke";
+    return "completed";
 }
 
 void set_env_var(const char* key, const char* value) {
@@ -390,7 +405,7 @@ ProcessResult run_cell_sweep(const fs::path& exe_dir, const Args& args) {
 
 void merge_overnight_results(Json& lock, const Args& args, double bpc, const Json& bench_json) {
     Json& section = lock["overnight_results"];
-    section["status"] = args.fast ? "fast_smoke" : "completed";
+    section["status"] = run_status_label(args);
     section["n_train"] = args.n_train;
     section["n_eval"] = args.n_eval;
     section["bpc"] = bpc;
@@ -416,7 +431,7 @@ void merge_cell_sweep_results(Json& lock, const Args& args, double bpc,
         lock["cell_sweep_results"] = Json::object();
     }
     Json& section = lock["cell_sweep_results"];
-    section["status"] = args.fast ? "fast_smoke" : "completed";
+    section["status"] = run_status_label(args);
     section["profile"] = "d17";
     section["mode"] = "cell-sweep";
     section["n_train"] = args.n_train;
@@ -440,7 +455,7 @@ void merge_rpsm_results(Json& lock, const Args& args, double bpc, const Json& be
         lock["rpsm_results"] = Json::object();
     }
     Json& section = lock["rpsm_results"];
-    section["status"] = args.fast ? "fast_smoke" : "completed";
+    section["status"] = run_status_label(args);
     section["profile"] = "d21";
     section["mode"] = "rpsm";
     section["n_train"] = args.n_train;
@@ -511,7 +526,8 @@ RunOutcome execute_run_kind(const Args& args, RunKind kind, const fs::path& exe_
                         {"n_train", step.n_train},
                         {"n_eval", step.n_eval},
                         {"fast", step.fast},
-                        {"status", step.fast ? "fast_smoke" : "completed"}};
+                        {"medium", step.medium},
+                        {"status", run_status_label(step)}};
 
     if (kind == RunKind::CellSweep) {
         outcome.cell_summary = extract_cell_sweep_summary(outcome.bench_json);
@@ -569,7 +585,8 @@ int main(int argc, char** argv) {
                        {"n_train", args.n_train},
                        {"n_eval", args.n_eval},
                        {"fast", args.fast},
-                       {"status", args.fast ? "fast_smoke" : "completed"},
+                       {"medium", args.medium},
+                       {"status", run_status_label(args)},
                        {"runs", reports}};
         if (reports.size() == 1 && reports[0].contains("bpc")) {
             report["bpc"] = reports[0]["bpc"];

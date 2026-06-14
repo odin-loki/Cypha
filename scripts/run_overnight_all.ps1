@@ -3,30 +3,39 @@
 # Usage:
 #   powershell -File scripts/run_overnight_all.ps1
 #   powershell -File scripts/run_overnight_all.ps1 -Fast -SkipCellSweep -NTrain 500
+#   powershell -File scripts/run_overnight_all.ps1 -Medium  # 5k train, real WikiText/gutenberg
 param(
     [string]$BuildDir = "native/build",
     [int]$NTrain = 300000,
     [int]$NEval = 2000,
     [int]$Threads = 1,
     [switch]$SkipCellSweep,
-    [switch]$Fast
+    [switch]$Fast,
+    [switch]$Medium
 )
 
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path $PSScriptRoot -Parent
+if ($Fast -and $Medium) {
+    throw "cannot use -Fast and -Medium together"
+}
+
 $effectiveNTrain = $NTrain
 $effectiveNEval = $NEval
 if ($Fast) {
     if ($NTrain -eq 300000) { $effectiveNTrain = 200 }
     if ($NEval -eq 2000) { $effectiveNEval = 64 }
+} elseif ($Medium) {
+    if ($NTrain -eq 300000) { $effectiveNTrain = 5000 }
+    if ($NEval -eq 2000) { $effectiveNEval = 256 }
 }
 
 $d17Script = Join-Path $PSScriptRoot "run_d17_overnight.ps1"
 $rpsmScript = Join-Path $PSScriptRoot "run_rpsm_overnight.ps1"
 $lockScript = Join-Path $PSScriptRoot "update_baseline_lock.ps1"
 
-Write-Host "== Phase 9 overnight automation (fast=$Fast n_train=$effectiveNTrain n_eval=$effectiveNEval) ==" -ForegroundColor Cyan
+Write-Host "== Phase 9 overnight automation (fast=$Fast medium=$Medium n_train=$effectiveNTrain n_eval=$effectiveNEval) ==" -ForegroundColor Cyan
 
 $overnightArgs = @{
     BuildDir = $BuildDir
@@ -36,6 +45,9 @@ $overnightArgs = @{
 }
 if ($Fast) {
     $overnightArgs.Fast = $true
+}
+if ($Medium) {
+    $overnightArgs.Medium = $true
 }
 
 Write-Host "== D17 hybrid overnight ==" -ForegroundColor Cyan
@@ -66,6 +78,9 @@ $lockArgs = @{
 }
 if ($Fast) {
     $lockArgs.Fast = $true
+}
+if ($Medium) {
+    $lockArgs.Medium = $true
 }
 
 Write-Host "== baseline lock: d17 ==" -ForegroundColor Cyan

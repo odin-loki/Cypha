@@ -9,16 +9,29 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.12" = @(
+    "Intelligence Stats **Phase 12**: **medium overnight** profile - between mini smoke and full 300k (``CYPHA_BENCH_MEDIUM_OVERNIGHT=1``; profile ``bench/config/d26_medium_overnight_profile.json``).",
+    "Bench domain **d26** medium overnight lock validation - ``cypha_bench_run --domain-tag d26``; CTest ``native_d26_medium_overnight_smoke``.",
+    "``cypha_baseline_lock --validate`` baseline lock validator - schema + BPC drift check against ``bench/BASELINE_LOCK.json``; CTest ``native_baseline_lock_validator_smoke``.",
+    "CI optional ``corpus_and_d25`` job (WikiText fetch + ``native_corpus_smoke`` / ``native_d25_corpus_smoke``); ``publish_release.ps1 -DryRun`` / ``-NotesOnly`` preview.",
+    "CI gate **103 CTests**; release notes v2.3.12 Phase 12 template."
+  )
+  "2.3.11" = @(
+    "Intelligence Stats **Phase 11**: WikiText-2 download (``scripts/download_wikitext2.ps1``, ``scripts/download_wikitext2.sh``); gutenberg fallback for d17/d21 when WikiText absent.",
+    "``corpus_smoke`` CLI + bench **d25** corpus readiness validation; CTest ``native_d25_corpus_smoke``, ``native_corpus_smoke``.",
+    "Overnight ``-Fast`` propagates ``CYPHA_BENCH_FAST=1`` through ``run_d17_overnight.ps1``, ``run_rpsm_overnight.ps1``, ``run_overnight_all.ps1``, ``update_baseline_lock.ps1``.",
+    "CI gate **101 CTests**; release notes v2.3.11 Phase 11 template."
+  )
   "2.3.10" = @(
     "Intelligence Stats **Phase 10**: hybrid EWC **GRIA bias** + SSM **W_slow** layer-0 Fisher (extends Phase 9 U/V + W_fast + α).",
-    "Bench domain **d24** production lock validation — ``cypha_bench_run --domain-tag d24``; profile ``bench/config/d24_production_lock_profile.json``.",
+    "Bench domain **d24** production lock validation - ``cypha_bench_run --domain-tag d24``; profile ``bench/config/d24_production_lock_profile.json``.",
     "``cypha_baseline_lock --run all`` (d17 + d21 + cell-sweep); CTest ``native_d24_production_lock_smoke``.",
     "Windows federated TLS mirror: ``scripts/ci_federated_tls_windows.ps1`` (vcpkg / ``OPENSSL_ROOT_DIR``).",
     "CI gate **99 CTests**; release notes v2.3.10 Phase 10 template."
   )
   "2.3.9" = @(
     "Intelligence Stats **Phase 9**: hybrid EWC **weight** Fisher on GRIA **U**/**V** + SSM **W_fast**; EWC anchor/Fisher in CyphaLM ``checkpoint.json``.",
-    "``scripts/run_overnight_all.ps1`` — unified overnight runner (D17 + d21 RPSM + cell sweep + baseline-lock refresh).",
+    "``scripts/run_overnight_all.ps1`` - unified overnight runner (D17 + d21 RPSM + cell sweep + baseline-lock refresh).",
     "Bench **d23** overnight lock validation; CTest ``native_d23_overnight_lock_smoke``.",
     "CI gate **98 CTests**; optional federated TLS job (``scripts/ci_federated_tls_linux.sh``)."
   )
