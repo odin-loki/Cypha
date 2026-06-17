@@ -1,20 +1,20 @@
 {
   "cell_sweep_results": {
-    "artifact_path": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\results",
-    "b2_bpc": 4.000709943353105,
-    "bpc": 4.000709943353105,
+    "artifact_path": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\bench\\results\\cell_sweep",
+    "b2_bpc": 2.864125041163193,
+    "bpc": 2.864125041163193,
     "env": {
       "CYPHA_BENCH_FULL_CORPUS": "1",
-      "CYPHA_BENCH_FULL_N_TRAIN": "5000",
+      "CYPHA_BENCH_FULL_N_TRAIN": "300000",
       "CYPHA_BENCH_OVERNIGHT": "1"
     },
     "mode": "cell-sweep",
-    "n_eval": 256,
-    "n_train": 5000,
+    "n_eval": 2000,
+    "n_train": 300000,
     "profile": "d17",
-    "run_at": "2026-06-14T09:32:28Z",
+    "run_at": "2026-06-17T20:59:40Z",
     "runner": "cypha_cell_hypothesis_sweep --overnight-sweep",
-    "status": "completed",
+    "status": "production",
     "variant_count": 25
   },
   "ctest_smoke": {
@@ -52,41 +52,41 @@
   "locked_at": "2026-06-14",
   "overnight_results": {
     "artifact_path": null,
-    "bpc": 4.000709943353105,
+    "bpc": 2.864125041163193,
     "context_mode": "hybrid_gria_lstm",
     "corpus": "wikitext2_official_split",
     "description": "Fill after a real CYPHA_BENCH_OVERNIGHT=1 run (scripts/run_d17_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d17)",
     "env": {
       "CYPHA_BENCH_FULL_CORPUS": "1",
-      "CYPHA_BENCH_FULL_N_TRAIN": "5000",
+      "CYPHA_BENCH_FULL_N_TRAIN": "300000",
       "CYPHA_BENCH_OVERNIGHT": "1"
     },
     "mode": "hybrid",
-    "n_eval": 256,
-    "n_train": 5000,
+    "n_eval": 2000,
+    "n_train": 300000,
     "profile": "d17",
-    "run_at": "2026-06-14T09:23:26Z",
+    "run_at": "2026-06-17T09:46:05Z",
     "runner": "cyphalm_bench_native --overnight",
-    "status": "completed",
+    "status": "production",
     "synthetic": false
   },
   "rpsm_results": {
     "artifact_path": null,
-    "bpc": 7.402042848873972,
+    "bpc": 7.3360806755698835,
     "corpus": "wikitext2_official_split",
     "description": "Fill after D21 RPSM overnight (scripts/run_rpsm_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d21)",
     "env": {
       "CYPHA_BENCH_FULL_CORPUS": "1",
-      "CYPHA_BENCH_FULL_N_TRAIN": "5000",
+      "CYPHA_BENCH_FULL_N_TRAIN": "300000",
       "CYPHA_BENCH_OVERNIGHT": "1"
     },
     "mode": "rpsm",
-    "n_eval": 256,
-    "n_train": 5000,
+    "n_eval": 2000,
+    "n_train": 300000,
     "profile": "d21",
-    "run_at": "2026-06-14T09:23:30Z",
+    "run_at": "2026-06-17T09:49:04Z",
     "runner": "cyphalm_bench_native --overnight --mode rpsm",
-    "status": "completed",
+    "status": "production",
     "synthetic": false
   },
   "schema_version": 1
