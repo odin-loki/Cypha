@@ -9,9 +9,12 @@
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
+#include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
+#include "cypha/cyphalm/cyphalm_math_integration.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_completeness.hpp"
 #include "cypha/intelligence/profile_guided_loss.hpp"
 
 namespace fs = std::filesystem;
@@ -28,6 +31,8 @@ struct Args {
     int max_train_steps = 0;
     int threads = 0;
     bool profile_guided_loss = false;
+    bool intelligence_monitor = false;
+    bool math_integration = false;
 };
 
 void usage() {
@@ -35,7 +40,7 @@ void usage() {
         << "usage: cyphalm_train --profile {d17,d04} --epochs N --out checkpoint_dir/\n"
         << "       (--corpus bench/data/... | --synthetic-tokens N)\n"
         << "       [--max-chars M] [--max-train-steps S] [--threads T]\n"
-        << "       [--profile-guided-loss]\n";
+        << "       [--profile-guided-loss] [--intelligence-monitor] [--math-integration]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -55,6 +60,8 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--max-train-steps") a.max_train_steps = std::stoi(need("--max-train-steps"));
         else if (k == "--threads") a.threads = std::stoi(need("--threads"));
         else if (k == "--profile-guided-loss") a.profile_guided_loss = true;
+        else if (k == "--intelligence-monitor") a.intelligence_monitor = true;
+        else if (k == "--math-integration") a.math_integration = true;
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -93,6 +100,13 @@ int main(int argc, char** argv) {
 
         cypha::cyphalm::CyphaLMConfig cfg;
         cypha::cyphalm::apply_bench_profile(args.profile, cfg);
+        bool profile_guided_loss = args.profile_guided_loss;
+        bool intelligence_monitor = args.intelligence_monitor;
+        if (args.math_integration) {
+            cypha::cyphalm::apply_math_integration_preset(cfg);
+            profile_guided_loss = true;
+            intelligence_monitor = true;
+        }
         if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
         if (args.profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
         cfg.train_epochs = args.epochs;
@@ -125,10 +139,15 @@ int main(int argc, char** argv) {
             args.max_train_steps > 0 ? std::min(args.max_train_steps, n_train) : n_train;
 
         cypha::cyphalm::CyphaLMModel model(cfg);
-        model.train_sequence(corpus.train_ids, train_steps, args.epochs);
-        cypha::intelligence::IntelligenceProfiler profiler;
+        cypha::intelligence::IntelligenceProfiler train_profiler;
+        cypha::intelligence::IntelligenceProfiler* train_profiler_ptr =
+            (intelligence_monitor || profile_guided_loss) ? &train_profiler : nullptr;
+        model.train_sequence(corpus.train_ids, train_steps, args.epochs, train_profiler_ptr);
+        cypha::intelligence::IntelligenceProfiler eval_profiler;
+        cypha::intelligence::IntelligenceProfiler* eval_profiler_ptr =
+            (profile_guided_loss || intelligence_monitor) ? &eval_profiler : train_profiler_ptr;
         const double bpc = model.eval_bpc(corpus.eval_ids, static_cast<int>(corpus.eval_ids.size()) - 1,
-                                          args.profile_guided_loss ? &profiler : nullptr);
+                                          eval_profiler_ptr);
 
         const fs::path out_dir =
             (fs::path(args.out_dir).extension() == ".json") ? fs::path(args.out_dir).parent_path()
@@ -155,15 +174,32 @@ int main(int argc, char** argv) {
             {"threads", cypha::cyphalm::effective_thread_count()},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;
-        if (args.profile_guided_loss) {
+        if (profile_guided_loss) {
             const auto pg_loss =
-                cypha::intelligence::compute_profile_guided_loss_from_profiler(profiler);
+                cypha::intelligence::compute_profile_guided_loss_from_profiler(eval_profiler);
             out["profile_guided_loss"] = {
                 {"r_eu_penalty", pg_loss.r_eu_penalty},
                 {"tau_penalty", pg_loss.tau_penalty},
                 {"total", pg_loss.total},
                 {"integration", "post_train_eval_bpc_profiler"},
             };
+        }
+        if (intelligence_monitor) {
+            const auto completeness =
+                cypha::intelligence::validate_profile_completeness(train_profiler);
+            out["intelligence_monitor"] =
+                cypha::cyphalm::export_intelligence_monitor_report(train_profiler);
+            out["profile_completeness"] = cypha::intelligence::profile_completeness_to_json(completeness);
+            std::cerr << "intelligence monitor completeness: "
+                      << (completeness.all_complete ? "complete" : "incomplete");
+            if (!completeness.missing_stats.empty()) {
+                std::cerr << " (missing:";
+                for (const auto& name : completeness.missing_stats) {
+                    std::cerr << ' ' << name;
+                }
+                std::cerr << ')';
+            }
+            std::cerr << '\n';
         }
         std::cout << out.dump(2) << std::endl;
         return 0;

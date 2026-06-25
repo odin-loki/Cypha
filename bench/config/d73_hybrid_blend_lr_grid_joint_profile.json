@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d73_hybrid_blend_lr_grid_joint_profile",
+
+  "description": "D73 Phase 58 navigation hybrid_blend_lr grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 73,
+
+    "domain_tag": "d73"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d73",
+
+    "Ablation grid: hybrid_blend_lr {0.005, 0.01, 0.02}",
+
+    "Preset ship cell: hybrid_blend_lr=0.01"
+
+  ]
+
+}

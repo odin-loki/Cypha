@@ -1,5 +1,7 @@
 // cypha_cell_hypothesis_sweep — smoke runner for cell hypothesis variants (Tier 1+2).
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -16,8 +18,11 @@
 #include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
+#include "cypha/cyphalm/cyphalm_math_integration.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
+#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_completeness.hpp"
 
 namespace {
 
@@ -36,6 +41,9 @@ struct Args {
     bool list_variants = false;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
+    bool intelligence_profile = false;
+    bool math_integration = false;
+    std::int64_t bench_seed = -1;
     std::string cell_variant;
     std::string output_dir;
 };
@@ -44,7 +52,10 @@ void usage() {
     std::cerr << "usage: cypha_cell_hypothesis_sweep [--smoke] [--tier1-only] [--tier2-only]\n"
               << "       [--tier2-smoke] [--tier3-smoke] [--overnight-sweep] [--overnight-sweep-smoke]\n"
               << "       [--list-variants] [--cell-variant H06] [--output-dir PATH]\n"
-              << "       [--profile d17] [--n-train N] [--n-eval M] [--threads T]\n";
+              << "       [--profile d17] [--n-train N] [--n-eval M] [--threads T]\n"
+              << "       [--intelligence-profile] [--math-integration] [--bench-seed N]\n"
+              << "  overnight sweep: --intelligence-profile + --math-integration auto when "
+                 "CYPHA_OVERNIGHT_MATH_INTEGRATION=1\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -75,6 +86,11 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--list-variants") a.list_variants = true;
         else if (k == "--cell-variant") a.cell_variant = need("--cell-variant");
         else if (k == "--output-dir") a.output_dir = need("--output-dir");
+        else if (k == "--intelligence-profile") a.intelligence_profile = true;
+        else if (k == "--math-integration") a.math_integration = true;
+        else if (k == "--bench-seed") {
+            a.bench_seed = std::stoll(need("--bench-seed"));
+        }
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -104,6 +120,17 @@ Args parse_args(int argc, char** argv) {
                 a.n_eval = cypha::bench::bench_overnight_enabled() ? 2000 : 80;
             }
         }
+    }
+    if (cypha::bench::bench_env_truthy("CYPHA_BENCH_FAST")) {
+        if (!a.n_train_explicit) a.n_train = cypha::bench::bench_scale(a.n_train, 80);
+        if (!a.n_eval_explicit) a.n_eval = cypha::bench::bench_scale(a.n_eval, 32);
+    }
+    if (a.overnight_sweep && cypha::bench::bench_env_truthy("CYPHA_OVERNIGHT_MATH_INTEGRATION")) {
+        a.intelligence_profile = true;
+        a.math_integration = true;
+    }
+    if (a.math_integration) {
+        a.intelligence_profile = true;
     }
     return a;
 }
@@ -169,6 +196,15 @@ nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Ar
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(args.profile, cfg);
     cypha::cyphalm::apply_cell_variant(spec.id, cfg);
+    if (const char* seed_env = std::getenv("CYPHA_BENCH_SEED")) {
+        cfg.seed = static_cast<std::uint64_t>(std::stoull(seed_env));
+    }
+    if (args.bench_seed >= 0) {
+        cfg.seed = static_cast<std::uint64_t>(args.bench_seed);
+    }
+    if (args.math_integration) {
+        cypha::cyphalm::apply_math_integration_preset(cfg);
+    }
     if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
 
     cypha::cyphalm::LMCorpus corpus;
@@ -191,8 +227,12 @@ nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Ar
     cfg.vocab_size = corpus.vocab_size;
 
     cypha::cyphalm::CyphaLMModel model(cfg);
+    cypha::intelligence::IntelligenceProfiler profiler;
     model.train_sequence(corpus.train_ids, args.n_train, cfg.train_epochs);
     const double bpc = model.eval_bpc(corpus.eval_ids, args.n_eval);
+    if (args.intelligence_profile) {
+        model.accumulate_intelligence_profile(corpus.eval_ids, args.n_eval, profiler);
+    }
     const auto alpha_profile = model.compression_profile();
 
     nlohmann::json row = {
@@ -207,9 +247,16 @@ nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Ar
         {"mean_alpha", alpha_profile.value("mean_alpha", 0.0)},
         {"n_train", args.n_train},
         {"n_eval", args.n_eval},
+        {"math_integration", args.math_integration},
     };
     if (spec.id == "B2" && !std::isnan(bpc)) {
         row["delta_vs_b2"] = 0.0;
+    }
+    if (args.intelligence_profile) {
+        const auto completeness = cypha::intelligence::validate_profile_completeness(profiler);
+        row["kappa"] = completeness.kappa;
+        row["profile_completeness"] =
+            cypha::intelligence::profile_completeness_to_json(completeness);
     }
     return row;
 }
@@ -226,6 +273,70 @@ std::string iso_timestamp_now() {
     std::ostringstream oss;
     oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ");
     return oss.str();
+}
+
+nlohmann::json build_pareto_ranked_variants(const nlohmann::json& rows, double w = 0.1) {
+    struct RankedEntry {
+        std::string id;
+        double kappa;
+        double bpc;
+        double normalized_bpc;
+        double pareto_score;
+        bool nondominated;
+    };
+    std::vector<RankedEntry> ranked;
+    ranked.reserve(rows.size());
+    double min_bpc = std::numeric_limits<double>::infinity();
+    double max_bpc = -std::numeric_limits<double>::infinity();
+    for (const auto& row : rows) {
+        if (!row.is_object() || !row.contains("kappa") || !row["kappa"].is_number() ||
+            !row.contains("bpc") || row["bpc"].is_null() || !row["bpc"].is_number()) {
+            continue;
+        }
+        const double kappa = row["kappa"].get<double>();
+        const double bpc = row["bpc"].get<double>();
+        if (!std::isfinite(kappa) || !std::isfinite(bpc)) {
+            continue;
+        }
+        min_bpc = std::min(min_bpc, bpc);
+        max_bpc = std::max(max_bpc, bpc);
+        ranked.push_back({row.value("id", ""), kappa, bpc, 0.0, 0.0, false});
+    }
+    const double bpc_span = max_bpc - min_bpc;
+    for (auto& entry : ranked) {
+        entry.normalized_bpc = bpc_span > 0.0 ? (entry.bpc - min_bpc) / bpc_span : 0.0;
+        entry.pareto_score = entry.kappa - w * entry.normalized_bpc;
+    }
+    for (auto& entry : ranked) {
+        bool dominated = false;
+        for (const auto& other : ranked) {
+            if (other.id == entry.id) {
+                continue;
+            }
+            if (other.kappa >= entry.kappa && other.bpc <= entry.bpc &&
+                (other.kappa > entry.kappa || other.bpc < entry.bpc)) {
+                dominated = true;
+                break;
+            }
+        }
+        entry.nondominated = !dominated;
+    }
+    std::sort(ranked.begin(), ranked.end(), [](const RankedEntry& a, const RankedEntry& b) {
+        if (a.nondominated != b.nondominated) {
+            return a.nondominated > b.nondominated;
+        }
+        return a.pareto_score > b.pareto_score;
+    });
+    nlohmann::json out = nlohmann::json::array();
+    for (const auto& entry : ranked) {
+        out.push_back({{"id", entry.id},
+                       {"kappa", entry.kappa},
+                       {"bpc", entry.bpc},
+                       {"normalized_bpc", entry.normalized_bpc},
+                       {"pareto_score", entry.pareto_score},
+                       {"nondominated", entry.nondominated}});
+    }
+    return out;
 }
 
 void append_overnight_progress_log(const std::string& variant_id, int index, int total) {
@@ -252,7 +363,11 @@ void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohm
 
     std::ofstream csv(out_dir / "summary.csv");
     if (csv) {
-        csv << "id,name,tier,bench_mode,bpc,delta_vs_b2,mean_alpha,corpus,synthetic,n_train,n_eval\n";
+        csv << "id,name,tier,bench_mode,bpc,delta_vs_b2,mean_alpha,corpus,synthetic,n_train,n_eval";
+        if (args.intelligence_profile) {
+            csv << ",kappa";
+        }
+        csv << '\n';
         for (const auto& row : results) {
             const std::string id = row.value("id", "");
             const std::string name = row.value("name", "");
@@ -274,7 +389,15 @@ void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohm
             csv << csv_field(id) << ',' << csv_field(name) << ',' << tier << ','
                 << csv_field(bench_mode) << ',' << bpc_str << ',' << delta_str << ','
                 << mean_alpha << ',' << csv_field(corpus) << ',' << (synthetic ? "1" : "0") << ','
-                << args.n_train << ',' << args.n_eval << '\n';
+                << args.n_train << ',' << args.n_eval;
+            if (args.intelligence_profile) {
+                std::string kappa_str;
+                if (row.contains("kappa") && row["kappa"].is_number()) {
+                    kappa_str = std::to_string(row["kappa"].get<double>());
+                }
+                csv << ',' << kappa_str;
+            }
+            csv << '\n';
         }
     }
 
@@ -284,10 +407,17 @@ void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohm
         {"n_eval", args.n_eval},
         {"overnight", cypha::bench::bench_overnight_enabled()},
         {"overnight_sweep_smoke", args.overnight_sweep_smoke},
+        {"math_integration", args.math_integration},
         {"variant_count", results.size()},
         {"b2_bpc", std::isnan(b2_bpc) ? nullptr : nlohmann::json(b2_bpc)},
         {"results", results},
     };
+    if (args.intelligence_profile) {
+        manifest["pareto_ranked_variants"] = build_pareto_ranked_variants(results);
+        if (!manifest["pareto_ranked_variants"].empty()) {
+            manifest["best_pareto_variant"] = manifest["pareto_ranked_variants"].front();
+        }
+    }
     std::ofstream manifest_out(out_dir / "manifest.json");
     if (manifest_out) {
         manifest_out << manifest.dump(2);
@@ -372,6 +502,8 @@ int main(int argc, char** argv) {
             {"overnight_sweep_smoke", args.overnight_sweep_smoke},
             {"overnight", cypha::bench::bench_overnight_enabled()},
             {"cell_variant", args.cell_variant.empty() ? nullptr : nlohmann::json(args.cell_variant)},
+            {"intelligence_profile", args.intelligence_profile},
+            {"math_integration", args.math_integration},
             {"results", results},
             {"skipped", skipped},
             {"variant_count", cypha::cyphalm::all_cell_variants().size()},
@@ -381,6 +513,12 @@ int main(int argc, char** argv) {
                                                       ? cypha::bench::results_dir() / "cell_sweep"
                                                       : std::filesystem::path(args.output_dir);
             out["output_dir"] = out_dir.string();
+        }
+        if (args.intelligence_profile) {
+            out["pareto_ranked_variants"] = build_pareto_ranked_variants(results);
+            if (!out["pareto_ranked_variants"].empty()) {
+                out["best_pareto_variant"] = out["pareto_ranked_variants"].front();
+            }
         }
         std::cout << out.dump(2) << std::endl;
         return 0;

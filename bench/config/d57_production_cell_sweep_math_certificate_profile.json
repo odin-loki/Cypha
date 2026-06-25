@@ -1,0 +1,34 @@
+{
+
+  "profile_id": "d57_production_cell_sweep_math_certificate_profile",
+
+  "description": "D57 Phase 43 production cell sweep math certificate — 300k lock + hybrid BPC gate",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 57,
+
+    "domain_tag": "d57"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d57",
+
+    "Validates cell sweep math tier vs overnight hybrid + joint κ–BPC",
+
+    "Maintainer: run_production_overnight.ps1 -MathIntegration to fill 300k lock"
+
+  ]
+
+}
+

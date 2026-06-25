@@ -11,6 +11,14 @@
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/intelligence/epistemic_threshold.hpp"
 
+namespace cypha::intelligence {
+class IntelligenceProfiler;
+}  // namespace cypha::intelligence
+
+namespace cypha::cyphalm {
+class LmIntelligenceMonitor;
+}  // namespace cypha::cyphalm
+
 namespace cypha::cyphalm {
 
 enum class DecodeStrategy { Greedy, Temperature, TopK, TopP, UncertaintyGated };
@@ -52,7 +60,9 @@ struct GenerateOutput {
 
 GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens,
                                const DecodeParams& params,
-                               cypha::intelligence::EpistemicThreshold* epistemic_threshold = nullptr);
+                               cypha::intelligence::EpistemicThreshold* epistemic_threshold = nullptr,
+                               cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
+                               LmIntelligenceMonitor* monitor = nullptr);
 
 /// Greedy decode (legacy wrapper).
 GenerateOutput generate_greedy(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens);
@@ -64,7 +74,9 @@ GenerateOutput generate_sample(CyphaLMModel& model, const std::vector<int>& prom
 /// Invoke ``cb`` once per SSE chunk; stop early if ``cb`` returns false.
 void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens,
                      const DecodeParams& params, const std::function<bool(const nlohmann::json&)>& cb,
-                     cypha::intelligence::EpistemicThreshold* epistemic_threshold = nullptr);
+                     cypha::intelligence::EpistemicThreshold* epistemic_threshold = nullptr,
+                     cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
+                     LmIntelligenceMonitor* monitor = nullptr);
 
 nlohmann::json predict_next_json(CyphaLMModel& model, int token_id);
 

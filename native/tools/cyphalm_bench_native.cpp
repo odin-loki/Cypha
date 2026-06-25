@@ -1,5 +1,6 @@
 // cyphalm_bench_native — char-LM BPC benchmark CLI for native CyphaLM tiers.
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -11,11 +12,15 @@
 #include "cypha/cyphalm/cyphalm_alpha_spectrum.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
+#include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
+#include "cypha/cyphalm/cyphalm_math_integration.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
 #include "cypha/bench/bench_paths.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_completeness.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
+#include "cypha/intelligence/profile_guided_loss.hpp"
 
 namespace {
 
@@ -29,7 +34,38 @@ struct Args {
     bool analysis = false;
     int analysis_steps = 256;
     bool intelligence_profile = false;
+    bool math_integration = false;
     bool overnight = false;
+    double per_stat_deviation_span = -1.0;
+    double kappa_lambda_target = -1.0;
+    double kappa_ceiling_strength = -1.0;
+    double kappa_ceiling_min_scale = -1.0;
+    bool use_eigenvalue_d_eff = false;
+    bool use_reu_forget_gate = false;
+    bool disable_kappa_excess_grad_nudge = false;
+    double kappa_excess_grad_scale = -1.0;
+    double kappa_excess_grad_margin = -1.0;
+    bool disable_kappa_navigation_warmup = false;
+    double kappa_navigation_warmup_strength = -1.0;
+    double kappa_navigation_warmup_floor = -1.0;
+    bool disable_kappa_kernel_blend_scale = false;
+    double kappa_kernel_blend_floor = -1.0;
+    double reu_forget_gate_blend = -1.0;
+    int kappa_trajectory_window = -1;
+    int navigation_loss_warmup_steps = -1;
+    double free_energy_beta = -1.0;
+    double kernel_blend = -1.0;
+    int kernel_m = -1;
+    bool hybrid_blend_logit_explicit = false;
+    double hybrid_blend_logit = 0.5;
+    double mdl_forget_max_norm = -1.0;
+    double kernel_lr_scale = -1.0;
+    double alpha_init = -1.0;
+    double hybrid_blend_lr = -1.0;
+    int n_experts = -1;
+    int max_memory_slots = -1;
+    int compress_interval = -1;
+    std::int64_t bench_seed = -1;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
 };
@@ -41,7 +77,37 @@ void usage() {
         << "       --profile {d17,d21,d04} --n-train N --n-eval M --threads T\n"
         << "       --overnight  (D17/D21: full WikiText + 300k train budget; or CYPHA_BENCH_OVERNIGHT=1)\n"
         << "       --analysis [--analysis-steps N]\n"
-        << "       --intelligence-profile\n";
+        << "       --intelligence-profile\n"
+        << "       --math-integration\n"
+        << "       --per-stat-deviation-span S\n"
+        << "       --kappa-lambda-target K\n"
+        << "       --kappa-ceiling-strength S\n"
+        << "       --kappa-ceiling-min-scale S\n"
+        << "       --kappa-excess-grad-scale S\n"
+        << "       --kappa-excess-grad-margin M\n"
+        << "       --disable-kappa-excess-grad-nudge\n"
+        << "       --disable-kappa-navigation-warmup\n"
+        << "       --kappa-navigation-warmup-strength S\n"
+        << "       --kappa-navigation-warmup-floor S\n"
+        << "       --disable-kappa-kernel-blend-scale\n"
+        << "       --kappa-kernel-blend-floor S\n"
+        << "       --reu-forget-gate-blend B\n"
+        << "       --kappa-trajectory-window W\n"
+        << "       --navigation-loss-warmup-steps N\n"
+        << "       --free-energy-beta B\n"
+        << "       --kernel-blend B\n"
+        << "       --kernel-m M\n"
+        << "       --hybrid-blend-logit L\n"
+        << "       --mdl-forget-max-norm N\n"
+        << "       --kernel-lr-scale S\n"
+        << "       --alpha-init A\n"
+        << "       --hybrid-blend-lr S\n"
+        << "       --n-experts N\n"
+        << "       --max-memory-slots N\n"
+        << "       --compress-interval N\n"
+        << "       --bench-seed N\n"
+        << "       --use-eigenvalue-d-eff\n"
+        << "       --use-reu-forget-gate\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -66,6 +132,91 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--analysis") a.analysis = true;
         else if (k == "--analysis-steps") a.analysis_steps = std::stoi(need("--analysis-steps"));
         else if (k == "--intelligence-profile") a.intelligence_profile = true;
+        else if (k == "--math-integration") a.math_integration = true;
+        else if (k == "--per-stat-deviation-span") {
+            a.per_stat_deviation_span = std::stod(need("--per-stat-deviation-span"));
+        }
+        else if (k == "--kappa-lambda-target") {
+            a.kappa_lambda_target = std::stod(need("--kappa-lambda-target"));
+        }
+        else if (k == "--kappa-ceiling-strength") {
+            a.kappa_ceiling_strength = std::stod(need("--kappa-ceiling-strength"));
+        }
+        else if (k == "--kappa-ceiling-min-scale") {
+            a.kappa_ceiling_min_scale = std::stod(need("--kappa-ceiling-min-scale"));
+        }
+        else if (k == "--kappa-excess-grad-scale") {
+            a.kappa_excess_grad_scale = std::stod(need("--kappa-excess-grad-scale"));
+        }
+        else if (k == "--kappa-excess-grad-margin") {
+            a.kappa_excess_grad_margin = std::stod(need("--kappa-excess-grad-margin"));
+        }
+        else if (k == "--disable-kappa-excess-grad-nudge") {
+            a.disable_kappa_excess_grad_nudge = true;
+        }
+        else if (k == "--disable-kappa-navigation-warmup") {
+            a.disable_kappa_navigation_warmup = true;
+        }
+        else if (k == "--kappa-navigation-warmup-strength") {
+            a.kappa_navigation_warmup_strength = std::stod(need("--kappa-navigation-warmup-strength"));
+        }
+        else if (k == "--kappa-navigation-warmup-floor") {
+            a.kappa_navigation_warmup_floor = std::stod(need("--kappa-navigation-warmup-floor"));
+        }
+        else if (k == "--disable-kappa-kernel-blend-scale") {
+            a.disable_kappa_kernel_blend_scale = true;
+        }
+        else if (k == "--kappa-kernel-blend-floor") {
+            a.kappa_kernel_blend_floor = std::stod(need("--kappa-kernel-blend-floor"));
+        }
+        else if (k == "--reu-forget-gate-blend") {
+            a.reu_forget_gate_blend = std::stod(need("--reu-forget-gate-blend"));
+        }
+        else if (k == "--kappa-trajectory-window") {
+            a.kappa_trajectory_window = std::stoi(need("--kappa-trajectory-window"));
+        }
+        else if (k == "--navigation-loss-warmup-steps") {
+            a.navigation_loss_warmup_steps = std::stoi(need("--navigation-loss-warmup-steps"));
+        }
+        else if (k == "--free-energy-beta") {
+            a.free_energy_beta = std::stod(need("--free-energy-beta"));
+        }
+        else if (k == "--kernel-blend") {
+            a.kernel_blend = std::stod(need("--kernel-blend"));
+        }
+        else if (k == "--kernel-m") {
+            a.kernel_m = std::stoi(need("--kernel-m"));
+        }
+        else if (k == "--hybrid-blend-logit") {
+            a.hybrid_blend_logit = std::stod(need("--hybrid-blend-logit"));
+            a.hybrid_blend_logit_explicit = true;
+        }
+        else if (k == "--mdl-forget-max-norm") {
+            a.mdl_forget_max_norm = std::stod(need("--mdl-forget-max-norm"));
+        }
+        else if (k == "--kernel-lr-scale") {
+            a.kernel_lr_scale = std::stod(need("--kernel-lr-scale"));
+        }
+        else if (k == "--alpha-init") {
+            a.alpha_init = std::stod(need("--alpha-init"));
+        }
+        else if (k == "--hybrid-blend-lr") {
+            a.hybrid_blend_lr = std::stod(need("--hybrid-blend-lr"));
+        }
+        else if (k == "--n-experts") {
+            a.n_experts = std::stoi(need("--n-experts"));
+        }
+        else if (k == "--max-memory-slots") {
+            a.max_memory_slots = std::stoi(need("--max-memory-slots"));
+        }
+        else if (k == "--compress-interval") {
+            a.compress_interval = std::stoi(need("--compress-interval"));
+        }
+        else if (k == "--bench-seed") {
+            a.bench_seed = std::stoll(need("--bench-seed"));
+        }
+        else if (k == "--use-eigenvalue-d-eff") a.use_eigenvalue_d_eff = true;
+        else if (k == "--use-reu-forget-gate") a.use_reu_forget_gate = true;
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -97,6 +248,12 @@ int main(int argc, char** argv) {
 
         cypha::cyphalm::CyphaLMConfig cfg;
         cypha::cyphalm::apply_bench_profile(args.profile, cfg);
+        if (const char* seed_env = std::getenv("CYPHA_BENCH_SEED")) {
+            cfg.seed = static_cast<std::uint64_t>(std::stoull(seed_env));
+        }
+        if (args.bench_seed >= 0) {
+            cfg.seed = static_cast<std::uint64_t>(args.bench_seed);
+        }
         std::string mode_label = args.mode;
         if (!args.cell_variant.empty()) {
             cypha::cyphalm::apply_cell_variant(args.cell_variant, cfg);
@@ -106,6 +263,94 @@ int main(int argc, char** argv) {
         } else {
             const auto bench_mode = cypha::cyphalm::parse_bench_mode(args.mode);
             cypha::cyphalm::apply_bench_mode(bench_mode, cfg);
+        }
+        if (args.math_integration) {
+            cypha::cyphalm::apply_math_integration_preset(cfg);
+            args.intelligence_profile = true;
+            if (args.per_stat_deviation_span > 0.0) {
+                cfg.per_stat_deviation_span = args.per_stat_deviation_span;
+            }
+            if (args.kappa_lambda_target > 0.0) {
+                cfg.kappa_lambda_target = args.kappa_lambda_target;
+            }
+            if (args.kappa_ceiling_strength > 0.0) {
+                cfg.kappa_ceiling_strength = args.kappa_ceiling_strength;
+            }
+            if (args.kappa_ceiling_min_scale > 0.0) {
+                cfg.kappa_ceiling_min_scale = args.kappa_ceiling_min_scale;
+            }
+            if (args.use_eigenvalue_d_eff) {
+                cfg.use_eigenvalue_d_eff = true;
+            }
+            if (args.use_reu_forget_gate) {
+                cfg.use_reu_forget_gate = true;
+            }
+            if (args.disable_kappa_excess_grad_nudge) {
+                cfg.use_kappa_excess_grad_nudge = false;
+            }
+            if (args.kappa_excess_grad_scale > 0.0) {
+                cfg.kappa_excess_grad_scale = args.kappa_excess_grad_scale;
+            }
+            if (args.kappa_excess_grad_margin >= 0.0) {
+                cfg.kappa_excess_grad_margin = args.kappa_excess_grad_margin;
+            }
+            if (args.disable_kappa_navigation_warmup) {
+                cfg.use_kappa_navigation_warmup_scale = false;
+            }
+            if (args.kappa_navigation_warmup_strength > 0.0) {
+                cfg.kappa_navigation_warmup_strength = args.kappa_navigation_warmup_strength;
+            }
+            if (args.kappa_navigation_warmup_floor > 0.0) {
+                cfg.kappa_navigation_warmup_floor = args.kappa_navigation_warmup_floor;
+            }
+            if (args.disable_kappa_kernel_blend_scale) {
+                cfg.use_kappa_kernel_blend_scale = false;
+            }
+            if (args.kappa_kernel_blend_floor > 0.0) {
+                cfg.kappa_kernel_blend_floor = args.kappa_kernel_blend_floor;
+            }
+            if (args.reu_forget_gate_blend >= 0.0) {
+                cfg.reu_forget_gate_blend = args.reu_forget_gate_blend;
+            }
+            if (args.kappa_trajectory_window > 0) {
+                cfg.kappa_trajectory_window = args.kappa_trajectory_window;
+            }
+            if (args.navigation_loss_warmup_steps >= 0) {
+                cfg.navigation_loss_warmup_steps = args.navigation_loss_warmup_steps;
+            }
+            if (args.free_energy_beta > 0.0) {
+                cfg.free_energy_beta = args.free_energy_beta;
+            }
+            if (args.kernel_blend > 0.0) {
+                cfg.kernel_blend = args.kernel_blend;
+            }
+            if (args.kernel_m > 0) {
+                cfg.kernel_m = args.kernel_m;
+            }
+            if (args.hybrid_blend_logit_explicit) {
+                cfg.hybrid_blend_logit = args.hybrid_blend_logit;
+            }
+            if (args.mdl_forget_max_norm > 0.0) {
+                cfg.mdl_forget_max_norm = args.mdl_forget_max_norm;
+            }
+            if (args.kernel_lr_scale > 0.0) {
+                cfg.kernel_lr_scale = args.kernel_lr_scale;
+            }
+            if (args.alpha_init > 0.0) {
+                cfg.alpha_init = args.alpha_init;
+            }
+            if (args.hybrid_blend_lr > 0.0) {
+                cfg.hybrid_blend_lr = args.hybrid_blend_lr;
+            }
+            if (args.n_experts > 0) {
+                cfg.n_experts = args.n_experts;
+            }
+            if (args.max_memory_slots > 0) {
+                cfg.max_memory_slots = args.max_memory_slots;
+            }
+            if (args.compress_interval > 0) {
+                cfg.compress_interval = args.compress_interval;
+            }
         }
         if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
         if (args.profile == "d21" && cfg.vocab_size < 256) cfg.vocab_size = 256;
@@ -142,10 +387,14 @@ int main(int argc, char** argv) {
         }
 
         cypha::cyphalm::CyphaLMModel model(cfg);
-        model.train_sequence(corpus.train_ids, args.n_train, cfg.train_epochs);
         cypha::intelligence::IntelligenceProfiler profiler;
-        const double bpc = model.eval_bpc(corpus.eval_ids, args.n_eval,
-                                          args.intelligence_profile ? &profiler : nullptr);
+        const bool track_profile = args.math_integration;
+        model.train_sequence(corpus.train_ids, args.n_train, cfg.train_epochs,
+                             track_profile ? &profiler : nullptr);
+        const double bpc = model.eval_bpc(corpus.eval_ids, args.n_eval, nullptr);
+        if (args.intelligence_profile) {
+            model.accumulate_intelligence_profile(corpus.eval_ids, args.n_eval, profiler);
+        }
 
         nlohmann::json out = {
             {"mode", mode_label},
@@ -160,12 +409,31 @@ int main(int argc, char** argv) {
             {"synthetic", synthetic},
             {"full_corpus", full_corpus},
             {"overnight", overnight},
+            {"bench_seed", cfg.seed},
             {"bpc", bpc},
             {"vocab_size", cfg.vocab_size},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;
         if (args.intelligence_profile) {
-            out["intelligence_profile"] = cypha::intelligence::intelligence_profile_report_json(profiler);
+            const auto completeness = cypha::intelligence::validate_profile_completeness(profiler);
+            if (args.math_integration) {
+                cypha::cyphalm::MathIntegrationExportOptions export_opts;
+                export_opts.kappa_trajectory = &model.kappa_trajectory_state();
+                export_opts.step_count = model.train_step_count();
+                out["math_integration"] =
+                    cypha::cyphalm::export_math_integration_report(profiler, cfg, export_opts);
+            }
+            out["intelligence_profile"] = cypha::cyphalm::export_intelligence_monitor_report(profiler);
+            out["profile_completeness"] =
+                cypha::intelligence::profile_completeness_to_json(completeness);
+            if (!completeness.all_complete) {
+                std::cerr << "cyphalm_bench_native: incomplete intelligence profile; missing stats:";
+                for (const auto& name : completeness.missing_stats) {
+                    std::cerr << ' ' << name;
+                }
+                std::cerr << '\n';
+                return 1;
+            }
         }
         if (args.analysis) {
             const auto profile = model.compression_profile();

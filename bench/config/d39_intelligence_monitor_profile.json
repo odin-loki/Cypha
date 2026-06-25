@@ -1,0 +1,40 @@
+{
+  "profile_id": "d39_intelligence_monitor_profile",
+  "description": "D39 intelligence profile completeness validation — full 7-stat monitoring toolchain file presence + cyphalm_bench_native --intelligence-profile smoke",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 39,
+    "domain_tag": "d39"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d39_intelligence_monitor_smoke — profile monitor gate (pending_profile_monitor or profile_monitor_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      {
+        "tool": "cyphalm_bench_native",
+        "args": {
+          "profile": "d17",
+          "mode": "hybrid",
+          "n_train": 80,
+          "n_eval": 32,
+          "intelligence_profile": true
+        }
+      }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 39",
+    "Or: cypha_bench_run --domain-tag d39",
+    "Verifies lm_intelligence_monitor.hpp/cpp and profile_completeness.hpp/cpp exist",
+    "Optional warn when native/CMakeLists.txt lacks native_intelligence_lm_monitor_smoke",
+    "Runs cyphalm_bench_native --profile d17 --mode hybrid --n-train 80 --n-eval 32 --intelligence-profile with CYPHA_BENCH_FAST=1",
+    "profile_completeness.all_complete == true OR intelligence_profile statistics (7) each point in [0,1] => profile_monitor_ready",
+    "Otherwise validation_status=pending_profile_monitor (smoke PASS)",
+    "Phase 25: intelligence profile completeness validation gate"
+  ]
+}

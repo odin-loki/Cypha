@@ -1,0 +1,17 @@
+{
+  "profile_id": "d48_kappa_ceiling_ablation_profile",
+  "description": "D48 Phase 35 κ ceiling joint tuning — eigenvalue D_eff + target sweep {0.80,0.83,0.86} @ 5k",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 48,
+    "domain_tag": "d48"
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d48",
+    "Runs κ lambda target ablation on d17 hybrid @ n_train=5000",
+    "Phase 35: eigenvalue D_eff + stronger κ ceiling + r_eu forget gate"
+  ]
+}

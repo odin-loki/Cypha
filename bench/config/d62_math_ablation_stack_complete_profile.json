@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d62_math_ablation_stack_complete_profile",
+
+  "description": "D62 Phase 48 unified math ablation stack complete certificate",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 62,
+
+    "domain_tag": "d62"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d62",
+
+    "Audits d47-d68 ablation tables + subprocess joint @ 5k seed 42",
+
+    "complete_ready when all 16 stack tables joint_ready"
+
+  ]
+
+}

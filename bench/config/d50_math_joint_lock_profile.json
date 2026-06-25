@@ -1,0 +1,17 @@
+{
+  "profile_id": "d50_math_joint_lock_profile",
+  "description": "D50 Phase 37 pinned-seed joint κ–BPC + BASELINE_LOCK repro @ 5k",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 50,
+    "domain_tag": "d50"
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d50",
+    "Runs baseline + math @ n_train=5000 with bench_seed=42",
+    "Phase 37: κ excess grad margin + separate flag; lock repro tolerance"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+
+  "profile_id": "d54_production_math_certificate_profile",
+
+  "description": "D54 Phase 41 production math certificate — 300k lock + hybrid BPC gate + 5k subprocess",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 54,
+
+    "domain_tag": "d54"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d54",
+
+    "Validates production math tier vs overnight hybrid baseline + joint κ–BPC",
+
+    "Maintainer: run_production_overnight.ps1 -MathIntegration to fill 300k lock"
+
+  ]
+
+}
+

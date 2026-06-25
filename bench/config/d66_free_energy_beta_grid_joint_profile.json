@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d66_free_energy_beta_grid_joint_profile",
+
+  "description": "D66 Phase 52 free energy beta grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 66,
+
+    "domain_tag": "d66"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d66",
+
+    "Ablation grid: free_energy_beta {0.005, 0.01, 0.02}",
+
+    "Preset ship cell: beta=0.01"
+
+  ]
+
+}

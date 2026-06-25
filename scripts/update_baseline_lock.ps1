@@ -16,7 +16,7 @@ param(
 
     [Parameter(Mandatory = $true)]
 
-    [ValidateSet("d17", "d21", "cell-sweep", "all")]
+    [ValidateSet("d17", "d17-math", "d21", "cell-sweep", "all")]
 
     [string]$Run,
 
@@ -33,6 +33,8 @@ param(
     [switch]$Medium,
 
     [switch]$Production,
+
+    [switch]$MathIntegration,
 
     [string]$BuildDir = "native/build",
 
@@ -81,6 +83,10 @@ if ($tierCount -gt 1) {
 
 if ($Fast -and -not $env:CYPHA_BENCH_FAST) {
     $env:CYPHA_BENCH_FAST = "1"
+}
+
+if ($MathIntegration) {
+    $env:CYPHA_OVERNIGHT_MATH_INTEGRATION = "1"
 }
 
 
@@ -195,6 +201,12 @@ if ($Run -eq "all") {
     foreach ($r in @("d17", "d21", "cell-sweep")) {
 
         Invoke-BaselineLockRun -RunName $r
+
+    }
+
+    if ($MathIntegration) {
+
+        Invoke-BaselineLockRun -RunName "d17-math"
 
     }
 

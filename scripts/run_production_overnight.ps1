@@ -11,7 +11,8 @@
 param(
     [string]$BuildDir = "native/build",
     [int]$Threads = 1,
-    [switch]$SkipCellSweep
+    [switch]$SkipCellSweep,
+    [switch]$MathIntegration
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,6 +36,10 @@ $invokeArgs = @{
 }
 if ($SkipCellSweep) {
     $invokeArgs.SkipCellSweep = $true
+}
+if ($MathIntegration) {
+    $invokeArgs.MathIntegration = $true
+    $env:CYPHA_OVERNIGHT_MATH_INTEGRATION = "1"
 }
 
 Start-Transcript -Path $logPath | Out-Null

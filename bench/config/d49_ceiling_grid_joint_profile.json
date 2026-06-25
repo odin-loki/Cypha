@@ -1,0 +1,17 @@
+{
+  "profile_id": "d49_ceiling_grid_joint_profile",
+  "description": "D49 Phase 36 κ ceiling 2D grid — strength × min_scale joint κ–BPC tuning @ 5k",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 49,
+    "domain_tag": "d49"
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d49",
+    "Runs ceiling strength {1.5,2.5} × min_scale {0.40,0.55} on d17 hybrid @ n_train=5000",
+    "Phase 36: trajectory ceiling + κ excess grad nudge"
+  ]
+}

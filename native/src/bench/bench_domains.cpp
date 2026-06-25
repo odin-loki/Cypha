@@ -10,6 +10,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -22,6 +23,7 @@
 
 #ifdef _WIN32
 #include <io.h>
+#include <windows.h>
 #ifndef popen
 #define popen _popen
 #define pclose _pclose
@@ -2903,52 +2905,169 @@ Json run_d19_cell_hypothesis_smoke() {
     return experiments;
 }
 
+Json parse_subprocess_json_stdout(const std::string& text);
+fs::path resolve_native_exe_dir();
+
+std::optional<double> variant_row_kappa(const Json& row) {
+    if (!row.contains("kappa") || row["kappa"].is_null() || !row["kappa"].is_number()) {
+        return std::nullopt;
+    }
+    const double value = row["kappa"].get<double>();
+    if (!std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+std::optional<double> variant_row_bpc(const Json& row) {
+    if (!row.contains("bpc") || row["bpc"].is_null() || !row["bpc"].is_number()) {
+        return std::nullopt;
+    }
+    const double value = row["bpc"].get<double>();
+    if (!std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+Json build_pareto_ranked_variants(const Json& rows, double w = 0.1) {
+    struct RankedEntry {
+        std::string id;
+        double kappa;
+        double bpc;
+        double normalized_bpc;
+        double pareto_score;
+        bool nondominated;
+    };
+    std::vector<RankedEntry> ranked;
+    ranked.reserve(rows.size());
+    double min_bpc = std::numeric_limits<double>::infinity();
+    double max_bpc = -std::numeric_limits<double>::infinity();
+    for (const auto& row : rows) {
+        if (!row.is_object()) {
+            continue;
+        }
+        const auto kappa = variant_row_kappa(row);
+        const auto bpc = variant_row_bpc(row);
+        if (!kappa.has_value() || !bpc.has_value()) {
+            continue;
+        }
+        min_bpc = std::min(min_bpc, *bpc);
+        max_bpc = std::max(max_bpc, *bpc);
+        ranked.push_back({row.value("id", ""), *kappa, *bpc, 0.0, 0.0, false});
+    }
+    const double bpc_span = max_bpc - min_bpc;
+    for (auto& entry : ranked) {
+        entry.normalized_bpc =
+            bpc_span > 0.0 ? (entry.bpc - min_bpc) / bpc_span : 0.0;
+        entry.pareto_score = entry.kappa - w * entry.normalized_bpc;
+    }
+    for (auto& entry : ranked) {
+        bool dominated = false;
+        for (const auto& other : ranked) {
+            if (other.id == entry.id) {
+                continue;
+            }
+            if (other.kappa >= entry.kappa && other.bpc <= entry.bpc &&
+                (other.kappa > entry.kappa || other.bpc < entry.bpc)) {
+                dominated = true;
+                break;
+            }
+        }
+        entry.nondominated = !dominated;
+    }
+    std::sort(ranked.begin(), ranked.end(), [](const RankedEntry& a, const RankedEntry& b) {
+        if (a.nondominated != b.nondominated) {
+            return a.nondominated > b.nondominated;
+        }
+        return a.pareto_score > b.pareto_score;
+    });
+    Json out = Json::array();
+    for (const auto& entry : ranked) {
+        out.push_back(Json{{"id", entry.id},
+                           {"kappa", entry.kappa},
+                           {"bpc", entry.bpc},
+                           {"normalized_bpc", entry.normalized_bpc},
+                           {"pareto_score", entry.pareto_score},
+                           {"nondominated", entry.nondominated}});
+    }
+    return out;
+}
+
+Json build_kappa_ranked_variants(const Json& rows) {
+    struct RankedEntry {
+        std::string id;
+        double kappa;
+    };
+    std::vector<RankedEntry> ranked;
+    ranked.reserve(rows.size());
+    for (const auto& row : rows) {
+        if (!row.is_object()) {
+            continue;
+        }
+        const auto kappa = variant_row_kappa(row);
+        if (!kappa.has_value()) {
+            continue;
+        }
+        ranked.push_back({row.value("id", ""), *kappa});
+    }
+    std::sort(ranked.begin(), ranked.end(),
+              [](const RankedEntry& a, const RankedEntry& b) { return a.kappa > b.kappa; });
+    Json out = Json::array();
+    for (const auto& entry : ranked) {
+        out.push_back(Json{{"id", entry.id}, {"kappa", entry.kappa}});
+    }
+    return out;
+}
+
 Json run_d20_cell_hypothesis_overnight_smoke() {
-    struct OvernightSpec {
-        const char* id;
-        const char* bench_mode;
-    };
-    const OvernightSpec variants[] = {
-        {"B2", "hybrid"},
-        {"H06", "hybrid"},
-        {"H14", "hybrid"},
-    };
-
-    const int n_train = cypha::bench::bench_scale(200, 200);
-    const int n_eval = cypha::bench::bench_scale(40, 40);
-    Json rows = Json::array();
-    for (const auto& spec : variants) {
-        cypha::cyphalm::CyphaLMConfig cfg;
-        cypha::cyphalm::apply_bench_profile("d17", cfg);
-        cypha::cyphalm::apply_cell_variant(spec.id, cfg);
-        cypha::cyphalm::apply_bench_mode(cypha::cyphalm::parse_bench_mode(spec.bench_mode), cfg);
-        if (cfg.vocab_size < 256) cfg.vocab_size = 256;
-
-        cypha::cyphalm::LMCorpus corpus;
-        corpus.profile = "d17";
-        corpus.source = "synthetic";
-        corpus.vocab_size = cfg.vocab_size;
-        corpus.train_ids =
-            cypha::cyphalm::synthetic_corpus(n_train + n_eval + 32, cfg.vocab_size, cfg.seed);
-        const std::size_t split = static_cast<std::size_t>(n_train);
-        corpus.eval_ids.assign(corpus.train_ids.begin() + static_cast<std::ptrdiff_t>(split),
-                               corpus.train_ids.end());
-        corpus.train_ids.resize(split);
-        cfg.vocab_size = corpus.vocab_size;
-
-        cypha::cyphalm::CyphaLMModel model(cfg);
-        model.train_sequence(corpus.train_ids, n_train, cfg.train_epochs);
-        const double bpc = model.eval_bpc(corpus.eval_ids, n_eval);
-        rows.push_back(Json{{"id", spec.id},
-                            {"bench_mode", spec.bench_mode},
-                            {"n_train", n_train},
-                            {"bpc", std::isnan(bpc) ? Json(nullptr) : Json(bpc)}});
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path sweep_exe =
+        cypha::bench::resolve_runner_exe("cypha_cell_hypothesis_sweep", exe_dir);
+    if (!fs::is_regular_file(sweep_exe)) {
+        throw std::runtime_error("missing cypha_cell_hypothesis_sweep: " + sweep_exe.string());
     }
 
+    const cypha::bench::RunProcessResult proc = cypha::bench::run_executable_capture(
+        sweep_exe, {"--overnight-sweep-smoke", "--intelligence-profile"});
+    if (proc.exit_code != 0) {
+        throw std::runtime_error("cypha_cell_hypothesis_sweep --overnight-sweep-smoke exit=" +
+                                 std::to_string(proc.exit_code));
+    }
+
+    const Json sweep_out = parse_subprocess_json_stdout(proc.stdout_text);
+    if (sweep_out.empty()) {
+        throw std::runtime_error("cypha_cell_hypothesis_sweep produced no JSON stdout");
+    }
+
+    Json rows = Json::array();
+    if (sweep_out.contains("results") && sweep_out["results"].is_array()) {
+        for (const auto& row : sweep_out["results"]) {
+            Json slim = Json{{"id", row.value("id", "")},
+                             {"bench_mode", row.value("bench_mode", "")},
+                             {"n_train", row.value("n_train", 0)},
+                             {"bpc", row.contains("bpc") ? row["bpc"] : Json(nullptr)}};
+            const auto kappa = variant_row_kappa(row);
+            if (kappa.has_value()) {
+                slim["kappa"] = *kappa;
+            } else {
+                slim["kappa"] = nullptr;
+            }
+            rows.push_back(std::move(slim));
+        }
+    }
+
+    const Json kappa_ranked = build_kappa_ranked_variants(rows);
+    const Json pareto_ranked = build_pareto_ranked_variants(rows);
     const Json experiments{
         {"overnight_sweep_smoke", rows},
-        {"variant_count", 3},
-        {"backend", "cypha_cell_hypothesis_sweep --overnight-sweep-smoke"},
+        {"kappa_ranked_variants", kappa_ranked},
+        {"pareto_ranked_variants", pareto_ranked},
+        {"variant_count", rows.size()},
+        {"n_train", sweep_out.value("n_train", 0)},
+        {"n_eval", sweep_out.value("n_eval", 0)},
+        {"intelligence_profile", sweep_out.value("intelligence_profile", true)},
+        {"backend", "cypha_cell_hypothesis_sweep --overnight-sweep-smoke --intelligence-profile"},
     };
     cypha::bench::finalize_domain("d20_cell_hypothesis_overnight", experiments);
     return experiments;
@@ -2959,10 +3078,26 @@ Json run_d22_intelligence_cross_profile() {
     const Json d16_ewc = run_d16_ewc_probe();
     const Json d20 = run_d20_cell_hypothesis_overnight_smoke();
 
+    Json kappa_ranked = Json::array();
+    if (d20.contains("kappa_ranked_variants") && d20["kappa_ranked_variants"].is_array()) {
+        kappa_ranked = d20["kappa_ranked_variants"];
+    }
+    Json pareto_ranked = Json::array();
+    if (d20.contains("pareto_ranked_variants") && d20["pareto_ranked_variants"].is_array()) {
+        pareto_ranked = d20["pareto_ranked_variants"];
+    }
+    Json best_pareto_variant = nullptr;
+    if (!pareto_ranked.empty()) {
+        best_pareto_variant = pareto_ranked.front();
+    }
+
     const Json experiments{
         {"d18_intelligence_profile", d18},
         {"d16_ewc_probe", d16_ewc},
         {"d20_cell_sweep_smoke", d20},
+        {"kappa_ranked_variants", kappa_ranked},
+        {"pareto_ranked_variants", pareto_ranked},
+        {"best_pareto_variant", best_pareto_variant},
         {"sub_domains", Json::array({"d18", "d16", "d20"})},
         {"backend", "cypha_bench_cross_intelligence"},
     };
@@ -2978,9 +3113,23 @@ Json run_d22_intelligence_cross_profile() {
 fs::path resolve_native_exe_dir() {
     if (const char* raw = std::getenv("CYPHA_NATIVE_EXE_DIR")) {
         if (*raw != '\0') {
-            return fs::absolute(raw);
+            const fs::path env_path = fs::absolute(raw);
+            if (fs::is_regular_file(env_path / "cyphalm_bench_native.exe") ||
+                fs::is_regular_file(env_path / "cypha_bench_run.exe")) {
+                return env_path;
+            }
         }
     }
+#if defined(_WIN32)
+    char module_path[MAX_PATH];
+    if (GetModuleFileNameA(nullptr, module_path, MAX_PATH) != 0) {
+        const fs::path self_dir = fs::path(module_path).parent_path();
+        if (fs::is_regular_file(self_dir / "cyphalm_bench_native.exe") ||
+            fs::is_regular_file(self_dir / "cypha_bench_run.exe")) {
+            return fs::absolute(self_dir);
+        }
+    }
+#endif
     return fs::current_path();
 }
 
@@ -3102,7 +3251,7 @@ constexpr double kD17HybridPinBpc = 2.873;
 constexpr double kD17HybridPinTolerance = 0.02;
 constexpr double kD17ProductionPinTolerance = 0.05;
 constexpr int kProductionNTrainMin = 300000;
-constexpr int kExpectedCellSweepVariants = 28;
+constexpr int kExpectedCellSweepVariants = 25;
 
 void require_lock_key(const Json& obj, const char* key, const char* ctx) {
     if (!obj.contains(key) || obj[key].is_null()) {
@@ -4402,6 +4551,4675 @@ Json run_d38_overnight_certificate_validation() {
     return experiments;
 }
 
+constexpr int kD39SmokeNTrain = 80;
+constexpr int kD39SmokeNEval = 32;
+constexpr int kExpectedProfileStatistics = 7;
+
+bool json_point_in_unit_interval(const Json& v) {
+    if (!v.is_number()) {
+        return false;
+    }
+    const double x = v.get<double>();
+    return std::isfinite(x) && x >= 0.0 && x <= 1.0;
+}
+
+bool intelligence_profile_statistics_complete(const Json& intelligence_profile) {
+    if (!intelligence_profile.contains("statistics") ||
+        !intelligence_profile["statistics"].is_array()) {
+        return false;
+    }
+    const Json& stats = intelligence_profile["statistics"];
+    if (stats.size() != kExpectedProfileStatistics) {
+        return false;
+    }
+    for (const auto& stat : stats) {
+        if (!stat.contains("point") || !json_point_in_unit_interval(stat["point"])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool profile_completeness_json_complete(const Json& completeness) {
+    return completeness.is_object() && completeness.value("all_complete", false);
+}
+
+bool parse_bench_intelligence_profile_complete(const Json& bench_output) {
+    if (bench_output.contains("profile_completeness") &&
+        profile_completeness_json_complete(bench_output["profile_completeness"])) {
+        return true;
+    }
+    if (!bench_output.contains("intelligence_profile") ||
+        !bench_output["intelligence_profile"].is_object()) {
+        return false;
+    }
+    const Json& intelligence_profile = bench_output["intelligence_profile"];
+    if (intelligence_profile.contains("profile_completeness") &&
+        profile_completeness_json_complete(intelligence_profile["profile_completeness"])) {
+        return true;
+    }
+    return intelligence_profile_statistics_complete(intelligence_profile);
+}
+
+Json parse_subprocess_json_stdout(const std::string& text) {
+    const auto begin = text.find_first_not_of(" \t\r\n");
+    if (begin == std::string::npos) {
+        return Json::object();
+    }
+    const auto end = text.find_last_not_of(" \t\r\n");
+    const std::string trimmed = text.substr(begin, end - begin + 1);
+    try {
+        return Json::parse(trimmed);
+    } catch (const std::exception&) {
+        return Json::object();
+    }
+}
+
+Json run_d39_intelligence_monitor_profile_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+
+    const std::array<const char*, 4> required_sources{
+        "include/cypha/cyphalm/lm_intelligence_monitor.hpp",
+        "src/cyphalm/lm_intelligence_monitor.cpp",
+        "include/cypha/intelligence/profile_completeness.hpp",
+        "src/intelligence/profile_completeness.cpp",
+    };
+    Json monitor_sources = Json::object();
+    for (const char* rel : required_sources) {
+        const fs::path path = native_root / rel;
+        const bool present = fs::is_regular_file(path);
+        monitor_sources[std::string("native/") + rel] = present;
+        if (!present) {
+            throw std::runtime_error("intelligence monitor source missing: " + path.string());
+        }
+    }
+
+    const fs::path hook_hpp = native_root / "include/cypha/cyphalm/cyphalm_intelligence_hook.hpp";
+    const fs::path hook_cpp = native_root / "src/cyphalm/cyphalm_intelligence_hook.cpp";
+    const bool hook_extended =
+        fs::is_regular_file(hook_hpp) && fs::is_regular_file(hook_cpp) &&
+        script_text_contains(hook_hpp, "export_intelligence_monitor_report") &&
+        script_text_contains(hook_cpp, "lm_intelligence_monitor.hpp");
+    monitor_sources["native/cyphalm_intelligence_hook_extended"] = hook_extended;
+
+    std::vector<std::string> warnings;
+    const bool lm_monitor_ctest_referenced =
+        script_text_contains(native_root / "CMakeLists.txt", "native_intelligence_lm_monitor_smoke");
+    if (!lm_monitor_ctest_referenced) {
+        warnings.push_back(
+            "native/CMakeLists.txt missing native_intelligence_lm_monitor_smoke CTest reference");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const cypha::bench::RunProcessResult proc = cypha::bench::run_executable_capture(
+        bench_native_exe,
+        {"--profile", "d17", "--mode", "hybrid", "--n-train", std::to_string(kD39SmokeNTrain),
+         "--n-eval", std::to_string(kD39SmokeNEval), "--intelligence-profile"});
+
+    Json bench_output = Json::object();
+    bool stdout_parsed = false;
+    if (!proc.stdout_text.empty()) {
+        bench_output = parse_subprocess_json_stdout(proc.stdout_text);
+        stdout_parsed = !bench_output.empty();
+    }
+    if (proc.exit_code == 0 && !stdout_parsed) {
+        throw std::runtime_error("cyphalm_bench_native --intelligence-profile produced no JSON stdout");
+    }
+    if (proc.exit_code != 0) {
+        throw std::runtime_error("cyphalm_bench_native --intelligence-profile exit=" +
+                                 std::to_string(proc.exit_code));
+    }
+
+    const bool profile_complete = stdout_parsed && parse_bench_intelligence_profile_complete(bench_output);
+    const std::string validation_status =
+        profile_complete ? "profile_monitor_ready" : "pending_profile_monitor";
+
+    const Json experiments{
+        {"monitor_sources", monitor_sources},
+        {"lm_monitor_ctest_referenced", lm_monitor_ctest_referenced},
+        {"cyphalm_bench_native",
+         Json{{"exit_code", proc.exit_code},
+              {"stdout_parsed", stdout_parsed},
+              {"profile_complete", profile_complete}}},
+        {"n_train", kD39SmokeNTrain},
+        {"n_eval", kD39SmokeNEval},
+        {"expected_profile_statistics", kExpectedProfileStatistics},
+        {"validation_status", validation_status},
+        {"warnings", warnings},
+        {"backend", "cyphalm_bench_native --intelligence-profile"},
+    };
+    cypha::bench::finalize_domain("d39_intelligence_monitor_profile_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d39_intelligence_monitor_profile_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+constexpr int kD40SmokeNTrain = 100;
+constexpr int kD40SmokeNEval = 40;
+
+bool json_bpc_finite(const Json& bench_output) {
+    if (!bench_output.contains("bpc") || bench_output["bpc"].is_null()) {
+        return false;
+    }
+    if (!bench_output["bpc"].is_number()) {
+        return false;
+    }
+    return std::isfinite(bench_output["bpc"].get<double>());
+}
+
+bool profile_guided_loss_math_ready(const fs::path& pgl_hpp) {
+    if (!fs::is_regular_file(pgl_hpp)) {
+        return false;
+    }
+    const bool has_navigation =
+        script_text_contains(pgl_hpp, "navigation_loss_total");
+    const bool has_seven_stat_lambdas =
+        script_text_contains(pgl_hpp, "lambda_alpha") &&
+        script_text_contains(pgl_hpp, "lambda_calibration");
+    return has_navigation || has_seven_stat_lambdas;
+}
+
+Json run_d40_math_integration_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+
+    const std::array<const char*, 2> required_sources{
+        "include/cypha/cyphalm/cyphalm_math_integration.hpp",
+        "src/cyphalm/cyphalm_math_integration.cpp",
+    };
+    Json math_sources = Json::object();
+    for (const char* rel : required_sources) {
+        const fs::path path = native_root / rel;
+        const bool present = fs::is_regular_file(path);
+        math_sources[std::string("native/") + rel] = present;
+        if (!present) {
+            throw std::runtime_error("math integration source missing: " + path.string());
+        }
+    }
+
+    const fs::path pgl_hpp = native_root / "include/cypha/intelligence/profile_guided_loss.hpp";
+    const fs::path pgl_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    const bool pgl_present = fs::is_regular_file(pgl_hpp) && fs::is_regular_file(pgl_cpp);
+    const bool pgl_math_ready = pgl_present && profile_guided_loss_math_ready(pgl_hpp);
+    math_sources["native/profile_guided_loss_present"] = pgl_present;
+    math_sources["native/profile_guided_loss_math_ready"] = pgl_math_ready;
+    if (!pgl_present) {
+        throw std::runtime_error("profile_guided_loss sources missing under native/");
+    }
+    if (!pgl_math_ready) {
+        throw std::runtime_error(
+            "profile_guided_loss.hpp missing navigation_loss_total or 7-stat lambdas");
+    }
+
+    std::vector<std::string> warnings;
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const cypha::bench::RunProcessResult proc = cypha::bench::run_executable_capture(
+        bench_native_exe,
+        {"--profile", "d17", "--mode", "hybrid", "--math-integration", "--intelligence-profile",
+         "--n-train", std::to_string(kD40SmokeNTrain), "--n-eval", std::to_string(kD40SmokeNEval)});
+
+    Json bench_output = Json::object();
+    bool stdout_parsed = false;
+    if (!proc.stdout_text.empty()) {
+        bench_output = parse_subprocess_json_stdout(proc.stdout_text);
+        stdout_parsed = !bench_output.empty();
+    }
+    if (proc.exit_code == 0 && !stdout_parsed) {
+        throw std::runtime_error(
+            "cyphalm_bench_native --math-integration produced no JSON stdout");
+    }
+    if (proc.exit_code != 0) {
+        throw std::runtime_error("cyphalm_bench_native --math-integration exit=" +
+                                 std::to_string(proc.exit_code));
+    }
+
+    const bool profile_complete = stdout_parsed && parse_bench_intelligence_profile_complete(bench_output);
+    const bool bpc_finite = stdout_parsed && json_bpc_finite(bench_output);
+    const bool math_ready = profile_complete && bpc_finite;
+    const std::string validation_status =
+        math_ready ? "math_integration_ready" : "pending_math_integration";
+
+    const Json experiments{
+        {"math_sources", math_sources},
+        {"cyphalm_bench_native",
+         Json{{"exit_code", proc.exit_code},
+              {"stdout_parsed", stdout_parsed},
+              {"profile_complete", profile_complete},
+              {"bpc_finite", bpc_finite}}},
+        {"n_train", kD40SmokeNTrain},
+        {"n_eval", kD40SmokeNEval},
+        {"validation_status", validation_status},
+        {"warnings", warnings},
+        {"backend", "cyphalm_bench_native --math-integration --intelligence-profile"},
+    };
+    cypha::bench::finalize_domain("d40_math_integration_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d40_math_integration_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+constexpr int kD41ScaleNTrain = 5000;
+constexpr int kD41ScaleNEval = 256;
+constexpr int kMathIntegrationBenchSeed = 42;
+constexpr double kD50LockBpcTolerance = 0.025;
+constexpr double kD50LockKappaTolerance = 0.03;
+
+void apply_math_integration_subprocess_env(int n_train) {
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+    _putenv_s("CYPHA_BENCH_FULL_CORPUS", "1");
+    _putenv_s("CYPHA_BENCH_OVERNIGHT", "1");
+    _putenv_s("CYPHA_BENCH_FULL_N_TRAIN", std::to_string(n_train).c_str());
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+    setenv("CYPHA_BENCH_FULL_CORPUS", "1", 1);
+    setenv("CYPHA_BENCH_OVERNIGHT", "1", 1);
+    setenv("CYPHA_BENCH_FULL_N_TRAIN", std::to_string(n_train).c_str(), 1);
+#endif
+}
+
+std::optional<double> json_bpc_value(const Json& bench_output) {
+    if (!bench_output.contains("bpc") || bench_output["bpc"].is_null() ||
+        !bench_output["bpc"].is_number()) {
+        return std::nullopt;
+    }
+    const double value = bench_output["bpc"].get<double>();
+    if (!std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+std::optional<double> json_kappa_value(const Json& bench_output) {
+    if (!bench_output.contains("intelligence_profile") ||
+        !bench_output["intelligence_profile"].is_object()) {
+        return std::nullopt;
+    }
+    const Json& intelligence_profile = bench_output["intelligence_profile"];
+    if (!intelligence_profile.contains("criticality_score") ||
+        !intelligence_profile["criticality_score"].is_number()) {
+        return std::nullopt;
+    }
+    const double value = intelligence_profile["criticality_score"].get<double>();
+    if (!std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+}
+
+Json run_math_integration_bench_subprocess(const fs::path& bench_native_exe, int n_train,
+                                           int n_eval, bool math_integration,
+                                           const char* label, double per_stat_span = -1.0,
+                                           double kappa_target = -1.0,
+                                           double kappa_ceiling_strength = -1.0,
+                                           double kappa_ceiling_min_scale = -1.0,
+                                           std::int64_t bench_seed = -1,
+                                           bool use_eigenvalue_d_eff = false,
+                                           bool use_reu_forget_gate = false,
+                                           double kappa_nav_warmup_strength = -1.0,
+                                           double kappa_nav_warmup_floor = -1.0,
+                                           bool disable_kappa_nav_warmup = false,
+                                           double kappa_kernel_blend_floor = -1.0,
+                                           bool disable_kappa_kernel_blend_scale = false,
+                                           double kappa_excess_grad_margin = -1.0,
+                                           double kappa_excess_grad_scale = -1.0,
+                                           bool disable_kappa_excess_grad_nudge = false,
+                                           double reu_forget_gate_blend = -1.0,
+                                           int kappa_trajectory_window = -1,
+                                           int navigation_loss_warmup_steps = -1,
+                                           double free_energy_beta = -1.0,
+                                           double kernel_blend = -1.0,
+                                           int kernel_m = -1,
+                                           bool hybrid_blend_logit_set = false,
+                                           double hybrid_blend_logit = 0.0,
+                                           double mdl_forget_max_norm = -1.0,
+                                           double kernel_lr_scale = -1.0,
+                                           double alpha_init = -1.0,
+                                           double hybrid_blend_lr = -1.0,
+                                           int n_experts = -1,
+                                           int max_memory_slots = -1,
+                                           int compress_interval = -1) {
+    apply_math_integration_subprocess_env(n_train);
+    std::vector<std::string> args{"--profile", "d17", "--mode", "hybrid", "--intelligence-profile",
+                                  "--n-train", std::to_string(n_train), "--n-eval",
+                                  std::to_string(n_eval)};
+    if (bench_seed >= 0) {
+        args.push_back("--bench-seed");
+        args.push_back(std::to_string(bench_seed));
+    }
+    if (math_integration) {
+        args.push_back("--math-integration");
+        if (per_stat_span > 0.0) {
+            args.push_back("--per-stat-deviation-span");
+            args.push_back(std::to_string(per_stat_span));
+        }
+        if (kappa_target > 0.0) {
+            args.push_back("--kappa-lambda-target");
+            args.push_back(std::to_string(kappa_target));
+        }
+        if (kappa_ceiling_strength > 0.0) {
+            args.push_back("--kappa-ceiling-strength");
+            args.push_back(std::to_string(kappa_ceiling_strength));
+        }
+        if (kappa_ceiling_min_scale > 0.0) {
+            args.push_back("--kappa-ceiling-min-scale");
+            args.push_back(std::to_string(kappa_ceiling_min_scale));
+        }
+        if (use_eigenvalue_d_eff) {
+            args.push_back("--use-eigenvalue-d-eff");
+        }
+        if (use_reu_forget_gate) {
+            args.push_back("--use-reu-forget-gate");
+        }
+        if (disable_kappa_nav_warmup) {
+            args.push_back("--disable-kappa-navigation-warmup");
+        }
+        if (kappa_nav_warmup_strength > 0.0) {
+            args.push_back("--kappa-navigation-warmup-strength");
+            args.push_back(std::to_string(kappa_nav_warmup_strength));
+        }
+        if (kappa_nav_warmup_floor > 0.0) {
+            args.push_back("--kappa-navigation-warmup-floor");
+            args.push_back(std::to_string(kappa_nav_warmup_floor));
+        }
+        if (disable_kappa_kernel_blend_scale) {
+            args.push_back("--disable-kappa-kernel-blend-scale");
+        }
+        if (kappa_kernel_blend_floor > 0.0) {
+            args.push_back("--kappa-kernel-blend-floor");
+            args.push_back(std::to_string(kappa_kernel_blend_floor));
+        }
+        if (disable_kappa_excess_grad_nudge) {
+            args.push_back("--disable-kappa-excess-grad-nudge");
+        }
+        if (kappa_excess_grad_scale > 0.0) {
+            args.push_back("--kappa-excess-grad-scale");
+            args.push_back(std::to_string(kappa_excess_grad_scale));
+        }
+        if (kappa_excess_grad_margin >= 0.0) {
+            args.push_back("--kappa-excess-grad-margin");
+            args.push_back(std::to_string(kappa_excess_grad_margin));
+        }
+        if (reu_forget_gate_blend >= 0.0) {
+            args.push_back("--reu-forget-gate-blend");
+            args.push_back(std::to_string(reu_forget_gate_blend));
+        }
+        if (kappa_trajectory_window > 0) {
+            args.push_back("--kappa-trajectory-window");
+            args.push_back(std::to_string(kappa_trajectory_window));
+        }
+        if (navigation_loss_warmup_steps >= 0) {
+            args.push_back("--navigation-loss-warmup-steps");
+            args.push_back(std::to_string(navigation_loss_warmup_steps));
+        }
+        if (free_energy_beta > 0.0) {
+            args.push_back("--free-energy-beta");
+            args.push_back(std::to_string(free_energy_beta));
+        }
+        if (kernel_blend > 0.0) {
+            args.push_back("--kernel-blend");
+            args.push_back(std::to_string(kernel_blend));
+        }
+        if (kernel_m > 0) {
+            args.push_back("--kernel-m");
+            args.push_back(std::to_string(kernel_m));
+        }
+        if (hybrid_blend_logit_set) {
+            args.push_back("--hybrid-blend-logit");
+            args.push_back(std::to_string(hybrid_blend_logit));
+        }
+        if (mdl_forget_max_norm > 0.0) {
+            args.push_back("--mdl-forget-max-norm");
+            args.push_back(std::to_string(mdl_forget_max_norm));
+        }
+        if (kernel_lr_scale > 0.0) {
+            args.push_back("--kernel-lr-scale");
+            args.push_back(std::to_string(kernel_lr_scale));
+        }
+        if (alpha_init > 0.0) {
+            args.push_back("--alpha-init");
+            args.push_back(std::to_string(alpha_init));
+        }
+        if (hybrid_blend_lr > 0.0) {
+            args.push_back("--hybrid-blend-lr");
+            args.push_back(std::to_string(hybrid_blend_lr));
+        }
+        if (n_experts > 0) {
+            args.push_back("--n-experts");
+            args.push_back(std::to_string(n_experts));
+        }
+        if (max_memory_slots > 0) {
+            args.push_back("--max-memory-slots");
+            args.push_back(std::to_string(max_memory_slots));
+        }
+        if (compress_interval > 0) {
+            args.push_back("--compress-interval");
+            args.push_back(std::to_string(compress_interval));
+        }
+    }
+
+    const cypha::bench::RunProcessResult proc =
+        cypha::bench::run_executable_capture(bench_native_exe, args);
+    Json bench_output = Json::object();
+    bool stdout_parsed = false;
+    if (!proc.stdout_text.empty()) {
+        bench_output = parse_subprocess_json_stdout(proc.stdout_text);
+        stdout_parsed = !bench_output.empty();
+    }
+    if (proc.exit_code != 0) {
+        throw std::runtime_error(std::string(label) + " exit=" + std::to_string(proc.exit_code));
+    }
+    if (!stdout_parsed) {
+        throw std::runtime_error(std::string(label) + " produced no JSON stdout");
+    }
+
+    const bool profile_complete = parse_bench_intelligence_profile_complete(bench_output);
+    const bool bpc_finite = json_bpc_finite(bench_output);
+    const auto bpc = json_bpc_value(bench_output);
+    const auto kappa = json_kappa_value(bench_output);
+
+    Json row = Json{{"exit_code", proc.exit_code},
+                    {"stdout_parsed", stdout_parsed},
+                    {"profile_complete", profile_complete},
+                    {"bpc_finite", bpc_finite},
+                    {"math_integration", math_integration}};
+    if (bpc.has_value()) {
+        row["bpc"] = *bpc;
+    } else {
+        row["bpc"] = nullptr;
+    }
+    if (kappa.has_value()) {
+        row["kappa"] = *kappa;
+    } else {
+        row["kappa"] = nullptr;
+    }
+    return row;
+}
+
+Json run_d41_math_integration_scale_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+
+    const std::array<const char*, 2> required_sources{
+        "include/cypha/cyphalm/cyphalm_math_integration.hpp",
+        "src/cyphalm/cyphalm_math_integration.cpp",
+    };
+    Json math_sources = Json::object();
+    for (const char* rel : required_sources) {
+        const fs::path path = native_root / rel;
+        const bool present = fs::is_regular_file(path);
+        math_sources[std::string("native/") + rel] = present;
+        if (!present) {
+            throw std::runtime_error("math integration source missing: " + path.string());
+        }
+    }
+
+    const fs::path pgl_hpp = native_root / "include/cypha/intelligence/profile_guided_loss.hpp";
+    const fs::path pgl_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    const bool pgl_present = fs::is_regular_file(pgl_hpp) && fs::is_regular_file(pgl_cpp);
+    const bool pgl_math_ready = pgl_present && profile_guided_loss_math_ready(pgl_hpp);
+    math_sources["native/profile_guided_loss_present"] = pgl_present;
+    math_sources["native/profile_guided_loss_math_ready"] = pgl_math_ready;
+    if (!pgl_present) {
+        throw std::runtime_error("profile_guided_loss sources missing under native/");
+    }
+    if (!pgl_math_ready) {
+        throw std::runtime_error(
+            "profile_guided_loss.hpp missing navigation_loss_total or 7-stat lambdas");
+    }
+
+    std::vector<std::string> warnings;
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const Json baseline =
+        run_math_integration_bench_subprocess(bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval,
+                                              false, "cyphalm_bench_native baseline");
+    const Json math_integration =
+        run_math_integration_bench_subprocess(bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval,
+                                              true, "cyphalm_bench_native --math-integration");
+
+    const bool baseline_ready =
+        baseline.value("profile_complete", false) && baseline.value("bpc_finite", false);
+    const bool math_ready =
+        math_integration.value("profile_complete", false) &&
+        math_integration.value("bpc_finite", false);
+    const std::string validation_status =
+        baseline_ready && math_ready ? "math_integration_scale_ready"
+                                     : "pending_math_integration_scale";
+
+    Json delta = Json::object();
+    const bool baseline_bpc_ok = baseline.contains("bpc") && !baseline["bpc"].is_null();
+    const bool math_bpc_ok = math_integration.contains("bpc") && !math_integration["bpc"].is_null();
+    const bool baseline_kappa_ok =
+        baseline.contains("kappa") && !baseline["kappa"].is_null();
+    const bool math_kappa_ok =
+        math_integration.contains("kappa") && !math_integration["kappa"].is_null();
+
+    if (baseline_bpc_ok && math_bpc_ok) {
+        delta["delta_bpc"] =
+            math_integration["bpc"].get<double>() - baseline["bpc"].get<double>();
+    } else {
+        delta["delta_bpc"] = nullptr;
+        warnings.push_back("delta_bpc unavailable (missing finite bpc on baseline or math run)");
+    }
+
+    if (baseline_kappa_ok && math_kappa_ok) {
+        delta["delta_kappa"] =
+            math_integration["kappa"].get<double>() - baseline["kappa"].get<double>();
+    } else {
+        delta["delta_kappa"] = nullptr;
+        warnings.push_back("delta_kappa unavailable (missing finite kappa on baseline or math run)");
+    }
+
+    const Json experiments{
+        {"math_sources", math_sources},
+        {"baseline", baseline},
+        {"math_integration", math_integration},
+        {"delta_bpc", delta["delta_bpc"]},
+        {"delta_kappa", delta["delta_kappa"]},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"warnings", warnings},
+        {"backend",
+         "cyphalm_bench_native baseline + --math-integration --intelligence-profile @ medium scale"},
+    };
+    cypha::bench::finalize_domain("d41_math_integration_scale_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d41_math_integration_scale_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+bool lock_section_bpc_finite(const Json& section) {
+    if (!section.is_object() || !section.contains("bpc") || section["bpc"].is_null() ||
+        !section["bpc"].is_number()) {
+        return false;
+    }
+    return std::isfinite(section["bpc"].get<double>());
+}
+
+bool lock_math_integration_results_usable(const Json& mir) {
+    if (!mir.is_object()) {
+        return false;
+    }
+    if (!mir.contains("baseline") || !mir.contains("math_integration")) {
+        return false;
+    }
+    if (!mir["baseline"].is_object() || !mir["math_integration"].is_object()) {
+        return false;
+    }
+    return lock_section_bpc_finite(mir["baseline"]) &&
+           lock_section_bpc_finite(mir["math_integration"]);
+}
+
+Json lock_section_to_bench_row(const Json& section, bool math_integration) {
+    Json row = Json{{"exit_code", 0},
+                    {"stdout_parsed", true},
+                    {"profile_complete", section.value("profile_complete", true)},
+                    {"bpc_finite", lock_section_bpc_finite(section)},
+                    {"math_integration", math_integration},
+                    {"source", "BASELINE_LOCK.json"}};
+    if (section.contains("bpc") && !section["bpc"].is_null()) {
+        row["bpc"] = section["bpc"];
+    } else {
+        row["bpc"] = nullptr;
+    }
+    if (section.contains("kappa") && !section["kappa"].is_null()) {
+        row["kappa"] = section["kappa"];
+    } else {
+        row["kappa"] = nullptr;
+    }
+    return row;
+}
+
+Json run_d42_math_integration_production_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+
+    const std::array<const char*, 2> required_sources{
+        "include/cypha/cyphalm/cyphalm_math_integration.hpp",
+        "src/cyphalm/cyphalm_math_integration.cpp",
+    };
+    Json math_sources = Json::object();
+    for (const char* rel : required_sources) {
+        const fs::path path = native_root / rel;
+        const bool present = fs::is_regular_file(path);
+        math_sources[std::string("native/") + rel] = present;
+        if (!present) {
+            throw std::runtime_error("math integration source missing: " + path.string());
+        }
+    }
+
+    const fs::path pgl_hpp = native_root / "include/cypha/intelligence/profile_guided_loss.hpp";
+    const fs::path pgl_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    const bool pgl_present = fs::is_regular_file(pgl_hpp) && fs::is_regular_file(pgl_cpp);
+    const bool pgl_math_ready = pgl_present && profile_guided_loss_math_ready(pgl_hpp);
+    math_sources["native/profile_guided_loss_present"] = pgl_present;
+    math_sources["native/profile_guided_loss_math_ready"] = pgl_math_ready;
+    if (!pgl_present) {
+        throw std::runtime_error("profile_guided_loss sources missing under native/");
+    }
+    if (!pgl_math_ready) {
+        throw std::runtime_error(
+            "profile_guided_loss.hpp missing navigation_loss_total or 7-stat lambdas");
+    }
+
+    const fs::path overnight_script = repo / "scripts" / "run_d17_overnight.ps1";
+    if (!fs::is_regular_file(overnight_script)) {
+        throw std::runtime_error("missing scripts/run_d17_overnight.ps1");
+    }
+    const bool overnight_has_math_switch =
+        script_text_contains(overnight_script, "MathIntegration");
+    const bool overnight_has_math_env =
+        script_text_contains(overnight_script, "CYPHA_OVERNIGHT_MATH_INTEGRATION");
+    if (!overnight_has_math_switch && !overnight_has_math_env) {
+        throw std::runtime_error(
+            "run_d17_overnight.ps1 missing MathIntegration param and "
+            "CYPHA_OVERNIGHT_MATH_INTEGRATION");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("math_integration_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing math_integration_results key");
+    }
+    const Json& math_integration_results = lock["math_integration_results"];
+
+    std::vector<std::string> warnings;
+    Json overnight_wiring{
+        {"script", "scripts/run_d17_overnight.ps1"},
+        {"MathIntegration_switch", overnight_has_math_switch},
+        {"CYPHA_OVERNIGHT_MATH_INTEGRATION", overnight_has_math_env},
+    };
+
+    Json baseline;
+    Json math_integration;
+    std::string bench_backend;
+    int n_train = kD41ScaleNTrain;
+    int n_eval = kD41ScaleNEval;
+    const bool lock_usable = lock_math_integration_results_usable(math_integration_results);
+
+    if (lock_usable) {
+        baseline = lock_section_to_bench_row(math_integration_results["baseline"], false);
+        math_integration =
+            lock_section_to_bench_row(math_integration_results["math_integration"], true);
+        if (math_integration_results.contains("n_train") &&
+            math_integration_results["n_train"].is_number_integer()) {
+            n_train = math_integration_results["n_train"].get<int>();
+        }
+        if (math_integration_results.contains("n_eval") &&
+            math_integration_results["n_eval"].is_number_integer()) {
+            n_eval = math_integration_results["n_eval"].get<int>();
+        }
+        bench_backend = "BASELINE_LOCK.json math_integration_results";
+    } else {
+        const fs::path exe_dir = resolve_native_exe_dir();
+        const fs::path bench_native_exe =
+            cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+        if (!fs::is_regular_file(bench_native_exe)) {
+            throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+        }
+
+#if defined(_WIN32)
+        _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+        setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+        baseline = run_math_integration_bench_subprocess(bench_native_exe, kD41ScaleNTrain,
+                                                         kD41ScaleNEval, false,
+                                                         "cyphalm_bench_native baseline");
+        math_integration = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native --math-integration");
+        bench_backend =
+            "cyphalm_bench_native baseline + --math-integration --intelligence-profile @ medium "
+            "scale (lock stub)";
+        if (!math_integration_results.is_null()) {
+            warnings.push_back(
+                "math_integration_results present but incomplete; used subprocess smoke");
+        }
+    }
+
+    const bool baseline_ready =
+        baseline.value("profile_complete", false) && baseline.value("bpc_finite", false);
+    const bool math_ready =
+        math_integration.value("profile_complete", false) &&
+        math_integration.value("bpc_finite", false);
+    const bool production_tier =
+        n_train >= kProductionNTrainMin &&
+        (!math_integration_results.contains("status") ||
+         math_integration_results["status"].is_null() ||
+         (math_integration_results["status"].is_string() &&
+          math_integration_results["status"].get<std::string>() != "pending"));
+    const std::string validation_status =
+        baseline_ready && math_ready && production_tier ? "math_integration_production_ready"
+                                                        : "pending_math_integration_production";
+
+    Json delta = Json::object();
+    const bool baseline_bpc_ok = baseline.contains("bpc") && !baseline["bpc"].is_null();
+    const bool math_bpc_ok = math_integration.contains("bpc") && !math_integration["bpc"].is_null();
+    const bool baseline_kappa_ok = baseline.contains("kappa") && !baseline["kappa"].is_null();
+    const bool math_kappa_ok =
+        math_integration.contains("kappa") && !math_integration["kappa"].is_null();
+
+    if (baseline_bpc_ok && math_bpc_ok) {
+        delta["delta_bpc"] =
+            math_integration["bpc"].get<double>() - baseline["bpc"].get<double>();
+    } else {
+        delta["delta_bpc"] = nullptr;
+        warnings.push_back("delta_bpc unavailable (missing finite bpc on baseline or math run)");
+    }
+
+    if (baseline_kappa_ok && math_kappa_ok) {
+        delta["delta_kappa"] =
+            math_integration["kappa"].get<double>() - baseline["kappa"].get<double>();
+    } else {
+        delta["delta_kappa"] = nullptr;
+        warnings.push_back("delta_kappa unavailable (missing finite kappa on baseline or math run)");
+    }
+
+    const Json experiments{
+        {"math_sources", math_sources},
+        {"overnight_wiring", overnight_wiring},
+        {"math_integration_results", math_integration_results},
+        {"lock_file", lock_path.string()},
+        {"lock_results_used", lock_usable},
+        {"baseline", baseline},
+        {"math_integration", math_integration},
+        {"delta_bpc", delta["delta_bpc"]},
+        {"delta_kappa", delta["delta_kappa"]},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"production_tier", production_tier},
+        {"validation_status", validation_status},
+        {"warnings", warnings},
+        {"backend", bench_backend},
+    };
+    cypha::bench::finalize_domain("d42_math_integration_production_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d42_math_integration_production_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+bool lock_has_best_pareto_variant(const Json& lock) {
+    if (!lock.contains("cell_sweep_results") || !lock["cell_sweep_results"].is_object()) {
+        return false;
+    }
+    const Json& cell_sweep = lock["cell_sweep_results"];
+    if (!cell_sweep.contains("best_pareto_variant")) {
+        return false;
+    }
+    const Json& best = cell_sweep["best_pareto_variant"];
+    if (best.is_string()) {
+        return !best.get<std::string>().empty();
+    }
+    if (best.is_object()) {
+        return best.contains("id") && best["id"].is_string() &&
+               !best["id"].get<std::string>().empty();
+    }
+    return false;
+}
+
+bool d22_has_pareto_ranked_variants(const Json& d22) {
+    return d22.contains("pareto_ranked_variants") && d22["pareto_ranked_variants"].is_array() &&
+           !d22["pareto_ranked_variants"].empty();
+}
+
+Json run_d43_math_integration_lock_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+
+    const fs::path baseline_lock_cpp = native_root / "tools" / "cypha_baseline_lock.cpp";
+    if (!fs::is_regular_file(baseline_lock_cpp)) {
+        throw std::runtime_error("missing native/tools/cypha_baseline_lock.cpp");
+    }
+    const bool baseline_lock_source_has_d17_math =
+        script_text_contains(baseline_lock_cpp, "d17-math");
+    if (!baseline_lock_source_has_d17_math) {
+        throw std::runtime_error("cypha_baseline_lock.cpp missing d17-math run kind");
+    }
+
+    const fs::path update_lock_path = repo / "scripts" / "update_baseline_lock.ps1";
+    if (!fs::is_regular_file(update_lock_path)) {
+        throw std::runtime_error("missing scripts/update_baseline_lock.ps1");
+    }
+    const bool update_lock_has_d17_math = script_text_contains(update_lock_path, "d17-math");
+    if (!update_lock_has_d17_math) {
+        throw std::runtime_error("update_baseline_lock.ps1 missing d17-math run option");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path baseline_lock_exe =
+        cypha::bench::resolve_runner_exe("cypha_baseline_lock", exe_dir);
+    const bool baseline_lock_exe_present = fs::is_regular_file(baseline_lock_exe);
+    if (!baseline_lock_exe_present) {
+        throw std::runtime_error("missing cypha_baseline_lock: " + baseline_lock_exe.string());
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("math_integration_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing math_integration_results key");
+    }
+    const Json& math_integration_results = lock["math_integration_results"];
+
+    int n_train = 0;
+    if (math_integration_results.contains("n_train") &&
+        math_integration_results["n_train"].is_number_integer()) {
+        n_train = math_integration_results["n_train"].get<int>();
+    }
+
+    std::string math_status;
+    if (math_integration_results.contains("status") &&
+        math_integration_results["status"].is_string()) {
+        math_status = math_integration_results["status"].get<std::string>();
+    }
+
+    std::vector<std::string> warnings;
+    const bool medium_tier = n_train >= kD41ScaleNTrain;
+    if (medium_tier && math_status == "pending") {
+        throw std::runtime_error(
+            "math_integration_results status=pending at n_train>=" +
+            std::to_string(kD41ScaleNTrain));
+    }
+    const bool math_lock_status_ok =
+        !medium_tier || (!math_status.empty() && math_status != "pending");
+
+    Json pareto_source = Json::object();
+    Json pareto_ranked_variants = Json::array();
+    Json best_pareto_variant = nullptr;
+    bool pareto_available = lock_has_best_pareto_variant(lock);
+
+    if (pareto_available) {
+        const Json& cell_sweep = lock["cell_sweep_results"];
+        pareto_source = Json{{"kind", "cell_sweep_results"},
+                             {"best_pareto_variant", cell_sweep["best_pareto_variant"]}};
+        if (cell_sweep["best_pareto_variant"].is_object()) {
+            best_pareto_variant = cell_sweep["best_pareto_variant"];
+        }
+    } else {
+        const Json d22 = run_d22_intelligence_cross_profile();
+        pareto_available = d22_has_pareto_ranked_variants(d22);
+        if (d22.contains("pareto_ranked_variants") && d22["pareto_ranked_variants"].is_array()) {
+            pareto_ranked_variants = d22["pareto_ranked_variants"];
+        }
+        if (d22.contains("best_pareto_variant") && !d22["best_pareto_variant"].is_null()) {
+            best_pareto_variant = d22["best_pareto_variant"];
+        }
+        pareto_source = Json{{"kind", "d22_intelligence_cross_profile"},
+                             {"pareto_ranked_variant_count", pareto_ranked_variants.size()}};
+        if (!pareto_available) {
+            warnings.push_back(
+                "d22 cross profile produced empty pareto_ranked_variants and lock lacks "
+                "cell_sweep_results.best_pareto_variant");
+        }
+    }
+
+    const bool d17_math_supported =
+        baseline_lock_source_has_d17_math && update_lock_has_d17_math && baseline_lock_exe_present;
+    const std::string validation_status =
+        math_lock_status_ok && pareto_available && d17_math_supported
+            ? "math_integration_lock_ready"
+            : "pending_math_integration_lock";
+
+    const Json experiments{
+        {"lock_file", lock_path.string()},
+        {"math_integration_results", math_integration_results},
+        {"n_train", n_train},
+        {"medium_tier_n_train_min", kD41ScaleNTrain},
+        {"medium_tier", medium_tier},
+        {"math_lock_status", math_status.empty() ? Json(nullptr) : Json(math_status)},
+        {"math_lock_status_ok", math_lock_status_ok},
+        {"pareto_available", pareto_available},
+        {"pareto_source", pareto_source},
+        {"pareto_ranked_variants", pareto_ranked_variants},
+        {"best_pareto_variant", best_pareto_variant},
+        {"d17_math_supported", d17_math_supported},
+        {"baseline_lock_exe_present", baseline_lock_exe_present},
+        {"baseline_lock_source_has_d17_math", baseline_lock_source_has_d17_math},
+        {"update_baseline_lock_has_d17_math", update_lock_has_d17_math},
+        {"validation_status", validation_status},
+        {"warnings", warnings},
+        {"backend", "baseline_lock_math_integration_validate"},
+    };
+    cypha::bench::finalize_domain("d43_math_integration_lock_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d43_math_integration_lock_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d44_kernel_nystrom_cyphalm_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+
+    const fs::path dif_cpp = native_root / "src/cyphalm/cyphalm_dif.cpp";
+    const fs::path dif_hpp = native_root / "include/cypha/cyphalm/cyphalm_dif.hpp";
+    const fs::path traj_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    const bool kernel_wired = fs::is_regular_file(dif_cpp) && fs::is_regular_file(dif_hpp) &&
+                              script_text_contains(dif_cpp, "kernel_mem_") &&
+                              script_text_contains(dif_cpp, "KernelMemory") &&
+                              script_text_contains(dif_hpp, "kernel_memory.hpp");
+    if (!kernel_wired) {
+        throw std::runtime_error("CyphaDIF missing KernelMemory Nyström wiring");
+    }
+    const bool trajectory_wired = fs::is_regular_file(traj_cpp) &&
+                                  script_text_contains(traj_cpp,
+                                                       "scale_profile_guided_loss_from_trajectory");
+    if (!trajectory_wired) {
+        throw std::runtime_error("profile_guided_loss missing kappa trajectory scheduler");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path smoke_exe = cypha::bench::resolve_runner_exe("kernel_llm_h04_smoke", exe_dir);
+    if (!fs::is_regular_file(smoke_exe)) {
+        throw std::runtime_error("missing kernel_llm_h04_smoke: " + smoke_exe.string());
+    }
+
+    const cypha::bench::RunProcessResult proc =
+        cypha::bench::run_executable_capture(smoke_exe, {});
+    if (proc.exit_code != 0) {
+        throw std::runtime_error("kernel_llm_h04_smoke exit=" + std::to_string(proc.exit_code));
+    }
+
+    const bool smoke_pass =
+        proc.stdout_text.find("kernel_llm_h04_smoke: PASS") != std::string::npos;
+    if (!smoke_pass) {
+        throw std::runtime_error("kernel_llm_h04_smoke did not report PASS");
+    }
+
+    const std::string validation_status =
+        kernel_wired && trajectory_wired && smoke_pass ? "kernel_nystrom_cyphalm_ready"
+                                                       : "pending_kernel_nystrom_cyphalm";
+
+    const Json experiments{
+        {"kernel_wired", kernel_wired},
+        {"trajectory_wired", trajectory_wired},
+        {"kernel_llm_h04_smoke",
+         Json{{"exit_code", proc.exit_code}, {"pass_reported", smoke_pass}}},
+        {"validation_status", validation_status},
+        {"backend", "kernel_nystrom_cyphalm_validate"},
+    };
+    cypha::bench::finalize_domain("d44_kernel_nystrom_cyphalm_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d44_kernel_nystrom_cyphalm_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d45_per_stat_navigation_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const bool per_stat_wired = fs::is_regular_file(pg_cpp) &&
+                                script_text_contains(pg_cpp,
+                                                     "scale_profile_guided_loss_by_stat_deviation") &&
+                                script_text_contains(pg_cpp, "resolve_adaptive_profile_guided_config");
+    if (!per_stat_wired) {
+        throw std::runtime_error("profile_guided_loss missing per-stat deviation scheduler");
+    }
+    const bool export_wired = fs::is_regular_file(math_cpp) &&
+                              script_text_contains(math_cpp, "stat_deltas") &&
+                              script_text_contains(math_cpp, "use_per_stat_deviation_lambdas");
+    if (!export_wired) {
+        throw std::runtime_error("cyphalm_math_integration missing enriched export telemetry");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const cypha::bench::RunProcessResult proc = cypha::bench::run_executable_capture(
+        bench_native_exe,
+        {"--profile", "d17", "--mode", "hybrid", "--math-integration", "--intelligence-profile",
+         "--n-train", std::to_string(kD40SmokeNTrain), "--n-eval", std::to_string(kD40SmokeNEval)});
+
+    Json bench_output = Json::object();
+    if (!proc.stdout_text.empty()) {
+        bench_output = parse_subprocess_json_stdout(proc.stdout_text);
+    }
+    if (proc.exit_code != 0) {
+        throw std::runtime_error("cyphalm_bench_native --math-integration exit=" +
+                                 std::to_string(proc.exit_code));
+    }
+    if (bench_output.empty()) {
+        throw std::runtime_error("cyphalm_bench_native --math-integration produced no JSON stdout");
+    }
+    if (!bench_output.contains("math_integration") ||
+        !bench_output["math_integration"].is_object()) {
+        throw std::runtime_error("bench JSON missing math_integration report");
+    }
+    const Json& math = bench_output["math_integration"];
+    const bool has_stat_deltas =
+        math.contains("stat_deltas") && math["stat_deltas"].is_object();
+    const bool has_nav_config = math.contains("navigation_config") &&
+                                math["navigation_config"].is_object() &&
+                                math["navigation_config"].value("use_per_stat_deviation_lambdas",
+                                                                 false);
+    const bool has_effective =
+        math.contains("effective_lambdas") && math["effective_lambdas"].is_object();
+    const bool profile_complete = parse_bench_intelligence_profile_complete(bench_output);
+    const bool bpc_finite = json_bpc_finite(bench_output);
+    const bool math_ready =
+        per_stat_wired && export_wired && has_stat_deltas && has_nav_config && has_effective &&
+        profile_complete && bpc_finite;
+    const std::string validation_status =
+        math_ready ? "per_stat_navigation_ready" : "pending_per_stat_navigation";
+
+    const Json experiments{
+        {"per_stat_wired", per_stat_wired},
+        {"export_wired", export_wired},
+        {"has_stat_deltas", has_stat_deltas},
+        {"has_nav_config", has_nav_config},
+        {"has_effective_lambdas", has_effective},
+        {"profile_complete", profile_complete},
+        {"bpc_finite", bpc_finite},
+        {"cyphalm_bench_native", Json{{"exit_code", proc.exit_code}}},
+        {"n_train", kD40SmokeNTrain},
+        {"n_eval", kD40SmokeNEval},
+        {"validation_status", validation_status},
+        {"backend", "cyphalm_bench_native --math-integration per-stat navigation"},
+    };
+    cypha::bench::finalize_domain("d45_per_stat_navigation_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d45_per_stat_navigation_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d46_math_stack_upgrade_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path model_cpp = native_root / "src/cyphalm/cyphalm_model.cpp";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const bool tau_gate_wired = fs::is_regular_file(model_cpp) &&
+                                script_text_contains(model_cpp, "use_tau_forget_gate") &&
+                                script_text_contains(model_cpp, "hybrid_forget_gate_scale");
+    const bool math_stack_wired = fs::is_regular_file(math_cpp) &&
+                                  script_text_contains(math_cpp, "use_tau_forget_gate") &&
+                                  script_text_contains(math_cpp, "use_kernel_llr") &&
+                                  script_text_contains(math_cpp, "per_stat_deviation_span = 1.0");
+    if (!tau_gate_wired || !math_stack_wired) {
+        throw std::runtime_error("Phase 33 math stack wiring incomplete");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path tau_smoke = cypha::bench::resolve_runner_exe("tau_forget_gate_smoke", exe_dir);
+    if (!fs::is_regular_file(tau_smoke)) {
+        throw std::runtime_error("missing tau_forget_gate_smoke: " + tau_smoke.string());
+    }
+    const cypha::bench::RunProcessResult tau_proc =
+        cypha::bench::run_executable_capture(tau_smoke, {});
+    if (tau_proc.exit_code != 0) {
+        throw std::runtime_error("tau_forget_gate_smoke exit=" + std::to_string(tau_proc.exit_code));
+    }
+
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+    const cypha::bench::RunProcessResult bench_proc = cypha::bench::run_executable_capture(
+        bench_native_exe,
+        {"--profile", "d17", "--mode", "hybrid", "--math-integration", "--intelligence-profile",
+         "--n-train", std::to_string(kD40SmokeNTrain), "--n-eval", std::to_string(kD40SmokeNEval)});
+    Json bench_output = Json::object();
+    if (!bench_proc.stdout_text.empty()) {
+        bench_output = parse_subprocess_json_stdout(bench_proc.stdout_text);
+    }
+    if (bench_proc.exit_code != 0) {
+        throw std::runtime_error("cyphalm_bench_native math stack exit=" +
+                                 std::to_string(bench_proc.exit_code));
+    }
+    if (!bench_output.contains("math_integration") ||
+        !bench_output["math_integration"].is_object()) {
+        throw std::runtime_error("bench JSON missing math_integration");
+    }
+    const Json& math = bench_output["math_integration"];
+    const Json& nav = math.contains("navigation_config") && math["navigation_config"].is_object()
+                          ? math["navigation_config"]
+                          : Json::object();
+    const bool tau_in_export = nav.value("use_tau_forget_gate", false);
+    const bool kernel_in_export = nav.value("use_kernel_llr", false);
+    const double span = nav.value("per_stat_deviation_span", 0.0);
+    const bool span_ok = std::abs(span - 1.0) < 1e-6;
+    const bool profile_complete = parse_bench_intelligence_profile_complete(bench_output);
+    const bool bpc_finite = json_bpc_finite(bench_output);
+    const bool math_ready = tau_in_export && kernel_in_export && span_ok && profile_complete &&
+                              bpc_finite && tau_proc.stdout_text.find("PASS") != std::string::npos;
+    const std::string validation_status =
+        math_ready ? "math_stack_upgrade_ready" : "pending_math_stack_upgrade";
+
+    const Json experiments{
+        {"tau_gate_wired", tau_gate_wired},
+        {"math_stack_wired", math_stack_wired},
+        {"tau_forget_gate_smoke", Json{{"exit_code", tau_proc.exit_code}}},
+        {"tau_in_export", tau_in_export},
+        {"kernel_in_export", kernel_in_export},
+        {"per_stat_deviation_span", span},
+        {"profile_complete", profile_complete},
+        {"bpc_finite", bpc_finite},
+        {"validation_status", validation_status},
+        {"backend", "Phase33_tau_kernel_span_math_stack"},
+    };
+    cypha::bench::finalize_domain("d46_math_stack_upgrade_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d46_math_stack_upgrade_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+constexpr int kD47AblationNTrain = 500;
+constexpr int kD47AblationNEval = 80;
+
+Json run_d47_span_ablation_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "use_kappa_ceiling_lambdas") ||
+        !script_text_contains(math_cpp, "use_lstm_d_eff_hidden_nudge")) {
+        throw std::runtime_error("math integration preset missing Phase 34 flags");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--per-stat-deviation-span")) {
+        throw std::runtime_error("cyphalm_bench_native missing --per-stat-deviation-span");
+    }
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "use_kappa_ceiling_lambdas")) {
+        throw std::runtime_error("profile_guided_loss missing kappa ceiling scheduler");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> spans{0.5, 1.0, 1.5};
+    Json span_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+    for (double span : spans) {
+        const Json baseline = run_math_integration_bench_subprocess(
+            bench_native_exe, kD47AblationNTrain, kD47AblationNEval, false,
+            "cyphalm_bench_native baseline", span);
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD47AblationNTrain, kD47AblationNEval, true,
+            "cyphalm_bench_native --math-integration", span);
+        if (!baseline.contains("bpc") || !math.contains("bpc") || baseline["bpc"].is_null() ||
+            math["bpc"].is_null()) {
+            throw std::runtime_error("span ablation missing bpc");
+        }
+        const double base_bpc = baseline["bpc"].get<double>();
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double score = kappa - 0.1 * delta_bpc;
+        Json row{{"per_stat_deviation_span", span},
+                 {"baseline_bpc", base_bpc},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"pareto_score", score}};
+        span_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const std::string validation_status =
+        best_row != nullptr ? "span_ablation_ready" : "pending_span_ablation";
+
+    const Json experiments{
+        {"span_ablation_rows", span_rows},
+        {"best_span", best_row},
+        {"n_train", kD47AblationNTrain},
+        {"n_eval", kD47AblationNEval},
+        {"validation_status", validation_status},
+        {"backend", "span_ablation_math_integration"},
+    };
+    cypha::bench::finalize_domain("d47_span_ablation_validation", experiments);
+    const fs::path table_path = cypha::bench::tables_dir() / "d47_span_ablation_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d48_kappa_ceiling_ablation_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kappa_ceiling_strength") ||
+        !script_text_contains(math_cpp, "use_eigenvalue_d_eff")) {
+        throw std::runtime_error("math integration preset missing Phase 35 flags");
+    }
+    const fs::path meas_cpp = native_root / "src/intelligence/measurers.cpp";
+    if (!fs::is_regular_file(meas_cpp) ||
+        !script_text_contains(meas_cpp, "participation_ratio_covariance_eigenvalue")) {
+        throw std::runtime_error("measurers missing eigenvalue D_eff PR");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--kappa-lambda-target")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kappa-lambda-target");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> targets{0.80, 0.83, 0.86};
+    Json target_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k");
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("kappa ceiling ablation missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double target : targets) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native --math-integration kappa ceiling", -1.0, target);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("kappa ceiling ablation missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.05 * std::abs(delta_kappa);
+        Json row{{"kappa_lambda_target", target},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        target_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "kappa_ceiling_joint_ready" : "kappa_ceiling_ablation_ready";
+
+    const Json experiments{
+        {"kappa_ceiling_rows", target_rows},
+        {"best_target", best_row},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "kappa_ceiling_ablation_math_integration"},
+    };
+    cypha::bench::finalize_domain("d48_kappa_ceiling_ablation_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d48_kappa_ceiling_ablation_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d49_ceiling_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "kappa_excess_grad_nudge") ||
+        !script_text_contains(pg_cpp, "use_kappa_trajectory_ceiling")) {
+        throw std::runtime_error("profile_guided_loss missing Phase 36 joint tuning");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--kappa-ceiling-min-scale")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kappa-ceiling-min-scale");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 2> strengths{1.5, 2.5};
+    const std::array<double, 2> min_scales{0.40, 0.55};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("ceiling grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double strength : strengths) {
+        for (double min_scale : min_scales) {
+            const Json math = run_math_integration_bench_subprocess(
+                bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+                "cyphalm_bench_native ceiling grid", -1.0, -1.0, strength, min_scale,
+                kMathIntegrationBenchSeed);
+            if (!math.contains("bpc") || math["bpc"].is_null()) {
+                throw std::runtime_error("ceiling grid missing math bpc");
+            }
+            const double math_bpc = math["bpc"].get<double>();
+            const double delta_bpc = math_bpc - base_bpc;
+            double kappa = 0.0;
+            if (math.contains("kappa") && !math["kappa"].is_null()) {
+                kappa = math["kappa"].get<double>();
+            }
+            const double delta_kappa = kappa - base_kappa;
+            const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+            Json row{{"kappa_ceiling_strength", strength},
+                     {"kappa_ceiling_min_scale", min_scale},
+                     {"baseline_bpc", base_bpc},
+                     {"baseline_kappa", base_kappa},
+                     {"math_bpc", math_bpc},
+                     {"delta_bpc", delta_bpc},
+                     {"kappa", kappa},
+                     {"delta_kappa", delta_kappa},
+                     {"joint_score", score}};
+            grid_rows.push_back(row);
+            if (score > best_score) {
+                best_score = score;
+                best_row = row;
+            }
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "ceiling_grid_joint_ready" : "ceiling_grid_ablation_ready";
+
+    const Json experiments{
+        {"ceiling_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "ceiling_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d49_ceiling_grid_joint_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d49_ceiling_grid_joint_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d50_math_joint_lock_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path model_cpp = native_root / "src/cyphalm/cyphalm_model.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "kappa_excess_grad_nudge") ||
+        !fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kappa_excess_grad_margin") ||
+        !fs::is_regular_file(model_cpp) ||
+        !script_text_contains(model_cpp, "use_kappa_excess_grad_nudge")) {
+        throw std::runtime_error("Phase 37 joint lock tuning sources missing");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--bench-seed")) {
+        throw std::runtime_error("cyphalm_bench_native missing --bench-seed");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("math_integration_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing math_integration_results key");
+    }
+    const Json& lock_math = lock["math_integration_results"];
+    if (!lock_math.contains("baseline") || !lock_math.contains("math_integration")) {
+        throw std::runtime_error("math_integration_results missing baseline/math_integration");
+    }
+    const double lock_base_bpc = lock_math["baseline"]["bpc"].get<double>();
+    const double lock_math_bpc = lock_math["math_integration"]["bpc"].get<double>();
+    const double lock_base_kappa = lock_math["baseline"]["kappa"].get<double>();
+    const double lock_math_kappa = lock_math["math_integration"]["kappa"].get<double>();
+    const double lock_delta_bpc = lock_math_bpc - lock_base_bpc;
+    const double lock_delta_kappa = lock_math_kappa - lock_base_kappa;
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k pinned seed", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    const Json math = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+        "cyphalm_bench_native math @ 5k pinned seed", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null() || !math.contains("bpc") ||
+        math["bpc"].is_null()) {
+        throw std::runtime_error("d50 joint lock missing bpc");
+    }
+
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double math_bpc = math["bpc"].get<double>();
+    const double delta_bpc = math_bpc - base_bpc;
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+    const double math_kappa =
+        math.contains("kappa") && !math["kappa"].is_null() ? math["kappa"].get<double>() : 0.0;
+    const double delta_kappa = math_kappa - base_kappa;
+
+    const bool joint_ok = delta_bpc < 0.0 && std::abs(delta_kappa) <= 0.05;
+    const bool lock_bpc_repro =
+        std::abs(base_bpc - lock_base_bpc) <= kD50LockBpcTolerance &&
+        std::abs(math_bpc - lock_math_bpc) <= kD50LockBpcTolerance;
+    const bool lock_kappa_repro =
+        std::abs(base_kappa - lock_base_kappa) <= kD50LockKappaTolerance &&
+        std::abs(math_kappa - lock_math_kappa) <= kD50LockKappaTolerance;
+    const bool lock_repro_ok = lock_bpc_repro && lock_kappa_repro;
+
+    const std::string validation_status =
+        joint_ok && lock_repro_ok
+            ? "joint_lock_ready"
+            : joint_ok ? "joint_ready"
+                       : lock_repro_ok ? "lock_repro_ready" : "joint_lock_ablation_ready";
+
+    const Json experiments{
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"baseline", baseline},
+        {"math_integration", math},
+        {"delta_bpc", delta_bpc},
+        {"delta_kappa", delta_kappa},
+        {"lock_baseline_bpc", lock_base_bpc},
+        {"lock_math_bpc", lock_math_bpc},
+        {"lock_delta_bpc", lock_delta_bpc},
+        {"lock_delta_kappa", lock_delta_kappa},
+        {"lock_bpc_tolerance", kD50LockBpcTolerance},
+        {"lock_kappa_tolerance", kD50LockKappaTolerance},
+        {"joint_ok", joint_ok},
+        {"lock_repro_ok", lock_repro_ok},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "joint_lock_math_integration"},
+    };
+    cypha::bench::finalize_domain("d50_math_joint_lock_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d50_math_joint_lock_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d51_opt_in_lever_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kappa_ceiling_min_scale = 0.40") ||
+        !script_text_contains(math_cpp, "use_kappa_kernel_blend_scale") ||
+        !script_text_contains(math_cpp, "use_reu_forget_gate = true")) {
+        throw std::runtime_error("math integration preset missing Phase 39 tuning");
+    }
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "scale_kernel_blend_from_kappa")) {
+        throw std::runtime_error("profile_guided_loss missing Phase 38 kernel blend scaling");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--use-eigenvalue-d-eff")) {
+        throw std::runtime_error("cyphalm_bench_native missing opt-in lever flags");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k lever ablation", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("d51 lever ablation missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    struct LeverRow {
+        const char* lever_id;
+        bool eigen;
+        bool reu;
+    };
+    const std::array<LeverRow, 4> levers{{{ "preset", false, false },
+                                          { "eigenvalue_d_eff", true, false },
+                                          { "reu_forget_gate", false, true },
+                                          { "eigen_reu", true, true }}};
+
+    Json lever_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    for (const LeverRow& lever : levers) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native opt-in lever", -1.0, -1.0, -1.0, -1.0, kMathIntegrationBenchSeed,
+            lever.eigen, lever.reu);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("d51 lever ablation missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"lever_id", lever.lever_id},
+                 {"use_eigenvalue_d_eff", lever.eigen},
+                 {"use_reu_forget_gate", lever.reu},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        lever_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "opt_in_lever_joint_ready" : "opt_in_lever_ablation_ready";
+
+    const Json experiments{
+        {"lever_rows", lever_rows},
+        {"best_lever", best_row},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "opt_in_lever_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d51_opt_in_lever_joint_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d51_opt_in_lever_joint_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d52_preset_ship_lock_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "use_reu_forget_gate = true") ||
+        !script_text_contains(math_cpp, "kappa_lambda_target = 0.83") ||
+        !script_text_contains(math_cpp, "kappa_ceiling_min_scale = 0.40")) {
+        throw std::runtime_error("math integration preset missing Phase 39 ship lock");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("math_integration_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing math_integration_results key");
+    }
+    const Json& lock_math = lock["math_integration_results"];
+    const double lock_base_bpc = lock_math["baseline"]["bpc"].get<double>();
+    const double lock_math_bpc = lock_math["math_integration"]["bpc"].get<double>();
+    const double lock_base_kappa = lock_math["baseline"]["kappa"].get<double>();
+    const double lock_math_kappa = lock_math["math_integration"]["kappa"].get<double>();
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k preset ship", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    const Json math = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+        "cyphalm_bench_native math @ 5k preset ship", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null() || !math.contains("bpc") ||
+        math["bpc"].is_null()) {
+        throw std::runtime_error("d52 preset ship lock missing bpc");
+    }
+
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double math_bpc = math["bpc"].get<double>();
+    const double delta_bpc = math_bpc - base_bpc;
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+    const double math_kappa =
+        math.contains("kappa") && !math["kappa"].is_null() ? math["kappa"].get<double>() : 0.0;
+    const double delta_kappa = math_kappa - base_kappa;
+
+    const bool joint_ok = delta_bpc < 0.0 && std::abs(delta_kappa) <= 0.05;
+    const bool lock_repro_ok =
+        std::abs(base_bpc - lock_base_bpc) <= kD50LockBpcTolerance &&
+        std::abs(math_bpc - lock_math_bpc) <= kD50LockBpcTolerance &&
+        std::abs(base_kappa - lock_base_kappa) <= kD50LockKappaTolerance &&
+        std::abs(math_kappa - lock_math_kappa) <= kD50LockKappaTolerance;
+
+    const std::string validation_status =
+        joint_ok && lock_repro_ok ? "preset_ship_lock_ready"
+                                  : joint_ok ? "preset_ship_joint_ready"
+                                               : "preset_ship_ablation_ready";
+
+    const Json experiments{
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"baseline", baseline},
+        {"math_integration", math},
+        {"delta_bpc", delta_bpc},
+        {"delta_kappa", delta_kappa},
+        {"lock_baseline_bpc", lock_base_bpc},
+        {"lock_math_bpc", lock_math_bpc},
+        {"joint_ok", joint_ok},
+        {"lock_repro_ok", lock_repro_ok},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "preset_ship_lock_math_integration"},
+        {"preset_flags",
+         Json{{"use_reu_forget_gate", true},
+              {"kappa_lambda_target", 0.83},
+              {"kappa_ceiling_min_scale", 0.40}}},
+    };
+    cypha::bench::finalize_domain("d52_preset_ship_lock_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d52_preset_ship_lock_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d53_production_preset_ship_lock_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "use_reu_forget_gate = true") ||
+        !script_text_contains(math_cpp, "use_kappa_navigation_warmup_scale = true")) {
+        throw std::runtime_error("math integration preset missing Phase 40 production ship lock");
+    }
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "scale_navigation_warmup_from_kappa")) {
+        throw std::runtime_error("profile_guided_loss missing Phase 40 navigation warmup scaling");
+    }
+    const fs::path prod_script = repo / "scripts" / "run_production_overnight.ps1";
+    if (!fs::is_regular_file(prod_script) ||
+        !script_text_contains(prod_script, "MathIntegration")) {
+        throw std::runtime_error("run_production_overnight.ps1 missing -MathIntegration");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("math_integration_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing math_integration_results key");
+    }
+    const Json& lock_math = lock["math_integration_results"];
+    const bool lock_usable = lock_math_integration_results_usable(lock_math);
+
+    int n_train = kD41ScaleNTrain;
+    int n_eval = kD41ScaleNEval;
+    if (lock_math.contains("n_train") && lock_math["n_train"].is_number_integer()) {
+        n_train = lock_math["n_train"].get<int>();
+    }
+    if (lock_math.contains("n_eval") && lock_math["n_eval"].is_number_integer()) {
+        n_eval = lock_math["n_eval"].get<int>();
+    }
+
+    std::string math_status;
+    if (lock_math.contains("status") && lock_math["status"].is_string()) {
+        math_status = lock_math["status"].get<std::string>();
+    }
+
+    const bool production_tier = n_train >= kProductionNTrainMin;
+    bool overnight_aligned = true;
+    int overnight_n_train = 0;
+    if (lock.contains("overnight_results") && lock["overnight_results"].is_object()) {
+        const Json& overnight = lock["overnight_results"];
+        if (overnight.contains("n_train") && overnight["n_train"].is_number_integer()) {
+            overnight_n_train = overnight["n_train"].get<int>();
+            if (production_tier && overnight_n_train != n_train) {
+                overnight_aligned = false;
+            }
+        }
+    }
+
+    bool lock_joint_ok = false;
+    double lock_delta_bpc = 0.0;
+    double lock_delta_kappa = 0.0;
+    if (lock_usable) {
+        const double lock_base_bpc = lock_math["baseline"]["bpc"].get<double>();
+        const double lock_math_bpc = lock_math["math_integration"]["bpc"].get<double>();
+        lock_delta_bpc = lock_math_bpc - lock_base_bpc;
+        if (lock_math["baseline"].contains("kappa") && lock_math["math_integration"].contains("kappa")) {
+            lock_delta_kappa =
+                lock_math["math_integration"]["kappa"].get<double>() -
+                lock_math["baseline"]["kappa"].get<double>();
+        }
+        lock_joint_ok = lock_delta_bpc < 0.0 && std::abs(lock_delta_kappa) <= 0.05;
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k production ship", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    const Json math = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+        "cyphalm_bench_native math @ 5k production ship", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null() || !math.contains("bpc") ||
+        math["bpc"].is_null()) {
+        throw std::runtime_error("d53 production ship lock missing bpc");
+    }
+
+    const double subprocess_delta_bpc = math["bpc"].get<double>() - baseline["bpc"].get<double>();
+    double subprocess_delta_kappa = 0.0;
+    if (baseline.contains("kappa") && !baseline["kappa"].is_null() && math.contains("kappa") &&
+        !math["kappa"].is_null()) {
+        subprocess_delta_kappa =
+            math["kappa"].get<double>() - baseline["kappa"].get<double>();
+    }
+    const bool subprocess_joint_ok =
+        subprocess_delta_bpc < 0.0 && std::abs(subprocess_delta_kappa) <= 0.05;
+
+    const bool production_lock_ready =
+        production_tier && (math_status == "production" || math_status == "completed");
+
+    const std::string validation_status =
+        production_lock_ready && lock_joint_ok && overnight_aligned
+            ? "production_preset_ship_lock_ready"
+            : production_tier && lock_joint_ok
+                  ? "production_preset_joint_ready"
+                  : !production_tier && subprocess_joint_ok
+                        ? "pending_production_preset_ship_lock"
+                        : subprocess_joint_ok ? "preset_ship_production_wiring_ready"
+                                              : "production_preset_ship_ablation_ready";
+
+    const Json experiments{
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"baseline", baseline},
+        {"math_integration", math},
+        {"subprocess_delta_bpc", subprocess_delta_bpc},
+        {"subprocess_delta_kappa", subprocess_delta_kappa},
+        {"subprocess_joint_ok", subprocess_joint_ok},
+        {"lock_delta_bpc", lock_delta_bpc},
+        {"lock_delta_kappa", lock_delta_kappa},
+        {"lock_joint_ok", lock_joint_ok},
+        {"lock_usable", lock_usable},
+        {"math_integration_results", lock_math},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"overnight_n_train", overnight_n_train},
+        {"overnight_aligned", overnight_aligned},
+        {"production_tier", production_tier},
+        {"production_lock_ready", production_lock_ready},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"math_lock_status", math_status.empty() ? Json(nullptr) : Json(math_status)},
+        {"validation_status", validation_status},
+        {"backend", "production_preset_ship_lock_math_integration"},
+    };
+    cypha::bench::finalize_domain("d53_production_preset_ship_lock_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d53_production_preset_ship_lock_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d54_production_math_certificate_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "use_reu_forget_gate = true") ||
+        !script_text_contains(math_cpp, "use_kappa_navigation_warmup_scale = true")) {
+        throw std::runtime_error("math integration preset missing Phase 40 production certificate");
+    }
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "scale_navigation_warmup_from_kappa")) {
+        throw std::runtime_error("profile_guided_loss missing navigation warmup scaling");
+    }
+    const fs::path prod_script = repo / "scripts" / "run_production_overnight.ps1";
+    const fs::path overnight_script = repo / "scripts" / "run_d17_overnight.ps1";
+    if (!fs::is_regular_file(prod_script) ||
+        !script_text_contains(prod_script, "MathIntegration")) {
+        throw std::runtime_error("run_production_overnight.ps1 missing -MathIntegration");
+    }
+    if (!fs::is_regular_file(overnight_script) ||
+        (!script_text_contains(overnight_script, "MathIntegration") &&
+         !script_text_contains(overnight_script, "CYPHA_OVERNIGHT_MATH_INTEGRATION"))) {
+        throw std::runtime_error("run_d17_overnight.ps1 missing MathIntegration wiring");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("math_integration_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing math_integration_results key");
+    }
+    const Json& lock_math = lock["math_integration_results"];
+    const bool lock_usable = lock_math_integration_results_usable(lock_math);
+
+    int n_train = kD41ScaleNTrain;
+    int n_eval = kD41ScaleNEval;
+    if (lock_math.contains("n_train") && lock_math["n_train"].is_number_integer()) {
+        n_train = lock_math["n_train"].get<int>();
+    }
+    if (lock_math.contains("n_eval") && lock_math["n_eval"].is_number_integer()) {
+        n_eval = lock_math["n_eval"].get<int>();
+    }
+
+    std::string math_status;
+    if (lock_math.contains("status") && lock_math["status"].is_string()) {
+        math_status = lock_math["status"].get<std::string>();
+    }
+
+    const bool production_tier = n_train >= kProductionNTrainMin;
+    bool overnight_aligned = true;
+    int overnight_n_train = 0;
+    double hybrid_bpc = 0.0;
+    bool hybrid_bpc_ok = false;
+    if (lock.contains("overnight_results") && lock["overnight_results"].is_object()) {
+        const Json& overnight = lock["overnight_results"];
+        if (overnight.contains("n_train") && overnight["n_train"].is_number_integer()) {
+            overnight_n_train = overnight["n_train"].get<int>();
+            if (production_tier && overnight_n_train != n_train) {
+                overnight_aligned = false;
+            }
+        }
+        if (overnight.contains("bpc") && overnight["bpc"].is_number()) {
+            hybrid_bpc = overnight["bpc"].get<double>();
+            hybrid_bpc_ok = std::isfinite(hybrid_bpc);
+        }
+    }
+
+    bool lock_joint_ok = false;
+    double lock_delta_bpc = 0.0;
+    double lock_delta_kappa = 0.0;
+    double lock_math_bpc = 0.0;
+    if (lock_usable) {
+        const double lock_base_bpc = lock_math["baseline"]["bpc"].get<double>();
+        lock_math_bpc = lock_math["math_integration"]["bpc"].get<double>();
+        lock_delta_bpc = lock_math_bpc - lock_base_bpc;
+        if (lock_math["baseline"].contains("kappa") && lock_math["math_integration"].contains("kappa")) {
+            lock_delta_kappa =
+                lock_math["math_integration"]["kappa"].get<double>() -
+                lock_math["baseline"]["kappa"].get<double>();
+        }
+        lock_joint_ok = lock_delta_bpc < 0.0 && std::abs(lock_delta_kappa) <= 0.05;
+    }
+
+    constexpr double kHybridBpcTolerance = 0.05;
+    double delta_bpc_vs_hybrid = 0.0;
+    bool hybrid_bpc_gate_ok = false;
+    bool delta_bpc_vs_hybrid_ok = false;
+    if (lock_usable && hybrid_bpc_ok && production_tier) {
+        delta_bpc_vs_hybrid = lock_math_bpc - hybrid_bpc;
+        delta_bpc_vs_hybrid_ok = true;
+        hybrid_bpc_gate_ok = lock_math_bpc <= hybrid_bpc + kHybridBpcTolerance;
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k certificate", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    const Json math = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+        "cyphalm_bench_native math @ 5k certificate", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null() || !math.contains("bpc") ||
+        math["bpc"].is_null()) {
+        throw std::runtime_error("d54 production certificate missing bpc");
+    }
+
+    const double subprocess_delta_bpc = math["bpc"].get<double>() - baseline["bpc"].get<double>();
+    double subprocess_delta_kappa = 0.0;
+    if (baseline.contains("kappa") && !baseline["kappa"].is_null() && math.contains("kappa") &&
+        !math["kappa"].is_null()) {
+        subprocess_delta_kappa =
+            math["kappa"].get<double>() - baseline["kappa"].get<double>();
+    }
+    const bool subprocess_joint_ok =
+        subprocess_delta_bpc < 0.0 && std::abs(subprocess_delta_kappa) <= 0.05;
+
+    const bool production_lock_ready =
+        production_tier && (math_status == "production" || math_status == "completed");
+
+    const std::string validation_status =
+        production_lock_ready && lock_joint_ok && overnight_aligned && hybrid_bpc_gate_ok
+            ? "production_math_certificate_ready"
+            : production_tier && lock_joint_ok && overnight_aligned
+                  ? "production_math_joint_ready"
+                  : !production_tier && subprocess_joint_ok
+                        ? "pending_production_math_certificate"
+                        : subprocess_joint_ok ? "production_math_certificate_wiring_ready"
+                                              : "production_math_certificate_ablation_ready";
+
+    const Json experiments{
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"baseline", baseline},
+        {"math_integration", math},
+        {"subprocess_delta_bpc", subprocess_delta_bpc},
+        {"subprocess_delta_kappa", subprocess_delta_kappa},
+        {"subprocess_joint_ok", subprocess_joint_ok},
+        {"lock_delta_bpc", lock_delta_bpc},
+        {"lock_delta_kappa", lock_delta_kappa},
+        {"lock_joint_ok", lock_joint_ok},
+        {"lock_usable", lock_usable},
+        {"delta_bpc_vs_hybrid_baseline",
+         delta_bpc_vs_hybrid_ok ? Json(delta_bpc_vs_hybrid) : Json(nullptr)},
+        {"hybrid_bpc", hybrid_bpc_ok ? Json(hybrid_bpc) : Json(nullptr)},
+        {"hybrid_bpc_gate_ok", hybrid_bpc_gate_ok},
+        {"hybrid_bpc_tolerance", kHybridBpcTolerance},
+        {"math_integration_results", lock_math},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"overnight_n_train", overnight_n_train},
+        {"overnight_aligned", overnight_aligned},
+        {"production_tier", production_tier},
+        {"production_lock_ready", production_lock_ready},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"math_lock_status", math_status.empty() ? Json(nullptr) : Json(math_status)},
+        {"validation_status", validation_status},
+        {"backend", "production_math_certificate"},
+    };
+    cypha::bench::finalize_domain("d54_production_math_certificate_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d54_production_math_certificate_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d55_nav_warmup_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "scale_navigation_warmup_from_kappa")) {
+        throw std::runtime_error("profile_guided_loss missing navigation warmup scaling");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--kappa-navigation-warmup-strength")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kappa-navigation-warmup-strength");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 2> strengths{0.25, 0.35};
+    const std::array<double, 2> floors{0.60, 0.65};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k nav warmup grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("nav warmup grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double strength : strengths) {
+        for (double floor : floors) {
+            const Json math = run_math_integration_bench_subprocess(
+                bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+                "cyphalm_bench_native nav warmup grid", -1.0, -1.0, -1.0, -1.0,
+                kMathIntegrationBenchSeed, false, false, strength, floor);
+            if (!math.contains("bpc") || math["bpc"].is_null()) {
+                throw std::runtime_error("nav warmup grid missing math bpc");
+            }
+            const double math_bpc = math["bpc"].get<double>();
+            const double delta_bpc = math_bpc - base_bpc;
+            double kappa = 0.0;
+            if (math.contains("kappa") && !math["kappa"].is_null()) {
+                kappa = math["kappa"].get<double>();
+            }
+            const double delta_kappa = kappa - base_kappa;
+            const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+            Json row{{"kappa_navigation_warmup_strength", strength},
+                     {"kappa_navigation_warmup_floor", floor},
+                     {"baseline_bpc", base_bpc},
+                     {"baseline_kappa", base_kappa},
+                     {"math_bpc", math_bpc},
+                     {"delta_bpc", delta_bpc},
+                     {"kappa", kappa},
+                     {"delta_kappa", delta_kappa},
+                     {"joint_score", score}};
+            grid_rows.push_back(row);
+            if (score > best_score) {
+                best_score = score;
+                best_row = row;
+            }
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "nav_warmup_grid_joint_ready" : "nav_warmup_grid_ablation_ready";
+
+    const Json experiments{
+        {"nav_warmup_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell",
+         Json{{"kappa_navigation_warmup_strength", 0.35},
+              {"kappa_navigation_warmup_floor", 0.65}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "nav_warmup_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d55_nav_warmup_grid_joint_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d55_nav_warmup_grid_joint_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json find_cell_sweep_variant_row(const Json& sweep_out, const char* variant_id) {
+    if (!sweep_out.contains("results") || !sweep_out["results"].is_array()) {
+        return nullptr;
+    }
+    for (const auto& row : sweep_out["results"]) {
+        if (row.is_object() && row.value("id", "") == variant_id) {
+            return row;
+        }
+    }
+    return nullptr;
+}
+
+Json run_cell_sweep_bench_subprocess(const fs::path& sweep_exe, bool math_integration,
+                                     const char* label, std::int64_t bench_seed = -1) {
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+    if (bench_seed >= 0) {
+#if defined(_WIN32)
+        _putenv_s("CYPHA_BENCH_SEED", std::to_string(bench_seed).c_str());
+#else
+        setenv("CYPHA_BENCH_SEED", std::to_string(bench_seed).c_str(), 1);
+#endif
+    }
+    std::vector<std::string> args{"--overnight-sweep-smoke", "--intelligence-profile"};
+    if (math_integration) {
+        args.push_back("--math-integration");
+    }
+    if (bench_seed >= 0) {
+        args.push_back("--bench-seed");
+        args.push_back(std::to_string(bench_seed));
+    }
+    const cypha::bench::RunProcessResult proc =
+        cypha::bench::run_executable_capture(sweep_exe, args);
+    Json sweep_out = Json::object();
+    bool stdout_parsed = false;
+    if (!proc.stdout_text.empty()) {
+        sweep_out = parse_subprocess_json_stdout(proc.stdout_text);
+        stdout_parsed = !sweep_out.empty();
+    }
+    if (proc.exit_code != 0) {
+        throw std::runtime_error(std::string(label) + " exit=" + std::to_string(proc.exit_code));
+    }
+    if (!stdout_parsed) {
+        throw std::runtime_error(std::string(label) + " produced no JSON stdout");
+    }
+    sweep_out["exit_code"] = proc.exit_code;
+    sweep_out["stdout_parsed"] = stdout_parsed;
+    return sweep_out;
+}
+
+Json run_d56_cell_sweep_math_integration_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path sweep_cpp = native_root / "tools/cypha_cell_hypothesis_sweep.cpp";
+    if (!fs::is_regular_file(sweep_cpp) ||
+        !script_text_contains(sweep_cpp, "--math-integration") ||
+        !script_text_contains(sweep_cpp, "apply_math_integration_preset")) {
+        throw std::runtime_error("cell sweep missing Phase 42 math integration wiring");
+    }
+    const fs::path overnight_script = repo / "scripts" / "run_d17_overnight.ps1";
+    if (!fs::is_regular_file(overnight_script) ||
+        !script_text_contains(overnight_script, "--math-integration")) {
+        throw std::runtime_error("run_d17_overnight.ps1 missing cell sweep --math-integration");
+    }
+    const fs::path lock_cpp = native_root / "tools/cypha_baseline_lock.cpp";
+    if (!fs::is_regular_file(lock_cpp) ||
+        !script_text_contains(lock_cpp, "math_integration")) {
+        throw std::runtime_error("cypha_baseline_lock missing cell sweep math integration");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    bool lock_math_enabled = false;
+    int lock_n_train = 0;
+    if (lock.contains("cell_sweep_results") && lock["cell_sweep_results"].is_object()) {
+        const Json& cell_sweep = lock["cell_sweep_results"];
+        if (cell_sweep.contains("math_integration_enabled") &&
+            cell_sweep["math_integration_enabled"].is_boolean()) {
+            lock_math_enabled = cell_sweep["math_integration_enabled"].get<bool>();
+        }
+        if (cell_sweep.contains("n_train") && cell_sweep["n_train"].is_number_integer()) {
+            lock_n_train = cell_sweep["n_train"].get<int>();
+        }
+    }
+    const bool production_tier = lock_n_train >= kProductionNTrainMin;
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path sweep_exe =
+        cypha::bench::resolve_runner_exe("cypha_cell_hypothesis_sweep", exe_dir);
+    if (!fs::is_regular_file(sweep_exe)) {
+        throw std::runtime_error("missing cypha_cell_hypothesis_sweep: " + sweep_exe.string());
+    }
+
+    const Json baseline_sweep =
+        run_cell_sweep_bench_subprocess(sweep_exe, false, "cell sweep baseline smoke",
+                                        kMathIntegrationBenchSeed);
+    const Json math_sweep =
+        run_cell_sweep_bench_subprocess(sweep_exe, true, "cell sweep math smoke",
+                                        kMathIntegrationBenchSeed);
+
+    const Json baseline_b2 = find_cell_sweep_variant_row(baseline_sweep, "B2");
+    const Json math_b2 = find_cell_sweep_variant_row(math_sweep, "B2");
+    if (baseline_b2.is_null() || math_b2.is_null()) {
+        throw std::runtime_error("d56 cell sweep missing B2 row");
+    }
+    if (!baseline_b2.contains("bpc") || baseline_b2["bpc"].is_null() || !math_b2.contains("bpc") ||
+        math_b2["bpc"].is_null()) {
+        throw std::runtime_error("d56 cell sweep B2 missing bpc");
+    }
+
+    const double baseline_b2_bpc = baseline_b2["bpc"].get<double>();
+    const double math_b2_bpc = math_b2["bpc"].get<double>();
+    const double delta_bpc = math_b2_bpc - baseline_b2_bpc;
+
+    double baseline_kappa = 0.0;
+    double math_kappa = 0.0;
+    const auto baseline_kappa_opt = variant_row_kappa(baseline_b2);
+    const auto math_kappa_opt = variant_row_kappa(math_b2);
+    if (baseline_kappa_opt.has_value()) {
+        baseline_kappa = *baseline_kappa_opt;
+    }
+    if (math_kappa_opt.has_value()) {
+        math_kappa = *math_kappa_opt;
+    }
+    const double delta_kappa = math_kappa - baseline_kappa;
+
+    const bool joint_ok = delta_bpc < 0.0 && std::abs(delta_kappa) <= 0.05;
+
+    Json baseline_pareto = nullptr;
+    Json math_pareto = nullptr;
+    if (baseline_sweep.contains("pareto_ranked_variants") &&
+        baseline_sweep["pareto_ranked_variants"].is_array() &&
+        !baseline_sweep["pareto_ranked_variants"].empty()) {
+        baseline_pareto = baseline_sweep["pareto_ranked_variants"][0];
+    }
+    if (math_sweep.contains("pareto_ranked_variants") &&
+        math_sweep["pareto_ranked_variants"].is_array() &&
+        !math_sweep["pareto_ranked_variants"].empty()) {
+        math_pareto = math_sweep["pareto_ranked_variants"][0];
+    }
+
+    const bool production_lock_ready =
+        production_tier && lock_math_enabled &&
+        (lock.contains("cell_sweep_results") &&
+         lock["cell_sweep_results"].contains("status") &&
+         lock["cell_sweep_results"]["status"].is_string() &&
+         (lock["cell_sweep_results"]["status"].get<std::string>() == "production" ||
+          lock["cell_sweep_results"]["status"].get<std::string>() == "completed"));
+
+    const std::string validation_status =
+        production_lock_ready && joint_ok ? "production_cell_sweep_math_ready"
+        : production_tier && lock_math_enabled && joint_ok
+              ? "cell_sweep_math_joint_ready"
+              : production_tier && !lock_math_enabled && joint_ok
+                    ? "pending_cell_sweep_math_integration"
+                    : !production_tier && joint_ok ? "pending_cell_sweep_math_integration"
+                    : joint_ok ? "cell_sweep_math_wiring_ready"
+                               : "cell_sweep_math_ablation_ready";
+
+    const Json experiments{
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"baseline_sweep", baseline_sweep},
+        {"math_sweep", math_sweep},
+        {"baseline_b2", baseline_b2},
+        {"math_b2", math_b2},
+        {"delta_bpc", delta_bpc},
+        {"delta_kappa", delta_kappa},
+        {"joint_ok", joint_ok},
+        {"baseline_best_pareto", baseline_pareto},
+        {"math_best_pareto", math_pareto},
+        {"lock_math_enabled", lock_math_enabled},
+        {"lock_n_train", lock_n_train},
+        {"production_tier", production_tier},
+        {"production_lock_ready", production_lock_ready},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"validation_status", validation_status},
+        {"backend", "cell_sweep_math_integration_joint"},
+    };
+    cypha::bench::finalize_domain("d56_cell_sweep_math_integration_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d56_cell_sweep_math_integration_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d57_production_cell_sweep_math_certificate_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path sweep_cpp = native_root / "tools/cypha_cell_hypothesis_sweep.cpp";
+    if (!fs::is_regular_file(sweep_cpp) ||
+        !script_text_contains(sweep_cpp, "--math-integration") ||
+        !script_text_contains(sweep_cpp, "apply_math_integration_preset")) {
+        throw std::runtime_error("cell sweep missing Phase 42 math integration wiring");
+    }
+    const fs::path prod_script = repo / "scripts" / "run_production_overnight.ps1";
+    const fs::path finalize_script = repo / "scripts" / "finalize_production_overnight.ps1";
+    if (!fs::is_regular_file(prod_script) ||
+        !script_text_contains(prod_script, "MathIntegration")) {
+        throw std::runtime_error("run_production_overnight.ps1 missing -MathIntegration");
+    }
+    if (!fs::is_regular_file(finalize_script) ||
+        !script_text_contains(finalize_script, "domain-tag d56")) {
+        throw std::runtime_error("finalize_production_overnight.ps1 missing d56 gate");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("cell_sweep_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing cell_sweep_results key");
+    }
+    const Json& cell_sweep = lock["cell_sweep_results"];
+
+    bool lock_math_enabled = false;
+    int n_train = 0;
+    int n_eval = 0;
+    std::string cell_status;
+    double lock_b2_bpc = 0.0;
+    bool lock_b2_bpc_ok = false;
+    if (cell_sweep.contains("math_integration_enabled") &&
+        cell_sweep["math_integration_enabled"].is_boolean()) {
+        lock_math_enabled = cell_sweep["math_integration_enabled"].get<bool>();
+    }
+    if (cell_sweep.contains("n_train") && cell_sweep["n_train"].is_number_integer()) {
+        n_train = cell_sweep["n_train"].get<int>();
+    }
+    if (cell_sweep.contains("n_eval") && cell_sweep["n_eval"].is_number_integer()) {
+        n_eval = cell_sweep["n_eval"].get<int>();
+    }
+    if (cell_sweep.contains("status") && cell_sweep["status"].is_string()) {
+        cell_status = cell_sweep["status"].get<std::string>();
+    }
+    if (cell_sweep.contains("b2_bpc") && cell_sweep["b2_bpc"].is_number()) {
+        lock_b2_bpc = cell_sweep["b2_bpc"].get<double>();
+        lock_b2_bpc_ok = std::isfinite(lock_b2_bpc);
+    } else if (cell_sweep.contains("bpc") && cell_sweep["bpc"].is_number()) {
+        lock_b2_bpc = cell_sweep["bpc"].get<double>();
+        lock_b2_bpc_ok = std::isfinite(lock_b2_bpc);
+    }
+
+    const bool production_tier = n_train >= kProductionNTrainMin;
+    bool overnight_aligned = true;
+    int overnight_n_train = 0;
+    double hybrid_bpc = 0.0;
+    bool hybrid_bpc_ok = false;
+    if (lock.contains("overnight_results") && lock["overnight_results"].is_object()) {
+        const Json& overnight = lock["overnight_results"];
+        if (overnight.contains("n_train") && overnight["n_train"].is_number_integer()) {
+            overnight_n_train = overnight["n_train"].get<int>();
+            if (production_tier && overnight_n_train != n_train) {
+                overnight_aligned = false;
+            }
+        }
+        if (overnight.contains("bpc") && overnight["bpc"].is_number()) {
+            hybrid_bpc = overnight["bpc"].get<double>();
+            hybrid_bpc_ok = std::isfinite(hybrid_bpc);
+        }
+    }
+
+    constexpr double kHybridBpcTolerance = 0.05;
+    double delta_bpc_vs_hybrid = 0.0;
+    bool hybrid_bpc_gate_ok = false;
+    bool delta_bpc_vs_hybrid_ok = false;
+    if (lock_math_enabled && lock_b2_bpc_ok && hybrid_bpc_ok && production_tier) {
+        delta_bpc_vs_hybrid = lock_b2_bpc - hybrid_bpc;
+        delta_bpc_vs_hybrid_ok = true;
+        hybrid_bpc_gate_ok = lock_b2_bpc <= hybrid_bpc + kHybridBpcTolerance;
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path sweep_exe =
+        cypha::bench::resolve_runner_exe("cypha_cell_hypothesis_sweep", exe_dir);
+    if (!fs::is_regular_file(sweep_exe)) {
+        throw std::runtime_error("missing cypha_cell_hypothesis_sweep: " + sweep_exe.string());
+    }
+
+    const Json baseline_sweep =
+        run_cell_sweep_bench_subprocess(sweep_exe, false, "cell sweep baseline certificate",
+                                        kMathIntegrationBenchSeed);
+    const Json math_sweep =
+        run_cell_sweep_bench_subprocess(sweep_exe, true, "cell sweep math certificate",
+                                        kMathIntegrationBenchSeed);
+
+    const Json baseline_b2 = find_cell_sweep_variant_row(baseline_sweep, "B2");
+    const Json math_b2 = find_cell_sweep_variant_row(math_sweep, "B2");
+    if (baseline_b2.is_null() || math_b2.is_null()) {
+        throw std::runtime_error("d57 cell sweep missing B2 row");
+    }
+    if (!baseline_b2.contains("bpc") || baseline_b2["bpc"].is_null() || !math_b2.contains("bpc") ||
+        math_b2["bpc"].is_null()) {
+        throw std::runtime_error("d57 cell sweep B2 missing bpc");
+    }
+
+    const double subprocess_delta_bpc =
+        math_b2["bpc"].get<double>() - baseline_b2["bpc"].get<double>();
+    double subprocess_delta_kappa = 0.0;
+    const auto base_kappa_opt = variant_row_kappa(baseline_b2);
+    const auto math_kappa_opt = variant_row_kappa(math_b2);
+    if (base_kappa_opt.has_value() && math_kappa_opt.has_value()) {
+        subprocess_delta_kappa = *math_kappa_opt - *base_kappa_opt;
+    }
+    const bool subprocess_joint_ok =
+        subprocess_delta_bpc < 0.0 && std::abs(subprocess_delta_kappa) <= 0.05;
+
+    const bool production_lock_ready =
+        production_tier && lock_math_enabled &&
+        (cell_status == "production" || cell_status == "completed");
+
+    const std::string validation_status =
+        production_lock_ready && subprocess_joint_ok && overnight_aligned && hybrid_bpc_gate_ok
+            ? "production_cell_sweep_math_certificate_ready"
+            : production_tier && subprocess_joint_ok && overnight_aligned
+                  ? "production_cell_sweep_math_joint_ready"
+                  : !production_tier && subprocess_joint_ok
+                        ? "pending_production_cell_sweep_math_certificate"
+                        : subprocess_joint_ok
+                              ? "production_cell_sweep_math_certificate_wiring_ready"
+                              : "production_cell_sweep_math_certificate_ablation_ready";
+
+    const Json experiments{
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"baseline_sweep", baseline_sweep},
+        {"math_sweep", math_sweep},
+        {"baseline_b2", baseline_b2},
+        {"math_b2", math_b2},
+        {"subprocess_delta_bpc", subprocess_delta_bpc},
+        {"subprocess_delta_kappa", subprocess_delta_kappa},
+        {"subprocess_joint_ok", subprocess_joint_ok},
+        {"delta_bpc_vs_hybrid_baseline",
+         delta_bpc_vs_hybrid_ok ? Json(delta_bpc_vs_hybrid) : Json(nullptr)},
+        {"hybrid_bpc", hybrid_bpc_ok ? Json(hybrid_bpc) : Json(nullptr)},
+        {"hybrid_bpc_gate_ok", hybrid_bpc_gate_ok},
+        {"hybrid_bpc_tolerance", kHybridBpcTolerance},
+        {"lock_b2_bpc", lock_b2_bpc_ok ? Json(lock_b2_bpc) : Json(nullptr)},
+        {"cell_sweep_results", cell_sweep},
+        {"lock_math_enabled", lock_math_enabled},
+        {"n_train", n_train},
+        {"n_eval", n_eval},
+        {"overnight_n_train", overnight_n_train},
+        {"overnight_aligned", overnight_aligned},
+        {"production_tier", production_tier},
+        {"production_lock_ready", production_lock_ready},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"cell_lock_status", cell_status.empty() ? Json(nullptr) : Json(cell_status)},
+        {"validation_status", validation_status},
+        {"backend", "production_cell_sweep_math_certificate"},
+    };
+    cypha::bench::finalize_domain("d57_production_cell_sweep_math_certificate_validation",
+                                  experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() /
+        "d57_production_cell_sweep_math_certificate_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d58_production_overnight_math_complete_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path prod_script = repo / "scripts" / "run_production_overnight.ps1";
+    const fs::path lock_script = repo / "scripts" / "update_baseline_lock.ps1";
+    const fs::path finalize_script = repo / "scripts" / "finalize_production_overnight.ps1";
+    if (!fs::is_regular_file(prod_script) ||
+        !script_text_contains(prod_script, "MathIntegration")) {
+        throw std::runtime_error("run_production_overnight.ps1 missing -MathIntegration");
+    }
+    if (!fs::is_regular_file(lock_script) ||
+        !script_text_contains(lock_script, "MathIntegration")) {
+        throw std::runtime_error("update_baseline_lock.ps1 missing -MathIntegration");
+    }
+    if (!fs::is_regular_file(finalize_script) ||
+        !script_text_contains(finalize_script, "domain-tag d57")) {
+        throw std::runtime_error("finalize_production_overnight.ps1 missing d57 gate");
+    }
+
+    const fs::path lock_path = cypha::bench::bench_root() / "BASELINE_LOCK.json";
+    const Json lock = load_json_file(lock_path);
+    if (!lock.contains("math_integration_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing math_integration_results key");
+    }
+    if (!lock.contains("overnight_results") || !lock.contains("cell_sweep_results")) {
+        throw std::runtime_error("BASELINE_LOCK.json missing overnight or cell_sweep sections");
+    }
+
+    const Json& lock_math = lock["math_integration_results"];
+    const Json& overnight = lock["overnight_results"];
+    const Json& cell_sweep = lock["cell_sweep_results"];
+    const bool lock_math_usable = lock_math_integration_results_usable(lock_math);
+
+    int math_n_train = 0;
+    int overnight_n_train = overnight.contains("n_train") && overnight["n_train"].is_number_integer()
+                               ? overnight["n_train"].get<int>()
+                               : 0;
+    int cell_n_train = cell_sweep.contains("n_train") && cell_sweep["n_train"].is_number_integer()
+                           ? cell_sweep["n_train"].get<int>()
+                           : 0;
+    if (lock_math.contains("n_train") && lock_math["n_train"].is_number_integer()) {
+        math_n_train = lock_math["n_train"].get<int>();
+    }
+
+    std::string math_status;
+    if (lock_math.contains("status") && lock_math["status"].is_string()) {
+        math_status = lock_math["status"].get<std::string>();
+    }
+    std::string cell_status;
+    if (cell_sweep.contains("status") && cell_sweep["status"].is_string()) {
+        cell_status = cell_sweep["status"].get<std::string>();
+    }
+
+    const bool production_tier = math_n_train >= kProductionNTrainMin;
+    const bool math_production_ready =
+        production_tier && (math_status == "production" || math_status == "completed");
+    const bool cell_math_enabled =
+        cell_sweep.contains("math_integration_enabled") &&
+        cell_sweep["math_integration_enabled"].is_boolean() &&
+        cell_sweep["math_integration_enabled"].get<bool>();
+    const bool cell_production_ready =
+        cell_n_train >= kProductionNTrainMin &&
+        (cell_status == "production" || cell_status == "completed");
+    const bool tier_aligned =
+        production_tier && math_n_train == overnight_n_train && math_n_train == cell_n_train;
+    const bool best_pareto_present =
+        cell_sweep.contains("best_pareto_variant") &&
+        (cell_sweep["best_pareto_variant"].is_object() ||
+         cell_sweep["best_pareto_variant"].is_string());
+
+    bool lock_joint_ok = false;
+    double lock_delta_bpc = 0.0;
+    double lock_delta_kappa = 0.0;
+    double lock_math_bpc = 0.0;
+    if (lock_math_usable) {
+        const double lock_base_bpc = lock_math["baseline"]["bpc"].get<double>();
+        lock_math_bpc = lock_math["math_integration"]["bpc"].get<double>();
+        lock_delta_bpc = lock_math_bpc - lock_base_bpc;
+        if (lock_math["baseline"].contains("kappa") && lock_math["math_integration"].contains("kappa")) {
+            lock_delta_kappa =
+                lock_math["math_integration"]["kappa"].get<double>() -
+                lock_math["baseline"]["kappa"].get<double>();
+        }
+        lock_joint_ok = lock_delta_bpc < 0.0 && std::abs(lock_delta_kappa) <= 0.05;
+    }
+
+    constexpr double kHybridBpcTolerance = 0.05;
+    double hybrid_bpc = 0.0;
+    bool hybrid_bpc_ok = false;
+    if (overnight.contains("bpc") && overnight["bpc"].is_number()) {
+        hybrid_bpc = overnight["bpc"].get<double>();
+        hybrid_bpc_ok = std::isfinite(hybrid_bpc);
+    }
+    bool hybrid_math_bpc_gate_ok = false;
+    bool hybrid_cell_bpc_gate_ok = false;
+    if (lock_math_usable && hybrid_bpc_ok && production_tier) {
+        hybrid_math_bpc_gate_ok = lock_math_bpc <= hybrid_bpc + kHybridBpcTolerance;
+    }
+    double lock_b2_bpc = 0.0;
+    bool lock_b2_bpc_ok = false;
+    if (cell_sweep.contains("b2_bpc") && cell_sweep["b2_bpc"].is_number()) {
+        lock_b2_bpc = cell_sweep["b2_bpc"].get<double>();
+        lock_b2_bpc_ok = std::isfinite(lock_b2_bpc);
+    } else if (cell_sweep.contains("bpc") && cell_sweep["bpc"].is_number()) {
+        lock_b2_bpc = cell_sweep["bpc"].get<double>();
+        lock_b2_bpc_ok = std::isfinite(lock_b2_bpc);
+    }
+    if (cell_math_enabled && lock_b2_bpc_ok && hybrid_bpc_ok && production_tier) {
+        hybrid_cell_bpc_gate_ok = lock_b2_bpc <= hybrid_bpc + kHybridBpcTolerance;
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k math complete", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    const Json math = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+        "cyphalm_bench_native math @ 5k math complete", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null() || !math.contains("bpc") ||
+        math["bpc"].is_null()) {
+        throw std::runtime_error("d58 production math complete missing bpc");
+    }
+
+    const double subprocess_delta_bpc = math["bpc"].get<double>() - baseline["bpc"].get<double>();
+    double subprocess_delta_kappa = 0.0;
+    if (baseline.contains("kappa") && !baseline["kappa"].is_null() && math.contains("kappa") &&
+        !math["kappa"].is_null()) {
+        subprocess_delta_kappa =
+            math["kappa"].get<double>() - baseline["kappa"].get<double>();
+    }
+    const bool subprocess_joint_ok =
+        subprocess_delta_bpc < 0.0 && std::abs(subprocess_delta_kappa) <= 0.05;
+
+    const bool production_lock_ready =
+        math_production_ready && cell_production_ready && cell_math_enabled && tier_aligned &&
+        best_pareto_present && lock_joint_ok && hybrid_math_bpc_gate_ok &&
+        hybrid_cell_bpc_gate_ok;
+
+    const std::string validation_status =
+        production_lock_ready && subprocess_joint_ok
+            ? "production_overnight_math_complete_ready"
+            : production_tier && subprocess_joint_ok && tier_aligned && lock_joint_ok
+                  ? "production_overnight_math_joint_ready"
+                  : !production_tier && subprocess_joint_ok
+                        ? "pending_production_overnight_math_complete"
+                        : subprocess_joint_ok ? "production_overnight_math_wiring_ready"
+                                              : "production_overnight_math_ablation_ready";
+
+    const Json experiments{
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"baseline", baseline},
+        {"math_integration", math},
+        {"subprocess_delta_bpc", subprocess_delta_bpc},
+        {"subprocess_delta_kappa", subprocess_delta_kappa},
+        {"subprocess_joint_ok", subprocess_joint_ok},
+        {"lock_delta_bpc", lock_delta_bpc},
+        {"lock_delta_kappa", lock_delta_kappa},
+        {"lock_joint_ok", lock_joint_ok},
+        {"lock_usable", lock_math_usable},
+        {"math_integration_results", lock_math},
+        {"overnight_results", overnight},
+        {"cell_sweep_results", cell_sweep},
+        {"math_n_train", math_n_train},
+        {"overnight_n_train", overnight_n_train},
+        {"cell_n_train", cell_n_train},
+        {"tier_aligned", tier_aligned},
+        {"cell_math_enabled", cell_math_enabled},
+        {"best_pareto_present", best_pareto_present},
+        {"hybrid_bpc", hybrid_bpc_ok ? Json(hybrid_bpc) : Json(nullptr)},
+        {"hybrid_math_bpc_gate_ok", hybrid_math_bpc_gate_ok},
+        {"hybrid_cell_bpc_gate_ok", hybrid_cell_bpc_gate_ok},
+        {"hybrid_bpc_tolerance", kHybridBpcTolerance},
+        {"production_tier", production_tier},
+        {"production_lock_ready", production_lock_ready},
+        {"production_n_train_min", kProductionNTrainMin},
+        {"math_lock_status", math_status.empty() ? Json(nullptr) : Json(math_status)},
+        {"cell_lock_status", cell_status.empty() ? Json(nullptr) : Json(cell_status)},
+        {"validation_status", validation_status},
+        {"backend", "production_overnight_math_complete"},
+    };
+    cypha::bench::finalize_domain("d58_production_overnight_math_complete_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d58_production_overnight_math_complete_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d59_kernel_blend_floor_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "scale_kernel_blend_from_kappa")) {
+        throw std::runtime_error("profile_guided_loss missing kernel blend scaling");
+    }
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "use_kappa_kernel_blend_scale") ||
+        !script_text_contains(math_cpp, "kappa_kernel_blend_floor = 0.08")) {
+        throw std::runtime_error("math integration preset missing kernel blend floor");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--kappa-kernel-blend-floor")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kappa-kernel-blend-floor");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> floors{0.05, 0.08, 0.12};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k kernel blend grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("kernel blend floor grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double floor : floors) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native kernel blend floor grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, floor);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("kernel blend floor grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"kappa_kernel_blend_floor", floor},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "kernel_blend_floor_grid_joint_ready" : "kernel_blend_floor_grid_ablation_ready";
+
+    const Json experiments{
+        {"kernel_blend_floor_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"kappa_kernel_blend_floor", 0.08}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "kernel_blend_floor_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d59_kernel_blend_floor_grid_joint_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d59_kernel_blend_floor_grid_joint_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d60_excess_grad_margin_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "kappa_excess_grad_nudge")) {
+        throw std::runtime_error("profile_guided_loss missing kappa excess grad nudge");
+    }
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kappa_excess_grad_margin = 0.02")) {
+        throw std::runtime_error("math integration preset missing excess grad margin");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--kappa-excess-grad-margin")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kappa-excess-grad-margin");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> margins{0.01, 0.02, 0.04};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k excess grad margin grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("excess grad margin grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double margin : margins) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native excess grad margin grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, margin);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("excess grad margin grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"kappa_excess_grad_margin", margin},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "excess_grad_margin_grid_joint_ready" : "excess_grad_margin_grid_ablation_ready";
+
+    const Json experiments{
+        {"excess_grad_margin_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"kappa_excess_grad_margin", 0.02}, {"kappa_excess_grad_scale", 0.35}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "excess_grad_margin_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d60_excess_grad_margin_grid_joint_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d60_excess_grad_margin_grid_joint_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d61_excess_grad_scale_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kappa_excess_grad_scale = 0.35")) {
+        throw std::runtime_error("math integration preset missing excess grad scale");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--kappa-excess-grad-scale")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kappa-excess-grad-scale");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> scales{0.25, 0.35, 0.50};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k excess grad scale grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("excess grad scale grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double scale : scales) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native excess grad scale grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, scale);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("excess grad scale grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"kappa_excess_grad_scale", scale},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "excess_grad_scale_grid_joint_ready" : "excess_grad_scale_grid_ablation_ready";
+
+    const Json experiments{
+        {"excess_grad_scale_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"kappa_excess_grad_margin", 0.02}, {"kappa_excess_grad_scale", 0.35}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "excess_grad_scale_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d61_excess_grad_scale_grid_joint_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d61_excess_grad_scale_grid_joint_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+bool math_ablation_table_joint_ready(const Json& table) {
+    if (table.is_null() || !table.is_object() || !table.contains("validation_status") ||
+        !table["validation_status"].is_string()) {
+        return false;
+    }
+    const std::string status = table["validation_status"].get<std::string>();
+    return status.find("joint_ready") != std::string::npos ||
+           status == "joint_lock_ready" || status == "preset_ship_lock_ready" ||
+           status == "span_ablation_ready";
+}
+
+Json try_load_ablation_table(const fs::path& filename) {
+    const fs::path path = cypha::bench::tables_dir() / filename;
+    if (!fs::is_regular_file(path)) {
+        return Json(nullptr);
+    }
+    std::ifstream in(path);
+    if (!in) {
+        return Json(nullptr);
+    }
+    Json j;
+    in >> j;
+    return j;
+}
+
+Json run_d62_math_ablation_stack_complete_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "apply_math_integration_preset") ||
+        !script_text_contains(math_cpp, "use_kappa_kernel_blend_scale") ||
+        !script_text_contains(math_cpp, "use_kappa_navigation_warmup_scale") ||
+        !script_text_contains(math_cpp, "use_kappa_excess_grad_nudge")) {
+        throw std::runtime_error("math integration preset incomplete for stack complete");
+    }
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "scale_kernel_blend_from_kappa") ||
+        !script_text_contains(pg_cpp, "scale_navigation_warmup_from_kappa") ||
+        !script_text_contains(pg_cpp, "kappa_excess_grad_nudge")) {
+        throw std::runtime_error("profile_guided_loss missing navigation math stack");
+    }
+
+    const fs::path finalize_script = repo / "scripts" / "finalize_production_overnight.ps1";
+    if (!fs::is_regular_file(finalize_script) ||
+        !script_text_contains(finalize_script, "domain-tag d58")) {
+        throw std::runtime_error("finalize_production_overnight.ps1 missing d58 gate");
+    }
+
+    const std::array<const char*, 24> stack_tables{
+        "d47_span_ablation_validation.json",
+        "d48_kappa_ceiling_ablation_validation.json",
+        "d49_ceiling_grid_joint_validation.json",
+        "d50_math_joint_lock_validation.json",
+        "d51_opt_in_lever_joint_validation.json",
+        "d52_preset_ship_lock_validation.json",
+        "d55_nav_warmup_grid_joint_validation.json",
+        "d59_kernel_blend_floor_grid_joint_validation.json",
+        "d60_excess_grad_margin_grid_joint_validation.json",
+        "d61_excess_grad_scale_grid_joint_validation.json",
+        "d63_reu_forget_blend_grid_joint_validation.json",
+        "d64_kappa_trajectory_window_grid_joint_validation.json",
+        "d65_navigation_loss_warmup_grid_joint_validation.json",
+        "d66_free_energy_beta_grid_joint_validation.json",
+        "d67_kernel_blend_grid_joint_validation.json",
+        "d68_kernel_m_grid_joint_validation.json",
+        "d69_hybrid_blend_logit_grid_joint_validation.json",
+        "d70_mdl_forget_max_norm_grid_joint_validation.json",
+        "d71_kernel_lr_scale_grid_joint_validation.json",
+        "d72_alpha_init_grid_joint_validation.json",
+        "d73_hybrid_blend_lr_grid_joint_validation.json",
+        "d74_n_experts_grid_joint_validation.json",
+        "d75_max_memory_slots_grid_joint_validation.json",
+        "d76_compress_interval_grid_joint_validation.json",
+    };
+
+    Json table_audit = Json::array();
+    int tables_present = 0;
+    int tables_joint_ready = 0;
+    for (const char* name : stack_tables) {
+        const Json table = try_load_ablation_table(name);
+        const bool present = !table.is_null();
+        const bool joint_ready = math_ablation_table_joint_ready(table);
+        if (present) {
+            ++tables_present;
+        }
+        if (joint_ready) {
+            ++tables_joint_ready;
+        }
+        table_audit.push_back(Json{{"table", name},
+                                   {"present", present},
+                                   {"joint_ready", joint_ready},
+                                   {"validation_status",
+                                    present && table.contains("validation_status")
+                                        ? table["validation_status"]
+                                        : Json(nullptr)}});
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k stack complete", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    const Json math = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+        "cyphalm_bench_native math @ 5k stack complete", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null() || !math.contains("bpc") ||
+        math["bpc"].is_null()) {
+        throw std::runtime_error("stack complete missing subprocess bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double math_bpc = math["bpc"].get<double>();
+    const double delta_bpc = math_bpc - base_bpc;
+    double delta_kappa = 0.0;
+    if (baseline.contains("kappa") && math.contains("kappa") && !baseline["kappa"].is_null() &&
+        !math["kappa"].is_null()) {
+        delta_kappa = math["kappa"].get<double>() - baseline["kappa"].get<double>();
+    }
+    const bool subprocess_joint_ok = delta_bpc < 0.0 && std::abs(delta_kappa) <= 0.05;
+    const bool stack_tables_complete =
+        tables_present == static_cast<int>(stack_tables.size()) &&
+        tables_joint_ready == static_cast<int>(stack_tables.size());
+
+    std::string validation_status = "math_ablation_stack_ablation_ready";
+    if (subprocess_joint_ok && stack_tables_complete) {
+        validation_status = "math_ablation_stack_complete_ready";
+    } else if (subprocess_joint_ok) {
+        validation_status = "math_ablation_stack_joint_ready";
+    }
+
+    const Json experiments{
+        {"table_audit", table_audit},
+        {"tables_present", tables_present},
+        {"tables_joint_ready", tables_joint_ready},
+        {"tables_expected", static_cast<int>(stack_tables.size())},
+        {"subprocess_baseline_bpc", base_bpc},
+        {"subprocess_math_bpc", math_bpc},
+        {"subprocess_delta_bpc", delta_bpc},
+        {"subprocess_delta_kappa", delta_kappa},
+        {"subprocess_joint_ok", subprocess_joint_ok},
+        {"stack_tables_complete", stack_tables_complete},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "math_ablation_stack_complete"},
+    };
+    cypha::bench::finalize_domain("d62_math_ablation_stack_complete_validation", experiments);
+    const fs::path table_path =
+        cypha::bench::tables_dir() / "d62_math_ablation_stack_complete_validation.json";
+    std::ofstream out(table_path);
+    if (out) {
+        out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d63_reu_forget_blend_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path model_cpp = native_root / "src/cyphalm/cyphalm_model.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "reu_forget_gate_blend = 0.25")) {
+        throw std::runtime_error("math integration preset missing reu forget blend");
+    }
+    if (!fs::is_regular_file(model_cpp) ||
+        !script_text_contains(model_cpp, "reu_forget_gate_blend")) {
+        throw std::runtime_error("cyphalm_model missing reu forget blend scaling");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--reu-forget-gate-blend")) {
+        throw std::runtime_error("cyphalm_bench_native missing --reu-forget-gate-blend");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> blends{0.0, 0.25, 0.50};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k reu forget blend grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("reu forget blend grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double blend : blends) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native reu forget blend grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, blend);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("reu forget blend grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"reu_forget_gate_blend", blend},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "reu_forget_blend_grid_joint_ready" : "reu_forget_blend_grid_ablation_ready";
+
+    const Json experiments{
+        {"reu_forget_blend_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"reu_forget_gate_blend", 0.25}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "reu_forget_blend_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d63_reu_forget_blend_grid_joint_validation", experiments);
+    const fs::path d63_table_path =
+        cypha::bench::tables_dir() / "d63_reu_forget_blend_grid_joint_validation.json";
+    std::ofstream d63_out(d63_table_path);
+    if (d63_out) {
+        d63_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d64_kappa_trajectory_window_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path pg_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kappa_trajectory_window = 16")) {
+        throw std::runtime_error("math integration preset missing kappa trajectory window");
+    }
+    if (!fs::is_regular_file(pg_cpp) ||
+        !script_text_contains(pg_cpp, "scale_profile_guided_loss_from_trajectory")) {
+        throw std::runtime_error("profile_guided_loss missing trajectory scaling");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--kappa-trajectory-window")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kappa-trajectory-window");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<int, 3> windows{8, 16, 32};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k trajectory window grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("trajectory window grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (int window : windows) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native trajectory window grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, window);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("trajectory window grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"kappa_trajectory_window", window},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status = joint_ok ? "kappa_trajectory_window_grid_joint_ready"
+                                                   : "kappa_trajectory_window_grid_ablation_ready";
+
+    const Json experiments{
+        {"kappa_trajectory_window_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"kappa_trajectory_window", 16}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "kappa_trajectory_window_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d64_kappa_trajectory_window_grid_joint_validation", experiments);
+    const fs::path d64_table_path =
+        cypha::bench::tables_dir() / "d64_kappa_trajectory_window_grid_joint_validation.json";
+    std::ofstream d64_out(d64_table_path);
+    if (d64_out) {
+        d64_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d65_navigation_loss_warmup_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path model_cpp = native_root / "src/cyphalm/cyphalm_model.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "navigation_loss_warmup_steps = 200")) {
+        throw std::runtime_error("math integration preset missing navigation loss warmup steps");
+    }
+    if (!fs::is_regular_file(model_cpp) ||
+        !script_text_contains(model_cpp, "navigation_loss_warmup_steps")) {
+        throw std::runtime_error("cyphalm_model missing navigation loss warmup ramp");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--navigation-loss-warmup-steps")) {
+        throw std::runtime_error("cyphalm_bench_native missing --navigation-loss-warmup-steps");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<int, 3> warmup_steps{100, 200, 400};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k nav loss warmup grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("nav loss warmup grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (int steps : warmup_steps) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native nav loss warmup grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, steps);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("nav loss warmup grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"navigation_loss_warmup_steps", steps},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "navigation_loss_warmup_grid_joint_ready"
+                 : "navigation_loss_warmup_grid_ablation_ready";
+
+    const Json experiments{
+        {"navigation_loss_warmup_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"navigation_loss_warmup_steps", 200}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "navigation_loss_warmup_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d65_navigation_loss_warmup_grid_joint_validation", experiments);
+    const fs::path d65_table_path =
+        cypha::bench::tables_dir() / "d65_navigation_loss_warmup_grid_joint_validation.json";
+    std::ofstream d65_out(d65_table_path);
+    if (d65_out) {
+        d65_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d66_free_energy_beta_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path model_cpp = native_root / "src/cyphalm/cyphalm_model.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "free_energy_beta = 0.01") ||
+        !script_text_contains(math_cpp, "use_free_energy_loss = true")) {
+        throw std::runtime_error("math integration preset missing free energy loss");
+    }
+    if (!fs::is_regular_file(model_cpp) ||
+        !script_text_contains(model_cpp, "free_energy_beta")) {
+        throw std::runtime_error("cyphalm_model missing free energy penalty");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) ||
+        !script_text_contains(bench_cpp, "--free-energy-beta")) {
+        throw std::runtime_error("cyphalm_bench_native missing --free-energy-beta");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> betas{0.005, 0.01, 0.02};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k free energy beta grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("free energy beta grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double beta : betas) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native free energy beta grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, beta);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("free energy beta grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"free_energy_beta", beta},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "free_energy_beta_grid_joint_ready" : "free_energy_beta_grid_ablation_ready";
+
+    const Json experiments{
+        {"free_energy_beta_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"free_energy_beta", 0.01}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "free_energy_beta_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d66_free_energy_beta_grid_joint_validation", experiments);
+    const fs::path d66_table_path =
+        cypha::bench::tables_dir() / "d66_free_energy_beta_grid_joint_validation.json";
+    std::ofstream d66_out(d66_table_path);
+    if (d66_out) {
+        d66_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d67_kernel_blend_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path model_cpp = native_root / "src/cyphalm/cyphalm_model.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kernel_blend = 0.25") ||
+        !script_text_contains(math_cpp, "use_kernel_llr = true")) {
+        throw std::runtime_error("math integration preset missing kernel blend");
+    }
+    if (!fs::is_regular_file(model_cpp) ||
+        !script_text_contains(model_cpp, "set_runtime_kernel_blend")) {
+        throw std::runtime_error("cyphalm_model missing runtime kernel blend");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) || !script_text_contains(bench_cpp, "--kernel-blend")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kernel-blend");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> blends{0.15, 0.25, 0.40};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k kernel blend grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("kernel blend grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double blend : blends) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native kernel blend grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, -1.0, blend);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("kernel blend grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"kernel_blend", blend},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "kernel_blend_grid_joint_ready" : "kernel_blend_grid_ablation_ready";
+
+    const Json experiments{
+        {"kernel_blend_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"kernel_blend", 0.25}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "kernel_blend_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d67_kernel_blend_grid_joint_validation", experiments);
+    const fs::path d67_table_path =
+        cypha::bench::tables_dir() / "d67_kernel_blend_grid_joint_validation.json";
+    std::ofstream d67_out(d67_table_path);
+    if (d67_out) {
+        d67_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d68_kernel_m_grid_joint_validation() {
+    const fs::path repo = cypha::bench::bench_root().parent_path();
+    const fs::path native_root = repo / "native";
+    const fs::path math_cpp = native_root / "src/cyphalm/cyphalm_math_integration.cpp";
+    const fs::path dif_cpp = native_root / "src/cyphalm/cyphalm_dif.cpp";
+    if (!fs::is_regular_file(math_cpp) ||
+        !script_text_contains(math_cpp, "kernel_m = 64")) {
+        throw std::runtime_error("math integration preset missing kernel_m");
+    }
+    if (!fs::is_regular_file(dif_cpp) || !script_text_contains(dif_cpp, "kernel_m")) {
+        throw std::runtime_error("cyphalm_dif missing kernel_m wiring");
+    }
+    const fs::path bench_cpp = native_root / "tools/cyphalm_bench_native.cpp";
+    if (!fs::is_regular_file(bench_cpp) || !script_text_contains(bench_cpp, "--kernel-m")) {
+        throw std::runtime_error("cyphalm_bench_native missing --kernel-m");
+    }
+
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<int, 3> kernel_ms{32, 64, 128};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k kernel m grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("kernel m grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (int km : kernel_ms) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native kernel m grid", -1.0, -1.0, -1.0, -1.0, kMathIntegrationBenchSeed,
+            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, -1.0, -1,
+            -1.0, -1.0, km);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("kernel m grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"kernel_m", km},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "kernel_m_grid_joint_ready" : "kernel_m_grid_ablation_ready";
+
+    const Json experiments{
+        {"kernel_m_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"kernel_m", 64}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "kernel_m_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d68_kernel_m_grid_joint_validation", experiments);
+    const fs::path d68_table_path =
+        cypha::bench::tables_dir() / "d68_kernel_m_grid_joint_validation.json";
+    std::ofstream d68_out(d68_table_path);
+    if (d68_out) {
+        d68_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d69_hybrid_blend_logit_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> blend_logits{0.0, 0.5, 1.0};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k hybrid blend logit grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("hybrid blend logit grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double logit : blend_logits) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native hybrid blend logit grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, -1.0, -1.0, -1, true, logit);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("hybrid blend logit grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"hybrid_blend_logit", logit},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "hybrid_blend_logit_grid_joint_ready" : "hybrid_blend_logit_grid_ablation_ready";
+
+    const Json experiments{
+        {"hybrid_blend_logit_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"hybrid_blend_logit", 0.5}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "hybrid_blend_logit_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d69_hybrid_blend_logit_grid_joint_validation", experiments);
+    const fs::path d69_table_path =
+        cypha::bench::tables_dir() / "d69_hybrid_blend_logit_grid_joint_validation.json";
+    std::ofstream d69_out(d69_table_path);
+    if (d69_out) {
+        d69_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d70_mdl_forget_max_norm_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> max_norms{2.0, 4.0, 8.0};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k mdl forget max norm grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("mdl forget max norm grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double max_norm : max_norms) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native mdl forget max norm grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, max_norm);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("mdl forget max norm grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"mdl_forget_max_norm", max_norm},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "mdl_forget_max_norm_grid_joint_ready" : "mdl_forget_max_norm_grid_ablation_ready";
+
+    const Json experiments{
+        {"mdl_forget_max_norm_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"mdl_forget_max_norm", 4.0}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "mdl_forget_max_norm_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d70_mdl_forget_max_norm_grid_joint_validation", experiments);
+    const fs::path d70_table_path =
+        cypha::bench::tables_dir() / "d70_mdl_forget_max_norm_grid_joint_validation.json";
+    std::ofstream d70_out(d70_table_path);
+    if (d70_out) {
+        d70_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d71_kernel_lr_scale_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> lr_scales{0.5, 1.0, 2.0};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k kernel lr scale grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("kernel lr scale grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double scale : lr_scales) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native kernel lr scale grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, scale);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("kernel lr scale grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"kernel_lr_scale", scale},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "kernel_lr_scale_grid_joint_ready" : "kernel_lr_scale_grid_ablation_ready";
+
+    const Json experiments{
+        {"kernel_lr_scale_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"kernel_lr_scale", 1.0}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "kernel_lr_scale_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d71_kernel_lr_scale_grid_joint_validation", experiments);
+    const fs::path d71_table_path =
+        cypha::bench::tables_dir() / "d71_kernel_lr_scale_grid_joint_validation.json";
+    std::ofstream d71_out(d71_table_path);
+    if (d71_out) {
+        d71_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d72_alpha_init_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> alpha_inits{0.3, 0.5, 0.7};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k alpha init grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("alpha init grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double alpha : alpha_inits) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native alpha init grid", -1.0, -1.0, -1.0, -1.0, kMathIntegrationBenchSeed,
+            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, -1.0, -1, -1.0,
+            -1.0, -1, false, 0.0, -1.0, -1.0, alpha);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("alpha init grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"alpha_init", alpha},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "alpha_init_grid_joint_ready" : "alpha_init_grid_ablation_ready";
+
+    const Json experiments{
+        {"alpha_init_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"alpha_init", 0.5}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "alpha_init_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d72_alpha_init_grid_joint_validation", experiments);
+    const fs::path d72_table_path =
+        cypha::bench::tables_dir() / "d72_alpha_init_grid_joint_validation.json";
+    std::ofstream d72_out(d72_table_path);
+    if (d72_out) {
+        d72_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d73_hybrid_blend_lr_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<double, 3> blend_lrs{0.005, 0.01, 0.02};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k hybrid blend lr grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("hybrid blend lr grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (double blend_lr : blend_lrs) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native hybrid blend lr grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, blend_lr);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("hybrid blend lr grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"hybrid_blend_lr", blend_lr},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "hybrid_blend_lr_grid_joint_ready" : "hybrid_blend_lr_grid_ablation_ready";
+
+    const Json experiments{
+        {"hybrid_blend_lr_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"hybrid_blend_lr", 0.01}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "hybrid_blend_lr_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d73_hybrid_blend_lr_grid_joint_validation", experiments);
+    const fs::path d73_table_path =
+        cypha::bench::tables_dir() / "d73_hybrid_blend_lr_grid_joint_validation.json";
+    std::ofstream d73_out(d73_table_path);
+    if (d73_out) {
+        d73_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d74_n_experts_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<int, 3> expert_counts{4, 8, 12};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k n experts grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("n experts grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (int experts : expert_counts) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native n experts grid", -1.0, -1.0, -1.0, -1.0, kMathIntegrationBenchSeed,
+            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, -1.0, -1, -1.0,
+            -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, experts);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("n experts grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"n_experts", experts},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "n_experts_grid_joint_ready" : "n_experts_grid_ablation_ready";
+
+    const Json experiments{
+        {"n_experts_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"n_experts", 8}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "n_experts_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d74_n_experts_grid_joint_validation", experiments);
+    const fs::path d74_table_path =
+        cypha::bench::tables_dir() / "d74_n_experts_grid_joint_validation.json";
+    std::ofstream d74_out(d74_table_path);
+    if (d74_out) {
+        d74_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d75_max_memory_slots_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<int, 3> slot_counts{128, 256, 512};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k max memory slots grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("max memory slots grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (int slots : slot_counts) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native max memory slots grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, -1, slots);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("max memory slots grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"max_memory_slots", slots},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "max_memory_slots_grid_joint_ready" : "max_memory_slots_grid_ablation_ready";
+
+    const Json experiments{
+        {"max_memory_slots_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"max_memory_slots", 256}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "max_memory_slots_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d75_max_memory_slots_grid_joint_validation", experiments);
+    const fs::path d75_table_path =
+        cypha::bench::tables_dir() / "d75_max_memory_slots_grid_joint_validation.json";
+    std::ofstream d75_out(d75_table_path);
+    if (d75_out) {
+        d75_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
+Json run_d76_compress_interval_grid_joint_validation() {
+    const fs::path exe_dir = resolve_native_exe_dir();
+    const fs::path bench_native_exe =
+        cypha::bench::resolve_runner_exe("cyphalm_bench_native", exe_dir);
+    if (!fs::is_regular_file(bench_native_exe)) {
+        throw std::runtime_error("missing cyphalm_bench_native: " + bench_native_exe.string());
+    }
+
+#if defined(_WIN32)
+    _putenv_s("CYPHA_BENCH_FAST", "1");
+#else
+    setenv("CYPHA_BENCH_FAST", "1", 1);
+#endif
+
+    const std::array<int, 3> compress_intervals{8, 16, 32};
+    Json grid_rows = Json::array();
+    Json best_row = nullptr;
+    double best_score = -1e18;
+
+    const Json baseline = run_math_integration_bench_subprocess(
+        bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, false,
+        "cyphalm_bench_native baseline @ 5k compress interval grid", -1.0, -1.0, -1.0, -1.0,
+        kMathIntegrationBenchSeed);
+    if (!baseline.contains("bpc") || baseline["bpc"].is_null()) {
+        throw std::runtime_error("compress interval grid missing baseline bpc");
+    }
+    const double base_bpc = baseline["bpc"].get<double>();
+    const double base_kappa =
+        baseline.contains("kappa") && !baseline["kappa"].is_null() ? baseline["kappa"].get<double>()
+                                                                   : 0.0;
+
+    for (int interval : compress_intervals) {
+        const Json math = run_math_integration_bench_subprocess(
+            bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
+            "cyphalm_bench_native compress interval grid", -1.0, -1.0, -1.0, -1.0,
+            kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
+            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, -1, -1,
+            interval);
+        if (!math.contains("bpc") || math["bpc"].is_null()) {
+            throw std::runtime_error("compress interval grid missing math bpc");
+        }
+        const double math_bpc = math["bpc"].get<double>();
+        const double delta_bpc = math_bpc - base_bpc;
+        double kappa = 0.0;
+        if (math.contains("kappa") && !math["kappa"].is_null()) {
+            kappa = math["kappa"].get<double>();
+        }
+        const double delta_kappa = kappa - base_kappa;
+        const double score = -delta_bpc - 0.08 * std::abs(delta_kappa);
+        Json row{{"compress_interval", interval},
+                 {"baseline_bpc", base_bpc},
+                 {"baseline_kappa", base_kappa},
+                 {"math_bpc", math_bpc},
+                 {"delta_bpc", delta_bpc},
+                 {"kappa", kappa},
+                 {"delta_kappa", delta_kappa},
+                 {"joint_score", score}};
+        grid_rows.push_back(row);
+        if (score > best_score) {
+            best_score = score;
+            best_row = row;
+        }
+    }
+
+    const bool joint_ok = best_row != nullptr && best_row["delta_bpc"].get<double>() < 0.0 &&
+                          std::abs(best_row["delta_kappa"].get<double>()) <= 0.05;
+    const std::string validation_status =
+        joint_ok ? "compress_interval_grid_joint_ready" : "compress_interval_grid_ablation_ready";
+
+    const Json experiments{
+        {"compress_interval_grid_rows", grid_rows},
+        {"best_cell", best_row},
+        {"preset_cell", Json{{"compress_interval", 16}}},
+        {"bench_seed", kMathIntegrationBenchSeed},
+        {"n_train", kD41ScaleNTrain},
+        {"n_eval", kD41ScaleNEval},
+        {"validation_status", validation_status},
+        {"backend", "compress_interval_grid_joint_math_integration"},
+    };
+    cypha::bench::finalize_domain("d76_compress_interval_grid_joint_validation", experiments);
+    const fs::path d76_table_path =
+        cypha::bench::tables_dir() / "d76_compress_interval_grid_joint_validation.json";
+    std::ofstream d76_out(d76_table_path);
+    if (d76_out) {
+        d76_out << experiments.dump(2);
+    }
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -4449,6 +9267,82 @@ std::vector<DomainSpec> build_all_domains() {
         {"d37", "cypha_bench.domains.d37_lock_refresh_validation", run_d37_lock_refresh_validation},
         {"d38", "cypha_bench.domains.d38_overnight_certificate_validation",
          run_d38_overnight_certificate_validation},
+        {"d39", "cypha_bench.domains.d39_intelligence_monitor_profile_validation",
+         run_d39_intelligence_monitor_profile_validation},
+        {"d40", "cypha_bench.domains.d40_math_integration_validation",
+         run_d40_math_integration_validation},
+        {"d41", "cypha_bench.domains.d41_math_integration_scale_validation",
+         run_d41_math_integration_scale_validation},
+        {"d42", "cypha_bench.domains.d42_math_integration_production_validation",
+         run_d42_math_integration_production_validation},
+        {"d43", "cypha_bench.domains.d43_math_integration_lock_validation",
+         run_d43_math_integration_lock_validation},
+        {"d44", "cypha_bench.domains.d44_kernel_nystrom_cyphalm_validation",
+         run_d44_kernel_nystrom_cyphalm_validation},
+        {"d45", "cypha_bench.domains.d45_per_stat_navigation_validation",
+         run_d45_per_stat_navigation_validation},
+        {"d46", "cypha_bench.domains.d46_math_stack_upgrade_validation",
+         run_d46_math_stack_upgrade_validation},
+        {"d47", "cypha_bench.domains.d47_span_ablation_validation",
+         run_d47_span_ablation_validation},
+        {"d48", "cypha_bench.domains.d48_kappa_ceiling_ablation_validation",
+         run_d48_kappa_ceiling_ablation_validation},
+        {"d49", "cypha_bench.domains.d49_ceiling_grid_joint_validation",
+         run_d49_ceiling_grid_joint_validation},
+        {"d50", "cypha_bench.domains.d50_math_joint_lock_validation",
+         run_d50_math_joint_lock_validation},
+        {"d51", "cypha_bench.domains.d51_opt_in_lever_joint_validation",
+         run_d51_opt_in_lever_joint_validation},
+        {"d52", "cypha_bench.domains.d52_preset_ship_lock_validation",
+         run_d52_preset_ship_lock_validation},
+        {"d53", "cypha_bench.domains.d53_production_preset_ship_lock_validation",
+         run_d53_production_preset_ship_lock_validation},
+        {"d54", "cypha_bench.domains.d54_production_math_certificate_validation",
+         run_d54_production_math_certificate_validation},
+        {"d55", "cypha_bench.domains.d55_nav_warmup_grid_joint_validation",
+         run_d55_nav_warmup_grid_joint_validation},
+        {"d56", "cypha_bench.domains.d56_cell_sweep_math_integration_validation",
+         run_d56_cell_sweep_math_integration_validation},
+        {"d57", "cypha_bench.domains.d57_production_cell_sweep_math_certificate_validation",
+         run_d57_production_cell_sweep_math_certificate_validation},
+        {"d58", "cypha_bench.domains.d58_production_overnight_math_complete_validation",
+         run_d58_production_overnight_math_complete_validation},
+        {"d59", "cypha_bench.domains.d59_kernel_blend_floor_grid_joint_validation",
+         run_d59_kernel_blend_floor_grid_joint_validation},
+        {"d60", "cypha_bench.domains.d60_excess_grad_margin_grid_joint_validation",
+         run_d60_excess_grad_margin_grid_joint_validation},
+        {"d61", "cypha_bench.domains.d61_excess_grad_scale_grid_joint_validation",
+         run_d61_excess_grad_scale_grid_joint_validation},
+        {"d62", "cypha_bench.domains.d62_math_ablation_stack_complete_validation",
+         run_d62_math_ablation_stack_complete_validation},
+        {"d63", "cypha_bench.domains.d63_reu_forget_blend_grid_joint_validation",
+         run_d63_reu_forget_blend_grid_joint_validation},
+        {"d64", "cypha_bench.domains.d64_kappa_trajectory_window_grid_joint_validation",
+         run_d64_kappa_trajectory_window_grid_joint_validation},
+        {"d65", "cypha_bench.domains.d65_navigation_loss_warmup_grid_joint_validation",
+         run_d65_navigation_loss_warmup_grid_joint_validation},
+        {"d66", "cypha_bench.domains.d66_free_energy_beta_grid_joint_validation",
+         run_d66_free_energy_beta_grid_joint_validation},
+        {"d67", "cypha_bench.domains.d67_kernel_blend_grid_joint_validation",
+         run_d67_kernel_blend_grid_joint_validation},
+        {"d68", "cypha_bench.domains.d68_kernel_m_grid_joint_validation",
+         run_d68_kernel_m_grid_joint_validation},
+        {"d69", "cypha_bench.domains.d69_hybrid_blend_logit_grid_joint_validation",
+         run_d69_hybrid_blend_logit_grid_joint_validation},
+        {"d70", "cypha_bench.domains.d70_mdl_forget_max_norm_grid_joint_validation",
+         run_d70_mdl_forget_max_norm_grid_joint_validation},
+        {"d71", "cypha_bench.domains.d71_kernel_lr_scale_grid_joint_validation",
+         run_d71_kernel_lr_scale_grid_joint_validation},
+        {"d72", "cypha_bench.domains.d72_alpha_init_grid_joint_validation",
+         run_d72_alpha_init_grid_joint_validation},
+        {"d73", "cypha_bench.domains.d73_hybrid_blend_lr_grid_joint_validation",
+         run_d73_hybrid_blend_lr_grid_joint_validation},
+        {"d74", "cypha_bench.domains.d74_n_experts_grid_joint_validation",
+         run_d74_n_experts_grid_joint_validation},
+        {"d75", "cypha_bench.domains.d75_max_memory_slots_grid_joint_validation",
+         run_d75_max_memory_slots_grid_joint_validation},
+        {"d76", "cypha_bench.domains.d76_compress_interval_grid_joint_validation",
+         run_d76_compress_interval_grid_joint_validation},
     };
 }
 

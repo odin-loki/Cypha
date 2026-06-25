@@ -182,5 +182,271 @@
     "env": "CYPHA_BENCH_FAST=1",
     "domain": "d38",
     "notes": "Production overnight completion certificate; see bench/config/d38_overnight_certificate_profile.json"
+  },
+  "intelligence_monitor_d39": {
+    "path": "everyday_profile.json",
+    "config": "d39_intelligence_monitor_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d39",
+    "notes": "Intelligence profile completeness validation; see bench/config/d39_intelligence_monitor_profile.json"
+  },
+  "math_integration_d40": {
+    "path": "everyday_profile.json",
+    "config": "d40_math_integration_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d40",
+    "notes": "Math integration validation; see bench/config/d40_math_integration_profile.json"
+  },
+  "math_integration_scale_d41": {
+    "path": "everyday_profile.json",
+    "config": "d41_math_integration_scale_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d41",
+    "notes": "Math integration scale validation; see bench/config/d41_math_integration_scale_profile.json"
+  },
+  "math_integration_production_d42": {
+    "path": "everyday_profile.json",
+    "config": "d42_math_integration_production_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d42",
+    "notes": "Math integration production validation; see bench/config/d42_math_integration_production_profile.json"
+  },
+  "math_integration_lock_d43": {
+    "path": "everyday_profile.json",
+    "config": "d43_math_integration_lock_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d43",
+    "notes": "Math integration lock validation; see bench/config/d43_math_integration_lock_profile.json"
+  },
+  "kernel_nystrom_cyphalm_d44": {
+    "path": "everyday_profile.json",
+    "config": "d44_kernel_nystrom_cyphalm_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d44",
+    "notes": "Nyström kernel CyphaLM validation; see bench/config/d44_kernel_nystrom_cyphalm_profile.json"
+  },
+  "per_stat_navigation_d45": {
+    "path": "everyday_profile.json",
+    "config": "d45_per_stat_navigation_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d45",
+    "notes": "Per-stat navigation λ validation; see bench/config/d45_per_stat_navigation_profile.json"
+  },
+  "math_stack_upgrade_d46": {
+    "path": "everyday_profile.json",
+    "config": "d46_math_stack_upgrade_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d46",
+    "notes": "Phase 33 math stack upgrade; see bench/config/d46_math_stack_upgrade_profile.json"
+  },
+  "span_ablation_d47": {
+    "path": "everyday_profile.json",
+    "config": "d47_span_ablation_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d47",
+    "notes": "Phase 34 span ablation + κ ceiling; see bench/config/d47_span_ablation_profile.json"
+  },
+  "kappa_ceiling_ablation_d48": {
+    "path": "everyday_profile.json",
+    "config": "d48_kappa_ceiling_ablation_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d48",
+    "notes": "Phase 35 κ ceiling joint tuning; see bench/config/d48_kappa_ceiling_ablation_profile.json"
+  },
+  "ceiling_grid_joint_d49": {
+    "path": "everyday_profile.json",
+    "config": "d49_ceiling_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d49",
+    "notes": "Phase 36 ceiling grid joint tuning; see bench/config/d49_ceiling_grid_joint_profile.json"
+  },
+  "math_joint_lock_d50": {
+    "path": "everyday_profile.json",
+    "config": "d50_math_joint_lock_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d50",
+    "notes": "Phase 37 pinned-seed joint lock; see bench/config/d50_math_joint_lock_profile.json"
+  },
+  "opt_in_lever_joint_d51": {
+    "path": "everyday_profile.json",
+    "config": "d51_opt_in_lever_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d51",
+    "notes": "Phase 38 opt-in lever joint tuning; see bench/config/d51_opt_in_lever_joint_profile.json"
+  },
+  "preset_ship_lock_d52": {
+    "path": "everyday_profile.json",
+    "config": "d52_preset_ship_lock_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d52",
+    "notes": "Phase 39 shipped preset lock; see bench/config/d52_preset_ship_lock_profile.json"
+  },
+  "production_preset_ship_lock_d53": {
+    "path": "everyday_profile.json",
+    "config": "d53_production_preset_ship_lock_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d53",
+    "notes": "Phase 40 production preset ship lock; see bench/config/d53_production_preset_ship_lock_profile.json"
+  },
+  "production_math_certificate_d54": {
+    "path": "everyday_profile.json",
+    "config": "d54_production_math_certificate_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d54",
+    "notes": "Phase 41 production math certificate; see bench/config/d54_production_math_certificate_profile.json"
+  },
+  "nav_warmup_grid_joint_d55": {
+    "path": "everyday_profile.json",
+    "config": "d55_nav_warmup_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d55",
+    "notes": "Phase 41 nav warmup grid ablation; see bench/config/d55_nav_warmup_grid_joint_profile.json"
+  },
+  "cell_sweep_math_integration_d56": {
+    "path": "everyday_profile.json",
+    "config": "d56_cell_sweep_math_integration_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d56",
+    "notes": "Phase 42 cell sweep math integration; see bench/config/d56_cell_sweep_math_integration_profile.json"
+  },
+  "production_cell_sweep_math_certificate_d57": {
+    "path": "everyday_profile.json",
+    "config": "d57_production_cell_sweep_math_certificate_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d57",
+    "notes": "Phase 43 production cell sweep math certificate; see bench/config/d57_production_cell_sweep_math_certificate_profile.json"
+  },
+  "production_overnight_math_complete_d58": {
+    "path": "everyday_profile.json",
+    "config": "d58_production_overnight_math_complete_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d58",
+    "notes": "Phase 44 unified production overnight math complete; see bench/config/d58_production_overnight_math_complete_profile.json"
+  },
+  "kernel_blend_floor_grid_joint_d59": {
+    "path": "everyday_profile.json",
+    "config": "d59_kernel_blend_floor_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d59",
+    "notes": "Phase 45 kernel blend floor grid ablation; see bench/config/d59_kernel_blend_floor_grid_joint_profile.json"
+  },
+  "excess_grad_margin_grid_joint_d60": {
+    "path": "everyday_profile.json",
+    "config": "d60_excess_grad_margin_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d60",
+    "notes": "Phase 46 excess grad margin grid ablation; see bench/config/d60_excess_grad_margin_grid_joint_profile.json"
+  },
+  "excess_grad_scale_grid_joint_d61": {
+    "path": "everyday_profile.json",
+    "config": "d61_excess_grad_scale_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d61",
+    "notes": "Phase 47 excess grad scale grid ablation; see bench/config/d61_excess_grad_scale_grid_joint_profile.json"
+  },
+  "math_ablation_stack_complete_d62": {
+    "path": "everyday_profile.json",
+    "config": "d62_math_ablation_stack_complete_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d62",
+    "notes": "Phase 48 math ablation stack complete; see bench/config/d62_math_ablation_stack_complete_profile.json"
+  },
+  "reu_forget_blend_grid_joint_d63": {
+    "path": "everyday_profile.json",
+    "config": "d63_reu_forget_blend_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d63",
+    "notes": "Phase 49 r_eu forget blend grid ablation; see bench/config/d63_reu_forget_blend_grid_joint_profile.json"
+  },
+  "kappa_trajectory_window_grid_joint_d64": {
+    "path": "everyday_profile.json",
+    "config": "d64_kappa_trajectory_window_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d64",
+    "notes": "Phase 50 kappa trajectory window grid ablation; see bench/config/d64_kappa_trajectory_window_grid_joint_profile.json"
+  },
+  "navigation_loss_warmup_grid_joint_d65": {
+    "path": "everyday_profile.json",
+    "config": "d65_navigation_loss_warmup_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d65",
+    "notes": "Phase 51 navigation loss warmup grid ablation; see bench/config/d65_navigation_loss_warmup_grid_joint_profile.json"
+  },
+  "free_energy_beta_grid_joint_d66": {
+    "path": "everyday_profile.json",
+    "config": "d66_free_energy_beta_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d66",
+    "notes": "Phase 52 free energy beta grid ablation; see bench/config/d66_free_energy_beta_grid_joint_profile.json"
+  },
+  "kernel_blend_grid_joint_d67": {
+    "path": "everyday_profile.json",
+    "config": "d67_kernel_blend_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d67",
+    "notes": "Phase 53 base kernel blend grid ablation; see bench/config/d67_kernel_blend_grid_joint_profile.json"
+  },
+  "kernel_m_grid_joint_d68": {
+    "path": "everyday_profile.json",
+    "config": "d68_kernel_m_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d68",
+    "notes": "Phase 54 kernel_m grid ablation; see bench/config/d68_kernel_m_grid_joint_profile.json"
+  },
+  "hybrid_blend_logit_grid_joint_d69": {
+    "path": "everyday_profile.json",
+    "config": "d69_hybrid_blend_logit_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d69",
+    "notes": "Phase 55 hybrid_blend_logit grid ablation; see bench/config/d69_hybrid_blend_logit_grid_joint_profile.json"
+  },
+  "mdl_forget_max_norm_grid_joint_d70": {
+    "path": "everyday_profile.json",
+    "config": "d70_mdl_forget_max_norm_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d70",
+    "notes": "Phase 56 mdl_forget_max_norm grid ablation; see bench/config/d70_mdl_forget_max_norm_grid_joint_profile.json"
+  },
+  "kernel_lr_scale_grid_joint_d71": {
+    "path": "everyday_profile.json",
+    "config": "d71_kernel_lr_scale_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d71",
+    "notes": "Phase 57 kernel_lr_scale grid ablation; see bench/config/d71_kernel_lr_scale_grid_joint_profile.json"
+  },
+  "alpha_init_grid_joint_d72": {
+    "path": "everyday_profile.json",
+    "config": "d72_alpha_init_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d72",
+    "notes": "Phase 57 alpha_init grid ablation; see bench/config/d72_alpha_init_grid_joint_profile.json"
+  },
+  "hybrid_blend_lr_grid_joint_d73": {
+    "path": "everyday_profile.json",
+    "config": "d73_hybrid_blend_lr_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d73",
+    "notes": "Phase 58 hybrid_blend_lr grid ablation; see bench/config/d73_hybrid_blend_lr_grid_joint_profile.json"
+  },
+  "n_experts_grid_joint_d74": {
+    "path": "everyday_profile.json",
+    "config": "d74_n_experts_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d74",
+    "notes": "Phase 59 n_experts grid ablation; see bench/config/d74_n_experts_grid_joint_profile.json"
+  },
+  "max_memory_slots_grid_joint_d75": {
+    "path": "everyday_profile.json",
+    "config": "d75_max_memory_slots_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d75",
+    "notes": "Phase 59 max_memory_slots grid ablation; see bench/config/d75_max_memory_slots_grid_joint_profile.json"
+  },
+  "compress_interval_grid_joint_d76": {
+    "path": "everyday_profile.json",
+    "config": "d76_compress_interval_grid_joint_profile.json",
+    "env": "CYPHA_BENCH_FAST=1",
+    "domain": "d76",
+    "notes": "Phase 59 compress_interval grid ablation; see bench/config/d76_compress_interval_grid_joint_profile.json"
   }
 }

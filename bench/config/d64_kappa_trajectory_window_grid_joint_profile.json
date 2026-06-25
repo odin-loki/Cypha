@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d64_kappa_trajectory_window_grid_joint_profile",
+
+  "description": "D64 Phase 50 κ trajectory window grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 64,
+
+    "domain_tag": "d64"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d64",
+
+    "Ablation grid: kappa_trajectory_window {8, 16, 32}",
+
+    "Preset ship cell: window=16"
+
+  ]
+
+}

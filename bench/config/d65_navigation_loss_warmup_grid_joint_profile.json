@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d65_navigation_loss_warmup_grid_joint_profile",
+
+  "description": "D65 Phase 51 navigation loss warmup steps grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 65,
+
+    "domain_tag": "d65"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d65",
+
+    "Ablation grid: navigation_loss_warmup_steps {100, 200, 400}",
+
+    "Preset ship cell: steps=200"
+
+  ]
+
+}

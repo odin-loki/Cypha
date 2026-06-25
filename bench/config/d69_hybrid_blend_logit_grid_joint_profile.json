@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d69_hybrid_blend_logit_grid_joint_profile",
+
+  "description": "D69 Phase 55 GRIA/LSTM hybrid_blend_logit grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 69,
+
+    "domain_tag": "d69"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d69",
+
+    "Ablation grid: hybrid_blend_logit {0.0, 0.5, 1.0}",
+
+    "Preset ship cell: hybrid_blend_logit=0.5"
+
+  ]
+
+}

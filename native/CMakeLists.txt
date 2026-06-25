@@ -66,12 +66,14 @@ add_library(cypha_core STATIC
   src/intelligence/measurers.cpp
   src/intelligence/intelligence_profiler.cpp
   src/intelligence/intelligence_profile_json.cpp
+  src/intelligence/profile_completeness.cpp
   src/intelligence/epistemic_threshold.cpp
   src/intelligence/soft_world_monitor.cpp
   src/intelligence/self_correcting_infer.cpp
   src/intelligence/profile_from_model.cpp
   src/intelligence/causal_graph.cpp
   src/intelligence/profile_guided_loss.cpp
+  src/cyphalm/lm_intelligence_monitor.cpp
   src/rpsm/psi_matrices.cpp
   src/rpsm/rpsm_sequence_layer.cpp
   src/bench/bench_paths.cpp
@@ -85,6 +87,7 @@ if(CYPHA_ENABLE_CUDA)
 endif()
 
 file(GLOB CYPHALM_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/*.cpp")
+list(REMOVE_ITEM CYPHALM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/lm_intelligence_monitor.cpp")
 if(NOT CYPHALM_SOURCES)
   message(FATAL_ERROR "cypha_lm_native: no sources under native/src/cyphalm/")
 endif()
@@ -265,6 +268,24 @@ target_link_libraries(cypha_export_gguf PRIVATE cypha_core)
 
 add_executable(intelligence_profiler_smoke tools/intelligence_profiler_smoke.cpp)
 target_link_libraries(intelligence_profiler_smoke PRIVATE cypha_core)
+
+add_executable(intelligence_lm_monitor_smoke tools/intelligence_lm_monitor_smoke.cpp)
+target_link_libraries(intelligence_lm_monitor_smoke PRIVATE cypha_core)
+
+add_executable(lm_self_correct_smoke tools/lm_self_correct_smoke.cpp)
+target_link_libraries(lm_self_correct_smoke PRIVATE cypha_lm_native)
+
+add_executable(navigation_loss_char_lstm_smoke tools/navigation_loss_char_lstm_smoke.cpp)
+target_link_libraries(navigation_loss_char_lstm_smoke PRIVATE cypha_lm_native)
+
+add_executable(navigation_loss_hybrid_smoke tools/navigation_loss_hybrid_smoke.cpp)
+target_link_libraries(navigation_loss_hybrid_smoke PRIVATE cypha_lm_native)
+
+add_executable(kernel_llm_h04_smoke tools/kernel_llm_h04_smoke.cpp)
+target_link_libraries(kernel_llm_h04_smoke PRIVATE cypha_lm_native)
+
+add_executable(tau_forget_gate_smoke tools/tau_forget_gate_smoke.cpp)
+target_link_libraries(tau_forget_gate_smoke PRIVATE cypha_lm_native)
 
 add_executable(ewc_smoke tools/ewc_smoke.cpp)
 target_link_libraries(ewc_smoke PRIVATE cypha_core)
@@ -905,6 +926,7 @@ add_test(
 )
 set_tests_properties(native_cyphalm_bench_intelligence_profile PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  PASS_REGULAR_EXPRESSION "criticality_score"
 )
 
 add_test(
@@ -1248,6 +1270,378 @@ add_test(
 set_tests_properties(native_d38_overnight_certificate_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
   TIMEOUT 60
+)
+
+add_test(
+  NAME native_d39_intelligence_monitor_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d39
+)
+set_tests_properties(native_d39_intelligence_monitor_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 180
+)
+
+add_test(
+  NAME native_d40_math_integration_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d40
+)
+set_tests_properties(native_d40_math_integration_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 180
+)
+
+add_test(
+  NAME native_d41_math_integration_scale_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d41
+)
+set_tests_properties(native_d41_math_integration_scale_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 600
+)
+
+add_test(
+  NAME native_d42_math_integration_production_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d42
+)
+set_tests_properties(native_d42_math_integration_production_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 600
+)
+
+add_test(
+  NAME native_d43_math_integration_lock_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d43
+)
+set_tests_properties(native_d43_math_integration_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 600
+)
+
+add_test(
+  NAME native_d44_kernel_nystrom_cyphalm_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d44
+)
+set_tests_properties(native_d44_kernel_nystrom_cyphalm_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 300
+)
+
+add_test(
+  NAME native_d45_per_stat_navigation_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d45
+)
+set_tests_properties(native_d45_per_stat_navigation_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 600
+)
+
+add_test(
+  NAME native_d46_math_stack_upgrade_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d46
+)
+set_tests_properties(native_d46_math_stack_upgrade_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 600
+)
+
+add_test(
+  NAME native_d47_span_ablation_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d47
+)
+set_tests_properties(native_d47_span_ablation_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 900
+)
+
+add_test(
+  NAME native_d48_kappa_ceiling_ablation_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d48
+)
+set_tests_properties(native_d48_kappa_ceiling_ablation_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1200
+)
+
+add_test(
+  NAME native_d49_ceiling_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d49
+)
+set_tests_properties(native_d49_ceiling_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d50_math_joint_lock_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d50
+)
+set_tests_properties(native_d50_math_joint_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1200
+)
+
+add_test(
+  NAME native_d51_opt_in_lever_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d51
+)
+set_tests_properties(native_d51_opt_in_lever_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 2400
+)
+
+add_test(
+  NAME native_d52_preset_ship_lock_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d52
+)
+set_tests_properties(native_d52_preset_ship_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1200
+)
+
+add_test(
+  NAME native_d53_production_preset_ship_lock_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d53
+)
+set_tests_properties(native_d53_production_preset_ship_lock_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d54_production_math_certificate_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d54
+)
+set_tests_properties(native_d54_production_math_certificate_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d55_nav_warmup_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d55
+)
+set_tests_properties(native_d55_nav_warmup_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 2400
+)
+
+add_test(
+  NAME native_d56_cell_sweep_math_integration_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d56
+)
+set_tests_properties(native_d56_cell_sweep_math_integration_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 3600
+)
+
+add_test(
+  NAME native_d57_production_cell_sweep_math_certificate_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d57
+)
+set_tests_properties(native_d57_production_cell_sweep_math_certificate_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 3600
+)
+
+add_test(
+  NAME native_d58_production_overnight_math_complete_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d58
+)
+set_tests_properties(native_d58_production_overnight_math_complete_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d59_kernel_blend_floor_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d59
+)
+set_tests_properties(native_d59_kernel_blend_floor_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d60_excess_grad_margin_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d60
+)
+set_tests_properties(native_d60_excess_grad_margin_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d61_excess_grad_scale_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d61
+)
+set_tests_properties(native_d61_excess_grad_scale_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d62_math_ablation_stack_complete_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d62
+)
+set_tests_properties(native_d62_math_ablation_stack_complete_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d63_reu_forget_blend_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d63
+)
+set_tests_properties(native_d63_reu_forget_blend_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d64_kappa_trajectory_window_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d64
+)
+set_tests_properties(native_d64_kappa_trajectory_window_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d65_navigation_loss_warmup_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d65
+)
+set_tests_properties(native_d65_navigation_loss_warmup_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d66_free_energy_beta_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d66
+)
+set_tests_properties(native_d66_free_energy_beta_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d67_kernel_blend_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d67
+)
+set_tests_properties(native_d67_kernel_blend_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d68_kernel_m_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d68
+)
+set_tests_properties(native_d68_kernel_m_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d69_hybrid_blend_logit_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d69
+)
+set_tests_properties(native_d69_hybrid_blend_logit_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d70_mdl_forget_max_norm_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d70
+)
+set_tests_properties(native_d70_mdl_forget_max_norm_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d71_kernel_lr_scale_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d71
+)
+set_tests_properties(native_d71_kernel_lr_scale_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d72_alpha_init_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d72
+)
+set_tests_properties(native_d72_alpha_init_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d73_hybrid_blend_lr_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d73
+)
+set_tests_properties(native_d73_hybrid_blend_lr_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 1800
+)
+
+add_test(
+  NAME native_d74_n_experts_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d74
+)
+set_tests_properties(native_d74_n_experts_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 2400
+)
+
+add_test(
+  NAME native_d75_max_memory_slots_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d75
+)
+set_tests_properties(native_d75_max_memory_slots_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 2400
+)
+
+add_test(
+  NAME native_d76_compress_interval_grid_joint_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d76
+)
+set_tests_properties(native_d76_compress_interval_grid_joint_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 2400
+)
+
+add_test(
+  NAME native_tau_forget_gate_smoke
+  COMMAND "$<TARGET_FILE:tau_forget_gate_smoke>"
+)
+
+add_test(
+  NAME native_intelligence_lm_monitor_smoke
+  COMMAND "$<TARGET_FILE:intelligence_lm_monitor_smoke>"
+)
+
+add_test(
+  NAME native_lm_self_correct_smoke
+  COMMAND "$<TARGET_FILE:lm_self_correct_smoke>"
+)
+
+add_test(
+  NAME native_navigation_loss_char_lstm_smoke
+  COMMAND "$<TARGET_FILE:navigation_loss_char_lstm_smoke>"
+)
+
+add_test(
+  NAME native_navigation_loss_hybrid_smoke
+  COMMAND "$<TARGET_FILE:navigation_loss_hybrid_smoke>"
+)
+
+add_test(
+  NAME native_kernel_llm_h04_smoke
+  COMMAND "$<TARGET_FILE:kernel_llm_h04_smoke>"
 )
 
 add_test(

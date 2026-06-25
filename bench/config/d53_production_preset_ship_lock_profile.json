@@ -1,0 +1,17 @@
+{
+  "profile_id": "d53_production_preset_ship_lock_profile",
+  "description": "D53 Phase 40 production preset ship lock — 300k math tier + 5k subprocess joint",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 53,
+    "domain_tag": "d53"
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d53",
+    "Validates production math lock tier + Phase 40 κ navigation warmup preset",
+    "Maintainer: run_production_overnight.ps1 -MathIntegration to fill 300k lock"
+  ]
+}

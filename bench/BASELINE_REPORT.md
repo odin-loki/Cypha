@@ -1,12 +1,12 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-06-14 11:14 UTC
+Generated: 2026-06-24 10:07 UTC
 
 Default parameters only — no hyperparameter tuning.
 
 ## Executive Summary
 
-- Domains run: **17**
+- Domains run: **61**
 - Cross-domain analyses: **4**
 
 ## D01
@@ -179,15 +179,35 @@ _No experiments recorded._
 
 ## D20
 
-*Timestamp:* 2026-06-14T11:13:47.903+00:00
+*Timestamp:* 2026-06-23T09:28:08.579+00:00
 
 ### backend
 
-- result: cypha_cell_hypothesis_sweep --overnight-sweep-smoke
+- result: cypha_cell_hypothesis_sweep --overnight-sweep-smoke --intelligence-profile
+
+### intelligence_profile
+
+- result: true
+
+### kappa_ranked_variants
+
+- result: [{"id":"H06","kappa":0.8437798443992272},{"id":"B2","kappa":0.8426201716581455},{"id":"H14","kappa":0.8426201716581455}]
+
+### n_eval
+
+- result: 32.0000
+
+### n_train
+
+- result: 80.0000
 
 ### overnight_sweep_smoke
 
-- result: [{"bench_mode":"hybrid","bpc":7.967382408140876,"id":"B2","n_train":200},{"bench_mode":"hybrid","bpc":7.9673824687505554,"id":"H06","n_train":200},{"bench_mode":"hybrid","bpc":7.967382408140876,"id":"H14","n_train":200}]
+- result: [{"bench_mode":"hybrid","bpc":7.03305777611685,"id":"B2","kappa":0.8426201716581455,"n_train":80},{"bench_mode":"hybrid","bpc":7.033067266671949,"id":"H06","kappa":0.8437798443992272,"n_train":80},{"bench_mode":"hybrid","bpc":7.03305777611685,"id":"H14","kappa":0.8426201716581455,"n_train":80}]
+
+### pareto_ranked_variants
+
+- result: [{"bpc":7.03305777611685,"id":"B2","kappa":0.8426201716581455,"nondominated":true,"normalized_bpc":0.0,"pareto_score":0.8426201716581455},{"bpc":7.03305777611685,"id":"H14","kappa":0.8426201716581455,"nondominated":true,"normalized_bpc":0.0,"pareto_score":0.8426201716581455},{"bpc":7.033067266671949,"id":"H06","kappa":0.8437798443992272,"nondominated":true,"normalized_bpc":1.0,"pareto_score":0.7437798443992272}]
 
 ### variant_count
 
@@ -234,6 +254,182 @@ _No experiments recorded._
 _No experiments recorded._
 
 ## D32
+
+_No experiments recorded._
+
+## D33
+
+_No experiments recorded._
+
+## D34
+
+_No experiments recorded._
+
+## D35
+
+_No experiments recorded._
+
+## D36
+
+_No experiments recorded._
+
+## D37
+
+_No experiments recorded._
+
+## D38
+
+_No experiments recorded._
+
+## D39
+
+_No experiments recorded._
+
+## D40
+
+_No experiments recorded._
+
+## D41
+
+_No experiments recorded._
+
+## D42
+
+_No experiments recorded._
+
+## D43
+
+_No experiments recorded._
+
+## D44
+
+_No experiments recorded._
+
+## D45
+
+_No experiments recorded._
+
+## D46
+
+_No experiments recorded._
+
+## D47
+
+_No experiments recorded._
+
+## D48
+
+_No experiments recorded._
+
+## D49
+
+_No experiments recorded._
+
+## D50
+
+_No experiments recorded._
+
+## D51
+
+_No experiments recorded._
+
+## D52
+
+_No experiments recorded._
+
+## D53
+
+_No experiments recorded._
+
+## D54
+
+_No experiments recorded._
+
+## D55
+
+_No experiments recorded._
+
+## D56
+
+_No experiments recorded._
+
+## D57
+
+_No experiments recorded._
+
+## D58
+
+_No experiments recorded._
+
+## D59
+
+_No experiments recorded._
+
+## D60
+
+_No experiments recorded._
+
+## D61
+
+_No experiments recorded._
+
+## D62
+
+_No experiments recorded._
+
+## D63
+
+_No experiments recorded._
+
+## D64
+
+_No experiments recorded._
+
+## D65
+
+_No experiments recorded._
+
+## D66
+
+_No experiments recorded._
+
+## D67
+
+_No experiments recorded._
+
+## D68
+
+_No experiments recorded._
+
+## D69
+
+_No experiments recorded._
+
+## D70
+
+_No experiments recorded._
+
+## D71
+
+_No experiments recorded._
+
+## D72
+
+_No experiments recorded._
+
+## D73
+
+_No experiments recorded._
+
+## D74
+
+_No experiments recorded._
+
+## D75
+
+_No experiments recorded._
+
+## D76
 
 _No experiments recorded._
 

@@ -1,0 +1,23 @@
+{
+  "profile_id": "d45_per_stat_navigation_profile",
+  "description": "D45 per-stat deviation navigation λ + enriched math integration export validation",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 45,
+    "domain_tag": "d45"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d45_per_stat_navigation_smoke",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    }
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d45",
+    "Validates scale_profile_guided_loss_by_stat_deviation + export stat_deltas/navigation_config",
+    "Phase 32: per-stat navigation λ scheduling"
+  ]
+}

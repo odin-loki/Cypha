@@ -1,0 +1,40 @@
+{
+  "profile_id": "d17_math_integration_profile",
+  "description": "D17 math integration smoke — hybrid LM with all math modules via --math-integration (5k train)",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 17,
+    "domain_tag": "d17_math_integration"
+  },
+  "medium_smoke": {
+    "description": "5k hybrid train with full math integration preset",
+    "n_train": 5000,
+    "n_eval": 256,
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      {
+        "tool": "cyphalm_bench_native",
+        "args": {
+          "profile": "d17",
+          "mode": "hybrid",
+          "n_train": 5000,
+          "n_eval": 256,
+          "math_integration": true,
+          "intelligence_profile": true
+        }
+      }
+    ]
+  },
+  "notes": [
+    "CLI: cyphalm_bench_native --profile d17 --mode hybrid --math-integration --n-train 5000 --n-eval 256",
+    "Enables profile-guided loss, alpha forget gate (H01), GRIA mixture (H09), OOD branching (H14),",
+    "free energy (H21), MDL forget (H12), priority replay (H13), NIG state cell, hebbian stack,",
+    "profile curriculum, and full 7-stat navigation loss.",
+    "Medium-tier 5k smoke between fast (100 train) and overnight (300k)."
+  ]
+}

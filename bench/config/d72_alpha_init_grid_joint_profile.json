@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d72_alpha_init_grid_joint_profile",
+
+  "description": "D72 Phase 57 GRIA alpha_init grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 72,
+
+    "domain_tag": "d72"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d72",
+
+    "Ablation grid: alpha_init {0.3, 0.5, 0.7}",
+
+    "Preset ship cell: alpha_init=0.5"
+
+  ]
+
+}

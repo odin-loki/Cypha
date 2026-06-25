@@ -62,12 +62,7 @@ double column_variance(const double* activations, int n_samples, int n_dims, int
   return var / static_cast<double>(n_samples);
 }
 
-}  // namespace
-
-double compute_participation_ratio(const double* activations, int n_samples, int n_dims) {
-  if (activations == nullptr || n_samples <= 0 || n_dims <= 0) {
-    return 0.0;
-  }
+double participation_ratio_variance_proxy(const double* activations, int n_samples, int n_dims) {
   double sum = 0.0;
   double sum_sq = 0.0;
   for (int d = 0; d < n_dims; ++d) {
@@ -80,6 +75,125 @@ double compute_participation_ratio(const double* activations, int n_samples, int
   }
   const double participation = (sum * sum) / sum_sq;
   return std::clamp(participation / static_cast<double>(n_dims), 0.0, 1.0);
+}
+
+void jacobi_symmetric_eigenvalues(const std::vector<double>& matrix, int n,
+                                  std::vector<double>& eigenvalues) {
+  eigenvalues.assign(static_cast<std::size_t>(n), 0.0);
+  if (n <= 0) {
+    return;
+  }
+  std::vector<double> a(static_cast<std::size_t>(n * n), 0.0);
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j < n; ++j) {
+      a[static_cast<std::size_t>(i * n + j)] = matrix[static_cast<std::size_t>(i * n + j)];
+    }
+  }
+  constexpr int kMaxJacobiIter = 64;
+  for (int iter = 0; iter < kMaxJacobiIter; ++iter) {
+    int p = 0;
+    int q = 1;
+    double max_off = 0.0;
+    for (int i = 0; i < n; ++i) {
+      for (int j = i + 1; j < n; ++j) {
+        const double off = std::abs(a[static_cast<std::size_t>(i * n + j)]);
+        if (off > max_off) {
+          max_off = off;
+          p = i;
+          q = j;
+        }
+      }
+    }
+    if (max_off <= 1e-10) {
+      break;
+    }
+    const double app = a[static_cast<std::size_t>(p * n + p)];
+    const double aqq = a[static_cast<std::size_t>(q * n + q)];
+    const double apq = a[static_cast<std::size_t>(p * n + q)];
+    const double phi = 0.5 * std::atan2(2.0 * apq, aqq - app);
+    const double c = std::cos(phi);
+    const double s = std::sin(phi);
+    for (int k = 0; k < n; ++k) {
+      const double akp = a[static_cast<std::size_t>(k * n + p)];
+      const double akq = a[static_cast<std::size_t>(k * n + q)];
+      a[static_cast<std::size_t>(k * n + p)] = c * akp - s * akq;
+      a[static_cast<std::size_t>(k * n + q)] = s * akp + c * akq;
+    }
+    for (int k = 0; k < n; ++k) {
+      const double apk = a[static_cast<std::size_t>(p * n + k)];
+      const double aqk = a[static_cast<std::size_t>(q * n + k)];
+      a[static_cast<std::size_t>(p * n + k)] = c * apk - s * aqk;
+      a[static_cast<std::size_t>(q * n + k)] = s * apk + c * aqk;
+    }
+    a[static_cast<std::size_t>(p * n + q)] = 0.0;
+    a[static_cast<std::size_t>(q * n + p)] = 0.0;
+  }
+  for (int i = 0; i < n; ++i) {
+    eigenvalues[static_cast<std::size_t>(i)] =
+        std::max(0.0, a[static_cast<std::size_t>(i * n + i)]);
+  }
+}
+
+double participation_ratio_covariance_eigenvalue(const double* activations, int n_samples,
+                                                 int n_dims) {
+  if (n_samples < 2 || n_dims <= 0 || n_dims > 256) {
+    return participation_ratio_variance_proxy(activations, n_samples, n_dims);
+  }
+  std::vector<double> means(static_cast<std::size_t>(n_dims), 0.0);
+  for (int d = 0; d < n_dims; ++d) {
+    for (int r = 0; r < n_samples; ++r) {
+      means[static_cast<std::size_t>(d)] +=
+          activations[static_cast<std::size_t>(r * n_dims + d)];
+    }
+    means[static_cast<std::size_t>(d)] /= static_cast<double>(n_samples);
+  }
+  std::vector<double> cov(static_cast<std::size_t>(n_dims * n_dims), 0.0);
+  for (int i = 0; i < n_dims; ++i) {
+    for (int j = i; j < n_dims; ++j) {
+      double c = 0.0;
+      for (int r = 0; r < n_samples; ++r) {
+        const double xi =
+            activations[static_cast<std::size_t>(r * n_dims + i)] - means[static_cast<std::size_t>(i)];
+        const double xj =
+            activations[static_cast<std::size_t>(r * n_dims + j)] - means[static_cast<std::size_t>(j)];
+        c += xi * xj;
+      }
+      c /= static_cast<double>(n_samples);
+      cov[static_cast<std::size_t>(i * n_dims + j)] = c;
+      cov[static_cast<std::size_t>(j * n_dims + i)] = c;
+    }
+  }
+  std::vector<double> eigenvalues;
+  jacobi_symmetric_eigenvalues(cov, n_dims, eigenvalues);
+  double sum = 0.0;
+  double sum_sq = 0.0;
+  for (double ev : eigenvalues) {
+    sum += ev;
+    sum_sq += ev * ev;
+  }
+  if (sum_sq <= kEps) {
+    return 0.0;
+  }
+  const double participation = (sum * sum) / sum_sq;
+  return std::clamp(participation / static_cast<double>(n_dims), 0.0, 1.0);
+}
+
+}  // namespace
+
+double compute_participation_ratio(const double* activations, int n_samples, int n_dims) {
+  return compute_participation_ratio(activations, n_samples, n_dims,
+                                     ParticipationRatioMethod::VarianceProxy);
+}
+
+double compute_participation_ratio(const double* activations, int n_samples, int n_dims,
+                                   ParticipationRatioMethod method) {
+  if (activations == nullptr || n_samples <= 0 || n_dims <= 0) {
+    return 0.0;
+  }
+  if (method == ParticipationRatioMethod::CovarianceEigenvalue) {
+    return participation_ratio_covariance_eigenvalue(activations, n_samples, n_dims);
+  }
+  return participation_ratio_variance_proxy(activations, n_samples, n_dims);
 }
 
 double compute_calibration(const double* confidences, const int* correct, int n, int n_bins) {

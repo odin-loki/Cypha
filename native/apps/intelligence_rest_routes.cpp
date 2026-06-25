@@ -9,6 +9,7 @@
 #include "cypha/intelligence/causal_graph.hpp"
 #include "cypha/intelligence/intelligence_profile_json.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_completeness.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
 
 namespace cypha {
@@ -37,13 +38,43 @@ void register_intelligence_rest_routes(httplib::Server& svr) {
     }
     std::lock_guard<std::mutex> lk(*g_mu);
     nlohmann::json payload = cypha::intelligence::intelligence_profile_to_json(*g_profiler);
+    const auto completeness =
+        cypha::intelligence::validate_profile_completeness(*g_profiler);
+    payload["profile_completeness"] =
+        cypha::intelligence::profile_completeness_to_json(completeness);
     payload["source"] = "intelligence_profiler";
     res.set_content(payload.dump(), "application/json");
   });
 
-  svr.Get("/intelligence/report", [](const httplib::Request&, httplib::Response& res) {
+  svr.Get("/intelligence/report", [](const httplib::Request& req, httplib::Response& res) {
+    const std::string source = req.get_param_value("source");
+    if (source == "live") {
+      if (g_mu == nullptr || g_profiler == nullptr) {
+        res.status = 503;
+        res.set_content(R"({"detail":"intelligence profiler not configured"})", "application/json");
+        return;
+      }
+      try {
+        std::lock_guard<std::mutex> lk(*g_mu);
+        nlohmann::json payload =
+            cypha::intelligence::intelligence_profile_report_json(*g_profiler);
+        const auto completeness =
+            cypha::intelligence::validate_profile_completeness(*g_profiler);
+        payload["profile_completeness"] =
+            cypha::intelligence::profile_completeness_to_json(completeness);
+        payload["source"] = "live_profiler";
+        res.set_content(payload.dump(), "application/json");
+      } catch (const std::exception& ex) {
+        res.status = 500;
+        nlohmann::json err{{"detail", ex.what()}};
+        res.set_content(err.dump(), "application/json");
+      }
+      return;
+    }
+
     try {
-      const auto profiler = cypha::intelligence::profile_from_reference_fixture(cypha::bench::repo_root());
+      const auto profiler =
+          cypha::intelligence::profile_from_reference_fixture(cypha::bench::repo_root());
       nlohmann::json payload = cypha::intelligence::intelligence_profile_report_json(profiler);
       payload["source"] = "reference_fixture";
       res.set_content(payload.dump(), "application/json");

@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d63_reu_forget_blend_grid_joint_profile",
+
+  "description": "D63 Phase 49 r_eu forget blend grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 63,
+
+    "domain_tag": "d63"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d63",
+
+    "Ablation grid: reu_forget_gate_blend {0.0, 0.25, 0.50}",
+
+    "Preset ship cell: blend=0.25"
+
+  ]
+
+}

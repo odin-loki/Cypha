@@ -61,7 +61,7 @@ function Show-LockSummary {
 
     Write-Host ""
     Write-Host "== BASELINE_LOCK summary ==" -ForegroundColor Cyan
-    foreach ($name in @("overnight_results", "rpsm_results", "cell_sweep_results")) {
+    foreach ($name in @("overnight_results", "rpsm_results", "cell_sweep_results", "math_integration_results")) {
         if ($lock.PSObject.Properties.Name -notcontains $name -or $null -eq $lock.$name) {
             Write-Host ("  {0,-22} (absent)" -f $name) -ForegroundColor DarkGray
             continue
@@ -151,6 +151,384 @@ if (Test-DomainTagExists -Tag "d28") {
 } else {
     Write-Host ""
     Write-Host "== cypha_bench_run --domain-tag d28 (skipped - domain not present) ==" -ForegroundColor DarkGray
+}
+
+if (Test-DomainTagExists -Tag "d42") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d42 (math integration production) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d42
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d42 (skipped - domain not present) ==" -ForegroundColor DarkGray
+}
+
+if (Test-DomainTagExists -Tag "d53") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d53 (production preset ship lock) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d53
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d53 (skipped - domain not present) ==" -ForegroundColor DarkGray
+}
+
+if (Test-DomainTagExists -Tag "d54") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d54 (production math certificate) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d54
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d54 (skipped - domain not present) ==" -ForegroundColor DarkGray
+}
+
+if (Test-DomainTagExists -Tag "d56") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d56 (cell sweep math integration) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d56
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d56 (skipped - domain not present) ==" -ForegroundColor DarkGray
+}
+
+if (Test-DomainTagExists -Tag "d57") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d57 (production cell sweep math certificate) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d57
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d57 (skipped - domain not present) ==" -ForegroundColor DarkGray
+}
+
+if (Test-DomainTagExists -Tag "d58") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d58 (production overnight math complete) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d58
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d58 (skipped - domain not present) ==" -ForegroundColor DarkGray
+}
+
+if (Test-DomainTagExists -Tag "d59") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d59 (kernel blend floor grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d59
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d60") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d60 (excess grad margin grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d60
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d61") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d61 (excess grad scale grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d61
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d62") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d62 (math ablation stack complete) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d62
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d63") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d63 (reu forget blend grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d63
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d64") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d64 (kappa trajectory window grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d64
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d65") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d65 (navigation loss warmup grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d65
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d66") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d66 (free energy beta grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d66
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d67") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d67 (kernel blend grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d67
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d68") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d68 (kernel m grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d68
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d69") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d69 (hybrid blend logit grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d69
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d70") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d70 (mdl forget max norm grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d70
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d71") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d71 (kernel lr scale grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d71
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d72") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d72 (alpha init grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d72
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d73") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d73 (hybrid blend lr grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d73
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d74") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d74 (n experts grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d74
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d75") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d75 (max memory slots grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d75
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+if (Test-DomainTagExists -Tag "d76") {
+    Write-Host ""
+    Write-Host "== cypha_bench_run --domain-tag d76 (compress interval grid) ==" -ForegroundColor Cyan
+    Push-Location $root
+    try {
+        & $benchExe --domain-tag d76
+        if ($LASTEXITCODE -ne 0) {
+            Show-LockSummary -Path $LockFile
+            exit $LASTEXITCODE
+        }
+    } finally {
+        Pop-Location
+    }
 }
 
 Show-LockSummary -Path $LockFile

@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d68_kernel_m_grid_joint_profile",
+
+  "description": "D68 Phase 54 Nyström kernel_m grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 68,
+
+    "domain_tag": "d68"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d68",
+
+    "Ablation grid: kernel_m {32, 64, 128}",
+
+    "Preset ship cell: kernel_m=64"
+
+  ]
+
+}

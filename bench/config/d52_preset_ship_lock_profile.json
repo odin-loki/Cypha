@@ -1,0 +1,16 @@
+{
+  "profile_id": "d52_preset_ship_lock_profile",
+  "description": "D52 Phase 39 shipped preset lock — r_eu forget + ablation winners @ 5k seed 42",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 52,
+    "domain_tag": "d52"
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d52",
+    "Validates Phase 39 preset (r_eu on, κ 0.83, min_scale 0.40) joint + lock repro"
+  ]
+}

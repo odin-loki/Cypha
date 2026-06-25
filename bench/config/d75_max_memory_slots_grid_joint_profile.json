@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d75_max_memory_slots_grid_joint_profile",
+
+  "description": "D75 Phase 59 priority replay max_memory_slots grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 75,
+
+    "domain_tag": "d75"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d75",
+
+    "Ablation grid: max_memory_slots {128, 256, 512}",
+
+    "Preset ship cell: max_memory_slots=256"
+
+  ]
+
+}

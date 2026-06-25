@@ -1,0 +1,55 @@
+{
+  "profile_id": "d41_math_integration_scale_profile",
+  "description": "D41 math integration scale validation — baseline vs --math-integration at medium tier (5000/256) with delta_bpc and delta_kappa",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 41,
+    "domain_tag": "d41"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d41_math_integration_scale_smoke — math integration scale gate (pending_math_integration_scale or math_integration_scale_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      {
+        "tool": "cyphalm_bench_native",
+        "args": {
+          "profile": "d17",
+          "mode": "hybrid",
+          "n_train": 5000,
+          "n_eval": 256,
+          "intelligence_profile": true
+        },
+        "label": "baseline"
+      },
+      {
+        "tool": "cyphalm_bench_native",
+        "args": {
+          "profile": "d17",
+          "mode": "hybrid",
+          "n_train": 5000,
+          "n_eval": 256,
+          "math_integration": true,
+          "intelligence_profile": true
+        },
+        "label": "math_integration"
+      }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 41",
+    "Or: cypha_bench_run --domain-tag d41",
+    "Verifies cyphalm_math_integration.hpp/cpp exist",
+    "Verifies profile_guided_loss.hpp has navigation_loss_total or 7-stat lambdas",
+    "Runs baseline cyphalm_bench_native --intelligence-profile then --math-integration --intelligence-profile with --n-train 5000 --n-eval 256 and CYPHA_BENCH_FAST=1",
+    "Records delta_bpc and delta_kappa (math minus baseline) in bench/report/tables/d41_math_integration_scale_validation.json",
+    "Subprocess exit != 0 throws (CTest FAIL)",
+    "Both runs profile_complete + finite bpc => math_integration_scale_ready",
+    "Otherwise validation_status=pending_math_integration_scale (smoke PASS)",
+    "Phase 27: math integration scale validation gate"
+  ]
+}

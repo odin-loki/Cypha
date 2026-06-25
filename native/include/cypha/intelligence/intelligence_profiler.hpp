@@ -76,11 +76,17 @@ class IntelligenceProfiler {
   /// Row order matches ``ProfileStatistic``; columns: point, epistemic var, aleatoric var.
   std::array<std::array<double, kMatrixCols>, kProfileStatisticCount> get_profile_matrix() const;
 
+  /// Raw NIG update counts per statistic (diagnostics / completeness checks).
+  std::array<int, kProfileStatisticCount> get_statistic_update_counts() const;
+
   /// ``κ = 1 - (1/7) Σ |P_i - P*_i|`` vs near-critical targets.
   double criticality_score() const;
 
   /// Diagonal Mahalanobis distance of current means from observation baselines.
   double health_signal() const;
+
+  /// Per-statistic NIG update counts (for profile completeness validation).
+  std::array<int, kProfileStatisticCount> statistic_update_counts() const;
 
   static std::array<double, kProfileStatisticCount> critical_targets();
 

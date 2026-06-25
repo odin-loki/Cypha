@@ -203,7 +203,8 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
   }
 }
 
-CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id) const {
+CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id,
+                                         double logit_nudge, double hidden_nudge) const {
   if (target_id < 0 || target_id >= vocab_size) {
     throw std::runtime_error("char_lstm: target_id out of range");
   }
@@ -220,6 +221,11 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
 
   std::vector<double> d_logits = cache.probs;
   d_logits[static_cast<std::size_t>(target_id)] -= 1.0;
+  if (logit_nudge != 0.0) {
+    for (int k = 0; k < vocab_size; ++k) {
+      d_logits[static_cast<std::size_t>(k)] += logit_nudge;
+    }
+  }
 
   outer_rowmajor(d_logits.data(), vocab_size, cache.h_new.data(), hidden, out.dWy.data());
   out.dby = d_logits;
@@ -232,6 +238,11 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
            d_logits[static_cast<std::size_t>(k)];
     }
     dh_new[static_cast<std::size_t>(j)] = s;
+  }
+  if (hidden_nudge != 0.0) {
+    for (int j = 0; j < hidden; ++j) {
+      dh_new[static_cast<std::size_t>(j)] += hidden_nudge;
+    }
   }
 
   std::vector<double> do_gate(static_cast<std::size_t>(hidden));
@@ -373,11 +384,12 @@ std::vector<double> CharLSTMHead::forward(int token_id) {
   return log_probs;
 }
 
-void CharLSTMHead::backward(int target_id, double lr, CharLSTMGrad* grads_out) {
+void CharLSTMHead::backward(int target_id, double lr, CharLSTMGrad* grads_out, double logit_nudge,
+                            double hidden_nudge) {
   if (!has_cache_) {
     return;
   }
-  CharLSTMGrad grads = backward_step(cache_, target_id);
+  CharLSTMGrad grads = backward_step(cache_, target_id, logit_nudge, hidden_nudge);
   if (grads_out != nullptr) {
     *grads_out = grads;
   }

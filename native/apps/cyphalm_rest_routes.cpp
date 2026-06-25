@@ -37,6 +37,9 @@ DecodeParams decode_params_from_json(const nlohmann::json& body) {
     }
     p.epistemic_halt = body.value("epistemic_halt", false);
     p.self_correct = body.value("self_correct", false);
+    if (p.self_correct) {
+        p.epistemic_halt = true;
+    }
     return p;
 }
 

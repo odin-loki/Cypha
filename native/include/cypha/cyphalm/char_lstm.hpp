@@ -78,7 +78,8 @@ class CharLSTMHead {
   std::vector<double> forward(int token_id);
 
   /// Stateful backward (BPTT-1) with weight update. Optional ``grads_out`` for EWC overlays.
-  void backward(int target_id, double lr, CharLSTMGrad* grads_out = nullptr);
+  void backward(int target_id, double lr, CharLSTMGrad* grads_out = nullptr,
+                double logit_nudge = 0.0, double hidden_nudge = 0.0);
 
   void load_state(const std::vector<double>& E_in, const std::vector<double>& Wx_in,
                   const std::vector<double>& Wh_in, const std::vector<double>& b_in,
@@ -89,7 +90,8 @@ class CharLSTMHead {
                     std::vector<double>& c_out, CharLSTMCache* cache_out = nullptr,
                     double forget_gate_scale = 1.0) const;
 
-  CharLSTMGrad backward_step(const CharLSTMCache& cache, int target_id) const;
+  CharLSTMGrad backward_step(const CharLSTMCache& cache, int target_id,
+                             double logit_nudge = 0.0, double hidden_nudge = 0.0) const;
 
   void apply_grads(const CharLSTMGrad& grads, double lr);
 

@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d76_compress_interval_grid_joint_profile",
+
+  "description": "D76 Phase 59 compressive memory compress_interval grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 76,
+
+    "domain_tag": "d76"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d76",
+
+    "Ablation grid: compress_interval {8, 16, 32}",
+
+    "Preset ship cell: compress_interval=16"
+
+  ]
+
+}

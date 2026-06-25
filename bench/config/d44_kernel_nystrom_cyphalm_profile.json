@@ -1,0 +1,25 @@
+{
+  "profile_id": "d44_kernel_nystrom_cyphalm_profile",
+  "description": "D44 Nyström KernelMemory CyphaLM validation — H04 kernel LLR + κ trajectory λ schedule",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 44,
+    "domain_tag": "d44"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d44_kernel_nystrom_cyphalm_smoke — KernelMemory in CyphaDIF + trajectory λ",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    }
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d44",
+    "Runs kernel_llm_h04_smoke (n_basis>=4, snapshot roundtrip, routing blend)",
+    "Verifies scale_profile_guided_loss_from_trajectory in profile_guided_loss.cpp",
+    "Records validation in bench/report/tables/d44_kernel_nystrom_cyphalm_validation.json",
+    "Phase 31: Nyström kernel port + κ trajectory navigation λ"
+  ]
+}

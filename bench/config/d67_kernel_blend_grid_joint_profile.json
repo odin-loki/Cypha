@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d67_kernel_blend_grid_joint_profile",
+
+  "description": "D67 Phase 53 base kernel blend grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 67,
+
+    "domain_tag": "d67"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d67",
+
+    "Ablation grid: kernel_blend {0.15, 0.25, 0.40}",
+
+    "Preset ship cell: blend=0.25 (distinct from d59 kappa floor)"
+
+  ]
+
+}

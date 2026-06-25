@@ -5,6 +5,8 @@
 #   pwsh -File scripts/run_d17_overnight.ps1 -Fast  # synthetic corpus if WikiText missing
 #   pwsh -File scripts/run_d17_overnight.ps1 -Medium  # 5k train, real WikiText/gutenberg
 #   pwsh -File scripts/run_d17_overnight.ps1 -Production  # 300k train, status=production in lock
+#   pwsh -File scripts/run_d17_overnight.ps1 -MathIntegration  # hybrid + profile-guided math loss
+#   $env:CYPHA_OVERNIGHT_MATH_INTEGRATION = "1"; pwsh -File scripts/run_d17_overnight.ps1
 param(
     [string]$BuildDir = "native/build",
     [int]$NTrain = 300000,
@@ -15,7 +17,8 @@ param(
     [switch]$CellSweep,
     [switch]$Fast,
     [switch]$Medium,
-    [switch]$Production
+    [switch]$Production,
+    [switch]$MathIntegration
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,6 +52,8 @@ if ($Fast) {
     $env:CYPHA_BENCH_FAST = "1"
 }
 
+$useMathIntegration = $MathIntegration -or ($env:CYPHA_OVERNIGHT_MATH_INTEGRATION -eq "1")
+
 Push-Location (Join-Path $root $BuildDir)
 try {
     if ($CellSweep) {
@@ -71,11 +76,25 @@ try {
             $cellSweepOut = Join-Path $root "bench\results\cell_sweep"
             $sweepArgs += @("--output-dir", $cellSweepOut)
         }
+        if ($useMathIntegration) {
+            $sweepArgs += @("--intelligence-profile", "--math-integration")
+        }
         & $sweepExe @sweepArgs 2>&1 | Tee-Object -FilePath $logPath -Append
     } else {
-        Write-Host "== D17 overnight bench (profile=$Profile mode=$Mode n_train=$NTrain) ==" -ForegroundColor Cyan
-        & $exe --profile $Profile --mode $Mode --overnight --n-train $NTrain --n-eval $NEval --threads $Threads 2>&1 |
-            Tee-Object -FilePath $logPath -Append
+        $benchArgs = @(
+            "--profile", $Profile,
+            "--mode", $Mode,
+            "--overnight",
+            "--n-train", $NTrain,
+            "--n-eval", $NEval,
+            "--threads", $Threads
+        )
+        if ($useMathIntegration) {
+            $benchArgs += @("--math-integration", "--intelligence-profile")
+        }
+        $mathNote = if ($useMathIntegration) { " math-integration" } else { "" }
+        Write-Host "== D17 overnight bench (profile=$Profile mode=$Mode n_train=$NTrain$mathNote) ==" -ForegroundColor Cyan
+        & $exe @benchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
     }
     if ($LASTEXITCODE -ne 0) {
         throw "overnight run failed exit=$LASTEXITCODE"

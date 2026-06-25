@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d70_mdl_forget_max_norm_grid_joint_profile",
+
+  "description": "D70 Phase 56 H12 mdl_forget_max_norm grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 70,
+
+    "domain_tag": "d70"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d70",
+
+    "Ablation grid: mdl_forget_max_norm {2.0, 4.0, 8.0}",
+
+    "Preset ship cell: mdl_forget_max_norm=4.0"
+
+  ]
+
+}

@@ -50,6 +50,23 @@
   },
   "description": "Locked baselines for regression checks and overnight bench comparison",
   "locked_at": "2026-06-14",
+  "math_integration_results": {
+    "baseline": {
+      "bpc": 4.000709943353105,
+      "kappa": 0.8259847576209205,
+      "profile_complete": true
+    },
+    "description": "Fill after D17 overnight with -MathIntegration (scripts/run_d17_overnight.ps1 -MathIntegration) or CYPHA_OVERNIGHT_MATH_INTEGRATION=1",
+    "math_integration": {
+      "bpc": 3.9833387184791813,
+      "kappa": 0.869726296050674,
+      "profile_complete": true
+    },
+    "n_eval": 256,
+    "n_train": 5000,
+    "run_at": "2026-06-24T07:55:26Z",
+    "status": "medium_smoke"
+  },
   "overnight_results": {
     "artifact_path": null,
     "bpc": 2.864125041163193,

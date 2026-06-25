@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d59_kernel_blend_floor_grid_joint_profile",
+
+  "description": "D59 Phase 45 κ kernel blend floor grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 59,
+
+    "domain_tag": "d59"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d59",
+
+    "Ablation grid: kappa_kernel_blend_floor {0.05, 0.08, 0.12}",
+
+    "Preset ship cell: floor=0.08"
+
+  ]
+
+}

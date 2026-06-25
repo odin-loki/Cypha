@@ -78,6 +78,8 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     cfg.use_ca_state_cell = false;
     cfg.use_free_energy_loss = false;
     cfg.use_algebraic_fingerprint = false;
+    cfg.use_kernel_llr = false;
+    cfg.kernel_blend = 0.25;
 
     if (id == "B0") {
         cfg.ngram_context = 4;
@@ -88,6 +90,10 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
         cfg.use_alpha_forget_gate = true;
     } else if (id == "H02" || id == "H17") {
         cfg.use_eml_activation = true;
+    } else if (id == "H04") {
+        cfg.use_kernel_llr = true;
+        cfg.kernel_m = 64;
+        cfg.kernel_lr_scale = 1.0;
     } else if (id == "H05") {
         cfg.alpha_learnable = true;
         cfg.profile_guided_loss = true;

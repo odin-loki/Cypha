@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d74_n_experts_grid_joint_profile",
+
+  "description": "D74 Phase 59 DIF n_experts grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 74,
+
+    "domain_tag": "d74"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d74",
+
+    "Ablation grid: n_experts {4, 8, 12}",
+
+    "Preset ship cell: n_experts=8"
+
+  ]
+
+}

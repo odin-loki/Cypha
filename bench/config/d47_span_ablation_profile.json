@@ -1,0 +1,17 @@
+{
+  "profile_id": "d47_span_ablation_profile",
+  "description": "D47 Phase 34 κ–BPC joint tuning — span ablation {0.5,1.0,1.5} + kappa ceiling + LSTM D_eff hidden nudge",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 47,
+    "domain_tag": "d47"
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d47",
+    "Runs per-stat deviation span ablation on d17 hybrid @ n_train=500",
+    "Phase 34: κ ceiling lambdas + LSTM hidden D_eff nudge gate"
+  ]
+}

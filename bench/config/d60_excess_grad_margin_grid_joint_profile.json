@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d60_excess_grad_margin_grid_joint_profile",
+
+  "description": "D60 Phase 46 κ excess grad margin grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 60,
+
+    "domain_tag": "d60"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d60",
+
+    "Ablation grid: kappa_excess_grad_margin {0.01, 0.02, 0.04}",
+
+    "Preset ship cell: margin=0.02 scale=0.35"
+
+  ]
+
+}

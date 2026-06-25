@@ -1,0 +1,34 @@
+{
+
+  "profile_id": "d56_cell_sweep_math_integration_profile",
+
+  "description": "D56 Phase 42 cell sweep math integration joint — B2 κ–BPC @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 56,
+
+    "domain_tag": "d56"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d56",
+
+    "Validates --math-integration in cell sweep + overnight script wiring",
+
+    "Maintainer: run_production_overnight.ps1 -MathIntegration for 300k Pareto fill"
+
+  ]
+
+}
+

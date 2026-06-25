@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d61_excess_grad_scale_grid_joint_profile",
+
+  "description": "D61 Phase 47 κ excess grad scale grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 61,
+
+    "domain_tag": "d61"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d61",
+
+    "Ablation grid: kappa_excess_grad_scale {0.25, 0.35, 0.50}",
+
+    "Preset ship cell: scale=0.35 margin=0.02"
+
+  ]
+
+}

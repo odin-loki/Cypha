@@ -18,12 +18,14 @@ void HebbianStack::configure(const HebbianStackConfig& config_in) {
 
 void HebbianStack::on_ssm_layer_context(std::vector<double>& ctx, int layer, const double* fast_state,
                                         const double* slow_state) {
-  if (graph) {
+  if (graph && !ctx.empty()) {
     const std::vector<double> diffused = graph->diffuse(ctx);
     if (diffused.size() == ctx.size()) {
       ctx = diffused;
     }
-    graph->update(ctx.data());
+    if (static_cast<int>(ctx.size()) >= graph->config().n) {
+      graph->update(ctx.data());
+    }
   }
   if (cfg.use_sparse_hebbian) {
     sparse_hebbian_update(ssm, fast_state, slow_state, cfg.ssm_hebb_lr, layer);

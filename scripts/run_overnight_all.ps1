@@ -13,7 +13,8 @@ param(
     [switch]$SkipCellSweep,
     [switch]$Fast,
     [switch]$Medium,
-    [switch]$Production
+    [switch]$Production,
+    [switch]$MathIntegration
 )
 
 $ErrorActionPreference = "Stop"
@@ -58,6 +59,9 @@ if ($Medium) {
 if ($Production) {
     $overnightArgs.Production = $true
 }
+if ($MathIntegration) {
+    $overnightArgs.MathIntegration = $true
+}
 
 Write-Host "== D17 hybrid overnight ==" -ForegroundColor Cyan
 & $d17Script @overnightArgs
@@ -95,6 +99,18 @@ if ($Production) {
     $lockArgs.Production = $true
 }
 
+if ($Production) {
+    $lockArgs.Production = $true
+}
+
+if ($MathIntegration) {
+    Write-Host "== baseline lock: d17-math ==" -ForegroundColor Cyan
+    & $lockScript -Run d17-math @lockArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "cypha_baseline_lock d17-math failed exit=$LASTEXITCODE"
+    }
+}
+
 Write-Host "== baseline lock: d17 ==" -ForegroundColor Cyan
 & $lockScript -Run d17 @lockArgs
 if ($LASTEXITCODE -ne 0) {
@@ -109,7 +125,11 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not $SkipCellSweep) {
     Write-Host "== baseline lock: cell-sweep ==" -ForegroundColor Cyan
-    & $lockScript -Run cell-sweep @lockArgs -OutputDir bench/results/cell_sweep
+    if ($MathIntegration) {
+        & $lockScript -Run cell-sweep @lockArgs -OutputDir bench/results/cell_sweep -MathIntegration
+    } else {
+        & $lockScript -Run cell-sweep @lockArgs -OutputDir bench/results/cell_sweep
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "cypha_baseline_lock cell-sweep failed exit=$LASTEXITCODE"
     }

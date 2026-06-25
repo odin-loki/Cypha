@@ -1,0 +1,17 @@
+{
+  "profile_id": "d51_opt_in_lever_joint_profile",
+  "description": "D51 Phase 38 opt-in math lever A/B — eigenvalue D_eff × r_eu forget @ 5k seed 42",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 51,
+    "domain_tag": "d51"
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain-tag d51",
+    "Compares preset vs +eigenvalue D_eff vs +r_eu forget vs both @ n_train=5000",
+    "Phase 38: ablation winners in preset + κ-adaptive kernel blend"
+  ]
+}

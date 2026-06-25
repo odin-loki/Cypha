@@ -178,6 +178,14 @@ void IntelligenceProfiler::update_from_batch(const ProfileBatch& batch) {
   update(obs);
 }
 
+std::array<int, kProfileStatisticCount> IntelligenceProfiler::get_statistic_update_counts() const {
+  std::array<int, kProfileStatisticCount> counts{};
+  for (std::size_t i = 0; i < kProfileStatisticCount; ++i) {
+    counts[i] = nig_states_[i].n_updates();
+  }
+  return counts;
+}
+
 std::array<std::array<double, IntelligenceProfiler::kMatrixCols>, kProfileStatisticCount>
 IntelligenceProfiler::get_profile_matrix() const {
   std::array<std::array<double, kMatrixCols>, kProfileStatisticCount> matrix{};
@@ -207,6 +215,14 @@ double IntelligenceProfiler::health_signal() const {
     mahal += (delta * delta) / (state.observation_variance() + kHealthEps);
   }
   return mahal;
+}
+
+std::array<int, kProfileStatisticCount> IntelligenceProfiler::statistic_update_counts() const {
+  std::array<int, kProfileStatisticCount> counts{};
+  for (std::size_t i = 0; i < kProfileStatisticCount; ++i) {
+    counts[i] = nig_states_[i].n_updates();
+  }
+  return counts;
 }
 
 }  // namespace cypha::intelligence

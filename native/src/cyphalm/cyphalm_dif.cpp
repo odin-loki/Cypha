@@ -4,6 +4,7 @@
 #include <cmath>
 #include <numeric>
 #include <stdexcept>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -97,7 +98,15 @@ CyphaDIF::CyphaDIF(const CyphaLMConfig& cfg)
       max_experts_(std::max(1, cfg.max_experts)),
       kappa0_(cfg.nig_kappa0),
       alpha0_(cfg.nig_alpha0),
-      beta0_(cfg.nig_beta0) {
+      beta0_(cfg.nig_beta0),
+      use_kernel_llr_(cfg.use_kernel_llr),
+      kernel_blend_(cfg.kernel_blend),
+      kernel_lr_scale_(cfg.kernel_lr_scale) {
+    if (cfg.use_kernel_llr) {
+        kernel_mem_ = std::make_unique<cypha::KernelMemory>(
+            field_dim_, std::max(16, cfg.kernel_m), static_cast<std::uint64_t>(cfg.seed));
+        kernel_mem_->set_gamma_scale(cfg.kernel_gamma_scale);
+    }
     if (cfg.n_experts > 0) {
         input_dim_ = field_dim_;
         for (int i = 0; i < cfg.n_experts; ++i) {
@@ -130,6 +139,87 @@ void CyphaDIF::reset() {
     }
 }
 
+double CyphaDIF::field_magnitude_score(const double* x, int dim) {
+    if (x == nullptr || dim <= 0) {
+        return 0.0;
+    }
+    double sq = 0.0;
+    for (int i = 0; i < dim; ++i) {
+        sq += x[i] * x[i];
+    }
+    return std::tanh(std::sqrt(sq));
+}
+
+std::vector<double> CyphaDIF::kernel_proxy_routing_probs(const double* x, int dim) const {
+    std::vector<double> scores(experts_.size(), 0.0);
+    if (experts_.empty()) {
+        return scores;
+    }
+    const double mag = field_magnitude_score(x, dim);
+    const double bandwidth = 0.5 + mag;
+    for (std::size_t k = 0; k < experts_.size(); ++k) {
+        std::vector<double> mean;
+        experts_[k].input_nig.predictive_mean(mean);
+        double dist_sq = 0.0;
+        const int use_dim = std::min(dim, static_cast<int>(mean.size()));
+        for (int i = 0; i < use_dim; ++i) {
+            const double d = x[i] - mean[static_cast<std::size_t>(i)];
+            dist_sq += d * d;
+        }
+        scores[k] = -dist_sq / (2.0 * bandwidth * bandwidth);
+    }
+    return softmax(scores);
+}
+
+void CyphaDIF::blend_routing_with_kernel_proxy(std::vector<double>& probs, const double* x,
+                                               int dim) const {
+    if (probs.empty() || kernel_blend_ <= 0.0) {
+        return;
+    }
+    const auto kernel_probs = kernel_proxy_routing_probs(x, dim);
+    if (kernel_probs.size() != probs.size()) {
+        return;
+    }
+    const double w = std::max(0.0, std::min(1.0, kernel_blend_));
+    for (std::size_t k = 0; k < probs.size(); ++k) {
+        probs[k] = (1.0 - w) * probs[k] + w * kernel_probs[k];
+    }
+}
+
+std::vector<std::string> CyphaDIF::expert_labels() const {
+    std::vector<std::string> labels;
+    labels.reserve(experts_.size());
+    for (std::size_t k = 0; k < experts_.size(); ++k) {
+        labels.push_back(std::to_string(k));
+    }
+    return labels;
+}
+
+void CyphaDIF::blend_routing_probs_with_kernel(std::vector<double>& probs, const double* x,
+                                               int dim) const {
+    if (probs.empty() || kernel_blend_ <= 0.0 || !use_kernel_llr_) {
+        return;
+    }
+    const double w = std::max(0.0, std::min(1.0, kernel_blend_));
+    if (kernel_mem_ != nullptr && kernel_mem_->n_basis() >= 4) {
+        const auto labels = expert_labels();
+        std::vector<double> kernel_scores(probs.size(), 0.0);
+        kernel_mem_->score_all(x, labels, kernel_scores);
+        const auto kernel_probs = softmax(kernel_scores);
+        if (kernel_probs.size() == probs.size()) {
+            for (std::size_t k = 0; k < probs.size(); ++k) {
+                probs[k] = (1.0 - w) * probs[k] + w * kernel_probs[k];
+            }
+            return;
+        }
+    }
+    blend_routing_with_kernel_proxy(probs, x, dim);
+}
+
+int CyphaDIF::kernel_n_basis() const {
+    return kernel_mem_ != nullptr ? kernel_mem_->n_basis() : 0;
+}
+
 double CyphaDIF::prior_log_prob(const double* x, int dim) const {
     NIGExpert prior(kappa0_, alpha0_, beta0_, dim);
     return prior.predictive_log_prob(x);
@@ -149,7 +239,11 @@ std::vector<double> CyphaDIF::route(const double* x, int dim) {
                 experts_.push_back(make_expert());
                 continue;
             }
-            return std::vector<double>{1.0};
+            auto probs = std::vector<double>{1.0};
+            if (use_kernel_llr_) {
+                blend_routing_probs_with_kernel(probs, x, dim);
+            }
+            return probs;
         }
         std::vector<double> llrs;
         llrs.reserve(experts_.size());
@@ -163,6 +257,9 @@ std::vector<double> CyphaDIF::route(const double* x, int dim) {
             static_cast<int>(experts_.size()) < max_experts_) {
             experts_.push_back(make_expert());
             continue;
+        }
+        if (use_kernel_llr_) {
+            blend_routing_probs_with_kernel(probs, x, dim);
         }
         return probs;
     }
@@ -223,6 +320,10 @@ void CyphaDIF::train_step(const double* x, int x_dim, const double* y, int y_dim
     auto& ex = experts_[static_cast<std::size_t>(winner)];
     ex.input_nig.update(x);
     ex.output_nig.update(y);
+    if (use_kernel_llr_ && kernel_mem_ != nullptr) {
+        const auto labels = expert_labels();
+        kernel_mem_->update(x, std::to_string(winner), labels, 0.05 * kernel_lr_scale_);
+    }
 }
 
 nlohmann::json CyphaDIF::get_state() const {
@@ -241,6 +342,22 @@ nlohmann::json CyphaDIF::get_state() const {
         experts.push_back(row);
     }
     j["experts"] = experts;
+    if (kernel_mem_ != nullptr) {
+        const auto snap = kernel_mem_->export_snapshot();
+        nlohmann::json km;
+        km["feat_dim"] = snap.feat_dim;
+        km["M"] = snap.M;
+        km["gamma"] = snap.gamma;
+        km["n_basis"] = snap.n_basis;
+        km["n_seen"] = snap.n_seen;
+        km["basis_rowmajor"] = snap.basis_rowmajor;
+        nlohmann::json weights = nlohmann::json::object();
+        for (const auto& kv : snap.weights) {
+            weights[kv.first] = kv.second;
+        }
+        km["weights"] = weights;
+        j["kernel_memory"] = km;
+    }
     return j;
 }
 
@@ -305,6 +422,20 @@ void CyphaDIF::set_state(const nlohmann::json& state) {
         expert.input_nig.load_state_dict(ex.at("input_nig"));
         expert.output_nig.load_state_dict(ex.at("output_nig"));
         experts_.push_back(std::move(expert));
+    }
+    if (state.contains("kernel_memory") && kernel_mem_ != nullptr) {
+        const auto& km = state.at("kernel_memory");
+        cypha::KernelMemory::Snapshot snap;
+        snap.feat_dim = km.at("feat_dim").get<int>();
+        snap.M = km.at("M").get<int>();
+        snap.gamma = km.at("gamma").get<double>();
+        snap.n_basis = km.at("n_basis").get<int>();
+        snap.n_seen = km.at("n_seen").get<int>();
+        snap.basis_rowmajor = km.at("basis_rowmajor").get<std::vector<double>>();
+        for (const auto& item : km.at("weights").items()) {
+            snap.weights[item.key()] = item.value().get<std::vector<double>>();
+        }
+        kernel_mem_->import_snapshot(snap);
     }
 }
 

@@ -1,0 +1,30 @@
+{
+  "profile_id": "d43_math_integration_lock_profile",
+  "description": "D43 math integration lock validation — BASELINE_LOCK math_integration_results medium tier + Pareto ranking + d17-math baseline lock wiring",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 43,
+    "domain_tag": "d43"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d43_math_integration_lock_smoke — math integration lock gate (pending_math_integration_lock or math_integration_lock_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    }
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 43",
+    "Or: cypha_bench_run --domain-tag d43",
+    "Requires bench/BASELINE_LOCK.json math_integration_results key",
+    "When n_train>=5000, math_integration_results.status must not be pending (medium_smoke ok)",
+    "Pareto: cell_sweep_results.best_pareto_variant in lock OR d22 cross profile pareto_ranked_variants",
+    "Verifies cypha_baseline_lock and update_baseline_lock.ps1 support d17-math",
+    "Records validation in bench/report/tables/d43_math_integration_lock_validation.json",
+    "Subprocess/validation throw => CTest FAIL",
+    "All checks pass => math_integration_lock_ready; otherwise pending_math_integration_lock (smoke PASS)",
+    "Phase 30: math integration lock validation gate"
+  ]
+}

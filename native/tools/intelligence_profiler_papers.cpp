@@ -215,13 +215,183 @@ void test_paper_v_soft_world_simulation_step() {
 }
 
 void test_paper_iv_profile_guided_loss() {
+  const auto cfg = cypha::intelligence::default_profile_guided_loss_config();
   cypha::intelligence::ProfileObservation obs;
-  obs.r_eu = 0.8;
-  obs.tau = 0.2;
-  const auto loss = cypha::intelligence::compute_profile_guided_loss(obs);
-  assert(loss.r_eu_penalty > 0.0);
+  obs.alpha = 0.75;
+  obs.d_eff = 0.15;
+  obs.sigma_branch = 0.35;
+  obs.tau = 0.05;
+  obs.r_eu = 0.10;
+  obs.lipschitz = 0.70;
+  obs.calibration = 0.45;
+  const auto loss = cypha::intelligence::compute_profile_guided_loss(obs, cfg);
+  assert(loss.alpha_penalty > 0.0);
+  assert(loss.d_eff_penalty > 0.0);
+  assert(loss.sigma_branch_penalty > 0.0);
   assert(loss.tau_penalty > 0.0);
-  assert(near(loss.total, loss.r_eu_penalty + loss.tau_penalty));
+  assert(loss.r_eu_penalty > 0.0);
+  assert(loss.lipschitz_penalty > 0.0);
+  assert(loss.calibration_penalty > 0.0);
+  assert(near(loss.navigation_loss_total,
+              cypha::intelligence::IntelligenceProfiler::navigation_loss(obs)));
+  assert(near(loss.total, loss.alpha_penalty + loss.d_eff_penalty + loss.sigma_branch_penalty +
+                            loss.tau_penalty + loss.r_eu_penalty + loss.lipschitz_penalty +
+                            loss.calibration_penalty));
+
+  const auto grad =
+      cypha::intelligence::compute_profile_guided_loss_grad(obs, cfg, /*gria_field_dim=*/8);
+  assert(grad.d_alpha_uniform != 0.0);
+  assert(grad.d_logit_uniform != 0.0);
+  assert(grad.d_gria_input.size() == 8U);
+  assert(grad.d_gria_input[0] > 0.0);
+}
+
+void test_adaptive_navigation_lambdas() {
+  const auto base = cypha::intelligence::default_profile_guided_loss_config();
+  const double low_kappa = 0.30;
+  const double high_kappa = 0.85;
+  const double target = 0.89;
+  const auto scaled_low =
+      cypha::intelligence::scale_profile_guided_loss_config(base, low_kappa, target);
+  const auto scaled_high =
+      cypha::intelligence::scale_profile_guided_loss_config(base, high_kappa, target);
+  const double scale_low = std::clamp(1.0 - low_kappa / target, 0.1, 1.0);
+  const double scale_high = std::clamp(1.0 - high_kappa / target, 0.1, 1.0);
+  assert(scale_low > scale_high);
+  assert(near(scaled_low.lambda_alpha, base.lambda_alpha * scale_low));
+  assert(near(scaled_high.lambda_alpha, base.lambda_alpha * scale_high));
+  assert(scaled_low.lambda_alpha > scaled_high.lambda_alpha);
+  assert(scaled_low.lambda_tau > scaled_high.lambda_tau);
+}
+
+void test_kappa_trajectory_navigation_lambdas() {
+  const auto base = cypha::intelligence::default_profile_guided_loss_config();
+  cypha::intelligence::KappaTrajectoryState state;
+  const auto step1 = cypha::intelligence::scale_profile_guided_loss_from_trajectory(
+      base, 0.40, state, 0.89, 8);
+  const auto step2 = cypha::intelligence::scale_profile_guided_loss_from_trajectory(
+      base, 0.35, state, 0.89, 8);
+  assert(state.sample_count == 2);
+  assert(step2.lambda_alpha >= step1.lambda_alpha);
+}
+
+void test_per_stat_deviation_navigation_lambdas() {
+  const auto base = cypha::intelligence::default_profile_guided_loss_config();
+  cypha::intelligence::ProfileObservation obs;
+  obs.alpha = 0.20;
+  obs.d_eff = base.target_d_eff;
+  const auto scaled =
+      cypha::intelligence::scale_profile_guided_loss_by_stat_deviation(base, obs, 0.5);
+  assert(scaled.lambda_alpha > base.lambda_alpha);
+  assert(near(scaled.lambda_d_eff, base.lambda_d_eff));
+}
+
+void test_kappa_ceiling_navigation_lambdas() {
+  const auto base = cypha::intelligence::default_profile_guided_loss_config();
+  cypha::intelligence::ProfileObservation obs;
+  obs.alpha = 0.75;
+  obs.d_eff = 0.15;
+  obs.sigma_branch = 0.35;
+  obs.tau = 0.55;
+  obs.r_eu = 0.60;
+  obs.lipschitz = 0.70;
+  obs.calibration = 0.45;
+  cypha::intelligence::AdaptiveNavigationOptions opts;
+  opts.use_kappa_ceiling_lambdas = true;
+  opts.target_kappa = 0.89;
+  const auto below = cypha::intelligence::resolve_adaptive_profile_guided_config(
+      base, obs, opts, nullptr);
+  assert(near(below.lambda_alpha, base.lambda_alpha));
+  obs.alpha = 0.95;
+  obs.d_eff = 0.85;
+  obs.tau = 0.90;
+  obs.r_eu = 0.88;
+  const auto above = cypha::intelligence::resolve_adaptive_profile_guided_config(
+      base, obs, opts, nullptr);
+  assert(above.lambda_alpha < base.lambda_alpha);
+  assert(above.lambda_tau < base.lambda_tau);
+}
+
+void test_hidden_nudge_grad() {
+  const auto cfg = cypha::intelligence::default_profile_guided_loss_config();
+  cypha::intelligence::ProfileObservation obs;
+  obs.d_eff = cfg.target_d_eff - 0.2;
+  const auto grad =
+      cypha::intelligence::compute_profile_guided_loss_grad(obs, cfg, /*gria_field_dim=*/4);
+  assert(grad.d_h_hidden_uniform != 0.0);
+  assert(std::signbit(grad.d_h_hidden_uniform) == std::signbit(grad.d_logit_uniform));
+}
+
+void test_eigenvalue_participation_ratio() {
+  const std::vector<double> activations{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+  const double proxy = cypha::intelligence::compute_participation_ratio(
+      activations.data(), 3, 3, cypha::intelligence::ParticipationRatioMethod::VarianceProxy);
+  const double eigen = cypha::intelligence::compute_participation_ratio(
+      activations.data(), 3, 3,
+      cypha::intelligence::ParticipationRatioMethod::CovarianceEigenvalue);
+  assert(proxy > 0.0 && eigen > 0.0);
+  assert(near(proxy, eigen, 0.15));
+}
+
+void test_kappa_ceiling_strength() {
+  const auto base = cypha::intelligence::default_profile_guided_loss_config();
+  cypha::intelligence::ProfileObservation obs;
+  obs.alpha = 0.95;
+  obs.d_eff = 0.85;
+  obs.tau = 0.90;
+  obs.r_eu = 0.88;
+  cypha::intelligence::AdaptiveNavigationOptions opts;
+  opts.use_kappa_ceiling_lambdas = true;
+  opts.target_kappa = 0.83;
+  opts.kappa_ceiling_strength = 3.0;
+  opts.kappa_ceiling_min_scale = 0.35;
+  const auto scaled =
+      cypha::intelligence::resolve_adaptive_profile_guided_config(base, obs, opts, nullptr);
+  assert(scaled.lambda_alpha < base.lambda_alpha * 0.6);
+}
+
+void test_kappa_excess_grad_nudge() {
+  cypha::intelligence::ProfileObservation obs;
+  obs.alpha = 0.95;
+  obs.d_eff = 0.85;
+  obs.tau = 0.55;
+  const auto grad_in_margin =
+      cypha::intelligence::kappa_excess_grad_nudge(obs, 0.85, 0.84, 1.5, 0.02);
+  assert(grad_in_margin.d_alpha_uniform == 0.0);
+  const auto grad = cypha::intelligence::kappa_excess_grad_nudge(obs, 0.90, 0.84, 1.5, 0.02);
+  assert(grad.d_alpha_uniform < 0.0);
+}
+
+void test_kappa_trajectory_ceiling() {
+  const auto base = cypha::intelligence::default_profile_guided_loss_config();
+  cypha::intelligence::KappaTrajectoryState state;
+  state.ema_kappa = 0.88;
+  state.prev_ema_kappa = 0.85;
+  state.sample_count = 2;
+  const auto with_ceiling = cypha::intelligence::scale_profile_guided_loss_from_trajectory(
+      base, 0.90, state, 0.84, 8, true);
+  cypha::intelligence::KappaTrajectoryState state2 = state;
+  const auto without_ceiling = cypha::intelligence::scale_profile_guided_loss_from_trajectory(
+      base, 0.90, state2, 0.84, 8, false);
+  assert(with_ceiling.lambda_alpha < without_ceiling.lambda_alpha);
+}
+
+void test_kappa_kernel_blend_scale() {
+  const double at_target =
+      cypha::intelligence::scale_kernel_blend_from_kappa(0.25, 0.83, 0.83, 0.08);
+  assert(near(at_target, 0.25, 1e-9));
+  const double high_kappa =
+      cypha::intelligence::scale_kernel_blend_from_kappa(0.25, 0.92, 0.83, 0.08);
+  assert(high_kappa < 0.25 && high_kappa >= 0.08);
+}
+
+void test_kappa_navigation_warmup_scale() {
+  const double at_target =
+      cypha::intelligence::scale_navigation_warmup_from_kappa(0.8, 0.83, 0.83, 0.35, 0.65);
+  assert(near(at_target, 0.8, 1e-9));
+  const double high_kappa =
+      cypha::intelligence::scale_navigation_warmup_from_kappa(0.8, 0.92, 0.83, 0.35, 0.65);
+  assert(high_kappa < 0.8 && high_kappa >= 0.65);
 }
 
 }  // namespace
@@ -235,6 +405,17 @@ int main() {
   test_paper_v_soft_world_simulation_step();
   test_paper_v_causal_graph();
   test_paper_iv_profile_guided_loss();
+  test_adaptive_navigation_lambdas();
+  test_kappa_trajectory_navigation_lambdas();
+  test_per_stat_deviation_navigation_lambdas();
+  test_kappa_ceiling_navigation_lambdas();
+  test_kappa_ceiling_strength();
+  test_kappa_excess_grad_nudge();
+  test_kappa_kernel_blend_scale();
+  test_kappa_navigation_warmup_scale();
+  test_kappa_trajectory_ceiling();
+  test_eigenvalue_participation_ratio();
+  test_hidden_nudge_grad();
   test_extended_measurers_and_batch();
   std::puts("intelligence_profiler_papers: PASS");
   return 0;

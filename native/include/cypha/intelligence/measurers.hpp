@@ -2,8 +2,20 @@
 
 namespace cypha::intelligence {
 
+/// Participation ratio computation method (Paper IV D_eff).
+enum class ParticipationRatioMethod {
+  /// Column-variance proxy (fast; legacy default).
+  VarianceProxy = 0,
+  /// Covariance eigenvalue PR: ``(Σλ)² / Σλ²`` (Paper IV fidelity).
+  CovarianceEigenvalue = 1,
+};
+
 /// Participation ratio ``(Σλ)² / Σλ²`` from column variances, divided by ``n_dims``.
 double compute_participation_ratio(const double* activations, int n_samples, int n_dims);
+
+/// Same as above with explicit method (Phase 35 eigenvalue PR).
+double compute_participation_ratio(const double* activations, int n_samples, int n_dims,
+                                   ParticipationRatioMethod method);
 
 /// Expected calibration error; returns ``C = 1 - ECE``.
 double compute_calibration(const double* confidences, const int* correct, int n, int n_bins = 10);

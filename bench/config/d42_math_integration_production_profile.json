@@ -1,0 +1,57 @@
+{
+  "profile_id": "d42_math_integration_production_profile",
+  "description": "D42 math integration production validation — overnight wiring + BASELINE_LOCK math_integration_results + baseline vs --math-integration smoke",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 42,
+    "domain_tag": "d42"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d42_math_integration_production_smoke — math integration production gate (pending_math_integration_production or math_integration_production_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      {
+        "tool": "cyphalm_bench_native",
+        "args": {
+          "profile": "d17",
+          "mode": "hybrid",
+          "n_train": 5000,
+          "n_eval": 256,
+          "intelligence_profile": true
+        },
+        "label": "baseline"
+      },
+      {
+        "tool": "cyphalm_bench_native",
+        "args": {
+          "profile": "d17",
+          "mode": "hybrid",
+          "n_train": 5000,
+          "n_eval": 256,
+          "math_integration": true,
+          "intelligence_profile": true
+        },
+        "label": "math_integration"
+      }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 42",
+    "Or: cypha_bench_run --domain-tag d42",
+    "Verifies cyphalm_math_integration.hpp/cpp exist",
+    "Verifies profile_guided_loss.hpp has navigation_loss_total or 7-stat lambdas",
+    "Verifies scripts/run_d17_overnight.ps1 has -MathIntegration or CYPHA_OVERNIGHT_MATH_INTEGRATION",
+    "Requires bench/BASELINE_LOCK.json math_integration_results key (stub ok for smoke)",
+    "Uses lock math_integration_results when baseline+math have finite bpc; else subprocess smoke @ 5000/256",
+    "Records delta_bpc and delta_kappa in bench/report/tables/d42_math_integration_production_validation.json",
+    "Subprocess exit != 0 throws (CTest FAIL)",
+    "baseline+math ready + n_train>=300000 + status!=pending => math_integration_production_ready",
+    "Otherwise validation_status=pending_math_integration_production (smoke PASS)",
+    "Phase 28: math integration production validation gate"
+  ]
+}

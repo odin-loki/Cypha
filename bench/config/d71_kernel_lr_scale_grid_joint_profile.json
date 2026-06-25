@@ -1,0 +1,33 @@
+{
+
+  "profile_id": "d71_kernel_lr_scale_grid_joint_profile",
+
+  "description": "D71 Phase 57 kernel LLR lr scale grid @ 5k seed 42",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 71,
+
+    "domain_tag": "d71"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d71",
+
+    "Ablation grid: kernel_lr_scale {0.5, 1.0, 2.0}",
+
+    "Preset ship cell: kernel_lr_scale=1.0"
+
+  ]
+
+}

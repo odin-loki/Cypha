@@ -31,7 +31,7 @@ using Json = nlohmann::json;
 
 namespace {
 
-enum class RunKind { D17, D21, CellSweep, All };
+enum class RunKind { D17, D17Math, D21, CellSweep, All };
 
 struct Args {
     RunKind run = RunKind::D17;
@@ -41,6 +41,7 @@ struct Args {
     bool fast = false;
     bool medium = false;
     bool production = false;
+    bool math_integration = false;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
     fs::path lock_file;
@@ -50,18 +51,19 @@ struct Args {
 
 void usage() {
     std::cerr
-        << "usage: cypha_baseline_lock --run {d17,d21,cell-sweep,all}\n"
+        << "usage: cypha_baseline_lock --run {d17,d17-math,d21,cell-sweep,all}\n"
         << "       [--n-train N] [--n-eval M] [--threads T] [--fast] [--medium] [--production]\n"
         << "       [--lock-file PATH] [--exe-dir DIR] [--output-dir DIR]\n";
 }
 
 RunKind parse_run_kind(const std::string& s) {
     if (s == "d17") return RunKind::D17;
+    if (s == "d17-math") return RunKind::D17Math;
     if (s == "d21") return RunKind::D21;
     if (s == "cell-sweep") return RunKind::CellSweep;
     if (s == "all") return RunKind::All;
     throw std::runtime_error("unknown --run: " + s +
-                             " (expected d17, d21, cell-sweep, or all)");
+                             " (expected d17, d17-math, d21, cell-sweep, or all)");
 }
 
 Args parse_args(int argc, char** argv) {
@@ -123,6 +125,12 @@ Args parse_args(int argc, char** argv) {
     }
     if (a.output_dir.empty() && (a.run == RunKind::CellSweep || a.run == RunKind::All)) {
         a.output_dir = cypha::bench::results_dir() / "cell_sweep";
+    }
+    if (a.run == RunKind::D17Math) {
+        a.math_integration = true;
+    }
+    if (cypha::bench::bench_env_truthy("CYPHA_OVERNIGHT_MATH_INTEGRATION")) {
+        a.math_integration = true;
     }
     return a;
 }
@@ -317,11 +325,44 @@ double extract_bpc_bench(const Json& j) {
     return bpc;
 }
 
+double extract_kappa(const Json& j) {
+    if (j.contains("intelligence_profile") && j["intelligence_profile"].is_object()) {
+        const Json& ip = j["intelligence_profile"];
+        if (ip.contains("criticality_score") && ip["criticality_score"].is_number()) {
+            const double k = ip["criticality_score"].get<double>();
+            if (std::isfinite(k)) {
+                return k;
+            }
+        }
+        if (ip.contains("profile_completeness") && ip["profile_completeness"].is_object()) {
+            const Json& pc = ip["profile_completeness"];
+            if (pc.contains("kappa") && pc["kappa"].is_number()) {
+                const double k = pc["kappa"].get<double>();
+                if (std::isfinite(k)) {
+                    return k;
+                }
+            }
+        }
+    }
+    if (j.contains("profile_completeness") && j["profile_completeness"].is_object()) {
+        const Json& pc = j["profile_completeness"];
+        if (pc.contains("kappa") && pc["kappa"].is_number()) {
+            const double k = pc["kappa"].get<double>();
+            if (std::isfinite(k)) {
+                return k;
+            }
+        }
+    }
+    throw std::runtime_error("bench JSON missing kappa");
+}
+
 struct CellSweepSummary {
     double bpc;
     double b2_bpc{std::numeric_limits<double>::quiet_NaN()};
     int variant_count{0};
     std::string output_dir;
+    std::string best_pareto_id;
+    Json best_pareto = Json::object();
 };
 
 CellSweepSummary extract_cell_sweep_summary(const Json& j) {
@@ -330,28 +371,49 @@ CellSweepSummary extract_cell_sweep_summary(const Json& j) {
     if (j.contains("output_dir") && j["output_dir"].is_string()) {
         s.output_dir = j["output_dir"].get<std::string>();
     }
+    double pareto_bpc = std::numeric_limits<double>::quiet_NaN();
+    if (j.contains("best_pareto_variant") && j["best_pareto_variant"].is_object()) {
+        const Json& bp = j["best_pareto_variant"];
+        s.best_pareto = bp;
+        s.best_pareto_id = bp.value("id", "");
+        if (bp.contains("bpc") && !bp["bpc"].is_null() && bp["bpc"].is_number()) {
+            pareto_bpc = bp["bpc"].get<double>();
+        }
+    } else if (j.contains("pareto_ranked_variants") && j["pareto_ranked_variants"].is_array() &&
+               !j["pareto_ranked_variants"].empty()) {
+        const Json& first = j["pareto_ranked_variants"].front();
+        if (first.is_object()) {
+            s.best_pareto = first;
+            s.best_pareto_id = first.value("id", "");
+            if (first.contains("bpc") && !first["bpc"].is_null() && first["bpc"].is_number()) {
+                pareto_bpc = first["bpc"].get<double>();
+            }
+        }
+    }
     if (!j.contains("results") || !j["results"].is_array()) {
         throw std::runtime_error("cell sweep JSON missing results array");
     }
-    bool found = false;
+    bool found_b2 = false;
     for (const auto& row : j["results"]) {
         if (row.value("id", "") == "B2" && row.contains("bpc") && !row["bpc"].is_null()) {
             s.b2_bpc = row["bpc"].get<double>();
-            s.bpc = s.b2_bpc;
-            found = true;
+            found_b2 = true;
             break;
         }
     }
-    if (!found) {
+    if (std::isfinite(pareto_bpc)) {
+        s.bpc = pareto_bpc;
+    } else if (found_b2) {
+        s.bpc = s.b2_bpc;
+    } else {
         for (const auto& row : j["results"]) {
             if (row.contains("bpc") && !row["bpc"].is_null()) {
                 s.bpc = row["bpc"].get<double>();
-                found = true;
                 break;
             }
         }
     }
-    if (!found || std::isnan(s.bpc)) {
+    if (std::isnan(s.bpc)) {
         throw std::runtime_error("cell sweep JSON has no usable bpc");
     }
     return s;
@@ -387,6 +449,24 @@ ProcessResult run_d17_bench(const fs::path& exe_dir, const Args& args) {
                      exe_dir);
 }
 
+ProcessResult run_d17_math_bench(const fs::path& exe_dir, const Args& args, bool math_integration) {
+    apply_bench_env(args);
+    const fs::path exe = exe_dir / exe_name("cyphalm_bench_native");
+    if (!fs::is_regular_file(exe)) {
+        throw std::runtime_error("missing executable: " + exe.string());
+    }
+    std::vector<std::string> bench_args{"--profile",       "d17",
+                                        "--mode",          "hybrid",
+                                        "--intelligence-profile",
+                                        "--n-train",       std::to_string(args.n_train),
+                                        "--n-eval",        std::to_string(args.n_eval),
+                                        "--threads",       std::to_string(args.threads)};
+    if (math_integration) {
+        bench_args.push_back("--math-integration");
+    }
+    return run_capture(exe, bench_args, exe_dir);
+}
+
 ProcessResult run_d21_bench(const fs::path& exe_dir, const Args& args) {
     apply_bench_env(args);
     const fs::path exe = exe_dir / exe_name("cyphalm_bench_native");
@@ -419,6 +499,10 @@ ProcessResult run_cell_sweep(const fs::path& exe_dir, const Args& args) {
     sweep_args.push_back(std::to_string(args.n_eval));
     sweep_args.push_back("--threads");
     sweep_args.push_back(std::to_string(args.threads));
+    sweep_args.push_back("--intelligence-profile");
+    if (args.math_integration) {
+        sweep_args.push_back("--math-integration");
+    }
     if (!args.output_dir.empty()) {
         sweep_args.push_back("--output-dir");
         sweep_args.push_back(fs::absolute(args.output_dir).string());
@@ -461,16 +545,104 @@ void merge_cell_sweep_results(Json& lock, const Args& args, double bpc,
     section["n_eval"] = args.n_eval;
     section["bpc"] = bpc;
     section["run_at"] = iso_timestamp_now();
-    section["runner"] = args.fast ? "cypha_cell_hypothesis_sweep --overnight-sweep-smoke"
-                                  : "cypha_cell_hypothesis_sweep --overnight-sweep";
+    section["runner"] = args.fast
+                            ? (args.math_integration
+                                   ? "cypha_cell_hypothesis_sweep --overnight-sweep-smoke "
+                                     "--intelligence-profile --math-integration"
+                                   : "cypha_cell_hypothesis_sweep --overnight-sweep-smoke "
+                                     "--intelligence-profile")
+                            : (args.math_integration
+                                   ? "cypha_cell_hypothesis_sweep --overnight-sweep "
+                                     "--intelligence-profile --math-integration"
+                                   : "cypha_cell_hypothesis_sweep --overnight-sweep "
+                                     "--intelligence-profile");
+    if (args.math_integration) {
+        section["math_integration_enabled"] = true;
+    }
     section["env"] = make_env_snapshot(args);
     section["variant_count"] = cell_summary.variant_count;
     if (!std::isnan(cell_summary.b2_bpc)) {
         section["b2_bpc"] = cell_summary.b2_bpc;
     }
+    if (!cell_summary.best_pareto.is_null() && cell_summary.best_pareto.is_object()) {
+        section["best_pareto_variant"] = cell_summary.best_pareto;
+    } else if (!cell_summary.best_pareto_id.empty()) {
+        section["best_pareto_variant"] = cell_summary.best_pareto_id;
+    }
     if (!cell_summary.output_dir.empty()) {
         section["artifact_path"] = cell_summary.output_dir;
     }
+}
+
+struct MathArmResult {
+    double bpc{0.0};
+    double kappa{0.0};
+    Json bench_json;
+};
+
+MathArmResult parse_math_arm(const Json& bench_json) {
+    MathArmResult arm;
+    arm.bench_json = bench_json;
+    arm.bpc = extract_bpc_bench(bench_json);
+    arm.kappa = extract_kappa(bench_json);
+    return arm;
+}
+
+ProcessResult run_math_bench_arm(const fs::path& exe_dir, const Args& args, bool math_integration,
+                                 const char* label) {
+    ProcessResult proc = run_d17_math_bench(exe_dir, args, math_integration);
+    if (proc.exit_code != 0) {
+        std::cerr << "cypha_baseline_lock: subprocess exit=" << proc.exit_code << " (" << label
+                  << ")\n";
+        if (!proc.stdout_text.empty()) {
+            std::cerr << proc.stdout_text << "\n";
+        }
+        throw std::runtime_error(std::string(label) + " exit=" + std::to_string(proc.exit_code));
+    }
+    if (proc.stdout_text.empty()) {
+        throw std::runtime_error(std::string(label) + " produced no stdout");
+    }
+    return proc;
+}
+
+Json run_d17_math(const fs::path& exe_dir, const Args& args, MathArmResult& baseline_out,
+                  MathArmResult& math_out) {
+    const ProcessResult baseline_proc =
+        run_math_bench_arm(exe_dir, args, false, "cyphalm_bench_native baseline");
+    baseline_out = parse_math_arm(Json::parse(extract_json_blob(baseline_proc.stdout_text)));
+
+    const ProcessResult math_proc =
+        run_math_bench_arm(exe_dir, args, true, "cyphalm_bench_native --math-integration");
+    math_out = parse_math_arm(Json::parse(extract_json_blob(math_proc.stdout_text)));
+
+    return Json{{"run", "d17-math"},
+                {"n_train", args.n_train},
+                {"n_eval", args.n_eval},
+                {"fast", args.fast},
+                {"medium", args.medium},
+                {"production", args.production},
+                {"status", run_status_label(args)},
+                {"baseline", Json{{"bpc", baseline_out.bpc}, {"kappa", baseline_out.kappa}}},
+                {"math_integration",
+                 Json{{"bpc", math_out.bpc}, {"kappa", math_out.kappa}}}};
+}
+
+void merge_math_integration_results(Json& lock, const Args& args, const MathArmResult& baseline,
+                                    const MathArmResult& math_arm) {
+    if (!lock.contains("math_integration_results")) {
+        lock["math_integration_results"] = Json::object();
+    }
+    Json& section = lock["math_integration_results"];
+    section["baseline"] = Json{{"bpc", baseline.bpc},
+                               {"kappa", baseline.kappa},
+                               {"profile_complete", true}};
+    section["math_integration"] = Json{{"bpc", math_arm.bpc},
+                                         {"kappa", math_arm.kappa},
+                                         {"profile_complete", true}};
+    section["n_train"] = args.n_train;
+    section["n_eval"] = args.n_eval;
+    section["status"] = run_status_label(args);
+    section["run_at"] = iso_timestamp_now();
 }
 
 void merge_rpsm_results(Json& lock, const Args& args, double bpc, const Json& bench_json) {
@@ -499,6 +671,8 @@ std::string run_kind_name(RunKind kind) {
     switch (kind) {
         case RunKind::D17:
             return "d17";
+        case RunKind::D17Math:
+            return "d17-math";
         case RunKind::D21:
             return "d21";
         case RunKind::CellSweep:
@@ -590,31 +764,41 @@ int main(int argc, char** argv) {
                                    : fs::absolute(args.lock_file);
 
         Json lock = load_lock_file(lock_path);
-        Json reports = Json::array();
+        Json report;
 
-        const std::vector<RunKind> sequence =
-            args.run == RunKind::All
-                ? std::vector<RunKind>{RunKind::D17, RunKind::D21, RunKind::CellSweep}
-                : std::vector<RunKind>{args.run};
+        if (args.run == RunKind::D17Math) {
+            MathArmResult baseline;
+            MathArmResult math_arm;
+            report = run_d17_math(exe_dir, args, baseline, math_arm);
+            report["lock_file"] = lock_path.string();
+            merge_math_integration_results(lock, args, baseline, math_arm);
+            write_lock_file(lock_path, lock);
+        } else {
+            Json reports = Json::array();
+            const std::vector<RunKind> sequence =
+                args.run == RunKind::All
+                    ? std::vector<RunKind>{RunKind::D17, RunKind::D21, RunKind::CellSweep}
+                    : std::vector<RunKind>{args.run};
 
-        for (RunKind kind : sequence) {
-            const RunOutcome outcome = execute_run_kind(args, kind, exe_dir);
-            merge_run_result(lock, args, kind, outcome);
-            reports.push_back(outcome.report);
-        }
-        write_lock_file(lock_path, lock);
+            for (RunKind kind : sequence) {
+                const RunOutcome outcome = execute_run_kind(args, kind, exe_dir);
+                merge_run_result(lock, args, kind, outcome);
+                reports.push_back(outcome.report);
+            }
+            write_lock_file(lock_path, lock);
 
-        Json report = {{"run", run_kind_name(args.run)},
-                       {"lock_file", lock_path.string()},
-                       {"n_train", args.n_train},
-                       {"n_eval", args.n_eval},
-                       {"fast", args.fast},
-                       {"medium", args.medium},
-                       {"production", args.production},
-                       {"status", run_status_label(args)},
-                       {"runs", reports}};
-        if (reports.size() == 1 && reports[0].contains("bpc")) {
-            report["bpc"] = reports[0]["bpc"];
+            report = {{"run", run_kind_name(args.run)},
+                      {"lock_file", lock_path.string()},
+                      {"n_train", args.n_train},
+                      {"n_eval", args.n_eval},
+                      {"fast", args.fast},
+                      {"medium", args.medium},
+                      {"production", args.production},
+                      {"status", run_status_label(args)},
+                      {"runs", reports}};
+            if (reports.size() == 1 && reports[0].contains("bpc")) {
+                report["bpc"] = reports[0]["bpc"];
+            }
         }
         std::cout << report.dump(2) << std::endl;
         return 0;

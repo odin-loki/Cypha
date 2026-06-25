@@ -32,6 +32,7 @@
 #include "cypha/cyphalm/selective_ssm.hpp"
 #include "cypha/cyphalm/view_embedding.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_guided_loss.hpp"
 #include "cypha/rpsm/rpsm_sequence_layer.hpp"
 #include "cypha/som/discriminative_feedback.hpp"
 #include "cypha/som/gng_expert.hpp"
@@ -40,6 +41,10 @@
 namespace cypha::intelligence {
 class IntelligenceProfiler;
 }  // namespace cypha::intelligence
+
+namespace cypha::cyphalm {
+class LmIntelligenceMonitor;
+}  // namespace cypha::cyphalm
 
 namespace cypha {
 namespace cyphalm {
@@ -86,13 +91,23 @@ class CyphaLMModel {
     void reset_context();
 
     PredictNextOutput predict_next(std::uint32_t token_id);
-    TrainStepMetrics train_step(std::uint32_t token_id, std::uint32_t next_token_id);
+    /// Re-blend cached hybrid GRIA/LSTM logits without advancing recurrent state.
+    PredictNextOutput repredict_hybrid_blend(double blend_logit) const;
+    TrainStepMetrics train_step(std::uint32_t token_id, std::uint32_t next_token_id,
+                                cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
+                                LmIntelligenceMonitor* monitor = nullptr);
     std::vector<double> forward_log_probs(std::uint32_t token_id);
 
-    void train_sequence(const std::vector<int>& ids, int n_steps, int epochs);
-    void train_sequence_views(const std::vector<int>& ids);
+    void train_sequence(const std::vector<int>& ids, int n_steps, int epochs,
+                        cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
+    void train_sequence_views(const std::vector<int>& ids,
+                              cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
     double eval_bpc(const std::vector<int>& ids, int n_eval,
                     cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
+
+    /// Full 7-stat profile pass over eval tokens (separate from BPC scoring).
+    void accumulate_intelligence_profile(const std::vector<int>& ids, int n_steps,
+                                         cypha::intelligence::IntelligenceProfiler& profiler);
 
     std::vector<std::uint32_t> encode_text(const std::string& text) const;
     std::string decode_tokens(const std::vector<std::uint32_t>& ids) const;
@@ -132,6 +147,11 @@ class CyphaLMModel {
 
     /// Char-LSTM head when ``context_mode == CharLstm`` (nullptr otherwise).
     const CharLSTMHead* char_lstm() const { return lstm_.get(); }
+
+    const cypha::intelligence::KappaTrajectoryState& kappa_trajectory_state() const {
+        return kappa_trajectory_state_;
+    }
+    std::uint32_t train_step_count() const { return step_count_; }
 
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
@@ -183,16 +203,23 @@ class CyphaLMModel {
     int last_gng_bmu_ = 0;
     int current_view_slot_ = 0;
     std::uint32_t step_count_ = 0;
+    cypha::intelligence::KappaTrajectoryState kappa_trajectory_state_;
     double hybrid_blend_logit_ = 0.0;
     double last_mean_alpha_ = 0.5;
+    double last_profile_tau_ = 0.65;
+    double last_profile_r_eu_ = 0.70;
     double last_train_loss_ = 0.0;
     CharLSTMCache hybrid_lstm_cache_;
     bool hybrid_lstm_has_cache_{false};
     std::vector<double> last_hybrid_log_g_;
     std::vector<double> last_hybrid_log_l_;
     HybridEwcRegularizer ewc_;
+    static constexpr int kLstmHiddenHistoryMax = 48;
+    std::vector<std::vector<double>> lstm_h_history_rows_;
 
     void init_components();
+    void append_lstm_hidden_history(const std::vector<double>& h);
+    double lstm_hidden_d_eff() const;
     void record_embedding(const std::vector<double>& e);
     void record_token_history(std::uint32_t token_id);
     std::vector<double> ngram_count_log_prior() const;
@@ -201,6 +228,7 @@ class CyphaLMModel {
     std::vector<double> ngram_embedding_vector() const;
     std::vector<double> build_gria_input(const std::vector<double>& field,
                                          const DIFPredictOutput* dif_out);
+    double hybrid_forget_gate_scale(const DIFPredictOutput& dif_out) const;
     std::vector<double> augment_gria_input(const std::vector<double>& v) const;
     std::vector<double> gria_input_core(const std::vector<double>& field,
                                         const DIFPredictOutput* dif_out) const;
@@ -212,8 +240,11 @@ class CyphaLMModel {
     void bptt_ssm_update(std::uint32_t next_token_id);
     void apply_lstm_ewc(TrainStepMetrics& m, const CharLSTMGrad& grads);
     void apply_hybrid_ewc(TrainStepMetrics& m, const HybridEwcGradStub& grads);
-    TrainStepMetrics train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id);
-    void train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs);
+    TrainStepMetrics train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id,
+                                     cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
+                                     LmIntelligenceMonitor* monitor = nullptr);
+    void train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs,
+                             cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
     void rpsm_embed_backprop_stub(std::uint32_t token_id);
     void set_view_slot(int slot) { current_view_slot_ = slot; }
     void refresh_laplace_prior();

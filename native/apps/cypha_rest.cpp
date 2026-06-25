@@ -51,6 +51,7 @@
 #include "cypha/dif_rest.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/causal_graph.hpp"
+#include "cypha/intelligence/measurers.hpp"
 #include "cypha/intelligence/self_correcting_infer.hpp"
 #include "cypha/curriculum.hpp"
 #include "cypha/ewc_regularizer.hpp"
@@ -897,10 +898,79 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
 
   {
     cypha::intelligence::ProfileObservation obs;
-    obs.calibration = std::clamp(conf, 0.0, 1.0);
-    obs.r_eu = is_ood ? 0.35 : 0.65;
-    obs.alpha = std::clamp(r_eff > 0.0 ? r_eff / (r_eff + 1.0) : 0.5, 0.0, 1.0);
-    obs.tau = self_corrected ? 0.62 : 0.48;
+    const int d = model.d_latent;
+    if (d > 0 && static_cast<int>(x.size()) == d && static_cast<int>(H.size()) == d) {
+      obs.alpha = cypha::intelligence::compute_alpha_gria(x.data(), H.data(), 1, d);
+    }
+
+    double epistemic_var = 0.0;
+    double aleatoric_var = 0.0;
+    bool has_r_eu = false;
+    if (self_corrected && r_eu_proxy > 0.0) {
+      obs.r_eu = std::clamp(r_eu_proxy, 0.0, 1.0);
+      has_r_eu = true;
+    } else if (use_gh && !*v.mke_active) {
+      epistemic_var = std::max(anomaly, 1e-6);
+      aleatoric_var = std::max(1.0 - anomaly, 1e-6);
+      obs.r_eu = cypha::intelligence::compute_epistemic_ratio(epistemic_var, aleatoric_var);
+      has_r_eu = true;
+    } else if (*v.mke_active && static_cast<int>(v.reg_var->size()) == k) {
+      double eps = 1e-8;
+      double T = *v.mke_temperature;
+      std::vector<double> z(static_cast<std::size_t>(k));
+      for (int j = 0; j < k; ++j) {
+        z[static_cast<std::size_t>(j)] = llr_for_scores[static_cast<std::size_t>(j)] / (T + eps);
+      }
+      std::vector<double> probs;
+      cypha::softmax_batch_reference(z.data(), 1, k, eps, probs);
+      double v_mix = 0.0;
+      for (int j = 0; j < k; ++j) {
+        v_mix += probs[static_cast<std::size_t>(j)] * (*v.reg_var)[static_cast<std::size_t>(j)];
+      }
+      aleatoric_var = std::max(v_mix, 1e-6);
+      epistemic_var = std::max((1.0 - conf) * (1.0 - conf), 1e-6);
+      obs.r_eu = cypha::intelligence::compute_epistemic_ratio(epistemic_var, aleatoric_var);
+      has_r_eu = true;
+    } else if (static_cast<int>(v.reg_mu->size()) == k && static_cast<int>(v.reg_var->size()) == k) {
+      double eps = 1e-8;
+      double T = model.temperature;
+      std::vector<double> z(static_cast<std::size_t>(k));
+      for (int j = 0; j < k; ++j) {
+        z[static_cast<std::size_t>(j)] = llr_for_scores[static_cast<std::size_t>(j)] / (T + eps);
+      }
+      std::vector<double> probs;
+      cypha::softmax_batch_reference(z.data(), 1, k, eps, probs);
+      double y_mix = 0.0;
+      double u_mix = 0.0;
+      cypha::regression::predict_mixture_scalar(probs.data(), v.reg_mu->data(), v.reg_var->data(),
+                                                static_cast<std::size_t>(k), y_mix, u_mix);
+      aleatoric_var = std::max(u_mix * u_mix, 1e-6);
+      epistemic_var = std::max((1.0 - conf) * (1.0 - conf), 1e-6);
+      obs.r_eu = cypha::intelligence::compute_epistemic_ratio(epistemic_var, aleatoric_var);
+      has_r_eu = true;
+    }
+    if (!has_r_eu) {
+      epistemic_var = std::max((1.0 - conf) * (1.0 - conf), 1e-6);
+      if (is_ood) {
+        epistemic_var = std::max(epistemic_var, 0.5);
+      }
+      aleatoric_var = std::max(conf * conf, 1e-6);
+      obs.r_eu = cypha::intelligence::compute_epistemic_ratio(epistemic_var, aleatoric_var);
+    }
+
+    if (body.contains("label") && body["label"].is_string()) {
+      const std::string gt_label = body["label"].get<std::string>();
+      const int correct = pred_label == gt_label ? 1 : 0;
+      const double conf_arr[] = {conf};
+      const int correct_arr[] = {correct};
+      obs.calibration =
+          cypha::intelligence::compute_calibration(conf_arr, correct_arr, 1);
+    }
+
+    if (self_corrected) {
+      obs.tau = cypha::intelligence::normalize_memory_depth(correction_passes, 8);
+    }
+
     g_intelligence_profiler.update(obs);
     g_causal_graph_monitor.observe_profile(obs);
   }

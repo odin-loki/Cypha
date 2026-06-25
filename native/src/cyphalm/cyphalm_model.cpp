@@ -1,5 +1,7 @@
 #include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/cyphalm/cyphalm_profile_curriculum.hpp"
+#include "cypha/cyphalm/lm_intelligence_monitor.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -23,6 +25,7 @@
 #include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/bench/bench_paths.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/measurers.hpp"
 #include "cypha/intelligence/profile_guided_loss.hpp"
 
 namespace cypha {
@@ -69,7 +72,20 @@ bool uses_hybrid_ewc(ContextMode mode) {
 }
 
 bool uses_profile_guided_backprop(const CyphaLMConfig& cfg) {
-    return cfg.profile_guided_loss || cfg.cell_variant == "H05";
+    return cfg.profile_guided_loss || cfg.use_full_navigation_loss || cfg.cell_variant == "H05";
+}
+
+cypha::intelligence::ProfileGuidedLossConfig profile_guided_loss_config_for(const CyphaLMConfig& cfg) {
+    if (cfg.use_full_navigation_loss) {
+        return cypha::intelligence::default_profile_guided_loss_config();
+    }
+    cypha::intelligence::ProfileGuidedLossConfig partial;
+    const auto targets = cypha::intelligence::IntelligenceProfiler::critical_targets();
+    partial.target_r_eu = targets[4];
+    partial.target_tau = targets[3];
+    partial.lambda_r_eu = 0.1;
+    partial.lambda_tau = 0.1;
+    return partial;
 }
 
 void init_proj(std::vector<double>& proj, int rows, int cols, std::uint64_t seed, double scale) {
@@ -194,7 +210,7 @@ void CyphaLMModel::init_components() {
             hcfg.ssm_hebb_lr = cfg_.ssm_hebb_lr;
             hcfg.d_state = cfg_.d_state;
             hcfg.n_layers = cfg_.ssm_layers;
-            hcfg.graph.n = 2 * cfg_.d_state;
+            hcfg.graph.n = cfg_.field_dim;
             hebbian_stack_->configure(hcfg);
         }
         {
@@ -613,6 +629,70 @@ void CyphaLMModel::fill_top_k(const std::vector<double>& log_probs, PredictNextO
     }
 }
 
+void CyphaLMModel::append_lstm_hidden_history(const std::vector<double>& h) {
+    if (h.empty()) {
+        return;
+    }
+    if (static_cast<int>(lstm_h_history_rows_.size()) >= kLstmHiddenHistoryMax) {
+        lstm_h_history_rows_.erase(lstm_h_history_rows_.begin());
+    }
+    lstm_h_history_rows_.push_back(h);
+}
+
+double CyphaLMModel::lstm_hidden_d_eff() const {
+    if (lstm_h_history_rows_.size() < 4U || !lstm_) {
+        return -1.0;
+    }
+    const int hidden = lstm_->hidden;
+    const int rows = static_cast<int>(lstm_h_history_rows_.size());
+    std::vector<double> flat(static_cast<std::size_t>(rows * hidden), 0.0);
+    for (int r = 0; r < rows; ++r) {
+        const auto& row = lstm_h_history_rows_[static_cast<std::size_t>(r)];
+        const int use = std::min(hidden, static_cast<int>(row.size()));
+        for (int j = 0; j < use; ++j) {
+            flat[static_cast<std::size_t>(r * hidden + j)] = row[static_cast<std::size_t>(j)];
+        }
+    }
+    return cypha::intelligence::compute_participation_ratio(
+        flat.data(), rows, hidden,
+        cfg_.use_eigenvalue_d_eff
+            ? cypha::intelligence::ParticipationRatioMethod::CovarianceEigenvalue
+            : cypha::intelligence::ParticipationRatioMethod::VarianceProxy);
+}
+
+double CyphaLMModel::hybrid_forget_gate_scale(const DIFPredictOutput& dif_out) const {
+    double scale = 1.0;
+    if (cfg_.use_alpha_forget_gate && gria_ && !gria_->alpha.empty()) {
+        double sum = 0.0;
+        for (double a : gria_->alpha) {
+            sum += a;
+        }
+        scale = sum / static_cast<double>(gria_->alpha.size());
+    }
+    if (cfg_.use_tau_forget_gate) {
+        double tau_signal = last_profile_tau_;
+        if (tau_signal <= 0.0 && dif_out.epistemic_var >= 0.0) {
+            tau_signal = cypha::intelligence::compute_epistemic_ratio(dif_out.epistemic_var,
+                                                                      dif_out.aleatoric_var);
+        }
+        tau_signal = std::clamp(tau_signal, 0.0, 1.0);
+        const double tau_scale = 0.5 + 0.5 * tau_signal;
+        scale = cfg_.use_alpha_forget_gate ? scale * tau_scale : tau_scale;
+    }
+    if (cfg_.use_reu_forget_gate) {
+        double reu_signal = last_profile_r_eu_;
+        if (reu_signal <= 0.0 && dif_out.epistemic_var >= 0.0) {
+            reu_signal = cypha::intelligence::compute_epistemic_ratio(dif_out.epistemic_var,
+                                                                      dif_out.aleatoric_var);
+        }
+        reu_signal = std::clamp(reu_signal, 0.0, 1.0);
+        const double reu_scale = 0.5 + 0.5 * reu_signal;
+        const double blend = std::clamp(cfg_.reu_forget_gate_blend, 0.0, 1.0);
+        scale *= (1.0 - blend) + blend * reu_scale;
+    }
+    return std::clamp(scale, 0.1, 1.5);
+}
+
 PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
     PredictNextOutput out;
     const auto mode = cfg_.context_mode;
@@ -710,18 +790,12 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         std::vector<double> log_l(cfg_.vocab_size);
         std::vector<double> h_new;
         std::vector<double> c_new;
-        double forget_gate_scale = 1.0;
-        if (cfg_.use_alpha_forget_gate && !gria_->alpha.empty()) {
-            double sum = 0.0;
-            for (double a : gria_->alpha) {
-                sum += a;
-            }
-            forget_gate_scale = sum / static_cast<double>(gria_->alpha.size());
-        }
+        const double forget_gate_scale = hybrid_forget_gate_scale(last_dif_out_);
         lstm_->forward_step(static_cast<int>(token_id), lstm_h_.data(), lstm_c_.data(),
                             log_l.data(), h_new, c_new, &hybrid_lstm_cache_, forget_gate_scale);
         lstm_h_ = std::move(h_new);
         lstm_c_ = std::move(c_new);
+        append_lstm_hidden_history(lstm_h_);
         hybrid_lstm_has_cache_ = true;
         last_hybrid_log_g_ = log_g;
         last_hybrid_log_l_ = log_l;
@@ -764,6 +838,17 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
     return out;
 }
 
+PredictNextOutput CyphaLMModel::repredict_hybrid_blend(double blend_logit) const {
+    PredictNextOutput out;
+    out.epistemic_var = last_dif_out_.epistemic_var;
+    out.aleatoric_var = last_dif_out_.aleatoric_var;
+    if (!last_hybrid_log_g_.empty() && !last_hybrid_log_l_.empty()) {
+        out.log_probs = blend_log_probs(last_hybrid_log_g_, last_hybrid_log_l_, blend_logit);
+        fill_top_k(out.log_probs, out);
+    }
+    return out;
+}
+
 void CyphaLMModel::ewc_snapshot() {
     ewc_.snapshot(lstm_.get(), active_ssm(), gria_.get());
 }
@@ -793,7 +878,9 @@ void CyphaLMModel::apply_hybrid_ewc(TrainStepMetrics& m, const HybridEwcGradStub
     }
 }
 
-TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t next_token_id) {
+TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t next_token_id,
+                                            cypha::intelligence::IntelligenceProfiler* profiler,
+                                            LmIntelligenceMonitor* monitor) {
     const auto pred = predict_next(token_id);
     TrainStepMetrics m;
     m.loss = -pred.log_probs[static_cast<std::size_t>(next_token_id)];
@@ -809,12 +896,162 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         m.loss += m.free_energy_penalty;
     }
 
+    cypha::intelligence::IntelligenceProfiler* active_profiler = profiler;
+    if (active_profiler == nullptr && uses_profile_guided_backprop(cfg_) && train_profiler_) {
+        active_profiler = train_profiler_.get();
+    }
+    if (monitor != nullptr) {
+        monitor->observe_token(last_e_, field_x_, pred.log_probs, pred.epistemic_var, pred.aleatoric_var,
+                               static_cast<std::int64_t>(next_token_id),
+                               static_cast<int>(cfg_.vocab_size));
+        last_profile_tau_ = monitor->snapshot_observation().tau;
+        last_profile_r_eu_ = monitor->snapshot_observation().r_eu;
+    }
+    if (active_profiler != nullptr && monitor == nullptr) {
+        update_profiler_from_lm_token(*active_profiler, last_e_, pred.log_probs, pred.epistemic_var,
+                                      pred.aleatoric_var);
+    }
+
+    auto apply_profile_guided = [&](GRIALowRankGrad* grad_out, double& blend_nudge_out,
+                                    double& logit_nudge_out, double& hidden_nudge_out) {
+        blend_nudge_out = 0.0;
+        logit_nudge_out = 0.0;
+        hidden_nudge_out = 0.0;
+        if (!uses_profile_guided_backprop(cfg_)) {
+            return;
+        }
+        auto pg_cfg = profile_guided_loss_config_for(cfg_);
+        cypha::intelligence::ProfileObservation monitor_obs{};
+        const bool have_monitor_obs = monitor != nullptr;
+        if (have_monitor_obs) {
+            monitor_obs = monitor->snapshot_observation();
+        }
+        cypha::intelligence::ProfileObservation scale_obs{};
+        bool have_scale_obs = false;
+        if (have_monitor_obs) {
+            scale_obs = monitor_obs;
+            have_scale_obs = true;
+        } else if (active_profiler != nullptr) {
+            const auto matrix = active_profiler->get_profile_matrix();
+            scale_obs.alpha = matrix[0][0];
+            scale_obs.d_eff = matrix[1][0];
+            scale_obs.sigma_branch = matrix[2][0];
+            scale_obs.tau = matrix[3][0];
+            scale_obs.r_eu = matrix[4][0];
+            scale_obs.lipschitz = matrix[5][0];
+            scale_obs.calibration = matrix[6][0];
+            have_scale_obs = true;
+        }
+        if (have_scale_obs && (cfg_.use_adaptive_navigation_lambdas ||
+                               cfg_.use_per_stat_deviation_lambdas ||
+                               cfg_.use_kappa_ceiling_lambdas)) {
+            cypha::intelligence::AdaptiveNavigationOptions nav_opts;
+            nav_opts.use_adaptive_lambdas = cfg_.use_adaptive_navigation_lambdas;
+            nav_opts.use_trajectory_lambdas =
+                cfg_.use_kappa_trajectory_lambdas && have_monitor_obs;
+            nav_opts.use_per_stat_deviation_lambdas = cfg_.use_per_stat_deviation_lambdas;
+            nav_opts.use_kappa_ceiling_lambdas = cfg_.use_kappa_ceiling_lambdas;
+            nav_opts.kappa_ceiling_strength = cfg_.kappa_ceiling_strength;
+            nav_opts.kappa_ceiling_min_scale = cfg_.kappa_ceiling_min_scale;
+            nav_opts.use_kappa_trajectory_ceiling = cfg_.use_kappa_trajectory_ceiling;
+            nav_opts.target_kappa = cfg_.kappa_lambda_target;
+            nav_opts.trajectory_window = cfg_.kappa_trajectory_window;
+            nav_opts.deviation_span = cfg_.per_stat_deviation_span;
+            pg_cfg = cypha::intelligence::resolve_adaptive_profile_guided_config(
+                pg_cfg, scale_obs, nav_opts,
+                nav_opts.use_trajectory_lambdas ? &kappa_trajectory_state_ : nullptr);
+        }
+        cypha::intelligence::ProfileGuidedLossTerms pg;
+        cypha::intelligence::ProfileGuidedLossGrad pg_grad;
+        if (cfg_.use_full_navigation_loss && have_monitor_obs) {
+            pg = cypha::intelligence::compute_profile_guided_loss(monitor_obs, pg_cfg);
+            pg_grad = cypha::intelligence::compute_profile_guided_loss_grad(
+                monitor_obs, pg_cfg, static_cast<int>(cfg_.field_dim));
+        } else if (active_profiler != nullptr) {
+            pg = cypha::intelligence::compute_profile_guided_loss_from_profiler(*active_profiler, pg_cfg);
+            pg_grad = cypha::intelligence::compute_profile_guided_loss_grad_from_profiler(
+                *active_profiler, pg_cfg, static_cast<int>(cfg_.field_dim));
+        } else {
+            return;
+        }
+        if (cfg_.use_kappa_excess_grad_nudge && have_scale_obs) {
+            const double kappa =
+                cypha::intelligence::IntelligenceProfiler::criticality_score_for(scale_obs);
+            const double nudge_strength =
+                cfg_.kappa_ceiling_strength * cfg_.kappa_excess_grad_scale;
+            const auto excess_grad = cypha::intelligence::kappa_excess_grad_nudge(
+                scale_obs, kappa, cfg_.kappa_lambda_target, nudge_strength,
+                cfg_.kappa_excess_grad_margin);
+            pg_grad.d_alpha_uniform += excess_grad.d_alpha_uniform;
+            pg_grad.d_logit_uniform += excess_grad.d_logit_uniform;
+            pg_grad.d_h_hidden_uniform += excess_grad.d_h_hidden_uniform;
+        }
+        double warmup = 1.0;
+        if (cfg_.navigation_loss_warmup_steps > 0) {
+            warmup = std::min(
+                1.0, static_cast<double>(step_count_ + 1) /
+                         static_cast<double>(cfg_.navigation_loss_warmup_steps));
+        }
+        if (cfg_.use_kappa_navigation_warmup_scale && have_scale_obs) {
+            const double kappa =
+                cypha::intelligence::IntelligenceProfiler::criticality_score_for(scale_obs);
+            warmup = cypha::intelligence::scale_navigation_warmup_from_kappa(
+                warmup, kappa, cfg_.kappa_lambda_target, cfg_.kappa_navigation_warmup_strength,
+                cfg_.kappa_navigation_warmup_floor);
+        }
+        pg.total *= warmup;
+        pg.navigation_loss_total *= warmup;
+        m.profile_guided_loss = pg.total;
+        m.loss += pg.total;
+        blend_nudge_out = pg_grad.d_alpha_uniform * warmup;
+        logit_nudge_out = pg_grad.d_logit_uniform * warmup;
+        if (cfg_.use_lstm_d_eff_hidden_nudge && lstm_) {
+            double h_d_eff = lstm_hidden_d_eff();
+            if (h_d_eff < 0.0 && have_scale_obs) {
+                h_d_eff = scale_obs.d_eff;
+            }
+            if (h_d_eff >= 0.0) {
+                const double d_d_eff = h_d_eff - pg_cfg.target_d_eff;
+                hidden_nudge_out = 2.0 * pg_cfg.lambda_d_eff * d_d_eff * 0.08 * warmup;
+            } else {
+                hidden_nudge_out = pg_grad.d_h_hidden_uniform * warmup;
+            }
+        }
+        if (grad_out != nullptr) {
+            for (auto& d_alpha : grad_out->d_alpha) {
+                d_alpha += pg_grad.d_alpha_uniform * warmup;
+            }
+            if (!pg_grad.d_gria_input.empty() && grad_out->dv.size() == pg_grad.d_gria_input.size()) {
+                for (std::size_t gi = 0; gi < grad_out->dv.size(); ++gi) {
+                    grad_out->dv[gi] += pg_grad.d_gria_input[gi] * warmup;
+                }
+            }
+        }
+    };
+
     const auto mode = cfg_.context_mode;
     GRIALowRankGrad gria_grad;
     bool has_gria_grad = false;
+    double navigation_blend_nudge = 0.0;
+    double navigation_logit_nudge = 0.0;
+    double navigation_hidden_nudge = 0.0;
     if (mode == ContextMode::CharLstm && lstm_) {
+        apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
+                             navigation_hidden_nudge);
         CharLSTMGrad grads;
-        lstm_->backward(static_cast<int>(next_token_id), cfg_.lstm_lr, &grads);
+        const double logit_nudge =
+            cfg_.use_full_navigation_loss ? navigation_logit_nudge : 0.0;
+        const double hidden_nudge =
+            cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0;
+        lstm_->backward(static_cast<int>(next_token_id), cfg_.lstm_lr, &grads, logit_nudge,
+                       hidden_nudge);
+        if (cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0) {
+            const int hidden = lstm_->hidden;
+            const double delta = cfg_.lstm_lr * navigation_blend_nudge * 0.02;
+            for (int j = hidden; j < 2 * hidden; ++j) {
+                lstm_->b[static_cast<std::size_t>(j)] -= delta;
+            }
+        }
         apply_lstm_ewc(m, grads);
         if (next_token_id < token_counts_.size()) {
             token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
@@ -824,19 +1061,8 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     if (gria_ && !gria_in_.empty()) {
         gria_grad = gria_->cross_entropy_gradients(gria_in_.data(), static_cast<int>(next_token_id));
         has_gria_grad = true;
-        if (uses_profile_guided_backprop(cfg_) && train_profiler_) {
-            update_profiler_from_lm_token(*train_profiler_, last_e_, pred.log_probs, pred.epistemic_var,
-                                          pred.aleatoric_var);
-            const auto pg =
-                cypha::intelligence::compute_profile_guided_loss_from_profiler(*train_profiler_);
-            m.profile_guided_loss = pg.total;
-            m.loss += pg.total;
-            const auto pg_grad =
-                cypha::intelligence::compute_profile_guided_loss_grad_from_profiler(*train_profiler_);
-            for (auto& d_alpha : gria_grad.d_alpha) {
-                d_alpha += pg_grad.d_alpha_uniform;
-            }
-        }
+        apply_profile_guided(&gria_grad, navigation_blend_nudge, navigation_logit_nudge,
+                             navigation_hidden_nudge);
         gria_->update_weights(gria_grad, cfg_.gria_lr);
         gria_->update_alpha(gria_grad, cfg_.gria_lr);
         gria_->update_bias(gria_grad, cfg_.gria_lr);
@@ -845,19 +1071,44 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
             view_emb_->update(current_view_slot_, grad_v.data() + cfg_.field_dim, cfg_.view_id_dim,
                               cfg_.view_lr);
         }
-    } else if (uses_profile_guided_backprop(cfg_) && train_profiler_) {
-        update_profiler_from_lm_token(*train_profiler_, last_e_, pred.log_probs, pred.epistemic_var,
-                                      pred.aleatoric_var);
-        const auto pg =
-            cypha::intelligence::compute_profile_guided_loss_from_profiler(*train_profiler_);
-        m.profile_guided_loss = pg.total;
-        m.loss += pg.total;
+    } else {
+        apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
+                             navigation_hidden_nudge);
     }
     if (cfg_.online && dif_ && embed_ && !proj_embed_.empty()) {
+        if (cfg_.use_kappa_kernel_blend_scale && cfg_.use_kernel_llr) {
+            cypha::intelligence::ProfileObservation scale_obs{};
+            bool have_scale_obs = false;
+            if (monitor != nullptr) {
+                scale_obs = monitor->snapshot_observation();
+                have_scale_obs = true;
+            } else if (active_profiler != nullptr) {
+                const auto matrix = active_profiler->get_profile_matrix();
+                scale_obs.alpha = matrix[0][0];
+                scale_obs.d_eff = matrix[1][0];
+                scale_obs.sigma_branch = matrix[2][0];
+                scale_obs.tau = matrix[3][0];
+                scale_obs.r_eu = matrix[4][0];
+                scale_obs.lipschitz = matrix[5][0];
+                scale_obs.calibration = matrix[6][0];
+                have_scale_obs = true;
+            }
+            if (have_scale_obs) {
+                const double kappa =
+                    cypha::intelligence::IntelligenceProfiler::criticality_score_for(scale_obs);
+                const double effective = cypha::intelligence::scale_kernel_blend_from_kappa(
+                    cfg_.kernel_blend, kappa, cfg_.kappa_lambda_target,
+                    cfg_.kappa_kernel_blend_floor);
+                dif_->set_runtime_kernel_blend(effective);
+            }
+        }
         const auto target = matvec(proj_embed_, cfg_.field_dim, cfg_.d_embed,
                                    embed_->embed_vec(next_token_id));
         dif_->train_step(field_x_.data(), static_cast<int>(field_x_.size()), target.data(),
                          static_cast<int>(target.size()));
+        if (cfg_.use_kappa_kernel_blend_scale && cfg_.use_kernel_llr) {
+            dif_->set_runtime_kernel_blend(cfg_.kernel_blend);
+        }
     }
     if (hebbian_stack_ && cfg_.train_ssm && !field_x_.empty() && !last_e_.empty()) {
         const int nxt = static_cast<int>(next_token_id);
@@ -870,8 +1121,10 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     }
     if (mode == ContextMode::Hybrid && lstm_) {
         if (hybrid_lstm_has_cache_) {
-            const CharLSTMGrad grads =
-                lstm_->backward_step(hybrid_lstm_cache_, static_cast<int>(next_token_id));
+            CharLSTMGrad grads = lstm_->backward_step(
+                hybrid_lstm_cache_, static_cast<int>(next_token_id),
+                cfg_.use_full_navigation_loss ? navigation_logit_nudge : 0.0,
+                cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0);
             lstm_->apply_grads(grads, cfg_.lstm_lr);
             HybridEwcGradStub stub;
             stub.has_lstm = true;
@@ -890,6 +1143,9 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                                    blend_logit_grad(last_hybrid_log_g_.data(), last_hybrid_log_l_.data(),
                                                     cfg_.vocab_size, hybrid_blend_logit_,
                                                     static_cast<int>(next_token_id));
+        }
+        if (cfg_.hybrid_blend_learnable && cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0) {
+            hybrid_blend_logit_ -= cfg_.hybrid_blend_lr * navigation_blend_nudge * 0.02;
         }
     }
     if (rpsm_layer_ && mode == ContextMode::Rpsm && !field_x_.empty()) {
@@ -1050,8 +1306,16 @@ int view_slot_for_name(const std::string& name) {
 
 }  // namespace
 
-void CyphaLMModel::train_sequence_views(const std::vector<int>& ids) {
+void CyphaLMModel::train_sequence_views(const std::vector<int>& ids,
+                                          cypha::intelligence::IntelligenceProfiler* profiler) {
     if (ids.size() < 2) return;
+    LmIntelligenceMonitor monitor;
+    monitor.set_use_eigenvalue_d_eff(cfg_.use_eigenvalue_d_eff);
+    const bool track_profiler = profiler != nullptr || uses_profile_guided_backprop(cfg_);
+    cypha::intelligence::IntelligenceProfiler* flush_profiler = profiler;
+    if (flush_profiler == nullptr && uses_profile_guided_backprop(cfg_) && train_profiler_) {
+        flush_profiler = train_profiler_.get();
+    }
     const auto schedule =
         resolve_view_schedule_struct(cfg_.view_schedule, cfg_.seed, std::max(1, cfg_.train_epochs));
     const auto epochs = iter_view_epochs(ids, schedule, std::nullopt, cfg_.view_block_size);
@@ -1069,6 +1333,10 @@ void CyphaLMModel::train_sequence_views(const std::vector<int>& ids) {
         if (item.epoch_idx != last_macro) {
             reset_context();
             last_macro = item.epoch_idx;
+            if (flush_profiler != nullptr) {
+                monitor.flush_to_profiler(*flush_profiler);
+                monitor.reset();
+            }
         } else if (item.reset_before) {
             reset_context();
         }
@@ -1078,13 +1346,18 @@ void CyphaLMModel::train_sequence_views(const std::vector<int>& ids) {
         for (int i = 0; i < steps; ++i) {
             const auto m = train_step(
                 static_cast<std::uint32_t>(item.segment_ids[static_cast<std::size_t>(i)]),
-                static_cast<std::uint32_t>(item.segment_ids[static_cast<std::size_t>(i + 1)]));
+                static_cast<std::uint32_t>(item.segment_ids[static_cast<std::size_t>(i + 1)]),
+                profiler, track_profiler ? &monitor : nullptr);
             ++step_i;
             if (log_every > 0 && step_i % log_every == 0) {
                 std::cerr << "[CyphaLM] train step " << step_i << " view=" << item.view_spec.name
                           << " loss=" << m.loss << std::endl;
             }
         }
+    }
+    if (flush_profiler != nullptr) {
+        monitor.flush_to_profiler(*flush_profiler);
+        monitor.reset();
     }
     cfg_.gria_lr = base_gria_lr;
 }
@@ -1121,10 +1394,12 @@ void CyphaLMModel::rpsm_embed_backprop_stub(std::uint32_t token_id) {
     }
 }
 
-TrainStepMetrics CyphaLMModel::train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id) {
+TrainStepMetrics CyphaLMModel::train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id,
+                                                 cypha::intelligence::IntelligenceProfiler* profiler,
+                                                 LmIntelligenceMonitor* monitor) {
     TrainStepMetrics m;
     if (!embed_ || !rpsm_layer_) {
-        return train_step(token_id, next_token_id);
+        return train_step(token_id, next_token_id, profiler, monitor);
     }
 
     const auto e = embed_->embed_vec(token_id);
@@ -1149,8 +1424,16 @@ TrainStepMetrics CyphaLMModel::train_step_rpsm(std::uint32_t token_id, std::uint
     return m;
 }
 
-void CyphaLMModel::train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs) {
+void CyphaLMModel::train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs,
+                                         cypha::intelligence::IntelligenceProfiler* profiler) {
     if (ids.size() < 2 || !rpsm_layer_) return;
+    LmIntelligenceMonitor monitor;
+    monitor.set_use_eigenvalue_d_eff(cfg_.use_eigenvalue_d_eff);
+    const bool track_profiler = profiler != nullptr || uses_profile_guided_backprop(cfg_);
+    cypha::intelligence::IntelligenceProfiler* flush_profiler = profiler;
+    if (flush_profiler == nullptr && uses_profile_guided_backprop(cfg_) && train_profiler_) {
+        flush_profiler = train_profiler_.get();
+    }
     const int ep_count = std::max(1, epochs);
     const char* log_env = std::getenv("CYPHALM_TRAIN_LOG_EVERY");
     const int log_every = log_env ? std::max(0, std::atoi(log_env)) : 0;
@@ -1161,27 +1444,42 @@ void CyphaLMModel::train_sequence_rpsm(const std::vector<int>& ids, int n_steps,
         for (int i = 0; i < steps; ++i) {
             const auto m = train_step_rpsm(
                 static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]),
-                static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i + 1)]));
+                static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i + 1)]), profiler,
+                track_profiler ? &monitor : nullptr);
             ++step_i;
             if (log_every > 0 && step_i % log_every == 0) {
                 std::cerr << "[CyphaLM] rpsm train step " << step_i << " loss=" << m.loss
                           << std::endl;
             }
         }
+        if (flush_profiler != nullptr) {
+            monitor.flush_to_profiler(*flush_profiler);
+            monitor.reset();
+        }
     }
 }
 
-void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int epochs) {
+void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int epochs,
+                                    cypha::intelligence::IntelligenceProfiler* profiler) {
     if (ids.size() < 2) return;
     if (cfg_.context_mode == ContextMode::Rpsm && rpsm_layer_) {
-        train_sequence_rpsm(ids, n_steps, epochs);
+        train_sequence_rpsm(ids, n_steps, epochs, profiler);
         return;
     }
     if (cfg_.view_schedule != "same_order") {
         const std::size_t take =
             std::min(ids.size(), static_cast<std::size_t>(std::max(1, n_steps) + 1));
-        train_sequence_views(std::vector<int>(ids.begin(), ids.begin() + static_cast<std::ptrdiff_t>(take)));
+        train_sequence_views(std::vector<int>(ids.begin(), ids.begin() + static_cast<std::ptrdiff_t>(take)),
+                             profiler);
         return;
+    }
+    LmIntelligenceMonitor monitor;
+    monitor.set_use_eigenvalue_d_eff(cfg_.use_eigenvalue_d_eff);
+    const bool track_profiler = profiler != nullptr || uses_profile_guided_backprop(cfg_) ||
+                                cfg_.use_full_navigation_loss;
+    cypha::intelligence::IntelligenceProfiler* flush_profiler = profiler;
+    if (flush_profiler == nullptr && uses_profile_guided_backprop(cfg_) && train_profiler_) {
+        flush_profiler = train_profiler_.get();
     }
     const int ep_count = std::max(1, epochs);
     const double base_gria_lr = cfg_.gria_lr;
@@ -1189,18 +1487,77 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
     const int steps_per_epoch = std::min(n_steps, static_cast<int>(ids.size()) - 1);
     const int total_steps = steps_per_epoch * ep_count;
     int step_total = 0;
+
+    std::vector<int> curriculum_order;
+    if (cfg_.use_profile_curriculum && steps_per_epoch > 0) {
+        const int prescan = std::min(512, steps_per_epoch);
+        reset_context();
+        std::vector<double> prescan_losses(static_cast<std::size_t>(prescan), 0.0);
+        for (int i = 0; i < prescan; ++i) {
+            const auto pred =
+                predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]));
+            const int nxt = ids[static_cast<std::size_t>(i + 1)];
+            if (nxt >= 0 && static_cast<std::size_t>(nxt) < pred.log_probs.size()) {
+                prescan_losses[static_cast<std::size_t>(i)] =
+                    -pred.log_probs[static_cast<std::size_t>(nxt)];
+            }
+        }
+        double max_loss = 0.0;
+        for (double loss : prescan_losses) {
+            max_loss = std::max(max_loss, loss);
+        }
+        curriculum_order = profile_curriculum_order(
+            ids, steps_per_epoch,
+            [&](int step_idx) -> double {
+                if (step_idx >= prescan || max_loss <= 1e-12) {
+                    return 0.0;
+                }
+                return prescan_losses[static_cast<std::size_t>(step_idx)] / max_loss;
+            });
+        reset_context();
+    }
+
+    auto train_one_step = [&](int step_idx) {
+        reset_context();
+        for (int j = 0; j < step_idx; ++j) {
+            (void)predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(j)]));
+        }
+        train_step(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(step_idx)]),
+                   static_cast<std::uint32_t>(ids[static_cast<std::size_t>(step_idx + 1)]), profiler,
+                   track_profiler ? &monitor : nullptr);
+    };
+
     for (int ep = 0; ep < ep_count; ++ep) {
         cfg_.gria_lr = base_gria_lr * std::pow(cfg_.gria_lr_decay, static_cast<double>(ep));
         reset_context();
         const int steps = steps_per_epoch;
-        for (int i = 0; i < steps; ++i) {
-            train_step(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]),
-                       static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i + 1)]));
-            ++step_total;
-            if (overnight_progress && step_total % 10000 == 0) {
-                std::cerr << "[cyphalm] overnight train progress: step " << step_total << "/"
-                          << total_steps << " epoch " << (ep + 1) << "/" << ep_count << std::endl;
+        if (!curriculum_order.empty()) {
+            for (int ord : curriculum_order) {
+                if (ord < 0 || ord >= steps) {
+                    continue;
+                }
+                train_one_step(ord);
+                ++step_total;
+                if (overnight_progress && step_total % 10000 == 0) {
+                    std::cerr << "[cyphalm] overnight train progress: step " << step_total << "/"
+                              << total_steps << " epoch " << (ep + 1) << "/" << ep_count << std::endl;
+                }
             }
+        } else {
+            for (int i = 0; i < steps; ++i) {
+                train_step(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]),
+                           static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i + 1)]), profiler,
+                           track_profiler ? &monitor : nullptr);
+                ++step_total;
+                if (overnight_progress && step_total % 10000 == 0) {
+                    std::cerr << "[cyphalm] overnight train progress: step " << step_total << "/"
+                              << total_steps << " epoch " << (ep + 1) << "/" << ep_count << std::endl;
+                }
+            }
+        }
+        if (flush_profiler != nullptr) {
+            monitor.flush_to_profiler(*flush_profiler);
+            monitor.reset();
         }
     }
     cfg_.gria_lr = base_gria_lr;
@@ -1275,7 +1632,6 @@ double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval,
         }
         const auto pred = predict_next(tok);
         const int nxt = ids[static_cast<std::size_t>(i + 1)];
-        // Index log_probs by vocab token id (not label/class order — legacy D04 bug).
         if (nxt < 0 || nxt >= vocab ||
             static_cast<std::size_t>(nxt) >= pred.log_probs.size()) {
             continue;
@@ -1289,6 +1645,38 @@ double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval,
     }
     if (scored <= 0) return std::numeric_limits<double>::quiet_NaN();
     return bits / static_cast<double>(scored);
+}
+
+void CyphaLMModel::accumulate_intelligence_profile(const std::vector<int>& ids, int n_steps,
+                                                   cypha::intelligence::IntelligenceProfiler& profiler) {
+    reset_context();
+    const int n = std::min(n_steps, static_cast<int>(ids.size()) - 1);
+    if (n <= 0) {
+        return;
+    }
+    const int vocab = static_cast<int>(cfg_.vocab_size);
+    LmIntelligenceMonitor monitor;
+    monitor.set_use_eigenvalue_d_eff(cfg_.use_eigenvalue_d_eff);
+    for (int i = 0; i < n; ++i) {
+        const std::uint32_t tok = static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]);
+        std::vector<double> embed;
+        if (embed_) {
+            try {
+                embed = embed_vector(tok);
+            } catch (const std::exception&) {
+                embed.clear();
+            }
+        }
+        const auto pred = predict_next(tok);
+        const int nxt = ids[static_cast<std::size_t>(i + 1)];
+        if (nxt < 0 || nxt >= vocab ||
+            static_cast<std::size_t>(nxt) >= pred.log_probs.size()) {
+            continue;
+        }
+        monitor.observe_token(embed, field_x_, pred.log_probs, pred.epistemic_var, pred.aleatoric_var,
+                              static_cast<std::int64_t>(nxt), vocab);
+    }
+    monitor.flush_to_profiler(profiler);
 }
 
 std::vector<double> CyphaLMModel::embed_vector(std::uint32_t token_id) const {

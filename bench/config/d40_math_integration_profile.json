@@ -1,0 +1,41 @@
+{
+  "profile_id": "d40_math_integration_profile",
+  "description": "D40 math integration validation — cyphalm_math_integration toolchain + profile-guided 7-stat navigation loss + cyphalm_bench_native --math-integration smoke",
+  "runner": "cypha_bench_run",
+  "env": {
+    "CYPHA_BENCH_FAST": "1"
+  },
+  "defaults": {
+    "domain": 40,
+    "domain_tag": "d40"
+  },
+  "fast_smoke": {
+    "description": "CTest native_d40_math_integration_smoke — math integration gate (pending_math_integration or math_integration_ready)",
+    "env": {
+      "CYPHA_BENCH_FAST": "1"
+    },
+    "runs": [
+      {
+        "tool": "cyphalm_bench_native",
+        "args": {
+          "profile": "d17",
+          "mode": "hybrid",
+          "n_train": 100,
+          "n_eval": 40,
+          "math_integration": true,
+          "intelligence_profile": true
+        }
+      }
+    ]
+  },
+  "notes": [
+    "CLI: cypha_bench_run --domain 40",
+    "Or: cypha_bench_run --domain-tag d40",
+    "Verifies cyphalm_math_integration.hpp/cpp exist",
+    "Verifies profile_guided_loss.hpp has navigation_loss_total or 7-stat lambdas",
+    "Runs cyphalm_bench_native --profile d17 --mode hybrid --math-integration --intelligence-profile --n-train 100 --n-eval 40 with CYPHA_BENCH_FAST=1",
+    "exit 0 + profile_completeness.all_complete + finite bpc => math_integration_ready",
+    "Otherwise validation_status=pending_math_integration (smoke PASS)",
+    "Phase 26: math integration validation gate"
+  ]
+}

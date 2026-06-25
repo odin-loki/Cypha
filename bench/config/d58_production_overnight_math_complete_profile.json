@@ -1,0 +1,34 @@
+{
+
+  "profile_id": "d58_production_overnight_math_complete_profile",
+
+  "description": "D58 Phase 44 unified production overnight math complete certificate",
+
+  "runner": "cypha_bench_run",
+
+  "env": {
+
+    "CYPHA_BENCH_FAST": "1"
+
+  },
+
+  "defaults": {
+
+    "domain": 58,
+
+    "domain_tag": "d58"
+
+  },
+
+  "notes": [
+
+    "CLI: cypha_bench_run --domain-tag d58",
+
+    "Unifies d54+d57 lock gates: math tier alignment, hybrid BPC, Pareto winner",
+
+    "Maintainer: run_production_overnight.ps1 -MathIntegration"
+
+  ]
+
+}
+
