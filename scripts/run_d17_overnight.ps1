@@ -54,6 +54,23 @@ if ($Fast) {
 
 $useMathIntegration = $MathIntegration -or ($env:CYPHA_OVERNIGHT_MATH_INTEGRATION -eq "1")
 
+function Invoke-NativeWithProgressLog {
+    param(
+        [string]$Exe,
+        [string[]]$NativeArgs,
+        [string]$LogPath
+    )
+    # Native tools log progress on stderr ([cyphalm], [cell_sweep]). With 2>&1 that becomes
+    # ErrorRecord output; ErrorActionPreference Stop would abort on the first progress line.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $Exe @NativeArgs 2>&1 | Tee-Object -FilePath $LogPath -Append
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
+
 Push-Location (Join-Path $root $BuildDir)
 try {
     if ($CellSweep) {
@@ -79,7 +96,7 @@ try {
         if ($useMathIntegration) {
             $sweepArgs += @("--intelligence-profile", "--math-integration")
         }
-        & $sweepExe @sweepArgs 2>&1 | Tee-Object -FilePath $logPath -Append
+        Invoke-NativeWithProgressLog -Exe $sweepExe -NativeArgs $sweepArgs -LogPath $logPath
     } else {
         $benchArgs = @(
             "--profile", $Profile,
@@ -94,7 +111,7 @@ try {
         }
         $mathNote = if ($useMathIntegration) { " math-integration" } else { "" }
         Write-Host "== D17 overnight bench (profile=$Profile mode=$Mode n_train=$NTrain$mathNote) ==" -ForegroundColor Cyan
-        & $exe @benchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
+        Invoke-NativeWithProgressLog -Exe $exe -NativeArgs $benchArgs -LogPath $logPath
     }
     if ($LASTEXITCODE -ne 0) {
         throw "overnight run failed exit=$LASTEXITCODE"
