@@ -337,6 +337,14 @@ void CyphaLMModel::init_components() {
         // eta, live for the D21 --mode rpsm production path exactly like use_izaac_init above.
         rc.use_spectral_alpha = (cfg_.context_mode == ContextMode::Rpsm);
         rc.use_normalized_eta = (cfg_.context_mode == ContextMode::Rpsm);
+        // Research/experiment-only override for the BPTT window length (see
+        // RPSM_UPGRADE_PLAN.md sec14 -- default is 1, i.e. off, because window>1 was measured
+        // to monotonically *hurt* eval BPC at this layer's lr regime). Not part of the profile
+        // schema; used to reproduce sec14's window sweep without a rebuild per config change.
+        if (const char* w = std::getenv("CYPHALM_RPSM_BPTT_WINDOW")) {
+            const int wv = std::atoi(w);
+            if (wv > 0) rc.bptt_window = wv;
+        }
         rpsm_layer_ = std::make_unique<cypha::rpsm::RpsmSequenceLayer>(rc);
         rpsm_log_probs_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
     }
@@ -382,6 +390,7 @@ void CyphaLMModel::reset_context() {
     last_ctx_.clear();
     last_ssm_h_fast_.clear();
     if (rpsm_layer_) rpsm_layer_->reset();
+    rpsm_bptt_token_ids_.clear();
     // DIF experts persist across view/block resets (Python carry_dif=True).
     std::fill(field_x_.begin(), field_x_.end(), 0.0);
     step_count_ = 0;
@@ -1381,9 +1390,14 @@ std::string CyphaLMModel::decode_tokens(const std::vector<std::uint32_t>& ids) c
 }
 
 void CyphaLMModel::rpsm_embed_backprop(std::uint32_t token_id) {
+    if (!rpsm_layer_) return;
+    rpsm_embed_backprop_from_grad(token_id, rpsm_layer_->input_grad());
+}
+
+void CyphaLMModel::rpsm_embed_backprop_from_grad(std::uint32_t token_id,
+                                                   const std::vector<double>& field_grad) {
     if (!embed_ || !rpsm_layer_) return;
     if (token_id >= embed_->vocab_size()) return;
-    const auto& field_grad = rpsm_layer_->input_grad();
     if (field_grad.empty()) return;
 
     // Correct chain rule: loss -> field_x_ (= proj_ssm_ * ctx) -> ctx (SSM layer-0 state
@@ -1392,6 +1406,10 @@ void CyphaLMModel::rpsm_embed_backprop(std::uint32_t token_id) {
     // encode_level0_features/inject_input_multilevel, both bounded by `state_dim`); any
     // trailing field_x_ entries never influence the loss, so their gradient is exactly zero,
     // not an approximation -- zero-pad rather than truncate/misalign as the old stub did.
+    // §14: this same helper is now also called once per step, in a loop, at each RPSM BPTT
+    // window flush -- `field_grad` there is `bptt_window_input_grads()[t]` (the deeper,
+    // multi-step-aware gradient), rather than the single-step-local `input_grad()` the
+    // immediate per-step caller (`rpsm_embed_backprop`) above passes.
     std::vector<double> grad_field(static_cast<std::size_t>(cfg_.field_dim), 0.0);
     for (std::size_t i = 0; i < field_grad.size() && i < grad_field.size(); ++i) {
         grad_field[i] = field_grad[i];
@@ -1469,6 +1487,26 @@ void CyphaLMModel::rpsm_embed_backprop(std::uint32_t token_id) {
     }
 }
 
+void CyphaLMModel::rpsm_bptt_embed_flush() {
+    // §14: called immediately after an `RpsmSequenceLayer::train_step` call that just flushed a
+    // BPTT window (`rpsm_layer_->bptt_window_flushed()`). Applies the deeper, multi-step-aware
+    // embedding-gradient correction to every token that appeared in the just-flushed window,
+    // on top of (not instead of) the immediate per-step update `rpsm_embed_backprop` already
+    // applied for each of those steps as they happened -- these are two distinct gradient
+    // signals (single-step-local vs. windowed-recursive), not a double count of the same one;
+    // see `bptt_backward_and_apply()` in rpsm_sequence_layer.cpp.
+    if (!rpsm_layer_) {
+        rpsm_bptt_token_ids_.clear();
+        return;
+    }
+    const auto& grads = rpsm_layer_->bptt_window_input_grads();
+    const std::size_t n = std::min(grads.size(), rpsm_bptt_token_ids_.size());
+    for (std::size_t t = 0; t < n; ++t) {
+        rpsm_embed_backprop_from_grad(rpsm_bptt_token_ids_[t], grads[t]);
+    }
+    rpsm_bptt_token_ids_.clear();
+}
+
 TrainStepMetrics CyphaLMModel::train_step_rpsm(std::uint32_t token_id, std::uint32_t next_token_id,
                                                  cypha::intelligence::IntelligenceProfiler* profiler,
                                                  LmIntelligenceMonitor* monitor) {
@@ -1485,12 +1523,16 @@ TrainStepMetrics CyphaLMModel::train_step_rpsm(std::uint32_t token_id, std::uint
     last_ctx_ = ctx;
     field_x_ = project_field(ctx);
 
+    rpsm_bptt_token_ids_.push_back(token_id);
     const auto rpsm_m = rpsm_layer_->train_step(field_x_.data(), static_cast<int>(field_x_.size()),
                                                 static_cast<int>(next_token_id), cfg_.rpsm_lr);
     m.loss = rpsm_m.loss;
     last_train_loss_ = m.loss;
 
     rpsm_embed_backprop(token_id);
+    if (rpsm_layer_->bptt_window_flushed()) {
+        rpsm_bptt_embed_flush();
+    }
 
     if (next_token_id < token_counts_.size()) {
         token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;

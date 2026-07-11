@@ -322,6 +322,9 @@ RpsmSequenceLayer::RpsmSequenceLayer(RpsmSequenceConfig cfg)
   enc_pre_.assign(static_cast<std::size_t>(cfg_.feat_dim), 0.0);
   enc_grad_.assign(static_cast<std::size_t>(cfg_.feat_dim), 0.0);
   input_grad_.assign(static_cast<std::size_t>(sd), 0.0);
+
+  bptt_cache_.assign(static_cast<std::size_t>(std::max(1, cfg_.bptt_window)), BpttStepCache{});
+  bptt_fill_ = 0;
 }
 
 const std::vector<double>& RpsmSequenceLayer::level_hidden(int level) const {
@@ -339,6 +342,13 @@ void RpsmSequenceLayer::reset() {
   std::fill(psi_rows_.begin(), psi_rows_.end(), 0.0);
   global_memory_.reset();
   last_surprise_ = 0.0;
+  // Discard any partial in-flight BPTT window rather than flushing it: the cached `h_inj`
+  // snapshots are only valid relative to the state trajectory that produced them, and that
+  // trajectory just got reset to zero. This mirrors CyphaLMModel::reset_context()'s own
+  // `bptt_buffer_.clear()` (rather than flush) on the same kind of boundary.
+  bptt_fill_ = 0;
+  bptt_flushed_this_call_ = false;
+  bptt_flush_input_grads_.clear();
 }
 
 double RpsmSequenceLayer::apply_activation(double x) const {
@@ -360,11 +370,17 @@ void RpsmSequenceLayer::log_softmax_row(const double* logits, int k, double* log
   }
 }
 
-void RpsmSequenceLayer::inject_input_multilevel(const double* input, int input_dim) {
+void RpsmSequenceLayer::inject_input_multilevel(const double* input, int input_dim,
+                                                 BpttStepCache* cache) {
   const int sd = cfg_.state_dim;
   const int d = cfg_.feat_dim;
   const int in_n = std::max(0, input_dim);
   const int nl = static_cast<int>(h_levels_.size());
+
+  if (cache != nullptr) {
+    cache->in_n = in_n;
+    cache->inj_acc.assign(static_cast<std::size_t>(sd), 0.0);
+  }
 
   for (int l = 0; l < nl; ++l) {
     const double scale = 1.0 / static_cast<double>(l + 1);
@@ -373,6 +389,11 @@ void RpsmSequenceLayer::inject_input_multilevel(const double* input, int input_d
       double acc = 0.0;
       for (int j = 0; j < in_n && j < sd; ++j) {
         acc += w_carry_[static_cast<std::size_t>((j % d) * sd + i)] * input[j];
+      }
+      // `acc` does not depend on `l` (only the post-activation blend `scale` below does), so
+      // one snapshot per step suffices -- record it on the first level's pass.
+      if (cache != nullptr && l == 0) {
+        cache->inj_acc[static_cast<std::size_t>(i)] = acc;
       }
       h[static_cast<std::size_t>(i)] += scale * apply_activation(acc);
     }
@@ -398,7 +419,7 @@ void RpsmSequenceLayer::encode_level0_features(const double* input, int input_di
   }
 }
 
-double RpsmSequenceLayer::hierarchy_update() {
+double RpsmSequenceLayer::hierarchy_update(BpttStepCache* cache) {
   const int sd = cfg_.state_dim;
   const int nl = static_cast<int>(h_levels_.size());
   // Fix 1 (spectral alpha): compute from psi_rows_ as it stood entering this call (i.e. the
@@ -409,13 +430,34 @@ double RpsmSequenceLayer::hierarchy_update() {
   const double beta = cfg_.beta_memory;
   double hierarchy_loss = 0.0;
 
+  if (cache != nullptr) {
+    cache->alpha = a;
+    cache->h_inj.assign(static_cast<std::size_t>(nl), std::vector<double>(static_cast<std::size_t>(sd)));
+    cache->up_pre.assign(static_cast<std::size_t>(nl), std::vector<double>(static_cast<std::size_t>(sd)));
+    cache->down_pre.assign(static_cast<std::size_t>(nl), std::vector<double>(static_cast<std::size_t>(sd)));
+    cache->blended_pre.assign(static_cast<std::size_t>(nl), std::vector<double>(static_cast<std::size_t>(sd)));
+  }
+
   for (int l = 0; l < nl; ++l) {
     auto& h = h_levels_[static_cast<std::size_t>(l)];
+    // Snapshot the state *entering* this level's transform (h_inj: post-injection/encode,
+    // pre-hierarchy) -- this is the exact tensor the reverse pass needs `d(w_up_)`,
+    // `d(mem query)` etc. to be taken with respect to. Must be a copy, not a reference: `h` is
+    // mutated below, in place, before this function returns.
+    if (cache != nullptr) {
+      cache->h_inj[static_cast<std::size_t>(l)] = h;
+    }
     matvec_row_major(w_up_.data(), sd, sd, h.data(), work_up_.data());
+    if (cache != nullptr) {
+      cache->up_pre[static_cast<std::size_t>(l)].assign(work_up_.begin(), work_up_.end());
+    }
     for (int i = 0; i < sd; ++i) {
       work_up_[static_cast<std::size_t>(i)] = apply_activation(work_up_[static_cast<std::size_t>(i)]);
     }
     matvec_transpose_row_major(w_up_.data(), sd, sd, h.data(), work_down_.data());
+    if (cache != nullptr) {
+      cache->down_pre[static_cast<std::size_t>(l)].assign(work_down_.begin(), work_down_.end());
+    }
     for (int i = 0; i < sd; ++i) {
       work_down_[static_cast<std::size_t>(i)] = apply_activation(work_down_[static_cast<std::size_t>(i)]);
     }
@@ -433,6 +475,9 @@ double RpsmSequenceLayer::hierarchy_update() {
       const double blended =
           (1.0 - a) * h[static_cast<std::size_t>(i)] + a * work_err_[static_cast<std::size_t>(i)] +
           beta * mem_read_[static_cast<std::size_t>(i)];
+      if (cache != nullptr) {
+        cache->blended_pre[static_cast<std::size_t>(l)][static_cast<std::size_t>(i)] = blended;
+      }
       h[static_cast<std::size_t>(i)] = apply_activation(blended);
       psi_rows_[static_cast<std::size_t>(l * sd + i)] = h[static_cast<std::size_t>(i)];
     }
@@ -472,7 +517,10 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
   const int tgt = std::clamp(target_class, 0, std::max(0, k - 1));
   const int in_n = std::max(0, input_dim);
 
-  inject_input_multilevel(input, input_dim);
+  bptt_flushed_this_call_ = false;
+  BpttStepCache& cache = bptt_cache_[static_cast<std::size_t>(bptt_fill_)];
+
+  inject_input_multilevel(input, input_dim, &cache);
   encode_level0_features(input, input_dim);
 
   batched_llr_gemm(feat_buf_.data(), 1, psi_, nullptr, llr_buf_.data());
@@ -481,7 +529,7 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
   log_softmax_row(llr_buf_.data(), k, log_probs.data());
   metrics.nll = -log_probs[static_cast<std::size_t>(tgt)];
 
-  const double hierarchy_loss = hierarchy_update();
+  const double hierarchy_loss = hierarchy_update(&cache);
   metrics.hierarchy_loss = hierarchy_loss;
   metrics.surprise = last_surprise_;
   metrics.loss = metrics.nll + cfg_.hierarchy_loss_weight * hierarchy_loss;
@@ -500,6 +548,7 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
     const double scale = std::clamp(1.0 / (frob_err + 1e-8), 0.0, cfg_.eta_norm_max_scale);
     effective_lr = lr * scale;
   }
+  cache.effective_lr = effective_lr;
 
   std::vector<double> grad_logits(static_cast<std::size_t>(k), 0.0);
   double max_z = llr_buf_[0];
@@ -543,7 +592,13 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
     }
   }
 
-  const auto& h0 = h_levels_[0];
+  // §14: this is the pre-existing single-step-local gradient (unchanged formula/value from
+  // before §14 -- it never depended on `h0`/weight-update ordering to begin with, see the git
+  // history for this block), kept for exact backward compatibility with `input_grad()`'s
+  // documented contract (native_rpsm_embed_grad_finite_diff, `rpsm_embed_backprop`'s per-step
+  // immediate embedding update). It intentionally does *not* include the hierarchy/injection
+  // paths' contribution to d(loss)/d(input) -- that deeper signal is new in §14 and is exposed
+  // separately, once per window, via `bptt_window_input_grads()`.
   std::fill(input_grad_.begin(), input_grad_.end(), 0.0);
   for (int j = 0; j < d; ++j) {
     const double pre = enc_pre_[static_cast<std::size_t>(j)];
@@ -552,27 +607,29 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
     for (int i = 0; i < sd; ++i) {
       input_grad_[static_cast<std::size_t>(i)] +=
           chain * w_enc_[static_cast<std::size_t>(j * sd + i)];
-      double x_in = 0.0;
-      if (i < in_n) {
-        x_in = input[i];
-      }
-      w_enc_[static_cast<std::size_t>(j * sd + i)] -= effective_lr * chain * x_in;
-      w_carry_[static_cast<std::size_t>(j * sd + i)] -= effective_lr * chain * h0[static_cast<std::size_t>(i)];
     }
   }
 
-  const double hier_w = cfg_.hierarchy_loss_weight;
-  if (hier_w > 0.0 && hierarchy_loss > kEps) {
-    const double hier_scale = 2.0 * hier_w * effective_lr / static_cast<double>(cfg_.n_levels);
-    for (int l = 0; l < cfg_.n_levels; ++l) {
-      const auto& h = h_levels_[static_cast<std::size_t>(l)];
-      for (int i = 0; i < sd; ++i) {
-        const double err = work_err_[static_cast<std::size_t>(i)];
-        for (int j = 0; j < sd; ++j) {
-          w_up_[static_cast<std::size_t>(i * sd + j)] -= hier_scale * err * h[static_cast<std::size_t>(j)];
-        }
-      }
-    }
+  // §14: `w_up_`/`w_enc_`/`w_carry_` are no longer updated here from this step's local
+  // activations alone (the old per-step block computed `w_up_`'s update from a *stale*
+  // `work_err_` left over from hierarchy_update()'s last-level loop iteration -- a latent bug,
+  // not just "no BPTT" -- and `w_carry_`'s update from `h_levels_[0]` *after* hierarchy_update()
+  // had already overwritten it with the next step's carry, not the h_inj value actually used by
+  // encode_level0_features(); both are fixed by construction in bptt_backward_and_apply(), which
+  // reads the correctly-timed `cache.h_inj`/per-level `work_err_` snapshots instead). Cache what
+  // the reverse pass needs and apply the real update once per `cfg_.bptt_window` steps.
+  cache.enc_pre = enc_pre_;
+  cache.enc_grad = enc_grad_;
+  cache.input.assign(static_cast<std::size_t>(sd), 0.0);
+  for (int i = 0; i < sd && i < in_n; ++i) {
+    cache.input[static_cast<std::size_t>(i)] = input[i];
+  }
+
+  ++bptt_fill_;
+  if (bptt_fill_ >= static_cast<int>(bptt_cache_.size())) {
+    bptt_backward_and_apply();
+    bptt_fill_ = 0;
+    bptt_flushed_this_call_ = true;
   }
 
   if (tgt >= 0 && tgt < k) {
@@ -580,6 +637,226 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
   }
 
   return metrics;
+}
+
+void RpsmSequenceLayer::bptt_backward_and_apply() {
+  // §14 core mechanism (RPSM_UPGRADE_PLAN.md §13.6/§13.7(a)): reverse-time pass through the
+  // `bptt_window` steps just cached, propagating the recursive gradient of the *whole window's*
+  // loss through the hierarchy's state carry `h_carry_{t+1} = act(blended_pre_t)`, exactly the
+  // dependency `train_step`'s old per-step-local update never accounted for.
+  //
+  // Notation per cached step t, per level l (see hierarchy_update()/inject_input_multilevel()):
+  //   h_inj_t[l]        = state entering hierarchy_update this step (post-injection/encode).
+  //   up_pre_t[l]   = W_up   . h_inj_t[l];  up_t[l]   = act(up_pre_t[l])
+  //   down_pre_t[l] = W_up^T . h_inj_t[l];  down_t[l] = act(down_pre_t[l])
+  //   err_t[l]      = up_t[l] - down_t[l]
+  //   blended_pre_t[l] = (1-a)*h_inj_t[l] + a*err_t[l] + beta*mem_read_t[l]
+  //   h_carry_{t+1}[l]  = act(blended_pre_t[l])   -- becomes h_inj_{t+1}[l]'s *base*, i.e. the
+  //                                                  h_pre that inject_input_multilevel adds to.
+  //   (level 0 only) enc_pre_t = W_enc.input_t + W_carry.h_inj_t[0]; feat_t = act(enc_pre_t)
+  //
+  // Backward recursion, t = N-1 .. 0 (standard truncated-BPTT boundary: the gradient entering
+  // "after step N-1" -- i.e. from steps beyond this window, not yet processed -- is exactly
+  // zero, and the gradient leaving "before step 0" is discarded rather than chased into a
+  // previous window, since window boundaries reuse the *forward* state continuously but
+  // deliberately truncate the *backward* pass, matching the hybrid path's own bptt_ssm_update):
+  //   grad_h_next[l]  = d(window loss)/d(h_carry_{t+1}[l])            (0 at t = N-1)
+  //   g_blend[l]      = grad_h_next[l] * act'(blended_pre_t[l])
+  //   d(h_inj_t[l])  += (1-a) * g_blend[l]                             [blend's direct term]
+  //   d(err_t[l])     = a * g_blend[l] + hierarchy_loss_weight * 2*err_t[l] / (n_levels*state_dim)
+  //                                                                    [+ hierarchy_loss's own
+  //                                                                     direct gradient, since
+  //                                                                     hierarchy_loss_t is
+  //                                                                     itself part of the loss]
+  //   d(up_pre_t[l])   =  d(err_t[l]) * act'(up_pre_t[l])
+  //   d(down_pre_t[l]) = -d(err_t[l]) * act'(down_pre_t[l])
+  //   d(w_up_)        += outer(d(up_pre_t[l]), h_inj_t[l])   [from up   = act(W_up   . h_inj)]
+  //                    + outer(h_inj_t[l], d(down_pre_t[l])) [from down = act(W_up^T . h_inj),
+  //                                                            note the transposed index order]
+  //   d(h_inj_t[l])  += W_up^T . d(up_pre_t[l])  +  W_up . d(down_pre_t[l])
+  //   (level 0 only, classifier->encode path, using the *cached* enc_grad_t so a later step's
+  //    classifier SGD on psi_.mu -- which still runs every step, unchanged -- cannot corrupt an
+  //    earlier step's gradient):
+  //     d(enc_pre_t)    = enc_grad_t * act'(enc_pre_t)
+  //     d(h_inj_t[0])  += W_carry^T . d(enc_pre_t)
+  //     d(w_carry_)    += outer(d(enc_pre_t), h_inj_t[0])
+  //     d(w_enc_)      += outer(d(enc_pre_t), input_t)
+  //   (injection path, shared W_carry_ across all levels via the level-independent
+  //    `inj_acc_t = sum_j W_carry_[(j%d)*sd+i] * input_t[j]`; only its *scale* varies by level):
+  //     d(acc_t[i])     = sum_l d(h_inj_t[l][i]) * (1/(l+1)) * act'(inj_acc_t[i])
+  //     d(w_carry_)    += outer(d(acc_t), input_t)   [wrapped through (j % feat_dim), matching
+  //                                                    inject_input_multilevel's own indexing]
+  //   d(input_t)      += (encode path) W_enc^T . d(enc_pre_t)
+  //                    + (injection path) sum_i d(acc_t[i]) * W_carry_[(j%d)*sd+i]
+  //                      [both bounded to input_t's actually-used length `cache.in_n`, matching
+  //                       the exact bounds inject_input_multilevel()/encode_level0_features()
+  //                       use forward -- input positions beyond that bound have *zero* forward
+  //                       influence, so their analytic gradient must be exactly zero, not merely
+  //                       small, to match a finite-difference check bit-for-bit]
+  //   grad_h_next[l] (for step t-1) := d(h_inj_t[l])   [h_pre_t = h_carry_t = h_inj_t - inj_t is
+  //                                                      purely additive, so d(h_pre_t) is the
+  //                                                      *complete* d(h_inj_t) computed above]
+  //
+  // Deliberate, explicitly-scoped simplification: `mem_read_t[l]`'s contribution to
+  // `blended_pre_t[l]` is *not* backpropagated into `d(h_inj_t[l])` (i.e. M_slots' read path is
+  // treated as a stop-gradient w.r.t. its query). This is not a silent truncation of the path
+  // this section is actually about (the hierarchy/injection/encode recurrence above is exact,
+  // full N-step chain rule, with no truncation beyond the window boundary itself); it is a
+  // separate, bounded, and measured design choice: RPSM_UPGRADE_PLAN.md §13.3 measured
+  // ||mem_read|| at ~1% of ||h|| and beta_memory=0.1, so this path's contribution to the blend
+  // is ~0.1% of the state -- and its *content* is a raw, non-learned activation snapshot
+  // (RpsmGlobalMemory::ring_write copies `gate*h`, not a projected key/value), so even an exact
+  // query-side gradient here could not address the content-quality issue §13.3 already found.
+  // Backpropagating through the attention weights exactly would additionally require caching a
+  // full slot-matrix snapshot at every step (slots mutate mid-window on a `ring_write`), for a
+  // provably tiny and, per §13.4, previously BPC-negative-or-neutral term. The finite-difference
+  // test (native_rpsm_bptt_grad_finite_diff) sets `beta_memory=0` so this scope decision cannot
+  // silently mask a real error in the terms that *are* verified here.
+  const int sd = cfg_.state_dim;
+  const int d = cfg_.feat_dim;
+  const int nl = static_cast<int>(h_levels_.size());
+  const int window = static_cast<int>(bptt_cache_.size());
+  if (window <= 0 || sd <= 0) {
+    return;
+  }
+
+  std::vector<double> d_w_up(static_cast<std::size_t>(sd) * static_cast<std::size_t>(sd), 0.0);
+  std::vector<double> d_w_enc(static_cast<std::size_t>(d) * static_cast<std::size_t>(sd), 0.0);
+  std::vector<double> d_w_carry(static_cast<std::size_t>(d) * static_cast<std::size_t>(sd), 0.0);
+
+  std::vector<std::vector<double>> grad_h_next(
+      static_cast<std::size_t>(nl), std::vector<double>(static_cast<std::size_t>(sd), 0.0));
+
+  bptt_flush_input_grads_.assign(static_cast<std::size_t>(window),
+                                  std::vector<double>(static_cast<std::size_t>(sd), 0.0));
+
+  double lr_sum = 0.0;
+  std::vector<double> tmp_a(static_cast<std::size_t>(sd));
+  std::vector<double> tmp_b(static_cast<std::size_t>(sd));
+
+  for (int t = window - 1; t >= 0; --t) {
+    const BpttStepCache& c = bptt_cache_[static_cast<std::size_t>(t)];
+    lr_sum += c.effective_lr;
+    auto& ig = bptt_flush_input_grads_[static_cast<std::size_t>(t)];
+
+    std::vector<std::vector<double>> d_h_inj(
+        static_cast<std::size_t>(nl), std::vector<double>(static_cast<std::size_t>(sd), 0.0));
+
+    const double hier_norm = (cfg_.hierarchy_loss_weight > 0.0)
+        ? (2.0 * cfg_.hierarchy_loss_weight / static_cast<double>(nl * sd))
+        : 0.0;
+
+    for (int l = 0; l < nl; ++l) {
+      const auto& h_inj = c.h_inj[static_cast<std::size_t>(l)];
+      const auto& up_pre = c.up_pre[static_cast<std::size_t>(l)];
+      const auto& down_pre = c.down_pre[static_cast<std::size_t>(l)];
+      const auto& blended_pre = c.blended_pre[static_cast<std::size_t>(l)];
+      const auto& g_next = grad_h_next[static_cast<std::size_t>(l)];
+      auto& d_hi = d_h_inj[static_cast<std::size_t>(l)];
+
+      std::vector<double> d_up_pre(static_cast<std::size_t>(sd));
+      std::vector<double> d_down_pre(static_cast<std::size_t>(sd));
+      for (int i = 0; i < sd; ++i) {
+        const double g_blend =
+            g_next[static_cast<std::size_t>(i)] *
+            activation_derivative(activation_mix_, blended_pre[static_cast<std::size_t>(i)]);
+        const double up_i = apply_activation(up_pre[static_cast<std::size_t>(i)]);
+        const double down_i = apply_activation(down_pre[static_cast<std::size_t>(i)]);
+        const double err_i = up_i - down_i;
+        d_hi[static_cast<std::size_t>(i)] += (1.0 - c.alpha) * g_blend;
+        const double d_err = c.alpha * g_blend + hier_norm * err_i;
+        d_up_pre[static_cast<std::size_t>(i)] =
+            d_err * activation_derivative(activation_mix_, up_pre[static_cast<std::size_t>(i)]);
+        d_down_pre[static_cast<std::size_t>(i)] =
+            -d_err * activation_derivative(activation_mix_, down_pre[static_cast<std::size_t>(i)]);
+      }
+
+      // d(h_inj) += W_up^T . d(up_pre)   [up_pre[i] = sum_c W_up[i*sd+c] * h_inj[c]]
+      matvec_transpose_row_major(w_up_.data(), sd, sd, d_up_pre.data(), tmp_a.data());
+      // d(h_inj) += W_up . d(down_pre)   [down_pre[i] = sum_r W_up[r*sd+i] * h_inj[r]]
+      matvec_row_major(w_up_.data(), sd, sd, d_down_pre.data(), tmp_b.data());
+      for (int i = 0; i < sd; ++i) {
+        d_hi[static_cast<std::size_t>(i)] +=
+            tmp_a[static_cast<std::size_t>(i)] + tmp_b[static_cast<std::size_t>(i)];
+      }
+
+      for (int i = 0; i < sd; ++i) {
+        const double dup = d_up_pre[static_cast<std::size_t>(i)];
+        const double ddown = d_down_pre[static_cast<std::size_t>(i)];
+        for (int cc = 0; cc < sd; ++cc) {
+          d_w_up[static_cast<std::size_t>(i * sd + cc)] +=
+              dup * h_inj[static_cast<std::size_t>(cc)];
+          d_w_up[static_cast<std::size_t>(cc * sd + i)] +=
+              h_inj[static_cast<std::size_t>(cc)] * ddown;
+        }
+      }
+    }
+
+    const int bound = std::min(c.in_n, sd);
+
+    // Level-0 classifier->encode path.
+    {
+      const auto& h_inj0 = c.h_inj[0];
+      std::vector<double> d_enc_pre(static_cast<std::size_t>(d));
+      for (int j = 0; j < d; ++j) {
+        d_enc_pre[static_cast<std::size_t>(j)] =
+            c.enc_grad[static_cast<std::size_t>(j)] *
+            activation_derivative(activation_mix_, c.enc_pre[static_cast<std::size_t>(j)]);
+      }
+      for (int j = 0; j < d; ++j) {
+        const double dep = d_enc_pre[static_cast<std::size_t>(j)];
+        for (int i = 0; i < sd; ++i) {
+          d_h_inj[0][static_cast<std::size_t>(i)] += w_carry_[static_cast<std::size_t>(j * sd + i)] * dep;
+          d_w_carry[static_cast<std::size_t>(j * sd + i)] += dep * h_inj0[static_cast<std::size_t>(i)];
+        }
+        for (int i = 0; i < bound; ++i) {
+          d_w_enc[static_cast<std::size_t>(j * sd + i)] += dep * c.input[static_cast<std::size_t>(i)];
+          ig[static_cast<std::size_t>(i)] += w_enc_[static_cast<std::size_t>(j * sd + i)] * dep;
+        }
+      }
+    }
+
+    // Injection path (shared W_carry_ across all levels, level-independent `inj_acc`).
+    {
+      std::vector<double> d_acc(static_cast<std::size_t>(sd), 0.0);
+      for (int l = 0; l < nl; ++l) {
+        const double scale = 1.0 / static_cast<double>(l + 1);
+        for (int i = 0; i < sd; ++i) {
+          d_acc[static_cast<std::size_t>(i)] +=
+              d_h_inj[static_cast<std::size_t>(l)][static_cast<std::size_t>(i)] * scale *
+              activation_derivative(activation_mix_, c.inj_acc[static_cast<std::size_t>(i)]);
+        }
+      }
+      for (int j = 0; j < bound; ++j) {
+        double acc_grad = 0.0;
+        for (int i = 0; i < sd; ++i) {
+          acc_grad += d_acc[static_cast<std::size_t>(i)] *
+                      w_carry_[static_cast<std::size_t>((j % d) * sd + i)];
+        }
+        ig[static_cast<std::size_t>(j)] += acc_grad;
+      }
+      for (int j = 0; j < sd; ++j) {
+        for (int i = 0; i < sd; ++i) {
+          d_w_carry[static_cast<std::size_t>((j % d) * sd + i)] +=
+              d_acc[static_cast<std::size_t>(i)] * c.input[static_cast<std::size_t>(j)];
+        }
+      }
+    }
+
+    grad_h_next = std::move(d_h_inj);
+  }
+
+  const double mean_lr = lr_sum / static_cast<double>(window);
+  const double inv_n = 1.0 / static_cast<double>(window);
+  for (std::size_t idx = 0; idx < w_up_.size(); ++idx) {
+    w_up_[idx] -= mean_lr * d_w_up[idx] * inv_n;
+  }
+  for (std::size_t idx = 0; idx < w_enc_.size(); ++idx) {
+    w_enc_[idx] -= mean_lr * d_w_enc[idx] * inv_n;
+  }
+  for (std::size_t idx = 0; idx < w_carry_.size(); ++idx) {
+    w_carry_[idx] -= mean_lr * d_w_carry[idx] * inv_n;
+  }
 }
 
 }  // namespace cypha::rpsm

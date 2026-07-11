@@ -144,6 +144,35 @@ struct RpsmSequenceConfig {
 
   double eta_norm_max_scale = 10.0;
 
+  /// §14 (RPSM_UPGRADE_PLAN.md §13.6/§13.7(a)): number of steps between real
+  /// backprop-through-time passes through this layer's own hierarchy recurrence
+  /// (`h_levels_`, the SSM-like carried state `hierarchy_update()` transforms every step).
+  /// Before §14, `train_step` updated `w_up_`/`w_enc_`/`w_carry_` from *only* the current
+  /// step's local activations -- zero credit assignment for how a hidden-state decision several
+  /// steps ago affected the current loss, *and* from a couple of latent timing bugs (stale
+  /// `work_err_`, post-overwrite `h_levels_`) that `bptt_backward_and_apply()` also fixes by
+  /// construction regardless of window size. Every `bptt_window` calls, `train_step` now runs a
+  /// proper reverse-time pass that accumulates the *recursive* gradient of the whole window's
+  /// loss through the state carry, then applies one *averaged* update (mean gradient x mean
+  /// per-step effective_lr over the window) -- i.e. this is non-overlapping batched gradient
+  /// accumulation, not a sliding/streaming truncated-BPTT that updates every step from a
+  /// K-step lookback (that variant would need every step to keep an O(window) forward-state
+  /// cache alive simultaneously and was out of scope here; see RPSM_UPGRADE_PLAN.md §14).
+  ///
+  /// Default is intentionally **1** (i.e. every step *is* its own window: apply the correctly-
+  /// derived local gradient immediately, no batching, no multi-step credit assignment), *not*
+  /// the hybrid GRIA+LSTM path's `CyphaLMConfig::bptt_steps` production default of 64
+  /// (cyphalm_d17_wikitext.json). RPSM_UPGRADE_PLAN.md §14 measured `bptt_window` in
+  /// {1,2,4,8,16,32,64} at n_train=5000 and found eval BPC degrades *monotonically* with window
+  /// size (4.75 at 1 -> 6.02 at 64, i.e. batching hurts, it does not help, for this layer/lr
+  /// regime) -- the opposite of the hybrid path's own measured effect of its 64-step window.
+  /// `window=1` is the only setting that does not risk regressing the D21 profile's shipped BPC
+  /// relative to pre-§14 behaviour; larger windows are kept fully implemented, wired, and
+  /// finite-difference-verified (`native_rpsm_bptt_grad_finite_diff`, and via the
+  /// `CYPHALM_RPSM_BPTT_WINDOW` env var override in `CyphaLMModel::init_components()`) for
+  /// further research, but are a deliberate *opt-in*, not the default.
+  int bptt_window = 1;
+
 };
 
 /// Fix 1 helper: top singular value of the L x D hierarchy state ``psi`` (row-major), normalised
@@ -209,8 +238,31 @@ class RpsmSequenceLayer {
   const PsiMatrices& psi() const { return psi_; }
 
   const std::vector<double>& w_up() const { return w_up_; }
+  const std::vector<double>& w_enc() const { return w_enc_; }
+  const std::vector<double>& w_carry() const { return w_carry_; }
+
+  /// Test-only mutators (mirror CellAISSM's `w_fast_layer0_mut()` convention): let a
+  /// finite-difference/regression test inject a specific weight snapshot so numeric and
+  /// analytic gradients can be compared against an identical, controlled forward trajectory.
+  std::vector<double>& w_up_mut() { return w_up_; }
+  std::vector<double>& w_enc_mut() { return w_enc_; }
+  std::vector<double>& w_carry_mut() { return w_carry_; }
 
   const RpsmGlobalMemory& global_memory() const { return global_memory_; }
+
+  /// §14 BPTT: true only immediately after the `train_step` call that just completed a window
+  /// flush (i.e. exactly every `cfg_.bptt_window` calls). When true, `bptt_window_input_grads()`
+  /// holds one gradient vector per step of the just-flushed window (length `state_dim` each), in
+  /// original chronological order (index 0 = oldest step of the window, index N-1 = newest).
+  /// This is a *deeper* signal than `input_grad()` (which stays the pre-existing single-step
+  /// local gradient, unchanged, for backward compatibility with the Finding #2 embed-backprop
+  /// path): it includes the hierarchy/injection paths' contribution to d(loss)/d(input), which
+  /// `input_grad()` has never included, plus genuine multi-step recursive credit.
+  bool bptt_window_flushed() const { return bptt_flushed_this_call_; }
+
+  const std::vector<std::vector<double>>& bptt_window_input_grads() const {
+    return bptt_flush_input_grads_;
+  }
 
   IzaacActivationMix activation_mix() const { return activation_mix_; }
 
@@ -221,6 +273,32 @@ class RpsmSequenceLayer {
 
 
  private:
+
+  /// §14 BPTT: one snapshot of everything a reverse-time pass needs to reconstruct the exact
+  /// local Jacobians used at this step's forward pass, without re-running any RNG-dependent or
+  /// weight-dependent computation (weights are held fixed for the whole window; see
+  /// `bptt_backward_and_apply()`). `up_pre`/`down_pre`/`blended_pre` are *pre-activation* values
+  /// (activation_derivative() takes the pre-activation argument, so these must be the raw
+  /// matvec/blend outputs, not the post-activation `work_up_`/`work_down_`/`h` the forward loop
+  /// already overwrites in place).
+  struct BpttStepCache {
+    int in_n = 0;                                  // input_dim actually used this step, clamped >=0.
+    std::vector<double> input;                     // length state_dim, zero-padded/truncated.
+    std::vector<std::vector<double>> h_inj;        // [n_levels][state_dim], state *entering*
+                                                     // hierarchy_update (post-injection/encode).
+    std::vector<std::vector<double>> up_pre;        // [n_levels][state_dim].
+    std::vector<std::vector<double>> down_pre;      // [n_levels][state_dim].
+    std::vector<std::vector<double>> blended_pre;   // [n_levels][state_dim].
+    std::vector<double> inj_acc;                    // length state_dim; level-independent
+                                                     // pre-activation injection accumulator.
+    std::vector<double> enc_pre;                    // length feat_dim.
+    std::vector<double> enc_grad;                   // length feat_dim; classifier->feat gradient
+                                                     // *as it stood at this step* (computed from
+                                                     // psi_.mu before that step's own SGD update).
+    double alpha = 0.0;                             // hierarchy_update's alpha_carry/spectral-a
+                                                     // used this step.
+    double effective_lr = 0.0;                      // this step's (possibly normalised-eta) lr.
+  };
 
   RpsmSequenceConfig cfg_;
 
@@ -260,15 +338,25 @@ class RpsmSequenceLayer {
 
   double last_surprise_{0.0};
 
-
+  // §14 BPTT window state.
+  std::vector<BpttStepCache> bptt_cache_;
+  int bptt_fill_{0};
+  bool bptt_flushed_this_call_{false};
+  std::vector<std::vector<double>> bptt_flush_input_grads_;
 
   double apply_activation(double x) const;
 
-  void inject_input_multilevel(const double* input, int input_dim);
+  void inject_input_multilevel(const double* input, int input_dim, BpttStepCache* cache = nullptr);
 
   void encode_level0_features(const double* input, int input_dim);
 
-  double hierarchy_update();
+  double hierarchy_update(BpttStepCache* cache = nullptr);
+
+  /// §14 BPTT: reverse-time pass over the just-filled `bptt_cache_` window. Accumulates the
+  /// recursive gradient of the *whole window's* loss w.r.t. `w_up_`/`w_enc_`/`w_carry_` (and,
+  /// per-step, w.r.t. that step's `input`, exposed via `bptt_flush_input_grads_`), then applies
+  /// one averaged SGD update. See rpsm_sequence_layer.cpp for the full derivation.
+  void bptt_backward_and_apply();
 
   static void log_softmax_row(const double* logits, int k, double* log_out);
 

@@ -207,6 +207,11 @@ class CyphaLMModel {
     std::vector<double> last_ssm_h_fast_;
     std::vector<std::vector<double>> bptt_buffer_;
     std::vector<std::vector<double>> bptt_slow_buffer_;
+    // §14 (RPSM_UPGRADE_PLAN.md §13.6/§13.7(a)): token ids for the RPSM BPTT window currently
+    // in flight, in the same chronological order `RpsmSequenceLayer` fills its own window cache
+    // -- zipped with `rpsm_layer_->bptt_window_input_grads()` at flush time so each cached
+    // step's *own* token gets the corresponding embedding-gradient correction.
+    std::vector<std::uint32_t> rpsm_bptt_token_ids_;
     int gria_d_in_ = 160;
     int last_gng_bmu_ = 0;
     int current_view_slot_ = 0;
@@ -254,6 +259,8 @@ class CyphaLMModel {
     void train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs,
                              cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
     void rpsm_embed_backprop(std::uint32_t token_id);
+    void rpsm_embed_backprop_from_grad(std::uint32_t token_id, const std::vector<double>& field_grad_raw);
+    void rpsm_bptt_embed_flush();
     void set_view_slot(int slot) { current_view_slot_ = slot; }
     void refresh_laplace_prior();
 

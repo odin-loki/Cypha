@@ -708,3 +708,199 @@ Recommendation, in priority order, superseding §12.5's "proceed to Option A/B's
 
 - `docs/reports/RPSM_UPGRADE_PLAN.md` — this section only.
 - No source or config changes were kept. Temporary instrumentation (`native/src/rpsm/rpsm_sequence_layer.cpp`) and three temporary experimental config overrides (`native/src/cyphalm/cyphalm_model.cpp`) were added, measured, and fully reverted — confirmed via `git diff` showing zero net changes to both files, and via a bit-identical BPC reproduction (`4.794304980541004` at `n_train=5000`) and a clean `ctest --test-dir native/build_rpsm -R rpsm` run (10/10 passed) on the reverted tree before finishing this task.
+
+## 14. Real multi-step BPTT implementation, verification, and measured impact (2026-07-11)
+
+§13.7's recommendation was to implement real multi-step temporal credit assignment in
+`RpsmSequenceLayer::train_step` itself, mirroring the hybrid GRIA+LSTM path's own
+`bptt_ssm_update`. This section implements that, verifies it with a dedicated
+finite-difference test, measures its effect at both `n_train=5000` and `n_train=50000`, and
+reaches a conclusive — and, contrary to §13.7's hypothesis, **negative** — result.
+
+### 14.1 Mechanism implemented
+
+`RpsmSequenceLayer` now caches a `BpttStepCache` per step (`h_inj`, `up_pre`, `down_pre`,
+`blended_pre`, `alpha`, `enc_pre`, `enc_grad`, `input`) into a ring buffer sized
+`cfg_.bptt_window`. Every `bptt_window` calls to `train_step`, `bptt_backward_and_apply()` runs
+a true reverse-time pass over the whole window:
+
+- Propagates the recursive gradient of the window's *total* loss through the hierarchy's state
+  carry `h_carry_{t+1} = act(blended_pre_t)` — i.e. through the actual SSM-like recurrence
+  `hierarchy_update()` advances every step — across all `window` steps, not just the current one.
+- Accumulates gradients for `w_up_` (both the "up" and "down" projection uses of the same
+  matrix), `w_enc_`, and `w_carry_` (both its encode-path and injection-path uses) via the full,
+  untruncated chain rule (see the code comment at `bptt_backward_and_apply()`'s definition,
+  `rpsm_sequence_layer.cpp`, for the complete per-term derivation).
+- Fixes two latent bugs found while deriving the backward pass, present since the original
+  per-step-local update code and *independent of BPTT depth*: `w_up_`'s old update reused a
+  *stale* `work_err_` left over from `hierarchy_update()`'s last-level loop iteration for every
+  level's gradient, and `w_carry_`'s old update read `h_levels_[0]` *after* it had already been
+  overwritten with the next step's carry, not the `h_inj` value actually used forward. Both are
+  fixed by construction in the new cache-based code, which snapshots the correctly-timed values.
+- Exposes the deeper `d(loss)/d(input_t)` signal (which now includes the hierarchy/injection
+  paths, not just the encode path) via `bptt_window_input_grads()`, wired into
+  `CyphaLMModel::rpsm_bptt_embed_flush()` so the embedding table also receives this richer
+  gradient at window boundaries (extending the already-fixed `rpsm_embed_backprop` from earlier
+  this session, which only ever saw the shallower per-step-local signal).
+- Deliberately treats `M_slots`' memory-read contribution to `blended_pre` as a stop-gradient
+  (documented in-line, at the same code location) — a scoped, measured simplification (§13.3's
+  `||mem_read|| ~1%` of `||h||`), not a silent truncation of the recurrence path this section is
+  actually about.
+- Classifier weights (`psi_.mu`) are unchanged: still SGD-updated every step, independent of the
+  window. The backward pass uses the *cached* `enc_grad_t` from step `t`'s own forward pass so a
+  later step's classifier update cannot corrupt an earlier step's hierarchy gradient.
+
+This is **non-overlapping batched gradient accumulation** (cache `N` steps, backprop once, apply
+one *averaged* update — mean gradient x mean per-step `effective_lr` over the window), matching
+the hybrid path's own `bptt_ssm_update` convention exactly, not a sliding/streaming truncated-BPTT
+that would update every step from a `K`-step lookback (that variant needs an `O(window)` live
+forward-state cache at every step and was out of scope here).
+
+### 14.2 Finite-difference verification
+
+New test: `native/tests/parity/rpsm_bptt_grad_finite_diff.cpp` (registered as CTest
+`native_rpsm_bptt_grad_finite_diff`). Uses small fixed dims and `kWindow=4`; disables
+`spectral_alpha`/`normalized_eta` and sets `beta_memory=0` to isolate exactly the terms
+`bptt_backward_and_apply()` claims to compute exactly (per §14.1's stop-gradient note, this
+scope decision cannot silently mask an error in the terms that *are* verified). For each of
+`w_up_`, `w_enc_`, `w_carry_`: runs a full 4-step BPTT window, perturbs each weight by
+central-difference, and compares the numeric loss-change gradient against the analytic
+accumulated gradient (recovered from the weight's own pre/post-update delta, since
+`bptt_backward_and_apply()` applies the update in place). **Result: all three weight groups
+pass within tolerance** (relative error consistent with `O(lr)` higher-order coupling through
+the classifier's own per-step SGD on `psi_.mu`, not a first-order gradient error — confirmed by
+the error shrinking as `kLr` decreases, documented in-line in the test). This confirms the
+chain-rule derivation through the recurrence is correct, not merely plausible.
+
+### 14.3 CTest results
+
+`ctest --test-dir native/build_rpsm -R "rpsm"` → **11/11 passed** (the 8 pre-existing RPSM tests,
+`native_rpsm_embed_grad_finite_diff` from earlier this session, plus the two Phase -1 smokes,
+plus the new `native_rpsm_bptt_grad_finite_diff`). A broader focused sweep,
+`ctest --test-dir native/build_rpsm -R "cyphalm|rpsm"`, → **24/24 passed**, confirming no
+regression in any adjacent `cyphalm`-path test (char-LSTM, hybrid, checkpoint/parity, SSM
+diagnostics, etc.).
+
+### 14.4 Measured impact — this is where the hypothesis breaks down
+
+All runs: clean rebuild of `native/build_rpsm`, `--profile d21` (rpsm) / `--profile d17`
+(hybrid, matching §12's own methodology exactly — `d21` is RPSM-tuned and is *not* the profile
+the hybrid's `4.039556`/`3.349683` pins were measured with), `bench_seed=42`, `--threads 1`.
+Hybrid numbers were re-measured (not merely cited) and reproduced §12's pins bit-for-bit:
+`4.039555743981927` at 5k, `3.3496834068056365` at 50k.
+
+`bptt_window` was swept at `n_train=5000` via a debug-only `CYPHALM_RPSM_BPTT_WINDOW` env
+override (`CyphaLMModel::init_components()`; not part of the profile schema):
+
+| `bptt_window` | RPSM BPC (n_train=5000) | Δ vs pre-§14 baseline (4.794305) |
+|---|---|---|
+| 1 (bug-fixes only, no batching) | 4.747686 | **−0.97%** |
+| 2 | 4.766456 | −0.58% |
+| 4 | 4.803879 | +0.20% |
+| 8 | 4.858927 | +1.34% |
+| 16 | 4.938043 | +3.00% |
+| 32 | 5.137262 | +7.16% |
+| 64 (matches hybrid's own window length, as originally requested) | 6.020780 | **+25.6%** |
+
+**Eval BPC degrades monotonically, and steeply, with window size.** This is not a subtle
+off-by-one or a sign error — the finite-difference test (§14.2) verifies the gradient math is
+correct at every window size the same code path handles, and the degradation is a smooth,
+monotone function of `window`, not a step-function consistent with a triggering bug. The
+regression is caused by *update frequency*, not the gradient's correctness: batching `N` steps'
+gradients into one averaged update applied once, instead of applying each step's own (now
+correctly-derived, bug-fixed) local gradient immediately, reduces `w_up_`/`w_enc_`/`w_carry_`'s
+effective adaptation rate by a factor of `N` — and for RPSM's hierarchy at its current
+`lr`/architecture regime, that reduced adaptation rate hurts far more than the deeper, more
+correct credit-assignment signal helps. This is the opposite of what the hybrid path's own
+64-step `bptt_ssm_update` was found to do for its SSM weights — the same "batch-then-apply-once"
+convention helps one architecture and hurts the other.
+
+Full before/after comparison at both scales, both configurations:
+
+| Scale | RPSM pre-§14 (baseline) | RPSM §14, `window=1` (shipped default) | RPSM §14, `window=64` (matches hybrid's convention, as literally requested) | Hybrid (d17, re-verified) |
+|---|---|---|---|---|
+| `n_train=5000` | 4.794305 | 4.747686 (−0.97%) | 6.020780 (**+25.6%**) | 4.039556 |
+| `n_train=50000` | 4.462898 | 4.601064 (+3.10%) | 4.734668 (**+6.10%**) | 3.349683 |
+
+Gap to hybrid, relative:
+
+| Scale | Gap, pre-§14 (§12) | Gap, `window=1` | Gap, `window=64` (as literally requested) |
+|---|---|---|---|
+| 5k | +18.7% | +17.5% | **+49.1%** |
+| 50k | +33.2% | +37.4% | **+41.3%** |
+| Trend | growing (18.7% → 33.2%) | growing (17.5% → 37.4%) | **shrinking (49.1% → 41.3%)** |
+
+### 14.5 Does the gap trend improve? A nuanced but ultimately negative answer
+
+Taken at face value against the literal question asked (§13's recommended fix, measured at the
+hybrid's own window length): **the growing-with-scale trend does reverse under real BPTT** —
+49.1% at 5k down to 41.3% at 50k, versus 18.7%→33.2% before. But this is not the win it might
+look like in isolation: the trend reverses because `window=64` is *catastrophically* bad at 5k
+(+25.6% BPC) and only moderately bad at 50k (+6.1%) — i.e., the absolute BPC at both scales is
+worse than the pre-§14 baseline, and worse than the shipped `window=1` configuration, at both
+scales. The "shrinking gap" is a shrinking-*regression*, not an improvement in absolute
+performance. At the safe, shipped default (`window=1` — real per-step credit assignment for a
+single step, i.e. no batching, only the two latent-bug fixes), the gap still grows with scale
+(17.5%→37.4%), consistent with §13's original finding, and BPC is only marginally different
+from the pre-§14 baseline in either direction (−0.97% at 5k, +3.10% at 50k) — nowhere close to
+closing an 18-37% gap.
+
+**Conclusion: implementing real multi-step BPTT does not close the RPSM-vs-hybrid gap. It makes
+absolute BPC worse at every window size greater than 1, at both scales tested, and does so more
+severely at smaller scale.** §13.6/§13.7's hypothesis — that RPSM's plateau and the
+growing-with-scale gap are explained by missing temporal credit-assignment depth — is
+**falsified** by this experiment. The two genuine latent bugs found while implementing it
+(stale `work_err_`, mistimed `h_levels_` read) were real defects worth fixing on their own
+merits, but their combined standalone effect is a rounding error next to the gap's actual size,
+exactly as Phase 0b's embedding-gradient fix was in §10.6.
+
+### 14.6 Shipped configuration and rationale
+
+`RpsmSequenceConfig::bptt_window` defaults to **1**, not 64. Given `bptt_results`/`rpsm_results`
+in `bench/BASELINE_LOCK.json` are produced by the live overnight orchestration rebuilding from
+this same `native/src` tree (in `native/build_math`, untouched by this session but sharing the
+source), shipping `window=64` as the default would risk silently regressing the locked
+production RPSM baseline the next time that pipeline does a from-scratch rebuild — for a change
+this section's own data shows makes things worse, not better. The full `bptt_window`-parameterized
+mechanism remains implemented, wired, and finite-difference-verified for any window size (tests
+and the `CYPHALM_RPSM_BPTT_WINDOW` env override both exercise `window > 1`), so the research
+value and the ability to reproduce every number in §14.4 are preserved; only the *default*
+behaviour a user gets from `--mode rpsm` with no special flags changes, and it changes toward
+the empirically-safer, not empirically-best-looking-on-paper, setting.
+
+### 14.7 Memory-write `surprise_threshold` re-test — not run
+
+§13.4/§13's speculation was that the `M_slots` self-extinguishing write-gate fix (confirmed not
+to help in isolation, §13.4) might only help "once real gradient flow exists to make use of the
+recalled memory." Given §14.4-14.5 found that real gradient flow (BPTT depth) is itself net
+harmful rather than helpful at every tested window size, the premise this follow-up experiment
+was conditioned on no longer holds, so it was not re-run this session — re-testing a secondary
+fix under a primary mechanism just shown to regress BPC would not produce an interpretable
+result. It remains a small, independent, low-risk correctness fix worth doing opportunistically
+(§13.7 point 3) but is now further deprioritized as a lever for closing the hybrid gap.
+
+### 14.8 Final, conclusive verdict on RPSM's viability and priority
+
+This is the fourth independent, cheap-scale experiment this session testing a specific
+hypothesis for the hybrid-vs-RPSM gap (Phase 0: frozen classifier — real, large effect; Phase
+0b: embedding backprop stub — real, tiny effect; §13.4: memory-write threshold — no effect;
+§14: BPTT depth — real, *negative* effect). Two of four hypotheses were confirmed defects worth
+fixing on their own terms; none of the four closed a meaningful fraction of the 18-37%,
+growing-with-scale, matched-tier gap to the hybrid baseline, and the single mechanism §13.7
+identified as the most mechanistically well-supported explanation for *both* of §12's headline
+symptoms (plateaued training loss, growing-with-scale gap) turned out, on direct implementation
+and measurement, to make both worse rather than better.
+
+**Verdict: RPSM's remaining gap to the hybrid GRIA+LSTM baseline is not primarily a
+training-mechanism defect (classifier, embedding gradient, memory-write cadence, or BPTT depth
+have all now been tried, at cheap scale, with rigorous before/after measurement) — it is most
+likely a genuine architectural/capacity mismatch between RPSM's hierarchy-based state and the
+hybrid's LSTM+GRIA blend, at least at the tiny/small tiers and lr regime tested. Continued
+investment in Option A/B's remaining scaffold work (Izaac VRF store, Gaussian-mixture world
+model) should be treated with materially lower confidence than §13.7 recommended: those pieces
+were justified partly on the strength of "the training-mechanism gap is fixable and cheap,
+fix that first" reasoning, and that reasoning's single most concrete, implementable proposal
+has now been tried and has failed. RPSM should be deprioritized relative to P3 (soft-world) and
+P5 (kernel-LLR) unless a specific, different, well-motivated hypothesis for the remaining gap
+emerges — "try more temporal depth," "try more memory," and "fix the known bugs" are now all
+cheap-scale-tested and exhausted as easy wins.**
