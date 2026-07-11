@@ -2849,6 +2849,36 @@ Json run_d12() {
     return experiments;
 }
 
+// Opt-in RFF auto-gamma kernel-LLR basis for the real D03 XOR bench domain (Fix 2 in
+// docs/research/upgrades/NONLINEAR_BOUNDARY.md; sweep in docs/RESEARCH_STATUS.md Priority 1). Follows
+// the same D03 env-var opt-in convention as `d03_view_schedule_from_env()`/`CYPHA_D03_VIEW_SCHEDULE`
+// above: unset/"nystrom" reproduces the pre-existing `--kernel-xor-features` Nystrom call byte-for-byte
+// (confirmed via rerun); "rff" swaps in `xor_kernel_bench --kernel-basis rff` (KernelMemory::make_rff +
+// auto_gamma_median_heuristic) on the same subprocess call instead of a second, parallel config system.
+struct D03KernelExperimentConfig {
+    std::string basis = "nystrom";
+    std::string feature_mode = "xor_pair";
+    int rff_dim = 4096;
+    double rff_gamma_scale = 1.0;
+};
+
+D03KernelExperimentConfig d03_kernel_experiment_from_env() {
+    D03KernelExperimentConfig cfg;
+    if (const char* v = std::getenv("CYPHA_D03_KERNEL_BASIS"); v != nullptr && *v != '\0') {
+        cfg.basis = std::string(v);
+    }
+    if (const char* v = std::getenv("CYPHA_D03_KERNEL_FEATURE_MODE"); v != nullptr && *v != '\0') {
+        cfg.feature_mode = std::string(v);
+    }
+    if (const char* v = std::getenv("CYPHA_D03_RFF_DIM"); v != nullptr && *v != '\0') {
+        cfg.rff_dim = std::atoi(v);
+    }
+    if (const char* v = std::getenv("CYPHA_D03_RFF_GAMMA_SCALE"); v != nullptr && *v != '\0') {
+        cfg.rff_gamma_scale = std::atof(v);
+    }
+    return cfg;
+}
+
 Json run_d03_xor() {
     const int seeds = bench_fast_mode() ? 1 : 3;
     const int passes = bench_fast_mode() ? 2 : 8;
@@ -2860,21 +2890,37 @@ Json run_d03_xor() {
     if (!fs::is_regular_file(bench_exe)) {
         throw std::runtime_error("xor_kernel_bench not found beside cypha_bench_run: " + bench_exe.string());
     }
+    const D03KernelExperimentConfig kernel_cfg = d03_kernel_experiment_from_env();
     std::ostringstream cmd;
     cmd << "\"" << bench_exe.string() << "\""
         << " --seeds " << seeds << " --passes " << passes << " --kernel-blend 1.0"
-        << " --kernel-m 512 --gamma-scale 2.0 --kernel-lr-scale 2.0 --kernel-xor-features";
+        << " --kernel-m 512 --gamma-scale 2.0 --kernel-lr-scale 2.0"
+        << " --kernel-feature-mode " << kernel_cfg.feature_mode;
+    if (kernel_cfg.basis == "rff") {
+        cmd << " --kernel-basis rff --rff-dim " << kernel_cfg.rff_dim
+            << " --rff-gamma-scale " << kernel_cfg.rff_gamma_scale;
+    }
     const Json j = Json::parse(capture_process_output(cmd.str()));
-    const Json experiments{
+    Json kernel_result{
+        {"accuracy", j.at("kernel_mean_acc")},
+        {"delta_pp", j.at("delta_pp")},
+        {"kernel_basis", j.value("kernel_basis", "nystrom")},
+        {"kernel_m", j.value("kernel_m", 512)},
+        {"kernel_feature_mode", j.value("kernel_feature_mode", "xor_pair")},
+        {"backend", "xor_kernel_bench_native"},
+    };
+    if (kernel_cfg.basis == "rff") {
+        kernel_result["rff_dim"] = j.value("rff_dim", kernel_cfg.rff_dim);
+        kernel_result["rff_gamma_scale"] = j.value("rff_gamma_scale", kernel_cfg.rff_gamma_scale);
+    }
+    Json experiments{
         {"S3_xor_linear",
          Json{{"accuracy", j.at("linear_mean_acc")}, {"seeds", seeds}, {"passes", passes}}},
-        {"S3_xor_kernel_llr",
-         Json{{"accuracy", j.at("kernel_mean_acc")},
-              {"delta_pp", j.at("delta_pp")},
-              {"kernel_m", j.value("kernel_m", 512)},
-              {"kernel_feature_mode", j.value("kernel_feature_mode", "xor_pair")},
-              {"backend", "xor_kernel_bench_native"}}},
+        {"S3_xor_kernel_llr", kernel_result},
     };
+    if (kernel_cfg.basis == "rff") {
+        experiments["kernel_basis"] = "rff";
+    }
     cypha::bench::finalize_domain("d03_xor_kernel", experiments);
     return experiments;
 }

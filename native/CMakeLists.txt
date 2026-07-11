@@ -1096,6 +1096,26 @@ set_tests_properties(native_d03_view_schedule_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1;CYPHA_D03_VIEW_SCHEDULE=schedule_a"
 )
 
+# D03 XOR kernel-LLR RFF basis wiring (Fix 2, docs/research/upgrades/NONLINEAR_BOUNDARY.md). Default
+# (flag unset) must reproduce the pre-existing Nystrom `d03_xor` bench domain behavior exactly; the
+# second test exercises the opt-in RFF auto-gamma code path end-to-end through the real bench domain
+# (not just the standalone xor_kernel_bench tool).
+add_test(
+  NAME native_d03_xor_kernel_basis_default_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d03_xor
+)
+set_tests_properties(native_d03_xor_kernel_basis_default_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
+
+add_test(
+  NAME native_d03_xor_kernel_basis_rff_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d03_xor
+)
+set_tests_properties(native_d03_xor_kernel_basis_rff_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1;CYPHA_D03_KERNEL_BASIS=rff;CYPHA_D03_RFF_DIM=512"
+)
+
 configure_file(
   "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
   "${CMAKE_CURRENT_BINARY_DIR}/d23_overnight_lock_smoke.json"

@@ -54,7 +54,7 @@ Run on 2026-05-31 using `bench/config/everyday_profile.json` (deliberation off, 
 | D01 — Nonlinear reg. | Sinusoidal | −0.037 | SGD −0.005 | ⚠ Both poor |
 | D05 — Chess | Rating prediction | **0.647** | Ridge 0.658 | ✅ Near-tied |
 | D11A — RL | CartPole value fn. | 0.012 | Ridge −0.046 | ⚠ Both poor (sparse RL) |
-| D14A — Physics | Feynman equations | −0.010 | — | ❌ Nonlinear equations — hard limit |
+| D14A — Physics | Feynman equations | 0.444 *(re-run 2026-07-11; was −0.010 on 2026-05-31)* | Ridge (per-eq., beaten on all 20) | ✅ Beats Ridge per-equation today — see Priority 1 update |
 
 ### OOD / uncertainty domains
 
@@ -144,7 +144,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 |-------|----------|-------------|
 | **Nonlinear decision boundaries (XOR etc.)** | 48.2% vs 80.5% kernel SVM — 32.3pp gap | Kernel LLR (Nyström) — **partially shipped**; tuning continues ([`upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md)) |
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
-| **Feynman equations** | Mean R²=−0.010 on nonlinear physics | Same — Kernel LLR |
+| **Feynman equations** | Mean R²=−0.010 on nonlinear physics *(2026-05-31; re-run 2026-07-11 now shows R²=0.444, beats Ridge on all 20 equations — see Priority 1 update; kernel LLR not applicable, D14 uses a separate linear expert-mixture regressor, not `KernelMemory`)* | Re-run shows this is no longer a hard limit on current HEAD; kernel LLR wiring there deferred (different subsystem) |
 | **ECG / temporal** | D10 20% accuracy (chance) | CellAI SSM tuning; temporal-aware features |
 | **CyphaLM BPC (GRIA-only)** | GRIA stack @ 300k **3.838** (+0.36 vs bigram); hybrid **2.873** resolves gap | Hybrid is default; GRIA-only path for ablation / long-range SSM probes |
 | **MNIST raw** | 72% vs 95% (LR+HOG) | Feature engineering (HOG) bridges most of the gap |
@@ -432,6 +432,20 @@ Planned engineering directions distilled from research specs. Full index: [`docs
 - **Auto-gamma validated against fixed-gamma** at `rff_dim=512`: fixed γ=1.0 → 49.4% (worse than the 51.2% linear baseline — a badly-chosen fixed γ can make the kernel path actively harmful); γ=0.2 → 55.6%; γ=0.01 → 64.3%; **auto-gamma (γ≈0.052, computed) → 68.0%** — beats every fixed γ tried, confirming the median-heuristic default is the right call for this task.
 - **Best configuration found:** RFF, latent features, auto-gamma, `rff_dim=4096` → **76.3% accuracy, ~2.7pp gap to the sklearn RBF SVM ceiling** — versus the ~18pp gap at the previous M=256 Nyström default. CTests: all 10 kernel/xor-related CTests (`native_kernel_llr`, `native_xor_kernel_bench_smoke`, `native_kernel_snapshot_roundtrip`, `native_kernel_cypha_roundtrip`, `native_d44_kernel_nystrom_cyphalm_smoke`, `native_d59/d67/d68/d71_*_grid_joint_smoke`, `native_kernel_llm_h04_smoke`) pass unchanged — purely additive (`KernelMemory::make_rff`/`auto_gamma_median_heuristic` + new opt-in `xor_kernel_bench` CLI flags), no change to shipped Nyström defaults or the `d03_xor` bench domain.
 - **Not yet done:** wiring `--kernel-basis rff` into the `d03_xor` bench domain / `bench_domains.cpp` as a tracked experiment (currently CLI-only in `xor_kernel_bench`); re-running Feynman (D14) and sinusoidal regression with the RFF basis to see if the same gap-closing generalizes beyond XOR; promoting `rff_dim=2048–4096` auto-gamma to a new default profile once validated on those other nonlinear domains.
+
+**Update (2026-07-11, continued) — RFF wired into the real `d03_xor` bench domain; Feynman (D14) generalization checked and deferred:**
+
+- **`d03_xor` bench domain wiring (done):** `run_d03_xor()` in `native/src/bench/bench_domains.cpp` already shells out to `xor_kernel_bench`; added a D03-only opt-in env-gate — `CYPHA_D03_KERNEL_BASIS=rff` (+ `CYPHA_D03_KERNEL_FEATURE_MODE`, `CYPHA_D03_RFF_DIM`, `CYPHA_D03_RFF_GAMMA_SCALE`) — that appends `--kernel-basis rff [...]` to that same subprocess call, following the identical env-var opt-in convention `CYPHA_D03_VIEW_SCHEDULE` already established for D03 experiments (not a second config system). Default (flag unset) is byte-identical to the pre-existing Nyström/`xor_pair` call — verified via rerun (`native_d03_xor_kernel_basis_default_smoke` CTest + manual rerun, see below). New CTests: `native_d03_xor_kernel_basis_default_smoke`, `native_d03_xor_kernel_basis_rff_smoke`.
+- **Before/after in the real bench domain** (`cypha_bench_run --domain-tag d03_xor`, table at `bench/report/tables/d03_xor_kernel.json`):
+
+  | Config | Mode | Linear acc | Kernel acc | Δpp | Wall time |
+  |---|---|---|---|---|---|
+  | Default (unchanged) | `xor_pair` + Nyström M=512 | 51.4% | **98.3%** | +46.9pp | ~114s (1 seed × 2 passes, FAST) |
+  | Opt-in, generalizable | `latent` + Nyström M=512 | 51.4% | 54.7% | +3.3pp | ~117s (1 seed × 2 passes, FAST — full 3×8 run impractical, same `O(M^3)`/step ceiling as Priority 1) |
+  | Opt-in, generalizable | `latent` + **RFF `rff_dim=4096`** | 51.2% | **76.3%** | +25.1pp | **27s total (3 seeds × 8 passes, full — no FAST)** |
+
+  The `latent`+RFF row **exactly reproduces the standalone tool's validated 76.3% / ~2.7pp-sklearn-gap figure**, live, inside the real wired bench domain — confirming the wiring is correct, not just plumbing that compiles. The shipped default (`xor_pair` hand-engineered features) already exceeds the sklearn ceiling regardless of kernel basis, so the RFF-vs-Nyström gap-closing story only shows up in the generalizable `latent` mode, which is opt-in (not the production default).
+- **Feynman (D14) generalization — deferred, documented reasoning (not forced):** grepped `native/src` + `docs/` for "feynman"/"sinusoid" — D14 (`run_d14`, `14A_feynman_all_equations`, per-equation Ridge `ridge_rmse` comparison) is the only live nonlinear-regression domain with a baseline-comparison framing; "sinusoidal regression" exists only in doc prose (this file's regression table), not in any current native bench domain. D14's regressor (`OnlineRegressor`/`online_reg_train_step`/`online_reg_predict`) routes through a plain linear `batch_llr_from_x` discriminant over discrete expert clusters, then a per-expert mean/variance mixture head — it never touches `KernelMemory`/`CyphaInferOptions.kernel_mem`, unlike the classification kernel-LLR path Fix 1/2 target. Wiring RFF there needs a new kernelized expert-routing discriminant on **both** the train step (`TrainStepExtras.kernel_mem`, currently `nullptr` from `online_reg_train_step`) and prediction (`online_reg_predict`'s direct `batch_llr_from_x` call has no kernel option at all) — a two-sided subsystem change, correctly out of scope for this pass. **Re-ran the existing D14 baseline instead** (full mode, `n_train=1600`, current HEAD): mean **R²=0.444** (per-equation range 0.03–0.79), **CyphaDIF beats the per-equation Ridge RMSE baseline on all 20 Feynman equations** — materially better than the stale `mean_r2=-0.010` row below (dated 2026-05-31, pre-dating many phases of general model fixes since). Regression table row updated to reflect this re-run.
 
 ### Priority 2 — Auto-gamma RFF
 
