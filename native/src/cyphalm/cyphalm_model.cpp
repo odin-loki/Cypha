@@ -24,6 +24,7 @@
 #include "cypha/cyphalm/cyphalm_views.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/bench/bench_paths.hpp"
+#include "cypha/intelligence/epistemic_threshold.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/measurers.hpp"
 #include "cypha/intelligence/profile_guided_loss.hpp"
@@ -862,6 +863,53 @@ PredictNextOutput CyphaLMModel::repredict_hybrid_blend(double blend_logit) const
     return out;
 }
 
+namespace {
+double max_prob_confidence(const std::vector<double>& log_probs) {
+    if (log_probs.empty()) return 0.0;
+    return std::exp(*std::max_element(log_probs.begin(), log_probs.end()));
+}
+}  // namespace
+
+PredictNextOutput CyphaLMModel::self_correct_if_needed(
+    const PredictNextOutput& initial, cypha::intelligence::EpistemicThreshold& threshold) const {
+    if (!cfg_.use_self_correcting_loop || cfg_.context_mode != ContextMode::Hybrid) {
+        return initial;
+    }
+    const double r_eu =
+        cypha::intelligence::compute_epistemic_ratio(initial.epistemic_var, initial.aleatoric_var);
+    if (std::getenv("CYPHA_SC_DEBUG")) {
+        std::cerr << "[sc-debug] r_eu=" << r_eu << " threshold=" << threshold.threshold()
+                  << " trigger=" << (threshold.should_correct(r_eu) ? 1 : 0) << "\n";
+    }
+    if (!threshold.should_correct(r_eu)) {
+        return initial;
+    }
+    // Mirrors the LM-native self-correction algorithm already used on the generation/decode
+    // path (`self_correct_predict` in cyphalm_generation.cpp): widen the hybrid blend toward
+    // the LSTM head over up to `kMaxSelfCorrectPasses` passes, keeping whichever pass has
+    // higher max-softmax confidence. Re-blends cached logits via `repredict_hybrid_blend`
+    // (no extra forward pass), so this is cheap relative to `predict_next`.
+    constexpr int kMaxSelfCorrectPasses = 3;
+    PredictNextOutput best = initial;
+    double best_conf = max_prob_confidence(best.log_probs);
+    double pass_blend = hybrid_blend_logit_;
+    int passes = 1;
+    bool corrected = false;
+    while (passes < kMaxSelfCorrectPasses && threshold.should_correct(r_eu)) {
+        pass_blend = pass_blend * 0.82 + 0.05;
+        const PredictNextOutput retry = repredict_hybrid_blend(pass_blend);
+        const double retry_conf = max_prob_confidence(retry.log_probs);
+        if (retry_conf > best_conf) {
+            best = retry;
+            best_conf = retry_conf;
+            corrected = true;
+        }
+        ++passes;
+    }
+    threshold.update(r_eu, corrected);
+    return best;
+}
+
 void CyphaLMModel::ewc_snapshot() {
     ewc_.snapshot(lstm_.get(), active_ssm(), gria_.get());
 }
@@ -1130,7 +1178,11 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     }
     bptt_ssm_update(next_token_id);
     if (cfg_.use_reversible_cell && reversible_cell_ && reversible_cell_->has_pair()) {
-        (void)reversible_cell_->backward_stub();
+        // NOTE: reconstruct()'s result is intentionally unused today — this call exercises the
+        // RevNet-style reconstruct path (H11) but nothing currently consumes x_hat for a
+        // memory-savings recompute-on-backward / gradient-checkpointing pattern (the usual
+        // reason a RevNet reconstruct exists). See docs/reports/STUB_AUDIT_2026-07-11.md.
+        (void)reversible_cell_->reconstruct();
     }
     if (mode == ContextMode::Hybrid && lstm_) {
         if (hybrid_lstm_has_cache_) {
@@ -1737,6 +1789,7 @@ double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval,
     const int vocab = static_cast<int>(cfg_.vocab_size);
     double bits = 0.0;
     int scored = 0;
+    cypha::intelligence::EpistemicThreshold self_correct_threshold(0.5, 5.0);
     for (int i = 0; i < n; ++i) {
         const std::uint32_t tok = static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]);
         std::vector<double> embed;
@@ -1747,7 +1800,10 @@ double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval,
                 embed.clear();
             }
         }
-        const auto pred = predict_next(tok);
+        auto pred = predict_next(tok);
+        if (cfg_.use_self_correcting_loop) {
+            pred = self_correct_if_needed(pred, self_correct_threshold);
+        }
         const int nxt = ids[static_cast<std::size_t>(i + 1)];
         if (nxt < 0 || nxt >= vocab ||
             static_cast<std::size_t>(nxt) >= pred.log_probs.size()) {
@@ -1774,6 +1830,7 @@ void CyphaLMModel::accumulate_intelligence_profile(const std::vector<int>& ids, 
     const int vocab = static_cast<int>(cfg_.vocab_size);
     LmIntelligenceMonitor monitor;
     monitor.set_use_eigenvalue_d_eff(cfg_.use_eigenvalue_d_eff);
+    cypha::intelligence::EpistemicThreshold self_correct_threshold(0.5, 5.0);
     for (int i = 0; i < n; ++i) {
         const std::uint32_t tok = static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]);
         std::vector<double> embed;
@@ -1784,7 +1841,10 @@ void CyphaLMModel::accumulate_intelligence_profile(const std::vector<int>& ids, 
                 embed.clear();
             }
         }
-        const auto pred = predict_next(tok);
+        auto pred = predict_next(tok);
+        if (cfg_.use_self_correcting_loop) {
+            pred = self_correct_if_needed(pred, self_correct_threshold);
+        }
         const int nxt = ids[static_cast<std::size_t>(i + 1)];
         if (nxt < 0 || nxt >= vocab ||
             static_cast<std::size_t>(nxt) >= pred.log_probs.size()) {

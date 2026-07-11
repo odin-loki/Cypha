@@ -39,7 +39,16 @@ std::vector<double> ReversibleSSMCell::forward(const std::vector<double>& x,
     return last_y_;
 }
 
-std::vector<double> ReversibleSSMCell::backward_stub() const {
+// Exact inverse of forward(): forward computes y_i = x_i + tanh(delta_i) and caches delta_i
+// verbatim in last_delta_ (not re-derived from anything else). Substituting that identical
+// cached delta_i back in gives:
+//     x_hat_i = y_i - tanh(delta_i) = (x_i + tanh(delta_i)) - tanh(delta_i) = x_i
+// exactly (up to floating-point rounding of the two additions/subtraction — tanh(delta_i) is
+// evaluated once in forward() and delta_i is stored as-is, so there is no re-evaluation drift).
+// This is why the "stub" name was misleading: there is no missing piece here (delta does not
+// need to be reconstructed from anything — it is simply cached), and every call site below
+// only ever calls this after forward() populated last_delta_/last_y_ for the *same* delta.
+std::vector<double> ReversibleSSMCell::reconstruct() const {
     if (!has_pair_) {
         return {};
     }

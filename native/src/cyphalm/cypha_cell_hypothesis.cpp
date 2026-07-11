@@ -21,7 +21,7 @@ const std::vector<CellVariantSpec>& variant_table() {
         {"H08", "TieredContext cell", 2, true, "context_bank", "short/mid/long tiered context bank attention"},
         {"H09", "GRIA-gated mixture", 2, true, "hybrid", "α trajectory shifts ordered GRIA vs chaotic LSTM blend"},
         {"H10", "NMP regularised", 2, true, "hybrid", "spec_alpha -> 0.485"},
-        {"H11", "Reversible cell", 2, true, "ssm", "RevNet additive coupling + backward reconstruct stub on SSM ctx"},
+        {"H11", "Reversible cell", 2, true, "ssm", "RevNet additive coupling + exact analytic backward reconstruct on SSM ctx"},
         {"H12", "MDL forget", 2, true, "hybrid", "L2 norm projection on field hidden state"},
         {"H13", "Priority replay recurrence", 2, true, "hybrid", "compressive memory priority replay slots"},
         {"H14", "OOD-branching cell", 2, true, "hybrid", "hybrid blend shifts to LSTM when DIF epistemic high"},

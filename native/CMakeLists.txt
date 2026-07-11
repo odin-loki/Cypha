@@ -290,6 +290,12 @@ target_link_libraries(tau_forget_gate_smoke PRIVATE cypha_lm_native)
 add_executable(ewc_smoke tools/ewc_smoke.cpp)
 target_link_libraries(ewc_smoke PRIVATE cypha_core)
 
+add_executable(ewc_real_fisher_smoke tools/ewc_real_fisher_smoke.cpp)
+target_link_libraries(ewc_real_fisher_smoke PRIVATE cypha_core)
+
+add_executable(reversible_ssm_cell_smoke tools/reversible_ssm_cell_smoke.cpp)
+target_link_libraries(reversible_ssm_cell_smoke PRIVATE cypha_lm_native)
+
 add_executable(curriculum_smoke tools/curriculum_smoke.cpp)
 target_link_libraries(curriculum_smoke PRIVATE cypha_core)
 
@@ -336,10 +342,12 @@ set(
   cypha_export_gguf
   intelligence_profiler_smoke
   ewc_smoke
+  ewc_real_fisher_smoke
   ewc_d16b_smoke
   ewc_cyphalm_smoke
   ewc_hybrid_smoke
   ewc_weights_smoke
+  reversible_ssm_cell_smoke
   native_sr_gate_laws_smoke
   federated_worker_smoke
   federated_tls_smoke
@@ -906,6 +914,11 @@ add_test(
 )
 
 add_test(
+  NAME native_ewc_real_fisher_smoke
+  COMMAND "$<TARGET_FILE:ewc_real_fisher_smoke>"
+)
+
+add_test(
   NAME native_ewc_d16b_smoke
   COMMAND "$<TARGET_FILE:ewc_d16b_smoke>"
 )
@@ -923,6 +936,11 @@ add_test(
 add_test(
   NAME native_ewc_weights_smoke
   COMMAND "$<TARGET_FILE:ewc_weights_smoke>"
+)
+
+add_test(
+  NAME native_reversible_ssm_cell_smoke
+  COMMAND "$<TARGET_FILE:reversible_ssm_cell_smoke>"
 )
 
 add_test(

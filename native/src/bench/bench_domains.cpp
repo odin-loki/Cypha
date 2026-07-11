@@ -1844,6 +1844,19 @@ Json run_d15() {
     return experiments;
 }
 
+// Opt-in: use EwcRegularizer::snapshot_calibrated (real diagonal Fisher from calibration-batch
+// squared gradients) instead of the default snapshot() squared-anchor proxy. Off by default so
+// existing D16B/D16H results are unchanged unless explicitly requested. See
+// docs/reports/STUB_AUDIT_2026-07-11.md.
+bool d16_real_fisher_enabled() {
+    const char* v = std::getenv("CYPHA_D16_REAL_FISHER");
+    if (v == nullptr) {
+        return false;
+    }
+    const std::string s(v);
+    return s == "1" || s == "true" || s == "True" || s == "yes";
+}
+
 Json run_d16_ewc_probe() {
     const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
     const cypha::bench::ProfileJson regime = cypha::bench::classification_params(&profile);
@@ -1905,7 +1918,19 @@ Json run_d16_ewc_probe() {
         }
         train_task(clf, *iris, use_ewc ? &extras : nullptr);
         if (use_ewc) {
-            ewc.snapshot(clf.mem, clf.infer);
+            if (d16_real_fisher_enabled()) {
+                std::vector<std::vector<double>> calib_x;
+                std::vector<std::string> calib_y;
+                calib_x.reserve(iris->train_x.size());
+                calib_y.reserve(iris->train_y.size());
+                for (std::size_t i = 0; i < iris->train_x.size(); ++i) {
+                    calib_x.push_back(pad_to_max(iris->train_x[i], max_dim));
+                    calib_y.push_back(iris->name + "_" + iris->train_y[i]);
+                }
+                ewc.snapshot_calibrated(clf.mem, clf.infer, calib_x, calib_y);
+            } else {
+                ewc.snapshot(clf.mem, clf.infer);
+            }
         }
         const double acc_before = eval_task(clf, *iris);
         train_task(clf, *wine, use_ewc ? &extras : nullptr);
@@ -1921,6 +1946,7 @@ Json run_d16_ewc_probe() {
         if (use_ewc) {
             row["ewc_lambda"] = extras.ewc_lambda;
             row["ewc_penalty_final"] = ewc.penalty(clf.mem, clf.infer);
+            row["ewc_real_fisher"] = d16_real_fisher_enabled();
         }
         return row;
     };
