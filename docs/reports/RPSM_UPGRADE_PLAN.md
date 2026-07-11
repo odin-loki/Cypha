@@ -518,3 +518,193 @@ Reasoning, weighing everything found across all phases:
 - `docs/RESEARCH_STATUS.md:393` and surrounding context (`:383-397`, re-read directly, not just via §3.2's summary)
 - `native/include/cypha/cyphalm/cyphalm_config.hpp:53-54` (`alpha_init`/`alpha_learnable`), `native/src/cyphalm/cypha_cell_hypothesis.cpp:84-156` (H01-H22 cell variants, `alpha_init=0.485` at H10) — cross-referenced per the task's suggestion; confirmed unrelated GRIA-gate construct, but corroborates `0.485` as an established "edge of chaos" convention in this codebase
 - `native/src/cyphalm/gria_lowrank.cpp`, `native/src/cyphalm/cyphalm_gria.cpp` (alpha-gate implementations, confirmed structurally unrelated to spectral radius)
+
+---
+
+## 12. 50k matched-scale verification (2026-07-11)
+
+**Status: the decisive follow-up measurement §11.7 called for. Verdict: the gap is real, growing with scale, and now justifies committing to Option A/B — this closes the ambiguity left by the 5k-only measurement.**
+
+This phase made **no source changes** (measurement-only, as instructed). All work was done from `native/build_rpsm` (three prior chained subagents' fixes — Phase 0, 0b, -1 — already built there; confirmed up to date against `HEAD` at commit `ff26a57`, which includes the required `048780e`/`45fc242`/`77e0955` commits). `ctest --test-dir native/build_rpsm -R rpsm` re-confirmed **10/10 passing** before any measurement, with zero regressions.
+
+### 12.1 Method
+
+Per §11.7's own top recommendation ("run one more bug-fixed RPSM-vs-hybrid comparison at a meaningfully larger matched scale, e.g. 50k"), ran both modes at `n_train=50000` (the full 50k tier was tractable — RPSM finished in ~65s, hybrid in ~13.3 min, both single-threaded — so no fallback to 20k was needed), `n_eval=512`, `bench_seed=42`, `wikitext2` corpus, from the same clean `native/build_rpsm/cyphalm_bench_native.exe`:
+
+| Mode | Profile | BPC | n_train | n_eval | train_epochs (default) |
+|---|---|---|---|---|---|
+| `rpsm` | d21 | **4.462898** | 50000 | 512 | 1 |
+| `hybrid` (`hybrid_gria_lstm`) | d17 | **3.349683** | 50000 | 512 | 2 (`hybrid_gria_weight≈0.0007` — still almost pure-LSTM at this scale, same as at 5k) |
+
+Same disclosed caveat as §11.6: the two modes' *default* `train_epochs` differ (hybrid=2, RPSM=1) — this is what each `--mode`'s as-shipped CLI default gives a user at this `n_train`, not an artificially-equalized comparison. Critically, **this asymmetry is constant across both the 5k and 50k measurements** (hybrid has always gotten 2x RPSM's effective passes over the training window, at both scales), so it cannot by itself explain a *change* in the relative gap between the two scale points — see §12.3.
+
+### 12.2 The gap: 5k → 50k trend
+
+| Scale | RPSM BPC | Hybrid BPC | Absolute gap | Relative gap (RPSM vs hybrid) |
+|---|---|---|---|---|
+| `n_train=5000` (§11.6) | 4.794305 | 4.039556 | 0.754749 | **+18.7%** |
+| `n_train=50000` (this phase) | 4.462898 | 3.349683 | 1.113214 | **+33.2%** |
+
+**The gap is growing, not shrinking, as scale increases** — both in absolute BPC (0.755 → 1.113, +47.5%) and in relative terms (18.7% → 33.2%, nearly doubling) over a 10x increase in training data. This is the opposite of the "tuning problem, will close with more training" hypothesis and lands squarely in the "architectural/scaling ceiling" bucket §11.7 pre-committed to as the trigger for Option A/B.
+
+The mechanism is visible in each model's own improvement rate with 10x more data:
+
+| Mode | BPC @ 5k | BPC @ 50k | Relative improvement |
+|---|---|---|---|
+| RPSM | 4.794305 | 4.462898 | **−6.9%** |
+| Hybrid | 4.039556 | 3.349683 | **−17.1%** |
+
+Hybrid's BPC improved **~2.5x more** (relative) than RPSM's for the same 10x increase in training data, despite the epoch-ratio between the two modes being identical at both scale points (always 2:1 hybrid:RPSM effective passes) — i.e. the epoch-default asymmetry is a constant offset, not the source of the *widening* gap. RPSM is scaling with data substantially worse than the hybrid baseline.
+
+### 12.3 Convergence assessment
+
+Using `CYPHALM_TRAIN_LOG_EVERY=5000` on the RPSM run (the only training-progress signal the bench tool exposes without touching `measurers.cpp`/`cyphalm_bench_native.cpp`'s CLI parsing, both correctly left untouched per the task's constraints), the per-step training loss at 10 evenly-spaced checkpoints across the 50k run was:
+
+```
+step  5000: loss=2.643    step 30000: loss=2.815
+step 10000: loss=4.720    step 35000: loss=2.555
+step 15000: loss=2.918    step 40000: loss=3.693
+step 20000: loss=1.663    step 45000: loss=2.954
+step 25000: loss=1.997    step 50000: loss=1.448
+```
+
+These are single-token instantaneous losses (high-variance by construction — per-character entropy varies a lot token to token), so no strong claim should be hung on any individual point, but the aggregate trend is informative: mean of the first half (steps 5k–25k) = **2.788**; mean of the second half (steps 30k–50k) = **2.690** — essentially flat, with no visible sustained downward trend across the run. Combined with the BPC-trajectory evidence in §12.2 (RPSM's 10x-more-data improvement is only a third of hybrid's), the convergence picture reads as **plateaued, not undertrained** — RPSM does not look like a model that would close much more of the gap with additional steps at this same architecture/hyperparameter configuration.
+
+### 12.4 Something noticed but not fixed (per the task's instruction to scope, not fix)
+
+The RPSM run's Tee-Object-piped stderr progress line for the first `CYPHALM_TRAIN_LOG_EVERY` checkpoint was rendered as a formatted `NativeCommandError`/`RemoteException` block by PowerShell (cosmetic only, exit code was 0, all subsequent log lines printed cleanly) — this is the exact same cosmetic stderr-transcript quirk already noted and partially addressed elsewhere for `run_d17_overnight.ps1` (`docs/reports/DEV_PLAN_2026-07-11.md:19`); RPSM's own bench invocations don't yet have that treatment. Not fixed here (out of scope, measurement-only task); worth folding into whichever follow-up next touches overnight/bench script wrappers.
+
+### 12.5 Final decisive recommendation
+
+**Verdict: the remaining RPSM-vs-hybrid gap is real, non-trivial (33.2% at the largest matched scale measured), and growing with scale — this meets and exceeds the exact threshold §11.7 pre-committed to as justification for Option A/B ("if that larger-scale gap instead grows or plateaus well above ~20%, that would be the first real evidence of an architectural ceiling, and at that point Option A/B's remaining scaffold work would be justified").** The ambiguity from the 5k-only measurement is resolved: this is not primarily a tuning/undertraining artifact.
+
+**Priority recommendation relative to `docs/reports/DEV_PLAN_2026-07-11.md`'s roadmap:**
+
+1. **Do not deprioritize RPSM Option A/B relative to P3 (soft-world) or P5 (kernel LLR).** P3 is explicitly framed as "independent, longer horizon" with no measured current gap; P5 targets a "confirmed hard ceiling, partially shipped" 18-percentage-point gap. RPSM's now-confirmed 33.2%-and-growing gap is larger in magnitude, has fresher/more-direct measurement support (this document, four independently-verified phases), and — unlike P3/P5 — was explicitly pre-registered with a decision threshold that this phase's own data now crosses. On the evidence in hand, **RPSM Option A/B should sit ahead of P3 and P5**, not behind them.
+2. **Sequence behind P1 (hidden-dim scale) and the in-flight production-overnight run**, both already active on this machine and both independently well-justified (P1 is a "no new theory needed" κ win per Paper IV; the overnight run is close to completion and already committed resource). Do not interrupt either to start Option A/B immediately.
+3. **When picked up, start with Option A/B's cheapest remaining sub-phase first** (§6 Phase 1 — config plumbing to Small/Medium tier — was already shown to be a minor lever in §9.5/§9.6 and should stay deprioritized; the real next step is §6 Phase 4/5's remaining scaffold work: the online `mu`/`inv_v` update mechanism ported from `memory_train.cpp`, and eventually the Izaac VRF store / Gaussian-mixture world model). A same-scale, same-tier re-measurement after each sub-phase (following exactly this document's own before/after methodology) should gate whether to continue to the next sub-phase.
+4. **This measurement should also correct the stale `bench/BASELINE_LOCK.json` framing** (156% gap, mismatched `n_train`) the next time the lock is legitimately refreshed — not as part of this task (out of scope, no lock changes made here), but flagged so a future lock-refresh pass doesn't inadvertently re-cite the stale 7.336-vs-2.864 comparison as current.
+
+**Net: RPSM's Option A/B track is promoted from "wait for more evidence" (§11.7's conditional framing) to "proceed, sequenced after the currently-running P1/overnight work" — the 50k matched-scale data is the deciding evidence this document's own phased plan was designed to produce.**
+
+### Files touched by §12
+
+- `docs/reports/RPSM_UPGRADE_PLAN.md` — this section only. No source, config, or lock-file changes (measurement-only task, per instructions).
+- `bench/results/rpsm_50k_d21.log`, `bench/results/hybrid_50k_d17.log` — raw run transcripts, not committed to the lock.
+
+---
+
+## 13. Architectural root-cause investigation (2026-07-11)
+
+**Status: the "why does the gap grow with scale" question §12 left open is now answered. Verdict: everything load-bearing in Option A/B is confirmed ACTIVE by default in `--mode rpsm`; the one piece that is confirmed under-active (the M_slots surprise-gated write) was forced fully active and measured, and it did not move BPC. Three cheap-scale "turn a knob" experiments (memory-always-on, higher memory blend weight, wider classifier bottleneck) all failed to close any of the gap — this rules out the remaining "config/activation gap" hypotheses and points at a real mechanism-level explanation: RPSM has zero backprop-through-time depth anywhere in its training loop, while the hybrid gets real multi-step temporal credit assignment. No source changes were kept (all experiments were reverted); this section is diagnostic only.**
+
+### 13.1 What is active by default in `--mode rpsm` / the D21 production profile — traced end to end
+
+Traced `bench/config/d21_rpsm_profile.json` → `bench/config/profiles/cyphalm_d21_rpsm.json` (the JSON profile `--profile d21 --mode rpsm` actually loads) → `apply_bench_profile`/`apply_bench_mode` (`cyphalm_config.cpp:71-101`) → `CyphaLMModel::init_components` (`cyphalm_model.cpp:328-341`, the code that builds the live `RpsmSequenceConfig`). Confirmed exactly what §4.3/§9.5/§11.2 of this document already found, re-verified firsthand against current `HEAD` (post Phase 0/0b/-1):
+
+| Feature | Active by default in `--mode rpsm`? | Evidence |
+|---|---|---|
+| Option A — batched-LLR GEMM (`batched_llr_gemm`) | **Yes, unconditionally** | Called with no gate at all in both `RpsmSequenceLayer::step` and `::train_step` (`rpsm_sequence_layer.cpp:454,478`) — there is no flag that could turn this off short of not using RPSM mode at all |
+| Option B — multi-level input injection (`inject_input_multilevel`) | **Yes, unconditionally** | Called at the top of both `step`/`train_step`, loops all `n_levels` (4, Tiny tier) with `scale=1/(l+1)` exactly as specified — no gate |
+| Option B — W_up/W_down hierarchy (bottom-up/top-down error, SGD-trained `w_up_`) | **Yes, unconditionally** | `hierarchy_update()` runs every step for every level; `w_up_` receives a real gradient update in `train_step` (`:564-576`) whenever `hierarchy_loss_weight > 0`, which it is by default (`0.1`, unconfigurable, see §13.2) |
+| Option B — `M_slots` global memory (`RpsmGlobalMemory`, soft-attention read + surprise-gated ring write) | **Read: yes, unconditionally. Write: technically yes, but self-extinguishing — see §13.3** | `soft_read` is called every level every step, no gate. `ring_write` is gated by `level_surprise >= cfg_.surprise_threshold` (default `0.05`, unconfigurable) |
+| Phase -1 — spectral α, normalised η | **Yes** (already confirmed in §11.2, re-verified) | `rc.use_spectral_alpha`/`rc.use_normalized_eta` both `true` for `context_mode==Rpsm` (`cyphalm_model.cpp:338-339`) |
+| Orthogonal `W_up` init / Izaac-seed-offset init | **Yes** (already confirmed in §3.2) | `rc.use_izaac_init = (... || cfg_.context_mode == ContextMode::Rpsm)` (`:335`) |
+| `n_memory_slots`, `alpha_carry` (now unused — spectral α overrides it), `beta_memory`, `hierarchy_loss_weight`, `surprise_threshold` | **Pinned at `RpsmSequenceConfig` struct defaults; no CyphaLMConfig/JSON/CLI field exists to change any of them** | Re-confirmed exactly as §4.3/§9.5 found: `cyphalm_model.cpp:328-340` sets only `n_levels`/`state_dim`/`feat_dim`/`n_classes`/`seed`/`use_izaac_init`/`use_spectral_alpha`/`use_normalized_eta` on `rc` — the other five `RpsmSequenceConfig` fields (`rpsm_sequence_layer.hpp:107-115`) are never touched, so every `--mode rpsm` run, at any `n_train`, uses `n_memory_slots=32, beta_memory=0.1, hierarchy_loss_weight=0.1, surprise_threshold=0.05` regardless of profile JSON |
+
+**Answer to the task's core question #1, part 1: every Option A/B mechanism this document previously identified as "implemented" is also confirmed ACTIVE (executes every step, unconditionally, with no dead code path) in the exact default `--mode rpsm` configuration used for every D21 production run and every BPC number cited in §9–12 of this document.** There is no "feature exists but the code path never runs" gap left to find for Option A or for four of Option B's five sub-features. The one exception — `M_slots`'s write side — is active in the sense that the code path runs and does write, but §13.3 shows it self-extinguishes early in training and stays extinguished, which is a distinct and more subtle failure mode than "off by default."
+
+### 13.2 H08 / H12 / H13 cross-check — confirmed structurally unrelated to RPSM's `M_slots`, not a more-advanced alternative
+
+Read `cypha_cell_hypothesis.cpp:9-37,108-131` (the full `H08`/`H12`/`H13` variant table entries and their `apply_cell_variant` branches) to check the task's hypothesis that these might toggle memory/context features overlapping with or superior to RPSM's own scaffold. **They do not overlap at all — they live on entirely different, mutually exclusive `context_mode` branches that never construct an `RpsmSequenceLayer`:**
+
+| Variant | `bench_mode` it applies (`apply_cell_variant` → `apply_bench_mode_string`) | Resulting `context_mode` | Memory mechanism toggled | Touches `RpsmSequenceLayer`/`M_slots`? |
+|---|---|---|---|---|
+| H08 (`use_context_bank`, `use_tiered_context`) | `"context_bank"` | `ContextMode::GriaNgram` (`cyphalm_config.cpp:87-90`) | `ContextBank` class (`context_bank_`, a short/mid/long tiered attention buffer, `cyphalm_model.cpp:311`) | **No** — `ContextBank` is a separate member, constructed only when `use_context_bank`; `RpsmSequenceLayer` is constructed only when `uses_rpsm(cfg_)`, and `apply_bench_mode(BenchMode::ContextBank, ...)` never sets `context_mode=Rpsm` |
+| H12 (`use_mdl_forget`) | `"hybrid"` | `ContextMode::Hybrid` | `CompressiveMemory` class (`memory_`, `cyphalm_model.cpp:302-309`; L2-norm/MDL projection on its slots) | **No** — same reasoning, `ContextMode::Hybrid` never constructs `rpsm_layer_` |
+| H13 (`use_priority_replay`) | `"hybrid"` | `ContextMode::Hybrid` | `CompressiveMemory` with `set_priority_replay(true)` (priority-weighted slot eviction) | **No** — same |
+
+**This resolves the ambiguity the task flagged: H08/H12/H13 are not "more advanced" versions of RPSM's memory stacked on top of or instead of `M_slots` — they are a completely different codebase subsystem (`ContextBank`/`CompressiveMemory`, both pre-existing, non-RPSM classes) applied to non-RPSM `context_mode`s.** Running `--mode rpsm` gets you `RpsmGlobalMemory` only; running `H08`/`H12`/`H13` gets you `ContextBank`/`CompressiveMemory` only and a plain GRIA-Ngram or hybrid LSTM backbone with no `RpsmSequenceLayer` at all. They are parallel architecture choices, not composable layers, and neither is a superset of the other in the current code.
+
+### 13.3 Runtime instrumentation: `M_slots` writes self-extinguish after ~1,300 steps and never resume
+
+Per the task's request, added temporary instrumentation (env-gated on `CYPHA_RPSM_DEBUG_INSTRUMENT=1`, zero cost/behavior change otherwise) to `inject_input_multilevel`, `hierarchy_update`'s `soft_read`/`ring_write` call sites, counting calls and logging the step index of every `ring_write`. Built in `native/build_rpsm`, ran `--profile d21 --mode rpsm --n-train 10000 --n-eval 128 --threads 1` (Tiny tier, all Phase 0/0b/-1 fixes live, unmodified production config otherwise). **All instrumentation was reverted before finishing this task — confirmed via `git diff` showing zero net changes to `native/src/rpsm/rpsm_sequence_layer.cpp` and `native/src/cyphalm/cyphalm_model.cpp`, and re-confirmed the reverted binary reproduces the exact `4.794304980541004` BPC pin at `n_train=5000` bit-for-bit.**
+
+Findings from the instrumented run:
+
+1. **Multi-level injection fires every step, every level, exactly as the code implies** — `injections` counter incremented 1:1 with training steps (10,000 injections at 10,000 steps), confirming Option B's Fix 4 (multi-level input injection) is not just present in code but genuinely executing on every forward/train call.
+2. **`soft_read` (memory read) also fires unconditionally every level every step** (40,000 reads over 10,000 steps × 4 levels) — the memory *read* side is never gated and never stops.
+3. **`ring_write` (memory write) fired exactly 5 times in the entire 10,000-step run, all within an 18-step window (steps 1,261–1,278), and never again:**
+
+```
+ring_write #1 at step=1261 level=0 surprise=0.050690 threshold=0.0500
+ring_write #2 at step=1262 level=0 surprise=0.051823 threshold=0.0500
+ring_write #3 at step=1270 level=0 surprise=0.051188 threshold=0.0500
+ring_write #4 at step=1273 level=0 surprise=0.050148 threshold=0.0500
+ring_write #5 at step=1278 level=0 surprise=0.050015 threshold=0.0500
+```
+
+The mechanism: `level_surprise` (the level-0 hierarchy prediction-error magnitude) starts above `surprise_threshold=0.05` early in training (while `w_up_`/`h_levels_` are still settling from orthogonal init), crosses below the fixed threshold for the last time around step ~1,280, and — because the hierarchy error trends only downward as `w_up_` continues to be SGD-trained to minimize exactly this error (`hier_scale` update, `train_step:564-576`) — never crosses back above `0.05` for the remaining 8,720+ steps of this run, and (by the same monotonic-training-loss-reduction logic) would not be expected to for the remaining ~290,000 steps of a full 300k production run either. **`M_slots` is only ever written during roughly the first 1,300 steps of any RPSM run and then holds a permanently frozen snapshot from that narrow window for the rest of training.** All 5 writes were also level-0 only — levels 1–3 never crossed the threshold even during the initial window, so 3 of the hierarchy's 4 levels never write to memory at all, at any point in training.
+4. **Even during the window when it is live, the memory's information content is tiny relative to the hidden state it's blended into**: averaged over the whole 10,000-step run, `mean(||mem_read||) ≈ 0.002–0.005` vs `mean(||h||) ≈ 0.39–0.51` — i.e. the memory-read vector's norm is roughly **1% of the hidden state's own norm**, and it enters the blend at `hierarchy_update`'s `beta=0.1` weight (`h[i] = ... + beta * mem_read[i]`), so the actual contribution to the hidden state is on the order of **0.1% of `||h||`**. This is consistent with soft-attention averaging over a small (32-slot) bank of what are, for 3 of 4 levels, still-zero-initialized slots, and for level 0, a handful of stale, un-differentiated raw activation vectors captured once near the start of training — there is no gradient path that ever trains the *content* of what gets written to a slot (`ring_write` copies raw `gate * h[i]`, not a learned projection), so retrieval is intrinsically low-information even before considering the write-frequency problem in point 3.
+
+**This is the clearest concrete instance the investigation found of "implemented but not effective by default"** — distinct from Findings #1/#2 from earlier phases (which were "never runs at all"), this is "runs early, then the codebase's own optimization dynamics push it below its own trigger threshold and it stops running for the rest of training." It directly answers part of the task's question #1: yes, there is at least one genuine "active in principle, inert in practice for a production-length run" mechanism, and it's `M_slots`'s write path, not any of the other four Option A/B sub-features (which all run unconditionally throughout).
+
+### 13.4 Three cheap-scale "turn the dial up" experiments — none recovered any BPC
+
+Per the task's item 3 ("if features are off by default... try turning them on... measure whether BPC improves"), ran three temporary, isolated, single-variable-changed experiments at `n_train=5000` (fastest tier, `--profile d21 --mode rpsm --n-eval 256 --threads 1`, same seed, `native/build_rpsm`, all changes reverted immediately after measurement — confirmed via `git diff` returning empty before moving to the next experiment). Baseline (current committed `HEAD`, i.e. Phase 0+0b+(-1) fixes, unmodified): **BPC = 4.794304980541004** (bit-identical to §11.5/§12's own pin, confirming a clean before/after methodology).
+
+| Experiment | Change (temporary, reverted) | BPC | Δ vs baseline |
+|---|---|---|---|
+| A | `surprise_threshold: 0.05 → 0.0` (memory writes on every level, every step, never gated off) | 4.794585773475248 | **+0.000281 (+0.0059%, worse)** |
+| B | A + `beta_memory: 0.1 → 0.5` (5x stronger memory-blend weight, on top of always-on writes) | 4.796544982084094 | **+0.002240 (+0.0467%, worse)** |
+| C | `rpsm_feat_dim: 64 → 128` (doubles the classifier's input bottleneck, matching the hybrid's `lstm_hidden=128`) | 4.813817518116889 | **+0.019513 (+0.407%, worse)** |
+
+**All three moved BPC in the wrong direction, by small-but-consistent (not noise-scale) amounts.** This is a materially different result from every previous phase in this document: Phase 0's fix (a genuinely dead code path, `Ψ_mu` never written) gave a −34.9% win the instant it was turned on; here, forcing an under-active mechanism (`M_slots` writes) to run continuously, or turning up its influence, or widening the classifier's bottleneck to match the hybrid's dimensionality, all make things very slightly worse, not better, at this scale. The most likely reason (consistent with §10.6's own "thin per-row update budget" reasoning for Finding #2): at `n_train=5000`, any added parameters or added signal paths need their own training steps to become useful, and a small regularization-free capacity increase without more data can mildly overfit/destabilize rather than help. But critically, **none of these were "the gap was hiding here" wins** — they rule out, rather than confirm, the "config/activation gap" hypothesis for the specific mechanisms tested.
+
+### 13.5 What is genuinely still "Planned" — clarifying the Izaac VRF store ambiguity
+
+Per the task's request to clarify a previously-ambiguous distinction, grepped `native/src/rpsm/` and `native/include/cypha/rpsm/` for `VRF`, `episodic`, `sha256`/`SHA-256`, and `snapshot` — **zero matches**. Cross-referenced against `RPSM_COMBINED_SPEC.md:98-102` and `RPSM_IMPLEMENTATION.md:80,89-91`, which describe **three separate global-memory layers**, only one of which is built:
+
+| Layer (per spec) | What it is | Built? | Where |
+|---|---|---|---|
+| 1. Izaac episodic store | VRF-keyed snapshots of past Ψ states, retrieved by content-addressable key (spec's own fallback: SHA-256 hash of quantised hidden state as a stub until a real VRF is wired) | **No — not found anywhere in `native/src/rpsm/`.** This is the genuinely-unimplemented "Planned" piece | — |
+| 2. Working memory `M_slots` | Fixed-size slot ring, soft-attention read, surprise-gated write | **Yes.** This is `RpsmGlobalMemory` | `rpsm_sequence_layer.hpp:49-91`, `.cpp:220-283` |
+| 3. Gaussian-mixture world model | Slow semantic anchor injected into the top hierarchy level (weight ~0.05) | **No — not found.** Also genuinely "Planned" | — |
+
+**The naming collision that made this ambiguous in earlier docs: "Izaac" is used for three unrelated things in this codebase**, only one of which is the actual missing VRF store:
+1. `IzaacActivationMix` (`rpsm_sequence_layer.hpp:19-39`) — a grammar-search-stub enum that picks one of 5 fixed activation functions per seed. **Built, active, unrelated to memory.**
+2. `use_izaac_init` / `kIzaacSeedOffset` (`rpsm_sequence_layer.cpp:12,74-79,291,302-308`) — an H19-style seed-offset convention for orthogonal weight init. **Built, active, unrelated to memory.**
+3. The **Izaac episodic VRF store** (spec's global-memory layer 1, above) — the actual missing piece. **Not built.**
+
+**Answer to the task's question #2's clarification request: yes, there is a genuine third tier beyond what's built — the Izaac VRF episodic store and the Gaussian-mixture world model are both real gaps, not built anywhere, and are correctly the only pieces of Option A/B that should still be called "Planned."** Everything else this document and its predecessor phases discuss (batched LLR GEMM, multi-level injection, W_up/W_down hierarchy, `M_slots` working memory, spectral α, normalised η, orthogonal init) is built and, per §13.1, active by default.
+
+### 13.6 Why the gap grows with scale despite everything relevant being active: the temporal-credit-assignment asymmetry
+
+With §13.1–13.4 ruling out "an existing feature is silently off" and "a known under-active feature just needs turning up" as explanations, re-read the actual training-loop call graphs for both modes side by side to find what structurally differs. One asymmetry stands out and is confirmed directly in code, not inferred:
+
+- **Hybrid (`train_step`, general path, used by `--mode hybrid`)** calls `bptt_ssm_update(next_token_id)` every single training step (`cyphalm_model.cpp:1122`), which — when `cfg_.bptt_steps > 0` (the D17 hybrid profile sets `bptt_steps: 64`, `cyphalm_d17_wikitext.json:22`) — accumulates a buffer of the last 64 steps' `(ctx, grad)` pairs and backpropagates the SSM/projection gradient through that real 64-step window (`cyphalm_model.cpp:1191,1266`, guarded by `cfg_.bptt_steps <= 0` / buffer-size checks). Separately, the hybrid's own LSTM head (`char_lstm.cpp`) computes and applies a full, correct backward pass every step for `Wy`/`Wh`/`b`/`by` via `backward_step`/`apply_gradients` (already contrasted with RPSM's classifier in §4.1's Finding #1 comparison).
+- **RPSM (`train_step_rpsm`, `cyphalm_model.cpp:1472-1500`)** never calls `bptt_ssm_update` at all — grepped every call site of `bptt_ssm_update` in `cyphalm_model.cpp` and confirmed the only call is the one inside the *general* `train_step` (line 1122), which `train_step_rpsm` does not invoke and has no equivalent of. Every gradient computed inside `RpsmSequenceLayer::train_step` (`Ψ_mu`, `w_enc_`, `w_carry_`, `w_up_`) is derived purely from the **current** timestep's forward activations (`feat_buf_`, `enc_pre_`, `h_levels_`, `work_err_` — all overwritten fresh each call) — there is no buffer of past states, no unrolling, and `cfg_.bptt_steps` (which the D21 RPSM profile leaves at its default `0` anyway, `cyphalm_d21_rpsm.json` has no `bptt_steps` key) has no code path that applies to RPSM at all.
+
+**Mechanistically, this means RPSM's entire hierarchy — `h_levels_`, `w_up_`, the encoder — learns via what is structurally closest to real-time recurrent learning / a single-step local update rule, propagated forward only through the carried hidden state, never backward through its own history.** The hybrid gets two independent, compounding sources of multi-step temporal credit assignment (the LSTM cell's own gating dynamics trained with a correct one-step backward pass repeated over a persistent cell state, *plus* an explicit 64-step BPTT correction on the upstream SSM projection); RPSM gets neither — its only mechanism for "remembering" earlier tokens is the forward-only leaky carry through `h_levels_`/`(1-a)` blending (`hierarchy_update`, Fix 1's spectral `a`), with zero gradient signal about whether that carry decision, several steps ago, helped or hurt the *current* prediction.
+
+**This is a plausible, mechanistically well-supported explanation for exactly the two symptoms this document's own §12 measurement already established:**
+1. *"RPSM's training loss visibly plateaued"* (§12.3) — a model whose only credit-assignment signal is single-step-local cannot discover or reinforce any temporal dependency whose useful gradient only becomes visible several steps later; it will correctly reduce single-step-predictable loss quickly (matching Phase 0's big, fast win — that was a single-step-local defect, exactly RPSM's strength) and then plateau once the easy single-step-local signal is exhausted, exactly the shape seen in §12.3's flat 5k-step-window loss average.
+2. *"The gap grows, not shrinks, with 10x more data"* (§12.2) — more training data mostly helps a model that can extract *longer-range* structure from it; a model bottlenecked to single-step-local updates gets proportionally less benefit from more data than one with real multi-step BPTT, which is exactly the asymmetric improvement rate §12.2 measured (RPSM improved 6.9% relative from 10x more data; hybrid improved 17.1%, ~2.5x more).
+
+This is also consistent with, and gives a causal explanation for, why none of §13.4's three experiments helped: none of them touch the temporal-credit-assignment mechanism. Widening the classifier bottleneck (Experiment C) or making the (memory-content-untrained, per §13.3 point 4) `M_slots` more active (A/B) cannot compensate for the model never receiving a gradient signal that says "the hidden-state decision several steps ago should have been different" — that signal simply does not exist anywhere in RPSM's current training loop, at any hyperparameter setting reachable from `RpsmSequenceConfig`'s existing fields.
+
+### 13.7 Final answer to the task's core question and concrete recommendation
+
+**Direct answer: it is not that Option A/B's features are inactive in the default `--mode rpsm` configuration — §13.1–13.2 confirm essentially everything is active and executing every step, and §13.4's experiments confirm that forcing the one under-active piece (`M_slots` writes) to run continuously, or amplifying it, does not recover any BPC. The remaining gap is best explained by a real inductive-bias/mechanism mismatch: RPSM's training loop has zero backprop-through-time depth anywhere (§13.6), while the hybrid baseline gets real multi-step temporal credit assignment through two independent mechanisms. This is not a "config gap" the way Findings #1/#2/Phase -1 were — it is an architectural gap in the *training* mechanism, distinct from (and cheaper to fix than) the still-genuinely-missing Izaac VRF store / Gaussian-mixture world model pieces (§13.5), which are a different, larger, and — per §13.3 point 4's finding about `M_slots`'s untrained content — not obviously higher-priority gap.**
+
+Recommendation, in priority order, superseding §12.5's "proceed to Option A/B's remaining scaffold work" with something more specific now that this session's own cheap-scale experiments have been run:
+
+1. **Do not build the Izaac VRF store or Gaussian-mixture world model next.** Both are real, substantial, "Planned"-as-labeled pieces of work (§13.5), but §13.3 point 4 found that the *already-built* `M_slots` mechanism carries near-zero information even when forced fully active, because slot content is never shaped by any gradient (`ring_write` copies raw activations, not a learned key/value). A VRF-keyed episodic store built on the same "write raw activations, retrieve by content-similarity, never train the content" pattern would very plausibly inherit the same low-information-content problem before it even gets to the harder VRF/hashing engineering — there is no evidence in hand that more memory *capacity* (a third tier) fixes a memory *quality* problem the second tier already has.
+2. **The highest-leverage next experiment is giving RPSM's own training loop real multi-step temporal credit assignment** — either (a) a `bptt_steps`-equivalent for `RpsmSequenceLayer::train_step` (buffer the last `k` steps' `(feat_buf_, h_levels_, work_err_)` and backpropagate the hierarchy/classifier loss through that window, mirroring `bptt_ssm_update`'s existing buffer-and-unroll pattern in the same file), or (b) at minimum, verify whether truncated BPTT even helps here at cheap scale before committing to the larger unrolled-hierarchy implementation, by first testing a much simpler proxy: increasing `RpsmSequenceLayer`'s implicit memory horizon via a slower `alpha_carry`/spectral-α blend (already partially explored by Phase -1, but not yet swept as its own independent lever) or literally-BPTT-through-`h_levels_`-only (cheaper than the full hierarchy) as a first cut. This is genuinely new implementation work, not a config change, so it should be scoped and estimated as its own phase before starting.
+3. **Separately, fix `M_slots`'s self-extinguishing write gate** (§13.3) even though §13.4 showed it doesn't move BPC on its own — a memory mechanism that provably stops writing after the first ~0.4% of a 300k-step run is a latent correctness issue independent of whether it currently matters, and a `surprise_threshold` that adapts to the *current* running-average error scale (rather than a fixed absolute `0.05`) rather than a fixed constant would be a small, cheap, low-risk change worth bundling with whichever future phase revisits `RpsmSequenceConfig`'s still-unconfigurable fields (§13.1's table, Phase 1 from §6 — still correctly deprioritized on its own per §9.5/§9.6, but worth doing opportunistically alongside #2 above rather than as a separate investment).
+4. **Do not deprioritize RPSM relative to §12.5's own ranking based on this section's findings** — the 33.2%-and-growing gap from §12 stands; this section only clarifies *why* (a training-mechanism gap, not a config gap), which if anything makes the fix more clearly scoped (implement real temporal credit assignment) rather than less justified.
+
+### Files touched by §13
+
+- `docs/reports/RPSM_UPGRADE_PLAN.md` — this section only.
+- No source or config changes were kept. Temporary instrumentation (`native/src/rpsm/rpsm_sequence_layer.cpp`) and three temporary experimental config overrides (`native/src/cyphalm/cyphalm_model.cpp`) were added, measured, and fully reverted — confirmed via `git diff` showing zero net changes to both files, and via a bit-identical BPC reproduction (`4.794304980541004` at `n_train=5000`) and a clean `ctest --test-dir native/build_rpsm -R rpsm` run (10/10 passed) on the reverted tree before finishing this task.
