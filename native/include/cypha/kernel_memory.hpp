@@ -15,6 +15,20 @@ class KernelMemory {
  public:
   KernelMemory(int feat_dim, int M = 256, std::uint64_t rng_seed = 0);
 
+  /// Random Fourier Features (RFF) basis: fixed random projection approximating the RBF kernel via
+  /// Bochner's theorem (``phi(x) = sqrt(2/M) * cos(W x + b)``), in place of the online Nyström landmark
+  /// sketch. Cheap (``O(M*feat_dim)`` per call, no Cholesky/eigh recompute) since the projection is frozen
+  /// at construction — ``gamma`` must be supplied up front (see ``auto_gamma_median_heuristic``).
+  static KernelMemory make_rff(int feat_dim, int M, double gamma, std::uint64_t rng_seed = 0);
+
+  /// Median pairwise-distance ("auto-gamma") heuristic: ``gamma_scale / (2 * median(||a-b||^2))`` over up
+  /// to ``max_samples`` rows sampled from ``samples_row_major`` (``n x feat_dim``). Same heuristic the
+  /// Nyström path uses internally for its landmarks, exposed here for RFF gamma calibration from raw data.
+  static double auto_gamma_median_heuristic(const double* samples_row_major, int n, int feat_dim,
+                                            double gamma_scale = 1.0, int max_samples = 256,
+                                            std::uint64_t rng_seed = 0);
+
+  bool is_rff() const { return rff_mode_; }
   int feat_dim() const { return feat_dim_; }
   int M() const { return M_; }
   double gamma() const { return gamma_; }
@@ -72,6 +86,11 @@ class KernelMemory {
   std::vector<double> whitening_;
   std::map<std::string, std::vector<double>> weights_;
   std::mt19937 rng_;
+
+  bool rff_mode_{false};
+  /// Row-major ``M × feat_dim`` random projection (RFF mode only).
+  std::vector<double> rff_w_;
+  std::vector<double> rff_b_;
 };
 
 /// Embed kernel LLR state into a v3 ``.cypha`` root (Python ``save_state`` keys).

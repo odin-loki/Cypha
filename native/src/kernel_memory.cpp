@@ -172,6 +172,62 @@ KernelMemory::KernelMemory(int feat_dim, int M, std::uint64_t rng_seed)
       basis_(static_cast<std::size_t>(M) * static_cast<std::size_t>(feat_dim), 0.0),
       rng_(static_cast<std::uint32_t>(rng_seed & 0xffffffffu)) {}
 
+KernelMemory KernelMemory::make_rff(int feat_dim, int M, double gamma, std::uint64_t rng_seed) {
+  KernelMemory km(feat_dim, M, rng_seed);
+  km.rff_mode_ = true;
+  km.gamma_ = gamma;
+  km.n_basis_ = M;
+  km.n_seen_ = 0;
+  std::mt19937 rng(static_cast<std::uint32_t>((rng_seed ^ 0x9e3779b97f4a7c15ull) & 0xffffffffu));
+  std::normal_distribution<double> ndist(0.0, std::sqrt(std::max(2.0 * gamma, 1e-12)));
+  std::uniform_real_distribution<double> udist(0.0, 2.0 * std::acos(-1.0));
+  km.rff_w_.assign(static_cast<std::size_t>(M) * static_cast<std::size_t>(feat_dim), 0.0);
+  km.rff_b_.assign(static_cast<std::size_t>(M), 0.0);
+  for (int i = 0; i < M; ++i) {
+    for (int j = 0; j < feat_dim; ++j) {
+      km.rff_w_[static_cast<std::size_t>(i * feat_dim + j)] = ndist(rng);
+    }
+    km.rff_b_[static_cast<std::size_t>(i)] = udist(rng);
+  }
+  return km;
+}
+
+double KernelMemory::auto_gamma_median_heuristic(const double* samples_row_major, int n, int feat_dim,
+                                                 double gamma_scale, int max_samples, std::uint64_t rng_seed) {
+  const double fallback = gamma_scale / static_cast<double>(std::max(feat_dim, 1));
+  if (n < 2 || feat_dim <= 0) {
+    return fallback;
+  }
+  std::vector<int> idx(static_cast<std::size_t>(n));
+  for (int i = 0; i < n; ++i) {
+    idx[static_cast<std::size_t>(i)] = i;
+  }
+  if (n > max_samples) {
+    std::mt19937 rng(static_cast<std::uint32_t>(rng_seed & 0xffffffffu));
+    std::shuffle(idx.begin(), idx.end(), rng);
+    idx.resize(static_cast<std::size_t>(max_samples));
+  }
+  const int ns = static_cast<int>(idx.size());
+  std::vector<double> sq_dists;
+  sq_dists.reserve(static_cast<std::size_t>(ns) * static_cast<std::size_t>(ns - 1) / 2);
+  for (int i = 0; i < ns; ++i) {
+    const double* a = samples_row_major + static_cast<std::size_t>(idx[static_cast<std::size_t>(i)]) *
+                                              static_cast<std::size_t>(feat_dim);
+    for (int j = i + 1; j < ns; ++j) {
+      const double* b = samples_row_major + static_cast<std::size_t>(idx[static_cast<std::size_t>(j)]) *
+                                                static_cast<std::size_t>(feat_dim);
+      sq_dists.push_back(sq_dist(a, b, feat_dim));
+    }
+  }
+  if (sq_dists.empty()) {
+    return fallback;
+  }
+  const std::size_t mid = sq_dists.size() / 2;
+  std::nth_element(sq_dists.begin(), sq_dists.begin() + static_cast<std::ptrdiff_t>(mid), sq_dists.end());
+  const double med = sq_dists[mid];
+  return gamma_scale / (2.0 * std::max(med, kEps));
+}
+
 void KernelMemory::recompute_nystrom() {
   const int nb = n_basis_;
   whitening_.clear();
@@ -266,6 +322,16 @@ void KernelMemory::load_state(int n_basis, int n_seen, const double* basis_row_m
 
 void KernelMemory::phi(const double* h, std::vector<double>& out) const {
   out.assign(static_cast<std::size_t>(M_), 0.0);
+  if (rff_mode_) {
+    const double scale = std::sqrt(2.0 / static_cast<double>(std::max(M_, 1)));
+    for (int i = 0; i < M_; ++i) {
+      double s = rff_b_[static_cast<std::size_t>(i)];
+      const double* wi = rff_w_.data() + static_cast<std::size_t>(i * feat_dim_);
+      s += dot(wi, h, feat_dim_);
+      out[static_cast<std::size_t>(i)] = scale * std::cos(s);
+    }
+    return;
+  }
   const int nb = n_basis_;
   if (nb <= 0) {
     return;
@@ -315,6 +381,10 @@ void KernelMemory::score_all(const double* h, const std::vector<std::string>& la
 
 void KernelMemory::reservoir_update(const double* h, std::optional<int> fixed_j) {
   n_seen_ += 1;
+  if (rff_mode_) {
+    // Fixed random projection — no landmark reservoir to maintain.
+    return;
+  }
   if (n_basis_ < M_) {
     double* slot = basis_.data() + static_cast<std::size_t>(n_basis_ * feat_dim_);
     for (int j = 0; j < feat_dim_; ++j) {

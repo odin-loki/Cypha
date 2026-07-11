@@ -51,6 +51,8 @@ LLR in RKHS: `log p(φ(h) | N(μ_k^φ, diag v_k^φ))`
 
 Random Fourier Features approximate RBF without landmark eigendecomp. Faster init; lower accuracy per feature. **Use for CyphaLM streaming** (no runtime landmark refit). Auto-gamma RFF shipped in preprocessor ([`FUTURE.md`](../../FUTURE.md) §0b).
 
+**Update (2026-07-11):** RFF kernel LLR basis (with auto-gamma via median heuristic as the default) now also implemented directly in `KernelMemory` (`make_rff` / `auto_gamma_median_heuristic` in `native/src/kernel_memory.cpp`) and exposed via `xor_kernel_bench --kernel-basis rff`, as a drop-in alternative to the Nyström landmark sketch for the XOR kernel-LLR benchmark — `O(M·d)` per step instead of `O(M^3)`, which let landmark/feature count scale well past the Nyström M=256–384 practical ceiling. Best found: `rff_dim=4096`, latent features, auto-gamma → 76.3% accuracy, ~2.7pp gap to the sklearn RBF ceiling (vs ~18pp at the Nyström M=256 default). Full sweep and fixed-vs-auto-gamma comparison in [`RESEARCH_STATUS.md`](../../RESEARCH_STATUS.md) Priority 1. Not yet wired into the `d03_xor` bench domain or re-validated on Feynman/sinusoidal regression.
+
 ---
 
 ## Diagnostic protocol

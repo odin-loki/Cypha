@@ -38,6 +38,15 @@ struct BenchConfig {
   bool shuffle_train = true;
   /// ``latent``, ``raw_x``, or ``xor_pair`` (default) kernel features.
   std::string kernel_feature_mode = "xor_pair";
+  /// ``nystrom`` (default, online landmark sketch) or ``rff`` (fixed Random Fourier Features basis).
+  std::string kernel_basis = "nystrom";
+  /// RFF projection dimension (``M``-equivalent) when ``kernel_basis == "rff"``.
+  int rff_dim = 512;
+  /// Multiplier applied to the auto (median-heuristic) gamma when calibrating the RFF basis.
+  double rff_gamma_scale = 1.0;
+  /// Fixed RBF bandwidth for RFF, bypassing the auto-gamma median heuristic (comparison baseline).
+  /// Sentinel <= 0 means "use auto-gamma" (the default).
+  double rff_fixed_gamma = -1.0;
 };
 
 struct SeedResult {
@@ -180,8 +189,41 @@ double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
   int total_steps = 0;
   extras.total_steps = &total_steps;
   const int kdim = use_kernel ? kernel_feature_dim(cfg, d, infer.d_latent) : infer.d_latent;
-  cypha::KernelMemory km(kdim, cfg.kernel_m, static_cast<std::uint64_t>(seed));
-  km.set_gamma_scale(cfg.gamma_scale);
+
+  // Calibration batch for RFF auto-gamma (median pairwise-distance heuristic over the same feature
+  // representation used at train/eval time — latent h, raw x, or xor_pair — computed before any weight
+  // updates so the projection is frozen and unbiased by training order).
+  std::vector<double> calib_rowmajor;
+  if (use_kernel && cfg.kernel_basis == "rff") {
+    std::vector<double> feat_buf;
+    const std::size_t n_calib = std::min<std::size_t>(sp.x_tr.size(), 256);
+    calib_rowmajor.reserve(n_calib * static_cast<std::size_t>(kdim));
+    for (std::size_t i = 0; i < n_calib; ++i) {
+      std::vector<double> h;
+      cypha::batch_encode(infer, sp.x_tr[i].data(), 1, h);
+      const double* feat = (cfg.kernel_feature_mode == "latent")
+                               ? h.data()
+                               : kernel_features_for_x(cfg, sp.x_tr[i].data(), d, feat_buf);
+      for (int j = 0; j < kdim; ++j) {
+        calib_rowmajor.push_back(feat[j]);
+      }
+    }
+  }
+
+  cypha::KernelMemory km = [&]() {
+    if (use_kernel && cfg.kernel_basis == "rff") {
+      const double gamma = (cfg.rff_fixed_gamma > 0.0)
+                                ? cfg.rff_fixed_gamma
+                                : cypha::KernelMemory::auto_gamma_median_heuristic(
+                                      calib_rowmajor.data(),
+                                      static_cast<int>(calib_rowmajor.size() / static_cast<std::size_t>(kdim)),
+                                      kdim, cfg.rff_gamma_scale, 256, static_cast<std::uint64_t>(seed));
+      return cypha::KernelMemory::make_rff(kdim, cfg.rff_dim, gamma, static_cast<std::uint64_t>(seed));
+    }
+    cypha::KernelMemory nystrom_km(kdim, cfg.kernel_m, static_cast<std::uint64_t>(seed));
+    nystrom_km.set_gamma_scale(cfg.gamma_scale);
+    return nystrom_km;
+  }();
   extras.kernel_mem = use_kernel ? &km : nullptr;
   extras.use_kernel_llr = use_kernel;
   extras.kernel_blend = cfg.kernel_blend;
@@ -219,9 +261,9 @@ double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
   const double sec =
       std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   const double acc = eval_acc(infer, sp, use_kernel ? &km : nullptr, use_kernel, cfg.kernel_blend, cfg, d);
-  std::cerr << "  seed=" << seed << " kernel=" << (use_kernel ? "1" : "0") << " mode=" << cfg.kernel_feature_mode
-            << " acc=" << acc << " train_sec=" << sec << " n_basis=" << km.n_basis() << " gamma=" << km.gamma()
-            << "\n";
+  std::cerr << "  seed=" << seed << " kernel=" << (use_kernel ? "1" : "0") << " basis="
+            << (use_kernel ? cfg.kernel_basis : "-") << " mode=" << cfg.kernel_feature_mode << " acc=" << acc
+            << " train_sec=" << sec << " n_basis=" << km.n_basis() << " gamma=" << km.gamma() << "\n";
   return acc;
 }
 
@@ -256,6 +298,14 @@ BenchConfig parse_bench_config(int argc, char** argv) {
       cfg.kernel_feature_mode = "xor_pair";
     } else if (arg == "--kernel-feature-mode" && i + 1 < argc) {
       cfg.kernel_feature_mode = argv[++i];
+    } else if (arg == "--kernel-basis" && i + 1 < argc) {
+      cfg.kernel_basis = argv[++i];
+    } else if (arg == "--rff-dim" && i + 1 < argc) {
+      cfg.rff_dim = std::atoi(argv[++i]);
+    } else if (arg == "--rff-gamma-scale" && i + 1 < argc) {
+      cfg.rff_gamma_scale = std::atof(argv[++i]);
+    } else if (arg == "--rff-fixed-gamma" && i + 1 < argc) {
+      cfg.rff_fixed_gamma = std::atof(argv[++i]);
     }
   }
   return cfg;
@@ -272,6 +322,10 @@ void usage() {
             << "  --kernel-raw-x       Nyström kernel on standardized raw x (not latent h)\n"
             << "  --kernel-xor-features  kernel on [x0,x1,x0*x1,x0^2,x1^2] (5-d)\n"
             << "  --kernel-feature-mode {latent,raw_x,xor_pair}\n"
+            << "  --kernel-basis {nystrom,rff}  landmark sketch (default) or fixed RFF projection\n"
+            << "  --rff-dim N          RFF projection dimension (default 512, kernel_basis=rff)\n"
+            << "  --rff-gamma-scale G  multiplier on RFF auto (median-heuristic) gamma (default 1.0)\n"
+            << "  --rff-fixed-gamma G  fixed RBF bandwidth for RFF, bypassing auto-gamma (comparison)\n"
             << "  --no-shuffle         disable per-pass train shuffle\n"
             << "  --tune               grid search M x gamma_scale x blend\n"
             << "  --tune-seeds N       seeds per tune cell (default 2)\n";
@@ -411,8 +465,10 @@ int xor_kernel_bench_main(int argc, char** argv) {
   double ker_sum = 0.0;
   std::cout << "{\n  \"dataset\": \"S3_nonlinear_xor_native\",\n  \"seeds\": " << cfg.seeds
             << ",\n  \"passes\": " << cfg.passes << ",\n  \"kernel_blend\": " << cfg.kernel_blend
-            << ",\n  \"kernel_m\": " << cfg.kernel_m << ",\n  \"gamma_scale\": " << cfg.gamma_scale
-            << ",\n  \"kernel_lr_scale\": " << cfg.kernel_lr_scale << ",\n  \"kernel_feature_mode\": \""
+            << ",\n  \"kernel_basis\": \"" << cfg.kernel_basis << "\",\n  \"kernel_m\": " << cfg.kernel_m
+            << ",\n  \"gamma_scale\": " << cfg.gamma_scale << ",\n  \"kernel_lr_scale\": " << cfg.kernel_lr_scale
+            << ",\n  \"rff_dim\": " << cfg.rff_dim << ",\n  \"rff_gamma_scale\": " << cfg.rff_gamma_scale
+            << ",\n  \"rff_fixed_gamma\": " << cfg.rff_fixed_gamma << ",\n  \"kernel_feature_mode\": \""
             << cfg.kernel_feature_mode << "\",\n  \"shuffle_train\": "
             << (cfg.shuffle_train ? "true" : "false") << ",\n  \"linear\": [\n";
   for (int s = 0; s < cfg.seeds; ++s) {

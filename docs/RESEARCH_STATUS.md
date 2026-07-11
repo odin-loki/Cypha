@@ -410,6 +410,29 @@ Planned engineering directions distilled from research specs. Full index: [`docs
 
 **Current state:** Nyström whitening native-only; M=256 default; XOR **+9–10 pp** vs linear; sklearn RBF ceiling **~79%** — **~18 pp** gap remains.
 
+**Update (2026-07-11) — reproduced baseline, M-sweep, RFF auto-gamma basis added:**
+
+- **Reproduced baseline** (`xor_kernel_bench --kernel-feature-mode latent --kernel-m 256 --gamma-scale 1.0`, 3 seeds × 8 passes, generalizable latent-only mode — not the XOR-specific `xor_pair` hack): linear **51.2%** → Nyström kernel **62.07%** (**+10.83 pp**, matches documented +9–10pp) — gap to sklearn ceiling (~79%) **≈16.9 pp**, consistent with the documented ~18pp within seed noise.
+- **`kernel_m` sweep (Nyström, same latent setup):** M=256 → 62.07%; M=384 → 62.53% (+0.47pp over M=256). **M=512 aborted** — `recompute_nystrom()` runs the whitening Cholesky/eigh solve on *every* training step (not just landmark fill-up), so per-step cost is `O(M^3)`; M=512 did not finish in a reasonable wall-clock budget (>15 min) and M=768 was not attempted. **Conclusion: Nyström landmark count is already near its practical (not just statistical) ceiling at M=256–384** — diminishing accuracy returns *and* superlinear cost blowup both push against raising M further on this code path.
+- **Implemented Fix 2 (RFF kernel LLR) with auto-gamma default**, closing the priority-2 item below at the same time: added `KernelMemory::make_rff()` (fixed random-Fourier-Features basis, `phi(x) = sqrt(2/M)*cos(Wx+b)`, no landmark reservoir/no recompute — `O(M·d)` per step instead of `O(M^3)`) and `KernelMemory::auto_gamma_median_heuristic()` (median pairwise-distance heuristic, the same rule the Nyström path already uses for its landmarks, applied here to a calibration batch up front). Wired into `xor_kernel_bench` via `--kernel-basis rff [--rff-dim N] [--rff-gamma-scale S] [--rff-fixed-gamma G]`; auto-gamma is the default, `--rff-fixed-gamma` is opt-in for comparison. No changes to existing Nyström call sites, defaults, or the shipped `xor_pair`/`d03_xor` bench domain config.
+- **RFF auto-gamma sweep (latent mode, same task/split, 3 seeds × 8 passes):**
+
+  | `rff_dim` | kernel acc | Δ vs linear | gap to sklearn (~79%) |
+  |---|---|---|---|
+  | 128 | 61.7% | +10.5pp | ~17.3pp |
+  | 256 | 65.0% | +13.8pp | ~14.0pp |
+  | 512 | 68.0% | +16.8pp | ~11.0pp |
+  | 768 | 70.3% | +19.0pp | ~8.7pp |
+  | 1024 | 71.1% | +19.9pp | ~7.9pp |
+  | 2048 | 74.2% | +23.0pp | ~4.8pp |
+  | 3072 | 75.8% | +24.5pp | ~3.2pp |
+  | **4096** | **76.3%** | **+25.1pp** | **~2.7pp** (best found) |
+
+  Returns diminish sharply past ~3072–4096 (+0.56pp for the last +1024 dims). RFF is also markedly cheaper than Nyström at comparable/larger effective dimension (no cubic recompute), so pushing `rff_dim` well past `kernel_m`'s practical ceiling is tractable.
+- **Auto-gamma validated against fixed-gamma** at `rff_dim=512`: fixed γ=1.0 → 49.4% (worse than the 51.2% linear baseline — a badly-chosen fixed γ can make the kernel path actively harmful); γ=0.2 → 55.6%; γ=0.01 → 64.3%; **auto-gamma (γ≈0.052, computed) → 68.0%** — beats every fixed γ tried, confirming the median-heuristic default is the right call for this task.
+- **Best configuration found:** RFF, latent features, auto-gamma, `rff_dim=4096` → **76.3% accuracy, ~2.7pp gap to the sklearn RBF SVM ceiling** — versus the ~18pp gap at the previous M=256 Nyström default. CTests: all 10 kernel/xor-related CTests (`native_kernel_llr`, `native_xor_kernel_bench_smoke`, `native_kernel_snapshot_roundtrip`, `native_kernel_cypha_roundtrip`, `native_d44_kernel_nystrom_cyphalm_smoke`, `native_d59/d67/d68/d71_*_grid_joint_smoke`, `native_kernel_llm_h04_smoke`) pass unchanged — purely additive (`KernelMemory::make_rff`/`auto_gamma_median_heuristic` + new opt-in `xor_kernel_bench` CLI flags), no change to shipped Nyström defaults or the `d03_xor` bench domain.
+- **Not yet done:** wiring `--kernel-basis rff` into the `d03_xor` bench domain / `bench_domains.cpp` as a tracked experiment (currently CLI-only in `xor_kernel_bench`); re-running Feynman (D14) and sinusoidal regression with the RFF basis to see if the same gap-closing generalizes beyond XOR; promoting `rff_dim=2048–4096` auto-gamma to a new default profile once validated on those other nonlinear domains.
+
 ### Priority 2 — Auto-gamma RFF
 
 **Evidence:** Manual gamma tuning is the largest single source of improvement in the tuning report. Auto-gamma via cross-validation (`RFFEncoder.auto_gamma_cv`) exists but is not default.
@@ -418,6 +441,8 @@ Planned engineering directions distilled from research specs. Full index: [`docs
 1. Make `auto_gamma_cv` the default encoder path for `RFFEncoder`.
 2. Add to the parity fixture generators.
 3. Re-run D08 (MNIST) and D14 (Feynman) with auto-gamma.
+
+**Update (2026-07-11):** For the kernel-LLR/XOR track specifically, auto-gamma is now shipped and default for the new RFF kernel basis — see the Priority 1 update above (`KernelMemory::auto_gamma_median_heuristic`, median pairwise-distance heuristic, no CV grid search needed since XOR's calibration batch is cheap and the heuristic already beat every fixed γ tried). The separate `RFFEncoder.auto_gamma_cv` preprocessor path (D08/D14, item 1–3 above) is untouched — still opt-in, not covered by this pass.
 
 ### Priority 3 — CyphaLM: beat-bigram roadmap
 
