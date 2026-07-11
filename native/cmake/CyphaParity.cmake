@@ -23,6 +23,7 @@ cypha_add_parity_exe(rpsm_batched_llr_smoke)
 cypha_add_parity_exe(rpsm_sequence_smoke LINK cypha_lm_native)
 cypha_add_parity_exe(rpsm_hierarchy_smoke)
 cypha_add_parity_exe(rpsm_train_smoke)
+cypha_add_parity_exe(rpsm_train_multiclass_smoke)
 cypha_add_parity_exe(score_batch_parity)
 cypha_add_parity_exe(kernel_llr_parity)
 cypha_add_parity_exe(memory_train_parity)
@@ -73,6 +74,7 @@ set(
   rpsm_sequence_smoke
   rpsm_hierarchy_smoke
   rpsm_train_smoke
+  rpsm_train_multiclass_smoke
   score_batch_parity
   kernel_llr_parity
   memory_train_parity

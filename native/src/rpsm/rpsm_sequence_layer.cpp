@@ -446,6 +446,23 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
     }
   }
 
+  // Ψ_mu output-classifier gradient (rows 1..K = per-class discriminative directions delta_k).
+  // llr_k = sum_j inv_var[j]*delta_k[j]*(feat[j] - mu0[j] - 0.5*delta_k[j]) - u_k + ctx_k, so
+  // d(llr_k)/d(delta_k[j]) = inv_var[j] * (feat[j] - mu0[j] - delta_k[j]); combined with the
+  // softmax/cross-entropy grad_logits[k] via the chain rule this is the same SGD update the
+  // hybrid LSTM head applies to Wy every step (char_lstm.cpp backward_step/apply_gradients).
+  // Without this, delta_k stays frozen at its random init forever (see RPSM_UPGRADE_PLAN.md Finding #1).
+  const double* mu0 = psi_.mu.data();
+  for (int c = 0; c < k; ++c) {
+    double* delta = psi_.mu.data() + static_cast<std::size_t>((1 + c) * d);
+    const double gc = grad_logits[static_cast<std::size_t>(c)];
+    for (int j = 0; j < d; ++j) {
+      const double grad = gc * psi_.inv_var[static_cast<std::size_t>(j)] *
+                           (feat_buf_[static_cast<std::size_t>(j)] - mu0[j] - delta[j]);
+      delta[j] -= lr * grad;
+    }
+  }
+
   const auto& h0 = h_levels_[0];
   std::fill(input_grad_.begin(), input_grad_.end(), 0.0);
   for (int j = 0; j < d; ++j) {
