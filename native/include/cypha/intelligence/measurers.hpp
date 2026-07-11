@@ -6,14 +6,26 @@ namespace cypha::intelligence {
 enum class ParticipationRatioMethod {
   /// Column-variance proxy (fast; legacy default).
   VarianceProxy = 0,
-  /// Covariance eigenvalue PR: ``(Σλ)² / Σλ²`` (Paper IV fidelity).
+  /// Covariance eigenvalue PR: ``(Σλ)² / Σλ²`` via Jacobi diagonalization (Paper IV
+  /// fidelity). ``O(n_dims^3)`` per call; for ``n_dims > 256`` this transparently
+  /// delegates to the ``TraceFrobenius`` method below instead of diagonalizing (see
+  /// its docs for why that is exact, not an approximation).
   CovarianceEigenvalue = 1,
+  /// Covariance eigenvalue PR computed as ``trace(C)^2 / trace(C^2)`` directly from the
+  /// covariance matrix, without ever diagonalizing it. For a symmetric PSD matrix,
+  /// ``trace(C) == Σλ`` and ``trace(C^2) == Σλ^2 == ||C||_F^2`` exactly, so this is
+  /// algebraically identical to ``CovarianceEigenvalue`` (not a proxy/approximation) but
+  /// costs ``O(n_dims^2 * n_samples)`` instead of ``O(n_dims^3)`` since the ``O(n_dims^3)``
+  /// Jacobi diagonalization is skipped entirely. Safe and recommended for any ``n_dims``,
+  /// including well above 256 (Phase 0 fix for the D_eff hidden-dim scale-up plan).
+  TraceFrobenius = 2,
 };
 
 /// Participation ratio ``(Σλ)² / Σλ²`` from column variances, divided by ``n_dims``.
 double compute_participation_ratio(const double* activations, int n_samples, int n_dims);
 
-/// Same as above with explicit method (Phase 35 eigenvalue PR).
+/// Same as above with explicit method (Phase 35 eigenvalue PR; Phase 0 hidden-dim-scale
+/// trace/Frobenius reformulation for ``n_dims`` above the Jacobi-affordable range).
 double compute_participation_ratio(const double* activations, int n_samples, int n_dims,
                                    ParticipationRatioMethod method);
 

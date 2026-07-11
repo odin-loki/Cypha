@@ -134,11 +134,10 @@ void jacobi_symmetric_eigenvalues(const std::vector<double>& matrix, int n,
   }
 }
 
-double participation_ratio_covariance_eigenvalue(const double* activations, int n_samples,
-                                                 int n_dims) {
-  if (n_samples < 2 || n_dims <= 0 || n_dims > 256) {
-    return participation_ratio_variance_proxy(activations, n_samples, n_dims);
-  }
+// Builds the n_dims x n_dims sample covariance matrix. This O(n_dims^2 * n_samples) cost
+// is shared by both the Jacobi-eigenvalue path and the trace/Frobenius path below.
+std::vector<double> sample_covariance_matrix(const double* activations, int n_samples,
+                                             int n_dims) {
   std::vector<double> means(static_cast<std::size_t>(n_dims), 0.0);
   for (int d = 0; d < n_dims; ++d) {
     for (int r = 0; r < n_samples; ++r) {
@@ -162,6 +161,57 @@ double participation_ratio_covariance_eigenvalue(const double* activations, int 
       cov[static_cast<std::size_t>(i * n_dims + j)] = c;
       cov[static_cast<std::size_t>(j * n_dims + i)] = c;
     }
+  }
+  return cov;
+}
+
+// Participation ratio (Σλ)²/Σλ² computed directly from the covariance matrix as
+// trace(C)^2 / trace(C^2), never diagonalizing it. For a symmetric matrix,
+// trace(C) == Σλ and trace(C^2) == Σ_i Σ_j C_ij * C_ji == Σ_i Σ_j C_ij^2 == ||C||_F^2
+// (since C_ji == C_ij), so this is an exact algebraic identity for Σλ and Σλ², not an
+// approximation of the eigenvalue method — it is that method, minus the O(n_dims^3)
+// Jacobi diagonalization that the participation-ratio formula never actually needed.
+double participation_ratio_trace_frobenius_from_cov(const std::vector<double>& cov, int n_dims) {
+  double trace = 0.0;
+  double frob_sq = 0.0;
+  for (int i = 0; i < n_dims; ++i) {
+    trace += cov[static_cast<std::size_t>(i * n_dims + i)];
+    for (int j = 0; j < n_dims; ++j) {
+      const double c = cov[static_cast<std::size_t>(i * n_dims + j)];
+      frob_sq += c * c;
+    }
+  }
+  if (frob_sq <= kEps) {
+    return 0.0;
+  }
+  const double participation = (trace * trace) / frob_sq;
+  return std::clamp(participation / static_cast<double>(n_dims), 0.0, 1.0);
+}
+
+double participation_ratio_covariance_trace_frobenius(const double* activations, int n_samples,
+                                                       int n_dims) {
+  if (n_samples < 2 || n_dims <= 0) {
+    return participation_ratio_variance_proxy(activations, n_samples, n_dims);
+  }
+  const std::vector<double> cov = sample_covariance_matrix(activations, n_samples, n_dims);
+  return participation_ratio_trace_frobenius_from_cov(cov, n_dims);
+}
+
+double participation_ratio_covariance_eigenvalue(const double* activations, int n_samples,
+                                                 int n_dims) {
+  if (n_samples < 2 || n_dims <= 0) {
+    return participation_ratio_variance_proxy(activations, n_samples, n_dims);
+  }
+  // Above this width the O(n_dims^3) Jacobi diagonalization becomes prohibitively
+  // expensive (~1B FLOPs already at 256, ~69B at 1024). Rather than silently falling
+  // back to the cheaper-but-different VarianceProxy metric (which would misreport D_eff
+  // fidelity at exactly the hidden dims Paper IV's scale-up experiment cares about),
+  // delegate to the trace/Frobenius reformulation, which computes the identical
+  // (Σλ)²/Σλ² quantity in O(n_dims^2 * n_samples) without diagonalizing at all.
+  constexpr int kJacobiMaxDims = 256;
+  const std::vector<double> cov = sample_covariance_matrix(activations, n_samples, n_dims);
+  if (n_dims > kJacobiMaxDims) {
+    return participation_ratio_trace_frobenius_from_cov(cov, n_dims);
   }
   std::vector<double> eigenvalues;
   jacobi_symmetric_eigenvalues(cov, n_dims, eigenvalues);
@@ -192,6 +242,9 @@ double compute_participation_ratio(const double* activations, int n_samples, int
   }
   if (method == ParticipationRatioMethod::CovarianceEigenvalue) {
     return participation_ratio_covariance_eigenvalue(activations, n_samples, n_dims);
+  }
+  if (method == ParticipationRatioMethod::TraceFrobenius) {
+    return participation_ratio_covariance_trace_frobenius(activations, n_samples, n_dims);
   }
   return participation_ratio_variance_proxy(activations, n_samples, n_dims);
 }

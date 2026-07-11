@@ -1,6 +1,7 @@
 /// Papers II–V scenarios for intelligence profiler: applications, landscape, epistemic loop, soft world.
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <vector>
@@ -333,6 +334,75 @@ void test_eigenvalue_participation_ratio() {
   assert(near(proxy, eigen, 0.15));
 }
 
+// Phase 0 (hidden-dim scale-up plan, docs/reports/HIDDEN_DIM_SCALE_PLAN.md §4.3/§7):
+// the eigenvalue-fidelity D_eff method must stay accurate (not silently fall back to
+// VarianceProxy) above 256 dims, since that's exactly the LSTM hidden-width range the
+// scale-up plan needs to trust. Covers both correctness (TraceFrobenius must match the
+// Jacobi eigenvalue result within tolerance where Jacobi is still affordable) and the
+// >256-dim path (where CovarianceEigenvalue now delegates to TraceFrobenius internally
+// instead of degrading to VarianceProxy).
+void test_trace_frobenius_participation_ratio() {
+  // Small case: TraceFrobenius should agree tightly with the Jacobi eigenvalue method,
+  // since (Sigma lambda)^2 / Sigma(lambda^2) == trace(C)^2 / trace(C^2) exactly for a
+  // symmetric covariance matrix -- this is an algebraic identity, not an approximation.
+  const std::vector<double> small_activations{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+  const double small_eigen = cypha::intelligence::compute_participation_ratio(
+      small_activations.data(), 3, 3,
+      cypha::intelligence::ParticipationRatioMethod::CovarianceEigenvalue);
+  const double small_trace_frob = cypha::intelligence::compute_participation_ratio(
+      small_activations.data(), 3, 3,
+      cypha::intelligence::ParticipationRatioMethod::TraceFrobenius);
+  assert(near(small_eigen, small_trace_frob, 1e-6));
+
+  // Large case: n_dims=300 is above the old hard `n_dims > 256` guard
+  // (native/src/intelligence/measurers.cpp) that used to silently swap in the cheaper,
+  // different VarianceProxy metric with no signal. Use a deterministic LCG so the
+  // activations have realistic cross-dimension correlation structure (not degenerate
+  // like a pure identity matrix), and keep n_samples small (48) to match the LSTM
+  // hidden-state ring buffer cap (`kLstmHiddenHistoryMax`, cyphalm_model.hpp).
+  constexpr int kDims = 300;
+  constexpr int kSamples = 48;
+  std::vector<double> big(static_cast<std::size_t>(kDims * kSamples), 0.0);
+  std::uint64_t state = 0x2545F4914F6CDD1DULL;
+  auto next_uniform = [&state]() {
+    state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+    return static_cast<double>((state >> 11) & 0xFFFFFFFFFFFFFULL) /
+           static_cast<double>(1ULL << 52);
+  };
+  std::vector<double> shared_factor(static_cast<std::size_t>(kSamples), 0.0);
+  for (int r = 0; r < kSamples; ++r) {
+    shared_factor[static_cast<std::size_t>(r)] = next_uniform() - 0.5;
+  }
+  for (int r = 0; r < kSamples; ++r) {
+    for (int d = 0; d < kDims; ++d) {
+      const double idio = next_uniform() - 0.5;
+      // Mix a shared low-rank factor into every 4th dimension so the covariance matrix
+      // has genuine off-diagonal structure (a pure-noise matrix would trivially make
+      // every method agree, which would not exercise the eigenvalue-vs-trace path).
+      const double coupling = (d % 4 == 0) ? 0.8 : 0.0;
+      big[static_cast<std::size_t>(r * kDims + d)] =
+          idio + coupling * shared_factor[static_cast<std::size_t>(r)];
+    }
+  }
+
+  const double big_variance_proxy = cypha::intelligence::compute_participation_ratio(
+      big.data(), kSamples, kDims, cypha::intelligence::ParticipationRatioMethod::VarianceProxy);
+  const double big_eigen = cypha::intelligence::compute_participation_ratio(
+      big.data(), kSamples, kDims,
+      cypha::intelligence::ParticipationRatioMethod::CovarianceEigenvalue);
+  const double big_trace_frob = cypha::intelligence::compute_participation_ratio(
+      big.data(), kSamples, kDims,
+      cypha::intelligence::ParticipationRatioMethod::TraceFrobenius);
+
+  assert(big_variance_proxy > 0.0 && big_variance_proxy <= 1.0);
+  assert(big_eigen > 0.0 && big_eigen <= 1.0);
+  assert(big_trace_frob > 0.0 && big_trace_frob <= 1.0);
+  // Above the old n_dims > 256 guard, CovarianceEigenvalue must now delegate to
+  // TraceFrobenius exactly (same call path, no diagonalization) -- not silently return
+  // the (numerically different) VarianceProxy value.
+  assert(near(big_eigen, big_trace_frob, 1e-9));
+}
+
 void test_kappa_ceiling_strength() {
   const auto base = cypha::intelligence::default_profile_guided_loss_config();
   cypha::intelligence::ProfileObservation obs;
@@ -415,6 +485,7 @@ int main() {
   test_kappa_navigation_warmup_scale();
   test_kappa_trajectory_ceiling();
   test_eigenvalue_participation_ratio();
+  test_trace_frobenius_participation_ratio();
   test_hidden_nudge_grad();
   test_extended_measurers_and_batch();
   std::puts("intelligence_profiler_papers: PASS");

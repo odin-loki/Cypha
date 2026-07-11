@@ -65,6 +65,7 @@ struct Args {
     int n_experts = -1;
     int max_memory_slots = -1;
     int compress_interval = -1;
+    int lstm_hidden = -1;
     std::int64_t bench_seed = -1;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
@@ -105,6 +106,7 @@ void usage() {
         << "       --n-experts N\n"
         << "       --max-memory-slots N\n"
         << "       --compress-interval N\n"
+        << "       --lstm-hidden N  (LSTM head hidden width override; default: profile value, e.g. 128 for d17)\n"
         << "       --bench-seed N\n"
         << "       --use-eigenvalue-d-eff\n"
         << "       --use-reu-forget-gate\n";
@@ -212,6 +214,9 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--compress-interval") {
             a.compress_interval = std::stoi(need("--compress-interval"));
         }
+        else if (k == "--lstm-hidden") {
+            a.lstm_hidden = std::stoi(need("--lstm-hidden"));
+        }
         else if (k == "--bench-seed") {
             a.bench_seed = std::stoll(need("--bench-seed"));
         }
@@ -263,6 +268,14 @@ int main(int argc, char** argv) {
         } else {
             const auto bench_mode = cypha::cyphalm::parse_bench_mode(args.mode);
             cypha::cyphalm::apply_bench_mode(bench_mode, cfg);
+        }
+        // Unconditional (not gated behind --math-integration like the grid-search overrides
+        // below): hidden-dim needs to be settable in vanilla hybrid mode too, per the
+        // hidden-dim scale-up plan (docs/reports/HIDDEN_DIM_SCALE_PLAN.md Phase 1).
+        // Default (unset) keeps whatever the profile/mode/cell-variant already configured
+        // (128 for the d17 production profile).
+        if (args.lstm_hidden > 0) {
+            cfg.lstm_hidden = args.lstm_hidden;
         }
         if (args.math_integration) {
             cypha::cyphalm::apply_math_integration_preset(cfg);
@@ -412,6 +425,7 @@ int main(int argc, char** argv) {
             {"bench_seed", cfg.seed},
             {"bpc", bpc},
             {"vocab_size", cfg.vocab_size},
+            {"lstm_hidden", cfg.lstm_hidden},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;
         if (args.intelligence_profile) {
