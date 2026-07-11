@@ -2,6 +2,7 @@
 
 #include "cypha/intelligence/measurers.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace cypha::intelligence {
@@ -122,6 +123,19 @@ double IntelligenceProfiler::criticality_score_for(const ProfileObservation& obs
   deviation_sum += axis_distance(obs.lipschitz, targets[5]);
   deviation_sum += axis_distance(obs.calibration, targets[6]);
   return 1.0 - deviation_sum / static_cast<double>(kProfileStatisticCount);
+}
+
+double IntelligenceProfiler::apply_causal_fidelity(double kappa, double causal_fidelity, double weight) {
+  if (!(causal_fidelity > 0.0)) {
+    // Insufficient causal-graph data (or a non-positive/NaN fidelity value): no-op, bit-
+    // identical to the pre-causal-fidelity kappa. The `!(x > 0.0)` form also catches NaN
+    // safely (NaN > 0.0 is false), so a malformed fidelity input degrades to "no adjustment"
+    // rather than poisoning kappa.
+    return kappa;
+  }
+  const double fidelity = std::clamp(causal_fidelity, 0.0, 1.0);
+  const double w = std::max(0.0, weight);
+  return std::clamp(kappa * (1.0 + w * fidelity), 0.0, 1.0);
 }
 
 void IntelligenceProfiler::update_statistic(ProfileStatistic stat, double value) {

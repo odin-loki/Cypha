@@ -1,8 +1,8 @@
 # Soft-world causal graph plan (P3) — 2026-07-11
 
-**Status:** Scoped, small increment implemented and verified. No large causal-discovery work in this pass.
+**Status:** Scoped increment implemented and verified (§1–8), followed by a second pass (§9) that wires the causal graph's own fidelity into κ/`criticality_score` — the highest-leverage next step §7/§8 of this document itself identified. No large causal-discovery work in either pass.
 **Priority:** P3 in `docs/reports/DEV_PLAN_2026-07-11.md:153` ("Paper V soft-world / causal graph maturity — next framework beyond 7-stat profile; targets κ 0.90–0.93; independent, longer horizon"). Also referenced at `DEV_PLAN_2026-07-11.md:138,142`: "Paper V causal graph beyond stub (`native/include/cypha/intelligence/causal_graph.hpp:13`)" and listed among "known stub functions."
-**Relationship to the parallel P0 work:** independent. This plan and its implementation do not touch `native/build_math`, `bench/BASELINE_LOCK.json`, or any overnight orchestration script. All build/verification in this pass used a fresh scratch directory, `native/build_softworld`. Files also avoided per this task's constraints: `native/src/rpsm/*`, `native/src/intelligence/measurers.cpp`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` path, kernel-LLR files.
+**Relationship to the parallel P0 work:** independent. This plan and its implementation do not touch `native/build_math`, `bench/BASELINE_LOCK.json`, or any overnight orchestration script. §1–8's build/verification used a fresh scratch directory, `native/build_softworld`; §9's used a second fresh scratch directory, `native/build_causal_kappa` (built from `HEAD` after §1–8's commit, per that pass's own constraint to avoid concurrent sibling work in `native/build_rpsm`, a hidden-dim build, a kernel-LLR build, and a multi-view build). Files avoided by both passes: `native/src/rpsm/*`, `native/src/intelligence/measurers.cpp`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` path, kernel-LLR files, multiview files, `cyphalm_model.cpp`, `char_lstm.cpp`.
 
 ---
 
@@ -217,6 +217,107 @@ Ranked by leverage-per-effort, for whoever picks up P3 next:
 
 ---
 
+## 9. Causal fidelity wired into κ (2026-07-11)
+
+**Status:** Implemented and verified. This closes exactly the gap §5.4/§7/§8 identified: "no change to `causal_graph.cpp` — this fix or a much larger one — can move `kappa` today, because nothing reads the causal graph's output back into the profile-matrix/criticality-score computation." That is no longer true; a `CausalGraphMonitor`'s live fidelity can now move `criticality_score`/`criticality_score_obs`, bounded and with an exact no-op guarantee when the graph has insufficient data. Scope, per §8 row 3 of this document ("Wire causal-graph fidelity into kappa... requires a design decision... should be scoped as its own short planning pass before implementation") — the design decision is made and recorded below, and implemented in the same pass since it turned out to be small (~195 lines across 6 files, all outside `measurers.cpp`/`rpsm/`/kernel-LLR/multiview/`--lstm-hidden` per this pass's constraints).
+
+### 9.1 The fidelity formula, and why
+
+The only two edges in `CausalGraphMonitor` with a genuine notion of "estimated from real accumulated data with a well-defined confidence" are the two `OnlineCorrelation`-backed edges added in §5 (`alpha<->calibration`, `tau<->r_eu`). The other four edges (`query->r_eu`, `simulation->world_model`, `world_model->maturation`, `maturation->tau`) report direct measured deltas or NIG means, not an estimated *relationship* between two named variables — there is no natural "confidence in a relationship" number to extract from them without a much larger redesign (§7 row 3: per-edge NIG parameterisation), so this pass does not use them for the fidelity signal. Using only the two OnlineCorrelation edges is deliberately narrow and directly extensible: if/when more edges gain their own online-correlation estimator, they compose into the same aggregate for free.
+
+New `CausalGraphMonitor::causal_fidelity()` (`causal_graph.hpp/.cpp`):
+
+```
+edge_confidence_weight(n) = 0                  if n < 2
+                           = 1 - 1/n            if n >= 2   (0.5 at n=2, -> 1 as n -> inf)
+
+causal_fidelity() = mean over edges e in {alpha<->calibration, tau<->r_eu} with n_e >= 2 of:
+                       edge_confidence_weight(n_e) * |correlation_e|
+                     (or exactly 0.0 if *no* edge has n_e >= 2)
+```
+
+Reasoning:
+
+- **Why confidence-weight at all, not just `mean(|correlation|)`:** a correlation computed from very few points can look arbitrarily strong by chance. Multiplying by a sample-size-dependent weight that starts at `0` (below the estimator's own `n<2` floor) and rises toward `1` means a long, consistently-correlated history is required to report high fidelity — a single lucky pair of points cannot.
+- **Why `1 - 1/n` specifically:** it is the simplest monotonically-increasing-in-`n`, bounded-in-`[0,1)` function that is exactly `0` at the same `n<2` boundary `OnlineCorrelation::correlation()` itself already uses (so the two degeneracy conventions agree by construction, not by coincidence), and `0.5` at the smallest non-degenerate sample size (`n=2`) — a deliberately conservative starting point. This is the same "degrees-of-freedom fraction" family of shrinkage weight used informally elsewhere in frequentist reliability estimates; a more principled version (Fisher-z + NIG posterior width, §7 row 2 of this doc) is flagged as a future refinement, not attempted here to keep this pass's diff small.
+- **Why average over *contributing* edges, not always over both:** if one edge has enough data and the other doesn't, the graph should still report a meaningful (if partial) fidelity signal from the edge that does — not silently zero out because of the other edge's degeneracy. Both-degenerate is the only case that returns exactly `0.0`.
+- **Numerical stability / degeneracy handling:** identical guard convention to `OnlineCorrelation::correlation()` (`n < 2` -> excluded, zero-variance already handled by `correlation()` returning `0.0` in that case per §5.1). No new degeneracy modes introduced.
+
+### 9.2 Wiring into κ
+
+New `IntelligenceProfiler::apply_causal_fidelity(kappa, causal_fidelity, weight = kDefaultCausalFidelityWeight = 0.05)` (`intelligence_profiler.hpp/.cpp`):
+
+```
+apply_causal_fidelity(kappa, fidelity, weight):
+  if not (fidelity > 0.0):            # covers fidelity <= 0 and NaN safely
+    return kappa                      # exact no-op, bit-identical
+  fidelity' = clamp(fidelity, 0, 1)
+  weight'   = max(0, weight)
+  return clamp(kappa * (1 + weight' * fidelity'), 0, 1)
+```
+
+**Multiplicative, not additive**, and bounded to a **5% ceiling** by default:
+
+- Multiplicative means the size of the boost scales with κ's own value — a well-grounded causal graph makes an *already-good* profile look modestly better; it doesn't hand out the same flat bonus to a profile that's far from critical for unrelated reasons. This matches the intuition that causal-graph fidelity is a *confidence multiplier* on the existing 7-axis score, not an independent 8th axis competing with it (the design-decision fork §7 row 4 called out — "does κ get an eighth axis? does an existing axis get an adjustment term?" — resolved here as: neither; it's a confidence-style multiplier on the whole score).
+- 5% is deliberately small relative to κ's own `[0,1]` range and to the ~0.80 (current, §5.4) -> 0.90–0.93 (Paper V target, §1) gap: this signal is a nudge that *reflects* grounded-causality quality, not a mechanism that manufactures the whole gap on its own. A larger weight was considered and rejected — it would let a single strong-but-narrow correlation swing κ by more than the deviation from *any single one* of the 7 existing axes' own worst-case contribution (`1/7 ≈ 14.3%`), which would make the causal-fidelity term dominate the score it's supposed to be a modest correction to.
+- Clamping to `[0,1]` after the multiply preserves κ's documented range even in edge cases (e.g. κ already very close to 1).
+
+**Call site** (`profile_from_model.cpp`, `intelligence_profile_report_json`): the `CausalGraphMonitor` is now constructed *before* the `criticality_score`/`criticality_score_obs` fields are set (previously constructed afterward, purely for the `causal_graph` JSON block — see §5.4's original ordering), so its live `causal_fidelity()` can be read back into both fields via `apply_causal_fidelity`. A new `causal_fidelity` field is also added to the top-level report JSON and to `CausalGraphMonitor::to_json()`'s `edge_estimation` block for direct observability. `landscape_kappa.*` (the fixed Paper-III reference-class comparisons) is deliberately **not** adjusted — those are static reference profiles, not live measurements, so a live causal-fidelity signal has no meaning there.
+
+### 9.3 Degeneracy behaviour in the one call path this pass measured end-to-end
+
+`intelligence_profile_report_json`'s `CausalGraphMonitor` is (as documented in §2.2/§2.3) a *fresh* monitor fed exactly one `observe_profile` call per report (`run_simulation_trajectory(4, obs)` calls `observe_profile` once, then four `simulation_step`s that don't touch the correlation trackers). That means `alpha_calibration_n() == tau_r_eu_n() == 1` — always, regardless of `n_train` — so `causal_fidelity()` is **exactly `0.0`** in this call path today, and `apply_causal_fidelity` is therefore a **guaranteed, provable no-op** there: `criticality_score`/`criticality_score_obs` in every existing bench-domain/reference-fixture call are bit-identical to before this pass. This is not a bug or an oversight — it is the intended "gracefully degrade to neutral when the causal graph has insufficient data" behaviour the task required, confirmed both by direct code inspection (the `!(fidelity > 0.0)` early-return in `apply_causal_fidelity`) and by measurement (§9.5).
+
+The wiring genuinely moves κ in any context where a `CausalGraphMonitor` accumulates ≥2 observations — which today means the **persistent** `g_causal_graph_monitor` (`cypha_rest.cpp`, same instance identified in §5.5 as the one real accumulation point) if it were also threaded through a report call, and, in this pass, the synthetic CTest coverage below and the standalone before/after measurement in §9.5.
+
+### 9.4 CTest coverage
+
+Added to `native/tools/intelligence_profiler_papers.cpp`, `test_paper_v_causal_fidelity_kappa()` (registered in `main()`, runs under the existing `native_intelligence_profiler_papers` CTest):
+
+1. **Degenerate (single observation, and empty/zero-observation monitor):** `causal_fidelity() == 0.0` exactly, `apply_causal_fidelity(kappa, 0.0) == kappa` exactly (bit-identical) — the "matches the old bit-identical baseline" case the task required.
+2. **20 synthetic observations**, `alpha`/`calibration` rising together and `tau`/`r_eu` moving in strict opposition (same synthetic-history pattern as the sibling's own §5.2 case 2, extended from 12 to 20 points): `causal_fidelity()` lands in `(0.8, 1.0)`, and folding it into a baseline κ measurably raises κ (`adjusted > baseline`) while staying within the documented `<=5%` multiplicative ceiling and within `[0,1]`.
+3. **Defensive inputs:** a zero weight is a no-op regardless of fidelity; a negative weight is clamped to zero (never lowers κ below baseline); a negative or NaN fidelity value is treated as "insufficient data" (no-op), not propagated into κ.
+
+### 9.5 Test results
+
+```
+ctest --test-dir native/build_causal_kappa -R "intelligence|causal|soft_world|d17|d18" --output-on-failure
+100% tests passed, 0 tests failed out of 8
+  native_intelligence_profiler_smoke .......... Passed
+  native_intelligence_profiler_papers .......... Passed   (includes the 3 new causal-fidelity cases)
+  native_intelligence_bench_smoke .............. Passed
+  native_cyphalm_bench_intelligence_profile .... Passed
+  native_d17_wikitext_smoke .................... Passed
+  native_d17_wikitext_overnight_smoke .......... Passed
+  native_d39_intelligence_monitor_smoke ........ Passed
+  native_intelligence_lm_monitor_smoke ......... Passed
+```
+
+Build/config: fresh scratch directory `native/build_causal_kappa` (GNU 13.2.0/Ninja/MinGW-w64, `cmake -S native -B native/build_causal_kappa -G Ninja -DCMAKE_BUILD_TYPE=Release`), built from current `HEAD` (`ca6f2cb`, i.e. after this document's original §1–8 commit `7bce7b7`). No changes to `native/build_math`, `bench/BASELINE_LOCK.json`, overnight scripts, `native/src/rpsm/*`, `cyphalm_model.cpp`, `char_lstm.cpp`, `measurers.hpp/.cpp`, `--lstm-hidden` parsing, kernel-LLR files, or multiview files.
+
+### 9.6 Before/after κ comparison at small scale
+
+**D17 bench smoke** (`cyphalm_bench_native --profile d17 --n-train 2000 --n-eval 256 --intelligence-profile`, this pass's build): ran cleanly, no crash. As predicted by §9.3, `causal_fidelity = 0.0` (`alpha_calibration_n = tau_r_eu_n = 1`) at this call site regardless of scale, so `criticality_score = criticality_score_obs = 0.854960260189175` — verified by hand (recomputing the unweighted 7-axis deviation sum from the run's own reported per-statistic `point`/`critical_target` values reproduces this exact figure) to be the same value the pre-this-pass formula would have produced. **This is a legitimate "no visible movement at this call site" result, not a failure to wire the signal** — it is the same finding the sibling agent reported for the edge-weight fix itself in §5.4, for the identical underlying reason (this call path only ever has one observation).
+
+**Standalone before/after demonstration** (ad hoc driver linked against this pass's build, using the exact synthetic-history pattern from CTest case 2, deleted after use — not part of the committed diff): for a fixed illustrative profile (`alpha=0.45, d_eff=0.40, sigma_branch=0.50, tau=0.55, r_eu=0.60, lipschitz=0.50, calibration=0.70` vs. the standard critical targets), baseline `κ = 0.9400000000`.
+
+| Causal-graph state | `causal_fidelity()` | Adjusted κ | Δκ | Δ% |
+|---|---|---|---|---|
+| Degenerate (n=1 both edges) | `0.0000000000` | `0.9400000000` | `0.0000000000` | `0.000%` |
+| 20 strongly-correlated synthetic observations (n=20 both edges) | `0.9500000000` | `0.9846500000` | `+0.0446500000` | `+4.750%` |
+
+This confirms both halves of the requirement in one table: exact no-op under degeneracy, and a measurable (here, +4.5 points / +4.75% relative), bounded (well under the 5% ceiling, since fidelity `<1`) shift once the causal graph has real, strongly-correlated history to back its edge weights.
+
+### 9.7 What would be needed to validate this at production scale
+
+Not run in this pass (a full production overnight is already in flight elsewhere, per this task's constraints) — flagged for whoever runs the next full D17/production overnight pass:
+
+1. **Confirm the single-observation degeneracy holds at production `n_train`.** §9.3's finding ("always `n=1` in this call path, regardless of scale") is a property of `intelligence_profile_report_json`'s construction, not of training size — it should hold trivially at `n_train=300000` exactly as it did at `n_train=2000`, but a production log's `intelligence_profile.causal_fidelity` field (now present) should be checked to be `0.0` to confirm, exactly like `criticality_score` should be checked to be bit-identical to the equivalent pre-this-pass production log at the same commit.
+2. **If/when the persistent-monitor pattern (§5.5, §9.3) is extended to the report path** (e.g. by threading `g_causal_graph_monitor` through `/intelligence/report?source=live` the way `/intelligence/simulation` already does, or by having a long-running training/serving loop call `intelligence_profile_report_json` against a monitor that persists across calls) — that would be the first production-realistic setting where `causal_fidelity` is non-degenerate, and the production-scale question becomes: does real κ (not the synthetic CTest numbers in §9.6) move by a similar small, bounded amount, and does it move in a way that's *correlated with actual model quality* rather than just with how long the process has been running? That second question needs real production traffic/training history to answer and can't be answered from a 2000-sample smoke run.
+3. **Revisit the 5% weight constant** once (1) and (2) have real production numbers — this pass chose `0.05` from first-principles bounding (§9.2), not from fitting against production data, since no production run with non-degenerate `causal_fidelity` exists yet to fit against.
+
+---
+
 ## Appendix: commands reference
 
 ```powershell
@@ -250,3 +351,19 @@ native/build_softworld/cypha_intelligence_bench.exe --out <scratch path>.json
 - `docs/reports/DEV_PLAN_2026-07-11.md` (§3 priority table, P3 row, stub-function list)
 - `bench/results/production_overnight_20260628_170701.log` (read-only, live evidence of current causal-graph JSON output at full production scale)
 - `docs/reports/HIDDEN_DIM_SCALE_PLAN.md`, `docs/reports/RPSM_UPGRADE_PLAN.md` (style/rigour reference for this document's structure)
+
+### §9 pass — additional commands and citations
+
+```powershell
+# One-time: configure a second fresh scratch build for the causal-fidelity-into-kappa pass
+cmake -S native -B native/build_causal_kappa -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+cmake --build native/build_causal_kappa --target intelligence_profiler_papers intelligence_profiler_smoke cypha_intelligence_bench cyphalm_bench_native intelligence_lm_monitor_smoke cypha_bench_run
+
+ctest --test-dir native/build_causal_kappa -R "intelligence|causal|soft_world|d17|d18" --output-on-failure
+
+native/build_causal_kappa/cyphalm_bench_native.exe --profile d17 --n-train 2000 --n-eval 256 --intelligence-profile
+# then inspect intelligence_profile.causal_fidelity / .criticality_score / .criticality_score_obs
+```
+
+Additional files read/cited for §9: `native/include/cypha/intelligence/intelligence_profiler.hpp` + `native/src/intelligence/intelligence_profiler.cpp` (full read — `criticality_score`/`criticality_score_for`/`critical_targets`, where `apply_causal_fidelity` was added), `native/src/intelligence/intelligence_profile_json.cpp` (`criticality_score` JSON key source), `native/src/bench/bench_domains.cpp:2885-2893,4916-4926` (`d18_intelligence_profile`'s `criticality_score` consumption, confirmed as a generic-numeric-value check, not a pinned literal, so unaffected by the value changing when fidelity is non-zero), `native/src/intelligence/profile_guided_loss.cpp` and `native/src/cyphalm/cyphalm_math_integration.cpp` (other `criticality_score_for` call sites, confirmed unaffected since they call the static per-observation function directly, not through `intelligence_profile_report_json`).

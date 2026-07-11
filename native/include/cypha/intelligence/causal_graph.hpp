@@ -18,7 +18,10 @@ namespace cypha::intelligence {
 /// profiler observations rather than a fixed per-observation formula; the remaining edges
 /// (query->r_eu, simulation->world_model, world_model->maturation, maturation->tau) report
 /// directly measured deltas/NIG means from ``SoftWorldMonitor``, which is already real online
-/// inference, not a placeholder.
+/// inference, not a placeholder. ``causal_fidelity()`` aggregates the two estimated edges into
+/// a single confidence-weighted signal that is fed back into kappa (see
+/// ``IntelligenceProfiler::apply_causal_fidelity``, docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md
+/// §9) -- this is the graph's first and only feedback path into kappa/criticality_score.
 struct CausalEdge {
   std::string from;
   std::string to;
@@ -88,6 +91,20 @@ class CausalGraphMonitor {
   /// Current online-estimated tau->r_eu edge correlation (raw, signed).
   double tau_r_eu_correlation() const { return tau_r_eu_corr_.correlation(); }
   int tau_r_eu_n() const { return tau_r_eu_corr_.n(); }
+
+  /// Aggregate causal-graph fidelity in ``[0, 1)``: a confidence-weighted mean of
+  /// ``|correlation|`` across the online-correlation-estimated edges (alpha<->calibration,
+  /// tau<->r_eu). "Confidence-weighted" means each edge's contribution is scaled by how much
+  /// history backs it (``1 - 1/n``, i.e. 0 below ``n=2`` and rising toward 1 with more
+  /// observations), so a single lucky-looking correlation from a small sample can't report
+  /// high fidelity the way a long, consistently-correlated history can.
+  ///
+  /// Exactly ``0.0`` whenever *neither* edge has accumulated ``n >= 2`` observations yet --
+  /// the same "not enough data" convention ``OnlineCorrelation::correlation()`` itself uses --
+  /// so a degenerate/insufficient-data graph reports a well-defined neutral value instead of a
+  /// fabricated one. See ``IntelligenceProfiler::apply_causal_fidelity`` for how this plugs
+  /// into kappa.
+  double causal_fidelity() const;
 
   nlohmann::json to_json() const;
   nlohmann::json trajectory_json() const;

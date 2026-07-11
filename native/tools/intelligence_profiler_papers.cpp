@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <limits>
 #include <vector>
 
 #include "cypha/bench/bench_paths.hpp"
@@ -284,6 +285,88 @@ void test_paper_v_causal_graph_correlation_edges() {
   }
 }
 
+// docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9: causal-graph fidelity wired into kappa.
+// Covers both halves of the degeneracy contract: (1) insufficient causal-graph data leaves
+// kappa bit-identical to the pre-fidelity baseline, and (2) clearly correlated synthetic
+// (alpha, calibration)/(tau, r_eu) history drives a measurable, bounded kappa shift.
+void test_paper_v_causal_fidelity_kappa() {
+  using cypha::intelligence::CausalGraphMonitor;
+  using cypha::intelligence::IntelligenceProfiler;
+  using cypha::intelligence::ProfileObservation;
+
+  ProfileObservation obs;
+  obs.alpha = 0.45;
+  obs.d_eff = 0.40;
+  obs.sigma_branch = 0.50;
+  obs.tau = 0.55;
+  obs.r_eu = 0.60;
+  obs.lipschitz = 0.50;
+  obs.calibration = 0.70;
+  const double baseline_kappa = IntelligenceProfiler::criticality_score_for(obs);
+
+  // (1) Degenerate/insufficient causal-graph data: a single observation cannot back a
+  // correlation (n < 2 on both estimated edges per OnlineCorrelation's own convention), so
+  // causal_fidelity() must be exactly 0 and apply_causal_fidelity must be a true no-op --
+  // bit-identical to the old, causal-graph-unaware kappa, matching the required "does not
+  // destabilise kappa when the causal graph has insufficient data" behaviour.
+  {
+    CausalGraphMonitor degenerate;
+    degenerate.observe_profile(obs);
+    assert(degenerate.alpha_calibration_n() == 1);
+    assert(degenerate.causal_fidelity() == 0.0);
+    const double adjusted =
+        IntelligenceProfiler::apply_causal_fidelity(baseline_kappa, degenerate.causal_fidelity());
+    assert(adjusted == baseline_kappa);
+
+    // An empty monitor (zero observations) must degrade the same way.
+    CausalGraphMonitor empty;
+    assert(empty.causal_fidelity() == 0.0);
+    assert(IntelligenceProfiler::apply_causal_fidelity(baseline_kappa, empty.causal_fidelity()) ==
+           baseline_kappa);
+  }
+
+  // (2) Clearly correlated synthetic history for both estimated edges: causal_fidelity()
+  // must land well above 0, and folding it in must measurably raise kappa relative to the
+  // degenerate case above, while staying within the documented bound (<= 5% multiplicative
+  // boost, i.e. adjusted <= baseline_kappa * 1.05) and never leaving kappa's [0, 1] range.
+  {
+    CausalGraphMonitor correlated;
+    for (int i = 0; i < 20; ++i) {
+      const double t = static_cast<double>(i) / 19.0;
+      ProfileObservation o;
+      o.alpha = 0.2 + 0.6 * t;        // rising
+      o.calibration = 0.3 + 0.5 * t;  // rising with alpha -> strong positive correlation
+      o.tau = 0.2 + 0.6 * t;          // rising
+      o.r_eu = 0.8 - 0.6 * t;         // falling -> strong negative correlation with tau
+      correlated.observe_profile(o);
+    }
+    assert(correlated.alpha_calibration_n() == 20);
+    const double fidelity = correlated.causal_fidelity();
+    assert(fidelity > 0.8);
+    assert(fidelity < 1.0);
+
+    const double adjusted = IntelligenceProfiler::apply_causal_fidelity(baseline_kappa, fidelity);
+    assert(adjusted > baseline_kappa);
+    assert(adjusted <= baseline_kappa * 1.05 + 1e-9);
+    assert(adjusted >= 0.0 && adjusted <= 1.0);
+
+    // Custom weight=0 must always be a no-op regardless of fidelity, and a negative weight
+    // must not be allowed to push kappa down below baseline (weight is clamped to >= 0).
+    assert(near(IntelligenceProfiler::apply_causal_fidelity(baseline_kappa, fidelity, 0.0),
+                baseline_kappa));
+    assert(IntelligenceProfiler::apply_causal_fidelity(baseline_kappa, fidelity, -1.0) >=
+           baseline_kappa);
+  }
+
+  // NaN/negative fidelity inputs (defensive: should never happen from a real
+  // CausalGraphMonitor, but apply_causal_fidelity must not propagate garbage into kappa).
+  {
+    assert(IntelligenceProfiler::apply_causal_fidelity(baseline_kappa, -0.5) == baseline_kappa);
+    assert(IntelligenceProfiler::apply_causal_fidelity(
+               baseline_kappa, std::numeric_limits<double>::quiet_NaN()) == baseline_kappa);
+  }
+}
+
 void test_paper_v_soft_world_simulation_step() {
   cypha::intelligence::SoftWorldMonitor monitor;
   monitor.simulation_step(0.8, 0.5, 0.2);
@@ -551,6 +634,7 @@ int main() {
   test_paper_v_soft_world_simulation_step();
   test_paper_v_causal_graph();
   test_paper_v_causal_graph_correlation_edges();
+  test_paper_v_causal_fidelity_kappa();
   test_paper_iv_profile_guided_loss();
   test_adaptive_navigation_lambdas();
   test_kappa_trajectory_navigation_lambdas();

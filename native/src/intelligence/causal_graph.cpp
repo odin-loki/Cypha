@@ -9,6 +9,19 @@ namespace {
 
 double clamp01(double x) { return std::clamp(x, 0.0, 1.0); }
 
+/// Degrees-of-freedom-style confidence weight for a single online-correlation edge:
+/// ``0`` below the estimator's own minimum sample size (``n < 2``, matching
+/// ``OnlineCorrelation::correlation()``'s own guard), ``0.5`` at exactly ``n = 2``, rising
+/// toward (but never reaching) ``1`` as more observations accumulate. Used so a correlation
+/// estimated from very little history contributes less to the aggregate fidelity signal than
+/// the same correlation value estimated from a long history.
+double edge_confidence_weight(int n) {
+  if (n < 2) {
+    return 0.0;
+  }
+  return 1.0 - 1.0 / static_cast<double>(n);
+}
+
 }  // namespace
 
 void OnlineCorrelation::update(double x, double y) {
@@ -97,6 +110,24 @@ void CausalGraphMonitor::run_simulation_trajectory(int n_steps, const ProfileObs
   }
 }
 
+double CausalGraphMonitor::causal_fidelity() const {
+  const OnlineCorrelation* const estimated_edges[] = {&alpha_calibration_corr_, &tau_r_eu_corr_};
+  double weighted_sum = 0.0;
+  int contributing = 0;
+  for (const OnlineCorrelation* corr : estimated_edges) {
+    const int n = corr->n();
+    if (n < 2) {
+      continue;  // No estimate yet for this edge; matches OnlineCorrelation's own convention.
+    }
+    weighted_sum += edge_confidence_weight(n) * std::abs(corr->correlation());
+    ++contributing;
+  }
+  if (contributing == 0) {
+    return 0.0;  // Neither edge has enough data: fully degenerate, well-defined neutral value.
+  }
+  return weighted_sum / static_cast<double>(contributing);
+}
+
 nlohmann::json CausalGraphMonitor::trajectory_json() const {
   nlohmann::json steps = nlohmann::json::array();
   for (const auto& s : trajectory_) {
@@ -137,7 +168,8 @@ nlohmann::json CausalGraphMonitor::to_json() const {
        {{"alpha_calibration_correlation", alpha_calibration_corr_.correlation()},
         {"alpha_calibration_n", alpha_calibration_corr_.n()},
         {"tau_r_eu_correlation", tau_r_eu_corr_.correlation()},
-        {"tau_r_eu_n", tau_r_eu_corr_.n()}}},
+        {"tau_r_eu_n", tau_r_eu_corr_.n()},
+        {"causal_fidelity", causal_fidelity()}}},
   };
 }
 

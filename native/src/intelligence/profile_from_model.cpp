@@ -189,7 +189,27 @@ nlohmann::json intelligence_profile_report_json(const IntelligenceProfiler& prof
   nlohmann::json root = intelligence_profile_to_json(profiler);
   const ProfileObservation obs = mean_observation(profiler);
   root["navigation_loss"] = IntelligenceProfiler::navigation_loss(obs);
-  root["criticality_score_obs"] = IntelligenceProfiler::criticality_score_for(obs);
+
+  // Causal graph is constructed up front (rather than after the kappa fields, as before)
+  // so its live fidelity signal can be folded into the kappa values reported below. See
+  // docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9 for the full rationale; in short, this
+  // is the causal graph's first and only feedback path into kappa/criticality_score. In this
+  // call path a *fresh* monitor is fed exactly one observation (`run_simulation_trajectory`
+  // only calls `observe_profile` once), so `causal_fidelity()` is guaranteed 0.0 here (n=1 on
+  // both estimated edges) and `apply_causal_fidelity` is therefore a guaranteed no-op below --
+  // this path's kappa values are unchanged from before this pass. Non-degenerate fidelity
+  // requires a monitor that has observed >=2 profiles, as demonstrated by the CTest coverage
+  // (see `test_paper_v_causal_fidelity_kappa` in intelligence_profiler_papers.cpp) and by the
+  // persistent `g_causal_graph_monitor` accumulation pattern already used in cypha_rest.cpp.
+  CausalGraphMonitor causal;
+  causal.run_simulation_trajectory(4, obs);
+  const double causal_fidelity = causal.causal_fidelity();
+
+  root["causal_fidelity"] = causal_fidelity;
+  root["criticality_score"] =
+      IntelligenceProfiler::apply_causal_fidelity(root["criticality_score"].get<double>(), causal_fidelity);
+  root["criticality_score_obs"] =
+      IntelligenceProfiler::apply_causal_fidelity(IntelligenceProfiler::criticality_score_for(obs), causal_fidelity);
 
   const auto flags = IntelligenceProfiler::predict_failure_modes(obs);
   root["failure_modes"] = {
@@ -219,8 +239,6 @@ nlohmann::json intelligence_profile_report_json(const IntelligenceProfiler& prof
                     IntelligenceProfiler::landscape_reference(LandscapeSystemClass::HumanMedian))}};
   root["landscape_kappa"] = landscape;
 
-  CausalGraphMonitor causal;
-  causal.run_simulation_trajectory(4, obs);
   root["causal_graph"] = causal.to_json();
   return root;
 }
