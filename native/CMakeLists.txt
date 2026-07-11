@@ -1116,6 +1116,28 @@ set_tests_properties(native_d03_xor_kernel_basis_rff_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1;CYPHA_D03_KERNEL_BASIS=rff;CYPHA_D03_RFF_DIM=512"
 )
 
+# D14 Feynman-equations kernelized (RFF, auto-gamma) expert-routing discriminant -- the deferred
+# dedicated pass from the D03 kernel-LLR track (docs/research/upgrades/NONLINEAR_BOUNDARY.md Fix 2 /
+# docs/RESEARCH_STATUS.md Priority 1). Default (flag unset) must reproduce the pre-existing D14 output
+# exactly; the second test exercises the opt-in RFF auto-gamma routing path end-to-end (construct +
+# training + prediction across all 20 Feynman equations) and would fail (non-zero exit, e.g. via
+# nlohmann::json refusing to serialize a non-finite double) if R^2/RMSE went non-finite.
+add_test(
+  NAME native_d14_kernel_basis_default_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d14
+)
+set_tests_properties(native_d14_kernel_basis_default_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
+
+add_test(
+  NAME native_d14_kernel_basis_rff_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d14
+)
+set_tests_properties(native_d14_kernel_basis_rff_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1;CYPHA_D14_KERNEL_BASIS=rff;CYPHA_D14_RFF_DIM=256"
+)
+
 configure_file(
   "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
   "${CMAKE_CURRENT_BINARY_DIR}/d23_overnight_lock_smoke.json"

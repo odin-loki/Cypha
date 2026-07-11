@@ -10,6 +10,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <random>
 #include <sstream>
@@ -782,14 +783,44 @@ struct RegExpertStat {
     int n_updates{0};
 };
 
+// ``score_matrix_use_field``'s own ``kernel_mem``/``use_kernel_llr`` args are a no-op by default:
+// it early-returns via ``rpsm_score_matrix_batched`` whenever ``CYPHA_USE_RPSM_LLR`` is unset (the
+// documented default), *before* reaching its kernel-blend branch. Blend manually here instead --
+// same ``(1-blend)*lin + blend*ker`` formula as ``classify_at_h``/``score_matrix_use_field``, applied
+// on top of whatever linear (RPSM or legacy) scores the model actually produces -- so the D14 opt-in
+// kernel path works regardless of the RPSM env toggle.
+void kernel_blend_llr(const cypha::CyphaInferModel& infer, const double* h,
+                      const cypha::KernelMemory* kernel_mem, double kernel_blend, std::vector<double>& llr) {
+    cypha::score_matrix_use_field(infer, h, 1, llr);
+    const int K = static_cast<int>(infer.labels.size());
+    if (kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
+        std::vector<double> kernel_scores;
+        kernel_mem->score_all(h, infer.labels, kernel_scores);
+        for (int k = 0; k < K; ++k) {
+            const double lin = llr[static_cast<std::size_t>(k)];
+            const double ker = kernel_scores[static_cast<std::size_t>(k)];
+            llr[static_cast<std::size_t>(k)] = (1.0 - kernel_blend) * lin + kernel_blend * ker;
+        }
+    }
+}
+
+// ``kernel_mem``/``use_kernel_llr``/``kernel_blend`` mirror the D03 kernel-LLR blend convention;
+// default args (nullptr/false) reproduce the pre-existing linear-only routing decision exactly.
 std::string pick_dif_regressor_expert(int step, int n_existing, int k_target, cypha::CyphaInferModel& infer,
-                                      const double* x, int d) {
+                                      const double* x, int d, const cypha::KernelMemory* kernel_mem = nullptr,
+                                      bool use_kernel_llr = false, double kernel_blend = 0.5) {
     if (n_existing < k_target && step <= k_target * 20) {
         return "_e" + std::to_string(step % k_target);
     }
     if (n_existing == 0) return "_e0";
     std::vector<double> llr;
-    cypha::batch_llr_from_x(infer, x, 1, llr);
+    if (use_kernel_llr && kernel_mem != nullptr) {
+        std::vector<double> h;
+        cypha::batch_encode(infer, x, 1, h);
+        kernel_blend_llr(infer, h.data(), kernel_mem, kernel_blend, llr);
+    } else {
+        cypha::batch_llr_from_x(infer, x, 1, llr);
+    }
     int bi = 0;
     for (int k = 1; k < static_cast<int>(infer.labels.size()); ++k) {
         if (llr[static_cast<std::size_t>(k)] > llr[static_cast<std::size_t>(bi)]) bi = k;
@@ -811,9 +842,57 @@ struct OnlineRegressor {
     int n_experts_cap{8};
     std::unordered_map<std::string, RegExpertStat> experts;
     int total_steps{0};
+    // Opt-in kernelized (RFF, auto-gamma) expert-routing discriminant (D14 dedicated pass, mirrors
+    // the D03 xor_kernel_bench/KernelMemory pattern). Null/false by default -- reproduces the
+    // pre-existing plain linear `batch_llr_from_x` routing exactly when unset.
+    std::unique_ptr<cypha::KernelMemory> kernel_mem;
+    bool use_kernel_llr{false};
+    double kernel_blend{0.5};
+    double kernel_lr_scale{1.0};
 };
 
-OnlineRegressor make_online_regressor(int input_dim, std::uint64_t seed, const cypha::bench::ProfileJson& regime) {
+// Opt-in RFF auto-gamma kernel-LLR basis for the D14 Feynman-equations regression domain's
+// expert-routing discriminant (deferred dedicated pass from the D03 kernel-LLR track --
+// docs/research/upgrades/NONLINEAR_BOUNDARY.md Fix 2 / docs/RESEARCH_STATUS.md Priority 1). D14's
+// regressor does not use `KernelMemory` at all on current HEAD: expert selection
+// (`pick_dif_regressor_expert`) and the mixture-softmax weights (`online_reg_predict`) both route
+// through a plain linear `batch_llr_from_x`/`score_matrix_use_field` discriminant over the discrete
+// expert clusters; the final scalar prediction itself stays a linear per-expert running mean/var
+// mixture (`regression::predict_mixture_scalar`) either way -- only the *routing* discriminant is
+// kernelized here, exactly as deferred. Env-gated the same way as
+// `CYPHA_D03_KERNEL_BASIS`/`CYPHA_D03_RFF_DIM`/`CYPHA_D03_RFF_GAMMA_SCALE`; unset reproduces the
+// pre-existing D14 output byte-for-byte.
+struct D14KernelConfig {
+    bool enabled = false;
+    int rff_dim = 4096;
+    double rff_gamma_scale = 1.0;
+    double kernel_blend = 0.5;
+    double kernel_lr_scale = 1.0;
+};
+
+D14KernelConfig d14_kernel_config_from_env() {
+    D14KernelConfig cfg;
+    if (const char* v = std::getenv("CYPHA_D14_KERNEL_BASIS"); v != nullptr && std::string(v) == "rff") {
+        cfg.enabled = true;
+    }
+    if (const char* v = std::getenv("CYPHA_D14_RFF_DIM"); v != nullptr && *v != '\0') {
+        cfg.rff_dim = std::atoi(v);
+    }
+    if (const char* v = std::getenv("CYPHA_D14_RFF_GAMMA_SCALE"); v != nullptr && *v != '\0') {
+        cfg.rff_gamma_scale = std::atof(v);
+    }
+    if (const char* v = std::getenv("CYPHA_D14_KERNEL_BLEND"); v != nullptr && *v != '\0') {
+        cfg.kernel_blend = std::atof(v);
+    }
+    if (const char* v = std::getenv("CYPHA_D14_KERNEL_LR_SCALE"); v != nullptr && *v != '\0') {
+        cfg.kernel_lr_scale = std::atof(v);
+    }
+    return cfg;
+}
+
+OnlineRegressor make_online_regressor(int input_dim, std::uint64_t seed, const cypha::bench::ProfileJson& regime,
+                                      const D14KernelConfig* kernel_cfg = nullptr,
+                                      const std::vector<std::vector<double>>* calib_x = nullptr) {
     cypha::FreshModelParams fp;
     fp.input_dim = input_dim;
     fp.field_dim = regime.value("field_dim", 128);
@@ -839,6 +918,29 @@ OnlineRegressor make_online_regressor(int input_dim, std::uint64_t seed, const c
     };
     r.tsp.replay_ratio = regime.value("replay_ratio", 0.0);
     r.tsp.replay_cap = 10000;
+
+    if (kernel_cfg != nullptr && kernel_cfg->enabled) {
+        const int kdim = r.infer.d_latent;
+        std::vector<double> calib_rowmajor;
+        if (calib_x != nullptr && kdim > 0) {
+            const std::size_t n_calib = std::min<std::size_t>(calib_x->size(), 256);
+            calib_rowmajor.reserve(n_calib * static_cast<std::size_t>(kdim));
+            for (std::size_t i = 0; i < n_calib; ++i) {
+                std::vector<double> h;
+                cypha::batch_encode(r.infer, (*calib_x)[i].data(), 1, h);
+                calib_rowmajor.insert(calib_rowmajor.end(), h.begin(), h.end());
+            }
+        }
+        const int n_calib_rows =
+            kdim > 0 ? static_cast<int>(calib_rowmajor.size() / static_cast<std::size_t>(kdim)) : 0;
+        const double gamma = cypha::KernelMemory::auto_gamma_median_heuristic(
+            calib_rowmajor.data(), n_calib_rows, kdim, kernel_cfg->rff_gamma_scale, 256, seed);
+        r.kernel_mem = std::make_unique<cypha::KernelMemory>(
+            cypha::KernelMemory::make_rff(kdim, kernel_cfg->rff_dim, gamma, seed));
+        r.use_kernel_llr = true;
+        r.kernel_blend = kernel_cfg->kernel_blend;
+        r.kernel_lr_scale = kernel_cfg->kernel_lr_scale;
+    }
     return r;
 }
 
@@ -847,17 +949,35 @@ void online_reg_train_step(OnlineRegressor& r, const std::vector<double>& x, dou
     const int d = static_cast<int>(x.size());
     const int k_target = std::max(r.n_experts_cap, 4);
     const int n_existing = static_cast<int>(r.mem.labels.size());
-    const std::string expert = pick_dif_regressor_expert(r.total_steps, n_existing, k_target, r.infer, x.data(), d);
-    (void)cypha::dif_train_step_vector(r.infer, r.mem, r.replay, x.data(), d, expert, r.world_lr, r.delta_lr,
-                                       r.world_lr, r.delta_lr, r.ood_sigma, r.tsp, r.rng, r.enc_updates, nullptr,
-                                       nullptr);
+    const std::string expert = pick_dif_regressor_expert(r.total_steps, n_existing, k_target, r.infer, x.data(), d,
+                                                          r.kernel_mem.get(), r.use_kernel_llr, r.kernel_blend);
+    if (r.use_kernel_llr && r.kernel_mem != nullptr) {
+        cypha::TrainStepExtras extras;
+        extras.kernel_mem = r.kernel_mem.get();
+        extras.use_kernel_llr = true;
+        extras.kernel_blend = r.kernel_blend;
+        extras.kernel_lr_scale = r.kernel_lr_scale;
+        (void)cypha::dif_train_step_vector(r.infer, r.mem, r.replay, x.data(), d, expert, r.world_lr, r.delta_lr,
+                                           r.world_lr, r.delta_lr, r.ood_sigma, r.tsp, r.rng, r.enc_updates, nullptr,
+                                           &extras);
+    } else {
+        (void)cypha::dif_train_step_vector(r.infer, r.mem, r.replay, x.data(), d, expert, r.world_lr, r.delta_lr,
+                                           r.world_lr, r.delta_lr, r.ood_sigma, r.tsp, r.rng, r.enc_updates, nullptr,
+                                           nullptr);
+    }
     auto& st = r.experts[expert];
     cypha::regression::expert_target_ema_step(st.mu, st.var_ema, st.n_updates, &y, 1, r.target_lr);
 }
 
 void online_reg_predict(const OnlineRegressor& r, const std::vector<double>& x, double& y_hat, double& unc) {
     std::vector<double> llr;
-    cypha::batch_llr_from_x(r.infer, x.data(), 1, llr);
+    if (r.use_kernel_llr && r.kernel_mem != nullptr) {
+        std::vector<double> h;
+        cypha::batch_encode(r.infer, x.data(), 1, h);
+        kernel_blend_llr(r.infer, h.data(), r.kernel_mem.get(), r.kernel_blend, llr);
+    } else {
+        cypha::batch_llr_from_x(r.infer, x.data(), 1, llr);
+    }
     const int k = static_cast<int>(r.infer.labels.size());
     if (k == 0) {
         y_hat = 0.0;
@@ -1462,6 +1582,12 @@ Json run_d14() {
     const cypha::bench::ProfileJson regime = cypha::bench::regression_params();
     const int n_train = cypha::bench::bench_scale(1600, 400);
     const int n_test = cypha::bench::bench_scale(400, 100);
+    // Opt-in kernelized (RFF, auto-gamma) expert-routing discriminant for 14A only -- see
+    // D14KernelConfig above. Unset (default) reproduces pre-existing 14A/14B/14C output exactly;
+    // 14B/14C intentionally keep calling the 3-arg `make_online_regressor` overload (kernel path
+    // stays off there regardless of the env gate) since only 14A carries the Ridge-comparison
+    // framing this pass targets.
+    const D14KernelConfig d14_kernel_cfg = d14_kernel_config_from_env();
 
     Json per_equation = Json::object();
     double mean_rmse = 0.0;
@@ -1477,13 +1603,17 @@ Json run_d14() {
         std::vector<double> train_y(ys.begin(), ys.begin() + n_train);
         std::vector<double> test_y(ys.begin() + n_train, ys.begin() + n_train + n_test);
 
-        OnlineRegressor reg = make_online_regressor(eq.n_inputs, kBenchSeed, regime);
+        OnlineRegressor reg = make_online_regressor(eq.n_inputs, kBenchSeed, regime, &d14_kernel_cfg, &train_x);
         for (std::size_t i = 0; i < train_x.size(); ++i) {
             online_reg_train_step(reg, train_x[i], train_y[i]);
         }
         cypha::sync_infer_model_from_memory(reg.infer, reg.mem);
         Json m = reg_metrics_native(reg, test_x, test_y);
         m["ridge_rmse"] = cypha::bench::ridge_baseline(train_x, train_y, test_x, test_y).rmse;
+        if (d14_kernel_cfg.enabled) {
+            m["kernel_basis"] = "rff";
+            m["rff_dim"] = d14_kernel_cfg.rff_dim;
+        }
         per_equation[eq.name] = m;
         mean_rmse += m["rmse"].get<double>();
         mean_r2 += m["r2"].get<double>();
@@ -1602,9 +1732,15 @@ Json run_d14() {
             Json{{"rmse", m["rmse"]}, {"mean_epistemic_var", m["mean_epistemic_var"]}};
     }
 
+    Json exp14a{{"per_equation", per_equation}, {"mean_rmse", mean_rmse}, {"mean_r2", mean_r2}};
+    exp14a["kernel_basis"] = d14_kernel_cfg.enabled ? "rff" : "linear";
+    if (d14_kernel_cfg.enabled) {
+        exp14a["rff_dim"] = d14_kernel_cfg.rff_dim;
+        exp14a["rff_gamma_scale"] = d14_kernel_cfg.rff_gamma_scale;
+        exp14a["kernel_blend"] = d14_kernel_cfg.kernel_blend;
+    }
     const Json experiments{
-        {"14A_feynman_all_equations",
-         Json{{"per_equation", per_equation}, {"mean_rmse", mean_rmse}, {"mean_r2", mean_r2}}},
+        {"14A_feynman_all_equations", exp14a},
         {"14B_extrapolation_uncertainty",
          Json{{"extrapolation_auroc", cypha::bench::safe_auroc(labels, scores)},
               {"regressor_uncertainty_auroc", cypha::bench::safe_auroc(reg_labels, reg_scores)}}},
