@@ -206,10 +206,21 @@ double compute_calibration(const double* confidences, const int* correct, int n,
   std::vector<int> bin_count(static_cast<std::size_t>(bins), 0);
 
   for (int i = 0; i < n; ++i) {
+    // std::clamp does not clamp NaN (all three comparisons are false, so it returns the
+    // NaN operand unchanged); guard explicitly instead of relying on clamp alone, since a
+    // NaN confidence would otherwise cast to an indefinite int (commonly INT_MIN) below and
+    // the pre-existing upper-bound-only check would let that negative index straight through
+    // to an out-of-bounds vector write.
+    if (!std::isfinite(confidences[i])) {
+      continue;
+    }
     const double c = std::clamp(confidences[i], 0.0, 1.0);
     int idx = static_cast<int>(c * static_cast<double>(bins));
     if (idx >= bins) {
       idx = bins - 1;
+    }
+    if (idx < 0) {
+      idx = 0;
     }
     bin_conf[static_cast<std::size_t>(idx)] += c;
     bin_acc[static_cast<std::size_t>(idx)] += static_cast<double>(correct[i]);

@@ -129,7 +129,15 @@ double max_log_prob_confidence(const std::vector<double>& log_probs, int vocab_s
     sum += std::exp(log_probs[static_cast<std::size_t>(i)] - max_lp);
   }
   const double log_z = max_lp + std::log(sum + kEps);
-  return std::clamp(std::exp(max_lp - log_z), 0.0, 1.0);
+  const double confidence = std::exp(max_lp - log_z);
+  // std::clamp passes NaN through unchanged (all bound comparisons are false), so a
+  // diverged/NaN log_probs vector (e.g. from an unstable training run) would otherwise
+  // propagate a NaN confidence into downstream binning (compute_calibration), which casts
+  // it to an int index. Guard explicitly rather than relying on clamp for NaN safety.
+  if (!std::isfinite(confidence)) {
+    return 0.5;
+  }
+  return std::clamp(confidence, 0.0, 1.0);
 }
 
 }  // namespace

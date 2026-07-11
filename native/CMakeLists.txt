@@ -303,7 +303,7 @@ add_executable(cypha_intelligence_bench tools/cypha_intelligence_bench.cpp)
 target_link_libraries(cypha_intelligence_bench PRIVATE cypha_core cypha_bench_native)
 
 add_executable(cypha_cell_hypothesis_sweep tools/cypha_cell_hypothesis_sweep.cpp)
-target_link_libraries(cypha_cell_hypothesis_sweep PRIVATE cypha_lm_native)
+target_link_libraries(cypha_cell_hypothesis_sweep PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cypha_cell_hypothesis_sweep)
 
 add_executable(cypha_baseline_lock tools/cypha_baseline_lock.cpp)

@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -15,6 +17,7 @@
 #include <nlohmann/json.hpp>
 
 #include "cypha/bench/bench_paths.hpp"
+#include "cypha/bench/bench_tune.hpp"
 #include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
@@ -55,7 +58,10 @@ void usage() {
               << "       [--profile d17] [--n-train N] [--n-eval M] [--threads T]\n"
               << "       [--intelligence-profile] [--math-integration] [--bench-seed N]\n"
               << "  overnight sweep: --intelligence-profile + --math-integration auto when "
-                 "CYPHA_OVERNIGHT_MATH_INTEGRATION=1\n";
+                 "CYPHA_OVERNIGHT_MATH_INTEGRATION=1\n"
+              << "  overnight sweep variants run isolated in child processes (re-invoking this "
+                 "binary with --cell-variant); a variant crash is recorded in \"failed\" and does "
+                 "not discard other variants' results.\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -192,7 +198,21 @@ std::string csv_field(const std::string& raw) {
     return out;
 }
 
+/// Test-only crash injection hook (opt-in via env var, unset by default in all real runs):
+/// lets us verify in CI/manually that isolated per-variant child processes crashing doesn't
+/// discard other variants' already-completed results, without needing to reproduce a real
+/// native bug on demand.
+void maybe_force_test_crash(const std::string& variant_id) {
+    const char* target = std::getenv("CYPHA_SWEEP_FORCE_CRASH_VARIANT");
+    if (target != nullptr && variant_id == target) {
+        std::cerr << "[cell_sweep] CYPHA_SWEEP_FORCE_CRASH_VARIANT=" << target
+                  << " — intentionally aborting for resilience test" << std::endl;
+        std::abort();
+    }
+}
+
 nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Args& args) {
+    maybe_force_test_crash(spec.id);
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(args.profile, cfg);
     cypha::cyphalm::apply_cell_variant(spec.id, cfg);
@@ -259,6 +279,75 @@ nlohmann::json run_variant(const cypha::cyphalm::CellVariantSpec& spec, const Ar
             cypha::intelligence::profile_completeness_to_json(completeness);
     }
     return row;
+}
+
+std::string extract_json_blob(const std::string& mixed) {
+    const std::size_t start = mixed.find('{');
+    const std::size_t end = mixed.rfind('}');
+    if (start != std::string::npos && end != std::string::npos && end >= start) {
+        return mixed.substr(start, end - start + 1);
+    }
+    return mixed;
+}
+
+/// Build the child argv for an isolated single-variant re-invocation of this same binary.
+/// Always resolves n_train/n_eval to the *already-computed* effective values (not the raw
+/// CLI flags) so the child's own parse_args() defaulting logic can't drift from the parent.
+std::vector<std::string> isolated_variant_args(const std::string& variant_id, const Args& args) {
+    std::vector<std::string> child_args = {
+        "--cell-variant", variant_id,
+        "--profile",      args.profile,
+        "--n-train",      std::to_string(args.n_train),
+        "--n-eval",       std::to_string(args.n_eval),
+        "--threads",      std::to_string(args.threads),
+    };
+    if (args.intelligence_profile) {
+        child_args.push_back("--intelligence-profile");
+    }
+    if (args.math_integration) {
+        child_args.push_back("--math-integration");
+    }
+    if (args.bench_seed >= 0) {
+        child_args.push_back("--bench-seed");
+        child_args.push_back(std::to_string(args.bench_seed));
+    }
+    return child_args;
+}
+
+/// Runs one cell-sweep variant in its own child process (re-invoking this same executable
+/// with ``--cell-variant``) so a native crash in one variant (e.g. an access violation)
+/// cannot take down the other variants' already-completed results. On success, returns the
+/// variant's result row exactly as ``run_variant`` would have produced in-process. On
+/// failure (nonzero/abnormal exit, or unparseable stdout), returns std::nullopt and fills
+/// ``error_out``/``exit_code_out`` for the caller to record and continue past.
+std::optional<nlohmann::json> run_variant_isolated(const std::filesystem::path& self_exe,
+                                                    const cypha::cyphalm::CellVariantSpec& spec,
+                                                    const Args& args, int& exit_code_out,
+                                                    std::string& error_out) {
+    const cypha::bench::RunProcessResult proc =
+        cypha::bench::run_executable_capture(self_exe, isolated_variant_args(spec.id, args));
+    exit_code_out = proc.exit_code;
+    if (proc.exit_code != 0) {
+        error_out = "child process exit=" + std::to_string(proc.exit_code) +
+                   (proc.exit_code == -1073741819 ? " (0xC0000005 ACCESS_VIOLATION)" : "");
+        return std::nullopt;
+    }
+    if (proc.stdout_text.empty()) {
+        error_out = "child process produced no stdout";
+        return std::nullopt;
+    }
+    try {
+        const nlohmann::json child_out = nlohmann::json::parse(extract_json_blob(proc.stdout_text));
+        if (!child_out.contains("results") || !child_out["results"].is_array() ||
+            child_out["results"].empty()) {
+            error_out = "child stdout JSON missing results[0]";
+            return std::nullopt;
+        }
+        return child_out["results"].front();
+    } catch (const std::exception& e) {
+        error_out = std::string("child stdout JSON parse failed: ") + e.what();
+        return std::nullopt;
+    }
 }
 
 std::string iso_timestamp_now() {
@@ -351,7 +440,7 @@ void append_overnight_progress_log(const std::string& variant_id, int index, int
 }
 
 void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohmann::json& results,
-                               const Args& args, double b2_bpc) {
+                               const Args& args, double b2_bpc, const nlohmann::json& failed) {
     std::filesystem::create_directories(out_dir);
     for (const auto& row : results) {
         const std::string id = row.value("id", "unknown");
@@ -411,6 +500,7 @@ void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohm
         {"variant_count", results.size()},
         {"b2_bpc", std::isnan(b2_bpc) ? nullptr : nlohmann::json(b2_bpc)},
         {"results", results},
+        {"failed", failed},
     };
     if (args.intelligence_profile) {
         manifest["pareto_ranked_variants"] = build_pareto_ranked_variants(results);
@@ -424,6 +514,19 @@ void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohm
     }
 }
 
+std::filesystem::path resolve_self_exe(const char* argv0) {
+    if (argv0 != nullptr) {
+        const std::filesystem::path self = std::filesystem::absolute(argv0);
+        if (std::filesystem::is_regular_file(self)) {
+            return self;
+        }
+        if (self.has_parent_path()) {
+            return cypha::bench::resolve_runner_exe("cypha_cell_hypothesis_sweep", self.parent_path());
+        }
+    }
+    return cypha::bench::resolve_runner_exe("cypha_cell_hypothesis_sweep", std::filesystem::current_path());
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -434,6 +537,16 @@ int main(int argc, char** argv) {
         if (args.overnight_sweep && cypha::bench::bench_overnight_enabled()) {
             ensure_overnight_env();
         }
+
+        // Isolate each variant in its own child process only for genuine sweep-orchestration
+        // invocations (--overnight-sweep[-smoke] without a specific --cell-variant already
+        // pinned down) — a single variant crashing (e.g. an access violation) then only loses
+        // that one variant's result instead of discarding every variant that already
+        // completed. --cell-variant invocations (including the isolated children themselves)
+        // always run in-process, so there is no recursive re-isolation.
+        const bool isolate_variants = args.overnight_sweep && args.cell_variant.empty();
+        const std::filesystem::path self_exe =
+            isolate_variants ? resolve_self_exe(argv[0]) : std::filesystem::path();
 
         if (args.list_variants) {
             nlohmann::json listed = nlohmann::json::array();
@@ -451,6 +564,7 @@ int main(int argc, char** argv) {
 
         nlohmann::json results = nlohmann::json::array();
         nlohmann::json skipped = nlohmann::json::array();
+        nlohmann::json failed = nlohmann::json::array();
         double b2_bpc = std::numeric_limits<double>::quiet_NaN();
 
         int variant_total = 0;
@@ -471,13 +585,33 @@ int main(int argc, char** argv) {
                           << variant_total << ")" << std::endl;
                 append_overnight_progress_log(v.id, variant_index, variant_total);
             }
-            auto row = run_variant(v, args);
-            if (v.id == "B2") {
-                if (!row["bpc"].is_null()) {
+            if (isolate_variants) {
+                int child_exit = 0;
+                std::string child_error;
+                auto row_opt = run_variant_isolated(self_exe, v, args, child_exit, child_error);
+                if (!row_opt) {
+                    std::cerr << "[cell_sweep] variant " << v.id
+                              << " FAILED — recording as failed and continuing (" << child_error
+                              << ")" << std::endl;
+                    failed.push_back({{"id", v.id},
+                                      {"name", v.name},
+                                      {"tier", v.tier},
+                                      {"exit_code", child_exit},
+                                      {"error", child_error}});
+                    continue;
+                }
+                auto row = std::move(*row_opt);
+                if (v.id == "B2" && !row["bpc"].is_null()) {
                     b2_bpc = row["bpc"].get<double>();
                 }
+                results.push_back(std::move(row));
+            } else {
+                auto row = run_variant(v, args);
+                if (v.id == "B2" && !row["bpc"].is_null()) {
+                    b2_bpc = row["bpc"].get<double>();
+                }
+                results.push_back(std::move(row));
             }
-            results.push_back(std::move(row));
         }
 
         for (auto& row : results) {
@@ -490,7 +624,7 @@ int main(int argc, char** argv) {
             std::filesystem::path out_dir = args.output_dir.empty()
                                                 ? cypha::bench::results_dir() / "cell_sweep"
                                                 : std::filesystem::path(args.output_dir);
-            write_overnight_artifacts(out_dir, results, args, b2_bpc);
+            write_overnight_artifacts(out_dir, results, args, b2_bpc, failed);
         }
 
         nlohmann::json out = {
@@ -504,8 +638,10 @@ int main(int argc, char** argv) {
             {"cell_variant", args.cell_variant.empty() ? nullptr : nlohmann::json(args.cell_variant)},
             {"intelligence_profile", args.intelligence_profile},
             {"math_integration", args.math_integration},
+            {"isolated_variants", isolate_variants},
             {"results", results},
             {"skipped", skipped},
+            {"failed", failed},
             {"variant_count", cypha::cyphalm::all_cell_variants().size()},
         };
         if (args.overnight_sweep) {
