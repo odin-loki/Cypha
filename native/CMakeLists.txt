@@ -1071,6 +1071,25 @@ set_tests_properties(native_d22_cross_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
 )
 
+# Multi-view training Phase 2 (CyphaDIF) pilot on D03 only — see
+# docs/reports/MULTI_VIEW_DIF_PHASE2_PLAN.md. Default (flag unset) must reproduce pre-existing
+# D03 behavior exactly; the second test exercises the opt-in view-schedule code path end-to-end.
+add_test(
+  NAME native_d03_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d03
+)
+set_tests_properties(native_d03_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1"
+)
+
+add_test(
+  NAME native_d03_view_schedule_smoke
+  COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d03
+)
+set_tests_properties(native_d03_view_schedule_smoke PROPERTIES
+  ENVIRONMENT "CYPHA_BENCH_FAST=1;CYPHA_D03_VIEW_SCHEDULE=schedule_a"
+)
+
 configure_file(
   "${CMAKE_SOURCE_DIR}/../bench/BASELINE_LOCK.json"
   "${CMAKE_CURRENT_BINARY_DIR}/d23_overnight_lock_smoke.json"

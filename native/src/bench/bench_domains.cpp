@@ -56,6 +56,7 @@
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
+#include "cypha/cyphalm/cyphalm_views.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
 #include "cypha/infer_cpu.hpp"
@@ -294,9 +295,50 @@ void fit_apply_preprocessor(std::vector<std::vector<double>>& train_x, std::vect
     }
 }
 
+// Phase 2 (multi-view online training for CyphaDIF, see docs/reports/MULTI_VIEW_DIF_PHASE2_PLAN.md):
+// D03-only opt-in pilot. Reuses the exact same pure, format-agnostic transforms Phase 1 built for
+// CyphaLM (`cypha/cyphalm/cyphalm_views.hpp`) -- they operate on plain `vector<int>`, so feeding a
+// sample-index vector instead of a token-id vector reorders (x, y) pairs instead of tokens, with no
+// changes to those functions. Off (empty/"same_order") reproduces the pre-existing per-pass
+// `std::shuffle(..., make_rng(42 + p))` order exactly.
+std::vector<int> dif_view_order(int n, const std::string& view_schedule, int pass_idx) {
+    std::vector<int> idx(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) idx[static_cast<std::size_t>(i)] = i;
+    std::shuffle(idx.begin(), idx.end(), make_rng(42 + static_cast<std::uint64_t>(pass_idx)));
+    if (view_schedule.empty() || view_schedule == "same_order") {
+        return idx;
+    }
+    const auto view_names = cypha::cyphalm::resolve_view_schedule(view_schedule, 1);
+    const std::string& view = view_names[static_cast<std::size_t>(pass_idx) % view_names.size()];
+    if (view == "reverse" || view == "backward") {
+        return cypha::cyphalm::view_reverse(idx);
+    }
+    if (view == "rotated") {
+        return cypha::cyphalm::view_rotate_start(idx, std::max(1, n / 4));
+    }
+    if (view == "block_shuffle") {
+        const int block = std::clamp(n / 4, 4, 64);
+        const auto blocks = cypha::cyphalm::block_shuffle_blocks(
+            idx, block, 42 + static_cast<std::uint64_t>(pass_idx) + 1000);
+        std::vector<int> flat;
+        flat.reserve(idx.size());
+        for (const auto& b : blocks) flat.insert(flat.end(), b.begin(), b.end());
+        return flat;
+    }
+    // "forward" (and any unrecognized name) falls back to the shuffled IID base order.
+    return idx;
+}
+
+std::string d03_view_schedule_from_env() {
+    const char* v = std::getenv("CYPHA_D03_VIEW_SCHEDULE");
+    if (v == nullptr || *v == '\0') return "";
+    return std::string(v);
+}
+
 Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const std::vector<std::string>& train_y,
                         const std::vector<std::vector<double>>& test_x, const std::vector<std::string>& test_y,
-                        const cypha::bench::ProfileJson& regime, const std::string& dataset_name) {
+                        const cypha::bench::ProfileJson& regime, const std::string& dataset_name,
+                        const std::string& view_schedule = "") {
     if (train_x.empty() || test_x.empty()) {
         return Json{{"dataset", dataset_name}, {"accuracy", 0.0}, {"n_train", 0}, {"n_test", 0}, {"expert_count", 0}};
     }
@@ -333,9 +375,7 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     const int train_n = static_cast<int>(tr.size());
     const int passes = std::max(1, regime.value("n_epochs", 1));
     for (int p = 0; p < passes; ++p) {
-        std::vector<int> order(static_cast<std::size_t>(train_n));
-        for (int i = 0; i < train_n; ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(42 + static_cast<std::uint64_t>(p)));
+        const std::vector<int> order = dif_view_order(train_n, view_schedule, p);
         for (int idx : order) {
             cypha::dif_train_step_vector(infer, mem, replay, tr[static_cast<std::size_t>(idx)].data(), d,
                                          train_y[static_cast<std::size_t>(idx)], world_lr, delta_lr, world_lr,
@@ -381,8 +421,14 @@ Json run_tabular_dataset(const TabularDataset& ds, const cypha::bench::ProfileJs
     std::vector<std::string> test_y;
     stratified_split(ds, 0.2, 42, train_x, train_y, test_x, test_y);
     standardize_train_test(train_x, test_x);
-    Json result = train_eval_vectors(train_x, train_y, test_x, test_y, regime, ds.name);
+    // D03-only Phase 2 multi-view pilot, opt-in via env (default unset == pre-existing behavior).
+    // See docs/reports/MULTI_VIEW_DIF_PHASE2_PLAN.md; not wired into D08/D09/D16.
+    const std::string view_schedule = d03_view_schedule_from_env();
+    Json result = train_eval_vectors(train_x, train_y, test_x, test_y, regime, ds.name, view_schedule);
     result["data_source"] = ds.source;
+    if (!view_schedule.empty()) {
+        result["view_schedule"] = view_schedule;
+    }
     return result;
 }
 
