@@ -40,8 +40,7 @@ the gamma bandwidth is not well-tuned for all datasets.
 ### �0c � D10/D17 CellAI SSM investigation
 
 **Evidence:**
-- D10 ECG: 17�20% accuracy on 5-class temporal classification (chance = 20%); CellAI/SSM
-  integration not yet tuned for this domain.
+- **D10 ECG "17-20% chance-level accuracy" is stale (resolved, 2026-07-11)** � re-ran `cypha_bench_run --domain 10` on current HEAD and got **60.67% accuracy** on the same 5-class ECG classification (10A), ~3x chance. No targeted fix was applied; this was an incidental side effect of unrelated upstream work. More importantly, the diagnosis this section originally proposed (SSM state norms / decay rates / routing-head connectivity) was never the right lens for D10: 10A-10D's scored path uses the `cypha_core` DIF expert-routing classifier (`OnlineClassifier` + hand-engineered `TimeSeriesEncoder` features), not `CellAISSM` at all � the SSM is only touched by an optional, non-scored, forward-only `10E_ssm_diagnose` probe. Do not use the old 17-20% figure as evidence of an SSM defect. Full writeup: [`docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md).
 - D17 CyphaLM: **hybrid_gria_lstm @ 300k = 2.873 BPC** (beats bigram); GRIA-only stack still weaker.
 - **D04 "33.2 bpc" was a benchmark bug** (wrong probability indexing in the legacy Python D04 domain, not a CyphaLM failure) � do not use it as evidence. Native D04 runs the full CyphaLM stack via `cypha_bench_run --domain 4`.
 
@@ -49,6 +48,8 @@ the gamma bandwidth is not well-tuned for all datasets.
 - State norms do not collapse or explode over long sequences.
 - Multi-scale decay rates (?_fast=1.0, ?_slow=20.0) are appropriate for the domain.
 - Output projections are properly connected to the expert routing head.
+
+**D10 status:** the above three checks were run against D10's SSM anyway for completeness (`cyphalm_ssm_diagnose --domain d10`): no collapse/explosion (verdict: pass), and no connectivity check applies since D10 has no routing head to disconnect from in the first place. **This instrumentation remains relevant for D17/CyphaLM** (which genuinely uses the SSM -> GRIA routing path); it is no longer an open question for D10.
 
 > **P7 note:** Python `CellAISSM` / `cypha_lm` packages removed; instrument native SSM via `cyphalm_bench_native` and CTests under `native_cyphalm_*`. Cell hypothesis sweep: [`research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md).
 
@@ -250,7 +251,7 @@ Two composed workstreams (neither replaces the other):
 |------|------|----------|
 | **Now � tuning** | Kernel LLR (Nystr�m) � �0a | Shipped; ~18 pp gap vs sklearn RBF on XOR |
 | **Now � shipped** | Auto-gamma RFF � �0b | Native fit + Qt + bench |
-| **Now** | D10/D17 CellAI SSM � �0c | D10: 17�20% ECG; hybrid D17 **2.873 BPC** |
+| **Now** | D10/D17 CellAI SSM � �0c | D10: **resolved 2026-07-11**, 60.67% ECG (was stale 17�20%); hybrid D17 **2.873 BPC** |
 | **Now � shipped** | Qt UX �2a�2e; minimal Web UI �4 | Threaded train, charts, compare runs, dark theme, REST SPA |
 | **Weeks** | Packaged AppImage / Windows bundle � �3 | `packaging/` scripts shipped |
 | **Ongoing** | CUDA CI + profiling � �1 | Blocking jobs green |
