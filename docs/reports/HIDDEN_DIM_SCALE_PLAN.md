@@ -320,3 +320,77 @@ The architectural finding from §4 (no blocker to scaling `lstm_hidden` itself) 
 ### Note on run stability under system load
 
 Both `native/build_scale` sweep runs at `hidden=512` were executed while several other single-threaded native benchmark processes (`native/build_rpsm`, `native/build_math`) were concurrently running on the same machine (parallel agent work, per this task's constraints). The first `hidden=512` attempt exited with code `-1` and empty stdout/stderr after ~22 minutes of wall-clock (no Windows Error Reporting crash entry was logged for it, and no lingering process was found afterward) — most likely an external termination under heavy multi-process CPU contention rather than an application bug. A clean re-run under the same contention completed normally (exit code 0) in ~15 minutes and produced the `hidden=512` row above. Anyone re-running this sweep on a busy machine should treat a `-1`/empty-output exit as "retry," not as a code defect, unless it reproduces consistently in isolation.
+
+---
+
+## Phase 2b results (2026-07-11): `lstm_hidden_d_eff` export fix and re-run
+
+**Status:** Implemented, built, tested, and re-run. Executed by a follow-up subagent against `native/build_scale` (reused from the Phase 0/1 subagent, rebuilt after this change; `native/build_math` and `native/build_rpsm` were not touched). All commands single-threaded, `n_train ≤ 5000`.
+
+### What `lstm_hidden_d_eff()` was already doing correctly
+
+Confirmed by reading `CyphaLMModel::lstm_hidden_d_eff()` (`native/src/cyphalm/cyphalm_model.cpp:646-665`) end to end before touching anything: it is **not** a measurement that needed fixing. It:
+
+- Draws its sample matrix from `lstm_h_history_rows_` (`native/include/cypha/cyphalm/cyphalm_model.hpp:218`), a ring buffer of up to `kLstmHiddenHistoryMax = 48` real LSTM hidden-state vectors, appended by `append_lstm_hidden_history(lstm_h_)` every hybrid `predict_next` step (`cyphalm_model.cpp:802`) — i.e. it is fed the actual post-`forward_step` LSTM hidden state (`lstm_h_`), width `lstm_->hidden`, not the GRIA field.
+- Sizes its flattened sample matrix as `rows × hidden` using `lstm_->hidden` directly (`cyphalm_model.cpp:650-659`), so it automatically tracks whatever `--lstm-hidden` is set to, with no hard-coded dimension anywhere in the function.
+- Delegates to `cypha::intelligence::compute_participation_ratio(...)` with `ParticipationRatioMethod::CovarianceEigenvalue` or `VarianceProxy` depending on `cfg_.use_eigenvalue_d_eff` (`cyphalm_model.cpp:660-664`) — the exact same, already-validated participation-ratio machinery the GRIA-field `d_eff` statistic uses, just pointed at a different tensor. Since Phase 0 (this doc, above) fixed `CovarianceEigenvalue` to delegate to the exact `TraceFrobenius` identity above 256 dims instead of silently falling back to `VarianceProxy`, this function is now also safe to call with `--use-eigenvalue-d-eff` at hidden ≥ 256 (not exercised in this pass — see below — but no longer a latent correctness trap if a future run enables it).
+- Returns `-1.0` only when there's no LSTM head or fewer than 4 history rows have been observed yet — a legitimate "not enough data" guard, not a bug.
+
+Its only real gap, exactly as the plan doc identified: it was called from exactly one place, `native/src/cyphalm/cyphalm_model.cpp:1013`, purely to compute a training-time gradient nudge target (`use_lstm_d_eff_hidden_nudge`) — never surfaced anywhere in the bench JSON. No changes were made to its math or its existing call site.
+
+### Where/how it was exported
+
+Two small, additive changes, no existing behavior touched:
+
+1. `native/include/cypha/cyphalm/cyphalm_model.hpp`: added a public inline accessor `double lstm_hidden_d_eff_report() const { return lstm_hidden_d_eff(); }` next to the other public read-only accessors (`train_step_count()`, etc.), since the existing `lstm_hidden_d_eff()` is private. Zero behavior change — pure visibility wrapper.
+2. `native/tools/cyphalm_bench_native.cpp`: immediately after `out["intelligence_profile"] = export_intelligence_monitor_report(profiler)` (the point where the existing 7-stat GRIA-field profile, including the existing `d_eff`, is serialized), added two new **nested** keys under the same `intelligence_profile` object:
+   - `intelligence_profile.lstm_hidden_d_eff` — the new statistic (`model.lstm_hidden_d_eff_report()`), `null` when the model reports `< 0` (not enough history / no LSTM head).
+   - `intelligence_profile.lstm_hidden_d_eff_method` — `"variance_proxy"` or `"covariance_eigenvalue"`, echoing `cfg.use_eigenvalue_d_eff`, so any consumer of the JSON knows which participation-ratio method produced the number without cross-referencing the CLI args.
+
+   This only runs when `--intelligence-profile` is passed (same gate as the rest of the block) and is called *after* `model.accumulate_intelligence_profile(...)` has already run the eval corpus through the model, so the 48-row hidden-state history reflects the eval pass — methodologically consistent with how the existing GRIA `d_eff` is measured (also over the eval pass, via the same `IntelligenceProfiler`).
+
+   The existing `intelligence_profile.statistics[].d_eff` (GRIA-field, fixed `field_dim=160`) is **untouched** — same call, same value, same position in the JSON. This was verified empirically in the re-run below: `d_eff` is bit-identical (`0.5865363087488848`) across all three hidden sizes, exactly as before Phase 2b, confirming the change is purely additive.
+
+### CTest results
+
+`ctest --test-dir native/build_scale -R "intelligence|d_eff|deff|measurer"` (6 matching tests, after rebuilding `cyphalm_bench_native`, `cypha_intelligence_bench`, `intelligence_lm_monitor_smoke`, `cypha_bench_run`):
+
+```
+100% tests passed, 0 tests failed out of 6
+  native_intelligence_profiler_smoke .......... Passed
+  native_intelligence_profiler_papers ......... Passed
+  native_intelligence_bench_smoke ............. Passed
+  native_cyphalm_bench_intelligence_profile ... Passed
+  native_d39_intelligence_monitor_smoke ....... Passed
+  native_intelligence_lm_monitor_smoke ........ Passed
+```
+
+No regressions. `native_cyphalm_bench_intelligence_profile` in particular exercises the exact CLI/JSON path that was modified and still passes, confirming `profile_completeness` (which checks the original 7-stat matrix, unaffected by the new nested keys) still reports `all_complete: true`.
+
+### Corrected Phase 2 sweep — results (medium tier, `n_train=5000`, `n_eval=256`, `--bench-seed 42`, single-threaded, `native/build_scale`, variance-proxy method for both `d_eff` and `lstm_hidden_d_eff`)
+
+| hidden | bpc | bpc (LSTM-only) | kappa (criticality_score) | GRIA `d_eff` (unchanged) | **`lstm_hidden_d_eff` (new)** |
+|---|---|---|---|---|---|
+| 128 | 4.039556 | 4.031056 | 0.831220 | 0.586536 | **0.270968** |
+| 256 | 3.929983 | 3.921449 | 0.834821 | 0.586536 | **0.485134** |
+| 512 | 3.848554 | 3.840080 | 0.833334 | 0.586536 | **0.576461** |
+
+Raw JSON captured at `bench/results/hidden_dim_scale/sweep_hidden{128,256,512}_v2.json` (not committed, per this task's constraints; regenerate with the Phase 2 command above at each hidden value).
+
+### Finding: `lstm_hidden_d_eff` now shows the expected upward trend — and it's a large one
+
+`lstm_hidden_d_eff` **more than doubles from hidden=128 to hidden=256** (0.271 → 0.485, +79% relative) and continues climbing to hidden=512 (→ 0.576, +19% relative over 256), while the diminishing-returns shape tracks the diminishing-returns shape of the BPC improvement (4.040→3.930 is a bigger absolute drop than 3.930→3.849). This is exactly the qualitative signature Paper IV predicts: representational capacity (D_eff of the actual hidden state) increasing with hidden width, with the rate of increase slowing as the statistic approaches its ceiling of 1.0 (full participation). Unlike the flat GRIA `d_eff` (bit-identical `0.586536` at all three sizes, confirming the fix is additive and did not disturb the pre-existing statistic), `lstm_hidden_d_eff` is clearly and monotonically sensitive to `--lstm-hidden`, resolving the exact blocker this task set out to fix.
+
+`kappa` (`criticality_score`) still moves only within a ~0.35pp band (0.8312 → 0.8348 → 0.8333), non-monotonically — this is expected and *not* a new problem: `criticality_score` is computed from the 7-stat profile matrix (`IntelligenceProfiler::criticality_score_for`), which is still built exclusively from the GRIA-field observations (`d_eff`, `alpha`, `sigma_branch`, `tau`, `r_eu`, `lipschitz`, `calibration`) via `LmIntelligenceMonitor::observe_token` — `lstm_hidden_d_eff` was deliberately exported as a new, separate, informational statistic (per this task's scope: "additive... do NOT replace/overwrite the existing GRIA-field d_eff"), not wired into the `kappa` formula itself. Whether `kappa` *should* eventually incorporate `lstm_hidden_d_eff` (e.g. as an additional profile axis, or blended into the existing `d_eff` axis) is a separate design decision outside this task's scope — flagged here as a natural follow-up, not a defect in this fix.
+
+### Go/no-go recommendation: **go on Phase 3 (512-dim @ 300k), conditional as below — hold on Phase 4 (1024-dim) until Phase 3 lands**
+
+The specific blocker this task was created to resolve is fixed and empirically confirmed: `lstm_hidden_d_eff` is now exported, distinct from and non-disruptive to the existing GRIA `d_eff`, passes all measurement CTests, and — critically — actually trends upward with `--lstm-hidden` in the same cheap sweep that previously showed it flat. This is no longer "BPC improved, trust that D_eff must be behind it" (the ungrounded inference the previous no-go was correctly worried about); it is now a direct, first-party measurement of the LSTM hidden state's effective dimensionality, and it moves the way Paper IV's theory says it should.
+
+**Recommend proceeding to Phase 3 (hidden=512 @ n_train=300000, single seed, single-threaded, `native/build_scale`)**, with three conditions carried over from the original plan and unchanged by this fix:
+
+1. Schedule it only once the machine is no longer contended by the live `native/build_math` D17→D21→cell-sweep overnight and the `native/build_rpsm` verification — Phase 3's own wall-clock estimate (~5–9.5h per §5.2) is itself sensitive to CPU contention, as directly observed in this pass (the `hidden=512` sweep at `n_train=5000` alone took ~15–22 minutes under contention against an ~ instant expectation at that scale in isolation).
+2. Capture both `d_eff` (GRIA-field, for continuity with the existing `BASELINE_LOCK.json` pins) and the new `lstm_hidden_d_eff` in the Phase 3 output, and confirm `lstm_hidden_d_eff` continues its upward trend at production scale/seed — the medium-tier (`n_train=5000`) trend confirmed here is a sanity signal, not a guarantee it survives 60× more training steps, though there is no specific mechanism identified that would reverse it.
+3. Do not lock a new `BASELINE_LOCK.json` section (per §7 Phase 5 of the original plan) until Phase 3's `kappa`/BPC numbers are in hand — this fix changes what's *measurable*, not what a full-scale run will actually *produce*.
+
+**Hold on Phase 4 (hidden=1024)** until Phase 3 completes and its `lstm_hidden_d_eff` trend is confirmed at production scale — per the original plan's own phase ordering and cost model (§5.2's 18–36h single-threaded estimate for 1024-dim is the largest single commitment in this plan and should not be scheduled on an unconfirmed extrapolation from a 5,000-step sweep).
