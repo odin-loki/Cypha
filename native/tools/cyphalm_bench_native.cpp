@@ -438,6 +438,16 @@ int main(int argc, char** argv) {
                     cypha::cyphalm::export_math_integration_report(profiler, cfg, export_opts);
             }
             out["intelligence_profile"] = cypha::cyphalm::export_intelligence_monitor_report(profiler);
+            // Distinct from intelligence_profile.statistics[d_eff] (measured over the fixed
+            // field_dim-wide GRIA field): this is the participation-ratio D_eff measured
+            // directly over the actual lstm_hidden-wide LSTM hidden-state history, so it is
+            // the statistic that should move when --lstm-hidden changes (see
+            // docs/reports/HIDDEN_DIM_SCALE_PLAN.md).
+            const double lstm_hidden_d_eff = model.lstm_hidden_d_eff_report();
+            out["intelligence_profile"]["lstm_hidden_d_eff"] =
+                lstm_hidden_d_eff >= 0.0 ? nlohmann::json(lstm_hidden_d_eff) : nlohmann::json(nullptr);
+            out["intelligence_profile"]["lstm_hidden_d_eff_method"] =
+                cfg.use_eigenvalue_d_eff ? "covariance_eigenvalue" : "variance_proxy";
             out["profile_completeness"] =
                 cypha::intelligence::profile_completeness_to_json(completeness);
             if (!completeness.all_complete) {

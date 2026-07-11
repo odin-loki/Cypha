@@ -153,6 +153,14 @@ class CyphaLMModel {
     }
     std::uint32_t train_step_count() const { return step_count_; }
 
+    /// Public accessor for the participation-ratio D_eff computed directly over the actual
+    /// LSTM hidden-state history (``lstm_h_history_rows_``, width ``lstm_->hidden``) --
+    /// distinct from the GRIA-field ``d_eff`` already exported by the intelligence profile
+    /// (which is measured over the fixed ``field_dim``-wide GRIA field and is therefore
+    /// structurally blind to ``lstm_hidden``). Returns -1.0 if there's no LSTM head or fewer
+    /// than 4 hidden-state rows have been observed yet (see ``lstm_hidden_d_eff()``).
+    double lstm_hidden_d_eff_report() const { return lstm_hidden_d_eff(); }
+
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
  private:
