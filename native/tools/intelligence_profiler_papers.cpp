@@ -208,6 +208,82 @@ void test_paper_v_causal_graph() {
   assert(j.at("soft_world").at("maturation_level").get<double>() >= 0.0);
 }
 
+void test_paper_v_causal_graph_correlation_edges() {
+  using cypha::intelligence::CausalGraphMonitor;
+  using cypha::intelligence::ProfileObservation;
+
+  // Single observation: cannot estimate a correlation from one point, so both
+  // online-estimated edges must report weight 0 (n < 2), unlike the old fixed-formula
+  // implementation which produced a confident-looking nonzero number from one sample.
+  {
+    CausalGraphMonitor single;
+    ProfileObservation obs;
+    obs.alpha = 0.72;
+    obs.calibration = 0.65;
+    obs.tau = 0.6;
+    obs.r_eu = 0.4;
+    single.observe_profile(obs);
+    assert(single.alpha_calibration_n() == 1);
+    assert(near(single.alpha_calibration_correlation(), 0.0, 1e-9));
+    assert(near(single.tau_r_eu_correlation(), 0.0, 1e-9));
+    const auto j = single.to_json();
+    bool found_zero_alpha_edge = false;
+    for (const auto& e : j.at("edges")) {
+      if (e.at("from") == "alpha" && e.at("to") == "calibration") {
+        assert(near(e.at("weight").get<double>(), 0.0, 1e-9));
+        found_zero_alpha_edge = true;
+      }
+    }
+    assert(found_zero_alpha_edge);
+  }
+
+  // Strongly positively correlated alpha/calibration history (moving together) must
+  // drive the estimated edge weight toward 1; tau/r_eu held anti-correlated in the same
+  // pass must drive that edge weight toward 1 as well (magnitude, sign-agnostic).
+  {
+    CausalGraphMonitor corr;
+    for (int i = 0; i < 12; ++i) {
+      ProfileObservation obs;
+      const double t = static_cast<double>(i) / 11.0;
+      obs.alpha = 0.2 + 0.6 * t;         // rising
+      obs.calibration = 0.3 + 0.5 * t;   // rising with alpha -> strong positive correlation
+      obs.tau = 0.2 + 0.6 * t;           // rising
+      obs.r_eu = 0.8 - 0.6 * t;          // falling -> strong negative correlation with tau
+      corr.observe_profile(obs);
+    }
+    assert(corr.alpha_calibration_n() == 12);
+    assert(corr.alpha_calibration_correlation() > 0.95);
+    assert(corr.tau_r_eu_correlation() < -0.95);
+    const auto j = corr.to_json();
+    const auto& est = j.at("edge_estimation");
+    assert(est.at("alpha_calibration_n").get<int>() == 12);
+    for (const auto& e : j.at("edges")) {
+      if (e.at("from") == "alpha" && e.at("to") == "calibration") {
+        assert(e.at("weight").get<double>() > 0.95);
+      }
+      if (e.at("from") == "tau" && e.at("to") == "r_eu") {
+        assert(e.at("weight").get<double>() > 0.95);
+      }
+    }
+  }
+
+  // Uncorrelated (constant) history: variance is ~0 so the correlation is undefined and
+  // must fall back to the documented 0.0, not a spurious value.
+  {
+    CausalGraphMonitor flat;
+    for (int i = 0; i < 8; ++i) {
+      ProfileObservation obs;
+      obs.alpha = 0.5;
+      obs.calibration = 0.5;
+      obs.tau = 0.5;
+      obs.r_eu = 0.5;
+      flat.observe_profile(obs);
+    }
+    assert(near(flat.alpha_calibration_correlation(), 0.0, 1e-9));
+    assert(near(flat.tau_r_eu_correlation(), 0.0, 1e-9));
+  }
+}
+
 void test_paper_v_soft_world_simulation_step() {
   cypha::intelligence::SoftWorldMonitor monitor;
   monitor.simulation_step(0.8, 0.5, 0.2);
@@ -474,6 +550,7 @@ int main() {
   test_paper_v_soft_world();
   test_paper_v_soft_world_simulation_step();
   test_paper_v_causal_graph();
+  test_paper_v_causal_graph_correlation_edges();
   test_paper_iv_profile_guided_loss();
   test_adaptive_navigation_lambdas();
   test_kappa_trajectory_navigation_lambdas();

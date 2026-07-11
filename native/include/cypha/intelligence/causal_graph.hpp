@@ -10,11 +10,42 @@
 
 namespace cypha::intelligence {
 
-/// Paper V causal graph stub: tracks P-space edges and soft-world maturation signals.
+/// Paper V causal graph: fixed topology of P-space edges tracking soft-world maturation
+/// signals. Edge *structure* (which nodes are connected) is still hand-specified, not
+/// discovered (Paper V §3.2's PC-algorithm-style skeleton discovery is out of scope here;
+/// see docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md). The alpha->calibration and tau->r_eu
+/// edge *weights* are estimated online via ``OnlineCorrelation`` from real accumulated
+/// profiler observations rather than a fixed per-observation formula; the remaining edges
+/// (query->r_eu, simulation->world_model, world_model->maturation, maturation->tau) report
+/// directly measured deltas/NIG means from ``SoftWorldMonitor``, which is already real online
+/// inference, not a placeholder.
 struct CausalEdge {
   std::string from;
   std::string to;
   double weight = 0.0;
+};
+
+/// Online (Welford-style) Pearson correlation estimator for two paired scalar streams.
+/// Used so causal-edge weights reflect an actual statistical relationship between the
+/// named variables across observed history, instead of a fixed formula evaluated on the
+/// current observation alone.
+class OnlineCorrelation {
+ public:
+  void update(double x, double y);
+
+  int n() const { return n_; }
+
+  /// Pearson correlation coefficient in [-1, 1]; ``0.0`` until at least 2 observations
+  /// have been accumulated (i.e. there is genuinely no correlation to estimate yet).
+  double correlation() const;
+
+ private:
+  int n_ = 0;
+  double mean_x_ = 0.0;
+  double mean_y_ = 0.0;
+  double cov_ = 0.0;
+  double var_x_ = 0.0;
+  double var_y_ = 0.0;
 };
 
 /// One acquisition → simulation → maturation cycle (Paper V trajectory entry).
@@ -49,6 +80,15 @@ class CausalGraphMonitor {
   const std::vector<CausalEdge>& edges() const { return edges_; }
   const std::vector<SimulationStepEvent>& trajectory() const { return trajectory_; }
 
+  /// Current online-estimated alpha->calibration edge correlation (raw, signed; see
+  /// ``OnlineCorrelation``). Exposed for testing/diagnostics of the real vs. fixed-formula gap.
+  double alpha_calibration_correlation() const { return alpha_calibration_corr_.correlation(); }
+  int alpha_calibration_n() const { return alpha_calibration_corr_.n(); }
+
+  /// Current online-estimated tau->r_eu edge correlation (raw, signed).
+  double tau_r_eu_correlation() const { return tau_r_eu_corr_.correlation(); }
+  int tau_r_eu_n() const { return tau_r_eu_corr_.n(); }
+
   nlohmann::json to_json() const;
   nlohmann::json trajectory_json() const;
 
@@ -58,6 +98,8 @@ class CausalGraphMonitor {
   std::vector<SimulationStepEvent> trajectory_;
   ProfileObservation last_obs_{};
   bool has_last_obs_{false};
+  OnlineCorrelation alpha_calibration_corr_;
+  OnlineCorrelation tau_r_eu_corr_;
 };
 
 }  // namespace cypha::intelligence

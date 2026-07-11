@@ -11,6 +11,25 @@ double clamp01(double x) { return std::clamp(x, 0.0, 1.0); }
 
 }  // namespace
 
+void OnlineCorrelation::update(double x, double y) {
+  ++n_;
+  const double dx = x - mean_x_;
+  mean_x_ += dx / static_cast<double>(n_);
+  const double dy = y - mean_y_;
+  mean_y_ += dy / static_cast<double>(n_);
+  cov_ += dx * (y - mean_y_);
+  var_x_ += dx * (x - mean_x_);
+  var_y_ += dy * (y - mean_y_);
+}
+
+double OnlineCorrelation::correlation() const {
+  constexpr double kMinVariance = 1e-12;
+  if (n_ < 2 || var_x_ <= kMinVariance || var_y_ <= kMinVariance) {
+    return 0.0;
+  }
+  return std::clamp(cov_ / std::sqrt(var_x_ * var_y_), -1.0, 1.0);
+}
+
 CausalGraphMonitor::CausalGraphMonitor() = default;
 
 void CausalGraphMonitor::record_edge(std::string from, std::string to, double weight) {
@@ -28,8 +47,17 @@ void CausalGraphMonitor::observe_profile(const ProfileObservation& obs) {
   }
   last_obs_ = obs;
   has_last_obs_ = true;
-  record_edge("alpha", "calibration", clamp01(1.0 - std::abs(obs.alpha - 0.5)));
-  record_edge("tau", "r_eu", clamp01(obs.tau * obs.r_eu));
+
+  // Edge weight estimated from the real (alpha, calibration) history via Pearson
+  // correlation, rather than a fixed formula of alpha alone (which never read the
+  // observed calibration value at all). Weight is 0 until >=2 observations exist.
+  alpha_calibration_corr_.update(obs.alpha, obs.calibration);
+  record_edge("alpha", "calibration", clamp01(std::abs(alpha_calibration_corr_.correlation())));
+
+  // Edge weight estimated from the real (tau, r_eu) history via Pearson correlation,
+  // rather than the instantaneous product ``tau * r_eu`` of a single observation.
+  tau_r_eu_corr_.update(obs.tau, obs.r_eu);
+  record_edge("tau", "r_eu", clamp01(std::abs(tau_r_eu_corr_.correlation())));
 }
 
 void CausalGraphMonitor::record_acquisition(double r_eu_before, double r_eu_after) {
@@ -105,6 +133,11 @@ nlohmann::json CausalGraphMonitor::to_json() const {
                             {"tau", last_obs_.tau},
                             {"r_eu", last_obs_.r_eu}}
            : nullptr},
+      {"edge_estimation",
+       {{"alpha_calibration_correlation", alpha_calibration_corr_.correlation()},
+        {"alpha_calibration_n", alpha_calibration_corr_.n()},
+        {"tau_r_eu_correlation", tau_r_eu_corr_.correlation()},
+        {"tau_r_eu_n", tau_r_eu_corr_.n()}}},
   };
 }
 
