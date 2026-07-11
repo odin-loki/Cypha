@@ -403,6 +403,92 @@ None of this means the fix was unnecessary: an incorrect gradient is still incor
 
 ---
 
+## 11. Phase -1 results (2026-07-11) — spectral α and normalised η ("RPSM core fixes")
+
+**Status: both fixes implemented (opt-in), verified (CTest), measured at matched cheap scale. A real same-`n_train`/same-tier hybrid-vs-RPSM A/B was also run, closing the one open gap flagged at the end of §10.7.**
+
+### 11.1 Re-confirming the framing (RESEARCH_STATUS.md:393)
+
+Re-read `docs/RESEARCH_STATUS.md:393` and `RPSM_IMPLEMENTATION.md:35-69` directly (not just this document's own §3.2 summary of them) before implementing anything. Confirmed exactly as §3.2 already found: the `RESEARCH_STATUS.md:393` bullet ("RPSM core fixes (spectral α, norm η, orthogonal init) | Planned | Forgetting ratio < 0.01; α ∈ [0.3, 0.6]") bundles three named fixes from `RPSM_IMPLEMENTATION.md`'s "Five critical fixes" list, of which orthogonal init (Fix 3) and symmetric `W_down` (Fix 5, not named in the `RESEARCH_STATUS.md` bullet but part of the same five) are already live in `rpsm_sequence_layer.cpp` (`init_orthogonal_matrix`, gated by `use_izaac_init`; `W_down` computed on the fly via `matvec_transpose_row_major`, never a stored parameter). Only **Fix 1 (spectral α)** and **Fix 2 (normalised η)** — both labelled "critical" in the spec, unlike Fixes 3-5's "high"/"medium" — remained unimplemented. This is Phase -1 exactly as scoped in §6/§10.7.
+
+Concretely, in *this* codebase's SSM formulation, prior to this phase:
+
+- **Spectral α** meant: `hierarchy_update()` (`rpsm_sequence_layer.cpp:340-383`, pre-fix) blended each level's carried hidden state against its own bottom-up/top-down prediction error using a single fixed scalar `a = cfg_.alpha_carry` (default `0.5`), never computed from Ψ's singular-value spectrum as `RPSM_IMPLEMENTATION.md:39-44` specifies (`gria_alpha_spectral(Psi)`, target `α ∈ [0.3, 0.6]` at edge-of-chaos init).
+- **Normalised η** meant: every SGD update inside `train_step` (`Ψ_mu` rows 1..K from Phase 0, `w_enc_`/`w_carry_`, and the hierarchy-loss-driven `w_up_` update) used the raw, fixed `lr` argument (`cfg_.rpsm_lr`) directly, never scaled by the prediction-error magnitude as `RPSM_IMPLEMENTATION.md:46-53` specifies (`eta = eta_base / (‖E_gated‖_F + eps)`).
+
+Cross-referenced the hybrid path's `alpha_init`/`alpha_learnable` convention (`cyphalm_config.hpp:53-54`, `cypha_cell_hypothesis.cpp:88-154`) per the task's suggestion: that `alpha` is an unrelated, per-vocab GRIA blend gate (`GRIALowRank`/`GriaHead`), not a spectral-radius construct — but the H10 cell hypothesis's `alpha_init = 0.485` (`cypha_cell_hypothesis.cpp:118`) confirmed that **0.485 is already an established "edge of chaos" target value elsewhere in this codebase**, independently corroborating `RPSM_IMPLEMENTATION.md`'s own training-notes target (`0.01 * |mean_alpha − 0.485|`) rather than that number being specific to RPSM alone.
+
+### 11.2 What was implemented
+
+Both fixes were judged well-defined and tractable, and were implemented as **opt-in** additions (new `RpsmSequenceConfig` fields, default `false`) rather than changes to the existing default behaviour, so Phase 0/0b's exact measured numbers remain reproducible with the fixes off — this was a deliberate risk-reduction choice given the task's caution about numerically-sensitive training code, not a sign either fix was ambiguous.
+
+**Fix 1 — `gria_alpha_spectral(Psi, n_levels, state_dim)`** (`rpsm_sequence_layer.cpp`, new free function; `use_spectral_alpha` config flag): computes the top singular value of the hierarchy state Ψ (`psi_rows_`, the L×D matrix populated by `hierarchy_update()` — note this is a *different* Ψ from Finding #1's classifier `Ψ_mu`/`PsiMatrices`, a naming collision confirmed by reading both files directly) via power iteration on the L×L Gram matrix `Ψ Ψ^T` (cheap: L is the small hierarchy depth — 4 to 32 across all four tiers — never D). The raw singular value is normalised by `√D` and squashed into `[0.3, 0.6]` via a sigmoid centred at `normalized_σ = 1.0` (the expected value for `Ψ ~ N(0,1)` at any of the four configured tiers, since `L/D = 1/32` is held constant across Tiny/Small/Medium/Large — `RPSM_IMPLEMENTATION.md:97-102`). When `use_spectral_alpha=true`, this replaces the fixed `cfg_.alpha_carry` in `hierarchy_update()`'s per-step blend, computed from the *previous* step's Ψ (i.e. before that call's loop overwrites `psi_rows_`), matching the spec's "system-level diagnostics" framing.
+
+**Fix 2 — normalised η** (`train_step`, `use_normalized_eta` config flag): per this document's own Phase -1 scoping (§6), scales the SGD learning rate used for every RPSM-trained parameter (Ψ_mu rows 1..K, `w_enc_`, `w_carry_`, the hierarchy-loss-driven `w_up_` update) by `1.0 / (‖E‖_F + 1e-8)`, where `‖E‖_F` is the Frobenius norm of the full multi-level prediction-error matrix for the current step — recovered exactly from `hierarchy_update()`'s already-computed mean-squared-error return value (`‖E‖_F = √(hierarchy_loss × n_levels × state_dim)`), no new state needed. **One deliberate deviation from the literal spec formula, disclosed rather than hidden:** `RPSM_IMPLEMENTATION.md:51-52`'s equation (`Psi_new = Psi + eta*(E_gated @ W_update)`) normalises a *separate hierarchy-state-update* term that has no corresponding standalone parameter in this codebase (`W_up` already plays that role and is trained via the ordinary SGD path); this implementation instead normalises the actual training-loop learning rate, exactly as this document's own §6 phased plan already specified before any code was written ("scale `lr` in `train_step` by `1.0/(‖work_err_‖_F + 1e-8)`"). A safety clamp (`eta_norm_max_scale`, default `10×`) was added — not part of the original spec formula — to bound the scale factor `1/(‖E‖_F+eps)` and prevent a divide-by-near-zero blowup once the hierarchy error shrinks late in training; this is disclosed as an addition, not presented as spec-derived.
+
+Both flags are turned on together for the live `--mode rpsm` path (`cyphalm_model.cpp`, next to the existing `use_izaac_init = (... || cfg_.context_mode == ContextMode::Rpsm)` line), mirroring that exact existing convention rather than adding new CLI/config plumbing (deliberately avoiding `cyphalm_bench_native.cpp`'s CLI parsing and `measurers.hpp`/`.cpp`, both off-limits per the parallel hidden-dim-scale agent's in-flight work).
+
+### 11.3 What was *not* implemented, and why (the literal "forgetting ratio < 0.01" metric)
+
+`RPSM_IMPLEMENTATION.md`'s own verification order item 2 ("Forgetting ratio < 0.01 over 100 steps") describes a property of the *original spec's* separate hierarchy-state-update term losing its carried Ψ history when η is unnormalised and large — a rolling-sequence hierarchy-state-persistence property, not classifier-vs-classifier catastrophic forgetting across training tasks. Since this codebase's Fix 2 mapping (§11.2) applies η to the SGD learning rate rather than to a standalone Ψ-state-update term, the literal metric doesn't transfer 1:1, and asserting a specific "`< 0.01`" threshold pulled from a different implementation would be exactly the kind of unverified, potentially-flaky claim the task asked to avoid. Instead, `native_rpsm_normalized_eta_smoke` tests the two properties that are actually meaningful for *this* mapping of the fix: (1) long-run (1500-step) numerical stability under a shrinking-error regime — the specific failure mode this implementation is exposed to — with no NaN/blowup, and (2) that Phase 0's already-validated "trained classifier beats a fresh one" property still holds with both Phase -1 fixes enabled. This is disclosed as a scope decision, not a silent gap.
+
+### 11.4 Test additions and CTest results
+
+Two new CTests, both self-contained (no cross-module wiring, per this document's own original cost estimate in §6):
+
+- `native_rpsm_spectral_alpha_smoke` — asserts `gria_alpha_spectral` ∈ `[0.3, 0.6]` on `Ψ ~ N(0,1)` at all four spec tiers (Tiny/Small/Medium/Large, two random seeds each) — directly implements `RPSM_IMPLEMENTATION.md`'s own verify-first item 1 — plus determinism and a degenerate all-zero-Ψ check.
+- `native_rpsm_normalized_eta_smoke` — the two properties from §11.3.
+
+Built from scratch in `native/build_rpsm` (reused; already had Phase 0/0b). `ctest --test-dir native/build_rpsm -R rpsm` → **10/10 passed** (0.15s–0.84s each): the 8 tests from Phase 0/0b plus the 2 new ones — no regressions.
+
+### 11.5 Before/after BPC, clean scratch comparison at n_train=5000
+
+Same methodology as §9.4/§10.5 (identical settings: `--profile d21 --mode rpsm --n-train 5000 --n-eval 256 --threads 1`, `bench_seed=42`, Tiny tier, `wikitext2` corpus confirmed in output). "Before" here is `HEAD` at commit `45fc242` (Phase 0 + Phase 0b, both flags compiled in but the code path they gate did not yet exist) — re-ran on the current tree before any Phase -1 edits landed and got the exact bit-identical Phase 0b number, confirming no drift.
+
+| Run | BPC | Δ vs before |
+|---|---|---|
+| **Before** (Phase 0 + Phase 0b only, `HEAD=45fc242`) | **4.821779758048934** | — |
+| **After** (+ Phase -1: spectral α and normalised η both enabled) | **4.794304980541004** | **−0.027475 BPC (−0.57% relative)** |
+
+Both runs deterministic (re-ran the after-fix bench a second time; bit-identical `4.794304980541004`).
+
+**Cumulative effect across all three phases**, same `n_train=5000` scale throughout: **7.4053 (original, frozen classifier) → 4.8218 (Phase 0) → 4.8218 (Phase 0b, −0.0066%) → 4.7943 (Phase -1, −0.57%) = −2.611 BPC, −35.3% relative, from the original committed behaviour.** Phase -1's own contribution is real, reproducible, and in the predicted direction, but — consistent with the pattern already seen in Phase 0b (§10.6) — an order of magnitude smaller than Phase 0's dominant effect. A plausible reason, following the same logic as §10.6: both fixes primarily affect *training dynamics/stability* (how smoothly the hierarchy state evolves, how the effective learning rate scales with error magnitude) rather than *what is being learned* — Phase 0 fixed a parameter that was structurally frozen forever; Phase -1 changes how quickly/stably the already-unfrozen parameters converge, a strictly smaller lever at only 5000 training steps.
+
+### 11.6 Matched-scale hybrid-vs-RPSM A/B (closing the gap flagged in §10.7)
+
+Per §10.7's own top recommendation ("a real same-`n_train`, same-tier hybrid-vs-RPSM A/B... is the single most informative next measurement"), ran the hybrid path at the identical scale used for every RPSM measurement in this document: `--profile d17 --mode hybrid --n-train 5000 --n-eval 256 --threads 1`, `bench_seed=42`, `wikitext2` corpus (same clean-scratch binary, `native/build_rpsm/cyphalm_bench_native.exe`).
+
+| Mode | Profile | BPC | n_train | n_eval | Notes |
+|---|---|---|---|---|---|
+| `hybrid` (`hybrid_gria_lstm`) | d17 | **4.039556** | 5000 | 256 | `train_epochs=2` (mode default); `bpc_lstm_only=4.031056`, `hybrid_gria_weight≈0.007` — at this small scale the hybrid blend has converged to being almost entirely LSTM |
+| `rpsm` (Phase 0+0b+(-1), this phase's fixes) | d21 | **4.794305** | 5000 | 256 | `train_epochs=1` (mode default); Tiny tier |
+
+**Matched-scale gap: RPSM is 0.754749 BPC worse than hybrid (+18.7% relative to hybrid's BPC).** One methodological caveat, disclosed rather than smoothed over: the two modes' *default* `train_epochs` differ (hybrid=2, RPSM=1) because that is what each `--mode` sets by default in this codebase — this is the real, as-shipped apples-to-apples comparison a user would get running each mode's default CLI at the same `n_train`/`n_eval`, not an artificially-equalized one; it is disclosed here so the reader can judge how much of the remaining 18.7% gap might be attributable to RPSM getting one fewer pass over the same 5000-example training set.
+
+**This is the single most important number in this entire document.** The originally-cited gap (`bench/BASELINE_LOCK.json`: RPSM 7.336 vs hybrid 2.864, both at `n_train=300000`, a **156% relative gap**) is not a fair like-for-like comparison — it compares a heavily-bugged RPSM configuration (frozen classifier, broken embedding backprop, fixed-not-spectral α) against a fully-converged 300k-step hybrid run. At matched scale, with the two highest-confidence bugs fixed (Phase 0/0b) and the two remaining named "core fixes" from `RESEARCH_STATUS.md:393` also implemented (Phase -1), **the gap collapses to 18.7%.**
+
+### 11.7 Final verdict on RPSM priority
+
+**The remaining gap looks predominantly like a training/scale artifact, not an established architectural ceiling — and the case for immediately committing to the large Option A/B refactors (§6 Phases 4-5) is now substantially weaker than the original `RESEARCH_STATUS.md`/`DEV_PLAN_2026-07-11.md` framing suggested, though this document still cannot fully rule out an architectural gap without a larger-scale run.**
+
+Reasoning, weighing everything found across all phases:
+
+1. **Most of the originally-cited 156%-relative gap was bugs, not architecture.** Finding #1 alone (frozen output classifier, Phase 0) closed 34.9 relative percentage points in isolation. Combined with Phase 0b and Phase -1, the fully-bug-fixed RPSM at the *same small scale* as a freshly-run hybrid comparison trails by only 18.7% — an order of magnitude smaller gap than the 300k-scale, bug-laden 156% figure that is currently pinned in `bench/BASELINE_LOCK.json` and cited in the roadmap docs as the justification for Option A/B.
+2. **Neither this document nor its predecessor phases (0, 0b) tested whether the remaining 18.7% gap closes further with more training.** All RPSM measurements in this document, including this phase's, are at `n_train=5000` — a scale at which *neither* model is well-converged (the hybrid's own `hybrid_gria_weight≈0.007` shows even the fully-trained hybrid mixture hasn't meaningfully engaged its GRIA component yet at this scale). It is entirely plausible that most or all of the remaining 18.7% would close with more steps at matched scale, given how much of the original gap turned out to be fixable defects rather than fundamental limits; it is also possible some fraction is a real architectural ceiling. **This document does not have the evidence to distinguish those two possibilities and does not claim to.**
+3. **Tier size is confirmed a minor lever (§9.5, −0.8%)**, so moving to Small/Medium tier (Phase 1, still not plumbed) is unlikely by itself to close a meaningful fraction of the remaining gap.
+4. **Recommendation, in priority order:** (a) before committing to Option A/B's large-scope Phases 4-5, run one more bug-fixed RPSM-vs-hybrid comparison at a meaningfully larger *matched* scale (e.g. 50k, not the live overnight run's 300k, in a dedicated scratch dir) to see whether the 18.7% gap shrinks, holds steady, or grows as both models get more training — this is the cheapest possible way to convert "looks like a training artifact" into a confirmed answer; (b) if that larger-scale gap is still small (single-digit-to-teens percent) or shrinking, RPSM's Option A/B priority should be **downgraded** from its current P4 "biggest single BPC gap in the repo" framing, since the real fair-comparison gap is far smaller than the pinned 7.336-vs-2.864 numbers suggest; (c) if that larger-scale gap instead grows or plateaus well above ~20%, that would be the first real evidence of an architectural ceiling, and *at that point* Option A/B's remaining scaffold work (Izaac VRF, Gaussian-mixture world model, §6 Phase 5) would be justified. **Either way, the roadmap documents' pinned "7.336 vs 2.864 / 156% gap" framing should be treated as stale and superseded by the matched-scale 18.7% figure in this document** — the former conflates architecture with easily-fixed training bugs and an unfair scale comparison; the latter is the first fair measurement taken in this entire investigation.
+
+### Files touched by Phase -1
+
+- `native/include/cypha/rpsm/rpsm_sequence_layer.hpp` — new opt-in config fields (`use_spectral_alpha`, `use_normalized_eta`, `eta_norm_max_scale`) and `gria_alpha_spectral()` declaration
+- `native/src/rpsm/rpsm_sequence_layer.cpp` — `gria_alpha_spectral()` implementation; wired into `hierarchy_update()` (Fix 1) and `train_step()` (Fix 2, `effective_lr`)
+- `native/src/cyphalm/cyphalm_model.cpp` — enable both flags for `context_mode == ContextMode::Rpsm`, next to the existing `use_izaac_init` line
+- `native/tests/parity/rpsm_spectral_alpha_smoke.cpp`, `native/tests/parity/rpsm_normalized_eta_smoke.cpp` — new CTests (§11.4)
+- `native/cmake/CyphaParity.cmake`, `native/CMakeLists.txt` — register the two new test targets/CTests
+- `docs/reports/RPSM_UPGRADE_PLAN.md` — this section
+
+---
+
 ### Files read/cited in this scoping pass
 
 - `docs/reports/DEV_PLAN_2026-07-11.md` (§1–3, full read)
@@ -426,3 +512,9 @@ None of this means the fix was unnecessary: an incorrect gradient is still incor
 - `bench/BASELINE_LOCK.json` (read-only; `rpsm_results`, `overnight_results` sections)
 - `bench/config/profiles/cyphalm_d21_rpsm.json`, `bench/config/d21_rpsm_profile.json`, `bench/config/profiles/cyphalm_d17_wikitext.json` (read-only, config comparison)
 - `native/src/bench/bench_domains.cpp` (domain registration table, `d41`/`d76` pattern for the new-domain proposal)
+
+### Additional files read/cited for Phase -1 (§11)
+
+- `docs/RESEARCH_STATUS.md:393` and surrounding context (`:383-397`, re-read directly, not just via §3.2's summary)
+- `native/include/cypha/cyphalm/cyphalm_config.hpp:53-54` (`alpha_init`/`alpha_learnable`), `native/src/cyphalm/cypha_cell_hypothesis.cpp:84-156` (H01-H22 cell variants, `alpha_init=0.485` at H10) — cross-referenced per the task's suggestion; confirmed unrelated GRIA-gate construct, but corroborates `0.485` as an established "edge of chaos" convention in this codebase
+- `native/src/cyphalm/gria_lowrank.cpp`, `native/src/cyphalm/cyphalm_gria.cpp` (alpha-gate implementations, confirmed structurally unrelated to spectral radius)

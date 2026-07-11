@@ -434,6 +434,8 @@ if(MSVC)
   target_compile_options(rpsm_train_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_train_multiclass_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_embed_grad_finite_diff PRIVATE /W4 /permissive-)
+  target_compile_options(rpsm_spectral_alpha_smoke PRIVATE /W4 /permissive-)
+  target_compile_options(rpsm_normalized_eta_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
   target_compile_options(score_batch_parity PRIVATE /W4 /permissive-)
   target_compile_options(kernel_llr_parity PRIVATE /W4 /permissive-)
@@ -504,6 +506,8 @@ else()
   target_compile_options(rpsm_train_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_train_multiclass_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_embed_grad_finite_diff PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(rpsm_spectral_alpha_smoke PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(rpsm_normalized_eta_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(score_batch_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -595,6 +599,14 @@ add_test(
 add_test(
   NAME native_rpsm_embed_grad_finite_diff
   COMMAND "$<TARGET_FILE:rpsm_embed_grad_finite_diff>"
+)
+add_test(
+  NAME native_rpsm_spectral_alpha_smoke
+  COMMAND "$<TARGET_FILE:rpsm_spectral_alpha_smoke>"
+)
+add_test(
+  NAME native_rpsm_normalized_eta_smoke
+  COMMAND "$<TARGET_FILE:rpsm_normalized_eta_smoke>"
 )
 add_test(
   NAME native_fixture_gen_list

@@ -333,6 +333,10 @@ void CyphaLMModel::init_components() {
         rc.n_classes = cfg_.vocab_size;
         rc.seed = cfg_.seed + 29;
         rc.use_izaac_init = (cfg_.cell_variant == "H19" || cfg_.context_mode == ContextMode::Rpsm);
+        // Phase -1 (RPSM_UPGRADE_PLAN.md, RESEARCH_STATUS.md:393): spectral alpha + normalised
+        // eta, live for the D21 --mode rpsm production path exactly like use_izaac_init above.
+        rc.use_spectral_alpha = (cfg_.context_mode == ContextMode::Rpsm);
+        rc.use_normalized_eta = (cfg_.context_mode == ContextMode::Rpsm);
         rpsm_layer_ = std::make_unique<cypha::rpsm::RpsmSequenceLayer>(rc);
         rpsm_log_probs_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
     }

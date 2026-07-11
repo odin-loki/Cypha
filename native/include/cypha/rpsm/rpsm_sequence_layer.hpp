@@ -124,7 +124,34 @@ struct RpsmSequenceConfig {
 
   IzaacActivationMix activation_mix = IzaacActivationMix::TanhOnly;
 
+  /// Phase -1 (RPSM_UPGRADE_PLAN.md Fix 1, RESEARCH_STATUS.md:393): replace the fixed
+  /// ``alpha_carry`` blend weight in ``hierarchy_update()`` with ``gria_alpha_spectral(Psi)``,
+  /// computed each step from the top singular value of the previous step's hierarchy state
+  /// ``psi_rows_`` (L x D). Opt-in: default-off preserves the exact Phase 0/0b behaviour.
+
+  bool use_spectral_alpha = false;
+
+  /// Phase -1 Fix 2: normalise the SGD learning rate used inside ``train_step`` by the
+  /// Frobenius norm of the current step's multi-level prediction error (``eta = eta_base /
+  /// (||E||_F + eps)``), per RPSM_IMPLEMENTATION.md:46-53. Opt-in: default-off preserves the
+  /// exact Phase 0/0b behaviour.
+
+  bool use_normalized_eta = false;
+
+  /// Safety clamp on the normalised-eta scale factor (``eta / lr``) to avoid a divide-by-near-zero
+  /// blowup once the hierarchy error converges toward 0. Not part of the original spec formula;
+  /// added because the spec's own training notes assume a grad-clip-equivalent safeguard exists.
+
+  double eta_norm_max_scale = 10.0;
+
 };
+
+/// Fix 1 helper: top singular value of the L x D hierarchy state ``psi`` (row-major), normalised
+/// by ``sqrt(state_dim)`` and squashed into ``[0.3, 0.6]`` (edge-of-chaos target band, matching
+/// RPSM_IMPLEMENTATION.md:44 and the existing ``alpha_init=0.485`` convention in
+/// ``cypha_cell_hypothesis.cpp``). Computed via power iteration on the L x L Gram matrix
+/// ``Psi @ Psi^T`` (cheap: L is the small hierarchy depth, e.g. 4-32, not D).
+double gria_alpha_spectral(const double* psi_row_major, int n_levels, int state_dim);
 
 
 

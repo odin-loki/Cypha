@@ -151,6 +151,67 @@ double activation_derivative(IzaacActivationMix mix, double x) {
 
 }  // namespace
 
+double gria_alpha_spectral(const double* psi_row_major, int n_levels, int state_dim) {
+  const int L = std::max(1, n_levels);
+  const int D = std::max(1, state_dim);
+
+  // Gram matrix G = Psi @ Psi^T (L x L, symmetric PSD) — cheap since L << D for every
+  // configured tier (Tiny/Small/Medium/Large all use L/D = 1/32, RPSM_IMPLEMENTATION.md:97-102).
+  std::vector<double> gram(static_cast<std::size_t>(L) * static_cast<std::size_t>(L), 0.0);
+  for (int i = 0; i < L; ++i) {
+    const double* ri = psi_row_major + static_cast<std::size_t>(i) * static_cast<std::size_t>(D);
+    for (int j = i; j < L; ++j) {
+      const double* rj = psi_row_major + static_cast<std::size_t>(j) * static_cast<std::size_t>(D);
+      double acc = 0.0;
+      for (int c = 0; c < D; ++c) {
+        acc += ri[static_cast<std::size_t>(c)] * rj[static_cast<std::size_t>(c)];
+      }
+      gram[static_cast<std::size_t>(i) * static_cast<std::size_t>(L) + static_cast<std::size_t>(j)] = acc;
+      gram[static_cast<std::size_t>(j) * static_cast<std::size_t>(L) + static_cast<std::size_t>(i)] = acc;
+    }
+  }
+
+  // Power iteration for the top eigenvalue of the symmetric PSD Gram matrix; converges to
+  // sigma_max(Psi)^2 since G = Psi Psi^T. 32 iterations is ample for L <= 32 (Large tier).
+  std::vector<double> v(static_cast<std::size_t>(L), 1.0 / std::sqrt(static_cast<double>(L)));
+  double lambda_max = 0.0;
+  for (int iter = 0; iter < 32; ++iter) {
+    std::vector<double> w(static_cast<std::size_t>(L), 0.0);
+    for (int i = 0; i < L; ++i) {
+      double acc = 0.0;
+      for (int j = 0; j < L; ++j) {
+        acc += gram[static_cast<std::size_t>(i) * static_cast<std::size_t>(L) + static_cast<std::size_t>(j)] *
+               v[static_cast<std::size_t>(j)];
+      }
+      w[static_cast<std::size_t>(i)] = acc;
+    }
+    double norm_sq = 0.0;
+    for (double x : w) {
+      norm_sq += x * x;
+    }
+    const double norm = std::sqrt(norm_sq);
+    if (norm < 1e-12) {
+      lambda_max = 0.0;
+      break;
+    }
+    for (int i = 0; i < L; ++i) {
+      v[static_cast<std::size_t>(i)] = w[static_cast<std::size_t>(i)] / norm;
+    }
+    lambda_max = norm;
+  }
+
+  const double sigma_max = std::sqrt(std::max(lambda_max, 0.0));
+  const double normalized = sigma_max / std::sqrt(static_cast<double>(D));
+  // Edge-of-chaos squash: at init (Psi ~ N(0,1)), normalized ~ 1 + sqrt(L/D) for every tier
+  // (constant L/D ratio across Tiny/Small/Medium/Large), which lands near alpha=0.476 — inside
+  // the spec's [0.3, 0.6] target band (RPSM_IMPLEMENTATION.md:44) and close to the existing
+  // 0.485 "edge of chaos" convention already used elsewhere in this codebase (H10 cell
+  // hypothesis, cypha_cell_hypothesis.cpp:118).
+  const double centered = normalized - 1.0;
+  const double sigmoid = 1.0 / (1.0 + std::exp(-2.0 * centered));
+  return 0.3 + 0.3 * sigmoid;
+}
+
 IzaacActivationMix select_izaac_activation_mix(std::uint64_t seed) {
   const auto idx = static_cast<int>(seed % static_cast<std::uint64_t>(kIzaacActivationMixCount));
   return static_cast<IzaacActivationMix>(idx);
@@ -340,7 +401,11 @@ void RpsmSequenceLayer::encode_level0_features(const double* input, int input_di
 double RpsmSequenceLayer::hierarchy_update() {
   const int sd = cfg_.state_dim;
   const int nl = static_cast<int>(h_levels_.size());
-  const double a = cfg_.alpha_carry;
+  // Fix 1 (spectral alpha): compute from psi_rows_ as it stood entering this call (i.e. the
+  // previous step's Psi), before this loop overwrites it below. Opt-in; defaults to the fixed
+  // cfg_.alpha_carry to preserve Phase 0/0b's exact measured behaviour when disabled.
+  const double a = cfg_.use_spectral_alpha ? gria_alpha_spectral(psi_rows_.data(), nl, sd)
+                                            : cfg_.alpha_carry;
   const double beta = cfg_.beta_memory;
   double hierarchy_loss = 0.0;
 
@@ -421,6 +486,21 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
   metrics.surprise = last_surprise_;
   metrics.loss = metrics.nll + cfg_.hierarchy_loss_weight * hierarchy_loss;
 
+  // Fix 2 (normalised eta): eta = eta_base / (||E||_F + eps), RPSM_IMPLEMENTATION.md:46-53.
+  // ||E||_F is the Frobenius norm of the full multi-level prediction-error matrix; hierarchy_loss
+  // is already that quantity's mean-square (sum over all L*sd elements, divided by L*sd), so the
+  // raw sum recovers exactly via hierarchy_loss * n_levels * sd. Opt-in; defaults to plain `lr`
+  // to preserve Phase 0/0b's exact measured behaviour when disabled. Clamped (not part of the
+  // original spec formula) to avoid a divide-by-near-zero blowup once the hierarchy error
+  // converges toward 0 later in training.
+  double effective_lr = lr;
+  if (cfg_.use_normalized_eta) {
+    const double frob_err = std::sqrt(std::max(0.0, hierarchy_loss) *
+                                       static_cast<double>(cfg_.n_levels * sd));
+    const double scale = std::clamp(1.0 / (frob_err + 1e-8), 0.0, cfg_.eta_norm_max_scale);
+    effective_lr = lr * scale;
+  }
+
   std::vector<double> grad_logits(static_cast<std::size_t>(k), 0.0);
   double max_z = llr_buf_[0];
   for (int i = 1; i < k; ++i) {
@@ -459,7 +539,7 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
     for (int j = 0; j < d; ++j) {
       const double grad = gc * psi_.inv_var[static_cast<std::size_t>(j)] *
                            (feat_buf_[static_cast<std::size_t>(j)] - mu0[j] - delta[j]);
-      delta[j] -= lr * grad;
+      delta[j] -= effective_lr * grad;
     }
   }
 
@@ -476,14 +556,14 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
       if (i < in_n) {
         x_in = input[i];
       }
-      w_enc_[static_cast<std::size_t>(j * sd + i)] -= lr * chain * x_in;
-      w_carry_[static_cast<std::size_t>(j * sd + i)] -= lr * chain * h0[static_cast<std::size_t>(i)];
+      w_enc_[static_cast<std::size_t>(j * sd + i)] -= effective_lr * chain * x_in;
+      w_carry_[static_cast<std::size_t>(j * sd + i)] -= effective_lr * chain * h0[static_cast<std::size_t>(i)];
     }
   }
 
   const double hier_w = cfg_.hierarchy_loss_weight;
   if (hier_w > 0.0 && hierarchy_loss > kEps) {
-    const double hier_scale = 2.0 * hier_w * lr / static_cast<double>(cfg_.n_levels);
+    const double hier_scale = 2.0 * hier_w * effective_lr / static_cast<double>(cfg_.n_levels);
     for (int l = 0; l < cfg_.n_levels; ++l) {
       const auto& h = h_levels_[static_cast<std::size_t>(l)];
       for (int i = 0; i < sd; ++i) {
