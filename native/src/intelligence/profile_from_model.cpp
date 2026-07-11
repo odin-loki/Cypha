@@ -190,18 +190,24 @@ nlohmann::json intelligence_profile_report_json(const IntelligenceProfiler& prof
   const ProfileObservation obs = mean_observation(profiler);
   root["navigation_loss"] = IntelligenceProfiler::navigation_loss(obs);
 
-  // Causal graph is constructed up front (rather than after the kappa fields, as before)
-  // so its live fidelity signal can be folded into the kappa values reported below. See
-  // docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9 for the full rationale; in short, this
-  // is the causal graph's first and only feedback path into kappa/criticality_score. In this
-  // call path a *fresh* monitor is fed exactly one observation (`run_simulation_trajectory`
-  // only calls `observe_profile` once), so `causal_fidelity()` is guaranteed 0.0 here (n=1 on
-  // both estimated edges) and `apply_causal_fidelity` is therefore a guaranteed no-op below --
-  // this path's kappa values are unchanged from before this pass. Non-degenerate fidelity
-  // requires a monitor that has observed >=2 profiles, as demonstrated by the CTest coverage
-  // (see `test_paper_v_causal_fidelity_kappa` in intelligence_profiler_papers.cpp) and by the
-  // persistent `g_causal_graph_monitor` accumulation pattern already used in cypha_rest.cpp.
-  CausalGraphMonitor causal;
+  // Causal graph fidelity is read from `profiler`'s own persistent, bench-run-scoped
+  // `CausalGraphMonitor` (see `IntelligenceProfiler::causal_graph()`), not a fresh
+  // single-observation monitor. See docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9/§9.7 for
+  // the full rationale. Before §9.7, this call path constructed a brand-new `CausalGraphMonitor`
+  // on every call and fed it exactly one observation (`run_simulation_trajectory` only calls
+  // `observe_profile` once), so `causal_fidelity()` was guaranteed 0.0 here (n=1 on both
+  // estimated edges) and `apply_causal_fidelity` was a guaranteed no-op. As of §9.7, callers
+  // that have access to per-step history during training/eval (e.g.
+  // `LmIntelligenceMonitor::flush_to_profiler`) feed real, genuinely-varying (alpha,
+  // calibration)/(tau, r_eu) checkpoints into this same persistent monitor as they go, so by the
+  // time a report is generated the monitor may already have accumulated >=2 observations and
+  // `causal_fidelity()` can be non-degenerate. Callers that never feed the profiler
+  // incrementally (e.g. `profile_from_reference_fixture`'s single `update_from_batch` call) are
+  // unaffected: their persistent monitor still only ever sees the one observation added below,
+  // so `causal_fidelity()` remains exactly 0.0 and this path's kappa values stay bit-identical to
+  // before this pass -- backward compatibility is preserved by construction, not by a special
+  // case.
+  CausalGraphMonitor& causal = profiler.causal_graph();
   causal.run_simulation_trajectory(4, obs);
   const double causal_fidelity = causal.causal_fidelity();
 

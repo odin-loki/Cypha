@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "cypha/intelligence/causal_graph.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 
 namespace cypha::cyphalm {
@@ -32,6 +33,17 @@ class LmIntelligenceMonitor {
   void trim_field_history();
   void append_perturbation_pair(const double* base, const double* perturbed);
 
+  /// Feed the profiler's persistent causal graph with several genuinely time-varying
+  /// (alpha, calibration)/(tau, r_eu) checkpoints reconstructed from this monitor's own
+  /// per-token history (growing-prefix snapshots), rather than only the one or two aggregate
+  /// observations `flush_to_profiler` already feeds the profiler's NIG state. See
+  /// docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9.7 for why this is necessary: those two
+  /// aggregate observations are both derived from the same summed per-token statistics, so at
+  /// least one axis of each edge is identical across them (zero variance -> zero correlation)
+  /// even though nominally n=2. No-op (feeds nothing) when this monitor's per-token history is
+  /// too short to reconstruct even one meaningful checkpoint.
+  void feed_causal_checkpoints(cypha::intelligence::CausalGraphMonitor& causal) const;
+
   int field_dim_ = 0;
   int embed_dim_ = 0;
   int field_count_ = 0;
@@ -51,6 +63,8 @@ class LmIntelligenceMonitor {
   double epistemic_sum_ = 0.0;
   double aleatoric_sum_ = 0.0;
   int variance_steps_ = 0;
+  std::vector<double> epistemic_history_;
+  std::vector<double> aleatoric_history_;
 
   std::vector<double> prev_field_;
   bool use_eigenvalue_d_eff_ = false;

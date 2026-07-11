@@ -50,6 +50,20 @@ int main() {
 
   monitor.flush_to_profiler(profiler);
 
+  // docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9.7: `flush_to_profiler` now also feeds the
+  // profiler's persistent `CausalGraphMonitor` with growing-prefix checkpoints reconstructed
+  // from this monitor's own per-token history, so a single flush over enough steps (here,
+  // kSteps=32, well above the 4-checkpoint x 4-min-samples floor) must leave both estimated
+  // edges with real accumulated history -- not the single degenerate observation the old
+  // fresh-per-report-call `CausalGraphMonitor` was stuck with.
+  const auto& causal = profiler.causal_graph();
+  if (causal.alpha_calibration_n() < 4 || causal.tau_r_eu_n() < 4) {
+    std::printf("intelligence_lm_monitor_smoke: FAIL (causal graph under-accumulated: "
+                "alpha_calibration_n=%d tau_r_eu_n=%d)\n",
+                causal.alpha_calibration_n(), causal.tau_r_eu_n());
+    return 1;
+  }
+
   const auto snapshot = monitor.snapshot_observation();
   if (!cypha::intelligence::profile_observation_complete(snapshot)) {
     std::puts("intelligence_lm_monitor_smoke: FAIL (incomplete snapshot)");

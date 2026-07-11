@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/intelligence/profile_observation.hpp"
 #include "cypha/intelligence/soft_world_monitor.hpp"
 
 namespace cypha::intelligence {

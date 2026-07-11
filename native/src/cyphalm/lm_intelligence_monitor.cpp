@@ -13,6 +13,27 @@ namespace {
 constexpr double kEps = 1e-12;
 constexpr int kTauMaxSteps = 512;
 
+// See `LmIntelligenceMonitor::feed_causal_checkpoints` (docs/reports/
+// SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9.7): number of growing-prefix checkpoints reconstructed
+// from this monitor's per-token history per flush, and the minimum sample count a given
+// per-token vector must have reached before a checkpoint uses it (below that, the
+// corresponding `ProfileObservation` field is left at its neutral default rather than computed
+// from too few points to be meaningful).
+constexpr int kCausalCheckpointCount = 4;
+constexpr int kCausalCheckpointMinSamples = 4;
+
+double mean_prefix(const std::vector<double>& values, int count) {
+  count = std::min(count, static_cast<int>(values.size()));
+  if (count <= 0) {
+    return 0.0;
+  }
+  double sum = 0.0;
+  for (int i = 0; i < count; ++i) {
+    sum += values[static_cast<std::size_t>(i)];
+  }
+  return sum / static_cast<double>(count);
+}
+
 double histogram_entropy(const double* values, int n, int n_bins = 16) {
   if (n <= 0) {
     return 0.0;
@@ -159,6 +180,8 @@ void LmIntelligenceMonitor::reset() {
   epistemic_sum_ = 0.0;
   aleatoric_sum_ = 0.0;
   variance_steps_ = 0;
+  epistemic_history_.clear();
+  aleatoric_history_.clear();
   prev_field_.clear();
 }
 
@@ -233,6 +256,12 @@ void LmIntelligenceMonitor::observe_token(const std::vector<double>& input_embed
     epistemic_sum_ += epistemic_var;
     aleatoric_sum_ += aleatoric_var;
     ++variance_steps_;
+    epistemic_history_.push_back(epistemic_var);
+    aleatoric_history_.push_back(aleatoric_var);
+    while (static_cast<int>(epistemic_history_.size()) > kMaxFieldHistory) {
+      epistemic_history_.erase(epistemic_history_.begin());
+      aleatoric_history_.erase(aleatoric_history_.begin());
+    }
   }
 
   if (field_hidden.empty()) {
@@ -314,6 +343,44 @@ cypha::intelligence::ProfileObservation LmIntelligenceMonitor::snapshot_observat
   return compute_observation();
 }
 
+void LmIntelligenceMonitor::feed_causal_checkpoints(
+    cypha::intelligence::CausalGraphMonitor& causal) const {
+  const int n_alpha = static_cast<int>(step_alphas_.size());
+  const int n_seq = static_cast<int>(sequence_trace_.size());
+  const int n_var = static_cast<int>(epistemic_history_.size());
+  if (n_alpha < kCausalCheckpointMinSamples && n_seq < kCausalCheckpointMinSamples &&
+      n_var < kCausalCheckpointMinSamples) {
+    return;
+  }
+
+  for (int c = 1; c <= kCausalCheckpointCount; ++c) {
+    const double frac = static_cast<double>(c) / static_cast<double>(kCausalCheckpointCount);
+    const int k_alpha = static_cast<int>(std::llround(static_cast<double>(n_alpha) * frac));
+    const int k_seq = static_cast<int>(std::llround(static_cast<double>(n_seq) * frac));
+    const int k_var = static_cast<int>(std::llround(static_cast<double>(n_var) * frac));
+
+    cypha::intelligence::ProfileObservation obs;
+    if (k_alpha >= kCausalCheckpointMinSamples) {
+      obs.alpha = mean_prefix(step_alphas_, k_alpha);
+      if (static_cast<int>(confidences_.size()) >= k_alpha &&
+          static_cast<int>(correct_.size()) >= k_alpha) {
+        obs.calibration =
+            cypha::intelligence::compute_calibration(confidences_.data(), correct_.data(), k_alpha);
+      }
+    }
+    if (k_seq >= kCausalCheckpointMinSamples) {
+      obs.tau = cypha::intelligence::compute_memory_depth_normalized(
+          sequence_trace_.data(), k_seq, 1, kTauMaxLag, kTauMaxSteps);
+    }
+    if (k_var >= kCausalCheckpointMinSamples) {
+      const double e_mean = mean_prefix(epistemic_history_, k_var);
+      const double a_mean = mean_prefix(aleatoric_history_, k_var);
+      obs.r_eu = cypha::intelligence::compute_epistemic_ratio(e_mean, a_mean);
+    }
+    causal.observe_profile(obs);
+  }
+}
+
 void LmIntelligenceMonitor::flush_to_profiler(
     cypha::intelligence::IntelligenceProfiler& profiler) {
   cypha::intelligence::ProfileBatch batch;
@@ -365,6 +432,15 @@ void LmIntelligenceMonitor::flush_to_profiler(
   hook_obs.r_eu = snapshot.r_eu;
   hook_obs.calibration = snapshot.calibration;
   profiler.update(hook_obs);
+
+  // Feed the profiler's persistent causal graph with real, genuinely time-varying checkpoints
+  // reconstructed from this monitor's own per-token history (see `feed_causal_checkpoints` and
+  // docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9.7). This is what lets
+  // `CausalGraphMonitor::causal_fidelity()` become non-degenerate within a single bench run:
+  // the two profiler updates above are both derived from the same summed per-token statistics
+  // (calibration and r_eu are numerically identical between them), so they alone cannot produce
+  // a non-zero online correlation no matter how many times this function is called.
+  feed_causal_checkpoints(profiler.causal_graph());
 }
 
 }  // namespace cypha::cyphalm

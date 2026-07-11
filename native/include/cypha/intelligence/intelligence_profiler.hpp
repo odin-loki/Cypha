@@ -3,21 +3,12 @@
 #include <array>
 #include <optional>
 
+#include "cypha/intelligence/causal_graph.hpp"
 #include "cypha/intelligence/nig_statistic_state.hpp"
+#include "cypha/intelligence/profile_observation.hpp"
 #include "cypha/intelligence/profile_statistic.hpp"
 
 namespace cypha::intelligence {
-
-/// One row of the seven-statistic profile vector ``P = (α, D_eff, σ, τ, r_eu, L, C)``.
-struct ProfileObservation {
-  double alpha = 0.5;
-  double d_eff = 0.5;
-  double sigma_branch = 0.5;
-  double tau = 0.5;
-  double r_eu = 0.5;
-  double lipschitz = 0.5;
-  double calibration = 0.5;
-};
 
 /// Optional raw batch for measurers; unset dynamics default to ``0.5``.
 struct ProfileBatch {
@@ -136,12 +127,31 @@ class IntelligenceProfiler {
   static double apply_causal_fidelity(double kappa, double causal_fidelity,
                                       double weight = kDefaultCausalFidelityWeight);
 
+  /// Bench-run-scoped ``CausalGraphMonitor`` that lives for as long as this
+  /// ``IntelligenceProfiler`` does (i.e. one instance per bench run / training run, not one
+  /// per report call). See docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9.7: prior to this,
+  /// ``intelligence_profile_report_json`` constructed a *fresh* ``CausalGraphMonitor`` on every
+  /// call, so its online-correlation edges never saw more than one observation
+  /// (``causal_fidelity()`` was therefore always exactly ``0.0``). Callers that want the causal
+  /// graph to accumulate real cross-step history (e.g. ``LmIntelligenceMonitor::flush_to_profiler``,
+  /// which has access to this profiler's own per-token history) should feed observations into
+  /// this monitor directly rather than constructing their own. Declared ``const`` (backed by a
+  /// ``mutable`` member) so it is reachable both from mutating call sites (e.g.
+  /// ``flush_to_profiler``, which takes a non-const ``IntelligenceProfiler&``) and from the
+  /// read-only report path (``intelligence_profile_report_json`` takes a
+  /// ``const IntelligenceProfiler&`` since most callers only ever read a profiler when
+  /// generating a report) -- the graph's own accumulation state is a live diagnostic, not part
+  /// of this profiler's logical (NIG-state) value, so ``const``-mutability here mirrors how the
+  /// rest of this class already treats diagnostics vs. core state.
+  CausalGraphMonitor& causal_graph() const { return causal_graph_; }
+
  private:
   void update_statistic(ProfileStatistic stat, double value);
 
   static double axis_distance(double value, double target);
 
   std::array<NigStatisticState, kProfileStatisticCount> nig_states_;
+  mutable CausalGraphMonitor causal_graph_;
 };
 
 }  // namespace cypha::intelligence

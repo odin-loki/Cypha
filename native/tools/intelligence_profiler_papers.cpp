@@ -367,6 +367,71 @@ void test_paper_v_causal_fidelity_kappa() {
   }
 }
 
+// docs/reports/SOFT_WORLD_CAUSAL_GRAPH_PLAN.md §9.7: intelligence_profile_report_json now
+// reads causal fidelity from the profiler's own persistent CausalGraphMonitor
+// (IntelligenceProfiler::causal_graph()) rather than constructing a fresh single-observation
+// one on every call. This exercises that contract end-to-end through the actual report
+// function, complementing test_paper_v_causal_fidelity_kappa's direct CausalGraphMonitor
+// coverage above.
+void test_paper_v_causal_fidelity_report_path_persistence() {
+  using cypha::intelligence::IntelligenceProfiler;
+  using cypha::intelligence::ProfileObservation;
+
+  ProfileObservation single_obs;
+  single_obs.alpha = 0.45;
+  single_obs.d_eff = 0.40;
+  single_obs.sigma_branch = 0.50;
+  single_obs.tau = 0.55;
+  single_obs.r_eu = 0.60;
+  single_obs.lipschitz = 0.50;
+  single_obs.calibration = 0.70;
+
+  // (1) Backward compatibility: a profiler fed exactly one observation (matching
+  // `profile_from_reference_fixture`'s single `update_from_batch` call, and every other
+  // existing report caller) must still report causal_fidelity == 0.0 and a bit-identical
+  // criticality_score -- the persistent monitor starts empty and this path only ever adds
+  // the one `run_simulation_trajectory` observation to it, same as before §9.7.
+  {
+    IntelligenceProfiler profiler;
+    profiler.update(single_obs);
+    const double baseline_kappa = profiler.criticality_score();
+
+    const auto report = cypha::intelligence::intelligence_profile_report_json(profiler);
+    assert(report.at("causal_fidelity").get<double>() == 0.0);
+    assert(report.at("criticality_score").get<double>() == baseline_kappa);
+  }
+
+  // (2) The fix: if the profiler's persistent causal_graph() has already accumulated real,
+  // genuinely-varying (alpha, calibration)/(tau, r_eu) history *before* the report is
+  // generated -- exactly what `LmIntelligenceMonitor::flush_to_profiler`'s checkpoint feeding
+  // does during a real bench run (see feed_causal_checkpoints) -- the report must surface a
+  // non-degenerate causal_fidelity and a measurably (but boundedly) higher criticality_score.
+  {
+    IntelligenceProfiler profiler;
+    profiler.update(single_obs);
+    const double baseline_kappa = profiler.criticality_score();
+
+    for (int i = 0; i < 20; ++i) {
+      const double t = static_cast<double>(i) / 19.0;
+      ProfileObservation o;
+      o.alpha = 0.2 + 0.6 * t;
+      o.calibration = 0.3 + 0.5 * t;
+      o.tau = 0.2 + 0.6 * t;
+      o.r_eu = 0.8 - 0.6 * t;
+      profiler.causal_graph().observe_profile(o);
+    }
+    assert(profiler.causal_graph().alpha_calibration_n() >= 20);
+
+    const auto report = cypha::intelligence::intelligence_profile_report_json(profiler);
+    const double fidelity = report.at("causal_fidelity").get<double>();
+    assert(fidelity > 0.8);
+    assert(fidelity < 1.0);
+    const double adjusted = report.at("criticality_score").get<double>();
+    assert(adjusted > baseline_kappa);
+    assert(adjusted <= baseline_kappa * 1.05 + 1e-9);
+  }
+}
+
 void test_paper_v_soft_world_simulation_step() {
   cypha::intelligence::SoftWorldMonitor monitor;
   monitor.simulation_step(0.8, 0.5, 0.2);
@@ -635,6 +700,7 @@ int main() {
   test_paper_v_causal_graph();
   test_paper_v_causal_graph_correlation_edges();
   test_paper_v_causal_fidelity_kappa();
+  test_paper_v_causal_fidelity_report_path_persistence();
   test_paper_iv_profile_guided_loss();
   test_adaptive_navigation_lambdas();
   test_kappa_trajectory_navigation_lambdas();
