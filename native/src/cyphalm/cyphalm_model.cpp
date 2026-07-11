@@ -1376,21 +1376,92 @@ std::string CyphaLMModel::decode_tokens(const std::vector<std::uint32_t>& ids) c
     return bpe_->decode(ids);
 }
 
-void CyphaLMModel::rpsm_embed_backprop_stub(std::uint32_t token_id) {
+void CyphaLMModel::rpsm_embed_backprop(std::uint32_t token_id) {
     if (!embed_ || !rpsm_layer_) return;
+    if (token_id >= embed_->vocab_size()) return;
     const auto& field_grad = rpsm_layer_->input_grad();
     if (field_grad.empty()) return;
 
+    // Correct chain rule: loss -> field_x_ (= proj_ssm_ * ctx) -> ctx (SSM layer-0 state
+    // transition) -> e (embedding row). `field_grad` is d(loss)/d(field_x_) restricted to the
+    // leading `rpsm_state_dim` entries RpsmSequenceLayer::train_step actually reads (see
+    // encode_level0_features/inject_input_multilevel, both bounded by `state_dim`); any
+    // trailing field_x_ entries never influence the loss, so their gradient is exactly zero,
+    // not an approximation -- zero-pad rather than truncate/misalign as the old stub did.
+    std::vector<double> grad_field(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+    for (std::size_t i = 0; i < field_grad.size() && i < grad_field.size(); ++i) {
+        grad_field[i] = field_grad[i];
+    }
+
+    CellAISSM* active = active_ssm();
+    const int ctx_dim = ssm_context_dim();
+    if (!active || ctx_dim <= 0 ||
+        proj_ssm_.size() != static_cast<std::size_t>(cfg_.field_dim) * static_cast<std::size_t>(ctx_dim)) {
+        return;
+    }
+    // proj_ssm_ is [field_dim x ctx_dim] row-major (project_field: field_x_ = proj_ssm_ * ctx),
+    // so d(loss)/d(ctx) = proj_ssm_^T . grad_field -- same transpose-multiply convention as
+    // bptt_ssm_update below and char_lstm.cpp's `dx = Wx^T * dgates`.
+    const auto grad_ctx = matvec_transpose(proj_ssm_, cfg_.field_dim, ctx_dim, grad_field);
+
+    const int sd = active->d_state();
+    if (sd <= 0 || static_cast<int>(grad_ctx.size()) < 2 * sd) return;
+
+    // Only SSM layer 0 consumes the raw embedding `e` directly (layer 1+, if any, takes the
+    // previous layer's ctx as input, not `e`) -- this mirrors the same layer-0-only scope
+    // `bptt_ssm_update` already uses for this SSM (it also only reads grad_ctx[0:2*d_state]).
+    // We take layer 0's *direct* contribution to the field vector via grad_ctx's first
+    // 2*d_state entries; we deliberately do not additionally unroll grad through layer 1+'s
+    // state transition back into layer 0's ctx, matching that existing precedent.
+    std::vector<double> grad_h(static_cast<std::size_t>(sd));
+    std::vector<double> grad_s(static_cast<std::size_t>(sd));
+    if (cfg_.use_multiscale && !active->multiscale_alpha().empty()) {
+        // ctx = [alpha*h + (1-alpha)*s ; s] per CellAISSM::step's multiscale branch.
+        const double alpha = std::clamp(active->multiscale_alpha()[0], 0.0, 1.0);
+        for (int i = 0; i < sd; ++i) {
+            const double g_blend = grad_ctx[static_cast<std::size_t>(i)];
+            const double g_s_direct = grad_ctx[static_cast<std::size_t>(sd + i)];
+            grad_h[static_cast<std::size_t>(i)] = alpha * g_blend;
+            grad_s[static_cast<std::size_t>(i)] = (1.0 - alpha) * g_blend + g_s_direct;
+        }
+    } else {
+        // ctx = [h ; s].
+        for (int i = 0; i < sd; ++i) {
+            grad_h[static_cast<std::size_t>(i)] = grad_ctx[static_cast<std::size_t>(i)];
+            grad_s[static_cast<std::size_t>(i)] = grad_ctx[static_cast<std::size_t>(sd + i)];
+        }
+    }
+
+    const auto& w_fast = active->w_fast_layer0();
+    const auto& w_slow = active->w_slow_layer0();
+    const std::uint32_t de = embed_->dim();
+    if (w_fast.size() != static_cast<std::size_t>(sd) * de ||
+        w_slow.size() != static_cast<std::size_t>(sd) * de) {
+        return;
+    }
+    const double lf = active->lambda_fast();
+    const double ls = active->lambda_slow();
+
+    // CellAISSM::step's non-spectral leaky-integrator update: h[i] = lf*h_prev[i] +
+    // (1-lf)*(W_fast . e)[i], s[i] = ls*s_prev[i] + (1-ls)*(W_slow . e)[i], so
+    // d(h[i])/d(e[j]) = (1-lf)*W_fast[i,j] and d(s[i])/d(e[j]) = (1-ls)*W_slow[i,j] --
+    // grad_e = (1-lf) * W_fast^T . grad_h + (1-ls) * W_slow^T . grad_s.
+    std::vector<double> grad_e(de, 0.0);
+    for (int i = 0; i < sd; ++i) {
+        const double gh = (1.0 - lf) * grad_h[static_cast<std::size_t>(i)];
+        const double gs = (1.0 - ls) * grad_s[static_cast<std::size_t>(i)];
+        const double* wf_row = w_fast.data() + static_cast<std::size_t>(i) * de;
+        const double* ws_row = w_slow.data() + static_cast<std::size_t>(i) * de;
+        for (std::uint32_t j = 0; j < de; ++j) {
+            grad_e[j] += gh * wf_row[j] + gs * ws_row[j];
+        }
+    }
+
     const double lr = cfg_.rpsm_lr * 0.1;
     auto& table = embed_->table();
-    const std::uint32_t de = embed_->dim();
-    if (token_id >= embed_->vocab_size()) return;
     double* row = table.data() + static_cast<std::size_t>(token_id) * de;
-
-    // Stub: map RPSM input gradient onto the leading embed dims (full chain deferred).
-    const int n = std::min(static_cast<int>(de), static_cast<int>(field_grad.size()));
-    for (int i = 0; i < n; ++i) {
-        row[static_cast<std::size_t>(i)] -= lr * field_grad[static_cast<std::size_t>(i)];
+    for (std::uint32_t j = 0; j < de; ++j) {
+        row[j] -= lr * grad_e[j];
     }
 }
 
@@ -1415,7 +1486,7 @@ TrainStepMetrics CyphaLMModel::train_step_rpsm(std::uint32_t token_id, std::uint
     m.loss = rpsm_m.loss;
     last_train_loss_ = m.loss;
 
-    rpsm_embed_backprop_stub(token_id);
+    rpsm_embed_backprop(token_id);
 
     if (next_token_id < token_counts_.size()) {
         token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;

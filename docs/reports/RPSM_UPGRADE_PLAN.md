@@ -324,6 +324,85 @@ Small tier gives a further **−0.040 BPC (−0.8%)** — real, but an order of 
 
 ---
 
+## 10. Phase 0b results (2026-07-11) — Finding #2 (`rpsm_embed_backprop_stub`) fixed and measured
+
+**Status: implemented, verified (finite-difference + CTest), measured. Finding #2 confirmed exactly as diagnosed in §4.2, fixed with a real chain-rule backward pass, and BPC-measured against the Phase 0 baseline.**
+
+### 10.1 What was confirmed
+
+Re-read `CyphaLMModel::rpsm_embed_backprop_stub` (`native/src/cyphalm/cyphalm_model.cpp:1379-1395` pre-fix) and its call site (`train_step_rpsm`, immediately after `rpsm_layer_->train_step(...)`) firsthand, plus the full forward chain between the embedding table and the RPSM layer's input: `embed_->embed_vec(token_id)` → `ssm_step(e)` (dispatches to `CellAISSM::step`/`HierarchicalSSM::step`; for the D21 RPSM profile — `use_hierarchical_ssm=false`, `use_differential_gate=false`, `use_ca_state_cell=false`, `use_reversible_cell=false` — this reduces to a bare `ssm_->step(e)` call) → `project_field(ctx)` (`field_x_ = proj_ssm_ · ctx`, a plain matvec) → `rpsm_layer_->train_step(field_x_, ...)`. Confirmed §4.2's diagnosis exactly: the stub read `rpsm_layer_->input_grad()` (gradient of loss w.r.t. the RPSM layer's own input, i.e. w.r.t. `field_x_`, restricted to the leading `rpsm_state_dim` entries the layer's forward pass actually reads — see `encode_level0_features`/`inject_input_multilevel` in `rpsm_sequence_layer.cpp`, both loop-bounded by `state_dim`) and subtracted its leading `min(d_embed, field_grad.size())` entries directly from the embedding row, with no `proj_ssm_` or SSM involvement at all — a basis mismatch (field-space vs embed-space), not a valid chain-rule gradient, exactly as diagnosed.
+
+Also read `CellAISSM::step`'s non-spectral leaky-integrator branch (`native/src/cyphalm/cellai_ssm.cpp:203-252`, the branch taken for the D21 RPSM profile since `use_spectral_pde=false`) and its public accessors (`w_fast_layer0()`, `w_slow_layer0()`, `lambda_fast()`, `lambda_slow()`, `multiscale_alpha()`) to determine the true differentiable path: `h[i] = lf·h_prev[i] + (1-lf)·(W_fast·e)[i]`, `s[i] = ls·s_prev[i] + (1-ls)·(W_slow·e)[i]`, and (with `use_multiscale=true`, also the D21 profile's setting) `ctx = [α·h+(1-α)·s ; s]` per layer. Cross-checked the general transpose-multiply convention against two existing precedents in this codebase: `char_lstm.cpp`'s `backward_step` (`dx = Wx^T · dgates`, then `dE[token] = dx` directly, confirming "transpose the forward linear map to backprop through it" is the established pattern) and this same file's `bptt_ssm_update` (`native/src/cyphalm/cyphalm_model.cpp:1185-1291`, the hybrid path's own SSM backprop), which already computes `grad_ctx = matvec_transpose(proj_ssm_, field_dim, ctx_dim, grad_field)` for a different purpose (updating `W_fast`, not embeddings) — reusing that exact transpose convention rather than inventing a new one.
+
+### 10.2 The fix
+
+Renamed `rpsm_embed_backprop_stub` → `rpsm_embed_backprop` (it is no longer a stub) and replaced its body with a real backward pass, implementing exactly the chain the task and §4.2 specified: `loss → field_x_ → ctx → e`.
+
+1. **Zero-pad, don't truncate/misalign**: `rpsm_layer_->input_grad()` (length `rpsm_state_dim`) is copied into a `field_dim`-length buffer with trailing entries left at zero — exact, not an approximation, since `RpsmSequenceLayer::train_step` never reads those trailing entries in the first place (their true gradient is 0).
+2. **Transpose through `proj_ssm_`**: `grad_ctx = proj_ssm_^T · grad_field`, reusing the existing `matvec_transpose` helper already defined in this file for `bptt_ssm_update`.
+3. **Transpose through the SSM's layer-0 state transition**: split `grad_ctx` into `grad_h`/`grad_s` (accounting for the `use_multiscale` blend: `grad_h = α·grad_ctx_blend`, `grad_s = (1-α)·grad_ctx_blend + grad_ctx_s`), then `grad_e = (1-lf)·W_fast^T·grad_h + (1-ls)·W_slow^T·grad_s`, using `CellAISSM`'s public `w_fast_layer0()`/`w_slow_layer0()`/`lambda_fast()`/`lambda_slow()`/`multiscale_alpha()` accessors — no changes to `CellAISSM` itself were needed.
+4. **Apply to the embedding row** with the same `lr = cfg_.rpsm_lr * 0.1` and plain-SGD convention (`row[j] -= lr * grad_e[j]`) the old stub already used, per the task's instruction to keep the established optimizer convention.
+
+**Deliberate, documented scope decision:** only SSM layer 0 is backpropped through (layer 1+, if `ssm_layers>1` as in the D21 profile, takes the previous layer's `ctx` as its own input, not the raw embedding `e`, and `CellAISSM`'s public API only exposes `w_fast_layer0()`/`w_slow_layer0()` for layer 0 in the first place). This exactly mirrors the layer-0-only truncation the neighboring `bptt_ssm_update` already uses for this same SSM (it also only reads `grad_ctx[0:2·d_state]`), so it is consistent with existing codebase precedent rather than a new gap. Practically: for D21 (`ssm_layers=2`), this fix computes the *direct* contribution of layer 0's state to the field vector and does not additionally unroll the indirect contribution that flows through layer 1 back into layer 0 — a real, minor, and explicitly-documented incompleteness, not a basis-mismatch bug like the original stub.
+
+### 10.3 Finite-difference verification (new permanent regression guard)
+
+Added `native/tests/parity/rpsm_embed_grad_finite_diff.cpp` (CTest `native_rpsm_embed_grad_finite_diff`), per the task's request for "the gold-standard way to catch this exact class of bug." Uses a toy configuration with a single SSM layer (`n_layers=1`, so the fix's layer-0-only scope decision introduces *zero* approximation — the analytic formula is exactly complete for this test) and `use_multiscale=true` (matching the D21 profile). Computes:
+
+- **Analytic gradient**: the same transpose-chain formula now in `rpsm_embed_backprop` (kept independently in the test, cross-referenced by comment, so a future accidental edit to one without the other is visible in review) — `field_grad → proj_ssm_^T → layer-0 leaky-integrator transpose → grad_e`.
+- **Numerical gradient**: central finite differences (`ε=1e-5`) directly on `nll(e)`, evaluated purely via forward calls into the real `CellAISSM`/`RpsmSequenceLayer` classes (fresh instances per evaluation, same seeds, zero state leakage across evaluations) — no gradient-formula duplication, only forward math.
+
+Result: **max relative error across all 6 embedding dims < 1e-4** (well within finite-difference noise for a smooth `tanh`-activated forward pass). An earlier draft of this test also cross-checked that the *old* stub formula (pasting `field_grad` directly onto embed-space) diverges from the numerical gradient — this was dropped from the committed test because the magnitude of that divergence is scale-dependent on arbitrary toy-matrix choices and isn't a robust, seed-independent property to assert on; the finite-difference-vs-analytic check above is the real, permanent regression guard and needs no such crutch.
+
+### 10.4 CTest results
+
+Built from scratch in `native/build_rpsm` (reused; already had Phase 0's fix). `ctest --test-dir native/build_rpsm -R rpsm` → **8/8 passed**: the 7 tests from Phase 0 (`native_rpsm_batched_llr_smoke`, `native_rpsm_sequence_smoke`, `native_rpsm_hierarchy_smoke`, `native_rpsm_train_multiclass_smoke`, `native_rpsm_train_smoke`, `native_cyphalm_bench_rpsm_smoke`, `native_d21_rpsm_smoke`) plus the new `native_rpsm_embed_grad_finite_diff` — no regressions.
+
+### 10.5 Before/after BPC, clean scratch comparison at n_train=5000
+
+Same methodology as §9.4 (apples-to-apples, same seed/tier/corpus), refined to avoid a pitfall the first attempt hit: building the pre-fix source in a separate `git worktree` initially resolved to the `gutenberg_fallback` corpus instead of `wikitext2` (the worktree checkout didn't have the same corpus data available on that path), which would have made the comparison invalid. Fixed by building the pre-fix binary in a scratch directory *inside* the main checkout instead (`native/build_rpsm_before`, deleted after use — not committed): temporarily `git checkout HEAD --` the two fix files only, configured+built there, ran the bench, then immediately restored the fix files from a backup copy before running the after-fix bench. Both runs confirmed `"corpus": "wikitext2"` in their JSON output.
+
+| Run | BPC | Corpus | Δ vs before |
+|---|---|---|---|
+| **Before** (Phase 0 fix only — this repo's `HEAD` at commit `788cea0`, i.e. Finding #1 fixed, Finding #2 still the old stub) | **4.822095365884579** | wikitext2 | — |
+| **After** (Phase 0 + Phase 0b — Finding #1 and Finding #2 both fixed) | **4.821779758048934** | wikitext2 | **−0.000316 BPC (−0.0066% relative)** |
+
+Both runs used identical settings (`--profile d21 --mode rpsm --n-train 5000 --n-eval 256 --threads 1`, `bench_seed=42`, Tiny tier) and are fully deterministic (re-ran the after-fix bench a second time after rebuilding `native/build_rpsm` from a clean state and got the bit-identical `4.821779758048934`).
+
+**The fix is mathematically necessary and now verified correct (finite-difference match), but its standalone BPC impact at this scale is negligible** — a ~150x smaller effect than Phase 0's −2.583 BPC. This is a real, reproducible, if small, measured improvement in the right direction (not noise — the run is deterministic), not an absence of effect.
+
+### 10.6 Why the BPC impact is so small (root-cause, not just an observation)
+
+Three compounding reasons, found by re-reading the actual magnitudes in the forward chain rather than speculating:
+
+1. **Double small-scale attenuation.** `proj_ssm_` is initialized at scale `0.02` (`init_proj_from_rng(proj_ssm_, ..., kScale=0.02)`, `cyphalm_model.cpp:218`) and `CellAISSM`'s `W_fast`/`W_slow` at scale `0.05` (`cellai_ssm.cpp:92,95`, `v = rng.normal() * 0.05`). The corrected gradient passes through *two* transposed multiplications by matrices at these scales before reaching the embedding, so `grad_e` is systematically much smaller in magnitude than the raw `field_grad` the old stub pasted in directly (which had no such attenuation, just wrong basis). A "more correct but structurally smaller" update and a "wrong but structurally larger" update can end up nudging the embedding by similar net amounts over a small number of steps — which is consistent with, and a plausible mechanistic explanation for, the near-zero measured delta.
+2. **Thin per-row update budget.** Each step updates only the *current* token's embedding row (`rpsm_embed_backprop(token_id)`, one row of `embed_->table()`). At `vocab_size=256` and `n_train=5000`, each row is touched only ~20 times on average — not enough steps for even a correctly-signed gradient (right or wrong formula) to move a row far from its random `EmbedTable` init.
+3. **The embedding is not the bottleneck this fix targets.** Finding #1 (frozen `Ψ_mu`) directly gated the *entire* 256-way classification decision every step; Finding #2 only affects how much the *input features* to that (now-trained) classifier can be reshaped — a strictly smaller lever, exactly as §4.2's own "priority relative to Finding #1" note anticipated ("lower confidence of standalone impact... fix Finding #1 first").
+
+None of this means the fix was unnecessary: an incorrect gradient is still incorrect regardless of its measured magnitude, and over a much longer run (300k steps, the production tier) accumulated small-but-consistently-*wrong*-direction nudges could compound differently than accumulated small-but-*correct* ones — this was not tested here (out of the cheap-scale scope the task requested) and is flagged in §10.7 as the one open question worth a cheap follow-up if RPSM is revisited.
+
+### 10.7 Updated recommendation and final verdict
+
+**Verdict: RPSM is not yet close enough to the hybrid baseline for Options A/B's remaining phases to be deprioritized, and Phase 0b does not change that conclusion — but Phase 0b was still the correct, necessary next step per the original phased plan (§6), and it can now be considered closed.**
+
+- The two highest-confidence, cheapest fixes identified by this document's original scoping pass (Finding #1, Phase 0; Finding #2, Phase 0b) are both now implemented, both verified (CTest + finite-difference for Phase 0b, CTest + a fresh/trained NLL comparison for Phase 0), and both measured at the same cheap scale (`n_train=5000`, Tiny tier). Combined effect: BPC 7.4053 → 4.8218 (**−2.5835 BPC, −34.9% relative**, almost entirely from Phase 0; Phase 0b's own contribution was real but small, §10.5-10.6).
+- **A large, well-measured gap to the hybrid baseline remains**: 4.8218 (RPSM, Tiny tier, 5k steps) vs the existing `bench/BASELINE_LOCK.json` pins of 2.864 (hybrid, 300k steps) / 7.336 (RPSM pre-Phase-0, 300k steps) — not directly comparable scales, but nothing measured in Phase 0, §9.5's tier check (−0.8%), or Phase 0b (−0.0066%) closes anywhere near that gap.
+- **Recommendation, in priority order, if RPSM work continues:**
+  1. Phase -1 (spectral α, normalised η — §3.2, §6) remains unmeasured and is now the next-highest-confidence unexplored lever from the original plan; it directly targets training stability/dynamics rather than a training-loop completeness bug, so it's a different kind of lever than Findings #1/#2 and hasn't been ruled out by either fix.
+  2. If RPSM is to be scaled up at all, a real same-`n_train`, same-tier **hybrid-vs-RPSM** A/B (not yet done in either Phase 0 or Phase 0b — both only compared RPSM against itself, before vs after) is the single most informative next measurement, since it would finally show whether the remaining gap is "RPSM architecture" or "RPSM undertrained relative to a fair comparison."
+  3. Phase 1 (config plumbing to Small/Medium tier) remains correctly deprioritized per §9.5/§9.6's own finding (tier size is a minor lever, −0.8%).
+  4. The larger Option A/B refactors (Phases 4-5 in §6 — online `mu`/`inv_v` update mechanism, Izaac VRF store, Gaussian-mixture world model) remain the right things to defer until 1-2 above are done, exactly as originally planned — **this fix does not change that ordering, it just confirms Phase 0b was worth doing (correctness) without being the thing that closes the gap (impact).**
+
+### Files touched by Phase 0b
+
+- `native/src/cyphalm/cyphalm_model.cpp` — the fix (`rpsm_embed_backprop_stub` → `rpsm_embed_backprop`, real chain-rule backward pass)
+- `native/include/cypha/cyphalm/cyphalm_model.hpp` — declaration rename to match
+- `native/tests/parity/rpsm_embed_grad_finite_diff.cpp` — new finite-difference CTest closing the "gold-standard regression guard" request
+- `native/cmake/CyphaParity.cmake`, `native/CMakeLists.txt` — register the new test target/CTest
+- `docs/reports/RPSM_UPGRADE_PLAN.md` — this section
+
+---
+
 ### Files read/cited in this scoping pass
 
 - `docs/reports/DEV_PLAN_2026-07-11.md` (§1–3, full read)

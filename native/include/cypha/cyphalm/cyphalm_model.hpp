@@ -245,7 +245,7 @@ class CyphaLMModel {
                                      LmIntelligenceMonitor* monitor = nullptr);
     void train_sequence_rpsm(const std::vector<int>& ids, int n_steps, int epochs,
                              cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
-    void rpsm_embed_backprop_stub(std::uint32_t token_id);
+    void rpsm_embed_backprop(std::uint32_t token_id);
     void set_view_slot(int slot) { current_view_slot_ = slot; }
     void refresh_laplace_prior();
 
