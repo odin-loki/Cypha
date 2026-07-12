@@ -299,3 +299,302 @@ wrapping and the new `hybrid_lstm_grad_scratch_` member). Verified via hunk-leve
 inspection that the final committed diff for this task contains only this task's changes, with the
 sibling's already-committed work left completely untouched, and re-ran the full regression suite
 against the final composed state (§3) to confirm the two changes compose without interaction.
+
+---
+
+## Follow-up (2026-07-12, part 2)
+
+**Scope:** execute this report's own §5 prioritized follow-up list -- (1) a sub-phase breakdown
+*inside* `lstm_backward` (45.3% share, §5 item 1), (2) an allocation audit of `bptt_ssm_update`
+(18.2% share, §5 item 2), and (3) a determinism-gated `-march=native`/`/arch:AVX2` trial (§5 item
+3). **Did not touch** `native/build_math`, `bench/BASELINE_LOCK.json`,
+`bench/BASELINE_REPORT.md`, the overnight orchestration scripts, `native/build_deff` (a sibling
+agent's live hidden=512 D_eff confirmation run), or the `lstm_h_history_rows_`/
+`kLstmHiddenHistoryMax`/`lstm_hidden_d_eff` area of `cyphalm_model.hpp` (owned by the already-
+landed `8cb9df1`/`3894d99`/`e733a89` fix).
+
+**HEAD at start:** `f566fee` (the MSVC/CUDA toolchain-migration commit; see
+`docs/reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`). Fresh build dir: `native/build_perf2`
+(MSVC, `windows-vs2026-release` preset, per that report's recommendation now that a clean MSVC
+build "just works"). A second throwaway dir, `native/build_perf2_avx2`, was used for the Part C
+trial and deleted afterward (all data below was captured before deletion).
+
+**Bottom line:**
+- **`lstm_backward` sub-phase profiling (Part A):** extended `CYPHA_PERF_TRACE` with six
+  sub-phase timers *inside* `CharLSTMHead::backward_step`. The two single-column/single-row
+  "transpose" matrix-vector products (`Wy`/`Wx`/`Wh` backprop into `dh_new`/`dx`/`dh_prev`) were
+  reading their weight matrices with a `hidden`-doubles stride in the innermost loop --
+  cache-hostile, not the row-major sequential access the weight-gradient outer products already
+  used. Fixing this via loop interchange (provably summation-order-preserving, so
+  bit-for-bit-identical output) collapsed `lstm_backward`'s own instrumented time from **17.618s
+  to 7.708s over the same 59,922 calls (-56.3%)**, and dropped its share of total `train_step`
+  time from **46.3% to 41.8%** (even though its *relative* share within backward itself shifted --
+  see the sub-phase table below -- because the previously-second-largest phases shrank the most).
+- **`bptt_ssm_update` allocation audit (Part B):** confirmed the same allocation-churn pattern
+  the top-level report predicted: `grad_core`, `grad_field`, `delta_rows`, `inv_v`, and `grad_ctx`
+  were all fresh `std::vector` locals every call (plus two more full-vector *copies*, `grad_h`/
+  `grad_s`, that were provably redundant sub-range duplicates of `grad_ctx`). Converted the first
+  group to persistent `CyphaLMModel` scratch members (same pattern as `hybrid_lstm_grad_scratch_`)
+  and deleted `grad_h`/`grad_s` entirely in favor of indexing `grad_ctx` directly. Also applied
+  the same transpose-matvec loop-interchange fix from Part A to the free-function
+  `matvec_transpose` helper this function calls twice. Combined effect: `bptt_ssm_update`'s
+  instrumented time dropped from **15.507s to 8.151s over the same call count (-47.4%)**, share of
+  `train_step` from **16.5% to 11.0%**.
+- **`-march=native`/`/arch:AVX2` trial (Part C):** built a second `cyphalm_bench_native` with
+  `/arch:AVX2` added to the default MSVC flags (careful to preserve the rest of the default flag
+  set -- see the pitfall noted below). **Determinism: PASS, no flag changes needed.** The AVX2
+  build's D17 output (`bpc`, `bpc_lstm_only`, and every other field) is **byte-for-byte identical**
+  to the non-AVX2 build at the same commit/seed -- MSVC's default `/fp:precise` (not overridden)
+  evidently keeps this workload's FMA/rounding behavior unchanged even with AVX2 codegen enabled.
+  **Speed: no measurable benefit** -- two paired timing runs showed the AVX2 build slightly
+  *slower* (81.2s, 83.9s) than the plain build (79.2s, 79.4s) on the same `--n-train 20000`
+  command, i.e. within noise but never faster. **Verdict: not adopted.** Determinism alone isn't
+  a reason to change the default build flags when there's no offsetting speed win, and the default
+  build is left completely unchanged.
+- **Throughput:** paired same-session A/B on the same commit, same MSVC build dir, same
+  `--n-train 20000 --n-eval 2000 --threads 1 --bench-seed 42` command used throughout this report:
+  **211.3 -> 252.2 chars/sec (+19.4%)** from Parts A+B combined. See "Running total" below for how
+  this composes with Part 1's MinGW numbers and the separate MSVC toolchain migration.
+- **Determinism:** the D17 BPC pin is **bit-for-bit identical** before/after Parts A and B (not
+  just "close") -- confirmed via full stdout diff (`Compare-Object`, zero differences), not just
+  the `bpc` field. All 18 `cyphalm|d17|lstm|bptt`-matching CTests pass; the broader regression
+  sweep (EWC/navigation/checkpoint/baseline-lock/corpus/self-correct/intelligence-monitor/hebbian,
+  19 tests) is 18/19 green, with the one failure (`native_ewc_weights_smoke`) being the exact same
+  pre-existing MSVC-vs-GCC floating-point-codegen finding already documented in
+  `docs/reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md` §3 (identical failure message and drift
+  numbers down to the last digit: `2.019481e-03->2.051795e-03` etc.) -- confirmed unrelated to
+  today's changes, not a new regression.
+
+---
+
+### Part A: `lstm_backward` sub-phase breakdown
+
+Re-ran `--profile d17 --n-train 20000 --n-eval 500 --threads 1 --bench-seed 42` with
+`CYPHA_PERF_TRACE=1` on the fresh MSVC build, first with only the new instrumentation added (no
+optimization yet), to get an honest breakdown of where the 45.3%-of-`train_step` `lstm_backward`
+phase actually goes:
+
+| Sub-phase | Before (s) | Before (%) | After fix (s) | After fix (%) | Δ absolute |
+|---|---|---|---|---|---|
+| 1. output-layer backward (`dWy`/`dby`/`dh_new`) | 3.238 | 18.4% | 1.494 | 19.4% | -53.9% |
+| 2. activation gradient (`do_gate`/`dc_new`+base) | 0.047 | 0.3% | 0.041 | 0.5% | -12.4% |
+| 3. gate derivative dispatch (per-gate loop) | 0.049 | 0.3% | 0.045 | 0.6% | -7.2% |
+| 4. weight-gradient outer products (`dWx`/`dWh`/`db`) | 3.969 | 22.5% | 3.458 | 44.9% | -12.9% |
+| 5. input-gradient backprop (`dx`/`dE`) | 5.190 | 29.5% | 1.360 | 17.6% | **-73.8%** |
+| 6. hidden-gradient backprop (`dh_prev`) | 5.125 | 29.1% | 1.310 | 17.0% | **-74.4%** |
+| **Total (instrumented)** | **17.618** | 100% | **7.708** | 100% | **-56.3%** |
+
+(Both columns: 59,922 real `backward_step` calls in this run.)
+
+**Root cause of the pre-fix split:** sub-phases 5 and 6 (`dx`/`dh_prev`, the input- and
+hidden-gradient backprop into `Wx`/`Wh`) were doing the exact same total arithmetic as sub-phase 4
+(the `dWx`/`dWh` outer products) -- all four operations touch `4*hidden x hidden` matrices -- yet
+took noticeably *more* wall time each despite doing *less* total work (one matrix each vs. two).
+The difference was memory access pattern, not FLOP count: `outer_rowmajor` (sub-phase 4) writes
+its output row-major/sequentially, but the pre-fix `dx`/`dh_prev` loops read `Wx[r*hidden+j]`/
+`Wh[r*hidden+j]` with the loop order `for (j) for (r)` -- i.e. `r` in the *inner* loop, striding
+by `hidden` doubles (1024 bytes at `hidden=128`) on every iteration, a textbook cache-hostile
+strided scan across a matrix too large to keep the touched cache lines resident. Sub-phase 1's
+`dh_new` computation (`Wy^T * d_logits`) has the identical pattern against `Wy` and shows the
+same signature (its 18.4%-before number is *higher* than its arithmetic share alone would suggest,
+for the same reason).
+
+**Fix implemented (Part A, item 2 of the task):** a pure loop-interchange, not an allocation fix
+and not an arithmetic change. Added `matvec_transpose_rowmajor(M, rows, cols, x, y)` in
+`char_lstm.cpp` that computes `y = M^T * x` by iterating the outer-product-source dimension `r`
+*outer* and the output dimension `c` *inner* (`y[c] += M[r*cols+c] * x[r]`), reading each row of
+`M` sequentially instead of striding through it. **This is provably summation-order-preserving:**
+for any fixed output index `c`, the additions into `y[c]` still happen in the exact same
+increasing-`r` order as the original `for (c) { s=0; for (r) s += M[r*cols+c]*x[r]; y[c]=s; }`
+form -- the interchange only changes which output element gets touched at each step, never the
+order two floating-point values are added for the *same* output element. Confirmed bit-for-bit
+identical output (see "Determinism" above), not just "close." Applied to all three
+transpose-matvecs inside `backward_step` (`Wy`/`Wx`/`Wh`) and, for consistency and because it's
+the exact same pattern, to the standalone `matvec_transpose` helper in `cyphalm_model.cpp` used by
+`bptt_ssm_update` (Part B) and two other call sites.
+
+**Secondary fix (also implemented, smaller effect):** `backward_step`'s non-eml/non-axiom path
+recomputed `std::tanh(cache.c_new[j])` even though `forward_step` already computed that exact
+value to produce `h_out[j] = o_gate[j] * tanh(c_out[j])`. Added a `tanh_c_new` field to
+`CharLSTMCache`, filled once in `forward_step`, and read back (not recomputed) in `backward_step`
+-- a plain cache lookup replacing a second `std::tanh` call per hidden dimension per step. Zero
+arithmetic change (identical `double`, not an approximation). This falls under sub-phase 2 above,
+which was already a rounding-error-level 0.3-0.5% of the total, so its effect is small but it is a
+genuine instance of the "redundant recomputation" pattern the task asked to look for.
+
+**Optimization *not* implemented, and why:** sub-phase 4 (weight-gradient outer products) is now
+the largest remaining sub-phase (44.9% of a much-smaller total) and is genuinely compute-bound --
+two full `4*hidden x hidden` outer products per step, already row-major/cache-friendly, with no
+redundant work or algebraic simplification available without changing the gradient formula
+itself. Per the task's explicit instruction not to touch gradient arithmetic without extremely
+careful verification, this was left alone; see "Remaining opportunities" below.
+
+### Part B: `bptt_ssm_update` allocation audit
+
+Confirmed this is `CyphaLMModel::bptt_ssm_update` in `cyphalm_model.cpp` (the hybrid model's
+BPTT-on-SSM-projection update, called once per `train_step` whenever BPTT-on-SSM is active) --
+**not** `RpsmSequenceLayer`'s BPTT (a separate, already-audited code path from earlier today's
+RPSM work; `rpsm_train_step`'s own perf-trace bucket is <0.01% of `train_step` time, confirming
+it's a different, cold path for the default D17 hybrid profile).
+
+Reading the function line-by-line (same technique `dafd677` used on `CharLSTMHead`) found five
+fresh-allocated `std::vector<double>` locals every call (`grad_core`, `grad_field`, `delta_rows`,
+`inv_v`, `grad_ctx`) plus two more (`grad_h`, `grad_s`) that were **not just fresh allocations but
+provably redundant full copies** of a sub-range of `grad_ctx` that already existed -- introduced,
+as far as can be told, purely so the code below could write `grad_h[r]` instead of
+`grad_ctx[r]` (and `grad_s[r]` instead of `grad_ctx[d_state + r]`).
+
+**Fix:**
+1. Added five persistent `CyphaLMModel` scratch members (`bptt_grad_core_scratch_`,
+   `bptt_grad_field_scratch_`, `bptt_delta_rows_scratch_`, `bptt_inv_v_scratch_`,
+   `bptt_grad_ctx_scratch_`), filled via `.assign()`/`.resize()`-in-place instead of fresh
+   construction, exactly the same pattern and safety argument as `hybrid_lstm_grad_scratch_`
+   (`CyphaLMModel::train_step` runs on a single thread per model instance; every element is fully
+   overwritten before being read each call).
+2. Added a `matvec_transpose` out-param overload (mirroring `CharLSTMHead::backward_step`'s
+   existing out-param pattern) so `grad_ctx` can be filled in place via the scratch member instead
+   of receiving a fresh vector every call.
+3. **Deleted `grad_h`/`grad_s` entirely** -- replaced every `grad_h[r]`/`grad_s[r]` read with
+   direct `grad_ctx[r]`/`grad_ctx[d_state + r]` indexing. Same values, zero arithmetic change, two
+   fewer allocations per call than even the scratch-member version would have needed.
+4. **Left `delta`/`delta_slow` as fresh locals, deliberately** -- these get `std::move`'d into
+   `bptt_buffer_`/`bptt_slow_buffer_` (which must own independent copies across the `bptt_steps`
+   window for later averaging), so making them persistent members would only replace a "move,
+   zero extra copies" pattern with a "fill member, then copy into the buffer" pattern -- no net
+   allocation reduction, and arguably a regression. Confirmed by re-reading the move-vs-copy
+   tradeoff explicitly before implementing (see the inline comment in `cyphalm_model.cpp`).
+5. **Explicitly did not touch** `gria_->grad_v_cross_entropy(...)` or
+   `ngram_fusion_->grad_field_x(...)` -- both return fresh vectors from *other* classes
+   (`GRIALowRank`, `ExactNgramFusion`), out of scope for an audit of `bptt_ssm_update` itself. Noted
+   as a candidate for a future, separately-scoped pass (see "Remaining opportunities").
+
+Net effect: `bptt_ssm_update`'s instrumented time dropped from 15.507s to 8.151s (-47.4%) over the
+same 59,922-call run, and its share of `train_step` time from 16.5% to 11.0%.
+
+### Part C: `/arch:AVX2` determinism-gated trial
+
+Machine has an Intel Xeon Gold 6242 (Cascade Lake, 32 logical processors as seen by this VM/host
+view; supports AVX-512, not just AVX2) and an RTX 3090 (irrelevant to this CPU-side trial). Per
+the task's explicit guidance, tried the safer default (`/arch:AVX2`) rather than jumping straight
+to AVX-512.
+
+**Build pitfall (worth flagging for anyone repeating this):** configuring a fresh build dir with
+`-DCMAKE_CXX_FLAGS="/arch:AVX2"` **replaces** CMake's own default `CMAKE_CXX_FLAGS` for a
+first-time configure rather than appending to it -- silently dropping `/EHsc` (exception handling)
+and `/GR` (RTTI), which surfaced as a `C4530` warning ("C++ exception handler used, but unwind
+semantics are not enabled") on two translation units. Since this codebase throws
+(`std::runtime_error` in `char_lstm.cpp` and elsewhere), that would have been a real correctness
+risk, not just a warning to ignore. Fixed by reconfiguring with the full default flag string
+(`/DWIN32 /D_WINDOWS /GR /EHsc /arch:AVX2`, read back from a working build's `CMakeCache.txt`)
+instead of a bare override.
+
+**Determinism result: PASS.** Ran the identical `--profile d17 --n-train 20000 --n-eval 2000
+--threads 1 --bench-seed 42` command on both the plain build and the `/arch:AVX2` build (same
+commit, same seed, same source, only the compile flag differs). The two runs' entire stdout JSON
+output is **byte-for-byte identical** (`Compare-Object` reports zero differences, not just an
+equal `bpc` field) -- `bpc`, `bpc_lstm_only`, `hybrid_blend_logit`, `hybrid_gria_weight`, every
+field. MSVC's default floating-point model (`/fp:precise`, not overridden by `/arch:AVX2` alone)
+evidently does not perform the FMA-contraction/rounding change that made this a risk in the first
+place -- `/fp:fast` would be the flag that actually risks that, and this trial never enabled it.
+
+**Speed result: no benefit, within noise leaning slightly negative.** Two paired timing runs
+(same machine, same session, same command) on the same commit that Parts A+B were measured on:
+
+| Run | Plain build | `/arch:AVX2` build |
+|---|---|---|
+| 1 | 79,187 ms | 81,183 ms |
+| 2 | 79,418 ms | 83,934 ms |
+
+The AVX2 build was never faster across either run. This is a believable negative result, not a
+methodology failure: at `lstm_hidden=128`, the matrices involved (`128x128` up to `512x128`) are
+small enough that Parts A/B's cache-access-pattern fix already resolved the actual bottleneck
+(memory access order, not raw FLOP throughput); auto-vectorization under plain `/O2` was
+apparently already extracting what SIMD width there was to extract for loops this shape, and
+explicit AVX2 codegen added no further win (and plausibly a small amount of overhead from wider
+instruction encoding / potential SSE-AVX transition effects, though this wasn't isolated further).
+
+**Verdict per the task's explicit decision rule:** determinism held, but there is no speed
+benefit to offset even the small risk/complexity of a non-default compiler flag, so **this is not
+adopted -- the default build (`native/CMakeLists.txt`, all presets) is completely unchanged.**
+Reported here as a measured, negative-but-informative trade-off for the record, exactly as the
+task asked for in the "can't get both" branch of its decision tree (except here it's "got
+determinism, didn't get speed," a related but distinct outcome worth distinguishing from "got
+speed, lost determinism").
+
+### Throughput: before/after (Parts A+B)
+
+Paired same-session runs, same MSVC build dir (`native/build_perf2`), same commit, toggled via
+`git stash`/`git stash pop` on just the four touched files so the comparison isolates *only*
+today's Part A+B changes (not the MSVC toolchain, held constant across both sides of this specific
+comparison):
+
+| | Run 1 | Run 2 | Avg | chars/sec |
+|---|---|---|---|---|
+| Before (this session's Parts A+B) | 96,331 ms | 93,002 ms | 94,667 ms | 211.3 |
+| After (this session's Parts A+B) | 79,187 ms | 79,418 ms | 79,303 ms | 252.2 |
+| **Speedup** | | | | **+19.4%** |
+
+(`--profile d17 --n-train 20000 --n-eval 2000 --threads 1 --bench-seed 42`, matching the exact
+command used for Part 1's own before/after table.)
+
+### Running total: today's entire optimization thread
+
+Being explicit about a real complication: **the toolchain changed partway through today's work**
+(MinGW -> MSVC, a separate task documented in `docs/reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`,
+itself measured at ~28% faster than MinGW on this exact D17 command/commit). That means the
+136.3 -> 211.3 chars/sec jump below is **not** attributable to today's algorithmic work -- most of
+it is the toolchain switch. Presented honestly, in the order things actually happened, not
+collapsed into one misleading multiplier:
+
+| Stage | chars/sec | Toolchain | What changed |
+|---|---|---|---|
+| Earlier baseline (context, pre-this-report) | ~96 | MinGW | (pre-existing) |
+| Before Part 1 fix | 126.4 | MinGW | (pre-existing) |
+| **After Part 1** (`dafd677`, allocation-reuse fix) | **138.3** | MinGW | +9.5% (Part 1) |
+| *(MSVC toolchain migration, `f566fee`, separate task)* | *(not a like-for-like number; see that report's own 104.65s vs. 144.28s A/B)* | *MinGW->MSVC* | *~+28% (toolchain, not algorithm)* |
+| Before Part 2 fix (this task, MSVC, same commit as `f566fee`) | 211.3 | MSVC | (post-toolchain-switch baseline) |
+| **After Part 2** (this task: sub-phase cache-pattern fix + `bptt_ssm_update` audit) | **252.2** | MSVC | **+19.4% (Part 2)** |
+
+**Honest cumulative read:** 252.2 / 96 = **2.63x** (+162.7%) versus the earliest baseline cited in
+this thread, but roughly a third of that multiplier (the toolchain-migration report's own ~28%
+figure) is a compiler/toolchain change, not an algorithmic improvement, and the two toolchains'
+absolute numbers were never measured back-to-back on identical hardware conditions across the
+*entire* chain (only within each pass's own paired A/B). The two numbers that *are* directly,
+rigorously comparable -- because they're same-commit, same-build-dir, same-session paired A/Bs --
+are Part 1's MinGW **+9.5%** and Part 2's MSVC **+19.4%**, both purely from allocation/cache-access
+fixes with zero arithmetic change and confirmed bit-identical BPC.
+
+### Remaining opportunities (not implemented this pass)
+
+1. **Sub-phase breakdown inside `predict_next` (now 40.6% of `train_step`, up from 31.9% purely
+   because `lstm_backward`/`bptt_ssm_update` shrank) -- Effort: Low, Impact: potentially High.**
+   This is now the single largest phase in `train_step` and hasn't been broken down at all (this
+   report's own §5 item 5, still not done). Given Parts A/B's finding that transpose-matvec
+   cache-access patterns were the dominant hidden cost in `lstm_backward`, `predict_next`'s
+   forward-pass LSTM cell (`matvec_rowmajor` calls in `char_lstm.cpp::forward_step`) is *already*
+   row-major-friendly by construction (reads `M[r*cols+c]` with `c` in the inner loop, i.e. no
+   stride) -- but the GRIA field lookup/blend side of `predict_next` hasn't been profiled in
+   isolation and is a plausible next target.
+2. **`grad_v_cross_entropy`/`grad_field_x` allocation audit (`GRIALowRank`/`ExactNgramFusion`,
+   different files) -- Effort: Medium, Impact: Medium.** Explicitly out of scope for this pass
+   (Part B's audit was scoped to `bptt_ssm_update` itself), but both are called once per
+   `train_step` in the default D17 path and return freshly-allocated vectors every call --
+   plausibly the same allocation-churn pattern as everything fixed so far, just one layer removed.
+3. **Weight-gradient outer products (`dWx`/`dWh`, now 44.9% of the shrunk `lstm_backward` total)
+   -- Effort: High, Risk: gradient-correctness, Impact: Unknown.** Already cache-friendly and
+   allocation-free; the only remaining lever is genuine vectorization/blocking of the outer-product
+   arithmetic itself, which risks touching gradient math directly. Per this task's explicit
+   instruction to avoid exactly that risk without extremely careful verification, left alone. If
+   pursued, would need the same bit-identical-BPC verification rigor as Part C, and ideally hand
+   micro-benchmarking of the outer-product loop in isolation before touching the real code.
+4. **AVX-512** (this CPU supports it) -- not tried, since even the safer AVX2 showed no benefit;
+   unlikely AVX-512 would do better on the same small-matrix, now-cache-optimized workload, but
+   noted for completeness in case a future pass targets a much larger `lstm_hidden` (the sibling
+   agent's concurrent hidden=512 run makes this a live, relevant question for a future session).
+5. **CUDA / batch-GPU offload** -- per the MSVC migration report, the toolchain blocker (§4 of
+   this report's original text) is now resolved; a CUDA build was demonstrated working on this
+   machine's RTX 3090 in that report. The core D17 online training recurrence itself remains
+   inherently sequential (each character step depends on the previous step's hidden state) and
+   thus not GPU-parallelizable without an algorithm change, but `CyphaLMBatch`'s batch/eval-side
+   path (already CUDA-capable per that report) could plausibly benefit and was not explored here
+   (out of this task's explicit A/B/C scope).

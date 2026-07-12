@@ -5,7 +5,12 @@
 #include "cypha/cyphalm/hybrid_blend.hpp"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <mutex>
 #include <random>
 #include <stdexcept>
 
@@ -16,6 +21,77 @@ namespace {
 
 constexpr double kLogEps = 1e-12;
 
+// CYPHA_PERF_TRACE follow-up (2026-07-12, part 2, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md
+// "Follow-up" section): fine-grained sub-phase breakdown *inside* backward_step specifically,
+// since the top-level trace in cyphalm_model.cpp already showed `lstm_backward` at 45.3% of
+// train_step time without saying which part of it dominates. Same env var (`CYPHA_PERF_TRACE`)
+// as the top-level trace so one env var enables both dumps; purely diagnostic (stderr summary at
+// process exit), never touches training math/state, so it cannot affect the D17 BPC pin whether
+// enabled or not.
+//
+// Guarded by a mutex (not thread_local-merge-on-destruction) because, unlike the top-level
+// train_step trace, `backward_step` is also called concurrently on a *shared* CharLSTMHead
+// instance from CyphaLMBatch's parallel_batch (multiple worker threads, see the thread_local
+// buffer comments above) -- a plain global accumulator would race under that path. The mutex is
+// only ever touched when CYPHA_PERF_TRACE is set (diagnostic opt-in, zero cost on the default
+// path), and even when enabled it's a single uncontended lock per sub-phase in the intended
+// `--threads 1` profiling scenario, negligible next to the microsecond-scale regions being timed.
+struct BackwardSubPhaseTrace {
+  static constexpr std::size_t kCount = 6;
+  static constexpr std::array<const char*, kCount> kNames = {
+      "1. output-layer backward (dWy/dby/dh_new)",
+      "2. activation gradient (do_gate/dc_new + df/di/dg/dc_prev base)",
+      "3. gate derivative dispatch (dgates: per-gate eml/axiom/sigmoid loop)",
+      "4. weight-gradient outer products (dWx/dWh/db)",
+      "5. input-gradient backprop (dx/dE)",
+      "6. hidden-gradient backprop (dh_prev)",
+  };
+  bool enabled = false;
+  std::mutex mu;
+  long long calls = 0;
+  std::array<double, kCount> totals{};
+
+  BackwardSubPhaseTrace() { enabled = std::getenv("CYPHA_PERF_TRACE") != nullptr; }
+  ~BackwardSubPhaseTrace() {
+    if (!enabled || calls == 0) return;
+    double total = 0.0;
+    for (double t : totals) total += t;
+    std::cerr << "=== CYPHA_PERF_TRACE: lstm_backward (CharLSTMHead::backward_step) sub-phase"
+                 " breakdown over " << calls << " calls (" << total << "s instrumented) ===\n";
+    for (std::size_t i = 0; i < kCount; ++i) {
+      const double pct = total > 0.0 ? (100.0 * totals[i] / total) : 0.0;
+      std::cerr << "  " << kNames[i] << ": " << totals[i] << "s (" << pct << "%)\n";
+    }
+  }
+  void add(std::size_t idx, double seconds) {
+    std::lock_guard<std::mutex> lock(mu);
+    totals[idx] += seconds;
+  }
+  void note_call() {
+    std::lock_guard<std::mutex> lock(mu);
+    ++calls;
+  }
+};
+BackwardSubPhaseTrace g_bwd_trace;
+
+class BwdScopeTimer {
+ public:
+  explicit BwdScopeTimer(std::size_t idx) : idx_(idx), enabled_(g_bwd_trace.enabled) {
+    if (enabled_) t0_ = std::chrono::steady_clock::now();
+  }
+  ~BwdScopeTimer() {
+    if (enabled_) {
+      g_bwd_trace.add(idx_,
+                      std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count());
+    }
+  }
+
+ private:
+  std::size_t idx_;
+  bool enabled_;
+  std::chrono::steady_clock::time_point t0_;
+};
+
 void matvec_rowmajor(const double* M, int rows, int cols, const double* x, double* y) {
   for (int r = 0; r < rows; ++r) {
     double s = 0.0;
@@ -24,6 +100,30 @@ void matvec_rowmajor(const double* M, int rows, int cols, const double* x, doubl
       s += row[c] * x[c];
     }
     y[r] = s;
+  }
+}
+
+// Perf (2026-07-12, part 2, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up"):
+// computes `y = M^T * x` for row-major `M` (`rows x cols`) by iterating `r` outer / `c` inner
+// instead of the natural-looking `c` outer / `r` inner. The naive form reads `M[r*cols + c]`
+// with stride `cols` doubles as `r` varies in the inner loop -- a cache-hostile strided scan
+// across a `4*hidden x hidden` (or `vocab_size x hidden`) matrix on every single backward step.
+// This form reads each row of `M` sequentially instead. It is a pure loop interchange, not a
+// summation-order change: for each fixed `c`, the additions into `y[c]` still occur in strictly
+// increasing `r` order -- identical to `for (c) { s=0; for (r) s += M[r*cols+c]*x[r]; y[c]=s; }`,
+// just visiting `r` before `c`. Confirmed via CYPHA_PERF_TRACE sub-phase timing (this exact
+// pattern against Wy/Wx/Wh accounted for ~18%+22%+29%+29% = the majority of
+// CharLSTMHead::backward_step's own time before this fix) that this was the single largest
+// remaining `lstm_backward` sub-phase cost, once the dafd677 allocation fix removed the
+// allocator overhead that had previously been dominating and masking it.
+void matvec_transpose_rowmajor(const double* M, int rows, int cols, const double* x, double* y) {
+  for (int c = 0; c < cols; ++c) y[c] = 0.0;
+  for (int r = 0; r < rows; ++r) {
+    const double xr = x[r];
+    const double* row = M + static_cast<std::size_t>(r) * static_cast<std::size_t>(cols);
+    for (int c = 0; c < cols; ++c) {
+      y[c] += row[c] * xr;
+    }
   }
 }
 
@@ -168,6 +268,14 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     }
   }
 
+  // Perf (2026-07-12, part 2): tanh_c records tanh(c_out[j]) for the axiom/plain branches (both
+  // use the identical o_gate*tanh(c_out) formula) so backward_step can reuse it directly instead
+  // of recomputing std::tanh on the same value -- see CharLSTMCache::tanh_c_new. Not meaningful
+  // for the eml branch (which doesn't use tanh at all), so left at whatever the thread_local
+  // buffer previously held there; backward_step's `cache.used_eml` branch never reads it.
+  thread_local std::vector<double> tanh_c;
+  if (tanh_c.size() != static_cast<std::size_t>(hidden)) tanh_c.resize(static_cast<std::size_t>(hidden));
+
   c_out.assign(static_cast<std::size_t>(hidden), 0.0);
   h_out.assign(static_cast<std::size_t>(hidden), 0.0);
   for (int j = 0; j < hidden; ++j) {
@@ -177,10 +285,11 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
       h_out[static_cast<std::size_t>(j)] =
           o_gate[static_cast<std::size_t>(j)] * eml_nand(c_out[static_cast<std::size_t>(j)], 1.0);
     } else if (use_axiom) {
-      h_out[static_cast<std::size_t>(j)] =
-          o_gate[static_cast<std::size_t>(j)] * std::tanh(c_out[static_cast<std::size_t>(j)]);
+      tanh_c[static_cast<std::size_t>(j)] = std::tanh(c_out[static_cast<std::size_t>(j)]);
+      h_out[static_cast<std::size_t>(j)] = o_gate[static_cast<std::size_t>(j)] * tanh_c[static_cast<std::size_t>(j)];
     } else {
-      h_out[static_cast<std::size_t>(j)] = o_gate[static_cast<std::size_t>(j)] * std::tanh(c_out[static_cast<std::size_t>(j)]);
+      tanh_c[static_cast<std::size_t>(j)] = std::tanh(c_out[static_cast<std::size_t>(j)]);
+      h_out[static_cast<std::size_t>(j)] = o_gate[static_cast<std::size_t>(j)] * tanh_c[static_cast<std::size_t>(j)];
     }
   }
 
@@ -209,6 +318,7 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     cache_out->o = o_gate;
     cache_out->c_new = c_out;
     cache_out->h_new = h_out;
+    cache_out->tanh_c_new = tanh_c;
     cache_out->gates = gates;
     cache_out->logits = logits;
     cache_out->probs = probs;
@@ -267,56 +377,62 @@ void CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id, Char
   if (dx.size() != static_cast<std::size_t>(hidden)) dx.resize(static_cast<std::size_t>(hidden));
   if (dgates.size() != static_cast<std::size_t>(four_h)) dgates.resize(static_cast<std::size_t>(four_h));
 
-  d_logits = cache.probs;
-  d_logits[static_cast<std::size_t>(target_id)] -= 1.0;
-  if (logit_nudge != 0.0) {
-    for (int k = 0; k < vocab_size; ++k) {
-      d_logits[static_cast<std::size_t>(k)] += logit_nudge;
+  if (g_bwd_trace.enabled) g_bwd_trace.note_call();
+
+  {
+    BwdScopeTimer __t(0);  // 1. output-layer backward (dWy/dby/dh_new)
+    d_logits = cache.probs;
+    d_logits[static_cast<std::size_t>(target_id)] -= 1.0;
+    if (logit_nudge != 0.0) {
+      for (int k = 0; k < vocab_size; ++k) {
+        d_logits[static_cast<std::size_t>(k)] += logit_nudge;
+      }
+    }
+
+    outer_rowmajor(d_logits.data(), vocab_size, cache.h_new.data(), hidden, out.dWy.data());
+    out.dby = d_logits;
+
+    matvec_transpose_rowmajor(Wy.data(), vocab_size, hidden, d_logits.data(), dh_new.data());
+    if (hidden_nudge != 0.0) {
+      for (int j = 0; j < hidden; ++j) {
+        dh_new[static_cast<std::size_t>(j)] += hidden_nudge;
+      }
     }
   }
 
-  outer_rowmajor(d_logits.data(), vocab_size, cache.h_new.data(), hidden, out.dWy.data());
-  out.dby = d_logits;
-
-  for (int j = 0; j < hidden; ++j) {
-    double s = 0.0;
-    for (int k = 0; k < vocab_size; ++k) {
-      s += Wy[static_cast<std::size_t>(k) * static_cast<std::size_t>(hidden) + static_cast<std::size_t>(j)] *
-           d_logits[static_cast<std::size_t>(k)];
+  {
+    BwdScopeTimer __t(1);  // 2. activation gradient (do_gate/dc_new + df/di/dg/dc_prev base)
+    if (cache.used_eml) {
+      for (int j = 0; j < hidden; ++j) {
+        const double h_act = eml_nand(cache.c_new[static_cast<std::size_t>(j)], 1.0);
+        do_gate[static_cast<std::size_t>(j)] = dh_new[static_cast<std::size_t>(j)] * h_act;
+        double deml_dc = 0.0;
+        double deml_const = 0.0;
+        eml_nand_grad(cache.c_new[static_cast<std::size_t>(j)], 1.0,
+                      dh_new[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)],
+                      deml_dc, deml_const);
+        dc_new[static_cast<std::size_t>(j)] = deml_dc;
+      }
+    } else {
+      for (int j = 0; j < hidden; ++j) {
+        // Perf (2026-07-12, part 2): tanh(c_new[j]) was previously recomputed here even though
+        // forward_step already computed it once to produce h_out[j] = o_gate[j] * tanh(c_out[j]).
+        // cache.tanh_c_new caches that exact value (see forward_step), so this is now a plain
+        // lookup instead of a second std::tanh call per hidden dim per backward step -- zero
+        // arithmetic change (same value, just not recomputed).
+        const double tanh_c = cache.tanh_c_new[static_cast<std::size_t>(j)];
+        do_gate[static_cast<std::size_t>(j)] = dh_new[static_cast<std::size_t>(j)] * tanh_c;
+        dc_new[static_cast<std::size_t>(j)] =
+            dh_new[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)] * (1.0 - tanh_c * tanh_c);
+      }
     }
-    dh_new[static_cast<std::size_t>(j)] = s;
-  }
-  if (hidden_nudge != 0.0) {
+
     for (int j = 0; j < hidden; ++j) {
-      dh_new[static_cast<std::size_t>(j)] += hidden_nudge;
+      df_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.c[static_cast<std::size_t>(j)];
+      di_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.g[static_cast<std::size_t>(j)];
+      dg_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.i[static_cast<std::size_t>(j)];
+      out.dc_prev[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.f[static_cast<std::size_t>(j)];
     }
-  }
-
-  if (cache.used_eml) {
-    for (int j = 0; j < hidden; ++j) {
-      const double h_act = eml_nand(cache.c_new[static_cast<std::size_t>(j)], 1.0);
-      do_gate[static_cast<std::size_t>(j)] = dh_new[static_cast<std::size_t>(j)] * h_act;
-      double deml_dc = 0.0;
-      double deml_const = 0.0;
-      eml_nand_grad(cache.c_new[static_cast<std::size_t>(j)], 1.0,
-                    dh_new[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)],
-                    deml_dc, deml_const);
-      dc_new[static_cast<std::size_t>(j)] = deml_dc;
-    }
-  } else {
-    for (int j = 0; j < hidden; ++j) {
-      const double tanh_c = std::tanh(cache.c_new[static_cast<std::size_t>(j)]);
-      do_gate[static_cast<std::size_t>(j)] = dh_new[static_cast<std::size_t>(j)] * tanh_c;
-      dc_new[static_cast<std::size_t>(j)] =
-          dh_new[static_cast<std::size_t>(j)] * cache.o[static_cast<std::size_t>(j)] * (1.0 - tanh_c * tanh_c);
-    }
-  }
-
-  for (int j = 0; j < hidden; ++j) {
-    df_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.c[static_cast<std::size_t>(j)];
-    di_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.g[static_cast<std::size_t>(j)];
-    dg_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.i[static_cast<std::size_t>(j)];
-    out.dc_prev[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.f[static_cast<std::size_t>(j)];
   }
 
   // Per-dimension derivative dispatch matching apply_axiom_gate's forward selection
@@ -344,6 +460,8 @@ void CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id, Char
   const bool use_axiom_grad =
       cache.used_axiom && static_cast<int>(axiom_grammar_.i_gate.size()) == hidden;
 
+  {
+  BwdScopeTimer __t2(2);  // 3. gate derivative dispatch (dgates: per-gate eml/axiom/sigmoid loop)
   for (int j = 0; j < hidden; ++j) {
     if (cache.used_eml) {
       double di_gx = 0.0;
@@ -413,31 +531,27 @@ void CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id, Char
           (1.0 - cache.o[static_cast<std::size_t>(j)]);
     }
   }
-
-  outer_rowmajor(dgates.data(), four_h, cache.x.data(), hidden, out.dWx.data());
-  outer_rowmajor(dgates.data(), four_h, cache.h.data(), hidden, out.dWh.data());
-  out.db = dgates;
-
-  for (int j = 0; j < hidden; ++j) {
-    double s = 0.0;
-    for (int r = 0; r < four_h; ++r) {
-      s += Wx[static_cast<std::size_t>(r) * static_cast<std::size_t>(hidden) + static_cast<std::size_t>(j)] *
-           dgates[static_cast<std::size_t>(r)];
-    }
-    dx[static_cast<std::size_t>(j)] = s;
-  }
-  for (int j = 0; j < hidden; ++j) {
-    out.dE[static_cast<std::size_t>(cache.token_id) * static_cast<std::size_t>(hidden) + static_cast<std::size_t>(j)] =
-        dx[static_cast<std::size_t>(j)];
   }
 
-  for (int j = 0; j < hidden; ++j) {
-    double s = 0.0;
-    for (int r = 0; r < four_h; ++r) {
-      s += Wh[static_cast<std::size_t>(r) * static_cast<std::size_t>(hidden) + static_cast<std::size_t>(j)] *
-           dgates[static_cast<std::size_t>(r)];
+  {
+    BwdScopeTimer __t3(3);  // 4. weight-gradient outer products (dWx/dWh/db)
+    outer_rowmajor(dgates.data(), four_h, cache.x.data(), hidden, out.dWx.data());
+    outer_rowmajor(dgates.data(), four_h, cache.h.data(), hidden, out.dWh.data());
+    out.db = dgates;
+  }
+
+  {
+    BwdScopeTimer __t4(4);  // 5. input-gradient backprop (dx/dE)
+    matvec_transpose_rowmajor(Wx.data(), four_h, hidden, dgates.data(), dx.data());
+    for (int j = 0; j < hidden; ++j) {
+      out.dE[static_cast<std::size_t>(cache.token_id) * static_cast<std::size_t>(hidden) + static_cast<std::size_t>(j)] =
+          dx[static_cast<std::size_t>(j)];
     }
-    out.dh_prev[static_cast<std::size_t>(j)] = s;
+  }
+
+  {
+    BwdScopeTimer __t5(5);  // 6. hidden-gradient backprop (dh_prev)
+    matvec_transpose_rowmajor(Wh.data(), four_h, hidden, dgates.data(), out.dh_prev.data());
   }
 }
 

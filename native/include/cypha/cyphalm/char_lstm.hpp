@@ -37,6 +37,12 @@ struct CharLSTMCache {
   std::vector<double> o;
   std::vector<double> c_new;
   std::vector<double> h_new;
+  // Perf (2026-07-12, part 2, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up"):
+  // tanh(c_new[j]) as computed by forward_step's h_out = o_gate * tanh(c_out). Cached here so
+  // backward_step's non-eml/non-axiom-eml path doesn't call std::tanh a second time on the exact
+  // same value it already produced during forward -- pure caching, zero arithmetic change (same
+  // double value, bit-for-bit, since it's the identical std::tanh call on the identical input).
+  std::vector<double> tanh_c_new;
   std::vector<double> gates;
   std::vector<double> logits;
   std::vector<double> probs;

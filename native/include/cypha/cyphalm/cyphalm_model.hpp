@@ -260,6 +260,18 @@ class CyphaLMModel {
     // not the CyphaLMBatch multi-thread batch path), and the buffer is fully overwritten by
     // backward_step before being read by apply_grads immediately below it.
     CharLSTMGrad hybrid_lstm_grad_scratch_;
+    // Perf (2026-07-12, part 2, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up"):
+    // bptt_ssm_update()'s own allocation-churn fix, same pattern/rationale as
+    // hybrid_lstm_grad_scratch_ above -- these were previously fresh-allocated `std::vector`
+    // locals every single train_step call (bptt_ssm_update runs once per call whenever BPTT-on-
+    // SSM is active); reused via `.assign()`/`.resize()` in place instead. Safe for the same
+    // reason as hybrid_lstm_grad_scratch_: CyphaLMModel::train_step runs on a single thread per
+    // model instance, and every element is fully overwritten before being read each call.
+    std::vector<double> bptt_grad_core_scratch_;
+    std::vector<double> bptt_grad_field_scratch_;
+    std::vector<double> bptt_delta_rows_scratch_;
+    std::vector<double> bptt_inv_v_scratch_;
+    std::vector<double> bptt_grad_ctx_scratch_;
     std::vector<double> last_hybrid_log_g_;
     std::vector<double> last_hybrid_log_l_;
     HybridEwcRegularizer ewc_;

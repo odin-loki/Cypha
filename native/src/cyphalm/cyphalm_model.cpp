@@ -204,16 +204,40 @@ std::vector<double> matvec(const std::vector<double>& m, int rows, int cols,
     return out;
 }
 
+// Perf (2026-07-12, part 2, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up"):
+// out-param overload so hot-path callers (bptt_ssm_update) can fill a persistent scratch buffer
+// in place instead of receiving a freshly heap-allocated vector every call. `.resize()` on an
+// already-correctly-sized vector is a no-op on capacity (matches the `.assign()`-reuse pattern
+// used throughout char_lstm.cpp's forward_step/backward_step). Numerically identical to the
+// value-returning overload below, which now delegates to this one.
+//
+// Loop order also swapped (r outer, c inner) vs. the original c-outer/r-inner form: `m` is
+// stored row-major (`rows x cols`), so the original inner loop over `r` accessed
+// `m[r*cols + c]` with stride `cols` doubles between iterations -- a cache-hostile strided
+// scan (confirmed as ~29% + ~29% of CharLSTMHead::backward_step's own time for the identical
+// access pattern against Wx/Wh, see the char_lstm.cpp fix in the same follow-up section). Row-
+// major iteration (r outer, c inner) reads `m` sequentially instead. This is a pure loop-
+// interchange, not a summation-order change: for each fixed `c`, the additions into `out[c]`
+// still happen in strictly increasing `r` order (0, 1, 2, ..., rows-1) -- the outer loop just
+// visits `r` before `c` instead of after -- so the result is bit-for-bit identical to the
+// original, not merely "close".
+void matvec_transpose(const std::vector<double>& m, int rows, int cols, const std::vector<double>& x,
+                      std::vector<double>& out) {
+    if (out.size() != static_cast<std::size_t>(cols)) out.resize(static_cast<std::size_t>(cols));
+    std::fill(out.begin(), out.end(), 0.0);
+    for (int r = 0; r < rows; ++r) {
+        const double xr = x[static_cast<std::size_t>(r)];
+        const double* row = m.data() + static_cast<std::size_t>(r) * static_cast<std::size_t>(cols);
+        for (int c = 0; c < cols; ++c) {
+            out[static_cast<std::size_t>(c)] += row[c] * xr;
+        }
+    }
+}
+
 std::vector<double> matvec_transpose(const std::vector<double>& m, int rows, int cols,
                                      const std::vector<double>& x) {
-    std::vector<double> out(static_cast<std::size_t>(cols), 0.0);
-    for (int c = 0; c < cols; ++c) {
-        double acc = 0.0;
-        for (int r = 0; r < rows; ++r) {
-            acc += m[static_cast<std::size_t>(r * cols + c)] * x[static_cast<std::size_t>(r)];
-        }
-        out[static_cast<std::size_t>(c)] = acc;
-    }
+    std::vector<double> out;
+    matvec_transpose(m, rows, cols, x, out);
     return out;
 }
 
@@ -1359,20 +1383,33 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         mode != ContextMode::SsmGriaNoLstm && mode != ContextMode::Rpsm) {
         return;
     }
+    // Perf (2026-07-12, part 2, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up"):
+    // grad_core/grad_field/delta_rows/inv_v/grad_ctx were previously fresh-allocated `std::vector`
+    // locals every call (this function runs once per train_step whenever BPTT-on-SSM is active,
+    // same hot-loop frequency as CharLSTMHead's forward/backward_step). Converted to persistent
+    // CyphaLMModel scratch members (see their declarations for the safety argument, same as
+    // hybrid_lstm_grad_scratch_) and filled via `.assign()`/`.resize()`/an out-param
+    // matvec_transpose overload so their backing storage is reused call-to-call once warmed up.
+    // `grad_v` (from `gria_->grad_v_cross_entropy`) and `grad_field_x`'s return (from
+    // `ngram_fusion_`) still allocate inside those other classes' own code -- out of scope here
+    // (different files/classes; see docs write-up), but note that even in the common D17
+    // (`Hybrid`) config, `grad_core` itself is *not* moved away (it's passed by const-ref into
+    // `grad_field_x`), so making it a persistent member is a real, unconditional win there.
     auto grad_v = gria_->grad_v_cross_entropy(gria_in_.data(), static_cast<int>(next_token_id));
-    std::vector<double> grad_core(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+    std::vector<double>& grad_core = bptt_grad_core_scratch_;
+    grad_core.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
     for (int i = 0; i < cfg_.field_dim && i < static_cast<int>(grad_v.size()); ++i) {
         grad_core[static_cast<std::size_t>(i)] = grad_v[static_cast<std::size_t>(i)];
     }
-    std::vector<double> grad_field;
+    std::vector<double>& grad_field = bptt_grad_field_scratch_;
     if (ngram_fusion_ &&
         (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
          mode == ContextMode::AblationNoSsm || mode == ContextMode::SsmGria)) {
         grad_field = ngram_fusion_->grad_field_x(grad_core);
     } else if (mode == ContextMode::AblationNoSsm && !proj_ngram_embed_.empty()) {
-        grad_field = matvec_transpose(proj_ngram_embed_, cfg_.field_dim,
-                                      static_cast<int>(proj_ngram_embed_.size()) / cfg_.field_dim,
-                                      grad_core);
+        matvec_transpose(proj_ngram_embed_, cfg_.field_dim,
+                        static_cast<int>(proj_ngram_embed_.size()) / cfg_.field_dim, grad_core,
+                        grad_field);
     } else if (mode == ContextMode::Full || mode == ContextMode::SsmGriaNoLstm) {
         const double u = last_dif_out_.epistemic_var;
         grad_field.resize(grad_core.size());
@@ -1380,11 +1417,15 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
             grad_field[i] = grad_core[i] * (u * 0.01);
         }
     } else {
-        grad_field = std::move(grad_core);
+        // Not moved (unlike the pre-fix version): grad_core is a persistent member now, so
+        // moving it away here would force it to reallocate from scratch on this mode's *next*
+        // call. A copy costs one alloc in this (Rpsm-only) branch -- no worse than the pre-fix
+        // code's fresh-`grad_core`-every-call baseline, and keeps the member reusable elsewhere.
+        grad_field = grad_core;
     }
     if (discriminative_feedback_ && dif_ && !grad_field.empty()) {
-        std::vector<double> delta_rows;
-        std::vector<double> inv_v;
+        std::vector<double>& delta_rows = bptt_delta_rows_scratch_;
+        std::vector<double>& inv_v = bptt_inv_v_scratch_;
         if (dif_->discriminative_state(delta_rows, inv_v)) {
             const int K = static_cast<int>(delta_rows.size()) / cfg_.field_dim;
             const auto d = discriminative_feedback_->compute_d(delta_rows, K, cfg_.field_dim, inv_v);
@@ -1392,29 +1433,32 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         }
     }
     const int ctx_dim = active->context_dim();
-    std::vector<double> grad_ctx =
-        matvec_transpose(proj_ssm_, cfg_.field_dim, ctx_dim, grad_field);
+    std::vector<double>& grad_ctx = bptt_grad_ctx_scratch_;
+    matvec_transpose(proj_ssm_, cfg_.field_dim, ctx_dim, grad_field, grad_ctx);
     if (static_cast<int>(grad_ctx.size()) < active->d_state()) return;
-    std::vector<double> grad_h(grad_ctx.begin(), grad_ctx.begin() + active->d_state());
+    // Perf: grad_h/grad_s used to be full copies of a sub-range of grad_ctx (grad_h =
+    // grad_ctx[0:d_state), grad_s = grad_ctx[d_state:2*d_state)) purely so the loops below could
+    // write `grad_h[r]`/`grad_s[r]` instead of `grad_ctx[r]`/`grad_ctx[d_state + r]`. Indexing
+    // grad_ctx directly is the exact same values, zero arithmetic change, and removes two more
+    // fresh heap allocations per call.
     const double lf = active->lambda_fast();
     const double ls = active->lambda_slow();
     std::vector<double> delta(static_cast<std::size_t>(active->d_state() * cfg_.d_embed), 0.0);
     for (int r = 0; r < active->d_state(); ++r) {
         for (int c = 0; c < cfg_.d_embed; ++c) {
             delta[static_cast<std::size_t>(r * cfg_.d_embed + c)] =
-                (1.0 - lf) * grad_h[static_cast<std::size_t>(r)] * last_e_[static_cast<std::size_t>(c)];
+                (1.0 - lf) * grad_ctx[static_cast<std::size_t>(r)] * last_e_[static_cast<std::size_t>(c)];
         }
     }
     // Slow tier: mirror outer-product delta for Fisher observe only (W_slow is not BPTT-updated).
     std::vector<double> delta_slow;
     if (static_cast<int>(grad_ctx.size()) >= 2 * active->d_state()) {
-        std::vector<double> grad_s(grad_ctx.begin() + active->d_state(),
-                                   grad_ctx.begin() + 2 * active->d_state());
-        delta_slow.assign(static_cast<std::size_t>(active->d_state() * cfg_.d_embed), 0.0);
-        for (int r = 0; r < active->d_state(); ++r) {
+        const int d_state = active->d_state();
+        delta_slow.assign(static_cast<std::size_t>(d_state * cfg_.d_embed), 0.0);
+        for (int r = 0; r < d_state; ++r) {
             for (int c = 0; c < cfg_.d_embed; ++c) {
                 delta_slow[static_cast<std::size_t>(r * cfg_.d_embed + c)] =
-                    (1.0 - ls) * grad_s[static_cast<std::size_t>(r)] * last_e_[static_cast<std::size_t>(c)];
+                    (1.0 - ls) * grad_ctx[static_cast<std::size_t>(d_state + r)] * last_e_[static_cast<std::size_t>(c)];
             }
         }
     }
