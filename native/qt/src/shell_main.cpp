@@ -71,12 +71,10 @@
 #include <QVector>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <QFrame>
 #include <QStyle>
 #include <QPalette>
 
 #if defined(CYPHA_SHELL_QT_CHARTS)
-#include <QBrush>
 #include <QtCharts/QAbstractAxis>
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
@@ -92,7 +90,6 @@
 #include <optional>
 #include <cstdint>
 #include <cstdio>
-#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
@@ -468,10 +465,15 @@ struct HttpJsonResult {
   QByteArray raw;
 };
 
+// Transfer timeout for one-shot REST calls made from the GUI thread (health/ready/models/predict/
+// update/load). Keeps the UI from freezing indefinitely if cypha_rest hangs or is unreachable.
+constexpr int kHttpTransferTimeoutMs = 15000;
+
 HttpJsonResult http_post_json(const QUrl& url, const QJsonObject& body) {
   HttpJsonResult r;
   QNetworkRequest req(url);
   req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+  req.setTransferTimeout(kHttpTransferTimeoutMs);
   QNetworkAccessManager nam;
   QNetworkReply* reply = nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
   QEventLoop loop;
@@ -482,7 +484,10 @@ HttpJsonResult http_post_json(const QUrl& url, const QJsonObject& body) {
   r.raw = reply->readAll();
   reply->deleteLater();
   if (nerr != QNetworkReply::NoError) {
-    r.err = QStringLiteral("%1\n%2").arg(err_s, QString::fromUtf8(r.raw));
+    const QString reason = nerr == QNetworkReply::TimeoutError
+                                ? QStringLiteral("Request timed out")
+                                : err_s;
+    r.err = QStringLiteral("%1\n%2").arg(reason, QString::fromUtf8(r.raw));
     return r;
   }
   QJsonParseError pe{};
@@ -499,6 +504,7 @@ HttpJsonResult http_post_json(const QUrl& url, const QJsonObject& body) {
 HttpJsonResult http_get_json(const QUrl& url) {
   HttpJsonResult r;
   QNetworkRequest req(url);
+  req.setTransferTimeout(kHttpTransferTimeoutMs);
   QNetworkAccessManager nam;
   QNetworkReply* reply = nam.get(req);
   QEventLoop loop;
@@ -509,7 +515,10 @@ HttpJsonResult http_get_json(const QUrl& url) {
   r.raw = reply->readAll();
   reply->deleteLater();
   if (nerr != QNetworkReply::NoError) {
-    r.err = QStringLiteral("%1\n%2").arg(err_s, QString::fromUtf8(r.raw));
+    const QString reason = nerr == QNetworkReply::TimeoutError
+                                ? QStringLiteral("Request timed out")
+                                : err_s;
+    r.err = QStringLiteral("%1\n%2").arg(reason, QString::fromUtf8(r.raw));
     return r;
   }
   QJsonParseError pe{};
@@ -2018,9 +2027,11 @@ QString native_quickstart_html() {
       "<h1>Native quick start (v2.4)</h1>"
       "<p>Install &rarr; validate &rarr; bench &rarr; tune &rarr; REST. Python is optional after install.</p>"
       "<h2>1. Build</h2>"
-      "<pre>cmake -S native -B C:\\Temp\\cypha_full_cpp_build -DCMAKE_BUILD_TYPE=Release "
-      "-DCYPHA_BUILD_QT=ON -DCYPHA_BUILD_EXPERIMENT_DB=ON -G Ninja\ncmake --build C:\\Temp\\cypha_full_cpp_build --parallel</pre>"
-      "<p>Build outside OneDrive on Windows (cloud sync locks object files).</p>"
+      "<pre>cmake -S native -B &lt;build-dir&gt; -DCMAKE_BUILD_TYPE=Release "
+      "-DCYPHA_BUILD_QT=ON -DCYPHA_BUILD_EXPERIMENT_DB=ON -G Ninja\ncmake --build &lt;build-dir&gt; --parallel</pre>"
+      "<p>Build outside OneDrive on Windows (cloud sync locks object files), e.g. "
+      "<code>C:\\Temp\\cypha_native_build</code>. Full instructions: "
+      "<code>docs/native/CYPHALM_NATIVE_BUILD.md</code>.</p>"
       "<h2>2. Validate</h2>"
       "<pre>powershell -File scripts\\cypha_native_validate_all.ps1</pre>"
       "<p>Or: <code>ctest -R native_</code> and REST smoke.</p>"
@@ -2029,7 +2040,7 @@ QString native_quickstart_html() {
       "<h2>4. Tune</h2>"
       "<pre>cypha_tune_run --config bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run</pre>"
       "<h2>5. REST</h2>"
-      "<pre>cypha_rest --listen 127.0.0.1:8765 --cypha model.cypha --registry ~/.cypha/models</pre>"
+      "<pre>cypha_rest --listen 127.0.0.1:8099 --cypha model.cypha --registry ~/.cypha/models</pre>"
       "<p>CyphaDIF: <code>GET /health</code>, <code>GET /ready</code>, <code>POST /predict</code>, "
       "<code>POST /update</code>, <code>GET /models</code>, <code>POST /load</code>.</p>"
       "<p>CyphaLM: <code>POST /lm/load</code>, <code>POST /generate</code>.</p>"
@@ -3629,6 +3640,20 @@ class MainWindow final : public QMainWindow {
     rest_browse_btn_ = new QPushButton(QStringLiteral("cypha_rest binary…"), inner_server);
     rest_bin_edit_ = new QLineEdit(inner_server);
     rest_bin_edit_->setPlaceholderText(QStringLiteral("path/to/cypha_rest"));
+    {
+      // Auto-discover: cypha_rest is typically installed/built alongside cypha_qt_shell
+      // (see native/qt/CMakeLists.txt install() + windeployqt packaging). Manual browse
+      // below remains available as a fallback when that's not the case.
+#if defined(_WIN32)
+      const QString exe_name = QStringLiteral("cypha_rest.exe");
+#else
+      const QString exe_name = QStringLiteral("cypha_rest");
+#endif
+      const QString guess = QApplication::applicationDirPath() + QLatin1Char('/') + exe_name;
+      if (QFileInfo::exists(guess)) {
+        rest_bin_edit_->setText(guess);
+      }
+    }
     row_bin->addWidget(rest_browse_btn_);
     row_bin->addWidget(rest_bin_edit_, 1);
     lay_server->addLayout(row_bin);
@@ -3636,7 +3661,7 @@ class MainWindow final : public QMainWindow {
     auto* row_listen = new QHBoxLayout();
     row_listen->addWidget(new QLabel(QStringLiteral("--listen"), inner_server));
     rest_listen_edit_ = new QLineEdit(inner_server);
-    rest_listen_edit_->setText(QStringLiteral("127.0.0.1:8765"));
+    rest_listen_edit_->setText(QStringLiteral("127.0.0.1:8099"));
     row_listen->addWidget(rest_listen_edit_, 1);
     lay_server->addLayout(row_listen);
 
@@ -3672,7 +3697,7 @@ class MainWindow final : public QMainWindow {
 
     lay_server->addWidget(new QLabel(QStringLiteral("REST base URL (must match --listen):"), inner_server));
     rest_base_edit_ = new QLineEdit(inner_server);
-    rest_base_edit_->setPlaceholderText(QStringLiteral("http://127.0.0.1:8765"));
+    rest_base_edit_->setPlaceholderText(QStringLiteral("http://127.0.0.1:8099"));
     lay_server->addWidget(rest_base_edit_);
 
     use_gh_chk_ = new QCheckBox(
@@ -3749,6 +3774,12 @@ class MainWindow final : public QMainWindow {
       if (tab >= 0 && tab < main_tabs_->count()) {
         main_tabs_->setCurrentIndex(tab);
       }
+    }
+    if (ui_settings.contains(QStringLiteral("restListen")) && rest_listen_edit_ != nullptr) {
+      rest_listen_edit_->setText(ui_settings.value(QStringLiteral("restListen")).toString());
+    }
+    if (ui_settings.contains(QStringLiteral("restBaseUrl")) && rest_base_edit_ != nullptr) {
+      rest_base_edit_->setText(ui_settings.value(QStringLiteral("restBaseUrl")).toString());
     }
 
     rest_proc_.setProcessChannelMode(QProcess::SeparateChannels);
@@ -4247,9 +4278,18 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(bulk_native_cancel_btn_, &QPushButton::clicked, this, [this]() {
+      // Cancels whichever bulk operation is currently running: native, REST/update, or MKE.
       bulk_cancel_flag_.store(true, std::memory_order_relaxed);
+      bulk_rest_cancel_flag_.store(true, std::memory_order_relaxed);
+      bulk_mke_cancel_flag_.store(true, std::memory_order_relaxed);
       if (bulk_worker_ != nullptr) {
         QMetaObject::invokeMethod(bulk_worker_, "requestCancel", Qt::QueuedConnection);
+      }
+      if (bulk_rest_worker_ != nullptr) {
+        QMetaObject::invokeMethod(bulk_rest_worker_, "requestCancel", Qt::QueuedConnection);
+      }
+      if (bulk_mke_worker_ != nullptr) {
+        QMetaObject::invokeMethod(bulk_mke_worker_, "requestCancel", Qt::QueuedConnection);
       }
     });
 
@@ -5409,6 +5449,12 @@ class MainWindow final : public QMainWindow {
     ui_settings.setValue(QStringLiteral("geometry"), saveGeometry());
     if (main_tabs_ != nullptr) {
       ui_settings.setValue(QStringLiteral("mainTab"), main_tabs_->currentIndex());
+    }
+    if (rest_listen_edit_ != nullptr) {
+      ui_settings.setValue(QStringLiteral("restListen"), rest_listen_edit_->text());
+    }
+    if (rest_base_edit_ != nullptr) {
+      ui_settings.setValue(QStringLiteral("restBaseUrl"), rest_base_edit_->text());
     }
     QMainWindow::closeEvent(e);
   }

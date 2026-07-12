@@ -2,6 +2,9 @@
 # cypha_qt_stub: Core-only link check + buffer load.
 # cypha_qt_shell: Widgets desktop shell (load .cypha, native classify row).
 
+# Canonical local dev config (CYPHA_BUILD_QT is OFF by default / CI): Qt 6.4+ (Core/Widgets/Network;
+# optionally Charts via CYPHA_QT_CHARTS), e.g. `-DCYPHA_BUILD_QT=ON -DCMAKE_PREFIX_PATH=<Qt6 kit dir>`
+# from native/ — see qt/README.md and scripts/run_cypha_qt_windows.ps1 for full examples.
 # Ubuntu 24.04 ships Qt 6.4.x; 6.5+ is nice-to-have for future APIs.
 find_package(Qt6 6.4 QUIET COMPONENTS Core Widgets Network)
 if(NOT Qt6_FOUND)

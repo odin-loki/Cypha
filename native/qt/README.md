@@ -74,7 +74,7 @@ Optional **`preprocessor.json`** (same schema as Python / REST). When loaded, th
 
 ## REST and local server
 
-- **Manual URL:** set the **`cypha_rest`** base URL (no trailing slash required), e.g. `http://127.0.0.1:8765`. **`use_gh`** toggles REST predict/update/bulk and **native** GH train steps. **"Predict (REST)"** / **"Update (REST)"** (optional **`replay_u01`** in body; checkbox **`return_explanation`** → **`POST /predict`** body + full JSON in the log). **"POST /load"** when **`--registry`** is set. **"GET /health"**, **"GET /ready"**, **"GET /models"** append JSON to the log.
+- **Manual URL:** set the **`cypha_rest`** base URL (no trailing slash required), e.g. `http://127.0.0.1:8099`. **`use_gh`** toggles REST predict/update/bulk and **native** GH train steps. **"Predict (REST)"** / **"Update (REST)"** (optional **`replay_u01`** in body; checkbox **`return_explanation`** → **`POST /predict`** body + full JSON in the log). **"POST /load"** when **`--registry`** is set. **"GET /health"**, **"GET /ready"**, **"GET /models"** append JSON to the log.
 - **Spawn server:** startup passes **`--cypha`**, optional **`--f-field-json`**, **`--pre`**, and **`--registry <root>`** when a registry root is configured. On success, the REST base URL is filled from **`http://` + --listen**. **Stdout/stderr** in the **cypha_rest log**; **Clear log** resets it.
 
 The server must have a model loaded for REST predict/update (via **`/load`** or **`--cypha`** at startup). Native predict does not require the server.

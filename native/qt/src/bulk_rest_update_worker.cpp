@@ -20,6 +20,11 @@ BulkRestUpdateWorker::BulkRestUpdateWorker(QObject* parent) : QObject(parent) {
 
 void BulkRestUpdateWorker::requestCancel() { cancel_.store(true, std::memory_order_relaxed); }
 
+namespace {
+// Same timeout as the main-thread REST helpers in shell_main.cpp (http_post_json/http_get_json).
+constexpr int kHttpTransferTimeoutMs = 15000;
+}  // namespace
+
 void BulkRestUpdateWorker::run(BulkRestUpdateJob job) {
   cancel_.store(false, std::memory_order_relaxed);
   if (job.cancel_flag != nullptr) {
@@ -78,6 +83,7 @@ void BulkRestUpdateWorker::run(BulkRestUpdateJob job) {
 
     QNetworkRequest req(update_url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    req.setTransferTimeout(kHttpTransferTimeoutMs);
     QNetworkReply* reply = nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
     QEventLoop loop;
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
@@ -89,8 +95,11 @@ void BulkRestUpdateWorker::run(BulkRestUpdateJob job) {
     reply->deleteLater();
 
     if (nerr != QNetworkReply::NoError) {
+      const QString reason = nerr == QNetworkReply::TimeoutError
+                                  ? QStringLiteral("Request timed out")
+                                  : err_s;
       emit finished(false, losses, false,
-                    QStringLiteral("%1\n%2").arg(err_s, QString::fromUtf8(raw)));
+                    QStringLiteral("%1\n%2").arg(reason, QString::fromUtf8(raw)));
       return;
     }
 

@@ -1,4 +1,6 @@
-// Headless Qt Core entry — verifies Qt + cypha_core link (including mke_scalar_train_step TU). Replace with Widgets shell per qt/README.md.
+// Headless Qt Core entry — verifies Qt + cypha_core link (including mke_scalar_train_step TU).
+// This is intentionally a minimal Core-only smoke binary (cypha_qt_stub); the full Widgets
+// desktop shell lives in shell_main.cpp / target cypha_qt_shell (see qt/README.md).
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QFile>
