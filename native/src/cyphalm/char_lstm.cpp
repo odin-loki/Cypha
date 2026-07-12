@@ -89,9 +89,18 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
   const int four_h = 4 * hidden;
   const double* x = E.data() + static_cast<std::size_t>(token_id) * static_cast<std::size_t>(hidden);
 
-  std::vector<double> gates(static_cast<std::size_t>(four_h));
+  // Perf: forward_step runs once per training/inference step (the dominant hot path at D17
+  // production scale). These were previously fresh-allocated std::vector<double> locals on
+  // every single call; thread_local statics let the (fixed-size, per-object `hidden`/`vocab_size`)
+  // backing storage persist across calls so steady-state operation does zero heap allocation
+  // here, without changing any arithmetic (every element is fully overwritten before use) or
+  // affecting correctness under CyphaLMBatch's per-thread parallel_batch (each thread gets its
+  // own thread_local instance, so there is no cross-thread aliasing).
+  thread_local std::vector<double> gates;
+  thread_local std::vector<double> wh;
+  if (gates.size() != static_cast<std::size_t>(four_h)) gates.resize(static_cast<std::size_t>(four_h));
+  if (wh.size() != static_cast<std::size_t>(four_h)) wh.resize(static_cast<std::size_t>(four_h));
   matvec_rowmajor(Wx.data(), four_h, hidden, x, gates.data());
-  std::vector<double> wh(static_cast<std::size_t>(four_h));
   matvec_rowmajor(Wh.data(), four_h, hidden, h, wh.data());
   for (int i = 0; i < four_h; ++i) {
     gates[static_cast<std::size_t>(i)] += wh[static_cast<std::size_t>(i)] + b[static_cast<std::size_t>(i)];
@@ -113,10 +122,14 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     }
   }
 
-  std::vector<double> i_gate(static_cast<std::size_t>(hidden));
-  std::vector<double> f_gate(static_cast<std::size_t>(hidden));
-  std::vector<double> g_gate(static_cast<std::size_t>(hidden));
-  std::vector<double> o_gate(static_cast<std::size_t>(hidden));
+  thread_local std::vector<double> i_gate;
+  thread_local std::vector<double> f_gate;
+  thread_local std::vector<double> g_gate;
+  thread_local std::vector<double> o_gate;
+  if (i_gate.size() != static_cast<std::size_t>(hidden)) i_gate.resize(static_cast<std::size_t>(hidden));
+  if (f_gate.size() != static_cast<std::size_t>(hidden)) f_gate.resize(static_cast<std::size_t>(hidden));
+  if (g_gate.size() != static_cast<std::size_t>(hidden)) g_gate.resize(static_cast<std::size_t>(hidden));
+  if (o_gate.size() != static_cast<std::size_t>(hidden)) o_gate.resize(static_cast<std::size_t>(hidden));
   const bool use_eml = activation_mode_ == LSTMActivationMode::Eml;
   const bool use_axiom = activation_mode_ == LSTMActivationMode::Axiom;
   for (int j = 0; j < hidden; ++j) {
@@ -171,13 +184,15 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     }
   }
 
-  std::vector<double> logits(static_cast<std::size_t>(vocab_size));
+  thread_local std::vector<double> logits;
+  thread_local std::vector<double> probs;
+  if (logits.size() != static_cast<std::size_t>(vocab_size)) logits.resize(static_cast<std::size_t>(vocab_size));
+  if (probs.size() != static_cast<std::size_t>(vocab_size)) probs.resize(static_cast<std::size_t>(vocab_size));
   matvec_rowmajor(Wy.data(), vocab_size, hidden, h_out.data(), logits.data());
   for (int k = 0; k < vocab_size; ++k) {
     logits[static_cast<std::size_t>(k)] += by[static_cast<std::size_t>(k)];
   }
 
-  std::vector<double> probs(static_cast<std::size_t>(vocab_size));
   softmax_logits(logits.data(), vocab_size, probs.data());
   for (int k = 0; k < vocab_size; ++k) {
     log_probs[k] = std::log(probs[static_cast<std::size_t>(k)] + kLogEps);
@@ -205,11 +220,21 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
 
 CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id,
                                          double logit_nudge, double hidden_nudge) const {
+  CharLSTMGrad out;
+  backward_step(cache, target_id, out, logit_nudge, hidden_nudge);
+  return out;
+}
+
+void CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id, CharLSTMGrad& out,
+                                 double logit_nudge, double hidden_nudge) const {
   if (target_id < 0 || target_id >= vocab_size) {
     throw std::runtime_error("char_lstm: target_id out of range");
   }
   const int four_h = 4 * hidden;
-  CharLSTMGrad out;
+  // Perf: `out` is caller-owned (see header doc). `.assign(n, 0.0)` on an already-correctly-sized
+  // vector reuses its existing heap buffer (no realloc), so callers that pass the same `out`
+  // instance across repeated calls (the online training hot path does, via a persistent member)
+  // pay for this zero-fill once and then never re-allocate these buffers again.
   out.dE.assign(static_cast<std::size_t>(vocab_size) * static_cast<std::size_t>(hidden), 0.0);
   out.dWx.assign(static_cast<std::size_t>(four_h) * static_cast<std::size_t>(hidden), 0.0);
   out.dWh.assign(static_cast<std::size_t>(four_h) * static_cast<std::size_t>(hidden), 0.0);
@@ -219,7 +244,30 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
   out.dh_prev.assign(static_cast<std::size_t>(hidden), 0.0);
   out.dc_prev.assign(static_cast<std::size_t>(hidden), 0.0);
 
-  std::vector<double> d_logits = cache.probs;
+  // Internal scratch temporaries: thread_local (not member/mutable) so this stays safe under
+  // CyphaLMBatch's parallel_batch, which calls backward_step from multiple threads on the same
+  // shared CharLSTMHead instance -- each thread gets its own copy, no aliasing/races, and within
+  // a thread the backing storage is reused call-to-call once warmed up (same reasoning as
+  // forward_step above).
+  thread_local std::vector<double> d_logits;
+  thread_local std::vector<double> dh_new;
+  thread_local std::vector<double> do_gate;
+  thread_local std::vector<double> dc_new;
+  thread_local std::vector<double> df_gate;
+  thread_local std::vector<double> di_gate;
+  thread_local std::vector<double> dg_gate;
+  thread_local std::vector<double> dgates;
+  thread_local std::vector<double> dx;
+  if (dh_new.size() != static_cast<std::size_t>(hidden)) dh_new.resize(static_cast<std::size_t>(hidden));
+  if (do_gate.size() != static_cast<std::size_t>(hidden)) do_gate.resize(static_cast<std::size_t>(hidden));
+  if (dc_new.size() != static_cast<std::size_t>(hidden)) dc_new.resize(static_cast<std::size_t>(hidden));
+  if (df_gate.size() != static_cast<std::size_t>(hidden)) df_gate.resize(static_cast<std::size_t>(hidden));
+  if (di_gate.size() != static_cast<std::size_t>(hidden)) di_gate.resize(static_cast<std::size_t>(hidden));
+  if (dg_gate.size() != static_cast<std::size_t>(hidden)) dg_gate.resize(static_cast<std::size_t>(hidden));
+  if (dx.size() != static_cast<std::size_t>(hidden)) dx.resize(static_cast<std::size_t>(hidden));
+  if (dgates.size() != static_cast<std::size_t>(four_h)) dgates.resize(static_cast<std::size_t>(four_h));
+
+  d_logits = cache.probs;
   d_logits[static_cast<std::size_t>(target_id)] -= 1.0;
   if (logit_nudge != 0.0) {
     for (int k = 0; k < vocab_size; ++k) {
@@ -230,7 +278,6 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
   outer_rowmajor(d_logits.data(), vocab_size, cache.h_new.data(), hidden, out.dWy.data());
   out.dby = d_logits;
 
-  std::vector<double> dh_new(static_cast<std::size_t>(hidden));
   for (int j = 0; j < hidden; ++j) {
     double s = 0.0;
     for (int k = 0; k < vocab_size; ++k) {
@@ -245,8 +292,6 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
     }
   }
 
-  std::vector<double> do_gate(static_cast<std::size_t>(hidden));
-  std::vector<double> dc_new(static_cast<std::size_t>(hidden));
   if (cache.used_eml) {
     for (int j = 0; j < hidden; ++j) {
       const double h_act = eml_nand(cache.c_new[static_cast<std::size_t>(j)], 1.0);
@@ -267,9 +312,6 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
     }
   }
 
-  std::vector<double> df_gate(static_cast<std::size_t>(hidden));
-  std::vector<double> di_gate(static_cast<std::size_t>(hidden));
-  std::vector<double> dg_gate(static_cast<std::size_t>(hidden));
   for (int j = 0; j < hidden; ++j) {
     df_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.c[static_cast<std::size_t>(j)];
     di_gate[static_cast<std::size_t>(j)] = dc_new[static_cast<std::size_t>(j)] * cache.g[static_cast<std::size_t>(j)];
@@ -302,7 +344,6 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
   const bool use_axiom_grad =
       cache.used_axiom && static_cast<int>(axiom_grammar_.i_gate.size()) == hidden;
 
-  std::vector<double> dgates(static_cast<std::size_t>(four_h));
   for (int j = 0; j < hidden; ++j) {
     if (cache.used_eml) {
       double di_gx = 0.0;
@@ -377,7 +418,6 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
   outer_rowmajor(dgates.data(), four_h, cache.h.data(), hidden, out.dWh.data());
   out.db = dgates;
 
-  std::vector<double> dx(static_cast<std::size_t>(hidden));
   for (int j = 0; j < hidden; ++j) {
     double s = 0.0;
     for (int r = 0; r < four_h; ++r) {
@@ -399,8 +439,6 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
     }
     out.dh_prev[static_cast<std::size_t>(j)] = s;
   }
-
-  return out;
 }
 
 void CharLSTMHead::apply_grads(const CharLSTMGrad& grads, double lr) {

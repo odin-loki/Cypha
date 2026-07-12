@@ -4,6 +4,8 @@
 #include "cypha/cyphalm/lm_intelligence_monitor.hpp"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -101,6 +103,65 @@ void init_proj_from_rng(std::vector<double>& proj, int rows, int cols, std::mt19
     std::normal_distribution<double> nd(0.0, scale);
     proj.assign(static_cast<std::size_t>(rows * cols), 0.0);
     for (auto& v : proj) v = nd(rng);
+}
+
+// CYPHA_PERF_TRACE: opt-in (env-gated), zero-overhead-when-unset phase-timing instrumentation
+// for CyphaLMModel::train_step, added for docs/reports/PERFORMANCE_PROFILE_2026-07-12.md. Purely
+// diagnostic (stderr summary at process exit) -- never touches training math/state, so it cannot
+// affect the D17 BPC pin regardless of whether it is enabled. Safe to keep permanently opt-in.
+struct PerfTracePhases {
+    static constexpr std::size_t kCount = 8;
+    static constexpr std::array<const char*, kCount> kNames = {
+        "predict_next (forward: GRIA+LSTM+hybrid blend)",
+        "gria_backward (cross_entropy_gradients+update_weights/alpha/bias)",
+        "dif_train_step (kernel-LLR memory)",
+        "hebbian_stack (encoder_train_step)",
+        "bptt_ssm_update",
+        "lstm_backward (hybrid path)",
+        "rpsm_train_step",
+        "tail (ewc/ngram/gng/laplace bookkeeping)",
+    };
+    bool enabled = false;
+    long long calls = 0;
+    std::array<double, kCount> totals{};
+
+    PerfTracePhases() { enabled = std::getenv("CYPHA_PERF_TRACE") != nullptr; }
+    ~PerfTracePhases() {
+        if (!enabled || calls == 0) return;
+        double total = 0.0;
+        for (double t : totals) total += t;
+        std::cerr << "=== CYPHA_PERF_TRACE: train_step phase breakdown over " << calls
+                   << " calls (" << total << "s instrumented) ===\n";
+        for (std::size_t i = 0; i < kCount; ++i) {
+            const double pct = total > 0.0 ? (100.0 * totals[i] / total) : 0.0;
+            std::cerr << "  " << kNames[i] << ": " << totals[i] << "s (" << pct << "%)\n";
+        }
+    }
+};
+PerfTracePhases g_perf_trace;
+
+// Times `fn()` into g_perf_trace.totals[idx] when CYPHA_PERF_TRACE is set; otherwise calls
+// `fn()` directly with no chrono overhead at all.
+template <typename Fn>
+void perf_trace_scope(std::size_t idx, Fn&& fn) {
+    if (!g_perf_trace.enabled) {
+        fn();
+        return;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    fn();
+    g_perf_trace.totals[idx] += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+}
+
+// begin/end pair for wrapping statements that produce a value to bind via `const auto` (where
+// perf_trace_scope's capture-by-reference-into-a-lambda pattern would need an extra default
+// construction + copy). No-op (single branch, no clock read) when tracing is disabled.
+inline std::chrono::steady_clock::time_point perf_trace_begin() {
+    return g_perf_trace.enabled ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+}
+inline void perf_trace_end(std::size_t idx, std::chrono::steady_clock::time_point t0) {
+    if (!g_perf_trace.enabled) return;
+    g_perf_trace.totals[idx] += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }
 
 std::vector<double> resize_to_field(const std::vector<double>& v, int field_dim) {
@@ -959,7 +1020,10 @@ void CyphaLMModel::apply_hybrid_ewc(TrainStepMetrics& m, const HybridEwcGradStub
 TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t next_token_id,
                                             cypha::intelligence::IntelligenceProfiler* profiler,
                                             LmIntelligenceMonitor* monitor) {
+    if (g_perf_trace.enabled) ++g_perf_trace.calls;
+    const auto perf_t0_predict = perf_trace_begin();
     const auto pred = predict_next(token_id);
+    perf_trace_end(0, perf_t0_predict);
     TrainStepMetrics m;
     m.loss = -pred.log_probs[static_cast<std::size_t>(next_token_id)];
     m.epistemic_var = pred.epistemic_var;
@@ -1136,131 +1200,148 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         }
         return m;
     }
-    if (gria_ && !gria_in_.empty()) {
-        gria_grad = gria_->cross_entropy_gradients(gria_in_.data(), static_cast<int>(next_token_id));
-        has_gria_grad = true;
-        apply_profile_guided(&gria_grad, navigation_blend_nudge, navigation_logit_nudge,
-                             navigation_hidden_nudge);
-        gria_->update_weights(gria_grad, cfg_.gria_lr);
-        gria_->update_alpha(gria_grad, cfg_.gria_lr);
-        gria_->update_bias(gria_grad, cfg_.gria_lr);
-        if (view_emb_ && cfg_.view_learnable) {
-            const auto grad_v = gria_->grad_v_cross_entropy(gria_in_.data(), static_cast<int>(next_token_id));
-            view_emb_->update(current_view_slot_, grad_v.data() + cfg_.field_dim, cfg_.view_id_dim,
-                              cfg_.view_lr);
-        }
-    } else {
-        apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
-                             navigation_hidden_nudge);
-    }
-    if (cfg_.online && dif_ && embed_ && !proj_embed_.empty()) {
-        if (cfg_.use_kappa_kernel_blend_scale && cfg_.use_kernel_llr) {
-            cypha::intelligence::ProfileObservation scale_obs{};
-            bool have_scale_obs = false;
-            if (monitor != nullptr) {
-                scale_obs = monitor->snapshot_observation();
-                have_scale_obs = true;
-            } else if (active_profiler != nullptr) {
-                const auto matrix = active_profiler->get_profile_matrix();
-                scale_obs.alpha = matrix[0][0];
-                scale_obs.d_eff = matrix[1][0];
-                scale_obs.sigma_branch = matrix[2][0];
-                scale_obs.tau = matrix[3][0];
-                scale_obs.r_eu = matrix[4][0];
-                scale_obs.lipschitz = matrix[5][0];
-                scale_obs.calibration = matrix[6][0];
-                have_scale_obs = true;
+    perf_trace_scope(1, [&]() {
+        if (gria_ && !gria_in_.empty()) {
+            gria_grad = gria_->cross_entropy_gradients(gria_in_.data(), static_cast<int>(next_token_id));
+            has_gria_grad = true;
+            apply_profile_guided(&gria_grad, navigation_blend_nudge, navigation_logit_nudge,
+                                 navigation_hidden_nudge);
+            gria_->update_weights(gria_grad, cfg_.gria_lr);
+            gria_->update_alpha(gria_grad, cfg_.gria_lr);
+            gria_->update_bias(gria_grad, cfg_.gria_lr);
+            if (view_emb_ && cfg_.view_learnable) {
+                const auto grad_v = gria_->grad_v_cross_entropy(gria_in_.data(), static_cast<int>(next_token_id));
+                view_emb_->update(current_view_slot_, grad_v.data() + cfg_.field_dim, cfg_.view_id_dim,
+                                  cfg_.view_lr);
             }
-            if (have_scale_obs) {
-                const double kappa =
-                    cypha::intelligence::IntelligenceProfiler::criticality_score_for(scale_obs);
-                const double effective = cypha::intelligence::scale_kernel_blend_from_kappa(
-                    cfg_.kernel_blend, kappa, cfg_.kappa_lambda_target,
-                    cfg_.kappa_kernel_blend_floor);
-                dif_->set_runtime_kernel_blend(effective);
-            }
-        }
-        const auto target = matvec(proj_embed_, cfg_.field_dim, cfg_.d_embed,
-                                   embed_->embed_vec(next_token_id));
-        dif_->train_step(field_x_.data(), static_cast<int>(field_x_.size()), target.data(),
-                         static_cast<int>(target.size()));
-        if (cfg_.use_kappa_kernel_blend_scale && cfg_.use_kernel_llr) {
-            dif_->set_runtime_kernel_blend(cfg_.kernel_blend);
-        }
-    }
-    if (hebbian_stack_ && cfg_.train_ssm && !field_x_.empty() && !last_e_.empty()) {
-        const int nxt = static_cast<int>(next_token_id);
-        hebbian_stack_->encoder_train_step(field_x_.data(), last_e_.data(), std::to_string(nxt),
-                                           std::to_string(nxt), cfg_.ssm_lr);
-    }
-    bptt_ssm_update(next_token_id);
-    if (cfg_.use_reversible_cell && reversible_cell_ && reversible_cell_->has_pair()) {
-        // NOTE: reconstruct()'s result is intentionally unused today — this call exercises the
-        // RevNet-style reconstruct path (H11) but nothing currently consumes x_hat for a
-        // memory-savings recompute-on-backward / gradient-checkpointing pattern (the usual
-        // reason a RevNet reconstruct exists). See docs/reports/STUB_AUDIT_2026-07-11.md.
-        (void)reversible_cell_->reconstruct();
-    }
-    if (mode == ContextMode::Hybrid && lstm_) {
-        if (hybrid_lstm_has_cache_) {
-            CharLSTMGrad grads = lstm_->backward_step(
-                hybrid_lstm_cache_, static_cast<int>(next_token_id),
-                cfg_.use_full_navigation_loss ? navigation_logit_nudge : 0.0,
-                cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0);
-            lstm_->apply_grads(grads, cfg_.lstm_lr);
-            HybridEwcGradStub stub;
-            stub.has_lstm = true;
-            stub.lstm = grads;
-            if (has_gria_grad) {
-                stub.d_gria_alpha = gria_grad.d_alpha;
-                stub.d_gria_U = gria_grad.dU;
-                stub.d_gria_V = gria_grad.dV;
-                stub.d_gria_bias = gria_grad.d_bias;
-            }
-            apply_hybrid_ewc(m, stub);
-            hybrid_lstm_has_cache_ = false;
-        }
-        if (cfg_.hybrid_blend_learnable && !last_hybrid_log_g_.empty() && !last_hybrid_log_l_.empty()) {
-            hybrid_blend_logit_ -= cfg_.hybrid_blend_lr *
-                                   blend_logit_grad(last_hybrid_log_g_.data(), last_hybrid_log_l_.data(),
-                                                    cfg_.vocab_size, hybrid_blend_logit_,
-                                                    static_cast<int>(next_token_id));
-        }
-        if (cfg_.hybrid_blend_learnable && cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0) {
-            hybrid_blend_logit_ -= cfg_.hybrid_blend_lr * navigation_blend_nudge * 0.02;
-        }
-    }
-    if (rpsm_layer_ && mode == ContextMode::Rpsm && !field_x_.empty()) {
-        const auto rpsm_m = rpsm_layer_->train_step(field_x_.data(), static_cast<int>(field_x_.size()),
-                                                    static_cast<int>(next_token_id), cfg_.rpsm_lr);
-        m.loss += rpsm_m.loss;
-    }
-    if (cfg_.ewc_lambda > 0.0 && uses_hybrid_ewc(mode) && mode != ContextMode::Hybrid &&
-        mode != ContextMode::CharLstm && has_gria_grad) {
-        HybridEwcGradStub stub;
-        stub.d_gria_alpha = gria_grad.d_alpha;
-        stub.d_gria_U = gria_grad.dU;
-        stub.d_gria_V = gria_grad.dV;
-        stub.d_gria_bias = gria_grad.d_bias;
-        apply_hybrid_ewc(m, stub);
-    }
-    observe_ngram_count(next_token_id);
-    if (next_token_id < token_counts_.size()) {
-        token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
-    }
-    if (gria_controller_ && gng_ && !field_x_.empty()) {
-        std::vector<double> act;
-        if (!last_dif_out_.mean.empty()) {
-            act = last_dif_out_.mean;
-        } else if (!pred.log_probs.empty()) {
-            act = pred.log_probs;
         } else {
-            act = field_x_;
+            apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
+                                 navigation_hidden_nudge);
         }
-        gria_controller_->push(field_x_, act);
-        (void)gria_controller_->act(last_gng_bmu_, *gng_);
-    }
-    refresh_laplace_prior();
+    });
+    perf_trace_scope(2, [&]() {
+        if (cfg_.online && dif_ && embed_ && !proj_embed_.empty()) {
+            if (cfg_.use_kappa_kernel_blend_scale && cfg_.use_kernel_llr) {
+                cypha::intelligence::ProfileObservation scale_obs{};
+                bool have_scale_obs = false;
+                if (monitor != nullptr) {
+                    scale_obs = monitor->snapshot_observation();
+                    have_scale_obs = true;
+                } else if (active_profiler != nullptr) {
+                    const auto matrix = active_profiler->get_profile_matrix();
+                    scale_obs.alpha = matrix[0][0];
+                    scale_obs.d_eff = matrix[1][0];
+                    scale_obs.sigma_branch = matrix[2][0];
+                    scale_obs.tau = matrix[3][0];
+                    scale_obs.r_eu = matrix[4][0];
+                    scale_obs.lipschitz = matrix[5][0];
+                    scale_obs.calibration = matrix[6][0];
+                    have_scale_obs = true;
+                }
+                if (have_scale_obs) {
+                    const double kappa =
+                        cypha::intelligence::IntelligenceProfiler::criticality_score_for(scale_obs);
+                    const double effective = cypha::intelligence::scale_kernel_blend_from_kappa(
+                        cfg_.kernel_blend, kappa, cfg_.kappa_lambda_target,
+                        cfg_.kappa_kernel_blend_floor);
+                    dif_->set_runtime_kernel_blend(effective);
+                }
+            }
+            const auto target = matvec(proj_embed_, cfg_.field_dim, cfg_.d_embed,
+                                       embed_->embed_vec(next_token_id));
+            dif_->train_step(field_x_.data(), static_cast<int>(field_x_.size()), target.data(),
+                             static_cast<int>(target.size()));
+            if (cfg_.use_kappa_kernel_blend_scale && cfg_.use_kernel_llr) {
+                dif_->set_runtime_kernel_blend(cfg_.kernel_blend);
+            }
+        }
+    });
+    perf_trace_scope(3, [&]() {
+        if (hebbian_stack_ && cfg_.train_ssm && !field_x_.empty() && !last_e_.empty()) {
+            const int nxt = static_cast<int>(next_token_id);
+            hebbian_stack_->encoder_train_step(field_x_.data(), last_e_.data(), std::to_string(nxt),
+                                               std::to_string(nxt), cfg_.ssm_lr);
+        }
+    });
+    perf_trace_scope(4, [&]() { bptt_ssm_update(next_token_id); });
+    perf_trace_scope(7, [&]() {
+        if (cfg_.use_reversible_cell && reversible_cell_ && reversible_cell_->has_pair()) {
+            // NOTE: reconstruct()'s result is intentionally unused today — this call exercises the
+            // RevNet-style reconstruct path (H11) but nothing currently consumes x_hat for a
+            // memory-savings recompute-on-backward / gradient-checkpointing pattern (the usual
+            // reason a RevNet reconstruct exists). See docs/reports/STUB_AUDIT_2026-07-11.md.
+            (void)reversible_cell_->reconstruct();
+        }
+    });
+    perf_trace_scope(5, [&]() {
+        if (mode == ContextMode::Hybrid && lstm_) {
+            if (hybrid_lstm_has_cache_) {
+                // Perf: out-param overload fills hybrid_lstm_grad_scratch_ in place (see its
+                // declaration in cyphalm_model.hpp) instead of allocating a fresh CharLSTMGrad
+                // every step; numerically identical to the value-returning overload.
+                lstm_->backward_step(
+                    hybrid_lstm_cache_, static_cast<int>(next_token_id), hybrid_lstm_grad_scratch_,
+                    cfg_.use_full_navigation_loss ? navigation_logit_nudge : 0.0,
+                    cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0);
+                lstm_->apply_grads(hybrid_lstm_grad_scratch_, cfg_.lstm_lr);
+                HybridEwcGradStub stub;
+                stub.has_lstm = true;
+                stub.lstm = hybrid_lstm_grad_scratch_;
+                if (has_gria_grad) {
+                    stub.d_gria_alpha = gria_grad.d_alpha;
+                    stub.d_gria_U = gria_grad.dU;
+                    stub.d_gria_V = gria_grad.dV;
+                    stub.d_gria_bias = gria_grad.d_bias;
+                }
+                apply_hybrid_ewc(m, stub);
+                hybrid_lstm_has_cache_ = false;
+            }
+            if (cfg_.hybrid_blend_learnable && !last_hybrid_log_g_.empty() && !last_hybrid_log_l_.empty()) {
+                hybrid_blend_logit_ -= cfg_.hybrid_blend_lr *
+                                       blend_logit_grad(last_hybrid_log_g_.data(), last_hybrid_log_l_.data(),
+                                                        cfg_.vocab_size, hybrid_blend_logit_,
+                                                        static_cast<int>(next_token_id));
+            }
+            if (cfg_.hybrid_blend_learnable && cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0) {
+                hybrid_blend_logit_ -= cfg_.hybrid_blend_lr * navigation_blend_nudge * 0.02;
+            }
+        }
+    });
+    perf_trace_scope(6, [&]() {
+        if (rpsm_layer_ && mode == ContextMode::Rpsm && !field_x_.empty()) {
+            const auto rpsm_m = rpsm_layer_->train_step(field_x_.data(), static_cast<int>(field_x_.size()),
+                                                        static_cast<int>(next_token_id), cfg_.rpsm_lr);
+            m.loss += rpsm_m.loss;
+        }
+    });
+    perf_trace_scope(7, [&]() {
+        if (cfg_.ewc_lambda > 0.0 && uses_hybrid_ewc(mode) && mode != ContextMode::Hybrid &&
+            mode != ContextMode::CharLstm && has_gria_grad) {
+            HybridEwcGradStub stub;
+            stub.d_gria_alpha = gria_grad.d_alpha;
+            stub.d_gria_U = gria_grad.dU;
+            stub.d_gria_V = gria_grad.dV;
+            stub.d_gria_bias = gria_grad.d_bias;
+            apply_hybrid_ewc(m, stub);
+        }
+        observe_ngram_count(next_token_id);
+        if (next_token_id < token_counts_.size()) {
+            token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
+        }
+        if (gria_controller_ && gng_ && !field_x_.empty()) {
+            std::vector<double> act;
+            if (!last_dif_out_.mean.empty()) {
+                act = last_dif_out_.mean;
+            } else if (!pred.log_probs.empty()) {
+                act = pred.log_probs;
+            } else {
+                act = field_x_;
+            }
+            gria_controller_->push(field_x_, act);
+            (void)gria_controller_->act(last_gng_bmu_, *gng_);
+        }
+        refresh_laplace_prior();
+    });
     return m;
 }
 

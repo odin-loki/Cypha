@@ -93,6 +93,14 @@ class CharLSTMHead {
   CharLSTMGrad backward_step(const CharLSTMCache& cache, int target_id,
                              double logit_nudge = 0.0, double hidden_nudge = 0.0) const;
 
+  /// Out-param overload: fills `out` in place instead of returning by value. Callers that own a
+  /// persistent CharLSTMGrad scratch buffer (e.g. the online per-step training hot path) can
+  /// reuse it across steps and avoid re-allocating the (vocab_size*hidden + 2*(4*hidden)*hidden)
+  /// gradient buffers on every call. Numerically identical to the value-returning overload, which
+  /// now delegates to this one.
+  void backward_step(const CharLSTMCache& cache, int target_id, CharLSTMGrad& out,
+                     double logit_nudge = 0.0, double hidden_nudge = 0.0) const;
+
   void apply_grads(const CharLSTMGrad& grads, double lr);
 
   double train_step(int token_id, int target_id, std::vector<double>& h, std::vector<double>& c, double lr);

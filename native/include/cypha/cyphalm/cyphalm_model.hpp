@@ -253,6 +253,13 @@ class CyphaLMModel {
     double last_train_loss_ = 0.0;
     CharLSTMCache hybrid_lstm_cache_;
     bool hybrid_lstm_has_cache_{false};
+    // Perf: reused across train_step calls via CharLSTMHead::backward_step's out-param overload
+    // (see docs/reports/PERFORMANCE_PROFILE_2026-07-12.md) so the hybrid-mode LSTM backward pass
+    // doesn't re-allocate its ~1.5MB gradient buffers (dWx/dWh/dE/dWy) on every character step.
+    // Safe to reuse: CyphaLMModel::train_step runs on a single thread per model instance (this is
+    // not the CyphaLMBatch multi-thread batch path), and the buffer is fully overwritten by
+    // backward_step before being read by apply_grads immediately below it.
+    CharLSTMGrad hybrid_lstm_grad_scratch_;
     std::vector<double> last_hybrid_log_g_;
     std::vector<double> last_hybrid_log_l_;
     HybridEwcRegularizer ewc_;
