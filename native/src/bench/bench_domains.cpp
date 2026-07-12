@@ -23,6 +23,9 @@
 #include <zlib.h>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <io.h>
 #include <windows.h>
 #ifndef popen
@@ -681,8 +684,8 @@ DigitDataset load_digits_hog_dataset() {
     cypha::bench::ImageEncoder enc;
     DigitDataset ds;
     auto encode = [&](const cypha::bench::GrayImage& img) {
-        const auto small = downsample_nearest(img, 8, 8);
-        const auto hog = enc.hog_features(small, 4, 9);
+        const auto downsampled = downsample_nearest(img, 8, 8);
+        const auto hog = enc.hog_features(downsampled, 4, 9);
         std::vector<double> row(hog.size());
         for (std::size_t i = 0; i < hog.size(); ++i) row[i] = static_cast<double>(hog[i]);
         return row;

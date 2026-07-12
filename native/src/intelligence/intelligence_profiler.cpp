@@ -10,7 +10,10 @@ namespace cypha::intelligence {
 namespace {
 
 constexpr double kHealthEps = 1e-8;
-constexpr double kMaxProfileDistance = std::sqrt(7.0);
+// std::sqrt is not guaranteed usable in a constant expression (MSVC's STL rejects it
+// pre-C++26, unlike libstdc++/libc++ which fold it via compiler builtins) -- keep this
+// as an ordinary const, not constexpr.
+const double kMaxProfileDistance = std::sqrt(7.0);
 
 ProfileObservation make_observation(double alpha, double d_eff, double sigma_branch, double tau,
                                     double r_eu, double lipschitz, double calibration) {

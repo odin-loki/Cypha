@@ -18,7 +18,11 @@ if(CYPHA_ENABLE_CUDA)
     message(FATAL_ERROR "CYPHA_ENABLE_CUDA is not supported for MinGW targets (use native MSVC or Linux + nvcc).")
   endif()
   enable_language(CUDA)
-  set(CMAKE_CUDA_STANDARD 23)
+  # nvcc (through at least CUDA 13.2) only accepts --std up to c++20 (`nvcc --help`
+  # lists c++03..c++20, no c++23) -- CMAKE_CUDA_STANDARD 23 fails FindOpenMP's CUDA
+  # try_compile with "does not support this, or CMake does not know the flags to
+  # enable it." Host-side C++23 (CMAKE_CXX_STANDARD above) is unaffected.
+  set(CMAKE_CUDA_STANDARD 20)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 75)
@@ -83,7 +87,12 @@ if(CYPHA_ENABLE_CUDA)
   target_sources(cypha_core PRIVATE src/accel_cuda.cu)
   target_compile_definitions(cypha_core PUBLIC CYPHA_ENABLE_CUDA)
   target_link_libraries(cypha_core PUBLIC CUDA::cudart)
-  set_target_properties(cypha_core PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  # accel_cuda.cu is the only .cu translation unit (no cross-TU device calls), so
+  # relocatable device code (-rdc=true) is unneeded -- and on Windows/MSVC it left
+  # executables linking cypha_core with an unresolved __cudaRegisterLinkedBinary_*
+  # symbol because CMake doesn't add a device-link step for consumers of a static
+  # lib built with CUDA_SEPARABLE_COMPILATION. Leave this OFF (CMake default).
+  set_target_properties(cypha_core PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
 endif()
 
 file(GLOB CYPHALM_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/*.cpp")
@@ -437,7 +446,10 @@ elseif(CYPHA_BUILD_EXPERIMENT_DB AND NOT _cypha_exp_sqlite_link)
 endif()
 
 if(MSVC)
-  target_compile_options(cypha_core PRIVATE /W4 /permissive-)
+  # cypha_core also compiles accel_cuda.cu when CYPHA_ENABLE_CUDA is ON; MSVC-style flags
+  # passed to nvcc without -Xcompiler wrapping make it misparse the command line ("A single
+  # input file is required..."), so scope these to the CXX compiler only.
+  target_compile_options(cypha_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /permissive->)
   target_compile_options(cypha_parity PRIVATE /W4 /permissive-)
   target_compile_options(cypha_parity_run PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
@@ -498,7 +510,8 @@ if(MSVC)
   target_compile_options(cypha_onnx_export PRIVATE /W4 /permissive-)
   target_compile_options(cypha_export_gguf PRIVATE /W4 /permissive-)
 else()
-  target_compile_options(cypha_core PRIVATE -Wall -Wextra -Wpedantic)
+  # Same CUDA-source scoping concern as the MSVC branch above.
+  target_compile_options(cypha_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic>)
   target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_bench_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_hebbian_parity PRIVATE -Wall -Wextra -Wpedantic)
@@ -1024,7 +1037,7 @@ add_test(
   COMMAND "$<TARGET_FILE:cypha_baseline_lock>"
     --run d17 --fast --n-train 200
     --lock-file "${CMAKE_CURRENT_BINARY_DIR}/baseline_lock_smoke.json"
-    --exe-dir "${CMAKE_CURRENT_BINARY_DIR}"
+    --exe-dir "$<TARGET_FILE_DIR:cyphalm_bench_native>"
 )
 set_tests_properties(native_baseline_lock_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
@@ -1851,25 +1864,29 @@ add_test(
 )
 
 if(WIN32)
+  # -BuildDir must be the actual directory containing cypha_rest.exe. That's
+  # CMAKE_CURRENT_BINARY_DIR for single-config generators (Ninja/Makefiles -- MinGW,
+  # wsl-gcc-release), but multi-config generators (Visual Studio) put it one level
+  # down, under <binaryDir>/Release/. $<TARGET_FILE_DIR:...> resolves correctly either way.
   add_test(
     NAME native_rest_multi_model
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass
       -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_cypha_rest_multi_model.ps1"
-      -BuildDir "${CMAKE_CURRENT_BINARY_DIR}"
+      -BuildDir "$<TARGET_FILE_DIR:cypha_rest>"
   )
   set_tests_properties(native_rest_multi_model PROPERTIES RUN_SERIAL TRUE)
   add_test(
     NAME native_rest_uncertainty_rank
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass
       -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_cypha_rest_uncertainty_rank.ps1"
-      -BuildDir "${CMAKE_CURRENT_BINARY_DIR}"
+      -BuildDir "$<TARGET_FILE_DIR:cypha_rest>"
   )
   set_tests_properties(native_rest_uncertainty_rank PROPERTIES RUN_SERIAL TRUE)
   add_test(
     NAME native_rest_ui_smoke
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass
       -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_cypha_rest_ui_smoke.ps1"
-      -BuildDir "${CMAKE_CURRENT_BINARY_DIR}"
+      -BuildDir "$<TARGET_FILE_DIR:cypha_rest>"
   )
   set_tests_properties(native_rest_ui_smoke PROPERTIES RUN_SERIAL TRUE)
 endif()
@@ -1879,7 +1896,7 @@ if(WIN32)
     NAME native_rest_schema_contract
     COMMAND powershell -NoProfile -ExecutionPolicy Bypass
       -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_rest_schema_contract.ps1"
-      -BuildDir "${CMAKE_CURRENT_BINARY_DIR}"
+      -BuildDir "$<TARGET_FILE_DIR:cypha_rest>"
   )
 else()
   add_test(
