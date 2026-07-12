@@ -28,6 +28,7 @@ cypha_add_parity_exe(rpsm_embed_grad_finite_diff LINK cypha_lm_native)
 cypha_add_parity_exe(rpsm_bptt_grad_finite_diff)
 cypha_add_parity_exe(rpsm_spectral_alpha_smoke)
 cypha_add_parity_exe(rpsm_normalized_eta_smoke)
+cypha_add_parity_exe(rpsm_world_stats_smoke)
 cypha_add_parity_exe(score_batch_parity)
 cypha_add_parity_exe(kernel_llr_parity)
 cypha_add_parity_exe(memory_train_parity)
@@ -83,6 +84,7 @@ set(
   rpsm_bptt_grad_finite_diff
   rpsm_spectral_alpha_smoke
   rpsm_normalized_eta_smoke
+  rpsm_world_stats_smoke
   score_batch_parity
   kernel_llr_parity
   memory_train_parity

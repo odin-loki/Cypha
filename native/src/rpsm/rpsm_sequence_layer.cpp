@@ -323,6 +323,16 @@ RpsmSequenceLayer::RpsmSequenceLayer(RpsmSequenceConfig cfg)
   enc_grad_.assign(static_cast<std::size_t>(cfg_.feat_dim), 0.0);
   input_grad_.assign(static_cast<std::size_t>(sd), 0.0);
 
+  // §15: world_m2_ starts at 1.0/dim (not 0.0), matching memory_train.cpp's own
+  // `world_M2.assign(d_latent, 1.0)` (memory_train.cpp:151) -- a deliberate regularising prior on
+  // the Welford variance accumulator, not an oversight; ported as-is. world_v_ starts at 1.0 to
+  // match psi_.inv_var's own init (init_psi_matrices: `inv_var.assign(d, 1.0)`), so enabling this
+  // flag is a no-op on step 0 and only diverges from the frozen-at-1.0 baseline once real feature
+  // statistics accumulate.
+  world_n_ = 0;
+  world_m2_.assign(static_cast<std::size_t>(cfg_.feat_dim), 1.0);
+  world_v_.assign(static_cast<std::size_t>(cfg_.feat_dim), 1.0);
+
   bptt_cache_.assign(static_cast<std::size_t>(std::max(1, cfg_.bptt_window)), BpttStepCache{});
   bptt_fill_ = 0;
 }
@@ -492,6 +502,59 @@ double RpsmSequenceLayer::hierarchy_update(BpttStepCache* cache) {
   return hierarchy_loss / static_cast<double>(nl * sd);
 }
 
+namespace {
+constexpr double kWorldMinVar = 1e-4;
+constexpr int kWorldWelfordSteps = 20;
+}  // namespace
+
+void RpsmSequenceLayer::update_world_stats(const double* feat) {
+  // §15 (RPSM_UPGRADE_PLAN.md): ported from `memory_train.cpp`'s `world_update()`
+  // (`native/src/memory_train.cpp:41-121`), specialised to this layer's single `psi_.mu` row-0
+  // (`mu0`) / `psi_.inv_var` state (that file's `world_log_norm`/`world_D_LOG2PI` are not used
+  // anywhere in `batched_llr_gemm`'s simpler LLR formula, so they are intentionally not ported).
+  const int d = cfg_.feat_dim;
+  double* mu0 = psi_.mu.data();  // row 0 of Psi_mu.
+  ++world_n_;
+
+  if (world_n_ <= kWorldWelfordSteps) {
+    // Welford's online mean/variance -- exact for the first kWorldWelfordSteps observations,
+    // matching memory_train.cpp:47-82 term-for-term (including its order of operations: mu0 is
+    // updated in place *before* M2 accumulates, using the post-update mu0 in the second delta).
+    for (int j = 0; j < d; ++j) {
+      const double delta0 = feat[j] - mu0[j];
+      mu0[j] += delta0 / static_cast<double>(world_n_);
+      world_m2_[static_cast<std::size_t>(j)] += delta0 * (feat[j] - mu0[j]);
+    }
+    if (world_n_ > 1) {
+      double v_sum = 0.0;
+      for (int j = 0; j < d; ++j) {
+        const double vj = std::max(
+            world_m2_[static_cast<std::size_t>(j)] / static_cast<double>(world_n_ - 1), kWorldMinVar);
+        world_v_[static_cast<std::size_t>(j)] = vj;
+        psi_.inv_var[static_cast<std::size_t>(j)] = std::min(1.0 / vj, cfg_.inv_var_max_scale);
+        v_sum += vj;
+      }
+      psi_.v_mean = v_sum / static_cast<double>(d);
+    }
+    return;
+  }
+
+  // EMA regime (memory_train.cpp:84-111): delta is captured w.r.t. mu0 *before* mu0's own update,
+  // matching that file's `delta_em`/`world_buf` ordering exactly.
+  const double lr = cfg_.world_stats_lr;
+  double v_sum = 0.0;
+  for (int j = 0; j < d; ++j) {
+    const double delta = feat[j] - mu0[j];
+    mu0[j] += lr * delta;
+    double vj = (1.0 - lr) * world_v_[static_cast<std::size_t>(j)] + lr * delta * delta;
+    vj = std::max(vj, kWorldMinVar);
+    world_v_[static_cast<std::size_t>(j)] = vj;
+    psi_.inv_var[static_cast<std::size_t>(j)] = std::min(1.0 / vj, cfg_.inv_var_max_scale);
+    v_sum += vj;
+  }
+  psi_.v_mean = v_sum / static_cast<double>(d);
+}
+
 double RpsmSequenceLayer::step(const double* input, int input_dim, double* log_probs_out) {
   inject_input_multilevel(input, input_dim);
   encode_level0_features(input, input_dim);
@@ -634,6 +697,14 @@ RpsmTrainStepMetrics RpsmSequenceLayer::train_step(const double* input, int inpu
 
   if (tgt >= 0 && tgt < k) {
     psi_.counts[static_cast<std::size_t>(tgt)] += 1.0;
+  }
+
+  // §15: update mu0/inv_var *after* this step's classifier gradient and BPTT cache have already
+  // used the pre-update values (mirrors memory_train.cpp's own `world_update(*this, h, world_lr)`
+  // call at the end of `memory_train()`, memory_train.cpp:368). Opt-in; default-off preserves
+  // every prior phase's exact measured behaviour.
+  if (cfg_.use_online_world_stats) {
+    update_world_stats(feat_buf_.data());
   }
 
   return metrics;

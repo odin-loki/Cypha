@@ -173,6 +173,33 @@ struct RpsmSequenceConfig {
   /// further research, but are a deliberate *opt-in*, not the default.
   int bptt_window = 1;
 
+  /// §15 (RPSM_UPGRADE_PLAN.md): online update of `Psi_mu` row 0 (`mu0`, world prior) and
+  /// `Psi.inv_var` (shared diagonal precision), ported from
+  /// `CyphaDifMemoryState::memory_train`'s `world_update()` (`native/src/memory_train.cpp:41-121`)
+  /// -- the general CyphaDIF classification path's already-proven online Welford/EMA
+  /// mean-variance estimator (Welford for the first 20 observations, then an EMA with rate
+  /// `world_stats_lr`, exactly mirrored here). Before this flag, `mu0` stayed at its random
+  /// `N(0,0.05)` init and `inv_var` stayed fixed at `1.0` for the *entire* run, in every prior
+  /// phase's (0/0b/-1/BPTT) measurement in this document -- only rows `1..K` (the per-class
+  /// deltas) were ever updated (Phase 0). Opt-in; default-off preserves every prior phase's
+  /// exact measured behaviour.
+  bool use_online_world_stats = false;
+
+  /// EMA rate used by the online world-stats update once `world_n_ > 20` steps (matches the
+  /// codebase-wide `world_lr` convention, e.g. `native/src/bench/bench_domains.cpp:404`,
+  /// `native/apps/cypha_rest.cpp:95`, both default `0.008`).
+  double world_stats_lr = 0.008;
+
+  /// Safety clamp on `psi_.inv_var`, analogous to Phase -1's `eta_norm_max_scale` -- not part of
+  /// `memory_train.cpp`'s original formula (that file's own `D` update, unlike this codebase's
+  /// Phase 0 SGD `Psi_mu` update, never multiplies its learning rate by `inv_var`, so it has no
+  /// equivalent stability constraint to begin with). Added because `train_step`'s per-class
+  /// gradient (`grad = gc * inv_var[j] * (...)`) has an effective per-dimension step size of
+  /// `lr * inv_var[j]`; once real (non-1.0) `inv_var` values are allowed to grow, that product can
+  /// exceed the classic gradient-descent stability bound (~2 / local curvature) and diverge. See
+  /// RPSM_UPGRADE_PLAN.md §15 for the measured instability this clamp fixes and the derivation.
+  double inv_var_max_scale = 25.0;
+
 };
 
 /// Fix 1 helper: top singular value of the L x D hierarchy state ``psi`` (row-major), normalised
@@ -236,6 +263,11 @@ class RpsmSequenceLayer {
   const std::vector<std::vector<double>>& all_levels() const { return h_levels_; }
 
   const PsiMatrices& psi() const { return psi_; }
+
+  /// Level-0 encoded feature vector (`feat_buf_`) as it stood after the most recent `step()`/
+  /// `train_step()` call -- the exact vector `batched_llr_gemm` scores against and §15's
+  /// `update_world_stats()` observes. Test-only accessor (mirrors `psi()`'s read-only exposure).
+  const std::vector<double>& feat() const { return feat_buf_; }
 
   const std::vector<double>& w_up() const { return w_up_; }
   const std::vector<double>& w_enc() const { return w_enc_; }
@@ -338,6 +370,11 @@ class RpsmSequenceLayer {
 
   double last_surprise_{0.0};
 
+  // §15 online world-stats state (mu0/inv_var), ported from memory_train.cpp's world_update().
+  std::int64_t world_n_{0};
+  std::vector<double> world_m2_;
+  std::vector<double> world_v_;
+
   // §14 BPTT window state.
   std::vector<BpttStepCache> bptt_cache_;
   int bptt_fill_{0};
@@ -357,6 +394,11 @@ class RpsmSequenceLayer {
   /// per-step, w.r.t. that step's `input`, exposed via `bptt_flush_input_grads_`), then applies
   /// one averaged SGD update. See rpsm_sequence_layer.cpp for the full derivation.
   void bptt_backward_and_apply();
+
+  /// §15: online Welford (n<=20) / EMA (n>20) update of `psi_.mu`'s row 0 (`mu0`) and
+  /// `psi_.inv_var`, using this step's post-encode feature vector `feat`. Ported line-for-line
+  /// from `memory_train.cpp`'s `world_update()`; see rpsm_sequence_layer.cpp for the derivation.
+  void update_world_stats(const double* feat);
 
   static void log_softmax_row(const double* logits, int k, double* log_out);
 

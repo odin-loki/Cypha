@@ -904,3 +904,337 @@ has now been tried and has failed. RPSM should be deprioritized relative to P3 (
 P5 (kernel-LLR) unless a specific, different, well-motivated hypothesis for the remaining gap
 emerges — "try more temporal depth," "try more memory," and "fix the known bugs" are now all
 cheap-scale-tested and exhausted as easy wins.**
+
+---
+
+## §15 — Online mu0/inv_var world-stats port (§6 Phase 4 / RESEARCH_STATUS.md:393): implemented,
+verified, measured — a real instability found and fixed, but the mechanism itself regresses BPC;
+not adopted, kept opt-in-off
+
+**Status: implemented, verified (CTest incl. a new parity-style regression guard), measured at
+matched cheap scale (`n_train=5000`), per this document's own diagnostic-first methodology (§13).
+Verdict: this is the fifth independent, cheap-scale, before/after-measured hypothesis this
+document has tested for the hybrid-vs-RPSM gap (after Phase 0, Phase 0b, §13.4's memory-threshold
+sweep, and §14's BPTT depth), and — like §13.4 and §14 — it is a net-negative result. The 5k check
+was the required minimum bar per this task's own instructions; since it did not "look promising,"
+the 50k stretch-goal confirmation was not run (also per instructions).**
+
+### 15.1 Precise scoping: what "the online mu/inv_v update mechanism ported from memory_train.cpp"
+actually means in this codebase
+
+Re-read `native/src/memory_train.cpp` and `native/include/cypha/memory_train.hpp` in full (the
+mechanism's actual home — there is no separate `memory_train.hpp`-adjacent "mu/inv_v" header;
+everything lives in `CyphaDifMemoryState`, `native/include/cypha/memory_train.hpp:26-71`) before
+touching any RPSM code, per the task's explicit instruction. `CyphaDifMemoryState::memory_train`
+(`memory_train.cpp:231-374`) does two structurally distinct online updates per training step, and
+it is essential to keep them separate because they are **not the same mechanism** and only one of
+them was previously addressed by this document:
+
+| Update | What it touches | Formula | Already ported to RPSM? |
+|---|---|---|---|
+| **Class differentials `D[k,·]`** (rows 1..K, the per-class discriminative direction — CyphaDIF's analogue of RPSM's `Ψ_mu` rows 1..K) | `D[k,j] += scales[k] * (h_mu0[j] - D[k,j])` (`memory_train.cpp:344-349`); `scales[k_idx]=delta_lr` (attraction toward the observed residual for the *correct* class), `scales[k≠k_idx] = -delta_lr·min(softmax_k, 0.5)` (repulsion for incorrect classes, weighted by predicted probability mass) — an EMA-toward-residual / repulsion rule, **not a loss gradient**, and critically **not scaled by `inv_var[j]`** at all | **Yes — already done, by a different mechanism.** Phase 0 (§4.1/§9) already fixed RPSM's structural analogue of this (`Ψ_mu` rows 1..K), but via a genuine cross-entropy SGD gradient (`delta_k[j] -= effective_lr·grad·`, `grad = gc·inv_var[j]·(feat[j]-mu0[j]-delta_k[j])`, `rpsm_sequence_layer.cpp:648-656`), not the EMA/repulsion rule shown here. Both approaches move the same conceptual quantity; Phase 0's version *is* scaled by `inv_var[j]` (a real gradient of the LLR score does depend on precision), which turns out to matter a great deal below (§15.6). |
+| **World prior `world_mu` (row 0, `mu0`) and precision `world_inv_v`** | `world_update()` (`memory_train.cpp:41-121`): Welford's online mean/variance for the first 20 observations (`world_n_ <= 20`, exact sample statistics), then an EMA with rate `world_lr` (codebase convention `0.008`, e.g. `bench_domains.cpp:404`, `cypha_rest.cpp:95`) for all subsequent steps, with a `kMinVar=1e-4` floor on variance | **No — this is the genuinely missing piece.** Confirmed by re-reading `RpsmSequenceLayer::train_step` (`rpsm_sequence_layer.cpp:511-712`, current `HEAD` before this phase) line-by-line: `psi_.mu`'s row 0 (`mu0`) is written exactly once, at construction (`init_psi_matrices`, `:81-100`, `Normal(0,0.05)`), and `psi_.inv_var` is written exactly once, also at construction (`:87`, fixed `1.0` for every dimension), and **neither is touched again by any of Phase 0, Phase 0b, Phase -1, or §14's BPTT work** — all four of those phases explicitly and deliberately left `mu0`/`inv_var` frozen (§9.2: *"Row 0 (`mu0`, world prior) was deliberately left untouched"*; §11.2 lists `inv_var` among fields "also left untouched"). This is case **(b)** from the task's framing — present in the struct, never updated — not case (a) (missing entirely, the struct fields exist) or case (c) (updated by a worse mechanism). |
+
+**Answer to the task's scoping question:** the "mu/inv_v mechanism" the task and §6 Phase 4 refer
+to is specifically `world_update()`'s Welford/EMA estimator for `mu0`/`inv_var` — a completely
+different piece of code from Phase 0's already-shipped `Ψ_mu`-rows-1..K fix, and one that no prior
+phase in this document has touched. It is real, well-defined, self-contained (`memory_train.cpp:
+41-121` is ~80 lines with no external dependencies beyond the struct's own fields), and small
+enough to port directly — **this is a well-bounded, testable change**, not a "Large" architectural
+gap like the Izaac VRF store (§13.5). Why it would plausibly help: `mu0`/`inv_var` currently force
+every RPSM run to score all 256 vocab classes as if the level-0 feature space were exactly
+standard-normal (zero mean, unit variance, uniform across all 64 dimensions) — a assumption picked
+arbitrarily at random init and never revisited, unlike the general CyphaDIF path where this
+assumption is continuously corrected against the actual observed feature distribution. If the
+encoder's real output distribution is off-center or has non-uniform per-dimension variance (very
+likely, since `w_enc_`/`w_carry_` are themselves being trained), an accurate `mu0`/`inv_var`
+should in principle sharpen the classifier's decision boundary the same way feature standardization
+sharpens any linear classifier. §15.6 explains, with a mechanistic root cause (not speculation),
+why this plausible-sounding argument does not survive contact with RPSM's specific training loop.
+
+### 15.2 The implementation
+
+Ported `world_update()` line-for-line as a new private method, `RpsmSequenceLayer::
+update_world_stats()` (`rpsm_sequence_layer.cpp:510-556`), specialised to this layer's single
+`psi_.mu` row-0 / `psi_.inv_var` state (that file's `world_log_norm`/`world_D_LOG2PI`/
+`world_drift_ema` bookkeeping is not used anywhere in `batched_llr_gemm`'s simpler LLR formula —
+`psi_matrices.cpp:46-85` — so it is intentionally not ported; only the parts that feed `mu`/
+`inv_var`/`v_mean` are). Called once per `train_step`, after the classifier/hierarchy gradients for
+that step have already used the *pre*-update `mu0`/`inv_var` (mirroring `memory_train.cpp:368`'s
+own `world_update(*this, h, world_lr)` call placement, at the very end of `memory_train()`) — see
+`rpsm_sequence_layer.cpp:706-708`.
+
+New config surface, all opt-in (default preserves every prior phase's exact measured behaviour),
+in `RpsmSequenceConfig` (`rpsm_sequence_layer.hpp:175-201`):
+
+- `use_online_world_stats` (default `false`) — gates the whole mechanism.
+- `world_stats_lr` (default `0.008`, matching the codebase-wide `world_lr` convention) — the EMA
+  rate for `world_n_ > 20`.
+- `inv_var_max_scale` (default `25.0`) — **a safety clamp added during this phase, not part of the
+  original `memory_train.cpp` formula; see §15.4 for why it was necessary.**
+
+A research-only env-var override, `CYPHALM_RPSM_WORLD_STATS=1` (`cyphalm_model.cpp:505-511`),
+mirrors §14's existing `CYPHALM_RPSM_BPTT_WINDOW` convention exactly — lets this phase's
+measurement be reproduced without a rebuild-per-config-change, and is **not** wired to default-on
+for `context_mode==Rpsm` (unlike Phase -1's `use_spectral_alpha`/`use_normalized_eta`), for the
+same reason §14.6 shipped `bptt_window=1`: the measured effect (§15.5) is net-negative, so turning
+it on by default would regress the D21 production path for no benefit.
+
+Also added a read-only test accessor, `RpsmSequenceLayer::feat()` (`rpsm_sequence_layer.hpp:267-
+270`), exposing `feat_buf_` — needed to write a real parity test (§15.3) rather than an
+approximate one, and modelled on the existing `psi()`/`w_up()` read-only accessor convention.
+
+### 15.3 A real instability, found by the test suite before any BPC measurement was attempted
+
+The first version of this phase's regression test (`native_rpsm_world_stats_smoke`'s
+`test_phase0_property_preserved` case, modelled directly on `rpsm_normalized_eta_smoke.cpp`'s
+identically-named check) **failed** on the very first run, with `trained` NLL of `1.6e+61` — not a
+subtle numeric drift, a genuine divergence. Added temporary diagnostics (reverted before the final
+commit, confirmed via `git diff`) and found the mechanism directly: `psi_.inv_var` reached `~186`
+(from a low-variance feature dimension's small-sample Welford estimate) while `Ψ_mu`'s class-delta
+rows (`psi.mu`, offset ≥ `feat_dim`) reached `~3.5e29`.
+
+**Root cause, derived directly from Phase 0's own already-shipped gradient formula**
+(`rpsm_sequence_layer.cpp:648-656`, unchanged by this phase):
+
+```
+grad = gc * inv_var[j] * (feat[j] - mu0[j] - delta_k[j])
+delta_k[j] -= lr * grad
+             = delta_k[j] * (1 + lr*gc*inv_var[j]) - lr*gc*inv_var[j]*(feat[j]-mu0[j])
+```
+
+For the target class, `gc = p_target - 1 < 0`; the coefficient on `delta_k[j]` is
+`1 - lr·|gc|·inv_var[j]`. Classic gradient-descent divergence occurs once this coefficient's
+magnitude exceeds 1, i.e. once `lr·|gc|·inv_var[j] > 2`. With the test's `lr=0.05` and `|gc|`
+approaching 1 early in training (when the model is confidently wrong), that threshold is crossed
+once `inv_var[j] > ~40` — well inside the range Welford's small-sample variance estimator produces
+routinely (`~186` observed above). **This is exactly the numerical-stability failure mode Phase -1
+(§11.2) added `eta_norm_max_scale` to guard against for a different quantity (the learning rate
+itself) — the same class of problem, in a new place.** Critically, `memory_train.cpp`'s own `D`
+update (§15.1's first row) has no equivalent risk, because it is not a gradient and is *never*
+multiplied by `inv_var[j]` at all — this is precisely why porting `world_update()` alongside an
+*already different*, `inv_var`-sensitive update rule (Phase 0's SGD) introduces a coupling that
+does not exist, and was never at risk of existing, in the source file this was ported from.
+
+**Fix:** added `inv_var_max_scale` (§15.2), clamping `psi_.inv_var[j] = min(1/v_j,
+inv_var_max_scale)` at both the Welford and EMA update sites (`rpsm_sequence_layer.cpp:534`,
+`:552`). With the clamp at its default (`25.0`), the exact same test that diverged to `1.6e+61`
+now passes cleanly (verified below, §15.5) — this is a genuine, disclosed, necessary correctness
+fix for the mechanism to be usable at all, independent of whether the mechanism turns out to help.
+
+### 15.4 Test additions and CTest results
+
+New CTest, `native_rpsm_world_stats_smoke` (`native/tests/parity/rpsm_world_stats_smoke.cpp`),
+three checks:
+
+1. **Parity** (`test_matches_independent_reference`): an independent, from-scratch reimplementation
+   of the exact Welford/EMA recurrence (written fresh in the test file, not calling into the
+   production code at all — the same "no formula duplication into the thing being tested" standard
+   §10.3's finite-difference test uses), driven by the *actual* `feat()` vectors
+   `RpsmSequenceLayer::train_step` produced (captured after each call, since `feat_buf_` depends on
+   the co-evolving encoder weights and cannot be predicted analytically from the input alone).
+   Checked against `psi().mu`'s row 0 and `psi().inv_var` at every one of 30 steps (spanning both
+   the Welford and EMA regimes): **max error < 1e-9** at every checkpoint.
+2. **Stability** (`test_long_run_stability`): 1500 steps with `use_online_world_stats`,
+   `use_spectral_alpha`, and `use_normalized_eta` all enabled together (matching D21 production's
+   own combination of live flags), asserting finite loss/NLL and `inv_var < 1e8` at every step —
+   this is the check that caught §15.3's instability before the clamp, and now passes with it.
+3. **Correctness preserved** (`test_phase0_property_preserved`): the already-validated Phase 0
+   property (trained beats fresh on multi-class eval) still holds with §15 enabled — this is the
+   exact case that produced `1.6e+61` pre-clamp and now passes.
+
+Built from scratch in a dedicated scratch directory, `native/build_rpsm_p5` (not `native/
+build_rpsm`, `native/build_scale`, or any other stale/reused directory — freshly configured this
+session, per the task's instruction). `ctest --test-dir native/build_rpsm_p5 -R rpsm` →
+**12/12 passed** (the 11 pre-existing RPSM tests carried over from Phases 0/0b/-1/§14, plus the
+new `native_rpsm_world_stats_smoke`) — no regressions. A broader sweep, `ctest --test-dir
+native/build_rpsm_p5 -R "cyphalm|rpsm"`, also passes in full once every referenced target is built
+(the two apparent failures seen on a partial build, `native_cyphalm_ssm_fixture`/
+`native_cyphalm_parity_suite`, were confirmed to be missing-executable artifacts from an
+incomplete `--target` list, not real regressions — both pass cleanly once `cyphalm_hebbian_parity`
+is also built).
+
+### 15.5 Before/after BPC, clean scratch comparison at n_train=5000
+
+Per this document's own established methodology (§9.4/§10.5/§11.5/§14.4), same settings throughout:
+`--profile d21 --mode rpsm --n-train 5000 --n-eval 256 --threads 1`, `bench_seed=42`, `wikitext2`
+corpus (confirmed in every run's JSON output), same `native/build_rpsm_p5/cyphalm_bench_native.exe`
+binary for both rows (only the `CYPHALM_RPSM_WORLD_STATS` env var differs). "Before" here is
+`use_online_world_stats=false` (the flag's default, i.e. this repo's current committed `HEAD`
+behaviour, unchanged by this phase's code) — confirmed **bit-identical** to §14's own shipped
+`bptt_window=1` pin (`4.747686`, §14.4's table), which is the correct "before" reference per the
+task's instruction ("bit-identical re-run of current HEAD before your change, to control for any
+drift since §14").
+
+| Run | BPC | Δ vs before |
+|---|---|---|
+| **Before** (§15 flag off — current `HEAD`, bit-identical to §14's shipped `4.747686` pin) | **4.747685528000672** | — |
+| **After** (§15 flag on: online `mu0`/`inv_var` update, with the `inv_var_max_scale=25.0` stability clamp) | **5.052647273780029** | **+0.304961745779357 BPC (+6.42% relative, worse)** |
+
+Both numbers reproduced bit-identically across two separate rebuild-and-rerun cycles in this
+session (once immediately after implementing the clamp, and again after reverting the temporary
+ablation diagnostics added for §15.6 — see below), confirming this is deterministic, not noise.
+
+**This does not meet the bar for adoption.** Per the task's own instructions, since the 5k result
+does not "look promising" (it is a clear regression, not a neutral or positive result), the 50k
+stretch-goal confirmation run was **not performed** — there is no plausible reading of "confirm a
+promising result at larger scale" that applies to a result that already moved in the wrong
+direction at the required minimum-bar scale.
+
+### 15.6 Why it hurts: two independent, disclosed ablations pinpoint the mechanism (not just the
+instability)
+
+The clamp (§15.3) fixes catastrophic divergence, but the *clamped* mechanism still regresses BPC
+by 6.4% — so the instability alone does not explain the full picture. Ran two temporary,
+env-gated ablations (isolating `mu0`-only vs `inv_var`-only contributions; added, measured, then
+fully reverted — confirmed via `git diff` returning empty for `rpsm_sequence_layer.cpp` before the
+final commit) at the same `n_train=5000` scale:
+
+| Variant | BPC | Δ vs before (4.747686) |
+|---|---|---|
+| Before (§15 off) | 4.747686 | — |
+| **mu0 only** (inv_var frozen at 1.0, matching Phase 0's original assumption) | **7.420635** | **+56.3%** |
+| **inv_var only** (mu0 frozen at random init, clamp=25.0) | **42.852895** | **+802.8%** |
+| **Both together** (clamp=25.0, this phase's shipped configuration) | 5.052647 | +6.4% |
+| Both together, tighter clamp (**inv_var_max_scale=3.0**, a sensitivity check) | 7.607129 | +60.3% |
+
+Three findings from this table, none of them favourable to the mechanism:
+
+1. **`mu0`-only is actively harmful on its own (+56.3%), with `inv_var` completely untouched** —
+   ruling out "it's just the `inv_var`/gradient-scaling interaction from §15.3" as the sole
+   explanation. The mechanism: `mu0` tracks `feat_buf_`, but `feat_buf_` is itself produced by
+   `w_enc_`/`w_carry_` — matrices being *simultaneously* trained, every step, by the same
+   `train_step` call (`encode_level0_features`, `rpsm_sequence_layer.cpp:413-430`; `w_enc_`'s own
+   gradient update happens via the encoder-chain-rule path, `enc_grad_`/`input_grad_`,
+   `:665-674`+BPTT). Because Welford's algorithm is *exact* for the first 20 steps, `mu0`
+   converges to track `feat_buf_` almost immediately — but Phase 0's classifier gradient depends
+   on the *residual* `(feat[j] - mu0[j] - delta_k[j])` (`:652-653`): as `mu0` chases `feat_buf_`
+   ever more closely, that residual shrinks toward zero, starving the one gradient signal Phase 0
+   proved (§9) is the dominant lever for RPSM's classification accuracy. This is structurally
+   different from `memory_train.cpp`'s own use of `world_mu`: that file's encoder/feature source is
+   not being jointly SGD-trained inside the same `memory_train()` call the way `w_enc_`/`w_carry_`
+   are inside RPSM's `train_step` — porting a "track the input distribution" statistic into a loop
+   that is *simultaneously* training the thing producing that input distribution creates a
+   self-defeating feedback loop that has no analogue in the source file.
+2. **`inv_var`-only (mu0 frozen) is catastrophically worse (+802.8%)** even with the same
+   `inv_var_max_scale=25.0` clamp that stabilises the combined configuration — because without
+   `mu0` also tracking `feat_buf_`, the Welford variance estimate `M2/(n-1)` is computed against a
+   `mu0` that does not reflect the encoder's actual (co-evolving) output distribution, so `v_j`
+   frequently collapses toward implausibly small values early in training (a `mu0` that happens to
+   sit far from the true short-run mean inflates *apparent* variance in some dimensions while
+   deflating it in others, depending on encoder-weight coincidence), which — even after clamping —
+   still pushes many dimensions' effective per-step learning rate (`lr·inv_var[j]`, §15.3) toward
+   the clamp ceiling simultaneously, a qualitatively worse regime than either extreme alone.
+3. **A tighter clamp makes the combined configuration worse, not better** (`inv_var_max_scale=3.0`
+   → `+60.3%`, worse than the default `25.0`'s `+6.4%`) — ruling out "just pick a more conservative
+   clamp" as a cheap fix. The relationship between clamp tightness and BPC is not monotonic in the
+   helpful direction, which is itself evidence this is not a simple "one hyperparameter is
+   miscalibrated" problem but a structural mismatch between the ported mechanism and RPSM's
+   specific training loop (§15.6 point 1).
+
+**Conclusion: the mechanism does not fail here because it was ported carelessly (§15.4's parity
+test proves the port is arithmetically exact) or because of an easily-tuned instability (§15.3's
+clamp fixes the divergence, and §15.6 shows tightening it further does not help) — it fails because
+`memory_train.cpp`'s `world_update()` was designed for a setting where the tracked feature
+distribution is not simultaneously being trained by the same loop that consumes `mu0`/`inv_var`'s
+output, and RPSM's `train_step` is exactly that setting.** This is a mechanism-level
+incompatibility, not a tuning problem — directly analogous in kind (though a different specific
+mechanism) to §14's finding that a differently-sourced, well-implemented technique (real BPTT) can
+still be a net negative once actually measured against RPSM's specific architecture and lr regime.
+
+### 15.7 Shipped configuration and rationale
+
+`RpsmSequenceConfig::use_online_world_stats` defaults to **`false`**, matching §14.6's precedent
+(`bptt_window` defaults to `1`, not the researched-and-measured-worse `64`). The full mechanism
+remains implemented, wired, parity-tested, and reproducible via `CYPHALM_RPSM_WORLD_STATS=1`
+for any future research revisiting this question with a different training-loop design (e.g. if
+a future phase decouples `mu0`'s update rate from the encoder's own training schedule, or ties
+`mu0`'s tracking to a slower EMA than Welford's exact-for-20-steps regime) — but the *default*
+behaviour a user gets from `--mode rpsm` is unchanged by this phase, and changes toward the
+empirically-safer setting, exactly as §14.6 did.
+
+### 15.8 Final verdict: closing out §6 Phase 4's mu/inv_v sub-item, and what this means for RPSM overall
+
+**§6 Phase 4 listed three sub-items: (1) the online `mu`/`inv_v` update mechanism (this phase's
+scope, per the task), (2) the missing `native_batched_update_parity` test (§3.1, a general
+CyphaDIF/Option-A test gap unrelated to RPSM's own training loop — out of this task's scope, not
+attempted here), and (3) wiring `TieredContextBuffer`/`ctx` into the LM call sites (Finding #4, a
+minor context-prior addition with no measured mechanism-level impact identified anywhere in this
+document). This phase closes sub-item (1) definitively: implemented, correctness-verified, and
+measured negative — not "unmeasured, deprioritized," an actual, honest null/negative result, the
+same standard §14 set for BPTT.**
+
+This is the **fifth** independent, cheap-scale, rigorously before/after-measured hypothesis this
+document has tested for the hybrid-vs-RPSM gap (Phase 0: frozen classifier — real, large, positive
+effect; Phase 0b: embedding backprop stub — real, tiny, positive effect; §13.4: memory-write
+threshold and two related knobs — no effect, slightly negative; §14: BPTT temporal-credit-
+assignment depth — real, substantially negative effect; **§15: online world-stats port — real,
+moderately negative effect, with a genuine instability found and fixed along the way**). Four of
+five were negative or neutral; only Phase 0 (fixing a parameter that was provably, unconditionally
+never updated at all) produced a large win. This further reinforces §14.8's pattern: every
+concrete, implementable "port or add a specific mechanism" hypothesis this investigation has been
+able to formulate and test has now been tried, and the two that were not simple bug-fixes (BPTT
+depth, world-stats porting) both made things worse once actually measured, not better.
+
+**Recommendation, unchanged in substance from §14.8 but now with one more independent data point
+supporting it:**
+
+1. **Do not treat §6 Phase 4 as a remaining "cheap, likely-to-help" lever.** Its most concrete,
+   implementable sub-item has been tried and measured negative, exactly like §14's treatment of
+   the temporal-credit-assignment hypothesis. The other two sub-items (the missing parity test,
+   `TieredContextBuffer` wiring) are correctness/completeness gaps, not BPC-gap-closing candidates
+   — nothing in this document's four prior "did this close the gap" measurements (§13.4, §14, and
+   now §15) found any lever of this kind that helps.
+2. **This document has now exhausted every concrete, cheaply-testable hypothesis for the
+   hybrid-vs-RPSM gap that could be formulated from reading the existing code** (frozen classifier,
+   broken embedding gradient, self-extinguishing memory writes, missing BPTT depth, missing online
+   feature-distribution tracking). One (Phase 0) was a real, large, fixable defect. The rest were
+   either negligible or actively counter-productive once implemented and measured. §14.8's
+   conclusion — that the remaining 18-37%-and-growing gap most likely reflects a genuine
+   architectural/capacity mismatch between RPSM's hierarchy-based state and the hybrid's LSTM+GRIA
+   blend, rather than a fixable training-loop defect — is **further strengthened, not weakened, by
+   this phase's result**, and should now be treated as the working conclusion rather than one
+   hypothesis among several.
+3. **Do not proceed to the Izaac VRF store or Gaussian-mixture world model (§6 Phase 5, §13.5)
+   expecting a cheap win.** §13.7 point 1 already flagged that `M_slots`'s existing "write raw
+   activations, never train the content" pattern would likely make a VRF-keyed episodic store
+   inherit the same low-information-content problem; this phase adds a second, independent caution
+   in the same spirit: mechanisms that work well in the general CyphaDIF path (`memory_train.cpp`)
+   do not transfer for free into RPSM's specific, simultaneously-self-training loop, and each
+   transfer attempt needs its own real measurement, not an assumption of transfer.
+4. **RPSM's priority should remain exactly where §14.8 left it: deprioritized relative to P3
+   (soft-world) and P5 (kernel-LLR)**, unless a specific, different, well-motivated hypothesis for
+   the remaining gap emerges that has not already been tried. This document has now tested five;
+   none of the remaining untested ideas in §6 (Phase 1's tier/config plumbing, already shown minor
+   in §9.5; Phase 5's VRF/world-model, flagged as likely-low-value above) look promising enough on
+   paper to justify a sixth cheap-scale experiment before either (a) a fundamentally new hypothesis
+   is proposed, or (b) RPSM is revisited as part of a larger architectural rework rather than a
+   series of targeted training-loop patches.
+
+### Files touched by §15
+
+- `native/include/cypha/rpsm/rpsm_sequence_layer.hpp` — new opt-in config fields
+  (`use_online_world_stats`, `world_stats_lr`, `inv_var_max_scale`), new private state
+  (`world_n_`, `world_m2_`, `world_v_`), `update_world_stats()` declaration, `feat()` test accessor
+- `native/src/rpsm/rpsm_sequence_layer.cpp` — `update_world_stats()` implementation (ported from
+  `memory_train.cpp`'s `world_update()`), wired into `train_step()`
+- `native/src/cyphalm/cyphalm_model.cpp` — `CYPHALM_RPSM_WORLD_STATS` research-only env override
+  (mirrors the existing `CYPHALM_RPSM_BPTT_WINDOW` convention); **not** wired to default-on for
+  `context_mode==Rpsm` (§15.7)
+- `native/tests/parity/rpsm_world_stats_smoke.cpp` — new CTest (parity + stability + Phase-0-
+  property-preserved checks, §15.4)
+- `native/cmake/CyphaParity.cmake`, `native/CMakeLists.txt` — register the new test target/CTest
+- `docs/reports/RPSM_UPGRADE_PLAN.md` — this section
+
+### Files read/cited for §15
+
+- `native/src/memory_train.cpp` (full read, `world_update()` at `:41-121`, `memory_train()` at
+  `:231-374`), `native/include/cypha/memory_train.hpp` (full read, `CyphaDifMemoryState` at `:26-71`)
+- `native/include/cypha/rpsm/rpsm_sequence_layer.hpp`, `native/src/rpsm/rpsm_sequence_layer.cpp`
+  (re-read in full against current `HEAD`, i.e. post Phase 0/0b/-1/§14)
+- `native/include/cypha/rpsm/psi_matrices.hpp`, `native/src/rpsm/psi_matrices.cpp` (re-read to
+  confirm `PsiMatrices`'s `mu`/`inv_var`/`v_mean` layout and `batched_llr_gemm`'s use of them)
+- `native/src/cyphalm/cyphalm_model.cpp` (RPSM `RpsmSequenceConfig` construction site,
+  `:485-513` post this phase's edit)
+- `native/tests/parity/rpsm_normalized_eta_smoke.cpp` (style/structure template for the new test)
+- `bench/config/profiles/cyphalm_d21_rpsm.json` (re-confirmed Tiny-tier dims unchanged, read-only)

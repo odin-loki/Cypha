@@ -502,6 +502,14 @@ void CyphaLMModel::init_components() {
             const int wv = std::atoi(w);
             if (wv > 0) rc.bptt_window = wv;
         }
+        // Research/experiment-only override for §15's online mu0/inv_var world-stats update
+        // (RPSM_UPGRADE_PLAN.md §15) -- default is off (see rpsm_sequence_layer.hpp's
+        // `use_online_world_stats` doc comment for why this is opt-in, matching Phase -1's own
+        // opt-in-flag convention). Not part of the profile schema; used to reproduce §15's
+        // before/after measurement without a rebuild per config change.
+        if (const char* ws = std::getenv("CYPHALM_RPSM_WORLD_STATS")) {
+            rc.use_online_world_stats = (std::atoi(ws) != 0);
+        }
         rpsm_layer_ = std::make_unique<cypha::rpsm::RpsmSequenceLayer>(rc);
         rpsm_log_probs_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
     }
