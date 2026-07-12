@@ -465,3 +465,75 @@ Phase 3 did exactly what a de-risking phase is supposed to do: it caught a real 
 3. **BPC and kappa, the two metrics that did move in the expected direction, are not `D_eff`-specific evidence.** They support "more hidden-dim capacity helps the model" in general (a weaker, less novel claim than Paper IV's specific `D_eff`-driven κ mechanism), which does not by itself justify the Phase 4 cost under this plan's own stated goal of validating the `D_eff` mechanism specifically.
 
 **Recommended next step before any Phase 4 scheduling:** a small, targeted follow-up — scale `kLstmHiddenHistoryMax` (or add a `--lstm-hidden-history-rows` override) so the sample count tracks `hidden` (e.g., ≥2× `hidden` rows, or report both the raw and width-normalized participation ratio side by side), then re-run the cheap `n_train=5000` sweep and this Phase 3 pair to confirm which of the two explanations in Finding 2 is correct before spending another multi-hour-to-multi-day budget on 1024-dim. The **bonus 1024-dim run offered as optional in this task was not started**, per this recommendation — Phase 3's own result is the reason not to, not a time-budget constraint (there was time remaining in this pass).
+
+---
+
+## Epistemic feedback loop verification (2026-07-11)
+
+**Status:** Investigated end-to-end, wired in behind an opt-in flag, measured, tested, no regressions. This resolves the §3 open question ("present as headers — not verified wired into the D17 train/eval loop... the self-correcting wrapper gap is worth a follow-up ticket since Paper IV's κ=0.89 estimate assumes it's active"). Executed against a fresh `native/build_selfcorrect` scratch build (does not touch `native/build_math`, `bench/BASELINE_LOCK.json`, or the overnight orchestration scripts — verified clean via `git status --short` on those paths throughout). `native/build_scale`'s independent hidden-dim-scale confirmation run and `native/src/intelligence/measurers.*`/`cyphalm_bench_native.cpp`'s `--lstm-hidden` parsing were not touched.
+
+### 1. What `self_correcting_infer.hpp`/`.cpp` and `epistemic_threshold.hpp`/`.cpp` actually do
+
+Read end to end. The mechanism is exactly as advertised: `self_correcting_infer_at_h_impl` (`native/src/intelligence/self_correcting_infer.cpp:16-52`) runs one inference pass, computes `r_eu = 1 − confidence`, and while `EpistemicThreshold::should_correct(r_eu)` (`r_eu > nig_.mean()`, `epistemic_threshold.cpp:8-10`) is true, re-infers up to `max_passes` times with widened "deliberation" bounds (`deliberation_lo *= 0.82` floor `0.05`, `deliberation_hi += 0.05` ceiling `1.0`, `self_correcting_infer.cpp:36-37`), keeping the highest-confidence pass, then calls `threshold.update(r_eu, corrected)` to adapt the learned threshold (lower it after a helpful correction, raise it after a false-positive-shaped one, `epistemic_threshold.cpp:12-18`). This part of the doc's original suspicion — "is the mechanism itself real, or a stub" — is resolved: it is a real, working, correctly-implemented mechanism, not a stub.
+
+### 2. Call-site trace — correcting an inaccuracy in the task's own premise
+
+The task's brief (and, transitively, a prior grep this task inherited) asserted `self_correcting_infer`/`SelfCorrectingResult`/`EpistemicThreshold` are referenced in `cyphalm_model.cpp`, `intelligence_profiler.cpp`, `cyphalm_generation.cpp`, and `branch_a_router.cpp`. Re-grepping precisely for the actual symbols (not just the substring `"epistemic"`) shows **this was only true for one of the four**:
+
+| File | Claimed to reference the wrapper | Actually does? |
+|---|---|---|
+| `cyphalm_generation.cpp` | yes | **yes** — but see below, it reimplements the LM-native analog inline, it doesn't call `self_correcting_infer()` |
+| `intelligence_profiler.cpp` | yes | **no** — `intelligence_profiler.cpp:48`'s `LandscapeSystemClass::SelfCorrectingCypha` is an unrelated static reference-landscape enum case (a hardcoded Paper-IV comparison point for `kappa`), not a call into `self_correcting_infer.hpp`. Its other `epistemic_var`/`r_eu` references are the DIF-measured uncertainty, not this wrapper. |
+| `branch_a_router.cpp` | yes | **no** — its `epistemic_threshold_` is a plain `double` router-config field feeding a simple `shannon_entropy(probs) > threshold` abstention check (`branch_a_router.cpp:270-382`); it does not use the `EpistemicThreshold` class or `self_correcting_infer` at all. (The real caller in this family is `native/apps/branch_a_rest_routes.cpp`, not `branch_a_router.cpp`.) |
+| `cyphalm_model.cpp` (pre-this-change) | yes | **no** — zero references to `self_correct`, `SelfCorrectingResult`, or `EpistemicThreshold` existed before this pass; grep confirmed only unrelated `epistemic_var`/`compute_epistemic_ratio` usage (the DIF measurement feeding `use_reu_forget_gate`, a different, already-shipped Paper IV mechanism). |
+
+The **real** call sites of the literal `self_correcting_infer()`/`self_correcting_infer_at_h()` functions are: `native/apps/cypha_rest.cpp:864` (a REST inference endpoint, opt-in via request-body `self_correct`), and two test/smoke tools (`intelligence_profiler_papers.cpp:137`, and `lm_self_correct_smoke.cpp`, which despite its name only exercises `EpistemicThreshold` directly). **None of these are on the D17 train/eval/bench path.** `cyphalm_generation.cpp` (`generate_decode`/`stream_generate`, the text-generation/decode path — not train/eval) has its own separate, LM-native reimplementation of the same algorithm (`self_correct_predict`, `cyphalm_generation.cpp:236-278`, using the same `EpistemicThreshold` class but operating on `CyphaLMModel`/`PredictNextOutput` directly instead of calling `self_correcting_infer_at_h`), gated by `DecodeParams::self_correct` which **defaults to `false`** (`cyphalm_generation.hpp:35`) and is never set by any D17 bench/train/eval call site.
+
+**Architectural finding, not just a wiring gap:** `self_correcting_infer()`/`self_correcting_infer_at_h()` take a `cypha::CyphaInferModel&` (`infer_cpu.hpp:66`) — a classification model (labels + confidence, `CyphaDIF` + `VectorEncoder`) — not a `cypha::cyphalm::CyphaLMModel&` (the D17 char-LSTM LM, which returns per-token `log_probs`, not a label). These are different, incompatible types. This is why `cyphalm_generation.cpp` had to write its *own* parallel implementation rather than calling the header's functions directly — the literal wrapper cannot be called on the D17 model at all without an adapter. This matters for scoping the fix (§4 below): the "small, low-risk fix" is reusing the existing LM-native pattern in the D17 eval loop, not making `self_correcting_infer()` itself reach D17.
+
+### 3. Direct evidence: `eval_bpc`/`accumulate_intelligence_profile` (pre-this-change)
+
+The two functions that back every `cyphalm_bench_native --profile d17` BPC/κ/r_eu number call `predict_next(tok)` once per token and use the result as-is — `native/src/cyphalm/cyphalm_model.cpp` (pre-change) `eval_bpc` and `accumulate_intelligence_profile`, both a simple `for` loop with no `EpistemicThreshold`/self-correction of any kind. `cyphalm_bench_native.cpp`'s `main()` calls exactly these two functions (plus `train_sequence`, which also has zero self-correction references). **Conclusion: for the current default D17/math-integration bench profile, Paper IV's κ=0.89 estimate's "self-correcting wrapper active" assumption does NOT hold** — the wrapper exists in the codebase, is correctly implemented, and is active on the REST-serving and (opt-in, off-by-default) text-generation paths, but was completely unreached by the D17 train/eval/bench loop before this pass. This confirms the doc's §3 suspicion.
+
+### 4. Fix implemented: opt-in `--use-self-correcting-loop`
+
+Given the CyphaInferModel/CyphaLMModel type mismatch above, the correct low-risk fix is not "call `self_correcting_infer()` from `eval_bpc`" (wrong type, would need a non-trivial adapter) but to bring the *already-proven* LM-native pattern (`cyphalm_generation.cpp`'s `self_correct_predict`, which has been exercising this exact algorithm on `CyphaLMModel` since it was written) into the eval loop, self-contained and independent of `cyphalm_generation.cpp` (zero changes to that file, zero regression risk there):
+
+- `cyphalm_config.hpp`: new `bool use_self_correcting_loop = false;` (default off — does not change the locked D17 baseline unless explicitly requested).
+- `cyphalm_model.hpp`/`.cpp`: new private `CyphaLMModel::self_correct_if_needed(initial, threshold)` — computes live `r_eu` via the same `compute_epistemic_ratio` already used elsewhere in this file; if `r_eu` exceeds the threshold and `context_mode == Hybrid` (D17's mode), re-blends the cached hybrid GRIA/LSTM logits via the existing `repredict_hybrid_blend` (no extra forward pass) at a progressively LSTM-shifted blend for up to 3 passes, keeping the highest-confidence result — algorithmically identical to `self_correct_predict`, written independently so `cyphalm_generation.cpp` is untouched.
+- `eval_bpc`/`accumulate_intelligence_profile`: when `cfg_.use_self_correcting_loop`, route each `predict_next(tok)` result through `self_correct_if_needed` before scoring/observing, using one `EpistemicThreshold(0.5, 5.0)` instance per eval pass (mirrors the prior `(0.5, 5.0)` default used at every other call site: `cypha_rest.cpp`, `shell_main.cpp`, `intelligence_profiler_papers.cpp`).
+- `cyphalm_bench_native.cpp`: new `--use-self-correcting-loop` CLI flag, applied unconditionally (same rationale as `--lstm-hidden`: a verification flag, should work without also requiring `--math-integration`), echoed into the output JSON as `use_self_correcting_loop` for traceability.
+
+### 5. Measured effect at `--profile d17 --n-train 5000 --n-eval 256 --intelligence-profile --bench-seed 42`
+
+| | bpc | `criticality_score` (κ) | r_eu | `lstm_hidden_d_eff` |
+|---|---|---|---|---|
+| flag off (baseline) | 4.039556 | 0.855927 | 0.168189 | 0.270968 |
+| flag on | 4.039556 | 0.855927 | 0.168189 | 0.270968 |
+
+**Bit-for-bit identical** — confirmed with a full-file diff of the two output JSONs (only the echoed `use_self_correcting_loop` field itself differs). This is a real, verified null result, not a wiring failure: `EpistemicThreshold`'s prior mean is `0.5` (`epistemic_threshold.cpp:5`, `prior_mu=0.5` default used at every existing call site including this new one), and this profile's measured `r_eu` is chronically low — the profile JSON's own `failure_modes.low_r_eu: true` and the `r_eu` critical target gap (`point: 0.168` vs. `critical_target: 0.7`) show the model's live epistemic ratio never gets close to `0.5` at any point in this 256-token eval pass, so `threshold.should_correct(r_eu)` never returns true and the correction loop never fires a single time (confirmed directly with temporary `std::cerr` instrumentation during development, since removed — every one of 256 tokens logged `trigger=0`). Since the threshold never fires, it also never adapts away from its `0.5` prior, so this null result is stable, not a transient cold-start artifact — it would not resolve itself with a longer eval window at this training scale.
+
+### 6. Test results
+
+`ctest --test-dir native/build_selfcorrect -R "self_correct|epistemic|intelligence"` (7 matching tests, after building `intelligence_profiler_smoke`, `intelligence_profiler_papers`, `cypha_intelligence_bench`, `cypha_bench_run`, `intelligence_lm_monitor_smoke`, `lm_self_correct_smoke`, `cyphalm_bench_native`):
+
+```
+100% tests passed, 0 tests failed out of 7
+  native_intelligence_profiler_smoke .......... Passed
+  native_intelligence_profiler_papers .......... Passed
+  native_intelligence_bench_smoke .............. Passed
+  native_cyphalm_bench_intelligence_profile .... Passed
+  native_d39_intelligence_monitor_smoke ........ Passed
+  native_intelligence_lm_monitor_smoke ......... Passed
+  native_lm_self_correct_smoke ................. Passed
+```
+
+No regressions. The flag-off path was also directly confirmed bit-identical to this document's own recorded Phase 2b numbers (§ above: `bpc=4.039556`, `criticality_score=0.855927`, `lstm_hidden_d_eff=0.270968` at hidden=128) both before and after this change, so the locked D17/math-integration baseline (`bench/BASELINE_REPORT.md`, `bench/BASELINE_LOCK.json` — neither touched by this pass) is unaffected by construction, not just by flag default.
+
+### 7. Answer to the open question
+
+**Is the epistemic feedback loop active for the current default D17/math-integration profile, and does Paper IV's κ=0.89 assumption hold?**
+
+- **Before this pass: no.** The wrapper existed, was correctly implemented, and was active on the REST-serving path and the (default-off) text-generation path, but was never reached by D17 train/eval/bench — Paper IV's "self-correcting wrapper active" assumption did not hold for the profile its own κ=0.89 estimate is meant to describe.
+- **After this pass: wired in, opt-in, verified inert at default settings.** `--use-self-correcting-loop` now makes the D17 eval/intelligence-profile path exercise the same algorithm as the generation path, with zero effect on the existing default behavior (bit-identical output when the flag is absent, confirmed above and by the unchanged 7-test suite). Turning the flag *on* at the current default `n_train=5000` medium-tier profile, current `lstm_hidden=128`, and math-integration's default r_eu regime produces **no measurable change** in `bpc`/κ/r_eu, because live `r_eu` never crosses even the lenient `0.5` trigger threshold at this scale — the model is comfortably within its "confident enough" regime throughout this eval window (consistent with `failure_modes.low_r_eu: true` already being flagged in every prior profile run in this document).
+- **Practical implication for Paper IV's κ=0.89 estimate:** the estimate's assumption is now *technically satisfiable* (the mechanism can be activated), but activating it changes nothing at the scale/profile measured so far, so it cannot be credited with (or blamed for) any part of the existing κ numbers in this document or in `BASELINE_LOCK.json`. Whether it would engage at other scales (e.g. earlier in training when the model is less confident, or at higher `lstm_hidden` where the Phase 2b/Phase 3 results above show `d_eff`/representational behavior is itself still not fully understood) is open — this pass answered "is it wired and safe," not "does it ever fire in some other regime," which would need a dedicated sweep over training step / `r_eu` trajectory and is a natural next follow-up but out of scope here.

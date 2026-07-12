@@ -40,6 +40,7 @@
 
 namespace cypha::intelligence {
 class IntelligenceProfiler;
+class EpistemicThreshold;
 }  // namespace cypha::intelligence
 
 namespace cypha::cyphalm {
@@ -263,6 +264,14 @@ class CyphaLMModel {
     void rpsm_bptt_embed_flush();
     void set_view_slot(int slot) { current_view_slot_ = slot; }
     void refresh_laplace_prior();
+
+    /// Paper IV self-correcting loop (opt-in via `cfg_.use_self_correcting_loop`, see its
+    /// doc comment in `cyphalm_config.hpp`): re-blend the hybrid GRIA/LSTM logits at a wider
+    /// deliberation setting when live r_eu exceeds `threshold`, keeping whichever pass has
+    /// higher confidence. Returns `initial` unchanged when the flag is off, when
+    /// `context_mode != Hybrid`, or when r_eu does not exceed the threshold.
+    PredictNextOutput self_correct_if_needed(const PredictNextOutput& initial,
+                                             cypha::intelligence::EpistemicThreshold& threshold) const;
 
     friend CyphaLMModel load_cyphalm_model(const std::string& json_path);
 };

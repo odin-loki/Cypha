@@ -183,6 +183,14 @@ struct CyphaLMConfig {
     bool use_reu_forget_gate = false;
     /// Blend factor for r_eu forget gate (0=off, 1=full multiply; Phase 36 default 0.25).
     double reu_forget_gate_blend = 0.25;
+    /// Paper IV §2.3/§4.2 epistemic feedback loop (SelfCorrectingCypha wrapper): during
+    /// `eval_bpc`/`accumulate_intelligence_profile`, re-run the hybrid GRIA/LSTM blend at a
+    /// wider deliberation setting (up to 3 passes) when live r_eu exceeds a learned
+    /// `EpistemicThreshold`, keeping whichever pass has higher confidence. Hybrid-mode only;
+    /// no-op otherwise. Opt-in and default-off: does not change the locked D17 BPC/kappa
+    /// baseline unless explicitly requested (2026-07-11 follow-up to
+    /// docs/reports/HIDDEN_DIM_SCALE_PLAN.md §3's self-correcting-wrapper gap).
+    bool use_self_correcting_loop = false;
     /// Damp κ trajectory λ boost when EMA κ exceeds target (Phase 36).
     bool use_kappa_trajectory_ceiling = false;
     /// Direct κ-excess backprop nudge (Phase 37; separate from ceiling λ).

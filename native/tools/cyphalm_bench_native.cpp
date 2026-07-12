@@ -66,6 +66,7 @@ struct Args {
     int max_memory_slots = -1;
     int compress_interval = -1;
     int lstm_hidden = -1;
+    bool use_self_correcting_loop = false;
     std::int64_t bench_seed = -1;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
@@ -109,7 +110,9 @@ void usage() {
         << "       --lstm-hidden N  (LSTM head hidden width override; default: profile value, e.g. 128 for d17)\n"
         << "       --bench-seed N\n"
         << "       --use-eigenvalue-d-eff\n"
-        << "       --use-reu-forget-gate\n";
+        << "       --use-reu-forget-gate\n"
+        << "       --use-self-correcting-loop  (Paper IV epistemic feedback loop in eval/intelligence-profile;\n"
+        << "                                    opt-in, default off, hybrid-mode only; see HIDDEN_DIM_SCALE_PLAN.md)\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -222,6 +225,7 @@ Args parse_args(int argc, char** argv) {
         }
         else if (k == "--use-eigenvalue-d-eff") a.use_eigenvalue_d_eff = true;
         else if (k == "--use-reu-forget-gate") a.use_reu_forget_gate = true;
+        else if (k == "--use-self-correcting-loop") a.use_self_correcting_loop = true;
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -276,6 +280,14 @@ int main(int argc, char** argv) {
         // (128 for the d17 production profile).
         if (args.lstm_hidden > 0) {
             cfg.lstm_hidden = args.lstm_hidden;
+        }
+        // Unconditional for the same reason as --lstm-hidden above: this is a verification flag
+        // for the epistemic feedback loop (docs/reports/HIDDEN_DIM_SCALE_PLAN.md's 2026-07-11
+        // follow-up section) and should be usable without also requiring --math-integration.
+        // Default (false) leaves eval_bpc/accumulate_intelligence_profile behavior identical to
+        // today, so the locked D17 baseline is unaffected unless this flag is passed explicitly.
+        if (args.use_self_correcting_loop) {
+            cfg.use_self_correcting_loop = true;
         }
         if (args.math_integration) {
             cypha::cyphalm::apply_math_integration_preset(cfg);
@@ -426,6 +438,7 @@ int main(int argc, char** argv) {
             {"bpc", bpc},
             {"vocab_size", cfg.vocab_size},
             {"lstm_hidden", cfg.lstm_hidden},
+            {"use_self_correcting_loop", cfg.use_self_correcting_loop},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;
         if (args.intelligence_profile) {

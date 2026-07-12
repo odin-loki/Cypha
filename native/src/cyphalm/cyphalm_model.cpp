@@ -877,10 +877,6 @@ PredictNextOutput CyphaLMModel::self_correct_if_needed(
     }
     const double r_eu =
         cypha::intelligence::compute_epistemic_ratio(initial.epistemic_var, initial.aleatoric_var);
-    if (std::getenv("CYPHA_SC_DEBUG")) {
-        std::cerr << "[sc-debug] r_eu=" << r_eu << " threshold=" << threshold.threshold()
-                  << " trigger=" << (threshold.should_correct(r_eu) ? 1 : 0) << "\n";
-    }
     if (!threshold.should_correct(r_eu)) {
         return initial;
     }
