@@ -456,9 +456,29 @@ int main(int argc, char** argv) {
             // directly over the actual lstm_hidden-wide LSTM hidden-state history, so it is
             // the statistic that should move when --lstm-hidden changes (see
             // docs/reports/HIDDEN_DIM_SCALE_PLAN.md).
-            const double lstm_hidden_d_eff = model.lstm_hidden_d_eff_report();
+            //
+            // Phase 3 follow-up (2026-07-12, "Finding 2" / history-buffer sampling fix):
+            // `lstm_hidden_d_eff` alone (the width-normalized ratio) cannot distinguish a
+            // genuine representational change from a statistical-power artifact of the
+            // history-buffer sample count vs. `lstm_hidden`. Export the raw (unnormalized)
+            // effective-dimension count and the actual samples/dims ratio used for *this*
+            // measurement alongside it so a future reader can tell at a glance whether a
+            // given `lstm_hidden_d_eff` value is well-powered, without re-deriving it from
+            // `lstm_hidden` and the (now instance-scaled, not hardcoded) history-buffer cap.
+            const auto lstm_hidden_d_eff_detail = model.lstm_hidden_d_eff_detail();
+            const bool lstm_hidden_d_eff_available = lstm_hidden_d_eff_detail.normalized >= 0.0;
             out["intelligence_profile"]["lstm_hidden_d_eff"] =
-                lstm_hidden_d_eff >= 0.0 ? nlohmann::json(lstm_hidden_d_eff) : nlohmann::json(nullptr);
+                lstm_hidden_d_eff_available ? nlohmann::json(lstm_hidden_d_eff_detail.normalized)
+                                            : nlohmann::json(nullptr);
+            out["intelligence_profile"]["lstm_hidden_d_eff_raw"] =
+                lstm_hidden_d_eff_available ? nlohmann::json(lstm_hidden_d_eff_detail.raw)
+                                            : nlohmann::json(nullptr);
+            out["intelligence_profile"]["lstm_hidden_d_eff_sample_ratio"] =
+                lstm_hidden_d_eff_available ? nlohmann::json(lstm_hidden_d_eff_detail.sample_ratio)
+                                            : nlohmann::json(nullptr);
+            out["intelligence_profile"]["lstm_hidden_d_eff_n_samples"] =
+                lstm_hidden_d_eff_available ? nlohmann::json(lstm_hidden_d_eff_detail.n_samples)
+                                            : nlohmann::json(nullptr);
             out["intelligence_profile"]["lstm_hidden_d_eff_method"] =
                 cfg.use_eigenvalue_d_eff ? "covariance_eigenvalue" : "variance_proxy";
             out["profile_completeness"] =

@@ -160,6 +160,18 @@ std::vector<double> matvec_transpose(const std::vector<double>& m, int rows, int
 
 CyphaLMModel::CyphaLMModel(CyphaLMConfig cfg) : cfg_(std::move(cfg)) {
     hybrid_blend_logit_ = cfg_.hybrid_blend_logit;
+    // Phase 3 follow-up (docs/reports/HIDDEN_DIM_SCALE_PLAN.md "Finding 2"): scale the
+    // LSTM hidden-state history ring buffer with `lstm_hidden` so `lstm_hidden_d_eff()`'s
+    // sample/dims ratio doesn't collapse at wide hidden sizes. `2 * lstm_hidden` targets a
+    // >=2x samples/dims ratio (the doc's own recommended floor); `std::max(48, ...)` keeps
+    // the pre-fix constant as a floor for tiny/degenerate `lstm_hidden` configs rather than
+    // shrinking below what was already known to work. At the default `lstm_hidden=128`
+    // this intentionally changes behavior (256 rows instead of 48, ratio 2.0 instead of
+    // 0.375) -- documented, not a silent regression: 48 rows was never derived from
+    // anything about hidden=128 specifically, just a fixed legacy constant, so there is no
+    // "correct" old behavior at hidden=128 to preserve bit-for-bit, only a consistent rule
+    // applied uniformly across all `lstm_hidden` values.
+    lstm_h_history_max_ = std::max(48, 2 * cfg_.lstm_hidden);
     init_components();
 }
 
@@ -647,15 +659,16 @@ void CyphaLMModel::append_lstm_hidden_history(const std::vector<double>& h) {
     if (h.empty()) {
         return;
     }
-    if (static_cast<int>(lstm_h_history_rows_.size()) >= kLstmHiddenHistoryMax) {
-        lstm_h_history_rows_.erase(lstm_h_history_rows_.begin());
+    if (static_cast<int>(lstm_h_history_rows_.size()) >= lstm_h_history_max_) {
+        lstm_h_history_rows_.pop_front();
     }
     lstm_h_history_rows_.push_back(h);
 }
 
-double CyphaLMModel::lstm_hidden_d_eff() const {
+LstmHiddenDEffReport CyphaLMModel::lstm_hidden_d_eff_detail() const {
+    LstmHiddenDEffReport report;
     if (lstm_h_history_rows_.size() < 4U || !lstm_) {
-        return -1.0;
+        return report;
     }
     const int hidden = lstm_->hidden;
     const int rows = static_cast<int>(lstm_h_history_rows_.size());
@@ -667,11 +680,19 @@ double CyphaLMModel::lstm_hidden_d_eff() const {
             flat[static_cast<std::size_t>(r * hidden + j)] = row[static_cast<std::size_t>(j)];
         }
     }
-    return cypha::intelligence::compute_participation_ratio(
-        flat.data(), rows, hidden,
-        cfg_.use_eigenvalue_d_eff
-            ? cypha::intelligence::ParticipationRatioMethod::CovarianceEigenvalue
-            : cypha::intelligence::ParticipationRatioMethod::VarianceProxy);
+    const auto method = cfg_.use_eigenvalue_d_eff
+                             ? cypha::intelligence::ParticipationRatioMethod::CovarianceEigenvalue
+                             : cypha::intelligence::ParticipationRatioMethod::VarianceProxy;
+    report.raw = cypha::intelligence::compute_participation_ratio_raw(flat.data(), rows, hidden, method);
+    report.normalized = std::clamp(report.raw / static_cast<double>(hidden), 0.0, 1.0);
+    report.n_samples = rows;
+    report.n_dims = hidden;
+    report.sample_ratio = static_cast<double>(rows) / static_cast<double>(hidden);
+    return report;
+}
+
+double CyphaLMModel::lstm_hidden_d_eff() const {
+    return lstm_hidden_d_eff_detail().normalized;
 }
 
 double CyphaLMModel::hybrid_forget_gate_scale(const DIFPredictOutput& dif_out) const {

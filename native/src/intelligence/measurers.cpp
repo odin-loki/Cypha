@@ -62,7 +62,8 @@ double column_variance(const double* activations, int n_samples, int n_dims, int
   return var / static_cast<double>(n_samples);
 }
 
-double participation_ratio_variance_proxy(const double* activations, int n_samples, int n_dims) {
+double participation_ratio_variance_proxy_raw(const double* activations, int n_samples,
+                                              int n_dims) {
   double sum = 0.0;
   double sum_sq = 0.0;
   for (int d = 0; d < n_dims; ++d) {
@@ -74,7 +75,12 @@ double participation_ratio_variance_proxy(const double* activations, int n_sampl
     return 0.0;
   }
   const double participation = (sum * sum) / sum_sq;
-  return std::clamp(participation / static_cast<double>(n_dims), 0.0, 1.0);
+  return std::clamp(participation, 0.0, static_cast<double>(n_dims));
+}
+
+double participation_ratio_variance_proxy(const double* activations, int n_samples, int n_dims) {
+  const double raw = participation_ratio_variance_proxy_raw(activations, n_samples, n_dims);
+  return std::clamp(raw / static_cast<double>(n_dims), 0.0, 1.0);
 }
 
 void jacobi_symmetric_eigenvalues(const std::vector<double>& matrix, int n,
@@ -171,7 +177,8 @@ std::vector<double> sample_covariance_matrix(const double* activations, int n_sa
 // (since C_ji == C_ij), so this is an exact algebraic identity for Σλ and Σλ², not an
 // approximation of the eigenvalue method — it is that method, minus the O(n_dims^3)
 // Jacobi diagonalization that the participation-ratio formula never actually needed.
-double participation_ratio_trace_frobenius_from_cov(const std::vector<double>& cov, int n_dims) {
+double participation_ratio_trace_frobenius_from_cov_raw(const std::vector<double>& cov,
+                                                         int n_dims) {
   double trace = 0.0;
   double frob_sq = 0.0;
   for (int i = 0; i < n_dims; ++i) {
@@ -185,7 +192,21 @@ double participation_ratio_trace_frobenius_from_cov(const std::vector<double>& c
     return 0.0;
   }
   const double participation = (trace * trace) / frob_sq;
-  return std::clamp(participation / static_cast<double>(n_dims), 0.0, 1.0);
+  return std::clamp(participation, 0.0, static_cast<double>(n_dims));
+}
+
+double participation_ratio_trace_frobenius_from_cov(const std::vector<double>& cov, int n_dims) {
+  const double raw = participation_ratio_trace_frobenius_from_cov_raw(cov, n_dims);
+  return std::clamp(raw / static_cast<double>(n_dims), 0.0, 1.0);
+}
+
+double participation_ratio_covariance_trace_frobenius_raw(const double* activations,
+                                                           int n_samples, int n_dims) {
+  if (n_samples < 2 || n_dims <= 0) {
+    return participation_ratio_variance_proxy_raw(activations, n_samples, n_dims);
+  }
+  const std::vector<double> cov = sample_covariance_matrix(activations, n_samples, n_dims);
+  return participation_ratio_trace_frobenius_from_cov_raw(cov, n_dims);
 }
 
 double participation_ratio_covariance_trace_frobenius(const double* activations, int n_samples,
@@ -197,10 +218,10 @@ double participation_ratio_covariance_trace_frobenius(const double* activations,
   return participation_ratio_trace_frobenius_from_cov(cov, n_dims);
 }
 
-double participation_ratio_covariance_eigenvalue(const double* activations, int n_samples,
-                                                 int n_dims) {
+double participation_ratio_covariance_eigenvalue_raw(const double* activations, int n_samples,
+                                                      int n_dims) {
   if (n_samples < 2 || n_dims <= 0) {
-    return participation_ratio_variance_proxy(activations, n_samples, n_dims);
+    return participation_ratio_variance_proxy_raw(activations, n_samples, n_dims);
   }
   // Above this width the O(n_dims^3) Jacobi diagonalization becomes prohibitively
   // expensive (~1B FLOPs already at 256, ~69B at 1024). Rather than silently falling
@@ -211,7 +232,7 @@ double participation_ratio_covariance_eigenvalue(const double* activations, int 
   constexpr int kJacobiMaxDims = 256;
   const std::vector<double> cov = sample_covariance_matrix(activations, n_samples, n_dims);
   if (n_dims > kJacobiMaxDims) {
-    return participation_ratio_trace_frobenius_from_cov(cov, n_dims);
+    return participation_ratio_trace_frobenius_from_cov_raw(cov, n_dims);
   }
   std::vector<double> eigenvalues;
   jacobi_symmetric_eigenvalues(cov, n_dims, eigenvalues);
@@ -225,7 +246,13 @@ double participation_ratio_covariance_eigenvalue(const double* activations, int 
     return 0.0;
   }
   const double participation = (sum * sum) / sum_sq;
-  return std::clamp(participation / static_cast<double>(n_dims), 0.0, 1.0);
+  return std::clamp(participation, 0.0, static_cast<double>(n_dims));
+}
+
+double participation_ratio_covariance_eigenvalue(const double* activations, int n_samples,
+                                                 int n_dims) {
+  const double raw = participation_ratio_covariance_eigenvalue_raw(activations, n_samples, n_dims);
+  return std::clamp(raw / static_cast<double>(n_dims), 0.0, 1.0);
 }
 
 }  // namespace
@@ -247,6 +274,20 @@ double compute_participation_ratio(const double* activations, int n_samples, int
     return participation_ratio_covariance_trace_frobenius(activations, n_samples, n_dims);
   }
   return participation_ratio_variance_proxy(activations, n_samples, n_dims);
+}
+
+double compute_participation_ratio_raw(const double* activations, int n_samples, int n_dims,
+                                       ParticipationRatioMethod method) {
+  if (activations == nullptr || n_samples <= 0 || n_dims <= 0) {
+    return 0.0;
+  }
+  if (method == ParticipationRatioMethod::CovarianceEigenvalue) {
+    return participation_ratio_covariance_eigenvalue_raw(activations, n_samples, n_dims);
+  }
+  if (method == ParticipationRatioMethod::TraceFrobenius) {
+    return participation_ratio_covariance_trace_frobenius_raw(activations, n_samples, n_dims);
+  }
+  return participation_ratio_variance_proxy_raw(activations, n_samples, n_dims);
 }
 
 double compute_calibration(const double* confidences, const int* correct, int n, int n_bins) {

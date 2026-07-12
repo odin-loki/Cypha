@@ -29,6 +29,19 @@ double compute_participation_ratio(const double* activations, int n_samples, int
 double compute_participation_ratio(const double* activations, int n_samples, int n_dims,
                                    ParticipationRatioMethod method);
 
+/// Raw (unnormalized) participation ratio ``(Σλ)² / Σλ²`` -- an *effective-dimension
+/// count* in ``[0, n_dims]`` (bounded above by ``min(n_samples, n_dims)`` in practice,
+/// since a covariance estimated from ``n_samples`` rows has rank at most
+/// ``n_samples - 1``), *before* the ``/ n_dims`` width-normalization that
+/// ``compute_participation_ratio`` applies. ``compute_participation_ratio(...) ==
+/// compute_participation_ratio_raw(...) / n_dims`` exactly (Phase 3 follow-up,
+/// docs/reports/HIDDEN_DIM_SCALE_PLAN.md: the width-normalized ratio alone cannot
+/// distinguish "genuinely lower-dimensional representation" from "under-sampled
+/// relative to width," since both push the normalized ratio down the same way -- the
+/// raw count plus the caller-known ``n_samples``/``n_dims`` disambiguates).
+double compute_participation_ratio_raw(const double* activations, int n_samples, int n_dims,
+                                       ParticipationRatioMethod method = ParticipationRatioMethod::VarianceProxy);
+
 /// Expected calibration error; returns ``C = 1 - ECE``.
 double compute_calibration(const double* confidences, const int* correct, int n, int n_bins = 10);
 

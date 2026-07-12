@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -70,6 +71,29 @@ struct TrainStepMetrics {
     double profile_guided_loss = 0.0;
     double ewc_penalty = 0.0;
     double free_energy_penalty = 0.0;
+};
+
+/// Phase 3 follow-up (docs/reports/HIDDEN_DIM_SCALE_PLAN.md, "history-buffer sampling
+/// fix"): full detail behind ``lstm_hidden_d_eff_report()`` so callers can tell a
+/// statistically well-powered measurement from an under-sampled one without re-deriving
+/// it from ``lstm_hidden`` and a hardcoded history-buffer constant. All fields are -1.0
+/// (or 0 for the int fields) when there's no LSTM head or fewer than 4 history rows have
+/// been observed yet -- the same "unavailable" contract as the legacy scalar accessor.
+struct LstmHiddenDEffReport {
+    /// Width-normalized participation ratio in [0, 1] -- ``raw / n_dims``. This is the
+    /// value historically exported as ``lstm_hidden_d_eff``; kept for continuity with
+    /// existing consumers/baselines.
+    double normalized = -1.0;
+    /// Unnormalized effective-dimension count in [0, n_dims] -- ``(Σλ)² / Σλ²`` before
+    /// the width normalization. Bounded above by ``min(n_samples, n_dims)`` in practice.
+    double raw = -1.0;
+    /// ``n_samples / n_dims`` actually used for this specific measurement -- the
+    /// statistical-power signal Finding 2 (Phase 3, 2026-07-11) was missing. Values well
+    /// below 1.0 mean the covariance estimate is underdetermined and ``normalized``
+    /// should be read with caution (or not at all).
+    double sample_ratio = -1.0;
+    int n_samples = 0;
+    int n_dims = 0;
 };
 
 /// Unified native CyphaLM stack (Tier 0–2–4 integration point).
@@ -162,6 +186,10 @@ class CyphaLMModel {
     /// than 4 hidden-state rows have been observed yet (see ``lstm_hidden_d_eff()``).
     double lstm_hidden_d_eff_report() const { return lstm_hidden_d_eff(); }
 
+    /// Full raw/normalized/sample-ratio detail behind ``lstm_hidden_d_eff_report()`` --
+    /// see ``LstmHiddenDEffReport`` for field semantics (Phase 3 follow-up).
+    LstmHiddenDEffReport lstm_hidden_d_eff_detail() const;
+
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
  private:
@@ -228,8 +256,22 @@ class CyphaLMModel {
     std::vector<double> last_hybrid_log_g_;
     std::vector<double> last_hybrid_log_l_;
     HybridEwcRegularizer ewc_;
-    static constexpr int kLstmHiddenHistoryMax = 48;
-    std::vector<std::vector<double>> lstm_h_history_rows_;
+    // Phase 3 follow-up (2026-07-12, docs/reports/HIDDEN_DIM_SCALE_PLAN.md "Finding 2"):
+    // this used to be a fixed `kLstmHiddenHistoryMax = 48` regardless of `lstm_hidden`,
+    // which meant the sample/dims ratio feeding `lstm_hidden_d_eff()`'s participation-
+    // ratio estimate *shrank* as `lstm_hidden` grew (0.375 at hidden=128, down to 0.094
+    // at hidden=512 -- a 4x more severely underdetermined covariance estimate at exactly
+    // the widths this metric is supposed to compare). `lstm_h_history_max_` is now sized
+    // from `cfg_.lstm_hidden` at construction time (see `init_components()`) so the
+    // sample count tracks hidden width instead of a constant. Kept as a per-instance
+    // member (not `static constexpr`) since it depends on `cfg_`, which is only known at
+    // runtime. `std::deque` (not `std::vector`) so the ring-buffer's `pop_front()` stays
+    // O(1) instead of O(history rows) now that the row count itself scales with
+    // `lstm_hidden` and can reach several hundred to ~1000+ rows -- this is called once
+    // per training step (`append_lstm_hidden_history`, cyphalm_model.cpp), so an O(rows)
+    // per-step cost would have compounded across a 300k-step production run.
+    int lstm_h_history_max_ = 48;
+    std::deque<std::vector<double>> lstm_h_history_rows_;
 
     void init_components();
     void append_lstm_hidden_history(const std::vector<double>& h);
