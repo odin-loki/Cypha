@@ -11,6 +11,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+
 $srcExe = Join-Path $BuildDir "cyphalm_bench_native.exe"
 if (-not (Test-Path $srcExe)) { throw "missing $srcExe" }
 if (-not (Test-Path $SlotExe)) { Copy-Item $srcExe $SlotExe -Force }
@@ -21,8 +23,9 @@ New-Item -ItemType File -Path $lock -Force | Out-Null
 
 $env:CYPHALM_TRAIN_LOG_EVERY = "$LogEvery"
 $modes = $Modes
-$root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-if (-not (Test-Path (Join-Path $root "native"))) { $root = Split-Path $PSScriptRoot -Parent }
+# Same repo-root double Split-Path bug as cyphalm_native_sweep.ps1 - resolve via the
+# shared helper instead of duplicating (and mis-computing) the probing logic here.
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
 $outPath = Join-Path $root $Results
 
 Push-Location $BuildDir

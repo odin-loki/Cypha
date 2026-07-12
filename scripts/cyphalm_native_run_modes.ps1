@@ -8,13 +8,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+
 $srcExe = Join-Path $BuildDir "cyphalm_bench_native.exe"
 $runExe = "C:\Temp\cyphalm_bench_build6_run.exe"
 if (-not (Test-Path $srcExe)) { throw "missing $srcExe" }
 Copy-Item $srcExe $runExe -Force
 
-$root = Split-Path $PSScriptRoot -Parent
-if (-not (Test-Path (Join-Path $root "native"))) { throw "repo root not found from $PSScriptRoot" }
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
 $outPath = Join-Path $root "docs\native\CYPHALM_NATIVE_BENCH_RESULTS.jsonl"
 
 foreach ($mode in $ModeList) {

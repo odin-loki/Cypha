@@ -1,13 +1,17 @@
 # Full native bench baseline lock (v2.2): Release build, all domains without FAST, CyphaLM BPC sweep.
 param(
-    [string]$BuildDir = "C:\Temp\cypha_full_cpp_build",
+    # Default resolved below via Get-DefaultNativeBuildDir when not passed explicitly.
+    [string]$BuildDir = "",
     [switch]$SkipBuild,
     [switch]$Medium,
     [switch]$SkipLmBench
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $stamp = Get-Date -Format "yyyyMMdd"
 
 $isMedium = $Medium -or ($env:CYPHA_BENCH_MEDIUM -eq "1")

@@ -6,7 +6,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
 
 if (-not $SkipBuild) {
     cmake -S (Join-Path $root "native") -B $BuildDir -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_EXPERIMENT_DB=OFF -G Ninja

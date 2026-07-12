@@ -9,6 +9,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+
 $srcExe = Join-Path $BuildDir "cyphalm_bench_native.exe"
 if (-not (Test-Path $srcExe)) { throw "missing $srcExe" }
 Copy-Item $srcExe $SlotExe -Force
@@ -20,8 +22,11 @@ if (Test-Path $lock) { throw "lock exists: $lock" }
 New-Item -ItemType File -Path $lock -Force | Out-Null
 
 $modes = @("hybrid", "char_lstm", "ssm", "ssm_gria", "context_bank", "spectral")
-$root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-if (-not (Test-Path (Join-Path $root "native"))) { $root = Split-Path $PSScriptRoot -Parent }
+# Bug fix: this used to double up Split-Path (scripts -> repo -> grandparent), landing
+# one directory too high before a Test-Path fallback quietly recovered. Resolve once,
+# correctly, via the shared helper (same "$PSScriptRoot -> Split-Path -Parent" pattern
+# used by the working overnight scripts).
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
 $outPath = Join-Path $root $Results
 
 Push-Location $BuildDir

@@ -1,6 +1,7 @@
 # Run cypha_tune_run on all native tune smoke sweep configs.
 param(
-    [string]$BuildDir = "C:\Temp\cypha_full_cpp_build",
+    # Default resolved below via Get-DefaultNativeBuildDir when not passed explicitly.
+    [string]$BuildDir = "",
     [int]$MaxCells = 4,
     [switch]$DryRun,
     [switch]$Write,
@@ -8,7 +9,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $tuneExe = Join-Path $BuildDir "cypha_tune_run.exe"
 $configDir = Join-Path $root "bench\config"
 $outDir = Join-Path $root "bench\artifacts\tuning"

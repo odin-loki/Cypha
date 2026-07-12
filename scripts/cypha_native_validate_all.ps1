@@ -123,14 +123,18 @@
 #   pwsh -File scripts/cypha_native_validate_all.ps1
 #   $env:CYPHA_VALIDATE_PRODUCTION = "1"; pwsh -File scripts/cypha_native_validate_all.ps1 -SkipBuild
 param(
-    [string]$BuildDir = "C:\Temp\cypha_full_cpp_build",
+    # Default resolved below via Get-DefaultNativeBuildDir when not passed explicitly.
+    [string]$BuildDir = "",
     [switch]$SkipBuild,
     [switch]$SkipBench,
     [switch]$TuneSmoke
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $results = [ordered]@{}
 
 function Step-Result {
