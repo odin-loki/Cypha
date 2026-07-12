@@ -386,11 +386,11 @@ Planned engineering directions distilled from research specs. Full index: [`docs
 
 | Upgrade | Doc | Status | Success criterion |
 |---------|-----|--------|-------------------|
-| CyphaDIF matrix refactor (RPSM Option A) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) | **Planned** | Parity green; batched LLR; faster infer |
-| RPSM sequence layer (Option B) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) + [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Planned** | D17 BPC < **2.873** (hybrid baseline) |
+| CyphaDIF matrix refactor (RPSM Option A) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) | **Shipped** — GEMM kernel (`batched_llr_gemm`) default-on for the general classification/DIF path, parity-tested to 1e-12 ([`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §2) | Parity green; batched LLR; faster infer — met |
+| RPSM sequence layer (Option B) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) + [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Scaffold shipped, training-loop bugs fixed (2026-07-11/12)** — frozen output classifier and broken embedding backprop fixed; matched-scale RPSM-vs-hybrid gap narrowed from the original 156% (mismatched, bugged) to 18.7% (5k) – 33.2% (50k, growing with scale) — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §9–§13 | D17 BPC < **2.873** (hybrid baseline) — not yet met; §13 diagnoses the remaining gap as likely architectural (RPSM has no BPTT depth), not a training artifact |
 | Nyström / nonlinear boundary fixes | [`NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md) | **Partially shipped** | Native kernel LLR live; close ~18 pp sklearn XOR gap |
-| Cell hypothesis testbench (28 variants) | [`CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) | **Planned** | Beat char-LSTM / hybrid on D17 @ 300k |
-| RPSM core fixes (spectral α, norm η, orthogonal init) | [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Planned** | Forgetting ratio < 0.01; α ∈ [0.3, 0.6] |
+| Cell hypothesis testbench (28 variants) | [`CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) | **Active** — running as the production overnight cell-sweep (`cypha_cell_hypothesis_sweep`, `scripts/run_production_overnight.ps1`) | Beat char-LSTM / hybrid on D17 @ 300k |
+| RPSM core fixes (spectral α, norm η, orthogonal init) | [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Shipped (2026-07-11)** — spectral α and normalised η implemented; orthogonal init/symmetric `W_down` were already live pre-existing | Forgetting ratio < 0.01 — not separately measured; α ∈ [0.3, 0.6] — implemented |
 
 **Execution order (RPSM track):** Option A → kernel LLR into A (tuning) → Option B → global memory → D17 benchmark.
 
