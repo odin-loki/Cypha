@@ -169,6 +169,55 @@ The current training loop is purely online with a simple replay buffer. Higher-q
 
 Both require only additions to the existing hot path � no changes to `CyphaInferModel` or the binary format.
 
+**Status (2026-07-12): both SHIPPED, opt-in / default-off.** The claim above holds exactly as
+written: neither feature touches `CyphaInferModel`, `CyphaDifMemoryState`, or the `.cypha`
+binary format — both are pure additions (new free functions + one new REST route + one new
+env-gated branch in the bench training loop).
+
+- **Curriculum ordering.** `cypha::curriculum_order_ascending_confidence` (hardest-first by max
+  softmax confidence) already existed (used by the CyphaLM token-curriculum pilot and by
+  `/uncertainty-rank`'s `"curriculum"` mode); this pass added the missing "randomise within a
+  window" half of the spec as `cypha::curriculum_order_windowed(confidences, n_rows, window, rng)`
+  in `native/include/cypha/curriculum.hpp` / `native/src/curriculum.cpp`. It is wired into the
+  actual CSV-driven DIF training hot path — `train_eval_vectors` in
+  `native/src/bench/bench_domains.cpp`, which every tabular/vision bench domain (D03, D08, ...)
+  funnels through as its `dif_train_step_vector`-per-row loop (the practical equivalent of
+  `dif_train_classify_sequence` for CSV data; that function itself is currently only exercised by
+  parity fixtures, not by any bench CLI) — via a new opt-in env gate, **`CYPHA_CURRICULUM_WINDOW`**
+  (integer window size; unset or `<= 0` = off, byte-identical to the pre-existing per-pass shuffle,
+  verified by re-running D03 twice with the var unset and diffing the output table — identical).
+  When set, each pass re-scores every training row with the model's *current* confidence
+  (`batch_llr_from_x` + `softmax_batch_reference`, both pre-existing), sorts hardest-first, and
+  locally shuffles within contiguous chunks of `window` rows using a dedicated
+  `std::mt19937` seeded independently of the main training RNG. Falls back to the original
+  per-pass shuffle on the very first pass of a cold-start online model (no labels registered yet,
+  so there is no confidence signal). New CTest `native_curriculum_window_smoke` covers determinism
+  (same seed ⇒ identical order), the window-boundary invariant (each window is a permutation of
+  its own hardest-first slice, not the whole array), and that windowing actually reorders relative
+  to the strict hardest-first baseline.
+- **Active learning / uncertainty ranking.** This was already fully shipped (see `d8271c4`/
+  `5d24b02`, predating this doc's "future" listing — §6 had not been updated to reflect it): `GET`
+  and `POST /uncertainty-rank` on `cypha_rest`, request body `{"rows": [[...], ...], "top_n": N,
+  "temperature": T?, "curriculum": bool?}`, response
+  `{"indices": [...], "entropies": [...], "confidences": [...], "top_n": N}` — `indices` sorted by
+  descending `entropy(softmax(LLR/temperature))` (most uncertain first) by default, or by ascending
+  confidence (hardest-first) when `"curriculum": true`. Covered by CTest `native_rest_uncertainty_rank`
+  (integration test that starts `cypha_rest.exe` and hits the live endpoint). One audit fix this
+  pass: the endpoint's entropy computation was a hand-duplicated copy of
+  `cypha::row_entropy_from_probs` (`native/include/cypha/infer_cpu.hpp`, also used by the
+  library's own `cypha::uncertainty_rank_indices` helper); `cypha_rest.cpp` now calls the shared
+  function directly instead of reimplementing it, per this section's original design intent to
+  reuse existing softmax/entropy math.
+- **Small-scale sanity check (plumbing correctness, not a hyperparameter search):** D03 (iris +
+  wine, `CYPHA_BENCH_FAST=1`, single epoch, seed 42) with `CYPHA_CURRICULUM_WINDOW` unset vs. `=8`:
+  iris accuracy 0.867 → 0.967 (improved), wine 1.00 → 1.00 (unchanged, already at ceiling). Neutral-
+  to-positive on this tiny synthetic slice, as expected for a plumbing check — not a claim of a
+  general accuracy win.
+- Full relevant suite green: `ctest --test-dir native/build_curriculum -R
+  "curriculum|uncertainty|dif_train"` → 5/5 passed; full non-overnight suite
+  (`ctest -E "overnight|cuda_bench|cell_hypothesis_overnight"`) → 164/164 passed (1 skipped,
+  OpenSSL-gated `native_federated_tls_smoke`, expected).
+
 ---
 
 ## �7 � Export formats

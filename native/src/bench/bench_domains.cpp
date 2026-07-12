@@ -51,6 +51,7 @@
 #include "cypha/bench/bench_tune.hpp"
 #include "cypha/create_model.hpp"
 #include "cypha/csv_ingest.hpp"
+#include "cypha/curriculum.hpp"
 #include "cypha/ewc_regularizer.hpp"
 #include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
@@ -336,6 +337,48 @@ std::string d03_view_schedule_from_env() {
     return std::string(v);
 }
 
+// docs/FUTURE.md §6 curriculum ordering: hardest-first (by current-model confidence), randomised
+// within a window. Opt-in / default-off (unset or 0 == pre-existing shuffled-per-pass order,
+// byte-identical), same env-gate convention as `CYPHA_D03_VIEW_SCHEDULE` above. Applies to any
+// caller of `train_eval_vectors` (D03 tabular + D08 vision both go through it); not limited to D03
+// because curriculum ordering (unlike the view-schedule pilot) has no per-domain assumptions.
+int curriculum_window_from_env() {
+    const char* v = std::getenv("CYPHA_CURRICULUM_WINDOW");
+    if (v == nullptr || *v == '\0') return 0;
+    try {
+        const int w = std::stoi(v);
+        return w > 0 ? w : 0;
+    } catch (...) {
+        return 0;
+    }
+}
+
+// Hardest-first-then-windowed-random order over `tr`/`train_y` using the model's *current*
+// confidence (max softmax prob) on each row. Falls back to the pre-existing `dif_view_order`
+// shuffle when the model has not yet seen any labels (k==0, i.e. before the first train step of an
+// online run) since there is no meaningful confidence signal yet.
+std::vector<int> curriculum_view_order(const cypha::CyphaInferModel& infer,
+                                       const std::vector<std::vector<double>>& tr,
+                                       const std::string& view_schedule, int pass_idx, int window,
+                                       std::mt19937& curriculum_rng) {
+    const int train_n = static_cast<int>(tr.size());
+    const int k = static_cast<int>(infer.labels.size());
+    if (k <= 0) {
+        return dif_view_order(train_n, view_schedule, pass_idx);
+    }
+    const std::vector<double> flat = flatten_rowmajor(tr);
+    std::vector<double> llr;
+    cypha::batch_llr_from_x(infer, flat.data(), train_n, llr);
+    std::vector<double> probs;
+    cypha::softmax_batch_reference(llr.data(), train_n, k, 1e-8, probs);
+    std::vector<double> confidences(static_cast<std::size_t>(train_n));
+    for (int i = 0; i < train_n; ++i) {
+        confidences[static_cast<std::size_t>(i)] =
+            cypha::row_max_softmax_confidence(probs.data() + static_cast<std::size_t>(i) * static_cast<std::size_t>(k), k);
+    }
+    return cypha::curriculum_order_windowed(confidences, train_n, window, curriculum_rng);
+}
+
 Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const std::vector<std::string>& train_y,
                         const std::vector<std::vector<double>>& test_x, const std::vector<std::string>& test_y,
                         const cypha::bench::ProfileJson& regime, const std::string& dataset_name,
@@ -375,8 +418,13 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
 
     const int train_n = static_cast<int>(tr.size());
     const int passes = std::max(1, regime.value("n_epochs", 1));
+    const int curriculum_window = curriculum_window_from_env();
+    std::mt19937 curriculum_rng = make_rng(4242);
     for (int p = 0; p < passes; ++p) {
-        const std::vector<int> order = dif_view_order(train_n, view_schedule, p);
+        const std::vector<int> order = curriculum_window > 0
+                                            ? curriculum_view_order(infer, tr, view_schedule, p, curriculum_window,
+                                                                    curriculum_rng)
+                                            : dif_view_order(train_n, view_schedule, p);
         for (int idx : order) {
             cypha::dif_train_step_vector(infer, mem, replay, tr[static_cast<std::size_t>(idx)].data(), d,
                                          train_y[static_cast<std::size_t>(idx)], world_lr, delta_lr, world_lr,
@@ -411,6 +459,9 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     };
     if (!preprocessor_meta.empty()) {
         result["preprocessor"] = preprocessor_meta;
+    }
+    if (curriculum_window > 0) {
+        result["curriculum_window"] = curriculum_window;
     }
     return result;
 }

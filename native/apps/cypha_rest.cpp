@@ -1090,14 +1090,6 @@ std::string json_predict(const nlohmann::json& body) {
   return json_predict_impl(body, view);
 }
 
-double row_entropy_from_probs(const double* p, int k, double eps) {
-  double s = 0.0;
-  for (int j = 0; j < k; ++j) {
-    s -= p[static_cast<std::size_t>(j)] * std::log(p[static_cast<std::size_t>(j)] + eps);
-  }
-  return s;
-}
-
 std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) {
   if (!*v.model || !*v.mem) {
     return R"({"detail":"No model loaded"})";
@@ -1171,7 +1163,7 @@ std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) 
   const bool curriculum = body.value("curriculum", false);
   for (int i = 0; i < n; ++i) {
     const double* prow = probs.data() + static_cast<std::size_t>(i) * static_cast<std::size_t>(k);
-    const double entropy = row_entropy_from_probs(prow, k, eps);
+    const double entropy = cypha::row_entropy_from_probs(prow, k, eps);
     const double confidence = cypha::row_max_softmax_confidence(prow, k);
     ranked.push_back({i, entropy, confidence});
   }

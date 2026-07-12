@@ -42,4 +42,18 @@ std::vector<int> curriculum_order_ascending_confidence(const std::vector<double>
   return order;
 }
 
+std::vector<int> curriculum_order_windowed(const std::vector<double>& max_confidences, int n_rows, int window,
+                                            std::mt19937& rng) {
+  std::vector<int> order = curriculum_order_ascending_confidence(max_confidences, n_rows);
+  if (window <= 1 || n_rows <= 1) {
+    return order;
+  }
+  for (std::size_t start = 0; start < order.size(); start += static_cast<std::size_t>(window)) {
+    const std::size_t end = std::min(order.size(), start + static_cast<std::size_t>(window));
+    std::shuffle(order.begin() + static_cast<std::ptrdiff_t>(start), order.begin() + static_cast<std::ptrdiff_t>(end),
+                 rng);
+  }
+  return order;
+}
+
 }  // namespace cypha
