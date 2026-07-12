@@ -1,7 +1,7 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-06-23  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **116 CTests** *(Phase 24 shipped; 117 when d39 merges)*
+**Last updated:** 2026-07-12  
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **160 CTests** *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -13,7 +13,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 |--------|--------|---------|
 | **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
-| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **116 CTests** gate CI *(Phase 24 shipped; 117 when d39 merges)* |
+| **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **160 CTests** gate CI *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
 | **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
@@ -116,8 +116,8 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 
 | Domain | Task | Cypha result | Root cause |
 |--------|------|-------------|-----------|
-| D10A | ECG classification (5-class) | 20% (chance) | CellAI SSM not tuned for temporal ECG |
-| D10B | ECG sliding window | 17.5% | Same as above |
+| D10A | ECG classification (5-class) | **60.67%** (~3× chance; stale 20%/17.5% figures retired 2026-07-11) | Not an SSM issue — 10A–10D route through the `cypha_core` DIF expert-routing classifier, not `CellAISSM`; see [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) |
+| D10B | ECG sliding window | 29.46% | Same path as above; modestly above chance |
 | D10D | Financial return sign | 49.9% | Efficient market — near-chance is expected |
 
 ---
@@ -145,7 +145,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 | **Nonlinear decision boundaries (XOR etc.)** | 48.2% vs 80.5% kernel SVM — 32.3pp gap | Kernel LLR (Nyström) — **partially shipped**; tuning continues ([`upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md)) |
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
 | **Feynman equations** | Mean R²=−0.010 on nonlinear physics *(2026-05-31; re-run 2026-07-11 now shows R²=0.444, beats Ridge on all 20 equations — see Priority 1 update; kernel LLR not applicable, D14 uses a separate linear expert-mixture regressor, not `KernelMemory`)* | Re-run shows this is no longer a hard limit on current HEAD; kernel LLR wiring there deferred (different subsystem) |
-| **ECG / temporal** | D10 20% accuracy (chance) | CellAI SSM tuning; temporal-aware features |
+| **ECG / temporal** | *(retired 2026-07-11 — no longer a hard limit)* D10A now scores **60.67%** (~3× chance) via the DIF classifier; the SSM was never on this path — see [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) | N/A — resolved incidentally; no SSM defect existed |
 | **CyphaLM BPC (GRIA-only)** | GRIA stack @ 300k **3.838** (+0.36 vs bigram); hybrid **2.873** resolves gap | Hybrid is default; GRIA-only path for ablation / long-range SSM probes |
 | **MNIST raw** | 72% vs 95% (LR+HOG) | Feature engineering (HOG) bridges most of the gap |
 
@@ -493,6 +493,8 @@ Followed through on the deferred item above: built the two-sided kernelized expe
 - Warm-started experts under-reported in D17B (`mean_alpha` low).
 - Char-level LM: bigram/trigram are strong; 4/5-gram set an upper practical bound.
 
+**Performance (2026-07-12):** D17 production training throughput is **252.2 chars/sec** single-threaded on MSVC (`windows-vs2026-release`), up from an initial ~96–126 chars/sec baseline, via allocator-churn fixes (thread-local scratch buffers, persistent gradient members) and a cache-friendly transpose-matvec loop interchange in `lstm_backward`/`bptt_ssm_update` — zero arithmetic change, D17 BPC pin confirmed bit-identical before/after. See [`PERFORMANCE_PROFILE_2026-07-12.md`](reports/PERFORMANCE_PROFILE_2026-07-12.md) for the full profiling breakdown.
+
 **Beat-bigram roadmap (ordered):**
 
 | Step | Action | Success criterion |
@@ -538,12 +540,9 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 
 ### Priority 6 — CellAI / ECG / temporal
 
-**Evidence:** D10 ECG: 20% accuracy (5-class chance). The SSM integration is not tuned for temporal signals.
+**Status (2026-07-11): resolved as stale, no fix needed.** The 20%/17.5% chance-level figures no longer reproduce on current HEAD — D10A now measures **60.67% accuracy** (~3× chance). The root finding: D10's scored ECG classification (10A–10D) never touches `CellAISSM` at all — it routes through the `cypha_core` DIF expert-routing classifier + hand-engineered `TimeSeriesEncoder` features. The SSM is only touched by an optional, non-scored `10E_ssm_diagnose` probe. Full writeup, including the supplementary SSM diagnostic run against the doc's three original hypotheses (state-norm collapse, τ_fast/τ_slow suitability, routing-head connectivity — all ruled out or N/A): [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md).
 
-**What to do:**
-1. Instrument `CellAISSM` to verify that hidden state norms do not collapse on ECG sequences.
-2. Try temporal feature engineering (sliding window FFT, wavelet) before the CyphaDIF classifier.
-3. Tune τ_fast/τ_slow decay parameters for ECG sampling rates.
+**Remaining (optional, longer-horizon) future item — not a bug fix:** if D10 is ever pushed toward real-ECG-classification-quality accuracy (>90%), that needs real UCR ECG5000 data (`bench/data/ecg5000/`) and/or a richer feature front-end or purpose-built sequence model — a dedicated future pass, not an SSM tuning task.
 
 ---
 
@@ -556,7 +555,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 2026 Q4 — Cell hypothesis testbench Tier 1–2
 2026 Q4 — Multi-view online training Phase 2 D16/DIF
 2026 Q4 — Priority 5: Continual learning investigation → EWC overlay
-2027 Q1 — Priority 6: CellAI SSM temporal tuning → D10 re-eval
+2026 Q3 — D10 re-eval: done (2026-07-11) — 60.67% accuracy, not an SSM issue; see [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md)
 2027 Q1 — Paper: fill {{EXP0N_*}} placeholders → narrative reconciliation → submit
 ```
 
