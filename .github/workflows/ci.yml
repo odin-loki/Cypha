@@ -3,7 +3,8 @@
 # Two blocking jobs: Linux native build+test, MinGW Windows PE cross-compile.
 # Optional third job: federated TLS smoke (OpenSSL; continue-on-error — does not gate merges).
 # Optional fourth job: corpus_and_d25 (WikiText fetch + corpus smokes; continue-on-error).
-# CI gate: 110 CTests (`ctest -R native_`, Qt GUI exec excluded on headless Linux).
+# CI gate: `ctest -R native_` (Qt GUI exec excluded on headless Linux) -- test count grows
+# over time, see scripts/cypha_native_validate_all.ps1 for the current authoritative tally.
 # Production overnight tier (300k train) is NOT run in CI — maintainer-only via
 # scripts/run_production_overnight.ps1; native_d27_production_lock_smoke validates lock schema only.
 # CUDA is optional for local builds only (see docs/native/ACCEL_CUDA.md).
