@@ -394,3 +394,74 @@ The specific blocker this task was created to resolve is fixed and empirically c
 3. Do not lock a new `BASELINE_LOCK.json` section (per §7 Phase 5 of the original plan) until Phase 3's `kappa`/BPC numbers are in hand — this fix changes what's *measurable*, not what a full-scale run will actually *produce*.
 
 **Hold on Phase 4 (hidden=1024)** until Phase 3 completes and its `lstm_hidden_d_eff` trend is confirmed at production scale — per the original plan's own phase ordering and cost model (§5.2's 18–36h single-threaded estimate for 1024-dim is the largest single commitment in this plan and should not be scheduled on an unconfirmed extrapolation from a 5,000-step sweep).
+
+---
+
+## Phase 3 results (2026-07-11): production-scale (`n_train=300000`) confirmation
+
+**Status:** Executed by a follow-up subagent against a freshly rebuilt `native/build_scale` (HEAD at `da1ad6d`, confirmed via `git log`/`git show c1844db --stat` — includes `ff26a57`, `c1844db`, `da1ad6d`, the Phase 0/1/2b commits above). `native/build_math`, `bench/BASELINE_LOCK.json`, and the overnight orchestration scripts were not touched (verified via `git status --short bench/BASELINE_LOCK.json` at the end of this pass — clean). Both runs below are same-binary, same-day, same-seed (`--bench-seed 42`), same-flags apples-to-apples comparisons from this pass — **not** a comparison against the June 28 `BASELINE_LOCK.json` pins (those used `--math-integration`, which this pass deliberately did not pass, per the task's exact command spec).
+
+Command (identical for both, only `--lstm-hidden` differs):
+
+```powershell
+native/build_scale/cyphalm_bench_native.exe --profile d17 --n-train 300000 --n-eval 2000 `
+    --lstm-hidden {128|512} --intelligence-profile --threads 1 --bench-seed 42
+```
+
+Note: `--overnight`/`CYPHA_BENCH_FULL_CORPUS` was **not** set (not part of the task's specified flags), so both runs used the capped-at-10M-characters WikiText-2 train split (`full_corpus: false` in both output JSONs) rather than the uncapped full 10.8MB file — the cap barely binds (WikiText-2 train is ~10.8MB) and, critically, is **identical for both runs**, so the hidden=128-vs-512 comparison itself is unaffected; only an absolute comparison against a hypothetical full-corpus number would need to account for it.
+
+### Result table
+
+| hidden | bpc | bpc (LSTM-only) | kappa (`criticality_score`) | GRIA `d_eff` (fixed 160-dim field) | **`lstm_hidden_d_eff`** | wall-clock (successful attempt) |
+|---|---|---|---|---|---|---|
+| 128 | 3.044487 | 3.044341 | 0.835314 | 0.577841 | **0.599997** | ~52.3 min |
+| 512 | 2.945026 | 2.944884 | 0.840743 | 0.577841 (bit-identical) | **0.331333** | ~16h 39min |
+
+Full JSON captured at `bench/results/hidden_dim_scale/hidden128_300k.json` and `bench/results/hidden_dim_scale/hidden512_300k.json` (both `.log`/`.json` are identical copies; not committed to the lock, per this task's constraints). `bpc_lstm_only ≈ bpc` and `hybrid_gria_weight ≈ 0.000117` in both, confirming the hybrid blend is running in near-pure-LSTM mode symmetrically in both runs (a fair comparison of the LSTM head specifically, which is what `--lstm-hidden` controls).
+
+### Run stability note (contention, not correctness)
+
+Both runs hit the exact `-1`/empty-output external-termination failure mode already documented above ("Note on run stability under system load") **repeatedly** during this pass — the machine had upward of 15–18 concurrent `cyphalm_bench_native.exe`/other native-benchmark processes at points during this window, from several other sibling agents building/testing in `native/build_rpsm`, `native/build_kernel`, `native/build_multiview`, `native/build_softworld`, etc. (confirmed via `Get-Process` snapshots and cross-referencing other agents' terminal logs — no evidence of a deliberate kill script; all repo orchestration scripts that call `Stop-Process` were checked and either target a specific tracked PID or explicitly comment "never kills processes"/"do not kill other cyphalm processes here"). Both the hidden=128 and hidden=512 attempt-1 runs died with `exit_code=-1`, empty stdout, at effectively the same wall-clock instant each time — a signature of an external/contention-driven termination rather than independent application crashes.
+
+**Mitigation used:** a self-healing watchdog loop (`Start-Process -Wait` in a retry loop, up to 40 attempts, 10s backoff, run detached from the Shell tool's own job tracking) was used for both, per the existing plan doc's own guidance to "treat -1/empty-output exit as retry, not a code defect." Both succeeded on **attempt 2**:
+
+- hidden=128: attempt 1 failed after ~8.4 min (contention-killed); attempt 2 succeeded cleanly in **52.3 minutes** — close to the §5.2 anchor (45.5 min, math-integration, June 28) despite this run not using `--math-integration` and running under a busier machine.
+- hidden=512: attempt 1 failed after ~8.4 min; attempt 2 succeeded, but took **16 hours 39 minutes** — well above the §5.2 estimate range of 5–9.5h. Given the sustained high process contention observed throughout this specific run's lifetime (confirmed via periodic `Get-Process` CPU-accumulation checks showing the expected steady climb, so the process was never stalled, just slower than an uncontended run would be), **this number should be read as "measured wall-clock under heavy shared-machine contention," not as a clean single-tenant estimate** — but it is the real, honest number for this specific run, exactly as the task asked to record "for future cost-estimation accuracy." The actual-to-baseline ratio observed (16.65h / 52.3min ≈ 19.1×) is higher than the §5.2 compute-only model's 13.6× estimate, consistent with added contention overhead on top of the pure `O(hidden²)` scaling.
+
+### Finding 1: BPC and kappa both improve at hidden=512, consistent with expectations
+
+BPC improves from 3.0445 → 2.9450 (−3.3% relative) and `kappa` (`criticality_score`) improves marginally from 0.8353 → 0.8407 — both directionally consistent with Paper IV's claim and with the medium-tier (`n_train=5000`) Phase 2b sweep's BPC trend (4.040→3.930→3.849 at 128/256/512). The GRIA-field `d_eff` is bit-identical (`0.577841`) between the two runs, exactly as expected (§4.2/Phase 2b: it measures the fixed-160-dim GRIA field, structurally independent of `lstm_hidden`) — this is a useful internal consistency check confirming nothing else about the harness changed between the two runs besides the swept parameter.
+
+### Finding 2: `lstm_hidden_d_eff` trend **reverses** at production scale — does not match the 5k-scale sweep's direction
+
+This is the central, unexpected result of this phase. The Phase 2b medium-tier sweep (`n_train=5000`) found `lstm_hidden_d_eff` climbing monotonically: 0.271 (h=128) → 0.485 (h=256) → 0.576 (h=512). At production scale (`n_train=300000`, 60× more training steps, same hidden values, same seed), the picture is different:
+
+| hidden | `lstm_hidden_d_eff` @ n_train=5000 (Phase 2b) | `lstm_hidden_d_eff` @ n_train=300000 (Phase 3, this pass) |
+|---|---|---|
+| 128 | 0.270968 | **0.599997** |
+| 512 | 0.576461 | **0.331333** |
+
+Not only does the hidden=128→512 *direction* reverse between the two scales (up at 5k, down at 300k), the *within-hidden-size* values also move a lot with more training: hidden=128's `lstm_hidden_d_eff` nearly doubles (0.271→0.600) with 60× more steps, while hidden=512's *drops* by nearly half (0.576→0.331). **This directly contradicts this document's own conditional go-ahead for Phase 3** ("Recommend proceeding to Phase 3... condition 2: confirm `lstm_hidden_d_eff` continues its upward trend at production scale") — the trend did not continue; it inverted.
+
+**Root-cause analysis (not fixed in this pass — flagged for a dedicated follow-up):** `lstm_hidden_d_eff()` draws its sample matrix from `lstm_h_history_rows_`, a ring buffer hard-capped at `kLstmHiddenHistoryMax = 48` rows (`native/include/cypha/cyphalm/cyphalm_model.hpp:218`, unchanged by this pass) — **regardless of `lstm_hidden`**. This means the sample-to-dimension ratio for the participation-ratio estimate is:
+
+| hidden | n_samples | n_dims | samples/dims ratio |
+|---|---|---|---|
+| 128 | 48 | 128 | 0.375 |
+| 512 | 48 | 512 | 0.094 |
+
+At hidden=512 the statistic is being estimated from **4× fewer samples per dimension** than at hidden=128, i.e. a much more severely underdetermined regime (48 samples can span at most a 47-dimensional subspace of a 512-dimensional state — by construction, most of the raw covariance structure above rank ~47 is unobservable no matter what the true representational spread is). `use_eigenvalue_d_eff` was not passed in either run (both report `"lstm_hidden_d_eff_method": "variance_proxy"`), so this is the cheap per-dimension-variance proxy, not the Phase-0-fixed `TraceFrobenius`/eigenvalue path — though switching methods would not fix the underlying sample-count problem, since both methods consume the same 48-row history.
+
+A second, non-exclusive explanation worth flagging: this may not be purely a sampling artifact. A fully-trained (300k-step) 512-dim LSTM has had much more opportunity than a 5,000-step one to specialize its representation — if the network learns to concentrate its *useful* variance onto a relatively fixed-size subset of directions regardless of how wide the hidden state is (i.e., the task's intrinsic complexity, not the available width, sets the effective dimensionality), then the *width-normalized* participation ratio (`compute_participation_ratio` is explicitly "divided by `n_dims`" per its own doc comment in `measurers.hpp:171`) would mechanically decrease as `hidden` grows even while raw representational usage stays flat or grows sublinearly — an authentic finding about *this specific normalized metric*, not necessarily evidence against Paper IV's broader capacity claim (which BPC/kappa, the two axes that do **not** depend on this narrow 48-row/`n_dims`-normalized statistic, both still support in this same run).
+
+Either way — undersampling artifact, genuine representational compression, or some mix — **the current `lstm_hidden_d_eff` statistic cannot be trusted as production-scale evidence for or against Paper IV's `D_eff`-driven κ claim until the 48-row history cap is addressed** (e.g., scaling `kLstmHiddenHistoryMax` with `hidden`, or reporting an unnormalized effective-dimension count alongside the normalized ratio, or explicitly flagging low sample/dim ratios in the exported JSON). This is a new, distinct gap from the Phase 0 (eigenvalue-ceiling) and Phase 2b (wrong-tensor) gaps already fixed — those fixes were necessary but not sufficient; this one is about statistical power, not wiring or algorithmic ceiling, and was only visible once a real production-scale (`n_train=300000`) run was performed, exactly as Phase 3 was designed to surface.
+
+### Go/no-go recommendation: **no-go on Phase 4 (1024-dim) — hold until the `lstm_hidden_d_eff` sampling gap is resolved and re-measured**
+
+Phase 3 did exactly what a de-risking phase is supposed to do: it caught a real problem before an even more expensive commitment. Recommending against Phase 4 for three independent, compounding reasons:
+
+1. **The specific metric this entire plan is built around (`lstm_hidden_d_eff`) inverted direction at production scale.** Proceeding to 1024-dim on the strength of a trend that just broke at the previous scale step would repeat exactly the mistake Phase 2/2b's own no-go/go logic was designed to avoid — extrapolating from an unconfirmed (here, actively contradicted) smaller-scale signal.
+2. **Wall-clock cost came in far above estimate even before contention is accounted for.** The 512-dim run took 16h39min against a 5–9.5h estimate (≈1.75–3.3× over, even granting heavy observed machine contention as a mitigating factor). A 1024-dim run, per the original §5.2 model (~53× vs. hidden=128's baseline, vs. 512-dim's ~13.6–19×), could plausibly run 30–70+ hours under similar contention — a very large commitment to make while the measurement this run would supposedly validate is currently unreliable.
+3. **BPC and kappa, the two metrics that did move in the expected direction, are not `D_eff`-specific evidence.** They support "more hidden-dim capacity helps the model" in general (a weaker, less novel claim than Paper IV's specific `D_eff`-driven κ mechanism), which does not by itself justify the Phase 4 cost under this plan's own stated goal of validating the `D_eff` mechanism specifically.
+
+**Recommended next step before any Phase 4 scheduling:** a small, targeted follow-up — scale `kLstmHiddenHistoryMax` (or add a `--lstm-hidden-history-rows` override) so the sample count tracks `hidden` (e.g., ≥2× `hidden` rows, or report both the raw and width-normalized participation ratio side by side), then re-run the cheap `n_train=5000` sweep and this Phase 3 pair to confirm which of the two explanations in Finding 2 is correct before spending another multi-hour-to-multi-day budget on 1024-dim. The **bonus 1024-dim run offered as optional in this task was not started**, per this recommendation — Phase 3's own result is the reason not to, not a time-budget constraint (there was time remaining in this pass).
