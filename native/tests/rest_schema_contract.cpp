@@ -148,6 +148,19 @@ const std::vector<std::string> kPredictKeys = {
 
 const std::vector<std::string> kUpdateKeys = {"loss", "n_corrections"};
 
+const std::vector<std::string> kReadyKeys = {"ready", "model_type"};
+
+const std::vector<std::string> kMetricsKeys = {
+    "uptime_seconds",  "model_loaded",          "model_type",     "n_predictions",
+    "n_corrections",   "registry_model_count",  "loaded_model_count", "active_model",
+    "session",         "regression_head_loaded", "lm_loaded",      "branch_a_router",
+};
+
+const std::vector<std::string> kSessionSummaryKeys = {
+    "n_predictions",  "n_corrections",     "correction_accuracy", "mean_confidence",
+    "mean_anomaly",   "n_ood_flagged",     "label_distribution",  "session_duration_s",
+};
+
 struct HttpResult {
   int status{0};
   json body;
@@ -160,6 +173,8 @@ HttpResult http_json(httplib::Client& cli, const char* method, const char* path,
     res = cli.Get(path);
   } else if (std::string(method) == "POST") {
     res = cli.Post(path, req_body, "application/json");
+  } else if (std::string(method) == "DELETE") {
+    res = cli.Delete(path);
   } else {
     throw std::runtime_error(std::string("unsupported method: ") + method);
   }
@@ -301,6 +316,24 @@ void validate_contract(httplib::Client& cli) {
   }
   require_keys(health.body, kHealthKeys, "/health");
 
+  const HttpResult ready = http_json(cli, "GET", "/ready");
+  // The spawned server always has a model preloaded via --cypha, so /ready is expected to
+  // report 200/ready:true here; a 503 (no model loaded) shape is also tolerated so this test
+  // stays valid if the harness is ever pointed at a server without a preloaded model.
+  if (ready.status == 200) {
+    require_keys(ready.body, kReadyKeys, "/ready");
+  } else if (ready.status == 503) {
+    require_keys(ready.body, {"ready", "reason"}, "/ready (no model loaded)");
+  } else {
+    throw std::runtime_error("/ready unexpected status " + std::to_string(ready.status));
+  }
+
+  const HttpResult metrics = http_json(cli, "GET", "/metrics");
+  if (metrics.status != 200) {
+    throw std::runtime_error("/metrics status " + std::to_string(metrics.status));
+  }
+  require_keys(metrics.body, kMetricsKeys, "/metrics");
+
   const std::string predict_body = R"({"input":[0,0,0,0,0,0,0,0],"use_gh":true})";
   const HttpResult predict = http_json(cli, "POST", "/predict", predict_body);
   if (predict.status != 200) {
@@ -315,6 +348,22 @@ void validate_contract(httplib::Client& cli) {
     throw std::runtime_error("/update status " + std::to_string(update.status));
   }
   require_exact_keys(update.body, kUpdateKeys, "/update");
+
+  const HttpResult classes = http_json(cli, "GET", "/classes");
+  // Same "model may or may not be loaded" tolerance as /ready above.
+  if (classes.status == 200) {
+    if (!classes.body.contains("classes") || !classes.body["classes"].is_object()) {
+      throw std::runtime_error("/classes.classes must be object");
+    }
+    for (const auto& [label, row] : classes.body["classes"].items()) {
+      (void)label;
+      require_keys(row, {"n_obs"}, "/classes[]");
+    }
+  } else if (classes.status == 503) {
+    require_keys(classes.body, {"detail"}, "/classes (no model loaded)");
+  } else {
+    throw std::runtime_error("/classes unexpected status " + std::to_string(classes.status));
+  }
 
   const HttpResult models = http_json(cli, "GET", "/models");
   if (models.status != 200) {
@@ -358,6 +407,20 @@ void validate_contract(httplib::Client& cli) {
       throw std::runtime_error("/load.loaded missing ModelCard key '" + k + "'");
     }
   }
+
+  // /session only exposes GET (summary) and DELETE (clear) — there is no POST /session
+  // route to create a session; a session accumulates implicitly from /predict + /update.
+  const HttpResult session = http_json(cli, "GET", "/session");
+  if (session.status != 200) {
+    throw std::runtime_error("/session status " + std::to_string(session.status));
+  }
+  require_exact_keys(session.body, kSessionSummaryKeys, "/session");
+
+  const HttpResult session_delete = http_json(cli, "DELETE", "/session");
+  if (session_delete.status != 200) {
+    throw std::runtime_error("DELETE /session status " + std::to_string(session_delete.status));
+  }
+  require_keys(session_delete.body, {"cleared"}, "DELETE /session");
 }
 
 }  // namespace

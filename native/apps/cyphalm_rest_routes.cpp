@@ -201,9 +201,11 @@ void register_cyphalm_rest_routes(httplib::Server& svr) {
             }
             const int tid = body.at("token_id").get<int>();
             res.set_content(predict_next_json(*g_lm, tid).dump(), "application/json");
-        } catch (...) {
+        } catch (const std::exception& ex) {
             res.status = 400;
-            res.set_content(R"({"detail":"bad json"})", "application/json");
+            nlohmann::json err;
+            err["detail"] = ex.what();
+            res.set_content(err.dump(), "application/json");
         }
     });
 

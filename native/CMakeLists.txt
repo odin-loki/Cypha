@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.19)
 project(cypha_native VERSION 2.2.8 LANGUAGES CXX C)
 
+# Enable /MP (parallel single-target compilation within MSVC's cl.exe) so multi-TU targets
+# make use of all available cores; no-op for other compilers.
+add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 
 option(CYPHA_BUILD_EXPERIMENT_DB "Build experiment_db_smoke / experiment_db_crud_parity (requires SQLite3)" OFF)
@@ -32,6 +36,7 @@ if(CYPHA_ENABLE_CUDA)
 endif()
 
 add_library(cypha_core STATIC
+  src/env.cpp
   src/load_cypha.cpp
   src/save_cypha.cpp
   src/infer_cpu.cpp
@@ -314,6 +319,15 @@ target_link_libraries(curriculum_window_smoke PRIVATE cypha_core)
 add_executable(corpus_smoke tools/corpus_smoke.cpp)
 target_link_libraries(corpus_smoke PRIVATE cypha_lm_native)
 
+add_executable(bpe_tokenizer_smoke tools/bpe_tokenizer_smoke.cpp)
+target_link_libraries(bpe_tokenizer_smoke PRIVATE cypha_lm_native)
+
+add_executable(npz_util_roundtrip_smoke tools/npz_util_roundtrip_smoke.cpp)
+target_link_libraries(npz_util_roundtrip_smoke PRIVATE cypha_lm_native)
+
+add_executable(causal_graph_smoke tools/causal_graph_smoke.cpp)
+target_link_libraries(causal_graph_smoke PRIVATE cypha_core)
+
 add_executable(intelligence_profiler_papers tools/intelligence_profiler_papers.cpp)
 target_link_libraries(intelligence_profiler_papers PRIVATE cypha_core)
 
@@ -509,6 +523,7 @@ if(MSVC)
   target_compile_options(cyphalm_train PRIVATE /W4 /permissive-)
   target_compile_options(cypha_onnx_export PRIVATE /W4 /permissive-)
   target_compile_options(cypha_export_gguf PRIVATE /W4 /permissive-)
+  target_compile_options(rest_schema_contract PRIVATE /W4 /permissive-)
 else()
   # Same CUDA-source scoping concern as the MSVC branch above.
   target_compile_options(cypha_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic>)
@@ -573,6 +588,7 @@ else()
   target_compile_options(cypha_export_gguf PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_char_lstm_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_checkpoint_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(rest_schema_contract PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Parity fixture paths: MinGW .exe run on Windows cannot open /mnt/c/... (WSL cross-build).
@@ -978,6 +994,21 @@ add_test(
 add_test(
   NAME native_corpus_smoke
   COMMAND "$<TARGET_FILE:corpus_smoke>"
+)
+
+add_test(
+  NAME native_bpe_tokenizer_smoke
+  COMMAND "$<TARGET_FILE:bpe_tokenizer_smoke>"
+)
+
+add_test(
+  NAME native_npz_util_roundtrip_smoke
+  COMMAND "$<TARGET_FILE:npz_util_roundtrip_smoke>"
+)
+
+add_test(
+  NAME native_causal_graph_smoke
+  COMMAND "$<TARGET_FILE:causal_graph_smoke>"
 )
 
 add_test(

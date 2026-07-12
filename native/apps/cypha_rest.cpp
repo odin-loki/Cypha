@@ -742,7 +742,7 @@ void refresh_registry_cache() {
 
 /// Resolve ``body["model"]`` (``name/version``) to a loaded slot; default = active globals.
 bool resolve_model_view(const nlohmann::json& body, ModelView& out_view, LoadedModelBundle** out_slot,
-                        std::string* detail_out) {
+                        std::string* detail_out, int* status_out = nullptr) {
   std::string req_key;
   if (body.contains("model") && body["model"].is_string()) {
     req_key = body["model"].get<std::string>();
@@ -754,6 +754,9 @@ bool resolve_model_view(const nlohmann::json& body, ModelView& out_view, LoadedM
       if (detail_out) {
         *detail_out = R"({"detail":"No model loaded"})";
       }
+      if (status_out) {
+        *status_out = 503;
+      }
       return false;
     }
     return true;
@@ -763,6 +766,9 @@ bool resolve_model_view(const nlohmann::json& body, ModelView& out_view, LoadedM
     if (detail_out) {
       *detail_out = R"({"detail":"model not loaded"})";
     }
+    if (status_out) {
+      *status_out = 404;
+    }
     return false;
   }
   *out_slot = &it->second;
@@ -770,6 +776,9 @@ bool resolve_model_view(const nlohmann::json& body, ModelView& out_view, LoadedM
   if (!it->second.model || !it->second.mem) {
     if (detail_out) {
       *detail_out = R"({"detail":"model not loaded"})";
+    }
+    if (status_out) {
+      *status_out = 404;
     }
     return false;
   }
@@ -1090,15 +1099,23 @@ std::string json_predict(const nlohmann::json& body) {
   return json_predict_impl(body, view);
 }
 
-std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) {
+// Result of the uncertainty-rank pipeline: the JSON response body plus the HTTP status
+// the caller should set. Keeping the status explicit here (rather than having the route
+// handler re-derive it by substring-matching the body) avoids fragile string sniffing.
+struct UncertaintyRankResult {
+  std::string body;
+  int status = 200;
+};
+
+UncertaintyRankResult json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) {
   if (!*v.model || !*v.mem) {
-    return R"({"detail":"No model loaded"})";
+    return {R"({"detail":"No model loaded"})", 503};
   }
   if (*v.mke_active) {
-    return R"({"detail":"uncertainty-rank not supported in MKE mode"})";
+    return {R"({"detail":"uncertainty-rank not supported in MKE mode"})", 400};
   }
   if (!body.contains("rows") || !body["rows"].is_array()) {
-    return std::string(R"json({"detail":"rows required (array of feature vectors)"})json");
+    return {std::string(R"json({"detail":"rows required (array of feature vectors)"})json"), 400};
   }
   const auto& rows_j = body["rows"];
   const int n = static_cast<int>(rows_j.size());
@@ -1107,15 +1124,15 @@ std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) 
     out["indices"] = nlohmann::json::array();
     out["entropies"] = nlohmann::json::array();
     out["top_n"] = 0;
-    return out.dump();
+    return {out.dump(), 200};
   }
   if (!rows_j[0].is_array() || rows_j[0].empty()) {
-    return R"({"detail":"each row must be a non-empty feature array"})";
+    return {R"({"detail":"each row must be a non-empty feature array"})", 400};
   }
   const int d_row = static_cast<int>(rows_j[0].size());
   for (int i = 1; i < n; ++i) {
     if (!rows_j[i].is_array() || static_cast<int>(rows_j[i].size()) != d_row) {
-      return R"({"detail":"rows must be uniform-length feature arrays"})";
+      return {R"({"detail":"rows must be uniform-length feature arrays"})", 400};
     }
   }
 
@@ -1132,7 +1149,7 @@ std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) 
       x = (*v.pre)->transform_one(x);
     }
     if (static_cast<int>(x.size()) != model.d_latent) {
-      return R"({"detail":"input dim mismatch after preprocessor"})";
+      return {R"({"detail":"input dim mismatch after preprocessor"})", 400};
     }
     x_latent.insert(x_latent.end(), x.begin(), x.end());
   }
@@ -1207,16 +1224,17 @@ std::string json_uncertainty_rank_impl(const nlohmann::json& body, ModelView v) 
   if (curriculum) {
     out["curriculum"] = true;
   }
-  return out.dump();
+  return {out.dump(), 200};
 }
 
-std::string json_uncertainty_rank(const nlohmann::json& body) {
+UncertaintyRankResult json_uncertainty_rank(const nlohmann::json& body) {
   std::lock_guard<std::mutex> lock(g_mu);
   ModelView view{};
   LoadedModelBundle* slot = nullptr;
   std::string detail;
-  if (!resolve_model_view(body, view, &slot, &detail)) {
-    return detail;
+  int status = 400;
+  if (!resolve_model_view(body, view, &slot, &detail, &status)) {
+    return {detail, status};
   }
   if (slot != nullptr) {
     std::lock_guard<std::mutex> slot_lk(slot->mu);
@@ -2060,15 +2078,9 @@ int main(int argc, char** argv) {
             "application/json");
         return;
       }
-      std::string out = json_uncertainty_rank(body);
-      if (out.find("No model loaded") != std::string::npos) {
-        res.status = 503;
-      } else if (out.find("model not loaded") != std::string::npos) {
-        res.status = 404;
-      } else if (out.find("\"detail\"") != std::string::npos) {
-        res.status = 400;
-      }
-      res.set_content(out, "application/json");
+      const UncertaintyRankResult out = json_uncertainty_rank(body);
+      res.status = out.status;
+      res.set_content(out.body, "application/json");
     } catch (...) {
       res.status = 400;
       res.set_content(R"({"detail":"bad json"})", "application/json");
@@ -2083,15 +2095,9 @@ int main(int argc, char** argv) {
         return;
       }
       auto body = nlohmann::json::parse(req.body);
-      std::string out = json_uncertainty_rank(body);
-      if (out.find("No model loaded") != std::string::npos) {
-        res.status = 503;
-      } else if (out.find("model not loaded") != std::string::npos) {
-        res.status = 404;
-      } else if (out.find("\"detail\"") != std::string::npos) {
-        res.status = 400;
-      }
-      res.set_content(out, "application/json");
+      const UncertaintyRankResult out = json_uncertainty_rank(body);
+      res.status = out.status;
+      res.set_content(out.body, "application/json");
     } catch (...) {
       res.status = 400;
       res.set_content(R"({"detail":"bad json"})", "application/json");
