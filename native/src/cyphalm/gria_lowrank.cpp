@@ -68,7 +68,17 @@ GRIALowRank::GRIALowRank(int field_dim_in, int vocab_size_in, int rank_in, doubl
 }
 
 void GRIALowRank::logits(const double* v, double* z_out) const {
-  std::vector<double> h(static_cast<std::size_t>(rank));
+  // Perf (2026-07-12, part 3, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up (part
+  // 3)"): `h` was previously a fresh `std::vector<double>` local every single call -- the same
+  // allocation-churn pattern already fixed in CharLSTMHead::forward_step/backward_step
+  // (dafd677/0851483). `thread_local` (not a plain function-static or a member) for the same
+  // reason as those fixes: `CyphaLMBatch::parallel_batch` (cyphalm_batch.cpp) calls
+  // `GRIALowRank::forward` concurrently on one *shared* `GRIALowRank` instance from multiple
+  // worker threads, so a plain static would race; `thread_local` gives each thread its own
+  // private backing storage. Zero arithmetic change -- every element is fully overwritten by
+  // the loop below before being read.
+  thread_local std::vector<double> h;
+  if (h.size() != static_cast<std::size_t>(rank)) h.resize(static_cast<std::size_t>(rank));
   for (int r = 0; r < rank; ++r) {
     double s = 0.0;
     for (int j = 0; j < field_dim; ++j) {
@@ -88,9 +98,14 @@ void GRIALowRank::logits(const double* v, double* z_out) const {
 }
 
 void GRIALowRank::forward(const double* v, double* log_probs_out) const {
-  std::vector<double> z(static_cast<std::size_t>(vocab_size));
+  // Perf (2026-07-12, part 3): same thread_local-reuse fix as `h` in logits() above, for the
+  // same reason (shared-instance concurrent use from CyphaLMBatch::parallel_batch) and with the
+  // same zero-arithmetic-change guarantee (both buffers are fully overwritten before use).
+  thread_local std::vector<double> z;
+  thread_local std::vector<double> probs;
+  if (z.size() != static_cast<std::size_t>(vocab_size)) z.resize(static_cast<std::size_t>(vocab_size));
+  if (probs.size() != static_cast<std::size_t>(vocab_size)) probs.resize(static_cast<std::size_t>(vocab_size));
   logits(v, z.data());
-  std::vector<double> probs(static_cast<std::size_t>(vocab_size));
   softmax_logits(z.data(), vocab_size, probs.data());
   for (int k = 0; k < vocab_size; ++k) {
     log_probs_out[k] = std::log(probs[static_cast<std::size_t>(k)] + kLogEps);

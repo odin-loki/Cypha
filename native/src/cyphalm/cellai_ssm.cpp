@@ -46,9 +46,9 @@ double CellAISSM::clip(double v, double lo, double hi) {
   return std::max(lo, std::min(hi, v));
 }
 
-std::vector<double> CellAISSM::matvec(const std::vector<double>& mat, int rows, int cols,
-                                      const std::vector<double>& x) {
-  std::vector<double> out(static_cast<std::size_t>(rows), 0.0);
+void CellAISSM::matvec(const std::vector<double>& mat, int rows, int cols,
+                       const std::vector<double>& x, std::vector<double>& out) {
+  if (out.size() != static_cast<std::size_t>(rows)) out.resize(static_cast<std::size_t>(rows));
   for (int r = 0; r < rows; ++r) {
     double acc = 0.0;
     const std::size_t row_off = static_cast<std::size_t>(r * cols);
@@ -57,6 +57,12 @@ std::vector<double> CellAISSM::matvec(const std::vector<double>& mat, int rows, 
     }
     out[static_cast<std::size_t>(r)] = acc;
   }
+}
+
+std::vector<double> CellAISSM::matvec(const std::vector<double>& mat, int rows, int cols,
+                                      const std::vector<double>& x) {
+  std::vector<double> out;
+  matvec(mat, rows, cols, x, out);
   return out;
 }
 
@@ -189,7 +195,17 @@ std::vector<double> CellAISSM::step(const std::vector<double>& e_t) {
     throw std::invalid_argument("CellAISSM: input dim mismatch");
   }
 
-  std::vector<double> layer_input = e_t;
+  // Perf (2026-07-12, part 3): step_layer_input_scratch_/step_wh_scratch_/step_ws_scratch_/
+  // step_ctx_scratch_ replace this function's previous `layer_input`/`wh`/`ws`/`ctx` fresh
+  // locals -- each one previously a brand-new heap allocation on *every layer iteration* of
+  // *every single predict_next call* (measured at 35.9% of predict_next's own time, the single
+  // largest sub-phase; see the report). `.assign()` on layer_input_scratch_ preserves the
+  // original semantics exactly (a copy of e_t, since e_t must not be mutated) while reusing the
+  // existing buffer; matvec's new out-param overload fills wh/ws in place; ctx_scratch_ is
+  // `.clear()`'d (keeps capacity) then rebuilt with the same push_back/insert calls as before.
+  // Zero arithmetic change throughout -- every element is fully overwritten/recomputed in the
+  // same order as the original before being read.
+  step_layer_input_scratch_.assign(e_t.begin(), e_t.end());
   if (temporal_som_) {
     const auto [bmu, lf, ls] = temporal_som_->step(e_t, true);
     (void)bmu;
@@ -205,8 +221,12 @@ std::vector<double> CellAISSM::step(const std::vector<double>& e_t) {
     auto& s = s_[static_cast<std::size_t>(layer)];
     const int in_dim = layer_input_dims_[static_cast<std::size_t>(layer)];
 
-    const auto wh = matvec(W_fast_[static_cast<std::size_t>(layer)], cfg_.d_state, in_dim, layer_input);
-    const auto ws = matvec(W_slow_[static_cast<std::size_t>(layer)], cfg_.d_state, in_dim, layer_input);
+    matvec(W_fast_[static_cast<std::size_t>(layer)], cfg_.d_state, in_dim, step_layer_input_scratch_,
+           step_wh_scratch_);
+    matvec(W_slow_[static_cast<std::size_t>(layer)], cfg_.d_state, in_dim, step_layer_input_scratch_,
+           step_ws_scratch_);
+    const auto& wh = step_wh_scratch_;
+    const auto& ws = step_ws_scratch_;
 
     const double lf = clip(lambda_fast_ * lam_fast_scale_, 0.01, 0.999);
     const double ls = clip(lambda_slow_ * lam_slow_scale_, 0.01, 0.999);
@@ -225,30 +245,32 @@ std::vector<double> CellAISSM::step(const std::vector<double>& e_t) {
       }
     }
 
-    std::vector<double> ctx;
-    ctx.reserve(static_cast<std::size_t>(2 * cfg_.d_state));
+    step_ctx_scratch_.clear();
     if (cfg_.use_multiscale) {
       const double alpha = clip(alpha_[static_cast<std::size_t>(layer)], 0.0, 1.0);
       for (int i = 0; i < cfg_.d_state; ++i) {
-        ctx.push_back(alpha * h[static_cast<std::size_t>(i)] + (1.0 - alpha) * s[static_cast<std::size_t>(i)]);
+        step_ctx_scratch_.push_back(alpha * h[static_cast<std::size_t>(i)] + (1.0 - alpha) * s[static_cast<std::size_t>(i)]);
       }
-      ctx.insert(ctx.end(), s.begin(), s.end());
+      step_ctx_scratch_.insert(step_ctx_scratch_.end(), s.begin(), s.end());
     } else {
-      ctx.insert(ctx.end(), h.begin(), h.end());
-      ctx.insert(ctx.end(), s.begin(), s.end());
+      step_ctx_scratch_.insert(step_ctx_scratch_.end(), h.begin(), h.end());
+      step_ctx_scratch_.insert(step_ctx_scratch_.end(), s.begin(), s.end());
     }
 
     if (hebb_graph_) {
-      ctx = hebb_graph_->diffuse(ctx);
-      hebb_graph_->update(ctx.data());
+      // hebb_graph_->diffuse() returns a fresh vector by value (a different class, out of
+      // scope for this pass -- see the report's "not pursued" list); assign it back into the
+      // scratch buffer rather than introducing a second, differently-lifetimed local.
+      step_ctx_scratch_ = hebb_graph_->diffuse(step_ctx_scratch_);
+      hebb_graph_->update(step_ctx_scratch_.data());
     }
 
     if (cfg_.use_sparse_hebbian) {
       sparse_hebbian_update(h, s, 1e-4, layer);
     }
 
-    contexts.insert(contexts.end(), ctx.begin(), ctx.end());
-    layer_input = std::move(ctx);
+    contexts.insert(contexts.end(), step_ctx_scratch_.begin(), step_ctx_scratch_.end());
+    step_layer_input_scratch_.swap(step_ctx_scratch_);
   }
 
   return contexts;

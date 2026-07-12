@@ -41,6 +41,8 @@ class NgramFusion {
     std::vector<double> apply_position_weights(const std::vector<double>& embeds) const;
     static std::vector<double> matvec(const std::vector<double>& m, int rows, int cols,
                                       const std::vector<double>& x);
+    static void matvec(const std::vector<double>& m, int rows, int cols,
+                       const std::vector<double>& x, std::vector<double>& out);
 };
 
 }  // namespace cypha::cyphalm

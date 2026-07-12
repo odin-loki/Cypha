@@ -110,8 +110,26 @@ class CellAISSM {
   std::unique_ptr<HebbianGraph> hebb_graph_;
   std::unique_ptr<cypha::som::TemporalSOM> temporal_som_;
 
+  // Perf (2026-07-12, part 3, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up (part
+  // 3)"): step()'s own allocation-churn fix, same pattern/rationale as CyphaLMModel's
+  // hybrid_lstm_grad_scratch_/bptt_*_scratch_ (see that file). These replace step()'s previous
+  // per-layer-iteration fresh `wh`/`ws`/`ctx` locals and the initial `layer_input = e_t` copy --
+  // reused via `.assign()`/`.resize()`/`std::swap` in place instead. Safe: each CellAISSM
+  // instance (owned by CyphaLMModel::ssm_/hierarchical_ssm_, or a standalone local in
+  // single-threaded diagnostic tools) is only ever driven by one thread at a time -- unlike
+  // CharLSTMHead/GRIALowRank, no code path calls CellAISSM::step concurrently on a shared
+  // instance from CyphaLMBatch's parallel_batch or any other multi-threaded caller (confirmed by
+  // audit; see the report for the exact grep). Every element is fully overwritten before being
+  // read each call, so this is a pure allocation-reuse fix with zero arithmetic change.
+  std::vector<double> step_layer_input_scratch_;
+  std::vector<double> step_wh_scratch_;
+  std::vector<double> step_ws_scratch_;
+  std::vector<double> step_ctx_scratch_;
+
   static std::vector<double> matvec(const std::vector<double>& mat, int rows, int cols,
                                     const std::vector<double>& x);
+  static void matvec(const std::vector<double>& mat, int rows, int cols,
+                     const std::vector<double>& x, std::vector<double>& out);
   static double clip(double v, double lo, double hi);
 };
 

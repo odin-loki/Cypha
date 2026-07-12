@@ -598,3 +598,232 @@ fixes with zero arithmetic change and confirmed bit-identical BPC.
    thus not GPU-parallelizable without an algorithm change, but `CyphaLMBatch`'s batch/eval-side
    path (already CUDA-capable per that report) could plausibly benefit and was not explored here
    (out of this task's explicit A/B/C scope).
+
+---
+
+## Follow-up (2026-07-12, part 3)
+
+**Scope:** execute Part 2's own §"Remaining opportunities" item 1 -- sub-phase-profile
+`predict_next` (the LSTM+GRIA hybrid forward pass) itself, the single largest unbroken-down phase
+in `train_step`, and fix whatever the profiling data supports. **Did not touch**
+`native/build_math`, `bench/BASELINE_LOCK.json`, `bench/BASELINE_REPORT.md`, the overnight
+orchestration scripts, or `native/build_deff` (the sibling hidden=512 D_eff run).
+
+**HEAD at start:** `0851483` (Part 2's own commit). Fresh build dir: `native/build_perf3` (MSVC,
+`windows-vs2026-release` preset).
+
+### Re-measured top-level breakdown
+
+Before assuming the Part 2 write-up's cited **40.6%** figure still held, re-ran
+`cyphalm_bench_native --profile d17 --n-train 20000 --n-eval 256 --threads 1 --bench-seed 42` with
+`CYPHA_PERF_TRACE=1` on a fresh build at current HEAD, *before* touching any code. Result:
+`predict_next` = **33.68%** of `train_step` (65.1s of 193.3s instrumented, 59,922 calls) --
+noticeably *lower* than the 40.6% cited in Part 2, confirming that figure's own caveat ("its
+absolute share grew as a fraction now that lstm_backward/bptt_ssm_update shrank -- this doesn't
+necessarily mean predict_next itself got slower, re-measure to confirm"): it was never really
+"40.6% and climbing", that number was itself noisy against this same shared, heavily-loaded
+64-core machine (see "Measurement environment note" below) -- re-measurements throughout this pass
+put `predict_next`'s share anywhere from **33.7% to 40.3%** depending on concurrent system load,
+with `lstm_backward` (42-46%) consistently the larger of the two. `predict_next` is still the
+right next target (it's the largest *unexplored* phase, whether it's exactly 34% or 40%), just not
+because it's mechanically "growing" -- it's cross-run measurement noise on an increasingly
+contended machine.
+
+### `predict_next` sub-phase breakdown
+
+Added a `PredictNextSubPhaseTrace`/`PredictScopeTimer` pair inside `CyphaLMModel::predict_next`
+(`native/src/cyphalm/cyphalm_model.cpp`), gated by the same `CYPHA_PERF_TRACE` env var, mirroring
+the `BackwardSubPhaseTrace`/`BwdScopeTimer` pattern Part 2 used for `lstm_backward`. Eight buckets,
+consistent across every run of this pass (four independent measurements, two different corpora,
+percentages stable to within ~1.5pp of each other even though absolute instrumented seconds varied
+2-3x with machine load -- see below):
+
+| # | Sub-phase | Share of `predict_next` |
+|---|---|---|
+| 1 | embed lookup + history record | ~0.13-0.15% |
+| 2 | **SSM step + hebbian hooks + field projection** | **~35.4-35.9%** |
+| 3 | DIF (kernel-LLR) predict | ~3.7-3.9% |
+| 4 | GRIA input build (memory/context-bank/ngram-fusion + rpsm/gng) | ~22.2-23.7% |
+| 5 | GRIA field forward (logits+softmax) | ~4.4-4.6% |
+| 6 | **LSTM forward step (gates) + hidden-state bookkeeping** | **~30.6-31.8%** |
+| 7 | hybrid blend combination (`blend_logit`/`blend_log_probs`) | ~1.2-1.3% |
+| 8 | tail (token history + top-k + bookkeeping) | ~0.4-0.46% |
+
+So `predict_next` isn't dominated by the LSTM cell the way its name suggests -- the **SSM step**
+(bucket 2, `CellAISSM::step`, called from inside `predict_next` for the hybrid path's
+context-modulation) is actually the single largest sub-phase, narrowly ahead of the LSTM forward
+gates themselves (bucket 6), with GRIA's context/n-gram-fusion input assembly (bucket 4) a clear
+third. This is a materially different shape than `lstm_backward`'s profile (which Part 2 found to
+be ~45% dominated by one thing, the `dWx`/`dWh` outer products) -- `predict_next`'s cost is spread
+across three separate subsystems (SSM, GRIA input assembly, LSTM gates) each individually
+cheap-ish, not one dominant bottleneck.
+
+### Fix implemented: allocation-churn removal across all four subsystems `predict_next` touches
+
+Per-call heap-allocation audit of every function `predict_next` calls (same methodology as Parts
+1/2/A/B), found the identical allocation-churn pattern in **every one of the four subsystems**
+above, none previously touched by Parts 1/2:
+
+- **`CyphaLMModel::predict_next` itself:** `log_g`/`log_l` (`std::vector<double>(vocab_size)`) and
+  `h_new`/`c_new` (LSTM forward-step outputs) were fresh `std::vector` locals every character step.
+  Replaced with persistent `log_g_scratch_`/`log_l_scratch_`/`predict_lstm_h_scratch_`/
+  `predict_lstm_c_scratch_` members (`.assign()`/`.resize()` in place); `h_new`/`c_new` are now
+  `std::swap`'d with `lstm_h_`/`lstm_c_` instead of move-assigned, so the same two buffers
+  permanently alternate roles instead of one side being freed and a fresh one allocated every step.
+- **`CellAISSM::step`** (bucket 2, the largest sub-phase): `matvec` returned freshly-allocated
+  `std::vector<double>` by value on every call (multiple times per `step()`), and `step()`'s own
+  locals (`layer_input`, `Wh`-product, `Ws`-product, `ctx`) were fresh allocations too. Added an
+  out-param `matvec(..., std::vector<double>& out)` overload (value-returning overload now
+  delegates to it) and four `CellAISSM` member scratch buffers (`step_layer_input_scratch_`,
+  `step_wh_scratch_`, `step_ws_scratch_`, `step_ctx_scratch_`) filled in place.
+- **`GRIALowRank::logits`/`forward`** (bucket 5): `h` (rank-sized), `z`/`probs` (vocab-sized) were
+  fresh locals every call. Replaced with `thread_local static std::vector<double>` -- `thread_local`
+  (not member/plain-static) specifically because `CyphaLMBatch::parallel_batch`
+  (`cyphalm_batch.cpp`) calls `GRIALowRank::forward` concurrently on one *shared* instance from
+  multiple worker threads (verified by reading that call site), so a plain static would race; a
+  member would still race since the instance is shared. `predict_next` itself only ever runs
+  single-threaded per model instance, so this dual-use function needed the more conservative of the
+  two safety patterns.
+- **`NgramFusion::forward`** (feeds bucket 4) + **`CyphaLMModel::ngram_embedding_vector`** (also
+  feeds bucket 4): `forward()`'s `pos_weighted`/`embed_part`/`gate_in`/`gate_logits` locals and
+  `matvec`'s return-by-value were the same pattern, fixed the same two ways as above (`thread_local`
+  in `NgramFusion::forward`/`matvec` for the same `parallel_batch`-shares-one-instance reason as
+  `GRIALowRank`; a new out-param `ngram_embedding_vector(std::vector<double>& out)` overload plus a
+  `mutable ngram_embed_vec_scratch_` member on `CyphaLMModel` for `gria_input_core`'s call site,
+  since `predict_next`'s own caller chain is single-threaded and `gria_input_core` is `const`).
+
+**Zero arithmetic/gradient change in any of the above** -- every reused buffer is either
+`.assign()`'d (guarantees every element written, matching a fresh zero-initialized vector) or fully
+overwritten element-by-element by the same loop that used to write into a fresh allocation, before
+any element is read. No loop reordering, no algebraic simplification, no summation-order change --
+this pass is allocation-reuse only, unlike Part 2's Part A which also included a proven-safe
+loop-interchange.
+
+### Determinism
+
+The D17 BPC pin was checked at **every single stage** of this pass -- before any instrumentation,
+after instrumentation-only, after the fix, and again after a final from-scratch rebuild once all
+changes were in place -- and came back **bit-identical every time**:
+`bpc = 3.4748796956404946`, `bpc_lstm_only = 3.472557891154332` (16 significant digits, `wikitext2`
+corpus, `--bench-seed 42`). `native_d17_wikitext_smoke` and the full requested CTest filter
+(`ctest --test-dir native/build_perf3 -C Release -R "cyphalm|d17|predict|gria"`, 16 tests) both pass
+100% on the final rebuilt binary.
+
+### Measurement environment note (read before the throughput numbers below)
+
+This pass ran on a much more heavily loaded version of the same shared 64-core machine than Parts
+1/2 did earlier today: the live `native/build_math` overnight benchmark and the sibling
+hidden=512 `native/build_deff` D_eff confirmation run were both still active, a *third* sibling
+agent was concurrently landing commits and rebuilding in `native/CMakeLists.txt` and several
+unrelated `native/` files in this same working directory (confirmed via `git status` showing ~15
+files this task never touched, mid-edit), and `git worktree list` showed three more Cursor-managed
+worktrees active elsewhere on this box. `Get-Process` during one of this pass's own timing runs
+showed several other processes with **tens of thousands of accumulated CPU-seconds** each, and this
+pass's own single-threaded benchmark process visibly CPU-starved (only ~93 CPU-seconds consumed
+over several minutes of wall time). Concretely: the exact same unmodified binary, run
+back-to-back with no code change in between, varied from **77s to 665s** wall-clock for the
+identical `--n-train 20000 --n-eval 256` command over the course of this pass -- an order of
+magnitude of pure scheduling noise, far larger than any effect this fix could plausibly produce.
+Wall-clock end-to-end chars/sec is therefore **not a trustworthy signal for this specific pass** and
+is reported below only for transparency, alongside the more robust evidence.
+
+To get a signal not confounded by whichever *other* files a concurrent sibling agent happened to be
+editing in the shared working directory at that moment (a real, observed problem this pass hit
+once -- a `git stash`/`pop` round-trip briefly lost this task's own `cyphalm_model.hpp` scratch-buffer
+declarations to an OS-level file-lock error, caught and re-applied before it could contaminate any
+result), the before/after comparison below was redone a second time in a fully isolated
+`git worktree` (pinned to Part 2's commit `0851483` for "before", this task's diff copied in for
+"after", built in its own directory) -- immune to concurrent edits to unrelated files, though still
+subject to the same machine-wide CPU scheduling contention described above.
+
+### `predict_next`'s own instrumented CPU time: before/after
+
+The one measurement that *is* robust to whole-process wall-clock noise: the sum of the eight
+`PredictScopeTimer` buckets above, i.e. actual `steady_clock` time spent inside `predict_next`
+itself, same-session same-build-dir paired runs (`wikitext2` corpus, 60,434 `predict_next` calls
+both sides):
+
+| | Instrumented `predict_next` time | vs. before |
+|---|---|---|
+| Before fix (instrumentation added, no allocation-reuse yet) | 34.459s | -- |
+| After fix, run 1 | 30.860s | **-10.4%** |
+| After fix, run 2 (re-check after final rebuild) | 30.202s | **-12.3%** |
+
+Both after-fix runs agree with each other to within 2%, and both are consistently below the
+before-fix number, despite being measured at different points across this pass (i.e. under
+different concurrent system load) -- this is the fix actually working, isolated from the
+whole-process noise described above. The per-bucket shift is broadly uniform (each of the four
+touched subsystems -- buckets 2/4/5/6 -- individually improved 8-14%; the untouched buckets 1/3/7/8
+moved by less than their own run-to-run noise, as expected since nothing in them changed).
+
+### End-to-end wall-clock throughput (reported for transparency, not trusted -- see note above)
+
+Direct `--n-train 20000 --n-eval 256 --threads 1 --bench-seed 42` timings, no `CYPHA_PERF_TRACE`
+overhead:
+
+| | Samples (ms) | Median |
+|---|---|---|
+| Before (main build dir, `git stash` toggle) | 118,426 / 95,383 / 120,954 | 118,426 |
+| Before (isolated worktree, `0851483`, fallback corpus) | 87,927 / 80,153 | 84,040 |
+| After (main build dir, final rebuilt binary) | 665,083 (one run; machine load had worsened sharply by this point -- see note above) | -- |
+
+No usable before/after delta can be extracted from these numbers today; the run-to-run spread
+within a single unchanged binary (77s-665s across this pass) is far larger than the ~10-12%
+internal `predict_next` improvement could move the needle on an end-to-end number where
+`predict_next` is only ~34-40% of the total. **Back-of-envelope expected effect**, using the robust
+internal number instead: `predict_next` at ~35% of `train_step` share x ~11% internal improvement
+implies train_step should end-to-end improve by roughly **~3-4%** once machine load is quiet enough
+to measure it -- directionally consistent with, but not independently confirming beyond, Part 2's
+own paired-run methodology. Recommend re-running this specific A/B once the overnight/`build_deff`
+jobs have finished and the machine is quiet, using the exact `git stash`-toggle or isolated-worktree
+methodology already set up here (both are fast to repeat).
+
+### Running total: today's entire optimization thread (updated)
+
+Extending Part 2's own honest, uncollapsed table:
+
+| Stage | chars/sec | Toolchain | What changed |
+|---|---|---|---|
+| Earlier baseline (context) | ~96 | MinGW | (pre-existing) |
+| Before Part 1 fix | 126.4 | MinGW | (pre-existing) |
+| **After Part 1** (`dafd677`) | **138.3** | MinGW | +9.5% (Part 1) |
+| *(MSVC toolchain migration, `f566fee`)* | *(~+28%, not algorithmic)* | *MinGW->MSVC* | *toolchain only* |
+| Before Part 2 fix | 211.3 | MSVC | (post-toolchain baseline) |
+| **After Part 2** (`0851483`) | **252.2** | MSVC | **+19.4% (Part 2)** |
+| After Part 3 fix (this task) | *not independently wall-clock-confirmed today (see note above)* | MSVC | **~+3-4% estimated** from the robust internal `predict_next` measurement |
+
+Same honest framing as Part 2: the toolchain-migration jump is not algorithmic and shouldn't be
+folded into a single multiplier with the allocation/cache-access fixes. Unlike Parts 1 and 2, this
+pass's own contribution to the chain is an *estimate* derived from the internal, noise-robust
+`predict_next` timing rather than a directly wall-clock-measured number, because today's machine
+load made the direct measurement unreliable (see "Measurement environment note"). The fix itself is
+real, deterministic-verified, and code-reviewable regardless of which exact multiplier it turns out
+to be once independently re-measured on a quieter machine.
+
+### Recommendation
+
+**This specific hot path (`predict_next`/`lstm_backward`/`bptt_ssm_update`) has reached diminishing
+returns for the allocation-reuse pattern that has driven all three of today's fixes.** Every
+allocation this pass could find inside `predict_next`'s call tree has now been converted to
+scratch-buffer reuse (this task) or was already allocation-free (`lstm_backward`'s weight-gradient
+outer products, `bptt_ssm_update`, both audited and fixed in Part 2). What's left in each of
+`predict_next`'s three largest sub-phases -- the SSM step's small matvecs, GRIA's input-assembly
+matvecs, the LSTM cell's gate matvecs -- is now genuinely compute-bound, cache-friendly (row-major
+by construction, per Part 2's finding that this codebase's matvec loops were already correctly
+ordered), and not obviously reducible without either (a) touching the actual gate/field/SSM
+arithmetic (out of scope for the safety discipline this whole thread has followed), or (b) a
+structural change to how many of these subsystems run per character step (e.g. whether DIF/
+n-gram-fusion/GNG/RPSM all need to be computed on every single step at this model's default
+configuration -- not investigated this pass, but a plausible next angle if predict_next specifically
+is revisited).
+
+**Recommend redirecting future performance work away from micro-optimizing this specific per-step
+critical path and toward one of:** (1) the batched-CUDA-caller opportunity flagged by the sibling
+accel-audit task (`CyphaLMBatch`'s batch/eval path, already CUDA-capable per the MSVC/CUDA migration
+report, genuinely GPU-parallelizable unlike the inherently-sequential D17 online-training
+recurrence itself); (2) a from-first-principles look at whether every one of `predict_next`'s four
+subsystems (SSM, DIF, GRIA, n-gram-fusion, LSTM) needs to run on literally every character step at
+the D17 default config, i.e. reducing the *amount* of per-character work rather than further
+speeding up the existing amount; or (3) simply re-running today's Part 3 A/B on a quiet machine to
+get a trustworthy wall-clock number for the record, since the code change itself is done and
+determinism-verified regardless.

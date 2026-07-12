@@ -42,9 +42,9 @@ NgramFusion::NgramFusion(int field_dim, int field_in, int embed_in, const std::s
     }
 }
 
-std::vector<double> NgramFusion::matvec(const std::vector<double>& m, int rows, int cols,
-                                        const std::vector<double>& x) {
-    std::vector<double> out(static_cast<std::size_t>(rows), 0.0);
+void NgramFusion::matvec(const std::vector<double>& m, int rows, int cols,
+                         const std::vector<double>& x, std::vector<double>& out) {
+    if (out.size() != static_cast<std::size_t>(rows)) out.resize(static_cast<std::size_t>(rows));
     for (int r = 0; r < rows; ++r) {
         double acc = 0.0;
         for (int c = 0; c < cols; ++c) {
@@ -52,6 +52,12 @@ std::vector<double> NgramFusion::matvec(const std::vector<double>& m, int rows, 
         }
         out[static_cast<std::size_t>(r)] = acc;
     }
+}
+
+std::vector<double> NgramFusion::matvec(const std::vector<double>& m, int rows, int cols,
+                                        const std::vector<double>& x) {
+    std::vector<double> out;
+    matvec(m, rows, cols, x, out);
     return out;
 }
 
@@ -75,21 +81,59 @@ std::vector<double> NgramFusion::forward(const std::vector<double>& field_x,
     if (static_cast<int>(field_x.size()) != field_in_) {
         throw std::runtime_error("NgramFusion: field_x dim mismatch");
     }
-    const auto em = apply_position_weights(embeds);
+    // Perf (2026-07-12, part 3, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up (part
+    // 3)"): `apply_position_weights(embeds)` unconditionally returned a fresh-copy vector even
+    // when `pos_weights_` is empty (the default -- `use_ngram_position_weights` defaults false),
+    // in which case it was *provably* just an identity copy of `embeds` (see its own early
+    // `return embeds;`). Inlining that exact no-op condition here lets the default-config path
+    // reference `embeds` directly via a pointer with zero extra allocation/copy, while the
+    // position-weighted path (unchanged arithmetic, still computed into a reused thread_local
+    // buffer below) behaves identically to before.
+    const bool needs_pos_weights =
+        !pos_weights_.empty() && n_positions_ > 0 && (embed_in_ / n_positions_) > 0 &&
+        static_cast<int>(embeds.size()) == embed_in_;
+    const std::vector<double>* em_ptr = &embeds;
+    thread_local std::vector<double> pos_weighted_scratch;
+    if (needs_pos_weights) {
+        const int d = embed_in_ / n_positions_;
+        if (pos_weighted_scratch.size() != static_cast<std::size_t>(embed_in_)) {
+            pos_weighted_scratch.resize(static_cast<std::size_t>(embed_in_));
+        }
+        for (int i = 0; i < n_positions_; ++i) {
+            const double w = pos_weights_[static_cast<std::size_t>(i)];
+            for (int j = 0; j < d; ++j) {
+                pos_weighted_scratch[static_cast<std::size_t>(i * d + j)] =
+                    w * embeds[static_cast<std::size_t>(i * d + j)];
+            }
+        }
+        em_ptr = &pos_weighted_scratch;
+    }
+    const auto& em = *em_ptr;
     if (static_cast<int>(em.size()) != embed_in_) {
         throw std::runtime_error("NgramFusion: embeds dim mismatch");
     }
+    // `embed_part` is purely an internal accumulator (never returned), unlike `field_part` below
+    // (which either *is* the return value or is combined into it in place) -- thread_local reuse
+    // via the out-param matvec overload above removes its allocation entirely. `field_part`
+    // itself is left as a `matvec`-returned local: it's what NRVO can construct directly in the
+    // caller's storage for this function's own return-by-value contract, so a scratch buffer
+    // there would just add a second copy back out, not remove one.
     auto field_part = matvec(W_field_, field_dim_, field_in_, field_x);
-    auto embed_part = matvec(W_embed_, field_dim_, embed_in_, em);
+    thread_local std::vector<double> embed_part_scratch;
+    matvec(W_embed_, field_dim_, embed_in_, em, embed_part_scratch);
+    const auto& embed_part = embed_part_scratch;
     if (mode_ == "gated") {
-        std::vector<double> gate_in(static_cast<std::size_t>(field_in_ + embed_in_));
-        for (int i = 0; i < field_in_; ++i) gate_in[static_cast<std::size_t>(i)] = field_x[static_cast<std::size_t>(i)];
+        thread_local std::vector<double> gate_in_scratch;
+        const std::size_t gate_in_size = static_cast<std::size_t>(field_in_ + embed_in_);
+        if (gate_in_scratch.size() != gate_in_size) gate_in_scratch.resize(gate_in_size);
+        for (int i = 0; i < field_in_; ++i) gate_in_scratch[static_cast<std::size_t>(i)] = field_x[static_cast<std::size_t>(i)];
         for (int i = 0; i < embed_in_; ++i) {
-            gate_in[static_cast<std::size_t>(field_in_ + i)] = em[static_cast<std::size_t>(i)];
+            gate_in_scratch[static_cast<std::size_t>(field_in_ + i)] = em[static_cast<std::size_t>(i)];
         }
-        const auto gate_logits = matvec(W_gate_, field_dim_, field_in_ + embed_in_, gate_in);
+        thread_local std::vector<double> gate_logits_scratch;
+        matvec(W_gate_, field_dim_, field_in_ + embed_in_, gate_in_scratch, gate_logits_scratch);
         for (int i = 0; i < field_dim_; ++i) {
-            const double g = sigmoid(gate_logits[static_cast<std::size_t>(i)]);
+            const double g = sigmoid(gate_logits_scratch[static_cast<std::size_t>(i)]);
             field_part[static_cast<std::size_t>(i)] =
                 g * field_part[static_cast<std::size_t>(i)] +
                 (1.0 - g) * embed_part[static_cast<std::size_t>(i)];

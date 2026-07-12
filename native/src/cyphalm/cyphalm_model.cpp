@@ -164,6 +164,65 @@ inline void perf_trace_end(std::size_t idx, std::chrono::steady_clock::time_poin
     g_perf_trace.totals[idx] += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 }
 
+// CYPHA_PERF_TRACE follow-up (2026-07-12, part 3, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md
+// "Follow-up (2026-07-12, part 3)"): fine-grained sub-phase breakdown *inside* predict_next
+// itself, mirroring char_lstm.cpp's BackwardSubPhaseTrace/BwdScopeTimer pattern used for
+// lstm_backward in part 2. Same env var as the top-level trace. No mutex (unlike
+// BackwardSubPhaseTrace): predict_next is a CyphaLMModel member function only ever called from
+// single-threaded contexts (train_step, generation, ssm_diagnose) -- CyphaLMBatch's
+// parallel_batch calls CharLSTMHead::forward_step and GRIALowRank::forward directly on their own
+// shared objects, never through CyphaLMModel::predict_next -- so this can use the same
+// unsynchronized style as the top-level g_perf_trace above. Purely diagnostic; never touches
+// training math/state.
+struct PredictNextSubPhaseTrace {
+    static constexpr std::size_t kCount = 8;
+    static constexpr std::array<const char*, kCount> kNames = {
+        "1. embed lookup + history record",
+        "2. SSM step + hebbian hooks + field projection",
+        "3. DIF (kernel-LLR) predict",
+        "4. GRIA input build (memory/context-bank/ngram-fusion + rpsm/gng)",
+        "5. GRIA field forward (logits+softmax)",
+        "6. LSTM forward step (gates) + hidden-state bookkeeping",
+        "7. hybrid blend combination (blend_logit + blend_log_probs)",
+        "8. tail (token history + top-k + bookkeeping)",
+    };
+    bool enabled = false;
+    long long calls = 0;
+    std::array<double, kCount> totals{};
+
+    PredictNextSubPhaseTrace() { enabled = std::getenv("CYPHA_PERF_TRACE") != nullptr; }
+    ~PredictNextSubPhaseTrace() {
+        if (!enabled || calls == 0) return;
+        double total = 0.0;
+        for (double t : totals) total += t;
+        std::cerr << "=== CYPHA_PERF_TRACE: predict_next sub-phase breakdown over " << calls
+                   << " calls (" << total << "s instrumented) ===\n";
+        for (std::size_t i = 0; i < kCount; ++i) {
+            const double pct = total > 0.0 ? (100.0 * totals[i] / total) : 0.0;
+            std::cerr << "  " << kNames[i] << ": " << totals[i] << "s (" << pct << "%)\n";
+        }
+    }
+};
+PredictNextSubPhaseTrace g_predict_trace;
+
+class PredictScopeTimer {
+ public:
+    explicit PredictScopeTimer(std::size_t idx) : idx_(idx), enabled_(g_predict_trace.enabled) {
+        if (enabled_) t0_ = std::chrono::steady_clock::now();
+    }
+    ~PredictScopeTimer() {
+        if (enabled_) {
+            g_predict_trace.totals[idx_] +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count();
+        }
+    }
+
+ private:
+    std::size_t idx_;
+    bool enabled_;
+    std::chrono::steady_clock::time_point t0_;
+};
+
 std::vector<double> resize_to_field(const std::vector<double>& v, int field_dim) {
     std::vector<double> out(static_cast<std::size_t>(field_dim), 0.0);
     const int n = std::min(field_dim, static_cast<int>(v.size()));
@@ -502,11 +561,16 @@ void CyphaLMModel::record_embedding(const std::vector<double>& e) {
     embed_history_[0] = e;
 }
 
-std::vector<double> CyphaLMModel::ngram_embedding_vector() const {
-    std::vector<double> out;
+void CyphaLMModel::ngram_embedding_vector(std::vector<double>& out) const {
+    out.clear();
     for (const auto& row : embed_history_) {
         out.insert(out.end(), row.begin(), row.end());
     }
+}
+
+std::vector<double> CyphaLMModel::ngram_embedding_vector() const {
+    std::vector<double> out;
+    ngram_embedding_vector(out);
     return out;
 }
 
@@ -669,7 +733,11 @@ std::vector<double> CyphaLMModel::gria_input_core(const std::vector<double>& fie
         (mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
          mode == ContextMode::AblationNoSsm || mode == ContextMode::Rpsm ||
          mode == ContextMode::SsmGria)) {
-        return ngram_fusion_->forward(field, ngram_embedding_vector());
+        // Perf (2026-07-12, part 3): fills ngram_embed_vec_scratch_ in place via the out-param
+        // overload instead of receiving a fresh vector from ngram_embedding_vector() every
+        // predict_next call (this is the default D17 hybrid path's ngram-fuse-split branch).
+        ngram_embedding_vector(ngram_embed_vec_scratch_);
+        return ngram_fusion_->forward(field, ngram_embed_vec_scratch_);
     }
     if (mode == ContextMode::AblationNoSsm && !proj_ngram_.empty()) {
         const auto embeds = ngram_embedding_vector();
@@ -814,6 +882,7 @@ double CyphaLMModel::hybrid_forget_gate_scale(const DIFPredictOutput& dif_out) c
 }
 
 PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
+    if (g_predict_trace.enabled) ++g_predict_trace.calls;
     PredictNextOutput out;
     const auto mode = cfg_.context_mode;
 
@@ -824,137 +893,191 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         return out;
     }
 
-    std::vector<double> log_g(cfg_.vocab_size);
+    // Perf (2026-07-12, part 3): log_g_scratch_ replaces a fresh `std::vector<double>
+    // log_g(vocab_size)` local allocated every single predict_next call. `.assign(n, 0.0)`
+    // reuses the existing heap buffer (no realloc once warmed up) and, same as the original
+    // constructor, zero-initializes it -- so callers that skip the block below (e.g. no
+    // `embed_`/`active_ssm()`) see the exact same all-zero log_g as before, not stale data from
+    // a previous call.
+    log_g_scratch_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
+    std::vector<double>& log_g = log_g_scratch_;
     if (embed_ && (active_ssm() || mode == ContextMode::AblationNoSsm)) {
-        const auto e = embed_->embed_vec(token_id);
-        record_embedding(e);
-        last_e_ = e;
-        if (mode == ContextMode::AblationNoSsm) {
-            last_ctx_.assign(static_cast<std::size_t>(ssm_context_dim()), 0.0);
-            field_x_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
-        } else {
-            auto ctx = ssm_step(e);
-            apply_hebbian_hooks(ctx);
-            last_ctx_ = ctx;
-            field_x_ = project_field(ctx);
-            if (cfg_.use_mdl_forget) {
-                mdl_forget_project(field_x_, cfg_.mdl_forget_max_norm);
-            }
-            if (nig_state_cell_) {
-                const auto nig_h = nig_state_cell_->step(field_x_.data(), cfg_.field_dim);
-                for (std::size_t i = 0; i < field_x_.size() && i < nig_h.size(); ++i) {
-                    field_x_[i] = 0.6 * field_x_[i] + 0.4 * nig_h[i];
+        std::vector<double> e;
+        {
+            PredictScopeTimer __t(0);  // 1. embed lookup + history record
+            e = embed_->embed_vec(token_id);
+            record_embedding(e);
+            last_e_ = e;
+        }
+        {
+            PredictScopeTimer __t(1);  // 2. SSM step + hebbian hooks + field projection
+            if (mode == ContextMode::AblationNoSsm) {
+                last_ctx_.assign(static_cast<std::size_t>(ssm_context_dim()), 0.0);
+                field_x_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+            } else {
+                auto ctx = ssm_step(e);
+                apply_hebbian_hooks(ctx);
+                last_ctx_ = ctx;
+                field_x_ = project_field(ctx);
+                if (cfg_.use_mdl_forget) {
+                    mdl_forget_project(field_x_, cfg_.mdl_forget_max_norm);
+                }
+                if (nig_state_cell_) {
+                    const auto nig_h = nig_state_cell_->step(field_x_.data(), cfg_.field_dim);
+                    for (std::size_t i = 0; i < field_x_.size() && i < nig_h.size(); ++i) {
+                        field_x_[i] = 0.6 * field_x_[i] + 0.4 * nig_h[i];
+                    }
                 }
             }
         }
         const bool skip_dif =
             mode == ContextMode::SsmGria || mode == ContextMode::AblationNoSsm;
-        if (dif_ && !skip_dif) {
-            last_dif_out_ = dif_->predict(field_x_.data(), static_cast<int>(field_x_.size()));
-            out.epistemic_var = last_dif_out_.epistemic_var;
-            out.aleatoric_var = last_dif_out_.aleatoric_var;
-        } else {
-            last_dif_out_ = {};
-            last_dif_out_.mean.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
-        }
-        if (selective_ && (mode == ContextMode::SsmGriaNoLstm || mode == ContextMode::Full)) {
-            const auto sel = selective_->step(e.data(), static_cast<std::uint32_t>(e.size()));
-            for (std::size_t i = 0; i < sel.size() && i < field_x_.size(); ++i) {
-                field_x_[i] = 0.5 * field_x_[i] + 0.5 * sel[i];
+        {
+            PredictScopeTimer __t(2);  // 3. DIF (kernel-LLR) predict
+            if (dif_ && !skip_dif) {
+                last_dif_out_ = dif_->predict(field_x_.data(), static_cast<int>(field_x_.size()));
+                out.epistemic_var = last_dif_out_.epistemic_var;
+                out.aleatoric_var = last_dif_out_.aleatoric_var;
+            } else {
+                last_dif_out_ = {};
+                last_dif_out_.mean.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
             }
-            if (memory_) {
-                const auto pooled = selective_->pooled_state();
+        }
+        {
+            PredictScopeTimer __t(3);  // 4. GRIA input build (memory/context-bank/ngram-fusion + rpsm/gng)
+            if (selective_ && (mode == ContextMode::SsmGriaNoLstm || mode == ContextMode::Full)) {
+                const auto sel = selective_->step(e.data(), static_cast<std::uint32_t>(e.size()));
+                for (std::size_t i = 0; i < sel.size() && i < field_x_.size(); ++i) {
+                    field_x_[i] = 0.5 * field_x_[i] + 0.5 * sel[i];
+                }
+                if (memory_) {
+                    const auto pooled = selective_->pooled_state();
+                    if (cfg_.use_priority_replay) {
+                        memory_->maybe_store_priority(step_count_, pooled.data(),
+                                                        static_cast<std::uint32_t>(pooled.size()),
+                                                        std::abs(last_train_loss_) + 1e-3);
+                    } else {
+                        memory_->maybe_store(step_count_, pooled.data(),
+                                             static_cast<std::uint32_t>(pooled.size()));
+                    }
+                }
+            } else if (memory_) {
                 if (cfg_.use_priority_replay) {
-                    memory_->maybe_store_priority(step_count_, pooled.data(),
-                                                    static_cast<std::uint32_t>(pooled.size()),
+                    memory_->maybe_store_priority(step_count_, field_x_.data(),
+                                                    static_cast<std::uint32_t>(field_x_.size()),
                                                     std::abs(last_train_loss_) + 1e-3);
                 } else {
-                    memory_->maybe_store(step_count_, pooled.data(),
-                                         static_cast<std::uint32_t>(pooled.size()));
+                    memory_->maybe_store(step_count_, field_x_.data(),
+                                         static_cast<std::uint32_t>(field_x_.size()));
                 }
             }
-        } else if (memory_) {
-            if (cfg_.use_priority_replay) {
-                memory_->maybe_store_priority(step_count_, field_x_.data(),
-                                                static_cast<std::uint32_t>(field_x_.size()),
-                                                std::abs(last_train_loss_) + 1e-3);
-            } else {
-                memory_->maybe_store(step_count_, field_x_.data(),
-                                     static_cast<std::uint32_t>(field_x_.size()));
+            gria_in_ = build_gria_input(field_x_, skip_dif ? nullptr : &last_dif_out_);
+            if (rpsm_layer_ && !field_x_.empty()) {
+                (void)rpsm_layer_->step(field_x_.data(), static_cast<int>(field_x_.size()),
+                                        rpsm_log_probs_.data());
+                const auto& h = rpsm_layer_->hidden();
+                for (std::size_t i = 0; i < gria_in_.size() && !h.empty(); ++i) {
+                    gria_in_[i] += 0.05 * h[i % h.size()];
+                }
+            }
+            if (gng_ && !field_x_.empty()) {
+                last_gng_bmu_ = gng_->step(field_x_);
             }
         }
-        gria_in_ = build_gria_input(field_x_, skip_dif ? nullptr : &last_dif_out_);
-        if (rpsm_layer_ && !field_x_.empty()) {
-            (void)rpsm_layer_->step(field_x_.data(), static_cast<int>(field_x_.size()),
-                                    rpsm_log_probs_.data());
-            const auto& h = rpsm_layer_->hidden();
-            for (std::size_t i = 0; i < gria_in_.size() && !h.empty(); ++i) {
-                gria_in_[i] += 0.05 * h[i % h.size()];
-            }
-        }
-        if (gng_ && !field_x_.empty()) {
-            last_gng_bmu_ = gng_->step(field_x_);
-        }
-        if (gria_) {
-            gria_->forward(gria_in_.data(), log_g.data());
-            if (uses_ngram_count_path(cfg_)) {
-                const auto ngram_prior = ngram_count_log_prior();
-                for (int k = 0; k < cfg_.vocab_size; ++k) {
-                    log_g[static_cast<std::size_t>(k)] += ngram_prior[static_cast<std::size_t>(k)];
+        {
+            PredictScopeTimer __t(4);  // 5. GRIA field forward (logits+softmax)
+            if (gria_) {
+                gria_->forward(gria_in_.data(), log_g.data());
+                if (uses_ngram_count_path(cfg_)) {
+                    const auto ngram_prior = ngram_count_log_prior();
+                    for (int k = 0; k < cfg_.vocab_size; ++k) {
+                        log_g[static_cast<std::size_t>(k)] += ngram_prior[static_cast<std::size_t>(k)];
+                    }
                 }
             }
         }
     }
 
     if (mode == ContextMode::Hybrid && lstm_ && gria_) {
-        std::vector<double> log_l(cfg_.vocab_size);
-        std::vector<double> h_new;
-        std::vector<double> c_new;
-        const double forget_gate_scale = hybrid_forget_gate_scale(last_dif_out_);
-        lstm_->forward_step(static_cast<int>(token_id), lstm_h_.data(), lstm_c_.data(),
-                            log_l.data(), h_new, c_new, &hybrid_lstm_cache_, forget_gate_scale);
-        lstm_h_ = std::move(h_new);
-        lstm_c_ = std::move(c_new);
-        append_lstm_hidden_history(lstm_h_);
-        hybrid_lstm_has_cache_ = true;
-        last_hybrid_log_g_ = log_g;
-        last_hybrid_log_l_ = log_l;
+        // Perf (2026-07-12, part 3): log_l_scratch_ replaces a fresh `std::vector<double>
+        // log_l(vocab_size)` local every call. `.resize()` (not `.assign()`) is enough here --
+        // unlike log_g_scratch_ above, log_l is always fully overwritten by forward_step's
+        // `log_probs[k] = ...` loop over every vocab index a few lines below, before it is ever
+        // read, so no zero-fill is needed to preserve the original semantics.
+        log_l_scratch_.resize(static_cast<std::size_t>(cfg_.vocab_size));
+        std::vector<double>& log_l = log_l_scratch_;
         double blend_logit = hybrid_blend_logit_;
-        if (cfg_.use_gria_gated_mixture && gria_) {
-            double mean_alpha = 0.5;
-            if (!gria_->alpha.empty()) {
-                double sum = 0.0;
-                for (double a : gria_->alpha) {
-                    sum += a;
+        {
+            PredictScopeTimer __t(5);  // 6. LSTM forward step (gates) + hidden-state bookkeeping
+            // Perf (2026-07-12, part 3): predict_lstm_h_scratch_/predict_lstm_c_scratch_ replace
+            // predict_next's previous fresh `h_new`/`c_new` locals. forward_step's own h_out/
+            // c_out contract starts with `.assign(hidden, 0.0)` (see char_lstm.cpp), which would
+            // corrupt `lstm_h_`/`lstm_c_` if they were passed as both the "previous state" input
+            // *and* the output buffer in the same call (the zero-fill would wipe the previous
+            // state before the per-index loop below it reads it) -- so the output buffers must
+            // stay physically distinct from `lstm_h_`/`lstm_c_` for the duration of the call,
+            // exactly as the original fresh-local design did. The difference here is *after* the
+            // call: swapping (not move-assigning) `lstm_h_`/`predict_lstm_h_scratch_` means the
+            // two buffers simply trade roles call-to-call -- `lstm_h_` ends up holding this
+            // step's freshly-written new state (bit-identical to before), and
+            // `predict_lstm_h_scratch_` ends up holding the *previous* `lstm_h_` buffer, already
+            // correctly sized and ready to be overwritten next call with zero heap allocation.
+            // A move-assignment (the original pattern) would instead leave the source empty,
+            // forcing a fresh allocation via forward_step's `.assign()` on the very next call.
+            const double forget_gate_scale = hybrid_forget_gate_scale(last_dif_out_);
+            lstm_->forward_step(static_cast<int>(token_id), lstm_h_.data(), lstm_c_.data(),
+                                log_l.data(), predict_lstm_h_scratch_, predict_lstm_c_scratch_,
+                                &hybrid_lstm_cache_, forget_gate_scale);
+            lstm_h_.swap(predict_lstm_h_scratch_);
+            lstm_c_.swap(predict_lstm_c_scratch_);
+            append_lstm_hidden_history(lstm_h_);
+            hybrid_lstm_has_cache_ = true;
+            last_hybrid_log_g_ = log_g;
+            last_hybrid_log_l_ = log_l;
+        }
+        {
+            PredictScopeTimer __t(6);  // 7. hybrid blend combination (blend_logit + blend_log_probs)
+            if (cfg_.use_gria_gated_mixture && gria_) {
+                double mean_alpha = 0.5;
+                if (!gria_->alpha.empty()) {
+                    double sum = 0.0;
+                    for (double a : gria_->alpha) {
+                        sum += a;
+                    }
+                    mean_alpha = sum / static_cast<double>(gria_->alpha.size());
                 }
-                mean_alpha = sum / static_cast<double>(gria_->alpha.size());
+                const double delta_alpha = mean_alpha - last_mean_alpha_;
+                blend_logit = gria_gated_blend_logit(blend_logit, mean_alpha, delta_alpha);
+                last_mean_alpha_ = mean_alpha;
             }
-            const double delta_alpha = mean_alpha - last_mean_alpha_;
-            blend_logit = gria_gated_blend_logit(blend_logit, mean_alpha, delta_alpha);
-            last_mean_alpha_ = mean_alpha;
-        }
-        if (cfg_.use_ood_branching && out.epistemic_var > 0.0) {
-            constexpr double kOodThreshold = 0.05;
-            if (out.epistemic_var > kOodThreshold) {
-                const double ood_scale = std::min(2.0, out.epistemic_var / kOodThreshold);
-                blend_logit -= 0.35 * ood_scale;
+            if (cfg_.use_ood_branching && out.epistemic_var > 0.0) {
+                constexpr double kOodThreshold = 0.05;
+                if (out.epistemic_var > kOodThreshold) {
+                    const double ood_scale = std::min(2.0, out.epistemic_var / kOodThreshold);
+                    blend_logit -= 0.35 * ood_scale;
+                }
             }
+            out.log_probs = blend_log_probs(log_g, log_l, blend_logit);
         }
-        out.log_probs = blend_log_probs(log_g, log_l, blend_logit);
     } else if (uses_lstm(mode) && lstm_ && !gria_) {
         out.log_probs = lstm_->forward(static_cast<int>(token_id));
     } else if (mode == ContextMode::Rpsm && rpsm_layer_ && !rpsm_log_probs_.empty()) {
         out.log_probs = rpsm_log_probs_;
     } else {
-        out.log_probs = std::move(log_g);
+        // Copy (not move) from log_g_scratch_ -- it's a persistent scratch member now (see
+        // above), not a one-off local, so it must stay intact for reuse on the next call.
+        out.log_probs = log_g;
     }
 
-    if (mode != ContextMode::CharLstm) {
-        record_token_history(token_id);
-    }
+    {
+        PredictScopeTimer __t(7);  // 8. tail (token history + top-k + bookkeeping)
+        if (mode != ContextMode::CharLstm) {
+            record_token_history(token_id);
+        }
 
-    ++step_count_;
-    fill_top_k(out.log_probs, out);
+        ++step_count_;
+        fill_top_k(out.log_probs, out);
+    }
     return out;
 }
 

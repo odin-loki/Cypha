@@ -272,6 +272,27 @@ class CyphaLMModel {
     std::vector<double> bptt_delta_rows_scratch_;
     std::vector<double> bptt_inv_v_scratch_;
     std::vector<double> bptt_grad_ctx_scratch_;
+    // Perf (2026-07-12, part 3, docs/reports/PERFORMANCE_PROFILE_2026-07-12.md "Follow-up (part
+    // 3)"): predict_next()'s own allocation-churn fix, same pattern/rationale as
+    // hybrid_lstm_grad_scratch_/bptt_*_scratch_ above. `log_g_scratch_`/`log_l_scratch_` replace
+    // predict_next's previous `std::vector<double> log_g(vocab_size)`/`log_l(vocab_size)` locals
+    // (fresh heap alloc every character step); `predict_lstm_h_scratch_`/`predict_lstm_c_scratch_`
+    // replace its `h_new`/`c_new` locals -- filled by CharLSTMHead::forward_step and then
+    // `std::swap`'d (not move-assigned) with `lstm_h_`/`lstm_c_` so the *same two buffers*
+    // alternate roles call-to-call instead of one side being freed and a fresh one allocated
+    // every step. Safe for the same reason as the other scratch members above: predict_next runs
+    // on a single thread per model instance (never CyphaLMBatch's parallel path), and every
+    // element is fully overwritten before being read each call.
+    std::vector<double> log_g_scratch_;
+    std::vector<double> log_l_scratch_;
+    std::vector<double> predict_lstm_h_scratch_;
+    std::vector<double> predict_lstm_c_scratch_;
+    // Perf (2026-07-12, part 3): gria_input_core()'s ngram-fuse-split branch previously received
+    // a freshly-allocated vector every call from `ngram_embedding_vector()` (returned by value).
+    // Filled in place via that function's new out-param overload instead; `mutable` because
+    // gria_input_core is `const` (it only reads the model's own state to build GRIA's input, it
+    // just also needs a scratch buffer to avoid allocating one every call).
+    mutable std::vector<double> ngram_embed_vec_scratch_;
     std::vector<double> last_hybrid_log_g_;
     std::vector<double> last_hybrid_log_l_;
     HybridEwcRegularizer ewc_;
@@ -301,6 +322,11 @@ class CyphaLMModel {
     std::uint64_t ngram_context_key() const;
     void observe_ngram_count(std::uint32_t next_token_id);
     std::vector<double> ngram_embedding_vector() const;
+    // Perf (2026-07-12, part 3): out-param overload so gria_input_core (the default D17
+    // ngram-fuse-split hot path) can fill a persistent scratch buffer in place instead of
+    // receiving a freshly heap-allocated vector every predict_next call. Numerically identical
+    // to the value-returning overload above, which now delegates to this one.
+    void ngram_embedding_vector(std::vector<double>& out) const;
     std::vector<double> build_gria_input(const std::vector<double>& field,
                                          const DIFPredictOutput* dif_out);
     double hybrid_forget_gate_scale(const DIFPredictOutput& dif_out) const;
