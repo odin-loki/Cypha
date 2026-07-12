@@ -1,6 +1,7 @@
 #include "cypha/bench/bench_profile.hpp"
 
 #include "cypha/bench/bench_paths.hpp"
+#include "cypha/env.hpp"
 
 #include <cctype>
 #include <cstdlib>
@@ -34,11 +35,13 @@ std::string lower_copy(std::string s) {
 }
 
 fs::path profile_path_from_env() {
-    if (const char* raw = std::getenv("CYPHA_BENCH_PROFILE_PATH")) {
-        if (*raw != '\0') return fs::path(raw);
+    if (const std::optional<std::string> raw = cypha::env_get("CYPHA_BENCH_PROFILE_PATH");
+        raw.has_value() && !raw->empty()) {
+        return fs::path(*raw);
     }
-    if (const char* raw = std::getenv("CYPHA_BENCH_PROFILE_JSON")) {
-        if (*raw != '\0') return fs::path(raw);
+    if (const std::optional<std::string> raw = cypha::env_get("CYPHA_BENCH_PROFILE_JSON");
+        raw.has_value() && !raw->empty()) {
+        return fs::path(*raw);
     }
     return {};
 }
@@ -132,8 +135,10 @@ ProfileJson load_profiles_index() {
 fs::path resolve_cyphalm_profile_path(const std::string& name) {
     std::string key = name;
     if (key.empty()) {
-        if (const char* env = std::getenv("CYPHALM_PROFILE")) key = env;
-        else if (const char* env = std::getenv("CYPHA_LM_PROFILE")) key = env;
+        if (const std::optional<std::string> profile_env = cypha::env_get("CYPHALM_PROFILE"); profile_env.has_value())
+            key = *profile_env;
+        else if (const std::optional<std::string> profile_env2 = cypha::env_get("CYPHA_LM_PROFILE"); profile_env2.has_value())
+            key = *profile_env2;
     }
     if (!key.empty()) {
         const std::string lk = lower_copy(key);

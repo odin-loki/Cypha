@@ -55,6 +55,7 @@
 #include "cypha/create_model.hpp"
 #include "cypha/csv_ingest.hpp"
 #include "cypha/curriculum.hpp"
+#include "cypha/env.hpp"
 #include "cypha/ewc_regularizer.hpp"
 #include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
@@ -105,11 +106,11 @@ int domain_number(const std::string& tag) { return domain_number_impl(tag); }
 namespace {
 
 bool bench_fast_mode() {
-    const char* v = std::getenv("CYPHA_BENCH_FAST");
-    if (v == nullptr) {
+    const std::optional<std::string> v = cypha::env_get("CYPHA_BENCH_FAST");
+    if (!v.has_value()) {
         return false;
     }
-    const std::string s(v);
+    const std::string& s = *v;
     return s == "1" || s == "true" || s == "True" || s == "yes";
 }
 
@@ -335,9 +336,9 @@ std::vector<int> dif_view_order(int n, const std::string& view_schedule, int pas
 }
 
 std::string d03_view_schedule_from_env() {
-    const char* v = std::getenv("CYPHA_D03_VIEW_SCHEDULE");
-    if (v == nullptr || *v == '\0') return "";
-    return std::string(v);
+    const std::optional<std::string> v = cypha::env_get("CYPHA_D03_VIEW_SCHEDULE");
+    if (!v.has_value() || v->empty()) return "";
+    return *v;
 }
 
 // docs/FUTURE.md §6 curriculum ordering: hardest-first (by current-model confidence), randomised
@@ -346,10 +347,10 @@ std::string d03_view_schedule_from_env() {
 // caller of `train_eval_vectors` (D03 tabular + D08 vision both go through it); not limited to D03
 // because curriculum ordering (unlike the view-schedule pilot) has no per-domain assumptions.
 int curriculum_window_from_env() {
-    const char* v = std::getenv("CYPHA_CURRICULUM_WINDOW");
-    if (v == nullptr || *v == '\0') return 0;
+    const std::optional<std::string> v = cypha::env_get("CYPHA_CURRICULUM_WINDOW");
+    if (!v.has_value() || v->empty()) return 0;
     try {
-        const int w = std::stoi(v);
+        const int w = std::stoi(*v);
         return w > 0 ? w : 0;
     } catch (...) {
         return 0;
@@ -861,7 +862,7 @@ void kernel_blend_llr(const cypha::CyphaInferModel& infer, const double* h,
 // ``kernel_mem``/``use_kernel_llr``/``kernel_blend`` mirror the D03 kernel-LLR blend convention;
 // default args (nullptr/false) reproduce the pre-existing linear-only routing decision exactly.
 std::string pick_dif_regressor_expert(int step, int n_existing, int k_target, cypha::CyphaInferModel& infer,
-                                      const double* x, int d, const cypha::KernelMemory* kernel_mem = nullptr,
+                                      const double* x, [[maybe_unused]] int d, const cypha::KernelMemory* kernel_mem = nullptr,
                                       bool use_kernel_llr = false, double kernel_blend = 0.5) {
     if (n_existing < k_target && step <= k_target * 20) {
         return "_e" + std::to_string(step % k_target);
@@ -926,20 +927,20 @@ struct D14KernelConfig {
 
 D14KernelConfig d14_kernel_config_from_env() {
     D14KernelConfig cfg;
-    if (const char* v = std::getenv("CYPHA_D14_KERNEL_BASIS"); v != nullptr && std::string(v) == "rff") {
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_KERNEL_BASIS"); v.has_value() && *v == "rff") {
         cfg.enabled = true;
     }
-    if (const char* v = std::getenv("CYPHA_D14_RFF_DIM"); v != nullptr && *v != '\0') {
-        cfg.rff_dim = std::atoi(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_RFF_DIM"); v.has_value() && !v->empty()) {
+        cfg.rff_dim = std::atoi(v->c_str());
     }
-    if (const char* v = std::getenv("CYPHA_D14_RFF_GAMMA_SCALE"); v != nullptr && *v != '\0') {
-        cfg.rff_gamma_scale = std::atof(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_RFF_GAMMA_SCALE"); v.has_value() && !v->empty()) {
+        cfg.rff_gamma_scale = std::atof(v->c_str());
     }
-    if (const char* v = std::getenv("CYPHA_D14_KERNEL_BLEND"); v != nullptr && *v != '\0') {
-        cfg.kernel_blend = std::atof(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_KERNEL_BLEND"); v.has_value() && !v->empty()) {
+        cfg.kernel_blend = std::atof(v->c_str());
     }
-    if (const char* v = std::getenv("CYPHA_D14_KERNEL_LR_SCALE"); v != nullptr && *v != '\0') {
-        cfg.kernel_lr_scale = std::atof(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_KERNEL_LR_SCALE"); v.has_value() && !v->empty()) {
+        cfg.kernel_lr_scale = std::atof(v->c_str());
     }
     return cfg;
 }
@@ -1903,11 +1904,11 @@ Json run_d15() {
 // existing D16B/D16H results are unchanged unless explicitly requested. See
 // docs/reports/STUB_AUDIT_2026-07-11.md.
 bool d16_real_fisher_enabled() {
-    const char* v = std::getenv("CYPHA_D16_REAL_FISHER");
-    if (v == nullptr) {
+    const std::optional<std::string> v = cypha::env_get("CYPHA_D16_REAL_FISHER");
+    if (!v.has_value()) {
         return false;
     }
-    const std::string s(v);
+    const std::string& s = *v;
     return s == "1" || s == "true" || s == "True" || s == "yes";
 }
 
@@ -3080,17 +3081,17 @@ struct D03KernelExperimentConfig {
 
 D03KernelExperimentConfig d03_kernel_experiment_from_env() {
     D03KernelExperimentConfig cfg;
-    if (const char* v = std::getenv("CYPHA_D03_KERNEL_BASIS"); v != nullptr && *v != '\0') {
-        cfg.basis = std::string(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D03_KERNEL_BASIS"); v.has_value() && !v->empty()) {
+        cfg.basis = *v;
     }
-    if (const char* v = std::getenv("CYPHA_D03_KERNEL_FEATURE_MODE"); v != nullptr && *v != '\0') {
-        cfg.feature_mode = std::string(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D03_KERNEL_FEATURE_MODE"); v.has_value() && !v->empty()) {
+        cfg.feature_mode = *v;
     }
-    if (const char* v = std::getenv("CYPHA_D03_RFF_DIM"); v != nullptr && *v != '\0') {
-        cfg.rff_dim = std::atoi(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D03_RFF_DIM"); v.has_value() && !v->empty()) {
+        cfg.rff_dim = std::atoi(v->c_str());
     }
-    if (const char* v = std::getenv("CYPHA_D03_RFF_GAMMA_SCALE"); v != nullptr && *v != '\0') {
-        cfg.rff_gamma_scale = std::atof(v);
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D03_RFF_GAMMA_SCALE"); v.has_value() && !v->empty()) {
+        cfg.rff_gamma_scale = std::atof(v->c_str());
     }
     return cfg;
 }
@@ -3419,13 +3420,11 @@ Json run_d22_intelligence_cross_profile() {
 }
 
 fs::path resolve_native_exe_dir() {
-    if (const char* raw = std::getenv("CYPHA_NATIVE_EXE_DIR")) {
-        if (*raw != '\0') {
-            const fs::path env_path = fs::absolute(raw);
-            if (fs::is_regular_file(env_path / "cyphalm_bench_native.exe") ||
-                fs::is_regular_file(env_path / "cypha_bench_run.exe")) {
-                return env_path;
-            }
+    if (const std::optional<std::string> raw = cypha::env_get("CYPHA_NATIVE_EXE_DIR"); raw.has_value() && !raw->empty()) {
+        const fs::path env_path = fs::absolute(*raw);
+        if (fs::is_regular_file(env_path / "cyphalm_bench_native.exe") ||
+            fs::is_regular_file(env_path / "cypha_bench_run.exe")) {
+            return env_path;
         }
     }
 #if defined(_WIN32)
@@ -8453,7 +8452,7 @@ Json run_d65_navigation_loss_warmup_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native nav loss warmup grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, steps);
+            false, -1.0, static_cast<int>(-1.0), steps);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("nav loss warmup grid missing math bpc");
         }
@@ -8561,7 +8560,7 @@ Json run_d66_free_energy_beta_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native free energy beta grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, beta);
+            false, -1.0, static_cast<int>(-1.0), -1, beta);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("free energy beta grid missing math bpc");
         }
@@ -8667,7 +8666,7 @@ Json run_d67_kernel_blend_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native kernel blend grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, -1.0, blend);
+            false, -1.0, static_cast<int>(-1.0), -1, -1.0, blend);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("kernel blend grid missing math bpc");
         }
@@ -8770,7 +8769,7 @@ Json run_d68_kernel_m_grid_joint_validation() {
         const Json math = run_math_integration_bench_subprocess(
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native kernel m grid", -1.0, -1.0, -1.0, -1.0, kMathIntegrationBenchSeed,
-            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, -1.0, -1,
+            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, static_cast<int>(-1.0), -1,
             -1.0, -1.0, km);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("kernel m grid missing math bpc");
@@ -8859,7 +8858,7 @@ Json run_d69_hybrid_blend_logit_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native hybrid blend logit grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, -1.0, -1.0, -1, true, logit);
+            false, -1.0, static_cast<int>(-1.0), -1, -1.0, -1.0, -1, true, logit);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("hybrid blend logit grid missing math bpc");
         }
@@ -8947,7 +8946,7 @@ Json run_d70_mdl_forget_max_norm_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native mdl forget max norm grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, max_norm);
+            false, -1.0, static_cast<int>(-1.0), -1, -1.0, -1.0, -1, false, 0.0, max_norm);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("mdl forget max norm grid missing math bpc");
         }
@@ -9035,7 +9034,7 @@ Json run_d71_kernel_lr_scale_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native kernel lr scale grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, scale);
+            false, -1.0, static_cast<int>(-1.0), -1, -1.0, -1.0, -1, false, 0.0, -1.0, scale);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("kernel lr scale grid missing math bpc");
         }
@@ -9122,7 +9121,7 @@ Json run_d72_alpha_init_grid_joint_validation() {
         const Json math = run_math_integration_bench_subprocess(
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native alpha init grid", -1.0, -1.0, -1.0, -1.0, kMathIntegrationBenchSeed,
-            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, -1.0, -1, -1.0,
+            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, static_cast<int>(-1.0), -1, -1.0,
             -1.0, -1, false, 0.0, -1.0, -1.0, alpha);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("alpha init grid missing math bpc");
@@ -9211,7 +9210,7 @@ Json run_d73_hybrid_blend_lr_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native hybrid blend lr grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, blend_lr);
+            false, -1.0, static_cast<int>(-1.0), -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, blend_lr);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("hybrid blend lr grid missing math bpc");
         }
@@ -9298,7 +9297,7 @@ Json run_d74_n_experts_grid_joint_validation() {
         const Json math = run_math_integration_bench_subprocess(
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native n experts grid", -1.0, -1.0, -1.0, -1.0, kMathIntegrationBenchSeed,
-            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, -1.0, -1, -1.0,
+            false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0, false, -1.0, static_cast<int>(-1.0), -1, -1.0,
             -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, experts);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("n experts grid missing math bpc");
@@ -9387,7 +9386,7 @@ Json run_d75_max_memory_slots_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native max memory slots grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, -1, slots);
+            false, -1.0, static_cast<int>(-1.0), -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, -1, slots);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("max memory slots grid missing math bpc");
         }
@@ -9475,7 +9474,7 @@ Json run_d76_compress_interval_grid_joint_validation() {
             bench_native_exe, kD41ScaleNTrain, kD41ScaleNEval, true,
             "cyphalm_bench_native compress interval grid", -1.0, -1.0, -1.0, -1.0,
             kMathIntegrationBenchSeed, false, false, -1.0, -1.0, false, -1.0, false, -1.0, -1.0,
-            false, -1.0, -1.0, -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, -1, -1,
+            false, -1.0, static_cast<int>(-1.0), -1, -1.0, -1.0, -1, false, 0.0, -1.0, -1.0, -1.0, -1.0, -1, -1,
             interval);
         if (!math.contains("bpc") || math["bpc"].is_null()) {
             throw std::runtime_error("compress interval grid missing math bpc");

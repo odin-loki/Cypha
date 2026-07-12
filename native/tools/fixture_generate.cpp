@@ -758,7 +758,7 @@ void generate_gh_infer_deliberation(const fs::path& out_dir, const fs::path& fix
   const cypha::CNode& fh = cypha::map_get_required(root, "field_h");
   const int fd = static_cast<int>(fh.shape[0]);
   const cypha::CNode& enc = cypha::map_get_required(root, "enc_W");
-  const int d = static_cast<int>(enc.shape[0]);
+  [[maybe_unused]] const int d = static_cast<int>(enc.shape[0]);
   std::vector<double> fflat = flatten_f_field(read_json(out_dir / "f_field.json"));
   cypha::CyphaInferModel model = cypha::CyphaInferModel::from_root(root, fflat.data(), fd);
 
@@ -842,7 +842,7 @@ void generate_retrieval(const fs::path& out_dir, const fs::path& fixtures_root) 
   const cypha::CNode& fh = cypha::map_get_required(root, "field_h");
   const int fd = static_cast<int>(fh.shape[0]);
   const cypha::CNode& enc = cypha::map_get_required(root, "enc_W");
-  const int d = static_cast<int>(enc.shape[0]);
+  [[maybe_unused]] const int d = static_cast<int>(enc.shape[0]);
   const int input_dim = src.at("input_dim").get<int>();
   std::vector<double> fflat = flatten_f_field(read_json(out_dir / "f_field.json"));
   cypha::CyphaInferModel model = cypha::CyphaInferModel::from_root(root, fflat.data(), fd);
@@ -1359,7 +1359,6 @@ void generate_dif_train_sequence_dir(const fs::path& out_dir, const fs::path& sr
   copy_fixture_file(src_dir / "f_field.json", out_dir / "f_field.json");
   const Json src = read_json(src_dir / "sidecar.json");
   auto [infer, mem] = load_infer_and_mem(out_dir / "before.cypha", out_dir / "f_field.json");
-  const int d = infer.d_latent;
   const int d_in = src.at("d_in").get<int>();
   const int n = src.at("n").get<int>();
   const int K = src.at("K").get<int>();
@@ -1802,7 +1801,7 @@ void generate_two_stage_pipeline(const fs::path& out_dir, const fs::path& fixtur
   const cypha::CNode& fh = cypha::map_get_required(root_node, "field_h");
   const int fd = static_cast<int>(fh.shape[0]);
   const cypha::CNode& enc = cypha::map_get_required(root_node, "enc_W");
-  const int d = static_cast<int>(enc.shape[0]);
+  [[maybe_unused]] const int d = static_cast<int>(enc.shape[0]);
   std::vector<double> fflat = flatten_f_field(read_json(fixtures_root / "f_field.json"));
   cypha::CyphaInferModel infer = cypha::CyphaInferModel::from_root(root_node, fflat.data(), fd);
   const int d_in = src.at("d_in").get<int>();
@@ -1853,7 +1852,6 @@ void generate_preprocess_train_classify_dir(const fs::path& out_dir, const fs::p
   cypha::PreprocessorState pre =
       cypha::PreprocessorState::from_json_file((out_dir / "preprocessor.json").string().c_str());
   auto [infer, mem] = load_infer_and_mem(out_dir / "before.cypha", out_dir / "f_field.json");
-  const int d = infer.d_latent;
   const int d_raw = src.at("d_raw").get<int>();
   const int n = src.at("n").get<int>();
   const int K = src.at("K").get<int>();

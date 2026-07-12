@@ -138,11 +138,11 @@ int main(int argc, char** argv) {
       const cypha::CNode& dm = cypha::map_get_required(cnode, "delta_mu");
       const cypha::CNode& no = cypha::map_get_required(cnode, "n_obs");
       const cypha::CNode* nc = cypha::map_get(cnode, "n_correct");
-      for (int j = 0; j < st.d_latent; ++j) {
-        double got = st.D[idx * static_cast<std::size_t>(st.d_latent) + static_cast<std::size_t>(j)];
-        double ex = dm.tensor[static_cast<std::size_t>(j)];
+      for (int jj = 0; jj < st.d_latent; ++jj) {
+        double got = st.D[idx * static_cast<std::size_t>(st.d_latent) + static_cast<std::size_t>(jj)];
+        double ex = dm.tensor[static_cast<std::size_t>(jj)];
         if (!near_eq(got, ex, 1e-9)) {
-          std::cerr << "delta_mu " << lbl << "[" << j << "] mismatch\n";
+          std::cerr << "delta_mu " << lbl << "[" << jj << "] mismatch\n";
           return 1;
         }
       }

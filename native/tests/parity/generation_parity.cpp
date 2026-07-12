@@ -314,10 +314,10 @@ int main(int argc, char** argv) {
                     if (!near_all(got[si].h, exp_h[si], atol)) {
                         std::cerr << "FAIL rollout[" << i << "]: h mismatch max_err=";
                         double me = 0.0;
-                        for (int j = 0; j < d; j++)
+                        for (int jj = 0; jj < d; jj++)
                             me = std::max(me, std::abs(
-                                got[si].h[static_cast<std::size_t>(j)] -
-                                exp_h[si][static_cast<std::size_t>(j)]));
+                                got[si].h[static_cast<std::size_t>(jj)] -
+                                exp_h[si][static_cast<std::size_t>(jj)]));
                         std::cerr << me << "\n";
                         ok = false;
                     }

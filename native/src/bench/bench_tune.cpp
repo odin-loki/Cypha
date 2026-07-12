@@ -1,5 +1,7 @@
 #include "cypha/bench/bench_tune.hpp"
 
+#include "cypha/env.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
@@ -202,11 +204,9 @@ std::string exe_name_for_runner(const std::string& runner) {
 fs::path resolve_runner_exe(const std::string& runner, const fs::path& exe_dir) {
     const std::string env_key = env_path_for_runner(runner);
     if (!env_key.empty()) {
-        if (const char* raw = std::getenv(env_key.c_str())) {
-            if (*raw != '\0') {
-                const fs::path p(raw);
-                if (fs::is_regular_file(p)) return fs::absolute(p);
-            }
+        if (const std::optional<std::string> raw = cypha::env_get(env_key.c_str()); raw.has_value() && !raw->empty()) {
+            const fs::path p(*raw);
+            if (fs::is_regular_file(p)) return fs::absolute(p);
         }
     }
     if (!exe_dir.empty()) {

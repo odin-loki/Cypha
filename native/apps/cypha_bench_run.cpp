@@ -13,6 +13,7 @@
 #include "cypha/bench/bench_figures.hpp"
 #include "cypha/bench/bench_paths.hpp"
 #include "cypha/bench/bench_report.hpp"
+#include "cypha/env.hpp"
 
 namespace {
 
@@ -64,11 +65,11 @@ bool ssm_diagnose_enabled(const Args& args) {
     if (args.ssm_diagnose) {
         return true;
     }
-    const char* v = std::getenv("CYPHA_SSM_DIAGNOSE");
-    if (v == nullptr) {
+    const std::optional<std::string> v = cypha::env_get("CYPHA_SSM_DIAGNOSE");
+    if (!v.has_value()) {
         return false;
     }
-    const std::string s(v);
+    const std::string& s = *v;
     return s == "1" || s == "true" || s == "True" || s == "yes";
 }
 

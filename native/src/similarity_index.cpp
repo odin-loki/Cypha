@@ -53,7 +53,7 @@ int SimilarityIndex::add(const double* x, int d, nlohmann::json metadata) {
   return static_cast<int>(idx);
 }
 
-std::vector<int> SimilarityIndex::add_batch(const double* x_row_major, int n, int d,
+std::vector<int> SimilarityIndex::add_batch(const double* x_row_major, int n, [[maybe_unused]] int d,
                                             const std::vector<nlohmann::json>* metadatas) {
   if (n <= 0) {
     return {};
@@ -114,7 +114,7 @@ std::vector<SimilarityIndex::QueryHit> SimilarityIndex::query(const double* x, i
 }
 
 std::vector<std::vector<SimilarityIndex::QueryHit>> SimilarityIndex::query_batch(const double* x_row_major, int n,
-                                                                                 int d, int k) const {
+                                                                                 [[maybe_unused]] int d, int k) const {
   std::vector<std::vector<QueryHit>> out(static_cast<std::size_t>(n));
   if (meta_.empty() || n <= 0) {
     return out;

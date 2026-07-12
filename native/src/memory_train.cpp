@@ -123,10 +123,10 @@ void world_update(CyphaDifMemoryState& s, const double* h, double lr) {
 }  // namespace
 
 void CyphaDifMemoryState::refresh_world_log_norm_from_v() {
-  constexpr double kMinVar = 1e-4;
+  constexpr double kMinVarStep = 1e-4;
   double sumlog = 0.0;
   for (int j = 0; j < d_latent; ++j) {
-    sumlog += std::log(std::max(world_v[static_cast<std::size_t>(j)], kMinVar));
+    sumlog += std::log(std::max(world_v[static_cast<std::size_t>(j)], kMinVarStep));
   }
   world_log_norm = world_D_LOG2PI - 0.5 * sumlog;
   world_log_n_ctr = 0;

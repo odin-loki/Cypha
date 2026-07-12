@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <filesystem>
 
+#include "cypha/env.hpp"
+
 namespace cypha::bench {
 
 namespace fs = std::filesystem;
@@ -16,8 +18,8 @@ fs::path repo_root_from_source() {
 }
 
 fs::path env_path(const char* key) {
-    if (const char* raw = std::getenv(key)) {
-        if (*raw != '\0') return fs::path(raw);
+    if (const std::optional<std::string> raw = cypha::env_get(key); raw.has_value() && !raw->empty()) {
+        return fs::path(*raw);
     }
     return {};
 }
@@ -64,11 +66,12 @@ int bench_scale(int default_value, int fast_value) {
 }
 
 bool bench_env_truthy(const char* key) {
-    if (const char* raw = std::getenv(key)) {
-        if (*raw == '\0') return false;
-        if (raw[0] == '1') return true;
-        if (raw[0] == 't' || raw[0] == 'T') return true;
-        if (raw[0] == 'y' || raw[0] == 'Y') return true;
+    if (const std::optional<std::string> raw = cypha::env_get(key); raw.has_value()) {
+        if (raw->empty()) return false;
+        const char c0 = (*raw)[0];
+        if (c0 == '1') return true;
+        if (c0 == 't' || c0 == 'T') return true;
+        if (c0 == 'y' || c0 == 'Y') return true;
     }
     return false;
 }
@@ -77,9 +80,9 @@ bool bench_overnight_enabled() { return bench_env_truthy("CYPHA_BENCH_OVERNIGHT"
 
 int bench_full_n_train() {
     int n = 300000;
-    if (const char* raw = std::getenv("CYPHA_BENCH_FULL_N_TRAIN")) {
+    if (const std::optional<std::string> raw = cypha::env_get("CYPHA_BENCH_FULL_N_TRAIN"); raw.has_value()) {
         try {
-            n = std::max(1, std::stoi(raw));
+            n = std::max(1, std::stoi(*raw));
         } catch (...) {
         }
     }

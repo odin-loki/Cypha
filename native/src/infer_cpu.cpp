@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "cypha/accel_backend.hpp"
+#include "cypha/env.hpp"
 #include "cypha/nig_field.hpp"
 #include "cypha/nig_gig_math.hpp"
 #include "cypha/retrieval.hpp"
@@ -31,11 +32,11 @@ constexpr double kEps = 1e-8;
 constexpr double kMinVar = 1e-4;
 
 bool use_rpsm_llr_from_env() {
-  const char* v = std::getenv("CYPHA_USE_RPSM_LLR");
-  if (v == nullptr || v[0] == '\0') {
+  const std::optional<std::string> v = cypha::env_get("CYPHA_USE_RPSM_LLR");
+  if (!v.has_value() || v->empty()) {
     return true;
   }
-  return v[0] != '0';
+  return (*v)[0] != '0';
 }
 
 double as_double(const CNode& n) {
@@ -151,12 +152,12 @@ std::pair<double, double> nig_adapt_session_chi(double chi, double psi, double i
 }
 
 void auto_recalibrate_temperature(CyphaInferModel& m, double decay) {
-  constexpr double kEps = 1e-8;
+  constexpr double kEpsLocal = 1e-8;
   if (m.llr_scale_n < 50) {
     return;
   }
   if (m.llr_scale_baseline <= 0.0 || !std::isfinite(m.llr_scale_baseline)) {
-    m.llr_scale_baseline = std::max(m.llr_scale_ema, kEps);
+    m.llr_scale_baseline = std::max(m.llr_scale_ema, kEpsLocal);
     return;
   }
   const double base_T =
@@ -164,8 +165,8 @@ void auto_recalibrate_temperature(CyphaInferModel& m, double decay) {
   if (!std::isfinite(base_T) || base_T <= 0.0) {
     return;
   }
-  const double ratio = m.llr_scale_ema / (m.llr_scale_baseline + kEps);
-  double T_adj = base_T / (ratio + kEps);
+  const double ratio = m.llr_scale_ema / (m.llr_scale_baseline + kEpsLocal);
+  double T_adj = base_T / (ratio + kEpsLocal);
   const double lo = base_T * 0.2;
   const double hi = base_T * 5.0;
   if (T_adj < lo) {
@@ -817,7 +818,7 @@ double compute_ece_bins(const double* confs, const double* correct, int n, int n
 
 double adapt_temperature_ece(CyphaInferModel& infer, const double* h_row_major, int n_cal, const int* true_class_idx,
                              int n_grid, double T_min, double T_max, int n_bins) {
-  constexpr double kEps = 1e-8;
+  constexpr double kEpsLocal = 1e-8;
   const int K = static_cast<int>(infer.labels.size());
   if (n_cal <= 0 || K == 0) {
     return infer.temperature;
@@ -837,10 +838,10 @@ double adapt_temperature_ece(CyphaInferModel& infer, const double* h_row_major, 
     for (int i = 0; i < n_cal; ++i) {
       for (int k = 0; k < K; ++k) {
         z[static_cast<std::size_t>(i * K + k)] =
-            llr[static_cast<std::size_t>(i * K + k)] / (T + kEps);
+            llr[static_cast<std::size_t>(i * K + k)] / (T + kEpsLocal);
       }
     }
-    softmax_batch_reference(z.data(), n_cal, K, kEps, probs);
+    softmax_batch_reference(z.data(), n_cal, K, kEpsLocal, probs);
     for (int i = 0; i < n_cal; ++i) {
       int bi = 0;
       double pmax = probs[static_cast<std::size_t>(i * K)];
