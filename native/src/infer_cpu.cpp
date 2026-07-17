@@ -986,7 +986,9 @@ void world_gate_vector_use_field(const CyphaInferModel& m, const double* h_row_m
   const int d = m.d_latent;
   gates_out.assign(static_cast<std::size_t>(n), 0.0);
   if (gh_chi <= 0.0 || gh_psi <= 0.0) {
-    throw std::runtime_error("GH gate disabled path not implemented for native parity");
+    throw std::runtime_error(
+        "world_gate_vector_use_field requires gh_chi > 0 and gh_psi > 0 (legacy sigmoid gate removed; "
+        "kInferWorldGateApiVersion=2)");
   }
 
   std::vector<double> mu0(static_cast<std::size_t>(d));
@@ -1060,14 +1062,6 @@ double mean_inv_v(const CyphaInferModel& m) {
     sum += m.inv_v[static_cast<std::size_t>(j)];
   }
   return sum / static_cast<double>(d);
-}
-
-double legacy_sigmoid_gate(double mahal_per_dim, double mahal_ema, double mahal_std_ema) {
-  const double std_safe = std::max(mahal_std_ema, 0.05);
-  const double threshold = mahal_ema + 5.0 * std_safe;
-  const double scale = 2.0 / std_safe;
-  const double margin = std::clamp((threshold - mahal_per_dim) * scale, -500.0, 500.0);
-  return 1.0 / (1.0 + std::exp(-margin));
 }
 
 }  // namespace
@@ -1189,16 +1183,14 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
   if (mahal_ema.has_value() && std::isfinite(*mahal_ema) && *mahal_ema > kEps) {
     r_base = *mahal_ema;
   }
-  if (gh_chi > 0.0 && gh_psi > 0.0) {
-    out.r_eff = nig_r_eff_scalar(out.mahal_per_dim, r_base, gh_chi, gh_psi);
-    out.world_gate = r_base / std::max(out.r_eff, r_base);
-  } else if (mahal_ema.has_value()) {
-    out.world_gate = legacy_sigmoid_gate(out.mahal_per_dim, *mahal_ema, mahal_std_ema);
-    out.r_eff = r_base;
-  } else {
-    out.world_gate = 1.0;
-    out.r_eff = r_base;
+  if (gh_chi <= 0.0 || gh_psi <= 0.0) {
+    throw std::runtime_error(
+        "classify_at_h requires gh_chi > 0 and gh_psi > 0 (legacy sigmoid gate removed; "
+        "kInferWorldGateApiVersion=2)");
   }
+  (void)mahal_std_ema;
+  out.r_eff = nig_r_eff_scalar(out.mahal_per_dim, r_base, gh_chi, gh_psi);
+  out.world_gate = r_base / std::max(out.r_eff, r_base);
 
   if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0 && disc_lin > kEps) {
     const double conf_lin = disc_lin * out.world_gate;

@@ -259,7 +259,7 @@ Both require new network coordination code outside the native training core � 
 
 | Item | Status (P7) |
 |------|-------------|
-| Legacy sigmoid (`gh_chi <= 0`) | Remove with a version bump + changelog entry; unused in-tree |
+| Legacy sigmoid (`gh_chi <= 0`) | **Removed** — `kInferWorldGateApiVersion=2`; throws when `gh_chi`/`gh_psi` ≤ 0 |
 | Python FastAPI / PySide6 Studio (`cypha_studio/`) | **Removed** � `cypha_rest` + `cypha_qt_shell` are authoritative |
 | `cypha_accel/` CuPy path | **Removed** � native `cypha::accel` (CUDA / parallel CPU) |
 | `cypha_core`, `bench/` (Python), `cypha_lm/` Python packages | **Removed** � native binaries only (`bench/` configs via `cypha_bench_run`) |

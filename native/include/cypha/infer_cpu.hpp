@@ -21,6 +21,10 @@ constexpr double kDeliberationLoDefault = 1.0;
 constexpr double kDeliberationHiDefault = 0.0;
 constexpr const char* kUnknownLabel = "__unknown__";
 
+/// World-gate API version: **2** = GH–NIG only (`gh_chi > 0`, `gh_psi > 0` required).
+/// Version **1** allowed a legacy sigmoid fallback when GH hyperparameters were non-positive (removed).
+constexpr int kInferWorldGateApiVersion = 2;
+
 /// Runtime inference modifiers (Python ``infer`` / ``gh_infer`` / REST ``POST /predict``).
 struct CyphaInferOptions {
   double deliberation_lo{kDeliberationLoDefault};

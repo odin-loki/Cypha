@@ -145,7 +145,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | ONNX export | [ ] Header-only |
 | GGUF export | [ ] Not started |
 | Federated training | [ ] TLS smoke only |
-| Legacy sigmoid removal | [ ] Deprecation flagged |
+| Legacy sigmoid removal | [x] Removed (`kInferWorldGateApiVersion=2`) |
 
 ---
 

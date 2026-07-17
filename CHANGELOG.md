@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Removed
+- **Legacy sigmoid world gate** (`gh_chi <= 0` / `gh_psi <= 0` fallback in `classify_at_h` and `world_gate_vector_use_field`). GH–NIG gate now required (`gh_chi > 0`, `gh_psi > 0`); non-positive hyperparameters throw. **`kInferWorldGateApiVersion`** bumped to **2** (`native/include/cypha/infer_cpu.hpp`). Unused in-tree; all native callers already pass `gh_chi=gh_psi=1`.
 - **`Cypha Possible Upgrades/`** root folder — content backported to [`docs/research/upgrades/`](docs/research/upgrades/README.md).
 - **Python runtime decommissioned (P7):** `Cypha.py`, `cypha_studio/`, `cypha_core/`, `cypha_accel/`, `bench/` (Python package removed), `cypha_lm/`, and related packages removed from the product path. Native C++ (`cypha_core` library, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`) is the sole runtime.
 - **pytest CI gate:** ~274 pytest tests no longer run in CI; validation is CTest-only.
