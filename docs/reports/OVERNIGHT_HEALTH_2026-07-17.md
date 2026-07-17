@@ -127,3 +127,58 @@ Treat as **potentially stuck** only if **all** of the following hold:
 3. `poll_finalize.log` reports `processes=0` or repeated STALL warnings.
 
 Until then: **healthy, slow, wait.**
+
+---
+
+## 7. Refresh — 2026-07-17T11:29:01Z (local ~21:29 AEST)
+
+**Scope:** Read-only re-check; no processes killed.  
+**Verdict:** **HEALTHY — H17 still in progress, active compute. Wait.**
+
+### Process inventory @ refresh
+
+| PID | Binary | Role | Started (local) | CPU @ refresh | Status |
+|-----|--------|------|-----------------|---------------|--------|
+| **50044** | `cypha_cell_hypothesis_sweep.exe` | **Active H17 child** (`--cell-variant H17`, 300k train) | 2026-07-17 20:30:30 | **~2307 s** total | **Running** |
+| **30632** | `cypha_cell_hypothesis_sweep.exe` | Parent orchestrator (`--overnight-sweep`, idle waiter) | 2026-07-12 11:55:40 | ~0.06 s | **Expected** |
+| **27864** | `cyphalm_bench_native.exe` | Separate D17 bench (512 hidden) — not cell-sweep | 2026-07-12 15:16:29 | ~60 042 s | Parallel unrelated job |
+
+Poll watcher last heartbeat: **`HEARTBEAT 2026-07-17 21:29:38 processes=4 lock_n_train=300000`**. No STALL/ERROR lines.
+
+### H17 timing
+
+| Event | Timestamp (UTC) | Elapsed |
+|-------|-----------------|---------|
+| H17 progress line (variant start) | 10:30:30 | — |
+| This refresh | 11:29:01 | **~59 min into H17** |
+| Prior H16→H17 gap | — | **123 min** (variant-start cadence) |
+| Prior H15→H16 gap | — | **98 min** |
+
+H17 duration is **within** the recent H15/H16 cadence. No new `overnight_progress.log` line is **expected** until H18 starts.
+
+### CPU sample (15 s interval, PID 50044)
+
+```
+2303.84 → 2313.73 CPU seconds  (+9.89 s / 15 s wall ≈ 66% single-thread)  ✓ compute active
+```
+
+Total CPU ~2307 s over ~59 min wall ≈ **65% duty cycle** — consistent with a healthy single-thread training child, not a stall.
+
+### Log state
+
+| Log | Last write | Tail |
+|-----|------------|------|
+| `overnight_progress.log` | 2026-07-17 20:30:30 local | Still `2026-07-17T10:30:30Z variant=H17 20/25` |
+| `poll_finalize.log` | 2026-07-17 21:29:38 local | Heartbeat `processes=4` |
+
+### Updated ETA
+
+| Item | Estimate |
+|------|----------|
+| H18 progress line | ~**2026-07-17T12:30Z–13:00Z** (~30–90 min from refresh) |
+| H18–H22 (5 variants) | ~8–10 h at recent cadence |
+| Artifact flush + finalize | After H22 child exits |
+
+### Recommended action (unchanged)
+
+**Wait.** Do not restart H17, do not finalize, do not AutoCommit. Re-check trigger remains: no H18 line by **13:00Z** **and** PID 50044 CPU delta ≈ 0 over 5 min **and** poll STALL/`processes=0`.

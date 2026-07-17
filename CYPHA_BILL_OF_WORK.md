@@ -6,8 +6,9 @@
 `docs/CYPHALM_UPGRADE_V2.md`, `docs/CYPHA_TESTS_PHASE2.md`, `docs/native/*`, `CHANGELOG.md`.
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete);
 115 CTests blocking gate (116 when `d38` merged).
-**Repo state as of this update (2026-07-17 late evening):** **160 CTests** blocking gate; Optimality **P0–9 addressed**
-(opt-in/no-go mix); §0.5 pin **2.873**; MC2/MS1 + MC5/MG5 metrics shipped; overnight H17 @ 20/25 healthy (`a09b665`).
+**Repo state as of this update (2026-07-17 late evening):** Bounded product/adjust wave closed out —
+[`PRODUCT_ADJUST_CLOSEOUT_2026-07-17.md`](docs/reports/PRODUCT_ADJUST_CLOSEOUT_2026-07-17.md). **160 CTests**
+blocking gate; overnight H17 @ 20/25 healthy — [`OVERNIGHT_HEALTH_2026-07-17.md`](docs/reports/OVERNIGHT_HEALTH_2026-07-17.md) §7.
 
 ---
 
