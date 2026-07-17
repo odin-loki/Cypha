@@ -6,8 +6,8 @@
 `docs/CYPHALM_UPGRADE_V2.md`, `docs/CYPHA_TESTS_PHASE2.md`, `docs/native/*`, `CHANGELOG.md`.
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete);
 115 CTests blocking gate (116 when `d38` merged).
-**Repo state as of this update (2026-07-17, HEAD `4133054`):** **160 CTests** blocking gate; Optimality Phases 0–1
-done; §0.5 BPC pin reconciled (`b0d39e7`); Addendum 2 MC2/MS1 started (`412ded1`); overnight still running.
+**Repo state as of this update (2026-07-17 evening):** **160 CTests** blocking gate; Optimality P0–2, P5, P9
+(`CriticalityVector`) done; P3 opt-in shipped; §0.5 pin **2.873**; MC2/MS1 metrics; overnight H15/25 still running.
 
 ---
 
@@ -15,7 +15,9 @@ done; §0.5 BPC pin reconciled (`b0d39e7`); Addendum 2 MC2/MS1 started (`412ded1
 
 | Area | Verdict | Evidence |
 |------|---------|----------|
-| **Optimality Phases 0–1** | [x] Done | Phase 0 parity→regression `4133054`; Phase 1 EM keystone `31bbb0c`/`7a07f8b` — see [`CYPHA_OPTIMALITY_PLAN.md`](CYPHA_OPTIMALITY_PLAN.md) |
+| **Optimality P0–2, P5, P9** | [x] Done | P0 `4133054`; P1 `31bbb0c`/`7a07f8b`; P2 `de4fa16`; P5 `da9be39`; P9 `CriticalityVector` `c759e72` — [`CYPHA_OPTIMALITY_PLAN.md`](CYPHA_OPTIMALITY_PLAN.md) |
+| **Optimality P3 (class GMM)** | [~] Opt-in; XOR no-go | `1b59f3e` default OFF; XOR ~51% — needs different approach or kernels |
+| **Optimality P4, P6–8** | [ ] Not started | BMA, IB, score matching, Rao-Blackwell |
 | **D17 perf Parts 1–6** | [x] Done | [`PERFORMANCE_PROFILE_2026-07-12.md`](docs/reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–6; Part 6 `12ad4b3` (skip dead BPTT slow-tier when EWC off) |
 | **P1 XOR kernel gap** | [x] ~2.7pp remaining (was ~18pp) | RFF auto-gamma `rff_dim=4096` → **76.3%** vs sklearn ~79%; [`RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1 |
 | **P2 auto-gamma defaults** | [x] Clarified shipped | `fb5e543` — kernel-LLR RFF auto-γ default in code; remaining D08/D14 re-bench optional |

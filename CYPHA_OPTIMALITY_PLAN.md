@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-17:** Phase **0 done** (`4133054`). Phase **1 done** (`31bbb0c`/`7a07f8b`). Phase **2 done** (EM MoE train step; see `docs/reports/OPTIMALITY_PHASE2_2026-07-17.md`). Phase **5 shipped** (`da9be39`). Phases **3–4, 6–8 not started**. Phase **9 partial**. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-17 (evening):** **Done:** P0 `4133054`; P1 `31bbb0c`/`7a07f8b`; P2 `de4fa16` (util caveat — `OPTIMALITY_PHASE2_2026-07-17.md`); P3 opt-in `1b59f3e` (XOR ~51%, default OFF); P5 `da9be39`; P9 `CriticalityVector` `c759e72`. **Open:** P4, P6–8; P3 default-on / XOR ≥75%; overnight finalize. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
 
 ---
 
@@ -12,14 +12,14 @@
 |-------|-------|--------|-------|
 | 0 | Retire parity, keep regression net | [x] Done | `4133054` — `native/tests/regression/` + `*_golden` CTests; parity harness retired |
 | 1 | EM keystone | [x] Done | `31bbb0c`/`7a07f8b` — `em_step.hpp`, `em_step.cpp`, `em_step_smoke` |
-| 2 | Fix MoE with EM | [x] Done | EM responsibilities in `mke_scalar_train_step`; goldens regen; see `OPTIMALITY_PHASE2_2026-07-17.md` |
-| 3 | Per-class GMM (real XOR fix) | [~] Opt-in shipped; XOR no-go | `use_class_gmm` default OFF; XOR ON≈50.5% vs OFF≈51.2% — see `OPTIMALITY_PHASE3_2026-07-17.md` |
+| 2 | Fix MoE with EM | [x] Done | `de4fa16` — EM responsibilities in `mke_scalar_train_step`; util caveat in `OPTIMALITY_PHASE2_2026-07-17.md` |
+| 3 | Per-class GMM (real XOR fix) | [~] Opt-in; XOR no-go | `1b59f3e` — `use_class_gmm` default OFF; XOR ON≈51% — see `OPTIMALITY_PHASE3_2026-07-17.md` |
 | 4 | Bayesian model averaging over Δk | [ ] Not started | |
 | 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
 | 6 | Variational IB encoder | [ ] Not started | |
 | 7 | Score matching → delete Bessel LUT | [ ] Not started | Blocked on Phase 0 |
 | 8 | Rao-Blackwellise sampling paths | [ ] Not started | |
-| 9 | Runtime criticality monitor | [~] Partial | `IntelligenceProfiler`, `criticality_score`, `lm_intelligence_monitor.hpp`, REST `/intelligence` metrics, profile-guided navigation loss — no `CriticalityVector` tier/cadence struct |
+| 9 | Runtime criticality monitor | [~] Partial | `CriticalityVector` tier/cadence `c759e72`; profiler, REST `/intelligence`, profile-guided loss shipped |
 
 ---
 
