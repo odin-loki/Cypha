@@ -78,6 +78,36 @@ bool uses_profile_guided_backprop(const CyphaLMConfig& cfg) {
     return cfg.profile_guided_loss || cfg.use_full_navigation_loss || cfg.cell_variant == "H05";
 }
 
+// True when CyphaDIF::predict/train_step outputs or side effects feed the hybrid forward path.
+// At the locked D17 default (Hybrid + ngram_fuse_split + no forget-gate/OOD/GNG-controller flags),
+// GRIA input is built via NgramFusion only -- DIF mean/epistemic are never read -- so both predict
+// and online train_step are dead work every character step. Gated conservatively: any config that
+// reads DIF output (proj_dif GRIA path, tau/r_eu forget gates, OOD branching, Full/SsmGriaNoLstm
+// bptt scaling, discriminative feedback) keeps the subsystem active for bit-identical behavior.
+bool dif_subsystem_affects_forward(const CyphaLMConfig& cfg) {
+    const auto mode = cfg.context_mode;
+    if (mode == ContextMode::CharLstm || mode == ContextMode::SsmGria ||
+        mode == ContextMode::AblationNoSsm) {
+        return false;
+    }
+    if (cfg.use_discriminative_feedback) {
+        return true;
+    }
+    if (cfg.use_tau_forget_gate || cfg.use_reu_forget_gate || cfg.use_ood_branching) {
+        return true;
+    }
+    if (cfg.use_gng && cfg.use_gria_controller) {
+        return true;
+    }
+    if (mode == ContextMode::Full || mode == ContextMode::SsmGriaNoLstm) {
+        return true;
+    }
+    if (cfg.ngram_fuse_split && uses_ngram_embed_path(mode, cfg)) {
+        return false;
+    }
+    return true;
+}
+
 cypha::intelligence::ProfileGuidedLossConfig profile_guided_loss_config_for(const CyphaLMConfig& cfg) {
     if (cfg.use_full_navigation_loss) {
         return cypha::intelligence::default_profile_guided_loss_config();
@@ -940,9 +970,10 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         }
         const bool skip_dif =
             mode == ContextMode::SsmGria || mode == ContextMode::AblationNoSsm;
+        const bool skip_dif_subsystem = skip_dif || !dif_subsystem_affects_forward(cfg_);
         {
             PredictScopeTimer __t(2);  // 3. DIF (kernel-LLR) predict
-            if (dif_ && !skip_dif) {
+            if (dif_ && !skip_dif_subsystem) {
                 last_dif_out_ = dif_->predict(field_x_.data(), static_cast<int>(field_x_.size()));
                 out.epistemic_var = last_dif_out_.epistemic_var;
                 out.aleatoric_var = last_dif_out_.aleatoric_var;
@@ -979,7 +1010,7 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
                                          static_cast<std::uint32_t>(field_x_.size()));
                 }
             }
-            gria_in_ = build_gria_input(field_x_, skip_dif ? nullptr : &last_dif_out_);
+            gria_in_ = build_gria_input(field_x_, skip_dif_subsystem ? nullptr : &last_dif_out_);
             if (rpsm_layer_ && !field_x_.empty()) {
                 (void)rpsm_layer_->step(field_x_.data(), static_cast<int>(field_x_.size()),
                                         rpsm_log_probs_.data());
@@ -1032,7 +1063,10 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
             // correctly sized and ready to be overwritten next call with zero heap allocation.
             // A move-assignment (the original pattern) would instead leave the source empty,
             // forcing a fresh allocation via forward_step's `.assign()` on the very next call.
-            const double forget_gate_scale = hybrid_forget_gate_scale(last_dif_out_);
+            const double forget_gate_scale =
+                (cfg_.use_alpha_forget_gate || cfg_.use_tau_forget_gate || cfg_.use_reu_forget_gate)
+                    ? hybrid_forget_gate_scale(last_dif_out_)
+                    : 1.0;
             lstm_->forward_step(static_cast<int>(token_id), lstm_h_.data(), lstm_c_.data(),
                                 log_l.data(), predict_lstm_h_scratch_, predict_lstm_c_scratch_,
                                 &hybrid_lstm_cache_, forget_gate_scale);
@@ -1375,7 +1409,8 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         }
     });
     perf_trace_scope(2, [&]() {
-        if (cfg_.online && dif_ && embed_ && !proj_embed_.empty()) {
+        if (cfg_.online && dif_ && embed_ && !proj_embed_.empty() &&
+            dif_subsystem_affects_forward(cfg_)) {
             if (cfg_.use_kappa_kernel_blend_scale && cfg_.use_kernel_llr) {
                 cypha::intelligence::ProfileObservation scale_obs{};
                 bool have_scale_obs = false;

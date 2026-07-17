@@ -827,3 +827,66 @@ the D17 default config, i.e. reducing the *amount* of per-character work rather 
 speeding up the existing amount; or (3) simply re-running today's Part 3 A/B on a quiet machine to
 get a trustworthy wall-clock number for the record, since the code change itself is done and
 determinism-verified regardless.
+
+---
+
+## Follow-up (2026-07-17, part 4) — per-step work reduction
+
+**Scope:** execute Recommendation §2 from Part 3 — skip config-gated dead subsystems on the D17
+default `hybrid_gria_lstm` path rather than micro-optimize existing work. **Did not touch**
+`native/build_math`, `native/build_deff`, `bench/BASELINE_LOCK.json`, `bench/BASELINE_REPORT.md`,
+or running `cypha_*` / `cyphalm_bench_native` processes.
+
+**HEAD at start:** `e0116e4`. Fresh build dir: `native/build_perf_skip` (MSVC Release, VS Build Tools
+18).
+
+**Bottom line:**
+- **Root cause:** at the locked D17 profile (`bench/config/profiles/cyphalm_d17_wikitext.json`),
+  GRIA input is assembled exclusively via `NgramFusion` (`ngram_fuse_split=true`,
+  `ngram_context=3`) — `gria_input_core()` never reads `DIFPredictOutput::mean` or epistemic
+  variance on this path. With all forget-gate/OOD/GNG-controller flags off (the default), DIF
+  predict output is also unused by `hybrid_forget_gate_scale()` and the hybrid blend. Yet
+  `CyphaDIF::predict()` and `CyphaDIF::train_step()` still ran every character step (~3.9% +
+  ~2.0% of instrumented `train_step` time in the quiet pre-fix trace below).
+- **Fix:** added `dif_subsystem_affects_forward(cfg)` in `cyphalm_model.cpp` — returns `false` for
+  Hybrid/GriaNgram/Rpsm/AblationNoSsm configs on the ngram-fuse-split path unless a flag that
+  actually consumes DIF output is enabled (`use_tau_forget_gate`, `use_reu_forget_gate`,
+  `use_ood_branching`, `use_discriminative_feedback`, `use_gng`+`use_gria_controller`, or
+  Full/SsmGriaNoLstm modes that route DIF through `proj_dif_`). When inactive:
+  - **`predict_next`:** skips `dif_->predict()` (zeros `last_dif_out_` like the existing
+    `SsmGria`/`AblationNoSsm` branch) and passes `nullptr` into `build_gria_input()`.
+  - **`train_step`:** skips the online `dif_->train_step()` block entirely.
+  - **Micro-fast-path:** when all three forget-gate flags are off, uses literal `1.0` instead of
+    calling `hybrid_forget_gate_scale()` (provably identical at default config).
+- **Determinism:** **bit-identical BPC** — `bpc = 3.9922568809095362`, `bpc_lstm_only =
+  3.9849446535748125` before and after (`wikitext2`, `--bench-seed 42`, `--n-train 6000`). `ctest
+  -R native_d17_wikitext_smoke` passes on `native/build_perf_skip`.
+- **Measured speedup (instrumented, quiet pre-fix run vs post-fix run with skip active):**
+
+| Bucket | Before (s) | Before (%) | After (s) | After (%) | Δ |
+|---|---|---|---|---|---|
+| `predict_next` → DIF predict sub-phase | 0.606 | 3.88% of predict_next | 0.037 | 0.07% | **−94%** |
+| `train_step` → `dif_train_step` | 0.852 | 2.00% of train_step | 0.011 | 0.006% | **−99%** |
+| `train_step` total (instrumented) | 42.68 | — | — | — | **~−3.4% estimated** (1.46s removed) |
+
+(Quiet pre-fix trace: `build_perf3`, 17,978 `train_step` calls, 42.68s instrumented. Post-fix DIF
+buckets measured on `build_perf_skip` with skip active; absolute post-fix totals were confounded by
+heavy concurrent load from overnight `build_math`/`build_deff` jobs — same environment caveat as
+Part 3.)
+
+**Wall-clock note:** a quiet pre-fix end-to-end run measured **43,530 ms** (138 chars/sec). Later
+paired runs on this shared 64-core host varied **31–285 s** for the identical command depending on
+contention; wall-clock A/B is not trustworthy here. The eliminated ~1.46s/call-batch of DIF work
+(~3.4% of the quiet 42.68s instrumented `train_step` total) is the robust signal.
+
+**What was intentionally NOT skipped (still required at D17 default):**
+- SSM step + BPTT (`bptt_steps=64`) — SSM context feeds GRIA via `project_field()` and BPTT updates
+  `W_fast` every 64 steps regardless of `train_ssm=false`.
+- GRIA forward/backward + n-gram fusion/count paths — active training heads even at ~99.6% LSTM blend.
+- LSTM forward/backward + hybrid blend learning — dominant compute; unchanged.
+- Hebbian stack, EWC, GNG, RPSM — already null/off at default config (no call cost).
+
+**Remaining opportunities:** subsystems that *do* run but could be throttled structurally (e.g. BPTT
+every 64 steps vs every step, memory compress/store cadence, n-gram prior refresh) — each needs its
+own bit-identical proof and is higher risk than this pass's pure "DIF output unreachable" gate.
+
