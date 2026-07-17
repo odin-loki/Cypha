@@ -2016,6 +2016,17 @@ AlphaSpectrumSnapshot CyphaLMModel::alpha_spectrum_snapshot() const {
     AlphaSpectrumSnapshot snap;
     if (gria_) snap.gria_projection_alpha = gria_->alpha;
     if (dif_) snap.expert_alpha = dif_->alpha_per_expert();
+    if (!snap.expert_alpha.empty()) {
+        double sum = 0.0;
+        int near = 0;
+        for (double a : snap.expert_alpha) {
+            sum += a;
+            if (std::abs(a - 0.5) < 0.1) ++near;
+        }
+        snap.mean_expert_alpha = sum / static_cast<double>(snap.expert_alpha.size());
+        snap.fraction_experts_near_edge_of_chaos =
+            static_cast<double>(near) / static_cast<double>(snap.expert_alpha.size());
+    }
     std::vector<double> all = snap.gria_projection_alpha;
     all.insert(all.end(), snap.expert_alpha.begin(), snap.expert_alpha.end());
     if (!all.empty()) {
@@ -2045,8 +2056,11 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"mean_epistemic_var", last_dif_out_.epistemic_var},
         {"mean_aleatoric_var", last_dif_out_.aleatoric_var},
         {"mean_alpha", snap.mean_alpha},
+        {"mean_expert_alpha", snap.mean_expert_alpha},
         {"expert_alpha_spectrum", snap.expert_alpha},
         {"gria_alpha_spectrum", gria_spec},
+        {"cfg_n_experts", cfg_.n_experts},
+        {"max_experts", cfg_.max_experts},
         {"n_experts", dif_ ? dif_->expert_count() : 0},
         {"lossless_fraction", last_dif_out_.epistemic_var / total},
         {"lossy_fraction", 1.0 - last_dif_out_.epistemic_var / total},

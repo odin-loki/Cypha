@@ -1429,7 +1429,10 @@ Json run_cyphalm_domain(const std::string& domain_id, const std::string& profile
         {"vocab_size", cfg.vocab_size},
         {"17B_alpha_spectrum",
          Json{{"mean_alpha", alpha_profile.value("mean_alpha", 0.0)},
+              {"mean_expert_alpha", alpha_profile.value("mean_expert_alpha", 0.0)},
               {"fraction_edge_of_chaos", alpha_profile.value("fraction_near_edge_of_chaos", 0.0)},
+              {"cfg_n_experts", alpha_profile.value("cfg_n_experts", 0)},
+              {"max_experts", alpha_profile.value("max_experts", 0)},
               {"n_experts", alpha_profile.value("n_experts", 0)}}},
         {"backend", "cypha_lm_native"},
     };
@@ -1502,7 +1505,10 @@ Json run_d21_rpsm_overnight_smoke() {
         {"rpsm_feat_dim", cfg.rpsm_feat_dim},
         {"17B_alpha_spectrum",
          Json{{"mean_alpha", alpha_profile.value("mean_alpha", 0.0)},
+              {"mean_expert_alpha", alpha_profile.value("mean_expert_alpha", 0.0)},
               {"fraction_edge_of_chaos", alpha_profile.value("fraction_near_edge_of_chaos", 0.0)},
+              {"cfg_n_experts", alpha_profile.value("cfg_n_experts", 0)},
+              {"max_experts", alpha_profile.value("max_experts", 0)},
               {"n_experts", alpha_profile.value("n_experts", 0)}}},
         {"backend", "cypha_lm_native"},
     };
@@ -2014,6 +2020,117 @@ Json run_d16_ewc_probe() {
         {"ewc", ewc_row},
         {"ewc_reduces_forgetting", ewc_forgetting <= baseline_forgetting},
         {"forgetting_delta", baseline_forgetting - ewc_forgetting},
+    };
+}
+
+// D16B EWC strength sweep (docs/reports/EWC_D16B_SCOPING_2026-07-12.md): extends
+// `run_d16_ewc_probe`'s baseline-vs-single-lambda probe into a real trade-off curve — several
+// `ewc_lambda` settings, each with/without the NIG world-field (`world_mu`) protection, and now
+// also reports task B's own post-training accuracy (wine, digits) alongside task A's
+// before/after — not just a single forgetting_score number. Not part of `all_domains()` / the
+// default bench report: called only from the standalone `ewc_d16b_sweep` tool
+// (native/tools/ewc_d16b_sweep.cpp) so it never touches `bench/report/tables/` or
+// `bench/BASELINE_REPORT.md`.
+Json run_d16_ewc_sweep_impl() {
+    const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
+    const cypha::bench::ProfileJson regime = cypha::bench::classification_params(&profile);
+    const auto tasks = load_multitask_datasets();
+    int max_dim = 0;
+    for (const auto& t : tasks) {
+        max_dim = std::max(max_dim, static_cast<int>(t.train_x.empty() ? 0 : t.train_x.front().size()));
+    }
+    auto make_multitask_clf = [&](std::uint64_t seed) {
+        return make_online_classifier(max_dim, seed, 0.0, regime);
+    };
+    auto eval_task = [&](const OnlineClassifier& c, const MultitaskBundle& task) {
+        std::vector<std::vector<double>> xp;
+        std::vector<std::string> labels;
+        xp.reserve(task.test_x.size());
+        labels.reserve(task.test_y.size());
+        for (std::size_t i = 0; i < task.test_x.size(); ++i) {
+            xp.push_back(pad_to_max(task.test_x[i], max_dim));
+            labels.push_back(task.name + "_" + task.test_y[i]);
+        }
+        return clf_metrics_native(c.infer, xp, labels)["accuracy"].get<double>();
+    };
+    const int steps = cypha::bench::bench_scale(3000, 800);
+    auto train_task = [&](OnlineClassifier& clf, const MultitaskBundle& task, cypha::TrainStepExtras* extras) {
+        std::vector<int> order(static_cast<int>(task.train_x.size()));
+        for (int i = 0; i < static_cast<int>(order.size()); ++i) {
+            order[static_cast<std::size_t>(i)] = i;
+        }
+        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 2));
+        const int limit = std::min(steps, static_cast<int>(order.size()));
+        for (int k = 0; k < limit; ++k) {
+            const int i = order[static_cast<std::size_t>(k)];
+            const auto x = pad_to_max(task.train_x[static_cast<std::size_t>(i)], max_dim);
+            const std::string label = task.name + "_" + task.train_y[static_cast<std::size_t>(i)];
+            const int d = static_cast<int>(x.size());
+            (void)cypha::dif_train_step_vector(clf.infer, clf.mem, clf.replay, x.data(), d, label, clf.world_lr,
+                                               clf.delta_lr, clf.world_lr, clf.delta_lr, clf.ood_sigma, clf.tsp,
+                                               clf.rng, clf.enc_updates, nullptr, extras);
+        }
+    };
+    const MultitaskBundle* iris = nullptr;
+    const MultitaskBundle* wine = nullptr;
+    const MultitaskBundle* digits = nullptr;
+    for (const auto& t : tasks) {
+        if (t.name == "iris") iris = &t;
+        if (t.name == "wine") wine = &t;
+        if (t.name == "digits") digits = &t;
+    }
+
+    auto run_setting = [&](double ewc_lambda, bool protect_world_field, std::uint64_t seed) {
+        OnlineClassifier clf = make_multitask_clf(seed);
+        cypha::EwcRegularizer ewc;
+        cypha::TrainStepExtras extras{};
+        const bool use_ewc = ewc_lambda > 0.0;
+        if (use_ewc) {
+            ewc.set_protect_world_field(protect_world_field);
+            extras.ewc = &ewc;
+            extras.ewc_lambda = ewc_lambda;
+        }
+        train_task(clf, *iris, use_ewc ? &extras : nullptr);
+        if (use_ewc) {
+            ewc.snapshot(clf.mem, clf.infer);
+        }
+        const double task_a_before = eval_task(clf, *iris);
+        train_task(clf, *wine, use_ewc ? &extras : nullptr);
+        const double task_b_wine_after = eval_task(clf, *wine);
+        train_task(clf, *digits, use_ewc ? &extras : nullptr);
+        cypha::sync_infer_model_from_memory(clf.infer, clf.mem);
+        const double task_a_after = eval_task(clf, *iris);
+        const double task_b_digits_after = eval_task(clf, *digits);
+        const double forgetting = (task_a_before - task_a_after) / std::max(task_a_before, 1e-6);
+        Json row{
+            {"ewc_lambda", ewc_lambda},
+            {"protect_world_field", protect_world_field},
+            {"task_a_accuracy_before", task_a_before},
+            {"task_a_accuracy_after", task_a_after},
+            {"forgetting_score", forgetting},
+            {"task_b_wine_accuracy_after", task_b_wine_after},
+            {"task_b_digits_accuracy_after", task_b_digits_after},
+        };
+        if (use_ewc) {
+            row["ewc_penalty_final"] = ewc.penalty(clf.mem, clf.infer);
+        }
+        return row;
+    };
+
+    Json rows = Json::array();
+    std::uint64_t seed = kBenchSeed + 100;
+    rows.push_back(run_setting(0.0, false, seed++));  // baseline: EWC off entirely.
+    const std::array<double, 3> lambdas{0.1, 0.5, 2.0};  // low / medium / high Fisher penalty weight.
+    for (double lambda : lambdas) {
+        rows.push_back(run_setting(lambda, false, seed++));  // classic EWC: D (class-delta prefix) + enc_w only.
+        rows.push_back(run_setting(lambda, true, seed++));   // + NIG world-field (world_mu) protection.
+    }
+    return Json{
+        {"rows", rows},
+        {"n_train_steps_per_task", steps},
+        {"note",
+         "Standalone sweep, not part of the default bench report -- see native/tools/ewc_d16b_sweep.cpp and "
+         "docs/reports/EWC_D16B_SCOPING_2026-07-12.md"},
     };
 }
 
@@ -9656,5 +9773,7 @@ std::vector<DomainSpec> build_all_domains() {
 }  // namespace
 
 std::vector<DomainSpec> all_domains() { return build_all_domains(); }
+
+DomainJson run_d16_ewc_sweep() { return run_d16_ewc_sweep_impl(); }
 
 }  // namespace cypha::bench

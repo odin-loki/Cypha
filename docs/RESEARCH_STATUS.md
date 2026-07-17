@@ -503,7 +503,7 @@ Followed through on the deferred item above: built the two-sided kernelized expe
 | 2 | D17: `bptt_steps=64`, tune `gria_lr` / `tau_slow` via `cyphalm_sweep.py` | Held-out BPC &lt; bigram on 40k — **+0.24 remaining** |
 | 3 | `CYPHA_BENCH_FULL_CORPUS=1` WikiText train | BPC &lt; bigram on official valid — *next* |
 | 4 | Compare vs **4-gram, 5-gram, char-LSTM** (new baselines) | **&lt; trigram** ✅; char-LSTM **3.589** still best |
-| 5 | Fix CyphaDIF warm-start `active_experts` reporting; re-run D17B | `n_experts` matches profile when warm-started |
+| 5 | Fix CyphaDIF warm-start `active_experts` reporting; re-run D17B | `n_experts` matches profile when warm-started — **done (2026-07-12):** no count bug; cold-start `n_experts:0` → 1 expert is genuine; `compression_profile()` now exposes `cfg_n_experts`, `mean_expert_alpha` — see [`D17B_EXPERT_REPORTING_2026-07-12.md`](reports/D17B_EXPERT_REPORTING_2026-07-12.md) |
 | 6 | Regenerate `BASELINE_REPORT.md`, paper `fig04_*`, update this doc | All placeholder cells filled |
 | 7 | **Multi-view online training** (Phase 1) | See [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md): block shuffle + view_id; BPC &lt; bigram or ≥0.05 ↓ vs 4.154 |
 
@@ -534,7 +534,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 **Evidence:** D16B forgetting_score=0.813. This is a significant architectural gap if the claim is "no forgetting". The current architecture only achieves zero forgetting with per-task isolated model files (D16F).
 
 **What to do:**
-1. Investigate elastic weight consolidation (EWC) as a post-hoc overlay on the NIG field.
+1. ~~Investigate elastic weight consolidation (EWC) as a post-hoc overlay on the NIG field.~~ **Scoping shipped 2026-07-12** — growable-`D` bug fixed; opt-in `world_mu` Fisher; D16B λ sweep shows modest gain at λ=2.0 (forgetting 0.135→0.108), world-field protection harmful at high λ — see [`EWC_D16B_SCOPING_2026-07-12.md`](reports/EWC_D16B_SCOPING_2026-07-12.md).
 2. Alternatively, redesign the expert routing so task-specific experts are not overwritten.
 3. Update the marketing claim: "no forgetting **per isolated model file**; shared-model continual learning is an open problem."
 

@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.19)
 project(cypha_native VERSION 2.2.8 LANGUAGES CXX C)
 
 # Enable /MP (parallel single-target compilation within MSVC's cl.exe) so multi-TU targets
-# make use of all available cores; no-op for other compilers.
-add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
+# make use of all available cores; no-op for other compilers. Scope to CXX only — passing /MP
+# to nvcc breaks CUDA .cu compilation ("A single input file is required...").
+add_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:MSVC>:/MP>>)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 
@@ -234,8 +235,17 @@ endif()
 add_executable(ewc_d16b_smoke tools/ewc_d16b_smoke.cpp)
 target_link_libraries(ewc_d16b_smoke PRIVATE cypha_core)
 
+add_executable(ewc_d16b_sweep tools/ewc_d16b_sweep.cpp)
+target_link_libraries(ewc_d16b_sweep PRIVATE cypha_bench_native)
+
+add_executable(ewc_growable_d_smoke tools/ewc_growable_d_smoke.cpp)
+target_link_libraries(ewc_growable_d_smoke PRIVATE cypha_core)
+
 add_executable(ewc_cyphalm_smoke tools/ewc_cyphalm_smoke.cpp)
 target_link_libraries(ewc_cyphalm_smoke PRIVATE cypha_lm_native)
+
+add_executable(d17b_expert_diagnose tools/d17b_expert_diagnose.cpp)
+target_link_libraries(d17b_expert_diagnose PRIVATE cypha_lm_native)
 
 add_executable(ewc_hybrid_smoke tools/ewc_hybrid_smoke.cpp)
 target_link_libraries(ewc_hybrid_smoke PRIVATE cypha_lm_native)
@@ -370,6 +380,8 @@ set(
   ewc_smoke
   ewc_real_fisher_smoke
   ewc_d16b_smoke
+  ewc_d16b_sweep
+  ewc_growable_d_smoke
   ewc_cyphalm_smoke
   ewc_hybrid_smoke
   ewc_weights_smoke
@@ -960,6 +972,16 @@ add_test(
 add_test(
   NAME native_ewc_d16b_smoke
   COMMAND "$<TARGET_FILE:ewc_d16b_smoke>"
+)
+
+add_test(
+  NAME native_ewc_d16b_sweep
+  COMMAND "$<TARGET_FILE:ewc_d16b_sweep>"
+)
+
+add_test(
+  NAME native_ewc_growable_d_smoke
+  COMMAND "$<TARGET_FILE:ewc_growable_d_smoke>"
 )
 
 add_test(

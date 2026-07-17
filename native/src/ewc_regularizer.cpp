@@ -147,13 +147,22 @@ void accumulate_diagonal_fisher_from_calibration(const CyphaDifMemoryState& mem,
   }
 }
 
+// Compares/pulls only the anchor-sized *prefix* of `theta`, not an exact-size match. `D` (the
+// class-delta score matrix) grows append-only as new classes are trained (existing rows preserved
+// in place; see `memory_train.cpp`'s `get_or_create`/`D.resize`), so `theta.size() > anchor.size()`
+// is the *expected*, common case for `D` in any multi-task continual-learning run once task B
+// introduces classes task A never saw — there is no Fisher information for those brand-new rows,
+// so leaving them out of the prefix is correct, not a fallback. `enc_w` and `world_mu` are
+// fixed-size and always hit the `theta.size() == anchor.size()` branch of this same logic.
+// `theta.size() < anchor.size()` (params somehow shrank) is treated as a snapshot no longer
+// applying and safely skipped, matching the previous exact-match guard's fail-safe behavior.
 double squared_penalty(const std::vector<double>& theta, const std::vector<double>& anchor,
                        const std::vector<double>& fisher) {
-  if (theta.size() != anchor.size() || theta.size() != fisher.size()) {
+  if (anchor.size() != fisher.size() || theta.size() < anchor.size()) {
     return 0.0;
   }
   double sum = 0.0;
-  for (std::size_t i = 0; i < theta.size(); ++i) {
+  for (std::size_t i = 0; i < anchor.size(); ++i) {
     const double d = theta[i] - anchor[i];
     sum += fisher[i] * d * d;
   }
@@ -162,13 +171,26 @@ double squared_penalty(const std::vector<double>& theta, const std::vector<doubl
 
 void pull_toward_anchor(std::vector<double>& theta, const std::vector<double>& anchor,
                         const std::vector<double>& fisher, double strength) {
-  if (theta.size() != anchor.size() || theta.size() != fisher.size() || strength <= 0.0) {
+  if (anchor.size() != fisher.size() || theta.size() < anchor.size() || strength <= 0.0) {
     return;
   }
-  for (std::size_t i = 0; i < theta.size(); ++i) {
+  for (std::size_t i = 0; i < anchor.size(); ++i) {
     const double d = theta[i] - anchor[i];
     theta[i] -= strength * fisher[i] * d;
   }
+}
+
+}  // namespace
+
+namespace {
+
+// Fisher information of a Gaussian mean under known variance v is 1/v — `mem.world_inv_v` is
+// exactly that, already maintained online by `world_update` (memory_train.cpp), so no separate
+// calibration pass is needed for this term.
+void snapshot_world_field(const CyphaDifMemoryState& mem, std::vector<double>& anchor_world_mu_out,
+                          std::vector<double>& fisher_world_mu_out) {
+  anchor_world_mu_out = mem.world_mu;
+  fisher_world_mu_out = mem.world_inv_v;
 }
 
 }  // namespace
@@ -178,6 +200,12 @@ void EwcRegularizer::snapshot(const CyphaDifMemoryState& mem, const CyphaInferMo
   anchor_enc_w_ = infer.enc_w;
   build_diagonal_fisher(anchor_D_, fisher_D_);
   build_diagonal_fisher(anchor_enc_w_, fisher_enc_w_);
+  if (protect_world_field_) {
+    snapshot_world_field(mem, anchor_world_mu_, fisher_world_mu_);
+  } else {
+    anchor_world_mu_.clear();
+    fisher_world_mu_.clear();
+  }
 }
 
 void EwcRegularizer::snapshot_calibrated(const CyphaDifMemoryState& mem, const CyphaInferModel& infer,
@@ -188,16 +216,26 @@ void EwcRegularizer::snapshot_calibrated(const CyphaDifMemoryState& mem, const C
   if (calib_x.empty()) {
     build_diagonal_fisher(anchor_D_, fisher_D_);
     build_diagonal_fisher(anchor_enc_w_, fisher_enc_w_);
-    return;
+  } else {
+    accumulate_diagonal_fisher_from_calibration(mem, infer, calib_x, calib_labels, fisher_D_, fisher_enc_w_);
   }
-  accumulate_diagonal_fisher_from_calibration(mem, infer, calib_x, calib_labels, fisher_D_, fisher_enc_w_);
+  if (protect_world_field_) {
+    snapshot_world_field(mem, anchor_world_mu_, fisher_world_mu_);
+  } else {
+    anchor_world_mu_.clear();
+    fisher_world_mu_.clear();
+  }
 }
 
 double EwcRegularizer::penalty(const CyphaDifMemoryState& mem, const CyphaInferModel& infer) const {
   if (!has_snapshot()) {
     return 0.0;
   }
-  return squared_penalty(mem.D, anchor_D_, fisher_D_) + squared_penalty(infer.enc_w, anchor_enc_w_, fisher_enc_w_);
+  double p = squared_penalty(mem.D, anchor_D_, fisher_D_) + squared_penalty(infer.enc_w, anchor_enc_w_, fisher_enc_w_);
+  if (protect_world_field_ && !anchor_world_mu_.empty()) {
+    p += squared_penalty(mem.world_mu, anchor_world_mu_, fisher_world_mu_);
+  }
+  return p;
 }
 
 void EwcRegularizer::apply_pull(CyphaDifMemoryState& mem, CyphaInferModel& infer, double ewc_lambda,
@@ -208,6 +246,12 @@ void EwcRegularizer::apply_pull(CyphaDifMemoryState& mem, CyphaInferModel& infer
   const double strength = ewc_lambda * lr;
   pull_toward_anchor(mem.D, anchor_D_, fisher_D_, strength);
   pull_toward_anchor(infer.enc_w, anchor_enc_w_, fisher_enc_w_, strength);
+  if (protect_world_field_ && !anchor_world_mu_.empty()) {
+    pull_toward_anchor(mem.world_mu, anchor_world_mu_, fisher_world_mu_, strength);
+    // world_inv_v mirrors world_v (`1/max(v, kMinVar)`) and is recomputed by `world_update` every
+    // step from `world_v`, not stored independently — pulling `world_mu` alone is sufficient; the
+    // (co-)variance itself is intentionally left to keep adapting to the current data stream.
+  }
 }
 
 }  // namespace cypha
