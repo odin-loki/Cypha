@@ -978,7 +978,7 @@ class SimpleLossChart final : public QWidget {
       painter.setPen(QColor(140, 140, 150));
       painter.drawText(full.adjusted(8, 0, -8, 0), Qt::AlignCenter,
                        compare_mode_
-                           ? QStringLiteral("Compare runs — select rows in Experiments and click Compare")
+                           ? QStringLiteral("Select runs above, then Compare — plots metrics_history loss")
                            : QStringLiteral("Per-step loss — bulk REST (blue) vs native (orange); dashed = EMA"));
       return;
     }
@@ -2993,8 +2993,11 @@ class MainWindow final : public QMainWindow {
       exp_cmp_row->addStretch(1);
       exp_form->addRow(exp_cmp_row);
 
-      exp_compare_summary_label_ = new QLabel(QStringLiteral("(select 2+ runs with loss history)"), exp_grp);
+      exp_compare_summary_label_ = new QLabel(exp_grp);
       exp_compare_summary_label_->setWordWrap(true);
+      exp_compare_summary_label_->setToolTip(QStringLiteral(
+          "After Compare: per-run Acc/F1/R²/RMSE table plus loss overlay.\n"
+          "Loss curves require metrics_history entries with a loss field."));
       exp_form->addRow(exp_compare_summary_label_);
 
       exp_compare_stats_table_ = new QTableWidget(0, 9, exp_grp);
@@ -3017,9 +3020,11 @@ class MainWindow final : public QMainWindow {
 
       exp_compare_chart_ = new SimpleLossChart(exp_grp);
       exp_compare_chart_->setMinimumHeight(160);
+      exp_compare_chart_->set_compare_loss_runs({});
       exp_form->addRow(exp_compare_chart_);
 
       lay_experiment->addWidget(exp_grp);
+      experiment_update_compare_hint();
     }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
@@ -4705,6 +4710,7 @@ class MainWindow final : public QMainWindow {
       }
       exp_compare_btn_->setEnabled(exp_db_ != nullptr && exp_runs_table_->selectionModel() != nullptr &&
                                    !exp_runs_table_->selectionModel()->selectedRows().isEmpty());
+      experiment_update_compare_hint();
     });
 
     connect(exp_compare_btn_, &QPushButton::clicked, this, [this]() { experiment_compare_selected_runs(); });
@@ -4712,9 +4718,7 @@ class MainWindow final : public QMainWindow {
     connect(exp_compare_clear_btn_, &QPushButton::clicked, this, [this]() {
       if (exp_compare_chart_ != nullptr) {
         exp_compare_chart_->clear_losses();
-      }
-      if (exp_compare_summary_label_ != nullptr) {
-        exp_compare_summary_label_->setText(QStringLiteral("(select 2+ runs with loss history)"));
+        exp_compare_chart_->set_compare_loss_runs({});
       }
       if (exp_compare_stats_table_ != nullptr) {
         exp_compare_stats_table_->setRowCount(0);
@@ -4723,6 +4727,7 @@ class MainWindow final : public QMainWindow {
       if (exp_compare_clear_btn_ != nullptr) {
         exp_compare_clear_btn_->setEnabled(false);
       }
+      experiment_update_compare_hint();
     });
 
     connect(exp_experiments_table_, &QTableWidget::itemSelectionChanged, this, [this]() {
@@ -7240,7 +7245,34 @@ class MainWindow final : public QMainWindow {
       }
       headline += summary_bits.join(QStringLiteral("  |  "));
     }
-    return headline.isEmpty() ? QStringLiteral("(select 2+ runs with loss history)") : headline;
+    return headline.isEmpty() ? QStringLiteral("(select runs above, then Compare)") : headline;
+  }
+
+  void experiment_update_compare_hint() {
+    if (exp_compare_summary_label_ == nullptr) {
+      return;
+    }
+    if (exp_compare_clear_btn_ != nullptr && exp_compare_clear_btn_->isEnabled()) {
+      return;
+    }
+    int sel_count = 0;
+    if (exp_runs_table_ != nullptr && exp_runs_table_->selectionModel() != nullptr) {
+      sel_count = exp_runs_table_->selectionModel()->selectedRows().size();
+    }
+    static const QString kMutedStyle = QStringLiteral("color: #888;");
+    if (sel_count == 0) {
+      exp_compare_summary_label_->setText(
+          QStringLiteral("(select runs above, then Compare — loss curves need metrics_history)"));
+      exp_compare_summary_label_->setStyleSheet(kMutedStyle);
+    } else if (sel_count == 1) {
+      exp_compare_summary_label_->setText(
+          QStringLiteral("1 run selected — click Compare (select 2+ to see Δacc)"));
+      exp_compare_summary_label_->setStyleSheet(QString());
+    } else {
+      exp_compare_summary_label_->setText(
+          QStringLiteral("%1 runs selected — click Compare").arg(sel_count));
+      exp_compare_summary_label_->setStyleSheet(QString());
+    }
   }
 
   void experiment_compare_selected_runs() {
@@ -7323,6 +7355,7 @@ class MainWindow final : public QMainWindow {
       exp_compare_clear_btn_->setEnabled(true);
     }
     if (exp_compare_summary_label_ != nullptr) {
+      exp_compare_summary_label_->setStyleSheet(QString());
       exp_compare_summary_label_->setText(
           experiment_compare_summary_text(stats_rows, stats_losses, series.size()));
     }
