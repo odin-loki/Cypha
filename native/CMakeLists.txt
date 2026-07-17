@@ -43,6 +43,7 @@ add_library(cypha_core STATIC
   src/infer_cpu.cpp
   src/retrieval.cpp
   src/nig_gig_math.cpp
+  src/nig_gig_score_match.cpp
   src/bessel_table_data.cpp
   src/preprocessor.cpp
   src/preprocessor_fit.cpp
@@ -202,6 +203,10 @@ cypha_mingw_apply_exe_link_options(kernel_approx_p5_smoke)
 add_executable(class_gmm_p3_smoke tools/class_gmm_p3_smoke.cpp)
 target_link_libraries(class_gmm_p3_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(class_gmm_p3_smoke)
+
+add_executable(gate_score_match_p7_smoke tools/gate_score_match_p7_smoke.cpp)
+target_link_libraries(gate_score_match_p7_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(gate_score_match_p7_smoke)
 
 add_executable(nig_bma_p4_smoke tools/nig_bma_p4_smoke.cpp)
 target_link_libraries(nig_bma_p4_smoke PRIVATE cypha_bench_native)
@@ -768,6 +773,12 @@ add_test(
 )
 set_tests_properties(native_rao_blackwell_p8_smoke PROPERTIES
   PASS_REGULAR_EXPRESSION "rao_blackwell_p8_smoke: PASS")
+add_test(
+  NAME native_gate_score_match_p7_smoke
+  COMMAND "$<TARGET_FILE:gate_score_match_p7_smoke>"
+)
+set_tests_properties(native_gate_score_match_p7_smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "gate_score_match_p7_smoke: PASS")
 add_test(
   NAME native_criticality_vector_p9_smoke
   COMMAND "$<TARGET_FILE:criticality_vector_p9_smoke>"

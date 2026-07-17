@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "cypha/bessel_table.hpp"
+#include "cypha/nig_gig_score_match.hpp"
 
 namespace cypha {
 
@@ -56,42 +57,72 @@ double np_interp_k0k1(double x) {
 
 }  // namespace
 
+double gig_k2k1_lut(double x) {
+  if (x <= 1e-8) {
+    return 2.0 / std::max(x, 1e-8);
+  }
+  if (x >= cypha::detail::kBesselX1) {
+    return np_interp_k2k1(cypha::detail::kBesselX1);
+  }
+  const double xt = std::clamp(x, cypha::detail::kBesselX0, cypha::detail::kBesselX1);
+  return np_interp_k2k1(xt);
+}
+
+namespace {
+
+double active_k2k1(double x) {
+  if (gig_normalisation_mode() == GigNormalisationMode::ScoreMatch) {
+    return gig_k2k1_score_match(x);
+  }
+  return gig_k2k1_lut(x);
+}
+
+double active_k0k1(double x) {
+  if (gig_normalisation_mode() == GigNormalisationMode::ScoreMatch) {
+    return gig_k0k1_score_match(x);
+  }
+  if (x <= 1e-8) {
+    return 1.0 / std::max(x, 1e-8);
+  }
+  if (x >= cypha::detail::kBesselX1) {
+    return np_interp_k0k1(cypha::detail::kBesselX1);
+  }
+  const double xt = std::clamp(x, cypha::detail::kBesselX0, cypha::detail::kBesselX1);
+  return np_interp_k0k1(xt);
+}
+
+}  // namespace
+
 double gig_e_inv_v_lam_neg1(double chi0, double psi) {
   if (chi0 < kEps || psi < kEps) {
     return psi / std::max(chi0, kEps);
   }
-  double chi_g = std::max(chi0, kEps);
-  double x = std::sqrt(chi_g * psi);
+  const double chi_g = std::max(chi0, kEps);
+  const double x = std::sqrt(chi_g * psi);
   if (x < 1e-6) {
     return psi / chi_g;
   }
-  double chi_b = chi_g;
-  double x_b = x;
-  if (x_b <= 120.0) {
-    double xt = std::clamp(x_b, cypha::detail::kBesselX0, cypha::detail::kBesselX1);
-    double ratio = np_interp_k2k1(xt);
-    return std::sqrt(psi / chi_b) * ratio;
+  if (x > 120.0) {
+    return psi / chi_g;
   }
-  return psi / chi_b;
+  const double ratio = active_k2k1(x);
+  return std::sqrt(psi / chi_g) * ratio;
 }
 
 double gig_e_v_lam_neg1(double chi0, double psi) {
   if (chi0 < kEps || psi < kEps) {
     return chi0 / std::max(psi, kEps);
   }
-  double chi_g = std::max(chi0, kEps);
-  double x = std::sqrt(chi_g * psi);
+  const double chi_g = std::max(chi0, kEps);
+  const double x = std::sqrt(chi_g * psi);
   if (x < 1e-6) {
     return chi_g / std::max(psi, kEps);
   }
-  double chi_b = chi_g;
-  double x_b = x;
-  if (x_b <= 120.0) {
-    double xt = std::clamp(x_b, cypha::detail::kBesselX0, cypha::detail::kBesselX1);
-    double ratio = np_interp_k0k1(xt);
-    return std::sqrt(chi_b / psi) * ratio;
+  if (x > 120.0) {
+    return std::sqrt(chi_g / std::max(psi, kEps));
   }
-  return std::sqrt(chi_b / std::max(psi, kEps));
+  const double ratio = active_k0k1(x);
+  return std::sqrt(chi_g / psi) * ratio;
 }
 
 double nig_adapt_chi_impl(double chi, double psi, double innovation_sq, double R, double alpha) {

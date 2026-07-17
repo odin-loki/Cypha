@@ -17,7 +17,7 @@
 | 4 | Bayesian model averaging over Δk | [ ] Not started | |
 | 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
 | 6 | Variational IB encoder | [ ] Not started | |
-| 7 | Score matching → delete Bessel LUT | [ ] Not started | Blocked on Phase 0 |
+| 7 | Score matching → delete Bessel LUT | [~] Opt-in shipped | Score-match path + CTest; LUT retained — see `OPTIMALITY_PHASE7_2026-07-17.md` |
 | 8 | Rao-Blackwellise sampling paths | [ ] Not started | |
 | 9 | Runtime criticality monitor | [~] Partial | `CriticalityVector` tier/cadence `c759e72`; profiler, REST `/intelligence`, profile-guided loss shipped |
 

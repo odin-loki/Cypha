@@ -1,8 +1,13 @@
 #pragma once
 
+#include "cypha/nig_gig_score_match.hpp"
+
 namespace cypha {
 
 /// GIG / NIG scalars shared by ``infer_cpu``, ``accel``, and CUDA host paths (reference parity fixture).
+
+/// ``K_2(x)/K_1(x)`` via Bessel LUT (default backend).
+double gig_k2k1_lut(double x);
 
 double gig_e_inv_v_lam_neg1(double chi0, double psi);
 double gig_e_v_lam_neg1(double chi0, double psi);
