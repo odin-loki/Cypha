@@ -1,6 +1,6 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-07-12  
+**Last updated:** 2026-07-17  
 **Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **160 CTests** *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)*
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
@@ -68,7 +68,7 @@ Run on 2026-05-31 using `bench/config/everyday_profile.json` (deliberation off, 
 
 | Domain | Task | Metric | Value | Verdict |
 |--------|------|--------|-------|---------|
-| D16B | Block forgetting (shared model) | Forgetting score | 0.813 | ❌ 81% forgetting — NOT zero-forgetting |
+| D16B | Block forgetting (shared model) | Forgetting score | 0.813 *(everyday profile, 2026-05-31)*; FAST EWC sweep baseline **0.135** (2026-07-12) | ❌ Shared-model forgetting real; EWC λ=2.0 modest gain → **0.108** — see [`EWC_D16B_SCOPING_2026-07-12.md`](reports/EWC_D16B_SCOPING_2026-07-12.md) |
 | D16E | Save / restore fidelity | Retention ratio | 1.000 | ✅ Save/restore is perfect |
 | D16F | Per-task isolated models | Forgetting score | 0.000 | ✅ Zero forgetting by architecture |
 
@@ -101,7 +101,7 @@ Run on 2026-05-31 using `bench/config/everyday_profile.json` (deliberation off, 
 
 | Domain | Task | Metric | Value | Verdict |
 |--------|------|--------|-------|---------|
-| D17B | Alpha spectrum | mean_alpha | 0.095 (post-upgrade) | ⚠ Still low alpha; 1 active expert |
+| D17B | Alpha spectrum | mean_alpha / n_experts | 0.095 / **1** (post-upgrade) | ⚠ Low `mean_alpha` blends GRIA α; cold-start **`n_experts=1` is genuine** (not a reporting bug) — use `mean_expert_alpha`; see [`D17B_EXPERT_REPORTING_2026-07-12.md`](reports/D17B_EXPERT_REPORTING_2026-07-12.md) |
 | D17D | Online adaptation BPC gain | ΔBPC | −0.288 (WikiText) | ✅ Adapts online |
 
 **CyphaLM upgrade (2026 Q2):** config adds `context_mode`, `ngram_context`, `train_epochs`, `bptt_steps`, `laplace_smoothing`, `gria_lr_decay`. Native bench adds 4-gram / 5-gram / char-LSTM baselines and LM ablations (`full`, `gria_ngram`, `ssm_only`, `ablation_no_dif`, `ablation_no_ssm`). Profiles: `bench/config/profiles/cyphalm_d04_gutenberg.json`, `cyphalm_d17_wikitext.json`. Details: [`docs/native/CYPHALM_NATIVE_BUILD.md`](native/CYPHALM_NATIVE_BUILD.md), [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6.
@@ -127,7 +127,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 | Property | Evidence | Status |
 |----------|----------|--------|
 | No catastrophic forgetting (per-task isolation) | D16F: forgetting_score=0.0 | ✅ Confirmed |
-| Shared-model forgetting is real | D16B: 81.25% forgetting score | ⚠ Known limit |
+| Shared-model forgetting is real | D16B: 81.25% forgetting score (everyday profile); EWC scoping best **0.135→0.108** @ λ=2.0 (FAST sweep) | ⚠ Known limit; EWC modest help only |
 | Uncertainty increases with noise | D15: epistemic_var rises with σ | ✅ Confirmed |
 | Adversarial robustness | D15C: FGSM minimal drop | ✅ Confirmed |
 | OOD detection (AUROC >0.80) | Cross-domain mean 0.844 | ✅ Confirmed |
@@ -371,6 +371,9 @@ Each hypothesis we have investigated with the result:
 | Native CUDA accel matches CPU float64 | Yes | Confirmed in `native_score_batch` / `native_cuda_smoke` |
 | Save/restore is lossless | Yes | D16E retention_ratio=1.0 |
 | Shared-model multi-task = no forgetting | No | D16B: 81.25% forgetting — **refuted** |
+| EWC overlay reduces D16B shared-model forgetting | Yes (scoping) | Growable-`D` bug fixed; λ=2.0: **0.135→0.108**; world-field protection harmful — see [`EWC_D16B_SCOPING_2026-07-12.md`](reports/EWC_D16B_SCOPING_2026-07-12.md) |
+| D17B `n_experts=1` is a warm-start reporting bug | No | Cold-start novelty gating → **genuine single expert**; `mean_expert_alpha` split shipped — see [`D17B_EXPERT_REPORTING_2026-07-12.md`](reports/D17B_EXPERT_REPORTING_2026-07-12.md) |
+| D17 online training has more micro-opt headroom | Yes (Parts 1–5) | **Compute-bound floor** on `lstm_backward`/`bptt_ssm_update`/`CharLSTM`; Part 4 dead-DIF skip ~3.4%; further gains need structural/CUDA paths — [`PERFORMANCE_PROFILE_2026-07-12.md`](reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–5 |
 | Adversarial robustness is good | Yes | D15C: FGSM minimal drop |
 | OOD detection works | Yes | Cross-domain mean AUROC=0.844 |
 | CyphaLM can learn language structure | Yes (partial) | D17 **beats trigram** at 40k (4.154 vs 4.398); +0.24 vs bigram; char-LSTM still best |
@@ -490,10 +493,10 @@ Followed through on the deferred item above: built the two-sided kernelized expe
 
 **Root causes (unchanged):**
 - Most learning in GRIA; SSM/DIF under-trained at default single-pass online loop.
-- Warm-started experts under-reported in D17B (`mean_alpha` low).
+- D17B `mean_alpha` low because GRIA projection α (fixed 0.5) blends with per-expert α (≈0); cold-start **`n_experts=1` is genuine** novelty gating, not under-reporting — see [`D17B_EXPERT_REPORTING_2026-07-12.md`](reports/D17B_EXPERT_REPORTING_2026-07-12.md).
 - Char-level LM: bigram/trigram are strong; 4/5-gram set an upper practical bound.
 
-**Performance (2026-07-12):** D17 production training throughput is **252.2 chars/sec** single-threaded on MSVC (`windows-vs2026-release`), up from an initial ~96–126 chars/sec baseline, via allocator-churn fixes (thread-local scratch buffers, persistent gradient members) and a cache-friendly transpose-matvec loop interchange in `lstm_backward`/`bptt_ssm_update` — zero arithmetic change, D17 BPC pin confirmed bit-identical before/after. See [`PERFORMANCE_PROFILE_2026-07-12.md`](reports/PERFORMANCE_PROFILE_2026-07-12.md) for the full profiling breakdown.
+**Performance (through 2026-07-17):** D17 production training throughput reached **252.2 chars/sec** single-threaded on MSVC (`windows-vs2026-release`), ~**2.63×** vs the earliest ~96 chars/sec MinGW baseline documented in [`PERFORMANCE_PROFILE_2026-07-12.md`](reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–5 (~**+28%** of that cumulative gap is MSVC toolchain migration, not algorithm). Algorithmic wins (all bit-identical BPC): **Part 1** allocation reuse (**126.4→138.3**, +9.5%, MinGW); **Part 2** cache-friendly transpose matvecs + `bptt_ssm_update` scratch (**211.3→252.2**, +19.4%, MSVC); **Part 3** `predict_next` allocation reuse (~**10–12%** internal `predict_next`, ~**3–4%** estimated end-to-end); **Part 4** (2026-07-17) skip dead DIF predict/train on the locked D17 `ngram_fusion` path (~**3.4%** estimated `train_step`); **Part 5** (2026-07-17) re-profile declares **compute-bound floor** on `lstm_backward`/`bptt_ssm_update`/`CharLSTM` — fused outer-product trial bit-identical but no reliable speedup, not shipped. Separate bench win (2026-07-17): batched DIF eval in `train_eval_vectors` (D03/D08) for CUDA amortization (~**4.9%** D03 wall-clock with `CYPHA_BENCH_FAST=1` on `native/build_perf_cuda`) — see profile doc Part 3 recommendation + [`ACCEL_CUDA.md`](native/ACCEL_CUDA.md). Further D17 online-recurrence gains require structural throttles or batch/CUDA paths outside the serial loop.
 
 **Beat-bigram roadmap (ordered):**
 
@@ -554,7 +557,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 2026 Q4 — RPSM Option A (matrix refactor) → Option B sequence layer — see upgrades/
 2026 Q4 — Cell hypothesis testbench Tier 1–2
 2026 Q4 — Multi-view online training Phase 2 D16/DIF
-2026 Q4 — Priority 5: Continual learning investigation → EWC overlay
+2026 Q3 — Priority 5: EWC D16B scoping shipped (2026-07-12) — modest gain 0.135→0.108; shared-model CL remains open
 2026 Q3 — D10 re-eval: done (2026-07-11) — 60.67% accuracy, not an SSM issue; see [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md)
 2027 Q1 — Paper: fill {{EXP0N_*}} placeholders → narrative reconciliation → submit
 ```
