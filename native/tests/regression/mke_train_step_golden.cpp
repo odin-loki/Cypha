@@ -242,7 +242,7 @@ int run_legacy_single(const nlohmann::json& j, const fs::path& dir) {
     return 1;
   }
 
-  std::cout << "mke_train_step parity OK\n";
+  std::cout << "mke_train_step golden OK\n";
   return 0;
 }
 
@@ -323,6 +323,8 @@ int run_extended_mke(const nlohmann::json& j, const fs::path& dir) {
   constexpr double kLossTol = 1e-8;
   constexpr double kEncTol = 1e-7;
 
+  const int K = static_cast<int>(infer.labels.size());
+
   for (std::size_t si = 0; si < steps.size(); ++si) {
     const auto& st = steps[si];
     std::vector<double> x;
@@ -345,7 +347,6 @@ int run_extended_mke(const nlohmann::json& j, const fs::path& dir) {
       }
     }
 
-    const int K = static_cast<int>(infer.labels.size());
     const auto& rl = st.at("routing_labs");
     if (static_cast<int>(rl.size()) != K) {
       std::cerr << "step " << si << " routing_labs length mismatch\n";
@@ -447,7 +448,156 @@ int run_extended_mke(const nlohmann::json& j, const fs::path& dir) {
     return 1;
   }
 
-  std::cout << "mke_train extended parity OK\n";
+  std::cout << "mke_train extended golden OK\n";
+  return 0;
+}
+
+/// Synthetic two-cluster regression: EM responsibilities should spread expert mass (no >~60% at convergence).
+int run_moe_em_util_smoke(const fs::path& dir, const nlohmann::json& ref) {
+  LoadedInfer L = load_infer_from_fixture_dir(dir);
+  cypha::CyphaInferModel& infer = L.infer;
+  cypha::CyphaDifMemoryState& mem = L.mem;
+  const int d_in = ref.at("d_in").get<int>();
+  const int d_rff = ref.at("D_rff").get<int>();
+  if (d_rff != L.d_latent) {
+    std::cerr << "moe_em_util_smoke: D_rff mismatch\n";
+    return 1;
+  }
+  std::vector<double> W_rff = ref.at("rff_W_rowmajor").get<std::vector<double>>();
+  std::vector<double> b_rff = ref.at("rff_b").get<std::vector<double>>();
+  const int K = static_cast<int>(infer.labels.size());
+  if (K < 2) {
+    std::cerr << "moe_em_util_smoke: need >=2 experts\n";
+    return 1;
+  }
+
+  std::unordered_map<std::string, std::vector<double>> w_work;
+  std::unordered_map<std::string, std::vector<double>> p_work;
+  cypha::TrainStepParams tsp{};
+  tsp.enc_lr = 0.0;
+  tsp.replay_ratio = 0.0;
+  cypha::ReplayBuffer replay(100);
+  std::mt19937 rng(20260717);
+  int enc_updates = 0;
+  int total_steps = 0;
+  cypha::TrainStepExtras extras{};
+  extras.total_steps = &total_steps;
+
+  // Lazy init + break symmetry on w and P (RLS precision stays well-conditioned).
+  {
+    std::vector<double> x(static_cast<std::size_t>(d_in), 0.0);
+    std::vector<double> phi(static_cast<std::size_t>(d_rff));
+    cypha::regression::rff_encode_batch_rowmajor(x.data(), 1, d_in, W_rff.data(), b_rff.data(), d_rff, phi.data());
+    cypha::regression::MkeScalarTrainStepOutputs step_out{};
+    constexpr double kPiFloor = 0.35;
+    constexpr double kSoftmaxEps = 1e-8;
+    cypha::regression::mke_scalar_train_step_from_phi(infer, mem, replay, phi.data(), d_rff, 0.0, w_work, p_work,
+                                                      nullptr, ref.value("temperature", 1.0), 1.0, kPiFloor, tsp,
+                                                      0.008, 0.05, 15.0, rng, enc_updates, &extras, nullptr,
+                                                      kSoftmaxEps, &step_out);
+  }
+  const std::size_t pd = static_cast<std::size_t>(d_rff) * static_cast<std::size_t>(d_rff);
+  for (int i = 0; i < K; ++i) {
+    const std::string& lbl = infer.labels[static_cast<std::size_t>(i)];
+    auto wit = w_work.find(lbl);
+    auto pit = p_work.find(lbl);
+    if (wit == w_work.end() || pit == p_work.end()) {
+      continue;
+    }
+    std::fill(wit->second.begin(), wit->second.end(), 0.0);
+    wit->second[static_cast<std::size_t>(i % d_rff)] = 2.0;
+    std::fill(pit->second.begin(), pit->second.end(), 0.0);
+    for (int t = 0; t < d_rff; ++t) {
+      pit->second[static_cast<std::size_t>(t) * static_cast<std::size_t>(d_rff) + static_cast<std::size_t>(t)] =
+          1000.0;
+    }
+  }
+  (void)pd;
+
+  constexpr int kTrainSteps = 120;
+  constexpr double kMinExpertUtil = 0.03;
+  std::vector<double> util_sum(static_cast<std::size_t>(K), 0.0);
+  double err_early = 0.0;
+  double err_late = 0.0;
+  int late_n = 0;
+  int route_match = 0;
+  int route_checks = 0;
+
+  for (int si = 0; si < kTrainSteps; ++si) {
+    std::vector<double> phi(static_cast<std::size_t>(d_rff), 0.01);
+    const int active = si % K;
+    phi[static_cast<std::size_t>(active)] = 1.0;
+    const double y = 2.0;
+
+    cypha::regression::MkeScalarTrainStepOutputs step_out{};
+    constexpr double kPiFloor = 0.35;
+    constexpr double kSoftmaxEps = 1e-8;
+    cypha::regression::mke_scalar_train_step_from_phi(infer, mem, replay, phi.data(), d_rff, y, w_work, p_work,
+                                                      nullptr, ref.value("temperature", 1.0), 1.0, kPiFloor, tsp,
+                                                      0.008, 0.05, 15.0, rng, enc_updates, &extras, nullptr,
+                                                      kSoftmaxEps, &step_out);
+
+    if (si < 10) {
+      err_early += step_out.err_sq;
+    }
+    if (si >= kTrainSteps - 20) {
+      ++late_n;
+      err_late += step_out.err_sq;
+      if (static_cast<int>(step_out.r.size()) == K) {
+        int best = 0;
+        for (int i = 1; i < K; ++i) {
+          if (step_out.r[static_cast<std::size_t>(i)] > step_out.r[static_cast<std::size_t>(best)]) {
+            best = i;
+          }
+        }
+        if (best == si % K) {
+          ++route_match;
+        }
+        ++route_checks;
+        for (int i = 0; i < K; ++i) {
+          util_sum[static_cast<std::size_t>(i)] += step_out.r[static_cast<std::size_t>(i)];
+        }
+      }
+    }
+  }
+
+  err_early /= 10.0;
+  err_late /= static_cast<double>(late_n);
+  if (!(err_late <= err_early * 1.25)) {
+    std::cerr << "moe_em_util_smoke: err not improved early=" << err_early << " late=" << err_late << "\n";
+    return 1;
+  }
+
+  if (route_checks > 0 && route_match < route_checks / 2) {
+    std::cerr << "moe_em_util_smoke: argmax r matched active expert " << route_match << "/" << route_checks
+              << " in late window\n";
+    return 1;
+  }
+
+  double util_total = 0.0;
+  for (int i = 0; i < K; ++i) {
+    util_total += util_sum[static_cast<std::size_t>(i)];
+  }
+  if (util_total <= 0.0) {
+    std::cerr << "moe_em_util_smoke: zero util_total\n";
+    return 1;
+  }
+  double max_frac = 0.0;
+  double min_frac = 1.0;
+  for (int i = 0; i < K; ++i) {
+    const double frac = util_sum[static_cast<std::size_t>(i)] / util_total;
+    max_frac = std::max(max_frac, frac);
+    min_frac = std::min(min_frac, frac);
+  }
+  if (min_frac < kMinExpertUtil) {
+    std::cerr << "moe_em_util_smoke: dead expert (min_frac=" << min_frac << " max_frac=" << max_frac
+              << " route_match=" << route_match << "/" << route_checks << ")\n";
+    return 1;
+  }
+
+  std::cout << "moe_em_util_smoke OK (min_frac=" << min_frac << " max_frac=" << max_frac
+            << " route_match=" << route_match << "/" << route_checks << " err_early=" << err_early
+            << " err_late=" << err_late << ")\n";
   return 0;
 }
 
@@ -471,7 +621,11 @@ int main(int argc, char** argv) {
     if (j.contains("steps") && j.at("steps").is_array() && !j.at("steps").empty()) {
       return run_extended_mke(j, dir);
     }
-    return run_legacy_single(j, dir);
+    const int rc = run_legacy_single(j, dir);
+    if (rc != 0) {
+      return rc;
+    }
+    return run_moe_em_util_smoke(dir, j);
   } catch (const std::exception& e) {
     std::cerr << "mke_train_step_golden: " << e.what() << "\n";
     return 1;

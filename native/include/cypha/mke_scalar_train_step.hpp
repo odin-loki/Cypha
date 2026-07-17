@@ -2,12 +2,14 @@
 
 /// One scalar ``MKERegressor.train_step`` composition in native (RFF φ is already ``d_latent``-dim features).
 ///
-/// Pipeline: ``refresh_world_log_norm_from_v`` → ``score_matrix_use_field(φ)`` → routing softmax →
-/// weighted expert RLS (``mke_expert_rls_scalar_step``) → ``dif_train_step_vector`` on φ with the router label.
-/// Matches ``mke_train_step_parity`` golden fixture (experts + router).
+/// Pipeline: ``refresh_world_log_norm_from_v`` → ``score_matrix_use_field(φ)`` → routing softmax (warmup-annealed
+/// temperature) → EM responsibilities ``r_i ∝ p_i · exp(−(y − w_i·φ)²/2σ²)`` → weighted expert RLS by ``r_i`` →
+/// ``dif_train_step_vector`` on φ with router label ``argmax r`` (or override).
+/// Matches ``mke_train_step_golden`` fixture (experts + router).
 ///
-/// **Router label:** if ``router_train_label_override`` is non-null and non-empty, uses it (Python ``infer`` /
-/// sidecar). Otherwise uses **argmax routing softmax** ``p`` (Python fallback when pred is ``__unknown__``).
+/// **Router label:** if ``router_train_label_override`` is non-null and non-empty, uses it (REST / sidecar).
+/// Otherwise uses **argmax EM responsibility** ``r`` (not argmax routing softmax ``p``).
+/// Missing per-label ``w`` / ``P`` are lazily initialised with small random ``w`` and diagonal ``P``.
 
 #include <random>
 #include <string>
@@ -31,6 +33,8 @@ struct MkeScalarTrainStepOutputs {
   double y_hat{0.0};
   double router_loss{0.0};
   std::string router_label;
+  /// Normalised EM responsibilities ``r_i`` (length ``K``), filled when ``out`` is non-null.
+  std::vector<double> r;
 };
 
 /// RFF-encode ``x`` then delegate to ``mke_scalar_train_step_from_phi``.

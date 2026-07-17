@@ -6,6 +6,8 @@
 #include "cypha/infer_cpu.hpp"
 #include "cypha/regression_stub.hpp"
 
+#include "cypha/em_step.hpp"
+
 namespace {
 
 bool cholesky_factor_spd(const std::vector<double>& A, int n, std::vector<double>& L) {
@@ -235,7 +237,7 @@ double rff_rls_train_step(const double* phi, int D, double* w, double* b, double
 
 void mke_expert_rls_scalar_step(const double* phi, int D, double pi, double gh_scale, double err,
                                 double forgetting_factor, double* w, double* P_rowmajor) {
-  if (D < 1 || pi < 0.02) {
+  if (D < 1 || pi < kEmEps) {
     return;
   }
   if (forgetting_factor > 0.0 && forgetting_factor < 1.0) {

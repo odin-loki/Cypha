@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-17 (HEAD `4133054`):** Phase **0 done** (`4133054` — parity→regression/golden). Phase **1 done** (`31bbb0c`, `7a07f8b` — `em_step.hpp` + smoke). Phases **2–8 not started**. Phase **9 partial** (Intelligence Stats / `IntelligenceProfiler`; no unified `CriticalityVector` yet). See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-17:** Phase **0 done** (`4133054`). Phase **1 done** (`31bbb0c`/`7a07f8b`). Phase **2 done** (EM MoE train step; see `docs/reports/OPTIMALITY_PHASE2_2026-07-17.md`). Phase **5 shipped** (`da9be39`). Phases **3–4, 6–8 not started**. Phase **9 partial**. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
 
 ---
 
@@ -12,7 +12,7 @@
 |-------|-------|--------|-------|
 | 0 | Retire parity, keep regression net | [x] Done | `4133054` — `native/tests/regression/` + `*_golden` CTests; parity harness retired |
 | 1 | EM keystone | [x] Done | `31bbb0c`/`7a07f8b` — `em_step.hpp`, `em_step.cpp`, `em_step_smoke` |
-| 2 | Fix MoE with EM | [ ] Not started | Blocked on Phase 1 |
+| 2 | Fix MoE with EM | [x] Done | EM responsibilities in `mke_scalar_train_step`; goldens regen; see `OPTIMALITY_PHASE2_2026-07-17.md` |
 | 3 | Per-class GMM (real XOR fix) | [ ] Not started | Blocked on Phase 1; RFF kernel patch closed XOR to ~2.7pp meanwhile |
 | 4 | Bayesian model averaging over Δk | [ ] Not started | |
 | 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
@@ -93,7 +93,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 2 — Fix MoE with EM (dead experts → live)
 
-**Status:** [ ] **Not started** — blocked on Phase 1.
+**Status:** [x] **Done** (2026-07-17) — EM E-step + `argmax r` router target in `mke_scalar_train_step_from_phi`; goldens regenerated; util smoke in `mke_train_step_golden`. Caveat: hard ≤60% mass floor not met under DIF prior (see report).
 
 **Objective:** Kill the rich-get-richer collapse. Replace self-argmax router training with responsibility-based routing.
 
