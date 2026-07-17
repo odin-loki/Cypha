@@ -15,7 +15,7 @@
 | 2 | Fix MoE with EM | [ ] Not started | Blocked on Phase 1 |
 | 3 | Per-class GMM (real XOR fix) | [ ] Not started | Blocked on Phase 1; RFF kernel patch closed XOR to ~2.7pp meanwhile |
 | 4 | Bayesian model averaging over Δk | [ ] Not started | |
-| 5 | Orthogonal / leverage-score features | [ ] Not started | Independent; RFF auto-gamma shipped separately (RESEARCH_STATUS P1) |
+| 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
 | 6 | Variational IB encoder | [ ] Not started | |
 | 7 | Score matching → delete Bessel LUT | [ ] Not started | Blocked on Phase 0 |
 | 8 | Rao-Blackwellise sampling paths | [ ] Not started | |
@@ -167,7 +167,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 5 — Orthogonal / leverage-score features (independent; parallelisable)
 
-**Status:** [ ] **Not started**. RFF auto-gamma shipped separately on kernel-LLR path (2026-07-11).
+**Status:** [x] **Shipped** (2026-07-17). Leverage-score Nyström + SORF RFF opt-in paths; CTest `native_kernel_approx_p5_smoke`. Report: [`docs/reports/OPTIMALITY_PHASE5_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE5_2026-07-17.md).
 
 **Objective:** Raise the kernel-approximation quality at fixed feature budget. Complements Phase 3 from the other side.
 

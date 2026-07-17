@@ -65,6 +65,7 @@ add_library(cypha_core STATIC
   src/accel_backend.cpp
   src/create_model.cpp
   src/kernel_memory.cpp
+  src/rff_features.cpp
   src/branch_a_router.cpp
   src/som/som_encoder.cpp
   src/som/temporal_som.cpp
@@ -191,6 +192,10 @@ target_link_libraries(cypha_kernel_tune PRIVATE cypha_core)
 
 add_executable(kernel_snapshot_roundtrip tools/kernel_snapshot_roundtrip.cpp)
 target_link_libraries(kernel_snapshot_roundtrip PRIVATE cypha_core)
+
+add_executable(kernel_approx_p5_smoke tools/kernel_approx_p5_smoke.cpp)
+target_link_libraries(kernel_approx_p5_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(kernel_approx_p5_smoke)
 
 add_executable(kernel_cypha_roundtrip tools/kernel_cypha_roundtrip.cpp)
 target_link_libraries(kernel_cypha_roundtrip PRIVATE cypha_core)
@@ -367,6 +372,7 @@ set(
   xor_kernel_bench
   cypha_kernel_tune
   kernel_snapshot_roundtrip
+  kernel_approx_p5_smoke
   kernel_cypha_roundtrip
   memory_train_roundtrip
   preprocessor_rff_gamma_cv_test
@@ -708,6 +714,12 @@ add_test(
 )
 set_tests_properties(native_xor_kernel_bench_smoke PROPERTIES
   PASS_REGULAR_EXPRESSION "\"kernel_mean_acc\": 0\\.[7-9]")
+add_test(
+  NAME native_kernel_approx_p5_smoke
+  COMMAND "$<TARGET_FILE:kernel_approx_p5_smoke>"
+)
+set_tests_properties(native_kernel_approx_p5_smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "kernel_approx_p5_smoke: PASS")
 add_test(
   NAME native_kernel_snapshot_roundtrip
   COMMAND "$<TARGET_FILE:kernel_snapshot_roundtrip>"

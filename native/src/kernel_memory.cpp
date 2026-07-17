@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 #include <utility>
 
 #include "cypha/load_cypha.hpp"
+#include "cypha/rff_features.hpp"
 
 namespace cypha {
 
@@ -172,23 +174,16 @@ KernelMemory::KernelMemory(int feat_dim, int M, std::uint64_t rng_seed)
       basis_(static_cast<std::size_t>(M) * static_cast<std::size_t>(feat_dim), 0.0),
       rng_(static_cast<std::uint32_t>(rng_seed & 0xffffffffu)) {}
 
-KernelMemory KernelMemory::make_rff(int feat_dim, int M, double gamma, std::uint64_t rng_seed) {
+KernelMemory KernelMemory::make_rff(int feat_dim, int M, double gamma, std::uint64_t rng_seed,
+                                    RffProjectionKind projection) {
   KernelMemory km(feat_dim, M, rng_seed);
   km.rff_mode_ = true;
+  km.rff_projection_ = projection;
   km.gamma_ = gamma;
   km.n_basis_ = M;
   km.n_seen_ = 0;
   std::mt19937 rng(static_cast<std::uint32_t>((rng_seed ^ 0x9e3779b97f4a7c15ull) & 0xffffffffu));
-  std::normal_distribution<double> ndist(0.0, std::sqrt(std::max(2.0 * gamma, 1e-12)));
-  std::uniform_real_distribution<double> udist(0.0, 2.0 * std::acos(-1.0));
-  km.rff_w_.assign(static_cast<std::size_t>(M) * static_cast<std::size_t>(feat_dim), 0.0);
-  km.rff_b_.assign(static_cast<std::size_t>(M), 0.0);
-  for (int i = 0; i < M; ++i) {
-    for (int j = 0; j < feat_dim; ++j) {
-      km.rff_w_[static_cast<std::size_t>(i * feat_dim + j)] = ndist(rng);
-    }
-    km.rff_b_[static_cast<std::size_t>(i)] = udist(rng);
-  }
+  init_rff_weights(projection, rng, gamma, M, feat_dim, km.rff_w_, km.rff_b_, true);
   return km;
 }
 
@@ -226,6 +221,82 @@ double KernelMemory::auto_gamma_median_heuristic(const double* samples_row_major
   std::nth_element(sq_dists.begin(), sq_dists.begin() + static_cast<std::ptrdiff_t>(mid), sq_dists.end());
   const double med = sq_dists[mid];
   return gamma_scale / (2.0 * std::max(med, kEps));
+}
+
+double ridge_leverage_score(const double* h, const double* basis, int n_basis, int feat_dim, double gamma,
+                            double ridge) {
+  if (n_basis <= 0) {
+    return 1.0;
+  }
+  std::vector<double> k_hb(static_cast<std::size_t>(n_basis), 0.0);
+  for (int i = 0; i < n_basis; ++i) {
+    const double* bi = basis + static_cast<std::size_t>(i * feat_dim);
+    k_hb[static_cast<std::size_t>(i)] = rbf(bi, h, feat_dim, gamma);
+  }
+  std::vector<double> K_bb(static_cast<std::size_t>(n_basis) * static_cast<std::size_t>(n_basis), 0.0);
+  for (int i = 0; i < n_basis; ++i) {
+    const double* bi = basis + static_cast<std::size_t>(i * feat_dim);
+    for (int j = 0; j <= i; ++j) {
+      const double* bj = basis + static_cast<std::size_t>(j * feat_dim);
+      const double kij = (i == j) ? 1.0 : rbf(bi, bj, feat_dim, gamma);
+      K_bb[static_cast<std::size_t>(i * n_basis + j)] = kij;
+      K_bb[static_cast<std::size_t>(j * n_basis + i)] = kij;
+    }
+    K_bb[static_cast<std::size_t>(i * n_basis + i)] += ridge;
+  }
+  std::vector<double> L(static_cast<std::size_t>(n_basis) * static_cast<std::size_t>(n_basis), 0.0);
+  if (!cholesky_lower(K_bb.data(), n_basis, L.data())) {
+    return 1.0;
+  }
+  std::vector<double> sol(static_cast<std::size_t>(n_basis), 0.0);
+  for (int i = 0; i < n_basis; ++i) {
+    double s = k_hb[static_cast<std::size_t>(i)];
+    for (int k = 0; k < i; ++k) {
+      s -= L[static_cast<std::size_t>(i * n_basis + k)] * sol[static_cast<std::size_t>(k)];
+    }
+    sol[static_cast<std::size_t>(i)] = s / L[static_cast<std::size_t>(i * n_basis + i)];
+  }
+  for (int i = n_basis - 1; i >= 0; --i) {
+    double s = sol[static_cast<std::size_t>(i)];
+    for (int k = i + 1; k < n_basis; ++k) {
+      s -= L[static_cast<std::size_t>(k * n_basis + i)] * sol[static_cast<std::size_t>(k)];
+    }
+    sol[static_cast<std::size_t>(i)] = s / L[static_cast<std::size_t>(i * n_basis + i)];
+  }
+  double schur = 1.0;
+  for (int i = 0; i < n_basis; ++i) {
+    schur -= k_hb[static_cast<std::size_t>(i)] * sol[static_cast<std::size_t>(i)];
+  }
+  return std::max(schur, 1e-12);
+}
+
+void KernelMemory::init_leverage_landmarks_from_samples(const double* samples_row_major, int n, int feat_dim) {
+  if (rff_mode_) {
+    return;
+  }
+  if (feat_dim != feat_dim_) {
+    throw std::runtime_error("KernelMemory::init_leverage_landmarks_from_samples feat_dim mismatch");
+  }
+  if (n <= 0) {
+    return;
+  }
+  gamma_ = auto_gamma_median_heuristic(samples_row_major, n, feat_dim, gamma_scale_, 256,
+                                     static_cast<std::uint64_t>(rng_()));
+  std::vector<int> idx;
+  select_leverage_landmark_indices(samples_row_major, n, feat_dim, M_, gamma_, kRidge,
+                                   static_cast<std::uint64_t>(rng_()), idx);
+  n_basis_ = static_cast<int>(idx.size());
+  n_seen_ = n;
+  basis_.assign(static_cast<std::size_t>(M_) * static_cast<std::size_t>(feat_dim_), 0.0);
+  for (int i = 0; i < n_basis_; ++i) {
+    const double* src = samples_row_major + static_cast<std::size_t>(idx[static_cast<std::size_t>(i)]) *
+                                              static_cast<std::size_t>(feat_dim);
+    double* dest = basis_.data() + static_cast<std::size_t>(i * feat_dim_);
+    for (int j = 0; j < feat_dim_; ++j) {
+      dest[j] = src[j];
+    }
+  }
+  recompute_nystrom();
 }
 
 void KernelMemory::recompute_nystrom() {
@@ -392,6 +463,27 @@ void KernelMemory::reservoir_update(const double* h, std::optional<int> fixed_j)
     }
     n_basis_ += 1;
     recompute_nystrom();
+    return;
+  }
+  if (landmark_sampling_ == LandmarkSamplingKind::LeverageScore && n_basis_ >= M_) {
+    const double lev_h = ridge_leverage_score(h, basis_.data(), n_basis_, feat_dim_, gamma_, kRidge);
+    int min_slot = 0;
+    double min_lev = ridge_leverage_score(basis_.data(), basis_.data(), n_basis_, feat_dim_, gamma_, kRidge);
+    for (int i = 1; i < M_; ++i) {
+      const double* bi = basis_.data() + static_cast<std::size_t>(i * feat_dim_);
+      const double lev_i = ridge_leverage_score(bi, basis_.data(), n_basis_, feat_dim_, gamma_, kRidge);
+      if (lev_i < min_lev) {
+        min_lev = lev_i;
+        min_slot = i;
+      }
+    }
+    if (lev_h > min_lev) {
+      double* dest = basis_.data() + static_cast<std::size_t>(min_slot * feat_dim_);
+      for (int d = 0; d < feat_dim_; ++d) {
+        dest[d] = h[d];
+      }
+      recompute_nystrom();
+    }
     return;
   }
   int j = 0;

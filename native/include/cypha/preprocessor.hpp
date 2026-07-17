@@ -17,6 +17,8 @@ struct PreprocessorState {
   /// Cross-validated γ grid search (Python ``RFFEncoder.auto_gamma_cv``). Takes precedence over
   /// ``auto_rff_gamma`` when both are set.
   bool auto_rff_gamma_cv{false};
+  /// Phase 5: structured orthogonal RFF (SORF/Fastfood) instead of iid Gaussian rows.
+  bool rff_sorf{false};
   int seed{42};
   std::vector<double> mean;
   std::vector<double> stddev;

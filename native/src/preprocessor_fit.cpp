@@ -1,6 +1,7 @@
 #include "cypha/mt19937_rng.hpp"
 #include "cypha/preprocessor.hpp"
 #include "cypha/regression_stub.hpp"
+#include "cypha/rff_features.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -516,17 +517,33 @@ void PreprocessorState::fit_from_design_matrix(const std::vector<double>& row_ma
       rff_gamma = gamma;
     }
     NumpyDefaultRng rng(seed);
-    rff_w.resize(static_cast<std::size_t>(rff_dim));
-    for (int r = 0; r < rff_dim; ++r) {
-      rff_w[static_cast<std::size_t>(r)].resize(static_cast<std::size_t>(d_work));
-      for (int c = 0; c < d_work; ++c) {
-        rff_w[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)] = rng.normal(0.0, gamma);
+    if (rff_sorf) {
+      std::vector<double> w_flat;
+      std::vector<double> b_flat;
+      std::mt19937 std_rng(static_cast<std::uint32_t>(seed & 0xffffffffu));
+      init_rff_weights(RffProjectionKind::Sorf, std_rng, gamma, rff_dim, d_work, w_flat, b_flat, false);
+      rff_w.resize(static_cast<std::size_t>(rff_dim));
+      for (int r = 0; r < rff_dim; ++r) {
+        rff_w[static_cast<std::size_t>(r)].resize(static_cast<std::size_t>(d_work));
+        for (int c = 0; c < d_work; ++c) {
+          rff_w[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)] =
+              w_flat[static_cast<std::size_t>(r * d_work + c)];
+        }
       }
-    }
-    rff_b.resize(static_cast<std::size_t>(rff_dim));
-    constexpr double kTwoPi = 2.0 * 3.14159265358979323846264338328;
-    for (int r = 0; r < rff_dim; ++r) {
-      rff_b[static_cast<std::size_t>(r)] = rng.uniform(0.0, kTwoPi);
+      rff_b = std::move(b_flat);
+    } else {
+      rff_w.resize(static_cast<std::size_t>(rff_dim));
+      for (int r = 0; r < rff_dim; ++r) {
+        rff_w[static_cast<std::size_t>(r)].resize(static_cast<std::size_t>(d_work));
+        for (int c = 0; c < d_work; ++c) {
+          rff_w[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)] = rng.normal(0.0, gamma);
+        }
+      }
+      rff_b.resize(static_cast<std::size_t>(rff_dim));
+      constexpr double kTwoPi = 2.0 * 3.14159265358979323846264338328;
+      for (int r = 0; r < rff_dim; ++r) {
+        rff_b[static_cast<std::size_t>(r)] = rng.uniform(0.0, kTwoPi);
+      }
     }
     output_dim = rff_dim;
   }

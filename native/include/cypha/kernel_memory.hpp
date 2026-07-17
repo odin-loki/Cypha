@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "cypha/load_cypha.hpp"
+#include "cypha/rff_features.hpp"
 
 namespace cypha {
 /// Nyström RBF kernel memory (reference parity fixture).
@@ -15,11 +16,25 @@ class KernelMemory {
  public:
   KernelMemory(int feat_dim, int M = 256, std::uint64_t rng_seed = 0);
 
-  /// Random Fourier Features (RFF) basis: fixed random projection approximating the RBF kernel via
+  /// Landmark reservoir sampling mode (Phase 5 optimality).
+enum class LandmarkSamplingKind {
+  /// Legacy uniform reservoir + nearest-slot replacement.
+  Uniform,
+  /// Ridge-leverage-score weighted landmark selection (Alaoui–Mahoney).
+  LeverageScore,
+};
+
+/// Random Fourier Features (RFF) basis: fixed random projection approximating the RBF kernel via
   /// Bochner's theorem (``phi(x) = sqrt(2/M) * cos(W x + b)``), in place of the online Nyström landmark
   /// sketch. Cheap (``O(M*feat_dim)`` per call, no Cholesky/eigh recompute) since the projection is frozen
   /// at construction — ``gamma`` must be supplied up front (see ``auto_gamma_median_heuristic``).
-  static KernelMemory make_rff(int feat_dim, int M, double gamma, std::uint64_t rng_seed = 0);
+  static KernelMemory make_rff(int feat_dim, int M, double gamma, std::uint64_t rng_seed = 0,
+                               RffProjectionKind projection = RffProjectionKind::IidGaussian);
+
+  /// SORF / Fastfood structured orthogonal RFF basis (Phase 5 opt-in).
+  static KernelMemory make_orthogonal_rff(int feat_dim, int M, double gamma, std::uint64_t rng_seed = 0) {
+    return make_rff(feat_dim, M, gamma, rng_seed, RffProjectionKind::Sorf);
+  }
 
   /// Median pairwise-distance ("auto-gamma") heuristic: ``gamma_scale / (2 * median(||a-b||^2))`` over up
   /// to ``max_samples`` rows sampled from ``samples_row_major`` (``n x feat_dim``). Same heuristic the
@@ -38,6 +53,13 @@ class KernelMemory {
 
   /// Multiplier on median-heuristic RBF bandwidth (1.0 = legacy default).
   void set_gamma_scale(double s) { gamma_scale_ = std::max(s, 1e-12); }
+
+  /// Opt-in ridge-leverage-score landmark sampling for the Nyström reservoir (default ``Uniform``).
+  void set_landmark_sampling(LandmarkSamplingKind kind) { landmark_sampling_ = kind; }
+  LandmarkSamplingKind landmark_sampling() const { return landmark_sampling_; }
+
+  /// Batch-initialize Nyström landmarks from a calibration set via leverage-score sampling.
+  void init_leverage_landmarks_from_samples(const double* samples_row_major, int n, int feat_dim);
 
   /// Whitened Nyström features ``phi(h) ∈ R^M`` (zeros for unfilled slots).
   void phi(const double* h, std::vector<double>& out) const;
@@ -88,6 +110,8 @@ class KernelMemory {
   std::mt19937 rng_;
 
   bool rff_mode_{false};
+  RffProjectionKind rff_projection_{RffProjectionKind::IidGaussian};
+  LandmarkSamplingKind landmark_sampling_{LandmarkSamplingKind::Uniform};
   /// Row-major ``M × feat_dim`` random projection (RFF mode only).
   std::vector<double> rff_w_;
   std::vector<double> rff_b_;
