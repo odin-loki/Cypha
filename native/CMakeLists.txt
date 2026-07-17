@@ -8,7 +8,7 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:MSVC>:/MP>>)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 
-option(CYPHA_BUILD_EXPERIMENT_DB "Build experiment_db_smoke / experiment_db_crud_parity (requires SQLite3)" OFF)
+option(CYPHA_BUILD_EXPERIMENT_DB "Build experiment_db_smoke / experiment_db_crud_golden (requires SQLite3)" OFF)
 option(CYPHA_BUILD_QT "Build optional Qt targets under qt/: cypha_qt_stub (Core), cypha_qt_shell (Widgets)" OFF)
 option(CYPHA_QT_CHARTS "When CYPHA_BUILD_QT is ON, link Qt Charts for cypha_qt_shell if found (default OFF for qt6-base-only CI)" OFF)
 option(CYPHA_ENABLE_CUDA "Build CUDA GPU path in accel backend (NVIDIA toolkit + driver); CPU uses std::thread" OFF)
@@ -157,8 +157,8 @@ else()
   target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# Phase B: parity harness sources live under tests/parity/ (binary names unchanged).
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaParity.cmake")
+# Phase 0: golden regression under tests/regression/.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaRegression.cmake")
 
 add_executable(cyphalm_bench_native tools/cyphalm_bench_native.cpp)
 target_link_libraries(cyphalm_bench_native PRIVATE cypha_lm_native)
@@ -362,7 +362,7 @@ cypha_mingw_apply_exe_link_options(baseline_lock_validate)
 
 set(
   _cypha_mingw_exe_targets
-  ${CYPHA_PARITY_EXE_TARGETS}
+  ${CYPHA_GOLDEN_EXE_TARGETS}
   cypha_fixture_gen
   xor_kernel_bench
   cypha_kernel_tune
@@ -456,18 +456,18 @@ if(CYPHA_BUILD_EXPERIMENT_DB AND _cypha_exp_sqlite_link)
   endif()
 
   add_executable(
-    experiment_db_crud_parity
-    tests/parity/experiment_db_crud_parity.cpp
+    experiment_db_crud_golden
+    tests/regression/experiment_db_crud_golden.cpp
     src/experiment_db.cpp
     src/experiment_db_crud.cpp
   )
-  target_link_libraries(experiment_db_crud_parity PRIVATE ${_cypha_exp_sqlite_link})
-  target_include_directories(experiment_db_crud_parity PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
-  cypha_mingw_apply_exe_link_options(experiment_db_crud_parity)
+  target_link_libraries(experiment_db_crud_golden PRIVATE ${_cypha_exp_sqlite_link})
+  target_include_directories(experiment_db_crud_golden PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+  cypha_mingw_apply_exe_link_options(experiment_db_crud_golden)
   if(MSVC)
-    target_compile_options(experiment_db_crud_parity PRIVATE /W4 /permissive-)
+    target_compile_options(experiment_db_crud_golden PRIVATE /W4 /permissive-)
   else()
-    target_compile_options(experiment_db_crud_parity PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(experiment_db_crud_golden PRIVATE -Wall -Wextra -Wpedantic)
   endif()
 elseif(CYPHA_BUILD_EXPERIMENT_DB AND NOT _cypha_exp_sqlite_link)
   message(
@@ -481,9 +481,9 @@ if(MSVC)
   # passed to nvcc without -Xcompiler wrapping make it misparse the command line ("A single
   # input file is required..."), so scope these to the CXX compiler only.
   target_compile_options(cypha_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /permissive->)
-  target_compile_options(cypha_parity PRIVATE /W4 /permissive-)
-  target_compile_options(cypha_parity_run PRIVATE /W4 /permissive-)
-  target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_golden PRIVATE /W4 /permissive-)
+  target_compile_options(cypha_golden_run PRIVATE /W4 /permissive-)
+  target_compile_options(batch_llr_golden PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE /W4 /permissive-)
   target_compile_options(em_step_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE /W4 /permissive-)
@@ -495,47 +495,47 @@ if(MSVC)
   target_compile_options(rpsm_normalized_eta_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_world_stats_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
-  target_compile_options(score_batch_parity PRIVATE /W4 /permissive-)
-  target_compile_options(kernel_llr_parity PRIVATE /W4 /permissive-)
+  target_compile_options(score_batch_golden PRIVATE /W4 /permissive-)
+  target_compile_options(kernel_llr_golden PRIVATE /W4 /permissive-)
   target_compile_options(xor_kernel_bench PRIVATE /W4 /permissive-)
   target_compile_options(cypha_kernel_tune PRIVATE /W4 /permissive-)
   target_compile_options(kernel_snapshot_roundtrip PRIVATE /W4 /permissive-)
   target_compile_options(kernel_cypha_roundtrip PRIVATE /W4 /permissive-)
-  target_compile_options(memory_train_parity PRIVATE /W4 /permissive-)
-  target_compile_options(multilabel_dif_parity PRIVATE /W4 /permissive-)
-  target_compile_options(merge_from_parity PRIVATE /W4 /permissive-)
-  target_compile_options(similarity_index_parity PRIVATE /W4 /permissive-)
+  target_compile_options(memory_train_golden PRIVATE /W4 /permissive-)
+  target_compile_options(multilabel_dif_golden PRIVATE /W4 /permissive-)
+  target_compile_options(merge_from_golden PRIVATE /W4 /permissive-)
+  target_compile_options(similarity_index_golden PRIVATE /W4 /permissive-)
   target_compile_options(memory_train_roundtrip PRIVATE /W4 /permissive-)
-  target_compile_options(preprocessor_parity PRIVATE /W4 /permissive-)
-  target_compile_options(preprocessor_fit_parity PRIVATE /W4 /permissive-)
+  target_compile_options(preprocessor_golden PRIVATE /W4 /permissive-)
+  target_compile_options(preprocessor_fit_golden PRIVATE /W4 /permissive-)
   target_compile_options(preprocessor_rff_gamma_cv_test PRIVATE /W4 /permissive-)
-  target_compile_options(csv_ingest_parity PRIVATE /W4 /permissive-)
-  target_compile_options(preprocess_train_classify_parity PRIVATE /W4 /permissive-)
+  target_compile_options(csv_ingest_golden PRIVATE /W4 /permissive-)
+  target_compile_options(preprocess_train_classify_golden PRIVATE /W4 /permissive-)
   target_compile_options(cypha_rest PRIVATE /W4 /permissive-)
   target_compile_options(registry_register PRIVATE /W4 /permissive-)
-  target_compile_options(nig_adapt_parity PRIVATE /W4 /permissive-)
-  target_compile_options(train_step_vector_parity PRIVATE /W4 /permissive-)
-  target_compile_options(dif_regressor_train_step_parity PRIVATE /W4 /permissive-)
-  target_compile_options(regression_mixture_parity PRIVATE /W4 /permissive-)
-  target_compile_options(regression_m4_parity PRIVATE /W4 /permissive-)
-  target_compile_options(regression_rff_parity PRIVATE /W4 /permissive-)
-  target_compile_options(regression_two_stage_pipeline_parity PRIVATE /W4 /permissive-)
-  target_compile_options(regression_two_stage_ridge_fit_parity PRIVATE /W4 /permissive-)
-  target_compile_options(quantile_dif_train_parity PRIVATE /W4 /permissive-)
-  target_compile_options(mke_train_step_parity PRIVATE /W4 /permissive-)
-  target_compile_options(generation_parity PRIVATE /W4 /permissive-)
-  target_compile_options(gh_infer_deliberation_parity PRIVATE /W4 /permissive-)
-  target_compile_options(embed_table_parity PRIVATE /W4 /permissive-)
-  target_compile_options(retrieval_parity PRIVATE /W4 /permissive-)
+  target_compile_options(nig_adapt_golden PRIVATE /W4 /permissive-)
+  target_compile_options(train_step_vector_golden PRIVATE /W4 /permissive-)
+  target_compile_options(dif_regressor_train_step_golden PRIVATE /W4 /permissive-)
+  target_compile_options(regression_mixture_golden PRIVATE /W4 /permissive-)
+  target_compile_options(regression_m4_golden PRIVATE /W4 /permissive-)
+  target_compile_options(regression_rff_golden PRIVATE /W4 /permissive-)
+  target_compile_options(regression_two_stage_pipeline_golden PRIVATE /W4 /permissive-)
+  target_compile_options(regression_two_stage_ridge_fit_golden PRIVATE /W4 /permissive-)
+  target_compile_options(quantile_dif_train_golden PRIVATE /W4 /permissive-)
+  target_compile_options(mke_train_step_golden PRIVATE /W4 /permissive-)
+  target_compile_options(generation_golden PRIVATE /W4 /permissive-)
+  target_compile_options(gh_infer_deliberation_golden PRIVATE /W4 /permissive-)
+  target_compile_options(embed_table_golden PRIVATE /W4 /permissive-)
+  target_compile_options(retrieval_golden PRIVATE /W4 /permissive-)
   target_compile_options(cuda_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_lm_native PRIVATE /W4 /permissive-)
   target_compile_options(cypha_bench_native PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_ssm_diagnose PRIVATE /W4 /permissive-)
-  target_compile_options(cyphalm_hebbian_parity PRIVATE /W4 /permissive-)
-  target_compile_options(som_parity PRIVATE /W4 /permissive-)
-  target_compile_options(cyphalm_model_parity PRIVATE /W4 /permissive-)
-  target_compile_options(cyphalm_char_lstm_parity PRIVATE /W4 /permissive-)
-  target_compile_options(cyphalm_checkpoint_parity PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_hebbian_golden PRIVATE /W4 /permissive-)
+  target_compile_options(som_golden PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_model_golden PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_char_lstm_golden PRIVATE /W4 /permissive-)
+  target_compile_options(cyphalm_checkpoint_golden PRIVATE /W4 /permissive-)
   target_compile_options(cypha_bench_run PRIVATE /W4 /permissive-)
   target_compile_options(cypha_tune_run PRIVATE /W4 /permissive-)
   target_compile_options(cypha_diagnostics_run PRIVATE /W4 /permissive-)
@@ -548,19 +548,19 @@ else()
   target_compile_options(cypha_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic>)
   target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_bench_native PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_hebbian_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(som_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_model_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_hebbian_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(som_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_model_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_bench_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_ssm_diagnose PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_bench_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_tune_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_diagnostics_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_train PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cypha_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cypha_parity_run PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cypha_golden_run PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(batch_llr_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(em_step_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE -Wall -Wextra -Wpedantic)
@@ -572,77 +572,77 @@ else()
   target_compile_options(rpsm_normalized_eta_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_world_stats_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(score_batch_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(kernel_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(score_batch_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(kernel_llr_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(xor_kernel_bench PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_kernel_tune PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_snapshot_roundtrip PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_cypha_roundtrip PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(memory_train_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(multilabel_dif_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(merge_from_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(similarity_index_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(memory_train_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(multilabel_dif_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(merge_from_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(similarity_index_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(memory_train_roundtrip PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(preprocessor_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(preprocessor_fit_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(preprocessor_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(preprocessor_fit_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(preprocessor_rff_gamma_cv_test PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(csv_ingest_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(preprocess_train_classify_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(csv_ingest_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(preprocess_train_classify_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_rest PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(registry_register PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(nig_adapt_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(train_step_vector_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(dif_regressor_train_step_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(regression_mixture_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(regression_m4_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(regression_rff_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(regression_two_stage_pipeline_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(regression_two_stage_ridge_fit_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(quantile_dif_train_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(mke_train_step_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(generation_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(gh_infer_deliberation_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(embed_table_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(retrieval_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(nig_adapt_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(train_step_vector_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(dif_regressor_train_step_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(regression_mixture_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(regression_m4_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(regression_rff_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(regression_two_stage_pipeline_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(regression_two_stage_ridge_fit_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(quantile_dif_train_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(mke_train_step_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(generation_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(gh_infer_deliberation_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(embed_table_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(retrieval_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_onnx_export PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_export_gguf PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_char_lstm_parity PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_checkpoint_parity PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_char_lstm_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(cyphalm_checkpoint_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rest_schema_contract PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Parity fixture paths: MinGW .exe run on Windows cannot open /mnt/c/... (WSL cross-build).
-set(_parity_fix "${CMAKE_SOURCE_DIR}/../fixtures")
-cmake_path(ABSOLUTE_PATH _parity_fix NORMALIZE)
-cypha_mingw_fix_parity_path_for_cross_host(_parity_fix)
+set(_golden_fix "${CMAKE_SOURCE_DIR}/../fixtures")
+cmake_path(ABSOLUTE_PATH _golden_fix NORMALIZE)
+cypha_mingw_fix_golden_path_for_cross_host(_golden_fix)
 
 enable_testing()
 add_test(
-  NAME native_parity
-  COMMAND "$<TARGET_FILE:cypha_parity>"
-    "${_parity_fix}/reference.cypha"
-    "${_parity_fix}/native_parity.bin"
+  NAME native_golden
+  COMMAND "$<TARGET_FILE:cypha_golden>"
+    "${_golden_fix}/reference.cypha"
+    "${_golden_fix}/native_parity.bin"
 )
 add_test(
-  NAME native_parity_run_list
-  COMMAND "$<TARGET_FILE:cypha_parity_run>" --list
+  NAME native_golden_run_list
+  COMMAND "$<TARGET_FILE:cypha_golden_run>" --list
 )
 add_test(
   NAME native_gh_infer_deliberation
-  COMMAND "$<TARGET_FILE:gh_infer_deliberation_parity>"
-    "${_parity_fix}/gh_infer_deliberation"
+  COMMAND "$<TARGET_FILE:gh_infer_deliberation_golden>"
+    "${_golden_fix}/gh_infer_deliberation"
 )
 add_test(
   NAME native_batch_llr
-  COMMAND "$<TARGET_FILE:batch_llr_parity>"
-    "${_parity_fix}/batch_llr/sidecar.json"
+  COMMAND "$<TARGET_FILE:batch_llr_golden>"
+    "${_golden_fix}/batch_llr/sidecar.json"
 )
 add_test(
   NAME native_rpsm_batched_llr_smoke
   COMMAND "$<TARGET_FILE:rpsm_batched_llr_smoke>"
-    "${_parity_fix}/reference.cypha"
-    "${_parity_fix}/native_parity.bin"
+    "${_golden_fix}/reference.cypha"
+    "${_golden_fix}/native_parity.bin"
 )
 add_test(NAME native_em_step_smoke COMMAND "$<TARGET_FILE:em_step_smoke>")
 add_test(
@@ -693,13 +693,13 @@ set_tests_properties(
 )
 add_test(
   NAME native_score_batch
-  COMMAND "$<TARGET_FILE:score_batch_parity>"
-    "${_parity_fix}/score_batch/sidecar.json"
+  COMMAND "$<TARGET_FILE:score_batch_golden>"
+    "${_golden_fix}/score_batch/sidecar.json"
 )
 add_test(
   NAME native_kernel_llr
-  COMMAND "$<TARGET_FILE:kernel_llr_parity>"
-    "${_parity_fix}/kernel_llr/sidecar.json"
+  COMMAND "$<TARGET_FILE:kernel_llr_golden>"
+    "${_golden_fix}/kernel_llr/sidecar.json"
 )
 add_test(
   NAME native_xor_kernel_bench_smoke
@@ -719,175 +719,175 @@ add_test(
 )
 add_test(
   NAME native_memory_train
-  COMMAND "$<TARGET_FILE:memory_train_parity>"
-    "${_parity_fix}/memory_train"
+  COMMAND "$<TARGET_FILE:memory_train_golden>"
+    "${_golden_fix}/memory_train"
 )
 add_test(
   NAME native_multilabel_dif
-  COMMAND "$<TARGET_FILE:multilabel_dif_parity>"
-    "${_parity_fix}/multilabel_dif"
+  COMMAND "$<TARGET_FILE:multilabel_dif_golden>"
+    "${_golden_fix}/multilabel_dif"
 )
 add_test(
   NAME native_merge_from
-  COMMAND "$<TARGET_FILE:merge_from_parity>"
-    "${_parity_fix}/merge_from"
+  COMMAND "$<TARGET_FILE:merge_from_golden>"
+    "${_golden_fix}/merge_from"
 )
 add_test(
   NAME native_similarity_index
-  COMMAND "$<TARGET_FILE:similarity_index_parity>"
-    "${_parity_fix}/similarity_index"
+  COMMAND "$<TARGET_FILE:similarity_index_golden>"
+    "${_golden_fix}/similarity_index"
 )
 add_test(
   NAME native_memory_train_roundtrip
   COMMAND "$<TARGET_FILE:memory_train_roundtrip>"
-    "${_parity_fix}/memory_train"
+    "${_golden_fix}/memory_train"
     "${CMAKE_CURRENT_BINARY_DIR}/memory_train_roundtrip_out.cypha"
 )
 add_test(
   NAME native_preprocessor
-  COMMAND "$<TARGET_FILE:preprocessor_parity>"
-    "${_parity_fix}/preprocessor"
+  COMMAND "$<TARGET_FILE:preprocessor_golden>"
+    "${_golden_fix}/preprocessor"
 )
 add_test(
   NAME native_preprocessor_fit
-  COMMAND "$<TARGET_FILE:preprocessor_fit_parity>"
-    "${_parity_fix}/preprocessor_fit"
-    "${_parity_fix}/preprocessor_fit_no_scale"
-    "${_parity_fix}/preprocessor_fit_rff"
+  COMMAND "$<TARGET_FILE:preprocessor_fit_golden>"
+    "${_golden_fix}/preprocessor_fit"
+    "${_golden_fix}/preprocessor_fit_no_scale"
+    "${_golden_fix}/preprocessor_fit_rff"
 )
 add_test(NAME native_preprocessor_rff_gamma_cv COMMAND "$<TARGET_FILE:preprocessor_rff_gamma_cv_test>")
 add_test(
   NAME native_csv_ingest
-  COMMAND "$<TARGET_FILE:csv_ingest_parity>"
-    "${_parity_fix}/csv_ingest"
+  COMMAND "$<TARGET_FILE:csv_ingest_golden>"
+    "${_golden_fix}/csv_ingest"
 )
 add_test(
   NAME native_studio_trainer_preprocess_classify_hotpath
-  COMMAND "$<TARGET_FILE:preprocess_train_classify_parity>"
-    "${_parity_fix}/studio_trainer_preprocess_classify_hotpath"
+  COMMAND "$<TARGET_FILE:preprocess_train_classify_golden>"
+    "${_golden_fix}/studio_trainer_preprocess_classify_hotpath"
 )
 add_test(
   NAME native_studio_trainer_preprocess_gh_classify_hotpath
-  COMMAND "$<TARGET_FILE:preprocess_train_classify_parity>"
-    "${_parity_fix}/studio_trainer_preprocess_gh_classify_hotpath"
+  COMMAND "$<TARGET_FILE:preprocess_train_classify_golden>"
+    "${_golden_fix}/studio_trainer_preprocess_gh_classify_hotpath"
 )
 add_test(
   NAME native_csv_preprocess_classify_hotpath
-  COMMAND "$<TARGET_FILE:preprocess_train_classify_parity>"
-    "${_parity_fix}/csv_preprocess_classify_hotpath"
+  COMMAND "$<TARGET_FILE:preprocess_train_classify_golden>"
+    "${_golden_fix}/csv_preprocess_classify_hotpath"
 )
-add_test(NAME native_nig_adapt COMMAND "$<TARGET_FILE:nig_adapt_parity>")
+add_test(NAME native_nig_adapt COMMAND "$<TARGET_FILE:nig_adapt_golden>")
 add_test(
   NAME native_train_step_vector
-  COMMAND "$<TARGET_FILE:train_step_vector_parity>"
-    "${_parity_fix}/train_step_vector"
+  COMMAND "$<TARGET_FILE:train_step_vector_golden>"
+    "${_golden_fix}/train_step_vector"
 )
 add_test(
   NAME native_dif_regressor_train_step
-  COMMAND "$<TARGET_FILE:dif_regressor_train_step_parity>"
-    "${_parity_fix}/dif_regressor_train_step"
+  COMMAND "$<TARGET_FILE:dif_regressor_train_step_golden>"
+    "${_golden_fix}/dif_regressor_train_step"
 )
-add_test(NAME native_regression_mixture COMMAND "$<TARGET_FILE:regression_mixture_parity>")
+add_test(NAME native_regression_mixture COMMAND "$<TARGET_FILE:regression_mixture_golden>")
 add_test(
   NAME native_regression_m4
-  COMMAND "$<TARGET_FILE:regression_m4_parity>"
-    "${_parity_fix}/regression_m4/sidecar.json"
+  COMMAND "$<TARGET_FILE:regression_m4_golden>"
+    "${_golden_fix}/regression_m4/sidecar.json"
 )
 add_test(
   NAME native_regression_rff
-  COMMAND "$<TARGET_FILE:regression_rff_parity>"
-    "${_parity_fix}/rff_regression/sidecar.json"
+  COMMAND "$<TARGET_FILE:regression_rff_golden>"
+    "${_golden_fix}/rff_regression/sidecar.json"
 )
 add_test(
   NAME native_regression_two_stage_pipeline
-  COMMAND "$<TARGET_FILE:regression_two_stage_pipeline_parity>"
-    "${_parity_fix}/two_stage_pipeline/sidecar.json"
+  COMMAND "$<TARGET_FILE:regression_two_stage_pipeline_golden>"
+    "${_golden_fix}/two_stage_pipeline/sidecar.json"
 )
 add_test(
   NAME native_regression_two_stage_ridge_fit
-  COMMAND "$<TARGET_FILE:regression_two_stage_ridge_fit_parity>"
-    "${_parity_fix}/two_stage_ridge_fit/sidecar.json"
+  COMMAND "$<TARGET_FILE:regression_two_stage_ridge_fit_golden>"
+    "${_golden_fix}/two_stage_ridge_fit/sidecar.json"
 )
 add_test(
   NAME native_regression_two_stage_e2e_ridge
-  COMMAND "$<TARGET_FILE:regression_two_stage_ridge_fit_parity>"
-    "${_parity_fix}/two_stage_e2e_ridge/sidecar.json"
+  COMMAND "$<TARGET_FILE:regression_two_stage_ridge_fit_golden>"
+    "${_golden_fix}/two_stage_e2e_ridge/sidecar.json"
 )
 add_test(
   NAME native_quantile_dif_train
-  COMMAND "$<TARGET_FILE:quantile_dif_train_parity>"
-    "${_parity_fix}/quantile_dif_train"
+  COMMAND "$<TARGET_FILE:quantile_dif_train_golden>"
+    "${_golden_fix}/quantile_dif_train"
 )
 add_test(
   NAME native_dif_train_replay
-  COMMAND "$<TARGET_FILE:quantile_dif_train_parity>"
-    "${_parity_fix}/dif_train_replay"
+  COMMAND "$<TARGET_FILE:quantile_dif_train_golden>"
+    "${_golden_fix}/dif_train_replay"
 )
 add_test(
   NAME native_studio_trainer_classify_hotpath
-  COMMAND "$<TARGET_FILE:quantile_dif_train_parity>"
-    "${_parity_fix}/studio_trainer_classify_hotpath"
+  COMMAND "$<TARGET_FILE:quantile_dif_train_golden>"
+    "${_golden_fix}/studio_trainer_classify_hotpath"
 )
 add_test(
   NAME native_studio_trainer_gh_classify_hotpath
-  COMMAND "$<TARGET_FILE:quantile_dif_train_parity>"
-    "${_parity_fix}/studio_trainer_gh_classify_hotpath"
+  COMMAND "$<TARGET_FILE:quantile_dif_train_golden>"
+    "${_golden_fix}/studio_trainer_gh_classify_hotpath"
 )
 add_test(
   NAME native_mke_train_step
-  COMMAND "$<TARGET_FILE:mke_train_step_parity>"
-    "${_parity_fix}/mke_train_step"
+  COMMAND "$<TARGET_FILE:mke_train_step_golden>"
+    "${_golden_fix}/mke_train_step"
 )
 add_test(
   NAME native_mke_train_extended
-  COMMAND "$<TARGET_FILE:mke_train_step_parity>"
-    "${_parity_fix}/mke_train_extended"
+  COMMAND "$<TARGET_FILE:mke_train_step_golden>"
+    "${_golden_fix}/mke_train_extended"
 )
 add_test(
   NAME native_generation
-  COMMAND "$<TARGET_FILE:generation_parity>"
-    "${_parity_fix}/generation/sidecar.json"
+  COMMAND "$<TARGET_FILE:generation_golden>"
+    "${_golden_fix}/generation/sidecar.json"
 )
 
 add_test(
   NAME native_embed_table
-  COMMAND "$<TARGET_FILE:embed_table_parity>"
-    "${_parity_fix}/embed_table/sidecar.json"
+  COMMAND "$<TARGET_FILE:embed_table_golden>"
+    "${_golden_fix}/embed_table/sidecar.json"
 )
-if(NOT EXISTS "${_parity_fix}/embed_table/sidecar.json")
+if(NOT EXISTS "${_golden_fix}/embed_table/sidecar.json")
   set_tests_properties(native_embed_table PROPERTIES DISABLED TRUE)
 endif()
 
 add_test(
   NAME native_retrieval
-  COMMAND "$<TARGET_FILE:retrieval_parity>"
-    "${_parity_fix}/retrieval/sidecar.json"
+  COMMAND "$<TARGET_FILE:retrieval_golden>"
+    "${_golden_fix}/retrieval/sidecar.json"
 )
-if(NOT EXISTS "${_parity_fix}/retrieval/sidecar.json")
+if(NOT EXISTS "${_golden_fix}/retrieval/sidecar.json")
   set_tests_properties(native_retrieval PROPERTIES DISABLED TRUE)
 endif()
 
 add_test(
   NAME native_cyphalm_char_lstm
-  COMMAND "$<TARGET_FILE:cyphalm_char_lstm_parity>"
-    "${_parity_fix}/cyphalm_char_lstm/sidecar.json"
+  COMMAND "$<TARGET_FILE:cyphalm_char_lstm_golden>"
+    "${_golden_fix}/cyphalm_char_lstm/sidecar.json"
 )
-if(NOT EXISTS "${_parity_fix}/cyphalm_char_lstm/sidecar.json")
+if(NOT EXISTS "${_golden_fix}/cyphalm_char_lstm/sidecar.json")
   set_tests_properties(native_cyphalm_char_lstm PROPERTIES DISABLED TRUE)
 endif()
 
 add_test(
-  NAME native_cyphalm_model_parity
-  COMMAND "$<TARGET_FILE:cyphalm_model_parity>"
+  NAME native_cyphalm_model_golden
+  COMMAND "$<TARGET_FILE:cyphalm_model_golden>"
 )
 
 add_test(
-  NAME native_cyphalm_checkpoint_parity
-  COMMAND "$<TARGET_FILE:cyphalm_checkpoint_parity>"
-    "${_parity_fix}/cyphalm_checkpoint/char_lstm/sidecar.json"
+  NAME native_cyphalm_checkpoint_golden
+  COMMAND "$<TARGET_FILE:cyphalm_checkpoint_golden>"
+    "${_golden_fix}/cyphalm_checkpoint/char_lstm/sidecar.json"
 )
-if(NOT EXISTS "${_parity_fix}/cyphalm_checkpoint/char_lstm/sidecar.json")
-  set_tests_properties(native_cyphalm_checkpoint_parity PROPERTIES DISABLED TRUE)
+if(NOT EXISTS "${_golden_fix}/cyphalm_checkpoint/char_lstm/sidecar.json")
+  set_tests_properties(native_cyphalm_checkpoint_golden PROPERTIES DISABLED TRUE)
 endif()
 
 add_test(
@@ -938,7 +938,7 @@ add_test(
 add_test(
   NAME native_onnx_export_dry_run
   COMMAND "$<TARGET_FILE:cypha_onnx_export>"
-    --cypha "${_parity_fix}/reference.cypha"
+    --cypha "${_golden_fix}/reference.cypha"
     --out "${CMAKE_CURRENT_BINARY_DIR}/onnx_export_smoke.onnx"
     --dry-run
 )
@@ -946,7 +946,7 @@ add_test(
 add_test(
   NAME native_onnx_export_smoke
   COMMAND "$<TARGET_FILE:cypha_onnx_export>"
-    --cypha "${_parity_fix}/reference.cypha"
+    --cypha "${_golden_fix}/reference.cypha"
     --out "${CMAKE_CURRENT_BINARY_DIR}/onnx_export_reference.onnx"
 )
 
@@ -958,7 +958,7 @@ add_test(
 add_test(
   NAME native_export_gguf_smoke
   COMMAND "$<TARGET_FILE:cypha_export_gguf>"
-    --cypha "${_parity_fix}/reference.cypha"
+    --cypha "${_golden_fix}/reference.cypha"
     --out "${CMAKE_CURRENT_BINARY_DIR}/gguf_export_reference.gguf"
 )
 
@@ -1022,10 +1022,12 @@ add_test(
   COMMAND "$<TARGET_FILE:curriculum_smoke>"
 )
 
-add_test(
-  NAME native_bench_metrics_smoke
-  COMMAND "$<TARGET_FILE:bench_metrics_smoke>"
-)
+if(TARGET bench_metrics_smoke)
+  add_test(
+    NAME native_bench_metrics_smoke
+    COMMAND "$<TARGET_FILE:bench_metrics_smoke>"
+  )
+endif()
 
 add_test(
   NAME native_curriculum_window_smoke
@@ -1884,32 +1886,32 @@ set_tests_properties(native_cell_hypothesis_overnight_smoke PROPERTIES
 add_test(
   NAME native_diagnostics_run
   COMMAND "$<TARGET_FILE:cypha_diagnostics_run>"
-    --fixtures "${_parity_fix}"
+    --fixtures "${_golden_fix}"
     --out "${CMAKE_CURRENT_BINARY_DIR}/diagnostics_results"
 )
 
 add_test(
   NAME native_cyphalm_hebbian
-  COMMAND "$<TARGET_FILE:cyphalm_hebbian_parity>"
+  COMMAND "$<TARGET_FILE:cyphalm_hebbian_golden>"
 )
 
 add_test(
-  NAME native_som_parity
-  COMMAND "$<TARGET_FILE:som_parity>"
+  NAME native_som_golden
+  COMMAND "$<TARGET_FILE:som_golden>"
 )
 
-add_test(NAME native_cyphalm_ssm COMMAND "$<TARGET_FILE:cyphalm_ssm_parity>")
+add_test(NAME native_cyphalm_ssm COMMAND "$<TARGET_FILE:cyphalm_ssm_golden>")
 
-if(EXISTS "${_parity_fix}/cyphalm_ssm/sidecar.json")
+if(EXISTS "${_golden_fix}/cyphalm_ssm/sidecar.json")
   add_test(
     NAME native_cyphalm_ssm_fixture
-    COMMAND "$<TARGET_FILE:cyphalm_parity>" "${_parity_fix}/cyphalm_ssm/sidecar.json"
+    COMMAND "$<TARGET_FILE:cyphalm_golden>" "${_golden_fix}/cyphalm_ssm/sidecar.json"
   )
 endif()
 
 add_test(
-  NAME native_cyphalm_parity_suite
-  COMMAND "$<TARGET_FILE:cyphalm_parity>"
+  NAME native_cyphalm_golden_suite
+  COMMAND "$<TARGET_FILE:cyphalm_golden>"
 )
 
 add_test(
@@ -1929,8 +1931,8 @@ add_test(
     "${CMAKE_CURRENT_BINARY_DIR}/registry_native_smoke_root"
     "native_reg_smoke"
     "0.0.1"
-    "${_parity_fix}/reference.cypha"
-    "${_parity_fix}/registry_register/card.json"
+    "${_golden_fix}/reference.cypha"
+    "${_golden_fix}/registry_register/card.json"
     --overwrite
     --and-verify
 )
@@ -1994,10 +1996,10 @@ if(TARGET experiment_db_smoke)
   )
 endif()
 
-if(TARGET experiment_db_crud_parity)
+if(TARGET experiment_db_crud_golden)
   add_test(
     NAME native_experiment_db_crud
-    COMMAND "$<TARGET_FILE:experiment_db_crud_parity>" "${_cypha_experiment_ddl_sql}"
+    COMMAND "$<TARGET_FILE:experiment_db_crud_golden>" "${_cypha_experiment_ddl_sql}"
   )
 endif()
 
@@ -2008,7 +2010,7 @@ endif()
 if(TARGET cypha_qt_stub)
   add_test(
     NAME native_qt_stub_load_reference
-    COMMAND "$<TARGET_FILE:cypha_qt_stub>" "${_parity_fix}/reference.cypha"
+    COMMAND "$<TARGET_FILE:cypha_qt_stub>" "${_golden_fix}/reference.cypha"
   )
   set_tests_properties(
     native_qt_stub_load_reference
@@ -2020,7 +2022,7 @@ endif()
 if(TARGET cypha_qt_shell)
   add_test(
     NAME native_qt_shell_smoke
-    COMMAND "$<TARGET_FILE:cypha_qt_shell>" --smoke "${_parity_fix}/reference.cypha"
+    COMMAND "$<TARGET_FILE:cypha_qt_shell>" --smoke "${_golden_fix}/reference.cypha"
   )
   set_tests_properties(
     native_qt_shell_smoke

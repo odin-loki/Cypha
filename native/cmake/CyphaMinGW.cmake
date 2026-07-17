@@ -46,7 +46,7 @@ endfunction()
 
 # Parity fixtures live on the Windows filesystem at /mnt/c/... when configuring from WSL; Windows .exe
 # cannot open those paths — rewrite to C:/... for add_test() arguments.
-function(cypha_mingw_fix_parity_path_for_cross_host path_var)
+function(cypha_mingw_fix_golden_path_for_cross_host path_var)
   if(NOT (MINGW AND CMAKE_HOST_UNIX))
     return()
   endif()

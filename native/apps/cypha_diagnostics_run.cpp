@@ -170,7 +170,7 @@ int run_process(const fs::path& exe, const std::vector<std::string>& args) {
 #endif
 }
 
-CheckResult run_parity_exe(const fs::path& exe_dir, const std::string& phase, const std::string& base,
+CheckResult run_golden_exe(const fs::path& exe_dir, const std::string& phase, const std::string& base,
                            const std::vector<std::string>& args) {
     CheckResult r;
     r.phase = phase;
@@ -295,29 +295,29 @@ struct ParityJob {
 std::vector<ParityJob> build_jobs(const fs::path& fix) {
     return {
         // Phase 1 — baseline establishment (CyphaDIF classify / model hotpaths)
-        {"1", "cypha_parity", {fix.string() + "/reference.cypha", fix.string() + "/native_parity.bin"}},
+        {"1", "cypha_golden", {fix.string() + "/reference.cypha", fix.string() + "/native_parity.bin"}},
         {"1", "create_model_smoke", {}},
-        {"1", "preprocess_train_classify_parity", {fix.string() + "/studio_trainer_preprocess_classify_hotpath"}},
-        {"1", "preprocess_train_classify_parity", {fix.string() + "/csv_preprocess_classify_hotpath"}},
+        {"1", "preprocess_train_classify_golden", {fix.string() + "/studio_trainer_preprocess_classify_hotpath"}},
+        {"1", "preprocess_train_classify_golden", {fix.string() + "/csv_preprocess_classify_hotpath"}},
 
         // Phase 2 — encoder quality (preprocessor + RFF)
-        {"2", "preprocessor_parity", {fix.string() + "/preprocessor"}},
-        {"2", "preprocessor_fit_parity",
+        {"2", "preprocessor_golden", {fix.string() + "/preprocessor"}},
+        {"2", "preprocessor_fit_golden",
          {fix.string() + "/preprocessor_fit", fix.string() + "/preprocessor_fit_no_scale",
           fix.string() + "/preprocessor_fit_rff"}},
-        {"2", "regression_rff_parity", {fix.string() + "/rff_regression/sidecar.json"}},
+        {"2", "regression_rff_golden", {fix.string() + "/rff_regression/sidecar.json"}},
 
         // Phase 3 — NIG calibration & deliberation
-        {"3", "nig_adapt_parity", {}},
-        {"3", "gh_infer_deliberation_parity", {fix.string() + "/gh_infer_deliberation"}},
+        {"3", "nig_adapt_golden", {}},
+        {"3", "gh_infer_deliberation_golden", {fix.string() + "/gh_infer_deliberation"}},
 
         // Phase 4 — online learning dynamics
-        {"4", "train_step_vector_parity", {fix.string() + "/train_step_vector"}},
-        {"4", "memory_train_parity", {fix.string() + "/memory_train"}},
+        {"4", "train_step_vector_golden", {fix.string() + "/train_step_vector"}},
+        {"4", "memory_train_golden", {fix.string() + "/memory_train"}},
         {"4", "memory_train_roundtrip", {fix.string() + "/memory_train"}},
-        {"4", "mke_train_step_parity", {fix.string() + "/mke_train_step"}},
-        {"4", "kernel_llr_parity", {fix.string() + "/kernel_llr/sidecar.json"}},
-        {"4", "batch_llr_parity", {fix.string() + "/batch_llr/sidecar.json"}},
+        {"4", "mke_train_step_golden", {fix.string() + "/mke_train_step"}},
+        {"4", "kernel_llr_golden", {fix.string() + "/kernel_llr/sidecar.json"}},
+        {"4", "batch_llr_golden", {fix.string() + "/batch_llr/sidecar.json"}},
     };
 }
 
@@ -412,7 +412,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             std::cout << "\n== phase " << j.phase << " :: " << j.exe << " ==\n";
-            CheckResult r = run_parity_exe(exe_dir, j.phase, j.exe, j.args);
+            CheckResult r = run_golden_exe(exe_dir, j.phase, j.exe, j.args);
             std::cout << (r.pass ? "[PASS] " : "[FAIL] ") << r.name;
             if (!r.detail.empty()) {
                 std::cout << " — " << r.detail;
