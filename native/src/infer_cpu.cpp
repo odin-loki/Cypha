@@ -307,12 +307,6 @@ void context_prior_for_labels(const CyphaInferModel& m, const std::vector<std::s
   const double w1 = 1.0 - alpha_fc;
   const double w2 = alpha_fc;
 
-  std::unordered_map<std::string, double> freq_lookup;
-  freq_lookup.reserve(m.mid_freq.size() * 2 + 1);
-  for (const auto& pr : m.mid_freq) {
-    freq_lookup[pr.first] = pr.second;
-  }
-
   for (int ki = 0; ki < K; ++ki) {
     const std::string& kk = classes[static_cast<std::size_t>(ki)];
 
@@ -331,9 +325,11 @@ void context_prior_for_labels(const CyphaInferModel& m, const std::vector<std::s
     double tier1 = 0.6 * t1_log + 0.4 * t1_co;
 
     double mid_k = 1e-3;
-    auto fk = freq_lookup.find(kk);
-    if (fk != freq_lookup.end()) {
-      mid_k += fk->second;
+    for (const auto& pr : m.mid_freq) {
+      if (pr.first == kk) {
+        mid_k += pr.second;
+        break;
+      }
     }
     double t2_log = std::log(mid_k / (mid_total + 1e-3) + eps);
 
@@ -799,10 +795,13 @@ void rpsm_score_matrix_batched(const CyphaInferModel& m, const double* h_row_maj
   if (K == 0) {
     return;
   }
-  const rpsm::PsiMatrices psi = rpsm::build_psi_from_model(m);
-  std::vector<double> ctx;
-  context_prior_for_labels(m, m.labels, ctx);
-  rpsm::batched_llr_gemm(h_row_major, n, psi, ctx.data(), llr_out.data());
+  // Perf (2026-07-17): thread_local Ψ + ctx scratch — default score_matrix_use_field path
+  // (RPSM batched LLR) reused per call instead of heap-allocating PsiMatrices + ctx vectors.
+  thread_local rpsm::PsiMatrices psi_scratch;
+  thread_local std::vector<double> ctx_scratch;
+  rpsm::build_psi_from_model_into(psi_scratch, m);
+  context_prior_for_labels(m, m.labels, ctx_scratch);
+  rpsm::batched_llr_gemm(h_row_major, n, psi_scratch, ctx_scratch.data(), llr_out.data());
 }
 
 void softmax_batch_reference(const double* z_row_major, int n, int k, double eps,

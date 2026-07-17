@@ -23,6 +23,9 @@ struct PsiMatrices {
 /// Build Ψ from ``CyphaInferModel`` (world prior + field injection on row 0, ``D`` on rows 1..K).
 PsiMatrices build_psi_from_model(const CyphaInferModel& m);
 
+/// In-place variant for infer hot-path scratch reuse (same numerics as ``build_psi_from_model``).
+void build_psi_from_model_into(PsiMatrices& psi, const CyphaInferModel& m);
+
 /// Batched LLR via a single GEMM-shaped multiply: ``llr_out`` is ``n × n_classes`` row-major.
 /// ``ctx`` length ``n_classes`` (Tier-1 context prior); may be nullptr → zeros.
 void batched_llr_gemm(const double* h_row_major, int n, const PsiMatrices& psi, const double* ctx,

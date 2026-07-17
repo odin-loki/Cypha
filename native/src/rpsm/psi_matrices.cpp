@@ -1,6 +1,7 @@
 #include "cypha/rpsm/psi_matrices.hpp"
 
 #include <cmath>
+#include <vector>
 
 #include "cypha/infer_cpu.hpp"
 
@@ -8,9 +9,14 @@ namespace cypha {
 namespace rpsm {
 
 PsiMatrices build_psi_from_model(const CyphaInferModel& m) {
+  PsiMatrices psi;
+  build_psi_from_model_into(psi, m);
+  return psi;
+}
+
+void build_psi_from_model_into(PsiMatrices& psi, const CyphaInferModel& m) {
   const int d = m.d_latent;
   const int K = static_cast<int>(m.labels.size());
-  PsiMatrices psi;
   psi.feat_dim = d;
   psi.n_classes = K;
   psi.mu.assign(static_cast<std::size_t>((1 + K) * d), 0.0);
@@ -40,7 +46,6 @@ PsiMatrices build_psi_from_model(const CyphaInferModel& m) {
       psi.mu[static_cast<std::size_t>((1 + k) * d + j)] = m.D[static_cast<std::size_t>(k * d + j)];
     }
   }
-  return psi;
 }
 
 void batched_llr_gemm(const double* h_row_major, int n, const PsiMatrices& psi, const double* ctx,
@@ -51,8 +56,13 @@ void batched_llr_gemm(const double* h_row_major, int n, const PsiMatrices& psi, 
     return;
   }
 
-  std::vector<double> b_row(static_cast<std::size_t>(K * d));
-  std::vector<double> bias(static_cast<std::size_t>(K));
+  // Perf (2026-07-17): thread_local b_row/bias — bias/b_row depend only on Ψ, not batch row count;
+  // reusing avoids two heap allocs per score_matrix / rpsm_score_matrix call (REST /predict batch
+  // paths and uncertainty_rank). Safe: infer_parallel_rows shards rows; each thread owns scratch.
+  thread_local std::vector<double> b_row;
+  thread_local std::vector<double> bias;
+  b_row.resize(static_cast<std::size_t>(K * d));
+  bias.resize(static_cast<std::size_t>(K));
 
   for (int k = 0; k < K; ++k) {
     const double* delta = psi.mu.data() + static_cast<std::size_t>((1 + k) * d);
