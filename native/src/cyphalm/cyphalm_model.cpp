@@ -979,7 +979,11 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
                 out.aleatoric_var = last_dif_out_.aleatoric_var;
             } else {
                 last_dif_out_ = {};
-                last_dif_out_.mean.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+                // Part 7b: when DIF is skipped (D17 ngram-fusion default), mean is never read —
+                // avoid field_dim zero-fill every predict_next (same pattern as Part 4 DIF skip).
+                if (!skip_dif_subsystem) {
+                    last_dif_out_.mean.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+                }
             }
         }
         {

@@ -1039,3 +1039,37 @@ algorithm change, batch/CUDA paths, or accepting BPC-changing throttles.
 
 **Commit of this pass:** code + documentation.
 
+---
+
+## Follow-up (2026-07-17, part 7b) — dead-work re-audit (Phase 2/3/9)
+
+**Scope:** Re-audit `train_step` / `predict_next` / DIF infer after Parts 4+6 for accidental
+always-on cost from Phase 2 MoE EM, Phase 3 `use_class_gmm` (default OFF), and Phase 9
+`CriticalityVector`. **Did not touch** `build_math`, `build_deff`, `BASELINE_*`, overnight scripts.
+Build dir: `native/build_perf_dead` (MinGW Release). Full write-up:
+`docs/reports/DEAD_WORK_AUDIT_2026-07-17.md`.
+
+### Findings (default-OFF / D17)
+
+| Subsystem | Accidental hot-path cost? | Notes |
+|---|---|---|
+| `use_class_gmm` | **No** | Legacy `K×d` path when OFF; GMM/EM loops gated |
+| MKE MoE EM | **No** | Not on CyphaLM D17; EM only when MKE or GMM explicitly ON |
+| CriticalityVector | **No** | REST/report/export only; not wired into default `train_step` |
+| Part 4 DIF skip | N/A (intentional) | Still active via `dif_subsystem_affects_forward` |
+| Part 6 BPTT slow skip | N/A (intentional) | Still active when `ewc_lambda=0` |
+
+### Shipped: skip dead DIF mean zero-fill on skipped predict path
+
+**Root cause:** Part 4 stopped calling `CyphaDIF::predict` on D17, but the fallback branch still ran
+`last_dif_out_.mean.assign(field_dim, 0)` every `predict_next` even though `build_gria_input` passes
+`nullptr` for DIF on that path.
+
+**Fix:** Gate the assign on `!skip_dif_subsystem` (`cyphalm_model.cpp`). Same “output unreachable”
+pattern as Part 4; configs that still consume DIF mean keep the zero-fill.
+
+**Impact:** Minor (eliminates ~`field_dim` writes/step on dead-DIF configs); bit-identical BPC on
+D17 default expected.
+
+**Commit of this pass:** code + audit docs.
+
