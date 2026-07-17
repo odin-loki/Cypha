@@ -1073,3 +1073,75 @@ D17 default expected.
 
 **Commit of this pass:** code + audit docs.
 
+---
+
+## Follow-up (2026-07-17, part 7) — post-skip remasure
+
+**Scope:** remasure D17 after Parts 4+6 skips (dead DIF + BPTT slow-tier when EWC off) on tip
+that also includes later EM/GMM/CriticalityVector code. **Did not touch** `native/build_math`,
+`native/build_deff`, `BASELINE_*`, overnight processes, or other agents' dirty trees
+(`infer_cpu`, `nig_gig_math`, `criticality_*`, `xor_kernel_bench`).
+
+**HEAD at remasure:** `bbb7d84` (includes Part 7b dead DIF zero-fill). Fresh MSVC Release build:
+`native/build_perf7` (VS Build Tools 18 / `cl` 19.51, `windows-vs2026-release` via BuildTools
+CMake).
+
+### Phase breakdown (`CYPHA_PERF_TRACE=1`)
+
+Command: `cyphalm_bench_native --profile d17 --n-train 8000 --n-eval 256 --threads 1 --bench-seed 42`
+
+`=== CYPHA_PERF_TRACE: train_step phase breakdown over 23970 calls (45.539s instrumented) ===`
+
+| Phase | Time | Share |
+|---|---|---|
+| **lstm_backward (hybrid path)** | **21.622s** | **47.48%** |
+| predict_next (GRIA+LSTM+hybrid) | 17.523s | 38.48% |
+| bptt_ssm_update | 4.554s | 10.00% |
+| gria_backward | 1.713s | 3.76% |
+| **dif_train_step** | **0.0039s** | **0.0086%** |
+| tail / hebbian / rpsm | <0.13s | <0.27% |
+
+`predict_next` DIF predict sub-phase: **0.0039s (0.022%)** — near-zero with Part 4 skip active.
+
+**Confirm skips (EWC off / D17 default):**
+- `dif_train_step` ≈ **0%** (Part 4 still effective).
+- DIF predict ≈ **0%** (Part 4 + 7b zero-fill skip).
+- Remaining `bptt_ssm_update` (~10%) is **fast-tier only**; Part 6 slow-tier is off when
+  `ewc_lambda=0` (no separate slow-path bucket; share is well below Part 5's pre-skip ~11–18%).
+
+Still dominant: `lstm_backward` + `predict_next` (~86% combined) — same compute-bound floor as Part 5.
+
+### Wall-clock chars/sec (`--n-train 20000 --n-eval 256 --threads 1 --bench-seed 42`)
+
+**Not trustworthy this session.** Host CPU load was **~100%** with concurrent
+`cyphalm_bench_native` / `cypha_cell_hypothesis_sweep` peers; a quiet 2–3 run median was not
+obtained. TRACE-instrumented 8k wall was ~46.4s (noise floor, not a throughput claim).
+
+Prior quiet MSVC anchor remains Part 2's **252.2 chars/sec** (pre-skip chain). Parts 4+6
+instrumented estimates (~3.4% + ~7.6% `train_step`) are still the best skip-attributable signals;
+end-to-end remasure needs an idle host.
+
+### Dead-work skip this pass
+
+**None shipped.** Part 7b already landed the only clear remaining bit-identical DIF dead-work
+(zero-fill). No further unreachable-output skip found with clear evidence under remasure load.
+Docs-only remasure.
+
+### Running total (updated)
+
+| Stage | chars/sec | Toolchain | What changed |
+|---|---|---|---|
+| Earlier baseline (context) | ~96 | MinGW | (pre-existing) |
+| Before Part 1 fix | 126.4 | MinGW | (pre-existing) |
+| **After Part 1** (`dafd677`) | **138.3** | MinGW | +9.5% (Part 1) |
+| *(MSVC toolchain migration)* | *(~+28%, not algorithmic)* | *MinGW→MSVC* | *toolchain only* |
+| Before Part 2 fix | 211.3 | MSVC | (post-toolchain baseline) |
+| **After Part 2** (`0851483`) | **252.2** | MSVC | **+19.4% (Part 2)** |
+| After Part 3 | *~+3–4% est.* | MSVC | `predict_next` scratch reuse |
+| After Part 4 | *~−3.4% train_step est.* | MSVC | skip dead DIF |
+| After Part 5 | *(floor; no ship)* | MSVC | compute-bound on `lstm_backward` |
+| After Part 6 | *~−7.6% train_step (instr.)* | MinGW A/B | skip BPTT slow when EWC off |
+| **Part 7 remasure** (`bbb7d84` tip) | *wall-clock N/A (CPU 100%)* | MSVC `build_perf7` | TRACE confirms DIF≈0%; BPTT~10% fast-tier; no new skip |
+
+**Commit of this pass:** documentation only.
+
