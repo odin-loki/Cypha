@@ -149,10 +149,11 @@ target_link_libraries(cypha_bench_native PUBLIC cypha_core cypha_lm_native)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
+  target_link_libraries(cypha_core PUBLIC OpenMP::OpenMP_CXX)
   target_link_libraries(cypha_lm_native PUBLIC OpenMP::OpenMP_CXX)
-  message(STATUS "cypha_lm_native: OpenMP enabled")
+  message(STATUS "cypha_core + cypha_lm_native: OpenMP enabled (score_matrix row-parallel)")
 else()
-  message(STATUS "cypha_lm_native: OpenMP not found; batch uses std::thread")
+  message(STATUS "OpenMP not found; score_matrix / batch uses std::thread")
 endif()
 
 if(MSVC)
@@ -328,6 +329,9 @@ endif()
 add_executable(cypha_onnx_export tools/cypha_onnx_export.cpp)
 target_link_libraries(cypha_onnx_export PRIVATE cypha_core)
 
+add_executable(onnx_export_smoke tools/onnx_export_smoke.cpp)
+target_link_libraries(onnx_export_smoke PRIVATE cypha_core)
+
 add_executable(cypha_export_gguf tools/cypha_export_gguf.cpp)
 target_link_libraries(cypha_export_gguf PRIVATE cypha_core)
 
@@ -436,6 +440,7 @@ set(
   cypha_federated_coordinator
   cypha_federated_worker
   cypha_onnx_export
+  onnx_export_smoke
   cypha_export_gguf
   intelligence_profiler_smoke
   ewc_smoke
@@ -600,6 +605,7 @@ if(MSVC)
   target_compile_options(cypha_diagnostics_run PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_train PRIVATE /W4 /permissive-)
   target_compile_options(cypha_onnx_export PRIVATE /W4 /permissive-)
+  target_compile_options(onnx_export_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_export_gguf PRIVATE /W4 /permissive-)
   target_compile_options(rest_schema_contract PRIVATE /W4 /permissive-)
 else()
@@ -665,6 +671,7 @@ else()
   target_compile_options(retrieval_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_onnx_export PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(onnx_export_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_export_gguf PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_char_lstm_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_checkpoint_golden PRIVATE -Wall -Wextra -Wpedantic)
@@ -1052,6 +1059,13 @@ add_test(
   COMMAND "$<TARGET_FILE:cypha_onnx_export>"
     --cypha "${_golden_fix}/reference.cypha"
     --out "${CMAKE_CURRENT_BINARY_DIR}/onnx_export_reference.onnx"
+)
+
+add_test(
+  NAME native_onnx_export_validate
+  COMMAND "$<TARGET_FILE:onnx_export_smoke>"
+    "${_golden_fix}/reference.cypha"
+    "${CMAKE_CURRENT_BINARY_DIR}/onnx_export_validate.onnx"
 )
 
 add_test(

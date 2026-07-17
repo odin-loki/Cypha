@@ -262,4 +262,301 @@ inline std::vector<std::uint8_t> build_cypha_infer_model(const InferGraphSpec& s
   return model;
 }
 
+struct ParsedNode {
+  std::string name;
+  std::string op;
+  std::vector<std::string> inputs;
+  std::vector<std::string> outputs;
+};
+
+struct ParsedOnnxModel {
+  std::int64_t ir_version{0};
+  std::string producer;
+  std::string graph_name;
+  std::vector<std::string> graph_inputs;
+  std::vector<std::string> graph_outputs;
+  std::vector<ParsedNode> nodes;
+  std::vector<std::string> initializers;
+};
+
+namespace detail {
+
+struct ProtoSlice {
+  const std::uint8_t* data{nullptr};
+  std::size_t size{0};
+  std::size_t pos{0};
+};
+
+inline bool slice_read_varint(ProtoSlice& s, std::uint64_t& out) {
+  out = 0;
+  int shift = 0;
+  while (s.pos < s.size) {
+    const std::uint8_t b = s.data[s.pos++];
+    out |= static_cast<std::uint64_t>(b & 0x7F) << shift;
+    if ((b & 0x80) == 0) {
+      return true;
+    }
+    shift += 7;
+    if (shift >= 64) {
+      return false;
+    }
+  }
+  return false;
+}
+
+inline bool slice_read_bytes(ProtoSlice& s, std::vector<std::uint8_t>& out) {
+  std::uint64_t len = 0;
+  if (!slice_read_varint(s, len) || s.pos + len > s.size) {
+    return false;
+  }
+  out.assign(s.data + s.pos, s.data + s.pos + len);
+  s.pos += static_cast<std::size_t>(len);
+  return true;
+}
+
+inline bool slice_read_string(ProtoSlice& s, std::string& out) {
+  std::vector<std::uint8_t> raw;
+  if (!slice_read_bytes(s, raw)) {
+    return false;
+  }
+  out.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+  return true;
+}
+
+inline bool slice_skip_field(ProtoSlice& s, int wire) {
+  if (wire == 0) {
+    std::uint64_t v = 0;
+    return slice_read_varint(s, v);
+  }
+  if (wire == 1) {
+    if (s.pos + 8 > s.size) {
+      return false;
+    }
+    s.pos += 8;
+    return true;
+  }
+  if (wire == 2) {
+    std::vector<std::uint8_t> tmp;
+    return slice_read_bytes(s, tmp);
+  }
+  if (wire == 5) {
+    if (s.pos + 4 > s.size) {
+      return false;
+    }
+    s.pos += 4;
+    return true;
+  }
+  return false;
+}
+
+inline bool parse_value_info_name(const std::uint8_t* data, std::size_t len, std::string& name) {
+  ProtoSlice s{data, len, 0};
+  while (s.pos < s.size) {
+    std::uint64_t tag = 0;
+    if (!slice_read_varint(s, tag)) {
+      return false;
+    }
+    const int field = static_cast<int>(tag >> 3);
+    const int wire = static_cast<int>(tag & 7);
+    if (field == 1 && wire == 2) {
+      return slice_read_string(s, name);
+    }
+    if (!slice_skip_field(s, wire)) {
+      return false;
+    }
+  }
+  return false;
+}
+
+inline bool parse_tensor_name(const std::uint8_t* data, std::size_t len, std::string& name) {
+  return parse_value_info_name(data, len, name);
+}
+
+inline bool parse_node_message(const std::uint8_t* data, std::size_t len, ParsedNode& node) {
+  ProtoSlice s{data, len, 0};
+  while (s.pos < s.size) {
+    std::uint64_t tag = 0;
+    if (!slice_read_varint(s, tag)) {
+      return false;
+    }
+    const int field = static_cast<int>(tag >> 3);
+    const int wire = static_cast<int>(tag & 7);
+    if (wire != 2) {
+      if (!slice_skip_field(s, wire)) {
+        return false;
+      }
+      continue;
+    }
+    std::string val;
+    if (!slice_read_string(s, val)) {
+      return false;
+    }
+    if (field == 1) {
+      node.inputs.push_back(val);
+    } else if (field == 2) {
+      node.outputs.push_back(val);
+    } else if (field == 3) {
+      node.name = val;
+    } else if (field == 4) {
+      node.op = val;
+    }
+  }
+  return !node.op.empty();
+}
+
+inline bool parse_graph_message(const std::uint8_t* data, std::size_t len, ParsedOnnxModel& out) {
+  ProtoSlice s{data, len, 0};
+  while (s.pos < s.size) {
+    std::uint64_t tag = 0;
+    if (!slice_read_varint(s, tag)) {
+      return false;
+    }
+    const int field = static_cast<int>(tag >> 3);
+    const int wire = static_cast<int>(tag & 7);
+    if (wire != 2) {
+      if (!slice_skip_field(s, wire)) {
+        return false;
+      }
+      continue;
+    }
+    std::vector<std::uint8_t> msg;
+    if (!slice_read_bytes(s, msg)) {
+      return false;
+    }
+    if (field == 1) {
+      ParsedNode node;
+      if (!parse_node_message(msg.data(), msg.size(), node)) {
+        return false;
+      }
+      out.nodes.push_back(std::move(node));
+    } else if (field == 2) {
+      out.graph_name.assign(reinterpret_cast<const char*>(msg.data()), msg.size());
+    } else if (field == 5) {
+      std::string init_name;
+      if (!parse_tensor_name(msg.data(), msg.size(), init_name)) {
+        return false;
+      }
+      out.initializers.push_back(std::move(init_name));
+    } else if (field == 11) {
+      std::string in_name;
+      if (!parse_value_info_name(msg.data(), msg.size(), in_name)) {
+        return false;
+      }
+      out.graph_inputs.push_back(std::move(in_name));
+    } else if (field == 12) {
+      std::string out_name;
+      if (!parse_value_info_name(msg.data(), msg.size(), out_name)) {
+        return false;
+      }
+      out.graph_outputs.push_back(std::move(out_name));
+    }
+  }
+  return true;
+}
+
+}  // namespace detail
+
+/// Parse a Cypha ONNX ModelProto for structural smoke checks (no external deps).
+inline ParsedOnnxModel parse_model(const std::vector<std::uint8_t>& bytes) {
+  detail::ProtoSlice s{bytes.data(), bytes.size(), 0};
+  ParsedOnnxModel model;
+  while (s.pos < s.size) {
+    std::uint64_t tag = 0;
+    if (!detail::slice_read_varint(s, tag)) {
+      throw std::runtime_error("onnx parse: truncated tag");
+    }
+    const int field = static_cast<int>(tag >> 3);
+    const int wire = static_cast<int>(tag & 7);
+    if (field == 1 && wire == 0) {
+      std::uint64_t v = 0;
+      if (!detail::slice_read_varint(s, v)) {
+        throw std::runtime_error("onnx parse: truncated ir_version");
+      }
+      model.ir_version = static_cast<std::int64_t>(v);
+      continue;
+    }
+    if (field == 2 && wire == 2) {
+      if (!detail::slice_read_string(s, model.producer)) {
+        throw std::runtime_error("onnx parse: truncated producer");
+      }
+      continue;
+    }
+    if (field == 7 && wire == 2) {
+      std::vector<std::uint8_t> graph;
+      if (!detail::slice_read_bytes(s, graph)) {
+        throw std::runtime_error("onnx parse: truncated graph");
+      }
+      if (!detail::parse_graph_message(graph.data(), graph.size(), model)) {
+        throw std::runtime_error("onnx parse: invalid graph");
+      }
+      continue;
+    }
+    if (!detail::slice_skip_field(s, wire)) {
+      throw std::runtime_error("onnx parse: unsupported field");
+    }
+  }
+  if (model.graph_name.empty() && model.nodes.empty()) {
+    throw std::runtime_error("onnx parse: missing graph");
+  }
+  return model;
+}
+
+inline bool vector_contains(const std::vector<std::string>& v, const std::string& needle) {
+  return std::find(v.begin(), v.end(), needle) != v.end();
+}
+
+/// Validate the minimal Cypha infer subgraph (encode -> LLR [-> softmax]).
+inline void validate_cypha_infer_model(const ParsedOnnxModel& model, bool expect_softmax) {
+  if (model.ir_version != kIrVersion) {
+    throw std::runtime_error("onnx validate: unexpected ir_version");
+  }
+  if (model.producer != "cypha_onnx_export") {
+    throw std::runtime_error("onnx validate: unexpected producer");
+  }
+  if (model.graph_name != "cypha_infer") {
+    throw std::runtime_error("onnx validate: unexpected graph name");
+  }
+  if (!vector_contains(model.graph_inputs, "x")) {
+    throw std::runtime_error("onnx validate: missing input x");
+  }
+  if (!vector_contains(model.graph_outputs, "llr")) {
+    throw std::runtime_error("onnx validate: missing output llr");
+  }
+  if (expect_softmax && !vector_contains(model.graph_outputs, "probs")) {
+    throw std::runtime_error("onnx validate: missing output probs");
+  }
+
+  const std::vector<std::string> need_init{"enc_W", "mu0", "inv_v", "D_T", "llr_bias"};
+  for (const auto& n : need_init) {
+    if (!vector_contains(model.initializers, n)) {
+      throw std::runtime_error("onnx validate: missing initializer " + n);
+    }
+  }
+  if (expect_softmax && !vector_contains(model.initializers, "inv_temp")) {
+    throw std::runtime_error("onnx validate: missing initializer inv_temp");
+  }
+
+  const std::vector<std::string> need_ops{"Gemm", "Sub", "Mul", "MatMul", "Add"};
+  if (model.nodes.size() < need_ops.size()) {
+    throw std::runtime_error("onnx validate: too few nodes");
+  }
+  for (std::size_t i = 0; i < need_ops.size(); ++i) {
+    if (model.nodes[i].op != need_ops[i]) {
+      throw std::runtime_error("onnx validate: node " + std::to_string(i) + " expected " +
+                               need_ops[i] + " got " + model.nodes[i].op);
+    }
+  }
+  if (expect_softmax) {
+    if (model.nodes.size() < need_ops.size() + 2) {
+      throw std::runtime_error("onnx validate: missing softmax nodes");
+    }
+    if (model.nodes[need_ops.size()].op != "Mul" || model.nodes[need_ops.size() + 1].op != "Softmax") {
+      throw std::runtime_error("onnx validate: expected Mul -> Softmax tail");
+    }
+    if (model.nodes.back().outputs.empty() || model.nodes.back().outputs[0] != "probs") {
+      throw std::runtime_error("onnx validate: softmax output must be probs");
+    }
+  }
+}
+
 }  // namespace cypha::onnx
