@@ -246,7 +246,7 @@ Poll watcher last heartbeat: **`HEARTBEAT 2026-07-17 22:07:59 processes=4 lock_n
 
 ### Stuck vs slow
 
-H18 child PID **47108** is actively computing (~1306 s CPU accumulated; ~23 min wall since 11:45:54Z start). Parent PID **30632** is idle-waiting as expected. Poll **`processes=4`** confirms overnight chain alive. **Not stuck — wait.**
+H18 child PID **47108** is actively computing (~1306 s CPU accumulated; CPU **1332 → 1344** over 12 s wall sample **+11.9 s**; ~23 min wall since 11:45:54Z start). Parent PID **30632** is idle-waiting as expected. Poll **`processes=4`** confirms overnight chain alive. **Not stuck — wait.**
 
 ### Updated ETA (H19–H22 + finalize)
 
@@ -263,23 +263,3 @@ At recent cadence (~75–120 min per variant from variant-start line):
 ### Recommended action
 
 **Wait.** Do not restart H18, do not finalize, do not AutoCommit. Re-check trigger: no H19 line by **~13:45Z** **and** PID 47108 CPU delta ≈ 0 over 5 min **and** poll STALL/`processes=0`.
-
----
-
-## 9. Refresh — 2026-07-17T12:08:30Z (local ~22:08 AEST)
-
-**Scope:** Read-only re-check; no processes killed.  
-**Verdict:** **HEALTHY — H18 still in progress (21/25), active compute. Wait.**
-
-| Check | Result |
-|-------|--------|
-| Progress log tail | Still `2026-07-17T11:45:54Z variant=H18 21/25` (expected until H19 starts) |
-| Elapsed into H18 | ~**23 min** wall from progress line |
-| Child PID **47108** | CPU **1332 → 1344** over 12 s wall (**+11.9 s**) — compute active |
-| Parent PID **30632** | Idle waiter |
-| Poll | `processes=4 lock_n_train=300000` — no STALL/ERROR |
-
-H18 duration is well within the 75–123 min H15–H17 cadence. **Do not restart. Do not finalize.**
-
-ETA unchanged: H19 ~`13:00Z–13:30Z` if cadence holds; finalize only after H22 + artifact flush — [`FINALIZE_PREP_2026-07-17.md`](FINALIZE_PREP_2026-07-17.md).  
-Product polish waves: **STOP** — [`PRODUCT_ADJUST_STOP_2026-07-17.md`](PRODUCT_ADJUST_STOP_2026-07-17.md).
