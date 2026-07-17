@@ -7,7 +7,7 @@
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete);
 115 CTests blocking gate (116 when `d38` merged).
 **Repo state as of this update (2026-07-17 evening):** **160 CTests** blocking gate; Optimality P0–2, P5, P9
-(`CriticalityVector`) done; P3 opt-in shipped; §0.5 pin **2.873**; MC2/MS1 metrics; overnight H15/25 still running.
+(`CriticalityVector`) done; P3 opt-in shipped; §0.5 pin **2.873**; MC2/MS1 metrics; overnight H16/19/25 still running.
 
 ---
 
@@ -30,7 +30,7 @@
 | **EWC D16B forgetting** | [~] Improved, not solved | Growable-`D` fix + λ sweep best **0.135→0.108** @ λ=2.0; shared-model CL still open; [`EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md) |
 | **Paper draft** | [x] Rewritten | `paper/CyphaLM_paper.md` placeholders removed `e9ac580`; narrative reconciliation vs lock still [ ] |
 | **Curriculum / uncertainty-rank** | [x] Shipped | `curriculum.hpp` + bench `CYPHA_CURRICULUM_WINDOW`; `GET/POST /uncertainty-rank` + CTest `native_rest_uncertainty_rank` |
-| **300k production overnight** | [~] Still running | H15/25 cell-sweep via `run_production_overnight.ps1`; d27–d38 gates `pending_production` until lock lands |
+| **300k production overnight** | [~] Still running | H16/19/25 cell-sweep via `run_production_overnight.ps1`; d27–d38 gates `pending_production` until lock lands |
 
 This is a task list with explicit done/in-progress/open markers — not a live status dashboard. See
 [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) for the canonical research journal.
@@ -55,7 +55,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 | # | Task | Status | Source |
 |---|------|--------|--------|
-| [~] 0.1 | **300k production overnight** to completion | In progress: H15/25 cell-sweep running | RESEARCH_STATUS Phase 13–24 |
+| [~] 0.1 | **300k production overnight** to completion | In progress: H16/19/25 cell-sweep running | RESEARCH_STATUS Phase 13–24 |
 | [ ] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Blocked on 0.1 | Phase 18, 24 |
 | [ ] 0.3 | `gh auth login` + `publish_release.ps1` | Auth still gated | Phase 15, 19 |
 | [ ] 0.4 | Merge **d38** once 0.1–0.2 land | 115 → 116 CTests | Phase 24 |
@@ -112,7 +112,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## 3. Cell hypothesis testbench (28 variants)
 
-- [~] Tier 1 sweep H01–H05 — overnight cell-sweep in progress (H15/25)
+- [~] Tier 1 sweep H01–H05 — overnight cell-sweep in progress (H16/19/25)
 - [ ] Tier 2 H07, H09–H13 native paths
 - [ ] Tier 3 real 300k run
 - [ ] Populate `results/summary.csv` vs locked baselines

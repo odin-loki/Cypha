@@ -43,7 +43,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 0 — Retire parity, keep the regression net
 
-**Status:** [ ] **Not started** (2026-07-17) — `native/tests/parity/` still exists with 36 `*_parity.cpp` files; no rename to `regression/`/`golden` yet.
+**Status:** [x] **Done** (2026-07-17) — `4133054`; `native/tests/regression/` + `*_golden` CTests; parity harness retired.
 
 **Objective:** Split "parity" into dead Python-comparison scaffolding (delete) and frozen goldens (repurpose as native regression tests). Removing parity also *unblocks* Phases 1–3 and 7, which were previously parity-breakers.
 
@@ -70,7 +70,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 1 — The EM keystone (shared primitive)
 
-**Status:** [ ] **Not started** (2026-07-17) — `native/include/cypha/em_step.hpp` and `native/src/em_step.cpp` do not exist. Required before Phases 2–3.
+**Status:** [x] **Done** (2026-07-17) — `31bbb0c`/`7a07f8b`; `em_step.hpp`, `em_step.cpp`, `em_step_smoke`.
 
 **Objective:** One reusable EM step: an E-step returning Bayes-optimal responsibilities `r_i ∝ π_i · p(x | component i)`, and a weighted M-step. Consumed by the MoE router (Phase 2) and per-class GMM (Phase 3).
 
@@ -120,7 +120,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 3 — Per-class GMM (the real XOR fix)
 
-**Status:** [ ] **Not started** — blocked on Phase 1. RFF kernel-LLR closed XOR to ~2.7pp meanwhile (RESEARCH_STATUS P1).
+**Status:** [~] **Opt-in shipped; XOR no-go** (2026-07-17) — `1b59f3e`; `use_class_gmm` default OFF; XOR ON≈51% vs OFF≈51% (no kernel). Default-on / format bump deferred — see `OPTIMALITY_PHASE3_2026-07-17.md`.
 
 **Objective:** Let each `ClassDifferential Δk` be a small mixture of Gaussians in latent space instead of one diagonal Gaussian. This removes the XOR *impossibility*, not just softens it.
 
@@ -255,7 +255,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 9 — Runtime criticality monitor (read-only first)
 
-**Status:** [~] **Partially shipped** (2026-07-17) — Intelligence Stats Phases 24–59 landed `IntelligenceProfiler`, `criticality_score` / κ, `lm_intelligence_monitor.hpp`, `soft_world_monitor.hpp`, profile-guided navigation loss, and REST intelligence metrics. **Not yet done:** unified `CriticalityVector` struct with per-field Tier tag (Tier-1 bound vs Tier-2 critical-point), cadence tags (hot/mid/cold), and mid-cadence estimators (spectral radius, stochastic `‖K̂−K‖_F`, forgetting canary) as specified below.
+**Status:** [~] **Partially shipped** (2026-07-17) — `CriticalityVector` / `CriticalityField` with tier/cadence tags shipped `c759e72`; hot gauges + REST `/intelligence/criticality`; read-only (inference byte-identical). Prior Intelligence Stats work (`IntelligenceProfiler`, κ, `lm_intelligence_monitor.hpp`, profile-guided loss) remains. **Open:** wire session extras into hot input; connect mid estimators (spectral radius, stochastic `‖K̂−K‖_F`, forgetting canary); optional `experiment_db` ring buffer — see `OPTIMALITY_PHASE9_2026-07-17.md`.
 
 **Objective:** Always-on self-monitoring vector: one normalised health scalar per component. Ship telemetry first (zero parity/golden risk), promote a gauge to closed-loop control only once it has its own fixture.
 
