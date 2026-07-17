@@ -109,6 +109,16 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
   replay.push(H.data(), x_preprocessed, d, y_label, loss);
 
   const std::string& pred = meta->pred_label;
+  const auto encoder_update = [&](const double* mu_true, const double* v_true, const double* mu_neg,
+                                  const double* v_neg, double w) {
+    if (extras != nullptr && extras->use_variational_ib_encoder) {
+      variational_ib_update_encoder_w(infer.enc_w, d, x_preprocessed, H.data(), mu_true, v_true, mu_neg, v_neg, w,
+                                      tsp.enc_lr, extras->ib_beta, enc_update_count);
+    } else {
+      contrastive_update_encoder_w(infer.enc_w, d, x_preprocessed, H.data(), mu_true, v_true, mu_neg, v_neg, w,
+                                   tsp.enc_lr, enc_update_count);
+    }
+  };
   if (!meta->correct && pred != "__unknown__") {
     std::vector<double> mu_k;
     std::vector<double> v_k;
@@ -116,8 +126,7 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
     std::vector<double> v_j;
     if (mem.class_mean_and_variance(y_label, mu_k, v_k) &&
         mem.class_mean_and_variance(pred, mu_j, v_j)) {
-      contrastive_update_encoder_w(infer.enc_w, d, x_preprocessed, H.data(), mu_k.data(), v_k.data(),
-                                   mu_j.data(), v_j.data(), 1.0, tsp.enc_lr, enc_update_count);
+      encoder_update(mu_k.data(), v_k.data(), mu_j.data(), v_j.data(), 1.0);
     }
   }
 
@@ -128,8 +137,7 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
     std::vector<double> v_b;
     if (mem.class_mean_and_variance(meta->llr_rank0, mu_a, v_a) &&
         mem.class_mean_and_variance(meta->llr_rank1, mu_b, v_b)) {
-      contrastive_update_encoder_w(infer.enc_w, d, x_preprocessed, H.data(), mu_a.data(), v_a.data(),
-                                   mu_b.data(), v_b.data(), 0.3, tsp.enc_lr, enc_update_count);
+      encoder_update(mu_a.data(), v_a.data(), mu_b.data(), v_b.data(), 0.3);
     }
   }
 

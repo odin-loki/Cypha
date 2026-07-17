@@ -204,6 +204,10 @@ add_executable(class_gmm_p3_smoke tools/class_gmm_p3_smoke.cpp)
 target_link_libraries(class_gmm_p3_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(class_gmm_p3_smoke)
 
+add_executable(encoder_ib_p6_smoke tools/encoder_ib_p6_smoke.cpp)
+target_link_libraries(encoder_ib_p6_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(encoder_ib_p6_smoke)
+
 add_executable(gate_score_match_p7_smoke tools/gate_score_match_p7_smoke.cpp)
 target_link_libraries(gate_score_match_p7_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(gate_score_match_p7_smoke)
@@ -402,6 +406,7 @@ set(
   kernel_approx_p5_smoke
   gate_score_match_p7_smoke
   class_gmm_p3_smoke
+  encoder_ib_p6_smoke
   nig_bma_p4_smoke
   rao_blackwell_p8_smoke
   criticality_vector_p9_smoke
@@ -759,6 +764,13 @@ add_test(
 )
 set_tests_properties(native_class_gmm_p3_smoke PROPERTIES
   PASS_REGULAR_EXPRESSION "class_gmm_p3_smoke: PASS"
+  TIMEOUT 600)
+add_test(
+  NAME native_encoder_ib_p6_smoke
+  COMMAND "$<TARGET_FILE:encoder_ib_p6_smoke>"
+)
+set_tests_properties(native_encoder_ib_p6_smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "encoder_ib_p6_smoke: PASS"
   TIMEOUT 600)
 add_test(
   NAME native_nig_bma_p4_smoke

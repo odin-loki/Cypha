@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <unordered_map>
 #include <vector>
 
 #include "cypha/mt19937_rng.hpp"
@@ -111,6 +112,27 @@ void encoder_align_to_offsets(std::vector<double>& w_row_major, int d,
   }
 }
 
+void apply_encoder_grad(std::vector<double>& w_row_major, int d, const double* f, const std::vector<double>& grad_h,
+                        double weight, double lr, int& update_count_for_fro_cap) {
+  for (int i = 0; i < d; ++i) {
+    const double gi = grad_h[static_cast<std::size_t>(i)];
+    if (!std::isfinite(gi)) {
+      return;
+    }
+    for (int j = 0; j < d; ++j) {
+      const double fv = f[static_cast<std::size_t>(j)];
+      if (!std::isfinite(fv)) {
+        return;
+      }
+      w_row_major[static_cast<std::size_t>(i * d + j)] += lr * weight * gi * fv;
+    }
+  }
+  update_count_for_fro_cap += 1;
+  if (update_count_for_fro_cap % 50 == 0) {
+    frobenius_cap(w_row_major);
+  }
+}
+
 void contrastive_update_encoder_w(std::vector<double>& w_row_major, int d, const double* f, const double* h,
                                   const double* mu_k, const double* v_k, const double* mu_j, const double* v_j,
                                   double weight, double lr, int& update_count_for_fro_cap) {
@@ -126,23 +148,107 @@ void contrastive_update_encoder_w(std::vector<double>& w_row_major, int d, const
   std::vector<double> rj;
   fisher_rao_residual(d, h, mu_k, v_k, rk);
   fisher_rao_residual(d, h, mu_j, v_j, rj);
+  std::vector<double> grad_h(static_cast<std::size_t>(d));
   for (int i = 0; i < d; ++i) {
-    double diff = rj[static_cast<std::size_t>(i)] - rk[static_cast<std::size_t>(i)];
-    if (!std::isfinite(diff)) {
+    grad_h[static_cast<std::size_t>(i)] = rj[static_cast<std::size_t>(i)] - rk[static_cast<std::size_t>(i)];
+  }
+  apply_encoder_grad(w_row_major, d, f, grad_h, weight, lr, update_count_for_fro_cap);
+}
+
+void variational_ib_update_encoder_w(std::vector<double>& w_row_major, int d, const double* f, const double* h,
+                                     const double* mu_k, const double* v_k, const double* mu_j, const double* v_j,
+                                     double weight, double lr, double beta, int& update_count_for_fro_cap) {
+  if (d <= 0 || static_cast<int>(w_row_major.size()) != d * d) {
+    return;
+  }
+  for (int i = 0; i < d; ++i) {
+    if (!std::isfinite(h[static_cast<std::size_t>(i)]) || !std::isfinite(f[static_cast<std::size_t>(i)])) {
       return;
     }
-    for (int j = 0; j < d; ++j) {
-      double fv = f[static_cast<std::size_t>(j)];
-      if (!std::isfinite(fv)) {
-        return;
+  }
+  if (!std::isfinite(beta) || beta < 0.0) {
+    return;
+  }
+  std::vector<double> rk;
+  std::vector<double> rj;
+  fisher_rao_residual(d, h, mu_k, v_k, rk);
+  fisher_rao_residual(d, h, mu_j, v_j, rj);
+  const double inv_sigma2 = 1.0 / (kVariationalIbPriorSigma * kVariationalIbPriorSigma);
+  std::vector<double> grad_h(static_cast<std::size_t>(d));
+  for (int i = 0; i < d; ++i) {
+    const double compress = h[static_cast<std::size_t>(i)] * inv_sigma2;
+    const double predict =
+        beta * (rk[static_cast<std::size_t>(i)] - rj[static_cast<std::size_t>(i)]);
+    grad_h[static_cast<std::size_t>(i)] = compress - predict;
+  }
+  apply_encoder_grad(w_row_major, d, f, grad_h, weight, lr, update_count_for_fro_cap);
+}
+
+double latent_class_mi_proxy(const std::vector<std::vector<double>>& h_samples,
+                             const std::vector<std::string>& labels) {
+  if (h_samples.empty() || h_samples.size() != labels.size()) {
+    return 0.0;
+  }
+  const int d = static_cast<int>(h_samples[0].size());
+  if (d <= 0) {
+    return 0.0;
+  }
+  std::unordered_map<std::string, std::vector<std::size_t>> by_label;
+  for (std::size_t i = 0; i < labels.size(); ++i) {
+    if (static_cast<int>(h_samples[i].size()) != d) {
+      return 0.0;
+    }
+    by_label[labels[i]].push_back(i);
+  }
+  if (by_label.size() < 2) {
+    return 0.0;
+  }
+  std::vector<std::vector<double>> centroids;
+  double within = 0.0;
+  int within_n = 0;
+  for (const auto& kv : by_label) {
+    std::vector<double> c(static_cast<std::size_t>(d), 0.0);
+    for (std::size_t ix : kv.second) {
+      for (int j = 0; j < d; ++j) {
+        c[static_cast<std::size_t>(j)] += h_samples[ix][static_cast<std::size_t>(j)];
       }
-      w_row_major[static_cast<std::size_t>(i * d + j)] += lr * weight * diff * fv;
+    }
+    const double inv = 1.0 / static_cast<double>(kv.second.size());
+    for (int j = 0; j < d; ++j) {
+      c[static_cast<std::size_t>(j)] *= inv;
+    }
+    for (std::size_t ix : kv.second) {
+      for (int j = 0; j < d; ++j) {
+        const double diff = h_samples[ix][static_cast<std::size_t>(j)] - c[static_cast<std::size_t>(j)];
+        within += diff * diff;
+        within_n += 1;
+      }
+    }
+    centroids.push_back(std::move(c));
+  }
+  if (within_n <= 0 || centroids.size() < 2) {
+    return 0.0;
+  }
+  within /= static_cast<double>(within_n);
+  double between = 0.0;
+  int pairs = 0;
+  for (std::size_t a = 0; a < centroids.size(); ++a) {
+    for (std::size_t b = a + 1; b < centroids.size(); ++b) {
+      double dist2 = 0.0;
+      for (int j = 0; j < d; ++j) {
+        const double diff = centroids[a][static_cast<std::size_t>(j)] - centroids[b][static_cast<std::size_t>(j)];
+        dist2 += diff * diff;
+      }
+      between += dist2;
+      pairs += 1;
     }
   }
-  update_count_for_fro_cap += 1;
-  if (update_count_for_fro_cap % 50 == 0) {
-    frobenius_cap(w_row_major);
+  between /= static_cast<double>(std::max(pairs, 1));
+  const double denom = within + between;
+  if (denom <= 1e-18) {
+    return 0.0;
   }
+  return between / denom;
 }
 
 void init_encoder_projection_w(int d, std::uint64_t seed, std::vector<double>& w_row_major) {

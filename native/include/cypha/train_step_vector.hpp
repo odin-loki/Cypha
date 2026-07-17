@@ -2,6 +2,7 @@
 
 #include "cypha/class_gmm.hpp"
 #include "cypha/ewc_regularizer.hpp"
+#include "cypha/encoder_contrastive.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/replay_buffer.hpp"
@@ -49,6 +50,10 @@ struct TrainStepExtras {
   /// Phase 3: per-class GMM (default **off** — legacy single Gaussian per class).
   bool use_class_gmm{false};
   int class_gmm_m{kClassGmmDefaultM};
+  /// Phase 6: variational IB encoder (default **off** — Fisher–Rao contrastive preserved).
+  bool use_variational_ib_encoder{false};
+  /// Alemi IB trade-off ``β`` in ``I(X;T) − β·I(T;Y)`` (used when ``use_variational_ib_encoder``).
+  double ib_beta{kVariationalIbBetaDefault};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).
