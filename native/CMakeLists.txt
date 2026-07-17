@@ -387,6 +387,14 @@ add_executable(needle_haystack_smoke tools/needle_haystack_smoke.cpp)
 target_link_libraries(needle_haystack_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(needle_haystack_smoke)
 
+add_executable(cyphalm_memorization_canary tools/cyphalm_memorization_canary.cpp)
+target_link_libraries(cyphalm_memorization_canary PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_memorization_canary)
+
+add_executable(memorization_canary_smoke tools/memorization_canary_smoke.cpp)
+target_link_libraries(memorization_canary_smoke PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(memorization_canary_smoke)
+
 add_executable(curriculum_window_smoke tools/curriculum_window_smoke.cpp)
 target_link_libraries(curriculum_window_smoke PRIVATE cypha_core)
 
@@ -469,6 +477,8 @@ set(
   sample_efficiency_curve_smoke
   cyphalm_needle_haystack
   needle_haystack_smoke
+  cyphalm_memorization_canary
+  memorization_canary_smoke
   curriculum_window_smoke
   corpus_smoke
   intelligence_profiler_papers
@@ -1180,6 +1190,17 @@ if(TARGET needle_haystack_smoke)
       --exe-dir "$<TARGET_FILE_DIR:cyphalm_needle_haystack>"
   )
   set_tests_properties(native_needle_haystack_smoke PROPERTIES
+    ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  )
+endif()
+
+if(TARGET memorization_canary_smoke)
+  add_test(
+    NAME native_memorization_canary_smoke
+    COMMAND "$<TARGET_FILE:memorization_canary_smoke>"
+      --exe-dir "$<TARGET_FILE_DIR:cyphalm_memorization_canary>"
+  )
+  set_tests_properties(native_memorization_canary_smoke PROPERTIES
     ENVIRONMENT "CYPHA_BENCH_FAST=1"
   )
 endif()
