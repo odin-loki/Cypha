@@ -86,6 +86,12 @@ Every one of the 20 equations individually loses R² under the kernel path at th
 
 **Recommendation:** do not turn `CYPHA_D14_KERNEL_BASIS=rff` on by default — leave it opt-in indefinitely. This is a clean, honest negative result (same spirit as this session's RPSM BPTT finding): the D03/XOR RFF kernel-LLR mechanism does not transfer to D14's architecturally different expert-routing regressor. Tests: `ctest --test-dir native/build_kernel3 -R "d14|kernel|xor"` 14/14 pass (2 new smoke tests added, D14 had none before); full native suite 171 tests also clean (169 pass, 2 skipped by design).
 
+**Update (2026-07-17) — §1 P2 auto-γ defaults (clarification):**
+
+- **KernelMemory RFF:** auto-γ median heuristic already default (2026-07-11); D03 `xor_pair` Nyström default untouched.
+- **Preprocessor RFFEncoder:** `auto_rff_gamma_cv` already default-on for tabular `input_dim ≤ 30` when `rff_gamma` left at 1.0 (`preprocessor_fit.cpp`); everyday profile documents this. D08 vision has no RFF preprocessor.
+- Full writeup: [`RESEARCH_STATUS.md`](../../RESEARCH_STATUS.md) Priority 2.
+
 ---
 
 ## Diagnostic protocol

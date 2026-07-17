@@ -487,6 +487,18 @@ Followed through on the deferred item above: built the two-sided kernelized expe
 
 **Update (2026-07-11):** For the kernel-LLR/XOR track specifically, auto-gamma is now shipped and default for the new RFF kernel basis — see the Priority 1 update above (`KernelMemory::auto_gamma_median_heuristic`, median pairwise-distance heuristic, no CV grid search needed since XOR's calibration batch is cheap and the heuristic already beat every fixed γ tried). The separate `RFFEncoder.auto_gamma_cv` preprocessor path (D08/D14, item 1–3 above) is untouched — still opt-in, not covered by this pass.
 
+**Update (2026-07-17) — §1 P2 clarification (defaults already in code; docs catch-up):**
+
+| Path | Default today | Notes |
+|---|---|---|
+| **KernelMemory RFF** (`make_rff`, `xor_kernel_bench --kernel-basis rff`, `CYPHA_D03/D14_KERNEL_BASIS=rff`) | **Auto-γ median heuristic** | `--rff-fixed-gamma` / explicit γ to override |
+| **Preprocessor / RFFEncoder** (`PreprocessorState::fit_from_design_matrix`) | **`auto_rff_gamma_cv` ON** when `input_dim ≤ 30`, `rff_gamma == 1.0`, and neither auto flag is set | Everyday tabular profile (`rff_dim=256`); noted in `everyday_profile.json`. Explicit `rff_gamma ≠ 1.0` or profile flags disable the implicit default |
+| **D03 xor_pair Nyström default** | **Unchanged** | Hand features + Nyström already beats sklearn; not modified |
+
+- D08 vision regime has no RFF preprocessor (`raw`/`hog` only) — tabular D01/D03 is the production encoder path for this item.
+- D14 kernelized expert-routing remains opt-in/off (Priority 1 negative); do not default-on.
+- Remaining P2 work (parity fixtures / full D08–D14 re-bench with explicit auto-γ profiles) is optional polish, not a missing default.
+
 ### Priority 3 — CyphaLM: beat-bigram roadmap
 
 **Status:** ✅ **Achieved @ 300k** via **hybrid GRIA+LSTM** — D17 **2.873 BPC** (−0.61 vs bigram, −0.11 vs char-LSTM bench). GRIA-only stack peaked @ **3.838** (+0.36 vs bigram).
