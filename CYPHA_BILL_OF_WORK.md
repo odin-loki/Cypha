@@ -91,8 +91,8 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 ### P4 — Multi-view online training (CyphaLM → CyphaDIF)
 - [x] Phase 1 (LM) done @ 300k
 - [ ] Port multi-view scheduling to CyphaDIF (D16)
-- [ ] Fix D16 **16G** task-block-shuffle regression
-- [ ] Document early-stop policy
+- [ ] Fix D16 **16G** task-block-shuffle regression — negative control documented; next = DIF-V3 replay-interleave ([`D16_MULTIVIEW_POLICY_2026-07-17.md`](docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md) §2)
+- [x] Document early-stop policy — [`D16_MULTIVIEW_POLICY_2026-07-17.md`](docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md) §1 (`schedule_b` ≤24k; `same_order`×2 @ 40k; `--n-train` knob)
 
 ### P5 — Shared-model continual learning
 - [x] Hybrid EWC + growable-`D` fix + λ sweep (`e6d95d2`) — best **0.135→0.108** @ λ=2.0

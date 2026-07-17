@@ -2385,7 +2385,9 @@ Json run_d16() {
         };
     }
 
-    // 16G view streams (simplified round_robin vs block shuffle forgetting)
+    // 16G view streams (round_robin vs task_block_shuffle forgetting probe).
+    // task_block_shuffle is a negative control (FAST mean acc ~0.58 vs RR ~0.81; wine/digits collapse).
+    // Do not enable in production profiles — see docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md §2.
     Json exp16g;
     {
         const int max_steps = cypha::bench::bench_scale(3000, 1500);

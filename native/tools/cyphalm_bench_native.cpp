@@ -28,6 +28,8 @@ struct Args {
     std::string mode = "hybrid";
     std::string profile = "d17";
     std::string cell_variant;
+    // Default 40k = same_order_e2 short-budget cap (see docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md).
+    // Override with --n-train; use schedule_b + n_train<=24000 for mid-budget multi-view policy.
     int n_train = 40000;
     int n_eval = 2000;
     int threads = 0;

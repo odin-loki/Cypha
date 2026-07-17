@@ -45,6 +45,13 @@
     "delta_vs_char_lstm_baseline": -0.108,
     "recommended_n_train": 300000,
     "hybrid_gria_weight": 0.004,
-    "notes": "C2 dual head; blend ~99.6% LSTM @ 300k"
+    "notes": "C2 dual head; blend ~99.6% LSTM @ 300k",
+    "multiview_policy": {
+      "doc": "docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md",
+      "gria_only_budget_le_24k": "view_schedule=schedule_b, stop at n_train cap",
+      "gria_only_budget_40k": "view_schedule=same_order, train_epochs=2, stop at 40000",
+      "bigram_target_early_stop": "schedule_b one-pass @ 12000-16000 tokens",
+      "hybrid_production": "ignore gria-only table; use recommended_n_train=300000"
+    }
   }
 }
