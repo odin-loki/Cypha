@@ -25,7 +25,7 @@
 | **Infer latency (RPSM scratch)** | [x] ~48% win | `4d3afa2` — [`INFER_LATENCY_PROFILE_2026-07-17.md`](docs/reports/INFER_LATENCY_PROFILE_2026-07-17.md) |
 | **D17 perf Parts 1–6** | [x] Done | [`PERFORMANCE_PROFILE_2026-07-12.md`](docs/reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–6; Part 6 `12ad4b3` (skip dead BPTT slow-tier when EWC off) |
 | **P1 XOR kernel gap** | [x] ~2.7pp remaining (was ~18pp) | RFF auto-gamma `rff_dim=4096` → **76.3%** vs sklearn ~79%; [`RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1 |
-| **P2 auto-gamma defaults** | [x] Clarified shipped | `fb5e543` — kernel-LLR RFF auto-γ default in code; remaining D08/D14 re-bench optional |
+| **P2 auto-gamma defaults** | [x] Shipped + smoke | Implicit CV default in `preprocessor_fit.cpp` (`d≤30`); D01/D08 FAST smoke 2026-07-17 |
 | **Addendum 2 MC2/MS1** | [x] Shipped | ECE + train/held-out gap `412ded1`; [`GENERAL_METRICS_MC2_MS1_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC2_MS1_2026-07-17.md) |
 | **§0.5 BPC pin** | [x] Reconciled | canonical **2.873** `b0d39e7`; [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 | **P5 marketing claims** | [x] Aligned | D16B/D16F isolation caveat `3491da0` |
@@ -79,8 +79,8 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ### P2 — Auto-gamma RFF as default
 - [x] Kernel-LLR RFF auto-gamma shipped (2026-07-11)
-- [ ] Promote `RFFEncoder.auto_rff_gamma_cv` to default preprocessor path
-- [ ] Re-run D08/D14 with preprocessor auto-gamma
+- [x] Promote `RFFEncoder.auto_rff_gamma_cv` to default preprocessor path (`fit_from_design_matrix` implicit when `d≤30`)
+- [x] Re-run D08/D01 preprocessor smoke (FAST tier; D08 N/A, D01 0 pp delta)
 
 ### P3 — CyphaLM beat-bigram
 - [x] Steps 1–6 done (hybrid **2.873 BPC** @ 300k)
@@ -137,7 +137,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 | Item | Status |
 |------|--------|
-| CUDA CI | [ ] Local-only |
+| CUDA CI | [x] Local-only (policy) — [`ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md), [`FUTURE.md`](docs/FUTURE.md) §1 |
 | Qt shell polish | [ ] Optional |
 | Web UI | [ ] Partial |
 | Multi-model `cypha_rest` | [x] Slice shipped `e3a5b63` — [`MULTI_MODEL_REST_2026-07-17.md`](docs/reports/MULTI_MODEL_REST_2026-07-17.md) |
@@ -163,7 +163,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 ## 7. Housekeeping
 
 - [ ] Full GPU training not implemented
-- [ ] Real-data profiling pass not logged
+- [x] Real-data profiling pass logged — [`REAL_DATA_PROFILE_2026-07-17.md`](docs/reports/REAL_DATA_PROFILE_2026-07-17.md); `scripts/run_real_data_profile.ps1`
 - [ ] Qt shell manual hardening pass
 - [ ] `cypha_som` archive — reads closed
 

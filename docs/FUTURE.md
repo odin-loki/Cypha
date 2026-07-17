@@ -71,7 +71,7 @@ cmake --build --preset windows-msvc-release-build
 
 **Not supported:** MinGW cross-compiles cannot enable `CYPHA_ENABLE_CUDA` (CMake will error).
 
-**CI:** CUDA is **not** gated in GitHub Actions — build and test locally with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
+**CI — local-only (formal, 2026-07-17):** CUDA is **not** compiled or tested in GitHub Actions. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed in v2.2.8 and **will not return** on hosted runners (no GPU fleet). Validate on a **self-hosted** or local CUDA box with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`mingw_cross`**) is the release gate. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
 
 **Performance:** profile with `./cuda_smoke --bench` on GPU; small batches may be CPU-faster due to launch overhead.
 
@@ -303,7 +303,7 @@ Two composed workstreams (neither replaces the other):
 | **Now** | D10/D17 CellAI SSM � �0c | D10: **resolved 2026-07-11**, 60.67% ECG (was stale 17�20%); hybrid D17 **2.873 BPC** |
 | **Now � shipped** | Qt UX �2a�2e; minimal Web UI �4 | Threaded train, charts, compare runs, dark theme, REST SPA |
 | **Weeks** | Packaged AppImage / Windows bundle � �3 | `packaging/` scripts shipped |
-| **Ongoing** | CUDA CI + profiling � �1 | Blocking jobs green |
+| **Done (policy)** | CUDA local-only validation � �1 | No hosted GPU CI; self-hosted / local `-DCYPHA_ENABLE_CUDA=ON` |
 | **2�4 months** | Multi-model `cypha_rest` � �5 | Deployment |
 | **4�8 months** | RPSM Option A ? B � �10 | Beat 2.873 BPC target |
 | **4�8 months** | Curriculum / active learning; ONNX � �6/7 | Research |

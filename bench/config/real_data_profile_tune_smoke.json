@@ -1,0 +1,20 @@
+{
+  "sweep_id": "real_data_profile_tune_smoke",
+  "description": "Two-cell D03 smoke over bench/data/iris.csv for real-data profiling",
+  "runner": "cypha_bench_run",
+  "defaults": {},
+  "cells": [
+    {
+      "id": "d03_default",
+      "args": {
+        "domain": 3
+      }
+    },
+    {
+      "id": "d03_fast_repeat",
+      "args": {
+        "domain_tag": "d03"
+      }
+    }
+  ]
+}
