@@ -170,4 +170,40 @@ void NgramFusion::load_weights(const std::vector<double>& w_field, const std::ve
     if (!pos_weights.empty()) pos_weights_ = pos_weights;
 }
 
+void NgramFusion::update_position_weights(const std::vector<double>& grad_v,
+                                          const std::vector<double>& embeds, double lr) {
+    if (pos_weights_.empty() || n_positions_ <= 0 || lr <= 0.0) {
+        return;
+    }
+    const int d = embed_in_ / n_positions_;
+    if (d <= 0 || static_cast<int>(embeds.size()) != embed_in_ ||
+        static_cast<int>(grad_v.size()) < field_dim_) {
+        return;
+    }
+    if (mode_ != "sum") {
+        return;
+    }
+    thread_local std::vector<double> grad_em_scratch;
+    if (grad_em_scratch.size() != static_cast<std::size_t>(embed_in_)) {
+        grad_em_scratch.assign(static_cast<std::size_t>(embed_in_), 0.0);
+    } else {
+        std::fill(grad_em_scratch.begin(), grad_em_scratch.end(), 0.0);
+    }
+    for (int r = 0; r < field_dim_; ++r) {
+        const double gv = grad_v[static_cast<std::size_t>(r)];
+        for (int c = 0; c < embed_in_; ++c) {
+            grad_em_scratch[static_cast<std::size_t>(c)] +=
+                W_embed_[static_cast<std::size_t>(r * embed_in_ + c)] * gv;
+        }
+    }
+    for (int i = 0; i < n_positions_; ++i) {
+        double dw = 0.0;
+        for (int j = 0; j < d; ++j) {
+            const std::size_t idx = static_cast<std::size_t>(i * d + j);
+            dw += grad_em_scratch[idx] * embeds[idx];
+        }
+        pos_weights_[static_cast<std::size_t>(i)] -= lr * dw;
+    }
+}
+
 }  // namespace cypha::cyphalm

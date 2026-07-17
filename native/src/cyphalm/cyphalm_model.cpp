@@ -1402,6 +1402,12 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
             gria_->update_weights(gria_grad, cfg_.gria_lr);
             gria_->update_alpha(gria_grad, cfg_.gria_lr);
             gria_->update_bias(gria_grad, cfg_.gria_lr);
+            if (ngram_fusion_ && cfg_.ngram_position_weights &&
+                !ngram_fusion_->pos_weights().empty() && !gria_grad.dv.empty()) {
+                ngram_embedding_vector(ngram_embed_vec_scratch_);
+                ngram_fusion_->update_position_weights(gria_grad.dv, ngram_embed_vec_scratch_,
+                                                       cfg_.gria_lr);
+            }
             if (view_emb_ && cfg_.view_learnable) {
                 const auto grad_v = gria_->grad_v_cross_entropy(gria_in_.data(), static_cast<int>(next_token_id));
                 view_emb_->update(current_view_slot_, grad_v.data() + cfg_.field_dim, cfg_.view_id_dim,

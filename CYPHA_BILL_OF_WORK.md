@@ -121,7 +121,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## 4. CyphaLM upgrade V2
 
-- [ ] B3 position weights — not implemented
+- [x] B3 position weights — opt-in (`--ngram-position-weights`); default OFF; ~−0.00005 BPC @ 5k (see `docs/reports/CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md`)
 - [ ] B4 bilinear fusion — not implemented
 - [x] B1 gated fusion — worse (+0.116 BPC), shelved
 - [x] Learnable views — neutral, keep fixed

@@ -21,6 +21,11 @@ class NgramFusion {
     void load_weights(const std::vector<double>& w_field, const std::vector<double>& w_embed,
                       const std::vector<double>& w_gate, const std::vector<double>& pos_weights);
 
+    /// Online SGD on learnable per-position scalars (B3). ``grad_v`` is dL/dv at the fusion
+    /// output (same shape as ``field_dim_``); ``embeds`` is the raw history vector before scaling.
+    void update_position_weights(const std::vector<double>& grad_v, const std::vector<double>& embeds,
+                                 double lr);
+
     const std::vector<double>& w_field() const { return W_field_; }
     const std::vector<double>& w_embed() const { return W_embed_; }
     const std::vector<double>& w_gate() const { return W_gate_; }
