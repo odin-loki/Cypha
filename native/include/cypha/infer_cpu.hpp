@@ -33,6 +33,8 @@ struct CyphaInferOptions {
   const KernelMemory* kernel_mem{nullptr};
   bool use_kernel_llr{false};
   double kernel_blend{0.5};
+  /// Phase 4 BMA over class deltas (falls back to ``CyphaInferModel::use_nig_bma`` when unset).
+  std::optional<bool> use_nig_bma{};
   /// Optional kernel feature vector (raw ``x`` or XOR pair features); defaults to ``h``.
   const double* kernel_x{nullptr};
 };
@@ -75,6 +77,10 @@ struct CyphaInferModel {
   std::vector<int> class_n_comp{};
   bool use_class_gmm{false};
   int class_gmm_m{kClassGmmDefaultM};
+  /// Phase 4: analytic BMA over NIG posterior of Δk at inference (default **off**).
+  bool use_nig_bma{false};
+  /// Normal quantile for credible-interval confidence (default 90% two-sided → 1.645).
+  double nig_bma_z{1.28};
   int cypha_format{kCyphaFormatV3};
   std::vector<double> enc_w{};
   std::vector<double> mu_world{};

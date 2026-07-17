@@ -40,6 +40,24 @@ bool use_rpsm_llr_from_env() {
   return (*v)[0] != '0';
 }
 
+bool use_nig_bma_from_env() {
+  const std::optional<std::string> v = cypha::env_get("CYPHA_USE_NIG_BMA");
+  if (!v.has_value() || v->empty()) {
+    return false;
+  }
+  return (*v)[0] != '0';
+}
+
+void apply_nig_bma_llr_row(const CyphaInferModel& m, const double* r, int K, double* llrs) {
+  const int d = m.d_latent;
+  for (int k = 0; k < K; ++k) {
+    const double nobs = m.n_obs[static_cast<std::size_t>(k)];
+    const double corr =
+        nig_delta_bma_llr_correction(d, nobs, m.v_mean, m.inv_v.data(), r);
+    llrs[static_cast<std::size_t>(k)] -= corr;
+  }
+}
+
 double as_double(const CNode& n) {
   if (n.kind == CNode::Float) {
     return n.f;
@@ -451,6 +469,15 @@ CyphaInferModel CyphaInferModel::from_root(const CNode& root, const double* f_fi
   m.cypha_format = read_cypha_format(root);
   m.use_class_gmm = read_class_gmm_enabled(root);
   m.class_gmm_m = read_class_gmm_m(root, m.use_class_gmm);
+  m.use_nig_bma = use_nig_bma_from_env();
+  const CNode* bma_node = map_get(root, "use_nig_bma");
+  if (bma_node != nullptr && bma_node->kind == CNode::Bool) {
+    m.use_nig_bma = bma_node->b;
+  }
+  const CNode* bma_z = map_get(root, "nig_bma_z");
+  if (bma_z != nullptr && bma_z->kind != CNode::Nil) {
+    m.nig_bma_z = as_double(*bma_z);
+  }
   const int max_m = m.gmm_max_m();
   const int n_classes = static_cast<int>(classes.map.size());
   m.labels.reserve(static_cast<std::size_t>(n_classes));
@@ -669,23 +696,6 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
     std::vector<double> ctx;
     context_prior_for_labels(m, m.labels, ctx);
     const ClassGmmStorage gmm = m.gmm_view();
-    std::vector<double> mu0(static_cast<std::size_t>(d));
-    for (int j = 0; j < d; ++j) {
-      mu0[static_cast<std::size_t>(j)] = m.mu_world[static_cast<std::size_t>(j)];
-    }
-    double h_sq = 0.0;
-    for (double v : m.field_h) {
-      h_sq += v * v;
-    }
-    if (std::isfinite(h_sq) && h_sq <= 1e8) {
-      for (int j = 0; j < d; ++j) {
-        double acc = 0.0;
-        for (int t = 0; t < m.field_dim; ++t) {
-          acc += m.f_field[static_cast<std::size_t>(j * m.field_dim + t)] * m.field_h[static_cast<std::size_t>(t)];
-        }
-        mu0[static_cast<std::size_t>(j)] += acc;
-      }
-    }
     for (int i = 0; i < n; ++i) {
       const double* h = h_row_major + static_cast<std::size_t>(i) * static_cast<std::size_t>(d);
       std::vector<double> rp(static_cast<std::size_t>(d));
@@ -693,10 +703,13 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
         const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
         rp[static_cast<std::size_t>(j)] = dj * m.inv_v[static_cast<std::size_t>(j)];
       }
+      double* llr_row = llr_out.data() + static_cast<std::size_t>(i * K);
       for (int k = 0; k < K; ++k) {
         const double u_k = m.v_mean / (m.n_obs[static_cast<std::size_t>(k)] + 1.0);
-        llr_out[static_cast<std::size_t>(i * K + k)] =
-            class_llr_for_k(gmm, k, rp.data(), m.inv_v.data(), u_k, ctx[static_cast<std::size_t>(k)]);
+        llr_row[k] = class_llr_for_k(gmm, k, rp.data(), m.inv_v.data(), u_k, ctx[static_cast<std::size_t>(k)]);
+      }
+      if (m.use_nig_bma) {
+        apply_nig_bma_llr_row(m, rp.data(), K, llr_row);
       }
     }
     if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
@@ -713,8 +726,20 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
     }
     return;
   }
-  if (use_rpsm_llr_from_env()) {
+  if (!m.use_nig_bma && use_rpsm_llr_from_env()) {
     rpsm_score_matrix_batched(m, h_row_major, n, llr_out);
+    if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
+      std::vector<double> kernel_scores(static_cast<std::size_t>(K));
+      for (int i = 0; i < n; ++i) {
+        kernel_mem->score_all(h_row_major + static_cast<std::size_t>(i) * d, m.labels, kernel_scores);
+        for (int k = 0; k < K; ++k) {
+          const double lin = llr_out[static_cast<std::size_t>(i * K + k)];
+          const double ker = kernel_scores[static_cast<std::size_t>(k)];
+          llr_out[static_cast<std::size_t>(i * K + k)] =
+              (1.0 - kernel_blend) * lin + kernel_blend * ker;
+        }
+      }
+    }
     return;
   }
 
@@ -740,6 +765,18 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
   ensure_infer_accel();
   cypha::accel::score_matrix(h_row_major, n, d, K, mu0.data(), m.inv_v.data(), m.D.data(), d_sq.data(),
                              u_k.data(), ctx.data(), llr_out.data());
+
+  if (m.use_nig_bma) {
+    for (int i = 0; i < n; ++i) {
+      const double* h = h_row_major + static_cast<std::size_t>(i) * static_cast<std::size_t>(d);
+      std::vector<double> rp(static_cast<std::size_t>(d));
+      for (int j = 0; j < d; ++j) {
+        const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
+        rp[static_cast<std::size_t>(j)] = dj * m.inv_v[static_cast<std::size_t>(j)];
+      }
+      apply_nig_bma_llr_row(m, rp.data(), K, llr_out.data() + static_cast<std::size_t>(i * K));
+    }
+  }
 
   if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
     std::vector<double> kernel_scores(static_cast<std::size_t>(K));
@@ -1093,6 +1130,15 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
     out.llrs[static_cast<std::size_t>(k)] = llr;
   }
 
+  std::vector<double> rp(static_cast<std::size_t>(d));
+  for (int j = 0; j < d; ++j) {
+    const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
+    rp[static_cast<std::size_t>(j)] = dj * m.inv_v[static_cast<std::size_t>(j)];
+  }
+  if (m.use_nig_bma) {
+    apply_nig_bma_llr_row(m, rp.data(), K, out.llrs.data());
+  }
+
   std::vector<double> linear_llrs = out.llrs;
   int linear_best = 0;
   double linear_best_llr = linear_llrs[0];
@@ -1161,7 +1207,21 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
     out.disc = disc_new * (conf_lin / disc_lin);
   }
 
-  out.confidence = out.disc * out.world_gate;
+  if (m.use_nig_bma) {
+    const double nobs = m.n_obs[static_cast<std::size_t>(best_i)];
+    const double epi =
+        nig_delta_bma_epistemic_var(nobs, m.v_mean, m.inv_v.data(), rp.data(), d);
+    const double epistemic_std = std::sqrt(std::max(epi, 0.0));
+    const double point = out.disc * out.world_gate;
+    // Report midpoint of [credible lower, MAP point] as confidence (bounded analytic approx).
+    const double lo =
+        nig_delta_credible_lower(point, epistemic_std, m.nig_bma_z, temperature);
+    out.confidence = 0.5 * (point + lo);
+    const double r_inflate = std::max(1.0, 1.0 + epistemic_std / std::max(out.mahal_per_dim, kEps));
+    out.r_eff *= r_inflate;
+  } else {
+    out.confidence = out.disc * out.world_gate;
+  }
   return out;
 }
 

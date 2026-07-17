@@ -107,4 +107,49 @@ double nig_r_eff_scalar(double mp, double r, double chi, double psi) {
   return r / std::max(e_inv, kEps);
 }
 
+double nig_delta_posterior_scale(double n_obs, double v_mean) {
+  return v_mean / (std::max(n_obs, 0.0) + 1.0);
+}
+
+double nig_delta_posterior_var_j(double n_obs, double v_mean, double inv_v_j) {
+  const double tau = nig_delta_posterior_scale(n_obs, v_mean);
+  return tau / std::max(inv_v_j, kEps);
+}
+
+double nig_delta_bma_llr_correction(int d, double n_obs, double v_mean, const double* inv_v,
+                                    const double* r) {
+  if (d <= 0 || inv_v == nullptr || r == nullptr) {
+    return 0.0;
+  }
+  const double tau = nig_delta_posterior_scale(n_obs, v_mean);
+  double r_sq_inv = 0.0;
+  for (int j = 0; j < d; ++j) {
+    const double inv_j = inv_v[static_cast<std::size_t>(j)];
+    const double rj = r[static_cast<std::size_t>(j)];
+    r_sq_inv += (rj * rj) / std::max(inv_j, kEps);
+  }
+  return 0.5 * tau * (static_cast<double>(d) + r_sq_inv);
+}
+
+double nig_delta_bma_epistemic_var(double n_obs, double v_mean, const double* inv_v, const double* r,
+                                   int d) {
+  if (d <= 0 || inv_v == nullptr || r == nullptr) {
+    return 0.0;
+  }
+  const double tau = nig_delta_posterior_scale(n_obs, v_mean);
+  double r_sq_inv = 0.0;
+  for (int j = 0; j < d; ++j) {
+    const double inv_j = inv_v[static_cast<std::size_t>(j)];
+    const double rj = r[static_cast<std::size_t>(j)];
+    r_sq_inv += (rj * rj) / std::max(inv_j, kEps);
+  }
+  return tau * r_sq_inv;
+}
+
+double nig_delta_credible_lower(double prob, double epistemic_std, double z, double temperature) {
+  const double T = std::max(temperature, kEps);
+  const double se = epistemic_std / T;
+  return std::clamp(prob - z * se, 0.0, 1.0);
+}
+
 }  // namespace cypha
