@@ -1,7 +1,8 @@
 # CyphaDIF — Research Status
 
 **Last updated:** 2026-07-17  
-**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **160 CTests** *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)*
+**Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **160 CTests** *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)*  
+**Planning docs:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md), [`CYPHA_OPTIMALITY_PLAN.md`](../CYPHA_OPTIMALITY_PLAN.md) (task lists updated 2026-07-17)
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
