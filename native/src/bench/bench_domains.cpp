@@ -1153,6 +1153,8 @@ Json reg_metrics_native(const OnlineRegressor& r, const std::vector<std::vector<
         {"rmse", cypha::bench::rmse(ys, preds)},
         {"mae", cypha::bench::mae(ys, preds)},
         {"r2", cypha::bench::r2(ys, preds)},
+        {"crps", cypha::bench::crps_gaussian_mean(ys, preds, unc)},
+        {"interval_coverage_90", cypha::bench::predictive_interval_coverage(ys, preds, unc, 1.645)},
         {"mean_epistemic_var", mean_unc_sq},
         {"expert_count", static_cast<int>(r.experts.size())},
     };

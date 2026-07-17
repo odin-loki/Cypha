@@ -1,4 +1,4 @@
-/// Smoke test for MC2 (ECE) and MS1 (generalization gap helpers).
+/// Smoke test for MC2 (ECE), MS1 (generalization gap), MR1 (CRPS), MR2 (90% interval coverage).
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -26,6 +26,14 @@ int main() {
       cypha::bench::accuracy({"a", "b", "c", "d"}, {"a", "x", "x", "d"});
   assert(std::isfinite(gap));
 
-  std::printf("bench_metrics_smoke: ece=%.4f gap=%.4f PASS\n", ece, gap);
+  const std::vector<double> y_true = {0.0, 1.0, 2.0, 3.0};
+  const std::vector<double> mu = {0.1, 1.0, 2.0, 2.9};
+  const std::vector<double> sigma = {0.5, 0.5, 0.5, 0.5};
+  const double crps = cypha::bench::crps_gaussian_mean(y_true, mu, sigma);
+  const double cov90 = cypha::bench::predictive_interval_coverage(y_true, mu, sigma, 1.645);
+  assert(std::isfinite(crps) && crps >= 0.0);
+  assert(finite_in_unit(cov90));
+
+  std::printf("bench_metrics_smoke: ece=%.4f gap=%.4f crps=%.4f cov90=%.4f PASS\n", ece, gap, crps, cov90);
   return 0;
 }

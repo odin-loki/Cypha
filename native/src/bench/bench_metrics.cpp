@@ -142,6 +142,52 @@ double expected_calibration_error(const std::vector<double>& confidences,
     return ece;
 }
 
+namespace {
+
+constexpr double kPi = 3.14159265358979323846;
+
+double normal_pdf(double z) { return std::exp(-0.5 * z * z) / std::sqrt(2.0 * kPi); }
+
+double normal_cdf(double z) { return 0.5 * std::erfc(-z / std::sqrt(2.0)); }
+
+}  // namespace
+
+double crps_gaussian(double y, double mu, double sigma) {
+    if (!std::isfinite(y) || !std::isfinite(mu) || !std::isfinite(sigma)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double s = std::max(sigma, 1e-12);
+    const double z = (y - mu) / s;
+    return s * (z * (2.0 * normal_cdf(z) - 1.0) + 2.0 * normal_pdf(z) - 1.0 / std::sqrt(kPi));
+}
+
+double crps_gaussian_mean(const std::vector<double>& y_true, const std::vector<double>& mu,
+                          const std::vector<double>& sigma) {
+    if (y_true.empty() || y_true.size() != mu.size() || y_true.size() != sigma.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    double acc = 0.0;
+    for (std::size_t i = 0; i < y_true.size(); ++i) {
+        acc += crps_gaussian(y_true[i], mu[i], sigma[i]);
+    }
+    return acc / static_cast<double>(y_true.size());
+}
+
+double predictive_interval_coverage(const std::vector<double>& y_true, const std::vector<double>& mu,
+                                    const std::vector<double>& sigma, double z) {
+    if (y_true.empty() || y_true.size() != mu.size() || y_true.size() != sigma.size() || z <= 0.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    int covered = 0;
+    for (std::size_t i = 0; i < y_true.size(); ++i) {
+        const double s = std::max(sigma[i], 0.0);
+        const double lo = mu[i] - z * s;
+        const double hi = mu[i] + z * s;
+        if (y_true[i] >= lo && y_true[i] <= hi) ++covered;
+    }
+    return static_cast<double>(covered) / static_cast<double>(y_true.size());
+}
+
 double safe_spearman(const std::vector<double>& a, const std::vector<double>& b) {
     if (a.size() < 2 || a.size() != b.size()) return 0.0;
     if (stddev(a) < 1e-12 || stddev(b) < 1e-12) return 0.0;

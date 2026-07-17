@@ -26,4 +26,15 @@ double safe_auroc(const std::vector<int>& y_true, const std::vector<double>& sco
 double expected_calibration_error(const std::vector<double>& confidences,
                                   const std::vector<double>& correct, int n_bins = 15);
 
+/// CRPS for a single Gaussian forecast N(mu, sigma^2) at observation y. Returns NaN when undefined.
+double crps_gaussian(double y, double mu, double sigma);
+
+/// Mean CRPS over paired observations and Gaussian forecasts (same length vectors).
+double crps_gaussian_mean(const std::vector<double>& y_true, const std::vector<double>& mu,
+                          const std::vector<double>& sigma);
+
+/// Fraction of y_true inside [mu - z*sigma, mu + z*sigma]. Default z=1.645 is 90% two-sided normal.
+double predictive_interval_coverage(const std::vector<double>& y_true, const std::vector<double>& mu,
+                                    const std::vector<double>& sigma, double z = 1.645);
+
 }  // namespace cypha::bench
