@@ -17,7 +17,7 @@
 |------|---------|----------|
 | **Optimality P0–2, P5, P9** | [x] Done | P0 `4133054`; P1 `31bbb0c`/`7a07f8b`; P2 `de4fa16`; P5 `da9be39`; P9 `CriticalityVector` `c759e72` — [`CYPHA_OPTIMALITY_PLAN.md`](CYPHA_OPTIMALITY_PLAN.md) |
 | **Optimality P3 (class GMM)** | [~] Opt-in; XOR no-go | `1b59f3e` default OFF; XOR ~51% — needs different approach or kernels |
-| **Optimality P4** | [ ] Not started | BMA over Δk |
+| **Optimality P4 (BMA over Δk)** | [~] Opt-in shipped | `33125b8` default OFF — [`OPTIMALITY_PHASE4_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE4_2026-07-17.md) |
 | **Optimality P6 (IB)** | [~] Opt-in | `f0ea334` default OFF — [`OPTIMALITY_PHASE6_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE6_2026-07-17.md) |
 | **Optimality P7 (score match)** | [~] Opt-in; LUT kept | `f19e167` — [`OPTIMALITY_PHASE7_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE7_2026-07-17.md) |
 | **Optimality P8 (RB)** | [x] Audit no-go | `322cb68` — no MC estimators in scope — [`OPTIMALITY_PHASE8_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE8_2026-07-17.md) |
@@ -33,7 +33,7 @@
 | **D10 ECG stale claim** | [x] Retired | D10A **60.67%** (~3× chance); never routed through `CellAISSM`; [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) |
 | **D17B `n_experts=1`** | [x] Genuine dynamic | Not a warm-start reporting bug; `mean_expert_alpha` split shipped `e6d95d2`; [`D17B_EXPERT_REPORTING_2026-07-12.md`](docs/reports/D17B_EXPERT_REPORTING_2026-07-12.md) |
 | **EWC D16B forgetting** | [~] Improved, not solved | Growable-`D` fix + λ sweep best **0.135→0.108** @ λ=2.0; shared-model CL still open; [`EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md) |
-| **Paper draft** | [x] Rewritten | `paper/CyphaLM_paper.md` placeholders removed `e9ac580`; narrative reconciliation vs lock still [ ] |
+| **Paper draft** | [x] Reconciled | `paper/CyphaLM_paper.md` canonical **2.873** + historical labels (2026-07-17) |
 | **Curriculum / uncertainty-rank** | [x] Shipped | `curriculum.hpp` + bench `CYPHA_CURRICULUM_WINDOW`; `GET/POST /uncertainty-rank` + CTest `native_rest_uncertainty_rank` |
 | **300k production overnight** | [~] Still running | H16/19/25 cell-sweep via `run_production_overnight.ps1`; d27–d38 gates `pending_production` until lock lands |
 
@@ -127,7 +127,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 ## 4. CyphaLM upgrade V2
 
 - [x] B3 position weights — opt-in `5445e40` (`--ngram-position-weights`); default OFF; null @ 5k (~−0.00005 BPC) — [`CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md`](docs/reports/CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md)
-- [x] B4 bilinear fusion — opt-in (`--ngram-bilinear-fusion`); default OFF; ~0 BPC @ 5k (see `docs/reports/CYPHALM_B4_BILINEAR_2026-07-17.md`)
+- [x] B4 bilinear fusion — opt-in `f185979` (`--ngram-bilinear-fusion`); default OFF; ~0 BPC @ 5k — [`CYPHALM_B4_BILINEAR_2026-07-17.md`](docs/reports/CYPHALM_B4_BILINEAR_2026-07-17.md)
 - [x] B1 gated fusion — worse (+0.116 BPC), shelved
 - [x] Learnable views — neutral, keep fixed
 
@@ -152,7 +152,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 ## 6. Paper / writeup
 
 - [x] `paper/CyphaLM_paper.md` rewritten (`e9ac580`)
-- [ ] Narrative reconciliation vs lock (§0.5 BPC pin conflict)
+- [x] Narrative reconciliation vs lock (§0.5 BPC pin — canonical **2.873**, historical sweeps labeled)
 - [ ] Submit (2027 Q1 target)
 
 ---

@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-17 (late evening):** **Phases 0–9 addressed** (mix of done / opt-in / no-go). **This wave:** P6 IB opt-in `f0ea334`; P7 score-match opt-in (LUT kept) `f19e167`; P8 RB audit no-go `322cb68`. **Open:** P4; P3 default-on / XOR ≥75%; overnight H16/19/25. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-17 (late evening):** **Phases 0–9 addressed** (mix of done / opt-in / no-go). **This wave:** P4 BMA opt-in `33125b8`; P6 IB opt-in `f0ea334`; P7 score-match opt-in (LUT kept) `f19e167`; P8 RB audit no-go `322cb68`; B3 position weights `5445e40`; B4 bilinear fusion `f185979`; infer latency ~48% win `4d3afa2`. **Open:** P3 default-on / XOR ≥75%; overnight H16/19/25. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
 
 ---
 
@@ -14,7 +14,7 @@
 | 1 | EM keystone | [x] Done | `31bbb0c`/`7a07f8b` — `em_step.hpp`, `em_step.cpp`, `em_step_smoke` |
 | 2 | Fix MoE with EM | [x] Done | `de4fa16` — EM responsibilities in `mke_scalar_train_step`; util caveat in `OPTIMALITY_PHASE2_2026-07-17.md` |
 | 3 | Per-class GMM (real XOR fix) | [~] Opt-in; XOR no-go | `1b59f3e` — `use_class_gmm` default OFF; XOR ON≈51% — see `OPTIMALITY_PHASE3_2026-07-17.md` |
-| 4 | Bayesian model averaging over Δk | [ ] Not started | |
+| 4 | Bayesian model averaging over Δk | [~] Opt-in shipped | `33125b8` — analytic NIG BMA default OFF; see `OPTIMALITY_PHASE4_2026-07-17.md` |
 | 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
 | 6 | Variational IB encoder | [~] Opt-in | `f0ea334` — default OFF; see `OPTIMALITY_PHASE6_2026-07-17.md` |
 | 7 | Score matching → delete Bessel LUT | [~] Opt-in; LUT kept | `f19e167` — score-match path + CTest; LUT retained — see `OPTIMALITY_PHASE7_2026-07-17.md` |
@@ -144,7 +144,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 4 — Bayesian model averaging over Δk
 
-**Status:** [ ] **Not started**.
+**Status:** [~] **Opt-in shipped** (2026-07-17) — `33125b8`; analytic NIG BMA at inference (`use_nig_bma` default OFF); ECE smoke within tolerance; see `OPTIMALITY_PHASE4_2026-07-17.md`.
 
 **Objective:** Stop collapsing `Δk` to a point. Keep the conjugate posterior (NIG is already conjugate → closed-form) and average over it at prediction.
 
