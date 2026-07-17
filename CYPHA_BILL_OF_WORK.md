@@ -75,7 +75,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] RFF auto-gamma shipped — **76.3%** @ `rff_dim=4096`, **~2.7pp** to sklearn (was ~18pp @ Nyström M=256)
 - [x] RFF wired into `d03_xor` (opt-in `CYPHA_D03_KERNEL_BASIS=rff`)
 - [x] Nyström M=512 impractical (`O(M³)`/step); M=384 marginal
-- [ ] Promote RFF auto-gamma to production default for generalizable `latent` mode
+- [x] Promote RFF auto-gamma to recommended exploratory default for generalizable `latent` mode — [`RFF_LATENT_PROMOTE_2026-07-17.md`](docs/reports/RFF_LATENT_PROMOTE_2026-07-17.md); `xor_pair` prod default unchanged
 - [ ] D14 kernelized routing — clean negative; do not default
 
 ### P2 — Auto-gamma RFF as default
