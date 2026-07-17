@@ -47,6 +47,10 @@ struct BenchConfig {
   /// Fixed RBF bandwidth for RFF, bypassing the auto-gamma median heuristic (comparison baseline).
   /// Sentinel <= 0 means "use auto-gamma" (the default).
   double rff_fixed_gamma = -1.0;
+  /// ``uniform`` (default) or ``leverage`` Nyström landmark reservoir (Phase 5 opt-in).
+  std::string nystrom_landmark_sampling = "uniform";
+  /// ``iid`` (default) or ``sorf`` RFF weight initialization (Phase 5 opt-in).
+  std::string rff_projection = "iid";
 };
 
 struct SeedResult {
@@ -190,11 +194,16 @@ double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
   extras.total_steps = &total_steps;
   const int kdim = use_kernel ? kernel_feature_dim(cfg, d, infer.d_latent) : infer.d_latent;
 
-  // Calibration batch for RFF auto-gamma (median pairwise-distance heuristic over the same feature
-  // representation used at train/eval time — latent h, raw x, or xor_pair — computed before any weight
-  // updates so the projection is frozen and unbiased by training order).
+  // Calibration batch for RFF auto-gamma and/or leverage Nyström init (median pairwise-distance
+  // heuristic over the same feature representation used at train/eval time — latent h, raw x, or
+  // xor_pair — computed before any weight updates so the projection is frozen and unbiased by
+  // training order).
   std::vector<double> calib_rowmajor;
-  if (use_kernel && cfg.kernel_basis == "rff") {
+  const bool need_calib =
+      use_kernel &&
+      (cfg.kernel_basis == "rff" ||
+       (cfg.kernel_basis == "nystrom" && cfg.nystrom_landmark_sampling == "leverage"));
+  if (need_calib) {
     std::vector<double> feat_buf;
     const std::size_t n_calib = std::min<std::size_t>(sp.x_tr.size(), 256);
     calib_rowmajor.reserve(n_calib * static_cast<std::size_t>(kdim));
@@ -218,10 +227,22 @@ double run_seed_mode(int seed, bool use_kernel, const BenchConfig& cfg) {
                                       calib_rowmajor.data(),
                                       static_cast<int>(calib_rowmajor.size() / static_cast<std::size_t>(kdim)),
                                       kdim, cfg.rff_gamma_scale, 256, static_cast<std::uint64_t>(seed));
+      if (cfg.rff_projection == "sorf") {
+        return cypha::KernelMemory::make_orthogonal_rff(kdim, cfg.rff_dim, gamma,
+                                                         static_cast<std::uint64_t>(seed));
+      }
       return cypha::KernelMemory::make_rff(kdim, cfg.rff_dim, gamma, static_cast<std::uint64_t>(seed));
     }
     cypha::KernelMemory nystrom_km(kdim, cfg.kernel_m, static_cast<std::uint64_t>(seed));
     nystrom_km.set_gamma_scale(cfg.gamma_scale);
+    if (cfg.nystrom_landmark_sampling == "leverage") {
+      nystrom_km.set_landmark_sampling(cypha::KernelMemory::LandmarkSamplingKind::LeverageScore);
+      if (!calib_rowmajor.empty()) {
+        nystrom_km.init_leverage_landmarks_from_samples(
+            calib_rowmajor.data(),
+            static_cast<int>(calib_rowmajor.size() / static_cast<std::size_t>(kdim)), kdim);
+      }
+    }
     return nystrom_km;
   }();
   extras.kernel_mem = use_kernel ? &km : nullptr;
@@ -306,6 +327,10 @@ BenchConfig parse_bench_config(int argc, char** argv) {
       cfg.rff_gamma_scale = std::atof(argv[++i]);
     } else if (arg == "--rff-fixed-gamma" && i + 1 < argc) {
       cfg.rff_fixed_gamma = std::atof(argv[++i]);
+    } else if (arg == "--nystrom-landmark-sampling" && i + 1 < argc) {
+      cfg.nystrom_landmark_sampling = argv[++i];
+    } else if (arg == "--rff-projection" && i + 1 < argc) {
+      cfg.rff_projection = argv[++i];
     }
   }
   return cfg;
@@ -326,6 +351,8 @@ void usage() {
             << "  --rff-dim N          RFF projection dimension (default 512, kernel_basis=rff)\n"
             << "  --rff-gamma-scale G  multiplier on RFF auto (median-heuristic) gamma (default 1.0)\n"
             << "  --rff-fixed-gamma G  fixed RBF bandwidth for RFF, bypassing auto-gamma (comparison)\n"
+            << "  --nystrom-landmark-sampling {uniform,leverage}  Nyström reservoir (default uniform)\n"
+            << "  --rff-projection {iid,sorf}  RFF weight init (default iid; sorf = SORF orthogonal)\n"
             << "  --no-shuffle         disable per-pass train shuffle\n"
             << "  --tune               grid search M x gamma_scale x blend\n"
             << "  --tune-seeds N       seeds per tune cell (default 2)\n";
@@ -468,8 +495,9 @@ int xor_kernel_bench_main(int argc, char** argv) {
             << ",\n  \"kernel_basis\": \"" << cfg.kernel_basis << "\",\n  \"kernel_m\": " << cfg.kernel_m
             << ",\n  \"gamma_scale\": " << cfg.gamma_scale << ",\n  \"kernel_lr_scale\": " << cfg.kernel_lr_scale
             << ",\n  \"rff_dim\": " << cfg.rff_dim << ",\n  \"rff_gamma_scale\": " << cfg.rff_gamma_scale
-            << ",\n  \"rff_fixed_gamma\": " << cfg.rff_fixed_gamma << ",\n  \"kernel_feature_mode\": \""
-            << cfg.kernel_feature_mode << "\",\n  \"shuffle_train\": "
+            << ",\n  \"rff_fixed_gamma\": " << cfg.rff_fixed_gamma << ",\n  \"nystrom_landmark_sampling\": \""
+            << cfg.nystrom_landmark_sampling << "\",\n  \"rff_projection\": \"" << cfg.rff_projection
+            << "\",\n  \"kernel_feature_mode\": \"" << cfg.kernel_feature_mode << "\",\n  \"shuffle_train\": "
             << (cfg.shuffle_train ? "true" : "false") << ",\n  \"linear\": [\n";
   for (int s = 0; s < cfg.seeds; ++s) {
     if (s) {

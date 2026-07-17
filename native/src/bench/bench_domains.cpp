@@ -3272,6 +3272,8 @@ struct D03KernelExperimentConfig {
     std::string feature_mode = "xor_pair";
     int rff_dim = 4096;
     double rff_gamma_scale = 1.0;
+    std::string nystrom_landmark_sampling = "uniform";
+    std::string rff_projection = "iid";
 };
 
 D03KernelExperimentConfig d03_kernel_experiment_from_env() {
@@ -3287,6 +3289,13 @@ D03KernelExperimentConfig d03_kernel_experiment_from_env() {
     }
     if (const std::optional<std::string> v = cypha::env_get("CYPHA_D03_RFF_GAMMA_SCALE"); v.has_value() && !v->empty()) {
         cfg.rff_gamma_scale = std::atof(v->c_str());
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D03_NYSTROM_LANDMARK_SAMPLING");
+        v.has_value() && !v->empty()) {
+        cfg.nystrom_landmark_sampling = *v;
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D03_RFF_PROJECTION"); v.has_value() && !v->empty()) {
+        cfg.rff_projection = *v;
     }
     return cfg;
 }
@@ -3311,6 +3320,11 @@ Json run_d03_xor() {
     if (kernel_cfg.basis == "rff") {
         cmd << " --kernel-basis rff --rff-dim " << kernel_cfg.rff_dim
             << " --rff-gamma-scale " << kernel_cfg.rff_gamma_scale;
+        if (kernel_cfg.rff_projection == "sorf") {
+            cmd << " --rff-projection sorf";
+        }
+    } else if (kernel_cfg.nystrom_landmark_sampling == "leverage") {
+        cmd << " --nystrom-landmark-sampling leverage";
     }
     const Json j = Json::parse(capture_process_output(cmd.str()));
     Json kernel_result{
@@ -3324,6 +3338,10 @@ Json run_d03_xor() {
     if (kernel_cfg.basis == "rff") {
         kernel_result["rff_dim"] = j.value("rff_dim", kernel_cfg.rff_dim);
         kernel_result["rff_gamma_scale"] = j.value("rff_gamma_scale", kernel_cfg.rff_gamma_scale);
+        kernel_result["rff_projection"] = j.value("rff_projection", kernel_cfg.rff_projection);
+    } else {
+        kernel_result["nystrom_landmark_sampling"] =
+            j.value("nystrom_landmark_sampling", kernel_cfg.nystrom_landmark_sampling);
     }
     Json experiments{
         {"S3_xor_linear",
