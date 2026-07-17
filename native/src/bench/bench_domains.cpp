@@ -639,6 +639,8 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
     }
     Json out{
         {"accuracy", cypha::bench::accuracy(y_true, y_pred)},
+        {"macro_f1", cypha::bench::f1_macro(y_true, y_pred)},
+        {"balanced_accuracy", cypha::bench::balanced_accuracy(y_true, y_pred)},
         {"mean_epistemic_var", mean_epi},
         {"expert_count", static_cast<int>(m.labels.size())},
     };
