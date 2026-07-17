@@ -34,6 +34,9 @@ struct Args {
     std::vector<int> haystack_chars;
     std::uint64_t seed = 42;
     bool write_table = false;
+    /// Opt-in: recap fact before QUESTION + extra teacher-forced prefix passes (SSM/context warm-up).
+    bool context_warmup = false;
+    int warmup_passes = 2;
 };
 
 struct CharCodec {
@@ -46,7 +49,9 @@ void usage() {
     std::cerr
         << "usage: cyphalm_needle_haystack [--out PATH] [--needle-len L]\n"
         << "       [--haystack-chars N,N,...] [--train-epochs E] [--seed S] [--write-table]\n"
-        << "FAST (CYPHA_BENCH_FAST=1): haystack 64,128; train_epochs=4.\n";
+        << "       [--context-warmup] [--warmup-passes N]\n"
+        << "FAST (CYPHA_BENCH_FAST=1): haystack 32,64; train_epochs=15.\n"
+        << "  --context-warmup: recap fact before QUESTION + N prefix warm-up passes at eval.\n";
 }
 
 std::vector<int> default_haystack_chars() {
@@ -93,6 +98,10 @@ Args parse_args(int argc, char** argv) {
             a.seed = static_cast<std::uint64_t>(std::stoull(need("--seed")));
         } else if (arg == "--write-table") {
             a.write_table = true;
+        } else if (arg == "--context-warmup") {
+            a.context_warmup = true;
+        } else if (arg == "--warmup-passes") {
+            a.warmup_passes = std::stoi(need("--warmup-passes"));
         } else if (arg == "--help" || arg == "-h") {
             usage();
             std::exit(0);
@@ -105,6 +114,9 @@ Args parse_args(int argc, char** argv) {
     }
     if (a.needle_len < 4) {
         throw std::runtime_error("needle_len must be >= 4");
+    }
+    if (a.warmup_passes < 1) {
+        throw std::runtime_error("warmup_passes must be >= 1");
     }
     return a;
 }
@@ -196,27 +208,39 @@ struct NeedleSequence {
     int answer_start = 0;
 };
 
-NeedleSequence build_sequence(const std::string& needle, int haystack_chars, std::uint64_t seed) {
+NeedleSequence build_sequence(const std::string& needle, int haystack_chars, std::uint64_t seed,
+                              bool context_warmup) {
     NeedleSequence seq;
     seq.needle = needle;
     const std::string fact = "FACT: The secret code is [[" + needle + "]].\n";
     const std::string haystack = haystack_filler(haystack_chars, seed);
+    const std::string recap =
+        context_warmup ? ("RECAP: The secret code is [[" + needle + "]].\n") : std::string{};
     seq.prompt_prefix = "QUESTION: What is the secret code? ANSWER: ";
-    seq.text = fact + haystack + seq.prompt_prefix + needle;
-    seq.answer_start = static_cast<int>(fact.size() + haystack.size() + seq.prompt_prefix.size());
+    seq.text = fact + haystack + recap + seq.prompt_prefix + needle;
+    seq.answer_start =
+        static_cast<int>(fact.size() + haystack.size() + recap.size() + seq.prompt_prefix.size());
     return seq;
 }
 
-double eval_answer_bpc(cypha::cyphalm::CyphaLMModel& model, const std::vector<int>& ids,
-                       int answer_start) {
+void warmup_prefix(cypha::cyphalm::CyphaLMModel& model, const std::vector<int>& ids, int answer_start,
+                   int warmup_passes) {
     model.reset_context();
+    const int passes = std::max(1, warmup_passes);
+    for (int pass = 0; pass < passes; ++pass) {
+        for (int i = 0; i < answer_start - 1; ++i) {
+            model.predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]));
+        }
+    }
+}
+
+double eval_answer_bpc(cypha::cyphalm::CyphaLMModel& model, const std::vector<int>& ids,
+                       int answer_start, int warmup_passes) {
     const int vocab = static_cast<int>(model.config().vocab_size);
     if (answer_start < 1 || answer_start >= static_cast<int>(ids.size())) {
         return std::numeric_limits<double>::quiet_NaN();
     }
-    for (int i = 0; i < answer_start - 1; ++i) {
-        model.predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]));
-    }
+    warmup_prefix(model, ids, answer_start, warmup_passes);
     double bits = 0.0;
     int scored = 0;
     for (int i = answer_start - 1; i < static_cast<int>(ids.size()) - 1; ++i) {
@@ -250,15 +274,12 @@ int argmax_token(const std::vector<double>& log_probs) {
 }
 
 double eval_token_recall(cypha::cyphalm::CyphaLMModel& model, const std::vector<int>& ids,
-                         int answer_start) {
-    model.reset_context();
+                         int answer_start, int warmup_passes) {
     const int vocab = static_cast<int>(model.config().vocab_size);
     if (answer_start < 1 || answer_start >= static_cast<int>(ids.size())) {
         return 0.0;
     }
-    for (int i = 0; i < answer_start - 1; ++i) {
-        model.predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]));
-    }
+    warmup_prefix(model, ids, answer_start, warmup_passes);
     int correct = 0;
     int total = 0;
     for (int i = answer_start; i < static_cast<int>(ids.size()); ++i) {
@@ -282,7 +303,9 @@ double eval_token_recall(cypha::cyphalm::CyphaLMModel& model, const std::vector<
 
 Json run_depth_tier(const Args& args, const std::string& needle, int haystack_chars,
                     const CharCodec& codec) {
-    const NeedleSequence seq = build_sequence(needle, haystack_chars, args.seed + haystack_chars);
+    const NeedleSequence seq =
+        build_sequence(needle, haystack_chars, args.seed + haystack_chars, args.context_warmup);
+    const int warmup_passes = args.context_warmup ? args.warmup_passes : 1;
     const std::vector<int> ids = encode_text(seq.text, codec);
     const int answer_start = seq.answer_start;
     if (answer_start <= 0 || answer_start >= static_cast<int>(seq.text.size())) {
@@ -310,8 +333,8 @@ Json run_depth_tier(const Args& args, const std::string& needle, int haystack_ch
         static_cast<int>(gen.generated_ids.size()) >= suffix_len &&
         generated.substr(0, static_cast<std::size_t>(suffix_len)) == needle;
 
-    const double bpc_answer = eval_answer_bpc(model, ids, answer_start);
-    const double token_recall = eval_token_recall(model, ids, answer_start);
+    const double bpc_answer = eval_answer_bpc(model, ids, answer_start, warmup_passes);
+    const double token_recall = eval_token_recall(model, ids, answer_start, warmup_passes);
 
     Json row;
     row["haystack_chars"] = haystack_chars;
@@ -322,6 +345,7 @@ Json run_depth_tier(const Args& args, const std::string& needle, int haystack_ch
     row["token_recall"] = token_recall;
     row["recalled"] = token_recall >= 1.0;
     row["bpc_answer"] = std::isnan(bpc_answer) ? Json(nullptr) : Json(bpc_answer);
+    row["warmup_passes"] = warmup_passes;
     return row;
 }
 
@@ -330,7 +354,7 @@ Json run_experiment(const Args& args) {
 
     std::string vocab_text;
     for (int depth : args.haystack_chars) {
-        vocab_text += build_sequence(needle, depth, args.seed + depth).text;
+        vocab_text += build_sequence(needle, depth, args.seed + depth, args.context_warmup).text;
     }
 
     CharCodec codec;
@@ -363,6 +387,8 @@ Json run_experiment(const Args& args) {
     out["context_mode"] = "char_lstm";
     out["seed"] = args.seed;
     out["fast"] = cypha::bench::bench_env_truthy("CYPHA_BENCH_FAST");
+    out["context_warmup"] = args.context_warmup;
+    out["warmup_passes"] = args.context_warmup ? args.warmup_passes : 1;
     out["haystack_chars_requested"] = args.haystack_chars;
     out["n_depths"] = static_cast<int>(args.haystack_chars.size());
     out["n_recalled"] = n_recalled;

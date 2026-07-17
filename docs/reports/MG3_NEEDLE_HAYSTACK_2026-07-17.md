@@ -43,6 +43,10 @@ ctest --test-dir native/build_mg3 -R native_needle_haystack_smoke --output-on-fa
 $env:CYPHA_BENCH_FAST=1; native/build_mg3/cyphalm_needle_haystack.exe --seed 42 --write-table
 ```
 
+## Follow-up: context warm-up (same day)
+
+See [`MG3_WARMUP_2026-07-17.md`](MG3_WARMUP_2026-07-17.md). Opt-in `--context-warmup` (fact recap + multi-pass prefix) lifted mean `token_recall` **0.05 → 0.35** (+0.30). Smoke now passes `--context-warmup` by default; runner CLI remains opt-in.
+
 ## Notes
 
 - Cheap synthetic domain; not a production long-context claim.

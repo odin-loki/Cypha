@@ -84,9 +84,12 @@ int main(int argc, char** argv) {
         }
 
         const fs::path out = fs::temp_directory_path() / "cypha_needle_haystack_smoke.json";
+        // MG3 warm-up A/B (2026-07-17): --context-warmup lifted recall_rate 0.05→0.35 (≥0.1);
+        // keep default-on for smoke.
         const std::vector<std::string> cli = {
             "--out", out.string(),
             "--seed", "42",
+            "--context-warmup",
         };
         const cypha::bench::RunProcessResult proc =
             cypha::bench::run_executable_capture(runner_exe, cli);
