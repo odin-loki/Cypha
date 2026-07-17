@@ -379,6 +379,14 @@ add_executable(sample_efficiency_curve_smoke tools/sample_efficiency_curve_smoke
 target_link_libraries(sample_efficiency_curve_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(sample_efficiency_curve_smoke)
 
+add_executable(cyphalm_robustness_curve tools/cyphalm_robustness_curve.cpp)
+target_link_libraries(cyphalm_robustness_curve PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(cyphalm_robustness_curve)
+
+add_executable(robustness_curve_smoke tools/robustness_curve_smoke.cpp)
+target_link_libraries(robustness_curve_smoke PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(robustness_curve_smoke)
+
 add_executable(cyphalm_needle_haystack tools/cyphalm_needle_haystack.cpp)
 target_link_libraries(cyphalm_needle_haystack PRIVATE cypha_lm_native cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cyphalm_needle_haystack)
@@ -483,6 +491,8 @@ set(
   bench_metrics_smoke
   cyphalm_sample_efficiency_curve
   sample_efficiency_curve_smoke
+  cyphalm_robustness_curve
+  robustness_curve_smoke
   cyphalm_needle_haystack
   needle_haystack_smoke
   cyphalm_memorization_canary
@@ -1189,6 +1199,17 @@ if(TARGET sample_efficiency_curve_smoke)
       --exe-dir "$<TARGET_FILE_DIR:cyphalm_sample_efficiency_curve>"
   )
   set_tests_properties(native_sample_efficiency_curve_smoke PROPERTIES
+    ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  )
+endif()
+
+if(TARGET robustness_curve_smoke)
+  add_test(
+    NAME native_robustness_curve_smoke
+    COMMAND "$<TARGET_FILE:robustness_curve_smoke>"
+      --exe-dir "$<TARGET_FILE_DIR:cyphalm_robustness_curve>"
+  )
+  set_tests_properties(native_robustness_curve_smoke PROPERTIES
     ENVIRONMENT "CYPHA_BENCH_FAST=1"
   )
 endif()

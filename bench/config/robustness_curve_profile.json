@@ -1,0 +1,10 @@
+{
+  "curve_id": "adversarial_robustness",
+  "description": "D15C FGSM-proxy accuracy vs perturbation epsilon (MC3 Addendum 2)",
+  "profile": "d15",
+  "dataset": "digits_hog",
+  "default_epsilons": [0.0, 0.05, 0.1, 0.2, 0.5],
+  "fast_epsilons": [0.0, 0.05, 0.1],
+  "max_eval_default": 500,
+  "max_eval_fast": 120
+}

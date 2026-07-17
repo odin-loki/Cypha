@@ -1893,6 +1893,102 @@ Json run_d14() {
     return experiments;
 }
 
+Json run_d15_fgsm_robustness_curve_impl(const std::vector<double>& epsilons, int max_eval,
+                                        std::uint64_t seed) {
+    if (epsilons.size() < 3) {
+        throw std::runtime_error("FGSM robustness curve requires >=3 epsilon points");
+    }
+    const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
+    const cypha::bench::ProfileJson regime = cypha::bench::classification_params(&profile);
+    const DigitDataset digits = load_digits_hog_dataset();
+    if (digits.test_x.empty()) {
+        throw std::runtime_error("digits HOG test split is empty");
+    }
+
+    OnlineClassifier clf =
+        make_online_classifier(static_cast<int>(digits.train_x.front().size()), seed, regime.value("enc_lr", 0.002),
+                               regime);
+    train_classifier_online(clf, digits.train_x, digits.train_y, 4, seed);
+
+    const int n = max_eval >= 0
+                      ? std::min(max_eval, static_cast<int>(digits.test_x.size()))
+                      : std::min(500, static_cast<int>(digits.test_x.size()));
+
+    struct AdvSample {
+        std::vector<double> x;
+        std::string y;
+        std::vector<int> sign;
+    };
+    std::vector<AdvSample> adv_samples;
+    adv_samples.reserve(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        const auto& x = digits.test_x[static_cast<std::size_t>(i)];
+        const std::string& y = digits.test_y[static_cast<std::size_t>(i)];
+        AdvSample sample{x, y, std::vector<int>(x.size(), 0)};
+        for (std::size_t j = 0; j < x.size(); ++j) {
+            std::vector<double> x_plus = x;
+            std::vector<double> x_minus = x;
+            x_plus[j] += 1e-4;
+            x_minus[j] -= 1e-4;
+            const std::string p_plus = online_clf_predict(clf.infer, x_plus);
+            const std::string p_minus = online_clf_predict(clf.infer, x_minus);
+            if (p_plus != y) {
+                sample.sign[j] = 1;
+            } else if (p_minus != y) {
+                sample.sign[j] = -1;
+            }
+        }
+        adv_samples.push_back(std::move(sample));
+    }
+
+    auto apply_fgsm = [](const AdvSample& sample, double epsilon) {
+        std::vector<double> x_adv = sample.x;
+        if (epsilon <= 0.0) {
+            return x_adv;
+        }
+        for (std::size_t j = 0; j < x_adv.size(); ++j) {
+            if (sample.sign[j] != 0) {
+                x_adv[j] += static_cast<double>(sample.sign[j]) * epsilon;
+                if (x_adv[j] < 0.0) {
+                    x_adv[j] = 0.0;
+                }
+            }
+        }
+        return x_adv;
+    };
+
+    Json points = Json::array();
+    for (double epsilon : epsilons) {
+        int correct = 0;
+        double epi_sum = 0.0;
+        for (const AdvSample& sample : adv_samples) {
+            const std::vector<double> x_adv = apply_fgsm(sample, epsilon);
+            const std::string pred = online_clf_predict(clf.infer, x_adv);
+            if (pred == sample.y) {
+                ++correct;
+            }
+            epi_sum += online_clf_epistemic(clf.infer, x_adv);
+        }
+        points.push_back(Json{
+            {"epsilon", epsilon},
+            {"accuracy", static_cast<double>(correct) / static_cast<double>(n)},
+            {"mean_epistemic", epi_sum / static_cast<double>(n)},
+            {"n_eval", n},
+        });
+    }
+
+    return Json{
+        {"curve_id", "adversarial_robustness"},
+        {"metric", "accuracy"},
+        {"perturbation", "fgsm_proxy"},
+        {"dataset", "digits_hog"},
+        {"bench_seed", seed},
+        {"n_eval", n},
+        {"epsilons_requested", epsilons},
+        {"points", points},
+    };
+}
+
 Json run_d15() {
     const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
     const cypha::bench::ProfileJson regime = cypha::bench::classification_params(&profile);
@@ -1937,43 +2033,19 @@ Json run_d15() {
     };
 
     auto experiment_15c = [&]() {
-        OnlineClassifier clf = make_online_classifier(static_cast<int>(digits.train_x.front().size()), kBenchSeed + 2,
-                                                      regime.value("enc_lr", 0.002), regime);
-        train_classifier_online(clf, digits.train_x, digits.train_y, 4, kBenchSeed + 2);
-        const int n = std::min(500, static_cast<int>(digits.test_x.size()));
-        int acc_nat = 0;
-        int acc_adv = 0;
-        double epi_nat = 0.0;
-        double epi_adv = 0.0;
-        for (int i = 0; i < n; ++i) {
-            const auto& x = digits.test_x[static_cast<std::size_t>(i)];
-            const std::string& y = digits.test_y[static_cast<std::size_t>(i)];
-            const std::string pred = online_clf_predict(clf.infer, x);
-            if (pred == y) ++acc_nat;
-            epi_nat += online_clf_epistemic(clf.infer, x);
-
-            std::vector<double> x_adv = x;
-            for (std::size_t j = 0; j < x_adv.size(); ++j) {
-                std::vector<double> x_plus = x;
-                std::vector<double> x_minus = x;
-                x_plus[j] += 1e-4;
-                x_minus[j] -= 1e-4;
-                const std::string p_plus = online_clf_predict(clf.infer, x_plus);
-                const std::string p_minus = online_clf_predict(clf.infer, x_minus);
-                if (p_plus != y) x_adv[j] += 0.1;
-                else if (p_minus != y) x_adv[j] -= 0.1;
-                if (x_adv[j] < 0.0) x_adv[j] = 0.0;
+        const std::vector<double> epsilons = {0.0, 0.05, 0.1, 0.2, 0.5};
+        Json curve = run_d15_fgsm_robustness_curve_impl(epsilons, cypha::bench::bench_scale(500, 120),
+                                                        kBenchSeed + 2);
+        curve["accuracy_natural"] = curve["points"].front()["accuracy"];
+        curve["mean_epistemic_natural"] = curve["points"].front()["mean_epistemic"];
+        for (const auto& row : curve["points"]) {
+            if (std::abs(row["epsilon"].get<double>() - 0.1) < 1e-9) {
+                curve["accuracy_adversarial"] = row["accuracy"];
+                curve["mean_epistemic_adversarial"] = row["mean_epistemic"];
+                break;
             }
-            const std::string pred_a = online_clf_predict(clf.infer, x_adv);
-            if (pred_a == y) ++acc_adv;
-            epi_adv += online_clf_epistemic(clf.infer, x_adv);
         }
-        return Json{
-            {"accuracy_natural", static_cast<double>(acc_nat) / static_cast<double>(n)},
-            {"accuracy_adversarial", static_cast<double>(acc_adv) / static_cast<double>(n)},
-            {"mean_epistemic_natural", epi_nat / static_cast<double>(n)},
-            {"mean_epistemic_adversarial", epi_adv / static_cast<double>(n)},
-        };
+        return curve;
     };
 
     const Json experiments{
@@ -9876,5 +9948,10 @@ std::vector<DomainSpec> build_all_domains() {
 std::vector<DomainSpec> all_domains() { return build_all_domains(); }
 
 DomainJson run_d16_ewc_sweep() { return run_d16_ewc_sweep_impl(); }
+
+DomainJson run_d15_fgsm_robustness_curve(const std::vector<double>& epsilons, int max_eval,
+                                          std::uint64_t seed) {
+    return run_d15_fgsm_robustness_curve_impl(epsilons, max_eval, seed);
+}
 
 }  // namespace cypha::bench

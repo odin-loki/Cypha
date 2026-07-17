@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -28,5 +29,9 @@ std::vector<DomainSpec> all_domains();
 /// never writes to `bench/report/tables/` or `bench/BASELINE_REPORT.md`. See
 /// native/tools/ewc_d16b_sweep.cpp and docs/reports/EWC_D16B_SCOPING_2026-07-12.md.
 DomainJson run_d16_ewc_sweep();
+
+/// D15C FGSM-proxy robustness curve (accuracy vs perturbation epsilon). MC3 Addendum 2.
+DomainJson run_d15_fgsm_robustness_curve(const std::vector<double>& epsilons, int max_eval = -1,
+                                          std::uint64_t seed = 42);
 
 }  // namespace cypha::bench
