@@ -152,6 +152,70 @@
     }
     table.exp-table th { color: var(--muted); font-weight: 500; }
     #experiments-list.empty { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+    .chat-log {
+      min-height: 280px;
+      max-height: 420px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      padding: 0.65rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 0.75rem;
+    }
+    .chat-msg {
+      max-width: 88%;
+      padding: 0.55rem 0.75rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .chat-msg.user {
+      align-self: flex-end;
+      background: #1e3352;
+      border: 1px solid var(--accent);
+    }
+    .chat-msg.assistant {
+      align-self: flex-start;
+      background: var(--panel);
+      border: 1px solid var(--border);
+    }
+    .chat-msg.system {
+      align-self: center;
+      max-width: 100%;
+      font-size: 0.8rem;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      padding: 0.25rem;
+    }
+    .chat-msg.pending { opacity: 0.75; }
+    .chat-msg .meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 0.35rem;
+      font-family: ui-monospace, Consolas, monospace;
+    }
+    .chat-composer textarea { margin-bottom: 0.5rem; min-height: 2.5rem; }
+    #chat-status { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.45rem 0.5rem;
+      font-size: 0.85rem;
+    }
+    details.lm-advanced summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 0.5rem;
+    }
   </style>
 </head>
 <body>
@@ -240,17 +304,45 @@
 
     <div id="tab-lm" class="tab-panel">
       <section>
-        <h2>CyphaLM generate</h2>
-        <p class="hint">POST /generate (falls back to /lm/generate if unavailable).</p>
-        <label for="lm-prompt">prompt_ids (JSON array of integers)</label>
-        <textarea id="lm-prompt">[1, 2, 3]</textarea>
-        <label for="lm-max-tokens">max_tokens</label>
-        <input type="number" id="lm-max-tokens" value="8" min="1" max="512">
-        <div class="row">
-          <button type="button" id="btn-lm-generate">Generate</button>
-          <button type="button" id="btn-lm-metrics" class="secondary">GET /lm/metrics</button>
+        <h2>CyphaLM Chat</h2>
+        <p class="hint">Conversational pane over <code>POST /generate/stream</code> (SSE) with fallback to <code>POST /generate</code>.</p>
+        <p id="chat-status">Load a checkpoint via <code>POST /lm/load</code> or start <code>cypha_rest --cyphalm-checkpoint</code>.</p>
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+        <div class="chat-composer">
+          <label for="chat-input">Message</label>
+          <textarea id="chat-input" placeholder="Type a prompt for CyphaLM…"></textarea>
+          <div class="row">
+            <label for="chat-strategy">strategy</label>
+            <select id="chat-strategy">
+              <option value="temperature">temperature</option>
+              <option value="greedy">greedy</option>
+              <option value="top_k">top_k</option>
+              <option value="top_p" selected>top_p</option>
+              <option value="uncertainty_gated">uncertainty_gated</option>
+            </select>
+            <label for="chat-max-tokens">max_tokens</label>
+            <input type="number" id="chat-max-tokens" value="32" min="1" max="512" style="width:5rem">
+            <label><input type="checkbox" id="chat-stream" checked> stream (SSE)</label>
+            <label><input type="checkbox" id="chat-epistemic"> epistemic_halt</label>
+            <button type="button" id="btn-chat-send">Send</button>
+            <button type="button" id="btn-chat-clear" class="secondary">Clear</button>
+          </div>
         </div>
-        <pre id="lm-out" class="out"></pre>
+      </section>
+      <section>
+        <details class="lm-advanced">
+          <summary>Advanced — raw token API</summary>
+          <p class="hint">POST /generate (falls back to /lm/generate if unavailable).</p>
+          <label for="lm-prompt">prompt_ids (JSON array of integers)</label>
+          <textarea id="lm-prompt">[1, 2, 3]</textarea>
+          <label for="lm-max-tokens">max_tokens</label>
+          <input type="number" id="lm-max-tokens" value="8" min="1" max="512">
+          <div class="row">
+            <button type="button" id="btn-lm-generate">Generate</button>
+            <button type="button" id="btn-lm-metrics" class="secondary">GET /lm/metrics</button>
+          </div>
+          <pre id="lm-out" class="out"></pre>
+        </details>
       </section>
     </div>
 

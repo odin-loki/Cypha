@@ -316,6 +316,273 @@
     return result;
   }
 
+  async function lmGenerateStream(body, onChunk) {
+    const payload = Object.assign({}, body, { stream: true });
+    const opts = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    };
+    let path = "/generate/stream";
+    let res = await fetch(path, opts);
+    if (res.status === 404) {
+      path = "/lm/generate/stream";
+      res = await fetch(path, opts);
+    }
+    if (res.status === 404 || !res.body) {
+      return { streamed: false, result: await lmGenerate(body) };
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        data = text;
+      }
+      return { streamed: false, result: { status: res.status, data } };
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+      for (const part of parts) {
+        const line = part
+          .split("\n")
+          .map((l) => l.trim())
+          .find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        try {
+          const chunk = JSON.parse(line.slice(6));
+          onChunk(chunk);
+        } catch (_) {
+          /* ignore malformed SSE lines */
+        }
+      }
+    }
+    return { streamed: true, status: res.status };
+  }
+
+  const CHAT_VOCAB = 128;
+  let chatContextText = "";
+  let chatBusy = false;
+
+  function encodePromptChars(text, vocabSize) {
+    const uniq = [];
+    for (const c of text) {
+      if (!uniq.includes(c)) uniq.push(c);
+    }
+    uniq.sort();
+    const limit = Math.max(vocabSize - 1, 1);
+    if (uniq.length > limit) uniq.length = limit;
+    const char2id = new Map();
+    uniq.forEach((c, i) => char2id.set(c, i + 1));
+    const ids = [];
+    for (const c of text) {
+      ids.push(char2id.has(c) ? char2id.get(c) : 0);
+    }
+    return ids;
+  }
+
+  function decodeGeneratedIds(ids, prompt, vocabSize) {
+    const uniq = [];
+    for (const c of prompt) {
+      if (!uniq.includes(c)) uniq.push(c);
+    }
+    uniq.sort();
+    const limit = Math.max(vocabSize - 1, 1);
+    if (uniq.length > limit) uniq.length = limit;
+    const id2char = new Map([[0, "?"]]);
+    uniq.forEach((c, i) => id2char.set(i + 1, c));
+    return ids.map((id) => id2char.get(id) ?? "?").join("");
+  }
+
+  function chatBody(promptIds) {
+    const max_tokens = parseInt($("chat-max-tokens").value, 10) || 32;
+    return {
+      prompt_ids: promptIds,
+      max_tokens,
+      temperature: 0.9,
+      strategy: $("chat-strategy").value,
+      top_k: 40,
+      top_p: 0.92,
+      uncertainty_threshold: null,
+      epistemic_halt: $("chat-epistemic").checked,
+      stream: $("chat-stream").checked,
+    };
+  }
+
+  function appendChatMessage(role, text, meta) {
+    const log = $("chat-log");
+    if (!log) return null;
+    const el = document.createElement("div");
+    el.className = "chat-msg " + role;
+    const body = document.createElement("div");
+    body.className = "chat-text";
+    body.textContent = text;
+    el.appendChild(body);
+    if (meta) {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = meta;
+      el.appendChild(m);
+    }
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+
+  function setChatStatus(text) {
+    const el = $("chat-status");
+    if (el) el.textContent = text;
+  }
+
+  function setChatBusy(busy) {
+    chatBusy = busy;
+    const send = $("btn-chat-send");
+    const input = $("chat-input");
+    if (send) send.disabled = busy;
+    if (input) input.disabled = busy;
+  }
+
+  async function sendChatMessage() {
+    if (chatBusy) return;
+    const input = $("chat-input");
+    const userText = input.value.trim();
+    if (!userText) return;
+
+    const promptText = chatContextText + userText;
+    let promptIds;
+    try {
+      promptIds = encodePromptChars(promptText, CHAT_VOCAB);
+    } catch (e) {
+      appendChatMessage("system", "Encode error: " + String(e));
+      return;
+    }
+
+    appendChatMessage("user", userText);
+    input.value = "";
+    chatContextText = promptText;
+
+    const assistantEl = appendChatMessage("assistant", "…", "generating");
+    assistantEl.classList.add("pending");
+    const textNode = assistantEl.querySelector(".chat-text");
+    const metaNode = assistantEl.querySelector(".meta");
+    const generatedIds = [];
+    let halted = false;
+    let haltedEpistemic = false;
+    const t0 = performance.now();
+    setChatBusy(true);
+    setChatStatus("Calling /generate…");
+
+    try {
+      const body = chatBody(promptIds);
+      const useStream = body.stream;
+
+      if (useStream) {
+        const streamResult = await lmGenerateStream(body, (chunk) => {
+          if (chunk.done) {
+            if (chunk.halted_on_uncertainty) halted = true;
+            return;
+          }
+          if (typeof chunk.token_id === "number") {
+            generatedIds.push(chunk.token_id);
+            const decoded = decodeGeneratedIds(generatedIds, promptText, CHAT_VOCAB);
+            textNode.textContent = decoded || "…";
+            if (metaNode) {
+              metaNode.textContent =
+                "token " +
+                generatedIds.length +
+                " · epistemic=" +
+                (chunk.epistemic_var != null ? Number(chunk.epistemic_var).toFixed(4) : "?");
+            }
+          }
+        });
+
+        if (!streamResult.streamed) {
+          const { status, data } = streamResult.result;
+          if (status < 200 || status >= 300) {
+            textNode.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+            assistantEl.classList.remove("pending");
+            setChatStatus("Generate failed (HTTP " + status + ").");
+            return;
+          }
+          const ids = Array.isArray(data.generated_ids) ? data.generated_ids : [];
+          generatedIds.push(...ids);
+          halted = !!data.halted_on_uncertainty;
+          haltedEpistemic = !!data.halted_on_epistemic;
+          textNode.textContent =
+            decodeGeneratedIds(generatedIds, promptText, CHAT_VOCAB) ||
+            (ids.length ? "[" + ids.join(", ") + "]" : "(empty)");
+        }
+      } else {
+        const { status, data } = await lmGenerate(body);
+        if (status < 200 || status >= 300) {
+          textNode.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+          assistantEl.classList.remove("pending");
+          setChatStatus("Generate failed (HTTP " + status + ").");
+          return;
+        }
+        const ids = Array.isArray(data.generated_ids) ? data.generated_ids : [];
+        generatedIds.push(...ids);
+        halted = !!data.halted_on_uncertainty;
+        haltedEpistemic = !!data.halted_on_epistemic;
+        textNode.textContent =
+          decodeGeneratedIds(generatedIds, promptText, CHAT_VOCAB) ||
+          (ids.length ? "[" + ids.join(", ") + "]" : "(empty)");
+      }
+
+      assistantEl.classList.remove("pending");
+      const decoded = textNode.textContent;
+      chatContextText = promptText + decoded;
+      const ms = (performance.now() - t0).toFixed(0);
+      const haltNote = halted
+        ? haltedEpistemic
+          ? " · halted (epistemic)"
+          : " · halted (uncertainty)"
+        : "";
+      if (metaNode) {
+        metaNode.textContent =
+          generatedIds.length +
+          " tokens · " +
+          ms +
+          " ms" +
+          haltNote +
+          " · ids=[" +
+          generatedIds.slice(0, 12).join(", ") +
+          (generatedIds.length > 12 ? ", …" : "") +
+          "]";
+      }
+      setChatStatus("Last reply: " + generatedIds.length + " tokens in " + ms + " ms.");
+    } catch (e) {
+      assistantEl.classList.remove("pending");
+      textNode.textContent = String(e);
+      setChatStatus("Request error.");
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  $("btn-chat-send").addEventListener("click", sendChatMessage);
+  $("btn-chat-clear").addEventListener("click", () => {
+    chatContextText = "";
+    const log = $("chat-log");
+    if (log) log.innerHTML = "";
+    setChatStatus("Conversation cleared.");
+  });
+  $("chat-input").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && !ev.shiftKey) {
+      ev.preventDefault();
+      sendChatMessage();
+    }
+  });
+
   $("btn-lm-generate").addEventListener("click", async () => {
     try {
       const prompt_ids = parseIntArray($("lm-prompt").value);
