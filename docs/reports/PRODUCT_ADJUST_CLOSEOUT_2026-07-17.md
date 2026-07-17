@@ -3,7 +3,7 @@
 **Author:** Odin Loch (agent closeout)  
 **Scope:** Summarize what landed in the bounded **product/profile adjust** wave vs what remains blocked on overnight or multi-day research.  
 **Repo HEAD at closeout:** `4d5dbbf` (code); this doc is docs-only follow-up.  
-**Overnight:** Read-only health — H17 @ 20/25 still running; see [`OVERNIGHT_HEALTH_2026-07-17.md`](OVERNIGHT_HEALTH_2026-07-17.md) §7.
+**Overnight:** Read-only health — H18 @ 21/25 in flight; see [`OVERNIGHT_HEALTH_2026-07-17.md`](OVERNIGHT_HEALTH_2026-07-17.md) §8.
 
 ---
 
@@ -11,7 +11,7 @@
 
 The bounded wave shipped **infer/train floor profiling**, **Optimality P0–9** (done / opt-in / no-go mix), **REST multi-model + Studio Web chat**, **Addendum-2 metrics (MC/MR/MG/MS)**, **ONNX/GGUF export**, **parallel `score_matrix`**, **Qt compare polish**, and **federated merge golden parity** — all without touching `build_math`, `build_deff`, `BASELINE_*`, or the live overnight cell-sweep.
 
-**Blocked on overnight / multi-day research:** 300k production cell-sweep completion (H17–H22), baseline lock refresh + d27–d38 production gates, RFF default promotion, P3 XOR GMM, RPSM zero-BPTT gap, hidden=512 @ 300k D_eff Phase 3, math-integration production certificate, and release publish.
+**Blocked on overnight / multi-day research:** 300k production cell-sweep completion (H19–H22 remain), baseline lock refresh + d27–d38 production gates, RFF default promotion, P3 XOR GMM, RPSM zero-BPTT gap, hidden=512 @ 300k D_eff Phase 3, math-integration production certificate, and release publish.
 
 ---
 
@@ -108,7 +108,7 @@ Canonical plan: [`CYPHA_OPTIMALITY_PLAN.md`](../../CYPHA_OPTIMALITY_PLAN.md).
 
 | Blocker | State @ closeout | Unblocks |
 |---------|------------------|----------|
-| **300k cell-sweep H17–H22** | H17 @ 20/25 in flight (~59 min at §7 refresh); PID 50044 active | H22 child exit + `write_overnight_artifacts` |
+| **300k cell-sweep H19–H22** | H18 @ 21/25 in flight (progress line 2026-07-17T11:45:54Z); PID 47108 active; poll `processes=4` | H22 child exit + `write_overnight_artifacts` |
 | **`poll_and_finalize_overnight.ps1 -AutoCommit`** | Waiting on sweep | After H22 + artifact flush |
 | **d27–d38 production gates** | `pending_production` | Baseline lock refresh post-overnight |
 | **d38 merge (115→116 CTests)** | Blocked on 0.1–0.2 | Lock lands |
@@ -138,7 +138,7 @@ Overnight health: [`OVERNIGHT_HEALTH_2026-07-17.md`](OVERNIGHT_HEALTH_2026-07-17
 
 ## Suggested execution order (post-closeout)
 
-1. **Wait** for H17–H22 overnight (do not restart).
+1. **Wait** for H19–H22 overnight (do not restart).
 2. **`poll_and_finalize_overnight.ps1 -AutoCommit`** when sweep completes.
 3. Merge **d38**; run production validate env hooks.
 4. Promote **RFF auto-gamma** default; re-evaluate P3 XOR.

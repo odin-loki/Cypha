@@ -182,3 +182,37 @@ Total CPU ~2307 s over ~59 min wall ≈ **65% duty cycle** — consistent with a
 ### Recommended action (unchanged)
 
 **Wait.** Do not restart H17, do not finalize, do not AutoCommit. Re-check trigger remains: no H18 line by **13:00Z** **and** PID 50044 CPU delta ≈ 0 over 5 min **and** poll STALL/`processes=0`.
+
+---
+
+## 8. Refresh — 2026-07-17T11:45:54Z (local ~21:45 AEST)
+
+**Scope:** Read-only re-check; no processes killed.  
+**Verdict:** **HEALTHY — H17 completed; H18 in progress (21/25). Wait.**
+
+### Progress
+
+| Event | Timestamp (UTC) | Notes |
+|-------|-----------------|-------|
+| H17 progress line (variant start) | 10:30:30 | — |
+| H18 progress line (variant start) | **11:45:54** | **21/25** — H17 child exited on schedule |
+| H16→H17 gap | — | **123 min** |
+| H17→H18 gap | — | **75 min** |
+
+New H18 child PID **47108** (`--cell-variant H18`, 300k train) started at 11:45:54Z. Parent orchestrator PID 30632 unchanged. Poll watcher heartbeats continue **`processes=4 lock_n_train=300000`**; no STALL/ERROR lines.
+
+### Remaining ETA (H19–H22 + finalize)
+
+At recent cadence (~75–123 min per variant):
+
+| Item | Estimate |
+|------|----------|
+| H19 progress line | ~**2026-07-17T13:00Z–13:30Z** |
+| H20 progress line | ~**2026-07-17T14:30Z–15:30Z** |
+| H21 progress line | ~**2026-07-17T16:00Z–17:30Z** |
+| H22 progress line (25/25) | ~**2026-07-17T17:30Z–19:00Z** |
+| Artifact flush + `poll_and_finalize_overnight.ps1` | After H22 child exits |
+
+### Recommended action
+
+**Wait.** Do not restart H18, do not finalize, do not AutoCommit. When H22 completes and artifacts flush, run **`poll_and_finalize_overnight.ps1 -AutoCommit`**.
