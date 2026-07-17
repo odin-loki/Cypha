@@ -6,8 +6,8 @@
 `docs/CYPHALM_UPGRADE_V2.md`, `docs/CYPHA_TESTS_PHASE2.md`, `docs/native/*`, `CHANGELOG.md`.
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete);
 115 CTests blocking gate (116 when `d38` merged).
-**Repo state as of this update (2026-07-17 evening):** **160 CTests** blocking gate; Optimality P0–2, P5, P9
-(`CriticalityVector`) done; P3 opt-in shipped; §0.5 pin **2.873**; MC2/MS1 metrics; overnight H16/19/25 still running.
+**Repo state as of this update (2026-07-17 late evening):** **160 CTests** blocking gate; Optimality **P0–9 addressed**
+(opt-in/no-go mix); §0.5 pin **2.873**; MC2/MS1 metrics; overnight H16/19/25 still running.
 
 ---
 
@@ -17,7 +17,12 @@
 |------|---------|----------|
 | **Optimality P0–2, P5, P9** | [x] Done | P0 `4133054`; P1 `31bbb0c`/`7a07f8b`; P2 `de4fa16`; P5 `da9be39`; P9 `CriticalityVector` `c759e72` — [`CYPHA_OPTIMALITY_PLAN.md`](CYPHA_OPTIMALITY_PLAN.md) |
 | **Optimality P3 (class GMM)** | [~] Opt-in; XOR no-go | `1b59f3e` default OFF; XOR ~51% — needs different approach or kernels |
-| **Optimality P4, P6–8** | [ ] Not started | BMA, IB, score matching, Rao-Blackwell |
+| **Optimality P4** | [ ] Not started | BMA over Δk |
+| **Optimality P6 (IB)** | [~] Opt-in | `f0ea334` default OFF — [`OPTIMALITY_PHASE6_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE6_2026-07-17.md) |
+| **Optimality P7 (score match)** | [~] Opt-in; LUT kept | `f19e167` — [`OPTIMALITY_PHASE7_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE7_2026-07-17.md) |
+| **Optimality P8 (RB)** | [x] Audit no-go | `322cb68` — no MC estimators in scope — [`OPTIMALITY_PHASE8_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE8_2026-07-17.md) |
+| **B3 position weights** | [~] Opt-in; null @ 5k | `5445e40` default OFF; ~−0.00005 BPC — [`CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md`](docs/reports/CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md) |
+| **Infer latency (RPSM scratch)** | [x] ~48% win | `4d3afa2` — [`INFER_LATENCY_PROFILE_2026-07-17.md`](docs/reports/INFER_LATENCY_PROFILE_2026-07-17.md) |
 | **D17 perf Parts 1–6** | [x] Done | [`PERFORMANCE_PROFILE_2026-07-12.md`](docs/reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–6; Part 6 `12ad4b3` (skip dead BPTT slow-tier when EWC off) |
 | **P1 XOR kernel gap** | [x] ~2.7pp remaining (was ~18pp) | RFF auto-gamma `rff_dim=4096` → **76.3%** vs sklearn ~79%; [`RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1 |
 | **P2 auto-gamma defaults** | [x] Clarified shipped | `fb5e543` — kernel-LLR RFF auto-γ default in code; remaining D08/D14 re-bench optional |
@@ -121,7 +126,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## 4. CyphaLM upgrade V2
 
-- [x] B3 position weights — opt-in (`--ngram-position-weights`); default OFF; ~−0.00005 BPC @ 5k (see `docs/reports/CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md`)
+- [x] B3 position weights — opt-in `5445e40` (`--ngram-position-weights`); default OFF; null @ 5k (~−0.00005 BPC) — [`CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md`](docs/reports/CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md)
 - [ ] B4 bilinear fusion — not implemented
 - [x] B1 gated fusion — worse (+0.116 BPC), shelved
 - [x] Learnable views — neutral, keep fixed

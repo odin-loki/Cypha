@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-17 (evening):** **Done:** P0 `4133054`; P1 `31bbb0c`/`7a07f8b`; P2 `de4fa16` (util caveat — `OPTIMALITY_PHASE2_2026-07-17.md`); P3 opt-in `1b59f3e` (XOR ~51%, default OFF); P5 `da9be39`; P9 `CriticalityVector` `c759e72`. **Open:** P4, P6–8; P3 default-on / XOR ≥75%; overnight finalize. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-17 (late evening):** **Phases 0–9 addressed** (mix of done / opt-in / no-go). **This wave:** P6 IB opt-in `f0ea334`; P7 score-match opt-in (LUT kept) `f19e167`; P8 RB audit no-go `322cb68`. **Open:** P4; P3 default-on / XOR ≥75%; overnight H16/19/25. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
 
 ---
 
@@ -16,9 +16,9 @@
 | 3 | Per-class GMM (real XOR fix) | [~] Opt-in; XOR no-go | `1b59f3e` — `use_class_gmm` default OFF; XOR ON≈51% — see `OPTIMALITY_PHASE3_2026-07-17.md` |
 | 4 | Bayesian model averaging over Δk | [ ] Not started | |
 | 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
-| 6 | Variational IB encoder | [ ] Not started | |
-| 7 | Score matching → delete Bessel LUT | [~] Opt-in shipped | Score-match path + CTest; LUT retained — see `OPTIMALITY_PHASE7_2026-07-17.md` |
-| 8 | Rao-Blackwellise sampling paths | [ ] Not started | |
+| 6 | Variational IB encoder | [~] Opt-in | `f0ea334` — default OFF; see `OPTIMALITY_PHASE6_2026-07-17.md` |
+| 7 | Score matching → delete Bessel LUT | [~] Opt-in; LUT kept | `f19e167` — score-match path + CTest; LUT retained — see `OPTIMALITY_PHASE7_2026-07-17.md` |
+| 8 | Rao-Blackwellise sampling paths | [x] Audit no-go | `322cb68` — no MC estimators in scope — see `OPTIMALITY_PHASE8_2026-07-17.md` |
 | 9 | Runtime criticality monitor | [~] Partial | `CriticalityVector` tier/cadence `c759e72`; profiler, REST `/intelligence`, profile-guided loss shipped |
 
 ---
@@ -189,7 +189,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 6 — Variational IB encoder (make the stated architecture true)
 
-**Status:** [ ] **Not started**.
+**Status:** [~] **Opt-in shipped** (2026-07-17) — `f0ea334`; variational IB default OFF; see `OPTIMALITY_PHASE6_2026-07-17.md`.
 
 **Objective:** Replace the heuristic Fisher–Rao push-pull encoder with an actual Information Bottleneck minimiser. You *cite* IB as a founding thread; currently the encoder only gauges it.
 
@@ -211,7 +211,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 7 — Score matching → delete the Bessel LUT
 
-**Status:** [ ] **Not started** — blocked on Phase 0.
+**Status:** [~] **Opt-in shipped; LUT kept** (2026-07-17) — `f19e167`; score-match path + CTest; see `OPTIMALITY_PHASE7_2026-07-17.md`.
 
 **Objective:** Fit the GH/NIG gate without its partition function; drop `bessel_ratios.npz`. Only became possible once parity was retired (Phase 0).
 
@@ -233,7 +233,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 8 — Rao-Blackwellise the sampling paths (free variance reduction)
 
-**Status:** [ ] **Not started**.
+**Status:** [x] **Audit no-go** (2026-07-17) — `322cb68`; no MC estimators in scope; see `OPTIMALITY_PHASE8_2026-07-17.md`.
 
 **Objective:** Replace Monte-Carlo sample averages with conditional expectations given sufficient statistics, anywhere you sample (KDE generation, priority-replay estimates).
 
