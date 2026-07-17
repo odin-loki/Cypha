@@ -105,7 +105,7 @@ Forgetting ratio: 0.0000  [EXCELLENT]
   All 5 seeds: acc_before=1.000 -> acc_after=1.000
 ```
 
-**Q5 answered (forgetting):** No catastrophic forgetting. Cypha's sufficient-statistics approach provides natural retention.
+**Q5 answered (forgetting):** No catastrophic forgetting **in this single-stream Phase 4 probe** (all seeds 1.000 → 1.000). **Scope note (2026-07):** this is not shared-model multi-task retention — D16B measures **~81% forgetting** on a shared classifier (iris → wine → digits); per-task isolated saves (D16F) score 0.0. Prescribed marketing language: *no forgetting per isolated model file; shared-model continual learning is an open problem* — see [`RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) Priority 5 and [`EWC_D16B_SCOPING_2026-07-12.md`](EWC_D16B_SCOPING_2026-07-12.md) (EWC λ=2.0 best **~0.108**, still not solved).
 
 ### Label Noise Robustness
 

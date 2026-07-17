@@ -540,7 +540,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 **What to do:**
 1. ~~Investigate elastic weight consolidation (EWC) as a post-hoc overlay on the NIG field.~~ **Scoping shipped 2026-07-12** — growable-`D` bug fixed; opt-in `world_mu` Fisher; D16B λ sweep shows modest gain at λ=2.0 (forgetting 0.135→0.108), world-field protection harmful at high λ — see [`EWC_D16B_SCOPING_2026-07-12.md`](reports/EWC_D16B_SCOPING_2026-07-12.md).
 2. Alternatively, redesign the expert routing so task-specific experts are not overwritten.
-3. Update the marketing claim: "no forgetting **per isolated model file**; shared-model continual learning is an open problem."
+3. ~~Update the marketing claim: "no forgetting **per isolated model file**; shared-model continual learning is an open problem."~~ **Done (2026-07-17)** — README, Qt Help (no prior overclaim), [`DIAGNOSTIC_REPORT.md`](reports/DIAGNOSTIC_REPORT.md), intelligence-stats papers audited; EWC best **~0.108** @ λ=2.0 per [`EWC_D16B_SCOPING_2026-07-12.md`](reports/EWC_D16B_SCOPING_2026-07-12.md).
 
 ### Priority 6 — CellAI / ECG / temporal
 

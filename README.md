@@ -210,7 +210,7 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 | R4 — Breast cancer | 0.957 | 0.950 | 0.983 | | |
 
 **Key findings:**
-- Catastrophic forgetting ratio: **0.000** (perfect retention; sufficient-statistics design).
+- **Forgetting:** No forgetting per isolated model file (D16F: 0.000); shared-model continual learning is an open problem (D16B: forgetting_score ≈ 0.813; EWC scoping best **~0.108** at λ=2.0 — see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 5 and [`docs/reports/EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md)).
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: linear LLR ~50%; **Nyström kernel LLR ~61%** (+10.6 pp, M=256) on S3 XOR. Diagnostic ceiling (~83% kernel SVM) still open — see [`docs/FUTURE.md`](docs/FUTURE.md) §0a.

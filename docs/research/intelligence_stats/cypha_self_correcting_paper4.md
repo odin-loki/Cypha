@@ -714,7 +714,7 @@ Paradoxically the full self-correcting Cypha system has capabilities beyond curr
 
 - **Better calibration (C = 0.82)** than any current LLM — knows what it does not know more reliably than GPT-4 class systems
 - **True epistemic decomposition** — can distinguish reducible from irreducible uncertainty, which no current deployed system does natively
-- **Online learning without catastrophic forgetting** — adapts to new data continuously, which transformers cannot do
+- **Per-task isolated online learning without catastrophic forgetting** — D16F confirms zero forgetting by architectural isolation; shared-model continual learning is an open problem (D16B), which transformers also lack
 - **Zero retraining deployment** — the NIG updates are online; no gradient descent required after initial training
 - **Self-monitoring** — detects its own degradation via the health signal, which no current deployed system does
 
