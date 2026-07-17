@@ -138,17 +138,22 @@ Overnight health: [`OVERNIGHT_HEALTH_2026-07-17.md`](OVERNIGHT_HEALTH_2026-07-17
 
 ## Suggested execution order (post-closeout)
 
-1. **Wait** for H19–H22 overnight (do not restart).
-2. **`poll_and_finalize_overnight.ps1 -AutoCommit`** when sweep completes.
-3. Merge **d38**; run production validate env hooks.
-4. Promote **RFF auto-gamma** default; re-evaluate P3 XOR — **advanced:** latent exploratory default promoted `beacef3` (`xor_pair` unchanged); see [`RFF_LATENT_PROMOTE_2026-07-17.md`](RFF_LATENT_PROMOTE_2026-07-17.md).
-5. Schedule **hidden=512 @ 300k** on uncontended machine.
-6. RPSM **BPTT-in-training** research track in parallel with cell-sweep analysis — **advanced:** `summary.csv` aggregation script shipped `a04af20` ([`CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md`](CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md)); run after sweep completes.
+> **Wave 2 update:** See [`PRODUCT_ADJUST_WAVE2_2026-07-17.md`](PRODUCT_ADJUST_WAVE2_2026-07-17.md) for post-closeout landings. Finalize command + prerequisites: [`FINALIZE_PREP_2026-07-17.md`](FINALIZE_PREP_2026-07-17.md).
+
+1. **Wait** for H19–H22 overnight (do not restart, do not kill).
+2. **`poll_and_finalize_overnight.ps1 -AutoCommit -BuildDir native/build_math`** when H22 + artifact flush complete — exact checklist in [`FINALIZE_PREP_2026-07-17.md`](FINALIZE_PREP_2026-07-17.md).
+3. **`aggregate_cell_sweep_summary.ps1`** on flushed variant JSON ([`CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md`](CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md) — shipped `a04af20`).
+4. Merge **d38**; run production validate env hooks.
+5. Re-evaluate **P3 XOR GMM** using RFF latent profile — latent exploratory default promoted `beacef3` (`xor_pair` prod default unchanged); see [`RFF_LATENT_PROMOTE_2026-07-17.md`](RFF_LATENT_PROMOTE_2026-07-17.md).
+6. Schedule **hidden=512 @ 300k** on uncontended machine.
+7. RPSM **BPTT-in-training** research track in parallel with cell-sweep analysis.
 
 ---
 
 ## Cross-links
 
+- Wave 2 closeout (DONE): [`PRODUCT_ADJUST_WAVE2_2026-07-17.md`](PRODUCT_ADJUST_WAVE2_2026-07-17.md)
+- Finalize prep (post-H22): [`FINALIZE_PREP_2026-07-17.md`](FINALIZE_PREP_2026-07-17.md)
 - Master task list: [`CYPHA_BILL_OF_WORK.md`](../../CYPHA_BILL_OF_WORK.md)
 - Research journal: [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md)
 - Optimality plan: [`CYPHA_OPTIMALITY_PLAN.md`](../../CYPHA_OPTIMALITY_PLAN.md)
