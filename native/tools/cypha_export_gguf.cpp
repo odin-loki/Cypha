@@ -1,12 +1,14 @@
 // cypha_export_gguf — export CyphaDIF inference tensors to GGUF v3.
 //
-// Default mode embeds float32 tensor blobs (enc_W, world.mu, class D, inv_v, llr_bias).
+// Default mode embeds float32 tensor blobs (enc_W, F_field, field_h, world.mu, class D,
+// inv_v, llr_bias).
 // Use --header-only for metadata-only smoke (no weight bytes).
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -30,6 +32,7 @@ struct Args {
   std::string cypha_path;
   std::string out_path;
   std::string manifest_path;
+  std::string verify_path;
   bool embed_weights{true};
   bool dry_run{false};
   bool help{false};
@@ -42,10 +45,12 @@ void usage() {
       << "options:\n"
       << "  --manifest PATH      tensor manifest JSON (default: <out>.manifest.json)\n"
       << "  --header-only        metadata + tensor info only (no weight blobs)\n"
+      << "  --verify PATH        read GGUF and validate magic/header/tensor count\n"
       << "  --dry-run            load model and print summary; do not write files\n"
       << "  --help               show this message\n\n"
       << "notes:\n"
-      << "  - Default embeds enc_W, world.mu (field-conditioned), D [K,d], inv_v, llr_bias.\n"
+      << "  - Default embeds enc_W, F_field, field_h, world.mu (field-conditioned), D [K,d],\n"
+      << "    inv_v, llr_bias.\n"
       << "  - Field-conditioned world.mu and llr_bias are frozen at export time.\n"
       << "  - Sidecar manifest JSON lists tensor shapes and optional inline data.\n";
 }
@@ -72,17 +77,22 @@ Args parse_args(int argc, char** argv) {
       a.embed_weights = false;
     } else if (k == "--full-gguf") {
       a.embed_weights = true;
+    } else if (k == "--verify") {
+      a.verify_path = need("--verify");
     } else if (k == "--dry-run") {
       a.dry_run = true;
     } else {
       throw std::runtime_error("unknown argument: " + k);
     }
   }
-  if (!a.help && a.cypha_path.empty()) {
-    throw std::runtime_error("--cypha is required");
+  if (!a.help && !a.verify_path.empty() && !a.cypha_path.empty()) {
+    throw std::runtime_error("--verify cannot be combined with --cypha export");
   }
-  if (!a.help && !a.dry_run && a.out_path.empty()) {
-    throw std::runtime_error("--out is required unless --dry-run");
+  if (!a.help && a.verify_path.empty() && a.cypha_path.empty()) {
+    throw std::runtime_error("--cypha is required unless --verify");
+  }
+  if (!a.help && a.verify_path.empty() && !a.dry_run && a.out_path.empty()) {
+    throw std::runtime_error("--out is required unless --dry-run or --verify");
   }
   return a;
 }
@@ -155,6 +165,16 @@ ExportTensors build_tensors(const cypha::CyphaInferModel& m) {
 
   const std::vector<float> enc_w = to_f32(m.enc_w);
   out.tensors.push_back({"enc_W", {d, d}, "float32", enc_w});
+
+  if (!m.f_field.empty()) {
+    const std::vector<float> f_field = to_f32(m.f_field);
+    out.tensors.push_back({"F_field", {d, m.field_dim}, "float32", f_field});
+  }
+
+  if (!m.field_h.empty()) {
+    const std::vector<float> field_h = to_f32(m.field_h);
+    out.tensors.push_back({"field_h", {1, m.field_dim}, "float32", field_h});
+  }
 
   const std::vector<float> world_mu = to_f32(compute_mu0_with_field(m));
   out.tensors.push_back({"world.mu", {1, d}, "float32", world_mu});
@@ -336,6 +356,127 @@ std::vector<std::uint8_t> build_gguf(const ExportTensors& exp, bool embed_weight
   return buf;
 }
 
+std::uint32_t read_u32(const std::uint8_t* p) {
+  return static_cast<std::uint32_t>(p[0]) | (static_cast<std::uint32_t>(p[1]) << 8) |
+         (static_cast<std::uint32_t>(p[2]) << 16) | (static_cast<std::uint32_t>(p[3]) << 24);
+}
+
+std::uint64_t read_u64(const std::uint8_t* p) {
+  std::uint64_t v = 0;
+  for (int i = 0; i < 8; ++i) {
+    v |= static_cast<std::uint64_t>(p[i]) << (8 * i);
+  }
+  return v;
+}
+
+std::string read_string_at(const std::vector<std::uint8_t>& buf, std::size_t& pos) {
+  if (pos + 8 > buf.size()) {
+    throw std::runtime_error("GGUF verify: truncated string length");
+  }
+  const std::uint64_t len = read_u64(buf.data() + pos);
+  pos += 8;
+  if (pos + len > buf.size()) {
+    throw std::runtime_error("GGUF verify: truncated string payload");
+  }
+  std::string s(reinterpret_cast<const char*>(buf.data() + pos),
+                reinterpret_cast<const char*>(buf.data() + pos + len));
+  pos += static_cast<std::size_t>(len);
+  return s;
+}
+
+void verify_gguf_file(const std::string& path) {
+  std::ifstream f(path, std::ios::binary);
+  if (!f) {
+    throw std::runtime_error("cannot read " + path);
+  }
+  f.seekg(0, std::ios::end);
+  const std::streamsize sz = f.tellg();
+  if (sz < 24) {
+    throw std::runtime_error("GGUF verify: file too small");
+  }
+  f.seekg(0, std::ios::beg);
+  std::vector<std::uint8_t> buf(static_cast<std::size_t>(sz));
+  f.read(reinterpret_cast<char*>(buf.data()), sz);
+  if (!f) {
+    throw std::runtime_error("GGUF verify: read failed");
+  }
+
+  if (read_u32(buf.data()) != kGgufMagic) {
+    throw std::runtime_error("GGUF verify: bad magic (expected GGUF)");
+  }
+  if (read_u32(buf.data() + 4) != kGgufVersion) {
+    throw std::runtime_error("GGUF verify: unsupported version");
+  }
+  const std::uint64_t n_tensors = read_u64(buf.data() + 8);
+  const std::uint64_t n_kv = read_u64(buf.data() + 16);
+  if (n_tensors == 0) {
+    throw std::runtime_error("GGUF verify: tensor count is zero");
+  }
+  if (n_kv == 0) {
+    throw std::runtime_error("GGUF verify: metadata kv count is zero");
+  }
+
+  std::size_t pos = 24;
+  std::string architecture;
+  for (std::uint64_t i = 0; i < n_kv; ++i) {
+    const std::string key = read_string_at(buf, pos);
+    if (pos + 4 > buf.size()) {
+      throw std::runtime_error("GGUF verify: truncated metadata type");
+    }
+    const std::uint32_t vtype = read_u32(buf.data() + pos);
+    pos += 4;
+    if (vtype == kGgufTypeString) {
+      const std::string value = read_string_at(buf, pos);
+      if (key == "general.architecture") {
+        architecture = value;
+      }
+    } else if (vtype == kGgufTypeUint32) {
+      if (pos + 4 > buf.size()) {
+        throw std::runtime_error("GGUF verify: truncated uint32 metadata");
+      }
+      pos += 4;
+    } else {
+      throw std::runtime_error("GGUF verify: unsupported metadata type");
+    }
+  }
+  if (architecture != "cypha-dif") {
+    throw std::runtime_error("GGUF verify: unexpected architecture '" + architecture + "'");
+  }
+
+  std::vector<std::string> tensor_names;
+  tensor_names.reserve(static_cast<std::size_t>(n_tensors));
+  for (std::uint64_t i = 0; i < n_tensors; ++i) {
+    const std::string name = read_string_at(buf, pos);
+    if (pos + 4 > buf.size()) {
+      throw std::runtime_error("GGUF verify: truncated tensor rank");
+    }
+    const std::uint32_t rank = read_u32(buf.data() + pos);
+    pos += 4;
+    pos += static_cast<std::size_t>(rank) * 8;
+    if (pos + 12 > buf.size()) {
+      throw std::runtime_error("GGUF verify: truncated tensor info");
+    }
+    const std::uint32_t ttype = read_u32(buf.data() + pos);
+    pos += 4;
+    pos += 8;
+    if (ttype != kGgufTensorTypeF32) {
+      throw std::runtime_error("GGUF verify: unexpected tensor type for " + name);
+    }
+    tensor_names.push_back(name);
+  }
+
+  const bool has_enc = std::find(tensor_names.begin(), tensor_names.end(), "enc_W") !=
+                       tensor_names.end();
+  const bool has_d = std::find(tensor_names.begin(), tensor_names.end(), "D") !=
+                     tensor_names.end();
+  if (!has_enc || !has_d) {
+    throw std::runtime_error("GGUF verify: missing required tensors enc_W and/or D");
+  }
+
+  std::cout << "GGUF verify OK: " << path << " (" << buf.size() << " bytes, " << n_tensors
+            << " tensors, " << n_kv << " metadata keys)\n";
+}
+
 void write_file(const std::string& path, const std::vector<std::uint8_t>& bytes) {
   std::ofstream f(path, std::ios::binary);
   if (!f) {
@@ -380,6 +521,11 @@ int main(int argc, char** argv) {
     const Args a = parse_args(argc, argv);
     if (a.help) {
       usage();
+      return 0;
+    }
+
+    if (!a.verify_path.empty()) {
+      verify_gguf_file(a.verify_path);
       return 0;
     }
 
