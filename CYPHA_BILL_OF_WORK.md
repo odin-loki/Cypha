@@ -142,8 +142,11 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | Web UI | [ ] Partial |
 | Multi-model `cypha_rest` | [ ] Not started |
 | **Curriculum / active learning** | [x] Shipped (`curriculum.hpp`, `/uncertainty-rank`) |
-| ONNX export | [ ] Header-only |
-| GGUF export | [ ] Not started |
+| ONNX export | [x] encode→LLR→softmax shipped `1cbdd8c` |
+| GGUF export | [x] Tensors packed `dad723d` |
+| Overnight health | [~] H17 healthy, wait `a09b665` |
+| Sample-efficiency curves | [x] MC5/MG5 `297f59c` |
+| Parallel `score_matrix` | [x] 3.44× @ n=256 `c788f5f` |
 | Federated training | [ ] TLS smoke only |
 | Legacy sigmoid removal | [x] Removed (`kInferWorldGateApiVersion=2`) |
 
