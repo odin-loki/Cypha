@@ -143,7 +143,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 |------|--------|
 | CUDA CI | [x] Local-only (policy) — [`ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md), [`FUTURE.md`](docs/FUTURE.md) §1 |
 | Qt shell polish | [ ] Optional |
-| Web UI | [ ] Partial |
+| Web UI | [~] Chat + empty/readiness polish | `b706647` + `436808f` — [`WEB_UI_POLISH_2026-07-17.md`](docs/reports/WEB_UI_POLISH_2026-07-17.md) |
 | Multi-model `cypha_rest` | [x] Slice shipped `e3a5b63` — [`MULTI_MODEL_REST_2026-07-17.md`](docs/reports/MULTI_MODEL_REST_2026-07-17.md) |
 | **Curriculum / active learning** | [x] Shipped (`curriculum.hpp`, `/uncertainty-rank`) |
 | ONNX export | [x] encode→LLR→softmax `1cbdd8c` (header-only ModelProto smoke) |
@@ -151,7 +151,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | Overnight health | [~] H18 healthy, wait `4a7fb49` — [`OVERNIGHT_HEALTH_2026-07-17.md`](docs/reports/OVERNIGHT_HEALTH_2026-07-17.md) §8 |
 | Sample-efficiency curves | [x] MC5/MG5 `297f59c` — [`SAMPLE_EFFICIENCY_CURVE_2026-07-17.md`](docs/reports/SAMPLE_EFFICIENCY_CURVE_2026-07-17.md) |
 | Parallel `score_matrix` | [x] ~3.4× @ n=256 `c788f5f` (OpenMP row-parallel) |
-| Federated training | [ ] TLS smoke only |
+| Federated training | [~] Golden merge blocking; TLS optional — [`FEDERATED_TLS_STATUS_2026-07-17.md`](docs/reports/FEDERATED_TLS_STATUS_2026-07-17.md) (`d1a9bf1`) |
 | Legacy sigmoid removal | [x] Removed (`kInferWorldGateApiVersion=2`) |
 
 ---
