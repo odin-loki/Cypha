@@ -35,6 +35,7 @@ cypha_add_golden_exe(kernel_llr_golden)
 cypha_add_golden_exe(memory_train_golden)
 cypha_add_golden_exe(multilabel_dif_golden)
 cypha_add_golden_exe(merge_from_golden)
+cypha_add_golden_exe(federated_merge_golden)
 cypha_add_golden_exe(similarity_index_golden)
 cypha_add_golden_exe(preprocessor_golden)
 cypha_add_golden_exe(preprocessor_fit_golden)
@@ -93,6 +94,7 @@ set(
   memory_train_golden
   multilabel_dif_golden
   merge_from_golden
+  federated_merge_golden
   similarity_index_golden
   preprocessor_golden
   preprocessor_fit_golden

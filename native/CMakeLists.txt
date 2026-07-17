@@ -569,6 +569,7 @@ if(MSVC)
   target_compile_options(memory_train_golden PRIVATE /W4 /permissive-)
   target_compile_options(multilabel_dif_golden PRIVATE /W4 /permissive-)
   target_compile_options(merge_from_golden PRIVATE /W4 /permissive-)
+  target_compile_options(federated_merge_golden PRIVATE /W4 /permissive-)
   target_compile_options(similarity_index_golden PRIVATE /W4 /permissive-)
   target_compile_options(memory_train_roundtrip PRIVATE /W4 /permissive-)
   target_compile_options(preprocessor_golden PRIVATE /W4 /permissive-)
@@ -648,6 +649,7 @@ else()
   target_compile_options(memory_train_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(multilabel_dif_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(merge_from_golden PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(federated_merge_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(similarity_index_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(memory_train_roundtrip PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(preprocessor_golden PRIVATE -Wall -Wextra -Wpedantic)
@@ -1269,6 +1271,24 @@ add_test(
     "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_a.json"
     "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_b.json"
     --out "${CMAKE_CURRENT_BINARY_DIR}/federated_merge_smoke.json"
+)
+
+add_test(
+  NAME native_federated_merge_golden
+  COMMAND "$<TARGET_FILE:federated_merge_golden>"
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge"
+)
+set_tests_properties(native_federated_merge_golden PROPERTIES
+  PASS_REGULAR_EXPRESSION "federated_merge parity OK")
+
+add_test(
+  NAME native_federated_coordinator_merge_smoke
+  COMMAND "$<TARGET_FILE:cypha_federated_coordinator>"
+    --merge
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_a.json"
+    "${CMAKE_SOURCE_DIR}/../fixtures/federated_merge/worker_b.json"
+    --min-workers 2
+    --out "${CMAKE_CURRENT_BINARY_DIR}/federated_coordinator_merge_smoke.json"
 )
 
 add_test(
