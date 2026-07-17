@@ -1,8 +1,9 @@
 # Optimality Phase 5b — Leverage / SORF Latent XOR A/B (2026-07-17)
 
-**Build:** `native/build_perf_p5b` (Ninja, Release, MinGW 13.2.0)  
+**Build:** `native/build_perf_p5c` (Ninja, Release, MinGW 13.2.0)  
 **Scope:** Product wiring + latent-mode promotion decision. Did not touch `build_math`, `build_deff`, `BASELINE_*`, overnight, or `CYPHA_*.md`.  
-**Production default unchanged:** D03 `xor_pair` (~98%) remains the shipped path.
+**Production default unchanged:** D03 `xor_pair` (~98%) remains the shipped path.  
+**Budget:** FAST — primary cells are **1 seed × 4 passes** (RFF + Nyström uniform M=256). Nyström leverage at M=256 is pathologically slow online (per-step ridge-leverage Cholesky ≈ O(M⁴)); matched leverage A/B used **M=64, 1×2**.
 
 ## Wiring (shipped)
 
@@ -15,42 +16,63 @@
 
 Defaults remain `uniform` / `iid`. Unset env reproduces prior D03 xor_pair Nyström call.
 
-## Latent-mode A/B (available numbers)
+## Latent-mode A/B (accuracy)
 
-Protocol: `--kernel-feature-mode latent --kernel-m 256 --gamma-scale 1.0`, auto-gamma RFF where applicable.
+Protocol: `--kernel-feature-mode latent`, auto-gamma RFF where applicable. Binary: `native/build_perf_p5c/xor_kernel_bench.exe`.
 
-| Config | Seeds × passes | Linear | Kernel | Δ vs linear | Notes |
-|--------|----------------|--------|--------|-------------|-------|
-| Nyström uniform (baseline) | 1 × 4 | 0.498 | **0.601** | +10.3 pp | Smoke budget; matches ~60% latent ballpark |
-| Nyström leverage | — | — | — | — | Incomplete in this session (same setup queued) |
-| RFF iid D=512 | — | — | — | — | Incomplete |
-| RFF SORF D=512 | — | — | — | — | Incomplete |
-| RFF iid D=1024 | — | — | — | — | Incomplete |
-| RFF SORF D=1024 | — | — | — | — | Incomplete |
+### Primary (matched 1 seed × 4 passes)
+
+| Config | Seeds × passes | Linear | Kernel | Δ vs linear | vs baseline |
+|--------|----------------|--------|--------|-------------|-------------|
+| Nyström uniform M=256 γ-scale=1.0 (baseline) | 1 × 4 | 0.498 | **0.601** | +10.3 pp | — |
+| Nyström leverage M=256 | 1 × 4 | — | — | — | **Incomplete** — online leverage reservoir too slow at M=256 (no finish in >8 min / pass) |
+| RFF iid D=512 | 1 × 4 | 0.498 | **0.672** | +17.4 pp | +7.1 pp vs Nyström uniform |
+| RFF SORF D=512 | 1 × 4 | 0.498 | **0.665** | +16.7 pp | **−0.7 pp vs RFF iid** |
+| RFF iid / SORF D=1024 | — | — | — | — | Skipped (FAST budget) |
+
+### Nyström leverage matched mini-A/B (M=64, 1×2)
+
+Forced by M=256 leverage wall-clock. Same seed/pass budget for both arms:
+
+| Config | Seeds × passes | Linear | Kernel | Δ vs linear | vs uniform |
+|--------|----------------|--------|--------|-------------|------------|
+| Nyström uniform M=64 | 1 × 2 | 0.514 | 0.489 | −2.5 pp | — |
+| Nyström leverage M=64 | 1 × 2 | 0.514 | 0.490 | −2.4 pp | **+0.1 pp** |
 
 Phase 5 approximation smoke (prior report, not XOR accuracy): leverage Nyström ‖K̂−K‖ −14.5%, SORF RFF −13.1% vs iid — quality of sketch, not latent XOR accuracy.
 
-Historical latent RFF (3×8, prior work): iid `rff_dim=4096` → **76.3%**; Nyström M=256 latent → ~62%. Those figures predate this promote pass and are not re-run here.
+Historical latent RFF (3×8, prior work): iid `rff_dim=4096` → **76.3%**; Nyström M=256 latent → ~62%. Those figures predate this promote pass.
 
 ## Promotion decision
 
-**Not promoted.** Available accuracy evidence does not show a ≥1 pp latent win for leverage or SORF over baseline. Approximation gains alone are insufficient without matched latent accuracy.
+**Not promoted.** No config meets the ≥1 pp latent win bar for changing recommended defaults:
 
+| Candidate | Evidence | ≥1 pp win? |
+|-----------|----------|------------|
+| Nyström leverage vs uniform | +0.1 pp at M=64 (1×2); M=256 unfinished | **No** |
+| RFF SORF vs iid (D=512) | 0.665 vs 0.672 (−0.7 pp) | **No** |
+
+Notes (informational only — not a default flip):
+
+- Latent RFF iid D=512 (0.672) beats latent Nyström uniform M=256 (0.601) by +7.1 pp on this FAST cell, but that is a basis choice already available via `--kernel-basis rff` / D03 env; this promote pass was about leverage/SORF sampling, not flipping the latent Nyström default.
 - Keep leverage / SORF **opt-in** via CLI + D03 env flags above.
 - Keep **xor_pair** as production D03 default.
-- Re-run full 3-seed × 8-pass latent matrix when budget allows; promote only if a config wins ≥1 pp accuracy (or same acc with clearly better ‖K̂−K‖ and no regression).
+- Do **not** change latent recommended defaults in docs/env.
 
 ## How to reproduce
 
 ```bash
-cmake -S native -B native/build_perf_p5b -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_EXPERIMENT_DB=OFF -G Ninja
-cmake --build native/build_perf_p5b -j8 --target xor_kernel_bench
+cmake -S native -B native/build_perf_p5c -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_EXPERIMENT_DB=OFF -G Ninja
+cmake --build native/build_perf_p5c -j8 --target xor_kernel_bench
 
-# Latent baselines / opt-in
-xor_kernel_bench --kernel-feature-mode latent --kernel-m 256 --gamma-scale 1.0 --seeds 3 --passes 8
-xor_kernel_bench --kernel-feature-mode latent --kernel-m 256 --gamma-scale 1.0 --nystrom-landmark-sampling leverage --seeds 3 --passes 8
-xor_kernel_bench --kernel-feature-mode latent --kernel-basis rff --rff-dim 512 --seeds 3 --passes 8
-xor_kernel_bench --kernel-feature-mode latent --kernel-basis rff --rff-dim 512 --rff-projection sorf --seeds 3 --passes 8
+# Primary FAST cells (1×4)
+xor_kernel_bench --kernel-feature-mode latent --kernel-m 256 --gamma-scale 1.0 --seeds 1 --passes 4
+xor_kernel_bench --kernel-feature-mode latent --kernel-basis rff --rff-dim 512 --seeds 1 --passes 4
+xor_kernel_bench --kernel-feature-mode latent --kernel-basis rff --rff-dim 512 --rff-projection sorf --seeds 1 --passes 4
+
+# Matched leverage mini-A/B (M=64; M=256 leverage online is impractical)
+xor_kernel_bench --kernel-feature-mode latent --kernel-m 64 --gamma-scale 1.0 --seeds 1 --passes 2
+xor_kernel_bench --kernel-feature-mode latent --kernel-m 64 --gamma-scale 1.0 --nystrom-landmark-sampling leverage --seeds 1 --passes 2
 ```
 
 ## Files
