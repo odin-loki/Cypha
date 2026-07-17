@@ -890,3 +890,93 @@ contention; wall-clock A/B is not trustworthy here. The eliminated ~1.46s/call-b
 every 64 steps vs every step, memory compress/store cadence, n-gram prior refresh) — each needs its
 own bit-identical proof and is higher risk than this pass's pure "DIF output unreachable" gate.
 
+---
+
+## Follow-up (2026-07-17, part 5) — re-profile / compute-bound pass
+
+**Scope:** re-measure Part 3's end-to-end hot path under quieter conditions if possible, then hunt
+for **one** more bit-identical-safe compute/structure fix inside `lstm_backward` /
+`bptt_ssm_update` / `CharLSTM` that Parts 1–4 missed. **Did not touch** `native/build_math`,
+`native/build_deff`, `bench/BASELINE_LOCK.json`, `bench/BASELINE_REPORT.md`, or running
+`cypha_*` overnight processes. Fresh build: `native/build_perf4` (MSVC Release, VS Build Tools
+18 / `cl` 19.51).
+
+**HEAD at start of this pass:** `e0116e4` (later tip advanced under concurrent agents; profiling
+binary built from then-current tree with Parts 1–3 instrumentation intact). `CYPHA_PERF_TRACE`
+confirmed working (train_step + `lstm_backward` + `predict_next` dumps all fire).
+
+### Re-profiled `train_step` (quiet-ish first run)
+
+Command: `cyphalm_bench_native --profile d17 --n-train 8000 --threads 1 --bench-seed 42` with
+`CYPHA_PERF_TRACE=1` on `native/build_perf4\Release` (~40s wall, ~39% CPU load on the host at
+capture — quieter than Part 3's worst contention, still not idle).
+
+`=== CYPHA_PERF_TRACE: train_step phase breakdown over 23970 calls (33.3431s instrumented) ===`
+
+| Phase | Time | Share |
+|---|---|---|
+| **lstm_backward (hybrid path)** | **14.761s** | **44.27%** |
+| predict_next (GRIA+LSTM+hybrid) | 12.640s | 37.91% |
+| bptt_ssm_update | 3.815s | 11.44% |
+| gria_backward | 1.393s | 4.18% |
+| dif_train_step | 0.657s | 1.97% |
+| tail / hebbian / rpsm | <0.08s | <0.25% |
+
+Largest remaining phase after Parts 1–4: still **`lstm_backward`**.
+
+`lstm_backward` sub-phases (same run, 23970 calls, 3.442s instrumented inside
+`CharLSTMHead::backward_step`):
+
+| Sub-phase | Time | Share of backward |
+|---|---|---|
+| **4. weight-gradient outer products (dWx/dWh/db)** | **1.536s** | **44.62%** |
+| 1. output-layer backward (dWy/dby/dh_new) | 0.688s | 20.00% |
+| 5. input-gradient backprop (dx/dE) | 0.598s | 17.37% |
+| 6. hidden-gradient backprop (dh_prev) | 0.581s | 16.87% |
+| 2–3. activation / gate derivatives | 0.039s | ~1.1% |
+
+`predict_next` sub-phases (same run): SSM step ~37.7%, LSTM forward ~32.9%, GRIA input build
+~18.7% — same three-way split Part 3 reported; no new single dominant sub-bucket.
+
+### Candidate tried and **not** shipped
+
+Audited `backward_step` for a Parts-1–3-missed structural win. The only clear candidate was
+**fusing** the two `outer_rowmajor` calls (`dWx`/`dWh` share `dgates`) and the two
+`matvec_transpose_rowmajor` calls (`Wx`/`Wh` share `dgates`) into single passes — pure loop
+fusion, no summation reordering, expected bit-identical.
+
+Prototype in `char_lstm.cpp` (kept out of tree; stash `part5-fusion` dropped):
+- **BPC:** bit-identical on `--n-train 20000 --n-eval 256 --bench-seed 42`
+  (`bpc = 3.4748796956404946`, `bpc_lstm_only = 3.472557891154332`).
+- **Speed:** no trustworthy win. Quiet baseline instrumented `backward_step` was **3.44s**;
+  fused builds under the same host's concurrent load measured **5.9–14.4s** for the same
+  bucket (noise dominates). Interleaved writes into two distinct matrices (`dWx`/`dWh` or
+  `dx`/`dh_prev`) also fight write locality vs the existing sequential row-major passes.
+  End-to-end wall for `--n-train 20000 --n-eval 256` ranged **~81–229s** across back-to-back
+  runs of *unchanged* binaries while `cyphalm_bench_native` / `cypha_cell_hypothesis_sweep`
+  peers held tens of thousands of CPU-seconds — same Part-3 measurement caveat.
+
+Per this task's rule (ship only with clear evidence, else declare floor, do not invent a cosmetic
+change): **code change not committed.**
+
+### Verdict: compute-bound floor reached for this path
+
+After Parts 1–3 (allocator reuse + cache-friendly transpose matvecs + `predict_next` scratch
+buffers) and Part 4 (skip dead DIF on the D17 ngram-fusion path), the remaining hot path is
+genuinely **compute-bound small matvecs/outer products**:
+- `dWx`/`dWh` outer products (~45% of `lstm_backward`, already row-major, allocation-free).
+- `Wy`/`Wx`/`Wh` transpose matvecs (~54% combined of `lstm_backward`, already Part-2
+  cache-ordered).
+- `predict_next` SSM/LSTM/GRIA matvecs (spread; allocation-fixed in Part 3).
+- `bptt_ssm_update` (~11% of `train_step`; allocation-fixed in Part 2, left as fresh
+  `delta`/`delta_slow` owners by design).
+
+No further bit-identical micro-optimization with clear evidence was found inside
+`lstm_backward` / `bptt_ssm_update` / `CharLSTM`. Further gains need either (a) arithmetic /
+algorithm change (out of Part-5 safety scope), (b) reducing how much work runs per step
+(Part 4's direction — more structural skips/throttles), or (c) batch/CUDA paths outside the
+sequential online D17 recurrence.
+
+**Artifacts:** quiet profile log at `bench/results/part5_profile.log` (local, not committed).
+**Commit of this pass:** documentation only.
+
