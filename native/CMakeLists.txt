@@ -379,6 +379,14 @@ add_executable(sample_efficiency_curve_smoke tools/sample_efficiency_curve_smoke
 target_link_libraries(sample_efficiency_curve_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(sample_efficiency_curve_smoke)
 
+add_executable(cyphalm_needle_haystack tools/cyphalm_needle_haystack.cpp)
+target_link_libraries(cyphalm_needle_haystack PRIVATE cypha_lm_native cypha_bench_native)
+cypha_mingw_apply_exe_link_options(cyphalm_needle_haystack)
+
+add_executable(needle_haystack_smoke tools/needle_haystack_smoke.cpp)
+target_link_libraries(needle_haystack_smoke PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(needle_haystack_smoke)
+
 add_executable(curriculum_window_smoke tools/curriculum_window_smoke.cpp)
 target_link_libraries(curriculum_window_smoke PRIVATE cypha_core)
 
@@ -459,6 +467,8 @@ set(
   bench_metrics_smoke
   cyphalm_sample_efficiency_curve
   sample_efficiency_curve_smoke
+  cyphalm_needle_haystack
+  needle_haystack_smoke
   curriculum_window_smoke
   corpus_smoke
   intelligence_profiler_papers
@@ -1159,6 +1169,17 @@ if(TARGET sample_efficiency_curve_smoke)
       --exe-dir "$<TARGET_FILE_DIR:cyphalm_sample_efficiency_curve>"
   )
   set_tests_properties(native_sample_efficiency_curve_smoke PROPERTIES
+    ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  )
+endif()
+
+if(TARGET needle_haystack_smoke)
+  add_test(
+    NAME native_needle_haystack_smoke
+    COMMAND "$<TARGET_FILE:needle_haystack_smoke>"
+      --exe-dir "$<TARGET_FILE_DIR:cyphalm_needle_haystack>"
+  )
+  set_tests_properties(native_needle_haystack_smoke PROPERTIES
     ENVIRONMENT "CYPHA_BENCH_FAST=1"
   )
 endif()
