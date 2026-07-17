@@ -59,6 +59,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"view_learnable", cfg.view_learnable},
         {"ngram_fusion", cfg.ngram_fusion},
         {"ngram_position_weights", cfg.ngram_position_weights},
+        {"ngram_bilinear_fusion", cfg.ngram_bilinear_fusion},
         {"ngram_fuse_split", cfg.ngram_fuse_split},
         {"gria_lr_decay", cfg.gria_lr_decay},
         {"bptt_steps", cfg.bptt_steps},
@@ -129,6 +130,7 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_b("view_learnable", cfg.view_learnable);
     if (c.contains("ngram_fusion")) cfg.ngram_fusion = c.at("ngram_fusion").get<std::string>();
     get_b("ngram_position_weights", cfg.ngram_position_weights);
+    get_b("ngram_bilinear_fusion", cfg.ngram_bilinear_fusion);
     get_b("ngram_fuse_split", cfg.ngram_fuse_split);
     get_d("gria_lr_decay", cfg.gria_lr_decay);
     get_i("bptt_steps", cfg.bptt_steps);
@@ -261,6 +263,13 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
             npz.add_f64("ngram_pos_weights", model.ngram_fusion_->pos_weights(),
                         {static_cast<std::uint32_t>(model.ngram_fusion_->pos_weights().size())});
         }
+        if (!model.ngram_fusion_->w_b_u().empty()) {
+            const int r = static_cast<int>(model.ngram_fusion_->w_b_u().size()) / cfg.field_dim;
+            add_matrix(npz, "ngram_W_b_u", model.ngram_fusion_->w_b_u(), cfg.field_dim, r);
+            add_matrix(npz, "ngram_W_b_vf", model.ngram_fusion_->w_b_vf(), r, cfg.field_dim);
+            add_matrix(npz, "ngram_W_b_ve", model.ngram_fusion_->w_b_ve(), r,
+                       model.ngram_fusion_->embed_in());
+        }
     }
     if (model.view_emb_ && !model.view_emb_->table().empty()) {
         add_matrix(npz, "view_embed", model.view_emb_->table(), cfg.max_view_slots, cfg.view_id_dim);
@@ -342,7 +351,10 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
             model.ngram_fusion_->load_weights(
                 npz.has("ngram_W_field") ? npz.read_f64("ngram_W_field") : std::vector<double>{},
                 npz.has("ngram_W_embed") ? npz.read_f64("ngram_W_embed") : std::vector<double>{},
-                npz.has("ngram_W_gate") ? npz.read_f64("ngram_W_gate") : std::vector<double>{}, pw);
+                npz.has("ngram_W_gate") ? npz.read_f64("ngram_W_gate") : std::vector<double>{}, pw,
+                npz.has("ngram_W_b_u") ? npz.read_f64("ngram_W_b_u") : std::vector<double>{},
+                npz.has("ngram_W_b_vf") ? npz.read_f64("ngram_W_b_vf") : std::vector<double>{},
+                npz.has("ngram_W_b_ve") ? npz.read_f64("ngram_W_b_ve") : std::vector<double>{});
         }
         if (model.view_emb_ && npz.has("view_embed")) {
             model.view_emb_->set_table(npz.read_f64("view_embed"));

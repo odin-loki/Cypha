@@ -457,7 +457,8 @@ void CyphaLMModel::init_components() {
         if (field_in > 0) {
             ngram_fusion_ = std::make_unique<NgramFusion>(
                 cfg_.field_dim, field_in, embed_in, cfg_.ngram_fusion, n_pos,
-                cfg_.ngram_position_weights, cfg_.seed + 4);
+                cfg_.ngram_position_weights, cfg_.ngram_bilinear_fusion, cfg_.gria_rank,
+                cfg_.seed + 4);
         } else {
             std::mt19937_64 rng(cfg_.seed + 4);
             init_proj_from_rng(proj_ngram_embed_, cfg_.field_dim, embed_in, rng, 0.02);

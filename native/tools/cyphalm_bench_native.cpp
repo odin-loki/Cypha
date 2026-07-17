@@ -68,6 +68,7 @@ struct Args {
     int lstm_hidden = -1;
     bool use_self_correcting_loop = false;
     bool ngram_position_weights = false;
+    bool ngram_bilinear_fusion = false;
     std::int64_t bench_seed = -1;
     bool n_train_explicit = false;
     bool n_eval_explicit = false;
@@ -114,7 +115,8 @@ void usage() {
         << "       --use-reu-forget-gate\n"
         << "       --use-self-correcting-loop  (Paper IV epistemic feedback loop in eval/intelligence-profile;\n"
         << "                                    opt-in, default off, hybrid-mode only; see HIDDEN_DIM_SCALE_PLAN.md)\n"
-        << "       --ngram-position-weights  (B3: learnable w_0..w_ngram scalars before W_e; default off)\n";
+        << "       --ngram-position-weights  (B3: learnable w_0..w_ngram scalars before W_e; default off)\n"
+        << "       --ngram-bilinear-fusion  (B4: low-rank field⊗embed bilinear term in sum fusion; default off)\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -229,6 +231,7 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--use-reu-forget-gate") a.use_reu_forget_gate = true;
         else if (k == "--use-self-correcting-loop") a.use_self_correcting_loop = true;
         else if (k == "--ngram-position-weights") a.ngram_position_weights = true;
+        else if (k == "--ngram-bilinear-fusion") a.ngram_bilinear_fusion = true;
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -294,6 +297,9 @@ int main(int argc, char** argv) {
         }
         if (args.ngram_position_weights) {
             cfg.ngram_position_weights = true;
+        }
+        if (args.ngram_bilinear_fusion) {
+            cfg.ngram_bilinear_fusion = true;
         }
         if (args.math_integration) {
             cypha::cyphalm::apply_math_integration_preset(cfg);
@@ -446,6 +452,7 @@ int main(int argc, char** argv) {
             {"lstm_hidden", cfg.lstm_hidden},
             {"use_self_correcting_loop", cfg.use_self_correcting_loop},
             {"ngram_position_weights", cfg.ngram_position_weights},
+            {"ngram_bilinear_fusion", cfg.ngram_bilinear_fusion},
             {"ngram_fusion", cfg.ngram_fusion},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;

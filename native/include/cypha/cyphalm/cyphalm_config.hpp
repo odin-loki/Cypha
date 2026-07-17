@@ -66,6 +66,8 @@ struct CyphaLMConfig {
     int max_view_slots = 16;
     std::string ngram_fusion = "sum";
     bool ngram_position_weights = false;
+    /// B4: low-rank bilinear term ``U @ ((V_f @ field_x) ⊙ (V_e @ embeds))`` added to sum fusion.
+    bool ngram_bilinear_fusion = false;
     bool ngram_fuse_split = true;
     double gria_lr_decay = 0.5;
     int bptt_steps = 0;

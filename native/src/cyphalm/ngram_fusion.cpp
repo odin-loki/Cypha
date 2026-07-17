@@ -17,15 +17,20 @@ double sigmoid(double x) {
     return z / (1.0 + z);
 }
 
+thread_local std::vector<double> g_bilinear_h_e_cache;
+
 }  // namespace
 
 NgramFusion::NgramFusion(int field_dim, int field_in, int embed_in, const std::string& mode,
-                         int n_positions, bool position_weights, std::uint64_t seed)
+                         int n_positions, bool position_weights, bool bilinear_fusion,
+                         int bilinear_rank, std::uint64_t seed)
     : field_dim_(field_dim),
       field_in_(field_in),
       embed_in_(embed_in),
       mode_(mode),
-      n_positions_(n_positions) {
+      n_positions_(n_positions),
+      bilinear_fusion_(bilinear_fusion && mode == "sum"),
+      bilinear_rank_(bilinear_rank > 0 ? bilinear_rank : 32) {
     std::mt19937_64 rng(seed);
     std::normal_distribution<double> nd(0.0, 0.02);
     W_field_.assign(static_cast<std::size_t>(field_dim_ * field_in_), 0.0);
@@ -39,6 +44,15 @@ NgramFusion::NgramFusion(int field_dim, int field_in, int embed_in, const std::s
     }
     if (position_weights && n_positions_ > 0) {
         pos_weights_.assign(static_cast<std::size_t>(n_positions_), 1.0);
+    }
+    if (bilinear_fusion_ && field_in_ > 0 && embed_in_ > 0) {
+        const int r = bilinear_rank_;
+        W_b_u_.assign(static_cast<std::size_t>(field_dim_ * r), 0.0);
+        W_b_vf_.assign(static_cast<std::size_t>(r * field_in_), 0.0);
+        W_b_ve_.assign(static_cast<std::size_t>(r * embed_in_), 0.0);
+        for (auto& v : W_b_u_) v = nd(rng);
+        for (auto& v : W_b_vf_) v = nd(rng);
+        for (auto& v : W_b_ve_) v = nd(rng);
     }
 }
 
@@ -143,6 +157,29 @@ std::vector<double> NgramFusion::forward(const std::vector<double>& field_x,
     for (int i = 0; i < field_dim_; ++i) {
         field_part[static_cast<std::size_t>(i)] += embed_part[static_cast<std::size_t>(i)];
     }
+    if (bilinear_fusion_ && !W_b_u_.empty()) {
+        const int r = bilinear_rank_;
+        thread_local std::vector<double> h_f_scratch;
+        thread_local std::vector<double> h_e_scratch;
+        if (h_f_scratch.size() != static_cast<std::size_t>(r)) {
+            h_f_scratch.assign(static_cast<std::size_t>(r), 0.0);
+            h_e_scratch.assign(static_cast<std::size_t>(r), 0.0);
+        } else {
+            std::fill(h_f_scratch.begin(), h_f_scratch.end(), 0.0);
+            std::fill(h_e_scratch.begin(), h_e_scratch.end(), 0.0);
+        }
+        matvec(W_b_vf_, r, field_in_, field_x, h_f_scratch);
+        matvec(W_b_ve_, r, embed_in_, em, h_e_scratch);
+        g_bilinear_h_e_cache = h_e_scratch;
+        for (int ri = 0; ri < r; ++ri) {
+            const double had = h_f_scratch[static_cast<std::size_t>(ri)] *
+                               h_e_scratch[static_cast<std::size_t>(ri)];
+            for (int i = 0; i < field_dim_; ++i) {
+                field_part[static_cast<std::size_t>(i)] +=
+                    W_b_u_[static_cast<std::size_t>(i * r + ri)] * had;
+            }
+        }
+    }
     return field_part;
 }
 
@@ -159,15 +196,49 @@ std::vector<double> NgramFusion::grad_field_x(const std::vector<double>& grad_v)
         }
         out[static_cast<std::size_t>(r)] = acc;
     }
+    if (bilinear_fusion_ && !W_b_u_.empty() && field_in_ == field_dim_) {
+        const int rank = bilinear_rank_;
+        if (static_cast<int>(g_bilinear_h_e_cache.size()) != rank) {
+            return out;
+        }
+        thread_local std::vector<double> grad_had_scratch;
+        if (grad_had_scratch.size() != static_cast<std::size_t>(rank)) {
+            grad_had_scratch.assign(static_cast<std::size_t>(rank), 0.0);
+        } else {
+            std::fill(grad_had_scratch.begin(), grad_had_scratch.end(), 0.0);
+        }
+        for (int ri = 0; ri < rank; ++ri) {
+            double acc = 0.0;
+            for (int i = 0; i < field_dim_; ++i) {
+                acc += W_b_u_[static_cast<std::size_t>(i * rank + ri)] *
+                       grad_v[static_cast<std::size_t>(i)];
+            }
+            grad_had_scratch[static_cast<std::size_t>(ri)] = acc;
+        }
+        for (int ri = 0; ri < rank; ++ri) {
+            const double grad_h_f =
+                grad_had_scratch[static_cast<std::size_t>(ri)] *
+                g_bilinear_h_e_cache[static_cast<std::size_t>(ri)];
+            for (int c = 0; c < field_in_; ++c) {
+                out[static_cast<std::size_t>(c)] +=
+                    W_b_vf_[static_cast<std::size_t>(ri * field_in_ + c)] * grad_h_f;
+            }
+        }
+    }
     return out;
 }
 
 void NgramFusion::load_weights(const std::vector<double>& w_field, const std::vector<double>& w_embed,
-                               const std::vector<double>& w_gate, const std::vector<double>& pos_weights) {
+                               const std::vector<double>& w_gate, const std::vector<double>& pos_weights,
+                               const std::vector<double>& w_b_u, const std::vector<double>& w_b_vf,
+                               const std::vector<double>& w_b_ve) {
     if (!w_field.empty()) W_field_ = w_field;
     if (!w_embed.empty()) W_embed_ = w_embed;
     if (!w_gate.empty()) W_gate_ = w_gate;
     if (!pos_weights.empty()) pos_weights_ = pos_weights;
+    if (!w_b_u.empty()) W_b_u_ = w_b_u;
+    if (!w_b_vf.empty()) W_b_vf_ = w_b_vf;
+    if (!w_b_ve.empty()) W_b_ve_ = w_b_ve;
 }
 
 void NgramFusion::update_position_weights(const std::vector<double>& grad_v,

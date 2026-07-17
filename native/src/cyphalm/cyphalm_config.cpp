@@ -180,6 +180,7 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_d("ssm_lr", cfg.ssm_lr);
     set_s("ngram_fusion", cfg.ngram_fusion);
     set_b("ngram_position_weights", cfg.ngram_position_weights);
+    set_b("ngram_bilinear_fusion", cfg.ngram_bilinear_fusion);
     set_b("ngram_fuse_split", cfg.ngram_fuse_split);
     set_s("bpe_merges_path", cfg.bpe_merges_path);
     set_s("bpe_vocab_path", cfg.bpe_vocab_path);
