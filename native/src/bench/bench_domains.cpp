@@ -601,22 +601,36 @@ double online_clf_epistemic(const cypha::CyphaInferModel& m, const std::vector<d
 }
 
 Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::vector<double>>& xs,
-                        const std::vector<std::string>& ys) {
+                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out = nullptr) {
+    const int n = static_cast<int>(xs.size());
+    const int k = static_cast<int>(m.labels.size());
     std::vector<std::string> y_true;
     std::vector<std::string> y_pred;
     std::vector<double> epistemic;
     y_true.reserve(xs.size());
     y_pred.reserve(xs.size());
     epistemic.reserve(xs.size());
-    for (std::size_t i = 0; i < xs.size(); ++i) {
-        y_true.push_back(ys[i]);
-        y_pred.push_back(online_clf_predict(m, xs[i]));
-        epistemic.push_back(online_clf_epistemic(m, xs[i]));
+    if (n > 0 && k > 0) {
+        const std::vector<double> flat = flatten_rowmajor(xs);
+        std::vector<double> llr;
+        cypha::batch_llr_from_x(m, flat.data(), n, llr);
+        std::vector<double> probs;
+        cypha::softmax_batch_reference(llr.data(), n, k, 1e-12, probs);
+        for (int i = 0; i < n; ++i) {
+            y_true.push_back(ys[static_cast<std::size_t>(i)]);
+            int best = 0;
+            for (int j = 1; j < k; ++j) {
+                if (llr[static_cast<std::size_t>(i * k + j)] > llr[static_cast<std::size_t>(i * k + best)]) {
+                    best = j;
+                }
+            }
+            y_pred.push_back(m.labels.empty() ? "0" : m.labels[static_cast<std::size_t>(best)]);
+            epistemic.push_back(
+                cypha::regression::mke_routing_entropy(probs.data() + static_cast<std::size_t>(i * k), k, 1e-12));
+        }
     }
-    std::vector<double> errors;
-    errors.reserve(xs.size());
-    for (std::size_t i = 0; i < y_true.size(); ++i) {
-        errors.push_back(y_true[i] == y_pred[i] ? 0.0 : 1.0);
+    if (epistemic_out != nullptr) {
+        *epistemic_out = epistemic;
     }
     double mean_epi = 0.0;
     if (!epistemic.empty()) {
@@ -855,19 +869,29 @@ struct RegExpertStat {
 // same ``(1-blend)*lin + blend*ker`` formula as ``classify_at_h``/``score_matrix_use_field``, applied
 // on top of whatever linear (RPSM or legacy) scores the model actually produces -- so the D14 opt-in
 // kernel path works regardless of the RPSM env toggle.
-void kernel_blend_llr(const cypha::CyphaInferModel& infer, const double* h,
-                      const cypha::KernelMemory* kernel_mem, double kernel_blend, std::vector<double>& llr) {
-    cypha::score_matrix_use_field(infer, h, 1, llr);
+void kernel_blend_llr_batched(const cypha::CyphaInferModel& infer, const double* h, int n,
+                              const cypha::KernelMemory* kernel_mem, double kernel_blend,
+                              std::vector<double>& llr) {
+    cypha::score_matrix_use_field(infer, h, n, llr);
     const int K = static_cast<int>(infer.labels.size());
-    if (kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
-        std::vector<double> kernel_scores;
-        kernel_mem->score_all(h, infer.labels, kernel_scores);
-        for (int k = 0; k < K; ++k) {
-            const double lin = llr[static_cast<std::size_t>(k)];
-            const double ker = kernel_scores[static_cast<std::size_t>(k)];
-            llr[static_cast<std::size_t>(k)] = (1.0 - kernel_blend) * lin + kernel_blend * ker;
+    const int d = infer.d_latent;
+    if (kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0 && n > 0 && d > 0) {
+        std::vector<double> kernel_scores(static_cast<std::size_t>(K));
+        for (int i = 0; i < n; ++i) {
+            kernel_mem->score_all(h + static_cast<std::size_t>(i) * static_cast<std::size_t>(d), infer.labels,
+                                    kernel_scores);
+            for (int k = 0; k < K; ++k) {
+                const double lin = llr[static_cast<std::size_t>(i * K + k)];
+                const double ker = kernel_scores[static_cast<std::size_t>(k)];
+                llr[static_cast<std::size_t>(i * K + k)] = (1.0 - kernel_blend) * lin + kernel_blend * ker;
+            }
         }
     }
+}
+
+void kernel_blend_llr(const cypha::CyphaInferModel& infer, const double* h,
+                      const cypha::KernelMemory* kernel_mem, double kernel_blend, std::vector<double>& llr) {
+    kernel_blend_llr_batched(infer, h, 1, kernel_mem, kernel_blend, llr);
 }
 
 // ``kernel_mem``/``use_kernel_llr``/``kernel_blend`` mirror the D03 kernel-LLR blend convention;
@@ -990,11 +1014,14 @@ OnlineRegressor make_online_regressor(int input_dim, std::uint64_t seed, const c
         std::vector<double> calib_rowmajor;
         if (calib_x != nullptr && kdim > 0) {
             const std::size_t n_calib = std::min<std::size_t>(calib_x->size(), 256);
-            calib_rowmajor.reserve(n_calib * static_cast<std::size_t>(kdim));
-            for (std::size_t i = 0; i < n_calib; ++i) {
-                std::vector<double> h;
-                cypha::batch_encode(r.infer, (*calib_x)[i].data(), 1, h);
-                calib_rowmajor.insert(calib_rowmajor.end(), h.begin(), h.end());
+            if (n_calib > 0) {
+                std::vector<std::vector<double>> calib_slice;
+                calib_slice.reserve(n_calib);
+                for (std::size_t i = 0; i < n_calib; ++i) {
+                    calib_slice.push_back((*calib_x)[i]);
+                }
+                const std::vector<double> calib_flat = flatten_rowmajor(calib_slice);
+                cypha::batch_encode(r.infer, calib_flat.data(), static_cast<int>(n_calib), calib_rowmajor);
             }
         }
         const int n_calib_rows =
@@ -1072,16 +1099,46 @@ void online_reg_predict(const OnlineRegressor& r, const std::vector<double>& x, 
 
 Json reg_metrics_native(const OnlineRegressor& r, const std::vector<std::vector<double>>& xs,
                         const std::vector<double>& ys) {
+    const int n = static_cast<int>(xs.size());
+    const int k = static_cast<int>(r.infer.labels.size());
     std::vector<double> preds;
     std::vector<double> unc;
     preds.reserve(xs.size());
     unc.reserve(xs.size());
-    for (const auto& x : xs) {
-        double y_hat = 0.0;
-        double u = 0.0;
-        online_reg_predict(r, x, y_hat, u);
-        preds.push_back(y_hat);
-        unc.push_back(u);
+    if (n > 0 && k > 0) {
+        const std::vector<double> flat = flatten_rowmajor(xs);
+        std::vector<double> llr;
+        if (r.use_kernel_llr && r.kernel_mem != nullptr) {
+            std::vector<double> h;
+            cypha::batch_encode(r.infer, flat.data(), n, h);
+            kernel_blend_llr_batched(r.infer, h.data(), n, r.kernel_mem.get(), r.kernel_blend, llr);
+        } else {
+            cypha::batch_llr_from_x(r.infer, flat.data(), n, llr);
+        }
+        std::vector<double> probs;
+        cypha::softmax_batch_reference(llr.data(), n, k, 1e-12, probs);
+        std::vector<double> mu;
+        std::vector<double> var;
+        mu.reserve(static_cast<std::size_t>(k));
+        var.reserve(static_cast<std::size_t>(k));
+        for (const auto& lbl : r.infer.labels) {
+            const auto it = r.experts.find(lbl);
+            if (it == r.experts.end()) {
+                mu.push_back(0.0);
+                var.push_back(0.0);
+            } else {
+                mu.push_back(it->second.mu.empty() ? 0.0 : it->second.mu[0]);
+                var.push_back(it->second.var_ema);
+            }
+        }
+        for (int i = 0; i < n; ++i) {
+            double y_hat = 0.0;
+            double u = 0.0;
+            cypha::regression::predict_mixture_scalar(probs.data() + static_cast<std::size_t>(i * k), mu.data(),
+                                                      var.data(), static_cast<std::size_t>(k), y_hat, u);
+            preds.push_back(y_hat);
+            unc.push_back(u);
+        }
     }
     double mean_unc_sq = 0.0;
     if (!unc.empty()) {
@@ -1230,11 +1287,14 @@ Json run_d02() {
 
     std::vector<double> preds;
     preds.reserve(y_test.size());
-    for (const auto& xrow : x_test) {
+    const int test_n = static_cast<int>(x_test.size());
+    const int k_experts = static_cast<int>(infer.labels.size());
+    if (test_n > 0 && k_experts > 0) {
+        const std::vector<double> flat = flatten_rowmajor(x_test);
         std::vector<double> llr;
-        cypha::batch_llr_from_x(infer, xrow.data(), 1, llr);
+        cypha::batch_llr_from_x(infer, flat.data(), test_n, llr);
         std::vector<double> probs;
-        cypha::softmax_batch_reference(llr.data(), 1, static_cast<int>(infer.labels.size()), 1e-12, probs);
+        cypha::softmax_batch_reference(llr.data(), test_n, k_experts, 1e-12, probs);
         std::vector<double> mu;
         std::vector<double> var;
         mu.reserve(infer.labels.size());
@@ -1244,10 +1304,13 @@ Json run_d02() {
             mu.push_back(st.mu.empty() ? 0.0 : st.mu[0]);
             var.push_back(st.var_ema);
         }
-        double y_hat = 0.0;
-        double unc = 0.0;
-        cypha::regression::predict_mixture_scalar(probs.data(), mu.data(), var.data(), mu.size(), y_hat, unc);
-        preds.push_back(y_hat);
+        for (int i = 0; i < test_n; ++i) {
+            double y_hat = 0.0;
+            double unc = 0.0;
+            cypha::regression::predict_mixture_scalar(probs.data() + static_cast<std::size_t>(i * k_experts),
+                                                      mu.data(), var.data(), mu.size(), y_hat, unc);
+            preds.push_back(y_hat);
+        }
     }
 
     const Json experiments{
@@ -2646,11 +2709,11 @@ Json run_d07() {
     OnlineClassifier clf = make_online_classifier(static_cast<int>(train_x.front().size()), kBenchSeed,
                                                   regime.value("enc_lr", 0.002), regime);
     train_classifier_online(clf, train_x, train_y, std::max(1, regime.value("n_epochs", 1)), kBenchSeed);
-    Json scores = clf_metrics_native(clf.infer, test_x, test_y);
     std::vector<double> epistemic;
+    Json scores = clf_metrics_native(clf.infer, test_x, test_y, &epistemic);
     std::vector<double> boundary_dist;
+    boundary_dist.reserve(test_x.size());
     for (const auto& xrow : test_x) {
-        epistemic.push_back(online_clf_epistemic(clf.infer, xrow));
         boundary_dist.push_back(std::abs(xrow[0] - 0.35));
     }
     scores["boundary_uncertainty_spearman"] = cypha::bench::safe_spearman(boundary_dist, epistemic);

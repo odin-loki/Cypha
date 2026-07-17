@@ -305,3 +305,64 @@ online training (`n=1` encode steps); the eval portion is now a single GPU-eligi
 2. For LM: add a **non-recurrent** bulk encode/score helper used by offline tools (or teach
    `CyphaLMBatch` to call `cypha::accel::batch_encode` over packed field rows), not
    `eval_bpc` itself — that stays sequential by construction.
+
+## Batched DIF eval path — part-b follow-ups (2026-07-17)
+
+Follow-up to the same-day `train_eval_vectors` batching (commit `882079b`). Grepped
+`native/src` for remaining `batch_llr_from_x` / `batch_encode` / `score_matrix` call sites
+that still used `n=1` inside a loop over a known full test/calib matrix.
+
+### Sites batched this pass (`native/src/bench/bench_domains.cpp`)
+
+| Site | Before | After | Domains hit |
+|------|--------|-------|-------------|
+| `clf_metrics_native` | per-row `online_clf_predict` + `online_clf_epistemic` ⇒ **2×** `batch_llr_from_x(..., n=1)` | one `batch_llr_from_x(..., n)` + batched softmax; optional `epistemic_out` | D06/D07/D09/D10/D12/D15/D16/… |
+| `reg_metrics_native` | per-row `online_reg_predict` ⇒ `n=1` encode/score | one flatten + `batch_llr_from_x` / batched `kernel_blend_llr` | D06/D14/… |
+| `run_d02` test loop | per-row `batch_llr_from_x(..., n=1)` | one flatten + batched LLR/softmax/mixture | D02 |
+| D14 kernel calib encode in `make_online_regressor` | per-row `batch_encode(..., n=1)` over ≤256 calib rows | one `batch_encode(..., n_calib)` | D14 (opt-in kernel) |
+| D07 boundary Spearman | re-scored epistemic with another n=1 loop | reuses `clf_metrics_native(..., &epistemic)` | D07 |
+
+`kernel_blend_llr` now wraps `kernel_blend_llr_batched(..., n)` so linear
+`score_matrix_use_field` amortizes over the batch (kernel `score_all` remains per-row —
+same as `score_matrix_use_field`'s own kernel-blend loop).
+
+### Intentionally left as `n=1` (not safe / not amortizable)
+
+These still call `batch_llr_from_x`/`batch_encode` with `n=1`, but they are **single-row
+online APIs** or **stateful train-time routing**, not eval over a frozen test matrix:
+
+- `online_clf_predict` / `online_clf_epistemic` — single-sample helpers (still used by
+  adversarial / per-row perturbation loops that mutate one `x` at a time).
+- `pick_dif_regressor_expert` / `online_reg_predict` — online expert routing & one-shot predict.
+- `run_d02` / `dif_train_step_vector` train loop — sequential online updates (same class as
+  D03 training; batching would change learning dynamics).
+- `train_step_vector.cpp`, REST/infer single-query paths, EWC Fisher loop (per-label
+  attribution needs the true class per row; could batch encode later but not a hot bench
+  eval path).
+- **D17 `eval_bpc`** — intentionally untouched (sequential recurrence).
+
+No further safe “full test matrix in memory, loop with `n=1`” sites remain in
+`bench_domains.cpp` after this pass.
+
+### Build + measurements (`native/build_perf_cuda2`, CUDA ON, SM86, VS Build Tools 18)
+
+Configured with VS18-bundled CMake + `-DCYPHA_ENABLE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86`.
+All timing used `CYPHA_BENCH_FAST=1` and scratch `CYPHA_REPO_ROOT` (no writes to real
+`bench/BASELINE_*`).
+
+**Accuracy (must-preserve):**
+
+| Domain | Metric | Before (HEAD) | After (batched) |
+|--------|--------|---------------|-----------------|
+| D02 | `cypha_scores.rmse` | `1.8087416892669428` | `1.8087416892669428` |
+| D07 | `accuracy` | `0.9183333333333333` | `0.9183333333333333` |
+
+**Wall clock:** domain wall remains **train-dominated**; under concurrent machine load the
+3-run series for D02/D07 were too noisy to claim a stable domain-wall % (cold CUDA init +
+OS jitter ≫ eval delta on these FAST scales). The structural change matches the proven
+`882079b` D03 pattern (one GPU-eligible `batch_encode` over `n_test` instead of per-row
+launches). Re-measure on a quiet host if a published % is needed; correctness is locked by
+the identical metrics above.
+
+`cuda_smoke --bench` on `build_perf_cuda2` (N=64, d=128, K=16): `batch_encode` **4.78x**,
+`score_matrix` **1.31x** CUDA vs CPU ref — GPU path live.
