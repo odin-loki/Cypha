@@ -15,7 +15,8 @@ struct PreprocessorState {
   /// Median pairwise distance heuristic (Python ``RFFEncoder.auto_gamma``).
   bool auto_rff_gamma{false};
   /// Cross-validated γ grid search (Python ``RFFEncoder.auto_gamma_cv``). Takes precedence over
-  /// ``auto_rff_gamma`` when both are set.
+  /// ``auto_rff_gamma`` when both are set. When left false with ``rff_gamma == 1.0`` and
+  /// ``input_dim ≤ 30``, ``fit_from_design_matrix`` enables CV implicitly (everyday tabular default).
   bool auto_rff_gamma_cv{false};
   /// Phase 5: structured orthogonal RFF (SORF/Fastfood) instead of iid Gaussian rows.
   bool rff_sorf{false};

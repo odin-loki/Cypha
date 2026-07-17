@@ -278,6 +278,7 @@ void fit_apply_preprocessor(std::vector<std::vector<double>>& train_x, std::vect
     pre.rff_dim = pre_cfg.value("rff_dim", -1);
     pre.auto_rff_gamma = pre_cfg.value("auto_rff_gamma", false);
     pre.auto_rff_gamma_cv = pre_cfg.value("auto_rff_gamma_cv", false);
+    pre.rff_gamma = pre_cfg.value("rff_gamma", 1.0);
     pre.seed = pre_cfg.value("seed", 42);
     const int n = static_cast<int>(train_x.size());
     const int d = static_cast<int>(train_x.front().size());

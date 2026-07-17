@@ -71,6 +71,30 @@ int test_fit_auto_cv_without_targets() {
   return 0;
 }
 
+int test_implicit_default_tabular_dim() {
+  cypha::NumpyDefaultRng rng(3);
+  constexpr int n = 90;
+  constexpr int d = 12;
+  std::vector<double> x(static_cast<std::size_t>(n * d));
+  for (int i = 0; i < n * d; ++i) {
+    x[static_cast<std::size_t>(i)] = rng.normal(0.0, 1.0);
+  }
+  cypha::PreprocessorState pre;
+  pre.scale = true;
+  pre.rff_dim = 32;
+  pre.seed = 5;
+  pre.fit_from_design_matrix(x, n, d);
+  if (!pre.auto_rff_gamma_cv) {
+    std::cerr << "implicit default: auto_rff_gamma_cv not enabled for d=" << d << "\n";
+    return 1;
+  }
+  if (!gamma_in_grid(pre.rff_gamma)) {
+    std::cerr << "implicit default: gamma not in grid " << pre.rff_gamma << "\n";
+    return 1;
+  }
+  return 0;
+}
+
 int test_cv_differs_from_median() {
   cypha::NumpyDefaultRng rng(2);
   constexpr int n = 100;
@@ -111,6 +135,9 @@ int main() {
       return 1;
     }
     if (test_fit_auto_cv_without_targets() != 0) {
+      return 1;
+    }
+    if (test_implicit_default_tabular_dim() != 0) {
       return 1;
     }
     if (test_cv_differs_from_median() != 0) {

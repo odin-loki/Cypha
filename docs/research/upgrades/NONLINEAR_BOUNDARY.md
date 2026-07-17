@@ -90,6 +90,7 @@ Every one of the 20 equations individually loses R² under the kernel path at th
 
 - **KernelMemory RFF:** auto-γ median heuristic already default (2026-07-11); D03 `xor_pair` Nyström default untouched.
 - **Preprocessor RFFEncoder:** `auto_rff_gamma_cv` already default-on for tabular `input_dim ≤ 30` when `rff_gamma` left at 1.0 (`preprocessor_fit.cpp`); everyday profile documents this. D08 vision has no RFF preprocessor.
+- **2026-07-17 smoke (`build_rff_def`, FAST):** D01 tabular **98.75% / 88.75%** with CV **γ=0.1** (0 pp vs prior opt-in profile); D08 **100% / 100%** raw/hog (unaffected).
 - Full writeup: [`RESEARCH_STATUS.md`](../../RESEARCH_STATUS.md) Priority 2.
 
 ---

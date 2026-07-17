@@ -499,6 +499,16 @@ Followed through on the deferred item above: built the two-sided kernelized expe
 - D14 kernelized expert-routing remains opt-in/off (Priority 1 negative); do not default-on.
 - Remaining P2 work (parity fixtures / full D08–D14 re-bench with explicit auto-γ profiles) is optional polish, not a missing default.
 
+**Update (2026-07-17 late) — P2 smoke re-bench (`native/build_rff_def`, `CYPHA_BENCH_FAST=1`):**
+
+| Check | Result | Δ vs fixed-γ=1.0 |
+|---|---|---|
+| CTest `native_preprocessor_fit` + `native_preprocessor_rff_gamma_cv` | **2/2 pass** (incl. new implicit-default smoke for `d≤30`) | — |
+| D01 FAST (`everyday_profile`, implicit CV) | linearly_separable **98.75%**, 4_gaussian_blobs **88.75%**; CV selects **γ=0.1** | **0 pp** (same as 2026-06 opt-in profile; tasks at ceiling) |
+| D08 FAST (`raw`/`hog`, no RFF preprocessor) | **100%** / **100%** | **N/A** (vision path unchanged) |
+
+Default path confirmed: `fit_from_design_matrix` sets `auto_rff_gamma_cv=true` when `input_dim≤30`, `rff_gamma==1.0`, and neither auto flag is set (`preprocessor_fit.cpp:508–511`); bench meta reflects it after fit.
+
 ### Priority 3 — CyphaLM: beat-bigram roadmap
 
 **Status:** ✅ **Achieved @ 300k** via **hybrid GRIA+LSTM** — D17 **2.873 BPC** (−0.61 vs bigram, −0.11 vs char-LSTM bench). GRIA-only stack peaked @ **3.838** (+0.36 vs bigram).
