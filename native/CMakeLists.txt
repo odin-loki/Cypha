@@ -395,6 +395,14 @@ add_executable(memorization_canary_smoke tools/memorization_canary_smoke.cpp)
 target_link_libraries(memorization_canary_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(memorization_canary_smoke)
 
+add_executable(cyphalm_algebraic_fingerprint tools/cyphalm_algebraic_fingerprint.cpp)
+target_link_libraries(cyphalm_algebraic_fingerprint PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_algebraic_fingerprint)
+
+add_executable(algebraic_fingerprint_smoke tools/algebraic_fingerprint_smoke.cpp)
+target_link_libraries(algebraic_fingerprint_smoke PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(algebraic_fingerprint_smoke)
+
 add_executable(curriculum_window_smoke tools/curriculum_window_smoke.cpp)
 target_link_libraries(curriculum_window_smoke PRIVATE cypha_core)
 
@@ -479,6 +487,8 @@ set(
   needle_haystack_smoke
   cyphalm_memorization_canary
   memorization_canary_smoke
+  cyphalm_algebraic_fingerprint
+  algebraic_fingerprint_smoke
   curriculum_window_smoke
   corpus_smoke
   intelligence_profiler_papers
@@ -1201,6 +1211,17 @@ if(TARGET memorization_canary_smoke)
       --exe-dir "$<TARGET_FILE_DIR:cyphalm_memorization_canary>"
   )
   set_tests_properties(native_memorization_canary_smoke PROPERTIES
+    ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  )
+endif()
+
+if(TARGET algebraic_fingerprint_smoke)
+  add_test(
+    NAME native_algebraic_fingerprint_smoke
+    COMMAND "$<TARGET_FILE:algebraic_fingerprint_smoke>"
+      --exe-dir "$<TARGET_FILE_DIR:cyphalm_algebraic_fingerprint>"
+  )
+  set_tests_properties(native_algebraic_fingerprint_smoke PROPERTIES
     ENVIRONMENT "CYPHA_BENCH_FAST=1"
   )
 endif()
