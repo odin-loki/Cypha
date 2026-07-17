@@ -92,6 +92,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <random>
 #include <stdexcept>
@@ -2996,6 +2997,24 @@ class MainWindow final : public QMainWindow {
       exp_compare_summary_label_->setWordWrap(true);
       exp_form->addRow(exp_compare_summary_label_);
 
+      exp_compare_stats_table_ = new QTableWidget(0, 9, exp_grp);
+      exp_compare_stats_table_->setHorizontalHeaderLabels(
+          {QStringLiteral("Run"), QStringLiteral("Acc %"), QStringLiteral("Macro F1"),
+           QStringLiteral("R²"), QStringLiteral("RMSE"), QStringLiteral("Steps"),
+           QStringLiteral("Dur (s)"), QStringLiteral("Final loss"), QStringLiteral("Min loss")});
+      exp_compare_stats_table_->horizontalHeader()->setStretchLastSection(false);
+      exp_compare_stats_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+      for (int col = 1; col < 9; ++col) {
+        exp_compare_stats_table_->horizontalHeader()->setSectionResizeMode(col, QHeaderView::ResizeToContents);
+      }
+      exp_compare_stats_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+      exp_compare_stats_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+      exp_compare_stats_table_->setSelectionMode(QAbstractItemView::NoSelection);
+      exp_compare_stats_table_->setAlternatingRowColors(true);
+      exp_compare_stats_table_->setMaximumHeight(120);
+      exp_compare_stats_table_->setVisible(false);
+      exp_form->addRow(exp_compare_stats_table_);
+
       exp_compare_chart_ = new SimpleLossChart(exp_grp);
       exp_compare_chart_->setMinimumHeight(160);
       exp_form->addRow(exp_compare_chart_);
@@ -4696,6 +4715,10 @@ class MainWindow final : public QMainWindow {
       }
       if (exp_compare_summary_label_ != nullptr) {
         exp_compare_summary_label_->setText(QStringLiteral("(select 2+ runs with loss history)"));
+      }
+      if (exp_compare_stats_table_ != nullptr) {
+        exp_compare_stats_table_->setRowCount(0);
+        exp_compare_stats_table_->setVisible(false);
       }
       if (exp_compare_clear_btn_ != nullptr) {
         exp_compare_clear_btn_->setEnabled(false);
@@ -7108,6 +7131,118 @@ class MainWindow final : public QMainWindow {
     return losses;
   }
 
+  static QString format_compare_metric(double v, bool as_percent) {
+    if (std::isnan(v)) {
+      return QStringLiteral("—");
+    }
+    if (as_percent) {
+      return QString::number(v * 100.0, 'f', 1);
+    }
+    return QString::number(v, 'g', 4);
+  }
+
+  static QString format_compare_duration(double duration_s) {
+    if (duration_s <= 0.0 || std::isnan(duration_s)) {
+      return QStringLiteral("—");
+    }
+    return QString::number(duration_s, 'f', 1);
+  }
+
+  static QString format_compare_loss(double v) {
+    if (std::isnan(v)) {
+      return QStringLiteral("—");
+    }
+    return QString::number(v, 'g', 4);
+  }
+
+  static double loss_curve_min(const QVector<double>& losses) {
+    if (losses.isEmpty()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return *std::min_element(losses.constBegin(), losses.constEnd());
+  }
+
+  static double loss_curve_final(const QVector<double>& losses) {
+    if (losses.isEmpty()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return losses.back();
+  }
+
+  void experiment_populate_compare_stats_table(
+      const QVector<QPair<QString, cypha::ExperimentDbRunCompareRow>>& rows,
+      const QVector<QVector<double>>& loss_curves) {
+    if (exp_compare_stats_table_ == nullptr) {
+      return;
+    }
+    exp_compare_stats_table_->setRowCount(rows.size());
+    for (int i = 0; i < rows.size(); ++i) {
+      const QString& label = rows[i].first;
+      const cypha::ExperimentDbRunCompareRow& c = rows[i].second;
+      const QVector<double>& losses = loss_curves[i];
+      exp_compare_stats_table_->setItem(i, 0, new QTableWidgetItem(label));
+      exp_compare_stats_table_->setItem(i, 1, new QTableWidgetItem(format_compare_metric(c.accuracy, true)));
+      exp_compare_stats_table_->setItem(i, 2, new QTableWidgetItem(format_compare_metric(c.macro_f1, true)));
+      exp_compare_stats_table_->setItem(i, 3, new QTableWidgetItem(format_compare_metric(c.r2_score, false)));
+      exp_compare_stats_table_->setItem(i, 4, new QTableWidgetItem(format_compare_metric(c.rmse, false)));
+      exp_compare_stats_table_->setItem(i, 5, new QTableWidgetItem(QString::number(c.n_steps)));
+      exp_compare_stats_table_->setItem(i, 6, new QTableWidgetItem(format_compare_duration(c.duration_s)));
+      exp_compare_stats_table_->setItem(i, 7, new QTableWidgetItem(format_compare_loss(loss_curve_final(losses))));
+      exp_compare_stats_table_->setItem(i, 8, new QTableWidgetItem(format_compare_loss(loss_curve_min(losses))));
+    }
+    exp_compare_stats_table_->setVisible(!rows.isEmpty());
+  }
+
+  static QString experiment_compare_summary_text(
+      const QVector<QPair<QString, cypha::ExperimentDbRunCompareRow>>& rows,
+      const QVector<QVector<double>>& loss_curves, int plotted_runs) {
+    QStringList summary_bits;
+    for (int i = 0; i < rows.size(); ++i) {
+      const QString& label = rows[i].first;
+      const cypha::ExperimentDbRunCompareRow& c = rows[i].second;
+      const QVector<double>& losses = loss_curves[i];
+      summary_bits.append(
+          QStringLiteral("%1 acc=%2 f1=%3 steps=%4 dur=%5s final_loss=%6")
+              .arg(label)
+              .arg(format_compare_metric(c.accuracy, true) + QLatin1Char('%'))
+              .arg(format_compare_metric(c.macro_f1, true))
+              .arg(c.n_steps)
+              .arg(format_compare_duration(c.duration_s))
+              .arg(format_compare_loss(loss_curve_final(losses))));
+    }
+
+    QString headline;
+    if (plotted_runs > 0) {
+      headline = QStringLiteral("%1 run(s) plotted").arg(plotted_runs);
+    }
+    if (rows.size() >= 2) {
+      int best_idx = 0;
+      int worst_idx = 0;
+      for (int i = 1; i < rows.size(); ++i) {
+        if (rows[i].second.accuracy > rows[best_idx].second.accuracy) {
+          best_idx = i;
+        }
+        if (rows[i].second.accuracy < rows[worst_idx].second.accuracy) {
+          worst_idx = i;
+        }
+      }
+      const double spread = (rows[best_idx].second.accuracy - rows[worst_idx].second.accuracy) * 100.0;
+      if (!std::isnan(spread) && spread > 0.0) {
+        headline += QStringLiteral(" · best acc %1 (%2) · Δacc %3 pp vs worst")
+                        .arg(format_compare_metric(rows[best_idx].second.accuracy, true) + QLatin1Char('%'))
+                        .arg(rows[best_idx].first)
+                        .arg(QString::number(spread, 'f', 1));
+      }
+    }
+    if (!summary_bits.isEmpty()) {
+      if (!headline.isEmpty()) {
+        headline += QStringLiteral(" — ");
+      }
+      headline += summary_bits.join(QStringLiteral("  |  "));
+    }
+    return headline.isEmpty() ? QStringLiteral("(select 2+ runs with loss history)") : headline;
+  }
+
   void experiment_compare_selected_runs() {
     if (!exp_db_ || exp_runs_table_ == nullptr || exp_compare_chart_ == nullptr) {
       return;
@@ -7144,7 +7279,8 @@ class MainWindow final : public QMainWindow {
     }
 
     QVector<QPair<QString, QVector<double>>> series;
-    QStringList summary_bits;
+    QVector<QPair<QString, cypha::ExperimentDbRunCompareRow>> stats_rows;
+    QVector<QVector<double>> stats_losses;
     for (const std::string& rid : run_ids) {
       cypha::ExperimentDbRunRow row{};
       bool found = false;
@@ -7152,25 +7288,27 @@ class MainWindow final : public QMainWindow {
         continue;
       }
       const QVector<double> losses = parse_loss_curve_from_metrics_json(row.metrics_history_json);
-      if (losses.isEmpty()) {
-        continue;
-      }
       QString label = QString::fromStdString(row.name);
       if (label.isEmpty()) {
         label = QString::fromStdString(rid).right(12);
       }
-      series.append(qMakePair(label, losses));
 
+      const cypha::ExperimentDbRunCompareRow* cmp_row = nullptr;
       for (const auto& c : cmp) {
         if (c.run_id == rid) {
-          summary_bits.append(QStringLiteral("%1 acc=%2 steps=%3")
-                                  .arg(label)
-                                  .arg(c.accuracy >= 0.0 ? QString::number(c.accuracy * 100.0, 'f', 1) + QLatin1Char('%')
-                                                         : QStringLiteral("—"))
-                                  .arg(c.n_steps));
+          cmp_row = &c;
           break;
         }
       }
+      if (cmp_row != nullptr) {
+        stats_rows.append(qMakePair(label, *cmp_row));
+        stats_losses.append(losses);
+      }
+
+      if (losses.isEmpty()) {
+        continue;
+      }
+      series.append(qMakePair(label, losses));
     }
 
     if (series.isEmpty()) {
@@ -7180,13 +7318,13 @@ class MainWindow final : public QMainWindow {
     }
 
     exp_compare_chart_->set_compare_loss_runs(series);
+    experiment_populate_compare_stats_table(stats_rows, stats_losses);
     if (exp_compare_clear_btn_ != nullptr) {
       exp_compare_clear_btn_->setEnabled(true);
     }
     if (exp_compare_summary_label_ != nullptr) {
-      exp_compare_summary_label_->setText(summary_bits.isEmpty()
-                                              ? QStringLiteral("%1 run(s) plotted").arg(series.size())
-                                              : summary_bits.join(QStringLiteral("  |  ")));
+      exp_compare_summary_label_->setText(
+          experiment_compare_summary_text(stats_rows, stats_losses, series.size()));
     }
   }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
@@ -7290,6 +7428,7 @@ class MainWindow final : public QMainWindow {
   QPushButton*  exp_compare_btn_{};
   QPushButton*  exp_compare_clear_btn_{};
   QLabel*       exp_compare_summary_label_{};
+  QTableWidget* exp_compare_stats_table_{};
   SimpleLossChart* exp_compare_chart_{};
 #else
   // Stub pointers so guards are not needed in non-DB code paths
