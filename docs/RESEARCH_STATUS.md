@@ -210,6 +210,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 ### Phase 7 — Intelligence Stats baseline lock (2026-06-14)
 
 - **`bench/BASELINE_LOCK.json`:** D17 hybrid **2.873 BPC** @ 300k reference pin; **`scripts/publish_release.ps1`** for local `gh release create`.
+- **Canonical pin clarification (2026-07-17):** **2.873** is the locked reference; native build6 sweep **2.892** and early framework **2.897** are historical variants, not alternate locks — [`docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`](reports/BASELINE_PIN_CANONICAL_2026-07-17.md).
 - **Overnight wiring:** CTest **`native_overnight_mini_smoke`** (800-train `--overnight` check).
 - **Cell / RPSM / EWC:** H16 SR gate laws; bench **d21** RPSM end-to-end; CyphaLM EWC embed + lm_head Fisher; optional federated TLS smoke.
 - **CI gate:** **93 CTests** (`ctest -R native_`); optional **`federated_tls`** job (`continue-on-error`).

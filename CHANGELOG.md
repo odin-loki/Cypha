@@ -251,7 +251,7 @@ milestone or a significant self-contained change.
 - **Native validation gate** — `scripts/cypha_native_validate_all.ps1` orchestrates CTest, pytest parity, bench smoke, tune dry-run, and REST contract checks.
 
 ### Changed
-- **CyphaLM 300k baseline lock** — native hybrid **2.897 BPC** on D17 @ 300k (Python reference 2.873; Δ +0.024 ~0.8%).
+- **CyphaLM 300k baseline lock** — native hybrid **2.897 BPC** on D17 @ 300k (release-time sweep figure; canonical pin remains **2.873** in `bench/BASELINE_LOCK.json` — see `docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`).
 - **Test coverage** — **52 CTests** (`native_*`) and **155 pytest** cases green on the full native gate.
 
 ### Installers
@@ -262,7 +262,7 @@ milestone or a significant self-contained change.
 ## [1.1.0] — 2026-05-31 · CyphaLM native release
 
 ### Added
-- **`cypha_lm_native`** — C++ CyphaLM Tiers 0–2–4 (hybrid **2.892 BPC @ 300k** vs Python 2.873).
+- **`cypha_lm_native`** — C++ CyphaLM Tiers 0–2–4 (build6 sweep hybrid **2.892 BPC @ 300k** vs canonical pin **2.873**).
 - Native REST LM routes in **`cypha_rest`**: `/lm/load`, `/lm/metrics`, `/lm/predict_next`, `/generate`, `/generate/stream`.
 - Checkpoint save/load with DIF + SSM state; Python GRIA import via `load_from_full_w`.
 - GitHub Release workflow: Linux `.tar.gz` + Windows `.zip` installer bundles (`scripts/package_release_*.sh`).

@@ -25,7 +25,14 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Full baseline lock (300k d17) ✅
 
-| Native hybrid @ 300k | **2.897 BPC** (Python 2.873, Δ +0.024) |
+**Canonical pin:** **2.873 BPC** (`bench/BASELINE_LOCK.json` → `d17_hybrid_baseline`). Full reconciliation: [`docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`](../reports/BASELINE_PIN_CANONICAL_2026-07-17.md).
+
+| Figure | BPC | Role |
+|--------|-----|------|
+| **Pinned hybrid (canonical)** | **2.873** | Regression / `-Production` validator (±0.05) |
+| Native build6 sweep (2026-06-10) | 2.892 | Historical sweep — not an alternate lock |
+| Early v2.5 framework note | 2.897 | Historical release-time figure — superseded |
+| Latest overnight native run | 2.864 | `overnight_results` in BASELINE_LOCK.json |
 
 ---
 

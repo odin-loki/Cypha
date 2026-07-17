@@ -14,6 +14,7 @@ Conventional neural language models entangle lossy distribution compression, los
 | Experiment | Metric | Value | Source |
 |------------|--------|-------|--------|
 | D17 (WikiText-2, 300k train) | Hybrid GRIA+LSTM held-out BPC (pinned) | **2.873** | `bench/BASELINE_LOCK.json:d17_hybrid_baseline` |
+| D17 (WikiText-2, 300k train) | Native build6 sweep BPC (historical) | 2.892 | `docs/native/CYPHALM_NATIVE_BENCH_RESULTS.jsonl` |
 | D17 (WikiText-2, 300k train) | Latest production overnight BPC | 2.864 | `bench/BASELINE_LOCK.json:overnight_results` |
 | D17 baselines @ 300k | Bigram / Trigram / char-LSTM-only | 3.478 / 4.398 / 2.979 | `docs/RESEARCH_STATUS.md` "Language model (D04 + D17)" |
 | D17 ablation | GRIA-only stack (no LSTM) BPC | 3.838 | `docs/RESEARCH_STATUS.md` |

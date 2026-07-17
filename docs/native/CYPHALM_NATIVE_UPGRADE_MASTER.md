@@ -1,21 +1,23 @@
-# CyphaLM Native Upgrade ó Master Tracker
+# CyphaLM Native Upgrade ù Master Tracker
 
 Native C++ port of CyphaLM (Tiers 0, 1, 2, 4). Python reference for D17 WikiText-2 @ 300k: **hybrid_gria_lstm ? 2.873 BPC** (`cyphalm_d17_wikitext.json` `_meta.held_out_bpc`).
+
+**Canonical baseline pin:** **2.873 BPC** @ 300k (`bench/BASELINE_LOCK.json` ? `d17_hybrid_baseline`). The native build6 sweep **2.892** below is a historical run artifact, not an alternate lock ù see [`../reports/BASELINE_PIN_CANONICAL_2026-07-17.md`](../reports/BASELINE_PIN_CANONICAL_2026-07-17.md).
 
 **Build:** `C:\Temp\cypha_native_build6` (Release, Ninja, outside OneDrive)  
 **Bench:** `cyphalm_bench_native.exe --profile d17 --n-train 300000 --n-eval 2000 --threads 1`  
 **Results log:** [`CYPHALM_NATIVE_BENCH_RESULTS.jsonl`](CYPHALM_NATIVE_BENCH_RESULTS.jsonl)
 
-## D17 WikiText-2 @ 300k ó build6 (2026-06-10)
+## D17 WikiText-2 @ 300k ù build6 (2026-06-10)
 
 | Mode | Native BPC | Python / prior | ? vs Python hybrid |
 |------|------------|----------------|--------------------|
 | **char_lstm** | **2.900** | ~2.98 char baseline | -0.08 vs char |
-| **hybrid** | **2.892** (v2 post LSTM fix) | **2.873** | **+0.019** |
-| **ssm_gria** | **3.515** | gria_ngram stack | ó |
-| **ssm** | **4.458** | ssm_only | ó |
+| **hybrid** | **2.892** (build6 sweep; pin **2.873**) | **2.873** | **+0.019** |
+| **ssm_gria** | **3.515** | gria_ngram stack | ù |
+| **ssm** | **4.458** | ssm_only | ù |
 | **spectral** | **4.458** | spectral PDE on | same as ssm @ 300k |
-| **context_bank** | **3.604** (v2 post attn fix) | build3: 4.637 | ó |
+| **context_bank** | **3.604** (v2 post attn fix) | build3: 4.637 | ù |
 
 All runs: `train_epochs=2`, `schedule_b`, isolated exe `C:\Temp\cyphalm_bench_build6_run.exe`, `CYPHALM_TRAIN_LOG_EVERY=100000`.
 
@@ -25,7 +27,7 @@ All runs: `train_epochs=2`, `schedule_b`, isolated exe `C:\Temp\cyphalm_bench_bu
 |------|-------|--------|
 | **0** | Char LSTM, embed, corpus, bench CLI | ? char_lstm @ 2.900 BPC |
 | **1** | CellAI SSM, CyphaDIF, GRIA low-rank, ngram fusion, views | ? ssm_gria 3.515; hybrid path wired |
-| **2** | Unified `CyphaLMModel`, hybrid blend, BPTT-64, schedule_b | ? hybrid **2.892 BPC @ 300k**; checkpoint + REST |
+| **2** | Unified `CyphaLMModel`, hybrid blend, BPTT-64, schedule_b | ? hybrid build6 sweep **2.892 BPC @ 300k** (pin **2.873**); checkpoint + REST |
 | **4** | Hebbian / multiscale / spectral flags | ? flags wired; spectral = ssm numerically @ 300k |
 
 ## Critical fixes (build3 ? build6)
@@ -43,9 +45,9 @@ All runs: `train_epochs=2`, `schedule_b`, isolated exe `C:\Temp\cyphalm_bench_bu
 
 ## Open parity gaps
 
-1. **Hybrid parity** ó ? **2.892 BPC @ 300k** (Python 2.873, ? +0.019); root cause was in-place LSTM `forward_step`
-2. **context_bank @ 300k** ó ? **3.604 BPC** after `proj_embed_` attn fix (was 7.14)
-3. **GRIA full-rank** ó ? Python `W` import via rank-32 ALS factorization (`load_from_full_w`)
+1. **Hybrid parity** ó build6 sweep **2.892 BPC @ 300k** vs pin **2.873** (? +0.019); root cause was in-place LSTM `forward_step`
+2. **context_bank @ 300k** ù ? **3.604 BPC** after `proj_embed_` attn fix (was 7.14)
+3. **GRIA full-rank** ù ? Python `W` import via rank-32 ALS factorization (`load_from_full_w`)
 
 ## Native REST LM (cypha_rest)
 
@@ -85,7 +87,7 @@ powershell -File scripts/cyphalm_native_run_modes.ps1
 
 | Date | Tier | Result |
 |------|------|--------|
-| 2026-05-31 | fix | **`eval_bpc` bug:** was evaluating fresh untrained model (BPCò8.0); fixed to reset context on trained weights only. |
+| 2026-05-31 | fix | **`eval_bpc` bug:** was evaluating fresh untrained model (BPCù8.0); fixed to reset context on trained weights only. |
 | 2026-05-31 | fix | **`apply_bench_profile`:** loads `cyphalm_d17_wikitext.json` hyperparams (2 epochs, `gria_lr=0.08`, `schedule_b`). |
 | 2026-05-31 | bench | **build2** D17 sweep (`C:\Temp\cypha_native_build2\cyphalm_bench_native.exe`, `--threads 0`, wikitext2): hybrid @ 40k **3.701 BPC** (sanity). |
 | 2026-05-31 | bench | **build2** hybrid @ 300k **3.353 BPC** (Python ref **2.873**; ? +0.480). |
@@ -110,4 +112,4 @@ powershell -File scripts/cyphalm_native_run_modes.ps1
 
 - [x] Wire `proj_dif` into GRIA input for non-hybrid modes (`gria_input_core` in `cyphalm_model.cpp` mirrors Python `_gria_input`)
 - [x] Tighten hybrid Python checkpoint load atol after full state import audit (sidecar `atol_bpc=0.02`; measured native delta ~0.002 BPC)
-- [x] Full 300k jsonl refresh: `docs/native/CYPHALM_NATIVE_BENCH_RESULTS.jsonl` (build6 sweep ó hybrid 2.892, context_bank 3.604, char_lstm 2.900 @ 300k)
+- [x] Full 300k jsonl refresh: `docs/native/CYPHALM_NATIVE_BENCH_RESULTS.jsonl` (build6 sweep ù hybrid 2.892, context_bank 3.604, char_lstm 2.900 @ 300k)

@@ -41,7 +41,7 @@ the gamma bandwidth is not well-tuned for all datasets.
 
 **Evidence:**
 - **D10 ECG "17-20% chance-level accuracy" is stale (resolved, 2026-07-11)** � re-ran `cypha_bench_run --domain 10` on current HEAD and got **60.67% accuracy** on the same 5-class ECG classification (10A), ~3x chance. No targeted fix was applied; this was an incidental side effect of unrelated upstream work. More importantly, the diagnosis this section originally proposed (SSM state norms / decay rates / routing-head connectivity) was never the right lens for D10: 10A-10D's scored path uses the `cypha_core` DIF expert-routing classifier (`OnlineClassifier` + hand-engineered `TimeSeriesEncoder` features), not `CellAISSM` at all � the SSM is only touched by an optional, non-scored, forward-only `10E_ssm_diagnose` probe. Do not use the old 17-20% figure as evidence of an SSM defect. Full writeup: [`docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md).
-- D17 CyphaLM: **hybrid_gria_lstm @ 300k = 2.873 BPC** (beats bigram); GRIA-only stack still weaker.
+- D17 CyphaLM: **hybrid_gria_lstm @ 300k = 2.873 BPC** (canonical pin — `bench/BASELINE_LOCK.json`; beats bigram); GRIA-only stack still weaker.
 - **D04 "33.2 bpc" was a benchmark bug** (wrong probability indexing in the legacy Python D04 domain, not a CyphaLM failure) � do not use it as evidence. Native D04 runs the full CyphaLM stack via `cypha_bench_run --domain 4`.
 
 **What to do:** Instrument native SSM state (`cyphalm_ssm_diagnose`, `--ssm-diagnose` on bench) to verify that:
