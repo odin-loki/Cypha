@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <limits>
 #include <numeric>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace cypha::bench {
@@ -58,6 +60,67 @@ double accuracy_int(const std::vector<int>& y_true, const std::vector<int>& y_pr
         if (y_true[i] == y_pred[i]) ++correct;
     }
     return static_cast<double>(correct) / static_cast<double>(y_true.size());
+}
+
+namespace {
+
+std::vector<std::string> unique_labels_sorted(const std::vector<std::string>& labels) {
+    std::unordered_set<std::string> seen;
+    std::vector<std::string> out;
+    for (const auto& y : labels) {
+        if (seen.insert(y).second) out.push_back(y);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+}  // namespace
+
+double f1_macro(const std::vector<std::string>& y_true, const std::vector<std::string>& y_pred) {
+    const std::vector<std::string> classes = unique_labels_sorted(y_true);
+    if (y_true.empty() || y_true.size() != y_pred.size() || classes.empty()) return 0.0;
+    double sum = 0.0;
+    int counted = 0;
+    for (const auto& cls : classes) {
+        int tp = 0;
+        int fp = 0;
+        int fn = 0;
+        for (std::size_t i = 0; i < y_true.size(); ++i) {
+            const bool pred = y_pred[i] == cls;
+            const bool truth = y_true[i] == cls;
+            if (pred && truth) ++tp;
+            else if (pred) ++fp;
+            else if (truth) ++fn;
+        }
+        if (tp == 0 && fp == 0 && fn == 0) continue;
+        const double prec = (tp + fp) > 0 ? static_cast<double>(tp) / static_cast<double>(tp + fp) : 0.0;
+        const double rec = (tp + fn) > 0 ? static_cast<double>(tp) / static_cast<double>(tp + fn) : 0.0;
+        const double f1 = (prec + rec) > 0.0 ? 2.0 * prec * rec / (prec + rec) : 0.0;
+        sum += f1;
+        ++counted;
+    }
+    return counted > 0 ? sum / static_cast<double>(counted) : 0.0;
+}
+
+double balanced_accuracy(const std::vector<std::string>& y_true, const std::vector<std::string>& y_pred) {
+    const std::vector<std::string> classes = unique_labels_sorted(y_true);
+    if (y_true.empty() || y_true.size() != y_pred.size() || classes.empty()) return 0.0;
+    double sum = 0.0;
+    int counted = 0;
+    for (const auto& cls : classes) {
+        int tp = 0;
+        int fn = 0;
+        for (std::size_t i = 0; i < y_true.size(); ++i) {
+            if (y_true[i] == cls) {
+                if (y_pred[i] == cls) ++tp;
+                else ++fn;
+            }
+        }
+        if (tp + fn == 0) continue;
+        sum += static_cast<double>(tp) / static_cast<double>(tp + fn);
+        ++counted;
+    }
+    return counted > 0 ? sum / static_cast<double>(counted) : 0.0;
 }
 
 double rmse(const std::vector<double>& y_true, const std::vector<double>& y_pred) {

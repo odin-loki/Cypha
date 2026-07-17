@@ -9,6 +9,12 @@ namespace cypha::bench {
 double accuracy(const std::vector<std::string>& y_true, const std::vector<std::string>& y_pred);
 double accuracy_int(const std::vector<int>& y_true, const std::vector<int>& y_pred);
 
+/// Macro-averaged F1 over classes present in ``y_true``.
+double f1_macro(const std::vector<std::string>& y_true, const std::vector<std::string>& y_pred);
+
+/// Mean per-class recall (sklearn ``balanced_accuracy_score``).
+double balanced_accuracy(const std::vector<std::string>& y_true, const std::vector<std::string>& y_pred);
+
 double rmse(const std::vector<double>& y_true, const std::vector<double>& y_pred);
 double mae(const std::vector<double>& y_true, const std::vector<double>& y_pred);
 double r2(const std::vector<double>& y_true, const std::vector<double>& y_pred);

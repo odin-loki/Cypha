@@ -32,33 +32,6 @@ std::vector<std::string> unique_labels_sorted(const std::vector<std::string>& la
     return out;
 }
 
-double f1_macro_impl(const std::vector<std::string>& y_true, const std::vector<std::string>& y_pred,
-                       const std::vector<std::string>& classes) {
-    if (y_true.empty() || y_true.size() != y_pred.size() || classes.empty()) return 0.0;
-    double sum = 0.0;
-    int counted = 0;
-    for (const auto& cls : classes) {
-        int tp = 0;
-        int fp = 0;
-        int fn = 0;
-        for (std::size_t i = 0; i < y_true.size(); ++i) {
-            const bool pred = y_pred[i] == cls;
-            const bool truth = y_true[i] == cls;
-            if (pred && truth) ++tp;
-            else if (pred) ++fp;
-            else if (truth) ++fn;
-        }
-        if (tp == 0 && fp == 0 && fn == 0) continue;
-        const double prec = (tp + fp) > 0 ? static_cast<double>(tp) / static_cast<double>(tp + fp) : 0.0;
-        const double rec = (tp + fn) > 0 ? static_cast<double>(tp) / static_cast<double>(tp + fn) : 0.0;
-        const double f1 =
-            (prec + rec) > 0.0 ? 2.0 * prec * rec / (prec + rec) : 0.0;
-        sum += f1;
-        ++counted;
-    }
-    return counted > 0 ? sum / static_cast<double>(counted) : 0.0;
-}
-
 bool fit_binary_logistic(const std::vector<std::vector<double>>& x, const std::vector<int>& y01,
                          std::vector<double>& w, double& bias, double C, int max_iter) {
     if (x.empty() || x.size() != y01.size()) return false;
@@ -148,7 +121,7 @@ ClassificationScores classification_scores(const std::vector<std::string>& y_tru
                                            const std::vector<std::string>& y_pred) {
     ClassificationScores out;
     out.accuracy = accuracy(y_true, y_pred);
-    out.f1_macro = f1_macro_impl(y_true, y_pred, unique_labels_sorted(y_true));
+    out.f1_macro = f1_macro(y_true, y_pred);
     return out;
 }
 
