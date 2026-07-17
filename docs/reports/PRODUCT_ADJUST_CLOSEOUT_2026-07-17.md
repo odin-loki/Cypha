@@ -141,9 +141,9 @@ Overnight health: [`OVERNIGHT_HEALTH_2026-07-17.md`](OVERNIGHT_HEALTH_2026-07-17
 1. **Wait** for H19–H22 overnight (do not restart).
 2. **`poll_and_finalize_overnight.ps1 -AutoCommit`** when sweep completes.
 3. Merge **d38**; run production validate env hooks.
-4. Promote **RFF auto-gamma** default; re-evaluate P3 XOR.
+4. Promote **RFF auto-gamma** default; re-evaluate P3 XOR — **advanced:** latent exploratory default promoted `beacef3` (`xor_pair` unchanged); see [`RFF_LATENT_PROMOTE_2026-07-17.md`](RFF_LATENT_PROMOTE_2026-07-17.md).
 5. Schedule **hidden=512 @ 300k** on uncontended machine.
-6. RPSM **BPTT-in-training** research track in parallel with cell-sweep analysis.
+6. RPSM **BPTT-in-training** research track in parallel with cell-sweep analysis — **advanced:** `summary.csv` aggregation script shipped `a04af20` ([`CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md`](CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md)); run after sweep completes.
 
 ---
 
