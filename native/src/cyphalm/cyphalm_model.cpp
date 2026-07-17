@@ -1617,8 +1617,13 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         }
     }
     // Slow tier: mirror outer-product delta for Fisher observe only (W_slow is not BPTT-updated).
+    // Perf (2026-07-17, part 6): at the locked D17 default (`ewc_lambda=0`), avg_slow is never
+    // consumed — only `ewc_.observe_grads(stub.d_ssm_w_slow=...)` reads it, and that block is
+    // gated on `ewc_lambda > 0`. Skip delta_slow / bptt_slow_buffer_ entirely when EWC is off
+    // (bit-identical: dead work on the default hybrid path, same pattern as Part 4's DIF skip).
+    const bool bptt_slow_for_ewc = cfg_.ewc_lambda > 0.0 && uses_hybrid_ewc(mode);
     std::vector<double> delta_slow;
-    if (static_cast<int>(grad_ctx.size()) >= 2 * active->d_state()) {
+    if (bptt_slow_for_ewc && static_cast<int>(grad_ctx.size()) >= 2 * active->d_state()) {
         const int d_state = active->d_state();
         delta_slow.assign(static_cast<std::size_t>(d_state * cfg_.d_embed), 0.0);
         for (int r = 0; r < d_state; ++r) {
@@ -1640,17 +1645,17 @@ void CyphaLMModel::bptt_ssm_update(std::uint32_t next_token_id) {
         }
     }
     for (double& v : avg) v /= static_cast<double>(bptt_buffer_.size());
-    std::vector<double> avg_slow;
-    if (bptt_slow_buffer_.size() == bptt_buffer_.size() && !bptt_slow_buffer_.empty()) {
-        avg_slow = bptt_slow_buffer_.front();
-        for (std::size_t i = 1; i < bptt_slow_buffer_.size(); ++i) {
-            for (std::size_t j = 0; j < avg_slow.size(); ++j) {
-                avg_slow[j] += bptt_slow_buffer_[i][j];
+    if (bptt_slow_for_ewc) {
+        std::vector<double> avg_slow;
+        if (bptt_slow_buffer_.size() == bptt_buffer_.size() && !bptt_slow_buffer_.empty()) {
+            avg_slow = bptt_slow_buffer_.front();
+            for (std::size_t i = 1; i < bptt_slow_buffer_.size(); ++i) {
+                for (std::size_t j = 0; j < avg_slow.size(); ++j) {
+                    avg_slow[j] += bptt_slow_buffer_[i][j];
+                }
             }
+            for (double& v : avg_slow) v /= static_cast<double>(bptt_slow_buffer_.size());
         }
-        for (double& v : avg_slow) v /= static_cast<double>(bptt_slow_buffer_.size());
-    }
-    if (cfg_.ewc_lambda > 0.0 && uses_hybrid_ewc(mode)) {
         HybridEwcGradStub stub;
         stub.d_ssm_w_fast = avg;
         if (!avg_slow.empty()) {

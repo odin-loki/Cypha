@@ -985,3 +985,57 @@ sequential online D17 recurrence.
 **Artifacts:** quiet profile log at `bench/results/part5_profile.log` (local, not committed).
 **Commit of this pass:** documentation only.
 
+---
+
+## Follow-up (2026-07-17, part 6) — structural skip audit (BPTT / memory / ngram)
+
+**Scope:** resolve stalled WIP in `bptt_ssm_update` and audit Part 5's remaining structural-throttle
+candidates. **Did not touch** `native/build_math`, `native/build_deff`, `BASELINE_*`,
+`CYPHA_*.md`, or overnight processes.
+
+**HEAD at start:** `b389e88`. Build dir for A/B: `native/build_perf_struct` (MinGW Release).
+
+### Audited candidates
+
+| Candidate | Default D17 active? | Bit-identical skip possible? | Verdict |
+|---|---|---|---|
+| **BPTT slow-tier (`delta_slow` / `bptt_slow_buffer_`)** | Yes (computed every step) | **Yes** — only consumed by `ewc_.observe_grads()` when `ewc_lambda > 0`; default `ewc_lambda=0` | **Shipped** |
+| **BPTT fast-tier (`delta` / `apply_bptt_delta_avg`)** | Yes | No — updates `W_fast` every `bptt_steps`; SSM context feeds GRIA via `project_field()` | Keep |
+| **BPTT cadence throttle** (e.g. update every 128 steps) | N/A | No — changes training dynamics / BPC | Not pursued |
+| **Compressive memory store/retrieve** | Yes (`max_memory_slots=256` default, `compress_interval=64`) | No — `retrieve()` bias is fused into GRIA input every step; store cadence already gated | Not pursued |
+| **N-gram Laplace prior (`ngram_count_log_prior` / `refresh_laplace_prior`)** | Yes | No — prior is added to GRIA logits at predict time and refreshed after train | Not pursued |
+
+### Shipped fix: skip dead BPTT slow-tier when EWC off
+
+**Root cause:** `bptt_ssm_update` computed a full slow-tier outer product (`delta_slow`, size
+`d_state × d_embed`) and maintained `bptt_slow_buffer_` on every step, then averaged into
+`avg_slow` when the BPTT window filled — but at the locked D17 default (`ewc_lambda=0`) the only
+consumer was `ewc_.observe_grads(stub.d_ssm_w_slow=...)`, already gated on `ewc_lambda > 0`.
+Same “output unreachable” pattern as Part 4's DIF skip.
+
+**Fix:** `bptt_slow_for_ewc = (ewc_lambda > 0 && uses_hybrid_ewc(mode))` gates
+`delta_slow` allocation, `bptt_slow_buffer_` pushes, `avg_slow` reduction, and
+`ewc_.observe_grads`. Fast-tier BPTT (`delta` → `apply_bptt_delta_avg`) unchanged.
+
+**Determinism:** **bit-identical BPC** on `build_perf_struct` (`wikitext2`, `--bench-seed 42`,
+`--n-train 6000 --n-eval 256 --threads 1`):
+- Before: `bpc = 3.993711451733088`, `bpc_lstm_only = 3.986609483437473`
+- After:  `bpc = 3.993711451733088`, `bpc_lstm_only = 3.986609483437473`
+
+(Cross-toolchain note: MSVC `build_perf_skip` reports `bpc = 3.9922568809095362` for the same
+command — compare within one build dir only.)
+
+**Measured speedup** (`CYPHA_PERF_TRACE=1`, `--n-train 8000`, same build dir, 23,970
+`train_step` calls):
+
+| Bucket | Before (s) | Before (%) | After (s) | After (%) | Δ |
+|---|---|---|---|---|---|
+| `bptt_ssm_update` | 5.699 | 10.63% of train_step | 3.994 | 8.06% | **−30%** |
+| `train_step` total (instrumented) | 53.63 | — | 49.55 | — | **~−7.6%** |
+
+**What remains (no free structural skip at D17 default):** fast-tier BPTT, memory
+retrieve/store, n-gram prior refresh, LSTM/GRIA/SSM forward-backward matvecs. Further gains need
+algorithm change, batch/CUDA paths, or accepting BPC-changing throttles.
+
+**Commit of this pass:** code + documentation.
+
