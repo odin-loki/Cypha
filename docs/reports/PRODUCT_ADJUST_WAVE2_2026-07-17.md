@@ -18,7 +18,8 @@ Wave 2 (post-[closeout](PRODUCT_ADJUST_CLOSEOUT_2026-07-17.md) `aad3ce7`) shippe
 1. **Overnight** — H19–H22 cell-sweep completion, then `poll_and_finalize_overnight.ps1 -AutoCommit` + lock commit + d27–d38/d38 certificate ([`FINALIZE_PREP_2026-07-17.md`](FINALIZE_PREP_2026-07-17.md)).
 2. **Multi-day research** — RPSM zero-BPTT gap, hidden=512 @ 300k Phase 3, P3 XOR GMM default-on, EWC/CL, multi-view DIF, κ ablations, federated TLS infra, Qt/Web hardening backlog, paper submit.
 
-No further bounded product/profile adjust items are queued for this wave.
+No further bounded product/profile adjust items are queued for this wave.  
+**Hard stop:** [`PRODUCT_ADJUST_STOP_2026-07-17.md`](PRODUCT_ADJUST_STOP_2026-07-17.md) — do not invent more micro-opts until overnight finalize.
 
 ---
 
@@ -137,6 +138,7 @@ Prior chat pane: `b706647` — [`WEB_UI_GENERATE_2026-07-17.md`](WEB_UI_GENERATE
 
 ## Cross-links
 
+- **STOP audit (free polish done):** [`PRODUCT_ADJUST_STOP_2026-07-17.md`](PRODUCT_ADJUST_STOP_2026-07-17.md)
 - Closeout (wave 1): [`PRODUCT_ADJUST_CLOSEOUT_2026-07-17.md`](PRODUCT_ADJUST_CLOSEOUT_2026-07-17.md)
 - Finalize prep: [`FINALIZE_PREP_2026-07-17.md`](FINALIZE_PREP_2026-07-17.md)
 - Master task list: [`CYPHA_BILL_OF_WORK.md`](../../CYPHA_BILL_OF_WORK.md)

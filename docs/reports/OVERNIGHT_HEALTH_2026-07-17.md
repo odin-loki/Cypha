@@ -216,3 +216,70 @@ At recent cadence (~75–123 min per variant):
 ### Recommended action
 
 **Wait.** Do not restart H18, do not finalize, do not AutoCommit. When H22 completes and artifacts flush, run **`poll_and_finalize_overnight.ps1 -AutoCommit`**.
+
+---
+
+## 9. Refresh — 2026-07-17T12:09:17Z (local ~22:09 AEST)
+
+**Scope:** Read-only re-check; no processes killed.  
+**Verdict:** **HEALTHY — H18 in progress (21/25), active compute. Wait.**
+
+### Progress
+
+| Event | Timestamp (UTC) | Notes |
+|-------|-----------------|-------|
+| H18 progress line (variant start) | **11:45:54** | **21/25** — unchanged (expected until H19 starts) |
+| This refresh | 12:09:17 | **~23 min into H18** |
+| H17→H18 gap | — | **75 min** (prior variant cadence) |
+
+`overnight_progress.log` tail still `2026-07-17T11:45:54Z variant=H18 21/25`. No new line during an in-flight variant is **expected** (`append_overnight_progress_log` fires at variant **start** only).
+
+### Process inventory @ refresh
+
+| PID | Binary | Role | CPU @ refresh | Status |
+|-----|--------|------|---------------|--------|
+| **47108** | `cypha_cell_hypothesis_sweep.exe` | **Active H18 child** (`--cell-variant H18`, 300k train) | **~1306 s** total | **Running** |
+| **30632** | `cypha_cell_hypothesis_sweep.exe` | Parent orchestrator (`--overnight-sweep`, idle waiter) | ~0 s | **Expected** |
+| **27864** | `cyphalm_bench_native.exe` | Separate D17 bench — not cell-sweep | ~60 s+ | Parallel unrelated job |
+
+Poll watcher last heartbeat: **`HEARTBEAT 2026-07-17 22:07:59 processes=4 lock_n_train=300000`**. No STALL/ERROR lines.
+
+### Stuck vs slow
+
+H18 child PID **47108** is actively computing (~1306 s CPU accumulated; ~23 min wall since 11:45:54Z start). Parent PID **30632** is idle-waiting as expected. Poll **`processes=4`** confirms overnight chain alive. **Not stuck — wait.**
+
+### Updated ETA (H19–H22 + finalize)
+
+At recent cadence (~75–120 min per variant from variant-start line):
+
+| Item | Estimate |
+|------|----------|
+| H19 progress line | ~**2026-07-17T13:00Z–13:45Z** (~75–120 min from H18 start) |
+| H20 progress line | ~**2026-07-17T14:30Z–15:30Z** |
+| H21 progress line | ~**2026-07-17T16:00Z–17:30Z** |
+| H22 progress line (25/25) | ~**2026-07-17T17:30Z–19:00Z** |
+| Artifact flush + `poll_and_finalize_overnight.ps1` | After H22 child exits |
+
+### Recommended action
+
+**Wait.** Do not restart H18, do not finalize, do not AutoCommit. Re-check trigger: no H19 line by **~13:45Z** **and** PID 47108 CPU delta ≈ 0 over 5 min **and** poll STALL/`processes=0`.
+
+---
+
+## 9. Refresh — 2026-07-17T12:08:30Z (local ~22:08 AEST)
+
+**Scope:** Read-only re-check; no processes killed.  
+**Verdict:** **HEALTHY — H18 still in progress (21/25), active compute. Wait.**
+
+| Check | Result |
+|-------|--------|
+| Progress log tail | Still `2026-07-17T11:45:54Z variant=H18 21/25` (expected until H19 starts) |
+| Elapsed into H18 | ~**23 min** wall from progress line |
+| Child PID **47108** | CPU **1332 → 1344** over 12 s wall (**+11.9 s**) — compute active |
+| Parent PID **30632** | Idle waiter |
+| Poll | `processes=4 lock_n_train=300000` — no STALL/ERROR |
+
+H18 duration is well within the 75–123 min H15–H17 cadence. **Do not restart. Do not finalize.**
+
+ETA unchanged: H19 ~`13:00Z–13:30Z` if cadence holds; finalize only after H22 + artifact flush — [`FINALIZE_PREP_2026-07-17.md`](FINALIZE_PREP_2026-07-17.md).  
+Product polish waves: **STOP** — [`PRODUCT_ADJUST_STOP_2026-07-17.md`](PRODUCT_ADJUST_STOP_2026-07-17.md).
