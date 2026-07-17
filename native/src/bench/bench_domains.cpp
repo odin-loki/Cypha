@@ -383,6 +383,9 @@ std::vector<int> curriculum_view_order(const cypha::CyphaInferModel& infer,
     return cypha::curriculum_order_windowed(confidences, train_n, window, curriculum_rng);
 }
 
+Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::vector<double>>& xs,
+                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out = nullptr);
+
 Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const std::vector<std::string>& train_y,
                         const std::vector<std::vector<double>>& test_x, const std::vector<std::string>& test_y,
                         const cypha::bench::ProfileJson& regime, const std::string& dataset_name,
@@ -437,35 +440,17 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     }
     cypha::sync_infer_model_from_memory(infer, mem);
 
-    const int test_n = static_cast<int>(te.size());
-    const int k_labels = static_cast<int>(infer.labels.size());
-    std::vector<std::string> y_true;
-    std::vector<std::string> y_pred;
-    y_true.reserve(te.size());
-    y_pred.reserve(te.size());
-    for (std::size_t i = 0; i < te.size(); ++i) {
-        y_true.push_back(test_y[i]);
-    }
-    if (test_n > 0 && k_labels > 0) {
-        const std::vector<double> flat = flatten_rowmajor(te);
-        std::vector<double> llr;
-        cypha::batch_llr_from_x(infer, flat.data(), test_n, llr);
-        y_pred.reserve(te.size());
-        for (int i = 0; i < test_n; ++i) {
-            int best = 0;
-            for (int k = 1; k < k_labels; ++k) {
-                if (llr[static_cast<std::size_t>(i * k_labels + k)] >
-                    llr[static_cast<std::size_t>(i * k_labels + best)]) {
-                    best = k;
-                }
-            }
-            y_pred.push_back(infer.labels.empty() ? "0" : infer.labels[static_cast<std::size_t>(best)]);
-        }
+    Json test_scores = clf_metrics_native(infer, te, test_y);
+    Json train_scores = clf_metrics_native(infer, tr, train_y);
+    if (train_scores.contains("accuracy") && test_scores.contains("accuracy")) {
+        test_scores["train_accuracy"] = train_scores["accuracy"];
+        test_scores["generalization_gap"] =
+            train_scores["accuracy"].get<double>() - test_scores["accuracy"].get<double>();
     }
 
     Json result = Json{
         {"dataset", dataset_name},
-        {"cypha_scores", Json{{"accuracy", cypha::bench::accuracy(y_true, y_pred)}}},
+        {"cypha_scores", test_scores},
         {"baselines", cypha::bench::offline_classification_baselines_json(tr, train_y, te, test_y)},
         {"n_train", train_n},
         {"n_test", static_cast<int>(te.size())},
@@ -601,12 +586,14 @@ double online_clf_epistemic(const cypha::CyphaInferModel& m, const std::vector<d
 }
 
 Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::vector<double>>& xs,
-                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out = nullptr) {
+                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out) {
     const int n = static_cast<int>(xs.size());
     const int k = static_cast<int>(m.labels.size());
     std::vector<std::string> y_true;
     std::vector<std::string> y_pred;
     std::vector<double> epistemic;
+    std::vector<double> confidences;
+    std::vector<double> correct;
     y_true.reserve(xs.size());
     y_pred.reserve(xs.size());
     epistemic.reserve(xs.size());
@@ -616,6 +603,8 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
         cypha::batch_llr_from_x(m, flat.data(), n, llr);
         std::vector<double> probs;
         cypha::softmax_batch_reference(llr.data(), n, k, 1e-12, probs);
+        confidences.reserve(static_cast<std::size_t>(n));
+        correct.reserve(static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i) {
             y_true.push_back(ys[static_cast<std::size_t>(i)]);
             int best = 0;
@@ -624,7 +613,12 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
                     best = j;
                 }
             }
-            y_pred.push_back(m.labels.empty() ? "0" : m.labels[static_cast<std::size_t>(best)]);
+            const std::string pred = m.labels.empty() ? "0" : m.labels[static_cast<std::size_t>(best)];
+            y_pred.push_back(pred);
+            const double conf = cypha::row_max_softmax_confidence(
+                probs.data() + static_cast<std::size_t>(i * k), k);
+            confidences.push_back(conf);
+            correct.push_back(pred == ys[static_cast<std::size_t>(i)] ? 1.0 : 0.0);
             epistemic.push_back(
                 cypha::regression::mke_routing_entropy(probs.data() + static_cast<std::size_t>(i * k), k, 1e-12));
         }
@@ -633,15 +627,25 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
         *epistemic_out = epistemic;
     }
     double mean_epi = 0.0;
+    double mean_conf = 0.0;
     if (!epistemic.empty()) {
         for (double v : epistemic) mean_epi += v;
         mean_epi /= static_cast<double>(epistemic.size());
     }
-    return Json{
+    if (!confidences.empty()) {
+        for (double v : confidences) mean_conf += v;
+        mean_conf /= static_cast<double>(confidences.size());
+    }
+    Json out{
         {"accuracy", cypha::bench::accuracy(y_true, y_pred)},
         {"mean_epistemic_var", mean_epi},
         {"expert_count", static_cast<int>(m.labels.size())},
     };
+    if (!confidences.empty()) {
+        out["mean_confidence"] = mean_conf;
+        out["ece"] = cypha::bench::expected_calibration_error(confidences, correct);
+    }
+    return out;
 }
 
 void train_classifier_online(OnlineClassifier& c, const std::vector<std::vector<double>>& xs,

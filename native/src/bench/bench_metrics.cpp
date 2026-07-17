@@ -114,6 +114,34 @@ double safe_auroc(const std::vector<int>& y_true, const std::vector<double>& sco
     return u / (static_cast<double>(n_pos) * static_cast<double>(n_neg));
 }
 
+double expected_calibration_error(const std::vector<double>& confidences,
+                                  const std::vector<double>& correct, int n_bins) {
+    const int n = static_cast<int>(confidences.size());
+    if (n <= 0 || confidences.size() != correct.size() || n_bins <= 0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    double ece = 0.0;
+    for (int b = 0; b < n_bins; ++b) {
+        const double lo = static_cast<double>(b) / static_cast<double>(n_bins);
+        const double hi = static_cast<double>(b + 1) / static_cast<double>(n_bins);
+        double sum_w = 0.0;
+        double sum_c = 0.0;
+        double sum_corr = 0.0;
+        for (int i = 0; i < n; ++i) {
+            if (confidences[static_cast<std::size_t>(i)] >= lo &&
+                confidences[static_cast<std::size_t>(i)] < hi) {
+                sum_w += 1.0;
+                sum_c += confidences[static_cast<std::size_t>(i)];
+                sum_corr += correct[static_cast<std::size_t>(i)];
+            }
+        }
+        if (sum_w > 0.0) {
+            ece += sum_w * std::abs(sum_c / sum_w - sum_corr / sum_w) / static_cast<double>(n);
+        }
+    }
+    return ece;
+}
+
 double safe_spearman(const std::vector<double>& a, const std::vector<double>& b) {
     if (a.size() < 2 || a.size() != b.size()) return 0.0;
     if (stddev(a) < 1e-12 || stddev(b) < 1e-12) return 0.0;

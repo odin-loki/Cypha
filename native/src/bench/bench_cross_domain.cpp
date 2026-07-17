@@ -35,7 +35,7 @@ bool experiments_is_dict(const ProfileJson& payload) {
 
 ProfileJson collect_calibration_rows(const std::unordered_map<std::string, ProfileJson>& tables) {
     static const std::vector<const char*> kClassKeys = {
-        "accuracy", "f1_macro", "mean_epistemic_var", "mean_confidence"};
+        "accuracy", "f1_macro", "mean_epistemic_var", "mean_confidence", "ece"};
     static const std::vector<const char*> kRegKeys = {"rmse", "r2", "mean_epistemic_var"};
     static const std::vector<const char*> kOodKeys = {
         "ood_auroc", "cypha_ood_auroc", "extrapolation_auroc"};
@@ -64,12 +64,17 @@ ProfileJson collect_calibration_rows(const std::unordered_map<std::string, Profi
             };
             if (has_any_key(metrics, kClassKeys)) {
                 row["task_type"] = "classification";
-                if (metrics.contains("mean_confidence") && metrics["mean_confidence"].is_number()) {
+                if (metrics.contains("ece") && metrics["ece"].is_number()) {
+                    row["ece"] = metrics["ece"];
+                } else if (metrics.contains("mean_confidence") && metrics["mean_confidence"].is_number()) {
                     row["ece_proxy"] = metrics["mean_confidence"];
                     if (metrics.contains("accuracy") && metrics["accuracy"].is_number()) {
                         row["ece_proxy"] = std::abs(metrics["mean_confidence"].get<double>() -
                                                     metrics["accuracy"].get<double>());
                     }
+                }
+                if (metrics.contains("generalization_gap") && metrics["generalization_gap"].is_number()) {
+                    row["generalization_gap"] = metrics["generalization_gap"];
                 }
             } else if (has_any_key(metrics, kRegKeys)) {
                 row["task_type"] = "regression";

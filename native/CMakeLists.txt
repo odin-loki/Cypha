@@ -60,6 +60,7 @@ add_library(cypha_core STATIC
   src/nig_field.cpp
   src/regression_stub.cpp
   src/mke_scalar_train_step.cpp
+  src/em_step.cpp
   src/generation.cpp
   src/accel_backend.cpp
   src/create_model.cpp
@@ -323,6 +324,9 @@ target_link_libraries(reversible_ssm_cell_smoke PRIVATE cypha_lm_native)
 add_executable(curriculum_smoke tools/curriculum_smoke.cpp)
 target_link_libraries(curriculum_smoke PRIVATE cypha_core)
 
+add_executable(bench_metrics_smoke tools/bench_metrics_smoke.cpp)
+target_link_libraries(bench_metrics_smoke PRIVATE cypha_bench_native)
+
 add_executable(curriculum_window_smoke tools/curriculum_window_smoke.cpp)
 target_link_libraries(curriculum_window_smoke PRIVATE cypha_core)
 
@@ -390,6 +394,7 @@ set(
   federated_worker_smoke
   federated_tls_smoke
   curriculum_smoke
+  bench_metrics_smoke
   curriculum_window_smoke
   corpus_smoke
   intelligence_profiler_papers
@@ -480,6 +485,7 @@ if(MSVC)
   target_compile_options(cypha_parity_run PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_parity PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE /W4 /permissive-)
+  target_compile_options(em_step_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_train_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_train_multiclass_smoke PRIVATE /W4 /permissive-)
@@ -556,6 +562,7 @@ else()
   target_compile_options(cypha_parity_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(em_step_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_train_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_train_multiclass_smoke PRIVATE -Wall -Wextra -Wpedantic)
@@ -637,6 +644,7 @@ add_test(
     "${_parity_fix}/reference.cypha"
     "${_parity_fix}/native_parity.bin"
 )
+add_test(NAME native_em_step_smoke COMMAND "$<TARGET_FILE:em_step_smoke>")
 add_test(
   NAME native_rpsm_sequence_smoke
   COMMAND "$<TARGET_FILE:rpsm_sequence_smoke>"
@@ -1012,6 +1020,11 @@ add_test(
 add_test(
   NAME native_curriculum_smoke
   COMMAND "$<TARGET_FILE:curriculum_smoke>"
+)
+
+add_test(
+  NAME native_bench_metrics_smoke
+  COMMAND "$<TARGET_FILE:bench_metrics_smoke>"
 )
 
 add_test(

@@ -22,4 +22,8 @@ double safe_spearman(const std::vector<double>& a, const std::vector<double>& b)
 /// ROC-AUC via Mann-Whitney U (NaN when only one class present).
 double safe_auroc(const std::vector<int>& y_true, const std::vector<double>& scores);
 
+/// Expected Calibration Error (equal-width confidence bins). Returns NaN when n <= 0.
+double expected_calibration_error(const std::vector<double>& confidences,
+                                  const std::vector<double>& correct, int n_bins = 15);
+
 }  // namespace cypha::bench
