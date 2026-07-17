@@ -828,6 +828,11 @@ speeding up the existing amount; or (3) simply re-running today's Part 3 A/B on 
 get a trustworthy wall-clock number for the record, since the code change itself is done and
 determinism-verified regardless.
 
+**2026-07-17 CUDA utilization follow-up:** CyphaLM `eval_bpc` remains sequential (cannot batch
+without an algorithm change). The smallest live win was batched DIF eval in
+`train_eval_vectors` (D03/D08) — see dated section in [`docs/native/ACCEL_CUDA.md`](../native/ACCEL_CUDA.md)
+(~4.9% D03 wall-clock with `CYPHA_BENCH_FAST=1` on `native/build_perf_cuda`).
+
 ---
 
 ## Follow-up (2026-07-17, part 4) — per-step work reduction

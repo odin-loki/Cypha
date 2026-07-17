@@ -437,19 +437,30 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     }
     cypha::sync_infer_model_from_memory(infer, mem);
 
+    const int test_n = static_cast<int>(te.size());
+    const int k_labels = static_cast<int>(infer.labels.size());
     std::vector<std::string> y_true;
     std::vector<std::string> y_pred;
     y_true.reserve(te.size());
     y_pred.reserve(te.size());
     for (std::size_t i = 0; i < te.size(); ++i) {
         y_true.push_back(test_y[i]);
+    }
+    if (test_n > 0 && k_labels > 0) {
+        const std::vector<double> flat = flatten_rowmajor(te);
         std::vector<double> llr;
-        cypha::batch_llr_from_x(infer, te[i].data(), 1, llr);
-        int best = 0;
-        for (int k = 1; k < static_cast<int>(infer.labels.size()); ++k) {
-            if (llr[static_cast<std::size_t>(k)] > llr[static_cast<std::size_t>(best)]) best = k;
+        cypha::batch_llr_from_x(infer, flat.data(), test_n, llr);
+        y_pred.reserve(te.size());
+        for (int i = 0; i < test_n; ++i) {
+            int best = 0;
+            for (int k = 1; k < k_labels; ++k) {
+                if (llr[static_cast<std::size_t>(i * k_labels + k)] >
+                    llr[static_cast<std::size_t>(i * k_labels + best)]) {
+                    best = k;
+                }
+            }
+            y_pred.push_back(infer.labels.empty() ? "0" : infer.labels[static_cast<std::size_t>(best)]);
         }
-        y_pred.push_back(infer.labels.empty() ? "0" : infer.labels[static_cast<std::size_t>(best)]);
     }
 
     Json result = Json{

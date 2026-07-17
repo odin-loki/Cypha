@@ -249,3 +249,59 @@ with `CYPHA_REPO_ROOT` pointed at an isolated scratch tree, per the note in §3)
 a dedicated smoke test); D03/D14 coverage above already exercises the same `train_eval_vectors`/
 `dif_train_step_vector` code paths D08 shares. No code was changed in this pass, so no regression
 risk beyond the audit itself — this run is a baseline confirmation, not a before/after.
+
+## Batched DIF eval path — first live CUDA-amortizing caller (2026-07-17)
+
+Follow-up to the 2026-07-12 utilization audit (§ above) and
+`docs/reports/PERFORMANCE_PROFILE_2026-07-12.md`'s recommendation to prefer genuinely batched
+callers over D17's sequential `eval_bpc` / online `train_step`. Fresh tree:
+`native/build_perf_cuda` via VS Build Tools 18 CMake (`4.2.3-msvc3`) +
+`cmake --preset windows-vs2026-release -DCYPHA_ENABLE_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86`
+(system-PATH CMake 3.29 cannot name the VS18 generator — use the bundled one; see
+`MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md` §2).
+
+### What was not viable (CyphaLM `eval_bpc`)
+
+`CyphaLMModel::eval_bpc` (`cyphalm_model.cpp`) is an inherently sequential recurrence: each token
+calls `predict_next`, which updates LSTM/SSM/GRIA state used by the next token. Batching that
+without an algorithm change is not possible. `CyphaLMBatch::train_sequence_batch` is a separate
+multi-sequence OpenMP/std::thread path and does **not** call `cypha::accel` CUDA kernels today —
+wiring CUDA into CyphaLMBatch remains a larger follow-up (next concrete step at end of this
+section).
+
+### Smallest bounded change that *does* exercise batched CUDA
+
+`train_eval_vectors` in `native/src/bench/bench_domains.cpp` (shared by **D03** and **D08**) used
+to call `batch_llr_from_x(..., n=1)` once per test row. It now flattens the full test matrix and
+calls `batch_llr_from_x(infer, flat, test_n, llr)` once. That reaches
+`cypha::accel::batch_encode` with `n = n_test` (and RPSM LLR scoring for the score stage — still
+CPU GEMM by default). Training remains online `n=1` (unchanged; still not GPU-amortizable).
+
+### Build note
+
+An earlier configure of this tree hit `nvcc fatal: A single input file is required...` because
+global `add_compile_options(... /MP)` leaked into the CUDA `.cu` compile line. That is already
+scoped to `COMPILE_LANGUAGE:CXX` in `native/CMakeLists.txt` on current `main`; rebuild after that
+fix succeeded (`cypha_bench_run.exe`, `cuda_smoke.exe` under `build_perf_cuda/Release`).
+
+### Measurements (`CYPHA_BENCH_FAST=1`, scratch `CYPHA_REPO_ROOT`, RTX 3090)
+
+| Path | Runs | Mean wall |
+|------|------|-----------|
+| D03 eval loop `n=1` (pre-change CUDA build) | 5 | **7.141 s** |
+| D03 eval loop batched `n=n_test` (same CUDA build) | 3 | **6.792 s** (~**4.9%** faster domain wall) |
+
+Iris accuracy stayed **0.9** (same as 2026-07-12 audit). Domain wall is still dominated by
+online training (`n=1` encode steps); the eval portion is now a single GPU-eligible batch
+(`n_test≈30` iris / ≈36 wine under stratified 20% split — small, so wall-clock gain is modest).
+
+`cuda_smoke --bench` on the same build (N=64, d=128, K=16): `batch_encode` **5.26x**,
+`score_matrix` **1.38x** CUDA vs CPU ref — confirms the GPU path is live.
+
+### Next concrete CyphaLMBatch / LM-eval CUDA step
+
+1. Keep DIF eval batched (done). Optionally raise `CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` above 1 so
+   remaining online `n=1` encodes stay on CPU while eval batches stay on GPU.
+2. For LM: add a **non-recurrent** bulk encode/score helper used by offline tools (or teach
+   `CyphaLMBatch` to call `cypha::accel::batch_encode` over packed field rows), not
+   `eval_bpc` itself — that stays sequential by construction.
