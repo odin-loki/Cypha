@@ -43,4 +43,23 @@ double crps_gaussian_mean(const std::vector<double>& y_true, const std::vector<d
 double predictive_interval_coverage(const std::vector<double>& y_true, const std::vector<double>& mu,
                                     const std::vector<double>& sigma, double z = 1.645);
 
+/// Lag-1 sample autocorrelation of regression residuals (y_true - y_pred). Returns 0 when undefined.
+double residual_autocorr_lag1(const std::vector<double>& y_true, const std::vector<double>& y_pred);
+
+/// Spectral flatness (geometric / arithmetic mean of DFT power bins) on regression residuals.
+double residual_spectral_flatness(const std::vector<double>& y_true, const std::vector<double>& y_pred);
+
+/// Summary of per-sample |top1 − top2| logit margins (distance from decision boundary proxy).
+struct MarginDistribution {
+    double mean = 0.0;
+    double p50 = 0.0;
+    double p10 = 0.0;
+};
+
+/// |top-1 − top-2| logit gap for one LLR row (0 when k <= 1).
+double logit_margin_top2(const double* llr_row, int k);
+
+/// Mean / p50 / p10 of |margin| over samples (NaN fields when empty).
+MarginDistribution margin_distribution(const std::vector<double>& margins);
+
 }  // namespace cypha::bench

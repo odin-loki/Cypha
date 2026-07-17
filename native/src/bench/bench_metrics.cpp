@@ -251,6 +251,137 @@ double predictive_interval_coverage(const std::vector<double>& y_true, const std
     return static_cast<double>(covered) / static_cast<double>(y_true.size());
 }
 
+double percentile_linear(const std::vector<double>& v, double p) {
+    if (v.empty()) return std::numeric_limits<double>::quiet_NaN();
+    std::vector<double> sorted = v;
+    std::sort(sorted.begin(), sorted.end());
+    if (sorted.size() == 1) return sorted.front();
+    const double rank = p * static_cast<double>(sorted.size() - 1);
+    const int lo = static_cast<int>(std::floor(rank));
+    const int hi = static_cast<int>(std::ceil(rank));
+    const double frac = rank - static_cast<double>(lo);
+    return sorted[static_cast<std::size_t>(lo)] * (1.0 - frac) + sorted[static_cast<std::size_t>(hi)] * frac;
+}
+
+double logit_margin_top2(const double* llr_row, int k) {
+    if (k <= 1) return 0.0;
+    double top = llr_row[0];
+    double second = llr_row[1];
+    if (second > top) {
+        const double tmp = top;
+        top = second;
+        second = tmp;
+    }
+    for (int j = 2; j < k; ++j) {
+        const double v = llr_row[j];
+        if (v > top) {
+            second = top;
+            top = v;
+        } else if (v > second) {
+            second = v;
+        }
+    }
+    return std::abs(top - second);
+}
+
+MarginDistribution margin_distribution(const std::vector<double>& margins) {
+    MarginDistribution out;
+    if (margins.empty()) {
+        out.mean = out.p50 = out.p10 = std::numeric_limits<double>::quiet_NaN();
+        return out;
+    }
+    std::vector<double> abs_m;
+    abs_m.reserve(margins.size());
+    double sum = 0.0;
+    for (double m : margins) {
+        const double a = std::abs(m);
+        abs_m.push_back(a);
+        sum += a;
+    }
+    out.mean = sum / static_cast<double>(abs_m.size());
+    out.p50 = percentile_linear(abs_m, 0.5);
+    out.p10 = percentile_linear(abs_m, 0.1);
+    return out;
+}
+
+double residual_autocorr_lag1(const std::vector<double>& y_true, const std::vector<double>& y_pred) {
+    if (y_true.size() < 3 || y_true.size() != y_pred.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const std::size_t n = y_true.size();
+    std::vector<double> resid(n);
+    for (std::size_t i = 0; i < n; ++i) resid[i] = y_true[i] - y_pred[i];
+    const double m = mean(resid);
+    double num = 0.0;
+    double denom = 0.0;
+    for (std::size_t i = 0; i + 1 < n; ++i) {
+        const double a = resid[i] - m;
+        const double b = resid[i + 1] - m;
+        num += a * b;
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+        const double d = resid[i] - m;
+        denom += d * d;
+    }
+    if (denom < 1e-24) return 0.0;
+    const double rho = num / denom;
+    return std::isfinite(rho) ? rho : std::numeric_limits<double>::quiet_NaN();
+}
+
+namespace {
+
+constexpr double kPiResidual = 3.14159265358979323846;
+
+void dft_power_spectrum(const std::vector<double>& signal, std::vector<double>& power) {
+    const int n = static_cast<int>(signal.size());
+    if (n < 2) {
+        power.clear();
+        return;
+    }
+    const int bins = n / 2;
+    power.resize(static_cast<std::size_t>(bins));
+    for (int k = 1; k <= bins; ++k) {
+        double re = 0.0;
+        double im = 0.0;
+        for (int j = 0; j < n; ++j) {
+            const double angle =
+                -2.0 * kPiResidual * static_cast<double>(k) * static_cast<double>(j) / static_cast<double>(n);
+            re += signal[static_cast<std::size_t>(j)] * std::cos(angle);
+            im += signal[static_cast<std::size_t>(j)] * std::sin(angle);
+        }
+        power[static_cast<std::size_t>(k - 1)] = re * re + im * im;
+    }
+}
+
+double spectral_flatness_from_power(const std::vector<double>& power) {
+    if (power.empty()) return std::numeric_limits<double>::quiet_NaN();
+    double log_sum = 0.0;
+    double arith = 0.0;
+    int count = 0;
+    for (double p : power) {
+        const double v = std::max(p, 1e-12);
+        log_sum += std::log(v);
+        arith += v;
+        ++count;
+    }
+    if (count <= 0 || arith <= 1e-12) return 0.0;
+    const double geom = std::exp(log_sum / static_cast<double>(count));
+    return geom / (arith / static_cast<double>(count));
+}
+
+}  // namespace
+
+double residual_spectral_flatness(const std::vector<double>& y_true, const std::vector<double>& y_pred) {
+    if (y_true.size() < 4 || y_true.size() != y_pred.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    std::vector<double> resid(y_true.size());
+    for (std::size_t i = 0; i < y_true.size(); ++i) resid[i] = y_true[i] - y_pred[i];
+    std::vector<double> power;
+    dft_power_spectrum(resid, power);
+    return spectral_flatness_from_power(power);
+}
+
 double safe_spearman(const std::vector<double>& a, const std::vector<double>& b) {
     if (a.size() < 2 || a.size() != b.size()) return 0.0;
     if (stddev(a) < 1e-12 || stddev(b) < 1e-12) return 0.0;

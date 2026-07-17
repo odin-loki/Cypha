@@ -595,6 +595,7 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
     std::vector<double> epistemic;
     std::vector<double> confidences;
     std::vector<double> correct;
+    std::vector<double> margins;
     y_true.reserve(xs.size());
     y_pred.reserve(xs.size());
     epistemic.reserve(xs.size());
@@ -622,6 +623,8 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
             correct.push_back(pred == ys[static_cast<std::size_t>(i)] ? 1.0 : 0.0);
             epistemic.push_back(
                 cypha::regression::mke_routing_entropy(probs.data() + static_cast<std::size_t>(i * k), k, 1e-12));
+            margins.push_back(cypha::bench::logit_margin_top2(
+                llr.data() + static_cast<std::size_t>(i * k), k));
         }
     }
     if (epistemic_out != nullptr) {
@@ -647,6 +650,12 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
     if (!confidences.empty()) {
         out["mean_confidence"] = mean_conf;
         out["ece"] = cypha::bench::expected_calibration_error(confidences, correct);
+    }
+    if (!margins.empty()) {
+        const cypha::bench::MarginDistribution md = cypha::bench::margin_distribution(margins);
+        out["margin_mean"] = md.mean;
+        out["margin_p50"] = md.p50;
+        out["margin_p10"] = md.p10;
     }
     return out;
 }
@@ -1158,6 +1167,8 @@ Json reg_metrics_native(const OnlineRegressor& r, const std::vector<std::vector<
         {"r2", cypha::bench::r2(ys, preds)},
         {"crps", cypha::bench::crps_gaussian_mean(ys, preds, unc)},
         {"interval_coverage_90", cypha::bench::predictive_interval_coverage(ys, preds, unc, 1.645)},
+        {"residual_autocorr_lag1", cypha::bench::residual_autocorr_lag1(ys, preds)},
+        {"residual_spectral_flatness", cypha::bench::residual_spectral_flatness(ys, preds)},
         {"mean_epistemic_var", mean_unc_sq},
         {"expert_count", static_cast<int>(r.experts.size())},
     };
