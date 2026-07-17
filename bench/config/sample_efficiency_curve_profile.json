@@ -1,0 +1,15 @@
+{
+  "curve_id": "sample_efficiency",
+  "description": "CyphaLM BPC vs n_train tiers (MC5/MG5 Addendum 2)",
+  "runner": "cyphalm_sample_efficiency_curve",
+  "defaults": {
+    "profile": "d17",
+    "mode": "hybrid",
+    "bench_seed": 42,
+    "n_eval": 256
+  },
+  "tiers": [500, 2000, 5000],
+  "fast_tiers": [80, 160, 240],
+  "metric": "bpc",
+  "output": "bench/results/sample_efficiency_curve.json"
+}

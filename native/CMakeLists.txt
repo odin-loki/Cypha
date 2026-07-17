@@ -367,6 +367,14 @@ target_link_libraries(curriculum_smoke PRIVATE cypha_core)
 add_executable(bench_metrics_smoke tools/bench_metrics_smoke.cpp)
 target_link_libraries(bench_metrics_smoke PRIVATE cypha_bench_native)
 
+add_executable(cyphalm_sample_efficiency_curve tools/cyphalm_sample_efficiency_curve.cpp)
+target_link_libraries(cyphalm_sample_efficiency_curve PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(cyphalm_sample_efficiency_curve)
+
+add_executable(sample_efficiency_curve_smoke tools/sample_efficiency_curve_smoke.cpp)
+target_link_libraries(sample_efficiency_curve_smoke PRIVATE cypha_bench_native)
+cypha_mingw_apply_exe_link_options(sample_efficiency_curve_smoke)
+
 add_executable(curriculum_window_smoke tools/curriculum_window_smoke.cpp)
 target_link_libraries(curriculum_window_smoke PRIVATE cypha_core)
 
@@ -444,6 +452,8 @@ set(
   federated_tls_smoke
   curriculum_smoke
   bench_metrics_smoke
+  cyphalm_sample_efficiency_curve
+  sample_efficiency_curve_smoke
   curriculum_window_smoke
   corpus_smoke
   intelligence_profiler_papers
@@ -1120,6 +1130,17 @@ if(TARGET bench_metrics_smoke)
   add_test(
     NAME native_bench_metrics_smoke
     COMMAND "$<TARGET_FILE:bench_metrics_smoke>"
+  )
+endif()
+
+if(TARGET sample_efficiency_curve_smoke)
+  add_test(
+    NAME native_sample_efficiency_curve_smoke
+    COMMAND "$<TARGET_FILE:sample_efficiency_curve_smoke>"
+      --exe-dir "$<TARGET_FILE_DIR:cyphalm_sample_efficiency_curve>"
+  )
+  set_tests_properties(native_sample_efficiency_curve_smoke PROPERTIES
+    ENVIRONMENT "CYPHA_BENCH_FAST=1"
   )
 endif()
 
