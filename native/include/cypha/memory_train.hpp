@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cypha/class_gmm.hpp"
 #include "cypha/load_cypha.hpp"
 
 #include <cstdint>
@@ -28,6 +29,14 @@ struct CyphaDifMemoryState {
   int field_dim{};
   std::vector<std::string> labels;
   std::vector<double> D{};
+  /// Per-class mixture weights (``K×max_m`` row-major); meaningful when ``use_class_gmm``.
+  std::vector<double> class_pi{};
+  /// Active component count per class in ``[1, kClassGmmMaxM]``.
+  std::vector<int> class_n_comp{};
+  /// Opt-in multimodal classes (default **off** — legacy single Gaussian per class).
+  bool use_class_gmm{false};
+  int class_gmm_m{kClassGmmDefaultM};
+  int cypha_format{kCyphaFormatV3};
   std::vector<double> n_obs_buf{};
   std::vector<std::int64_t> n_correct{};
   std::unordered_map<std::string, int> label_index{};
@@ -68,6 +77,9 @@ struct CyphaDifMemoryState {
 
   /// Python `_dedup_check`: separate highly overlapping class deltas.
   void dedup_check(const std::string& label);
+
+  [[nodiscard]] ClassGmmStorage gmm_view() const;
+  int gmm_max_m() const { return use_class_gmm ? kClassGmmMaxM : 1; }
 };
 
 /// Max entry of Python `DIFMemory.classify` LLR dict (no softmax / gate).

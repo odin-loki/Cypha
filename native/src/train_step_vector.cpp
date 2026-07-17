@@ -3,6 +3,7 @@
 #include <limits>
 #include <stdexcept>
 
+#include "cypha/class_gmm.hpp"
 #include "cypha/encoder_contrastive.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/kernel_memory.hpp"
@@ -28,10 +29,11 @@ void collect_nonempty_deltas(const CyphaDifMemoryState& mem, std::vector<std::ve
   const int d = mem.d_latent;
   const int K = static_cast<int>(mem.labels.size());
   constexpr double thr = 1e-16;
+  const int max_m = mem.gmm_max_m();
   for (int k = 0; k < K; ++k) {
     double n2 = 0.0;
     for (int j = 0; j < d; ++j) {
-      double v = mem.D[static_cast<std::size_t>(k * d + j)];
+      double v = mem.D[class_gmm_d_offset(k, 0, d, max_m) + static_cast<std::size_t>(j)];
       n2 += v * v;
     }
     if (n2 <= thr) {
@@ -39,7 +41,7 @@ void collect_nonempty_deltas(const CyphaDifMemoryState& mem, std::vector<std::ve
     }
     std::vector<double> row(static_cast<std::size_t>(d));
     for (int j = 0; j < d; ++j) {
-      row[static_cast<std::size_t>(j)] = mem.D[static_cast<std::size_t>(k * d + j)];
+      row[static_cast<std::size_t>(j)] = mem.D[class_gmm_d_offset(k, 0, d, max_m) + static_cast<std::size_t>(j)];
     }
     out.push_back(std::move(row));
   }
@@ -55,6 +57,13 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
                              TrainStepExtras* extras) {
   if (d != infer.d_latent || d != mem.d_latent) {
     return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  if (extras != nullptr) {
+    mem.use_class_gmm = extras->use_class_gmm;
+    if (extras->use_class_gmm) {
+      mem.class_gmm_m = std::max(1, std::min(extras->class_gmm_m, kClassGmmMaxM));
+    }
   }
 
   std::vector<double> H;

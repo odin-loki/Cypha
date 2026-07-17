@@ -11,6 +11,11 @@ void sync_infer_model_from_memory(CyphaInferModel& m, const CyphaDifMemoryState&
   constexpr double kMinVar = 1e-4;
   m.labels = s.labels;
   m.D = s.D;
+  m.class_pi = s.class_pi;
+  m.class_n_comp = s.class_n_comp;
+  m.use_class_gmm = s.use_class_gmm;
+  m.class_gmm_m = s.class_gmm_m;
+  m.cypha_format = s.cypha_format;
   m.n_obs = s.n_obs_buf;
   m.d_latent = s.d_latent;
   m.mu_world = s.world_mu;

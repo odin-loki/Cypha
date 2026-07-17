@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cypha/class_gmm.hpp"
 #include "cypha/ewc_regularizer.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
@@ -45,6 +46,9 @@ struct TrainStepExtras {
   /// Optional EWC overlay (``ewc_lambda > 0`` and non-null ``ewc``).
   double ewc_lambda{0.0};
   EwcRegularizer* ewc{nullptr};
+  /// Phase 3: per-class GMM (default **off** — legacy single Gaussian per class).
+  bool use_class_gmm{false};
+  int class_gmm_m{kClassGmmDefaultM};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).

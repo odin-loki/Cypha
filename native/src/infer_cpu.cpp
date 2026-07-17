@@ -1,5 +1,6 @@
 #include "cypha/infer_cpu.hpp"
 
+#include "cypha/class_gmm.hpp"
 #include "cypha/kernel_memory.hpp"
 #include "cypha/preprocessor.hpp"
 #include "cypha/rpsm/psi_matrices.hpp"
@@ -329,6 +330,18 @@ void context_prior_for_labels(const CyphaInferModel& m, const std::vector<std::s
   }
 }
 
+ClassGmmStorage CyphaInferModel::gmm_view() const {
+  ClassGmmStorage g;
+  g.enabled = use_class_gmm;
+  g.max_m = gmm_max_m();
+  g.d = d_latent;
+  g.K = static_cast<int>(labels.size());
+  g.D = D.data();
+  g.class_pi = class_pi.data();
+  g.class_n_comp = class_n_comp.empty() ? nullptr : class_n_comp.data();
+  return g;
+}
+
 CyphaInferModel CyphaInferModel::from_root(const CNode& root, const double* f_field_row_major,
                                            int field_dim_in) {
   CyphaInferModel m;
@@ -435,25 +448,28 @@ CyphaInferModel CyphaInferModel::from_root(const CNode& root, const double* f_fi
   if (classes.kind != CNode::Map) {
     throw std::runtime_error("classes must be dict");
   }
-  m.labels.reserve(classes.map.size());
-  m.D.clear();
-  m.n_obs.clear();
+  m.cypha_format = read_cypha_format(root);
+  m.use_class_gmm = read_class_gmm_enabled(root);
+  m.class_gmm_m = read_class_gmm_m(root, m.use_class_gmm);
+  const int max_m = m.gmm_max_m();
+  const int n_classes = static_cast<int>(classes.map.size());
+  m.labels.reserve(static_cast<std::size_t>(n_classes));
+  if (m.use_class_gmm) {
+    class_gmm_ensure_capacity(n_classes, m.d_latent, max_m, m.D, m.class_pi, m.class_n_comp);
+  } else {
+    m.D.assign(static_cast<std::size_t>(n_classes) * static_cast<std::size_t>(m.d_latent), 0.0);
+  }
+  int k_idx = 0;
   for (const auto& pr : classes.map) {
     m.labels.push_back(pr.first);
     const CNode& cnode = pr.second;
     if (cnode.kind != CNode::Map) {
       throw std::runtime_error("class entry must be dict");
     }
-    const CNode& dm = map_get_required(cnode, "delta_mu");
-    if (dm.kind != CNode::Tensor || dm.shape.size() != 1 ||
-        static_cast<int>(dm.shape[0]) != m.d_latent) {
-      throw std::runtime_error("delta_mu bad shape");
-    }
-    for (double v : dm.tensor) {
-      m.D.push_back(v);
-    }
+    load_class_delta_from_cnode(cnode, m.d_latent, max_m, k_idx, m.D, m.class_pi, m.class_n_comp);
     const CNode& no = map_get_required(cnode, "n_obs");
     m.n_obs.push_back(static_cast<double>(as_int64(no)));
+    ++k_idx;
   }
 
   const int expected_f = m.d_latent * m.field_dim;
@@ -630,10 +646,6 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
   if (K == 0) {
     return;
   }
-  if (use_rpsm_llr_from_env()) {
-    rpsm_score_matrix_batched(m, h_row_major, n, llr_out);
-    return;
-  }
 
   std::vector<double> mu0(static_cast<std::size_t>(d));
   for (int j = 0; j < d; ++j) {
@@ -651,6 +663,59 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
       }
       mu0[static_cast<std::size_t>(j)] += acc;
     }
+  }
+
+  if (m.use_class_gmm) {
+    std::vector<double> ctx;
+    context_prior_for_labels(m, m.labels, ctx);
+    const ClassGmmStorage gmm = m.gmm_view();
+    std::vector<double> mu0(static_cast<std::size_t>(d));
+    for (int j = 0; j < d; ++j) {
+      mu0[static_cast<std::size_t>(j)] = m.mu_world[static_cast<std::size_t>(j)];
+    }
+    double h_sq = 0.0;
+    for (double v : m.field_h) {
+      h_sq += v * v;
+    }
+    if (std::isfinite(h_sq) && h_sq <= 1e8) {
+      for (int j = 0; j < d; ++j) {
+        double acc = 0.0;
+        for (int t = 0; t < m.field_dim; ++t) {
+          acc += m.f_field[static_cast<std::size_t>(j * m.field_dim + t)] * m.field_h[static_cast<std::size_t>(t)];
+        }
+        mu0[static_cast<std::size_t>(j)] += acc;
+      }
+    }
+    for (int i = 0; i < n; ++i) {
+      const double* h = h_row_major + static_cast<std::size_t>(i) * static_cast<std::size_t>(d);
+      std::vector<double> rp(static_cast<std::size_t>(d));
+      for (int j = 0; j < d; ++j) {
+        const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
+        rp[static_cast<std::size_t>(j)] = dj * m.inv_v[static_cast<std::size_t>(j)];
+      }
+      for (int k = 0; k < K; ++k) {
+        const double u_k = m.v_mean / (m.n_obs[static_cast<std::size_t>(k)] + 1.0);
+        llr_out[static_cast<std::size_t>(i * K + k)] =
+            class_llr_for_k(gmm, k, rp.data(), m.inv_v.data(), u_k, ctx[static_cast<std::size_t>(k)]);
+      }
+    }
+    if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
+      std::vector<double> kernel_scores(static_cast<std::size_t>(K));
+      for (int i = 0; i < n; ++i) {
+        kernel_mem->score_all(h_row_major + static_cast<std::size_t>(i) * d, m.labels, kernel_scores);
+        for (int k = 0; k < K; ++k) {
+          const double lin = llr_out[static_cast<std::size_t>(i * K + k)];
+          const double ker = kernel_scores[static_cast<std::size_t>(k)];
+          llr_out[static_cast<std::size_t>(i * K + k)] =
+              (1.0 - kernel_blend) * lin + kernel_blend * ker;
+        }
+      }
+    }
+    return;
+  }
+  if (use_rpsm_llr_from_env()) {
+    rpsm_score_matrix_batched(m, h_row_major, n, llr_out);
+    return;
   }
 
   std::vector<double> ctx;
@@ -1003,17 +1068,28 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
   out.mahal_per_dim = mahal_num / static_cast<double>(std::max(d, 1));
 
   for (int k = 0; k < K; ++k) {
-    double cross = 0.0;
-    double d_sq = 0.0;
-    for (int j = 0; j < d; ++j) {
-      const double Dkj = m.D[static_cast<std::size_t>(k * d + j)];
-      const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
-      const double rj = dj * m.inv_v[static_cast<std::size_t>(j)];
-      cross += Dkj * rj;
-      d_sq += Dkj * Dkj * m.inv_v[static_cast<std::size_t>(j)];
+    double llr = 0.0;
+    if (!m.use_class_gmm) {
+      double cross = 0.0;
+      double d_sq = 0.0;
+      for (int j = 0; j < d; ++j) {
+        const double Dkj = m.D[static_cast<std::size_t>(k * d + j)];
+        const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
+        const double rj = dj * m.inv_v[static_cast<std::size_t>(j)];
+        cross += Dkj * rj;
+        d_sq += Dkj * Dkj * m.inv_v[static_cast<std::size_t>(j)];
+      }
+      const double u_arr = m.v_mean / (m.n_obs[static_cast<std::size_t>(k)] + 1.0);
+      llr = cross - 0.5 * d_sq - u_arr + ctx[static_cast<std::size_t>(k)];
+    } else {
+      std::vector<double> rp(static_cast<std::size_t>(d));
+      for (int j = 0; j < d; ++j) {
+        const double dj = h[j] - mu0[static_cast<std::size_t>(j)];
+        rp[static_cast<std::size_t>(j)] = dj * m.inv_v[static_cast<std::size_t>(j)];
+      }
+      const double u_arr = m.v_mean / (m.n_obs[static_cast<std::size_t>(k)] + 1.0);
+      llr = class_llr_for_k(m.gmm_view(), k, rp.data(), m.inv_v.data(), u_arr, ctx[static_cast<std::size_t>(k)]);
     }
-    const double u_arr = m.v_mean / (m.n_obs[static_cast<std::size_t>(k)] + 1.0);
-    const double llr = cross - 0.5 * d_sq - u_arr + ctx[static_cast<std::size_t>(k)];
     out.llrs[static_cast<std::size_t>(k)] = llr;
   }
 

@@ -13,7 +13,7 @@
 | 0 | Retire parity, keep regression net | [x] Done | `4133054` — `native/tests/regression/` + `*_golden` CTests; parity harness retired |
 | 1 | EM keystone | [x] Done | `31bbb0c`/`7a07f8b` — `em_step.hpp`, `em_step.cpp`, `em_step_smoke` |
 | 2 | Fix MoE with EM | [x] Done | EM responsibilities in `mke_scalar_train_step`; goldens regen; see `OPTIMALITY_PHASE2_2026-07-17.md` |
-| 3 | Per-class GMM (real XOR fix) | [ ] Not started | Blocked on Phase 1; RFF kernel patch closed XOR to ~2.7pp meanwhile |
+| 3 | Per-class GMM (real XOR fix) | [~] Opt-in shipped; XOR no-go | `use_class_gmm` default OFF; XOR ON≈50.5% vs OFF≈51.2% — see `OPTIMALITY_PHASE3_2026-07-17.md` |
 | 4 | Bayesian model averaging over Δk | [ ] Not started | |
 | 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
 | 6 | Variational IB encoder | [ ] Not started | |

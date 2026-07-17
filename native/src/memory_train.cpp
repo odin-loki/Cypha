@@ -5,6 +5,8 @@
 #include <limits>
 #include <stdexcept>
 
+#include "cypha/class_gmm.hpp"
+#include "cypha/em_step.hpp"
 #include "cypha/load_cypha.hpp"
 
 namespace cypha {
@@ -17,6 +19,7 @@ constexpr double kMdlLambda = 0.001;
 constexpr int kMdlColdStart = 8;
 constexpr double kRepulseCap = 0.5;
 constexpr double kLog2Pi = 1.8378770664093453;  // log(2*pi)
+constexpr double kGmmPiEma = 0.05;
 
 double as_double(const CNode& n) {
   if (n.kind == CNode::Float) {
@@ -189,16 +192,24 @@ CyphaDifMemoryState CyphaDifMemoryState::from_cypha_root(const CNode& root, cons
   }
 
   const CNode& classes = map_get_required(root, "classes");
+  s.cypha_format = read_cypha_format(root);
+  s.use_class_gmm = read_class_gmm_enabled(root);
+  s.class_gmm_m = read_class_gmm_m(root, s.use_class_gmm);
+  const int max_m = s.gmm_max_m();
+  const int n_classes = static_cast<int>(classes.map.size());
+  if (s.use_class_gmm) {
+    class_gmm_ensure_capacity(n_classes, s.d_latent, max_m, s.D, s.class_pi, s.class_n_comp);
+  } else {
+    s.D.assign(static_cast<std::size_t>(n_classes) * static_cast<std::size_t>(s.d_latent), 0.0);
+  }
+  int k_idx = 0;
   for (const auto& pr : classes.map) {
     const std::string& lbl = pr.first;
     int k = static_cast<int>(s.labels.size());
     s.label_index[lbl] = k;
     s.labels.push_back(lbl);
     const CNode& cnode = pr.second;
-    const CNode& dm = map_get_required(cnode, "delta_mu");
-    for (double v : dm.tensor) {
-      s.D.push_back(v);
-    }
+    load_class_delta_from_cnode(cnode, s.d_latent, max_m, k_idx, s.D, s.class_pi, s.class_n_comp);
     const CNode& no = map_get_required(cnode, "n_obs");
     s.n_obs_buf.push_back(static_cast<double>(as_int64(no)));
     const CNode* nc = map_get(cnode, "n_correct");
@@ -207,6 +218,10 @@ CyphaDifMemoryState CyphaDifMemoryState::from_cypha_root(const CNode& root, cons
       ncor = as_int64(*nc);
     }
     s.n_correct.push_back(ncor);
+    ++k_idx;
+  }
+  if (!s.use_class_gmm && !s.D.empty()) {
+    // Legacy layout: compact K×d (class_n_comp unused).
   }
   return s;
 }
@@ -220,12 +235,25 @@ bool CyphaDifMemoryState::class_mean_and_variance(const std::string& label, std:
   int k = it->second;
   mu_out.resize(static_cast<std::size_t>(d_latent));
   v_out.resize(static_cast<std::size_t>(d_latent));
+  const int max_m = gmm_max_m();
   for (int j = 0; j < d_latent; ++j) {
     mu_out[static_cast<std::size_t>(j)] =
-        world_mu[static_cast<std::size_t>(j)] + D[static_cast<std::size_t>(k * d_latent + j)];
+        world_mu[static_cast<std::size_t>(j)] + D[class_gmm_d_offset(k, 0, d_latent, max_m) + static_cast<std::size_t>(j)];
     v_out[static_cast<std::size_t>(j)] = world_v[static_cast<std::size_t>(j)];
   }
   return true;
+}
+
+ClassGmmStorage CyphaDifMemoryState::gmm_view() const {
+  ClassGmmStorage g;
+  g.enabled = use_class_gmm;
+  g.max_m = gmm_max_m();
+  g.d = d_latent;
+  g.K = static_cast<int>(labels.size());
+  g.D = D.data();
+  g.class_pi = class_pi.data();
+  g.class_n_comp = class_n_comp.empty() ? nullptr : class_n_comp.data();
+  return g;
 }
 
 double CyphaDifMemoryState::memory_train(const double* h, const std::string& label, const double* h_field,
@@ -233,6 +261,8 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
                                          double temperature, double /*ood_sigma*/, double world_lr,
                                          double delta_lr, MemoryTrainMeta* meta_out) {
   const int d = d_latent;
+
+  const int max_m = gmm_max_m();
 
   auto get_or_create = [&](const std::string& lbl) -> int {
     auto it = label_index.find(lbl);
@@ -244,12 +274,20 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
     label_index[lbl] = k;
     n_obs_buf.push_back(0.0);
     n_correct.push_back(0);
-    D.resize(static_cast<std::size_t>((k + 1) * d), 0.0);
+    if (use_class_gmm) {
+      class_gmm_ensure_capacity(k + 1, d, max_m, D, class_pi, class_n_comp);
+      class_gmm_init_class_row(k, d, max_m, std::min(class_gmm_m, max_m),
+                               static_cast<std::uint64_t>(k + n_obs_buf.size()), D, class_pi, class_n_comp);
+    } else {
+      D.resize(static_cast<std::size_t>((k + 1) * d), 0.0);
+    }
     return k;
   };
 
   const int k_idx = get_or_create(label);
   const int K = static_cast<int>(labels.size());
+  // Refresh after get_or_create — D/class_pi may have reallocated.
+  const ClassGmmStorage gmm = gmm_view();
 
   std::vector<double> mu0(static_cast<std::size_t>(d));
   for (int j = 0; j < d; ++j) {
@@ -284,16 +322,31 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
 
   std::vector<double> cross(static_cast<std::size_t>(K), 0.0);
   std::vector<double> d_sq(static_cast<std::size_t>(K), 0.0);
-  for (int k = 0; k < K; ++k) {
-    double ck = 0.0;
-    double sk = 0.0;
-    for (int j = 0; j < d; ++j) {
-      double Dkj = D[static_cast<std::size_t>(k * d + j)];
-      ck += Dkj * r[static_cast<std::size_t>(j)];
-      sk += Dkj * Dkj * world_inv_v[static_cast<std::size_t>(j)];
+  std::vector<double> scores(static_cast<std::size_t>(K), 0.0);
+  if (!use_class_gmm) {
+    for (int k = 0; k < K; ++k) {
+      double ck = 0.0;
+      double sk = 0.0;
+      for (int j = 0; j < d; ++j) {
+        double Dkj = D[static_cast<std::size_t>(k * d + j)];
+        ck += Dkj * r[static_cast<std::size_t>(j)];
+        sk += Dkj * Dkj * world_inv_v[static_cast<std::size_t>(j)];
+      }
+      cross[static_cast<std::size_t>(k)] = ck;
+      d_sq[static_cast<std::size_t>(k)] = sk;
+      scores[static_cast<std::size_t>(k)] = ck - 0.5 * sk;
     }
-    cross[static_cast<std::size_t>(k)] = ck;
-    d_sq[static_cast<std::size_t>(k)] = sk;
+  } else {
+    for (int k = 0; k < K; ++k) {
+      scores[static_cast<std::size_t>(k)] = class_gmm_logsumexp_score(gmm, k, r.data(), world_inv_v.data());
+      const double* delta0 = D.data() + class_gmm_d_offset(k, 0, d, max_m);
+      cross[static_cast<std::size_t>(k)] = class_delta_llr_fragment(delta0, r.data(), world_inv_v.data(), d);
+      d_sq[static_cast<std::size_t>(k)] = 0.0;
+      for (int j = 0; j < d; ++j) {
+        double Dkj = delta0[static_cast<std::size_t>(j)];
+        d_sq[static_cast<std::size_t>(k)] += Dkj * Dkj * world_inv_v[static_cast<std::size_t>(j)];
+      }
+    }
   }
 
   std::vector<double> ctx_arr(static_cast<std::size_t>(K), 0.0);
@@ -302,12 +355,7 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
     if (it != context_prior.end()) {
       ctx_arr[static_cast<std::size_t>(k)] = it->second;
     }
-  }
-
-  std::vector<double> scores(static_cast<std::size_t>(K), 0.0);
-  for (int k = 0; k < K; ++k) {
-    scores[static_cast<std::size_t>(k)] =
-        cross[static_cast<std::size_t>(k)] - 0.5 * d_sq[static_cast<std::size_t>(k)] + ctx_arr[static_cast<std::size_t>(k)];
+    scores[static_cast<std::size_t>(k)] += ctx_arr[static_cast<std::size_t>(k)];
   }
   int best_idx = 0;
   for (int k = 1; k < K; ++k) {
@@ -341,10 +389,34 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
   }
   scales[static_cast<std::size_t>(k_idx)] = delta_lr;
 
-  for (int k = 0; k < K; ++k) {
-    for (int j = 0; j < d; ++j) {
-      double& Dkj = D[static_cast<std::size_t>(k * d + j)];
-      Dkj += scales[static_cast<std::size_t>(k)] * (h_mu0[static_cast<std::size_t>(j)] - Dkj);
+  if (!use_class_gmm) {
+    for (int k = 0; k < K; ++k) {
+      for (int j = 0; j < d; ++j) {
+        double& Dkj = D[static_cast<std::size_t>(k * d + j)];
+        Dkj += scales[static_cast<std::size_t>(k)] * (h_mu0[static_cast<std::size_t>(j)] - Dkj);
+      }
+    }
+  } else {
+    std::vector<double> comp_resp(static_cast<std::size_t>(max_m));
+    for (int k = 0; k < K; ++k) {
+      const double scale_k = scales[static_cast<std::size_t>(k)];
+      const int M = std::max(1, std::min(class_n_comp[static_cast<std::size_t>(k)], max_m));
+      if (k == k_idx && M > 1) {
+        class_gmm_component_responsibilities(gmm, k, r.data(), world_inv_v.data(), temperature, comp_resp.data());
+        class_gmm_update_pi_ema(k, max_m, comp_resp.data(), M, kGmmPiEma, class_pi);
+      } else {
+        for (int m = 0; m < M; ++m) {
+          comp_resp[static_cast<std::size_t>(m)] = (m == 0) ? 1.0 : 0.0;
+        }
+      }
+      for (int m = 0; m < M; ++m) {
+        const double wm = comp_resp[static_cast<std::size_t>(m)] * scale_k;
+        double* delta = D.data() + class_gmm_d_offset(k, m, d, max_m);
+        for (int j = 0; j < d; ++j) {
+          delta[static_cast<std::size_t>(j)] +=
+              wm * (h_mu0[static_cast<std::size_t>(j)] - delta[static_cast<std::size_t>(j)]);
+        }
+      }
     }
   }
 
@@ -360,8 +432,18 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
   }
   for (int k = 0; k < K; ++k) {
     double f = 1.0 - lam_eff[static_cast<std::size_t>(k)];
-    for (int j = 0; j < d; ++j) {
-      D[static_cast<std::size_t>(k * d + j)] *= f;
+    if (!use_class_gmm) {
+      for (int j = 0; j < d; ++j) {
+        D[static_cast<std::size_t>(k * d + j)] *= f;
+      }
+    } else {
+      const int M = std::max(1, std::min(class_n_comp[static_cast<std::size_t>(k)], max_m));
+      for (int m = 0; m < M; ++m) {
+        double* delta = D.data() + class_gmm_d_offset(k, m, d, max_m);
+        for (int j = 0; j < d; ++j) {
+          delta[static_cast<std::size_t>(j)] *= f;
+        }
+      }
     }
   }
 
@@ -396,25 +478,38 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
     }
     std::vector<double> crossp(static_cast<std::size_t>(K), 0.0);
     std::vector<double> dsqp(static_cast<std::size_t>(K), 0.0);
-    for (int k = 0; k < K; ++k) {
-      double ck = 0.0;
-      double sk = 0.0;
-      for (int j = 0; j < d; ++j) {
-        double Dkj = D[static_cast<std::size_t>(k * d + j)];
-        ck += Dkj * rp[static_cast<std::size_t>(j)];
-        sk += Dkj * Dkj * world_inv_v[static_cast<std::size_t>(j)];
-      }
-      crossp[static_cast<std::size_t>(k)] = ck;
-      dsqp[static_cast<std::size_t>(k)] = sk;
-    }
     std::vector<double> llrp(static_cast<std::size_t>(K), 0.0);
     double v_mean_p = world_v_mean;
+    if (!use_class_gmm) {
+      for (int k = 0; k < K; ++k) {
+        double ck = 0.0;
+        double sk = 0.0;
+        for (int j = 0; j < d; ++j) {
+          double Dkj = D[static_cast<std::size_t>(k * d + j)];
+          ck += Dkj * rp[static_cast<std::size_t>(j)];
+          sk += Dkj * Dkj * world_inv_v[static_cast<std::size_t>(j)];
+        }
+        crossp[static_cast<std::size_t>(k)] = ck;
+        dsqp[static_cast<std::size_t>(k)] = sk;
+      }
+    } else {
+      const ClassGmmStorage gmm_p = gmm_view();
+      for (int k = 0; k < K; ++k) {
+        crossp[static_cast<std::size_t>(k)] = class_gmm_logsumexp_score(gmm_p, k, rp.data(), world_inv_v.data());
+        dsqp[static_cast<std::size_t>(k)] = 0.0;
+      }
+    }
     int best_llr = 0;
     for (int k = 0; k < K; ++k) {
       double u_p = v_mean_p / (n_obs_buf[static_cast<std::size_t>(k)] + 1.0);
-      llrp[static_cast<std::size_t>(k)] =
-          crossp[static_cast<std::size_t>(k)] - 0.5 * dsqp[static_cast<std::size_t>(k)] - u_p +
-          ctx_arr[static_cast<std::size_t>(k)];
+      if (!use_class_gmm) {
+        llrp[static_cast<std::size_t>(k)] =
+            crossp[static_cast<std::size_t>(k)] - 0.5 * dsqp[static_cast<std::size_t>(k)] - u_p +
+            ctx_arr[static_cast<std::size_t>(k)];
+      } else {
+        llrp[static_cast<std::size_t>(k)] =
+            crossp[static_cast<std::size_t>(k)] - u_p + ctx_arr[static_cast<std::size_t>(k)];
+      }
       if (llrp[static_cast<std::size_t>(k)] > llrp[static_cast<std::size_t>(best_llr)]) {
         best_llr = k;
       }
@@ -463,12 +558,22 @@ void CyphaDifMemoryState::dedup_check(const std::string& label) {
   const int d = d_latent;
   auto dot_delta = [&](int a, int b) {
     double s = 0.0;
+    const int max_m = gmm_max_m();
     for (int t = 0; t < d; ++t) {
-      s += D[static_cast<std::size_t>(a * d + t)] * D[static_cast<std::size_t>(b * d + t)];
+      s += D[class_gmm_d_offset(a, 0, d, max_m) + static_cast<std::size_t>(t)] *
+           D[class_gmm_d_offset(b, 0, d, max_m) + static_cast<std::size_t>(t)];
     }
     return s;
   };
-  auto norm_delta = [&](int a) { return std::sqrt(std::max(dot_delta(a, a), 0.0)) + kEps; };
+  auto norm_delta = [&](int a) {
+    double s = 0.0;
+    const int max_m = gmm_max_m();
+    for (int t = 0; t < d; ++t) {
+      const double v = D[class_gmm_d_offset(a, 0, d, max_m) + static_cast<std::size_t>(t)];
+      s += v * v;
+    }
+    return std::sqrt(std::max(s, 0.0)) + kEps;
+  };
   const double nk = norm_delta(k);
   const int K = static_cast<int>(labels.size());
   for (int j = 0; j < K; ++j) {
@@ -480,9 +585,11 @@ void CyphaDifMemoryState::dedup_check(const std::string& label) {
     if (cos_sim > kDedupThresh) {
       const double overlap = cos_sim - kDedupThresh;
       for (int t = 0; t < d; ++t) {
-        const double push_t = overlap * 0.5 * D[static_cast<std::size_t>(j * d + t)] / nj;
-        D[static_cast<std::size_t>(k * d + t)] -= push_t;
-        D[static_cast<std::size_t>(j * d + t)] -= push_t;
+        const std::size_t ak = class_gmm_d_offset(k, 0, d, gmm_max_m()) + static_cast<std::size_t>(t);
+        const std::size_t aj = class_gmm_d_offset(j, 0, d, gmm_max_m()) + static_cast<std::size_t>(t);
+        const double push_t = overlap * 0.5 * D[aj] / nj;
+        D[ak] -= push_t;
+        D[aj] -= push_t;
       }
     }
   }
@@ -521,21 +628,33 @@ double memory_max_classify_llr(const CyphaDifMemoryState& s, const double* h, co
     rp[static_cast<std::size_t>(j)] = d_h[static_cast<std::size_t>(j)] * s.world_inv_v[static_cast<std::size_t>(j)];
   }
   double mx = -1e300;
+  const ClassGmmStorage gmm = s.gmm_view();
   for (int k = 0; k < K; ++k) {
-    double cross = 0.0;
-    double d_sq = 0.0;
-    for (int j = 0; j < d; ++j) {
-      double Dkj = s.D[static_cast<std::size_t>(k * d + j)];
-      cross += Dkj * rp[static_cast<std::size_t>(j)];
-      d_sq += Dkj * Dkj * s.world_inv_v[static_cast<std::size_t>(j)];
+    double llr = 0.0;
+    if (!s.use_class_gmm) {
+      double cross = 0.0;
+      double d_sq = 0.0;
+      for (int j = 0; j < d; ++j) {
+        double Dkj = s.D[static_cast<std::size_t>(k * d + j)];
+        cross += Dkj * rp[static_cast<std::size_t>(j)];
+        d_sq += Dkj * Dkj * s.world_inv_v[static_cast<std::size_t>(j)];
+      }
+      double ctx = 0.0;
+      auto it = context_prior.find(s.labels[static_cast<std::size_t>(k)]);
+      if (it != context_prior.end()) {
+        ctx = it->second;
+      }
+      double u_arr = s.world_v_mean / (s.n_obs_buf[static_cast<std::size_t>(k)] + 1.0);
+      llr = cross - 0.5 * d_sq - u_arr + ctx;
+    } else {
+      double ctx = 0.0;
+      auto it = context_prior.find(s.labels[static_cast<std::size_t>(k)]);
+      if (it != context_prior.end()) {
+        ctx = it->second;
+      }
+      const double u_arr = s.world_v_mean / (s.n_obs_buf[static_cast<std::size_t>(k)] + 1.0);
+      llr = class_llr_for_k(gmm, k, rp.data(), s.world_inv_v.data(), u_arr, ctx);
     }
-    double ctx = 0.0;
-    auto it = context_prior.find(s.labels[static_cast<std::size_t>(k)]);
-    if (it != context_prior.end()) {
-      ctx = it->second;
-    }
-    double u_arr = s.world_v_mean / (s.n_obs_buf[static_cast<std::size_t>(k)] + 1.0);
-    double llr = cross - 0.5 * d_sq - u_arr + ctx;
     mx = std::max(mx, llr);
   }
   return mx;
@@ -586,6 +705,7 @@ CNode node_f64(double v) {
 CNode build_classes_map(const CyphaDifMemoryState& s) {
   CNode m;
   m.kind = CNode::Map;
+  const int max_m = s.gmm_max_m();
   for (const std::string& lbl : s.labels) {
     auto it = s.label_index.find(lbl);
     if (it == s.label_index.end()) {
@@ -594,11 +714,35 @@ CNode build_classes_map(const CyphaDifMemoryState& s) {
     const int k = it->second;
     CNode c;
     c.kind = CNode::Map;
-    std::vector<double> dm(static_cast<std::size_t>(s.d_latent));
-    for (int j = 0; j < s.d_latent; ++j) {
-      dm[static_cast<std::size_t>(j)] = s.D[static_cast<std::size_t>(k * s.d_latent + j)];
+    const int n_comp =
+        s.use_class_gmm && !s.class_n_comp.empty()
+            ? std::max(1, std::min(s.class_n_comp[static_cast<std::size_t>(k)], max_m))
+            : 1;
+    if (n_comp <= 1) {
+      std::vector<double> dm(static_cast<std::size_t>(s.d_latent));
+      for (int j = 0; j < s.d_latent; ++j) {
+        dm[static_cast<std::size_t>(j)] =
+            s.D[class_gmm_d_offset(k, 0, s.d_latent, max_m) + static_cast<std::size_t>(j)];
+      }
+      c.map.emplace_back("delta_mu", tensor_1d(dm));
+    } else {
+      CNode dm2;
+      dm2.kind = CNode::Tensor;
+      dm2.shape = {static_cast<std::uint32_t>(n_comp), static_cast<std::uint32_t>(s.d_latent)};
+      dm2.tensor.resize(static_cast<std::size_t>(n_comp * s.d_latent));
+      for (int cm = 0; cm < n_comp; ++cm) {
+        for (int j = 0; j < s.d_latent; ++j) {
+          dm2.tensor[static_cast<std::size_t>(cm * s.d_latent + j)] =
+              s.D[class_gmm_d_offset(k, cm, s.d_latent, max_m) + static_cast<std::size_t>(j)];
+        }
+      }
+      c.map.emplace_back("delta_mu", std::move(dm2));
+      std::vector<double> mix(static_cast<std::size_t>(n_comp));
+      for (int cm = 0; cm < n_comp; ++cm) {
+        mix[static_cast<std::size_t>(cm)] = s.class_pi[class_gmm_d_offset(k, cm, 1, max_m)];
+      }
+      c.map.emplace_back("mixing", tensor_1d(mix));
     }
-    c.map.emplace_back("delta_mu", tensor_1d(dm));
     const double nobs = s.n_obs_buf[static_cast<std::size_t>(k)];
     const double rn = std::round(nobs);
     if (std::abs(nobs - rn) < 1e-9 && rn >= static_cast<double>(std::numeric_limits<std::int64_t>::min()) &&
@@ -687,9 +831,18 @@ std::vector<std::string> memory_merge_from(CyphaDifMemoryState& self, const Cyph
     self.label_index[lbl] = k;
     self.n_obs_buf.push_back(0.0);
     self.n_correct.push_back(0);
-    self.D.resize(static_cast<std::size_t>((k + 1) * d), 0.0);
+    if (self.use_class_gmm) {
+      class_gmm_ensure_capacity(k + 1, d, self.gmm_max_m(), self.D, self.class_pi, self.class_n_comp);
+      class_gmm_init_class_row(k, d, self.gmm_max_m(), std::min(self.class_gmm_m, self.gmm_max_m()),
+                               static_cast<std::uint64_t>(k + 1), self.D, self.class_pi, self.class_n_comp);
+    } else {
+      self.D.resize(static_cast<std::size_t>((k + 1) * d), 0.0);
+    }
     return k;
   };
+
+  const int max_m_self = self.gmm_max_m();
+  const int max_m_other = other.gmm_max_m();
 
   std::vector<std::string> new_labels;
   for (const std::string& lbl : other.labels) {
@@ -700,21 +853,40 @@ std::vector<std::string> memory_merge_from(CyphaDifMemoryState& self, const Cyph
     const int ok = oit->second;
     if (self.label_index.find(lbl) != self.label_index.end()) {
       const int sk = self.label_index.at(lbl);
-      double norm_s = class_fisher_rao_norm(self.D.data() + static_cast<std::size_t>(sk * d), d, self_v0.data());
-      double norm_o = class_fisher_rao_norm(other.D.data() + static_cast<std::size_t>(ok * d), d, other_v0.data());
+      double norm_s = class_gmm_fisher_rao_norm(self.gmm_view(), sk, self_v0.data());
+      double norm_o = class_gmm_fisher_rao_norm(other.gmm_view(), ok, other_v0.data());
       const double total = norm_s * weight_self + norm_o * weight_other + kEps;
       const double w_s = norm_s * weight_self / total;
       const double w_o = norm_o * weight_other / total;
-      for (int j = 0; j < d; ++j) {
-        self.D[static_cast<std::size_t>(sk * d + j)] =
-            w_s * self.D[static_cast<std::size_t>(sk * d + j)] + w_o * other.D[static_cast<std::size_t>(ok * d + j)];
+      const int Ms = self.use_class_gmm ? std::max(1, std::min(self.class_n_comp[static_cast<std::size_t>(sk)], max_m_self)) : 1;
+      const int Mo = other.use_class_gmm ? std::max(1, std::min(other.class_n_comp[static_cast<std::size_t>(ok)], max_m_other)) : 1;
+      for (int m = 0; m < std::max(Ms, Mo); ++m) {
+        if (m >= Ms || m >= Mo) {
+          continue;
+        }
+        for (int j = 0; j < d; ++j) {
+          self.D[class_gmm_d_offset(sk, m, d, max_m_self) + static_cast<std::size_t>(j)] =
+              w_s * self.D[class_gmm_d_offset(sk, m, d, max_m_self) + static_cast<std::size_t>(j)] +
+              w_o * other.D[class_gmm_d_offset(ok, m, d, max_m_other) + static_cast<std::size_t>(j)];
+        }
       }
       self.n_obs_buf[static_cast<std::size_t>(sk)] += other.n_obs_buf[static_cast<std::size_t>(ok)];
       self.n_correct[static_cast<std::size_t>(sk)] += other.n_correct[static_cast<std::size_t>(ok)];
     } else {
       const int nk = get_or_create(lbl);
-      for (int j = 0; j < d; ++j) {
-        self.D[static_cast<std::size_t>(nk * d + j)] = other.D[static_cast<std::size_t>(ok * d + j)];
+      const int Mo = other.use_class_gmm ? std::max(1, std::min(other.class_n_comp[static_cast<std::size_t>(ok)], max_m_other)) : 1;
+      for (int m = 0; m < Mo; ++m) {
+        for (int j = 0; j < d; ++j) {
+          self.D[class_gmm_d_offset(nk, m, d, max_m_self) + static_cast<std::size_t>(j)] =
+              other.D[class_gmm_d_offset(ok, m, d, max_m_other) + static_cast<std::size_t>(j)];
+        }
+        if (self.use_class_gmm && !other.class_pi.empty()) {
+          self.class_pi[class_gmm_d_offset(nk, m, 1, max_m_self)] =
+              other.class_pi[class_gmm_d_offset(ok, m, 1, max_m_other)];
+        }
+      }
+      if (self.use_class_gmm && !other.class_n_comp.empty()) {
+        self.class_n_comp[static_cast<std::size_t>(nk)] = other.class_n_comp[static_cast<std::size_t>(ok)];
       }
       self.n_obs_buf[static_cast<std::size_t>(nk)] = other.n_obs_buf[static_cast<std::size_t>(ok)];
       self.n_correct[static_cast<std::size_t>(nk)] = other.n_correct[static_cast<std::size_t>(ok)];
@@ -731,7 +903,34 @@ CNode CyphaDifMemoryState::merge_state_into_root_for_save(const CNode& root, con
       kv.second = patch_world_node(kv.second, s);
     } else if (kv.first == "classes") {
       kv.second = build_classes_map(s);
+    } else if (kv.first == "cypha_format") {
+      kv.second = node_int64(s.use_class_gmm ? kCyphaFormatV4 : s.cypha_format);
+    } else if (kv.first == "use_class_gmm") {
+      kv.second = node_int64(s.use_class_gmm ? 1 : 0);
+    } else if (kv.first == "class_gmm") {
+      if (s.use_class_gmm) {
+        CNode cg;
+        cg.kind = CNode::Map;
+        cg.map.push_back({"enabled", node_int64(1)});
+        cg.map.push_back({"default_m", node_int64(s.class_gmm_m)});
+        cg.map.push_back({"max_m", node_int64(kClassGmmMaxM)});
+        kv.second = std::move(cg);
+      }
     }
+  }
+  if (s.use_class_gmm && map_get(out, "cypha_format") == nullptr) {
+    out.map.push_back({"cypha_format", node_int64(kCyphaFormatV4)});
+  }
+  if (s.use_class_gmm && map_get(out, "use_class_gmm") == nullptr) {
+    out.map.push_back({"use_class_gmm", node_int64(1)});
+  }
+  if (s.use_class_gmm && map_get(out, "class_gmm") == nullptr) {
+    CNode cg;
+    cg.kind = CNode::Map;
+    cg.map.push_back({"enabled", node_int64(1)});
+    cg.map.push_back({"default_m", node_int64(s.class_gmm_m)});
+    cg.map.push_back({"max_m", node_int64(kClassGmmMaxM)});
+    out.map.push_back({"class_gmm", std::move(cg)});
   }
   return out;
 }

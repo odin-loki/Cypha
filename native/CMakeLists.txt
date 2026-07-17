@@ -61,6 +61,7 @@ add_library(cypha_core STATIC
   src/regression_stub.cpp
   src/mke_scalar_train_step.cpp
   src/em_step.cpp
+  src/class_gmm.cpp
   src/generation.cpp
   src/accel_backend.cpp
   src/create_model.cpp
@@ -197,6 +198,10 @@ target_link_libraries(kernel_snapshot_roundtrip PRIVATE cypha_core)
 add_executable(kernel_approx_p5_smoke tools/kernel_approx_p5_smoke.cpp)
 target_link_libraries(kernel_approx_p5_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(kernel_approx_p5_smoke)
+
+add_executable(class_gmm_p3_smoke tools/class_gmm_p3_smoke.cpp)
+target_link_libraries(class_gmm_p3_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(class_gmm_p3_smoke)
 
 add_executable(criticality_vector_p9_smoke tools/criticality_vector_p9_smoke.cpp)
 target_link_libraries(criticality_vector_p9_smoke PRIVATE cypha_core)
@@ -378,6 +383,7 @@ set(
   cypha_kernel_tune
   kernel_snapshot_roundtrip
   kernel_approx_p5_smoke
+  class_gmm_p3_smoke
   criticality_vector_p9_smoke
   kernel_cypha_roundtrip
   memory_train_roundtrip
@@ -726,6 +732,13 @@ add_test(
 )
 set_tests_properties(native_kernel_approx_p5_smoke PROPERTIES
   PASS_REGULAR_EXPRESSION "kernel_approx_p5_smoke: PASS")
+add_test(
+  NAME native_class_gmm_p3_smoke
+  COMMAND "$<TARGET_FILE:class_gmm_p3_smoke>"
+)
+set_tests_properties(native_class_gmm_p3_smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "class_gmm_p3_smoke: PASS"
+  TIMEOUT 600)
 add_test(
   NAME native_criticality_vector_p9_smoke
   COMMAND "$<TARGET_FILE:criticality_vector_p9_smoke>"

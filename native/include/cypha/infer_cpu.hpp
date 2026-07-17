@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "cypha/class_gmm.hpp"
 #include "cypha/kernel_memory.hpp"
 #include "cypha/load_cypha.hpp"
 #include "cypha/retrieval.hpp"
@@ -70,6 +71,11 @@ struct CyphaInferModel {
   /// Per-class n_obs (same order as labels).
   std::vector<double> n_obs{};
   std::vector<double> D{};
+  std::vector<double> class_pi{};
+  std::vector<int> class_n_comp{};
+  bool use_class_gmm{false};
+  int class_gmm_m{kClassGmmDefaultM};
+  int cypha_format{kCyphaFormatV3};
   std::vector<double> enc_w{};
   std::vector<double> mu_world{};
   std::vector<double> inv_v{};
@@ -113,6 +119,9 @@ struct CyphaInferModel {
   /// Python ``deliberation_lo`` / ``deliberation_hi`` (defaults disable abstention).
   double deliberation_lo{kDeliberationLoDefault};
   double deliberation_hi{kDeliberationHiDefault};
+
+  [[nodiscard]] ClassGmmStorage gmm_view() const;
+  int gmm_max_m() const { return use_class_gmm ? kClassGmmMaxM : 1; }
 
   /// Load inference buffers from a `.cypha` root. If `world.F_field` is stored in the blob (same layout
   /// as Python `WorldPrior.F_field`), pass `f_field_row_major == nullptr`. Otherwise pass row-major floats.
