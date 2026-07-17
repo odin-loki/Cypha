@@ -207,6 +207,10 @@ add_executable(nig_bma_p4_smoke tools/nig_bma_p4_smoke.cpp)
 target_link_libraries(nig_bma_p4_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(nig_bma_p4_smoke)
 
+add_executable(rao_blackwell_p8_smoke tools/rao_blackwell_p8_smoke.cpp)
+target_link_libraries(rao_blackwell_p8_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(rao_blackwell_p8_smoke)
+
 add_executable(criticality_vector_p9_smoke tools/criticality_vector_p9_smoke.cpp)
 target_link_libraries(criticality_vector_p9_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(criticality_vector_p9_smoke)
@@ -391,8 +395,10 @@ set(
   cypha_kernel_tune
   kernel_snapshot_roundtrip
   kernel_approx_p5_smoke
+  gate_score_match_p7_smoke
   class_gmm_p3_smoke
   nig_bma_p4_smoke
+  rao_blackwell_p8_smoke
   criticality_vector_p9_smoke
   criticality_overhead_p9_bench
   kernel_cypha_roundtrip
@@ -756,6 +762,12 @@ add_test(
 set_tests_properties(native_nig_bma_p4_smoke PROPERTIES
   PASS_REGULAR_EXPRESSION "nig_bma_p4_smoke:.*PASS"
   TIMEOUT 600)
+add_test(
+  NAME native_rao_blackwell_p8_smoke
+  COMMAND "$<TARGET_FILE:rao_blackwell_p8_smoke>"
+)
+set_tests_properties(native_rao_blackwell_p8_smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "rao_blackwell_p8_smoke: PASS")
 add_test(
   NAME native_criticality_vector_p9_smoke
   COMMAND "$<TARGET_FILE:criticality_vector_p9_smoke>"
