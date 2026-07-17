@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-17 (HEAD `12ad4b3`):** Phases **0–1 not started** (`em_step.hpp` absent; `native/tests/parity/` still live). Phases **2–8 not started**. Phase **9 partially exists** via Intelligence Stats / `IntelligenceProfiler` (`criticality_score`, κ navigation loss, REST metrics) — no unified `CriticalityVector` struct yet. See also [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-17 (HEAD `4133054`):** Phase **0 done** (`4133054` — parity→regression/golden). Phase **1 done** (`31bbb0c`, `7a07f8b` — `em_step.hpp` + smoke). Phases **2–8 not started**. Phase **9 partial** (Intelligence Stats / `IntelligenceProfiler`; no unified `CriticalityVector` yet). See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
 
 ---
 
@@ -10,8 +10,8 @@
 
 | Phase | Title | Status | Notes |
 |-------|-------|--------|-------|
-| 0 | Retire parity, keep regression net | [ ] Not started | `native/tests/parity/` (36 files) still named `*_parity`; Python-comparison language remains in PORT_CONTRACT |
-| 1 | EM keystone | [ ] Not started | `native/include/cypha/em_step.hpp` absent — keystone for Phases 2–3 |
+| 0 | Retire parity, keep regression net | [x] Done | `4133054` — `native/tests/regression/` + `*_golden` CTests; parity harness retired |
+| 1 | EM keystone | [x] Done | `31bbb0c`/`7a07f8b` — `em_step.hpp`, `em_step.cpp`, `em_step_smoke` |
 | 2 | Fix MoE with EM | [ ] Not started | Blocked on Phase 1 |
 | 3 | Per-class GMM (real XOR fix) | [ ] Not started | Blocked on Phase 1; RFF kernel patch closed XOR to ~2.7pp meanwhile |
 | 4 | Bayesian model averaging over Δk | [ ] Not started | |

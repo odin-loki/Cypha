@@ -6,9 +6,8 @@
 `docs/CYPHALM_UPGRADE_V2.md`, `docs/CYPHA_TESTS_PHASE2.md`, `docs/native/*`, `CHANGELOG.md`.
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete);
 115 CTests blocking gate (116 when `d38` merged).
-**Repo state as of this update (2026-07-17, HEAD `12ad4b3`):** **160 CTests** blocking gate; Intelligence Stats
-Phases 24–59 + Math Integration shipped; D17 perf Parts 1–6 done; RPSM cheap hypotheses exhausted; several
-stale claims from the 2026-06 snapshot corrected below.
+**Repo state as of this update (2026-07-17, HEAD `4133054`):** **160 CTests** blocking gate; Optimality Phases 0–1
+done; §0.5 BPC pin reconciled (`b0d39e7`); Addendum 2 MC2/MS1 started (`412ded1`); overnight still running.
 
 ---
 
@@ -16,8 +15,13 @@ stale claims from the 2026-06 snapshot corrected below.
 
 | Area | Verdict | Evidence |
 |------|---------|----------|
+| **Optimality Phases 0–1** | [x] Done | Phase 0 parity→regression `4133054`; Phase 1 EM keystone `31bbb0c`/`7a07f8b` — see [`CYPHA_OPTIMALITY_PLAN.md`](CYPHA_OPTIMALITY_PLAN.md) |
 | **D17 perf Parts 1–6** | [x] Done | [`PERFORMANCE_PROFILE_2026-07-12.md`](docs/reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–6; Part 6 `12ad4b3` (skip dead BPTT slow-tier when EWC off) |
 | **P1 XOR kernel gap** | [x] ~2.7pp remaining (was ~18pp) | RFF auto-gamma `rff_dim=4096` → **76.3%** vs sklearn ~79%; [`RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1 |
+| **P2 auto-gamma defaults** | [x] Clarified shipped | `fb5e543` — kernel-LLR RFF auto-γ default in code; remaining D08/D14 re-bench optional |
+| **Addendum 2 MC2/MS1** | [~] Started | ECE + train/held-out gap `412ded1`; [`GENERAL_METRICS_MC2_MS1_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC2_MS1_2026-07-17.md) |
+| **§0.5 BPC pin** | [x] Reconciled | canonical **2.873** `b0d39e7`; [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
+| **P5 marketing claims** | [x] Aligned | D16B/D16F isolation caveat `3491da0` |
 | **RPSM cheap hypotheses** | [x] Exhausted | [`RPSM_UPGRADE_PLAN.md`](docs/reports/RPSM_UPGRADE_PLAN.md) §13–§14 — five cheap-scale experiments; gap is zero-BPTT training, not config |
 | **D10 ECG stale claim** | [x] Retired | D10A **60.67%** (~3× chance); never routed through `CellAISSM`; [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) |
 | **D17B `n_experts=1`** | [x] Genuine dynamic | Not a warm-start reporting bug; `mean_expert_alpha` split shipped `e6d95d2`; [`D17B_EXPERT_REPORTING_2026-07-12.md`](docs/reports/D17B_EXPERT_REPORTING_2026-07-12.md) |
@@ -53,7 +57,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | [ ] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Blocked on 0.1 | Phase 18, 24 |
 | [ ] 0.3 | `gh auth login` + `publish_release.ps1` | Auth still gated | Phase 15, 19 |
 | [ ] 0.4 | Merge **d38** once 0.1–0.2 land | 115 → 116 CTests | Phase 24 |
-| [ ] 0.5 | Reconcile three 300k hybrid BPC pins (2.873 / 2.892 / 2.897) | Canonical lock TBD | FUTURE.md |
+| [x] 0.5 | Reconcile three 300k hybrid BPC pins (2.873 / 2.892 / 2.897) | Canonical **2.873** `b0d39e7` | [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 
 ---
 
@@ -87,7 +91,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] Hybrid EWC + growable-`D` fix + λ sweep (`e6d95d2`) — best **0.135→0.108** @ λ=2.0
 - [~] Forgetting improved but not solved (legacy **0.813** everyday profile)
 - [ ] Further EWC / routing redesign vs accept D16F isolation-only
-- [ ] Confirm marketing language live everywhere
+- [x] Confirm marketing language live everywhere (`3491da0`)
 
 ### P6 — ECG / temporal — stale claim retired
 - [x] D10A **60.67%**; not `CellAISSM` path ([`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md))
