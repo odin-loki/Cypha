@@ -1,19 +1,28 @@
 {
   "cell_sweep_results": {
     "artifact_path": "C:\\Users\\odinl\\OneDrive\\Desktop\\Cypha\\bench\\results\\cell_sweep",
-    "b2_bpc": 2.864125041163193,
-    "bpc": 2.864125041163193,
+    "b2_bpc": 3.0729991173047932,
+    "best_pareto_variant": {
+      "bpc": 2.921439403786709,
+      "id": "H19",
+      "kappa": 0.8831653509847233,
+      "nondominated": true,
+      "normalized_bpc": 0.003962724039487175,
+      "pareto_score": 0.8827690785807746
+    },
+    "bpc": 2.921439403786709,
     "env": {
       "CYPHA_BENCH_FULL_CORPUS": "1",
       "CYPHA_BENCH_FULL_N_TRAIN": "300000",
       "CYPHA_BENCH_OVERNIGHT": "1"
     },
+    "math_integration_enabled": true,
     "mode": "cell-sweep",
     "n_eval": 2000,
     "n_train": 300000,
     "profile": "d17",
-    "run_at": "2026-06-17T20:59:40Z",
-    "runner": "cypha_cell_hypothesis_sweep --overnight-sweep",
+    "run_at": "2026-07-17T17:03:08Z",
+    "runner": "cypha_cell_hypothesis_sweep --overnight-sweep --intelligence-profile --math-integration",
     "status": "production",
     "variant_count": 25
   },
@@ -52,20 +61,20 @@
   "locked_at": "2026-06-14",
   "math_integration_results": {
     "baseline": {
-      "bpc": 4.000709943353105,
-      "kappa": 0.8259847576209205,
+      "bpc": 2.864125041163193,
+      "kappa": 0.8369505843700256,
       "profile_complete": true
     },
     "description": "Fill after D17 overnight with -MathIntegration (scripts/run_d17_overnight.ps1 -MathIntegration) or CYPHA_OVERNIGHT_MATH_INTEGRATION=1",
     "math_integration": {
-      "bpc": 3.9833387184791813,
-      "kappa": 0.869726296050674,
+      "bpc": 3.0729991173047932,
+      "kappa": 0.8604590810492928,
       "profile_complete": true
     },
-    "n_eval": 256,
-    "n_train": 5000,
-    "run_at": "2026-06-24T07:55:26Z",
-    "status": "medium_smoke"
+    "n_eval": 2000,
+    "n_train": 300000,
+    "run_at": "2026-07-12T01:19:19Z",
+    "status": "production"
   },
   "overnight_results": {
     "artifact_path": null,
@@ -82,7 +91,7 @@
     "n_eval": 2000,
     "n_train": 300000,
     "profile": "d17",
-    "run_at": "2026-06-17T09:46:05Z",
+    "run_at": "2026-07-12T01:52:47Z",
     "runner": "cyphalm_bench_native --overnight",
     "status": "production",
     "synthetic": false
@@ -101,7 +110,7 @@
     "n_eval": 2000,
     "n_train": 300000,
     "profile": "d21",
-    "run_at": "2026-06-17T09:49:04Z",
+    "run_at": "2026-07-12T01:55:40Z",
     "runner": "cyphalm_bench_native --overnight --mode rpsm",
     "status": "production",
     "synthetic": false
