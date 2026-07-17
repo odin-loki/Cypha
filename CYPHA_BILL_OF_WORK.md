@@ -7,7 +7,7 @@
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete);
 115 CTests blocking gate (116 when `d38` merged).
 **Repo state as of this update (2026-07-17 late evening):** **160 CTests** blocking gate; Optimality **P0–9 addressed**
-(opt-in/no-go mix); §0.5 pin **2.873**; MC2/MS1 metrics; overnight H16/19/25 still running.
+(opt-in/no-go mix); §0.5 pin **2.873**; MC2/MS1 + MC5/MG5 metrics shipped; overnight H17 @ 20/25 healthy (`a09b665`).
 
 ---
 
@@ -26,7 +26,7 @@
 | **D17 perf Parts 1–6** | [x] Done | [`PERFORMANCE_PROFILE_2026-07-12.md`](docs/reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–6; Part 6 `12ad4b3` (skip dead BPTT slow-tier when EWC off) |
 | **P1 XOR kernel gap** | [x] ~2.7pp remaining (was ~18pp) | RFF auto-gamma `rff_dim=4096` → **76.3%** vs sklearn ~79%; [`RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1 |
 | **P2 auto-gamma defaults** | [x] Clarified shipped | `fb5e543` — kernel-LLR RFF auto-γ default in code; remaining D08/D14 re-bench optional |
-| **Addendum 2 MC2/MS1** | [~] Started | ECE + train/held-out gap `412ded1`; [`GENERAL_METRICS_MC2_MS1_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC2_MS1_2026-07-17.md) |
+| **Addendum 2 MC2/MS1** | [x] Shipped | ECE + train/held-out gap `412ded1`; [`GENERAL_METRICS_MC2_MS1_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC2_MS1_2026-07-17.md) |
 | **§0.5 BPC pin** | [x] Reconciled | canonical **2.873** `b0d39e7`; [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 | **P5 marketing claims** | [x] Aligned | D16B/D16F isolation caveat `3491da0` |
 | **RPSM cheap hypotheses** | [x] Exhausted | [`RPSM_UPGRADE_PLAN.md`](docs/reports/RPSM_UPGRADE_PLAN.md) §13–§14 — five cheap-scale experiments; gap is zero-BPTT training, not config |
@@ -35,7 +35,7 @@
 | **EWC D16B forgetting** | [~] Improved, not solved | Growable-`D` fix + λ sweep best **0.135→0.108** @ λ=2.0; shared-model CL still open; [`EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md) |
 | **Paper draft** | [x] Reconciled | `paper/CyphaLM_paper.md` canonical **2.873** + historical labels (2026-07-17) |
 | **Curriculum / uncertainty-rank** | [x] Shipped | `curriculum.hpp` + bench `CYPHA_CURRICULUM_WINDOW`; `GET/POST /uncertainty-rank` + CTest `native_rest_uncertainty_rank` |
-| **300k production overnight** | [~] Still running | H16/19/25 cell-sweep via `run_production_overnight.ps1`; d27–d38 gates `pending_production` until lock lands |
+| **300k production overnight** | [~] H17 healthy, wait | H17 @ 20/25; active compute per `a09b665` — [`OVERNIGHT_HEALTH_2026-07-17.md`](docs/reports/OVERNIGHT_HEALTH_2026-07-17.md); d27–d38 gates `pending_production` until lock lands |
 
 This is a task list with explicit done/in-progress/open markers — not a live status dashboard. See
 [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) for the canonical research journal.
@@ -60,7 +60,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 | # | Task | Status | Source |
 |---|------|--------|--------|
-| [~] 0.1 | **300k production overnight** to completion | In progress: H16/19/25 cell-sweep running | RESEARCH_STATUS Phase 13–24 |
+| [~] 0.1 | **300k production overnight** to completion | In progress: H17 @ 20/25 (healthy, wait) | RESEARCH_STATUS Phase 13–24; `a09b665` |
 | [ ] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Blocked on 0.1 | Phase 18, 24 |
 | [ ] 0.3 | `gh auth login` + `publish_release.ps1` | Auth still gated | Phase 15, 19 |
 | [ ] 0.4 | Merge **d38** once 0.1–0.2 land | 115 → 116 CTests | Phase 24 |
@@ -117,7 +117,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## 3. Cell hypothesis testbench (28 variants)
 
-- [~] Tier 1 sweep H01–H05 — overnight cell-sweep in progress (H16/19/25)
+- [~] Tier 1 sweep H01–H05 — overnight cell-sweep in progress (H17 @ 20/25)
 - [ ] Tier 2 H07, H09–H13 native paths
 - [ ] Tier 3 real 300k run
 - [ ] Populate `results/summary.csv` vs locked baselines
@@ -140,13 +140,13 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | CUDA CI | [ ] Local-only |
 | Qt shell polish | [ ] Optional |
 | Web UI | [ ] Partial |
-| Multi-model `cypha_rest` | [ ] Not started |
+| Multi-model `cypha_rest` | [x] Slice shipped `e3a5b63` — [`MULTI_MODEL_REST_2026-07-17.md`](docs/reports/MULTI_MODEL_REST_2026-07-17.md) |
 | **Curriculum / active learning** | [x] Shipped (`curriculum.hpp`, `/uncertainty-rank`) |
-| ONNX export | [x] encode→LLR→softmax shipped `1cbdd8c` |
-| GGUF export | [x] Tensors packed `dad723d` |
-| Overnight health | [~] H17 healthy, wait `a09b665` |
-| Sample-efficiency curves | [x] MC5/MG5 `297f59c` |
-| Parallel `score_matrix` | [x] 3.44× @ n=256 `c788f5f` |
+| ONNX export | [x] encode→LLR→softmax `1cbdd8c` (header-only ModelProto smoke) |
+| GGUF export | [x] Tensors packed `dad723d` (`enc_W`, `F_field`, `world.mu`, class `D`/`D_T`, `inv_v`, `llr_bias`) |
+| Overnight health | [~] H17 healthy, wait `a09b665` — [`OVERNIGHT_HEALTH_2026-07-17.md`](docs/reports/OVERNIGHT_HEALTH_2026-07-17.md) |
+| Sample-efficiency curves | [x] MC5/MG5 `297f59c` — [`SAMPLE_EFFICIENCY_CURVE_2026-07-17.md`](docs/reports/SAMPLE_EFFICIENCY_CURVE_2026-07-17.md) |
+| Parallel `score_matrix` | [x] ~3.4× @ n=256 `c788f5f` (OpenMP row-parallel) |
 | Federated training | [ ] TLS smoke only |
 | Legacy sigmoid removal | [x] Removed (`kInferWorldGateApiVersion=2`) |
 
