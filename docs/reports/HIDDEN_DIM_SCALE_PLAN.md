@@ -608,3 +608,84 @@ Given this document's own prior observation that this exact point took 16h39min 
 ### 5. Updated go/no-go recommendation on Phase 4 (1024-dim)
 
 **Still no-go, pending the hidden=512 leg of the production re-confirmation in §4 — upgraded from "no-go, sampling gap unaddressed" to "no-go, sampling gap addressed, one of two production points re-confirmed, awaiting the second (higher-value) measurement."** The original Phase 3 no-go had three legs (§ above): (1) the `lstm_hidden_d_eff` inversion itself, (2) wall-clock cost far above estimate, (3) BPC/kappa alone being weaker, non-`D_eff`-specific evidence. This pass resolves the *measurement* half of leg (1) for both points (the statistic is no longer known to be underpowered at either hidden size, `sample_ratio=2.0` uniformly) and resolves the *empirical* half for the hidden=128 point specifically (0.600→0.694, moved in the expected direction). It does **not yet** resolve the empirical half for hidden=512, which is the point that actually determines whether the inversion (0.600→0.331 pre-fix) is resolved, since that requires comparing hidden=512's post-fix value against hidden=128's post-fix value (0.693926) once it exists. Legs (2) and (3) are unchanged by this pass. **Do not schedule Phase 4 until hidden=512's post-fix value is recorded in the §4 table above** — if it comes in above 0.693926, that resolves the specific concern this plan is built around and makes a Phase 4 go-decision worth revisiting on its own (unchanged) cost/contention merits; if it does not, that is itself a significant, novel finding (genuine width-independent representational compression at scale) that would argue against Phase 4 even more strongly than the original inversion did, since it would no longer be attributable to a measurement bug.
+
+---
+
+## Phase 3 re-confirmation status (2026-07-17): hidden=512 @ 300k still running
+
+**Status:** **RUNNING** — hidden=512 production re-confirmation incomplete; hidden=128 post-fix point complete (unchanged from §4 above).
+
+Read-only inspection only; PID 27864 (`cyphalm_bench_native.exe`) was **not** killed or disturbed.
+
+### Process snapshot (2026-07-17 ~21:17 local)
+
+| Field | Value |
+|---|---|
+| **State** | Running (attempt 1, no retries yet) |
+| **Benchmark PID** | 27864 (`cyphalm_bench_native.exe`) |
+| **Watchdog PID** | 21072 (`powershell.exe` hosting `watchdog_300k_hidden512.ps1`) |
+| **Command line** | `native/build_deff/cyphalm_bench_native.exe --profile d17 --n-train 300000 --n-eval 2000 --lstm-hidden 512 --intelligence-profile --threads 1 --bench-seed 42` |
+| **Started** | 2026-07-12T15:16:29 local (`CreationDate` / watchdog log) |
+| **Wall elapsed (at inspection)** | ~5d 6h (~126 h) |
+| **CPU time (at inspection)** | ~16.56 h (~59,500 s) |
+| **CPU / wall ratio** | ~13% (heavy shared-machine contention; process is compute-active when scheduled — ~30 s CPU gained per 30 s wall sample) |
+| **Working set** | ~56–82 MB |
+| **Output JSON** | `bench/results/hidden_dim_scale_deff/300k_hidden512.json` — **0 bytes** (stdout redirected; written only on process exit) |
+| **Watchdog log** | `bench/results/hidden_dim_scale_deff/300k_hidden512_watchdog.log` — single line: `attempt 1 starting 2026-07-12T15:16:29...` (no `FINISHED` line yet) |
+
+### Completed reference numbers (same `native/build_deff` binary, post-fix history scaling)
+
+**hidden=128 @ 300k (post-fix, complete 2026-07-12T14:58, ~57 min wall):**
+
+| Metric | Value |
+|---|---|
+| bpc | 3.044487 |
+| kappa (`criticality_score`) | 0.852230 |
+| GRIA `d_eff` | 0.577841 |
+| **`lstm_hidden_d_eff`** | **0.693926** |
+| `lstm_hidden_d_eff_raw` | 88.823 |
+| `lstm_hidden_d_eff_sample_ratio` | 2.0 (`n_samples`=256) |
+
+Source: `bench/results/hidden_dim_scale_deff/300k_hidden128.json`
+
+**Pre-fix hidden=512 @ 300k (for comparison — `native/build_scale`, 48-row history cap):**
+
+| Metric | Value |
+|---|---|
+| bpc | 2.945026 |
+| kappa | 0.840743 |
+| GRIA `d_eff` | 0.577841 |
+| **`lstm_hidden_d_eff`** | **0.331333** (severely underpowered; `sample_ratio` 0.094) |
+| wall-clock | ~16h 39min (attempt 2, 2026-07-11→12) |
+
+Source: `bench/results/hidden_dim_scale/hidden512_300k.json`
+
+**Post-fix control sweep @ 5k (confirms monotonic trend at medium tier):**
+
+| hidden | `lstm_hidden_d_eff` | bpc |
+|---|---|---|
+| 128 | 0.278387 | 4.039556 |
+| 256 | 0.503581 | 3.929983 |
+| 512 | 0.595738 | 3.848554 |
+
+Source: `bench/results/hidden_dim_scale_deff/5k_hidden{128,256,512}.json`
+
+### Progress / ETA evidence
+
+- **CPU-time proxy:** At inspection, accumulated CPU (~16.56 h) was **~99% of the pre-fix hidden=512 successful run's CPU budget** (~16.65 h wall for that attempt). This suggests the training pass is **near completion or in late training / eval**, *if* total CPU demand is unchanged from pre-fix.
+- **Caveat — post-fix may need more CPU than pre-fix:** The history-buffer fix scales `lstm_h_history_max_` to `max(48, 2×hidden)` (1024 rows at hidden=512 vs. 48 pre-fix). Per-step `lstm_hidden_d_eff()` and ring-buffer maintenance are heavier; total CPU demand could exceed the pre-fix ~16.65 h baseline by an unknown margin (10–30% is plausible but not measured here).
+- **Wall-clock ETA under current contention:** At ~13% CPU scheduling, each CPU-hour costs ~7.7 wall-hours. If **~1–4 CPU-hours remain** (optimistic near-done vs. conservative post-fix overhead), expect **~8–31 additional wall-hours** from the inspection time — i.e. completion roughly **2026-07-18 through 2026-07-19** local, assuming no `-1`/empty-output retry. A contention-kill retry would reset the attempt counter (watchdog allows up to 40 attempts).
+- **Decision criterion (unchanged):** Compare post-fix hidden=512 `lstm_hidden_d_eff` against hidden=128 post-fix **0.693926**. Above → sampling-artifact inversion resolved; at/below → genuine representational-compression finding.
+
+### How to re-check
+
+```powershell
+# Process alive?
+Get-CimInstance Win32_Process -Filter "ProcessId = 27864" | Select ProcessId, CommandLine
+
+# Watchdog / attempt history
+Get-Content bench/results/hidden_dim_scale_deff/300k_hidden512_watchdog.log
+
+# Done when non-empty:
+Get-Item bench/results/hidden_dim_scale_deff/300k_hidden512.json | Select Length, LastWriteTime
+```
