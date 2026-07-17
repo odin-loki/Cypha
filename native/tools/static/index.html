@@ -202,6 +202,23 @@
     }
     .chat-composer textarea { margin-bottom: 0.5rem; min-height: 2.5rem; }
     #chat-status { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+    #chat-status.ok { color: var(--ok); }
+    #chat-status.warn { color: var(--err); }
+    .chat-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 2rem 1rem;
+      gap: 0.35rem;
+      min-height: 240px;
+    }
+    .chat-empty.hidden { display: none; }
+    .chat-empty p { margin: 0; }
     select {
       background: var(--bg);
       border: 1px solid var(--border);
@@ -307,7 +324,12 @@
         <h2>CyphaLM Chat</h2>
         <p class="hint">Conversational pane over <code>POST /generate/stream</code> (SSE) with fallback to <code>POST /generate</code>.</p>
         <p id="chat-status">Load a checkpoint via <code>POST /lm/load</code> or start <code>cypha_rest --cyphalm-checkpoint</code>.</p>
-        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+        <div id="chat-log" class="chat-log" aria-live="polite">
+          <div id="chat-empty" class="chat-empty">
+            <p>No messages yet</p>
+            <p class="hint">Type a prompt below. CyphaLM must be loaded via <code>--cyphalm-checkpoint</code> or <code>POST /lm/load</code>.</p>
+          </div>
+        </div>
         <div class="chat-composer">
           <label for="chat-input">Message</label>
           <textarea id="chat-input" placeholder="Type a prompt for CyphaLM…"></textarea>

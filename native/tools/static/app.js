@@ -434,13 +434,40 @@
       el.appendChild(m);
     }
     log.appendChild(el);
+    syncChatEmpty();
     log.scrollTop = log.scrollHeight;
     return el;
   }
 
-  function setChatStatus(text) {
+  function syncChatEmpty() {
+    const log = $("chat-log");
+    const empty = $("chat-empty");
+    if (!log || !empty) return;
+    empty.classList.toggle("hidden", !!log.querySelector(".chat-msg"));
+  }
+
+  function setChatStatus(text, tone) {
     const el = $("chat-status");
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    if (tone) el.className = tone;
+  }
+
+  async function refreshChatReadiness() {
+    try {
+      const { status, data } = await api("GET", "/metrics");
+      if (status !== 200 || !data) return;
+      if (data.lm_loaded) {
+        setChatStatus("CyphaLM loaded — ready to chat.", "ok");
+      } else {
+        setChatStatus(
+          "CyphaLM not loaded. Start cypha_rest with --cyphalm-checkpoint or POST /lm/load.",
+          "warn"
+        );
+      }
+    } catch (_) {
+      /* offline — keep default hint in HTML */
+    }
   }
 
   function setChatBusy(busy) {
@@ -573,8 +600,20 @@
   $("btn-chat-clear").addEventListener("click", () => {
     chatContextText = "";
     const log = $("chat-log");
-    if (log) log.innerHTML = "";
-    setChatStatus("Conversation cleared.");
+    if (log) {
+      log.innerHTML =
+        '<div id="chat-empty" class="chat-empty">' +
+        "<p>No messages yet</p>" +
+        '<p class="hint">Type a prompt below. CyphaLM must be loaded via <code>--cyphalm-checkpoint</code> or <code>POST /lm/load</code>.</p>' +
+        "</div>";
+    }
+    refreshChatReadiness();
+  });
+
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.tab === "lm") refreshChatReadiness();
+    });
   });
   $("chat-input").addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && !ev.shiftKey) {
@@ -665,4 +704,5 @@
 
   drawLossChart();
   refreshHealth();
+  refreshChatReadiness();
 })();
