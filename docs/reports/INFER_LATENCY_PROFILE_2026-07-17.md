@@ -60,6 +60,10 @@ Host load was noisy (CyphaLM wall times vary ~2× across back-to-back runs). Pre
 
 **Win:** `score_matrix` n=1 **~6.95 → 3.60 µs** (~48%); n=32 per-row **0.28 → 0.16 µs** (~43%). Safe: same numerics, golden OK.
 
+## Follow-on (same day): row-parallel score
+
+See [`PARALLEL_SCORE_2026-07-17.md`](PARALLEL_SCORE_2026-07-17.md). OpenMP row parallel in `batched_llr_gemm` when `n>=16` and `n*d*K>=1e6`. Product fixture (d=8 K=3) stays serial; synth d=256 K=32 n=256 → **~3.4×** vs serial (`build_perf_omp`).
+
 ## Floor
 
 - REST single-row GH classify: compute-bound + small-K overhead; further wins need classify_at_h scratch (deferred — A/B noisy).

@@ -14,7 +14,6 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -23,6 +22,7 @@
 #include "cypha/env.hpp"
 #include "cypha/nig_field.hpp"
 #include "cypha/nig_gig_math.hpp"
+#include "cypha/parallel_rows.hpp"
 #include "cypha/retrieval.hpp"
 
 namespace cypha {
@@ -113,44 +113,6 @@ static std::once_flag g_infer_accel_once;
 
 static void ensure_infer_accel() {
   std::call_once(g_infer_accel_once, [] { cypha::accel::init(); });
-}
-
-static int infer_thread_workers() {
-  unsigned t = std::thread::hardware_concurrency();
-  return t ? static_cast<int>(t) : 4;
-}
-
-template <class F>
-static void infer_parallel_rows(int begin, int end, F&& f) {
-  const int nrows = end - begin;
-  if (nrows <= 0) {
-    return;
-  }
-  int nt = std::min(infer_thread_workers(), nrows);
-  if (nt <= 1) {
-    for (int i = begin; i < end; ++i) {
-      f(i);
-    }
-    return;
-  }
-  const int chunk = (nrows + nt - 1) / nt;
-  std::vector<std::thread> th;
-  th.reserve(static_cast<std::size_t>(nt));
-  for (int t = 0; t < nt; ++t) {
-    int lo = begin + t * chunk;
-    int hi = std::min(end, lo + chunk);
-    if (lo >= hi) {
-      break;
-    }
-    th.emplace_back([lo, hi, &f]() {
-      for (int i = lo; i < hi; ++i) {
-        f(i);
-      }
-    });
-  }
-  for (auto& x : th) {
-    x.join();
-  }
 }
 
 }  // namespace
@@ -692,7 +654,7 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
     std::vector<double> ctx;
     context_prior_for_labels(m, m.labels, ctx);
     const ClassGmmStorage gmm = m.gmm_view();
-    for (int i = 0; i < n; ++i) {
+    parallel_for_score_rows(n, d, K, [&](int i) {
       const double* h = h_row_major + static_cast<std::size_t>(i) * static_cast<std::size_t>(d);
       std::vector<double> rp(static_cast<std::size_t>(d));
       for (int j = 0; j < d; ++j) {
@@ -707,7 +669,7 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
       if (m.use_nig_bma) {
         apply_nig_bma_llr_row(m, rp.data(), K, llr_row);
       }
-    }
+    });
     if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
       std::vector<double> kernel_scores(static_cast<std::size_t>(K));
       for (int i = 0; i < n; ++i) {
@@ -810,7 +772,7 @@ void softmax_batch_reference(const double* z_row_major, int n, int k, double eps
   if (n <= 0 || k <= 0) {
     return;
   }
-  infer_parallel_rows(0, n, [&](int i) {
+  parallel_for_rows(0, n, [&](int i) {
     softmax_row_reference(z_row_major + i * k, k, eps, probs_out.data() + i * k);
   });
 }

@@ -19,6 +19,7 @@ endfunction()
 cypha_add_golden_exe(cypha_golden SOURCE "${CYPHA_REGRESSION_DIR}/golden_main.cpp")
 cypha_add_golden_exe(batch_llr_golden)
 cypha_add_golden_exe(rpsm_batched_llr_smoke)
+cypha_add_golden_exe(score_matrix_parallel_parity)
 cypha_add_golden_exe(em_step_smoke)
 cypha_add_golden_exe(rpsm_sequence_smoke LINK cypha_lm_native)
 cypha_add_golden_exe(rpsm_hierarchy_smoke)
@@ -76,6 +77,7 @@ set(
   retrieval_golden
   batch_llr_golden
   rpsm_batched_llr_smoke
+  score_matrix_parallel_parity
   em_step_smoke
   rpsm_sequence_smoke
   rpsm_hierarchy_smoke

@@ -549,6 +549,7 @@ if(MSVC)
   target_compile_options(cypha_golden_run PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_golden PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE /W4 /permissive-)
+  target_compile_options(score_matrix_parallel_parity PRIVATE /W4 /permissive-)
   target_compile_options(em_step_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_train_smoke PRIVATE /W4 /permissive-)
@@ -627,6 +628,7 @@ else()
   target_compile_options(cypha_golden_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_batched_llr_smoke PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(score_matrix_parallel_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(em_step_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_train_smoke PRIVATE -Wall -Wextra -Wpedantic)
@@ -710,6 +712,7 @@ add_test(
     "${_golden_fix}/reference.cypha"
     "${_golden_fix}/native_parity.bin"
 )
+add_test(NAME native_score_matrix_parallel_parity COMMAND "$<TARGET_FILE:score_matrix_parallel_parity>")
 add_test(NAME native_em_step_smoke COMMAND "$<TARGET_FILE:em_step_smoke>")
 add_test(
   NAME native_rpsm_sequence_smoke

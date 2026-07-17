@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "cypha/infer_cpu.hpp"
+#include "cypha/parallel_rows.hpp"
 
 namespace cypha {
 namespace rpsm {
@@ -80,18 +81,21 @@ void batched_llr_gemm(const double* h_row_major, int n, const PsiMatrices& psi, 
     bias[static_cast<std::size_t>(k)] = -cross_mu - 0.5 * d_sq - u_k + ctx_k;
   }
 
-  for (int i = 0; i < n; ++i) {
+  // Capture heap pointers (not thread_local vector objects) for OpenMP workers.
+  const double* b_data = b_row.data();
+  const double* bias_data = bias.data();
+  parallel_for_score_rows(n, d, K, [&](int i) {
     const double* hi = h_row_major + static_cast<std::size_t>(i * d);
     double* llr_row = llr_out + static_cast<std::size_t>(i * K);
     for (int k = 0; k < K; ++k) {
-      double acc = bias[static_cast<std::size_t>(k)];
-      const double* bk = b_row.data() + static_cast<std::size_t>(k * d);
+      double acc = bias_data[static_cast<std::size_t>(k)];
+      const double* bk = b_data + static_cast<std::size_t>(k * d);
       for (int j = 0; j < d; ++j) {
         acc += hi[j] * bk[j];
       }
       llr_row[k] = acc;
     }
-  }
+  });
 }
 
 }  // namespace rpsm
