@@ -5,6 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/env.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/soft_world_monitor.hpp"
 
@@ -110,6 +111,25 @@ double criticality_field_distance(double value, CriticalityTier tier, double tar
     return std::max(0.0, value - target_or_bound);
   }
   return std::abs(value - target_or_bound);
+}
+
+bool criticality_vector_enabled() {
+  if (const std::optional<std::string> raw = cypha::env_get("CYPHA_CRITICALITY"); raw.has_value()) {
+    if (raw->empty()) {
+      return true;
+    }
+    const char c0 = (*raw)[0];
+    if (c0 == '0') {
+      return false;
+    }
+    if (c0 == 'f' || c0 == 'F') {
+      return false;
+    }
+    if (c0 == 'n' || c0 == 'N') {
+      return false;
+    }
+  }
+  return true;
 }
 
 CriticalityVector build_criticality_vector(const IntelligenceProfiler& profiler,

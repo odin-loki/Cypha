@@ -89,6 +89,24 @@ No goldens touched.
 - `native/tools/criticality_vector_p9_smoke.cpp` (new)
 - `native/CMakeLists.txt`
 
+## Hot-path overhead (2026-07-17, `build_perf_p9`)
+
+**Claim check:** `CriticalityVector` is **not** invoked inside D17 `train_step`. Population is report/REST only (`intelligence_profile_to_json` / `intelligence_profile_report_json` / `GET /intelligence/criticality`). Mid estimators remain behind `enable_mid && step % 64 == 0`.
+
+| Metric | Value |
+|--------|-------|
+| D17 hybrid train (8k steps, synthetic) | 73.26 s (~9157 µs/step) |
+| Simulated per-step `criticality_vector()` ×8k | 0.0048 s (~0.60 µs/call) |
+| **Simulated if called every train step** | **0.007%** of train wall |
+| **Shipped hot-path overhead** | **0.000%** (not on train path) |
+| BPC (profiler-train vs baseline) | **bit-identical** `7.994747130705` |
+
+### Gate shipped
+
+`CYPHA_CRITICALITY` — default **ON** (REST + report embed). Set `0` / `false` / `off` to strip `criticality_vector` from profile JSON and return 503 on `/intelligence/criticality`. Bench train path pays nothing either way.
+
+Tool: `criticality_overhead_p9_bench` (`native/build_perf_p9`).
+
 ## Promotion path
 
 1. Wire REST `/predict` session extras into `CriticalityHotInput` (routing entropy from MKE head when loaded).

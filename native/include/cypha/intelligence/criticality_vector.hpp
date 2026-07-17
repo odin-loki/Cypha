@@ -75,6 +75,9 @@ const char* criticality_cadence_label(CriticalityCadence cadence);
 
 double criticality_field_distance(double value, CriticalityTier tier, double target_or_bound);
 
+/// True unless ``CYPHA_CRITICALITY`` is ``0`` / ``false`` / ``off`` (default ON for REST).
+bool criticality_vector_enabled();
+
 /// Populate hot fields from profiler NIG state + optional session extras.
 CriticalityVector build_criticality_vector(const IntelligenceProfiler& profiler,
                                            const CriticalityHotInput& hot = {},

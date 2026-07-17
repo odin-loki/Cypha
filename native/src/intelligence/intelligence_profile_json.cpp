@@ -41,11 +41,10 @@ nlohmann::json intelligence_profile_to_json(const IntelligenceProfiler& profiler
         {"critical_target", targets[i]},
     });
   }
-  return nlohmann::json{
+  nlohmann::json out{
       {"statistics", stats},
       {"criticality_score", profiler.criticality_score()},
       {"health_signal", profiler.health_signal()},
-      {"criticality_vector", criticality_vector_to_json(profiler.criticality_vector())},
       {"critical_targets",
        nlohmann::json{{"alpha", targets[0]},
                       {"d_eff", targets[1]},
@@ -55,6 +54,12 @@ nlohmann::json intelligence_profile_to_json(const IntelligenceProfiler& profiler
                       {"lipschitz", targets[5]},
                       {"calibration", targets[6]}}},
   };
+  if (criticality_vector_enabled()) {
+    out["criticality_vector"] = criticality_vector_to_json(profiler.criticality_vector());
+  } else {
+    out["criticality_vector"] = nullptr;
+  }
+  return out;
 }
 
 }  // namespace cypha::intelligence

@@ -247,7 +247,11 @@ nlohmann::json intelligence_profile_report_json(const IntelligenceProfiler& prof
   root["landscape_kappa"] = landscape;
 
   root["causal_graph"] = causal.to_json();
-  root["criticality_vector"] = criticality_vector_to_json(profiler.criticality_vector());
+  if (criticality_vector_enabled()) {
+    root["criticality_vector"] = criticality_vector_to_json(profiler.criticality_vector());
+  } else {
+    root["criticality_vector"] = nullptr;
+  }
   return root;
 }
 

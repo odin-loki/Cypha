@@ -207,6 +207,10 @@ add_executable(criticality_vector_p9_smoke tools/criticality_vector_p9_smoke.cpp
 target_link_libraries(criticality_vector_p9_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(criticality_vector_p9_smoke)
 
+add_executable(criticality_overhead_p9_bench tools/criticality_overhead_p9_bench.cpp)
+target_link_libraries(criticality_overhead_p9_bench PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(criticality_overhead_p9_bench)
+
 add_executable(kernel_cypha_roundtrip tools/kernel_cypha_roundtrip.cpp)
 target_link_libraries(kernel_cypha_roundtrip PRIVATE cypha_core)
 
@@ -385,6 +389,7 @@ set(
   kernel_approx_p5_smoke
   class_gmm_p3_smoke
   criticality_vector_p9_smoke
+  criticality_overhead_p9_bench
   kernel_cypha_roundtrip
   memory_train_roundtrip
   preprocessor_rff_gamma_cv_test

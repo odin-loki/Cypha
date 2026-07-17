@@ -99,6 +99,12 @@ void register_intelligence_rest_routes(httplib::Server& svr) {
   });
 
   svr.Get("/intelligence/criticality", [](const httplib::Request& req, httplib::Response& res) {
+    if (!cypha::intelligence::criticality_vector_enabled()) {
+      res.status = 503;
+      res.set_content(R"({"detail":"criticality vector disabled (CYPHA_CRITICALITY=0)"})",
+                      "application/json");
+      return;
+    }
     if (g_mu == nullptr || g_profiler == nullptr) {
       res.status = 503;
       res.set_content(R"({"detail":"intelligence profiler not configured"})", "application/json");
