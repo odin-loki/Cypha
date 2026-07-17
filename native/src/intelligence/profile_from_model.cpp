@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "cypha/bench/bench_paths.hpp"
+#include "cypha/intelligence/criticality_vector.hpp"
 #include "cypha/intelligence/intelligence_profile_json.hpp"
 #include "cypha/intelligence/causal_graph.hpp"
 #include "cypha/intelligence/measurers.hpp"
@@ -246,6 +247,7 @@ nlohmann::json intelligence_profile_report_json(const IntelligenceProfiler& prof
   root["landscape_kappa"] = landscape;
 
   root["causal_graph"] = causal.to_json();
+  root["criticality_vector"] = criticality_vector_to_json(profiler.criticality_vector());
   return root;
 }
 

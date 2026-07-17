@@ -1,5 +1,7 @@
 #include "cypha/intelligence/intelligence_profile_json.hpp"
 
+#include "cypha/intelligence/criticality_vector.hpp"
+
 namespace cypha::intelligence {
 
 namespace {
@@ -43,6 +45,7 @@ nlohmann::json intelligence_profile_to_json(const IntelligenceProfiler& profiler
       {"statistics", stats},
       {"criticality_score", profiler.criticality_score()},
       {"health_signal", profiler.health_signal()},
+      {"criticality_vector", criticality_vector_to_json(profiler.criticality_vector())},
       {"critical_targets",
        nlohmann::json{{"alpha", targets[0]},
                       {"d_eff", targets[1]},

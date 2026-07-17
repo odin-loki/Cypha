@@ -7,6 +7,7 @@
 
 #include "cypha/bench/bench_paths.hpp"
 #include "cypha/intelligence/causal_graph.hpp"
+#include "cypha/intelligence/criticality_vector.hpp"
 #include "cypha/intelligence/intelligence_profile_json.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/profile_completeness.hpp"
@@ -94,6 +95,26 @@ void register_intelligence_rest_routes(httplib::Server& svr) {
     std::lock_guard<std::mutex> lk(*g_mu);
     nlohmann::json payload = g_causal_graph->to_json();
     payload["source"] = "causal_graph_monitor";
+    res.set_content(payload.dump(), "application/json");
+  });
+
+  svr.Get("/intelligence/criticality", [](const httplib::Request& req, httplib::Response& res) {
+    if (g_mu == nullptr || g_profiler == nullptr) {
+      res.status = 503;
+      res.set_content(R"({"detail":"intelligence profiler not configured"})", "application/json");
+      return;
+    }
+    cypha::intelligence::CriticalityBuildOptions opts;
+    if (req.has_param("mid")) {
+      opts.enable_mid = req.get_param_value("mid") == "1" || req.get_param_value("mid") == "true";
+    }
+    if (req.has_param("step")) {
+      opts.step = std::stoll(req.get_param_value("step"));
+    }
+    std::lock_guard<std::mutex> lk(*g_mu);
+    const auto vec = g_profiler->criticality_vector({}, {}, opts);
+    nlohmann::json payload = cypha::intelligence::criticality_vector_to_json(vec);
+    payload["source"] = "intelligence_profiler";
     res.set_content(payload.dump(), "application/json");
   });
 }

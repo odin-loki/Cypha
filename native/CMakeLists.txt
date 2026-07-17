@@ -77,6 +77,7 @@ add_library(cypha_core STATIC
   src/intelligence/nig_statistic_state.cpp
   src/intelligence/measurers.cpp
   src/intelligence/intelligence_profiler.cpp
+  src/intelligence/criticality_vector.cpp
   src/intelligence/intelligence_profile_json.cpp
   src/intelligence/profile_completeness.cpp
   src/intelligence/epistemic_threshold.cpp
@@ -196,6 +197,10 @@ target_link_libraries(kernel_snapshot_roundtrip PRIVATE cypha_core)
 add_executable(kernel_approx_p5_smoke tools/kernel_approx_p5_smoke.cpp)
 target_link_libraries(kernel_approx_p5_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(kernel_approx_p5_smoke)
+
+add_executable(criticality_vector_p9_smoke tools/criticality_vector_p9_smoke.cpp)
+target_link_libraries(criticality_vector_p9_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(criticality_vector_p9_smoke)
 
 add_executable(kernel_cypha_roundtrip tools/kernel_cypha_roundtrip.cpp)
 target_link_libraries(kernel_cypha_roundtrip PRIVATE cypha_core)
@@ -373,6 +378,7 @@ set(
   cypha_kernel_tune
   kernel_snapshot_roundtrip
   kernel_approx_p5_smoke
+  criticality_vector_p9_smoke
   kernel_cypha_roundtrip
   memory_train_roundtrip
   preprocessor_rff_gamma_cv_test
@@ -720,6 +726,12 @@ add_test(
 )
 set_tests_properties(native_kernel_approx_p5_smoke PROPERTIES
   PASS_REGULAR_EXPRESSION "kernel_approx_p5_smoke: PASS")
+add_test(
+  NAME native_criticality_vector_p9_smoke
+  COMMAND "$<TARGET_FILE:criticality_vector_p9_smoke>"
+)
+set_tests_properties(native_criticality_vector_p9_smoke PROPERTIES
+  PASS_REGULAR_EXPRESSION "criticality_vector_p9_smoke: PASS")
 add_test(
   NAME native_kernel_snapshot_roundtrip
   COMMAND "$<TARGET_FILE:kernel_snapshot_roundtrip>"

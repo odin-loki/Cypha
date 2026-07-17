@@ -4,6 +4,7 @@
 #include <cmath>
 #include <numeric>
 
+#include "cypha/intelligence/criticality_vector.hpp"
 #include "cypha/intelligence/measurers.hpp"
 
 namespace cypha::cyphalm {
@@ -341,6 +342,45 @@ cypha::intelligence::ProfileObservation LmIntelligenceMonitor::compute_observati
 
 cypha::intelligence::ProfileObservation LmIntelligenceMonitor::snapshot_observation() const {
   return compute_observation();
+}
+
+cypha::intelligence::CriticalityHotInput LmIntelligenceMonitor::hot_criticality_input() const {
+  const cypha::intelligence::ProfileObservation obs = compute_observation();
+  cypha::intelligence::CriticalityHotInput hot;
+  hot.anomaly_score = 1.0 - obs.calibration;
+  hot.drift_score = 0.0;
+  if (step_alphas_.size() >= 2) {
+    const std::size_t half = step_alphas_.size() / 2;
+    double early = 0.0;
+    double late = 0.0;
+    for (std::size_t i = 0; i < half; ++i) {
+      early += step_alphas_[i];
+    }
+    for (std::size_t i = half; i < step_alphas_.size(); ++i) {
+      late += step_alphas_[i];
+    }
+    early /= static_cast<double>(half);
+    late /= static_cast<double>(step_alphas_.size() - half);
+    hot.drift_score = std::abs(late - early);
+  }
+  hot.nig_confidence = obs.calibration;
+  hot.effective_sample_size =
+      static_cast<double>(std::max(confidences_.size(), static_cast<std::size_t>(variance_steps_)));
+  if (!confidences_.empty()) {
+    int n_low = 0;
+    for (double c : confidences_) {
+      if (c < 0.35) {
+        ++n_low;
+      }
+    }
+    hot.ood_rate = static_cast<double>(n_low) / static_cast<double>(confidences_.size());
+  }
+  if (variance_steps_ > 0) {
+    const double epistemic_mean = epistemic_sum_ / static_cast<double>(variance_steps_);
+    const double aleatoric_mean = aleatoric_sum_ / static_cast<double>(variance_steps_);
+    hot.anomaly_score = cypha::intelligence::compute_epistemic_ratio(epistemic_mean, aleatoric_mean);
+  }
+  return hot;
 }
 
 void LmIntelligenceMonitor::feed_causal_checkpoints(

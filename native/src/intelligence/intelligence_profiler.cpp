@@ -1,5 +1,6 @@
 #include "cypha/intelligence/intelligence_profiler.hpp"
 
+#include "cypha/intelligence/criticality_vector.hpp"
 #include "cypha/intelligence/measurers.hpp"
 
 #include <algorithm>
@@ -240,6 +241,12 @@ std::array<int, kProfileStatisticCount> IntelligenceProfiler::statistic_update_c
     counts[i] = nig_states_[i].n_updates();
   }
   return counts;
+}
+
+CriticalityVector IntelligenceProfiler::criticality_vector(const CriticalityHotInput& hot,
+                                                           const CriticalityMidInput& mid,
+                                                           const CriticalityBuildOptions& opts) const {
+  return build_criticality_vector(*this, hot, mid, opts);
 }
 
 }  // namespace cypha::intelligence

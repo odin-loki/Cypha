@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "cypha/intelligence/causal_graph.hpp"
+#include "cypha/intelligence/criticality_vector.hpp"
 #include "cypha/intelligence/intelligence_profiler.hpp"
 
 namespace cypha::cyphalm {
@@ -25,6 +26,9 @@ class LmIntelligenceMonitor {
   void flush_to_profiler(cypha::intelligence::IntelligenceProfiler& profiler);
 
   cypha::intelligence::ProfileObservation snapshot_observation() const;
+
+  /// Hot criticality gauges from accumulated token history (read-only).
+  cypha::intelligence::CriticalityHotInput hot_criticality_input() const;
 
   void reset();
 

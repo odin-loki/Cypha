@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "cypha/intelligence/causal_graph.hpp"
+#include "cypha/intelligence/criticality_vector.hpp"
 #include "cypha/intelligence/nig_statistic_state.hpp"
 #include "cypha/intelligence/profile_observation.hpp"
 #include "cypha/intelligence/profile_statistic.hpp"
@@ -72,6 +73,11 @@ class IntelligenceProfiler {
 
   /// ``κ = 1 - (1/7) Σ |P_i - P*_i|`` vs near-critical targets.
   double criticality_score() const;
+
+  /// Phase 9 read-only criticality vector (hot every call; mid behind ``opts.enable_mid``).
+  CriticalityVector criticality_vector(const CriticalityHotInput& hot = {},
+                                       const CriticalityMidInput& mid = {},
+                                       const CriticalityBuildOptions& opts = {}) const;
 
   /// Diagonal Mahalanobis distance of current means from observation baselines.
   double health_signal() const;
