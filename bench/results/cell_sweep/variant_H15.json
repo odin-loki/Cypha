@@ -1,0 +1,40 @@
+﻿{
+    "bench_mode":  "hybrid",
+    "bpc":  5.262403448810712,
+    "corpus":  "wikitext2",
+    "id":  "H15",
+    "kappa":  0.8724083973007322,
+    "math_integration":  true,
+    "mean_alpha":  0.5238638520367702,
+    "n_eval":  2000,
+    "n_train":  300000,
+    "name":  "AXIOM-evolved cell",
+    "notes":  "seed-evolved eml/sigmoid/tanh gate grammar in LSTM",
+    "profile_completeness":  {
+                                 "all_complete":  true,
+                                 "kappa":  0.8724083973007322,
+                                 "missing_stats":  [
+
+                                                   ],
+                                 "stat_observed":  [
+                                                       true,
+                                                       true,
+                                                       true,
+                                                       true,
+                                                       true,
+                                                       true,
+                                                       true
+                                                   ],
+                                 "update_counts":  [
+                                                       2,
+                                                       2,
+                                                       2,
+                                                       2,
+                                                       2,
+                                                       2,
+                                                       2
+                                                   ]
+                             },
+    "synthetic":  false,
+    "tier":  3
+}

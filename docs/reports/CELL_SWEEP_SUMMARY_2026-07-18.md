@@ -8,7 +8,7 @@
 
 | Variant | Issue |
 |---------|-------|
-| **H15** | Overnight `bpc: null` (axiom NaN). Remeasured **3.982** @ `n_train=5000` after NaN fix — **not** a 300k overnight re-row. |
+| **H15** | 300k re-row **5.262** (was null; 5k was 3.982) |
 | Count | **25/25** rows with BPC in local CSV after 2026-07-18 reaggregate |
 
 ## Highlights (lower BPC better)
@@ -19,7 +19,7 @@
 | B1 | 2.887 | +0.014 | Char-LSTM artifact row (not locked B1) |
 | H22 | 3.077 | +0.204 | |
 | H01 | 3.073 | +0.200 | |
-| **H15** | **3.982** | +1.109 | Finite @5k post-fix; optional 300k re-run |
+| **H15** | **5.262** | +2.389 | 300k re-row (worse than @5k) |
 | H16/H17 | ~4.61 | +1.74 | |
 | H18/H20/H21 | ~11.5 | +8.6 | Collapsed / failed configs |
 | B0 / B2 rows in CSV | 11.58 / 6.81 | — | Sweep-local baselines, **not** lock pins |
@@ -31,3 +31,4 @@
 ```powershell
 powershell -File scripts/aggregate_cell_sweep_summary.ps1
 ```
+
