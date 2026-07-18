@@ -151,6 +151,7 @@ Cypha Tests.txt
 docs/site/
 *.html
 !native/tools/static/*.html
+!paper/arxiv_bundle/*.html
 *.md.html
 *_test.html
 *_demo.html
