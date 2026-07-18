@@ -174,10 +174,10 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** human-only — venue/arXiv upload; optional Linux CI assets / pandoc PDF / 300k H15  
-**Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md)
+**Active plan:** human-only — venue/arXiv upload; optional pandoc PDF / 300k H15 / ECG5000  
+**Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`MSVC_RELEASE_CI_2026-07-18.md`](docs/reports/MSVC_RELEASE_CI_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
-2. ~~Phase E release~~ — `v2.3.24` published; Windows zip attached; packaging CI fix landed
+2. ~~Phase E release~~ — `v2.3.24` published; Windows gate is **MSVC** (`windows_msvc`, not MinGW)
 3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human, 2027 Q1)
-4. Optional — re-tag for Linux/AppImage CI; pandoc PDF; 300k H15; `gh auth login` for full CLI scopes
+4. Optional — re-tag after green `windows_msvc` for MSVC zip + Linux/AppImage; pandoc PDF; 300k H15

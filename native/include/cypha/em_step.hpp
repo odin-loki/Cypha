@@ -9,6 +9,7 @@
 /// Diagonal-Gaussian log-likelihood follows the ``generation.hpp`` ``batch_logpdf`` convention
 /// (same Mahalanobis weighting as ``score_matrix_use_field`` via ``inv_v``).
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 

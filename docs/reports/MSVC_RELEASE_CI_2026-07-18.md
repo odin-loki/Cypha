@@ -18,3 +18,7 @@
 
 - `RpsmGlobalMemory::slots()` → `slot_data()` (Qt `slots` macro clash)
 - `experiment_export_compare` uses `QString(key).replace(...)` (const QString)
+
+## CI follow-up
+
+First `windows_msvc` run failed on `em_step.hpp` (`std::max` vs Windows `max` macro). Fixed with global MSVC `NOMINMAX` / `WIN32_LEAN_AND_MEAN` in `native/CMakeLists.txt` and `#include <algorithm>` in `em_step.hpp` / `kernel_memory.hpp`.

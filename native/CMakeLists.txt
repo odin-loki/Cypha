@@ -6,6 +6,11 @@ project(cypha_native VERSION 2.2.8 LANGUAGES CXX C)
 # to nvcc breaks CUDA .cu compilation ("A single input file is required...").
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:$<$<CXX_COMPILER_ID:MSVC>:/MP>>)
 
+# Windows.h defines min/max macros that break std::min / std::max under MSVC unless NOMINMAX is set.
+if(MSVC)
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaMinGW.cmake")
 
 option(CYPHA_BUILD_EXPERIMENT_DB "Build experiment_db_smoke / experiment_db_crud_golden (requires SQLite3)" OFF)
