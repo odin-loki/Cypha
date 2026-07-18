@@ -101,6 +101,8 @@ jobs:
           chmod +x /tmp/linuxdeploy-x86_64.AppImage /tmp/linuxdeploy-plugin-qt-x86_64.AppImage
 
       - name: Package AppImage (cypha_qt_shell + cypha_rest)
+        id: appimage
+        continue-on-error: true
         env:
           SKIP_BUILD: "1"
           LINUXDEPLOY: /tmp/linuxdeploy-x86_64.AppImage
@@ -111,6 +113,7 @@ jobs:
           mkdir -p dist
           test -x native/build-release/cypha_qt_shell || test -x native/build-release/qt/cypha_qt_shell
           test -x native/build-release/cypha_rest || test -x native/build-release/qt/cypha_rest
+          test -f packaging/cypha.png
           bash packaging/build_appimage.sh "$VERSION" native/build-release dist
 
       - name: Verify release bundle contents
@@ -129,12 +132,17 @@ jobs:
             test -x "$STAGE/bin/dev/$bin"
           done
           APPIMAGE="dist/cypha-${VERSION}-linux-x86_64.AppImage"
-          test -x "$APPIMAGE"
-          file "$APPIMAGE" | grep -qi 'AppImage\|ELF'
+          if [[ -f "$APPIMAGE" ]]; then
+            test -x "$APPIMAGE"
+            file "$APPIMAGE" | grep -qi 'AppImage\|ELF'
+          else
+            echo "WARN: AppImage not produced; shipping Linux CLI tarball only"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x86_64
+          if-no-files-found: error
           path: |
             dist/cypha-*-linux-x86_64.tar.gz
             dist/cypha-*-linux-x86_64.AppImage

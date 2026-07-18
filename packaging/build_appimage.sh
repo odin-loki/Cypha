@@ -117,10 +117,16 @@ Categories=Development;Science;
 Terminal=false
 EOF
 
-# Optional icon — copy if packaging/cypha.png exists; linuxdeploy tolerates a missing file.
+# Icon is required by linuxdeploy when desktop Icon=cypha is set.
 if [[ -f "$REPO_ROOT/packaging/cypha.png" ]]; then
   install -m 644 "$REPO_ROOT/packaging/cypha.png" "$APPDIR/cypha.png"
+else
+  echo "error: missing packaging/cypha.png (required for AppImage Icon=cypha)" >&2
+  exit 1
 fi
+# Also install under hicolor so Icon lookup finds it after desktop deploy.
+mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+install -m 644 "$APPDIR/cypha.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/cypha.png"
 
 cat >"$APPDIR/AppRun" <<'EOF'
 #!/usr/bin/env bash
