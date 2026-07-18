@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -178,6 +179,9 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_s("lstm_optim", cfg.lstm_optim);
     set_d("lstm_grad_clip", cfg.lstm_grad_clip);
     set_s("lstm_init", cfg.lstm_init);
+    set_d("lstm_weight_decay", cfg.lstm_weight_decay);
+    set_i("lstm_lr_warmup_steps", cfg.lstm_lr_warmup_steps);
+    set_i("lstm_lr_cosine_steps", cfg.lstm_lr_cosine_steps);
     set_d("hybrid_blend_logit", cfg.hybrid_blend_logit);
     set_b("hybrid_blend_learnable", cfg.hybrid_blend_learnable);
     set_d("hybrid_blend_lr", cfg.hybrid_blend_lr);
@@ -306,6 +310,46 @@ void apply_lstm_recipe_env(CyphaLMConfig& cfg) {
     if (const auto v = cypha::env_get("CYPHA_LSTM_INIT"); v.has_value() && !v->empty()) {
         cfg.lstm_init = lower_copy(*v);
     }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_WEIGHT_DECAY"); v.has_value() && !v->empty()) {
+        cfg.lstm_weight_decay = std::max(0.0, std::stod(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LR_WARMUP"); v.has_value() && !v->empty()) {
+        cfg.lstm_lr_warmup_steps = std::max(0, std::stoi(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LR_COSINE"); v.has_value() && !v->empty()) {
+        cfg.lstm_lr_cosine_steps = std::max(0, std::stoi(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LR"); v.has_value() && !v->empty()) {
+        cfg.lstm_lr = std::stod(*v);
+    }
+}
+
+double lstm_lr_at_step(const CyphaLMConfig& cfg, int step) {
+    const int warmup = std::max(0, cfg.lstm_lr_warmup_steps);
+    const int cosine = std::max(0, cfg.lstm_lr_cosine_steps);
+    if (warmup == 0 && cosine == 0) {
+        return cfg.lstm_lr;
+    }
+    const double base = cfg.lstm_lr;
+    const double floor_lr = 0.1 * base;
+    if (step < 0) {
+        step = 0;
+    }
+    if (warmup > 0 && step < warmup) {
+        // Linear warmup 0 → base over ``warmup`` steps (step 0 near-zero, step warmup-1 at base).
+        return base * (static_cast<double>(step + 1) / static_cast<double>(warmup));
+    }
+    if (cosine <= 0) {
+        return base;
+    }
+    const int t = step - warmup;
+    if (t >= cosine) {
+        return floor_lr;
+    }
+    constexpr double kPi = 3.14159265358979323846;
+    const double progress = static_cast<double>(t) / static_cast<double>(cosine);
+    const double cos_factor = 0.5 * (1.0 + std::cos(kPi * progress));  // 1 → 0
+    return floor_lr + (base - floor_lr) * cos_factor;
 }
 
 }  // namespace cypha::cyphalm

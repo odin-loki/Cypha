@@ -96,11 +96,20 @@ static void cpu_parallel_batch_encode(const double* x, int n, int d, const doubl
 static void cpu_parallel_score_matrix(const double* H, int n, int d, int K, const double* mu0,
                                       const double* inv_v, const double* D, const double* D_sq,
                                       const double* u_k, const double* ctx, double* llr) {
+  // Perf §3.1: fold inv_v into D once per call so the hot loop is (H−μ0)·D_scaled.
+  // Association matches (H−μ0)*(inv_v*D); CUDA path keeps the original API/kernel.
+  std::vector<double> D_scaled(static_cast<std::size_t>(K) * static_cast<std::size_t>(d));
+  for (int k = 0; k < K; ++k) {
+    for (int j = 0; j < d; ++j) {
+      D_scaled[static_cast<std::size_t>(k * d + j)] = inv_v[j] * D[k * d + j];
+    }
+  }
+  const double* Ds = D_scaled.data();
   parallel_rows(0, n, [&](int i) {
     for (int k = 0; k < K; ++k) {
       double cross = 0.0;
       for (int j = 0; j < d; ++j)
-        cross += (H[i * d + j] - mu0[j]) * inv_v[j] * D[k * d + j];
+        cross += (H[i * d + j] - mu0[j]) * Ds[k * d + j];
       llr[i * K + k] = cross - 0.5 * D_sq[k] - u_k[k] + ctx[k];
     }
   });

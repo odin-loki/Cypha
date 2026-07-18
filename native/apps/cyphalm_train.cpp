@@ -37,6 +37,9 @@ struct Args {
     std::string lstm_optim;
     double grad_clip = -1.0;
     std::string lstm_init;
+    double weight_decay = -1.0;
+    int lstm_lr_warmup = -1;
+    int lstm_lr_cosine = -1;
 };
 
 void usage() {
@@ -45,7 +48,8 @@ void usage() {
         << "       (--corpus bench/data/... | --synthetic-tokens N)\n"
         << "       [--max-chars M] [--max-train-steps S] [--threads T]\n"
         << "       [--profile-guided-loss] [--intelligence-monitor] [--math-integration]\n"
-        << "       [--bptt-lstm N] [--optim sgd|adam] [--grad-clip C] [--lstm-init default|classic]\n";
+        << "       [--bptt-lstm N] [--optim sgd|adam] [--grad-clip C] [--lstm-init default|classic]\n"
+        << "       [--weight-decay W] [--lstm-lr-warmup N] [--lstm-lr-cosine N]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -71,6 +75,9 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--optim") a.lstm_optim = need("--optim");
         else if (k == "--grad-clip") a.grad_clip = std::stod(need("--grad-clip"));
         else if (k == "--lstm-init") a.lstm_init = need("--lstm-init");
+        else if (k == "--weight-decay") a.weight_decay = std::stod(need("--weight-decay"));
+        else if (k == "--lstm-lr-warmup") a.lstm_lr_warmup = std::stoi(need("--lstm-lr-warmup"));
+        else if (k == "--lstm-lr-cosine") a.lstm_lr_cosine = std::stoi(need("--lstm-lr-cosine"));
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -123,6 +130,9 @@ int main(int argc, char** argv) {
         if (!args.lstm_optim.empty()) cfg.lstm_optim = args.lstm_optim;
         if (args.grad_clip >= 0.0) cfg.lstm_grad_clip = args.grad_clip;
         if (!args.lstm_init.empty()) cfg.lstm_init = args.lstm_init;
+        if (args.weight_decay >= 0.0) cfg.lstm_weight_decay = args.weight_decay;
+        if (args.lstm_lr_warmup >= 0) cfg.lstm_lr_warmup_steps = args.lstm_lr_warmup;
+        if (args.lstm_lr_cosine >= 0) cfg.lstm_lr_cosine_steps = args.lstm_lr_cosine;
 
         cypha::cyphalm::LMCorpus corpus;
         bool synthetic = false;

@@ -274,6 +274,10 @@ void CharLSTMHead::set_grad_clip(double clip) {
   grad_clip_ = std::max(0.0, clip);
 }
 
+void CharLSTMHead::set_weight_decay(double wd) {
+  weight_decay_ = std::max(0.0, wd);
+}
+
 void CharLSTMHead::ensure_adam_state() {
   if (m_E_.size() == E.size()) return;
   m_E_.assign(E.size(), 0.0);
@@ -774,6 +778,14 @@ void CharLSTMHead::apply_grads(const CharLSTMGrad& grads_in, double lr) {
     adam_update(b, m_b_, v_b_, grads.db, lr, adam_t_, kBeta1, kBeta2, kEps);
     adam_update(Wy, m_Wy_, v_Wy_, grads.dWy, lr, adam_t_, kBeta1, kBeta2, kEps);
     adam_update(by, m_by_, v_by_, grads.dby, lr, adam_t_, kBeta1, kBeta2, kEps);
+    // AdamW: decoupled weight decay after Adam step; skip biases (b, by).
+    if (weight_decay_ > 0.0) {
+      const double scale = lr * weight_decay_;
+      for (double& w : E) w -= scale * w;
+      for (double& w : Wx) w -= scale * w;
+      for (double& w : Wh) w -= scale * w;
+      for (double& w : Wy) w -= scale * w;
+    }
     return;
   }
   for (std::size_t i = 0; i < E.size(); ++i) E[i] -= lr * grads.dE[i];

@@ -379,9 +379,17 @@ add_executable(quality_recipe_wave1_smoke tools/quality_recipe_wave1_smoke.cpp)
 target_link_libraries(quality_recipe_wave1_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(quality_recipe_wave1_smoke)
 
+add_executable(quality_recipe_wave2_smoke tools/quality_recipe_wave2_smoke.cpp)
+target_link_libraries(quality_recipe_wave2_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(quality_recipe_wave2_smoke)
+
 add_executable(throughput_lock_smoke tools/throughput_lock_smoke.cpp)
 target_link_libraries(throughput_lock_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(throughput_lock_smoke)
+
+add_executable(score_matrix_inv_v_fold_smoke tools/score_matrix_inv_v_fold_smoke.cpp)
+target_link_libraries(score_matrix_inv_v_fold_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(score_matrix_inv_v_fold_smoke)
 
 add_executable(navigation_loss_hybrid_smoke tools/navigation_loss_hybrid_smoke.cpp)
 target_link_libraries(navigation_loss_hybrid_smoke PRIVATE cypha_lm_native)
@@ -2117,8 +2125,18 @@ add_test(
 )
 
 add_test(
+  NAME native_quality_recipe_wave2_smoke
+  COMMAND "$<TARGET_FILE:quality_recipe_wave2_smoke>"
+)
+
+add_test(
   NAME native_throughput_lock_smoke
   COMMAND "$<TARGET_FILE:throughput_lock_smoke>"
+)
+
+add_test(
+  NAME native_score_matrix_inv_v_fold_smoke
+  COMMAND "$<TARGET_FILE:score_matrix_inv_v_fold_smoke>"
 )
 
 add_test(

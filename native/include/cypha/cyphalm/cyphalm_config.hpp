@@ -93,6 +93,12 @@ struct CyphaLMConfig {
     double lstm_grad_clip = 0.0;
     /// ``default`` N(0,0.02) or ``classic`` (orthogonal Wh, forget bias +1). Env: ``CYPHA_LSTM_INIT``.
     std::string lstm_init = "default";
+    /// AdamW decoupled weight decay; 0 = off (D17 pin). Env: ``CYPHA_LSTM_WEIGHT_DECAY``.
+    double lstm_weight_decay = 0.0;
+    /// Linear LR warmup steps (0 = no warmup). Env: ``CYPHA_LSTM_LR_WARMUP``.
+    int lstm_lr_warmup_steps = 0;
+    /// Cosine decay steps after warmup (0 = constant lr / no schedule). Env: ``CYPHA_LSTM_LR_COSINE``.
+    int lstm_lr_cosine_steps = 0;
     double hybrid_blend_logit = 0.0;
     bool hybrid_blend_learnable = true;
     double hybrid_blend_lr = 0.01;
@@ -253,7 +259,13 @@ std::string bench_mode_name(BenchMode mode);
 /// Load ``bench/config/profiles/cyphalm_<profile>_wikitext.json`` (or gutenberg for d04).
 void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg);
 
-/// Overlay Quality Wave-1 LSTM recipe env vars (``CYPHA_LSTM_*``). Safe no-op when unset.
+/// Overlay Quality Wave-1/2 LSTM recipe env vars (``CYPHA_LSTM_*``). Safe no-op when unset.
 void apply_lstm_recipe_env(CyphaLMConfig& cfg);
+
+/// LSTM LR at training step ``step`` (0-based). When warmup and cosine are both 0, returns
+/// ``cfg.lstm_lr`` unchanged. Otherwise: linear warmup 0→``lstm_lr`` over
+/// ``lstm_lr_warmup_steps``, then cosine decay to ``0.1 * lstm_lr`` over
+/// ``lstm_lr_cosine_steps``, then hold at the floor.
+double lstm_lr_at_step(const CyphaLMConfig& cfg, int step);
 
 }  // namespace cypha::cyphalm

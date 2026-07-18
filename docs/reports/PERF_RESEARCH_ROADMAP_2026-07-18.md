@@ -1,4 +1,4 @@
-﻿> **Note (2026-07-18):** Draft research/audit note. Execution status: [ROADMAP_EXECUTION_LEDGER_2026-07-18.md](ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Living status is [CONTINUUM_CLOSEOUT_2026-07-18.md](CONTINUUM_CLOSEOUT_2026-07-18.md) + [CYPHA_BILL_OF_WORK.md](../../CYPHA_BILL_OF_WORK.md). Release is **v2.3.24** / CI is **windows_msvc** (not MinGW). Treat numbers below as proposals unless cross-checked against those sources. Wave 1: `CYPHA_NATIVE_ARCH` / `CYPHA_ENABLE_LTO`, `g_mu` CPU unlock, throughput-lock scaffold (no CI hard-fail).
+﻿> **Note (2026-07-18):** Draft research/audit note. Execution status: [ROADMAP_EXECUTION_LEDGER_2026-07-18.md](ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Living status is [CONTINUUM_CLOSEOUT_2026-07-18.md](CONTINUUM_CLOSEOUT_2026-07-18.md) + [CYPHA_BILL_OF_WORK.md](../../CYPHA_BILL_OF_WORK.md). Release is **v2.3.24** / CI is **windows_msvc**. Wave 1: native-arch/LTO, `g_mu` unlock, throughput scaffold. Wave 2: CPU `score_matrix` `inv_v` fold (§3.1).
 # Cypha — Performance Research & Profiling Roadmap
 
 **Prepared for:** Odin Loch

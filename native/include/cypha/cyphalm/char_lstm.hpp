@@ -102,6 +102,9 @@ class CharLSTMHead {
   /// Global L2 grad clip; 0 = disabled (default).
   void set_grad_clip(double clip);
   double grad_clip() const { return grad_clip_; }
+  /// AdamW decoupled weight decay; 0 = off (default). Applied only under Adam to E/Wx/Wh/Wy.
+  void set_weight_decay(double wd);
+  double weight_decay() const { return weight_decay_; }
 
   /// Reset internal h/c (stateful online API). Flushes any pending BPTT window without apply.
   void reset_state();
@@ -172,6 +175,7 @@ class CharLSTMHead {
   int bptt_window_{1};
   LSTMOptim optim_{LSTMOptim::Sgd};
   double grad_clip_{0.0};
+  double weight_decay_{0.0};
   std::deque<CharLSTMCache> bptt_caches_;
   std::deque<int> bptt_targets_;
 

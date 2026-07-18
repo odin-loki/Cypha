@@ -43,6 +43,12 @@ int main() {
     std::puts("throughput_lock_smoke: FAIL (non-finite timing)");
     return 1;
   }
+  for (double v : llr) {
+    if (!std::isfinite(v)) {
+      std::puts("throughput_lock_smoke: FAIL (non-finite score_matrix output)");
+      return 1;
+    }
+  }
 
   std::printf(
       "throughput_lock_smoke: PASS score_matrix_us_per_row=%.6f n=%d d=%d K=%d device=%s\n",

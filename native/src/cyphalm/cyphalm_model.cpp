@@ -476,6 +476,7 @@ void CyphaLMModel::init_components() {
         lstm_->set_bptt_window(cfg_.lstm_bptt_steps);
         lstm_->set_optim(parse_lstm_optim(cfg_.lstm_optim));
         lstm_->set_grad_clip(cfg_.lstm_grad_clip);
+        lstm_->set_weight_decay(cfg_.lstm_weight_decay);
         if (cfg_.use_eml_activation) {
             lstm_->set_activation_mode(LSTMActivationMode::Eml);
         } else if (cfg_.use_axiom_activation) {
@@ -581,7 +582,8 @@ void CyphaLMModel::reset_context() {
     last_train_loss_ = 0.0;
     if (lstm_) {
         // Apply any partial truncated-BPTT window before wiping state (no-op when window empty).
-        lstm_->flush_bptt(cfg_.lstm_lr);
+        const int lr_step = static_cast<int>(step_count_ > 0 ? step_count_ - 1 : 0);
+        lstm_->flush_bptt(lstm_lr_at_step(cfg_, lr_step));
         lstm_->reset_state();
         std::fill(lstm_h_.begin(), lstm_h_.end(), 0.0);
         std::fill(lstm_c_.begin(), lstm_c_.end(), 0.0);
@@ -1234,8 +1236,9 @@ void CyphaLMModel::apply_hybrid_ewc(TrainStepMetrics& m, const HybridEwcGradStub
         const double pen = ewc_.penalty(lstm_.get(), active_ssm(), gria_.get());
         m.loss += cfg_.ewc_lambda * pen;
         m.ewc_penalty = pen;
-        ewc_.apply_pull(lstm_.get(), active_ssm(), gria_.get(), cfg_.ewc_lambda, cfg_.lstm_lr,
-                        cfg_.gria_lr, cfg_.ssm_lr);
+        const int lr_step = static_cast<int>(step_count_ > 0 ? step_count_ - 1 : 0);
+        ewc_.apply_pull(lstm_.get(), active_ssm(), gria_.get(), cfg_.ewc_lambda,
+                        lstm_lr_at_step(cfg_, lr_step), cfg_.gria_lr, cfg_.ssm_lr);
     }
 }
 
@@ -1246,6 +1249,9 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     const auto perf_t0_predict = perf_trace_begin();
     const auto pred = predict_next(token_id);
     perf_trace_end(0, perf_t0_predict);
+    // predict_next already ++step_count_; use 0-based index for the LR schedule.
+    const int lstm_lr_step = static_cast<int>(step_count_ > 0 ? step_count_ - 1 : 0);
+    const double lstm_lr = lstm_lr_at_step(cfg_, lstm_lr_step);
     TrainStepMetrics m;
     m.loss = -pred.log_probs[static_cast<std::size_t>(next_token_id)];
     m.epistemic_var = pred.epistemic_var;
@@ -1419,12 +1425,12 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
             cfg_.use_full_navigation_loss ? navigation_logit_nudge : 0.0;
         const double hidden_nudge =
             cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0;
-        lstm_->backward(static_cast<int>(next_token_id), cfg_.lstm_lr, &grads, logit_nudge,
+        lstm_->backward(static_cast<int>(next_token_id), lstm_lr, &grads, logit_nudge,
                        hidden_nudge);
         if (cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0 &&
             cfg_.lstm_bptt_steps <= 1) {
             const int hidden = lstm_->hidden;
-            const double delta = cfg_.lstm_lr * navigation_blend_nudge * 0.02;
+            const double delta = lstm_lr * navigation_blend_nudge * 0.02;
             for (int j = hidden; j < 2 * hidden; ++j) {
                 lstm_->b[static_cast<std::size_t>(j)] -= delta;
             }
@@ -1527,7 +1533,7 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                 const double hidden_nudge =
                     cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0;
                 const bool updated = lstm_->push_bptt_step(
-                    hybrid_lstm_cache_, static_cast<int>(next_token_id), cfg_.lstm_lr,
+                    hybrid_lstm_cache_, static_cast<int>(next_token_id), lstm_lr,
                     &hybrid_lstm_grad_scratch_, logit_nudge, hidden_nudge);
                 if (updated) {
                     HybridEwcGradStub stub;
@@ -2108,7 +2114,8 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
     }
     cfg_.gria_lr = base_gria_lr;
     if (lstm_) {
-        lstm_->flush_bptt(cfg_.lstm_lr);
+        const int lr_step = static_cast<int>(step_count_ > 0 ? step_count_ - 1 : 0);
+        lstm_->flush_bptt(lstm_lr_at_step(cfg_, lr_step));
     }
     if (cfg_.use_sr_gates && lstm_) {
         fit_sr_gate_laws_on_lstm(*lstm_, cfg_.vocab_size, cfg_.seed);

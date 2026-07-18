@@ -72,6 +72,10 @@ struct Args {
     std::string lstm_optim;
     double grad_clip = -1.0;
     std::string lstm_init;
+    double weight_decay = -1.0;
+    double lstm_lr = -1.0;
+    int lstm_lr_warmup = -1;
+    int lstm_lr_cosine = -1;
     bool use_self_correcting_loop = false;
     bool ngram_position_weights = false;
     bool ngram_bilinear_fusion = false;
@@ -120,6 +124,10 @@ void usage() {
         << "       --optim {sgd,adam}  (LSTM optimizer; default sgd; or CYPHA_LSTM_OPTIM)\n"
         << "       --grad-clip C  (global L2 clip; 0=off; or CYPHA_LSTM_GRAD_CLIP)\n"
         << "       --lstm-init {default,classic}  (or CYPHA_LSTM_INIT)\n"
+        << "       --weight-decay W  (AdamW; 0=off; or CYPHA_LSTM_WEIGHT_DECAY)\n"
+        << "       --lstm-lr LR  (LSTM head learning rate override; or CYPHA_LSTM_LR)\n"
+        << "       --lstm-lr-warmup N  (linear warmup steps; 0=off; or CYPHA_LSTM_LR_WARMUP)\n"
+        << "       --lstm-lr-cosine N  (cosine decay steps after warmup; 0=off; or CYPHA_LSTM_LR_COSINE)\n"
         << "       --bench-seed N\n"
         << "       --use-eigenvalue-d-eff\n"
         << "       --use-reu-forget-gate\n"
@@ -246,6 +254,18 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--lstm-init") {
             a.lstm_init = need("--lstm-init");
         }
+        else if (k == "--weight-decay") {
+            a.weight_decay = std::stod(need("--weight-decay"));
+        }
+        else if (k == "--lstm-lr") {
+            a.lstm_lr = std::stod(need("--lstm-lr"));
+        }
+        else if (k == "--lstm-lr-warmup") {
+            a.lstm_lr_warmup = std::stoi(need("--lstm-lr-warmup"));
+        }
+        else if (k == "--lstm-lr-cosine") {
+            a.lstm_lr_cosine = std::stoi(need("--lstm-lr-cosine"));
+        }
         else if (k == "--bench-seed") {
             a.bench_seed = std::stoll(need("--bench-seed"));
         }
@@ -320,6 +340,18 @@ int main(int argc, char** argv) {
         }
         if (!args.lstm_init.empty()) {
             cfg.lstm_init = args.lstm_init;
+        }
+        if (args.weight_decay >= 0.0) {
+            cfg.lstm_weight_decay = args.weight_decay;
+        }
+        if (args.lstm_lr >= 0.0) {
+            cfg.lstm_lr = args.lstm_lr;
+        }
+        if (args.lstm_lr_warmup >= 0) {
+            cfg.lstm_lr_warmup_steps = args.lstm_lr_warmup;
+        }
+        if (args.lstm_lr_cosine >= 0) {
+            cfg.lstm_lr_cosine_steps = args.lstm_lr_cosine;
         }
         // Unconditional for the same reason as --lstm-hidden above: this is a verification flag
         // for the epistemic feedback loop (docs/reports/HIDDEN_DIM_SCALE_PLAN.md's 2026-07-11
