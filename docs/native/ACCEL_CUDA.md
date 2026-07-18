@@ -1,6 +1,6 @@
 # Cypha accel — CUDA build (MSVC / Linux)
 
-**Policy — local-only (2026-07-17):** CUDA is an **optional, self-hosted build flag**. GitHub Actions **does not** compile or test CUDA (former **`windows_cuda_msvc`** / **`linux_cuda`** jobs removed in v2.2.8). There is **no** planned return of hosted CI GPU runners — validate on your own machine or a self-hosted runner with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** / **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`mingw_cross`**) remains the release gate.
+**Policy — local-only (2026-07-17):** CUDA is an **optional, self-hosted build flag**. GitHub Actions **does not** compile or test CUDA (former **`windows_cuda_msvc`** / **`linux_cuda`** jobs removed in v2.2.8). There is **no** planned return of hosted CI GPU runners — validate on your own machine or a self-hosted runner with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** / **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`windows_msvc`**) remains the release gate.
 
 Optional GPU path for **`cypha::accel`** (`native/src/accel_backend.cpp` + `accel_cuda.cu`).
 Without **`-DCYPHA_ENABLE_CUDA=ON`**, the same APIs use **ISO C++** `std::thread` row parallelism.
@@ -46,7 +46,7 @@ cmake --build build-windows-msvc --config Release --target cuda_smoke score_batc
 ctest --test-dir build-windows-msvc -C Release -R "native_cuda_smoke|native_score_batch"
 ```
 
-Blocking hosted CI jobs remain CPU-only: **`build_and_test`**, **`mingw_cross`** (see [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
+Blocking hosted CI jobs remain CPU-only: **`build_and_test`**, **`windows_msvc`** (see [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
 
 **Architecture flags:** set `-DCMAKE_CUDA_ARCHITECTURES` to your GPU SM version, e.g. `75` (Turing), `86` (Ampere), `89` (Ada). Default in `CMakeLists.txt` is **75** when unset.
 

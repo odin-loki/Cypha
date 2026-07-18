@@ -6,7 +6,7 @@
 
 
 
-**Current baseline:** 52 CTest, two blocking CI jobs (`build_and_test`, `mingw_cross`), GitHub Release installers.
+**Current baseline:** 52 CTest, two blocking CI jobs (`build_and_test`, `windows_msvc`), GitHub Release installers.
 
 
 

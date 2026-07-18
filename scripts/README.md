@@ -33,7 +33,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | Script | Purpose |
 |--------|---------|
 | `package_release_linux.sh` | Bundle Linux release tarball |
-| `package_release_windows.sh` | Bundle Windows release zip |
+| `package_release_windows.ps1` | Bundle Windows MSVC release zip (`.sh` wraps to PowerShell) |
 | `native/scripts/package_windows_qt.ps1` | Windows Qt deployment helper |
 | `publish_release.ps1` | Local `gh release create` (`-DryRun` / `-NotesOnly` preview without gh) |
 

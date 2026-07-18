@@ -8,6 +8,9 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Changed
+- **Windows toolchain / CI:** blocking `mingw_cross` job replaced by `windows_msvc` (native MSVC Release on `windows-latest`). Release zip is packaged via `scripts/package_release_windows.ps1` from an MSVC build; MinGW cross-compile is no longer a release or CI gate.
+
 ### Removed
 - **Legacy sigmoid world gate** (`gh_chi <= 0` / `gh_psi <= 0` fallback in `classify_at_h` and `world_gate_vector_use_field`). GH–NIG gate now required (`gh_chi > 0`, `gh_psi > 0`); non-positive hyperparameters throw. **`kInferWorldGateApiVersion`** bumped to **2** (`native/include/cypha/infer_cpu.hpp`). Unused in-tree; all native callers already pass `gh_chi=gh_psi=1`.
 - **`Cypha Possible Upgrades/`** root folder — content backported to [`docs/research/upgrades/`](docs/research/upgrades/README.md).
@@ -17,7 +20,7 @@ milestone or a significant self-contained change.
 - **CUDA CI jobs:** **`windows_cuda_msvc`** and **`linux_cuda`** removed from `.github/workflows/ci.yml`; CUDA remains an optional local build.
 
 ### Changed
-- **CI gate:** native-only — **CTests grow over time, see `scripts/cypha_native_validate_all.ps1` for the current authoritative tally** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `mingw_cross`); optional **`federated_tls`** job (**`-DCYPHA_ENABLE_OPENSSL=ON`**, `native_federated_tls_smoke`, `continue-on-error`; local mirrors **`scripts/ci_federated_tls_linux.sh`**, **`scripts/ci_federated_tls_windows.ps1`**); optional **`corpus_and_d25`** job (WikiText fetch + **`native_corpus_smoke`** / **`native_d25_corpus_smoke`**, `continue-on-error`). Production overnight tier (300k) is **not** run in CI — maintainer-only via **`scripts/run_production_overnight.ps1`** (+ **`finalize_production_overnight.ps1`**).
+- **CI gate:** native-only — **CTests grow over time, see `scripts/cypha_native_validate_all.ps1` for the current authoritative tally** (`ctest -R native_`) across **two blocking jobs** (`build_and_test`, `windows_msvc`); optional **`federated_tls`** job (**`-DCYPHA_ENABLE_OPENSSL=ON`**, `native_federated_tls_smoke`, `continue-on-error`; local mirrors **`scripts/ci_federated_tls_linux.sh`**, **`scripts/ci_federated_tls_windows.ps1`**); optional **`corpus_and_d25`** job (WikiText fetch + **`native_corpus_smoke`** / **`native_d25_corpus_smoke`**, `continue-on-error`). Production overnight tier (300k) is **not** run in CI — maintainer-only via **`scripts/run_production_overnight.ps1`** (+ **`finalize_production_overnight.ps1`**).
 - **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS` default:** **1** (was 16) — CUDA used for all batch sizes n≥1 when a GPU is available.
 - **Docs:** README, CONTRIBUTING, docs hub, NATIVE_QUICKSTART, PORT_FULL_STACK, RESEARCH_STATUS, FUTURE, and C++ framework plan updated for native-first workflow.
 - **C++23** standard for native build (`native/CMakeLists.txt`).

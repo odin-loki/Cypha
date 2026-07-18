@@ -58,7 +58,7 @@ Set **`CYPHA_*_BIN`** env vars to point smoke tests at your build tree (see `scr
 
 ## Native `cypha_rest`
 
-CI runs **two blocking jobs** (`.github/workflows/ci.yml`): **`build_and_test`** (Ubuntu native build + CTest) and **`mingw_cross`** (MinGW Windows PE cross-build). The Linux **`build_and_test`** job gates REST smokes via **`CYPHA_REST_BIN`**. CUDA is optional for local builds only — configure with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`** before merging accel changes (see [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md)).
+CI runs **two blocking jobs** (`.github/workflows/ci.yml`): **`build_and_test`** (Ubuntu native build + CTest) and **`windows_msvc`** (native MSVC Release). The Linux **`build_and_test`** job gates REST smokes via **`CYPHA_REST_BIN`**. CUDA is optional for local builds only — configure with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`** before merging accel changes (see [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md)).
 
 **Local (Linux / WSL ELF):** install **`sudo apt-get install -y libsqlite3-dev`** (optional M6 CTest **`native_experiment_db_smoke`**), then either **`bash scripts/ci_native_linux.sh`** or manually:
 

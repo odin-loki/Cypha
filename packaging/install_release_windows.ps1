@@ -32,7 +32,7 @@ $required = @(
 )
 foreach ($name in $required) {
     if (-not (Test-Path (Join-Path $BinDest $name))) {
-        throw "Release bundle missing bin\$name (re-package with scripts/package_release_windows.sh)"
+        throw "Release bundle missing bin\$name (re-package with scripts/package_release_windows.ps1)"
     }
 }
 

@@ -6,7 +6,7 @@ For a **living snapshot** of automated tests and known gaps, see [`VERIFICATION_
 
 **Remote CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — **two blocking jobs** on push to `main`:
 1. **`build_and_test`** (Ubuntu) — `cmake -DCYPHA_BUILD_QT=ON` + **`ctest -R native_`** (GUI exec tests excluded on headless); WikiText-2 corpus; **`CYPHA_REST_BIN`** and `QT_QPA_PLATFORM=offscreen`.
-2. **`mingw_cross`** — MinGW Windows PE artifact smoke (`cypha_rest.exe`, `cypha_bench_run.exe`, …).
+2. **`windows_msvc`** — native MSVC Release artifact smoke (`cypha_rest.exe`, `cypha_bench_run.exe`, …).
 
 CUDA compile smokes (`windows_cuda_msvc`, `linux_cuda`) were removed from CI; validate CUDA locally with `-DCYPHA_ENABLE_CUDA=ON` (see [`ACCEL_CUDA.md`](../native/ACCEL_CUDA.md)).
 

@@ -7407,7 +7407,7 @@ class MainWindow final : public QMainWindow {
           const QString val = exp_compare_stats_table_->item(r, c)
                                   ? exp_compare_stats_table_->item(r, c)->text()
                                   : QString();
-          out << (c ? ", " : "") << '"' << key.replace('"', "\\\"") << "\": \""
+          out << (c ? ", " : "") << '"' << QString(key).replace('"', "\\\"") << "\": \""
               << QString(val).replace('\\', "\\\\").replace('"', "\\\"") << '"';
         }
         out << "}" << (r + 1 < rows ? ",\n" : "\n");
@@ -7419,7 +7419,7 @@ class MainWindow final : public QMainWindow {
         const QString key = exp_compare_stats_table_->horizontalHeaderItem(c)
                                 ? exp_compare_stats_table_->horizontalHeaderItem(c)->text()
                                 : QStringLiteral("c%1").arg(c);
-        out << '"' << key.replace('"', "\"\"") << '"';
+        out << '"' << QString(key).replace('"', "\"\"") << '"';
       }
       out << '\n';
       for (int r = 0; r < rows; ++r) {

@@ -71,7 +71,7 @@ cmake --build --preset windows-msvc-release-build
 
 **Not supported:** MinGW cross-compiles cannot enable `CYPHA_ENABLE_CUDA` (CMake will error).
 
-**CI — local-only (formal, 2026-07-17):** CUDA is **not** compiled or tested in GitHub Actions. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed in v2.2.8 and **will not return** on hosted runners (no GPU fleet). Validate on a **self-hosted** or local CUDA box with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`mingw_cross`**) is the release gate. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
+**CI — local-only (formal, 2026-07-17):** CUDA is **not** compiled or tested in GitHub Actions. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed in v2.2.8 and **will not return** on hosted runners (no GPU fleet). Validate on a **self-hosted** or local CUDA box with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`windows_msvc`**) is the release gate. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
 
 **Performance:** profile with `./cuda_smoke --bench` on GPU; small batches may be CPU-faster due to launch overhead.
 

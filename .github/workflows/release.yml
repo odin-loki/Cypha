@@ -1,4 +1,4 @@
-﻿# Build Linux + Windows (MinGW cross) native release archives and publish a GitHub Release on tag push.
+﻿# Build Linux + Windows (native MSVC) release archives and publish a GitHub Release on tag push.
 # Native-only assets — no Python venv. Linux also ships a Qt AppImage (cypha_qt_shell + cypha_rest).
 #
 # Create a release:
@@ -119,12 +119,13 @@ jobs:
           tar xzf "dist/cypha-${VERSION}-linux-x86_64.tar.gz" -C dist
           STAGE="dist/cypha-${VERSION}-linux-x86_64"
           for bin in cypha_rest cypha_bench_run cypha_bench_report cypha_diagnostics_run cypha_tune_run \
-                     cyphalm_bench_native cyphalm_parity cyphalm_checkpoint_parity \
-                     gh_infer_deliberation_parity kernel_llr_parity registry_register create_model_smoke; do
+                     cyphalm_bench_native cypha_baseline_lock baseline_lock_validate \
+                     registry_register create_model_smoke; do
             test -x "$STAGE/bin/$bin"
           done
-          for bin in score_batch_parity multilabel_dif_parity merge_from_parity similarity_index_parity \
-                     embed_table_parity retrieval_parity som_parity; do
+          for bin in score_batch_golden multilabel_dif_golden merge_from_golden similarity_index_golden \
+                     embed_table_golden retrieval_golden som_golden kernel_llr_golden \
+                     gh_infer_deliberation_golden cyphalm_checkpoint_golden; do
             test -x "$STAGE/bin/dev/$bin"
           done
           APPIMAGE="dist/cypha-${VERSION}-linux-x86_64.AppImage"
@@ -139,54 +140,58 @@ jobs:
             dist/cypha-*-linux-x86_64.AppImage
 
   build-windows:
-    name: Windows x86_64 package (MinGW cross)
-    runs-on: ubuntu-latest
+    name: Windows x86_64 package (MSVC)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install MinGW + CMake
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++-mingw-w64-x86-64 zip
+      - name: Setup MSVC + Ninja
+        uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Configure + build (Windows PE)
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Configure + build (MSVC Release)
+        shell: cmd
         run: |
-          cmake -S native -B native/build-mingw-release \
-            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/native/toolchains/mingw-w64-x86_64.cmake" \
-            -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }} \
-            -G Ninja
-          cmake --build native/build-mingw-release --parallel --target all
+          cmake -S native -B native/build-msvc-release -G Ninja -DCMAKE_BUILD_TYPE=%CMAKE_BUILD_TYPE%
+          cmake --build native/build-msvc-release --parallel
 
-      - name: List Windows PE binaries (pre-package)
-        run: ls -la native/build-mingw-release/*.exe | sort
+      - name: List Windows MSVC binaries (pre-package)
+        shell: powershell
+        run: Get-ChildItem native\build-msvc-release -Filter *.exe | Sort-Object Name | Format-Table Name,Length
 
       - name: Package zip
+        shell: powershell
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          bash scripts/package_release_windows.sh "$VERSION" native/build-mingw-release dist
+          $Version = "${{ github.ref_name }}".TrimStart('v')
+          & .\scripts\package_release_windows.ps1 -Version $Version -BuildDir native\build-msvc-release -OutDir dist
 
       - name: Verify release bundle contents
+        shell: powershell
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE="dist/cypha-${VERSION}-windows-x86_64.zip"
-          STAGE="dist/cypha-${VERSION}-windows-x86_64"
-          rm -rf "$STAGE"
-          unzip -q "$ARCHIVE" -d dist
-          missing=0
-          for bin in cypha_rest.exe cypha_bench_run.exe cypha_bench_report.exe cypha_diagnostics_run.exe cypha_tune_run.exe \
-                     cyphalm_bench_native.exe cyphalm_parity.exe cyphalm_checkpoint_parity.exe \
-                     gh_infer_deliberation_parity.exe kernel_llr_parity.exe registry_register.exe create_model_smoke.exe; do
-            if ! test -f "$STAGE/bin/$bin"; then
-              echo "MISSING $STAGE/bin/$bin"
-              missing=1
-            fi
-          done
-          for bin in score_batch_parity.exe multilabel_dif_parity.exe merge_from_parity.exe similarity_index_parity.exe \
-                     embed_table_parity.exe retrieval_parity.exe som_parity.exe; do
-            if ! test -f "$STAGE/bin/dev/$bin"; then
-              echo "MISSING $STAGE/bin/dev/$bin"
-              missing=1
-            fi
-          done
-          test "$missing" -eq 0
+          $Version = "${{ github.ref_name }}".TrimStart('v')
+          $Archive = "dist\cypha-$Version-windows-x86_64.zip"
+          $Stage = "dist\cypha-$Version-windows-x86_64"
+          if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
+          Expand-Archive -Path $Archive -DestinationPath dist -Force
+          $need = @(
+            'cypha_rest.exe','cypha_bench_run.exe','cypha_bench_report.exe','cypha_diagnostics_run.exe',
+            'cypha_tune_run.exe','cyphalm_bench_native.exe','cypha_baseline_lock.exe',
+            'baseline_lock_validate.exe','registry_register.exe','create_model_smoke.exe'
+          )
+          $dev = @(
+            'score_batch_golden.exe','multilabel_dif_golden.exe','merge_from_golden.exe',
+            'similarity_index_golden.exe','embed_table_golden.exe','retrieval_golden.exe',
+            'som_golden.exe','kernel_llr_golden.exe','gh_infer_deliberation_golden.exe',
+            'cyphalm_checkpoint_golden.exe'
+          )
+          foreach ($b in $need) {
+            if (-not (Test-Path "$Stage\bin\$b")) { throw "MISSING $Stage\bin\$b" }
+          }
+          foreach ($b in $dev) {
+            if (-not (Test-Path "$Stage\bin\dev\$b")) { throw "MISSING $Stage\bin\dev\$b" }
+          }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -261,7 +266,7 @@ jobs:
             powershell -ExecutionPolicy Bypass -File install.ps1
             ```
 
-            MinGW PE binaries with static libgcc/libstdc++ (no separate MinGW runtime install).
+            Native **MSVC** x64 binaries (Visual Studio / VC++ redistributable on clean machines).
 
             **Windows Qt GUI:** build natively on Windows with `packaging/build_windows_bundle.ps1` (`windeployqt`; see [`packaging/README.md`](packaging/README.md)).
 
@@ -275,14 +280,14 @@ jobs:
             | `cypha_diagnostics_run` | Phases 1–4 diagnostics orchestrator |
             | `cypha_tune_run` | Native tuning sweep runner |
             | `cyphalm_bench_native` | WikiText BPC bench CLI |
-            | `cyphalm_parity`, `cyphalm_checkpoint_parity` | CyphaLM parity smoke tools |
-            | `gh_infer_deliberation_parity`, `kernel_llr_parity` | CyphaDIF parity (used by diagnostics) |
+            | `cypha_baseline_lock`, `baseline_lock_validate` | Baseline lock update / validate |
             | `registry_register`, `create_model_smoke` | Registry + model creation smoke |
 
-            ### Dev parity tools (`bin/dev/`, not on PATH)
+            ### Dev golden tools (`bin/dev/`, not on PATH)
 
-            - `score_batch_parity`, `multilabel_dif_parity`, `merge_from_parity`, `similarity_index_parity`
-            - `embed_table_parity`, `retrieval_parity`, `som_parity`
+            - `score_batch_golden`, `multilabel_dif_golden`, `merge_from_golden`, `similarity_index_golden`
+            - `embed_table_golden`, `retrieval_golden`, `som_golden`, `kernel_llr_golden`
+            - `gh_infer_deliberation_golden`, `cyphalm_checkpoint_golden`
 
             ### Phase 7 maintainer notes
 

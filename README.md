@@ -192,7 +192,7 @@ These defaults come from a profiled medium-grid tuning programme, not from guess
 | `regression_m4_parity` | M4 regression |
 | `cuda_smoke` | CUDA path smoke test |
 
-(Full inventory in [`native/README.md`](native/README.md). CI gate: **two blocking jobs** — **`build_and_test`** (Linux native + CTest) and **`mingw_cross`** (MinGW Windows PE cross-compile); Windows local gate via `scripts/cypha_native_validate_all.ps1`.)
+(Full inventory in [`native/README.md`](native/README.md). CI gate: **two blocking jobs** — **`build_and_test`** (Linux native + CTest) and **`windows_msvc`** (native MSVC Release); Windows local gate via `scripts/cypha_native_validate_all.ps1`.)
 
 ---
 

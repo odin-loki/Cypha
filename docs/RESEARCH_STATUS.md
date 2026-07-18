@@ -172,7 +172,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Milestones M1–M6 completed:** `cypha_parity`, `cypha_rest`, `cypha_qt_shell` built.
 - **Parity tests:** **106 CTests** (`ctest -R native_`) and subprocess cases (suite grew from 64 at Phase 2). All pass within float64 tolerance.
 - **GPU acceleration:** `cypha::accel` fused LLR pipeline (CUDA / parallel CPU).
-- **MinGW cross-build:** Windows PE from WSL; CI job `mingw_cross`.
+- **Windows MSVC:** native Release on `windows-latest`; CI job `windows_msvc` (MinGW cross-compile retired).
 - **Verified:** binary format round-trip, registry, experiment DB (SQLite), model card, preprocessor, regression head, MKE regressor, two-stage pipeline.
 - **Kernel LLR:** Nyström whitening in C++ (`native/src/kernel_memory.cpp`, CTest `native_kernel_llr`); deliberation native (`native_gh_infer_deliberation`).
 

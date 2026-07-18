@@ -19,7 +19,7 @@ The **committed parity fixtures** and **PORT_CONTRACT** are the spec. The **prod
 | Preprocessor fit from Qt (scale + PCA) | ✅ `fit_from_design_matrix` + save `preprocessor.json` |
 | Experiments DB (SQLite, M6) | ✅ `experiment_db_crud`, Qt M6 panel |
 | Autoregressive / generation path | ✅ native `generation_parity`, CTest |
-| Test suite | ✅ **52+ CTest** (`ctest -R native_`) — GitHub Actions two blocking jobs (`build_and_test`, `mingw_cross`) |
+| Test suite | ✅ **52+ CTest** (`ctest -R native_`) — GitHub Actions two blocking jobs (`build_and_test`, `windows_msvc`) |
 
 ---
 

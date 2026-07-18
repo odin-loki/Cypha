@@ -72,7 +72,7 @@ bool test_hierarchy_smoke() {
   }
 
   bool slots_written = false;
-  for (double v : layer.global_memory().slots()) {
+  for (double v : layer.global_memory().slot_data()) {
     if (std::abs(v) > 1e-9) {
       slots_written = true;
       break;

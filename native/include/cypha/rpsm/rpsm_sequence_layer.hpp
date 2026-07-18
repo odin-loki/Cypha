@@ -74,7 +74,8 @@ class RpsmGlobalMemory {
 
   int dim() const { return dim_; }
 
-  const std::vector<double>& slots() const { return slots_; }
+  // Named slot_data() (not slots()) to avoid clashing with Qt's `slots` keyword macro.
+  const std::vector<double>& slot_data() const { return slots_; }
 
 
 

@@ -9,7 +9,7 @@ Standalone **native C++** distributables for Cypha — no Python runtime or venv
 | [`build_appimage.sh`](build_appimage.sh) | Linux (local/CI) | Self-contained **`cypha_qt_shell`** AppImage + **`cypha_rest`** sidecar |
 | [`build_windows_bundle.ps1`](build_windows_bundle.ps1) | Windows (native) | **`windeployqt`** folder with Qt DLLs |
 
-Release archives are also produced by [`scripts/package_release_linux.sh`](../scripts/package_release_linux.sh) and [`scripts/package_release_windows.sh`](../scripts/package_release_windows.sh) in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
+Release archives are also produced by [`scripts/package_release_linux.sh`](../scripts/package_release_linux.sh) and [`scripts/package_release_windows.ps1`](../scripts/package_release_windows.ps1) in [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 
 ---
 
@@ -31,7 +31,7 @@ CI workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) 
 |-------|----------|----------|
 | `cypha-<ver>-linux-x86_64.tar.gz` | Linux x86_64 | CLI tools (`cypha_rest`, bench, diagnostics, …) |
 | `cypha-<ver>-linux-x86_64.AppImage` | Linux x86_64 | Standalone Qt shell + bundled `cypha_rest` |
-| `cypha-<ver>-windows-x86_64.zip` | Windows x86_64 | MinGW PE CLI tools (static libgcc/libstdc++) |
+| `cypha-<ver>-windows-x86_64.zip` | Windows x86_64 | Native **MSVC** CLI tools |
 
 Prebuilt installers: **[GitHub Releases — latest](https://github.com/odin-loki/Cypha/releases/latest)**.
 

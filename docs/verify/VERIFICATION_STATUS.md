@@ -17,7 +17,7 @@ Honest snapshot for **native production**. “Debugged” here means *automated 
 
 **GUI smoke (optional Qt build):** `ctest --test-dir native/build -R native_qt --output-on-failure` with **`QT_QPA_PLATFORM=offscreen`**.
 
-GitHub Actions **CI** (`.github/workflows/ci.yml`): **two blocking jobs** — **`build_and_test`** (Ubuntu: cmake + **`ctest -R native_`**) and **`mingw_cross`** (MinGW Windows PE cross-compile).
+GitHub Actions **CI** (`.github/workflows/ci.yml`): **two blocking jobs** — **`build_and_test`** (Ubuntu: cmake + **`ctest -R native_`**) and **`windows_msvc`** (native MSVC Release on `windows-latest`).
 
 **CyphaLM (research):** `ctest --test-dir native/build -R native_cyphalm --output-on-failure` locally when changing LM native code.
 

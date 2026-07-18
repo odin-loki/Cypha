@@ -30,7 +30,7 @@ Optional: **`-DCYPHA_ENABLE_CUDA=ON`** (MSVC or Linux + NVIDIA), **`-DCYPHA_BUIL
 
 Prebuilt installers: **[GitHub Releases `v2.2.8`](https://github.com/odin-loki/Cypha/releases/tag/v2.2.8)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
 
-After download, or after local packaging with `scripts/package_release_windows.sh` / `scripts/package_release_linux.sh`:
+After download, or after local packaging with `scripts/package_release_windows.ps1` / `scripts/package_release_linux.sh`:
 
 ```powershell
 # Windows — from extracted tarball

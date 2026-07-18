@@ -36,29 +36,11 @@ native\build-windows-vs2026\Release\cyphalm_bench_native.exe --mode hybrid --pro
 /tmp/cypha_native_build/cyphalm_bench_native --mode hybrid --profile d17 --n-train 500 --n-eval 100
 ```
 
-### Cross-compile / CI (MinGW)
+### Optional local MinGW (not CI / not release)
 
-MinGW/Ninja remains supported for the `mingw_cross` CI job (Linux→Windows PE cross-compile) and WSL-native dev loops, but is no longer the recommended local Windows toolchain (it was a PATH-precedence accident, not a deliberate choice — see the migration report linked above). It also cannot build the CUDA path (`CYPHA_ENABLE_CUDA` is unsupported for MinGW targets).
+MinGW is **not** a CI or release gate — those use **`windows_msvc`**. Keep MinGW only for optional local/WSL experiments. It cannot build the CUDA path (`CYPHA_ENABLE_CUDA` is unsupported for MinGW targets). Prefer MSVC presets above for Windows work.
 
-Use a build directory **outside OneDrive** (or any cloud-synced folder) for MinGW/Ninja builds. Sync tools lock object files and slow Ninja; MinGW links can fail with `Permission denied` when relinking a running `cyphalm_bench_native.exe`. If that happens, use a fresh dir (e.g. `C:\Temp\cypha_native_build`) or stop bench processes first.
-
-```powershell
-# Windows — MinGW/Ninja (from repo root)
-cmake -S native -B C:\Temp\cypha_native_build `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DCYPHA_BUILD_EXPERIMENT_DB=OFF `
-  -DCYPHA_FETCH_SQLITE3_AMALGAMATION=OFF `
-  -G Ninja
-
-cmake --build C:\Temp\cypha_native_build --parallel `
-  --target cypha_lm_native cyphalm_bench_native cyphalm_parity
-```
-
-**Smoke:**
-
-```powershell
-C:\Temp\cypha_native_build\cyphalm_bench_native.exe --mode hybrid --profile d17 --n-train 500 --n-eval 100
-```
+Use a build directory **outside OneDrive** (or any cloud-synced folder). Sync tools lock object files and slow Ninja; links can fail with `Permission denied` when relinking a running `cyphalm_bench_native.exe`.
 
 ## Why avoid OneDrive build dirs
 
@@ -106,9 +88,9 @@ cmake --build build-windows-msvc --config Release --target cyphalm_bench_native
 
 Or VS 2026: `windows-vs2026-release` preset (binaries under `build-windows-vs2026/Release/`). Multi-config generators place binaries under `build-windows-msvc/Release/`.
 
-### Cross-compile / CI: Ninja + MinGW (Strawberry / MSYS2)
+### Optional: Ninja + MinGW (Strawberry / MSYS2)
 
-Secondary path — used by the `mingw_cross` CI job and WSL-native dev loops; not the recommended local Windows toolchain (see [`MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`](../reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md)). Cannot build the CUDA path.
+Not used by CI or releases. See [`MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`](../reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md). Cannot build the CUDA path.
 
 ```powershell
 cmake -S native -B C:\Temp\cypha_native_build -G Ninja -DCMAKE_BUILD_TYPE=Release `

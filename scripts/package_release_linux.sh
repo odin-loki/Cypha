@@ -5,7 +5,7 @@
 #   bash scripts/package_release_linux.sh <VERSION> <BUILD_DIR> [OUT_DIR]
 #
 # Example (CI):
-#   bash scripts/package_release_linux.sh 2.0.0 native/build dist
+#   bash scripts/package_release_linux.sh 2.0.0 native/build-release dist
 
 set -euo pipefail
 
@@ -25,24 +25,40 @@ BINARIES=(
   cypha_diagnostics_run
   cypha_tune_run
   cyphalm_bench_native
-  cyphalm_parity
-  cyphalm_checkpoint_parity
-  gh_infer_deliberation_parity
-  kernel_llr_parity
+  cypha_baseline_lock
+  baseline_lock_validate
   registry_register
   create_model_smoke
 )
 
-# Dev / research parity tools (installed under bin/dev/, not on PATH)
+# Dev / research golden tools (installed under bin/dev/, not on PATH)
 DEV_BINARIES=(
-  score_batch_parity
-  multilabel_dif_parity
-  merge_from_parity
-  similarity_index_parity
-  embed_table_parity
-  retrieval_parity
-  som_parity
+  score_batch_golden
+  multilabel_dif_golden
+  merge_from_golden
+  similarity_index_golden
+  embed_table_golden
+  retrieval_golden
+  som_golden
+  kernel_llr_golden
+  gh_infer_deliberation_golden
+  cyphalm_checkpoint_golden
 )
+
+find_bin() {
+  local name="$1"
+  local cand
+  for cand in \
+    "$REPO_ROOT/$BUILD_DIR/$name" \
+    "$REPO_ROOT/$BUILD_DIR/Release/$name" \
+    "$REPO_ROOT/$BUILD_DIR/bin/$name"; do
+    if [[ -f "$cand" ]]; then
+      echo "$cand"
+      return 0
+    fi
+  done
+  return 1
+}
 
 rm -rf "$STAGING"
 mkdir -p "$STAGING/bin/dev" "$STAGING/share/demo_fixtures" "$STAGING/share/examples"
@@ -50,22 +66,22 @@ mkdir -p "$STAGING/bin/dev" "$STAGING/share/demo_fixtures" "$STAGING/share/examp
 echo "$VERSION" >"$STAGING/VERSION"
 
 for bin in "${BINARIES[@]}"; do
-  src="$REPO_ROOT/$BUILD_DIR/$bin"
-  if [[ ! -x "$src" ]]; then
+  if ! src="$(find_bin "$bin")"; then
     echo "ERROR: required release binary missing from build dir: $bin (looked in $BUILD_DIR)" >&2
     exit 1
   fi
-  install -m 755 "$src" "$STAGING/bin/$bin"
+  cp "$src" "$STAGING/bin/$bin"
+  chmod +x "$STAGING/bin/$bin"
   echo "  + bin/$bin"
 done
 
 for bin in "${DEV_BINARIES[@]}"; do
-  src="$REPO_ROOT/$BUILD_DIR/$bin"
-  if [[ ! -x "$src" ]]; then
+  if ! src="$(find_bin "$bin")"; then
     echo "ERROR: required dev release binary missing from build dir: $bin (looked in $BUILD_DIR)" >&2
     exit 1
   fi
-  install -m 755 "$src" "$STAGING/bin/dev/$bin"
+  cp "$src" "$STAGING/bin/dev/$bin"
+  chmod +x "$STAGING/bin/dev/$bin"
   echo "  + bin/dev/$bin"
 done
 
@@ -93,7 +109,7 @@ Run native bench domains (d01-d17):
 Rebuild bench report from saved tables:
   cypha_bench_report --output ./bench_report
 
-Run native diagnostics (phases 1-4 parity orchestrator):
+Run native diagnostics (phases 1-4 orchestrator):
   cypha_diagnostics_run --fixtures /path/to/fixtures
 
 Run CyphaLM bench CLI (WikiText profile; needs corpus on PATH or synthetic fallback):
@@ -102,7 +118,7 @@ Run CyphaLM bench CLI (WikiText profile; needs corpus on PATH or synthetic fallb
 Run native tuning sweep (dry-run):
   cypha_tune_run --config ../../bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run
 
-Dev parity tools (not on PATH): bin/dev/score_batch_parity, multilabel_dif_parity, merge_from_parity, similarity_index_parity, embed_table_parity, retrieval_parity, som_parity
+Dev golden tools (not on PATH): bin/dev/*_golden
 
 Qt shell: build cypha_qt_shell from native/ (see docs/native/qt/README.md).
 
@@ -122,4 +138,3 @@ fi
 mkdir -p "$REPO_ROOT/$OUT_DIR"
 tar -C "$(dirname "$STAGING")" -czf "$ARCHIVE" "$(basename "$STAGING")"
 echo "Created $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))"
-
