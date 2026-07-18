@@ -1,8 +1,8 @@
 # CyphaDIF — Research Status
 
-**Last updated:** 2026-07-17  
+**Last updated:** 2026-07-18  
 **Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **160 CTests** *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)*  
-**Planning docs:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md), [`CYPHA_OPTIMALITY_PLAN.md`](../CYPHA_OPTIMALITY_PLAN.md) (task lists updated 2026-07-17)
+**Planning docs:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md), [`CYPHA_OPTIMALITY_PLAN.md`](../CYPHA_OPTIMALITY_PLAN.md) (task lists updated 2026-07-18)
 
 This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
 
@@ -16,7 +16,7 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 | **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
 | **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **160 CTests** gate CI *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
-| **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
+| **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`; lock commit `a552aee`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; overnight historical **2.864**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
 | **Bench harness (`cypha_bench_run`)** | 17 domains complete | D04 full LLM suite; D17 extended integration; configs + reports under `bench/` |
 | **cypha_qt_shell / cypha_rest (native)** | Working | Qt Studio + cpp-httplib REST + registry; **CyphaLM `/generate` + `/generate/stream` (SSE)** on native `cypha_rest` |
@@ -117,7 +117,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 
 | Domain | Task | Cypha result | Root cause |
 |--------|------|-------------|-----------|
-| D10A | ECG classification (5-class) | **60.67%** (~3× chance; stale 20%/17.5% figures retired 2026-07-11) | Not an SSM issue — 10A–10D route through the `cypha_core` DIF expert-routing classifier, not `CellAISSM`; see [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) |
+| D10A | ECG classification (5-class) | **90.11%** (real UCR ECG5000 + enriched features; legacy `CYPHA_D10_ECG_ENRICH=0` → 85.96%; synthetic fallback was **60.67%**) | Not an SSM issue — 10A–10D route through the `cypha_core` DIF expert-routing classifier, not `CellAISSM`; historical synth diagnosis superseded — see [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG5000_REAL_DATA_2026-07-18.md`](reports/D10_ECG5000_REAL_DATA_2026-07-18.md), [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) |
 | D10B | ECG sliding window | 29.46% | Same path as above; modestly above chance |
 | D10D | Financial return sign | 49.9% | Efficient market — near-chance is expected |
 
@@ -135,7 +135,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 | Task routing / discovery | D16A: ARI=1.0 | ✅ Confirmed |
 | Online adaptation (BPC) | D17D: −0.250 bpc gain | ✅ Confirmed |
 | Save/restore fidelity | D16E: retention=1.0 | ✅ Confirmed |
-| Linear separability ceiling | D01/XOR: 48.2% vs kernel SVM 80.5% | ✅ Confirmed hard limit |
+| Linear separability ceiling | D01/XOR: 48.2% vs kernel SVM 80.5% (RFF kernel LLR **76.3%**, ~2.7pp gap) | ✅ Confirmed for linear LLR; RFF kernel closes most of gap |
 
 ---
 
@@ -143,10 +143,10 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 
 | Limit | Evidence | Proposed fix |
 |-------|----------|-------------|
-| **Nonlinear decision boundaries (XOR etc.)** | 48.2% vs 80.5% kernel SVM — 32.3pp gap | Kernel LLR (Nyström) — **partially shipped**; tuning continues ([`upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md)) |
+| **Nonlinear decision boundaries (XOR etc.)** | Linear 48.2% vs 80.5% kernel SVM — 32.3pp gap; RFF kernel LLR **76.3%** (~**2.7pp** to sklearn ceiling) | Kernel LLR (Nyström + RFF) — **partially shipped**; RFF auto-γ default closes most of gap ([`upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md)) |
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
 | **Feynman equations** | Mean R²=−0.010 on nonlinear physics *(2026-05-31; re-run 2026-07-11 now shows R²=0.444, beats Ridge on all 20 equations — see Priority 1 update; kernel LLR not applicable, D14 uses a separate linear expert-mixture regressor, not `KernelMemory`)* | Re-run shows this is no longer a hard limit on current HEAD; kernel LLR wiring there deferred (different subsystem) |
-| **ECG / temporal** | *(retired 2026-07-11 — no longer a hard limit)* D10A now scores **60.67%** (~3× chance) via the DIF classifier; the SSM was never on this path — see [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) | N/A — resolved incidentally; no SSM defect existed |
+| **ECG / temporal** | *(retired 2026-07-11 — no longer a hard limit)* D10A now **90.11%** on real ECG5000 (enriched features); synthetic fallback was **60.67%**; never a `CellAISSM` path — see [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) (historical synth diagnosis, superseded) | N/A — resolved; no SSM defect existed |
 | **CyphaLM BPC (GRIA-only)** | GRIA stack @ 300k **3.838** (+0.36 vs bigram); hybrid **2.873** resolves gap | Hybrid is default; GRIA-only path for ablation / long-range SSM probes |
 | **MNIST raw** | 72% vs 95% (LR+HOG) | Feature engineering (HOG) bridges most of the gap |
 
@@ -346,13 +346,14 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Offline release notes:** **`publish_release.ps1 -NotesPath`** for offline **`gh release create`** workflow.
 - **CI:** blocking gate **115 CTests** (+1 d37 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
 
-### Phase 24 — overnight completion certificate gate (v2.3.24) — prep
+### Phase 24 — overnight completion certificate gate (v2.3.24) — shipped
 
-- **Bench d38:** production overnight completion certificate — full 300k cross-section + 28-variant cell sweep + production/overnight-complete gates; profile **`bench/config/d38_overnight_certificate_profile.json`**; report **`bench/report/tables/d38_overnight_certificate_validation.json`**. CTest **`native_d38_overnight_certificate_smoke`** *(when merged)*.
+- **Bench d38:** production overnight completion certificate — full 300k cross-section + 28-variant cell sweep + production/overnight-complete gates; profile **`bench/config/d38_overnight_certificate_profile.json`**; report **`bench/report/tables/d38_overnight_certificate_validation.json`**. CTest **`native_d38_overnight_certificate_smoke`**.
 - **Poll auto-commit:** **`scripts/poll_and_finalize_overnight.ps1 -AutoCommit`** — post-finalize **`commit_production_lock.ps1 -Force`** when **`overnight_results.n_train >= 300000`**; **`start_poll_finalize_background.ps1 -AutoCommit`** passthrough.
 - **Variant stall detector:** **`scripts/watch_production_overnight.ps1`** — **`-StallMinutes`**, **`-LogFile`** append for **STALL_WARNING** when variant count unchanged while overnight running.
 - **Local validate env var:** **`CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`** on **`cypha_native_validate_all.ps1`** runs d38 when profile exists.
-- **CI:** blocking gate **115 CTests** today; **116** when d38 merges (+1 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+- **Lock commit:** production overnight lock merged at **`a552aee`** — D17 hybrid **2.873 BPC** pin; overnight run **2.864 BPC** (historical).
+- **CI:** blocking gate **116 CTests** (+1 d38 smoke). Release **v2.3.24** shipped; packaging complete. Paper **`arxiv_bundle`** ready — human arXiv upload is the remaining product submit step.
 
 ---
 
@@ -369,7 +370,7 @@ Each hypothesis we have investigated with the result:
 | Hebbian diffusion aids CellAI | Structural (U5) | Safe; CellAI-only; not tested on classification |
 | Temporal SOM improves SSM decay | Structural (U6) | Safe; CellAI-only |
 | Combining all SOM upgrades (U1–U6) | Yes | Worst overall; upgrades interact adversely |
-| LLR ceiling explains XOR gap | Yes | Confirmed at 32.3pp — highest-priority fix |
+| LLR ceiling explains XOR gap | Yes | Confirmed at 32.3pp linear — RFF kernel LLR closes to **~2.7pp** |
 | Native CUDA accel matches CPU float64 | Yes | Confirmed in `native_score_batch` / `native_cuda_smoke` |
 | Save/restore is lossless | Yes | D16E retention_ratio=1.0 |
 | Shared-model multi-task = no forgetting | No | D16B: 81.25% forgetting — **refuted** |
@@ -393,11 +394,11 @@ Planned engineering directions distilled from research specs. Full index: [`docs
 |---------|-----|--------|-------------------|
 | CyphaDIF matrix refactor (RPSM Option A) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) | **Shipped** — GEMM kernel (`batched_llr_gemm`) default-on for the general classification/DIF path, parity-tested to 1e-12 ([`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §2) | Parity green; batched LLR; faster infer — met |
 | RPSM sequence layer (Option B) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) + [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Scaffold shipped; BPTT §14 negative; Small-tier capacity gate STOP (2026-07-18)** — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §14–§15 + [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](reports/RPSM_SMALL_TIER_GATE_2026-07-18.md) | D17 BPC < **2.873** not met; gap architectural — deprioritize further RPSM training-loop / capacity work |
-| Nyström / nonlinear boundary fixes | [`NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md) | **Partially shipped** | Native kernel LLR live; close ~18 pp sklearn XOR gap |
-| Cell hypothesis testbench (28 variants) | [`CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) | **Active** — running as the production overnight cell-sweep (`cypha_cell_hypothesis_sweep`, `scripts/run_production_overnight.ps1`) | Beat char-LSTM / hybrid on D17 @ 300k |
+| Nyström / nonlinear boundary fixes | [`NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md) | **Partially shipped** | Native kernel LLR live; RFF auto-γ closes XOR gap to **~2.7pp** (was ~18pp at Nyström M=256 default) |
+| Cell hypothesis testbench (28 variants) | [`CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) | **Closed (2026-07-18)** — sweep complete; H15 **5.262 BPC** @300k (not promote); H19 **~2.921 BPC** best cell (still above hybrid **2.873**) — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](reports/CELL_SWEEP_SUMMARY_2026-07-18.md) | Beat hybrid on D17 @ 300k — not met |
 | RPSM core fixes (spectral α, norm η, orthogonal init) | [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Shipped (2026-07-11)** — spectral α and normalised η implemented; orthogonal init/symmetric `W_down` were already live pre-existing | Forgetting ratio < 0.01 — not separately measured; α ∈ [0.3, 0.6] — implemented |
 
-**Execution order (RPSM track):** Option A → kernel LLR into A (tuning) → Option B → global memory → D17 benchmark.
+**Execution order (RPSM track):** Option A ✅ → kernel LLR into A (tuning) → Option B **STOP** (deprioritized) → global memory → D17 benchmark.
 
 ---
 
@@ -413,7 +414,7 @@ Planned engineering directions distilled from research specs. Full index: [`docs
 3. ~~Wire native kernel train in `memory_train.cpp`~~ — **done**; online XOR bench via `xor_kernel_bench`.
 4. **Tuning:** diverse landmarks, M=512 profile, close sklearn RBF gap — see [`NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md).
 
-**Current state:** Nyström whitening native-only; M=256 default; XOR **+9–10 pp** vs linear; sklearn RBF ceiling **~79%** — **~18 pp** gap remains.
+**Current state:** Nyström whitening native-only; M=256 default; XOR **+9–10 pp** vs linear at Nyström default; RFF auto-γ **`rff_dim=4096`** → **76.3%** — **~2.7pp** gap to sklearn RBF ceiling (was ~18pp at M=256 Nyström).
 
 **Update (2026-07-11) — reproduced baseline, M-sweep, RFF auto-gamma basis added:**
 
@@ -568,23 +569,25 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 
 ### Priority 6 — CellAI / ECG / temporal
 
-**Status (2026-07-11): resolved as stale, no fix needed.** The 20%/17.5% chance-level figures no longer reproduce on current HEAD — D10A now measures **60.67% accuracy** (~3× chance). The root finding: D10's scored ECG classification (10A–10D) never touches `CellAISSM` at all — it routes through the `cypha_core` DIF expert-routing classifier + hand-engineered `TimeSeriesEncoder` features. The SSM is only touched by an optional, non-scored `10E_ssm_diagnose` probe. Full writeup, including the supplementary SSM diagnostic run against the doc's three original hypotheses (state-norm collapse, τ_fast/τ_slow suitability, routing-head connectivity — all ruled out or N/A): [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md).
+**Status (2026-07-18): resolved — real ECG5000 data + enriched features.** D10A default now **90.11%** accuracy on UCR ECG5000 (5-class); legacy `CYPHA_D10_ECG_ENRICH=0` → **85.96%**; synthetic fallback was **60.67%** (~3× chance). The root finding from 2026-07-11 still holds and is not superseded: D10's scored ECG classification (10A–10D) never touches `CellAISSM` — it routes through the `cypha_core` DIF expert-routing classifier + hand-engineered `TimeSeriesEncoder` features. The SSM is only touched by an optional, non-scored `10E_ssm_diagnose` probe.
 
-**Remaining (optional, longer-horizon) future item — not a bug fix:** if D10 is ever pushed toward real-ECG-classification-quality accuracy (>90%), that needs real UCR ECG5000 data (`bench/data/ecg5000/`) and/or a richer feature front-end or purpose-built sequence model — a dedicated future pass, not an SSM tuning task.
+**Historical diagnosis (2026-07-11, superseded for current accuracy claims):** the 20%/17.5% chance-level figures and the 60.67% synthetic-fallback score reflected stale data / synth corpus, not an SSM defect. Full writeup: [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md).
+
+**Current reports:** [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG5000_REAL_DATA_2026-07-18.md`](reports/D10_ECG5000_REAL_DATA_2026-07-18.md).
 
 ---
 
 ## Forward research map
 
 ```
-2026 Q3 — Priority 1: Kernel LLR tuning → close sklearn XOR gap
-2026 Q3 — Priority 2: Auto-gamma RFF default → D08/D14 re-benchmark
-2026 Q4 — RPSM Option A (matrix refactor) → Option B sequence layer — see upgrades/
-2026 Q4 — Cell hypothesis testbench Tier 1–2
+2026 Q3 — Priority 1: Kernel LLR tuning → RFF auto-γ closes XOR gap to ~2.7pp (promote to default profile TBD)
+2026 Q3 — Priority 2: Auto-gamma RFF default → D08/D14 re-benchmark (defaults shipped; polish optional)
+2026 Q4 — RPSM Option A shipped; Option B STOP / deprioritized — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md)
+2026 Q4 — Cell hypothesis sweep closed — H19 ~2.921 best cell; hybrid 2.873 remains default
 2026 Q4 — Multi-view online training Phase 2 D16/DIF
 2026 Q3 — Priority 5: EWC D16B scoping shipped (2026-07-12) — modest gain 0.135→0.108; shared-model CL remains open
-2026 Q3 — D10 re-eval: done (2026-07-11) — 60.67% accuracy, not an SSM issue; see [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md)
-2027 Q1 — Paper: fill {{EXP0N_*}} placeholders → narrative reconciliation → submit
+2026 Q3 — D10 re-eval: done — **90.11%** on real ECG5000 (2026-07-18); not an SSM issue
+2026 Q3 — Release v2.3.24 shipped; paper arxiv_bundle ready — human arXiv upload only
 ```
 
 ---

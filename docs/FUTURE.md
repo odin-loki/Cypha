@@ -2,62 +2,64 @@
 
 Cypha's native port (M1-M6 + P7) is complete - inference, training, REST server, Qt shell, experiments DB, and parity fixtures all pass CI (**160 CTests** — see `scripts/cypha_native_validate_all.ps1` for the current authoritative count). Python runtime packages removed. This document records the most valuable next engineering directions, from near-term (months) to longer-horizon (quarters).
 
+**Last updated:** 2026-07-18
+
 ---
 
-## �0 � Evidence-confirmed upgrades (post-diagnostic, highest priority)
+## 0 — Evidence-confirmed upgrades (post-diagnostic, highest priority)
 
 These come directly from the 2026-05-30 diagnostic run
 ([`docs/reports/DIAGNOSTIC_REPORT.md`](reports/DIAGNOSTIC_REPORT.md)). Every
 item has a measured effect size; nothing is speculative.
 
-**RPSM roadmap (Option A + B):** see [�10](#10--rpsm-matrix-refactor--cyphalm-sequence-layer) and [`docs/research/upgrades/`](research/upgrades/README.md).
+**RPSM roadmap (Option A + B):** see [10](#10--rpsm-matrix-refactor--cyphalm-sequence-layer) and [`docs/research/upgrades/`](research/upgrades/README.md). Option B is **STOP / deprioritized** (2026-07-18).
 
-### �0a � Kernel LLR via Nystr�m approximation (SHIPPED � tuning continues)
+### 0a — Kernel LLR via Nyström approximation (SHIPPED — tuning continues)
 
 **Evidence:** FDR=0.001 on XOR; `linear(h)=0.512` (chance) vs `kernel(h)=0.835`.
-Nonlinearity gap = **32.3 pp** � unreachable with the current linear LLR discriminant.
+Nonlinearity gap = **32.3 pp** — unreachable with the current linear LLR discriminant.
 
-**Shipped (2026-05-31):** Whitened Nystr�m features in native C++ (`native/src/kernel_memory.cpp`):
-1. Reservoir landmarks (**M=256** default) with median-? RBF bandwidth.
-2. `?(h) = K(h, landmarks) � K(landmarks, landmarks)^{-1/2}` via Cholesky whitening.
-3. Online softmax gradient on `?(h)`; blended into `score_matrix` when kernel enabled.
+**Shipped (2026-05-31):** Whitened Nyström features in native C++ (`native/src/kernel_memory.cpp`):
+1. Reservoir landmarks (**M=256** default) with median-γ RBF bandwidth.
+2. `φ(h) = K(h, landmarks) · K(landmarks, landmarks)^{-1/2}` via Cholesky whitening.
+3. Online softmax gradient on `φ(h)`; blended into `score_matrix` when kernel enabled.
 
-**Measured gain (3 seeds, 8 passes, blend=1.0, M=256, replay off, 2026-06):** native linear **49.9%** ? **59.2%** (+ **+9.3 pp**). Still below sklearn RBF ceiling (~79% on raw XOR splits). `.cypha` kernel keys via `patch_kernel_into_root`; Qt shell + native `cypha_rest` train/infer/save/load wired. Bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`). Opt-in profile: `bench/config/kernel_llr_profile.json`. Full validate includes d03_xor fast smoke + REST kernel body test.
+**Measured gain (3 seeds, 8 passes, blend=1.0, M=256, replay off, 2026-06):** native linear **49.9%** → **59.2%** (+ **+9.3 pp**). RFF auto-γ (2026-07-11) closes the sklearn RBF ceiling gap to **~2.7pp** at `rff_dim=4096` (was ~18pp at Nyström M=256 default). `.cypha` kernel keys via `patch_kernel_into_root`; Qt shell + native `cypha_rest` train/infer/save/load wired. Bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`). Opt-in profile: `bench/config/kernel_llr_profile.json`. Full validate includes d03_xor fast smoke + REST kernel body test.
 
 > **P7 note:** Python `cypha_core` / `KernelMemory` removed; native path is authoritative. Full fix taxonomy: [`research/upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md).
 
-### �0b � Auto-gamma for RFF bandwidth (SHIPPED � bench + studio + native fit)
+### 0b — Auto-gamma for RFF bandwidth (SHIPPED — bench + studio + native fit)
 
 **Evidence:** `D_rff` sweep showed high variance between D=256 and D=512, suggesting
 the gamma bandwidth is not well-tuned for all datasets.
 
-**Shipped (2026-06):** Native `PreprocessorState::auto_rff_gamma` + `estimate_rff_gamma_median_pairwise` in `fit_from_design_matrix`. Bench: native `BenchClassifier.prepare_encoder_from_data` wired via online train. Qt shell trainer: auto-? before online loop. CTest: **`native_preprocessor_fit`** (RFF fixture under `fixtures/preprocessor_fit_rff/`). **`auto_rff_gamma_cv`** grid CV also shipped.
+**Shipped (2026-06):** Native `PreprocessorState::auto_rff_gamma` + `estimate_rff_gamma_median_pairwise` in `fit_from_design_matrix`. Bench: native `BenchClassifier.prepare_encoder_from_data` wired via online train. Qt shell trainer: auto-γ before online loop. CTest: **`native_preprocessor_fit`** (RFF fixture under `fixtures/preprocessor_fit_rff/`). **`auto_rff_gamma_cv`** grid CV also shipped.
 
 > **P7 note:** Python `RFFEncoder.fit(X)` removed with `cypha_core`.
 
-**Expected gain:** +2�4 pp on small-dimensional datasets (re-benchmark d01 small tasks to confirm).
+**Expected gain:** +2–4 pp on small-dimensional datasets (re-benchmark d01 small tasks to confirm).
 
-### �0c � D10/D17 CellAI SSM investigation
+### 0c — D10/D17 CellAI SSM investigation
 
 **Evidence:**
-- **D10 ECG "17-20% chance-level accuracy" is stale (resolved, 2026-07-11)** � re-ran `cypha_bench_run --domain 10` on current HEAD and got **60.67% accuracy** on the same 5-class ECG classification (10A), ~3x chance. No targeted fix was applied; this was an incidental side effect of unrelated upstream work. More importantly, the diagnosis this section originally proposed (SSM state norms / decay rates / routing-head connectivity) was never the right lens for D10: 10A-10D's scored path uses the `cypha_core` DIF expert-routing classifier (`OnlineClassifier` + hand-engineered `TimeSeriesEncoder` features), not `CellAISSM` at all � the SSM is only touched by an optional, non-scored, forward-only `10E_ssm_diagnose` probe. Do not use the old 17-20% figure as evidence of an SSM defect. Full writeup: [`docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md).
-- D17 CyphaLM: **hybrid_gria_lstm @ 300k = 2.873 BPC** (canonical pin — `bench/BASELINE_LOCK.json`; beats bigram); GRIA-only stack still weaker.
-- **D04 "33.2 bpc" was a benchmark bug** (wrong probability indexing in the legacy Python D04 domain, not a CyphaLM failure) � do not use it as evidence. Native D04 runs the full CyphaLM stack via `cypha_bench_run --domain 4`.
+- **D10 ECG (resolved, 2026-07-18):** D10A default **90.11%** on real UCR ECG5000 with enriched features; legacy `CYPHA_D10_ECG_ENRICH=0` → **85.96%**; synthetic fallback was **60.67%** (~3× chance). The 2026-07-11 diagnosis still holds: 10A–10D's scored path uses the `cypha_core` DIF expert-routing classifier (`OnlineClassifier` + hand-engineered `TimeSeriesEncoder` features), not `CellAISSM` — the SSM is only touched by an optional, non-scored, forward-only `10E_ssm_diagnose` probe. Do not use the old 17–20% or 60.67% synth figures as current evidence. Historical synth diagnosis (superseded): [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md). Current reports: [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG5000_REAL_DATA_2026-07-18.md`](reports/D10_ECG5000_REAL_DATA_2026-07-18.md).
+- D17 CyphaLM: **hybrid_gria_lstm @ 300k = 2.873 BPC** (canonical pin — `bench/BASELINE_LOCK.json`, lock commit `a552aee`; beats bigram); GRIA-only stack still weaker; overnight historical **2.864**.
+- **D04 "33.2 bpc" was a benchmark bug** (wrong probability indexing in the legacy Python D04 domain, not a CyphaLM failure) — do not use it as evidence. Native D04 runs the full CyphaLM stack via `cypha_bench_run --domain 4`.
 
 **What to do:** Instrument native SSM state (`cyphalm_ssm_diagnose`, `--ssm-diagnose` on bench) to verify that:
 - State norms do not collapse or explode over long sequences.
-- Multi-scale decay rates (?_fast=1.0, ?_slow=20.0) are appropriate for the domain.
+- Multi-scale decay rates (τ_fast=1.0, τ_slow=20.0) are appropriate for the domain.
 - Output projections are properly connected to the expert routing head.
 
 **D10 status:** the above three checks were run against D10's SSM anyway for completeness (`cyphalm_ssm_diagnose --domain d10`): no collapse/explosion (verdict: pass), and no connectivity check applies since D10 has no routing head to disconnect from in the first place. **This instrumentation remains relevant for D17/CyphaLM** (which genuinely uses the SSM -> GRIA routing path); it is no longer an open question for D10.
 
-> **P7 note:** Python `CellAISSM` / `cypha_lm` packages removed; instrument native SSM via `cyphalm_bench_native` and CTests under `native_cyphalm_*`. Cell hypothesis sweep: [`research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md).
+> **P7 note:** Python `CellAISSM` / `cypha_lm` packages removed; instrument native SSM via `cyphalm_bench_native` and CTests under `native_cyphalm_*`. Cell hypothesis sweep **closed** (2026-07-18): H19 **~2.921 BPC** best cell; hybrid **2.873** remains default — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](reports/CELL_SWEEP_SUMMARY_2026-07-18.md).
 
 ---
 
-## �1 � CUDA GPU path (`cypha::accel`)
+## 1 — CUDA GPU path (`cypha::accel`)
 
-**Status:** Native **CUDA** in `native/src/accel_cuda.cu` (pooled device memory + Bessel table for GH�NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ? **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default **1** � GPU used for all n?1 when available). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
+**Status:** Native **CUDA** in `native/src/accel_cuda.cu` (pooled device memory + Bessel table for GH–NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ≥ **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default **1** — GPU used for all n≥1 when available). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
 
 **Windows (native MSVC):** install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads), then:
 ```powershell
@@ -71,38 +73,40 @@ cmake --build --preset windows-msvc-release-build
 
 **Not supported:** MinGW cross-compiles cannot enable `CYPHA_ENABLE_CUDA` (CMake will error).
 
-**CI — local-only (formal, 2026-07-17):** CUDA is **not** compiled or tested in GitHub Actions. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed in v2.2.8 and **will not return** on hosted runners (no GPU fleet). Validate on a **self-hosted** or local CUDA box with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`windows_msvc`**) is the release gate. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
+**CI — local-only (formal, 2026-07-17):** CUDA is **not** compiled or tested in GitHub Actions. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed in v2.2.8 and **will not return** on hosted runners (no GPU fleet). Validate on a **self-hosted** or local CUDA box with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. CPU-only CI (**Linux CTest**, **`windows_msvc`**) is the release gate; MinGW is not a gate. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
 
 **Performance:** profile with `./cuda_smoke --bench` on GPU; small batches may be CPU-faster due to launch overhead.
 
 ---
 
-## �2 � Qt shell richer UX
+## 2 — Qt shell richer UX
 
-The Qt shell (`cypha_qt_shell`) covers the full training/inference/registry workflow. Items **�2a�2e shipped** (2026 Q2); see [`native/qt/README.md`](../native/qt/README.md).
+The Qt shell (`cypha_qt_shell`) covers the full training/inference/registry workflow. Items **2a–2e shipped** (2026 Q2); see [`native/qt/README.md`](../native/qt/README.md).
 
-### 2a � Streaming training progress ? SHIPPED
+### 2a — Streaming training progress — SHIPPED
 Bulk native train runs on a **background `QThread`**. Live loss chart + rolling accuracy drain every 80 ms; cancel via atomic flag; final state synced on finish.
 
-### 2b � Chart interactivity ? SHIPPED
+### 2b — Chart interactivity — SHIPPED
 Painted `SimpleLossChart` and optional **`QChartView`** (`-DCYPHA_QT_CHARTS=ON`): mouse-over tooltip, pan, scroll-wheel zoom (clamped to data extents). PNG/SVG/CSV export.
 
-### 2c � Experiment run comparison view ? SHIPPED
+### 2c — Experiment run comparison view — SHIPPED
 Experiments panel **"Compare selected runs"** overlays `metrics_history` loss curves for 2+ runs (colour per run).
 
-### 2d � Model card editor ? SHIPPED
-**`card.json�`** dialog edits name, description, tags, task before registry register.
+### 2d — Model card editor — SHIPPED
+**`card.json`** dialog edits name, description, tags, task before registry register.
 
-### 2e � Dark theme ? SHIPPED
+### 2e — Dark theme — SHIPPED
 **Fusion** palette toggle in Settings; persisted to `~/.cypha/shell_settings.json` and QSettings.
 
 **Remaining Qt polish (optional):** richer compare-run statistics; experiment diff export; additional chart series types.
 
 ---
 
-## �3 � Packaged standalone binary
+## 3 — Packaged standalone binary
 
 Goal: a single distributable executable (`cypha_qt_shell`) with no external runtime dependencies.
+
+**Status (2026-07-18): SHIPPED** — release **v2.3.24** includes packaging; scripts below are the maintained workflow.
 
 **Linux AppImage:**
 1. Build with `DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON`.
@@ -119,43 +123,43 @@ Release bundles: [`packaging/`](../../packaging/) install scripts + `scripts/pac
 
 ---
 
-## �4 � Web UI (browser-based Studio)
+## 4 — Web UI (browser-based Studio)
 
-Native **`cypha_rest`** (cpp-httplib; see [`PORT_CONTRACT.md`](port/PORT_CONTRACT.md) �3) exposes the full REST API.
+Native **`cypha_rest`** (cpp-httplib; see [`PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §3) exposes the full REST API.
 
-### Minimal SPA ? SHIPPED (2026 Q2)
-Vanilla JS SPA at **`GET /`** � health, predict, update, models, session RNG. Static assets under `native/tools/static/`; optional embed via `-DCYPHA_EMBED_STATIC_UI=ON`. CTest **`native_rest_ui_smoke`**.
+### Minimal SPA — SHIPPED (2026 Q2)
+Vanilla JS SPA at **`GET /`** — health, predict, update, models, session RNG. Static assets under `native/tools/static/`; optional embed via `-DCYPHA_EMBED_STATIC_UI=ON`. CTest **`native_rest_ui_smoke`**.
 
 **Remaining (expansion):** live training charts, experiment browser, CyphaLM `/generate` chat pane, richer model registry UX.
 
-**Option B � htmx + server-side HTML:** not started; lower priority now that minimal SPA ships.
+**Option B — htmx + server-side HTML:** not started; lower priority now that minimal SPA ships.
 
 ---
 
-## �5 � Multi-model serving in `cypha_rest`
+## 5 — Multi-model serving in `cypha_rest`
 
 **Current:** `cypha_rest` serves one model at a time (load-then-predict; hot-swap via `POST /load`).
 
 **Target architecture:**
 ```
 cypha_rest --registry <root> --listen 0.0.0.0:8765
-  GET  /models          ? list all registered models
-  POST /predict         ? body: { "model": "<name>/<version>", "input": [...] }
-  POST /update          ? body: { "model": "...", "input": [...], "correct_label": "..." }
-  POST /load            ? hot-swap active model (for backward compat)
+  GET  /models          → list all registered models
+  POST /predict         → body: { "model": "<name>/<version>", "input": [...] }
+  POST /update          → body: { "model": "...", "input": [...], "correct_label": "..." }
+  POST /load            → hot-swap active model (for backward compat)
 ```
 
 **Implementation sketch:**
-- `g_models: std::unordered_map<std::string, CyphaInferModel>` � keyed by `name/version`.
+- `g_models: std::unordered_map<std::string, CyphaInferModel>` — keyed by `name/version`.
 - Per-model `std::mutex` for train vs infer serialisation.
-- `POST /load` without a body ? load all models in the registry at startup.
+- `POST /load` without a body → load all models in the registry at startup.
 - Optional LRU eviction (keep N most-recently-used models in RAM).
 
 **Benefit:** one process can serve an A/B test or a production-then-staging model pair without two separate server instances.
 
 ---
 
-## �6 � Curriculum / active learning
+## 6 — Curriculum / active learning
 
 The current training loop is purely online with a simple replay buffer. Higher-quality training on skewed datasets can use:
 
@@ -164,10 +168,10 @@ The current training loop is purely online with a simple replay buffer. Higher-q
 - Implemented as a reordering pass over the CSV before `dif_train_classify_sequence`.
 
 **Active learning (uncertainty sampling):**
-- Sort unlabelled pool by `entropy(softmax(LLR))` � highest entropy = most uncertain.
+- Sort unlabelled pool by `entropy(softmax(LLR))` — highest entropy = most uncertain.
 - Expose `GET /uncertainty-rank` on `cypha_rest` that returns the top-N row indices from a provided feature matrix.
 
-Both require only additions to the existing hot path � no changes to `CyphaInferModel` or the binary format.
+Both require only additions to the existing hot path — no changes to `CyphaInferModel` or the binary format.
 
 **Status (2026-07-12): both SHIPPED, opt-in / default-off.** The claim above holds exactly as
 written: neither feature touches `CyphaInferModel`, `CyphaDifMemoryState`, or the `.cypha`
@@ -220,10 +224,10 @@ env-gated branch in the bench training loop).
 
 ---
 
-## �7 � Export formats
+## 7 — Export formats
 
 ### ONNX export
-Export the inference path (encode ? LLR ? softmax) as an ONNX graph so the model can run in PyTorch, TensorFlow, or ONNX Runtime without `cypha_rest`.
+Export the inference path (encode → LLR → softmax) as an ONNX graph so the model can run in PyTorch, TensorFlow, or ONNX Runtime without `cypha_rest`.
 
 - `batch_encode` maps to a matmul + `tanh`/`cos` non-linearity.
 - `score_matrix_use_field` maps to a matmul + optional NIG field gates.
@@ -236,7 +240,7 @@ Longer-horizon: pack `enc_W`, `F_field`, class centroid tensors into a GGUF cont
 
 ---
 
-## �8 � Distributed / federated training
+## 8 — Distributed / federated training
 
 The current model trains on a single machine with a single replay buffer. For multi-device or multi-process training:
 
@@ -251,46 +255,47 @@ The current model trains on a single machine with a single replay buffer. For mu
 - `world_mu` deltas + class distribution changes are the federated payload.
 - No raw samples leave the device.
 
-Both require new network coordination code outside the native training core � the local training math in the C++ `cypha_core` library stays unchanged.
+Both require new network coordination code outside the native training core — the local training math in the C++ `cypha_core` library stays unchanged.
 
 ---
 
-## �9 � Deprecations and clean-up (P7 complete)
+## 9 — Deprecations and clean-up (P7 complete)
 
 | Item | Status (P7) |
 |------|-------------|
 | Legacy sigmoid (`gh_chi <= 0`) | **Removed** — `kInferWorldGateApiVersion=2`; throws when `gh_chi`/`gh_psi` ≤ 0 |
-| Python FastAPI / PySide6 Studio (`cypha_studio/`) | **Removed** � `cypha_rest` + `cypha_qt_shell` are authoritative |
-| `cypha_accel/` CuPy path | **Removed** � native `cypha::accel` (CUDA / parallel CPU) |
-| `cypha_core`, `bench/` (Python), `cypha_lm/` Python packages | **Removed** � native binaries only (`bench/` configs via `cypha_bench_run`) |
+| Python FastAPI / PySide6 Studio (`cypha_studio/`) | **Removed** — `cypha_rest` + `cypha_qt_shell` are authoritative |
+| `cypha_accel/` CuPy path | **Removed** — native `cypha::accel` (CUDA / parallel CPU) |
+| `cypha_core`, `bench/` (Python), `cypha_lm/` Python packages | **Removed** — native binaries only (`bench/` configs via `cypha_bench_run`) |
 | pytest CI gate (~274 tests) | **Removed** - **160 CTests** (`ctest -R native_`; see `scripts/cypha_native_validate_all.ps1` for the current authoritative count) gate releases |
-| `run_all.py` bench orchestrator | **Removed** � `cypha_bench_run` |
+| `run_all.py` bench orchestrator | **Removed** — `cypha_bench_run` |
 
 ---
 
-## �10 � RPSM matrix refactor + CyphaLM sequence layer
+## 10 — RPSM matrix refactor + CyphaLM sequence layer
 
-**Status:** Planned � specs in [`docs/research/upgrades/`](research/upgrades/README.md).  
-**Target:** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k.
+**Status:** Option A **shipped**; Option B **STOP / deprioritized (2026-07-18)** — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §14–§15, [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](reports/RPSM_SMALL_TIER_GATE_2026-07-18.md), and [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md). Do **not** treat "beat 2.873 via RPSM" as an open plan.
+
+**Target (historical):** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k — **not met** by RPSM Option B; hybrid remains default.
 
 Two composed workstreams (neither replaces the other):
 
-| Track | What | Depends on |
-|-------|------|------------|
-| **Option A** | CyphaDIF matrix refactor (?_mu / ?_var, batched LLR/GEMM) | Existing parity suite + new batched fixtures |
-| **Option B** | RPSM sequence layer � CyphaDIF at level 0, hierarchy above | Option A + [RPSM_IMPLEMENTATION.md](research/upgrades/RPSM_IMPLEMENTATION.md) |
+| Track | What | Status |
+|-------|------|--------|
+| **Option A** | CyphaDIF matrix refactor (μ/σ, batched LLR/GEMM) | **Shipped** — parity-validated |
+| **Option B** | RPSM sequence layer — CyphaDIF at level 0, hierarchy above | **STOP** — BPTT §14 negative; Small-tier capacity gate failed |
 
-**Execution order:**
+**Execution order (as run):**
 
-1. Option A � matrix refactor (parity-validated, no behaviour change)  
-2. Nystr�m kernel LLR into A � **partially shipped** (�0a); tuning continues  
-3. Option B � RPSM sequence layer in native CyphaLM  
-4. Global memory � Izaac episodic store + working memory + GMM world model  
-5. D17 benchmark vs hybrid baseline  
+1. Option A — matrix refactor ✅  
+2. Nyström / RFF kernel LLR into A — **partially shipped** (0a); RFF closes XOR gap to ~2.7pp  
+3. Option B — RPSM sequence layer — **STOP / deprioritized**  
+4. Global memory — Izaac episodic store + working memory + GMM world model (future)  
+5. D17 benchmark vs hybrid baseline — hybrid **2.873** holds  
 
-**Parallel track:** [Cell hypothesis testbench](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) � 28 recurrent-cell variants.
+**Parallel track:** [Cell hypothesis testbench](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) — **closed** (2026-07-18); H19 **~2.921 BPC** best cell; H15 **5.262 BPC** @300k not promoted — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](reports/CELL_SWEEP_SUMMARY_2026-07-18.md).
 
-**Native milestone:** Option A is the next major `cypha_core` refactor � see [`CYPHA_FULL_CPP_FRAMEWORK_PLAN.md`](native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md).
+**Native milestone:** Option A shipped; see [`CYPHA_FULL_CPP_FRAMEWORK_PLAN.md`](native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md).
 
 ---
 
@@ -298,13 +303,15 @@ Two composed workstreams (neither replaces the other):
 
 | When | What | Evidence |
 |------|------|----------|
-| **Now � tuning** | Kernel LLR (Nystr�m) � �0a | Shipped; ~18 pp gap vs sklearn RBF on XOR |
-| **Now � shipped** | Auto-gamma RFF � �0b | Native fit + Qt + bench |
-| **Now** | D10/D17 CellAI SSM � �0c | D10: **resolved 2026-07-11**, 60.67% ECG (was stale 17�20%); hybrid D17 **2.873 BPC** |
-| **Now � shipped** | Qt UX �2a�2e; minimal Web UI �4 | Threaded train, charts, compare runs, dark theme, REST SPA |
-| **Weeks** | Packaged AppImage / Windows bundle � �3 | `packaging/` scripts shipped |
-| **Done (policy)** | CUDA local-only validation � �1 | No hosted GPU CI; self-hosted / local `-DCYPHA_ENABLE_CUDA=ON` |
-| **2�4 months** | Multi-model `cypha_rest` � �5 | Deployment |
-| **4�8 months** | RPSM Option A ? B � �10 | Beat 2.873 BPC target |
-| **4�8 months** | Curriculum / active learning; ONNX � �6/7 | Research |
-| **Longer** | Cell hypothesis sweep; federated; GGUF � �8 / upgrades | Research |
+| **Now — tuning** | Kernel LLR (Nyström + RFF) — 0a | Shipped; RFF auto-γ closes XOR gap to **~2.7pp** (was ~18pp) |
+| **Now — shipped** | Auto-gamma RFF — 0b | Native fit + Qt + bench |
+| **Now — shipped** | D10/D17 CellAI SSM — 0c | D10: **90.11%** ECG5000 (2026-07-18); hybrid D17 **2.873 BPC** |
+| **Now — shipped** | Qt UX 2a–2e; minimal Web UI — 4 | Threaded train, charts, compare runs, dark theme, REST SPA |
+| **Shipped (v2.3.24)** | Packaged AppImage / Windows bundle — 3 | `packaging/` scripts + release bundles |
+| **Done (policy)** | CUDA local-only validation — 1 | No hosted GPU CI; Linux CTest + `windows_msvc`; MinGW not a gate |
+| **Human-only** | Paper arXiv upload | `arxiv_bundle` ready — see [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) |
+| **2–4 months** | Multi-model `cypha_rest` — 5 | Deployment |
+| **Closed** | RPSM Option B — 10 | STOP; hybrid **2.873** remains default |
+| **Closed** | Cell hypothesis sweep | H19 ~2.921 best; hybrid wins |
+| **4–8 months** | Curriculum / active learning; ONNX — 6/7 | Curriculum/uncertainty shipped; ONNX integration open |
+| **Longer** | Federated; GGUF — 8 / upgrades | Research |

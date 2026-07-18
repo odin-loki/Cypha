@@ -34,7 +34,7 @@ blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, loc
 | **§0.5 BPC pin** | [x] Reconciled | canonical **2.873** `b0d39e7`; [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 | **P5 marketing claims** | [x] Aligned | D16B/D16F isolation caveat `3491da0` |
 | **RPSM cheap hypotheses** | [x] Exhausted | [`RPSM_UPGRADE_PLAN.md`](docs/reports/RPSM_UPGRADE_PLAN.md) §13–§14 — five cheap-scale experiments; gap is zero-BPTT training, not config |
-| **D10 ECG stale claim** | [x] Retired | D10A **60.67%** (~3× chance); never routed through `CellAISSM`; [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) |
+| **D10 ECG stale claim** | [x] Retired | D10A **90.11%** on real ECG5000 (enriched features; legacy `CYPHA_D10_ECG_ENRICH=0` → 85.96%); synth fallback was **60.67%**; never `CellAISSM` path — [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) (historical synth) |
 | **D17B `n_experts=1`** | [x] Genuine dynamic | Not a warm-start reporting bug; `mean_expert_alpha` split shipped `e6d95d2`; [`D17B_EXPERT_REPORTING_2026-07-12.md`](docs/reports/D17B_EXPERT_REPORTING_2026-07-12.md) |
 | **EWC D16B forgetting** | [~] Improved, not solved | Growable-`D` fix + λ sweep best **0.135→0.108** @ λ=2.0; shared-model CL still open; [`EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md) |
 | **Paper draft** | [x] Reconciled | `paper/CyphaLM_paper.md` canonical **2.873** + historical labels (2026-07-17) |
