@@ -142,7 +142,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 |------|--------|
 | CUDA CI | [x] Local-only (policy) — [`ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md), [`FUTURE.md`](docs/FUTURE.md) §1 |
 | Qt shell polish | [x] Compare + export | Empty hints + CSV/JSON export — [`QT_HARDENING_CHECKLIST_2026-07-18.md`](docs/reports/QT_HARDENING_CHECKLIST_2026-07-18.md) |
-| Web UI | [~] Chat + empty/readiness polish | `b706647` + `436808f` — [`WEB_UI_POLISH_2026-07-17.md`](docs/reports/WEB_UI_POLISH_2026-07-17.md) |
+| Web UI | [x] Chat + empty/readiness polish | `b706647` + `436808f` — [`WEB_UI_POLISH_2026-07-17.md`](docs/reports/WEB_UI_POLISH_2026-07-17.md) |
 | Multi-model `cypha_rest` | [x] Slice shipped `e3a5b63` — [`MULTI_MODEL_REST_2026-07-17.md`](docs/reports/MULTI_MODEL_REST_2026-07-17.md) |
 | **Curriculum / active learning** | [x] Shipped (`curriculum.hpp`, `/uncertainty-rank`) |
 | ONNX export | [x] encode→LLR→softmax `1cbdd8c` (header-only ModelProto smoke) |
