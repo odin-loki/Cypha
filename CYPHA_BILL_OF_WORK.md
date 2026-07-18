@@ -30,7 +30,7 @@ blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, loc
 | **Addendum 2 MC2/MS1** | [x] Shipped | ECE + train/held-out gap `412ded1`; [`GENERAL_METRICS_MC2_MS1_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC2_MS1_2026-07-17.md) |
 | **Addendum 2 MC4** | [x] Shipped | Margin distribution (mean/p50/p10) `b61543f`; [`GENERAL_METRICS_MC4_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC4_2026-07-17.md) |
 | **Addendum 2 MR3** | [x] Shipped | Residual autocorr + spectral flatness `b61543f`; [`GENERAL_METRICS_MR3_2026-07-17.md`](docs/reports/GENERAL_METRICS_MR3_2026-07-17.md) |
-| **Cell-sweep summary.csv tool** | [~] Script ready | `aggregate_cell_sweep_summary.ps1` `a04af20`; **pending aggregator run** — [`CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md`](docs/reports/CELL_SWEEP_SUMMARY_TOOL_2026-07-17.md) |
+| **Cell-sweep summary.csv tool** | [~] 24/25 rows | Aggregator run 2026-07-18; H15 `bpc:null` artifact gap — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md) |
 | **§0.5 BPC pin** | [x] Reconciled | canonical **2.873** `b0d39e7`; [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 | **P5 marketing claims** | [x] Aligned | D16B/D16F isolation caveat `3491da0` |
 | **RPSM cheap hypotheses** | [x] Exhausted | [`RPSM_UPGRADE_PLAN.md`](docs/reports/RPSM_UPGRADE_PLAN.md) §13–§14 — five cheap-scale experiments; gap is zero-BPTT training, not config |
@@ -39,7 +39,7 @@ blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, loc
 | **EWC D16B forgetting** | [~] Improved, not solved | Growable-`D` fix + λ sweep best **0.135→0.108** @ λ=2.0; shared-model CL still open; [`EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md) |
 | **Paper draft** | [x] Reconciled | `paper/CyphaLM_paper.md` canonical **2.873** + historical labels (2026-07-17) |
 | **Curriculum / uncertainty-rank** | [x] Shipped | `curriculum.hpp` + bench `CYPHA_CURRICULUM_WINDOW`; `GET/POST /uncertainty-rank` + CTest `native_rest_uncertainty_rank` |
-| **300k production overnight** | [x] Done | H22 @ 25/25; finalize exit=0; lock `a552aee` — [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md) |
+| **300k production overnight** | [x] Done | Lock `a552aee`; **2.864 BPC** @ 300k — [`POST_LOCK_STATUS_2026-07-18.md`](docs/reports/POST_LOCK_STATUS_2026-07-18.md) |
 
 This is a task list with explicit done/in-progress/open markers — not a live status dashboard. See
 [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) for the canonical research journal.
@@ -66,8 +66,8 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 |---|------|--------|--------|
 | [x] 0.1 | **300k production overnight** to completion | H22 @ 25/25 (`2026-07-17T15:39:44Z`) | [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md) |
 | [x] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Done; lock `a552aee` (2026-07-18 06:47 local, exit=0) | Phase 18, 24 |
-| [ ] 0.3 | `gh auth login` + `publish_release.ps1` | Auth still gated | Phase 15, 19 |
-| [ ] 0.4 | Merge **d38** once 0.1–0.2 land | Unblocked; 115 → 116 CTests | Phase 24 |
+| [ ] 0.3 | `gh auth login` + `publish_release.ps1` | **Blocked** — `gh auth status`: not logged in | Phase 15, 19 |
+| [ ] 0.4 | Validate **d38** overnight certificate (domain + CTest in tree) | **Next** — `native_d38` / `CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`; 115 → 116 CTests | Phase 24 |
 | [x] 0.5 | Reconcile three 300k hybrid BPC pins (2.873 / 2.892 / 2.897) | Canonical **2.873** `b0d39e7` | [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 
 ---
