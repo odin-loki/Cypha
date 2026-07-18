@@ -107,6 +107,8 @@ bench/report/summary.json
 bench/data/mnist/
 bench/data/wikitext2/
 !bench/data/wikitext2/README.md
+bench/data/ecg5000/*
+!bench/data/ecg5000/README.md
 bench/artifacts/tuning/
 bench/report/baselines/
 

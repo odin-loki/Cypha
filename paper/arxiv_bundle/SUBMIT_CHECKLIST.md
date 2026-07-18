@@ -7,7 +7,7 @@
 
 ## Submit checklist (human)
 1. Choose venue (arXiv cs.LG / workshop / journal).
-2. Convert markdown → PDF (pandoc + preferred template) if required.
+2. Convert markdown → PDF if required: `pandoc CyphaLM_paper.md -o CyphaLM_paper.pdf --pdf-engine=pdflatex` (needs a TeX install; HTML already in this bundle).
 3. Upload PDF + figures; set metadata from paper title/abstract.
 4. Confirm license (recommend CC-BY-4.0 or arXiv default).
 

@@ -232,6 +232,14 @@ jobs:
             echo "Install PowerShell (pwsh) locally to run scripts/create_release_notes.ps1"
           fi
 
+      # softprops cannot PATCH a release created outside Actions ("Resource not accessible
+      # by integration"). Delete any prior release for this tag, then create fresh.
+      - name: Delete prior GitHub Release for tag (keep tag)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete "${{ github.ref_name }}" -y || true
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:

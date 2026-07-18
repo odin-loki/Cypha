@@ -105,7 +105,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ### P6 — ECG / temporal — stale claim retired
 - [x] D10A **60.67%**; not `CellAISSM` path ([`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md))
-- [ ] Optional: push D10 >90% with real ECG5000 data — **blocked** (no `bench/data/ecg5000/`)
+- [~] Optional: push D10 >90% with real ECG5000 — data unblocked (**85.96%** D10A); >90% still open — [`D10_ECG5000_REAL_DATA_2026-07-18.md`](docs/reports/D10_ECG5000_REAL_DATA_2026-07-18.md)
 
 ---
 
@@ -174,10 +174,10 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** human-only — venue/arXiv upload; optional pandoc PDF / 300k H15 / ECG5000  
-**Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`MSVC_RELEASE_CI_2026-07-18.md`](docs/reports/MSVC_RELEASE_CI_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md)
+**Active plan:** human-only — venue/arXiv upload; optional LaTeX PDF / 300k H15 / D10>90% features  
+**Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`D10_ECG5000_REAL_DATA_2026-07-18.md`](docs/reports/D10_ECG5000_REAL_DATA_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
-2. ~~Phase E release~~ — `v2.3.24` published; Windows gate is **MSVC** (`windows_msvc`, not MinGW)
-3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human, 2027 Q1)
-4. Optional — re-tag after green `windows_msvc` for MSVC zip + Linux/AppImage; pandoc PDF; 300k H15
+2. ~~Phase E release~~ — `v2.3.24` assets live (MSVC Windows + Linux tar/AppImage)
+3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human, 2027 Q1; HTML ready, PDF needs LaTeX)
+4. Optional — 300k H15; D10 feature pass for >90%; MiKTeX/`pdflatex` for PDF
