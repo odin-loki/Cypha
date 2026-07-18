@@ -99,6 +99,7 @@ CyphaDIF::CyphaDIF(const CyphaLMConfig& cfg)
       kappa0_(cfg.nig_kappa0),
       alpha0_(cfg.nig_alpha0),
       beta0_(cfg.nig_beta0),
+      use_soft_expert_updates_(cfg.use_soft_expert_updates),
       use_kernel_llr_(cfg.use_kernel_llr),
       kernel_blend_(cfg.kernel_blend),
       kernel_lr_scale_(cfg.kernel_lr_scale) {
@@ -317,9 +318,18 @@ void CyphaDIF::train_step(const double* x, int x_dim, const double* y, int y_dim
             winner = i;
         }
     }
-    auto& ex = experts_[static_cast<std::size_t>(winner)];
-    ex.input_nig.update(x);
-    ex.output_nig.update(y);
+    if (use_soft_expert_updates_ && probs.size() > 1) {
+        for (int i = 0; i < static_cast<int>(probs.size()); ++i) {
+            if (probs[static_cast<std::size_t>(i)] < 1e-4) continue;
+            auto& ex = experts_[static_cast<std::size_t>(i)];
+            ex.input_nig.update(x);
+            ex.output_nig.update(y);
+        }
+    } else {
+        auto& ex = experts_[static_cast<std::size_t>(winner)];
+        ex.input_nig.update(x);
+        ex.output_nig.update(y);
+    }
     if (use_kernel_llr_ && kernel_mem_ != nullptr) {
         const auto labels = expert_labels();
         kernel_mem_->update(x, std::to_string(winner), labels, 0.05 * kernel_lr_scale_);

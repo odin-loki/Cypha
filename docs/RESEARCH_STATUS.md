@@ -392,7 +392,7 @@ Planned engineering directions distilled from research specs. Full index: [`docs
 | Upgrade | Doc | Status | Success criterion |
 |---------|-----|--------|-------------------|
 | CyphaDIF matrix refactor (RPSM Option A) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) | **Shipped** — GEMM kernel (`batched_llr_gemm`) default-on for the general classification/DIF path, parity-tested to 1e-12 ([`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §2) | Parity green; batched LLR; faster infer — met |
-| RPSM sequence layer (Option B) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) + [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Scaffold shipped, training-loop bugs fixed (2026-07-11/12)** — frozen output classifier and broken embedding backprop fixed; matched-scale RPSM-vs-hybrid gap narrowed from the original 156% (mismatched, bugged) to 18.7% (5k) – 33.2% (50k, growing with scale) — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §9–§13 | D17 BPC < **2.873** (hybrid baseline) — not yet met; §13 diagnoses the remaining gap as likely architectural (RPSM has no BPTT depth), not a training artifact |
+| RPSM sequence layer (Option B) | [`RPSM_COMBINED_SPEC.md`](research/upgrades/RPSM_COMBINED_SPEC.md) + [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Scaffold shipped; BPTT §14 negative; Small-tier capacity gate STOP (2026-07-18)** — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §14–§15 + [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](reports/RPSM_SMALL_TIER_GATE_2026-07-18.md) | D17 BPC < **2.873** not met; gap architectural — deprioritize further RPSM training-loop / capacity work |
 | Nyström / nonlinear boundary fixes | [`NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md) | **Partially shipped** | Native kernel LLR live; close ~18 pp sklearn XOR gap |
 | Cell hypothesis testbench (28 variants) | [`CELL_HYPOTHESIS_TESTBENCH.md`](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) | **Active** — running as the production overnight cell-sweep (`cypha_cell_hypothesis_sweep`, `scripts/run_production_overnight.ps1`) | Beat char-LSTM / hybrid on D17 @ 300k |
 | RPSM core fixes (spectral α, norm η, orthogonal init) | [`RPSM_IMPLEMENTATION.md`](research/upgrades/RPSM_IMPLEMENTATION.md) | **Shipped (2026-07-11)** — spectral α and normalised η implemented; orthogonal init/symmetric `W_down` were already live pre-existing | Forgetting ratio < 0.01 — not separately measured; α ∈ [0.3, 0.6] — implemented |
@@ -547,14 +547,15 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 
 ### Priority 4 — Multi-view online training (CyphaLM → CyphaDIF)
 
-**Status:** Planned — full spec in [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md).
+**Status:** Phase 1 shipped; index-reorder multi-view remains out of scope (BoW STOP). Spec: [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md).
 
 **Idea:** Structure-preserving reorderings (block shuffle, rotated start, bidirectional passes, task-block permutations) each macro-epoch, with explicit `view_id` and memory policy (reset fast / carry slow). Exploits online routing, replay, and expert growth instead of single static stream training.
 
 **Phase 1 (LM):** Multi-view + convergence complete. **Hybrid @ 300k: 2.873 BPC (D17), 2.993 (D04).**  
 **Long-range context (Cypha Tests 1C):** SSM warm-up + reset probes pass @ 300k. **1A @ char shuffle: +4.54 BPC** (block shuffle flat). See [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md).  
 **Upgrade V2:** Learnable views neutral; gated fusion worse — keep fixed views + sum fusion.  
-**Model-class C2 hybrid:** **Default profile.** See [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md).
+**Model-class C2 hybrid:** **Default profile.** See [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md).  
+**Upgrade wave 2 (2026-07-18):** Expert-util knobs live but no BPC win @5k. Real WikiText BPE (`d17_bpe`) **worse** than char at short/mid budget (`5.12`@5k / `4.79`@30k vs `4.04`); sample-BPE `3.82` was an artifact. D14 residual RFF opt-in lifts FAST mean R² `-0.223`→`0.527` — [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](reports/UPGRADE_WAVE2_STATUS_2026-07-18.md).
 
 ### Priority 5 — Shared-model continual learning
 
@@ -562,7 +563,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 
 **What to do:**
 1. ~~Investigate elastic weight consolidation (EWC) as a post-hoc overlay on the NIG field.~~ **Scoping shipped 2026-07-12** — growable-`D` bug fixed; opt-in `world_mu` Fisher; D16B λ sweep shows modest gain at λ=2.0 (forgetting 0.135→0.108), world-field protection harmful at high λ — see [`EWC_D16B_SCOPING_2026-07-12.md`](reports/EWC_D16B_SCOPING_2026-07-12.md).
-2. Alternatively, redesign the expert routing so task-specific experts are not overwritten.
+2. Alternatively, redesign the expert routing so task-specific experts are not overwritten. **Tried (2026-07-18):** `CYPHA_D16_TASK_STICKY=1` (prefix-protect D updates + skip cross-task encoder contrastive) — FAST D16B forgetting unchanged (`0.0345`); product remains D16F isolation — [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](reports/UPGRADE_WAVE2_STATUS_2026-07-18.md), [`P4_P5_CONTINUAL_LEARNING_DECISION_2026-07-18.md`](reports/P4_P5_CONTINUAL_LEARNING_DECISION_2026-07-18.md).
 3. ~~Update the marketing claim: "no forgetting **per isolated model file**; shared-model continual learning is an open problem."~~ **Done (2026-07-17)** — README, Qt Help (no prior overclaim), [`DIAGNOSTIC_REPORT.md`](reports/DIAGNOSTIC_REPORT.md), intelligence-stats papers audited; EWC best **~0.108** @ λ=2.0 per [`EWC_D16B_SCOPING_2026-07-12.md`](reports/EWC_D16B_SCOPING_2026-07-12.md).
 
 ### Priority 6 — CellAI / ECG / temporal

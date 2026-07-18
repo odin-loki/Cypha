@@ -2988,8 +2988,13 @@ class MainWindow final : public QMainWindow {
           QStringLiteral("Plot metrics_history loss curves for selected runs (one colour per run)"));
       exp_compare_clear_btn_ = new QPushButton(QStringLiteral("Clear compare chart"), exp_grp);
       exp_compare_clear_btn_->setEnabled(false);
+      exp_compare_export_btn_ = new QPushButton(QStringLiteral("Export compare…"), exp_grp);
+      exp_compare_export_btn_->setEnabled(false);
+      exp_compare_export_btn_->setToolTip(
+          QStringLiteral("Write the compare stats table to CSV or JSON after Compare"));
       exp_cmp_row->addWidget(exp_compare_btn_);
       exp_cmp_row->addWidget(exp_compare_clear_btn_);
+      exp_cmp_row->addWidget(exp_compare_export_btn_);
       exp_cmp_row->addStretch(1);
       exp_form->addRow(exp_cmp_row);
 
@@ -4727,8 +4732,13 @@ class MainWindow final : public QMainWindow {
       if (exp_compare_clear_btn_ != nullptr) {
         exp_compare_clear_btn_->setEnabled(false);
       }
+      if (exp_compare_export_btn_ != nullptr) {
+        exp_compare_export_btn_->setEnabled(false);
+      }
       experiment_update_compare_hint();
     });
+
+    connect(exp_compare_export_btn_, &QPushButton::clicked, this, [this]() { experiment_export_compare(); });
 
     connect(exp_experiments_table_, &QTableWidget::itemSelectionChanged, this, [this]() {
       if (exp_experiments_table_ == nullptr || exp_experiments_table_->currentRow() < 0) {
@@ -7354,10 +7364,74 @@ class MainWindow final : public QMainWindow {
     if (exp_compare_clear_btn_ != nullptr) {
       exp_compare_clear_btn_->setEnabled(true);
     }
+    if (exp_compare_export_btn_ != nullptr) {
+      exp_compare_export_btn_->setEnabled(exp_compare_stats_table_ != nullptr &&
+                                         exp_compare_stats_table_->rowCount() > 0);
+    }
     if (exp_compare_summary_label_ != nullptr) {
       exp_compare_summary_label_->setStyleSheet(QString());
       exp_compare_summary_label_->setText(
           experiment_compare_summary_text(stats_rows, stats_losses, series.size()));
+    }
+  }
+
+  void experiment_export_compare() {
+    if (exp_compare_stats_table_ == nullptr || exp_compare_stats_table_->rowCount() <= 0) {
+      QMessageBox::information(this, QStringLiteral("Export compare"),
+                               QStringLiteral("Run Compare first so the stats table is populated."));
+      return;
+    }
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("Export compare"), QStringLiteral("cypha_compare.csv"),
+        QStringLiteral("CSV (*.csv);;JSON (*.json)"));
+    if (path.isEmpty()) {
+      return;
+    }
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+      QMessageBox::warning(this, QStringLiteral("Export compare"),
+                           QStringLiteral("Could not write %1").arg(path));
+      return;
+    }
+    QTextStream out(&f);
+    const int cols = exp_compare_stats_table_->columnCount();
+    const int rows = exp_compare_stats_table_->rowCount();
+    if (path.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive)) {
+      out << "[\n";
+      for (int r = 0; r < rows; ++r) {
+        out << "  {";
+        for (int c = 0; c < cols; ++c) {
+          const QString key = exp_compare_stats_table_->horizontalHeaderItem(c)
+                                  ? exp_compare_stats_table_->horizontalHeaderItem(c)->text()
+                                  : QStringLiteral("c%1").arg(c);
+          const QString val = exp_compare_stats_table_->item(r, c)
+                                  ? exp_compare_stats_table_->item(r, c)->text()
+                                  : QString();
+          out << (c ? ", " : "") << '"' << key.replace('"', "\\\"") << "\": \""
+              << QString(val).replace('\\', "\\\\").replace('"', "\\\"") << '"';
+        }
+        out << "}" << (r + 1 < rows ? ",\n" : "\n");
+      }
+      out << "]\n";
+    } else {
+      for (int c = 0; c < cols; ++c) {
+        if (c) out << ',';
+        const QString key = exp_compare_stats_table_->horizontalHeaderItem(c)
+                                ? exp_compare_stats_table_->horizontalHeaderItem(c)->text()
+                                : QStringLiteral("c%1").arg(c);
+        out << '"' << key.replace('"', "\"\"") << '"';
+      }
+      out << '\n';
+      for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+          if (c) out << ',';
+          const QString val = exp_compare_stats_table_->item(r, c)
+                                  ? exp_compare_stats_table_->item(r, c)->text()
+                                  : QString();
+          out << '"' << QString(val).replace('"', "\"\"") << '"';
+        }
+        out << '\n';
+      }
     }
   }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
@@ -7460,6 +7534,7 @@ class MainWindow final : public QMainWindow {
   QTableWidget* exp_runs_table_{};
   QPushButton*  exp_compare_btn_{};
   QPushButton*  exp_compare_clear_btn_{};
+  QPushButton*  exp_compare_export_btn_{};
   QLabel*       exp_compare_summary_label_{};
   QTableWidget* exp_compare_stats_table_{};
   SimpleLossChart* exp_compare_chart_{};

@@ -17,7 +17,7 @@ blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, loc
 | Area | Verdict | Evidence |
 |------|---------|----------|
 | **Optimality P0–2, P5, P9** | [x] Done | P0 `4133054`; P1 `31bbb0c`/`7a07f8b`; P2 `de4fa16`; P5 `da9be39`; P9 `CriticalityVector` `c759e72` — [`CYPHA_OPTIMALITY_PLAN.md`](CYPHA_OPTIMALITY_PLAN.md) |
-| **Optimality P3 (class GMM)** | [~] Opt-in; XOR no-go | `1b59f3e` default OFF; XOR ~51% — needs different approach or kernels |
+| **Optimality P3 (class GMM)** | [x] Opt-in; XOR REJECT | hard-split warm-start still ~50.5% — [`OPTIMALITY_P3_GMM_WARMSTART_2026-07-18.md`](docs/reports/OPTIMALITY_P3_GMM_WARMSTART_2026-07-18.md); keep RFF |
 | **Optimality P4 (BMA over Δk)** | [~] Opt-in shipped | `33125b8` default OFF — [`OPTIMALITY_PHASE4_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE4_2026-07-17.md) |
 | **Optimality P6 (IB)** | [~] Opt-in | `f0ea334` default OFF — [`OPTIMALITY_PHASE6_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE6_2026-07-17.md) |
 | **Optimality P7 (score match)** | [~] Opt-in; LUT kept | `f19e167` — [`OPTIMALITY_PHASE7_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE7_2026-07-17.md) |
@@ -30,7 +30,7 @@ blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, loc
 | **Addendum 2 MC2/MS1** | [x] Shipped | ECE + train/held-out gap `412ded1`; [`GENERAL_METRICS_MC2_MS1_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC2_MS1_2026-07-17.md) |
 | **Addendum 2 MC4** | [x] Shipped | Margin distribution (mean/p50/p10) `b61543f`; [`GENERAL_METRICS_MC4_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC4_2026-07-17.md) |
 | **Addendum 2 MR3** | [x] Shipped | Residual autocorr + spectral flatness `b61543f`; [`GENERAL_METRICS_MR3_2026-07-17.md`](docs/reports/GENERAL_METRICS_MR3_2026-07-17.md) |
-| **Cell-sweep summary.csv tool** | [~] 24/25 rows | Aggregator run 2026-07-18; H15 `bpc:null` artifact gap — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md) |
+| **Cell-sweep summary.csv tool** | [~] 24/25 + fix | H15 NaN root-caused + fixed (FAST finite); 300k H15 re-run optional — [`H15_AXIOM_NAN_FIX_2026-07-18.md`](docs/reports/H15_AXIOM_NAN_FIX_2026-07-18.md) |
 | **§0.5 BPC pin** | [x] Reconciled | canonical **2.873** `b0d39e7`; [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 | **P5 marketing claims** | [x] Aligned | D16B/D16F isolation caveat `3491da0` |
 | **RPSM cheap hypotheses** | [x] Exhausted | [`RPSM_UPGRADE_PLAN.md`](docs/reports/RPSM_UPGRADE_PLAN.md) §13–§14 — five cheap-scale experiments; gap is zero-BPTT training, not config |
@@ -52,10 +52,10 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 (criticality score) → profile-guided navigation loss. Open questions:
 
 - [ ] **Ablation grids suspiciously flat** — 16 hyperparameters report identical ΔBPC/Δκ at FAST/5k tier; re-run at production scale before trusting preset values.
-- [ ] **Scale-dependent sign flip unexplained** — math-integration worse at 500 train, better at 5k; needs scaling-law sweep.
+- [ ] **Scale-dependent sign flip unexplained** — math-integration worse at 500 train, better at 5k, worse @300k (+0.209 BPC); needs scaling-law sweep — [`MATH_INTEGRATION_PRODUCTION_2026-07-18.md`](docs/reports/MATH_INTEGRATION_PRODUCTION_2026-07-18.md).
 - [ ] **Is κ-targeting a generalization signal?** — no held-out transfer tests beyond existing eval split.
 - [x] **Reconcile kernel-LLR gap** — generalizable XOR `latent` gap now **~2.7pp** (RFF, 2026-07-11), not stale ~18pp; latent RFF auto-gamma promoted as exploratory default `beacef3` — §1 P1 (`xor_pair` prod default unchanged).
-- [ ] **Production-tier validation** — d53–d58 `pending_production`; overnight complete (`a552aee`); re-run validate hooks.
+- [x] **Production-tier validation** — d53 → `preset_ship_production_wiring_ready` (`lock_joint_ok=false` @ 300k); see math production report.
 - [ ] **Eigenvalue `D_eff` vs τ-based `r_eu` split** — eigenvalue estimator alone +0.096 ΔBPC; derive why.
 
 ---
@@ -66,7 +66,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 |---|------|--------|--------|
 | [x] 0.1 | **300k production overnight** to completion | H22 @ 25/25 (`2026-07-17T15:39:44Z`) | [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md) |
 | [x] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Done; lock `a552aee` (2026-07-18 06:47 local, exit=0) | Phase 18, 24 |
-| [ ] 0.3 | `gh auth login` + `publish_release.ps1` | **Blocked** — `gh auth status`: not logged in | Phase 15, 19 |
+| [ ] 0.3 | `gh auth login` + `publish_release.ps1` | **Blocked** — `gh auth status`: not logged in (agent dry-run needs `native/build`) | Phase 15, 19 |
 | [x] 0.4 | Validate **d38** overnight certificate (domain + CTest in tree) | **PASS** `overnight_certificate_ready` vs lock `a552aee` — [`D38_STATUS_2026-07-18.md`](docs/reports/D38_STATUS_2026-07-18.md) | Phase 24 |
 | [x] 0.5 | Reconcile three 300k hybrid BPC pins (2.873 / 2.892 / 2.897) | Canonical **2.873** `b0d39e7` | [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 
@@ -90,18 +90,17 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] Steps 1–6 done (hybrid **2.873 BPC** @ 300k)
 - [x] D17B **`n_experts=1` genuine** — not a bug (`e6d95d2`, [`D17B_EXPERT_REPORTING_2026-07-12.md`](docs/reports/D17B_EXPERT_REPORTING_2026-07-12.md))
 - [x] D17 perf Parts 1–6 (`12ad4b3`)
-- [ ] Step 7 — Multi-view Phase 2 (D16/DIF)
+- [x] Step 7 — Multi-view Phase 2 gated — index-reorder dead; curriculum opt-in kept — [`P4_P5_CONTINUAL_LEARNING_DECISION_2026-07-18.md`](docs/reports/P4_P5_CONTINUAL_LEARNING_DECISION_2026-07-18.md)
 
 ### P4 — Multi-view online training (CyphaLM → CyphaDIF)
 - [x] Phase 1 (LM) done @ 300k
-- [ ] Port multi-view scheduling to CyphaDIF (D16)
-- [ ] Fix D16 **16G** task-block-shuffle regression — negative control documented; next = DIF-V3 replay-interleave ([`D16_MULTIVIEW_POLICY_2026-07-17.md`](docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md) §2)
+- [x] Port attempts measured — 16I replay **negative**; class-block **negative**; curriculum **+7.4pp iris** opt-in
+- [x] Fix D16 **16G** — confirmed negative control only ([`D16_MULTIVIEW_POLICY_2026-07-17.md`](docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md) §2)
 - [x] Document early-stop policy — [`D16_MULTIVIEW_POLICY_2026-07-17.md`](docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md) §1 (`schedule_b` ≤24k; `same_order`×2 @ 40k; `--n-train` knob)
 
 ### P5 — Shared-model continual learning
-- [x] Hybrid EWC + growable-`D` fix + λ sweep (`e6d95d2`) — best **0.135→0.108** @ λ=2.0
-- [~] Forgetting improved but not solved (legacy **0.813** everyday profile)
-- [ ] Further EWC / routing redesign vs accept D16F isolation-only
+- [x] Hybrid EWC + growable-`D` fix + λ sweep (`e6d95d2`) — best **0.135→0.108** @ λ=2.0; FAST re-sweep λ=2.0 → **0.0** forgetting
+- [x] **Accept D16F isolation-only** for product; EWC optional overlay — [`P4_P5_CONTINUAL_LEARNING_DECISION_2026-07-18.md`](docs/reports/P4_P5_CONTINUAL_LEARNING_DECISION_2026-07-18.md)
 - [x] Confirm marketing language live everywhere (`3491da0`)
 
 ### P6 — ECG / temporal — stale claim retired
@@ -113,9 +112,9 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 ## 2. RPSM track
 
 - [x] **Option A** matrix refactor — `batched_llr_gemm` default-on (`RPSM_UPGRADE_PLAN.md` §2)
-- [~] **Option B** sequence layer — scaffold + bug fixes; **cheap hypotheses exhausted** (§13–§14); zero-BPTT gap remains; D17 < **2.873** not met
-- [ ] Global memory (Izaac VRF + Gaussian-mixture world model)
-- [ ] Final 300k D17 benchmark vs hybrid
+- [x] **Option B** sequence layer — scaffold + BPTT tried (§14 negative); Small-tier capacity gate **STOP** — [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](docs/reports/RPSM_SMALL_TIER_GATE_2026-07-18.md)
+- [x] Global memory (Izaac VRF + GMM world) — **deprioritized** (Small-tier failed; BPTT/world-stats negative)
+- [x] Final 300k D17 benchmark vs hybrid — lock stands (RPSM 7.336 vs hybrid 2.873); no further 300k RPSM this wave
 
 ---
 
@@ -142,7 +141,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | Item | Status |
 |------|--------|
 | CUDA CI | [x] Local-only (policy) — [`ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md), [`FUTURE.md`](docs/FUTURE.md) §1 |
-| Qt shell polish | [~] Compare empty-state hints | [`QT_SHELL_POLISH_2026-07-17.md`](docs/reports/QT_SHELL_POLISH_2026-07-17.md) |
+| Qt shell polish | [x] Compare + export | Empty hints + CSV/JSON export — [`QT_HARDENING_CHECKLIST_2026-07-18.md`](docs/reports/QT_HARDENING_CHECKLIST_2026-07-18.md) |
 | Web UI | [~] Chat + empty/readiness polish | `b706647` + `436808f` — [`WEB_UI_POLISH_2026-07-17.md`](docs/reports/WEB_UI_POLISH_2026-07-17.md) |
 | Multi-model `cypha_rest` | [x] Slice shipped `e3a5b63` — [`MULTI_MODEL_REST_2026-07-17.md`](docs/reports/MULTI_MODEL_REST_2026-07-17.md) |
 | **Curriculum / active learning** | [x] Shipped (`curriculum.hpp`, `/uncertainty-rank`) |
@@ -160,24 +159,27 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 - [x] `paper/CyphaLM_paper.md` rewritten (`e9ac580`)
 - [x] Narrative reconciliation vs lock (§0.5 BPC pin — canonical **2.873**, historical sweeps labeled)
-- [ ] Submit (2027 Q1 target)
+- [~] Submit (2027 Q1 target) — native figure JSON+PNG landed (`scripts/render_native_paper_figures.py`); bibliography still open
 
 ---
 
 ## 7. Housekeeping
 
-- [ ] Full GPU training not implemented
+- [~] Full GPU training not implemented — gap documented; infer CUDA only — [`GPU_TRAINING_GAP_2026-07-18.md`](docs/reports/GPU_TRAINING_GAP_2026-07-18.md)
 - [x] Real-data profiling pass logged — [`REAL_DATA_PROFILE_2026-07-17.md`](docs/reports/REAL_DATA_PROFILE_2026-07-17.md); `scripts/run_real_data_profile.ps1`
-- [ ] Qt shell manual hardening pass
+- [x] Qt shell manual hardening checklist + compare export — [`QT_HARDENING_CHECKLIST_2026-07-18.md`](docs/reports/QT_HARDENING_CHECKLIST_2026-07-18.md)
 - [ ] `cypha_som` archive — reads closed
 
 ---
 
 ## Suggested execution order
 
-1. §0 — summary.csv aggregator + d38 merge + release publish
-2. §0.5 — canonical BPC pin
-3. §1 P1/P2 — promote RFF defaults
-4. §2 RPSM — BPTT in training loop (cheap hypotheses done)
-5. §1 P5 + §3 — forgetting + cell sweep in parallel
-6. §4–§6 — opportunistic
+**Active plan:** [`docs/reports/UPGRADE_WAVE2_PLAN_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_PLAN_2026-07-18.md)  
+**Prior backlog plan (closed):** [`docs/reports/BACKLOG_EXECUTION_PLAN_2026-07-18.md`](docs/reports/BACKLOG_EXECUTION_PLAN_2026-07-18.md)  
+**Wave-2 status:** [`docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md)
+
+1. ~~Phase A–D backlog~~ — see backlog plan + reports (math, H15, paper figs, Qt, P4/P5, RPSM Small STOP, GMM REJECT, GPU gap doc)
+2. ~~Wave 2 + stretch~~ — residual RFF **PASS** (`0.527`); real BPE short-budget **FAIL**; paper PNGs landed — [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md)
+3. Phase E — `gh auth login` + `publish_release.ps1` (human-gated)
+4. Phase F — paper bibliography + submit (2027 Q1)
+5. Optional — real WikiText BPE@300k vs hybrid pin 2.873 (short/mid budget already worse than char)

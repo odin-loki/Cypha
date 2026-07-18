@@ -90,6 +90,10 @@ bool dif_subsystem_affects_forward(const CyphaLMConfig& cfg) {
         mode == ContextMode::AblationNoSsm) {
         return false;
     }
+    // Expert-utilization research path: keep DIF alive even on ngram_fuse_split hybrid.
+    if (cfg.use_soft_expert_updates || cfg.use_routing_entropy_floor || cfg.n_experts > 0) {
+        return true;
+    }
     if (cfg.use_discriminative_feedback) {
         return true;
     }
@@ -519,6 +523,11 @@ void CyphaLMModel::init_components() {
         rc.state_dim = cfg_.rpsm_state_dim;
         rc.feat_dim = cfg_.rpsm_feat_dim;
         rc.n_classes = cfg_.vocab_size;
+        rc.n_memory_slots = cfg_.rpsm_n_memory_slots;
+        rc.beta_memory = cfg_.rpsm_beta_memory;
+        rc.surprise_threshold = cfg_.rpsm_surprise_threshold;
+        rc.hierarchy_loss_weight = cfg_.rpsm_hierarchy_loss_weight;
+        rc.bptt_window = std::max(1, cfg_.rpsm_bptt_window);
         rc.seed = cfg_.seed + 29;
         rc.use_izaac_init = (cfg_.cell_variant == "H19" || cfg_.context_mode == ContextMode::Rpsm);
         // Phase -1 (RPSM_UPGRADE_PLAN.md, RESEARCH_STATUS.md:393): spectral alpha + normalised
@@ -527,8 +536,7 @@ void CyphaLMModel::init_components() {
         rc.use_normalized_eta = (cfg_.context_mode == ContextMode::Rpsm);
         // Research/experiment-only override for the BPTT window length (see
         // RPSM_UPGRADE_PLAN.md sec14 -- default is 1, i.e. off, because window>1 was measured
-        // to monotonically *hurt* eval BPC at this layer's lr regime). Not part of the profile
-        // schema; used to reproduce sec14's window sweep without a rebuild per config change.
+        // to monotonically *hurt* eval BPC at this layer's lr regime). Env wins over profile.
         if (const char* w = std::getenv("CYPHALM_RPSM_BPTT_WINDOW")) {
             const int wv = std::atoi(w);
             if (wv > 0) rc.bptt_window = wv;
@@ -776,7 +784,21 @@ std::vector<double> CyphaLMModel::gria_input_core(const std::vector<double>& fie
         // overload instead of receiving a fresh vector from ngram_embedding_vector() every
         // predict_next call (this is the default D17 hybrid path's ngram-fuse-split branch).
         ngram_embedding_vector(ngram_embed_vec_scratch_);
-        return ngram_fusion_->forward(field, ngram_embed_vec_scratch_);
+        auto fused = ngram_fusion_->forward(field, ngram_embed_vec_scratch_);
+        // Upgrade wave 2: ngram_fuse_split previously discarded DIF mean entirely. When expert
+        // utilization is forced on, blend projected DIF mean into the ngram GRIA input so soft
+        // updates / entropy floor can move hybrid logits (default path remains bit-identical).
+        if (dif_out != nullptr && !proj_dif_.empty() &&
+            (cfg_.use_soft_expert_updates || cfg_.use_routing_entropy_floor || cfg_.n_experts > 0)) {
+            const auto mean_resized = resize_to_field(dif_out->mean, cfg_.field_dim);
+            const std::vector<double> mean =
+                matvec(proj_dif_, cfg_.field_dim, cfg_.field_dim, mean_resized);
+            constexpr double kDifBlend = 0.15;
+            for (std::size_t i = 0; i < fused.size() && i < mean.size(); ++i) {
+                fused[i] = (1.0 - kDifBlend) * fused[i] + kDifBlend * mean[i];
+            }
+        }
+        return fused;
     }
     if (mode == ContextMode::AblationNoSsm && !proj_ngram_.empty()) {
         const auto embeds = ngram_embedding_vector();
@@ -1230,6 +1252,18 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     if (cfg_.use_free_energy_loss && m.epistemic_var > 0.0) {
         m.free_energy_penalty = cfg_.free_energy_beta * m.epistemic_var;
         m.loss += m.free_energy_penalty;
+    }
+    if (cfg_.use_routing_entropy_floor && !last_dif_out_.routing_probs.empty() &&
+        last_dif_out_.routing_probs.size() > 1) {
+        double ent = 0.0;
+        for (double pi : last_dif_out_.routing_probs) {
+            if (pi > 1e-12) ent -= pi * std::log(pi);
+        }
+        const double max_ent = std::log(static_cast<double>(last_dif_out_.routing_probs.size()));
+        const double floor = max_ent * cfg_.routing_entropy_floor_frac;
+        if (ent < floor) {
+            m.loss += cfg_.routing_entropy_lambda * (floor - ent);
+        }
     }
 
     cypha::intelligence::IntelligenceProfiler* active_profiler = profiler;

@@ -76,6 +76,14 @@ void class_gmm_init_class_row(int k, int d, int max_m, int n_comp, std::uint64_t
 void class_gmm_update_pi_ema(int k, int max_m, const double* resp, int n_comp, double alpha,
                              std::vector<double>& class_pi);
 
+/// Hard-split warm-start: for each class, bipartition field rows by sign of the max-variance
+/// axis residual and set two component deltas to lobe means − ``world_mu``. Opt-in research path
+/// for Phase-3 XOR (default training still uses online soft-EM only).
+void class_gmm_hard_split_warmstart(int d, const double* world_mu, const std::vector<std::vector<double>>& h_rows,
+                                    const std::vector<int>& class_k, int max_m, int n_comp,
+                                    std::vector<double>& D, std::vector<double>& class_pi,
+                                    std::vector<int>& class_n_comp);
+
 int read_cypha_format(const CNode& root);
 bool read_class_gmm_enabled(const CNode& root);
 int read_class_gmm_m(const CNode& root, bool enabled);

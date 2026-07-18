@@ -389,6 +389,19 @@ double CyphaDifMemoryState::memory_train(const double* h, const std::string& lab
   }
   scales[static_cast<std::size_t>(k_idx)] = delta_lr;
 
+  if (!task_prefix_protect.empty()) {
+    for (int k = 0; k < K; ++k) {
+      const std::string& lbl = labels[static_cast<std::size_t>(k)];
+      const auto us = lbl.find('_');
+      const std::string pref = (us == std::string::npos) ? lbl : lbl.substr(0, us);
+      if (pref != task_prefix_protect) {
+        scales[static_cast<std::size_t>(k)] = 0.0;
+      }
+    }
+    // Keep attracting the true target even if its prefix somehow mismatched.
+    scales[static_cast<std::size_t>(k_idx)] = delta_lr;
+  }
+
   if (!use_class_gmm) {
     for (int k = 0; k < K; ++k) {
       for (int j = 0; j < d; ++j) {

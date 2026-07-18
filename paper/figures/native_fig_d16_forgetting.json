@@ -1,0 +1,12 @@
+{
+  "figure": "native_fig_d16_forgetting",
+  "title": "D16 forgetting: shared model vs isolation",
+  "source": "docs/RESEARCH_STATUS.md + docs/reports/EWC_D16B_SCOPING_2026-07-12.md",
+  "series": [
+    {"exp": "16B everyday profile (legacy)", "forgetting_score": 0.813},
+    {"exp": "16B FAST baseline (EWC off)", "forgetting_score": 0.135},
+    {"exp": "16B FAST EWC λ=2.0", "forgetting_score": 0.108},
+    {"exp": "16F per-task isolation", "forgetting_score": 0.0}
+  ],
+  "product_claim": "Zero forgetting holds for per-task isolated model files (16F); shared-model CL remains open."
+}

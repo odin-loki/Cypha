@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -18,16 +19,30 @@ struct AxiomGateGrammar {
     std::vector<AxiomGateFn> o_gate;
 };
 
-inline double apply_axiom_gate(AxiomGateFn fn, double gate_pre, double state_ref) {
-    switch (fn) {
-        case AxiomGateFn::Sigmoid:
-            return sigmoid(gate_pre);
-        case AxiomGateFn::Tanh:
-            return std::tanh(gate_pre);
-        case AxiomGateFn::Eml:
-            return eml_nand(gate_pre, state_ref);
+/// Apply evolved gate fn. Control gates (i/f/o) must stay in ``[0,1]`` — raw ``tanh`` on those
+/// roles explodes cell state (H15 300k ``bpc:null``). Candidate gate ``g`` maps to ``[-1,1]``.
+inline double apply_axiom_gate(AxiomGateFn fn, double gate_pre, double state_ref, bool candidate = false) {
+    if (candidate) {
+        switch (fn) {
+            case AxiomGateFn::Sigmoid:
+                return 2.0 * sigmoid(gate_pre) - 1.0;
+            case AxiomGateFn::Tanh:
+                return std::tanh(gate_pre);
+            case AxiomGateFn::Eml:
+                return 2.0 * eml_nand(gate_pre, state_ref) - 1.0;
+        }
+    } else {
+        switch (fn) {
+            case AxiomGateFn::Sigmoid:
+                return sigmoid(gate_pre);
+            case AxiomGateFn::Tanh:
+                // Affine map keeps LSTM forget/input/output semantics in [0, 1].
+                return 0.5 * (std::tanh(gate_pre) + 1.0);
+            case AxiomGateFn::Eml:
+                return eml_nand(gate_pre, state_ref);
+        }
     }
-    return sigmoid(gate_pre);
+    return candidate ? std::tanh(gate_pre) : sigmoid(gate_pre);
 }
 
 inline AxiomGateGrammar axiom_grammar_from_seed(std::uint64_t seed, int hidden) {

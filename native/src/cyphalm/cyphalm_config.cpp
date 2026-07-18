@@ -93,11 +93,11 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
             cfg.use_spectral_pde = true;
             break;
         case BenchMode::Rpsm:
+            // Do not hardcode Tiny (L=4,D=128,feat=64) here — that overwrote profile JSON after
+            // apply_bench_profile and blocked Small-tier capacity gates (BACKLOG Phase C1).
+            // Dims/memory knobs come from the profile (d21 Tiny lock vs d21_small).
             cfg.context_mode = ContextMode::Rpsm;
             cfg.use_rpsm_layer = true;
-            cfg.rpsm_n_levels = 4;
-            cfg.rpsm_state_dim = 128;
-            cfg.rpsm_feat_dim = 64;
             break;
     }
 }
@@ -149,6 +149,10 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_i("field_dim", cfg.field_dim);
     set_i("max_experts", cfg.max_experts);
     set_i("n_experts", cfg.n_experts);
+    set_b("use_soft_expert_updates", cfg.use_soft_expert_updates);
+    set_b("use_routing_entropy_floor", cfg.use_routing_entropy_floor);
+    set_d("routing_entropy_lambda", cfg.routing_entropy_lambda);
+    set_d("routing_entropy_floor_frac", cfg.routing_entropy_floor_frac);
     set_d("alpha_init", cfg.alpha_init);
     set_b("alpha_learnable", cfg.alpha_learnable);
     set_i("gria_rank", cfg.gria_rank);
@@ -188,6 +192,12 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_i("rpsm_n_levels", cfg.rpsm_n_levels);
     set_i("rpsm_state_dim", cfg.rpsm_state_dim);
     set_i("rpsm_feat_dim", cfg.rpsm_feat_dim);
+    set_d("rpsm_lr", cfg.rpsm_lr);
+    set_i("rpsm_n_memory_slots", cfg.rpsm_n_memory_slots);
+    set_d("rpsm_beta_memory", cfg.rpsm_beta_memory);
+    set_d("rpsm_surprise_threshold", cfg.rpsm_surprise_threshold);
+    set_d("rpsm_hierarchy_loss_weight", cfg.rpsm_hierarchy_loss_weight);
+    set_i("rpsm_bptt_window", cfg.rpsm_bptt_window);
     set_b("profile_guided_loss", cfg.profile_guided_loss);
     set_b("use_full_navigation_loss", cfg.use_full_navigation_loss);
     set_b("use_profile_curriculum", cfg.use_profile_curriculum);
@@ -241,8 +251,12 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
     fs::path path;
     if (profile == "d17") {
         path = root / "cyphalm_d17_wikitext.json";
+    } else if (profile == "d17_bpe") {
+        path = root / "cyphalm_d17_wikitext_bpe.json";
     } else if (profile == "d21") {
         path = root / "cyphalm_d21_rpsm.json";
+    } else if (profile == "d21_small") {
+        path = root / "cyphalm_d21_rpsm_small.json";
     } else if (profile == "d04") {
         path = root / "cyphalm_d04_gutenberg.json";
         if (!fs::is_regular_file(path)) {
@@ -259,6 +273,16 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
     nlohmann::json j;
     in >> j;
     merge_json_config(j, cfg);
+    const fs::path repo = fs::path(repo_root_from_config());
+    auto resolve = [&](std::string& p) {
+        if (p.empty()) return;
+        const fs::path cand = fs::path(p);
+        if (cand.is_absolute() && fs::is_regular_file(cand)) return;
+        const fs::path under = repo / cand;
+        if (fs::is_regular_file(under)) p = under.string();
+    };
+    resolve(cfg.bpe_merges_path);
+    resolve(cfg.bpe_vocab_path);
 }
 
 }  // namespace cypha::cyphalm

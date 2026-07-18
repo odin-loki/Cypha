@@ -29,3 +29,15 @@ current native bench artifacts instead, per subsystem:
 
 Regenerating these figures from current native `bench/results/` data (rather than only citing tables
 in prose) is future work, not performed as part of this 2026-07-12 rewrite.
+
+## Native figure payloads (2026-07-18)
+
+JSON summaries + PNG bars (render: `python scripts/render_native_paper_figures.py`). Sources: production lock + RESEARCH_STATUS:
+
+| File | Content |
+|------|---------|
+| `native_fig_d17_bpc.json` / `.png` | D17 BPC vs bigram / LSTM / GRIA / RPSM |
+| `native_fig_d17b_alpha.json` / `.png` | D17B mean_alpha / n_experts |
+| `native_fig_d16_forgetting.json` / `.png` | D16B/EWC/16F forgetting scores |
+
+Submit (2027 Q1) still needs full bibliography; native JSON+PNG figures are landed.

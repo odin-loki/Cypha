@@ -276,4 +276,95 @@ void class_gmm_update_pi_ema(int k, int max_m, const double* resp, int n_comp, d
   }
 }
 
+void class_gmm_hard_split_warmstart(int d, const double* world_mu, const std::vector<std::vector<double>>& h_rows,
+                                    const std::vector<int>& class_k, int max_m, int n_comp,
+                                    std::vector<double>& D, std::vector<double>& class_pi,
+                                    std::vector<int>& class_n_comp) {
+  if (d <= 0 || h_rows.empty() || class_k.size() != h_rows.size() || world_mu == nullptr) {
+    return;
+  }
+  n_comp = std::max(1, std::min(n_comp, max_m));
+  int K = 0;
+  for (int k : class_k) K = std::max(K, k + 1);
+  if (K <= 0) return;
+  class_gmm_ensure_capacity(K, d, max_m, D, class_pi, class_n_comp);
+
+  for (int k = 0; k < K; ++k) {
+    std::vector<std::size_t> idxs;
+    for (std::size_t i = 0; i < class_k.size(); ++i) {
+      if (class_k[i] == k) idxs.push_back(i);
+    }
+    if (idxs.empty()) continue;
+    class_n_comp[static_cast<std::size_t>(k)] = n_comp;
+    // Class mean in field space.
+    std::vector<double> mean(static_cast<std::size_t>(d), 0.0);
+    for (std::size_t i : idxs) {
+      for (int j = 0; j < d; ++j) {
+        mean[static_cast<std::size_t>(j)] += h_rows[i][static_cast<std::size_t>(j)];
+      }
+    }
+    const double inv_n = 1.0 / static_cast<double>(idxs.size());
+    for (int j = 0; j < d; ++j) mean[static_cast<std::size_t>(j)] *= inv_n;
+
+    int axis = 0;
+    double best_var = -1.0;
+    for (int j = 0; j < d; ++j) {
+      double v = 0.0;
+      for (std::size_t i : idxs) {
+        const double diff = h_rows[i][static_cast<std::size_t>(j)] - mean[static_cast<std::size_t>(j)];
+        v += diff * diff;
+      }
+      if (v > best_var) {
+        best_var = v;
+        axis = j;
+      }
+    }
+
+    std::vector<double> mean0(static_cast<std::size_t>(d), 0.0);
+    std::vector<double> mean1(static_cast<std::size_t>(d), 0.0);
+    int n0 = 0;
+    int n1 = 0;
+    for (std::size_t i : idxs) {
+      const bool side = h_rows[i][static_cast<std::size_t>(axis)] >= mean[static_cast<std::size_t>(axis)];
+      auto& dest = side ? mean1 : mean0;
+      int& cnt = side ? n1 : n0;
+      for (int j = 0; j < d; ++j) dest[static_cast<std::size_t>(j)] += h_rows[i][static_cast<std::size_t>(j)];
+      ++cnt;
+    }
+    if (n0 == 0 || n1 == 0) {
+      // Degenerate split — keep single-mode at class mean.
+      class_n_comp[static_cast<std::size_t>(k)] = 1;
+      double* delta = D.data() + class_gmm_d_offset(k, 0, d, max_m);
+      for (int j = 0; j < d; ++j) {
+        delta[static_cast<std::size_t>(j)] = mean[static_cast<std::size_t>(j)] - world_mu[static_cast<std::size_t>(j)];
+      }
+      class_pi[class_gmm_d_offset(k, 0, 1, max_m)] = 1.0;
+      continue;
+    }
+    const double inv0 = 1.0 / static_cast<double>(n0);
+    const double inv1 = 1.0 / static_cast<double>(n1);
+    for (int j = 0; j < d; ++j) {
+      mean0[static_cast<std::size_t>(j)] *= inv0;
+      mean1[static_cast<std::size_t>(j)] *= inv1;
+    }
+    for (int m = 0; m < max_m; ++m) {
+      class_pi[class_gmm_d_offset(k, m, 1, max_m)] = 0.0;
+      double* delta = D.data() + class_gmm_d_offset(k, m, d, max_m);
+      for (int j = 0; j < d; ++j) delta[static_cast<std::size_t>(j)] = 0.0;
+    }
+    const std::vector<double>* means[2] = {&mean0, &mean1};
+    const int counts[2] = {n0, n1};
+    const double total = static_cast<double>(n0 + n1);
+    for (int m = 0; m < std::min(2, n_comp); ++m) {
+      double* delta = D.data() + class_gmm_d_offset(k, m, d, max_m);
+      for (int j = 0; j < d; ++j) {
+        delta[static_cast<std::size_t>(j)] =
+            (*means[m])[static_cast<std::size_t>(j)] - world_mu[static_cast<std::size_t>(j)];
+      }
+      class_pi[class_gmm_d_offset(k, m, 1, max_m)] = static_cast<double>(counts[m]) / total;
+    }
+    class_n_comp[static_cast<std::size_t>(k)] = std::min(2, n_comp);
+  }
+}
+
 }  // namespace cypha

@@ -45,6 +45,12 @@ struct CyphaLMConfig {
 
     int n_experts = 0;
     int max_experts = 256;
+    /// Soft multi-expert NIG updates (vs winner-take-all). Env: CYPHA_LM_SOFT_EXPERT_UPDATES=1.
+    bool use_soft_expert_updates = false;
+    /// Add routing-entropy floor loss when experts > 1. Env: CYPHA_LM_ROUTING_ENTROPY_FLOOR=1.
+    bool use_routing_entropy_floor = false;
+    double routing_entropy_lambda = 0.05;
+    double routing_entropy_floor_frac = 0.5;
     int field_dim = 160;
     double nig_kappa0 = 1.0;
     double nig_alpha0 = 2.0;
@@ -151,6 +157,13 @@ struct CyphaLMConfig {
     int rpsm_state_dim = 128;
     int rpsm_feat_dim = 64;
     double rpsm_lr = 0.01;
+    /// Working-memory ring size / write gate (defaults match ``RpsmSequenceConfig``).
+    int rpsm_n_memory_slots = 32;
+    double rpsm_beta_memory = 0.1;
+    double rpsm_surprise_threshold = 0.05;
+    double rpsm_hierarchy_loss_weight = 0.1;
+    /// Research BPTT window (1 = local grads; >1 measured negative @ 5k — keep profile default 1).
+    int rpsm_bptt_window = 1;
 
     /// Paper IV: add profile-guided regularizers to per-step train loss.
     bool profile_guided_loss = false;

@@ -236,16 +236,16 @@ void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, 
     if (use_axiom && static_cast<int>(axiom_grammar_.i_gate.size()) == hidden) {
       i_gate[static_cast<std::size_t>(j)] =
           apply_axiom_gate(axiom_grammar_.i_gate[static_cast<std::size_t>(j)],
-                           gates[static_cast<std::size_t>(j)], h[j]);
+                           gates[static_cast<std::size_t>(j)], h[j], false);
       f_gate[static_cast<std::size_t>(j)] =
           apply_axiom_gate(axiom_grammar_.f_gate[static_cast<std::size_t>(j)],
-                           gates[static_cast<std::size_t>(hidden + j)], c[j]);
+                           gates[static_cast<std::size_t>(hidden + j)], c[j], false);
       g_gate[static_cast<std::size_t>(j)] =
           apply_axiom_gate(axiom_grammar_.g_gate[static_cast<std::size_t>(j)],
-                           gates[static_cast<std::size_t>(2 * hidden + j)], h[j]);
+                           gates[static_cast<std::size_t>(2 * hidden + j)], h[j], true);
       o_gate[static_cast<std::size_t>(j)] =
           apply_axiom_gate(axiom_grammar_.o_gate[static_cast<std::size_t>(j)],
-                           gates[static_cast<std::size_t>(3 * hidden + j)], c[j]);
+                           gates[static_cast<std::size_t>(3 * hidden + j)], c[j], false);
     } else if (use_eml) {
       i_gate[static_cast<std::size_t>(j)] =
           eml_nand(gates[static_cast<std::size_t>(j)], h[j]);
@@ -442,19 +442,40 @@ void CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id, Char
   // i/g use h[j] as state_ref, and — consistent with the pure-eml branch above — that
   // term is not separately accumulated since out.dh_prev is fully recomputed from
   // dgates via the Wh backprop below.
+  // Matches apply_axiom_gate(..., candidate): control maps tanh→[0,1]; candidate maps sig/eml→[-1,1].
   auto axiom_gate_grad = [](AxiomGateFn fn, double pre, double state_ref, double gate_val,
-                            double d_gate_val, double& d_pre, double& d_state_extra) {
+                            double d_gate_val, bool candidate, double& d_pre, double& d_state_extra) {
     d_state_extra = 0.0;
-    switch (fn) {
-      case AxiomGateFn::Sigmoid:
-        d_pre = d_gate_val * gate_val * (1.0 - gate_val);
-        break;
-      case AxiomGateFn::Tanh:
-        d_pre = d_gate_val * (1.0 - gate_val * gate_val);
-        break;
-      case AxiomGateFn::Eml:
-        eml_nand_grad(pre, state_ref, d_gate_val, d_pre, d_state_extra);
-        break;
+    if (candidate) {
+      switch (fn) {
+        case AxiomGateFn::Sigmoid: {
+          // gate = 2*σ-1 ⇒ dgate/dpre = 0.5*(1-gate²)
+          d_pre = d_gate_val * 0.5 * (1.0 - gate_val * gate_val);
+          break;
+        }
+        case AxiomGateFn::Tanh:
+          d_pre = d_gate_val * (1.0 - gate_val * gate_val);
+          break;
+        case AxiomGateFn::Eml: {
+          double d_eml = 0.0;
+          eml_nand_grad(pre, state_ref, 2.0 * d_gate_val, d_eml, d_state_extra);
+          d_pre = d_eml;
+          break;
+        }
+      }
+    } else {
+      switch (fn) {
+        case AxiomGateFn::Sigmoid:
+          d_pre = d_gate_val * gate_val * (1.0 - gate_val);
+          break;
+        case AxiomGateFn::Tanh:
+          // gate = 0.5*(tanh+1) ⇒ dgate/dpre = 2*gate*(1-gate)
+          d_pre = d_gate_val * 2.0 * gate_val * (1.0 - gate_val);
+          break;
+        case AxiomGateFn::Eml:
+          eml_nand_grad(pre, state_ref, d_gate_val, d_pre, d_state_extra);
+          break;
+      }
     }
   };
   const bool use_axiom_grad =
@@ -495,26 +516,26 @@ void CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id, Char
 
       axiom_gate_grad(axiom_grammar_.i_gate[static_cast<std::size_t>(j)],
                       cache.gates[static_cast<std::size_t>(j)], cache.h[static_cast<std::size_t>(j)],
-                      cache.i[static_cast<std::size_t>(j)], di_gate[static_cast<std::size_t>(j)], d_pre,
+                      cache.i[static_cast<std::size_t>(j)], di_gate[static_cast<std::size_t>(j)], false, d_pre,
                       d_extra);
       dgates[static_cast<std::size_t>(j)] = d_pre;
 
       axiom_gate_grad(axiom_grammar_.f_gate[static_cast<std::size_t>(j)],
                       cache.gates[static_cast<std::size_t>(hidden + j)], cache.c[static_cast<std::size_t>(j)],
-                      cache.f[static_cast<std::size_t>(j)], df_gate[static_cast<std::size_t>(j)], d_pre,
+                      cache.f[static_cast<std::size_t>(j)], df_gate[static_cast<std::size_t>(j)], false, d_pre,
                       d_extra);
       dgates[static_cast<std::size_t>(hidden + j)] = d_pre;
       out.dc_prev[static_cast<std::size_t>(j)] += d_extra;
 
       axiom_gate_grad(axiom_grammar_.g_gate[static_cast<std::size_t>(j)],
                       cache.gates[static_cast<std::size_t>(2 * hidden + j)], cache.h[static_cast<std::size_t>(j)],
-                      cache.g[static_cast<std::size_t>(j)], dg_gate[static_cast<std::size_t>(j)], d_pre,
+                      cache.g[static_cast<std::size_t>(j)], dg_gate[static_cast<std::size_t>(j)], true, d_pre,
                       d_extra);
       dgates[static_cast<std::size_t>(2 * hidden + j)] = d_pre;
 
       axiom_gate_grad(axiom_grammar_.o_gate[static_cast<std::size_t>(j)],
                       cache.gates[static_cast<std::size_t>(3 * hidden + j)], cache.c[static_cast<std::size_t>(j)],
-                      cache.o[static_cast<std::size_t>(j)], do_gate[static_cast<std::size_t>(j)], d_pre,
+                      cache.o[static_cast<std::size_t>(j)], do_gate[static_cast<std::size_t>(j)], false, d_pre,
                       d_extra);
       dgates[static_cast<std::size_t>(3 * hidden + j)] = d_pre;
       out.dc_prev[static_cast<std::size_t>(j)] += d_extra;

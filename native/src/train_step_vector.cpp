@@ -109,6 +109,14 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
   replay.push(H.data(), x_preprocessed, d, y_label, loss);
 
   const std::string& pred = meta->pred_label;
+  const auto label_prefix = [](const std::string& lbl) -> std::string {
+    const auto us = lbl.find('_');
+    return (us == std::string::npos) ? lbl : lbl.substr(0, us);
+  };
+  const auto same_task = [&](const std::string& a, const std::string& b) -> bool {
+    if (mem.task_prefix_protect.empty()) return true;
+    return label_prefix(a) == mem.task_prefix_protect && label_prefix(b) == mem.task_prefix_protect;
+  };
   const auto encoder_update = [&](const double* mu_true, const double* v_true, const double* mu_neg,
                                   const double* v_neg, double w) {
     if (extras != nullptr && extras->use_variational_ib_encoder) {
@@ -119,7 +127,7 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
                                    tsp.enc_lr, enc_update_count);
     }
   };
-  if (!meta->correct && pred != "__unknown__") {
+  if (!meta->correct && pred != "__unknown__" && same_task(y_label, pred)) {
     std::vector<double> mu_k;
     std::vector<double> v_k;
     std::vector<double> mu_j;
@@ -130,7 +138,8 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
     }
   }
 
-  if (meta->post_conf > kDeliberateLo && meta->post_conf < kDeliberateHi && !meta->llr_rank1.empty()) {
+  if (meta->post_conf > kDeliberateLo && meta->post_conf < kDeliberateHi && !meta->llr_rank1.empty() &&
+      same_task(meta->llr_rank0, meta->llr_rank1)) {
     std::vector<double> mu_a;
     std::vector<double> v_a;
     std::vector<double> mu_b;

@@ -54,6 +54,9 @@ struct TrainStepExtras {
   bool use_variational_ib_encoder{false};
   /// Alemi IB trade-off ``β`` in ``I(X;T) − β·I(T;Y)`` (used when ``use_variational_ib_encoder``).
   double ib_beta{kVariationalIbBetaDefault};
+  /// D16 task-sticky CL: when set (e.g. ``"iris"``), zero repulsion/attraction scales for
+  /// labels whose prefix before ``_`` does not match. Env: CYPHA_D16_TASK_STICKY=1.
+  const std::string* task_prefix_protect{nullptr};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).

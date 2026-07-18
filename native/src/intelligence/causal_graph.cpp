@@ -52,7 +52,12 @@ void CausalGraphMonitor::record_edge(std::string from, std::string to, double we
 void CausalGraphMonitor::observe_profile(const ProfileObservation& obs) {
   if (has_last_obs_) {
     const double delta_reu = obs.r_eu - last_obs_.r_eu;
-    record_edge("r_eu", "tau", clamp01(0.5 + 0.5 * delta_reu));
+    // Granger-lite lag asymmetry: prefer direction with stronger lag-1 correlation.
+    lag_tau_reu_.update(last_obs_.tau, obs.r_eu);
+    lag_reu_tau_.update(last_obs_.r_eu, obs.tau);
+    const double fwd = std::abs(lag_tau_reu_.correlation());
+    const double bwd = std::abs(lag_reu_tau_.correlation());
+    record_edge("r_eu", "tau", clamp01(std::max(0.0, bwd - fwd) + 0.5 * std::max(0.0, delta_reu)));
     record_edge("alpha", "sigma_branch", clamp01(std::abs(obs.alpha - last_obs_.alpha)));
     if (delta_reu > 0.0) {
       soft_world_.record_acquisition(last_obs_.r_eu, obs.r_eu);
@@ -105,13 +110,21 @@ void CausalGraphMonitor::run_simulation_trajectory(int n_steps, const ProfileObs
     const double r_after = std::max(0.05, r_eu - decay);
     const double resolution = std::max(0.0, r_eu - r_after);
     simulation_step(r_eu, r_after, resolution);
-    record_edge("maturation", "tau", clamp01(obs.tau * soft_world_.maturation_level()));
+    const double mat = soft_world_.maturation_level();
+    // Data-driven maturation→tau (Upgrade wave 2) instead of instantaneous product.
+    if (has_last_maturation_) {
+      maturation_tau_corr_.update(last_maturation_, obs.tau);
+    }
+    last_maturation_ = mat;
+    has_last_maturation_ = true;
+    record_edge("maturation", "tau", clamp01(std::abs(maturation_tau_corr_.correlation())));
     r_eu = r_after;
   }
 }
 
 double CausalGraphMonitor::causal_fidelity() const {
-  const OnlineCorrelation* const estimated_edges[] = {&alpha_calibration_corr_, &tau_r_eu_corr_};
+  const OnlineCorrelation* const estimated_edges[] = {&alpha_calibration_corr_, &tau_r_eu_corr_,
+                                                      &maturation_tau_corr_};
   double weighted_sum = 0.0;
   int contributing = 0;
   for (const OnlineCorrelation* corr : estimated_edges) {
@@ -169,6 +182,12 @@ nlohmann::json CausalGraphMonitor::to_json() const {
         {"alpha_calibration_n", alpha_calibration_corr_.n()},
         {"tau_r_eu_correlation", tau_r_eu_corr_.correlation()},
         {"tau_r_eu_n", tau_r_eu_corr_.n()},
+        {"maturation_tau_correlation", maturation_tau_corr_.correlation()},
+        {"maturation_tau_n", maturation_tau_corr_.n()},
+        {"lag_tau_reu_correlation", lag_tau_reu_.correlation()},
+        {"lag_reu_tau_correlation", lag_reu_tau_.correlation()},
+        {"granger_lite_delta",
+         std::abs(lag_reu_tau_.correlation()) - std::abs(lag_tau_reu_.correlation())},
         {"causal_fidelity", causal_fidelity()}}},
   };
 }

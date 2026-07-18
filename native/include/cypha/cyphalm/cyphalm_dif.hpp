@@ -59,6 +59,7 @@ class CyphaDIF {
     double kappa0_;
     double alpha0_;
     double beta0_;
+    bool use_soft_expert_updates_{false};
     bool use_kernel_llr_{false};
     double kernel_blend_{0.25};
     double kernel_lr_scale_{1.0};

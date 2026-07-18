@@ -130,6 +130,28 @@ LMCorpus from_train_eval_text(const std::string& train_text, const std::string& 
     return c;
 }
 
+fs::path resolve_repo_path(const std::string& path) {
+    if (path.empty()) {
+        return {};
+    }
+    fs::path p(path);
+    if (p.is_absolute() && fs::is_regular_file(p)) {
+        return p;
+    }
+    const fs::path under_root = fs::path(repo_root_from_native()) / p;
+    if (fs::is_regular_file(under_root)) {
+        return under_root;
+    }
+    if (fs::is_regular_file(p)) {
+        return p;
+    }
+    const fs::path under_cwd = fs::current_path() / p;
+    if (fs::is_regular_file(under_cwd)) {
+        return under_cwd;
+    }
+    return p;
+}
+
 }  // namespace
 
 bool bench_full_corpus_enabled() { return cypha::bench::bench_env_truthy("CYPHA_BENCH_FULL_CORPUS"); }
@@ -137,13 +159,16 @@ bool bench_full_corpus_enabled() { return cypha::bench::bench_env_truthy("CYPHA_
 LMCorpus load_bench_corpus(const std::string& profile, int max_chars, int vocab_size,
                            const std::string& bpe_merges, const std::string& bpe_vocab) {
     std::unique_ptr<BpeTokenizer> bpe;
-    if (!bpe_merges.empty() && !bpe_vocab.empty() &&
-        fs::is_regular_file(bpe_merges) && fs::is_regular_file(bpe_vocab)) {
-        bpe = std::make_unique<BpeTokenizer>(BpeTokenizer::load(bpe_merges, bpe_vocab));
+    const fs::path merges_path = resolve_repo_path(bpe_merges);
+    const fs::path vocab_path = resolve_repo_path(bpe_vocab);
+    if (!merges_path.empty() && !vocab_path.empty() && fs::is_regular_file(merges_path) &&
+        fs::is_regular_file(vocab_path)) {
+        bpe = std::make_unique<BpeTokenizer>(
+            BpeTokenizer::load(merges_path.string(), vocab_path.string()));
     }
     const BpeTokenizer* bpe_ptr = bpe.get();
     const fs::path root = fs::path(repo_root_from_native()) / "bench" / "data";
-    if (profile == "d17" || profile == "d21") {
+    if (profile == "d17" || profile == "d17_bpe" || profile == "d21") {
         const fs::path wt_dir = root / "wikitext2" / "wikitext-2";
         const fs::path wt_train = wt_dir / "wiki.train.tokens";
         const fs::path wt_valid = wt_dir / "wiki.valid.tokens";
@@ -179,9 +204,12 @@ LMCorpus load_corpus_file(const std::string& corpus_path, const std::string& pro
                           int vocab_size, const std::string& bpe_merges,
                           const std::string& bpe_vocab) {
     std::unique_ptr<BpeTokenizer> bpe;
-    if (!bpe_merges.empty() && !bpe_vocab.empty() &&
-        fs::is_regular_file(bpe_merges) && fs::is_regular_file(bpe_vocab)) {
-        bpe = std::make_unique<BpeTokenizer>(BpeTokenizer::load(bpe_merges, bpe_vocab));
+    const fs::path merges_path = resolve_repo_path(bpe_merges);
+    const fs::path vocab_path = resolve_repo_path(bpe_vocab);
+    if (!merges_path.empty() && !vocab_path.empty() && fs::is_regular_file(merges_path) &&
+        fs::is_regular_file(vocab_path)) {
+        bpe = std::make_unique<BpeTokenizer>(
+            BpeTokenizer::load(merges_path.string(), vocab_path.string()));
     }
     const BpeTokenizer* bpe_ptr = bpe.get();
 

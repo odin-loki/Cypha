@@ -117,6 +117,11 @@ class CausalGraphMonitor {
   bool has_last_obs_{false};
   OnlineCorrelation alpha_calibration_corr_;
   OnlineCorrelation tau_r_eu_corr_;
+  OnlineCorrelation maturation_tau_corr_;
+  OnlineCorrelation lag_tau_reu_;   // corr(tau_{t-1}, r_eu_t)
+  OnlineCorrelation lag_reu_tau_;   // corr(r_eu_{t-1}, tau_t)
+  double last_maturation_{0.0};
+  bool has_last_maturation_{false};
 };
 
 }  // namespace cypha::intelligence

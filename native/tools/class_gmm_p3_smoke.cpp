@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cypha/class_gmm.hpp"
 #include "cypha/create_model.hpp"
 #include "cypha/encoder_contrastive.hpp"
 #include "cypha/infer_cpu.hpp"
@@ -103,7 +104,7 @@ double eval_acc(cypha::CyphaInferModel& infer, const Split& sp) {
   return static_cast<double>(correct) / static_cast<double>(sp.x_te.size());
 }
 
-double run_xor_linear(int seed, bool use_gmm, int gmm_m) {
+double run_xor_linear(int seed, bool use_gmm, int gmm_m, bool warmstart) {
   constexpr int n = 4000;
   constexpr int d = 20;
   constexpr int passes = 8;
@@ -146,6 +147,24 @@ double run_xor_linear(int seed, bool use_gmm, int gmm_m) {
       cypha::dif_train_step_vector(infer, mem, replay, sp.x_tr[i].data(), d, sp.y_tr[i], 0.008, 0.05,
                                    0.008, 0.05, 15.0, tsp, rng, enc_updates, nullptr, &extras);
     }
+    // After first pass: hard-split component placement in field space (Phase C2).
+    if (use_gmm && warmstart && p == 0 && !mem.world_mu.empty()) {
+      std::vector<std::vector<double>> h_rows;
+      std::vector<int> class_k;
+      h_rows.reserve(sp.x_tr.size());
+      class_k.reserve(sp.x_tr.size());
+      for (std::size_t i = 0; i < sp.x_tr.size(); ++i) {
+        std::vector<double> h;
+        cypha::batch_encode(infer, sp.x_tr[i].data(), 1, h);
+        const auto it = mem.label_index.find(sp.y_tr[i]);
+        if (it == mem.label_index.end()) continue;
+        h_rows.push_back(std::move(h));
+        class_k.push_back(it->second);
+      }
+      cypha::class_gmm_hard_split_warmstart(mem.d_latent, mem.world_mu.data(), h_rows, class_k, mem.gmm_max_m(),
+                                            gmm_m, mem.D, mem.class_pi, mem.class_n_comp);
+      cypha::sync_infer_model_from_memory(infer, mem);
+    }
   }
   cypha::sync_infer_model_from_memory(infer, mem);
   return eval_acc(infer, sp);
@@ -185,24 +204,33 @@ int main() {
   constexpr int kGmmM = 2;
   double off_sum = 0.0;
   double on_sum = 0.0;
+  double warm_sum = 0.0;
   for (int s = 0; s < kSeeds; ++s) {
-    const double off = run_xor_linear(s, false, kGmmM);
-    const double on = run_xor_linear(s, true, kGmmM);
+    const double off = run_xor_linear(s, false, kGmmM, false);
+    const double on = run_xor_linear(s, true, kGmmM, false);
+    const double warm = run_xor_linear(s, true, kGmmM, true);
     off_sum += off;
     on_sum += on;
-    std::cerr << "  seed=" << s << " gmm_off=" << off << " gmm_on=" << on << "\n";
+    warm_sum += warm;
+    std::cerr << "  seed=" << s << " gmm_off=" << off << " gmm_on=" << on << " gmm_warm=" << warm << "\n";
   }
   const double off_mean = off_sum / static_cast<double>(kSeeds);
   const double on_mean = on_sum / static_cast<double>(kSeeds);
+  const double warm_mean = warm_sum / static_cast<double>(kSeeds);
   const double lift = on_mean - off_mean;
+  const double warm_lift = warm_mean - off_mean;
   const bool xor_target = on_mean >= 0.75;
+  const bool warm_target = warm_mean >= 0.75;
   const bool xor_lift = lift >= 0.05;
 
   std::cout << "class_gmm_p3_smoke:\n"
             << "  xor_linear_mean_off=" << off_mean << "\n"
             << "  xor_linear_mean_on=" << on_mean << "\n"
+            << "  xor_linear_mean_warm=" << warm_mean << "\n"
             << "  lift=" << lift << "\n"
+            << "  warm_lift=" << warm_lift << "\n"
             << "  xor_target_75=" << (xor_target ? "true" : "false") << "\n"
+            << "  warm_target_75=" << (warm_target ? "true" : "false") << "\n"
             << "  xor_lift_5pp=" << (xor_lift ? "true" : "false") << "\n";
 
   if (!format_roundtrip_ok()) {

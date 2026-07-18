@@ -297,6 +297,17 @@ int main(int argc, char** argv) {
         if (args.use_self_correcting_loop) {
             cfg.use_self_correcting_loop = true;
         }
+        // Expert-utilization research knobs (Upgrade wave 2) — env-gated, default off.
+        if (const char* soft = std::getenv("CYPHA_LM_SOFT_EXPERT_UPDATES"); soft && soft[0] == '1') {
+            cfg.use_soft_expert_updates = true;
+        }
+        if (const char* ent = std::getenv("CYPHA_LM_ROUTING_ENTROPY_FLOOR"); ent && ent[0] == '1') {
+            cfg.use_routing_entropy_floor = true;
+        }
+        if (const char* ne = std::getenv("CYPHA_LM_N_EXPERTS"); ne && ne[0] != '\0') {
+            const int n = std::atoi(ne);
+            if (n > 0) cfg.n_experts = n;
+        }
         if (args.ngram_position_weights) {
             cfg.ngram_position_weights = true;
         }
@@ -391,14 +402,16 @@ int main(int argc, char** argv) {
                 cfg.compress_interval = args.compress_interval;
             }
         }
-        if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
+        if ((args.profile == "d17" || args.profile == "d17_bpe") && cfg.vocab_size < 256)
+            cfg.vocab_size = 256;
         if (args.profile == "d21" && cfg.vocab_size < 256) cfg.vocab_size = 256;
         if (args.profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
 
         cypha::cyphalm::LMCorpus corpus;
         bool synthetic = false;
-        const bool full_corpus = (args.profile == "d17" || args.profile == "d21") &&
-                                 (cypha::cyphalm::bench_full_corpus_enabled() || overnight);
+        const bool full_corpus =
+            (args.profile == "d17" || args.profile == "d17_bpe" || args.profile == "d21") &&
+            (cypha::cyphalm::bench_full_corpus_enabled() || overnight);
         try {
             const int max_chars = full_corpus ? 0 : 10'000'000;
             corpus = cypha::cyphalm::load_bench_corpus(args.profile, max_chars, cfg.vocab_size,
@@ -456,6 +469,9 @@ int main(int argc, char** argv) {
             {"ngram_position_weights", cfg.ngram_position_weights},
             {"ngram_bilinear_fusion", cfg.ngram_bilinear_fusion},
             {"ngram_fusion", cfg.ngram_fusion},
+            {"n_experts", cfg.n_experts},
+            {"use_soft_expert_updates", cfg.use_soft_expert_updates},
+            {"use_routing_entropy_floor", cfg.use_routing_entropy_floor},
         };
         if (std::isnan(bpc)) out["bpc"] = nullptr;
         if (args.intelligence_profile) {

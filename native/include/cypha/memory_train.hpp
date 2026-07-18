@@ -36,6 +36,9 @@ struct CyphaDifMemoryState {
   /// Opt-in multimodal classes (default **off** — legacy single Gaussian per class).
   bool use_class_gmm{false};
   int class_gmm_m{kClassGmmDefaultM};
+  /// When non-empty, ``memory_train`` zeros update scales for labels whose prefix
+  /// (before first ``_``) does not match — task-sticky CL (D16).
+  std::string task_prefix_protect;
   int cypha_format{kCyphaFormatV3};
   std::vector<double> n_obs_buf{};
   std::vector<std::int64_t> n_correct{};

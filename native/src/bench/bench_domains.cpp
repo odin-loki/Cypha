@@ -70,6 +70,7 @@
 #include "cypha/preprocessor.hpp"
 #include "cypha/regression_stub.hpp"
 #include "cypha/replay_buffer.hpp"
+#include "cypha/rff_features.hpp"
 #include "cypha/sync_infer.hpp"
 #include "cypha/train_step_vector.hpp"
 
@@ -358,6 +359,34 @@ int curriculum_window_from_env() {
     }
 }
 
+bool d03_class_block_from_env() {
+    const std::optional<std::string> v = cypha::env_get("CYPHA_D03_CLASS_BLOCK");
+    if (!v.has_value() || v->empty()) return false;
+    return *v == "1" || *v == "true" || *v == "TRUE" || *v == "yes";
+}
+
+/// DIF-V1: group by label, shuffle block order (not arbitrary index windows).
+std::vector<int> class_block_order(const std::vector<std::string>& labels, int pass_idx) {
+    std::unordered_map<std::string, std::vector<int>> by_label;
+    for (int i = 0; i < static_cast<int>(labels.size()); ++i) {
+        by_label[labels[static_cast<std::size_t>(i)]].push_back(i);
+    }
+    std::vector<std::string> keys;
+    keys.reserve(by_label.size());
+    for (const auto& kv : by_label) keys.push_back(kv.first);
+    std::sort(keys.begin(), keys.end());
+    std::mt19937 rng = make_rng(42 + static_cast<std::uint64_t>(pass_idx) + 9000);
+    std::shuffle(keys.begin(), keys.end(), rng);
+    std::vector<int> out;
+    out.reserve(labels.size());
+    for (const std::string& k : keys) {
+        auto& idxs = by_label[k];
+        std::shuffle(idxs.begin(), idxs.end(), rng);
+        out.insert(out.end(), idxs.begin(), idxs.end());
+    }
+    return out;
+}
+
 // Hardest-first-then-windowed-random order over `tr`/`train_y` using the model's *current*
 // confidence (max softmax prob) on each row. Falls back to the pre-existing `dif_view_order`
 // shuffle when the model has not yet seen any labels (k==0, i.e. before the first train step of an
@@ -427,12 +456,17 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     const int train_n = static_cast<int>(tr.size());
     const int passes = std::max(1, regime.value("n_epochs", 1));
     const int curriculum_window = curriculum_window_from_env();
+    const bool class_block = d03_class_block_from_env();
     std::mt19937 curriculum_rng = make_rng(4242);
     for (int p = 0; p < passes; ++p) {
-        const std::vector<int> order = curriculum_window > 0
-                                            ? curriculum_view_order(infer, tr, view_schedule, p, curriculum_window,
-                                                                    curriculum_rng)
-                                            : dif_view_order(train_n, view_schedule, p);
+        std::vector<int> order;
+        if (class_block) {
+            order = class_block_order(train_y, p);
+        } else if (curriculum_window > 0) {
+            order = curriculum_view_order(infer, tr, view_schedule, p, curriculum_window, curriculum_rng);
+        } else {
+            order = dif_view_order(train_n, view_schedule, p);
+        }
         for (int idx : order) {
             cypha::dif_train_step_vector(infer, mem, replay, tr[static_cast<std::size_t>(idx)].data(), d,
                                          train_y[static_cast<std::size_t>(idx)], world_lr, delta_lr, world_lr,
@@ -463,6 +497,9 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     }
     if (curriculum_window > 0) {
         result["curriculum_window"] = curriculum_window;
+    }
+    if (class_block) {
+        result["class_block"] = true;
     }
     return result;
 }
@@ -955,6 +992,20 @@ struct OnlineRegressor {
     bool use_kernel_llr{false};
     double kernel_blend{0.5};
     double kernel_lr_scale{1.0};
+    int kernel_calib_warmup_steps{0};
+    int rff_dim{4096};
+    double rff_gamma_scale{1.0};
+    std::uint64_t kernel_seed{0};
+    std::vector<std::vector<double>> kernel_recalib_x;
+    bool kernel_recalib_done{false};
+    // Stage-2 residual RFF head (Upgrade wave 2 fork 1b): online ridge on cos-RFF(x) → residual.
+    bool use_residual_rff{false};
+    int residual_rff_dim{256};
+    double residual_rff_lr{0.02};
+    std::vector<double> residual_rff_w;  // D×d row-major
+    std::vector<double> residual_rff_b;  // D
+    std::vector<double> residual_coef;   // D
+    double residual_bias{0.0};
 };
 
 // Opt-in RFF auto-gamma kernel-LLR basis for the D14 Feynman-equations regression domain's
@@ -974,6 +1025,9 @@ struct D14KernelConfig {
     double rff_gamma_scale = 1.0;
     double kernel_blend = 0.5;
     double kernel_lr_scale = 1.0;
+    int calib_warmup_steps = 0;
+    bool residual_rff = false;
+    int residual_rff_dim = 256;
 };
 
 D14KernelConfig d14_kernel_config_from_env() {
@@ -992,6 +1046,18 @@ D14KernelConfig d14_kernel_config_from_env() {
     }
     if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_KERNEL_LR_SCALE"); v.has_value() && !v->empty()) {
         cfg.kernel_lr_scale = std::atof(v->c_str());
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_KERNEL_CALIB_WARMUP_STEPS"); v.has_value() &&
+        !v->empty()) {
+        cfg.calib_warmup_steps = std::atoi(v->c_str());
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_RESIDUAL_RFF"); v.has_value() &&
+        (*v == "1" || *v == "true" || *v == "TRUE")) {
+        cfg.residual_rff = true;
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D14_RESIDUAL_RFF_DIM"); v.has_value() &&
+        !v->empty()) {
+        cfg.residual_rff_dim = std::max(16, std::atoi(v->c_str()));
     }
     return cfg;
 }
@@ -1049,11 +1115,83 @@ OnlineRegressor make_online_regressor(int input_dim, std::uint64_t seed, const c
         r.use_kernel_llr = true;
         r.kernel_blend = kernel_cfg->kernel_blend;
         r.kernel_lr_scale = kernel_cfg->kernel_lr_scale;
+        r.kernel_calib_warmup_steps = kernel_cfg->calib_warmup_steps;
+        r.rff_dim = kernel_cfg->rff_dim;
+        r.rff_gamma_scale = kernel_cfg->rff_gamma_scale;
+        r.kernel_seed = seed;
+    }
+    if (kernel_cfg != nullptr && kernel_cfg->residual_rff) {
+        const int d_in = input_dim;
+        const int D = kernel_cfg->residual_rff_dim;
+        r.use_residual_rff = true;
+        r.residual_rff_dim = D;
+        std::mt19937 rng(static_cast<std::uint32_t>(seed ^ 0x51FF1u));
+        constexpr double kGamma = 1.0;
+        cypha::init_rff_weights(cypha::RffProjectionKind::IidGaussian, rng, kGamma, D, d_in,
+                                r.residual_rff_w, r.residual_rff_b, /*kernel_memory_scale=*/true);
+        r.residual_coef.assign(static_cast<std::size_t>(D), 0.0);
+        r.residual_bias = 0.0;
     }
     return r;
 }
 
+void residual_rff_features(const OnlineRegressor& r, const std::vector<double>& x, std::vector<double>& phi) {
+    const int D = r.residual_rff_dim;
+    const int d = static_cast<int>(x.size());
+    phi.assign(static_cast<std::size_t>(D), 0.0);
+    if (D <= 0 || r.residual_rff_w.empty() || r.residual_rff_b.size() != static_cast<std::size_t>(D)) {
+        return;
+    }
+    const double scale = std::sqrt(2.0 / static_cast<double>(D));
+    for (int i = 0; i < D; ++i) {
+        double dot = r.residual_rff_b[static_cast<std::size_t>(i)];
+        const double* row = r.residual_rff_w.data() + static_cast<std::size_t>(i * d);
+        for (int j = 0; j < d; ++j) {
+            dot += row[j] * x[static_cast<std::size_t>(j)];
+        }
+        phi[static_cast<std::size_t>(i)] = scale * std::cos(dot);
+    }
+}
+
+double residual_rff_predict(const OnlineRegressor& r, const std::vector<double>& x) {
+    if (!r.use_residual_rff || r.residual_coef.empty()) {
+        return 0.0;
+    }
+    std::vector<double> phi;
+    residual_rff_features(r, x, phi);
+    double y = r.residual_bias;
+    for (std::size_t i = 0; i < phi.size() && i < r.residual_coef.size(); ++i) {
+        y += r.residual_coef[i] * phi[i];
+    }
+    return y;
+}
+
+void residual_rff_train(OnlineRegressor& r, const std::vector<double>& x, double residual) {
+    if (!r.use_residual_rff || r.residual_coef.empty()) {
+        return;
+    }
+    std::vector<double> phi;
+    residual_rff_features(r, x, phi);
+    double pred = r.residual_bias;
+    for (std::size_t i = 0; i < phi.size(); ++i) {
+        pred += r.residual_coef[i] * phi[i];
+    }
+    const double err = residual - pred;
+    const double lr = r.residual_rff_lr;
+    r.residual_bias += lr * err;
+    for (std::size_t i = 0; i < phi.size(); ++i) {
+        r.residual_coef[i] += lr * err * phi[i];
+    }
+}
+
+void online_reg_predict_mixture(const OnlineRegressor& r, const std::vector<double>& x, double& y_hat,
+                                double& unc);
+
 void online_reg_train_step(OnlineRegressor& r, const std::vector<double>& x, double y) {
+    if (r.use_kernel_llr && r.kernel_mem != nullptr && r.kernel_calib_warmup_steps > 0 &&
+        !r.kernel_recalib_done && r.kernel_recalib_x.size() < 256) {
+        r.kernel_recalib_x.push_back(x);
+    }
     ++r.total_steps;
     const int d = static_cast<int>(x.size());
     const int k_target = std::max(r.n_experts_cap, 4);
@@ -1076,9 +1214,35 @@ void online_reg_train_step(OnlineRegressor& r, const std::vector<double>& x, dou
     }
     auto& st = r.experts[expert];
     cypha::regression::expert_target_ema_step(st.mu, st.var_ema, st.n_updates, &y, 1, r.target_lr);
+
+    if (r.use_kernel_llr && r.kernel_mem != nullptr && !r.kernel_recalib_done && r.kernel_calib_warmup_steps > 0 &&
+        r.total_steps == r.kernel_calib_warmup_steps) {
+        const int kdim = r.infer.d_latent;
+        if (kdim > 0 && !r.kernel_recalib_x.empty()) {
+            const std::size_t n_calib = std::min<std::size_t>(r.kernel_recalib_x.size(), 256);
+            const std::vector<double> calib_flat = flatten_rowmajor(
+                std::vector<std::vector<double>>(r.kernel_recalib_x.begin(),
+                                                 r.kernel_recalib_x.begin() + static_cast<std::ptrdiff_t>(n_calib)));
+            std::vector<double> calib_rowmajor;
+            cypha::batch_encode(r.infer, calib_flat.data(), static_cast<int>(n_calib), calib_rowmajor);
+            const int n_calib_rows =
+                static_cast<int>(calib_rowmajor.size() / static_cast<std::size_t>(kdim));
+            const double gamma = cypha::KernelMemory::auto_gamma_median_heuristic(
+                calib_rowmajor.data(), n_calib_rows, kdim, r.rff_gamma_scale, 256, r.kernel_seed);
+            r.kernel_mem = std::make_unique<cypha::KernelMemory>(
+                cypha::KernelMemory::make_rff(kdim, r.rff_dim, gamma, r.kernel_seed));
+        }
+        r.kernel_recalib_done = true;
+    }
+    if (r.use_residual_rff) {
+        double y_hat = 0.0;
+        double unc = 0.0;
+        online_reg_predict_mixture(r, x, y_hat, unc);
+        residual_rff_train(r, x, y - y_hat);
+    }
 }
 
-void online_reg_predict(const OnlineRegressor& r, const std::vector<double>& x, double& y_hat, double& unc) {
+void online_reg_predict_mixture(const OnlineRegressor& r, const std::vector<double>& x, double& y_hat, double& unc) {
     std::vector<double> llr;
     if (r.use_kernel_llr && r.kernel_mem != nullptr) {
         std::vector<double> h;
@@ -1111,6 +1275,13 @@ void online_reg_predict(const OnlineRegressor& r, const std::vector<double>& x, 
     }
     cypha::regression::predict_mixture_scalar(probs.data(), mu.data(), var.data(), static_cast<std::size_t>(k), y_hat,
                                               unc);
+}
+
+void online_reg_predict(const OnlineRegressor& r, const std::vector<double>& x, double& y_hat, double& unc) {
+    online_reg_predict_mixture(r, x, y_hat, unc);
+    if (r.use_residual_rff) {
+        y_hat += residual_rff_predict(r, x);
+    }
 }
 
 Json reg_metrics_native(const OnlineRegressor& r, const std::vector<std::vector<double>>& xs,
@@ -1152,6 +1323,9 @@ Json reg_metrics_native(const OnlineRegressor& r, const std::vector<std::vector<
             double u = 0.0;
             cypha::regression::predict_mixture_scalar(probs.data() + static_cast<std::size_t>(i * k), mu.data(),
                                                       var.data(), static_cast<std::size_t>(k), y_hat, u);
+            if (r.use_residual_rff) {
+                y_hat += residual_rff_predict(r, xs[static_cast<std::size_t>(i)]);
+            }
             preds.push_back(y_hat);
             unc.push_back(u);
         }
@@ -1894,6 +2068,10 @@ Json run_d14() {
         exp14a["rff_gamma_scale"] = d14_kernel_cfg.rff_gamma_scale;
         exp14a["kernel_blend"] = d14_kernel_cfg.kernel_blend;
     }
+    exp14a["residual_rff"] = d14_kernel_cfg.residual_rff;
+    if (d14_kernel_cfg.residual_rff) {
+        exp14a["residual_rff_dim"] = d14_kernel_cfg.residual_rff_dim;
+    }
     const Json experiments{
         {"14A_feynman_all_equations", exp14a},
         {"14B_extrapolation_uncertainty",
@@ -2110,7 +2288,17 @@ Json run_d16_ewc_probe() {
     };
 
     const int steps = cypha::bench::bench_scale(3000, 800);
+    const bool task_sticky = []() {
+        const std::optional<std::string> v = cypha::env_get("CYPHA_D16_TASK_STICKY");
+        if (!v.has_value()) return false;
+        return *v == "1" || *v == "true" || *v == "TRUE" || *v == "yes";
+    }();
     auto train_task = [&](OnlineClassifier& clf, const MultitaskBundle& task, cypha::TrainStepExtras* extras) {
+        if (task_sticky) {
+            clf.mem.task_prefix_protect = task.name;
+        } else {
+            clf.mem.task_prefix_protect.clear();
+        }
         std::vector<int> order(static_cast<int>(task.train_x.size()));
         for (int i = 0; i < static_cast<int>(order.size()); ++i) {
             order[static_cast<std::size_t>(i)] = i;
@@ -2126,6 +2314,7 @@ Json run_d16_ewc_probe() {
                                                clf.delta_lr, clf.world_lr, clf.delta_lr, clf.ood_sigma, clf.tsp,
                                                clf.rng, clf.enc_updates, nullptr, extras);
         }
+        clf.mem.task_prefix_protect.clear();
     };
     const MultitaskBundle* iris = nullptr;
     const MultitaskBundle* wine = nullptr;
@@ -2186,6 +2375,7 @@ Json run_d16_ewc_probe() {
         {"ewc", ewc_row},
         {"ewc_reduces_forgetting", ewc_forgetting <= baseline_forgetting},
         {"forgetting_delta", baseline_forgetting - ewc_forgetting},
+        {"task_sticky", task_sticky},
     };
 }
 
@@ -2576,6 +2766,74 @@ Json run_d16() {
         }
     }
 
+    // 16I DIF-V3 replay-interleave: round-robin stream with elevated replay_ratio.
+    // Index-reorder (16G) is a closed negative; this probes the existing ReplayBuffer path.
+    Json exp16i;
+    {
+        const int max_steps = cypha::bench::bench_scale(3000, 1500);
+        const int warm_steps = std::max(1, max_steps / 6);
+        auto forgetting_with_replay = [&](double replay_ratio, std::uint64_t seed) {
+            OnlineClassifier clf = make_multitask_clf(seed);
+            clf.tsp.replay_ratio = replay_ratio;
+            const MultitaskBundle* iris = nullptr;
+            for (const auto& t : tasks) {
+                if (t.name == "iris") iris = &t;
+            }
+            std::vector<int> warm_order(static_cast<int>(iris->train_x.size()));
+            for (int i = 0; i < static_cast<int>(warm_order.size()); ++i) warm_order[static_cast<std::size_t>(i)] = i;
+            std::shuffle(warm_order.begin(), warm_order.end(), make_rng(seed + 1));
+            for (int k = 0; k < std::min(warm_steps, static_cast<int>(warm_order.size())); ++k) {
+                const int i = warm_order[static_cast<std::size_t>(k)];
+                const auto x = pad_to_max(iris->train_x[static_cast<std::size_t>(i)], max_dim);
+                (void)online_clf_train_step(clf, x, "iris_" + iris->train_y[static_cast<std::size_t>(i)]);
+            }
+            const double acc_before = eval_task(clf, *iris);
+            int step = 0;
+            std::unordered_map<std::string, std::size_t> cursors;
+            while (step < max_steps - warm_steps) {
+                for (const auto& t : tasks) {
+                    if (step >= max_steps - warm_steps) break;
+                    const std::size_t i = cursors[t.name]++ % t.train_x.size();
+                    const auto x = pad_to_max(t.train_x[i], max_dim);
+                    (void)online_clf_train_step(clf, x, t.name + "_" + t.train_y[i]);
+                    ++step;
+                }
+            }
+            cypha::sync_infer_model_from_memory(clf.infer, clf.mem);
+            const double acc_after = eval_task(clf, *iris);
+            Json per_task = Json::object();
+            double mean_acc = 0.0;
+            for (const auto& t : tasks) {
+                const double a = eval_task(clf, t);
+                per_task[t.name] = a;
+                mean_acc += a;
+            }
+            mean_acc /= static_cast<double>(std::max<std::size_t>(1, tasks.size()));
+            return Json{
+                {"replay_ratio", replay_ratio},
+                {"task_a_accuracy_before", acc_before},
+                {"task_a_accuracy_after", acc_after},
+                {"forgetting_score", (acc_before - acc_after) / std::max(acc_before, 1e-6)},
+                {"mean_task_accuracy", mean_acc},
+                {"per_task_accuracy", per_task},
+            };
+        };
+        const Json rr0 = forgetting_with_replay(0.0, kBenchSeed + 50);
+        const Json rr22 = forgetting_with_replay(0.22, kBenchSeed + 51);
+        const Json rr50 = forgetting_with_replay(0.5, kBenchSeed + 52);
+        exp16i = Json{
+            {"max_steps", max_steps},
+            {"replay_ratio_0", rr0},
+            {"replay_ratio_0_22", rr22},
+            {"replay_ratio_0_50", rr50},
+            {"forgetting_delta_0_22",
+             rr22["forgetting_score"].get<double>() - rr0["forgetting_score"].get<double>()},
+            {"forgetting_delta_0_50",
+             rr50["forgetting_score"].get<double>() - rr0["forgetting_score"].get<double>()},
+            {"note", "DIF-V3 replay-interleave; negative delta = reduced forgetting vs RR"},
+        };
+    }
+
     const Json experiments{
         {"16A_task_discovery", exp16a},
         {"16B_forgetting_resistance", exp16b},
@@ -2584,6 +2842,7 @@ Json run_d16() {
         {"16F_per_task_models", exp16f},
         {"16G_view_streams", exp16g},
         {"16H_ewc_overlay", exp16h},
+        {"16I_replay_interleave", exp16i},
         {"backend", "cypha_core"},
     };
     cypha::bench::finalize_domain("d16", experiments);
