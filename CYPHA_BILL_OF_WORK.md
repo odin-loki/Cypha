@@ -105,7 +105,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ### P6 — ECG / temporal — stale claim retired
 - [x] D10A **60.67%**; not `CellAISSM` path ([`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md))
-- [~] Optional: push D10 >90% with real ECG5000 — data unblocked (**85.96%** D10A); >90% still open — [`D10_ECG5000_REAL_DATA_2026-07-18.md`](docs/reports/D10_ECG5000_REAL_DATA_2026-07-18.md)
+- [x] Optional: push D10 >90% with real ECG5000 — **90.11%** D10A default (`1c22165`) — [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
 
 ---
 
@@ -159,7 +159,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 - [x] `paper/CyphaLM_paper.md` rewritten (`e9ac580`)
 - [x] Narrative reconciliation vs lock (§0.5 BPC pin — canonical **2.873**, historical sweeps labeled)
-- [~] Submit (2027 Q1 target) — figures + bibliography + `paper/arxiv_bundle/` ready; venue/arXiv upload still human
+- [~] Submit (2027 Q1 target) — figures + bibliography + `paper/arxiv_bundle/` (MD/HTML/PDF) ready; venue/arXiv upload still human
 
 ---
 
@@ -174,10 +174,10 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** human-only — venue/arXiv upload; optional LaTeX PDF / 300k H15 / D10>90% features  
-**Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`D10_ECG5000_REAL_DATA_2026-07-18.md`](docs/reports/D10_ECG5000_REAL_DATA_2026-07-18.md)
+**Active plan:** human-only — venue/arXiv upload; optional 300k H15  
+**Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
 2. ~~Phase E release~~ — `v2.3.24` assets live (MSVC Windows + Linux tar/AppImage)
-3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human, 2027 Q1; HTML ready, PDF needs LaTeX)
-4. Optional — 300k H15; D10 feature pass for >90%; MiKTeX/`pdflatex` for PDF
+3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human, 2027 Q1; MD/HTML/PDF ready)
+4. Optional — 300k H15 re-row

@@ -8,6 +8,13 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Fixed
+- **`native_rest_schema_contract` (Linux):** `ChildProcess` is now move-only so assigning the spawned `cypha_rest` no longer kills the server before `/health` (was flaky `server did not become ready` at ~15s).
+
+### Added
+- **D10A ECG5000 >90%:** enriched temporal features + 44 passes → **90.11%** default (`CYPHA_D10_ECG_ENRICH=0` keeps legacy 85.96%).
+- **Paper PDF:** `paper/arxiv_bundle/CyphaLM_paper.pdf` (pandoc + XeLaTeX).
+
 ### Changed
 - **Windows toolchain / CI:** blocking `mingw_cross` job replaced by `windows_msvc` (native MSVC Release on `windows-latest`). Release zip is packaged via `scripts/package_release_windows.ps1` from an MSVC build; MinGW cross-compile is no longer a release or CI gate.
 

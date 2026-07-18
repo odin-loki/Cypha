@@ -42,7 +42,22 @@ std::string quote_arg(const std::string& s) {
 struct ChildProcess {
   intptr_t pid{-1};
 
-  ~ChildProcess() {
+  ChildProcess() = default;
+  ChildProcess(const ChildProcess&) = delete;
+  ChildProcess& operator=(const ChildProcess&) = delete;
+  ChildProcess(ChildProcess&& other) noexcept : pid(other.pid) { other.pid = -1; }
+  ChildProcess& operator=(ChildProcess&& other) noexcept {
+    if (this != &other) {
+      reset();
+      pid = other.pid;
+      other.pid = -1;
+    }
+    return *this;
+  }
+
+  ~ChildProcess() { reset(); }
+
+  void reset() {
     if (pid > 0) {
       HANDLE proc = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
       if (proc != nullptr) {
@@ -95,10 +110,26 @@ ChildProcess spawn_process(const fs::path& exe, const std::vector<std::string>& 
 struct ChildProcess {
   pid_t pid{-1};
 
-  ~ChildProcess() {
+  ChildProcess() = default;
+  ChildProcess(const ChildProcess&) = delete;
+  ChildProcess& operator=(const ChildProcess&) = delete;
+  ChildProcess(ChildProcess&& other) noexcept : pid(other.pid) { other.pid = -1; }
+  ChildProcess& operator=(ChildProcess&& other) noexcept {
+    if (this != &other) {
+      reset();
+      pid = other.pid;
+      other.pid = -1;
+    }
+    return *this;
+  }
+
+  ~ChildProcess() { reset(); }
+
+  void reset() {
     if (pid > 0) {
       kill(pid, SIGTERM);
       waitpid(pid, nullptr, 0);
+      pid = -1;
     }
   }
 };
@@ -228,7 +259,8 @@ void require_exact_keys(const json& j, const std::vector<std::string>& keys, con
 }
 
 void wait_for_health(httplib::Client& cli) {
-  for (int i = 0; i < 60; ++i) {
+  // Up to ~60s: model preload can be slow under CI load after a long CTest suite.
+  for (int i = 0; i < 240; ++i) {
     auto res = cli.Get("/health");
     if (res && res->status == 200) {
       return;

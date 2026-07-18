@@ -2223,7 +2223,7 @@ else()
       --build-dir "${CMAKE_CURRENT_BINARY_DIR}"
   )
 endif()
-set_tests_properties(native_rest_schema_contract PROPERTIES RUN_SERIAL TRUE)
+set_tests_properties(native_rest_schema_contract PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
 
 if(TARGET experiment_db_smoke)
   add_test(
