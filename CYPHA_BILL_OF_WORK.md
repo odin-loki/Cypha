@@ -7,7 +7,7 @@
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete).
 **Repo state as of this update (2026-07-18):** Continuum closed —
 [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md). **~160 CTests**
-blocking gate (Linux + `windows_msvc`); release **v2.3.24**; **300k overnight COMPLETE** — lock `a552aee` — [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md).
+blocking gate (Linux + `windows_msvc`); release **v2.3.25** (One Cypha); **300k overnight COMPLETE** — lock `a552aee` — [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md).
 
 ---
 
@@ -66,6 +66,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | [x] 0.1 | **300k production overnight** to completion | H22 @ 25/25 (`2026-07-17T15:39:44Z`) | [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md) |
 | [x] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Done; lock `a552aee` (2026-07-18 06:47 local, exit=0) | Phase 18, 24 |
 | [x] 0.3 | Publish release `v2.3.24` | **Done** — commits pushed; release https://github.com/odin-loki/Cypha/releases/tag/v2.3.24 (git cred API; `gh` CLI still lacks `read:org`) | Phase 15, 19 |
+| [x] 0.6 | Publish release `v2.3.25` | **Done** — One Cypha cutover; tag at commit `5efc585`; CI assets shipped — [`RELEASE_V2_3_25_2026-07-18.md`](docs/reports/RELEASE_V2_3_25_2026-07-18.md) | Phase F |
 | [x] 0.4 | Validate **d38** overnight certificate (domain + CTest in tree) | **PASS** `overnight_certificate_ready` vs lock `a552aee` — [`D38_STATUS_2026-07-18.md`](docs/reports/D38_STATUS_2026-07-18.md) | Phase 24 |
 | [x] 0.5 | Reconcile three 300k hybrid BPC pins (2.873 / 2.892 / 2.897) | Canonical **2.873** `b0d39e7` | [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 
@@ -158,7 +159,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 - [x] `paper/CyphaLM_paper.md` rewritten (`e9ac580`)
 - [x] Narrative reconciliation vs lock (§0.5 BPC pin — canonical **2.873**, historical sweeps labeled)
-- [~] Submit (2027 Q1 target) — bundle ready (MD/HTML/PDF/`abstract.txt`/`metadata.yaml`/`RESULTS_ATTEST.md`); also on release as `cypha-2.3.24-arxiv-bundle.zip`; **authenticated arXiv upload still human**
+- [~] Submit (2027 Q1 target) — bundle ready (MD/HTML/PDF/`abstract.txt`/`metadata.yaml`/`RESULTS_ATTEST.md`); also on release as `cypha-2.3.25-arxiv-bundle.zip`; **authenticated arXiv upload still human**
 
 ---
 
@@ -177,7 +178,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 **Evidence:** [`QUALITY_RECIPE_WAVE2_2026-07-18.md`](docs/reports/QUALITY_RECIPE_WAVE2_2026-07-18.md), [`ROADMAP_EXECUTION_LEDGER_2026-07-18.md`](docs/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md), [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
-2. ~~Phase E release~~ — `v2.3.24` assets live (MSVC Windows + Linux tar/AppImage)
-3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human; MD/HTML/PDF + `abstract.txt` / `metadata.yaml` ready)
+2. ~~Phase E release~~ — `v2.3.25` assets live (MSVC Windows + Linux tar/AppImage; One Cypha cutover)
+3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human; MD/HTML/PDF + `abstract.txt` / `metadata.yaml` ready; `cypha-2.3.25-arxiv-bundle.zip` on release)
 4. ~~Optional 300k H15~~ — done (**5.262** BPC; not a promote)
 

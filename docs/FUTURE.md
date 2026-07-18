@@ -106,7 +106,7 @@ Experiments panel **"Compare selected runs"** overlays `metrics_history` loss cu
 
 Goal: a single distributable executable (`cypha_qt_shell`) with no external runtime dependencies.
 
-**Status (2026-07-18): SHIPPED** — release **v2.3.24** includes packaging; scripts below are the maintained workflow.
+**Status (2026-07-18): SHIPPED** — release **v2.3.25** (One Cypha) includes packaging; scripts below are the maintained workflow.
 
 **Linux AppImage:**
 1. Build with `DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON`.
@@ -307,7 +307,7 @@ Two composed workstreams (neither replaces the other):
 | **Now — shipped** | Auto-gamma RFF — 0b | Native fit + Qt + bench |
 | **Now — shipped** | D10/D17 CellAI SSM — 0c | D10: **90.11%** ECG5000 (2026-07-18); hybrid D17 **2.873 BPC** |
 | **Now — shipped** | Qt UX 2a–2e; minimal Web UI — 4 | Threaded train, charts, compare runs, dark theme, REST SPA |
-| **Shipped (v2.3.24)** | Packaged AppImage / Windows bundle — 3 | `packaging/` scripts + release bundles |
+| **Shipped (v2.3.25)** | Packaged AppImage / Windows bundle — 3 | `packaging/` scripts + release bundles (One Cypha) |
 | **Done (policy)** | CUDA local-only validation — 1 | No hosted GPU CI; Linux CTest + `windows_msvc`; MinGW not a gate |
 | **Human-only** | Paper arXiv upload | `arxiv_bundle` ready — see [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) |
 | **2–4 months** | Multi-model `cypha_rest` — 5 | Deployment |

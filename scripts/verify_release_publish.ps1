@@ -2,11 +2,11 @@
 # Does not call gh; authenticate manually before a real publish:
 #   gh auth login
 #   gh auth status
-# Then: pwsh -File scripts/publish_release.ps1 -Tag v2.3.20
+# Then: pwsh -File scripts/publish_release.ps1 -Tag v2.3.25
 #
 # Usage:
 #   pwsh -File scripts/verify_release_publish.ps1
-#   pwsh -File scripts/verify_release_publish.ps1 -BuildDir native/build -Tag v2.3.20
+#   pwsh -File scripts/verify_release_publish.ps1 -BuildDir native/build -Tag v2.3.25
 #   pwsh -File scripts/verify_release_publish.ps1 -AllowPending
 param(
     [string]$BuildDir = "native/build",
@@ -16,7 +16,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
-$DEFAULT_TAG = "v2.3.20"
+$DEFAULT_TAG = "v2.3.25"
 $PRODUCTION_N_TRAIN_MIN = 300000
 
 $validateCompleteScript = Join-Path $PSScriptRoot "validate_production_complete.ps1"

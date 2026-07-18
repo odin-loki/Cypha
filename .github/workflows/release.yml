@@ -9,6 +9,7 @@
 #   cypha-<version>-linux-x86_64.tar.gz
 #   cypha-<version>-linux-x86_64.AppImage
 #   cypha-<version>-windows-x86_64.zip
+#   cypha-<version>-arxiv-bundle.zip
 #
 # Phase 7 (v2.3.7+): maintainer may also attach bench/BASELINE_LOCK.json snapshot
 # or overnight result JSON via scripts/publish_release.ps1 after local gh auth.
@@ -218,6 +219,20 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # Replaces maintainer manual `Compress-Archive paper/arxiv_bundle/*` attach after tag publish.
+      - name: Package arXiv paper bundle
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUNDLE_DIR="paper/arxiv_bundle"
+          test -d "$BUNDLE_DIR" || { echo "ERROR: missing $BUNDLE_DIR"; exit 1; }
+          if ! test -f "$BUNDLE_DIR/CyphaLM_paper.pdf" && ! test -f "$BUNDLE_DIR/CyphaLM_paper.md"; then
+            echo "ERROR: $BUNDLE_DIR must contain CyphaLM_paper.pdf and/or CyphaLM_paper.md"
+            exit 1
+          fi
+          mkdir -p dist
+          (cd "$BUNDLE_DIR" && zip -r "../../dist/cypha-${VERSION}-arxiv-bundle.zip" .)
+          test -f "dist/cypha-${VERSION}-arxiv-bundle.zip"
+
       - name: List artifacts
         run: find dist -type f | sort
 
@@ -248,6 +263,7 @@ jobs:
             dist/cypha-*-linux-x86_64.tar.gz
             dist/cypha-*-linux-x86_64.AppImage
             dist/cypha-*-windows-x86_64.zip
+            dist/cypha-*-arxiv-bundle.zip
           body: |
             ## Cypha ${{ github.ref_name }} — native C++ framework
 

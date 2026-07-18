@@ -344,7 +344,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **In-flight migrate:** **`scripts/migrate_inflight_overnight_artifacts.ps1`** — merge repo-root **`results/`** spill into **`bench/results/cell_sweep/`**; chained from **`run_post_overnight.ps1`** (`-DryRun` preview unless **`-SkipMigrate`**).
 - **Local validate env var:** **`CYPHA_VALIDATE_LOCK_REFRESH=1`** on **`cypha_native_validate_all.ps1`** runs d37 when profile exists.
 - **Offline release notes:** **`publish_release.ps1 -NotesPath`** for offline **`gh release create`** workflow.
-- **CI:** blocking gates **Linux CTest** + **`windows_msvc`** (~**160 CTests** — see `scripts/cypha_native_validate_all.ps1`). Production overnight **complete** (lock `a552aee`); release **v2.3.24** assets live. Remaining human step: arXiv upload from `paper/arxiv_bundle/`.
+- **CI:** blocking gates **Linux CTest** + **`windows_msvc`** (~**160 CTests** — see `scripts/cypha_native_validate_all.ps1`). Production overnight **complete** (lock `a552aee`); release **v2.3.25** (One Cypha) assets live. Remaining human step: arXiv upload from `paper/arxiv_bundle/`.
 
 ### Phase 24 — overnight completion certificate gate (v2.3.24) — shipped
 
@@ -353,7 +353,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **Variant stall detector:** **`scripts/watch_production_overnight.ps1`** — **`-StallMinutes`**, **`-LogFile`** append for **STALL_WARNING** when variant count unchanged while overnight running.
 - **Local validate env var:** **`CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`** on **`cypha_native_validate_all.ps1`** runs d38 when profile exists.
 - **Lock commit:** production overnight lock merged at **`a552aee`** — D17 hybrid **2.873 BPC** pin; overnight run **2.864 BPC** (historical).
-- **CI:** blocking gate **116 CTests** (+1 d38 smoke). Release **v2.3.24** shipped; packaging complete. Paper **`arxiv_bundle`** ready — human arXiv upload is the remaining product submit step.
+- **CI:** blocking gate **116 CTests** (+1 d38 smoke). Release **v2.3.25** (One Cypha) shipped; packaging complete. Paper **`arxiv_bundle`** ready — human arXiv upload is the remaining product submit step.
 
 ---
 
@@ -587,7 +587,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 2026 Q4 — Multi-view online training Phase 2 D16/DIF
 2026 Q3 — Priority 5: EWC D16B scoping shipped (2026-07-12) — modest gain 0.135→0.108; shared-model CL remains open
 2026 Q3 — D10 re-eval: done — **90.11%** on real ECG5000 (2026-07-18); not an SSM issue
-2026 Q3 — Release v2.3.24 shipped; paper arxiv_bundle ready — human arXiv upload only
+2026 Q3 — Release v2.3.25 (One Cypha) shipped; paper arxiv_bundle ready — human arXiv upload only
 ```
 
 ---

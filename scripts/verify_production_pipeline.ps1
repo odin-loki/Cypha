@@ -15,7 +15,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
-$DEFAULT_TAG = "v2.3.22"
+$DEFAULT_TAG = "v2.3.25"
 $PRODUCTION_N_TRAIN_MIN = 300000
 
 $validateCompleteScript = Join-Path $PSScriptRoot "validate_production_complete.ps1"
