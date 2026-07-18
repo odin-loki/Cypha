@@ -66,7 +66,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 |---|------|--------|--------|
 | [x] 0.1 | **300k production overnight** to completion | H22 @ 25/25 (`2026-07-17T15:39:44Z`) | [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md) |
 | [x] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Done; lock `a552aee` (2026-07-18 06:47 local, exit=0) | Phase 18, 24 |
-| [ ] 0.3 | `gh auth login` + `publish_release.ps1` | **Blocked** — `gh auth status`: not logged in (agent dry-run needs `native/build`) | Phase 15, 19 |
+| [x] 0.3 | Publish release `v2.3.24` | **Done** — commits pushed; release https://github.com/odin-loki/Cypha/releases/tag/v2.3.24 (git cred API; `gh` CLI still lacks `read:org`) | Phase 15, 19 |
 | [x] 0.4 | Validate **d38** overnight certificate (domain + CTest in tree) | **PASS** `overnight_certificate_ready` vs lock `a552aee` — [`D38_STATUS_2026-07-18.md`](docs/reports/D38_STATUS_2026-07-18.md) | Phase 24 |
 | [x] 0.5 | Reconcile three 300k hybrid BPC pins (2.873 / 2.892 / 2.897) | Canonical **2.873** `b0d39e7` | [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 
@@ -178,6 +178,6 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 **Evidence:** [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md), [`MATH_OPEN_ITEMS_2026-07-18.md`](docs/reports/MATH_OPEN_ITEMS_2026-07-18.md), [`PHASE_F_PAPER_CLOSEOUT_2026-07-18.md`](docs/reports/PHASE_F_PAPER_CLOSEOUT_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
-2. Phase E — **`gh auth login`** then `publish_release.ps1` (only remaining blocker; dry-run already OK)
+2. ~~Phase E release~~ — `v2.3.24` published; `main` pushed
 3. Phase F submit — venue/arXiv upload (human, 2027 Q1)
-4. Optional future — math overnight recipe redesign (not preset promotion); residual RFF full-tier D14
+4. Optional future — math overnight recipe redesign; residual RFF full-tier D14; `gh auth login` for full CLI scopes
