@@ -1,11 +1,14 @@
 #include "cypha/bench/bench_encoder_timeseries.hpp"
 
 #include "cypha/bench/bench_paths.hpp"
+#include "cypha/env.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <numeric>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -178,6 +181,79 @@ std::vector<float> TimeSeriesEncoder::encode_series(const std::vector<double>& s
     std::vector<double> padded = series;
     padded.resize(static_cast<std::size_t>(window_size_), series.empty() ? 0.0 : series.back());
     return encode_window(padded);
+}
+
+void zscore_series_inplace(std::vector<double>& series) {
+    if (series.empty()) return;
+    double sum = 0.0;
+    for (double v : series) sum += v;
+    const double mean = sum / static_cast<double>(series.size());
+    double var_acc = 0.0;
+    for (double v : series) {
+        const double d = v - mean;
+        var_acc += d * d;
+    }
+    double stdv = std::sqrt(var_acc / static_cast<double>(series.size()));
+    if (stdv < 1e-12) stdv = 1.0;
+    for (double& v : series) v = (v - mean) / stdv;
+}
+
+std::vector<double> series_first_diff(const std::vector<double>& series) {
+    if (series.size() < 2) return {};
+    std::vector<double> out(series.size() - 1);
+    for (std::size_t i = 1; i < series.size(); ++i) {
+        out[i - 1] = series[i] - series[i - 1];
+    }
+    return out;
+}
+
+D10EcgFeatureConfig d10_ecg_feature_config_from_env(const std::string& data_source) {
+    D10EcgFeatureConfig cfg;
+    if (bench_env_truthy("CYPHA_D10_ECG_ENRICH")) {
+        cfg.enrich = true;
+    } else if (const std::optional<std::string> off = cypha::env_get("CYPHA_D10_ECG_ENRICH");
+               off.has_value() && !off->empty() && (*off == "0" || *off == "false" || *off == "False")) {
+        cfg.enrich = false;
+    } else {
+        cfg.enrich = (data_source == "ecg5000");
+    }
+    if (!cfg.enrich) return cfg;
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D10_ECG_ZSCORE"); v.has_value() && !v->empty()) {
+        cfg.zscore_series = bench_env_truthy("CYPHA_D10_ECG_ZSCORE");
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D10_ECG_DIFF"); v.has_value() && !v->empty()) {
+        cfg.include_diff = bench_env_truthy("CYPHA_D10_ECG_DIFF");
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D10_ECG_FULL_WINDOW"); v.has_value() && !v->empty()) {
+        cfg.full_window = bench_env_truthy("CYPHA_D10_ECG_FULL_WINDOW");
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D10_ECG_STANDARDIZE"); v.has_value() && !v->empty()) {
+        cfg.standardize_features = bench_env_truthy("CYPHA_D10_ECG_STANDARDIZE");
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D10_ECG_N_FFT"); v.has_value() && !v->empty()) {
+        cfg.n_fft = std::max(4, std::atoi(v->c_str()));
+    }
+    if (const std::optional<std::string> v = cypha::env_get("CYPHA_D10_TRAIN_PASSES"); v.has_value() && !v->empty()) {
+        cfg.train_passes = std::max(1, std::atoi(v->c_str()));
+    }
+    return cfg;
+}
+
+std::vector<float> encode_ecg_series(const TimeSeriesEncoder& enc, const std::vector<double>& series,
+                                     const D10EcgFeatureConfig& cfg) {
+    if (!cfg.enrich) return enc.encode_series(series);
+    std::vector<double> work = series;
+    if (cfg.zscore_series) zscore_series_inplace(work);
+    const auto raw = enc.encode_series(work);
+    if (!cfg.include_diff) return raw;
+    const std::vector<double> diff = series_first_diff(work);
+    if (diff.empty()) return raw;
+    const auto diff_feat = enc.encode_series(diff);
+    std::vector<float> out;
+    out.reserve(raw.size() + diff_feat.size());
+    out.insert(out.end(), raw.begin(), raw.end());
+    out.insert(out.end(), diff_feat.begin(), diff_feat.end());
+    return out;
 }
 
 EcgSplit load_ecg5000(std::uint64_t seed) {

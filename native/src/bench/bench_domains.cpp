@@ -3179,31 +3179,45 @@ Json run_d10_experiment_a() {
     const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
     const cypha::bench::ProfileJson regime = cypha::bench::classification_params(&profile);
     const auto ecg = cypha::bench::load_ecg5000(kBenchSeed);
-    const int win = std::min(32, static_cast<int>(ecg.x_train.front().size()));
-    cypha::bench::TimeSeriesEncoder enc(win, 16);
+    const cypha::bench::D10EcgFeatureConfig feat_cfg = cypha::bench::d10_ecg_feature_config_from_env(ecg.source);
+    const int series_len = ecg.x_train.empty() ? 140 : static_cast<int>(ecg.x_train.front().size());
+    const int win = feat_cfg.enrich && feat_cfg.full_window ? series_len : std::min(32, series_len);
+    const int n_fft = feat_cfg.enrich ? feat_cfg.n_fft : 16;
+    cypha::bench::TimeSeriesEncoder enc(win, n_fft);
     std::vector<std::vector<double>> xtr;
     std::vector<std::string> ytr;
     std::vector<std::vector<double>> xte;
     std::vector<std::string> yte;
     for (std::size_t i = 0; i < ecg.x_train.size(); ++i) {
-        const auto feat = enc.encode_series(ecg.x_train[i]);
+        const auto feat = cypha::bench::encode_ecg_series(enc, ecg.x_train[i], feat_cfg);
         std::vector<double> row(feat.size());
         for (std::size_t j = 0; j < feat.size(); ++j) row[j] = static_cast<double>(feat[j]);
         xtr.push_back(std::move(row));
         ytr.push_back(std::to_string(ecg.y_train[i]));
     }
     for (std::size_t i = 0; i < ecg.x_test.size(); ++i) {
-        const auto feat = enc.encode_series(ecg.x_test[i]);
+        const auto feat = cypha::bench::encode_ecg_series(enc, ecg.x_test[i], feat_cfg);
         std::vector<double> row(feat.size());
         for (std::size_t j = 0; j < feat.size(); ++j) row[j] = static_cast<double>(feat[j]);
         xte.push_back(std::move(row));
         yte.push_back(std::to_string(ecg.y_test[i]));
     }
+    if (feat_cfg.enrich && feat_cfg.standardize_features) {
+        standardize_train_test(xtr, xte);
+    }
+    const int passes = feat_cfg.enrich ? feat_cfg.train_passes : 8;
     OnlineClassifier clf = make_online_classifier(static_cast<int>(xtr.front().size()), kBenchSeed,
                                                   regime.value("enc_lr", 0.002), regime);
-    train_classifier_online(clf, xtr, ytr, 8, kBenchSeed);
+    train_classifier_online(clf, xtr, ytr, passes, kBenchSeed);
     Json m = clf_metrics_native(clf.infer, xte, yte);
     m["data_source"] = ecg.source;
+    if (feat_cfg.enrich) {
+        m["feature_mode"] = "ecg_enrich";
+        m["train_passes"] = passes;
+        m["feature_dim"] = static_cast<int>(xtr.front().size());
+        m["window"] = win;
+        m["n_fft"] = n_fft;
+    }
     return m;
 }
 

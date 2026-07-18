@@ -33,6 +33,28 @@ struct EcgSplit {
     std::vector<int> y_test;
 };
 
+/// Per-series z-score (mean 0, std 1); no-op on empty / near-constant series.
+void zscore_series_inplace(std::vector<double>& series);
+
+/// First temporal difference; empty input → empty output.
+std::vector<double> series_first_diff(const std::vector<double>& series);
+
+struct D10EcgFeatureConfig {
+    bool enrich{false};
+    bool zscore_series{true};
+    bool include_diff{true};
+    bool full_window{true};
+    bool standardize_features{true};
+    int n_fft{32};
+    int train_passes{44};
+};
+
+D10EcgFeatureConfig d10_ecg_feature_config_from_env(const std::string& data_source);
+
+/// Encode one ECG series; when ``cfg.enrich`` concatenates raw + diff features.
+std::vector<float> encode_ecg_series(const TimeSeriesEncoder& enc, const std::vector<double>& series,
+                                     const D10EcgFeatureConfig& cfg);
+
 EcgSplit load_ecg5000(std::uint64_t seed);
 
 struct FinancialWindowDataset {
