@@ -689,3 +689,45 @@ Get-Content bench/results/hidden_dim_scale_deff/300k_hidden512_watchdog.log
 # Done when non-empty:
 Get-Item bench/results/hidden_dim_scale_deff/300k_hidden512.json | Select Length, LastWriteTime
 ```
+
+---
+
+## Phase 3 re-confirmation complete (2026-07-18): hidden=512 @ 300k post-fix
+
+**Status:** **COMPLETE** — hidden=512 production re-confirmation finished on attempt 1 (`native/build_deff`, post-fix history scaling). Watchdog log: `attempt 1 exit=0 outlen=9259 at 2026-07-18T01:02:55`, `FINISHED ok=True attempts=1` (started 2026-07-12T15:16:29 local; ~5d 10h wall under sustained machine contention).
+
+Source: `bench/results/hidden_dim_scale_deff/300k_hidden512.json` (~9 KB).
+
+### Result table (post-fix pair, `native/build_deff`, `--bench-seed 42`, `n_train=300000`, `n_eval=2000`)
+
+| hidden | bpc | bpc (LSTM-only) | kappa (`criticality_score`) | GRIA `d_eff` | **`lstm_hidden_d_eff`** | `lstm_hidden_d_eff_raw` | `sample_ratio` | `n_samples` |
+|---|---|---|---|---|---|---|---|---|
+| 128 (post-fix) | 3.044487 | 3.044341 | 0.852230 | 0.577841 | **0.693926** | 88.823 | 2.0 | 256 |
+| 512 (post-fix) | **2.945026** | 2.944884 | 0.862582 | 0.577841 | **0.420611** | 215.353 | 2.0 | 1024 |
+
+Reference pre-fix hidden=512 (48-row cap, `native/build_scale`): bpc **2.945026**, `lstm_hidden_d_eff` **0.331333**, `sample_ratio` 0.094 — source `bench/results/hidden_dim_scale/hidden512_300k.json`.
+
+### Pre-fix reuse check
+
+**Not a stale JSON copy, but the training outcome is bit-identical to pre-fix.**
+
+- **`lstm_hidden_d_eff` is present and non-null** (`0.420611`, not missing). Post-fix export fields are populated: `lstm_hidden_d_eff_method: "variance_proxy"`, `lstm_hidden_d_eff_n_samples: 1024`, `lstm_hidden_d_eff_sample_ratio: 2.0`, `lstm_hidden_d_eff_raw: 215.353` — these keys did not exist on the pre-fix artifact.
+- **`bpc = 2.945026` is bit-identical to the pre-fix hidden=512 run** (same seed, same flags, same capped WikiText-2 split). GRIA `d_eff` is also bit-identical (`0.577841`). This is expected: the history-buffer fix changes how `lstm_hidden_d_eff` is *measured*, not how the LSTM is *trained*.
+- **`lstm_hidden_d_eff` did move** with the fix (0.331 → 0.421, +27% relative) — confirming the pre-fix 0.331 was partially an undersampling artifact — but it **did not** recover the medium-tier monotonic trend (5k sweep: 0.596 at hidden=512 vs. 0.278 at hidden=128).
+
+### Verdict on Paper IV `D_eff`-driven κ claim (this run)
+
+**Decision threshold (§4, unchanged):** post-fix hidden=512 `lstm_hidden_d_eff` must exceed hidden=128 post-fix **0.693926** to accept the Paper IV claim that scaling hidden dimension closes the κ gap via representational `D_eff`.
+
+| Criterion | Result |
+|---|---|
+| hidden=512 `lstm_hidden_d_eff` vs. 0.693926 | **0.420611 — below threshold (−39%)** |
+| Direction hidden=128→512 @ 300k | **Decreases** (0.694 → 0.421), inverts the 5k sweep trend |
+| BPC improvement hidden=128→512 | Yes (−3.3% relative, 3.044 → 2.945) — capacity helps, but not via measured `lstm_hidden_d_eff` |
+| κ (`criticality_score`) | 0.852 → 0.863 (+1.1 pp) — marginal; driven by GRIA-field stats, not `lstm_hidden_d_eff` |
+
+**Verdict: REJECT** the Paper IV `D_eff`-driven κ claim for this run. Even with a well-powered measurement (`sample_ratio=2.0`, 1024 samples), wider hidden at production scale yields **lower** normalized LSTM hidden-state effective dimensionality than hidden=128, not higher. This supports Finding 2's second explanation (genuine width-normalized representational compression at scale) rather than a resolved sampling artifact. BPC and marginal κ gains alone are insufficient evidence for the specific `D_eff` mechanism Paper IV asserts.
+
+### Updated go/no-go on Phase 4 (1024-dim)
+
+**No-go — strengthened.** The production-scale inversion persists after the measurement fix. Scheduling a 1024-dim @ 300k run (~18–36 h clean, potentially multi-day under contention) would extrapolate from a trend that broke at 512, not confirmed it. Recommended next step before any Phase 4 commitment: investigate why the 5k monotonic `lstm_hidden_d_eff` trend does not survive 300k training (e.g. report unnormalized `lstm_hidden_d_eff_raw` side-by-side, or decouple width-normalized ratio from absolute effective dimension), rather than scaling hidden further on an unconfirmed `D_eff` lever.
