@@ -1,0 +1,13 @@
+# arXiv / venue metadata (human paste into submit form)
+title: "CyphaLM: Explicit Compression, Uncertainty, and Self-Organisation for Online Language Modelling"
+authors:
+  - name: Odin Loch
+categories:
+  primary: cs.LG
+  secondary: [cs.CL, stat.ML]
+license: CC-BY-4.0  # or arXiv default — confirm at submit
+comments: "Draft bundle from paper/arxiv_bundle/; canonical D17 hybrid BPC pin 2.873"
+abstract_file: abstract.txt
+main_pdf: CyphaLM_paper.pdf
+main_md: CyphaLM_paper.md
+main_html: CyphaLM_paper.html

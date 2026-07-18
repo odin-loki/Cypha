@@ -123,7 +123,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] Tier 1 sweep H01–H22 — overnight cell-sweep complete (H22 @ 25/25, lock `a552aee`)
 - [x] Tier 2 H07, H09–H13 native paths — verified @ 2k; H11 null short-budget only — [`TIER2_NATIVE_PATHS_2026-07-18.md`](docs/reports/TIER2_NATIVE_PATHS_2026-07-18.md)
 - [x] Tier 3 real 300k run — complete via production overnight
-- [~] Populate `results/summary.csv` vs locked baselines — **25/25** local rows; H15 **3.982** @5k post-fix; 300k re-row optional — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md) / [`H15_AXIOM_NAN_FIX_2026-07-18.md`](docs/reports/H15_AXIOM_NAN_FIX_2026-07-18.md)
+- [~] Populate `results/summary.csv` vs locked baselines — **25/25** local rows; H15 **3.982** @5k post-fix; **300k H15 re-row in flight** (PID log `bench/results/cell_sweep/h15_300k_rerun.log`) — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md) / [`H15_AXIOM_NAN_FIX_2026-07-18.md`](docs/reports/H15_AXIOM_NAN_FIX_2026-07-18.md)
 
 ---
 
@@ -150,7 +150,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | Overnight health | [x] Complete — H22 @ 25/25, lock `a552aee` — [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md) |
 | Sample-efficiency curves | [x] MC5/MG5 `297f59c` — [`SAMPLE_EFFICIENCY_CURVE_2026-07-17.md`](docs/reports/SAMPLE_EFFICIENCY_CURVE_2026-07-17.md) |
 | Parallel `score_matrix` | [x] ~3.4× @ n=256 `c788f5f` (OpenMP row-parallel) |
-| Federated training | [~] Golden merge blocking; TLS optional — [`FEDERATED_TLS_STATUS_2026-07-17.md`](docs/reports/FEDERATED_TLS_STATUS_2026-07-17.md) (`d1a9bf1`) |
+| Federated training | [x] Golden merge **PASS** (`d1a9bf1`); TLS optional CI — [`FEDERATED_TLS_STATUS_2026-07-17.md`](docs/reports/FEDERATED_TLS_STATUS_2026-07-17.md) |
 | Legacy sigmoid removal | [x] Removed (`kInferWorldGateApiVersion=2`) |
 
 ---
@@ -174,10 +174,10 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** human-only — venue/arXiv upload; optional 300k H15  
+**Active plan:** (1) wait for 300k H15 re-row + aggregate; (2) human arXiv upload  
 **Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
 2. ~~Phase E release~~ — `v2.3.24` assets live (MSVC Windows + Linux tar/AppImage)
-3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human, 2027 Q1; MD/HTML/PDF ready)
-4. Optional — 300k H15 re-row
+3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human; MD/HTML/PDF + `abstract.txt` / `metadata.yaml` ready)
+4. **In flight** — H15-only `@ n_train=300000` → update `variant_H15.json` + `summary.csv` when done
