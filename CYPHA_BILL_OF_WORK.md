@@ -123,7 +123,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] Tier 1 sweep H01–H22 — overnight cell-sweep complete (H22 @ 25/25, lock `a552aee`)
 - [x] Tier 2 H07, H09–H13 native paths — verified @ 2k; H11 null short-budget only — [`TIER2_NATIVE_PATHS_2026-07-18.md`](docs/reports/TIER2_NATIVE_PATHS_2026-07-18.md)
 - [x] Tier 3 real 300k run — complete via production overnight
-- [x] Populate `results/summary.csv` � H15 **5.262** @300k � [`H15_300K_RERUN_2026-07-18.md`](docs/reports/H15_300K_RERUN_2026-07-18.md)
+- [x] Populate `results/summary.csv` — H15 **5.262** @300k — [`H15_300K_RERUN_2026-07-18.md`](docs/reports/H15_300K_RERUN_2026-07-18.md)
 
 ---
 
@@ -174,11 +174,11 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** human-only � venue/arXiv upload
+**Active plan:** human-only — venue/arXiv upload
 **Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
 2. ~~Phase E release~~ — `v2.3.24` assets live (MSVC Windows + Linux tar/AppImage)
 3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human; MD/HTML/PDF + `abstract.txt` / `metadata.yaml` ready)
-4. ~~Optional 300k H15~~ � done (**5.262** BPC; not a promote)
+4. ~~Optional 300k H15~~ — done (**5.262** BPC; not a promote)
 
