@@ -182,4 +182,4 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 2. ~~Wave 2 + stretch~~ — residual RFF **PASS** (`0.527`); real BPE short-budget **FAIL**; paper PNGs landed — [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md)
 3. Phase E — `gh auth login` + `publish_release.ps1` (human-gated; `-DryRun` notes OK offline)
 4. ~~Phase F bibliography / native figures~~ — done 2026-07-18; submit upload still human (2027 Q1)
-5. Optional — real WikiText BPE@300k vs hybrid pin 2.873 (in progress / short-mid already worse)
+5. ~~Optional BPE@300k~~ — **FAIL** `4.154` vs pin `2.873` (`bench/results/wave3_d17_bpe_300k.json.txt`); STOP

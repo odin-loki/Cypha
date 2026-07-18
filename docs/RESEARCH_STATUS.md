@@ -555,7 +555,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 **Long-range context (Cypha Tests 1C):** SSM warm-up + reset probes pass @ 300k. **1A @ char shuffle: +4.54 BPC** (block shuffle flat). See [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md).  
 **Upgrade V2:** Learnable views neutral; gated fusion worse — keep fixed views + sum fusion.  
 **Model-class C2 hybrid:** **Default profile.** See [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md).  
-**Upgrade wave 2 (2026-07-18):** Expert-util knobs live but no BPC win @5k. Real WikiText BPE (`d17_bpe`) **worse** than char at short/mid budget (`5.12`@5k / `4.79`@30k vs `4.04`); sample-BPE `3.82` was an artifact. D14 residual RFF opt-in lifts FAST mean R² `-0.223`→`0.527` — [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](reports/UPGRADE_WAVE2_STATUS_2026-07-18.md).
+**Upgrade wave 2 (2026-07-18):** Expert-util knobs live but no BPC win @5k. Real WikiText BPE (`d17_bpe`) **STOP** vs char: `5.12`@5k / `4.79`@30k / **`4.154`@300k** vs char pin **2.873** (sample-BPE `3.82` was an artifact). D14 residual RFF opt-in lifts FAST mean R² `-0.223`→`0.527` — [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](reports/UPGRADE_WAVE2_STATUS_2026-07-18.md).
 
 ### Priority 5 — Shared-model continual learning
 

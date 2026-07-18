@@ -12,4 +12,8 @@
 
 ## Release dry-run
 
-`publish_release.ps1 -DryRun` generates notes without calling `gh`. Live publish remains blocked until maintainer auth.
+`powershell -File scripts/publish_release.ps1 -DryRun` succeeded for tag `v2.3.24` (notes under `%TEMP%\cypha_release_notes_v2.3.24.md`). Live publish remains blocked until `gh auth login`.
+
+## Stretch closed same day
+
+Real WikiText BPE hybrid @300k → **BPC 4.154** (vocab 427) — does **not** beat char hybrid pin **2.873**. Documented STOP in wave-2 status.
