@@ -79,7 +79,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] RFF wired into `d03_xor` (opt-in `CYPHA_D03_KERNEL_BASIS=rff`)
 - [x] Nyström M=512 impractical (`O(M³)`/step); M=384 marginal
 - [x] Promote RFF auto-gamma to recommended exploratory default for generalizable `latent` mode — [`RFF_LATENT_PROMOTE_2026-07-17.md`](docs/reports/RFF_LATENT_PROMOTE_2026-07-17.md) `beacef3`; `xor_pair` prod default unchanged
-- [ ] D14 kernelized routing — clean negative; do not default
+- [x] D14 kernelized routing — clean negative; residual RFF opt-in **PASS** FAST — do not default routing; [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md)
 
 ### P2 — Auto-gamma RFF as default
 - [x] Kernel-LLR RFF auto-gamma shipped (2026-07-11)
@@ -105,7 +105,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ### P6 — ECG / temporal — stale claim retired
 - [x] D10A **60.67%**; not `CellAISSM` path ([`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md))
-- [ ] Optional: push D10 >90% with real ECG5000 data
+- [ ] Optional: push D10 >90% with real ECG5000 data — **blocked** (no `bench/data/ecg5000/`)
 
 ---
 
@@ -121,9 +121,9 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 ## 3. Cell hypothesis testbench (28 variants)
 
 - [x] Tier 1 sweep H01–H22 — overnight cell-sweep complete (H22 @ 25/25, lock `a552aee`)
-- [ ] Tier 2 H07, H09–H13 native paths
+- [x] Tier 2 H07, H09–H13 native paths — verified @ 2k; H11 null short-budget only — [`TIER2_NATIVE_PATHS_2026-07-18.md`](docs/reports/TIER2_NATIVE_PATHS_2026-07-18.md)
 - [x] Tier 3 real 300k run — complete via production overnight
-- [~] Populate `results/summary.csv` vs locked baselines — 24/25 rows; H15 omitted (`bpc:null`) — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md)
+- [~] Populate `results/summary.csv` vs locked baselines — 24/25 rows; H15 NaN fixed in code, 300k re-row optional — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md) / [`H15_AXIOM_NAN_FIX_2026-07-18.md`](docs/reports/H15_AXIOM_NAN_FIX_2026-07-18.md)
 
 ---
 
