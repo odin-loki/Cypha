@@ -1,8 +1,8 @@
 # Cypha — custom AI architecture: Differential Information Field Classifier (CyphaDIF)
 
-[![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows installers — latest **v2.2.8**)
+[![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows — latest **[v2.3.24](https://github.com/odin-loki/Cypha/releases/tag/v2.3.24)**)
 
-> **A custom AI architecture invented from first principles by unifying four otherwise-disconnected threads of theory: AIXI / Solomonoff (minimum-description-length priors over class complexity, `‖Δk‖_F ≤ C`), information geometry (natural gradients on the Gaussian manifold, Cramér–Rao efficient), the Free Energy Principle / active inference (a shared world prior `θ₀` plus differential class offsets `Δk`), and the Information Bottleneck (contrastive encoder feedback via Fisher–Rao residuals). The core invariant is that every class `k` is represented as `θ₀ ⊕ Δk` — a shared world prior plus a small class-specific offset in natural parameter space — and classification is `y* = argmax_k [log p(h | θ₀ ⊕ Δk) + log p(k | context)]`. The architecture is domain-agnostic (any input is reduced to a latent vector by a pluggable `Encoder`), handles heavy-tailed inputs through a Generalised-Hyperbolic / NIG gate, detects out-of-distribution inputs natively, supports online corrections, and reports calibrated regression uncertainty. The engineering layer — CMake-built C++ native core, REST server, Qt desktop Studio, optional CUDA acceleration, SQLite-backed persistent state — is validated by **53 CTest** cases across named fixtures (`cypha_parity`, `memory_train_parity`, `quantile_dif_train_parity`, `mke_train_step_parity`, `regression_m4_parity`, …).**
+> **A custom AI architecture invented from first principles by unifying four otherwise-disconnected threads of theory: AIXI / Solomonoff (minimum-description-length priors over class complexity, `‖Δk‖_F ≤ C`), information geometry (natural gradients on the Gaussian manifold, Cramér–Rao efficient), the Free Energy Principle / active inference (a shared world prior `θ₀` plus differential class offsets `Δk`), and the Information Bottleneck (contrastive encoder feedback via Fisher–Rao residuals). The core invariant is that every class `k` is represented as `θ₀ ⊕ Δk` — a shared world prior plus a small class-specific offset in natural parameter space — and classification is `y* = argmax_k [log p(h | θ₀ ⊕ Δk) + log p(k | context)]`. The architecture is domain-agnostic (any input is reduced to a latent vector by a pluggable `Encoder`), handles heavy-tailed inputs through a Generalised-Hyperbolic / NIG gate, detects out-of-distribution inputs natively, supports online corrections, and reports calibrated regression uncertainty. The engineering layer — CMake-built C++ native core (sole runtime), REST server, Qt desktop Studio, optional local CUDA, SQLite-backed persistent state — is validated by **~160 CTests** (see `scripts/cypha_native_validate_all.ps1`) across named golden fixtures (`cypha_golden`, `memory_train_golden`, `quantile_dif_train_golden`, …). Canonical CyphaLM D17 hybrid pin: **2.873 BPC** @ 300k WikiText-2.**
 
 ---
 
@@ -36,11 +36,11 @@ The folder is the **native C++ implementation** of this AI architecture. The har
 Build outside OneDrive on Windows (cloud sync locks object files). Full guide: [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md).
 
 ```powershell
-# Windows — configure + build
-cmake -S native -B C:\Temp\cypha_build -DCMAKE_BUILD_TYPE=Release -G Ninja
+# Windows — MSVC + Ninja recommended (matches CI windows_msvc)
+cmake -S native -B C:\Temp\cypha_build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build C:\Temp\cypha_build --parallel
 
-# Validate (118 CTests when d40 merged, else 117 when d39 merged, else 116)
+# Validate (~160 CTests; authoritative tally in validate script header)
 ctest --test-dir C:\Temp\cypha_build -R native_ --output-on-failure
 
 # Full production gate (rebuild + CTest + bench smoke + tune dry-run)
@@ -69,7 +69,7 @@ cypha_bench_run --list-domains
 cypha_bench_run --from-domain 1
 ```
 
-Prebuilt bundles: **[GitHub Releases](https://github.com/odin-loki/Cypha/releases)** → `packaging/install_release_windows.ps1` or `packaging/install_release_linux.sh`.
+Prebuilt bundles (**v2.3.24**): [Windows MSVC zip](https://github.com/odin-loki/Cypha/releases/download/v2.3.24/cypha-2.3.24-windows-x86_64.zip) · [Linux tar.gz](https://github.com/odin-loki/Cypha/releases/download/v2.3.24/cypha-2.3.24-linux-x86_64.tar.gz) · [AppImage](https://github.com/odin-loki/Cypha/releases/download/v2.3.24/cypha-2.3.24-linux-x86_64.AppImage) · [arXiv paper bundle](https://github.com/odin-loki/Cypha/releases/download/v2.3.24/cypha-2.3.24-arxiv-bundle.zip). Install via `packaging/install_release_windows.ps1` or `packaging/install_release_linux.sh`.
 
 ---
 
@@ -79,7 +79,7 @@ Prebuilt bundles: **[GitHub Releases](https://github.com/odin-loki/Cypha/release
 |---|---|
 | [`README.md`](README.md) | This file. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history — milestones, bug fixes, benchmark deltas. |
-| [`bessel_ratios.npz`](bessel_ratios.npz) | Pre-computed `K_n` Bessel ratios (`16 384` uniform points, `x ∈ [10⁻⁶, 120]`, max rel-err `< 5 × 10⁻³`) — replaces per-call `scipy.special.kv` in the GH-posterior hot path. |
+| [`bessel_ratios.npz`](bessel_ratios.npz) | Historical Python-era Bessel LUT input (native runtime uses compiled `native/src/bessel_table_data.cpp`). |
 | [`native/README.md`](native/README.md) | Native C++ core build & test guide — CTest harness, parity test inventory, SQLite amalgamation, CUDA smoke test. |
 | [`docs/README.md`](docs/README.md) | Documentation hub — all sub-documents indexed by purpose. |
 | [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md) | One-page native install → validate → bench → tune → REST. |
@@ -181,18 +181,18 @@ These defaults come from a profiled medium-grid tuning programme, not from guess
 
 ---
 
-## 🧪 Parity test inventory (selected, from `native/README.md`)
+## 🧪 Golden / CTest inventory (selected)
 
 | Test | What it verifies |
 |---|---|
-| `cypha_parity` | Top-level infer vs `fixtures/` |
-| `memory_train_parity` | `DIFMemory` training step |
-| `quantile_dif_train_parity` | Quantile-DIF training step |
-| `mke_train_step_parity` | Mixture-of-experts training step |
-| `regression_m4_parity` | M4 regression |
-| `cuda_smoke` | CUDA path smoke test |
+| `native_cypha_golden` / fixture goldens | Top-level infer vs `fixtures/` |
+| `memory_train_golden` | `DIFMemory` training step |
+| `quantile_dif_train_golden` | Quantile-DIF training step |
+| `mke_train_step_golden` | Mixture-of-experts training step |
+| `regression_m4_golden` | M4 regression |
+| `native_cuda_smoke` | CUDA path smoke (local CUDA builds only) |
 
-(Full inventory in [`native/README.md`](native/README.md). CI gate: **two blocking jobs** — **`build_and_test`** (Linux native + CTest) and **`windows_msvc`** (native MSVC Release); Windows local gate via `scripts/cypha_native_validate_all.ps1`.)
+Full inventory in [`native/README.md`](native/README.md). CI: **`build_and_test`** (Linux) + **`windows_msvc`**; local full gate `scripts/cypha_native_validate_all.ps1` (~160 CTests).
 
 ---
 
@@ -213,8 +213,9 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 - **Forgetting:** No forgetting per isolated model file (D16F: 0.000); shared-model continual learning is an open problem (D16B: forgetting_score ≈ 0.813; EWC scoping best **~0.108** at λ=2.0 — see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 5 and [`docs/reports/EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md)).
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
-- XOR / nonlinear boundaries: linear LLR ~50%; **Nyström kernel LLR ~61%** (+10.6 pp, M=256) on S3 XOR. Diagnostic ceiling (~83% kernel SVM) still open — see [`docs/FUTURE.md`](docs/FUTURE.md) §0a.
-- **D04 / D17:** CyphaLM benchmarks (Izaac → CellAI SSM → CyphaDIF → GRIA) via **`cypha_bench_run`** — held-out BPC, context-length curve, expert routing, save/restore parity, and sampling benchmarks.
+- XOR / nonlinear boundaries: latent RFF auto-gamma reaches **~76.3%** (~2.7 pp vs sklearn ~79%); see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
+- **D04 / D17:** CyphaLM hybrid GRIA+LSTM canonical pin **2.873 BPC** @ 300k WikiText-2 (`bench/BASELINE_LOCK.json`); run via **`cypha_bench_run`**.
+- **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
 - **CyphaLM REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE) with per-token CyphaDIF routing.
 
 ---
@@ -223,10 +224,10 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 
 - **The AI is bespoke.** CyphaDIF is not a fork, not a wrapper, not a tuning of an existing model. It is a from-first-principles architecture whose learning rule is derived from the intersection of four formal programmes (AIXI / Solomonoff, information geometry, FEP, IB).
 - **The proof surface is parity correctness, not leaderboard ML accuracy.** No "we beat X on benchmark Y" claim. Instead: "the native runtime matches committed fixture goldens across this CTest matrix." Benchmark numbers (§ above) are honest measurements on standard sklearn datasets, not cherry-picked.
-- **Nonlinear decision boundaries:** Linear LLR caps XOR near ~50%. **Nyström kernel LLR** (M=256 landmarks) reaches **~61%** (+10.6 pp) — implemented in C++; diagnostic ~83% kernel-SVM ceiling remains. See [`docs/FUTURE.md`](docs/FUTURE.md) §0a.
+- **Nonlinear decision boundaries:** Linear LLR caps XOR near chance; **latent RFF** closes most of the sklearn gap (~76.3% vs ~79%). See [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
-- **Optional CUDA.** The native core works without GPU; CUDA is a local build flag (`-DCYPHA_ENABLE_CUDA=ON`). CI does not compile CUDA — validate with **`native_cuda_smoke`** / **`native_score_batch`** locally when changing accel code (see [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md)).
-- **Future waves.** RFF auto-gamma, Qt UX polish, packaged binaries, multi-model REST, ONNX export — see [`docs/FUTURE.md`](docs/FUTURE.md) and [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md).
+- **Optional CUDA.** Infer path only as a local build flag (`-DCYPHA_ENABLE_CUDA=ON`); no CUDA CI; full GPU training not implemented — see [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md).
+- **Status / next.** Continuum closeout 2026-07-18: release **v2.3.24**, D10A **90.11%**, paper bundle ready. Remaining human step: arXiv upload. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/FUTURE.md`](docs/FUTURE.md), [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md).
 
 ---
 
@@ -244,4 +245,4 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 
 ---
 
-[← Back to main README](../README.md)
+**Docs hub:** [`docs/README.md`](docs/README.md) · **Bill of work:** [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md)

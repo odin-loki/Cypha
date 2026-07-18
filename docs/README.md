@@ -43,12 +43,14 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 
 | Doc | What it covers |
 |-----|----------------|
-| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: **52 CTest** inventory, per-fixture status, known gaps |
+| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: **~160 CTests** (see validate script), per-fixture status, known gaps |
 | [Roadmap](verify/ROADMAP.md) | Milestones M1–M6 complete; current engineering horizon |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
-| [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / WSL workflow checklist |
+| [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / MSVC–Linux workflow checklist |
 | [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I–V); C++ in `native/include/cypha/intelligence/` |
-| [Possible upgrades](research/upgrades/README.md) | RPSM Option A/B, nonlinear boundary, cell hypothesis testbench (planned) |
+| [Possible upgrades](research/upgrades/README.md) | RPSM / cell tracks **STOP or closed** (see BoW); remaining opt-ins default OFF |
+| [Continuum closeout (2026-07-18)](reports/CONTINUUM_CLOSEOUT_2026-07-18.md) | MSVC gate, v2.3.24 assets, D10A 90.11%, H15 300k, paper bundle |
+| [Documentation refresh (2026-07-18)](DOCUMENTATION_REFRESH_2026-07-18.md) | What was synced and the canonical number table |
 | [Failed experiments](archive/failed_experiments/cypha_som/README.md) | cypha_som SOM upgrade post-mortem |
 | [C++2023 migration](native/migration/CPLUSPLUS_2023_MASTER_PLAN.md) | Python decommission phases (P7 complete) |
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, CTest gate reference |
@@ -105,9 +107,11 @@ For the full picture of where the project stands — benchmark numbers, confirme
 
 **[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** — the canonical research journal.
 
-**[`docs/MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md)** — planned multi-view online training (CyphaLM Phase 1, CyphaDIF Phase 2): structure-preserving reorderings, view schedules, execution roadmap.
+**[`docs/MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md)** — multi-view online training plan (Phase 2 piloted negative on D03; see BoW).
 
-**[`docs/research/upgrades/README.md`](research/upgrades/README.md)** — planned RPSM refactor (Option A), CyphaLM sequence layer (Option B), nonlinear boundary fixes, cell hypothesis testbench.
+**[`docs/research/upgrades/README.md`](research/upgrades/README.md)** — upgrade index (RPSM Option A/B and Small-tier **STOP**; cell-sweep closed; H19 best hypothesis ~2.921 vs hybrid pin 2.873).
+
+**[`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)** — living task list; active plan: human arXiv upload.
 
 Permanent investigation reports:
 

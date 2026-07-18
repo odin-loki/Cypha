@@ -4,11 +4,10 @@
 **Source:** Consolidated from `docs/FUTURE.md`, `docs/RESEARCH_STATUS.md`, `docs/verify/ROADMAP.md`,
 `docs/verify/VERIFICATION_STATUS.md`, `docs/research/upgrades/*`, `docs/MULTI_VIEW_TRAINING_PLAN.md`,
 `docs/CYPHALM_UPGRADE_V2.md`, `docs/CYPHA_TESTS_PHASE2.md`, `docs/native/*`, `CHANGELOG.md`.
-**Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete);
-115 CTests blocking gate (116 when `d38` merged).
-**Repo state as of this update (2026-07-18):** Bounded product/adjust wave closed out —
-[`PRODUCT_ADJUST_CLOSEOUT_2026-07-17.md`](docs/reports/PRODUCT_ADJUST_CLOSEOUT_2026-07-17.md). **160 CTests**
-blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, lock `a552aee` — [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md).
+**Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete).
+**Repo state as of this update (2026-07-18):** Continuum closed —
+[`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md). **~160 CTests**
+blocking gate (Linux + `windows_msvc`); release **v2.3.24**; **300k overnight COMPLETE** — lock `a552aee` — [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md).
 
 ---
 
@@ -104,8 +103,8 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] Confirm marketing language live everywhere (`3491da0`)
 
 ### P6 — ECG / temporal — stale claim retired
-- [x] D10A **60.67%**; not `CellAISSM` path ([`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md))
-- [x] Optional: push D10 >90% with real ECG5000 — **90.11%** D10A default (`1c22165`) — [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
+- [x] D10A not `CellAISSM` path (synth diagnosis 60.67% historical) — [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](docs/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md)
+- [x] Real ECG5000 + enriched features — **90.11%** D10A default (`1c22165`) — [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
 
 ---
 

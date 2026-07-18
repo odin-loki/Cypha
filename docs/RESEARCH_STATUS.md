@@ -344,7 +344,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 - **In-flight migrate:** **`scripts/migrate_inflight_overnight_artifacts.ps1`** — merge repo-root **`results/`** spill into **`bench/results/cell_sweep/`**; chained from **`run_post_overnight.ps1`** (`-DryRun` preview unless **`-SkipMigrate`**).
 - **Local validate env var:** **`CYPHA_VALIDATE_LOCK_REFRESH=1`** on **`cypha_native_validate_all.ps1`** runs d37 when profile exists.
 - **Offline release notes:** **`publish_release.ps1 -NotesPath`** for offline **`gh release create`** workflow.
-- **CI:** blocking gate **115 CTests** (+1 d37 smoke). Full 300k production overnight **in progress** — maintainer workflow via **`run_production_overnight.ps1`**; **`gh auth login`** still required for GitHub Release publish.
+- **CI:** blocking gates **Linux CTest** + **`windows_msvc`** (~**160 CTests** — see `scripts/cypha_native_validate_all.ps1`). Production overnight **complete** (lock `a552aee`); release **v2.3.24** assets live. Remaining human step: arXiv upload from `paper/arxiv_bundle/`.
 
 ### Phase 24 — overnight completion certificate gate (v2.3.24) — shipped
 
