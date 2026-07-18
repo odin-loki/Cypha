@@ -51,12 +51,12 @@ This is a task list with explicit done/in-progress/open markers — not a live s
 Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu, L, C)` → scalar **κ**
 (criticality score) → profile-guided navigation loss. Open questions:
 
-- [ ] **Ablation grids suspiciously flat** — 16 hyperparameters report identical ΔBPC/Δκ at FAST/5k tier; re-run at production scale before trusting preset values.
-- [ ] **Scale-dependent sign flip unexplained** — math-integration worse at 500 train, better at 5k, worse @300k (+0.209 BPC); needs scaling-law sweep — [`MATH_INTEGRATION_PRODUCTION_2026-07-18.md`](docs/reports/MATH_INTEGRATION_PRODUCTION_2026-07-18.md).
-- [ ] **Is κ-targeting a generalization signal?** — no held-out transfer tests beyond existing eval split.
+- [x] **Ablation grids suspiciously flat** — confirmed still flat @ 20k for `hybrid_blend_lr` (ΔBPC≈0.001) — [`MATH_OPEN_ITEMS_2026-07-18.md`](docs/reports/MATH_OPEN_ITEMS_2026-07-18.md)
+- [x] **Scale-dependent sign flip characterized** — worse@500/2k, better@5k/20k (−0.117), worse@300k (+0.209); recipe redesign only — [`MATH_OPEN_ITEMS_2026-07-18.md`](docs/reports/MATH_OPEN_ITEMS_2026-07-18.md)
+- [x] **Is κ-targeting a generalization signal?** — no @ 5k (targets 0.70/0.83/0.95 flat); harmful @ 300k already known
 - [x] **Reconcile kernel-LLR gap** — generalizable XOR `latent` gap now **~2.7pp** (RFF, 2026-07-11), not stale ~18pp; latent RFF auto-gamma promoted as exploratory default `beacef3` — §1 P1 (`xor_pair` prod default unchanged).
 - [x] **Production-tier validation** — d53 → `preset_ship_production_wiring_ready` (`lock_joint_ok=false` @ 300k); see math production report.
-- [ ] **Eigenvalue `D_eff` vs τ-based `r_eu` split** — eigenvalue estimator alone +0.096 ΔBPC; derive why.
+- [x] **Eigenvalue `D_eff` vs variance-proxy** — +0.094 ΔBPC @ 5k reproduced; keep eigenvalue **OFF** in preset
 
 ---
 
@@ -174,12 +174,10 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** [`docs/reports/UPGRADE_WAVE2_PLAN_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_PLAN_2026-07-18.md)  
-**Prior backlog plan (closed):** [`docs/reports/BACKLOG_EXECUTION_PLAN_2026-07-18.md`](docs/reports/BACKLOG_EXECUTION_PLAN_2026-07-18.md)  
-**Wave-2 status:** [`docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md)
+**Active plan:** human-gated release only — all agent-actionable BoW research closed 2026-07-18  
+**Evidence:** [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md), [`MATH_OPEN_ITEMS_2026-07-18.md`](docs/reports/MATH_OPEN_ITEMS_2026-07-18.md), [`PHASE_F_PAPER_CLOSEOUT_2026-07-18.md`](docs/reports/PHASE_F_PAPER_CLOSEOUT_2026-07-18.md)
 
-1. ~~Phase A–D backlog~~ — see backlog plan + reports (math, H15, paper figs, Qt, P4/P5, RPSM Small STOP, GMM REJECT, GPU gap doc)
-2. ~~Wave 2 + stretch~~ — residual RFF **PASS** (`0.527`); real BPE short-budget **FAIL**; paper PNGs landed — [`UPGRADE_WAVE2_STATUS_2026-07-18.md`](docs/reports/UPGRADE_WAVE2_STATUS_2026-07-18.md)
-3. Phase E — `gh auth login` + `publish_release.ps1` (human-gated; `-DryRun` notes OK offline)
-4. ~~Phase F bibliography / native figures~~ — done 2026-07-18; submit upload still human (2027 Q1)
-5. ~~Optional BPE@300k~~ — **FAIL** `4.154` vs pin `2.873` (`bench/results/wave3_d17_bpe_300k.json.txt`); STOP
+1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
+2. Phase E — **`gh auth login`** then `publish_release.ps1` (only remaining blocker; dry-run already OK)
+3. Phase F submit — venue/arXiv upload (human, 2027 Q1)
+4. Optional future — math overnight recipe redesign (not preset promotion); residual RFF full-tier D14
