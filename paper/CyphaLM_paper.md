@@ -193,14 +193,21 @@ CyphaLM's native C++ hybrid GRIA+LSTM implementation makes the lossless residual
 
 ## References
 
-<!-- Placeholder bibliography -->
-- Gu & Dao (2023) — Mamba
-- Amini et al. (2020) — Deep Evidential Regression
-- Grunwald (2007) — MDL
-- Shazeer et al. (2017) — Mixture of Experts
-- Langton (1990); Poole et al. (2016) — Edge of chaos
-- Tishby et al. (2000) — Information Bottleneck
+1. Gu, A. & Dao, T. (2023). *Mamba: Linear-Time Sequence Modeling with Selective State Spaces*. arXiv:2312.00752.
+2. Amini, A., Schwarting, W., Soleimany, A. & Rus, D. (2020). Deep Evidential Regression. *NeurIPS*.
+3. Grünwald, P. D. (2007). *The Minimum Description Length Principle*. MIT Press.
+4. Shazeer, N., Mirhoseini, A., Maziarz, K., Davis, A., Le, Q., Hinton, G. & Dean, J. (2017). Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer. *ICLR*.
+5. Langton, C. G. (1990). Computation at the edge of chaos: Phase transitions and emergent computation. *Physica D*, 42(1–3), 12–37.
+6. Poole, B., Lahiri, S., Raghu, M., Sohl-Dickstein, J. & Ganguli, S. (2016). Exponential expressivity in deep neural networks through transient chaos. *NeurIPS*.
+7. Tishby, N., Pereira, F. C. & Bialek, W. (2000). The information bottleneck method. arXiv:physics/0004057.
+8. Hochreiter, S. & Schmidhuber, J. (1997). Long short-term memory. *Neural Computation*, 9(8), 1735–1780.
+9. Merity, S., Xiong, C., Bradbury, J. & Socher, R. (2017). Pointer Sentinel Mixture Models (WikiText-2). *ICLR*.
+10. Rahimi, A. & Recht, B. (2007). Random Features for Large-Scale Kernel Machines. *NeurIPS*.
+11. Kirkpatrick, J. et al. (2017). Overcoming catastrophic forgetting in neural networks. *PNAS*, 114(13), 3521–3526.
+12. Murphy, K. P. (2007). Conjugate Bayesian analysis of the Gaussian distribution. Technical note (Normal–Inverse–Gamma).
+13. Gu, A., Goel, K. & Ré, C. (2022). Efficiently Modeling Long Sequences with Structured State Spaces. *ICLR* (S4).
+14. Sennrich, R., Haddow, B. & Birch, A. (2016). Neural Machine Translation of Rare Words with Subword Units. *ACL*.
 
 ---
 
-*Rewritten 2026-07-12 against the native C++ runtime (post-P7); BPC narrative reconciled 2026-07-17 (`b0d39e7`, canonical pin **2.873**). Primary sources: `bench/BASELINE_LOCK.json`, `bench/BASELINE_REPORT.md`, `docs/RESEARCH_STATUS.md`, `docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`, `docs/reports/PERFORMANCE_PROFILE_2026-07-12.md`, `docs/reports/DEV_PLAN_2026-07-11.md`, `CHANGELOG.md`, and `native/src/cyphalm/` / `native/include/cypha/cyphalm/` source. Figures under `paper/figures/*.json` are historical Python-prototype artifacts (see per-section notes in §3/§5) and have not been regenerated for the native implementation; regenerating them from `bench/results/` is future work, not performed in this rewrite.*
+*Rewritten 2026-07-12 against the native C++ runtime (post-P7); BPC narrative reconciled 2026-07-17 (`b0d39e7`, canonical pin **2.873**); bibliography + native figure PNGs closed 2026-07-18. Primary sources: `bench/BASELINE_LOCK.json`, `bench/BASELINE_REPORT.md`, `docs/RESEARCH_STATUS.md`, `docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`, `docs/reports/PERFORMANCE_PROFILE_2026-07-12.md`, `docs/reports/DEV_PLAN_2026-07-11.md`, `CHANGELOG.md`, and `native/src/cyphalm/` / `native/include/cypha/cyphalm/` source. Historical Python-prototype metrics remain under `paper/figures/exp*.json`; current native bar charts are `paper/figures/native_fig_*.json` / `.png` (render: `scripts/render_native_paper_figures.py`).*
