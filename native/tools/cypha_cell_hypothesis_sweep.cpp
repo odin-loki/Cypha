@@ -620,11 +620,16 @@ int main(int argc, char** argv) {
             }
         }
 
-        if (args.overnight_sweep) {
-            std::filesystem::path out_dir = args.output_dir.empty()
-                                                ? cypha::bench::results_dir() / "cell_sweep"
-                                                : std::filesystem::path(args.output_dir);
-            write_overnight_artifacts(out_dir, results, args, b2_bpc, failed);
+        // Write variant_*.json / summary.csv whenever overnight-sweep OR an explicit
+        // --output-dir is set (single --cell-variant H15 re-rows previously only printed
+        // stdout and left variant_H15.json stale).
+        const bool write_artifacts = args.overnight_sweep || !args.output_dir.empty();
+        std::filesystem::path artifacts_dir;
+        if (write_artifacts) {
+            artifacts_dir = args.output_dir.empty()
+                                ? cypha::bench::results_dir() / "cell_sweep"
+                                : std::filesystem::path(args.output_dir);
+            write_overnight_artifacts(artifacts_dir, results, args, b2_bpc, failed);
         }
 
         nlohmann::json out = {
@@ -644,11 +649,8 @@ int main(int argc, char** argv) {
             {"failed", failed},
             {"variant_count", cypha::cyphalm::all_cell_variants().size()},
         };
-        if (args.overnight_sweep) {
-            const std::filesystem::path out_dir = args.output_dir.empty()
-                                                      ? cypha::bench::results_dir() / "cell_sweep"
-                                                      : std::filesystem::path(args.output_dir);
-            out["output_dir"] = out_dir.string();
+        if (write_artifacts) {
+            out["output_dir"] = artifacts_dir.string();
         }
         if (args.intelligence_profile) {
             out["pareto_ranked_variants"] = build_pareto_ranked_variants(results);

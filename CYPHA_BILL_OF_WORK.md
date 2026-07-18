@@ -18,11 +18,11 @@ blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, loc
 |------|---------|----------|
 | **Optimality P0–2, P5, P9** | [x] Done | P0 `4133054`; P1 `31bbb0c`/`7a07f8b`; P2 `de4fa16`; P5 `da9be39`; P9 `CriticalityVector` `c759e72` — [`CYPHA_OPTIMALITY_PLAN.md`](CYPHA_OPTIMALITY_PLAN.md) |
 | **Optimality P3 (class GMM)** | [x] Opt-in; XOR REJECT | hard-split warm-start still ~50.5% — [`OPTIMALITY_P3_GMM_WARMSTART_2026-07-18.md`](docs/reports/OPTIMALITY_P3_GMM_WARMSTART_2026-07-18.md); keep RFF |
-| **Optimality P4 (BMA over Δk)** | [~] Opt-in shipped | `33125b8` default OFF — [`OPTIMALITY_PHASE4_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE4_2026-07-17.md) |
-| **Optimality P6 (IB)** | [~] Opt-in | `f0ea334` default OFF — [`OPTIMALITY_PHASE6_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE6_2026-07-17.md) |
-| **Optimality P7 (score match)** | [~] Opt-in; LUT kept | `f19e167` — [`OPTIMALITY_PHASE7_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE7_2026-07-17.md) |
+| **Optimality P4 (BMA over Δk)** | [x] Opt-in shipped; default OFF | `33125b8` — [`OPTIMALITY_PHASE4_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE4_2026-07-17.md) |
+| **Optimality P6 (IB)** | [x] Opt-in shipped; default OFF | `f0ea334` — [`OPTIMALITY_PHASE6_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE6_2026-07-17.md) |
+| **Optimality P7 (score match)** | [x] Opt-in shipped; LUT kept | `f19e167` — [`OPTIMALITY_PHASE7_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE7_2026-07-17.md) |
 | **Optimality P8 (RB)** | [x] Audit no-go | `322cb68` — no MC estimators in scope — [`OPTIMALITY_PHASE8_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE8_2026-07-17.md) |
-| **B3 position weights** | [~] Opt-in; null @ 5k | `5445e40` default OFF; ~−0.00005 BPC — [`CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md`](docs/reports/CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md) |
+| **B3 position weights** | [x] Opt-in; null @ 5k | `5445e40` default OFF; ~−0.00005 BPC — [`CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md`](docs/reports/CYPHALM_B3_POSITION_WEIGHTS_2026-07-17.md) |
 | **Infer latency (RPSM scratch)** | [x] ~48% win | `4d3afa2` — [`INFER_LATENCY_PROFILE_2026-07-17.md`](docs/reports/INFER_LATENCY_PROFILE_2026-07-17.md) |
 | **D17 perf Parts 1–6** | [x] Done | [`PERFORMANCE_PROFILE_2026-07-12.md`](docs/reports/PERFORMANCE_PROFILE_2026-07-12.md) Parts 1–6; Part 6 `12ad4b3` (skip dead BPTT slow-tier when EWC off) |
 | **P1 XOR kernel gap** | [x] ~2.7pp remaining (was ~18pp) | RFF auto-gamma `rff_dim=4096` → **76.3%** vs sklearn ~79%; [`RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1 |

@@ -10,6 +10,7 @@ milestone or a significant self-contained change.
 
 ### Fixed
 - **`native_rest_schema_contract` (Linux):** `ChildProcess` is now move-only so assigning the spawned `cypha_rest` no longer kills the server before `/health` (was flaky `server did not become ready` at ~15s).
+- **`cypha_cell_hypothesis_sweep`:** `--output-dir` now writes `variant_*.json` / `summary.csv` even for single `--cell-variant` runs (previously overnight-sweep only).
 
 ### Added
 - **D10A ECG5000 >90%:** enriched temporal features + 44 passes → **90.11%** default (`CYPHA_D10_ECG_ENRICH=0` keeps legacy 85.96%).

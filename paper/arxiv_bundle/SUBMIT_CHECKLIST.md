@@ -4,6 +4,7 @@
 - `CyphaLM_paper.md` / `.html` / `.pdf` — camera-ready draft (canonical BPC pin 2.873)
 - `abstract.txt` — plain-text abstract for the arXiv form
 - `metadata.yaml` — title, author, suggested categories, license note
+- `RESULTS_ATTEST.md` — D10/H15/lock provenance snapshot (not in the PDF body)
 - `native_fig_*.png/json` — native measurement figures
 - `FIGURES_README.md` — figure provenance
 
