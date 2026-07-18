@@ -1,0 +1,32 @@
+# Cell-sweep summary — post-overnight (2026-07-18)
+
+**Tool:** `scripts/aggregate_cell_sweep_summary.ps1`  
+**Baselines:** B0=3.478 · B1=2.979 · B2=**2.873** (canonical hybrid)  
+**Local CSV:** `bench/results/cell_sweep/summary.csv` (not committed)
+
+## Artifact gaps
+
+| Variant | Issue |
+|---------|-------|
+| **H15** | `bpc: null` in `variant_H15.json` — omitted from CSV |
+| Count | 24 rows with BPC (of ~25 expected IDs) |
+
+## Highlights (lower BPC better)
+
+| Variant | BPC | vs B2 (2.873) | Note |
+|---------|-----|---------------|------|
+| **H19** | **2.921** | +0.048 | Best hypothesis-tier row in CSV |
+| B1 | 2.887 | +0.014 | Char-LSTM artifact row (not locked B1) |
+| H22 | 3.077 | +0.204 | |
+| H01 | 3.073 | +0.200 | |
+| H16/H17 | ~4.61 | +1.74 | |
+| H18/H20/H21 | ~11.5 | +8.6 | Collapsed / failed configs |
+| B0 / B2 rows in CSV | 11.58 / 6.81 | — | Sweep-local baselines, **not** lock pins |
+
+**No hypothesis beat canonical hybrid 2.873.** Closest: H19 at 2.921 (+48 mBPC).
+
+## How to regenerate
+
+```powershell
+powershell -File scripts/aggregate_cell_sweep_summary.ps1
+```
