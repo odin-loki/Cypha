@@ -159,7 +159,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 - [x] `paper/CyphaLM_paper.md` rewritten (`e9ac580`)
 - [x] Narrative reconciliation vs lock (§0.5 BPC pin — canonical **2.873**, historical sweeps labeled)
-- [~] Submit (2027 Q1 target) — figures + bibliography + `paper/arxiv_bundle/` (MD/HTML/PDF) ready; venue/arXiv upload still human
+- [~] Submit (2027 Q1 target) — bundle ready (MD/HTML/PDF/`abstract.txt`/`metadata.yaml`/`RESULTS_ATTEST.md`); also on release as `cypha-2.3.24-arxiv-bundle.zip`; **authenticated arXiv upload still human**
 
 ---
 
