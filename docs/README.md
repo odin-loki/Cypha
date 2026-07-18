@@ -1,4 +1,4 @@
-# Cypha — documentation hub
+﻿# Cypha â€” documentation hub
 
 Start here, then open the section that matches what you need.
 
@@ -6,10 +6,10 @@ Start here, then open the section that matches what you need.
 
 ## Quick start
 
-**Native only.** See [`docs/native/NATIVE_QUICKSTART.md`](native/NATIVE_QUICKSTART.md) for install → validate → bench → tune → REST.
+**Native only.** See [`docs/native/NATIVE_QUICKSTART.md`](native/NATIVE_QUICKSTART.md) for install â†’ validate â†’ bench â†’ tune â†’ REST.
 
 ```powershell
-# Windows — build + validate
+# Windows â€” build + validate
 cmake -S native -B C:\Temp\cypha_build -DCMAKE_BUILD_TYPE=Release -G Ninja
 cmake --build C:\Temp\cypha_build --parallel
 ctest --test-dir C:\Temp\cypha_build -R native_ --output-on-failure
@@ -44,10 +44,10 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | Doc | What it covers |
 |-----|----------------|
 | [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: **~160 CTests** (see validate script), per-fixture status, known gaps |
-| [Roadmap](verify/ROADMAP.md) | Milestones M1–M6 complete; current engineering horizon |
+| [Roadmap](verify/ROADMAP.md) | Milestones M1â€“M6 complete; current engineering horizon |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
-| [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / MSVC–Linux workflow checklist |
-| [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I–V); C++ in `native/include/cypha/intelligence/` |
+| [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / MSVCâ€“Linux workflow checklist |
+| [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (Iâ€“V); C++ in `native/include/cypha/intelligence/` |
 | [Possible upgrades](research/upgrades/README.md) | RPSM / cell tracks **STOP or closed** (see BoW); remaining opt-ins default OFF |
 | [Continuum closeout (2026-07-18)](reports/CONTINUUM_CLOSEOUT_2026-07-18.md) | MSVC gate, v2.3.24 assets, D10A 90.11%, H15 300k, paper bundle |
 | [Documentation refresh (2026-07-18)](DOCUMENTATION_REFRESH_2026-07-18.md) | What was synced and the canonical number table |
@@ -56,7 +56,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, CTest gate reference |
 | [CHANGELOG](../CHANGELOG.md) | Release history and what changed in each milestone |
 
-**Quick gate (matches GitHub Actions CI — two blocking jobs: `build_and_test`, `windows_msvc`):**
+**Quick gate (matches GitHub Actions CI â€” two blocking jobs: `build_and_test`, `windows_msvc`):**
 ```bash
 bash scripts/ci_native_linux.sh                    # native CTest
 ctest --test-dir native/build -R native_ --output-on-failure
@@ -73,11 +73,11 @@ powershell -File scripts\cypha_native_validate_all.ps1
 
 | Doc | What it covers |
 |-----|----------------|
-| [Port contract](port/PORT_CONTRACT.md) | Normative: `.cypha` v3, LLR/softmax/GH, CyphaDIF REST, **CyphaLM `/generate` §4** |
-| [Full stack port](port/PORT_FULL_STACK.md) | Per-milestone record M1–M6 (complete); Python runtime decommissioned |
+| [Port contract](port/PORT_CONTRACT.md) | Normative: `.cypha` v3, LLR/softmax/GH, CyphaDIF REST, **CyphaLM `/generate` Â§4** |
+| [Full stack port](port/PORT_FULL_STACK.md) | Per-milestone record M1â€“M6 (complete); Python runtime decommissioned |
 | [Preprocessor contract](port/PREPROCESSOR_CONTRACT.md) | `preprocessor.json` format next to `model.cypha` |
 | [Experiments schema](port/EXPERIMENTS_SCHEMA.md) | SQLite layout for experiments DB |
-| [fixtures/README.md](../fixtures/README.md) | Committed parity assets — inputs + expected outputs |
+| [fixtures/README.md](../fixtures/README.md) | Committed parity assets â€” inputs + expected outputs |
 | [native/README.md](../native/README.md) | C++ build guide: CMake presets, CTest inventory, CUDA, Qt |
 
 ---
@@ -92,7 +92,7 @@ powershell -File scripts\cypha_native_validate_all.ps1
 **Run benchmarks (native):**
 ```bash
 cypha_bench_run --list-domains
-cypha_bench_run --from-domain 1          # d01 … d17
+cypha_bench_run --from-domain 1          # d01 â€¦ d17
 cypha_bench_run --report-only            # cross-domain + BASELINE_REPORT.md + figures
 native/build/xor_kernel_bench --seeds 3 --passes 8 --kernel-blend 1.0
 ```
@@ -103,15 +103,15 @@ See [RESEARCH_STATUS.md](RESEARCH_STATUS.md) for the interpretation of all bench
 
 ## Research status and experimental reports
 
-For the full picture of where the project stands — benchmark numbers, confirmed properties, hard limits, hypothesis ledger, and next priorities — read:
+For the full picture of where the project stands â€” benchmark numbers, confirmed properties, hard limits, hypothesis ledger, and next priorities â€” read:
 
-**[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** — the canonical research journal.
+**[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** â€” the canonical research journal.
 
-**[`docs/MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md)** — multi-view online training plan (Phase 2 piloted negative on D03; see BoW).
+**[`docs/MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md)** â€” multi-view online training plan (Phase 2 piloted negative on D03; see BoW).
 
-**[`docs/research/upgrades/README.md`](research/upgrades/README.md)** — upgrade index (RPSM Option A/B and Small-tier **STOP**; cell-sweep closed; H19 best hypothesis ~2.921 vs hybrid pin 2.873).
+**[`docs/research/upgrades/README.md`](research/upgrades/README.md)** â€” upgrade index (RPSM Option A/B and Small-tier **STOP**; cell-sweep closed; H19 best hypothesis ~2.921 vs hybrid pin 2.873).
 
-**[`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)** — living task list; active plan: human arXiv upload.
+**[`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)** â€” living task list; active plan: human arXiv upload.
 
 Permanent investigation reports:
 
@@ -124,6 +124,9 @@ Permanent investigation reports:
 | [BENCH_ARCH_RESCORE_REPORT.md](reports/BENCH_ARCH_RESCORE_REPORT.md) | Post-architecture rescore with best config. |
 | [BENCH_UPGRADE_REPORT.md](reports/BENCH_UPGRADE_REPORT.md) | Deliberation and SOM upgrade combined benchmark effects. |
 | [BENCH_PAPER.md](reports/BENCH_PAPER.md) | Short paper: regression-competent DIF routing, variant-aware profiles, arch search fixes. |
+| [Unfinished-work audit (2026-07-18)](reports/UNFINISHED_WORK_AUDIT_2026-07-18.md) | Diligence checklist; cross-check against continuum closeout |
+| [Perf research roadmap (draft)](reports/PERF_RESEARCH_ROADMAP_2026-07-18.md) | Optional throughput ideas |
+| [Quality research roadmap (draft)](reports/QUALITY_RESEARCH_ROADMAP_2026-07-18.md) | Optional BPC/accuracy ideas |
 
 ---
 
