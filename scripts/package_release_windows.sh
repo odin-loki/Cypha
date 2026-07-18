@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Package Windows x86_64 release ZIP from a MinGW cross-build directory.
 #
 # Usage:
@@ -82,7 +82,7 @@ done
 cp "$REPO_ROOT/packaging/install_release_windows.ps1" "$STAGING/install.ps1"
 
 cat >"$STAGING/README.txt" <<EOF
-Cypha ${VERSION} â€” Windows x86_64 native tools (MinGW PE, full C++ framework)
+Cypha ${VERSION} - Windows x86_64 native tools (MinGW PE, full C++ framework)
 =============================================================================
 
 Quick install (adds %LOCALAPPDATA%\\Cypha\\${VERSION}\\bin to user PATH):
@@ -93,16 +93,16 @@ Run native REST (classifier + CyphaLM + CyphaDIF routes):
     --f-field-json share\\demo_fixtures\\f_field.json
 
 CyphaDIF REST routes (POST JSON):
-  /dif/retrieve   â€” ranked database hits (input, database, top_k, optional label)
-  /dif/generate   â€” latent samples (mode: langevin | from_observation | retrieval_augmented)
+  /dif/retrieve   - ranked database hits (input, database, top_k, optional label)
+  /dif/generate   - latent samples (mode: langevin | from_observation | retrieval_augmented)
 
-Run native bench domains (d01â€“d17):
+Run native bench domains (d01-d17):
   cypha_bench_run.exe --domain 17
 
 Rebuild bench report from saved tables:
   cypha_bench_report.exe --output .\\bench_report
 
-Run native diagnostics (phases 1â€“4 parity orchestrator):
+Run native diagnostics (phases 1-4 parity orchestrator):
   cypha_diagnostics_run.exe --fixtures share\\demo_fixtures\\..\\..\\fixtures
 
 Run CyphaLM bench CLI:
@@ -113,7 +113,7 @@ Run native tuning sweep (dry-run):
 
 Dev parity tools (not on PATH): bin\\dev\\score_batch_parity.exe, multilabel_dif_parity.exe, merge_from_parity.exe, similarity_index_parity.exe, embed_table_parity.exe, retrieval_parity.exe, som_parity.exe
 
-Qt shell: build `cypha_qt_shell` from `native/` (see `docs/native/qt/README.md`).
+Qt shell: build cypha_qt_shell from native/ (see docs/native/qt/README.md).
 
 These binaries are cross-built with static libgcc/libstdc++ (no separate MinGW DLLs required).
 EOF

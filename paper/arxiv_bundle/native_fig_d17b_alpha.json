@@ -1,0 +1,10 @@
+{
+  "figure": "native_fig_d17b_alpha",
+  "title": "D17B alpha spectrum (post-upgrade)",
+  "source": "docs/RESEARCH_STATUS.md + docs/reports/D17B_EXPERT_REPORTING_2026-07-12.md",
+  "metrics": {
+    "mean_alpha": 0.095,
+    "n_experts": 1,
+    "note": "Cold-start n_experts=1 is genuine novelty gating; use mean_expert_alpha for expert-specific α"
+  }
+}

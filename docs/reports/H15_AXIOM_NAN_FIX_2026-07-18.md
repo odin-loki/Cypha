@@ -6,4 +6,4 @@
 
 **Fix:** Control gates map tanh → `[0,1]` via `0.5*(tanh+1)`; candidate gate `g` maps sigmoid/eml → `[-1,1]`. Backward derivatives updated to match (`char_lstm.cpp`).
 
-**Follow-up:** FAST smoke with `--cell-variant H15` should yield finite BPC. Optional: re-run H15-only @ 300k to fill `variant_H15.json` (not required for lock).
+**Follow-up:** Remeasured **3.982 BPC** @ `n_train=5000` (2026-07-18); local cell-sweep CSV is 25/25. Optional: re-run H15-only @ 300k to replace the overnight null row (not required for lock).

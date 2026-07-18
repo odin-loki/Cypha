@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Package Linux x86_64 release tarball from a native CMake build directory.
 #
 # Usage:
@@ -73,7 +73,7 @@ cp "$REPO_ROOT/packaging/install_release_linux.sh" "$STAGING/install.sh"
 chmod +x "$STAGING/install.sh"
 
 cat >"$STAGING/README.txt" <<EOF
-Cypha ${VERSION} â€” Linux x86_64 native tools (full C++ framework)
+Cypha ${VERSION} - Linux x86_64 native tools (full C++ framework)
 =================================================================
 
 Quick install (adds ~/.local/bin symlinks for bin/; dev tools stay in bin/dev/):
@@ -84,16 +84,16 @@ Run native REST (classifier + CyphaLM + CyphaDIF routes):
     --f-field-json share/demo_fixtures/f_field.json
 
 CyphaDIF REST routes (POST JSON):
-  /dif/retrieve   â€” ranked database hits (input, database, top_k, optional label)
-  /dif/generate   â€” latent samples (mode: langevin | from_observation | retrieval_augmented)
+  /dif/retrieve   - ranked database hits (input, database, top_k, optional label)
+  /dif/generate   - latent samples (mode: langevin | from_observation | retrieval_augmented)
 
-Run native bench domains (d01â€“d17):
+Run native bench domains (d01-d17):
   cypha_bench_run --domain 17
 
 Rebuild bench report from saved tables:
   cypha_bench_report --output ./bench_report
 
-Run native diagnostics (phases 1â€“4 parity orchestrator):
+Run native diagnostics (phases 1-4 parity orchestrator):
   cypha_diagnostics_run --fixtures /path/to/fixtures
 
 Run CyphaLM bench CLI (WikiText profile; needs corpus on PATH or synthetic fallback):
@@ -104,7 +104,7 @@ Run native tuning sweep (dry-run):
 
 Dev parity tools (not on PATH): bin/dev/score_batch_parity, multilabel_dif_parity, merge_from_parity, similarity_index_parity, embed_table_parity, retrieval_parity, som_parity
 
-Qt shell: build `cypha_qt_shell` from `native/` (see `docs/native/qt/README.md`).
+Qt shell: build cypha_qt_shell from native/ (see docs/native/qt/README.md).
 
 Runtime deps: libgomp1 (OpenMP), libstdc++6, glibc 2.31+
 EOF

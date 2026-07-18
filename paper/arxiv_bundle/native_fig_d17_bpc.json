@@ -1,0 +1,16 @@
+{
+  "figure": "native_fig_d17_bpc",
+  "title": "CyphaLM D17 BPC vs n-gram baselines @ 300k",
+  "source": "bench/BASELINE_LOCK.json + docs/RESEARCH_STATUS.md",
+  "n_train": 300000,
+  "corpus": "wikitext2_official_split",
+  "series": [
+    {"name": "hybrid_gria_lstm (canonical pin)", "bpc": 2.873},
+    {"name": "overnight_results (lock production)", "bpc": 2.864125041163193},
+    {"name": "bigram (D17 table)", "bpc": 3.478},
+    {"name": "char-LSTM bench (D17 table)", "bpc": 2.979},
+    {"name": "GRIA-only stack", "bpc": 3.838},
+    {"name": "RPSM d21 lock", "bpc": 7.3360806755698835}
+  ],
+  "notes": "Canonical marketing pin remains 2.873; overnight_results 2.864 is the locked production overnight arm."
+}
