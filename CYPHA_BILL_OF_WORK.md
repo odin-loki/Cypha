@@ -67,7 +67,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 | [x] 0.1 | **300k production overnight** to completion | H22 @ 25/25 (`2026-07-17T15:39:44Z`) | [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/reports/OVERNIGHT_COMPLETE_2026-07-18.md) |
 | [x] 0.2 | `poll_and_finalize_overnight.ps1 -AutoCommit` after 0.1 | Done; lock `a552aee` (2026-07-18 06:47 local, exit=0) | Phase 18, 24 |
 | [ ] 0.3 | `gh auth login` + `publish_release.ps1` | **Blocked** — `gh auth status`: not logged in | Phase 15, 19 |
-| [ ] 0.4 | Validate **d38** overnight certificate (domain + CTest in tree) | **Next** — `native_d38` / `CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`; 115 → 116 CTests | Phase 24 |
+| [x] 0.4 | Validate **d38** overnight certificate (domain + CTest in tree) | **PASS** `overnight_certificate_ready` vs lock `a552aee` — [`D38_STATUS_2026-07-18.md`](docs/reports/D38_STATUS_2026-07-18.md) | Phase 24 |
 | [x] 0.5 | Reconcile three 300k hybrid BPC pins (2.873 / 2.892 / 2.897) | Canonical **2.873** `b0d39e7` | [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 
 ---
