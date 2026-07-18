@@ -1,6 +1,6 @@
 # Qt 6 desktop (M5)
 
-The product milestone in [`docs/port/PORT_FULL_STACK.md`](../../docs/port/PORT_FULL_STACK.md) calls for a **Qt 6** shell (dataset → train → registry → predict → explain) talking to the same REST JSON as FastAPI or linking **`cypha_core`** directly.
+The product milestone in [`docs/port/PORT_FULL_STACK.md`](../../docs/port/PORT_FULL_STACK.md) calls for a **Qt 6** shell (dataset → train → registry → predict → explain) talking to native **`cypha_rest`** JSON per **PORT_CONTRACT** §3 (or linking **`cypha_core`** directly).
 
 ## Optional build (off by default)
 

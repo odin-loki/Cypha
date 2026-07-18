@@ -40,7 +40,7 @@ struct BranchARouteResult {
 };
 
 struct BranchAGenerationResult {
-    std::string provider;  // ``cypha_lm`` | ``ollama`` | ``none``
+    std::string provider;  // ``cypha`` | ``ollama`` | ``none``
     std::string text;
     std::string reason;
     std::string error;

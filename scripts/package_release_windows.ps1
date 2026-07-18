@@ -110,13 +110,13 @@ Cypha $Version - Windows x86_64 native tools (MSVC, full C++ framework)
 Quick install (adds %LOCALAPPDATA%\Cypha\$Version\bin to user PATH):
   powershell -ExecutionPolicy Bypass -File install.ps1
 
-Run native REST (classifier + CyphaLM + CyphaDIF routes):
+Run native REST (classifier + Cypha sequence + Cypha routes):
   cypha_rest.exe --listen 127.0.0.1:8099 --cypha share\demo_fixtures\reference.cypha ^
     --f-field-json share\demo_fixtures\f_field.json
 
-CyphaDIF REST routes (POST JSON):
-  /dif/retrieve   - ranked database hits (input, database, top_k, optional label)
-  /dif/generate   - latent samples (mode: langevin | from_observation | retrieval_augmented)
+Cypha REST routes (POST JSON):
+  /retrieve   - ranked database hits (input, database, top_k, optional label)
+  /sample     - latent samples (mode: langevin | from_observation | retrieval_augmented)
 
 Run native bench domains (d01-d17):
   cypha_bench_run.exe --domain 17
@@ -127,7 +127,7 @@ Rebuild bench report from saved tables:
 Run native diagnostics (phases 1-4 orchestrator):
   cypha_diagnostics_run.exe --fixtures share\demo_fixtures\..\..\fixtures
 
-Run CyphaLM bench CLI:
+Run Cypha sequence bench CLI:
   cyphalm_bench_native.exe --mode hybrid --profile d17 --n-train 5000 --n-eval 500 --threads 1
 
 Dev golden tools (not on PATH): bin\dev\*_golden.exe

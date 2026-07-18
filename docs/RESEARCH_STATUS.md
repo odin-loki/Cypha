@@ -1,10 +1,10 @@
-# CyphaDIF — Research Status
+# Cypha — Research Status
 
 **Last updated:** 2026-07-18  
 **Runtime:** native C++ only — `cypha_rest`, `cypha_bench_run`, **160 CTests** *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)*  
 **Planning docs:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md), [`CYPHA_OPTIMALITY_PLAN.md`](../CYPHA_OPTIMALITY_PLAN.md) (task lists updated 2026-07-18)
 
-This is the canonical research journal for CyphaDIF and the Cypha stack. It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project.
+This is the canonical research journal for **Cypha** (one product; DIF classifier + sequence spine under `cypha::Cypha`). It records what we have tried, what the numbers show, what is confirmed, what is broken, and where we are going next. Intended audience: future developers and researchers picking up this project. Historical notes may still say “CyphaDIF” / “CyphaLM” for subsystems as they were named at the time.
 
 ---
 
@@ -12,14 +12,14 @@ This is the canonical research journal for CyphaDIF and the Cypha stack. It reco
 
 | System | Status | Verdict |
 |--------|--------|---------|
-| **CyphaDIF classifier** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
-| **CyphaDIF regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
+| **Cypha classifier (DIF)** | Working, benchmarked | Competitive on linear/tabular; hard limit on nonlinear boundaries |
+| **Cypha regressor (DIFRegressor)** | Working | Comparable to Ridge on smooth domains; poor on nonlinear equations |
 | **Native C++ / CUDA / Qt (M1–M6 + P7)** | Shipped | Sole production runtime; Kernel LLR in `native/src/kernel_memory.cpp`; **160 CTests** gate CI *(see `scripts/cypha_native_validate_all.ps1` for the current authoritative count)* |
 | **cypha::accel (GPU fused kernels)** | Working | Native CUDA when `-DCYPHA_ENABLE_CUDA=ON`; ISO C++ thread fallback |
-| **CyphaLM (native)** | Best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`; lock commit `a552aee`) | **Beats bigram (−0.61)** and char-LSTM bench (−0.11); GRIA-only stack **3.838**; overnight historical **2.864**; via `cyphalm_bench_native` / REST `/generate` — long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
+| **Cypha sequence (native)** | Historical best @ 300k: **2.873 BPC** (`hybrid_gria_lstm`; lock commit `a552aee`); living spine **PGM→Wy (U06)** | Hybrid **beats** bigram (−0.61) and char-LSTM bench (−0.11) as archived pin; GRIA-only **3.838**; overnight historical **2.864**; living default is PGM→Wy — [`ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md); long-range + V2 sweeps → [`CYPHALM_LONG_RANGE_TESTS.md`](CYPHALM_LONG_RANGE_TESTS.md), [`CYPHALM_MODEL_CLASS_RESEARCH.md`](CYPHALM_MODEL_CLASS_RESEARCH.md) |
 | **cypha_som (SOM upgrades)** | Removed (archived) | Failed experiment — see [`docs/archive/failed_experiments/cypha_som/README.md`](archive/failed_experiments/cypha_som/README.md) |
 | **Bench harness (`cypha_bench_run`)** | 17 domains complete | D04 full LLM suite; D17 extended integration; configs + reports under `bench/` |
-| **cypha_qt_shell / cypha_rest (native)** | Working | Qt Studio + cpp-httplib REST + registry; **CyphaLM `/generate` + `/generate/stream` (SSE)** on native `cypha_rest` |
+| **cypha_qt_shell / cypha_rest (native)** | Working | Qt Studio + cpp-httplib REST + registry; `/generate` + `/generate/stream` (SSE), `/sample`, `/retrieve`, `/sequence/*` on native `cypha_rest` |
 
 ---
 
@@ -98,7 +98,7 @@ Run on 2026-05-31 using `bench/config/everyday_profile.json` (deliberation off, 
 
 **Ablation (40k, D17):** `gria_ngram` **4.154** &lt; `full` **4.725** &lt; `ssm_only` **4.451**; `ablation_no_ssm` **4.165** ≈ gria_ngram — explicit n-gram embeds carry most of the gain.
 
-**300k verdict (2026-06-07):** **Hybrid GRIA+LSTM** (`hybrid_gria_lstm`) **beats bigram, trigram, and char-LSTM bench** on WikiText valid. Blend learns ~**99.6% LSTM**. Default D17 profile updated; Phase 1c cap **300k** (`CYPHA_BENCH_FULL_N_TRAIN`).
+**300k verdict (2026-06-07):** **Hybrid GRIA+LSTM** (`hybrid_gria_lstm`) **beats bigram, trigram, and char-LSTM bench** on WikiText valid. Blend learns ~**99.6% LSTM**. That hybrid profile was the D17 default at the time (Phase 1c cap **300k**, `CYPHA_BENCH_FULL_N_TRAIN`); today hybrid is historical and the living sequence default is PGM→Wy (U06).
 
 | Domain | Task | Metric | Value | Verdict |
 |--------|------|--------|-------|---------|
@@ -147,7 +147,7 @@ D17 uses **WikiText-2 official train/valid/test** splits (not random 80/20). Req
 | **Linear regression gap** | D01 R²=0.756 vs SGD R²≈1.0 for linear targets | Kernel LLR for LLR score + auto-gamma RFF |
 | **Feynman equations** | Mean R²=−0.010 on nonlinear physics *(2026-05-31; re-run 2026-07-11 now shows R²=0.444, beats Ridge on all 20 equations — see Priority 1 update; kernel LLR not applicable, D14 uses a separate linear expert-mixture regressor, not `KernelMemory`)* | Re-run shows this is no longer a hard limit on current HEAD; kernel LLR wiring there deferred (different subsystem) |
 | **ECG / temporal** | *(retired 2026-07-11 — no longer a hard limit)* D10A now **90.11%** on real ECG5000 (enriched features); synthetic fallback was **60.67%**; never a `CellAISSM` path — see [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md) (historical synth diagnosis, superseded) | N/A — resolved; no SSM defect existed |
-| **CyphaLM BPC (GRIA-only)** | GRIA stack @ 300k **3.838** (+0.36 vs bigram); hybrid **2.873** resolves gap | Hybrid is default; GRIA-only path for ablation / long-range SSM probes |
+| **Sequence BPC (GRIA-only)** | GRIA stack @ 300k **3.838** (+0.36 vs bigram); hybrid **2.873** resolved the gap historically | Hybrid is historical; living default is PGM→Wy (U06); GRIA-only path remains for ablation / long-range SSM probes |
 | **MNIST raw** | 72% vs 95% (LR+HOG) | Feature engineering (HOG) bridges most of the gap |
 
 ---
@@ -583,7 +583,7 @@ See [`docs/port/PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §6 (bench env vars, d
 2026 Q3 — Priority 1: Kernel LLR tuning → RFF auto-γ closes XOR gap to ~2.7pp (promote to default profile TBD)
 2026 Q3 — Priority 2: Auto-gamma RFF default → D08/D14 re-benchmark (defaults shipped; polish optional)
 2026 Q4 — RPSM Option A shipped; Option B STOP / deprioritized — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md)
-2026 Q4 — Cell hypothesis sweep closed — H19 ~2.921 best cell; hybrid 2.873 remains default
+2026 Q4 — Cell hypothesis sweep closed — H19 ~2.921 best cell; hybrid 2.873 historical; living default PGM→Wy (U06)
 2026 Q4 — Multi-view online training Phase 2 D16/DIF
 2026 Q3 — Priority 5: EWC D16B scoping shipped (2026-07-12) — modest gain 0.135→0.108; shared-model CL remains open
 2026 Q3 — D10 re-eval: done — **90.11%** on real ECG5000 (2026-07-18); not an SSM issue

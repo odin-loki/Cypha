@@ -12,7 +12,7 @@
 
 #include "cypha/infer_cpu.hpp"
 #include "cypha/load_cypha.hpp"
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 
 namespace fs = std::filesystem;
 

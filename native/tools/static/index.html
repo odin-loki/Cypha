@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cypha Studio</title>
+  <title>Cypha</title>
   <style>
     :root {
       color-scheme: dark;
@@ -237,7 +237,7 @@
 </head>
 <body>
   <header>
-    <h1>Cypha Studio</h1>
+    <h1>Cypha</h1>
     <span id="health-badge">checking…</span>
   </header>
 
@@ -246,7 +246,7 @@
     <button type="button" class="tab-btn" data-tab="predict">Predict</button>
     <button type="button" class="tab-btn" data-tab="update">Update</button>
     <button type="button" class="tab-btn" data-tab="models">Experiments</button>
-    <button type="button" class="tab-btn" data-tab="lm">CyphaLM</button>
+    <button type="button" class="tab-btn" data-tab="lm">Cypha</button>
     <button type="button" class="tab-btn" data-tab="session">Session</button>
     <button type="button" class="tab-btn" data-tab="metrics">Metrics</button>
     <button type="button" class="tab-btn" data-tab="intelligence">Intelligence</button>
@@ -321,18 +321,18 @@
 
     <div id="tab-lm" class="tab-panel">
       <section>
-        <h2>CyphaLM Chat</h2>
+        <h2>Cypha Chat</h2>
         <p class="hint">Conversational pane over <code>POST /generate/stream</code> (SSE) with fallback to <code>POST /generate</code>.</p>
-        <p id="chat-status">Load a checkpoint via <code>POST /lm/load</code> or start <code>cypha_rest --cyphalm-checkpoint</code>.</p>
+        <p id="chat-status">Load a checkpoint via <code>POST /sequence/load</code> or start <code>cypha_rest --sequence-checkpoint</code>.</p>
         <div id="chat-log" class="chat-log" aria-live="polite">
           <div id="chat-empty" class="chat-empty">
             <p>No messages yet</p>
-            <p class="hint">Type a prompt below. CyphaLM must be loaded via <code>--cyphalm-checkpoint</code> or <code>POST /lm/load</code>.</p>
+            <p class="hint">Type a prompt below. Sequence must be loaded via <code>--sequence-checkpoint</code> or <code>POST /sequence/load</code>.</p>
           </div>
         </div>
         <div class="chat-composer">
           <label for="chat-input">Message</label>
-          <textarea id="chat-input" placeholder="Type a prompt for CyphaLM…"></textarea>
+          <textarea id="chat-input" placeholder="Type a prompt for Cypha…"></textarea>
           <div class="row">
             <label for="chat-strategy">strategy</label>
             <select id="chat-strategy">
@@ -354,14 +354,14 @@
       <section>
         <details class="lm-advanced">
           <summary>Advanced — raw token API</summary>
-          <p class="hint">POST /generate (falls back to /lm/generate if unavailable).</p>
+          <p class="hint">POST /generate</p>
           <label for="lm-prompt">prompt_ids (JSON array of integers)</label>
           <textarea id="lm-prompt">[1, 2, 3]</textarea>
           <label for="lm-max-tokens">max_tokens</label>
           <input type="number" id="lm-max-tokens" value="8" min="1" max="512">
           <div class="row">
             <button type="button" id="btn-lm-generate">Generate</button>
-            <button type="button" id="btn-lm-metrics" class="secondary">GET /lm/metrics</button>
+            <button type="button" id="btn-lm-metrics" class="secondary">GET /sequence/metrics</button>
           </div>
           <pre id="lm-out" class="out"></pre>
         </details>

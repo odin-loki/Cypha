@@ -7,7 +7,7 @@
 #include <random>
 #include <stdexcept>
 
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 
 namespace cypha {
 

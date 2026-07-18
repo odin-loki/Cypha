@@ -52,7 +52,7 @@ void validate_result_section(const Json& section, const char* name, const char* 
         fail(std::string(name) + " status is pending");
     }
     if (status != "fast_smoke" && status != "medium_smoke" && status != "production" &&
-        status != "completed") {
+        status != "completed" && status != "historical") {
         fail(std::string(name) + " status '" + status + "' is not recognized");
     }
     if (!section["bpc"].is_number()) {
@@ -135,6 +135,10 @@ void validate_production_tier(const Json& lock) {
     }
     require_key(overnight, "status", "overnight_results");
     const std::string status = overnight["status"].get<std::string>();
+    if (status == "historical") {
+        std::printf("  (-Production: n_train=%d status=historical, archived pin)\n", n_train);
+        return;
+    }
     if (status != "production" && status != "completed") {
         fail("overnight_results status '" + status +
              "' invalid for production tier (n_train=" + std::to_string(n_train) +

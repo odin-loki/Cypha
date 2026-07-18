@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 
 int main() {
   constexpr std::size_t k = 3;

@@ -1,6 +1,6 @@
 #include "cypha/mt19937_rng.hpp"
 #include "cypha/preprocessor.hpp"
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 #include "cypha/rff_features.hpp"
 
 #include <algorithm>

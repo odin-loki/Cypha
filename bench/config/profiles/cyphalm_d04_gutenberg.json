@@ -49,6 +49,8 @@
     "delta_vs_char_lstm": -0.188,
     "hybrid_minus_gria_bpc": 1.105,
     "artifact": "cyphalm_hybrid_lstm_d04_300k.json",
-    "n_train": 300000
+    "n_train": 300000,
+    "status": "historical",
+    "notes": "Historical hybrid GRIA+LSTM pin. Living Cypha sequence default is PGM→Wy (U06 / pgm_logits)."
   }
 }

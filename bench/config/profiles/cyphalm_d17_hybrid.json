@@ -40,6 +40,8 @@
     "source": "hybrid_c2_300k",
     "held_out_bpc": 2.87,
     "delta_vs_gria_ngram": -0.972,
-    "alias_of": "cyphalm_d17_wikitext.json"
+    "alias_of": "cyphalm_d17_wikitext.json",
+    "status": "historical",
+    "notes": "Historical hybrid GRIA+LSTM pin. Living Cypha sequence default is PGM→Wy (U06 / pgm_logits)."
   }
 }

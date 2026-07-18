@@ -68,7 +68,7 @@
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/preprocessor.hpp"
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 #include "cypha/replay_buffer.hpp"
 #include "cypha/rff_features.hpp"
 #include "cypha/sync_infer.hpp"
@@ -4196,6 +4196,9 @@ std::string validate_production_tier_lock(const Json& lock) {
 
     require_lock_key(overnight, "status", "overnight_results");
     const std::string status = overnight["status"].get<std::string>();
+    if (status == "historical") {
+        return "historical_archived";
+    }
     if (status != "production" && status != "completed") {
         throw std::runtime_error("overnight_results status '" + status +
                                  "' invalid for production tier (n_train=" + std::to_string(n_train) +
@@ -4250,6 +4253,9 @@ std::string validate_overnight_complete_lock(const Json& lock) {
         }
         require_lock_key(lock[name], "status", name);
         const std::string status = lock[name]["status"].get<std::string>();
+        if (status == "historical") {
+            return "historical_overnight_archived";
+        }
         if (status != "production" && status != "completed") {
             throw std::runtime_error(std::string(name) + " status '" + status +
                                      "' invalid for overnight complete tier (n_train=" +

@@ -10,7 +10,7 @@ Native build, validation, and release helpers. Narrative “when to run what” 
 | `ci_native_linux.sh` | Linux/WSL mirror of CI **`build_and_test`**: cmake + `ctest -R native_` | console |
 | `ci_federated_tls_linux.sh` | Linux/WSL mirror of optional CI **`federated_tls`**: `-DCYPHA_ENABLE_OPENSSL=ON` + `ctest -R native_federated_tls` | console |
 | `ci_federated_tls_windows.ps1` | Windows mirror of optional CI **`federated_tls`**: OpenSSL via vcpkg / `OPENSSL_ROOT_DIR`, `ctest -R native_federated_tls_smoke` | console |
-| `cyphalm_native_validate.ps1` | CyphaLM native CTest subset + checkpoint smoke | console |
+| `cyphalm_native_validate.ps1` | Cypha sequence CTest subset + checkpoint smoke | console |
 | `wsl_verify.sh` | WSL: native build + CTest + optional REST smoke (`RUN_NATIVE=1`) | console |
 | `build_native_wsl.ps1` | WSL CMake build in `native/build-wsl` + optional ctest | console |
 
@@ -47,10 +47,12 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | **`cypha_diagnostics_run`** (native) | Phases 1–4 validation orchestrator (parity exes + inline checks) | stdout |
 | `cypha_bench_full_baseline.ps1` | Capture baseline bench profile | `artifacts/profiles/` |
 | `cypha_tune_smoke.ps1` | Dry-run tune sweep smoke | console |
-| `cyphalm_native_run_modes.ps1` | CyphaLM native mode matrix | console |
-| `cyphalm_native_sweep.ps1` / `cyphalm_native_sweep_safe.ps1` | CyphaLM config sweeps | disk |
+| `cyphalm_native_run_modes.ps1` | Cypha sequence mode matrix | console |
+| `cyphalm_native_sweep.ps1` / `cyphalm_native_sweep_safe.ps1` | Cypha sequence config sweeps | disk |
 | `download_wikitext2.ps1` | Download WikiText-2 raw into `bench/data/wikitext2/wikitext-2/` (PowerShell 5+) | disk |
 | `download_wikitext2.sh` | Bash equivalent for Linux/CI | disk |
+| `run_unified_context_tournament.ps1` | U01–U10 unified-context BPC tournament vs B2 (40k screen, 300k crown) | `bench/results/unified_context_tournament/` |
+| `run_large_context_profile.ps1` | Large-context / large-data profiling: PGM N-scale + BPC tiers (hybrid/H23) + needle-haystack (`-Tier Medium\|Large\|XL`) | `bench/results/large_context_profile/` |
 | `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`, `-Medium`, `-Production`) | disk |
 | `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`, `-Medium`, `-Production`) | disk |
 | `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast`, `-Medium`, or `-Production` to child scripts) | `bench/BASELINE_LOCK.json` |

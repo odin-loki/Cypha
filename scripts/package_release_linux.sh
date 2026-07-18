@@ -95,13 +95,13 @@ Cypha ${VERSION} - Linux x86_64 native tools (full C++ framework)
 Quick install (adds ~/.local/bin symlinks for bin/; dev tools stay in bin/dev/):
   bash install.sh
 
-Run native REST (classifier + CyphaLM + CyphaDIF routes):
+Run native REST (classifier + Cypha sequence + Cypha routes):
   cypha_rest --listen 127.0.0.1:8099 --cypha share/demo_fixtures/reference.cypha \\
     --f-field-json share/demo_fixtures/f_field.json
 
-CyphaDIF REST routes (POST JSON):
-  /dif/retrieve   - ranked database hits (input, database, top_k, optional label)
-  /dif/generate   - latent samples (mode: langevin | from_observation | retrieval_augmented)
+Cypha REST routes (POST JSON):
+  /retrieve   - ranked database hits (input, database, top_k, optional label)
+  /sample     - latent samples (mode: langevin | from_observation | retrieval_augmented)
 
 Run native bench domains (d01-d17):
   cypha_bench_run --domain 17
@@ -112,7 +112,7 @@ Rebuild bench report from saved tables:
 Run native diagnostics (phases 1-4 orchestrator):
   cypha_diagnostics_run --fixtures /path/to/fixtures
 
-Run CyphaLM bench CLI (WikiText profile; needs corpus on PATH or synthetic fallback):
+Run Cypha sequence bench CLI (WikiText profile; needs corpus on PATH or synthetic fallback):
   cyphalm_bench_native --mode hybrid --profile d17 --n-train 5000 --n-eval 500 --threads 1
 
 Run native tuning sweep (dry-run):

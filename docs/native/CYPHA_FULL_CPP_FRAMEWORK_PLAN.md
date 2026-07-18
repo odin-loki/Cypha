@@ -14,7 +14,7 @@ Changelog: [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ```
 scripts/cypha_native_validate_all.ps1  → OK
-  ~160 CTests | fig01-fig09 PNG | /dif/retrieve | tune dry-run
+  ~160 CTests | fig01-fig09 PNG | /retrieve | tune dry-run
 ```
 
 GitHub Actions **CI**: Linux **`build_and_test`** + **`windows_msvc`** (MSVC Release). MinGW is optional local only — not a CI/release gate. CUDA jobs removed — validate locally. Release **v2.3.24** installers published.
@@ -53,9 +53,9 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ```
 cypha_qt_shell (9 tabs + Settings/Confusion dialogs)
-cypha_rest (/dif/*, /lm/*, /route/*)
+cypha_rest (/sample, /retrieve, /sequence/*, /route/*)
 cypha_bench_run │ cypha_bench_report │ cypha_tune_run │ cypha_diagnostics_run
-cyphalm_bench_native │ cypha_lm_native │ cypha_core (C++ library)
+cyphalm_bench_native │ cypha_core (C++ library; cypha_lm_native INTERFACE alias)
 ```
 
 Bench configs, data, and reports live under **`bench/`**; parity goldens under **`fixtures/`**.

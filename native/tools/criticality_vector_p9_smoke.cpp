@@ -10,7 +10,7 @@
 #include "cypha/intelligence/intelligence_profiler.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
 #include "cypha/load_cypha.hpp"
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 
 namespace {
 

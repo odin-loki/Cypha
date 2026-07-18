@@ -87,7 +87,7 @@ add_library(cypha_core STATIC
   src/replay_buffer.cpp
   src/train_step_vector.cpp
   src/nig_field.cpp
-  src/regression_stub.cpp
+  src/regression.cpp
   src/mke_scalar_train_step.cpp
   src/em_step.cpp
   src/class_gmm.cpp
@@ -137,16 +137,14 @@ endif()
 file(GLOB CYPHALM_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/*.cpp")
 list(REMOVE_ITEM CYPHALM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/lm_intelligence_monitor.cpp")
 if(NOT CYPHALM_SOURCES)
-  message(FATAL_ERROR "cypha_lm_native: no sources under native/src/cyphalm/")
+  message(FATAL_ERROR "cypha_core: no sources under native/src/cyphalm/")
 endif()
-add_library(cypha_lm_native STATIC ${CYPHALM_SOURCES})
+# One Cypha: sequence stack + facade compile into cypha_core (no second product library).
+target_sources(cypha_core PRIVATE ${CYPHALM_SOURCES} src/cypha.cpp)
 
-target_include_directories(cypha_lm_native PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/include"
-  "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
-)
-
-target_link_libraries(cypha_lm_native PUBLIC cypha_core)
+# Compatibility alias for existing target_link_libraries(... cypha_lm_native).
+add_library(cypha_lm_native INTERFACE)
+target_link_libraries(cypha_lm_native INTERFACE cypha_core)
 
 add_library(cypha_bench_native STATIC
   src/bench/bench_profile.cpp
@@ -178,16 +176,9 @@ target_link_libraries(cypha_bench_native PUBLIC cypha_core cypha_lm_native)
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
   target_link_libraries(cypha_core PUBLIC OpenMP::OpenMP_CXX)
-  target_link_libraries(cypha_lm_native PUBLIC OpenMP::OpenMP_CXX)
-  message(STATUS "cypha_core + cypha_lm_native: OpenMP enabled (score_matrix row-parallel)")
+  message(STATUS "cypha_core: OpenMP enabled (score_matrix row-parallel)")
 else()
   message(STATUS "OpenMP not found; score_matrix / batch uses std::thread")
-endif()
-
-if(MSVC)
-  target_compile_options(cypha_lm_native PRIVATE /W4 /permissive-)
-else()
-  target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Phase 0: golden regression under tests/regression/.
@@ -284,6 +275,16 @@ target_link_libraries(cuda_smoke PRIVATE cypha_core)
 
 add_executable(create_model_smoke tools/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
+
+add_executable(cypha_one_smoke tools/cypha_one_smoke.cpp)
+target_link_libraries(cypha_one_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(cypha_one_smoke)
+add_test(
+  NAME native_one_cypha_smoke
+  COMMAND "$<TARGET_FILE:cypha_one_smoke>"
+    --cypha "${CMAKE_SOURCE_DIR}/../fixtures/reference.cypha"
+)
+set_tests_properties(native_one_cypha_smoke PROPERTIES TIMEOUT 120)
 
 add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
 target_link_libraries(cypha_federated_merge PRIVATE cypha_core)
@@ -409,6 +410,16 @@ target_link_libraries(ewc_real_fisher_smoke PRIVATE cypha_core)
 add_executable(reversible_ssm_cell_smoke tools/reversible_ssm_cell_smoke.cpp)
 target_link_libraries(reversible_ssm_cell_smoke PRIVATE cypha_lm_native)
 
+add_executable(pgm_cell_smoke tools/pgm_cell_smoke.cpp)
+target_link_libraries(pgm_cell_smoke PRIVATE cypha_lm_native)
+
+add_executable(pgm_checkpoint_roundtrip_smoke tools/pgm_checkpoint_roundtrip_smoke.cpp)
+target_link_libraries(pgm_checkpoint_roundtrip_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(pgm_checkpoint_roundtrip_smoke)
+
+add_executable(pgm_cell_bench tools/pgm_cell_bench.cpp)
+target_link_libraries(pgm_cell_bench PRIVATE cypha_lm_native)
+
 add_executable(curriculum_smoke tools/curriculum_smoke.cpp)
 target_link_libraries(curriculum_smoke PRIVATE cypha_core)
 
@@ -528,6 +539,8 @@ set(
   ewc_hybrid_smoke
   ewc_weights_smoke
   reversible_ssm_cell_smoke
+  pgm_cell_smoke
+  pgm_checkpoint_roundtrip_smoke
   native_sr_gate_laws_smoke
   federated_worker_smoke
   federated_tls_smoke
@@ -678,7 +691,6 @@ if(MSVC)
   target_compile_options(embed_table_golden PRIVATE /W4 /permissive-)
   target_compile_options(retrieval_golden PRIVATE /W4 /permissive-)
   target_compile_options(cuda_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(cypha_lm_native PRIVATE /W4 /permissive-)
   target_compile_options(cypha_bench_native PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_ssm_diagnose PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_hebbian_golden PRIVATE /W4 /permissive-)
@@ -697,7 +709,6 @@ if(MSVC)
 else()
   # Same CUDA-source scoping concern as the MSVC branch above.
   target_compile_options(cypha_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic>)
-  target_compile_options(cypha_lm_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_bench_native PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_hebbian_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(som_golden PRIVATE -Wall -Wextra -Wpedantic)
@@ -1218,6 +1229,17 @@ add_test(
   NAME native_reversible_ssm_cell_smoke
   COMMAND "$<TARGET_FILE:reversible_ssm_cell_smoke>"
 )
+
+add_test(
+  NAME native_pgm_cell_smoke
+  COMMAND "$<TARGET_FILE:pgm_cell_smoke>"
+)
+
+add_test(
+  NAME native_pgm_checkpoint_roundtrip_smoke
+  COMMAND "$<TARGET_FILE:pgm_checkpoint_roundtrip_smoke>"
+)
+set_tests_properties(native_pgm_checkpoint_roundtrip_smoke PROPERTIES TIMEOUT 120)
 
 add_test(
   NAME native_sr_gate_laws_smoke
@@ -2283,6 +2305,20 @@ else()
   )
 endif()
 set_tests_properties(native_rest_schema_contract PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
+
+if(WIN32)
+  add_test(
+    NAME native_cypha_rest_one_smoke
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+      -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_cypha_rest_one_smoke.ps1"
+      -BuildDir "$<TARGET_FILE_DIR:cypha_rest>"
+      -RestExe "$<TARGET_FILE:cypha_rest>"
+  )
+  set_tests_properties(native_cypha_rest_one_smoke PROPERTIES
+    RUN_SERIAL TRUE
+    TIMEOUT 30
+  )
+endif()
 
 if(TARGET experiment_db_smoke)
   add_test(

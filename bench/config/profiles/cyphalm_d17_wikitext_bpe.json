@@ -41,6 +41,7 @@
     "source": "d17_bpe_upgrade_wave2",
     "corpus": "wikitext2+bpe",
     "recommended_n_train": 5000,
-    "notes": "Char-BPE hybrid gate vs char hybrid ~4.04@5k. Train assets via scripts/train_wikitext_bpe.py."
+    "status": "historical",
+    "notes": "Historical hybrid GRIA+LSTM pin. Living Cypha sequence default is PGM→Wy (U06 / pgm_logits). Char-BPE hybrid gate vs char hybrid ~4.04@5k. Train assets via scripts/train_wikitext_bpe.py."
   }
 }

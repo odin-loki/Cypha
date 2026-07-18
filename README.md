@@ -1,14 +1,14 @@
-# Cypha — custom AI architecture: Differential Information Field Classifier (CyphaDIF)
+# Cypha — classify, regress, sample latents, generate tokens
 
 [![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows — latest **[v2.3.24](https://github.com/odin-loki/Cypha/releases/tag/v2.3.24)**)
 
-> **A custom AI architecture invented from first principles by unifying four otherwise-disconnected threads of theory: AIXI / Solomonoff (minimum-description-length priors over class complexity, `‖Δk‖_F ≤ C`), information geometry (natural gradients on the Gaussian manifold, Cramér–Rao efficient), the Free Energy Principle / active inference (a shared world prior `θ₀` plus differential class offsets `Δk`), and the Information Bottleneck (contrastive encoder feedback via Fisher–Rao residuals). The core invariant is that every class `k` is represented as `θ₀ ⊕ Δk` — a shared world prior plus a small class-specific offset in natural parameter space — and classification is `y* = argmax_k [log p(h | θ₀ ⊕ Δk) + log p(k | context)]`. The architecture is domain-agnostic (any input is reduced to a latent vector by a pluggable `Encoder`), handles heavy-tailed inputs through a Generalised-Hyperbolic / NIG gate, detects out-of-distribution inputs natively, supports online corrections, and reports calibrated regression uncertainty. The engineering layer — CMake-built C++ native core (sole runtime), REST server, Qt desktop Studio, optional local CUDA, SQLite-backed persistent state — is validated by **~160 CTests** (see `scripts/cypha_native_validate_all.ps1`) across named golden fixtures (`cypha_golden`, `memory_train_golden`, `quantile_dif_train_golden`, …). Canonical CyphaLM D17 hybrid pin: **2.873 BPC** @ 300k WikiText-2.**
+> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + next-token / text generate. Built from first principles (AIXI/MDL, information geometry, free-energy world prior `θ₀ ⊕ Δk`, Information Bottleneck encoder). Native C++ sole runtime — REST, Qt Studio, optional CUDA — validated by CTests. Historical D17 hybrid BPC **2.873** is archived; living sequence spine is PGM→Wy (see `docs/reports/ONE_CYPHA_CUTOVER.md`).**
 
 ---
 
 ## What this folder is
 
-Cypha is a *fully custom* AI architecture — not a wrapper around a transformer, not a fork of an existing framework, not a deployment of a published paper. The object at the centre is **CyphaDIF**, the Differential Information Field Classifier, which derives a single learning rule from the intersection of four formal programmes:
+Cypha is a *fully custom* AI architecture — not a wrapper around a transformer, not a fork of an existing framework, not a deployment of a published paper. One public type `cypha::Cypha` owns classify, regress, latent sample, and sequence. Its classifier core is the Differential Information Field (historically branded CyphaDIF), which derives a single learning rule from the intersection of four formal programmes:
 
 - **AIXI / Solomonoff** contributes a minimum-description-length prior on class complexity. The class-specific offset `Δk` is regularised by `‖Δk‖_F ≤ C` so that simpler classes are preferred when the evidence is weak, with cold-start protection for the first `_MDL_COLD_START = 8` observations.
 - **Information geometry** contributes the choice of update rule. Updates are natural gradients on the diagonal-Gaussian manifold, which is Cramér–Rao efficient — informally, the cheapest update that does not waste information.
@@ -17,7 +17,7 @@ Cypha is a *fully custom* AI architecture — not a wrapper around a transformer
 
 These four threads collapse into one operational rule: every class has the same world prior plus a small offset, classification is an `argmax` over those offsets, and learning is a natural-gradient step that respects an MDL constraint and a Fisher–Rao encoder loss simultaneously.
 
-The model is **domain-agnostic** — anything that can be turned into a latent vector by a pluggable `Encoder` works (numbers, text, spectrograms, behavioural telemetry, …). Out of the box it ships with `VectorEncoder` (passthrough), `RFFEncoder` (Random Fourier Features over an RBF kernel, `D = 256` features default), and `ConcatEncoder` (concatenate multiple encoders' outputs). The `MultiModalCyphaDIF` extends this with **per-encoder LLR fusion** so each modality contributes its own log-likelihood-ratio and they are summed at the decision step.
+The model is **domain-agnostic** — anything that can be turned into a latent vector by a pluggable `Encoder` works (numbers, text, spectrograms, behavioural telemetry, …). Out of the box it ships with `VectorEncoder` (passthrough), `RFFEncoder` (Random Fourier Features over an RBF kernel, `D = 256` features default), and `ConcatEncoder` (concatenate multiple encoders' outputs). Multi-modal LLR fusion (`MultiModalCyphaDIF` type name, retained) lets each modality contribute its own log-likelihood-ratio; they are summed at the decision step.
 
 Five enhancement phases sit on top of the v1 foundation:
 
@@ -58,7 +58,7 @@ bash scripts/ci_native_linux.sh
 **Run services** (after build or release install):
 
 ```bash
-# REST API (CyphaDIF + CyphaLM + Branch A)
+# REST API (Cypha + Branch A)
 cypha_rest --listen 127.0.0.1:8099 --cypha fixtures/reference.cypha
 
 # Qt Studio shell (build with -DCYPHA_BUILD_QT=ON)
@@ -158,7 +158,7 @@ A separate **`CausalField`** runs alongside as a recurrent SGEMV update for sequ
 
 These defaults come from a profiled medium-grid tuning programme, not from guesses.
 
-### `CyphaDIF`
+### `cypha::Cypha` (classifier defaults)
 
 | Parameter | Default | Origin |
 |---|---|---|
@@ -200,7 +200,7 @@ Full inventory in [`native/README.md`](native/README.md). CI: **`build_and_test`
 
 Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/reports/DIAGNOSTIC_REPORT.md). Three root-cause bugs were found and fixed; results below are **post-fix**:
 
-| Task | CyphaDIF | SGD (online) | SVM ceiling | Notes |
+| Task | Cypha | SGD (online) | SVM ceiling | Notes |
 |------|----------|--------------|-------------|-------|
 | S1 — linearly-separable 2-class | **0.783** | 0.644 | 0.898 | RFF + 4 passes + deliberation disabled |
 | S3 — XOR (nonlinear) | 0.482 | 0.498 | 0.825 | **Hard LLR-linearity limit** — kernel LLR required |
@@ -214,15 +214,15 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: latent RFF auto-gamma reaches **~76.3%** (~2.7 pp vs sklearn ~79%); see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
-- **D04 / D17:** CyphaLM hybrid GRIA+LSTM canonical pin **2.873 BPC** @ 300k WikiText-2 (`bench/BASELINE_LOCK.json`); run via **`cypha_bench_run`**.
+- **D04 / D17:** historical hybrid GRIA+LSTM pin **2.873 BPC** @ 300k WikiText-2 (`bench/BASELINE_LOCK.json`); living sequence spine is PGM→Wy (U06). Run via **`cypha_bench_run`**.
 - **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
-- **CyphaLM REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE) with per-token CyphaDIF routing.
+- **Sequence REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE), plus `/sample`, `/retrieve`, `/sequence/*`.
 
 ---
 
 ## 🚧 Honest framing
 
-- **The AI is bespoke.** CyphaDIF is not a fork, not a wrapper, not a tuning of an existing model. It is a from-first-principles architecture whose learning rule is derived from the intersection of four formal programmes (AIXI / Solomonoff, information geometry, FEP, IB).
+- **The AI is bespoke.** Cypha is not a fork, not a wrapper, not a tuning of an existing model. It is a from-first-principles architecture whose learning rule is derived from the intersection of four formal programmes (AIXI / Solomonoff, information geometry, FEP, IB).
 - **The proof surface is parity correctness, not leaderboard ML accuracy.** No "we beat X on benchmark Y" claim. Instead: "the native runtime matches committed fixture goldens across this CTest matrix." Benchmark numbers (§ above) are honest measurements on standard sklearn datasets, not cherry-picked.
 - **Nonlinear decision boundaries:** Linear LLR caps XOR near chance; **latent RFF** closes most of the sklearn gap (~76.3% vs ~79%). See [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.

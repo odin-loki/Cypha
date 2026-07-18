@@ -1,4 +1,4 @@
-// cyphalm_train — train CyphaLM from corpus text and save a Python-compatible checkpoint.
+// cyphalm_train — train Cypha sequence from corpus text and save a checkpoint.
 #include <filesystem>
 #include <iostream>
 #include <limits>

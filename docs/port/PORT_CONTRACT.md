@@ -2,6 +2,8 @@
 
 This document is the **normative checklist** for native ports. Behavior must match the frozen contracts in this document unless you explicitly version and document a breaking change.
 
+> **Naming:** Historical Python **CyphaDIF** names below are wire-format parity references only. The living product is **Cypha** (classifier + sequence); REST is **`cypha_rest`**.
+
 ## 1. Binary state (`.cypha`)
 
 - **Writers / readers**: `cypha_save_binary`, `cypha_load_binary`, **`cypha_save_binary_to_bytes`**, **`cypha_load_binary_from_bytes`** in native **`cypha_core`** (v3 bytes ↔ dict; same layout as native **`save_cypha_to_buffer`** / **`load_cypha_from_buffer`**).
@@ -10,15 +12,15 @@ This document is the **normative checklist** for native ports. Behavior must mat
 - **Version**: single byte; current **3**. After magic: `version (u8)`, `endian_sentinel (u32) = 0x01020304`, `n_fields (u32)`, then keyed entries.
 - **Endianness**: **little-endian** for all multi-byte scalars; if sentinel ≠ `0x01020304`, the file requires byte-swapping (big-endian writer).
 - **Tensor rule**: arrays serialized as **float64**, **C-contiguous row-major**; no stride metadata in the file.
-- **NIG `field_W_T` / `field_a_eff`**: Python **`CyphaDIF.save_state()`** persists **`field_W_T`**, **`field_h`**, **`field_step`**, and **`field_a_eff`** (float64 tensor, same values as **`Field._A_eff`** fp32 matvec matrix). Native **`load_cypha_*` → `CyphaInferModel`** uses optional **`field_a_eff`** when shapes match **`field_W_T`**; otherwise recomputes via **`recompute_field_a_eff`** (`native/src/nig_field.cpp`). Qt **`patch_infer_training_snapshot`** and **`memory_train_roundtrip`** (after merge) emit **`field_a_eff`** when a causal field is present. Older v3 files without **`field_a_eff`** still load.
+- **NIG `field_W_T` / `field_a_eff`**: Historical Python **`CyphaDIF.save_state()`** wrote **`field_W_T`**, **`field_h`**, **`field_step`**, and **`field_a_eff`** (float64 tensor, same values as **`Field._A_eff`** fp32 matvec matrix). Native **`load_cypha_*` → `CyphaInferModel`** uses optional **`field_a_eff`** when shapes match **`field_W_T`**; otherwise recomputes via **`recompute_field_a_eff`** (`native/src/nig_field.cpp`). Qt **`patch_infer_training_snapshot`** and **`memory_train_roundtrip`** (after merge) emit **`field_a_eff`** when a causal field is present. Older v3 files without **`field_a_eff`** still load.
 - **Recursive dicts**: dtype `DICT` nests key/value pairs; the tree is the same shape as `save_state()` / `load_state()`.
-- **`world.F_field`** (optional in older files; **written by current `CyphaDIF.save_state`**): float64 tensor shape `(feat_dim, field_dim)` — field-conditioned shift for μ₀ (`WorldPrior.F_field`). When present, native loaders may omit external `f_field.json`. Older checkpoints without `F_field` still load via sidecar JSON.
+- **`world.F_field`** (optional in older files; **written by native `Cypha::save` / Qt `patch_infer_training_snapshot`**; historical Python writer did the same): float64 tensor shape `(feat_dim, field_dim)` — field-conditioned shift for μ₀ (`WorldPrior.F_field`). When present, native loaders may omit external `f_field.json`. Older checkpoints without `F_field` still load via sidecar JSON.
 
 Native loaders should accept **version 3** and reject unknown higher versions.
 
 ### Qt shell native save parity (`patch_infer_training_snapshot`)
 
-After native training, **`patch_infer_training_snapshot`** in `native/qt/src/shell_main.cpp` writes all keys that Python `CyphaDIF._save_state()` produces:
+After native training, **`patch_infer_training_snapshot`** in `native/qt/src/shell_main.cpp` writes all keys that the historical Python **`CyphaDIF._save_state()`** writer produced:
 
 | Python `_save_state` key | Native write | Notes |
 |---|---|---|
@@ -40,9 +42,9 @@ After native training, **`patch_infer_training_snapshot`** in `native/qt/src/she
 
 `cypha_core` uses `cypha_accel.score_batch.fused_score_llr` for the batched LLR core in `score_matrix` / `generate` (fuses `(H-μ₀)⊙inv_v`, `R @ D.T`, and MDL/context bias). Encoder batch projection uses `project_features`. **CuPy on GPU** when installed and a CUDA device is visible; otherwise **NumPy on CPU**. Numerics must match the reference formula in float64 (CTest **native_***, CTest **native_***). Native code may implement the same ops on any backend.
 
-## 2. Core inference math (CyphaDIF)
+## 2. Core inference math (Cypha)
 
-Treat this as the **single spec** shared by `infer`, `batch_infer`, `batch_infer_full`, and the studio `InferenceEngine`.
+Treat this as the **single spec** shared by `infer`, `batch_infer`, `batch_infer_full`, **`cypha_rest`**, and the Qt shell.
 
 1. **Latent**: `h = encoder.project(encoder_fn(x))` with `h` shape `(d,)`, `batch_encode` stacks to `(N, d)`.
 2. **LLR**: `score_matrix(H, use_field)` — same μ₀ shift when `use_field=True` (field-conditioned prior). Column order = `memory._label_order`. Per-class MDL term uses **`world.v_mean / (n_obs_k + 1)`** (scalar mean of diagonal **variances** `v`), not `mean(inv_v)` — batch `score_matrix` must match `DIFMemory.classify`.
@@ -60,43 +62,47 @@ These features exist in native **`cypha_core`**. Parity fixtures for the core li
 
 - **Deliberation** (`deliberation_lo`, `deliberation_hi`): when `lo < hi` and the inferred confidence falls in `[lo, hi]`, `infer` / `infer_full` return label `__unknown__` and halve the confidence. Default is **`deliberation_lo=1.0`, `deliberation_hi=0.0`** (disabled; `lo >= hi` → no abstention). **Native (Phase 1):** `apply_deliberation` + `infer_at_h` (`native/src/infer_cpu.cpp`); keys loaded from `.cypha`; optional `deliberation_lo` / `deliberation_hi` on `POST /predict` when `use_gh=false`. Not applied on `gh_infer` (matches Python). CTest **`native_gh_infer_deliberation`** + `fixtures/gh_infer_deliberation/` (committed sidecar).
 
-- **`gh_infer` vs native REST `use_gh`:** FastAPI `InferenceEngine` with `use_gh=True` calls `CyphaDIF.gh_infer` (NIG-adjusted temperature `T_adj`, classify with `mahal_ema=None`, `gh_chi=gh_psi=1`). **Native (Phase 1):** `gh_infer_at_h` + `cypha_rest` `POST /predict` when `use_gh=true` (session `g_gh_chi` / `g_gh_psi`; `anomaly_score` from `R_eff` vs `_mahal_ema`; `is_ood` when anomaly > 3.0). CTest **`native_gh_infer_deliberation`**. `/update` with `use_gh=true` remains `dif_gh_train_step_vector`.
+- **`gh_infer` / REST `use_gh`:** `gh_infer_at_h` + `cypha_rest` `POST /predict` when `use_gh=true` (session `g_gh_chi` / `g_gh_psi`; `anomaly_score` from `R_eff` vs `_mahal_ema`; `is_ood` when anomaly > 3.0). CTest **`native_gh_infer_deliberation`**. `/update` with `use_gh=true` remains `dif_gh_train_step_vector`.
 
-## 3. REST API (FastAPI)
+## 3. REST API
 
-Base: `cypha_qt_shell / cypha_rest.server.api.create_app`. Typical routes:
+**Authoritative server:** native **`cypha_rest`** (`--listen 127.0.0.1:7749` by default; `CYPHA_API_HOST` / `CYPHA_API_PORT`). Route shapes below are the stable wire contract.
+
+> **Historical footnote (removed):** An in-tree Python FastAPI app (`create_app` / uvicorn) once mirrored these routes for parity smoke. It is gone; do not treat FastAPI error codes or `InferenceEngine` behaviour as normative.
+
+Typical routes:
 
 | Method | Path | Role |
 |--------|------|------|
-| GET | `/health` | `{ status, model, uptime, n_predictions }` — `n_predictions` matches the engine counter (same as `/metrics` → `n_predictions` on native `cypha_rest` + FastAPI) |
-| GET | `/ready` | **`200`** `{ "ready": true, "model_type": str }` when an engine is loaded; **`503`** `{ "ready": false, "reason": "no_model_loaded" }` when not (FastAPI + native `cypha_rest`) |
-| GET | `/metrics` | `uptime_seconds`, `model_loaded`, `model_type`, `n_predictions`, `n_corrections`, `registry_model_count`, **`loaded_model_count`**, **`active_model`**, optional `gh_chi_session` / `gh_psi_session` when `CyphaDIF`, `session` or `null`, **`regression_head_loaded`** (bool — MoE sidecar active for `/predict`) |
-| POST | `/predict` | Body: `{ "input": [float, ...], "use_gh": bool, "return_explanation": bool, "use_kernel_llr"?: bool, "kernel_blend"?: float, "model"?: "<name>/<version>" }` — omit **`model`** (or set to active key) for byte-compatible single-model default; named slot → **`404`** `{"detail":"model not loaded"}`; optional Nyström kernel LLR when `use_kernel_llr=true` (native creates in-session `KernelMemory` if `.cypha` has none); **`503`** `{ "detail": "No model loaded" }` when no engine / native has no model |
-| POST | `/update` | Body: `{ "input": [...], "correct_label": str, "use_gh": bool, "use_kernel_llr"?: bool, "kernel_blend"?: float, "model"?: "<name>/<version>" }`; success **`200`** → **`{ "loss": float, "n_corrections": int }`** only (no extra keys); omit **`model`** for active globals (single-model compat); named slot → **`404`** `{"detail":"model not loaded"}`; **`503`** `{ "detail": "No model loaded" }` when no model. **Native `cypha_rest` only (optional):** when `regression_head.json` includes an **`mke`** block (see below), you may add **`regression_y`** (number) to run one scalar **`MKERegressor.train_step`**-style update; **`loss`** is then the router **`dif_train_step_vector`** loss. Optional **`router_train_label`** (string) overrides the router training label; optional **`replay_u01`** (array of numbers) fixes priority-replay uniforms (parity-style). Sending **`regression_y`** without an **`mke`** block → **`400`** `{"detail":"regression_y requires mke block in regression_head.json"}`. |
-| POST | `/register` | Body `{ "name", "version", "model_cypha", "card_json", "preprocessor_json"?: str \| null, "overwrite"?: bool }` — absolute or relative **host** paths to existing files; copies into **`<registry_root>/<name>/<version>/`**. Success **`200`** → `{ "registered": true, "model_dir": "<path>" }`; **`503`** `{"detail":"No registry configured"}` when no registry (native without **`--registry`**, FastAPI with **`create_app(..., registry=None)`**); failure **`400`** `{"detail":"…"}` (missing sources, destination exists without **`overwrite`**, etc.). Native **`cypha_rest`** refreshes its in-process registry scan cache after success. **FastAPI** default **`uvicorn cypha_qt_shell / cypha_rest.server.api:app`** uses **`ModelRegistry(CYPHA_REGISTRY_ROOT)`** (see **`env_config.registry_root`**); same copy semantics when a registry is attached (no in-memory cache refresh beyond the next **`GET /models`** scan). CLI **`registry_register`**. |
+| GET | `/health` | `{ status, model, uptime, n_predictions }` — `n_predictions` matches the engine counter (same as `/metrics` → `n_predictions`) |
+| GET | `/ready` | **`200`** `{ "ready": true, "model_type": str }` when an engine is loaded; **`503`** `{ "ready": false, "reason": "no_model_loaded" }` when not |
+| GET | `/metrics` | `uptime_seconds`, `model_loaded`, `model_type`, `n_predictions`, `n_corrections`, `registry_model_count`, **`loaded_model_count`**, **`active_model`**, optional `gh_chi_session` / `gh_psi_session` when Cypha classifier loaded, `session` or `null`, **`regression_head_loaded`** (bool — MoE sidecar active for `/predict`), **`sequence_loaded`** (bool — sequence checkpoint loaded; alias **`lm_loaded`**) |
+| POST | `/predict` | Body: `{ "input": [float, ...], "use_gh": bool, "return_explanation": bool, "use_kernel_llr"?: bool, "kernel_blend"?: float, "model"?: "<name>/<version>" }` — omit **`model`** (or set to active key) for byte-compatible single-model default; named slot → **`404`** `{"detail":"model not loaded"}`; optional Nyström kernel LLR when `use_kernel_llr=true` (native creates in-session `KernelMemory` if `.cypha` has none); **`503`** `{ "detail": "No model loaded" }` when no engine |
+| POST | `/update` | Body: `{ "input": [...], "correct_label": str, "use_gh": bool, "use_kernel_llr"?: bool, "kernel_blend"?: float, "model"?: "<name>/<version>" }`; success **`200`** → **`{ "loss": float, "n_corrections": int }`** only (no extra keys); omit **`model`** for active globals (single-model compat); named slot → **`404`** `{"detail":"model not loaded"}`; **`503`** `{ "detail": "No model loaded" }` when no model. **Optional:** when `regression_head.json` includes an **`mke`** block (see below), you may add **`regression_y`** (number) to run one scalar **`MKERegressor.train_step`**-style update; **`loss`** is then the router **`dif_train_step_vector`** loss. Optional **`router_train_label`** (string) overrides the router training label; optional **`replay_u01`** (array of numbers) fixes priority-replay uniforms (parity-style). Sending **`regression_y`** without an **`mke`** block → **`400`** `{"detail":"regression_y requires mke block in regression_head.json"}`. |
+| POST | `/register` | Body `{ "name", "version", "model_cypha", "card_json", "preprocessor_json"?: str \| null, "overwrite"?: bool }` — absolute or relative **host** paths to existing files; copies into **`<registry_root>/<name>/<version>/`**. Success **`200`** → `{ "registered": true, "model_dir": "<path>" }`; **`503`** `{"detail":"No registry configured"}` when **`cypha_rest`** started without **`--registry`**; failure **`400`** `{"detail":"…"}` (missing sources, destination exists without **`overwrite`**, etc.). **`cypha_rest`** refreshes its in-process registry scan cache after success. CLI **`registry_register`**. |
 | POST | `/adapt_temperature` | Body: `{ "calibration": [ { "input": [...], "correct_label": str }, ... ], "n_grid"?, "T_min"?, "T_max"?, "n_bins"? }` → `{ "temperature", "n_used" }` (ECE grid); **`503`** `{ "detail": "No model loaded" }` when no model |
 | GET | `/models` | `{ "models": [ ModelCard dicts ], "active_model": "<name>/<version>" \| null }` — each row includes **`loaded`** (bool, in RAM) and **`active`** (bool, hot-swap target / default for omitting **`model`** on predict/update). Empty registry → **`{ "models": [], "active_model": null }`**; query **`summary=true`** (or `1`) → `{ "models": [ { "name", "version", "loaded", "active" }, ... ], "active_model": … }` |
-| POST | `/load` | Body: `{ "name": str, "version"?: str }` (`version` defaults to **`latest`**), or `{ "model": "<name>/<version>" }`, or **empty body** → preload all registry bundles into RAM (returns `{ "loaded": [ "<name>/<version>", ... ] }`). On single-model load success: **`200`** `{ "loaded": <ModelCard dict>, "model": "<name>/<version>" }` — hot-swaps **active** globals and fills the in-memory map; **`503`** `{ "detail": "No registry configured" }` if no registry (`cypha_rest` without **`--registry`**, or FastAPI **`create_app(..., registry=None)`** — the default **`api:app`** has a registry from **`CYPHA_REGISTRY_ROOT`**); **`404`** — native `{ "detail": "model not found" }`; FastAPI `{ "detail": "<exception message>" }` (typically a missing card path — not byte-identical to native) |
-| GET | `/session` | `n_predictions`, `n_corrections`, `correction_accuracy`, `mean_confidence`, `mean_anomaly`, `n_ood_flagged`, `label_distribution`, `session_duration_s` (same keys in `/metrics` → `session` when a session exists). FastAPI: if `create_app(..., session=None)`, returns **200** with zeros / empty `label_distribution` (no `InferenceSession` attached); native `cypha_rest` always has an in-process session buffer when a model is loaded. |
-| DELETE | `/session` | → `{ "cleared": true }` (**200** always on FastAPI); clears prediction history and session GH χ/ψ when an `InferenceSession` exists (native matches `InferenceSession.clear`). If `session=None` on `create_app`, FastAPI treats delete as a no-op but still returns **`cleared: true`**. |
+| POST | `/load` | Body: `{ "name": str, "version"?: str }` (`version` defaults to **`latest`**), or `{ "model": "<name>/<version>" }`, or **empty body** → preload all registry bundles into RAM (returns `{ "loaded": [ "<name>/<version>", ... ] }`). On single-model load success: **`200`** `{ "loaded": <ModelCard dict>, "model": "<name>/<version>" }` — hot-swaps **active** globals and fills the in-memory map; **`503`** `{ "detail": "No registry configured" }` if **`cypha_rest`** started without **`--registry`**; **`404`** `{ "detail": "model not found" }` |
+| GET | `/session` | `n_predictions`, `n_corrections`, `correction_accuracy`, `mean_confidence`, `mean_anomaly`, `n_ood_flagged`, `label_distribution`, `session_duration_s` (same keys in `/metrics` → `session` when a session exists). **`cypha_rest`** keeps an in-process session buffer when a model is loaded. |
+| DELETE | `/session` | → `{ "cleared": true }` (**200**); clears prediction history and session GH χ/ψ (`InferenceSession.clear`). |
 | GET | `/session/rng` | `{ "state": [uint32 × 624], "pos": int }` — snapshot of session RNG for deterministic replay cross-runtime. |
 | POST | `/session/rng` | Body `{ "seed": int }` or `{ "state": [...], "pos": int }` — re-seed or restore; returns GET shape. Tested in `native/scripts/smoke_cypha_rest_mingw.ps1`. |
 | GET | `/classes` | `{ "classes": { label: { "n_obs": float } } }`; **`503`** `{ "detail": "No model loaded" }` when no model |
-| GET / POST | `/uncertainty-rank` | Body: `{ "rows": [[float, ...], ...], "top_n"?: int, "temperature"?: float, "curriculum"?: bool }` → `{ "indices", "entropies", "confidences", "top_n" }` (plus `"curriculum": true` when requested), ranked by descending entropy (or ascending confidence when `curriculum=true`). **Native `cypha_rest` GET note:** since GET request bodies are not read by the HTTP stack, native `cypha_rest` requires the JSON payload to be passed as a URL-encoded query string: **`GET /uncertainty-rank?payload=<urlencoded-json>`** (e.g. `?payload=%7B%22rows%22%3A...%7D`); a GET with neither `?payload=` nor a body returns **`400`** `{"detail":"JSON body or ?payload=<urlencoded-json> required (GET bodies are not read by the HTTP stack)"}`. POST accepts a normal JSON body. **`503`** `{ "detail": "No model loaded" }` when no model; **`400`** `{ "detail": "…" }` for malformed `rows` / dimension mismatch / MKE-mode requests. |
+| GET / POST | `/uncertainty-rank` | Body: `{ "rows": [[float, ...], ...], "top_n"?: int, "temperature"?: float, "curriculum"?: bool }` → `{ "indices", "entropies", "confidences", "top_n" }` (plus `"curriculum": true` when requested), ranked by descending entropy (or ascending confidence when `curriculum=true`). **GET note:** since GET request bodies are not read by the HTTP stack, **`cypha_rest`** requires the JSON payload as a URL-encoded query string: **`GET /uncertainty-rank?payload=<urlencoded-json>`** (e.g. `?payload=%7B%22rows%22%3A...%7D`); a GET with neither `?payload=` nor a body returns **`400`** `{"detail":"JSON body or ?payload=<urlencoded-json> required (GET bodies are not read by the HTTP stack)"}`. POST accepts a normal JSON body. **`503`** `{ "detail": "No model loaded" }` when no model; **`400`** `{ "detail": "…" }` for malformed `rows` / dimension mismatch / MKE-mode requests. |
 
-**Malformed request body:** if the client sends **invalid JSON** on `POST /predict`, `/update`, or `/adapt_temperature`, native `cypha_rest` responds with **`400`** and `{"detail":"bad json"}`. The same applies to **`POST /load`** when a registry is configured (parse fails before lookup). **Note:** with **no** registry, native **`POST /load`** returns **`503`** before parsing the body, so a garbage body still yields **`{"detail":"No registry configured"}`** rather than **`bad json`**. FastAPI parses the body first and typically responds with **`422`** and a structured `detail` (validation / JSON decode) — not byte-identical to native.
+**Malformed request body:** if the client sends **invalid JSON** on `POST /predict`, `/update`, or `/adapt_temperature`, **`cypha_rest`** responds with **`400`** and `{"detail":"bad json"}`. The same applies to **`POST /load`** when a registry is configured (parse fails before lookup). **Note:** with **no** registry, **`POST /load`** returns **`503`** before parsing the body, so a garbage body still yields **`{"detail":"No registry configured"}`** rather than **`bad json`**.
 
-**Input dimension:** after optional preprocessor transform, vector length must match model latent dim; otherwise **`POST /predict`**, **`/update`**, and **`/adapt_temperature`** (per calibration row) return **`400`** and `{"detail":"input dim mismatch after preprocessor"}` on both native `cypha_rest` and FastAPI (FastAPI maps encoder **`ValueError` / `TypeError`** when the message contains **`got length`** or **`shape`** + **`mismatch`**).
+**Input dimension:** after optional preprocessor transform, vector length must match model latent dim; otherwise **`POST /predict`**, **`/update`**, and **`/adapt_temperature`** (per calibration row) return **`400`** and `{"detail":"input dim mismatch after preprocessor"}`.
 
-**Replay on `/update`:** native **`cypha_rest`** drives priority replay from an in-process **`std::mt19937`** session RNG by default. Optional **`replay_u01`** on **`POST /update`** is forwarded through **`TrainStepExtras`** for **classification** (`dif_train_step_vector` / GH) and for **MKE** (`mke_scalar_train_step` when **`regression_y`** + **`mke`**), mirroring parity harness fixed replay uniforms. When **`replay_u01`** is omitted, replay sampling uses the session RNG.
+**Replay on `/update`:** **`cypha_rest`** drives priority replay from an in-process **`std::mt19937`** session RNG by default. Optional **`replay_u01`** on **`POST /update`** is forwarded through **`TrainStepExtras`** for **classification** (`dif_train_step_vector` / GH) and for **MKE** (`mke_scalar_train_step` when **`regression_y`** + **`mke`**), mirroring parity harness fixed replay uniforms. When **`replay_u01`** is omitted, replay sampling uses the session RNG.
 
-**FastAPI vs native on `/update`:** FastAPI implements the same optional keys when configured: **`regression_y`** + **`mke`** block in **`CYPHA_REGRESSION_HEAD`** / `create_app(..., regression_head_path=...)` runs a Python **`mke_rest_update`** (parity with native **`mke_scalar_train_step`**); **`replay_u01`** is forwarded for classification and MKE updates via **`ListReplayRng`**; **`router_train_label`** overrides the router training label on the MKE path only (ignored on plain classification, same as native). **`regression_y`** without an **`mke`** block → **`400`** `{"detail":"regression_y requires mke block in regression_head.json"}`.
+**Optional `/update` keys:** **`regression_y`** + **`mke`** block in **`regression_head.json`** (see below) runs **`mke_scalar_train_step`**; optional **`router_train_label`** overrides the router training label on the MKE path only (ignored on plain classification). **`regression_y`** without an **`mke`** block → **`400`** `{"detail":"regression_y requires mke block in regression_head.json"}`.
 
 **On-disk registry (native tooling):** pre-built **`model.cypha`** + **`card.json`** can be installed under **`<root>/<name>/<version>/`** with **`native/registry_register`** (see **`native/README.md`**) or **`cypha::registry_register_bundle`** — same tree Python **`ModelRegistry`** scans. CTest **`native_registry_register`**; subprocess ctest **CTest **native_***** (env **`CYPHA_REGISTRY_REGISTER_BIN`**).
 
 **Multi-model serving (native `cypha_rest` — FUTURE.md §5, bounded slice):** start with **`--registry <root>`** and optional **`--preload-registry`** to load every registry bundle into an in-process map keyed by **`name/version`**. Each slot has its own **`std::mutex`** (train vs infer serialisation per model). **`POST /predict`** and **`POST /update`** accept optional JSON **`"model": "<name>/<version>"`**; omitting **`model`** (or passing the active key) routes to the legacy single-model globals — byte-compatible when only one model is loaded. **`GET /models`** annotates each card with **`loaded`** / **`active`** and returns top-level **`active_model`**. **`POST /load`** hot-swaps the active globals and upserts the map; empty body preloads all registry entries. **`GET /metrics`** exposes **`loaded_model_count`** and **`active_model`**. LRU eviction of map slots is **not** implemented (follow-up).
 
-**Predict response** (`PredictResponse`): `label`, `confidence`, `all_scores`, `anomaly_score`, `is_ood`, `regression_val`, `uncertainty`, optional `explanation`, `latency_ms`. When `return_explanation` is true, native **`cypha_rest`** and FastAPI (via **`InferenceEngine.explain`**) use the same top-level **`explanation`** key set in **`native/scripts/smoke_cypha_rest_mingw.ps1`** (REST JSON shape smoke) for every leaf is not guaranteed if **`explain()`** gains extra fields beyond the native REST builder.
+**Predict response** (`PredictResponse`): `label`, `confidence`, `all_scores`, `anomaly_score`, `is_ood`, `regression_val`, `uncertainty`, optional `explanation`, `latency_ms`. When `return_explanation` is true, **`cypha_rest`** uses the top-level **`explanation`** key set exercised in **`native/scripts/smoke_cypha_rest_mingw.ps1`** (REST JSON shape smoke).
 
 **Native `cypha_rest` — optional scalar regression head:** with `--regression-json regression_head.json` (or `regression_head.json` beside `model.cypha` on registry **`POST /load`**), JSON shape is (JSON Schema: [`schemas/regression_head.schema.json`](schemas/regression_head.schema.json)):
 
@@ -104,81 +110,76 @@ Base: `cypha_qt_shell / cypha_rest.server.api.create_app`. Typical routes:
 { "experts": { "<class_label>": { "mu": <float_or_[d]>, "var_ema": <float> }, ... } }
 ```
 
-For each loaded class label (same strings as routing / `all_scores` keys), `mu` is the expert target EMA (scalar number or first element of an array for future vector targets). Native fills `regression_val` = Σ_k p_k·μ_k and `uncertainty` = √(Σ_k p_k·var_k) using the same softmax `p` as classification (`LLR / temperature` then `softmax_batch_like_python`). If the sidecar is absent, `regression_val` is JSON `null` and `uncertainty` is `0` (matches classification-only FastAPI). **FastAPI** loads the same file via **`CYPHA_REGRESSION_HEAD`** or `create_app(..., regression_head_path=...)` so `/predict` can match native numerically when the model and inputs are the same.
+For each loaded class label (same strings as routing / `all_scores` keys), `mu` is the expert target EMA (scalar number or first element of an array for future vector targets). **`cypha_rest`** fills `regression_val` = Σ_k p_k·μ_k and `uncertainty` = √(Σ_k p_k·var_k) using the same softmax `p` as classification (`LLR / temperature` then `softmax_batch_like_python`). If the sidecar is absent, `regression_val` is JSON `null` and `uncertainty` is `0`. Load via **`--regression-json`** or env **`CYPHA_REGRESSION_HEAD`** (registry **`POST /load`** picks up `regression_head.json` beside the model when present).
 
 **Optional `mke` block (native `cypha_rest` — online scalar MKERegressor step):** same file may include **`mke`** with **`d_in`**, **`D_rff`** (must equal classifier latent **`d`**), **`rff_W_rowmajor`**, **`rff_b`**, per-label **`w`** (length **`D_rff`**) and **`P`** (length **`D_rff`²** row-major), **`temperature`**, **`forgetting_factor`**, optional **`pi_floor`** (default **0.02**), optional **`gh_scales`** (length **K**). With **`mke`**, **`/predict`** uses RFF(**`input`**) as routing features (after preprocessor; **`input`** length must be **`d_in`**) and sets **`regression_val`** = Σ_k p_k·(w_k·φ); **`uncertainty`** still uses expert **`var_ema`** mixture when **`experts`** lists **`var_ema`** per label. **`POST /update`** with **`regression_y`** runs **`mke_scalar_train_step`** (see **`native/include/cypha/mke_scalar_train_step.hpp`**).
 
 Qt or C++ clients should treat these JSON shapes as **stable** for v1; add fields additively rather than renaming.
 
-## 4. CyphaLM REST
+## 4. Sequence REST (Cypha)
 
-**FastAPI (CyphaStudio):** language-model routes when `lm_engine` or `CYPHALM_LM_CHECKPOINT` is set — see table below.
-
-**Native `cypha_rest`:** same LM surface (`/lm/load`, `/lm/metrics`, `/lm/predict_next`, `/generate`) when built with `cypha_lm_native`. Classifier routes unchanged.
+**Native `cypha_rest`:** sequence surface (`/sequence/load`, `/sequence/metrics`, `/predict_next`, `/generate`) when built with `cypha_lm_native` / `cypha_core`. Classifier routes unchanged.
 
 | Method | Path | Role |
 |--------|------|------|
-| POST | `/lm/load` | Body `{ "checkpoint_path": str }` → load CyphaLM (``.json`` + ``.npz`` pair). **200** `{ "loaded": true, "summary": {...} }`; **503** if `cypha_lm` missing. |
-| GET | `/lm/metrics` | CyphaLM summary: vocab, experts, generation counts. **503** if no LM loaded. |
-| POST | `/lm/predict_next` | Body `{ "token_id": int }` → `{ log_probs, epistemic_var, aleatoric_var, routing_probs, dominant_expert, active_experts, top_k_tokens, top_k_probs }`. |
+| POST | `/sequence/load` | Body `{ "checkpoint_path": str }` → load Cypha sequence checkpoint (``.json`` + ``.npz`` pair). **200** `{ "loaded": true, "summary": {...} }`; **503** if sequence stack missing. |
+| GET | `/sequence/metrics` | Sequence summary: vocab, experts, generation counts. **503** if no sequence model loaded. |
+| POST | `/predict_next` | Body `{ "token_id": int }` → `{ log_probs, epistemic_var, aleatoric_var, routing_probs, dominant_expert, active_experts, top_k_tokens, top_k_probs }`. |
 | POST | `/generate` | Body `{ "prompt_ids": [int,...], "max_tokens", "temperature", "strategy", "top_k", "top_p", "uncertainty_threshold", "stream" }`. Strategies: `greedy`, `temperature`, `top_k`, `top_p`, `uncertainty_gated`. **200** batch JSON with `generated_ids`, `per_step`, `per_step_metrics`; or **SSE** when `stream=true`. |
 | POST | `/generate/stream` | Same body as `/generate`; always returns **SSE** (`text/event-stream`, one JSON object per token). |
 
-**Environment:** `CYPHA_LM_CHECKPOINT` — optional path to load CyphaLM at app startup.
+**Environment:** `CYPHA_SEQUENCE_CHECKPOINT` — optional path to load Cypha sequence at app startup. Aliases: `CYPHALM_CHECKPOINT`, `CYPHA_LM_CHECKPOINT`.
 
 **Streaming chunk shape (SSE `data:` lines):** `{ "index", "token_id", "loss", "epistemic_var", "aleatoric_var", "active_experts", "dominant_expert", "routing_probs", "done" }`. Final line: `{ "done": true }`.
 
-**CyphaDIF integration:** each `predict_next` / generation step runs the CyphaLM pipeline (Izaac → CellAI SSM → **CyphaDIF expert routing** → GRIA). `routing_probs` and `dominant_expert` expose per-token expert field behaviour.
+**Expert routing:** each `predict_next` / generation step runs the Cypha sequence pipeline (Izaac → CellAI SSM → expert routing → GRIA). `routing_probs` and `dominant_expert` expose per-token expert field behaviour.
 
-See [`native/qt/README.md`](../../native/qt/README.md), [`cypha_lm/README.md`](../../cypha_lm/README.md), and [`examples/README.md`](../../examples/README.md).
+See [`native/qt/README.md`](../../native/qt/README.md) and [`examples/README.md`](../../examples/README.md). (Historical Python `cypha_lm/` tree removed.)
 
 ## 4a. Branch A text routing REST
 
-**FastAPI (CyphaStudio):** Branch A routes on frozen text embeddings + CyphaDIF epistemic gate — see [`docs/CYPHA_BRANCH_A_EMBEDDINGS.md`](../CYPHA_BRANCH_A_EMBEDDINGS.md).
-
-**Native `cypha_rest`:** same surface when built with `cypha_core` Branch A router (`native/include/cypha/branch_a_router.hpp`). Classifier + CyphaLM routes unchanged.
+**Native `cypha_rest`:** Branch A surface when built with `cypha_core` Branch A router (`native/include/cypha/branch_a_router.hpp`). See [`docs/CYPHA_BRANCH_A_EMBEDDINGS.md`](../CYPHA_BRANCH_A_EMBEDDINGS.md). Classifier + sequence routes unchanged.
 
 | Method | Path | Role |
 |--------|------|------|
-| GET | `/route/health` | `{ router_trained, router_summary, ollama_url, ollama_model, ollama_reachable, lm_loaded }` |
+| GET | `/route/health` | `{ router_trained, router_summary, ollama_url, ollama_model, ollama_reachable, sequence_loaded }` (`lm_loaded` alias) |
 | POST | `/route/text` | Body `{ "text": str, "epistemic_threshold"?: float }` → `{ label, confidence, epistemic_var, abstain, embedding_backend, action, latency_ms }`. **`action`**: `cypha_route` (in-domain) or `fallback_llm` (OOD abstain). **400** if `text` empty; **500** if router not loaded. |
-| POST | `/route/generate` | Route then **CyphaLM** (in-domain, when `--cyphalm-checkpoint` / `POST /lm/load`) or **Ollama** (`POST /api/generate` on `CYPHA_OLLAMA_URL`) on abstain. Body adds `max_tokens`, `ollama_model`, `ollama_system`, `cypha_lm_strategy`, `cypha_lm_temperature`. Response `{ route, generation, latency_ms }`. |
+| POST | `/route/generate` | Route then **Cypha sequence** (in-domain, when `--sequence-checkpoint` / `POST /sequence/load`; alias `--cyphalm-checkpoint`) or **Ollama** (`POST /api/generate` on `CYPHA_OLLAMA_URL`) on abstain. Body adds `max_tokens`, `ollama_model`, `ollama_system`, `cypha_strategy` / `cypha_temperature` (aliases `cypha_lm_strategy` / `cypha_lm_temperature`). Response `{ route, generation, latency_ms }` with `generation.provider` = `"cypha"` | `"ollama"` | `"none"`. |
 | POST | `/route/save` | Persist router to checkpoint dir (**200** `{ saved, checkpoint, summary }`; **400** if not trained). |
 
-**Checkpoint (native JSON):** `--branch-a-json path/to/branch_a_router.json` or env **`CYPHA_BRANCH_A_CHECKPOINT`** (base or `.json` path). JSON references sibling **`model_cypha`** (v3 `.cypha` CyphaDIF state), **`mean`** / **`std`** arrays (standardisation), optional **`projection`** (hashing SVD row-major), optional **`f_field_json`**. Python pickle **`.npz`** checkpoints are **not** loaded natively — use committed native JSON + `.cypha` bundles under **`fixtures/`**.
+**Checkpoint (native JSON):** `--branch-a-json path/to/branch_a_router.json` or env **`CYPHA_BRANCH_A_CHECKPOINT`** (base or `.json` path). JSON references sibling **`model_cypha`** (v3 `.cypha` Cypha state), **`mean`** / **`std`** arrays (standardisation), optional **`projection`** (hashing SVD row-major), optional **`f_field_json`**. Python pickle **`.npz`** checkpoints are **not** loaded natively — use committed native JSON + `.cypha` bundles under **`fixtures/`**.
 
 **Embedding:** native uses deterministic **MurmurHash3** feature hashing (`hash_n_features` default **512**, `hash_n_components` default **128**, unigram+bigram tokens, L2 norm) + optional fixed projection matrix from the checkpoint JSON. No `sentence-transformers` in C++.
 
 **Epistemic gate:** Shannon entropy of routing softmax (same contract as Python `BenchClassifier.predict` → `infer_full["entropy"]`). Abstain when `epistemic_var > epistemic_threshold` (default **0.5**, overridable per request or `CYPHA_BRANCH_A_EPISTEMIC_THRESHOLD` at export).
 
-**`/metrics`:** adds **`branch_a_router`** summary object and **`lm_loaded`** (aligned with FastAPI `/metrics`).
+**`/metrics`:** adds **`branch_a_router`** summary object and **`sequence_loaded`** (sequence checkpoint loaded; alias **`lm_loaded`**).
 
-## 4c. CyphaDIF generation / retrieval REST
+## 4c. Latent sample / retrieve REST (Cypha)
 
-**FastAPI (CyphaStudio):** CyphaDIF latent generation when `engine` is loaded — see table below. **Not** CyphaLM token generation (`POST /generate` is CyphaLM only).
+Owned by **`cypha::Cypha`**. Latent sampling when a `.cypha` model is loaded — **not** token generation. Samples are latent `h` (`space: "latent"`), not full feature rows.
 
-**Native `cypha_rest`:** same surface when built with `cypha_core` generation (`native/include/cypha/generation.hpp`). Classifier, CyphaLM, and Branch A routes unchanged.
+**Native `cypha_rest`:** `generation.hpp` via `Cypha::sample` / `retrieve`.
 
 | Method | Path | Role |
 |--------|------|------|
-| POST | `/dif/generate` | Body `{ "input": [float,...], "mode": "langevin" \| "from_observation" \| "retrieval_augmented", "database"?: [[float,...],...], "label"?: str, "k_neighbors"?: int, "n_samples"?: int, "n_steps"?: int, "temperature"?: float, "seed"?: int }`. **`200`** → `{ "mode", "label", "n_samples", "space": "latent", "samples": [[float,...],...] }` where each sample is a **latent** vector (length = model `d_latent`). **`503`** `{ "detail": "No model loaded" }`; **`400`** `{ "detail": "…" }` for bad JSON, unknown mode, dim mismatch, or missing `database` on `retrieval_augmented`. Optional **`label`** overrides inferred class; otherwise label comes from query inference (or nearest retrieval hit for RAG). Defaults: `n_samples=10`, `n_steps=30`, `k_neighbors=5`, `temperature=1.0`. |
-| POST | `/dif/retrieve` | Body `{ "input": [float,...], "database": [[float,...],...], "top_k"?: int, "label"?: str }`. **`200`** → `{ "top_k", "hits": [{ "index", "log_likelihood", "predicted_label" }, ...] }`. Scores each database row by class log-likelihood (Python `CyphaDIF.retrieve` / native `retrieve_from_x`). Optional **`label`** fixes the scoring class; otherwise uses the query's predicted label. |
+| POST | `/sample` | Former `/dif/generate`. Body `{ "input": [float,...], "mode": "langevin" \| "from_observation" \| "retrieval_augmented", ... }`. **`200`** → `{ "mode", "label", "n_samples", "space": "latent", "samples": [...] }`. |
+| POST | `/retrieve` | Former `/dif/retrieve`. Body `{ "input", "database", "top_k"? }`. |
+| POST | `/sequence/load` | Former `/lm/load`. |
+| GET | `/sequence/metrics` | Former `/lm/metrics`. |
+| POST | `/predict_next` | Former `/lm/predict_next`. |
 
-**Input dimension:** same as `POST /predict` — optional preprocessor transform, then length must match model latent dim; otherwise **`400`** `{ "detail": "input dim mismatch after preprocessor" }`.
+**Input dimension:** same as `POST /predict`. Health `model_type` is **`Cypha`**.
 
-**Malformed JSON:** native **`400`** `{ "detail": "bad json" }`; FastAPI **`422`** validation detail.
+**Note:** `POST /generate` = token autoregression. `POST /sample` = latent sampling.
 
-**Note:** `POST /generate` and `POST /generate/stream` remain **CyphaLM** token autoregression. Use **`POST /dif/generate`** for CyphaDIF latent sampling.
+## 4b. Native sequence stack (inside `cypha_core`)
 
-## 4b. Native CyphaLM (C++ — not in `cypha_rest`)
-
-Native char-LM lives in **`native/`** as **`cypha_lm_native`** (Tiers 0–2–4). Sources: `native/include/cypha/cyphalm/`, `native/src/cyphalm/`. Build notes: [`docs/native/CYPHALM_NATIVE_BUILD.md`](../native/CYPHALM_NATIVE_BUILD.md); tracker: [`CYPHALM_NATIVE_UPGRADE_MASTER.md`](../native/CYPHALM_NATIVE_UPGRADE_MASTER.md).
+Sequence sources live under `native/include/cypha/cyphalm/`, `native/src/cyphalm/`, compiled into **`cypha_core`** (compat alias target `cypha_lm_native` remains). Public facade: **`cypha::Cypha`**. Build notes: [`docs/native/CYPHALM_NATIVE_BUILD.md`](../native/CYPHALM_NATIVE_BUILD.md).
 
 ### Reference parity rule
 
-**Python `CyphaLM` (`cypha_lm/`) remains the golden reference** for numerics, BPC targets, and checkpoint layout until native parity is explicitly locked in CI. Native tools may PASS component fixtures (char LSTM, SSM step, Hebbian hooks, model scaffold) without claiming full end-to-end BPC equivalence to a trained Python checkpoint. Do not treat native BPC from `cyphalm_bench_native` as authoritative for product decisions until checkpoint parity is recorded in the master tracker.
-
-Fixtures are generated once from Python: native parity fixture workflow (see MAINTENANCE.md) → `fixtures/cyphalm_*/sidecar.json`.
+**Historical:** Python `CyphaLM` (`cypha_lm/`) was the golden reference for numerics, BPC targets, and checkpoint layout; that tree is **removed**. Native fixtures under `fixtures/cyphalm_*/` and CTests remain the authoritative parity gate. Do not treat native BPC from `cyphalm_bench_native` as a product claim until checkpoint parity is recorded in the master tracker.
 
 ### `cyphalm_bench_native` — BPC bench CLI
 
@@ -233,9 +234,9 @@ Example output keys: `mode`, `profile`, `context_mode`, `bpc`, `threads`, `corpu
 
 **ctest:** CTest **native_*** — skip if binaries missing; env **`CYPHALM_PARITY_BIN`**, **`CYPHALM_BENCH_NATIVE_BIN`**, **`CYPHALM_CHAR_LSTM_PARITY_BIN`**.
 
-**Checkpoint format:** v2 **`CyphaLM.save()`** / **`CyphaLMModel::save()`** JSON + NPZ; native loads Python full-rank GRIA via **`load_from_full_w`**. Native roundtrip also persists **`dif`** (NIG expert states) and **`ssm`** (h/s layer states). Fixtures: committed under **`fixtures/cyphalm_checkpoint/`**; gate with **`ctest -R native_cyphalm`**.
+**Checkpoint format:** Cypha sequence checkpoint (`CyphaLMModel::save` / historical `CyphaLM.save()`) JSON + NPZ; native loads Python full-rank GRIA via **`load_from_full_w`**. Native roundtrip also persists **`dif`** (NIG expert states) and **`ssm`** (h/s layer states). Includes U06 PGM flags + `pgm_wy`/`pgm_by` (+ PGM cell state when present). Fixtures: committed under **`fixtures/cyphalm_checkpoint/`**; gate with **`ctest -R native_cyphalm`**.
 
-**Native REST LM:** `cypha_rest` exposes **`POST /lm/load`**, **`GET /lm/metrics`**, **`POST /lm/predict_next`**, **`POST /generate`**, **`POST /generate/stream`** (see master tracker). Startup: **`--cyphalm-checkpoint`** or env **`CYPHALM_CHECKPOINT`**. `/health` reports `lm_loaded`.
+**Native REST sequence:** `cypha_rest` exposes **`POST /sequence/load`**, **`GET /sequence/metrics`**, **`POST /predict_next`**, **`POST /generate`**, **`POST /generate/stream`** (see master tracker). Startup: **`--sequence-checkpoint`** or env **`CYPHA_SEQUENCE_CHECKPOINT`** (aliases: **`--cyphalm-checkpoint`**, **`CYPHALM_CHECKPOINT`**, **`CYPHA_LM_CHECKPOINT`**). `/health` reports **`sequence_loaded`** (alias **`lm_loaded`**).
 
 ## 5. Parity fixtures (machine-checked)
 
@@ -317,8 +318,8 @@ Every domain **`experiments`** object includes **`backend`** describing the engi
 
 | Value | Meaning |
 |-------|---------|
-| **`cypha_core`** | Native **CyphaDIF** training/inference (`create_fresh_model_root`, `dif_train_step_vector`, encoders, etc.). |
-| **`cypha_lm_native`** | Native **CyphaLM** BPC bench (**d04**, **d17** LM sections). |
+| **`cypha_core`** | Native **Cypha** training/inference (`create_fresh_model_root`, `dif_train_step_vector`, encoders, etc.). |
+| **`cypha_lm_native`** | Native **Cypha** sequence BPC bench (**d04**, **d17** LM sections). |
 | **`native_stub`** | Reserved for unimplemented domains (should not appear once the domain is ported). |
 
 Per-task entries may also carry **`backend": "cypha_core"`** when nested under **`tasks`** / **`datasets`**.
@@ -347,7 +348,7 @@ Results appear under **`experiments.baselines`** (or per-task **`baselines`**) w
 
 ## 7. Related (full product port)
 
-- **[`PORT_FULL_STACK.md`](PORT_FULL_STACK.md)** — replace Python core + CyphaStudio + REST + Qt (milestones, risks).  
+- **[`PORT_FULL_STACK.md`](PORT_FULL_STACK.md)** — replace Python core + Cypha GUI + REST + Qt (milestones, risks).  
 - **[`PREPROCESSOR_CONTRACT.md`](PREPROCESSOR_CONTRACT.md)** — registry `preprocessor.json` beside `.cypha`.
 - **Experiments SQLite (M6):** CTests **`native_experiment_db_smoke`** / **`native_experiment_db_file`**; CTest **`native_experiment_db_crud`** (CMake-generated DDL) — env **`CYPHA_EXPERIMENT_DB_SMOKE_BIN`**, **`CYPHA_EXPERIMENT_DB_CRUD_PARITY_BIN`** — **`native/README.md`**.
 

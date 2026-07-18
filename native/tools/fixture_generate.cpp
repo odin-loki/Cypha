@@ -34,7 +34,7 @@
 #include "cypha/mke_scalar_train_step.hpp"
 #include "cypha/multilabel_dif.hpp"
 #include "cypha/preprocessor.hpp"
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 #include "cypha/replay_buffer.hpp"
 #include "cypha/similarity_index.hpp"
 #include "cypha/train_step_vector.hpp"

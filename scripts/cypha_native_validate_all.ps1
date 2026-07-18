@@ -406,7 +406,7 @@ if ($TuneSmoke) {
 
 # --- cypha_rest /dif REST smoke (curl) ---
 Write-Host ""
-Write-Host "== cypha_rest /dif/retrieve smoke (curl) ==" -ForegroundColor Yellow
+Write-Host "== cypha_rest /retrieve smoke (curl) ==" -ForegroundColor Yellow
 $restExe = BinPath "cypha_rest"
 $refCypha = Join-Path $root "fixtures\reference.cypha"
 $fField = Join-Path $root "fixtures\f_field.json"
@@ -474,7 +474,7 @@ if (-not (Test-Path $restExe)) {
             $payloadJson = $payloadObj | ConvertTo-Json -Compress -Depth 20
             $tmpBody = Join-Path $env:TEMP "cypha_dif_retrieve_smoke.json"
             [System.IO.File]::WriteAllText($tmpBody, $payloadJson)
-            $curlOut = curl.exe -s -S -X POST "$baseUrl/dif/retrieve" `
+            $curlOut = curl.exe -s -S -X POST "$baseUrl/retrieve" `
                 -H "Content-Type: application/json" `
                 --data-binary "@$tmpBody"
             $curlCode = $LASTEXITCODE

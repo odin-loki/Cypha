@@ -35,5 +35,9 @@
   "use_multiscale": true,
   "n_experts": 0,
   "train_ssm": false,
-  "ssm_lr": 0.002
+  "ssm_lr": 0.002,
+  "_meta": {
+    "status": "historical",
+    "notes": "Historical hybrid GRIA+LSTM pin. Living Cypha sequence default is PGM→Wy (U06 / pgm_logits)."
+  }
 }

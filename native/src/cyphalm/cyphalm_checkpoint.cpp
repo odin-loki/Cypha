@@ -89,11 +89,33 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"bpe_merges_path", cfg.bpe_merges_path},
         {"bpe_vocab_path", cfg.bpe_vocab_path},
         {"ewc_lambda", cfg.ewc_lambda},
+        {"cell_variant", cfg.cell_variant},
+        {"use_pgm_cell", cfg.use_pgm_cell},
+        {"use_unified_context", cfg.use_unified_context},
+        {"unified_context_source", unified_context_source_name(cfg.unified_context_source)},
+        {"unified_readout", unified_readout_name(cfg.unified_readout)},
+        {"pgm_n_sub", cfg.pgm_n_sub},
+        {"pgm_levels", cfg.pgm_levels},
+        {"pgm_chunk_len", cfg.pgm_chunk_len},
+        {"pgm_topk", cfg.pgm_topk},
+        {"pgm_beam", cfg.pgm_beam},
+        {"pgm_rehash_t", cfg.pgm_rehash_t},
+        {"pgm_hops", cfg.pgm_hops},
     };
 }
 
 CyphaLMConfig config_from_json(const nlohmann::json& c) {
     CyphaLMConfig cfg;
+    // Checkpoints that predate One Cypha omit unified/PGM keys. Start from legacy
+    // (hybrid-era) defaults so missing keys do not inherit living PGM→Wy struct defaults.
+    cfg.context_mode = ContextMode::Hybrid;
+    cfg.use_unified_context = false;
+    cfg.unified_context_source = UnifiedContextSource::None;
+    cfg.unified_readout = UnifiedReadout::None;
+    cfg.use_pgm_cell = false;
+    cfg.pgm_n_sub = 16;
+    cfg.ngram_fuse_split = true;
+    cfg.cell_variant.clear();
     auto get_i = [&](const char* k, int& v) {
         if (c.contains(k)) v = c.at(k).get<int>();
     };
@@ -160,6 +182,23 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     if (c.contains("bpe_merges_path")) cfg.bpe_merges_path = c.at("bpe_merges_path").get<std::string>();
     if (c.contains("bpe_vocab_path")) cfg.bpe_vocab_path = c.at("bpe_vocab_path").get<std::string>();
     get_d("ewc_lambda", cfg.ewc_lambda);
+    if (c.contains("cell_variant")) cfg.cell_variant = c.at("cell_variant").get<std::string>();
+    get_b("use_pgm_cell", cfg.use_pgm_cell);
+    get_b("use_unified_context", cfg.use_unified_context);
+    if (c.contains("unified_context_source")) {
+        cfg.unified_context_source =
+            parse_unified_context_source(c.at("unified_context_source").get<std::string>());
+    }
+    if (c.contains("unified_readout")) {
+        cfg.unified_readout = parse_unified_readout(c.at("unified_readout").get<std::string>());
+    }
+    get_i("pgm_n_sub", cfg.pgm_n_sub);
+    get_i("pgm_levels", cfg.pgm_levels);
+    get_i("pgm_chunk_len", cfg.pgm_chunk_len);
+    get_i("pgm_topk", cfg.pgm_topk);
+    get_i("pgm_beam", cfg.pgm_beam);
+    get_i("pgm_rehash_t", cfg.pgm_rehash_t);
+    get_i("pgm_hops", cfg.pgm_hops);
     return cfg;
 }
 
@@ -234,6 +273,13 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     }
     if (model.ewc_.has_snapshot()) {
         meta["ewc"] = model.ewc_.get_state();
+    }
+    if (!model.pgm_wy_.empty()) {
+        meta["pgm_wy"] = vec_to_json(model.pgm_wy_);
+        meta["pgm_by"] = vec_to_json(model.pgm_by_);
+    }
+    if (model.pgm_cell_) {
+        meta["pgm_cell"] = model.pgm_cell_->get_state();
     }
 
     std::ofstream out(json_file);
@@ -336,6 +382,15 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
     }
     if (meta.contains("ewc")) {
         model.ewc_.set_state(meta.at("ewc"));
+    }
+    if (meta.contains("pgm_wy")) {
+        model.pgm_wy_ = json_to_vec(meta.at("pgm_wy"));
+    }
+    if (meta.contains("pgm_by")) {
+        model.pgm_by_ = json_to_vec(meta.at("pgm_by"));
+    }
+    if (meta.contains("pgm_cell") && model.pgm_cell_) {
+        model.pgm_cell_->set_state(meta.at("pgm_cell"));
     }
 
     fs::path npz_path = jp;

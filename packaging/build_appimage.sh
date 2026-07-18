@@ -109,7 +109,7 @@ install -m 755 "$REST_EXE" "$APPDIR/usr/bin/cypha_rest"
 cat >"$APPDIR/cypha_qt_shell.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Cypha Studio
+Name=Cypha
 Comment=Cypha native Qt shell (train, infer, registry)
 Exec=cypha_qt_shell
 Icon=cypha

@@ -8,7 +8,7 @@ Replaced collapsing self-argmax router training in `mke_scalar_train_step_from_p
 
 1. **E-step:** `r_i ∝ prior_i · exp(−(y − w_i·φ)² / 2σ²)` with `dp = w_i·φ` reused from the `y_hat` loop; prior mixes routing softmax `p` with a uniform floor from `pi_floor`.
 2. **Router target:** DIF train uses `argmax r` (unless override).
-3. **M-step:** `mke_expert_rls_scalar_step` weighted by `r_i`; hard `pi < 0.02` skip → `kEmEps` in `regression_stub.cpp`.
+3. **M-step:** `mke_expert_rls_scalar_step` weighted by `r_i`; hard `pi < 0.02` skip → `kEmEps` in `src/regression.cpp`.
 4. **Init / warmup:** lazy random `w` + diagonal `P`; routing temperature anneals over first 200 steps when `extras->total_steps` is set.
 5. **Goldens:** regenerated `fixtures/mke_train_step/` and `fixtures/mke_train_extended/`; `regression_m4` low-pi noop uses `pi=1e-12`.
 

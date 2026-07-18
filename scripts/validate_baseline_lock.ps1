@@ -15,7 +15,7 @@ $D17_PIN_BPC = 2.873
 $D17_PIN_TOLERANCE = 0.02
 $D17_PRODUCTION_PIN_TOLERANCE = 0.05
 $PRODUCTION_N_TRAIN_MIN = 300000
-$VALID_STATUSES = @("fast_smoke", "medium_smoke", "production", "completed")
+$VALID_STATUSES = @("fast_smoke", "medium_smoke", "production", "completed", "historical")
 $PRODUCTION_STATUSES = @("production", "completed")
 
 function Fail([string]$Message) {
@@ -143,9 +143,11 @@ if ($Production) {
     }
     if ([int]$nTrain -ge $PRODUCTION_N_TRAIN_MIN) {
         $prodStatus = Require-Object $overnight "status" "overnight_results"
-        if ($PRODUCTION_STATUSES -notcontains $prodStatus) {
+        if ($prodStatus -eq "historical") {
+            Write-Host "  (-Production: n_train=$nTrain status=historical, archived pin)" -ForegroundColor DarkGray
+        } elseif ($PRODUCTION_STATUSES -notcontains $prodStatus) {
             Fail ("overnight_results status '{0}' invalid for production tier (n_train={1}; expected {2})" -f $prodStatus, $nTrain, ($PRODUCTION_STATUSES -join ', '))
-        }
+        } else {
         $prodBpc = Require-Object $overnight "bpc" "overnight_results"
         try {
             [void][double]$prodBpc
@@ -156,7 +158,8 @@ if ($Production) {
         if ($prodDelta -gt $D17_PRODUCTION_PIN_TOLERANCE) {
             Fail ("overnight_results bpc {0} out of production pin tolerance (expected ~{1}, delta {2:F4}, max {3})" -f $prodBpc, $D17_PIN_BPC, $prodDelta, $D17_PRODUCTION_PIN_TOLERANCE)
         }
-        Write-Host "  (-Production: n_train=$nTrain status=$prodStatus bpc pin OK)" -ForegroundColor DarkGray
+            Write-Host "  (-Production: n_train=$nTrain status=$prodStatus bpc pin OK)" -ForegroundColor DarkGray
+        }
     } else {
         Write-Host "  (-Production: n_train=$nTrain < $PRODUCTION_N_TRAIN_MIN, pending_production)" -ForegroundColor DarkGray
     }

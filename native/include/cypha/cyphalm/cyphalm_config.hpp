@@ -18,6 +18,8 @@ enum class ContextMode {
     AblationNoDif,
     AblationNoSsm,
     Rpsm,
+    /// Single-context PGM spine: SSM→field→PGM h → Wy logits (U06 tournament winner).
+    PgmLogits,
 };
 
 /// Bench / CLI mode aliases (mapped to ``ContextMode`` + tier flags).
@@ -29,6 +31,26 @@ enum class BenchMode {
     ContextBank,
     Spectral,
     Rpsm,
+    PgmLogits,
+};
+
+/// Unified-context tournament (U01–U10): single context carrier (default off = fragmented D17).
+enum class UnifiedContextSource {
+    None = 0,
+    Field,
+    Lstm,
+    Pgm,
+    ContextBank,
+    Memory,
+    UnifiedBuffer,
+};
+
+/// Single readout head when ``use_unified_context`` is set.
+enum class UnifiedReadout {
+    None = 0,
+    Lstm,
+    Gria,
+    PgmWy,
 };
 
 struct CyphaLMConfig {
@@ -61,7 +83,8 @@ struct CyphaLMConfig {
     int gria_rank = 32;
 
     int context_length = 256;
-    ContextMode context_mode = ContextMode::Hybrid;
+    /// Living product default: PGM→Wy spine (U06). Hybrid remains available via ``--mode hybrid``.
+    ContextMode context_mode = ContextMode::PgmLogits;
     int ngram_context = 2;
     int train_epochs = 1;
     std::string view_schedule = "same_order";
@@ -74,7 +97,7 @@ struct CyphaLMConfig {
     bool ngram_position_weights = false;
     /// B4: low-rank bilinear term ``U @ ((V_f @ field_x) ⊙ (V_e @ embeds))`` added to sum fusion.
     bool ngram_bilinear_fusion = false;
-    bool ngram_fuse_split = true;
+    bool ngram_fuse_split = false;
     double gria_lr_decay = 0.5;
     int bptt_steps = 0;
     double laplace_smoothing = 1.0;
@@ -127,7 +150,7 @@ struct CyphaLMConfig {
     std::string bpe_merges_path;
     std::string bpe_vocab_path;
 
-    /// Cell hypothesis testbench id (e.g. ``H06``); empty = default stack only.
+    /// Cell hypothesis testbench id (e.g. ``U06``); empty = use struct defaults (PGM→Wy).
     std::string cell_variant;
     /// H02/H17: Sheffer ``eml()`` activations in char-LSTM gates.
     bool use_eml_activation = false;
@@ -161,6 +184,22 @@ struct CyphaLMConfig {
     bool use_free_energy_loss = false;
     /// H22: algebraic fingerprint tag mixed into GRIA input.
     bool use_algebraic_fingerprint = false;
+    /// H23: Plastic Graph Machine (PGM) hierarchical sparse slot-graph cell.
+    bool use_pgm_cell = true;
+    /// U01–U10: enforce one context carrier + one readout (off = legacy dual-head D17).
+    bool use_unified_context = true;
+    UnifiedContextSource unified_context_source = UnifiedContextSource::Pgm;
+    UnifiedReadout unified_readout = UnifiedReadout::PgmWy;
+    /// PGM branching factor b (N ≈ n_sub^levels); hierarchical log-N address.
+    int pgm_n_sub = 8;
+    /// PGM hierarchy depth L.
+    int pgm_levels = 3;
+    /// PGM T1 chunk length (consolidate adjacent bindings at boundary).
+    int pgm_chunk_len = 16;
+    int pgm_topk = 4;
+    int pgm_beam = 2;
+    int pgm_rehash_t = 16;
+    int pgm_hops = 2;
 
     double mdl_forget_max_norm = 4.0;
     double free_energy_beta = 0.05;
@@ -255,6 +294,14 @@ std::string context_mode_string(ContextMode mode);
 BenchMode parse_bench_mode(const std::string& s);
 void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg);
 std::string bench_mode_name(BenchMode mode);
+
+/// Enable the integrated PGM→logits recipe (ContextMode::PgmLogits + H23-ish PGM knobs).
+void apply_pgm_logits_recipe(CyphaLMConfig& cfg);
+
+std::string unified_context_source_name(UnifiedContextSource s);
+std::string unified_readout_name(UnifiedReadout r);
+UnifiedContextSource parse_unified_context_source(const std::string& s);
+UnifiedReadout parse_unified_readout(const std::string& s);
 
 /// Load ``bench/config/profiles/cyphalm_<profile>_wikitext.json`` (or gutenberg for d04).
 void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg);

@@ -29,6 +29,7 @@
 #include "cypha/cyphalm/gria_gated_mixture.hpp"
 #include "cypha/cyphalm/mdl_forget.hpp"
 #include "cypha/cyphalm/nig_state_cell.hpp"
+#include "cypha/cyphalm/pgm_cell.hpp"
 #include "cypha/cyphalm/reversible_ssm_cell.hpp"
 #include "cypha/cyphalm/selective_ssm.hpp"
 #include "cypha/cyphalm/view_embedding.hpp"
@@ -173,6 +174,10 @@ class CyphaLMModel {
     /// Char-LSTM head when ``context_mode == CharLstm`` (nullptr otherwise).
     const CharLSTMHead* char_lstm() const { return lstm_.get(); }
 
+    /// H23 PGM cell when ``use_pgm_cell`` (nullptr otherwise).
+    const PGMCell* pgm_cell() const { return pgm_cell_.get(); }
+    PGMCell* pgm_cell() { return pgm_cell_.get(); }
+
     const cypha::intelligence::KappaTrajectoryState& kappa_trajectory_state() const {
         return kappa_trajectory_state_;
     }
@@ -205,6 +210,7 @@ class CyphaLMModel {
     std::unique_ptr<CompressiveMemory> memory_;
     std::unique_ptr<ContextBank> context_bank_;
     std::unique_ptr<NigStateCell> nig_state_cell_;
+    std::unique_ptr<PGMCell> pgm_cell_;
     std::unique_ptr<ReversibleSSMCell> reversible_cell_;
     std::unique_ptr<NgramFusion> ngram_fusion_;
     std::unique_ptr<cypha::som::GNGExpertManager> gng_;
@@ -224,6 +230,13 @@ class CyphaLMModel {
     std::vector<double> proj_ngram_embed_;
     DIFPredictOutput last_dif_out_;
     std::vector<double> field_x_;
+    /// Unified-context carrier (U01–U10); unused when ``!use_unified_context``.
+    std::vector<double> unified_context_;
+    /// proj: lstm_hidden × context_dim — additive conditioning of LSTM h from unified context.
+    std::vector<double> proj_ctx_lstm_;
+    /// U06: vocab × context_dim linear head on PGM/unified context.
+    std::vector<double> pgm_wy_;
+    std::vector<double> pgm_by_;
     std::vector<double> gria_in_;
     std::vector<double> lstm_h_;
     std::vector<double> lstm_c_;
@@ -314,6 +327,13 @@ class CyphaLMModel {
     std::deque<std::vector<double>> lstm_h_history_rows_;
 
     void init_components();
+    /// U01–U10 path: build one ``unified_context_``, one readout; no dual-head blend.
+    PredictNextOutput predict_next_unified(std::uint32_t token_id);
+    void build_unified_context_from_field();
+    void unified_lstm_forward(std::uint32_t token_id, std::vector<double>& log_out);
+    void unified_gria_forward(std::vector<double>& log_out);
+    void unified_pgm_wy_forward(std::vector<double>& log_out);
+    void train_unified_readout(std::uint32_t next_token_id, double lstm_lr, TrainStepMetrics& m);
     void append_lstm_hidden_history(const std::vector<double>& h);
     double lstm_hidden_d_eff() const;
     void record_embedding(const std::vector<double>& e);

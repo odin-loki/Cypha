@@ -184,7 +184,7 @@ const std::vector<std::string> kReadyKeys = {"ready", "model_type"};
 const std::vector<std::string> kMetricsKeys = {
     "uptime_seconds",  "model_loaded",          "model_type",     "n_predictions",
     "n_corrections",   "registry_model_count",  "loaded_model_count", "active_model",
-    "session",         "regression_head_loaded", "lm_loaded",      "branch_a_router",
+    "session",         "regression_head_loaded", "branch_a_router",
 };
 
 const std::vector<std::string> kSessionSummaryKeys = {
@@ -365,6 +365,9 @@ void validate_contract(httplib::Client& cli) {
     throw std::runtime_error("/metrics status " + std::to_string(metrics.status));
   }
   require_keys(metrics.body, kMetricsKeys, "/metrics");
+  if (!metrics.body.contains("sequence_loaded") && !metrics.body.contains("lm_loaded")) {
+    throw std::runtime_error("/metrics: missing sequence_loaded or lm_loaded");
+  }
 
   const std::string predict_body = R"({"input":[0,0,0,0,0,0,0,0],"use_gh":true})";
   const HttpResult predict = http_json(cli, "POST", "/predict", predict_body);

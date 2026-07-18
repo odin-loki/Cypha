@@ -66,6 +66,6 @@ Try:
   cypha_tune_run --config /path/to/sweep.json --dry-run
   cypha_diagnostics_run --fixtures /path/to/fixtures
 
-CyphaDIF REST (POST JSON on cypha_rest): /dif/retrieve, /dif/generate
+Cypha REST (POST JSON on cypha_rest): /retrieve, /sample
 
 EOF

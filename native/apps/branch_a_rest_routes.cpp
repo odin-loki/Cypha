@@ -144,7 +144,9 @@ void register_branch_a_rest_routes(httplib::Server& svr) {
         j["ollama_url"] = ollama_base_url();
         j["ollama_model"] = ollama_model();
         j["ollama_reachable"] = ollama_reachable();
-        j["lm_loaded"] = cyphalm::cyphalm_rest_lm_loaded();
+        const bool sequence_loaded = cyphalm::cyphalm_rest_lm_loaded();
+        j["sequence_loaded"] = sequence_loaded;
+        j["lm_loaded"] = sequence_loaded;  // alias
         res.set_content(j.dump(), "application/json");
     });
 
@@ -205,8 +207,17 @@ void register_branch_a_rest_routes(httplib::Server& svr) {
             if (body.contains("ollama_system") && body["ollama_system"].is_string()) {
                 opt.ollama_system = body["ollama_system"].get<std::string>();
             }
-            opt.cypha_lm_strategy = body.value("cypha_lm_strategy", std::string("top_p"));
-            opt.cypha_lm_temperature = body.value("cypha_lm_temperature", 0.9);
+            // Prefer Cypha-neutral keys; keep cypha_lm_* as aliases.
+            if (body.contains("cypha_strategy") && body["cypha_strategy"].is_string()) {
+                opt.cypha_lm_strategy = body["cypha_strategy"].get<std::string>();
+            } else {
+                opt.cypha_lm_strategy = body.value("cypha_lm_strategy", std::string("top_p"));
+            }
+            if (body.contains("cypha_temperature") && body["cypha_temperature"].is_number()) {
+                opt.cypha_lm_temperature = body["cypha_temperature"].get<double>();
+            } else {
+                opt.cypha_lm_temperature = body.value("cypha_lm_temperature", 0.9);
+            }
 
             BranchARouteResult route;
             {
@@ -236,7 +247,7 @@ void register_branch_a_rest_routes(httplib::Server& svr) {
                 nlohmann::json gen;
                 gen["provider"] = "none";
                 gen["text"] = "";
-                gen["reason"] = "CyphaLM not loaded; routing only (in-domain).";
+                gen["reason"] = "Cypha sequence not loaded; routing only (in-domain).";
                 out["generation"] = gen;
             } else {
                 const int vocab = 128;
@@ -250,7 +261,7 @@ void register_branch_a_rest_routes(httplib::Server& svr) {
                     cyphalm::cyphalm_rest_generate_json(prompt_ids, opt.max_tokens, params);
                 const auto generated = gen_json.value("generated_ids", std::vector<int>{});
                 nlohmann::json gen;
-                gen["provider"] = "cypha_lm";
+                gen["provider"] = "cypha";
                 gen["text"] = decode_generated_ids(generated, text, vocab);
                 gen["generated_ids"] = generated;
                 gen["latency_ms"] =

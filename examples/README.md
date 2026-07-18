@@ -27,16 +27,16 @@ Default listen port is **8099** (override with `CYPHA_REST_PORT` in the curl hel
 | `cypha_load_body.json` | `/load` | POST |
 | `curl_predict.ps1` | `/predict` | one-liner curl (PowerShell) |
 | `curl_predict.sh` | `/predict` | one-liner curl (bash) |
-| `lm_generate_body.json` | `/generate`, `/generate/stream` | POST (CyphaLM) |
+| `lm_generate_body.json` | `/generate`, `/generate/stream` | POST (Cypha sequence) |
 | `curl_lm_generate_stream.ps1` | `/generate/stream` | SSE streaming (PowerShell) |
 | `curl_lm_generate_stream.sh` | `/generate/stream` | SSE streaming (bash) |
-| `demo_cyphalm/` | CyphaLM demo checkpoint | see `demo_cyphalm/README.md` |
+| `demo_cyphalm/` | Cypha sequence demo checkpoint | see `demo_cyphalm/README.md` |
 
-Load CyphaLM at startup with `--cyphalm-checkpoint <base>` or env `CYPHALM_CHECKPOINT` (`.json` + `.npz`).
+Load Cypha at startup with `--sequence-checkpoint <base>` or env `CYPHA_SEQUENCE_CHECKPOINT` (`.json` + `.npz`; aliases `--cyphalm-checkpoint`, `CYPHALM_CHECKPOINT`).
 
 ---
 
-## CyphaLM generation
+## Cypha generation
 
 **Batch generate (top-p nucleus sampling):**
 ```bash
@@ -50,7 +50,7 @@ curl -s -X POST http://127.0.0.1:8099/generate \
 bash examples/curl_lm_generate_stream.sh
 ```
 
-Each SSE `data:` line includes `token_id`, `epistemic_var`, `dominant_expert`, and `routing_probs` from CyphaDIF.
+Each SSE `data:` line includes `token_id`, `epistemic_var`, `dominant_expert`, and `routing_probs` from Cypha.
 
 ---
 

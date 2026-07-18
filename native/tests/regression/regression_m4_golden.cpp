@@ -9,7 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 
 namespace {
 

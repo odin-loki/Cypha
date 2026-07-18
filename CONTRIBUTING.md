@@ -94,7 +94,7 @@ Update [`CHANGELOG.md`](CHANGELOG.md) when:
 
 ## Layout
 
-- `native/` — authoritative runtime (CyphaDIF, CyphaLM, REST, Qt shell, bench/tune/diagnostics).
+- `native/` — authoritative runtime (Cypha, REST, Qt shell, bench/tune/diagnostics).
 - `fixtures/` — committed goldens for CTest parity.
 - `docs/reports/` — permanent experiment records; committed, not regenerated.
 - `docs/RESEARCH_STATUS.md` — benchmark journal and research priorities.

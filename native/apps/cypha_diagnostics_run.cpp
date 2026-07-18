@@ -294,7 +294,7 @@ struct ParityJob {
 
 std::vector<ParityJob> build_jobs(const fs::path& fix) {
     return {
-        // Phase 1 — baseline establishment (CyphaDIF classify / model hotpaths)
+        // Phase 1 — baseline establishment (Cypha classify / model hotpaths)
         {"1", "cypha_golden", {fix.string() + "/reference.cypha", fix.string() + "/native_parity.bin"}},
         {"1", "create_model_smoke", {}},
         {"1", "preprocess_train_classify_golden", {fix.string() + "/studio_trainer_preprocess_classify_hotpath"}},

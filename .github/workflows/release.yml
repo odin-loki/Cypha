@@ -251,7 +251,7 @@ jobs:
           body: |
             ## Cypha ${{ github.ref_name }} — native C++ framework
 
-            Prebuilt **native C++** runtime only (no Python venv): CyphaDIF REST (`/dif/retrieve`, `/dif/generate`), native bench (d01–d17), CyphaLM, diagnostics orchestrator, parity smoke tools, and a **standalone Qt shell AppImage** on Linux.
+            Prebuilt **native C++** runtime only (no Python venv): Cypha REST (`/sample`, `/retrieve`, `/sequence/*`), native bench (d01–d17), Cypha sequence, diagnostics orchestrator, parity smoke tools, and a **standalone Qt shell AppImage** on Linux.
 
             ### Linux CLI (`cypha-*-linux-x86_64.tar.gz`)
 
@@ -290,7 +290,7 @@ jobs:
 
             | Binary | Role |
             |--------|------|
-            | `cypha_rest` | Native REST server (classifier + `/lm/*`, `/generate`, `/dif/*`) |
+            | `cypha_rest` | Native REST server (classifier + `/sample`, `/retrieve`, `/sequence/*`) |
             | `cypha_bench_run` | Bench master runner (domains d01–d17) |
             | `cypha_bench_report` | Report-only rebuild (`BASELINE_REPORT.md` + `summary.json`) |
             | `cypha_diagnostics_run` | Phases 1–4 diagnostics orchestrator |
@@ -315,14 +315,14 @@ jobs:
 
             - **Baseline lock update:** `pwsh -File scripts/update_baseline_lock.ps1 -Run d17` (or `-Run d21`, `-Run cell-sweep`; add `-Fast` for smoke) — wraps **`cypha_baseline_lock`** CLI.
             - **Cross-profile bench:** `cypha_bench_run --domain-tag d22` — d18 intelligence + d16 EWC probe + d20 cell sweep; profile [`bench/config/d22_intelligence_cross_profile.json`](bench/config/d22_intelligence_cross_profile.json).
-            - **Hybrid EWC:** SSM/GRIA α Fisher overlay + B0 **`ngram_count_table`** prior; H01 α forget gate; CyphaLM checkpoint persists ngram counts.
+            - **Hybrid EWC:** SSM/GRIA α Fisher overlay + B0 **`ngram_count_table`** prior; H01 α forget gate; Cypha sequence checkpoint persists ngram counts.
             - **CI gate:** **96 CTests** (`ctest -R native_`); optional **`federated_tls`** job runs **`native_federated_tls_smoke`** with **`-DCYPHA_ENABLE_OPENSSL=ON`** (`bash scripts/ci_federated_tls_linux.sh` locally).
 
             ### Phase 9 maintainer notes (v2.3.9, shipped)
 
             - **Unified overnight:** `pwsh -File scripts/run_overnight_all.ps1` — D17 + d21 RPSM + 28-variant cell sweep + `update_baseline_lock.ps1` refresh of [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json). Add `-Fast` for smoke token budgets.
             - **Overnight lock validation:** `cypha_bench_run --domain-tag d23` — FAST wiring check for baseline-lock schema and mini overnight path; profile [`bench/config/d23_overnight_lock_profile.json`](bench/config/d23_overnight_lock_profile.json).
-            - **Hybrid EWC weight Fisher:** diagonal Fisher on GRIA **U**/**V** + SSM **W_fast** (extends Phase 8 α Fisher); EWC anchor/Fisher blocks persisted in CyphaLM `checkpoint.json`.
+            - **Hybrid EWC weight Fisher:** diagonal Fisher on GRIA **U**/**V** + SSM **W_fast** (extends Phase 8 α Fisher); EWC anchor/Fisher blocks persisted in Cypha `checkpoint.json`.
             - **CI gate:** **98 CTests** (`ctest -R native_`); smokes **`native_d23_overnight_lock_smoke`**, **`native_ewc_weights_smoke`**.
 
             ### Phase 10 maintainer notes (v2.3.10, shipped)

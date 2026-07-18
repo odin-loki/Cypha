@@ -29,8 +29,8 @@ Monorepo C++ core for [`docs/port/PORT_FULL_STACK.md`](../docs/port/PORT_FULL_ST
 
 | Target | Sources |
 |--------|---------|
-| **`cypha_core`** | `src/*.cpp`, `src/som/*`, `src/intelligence/*` — CyphaDIF runtime |
-| **`cypha_lm_native`** | `src/cyphalm/*.cpp` — CyphaLM |
+| **`cypha_core`** | `src/*.cpp`, `src/cyphalm/*`, `src/som/*`, `src/intelligence/*`, `src/cypha.cpp` — one Cypha (classify/regress/sample/tokens) |
+| **`cypha_lm_native`** | INTERFACE alias of `cypha_core` (compat for existing link lines) |
 | **`cypha_bench_native`** | `src/bench/*.cpp` — benchmark engine |
 
 ### Apps (`apps/` → executables)
@@ -80,8 +80,8 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 
 | Lib | Role |
 |-----|------|
-| **`cypha_core`** | M1–M7 CyphaDIF runtime: `.cypha` v3 I/O, CPU infer, training, regression, generation/RAG, Branch A router, MultiLabel, merge_from, SimilarityIndex, kernel LLR, retrieval |
-| **`cypha_lm_native`** | CyphaLM: Izaac embed, model/SSM, BPE, Hebbian/HierSSM, decode, checkpoint I/O — see [`CYPHALM_NATIVE_BUILD.md`](../docs/native/CYPHALM_NATIVE_BUILD.md) |
+| **`cypha_core`** | M1–M7 Cypha runtime: `.cypha` v3 I/O, CPU infer, training, regression, generation/RAG, Branch A router, MultiLabel, merge_from, SimilarityIndex, kernel LLR, retrieval |
+| **`cypha_lm_native`** | Cypha sequence: Izaac embed, model/SSM, BPE, Hebbian/HierSSM, decode, checkpoint I/O — see [`CYPHALM_NATIVE_BUILD.md`](../docs/native/CYPHALM_NATIVE_BUILD.md) |
 | **`cypha_bench_native`** | Bench engine: d01–d17 domains, encoders, sklearn-equivalent baselines, cross-domain analyses, figure data + PNG render, tune sweep helpers |
 
 ### Production binaries
@@ -93,7 +93,7 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 | **`cypha_tune_run`** | Native tuning/sweep orchestrator. Loads sweep JSON, invokes **`cyphalm_bench_native`** or **`cypha_bench_run`** per cell. CLI: `--config PATH`, `--out PATH`, `--exe-dir DIR`, `--max-cells N`, `--write`, `--dry-run`. CTest **`native_tune_run_smoke`**. |
 | **`cypha_diagnostics_run`** | Phases 1–4 validation orchestrator: runs parity exes + inline **`cypha_core`** checks (no sklearn). CLI: `--fixtures DIR`, `--out DIR`, `--exe-dir DIR`, `--phases 1,2,3,4`, `--list`, `--inline-only`. CTest **`native_diagnostics_run`**. |
 | **`cyphalm_bench_native`** | Per-profile LM BPC bench (char-LSTM / hybrid / ablations). Used by **`cypha_bench_run`** d04/d17 and **`cypha_tune_run`**. |
-| **`cyphalm_train`** | Train CyphaLM from corpus text via native **`train_sequence`**, save Python-compatible checkpoint (`checkpoint.json` + `.npz`). CLI: `--profile {d17,d04}`, `--corpus bench/data/...`, `--epochs N`, `--out checkpoint_dir/`, optional `--synthetic-tokens N` (smoke), `--max-train-steps S`, `--threads T`. CTest **`native_cyphalm_train_smoke`**. |
+| **`cyphalm_train`** | Train Cypha sequence from corpus text via native **`train_sequence`**, save checkpoint (`checkpoint.json` + `.npz`). CLI: `--profile {d17,d04}`, `--corpus bench/data/...`, `--epochs N`, `--out checkpoint_dir/`, optional `--synthetic-tokens N` (smoke), `--max-train-steps S`, `--threads T`. CTest **`native_cyphalm_train_smoke`**. |
 
 ### Core parity & smoke
 
@@ -131,17 +131,17 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 | **`regression_two_stage_ridge_fit_parity`** | M6–M7 | **`two_stage_dif_ridge_fit_from_llr`** + **`two_stage_dif_predict_batch`** vs `fixtures/two_stage_ridge_fit/sidecar.json` or **`two_stage_e2e_ridge/`** (quantile-DIF LLR); CTests **`native_regression_two_stage_ridge_fit`**, **`native_regression_two_stage_e2e_ridge`** (**`k_native_regression_milestone` ≥ 7**) |
 | **`regression_rff_parity`** | M4 | **`RFFRegressor` / `MKERegressor` math kernels:** `rff_encode_batch_rowmajor`, `ridge_fit_bias`, `linear_predict_with_bias`, `mke_expert_linear_dots` (+ mixture sanity) vs `fixtures/rff_regression/sidecar.json` |
 | **`registry_register`** | M5 | Copy **`model.cypha`** + **`card.json`** (+ optional **`--pre preprocessor.json`**) into `<root>/<name>/<version>/`; **`--and-verify`** runs **`registry_scan`**. CTest **`native_registry_register`**. |
-| **`cypha_rest`** | M5+ | **CyphaDIF** REST routes (see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §3): **`/health`**, **`/ready`**, **`/metrics`**, **`/predict`**, **`/update`**, **`/adapt_temperature`**, **`/session`**, **`DELETE /session`**, **`/classes`**, **`/models`**, **`/load`**, **`/register`**. Optional **`--regression-json`**. **CyphaLM** routes: **`POST /lm/load`**, **`GET /lm/metrics`**, **`POST /lm/predict_next`**, **`POST /generate`**, **`POST /generate/stream`**. **Branch A** router (optional **`--branch-a-json`**): **`GET /route/health`**, **`POST /route/text`**, **`POST /route/generate`**, **`POST /route/save`**. Smoke: **`native/scripts/smoke_cypha_rest_mingw.ps1`**. |
+| **`cypha_rest`** | M5+ | **Cypha** REST routes (see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §3): **`/health`**, **`/ready`**, **`/metrics`**, **`/predict`**, **`/update`**, **`/adapt_temperature`**, **`/session`**, **`DELETE /session`**, **`/classes`**, **`/models`**, **`/load`**, **`/register`**. Optional **`--regression-json`**. Sequence routes: **`POST /sequence/load`**, **`GET /sequence/metrics`**, **`POST /predict_next`**, **`POST /generate`**, **`POST /generate/stream`**. Latent: **`POST /sample`**, **`POST /retrieve`**. **Branch A** router (optional **`--branch-a-json`**): **`GET /route/health`**, **`POST /route/text`**, **`POST /route/generate`**, **`POST /route/save`**. Smoke: **`native/scripts/smoke_cypha_rest_mingw.ps1`**. |
 | **`experiment_db_smoke`** | M6 | **Optional** — uses embedded experiment DDL at configure time. **SQLite:** system **`find_package(SQLite3)`** or default **`CYPHA_FETCH_SQLITE3_AMALGAMATION=ON`** (downloads official amalgamation). Uses **`cypha/experiment_db.hpp`** (`ExperimentDb`, `experiment_sqlite_exec`, …). CTests **`native_experiment_db_smoke`** / **`native_experiment_db_file`**. |
 | **`experiment_db_crud_parity`** | M6 | **`cypha/experiment_db_crud.hpp`** — insert/finish, append metrics, fail/delete, get/list, best/leaderboard, **`compare_runs`**, **`update_run_notes`** vs canonical DDL; CTest **`native_experiment_db_crud`**. |
 | **`cypha_qt_stub`** | M5 | Optional Qt6 **Core** + **`cypha_core`**: optional arg **`reference.cypha`** → **`QFile`** → **`load_cypha_from_buffer`**. **`${BUILD_DIR}/qt/cypha_qt_stub`**. CTest **`native_qt_stub_load_reference`**. |
 | **`cypha_qt_shell`** | M5–M6 | Qt6 **Widgets** + **Network** + **`cypha_core`**: **Dataset panel** — column picker (`QComboBox` target + `QListWidget` feature checkboxes), raw CSV preview table (first 8 rows), val-split % hold-out with post-train accuracy eval; **Fit preprocessor dialog** — scale on/off, PCA dim, fit via `fit_from_design_matrix`, save `preprocessor.json` (no Python needed); train CSV + REST/native bulk; **training progress panel** (per-class accuracy + rolling stats); loss chart REST vs native + optional EMA + **PNG/SVG/CSV** export (optional **`-DCYPHA_QT_CHARTS=ON`**); **`POST /predict`** **`return_explanation`**; **save `.cypha`** (merge + infer snapshot incl. **`feat_dim`**, context, **`mid_trans`**, **`field_W_T`**, **`field_a_eff`**); **train hparams** + auto **`train_hparams.json`**; **`replay_u01`**; MKE regressor loop + `regression_y` bulk; registry + **`POST /load`**; **`GET /health`**, **`/ready`**, **`/models`**; Experiments DB panel (M6: open `.db`, start/finish runs, list table); spawn **`cypha_rest`**; **`--smoke`**. CTest **`native_qt_shell_smoke`**. |
 
-### CyphaLM parity
+### Cypha sequence parity
 
 | Binary | Role |
 |--------|------|
-| **`cyphalm_parity`** | Full CyphaLM parity suite. CTest **`native_cyphalm_parity_suite`**. **`CYPHALM_PARITY_BIN`**. |
+| **`cyphalm_parity`** | Full Cypha sequence parity suite. CTest **`native_cyphalm_parity_suite`**. **`CYPHALM_PARITY_BIN`**. |
 | **`cyphalm_model_parity`** | Model forward vs reference. CTest **`native_cyphalm_model_parity`**. |
 | **`cyphalm_ssm_parity`** | HierSSM / SSM kernels. CTest **`native_cyphalm_ssm`**, **`native_cyphalm_ssm_fixture`**. |
 | **`cyphalm_hebbian_parity`** | Hebbian update step. CTest **`native_cyphalm_hebbian`**. |
@@ -158,7 +158,7 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 | **`cypha_federated_worker`** | POST worker JSON to coordinator (**`--scheme http|https`**). Used with coordinator listen mode. |
 | **`federated_worker_smoke`** | In-process HTTP loopback (no TLS). CTest **`native_federated_worker_smoke`**. |
 | **`federated_tls_smoke`** | HTTPS loopback with self-signed cert (requires OpenSSL build + **`openssl`** CLI on PATH). CTest **`native_federated_tls_smoke`** (exit **2** = skip). |
-| **`ewc_cyphalm_smoke`** | CyphaLM char-LSTM EWC on embed + recurrent + lm_head. CTest **`native_ewc_cyphalm_smoke`**. |
+| **`ewc_cyphalm_smoke`** | Cypha sequence char-LSTM EWC on embed + recurrent + lm_head. CTest **`native_ewc_cyphalm_smoke`**. |
 | **`ewc_hybrid_smoke`** | Hybrid EWC on SSM multiscale α + GRIA per-token α (B0 ngram count path when `ngram_context > 0`). CTest **`native_ewc_hybrid_smoke`**. |
 | **`ewc_weights_smoke`** | Hybrid EWC weight Fisher on GRIA **U**/**V** + SSM **W_fast**; EWC anchor/Fisher checkpoint round-trip. CTest **`native_ewc_weights_smoke`**. *(Phase 9 shipped.)* |
 | **`ewc_weights_smoke`** *(Phase 9–10)* | Hybrid EWC Fisher on GRIA **U/V/bias** + SSM **W_fast/W_slow**. CTest **`native_ewc_weights_smoke`**. |
@@ -345,7 +345,7 @@ Committed goldens live under **`fixtures/`**. After intentional **`cypha_core`**
 - [`PREPROCESSOR_CONTRACT.md`](../docs/port/PREPROCESSOR_CONTRACT.md) + [`schemas/preprocessor.schema.json`](../docs/port/schemas/preprocessor.schema.json)  
 - [`schemas/regression_head.schema.json`](../docs/port/schemas/regression_head.schema.json) — optional MoE sidecar for `/predict` **`regression_val`**  
 - [`EXPERIMENTS_SCHEMA.md`](../docs/port/EXPERIMENTS_SCHEMA.md) — SQLite (M6). DDL is embedded at CMake configure time. Native **`experiment_db_smoke`** + **`experiment_db_crud_parity`** (CTests **`native_experiment_db_smoke`** / **`native_experiment_db_crud`**) validate DDL and core run/metrics CRUD when SQLite is available.  
-- [`regression_stub.hpp`](include/cypha/regression_stub.hpp) — M4 placeholder  
+- [`regression.hpp`](include/cypha/regression.hpp) / [`regression.cpp`](src/regression.cpp) — M4 regression stack (`regression_stub.hpp` is a deprecated include alias)  
 
 ## Next engineering waves
 
@@ -353,5 +353,5 @@ Committed goldens live under **`fixtures/`**. After intentional **`cypha_core`**
 - **Qt shell streaming** — move bulk training to a `QThread`; emit per-step loss/accuracy signals; live loss chart update during training. See [`docs/FUTURE.md`](../docs/FUTURE.md) §2a.  
 - **Packaged binary** — AppImage (Linux) or `windeployqt` folder / `.msi` (Windows) distributing Qt shell as a self-contained executable. See [`docs/FUTURE.md`](../docs/FUTURE.md) §3.  
 - **REST multi-model** — `cypha_rest --registry <root>` serving N models; per-model mutex; LRU eviction. See [`docs/FUTURE.md`](../docs/FUTURE.md) §5.  
-- **CyphaLM native inference** — C++ decode path for `.cypha` LM checkpoints (generation + REST parity). See [`docs/port/PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §4.  
+- **Cypha sequence native inference** — C++ decode path for sequence checkpoints (generation + REST parity). See [`docs/port/PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §4.  
 - **Full future directions** — Web UI, curriculum/active learning, ONNX export, federated training: [`docs/FUTURE.md`](../docs/FUTURE.md).  

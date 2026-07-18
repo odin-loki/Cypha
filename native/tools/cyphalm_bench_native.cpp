@@ -25,7 +25,7 @@
 namespace {
 
 struct Args {
-    std::string mode = "hybrid";
+    std::string mode = "pgm_logits";
     std::string profile = "d17";
     std::string cell_variant;
     // Default 40k = same_order_e2 short-budget cap (see docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md).
@@ -87,7 +87,8 @@ struct Args {
 void usage() {
     std::cerr
         << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral,rpsm}\n"
-        << "       --cell-variant {B0..H22}  (overrides --mode)\n"
+        << "       (hybrid = HISTORICAL D17 GRIA+LSTM pin; living default is PGM->Wy via cypha::Cypha)\n"
+        << "       --cell-variant {B0..H23,U01..U10}  (HISTORICAL research; H23=PGM; U*=unified-context)\n"
         << "       --profile {d17,d21,d04} --n-train N --n-eval M --threads T\n"
         << "       --overnight  (D17/D21: full WikiText + 300k train budget; or CYPHA_BENCH_OVERNIGHT=1)\n"
         << "       --analysis [--analysis-steps N]\n"
@@ -132,7 +133,8 @@ void usage() {
         << "       --use-eigenvalue-d-eff\n"
         << "       --use-reu-forget-gate\n"
         << "       --use-self-correcting-loop  (Paper IV epistemic feedback loop in eval/intelligence-profile;\n"
-        << "                                    opt-in, default off, hybrid-mode only; see HIDDEN_DIM_SCALE_PLAN.md)\n"
+        << "                                    opt-in, default off, hybrid-mode only — HISTORICAL research;\n"
+        << "                                    see HIDDEN_DIM_SCALE_PLAN.md)\n"
         << "       --ngram-position-weights  (B3: learnable w_0..w_ngram scalars before W_e; default off)\n"
         << "       --ngram-bilinear-fusion  (B4: low-rank field⊗embed bilinear term in sum fusion; default off)\n";
 }

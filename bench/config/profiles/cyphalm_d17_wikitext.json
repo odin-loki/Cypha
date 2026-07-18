@@ -45,7 +45,8 @@
     "delta_vs_char_lstm_baseline": -0.108,
     "recommended_n_train": 300000,
     "hybrid_gria_weight": 0.004,
-    "notes": "C2 dual head; blend ~99.6% LSTM @ 300k",
+    "status": "historical",
+    "notes": "Historical hybrid GRIA+LSTM pin. Living Cypha sequence default is PGM→Wy (U06 / pgm_logits). C2 dual head; blend ~99.6% LSTM @ 300k",
     "multiview_policy": {
       "doc": "docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md",
       "gria_only_budget_le_24k": "view_schedule=schedule_b, stop at n_train cap",

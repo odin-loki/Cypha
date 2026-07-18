@@ -14,7 +14,7 @@ const std::vector<CellVariantSpec>& variant_table() {
         {"H01", "alpha-gate cell", 1, true, "hybrid", "GRIA mean α scales LSTM forget gate in hybrid forward"},
         {"H02", "EML activation cell", 1, true, "char_lstm", "Sheffer eml() replaces sigmoid/tanh"},
         {"H03", "CausalField cell", 1, true, "ssm", "SSM/SGEMV recurrence primitive"},
-        {"H04", "Pure CyphaDIF LM", 1, true, "ssm_gria", "DIF + GRIA without LSTM"},
+        {"H04", "Pure expert-field LM", 1, true, "ssm_gria", "expert field + GRIA without LSTM"},
         {"H05", "alpha-fitness aux loss", 1, true, "hybrid", "hybrid + profile-guided loss in train_step backprop"},
         {"H06", "NIG-state cell", 2, true, "hybrid", "NigStateCell Bayesian update on field path"},
         {"H07", "Differential gate", 2, true, "hybrid", "SSM ctx = theta0 + delta-h blend (last_ctx + dh)"},
@@ -34,6 +34,20 @@ const std::vector<CellVariantSpec>& variant_table() {
         {"H20", "Spectral state cell", 3, true, "spectral", "FFT-domain SSM recurrence"},
         {"H21", "Free Energy cell", 3, true, "ssm_gria", "variational β·epistemic_var penalty in train_step"},
         {"H22", "Algebraic fingerprint cell", 3, true, "hybrid", "Izaac algebraic fingerprint tag in GRIA input"},
+        {"H23", "PGM cell", 3, true, "hybrid",
+         "Plastic Graph Machine: hierarchical log-N address + sparse slot graph (no dense attn)"},
+        // Unified-context tournament: one context carrier + one readout (no dual-head blend).
+        {"U01", "Field→LSTM", 4, true, "hybrid", "unified: field_x context, CharLSTM readout"},
+        {"U02", "Field→GRIA", 4, true, "ssm_gria", "unified: field_x context, GRIA readout"},
+        {"U03", "LSTM-only", 4, true, "char_lstm", "unified: LSTM h is the sole context+readout"},
+        {"U04", "PGM→LSTM", 4, true, "hybrid", "unified: PGM h replaces context, CharLSTM readout"},
+        {"U05", "PGM→GRIA", 4, true, "ssm_gria", "unified: PGM h context, GRIA readout"},
+        {"U06", "PGM→logits", 4, true, "pgm_logits", "unified: PGM h → Wy vocab head"},
+        {"U07", "Bank→LSTM", 4, true, "hybrid", "unified: ContextBank attend vec → CharLSTM"},
+        {"U08", "Memory→LSTM", 4, true, "hybrid", "unified: CompressiveMemory retrieve → CharLSTM"},
+        {"U09", "PGM-large→LSTM", 4, true, "hybrid", "unified: PGM N=4096 (b=8 L=4) → CharLSTM"},
+        {"U10", "UnifiedBuffer→LSTM", 4, true, "hybrid",
+         "unified: single buffer writers (SSM→PGM replace→memory add) → CharLSTM"},
     };
     return kVariants;
 }
@@ -78,6 +92,10 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     cfg.use_ca_state_cell = false;
     cfg.use_free_energy_loss = false;
     cfg.use_algebraic_fingerprint = false;
+    cfg.use_pgm_cell = false;
+    cfg.use_unified_context = false;
+    cfg.unified_context_source = UnifiedContextSource::None;
+    cfg.unified_readout = UnifiedReadout::None;
     cfg.use_kernel_llr = false;
     cfg.kernel_blend = 0.25;
 
@@ -152,6 +170,100 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     } else if (id == "H22") {
         cfg.use_algebraic_fingerprint = true;
         cfg.alpha_learnable = true;
+    } else if (id == "H23") {
+        cfg.use_pgm_cell = true;
+        cfg.pgm_n_sub = 8;
+        cfg.pgm_levels = 3;
+        cfg.pgm_chunk_len = 16;
+        cfg.pgm_topk = 4;
+        cfg.pgm_beam = 2;
+        cfg.pgm_rehash_t = 16;
+        cfg.pgm_hops = 2;
+    } else if (id == "U01") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::Field;
+        cfg.unified_readout = UnifiedReadout::Lstm;
+        cfg.hybrid_blend_learnable = false;
+    } else if (id == "U02") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::Field;
+        cfg.unified_readout = UnifiedReadout::Gria;
+        cfg.ngram_fuse_split = false;
+    } else if (id == "U03") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::Lstm;
+        cfg.unified_readout = UnifiedReadout::Lstm;
+    } else if (id == "U04") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::Pgm;
+        cfg.unified_readout = UnifiedReadout::Lstm;
+        cfg.use_pgm_cell = true;
+        cfg.pgm_n_sub = 8;
+        cfg.pgm_levels = 3;
+        cfg.pgm_chunk_len = 16;
+        cfg.pgm_topk = 4;
+        cfg.pgm_beam = 2;
+        cfg.pgm_rehash_t = 16;
+        cfg.pgm_hops = 2;
+        cfg.hybrid_blend_learnable = false;
+    } else if (id == "U05") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::Pgm;
+        cfg.unified_readout = UnifiedReadout::Gria;
+        cfg.use_pgm_cell = true;
+        cfg.pgm_n_sub = 8;
+        cfg.pgm_levels = 3;
+        cfg.pgm_chunk_len = 16;
+        cfg.pgm_topk = 4;
+        cfg.pgm_beam = 2;
+        cfg.pgm_rehash_t = 16;
+        cfg.pgm_hops = 2;
+        cfg.ngram_fuse_split = false;
+    } else if (id == "U06") {
+        apply_pgm_logits_recipe(cfg);
+    } else if (id == "U07") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::ContextBank;
+        cfg.unified_readout = UnifiedReadout::Lstm;
+        cfg.use_context_bank = true;
+        cfg.use_tiered_context = true;
+        cfg.context_bank_slots = 64;
+        cfg.hybrid_blend_learnable = false;
+    } else if (id == "U08") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::Memory;
+        cfg.unified_readout = UnifiedReadout::Lstm;
+        cfg.max_memory_slots = 256;
+        cfg.compress_interval = 32;
+        cfg.hybrid_blend_learnable = false;
+    } else if (id == "U09") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::Pgm;
+        cfg.unified_readout = UnifiedReadout::Lstm;
+        cfg.use_pgm_cell = true;
+        cfg.pgm_n_sub = 8;
+        cfg.pgm_levels = 4;  // N = 4096
+        cfg.pgm_chunk_len = 16;
+        cfg.pgm_topk = 4;
+        cfg.pgm_beam = 2;
+        cfg.pgm_rehash_t = 16;
+        cfg.pgm_hops = 2;
+        cfg.hybrid_blend_learnable = false;
+    } else if (id == "U10") {
+        cfg.use_unified_context = true;
+        cfg.unified_context_source = UnifiedContextSource::UnifiedBuffer;
+        cfg.unified_readout = UnifiedReadout::Lstm;
+        cfg.use_pgm_cell = true;
+        cfg.pgm_n_sub = 8;
+        cfg.pgm_levels = 3;
+        cfg.pgm_chunk_len = 16;
+        cfg.pgm_topk = 4;
+        cfg.pgm_beam = 2;
+        cfg.pgm_rehash_t = 16;
+        cfg.pgm_hops = 2;
+        cfg.max_memory_slots = 256;
+        cfg.compress_interval = 32;
+        cfg.hybrid_blend_learnable = false;
     }
 }
 

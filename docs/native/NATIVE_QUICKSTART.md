@@ -2,7 +2,7 @@
 
 One-page guide: **install → validate → bench → tune → REST**. Native C++ is the sole production runtime.
 
-**Deeper docs:** [`native/README.md`](../../native/README.md) (all targets), [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md) (API + bench §6), [`CYPHALM_NATIVE_BUILD.md`](CYPHALM_NATIVE_BUILD.md) (CyphaLM build).
+**Deeper docs:** [`native/README.md`](../../native/README.md) (all targets), [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md) (API + bench §6), [`CYPHALM_NATIVE_BUILD.md`](CYPHALM_NATIVE_BUILD.md) (Cypha sequence build).
 
 ---
 
@@ -119,7 +119,7 @@ Sweep JSON specifies **`runner`** (`cyphalm_bench_native` or `cypha_bench_run`),
 
 ---
 
-## 5b. CyphaLM training (native)
+## 5b. Cypha sequence training (native)
 
 Train a checkpoint from corpus text (profiles **`d17`** / **`d04`** load bench JSON from **`bench/config/profiles/`**):
 
@@ -137,7 +137,7 @@ cyphalm_train --profile d04 --epochs 1 --synthetic-tokens 512 \
   --max-train-steps 128 --out /tmp/cyphalm_train_smoke/
 ```
 
-Writes **`checkpoint.json`** + **`checkpoint.npz`** under **`--out`**. Load in REST: **`cypha_rest --cyphalm-checkpoint path/to/checkpoint.json`**.
+Writes **`checkpoint.json`** + **`checkpoint.npz`** under **`--out`**. Load in REST: **`cypha_rest --sequence-checkpoint path/to/checkpoint.json`** (alias: **`--cyphalm-checkpoint`**).
 
 ```bash
 ctest --test-dir C:/Temp/cypha_full_cpp_build -R native_cyphalm_train_smoke --output-on-failure
@@ -153,9 +153,9 @@ cypha_rest --listen 127.0.0.1:8099 \
   --f-field-json fixtures/f_field.json
 ```
 
-**CyphaDIF:** `GET /health`, `GET /ready`, `POST /predict`, `POST /update`, `GET /models`, `POST /load`, `POST /register`, …
+**Cypha:** `GET /health`, `GET /ready`, `POST /predict`, `POST /update`, `GET /models`, `POST /load`, `POST /register`, …
 
-**CyphaLM:** `POST /lm/load`, `GET /lm/metrics`, `POST /lm/predict_next`, `POST /generate`, `POST /generate/stream`
+**Sequence:** `POST /sequence/load`, `GET /sequence/metrics`, `POST /predict_next`, `POST /generate`, `POST /generate/stream`
 
 **Branch A** (optional `--branch-a-json branch_a_router.json`): `GET /route/health`, `POST /route/text`, `POST /route/generate`, `POST /route/save`
 

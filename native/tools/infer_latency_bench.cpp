@@ -286,7 +286,7 @@ int main() {
 
     bench_synth_parallel_gemm();
 
-    std::printf("infer_latency_bench (CyphaLM d17 hybrid synthetic):\n");
+    std::printf("infer_latency_bench (Cypha d17 hybrid synthetic):\n");
     bench_cyphalm();
 
     return 0;

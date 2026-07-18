@@ -1,4 +1,4 @@
-# CyphaStudio environment variables
+# Cypha environment variables
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
@@ -8,7 +8,7 @@
 | `CYPHA_CORS_ORIGINS` | Comma-separated allowed browser origins, or `*` for all | `*` |
 | `CYPHA_CSV_CHUNK_ROWS` | Stream large CSV imports in chunks of this row count (unset = load whole file into memory first) | *(unset)* |
 | `CYPHA_REGRESSION_HEAD` | Path to optional `regression_head.json` (same schema as native `cypha_rest --regression-json`) — MoE **`regression_val`** / **`uncertainty`** on **`POST /predict`** | *(unset)* |
-| `CYPHA_LM_CHECKPOINT` | Path to CyphaLM checkpoint base (``.json`` + ``.npz``). Native **`cypha_rest`** loads CyphaLM for **`/generate`**, **`/lm/*`** when built with LM support. | *(unset)* |
+| `CYPHA_SEQUENCE_CHECKPOINT` | Path to Cypha sequence checkpoint base (``.json`` + ``.npz``). Native **`cypha_rest`** loads the sequence model for **`/generate`**, **`/sequence/*`**, **`/predict_next`** when built with sequence support. Aliases: **`CYPHALM_CHECKPOINT`**, **`CYPHA_LM_CHECKPOINT`**. Health/metrics report **`sequence_loaded`** (alias **`lm_loaded`**). | *(unset)* |
 | `CYPHA_BRANCH_A_EPISTEMIC_THRESHOLD` | Epistemic variance gate for **`POST /route/text`** and **`POST /route/generate`** (abstain → Ollama) | `0.5` |
 | `CYPHA_BRANCH_A_N_TRAIN` | 20 Newsgroups samples for lazy Branch A router training on first `/route/*` call | `1200` |
 | `CYPHA_BRANCH_A_EMBED_BACKEND` | Text embedder: `auto`, `sentence_transformers`, or `hashing` | `auto` |
@@ -37,7 +37,7 @@
 
 **CORS:** For production behind a known web UI, set e.g. `CYPHA_CORS_ORIGINS=https://app.example.com`. Use `*` only on trusted networks.
 
-**GUI:** Dataset **File → Import** and the Dataset panel **Load** button remember the last browse directory and **File → Recent Datasets** (stored under `QSettings` org `Cypha`, app `CyphaStudio`).
+**GUI:** Dataset **File → Import** and the Dataset panel **Load** button remember the last browse directory and **File → Recent Datasets** (stored under `QSettings` org `Cypha`, app `Cypha`).
 
 ## Health, readiness, metrics (REST)
 

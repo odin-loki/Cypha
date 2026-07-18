@@ -132,7 +132,7 @@ std::vector<fs::path> generate_figure_data() {
             if (!categories.empty()) {
                 const ProfileJson fig = grouped_bar_figure(
                     "fig01_sanity_overview", "Classification accuracy (D01 subset)", "accuracy", categories,
-                    {{"CyphaDIF", cypha_acc}, {"Logistic Regression", lr_acc}});
+                    {{"Cypha", cypha_acc}, {"Logistic Regression", lr_acc}});
                 const fs::path path = figures_dir() / "fig01_sanity_overview.json";
                 write_json_file(path, fig);
                 written.push_back(path);
@@ -157,7 +157,7 @@ std::vector<fs::path> generate_figure_data() {
         const double ridge_rmse = nested_number(exp, {"baselines", "ridge", "rmse"}, nested_number(exp, {"ridge_rmse"}));
         const ProfileJson fig = grouped_bar_figure(
             "fig02_regression_rmse_comparison", "Regression RMSE comparison", "rmse", {dataset},
-            {{"CyphaDIF", {cypha_rmse}}, {"Ridge", {ridge_rmse}}});
+            {{"Cypha", {cypha_rmse}}, {"Ridge", {ridge_rmse}}});
         const fs::path path = figures_dir() / "fig02_regression_rmse_comparison.json";
         write_json_file(path, fig);
         written.push_back(path);
@@ -180,7 +180,7 @@ std::vector<fs::path> generate_figure_data() {
             if (!categories.empty()) {
                 const ProfileJson fig = grouped_bar_figure(
                     "fig03_classification_accuracy", "Classification accuracy by dataset", "accuracy", categories,
-                    {{"CyphaDIF", cypha_acc}, {"Logistic Regression", lr_acc}});
+                    {{"Cypha", cypha_acc}, {"Logistic Regression", lr_acc}});
                 const fs::path path = figures_dir() / "fig03_classification_accuracy.json";
                 write_json_file(path, fig);
                 written.push_back(path);
@@ -202,7 +202,7 @@ std::vector<fs::path> generate_figure_data() {
             {"chart_type", "bar"},
             {"title", "Chess outcome regression (" + source + ")"},
             {"y_label", "rmse"},
-            {"categories", ProfileJson::array({"CyphaDIF", "Ridge"})},
+            {"categories", ProfileJson::array({"Cypha", "Ridge"})},
             {"series", ProfileJson::array({ProfileJson{{"name", "RMSE"}, {"values", ProfileJson::array({cypha_rmse, ridge_rmse})}}})},
         };
         const fs::path path = figures_dir() / "fig05_chess_rmse_vs_baselines.json";
@@ -222,7 +222,7 @@ std::vector<fs::path> generate_figure_data() {
         const double bigram_bpc = nested_number(char_lm, {"bigram_bpc"});
         const double trigram_bpc = nested_number(char_lm, {"trigram_bpc"});
 
-        std::vector<std::string> categories = {"CyphaLM"};
+        std::vector<std::string> categories = {"Cypha (sequence)"};
         std::vector<double> bpc_values = {cypha_bpc};
         if (bigram_bpc > 0.0) {
             categories.push_back("Bigram");
@@ -237,7 +237,7 @@ std::vector<fs::path> generate_figure_data() {
             {"figure", "fig04_char_lm_training"},
             {"format", "figure_data_v1"},
             {"chart_type", "bar"},
-            {"title", "CyphaLM char LM (" + source + ")"},
+            {"title", "Cypha char LM (" + source + ")"},
             {"y_label", "bits per character"},
             {"categories", categories},
             {"series", ProfileJson::array({ProfileJson{{"name", "BPC"}, {"values", bpc_values}}})},
@@ -262,7 +262,7 @@ std::vector<fs::path> generate_figure_data() {
         const ProfileJson fig = grouped_bar_figure(
             "fig06_go_territory_regression", "Go territory regression and outcome classification", "score",
             {"Territory RMSE", "Outcome accuracy"},
-            {{"CyphaDIF", {cypha_rmse, cypha_acc}},
+            {{"Cypha", {cypha_rmse, cypha_acc}},
              {"SGD", {sgd_rmse, sgd_acc}},
              {"RF/LogReg", {rf_rmse, logreg_acc}}});
         emit_figure(fig, manifest, written);
@@ -280,7 +280,7 @@ std::vector<fs::path> generate_figure_data() {
             {"chart_type", "bar"},
             {"title", "Poker decision accuracy"},
             {"y_label", "accuracy"},
-            {"categories", ProfileJson::array({"CyphaDIF", "SGD", "RF"})},
+            {"categories", ProfileJson::array({"Cypha", "SGD", "RF"})},
             {"series", ProfileJson::array({ProfileJson{
                               {"name", "accuracy"},
                               {"values", ProfileJson::array({cypha_acc, sgd_acc, rf_acc})}}})},
@@ -314,7 +314,7 @@ std::vector<fs::path> generate_figure_data() {
         if (!categories.empty()) {
             const ProfileJson fig = grouped_bar_figure(
                 "fig08_mnist_accuracy_by_encoding", "Vision classification (" + source + ")", "accuracy",
-                categories, {{"CyphaDIF", cypha_acc}, {"LogReg/SGD", baseline_acc}});
+                categories, {{"Cypha", cypha_acc}, {"LogReg/SGD", baseline_acc}});
             emit_figure(fig, manifest, written);
         }
     }
@@ -336,7 +336,7 @@ std::vector<fs::path> generate_figure_data() {
             {"chart_type", "bar"},
             {"title", "Documents overview"},
             {"y_label", "score"},
-            {"categories", ProfileJson::array({"20news CyphaDIF", "20news SGD", "20news LogReg", "Epistemic in",
+            {"categories", ProfileJson::array({"20news Cypha", "20news SGD", "20news LogReg", "Epistemic in",
                                                 "Epistemic OOD"})},
             {"series", ProfileJson::array({ProfileJson{
                               {"name", "score"},

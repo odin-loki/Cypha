@@ -22,8 +22,9 @@
     "n_train": 300000,
     "profile": "d17",
     "run_at": "2026-07-17T17:03:08Z",
+    "notes": "HISTORICAL cell-hypothesis sweep (One Cypha cutover 2026-07-18). Living sequence spine is PGM→Wy via cypha::Cypha::init_default_sequence (U06). Numeric results retained for regression.",
     "runner": "cypha_cell_hypothesis_sweep --overnight-sweep --intelligence-profile --math-integration",
-    "status": "production",
+    "status": "historical",
     "variant_count": 25
   },
   "ctest_smoke": {
@@ -52,10 +53,11 @@
     "mode": "hybrid",
     "n_eval": 2000,
     "n_train": 300000,
-    "notes": "Beat-bigram target; native reference within ~0.02 BPC of Python ref",
+    "notes": "HISTORICAL pin only (One Cypha cutover 2026-07-18). Living sequence spine is PGM→Wy via cypha::Cypha::init_default_sequence (U06). Not a production default.",
     "profile": "d17",
     "source": "Phase 1c 17A (bench/config/d17_phase1c_17a.json)",
-    "split": "official train/valid"
+    "split": "official train/valid",
+    "status": "historical"
   },
   "description": "Locked baselines for regression checks and overnight bench comparison",
   "locked_at": "2026-06-14",
@@ -74,7 +76,7 @@
     "n_eval": 2000,
     "n_train": 300000,
     "run_at": "2026-07-12T01:19:19Z",
-    "status": "production"
+    "status": "historical"
   },
   "overnight_results": {
     "artifact_path": null,
@@ -93,7 +95,7 @@
     "profile": "d17",
     "run_at": "2026-07-12T01:52:47Z",
     "runner": "cyphalm_bench_native --overnight",
-    "status": "production",
+    "status": "historical",
     "synthetic": false
   },
   "rpsm_results": {

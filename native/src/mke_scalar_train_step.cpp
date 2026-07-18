@@ -7,7 +7,7 @@
 #include "cypha/em_step.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 #include "cypha/replay_buffer.hpp"
 #include "cypha/train_step_vector.hpp"
 

@@ -1,4 +1,4 @@
-# CyphaStudio GUI threading
+# Cypha GUI threading
 
 ## Training worker
 
@@ -16,4 +16,4 @@ Qt signals emitted from a secondary thread are **queued** to the GUI thread, so 
 
 ## REST / headless
 
-The FastAPI app runs inference on the asyncio thread pool’s worker by default (sync handlers). That is separate from the Qt GUI path; do not mix Qt calls into API handlers.
+Native **`cypha_rest`** (cpp-httplib) runs inference on worker threads. That is separate from the Qt GUI path; do not mix Qt calls into REST handlers. Legacy FastAPI removed (2026-07-18).

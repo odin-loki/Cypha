@@ -57,6 +57,7 @@ void usage() {
               << "       [--list-variants] [--cell-variant H06] [--output-dir PATH]\n"
               << "       [--profile d17] [--n-train N] [--n-eval M] [--threads T]\n"
               << "       [--intelligence-profile] [--math-integration] [--bench-seed N]\n"
+              << "  HISTORICAL research tool (One Cypha cutover 2026-07-18). Living spine: PGM->Wy / cypha::Cypha.\n"
               << "  overnight sweep: --intelligence-profile + --math-integration auto when "
                  "CYPHA_OVERNIGHT_MATH_INTEGRATION=1\n"
               << "  overnight sweep variants run isolated in child processes (re-invoking this "

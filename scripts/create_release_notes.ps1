@@ -108,7 +108,7 @@ $highlights = @{
     "CI gate **99 CTests**; release notes v2.3.10 Phase 10 template."
   )
   "2.3.9" = @(
-    "Intelligence Stats **Phase 9**: hybrid EWC **weight** Fisher on GRIA **U**/**V** + SSM **W_fast**; EWC anchor/Fisher in CyphaLM ``checkpoint.json``.",
+    "Intelligence Stats **Phase 9**: hybrid EWC **weight** Fisher on GRIA **U**/**V** + SSM **W_fast**; EWC anchor/Fisher in Cypha ``checkpoint.json``.",
     "``scripts/run_overnight_all.ps1`` - unified overnight runner (D17 + d21 RPSM + cell sweep + baseline-lock refresh).",
     "Bench **d23** overnight lock validation; CTest ``native_d23_overnight_lock_smoke``.",
     "CI gate **98 CTests**; optional federated TLS job (``scripts/ci_federated_tls_linux.sh``)."
@@ -132,7 +132,7 @@ $highlights = @{
     "Intelligence Stats **Phase 6** docs; CI gate **85 CTests**."
   )
   "2.3.5" = @(
-    "Qt CyphaLM generate tab: **epistemic halt** checkbox (Paper IV r_eu gate; matches REST ``/generate``).",
+    "Qt Cypha generate tab: **epistemic halt** checkbox (Paper IV r_eu gate; matches REST ``/generate``).",
     "D17 WikiText **overnight** profile @ 300k tokens: ``d17_wikitext_overnight_profile.json``, ``--overnight`` / ``CYPHA_BENCH_OVERNIGHT=1``.",
     "CTest ``native_d17_wikitext_overnight_smoke`` (500-train wiring check).",
     "Intelligence Stats **Phase 5** docs; CI gate **81 CTests**."

@@ -170,14 +170,14 @@ const FixtureEntry kFixtures[] = {
     {"gh_infer_deliberation", "gh_infer_deliberation_golden", "exe", "GH infer deliberation"},
     {"embed_table", "embed_table_golden", "exe", "embed table sidecar"},
     {"retrieval", "retrieval_golden", "exe", "retrieval sidecar"},
-    {"cyphalm_char_lstm", "cyphalm_char_lstm_golden", "exe", "CyphaLM char-LSTM sidecar"},
-    {"cyphalm_model", "cyphalm_model_golden", "exe", "CyphaLM model smoke (no fixture dir)"},
-    {"cyphalm_checkpoint_char_lstm", "cyphalm_checkpoint_golden", "exe", "CyphaLM checkpoint char_lstm sidecar"},
-    {"cyphalm_hebbian", "cyphalm_hebbian_golden", "exe", "CyphaLM Hebbian (no fixture dir)"},
+    {"cyphalm_char_lstm", "cyphalm_char_lstm_golden", "exe", "Cypha sequence char-LSTM sidecar"},
+    {"cyphalm_model", "cyphalm_model_golden", "exe", "Cypha sequence model smoke (no fixture dir)"},
+    {"cyphalm_checkpoint_char_lstm", "cyphalm_checkpoint_golden", "exe", "Cypha sequence checkpoint char_lstm sidecar"},
+    {"cyphalm_hebbian", "cyphalm_hebbian_golden", "exe", "Cypha sequence Hebbian (no fixture dir)"},
     {"som", "som_golden", "exe", "SOM/GNG parity (no fixture dir)"},
-    {"cyphalm_ssm", "cyphalm_ssm_golden", "exe", "CyphaLM SSM smoke (no fixture dir)"},
-    {"cyphalm_ssm_fixture", "cyphalm_golden", "exe", "CyphaLM SSM fixture sidecar"},
-    {"cyphalm_golden_suite", "cyphalm_golden", "exe", "CyphaLM parity suite (no fixture dir)"},
+    {"cyphalm_ssm", "cyphalm_ssm_golden", "exe", "Cypha sequence SSM smoke (no fixture dir)"},
+    {"cyphalm_ssm_fixture", "cyphalm_golden", "exe", "Cypha sequence SSM fixture sidecar"},
+    {"cyphalm_golden_suite", "cyphalm_golden", "exe", "Cypha sequence parity suite (no fixture dir)"},
 };
 
 const FixtureEntry* find_fixture(const std::string& name) {

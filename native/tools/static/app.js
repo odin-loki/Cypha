@@ -143,7 +143,7 @@
       ["predictions", data.n_predictions],
       ["corrections", data.n_corrections],
       ["models", data.registry_model_count],
-      ["lm_loaded", data.lm_loaded],
+      ["sequence_loaded", data.sequence_loaded ?? data.lm_loaded],
       ["regression", data.regression_head_loaded],
     ];
     root.innerHTML = items
@@ -309,11 +309,7 @@
   });
 
   async function lmGenerate(body) {
-    let result = await api("POST", "/generate", body);
-    if (result.status === 404) {
-      result = await api("POST", "/lm/generate", body);
-    }
-    return result;
+    return api("POST", "/generate", body);
   }
 
   async function lmGenerateStream(body, onChunk) {
@@ -323,12 +319,8 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     };
-    let path = "/generate/stream";
+    const path = "/generate/stream";
     let res = await fetch(path, opts);
-    if (res.status === 404) {
-      path = "/lm/generate/stream";
-      res = await fetch(path, opts);
-    }
     if (res.status === 404 || !res.body) {
       return { streamed: false, result: await lmGenerate(body) };
     }
@@ -457,11 +449,11 @@
     try {
       const { status, data } = await api("GET", "/metrics");
       if (status !== 200 || !data) return;
-      if (data.lm_loaded) {
-        setChatStatus("CyphaLM loaded — ready to chat.", "ok");
+      if (data.sequence_loaded ?? data.lm_loaded) {
+        setChatStatus("Cypha sequence loaded — ready to chat.", "ok");
       } else {
         setChatStatus(
-          "CyphaLM not loaded. Start cypha_rest with --cyphalm-checkpoint or POST /lm/load.",
+          "Sequence not loaded. Start cypha_rest with --sequence-checkpoint or POST /sequence/load.",
           "warn"
         );
       }
@@ -604,7 +596,7 @@
       log.innerHTML =
         '<div id="chat-empty" class="chat-empty">' +
         "<p>No messages yet</p>" +
-        '<p class="hint">Type a prompt below. CyphaLM must be loaded via <code>--cyphalm-checkpoint</code> or <code>POST /lm/load</code>.</p>' +
+        '<p class="hint">Type a prompt below. Sequence must be loaded via <code>--sequence-checkpoint</code> or <code>POST /sequence/load</code>.</p>' +
         "</div>";
     }
     refreshChatReadiness();
@@ -644,7 +636,7 @@
   });
 
   $("btn-lm-metrics").addEventListener("click", async () => {
-    const { status, data } = await api("GET", "/lm/metrics");
+    const { status, data } = await api("GET", "/sequence/metrics");
     show($("lm-out"), data, status);
   });
 

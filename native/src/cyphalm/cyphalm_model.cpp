@@ -61,7 +61,7 @@ bool uses_ngram_embed_path(ContextMode mode, const CyphaLMConfig& cfg) {
     }
     return mode == ContextMode::Hybrid || mode == ContextMode::GriaNgram ||
            mode == ContextMode::AblationNoSsm || mode == ContextMode::Rpsm ||
-           mode == ContextMode::SsmGria;
+           mode == ContextMode::SsmGria || mode == ContextMode::PgmLogits;
 }
 
 bool uses_ngram_count_path(const CyphaLMConfig& cfg) {
@@ -71,7 +71,7 @@ bool uses_ngram_count_path(const CyphaLMConfig& cfg) {
 bool uses_hybrid_ewc(ContextMode mode) {
     return mode == ContextMode::Hybrid || mode == ContextMode::SsmGria ||
            mode == ContextMode::GriaNgram || mode == ContextMode::SsmGriaNoLstm ||
-           mode == ContextMode::Full;
+           mode == ContextMode::Full || mode == ContextMode::PgmLogits;
 }
 
 bool uses_profile_guided_backprop(const CyphaLMConfig& cfg) {
@@ -511,6 +511,48 @@ void CyphaLMModel::init_components() {
         nig_state_cell_ = std::make_unique<NigStateCell>(
             cfg_.nig_kappa0, cfg_.nig_alpha0, cfg_.nig_beta0, cfg_.field_dim);
     }
+    if (cfg_.use_pgm_cell) {
+        PGMCellConfig pc;
+        pc.d_input = cfg_.field_dim;
+        pc.hidden = cfg_.field_dim;
+        pc.n_sub = std::max(2, cfg_.pgm_n_sub);
+        pc.levels = std::max(1, cfg_.pgm_levels);
+        pc.chunk_len = std::max(2, cfg_.pgm_chunk_len);
+        pc.topk = std::max(1, cfg_.pgm_topk);
+        pc.beam = std::max(1, cfg_.pgm_beam);
+        pc.rehash_t = std::max(1, cfg_.pgm_rehash_t);
+        pc.hops = std::max(0, cfg_.pgm_hops);
+        pc.seed = cfg_.seed + 41;
+        pgm_cell_ = std::make_unique<PGMCell>(pc);
+    }
+    if (cfg_.use_unified_context) {
+        unified_context_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+        if (cfg_.unified_readout == UnifiedReadout::Lstm && lstm_) {
+            std::mt19937_64 rng(cfg_.seed + 61);
+            init_proj_from_rng(proj_ctx_lstm_, cfg_.lstm_hidden, cfg_.field_dim, rng, 0.02);
+        }
+        if (cfg_.unified_readout == UnifiedReadout::PgmWy) {
+            std::mt19937_64 rng(cfg_.seed + 62);
+            std::normal_distribution<double> nd(0.0, 0.02);
+            pgm_wy_.assign(static_cast<std::size_t>(cfg_.vocab_size) *
+                               static_cast<std::size_t>(cfg_.field_dim),
+                           0.0);
+            for (double& w : pgm_wy_) w = nd(rng);
+            pgm_by_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
+        }
+        // Bank/memory sources need those modules even if D17 defaults would skip bank.
+        if (cfg_.unified_context_source == UnifiedContextSource::ContextBank && !context_bank_) {
+            context_bank_ = std::make_unique<ContextBank>(cfg_.d_embed, cfg_.context_bank_slots);
+        }
+        if (cfg_.unified_context_source == UnifiedContextSource::Memory && !memory_ &&
+            mode != ContextMode::CharLstm) {
+            memory_ = std::make_unique<CompressiveMemory>(
+                static_cast<std::uint32_t>(cfg_.field_dim),
+                static_cast<std::uint32_t>(std::max(1, cfg_.max_memory_slots)), cfg_.nig_kappa0,
+                cfg_.nig_alpha0, cfg_.nig_beta0, static_cast<std::uint32_t>(cfg_.seed + 17));
+            memory_->set_compress_interval(static_cast<std::uint32_t>(cfg_.compress_interval));
+        }
+    }
     if (cfg_.use_reversible_cell) {
         reversible_cell_ = std::make_unique<ReversibleSSMCell>();
     }
@@ -577,7 +619,11 @@ void CyphaLMModel::reset_context() {
     if (memory_) memory_->reset();
     if (context_bank_) context_bank_->reset();
     if (nig_state_cell_) nig_state_cell_->reset();
+    if (pgm_cell_) pgm_cell_->reset();
     if (reversible_cell_) reversible_cell_->reset();
+    if (!unified_context_.empty()) {
+        std::fill(unified_context_.begin(), unified_context_.end(), 0.0);
+    }
     last_mean_alpha_ = 0.5;
     last_train_loss_ = 0.0;
     if (lstm_) {
@@ -950,10 +996,272 @@ double CyphaLMModel::hybrid_forget_gate_scale(const DIFPredictOutput& dif_out) c
     return std::clamp(scale, 0.1, 1.5);
 }
 
+void CyphaLMModel::build_unified_context_from_field() {
+    const auto src = cfg_.unified_context_source;
+    unified_context_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+
+    if (src == UnifiedContextSource::Lstm) {
+        // Carrier is LSTM h; pad/trim into field_dim buffer for a common shape.
+        for (std::size_t i = 0; i < unified_context_.size() && i < lstm_h_.size(); ++i) {
+            unified_context_[i] = lstm_h_[i];
+        }
+        return;
+    }
+
+    if (src == UnifiedContextSource::Field || src == UnifiedContextSource::UnifiedBuffer) {
+        unified_context_ = field_x_;
+    }
+
+    if ((src == UnifiedContextSource::Pgm || src == UnifiedContextSource::UnifiedBuffer) &&
+        pgm_cell_ && !field_x_.empty()) {
+        // Replace (not 0.6/0.4 side-blend): PGM output *is* the context.
+        const auto pgm_h = pgm_cell_->step(field_x_);
+        unified_context_ = pgm_h;
+        if (static_cast<int>(unified_context_.size()) != cfg_.field_dim) {
+            unified_context_.resize(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+        }
+    }
+
+    if (src == UnifiedContextSource::ContextBank && context_bank_ && embed_) {
+        const auto& q = embed_history_.empty() ? last_e_ : embed_history_[0];
+        if (!q.empty()) {
+            const auto attn = cfg_.use_tiered_context ? context_bank_->tiered_linear_attention(q)
+                                                      : context_bank_->linear_attention(q);
+            if (!proj_embed_.empty()) {
+                unified_context_ = matvec(proj_embed_, cfg_.field_dim, cfg_.d_embed, attn);
+            }
+            context_bank_->push(q.data(), cfg_.d_embed);
+        }
+    }
+
+    if ((src == UnifiedContextSource::Memory || src == UnifiedContextSource::UnifiedBuffer) &&
+        memory_ && !field_x_.empty()) {
+        memory_->maybe_store(step_count_, field_x_.data(),
+                             static_cast<std::uint32_t>(field_x_.size()));
+        const auto retrieved =
+            memory_->retrieve(field_x_.data(), static_cast<std::uint32_t>(field_x_.size()));
+        if (src == UnifiedContextSource::Memory) {
+            unified_context_ = retrieved;
+            if (static_cast<int>(unified_context_.size()) != cfg_.field_dim) {
+                unified_context_.resize(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+            }
+        } else {
+            // UnifiedBuffer: additive write into the single buffer only.
+            for (std::size_t i = 0; i < unified_context_.size() && i < retrieved.size(); ++i) {
+                unified_context_[i] += 0.05 * retrieved[i];
+            }
+        }
+    }
+
+    if (src == UnifiedContextSource::Field && unified_context_.empty()) {
+        unified_context_ = field_x_;
+    }
+}
+
+void CyphaLMModel::unified_lstm_forward(std::uint32_t token_id, std::vector<double>& log_out) {
+    if (!lstm_) throw std::runtime_error("unified LSTM readout without LSTM head");
+    log_out.resize(static_cast<std::size_t>(cfg_.vocab_size));
+    std::vector<double> h_in = lstm_h_;
+    if (!proj_ctx_lstm_.empty() && !unified_context_.empty() &&
+        cfg_.unified_context_source != UnifiedContextSource::Lstm) {
+        const int H = cfg_.lstm_hidden;
+        const int D = cfg_.field_dim;
+        for (int j = 0; j < H; ++j) {
+            double s = 0.0;
+            for (int i = 0; i < D; ++i) {
+                s += proj_ctx_lstm_[static_cast<std::size_t>(j * D + i)] *
+                     unified_context_[static_cast<std::size_t>(i)];
+            }
+            h_in[static_cast<std::size_t>(j)] += s;
+        }
+    }
+    lstm_->forward_step(static_cast<int>(token_id), h_in.data(), lstm_c_.data(), log_out.data(),
+                        predict_lstm_h_scratch_, predict_lstm_c_scratch_, &hybrid_lstm_cache_, 1.0);
+    lstm_h_.swap(predict_lstm_h_scratch_);
+    lstm_c_.swap(predict_lstm_c_scratch_);
+    append_lstm_hidden_history(lstm_h_);
+    hybrid_lstm_has_cache_ = true;
+}
+
+void CyphaLMModel::unified_gria_forward(std::vector<double>& log_out) {
+    if (!gria_) throw std::runtime_error("unified GRIA readout without GRIA head");
+    log_out.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
+    gria_in_ = unified_context_;
+    if (static_cast<int>(gria_in_.size()) < gria_d_in_) {
+        gria_in_.resize(static_cast<std::size_t>(gria_d_in_), 0.0);
+    } else if (static_cast<int>(gria_in_.size()) > gria_d_in_) {
+        gria_in_.resize(static_cast<std::size_t>(gria_d_in_));
+    }
+    gria_->forward(gria_in_.data(), log_out.data());
+}
+
+void CyphaLMModel::unified_pgm_wy_forward(std::vector<double>& log_out) {
+    const int V = cfg_.vocab_size;
+    const int D = cfg_.field_dim;
+    log_out.assign(static_cast<std::size_t>(V), 0.0);
+    if (pgm_wy_.empty() || unified_context_.empty()) return;
+    double max_logit = -1e300;
+    for (int k = 0; k < V; ++k) {
+        double s = pgm_by_[static_cast<std::size_t>(k)];
+        const std::size_t row = static_cast<std::size_t>(k) * static_cast<std::size_t>(D);
+        for (int i = 0; i < D; ++i) {
+            s += pgm_wy_[row + static_cast<std::size_t>(i)] *
+                 unified_context_[static_cast<std::size_t>(i)];
+        }
+        log_out[static_cast<std::size_t>(k)] = s;
+        if (s > max_logit) max_logit = s;
+    }
+    double sum = 0.0;
+    for (int k = 0; k < V; ++k) {
+        const double e = std::exp(log_out[static_cast<std::size_t>(k)] - max_logit);
+        log_out[static_cast<std::size_t>(k)] = e;
+        sum += e;
+    }
+    const double inv = 1.0 / std::max(sum, 1e-300);
+    for (int k = 0; k < V; ++k) {
+        log_out[static_cast<std::size_t>(k)] =
+            std::log(log_out[static_cast<std::size_t>(k)] * inv + kLogEps);
+    }
+}
+
+PredictNextOutput CyphaLMModel::predict_next_unified(std::uint32_t token_id) {
+    PredictNextOutput out;
+    const auto mode = cfg_.context_mode;
+    const auto src = cfg_.unified_context_source;
+
+    if (src == UnifiedContextSource::Lstm || mode == ContextMode::CharLstm) {
+        if (!lstm_) throw std::runtime_error("unified Lstm source without LSTM");
+        // Pure LSTM spine: the recurrent state *is* the context.
+        out.log_probs = lstm_->forward(static_cast<int>(token_id));
+        for (std::size_t i = 0; i < unified_context_.size() && i < lstm_h_.size(); ++i) {
+            unified_context_[i] = lstm_h_[i];
+        }
+        // Sync lstm_h_ from stateful API if needed — forward() updates internal state;
+        // keep external buffers aligned for reporting.
+        ++step_count_;
+        fill_top_k(out.log_probs, out);
+        return out;
+    }
+
+    if (!embed_) throw std::runtime_error("unified context requires embed table");
+    {
+        auto e = embed_->embed_vec(token_id);
+        record_embedding(e);
+        last_e_ = e;
+        if (context_bank_ && src == UnifiedContextSource::ContextBank) {
+            // push happens inside build after attention
+        }
+        if (active_ssm() || mode == ContextMode::AblationNoSsm) {
+            if (mode == ContextMode::AblationNoSsm) {
+                last_ctx_.assign(static_cast<std::size_t>(ssm_context_dim()), 0.0);
+                field_x_.assign(static_cast<std::size_t>(cfg_.field_dim), 0.0);
+            } else {
+                auto ctx = ssm_step(e);
+                apply_hebbian_hooks(ctx);
+                last_ctx_ = ctx;
+                field_x_ = project_field(ctx);
+            }
+        }
+    }
+
+    build_unified_context_from_field();
+
+    log_g_scratch_.assign(static_cast<std::size_t>(cfg_.vocab_size), 0.0);
+    switch (cfg_.unified_readout) {
+        case UnifiedReadout::Lstm:
+            unified_lstm_forward(token_id, log_g_scratch_);
+            break;
+        case UnifiedReadout::Gria:
+            unified_gria_forward(log_g_scratch_);
+            break;
+        case UnifiedReadout::PgmWy:
+            unified_pgm_wy_forward(log_g_scratch_);
+            break;
+        default:
+            throw std::runtime_error("use_unified_context set without unified_readout");
+    }
+    out.log_probs = log_g_scratch_;
+    if (mode != ContextMode::CharLstm) {
+        record_token_history(token_id);
+    }
+    ++step_count_;
+    fill_top_k(out.log_probs, out);
+    return out;
+}
+
+void CyphaLMModel::train_unified_readout(std::uint32_t next_token_id, double lstm_lr,
+                                         TrainStepMetrics& m) {
+    if (cfg_.unified_readout == UnifiedReadout::Lstm && lstm_ && hybrid_lstm_has_cache_) {
+        const bool updated =
+            lstm_->push_bptt_step(hybrid_lstm_cache_, static_cast<int>(next_token_id), lstm_lr,
+                                  &hybrid_lstm_grad_scratch_, 0.0, 0.0);
+        if (updated) {
+            apply_lstm_ewc(m, hybrid_lstm_grad_scratch_);
+        }
+        hybrid_lstm_has_cache_ = false;
+        if (!proj_ctx_lstm_.empty() && !unified_context_.empty()) {
+            const int H = cfg_.lstm_hidden;
+            const int D = cfg_.field_dim;
+            const double scale = lstm_lr * 0.05;
+            for (int j = 0; j < H; ++j) {
+                const double target = lstm_h_[static_cast<std::size_t>(j)];
+                for (int i = 0; i < D; ++i) {
+                    proj_ctx_lstm_[static_cast<std::size_t>(j * D + i)] +=
+                        scale * target * unified_context_[static_cast<std::size_t>(i)];
+                }
+            }
+        }
+        return;
+    }
+    if (cfg_.unified_readout == UnifiedReadout::Lstm && lstm_ &&
+        cfg_.unified_context_source == UnifiedContextSource::Lstm) {
+        CharLSTMGrad grads;
+        lstm_->backward(static_cast<int>(next_token_id), lstm_lr, &grads, 0.0, 0.0);
+        if (!grads.dWx.empty()) apply_lstm_ewc(m, grads);
+        return;
+    }
+    if (cfg_.unified_readout == UnifiedReadout::Gria && gria_ && !gria_in_.empty()) {
+        auto gria_grad =
+            gria_->cross_entropy_gradients(gria_in_.data(), static_cast<int>(next_token_id));
+        gria_->update_weights(gria_grad, cfg_.gria_lr);
+        gria_->update_alpha(gria_grad, cfg_.gria_lr);
+        gria_->update_bias(gria_grad, cfg_.gria_lr);
+        return;
+    }
+    if (cfg_.unified_readout == UnifiedReadout::PgmWy && !pgm_wy_.empty() &&
+        !unified_context_.empty()) {
+        const int V = cfg_.vocab_size;
+        const int D = cfg_.field_dim;
+        const int t = static_cast<int>(next_token_id);
+        // Recompute probs from stored context for CE grad.
+        std::vector<double> log_p(static_cast<std::size_t>(V), 0.0);
+        unified_pgm_wy_forward(log_p);
+        std::vector<double> dlogit(static_cast<std::size_t>(V), 0.0);
+        for (int k = 0; k < V; ++k) {
+            dlogit[static_cast<std::size_t>(k)] = std::exp(log_p[static_cast<std::size_t>(k)]);
+        }
+        dlogit[static_cast<std::size_t>(t)] -= 1.0;
+        const double lr = cfg_.gria_lr;
+        for (int k = 0; k < V; ++k) {
+            const double g = dlogit[static_cast<std::size_t>(k)];
+            pgm_by_[static_cast<std::size_t>(k)] -= lr * g;
+            const std::size_t row = static_cast<std::size_t>(k) * static_cast<std::size_t>(D);
+            for (int i = 0; i < D; ++i) {
+                pgm_wy_[row + static_cast<std::size_t>(i)] -=
+                    lr * g * unified_context_[static_cast<std::size_t>(i)];
+            }
+        }
+    }
+}
+
 PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
     if (g_predict_trace.enabled) ++g_predict_trace.calls;
     PredictNextOutput out;
     const auto mode = cfg_.context_mode;
+
+    if (cfg_.use_unified_context) {
+        return predict_next_unified(token_id);
+    }
 
     if (mode == ContextMode::CharLstm) {
         if (!lstm_) throw std::runtime_error("char_lstm without LSTM head");
@@ -995,6 +1303,13 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
                     const auto nig_h = nig_state_cell_->step(field_x_.data(), cfg_.field_dim);
                     for (std::size_t i = 0; i < field_x_.size() && i < nig_h.size(); ++i) {
                         field_x_[i] = 0.6 * field_x_[i] + 0.4 * nig_h[i];
+                    }
+                }
+                // H23: PGM sparse hierarchical memory on the field path (same blend site as NIG).
+                if (pgm_cell_) {
+                    const auto pgm_h = pgm_cell_->step(field_x_);
+                    for (std::size_t i = 0; i < field_x_.size() && i < pgm_h.size(); ++i) {
+                        field_x_[i] = 0.6 * field_x_[i] + 0.4 * pgm_h[i];
                     }
                 }
             }
@@ -1417,6 +1732,19 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     double navigation_blend_nudge = 0.0;
     double navigation_logit_nudge = 0.0;
     double navigation_hidden_nudge = 0.0;
+    if (cfg_.use_unified_context) {
+        apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
+                             navigation_hidden_nudge);
+        train_unified_readout(next_token_id, lstm_lr, m);
+        if (cfg_.bptt_steps > 0 && active_ssm()) {
+            bptt_ssm_update(next_token_id);
+        }
+        observe_ngram_count(next_token_id);
+        if (next_token_id < token_counts_.size()) {
+            token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
+        }
+        return m;
+    }
     if (mode == ContextMode::CharLstm && lstm_) {
         apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
                              navigation_hidden_nudge);

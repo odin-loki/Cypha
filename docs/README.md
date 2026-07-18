@@ -73,7 +73,7 @@ powershell -File scripts\cypha_native_validate_all.ps1
 
 | Doc | What it covers |
 |-----|----------------|
-| [Port contract](port/PORT_CONTRACT.md) | Normative: `.cypha` v3, LLR/softmax/GH, CyphaDIF REST, **CyphaLM `/generate` Â§4** |
+| [Port contract](port/PORT_CONTRACT.md) | Normative: `.cypha` v3, LLR/softmax/GH, Cypha REST, **Cypha `/generate` §4** |
 | [Full stack port](port/PORT_FULL_STACK.md) | Per-milestone record M1â€“M6 (complete); Python runtime decommissioned |
 | [Preprocessor contract](port/PREPROCESSOR_CONTRACT.md) | `preprocessor.json` format next to `model.cypha` |
 | [Experiments schema](port/EXPERIMENTS_SCHEMA.md) | SQLite layout for experiments DB |

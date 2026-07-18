@@ -1,6 +1,6 @@
-# Branch A — CyphaDIF on Frozen Semantic Embeddings
+# Branch A — Cypha classifier on Frozen Semantic Embeddings
 
-**Maps:** [`Cypha Tests.txt`](../Cypha%20Tests.txt) Branch A → CyphaDIF as NLP routing/classification layer on top of a frozen encoder.
+**Maps:** [`Cypha Tests.txt`](../Cypha%20Tests.txt) Branch A → Cypha classifier as NLP routing/classification layer on top of a frozen encoder.
 
 **Runner:** `cypha_tune_run --config bench/config/cypha_branch_a_sweep.py --write`
 
@@ -17,7 +17,7 @@ Without it, the sweep falls back to deterministic hashing+SVD (weaker; for pipel
 ## Architecture
 
 ```text
-text → [frozen encoder] → vector x → CyphaDIF(VectorEncoder) → label + epistemic variance
+text → [frozen encoder] → vector x → Cypha classifier(VectorEncoder) → label + epistemic variance
                 ↑                           ↑
            no LM training              online train (field + optional W_enc)
 ```
@@ -25,7 +25,7 @@ text → [frozen encoder] → vector x → CyphaDIF(VectorEncoder) → label + e
 | Component | Role |
 |-----------|------|
 | `frozen_text_embeddings.py` | `embed_texts()` via MiniLM or hashing fallback |
-| `CyphaDIF` | Online classifier, OOD epistemic signal, adversarial GH gate |
+| Cypha classifier | Online classifier, OOD epistemic signal, adversarial GH gate |
 | `encoder._frozen=True` | Skip Fisher-Rao encoder updates; DIF field only |
 
 ---
@@ -37,12 +37,12 @@ Encoder: **sentence-transformers/all-MiniLM-L6-v2** (384-d, frozen)
 
 | Method | Accuracy | Notes |
 |--------|----------|-------|
-| CyphaDIF + TF-IDF/SVD (D09 reference) | **34.0%** | Current D09-style path |
-| CyphaDIF + frozen ST, online `W_enc` | **49.3%** | +15.3pp vs TF-IDF |
+| Cypha classifier + TF-IDF/SVD (D09 reference) | **34.0%** | Current D09-style path |
+| Cypha classifier + frozen ST, online `W_enc` | **49.3%** | +15.3pp vs TF-IDF |
 | LogReg + frozen ST | **60.3%** | Batch baseline |
-| **CyphaDIF + frozen ST, frozen `W_enc`** | **62.5%** | **Best** — online field only |
+| **Cypha classifier + frozen ST, frozen `W_enc`** | **62.5%** | **Best** — online field only |
 
-**Verdict:** Frozen semantic embeddings unlock CyphaDIF on text — **+28.5pp vs TF-IDF** at 2k samples. Freezing `EncoderProjection` (**62.5%**) beats online projection tuning (**49.3%**) and matches/beats batch LogReg on this split.
+**Verdict:** Frozen semantic embeddings unlock Cypha classifier on text — **+28.5pp vs TF-IDF** at 2k samples. Freezing `EncoderProjection` (**62.5%**) beats online projection tuning (**49.3%**) and matches/beats batch LogReg on this split.
 
 ### Gutenberg OOD epistemic (D09 Branch A run)
 
@@ -53,7 +53,7 @@ Artifact: `bench/config/d09_branch_a_summary.json`
 | 20news held-out (in-domain) | **0.170** |
 | Gutenberg segments (OOD) | **1.077** |
 
-Mann-Whitney **p ≈ 2.8×10⁻¹⁰²** — CyphaDIF uncertainty **rises on out-of-domain book text** when trained on newsgroup MiniLM vectors. Use for routing / abstain before LLM generation.
+Mann-Whitney **p ≈ 2.8×10⁻¹⁰²** — Cypha classifier uncertainty **rises on out-of-domain book text** when trained on newsgroup MiniLM vectors. Use for routing / abstain before LLM generation.
 
 ```powershell
 cypha_tune_run --config bench/config/run_d09_branch_a.py
@@ -70,7 +70,7 @@ Hashing fallback @ same protocol: **16–19%** (not semantic — use only for of
 - Intent / topic routing with **online updates** without retraining the LM
 - **Calibrated confidence** and OOD detection on embedding inputs
 - Adversarial GH gate before queries reach a local LLM
-- Sub-ms CyphaDIF classify after embedding is computed (C++ path)
+- Sub-ms Cypha classify after embedding is computed (C++ path)
 
 ---
 
@@ -109,13 +109,13 @@ Artifact: `bench/config/cypha_branch_a_encoder_sweep.json`
 
 ---
 
-## REST routing (CyphaStudio)
+## REST routing (Cypha)
 
 | Route | Purpose |
 |-------|---------|
-| `GET /route/health` | Router trained?, Ollama reachable?, CyphaLM loaded? |
+| `GET /route/health` | Router trained?, Ollama reachable?, `sequence_loaded`? |
 | `POST /route/text` | Embed → classify → epistemic gate (no generation) |
-| `POST /route/generate` | Route then **CyphaLM** (in-domain) or **Ollama** (OOD abstain) |
+| `POST /route/generate` | Route then **Cypha sequence** (in-domain) or **Ollama** (OOD abstain) |
 
 Environment (see [`docs/studio/CYPHA_ENV.md`](studio/CYPHA_ENV.md)):
 
@@ -128,10 +128,14 @@ Environment (see [`docs/studio/CYPHA_ENV.md`](studio/CYPHA_ENV.md)):
 | `CYPHA_OLLAMA_MODEL` | `mistral` |
 | `CYPHA_BRANCH_A_CHECKPOINT` | `~/.cypha/branch_a_router` (``.json`` + ``.npz``) |
 | `CYPHA_BRANCH_A_AUTO_SAVE` | Save checkpoint after train when `1` |
-| `CYPHA_LM_CHECKPOINT` | *(optional CyphaLM for in-domain gen)* |
+| `CYPHA_SEQUENCE_CHECKPOINT` | *(optional Cypha sequence for in-domain gen; aliases `CYPHA_LM_CHECKPOINT`, `CYPHALM_CHECKPOINT`)* |
 
 ```powershell
-uvicorn cypha_qt_shell / cypha_rest.server.api:app --port 7749
+# Native REST (default bind 127.0.0.1:7749 — see docs/studio/CYPHA_ENV.md)
+$env:CYPHA_BRANCH_A_CHECKPOINT="$HOME/.cypha/branch_a_router"
+# Optional: in-domain /route/generate via Cypha sequence
+# $env:CYPHA_SEQUENCE_CHECKPOINT="path/to/checkpoint.json"
+cypha_rest --listen 127.0.0.1:7749 --branch-a-json $env:CYPHA_BRANCH_A_CHECKPOINT
 
 curl -s -X POST http://127.0.0.1:7749/route/text `
   -H "Content-Type: application/json" `
@@ -146,7 +150,7 @@ curl -s -X POST http://127.0.0.1:7749/route/generate `
 $env:CYPHA_BRANCH_A_CHECKPOINT="$HOME/.cypha/branch_a_router"
 ```
 
-**Studio GUI:** File → Settings → Inference → enable **Branch A text routing**. Chat embeds queries, shows route label/epistemic, streams CyphaLM in-domain or calls Ollama on abstain.
+**Studio GUI:** File → Settings → Inference → enable **Branch A text routing**. Chat embeds queries, shows route label/epistemic, streams Cypha sequence in-domain or calls Ollama on abstain.
 
 ## References
 

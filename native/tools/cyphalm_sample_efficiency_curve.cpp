@@ -26,6 +26,7 @@ struct Args {
     fs::path out_path;
     std::string profile = "d17";
     std::string mode = "hybrid";
+    std::string cell_variant;  // empty = omit; e.g. H23
     std::vector<int> tiers;
     int n_eval = -1;
     std::int64_t bench_seed = 42;
@@ -36,8 +37,10 @@ void usage() {
     std::cerr
         << "usage: cyphalm_sample_efficiency_curve [--exe-dir DIR] [--out PATH]\n"
         << "       [--profile d17|d04] [--mode hybrid|char_lstm|...]\n"
-        << "       [--tiers N,N,...] [--n-eval M] [--bench-seed S] [--write-table]\n"
-        << "Default tiers: 500,2000,5000 (FAST: 80,160,240 via CYPHA_BENCH_FAST=1).\n";
+        << "       [--cell-variant B0..H23] [--tiers N,N,...] [--n-eval M]\n"
+        << "       [--bench-seed S] [--write-table]\n"
+        << "Default tiers: 500,2000,5000 (FAST: 80,160,240 via CYPHA_BENCH_FAST=1).\n"
+        << "Large-context example: --tiers 2000,10000,40000,100000,300000 --cell-variant H23\n";
 }
 
 std::vector<int> default_tiers() {
@@ -98,6 +101,7 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--out") a.out_path = fs::absolute(need("--out"));
         else if (k == "--profile") a.profile = need("--profile");
         else if (k == "--mode") a.mode = need("--mode");
+        else if (k == "--cell-variant") a.cell_variant = need("--cell-variant");
         else if (k == "--tiers") a.tiers = parse_tiers(need("--tiers"));
         else if (k == "--n-eval") a.n_eval = std::stoi(need("--n-eval"));
         else if (k == "--bench-seed") a.bench_seed = std::stoll(need("--bench-seed"));
@@ -142,7 +146,7 @@ int main(int argc, char** argv) {
         std::string corpus;
         bool synthetic = false;
         for (const int n_train : args.tiers) {
-            const std::vector<std::string> cli = {
+            std::vector<std::string> cli = {
                 "--profile", args.profile,
                 "--mode", args.mode,
                 "--n-train", std::to_string(n_train),
@@ -150,6 +154,10 @@ int main(int argc, char** argv) {
                 "--threads", "1",
                 "--bench-seed", std::to_string(args.bench_seed),
             };
+            if (!args.cell_variant.empty()) {
+                cli.push_back("--cell-variant");
+                cli.push_back(args.cell_variant);
+            }
             const cypha::bench::RunProcessResult proc =
                 cypha::bench::run_executable_capture(bench_exe, cli);
             if (proc.exit_code != 0) {
@@ -185,6 +193,7 @@ int main(int argc, char** argv) {
             {"runner", "cyphalm_bench_native"},
             {"profile", args.profile},
             {"mode", args.mode},
+            {"cell_variant", args.cell_variant.empty() ? Json(nullptr) : Json(args.cell_variant)},
             {"bench_seed", args.bench_seed},
             {"fast", cypha::bench::bench_env_truthy("CYPHA_BENCH_FAST")},
             {"corpus", corpus.empty() ? Json(nullptr) : Json(corpus)},

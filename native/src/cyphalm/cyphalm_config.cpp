@@ -35,6 +35,7 @@ ContextMode parse_context_mode(const std::string& s) {
     if (k == "ablation_no_dif") return ContextMode::AblationNoDif;
     if (k == "ablation_no_ssm") return ContextMode::AblationNoSsm;
     if (k == "rpsm") return ContextMode::Rpsm;
+    if (k == "pgm_logits" || k == "pgm") return ContextMode::PgmLogits;
     throw std::runtime_error("unknown context mode: " + s);
 }
 
@@ -49,6 +50,7 @@ std::string context_mode_name(ContextMode mode) {
         case ContextMode::AblationNoDif: return "ablation_no_dif";
         case ContextMode::AblationNoSsm: return "ablation_no_ssm";
         case ContextMode::Rpsm: return "rpsm";
+        case ContextMode::PgmLogits: return "pgm_logits";
     }
     return "unknown";
 }
@@ -57,6 +59,7 @@ std::string context_mode_string(ContextMode mode) {
     switch (mode) {
         case ContextMode::Hybrid: return "hybrid_gria_lstm";
         case ContextMode::SsmGria: return "ssm_only";
+        case ContextMode::PgmLogits: return "pgm_logits";
         default: return context_mode_name(mode);
     }
 }
@@ -69,7 +72,24 @@ BenchMode parse_bench_mode(const std::string& s) {
     if (s == "context_bank") return BenchMode::ContextBank;
     if (s == "spectral") return BenchMode::Spectral;
     if (s == "rpsm") return BenchMode::Rpsm;
+    if (s == "pgm_logits" || s == "pgm") return BenchMode::PgmLogits;
     throw std::runtime_error("unknown bench mode: " + s);
+}
+
+void apply_pgm_logits_recipe(CyphaLMConfig& cfg) {
+    cfg.context_mode = ContextMode::PgmLogits;
+    cfg.use_unified_context = true;
+    cfg.unified_context_source = UnifiedContextSource::Pgm;
+    cfg.unified_readout = UnifiedReadout::PgmWy;
+    cfg.use_pgm_cell = true;
+    cfg.pgm_n_sub = 8;
+    cfg.pgm_levels = 3;
+    cfg.pgm_chunk_len = 16;
+    cfg.pgm_topk = 4;
+    cfg.pgm_beam = 2;
+    cfg.pgm_rehash_t = 16;
+    cfg.pgm_hops = 2;
+    cfg.ngram_fuse_split = false;
 }
 
 void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
@@ -103,6 +123,9 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
             cfg.context_mode = ContextMode::Rpsm;
             cfg.use_rpsm_layer = true;
             break;
+        case BenchMode::PgmLogits:
+            apply_pgm_logits_recipe(cfg);
+            break;
     }
 }
 
@@ -115,8 +138,53 @@ std::string bench_mode_name(BenchMode mode) {
         case BenchMode::ContextBank: return "context_bank";
         case BenchMode::Spectral: return "spectral";
         case BenchMode::Rpsm: return "rpsm";
+        case BenchMode::PgmLogits: return "pgm_logits";
     }
     return "unknown";
+}
+
+std::string unified_context_source_name(UnifiedContextSource s) {
+    switch (s) {
+        case UnifiedContextSource::None: return "none";
+        case UnifiedContextSource::Field: return "field";
+        case UnifiedContextSource::Lstm: return "lstm";
+        case UnifiedContextSource::Pgm: return "pgm";
+        case UnifiedContextSource::ContextBank: return "context_bank";
+        case UnifiedContextSource::Memory: return "memory";
+        case UnifiedContextSource::UnifiedBuffer: return "unified_buffer";
+    }
+    return "none";
+}
+
+std::string unified_readout_name(UnifiedReadout r) {
+    switch (r) {
+        case UnifiedReadout::None: return "none";
+        case UnifiedReadout::Lstm: return "lstm";
+        case UnifiedReadout::Gria: return "gria";
+        case UnifiedReadout::PgmWy: return "pgm_wy";
+    }
+    return "none";
+}
+
+UnifiedContextSource parse_unified_context_source(const std::string& s) {
+    const std::string k = lower_copy(s);
+    if (k == "none" || k.empty()) return UnifiedContextSource::None;
+    if (k == "field") return UnifiedContextSource::Field;
+    if (k == "lstm") return UnifiedContextSource::Lstm;
+    if (k == "pgm") return UnifiedContextSource::Pgm;
+    if (k == "context_bank" || k == "bank") return UnifiedContextSource::ContextBank;
+    if (k == "memory") return UnifiedContextSource::Memory;
+    if (k == "unified_buffer" || k == "buffer") return UnifiedContextSource::UnifiedBuffer;
+    throw std::runtime_error("unknown unified_context_source: " + s);
+}
+
+UnifiedReadout parse_unified_readout(const std::string& s) {
+    const std::string k = lower_copy(s);
+    if (k == "none" || k.empty()) return UnifiedReadout::None;
+    if (k == "lstm") return UnifiedReadout::Lstm;
+    if (k == "gria") return UnifiedReadout::Gria;
+    if (k == "pgm_wy" || k == "pgm" || k == "wy") return UnifiedReadout::PgmWy;
+    throw std::runtime_error("unknown unified_readout: " + s);
 }
 
 namespace {
@@ -216,6 +284,35 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_b("use_adaptive_navigation_lambdas", cfg.use_adaptive_navigation_lambdas);
     set_d("kappa_lambda_target", cfg.kappa_lambda_target);
     set_b("use_nig_state_cell", cfg.use_nig_state_cell);
+    set_b("use_pgm_cell", cfg.use_pgm_cell);
+    set_b("use_unified_context", cfg.use_unified_context);
+    if (j.contains("unified_context_source") && j["unified_context_source"].is_string()) {
+        cfg.unified_context_source =
+            parse_unified_context_source(j["unified_context_source"].get<std::string>());
+    }
+    if (j.contains("unified_readout") && j["unified_readout"].is_string()) {
+        cfg.unified_readout = parse_unified_readout(j["unified_readout"].get<std::string>());
+    }
+    if (j.contains("cell_variant") && j["cell_variant"].is_string()) {
+        cfg.cell_variant = j["cell_variant"].get<std::string>();
+    }
+    set_i("pgm_n_sub", cfg.pgm_n_sub);
+    set_i("pgm_levels", cfg.pgm_levels);
+    set_i("pgm_chunk_len", cfg.pgm_chunk_len);
+    set_i("pgm_topk", cfg.pgm_topk);
+    set_i("pgm_beam", cfg.pgm_beam);
+    set_i("pgm_rehash_t", cfg.pgm_rehash_t);
+    set_i("pgm_hops", cfg.pgm_hops);
+    if (j.contains("context_mode") && j["context_mode"].is_string()) {
+        const std::string cm = j["context_mode"].get<std::string>();
+        if (cm == "pgm_logits" || cm == "pgm") {
+            apply_pgm_logits_recipe(cfg);
+        }
+    }
+    if (cfg.cell_variant == "U06") {
+        apply_pgm_logits_recipe(cfg);
+        cfg.cell_variant = "U06";
+    }
     set_b("use_alpha_forget_gate", cfg.use_alpha_forget_gate);
     set_b("use_tau_forget_gate", cfg.use_tau_forget_gate);
     set_b("use_kappa_trajectory_lambdas", cfg.use_kappa_trajectory_lambdas);

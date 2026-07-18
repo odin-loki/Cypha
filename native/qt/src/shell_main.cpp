@@ -103,19 +103,19 @@
 #include "cypha/create_model.hpp"
 #include "cypha/csv_ingest.hpp"
 #include "cypha/infer_cpu.hpp"
+#include "cypha/generation.hpp"
 #include "cypha/kernel_memory.hpp"
 #include "cypha/load_cypha.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/mke_scalar_train_step.hpp"
 #include "cypha/preprocessor.hpp"
 #include "cypha/registry.hpp"
-#include "cypha/regression_stub.hpp"
+#include "cypha/regression.hpp"
 #include "cypha/replay_buffer.hpp"
 #include "cypha/train_step_vector.hpp"
-#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
+#include "cypha/cypha.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/intelligence/epistemic_threshold.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
 
 #include "bulk_train_worker.h"
 #include "bulk_rest_update_worker.h"
@@ -2042,9 +2042,9 @@ QString native_quickstart_html() {
       "<pre>cypha_tune_run --config bench/config/cyphalm_hybrid_lstm_tune_smoke.json --dry-run</pre>"
       "<h2>5. REST</h2>"
       "<pre>cypha_rest --listen 127.0.0.1:8099 --cypha model.cypha --registry ~/.cypha/models</pre>"
-      "<p>CyphaDIF: <code>GET /health</code>, <code>GET /ready</code>, <code>POST /predict</code>, "
+      "<p>Cypha: <code>GET /health</code>, <code>GET /ready</code>, <code>POST /predict</code>, "
       "<code>POST /update</code>, <code>GET /models</code>, <code>POST /load</code>.</p>"
-      "<p>CyphaLM: <code>POST /lm/load</code>, <code>POST /generate</code>.</p>"
+      "<p>Cypha sequence: <code>POST /sequence/load</code>, <code>POST /generate</code>.</p>"
       "<h2>6. Qt shell tabs</h2>"
       "<ol><li>Data &mdash; CSV inspect (dataset_widget)</li>"
       "<li>Model &mdash; F_field / preprocessor sidecars</li>"
@@ -2053,7 +2053,7 @@ QString native_quickstart_html() {
       "<li>Registry &mdash; ModelRegistry scan / load / REST /load</li>"
       "<li>Server &mdash; spawn cypha_rest</li>"
       "<li>Experiments &mdash; SQLite experiment DB (when enabled)</li>"
-      "<li>CyphaLM &mdash; checkpoint decode</li>"
+      "<li>Cypha &mdash; checkpoint decode</li>"
       "<li>Help &mdash; this page</li></ol>"
       "<p>Full doc: <code>docs/native/NATIVE_QUICKSTART.md</code></p>");
 }
@@ -2109,7 +2109,7 @@ struct StudioPreferences {
   }
 };
 
-QSettings studio_qsettings() { return QSettings(QStringLiteral("Cypha"), QStringLiteral("CyphaStudio")); }
+QSettings studio_qsettings() { return QSettings(QStringLiteral("Cypha"), QStringLiteral("Cypha")); }
 
 void merge_shell_settings_json(StudioPreferences& p) {
   QFile f(shell_settings_path());
@@ -2420,7 +2420,7 @@ class ModelCardEditorDialog final : public QDialog {
 class SettingsDialog final : public QDialog {
  public:
   explicit SettingsDialog(StudioPreferences prefs, QWidget* parent = nullptr) : QDialog(parent), prefs_(std::move(prefs)) {
-    setWindowTitle(QStringLiteral("Studio Settings"));
+    setWindowTitle(QStringLiteral("Cypha Settings"));
     resize(520, 420);
     auto* root = new QVBoxLayout(this);
     auto* tabs = new QTabWidget(this);
@@ -2619,7 +2619,7 @@ class MainWindow final : public QMainWindow {
         QStringLiteral(
             "<p style='margin:0'><b>Workflow</b> &mdash; <b>1 Data</b> &rarr; <b>2 Model</b> &rarr; "
             "<b>3 Train</b> &rarr; <b>4 Predict</b> &rarr; <b>5 Registry</b> &rarr; <b>6 Server</b>"
-            " &rarr; <b>7 Experiments</b> (when enabled) &rarr; <b>8 CyphaLM</b> &rarr; <b>9 Help</b></p>"
+            " &rarr; <b>7 Experiments</b> (when enabled) &rarr; <b>8 Cypha</b> &rarr; <b>9 Help</b></p>"
             "<p style='margin:8px 0 0 0; color:#c8d6e8; font-size:12px'>Work left to right. The window "
             "geometry and active tab are saved when you quit.</p>"),
         central);
@@ -3033,15 +3033,17 @@ class MainWindow final : public QMainWindow {
     }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
-    // ── CyphaLM panel (native decode + optional REST /lm/*) ───────────────────
-    const auto pg_lm = make_page(QStringLiteral("8 · CyphaLM"));
+    // ── Cypha panel (native decode + optional REST /sequence/*) ───────────────────
+    const auto pg_lm = make_page(QStringLiteral("8 · Cypha"));
     QWidget* const inner_lm = pg_lm.first;
     QVBoxLayout* const lay_lm = pg_lm.second;
     {
       auto* lm_intro = new QLabel(
-          QStringLiteral("<b>CyphaLM</b> &mdash; load a <tt>.json</tt> checkpoint (+ sibling <tt>.npz</tt>) "
-                         "for in-process decode, or tick REST to use <tt>cypha_rest</tt> "
-                         "<tt>/lm/load</tt> and <tt>/generate</tt>."),
+          QStringLiteral("<b>Cypha</b> &mdash; load a <tt>.json</tt> checkpoint (+ sibling <tt>.npz</tt>) "
+                         "for in-process token decode, or tick REST for <tt>cypha_rest</tt> "
+                         "<tt>/sequence/load</tt> and <tt>/generate</tt>. "
+                         "<b>Sample latents</b> draws latent <tt>h</tt> (not tokens) via native "
+                         "<tt>studio_cypha_</tt> or REST <tt>POST /sample</tt>."),
           inner_lm);
       lm_intro->setWordWrap(true);
       lm_intro->setTextFormat(Qt::RichText);
@@ -3070,6 +3072,43 @@ class MainWindow final : public QMainWindow {
       lm_load_row->addWidget(lm_status_label_, 1);
       lm_ckpt_form->addRow(lm_load_row);
       lay_lm->addWidget(lm_ckpt_grp);
+    }
+    {
+      auto* lm_sample_grp = new QGroupBox(QStringLiteral("Sample latents"), inner_lm);
+      auto* lm_sample_form = new QFormLayout(lm_sample_grp);
+
+      lm_sample_mode_combo_ = new QComboBox(lm_sample_grp);
+      lm_sample_mode_combo_->addItems(
+          {QStringLiteral("langevin"), QStringLiteral("from_observation")});
+      lm_sample_form->addRow(QStringLiteral("mode:"), lm_sample_mode_combo_);
+
+      lm_sample_n_spin_ = new QSpinBox(lm_sample_grp);
+      lm_sample_n_spin_->setRange(1, 32);
+      lm_sample_n_spin_->setValue(4);
+      lm_sample_form->addRow(QStringLiteral("n_samples:"), lm_sample_n_spin_);
+
+      lm_sample_steps_spin_ = new QSpinBox(lm_sample_grp);
+      lm_sample_steps_spin_->setRange(1, 512);
+      lm_sample_steps_spin_->setValue(20);
+      lm_sample_form->addRow(QStringLiteral("n_steps (langevin):"), lm_sample_steps_spin_);
+
+      lm_sample_input_edit_ = new QLineEdit(lm_sample_grp);
+      lm_sample_input_edit_->setPlaceholderText(
+          QStringLiteral("comma-separated raw features; empty = zeros (load .cypha on Model tab)"));
+      lm_sample_form->addRow(QStringLiteral("input:"), lm_sample_input_edit_);
+
+      lm_sample_btn_ = new QPushButton(QStringLiteral("Sample"), lm_sample_grp);
+      lm_sample_btn_->setEnabled(false);
+      lm_sample_form->addRow(lm_sample_btn_);
+
+      lm_sample_output_edit_ = new QPlainTextEdit(lm_sample_grp);
+      lm_sample_output_edit_->setReadOnly(true);
+      lm_sample_output_edit_->setPlaceholderText(
+          QStringLiteral("first latent sample (truncated), inferred label, n_samples"));
+      lm_sample_output_edit_->setMinimumHeight(72);
+      lm_sample_form->addRow(lm_sample_output_edit_);
+
+      lay_lm->addWidget(lm_sample_grp);
     }
     {
       auto* lm_gen_grp = new QGroupBox(QStringLiteral("Generate"), inner_lm);
@@ -3923,7 +3962,9 @@ class MainWindow final : public QMainWindow {
 
     connect(pre_clear_btn_, &QPushButton::clicked, this, [this]() {
       pre_path_.clear();
-      pre_.reset();
+      if (studio_cypha_) {
+        studio_cypha_->preprocessor_owned().reset();
+      }
       pre_label_->setText(QStringLiteral("(optional)"));
       update_features_hint();
     });
@@ -4039,7 +4080,7 @@ class MainWindow final : public QMainWindow {
         return;
       }
       const int need = feature_input_dim();
-      if (need <= 0 || !model_) {
+      if (need <= 0 || !infer_model()) {
         QMessageBox::information(this, QStringLiteral("Features"),
                                  QStringLiteral("Load a .cypha (and optional preprocessor) first."));
         return;
@@ -4241,11 +4282,11 @@ class MainWindow final : public QMainWindow {
       job.sort_by_uncertainty =
           sort_by_uncertainty_chk_ != nullptr && sort_by_uncertainty_chk_->isChecked();
       job.curriculum = curriculum_chk_ != nullptr && curriculum_chk_->isChecked();
-      job.model = model_.get();
-      job.mem = native_mem_.get();
-      job.replay = native_replay_.get();
-      job.pre = pre_.get();
-      job.kernel_mem = native_kernel_mem_.get();
+      job.model = infer_model();
+      job.mem = studio_mem();
+      job.replay = studio_replay();
+      job.pre = pre_state();
+      job.kernel_mem = studio_kernel_mem();
       job.use_gh = use_gh_chk_->isChecked();
       job.use_kernel_llr = native_use_kernel_llr_;
       job.kernel_blend = native_kernel_blend_;
@@ -4331,7 +4372,7 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(mke_bulk_btn_, &QPushButton::clicked, this, [this]() {
-      if (!native_train_ok_ || model_ == nullptr || native_mem_ == nullptr || native_replay_ == nullptr) {
+      if (!native_train_ok_ || infer_model() == nullptr || studio_mem() == nullptr || studio_replay() == nullptr) {
         QMessageBox::information(this, QStringLiteral("MKE bulk"),
                                  QStringLiteral("Load a model with F_field and native train state first."));
         return;
@@ -4356,10 +4397,10 @@ class MainWindow final : public QMainWindow {
       BulkMkeTrainJob job{};
       job.data = last_csv_;
       job.n_rows = n;
-      job.model = model_.get();
-      job.mem = native_mem_.get();
-      job.replay = native_replay_.get();
-      job.pre = pre_.get();
+      job.model = infer_model();
+      job.mem = studio_mem();
+      job.replay = studio_replay();
+      job.pre = pre_state();
       job.w_by_label = &mke_w_by_label_;
       job.p_by_label = &mke_p_by_label_;
       job.forgetting_factor = mke_ff_spin_->value();
@@ -4423,7 +4464,7 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(mke_predict_btn_, &QPushButton::clicked, this, [this]() {
-      if (!model_ || native_mem_ == nullptr) return;
+      if (!infer_model() || studio_mem() == nullptr) return;
       const QString t = features_edit_->text().trimmed();
       if (t.isEmpty()) {
         QMessageBox::information(this, QStringLiteral("MKE predict"),
@@ -4437,9 +4478,9 @@ class MainWindow final : public QMainWindow {
         return;
       }
       std::vector<double> phi = x_raw;
-      if (pre_ != nullptr) phi = pre_->transform_one(x_raw);
-      const int d = model_->d_latent;
-      const int K = static_cast<int>(model_->labels.size());
+      if (pre_state() != nullptr) phi = pre_state()->transform_one(x_raw);
+      const int d = infer_model()->d_latent;
+      const int K = static_cast<int>(infer_model()->labels.size());
       if (static_cast<int>(phi.size()) != d || K == 0) {
         QMessageBox::warning(this, QStringLiteral("MKE predict"),
                              QStringLiteral("Dim mismatch or no classes in model."));
@@ -4447,16 +4488,16 @@ class MainWindow final : public QMainWindow {
       }
       // Compute LLR via native infer pipeline
       std::vector<double> h_out;
-      cypha::batch_encode(*model_, phi.data(), 1, h_out);
+      cypha::batch_encode(*infer_model(), phi.data(), 1, h_out);
       std::vector<double> llr;
-      cypha::score_matrix_use_field(*model_, h_out.data(), 1, llr);
+      cypha::score_matrix_use_field(*infer_model(), h_out.data(), 1, llr);
 
       // Build expert mu array (phi @ w_k for each k, where phi is the latent encoding)
       // Note: mke_scalar_train_step_from_phi uses phi (= RFF features = d_latent-dim),
       // so w_k has size d.
       std::vector<double> expert_mu(static_cast<std::size_t>(K), 0.0);
       for (int k = 0; k < K; ++k) {
-        const std::string& lbl = model_->labels[static_cast<std::size_t>(k)];
+        const std::string& lbl = infer_model()->labels[static_cast<std::size_t>(k)];
         auto it = mke_w_by_label_.find(lbl);
         if (it == mke_w_by_label_.end()) continue;
         const std::vector<double>& wk = it->second;
@@ -4467,7 +4508,7 @@ class MainWindow final : public QMainWindow {
       }
       double entropy = 0.0;
       const double y_hat = cypha::regression::mke_scalar_predict_from_llr(
-          llr.data(), K, model_->temperature, 1e-9, expert_mu.data(), &entropy);
+          llr.data(), K, infer_model()->temperature, 1e-9, expert_mu.data(), &entropy);
       if (mke_result_label_ != nullptr)
         mke_result_label_->setText(
             QStringLiteral("MKE predict: y_hat=%1  routing_entropy=%2")
@@ -4505,7 +4546,7 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(native_train_one_btn_, &QPushButton::clicked, this, [this]() {
-      if (!native_train_ok_ || model_ == nullptr) {
+      if (!native_train_ok_ || infer_model() == nullptr) {
         QMessageBox::information(this, QStringLiteral("Native train"),
                                  QStringLiteral("Load a model with F_field and ensure native train is available."));
         return;
@@ -4527,8 +4568,8 @@ class MainWindow final : public QMainWindow {
         return;
       }
       std::vector<double> x_latent = x_raw;
-      if (pre_ != nullptr) {
-        x_latent = pre_->transform_one(x_raw);
+      if (pre_state() != nullptr) {
+        x_latent = pre_state()->transform_one(x_raw);
       }
       double loss = 0.0;
       cypha::MemoryTrainMeta meta{};
@@ -4554,7 +4595,7 @@ class MainWindow final : public QMainWindow {
       set_native_hparams_defaults();
     });
     connect(save_native_btn_, &QPushButton::clicked, this, [this]() {
-      if (!native_train_ok_ || model_ == nullptr || native_mem_ == nullptr) {
+      if (!native_train_ok_ || infer_model() == nullptr || studio_mem() == nullptr) {
         QMessageBox::information(this, QStringLiteral("Save"),
                                  QStringLiteral("Load a model with F_field first (native train state required)."));
         return;
@@ -4689,7 +4730,7 @@ class MainWindow final : public QMainWindow {
       const qint64 ts_ms = static_cast<qint64>(now * 1000.0);
       const std::string run_id = "run_" + std::to_string(ts_ms);
       const std::string config_json = "{\"shell\":\"qt\",\"model\":\""
-          + (model_ ? std::to_string(model_->d_latent) + "d" : "none") + "\"}";
+          + (infer_model() ? std::to_string(infer_model()->d_latent) + "d" : "none") + "\"}";
       if (!experiment_db_insert_run_pending(*exp_db_, run_id.c_str(), exp_id.c_str(),
                                             run_name.toUtf8().constData(),
                                             config_json.c_str(), now, now,
@@ -4770,16 +4811,16 @@ class MainWindow final : public QMainWindow {
       double accuracy = 0.0;
       int n_total = 0;
       int n_correct_total = 0;
-      if (native_mem_ != nullptr) {
-        for (std::size_t k = 0; k < native_mem_->n_obs_buf.size(); ++k) {
-          n_total   += static_cast<int>(native_mem_->n_obs_buf[k]);
-          n_correct_total += (k < native_mem_->n_correct.size())
-                                 ? static_cast<int>(native_mem_->n_correct[k]) : 0;
+      if (studio_mem() != nullptr) {
+        for (std::size_t k = 0; k < studio_mem()->n_obs_buf.size(); ++k) {
+          n_total   += static_cast<int>(studio_mem()->n_obs_buf[k]);
+          n_correct_total += (k < studio_mem()->n_correct.size())
+                                 ? static_cast<int>(studio_mem()->n_correct[k]) : 0;
         }
         if (n_total > 0)
           accuracy = static_cast<double>(n_correct_total) / n_total;
       }
-      const int K = (model_ != nullptr) ? static_cast<int>(model_->labels.size()) : 0;
+      const int K = (infer_model() != nullptr) ? static_cast<int>(infer_model()->labels.size()) : 0;
 
       const QString checkpoint_path = cypha_path_.isEmpty() ? QString{} : cypha_path_;
 
@@ -5116,15 +5157,24 @@ class MainWindow final : public QMainWindow {
 
     connect(lm_browse_btn_, &QPushButton::clicked, this, [this]() {
       const QString path = QFileDialog::getOpenFileName(
-          this, QStringLiteral("Open CyphaLM checkpoint"), QString(),
-          QStringLiteral("CyphaLM checkpoint (*.json);;All (*)"));
+          this, QStringLiteral("Open Cypha checkpoint"), QString(),
+          QStringLiteral("Cypha checkpoint (*.json);;All (*)"));
       if (!path.isEmpty()) {
         lm_path_edit_->setText(path);
       }
     });
     connect(lm_load_btn_, &QPushButton::clicked, this, [this]() { lm_do_load(); });
     connect(lm_generate_btn_, &QPushButton::clicked, this, [this]() { lm_do_generate(); });
-    connect(lm_use_rest_chk_, &QCheckBox::stateChanged, this, [this](int) { lm_refresh_generate_enabled(); });
+    connect(lm_sample_btn_, &QPushButton::clicked, this, [this]() { lm_do_sample(); });
+    connect(lm_use_rest_chk_, &QCheckBox::stateChanged, this, [this](int) {
+      lm_refresh_generate_enabled();
+      lm_refresh_sample_enabled();
+    });
+    if (rest_base_edit_ != nullptr) {
+      connect(rest_base_edit_, &QLineEdit::textChanged, this, [this](const QString&) {
+        lm_refresh_sample_enabled();
+      });
+    }
     connect(bench_browse_btn_, &QPushButton::clicked, this, [this]() {
       const QString path = QFileDialog::getOpenFileName(
           this, QStringLiteral("cypha_bench_run binary"), QString(),
@@ -5203,7 +5253,7 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(predict_btn_, &QPushButton::clicked, this, [this]() {
-      if (!model_) {
+      if (!infer_model()) {
         return;
       }
       const QString t = features_edit_->text().trimmed();
@@ -5237,7 +5287,7 @@ class MainWindow final : public QMainWindow {
 
     // ── Batch predict: load CSV → run native infer on each row ────────────────
     connect(batch_predict_csv_btn_, &QPushButton::clicked, this, [this]() {
-      if (!model_) return;
+      if (!infer_model()) return;
       const QString csv_path = QFileDialog::getOpenFileName(this, QStringLiteral("Batch predict CSV"),
                                                             file_dialog_start_dir(),
                                                             QStringLiteral("CSV (*.csv);;All (*)"));
@@ -5279,7 +5329,7 @@ class MainWindow final : public QMainWindow {
 
         std::string lbl;
         double conf = 0.0;
-        const int rc = best_label_and_conf(*model_, pre_.get(), xvec, &lbl, &conf, use_gh_chk_->isChecked(),
+        const int rc = best_label_and_conf(*infer_model(), pre_state(), xvec, &lbl, &conf, use_gh_chk_->isChecked(),
                                            native_gh_chi_, native_gh_psi_);
         if (rc != 0) {
           lbl  = "(error)";
@@ -5327,7 +5377,7 @@ class MainWindow final : public QMainWindow {
     });
 
     connect(predict_rest_btn_, &QPushButton::clicked, this, [this]() {
-      if (!model_) {
+      if (!infer_model()) {
         return;
       }
       QString base = rest_base_edit_->text().trimmed();
@@ -5749,7 +5799,7 @@ class MainWindow final : public QMainWindow {
         pre_label_->setText(QStringLiteral("(fitted in-memory)"));
       }
 
-      pre_.reset(new cypha::PreprocessorState(std::move(ps)));
+      ensure_studio_cypha().preprocessor_owned().reset(new cypha::PreprocessorState(std::move(ps)));
       update_features_hint();
       return true;
     };
@@ -5837,8 +5887,8 @@ class MainWindow final : public QMainWindow {
   }
 
   QString default_mke_correct_label() const {
-    if (model_ != nullptr && !model_->labels.empty()) {
-      return QString::fromStdString(model_->labels[0]);
+    if (infer_model() != nullptr && !infer_model()->labels.empty()) {
+      return QString::fromStdString(infer_model()->labels[0]);
     }
     return QStringLiteral("class");
   }
@@ -5848,11 +5898,11 @@ class MainWindow final : public QMainWindow {
     native_gh_R_base_ = 1.0;
     native_gh_chi_ = 1.0;
     native_gh_psi_ = 1.0;
-    if (model_ == nullptr) {
+    if (infer_model() == nullptr) {
       return;
     }
-    const int d = model_->d_latent;
-    native_gh_inv_v_ = model_->inv_v;
+    const int d = infer_model()->d_latent;
+    native_gh_inv_v_ = infer_model()->inv_v;
     double mean_inv = 0.0;
     for (int j = 0; j < d; ++j) {
       mean_inv += native_gh_inv_v_[static_cast<std::size_t>(j)];
@@ -5862,76 +5912,40 @@ class MainWindow final : public QMainWindow {
   }
 
   void reinit_native_train_state() {
-    native_mem_.reset();
-    native_replay_.reset();
-    native_kernel_mem_.reset();
-    native_use_kernel_llr_ = false;
-    native_kernel_blend_ = 0.5;
-    native_enc_updates_ = 0;
-    native_total_steps_ = 0;
-    native_llr_ema_ = 0.0;
     native_train_ok_ = false;
-    // Reset training progress panel
     train_prog_win_correct_ = 0;
     train_prog_win_total_   = 0;
     train_prog_ema_loss_    = 0.0;
     if (train_prog_class_table_ != nullptr) train_prog_class_table_->setRowCount(0);
     if (train_prog_acc_bar_ != nullptr) train_prog_acc_bar_->clear();
-    if (train_prog_label_ != nullptr)
+    if (train_prog_label_ != nullptr) {
       train_prog_label_->setText(QStringLiteral("Steps: 0  |  Acc(win): —  |  EMA loss: —  |  Classes: 0"));
-    if (native_train_one_btn_ != nullptr) {
-      native_train_one_btn_->setEnabled(false);
     }
-    if (csv_bulk_native_btn_ != nullptr) {
-      csv_bulk_native_btn_->setEnabled(false);
-    }
-    if (save_native_btn_ != nullptr) {
-      save_native_btn_->setEnabled(false);
-    }
-    if (model_ == nullptr || cypha_path_.isEmpty()) {
+    if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(false);
+    if (csv_bulk_native_btn_ != nullptr) csv_bulk_native_btn_->setEnabled(false);
+    if (save_native_btn_ != nullptr) save_native_btn_->setEnabled(false);
+    if (!classify_loaded() || cypha_path_.isEmpty() || studio_mem() == nullptr || studio_replay() == nullptr) {
       return;
     }
-    try {
-      cypha::CNode root = cypha::load_cypha_file(cypha_path_.toUtf8().constData());
-      const cypha::CNode& enc = cypha::map_get_required(root, "enc_W");
-      const int d = static_cast<int>(enc.shape[0]);
-      const cypha::CNode& fh = cypha::map_get_required(root, "field_h");
-      const int fd = static_cast<int>(fh.shape[0]);
-      const double* ff_ptr = nullptr;
-      if (embedded_world_f_field_ok(root, d, fd)) {
-        const cypha::CNode& world = cypha::map_get_required(root, "world");
-        const cypha::CNode* wff = cypha::map_get(world, "F_field");
-        ff_ptr = wff->tensor.data();
-      } else if (!f_field_flat_.empty()) {
-        ff_ptr = f_field_flat_.data();
-      } else {
-        return;
-      }
-      native_mem_.reset(new cypha::CyphaDifMemoryState(cypha::CyphaDifMemoryState::from_cypha_root(root, ff_ptr, fd)));
-      load_native_kernel_from_cypha_root(root, d);
-      load_native_hparams_from_widgets_silent();
-      native_replay_.reset(new cypha::ReplayBuffer(native_tsp_.replay_cap));
-      native_replay_cap_applied_ = native_tsp_.replay_cap;
+    load_native_hparams_from_widgets_silent();
+    sync_studio_session_from_ui();
+    sync_kernel_ui_from_studio();
+    if (native_gh_inv_v_.empty()) {
       snapshot_gh_native();
-      native_train_ok_ = true;
-      if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(true);
-      if (csv_bulk_native_btn_ != nullptr) csv_bulk_native_btn_->setEnabled(true);
-      if (save_native_btn_ != nullptr) save_native_btn_->setEnabled(true);
-      if (mke_bulk_btn_ != nullptr) mke_bulk_btn_->setEnabled(true);
-    } catch (const std::exception&) {
-      native_mem_.reset();
-      native_replay_.reset();
-      if (save_native_btn_ != nullptr) save_native_btn_->setEnabled(false);
-      if (mke_bulk_btn_ != nullptr) mke_bulk_btn_->setEnabled(false);
     }
+    native_train_ok_ = true;
+    if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(true);
+    if (csv_bulk_native_btn_ != nullptr) csv_bulk_native_btn_->setEnabled(true);
+    if (save_native_btn_ != nullptr) save_native_btn_->setEnabled(true);
+    if (mke_bulk_btn_ != nullptr) mke_bulk_btn_->setEnabled(true);
   }
 
   bool run_native_train_on_latent(const std::vector<double>& x_latent, const std::string& y_label, double* loss_out,
                                    cypha::MemoryTrainMeta* meta_out = nullptr) {
-    if (!native_train_ok_ || model_ == nullptr || native_mem_ == nullptr || native_replay_ == nullptr) {
+    if (!native_train_ok_ || infer_model() == nullptr || studio_mem() == nullptr || studio_replay() == nullptr) {
       return false;
     }
-    if (static_cast<int>(x_latent.size()) != model_->d_latent) {
+    if (static_cast<int>(x_latent.size()) != infer_model()->d_latent) {
       return false;
     }
     cypha::TrainStepExtras extras{};
@@ -5949,22 +5963,22 @@ class MainWindow final : public QMainWindow {
     cypha::MemoryTrainMeta meta_local{};
     cypha::MemoryTrainMeta* meta = (meta_out != nullptr) ? meta_out : &meta_local;
     double loss = 0.0;
-    if (use_gh_chk_->isChecked() && static_cast<int>(native_gh_inv_v_.size()) == model_->d_latent) {
+    if (use_gh_chk_->isChecked() && static_cast<int>(native_gh_inv_v_.size()) == infer_model()->d_latent) {
       const cypha::GhTrainStepResult gh = cypha::dif_gh_train_step_vector(
-          *model_, *native_mem_, *native_replay_, x_latent.data(), model_->d_latent, y_label, native_gh_inv_v_,
+          *infer_model(), *studio_mem(), *studio_replay(), x_latent.data(), infer_model()->d_latent, y_label, native_gh_inv_v_,
           native_gh_R_base_, native_gh_chi_, native_gh_psi_, kGhNigAdaptAlphaShell, native_world_lr_, native_delta_lr_,
           native_ood_sigma_, native_tsp_, native_rng_, native_enc_updates_, meta, &extras);
       loss = gh.loss;
       native_gh_chi_ = gh.chi_new;
       native_gh_psi_ = gh.psi_new;
     } else {
-      loss = cypha::dif_train_step_vector(*model_, *native_mem_, *native_replay_, x_latent.data(), model_->d_latent,
+      loss = cypha::dif_train_step_vector(*infer_model(), *studio_mem(), *studio_replay(), x_latent.data(), infer_model()->d_latent,
                                           y_label, native_world_lr_, native_delta_lr_, native_world_lr_,
                                           native_delta_lr_, native_ood_sigma_, native_tsp_, native_rng_,
                                           native_enc_updates_, meta, &extras);
     }
     if (meta->correct) {
-      model_->total_correct += 1;
+      infer_model()->total_correct += 1;
     }
     // Rolling accuracy window (last 200 steps)
     if (train_prog_win_total_ < 200) {
@@ -6033,7 +6047,7 @@ class MainWindow final : public QMainWindow {
     if (train_prog_label_ == nullptr) {
       return;
     }
-    const int K = (model_ != nullptr) ? static_cast<int>(model_->labels.size()) : 0;
+    const int K = (infer_model() != nullptr) ? static_cast<int>(infer_model()->labels.size()) : 0;
     const QString loss_str =
         (step > 0) ? QString::number(train_prog_ema_loss_, 'f', 4) : QStringLiteral("—");
     train_prog_label_->setText(
@@ -6153,7 +6167,7 @@ class MainWindow final : public QMainWindow {
 
     // Val accuracy on held-out rows
     QString val_suffix;
-    if (bulk_val_n_ > 0 && model_ != nullptr && bulk_train_data_.n_rows > 0) {
+    if (bulk_val_n_ > 0 && infer_model() != nullptr && bulk_train_data_.n_rows > 0) {
       int val_correct = 0;
       for (int i = 0; i < bulk_train_data_.n_rows; ++i) {
         std::vector<double> xr(static_cast<std::size_t>(bulk_train_data_.n_features));
@@ -6162,7 +6176,7 @@ class MainWindow final : public QMainWindow {
         for (int j = 0; j < bulk_train_data_.n_features; ++j)
           xr[static_cast<std::size_t>(j)] = bulk_train_data_.x_rowmajor[rb + static_cast<std::size_t>(j)];
         std::string pred; double conf = 0.0;
-        if (best_label_and_conf(*model_, pre_.get(), xr, &pred, &conf, use_gh_chk_->isChecked(),
+        if (best_label_and_conf(*infer_model(), pre_state(), xr, &pred, &conf, use_gh_chk_->isChecked(),
                                 native_gh_chi_, native_gh_psi_) == 0 &&
             pred == bulk_train_data_.y_class[static_cast<std::size_t>(i)])
           ++val_correct;
@@ -6191,7 +6205,7 @@ class MainWindow final : public QMainWindow {
   void refresh_train_progress(bool update_class_table = false) {
     if (train_prog_label_ == nullptr) return;
 
-    const int K = (model_ != nullptr) ? static_cast<int>(model_->labels.size()) : 0;
+    const int K = (infer_model() != nullptr) ? static_cast<int>(infer_model()->labels.size()) : 0;
     const QString acc_str = (train_prog_win_total_ > 0)
         ? QString::number(100.0 * train_prog_win_correct_ / train_prog_win_total_, 'f', 1) + QLatin1Char('%')
         : QStringLiteral("—");
@@ -6203,18 +6217,18 @@ class MainWindow final : public QMainWindow {
             .arg(native_total_steps_).arg(acc_str).arg(loss_str).arg(K));
 
     if (!update_class_table || train_prog_class_table_ == nullptr) return;
-    if (native_mem_ == nullptr) return;
+    if (studio_mem() == nullptr) return;
 
-    const int nk = static_cast<int>(native_mem_->labels.size());
+    const int nk = static_cast<int>(studio_mem()->labels.size());
     train_prog_class_table_->setRowCount(nk);
     QStringList bar_labels;
     QVector<double> bar_acc;
     for (int k = 0; k < nk; ++k) {
-      const QString lbl   = QString::fromStdString(native_mem_->labels[static_cast<std::size_t>(k)]);
-      const double  n_obs = (static_cast<int>(native_mem_->n_obs_buf.size()) > k)
-                                ? native_mem_->n_obs_buf[static_cast<std::size_t>(k)] : 0.0;
-      const std::int64_t n_cor = (static_cast<int>(native_mem_->n_correct.size()) > k)
-                                     ? native_mem_->n_correct[static_cast<std::size_t>(k)] : 0;
+      const QString lbl   = QString::fromStdString(studio_mem()->labels[static_cast<std::size_t>(k)]);
+      const double  n_obs = (static_cast<int>(studio_mem()->n_obs_buf.size()) > k)
+                                ? studio_mem()->n_obs_buf[static_cast<std::size_t>(k)] : 0.0;
+      const std::int64_t n_cor = (static_cast<int>(studio_mem()->n_correct.size()) > k)
+                                     ? studio_mem()->n_correct[static_cast<std::size_t>(k)] : 0;
       const double acc_k = (n_obs > 0) ? 100.0 * static_cast<double>(n_cor) / n_obs : 0.0;
       train_prog_class_table_->setItem(k, 0, new QTableWidgetItem(lbl));
       train_prog_class_table_->setItem(k, 1, new QTableWidgetItem(QString::number(static_cast<int>(n_obs))));
@@ -6347,11 +6361,11 @@ class MainWindow final : public QMainWindow {
     native_tsp_.replay_cap = hp_replay_cap_spin_->value();
     native_tsp_.align_every = hp_align_every_spin_->value();
     native_tsp_.temp_recalib_every = hp_temp_recalib_spin_->value();
-    if (native_train_ok_ && native_replay_ != nullptr &&
-        native_tsp_.replay_cap != native_replay_cap_applied_) {
-      native_replay_.reset(new cypha::ReplayBuffer(native_tsp_.replay_cap));
+    if (native_train_ok_ && studio_replay() != nullptr && native_tsp_.replay_cap != native_replay_cap_applied_) {
+      studio_cypha_->replay_owned().reset(new cypha::ReplayBuffer(native_tsp_.replay_cap));
       native_replay_cap_applied_ = native_tsp_.replay_cap;
     }
+    sync_studio_session_from_ui();
   }
 
   void set_native_hparams_defaults() {
@@ -6372,55 +6386,35 @@ class MainWindow final : public QMainWindow {
   }
 
   void load_native_kernel_from_cypha_root(const cypha::CNode& root, int d) {
-    native_kernel_mem_.reset();
-    native_use_kernel_llr_ = false;
-    native_kernel_blend_ = 0.5;
-    if (d <= 0) {
-      if (use_kernel_llr_chk_ != nullptr) {
-        use_kernel_llr_chk_->setChecked(false);
-      }
-      if (kernel_blend_spin_ != nullptr) {
-        kernel_blend_spin_->setValue(0.5);
-      }
-      return;
-    }
-    cypha::KernelMemory km(d, 256, 0);
-    bool use = false;
-    double blend = 0.5;
-    if (cypha::try_load_kernel_from_root(root, km, use, blend)) {
-      native_use_kernel_llr_ = use;
-      native_kernel_blend_ = blend;
-      native_kernel_mem_.reset(new cypha::KernelMemory(std::move(km)));
-    }
-    if (use_kernel_llr_chk_ != nullptr) {
-      use_kernel_llr_chk_->setChecked(native_use_kernel_llr_);
-    }
-    if (kernel_blend_spin_ != nullptr) {
-      kernel_blend_spin_->setValue(native_kernel_blend_);
-    }
+    Q_UNUSED(root);
+    Q_UNUSED(d);
+    sync_kernel_ui_from_studio();
   }
 
   void sync_native_kernel_from_ui() {
-    if (use_kernel_llr_chk_ == nullptr || model_ == nullptr) {
+    if (use_kernel_llr_chk_ == nullptr || !classify_loaded()) {
       native_use_kernel_llr_ = false;
       return;
     }
     native_use_kernel_llr_ = use_kernel_llr_chk_->isChecked();
     native_kernel_blend_ =
         kernel_blend_spin_ != nullptr ? kernel_blend_spin_->value() : native_kernel_blend_;
+    studio_cypha_->use_kernel_llr() = native_use_kernel_llr_;
+    studio_cypha_->kernel_blend() = native_kernel_blend_;
     if (!native_use_kernel_llr_) {
       return;
     }
-    const int d = model_->d_latent;
-    if (native_kernel_mem_ == nullptr || native_kernel_mem_->feat_dim() != d) {
-      native_kernel_mem_.reset(new cypha::KernelMemory(d, 256, static_cast<std::uint64_t>(native_rng_())));
+    const int d = infer_model()->d_latent;
+    if (studio_kernel_mem() == nullptr || studio_kernel_mem()->feat_dim() != d) {
+      studio_cypha_->kernel_mem_owned().reset(
+          new cypha::KernelMemory(d, 256, static_cast<std::uint64_t>(native_rng_())));
     }
   }
 
   void fill_kernel_train_extras(cypha::TrainStepExtras& extras) {
     sync_native_kernel_from_ui();
-    if (native_use_kernel_llr_ && native_kernel_mem_ != nullptr) {
-      extras.kernel_mem = native_kernel_mem_.get();
+    if (native_use_kernel_llr_ && studio_kernel_mem() != nullptr) {
+      extras.kernel_mem = studio_kernel_mem();
       extras.use_kernel_llr = true;
       extras.kernel_blend = native_kernel_blend_;
     }
@@ -6430,8 +6424,8 @@ class MainWindow final : public QMainWindow {
     opt.kernel_mem = nullptr;
     opt.use_kernel_llr = false;
     opt.kernel_blend = native_kernel_blend_;
-    if (native_use_kernel_llr_ && native_kernel_mem_ != nullptr) {
-      opt.kernel_mem = native_kernel_mem_.get();
+    if (native_use_kernel_llr_ && studio_kernel_mem() != nullptr) {
+      opt.kernel_mem = studio_kernel_mem();
       opt.use_kernel_llr = true;
       opt.kernel_blend = native_kernel_blend_;
     }
@@ -6485,26 +6479,11 @@ class MainWindow final : public QMainWindow {
 
   bool save_native_model_to_path(const QString& path, QString* err_out) {
     try {
-      cypha::CNode root = cypha::load_cypha_file(cypha_path_.toUtf8().constData());
-      cypha::CNode merged = cypha::CyphaDifMemoryState::merge_state_into_root_for_save(root, *native_mem_);
-      const std::int64_t ts =
-          static_cast<std::int64_t>(model_->saved_total_steps) + static_cast<std::int64_t>(native_total_steps_);
-      NativeSessionSnapshotPatch sess{};
-      sess.ood_sigma = native_ood_sigma_;
-      sess.gh_chi = native_gh_chi_;
-      sess.gh_psi = native_gh_psi_;
-      sess.gh_r_base = native_gh_R_base_;
-      sess.gh_inv_v_clean = native_gh_inv_v_.empty() ? nullptr : &native_gh_inv_v_;
-      sess.feat_dim = pre_ != nullptr ? pre_->input_dim : -1;
-      patch_infer_training_snapshot(merged, *model_, ts, native_llr_ema_, &sess);
+      sync_studio_session_from_ui();
       sync_native_kernel_from_ui();
-      if (native_kernel_mem_ != nullptr) {
-        cypha::patch_kernel_into_root(merged, *native_kernel_mem_, native_use_kernel_llr_, native_kernel_blend_);
-      } else if (model_ != nullptr) {
-        cypha::KernelMemory dummy(model_->d_latent, 256, 0);
-        cypha::patch_kernel_into_root(merged, dummy, false, native_kernel_blend_);
-      }
-      cypha::save_cypha_file(path.toUtf8().constData(), merged);
+      // Cypha::save merges mem→root, syncs infer snapshot, kernel, total_steps, llr_ema.
+      // Residual: GH session ood_sigma/chi/psi are not written via patch_infer_training_snapshot.
+      studio_cypha_->save(path.toUtf8().constData());
       return true;
     } catch (const std::exception& ex) {
       if (err_out != nullptr) {
@@ -6555,6 +6534,190 @@ class MainWindow final : public QMainWindow {
     lm_generate_btn_->setEnabled(lm_loaded_ || rest_mode);
   }
 
+  void lm_refresh_sample_enabled() {
+    if (lm_sample_btn_ == nullptr) {
+      return;
+    }
+    const bool rest_mode = lm_use_rest_chk_ != nullptr && lm_use_rest_chk_->isChecked();
+    const bool rest_ok = rest_mode && !rest_base_normalized().isEmpty();
+    lm_sample_btn_->setEnabled(classify_loaded() || rest_ok);
+  }
+
+  bool lm_build_sample_input(std::vector<double>& x, QString* err_out) const {
+    const QString t =
+        lm_sample_input_edit_ != nullptr ? lm_sample_input_edit_->text().trimmed() : QString();
+    if (!t.isEmpty()) {
+      const int dim = feature_input_dim();
+      if (dim > 0) {
+        return parse_feature_vector(t, dim, x, err_out);
+      }
+      const QStringList parts = t.split(QLatin1Char(','), Qt::SkipEmptyParts);
+      if (parts.isEmpty()) {
+        if (err_out != nullptr) {
+          *err_out = QStringLiteral("Enter at least one numeric value.");
+        }
+        return false;
+      }
+      x.clear();
+      x.reserve(static_cast<std::size_t>(parts.size()));
+      for (const QString& p : parts) {
+        bool ok = false;
+        const double v = p.trimmed().toDouble(&ok);
+        if (!ok) {
+          if (err_out != nullptr) {
+            *err_out = QStringLiteral("Not a number: \"%1\"").arg(p.trimmed());
+          }
+          return false;
+        }
+        x.push_back(v);
+      }
+      return true;
+    }
+    const int dim = feature_input_dim();
+    if (dim > 0) {
+      x.assign(static_cast<std::size_t>(dim), 0.0);
+      return true;
+    }
+    if (err_out != nullptr) {
+      *err_out = QStringLiteral(
+          "Enter an input vector or load a .cypha model on the Model tab (for zero-fill dim).");
+    }
+    return false;
+  }
+
+  static QString lm_format_sample_preview(const QString& label, int n_samples,
+                                          const std::vector<double>& first) {
+    QStringList parts;
+    constexpr int kMaxShow = 8;
+    const int show = std::min(kMaxShow, static_cast<int>(first.size()));
+    parts.reserve(show);
+    for (int i = 0; i < show; ++i) {
+      parts << QString::number(first[static_cast<std::size_t>(i)], 'g', 4);
+    }
+    QString vec = parts.join(QStringLiteral(", "));
+    if (static_cast<int>(first.size()) > kMaxShow) {
+      vec += QStringLiteral(", … (%1 dims)").arg(first.size());
+    }
+    return QStringLiteral("label=%1  n=%2\n[%3]").arg(label).arg(n_samples).arg(vec);
+  }
+
+  void lm_do_sample() {
+    std::vector<double> x_in;
+    QString perr;
+    if (!lm_build_sample_input(x_in, &perr)) {
+      QMessageBox::warning(this, QStringLiteral("Sample latents"), perr);
+      return;
+    }
+
+    const QString mode =
+        lm_sample_mode_combo_ != nullptr ? lm_sample_mode_combo_->currentText() : QStringLiteral("langevin");
+    const int n_samples = lm_sample_n_spin_ != nullptr ? lm_sample_n_spin_->value() : 4;
+    const int n_steps = lm_sample_steps_spin_ != nullptr ? lm_sample_steps_spin_->value() : 20;
+    constexpr double kTemperature = 1.0;
+    constexpr double kLangevinStepSize = 0.05;
+
+    const bool rest_mode = lm_use_rest_chk_ != nullptr && lm_use_rest_chk_->isChecked();
+    if (rest_mode) {
+      const QString base = rest_base_normalized();
+      if (base.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("Sample latents"),
+                               QStringLiteral("Set REST base URL on the Server tab."));
+        return;
+      }
+      QJsonArray input_arr;
+      for (double v : x_in) {
+        input_arr.append(v);
+      }
+      QJsonObject body;
+      body[QStringLiteral("mode")] = mode;
+      body[QStringLiteral("input")] = input_arr;
+      body[QStringLiteral("n_samples")] = n_samples;
+      body[QStringLiteral("n_steps")] = n_steps;
+      body[QStringLiteral("temperature")] = kTemperature;
+      const auto t0 = std::chrono::steady_clock::now();
+      const HttpJsonResult r = http_post_json(QUrl(base + QStringLiteral("/sample")), body);
+      const double latency_ms =
+          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      if (!r.ok) {
+        QMessageBox::warning(this, QStringLiteral("Cypha /sample"), r.err);
+        return;
+      }
+      if (r.obj.contains(QStringLiteral("detail"))) {
+        QMessageBox::warning(this, QStringLiteral("Cypha /sample"),
+                             r.obj.value(QStringLiteral("detail")).toString());
+        return;
+      }
+      const QJsonArray samples = r.obj.value(QStringLiteral("samples")).toArray();
+      if (samples.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Cypha /sample"), QStringLiteral("No samples returned."));
+        return;
+      }
+      std::vector<double> first;
+      const QJsonArray row0 = samples.at(0).toArray();
+      first.reserve(row0.size());
+      for (const QJsonValue& v : row0) {
+        first.push_back(v.toDouble());
+      }
+      const QString label = r.obj.value(QStringLiteral("label")).toString();
+      const int n_out = r.obj.value(QStringLiteral("n_samples")).toInt(n_samples);
+      if (lm_sample_output_edit_ != nullptr) {
+        QString out = lm_format_sample_preview(label, n_out, first);
+        out += QStringLiteral("\n\nlatency_ms: %1").arg(latency_ms, 0, 'f', 2);
+        lm_sample_output_edit_->setPlainText(out);
+      }
+      result_label_->setText(QStringLiteral("[Cypha REST /sample] label=%1 n=%2 (%3 ms)")
+                                 .arg(label)
+                                 .arg(n_out)
+                                 .arg(latency_ms, 0, 'f', 1));
+      return;
+    }
+
+    if (!classify_loaded()) {
+      QMessageBox::information(this, QStringLiteral("Sample latents"),
+                               QStringLiteral("Load a .cypha on the Model tab, or enable REST."));
+      return;
+    }
+
+    sync_studio_session_from_ui();
+    sync_native_kernel_from_ui();
+
+    cypha::SampleOpts sopt{};
+    sopt.x = x_in.data();
+    sopt.x_dim = static_cast<int>(x_in.size());
+    sopt.n_samples = n_samples;
+    sopt.n_steps = n_steps;
+    sopt.temperature = kTemperature;
+    sopt.step_size = kLangevinStepSize;
+    if (mode == QStringLiteral("from_observation")) {
+      sopt.mode = cypha::SampleMode::FromObservation;
+    } else {
+      sopt.mode = cypha::SampleMode::Langevin;
+    }
+
+    const auto t0 = std::chrono::steady_clock::now();
+    const cypha::SampleOut sout = studio_cypha_->sample(sopt);
+    const double latency_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+
+    if (!sout.detail.empty()) {
+      QMessageBox::warning(this, QStringLiteral("Sample latents"), QString::fromStdString(sout.detail));
+      return;
+    }
+    if (sout.h.empty()) {
+      QMessageBox::warning(this, QStringLiteral("Sample latents"), QStringLiteral("No samples returned."));
+      return;
+    }
+    if (lm_sample_output_edit_ != nullptr) {
+      QString out = lm_format_sample_preview(QString::fromStdString(sout.label), n_samples, sout.h.front());
+      out += QStringLiteral("\n\nlatency_ms: %1").arg(latency_ms, 0, 'f', 2);
+      lm_sample_output_edit_->setPlainText(out);
+    }
+    result_label_->setText(QStringLiteral("[Cypha native sample] label=%1 n=%2 (%3 ms)")
+                               .arg(QString::fromStdString(sout.label))
+                               .arg(n_samples)
+                               .arg(latency_ms, 0, 'f', 1));
+  }
+
   QString rest_base_normalized() const {
     QString base = rest_base_edit_ != nullptr ? rest_base_edit_->text().trimmed() : QString();
     while (base.endsWith(QLatin1Char('/'))) {
@@ -6566,11 +6729,11 @@ class MainWindow final : public QMainWindow {
   void lm_do_load() {
     const QString path = lm_path_edit_ != nullptr ? lm_path_edit_->text().trimmed() : QString();
     if (path.isEmpty()) {
-      QMessageBox::information(this, QStringLiteral("CyphaLM"), QStringLiteral("Enter a checkpoint path."));
+      QMessageBox::information(this, QStringLiteral("Cypha"), QStringLiteral("Enter a checkpoint path."));
       return;
     }
     if (!QFileInfo::exists(path)) {
-      QMessageBox::warning(this, QStringLiteral("CyphaLM"),
+      QMessageBox::warning(this, QStringLiteral("Cypha"),
                            QStringLiteral("File not found:\n%1").arg(path));
       return;
     }
@@ -6579,23 +6742,22 @@ class MainWindow final : public QMainWindow {
     if (rest_mode) {
       const QString base = rest_base_normalized();
       if (base.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("CyphaLM"),
+        QMessageBox::information(this, QStringLiteral("Cypha"),
                                  QStringLiteral("Set REST base URL on the Server tab (or start cypha_rest)."));
         return;
       }
       QJsonObject body;
       body[QStringLiteral("checkpoint_path")] = path;
-      const HttpJsonResult r = http_post_json(QUrl(base + QStringLiteral("/lm/load")), body);
+      const HttpJsonResult r = http_post_json(QUrl(base + QStringLiteral("/sequence/load")), body);
       if (!r.ok) {
-        QMessageBox::warning(this, QStringLiteral("CyphaLM /lm/load"), r.err);
+        QMessageBox::warning(this, QStringLiteral("Cypha /sequence/load"), r.err);
         return;
       }
       if (r.obj.contains(QStringLiteral("detail"))) {
-        QMessageBox::warning(this, QStringLiteral("CyphaLM /lm/load"),
+        QMessageBox::warning(this, QStringLiteral("Cypha /sequence/load"),
                              r.obj.value(QStringLiteral("detail")).toString());
         return;
       }
-      lm_model_.reset();
       lm_loaded_ = true;
       lm_source_path_ = path;
       lm_n_generations_ = 0;
@@ -6613,12 +6775,18 @@ class MainWindow final : public QMainWindow {
       }
     } else {
       try {
-        lm_model_ = std::make_unique<cypha::cyphalm::CyphaLMModel>(
-            cypha::cyphalm::load_cyphalm_model(qstring_to_fs_path(path).string()));
+        auto& cy = ensure_studio_cypha();
+        if (!cy.load_sequence(qstring_to_fs_path(path).string())) {
+          throw std::runtime_error("Cypha::load_sequence failed");
+        }
         lm_loaded_ = true;
         lm_source_path_ = path;
         lm_n_generations_ = 0;
-        const auto& cfg = lm_model_->config();
+        const cypha::cyphalm::CyphaLMModel* seq = cy.sequence();
+        if (seq == nullptr) {
+          throw std::runtime_error("sequence not loaded after load_sequence");
+        }
+        const auto& cfg = seq->config();
         if (lm_status_label_ != nullptr) {
           lm_status_label_->setText(QStringLiteral("Native loaded — vocab %1, field_dim %2, experts %3")
                                         .arg(cfg.vocab_size)
@@ -6629,10 +6797,9 @@ class MainWindow final : public QMainWindow {
           lm_output_edit_->clear();
         }
       } catch (const std::exception& ex) {
-        lm_model_.reset();
         lm_loaded_ = false;
         lm_source_path_.clear();
-        QMessageBox::warning(this, QStringLiteral("CyphaLM load"),
+        QMessageBox::warning(this, QStringLiteral("Cypha load"),
                              QString::fromUtf8(ex.what()));
         if (lm_status_label_ != nullptr) {
           lm_status_label_->setText(QStringLiteral("(load failed)"));
@@ -6642,7 +6809,7 @@ class MainWindow final : public QMainWindow {
       }
     }
     lm_refresh_generate_enabled();
-    result_label_->setText(QStringLiteral("[CyphaLM] loaded %1").arg(path));
+    result_label_->setText(QStringLiteral("[Cypha] loaded %1").arg(path));
   }
 
   void lm_do_generate() {
@@ -6650,7 +6817,7 @@ class MainWindow final : public QMainWindow {
     QString perr;
     if (!parse_token_ids(lm_prompt_edit_ != nullptr ? lm_prompt_edit_->text() : QString(), prompt_ids,
                          &perr)) {
-      QMessageBox::warning(this, QStringLiteral("CyphaLM generate"), perr);
+      QMessageBox::warning(this, QStringLiteral("Cypha generate"), perr);
       return;
     }
     const int max_tokens = lm_n_tokens_spin_ != nullptr ? lm_n_tokens_spin_->value() : 64;
@@ -6664,7 +6831,7 @@ class MainWindow final : public QMainWindow {
     if (rest_mode) {
       const QString base = rest_base_normalized();
       if (base.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("CyphaLM"),
+        QMessageBox::information(this, QStringLiteral("Cypha"),
                                  QStringLiteral("Set REST base URL on the Server tab."));
         return;
       }
@@ -6686,11 +6853,11 @@ class MainWindow final : public QMainWindow {
       const double latency_ms =
           std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
       if (!r.ok) {
-        QMessageBox::warning(this, QStringLiteral("CyphaLM /generate"), r.err);
+        QMessageBox::warning(this, QStringLiteral("Cypha /generate"), r.err);
         return;
       }
       if (r.obj.contains(QStringLiteral("detail"))) {
-        QMessageBox::warning(this, QStringLiteral("CyphaLM /generate"),
+        QMessageBox::warning(this, QStringLiteral("Cypha /generate"),
                              r.obj.value(QStringLiteral("detail")).toString());
         return;
       }
@@ -6701,14 +6868,20 @@ class MainWindow final : public QMainWindow {
         lm_output_edit_->setPlainText(out);
       }
       result_label_->setText(
-          QStringLiteral("[CyphaLM REST] generated %1 tokens in %2 ms")
+          QStringLiteral("[Cypha REST] generated %1 tokens in %2 ms")
               .arg(r.obj.value(QStringLiteral("n_tokens")).toInt())
               .arg(latency_ms, 0, 'f', 1));
       return;
     }
 
-    if (!lm_model_) {
-      QMessageBox::information(this, QStringLiteral("CyphaLM"),
+    if (!studio_cypha_ || !studio_cypha_->sequence_loaded()) {
+      QMessageBox::information(this, QStringLiteral("Cypha"),
+                               QStringLiteral("Load a checkpoint first."));
+      return;
+    }
+    cypha::cyphalm::CyphaLMModel* seq = studio_cypha_->sequence();
+    if (seq == nullptr) {
+      QMessageBox::information(this, QStringLiteral("Cypha"),
                                QStringLiteral("Load a checkpoint first."));
       return;
     }
@@ -6725,7 +6898,7 @@ class MainWindow final : public QMainWindow {
     const auto t0 = std::chrono::steady_clock::now();
     try {
       const cypha::cyphalm::GenerateOutput gen = cypha::cyphalm::generate_decode(
-          *lm_model_, prompt_ids, max_tokens, params, &lm_epistemic_threshold_);
+          *seq, prompt_ids, max_tokens, params, &lm_epistemic_threshold_);
       const double latency_ms =
           std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
       ++lm_n_generations_;
@@ -6742,7 +6915,7 @@ class MainWindow final : public QMainWindow {
         for (int id : gen.generated_ids) {
           uids.push_back(static_cast<std::uint32_t>(id));
         }
-        decoded = QString::fromStdString(lm_model_->decode_tokens(uids));
+        decoded = QString::fromStdString(seq->decode_tokens(uids));
       } catch (...) {
         decoded = QStringLiteral("(decode unavailable)");
       }
@@ -6762,42 +6935,48 @@ class MainWindow final : public QMainWindow {
       if (lm_output_edit_ != nullptr) {
         lm_output_edit_->setPlainText(out);
       }
-      result_label_->setText(QStringLiteral("[CyphaLM native] %1 tokens, %2 ms")
+      result_label_->setText(QStringLiteral("[Cypha native] %1 tokens, %2 ms")
                                  .arg(static_cast<int>(gen.generated_ids.size()))
                                  .arg(latency_ms, 0, 'f', 1));
     } catch (const std::exception& ex) {
-      QMessageBox::warning(this, QStringLiteral("CyphaLM generate"), QString::fromUtf8(ex.what()));
+      QMessageBox::warning(this, QStringLiteral("Cypha generate"), QString::fromUtf8(ex.what()));
     }
   }
 
   int feature_input_dim() const {
-    if (pre_) {
-      return pre_->input_dim;
+    if (pre_state() != nullptr) {
+      return pre_state()->input_dim;
     }
-    return model_ ? model_->d_latent : 0;
+    return infer_model() ? infer_model()->d_latent : 0;
   }
 
   void update_features_hint() {
-    if (!model_) {
-      features_hint_->setText(pre_ ? QStringLiteral("Preprocessor loaded — load a .cypha next")
-                                   : QStringLiteral("Features: load a model first"));
+    if (!infer_model()) {
+      features_hint_->setText(pre_state() != nullptr ? QStringLiteral("Preprocessor loaded — load a .cypha next")
+                                                     : QStringLiteral("Features: load a model first"));
       return;
     }
-    if (pre_) {
+    if (pre_state() != nullptr) {
       features_hint_->setText(QStringLiteral("Features: %1 raw values (preprocessor → latent dim %2)")
-                                  .arg(pre_->input_dim)
-                                  .arg(model_->d_latent));
+                                  .arg(pre_state()->input_dim)
+                                  .arg(infer_model()->d_latent));
     } else {
       features_hint_->setText(
-          QStringLiteral("Features: %1 values (latent / encoder input, no preprocessor)").arg(model_->d_latent));
+          QStringLiteral("Features: %1 values (latent / encoder input, no preprocessor)").arg(infer_model()->d_latent));
     }
   }
 
   void reload_preprocessor_only() {
-    pre_.reset();
+    if (!pre_path_.isEmpty()) {
+      ensure_studio_cypha();
+    } else if (!studio_cypha_) {
+      update_features_hint();
+      return;
+    }
+    studio_cypha_->preprocessor_owned().reset();
     if (!pre_path_.isEmpty()) {
       try {
-        pre_.reset(new cypha::PreprocessorState(
+        studio_cypha_->preprocessor_owned().reset(new cypha::PreprocessorState(
             cypha::PreprocessorState::from_json_file(pre_path_.toUtf8().constData())));
       } catch (const std::exception& ex) {
         QMessageBox::warning(this, QStringLiteral("Preprocessor"),
@@ -6952,99 +7131,83 @@ class MainWindow final : public QMainWindow {
   bool native_predict_detail(const std::vector<double>& x_in, std::string* label_out, double* conf_out,
                              QJsonObject* scores_out, double* anomaly_out, bool* is_ood_out,
                              QJsonObject* explanation_out) {
-    if (!model_ || label_out == nullptr || conf_out == nullptr) {
+    if (!classify_loaded() || label_out == nullptr || conf_out == nullptr) {
       return false;
     }
-    std::vector<double> x_latent;
-    const double* x_ptr = nullptr;
-    if (pre_ != nullptr) {
-      if (static_cast<int>(x_in.size()) != pre_->input_dim) {
-        return false;
-      }
-      x_latent = pre_->transform_one(x_in);
-      if (static_cast<int>(x_latent.size()) != model_->d_latent) {
-        return false;
-      }
-      x_ptr = x_latent.data();
-    } else {
-      if (static_cast<int>(x_in.size()) != model_->d_latent) {
-        return false;
-      }
-      x_ptr = x_in.data();
+    sync_studio_session_from_ui();
+    sync_native_kernel_from_ui();
+
+    cypha::PredictOpts popts{};
+    popts.use_gh = use_gh_chk_ != nullptr && use_gh_chk_->isChecked();
+    popts.use_field = true;
+    if (infer_model() != nullptr) {
+      popts.deliberation_lo = infer_model()->deliberation_lo;
+      popts.deliberation_hi = infer_model()->deliberation_hi;
     }
-    if (model_->labels.empty()) {
+    if (predict_self_correct_chk_ != nullptr) {
+      popts.self_correct = predict_self_correct_chk_->isChecked();
+    }
+
+    const cypha::PredictOut po =
+        studio_cypha_->predict(x_in.data(), static_cast<int>(x_in.size()), popts);
+    if (!po.detail.empty()) {
       return false;
     }
-    std::vector<double> H;
-    cypha::batch_encode(*model_, x_ptr, 1, H);
-    const int k = static_cast<int>(model_->labels.size());
-    std::vector<double> llrs;
-    double anomaly = 0.0;
-    bool is_ood = false;
-    double r_eff = 0.0;
-    if (use_gh_chk_ != nullptr && use_gh_chk_->isChecked()) {
-      cypha::CyphaInferOptions kopt{};
-      fill_kernel_infer_options(kopt);
-      const cypha::GhInferAtHResult gh = cypha::gh_infer_at_h(*model_, H.data(), native_gh_chi_, native_gh_psi_,
-                                                              kGhNigAdaptAlphaShell, &kopt);
-      *label_out = gh.label;
-      *conf_out = gh.confidence;
-      llrs = gh.llrs;
-      r_eff = gh.r_eff;
-      const double r_base =
-          (model_->has_mahal_ema && model_->mahal_ema > 0.0) ? model_->mahal_ema : 1.0;
-      anomaly = cypha::gh_infer_anomaly_score(r_eff, r_base);
-      is_ood = anomaly > studio_prefs_.inference_ood_threshold;
-    } else {
-      cypha::CyphaInferOptions iopt{};
-      iopt.deliberation_lo = model_->deliberation_lo;
-      iopt.deliberation_hi = model_->deliberation_hi;
-      iopt.use_field = true;
-      fill_kernel_infer_options(iopt);
-      const cypha::InferAtHResult inf = cypha::infer_at_h(*model_, H.data(), iopt);
-      *label_out = inf.label;
-      *conf_out = inf.confidence;
-      llrs = inf.llrs;
-    }
+
+    *label_out = po.label;
+    *conf_out = po.confidence;
+
     if (scores_out != nullptr) {
       QJsonObject scores;
-      for (int j = 0; j < k && j < static_cast<int>(llrs.size()); ++j) {
-        scores[QString::fromStdString(model_->labels[static_cast<std::size_t>(j)])] = llrs[static_cast<std::size_t>(j)];
+      const int k = static_cast<int>(po.labels.size());
+      for (int j = 0; j < k && j < static_cast<int>(po.all_scores.size()); ++j) {
+        scores[QString::fromStdString(po.labels[static_cast<std::size_t>(j)])] =
+            po.all_scores[static_cast<std::size_t>(j)];
       }
       *scores_out = scores;
     }
     if (anomaly_out != nullptr) {
-      *anomaly_out = anomaly;
+      *anomaly_out = po.anomaly_score;
     }
     if (is_ood_out != nullptr) {
-      *is_ood_out = is_ood;
+      *is_ood_out = po.is_ood;
     }
+
     const bool want_expl =
         predict_return_explanation_chk_ != nullptr && predict_return_explanation_chk_->isChecked();
     if (want_expl && explanation_out != nullptr) {
       QJsonObject expl;
       expl[QStringLiteral("label")] = QString::fromStdString(*label_out);
       expl[QStringLiteral("confidence")] = *conf_out;
-      expl[QStringLiteral("anomaly_score")] = anomaly;
-      expl[QStringLiteral("is_ood")] = is_ood;
-      expl[QStringLiteral("r_eff")] = r_eff;
+      expl[QStringLiteral("anomaly_score")] = po.anomaly_score;
+      expl[QStringLiteral("is_ood")] = po.is_ood;
+      expl[QStringLiteral("r_eff")] = po.r_eff;
       QJsonObject cdet;
-      const int d = model_->d_latent;
+      const int d = infer_model()->d_latent;
+      const int k = static_cast<int>(infer_model()->labels.size());
       for (int ci = 0; ci < k; ++ci) {
         double sumsq = 0.0;
         for (int j = 0; j < d; ++j) {
-          const double v = model_->D[static_cast<std::size_t>(ci * d + j)];
+          const double v = infer_model()->D[static_cast<std::size_t>(ci * d + j)];
           sumsq += v * v;
         }
         QJsonObject row;
-        row[QStringLiteral("n_obs")] = model_->n_obs[static_cast<std::size_t>(ci)];
+        row[QStringLiteral("n_obs")] = infer_model()->n_obs[static_cast<std::size_t>(ci)];
         row[QStringLiteral("delta_mu_norm")] = std::sqrt(sumsq);
-        cdet[QString::fromStdString(model_->labels[static_cast<std::size_t>(ci)])] = row;
+        cdet[QString::fromStdString(infer_model()->labels[static_cast<std::size_t>(ci)])] = row;
       }
       expl[QStringLiteral("class_details")] = cdet;
+      std::vector<double> H;
+      const double* x_ptr = x_in.data();
+      std::vector<double> x_latent;
+      if (pre_state() != nullptr) {
+        x_latent = pre_state()->transform_one(x_in);
+        x_ptr = x_latent.data();
+      }
+      cypha::batch_encode(*infer_model(), x_ptr, 1, H);
       double wh = 0.0;
       for (int j = 0; j < d; ++j) {
-        const double t = H[static_cast<std::size_t>(j)] - model_->mu_world[static_cast<std::size_t>(j)];
+        const double t = H[static_cast<std::size_t>(j)] - infer_model()->mu_world[static_cast<std::size_t>(j)];
         wh += t * t;
       }
       expl[QStringLiteral("world_mu_distance")] = std::sqrt(wh);
@@ -7436,32 +7599,133 @@ class MainWindow final : public QMainWindow {
   }
 #endif  // CYPHA_SHELL_EXPERIMENT_DB
 
+  cypha::Cypha& ensure_studio_cypha() {
+    if (!studio_cypha_) {
+      studio_cypha_ = std::make_unique<cypha::Cypha>();
+    }
+    return *studio_cypha_;
+  }
+
+  cypha::CyphaInferModel* infer_model() {
+    return studio_cypha_ && studio_cypha_->loaded() ? studio_cypha_->infer() : nullptr;
+  }
+  const cypha::CyphaInferModel* infer_model() const {
+    return studio_cypha_ && studio_cypha_->loaded() ? studio_cypha_->infer() : nullptr;
+  }
+  cypha::PreprocessorState* pre_state() {
+    return studio_cypha_ ? studio_cypha_->preprocessor() : nullptr;
+  }
+  const cypha::PreprocessorState* pre_state() const {
+    return studio_cypha_ ? studio_cypha_->preprocessor() : nullptr;
+  }
+  cypha::CyphaDifMemoryState* studio_mem() {
+    return studio_cypha_ && studio_cypha_->loaded() ? studio_cypha_->mem() : nullptr;
+  }
+  cypha::ReplayBuffer* studio_replay() {
+    return studio_cypha_ && studio_cypha_->loaded() ? studio_cypha_->replay() : nullptr;
+  }
+  cypha::KernelMemory* studio_kernel_mem() {
+    return studio_cypha_ && studio_cypha_->loaded() ? studio_cypha_->kernel_mem() : nullptr;
+  }
+  bool classify_loaded() const { return studio_cypha_ && studio_cypha_->loaded(); }
+
+  void sync_studio_session_from_ui() {
+    if (!classify_loaded()) {
+      return;
+    }
+    studio_cypha_->world_lr() = native_world_lr_;
+    studio_cypha_->delta_lr() = native_delta_lr_;
+    studio_cypha_->ood_sigma() = native_ood_sigma_;
+    studio_cypha_->train_params() = native_tsp_;
+    studio_cypha_->total_steps() = native_total_steps_;
+    studio_cypha_->llr_ema() = native_llr_ema_;
+    studio_cypha_->enc_updates() = native_enc_updates_;
+    studio_cypha_->gh_chi() = native_gh_chi_;
+    studio_cypha_->gh_psi() = native_gh_psi_;
+    studio_cypha_->gh_inv_v_clean() = native_gh_inv_v_;
+    studio_cypha_->gh_R_base() = native_gh_R_base_;
+    studio_cypha_->use_kernel_llr() = native_use_kernel_llr_;
+    studio_cypha_->kernel_blend() = native_kernel_blend_;
+  }
+
+  void sync_session_from_studio() {
+    if (!classify_loaded()) {
+      return;
+    }
+    native_world_lr_ = studio_cypha_->world_lr();
+    native_delta_lr_ = studio_cypha_->delta_lr();
+    native_ood_sigma_ = studio_cypha_->ood_sigma();
+    native_tsp_ = studio_cypha_->train_params();
+    native_total_steps_ = studio_cypha_->total_steps();
+    native_llr_ema_ = studio_cypha_->llr_ema();
+    native_enc_updates_ = studio_cypha_->enc_updates();
+    native_gh_chi_ = studio_cypha_->gh_chi();
+    native_gh_psi_ = studio_cypha_->gh_psi();
+    native_gh_inv_v_ = studio_cypha_->gh_inv_v_clean();
+    native_gh_R_base_ = studio_cypha_->gh_R_base();
+    native_use_kernel_llr_ = studio_cypha_->use_kernel_llr();
+    native_kernel_blend_ = studio_cypha_->kernel_blend();
+    native_replay_cap_applied_ = native_tsp_.replay_cap;
+  }
+
+  void sync_kernel_ui_from_studio() {
+    native_use_kernel_llr_ = false;
+    native_kernel_blend_ = 0.5;
+    if (classify_loaded()) {
+      native_use_kernel_llr_ = studio_cypha_->use_kernel_llr();
+      native_kernel_blend_ = studio_cypha_->kernel_blend();
+    }
+    if (use_kernel_llr_chk_ != nullptr) {
+      use_kernel_llr_chk_->setChecked(native_use_kernel_llr_);
+    }
+    if (kernel_blend_spin_ != nullptr) {
+      kernel_blend_spin_->setValue(native_kernel_blend_);
+    }
+  }
+
   void apply_model_load() {
-    QString err;
-    std::unique_ptr<cypha::CyphaInferModel> m;
-    if (!try_load_cypha_paths(cypha_path_, ff_path_, f_field_flat_, m, &err)) {
-      QMessageBox::warning(this, QStringLiteral("Load failed"), err);
-      model_.reset();
+    if (cypha_path_.isEmpty()) {
       predict_btn_->setEnabled(false);
       predict_rest_btn_->setEnabled(false);
       update_rest_btn_->setEnabled(false);
       if (batch_predict_csv_btn_ != nullptr) batch_predict_csv_btn_->setEnabled(false);
       if (mke_predict_btn_ != nullptr) mke_predict_btn_->setEnabled(false);
       if (mke_bulk_btn_ != nullptr) mke_bulk_btn_->setEnabled(false);
-      if (native_train_one_btn_ != nullptr) {
-        native_train_one_btn_->setEnabled(false);
-      }
-      if (csv_bulk_native_btn_ != nullptr) {
-        csv_bulk_native_btn_->setEnabled(false);
-      }
-      if (save_native_btn_ != nullptr) {
-        save_native_btn_->setEnabled(false);
-      }
-      path_label_->setText(cypha_path_.isEmpty() ? QStringLiteral("(no model)") : cypha_path_);
+      if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(false);
+      if (csv_bulk_native_btn_ != nullptr) csv_bulk_native_btn_->setEnabled(false);
+      if (save_native_btn_ != nullptr) save_native_btn_->setEnabled(false);
+      path_label_->setText(QStringLiteral("(no model)"));
       update_features_hint();
+      lm_refresh_sample_enabled();
       return;
     }
-    model_ = std::move(m);
+
+    auto& cy = ensure_studio_cypha();
+    const std::string cy_u8 = cypha_path_.toUtf8().constData();
+    const std::string pre_u8 = pre_path_.isEmpty() ? std::string{} : pre_path_.toUtf8().constData();
+    const std::string ff_u8 = ff_path_.isEmpty() ? std::string{} : ff_path_.toUtf8().constData();
+    if (!cy.load(cy_u8, pre_u8, ff_u8)) {
+      QString err = ff_path_.isEmpty()
+                        ? QStringLiteral(
+                              "world.F_field is not embedded in this .cypha — set an F_field JSON path (same "
+                              "format as cypha_rest --f-field-json).")
+                        : QStringLiteral("Load failed (check .cypha, F_field JSON, preprocessor).");
+      QMessageBox::warning(this, QStringLiteral("Load failed"), err);
+      predict_btn_->setEnabled(false);
+      predict_rest_btn_->setEnabled(false);
+      update_rest_btn_->setEnabled(false);
+      if (batch_predict_csv_btn_ != nullptr) batch_predict_csv_btn_->setEnabled(false);
+      if (mke_predict_btn_ != nullptr) mke_predict_btn_->setEnabled(false);
+      if (mke_bulk_btn_ != nullptr) mke_bulk_btn_->setEnabled(false);
+      if (native_train_one_btn_ != nullptr) native_train_one_btn_->setEnabled(false);
+      if (csv_bulk_native_btn_ != nullptr) csv_bulk_native_btn_->setEnabled(false);
+      if (save_native_btn_ != nullptr) save_native_btn_->setEnabled(false);
+      path_label_->setText(cypha_path_);
+      update_features_hint();
+      lm_refresh_sample_enabled();
+      return;
+    }
+
     path_label_->setText(cypha_path_);
     predict_btn_->setEnabled(true);
     predict_rest_btn_->setEnabled(true);
@@ -7470,12 +7734,15 @@ class MainWindow final : public QMainWindow {
     if (mke_predict_btn_ != nullptr) mke_predict_btn_->setEnabled(true);
     features_edit_->clear();
     (void)try_load_train_hparams_adjacent();
-    reload_preprocessor_only();
+    sync_session_from_studio();
+    load_native_hparams_from_widgets_silent();
+    sync_studio_session_from_ui();
     reinit_native_train_state();
     result_label_->setText(
         QStringLiteral("Loaded: latent dim %1, %2 classes")
-            .arg(model_->d_latent)
-            .arg(static_cast<int>(model_->labels.size())));
+            .arg(infer_model()->d_latent)
+            .arg(static_cast<int>(infer_model()->labels.size())));
+    lm_refresh_sample_enabled();
   }
 
   QProcess rest_proc_;
@@ -7668,14 +7935,10 @@ class MainWindow final : public QMainWindow {
   cypha::CsvDenseResult last_csv_{};
   bool last_csv_ok_{false};
   std::vector<double> f_field_flat_;
-  std::unique_ptr<cypha::CyphaInferModel> model_;
-  std::unique_ptr<cypha::PreprocessorState> pre_;
+  std::unique_ptr<cypha::Cypha> studio_cypha_;
   std::vector<double> replay_u01_cache_;
-  std::unique_ptr<cypha::CyphaDifMemoryState> native_mem_;
-  std::unique_ptr<cypha::KernelMemory> native_kernel_mem_;
   bool native_use_kernel_llr_{false};
   double native_kernel_blend_{0.5};
-  std::unique_ptr<cypha::ReplayBuffer> native_replay_;
   std::mt19937 native_rng_{424242u};
   cypha::TrainStepParams native_tsp_{};
   double native_world_lr_{0.008};
@@ -7690,12 +7953,18 @@ class MainWindow final : public QMainWindow {
   double native_gh_psi_{1.0};
   bool native_train_ok_{false};
   int native_replay_cap_applied_{10000};
-  // ── CyphaLM tab ─────────────────────────────────────────────────────────────
+  // ── Cypha tab ─────────────────────────────────────────────────────────────
   QLineEdit* lm_path_edit_{};
   QPushButton* lm_browse_btn_{};
   QPushButton* lm_load_btn_{};
   QCheckBox* lm_use_rest_chk_{};
   QLabel* lm_status_label_{};
+  QComboBox* lm_sample_mode_combo_{};
+  QSpinBox* lm_sample_n_spin_{};
+  QSpinBox* lm_sample_steps_spin_{};
+  QLineEdit* lm_sample_input_edit_{};
+  QPushButton* lm_sample_btn_{};
+  QPlainTextEdit* lm_sample_output_edit_{};
   QLineEdit* lm_prompt_edit_{};
   QSpinBox* lm_n_tokens_spin_{};
   QComboBox* lm_strategy_combo_{};
@@ -7708,7 +7977,6 @@ class MainWindow final : public QMainWindow {
   QPushButton* bench_browse_btn_{};
   QPushButton* bench_run_d17_btn_{};
   QPlainTextEdit* bench_log_edit_{};
-  std::unique_ptr<cypha::cyphalm::CyphaLMModel> lm_model_;
   bool lm_loaded_{false};
   QString lm_source_path_;
   int lm_n_generations_{0};
@@ -7737,7 +8005,7 @@ int main(int argc, char** argv) {
     std::printf(
         "cypha_qt_shell [options]\n"
         "  GUI: tabs — Data, Model, Train, Predict (confidence+explanation), Registry, Server,\n"
-        "       Experiments (SQLite when built), CyphaLM, Help (NATIVE_QUICKSTART).\n"
+        "       Experiments (SQLite when built), Cypha, Help (NATIVE_QUICKSTART).\n"
         "       load .cypha; CSV inspect + bulk REST /update + loss chart;\n"
         "       optional F_field JSON; preprocessor.json; native predict; spawn cypha_rest\n"
         "       (--registry when set); REST /health, /ready, /models, /load, /predict, /update;\n"
@@ -7745,7 +8013,7 @@ int main(int argc, char** argv) {
         "       loss chart export PNG/SVG/CSV; EMA smoothing; Y lock; training log table;\n"
         "       POST /predict return_explanation → confidence panel (class_details, OOD meter);\n"
         "       optional replay_u01 JSON; regression_y bulk for MKE.\n"
-        "       CyphaLM: native checkpoint + generate; REST /lm/load + /generate; bench --domain 17.\n"
+        "       Cypha: native checkpoint + generate; REST /sequence/load + /generate; bench --domain 17.\n"
         "  --smoke <path.cypha> [f_field.json]  headless load + zero-vector native predict (CI).\n"
         "  -h, --help            this message\n");
     return 0;

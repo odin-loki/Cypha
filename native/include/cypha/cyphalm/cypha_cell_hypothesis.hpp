@@ -16,7 +16,7 @@ struct CellVariantSpec {
     std::string notes;
 };
 
-/// All 28 cell-hypothesis variants (B0–B2, H01–H22).
+/// All cell-hypothesis variants (B0–B2, H01–H23, U01–U10 unified-context).
 const std::vector<CellVariantSpec>& all_cell_variants();
 
 /// Lookup by id (e.g. ``H06``). Returns nullptr when unknown.
