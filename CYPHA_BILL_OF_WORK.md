@@ -30,7 +30,7 @@ blocking gate; **300k overnight COMPLETE** — H22 @ 25/25, finalize exit=0, loc
 | **Addendum 2 MC2/MS1** | [x] Shipped | ECE + train/held-out gap `412ded1`; [`GENERAL_METRICS_MC2_MS1_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC2_MS1_2026-07-17.md) |
 | **Addendum 2 MC4** | [x] Shipped | Margin distribution (mean/p50/p10) `b61543f`; [`GENERAL_METRICS_MC4_2026-07-17.md`](docs/reports/GENERAL_METRICS_MC4_2026-07-17.md) |
 | **Addendum 2 MR3** | [x] Shipped | Residual autocorr + spectral flatness `b61543f`; [`GENERAL_METRICS_MR3_2026-07-17.md`](docs/reports/GENERAL_METRICS_MR3_2026-07-17.md) |
-| **Cell-sweep summary.csv tool** | [~] 25/25 local | H15 **5.262** @300k (worse than hybrid; not a promote) — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md) |
+| **Cell-sweep summary.csv tool** | [x] 25/25 local | H15 **5.262** @300k (worse than hybrid; not a promote) — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](docs/reports/CELL_SWEEP_SUMMARY_2026-07-18.md) |
 | **§0.5 BPC pin** | [x] Reconciled | canonical **2.873** `b0d39e7`; [`BASELINE_PIN_CANONICAL_2026-07-17.md`](docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md) |
 | **P5 marketing claims** | [x] Aligned | D16B/D16F isolation caveat `3491da0` |
 | **RPSM cheap hypotheses** | [x] Exhausted | [`RPSM_UPGRADE_PLAN.md`](docs/reports/RPSM_UPGRADE_PLAN.md) §13–§14 — five cheap-scale experiments; gap is zero-BPTT training, not config |
@@ -123,7 +123,7 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 - [x] Tier 1 sweep H01–H22 — overnight cell-sweep complete (H22 @ 25/25, lock `a552aee`)
 - [x] Tier 2 H07, H09–H13 native paths — verified @ 2k; H11 null short-budget only — [`TIER2_NATIVE_PATHS_2026-07-18.md`](docs/reports/TIER2_NATIVE_PATHS_2026-07-18.md)
 - [x] Tier 3 real 300k run — complete via production overnight
-- [x] Populate `results/summary.csv` � H15 **5.262** @300k � [`H15_300K_RERUN_2026-07-18.md`](docs/reports/H15_300K_RERUN_2026-07-18.md)
+- [x] Populate `results/summary.csv` � H15 **5.262** @300k � [`H15_300K_RERUN_2026-07-18.md`](docs/reports/H15_300K_RERUN_2026-07-18.md)
 
 ---
 
@@ -174,11 +174,11 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** human-only � venue/arXiv upload
+**Active plan:** human-only � venue/arXiv upload
 **Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
 2. ~~Phase E release~~ — `v2.3.24` assets live (MSVC Windows + Linux tar/AppImage)
 3. Phase F submit — venue/arXiv upload from `paper/arxiv_bundle/` (human; MD/HTML/PDF + `abstract.txt` / `metadata.yaml` ready)
-4. ~~Optional 300k H15~~ � done (**5.262** BPC; not a promote)
+4. ~~Optional 300k H15~~ � done (**5.262** BPC; not a promote)
 
