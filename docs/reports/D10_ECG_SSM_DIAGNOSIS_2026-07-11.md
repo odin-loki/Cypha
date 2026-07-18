@@ -1,5 +1,7 @@
 # D10 ECG / SSM diagnosis (2026-07-11)
 
+> **Superseded (2026-07-18):** Real-data ECG5000 D10A now **90.11%** accuracy on HEAD — see [`D10_ECG5000_REAL_DATA_2026-07-18.md`](D10_ECG5000_REAL_DATA_2026-07-18.md) and [`CONTINUUM_CLOSEOUT_2026-07-18.md`](CONTINUUM_CLOSEOUT_2026-07-18.md).
+
 **Scope:** Re-investigate the `docs/FUTURE.md` §0c claim that "D10 ECG: 17–20% accuracy on
 5-class temporal classification (chance = 20%); CellAI/SSM integration not yet tuned for
 this domain," per the recommended instrumentation (state-norm collapse/explosion, τ_fast/τ_slow

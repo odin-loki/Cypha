@@ -28,7 +28,7 @@ Optional: **`-DCYPHA_ENABLE_CUDA=ON`** (MSVC or Linux + NVIDIA), **`-DCYPHA_BUIL
 
 ## 2. Install (release bundle)
 
-Prebuilt installers: **[GitHub Releases `v2.2.8`](https://github.com/odin-loki/Cypha/releases/tag/v2.2.8)** (`cypha-*-linux-x86_64.tar.gz`, `cypha-*-windows-x86_64.zip`).
+Prebuilt installers: **[GitHub Releases `v2.3.24`](https://github.com/odin-loki/Cypha/releases/tag/v2.3.24)** — `cypha-2.3.24-linux-x86_64.tar.gz`, `cypha-2.3.24-windows-x86_64.zip` (MSVC), optional **`cypha-2.3.24-linux-x86_64.AppImage`** (Qt shell), **`cypha-2.3.24-arxiv-bundle.zip`** (paper figures).
 
 After download, or after local packaging with `scripts/package_release_windows.ps1` / `scripts/package_release_linux.sh`:
 
@@ -54,7 +54,7 @@ Adds **`cypha_rest`**, **`cypha_bench_run`**, **`cypha_bench_report`**, **`cypha
 powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
-Runs: Release build → **`ctest -R native_`** (115 CTests; **116** when d38 merges) → REST contract smoke → bench smoke (d01, d04, d17) → **`--report-only`** figures → tune dry-run (all smoke configs). Pass **`-TuneSmoke`** for a live **`cypha_tune_run`** sweep.
+Runs: Release build → **`ctest -R native_`** (~**160 CTests**; see **`scripts/cypha_native_validate_all.ps1`** for the authoritative tally) → REST contract smoke → bench smoke (d01, d04, d17) → **`--report-only`** figures → tune dry-run (all smoke configs). Pass **`-TuneSmoke`** for a live **`cypha_tune_run`** sweep.
 
 **Manual subset:**
 

@@ -39,9 +39,11 @@ RUN_NATIVE=1 bash scripts/wsl_verify.sh
 powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
-### Native `cypha_rest` on Windows (MinGW cross-build in WSL)
+### Native `cypha_rest` on Windows (MSVC — preferred)
 
-From **PowerShell** at repo root: `powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1`. Smoke: `powershell -File native/scripts/smoke_cypha_rest_mingw.ps1`.
+Use **`cmake --preset windows-msvc-release`** (see [`native/README.md`](../../native/README.md)) — matches CI **`windows_msvc`**. From **PowerShell** at repo root after build: `powershell -File native/scripts/smoke_cypha_rest_mingw.ps1` (set **`CYPHA_REST_BIN`** to your MSVC **`cypha_rest.exe`**).
+
+**Optional MinGW cross-build (not CI gate):** `powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1`.
 
 **M1 / `cypha_parity`:** **`reference.cypha`** includes **Tier-1**; C++ **`from_root`** restores **`ctx_*`** ([`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md) §4; **`ctest -R native_parity`**).
 

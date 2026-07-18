@@ -1,5 +1,7 @@
 # MSVC toolchain migration — 2026-07-12
 
+> **Superseded (2026-07-18):** MinGW is no longer a CI or release gate — blocking jobs are **`build_and_test`** (Linux) + **`windows_msvc`** (MSVC Release). MinGW remains an optional local cross-build footnote.
+
 Machine: Windows 10 (26200), 64 logical cores, NVIDIA RTX 3090 (24GB, SM 8.6), CUDA Toolkit v13.2,
 Visual Studio 18 (2026) Community + Build Tools 18 (MSVC 14.51.36231), CMake 4.2.3-msvc3 (bundled
 with VS 2026 — the system-PATH CMake, 3.29.2, predates the `Visual Studio 18 2026` generator name

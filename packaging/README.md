@@ -22,7 +22,7 @@ Tagged releases (`v*`) publish **native-only** assets (no Python venv). Maintain
 gh auth login
 
 # Optional: emit markdown notes for a tag (stub — append to release body locally)
-pwsh -File scripts/create_release_notes.ps1 -Tag v2.2.8
+pwsh -File scripts/create_release_notes.ps1 -Tag v2.3.24
 ```
 
 CI workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) uploads tarballs/AppImage/zip on tag push; `generate_release_notes: true` fills the GitHub UI body. Use `create_release_notes.ps1` for a git-log supplement before tagging.
@@ -32,22 +32,23 @@ CI workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) 
 | `cypha-<ver>-linux-x86_64.tar.gz` | Linux x86_64 | CLI tools (`cypha_rest`, bench, diagnostics, …) |
 | `cypha-<ver>-linux-x86_64.AppImage` | Linux x86_64 | Standalone Qt shell + bundled `cypha_rest` |
 | `cypha-<ver>-windows-x86_64.zip` | Windows x86_64 | Native **MSVC** CLI tools |
+| `cypha-<ver>-arxiv-bundle.zip` | All | Paper figures bundle (no runtime) |
 
-Prebuilt installers: **[GitHub Releases — latest](https://github.com/odin-loki/Cypha/releases/latest)**.
+Prebuilt installers: **[GitHub Releases — latest (`v2.3.24`)](https://github.com/odin-loki/Cypha/releases/tag/v2.3.24)**.
 
 ```bash
 # Linux CLI tarball
-tar xzf cypha-2.2.8-linux-x86_64.tar.gz && cd cypha-2.2.8-linux-x86_64 && bash install.sh
+tar xzf cypha-2.3.24-linux-x86_64.tar.gz && cd cypha-2.3.24-linux-x86_64 && bash install.sh
 
 # Linux Qt AppImage (no install step)
-chmod +x cypha-2.2.8-linux-x86_64.AppImage
-./cypha-2.2.8-linux-x86_64.AppImage
+chmod +x cypha-2.3.24-linux-x86_64.AppImage
+./cypha-2.3.24-linux-x86_64.AppImage
 ```
 
 ```powershell
-# Windows CLI zip
-Expand-Archive cypha-2.2.8-windows-x86_64.zip
-cd cypha-2.2.8-windows-x86_64
+# Windows CLI zip (MSVC)
+Expand-Archive cypha-2.3.24-windows-x86_64.zip
+cd cypha-2.3.24-windows-x86_64
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
@@ -82,10 +83,10 @@ export APPIMAGE_EXTRACT_AND_RUN=1
 
 ```bash
 # From repo root
-bash packaging/build_appimage.sh 2.2.8
+bash packaging/build_appimage.sh 2.3.24
 
 # Re-package from an existing CMake tree (e.g. CI build-release):
-SKIP_BUILD=1 bash packaging/build_appimage.sh 2.2.8 native/build-release dist
+SKIP_BUILD=1 bash packaging/build_appimage.sh 2.3.24 native/build-release dist
 ```
 
 Output: `dist/cypha-<ver>-linux-x86_64.AppImage`
@@ -93,11 +94,11 @@ Output: `dist/cypha-<ver>-linux-x86_64.AppImage`
 ### Run
 
 ```bash
-chmod +x dist/cypha-2.2.8-linux-x86_64.AppImage
-./dist/cypha-2.2.8-linux-x86_64.AppImage
+chmod +x dist/cypha-2.3.24-linux-x86_64.AppImage
+./dist/cypha-2.3.24-linux-x86_64.AppImage
 
 # Headless smoke (demo fixtures bundled when built from a full tree)
-./dist/cypha-2.2.8-linux-x86_64.AppImage --appimage-extract-and-run --smoke \
+./dist/cypha-2.3.24-linux-x86_64.AppImage --appimage-extract-and-run --smoke \
   usr/share/cypha/demo_fixtures/reference.cypha
 ```
 
@@ -116,7 +117,7 @@ Requires **Qt 6 installed natively on Windows** ([qt.io](https://www.qt.io/downl
 ```powershell
 # From repo root — configures, builds, and runs windeployqt
 powershell -ExecutionPolicy Bypass -File packaging\build_windows_bundle.ps1 `
-  -Version 2.2.8 `
+  -Version 2.3.24 `
   -WithFixtures
 
 # Package from an existing build:
@@ -130,8 +131,8 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows_bundle.ps1 `
 Output: `dist\cypha-<ver>-windows-qt\` containing `cypha_qt_shell.exe`, Qt DLLs, and optionally `cypha_rest.exe`.
 
 ```powershell
-dist\cypha-2.2.8-windows-qt\cypha_qt_shell.exe
-dist\cypha-2.2.8-windows-qt\cypha_qt_shell.exe --smoke share\demo_fixtures\reference.cypha
+dist\cypha-2.3.24-windows-qt\cypha_qt_shell.exe
+dist\cypha-2.3.24-windows-qt\cypha_qt_shell.exe --smoke share\demo_fixtures\reference.cypha
 ```
 
 Lower-level helper (same windeployqt pattern): [`native/scripts/package_windows_qt.ps1`](../native/scripts/package_windows_qt.ps1).

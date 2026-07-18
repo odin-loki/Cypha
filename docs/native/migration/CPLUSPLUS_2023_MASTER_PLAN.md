@@ -6,7 +6,7 @@
 
 
 
-**Current baseline:** 52 CTest, two blocking CI jobs (`build_and_test`, `windows_msvc`), GitHub Release installers.
+**Current baseline:** ~**160 CTest**, two blocking CI jobs (`build_and_test`, `windows_msvc`), GitHub Release installers (**v2.3.24**). See **`scripts/cypha_native_validate_all.ps1`** for authoritative tally.
 
 
 

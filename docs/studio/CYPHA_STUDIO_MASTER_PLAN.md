@@ -1,6 +1,6 @@
 # Cypha Studio — Master Plan (historical)
 
-> **Superseded (2026-05):** Native port milestones **M1–M6 are complete**. The C++/Qt shell (`cypha_qt_shell`) now covers training, registry, experiments, and REST orchestration. This document tracked the **PySide6 reference Studio** backlog before that cutover.
+> **Superseded (2026-05):** Native port milestones **M1–M6 are complete**. The C++/Qt shell (`cypha_qt_shell`) now covers training, registry, experiments, and REST orchestration. This document tracked the **PySide6 reference Studio** backlog before that cutover. The PySide6/Python golden UI path is **removed (P7)** — not a live product path.
 
 **Use instead:**
 

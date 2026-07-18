@@ -5,7 +5,7 @@
 Optional GPU path for **`cypha::accel`** (`native/src/accel_backend.cpp` + `accel_cuda.cu`).
 Without **`-DCYPHA_ENABLE_CUDA=ON`**, the same APIs use **ISO C++** `std::thread` row parallelism.
 
-**Python reference:** `cypha_accel/score_batch.py` — `project_features`, `fused_score_llr` (CuPy when available; NumPy CPU fallback). Native parity: **`score_batch_parity`**, CTest **`native_score_batch`**.
+**Native reference (P7):** `cypha_accel/` removed — use **`native/src/accel_cuda.cu`** + **`score_batch_parity`**, CTest **`native_score_batch`** for fused LLR parity vs `fixtures/score_batch/sidecar.json`.
 
 ## Requirements
 

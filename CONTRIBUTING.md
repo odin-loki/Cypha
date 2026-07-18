@@ -11,7 +11,11 @@
 **Manual build:**
 
 ```powershell
-# Windows — build outside OneDrive
+# Windows — MSVC Release (preferred; matches CI windows_msvc)
+cmake --preset windows-msvc-release
+cmake --build native/build-windows-msvc --config Release --parallel
+
+# Or Ninja + MSVC outside OneDrive
 cmake -S native -B C:\Temp\cypha_build -DCMAKE_BUILD_TYPE=Release -G Ninja
 cmake --build C:\Temp\cypha_build --parallel
 ```
@@ -27,7 +31,7 @@ Optional CMake flags: **`-DCYPHA_ENABLE_CUDA=ON`**, **`-DCYPHA_BUILD_QT=ON`**, *
 ## Native production gate (required after C++ changes)
 
 ```powershell
-# Windows — full gate: rebuild + 52 CTests + bench smoke + tune dry-run + REST smoke
+# Windows — full gate: rebuild + ~160 CTests + bench smoke + tune dry-run + REST smoke
 powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
@@ -70,7 +74,7 @@ ctest --test-dir native/build --output-on-failure
 
 Without **`libsqlite3-dev`**, CMake skips **`experiment_db_smoke`**; other CTest targets still build.
 
-**Windows `.exe` from WSL (MinGW):** `powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1` (add **`-AllTargets`** for every `*.exe`).
+**Windows (optional — not CI/release gate):** MinGW cross-build from WSL: `powershell -File native/scripts/build_cypha_rest_mingw_wsl.ps1` (add **`-AllTargets`** for every `*.exe`). Prefer **MSVC** presets above for local validation and release parity.
 
 **MoE sidecar:** `fixtures/regression_head.json`. See **`docs/port/PORT_CONTRACT.md`** §3.
 

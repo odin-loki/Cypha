@@ -8,7 +8,7 @@ Honest snapshot for **native production**. “Debugged” here means *automated 
 
 | Layer | What runs | Count / notes |
 |--------|-----------|----------------|
-| **`ctest -R native_`** | `cypha_core` math, encoders, regressors, save/load, parity fixtures, REST/Qt smokes | **52+** CTests (see `ctest -N` on your build tree) |
+| **`ctest -R native_`** | `cypha_core` math, encoders, regressors, save/load, parity fixtures, REST/Qt smokes | **~160 CTests** (see **`scripts/cypha_native_validate_all.ps1`** for authoritative tally; or `ctest -N` on your build tree) |
 | **`cypha_parity`** | Reload `.cypha`, numeric targets vs `expected.npz`, Tier-1 context | CTest **`native_parity`** |
 | **`native/scripts/smoke_cypha_rest_mingw.ps1`** | Subprocess `cypha_rest` vs parity fixtures | REST smoke (set **`CYPHA_REST_BIN`**) |
 | **`cypha_diagnostics_run`** | Phases 1–4 orchestration over parity exes | CTest **`native_diagnostics_run`** |
@@ -17,7 +17,7 @@ Honest snapshot for **native production**. “Debugged” here means *automated 
 
 **GUI smoke (optional Qt build):** `ctest --test-dir native/build -R native_qt --output-on-failure` with **`QT_QPA_PLATFORM=offscreen`**.
 
-GitHub Actions **CI** (`.github/workflows/ci.yml`): **two blocking jobs** — **`build_and_test`** (Ubuntu: cmake + **`ctest -R native_`**) and **`windows_msvc`** (native MSVC Release on `windows-latest`).
+GitHub Actions **CI** (`.github/workflows/ci.yml`): **two blocking jobs** — **`build_and_test`** (Ubuntu: cmake + **`ctest -R native_`**) and **`windows_msvc`** (native MSVC Release on `windows-latest`). MinGW is optional local only — not a CI gate.
 
 **CyphaLM (research):** `ctest --test-dir native/build -R native_cyphalm --output-on-failure` locally when changing LM native code.
 
@@ -36,7 +36,7 @@ See [`fixtures/README.md`](../../fixtures/README.md) and the table in prior revi
 
 1. **Full GPU training** — not implemented; optional CUDA accel for fused LLR when built with **`-DCYPHA_ENABLE_CUDA=ON`**.
 2. **Real-data profiling** — use native bench/tune binaries on your CSV dumps.
-3. **CUDA CI** — not in GitHub Actions; build locally with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`**; device benchmarks remain manual.
+3. **CUDA CI** — not in GitHub Actions and not planned; build locally with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`**; device benchmarks remain manual.
 
 ## Green bar (keep this clean)
 

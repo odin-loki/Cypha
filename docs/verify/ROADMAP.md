@@ -19,7 +19,7 @@ The **committed parity fixtures** and **PORT_CONTRACT** are the spec. The **prod
 | Preprocessor fit from Qt (scale + PCA) | ✅ `fit_from_design_matrix` + save `preprocessor.json` |
 | Experiments DB (SQLite, M6) | ✅ `experiment_db_crud`, Qt M6 panel |
 | Autoregressive / generation path | ✅ native `generation_parity`, CTest |
-| Test suite | ✅ **52+ CTest** (`ctest -R native_`) — GitHub Actions two blocking jobs (`build_and_test`, `windows_msvc`) |
+| Test suite | ✅ **~160 CTest** (`ctest -R native_`) — GitHub Actions two blocking jobs (`build_and_test`, `windows_msvc`) |
 
 ---
 
@@ -46,7 +46,7 @@ Committed CTests green: inference vs fixtures, `score_matrix` modes, preprocesso
 
 ## Phase 3 — GPU (native accel) ✅
 
-Native **`cypha::accel`**: optional **CUDA** (`-DCYPHA_ENABLE_CUDA=ON`) or parallel CPU. CI CUDA jobs compile smoke on CPU threads when no GPU is present.
+Native **`cypha::accel`**: optional **CUDA** (`-DCYPHA_ENABLE_CUDA=ON`) or parallel CPU. **CUDA is local-only** — no GitHub Actions CUDA jobs; validate on your own machine before merging accel changes.
 
 ---
 
@@ -58,7 +58,7 @@ All milestones complete — see [`PORT_FULL_STACK.md`](../port/PORT_FULL_STACK.m
 
 ## Phase 5 — Current engineering horizon
 
-Kernel LLR (Nyström) shipped in C++ with **`xor_kernel_bench`** (+10.6 pp XOR gain at M=256). Secondary priorities: CUDA CI device runner, Qt polish, packaged binaries, web UI, multi-model serving — [`docs/FUTURE.md`](../FUTURE.md).
+Kernel LLR (Nyström) shipped in C++ with **`xor_kernel_bench`** (+10.6 pp XOR gain at M=256). Secondary priorities: Qt polish, packaged binaries, web UI, multi-model serving — [`docs/FUTURE.md`](../FUTURE.md). (CUDA CI is not on the horizon — local-only policy.)
 
 ---
 
@@ -68,7 +68,7 @@ Native **`cypha_lm_native`** / **`cyphalm_bench_native`**. Local gate: `ctest --
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **D17 held-out BPC** | **4.50** | Gutenberg; bigram baseline 3.69 |
+| **D17 held-out BPC** | **2.873** | Canonical hybrid pin @ 300k (`bench/BASELINE_LOCK.json`); see [`RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) |
 | **D04 “33.2 bpc”** | benchmark bug | Wrong prob indexing on legacy D04 path — not CyphaLM |
 
 See [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) and [`CHANGELOG.md`](../../CHANGELOG.md).

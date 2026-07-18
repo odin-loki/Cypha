@@ -1,5 +1,7 @@
 # Product adjust closeout — bounded profile wave (2026-07-17)
 
+> **Superseded (2026-07-18):** Overnight + d38 certificate shipped; see [`CONTINUUM_CLOSEOUT_2026-07-18.md`](CONTINUUM_CLOSEOUT_2026-07-18.md) and release **[v2.3.24](https://github.com/odin-loki/Cypha/releases/tag/v2.3.24)**.
+
 **Author:** Odin Loch (agent closeout)  
 **Scope:** Summarize what landed in the bounded **product/profile adjust** wave vs what remains blocked on overnight or multi-day research.  
 **Repo HEAD at closeout:** `4d5dbbf` (code); this doc is docs-only follow-up.  
