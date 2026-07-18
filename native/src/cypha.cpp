@@ -224,7 +224,7 @@ bool Cypha::load(const std::string& cypha_path, const std::string& preprocessor_
   KernelMemory km(d, 256, 0);
   bool use_k = false;
   double blend = 0.5;
-  if (try_load_kernel_from_root(root, km, use_k, blend)) {
+  if (try_load_kernel_from_root(root_, km, use_k, blend)) {
     kernel_mem_ = std::make_unique<KernelMemory>(std::move(km));
     use_kernel_llr_ = use_k;
     kernel_blend_ = blend;

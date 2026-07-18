@@ -107,7 +107,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
 CyphaLMConfig config_from_json(const nlohmann::json& c) {
     CyphaLMConfig cfg;
     // Checkpoints that predate One Cypha omit unified/PGM keys. Start from legacy
-    // (hybrid-era) defaults so missing keys do not inherit living PGM→Wy struct defaults.
+    // (hybrid-era) defaults so missing keys do not inherit product U06/PGM settings.
     cfg.context_mode = ContextMode::Hybrid;
     cfg.use_unified_context = false;
     cfg.unified_context_source = UnifiedContextSource::None;

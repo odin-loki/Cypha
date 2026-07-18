@@ -83,8 +83,9 @@ struct CyphaLMConfig {
     int gria_rank = 32;
 
     int context_length = 256;
-    /// Living product default: PGM→Wy spine (U06). Hybrid remains available via ``--mode hybrid``.
-    ContextMode context_mode = ContextMode::PgmLogits;
+    /// Bare ``CyphaLMConfig`` defaults Hybrid for benches; product/Cypha entry points apply U06 via
+    /// ``apply_pgm_logits_recipe`` / ``apply_cell_variant("U06")``.
+    ContextMode context_mode = ContextMode::Hybrid;
     int ngram_context = 2;
     int train_epochs = 1;
     std::string view_schedule = "same_order";
@@ -150,7 +151,7 @@ struct CyphaLMConfig {
     std::string bpe_merges_path;
     std::string bpe_vocab_path;
 
-    /// Cell hypothesis testbench id (e.g. ``U06``); empty = use struct defaults (PGM→Wy).
+    /// Cell hypothesis testbench id (e.g. ``U06``); empty = bare struct defaults (Hybrid / D17).
     std::string cell_variant;
     /// H02/H17: Sheffer ``eml()`` activations in char-LSTM gates.
     bool use_eml_activation = false;
@@ -185,11 +186,11 @@ struct CyphaLMConfig {
     /// H22: algebraic fingerprint tag mixed into GRIA input.
     bool use_algebraic_fingerprint = false;
     /// H23: Plastic Graph Machine (PGM) hierarchical sparse slot-graph cell.
-    bool use_pgm_cell = true;
+    bool use_pgm_cell = false;
     /// U01–U10: enforce one context carrier + one readout (off = legacy dual-head D17).
-    bool use_unified_context = true;
-    UnifiedContextSource unified_context_source = UnifiedContextSource::Pgm;
-    UnifiedReadout unified_readout = UnifiedReadout::PgmWy;
+    bool use_unified_context = false;
+    UnifiedContextSource unified_context_source = UnifiedContextSource::None;
+    UnifiedReadout unified_readout = UnifiedReadout::None;
     /// PGM branching factor b (N ≈ n_sub^levels); hierarchical log-N address.
     int pgm_n_sub = 8;
     /// PGM hierarchy depth L.
