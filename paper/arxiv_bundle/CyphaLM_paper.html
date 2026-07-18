@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CyphaLM</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">CyphaLM</h1>
+</header>
+<h1
+id="cyphalm-explicit-compression-uncertainty-and-self-organisation-for-online-language-modelling">CyphaLM:
+Explicit Compression, Uncertainty, and Self-Organisation for Online
+Language Modelling</h1>
+<p><strong>Author:</strong> Odin Loch <strong>Status:</strong> Draft —
+rewritten 2026-07-12; <strong>narrative reconciled 2026-07-17</strong>
+against canonical D17 hybrid 300k BPC pin <strong>2.873</strong>
+(<code>b0d39e7</code>, <a
+href="../docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md"><code>docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md</code></a>).
+Describes the current <strong>native C++</strong> CyphaLM (hybrid
+GRIA+LSTM, trained by real backpropagation). The Python prototype this
+paper originally described (<code>cypha_lm/</code>) was fully
+decommissioned in Phase P7 (see <code>CHANGELOG.md</code>, “[Unreleased]
+&gt; Removed”: <em>“Python runtime decommissioned (P7): …
+<code>cypha_lm/</code> … removed from the product path. Native C++ … is
+the sole runtime.”</em>). Metrics below are sourced from
+<code>bench/BASELINE_LOCK.json</code>,
+<code>bench/BASELINE_REPORT.md</code>, and
+<code>docs/RESEARCH_STATUS.md</code>; every figure/table is annotated
+with its source, and any claim that could not be re-verified against the
+native implementation is explicitly flagged rather than carried over
+from the old draft. <strong>Canonical rule:</strong> cite
+<strong>2.873</strong> for the locked baseline, production gate, and
+RPSM stop/go target; other 300k hybrid figures (2.892, 2.864, etc.) are
+historical run artifacts only.</p>
+<hr />
+<h2 id="abstract">Abstract</h2>
+<p>Conventional neural language models entangle lossy distribution
+compression, lossless residual encoding, statistical density estimation,
+and self-organised feature discovery in a single optimisation process.
+<strong>CyphaLM</strong> keeps each mechanism as a separate, named
+subsystem — <strong>Izaac</strong> GF(2^n) fixed-embedding lookup (zero
+trainable embedding parameters, structurally collision-free by
+construction), <strong>CellAI</strong> multi-scale state-space temporal
+layer (O(1) recurrent state update per token), <strong>CyphaDIF</strong>
+Normal-Inverse-Gamma (NIG) expert field (explicit epistemic/aleatoric
+uncertainty decomposition, optionally kernel-LLR-blended routing), and a
+<strong>GRIA</strong> low-rank alpha-projection output head — but,
+unlike the Python prototype this paper originally described, the current
+native C++ implementation (<code>native/src/cyphalm/</code>) trains all
+of these end-to-end with <strong>real gradient descent /
+backpropagation</strong> (truncated BPTT on the char-LSTM head,
+cross-entropy gradient steps on GRIA’s low-rank factors and per-token α,
+and a windowed BPTT update on the SSM projection), not a gradient-free
+NumPy scheme. GRIA’s output is blended, at the logit level via a learned
+sigmoid weight, with a parallel trainable character-level LSTM head; the
+model is referred to internally as <strong>“hybrid GRIA+LSTM.”</strong>
+On the D17 benchmark (WikiText-2, official train/valid split, 300k
+training characters), this hybrid model achieves <strong>2.873
+bits-per-character (BPC)</strong> held out, beating a bigram baseline
+(<strong>3.478</strong>, Δ −0.61) and a trigram baseline
+(<strong>4.398</strong>, Δ −1.53); a plain (non-hybrid) char-LSTM
+baseline trained under the same harness reaches 2.979 BPC, i.e. the
+hybrid’s advantage over n-gram baselines is real but the model’s own
+learned blend weight assigns roughly <strong>99.6% of the logit mix to
+the LSTM branch</strong>, so at the current operating point the
+GRIA/SSM/DIF pathway is contributing comparatively little of the
+headline win. Online domain adaptation reduces held-out BPC by roughly
+<strong>0.25–0.29</strong> on out-of-distribution WikiText text.
+Single-threaded production training throughput is <strong>252.2
+characters/second</strong> (MSVC, 2026-07-12 profiling pass). An
+intelligence-profile instrumentation hook computes a composite
+criticality score **κ = 1 − (1/7)·Σ|Pᵢ − P*ᵢ|** over seven statistics
+(α, D_eff, σ_branch, τ, r_eu, Lipschitz, calibration); at 5,000-step
+ablation scale κ rises from 0.826 (no auxiliary loss) to 0.870 with the
+<code>--math-integration</code> profile-guided navigation loss enabled,
+still short of the internal target κ≈0.89. Several of the old draft’s
+headline numbers (Izaac kNN accuracy, expert purity, toy-vocabulary
+perplexity, transformer parameter-efficiency comparison) were specific
+to the now-removed Python prototype and could not be reproduced against
+the native implementation within this rewrite’s scope; they are reported
+below as historical, superseded values, not current results.</p>
+<p><strong>Key results (native, 2026-07-12):</strong></p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 34%" />
+<col style="width: 22%" />
+<col style="width: 20%" />
+<col style="width: 22%" />
+</colgroup>
+<thead>
+<tr>
+<th>Experiment</th>
+<th>Metric</th>
+<th>Value</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D17 (WikiText-2, 300k train)</td>
+<td>Hybrid GRIA+LSTM held-out BPC (pinned)</td>
+<td><strong>2.873</strong></td>
+<td><code>bench/BASELINE_LOCK.json:d17_hybrid_baseline</code></td>
+</tr>
+<tr>
+<td>D17 (WikiText-2, 300k train)</td>
+<td>Native build6 sweep BPC (historical)</td>
+<td>2.892</td>
+<td><code>docs/native/CYPHALM_NATIVE_BENCH_RESULTS.jsonl</code></td>
+</tr>
+<tr>
+<td>D17 (WikiText-2, 300k train)</td>
+<td>Overnight native run BPC (historical sweep, not lock)</td>
+<td>2.864</td>
+<td><code>bench/BASELINE_LOCK.json:overnight_results</code></td>
+</tr>
+<tr>
+<td>D17 baselines @ 300k</td>
+<td>Bigram / Trigram / char-LSTM-only</td>
+<td>3.478 / 4.398 / 2.979</td>
+<td><code>docs/RESEARCH_STATUS.md</code> “Language model (D04 +
+D17)”</td>
+</tr>
+<tr>
+<td>D17 ablation</td>
+<td>GRIA-only stack (no LSTM) BPC</td>
+<td>3.838</td>
+<td><code>docs/RESEARCH_STATUS.md</code></td>
+</tr>
+<tr>
+<td>D17D online adaptation</td>
+<td>ΔBPC on OOD WikiText text</td>
+<td>≈ −0.25 to −0.29 (two runs cited)</td>
+<td><code>docs/RESEARCH_STATUS.md</code> (Confirmed-properties table:
+−0.250; post-upgrade table: −0.288)</td>
+</tr>
+<tr>
+<td>D21 RPSM (alternative sequence layer)</td>
+<td>Held-out BPC @ 300k</td>
+<td>7.336 (far behind hybrid)</td>
+<td><code>bench/BASELINE_LOCK.json:rpsm_results</code></td>
+</tr>
+<tr>
+<td>Math-integration ablation @ 5k steps</td>
+<td>BPC / κ, baseline → with <code>--math-integration</code></td>
+<td>4.001/0.826 → 3.983/0.870</td>
+<td><code>bench/BASELINE_LOCK.json:math_integration_results</code></td>
+</tr>
+<tr>
+<td>Training throughput</td>
+<td>Single-threaded chars/sec (production D17 config)</td>
+<td>252.2</td>
+<td><code>docs/reports/PERFORMANCE_PROFILE_2026-07-12.md</code></td>
+</tr>
+<tr>
+<td>CellAI SSM diagnostic</td>
+<td>λ_fast / λ_slow decay rates, no state collapse/explosion</td>
+<td>0.3679 / 0.9512, checks passed</td>
+<td><code>bench/BASELINE_REPORT.md</code> D17
+<code>ssm_diagnose</code></td>
+</tr>
+<tr>
+<td>Task routing / discovery (closest current native analogue to “expert
+purity”)</td>
+<td>Adjusted Rand Index</td>
+<td>1.000</td>
+<td><code>docs/RESEARCH_STATUS.md</code> D16A (a classification task,
+not LM expert routing — see §3.3)</td>
+</tr>
+<tr>
+<td>Shared-model continual learning</td>
+<td>Forgetting score (NOT zero-forgetting)</td>
+<td>0.813</td>
+<td><code>docs/RESEARCH_STATUS.md</code> D16B</td>
+</tr>
+<tr>
+<td>Per-task-isolated continual learning</td>
+<td>Forgetting score</td>
+<td>0.000</td>
+<td><code>docs/RESEARCH_STATUS.md</code> D16F</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Superseded (Python-prototype-only, not re-verified on native
+— see §3 and §5 for details):</strong> Izaac kNN accuracy 0.0125,
+GF-rank Spearman 0.1434, synthetic 2-topic expert purity 1.0000,
+toy-vocabulary perplexity 12.9032, code-corpus 0.6146 bits/char,
+NIG-vs-dropout ECE calibration, and the transformer parameter-efficiency
+comparison (Fig. 10). These numbers live only in
+<code>paper/figures/exp0N_*.json</code>, which are historical artifacts
+of the decommissioned Python stack (<code>cypha_lm/</code>); see the
+per-section notes below for what, if anything, the native implementation
+has as a current equivalent.</p>
+<hr />
+<h2 id="introduction">1. Introduction</h2>
+<h3 id="four-mechanisms-in-neural-networks">1.1 Four mechanisms in
+neural networks</h3>
+<p>Lossy compression (GRIA α → 1), lossless residual channel (epistemic
+uncertainty), statistical P(Y|X) approximation, and self-organisation at
+the edge of chaos (α ≈ 0.5). This framing is unchanged from the original
+draft; it motivates the subsystem split, independent of which runtime
+implements it.</p>
+<h3 id="limitations-of-entangled-mechanisms">1.2 Limitations of
+entangled mechanisms</h3>
+<p>Opacity, parameter inefficiency, no calibrated uncertainty,
+catastrophic forgetting. <strong>Update:</strong> the native
+implementation’s own bench results now directly confirm the forgetting
+risk for at least one configuration — D16B measures <strong>81.3%
+forgetting</strong> in a shared-model multi-task setting, refuting an
+earlier “zero forgetting” claim for that regime. Zero forgetting is
+confirmed only for per-task-isolated model files (D16F, D16E) — see §5.8
+and §6.4.</p>
+<h3 id="cyphalm-thesis">1.3 CyphaLM thesis</h3>
+<p>Explicit, named mechanisms are more efficient and interpretable than
+an entangled end-to-end network — <strong>and</strong>, contrary to the
+original draft’s framing, explicit mechanisms are not incompatible with
+gradient-based training: the native CyphaLM trains every one of its four
+subsystems (SSM, DIF, GRIA, LSTM) via real backpropagation while keeping
+them as separately-inspectable modules (separately loggable κ/D_eff/BPC
+statistics via the intelligence-profiler hook, separate ablation
+switches in <code>cyphalm_config.hpp</code>, separate checkpoint
+sections). The “explicit” claim is about modularity and instrumentation,
+not about avoiding gradients.</p>
+<hr />
+<h2 id="background">2. Background</h2>
+<ul>
+<li>2.1 Compression-based learning (MDL, GRIA-NMP)</li>
+<li>2.2 Normal-Inverse-Gamma posteriors (implemented natively in
+<code>cyphalm_nig_expert.hpp</code> /
+<code>nig_state_cell.hpp</code>)</li>
+<li>2.3 State space models (O(n) sequence advantage; native CellAI
+implementation gives O(1) <em>per-token</em> recurrent update, see
+§3.2)</li>
+<li>2.4 Grand Unified Law: α = 1 − H(f(X)) / H(X) (native alpha-spectrum
+instrumentation: <code>cyphalm_alpha_spectrum.hpp</code>,
+<code>ssm_diagnose.hpp</code>)</li>
+</ul>
+<p>This background is conceptually unchanged; all four cited constructs
+still exist in the native codebase under the same names.</p>
+<hr />
+<h2 id="cyphalm-architecture">3. CyphaLM Architecture</h2>
+<p>The native pipeline
+(<code>native/include/cypha/cyphalm/cyphalm_model.hpp</code>) is: token
+→ <strong>Izaac</strong> fixed embedding (feeds the SSM path) →
+<strong>CellAI</strong> SSM → <strong>CyphaDIF</strong> expert field →
+<strong>GRIA</strong> low-rank projection head, whose output logits are
+blended at the logit level (learned sigmoid weight
+<code>hybrid_blend_logit</code>) with a parallel, separately-embedded,
+trainable <strong>char-LSTM</strong> head. All trainable components are
+updated by gradient descent every character step
+(<code>CyphaLMModel::train_step</code>).</p>
+<h3 id="izaac-gf2n-embeddings">3.1 Izaac GF(2^n) embeddings</h3>
+<p><strong>Current status: exists, same name and construction, in
+<code>native/src/cyphalm/embed_table.cpp</code>
+(<code>EmbedTable</code>).</strong> Token IDs are mapped through a
+GF(2^n) permutation polynomial (irreducible-polynomial multiplication +
+a coprime exponent, matching the construction
+<code>galois.GF(2**n)</code> used historically) into a fixed lookup
+table generated once at construction and never updated by gradient
+descent — it genuinely has <strong>zero trainable parameters</strong>,
+feeding the CellAI SSM input. (Note: the char-LSTM head has its own,
+separate, <em>trainable</em> embedding table <code>E</code>; only the
+Izaac/SSM path is parameter-free.)</p>
+<p><strong>Collision rate:</strong> because the underlying map is a
+bijection over GF(2^n) (the exponent is chosen to be coprime with the
+multiplicative group order, guaranteeing an injective — hence
+collision-free — mapping for any set of token IDs smaller than the field
+size), a collision rate of <strong>0.0 is a structural guarantee of the
+construction, not merely an empirical measurement</strong> — this
+actually strengthens, not contradicts, the old draft’s “collision rate =
+0.0” claim.</p>
+<p><strong>kNN accuracy 0.0125 / GF-rank Spearman 0.1434:</strong> these
+are specific to the old Python prototype’s evaluation harness
+(nearest-neighbour semantic-proximity probe on a 512-token vocabulary;
+see <code>paper/figures/exp01_embedding_metrics.json</code>) and have
+<strong>not been re-measured against the native implementation</strong>.
+Native Izaac is not designed to preserve semantic proximity between
+tokens — it is an explicit, structured, zero-parameter substitute for a
+learned embedding, not a semantic one — so this specific metric may not
+even be the right one to re-measure; we flag it as <strong>not
+re-verified / possibly not meaningful for the current design
+goal</strong>, rather than repeating the old number as current.</p>
+<p><em>(Historical figure:
+<code>paper/figures/exp01_embedding_metrics.json</code> —
+Python-prototype-only; no native re-measurement exists yet.)</em></p>
+<h3 id="cellai-ssm-temporal-layer">3.2 CellAI SSM temporal layer</h3>
+<p><strong>Current status: exists, same name, in
+<code>native/src/cyphalm/cellai_ssm.cpp</code>
+(<code>CellAISSM</code>).</strong> A multi-scale rank-2 SSM with
+separate fast/slow tracks per layer, optional spectral-PDE circulant
+state transition, and optional sparse Hebbian/temporal-SOM extensions.
+Each token step is a single fixed-size recurrent state update
+(<strong>O(1) per token</strong>, matching the original claim), not a
+full-sequence O(n) reprocessing pass.</p>
+<p><strong>Current native measurement</strong> (D17
+<code>ssm_diagnose</code> probe, <code>bench/BASELINE_REPORT.md</code>):
+fast/slow decay rates λ_fast = 0.3679, λ_slow = 0.9512; state-norm
+checks pass (<code>checks_passed: true</code>, no collapse or explosion
+in fast/slow/context tracks over a 128-step probe); GRIA
+field-projection is connected to routing
+(<code>projection.connected_to_routing: true</code>). This is a real,
+current, native measurement — unlike the old draft’s <code>N/A</code>
+placeholder for this row.</p>
+<p><em>(Historical figure:
+<code>paper/figures/exp02_ssm_metrics.json</code> compares a
+Python-prototype CellAI against an RNN/transformer on tiny synthetic
+sequences up to length 100 — not reproduced natively; no native
+RNN/transformer comparison exists in this repo.)</em></p>
+<h3 id="cyphadif-expert-field">3.3 CyphaDIF expert field</h3>
+<p><strong>Current status: exists, same name, in
+<code>native/src/cyphalm/cyphalm_dif.cpp</code> (<code>CyphaDIF</code>)
++ <code>cyphalm_nig_expert.hpp</code>.</strong> Routes the SSM field
+through NIG experts, producing an explicit epistemic/aleatoric variance
+decomposition per prediction; optionally blends its linear-LLR routing
+softmax with a <code>KernelMemory</code> Nyström (or RFF) kernel score
+(<code>use_kernel_llr</code>, shipped as “H04”).</p>
+<p><strong>Expert purity 1.00 (old claim):</strong> this number came
+from a synthetic two-topic Python routing benchmark that has no direct
+analogue in the current native LM bench domains. <strong>We could not
+re-verify it as stated.</strong> The closest current native measurement
+of routing/discrimination quality is <strong>D16A task discovery,
+Adjusted Rand Index = 1.000</strong>
+(<code>docs/RESEARCH_STATUS.md</code>) — but that is a
+<em>classification</em> continual-learning benchmark, not the LM
+character-routing task the old “purity” number described, so it is cited
+here as supporting evidence that CyphaDIF’s routing <em>can</em> be
+perfect on a well-separated task, not as a direct replacement metric.
+Within the D17/D04 language-modelling domains specifically, the
+alpha-spectrum probe (§3.4) currently reports
+<strong><code>n_experts = 1</code></strong> — i.e. only one expert is
+active in the production hybrid config. D17B diagnostics
+(<code>docs/reports/D17B_EXPERT_REPORTING_2026-07-12.md</code>, shipped
+<code>e6d95d2</code>) established this is <strong>genuine novelty-gated
+dynamics</strong> on the default cold-start profile (not a warm-start
+reporting bug): field inputs rarely trigger a second expert, so a single
+dominant expert is the expected operating point at current mean α ≈
+0.095.</p>
+<p><em>(Historical figure:
+<code>paper/figures/exp03_experts_metrics.json</code> — Python-prototype
+synthetic 2-topic corpus; not reproduced natively.)</em></p>
+<h3 id="gria-alpha-projection">3.4 GRIA alpha-projection</h3>
+<p><strong>Current status: exists, same name, in
+<code>native/src/cyphalm/gria_lowrank.cpp</code>
+(<code>GRIALowRank</code>) — and, unlike the old draft’s framing, it is
+trained by real gradient descent.</strong> Logits are
+<code>alpha_k * z_k + (1 - alpha_k) * bias_k</code>, where
+<code>z = V^T @ (U^T @ v)</code> is a rank-32 low-rank factorization and
+<code>alpha</code> is a per-vocabulary-token, independently learnable
+parameter (<code>alpha_learnable = true</code>) updated every step via
+<code>GRIALowRank::train_step</code>’s cross-entropy gradient
+(<code>cross_entropy_gradients</code> → <code>update_weights</code> /
+<code>update_alpha</code> / <code>update_bias</code>), not an online
+non-gradient rule.</p>
+<p><strong>Current native alpha-spectrum measurement:</strong>
+<code>docs/RESEARCH_STATUS.md</code>’s post-upgrade note reports
+<strong>mean α ≈ 0.095</strong> for the production hybrid model — “still
+low alpha; 1 active expert” — versus an earlier (2026-06-13,
+pre-upgrade) <code>bench/BASELINE_REPORT.md</code> D17B snapshot of mean
+α = 0.4981, fraction-edge-of-chaos = 0.9961 (<code>n_experts = 1</code>
+in both cases). We report both, dated, rather than picking one: the
+model’s α spectrum has shifted over successive training-recipe changes
+and the most current (post-upgrade) reading is the low one. Combined
+with §3.3’s <code>n_experts=1</code> and the abstract’s “99.6% LSTM
+blend weight” finding, the honest current picture is that <strong>GRIA’s
+own compression/expert-richness signal is currently under-expressed in
+the production hybrid configuration</strong> relative to the char-LSTM
+branch it is blended with.</p>
+<p><em>(Historical figure:
+<code>paper/figures/exp04_alpha_metrics.json</code> — Python-prototype
+edge-of-chaos histogram at synthetic checkpoints; not reproduced
+natively at the same checkpoints.)</em></p>
+<h3 id="end-to-end-pipeline">3.5 End-to-end pipeline</h3>
+<p>Token → Izaac (fixed, feeds SSM) → CellAI SSM → CyphaDIF (routing +
+NIG uncertainty) → GRIA low-rank α-head, <strong>blended at the logit
+level with a parallel trainable char-LSTM head via a learned sigmoid
+weight</strong> → P(next token). Trained end-to-end by gradient descent:
+char-LSTM via truncated BPTT-1 (<code>CharLSTMHead::backward</code>),
+GRIA via cross-entropy gradient steps, SSM projection via a windowed
+BPTT update (<code>CyphaLMModel::bptt_ssm_update</code>). This is the
+single largest architectural change versus the original draft: the
+pipeline shape is recognisable, but the training mechanism is not
+gradient-free.</p>
+<hr />
+<h2 id="theoretical-properties">4. Theoretical Properties</h2>
+<ul>
+<li>4.1 Epistemic variance bounds lossless residual mass</li>
+<li>4.2 Per-token inference is O(1) in the recurrent state size (not
+full-sequence O(n) reprocessing) — confirmed for the native CellAI SSM
+(§3.2); training remains sequential (each step depends on the previous
+hidden state) and is not GPU-parallelisable without an algorithmic
+change (<code>docs/reports/PERFORMANCE_PROFILE_2026-07-12.md</code>
+§5).</li>
+<li>4.3 Bounded expert creation — native <code>max_experts</code> cap in
+<code>CyphaDIF</code>; current production LM configuration reports a
+single active expert (§3.3), so this bound is not being stress-tested at
+its current operating point.</li>
+<li>4.4 α ≈ 0.5 maximises bits-per-parameter — the current production
+hybrid model’s measured mean α (≈0.095, §3.4) is well below this target,
+an open gap rather than a confirmed property.</li>
+</ul>
+<hr />
+<h2 id="experiments">5. Experiments</h2>
+<p>All experiments below are re-grounded in current native bench results
+(<code>bench/BASELINE_LOCK.json</code>,
+<code>bench/BASELINE_REPORT.md</code>,
+<code>docs/RESEARCH_STATUS.md</code>) as of 2026-07-12. Where no native
+equivalent experiment exists, this is stated explicitly rather than
+silently keeping the old number.</p>
+<h3 id="embedding-benchmark-historical-fig.-1">5.1 Embedding benchmark
+(historical Fig. 1)</h3>
+<p>See §3.1. <strong>Not re-measured natively.</strong> Old
+Python-prototype values (kNN accuracy 0.0125 for Izaac vs. 0.0025 random
+/ 0.0100 frequency-init learned, collision rate 0.0 for all three) are
+historical only; the collision-rate-zero property is, however,
+independently re-derivable as a structural guarantee of the current
+native GF(2^n) construction (§3.1).</p>
+<h3 id="ssm-sequence-capacity-historical-fig.-2">5.2 SSM sequence
+capacity (historical Fig. 2)</h3>
+<p><strong>Not re-measured natively</strong> as an
+RNN/transformer-vs-CellAI lag-accuracy sweep. The current native
+equivalent evidence is the <code>ssm_diagnose</code> probe (§3.2):
+fast/slow decay rates well-separated (0.3679 / 0.9512), no state
+collapse/explosion over a 128-step probe on the production D17
+model.</p>
+<h3 id="expert-self-organisation-historical-fig.-3">5.3 Expert
+self-organisation (historical Fig. 3)</h3>
+<p><strong>Not re-measured natively</strong> on an equivalent synthetic
+two-topic corpus. See §3.3 for the closest current native evidence (D16A
+routing ARI = 1.000, a different task) and the confirmed
+<code>n_experts=1</code> genuine-dynamics finding on D17B.</p>
+<h3 id="alpha-spectrum-emergence-historical-fig.-4">5.4 Alpha spectrum
+emergence (historical Fig. 4)</h3>
+<p>Current native measurement: mean α ≈ 0.095 (post-upgrade production
+config) vs. 0.4981 (2026-06-13 pre-upgrade snapshot); see §3.4 for full
+discussion. This <em>is</em> now a current, cited, native number — the
+old draft’s <code>N/A</code> placeholder is resolved, but the resolved
+value shows a gap against the α≈0.5 theoretical target (§4.4), not a
+confirmation of it.</p>
+<h3 id="language-modelling-d04-gutenberg-d17-wikitext-2">5.5 Language
+modelling (D04 Gutenberg / D17 WikiText-2)</h3>
+<p>Replaces the old draft’s “toy vocabulary” and “code corpus”
+Python-prototype experiments
+(<code>paper/figures/exp05_toy_lm_metrics.json</code>,
+<code>exp06_code_lm_metrics.json</code>), which have no equivalent in
+the current native bench domains and are not carried forward as current
+results.</p>
+<p><strong>D17 WikiText-2, held-out BPC by training scale and context
+mode</strong> (<code>docs/RESEARCH_STATUS.md</code> “Language model (D04
++ D17)”):</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>Train scale</th>
+<th>Context mode</th>
+<th>CyphaLM</th>
+<th>Bigram</th>
+<th>Trigram</th>
+<th>Char-LSTM baseline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>40k</td>
+<td><code>gria_ngram</code></td>
+<td>4.154</td>
+<td>3.914</td>
+<td>4.398</td>
+<td>—</td>
+</tr>
+<tr>
+<td>300k</td>
+<td><code>hybrid_gria_lstm</code> (production)</td>
+<td><strong>2.873</strong></td>
+<td>3.478</td>
+<td>4.398</td>
+<td>2.979</td>
+</tr>
+<tr>
+<td>300k</td>
+<td><code>gria_ngram</code> (GRIA-only ablation)</td>
+<td>3.838</td>
+<td>3.478</td>
+<td>4.398</td>
+<td>2.979</td>
+</tr>
+</tbody>
+</table>
+<p>D04 Gutenberg (Moby Dick fallback) shows the same qualitative
+pattern: 300k hybrid BPC 2.993 vs. bigram 3.633, trigram 3.424 (trigram
+beats bigram here; hybrid still ahead of both). <strong>The production
+hybrid model beats bigram and trigram baselines and a dedicated
+char-LSTM baseline</strong> on WikiText-2 at 300k training characters —
+a materially different and better result than the old draft’s headline
+“4.50 BPC, above bigram” claim, but see the abstract’s caveat that the
+LSTM branch, not GRIA/SSM/DIF, carries most of this win.</p>
+<h3 id="uncertainty-calibration-historical-fig.-7">5.6 Uncertainty
+calibration (historical Fig. 7)</h3>
+<p><strong>Not re-measured natively</strong> as an
+ECE-vs-dropout-baseline comparison
+(<code>paper/figures/exp07_calibration_metrics.json</code> is
+Python-prototype-only). The closest current native uncertainty-quality
+evidence is out-of-distribution detection AUROC on the general CyphaDIF
+classification bench (not the LM specifically): cross-domain mean OOD
+AUROC <strong>0.844</strong> (<code>docs/RESEARCH_STATUS.md</code>,
+“Confirmed architectural properties”), D12A intrusion-detection OOD
+AUROC <strong>0.889</strong>. A dedicated LM-calibration (ECE)
+re-measurement on the native hybrid model has not been performed.</p>
+<h3 id="online-adaptation">5.7 Online adaptation</h3>
+<p>Current native measurement (D17D): held-out BPC improves by roughly
+<strong>0.25–0.29</strong> after online adaptation on
+out-of-distribution WikiText text — <code>docs/RESEARCH_STATUS.md</code>
+cites both <strong>−0.250</strong> (summary “Confirmed architectural
+properties” table) and <strong>−0.288</strong> (detailed post-upgrade,
+40k WikiText table) from what appear to be two different
+runs/configurations; we report the range rather than picking one
+arbitrarily. This replaces the old draft’s Python-prototype
+<code>ppl_online</code>/<code>ppl_frozen</code> perplexity-improvement
+figure (<code>paper/figures/exp08_adaptation_metrics.json</code>, a
+synthetic-corpus number ~2248 perplexity-points, not a meaningful
+comparison to the current BPC-based measurement).</p>
+<h3 id="catastrophic-forgetting">5.8 Catastrophic forgetting</h3>
+<p><strong>Materially revised from the old draft</strong>, which had no
+native data (<code>N/A</code> placeholder) and no reason to expect the
+outcome below. Current native measurement
+(<code>docs/RESEARCH_STATUS.md</code>, D16 domain):</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Configuration</th>
+<th>Forgetting score</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shared model, block training on task B</td>
+<td><strong>0.813</strong></td>
+<td>❌ Substantial forgetting — <strong>not</strong>
+zero-forgetting</td>
+</tr>
+<tr>
+<td>Per-task isolated model files (save/reload)</td>
+<td><strong>0.000</strong></td>
+<td>✅ Zero forgetting, but only by architectural isolation</td>
+</tr>
+<tr>
+<td>Save/restore fidelity (single task)</td>
+<td>retention ratio 1.000</td>
+<td>✅ Lossless save/restore</td>
+</tr>
+</tbody>
+</table>
+<p><strong>This directly contradicts any implicit “no catastrophic
+forgetting” framing in the original draft’s §1.2/§4.</strong> The
+corrected claim, per the maintainers’ own prescribed language: <em>“no
+forgetting per isolated model file; shared-model continual learning is
+an open problem”</em> (<code>docs/RESEARCH_STATUS.md</code>, Priority
+5).</p>
+<h3 id="parameter-efficiency">5.9 Parameter efficiency</h3>
+<p><strong>Not re-measured natively.</strong> The old draft’s Fig. 10
+comparison (<code>paper/figures/exp10_efficiency_metrics.json</code>)
+pits a Python-prototype CyphaLM (10.05 BPC at ~70k–220k params) against
+a transformer baseline that reports implausibly near-zero BPC (~0.0002)
+on what is evidently a tiny memorised/overfit synthetic task — this
+comparison was not meaningful even at the time and is not carried
+forward. No fair, parameter-matched CyphaLM-vs-transformer comparison
+exists for the current native hybrid model. The currently measured
+efficiency figure for the native implementation is <strong>training
+throughput</strong>, not a parameter/BPC efficiency curve: <strong>252.2
+characters/second single-threaded</strong> on the production D17
+configuration (MSVC, <code>windows-vs2026-release</code>), up from an
+initial ~96–126 chars/sec baseline via allocator-churn fixes and
+cache-friendly matrix-transpose loop reordering, with the D17 BPC pin
+confirmed bit-identical before and after
+(<code>docs/reports/PERFORMANCE_PROFILE_2026-07-12.md</code>).</p>
+<hr />
+<h2 id="discussion">6. Discussion</h2>
+<ul>
+<li>6.1 Epistemic residual as anti-hallucination signal — unchanged in
+spirit; native CyphaDIF still exports epistemic/aleatoric variance per
+prediction (<code>DIFPredictOutput</code>), and REST
+<code>/generate</code> exposes an epistemic-halt gate on
+<code>r_eu</code>.</li>
+<li>6.2 Comparison to SSM literature (Mamba, S4) — unchanged; CellAI
+remains a rank-2 multi-scale SSM, not a selective-state-space
+(Mamba-style) design, though a <code>SelectiveSSM</code> class now
+exists natively as a separate, not-yet-default, alternative
+(<code>native/include/cypha/cyphalm/selective_ssm.hpp</code>).</li>
+<li>6.3 Comparison to MoE literature — softened per §3.3/§3.4: the
+production LM configuration currently reports a single active expert
+(genuine D17B dynamics, not a reporting bug), so a meaningful MoE-style
+comparison (multiple specialised experts) is not yet demonstrated for
+language modelling specifically at the current α operating point.</li>
+<li>6.4 Limitations — <strong>materially expanded</strong> versus the
+old draft:
+<ul>
+<li>Shared-model continual learning exhibits substantial (81.3%)
+forgetting; zero-forgetting holds only per isolated model file
+(§5.8).</li>
+<li>The hybrid model’s headline BPC win is driven predominantly by its
+char-LSTM branch (~99.6% of the learned logit blend weight), not by the
+GRIA/SSM/DIF pathway the paper’s title and abstract foreground (§3.4,
+abstract).</li>
+<li>GRIA’s mean α (≈0.095) is well below the α≈0.5 “edge of chaos”
+target this architecture is theoretically motivated by (§4.4).</li>
+<li>An alternative sequence layer (RPSM, “Option B”) trained on the same
+D17 task reaches only 7.336 BPC at 300k — far behind the hybrid model —
+attributed by the maintainers to RPSM lacking the hybrid’s BPTT depth
+rather than a training-loop bug
+(<code>docs/RESEARCH_STATUS.md</code>).</li>
+<li>The <code>--math-integration</code> intelligence-profile-guided
+navigation loss measurably raises κ (0.826→0.870 at 5k steps) but at the
+cost of BPC in at least one uncommitted 300k run (2.873 pinned hybrid
+vs. 3.073 BPC / κ 0.860 with math-integration, per
+<code>docs/reports/DEV_PLAN_2026-07-11.md</code> — not yet merged into
+the baseline lock) — i.e. there is an observed κ/BPC trade-off at
+production scale, not a free improvement on both axes.</li>
+</ul></li>
+</ul>
+<hr />
+<h2 id="conclusion">7. Conclusion</h2>
+<p>CyphaLM’s native C++ hybrid GRIA+LSTM implementation makes the
+lossless residual (via CyphaDIF’s NIG epistemic/aleatoric split) and the
+compression parameter (via GRIA’s learnable per-token α) first-class,
+measurable, and now also <strong>gradient-trained</strong> quantities —
+a change from the original Python prototype’s gradient-free design, not
+merely a reimplementation of it. On its own headline task (D17,
+WikiText-2, 300k characters) it beats bigram and trigram baselines by a
+wide margin (2.873 vs. 3.478 / 4.398 BPC) and a dedicated char-LSTM
+baseline by a smaller one (2.873 vs. 2.979). The most important open
+finding from this rewrite is that the model’s own learned blend weight
+currently blends GRIA out almost entirely (~99.6% LSTM) in favour of the
+LSTM branch — so the “explicit mechanisms” thesis this paper argues for
+is not yet reflected in how much the winning configuration actually
+relies on GRIA, CellAI, or CyphaDIF individually. Closing that gap
+(raising GRIA’s contribution without losing BPC, and growing
+multi-expert routing beyond the current D17B single-expert operating
+point) is a more concrete, betterspecified research target than the
+original draft’s now-superseded numbers.</p>
+<hr />
+<h2 id="references">References</h2>
+<ol type="1">
+<li>Gu, A. &amp; Dao, T. (2023). <em>Mamba: Linear-Time Sequence
+Modeling with Selective State Spaces</em>. arXiv:2312.00752.</li>
+<li>Amini, A., Schwarting, W., Soleimany, A. &amp; Rus, D. (2020). Deep
+Evidential Regression. <em>NeurIPS</em>.</li>
+<li>Grünwald, P. D. (2007). <em>The Minimum Description Length
+Principle</em>. MIT Press.</li>
+<li>Shazeer, N., Mirhoseini, A., Maziarz, K., Davis, A., Le, Q., Hinton,
+G. &amp; Dean, J. (2017). Outrageously Large Neural Networks: The
+Sparsely-Gated Mixture-of-Experts Layer. <em>ICLR</em>.</li>
+<li>Langton, C. G. (1990). Computation at the edge of chaos: Phase
+transitions and emergent computation. <em>Physica D</em>, 42(1–3),
+12–37.</li>
+<li>Poole, B., Lahiri, S., Raghu, M., Sohl-Dickstein, J. &amp; Ganguli,
+S. (2016). Exponential expressivity in deep neural networks through
+transient chaos. <em>NeurIPS</em>.</li>
+<li>Tishby, N., Pereira, F. C. &amp; Bialek, W. (2000). The information
+bottleneck method. arXiv:physics/0004057.</li>
+<li>Hochreiter, S. &amp; Schmidhuber, J. (1997). Long short-term memory.
+<em>Neural Computation</em>, 9(8), 1735–1780.</li>
+<li>Merity, S., Xiong, C., Bradbury, J. &amp; Socher, R. (2017). Pointer
+Sentinel Mixture Models (WikiText-2). <em>ICLR</em>.</li>
+<li>Rahimi, A. &amp; Recht, B. (2007). Random Features for Large-Scale
+Kernel Machines. <em>NeurIPS</em>.</li>
+<li>Kirkpatrick, J. et al. (2017). Overcoming catastrophic forgetting in
+neural networks. <em>PNAS</em>, 114(13), 3521–3526.</li>
+<li>Murphy, K. P. (2007). Conjugate Bayesian analysis of the Gaussian
+distribution. Technical note (Normal–Inverse–Gamma).</li>
+<li>Gu, A., Goel, K. &amp; Ré, C. (2022). Efficiently Modeling Long
+Sequences with Structured State Spaces. <em>ICLR</em> (S4).</li>
+<li>Sennrich, R., Haddow, B. &amp; Birch, A. (2016). Neural Machine
+Translation of Rare Words with Subword Units. <em>ACL</em>.</li>
+</ol>
+<hr />
+<p><em>Rewritten 2026-07-12 against the native C++ runtime (post-P7);
+BPC narrative reconciled 2026-07-17 (<code>b0d39e7</code>, canonical pin
+<strong>2.873</strong>); bibliography + native figure PNGs closed
+2026-07-18. Primary sources: <code>bench/BASELINE_LOCK.json</code>,
+<code>bench/BASELINE_REPORT.md</code>,
+<code>docs/RESEARCH_STATUS.md</code>,
+<code>docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md</code>,
+<code>docs/reports/PERFORMANCE_PROFILE_2026-07-12.md</code>,
+<code>docs/reports/DEV_PLAN_2026-07-11.md</code>,
+<code>CHANGELOG.md</code>, and <code>native/src/cyphalm/</code> /
+<code>native/include/cypha/cyphalm/</code> source. Historical
+Python-prototype metrics remain under
+<code>paper/figures/exp*.json</code>; current native bar charts are
+<code>paper/figures/native_fig_*.json</code> / <code>.png</code>
+(render: <code>scripts/render_native_paper_figures.py</code>).</em></p>
+</body>
+</html>
