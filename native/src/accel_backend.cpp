@@ -1,5 +1,6 @@
 #include "cypha/accel_backend.hpp"
 
+#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <mutex>
@@ -38,8 +39,8 @@ namespace accel {
 namespace {
 
 std::mutex g_mu;
-bool g_inited = false;
-bool g_gpu = false;
+std::atomic<bool> g_inited{false};
+std::atomic<bool> g_gpu{false};
 std::string g_info;
 
 /// When CUDA is ready, use the GPU for all batch sizes ``n >= kGpuMinBatchRows`` (default 1).
@@ -48,7 +49,7 @@ static constexpr int kGpuMinBatchRows = CYPHA_ACCEL_GPU_MIN_BATCH_ROWS;
 
 #if defined(CYPHA_ENABLE_CUDA)
 static bool cuda_path_for_batch(int n) {
-  return g_gpu && cypha_accel_cuda_ready() && n >= kGpuMinBatchRows;
+  return g_gpu.load(std::memory_order_acquire) && cypha_accel_cuda_ready() && n >= kGpuMinBatchRows;
 }
 #endif
 
@@ -149,31 +150,45 @@ static void cpu_parallel_world_gate_nig(const double* H, int n, int d, const dou
   });
 }
 
+/// Ensure one-time init; returns whether GPU path is active.
+static bool ensure_inited() {
+  if (g_inited.load(std::memory_order_acquire)) {
+    return g_gpu.load(std::memory_order_acquire);
+  }
+  return init();
+}
+
 }  // namespace
 
 bool init() {
   std::lock_guard<std::mutex> lk(g_mu);
-  if (g_inited) return g_gpu;
-  g_inited = true;
-  g_gpu = false;
+  if (g_inited.load(std::memory_order_relaxed)) {
+    return g_gpu.load(std::memory_order_relaxed);
+  }
+  bool gpu = false;
 #ifdef CYPHA_ENABLE_CUDA
   char buf[512]{};
   if (cypha_accel_cuda_try_init(buf, static_cast<int>(sizeof(buf)))) {
-    g_gpu = true;
+    gpu = true;
     g_info = buf[0] ? std::string(buf) : std::string(cypha_accel_cuda_device_name());
-    return true;
-  }
+  } else
 #endif
-  g_info = std::string("CPU (std::thread, ") + std::to_string(thread_workers()) + " workers)";
-  return false;
+  {
+    g_info = std::string("CPU (std::thread, ") + std::to_string(thread_workers()) + " workers)";
+  }
+  g_gpu.store(gpu, std::memory_order_release);
+  g_inited.store(true, std::memory_order_release);
+  return gpu;
 }
 
 bool is_available() {
-  std::lock_guard<std::mutex> lk(g_mu);
-  return g_gpu;
+  ensure_inited();
+  return g_gpu.load(std::memory_order_acquire);
 }
 
 std::string device_info() {
+  ensure_inited();
+  // g_info is written once under g_mu during init; immutable afterwards until shutdown.
   std::lock_guard<std::mutex> lk(g_mu);
   return g_info.empty() ? std::string("not initialised") : g_info;
 }
@@ -183,8 +198,8 @@ void shutdown() {
 #ifdef CYPHA_ENABLE_CUDA
   cypha_accel_cuda_shutdown();
 #endif
-  g_gpu = false;
-  g_inited = false;
+  g_gpu.store(false, std::memory_order_release);
+  g_inited.store(false, std::memory_order_release);
   g_info.clear();
 }
 
@@ -192,9 +207,10 @@ void batch_encode(const double* x_row, int n, int d, const double* w_row, double
   if (n <= 0 || d <= 0) {
     return;
   }
-  std::lock_guard<std::mutex> lk(g_mu);
+  (void)ensure_inited();
 #if defined(CYPHA_ENABLE_CUDA)
   if (cuda_path_for_batch(n)) {
+    std::lock_guard<std::mutex> lk(g_mu);
     cypha_accel_cuda_batch_encode(x_row, n, d, w_row, h_out);
     return;
   }
@@ -208,9 +224,10 @@ void score_matrix(const double* h_row, int n, int d, int K, const double* mu0, c
   if (n <= 0 || K <= 0 || d <= 0) {
     return;
   }
-  std::lock_guard<std::mutex> lk(g_mu);
+  (void)ensure_inited();
 #if defined(CYPHA_ENABLE_CUDA)
   if (cuda_path_for_batch(n)) {
+    std::lock_guard<std::mutex> lk(g_mu);
     cypha_accel_cuda_score_matrix(h_row, n, d, K, mu0, inv_v, D_row, D_sq, u_k, ctx, llr_out);
     return;
   }
@@ -223,9 +240,10 @@ void softmax_rows(const double* logits, int n, int K, double temperature, double
     return;
   }
   double inv_T = 1.0 / std::max(temperature, 1e-8);
-  std::lock_guard<std::mutex> lk(g_mu);
+  (void)ensure_inited();
 #if defined(CYPHA_ENABLE_CUDA)
   if (cuda_path_for_batch(n)) {
+    std::lock_guard<std::mutex> lk(g_mu);
     cypha_accel_cuda_softmax_rows(logits, n, K, inv_T, probs_out);
     return;
   }
@@ -238,9 +256,10 @@ void world_gate_batch(const double* h_row, int n, int d, const double* psi_vec, 
   if (n <= 0 || d <= 0) {
     return;
   }
-  std::lock_guard<std::mutex> lk(g_mu);
+  (void)ensure_inited();
 #if defined(CYPHA_ENABLE_CUDA)
   if (cuda_path_for_batch(n)) {
+    std::lock_guard<std::mutex> lk(g_mu);
     cypha_accel_cuda_world_gate(h_row, n, d, psi_vec, chi, gates_out);
     return;
   }
@@ -254,9 +273,10 @@ void world_gate_nig_field_batch(const double* h_row, int n, int d, const double*
   if (n <= 0 || d <= 0) {
     return;
   }
-  std::lock_guard<std::mutex> lk(g_mu);
+  (void)ensure_inited();
 #if defined(CYPHA_ENABLE_CUDA)
   if (cuda_path_for_batch(n)) {
+    std::lock_guard<std::mutex> lk(g_mu);
     cypha_accel_cuda_world_gate_nig(h_row, n, d, mu0, inv_v, r_base, gh_chi, gh_psi, gates_out);
     return;
   }

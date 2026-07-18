@@ -2,9 +2,9 @@
 /// Accelerated compute: **CUDA** when built with ``-DCYPHA_ENABLE_CUDA=ON`` and a
 /// GPU is present; otherwise **ISO C++** parallel CPU (``std::thread``) over rows.
 ///
-/// Thread safety: ``init()`` / ``shutdown()`` are not thread-safe.  Compute entry
-/// points use one global mutex and are safe for one caller at a time (or wrap
-/// externally for concurrent use).
+/// Thread safety: ``init()`` / ``shutdown()`` serialize on an internal mutex.
+/// After init, **CPU** compute entry points are lock-free (safe for concurrent
+/// callers). **CUDA** paths still take the mutex around the device call.
 
 #include <string>
 

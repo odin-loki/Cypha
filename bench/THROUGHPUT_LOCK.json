@@ -1,0 +1,23 @@
+﻿{
+    "schema_version":  1,
+    "status":  "scaffold",
+    "measured_at_utc":  "2026-07-18T09:10:49.5479704Z",
+    "toolchain_note":  "MSVC Release recommended; MinGW not a gate",
+    "device_info":  "CPU (std::thread, 64 workers)",
+    "d17_slice":  {
+                      "n_train":  2048,
+                      "n_eval":  64,
+                      "threads":  1,
+                      "bench_seed":  42,
+                      "wall_ms":  null,
+                      "chars_per_sec":  null
+                  },
+    "score_matrix":  {
+                         "n":  32,
+                         "d":  64,
+                         "K":  16,
+                         "us_per_row":  73.228027
+                     },
+    "ci_hard_fail":  false,
+    "notes":  "Wave 1 scaffold - do not gate CI until medians stabilize"
+}

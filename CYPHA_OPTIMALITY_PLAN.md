@@ -2,24 +2,24 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-17 (late evening):** **Phases 0–9 addressed** (mix of done / opt-in / no-go). **This wave:** P4 BMA opt-in `33125b8`; P6 IB opt-in `f0ea334`; P7 score-match opt-in (LUT kept) `f19e167`; P8 RB audit no-go `322cb68`; B3 position weights `5445e40`; B4 bilinear fusion `f185979`; infer latency ~48% win `4d3afa2`. **Open:** P3 default-on / XOR ≥75%; overnight H16/19/25. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-18:** **Phases 0–9 addressed** (mix of done / opt-in / no-go). Overnight cell sweep + H15@300k closed (best cell H19 ~2.921; H15 = 5.262 — **not** a promote; hybrid pin **2.873**). **Open (no default flip):** P3 XOR ≥75% for default-on (**STOP / REJECT** at ~50.5%); P9 mid-estimators / session extras. Quality/Perf Wave 1 substrate: see [`docs/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md`](docs/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Living BoW: [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
 
 ---
 
-## Phase status summary (2026-07-17)
+## Phase status summary (2026-07-18)
 
 | Phase | Title | Status | Notes |
 |-------|-------|--------|-------|
 | 0 | Retire parity, keep regression net | [x] Done | `4133054` — `native/tests/regression/` + `*_golden` CTests; parity harness retired |
 | 1 | EM keystone | [x] Done | `31bbb0c`/`7a07f8b` — `em_step.hpp`, `em_step.cpp`, `em_step_smoke` |
 | 2 | Fix MoE with EM | [x] Done | `de4fa16` — EM responsibilities in `mke_scalar_train_step`; util caveat in `OPTIMALITY_PHASE2_2026-07-17.md` |
-| 3 | Per-class GMM (real XOR fix) | [~] Opt-in; XOR no-go | `1b59f3e` — `use_class_gmm` default OFF; XOR ON≈51% — see `OPTIMALITY_PHASE3_2026-07-17.md` |
+| 3 | Per-class GMM (real XOR fix) | [x] **STOP** — REJECT default-on | `1b59f3e` — `use_class_gmm` OFF; XOR ON≈50.5% — keep opt-in only |
 | 4 | Bayesian model averaging over Δk | [~] Opt-in shipped | `33125b8` — analytic NIG BMA default OFF; see `OPTIMALITY_PHASE4_2026-07-17.md` |
 | 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
 | 6 | Variational IB encoder | [~] Opt-in | `f0ea334` — default OFF; see `OPTIMALITY_PHASE6_2026-07-17.md` |
 | 7 | Score matching → delete Bessel LUT | [~] Opt-in; LUT kept | `f19e167` — score-match path + CTest; LUT retained — see `OPTIMALITY_PHASE7_2026-07-17.md` |
 | 8 | Rao-Blackwellise sampling paths | [x] Audit no-go | `322cb68` — no MC estimators in scope — see `OPTIMALITY_PHASE8_2026-07-17.md` |
-| 9 | Runtime criticality monitor | [~] Partial | `CriticalityVector` tier/cadence `c759e72`; profiler, REST `/intelligence`, profile-guided loss shipped |
+| 9 | Runtime criticality monitor | [~] Partial | Hot gauges + REST `/intelligence` shipped; **open:** mid estimators, session extras |
 
 ---
 
@@ -120,7 +120,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 3 — Per-class GMM (the real XOR fix)
 
-**Status:** [~] **Opt-in shipped; XOR no-go** (2026-07-17) — `1b59f3e`; `use_class_gmm` default OFF; XOR ON≈51% vs OFF≈51% (no kernel). Default-on / format bump deferred — see `OPTIMALITY_PHASE3_2026-07-17.md`.
+**Status:** [x] **STOP / REJECT default-on** (2026-07-18) — `1b59f3e`; `use_class_gmm` stays OFF; XOR ~50.5% ON vs OFF (no kernel). Do not reopen for promote without a new encoder story — see `OPTIMALITY_PHASE3_2026-07-17.md`.
 
 **Objective:** Let each `ClassDifferential Δk` be a small mixture of Gaussians in latent space instead of one diagonal Gaussian. This removes the XOR *impossibility*, not just softens it.
 

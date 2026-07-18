@@ -58,9 +58,13 @@ Source can stay in OneDrive; only the **binary directory** (`-B`) should be loca
 |--------|---------|--------------|
 | `CYPHA_BUILD_EXPERIMENT_DB` | OFF (unset) | Set **OFF** to skip SQLite experiment targets — not needed for LM bench/parity |
 | `CYPHA_FETCH_SQLITE3_AMALGAMATION` | ON | Set **OFF** on Windows when you have no network or want faster configure; LM targets do not need SQLite |
-| `CMAKE_BUILD_TYPE` | — | Use **Release** for bench timings |
+| `CMAKE_BUILD_TYPE` | — | Use **Release** for bench timings (**MSVC Release** is the measured path) |
+| `CYPHA_NATIVE_ARCH` | OFF | Local research: GCC/Clang `-O3 -march=native`; MSVC `/arch:AVX2`. Never required for CI goldens. |
+| `CYPHA_ENABLE_LTO` | OFF | Release IPO/LTO when the toolchain supports it |
 | `CYPHA_ENABLE_CUDA` | OFF | Optional GPU path for **`cypha::accel`** (encode / fused LLR / softmax / gate). **Windows: MSVC only** — see [`ACCEL_CUDA.md`](ACCEL_CUDA.md). CyphaLM (`cypha_lm_native`) remains CPU-only. |
 | `CYPHA_BUILD_QT` | OFF | Unrelated to CyphaLM |
+
+**Throughput lock (scaffold):** `scripts/update_throughput_lock.ps1` writes `bench/THROUGHPUT_LOCK.json` (chars/sec + `score_matrix` µs/row). Local smoke only — not a CI hard-fail yet.
 
 `cypha_lm_native` is always built when configuring `native/`; sources are collected via `file(GLOB … src/cyphalm/*.cpp)`.
 

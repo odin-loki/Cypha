@@ -1,4 +1,4 @@
-﻿> **Note (2026-07-18):** Draft research/audit note. Living status is [CONTINUUM_CLOSEOUT_2026-07-18.md](CONTINUUM_CLOSEOUT_2026-07-18.md) + [CYPHA_BILL_OF_WORK.md](../../CYPHA_BILL_OF_WORK.md). Release is **v2.3.24** / CI is **windows_msvc** (not MinGW). Treat numbers below as proposals unless cross-checked against those sources.
+﻿> **Note (2026-07-18):** Draft research/audit note. Execution status: [ROADMAP_EXECUTION_LEDGER_2026-07-18.md](ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Living status is [CONTINUUM_CLOSEOUT_2026-07-18.md](CONTINUUM_CLOSEOUT_2026-07-18.md) + [CYPHA_BILL_OF_WORK.md](../../CYPHA_BILL_OF_WORK.md). Release is **v2.3.24** / CI is **windows_msvc** (not MinGW). Treat numbers below as proposals unless cross-checked against those sources. Wave 1 ships opt-in §1.1 / §1.2 / §1.5 (default OFF — D17 pin unchanged).
 # Cypha — Benchmark & Model-Quality Research Roadmap
 
 **Prepared for:** Odin Loch

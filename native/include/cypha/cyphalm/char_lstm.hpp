@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
+#include <string>
 #include <vector>
 
 #include "cypha/cyphalm/axiom_activation.hpp"
@@ -13,6 +15,18 @@ enum class LSTMActivationMode {
     Standard,
     Eml,
     Axiom,
+};
+
+/// Wave-1 Quality §1.2 — optimizer for ``apply_grads`` (default SGD preserves D17 pin).
+enum class LSTMOptim {
+    Sgd,
+    Adam,
+};
+
+/// Wave-1 Quality §1.5 — weight init (default N(0,0.02) preserves goldens).
+enum class LSTMInitMode {
+    Default,
+    Classic,
 };
 
 struct CharLSTMGrad {
@@ -51,7 +65,8 @@ struct CharLSTMCache {
   bool used_sr_gates{false};
 };
 
-/// Single-layer char LSTM head (online BPTT-1). Weight layout matches Python ``CharLSTMHead``.
+/// Single-layer char LSTM head. Default path is online BPTT-1 + SGD (matches historical pin).
+/// Opt-in truncated BPTT / Adam / classic init via setters (Quality Wave 1; default OFF).
 class CharLSTMHead {
  public:
   int vocab_size{256};
@@ -65,7 +80,8 @@ class CharLSTMHead {
   std::vector<double> by;   // vocab_size
 
   CharLSTMHead() = default;
-  CharLSTMHead(int vocab_size_in, int hidden_in, std::uint64_t seed = 42);
+  CharLSTMHead(int vocab_size_in, int hidden_in, std::uint64_t seed = 42,
+               LSTMInitMode init_mode = LSTMInitMode::Default);
 
   void set_activation_mode(LSTMActivationMode mode) { activation_mode_ = mode; }
   LSTMActivationMode activation_mode() const { return activation_mode_; }
@@ -77,15 +93,36 @@ class CharLSTMHead {
   void set_sr_gate_laws(const SrGateLaws& laws) { sr_laws_ = laws; }
   const SrGateLaws& sr_gate_laws() const { return sr_laws_; }
 
-  /// Reset internal h/c (stateful online API).
+  /// Truncated BPTT window (1 = historic BPTT-1). Env/CLI: ``CYPHA_LSTM_BPTT`` / ``--bptt-lstm``.
+  void set_bptt_window(int steps);
+  int bptt_window() const { return bptt_window_; }
+
+  void set_optim(LSTMOptim optim);
+  LSTMOptim optim() const { return optim_; }
+  /// Global L2 grad clip; 0 = disabled (default).
+  void set_grad_clip(double clip);
+  double grad_clip() const { return grad_clip_; }
+
+  /// Reset internal h/c (stateful online API). Flushes any pending BPTT window without apply.
   void reset_state();
 
   /// Stateful forward — updates internal h/c; returns log_probs.
   std::vector<double> forward(int token_id);
 
-  /// Stateful backward (BPTT-1) with weight update. Optional ``grads_out`` for EWC overlays.
+  /// Stateful backward with weight update (respects BPTT window / Adam / clip).
+  /// Optional ``grads_out`` for EWC overlays (filled on flush).
   void backward(int target_id, double lr, CharLSTMGrad* grads_out = nullptr,
                 double logit_nudge = 0.0, double hidden_nudge = 0.0);
+
+  /// Push one cached step into the BPTT window; may flush (apply grads) when full.
+  /// Returns true when a weight update occurred. Used by hybrid train path.
+  bool push_bptt_step(const CharLSTMCache& cache, int target_id, double lr,
+                      CharLSTMGrad* grads_out = nullptr, double logit_nudge = 0.0,
+                      double hidden_nudge = 0.0);
+
+  /// Force-flush a partial BPTT window (e.g. end of sequence). No-op if empty.
+  void flush_bptt(double lr, CharLSTMGrad* grads_out = nullptr, double logit_nudge = 0.0,
+                  double hidden_nudge = 0.0);
 
   void load_state(const std::vector<double>& E_in, const std::vector<double>& Wx_in,
                   const std::vector<double>& Wh_in, const std::vector<double>& b_in,
@@ -104,14 +141,25 @@ class CharLSTMHead {
   /// reuse it across steps and avoid re-allocating the (vocab_size*hidden + 2*(4*hidden)*hidden)
   /// gradient buffers on every call. Numerically identical to the value-returning overload, which
   /// now delegates to this one.
+  ///
+  /// Optional ``dh_next`` / ``dc_next`` (length ``hidden``) inject truncated-BPTT temporal grads
+  /// from the future step; pass nullptr for BPTT-1 (default).
   void backward_step(const CharLSTMCache& cache, int target_id, CharLSTMGrad& out,
-                     double logit_nudge = 0.0, double hidden_nudge = 0.0) const;
+                     double logit_nudge = 0.0, double hidden_nudge = 0.0,
+                     const double* dh_next = nullptr, const double* dc_next = nullptr) const;
 
   void apply_grads(const CharLSTMGrad& grads, double lr);
 
   double train_step(int token_id, int target_id, std::vector<double>& h, std::vector<double>& c, double lr);
 
  private:
+  void init_weights(std::uint64_t seed, LSTMInitMode init_mode);
+  void ensure_adam_state();
+  void ensure_grad_scratch(CharLSTMGrad& g) const;
+  void accumulate_grads(CharLSTMGrad& acc, const CharLSTMGrad& step) const;
+  void clip_grads_inplace(CharLSTMGrad& grads) const;
+  void flush_bptt_window(double lr, CharLSTMGrad* grads_out, double logit_nudge, double hidden_nudge);
+
   std::vector<double> h_;
   std::vector<double> c_;
   CharLSTMCache cache_;
@@ -120,9 +168,29 @@ class CharLSTMHead {
   AxiomGateGrammar axiom_grammar_;
   bool use_sr_gates_{false};
   SrGateLaws sr_laws_;
+
+  int bptt_window_{1};
+  LSTMOptim optim_{LSTMOptim::Sgd};
+  double grad_clip_{0.0};
+  std::deque<CharLSTMCache> bptt_caches_;
+  std::deque<int> bptt_targets_;
+
+  // Adam moments (allocated lazily when optim_ == Adam).
+  std::vector<double> m_E_, v_E_;
+  std::vector<double> m_Wx_, v_Wx_;
+  std::vector<double> m_Wh_, v_Wh_;
+  std::vector<double> m_b_, v_b_;
+  std::vector<double> m_Wy_, v_Wy_;
+  std::vector<double> m_by_, v_by_;
+  std::int64_t adam_t_{0};
 };
 
 using CharLSTM = CharLSTMHead;
+
+LSTMOptim parse_lstm_optim(const std::string& s);
+LSTMInitMode parse_lstm_init_mode(const std::string& s);
+std::string lstm_optim_name(LSTMOptim o);
+std::string lstm_init_mode_name(LSTMInitMode m);
 
 /// Vector blend helper for ``CyphaLMNative`` (returns sigmoid(blend_logit)).
 double blend_log_probs(const std::vector<double>& log_g, const std::vector<double>& log_l, double blend_logit,

@@ -68,6 +68,10 @@ struct Args {
     int max_memory_slots = -1;
     int compress_interval = -1;
     int lstm_hidden = -1;
+    int bptt_lstm = -1;
+    std::string lstm_optim;
+    double grad_clip = -1.0;
+    std::string lstm_init;
     bool use_self_correcting_loop = false;
     bool ngram_position_weights = false;
     bool ngram_bilinear_fusion = false;
@@ -112,6 +116,10 @@ void usage() {
         << "       --max-memory-slots N\n"
         << "       --compress-interval N\n"
         << "       --lstm-hidden N  (LSTM head hidden width override; default: profile value, e.g. 128 for d17)\n"
+        << "       --bptt-lstm N  (truncated BPTT window; default 1 = pin path; or CYPHA_LSTM_BPTT)\n"
+        << "       --optim {sgd,adam}  (LSTM optimizer; default sgd; or CYPHA_LSTM_OPTIM)\n"
+        << "       --grad-clip C  (global L2 clip; 0=off; or CYPHA_LSTM_GRAD_CLIP)\n"
+        << "       --lstm-init {default,classic}  (or CYPHA_LSTM_INIT)\n"
         << "       --bench-seed N\n"
         << "       --use-eigenvalue-d-eff\n"
         << "       --use-reu-forget-gate\n"
@@ -226,6 +234,18 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--lstm-hidden") {
             a.lstm_hidden = std::stoi(need("--lstm-hidden"));
         }
+        else if (k == "--bptt-lstm") {
+            a.bptt_lstm = std::stoi(need("--bptt-lstm"));
+        }
+        else if (k == "--optim") {
+            a.lstm_optim = need("--optim");
+        }
+        else if (k == "--grad-clip") {
+            a.grad_clip = std::stod(need("--grad-clip"));
+        }
+        else if (k == "--lstm-init") {
+            a.lstm_init = need("--lstm-init");
+        }
         else if (k == "--bench-seed") {
             a.bench_seed = std::stoll(need("--bench-seed"));
         }
@@ -288,6 +308,18 @@ int main(int argc, char** argv) {
         // (128 for the d17 production profile).
         if (args.lstm_hidden > 0) {
             cfg.lstm_hidden = args.lstm_hidden;
+        }
+        if (args.bptt_lstm > 0) {
+            cfg.lstm_bptt_steps = args.bptt_lstm;
+        }
+        if (!args.lstm_optim.empty()) {
+            cfg.lstm_optim = args.lstm_optim;
+        }
+        if (args.grad_clip >= 0.0) {
+            cfg.lstm_grad_clip = args.grad_clip;
+        }
+        if (!args.lstm_init.empty()) {
+            cfg.lstm_init = args.lstm_init;
         }
         // Unconditional for the same reason as --lstm-hidden above: this is a verification flag
         // for the epistemic feedback loop (docs/reports/HIDDEN_DIM_SCALE_PLAN.md's 2026-07-11

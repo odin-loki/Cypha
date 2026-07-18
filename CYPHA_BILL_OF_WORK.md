@@ -173,8 +173,8 @@ Large subsystem landed: 7-statistic profile `P = (α, D_eff, σ_branch, τ, r_eu
 
 ## Suggested execution order
 
-**Active plan:** human-only — venue/arXiv upload
-**Evidence:** [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md), [`RELEASE_V2_3_24_2026-07-18.md`](docs/reports/RELEASE_V2_3_24_2026-07-18.md), [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)
+**Active plan:** human-only — venue/arXiv upload (Phase F); Wave 1 Quality/Perf substrate **landed** (see ledger)
+**Evidence:** [`ROADMAP_EXECUTION_LEDGER_2026-07-18.md`](docs/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md), [`QUALITY_RECIPE_WAVE1_2026-07-18.md`](docs/reports/QUALITY_RECIPE_WAVE1_2026-07-18.md), [`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/reports/CONTINUUM_CLOSEOUT_2026-07-18.md)
 
 1. ~~Agent research waves~~ — backlog, wave 2, BPE@300k STOP, math §0-bis mid-tier closed
 2. ~~Phase E release~~ — `v2.3.24` assets live (MSVC Windows + Linux tar/AppImage)

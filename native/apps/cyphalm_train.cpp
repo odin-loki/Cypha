@@ -33,6 +33,10 @@ struct Args {
     bool profile_guided_loss = false;
     bool intelligence_monitor = false;
     bool math_integration = false;
+    int bptt_lstm = -1;
+    std::string lstm_optim;
+    double grad_clip = -1.0;
+    std::string lstm_init;
 };
 
 void usage() {
@@ -40,7 +44,8 @@ void usage() {
         << "usage: cyphalm_train --profile {d17,d04} --epochs N --out checkpoint_dir/\n"
         << "       (--corpus bench/data/... | --synthetic-tokens N)\n"
         << "       [--max-chars M] [--max-train-steps S] [--threads T]\n"
-        << "       [--profile-guided-loss] [--intelligence-monitor] [--math-integration]\n";
+        << "       [--profile-guided-loss] [--intelligence-monitor] [--math-integration]\n"
+        << "       [--bptt-lstm N] [--optim sgd|adam] [--grad-clip C] [--lstm-init default|classic]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -62,6 +67,10 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--profile-guided-loss") a.profile_guided_loss = true;
         else if (k == "--intelligence-monitor") a.intelligence_monitor = true;
         else if (k == "--math-integration") a.math_integration = true;
+        else if (k == "--bptt-lstm") a.bptt_lstm = std::stoi(need("--bptt-lstm"));
+        else if (k == "--optim") a.lstm_optim = need("--optim");
+        else if (k == "--grad-clip") a.grad_clip = std::stod(need("--grad-clip"));
+        else if (k == "--lstm-init") a.lstm_init = need("--lstm-init");
         else if (k == "--help" || k == "-h") {
             usage();
             std::exit(0);
@@ -110,6 +119,10 @@ int main(int argc, char** argv) {
         if (args.profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
         if (args.profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
         cfg.train_epochs = args.epochs;
+        if (args.bptt_lstm > 0) cfg.lstm_bptt_steps = args.bptt_lstm;
+        if (!args.lstm_optim.empty()) cfg.lstm_optim = args.lstm_optim;
+        if (args.grad_clip >= 0.0) cfg.lstm_grad_clip = args.grad_clip;
+        if (!args.lstm_init.empty()) cfg.lstm_init = args.lstm_init;
 
         cypha::cyphalm::LMCorpus corpus;
         bool synthetic = false;

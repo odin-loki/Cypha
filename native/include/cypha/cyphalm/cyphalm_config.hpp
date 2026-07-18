@@ -85,6 +85,14 @@ struct CyphaLMConfig {
 
     int lstm_hidden = 128;
     double lstm_lr = 0.05;
+    /// Truncated BPTT window for char-LSTM (1 = historic BPTT-1). Opt-in; default preserves pin.
+    int lstm_bptt_steps = 1;
+    /// ``sgd`` (default) or ``adam``. Env: ``CYPHA_LSTM_OPTIM``.
+    std::string lstm_optim = "sgd";
+    /// Global L2 grad clip; 0 = off. Env: ``CYPHA_LSTM_GRAD_CLIP``.
+    double lstm_grad_clip = 0.0;
+    /// ``default`` N(0,0.02) or ``classic`` (orthogonal Wh, forget bias +1). Env: ``CYPHA_LSTM_INIT``.
+    std::string lstm_init = "default";
     double hybrid_blend_logit = 0.0;
     bool hybrid_blend_learnable = true;
     double hybrid_blend_lr = 0.01;
@@ -244,5 +252,8 @@ std::string bench_mode_name(BenchMode mode);
 
 /// Load ``bench/config/profiles/cyphalm_<profile>_wikitext.json`` (or gutenberg for d04).
 void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg);
+
+/// Overlay Quality Wave-1 LSTM recipe env vars (``CYPHA_LSTM_*``). Safe no-op when unset.
+void apply_lstm_recipe_env(CyphaLMConfig& cfg);
 
 }  // namespace cypha::cyphalm

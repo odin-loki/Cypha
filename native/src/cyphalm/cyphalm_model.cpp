@@ -471,7 +471,11 @@ void CyphaLMModel::init_components() {
         }
     }
     if (uses_lstm(mode)) {
-        lstm_ = std::make_unique<CharLSTMHead>(cfg_.vocab_size, cfg_.lstm_hidden, cfg_.seed + 5);
+        lstm_ = std::make_unique<CharLSTMHead>(cfg_.vocab_size, cfg_.lstm_hidden, cfg_.seed + 5,
+                                               parse_lstm_init_mode(cfg_.lstm_init));
+        lstm_->set_bptt_window(cfg_.lstm_bptt_steps);
+        lstm_->set_optim(parse_lstm_optim(cfg_.lstm_optim));
+        lstm_->set_grad_clip(cfg_.lstm_grad_clip);
         if (cfg_.use_eml_activation) {
             lstm_->set_activation_mode(LSTMActivationMode::Eml);
         } else if (cfg_.use_axiom_activation) {
@@ -576,6 +580,8 @@ void CyphaLMModel::reset_context() {
     last_mean_alpha_ = 0.5;
     last_train_loss_ = 0.0;
     if (lstm_) {
+        // Apply any partial truncated-BPTT window before wiping state (no-op when window empty).
+        lstm_->flush_bptt(cfg_.lstm_lr);
         lstm_->reset_state();
         std::fill(lstm_h_.begin(), lstm_h_.end(), 0.0);
         std::fill(lstm_c_.begin(), lstm_c_.end(), 0.0);
@@ -1415,14 +1421,17 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
             cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0;
         lstm_->backward(static_cast<int>(next_token_id), cfg_.lstm_lr, &grads, logit_nudge,
                        hidden_nudge);
-        if (cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0) {
+        if (cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0 &&
+            cfg_.lstm_bptt_steps <= 1) {
             const int hidden = lstm_->hidden;
             const double delta = cfg_.lstm_lr * navigation_blend_nudge * 0.02;
             for (int j = hidden; j < 2 * hidden; ++j) {
                 lstm_->b[static_cast<std::size_t>(j)] -= delta;
             }
         }
-        apply_lstm_ewc(m, grads);
+        if (!grads.dWx.empty()) {
+            apply_lstm_ewc(m, grads);
+        }
         if (next_token_id < token_counts_.size()) {
             token_counts_[static_cast<std::size_t>(next_token_id)] += 1.0;
         }
@@ -1511,24 +1520,34 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     perf_trace_scope(5, [&]() {
         if (mode == ContextMode::Hybrid && lstm_) {
             if (hybrid_lstm_has_cache_) {
-                // Perf: out-param overload fills hybrid_lstm_grad_scratch_ in place (see its
-                // declaration in cyphalm_model.hpp) instead of allocating a fresh CharLSTMGrad
-                // every step; numerically identical to the value-returning overload.
-                lstm_->backward_step(
-                    hybrid_lstm_cache_, static_cast<int>(next_token_id), hybrid_lstm_grad_scratch_,
-                    cfg_.use_full_navigation_loss ? navigation_logit_nudge : 0.0,
-                    cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0);
-                lstm_->apply_grads(hybrid_lstm_grad_scratch_, cfg_.lstm_lr);
-                HybridEwcGradStub stub;
-                stub.has_lstm = true;
-                stub.lstm = hybrid_lstm_grad_scratch_;
-                if (has_gria_grad) {
+                // BPTT-1 (default): same out-param hot path as before. BPTT>1: window flush via
+                // push_bptt_step (opt-in Quality Wave 1; pin path unchanged).
+                const double logit_nudge =
+                    cfg_.use_full_navigation_loss ? navigation_logit_nudge : 0.0;
+                const double hidden_nudge =
+                    cfg_.use_full_navigation_loss ? navigation_hidden_nudge : 0.0;
+                const bool updated = lstm_->push_bptt_step(
+                    hybrid_lstm_cache_, static_cast<int>(next_token_id), cfg_.lstm_lr,
+                    &hybrid_lstm_grad_scratch_, logit_nudge, hidden_nudge);
+                if (updated) {
+                    HybridEwcGradStub stub;
+                    stub.has_lstm = true;
+                    stub.lstm = hybrid_lstm_grad_scratch_;
+                    if (has_gria_grad) {
+                        stub.d_gria_alpha = gria_grad.d_alpha;
+                        stub.d_gria_U = gria_grad.dU;
+                        stub.d_gria_V = gria_grad.dV;
+                        stub.d_gria_bias = gria_grad.d_bias;
+                    }
+                    apply_hybrid_ewc(m, stub);
+                } else if (has_gria_grad) {
+                    HybridEwcGradStub stub;
                     stub.d_gria_alpha = gria_grad.d_alpha;
                     stub.d_gria_U = gria_grad.dU;
                     stub.d_gria_V = gria_grad.dV;
                     stub.d_gria_bias = gria_grad.d_bias;
+                    apply_hybrid_ewc(m, stub);
                 }
-                apply_hybrid_ewc(m, stub);
                 hybrid_lstm_has_cache_ = false;
             }
             if (cfg_.hybrid_blend_learnable && !last_hybrid_log_g_.empty() && !last_hybrid_log_l_.empty()) {
@@ -2088,6 +2107,9 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
         }
     }
     cfg_.gria_lr = base_gria_lr;
+    if (lstm_) {
+        lstm_->flush_bptt(cfg_.lstm_lr);
+    }
     if (cfg_.use_sr_gates && lstm_) {
         fit_sr_gate_laws_on_lstm(*lstm_, cfg_.vocab_size, cfg_.seed);
     }

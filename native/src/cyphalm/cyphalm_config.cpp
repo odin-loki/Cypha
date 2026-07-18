@@ -1,11 +1,14 @@
 #include "cypha/cyphalm/cyphalm_config.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 
 #include <nlohmann/json.hpp>
+
+#include "cypha/env.hpp"
 
 namespace cypha::cyphalm {
 
@@ -171,6 +174,10 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_d("gria_lr_decay", cfg.gria_lr_decay);
     set_i("lstm_hidden", cfg.lstm_hidden);
     set_d("lstm_lr", cfg.lstm_lr);
+    set_i("lstm_bptt_steps", cfg.lstm_bptt_steps);
+    set_s("lstm_optim", cfg.lstm_optim);
+    set_d("lstm_grad_clip", cfg.lstm_grad_clip);
+    set_s("lstm_init", cfg.lstm_init);
     set_d("hybrid_blend_logit", cfg.hybrid_blend_logit);
     set_b("hybrid_blend_learnable", cfg.hybrid_blend_learnable);
     set_d("hybrid_blend_lr", cfg.hybrid_blend_lr);
@@ -283,6 +290,22 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
     };
     resolve(cfg.bpe_merges_path);
     resolve(cfg.bpe_vocab_path);
+    apply_lstm_recipe_env(cfg);
+}
+
+void apply_lstm_recipe_env(CyphaLMConfig& cfg) {
+    if (const auto v = cypha::env_get("CYPHA_LSTM_BPTT"); v.has_value() && !v->empty()) {
+        cfg.lstm_bptt_steps = std::max(1, std::stoi(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_OPTIM"); v.has_value() && !v->empty()) {
+        cfg.lstm_optim = lower_copy(*v);
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_GRAD_CLIP"); v.has_value() && !v->empty()) {
+        cfg.lstm_grad_clip = std::stod(*v);
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_INIT"); v.has_value() && !v->empty()) {
+        cfg.lstm_init = lower_copy(*v);
+    }
 }
 
 }  // namespace cypha::cyphalm

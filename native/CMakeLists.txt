@@ -18,7 +18,30 @@ option(CYPHA_BUILD_QT "Build optional Qt targets under qt/: cypha_qt_stub (Core)
 option(CYPHA_QT_CHARTS "When CYPHA_BUILD_QT is ON, link Qt Charts for cypha_qt_shell if found (default OFF for qt6-base-only CI)" OFF)
 option(CYPHA_ENABLE_CUDA "Build CUDA GPU path in accel backend (NVIDIA toolkit + driver); CPU uses std::thread" OFF)
 option(CYPHA_ENABLE_OPENSSL "Enable CPPHTTPLIB_OPENSSL_SUPPORT for federated coordinator/worker TLS" OFF)
+option(CYPHA_NATIVE_ARCH "Enable host-native ISA flags (-march=native / MSVC /arch:AVX2) for local research builds" OFF)
+option(CYPHA_ENABLE_LTO "Enable link-time optimization / IPO for Release builds" OFF)
 set(CYPHA_ACCEL_GPU_MIN_BATCH_ROWS "1" CACHE STRING "Minimum batch row count (n) to use CUDA in cypha::accel (1 = always batch on GPU when available)")
+
+if(CYPHA_NATIVE_ARCH)
+  if(MSVC)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/arch:AVX2>)
+    message(STATUS "CYPHA_NATIVE_ARCH: MSVC /arch:AVX2")
+  else()
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-O3> $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+    message(STATUS "CYPHA_NATIVE_ARCH: -O3 -march=native")
+  endif()
+endif()
+
+if(CYPHA_ENABLE_LTO)
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT _cypha_ipo_ok OUTPUT _cypha_ipo_msg)
+  if(_cypha_ipo_ok)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    message(STATUS "CYPHA_ENABLE_LTO: IPO enabled for Release")
+  else()
+    message(WARNING "CYPHA_ENABLE_LTO requested but IPO unsupported: ${_cypha_ipo_msg}")
+  endif()
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -351,6 +374,14 @@ target_link_libraries(lm_self_correct_smoke PRIVATE cypha_lm_native)
 
 add_executable(navigation_loss_char_lstm_smoke tools/navigation_loss_char_lstm_smoke.cpp)
 target_link_libraries(navigation_loss_char_lstm_smoke PRIVATE cypha_lm_native)
+
+add_executable(quality_recipe_wave1_smoke tools/quality_recipe_wave1_smoke.cpp)
+target_link_libraries(quality_recipe_wave1_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(quality_recipe_wave1_smoke)
+
+add_executable(throughput_lock_smoke tools/throughput_lock_smoke.cpp)
+target_link_libraries(throughput_lock_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(throughput_lock_smoke)
 
 add_executable(navigation_loss_hybrid_smoke tools/navigation_loss_hybrid_smoke.cpp)
 target_link_libraries(navigation_loss_hybrid_smoke PRIVATE cypha_lm_native)
@@ -2078,6 +2109,16 @@ add_test(
 add_test(
   NAME native_navigation_loss_char_lstm_smoke
   COMMAND "$<TARGET_FILE:navigation_loss_char_lstm_smoke>"
+)
+
+add_test(
+  NAME native_quality_recipe_wave1_smoke
+  COMMAND "$<TARGET_FILE:quality_recipe_wave1_smoke>"
+)
+
+add_test(
+  NAME native_throughput_lock_smoke
+  COMMAND "$<TARGET_FILE:throughput_lock_smoke>"
 )
 
 add_test(
