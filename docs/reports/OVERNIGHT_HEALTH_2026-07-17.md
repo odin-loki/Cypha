@@ -263,3 +263,44 @@ At recent cadence (~75–120 min per variant from variant-start line):
 ### Recommended action
 
 **Wait.** Do not restart H18, do not finalize, do not AutoCommit. Re-check trigger: no H19 line by **~13:45Z** **and** PID 47108 CPU delta ≈ 0 over 5 min **and** poll STALL/`processes=0`.
+
+---
+
+## 10. COMPLETE — 2026-07-18 (local ~16:47 AEST)
+
+**Scope:** Post-mortem read-only confirmation; no processes restarted.  
+**Verdict:** **COMPLETE — H22 done, finalize exit=0, lock commit `a552aee`.**
+
+### Final evidence
+
+| Check | Result |
+|-------|--------|
+| `overnight_progress.log` tail | `2026-07-17T15:39:44Z variant=H22 25/25` |
+| `poll_and_finalize_overnight.ps1` | Finished **2026-07-18 06:47:37** local, **exit=0** |
+| Lock commit | **`a552aee`** — `bench: lock production overnight results (n_train=300000)`; updated `BASELINE_LOCK.json` |
+| Process inventory | No `cypha_cell` / `cyphalm` processes running |
+
+### Variant cadence (H15–H22, production resume)
+
+| Variant | Progress line (UTC) | Gap from prior |
+|---------|---------------------|----------------|
+| H15 18/25 | 06:49:54 | — (resume after idle) |
+| H16 19/25 | 08:27:54 | 98 min |
+| H17 20/25 | 10:30:30 | 123 min |
+| H18 21/25 | 11:45:54 | 75 min |
+| H19 22/25 | 12:39:27 | 54 min |
+| H20 23/25 | 13:39:44 | 60 min |
+| H21 24/25 | 14:22:00 | 42 min |
+| H22 25/25 | **15:39:44** | 78 min |
+
+Sweep artifacts flushed; baseline lock landed via finalize AutoCommit chain.
+
+### Remaining (post-complete)
+
+| Item | Status |
+|------|--------|
+| `aggregate_cell_sweep_summary.ps1` → `summary.csv` | **Pending** — script ready; not yet run |
+| Merge **d38** (115→116 CTests) | Blocked on production validate after lock |
+| `gh auth login` + `publish_release.ps1` | Auth still gated |
+
+See [`OVERNIGHT_COMPLETE_2026-07-18.md`](OVERNIGHT_COMPLETE_2026-07-18.md) for timeline and next steps.
