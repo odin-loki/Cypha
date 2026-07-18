@@ -6420,17 +6420,6 @@ class MainWindow final : public QMainWindow {
     }
   }
 
-  void fill_kernel_infer_options(cypha::CyphaInferOptions& opt) const {
-    opt.kernel_mem = nullptr;
-    opt.use_kernel_llr = false;
-    opt.kernel_blend = native_kernel_blend_;
-    if (native_use_kernel_llr_ && studio_kernel_mem() != nullptr) {
-      opt.kernel_mem = studio_kernel_mem();
-      opt.use_kernel_llr = true;
-      opt.kernel_blend = native_kernel_blend_;
-    }
-  }
-
   void refresh_loss_chart() {
     if (loss_chart_ == nullptr) {
       return;
