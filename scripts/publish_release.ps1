@@ -1,5 +1,6 @@
 # Publish a GitHub Release for a tag using maintainer notes from create_release_notes.ps1.
-# Phase 24 (v2.3.24, prep): d38 overnight completion certificate, poll -AutoCommit, stall detector, 116 CTests when d38 merged.
+# Phase 25 (v2.3.25, prep): One Cypha cutover — single public type cypha::Cypha (classify + regress + latent sample + sequence).
+# Phase 24 (v2.3.24, shipped): d38 overnight completion certificate, poll -AutoCommit, stall detector, 116 CTests when d38 merged.
 # Phase 23 (v2.3.23, shipped): d37 lock refresh validation, -NotesPath for offline gh workflow, 115 CTests.
 # Phase 22 (v2.3.22, shipped): d36 production pipeline E2E validation, run_post_overnight.ps1, CYPHA_VALIDATE_PIPELINE_E2E, 114 CTests.
 # Phase 21 (v2.3.21, shipped): d35 lock commit pipeline validation, CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE, 113 CTests.
@@ -22,9 +23,9 @@
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -Draft
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -DryRun          # notes to stdout + temp file; no gh
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -NotesOnly       # alias for -DryRun
-#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.24 -NotesPath release_notes.md  # offline gh
+#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.25 -NotesPath release_notes.md  # offline gh
 param(
-  [string]$Tag = "v2.3.24",
+  [string]$Tag = "v2.3.25",
   [string]$NotesPath = "",
   [switch]$Draft,
   [Alias("NotesOnly")]

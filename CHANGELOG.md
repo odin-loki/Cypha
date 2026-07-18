@@ -69,7 +69,7 @@ milestone or a significant self-contained change.
 - **Intelligence Stats Phase 22 (v2.3.22) — shipped:** bench **d36** production pipeline E2E validation — full maintainer overnight-to-publish toolchain script + profile presence gates (d27-d35); profile **`bench/config/d36_pipeline_e2e_profile.json`**; **`scripts/run_post_overnight.ps1`**; watch **effective_n_train**; **`CYPHA_VALIDATE_PIPELINE_E2E=1`**; CTest **`native_d36_pipeline_e2e_smoke`** (**114 total**).
 - **Intelligence Stats Phase 23 (v2.3.23) — shipped:** bench **d37** overnight lock refresh validation — post-overnight baseline lock update toolchain; profile **`bench/config/d37_lock_refresh_profile.json`**; **`scripts/migrate_inflight_overnight_artifacts.ps1`**; finalize best-effort **`update_baseline_lock -Production`**; **`CYPHA_VALIDATE_LOCK_REFRESH=1`**; **`publish_release.ps1 -NotesPath`**; CTest **`native_d37_lock_refresh_smoke`** (**115 total**).
 - **Intelligence Stats Phase 24 (v2.3.24) — shipped:** bench **d38** production overnight completion certificate — full 300k cross-section + 28-variant cell sweep; profile **`bench/config/d38_overnight_certificate_profile.json`**; **`poll_and_finalize_overnight.ps1 -AutoCommit`**; watch stall detector; **`CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE=1`**; CTest **`native_d38_overnight_certificate_smoke`** (**116 total**).
-- **Intelligence Stats Phase 25 (v2.3.25) — shipped:** bench **d39** intelligence profile completeness validation — 7-stat monitoring toolchain + **`cyphalm_bench_native --intelligence-profile`** smoke; profile **`bench/config/d39_intelligence_monitor_profile.json`**; **`CYPHA_VALIDATE_INTELLIGENCE_MONITOR=1`**; CTest **`native_d39_intelligence_monitor_smoke`** (**117 total**).
+- **Intelligence Stats Phase 25 — shipped (in-tree; formal release tag v2.3.25 is One Cypha cutover):** bench **d39** intelligence profile completeness validation — 7-stat monitoring toolchain + **`cyphalm_bench_native --intelligence-profile`** smoke; profile **`bench/config/d39_intelligence_monitor_profile.json`**; **`CYPHA_VALIDATE_INTELLIGENCE_MONITOR=1`**; CTest **`native_d39_intelligence_monitor_smoke`** (**117 total**).
 - **Intelligence Stats Phase 26 (v2.3.26) — shipped:** bench **d40** math integration validation — **`cyphalm_math_integration`** + 7-stat profile-guided navigation loss + **`cyphalm_bench_native --math-integration`** smoke; profile **`bench/config/d40_math_integration_profile.json`**; **`scripts/run_math_integration_bench.ps1`**; **`CYPHA_VALIDATE_MATH_INTEGRATION=1`**; CTest **`native_d40_math_integration_smoke`** (**118 total**).
 - **Intelligence Stats Phase 27 (v2.3.27) — shipped:** bench **d41** math integration scale validation (5k/256, ΔBPC/Δκ); navigation-loss **warmup** + hybrid **blend nudge**; **profile curriculum** re-enabled in math preset; cell sweep **`--intelligence-profile`** κ overlay; LM **self-correct** REST auto-`epistemic_halt`; CTests **`native_d41_math_integration_scale_smoke`**, **`native_lm_self_correct_smoke`** (**121 total**).
 - **Intelligence Stats Phase 28 (v2.3.28) — shipped:** **CharLSTM navigation loss** backprop; **adaptive λ from κ**; **d20/d22 κ ranking**; bench **d42** production math-integration gate + **`run_d17_overnight.ps1 -MathIntegration`**; CTests **`native_d42_math_integration_production_smoke`**, **`native_navigation_loss_char_lstm_smoke`** (**123 total**).
@@ -165,9 +165,23 @@ milestone or a significant self-contained change.
 - **`cypha_export_gguf`:** GGUF header + manifest stub; CTest `native_export_gguf_help`.
 
 ### Fixed
-- **Phase 25 (v2.3.25):** **`lm_intelligence_monitor`** — remove **`batch.sequence`** OOB (τ via **`batch.tau`**); guard **`embed_dim != field_dim`** on **`batch.input`**.
-- **Phase 25 (v2.3.25):** **`cyphalm_model`** — skip **`update_profiler_from_lm_token`** when LM intelligence monitor is active (avoid double-counting).
+- **`lm_intelligence_monitor`:** remove **`batch.sequence`** OOB (τ via **`batch.tau`**); guard **`embed_dim != field_dim`** on **`batch.input`**.
+- **`cyphalm_model`:** skip **`update_profiler_from_lm_token`** when LM intelligence monitor is active (avoid double-counting).
 - **Phase 25+26:** bench **d39** / **d40** — throw when subprocess exit **≠ 0** (was silently passing on crash).
+
+---
+
+## [2.3.25] — 2026-07-18 · One Cypha cutover
+
+### Added
+- **One public type `cypha::Cypha`:** classify + regress + latent sample + sequence (next-token / text generate) in a single native runtime.
+- **REST:** `POST /sample`, `POST /retrieve`, `/sequence/*`; health `model_type=Cypha`; primary `predict` / `update` / sample paths owned by `Cypha`.
+- **Living sequence spine:** PGM→Wy (U06); D17 hybrid **2.873 BPC** retained as historical pin only.
+- **Qt Studio:** `studio_cypha_` owns classify / sample / sequence; Sample latents UI.
+- **Smokes:** `native_one_cypha_smoke`, `native_cypha_rest_one_smoke`, PGM cell checkpoint round-trip; CI green.
+
+### Changed
+- **Branding / API cutover:** dual CyphaDIF + CyphaLM surfaces collapsed into `cypha::Cypha`; `/dif/*` and `/lm/*` removed from the living REST contract (see [`docs/reports/ONE_CYPHA_CUTOVER.md`](docs/reports/ONE_CYPHA_CUTOVER.md)).
 
 ---
 
@@ -553,7 +567,9 @@ First committed state of the project. All six native port milestones signed off:
 
 ---
 
-[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.2.8...HEAD
+[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.3.25...HEAD
+[2.3.25]: https://github.com/odin-loki/Cypha/compare/v2.3.24...v2.3.25
+[2.3.24]: https://github.com/odin-loki/Cypha/compare/v2.2.8...v2.3.24
 [2.2.8]: https://github.com/odin-loki/Cypha/compare/v2.2.7...v2.2.8
 [2.2.7]: https://github.com/odin-loki/Cypha/compare/v2.2.6...v2.2.7
 [2.2.6]: https://github.com/odin-loki/Cypha/compare/v2.2.5...v2.2.6

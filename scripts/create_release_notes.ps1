@@ -9,6 +9,13 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.3.25" = @(
+    "One Cypha cutover: single public type cypha::Cypha (classify + regress + latent sample + sequence)",
+    "REST: /sample /retrieve /sequence/*; health model_type=Cypha; primary predict/update/sample via Cypha",
+    "Living sequence spine PGM→Wy (U06); hybrid D17 kept historical; PGM cell checkpoint round-trip",
+    "Qt Studio: studio_cypha_ owns classify/sample/sequence; Sample latents UI",
+    "Smokes: native_one_cypha_smoke, native_cypha_rest_one_smoke, pgm checkpoint round-trip; CI green"
+  )
   "2.3.24" = @(
     "Intelligence Stats **Phase 24** (shipped): bench **d38** production overnight completion certificate - full 300k cross-section + 28-variant cell sweep; profile ``bench/config/d38_overnight_certificate_profile.json``; CTest ``native_d38_overnight_certificate_smoke``.",
     "``poll_and_finalize_overnight.ps1 -AutoCommit`` - post-finalize lock commit when ``n_train >= 300000``; watch variant **STALL_WARNING** detector.",
