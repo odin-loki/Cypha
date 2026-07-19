@@ -181,6 +181,9 @@ else()
   message(STATUS "OpenMP not found; score_matrix / batch uses std::thread")
 endif()
 
+# D01 MSVC/MinGW train-order parity is handled in code via cypha::portable_shuffle
+# (libstdc++ std::shuffle schedule). Do not rely on /fp:strict for that gap.
+
 # Phase 0: golden regression under tests/regression/.
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaRegression.cmake")
 

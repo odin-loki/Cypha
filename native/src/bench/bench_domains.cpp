@@ -67,6 +67,7 @@
 #include "cypha/intelligence/profile_from_model.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/memory_train.hpp"
+#include "cypha/portable_shuffle.hpp"
 #include "cypha/preprocessor.hpp"
 #include "cypha/regression.hpp"
 #include "cypha/replay_buffer.hpp"
@@ -75,6 +76,8 @@
 #include "cypha/train_step_vector.hpp"
 
 #include "cypha/bench/bench_domains.hpp"
+
+#include "d01_synthetic_golden.inc"
 
 namespace cypha::bench {
 
@@ -133,19 +136,96 @@ std::mt19937 make_rng(std::uint64_t seed) {
     return std::mt19937(static_cast<std::mt19937::result_type>(seed));
 }
 
-Json make_synthetic_classification(int n, int d, std::uint64_t seed) {
-    std::mt19937 rng = make_rng(seed);
-    std::normal_distribution<double> gauss(0.0, 1.0);
-    std::vector<std::vector<double>> xs(static_cast<std::size_t>(n), std::vector<double>(static_cast<std::size_t>(d)));
-    std::vector<std::string> ys(static_cast<std::size_t>(n));
-    for (int i = 0; i < n; ++i) {
-        double sum = 0.0;
-        for (int j = 0; j < d; ++j) {
-            const double v = gauss(rng);
-            xs[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = v;
-            sum += v;
+/// Hubert–Arabie adjusted Rand index on two parallel label sequences (string labels).
+double adjusted_rand_index(const std::vector<std::string>& labels_a, const std::vector<std::string>& labels_b) {
+    const std::size_t n = labels_a.size();
+    if (n == 0 || labels_b.size() != n) {
+        return 0.0;
+    }
+    std::unordered_map<std::string, int> map_a;
+    std::unordered_map<std::string, int> map_b;
+    std::vector<int> a(n);
+    std::vector<int> b(n);
+    int na = 0;
+    int nb = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+        auto [it_a, ins_a] = map_a.emplace(labels_a[i], na);
+        if (ins_a) ++na;
+        a[i] = it_a->second;
+        auto [it_b, ins_b] = map_b.emplace(labels_b[i], nb);
+        if (ins_b) ++nb;
+        b[i] = it_b->second;
+    }
+    if (na == 0 || nb == 0) {
+        return 0.0;
+    }
+    std::vector<std::vector<long long>> cont(static_cast<std::size_t>(na),
+                                             std::vector<long long>(static_cast<std::size_t>(nb), 0));
+    std::vector<long long> row(static_cast<std::size_t>(na), 0);
+    std::vector<long long> col(static_cast<std::size_t>(nb), 0);
+    for (std::size_t i = 0; i < n; ++i) {
+        ++cont[static_cast<std::size_t>(a[i])][static_cast<std::size_t>(b[i])];
+        ++row[static_cast<std::size_t>(a[i])];
+        ++col[static_cast<std::size_t>(b[i])];
+    }
+    auto comb2 = [](long long x) -> long long { return x < 2 ? 0 : x * (x - 1) / 2; };
+    long long sum_nij = 0;
+    for (int i = 0; i < na; ++i) {
+        for (int j = 0; j < nb; ++j) {
+            sum_nij += comb2(cont[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)]);
         }
-        ys[static_cast<std::size_t>(i)] = (sum > 0.0) ? "1" : "0";
+    }
+    long long sum_ai = 0;
+    for (long long v : row) sum_ai += comb2(v);
+    long long sum_bj = 0;
+    for (long long v : col) sum_bj += comb2(v);
+    const long long n_c2 = comb2(static_cast<long long>(n));
+    if (n_c2 == 0) {
+        return 0.0;
+    }
+    const double expected = static_cast<double>(sum_ai) * static_cast<double>(sum_bj) / static_cast<double>(n_c2);
+    const double max_index = 0.5 * (static_cast<double>(sum_ai) + static_cast<double>(sum_bj));
+    const double denom = max_index - expected;
+    if (std::abs(denom) < 1e-15) {
+        return 1.0;  // perfect agreement (or both constant)
+    }
+    return (static_cast<double>(sum_nij) - expected) / denom;
+}
+
+/// Portable N(0,1) via Marsaglia polar method on std::mt19937. Avoids
+/// std::normal_distribution (implementation-defined; MSVC ≠ libstdc++) so D01
+/// synthetic draws match across Windows/Linux toolchains.
+double portable_normal(std::mt19937& rng) {
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    double u = 0.0;
+    double v = 0.0;
+    double s = 0.0;
+    do {
+        u = 2.0 * unit(rng) - 1.0;
+        v = 2.0 * unit(rng) - 1.0;
+        s = u * u + v * v;
+    } while (s >= 1.0 || s == 0.0);
+    return u * std::sqrt(-2.0 * std::log(s) / s);
+}
+
+Json make_synthetic_classification(int n, int d, std::uint64_t seed) {
+    std::vector<std::vector<double>> xs;
+    std::vector<std::string> ys;
+    // D01 recipes: freeze MinGW libstdc++ normal_distribution draws so MSVC matches the
+    // June baseline (std::normal_distribution is implementation-defined).
+    if (!cypha::bench::d01_golden::try_load(n, d, seed, xs, ys)) {
+        std::mt19937 rng = make_rng(seed);
+        xs.assign(static_cast<std::size_t>(n), std::vector<double>(static_cast<std::size_t>(d)));
+        ys.resize(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < d; ++j) {
+                const double v = portable_normal(rng);
+                xs[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] = v;
+                sum += v;
+            }
+            ys[static_cast<std::size_t>(i)] = (sum > 0.0) ? "1" : "0";
+        }
     }
     return Json{{"xs", xs}, {"ys", ys}, {"input_dim", d}, {"n", n}};
 }
@@ -159,7 +239,6 @@ struct TabularDataset {
 
 TabularDataset make_synthetic_tabular(const std::string& name, int n, int d, int n_classes, std::uint64_t seed) {
     std::mt19937 rng = make_rng(seed);
-    std::normal_distribution<double> gauss(0.0, 1.0);
     TabularDataset ds;
     ds.name = name;
     ds.source = "synthetic";
@@ -169,7 +248,7 @@ TabularDataset make_synthetic_tabular(const std::string& name, int n, int d, int
         const int cls = i % std::max(1, n_classes);
         for (int j = 0; j < d; ++j) {
             ds.x[static_cast<std::size_t>(i)][static_cast<std::size_t>(j)] =
-                gauss(rng) + static_cast<double>(cls) * 1.5;
+                portable_normal(rng) + static_cast<double>(cls) * 1.5;
         }
         ds.y[static_cast<std::size_t>(i)] = std::to_string(cls);
     }
@@ -240,7 +319,7 @@ void stratified_split(const TabularDataset& ds, double test_frac, std::uint64_t 
     std::mt19937 rng = make_rng(seed);
     for (auto& kv : by_class) {
         auto& idx = kv.second;
-        std::shuffle(idx.begin(), idx.end(), rng);
+        cypha::portable_shuffle(idx.begin(), idx.end(), rng);
         const int n_test = std::max(1, static_cast<int>(std::round(static_cast<double>(idx.size()) * test_frac)));
         for (int k = 0; k < static_cast<int>(idx.size()); ++k) {
             const int i = idx[static_cast<std::size_t>(k)];
@@ -308,11 +387,11 @@ void fit_apply_preprocessor(std::vector<std::vector<double>>& train_x, std::vect
 // CyphaLM (`cypha/cyphalm/cyphalm_views.hpp`) -- they operate on plain `vector<int>`, so feeding a
 // sample-index vector instead of a token-id vector reorders (x, y) pairs instead of tokens, with no
 // changes to those functions. Off (empty/"same_order") reproduces the pre-existing per-pass
-// `std::shuffle(..., make_rng(42 + p))` order exactly.
+// `cypha::portable_shuffle(..., make_rng(42 + p))` order exactly.
 std::vector<int> dif_view_order(int n, const std::string& view_schedule, int pass_idx) {
     std::vector<int> idx(static_cast<std::size_t>(n));
     for (int i = 0; i < n; ++i) idx[static_cast<std::size_t>(i)] = i;
-    std::shuffle(idx.begin(), idx.end(), make_rng(42 + static_cast<std::uint64_t>(pass_idx)));
+    cypha::portable_shuffle(idx.begin(), idx.end(), make_rng(42 + static_cast<std::uint64_t>(pass_idx)));
     if (view_schedule.empty() || view_schedule == "same_order") {
         return idx;
     }
@@ -376,12 +455,12 @@ std::vector<int> class_block_order(const std::vector<std::string>& labels, int p
     for (const auto& kv : by_label) keys.push_back(kv.first);
     std::sort(keys.begin(), keys.end());
     std::mt19937 rng = make_rng(42 + static_cast<std::uint64_t>(pass_idx) + 9000);
-    std::shuffle(keys.begin(), keys.end(), rng);
+    cypha::portable_shuffle(keys.begin(), keys.end(), rng);
     std::vector<int> out;
     out.reserve(labels.size());
     for (const std::string& k : keys) {
         auto& idxs = by_label[k];
-        std::shuffle(idxs.begin(), idxs.end(), rng);
+        cypha::portable_shuffle(idxs.begin(), idxs.end(), rng);
         out.insert(out.end(), idxs.begin(), idxs.end());
     }
     return out;
@@ -423,6 +502,10 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     if (train_x.empty() || test_x.empty()) {
         return Json{{"dataset", dataset_name}, {"accuracy", 0.0}, {"n_train", 0}, {"n_test", 0}, {"expert_count", 0}};
     }
+    // Offline logistic/etc. must see the original feature space. Fitting them on post-RFF
+    // (often 256-d) collapses the GD logistic baseline to chance (~0.5) and misreports the gap.
+    const std::vector<std::vector<double>> baseline_tr = train_x;
+    const std::vector<std::vector<double>> baseline_te = test_x;
     std::vector<std::vector<double>> tr = train_x;
     std::vector<std::vector<double>> te = test_x;
     Json preprocessor_meta;
@@ -486,7 +569,8 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     Json result = Json{
         {"dataset", dataset_name},
         {"cypha_scores", test_scores},
-        {"baselines", cypha::bench::offline_classification_baselines_json(tr, train_y, te, test_y)},
+        {"baselines",
+         cypha::bench::offline_classification_baselines_json(baseline_tr, train_y, baseline_te, test_y)},
         {"n_train", train_n},
         {"n_test", static_cast<int>(te.size())},
         {"expert_count", static_cast<int>(infer.labels.size())},
@@ -703,7 +787,7 @@ void train_classifier_online(OnlineClassifier& c, const std::vector<std::vector<
     for (int p = 0; p < passes; ++p) {
         std::vector<int> order(static_cast<std::size_t>(n));
         for (int i = 0; i < n; ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(seed + static_cast<std::uint64_t>(p)));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(seed + static_cast<std::uint64_t>(p)));
         for (int idx : order) {
             (void)online_clf_train_step(c, xs[static_cast<std::size_t>(idx)], ys[static_cast<std::size_t>(idx)]);
         }
@@ -1555,7 +1639,7 @@ void subsample_vision(cypha::bench::VisionDataset& ds, int max_train, int max_te
         if (static_cast<int>(imgs.size()) <= max_n) return;
         std::vector<int> idx(static_cast<std::size_t>(imgs.size()));
         for (int i = 0; i < static_cast<int>(idx.size()); ++i) idx[static_cast<std::size_t>(i)] = i;
-        std::shuffle(idx.begin(), idx.end(), make_rng(seed));
+        cypha::portable_shuffle(idx.begin(), idx.end(), make_rng(seed));
         std::vector<cypha::bench::GrayImage> new_imgs;
         std::vector<std::string> new_labels;
         new_imgs.reserve(static_cast<std::size_t>(max_n));
@@ -1981,7 +2065,7 @@ Json run_d14() {
     for (int pass = 0; pass < 4; ++pass) {
         std::vector<int> order(static_cast<int>(x_in.size()));
         for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(pass)));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(pass)));
         for (int idx : order) online_reg_train_step(reg_b, x_in[static_cast<std::size_t>(idx)], y_in[static_cast<std::size_t>(idx)]);
     }
     cypha::sync_infer_model_from_memory(reg_b.infer, reg_b.mem);
@@ -2303,7 +2387,7 @@ Json run_d16_ewc_probe() {
         for (int i = 0; i < static_cast<int>(order.size()); ++i) {
             order[static_cast<std::size_t>(i)] = i;
         }
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 2));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 2));
         const int limit = std::min(steps, static_cast<int>(order.size()));
         for (int k = 0; k < limit; ++k) {
             const int i = order[static_cast<std::size_t>(k)];
@@ -2415,7 +2499,7 @@ Json run_d16_ewc_sweep_impl() {
         for (int i = 0; i < static_cast<int>(order.size()); ++i) {
             order[static_cast<std::size_t>(i)] = i;
         }
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 2));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 2));
         const int limit = std::min(steps, static_cast<int>(order.size()));
         for (int k = 0; k < limit; ++k) {
             const int i = order[static_cast<std::size_t>(k)];
@@ -2515,14 +2599,12 @@ Json run_d16() {
         return clf_metrics_native(c.infer, xp, labels)["accuracy"].get<double>();
     };
 
-    // 16A task discovery
+    // 16A task discovery — dominant-winner ARI (ported from historical Python d16)
     Json exp16a;
     {
         OnlineClassifier clf = make_multitask_clf(kBenchSeed);
         const int max_steps = cypha::bench::bench_scale(12000, 3000);
         std::unordered_map<std::string, std::size_t> cursors;
-        std::vector<std::string> task_order;
-        for (const auto& t : tasks) task_order.push_back(t.name);
         int step = 0;
         while (step < max_steps) {
             for (const auto& t : tasks) {
@@ -2537,10 +2619,48 @@ Json run_d16() {
             }
         }
         cypha::sync_infer_model_from_memory(clf.infer, clf.mem);
+
+        // Replay the same round-robin stream for routing labels (Python collected online;
+        // post-train replay is equivalent once the multitask head has separated tasks).
+        std::unordered_map<std::string, std::vector<std::string>> routing_by_task;
+        for (const auto& t : tasks) routing_by_task[t.name] = {};
+        cursors.clear();
+        step = 0;
+        while (step < max_steps) {
+            for (const auto& t : tasks) {
+                if (step >= max_steps) break;
+                const std::size_t idx = cursors[t.name]++;
+                if (idx >= t.train_x.size()) cursors[t.name] = 0;
+                const std::size_t i = idx % t.train_x.size();
+                const auto x = pad_to_max(t.train_x[i], max_dim);
+                routing_by_task[t.name].push_back(online_clf_predict(clf.infer, x));
+                ++step;
+            }
+        }
+
+        std::vector<std::string> task_labels;
+        std::vector<std::string> route_labels;
+        for (const auto& t : tasks) {
+            const auto& routes = routing_by_task[t.name];
+            if (routes.empty()) continue;
+            std::unordered_map<std::string, int> counts;
+            for (const auto& w : routes) ++counts[w];
+            std::string dominant = routes.front();
+            int best = -1;
+            for (const auto& [lab, c] : counts) {
+                if (c > best) {
+                    best = c;
+                    dominant = lab;
+                }
+            }
+            task_labels.insert(task_labels.end(), routes.size(), t.name);
+            route_labels.insert(route_labels.end(), routes.size(), dominant);
+        }
+        const double ari = adjusted_rand_index(task_labels, route_labels);
         Json per_task = Json::object();
         for (const auto& t : tasks) per_task[t.name] = eval_task(clf, t);
         exp16a = Json{
-            {"routing_ari", 0.0},
+            {"routing_ari", ari},
             {"per_task_accuracy", per_task},
             {"expert_count", static_cast<int>(clf.infer.labels.size())},
         };
@@ -2603,7 +2723,7 @@ Json run_d16() {
         auto train_named = [&](const MultitaskBundle& task) {
             std::vector<int> order(static_cast<int>(task.train_x.size()));
             for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<std::size_t>(i)] = i;
-            std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 5));
+            cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 5));
             const int limit = std::min(steps, static_cast<int>(order.size()));
             for (int k = 0; k < limit; ++k) {
                 const int i = order[static_cast<std::size_t>(k)];
@@ -2644,7 +2764,7 @@ Json run_d16() {
             for (int pass = 0; pass < 3; ++pass) {
                 std::vector<int> order(static_cast<int>(t.train_x.size()));
                 for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<std::size_t>(i)] = i;
-                std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 11 + static_cast<std::uint64_t>(pass)));
+                cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + 11 + static_cast<std::uint64_t>(pass)));
                 for (int idx : order) {
                     const auto x = pad_to_max(t.train_x[static_cast<std::size_t>(idx)], max_dim);
                     (void)online_clf_train_step(clf, x, t.name + "_" + t.train_y[static_cast<std::size_t>(idx)]);
@@ -2675,7 +2795,7 @@ Json run_d16() {
             }
             std::vector<int> warm_order(static_cast<int>(iris->train_x.size()));
             for (int i = 0; i < static_cast<int>(warm_order.size()); ++i) warm_order[static_cast<std::size_t>(i)] = i;
-            std::shuffle(warm_order.begin(), warm_order.end(), make_rng(seed + 1));
+            cypha::portable_shuffle(warm_order.begin(), warm_order.end(), make_rng(seed + 1));
             for (int k = 0; k < std::min(warm_steps, static_cast<int>(warm_order.size())); ++k) {
                 const int i = warm_order[static_cast<std::size_t>(k)];
                 const auto x = pad_to_max(iris->train_x[static_cast<std::size_t>(i)], max_dim);
@@ -2689,7 +2809,7 @@ Json run_d16() {
                 std::vector<std::string> order;
                 if (block_shuffle) {
                     order = {"iris", "wine", "digits"};
-                    std::shuffle(order.begin(), order.end(), rng);
+                    cypha::portable_shuffle(order.begin(), order.end(), rng);
                 } else {
                     for (const auto& t : tasks) order.push_back(t.name);
                 }
@@ -2781,7 +2901,7 @@ Json run_d16() {
             }
             std::vector<int> warm_order(static_cast<int>(iris->train_x.size()));
             for (int i = 0; i < static_cast<int>(warm_order.size()); ++i) warm_order[static_cast<std::size_t>(i)] = i;
-            std::shuffle(warm_order.begin(), warm_order.end(), make_rng(seed + 1));
+            cypha::portable_shuffle(warm_order.begin(), warm_order.end(), make_rng(seed + 1));
             for (int k = 0; k < std::min(warm_steps, static_cast<int>(warm_order.size())); ++k) {
                 const int i = warm_order[static_cast<std::size_t>(k)];
                 const auto x = pad_to_max(iris->train_x[static_cast<std::size_t>(i)], max_dim);
@@ -2853,7 +2973,7 @@ void holdout_split_indices(int n, double test_frac, std::uint64_t seed, std::vec
                            std::vector<int>& test_idx) {
     std::vector<int> order(static_cast<std::size_t>(n));
     for (int i = 0; i < n; ++i) order[static_cast<std::size_t>(i)] = i;
-    std::shuffle(order.begin(), order.end(), make_rng(seed));
+    cypha::portable_shuffle(order.begin(), order.end(), make_rng(seed));
     const int n_test = std::max(1, static_cast<int>(std::round(static_cast<double>(n) * test_frac)));
     test_idx.assign(order.begin(), order.begin() + n_test);
     train_idx.assign(order.begin() + n_test, order.end());
@@ -2974,7 +3094,7 @@ Json run_d05() {
     for (int p = 0; p < 4; ++p) {
         std::vector<int> order(static_cast<std::size_t>(train_x.size()));
         for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
         for (int idx : order) {
             online_reg_train_step(reg, train_x[static_cast<std::size_t>(idx)], train_y[static_cast<std::size_t>(idx)]);
         }
@@ -3024,7 +3144,7 @@ Json run_d06() {
     for (int p = 0; p < 4; ++p) {
         std::vector<int> order(static_cast<std::size_t>(train_x.size()));
         for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
         for (int idx : order) {
             online_reg_train_step(reg, train_x[static_cast<std::size_t>(idx)], train_y_reg[static_cast<std::size_t>(idx)]);
         }
@@ -3394,7 +3514,7 @@ Json run_d11_experiment_a() {
     for (int p = 0; p < 4; ++p) {
         std::vector<int> order(static_cast<std::size_t>(train_x.size()));
         for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
         for (int idx : order) {
             online_reg_train_step(reg, train_x[static_cast<std::size_t>(idx)], train_y[static_cast<std::size_t>(idx)]);
         }
@@ -3445,7 +3565,7 @@ Json run_d11_experiment_b() {
     for (int p = 0; p < 5; ++p) {
         std::vector<int> order(static_cast<std::size_t>(split));
         for (int i = 0; i < split; ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
         for (int idx : order) {
             online_reg_train_step(reg, x[static_cast<std::size_t>(idx)], y[static_cast<std::size_t>(idx)]);
         }
@@ -3548,7 +3668,7 @@ Json run_d12_experiment_a() {
     for (int p = 0; p < 3; ++p) {
         std::vector<int> order(static_cast<std::size_t>(x_norm.size()));
         for (int i = 0; i < static_cast<int>(order.size()); ++i) order[static_cast<std::size_t>(i)] = i;
-        std::shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
+        cypha::portable_shuffle(order.begin(), order.end(), make_rng(kBenchSeed + static_cast<std::uint64_t>(p)));
         for (int idx : order) {
             (void)online_clf_train_step(clf, x_norm[static_cast<std::size_t>(idx)], "normal");
         }

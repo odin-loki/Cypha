@@ -87,6 +87,9 @@ struct CyphaLMConfig {
     /// ``apply_pgm_logits_recipe`` / ``apply_cell_variant("U06")``.
     ContextMode context_mode = ContextMode::Hybrid;
     int ngram_context = 2;
+    /// B0: add online n-gram count Laplace log-prior onto GRIA logits. Off by default so
+    /// ordinary hybrid (ngram_context>0 for embed fusion only) keeps pre-685dbf2 blend dynamics.
+    bool use_ngram_count_prior = false;
     int train_epochs = 1;
     std::string view_schedule = "same_order";
     int view_block_size = 512;

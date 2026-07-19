@@ -65,7 +65,7 @@ bool uses_ngram_embed_path(ContextMode mode, const CyphaLMConfig& cfg) {
 }
 
 bool uses_ngram_count_path(const CyphaLMConfig& cfg) {
-    return cfg.ngram_context > 0;
+    return cfg.use_ngram_count_prior && cfg.ngram_context > 0;
 }
 
 bool uses_hybrid_ewc(ContextMode mode) {

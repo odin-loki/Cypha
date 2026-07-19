@@ -13,7 +13,7 @@ std::vector<int> curriculum_order_ascending_confidence(const std::vector<double>
 
 /// Same hardest-first order as ``curriculum_order_ascending_confidence``, then locally randomised:
 /// the resulting index sequence is cut into contiguous chunks of ``window`` positions (the last
-/// chunk may be shorter) and each chunk is independently ``std::shuffle``d with ``rng``. This keeps
+/// chunk may be shorter) and each chunk is independently ``portable_shuffle``d with ``rng``. This keeps
 /// examples roughly ordered by difficulty (hardest-first) while breaking the strict total order the
 /// model could otherwise overfit to. ``window <= 1`` performs no shuffling and returns exactly
 /// ``curriculum_order_ascending_confidence``'s output (deterministic, no ``rng`` draws).

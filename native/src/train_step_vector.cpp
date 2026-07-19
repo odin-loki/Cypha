@@ -20,8 +20,11 @@ namespace cypha {
 
 namespace {
 
-constexpr double kDeliberateLo = 0.25;
-constexpr double kDeliberateHi = 0.40;
+// Match everyday_profile algorithm_variants (deliberation_lo=1.0, deliberation_hi=0.0) and
+// Python CyphaDIF defaults: lo >= hi disables the mid-confidence contrastive nudge. The old
+// hardcoded 0.25–0.40 band re-enabled deliberation during train and amplified MSVC/MinGW FP drift.
+constexpr double kDeliberateLo = 1.0;
+constexpr double kDeliberateHi = 0.0;
 constexpr double kOodEma = 0.01;
 constexpr double kLlrScaleAlpha = 0.002;
 

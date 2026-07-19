@@ -102,6 +102,7 @@ void apply_cell_variant(const std::string& id, CyphaLMConfig& cfg) {
     if (id == "B0") {
         cfg.ngram_context = 4;
         cfg.context_length = 128;
+        cfg.use_ngram_count_prior = true;
     } else if (id == "H01") {
         cfg.alpha_init = 0.5;
         cfg.alpha_learnable = true;

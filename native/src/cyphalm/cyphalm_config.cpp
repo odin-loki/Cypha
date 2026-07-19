@@ -233,6 +233,7 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
         cfg.context_mode = parse_context_mode(j.at("context_mode").get<std::string>());
     }
     set_i("ngram_context", cfg.ngram_context);
+    set_b("use_ngram_count_prior", cfg.use_ngram_count_prior);
     set_i("train_epochs", cfg.train_epochs);
     set_s("view_schedule", cfg.view_schedule);
     set_i("view_block_size", cfg.view_block_size);

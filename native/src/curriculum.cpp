@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "cypha/portable_shuffle.hpp"
+
 namespace cypha {
 
 double row_max_softmax_confidence(const double* probs, int k) {
@@ -50,8 +52,8 @@ std::vector<int> curriculum_order_windowed(const std::vector<double>& max_confid
   }
   for (std::size_t start = 0; start < order.size(); start += static_cast<std::size_t>(window)) {
     const std::size_t end = std::min(order.size(), start + static_cast<std::size_t>(window));
-    std::shuffle(order.begin() + static_cast<std::ptrdiff_t>(start), order.begin() + static_cast<std::ptrdiff_t>(end),
-                 rng);
+    portable_shuffle(order.begin() + static_cast<std::ptrdiff_t>(start),
+                     order.begin() + static_cast<std::ptrdiff_t>(end), rng);
   }
   return order;
 }
