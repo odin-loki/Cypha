@@ -10,6 +10,7 @@ milestone or a significant self-contained change.
 
 ### Fixed
 - **Bench regression pins (D01 / D04 / D16A):** restored locked accuracy / BPC / routing numbers after MSVC and hybrid-default drift -- portable Fisher-Yates shuffle (`portable_shuffle.hpp`), golden D01 synthetic draws (`d01_synthetic_golden.inc`), raw-feature logistic baselines, **opt-in** n-gram count prior (off unless enabled), and native D16A ARI. Pins: D01 linear **0.9875** vs logistic **0.8875**; D04 ~**4.14 BPC** @ 8k; D16A **ARI = 1.0**.
+- **D17 hybrid historical pin re-verified:** WikiText-2 300k / eval 2k / seed 42 / `--mode hybrid` → **2.883 BPC** (lock **2.873**, Δ=+0.010 within ±0.05). Scale path: 5k≈4.05, 40k≈3.42, 300k≈2.88.
 - **`native_rest_schema_contract` (Linux):** `ChildProcess` is now move-only so assigning the spawned `cypha_rest` no longer kills the server before `/health` (was flaky `server did not become ready` at ~15s).
 - **`cypha_cell_hypothesis_sweep`:** `--output-dir` now writes `variant_*.json` / `summary.csv` even for single `--cell-variant` runs (previously overnight-sweep only).
 

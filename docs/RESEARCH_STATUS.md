@@ -34,7 +34,16 @@ Restored after MSVC / hybrid-default drift (portable shuffle, D01 golden draws, 
 | **D01** 4-Gaussian blobs | Cypha **0.8875** | Same harness |
 | **D04** Gutenberg @ 8k | BPC **~4.14-4.16** (hybrid bench mode) | Historical hybrid profile; living product sequence is PGM->Wy |
 | **D16A** task discovery | **ARI = 1.0** | Native ARI recovery |
-| **D17** hybrid @ 300k | **2.873 BPC** | **Historical pin only** -- not the living production spine |
+| **D17** hybrid @ 300k | **2.873 BPC** (lock) / **2.883** re-run 2026-07-19 | **Historical pin only** -- not the living production spine; Δ=+0.010 within ±0.05 gate |
+
+**Reproduce historical hybrid pin** (must pass `--mode hybrid`; CLI default is `pgm_logits`):
+
+```powershell
+$env:CYPHA_BENCH_FULL_CORPUS="1"; $env:CYPHA_BENCH_OVERNIGHT="1"
+cyphalm_bench_native --profile d17 --mode hybrid --overnight --n-train 300000 --n-eval 2000 --threads 1 --bench-seed 42
+```
+
+Scale check (same flags, seed 42): 5k → ~4.05 BPC; 40k → ~3.42 BPC; 300k → ~2.88 BPC. Keep `use_ngram_count_prior=false` (default).
 
 Living sequence: `Cypha::init_default_sequence` -> U06 / `apply_pgm_logits_recipe`. Bare `CyphaLMConfig` may still default Hybrid for **bench** compatibility.
 
