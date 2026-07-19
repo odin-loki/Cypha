@@ -30,4 +30,4 @@ RPSM Option A/B and the cell hypothesis testbench are **not active**. Kept for a
 - [`docs/FUTURE.md`](../../FUTURE.md) — §0a kernel LLR (shipped), §10 RPSM horizon
 - [`docs/native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md`](../../native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md) — Option A as future native milestone
 - [`docs/port/PORT_FULL_STACK.md`](../../port/PORT_FULL_STACK.md) — port tracker pointer
-- [`docs/reports/DIAGNOSTIC_REPORT.md`](../../reports/DIAGNOSTIC_REPORT.md) — XOR ceiling evidence
+- [`docs/reports/DIAGNOSTIC_REPORT.md`](../../archive/reports/DIAGNOSTIC_REPORT.md) — XOR ceiling evidence

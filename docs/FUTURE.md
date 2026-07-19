@@ -1,18 +1,20 @@
 # Future directions
 
-Cypha's native port (M1-M6 + P7) is complete - inference, training, REST server, Qt shell, experiments DB, and parity fixtures all pass CI (**160 CTests** — see `scripts/cypha_native_validate_all.ps1` for the current authoritative count). Python runtime packages removed. This document records the most valuable next engineering directions, from near-term (months) to longer-horizon (quarters).
+**One Cypha.** Public type `cypha::Cypha` (classify + regress + latent sample + tokens). Native port (M1-M6 + P7) is complete -- inference, training, REST, Qt shell, experiments DB, parity fixtures -- CI **~160 CTests** (see `scripts/cypha_native_validate_all.ps1`). Python runtime removed.
 
-**Last updated:** 2026-07-18
+**Forward path:** improve the living sequence spine **PGM->Wy (U06)** under `cypha::Cypha`. Hybrid GRIA+LSTM D17 **2.873 BPC** is a **historical pin** only -- not a product default to "beat" as the shipping recipe. Cutover: [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md). Dated reports: [`archive/`](archive/README.md).
+
+**Last updated:** 2026-07-19
 
 ---
 
-## 0 — Evidence-confirmed upgrades (post-diagnostic, highest priority)
+## 0 -- Evidence-confirmed upgrades (post-diagnostic, highest priority)
 
 These come directly from the 2026-05-30 diagnostic run
-([`docs/reports/DIAGNOSTIC_REPORT.md`](reports/DIAGNOSTIC_REPORT.md)). Every
+([`archive/reports/DIAGNOSTIC_REPORT.md`](archive/reports/DIAGNOSTIC_REPORT.md)). Every
 item has a measured effect size; nothing is speculative.
 
-**RPSM roadmap (Option A + B):** see [10](#10--rpsm-matrix-refactor--cyphalm-sequence-layer) and [`docs/research/upgrades/`](research/upgrades/README.md). Option B is **STOP / deprioritized** (2026-07-18).
+**RPSM roadmap (Option A + B):** see [10](#10--rpsm-matrix-refactor--sequence-layer-closed) and [`docs/research/upgrades/`](research/upgrades/README.md). Option B is **STOP / deprioritized** (2026-07-18).
 
 ### 0a — Kernel LLR via Nyström approximation (SHIPPED — tuning continues)
 
@@ -42,9 +44,9 @@ the gamma bandwidth is not well-tuned for all datasets.
 ### 0c — D10/D17 CellAI SSM investigation
 
 **Evidence:**
-- **D10 ECG (resolved, 2026-07-18):** D10A default **90.11%** on real UCR ECG5000 with enriched features; legacy `CYPHA_D10_ECG_ENRICH=0` → **85.96%**; synthetic fallback was **60.67%** (~3× chance). The 2026-07-11 diagnosis still holds: 10A–10D's scored path uses the `cypha_core` DIF expert-routing classifier (`OnlineClassifier` + hand-engineered `TimeSeriesEncoder` features), not `CellAISSM` — the SSM is only touched by an optional, non-scored, forward-only `10E_ssm_diagnose` probe. Do not use the old 17–20% or 60.67% synth figures as current evidence. Historical synth diagnosis (superseded): [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md). Current reports: [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG5000_REAL_DATA_2026-07-18.md`](reports/D10_ECG5000_REAL_DATA_2026-07-18.md).
-- D17 CyphaLM: **hybrid_gria_lstm @ 300k = 2.873 BPC** (historical D17 pin — `bench/BASELINE_LOCK.json`; beats bigram); GRIA-only stack still weaker; overnight historical **2.864**. Living sequence default: **PGM→Wy** (U06) — [`ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md).
-- **D04 "33.2 bpc" was a benchmark bug** (wrong probability indexing in the legacy Python D04 domain, not a CyphaLM failure) — do not use it as evidence. Native D04 runs the full CyphaLM stack via `cypha_bench_run --domain 4`.
+- **D10 ECG (resolved, 2026-07-18):** D10A default **90.11%** on real UCR ECG5000 with enriched features; legacy `CYPHA_D10_ECG_ENRICH=0` -> **85.96%**; synthetic fallback was **60.67%**. Scored path uses the `cypha_core` DIF expert-routing classifier, not `CellAISSM`. Archive: [`D10_ECG_SSM_DIAGNOSIS_2026-07-11.md`](archive/reports/D10_ECG_SSM_DIAGNOSIS_2026-07-11.md), [`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](archive/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md), [`D10_ECG5000_REAL_DATA_2026-07-18.md`](archive/reports/D10_ECG5000_REAL_DATA_2026-07-18.md).
+- D17 sequence: **hybrid_gria_lstm @ 300k = 2.873 BPC** is a **historical pin** (`bench/BASELINE_LOCK.json`). Living sequence default: **PGM->Wy** (U06) -- [`ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md).
+- **D04 "33.2 bpc" was a benchmark bug** -- do not use it as evidence. Native D04 runs the sequence stack via `cypha_bench_run --domain 4`.
 
 **What to do:** Instrument native SSM state (`cyphalm_ssm_diagnose`, `--ssm-diagnose` on bench) to verify that:
 - State norms do not collapse or explode over long sequences.
@@ -53,7 +55,7 @@ the gamma bandwidth is not well-tuned for all datasets.
 
 **D10 status:** the above three checks were run against D10's SSM anyway for completeness (`cyphalm_ssm_diagnose --domain d10`): no collapse/explosion (verdict: pass), and no connectivity check applies since D10 has no routing head to disconnect from in the first place. **This instrumentation remains relevant for D17/CyphaLM** (which genuinely uses the SSM -> GRIA routing path); it is no longer an open question for D10.
 
-> **P7 note:** Python `CellAISSM` / `cypha_lm` packages removed; instrument native SSM via `cyphalm_bench_native` and CTests under `native_cyphalm_*`. Cell hypothesis sweep **closed** (2026-07-18): H19 **~2.921 BPC** best cell; hybrid **2.873** is historical (won the cell sweep). Living sequence default is PGM→Wy (U06) — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](reports/CELL_SWEEP_SUMMARY_2026-07-18.md), [`ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md).
+> **P7 note:** Python `CellAISSM` / `cypha_lm` packages removed; instrument native SSM via `cyphalm_bench_native` and CTests under `native_cyphalm_*`. Cell hypothesis sweep **closed** (2026-07-18): H19 **~2.921 BPC** best cell; hybrid **2.873** is historical. Living sequence default is PGM->Wy (U06) -- [`CELL_SWEEP_SUMMARY_2026-07-18.md`](archive/reports/CELL_SWEEP_SUMMARY_2026-07-18.md), [`ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md).
 
 ---
 
@@ -272,28 +274,18 @@ Both require new network coordination code outside the native training core — 
 
 ---
 
-## 10 — RPSM matrix refactor + CyphaLM sequence layer
+## 10 -- RPSM matrix refactor + sequence layer (closed)
 
-**Status:** Option A **shipped**; Option B **STOP / deprioritized (2026-07-18)** — see [`RPSM_UPGRADE_PLAN.md`](reports/RPSM_UPGRADE_PLAN.md) §14–§15, [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](reports/RPSM_SMALL_TIER_GATE_2026-07-18.md), and [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md). Do **not** treat "beat 2.873 via RPSM" as an open plan.
+**Status:** Option A **shipped**; Option B **STOP / deprioritized (2026-07-18)** -- see [`RPSM_UPGRADE_PLAN.md`](archive/plans/RPSM_UPGRADE_PLAN.md), [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](archive/reports/RPSM_SMALL_TIER_GATE_2026-07-18.md), and [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md). Do **not** treat "beat 2.873 via RPSM" as an open plan.
 
-**Target (historical):** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k — **not met** by RPSM Option B. Hybrid is a historical pin; living sequence default is PGM→Wy (U06).
-
-Two composed workstreams (neither replaces the other):
+**Historical target:** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k -- **not met** by RPSM Option B. Hybrid remains a historical pin; living work is **PGM->Wy** quality under `cypha::Cypha`.
 
 | Track | What | Status |
 |-------|------|--------|
-| **Option A** | CyphaDIF matrix refactor (μ/σ, batched LLR/GEMM) | **Shipped** — parity-validated |
-| **Option B** | RPSM sequence layer — CyphaDIF at level 0, hierarchy above | **STOP** — BPTT §14 negative; Small-tier capacity gate failed |
+| **Option A** | Classifier matrix refactor (batched LLR/GEMM) | **Shipped** |
+| **Option B** | RPSM sequence layer | **STOP** |
 
-**Execution order (as run):**
-
-1. Option A — matrix refactor ✅  
-2. Nyström / RFF kernel LLR into A — **partially shipped** (0a); RFF closes XOR gap to ~2.7pp  
-3. Option B — RPSM sequence layer — **STOP / deprioritized**  
-4. Global memory — Izaac episodic store + working memory + GMM world model (future)  
-5. D17 benchmark vs hybrid baseline — hybrid **2.873** holds  
-
-**Parallel track:** [Cell hypothesis testbench](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) — **closed** (2026-07-18); H19 **~2.921 BPC** best cell; H15 **5.262 BPC** @300k not promoted — [`CELL_SWEEP_SUMMARY_2026-07-18.md`](reports/CELL_SWEEP_SUMMARY_2026-07-18.md).
+**Parallel track:** [Cell hypothesis testbench](research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md) -- **closed**; H19 **~2.921 BPC** best cell -- [`CELL_SWEEP_SUMMARY_2026-07-18.md`](archive/reports/CELL_SWEEP_SUMMARY_2026-07-18.md).
 
 **Native milestone:** Option A shipped; see [`CYPHA_FULL_CPP_FRAMEWORK_PLAN.md`](native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md).
 
@@ -303,15 +295,15 @@ Two composed workstreams (neither replaces the other):
 
 | When | What | Evidence |
 |------|------|----------|
-| **Now — tuning** | Kernel LLR (Nyström + RFF) — 0a | Shipped; RFF auto-γ closes XOR gap to **~2.7pp** (was ~18pp) |
-| **Now — shipped** | Auto-gamma RFF — 0b | Native fit + Qt + bench |
-| **Now — shipped** | D10/D17 CellAI SSM — 0c | D10: **90.11%** ECG5000 (2026-07-18); hybrid D17 **2.873 BPC** |
-| **Now — shipped** | Qt UX 2a–2e; minimal Web UI — 4 | Threaded train, charts, compare runs, dark theme, REST SPA |
-| **Shipped (v2.3.25)** | Packaged AppImage / Windows bundle — 3 | `packaging/` scripts + release bundles (One Cypha) |
-| **Done (policy)** | CUDA local-only validation — 1 | No hosted GPU CI; Linux CTest + `windows_msvc`; MinGW not a gate |
-| **Human-only** | Paper arXiv upload | `arxiv_bundle` ready — see [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) |
-| **2–4 months** | Multi-model `cypha_rest` — 5 | Deployment |
-| **Closed** | RPSM Option B — 10 | STOP; hybrid **2.873** historical; living default PGM→Wy (U06) |
-| **Closed** | Cell hypothesis sweep | H19 ~2.921 best; hybrid wins |
-| **4–8 months** | Curriculum / active learning; ONNX — 6/7 | Curriculum/uncertainty shipped; ONNX integration open |
-| **Longer** | Federated; GGUF — 8 / upgrades | Research |
+| **Now -- living** | PGM->Wy sequence quality | Product spine under `cypha::Cypha` |
+| **Now -- tuning** | Kernel LLR (Nystrom + RFF) -- 0a | Shipped; RFF auto-gamma closes XOR gap to **~2.7pp** |
+| **Now -- shipped** | D10 ECG -- 0c | **90.11%** ECG5000 (2026-07-18) |
+| **Historical pin** | Hybrid D17 **2.873 BPC** | Lock / bench only -- not living default |
+| **Now -- shipped** | Qt UX 2a-2e; minimal Web UI -- 4 | Threaded train, charts, REST SPA |
+| **Shipped (v2.3.25)** | Packaged AppImage / Windows bundle -- 3 | One Cypha release |
+| **Done (policy)** | CUDA local-only validation -- 1 | No hosted GPU CI |
+| **Human-only** | Paper arXiv upload | `arxiv_bundle` ready -- [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) |
+| **2-4 months** | Multi-model `cypha_rest` -- 5 | Deployment |
+| **Closed** | RPSM Option B / cell sweep -- 10 | STOP; see archive |
+| **4-8 months** | ONNX integration -- 7 | Curriculum/uncertainty already shipped |
+| **Longer** | Federated; GGUF -- 8 / upgrades | Research |

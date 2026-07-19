@@ -9,14 +9,16 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Fixed
+- **Bench regression pins (D01 / D04 / D16A):** restored locked accuracy / BPC / routing numbers after MSVC and hybrid-default drift -- portable Fisher-Yates shuffle (`portable_shuffle.hpp`), golden D01 synthetic draws (`d01_synthetic_golden.inc`), raw-feature logistic baselines, **opt-in** n-gram count prior (off unless enabled), and native D16A ARI. Pins: D01 linear **0.9875** vs logistic **0.8875**; D04 ~**4.14 BPC** @ 8k; D16A **ARI = 1.0**.
 - **`native_rest_schema_contract` (Linux):** `ChildProcess` is now move-only so assigning the spawned `cypha_rest` no longer kills the server before `/health` (was flaky `server did not become ready` at ~15s).
 - **`cypha_cell_hypothesis_sweep`:** `--output-dir` now writes `variant_*.json` / `summary.csv` even for single `--cell-variant` runs (previously overnight-sweep only).
 
 ### Added
-- **D10A ECG5000 >90%:** enriched temporal features + 44 passes → **90.11%** default (`CYPHA_D10_ECG_ENRICH=0` keeps legacy 85.96%).
+- **D10A ECG5000 >90%:** enriched temporal features + 44 passes -> **90.11%** default (`CYPHA_D10_ECG_ENRICH=0` keeps legacy 85.96%).
 - **Paper PDF:** `paper/arxiv_bundle/CyphaLM_paper.pdf` (pandoc + XeLaTeX).
 
 ### Changed
+- **Docs archive:** historical dated reports / CyphaLM studies / mega-plans moved under `docs/archive/`; living hub rewritten for One Cypha (`cypha::Cypha`, PGM->Wy default, hybrid **2.873** historical pin only).
 - **Windows toolchain / CI:** blocking `mingw_cross` job replaced by `windows_msvc` (native MSVC Release on `windows-latest`). Release zip is packaged via `scripts/package_release_windows.ps1` from an MSVC build; MinGW cross-compile is no longer a release or CI gate.
 
 ### Removed

@@ -53,7 +53,7 @@ Random Fourier Features approximate RBF without landmark eigendecomp. Faster ini
 
 **Update (2026-07-11):** RFF kernel LLR basis (with auto-gamma via median heuristic as the default) now also implemented directly in `KernelMemory` (`make_rff` / `auto_gamma_median_heuristic` in `native/src/kernel_memory.cpp`) and exposed via `xor_kernel_bench --kernel-basis rff`, as a drop-in alternative to the Nyström landmark sketch for the XOR kernel-LLR benchmark — `O(M·d)` per step instead of `O(M^3)`, which let landmark/feature count scale well past the Nyström M=256–384 practical ceiling. Best found: `rff_dim=4096`, latent features, auto-gamma → 76.3% accuracy, ~2.7pp gap to the sklearn RBF ceiling (vs ~18pp at the Nyström M=256 default). Full sweep and fixed-vs-auto-gamma comparison in [`RESEARCH_STATUS.md`](../../RESEARCH_STATUS.md) Priority 1.
 
-**Update (2026-07-17):** **Promoted as recommended exploratory default for generalizable `latent` mode** (not production `xor_pair`). Profile: `bench/config/latent_rff_auto_gamma.json`; closeout report [`RFF_LATENT_PROMOTE_2026-07-17.md`](../../reports/RFF_LATENT_PROMOTE_2026-07-17.md). Shipped `d03_xor` / `kernel_llr_profile.json` defaults unchanged.
+**Update (2026-07-17):** **Promoted as recommended exploratory default for generalizable `latent` mode** (not production `xor_pair`). Profile: `bench/config/latent_rff_auto_gamma.json`; closeout report [`RFF_LATENT_PROMOTE_2026-07-17.md`](../../archive/reports/RFF_LATENT_PROMOTE_2026-07-17.md). Shipped `d03_xor` / `kernel_llr_profile.json` defaults unchanged.
 
 **Update (2026-07-11, continued) — D03 bench-domain wiring + Feynman generalization check:**
 
@@ -107,7 +107,7 @@ Every one of the 20 equations individually loses R² under the kernel path at th
 | D4 | Encoder + Nyström | Match/exceed SVM |
 | D5 | Full diagnostic suite | All tasks ≥ SVM ceiling |
 
-Domains: S1 linear, S3 XOR, R1 Iris, R3 digits — see [`DIAGNOSTIC_REPORT.md`](../../reports/DIAGNOSTIC_REPORT.md).
+Domains: S1 linear, S3 XOR, R1 Iris, R3 digits — see [`DIAGNOSTIC_REPORT.md`](../../archive/reports/DIAGNOSTIC_REPORT.md).
 
 ---
 

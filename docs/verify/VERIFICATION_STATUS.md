@@ -19,7 +19,7 @@ Honest snapshot for **native production**. “Debugged” here means *automated 
 
 GitHub Actions **CI** (`.github/workflows/ci.yml`): **two blocking jobs** — **`build_and_test`** (Ubuntu: cmake + **`ctest -R native_`**) and **`windows_msvc`** (native MSVC Release on `windows-latest`). MinGW is optional local only — not a CI gate.
 
-**CyphaLM (research):** `ctest --test-dir native/build -R native_cyphalm --output-on-failure` locally when changing LM native code.
+**Cypha sequence:** `ctest --test-dir native/build -R native_cyphalm --output-on-failure` locally when changing sequence / checkpoint code. Living default is **PGM->Wy**; hybrid modes remain for historical BPC benches.
 
 **Not covered automatically:** interactive GUI workflows, long-run memory leaks, multi-thread stress, real KDD-scale files unless you supply data.
 

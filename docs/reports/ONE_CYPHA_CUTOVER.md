@@ -70,4 +70,4 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 
 ## Release
 
-**v2.3.25** (2026-07-18) — One Cypha cutover shipped at commit `5efc585`; CI release assets live. See [`RELEASE_V2_3_25_2026-07-18.md`](RELEASE_V2_3_25_2026-07-18.md).
+**v2.3.25** (2026-07-18) -- One Cypha cutover shipped at commit `5efc585`; CI release assets live. See [`../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md`](../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md).

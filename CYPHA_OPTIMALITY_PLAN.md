@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-18:** **Phases 0–9 addressed** (mix of done / opt-in / no-go). Overnight cell sweep + H15@300k closed (best cell H19 ~2.921; H15 = 5.262 — **not** a promote; hybrid pin **2.873**). **Open (no default flip):** P3 XOR ≥75% for default-on (**STOP / REJECT** at ~50.5%); P9 mid-estimators / session extras. Quality/Perf Wave 1 substrate: see [`docs/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md`](docs/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Living BoW: [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-18:** **Phases 0–9 addressed** (mix of done / opt-in / no-go). Overnight cell sweep + H15@300k closed (best cell H19 ~2.921; H15 = 5.262 — **not** a promote; hybrid pin **2.873**). **Open (no default flip):** P3 XOR ≥75% for default-on (**STOP / REJECT** at ~50.5%); P9 mid-estimators / session extras. Quality/Perf Wave 1 substrate: see [`docs/archive/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md`](docs/archive/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Living BoW: [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
 
 ---
 
@@ -15,7 +15,7 @@
 | 2 | Fix MoE with EM | [x] Done | `de4fa16` — EM responsibilities in `mke_scalar_train_step`; util caveat in `OPTIMALITY_PHASE2_2026-07-17.md` |
 | 3 | Per-class GMM (real XOR fix) | [x] **STOP** — REJECT default-on | `1b59f3e` — `use_class_gmm` OFF; XOR ON≈50.5% — keep opt-in only |
 | 4 | Bayesian model averaging over Δk | [~] Opt-in shipped | `33125b8` — analytic NIG BMA default OFF; see `OPTIMALITY_PHASE4_2026-07-17.md` |
-| 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
+| 5 | Orthogonal / leverage-score features | [x] Shipped (2026-07-17) | Leverage Nyström + SORF opt-in; CTest `native_kernel_approx_p5_smoke`; see `docs/archive/reports/OPTIMALITY_PHASE5_2026-07-17.md` |
 | 6 | Variational IB encoder | [~] Opt-in | `f0ea334` — default OFF; see `OPTIMALITY_PHASE6_2026-07-17.md` |
 | 7 | Score matching → delete Bessel LUT | [~] Opt-in; LUT kept | `f19e167` — score-match path + CTest; LUT retained — see `OPTIMALITY_PHASE7_2026-07-17.md` |
 | 8 | Rao-Blackwellise sampling paths | [x] Audit no-go | `322cb68` — no MC estimators in scope — see `OPTIMALITY_PHASE8_2026-07-17.md` |
@@ -167,7 +167,7 @@ Each phase is self-contained and Cursor-actionable:
 
 ## Phase 5 — Orthogonal / leverage-score features (independent; parallelisable)
 
-**Status:** [x] **Shipped** (2026-07-17). Leverage-score Nyström + SORF RFF opt-in paths; CTest `native_kernel_approx_p5_smoke`. Report: [`docs/reports/OPTIMALITY_PHASE5_2026-07-17.md`](docs/reports/OPTIMALITY_PHASE5_2026-07-17.md).
+**Status:** [x] **Shipped** (2026-07-17). Leverage-score Nyström + SORF RFF opt-in paths; CTest `native_kernel_approx_p5_smoke`. Report: [`docs/archive/reports/OPTIMALITY_PHASE5_2026-07-17.md`](docs/archive/reports/OPTIMALITY_PHASE5_2026-07-17.md).
 
 **Objective:** Raise the kernel-approximation quality at fixed feature budget. Complements Phase 3 from the other side.
 

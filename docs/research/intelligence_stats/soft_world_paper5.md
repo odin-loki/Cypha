@@ -628,7 +628,7 @@ We claim the complete soft world system is a sufficient architecture for general
 **Delivered by:** NIG framework — exact epistemic/aleatoric decomposition at every inference step. The system always has a calibrated uncertainty estimate.
 
 **Premise 5:** General intelligence requires learning without forgetting.
-**Delivered by:** Online NIG updates — no forgetting per isolated model file (D16F: zero forgetting by architectural isolation); shared-model continual learning remains an open problem (D16B; EWC scoping best forgetting **~0.108** at λ=2.0 — see [`EWC_D16B_SCOPING_2026-07-12.md`](../../reports/EWC_D16B_SCOPING_2026-07-12.md)).
+**Delivered by:** Online NIG updates — no forgetting per isolated model file (D16F: zero forgetting by architectural isolation); shared-model continual learning remains an open problem (D16B; EWC scoping best forgetting **~0.108** at λ=2.0 — see [`EWC_D16B_SCOPING_2026-07-12.md`](../../archive/reports/EWC_D16B_SCOPING_2026-07-12.md)).
 
 **Premise 6:** General intelligence requires the ability to plan and reason about the future.
 **Delivered by:** Simulation engine — forward simulation over causal graphs gives n-step prediction under interventions. Planning is simulation search.

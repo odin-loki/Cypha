@@ -25,7 +25,7 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Full baseline lock (300k d17) ✅
 
-**Canonical pin:** **2.873 BPC** (`bench/BASELINE_LOCK.json` → `d17_hybrid_baseline`). Full reconciliation: [`docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`](../reports/BASELINE_PIN_CANONICAL_2026-07-17.md).
+**Canonical pin:** **2.873 BPC** (`bench/BASELINE_LOCK.json` → `d17_hybrid_baseline`). Full reconciliation: [`docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`](../archive/reports/BASELINE_PIN_CANONICAL_2026-07-17.md).
 
 | Figure | BPC | Role |
 |--------|-----|------|

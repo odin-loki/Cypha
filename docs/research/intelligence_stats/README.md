@@ -15,4 +15,4 @@ Seven universal intelligence statistics and their applications (P-space profilin
 
 **Smoke tests:** `native_intelligence_profiler_smoke`, `native_intelligence_profiler_papers`, `native_intelligence_bench_smoke`.
 
-**Implementation report:** [docs/reports/INTELLIGENCE_STATS_IMPLEMENTATION.md](../../reports/INTELLIGENCE_STATS_IMPLEMENTATION.md)
+**Implementation report:** [docs/reports/INTELLIGENCE_STATS_IMPLEMENTATION.md](../../archive/reports/INTELLIGENCE_STATS_IMPLEMENTATION.md)

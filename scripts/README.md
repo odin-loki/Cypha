@@ -1,6 +1,8 @@
 # Scripts index
 
-Native build, validation, and release helpers. Narrative “when to run what” lives in **[`docs/README.md`](../docs/README.md)**. **Fixtures / native / schema cadence:** **[`docs/verify/MAINTENANCE.md`](../docs/verify/MAINTENANCE.md)**.
+Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`). Narrative "when to run what" lives in **[`docs/README.md`](../docs/README.md)**. **Fixtures / native / schema cadence:** **[`docs/verify/MAINTENANCE.md`](../docs/verify/MAINTENANCE.md)**.
+
+> **Historical pin:** D17 hybrid GRIA+LSTM **2.873 BPC** in `bench/BASELINE_LOCK.json` is for lock / overnight validation only. Living sequence default is **PGM->Wy** -- [`docs/reports/ONE_CYPHA_CUTOVER.md`](../docs/reports/ONE_CYPHA_CUTOVER.md).
 
 ## Validation gates (primary)
 

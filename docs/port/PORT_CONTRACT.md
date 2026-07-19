@@ -1,8 +1,18 @@
-# Cypha → C++ / CUDA / Qt — frozen reference contracts
+# Cypha -> C++ / CUDA / Qt -- frozen reference contracts
 
 This document is the **normative checklist** for native ports. Behavior must match the frozen contracts in this document unless you explicitly version and document a breaking change.
 
-> **Naming:** Historical Python **CyphaDIF** names below are wire-format parity references only. The living product is **Cypha** (classifier + sequence); REST is **`cypha_rest`**.
+## Product lead
+
+| Layer | Living truth |
+|-------|----------------|
+| **Public type** | **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens |
+| **REST** | **`cypha_rest`** -- `/predict`, `/update`, `/sample`, `/retrieve`, `/sequence/*`, `/generate` |
+| **Sequence default** | **PGM->Wy (U06)** via `Cypha::init_default_sequence` |
+| **Hybrid GRIA+LSTM** | **Bench / historical pin** (D17 **2.873 BPC** in `bench/BASELINE_LOCK.json`) -- not the product default |
+| **Python names** | **Wire-format history only** (`.cypha` v3 keys, parity fixtures). Runtime packages removed (P7). |
+
+> Dual brands "CyphaDIF" / "CyphaLM" in sections below are historical labels for the same product surfaces. Cutover: [`../reports/ONE_CYPHA_CUTOVER.md`](../reports/ONE_CYPHA_CUTOVER.md).
 
 ## 1. Binary state (`.cypha`)
 
@@ -174,6 +184,8 @@ Owned by **`cypha::Cypha`**. Latent sampling when a `.cypha` model is loaded —
 **Note:** `POST /generate` = token autoregression. `POST /sample` = latent sampling.
 
 ## 4b. Native sequence stack (inside `cypha_core`)
+
+> **Product note:** Living entry is `cypha::Cypha` sequence APIs. Hybrid `--mode hybrid` / `hybrid_gria_lstm` profiles remain for **historical BPC benches** and lock validation; they are not the shipping sequence default (PGM->Wy).
 
 Sequence sources live under `native/include/cypha/cyphalm/`, `native/src/cyphalm/`, compiled into **`cypha_core`** (compat alias target `cypha_lm_native` remains). Public facade: **`cypha::Cypha`**. Build notes: [`docs/native/CYPHALM_NATIVE_BUILD.md`](../native/CYPHALM_NATIVE_BUILD.md).
 

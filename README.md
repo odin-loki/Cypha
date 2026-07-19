@@ -85,8 +85,10 @@ Prebuilt bundles (**v2.3.25**): [Windows MSVC zip](https://github.com/odin-loki/
 | [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md) | One-page native install → validate → bench → tune → REST. |
 | [`docs/port/PORT_CONTRACT.md`](docs/port/PORT_CONTRACT.md) | The parity contract — `.cypha` v3, REST shapes, bench §6. |
 | [`docs/verify/VERIFICATION_STATUS.md`](docs/verify/VERIFICATION_STATUS.md) | Current CTest parity results across all fixtures. |
-| [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/reports/DIAGNOSTIC_REPORT.md) | 2026-05-30 full diagnostic: three root-cause bugs found, +23.5 pp on linearly-separable 2-class. |
-| [`docs/reports/SOM_UPGRADE_REPORT.md`](docs/reports/SOM_UPGRADE_REPORT.md) | SOM/GNG/GRIA/Hebbian upgrade evaluation: all six upgrades benchmarked; default flags remain OFF. |
+| [`docs/reports/ONE_CYPHA_CUTOVER.md`](docs/reports/ONE_CYPHA_CUTOVER.md) | One Cypha cutover -- `cypha::Cypha`, PGM->Wy living default, hybrid 2.873 historical. |
+| [`docs/archive/README.md`](docs/archive/README.md) | Archived reports / studies / plans (not product spine). |
+| [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](docs/archive/reports/DIAGNOSTIC_REPORT.md) | 2026-05-30 diagnostic (archived). |
+| [`docs/archive/failed_experiments/cypha_som/README.md`](docs/archive/failed_experiments/cypha_som/README.md) | SOM upgrade failed experiment (archived). |
 | [`native/`](native/) | C++ native core. CMake build. Milestones M1–M6 complete. |
 | [`fixtures/`](fixtures/) | Committed parity assets — input vectors and expected outputs for CTest validation. |
 | [`bench/`](bench/) | Native benchmark tree: config, data, report, artifacts. |
@@ -198,7 +200,7 @@ Full inventory in [`native/README.md`](native/README.md). CI: **`build_and_test`
 
 ## 📊 Empirical benchmark results (2026-05-30)
 
-Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/reports/DIAGNOSTIC_REPORT.md). Three root-cause bugs were found and fixed; results below are **post-fix**:
+Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](docs/archive/reports/DIAGNOSTIC_REPORT.md). Three root-cause bugs were found and fixed; results below are **post-fix**:
 
 | Task | Cypha | SGD (online) | SVM ceiling | Notes |
 |------|----------|--------------|-------------|-------|
@@ -210,12 +212,12 @@ Full diagnostic run documented in [`docs/reports/DIAGNOSTIC_REPORT.md`](docs/rep
 | R4 — Breast cancer | 0.957 | 0.950 | 0.983 | | |
 
 **Key findings:**
-- **Forgetting:** No forgetting per isolated model file (D16F: 0.000); shared-model continual learning is an open problem (D16B: forgetting_score ≈ 0.813; EWC scoping best **~0.108** at λ=2.0 — see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 5 and [`docs/reports/EWC_D16B_SCOPING_2026-07-12.md`](docs/reports/EWC_D16B_SCOPING_2026-07-12.md)).
+- **Forgetting:** No forgetting per isolated model file (D16F: 0.000); shared-model continual learning is an open problem (D16B: forgetting_score ≈ 0.813; EWC scoping best **~0.108** at λ=2.0 — see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 5 and [`docs/archive/reports/EWC_D16B_SCOPING_2026-07-12.md`](docs/archive/reports/EWC_D16B_SCOPING_2026-07-12.md)).
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: latent RFF auto-gamma reaches **~76.3%** (~2.7 pp vs sklearn ~79%); see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **D04 / D17:** historical hybrid GRIA+LSTM pin **2.873 BPC** @ 300k WikiText-2 (`bench/BASELINE_LOCK.json`); living sequence spine is PGM→Wy (U06). Run via **`cypha_bench_run`**.
-- **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
+- **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/archive/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
 - **Sequence REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE), plus `/sample`, `/retrieve`, `/sequence/*`.
 
 ---

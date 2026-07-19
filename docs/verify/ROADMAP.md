@@ -62,14 +62,15 @@ Kernel LLR (Nyström) shipped in C++ with **`xor_kernel_bench`** (+10.6 pp XOR g
 
 ---
 
-## Phase 6 — CyphaLM research prototype
+## Phase 6 -- Sequence research (historical hybrid pin)
 
-Native **`cypha_lm_native`** / **`cyphalm_bench_native`**. Local gate: `ctest --test-dir native/build -R native_cyphalm --output-on-failure`.
+Native sequence stack lives in **`cypha_core`** (`cypha_lm_native` is an INTERFACE alias). Bench CLI: **`cyphalm_bench_native`**. Local gate: `ctest --test-dir native/build -R native_cyphalm --output-on-failure`.
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **D17 held-out BPC** | **2.873** | Canonical hybrid pin @ 300k (`bench/BASELINE_LOCK.json`); see [`RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) |
-| **D04 “33.2 bpc”** | benchmark bug | Wrong prob indexing on legacy D04 path — not CyphaLM |
+| **Living sequence default** | **PGM->Wy (U06)** | Product spine via `cypha::Cypha::init_default_sequence` -- [`ONE_CYPHA_CUTOVER.md`](../reports/ONE_CYPHA_CUTOVER.md) |
+| **D17 hybrid BPC @ 300k** | **2.873** | **Historical pin only** (`bench/BASELINE_LOCK.json`); not the living production default |
+| **D04 "33.2 bpc"** | benchmark bug | Wrong prob indexing on legacy D04 path -- ignore as evidence |
 
 See [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) and [`CHANGELOG.md`](../../CHANGELOG.md).
 

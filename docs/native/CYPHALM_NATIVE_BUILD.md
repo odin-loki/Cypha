@@ -7,7 +7,7 @@ How to configure and build **`cypha_lm_native`** and CyphaLM tooling (`cyphalm_b
 
 ## Quick start (recommended)
 
-**Windows: MSVC (`windows-vs2026-release` / `windows-msvc-release` presets) is the primary, recommended toolchain** — see [`MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`](../reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md). MSVC is at least as correct on the full CTest suite, faster on this workload (~28% on D17), and the only Windows toolchain that can build the CUDA path at all (MinGW + nvcc is unsupported). MinGW/Ninja is now a secondary path — see "Cross-compile / CI (MinGW)" below.
+**Windows: MSVC (`windows-vs2026-release` / `windows-msvc-release` presets) is the primary, recommended toolchain** — see [`MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`](../archive/reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md). MSVC is at least as correct on the full CTest suite, faster on this workload (~28% on D17), and the only Windows toolchain that can build the CUDA path at all (MinGW + nvcc is unsupported). MinGW/Ninja is now a secondary path — see "Cross-compile / CI (MinGW)" below.
 
 ```powershell
 # Windows — MSVC preset (from native/)
@@ -94,7 +94,7 @@ Or VS 2026: `windows-vs2026-release` preset (binaries under `build-windows-vs202
 
 ### Optional: Ninja + MinGW (Strawberry / MSYS2)
 
-Not used by CI or releases. See [`MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`](../reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md). Cannot build the CUDA path.
+Not used by CI or releases. See [`MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md`](../archive/reports/MSVC_TOOLCHAIN_MIGRATION_2026-07-12.md). Cannot build the CUDA path.
 
 ```powershell
 cmake -S native -B C:\Temp\cypha_native_build -G Ninja -DCMAKE_BUILD_TYPE=Release `

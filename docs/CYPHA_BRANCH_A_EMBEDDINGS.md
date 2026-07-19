@@ -156,4 +156,4 @@ $env:CYPHA_BRANCH_A_CHECKPOINT="$HOME/.cypha/branch_a_router"
 
 - Embeddings adapter: `bench/adapters/frozen_text_embeddings.py`
 - D09 documents: `bench/domains/d09_documents.py`
-- Phase 2 encoder study: [`CYPHA_TESTS_PHASE2.md`](CYPHA_TESTS_PHASE2.md)
+- Phase 2 encoder study: [`CYPHA_TESTS_PHASE2.md`](archive/studies/CYPHA_TESTS_PHASE2.md)
