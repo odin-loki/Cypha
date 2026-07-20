@@ -92,6 +92,53 @@ void apply_pgm_logits_recipe(CyphaLMConfig& cfg) {
     cfg.ngram_fuse_split = false;
 }
 
+void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
+    cfg.context_mode = ContextMode::Hybrid;
+    cfg.use_pgm_cell = false;
+    cfg.use_unified_context = false;
+    cfg.unified_context_source = UnifiedContextSource::None;
+    cfg.unified_readout = UnifiedReadout::None;
+    cfg.use_rpsm_layer = false;
+    cfg.use_multiscale = true;
+    cfg.ngram_fuse_split = true;
+    cfg.use_ngram_count_prior = false;
+    // KILL @40k (raw 3.634 / gated 3.570 vs L2 3.369). Keep opt-in research only.
+    cfg.use_lstm_memory_attn = false;
+    if (cfg.ngram_context < 2) {
+        cfg.ngram_context = 3;
+    }
+    cfg.hybrid_blend_learnable = true;
+    if (cfg.lstm_hidden < 32) {
+        cfg.lstm_hidden = 128;
+    }
+    if (cfg.d_state < cfg.lstm_hidden) {
+        cfg.d_state = cfg.lstm_hidden;
+    }
+    if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
+        cfg.view_schedule = "schedule_b";
+    }
+}
+
+void apply_wave2_bptt_recipe(CyphaLMConfig& cfg, const Wave2BpttOptions& opt) {
+    cfg.lstm_bptt_steps = std::max(1, opt.bptt_steps);
+    cfg.lstm_optim = "adam";
+    cfg.lstm_grad_clip = opt.grad_clip;
+    cfg.lstm_init = "classic";
+    cfg.lstm_lr = opt.lstm_lr;
+    if (!opt.with_schedule || opt.train_steps <= 0) {
+        cfg.lstm_lr_warmup_steps = 0;
+        cfg.lstm_lr_cosine_steps = 0;
+        return;
+    }
+    // ~2.5% warmup (min 64, max 2000), cosine over the rest of the budget.
+    const int steps = std::max(1, opt.train_steps);
+    int warmup = std::max(64, steps / 40);
+    warmup = std::min(warmup, 2000);
+    warmup = std::min(warmup, std::max(1, steps / 4));
+    cfg.lstm_lr_warmup_steps = warmup;
+    cfg.lstm_lr_cosine_steps = std::max(1, steps - warmup);
+}
+
 void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
     cfg.use_context_bank = false;
     cfg.use_spectral_pde = false;
@@ -103,7 +150,17 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
             cfg.context_mode = ContextMode::SsmGria;
             break;
         case BenchMode::Hybrid:
+            // Hermetic hybrid: clear PGM/unified leftovers without clobbering profile knobs
+            // (view_schedule, ngram_context, dims). Product default uses
+            // ``apply_hybrid_production_recipe`` instead.
             cfg.context_mode = ContextMode::Hybrid;
+            cfg.use_pgm_cell = false;
+            cfg.use_unified_context = false;
+            cfg.unified_context_source = UnifiedContextSource::None;
+            cfg.unified_readout = UnifiedReadout::None;
+            cfg.use_rpsm_layer = false;
+            cfg.ngram_fuse_split = true;
+            cfg.use_ngram_count_prior = false;
             break;
         case BenchMode::SsmGria:
             cfg.context_mode = ContextMode::GriaNgram;
@@ -243,6 +300,8 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_d("laplace_smoothing", cfg.laplace_smoothing);
     set_d("gria_lr_decay", cfg.gria_lr_decay);
     set_i("lstm_hidden", cfg.lstm_hidden);
+    set_i("lstm_layers", cfg.lstm_layers);
+    if (cfg.lstm_layers < 1) cfg.lstm_layers = 1;
     set_d("lstm_lr", cfg.lstm_lr);
     set_i("lstm_bptt_steps", cfg.lstm_bptt_steps);
     set_s("lstm_optim", cfg.lstm_optim);
@@ -396,6 +455,9 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
 }
 
 void apply_lstm_recipe_env(CyphaLMConfig& cfg) {
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LAYERS"); v.has_value() && !v->empty()) {
+        cfg.lstm_layers = std::max(1, std::stoi(*v));
+    }
     if (const auto v = cypha::env_get("CYPHA_LSTM_BPTT"); v.has_value() && !v->empty()) {
         cfg.lstm_bptt_steps = std::max(1, std::stoi(*v));
     }

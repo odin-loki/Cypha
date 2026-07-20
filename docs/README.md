@@ -2,7 +2,7 @@
 
 **One product:** `cypha::Cypha` -- classify + regress + sample latents + next-token / text generate. Native C++ only (`cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`).
 
-Living sequence default: **PGM->Wy (U06)**. Hybrid D17 **2.873 BPC** is a **historical pin** only -- see [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md).
+Living sequence default: **Hybrid GRIA+LSTM (~2.8 BPC)** with predictive arithmetic coding. See [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md) and [`research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md`](research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md).
 
 Start here, then open the section that matches what you need.
 

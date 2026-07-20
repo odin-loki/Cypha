@@ -1,0 +1,3 @@
+corpus="bench/data/wikitext2/wikitext-2/wiki.train.tokens" loaded=44008
+mode=hybrid ngram_fuse_split=1 lstm_hidden=128 lstm_layers=2 mem_attn=0
+roundtrip failed: 

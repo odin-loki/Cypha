@@ -124,19 +124,41 @@ int main(int argc, char** argv) {
     std::cerr << "init_default_sequence failed\n";
     return 5;
   }
+  if (!model.sequence() ||
+      model.sequence()->config().context_mode != cypha::cyphalm::ContextMode::Hybrid) {
+    std::cerr << "init_default_sequence should use Hybrid production recipe\n";
+    return 10;
+  }
   (void)model.train_token(1, 2);
   auto tok = model.predict_next(1);
   if (!tok.detail.empty()) {
     std::cerr << "predict_next: " << tok.detail << "\n";
     return 6;
   }
-  std::cout << "predict_next log_probs=" << tok.log_probs.size() << "\n";
+  std::cout << "predict_next log_probs=" << tok.log_probs.size()
+            << " mode=" << cypha::cyphalm::context_mode_name(model.sequence()->config().context_mode)
+            << "\n";
 
   cypha::GenerateTokenOpts gopt;
   gopt.max_tokens = 4;
   gopt.decode.strategy = cypha::cyphalm::DecodeStrategy::Greedy;
   const std::string text = model.generate({1, 2, 3}, gopt);
   std::cout << "generate chars=" << text.size() << "\n";
+
+  const std::vector<std::uint32_t> stream = {1, 2, 3, 4, 5, 2, 3, 4};
+  auto packed = model.compress_tokens(stream);
+  if (!packed.detail.empty() || packed.bytes.empty()) {
+    std::cerr << "compress_tokens: " << packed.detail << "\n";
+    return 11;
+  }
+  std::string detail;
+  auto round = model.decompress_tokens(packed.bytes, stream.front(), stream.size(), &detail);
+  if (!detail.empty() || round != stream) {
+    std::cerr << "compress/decompress roundtrip failed: " << detail << "\n";
+    return 12;
+  }
+  std::cout << "predictive_codec model_bpc=" << packed.model_bpc << " coded_bpc=" << packed.coded_bpc
+            << "\n";
   std::cout << "one_cypha_smoke OK\n";
   return 0;
 }

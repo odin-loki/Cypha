@@ -38,6 +38,26 @@ struct CharLSTMGrad {
   std::vector<double> dby;
   std::vector<double> dh_prev;
   std::vector<double> dc_prev;
+  /// Extra-layer grads for layers 1..L-1 (empty when ``n_layers==1``).
+  std::vector<std::vector<double>> dWx_l;
+  std::vector<std::vector<double>> dWh_l;
+  std::vector<std::vector<double>> db_l;
+};
+
+/// Per-layer activations for stacked residual LSTM (``n_layers > 1``).
+struct CharLSTMLayerCache {
+  std::vector<double> x;       // layer input (token embed for L0; prev residual h for L>0)
+  std::vector<double> h;       // prev recurrent h
+  std::vector<double> c;
+  std::vector<double> i;
+  std::vector<double> f;
+  std::vector<double> g;
+  std::vector<double> o;
+  std::vector<double> c_new;
+  std::vector<double> h_lstm;  // pre-residual LSTM output
+  std::vector<double> h_new;   // post-residual (L0: = h_lstm; L>0: = h_lstm + x)
+  std::vector<double> tanh_c_new;
+  std::vector<double> gates;
 };
 
 struct CharLSTMCache {
@@ -63,25 +83,39 @@ struct CharLSTMCache {
   bool used_eml{false};
   bool used_axiom{false};
   bool used_sr_gates{false};
+  /// Filled when ``n_layers > 1`` (one entry per layer). Empty on the single-layer pin path.
+  std::vector<CharLSTMLayerCache> layers;
 };
 
-/// Single-layer char LSTM head. Default path is online BPTT-1 + SGD (matches historical pin).
+/// Char LSTM head with optional stacked residual depth.
+///
+/// ``n_layers == 1`` (default): historic single-layer path — D17 pin bit-identical.
+/// ``n_layers >= 2``: Layer 0 is embed→LSTM; layers 1..L-1 take previous residual hidden as
+/// input with ``h_out = h_lstm + h_in``. Readout ``Wy`` is applied **only to the top-layer
+/// residual hidden** (not a sum of residuals).
+///
 /// Opt-in truncated BPTT / Adam / classic init via setters (Quality Wave 1; default OFF).
 class CharLSTMHead {
  public:
   int vocab_size{256};
   int hidden{128};
+  /// Stack depth (default 1 preserves D17 pin). Config: ``lstm_layers`` / ``--lstm-layers``.
+  int n_layers{1};
 
   std::vector<double> E;    // vocab_size x hidden
-  std::vector<double> Wx;   // (4*hidden) x hidden
-  std::vector<double> Wh;   // (4*hidden) x hidden
-  std::vector<double> b;    // 4*hidden
-  std::vector<double> Wy;   // vocab_size x hidden
+  std::vector<double> Wx;   // layer-0 (4*hidden) x hidden
+  std::vector<double> Wh;   // layer-0 (4*hidden) x hidden
+  std::vector<double> b;    // layer-0 4*hidden
+  std::vector<double> Wy;   // vocab_size x hidden  (top-layer readout)
   std::vector<double> by;   // vocab_size
+  /// Layers 1..L-1 weights (size ``n_layers-1``; empty when ``n_layers==1``).
+  std::vector<std::vector<double>> Wx_l;
+  std::vector<std::vector<double>> Wh_l;
+  std::vector<std::vector<double>> b_l;
 
   CharLSTMHead() = default;
   CharLSTMHead(int vocab_size_in, int hidden_in, std::uint64_t seed = 42,
-               LSTMInitMode init_mode = LSTMInitMode::Default);
+               LSTMInitMode init_mode = LSTMInitMode::Default, int n_layers_in = 1);
 
   void set_activation_mode(LSTMActivationMode mode) { activation_mode_ = mode; }
   LSTMActivationMode activation_mode() const { return activation_mode_; }
@@ -109,6 +143,10 @@ class CharLSTMHead {
   /// Reset internal h/c (stateful online API). Flushes any pending BPTT window without apply.
   void reset_state();
 
+  /// Zero Adam moments / step so encode and decode start from identical optimizer state
+  /// (checkpoints do not persist Adam; warm post-train moments break online_adapt roundtrips).
+  void reset_optim_state();
+
   /// Stateful forward — updates internal h/c; returns log_probs.
   std::vector<double> forward(int token_id);
 
@@ -131,7 +169,13 @@ class CharLSTMHead {
                   const std::vector<double>& Wh_in, const std::vector<double>& b_in,
                   const std::vector<double>& Wy_in, const std::vector<double>& by_in);
 
+  /// Load extra-layer weights (layers 1..L-1). No-op / ignored when ``n_layers==1``.
+  void load_extra_layers(const std::vector<std::vector<double>>& Wx_l_in,
+                         const std::vector<std::vector<double>>& Wh_l_in,
+                         const std::vector<std::vector<double>>& b_l_in);
+
   /// External-state forward step (batch / parity).
+  /// Layer-0 recurrent state is ``h``/``c``; layers 1..L-1 use internal upper-layer state.
   void forward_step(int token_id, const double* h, const double* c, double* log_probs, std::vector<double>& h_out,
                     std::vector<double>& c_out, CharLSTMCache* cache_out = nullptr,
                     double forget_gate_scale = 1.0) const;
@@ -146,7 +190,7 @@ class CharLSTMHead {
   /// now delegates to this one.
   ///
   /// Optional ``dh_next`` / ``dc_next`` (length ``hidden``) inject truncated-BPTT temporal grads
-  /// from the future step; pass nullptr for BPTT-1 (default).
+  /// from the future step into **layer 0** only; pass nullptr for BPTT-1 (default).
   void backward_step(const CharLSTMCache& cache, int target_id, CharLSTMGrad& out,
                      double logit_nudge = 0.0, double hidden_nudge = 0.0,
                      const double* dh_next = nullptr, const double* dc_next = nullptr) const;
@@ -157,14 +201,24 @@ class CharLSTMHead {
 
  private:
   void init_weights(std::uint64_t seed, LSTMInitMode init_mode);
+  void ensure_upper_state() const;
   void ensure_adam_state();
   void ensure_grad_scratch(CharLSTMGrad& g) const;
   void accumulate_grads(CharLSTMGrad& acc, const CharLSTMGrad& step) const;
   void clip_grads_inplace(CharLSTMGrad& grads) const;
   void flush_bptt_window(double lr, CharLSTMGrad* grads_out, double logit_nudge, double hidden_nudge);
+  void forward_step_stacked(int token_id, const double* h, const double* c, double* log_probs,
+                            std::vector<double>& h_out, std::vector<double>& c_out,
+                            CharLSTMCache* cache_out, double forget_gate_scale) const;
+  void backward_step_stacked(const CharLSTMCache& cache, int target_id, CharLSTMGrad& out,
+                             double logit_nudge, double hidden_nudge, const double* dh_next,
+                             const double* dc_next) const;
 
   std::vector<double> h_;
   std::vector<double> c_;
+  /// Upper-layer recurrent state (layers 1..L-1). Mutable so const ``forward_step`` can advance it.
+  mutable std::vector<std::vector<double>> h_upper_;
+  mutable std::vector<std::vector<double>> c_upper_;
   CharLSTMCache cache_;
   bool has_cache_{false};
   LSTMActivationMode activation_mode_{LSTMActivationMode::Standard};
@@ -186,6 +240,9 @@ class CharLSTMHead {
   std::vector<double> m_b_, v_b_;
   std::vector<double> m_Wy_, v_Wy_;
   std::vector<double> m_by_, v_by_;
+  std::vector<std::vector<double>> m_Wx_l_, v_Wx_l_;
+  std::vector<std::vector<double>> m_Wh_l_, v_Wh_l_;
+  std::vector<std::vector<double>> m_b_l_, v_b_l_;
   std::int64_t adam_t_{0};
 };
 

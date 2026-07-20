@@ -289,6 +289,28 @@ add_test(
 )
 set_tests_properties(native_one_cypha_smoke PROPERTIES TIMEOUT 120)
 
+add_executable(predictive_codec_smoke tools/predictive_codec_smoke.cpp)
+target_link_libraries(predictive_codec_smoke PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(predictive_codec_smoke)
+add_test(NAME native_predictive_codec_smoke COMMAND "$<TARGET_FILE:predictive_codec_smoke>")
+set_tests_properties(native_predictive_codec_smoke PROPERTIES TIMEOUT 180)
+
+add_executable(stacked_lstm_smoke tools/stacked_lstm_smoke.cpp)
+target_link_libraries(stacked_lstm_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(stacked_lstm_smoke)
+add_test(NAME native_stacked_lstm_smoke COMMAND "$<TARGET_FILE:stacked_lstm_smoke>")
+set_tests_properties(native_stacked_lstm_smoke PROPERTIES TIMEOUT 120)
+
+add_executable(predictive_codec_bench tools/predictive_codec_bench.cpp)
+target_link_libraries(predictive_codec_bench PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(predictive_codec_bench)
+# Short WikiText slice (or synthetic fallback): hybrid train + arithmetic coding parity.
+add_test(
+  NAME native_predictive_codec_bench_smoke
+  COMMAND "$<TARGET_FILE:predictive_codec_bench>" --n-train 1500 --n-eval 400 --epochs 1
+)
+set_tests_properties(native_predictive_codec_bench_smoke PROPERTIES TIMEOUT 600)
+
 add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
 target_link_libraries(cypha_federated_merge PRIVATE cypha_core)
 

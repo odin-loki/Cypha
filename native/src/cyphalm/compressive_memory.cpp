@@ -139,4 +139,42 @@ std::vector<double> CompressiveMemory::retrieve(const double* query, std::uint32
     return bias;
 }
 
+bool CompressiveMemory::slot_mean(std::uint32_t i, double* out) const {
+    if (!out || i >= slots_.size() || slots_[i].mean.size() != slot_dim_) return false;
+    std::copy(slots_[i].mean.begin(), slots_[i].mean.end(), out);
+    return true;
+}
+
+bool CompressiveMemory::soft_attend(const double* query, std::uint32_t query_len, double* out) const {
+    if (!out || slots_.empty() || query == nullptr || query_len == 0) return false;
+    const std::uint32_t dim = std::min(query_len, slot_dim_);
+    std::fill(out, out + slot_dim_, 0.0);
+
+    double max_logit = -1e300;
+    std::vector<double> logits(slots_.size(), 0.0);
+    for (std::size_t s = 0; s < slots_.size(); ++s) {
+        double dot = 0.0;
+        for (std::uint32_t d = 0; d < dim; ++d) {
+            dot += query[d] * slots_[s].mean[d];
+        }
+        // Scale by sqrt(dim) for stability.
+        logits[s] = dot / std::sqrt(static_cast<double>(std::max(dim, 1u)));
+        max_logit = std::max(max_logit, logits[s]);
+    }
+    double sum = 0.0;
+    for (std::size_t s = 0; s < slots_.size(); ++s) {
+        logits[s] = std::exp(logits[s] - max_logit);
+        sum += logits[s];
+    }
+    if (!(sum > 0.0)) return false;
+    const double inv = 1.0 / sum;
+    for (std::size_t s = 0; s < slots_.size(); ++s) {
+        const double w = logits[s] * inv;
+        for (std::uint32_t d = 0; d < slot_dim_; ++d) {
+            out[d] += w * slots_[s].mean[d];
+        }
+    }
+    return true;
+}
+
 }  // namespace cypha::cyphalm

@@ -34,6 +34,7 @@ struct Args {
     bool intelligence_monitor = false;
     bool math_integration = false;
     int bptt_lstm = -1;
+    int lstm_layers = -1;
     std::string lstm_optim;
     double grad_clip = -1.0;
     std::string lstm_init;
@@ -48,8 +49,9 @@ void usage() {
         << "       (--corpus bench/data/... | --synthetic-tokens N)\n"
         << "       [--max-chars M] [--max-train-steps S] [--threads T]\n"
         << "       [--profile-guided-loss] [--intelligence-monitor] [--math-integration]\n"
-        << "       [--bptt-lstm N] [--optim sgd|adam] [--grad-clip C] [--lstm-init default|classic]\n"
-        << "       [--weight-decay W] [--lstm-lr-warmup N] [--lstm-lr-cosine N]\n";
+        << "       [--bptt-lstm N] [--lstm-layers N] [--optim sgd|adam] [--grad-clip C]\n"
+        << "       [--lstm-init default|classic] [--weight-decay W]\n"
+        << "       [--lstm-lr-warmup N] [--lstm-lr-cosine N]\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -72,6 +74,7 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--intelligence-monitor") a.intelligence_monitor = true;
         else if (k == "--math-integration") a.math_integration = true;
         else if (k == "--bptt-lstm") a.bptt_lstm = std::stoi(need("--bptt-lstm"));
+        else if (k == "--lstm-layers") a.lstm_layers = std::stoi(need("--lstm-layers"));
         else if (k == "--optim") a.lstm_optim = need("--optim");
         else if (k == "--grad-clip") a.grad_clip = std::stod(need("--grad-clip"));
         else if (k == "--lstm-init") a.lstm_init = need("--lstm-init");
@@ -127,6 +130,7 @@ int main(int argc, char** argv) {
         if (args.profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
         cfg.train_epochs = args.epochs;
         if (args.bptt_lstm > 0) cfg.lstm_bptt_steps = args.bptt_lstm;
+        if (args.lstm_layers > 0) cfg.lstm_layers = args.lstm_layers;
         if (!args.lstm_optim.empty()) cfg.lstm_optim = args.lstm_optim;
         if (args.grad_clip >= 0.0) cfg.lstm_grad_clip = args.grad_clip;
         if (!args.lstm_init.empty()) cfg.lstm_init = args.lstm_init;

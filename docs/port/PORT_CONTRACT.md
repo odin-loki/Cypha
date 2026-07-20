@@ -8,7 +8,7 @@ This document is the **normative checklist** for native ports. Behavior must mat
 |-------|----------------|
 | **Public type** | **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens |
 | **REST** | **`cypha_rest`** -- `/predict`, `/update`, `/sample`, `/retrieve`, `/sequence/*`, `/generate` |
-| **Sequence default** | **PGM->Wy (U06)** via `Cypha::init_default_sequence` |
+| **Sequence default** | **Hybrid GRIA+LSTM** via `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` (~2.8 BPC @ 300k) |
 | **Hybrid GRIA+LSTM** | **Bench / historical pin** (D17 **2.873 BPC** in `bench/BASELINE_LOCK.json`) -- not the product default |
 | **Python names** | **Wire-format history only** (`.cypha` v3 keys, parity fixtures). Runtime packages removed (P7). |
 

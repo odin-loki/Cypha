@@ -19,6 +19,11 @@ public:
     void maybe_store_priority(std::uint32_t token_index, const double* pooled, std::uint32_t dim,
                               double priority);
     std::vector<double> retrieve(const double* query, std::uint32_t query_len) const;
+    /// Softmax attention over slot means (dot-product). Writes ``slot_dim`` into ``out``.
+    /// Returns false if no filled slots.
+    bool soft_attend(const double* query, std::uint32_t query_len, double* out) const;
+    /// Copy slot ``i`` mean into ``out`` (length ``slot_dim``). Returns false if OOB/empty.
+    bool slot_mean(std::uint32_t i, double* out) const;
     void reset();
 
     void set_compress_interval(std::uint32_t n) { compress_interval_ = n; }

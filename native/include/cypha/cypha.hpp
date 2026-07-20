@@ -14,6 +14,7 @@
 
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/cyphalm/predictive_codec.hpp"
 #include "cypha/ewc_regularizer.hpp"
 #include "cypha/generation.hpp"
 #include "cypha/infer_cpu.hpp"
@@ -140,10 +141,9 @@ class Cypha {
             const std::string& f_field_json_path = {}, const std::string& regression_json_path = {},
             const std::string& train_hparams_path = {});
 
-  /// Load sequence checkpoint (JSON config path). Defaults to PGM→Wy (U06) if path empty
-  /// and ``init_default_sequence`` was called.
+  /// Load sequence checkpoint (JSON config path).
   bool load_sequence(const std::string& json_path);
-  /// Fresh sequence model with PGM→Wy spine (internal U06 flags; no product brand).
+  /// Fresh sequence model: Hybrid GRIA+LSTM production recipe (~2.8 BPC after ~300k train).
   bool init_default_sequence(int vocab_size = 256, int d_model = 64);
 
   void save(const std::string& cypha_path) const;
@@ -163,6 +163,19 @@ class Cypha {
   TokenOut predict_next(std::uint32_t token);
   double train_token(std::uint32_t token, std::uint32_t next);
   std::string generate(const std::vector<int>& prompt_ids, const GenerateTokenOpts& o = {});
+
+  /// Predictive arithmetic coding (LLMZip-style): model probs → entropy-coded bitstream.
+  /// Default options enable the adaptive predictor mixer (neural + online n-grams).
+  cyphalm::PredictiveCodecResult compress_tokens(
+      const std::vector<std::uint32_t>& tokens, const cyphalm::PredictiveCodecOptions& opt = {});
+  std::vector<std::uint32_t> decompress_tokens(const std::vector<std::uint8_t>& bytes,
+                                               std::uint32_t seed, std::size_t n_tokens,
+                                               std::string* detail = nullptr,
+                                               const cyphalm::PredictiveCodecOptions& opt = {});
+  std::vector<std::uint32_t> generate_via_bits(const std::vector<std::uint32_t>& prefix,
+                                               std::size_t n_new, std::uint64_t rng_seed,
+                                               std::string* detail = nullptr,
+                                               const cyphalm::PredictiveCodecOptions& opt = {});
 
   // Accessors for REST / tools during cutover (non-owning).
   CyphaInferModel* infer() { return infer_.get(); }

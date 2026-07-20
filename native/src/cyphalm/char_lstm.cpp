@@ -216,9 +216,11 @@ void adam_update(std::vector<double>& w, std::vector<double>& m, std::vector<dou
 
 }  // namespace
 
-CharLSTMHead::CharLSTMHead(int vocab_size_in, int hidden_in, std::uint64_t seed, LSTMInitMode init_mode) {
+CharLSTMHead::CharLSTMHead(int vocab_size_in, int hidden_in, std::uint64_t seed, LSTMInitMode init_mode,
+                           int n_layers_in) {
   vocab_size = vocab_size_in;
   hidden = hidden_in;
+  n_layers = std::max(1, n_layers_in);
   init_weights(seed, init_mode);
   reset_state();
 }
@@ -231,20 +233,42 @@ void CharLSTMHead::init_weights(std::uint64_t seed, LSTMInitMode init_mode) {
   b.assign(static_cast<std::size_t>(four_h), 0.0);
   Wy.assign(static_cast<std::size_t>(vocab_size) * static_cast<std::size_t>(hidden), 0.0);
   by.assign(static_cast<std::size_t>(vocab_size), 0.0);
+  const int n_extra = std::max(0, n_layers - 1);
+  Wx_l.assign(static_cast<std::size_t>(n_extra),
+              std::vector<double>(static_cast<std::size_t>(four_h) * static_cast<std::size_t>(hidden), 0.0));
+  Wh_l.assign(static_cast<std::size_t>(n_extra),
+              std::vector<double>(static_cast<std::size_t>(four_h) * static_cast<std::size_t>(hidden), 0.0));
+  b_l.assign(static_cast<std::size_t>(n_extra), std::vector<double>(static_cast<std::size_t>(four_h), 0.0));
 
   std::mt19937_64 rng(seed);
+  auto fill_layer = [&](std::vector<double>& Wx_m, std::vector<double>& Wh_m, std::vector<double>& b_m,
+                        bool is_layer0) {
+    if (init_mode == LSTMInitMode::Classic) {
+      std::normal_distribution<double> nd(0.0, 1.0);
+      constexpr double kScale = 0.02;
+      for (auto& v : Wx_m) v = nd(rng) * kScale;
+      for (int block = 0; block < 4; ++block) {
+        fill_orthogonal_block(Wh_m, hidden, block, rng);
+      }
+      std::fill(b_m.begin(), b_m.end(), 0.0);
+      for (int j = hidden; j < 2 * hidden; ++j) {
+        b_m[static_cast<std::size_t>(j)] = 1.0;
+      }
+      (void)is_layer0;
+    } else {
+      std::normal_distribution<double> nd(0.0, 1.0);
+      constexpr double kScale = 0.02;
+      for (auto& v : Wx_m) v = nd(rng) * kScale;
+      for (auto& v : Wh_m) v = nd(rng) * kScale;
+      std::fill(b_m.begin(), b_m.end(), 0.0);
+    }
+  };
+
   if (init_mode == LSTMInitMode::Classic) {
     std::normal_distribution<double> nd(0.0, 1.0);
     constexpr double kScale = 0.02;
     for (auto& v : E) v = nd(rng) * kScale;
-    for (auto& v : Wx) v = nd(rng) * kScale;
-    for (int block = 0; block < 4; ++block) {
-      fill_orthogonal_block(Wh, hidden, block, rng);
-    }
-    // Forget-gate bias +1 (f gate occupies [hidden, 2*hidden)).
-    for (int j = hidden; j < 2 * hidden; ++j) {
-      b[static_cast<std::size_t>(j)] = 1.0;
-    }
+    fill_layer(Wx, Wh, b, true);
     const double wy_bound =
         std::sqrt(6.0 / static_cast<double>(std::max(1, hidden + vocab_size)));
     std::uniform_real_distribution<double> ud(-wy_bound, wy_bound);
@@ -253,9 +277,22 @@ void CharLSTMHead::init_weights(std::uint64_t seed, LSTMInitMode init_mode) {
     std::normal_distribution<double> nd(0.0, 1.0);
     constexpr double kScale = 0.02;
     for (auto& v : E) v = nd(rng) * kScale;
-    for (auto& v : Wx) v = nd(rng) * kScale;
-    for (auto& v : Wh) v = nd(rng) * kScale;
+    fill_layer(Wx, Wh, b, true);
     for (auto& v : Wy) v = nd(rng) * kScale;
+  }
+  for (int el = 0; el < n_extra; ++el) {
+    fill_layer(Wx_l[static_cast<std::size_t>(el)], Wh_l[static_cast<std::size_t>(el)],
+               b_l[static_cast<std::size_t>(el)], false);
+  }
+}
+
+void CharLSTMHead::ensure_upper_state() const {
+  const int n_extra = std::max(0, n_layers - 1);
+  if (static_cast<int>(h_upper_.size()) != n_extra) {
+    h_upper_.assign(static_cast<std::size_t>(n_extra),
+                    std::vector<double>(static_cast<std::size_t>(hidden), 0.0));
+    c_upper_.assign(static_cast<std::size_t>(n_extra),
+                    std::vector<double>(static_cast<std::size_t>(hidden), 0.0));
   }
 }
 
@@ -279,7 +316,10 @@ void CharLSTMHead::set_weight_decay(double wd) {
 }
 
 void CharLSTMHead::ensure_adam_state() {
-  if (m_E_.size() == E.size()) return;
+  if (m_E_.size() == E.size() &&
+      static_cast<int>(m_Wx_l_.size()) == std::max(0, n_layers - 1)) {
+    return;
+  }
   m_E_.assign(E.size(), 0.0);
   v_E_.assign(E.size(), 0.0);
   m_Wx_.assign(Wx.size(), 0.0);
@@ -292,6 +332,13 @@ void CharLSTMHead::ensure_adam_state() {
   v_Wy_.assign(Wy.size(), 0.0);
   m_by_.assign(by.size(), 0.0);
   v_by_.assign(by.size(), 0.0);
+  const int n_extra = std::max(0, n_layers - 1);
+  m_Wx_l_.assign(static_cast<std::size_t>(n_extra), std::vector<double>(Wx.size(), 0.0));
+  v_Wx_l_.assign(static_cast<std::size_t>(n_extra), std::vector<double>(Wx.size(), 0.0));
+  m_Wh_l_.assign(static_cast<std::size_t>(n_extra), std::vector<double>(Wh.size(), 0.0));
+  v_Wh_l_.assign(static_cast<std::size_t>(n_extra), std::vector<double>(Wh.size(), 0.0));
+  m_b_l_.assign(static_cast<std::size_t>(n_extra), std::vector<double>(b.size(), 0.0));
+  v_b_l_.assign(static_cast<std::size_t>(n_extra), std::vector<double>(b.size(), 0.0));
   adam_t_ = 0;
 }
 
@@ -305,6 +352,13 @@ void CharLSTMHead::ensure_grad_scratch(CharLSTMGrad& g) const {
   g.dby.assign(static_cast<std::size_t>(vocab_size), 0.0);
   g.dh_prev.assign(static_cast<std::size_t>(hidden), 0.0);
   g.dc_prev.assign(static_cast<std::size_t>(hidden), 0.0);
+  const int n_extra = std::max(0, n_layers - 1);
+  g.dWx_l.assign(static_cast<std::size_t>(n_extra),
+                 std::vector<double>(static_cast<std::size_t>(four_h) * static_cast<std::size_t>(hidden), 0.0));
+  g.dWh_l.assign(static_cast<std::size_t>(n_extra),
+                 std::vector<double>(static_cast<std::size_t>(four_h) * static_cast<std::size_t>(hidden), 0.0));
+  g.db_l.assign(static_cast<std::size_t>(n_extra),
+                std::vector<double>(static_cast<std::size_t>(four_h), 0.0));
 }
 
 void CharLSTMHead::accumulate_grads(CharLSTMGrad& acc, const CharLSTMGrad& step) const {
@@ -314,6 +368,11 @@ void CharLSTMHead::accumulate_grads(CharLSTMGrad& acc, const CharLSTMGrad& step)
   for (std::size_t i = 0; i < acc.db.size(); ++i) acc.db[i] += step.db[i];
   for (std::size_t i = 0; i < acc.dWy.size(); ++i) acc.dWy[i] += step.dWy[i];
   for (std::size_t i = 0; i < acc.dby.size(); ++i) acc.dby[i] += step.dby[i];
+  for (std::size_t el = 0; el < acc.dWx_l.size() && el < step.dWx_l.size(); ++el) {
+    for (std::size_t i = 0; i < acc.dWx_l[el].size(); ++i) acc.dWx_l[el][i] += step.dWx_l[el][i];
+    for (std::size_t i = 0; i < acc.dWh_l[el].size(); ++i) acc.dWh_l[el][i] += step.dWh_l[el][i];
+    for (std::size_t i = 0; i < acc.db_l[el].size(); ++i) acc.db_l[el][i] += step.db_l[el][i];
+  }
 }
 
 void CharLSTMHead::clip_grads_inplace(CharLSTMGrad& grads) const {
@@ -328,6 +387,9 @@ void CharLSTMHead::clip_grads_inplace(CharLSTMGrad& grads) const {
   add(grads.db);
   add(grads.dWy);
   add(grads.dby);
+  for (const auto& v : grads.dWx_l) add(v);
+  for (const auto& v : grads.dWh_l) add(v);
+  for (const auto& v : grads.db_l) add(v);
   const double norm = std::sqrt(sq);
   if (norm <= grad_clip_ || norm <= 0.0) return;
   const double scale = grad_clip_ / norm;
@@ -340,19 +402,54 @@ void CharLSTMHead::clip_grads_inplace(CharLSTMGrad& grads) const {
   scale_v(grads.db);
   scale_v(grads.dWy);
   scale_v(grads.dby);
+  for (auto& v : grads.dWx_l) scale_v(v);
+  for (auto& v : grads.dWh_l) scale_v(v);
+  for (auto& v : grads.db_l) scale_v(v);
 }
 
 void CharLSTMHead::reset_state() {
   h_.assign(static_cast<std::size_t>(hidden), 0.0);
   c_.assign(static_cast<std::size_t>(hidden), 0.0);
+  ensure_upper_state();
+  for (auto& h : h_upper_) std::fill(h.begin(), h.end(), 0.0);
+  for (auto& c : c_upper_) std::fill(c.begin(), c.end(), 0.0);
   has_cache_ = false;
   bptt_caches_.clear();
   bptt_targets_.clear();
 }
 
+void CharLSTMHead::reset_optim_state() {
+  adam_t_ = 0;
+  auto zero = [](std::vector<double>& v) {
+    if (!v.empty()) std::fill(v.begin(), v.end(), 0.0);
+  };
+  zero(m_E_);
+  zero(v_E_);
+  zero(m_Wx_);
+  zero(v_Wx_);
+  zero(m_Wh_);
+  zero(v_Wh_);
+  zero(m_b_);
+  zero(v_b_);
+  zero(m_Wy_);
+  zero(v_Wy_);
+  zero(m_by_);
+  zero(v_by_);
+  for (auto& v : m_Wx_l_) zero(v);
+  for (auto& v : v_Wx_l_) zero(v);
+  for (auto& v : m_Wh_l_) zero(v);
+  for (auto& v : v_Wh_l_) zero(v);
+  for (auto& v : m_b_l_) zero(v);
+  for (auto& v : v_b_l_) zero(v);
+}
+
 void CharLSTMHead::forward_step(int token_id, const double* h, const double* c, double* log_probs,
                                 std::vector<double>& h_out, std::vector<double>& c_out,
                                 CharLSTMCache* cache_out, double forget_gate_scale) const {
+  if (n_layers > 1) {
+    forward_step_stacked(token_id, h, c, log_probs, h_out, c_out, cache_out, forget_gate_scale);
+    return;
+  }
   if (token_id < 0 || token_id >= vocab_size) {
     throw std::runtime_error("char_lstm: token_id out of range");
   }
@@ -508,6 +605,10 @@ CharLSTMGrad CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_
 void CharLSTMHead::backward_step(const CharLSTMCache& cache, int target_id, CharLSTMGrad& out,
                                  double logit_nudge, double hidden_nudge, const double* dh_next,
                                  const double* dc_next) const {
+  if (n_layers > 1 || !cache.layers.empty()) {
+    backward_step_stacked(cache, target_id, out, logit_nudge, hidden_nudge, dh_next, dc_next);
+    return;
+  }
   if (target_id < 0 || target_id >= vocab_size) {
     throw std::runtime_error("char_lstm: target_id out of range");
   }
@@ -778,6 +879,13 @@ void CharLSTMHead::apply_grads(const CharLSTMGrad& grads_in, double lr) {
     adam_update(b, m_b_, v_b_, grads.db, lr, adam_t_, kBeta1, kBeta2, kEps);
     adam_update(Wy, m_Wy_, v_Wy_, grads.dWy, lr, adam_t_, kBeta1, kBeta2, kEps);
     adam_update(by, m_by_, v_by_, grads.dby, lr, adam_t_, kBeta1, kBeta2, kEps);
+    for (std::size_t el = 0; el < Wx_l.size() && el < grads.dWx_l.size(); ++el) {
+      adam_update(Wx_l[el], m_Wx_l_[el], v_Wx_l_[el], grads.dWx_l[el], lr, adam_t_, kBeta1, kBeta2,
+                  kEps);
+      adam_update(Wh_l[el], m_Wh_l_[el], v_Wh_l_[el], grads.dWh_l[el], lr, adam_t_, kBeta1, kBeta2,
+                  kEps);
+      adam_update(b_l[el], m_b_l_[el], v_b_l_[el], grads.db_l[el], lr, adam_t_, kBeta1, kBeta2, kEps);
+    }
     // AdamW: decoupled weight decay after Adam step; skip biases (b, by).
     if (weight_decay_ > 0.0) {
       const double scale = lr * weight_decay_;
@@ -785,6 +893,12 @@ void CharLSTMHead::apply_grads(const CharLSTMGrad& grads_in, double lr) {
       for (double& w : Wx) w -= scale * w;
       for (double& w : Wh) w -= scale * w;
       for (double& w : Wy) w -= scale * w;
+      for (auto& layer : Wx_l) {
+        for (double& w : layer) w -= scale * w;
+      }
+      for (auto& layer : Wh_l) {
+        for (double& w : layer) w -= scale * w;
+      }
     }
     return;
   }
@@ -794,6 +908,11 @@ void CharLSTMHead::apply_grads(const CharLSTMGrad& grads_in, double lr) {
   for (std::size_t i = 0; i < b.size(); ++i) b[i] -= lr * grads.db[i];
   for (std::size_t i = 0; i < Wy.size(); ++i) Wy[i] -= lr * grads.dWy[i];
   for (std::size_t i = 0; i < by.size(); ++i) by[i] -= lr * grads.dby[i];
+  for (std::size_t el = 0; el < Wx_l.size() && el < grads.dWx_l.size(); ++el) {
+    for (std::size_t i = 0; i < Wx_l[el].size(); ++i) Wx_l[el][i] -= lr * grads.dWx_l[el][i];
+    for (std::size_t i = 0; i < Wh_l[el].size(); ++i) Wh_l[el][i] -= lr * grads.dWh_l[el][i];
+    for (std::size_t i = 0; i < b_l[el].size(); ++i) b_l[el][i] -= lr * grads.db_l[el][i];
+  }
 }
 
 void CharLSTMHead::flush_bptt_window(double lr, CharLSTMGrad* grads_out, double logit_nudge,
@@ -898,6 +1017,327 @@ std::string lstm_init_mode_name(LSTMInitMode m) {
   return m == LSTMInitMode::Classic ? "classic" : "default";
 }
 
+void CharLSTMHead::forward_step_stacked(int token_id, const double* h, const double* c,
+                                        double* log_probs, std::vector<double>& h_out,
+                                        std::vector<double>& c_out, CharLSTMCache* cache_out,
+                                        double forget_gate_scale) const {
+  if (token_id < 0 || token_id >= vocab_size) {
+    throw std::runtime_error("char_lstm: token_id out of range");
+  }
+  ensure_upper_state();
+  const int four_h = 4 * hidden;
+  const bool use_eml = activation_mode_ == LSTMActivationMode::Eml;
+  const bool use_axiom = activation_mode_ == LSTMActivationMode::Axiom;
+  const double* embed = E.data() + static_cast<std::size_t>(token_id) * static_cast<std::size_t>(hidden);
+
+  auto run_layer = [&](const double* Wx_m, const double* Wh_m, const double* b_m, const double* x_in,
+                       const double* h_in, const double* c_in, double f_scale, CharLSTMLayerCache& lc) {
+    lc.x.assign(x_in, x_in + hidden);
+    lc.h.assign(h_in, h_in + hidden);
+    lc.c.assign(c_in, c_in + hidden);
+    lc.gates.assign(static_cast<std::size_t>(four_h), 0.0);
+    std::vector<double> wh(static_cast<std::size_t>(four_h), 0.0);
+    matvec_rowmajor(Wx_m, four_h, hidden, x_in, lc.gates.data());
+    matvec_rowmajor(Wh_m, four_h, hidden, h_in, wh.data());
+    for (int i = 0; i < four_h; ++i) {
+      lc.gates[static_cast<std::size_t>(i)] += wh[static_cast<std::size_t>(i)] + b_m[i];
+    }
+    lc.i.assign(static_cast<std::size_t>(hidden), 0.0);
+    lc.f.assign(static_cast<std::size_t>(hidden), 0.0);
+    lc.g.assign(static_cast<std::size_t>(hidden), 0.0);
+    lc.o.assign(static_cast<std::size_t>(hidden), 0.0);
+    for (int j = 0; j < hidden; ++j) {
+      if (use_axiom && static_cast<int>(axiom_grammar_.i_gate.size()) == hidden) {
+        lc.i[static_cast<std::size_t>(j)] =
+            apply_axiom_gate(axiom_grammar_.i_gate[static_cast<std::size_t>(j)],
+                             lc.gates[static_cast<std::size_t>(j)], h_in[j], false);
+        lc.f[static_cast<std::size_t>(j)] =
+            apply_axiom_gate(axiom_grammar_.f_gate[static_cast<std::size_t>(j)],
+                             lc.gates[static_cast<std::size_t>(hidden + j)], c_in[j], false);
+        lc.g[static_cast<std::size_t>(j)] =
+            apply_axiom_gate(axiom_grammar_.g_gate[static_cast<std::size_t>(j)],
+                             lc.gates[static_cast<std::size_t>(2 * hidden + j)], h_in[j], true);
+        lc.o[static_cast<std::size_t>(j)] =
+            apply_axiom_gate(axiom_grammar_.o_gate[static_cast<std::size_t>(j)],
+                             lc.gates[static_cast<std::size_t>(3 * hidden + j)], c_in[j], false);
+      } else if (use_eml) {
+        lc.i[static_cast<std::size_t>(j)] = eml_nand(lc.gates[static_cast<std::size_t>(j)], h_in[j]);
+        lc.f[static_cast<std::size_t>(j)] =
+            eml_nand(lc.gates[static_cast<std::size_t>(hidden + j)], c_in[j]);
+        lc.g[static_cast<std::size_t>(j)] =
+            eml_nand(lc.gates[static_cast<std::size_t>(2 * hidden + j)], h_in[j]);
+        lc.o[static_cast<std::size_t>(j)] =
+            eml_nand(lc.gates[static_cast<std::size_t>(3 * hidden + j)], c_in[j]);
+      } else {
+        lc.i[static_cast<std::size_t>(j)] = sigmoid(lc.gates[static_cast<std::size_t>(j)]);
+        lc.f[static_cast<std::size_t>(j)] = sigmoid(lc.gates[static_cast<std::size_t>(hidden + j)]);
+        lc.g[static_cast<std::size_t>(j)] = std::tanh(lc.gates[static_cast<std::size_t>(2 * hidden + j)]);
+        lc.o[static_cast<std::size_t>(j)] = sigmoid(lc.gates[static_cast<std::size_t>(3 * hidden + j)]);
+      }
+    }
+    if (f_scale != 1.0) {
+      for (int j = 0; j < hidden; ++j) lc.f[static_cast<std::size_t>(j)] *= f_scale;
+    }
+    lc.c_new.assign(static_cast<std::size_t>(hidden), 0.0);
+    lc.h_lstm.assign(static_cast<std::size_t>(hidden), 0.0);
+    lc.tanh_c_new.assign(static_cast<std::size_t>(hidden), 0.0);
+    for (int j = 0; j < hidden; ++j) {
+      lc.c_new[static_cast<std::size_t>(j)] =
+          lc.f[static_cast<std::size_t>(j)] * c_in[j] +
+          lc.i[static_cast<std::size_t>(j)] * lc.g[static_cast<std::size_t>(j)];
+      if (use_eml) {
+        lc.h_lstm[static_cast<std::size_t>(j)] =
+            lc.o[static_cast<std::size_t>(j)] * eml_nand(lc.c_new[static_cast<std::size_t>(j)], 1.0);
+      } else {
+        lc.tanh_c_new[static_cast<std::size_t>(j)] = std::tanh(lc.c_new[static_cast<std::size_t>(j)]);
+        lc.h_lstm[static_cast<std::size_t>(j)] =
+            lc.o[static_cast<std::size_t>(j)] * lc.tanh_c_new[static_cast<std::size_t>(j)];
+      }
+    }
+  };
+
+  std::vector<CharLSTMLayerCache> layers(static_cast<std::size_t>(n_layers));
+  // Layer 0: embed → LSTM (no residual). forget_gate_scale applies to layer 0 only.
+  run_layer(Wx.data(), Wh.data(), b.data(), embed, h, c, forget_gate_scale, layers[0]);
+  layers[0].h_new = layers[0].h_lstm;
+  h_out = layers[0].h_new;
+  c_out = layers[0].c_new;
+
+  for (int el = 0; el < n_layers - 1; ++el) {
+    CharLSTMLayerCache& lc = layers[static_cast<std::size_t>(el + 1)];
+    run_layer(Wx_l[static_cast<std::size_t>(el)].data(), Wh_l[static_cast<std::size_t>(el)].data(),
+              b_l[static_cast<std::size_t>(el)].data(), h_out.data(),
+              h_upper_[static_cast<std::size_t>(el)].data(),
+              c_upper_[static_cast<std::size_t>(el)].data(), 1.0, lc);
+    // Residual: h_out = h_lstm + h_in (h_in is previous layer residual / layer input).
+    lc.h_new.assign(static_cast<std::size_t>(hidden), 0.0);
+    for (int j = 0; j < hidden; ++j) {
+      lc.h_new[static_cast<std::size_t>(j)] =
+          lc.h_lstm[static_cast<std::size_t>(j)] + lc.x[static_cast<std::size_t>(j)];
+    }
+    h_upper_[static_cast<std::size_t>(el)] = lc.h_new;
+    c_upper_[static_cast<std::size_t>(el)] = lc.c_new;
+    h_out = lc.h_new;
+    // External c_out remains layer-0 cell; upper cells live in c_upper_.
+  }
+
+  // Top-layer readout only (Wy on residual top hidden).
+  std::vector<double> logits(static_cast<std::size_t>(vocab_size), 0.0);
+  std::vector<double> probs(static_cast<std::size_t>(vocab_size), 0.0);
+  matvec_rowmajor(Wy.data(), vocab_size, hidden, h_out.data(), logits.data());
+  for (int k = 0; k < vocab_size; ++k) {
+    logits[static_cast<std::size_t>(k)] += by[static_cast<std::size_t>(k)];
+  }
+  softmax_logits(logits.data(), vocab_size, probs.data());
+  for (int k = 0; k < vocab_size; ++k) {
+    log_probs[k] = std::log(probs[static_cast<std::size_t>(k)] + kLogEps);
+  }
+
+  // Layer-0 external state mirrors single-layer contract (hybrid lstm_h_/lstm_c_).
+  h_out = layers[0].h_new;
+  c_out = layers[0].c_new;
+
+  if (cache_out != nullptr) {
+    cache_out->token_id = token_id;
+    cache_out->layers = std::move(layers);
+    cache_out->logits = std::move(logits);
+    cache_out->probs = std::move(probs);
+    cache_out->used_eml = use_eml;
+    cache_out->used_axiom = use_axiom;
+    cache_out->used_sr_gates = false;
+    // Mirror top residual into legacy fields for any callers reading h_new/probs.
+    cache_out->h_new = cache_out->layers.back().h_new;
+    cache_out->x = cache_out->layers[0].x;
+    cache_out->h = cache_out->layers[0].h;
+    cache_out->c = cache_out->layers[0].c;
+    cache_out->c_new = cache_out->layers[0].c_new;
+  }
+}
+
+void CharLSTMHead::backward_step_stacked(const CharLSTMCache& cache, int target_id, CharLSTMGrad& out,
+                                         double logit_nudge, double hidden_nudge,
+                                         const double* dh_next, const double* dc_next) const {
+  if (target_id < 0 || target_id >= vocab_size) {
+    throw std::runtime_error("char_lstm: target_id out of range");
+  }
+  if (static_cast<int>(cache.layers.size()) != n_layers) {
+    throw std::runtime_error("char_lstm: stacked cache layer count mismatch");
+  }
+  const int four_h = 4 * hidden;
+  ensure_grad_scratch(out);
+  std::fill(out.dE.begin(), out.dE.end(), 0.0);
+  std::fill(out.dWx.begin(), out.dWx.end(), 0.0);
+  std::fill(out.dWh.begin(), out.dWh.end(), 0.0);
+  std::fill(out.db.begin(), out.db.end(), 0.0);
+  std::fill(out.dWy.begin(), out.dWy.end(), 0.0);
+  std::fill(out.dby.begin(), out.dby.end(), 0.0);
+  std::fill(out.dh_prev.begin(), out.dh_prev.end(), 0.0);
+  std::fill(out.dc_prev.begin(), out.dc_prev.end(), 0.0);
+  for (auto& v : out.dWx_l) std::fill(v.begin(), v.end(), 0.0);
+  for (auto& v : out.dWh_l) std::fill(v.begin(), v.end(), 0.0);
+  for (auto& v : out.db_l) std::fill(v.begin(), v.end(), 0.0);
+
+  std::vector<double> d_logits = cache.probs;
+  d_logits[static_cast<std::size_t>(target_id)] -= 1.0;
+  if (logit_nudge != 0.0) {
+    for (int k = 0; k < vocab_size; ++k) d_logits[static_cast<std::size_t>(k)] += logit_nudge;
+  }
+  const auto& top = cache.layers.back();
+  outer_rowmajor(d_logits.data(), vocab_size, top.h_new.data(), hidden, out.dWy.data());
+  out.dby = d_logits;
+
+  std::vector<double> dh_top(static_cast<std::size_t>(hidden), 0.0);
+  matvec_transpose_rowmajor(Wy.data(), vocab_size, hidden, d_logits.data(), dh_top.data());
+  if (hidden_nudge != 0.0) {
+    for (int j = 0; j < hidden; ++j) dh_top[static_cast<std::size_t>(j)] += hidden_nudge;
+  }
+
+  auto backprop_layer = [&](const CharLSTMLayerCache& lc, const double* Wx_m, const double* Wh_m,
+                            std::vector<double>& dWx_m, std::vector<double>& dWh_m,
+                            std::vector<double>& db_m, std::vector<double>& dh_out,
+                            std::vector<double>& dx_out, std::vector<double>& dh_prev_out,
+                            std::vector<double>& dc_prev_out, bool residual, const double* dh_t_next,
+                            const double* dc_t_next) {
+    std::vector<double> dh_new = dh_out;
+    if (residual) {
+      // h_new = h_lstm + x  ⇒  dh_lstm = dh_new, dx += dh_new
+      for (int j = 0; j < hidden; ++j) {
+        dx_out[static_cast<std::size_t>(j)] += dh_new[static_cast<std::size_t>(j)];
+      }
+    }
+    std::vector<double> dh_lstm = dh_new;
+    std::vector<double> do_gate(static_cast<std::size_t>(hidden), 0.0);
+    std::vector<double> dc_new(static_cast<std::size_t>(hidden), 0.0);
+    std::vector<double> df_gate(static_cast<std::size_t>(hidden), 0.0);
+    std::vector<double> di_gate(static_cast<std::size_t>(hidden), 0.0);
+    std::vector<double> dg_gate(static_cast<std::size_t>(hidden), 0.0);
+    std::vector<double> dgates(static_cast<std::size_t>(four_h), 0.0);
+
+    if (cache.used_eml) {
+      for (int j = 0; j < hidden; ++j) {
+        const double h_act = eml_nand(lc.c_new[static_cast<std::size_t>(j)], 1.0);
+        do_gate[static_cast<std::size_t>(j)] = dh_lstm[static_cast<std::size_t>(j)] * h_act;
+        double deml_dc = 0.0;
+        double deml_const = 0.0;
+        eml_nand_grad(lc.c_new[static_cast<std::size_t>(j)], 1.0,
+                      dh_lstm[static_cast<std::size_t>(j)] * lc.o[static_cast<std::size_t>(j)], deml_dc,
+                      deml_const);
+        dc_new[static_cast<std::size_t>(j)] = deml_dc;
+      }
+    } else {
+      for (int j = 0; j < hidden; ++j) {
+        const double tanh_c = lc.tanh_c_new[static_cast<std::size_t>(j)];
+        do_gate[static_cast<std::size_t>(j)] = dh_lstm[static_cast<std::size_t>(j)] * tanh_c;
+        dc_new[static_cast<std::size_t>(j)] =
+            dh_lstm[static_cast<std::size_t>(j)] * lc.o[static_cast<std::size_t>(j)] *
+            (1.0 - tanh_c * tanh_c);
+      }
+    }
+    if (dc_t_next != nullptr) {
+      for (int j = 0; j < hidden; ++j) {
+        dc_new[static_cast<std::size_t>(j)] += dc_t_next[static_cast<std::size_t>(j)];
+      }
+    }
+    if (dh_t_next != nullptr) {
+      // Temporal BPTT into recurrent h enters via Wh path after gate grads; fold into dh_lstm
+      // equivalent by adding to pre-activation path through Wh — handled below via dh_prev.
+      // For cell path, only dc_t_next applies directly. Temporal dh on recurrent state is
+      // injected as additive dh into the Wh^T path by adding to dgates via an extra dh term
+      // after dgates are formed — see dh_prev accumulation.
+    }
+
+    for (int j = 0; j < hidden; ++j) {
+      df_gate[static_cast<std::size_t>(j)] =
+          dc_new[static_cast<std::size_t>(j)] * lc.c[static_cast<std::size_t>(j)];
+      di_gate[static_cast<std::size_t>(j)] =
+          dc_new[static_cast<std::size_t>(j)] * lc.g[static_cast<std::size_t>(j)];
+      dg_gate[static_cast<std::size_t>(j)] =
+          dc_new[static_cast<std::size_t>(j)] * lc.i[static_cast<std::size_t>(j)];
+      dc_prev_out[static_cast<std::size_t>(j)] =
+          dc_new[static_cast<std::size_t>(j)] * lc.f[static_cast<std::size_t>(j)];
+    }
+
+    for (int j = 0; j < hidden; ++j) {
+      if (cache.used_eml) {
+        double di_gx = 0.0, di_hy = 0.0;
+        eml_nand_grad(lc.gates[static_cast<std::size_t>(j)], lc.h[static_cast<std::size_t>(j)],
+                      di_gate[static_cast<std::size_t>(j)], di_gx, di_hy);
+        dgates[static_cast<std::size_t>(j)] = di_gx;
+        double df_gx = 0.0, df_cy = 0.0;
+        eml_nand_grad(lc.gates[static_cast<std::size_t>(hidden + j)], lc.c[static_cast<std::size_t>(j)],
+                      df_gate[static_cast<std::size_t>(j)], df_gx, df_cy);
+        dgates[static_cast<std::size_t>(hidden + j)] = df_gx;
+        dc_prev_out[static_cast<std::size_t>(j)] += df_cy;
+        double dg_gx = 0.0, dg_hy = 0.0;
+        eml_nand_grad(lc.gates[static_cast<std::size_t>(2 * hidden + j)], lc.h[static_cast<std::size_t>(j)],
+                      dg_gate[static_cast<std::size_t>(j)], dg_gx, dg_hy);
+        dgates[static_cast<std::size_t>(2 * hidden + j)] = dg_gx;
+        double do_gx = 0.0, do_cy = 0.0;
+        eml_nand_grad(lc.gates[static_cast<std::size_t>(3 * hidden + j)], lc.c[static_cast<std::size_t>(j)],
+                      do_gate[static_cast<std::size_t>(j)], do_gx, do_cy);
+        dgates[static_cast<std::size_t>(3 * hidden + j)] = do_gx;
+        dc_prev_out[static_cast<std::size_t>(j)] += do_cy;
+      } else {
+        dgates[static_cast<std::size_t>(j)] =
+            di_gate[static_cast<std::size_t>(j)] * lc.i[static_cast<std::size_t>(j)] *
+            (1.0 - lc.i[static_cast<std::size_t>(j)]);
+        dgates[static_cast<std::size_t>(hidden + j)] =
+            df_gate[static_cast<std::size_t>(j)] * lc.f[static_cast<std::size_t>(j)] *
+            (1.0 - lc.f[static_cast<std::size_t>(j)]);
+        dgates[static_cast<std::size_t>(2 * hidden + j)] =
+            dg_gate[static_cast<std::size_t>(j)] *
+            (1.0 - lc.g[static_cast<std::size_t>(j)] * lc.g[static_cast<std::size_t>(j)]);
+        dgates[static_cast<std::size_t>(3 * hidden + j)] =
+            do_gate[static_cast<std::size_t>(j)] * lc.o[static_cast<std::size_t>(j)] *
+            (1.0 - lc.o[static_cast<std::size_t>(j)]);
+      }
+    }
+
+    outer_rowmajor(dgates.data(), four_h, lc.x.data(), hidden, dWx_m.data());
+    outer_rowmajor(dgates.data(), four_h, lc.h.data(), hidden, dWh_m.data());
+    db_m = dgates;
+
+    std::vector<double> dx(static_cast<std::size_t>(hidden), 0.0);
+    matvec_transpose_rowmajor(Wx_m, four_h, hidden, dgates.data(), dx.data());
+    for (int j = 0; j < hidden; ++j) {
+      dx_out[static_cast<std::size_t>(j)] += dx[static_cast<std::size_t>(j)];
+    }
+    matvec_transpose_rowmajor(Wh_m, four_h, hidden, dgates.data(), dh_prev_out.data());
+    if (dh_t_next != nullptr) {
+      for (int j = 0; j < hidden; ++j) {
+        dh_prev_out[static_cast<std::size_t>(j)] += dh_t_next[static_cast<std::size_t>(j)];
+      }
+    }
+    (void)Wh_m;
+  };
+
+  // Backprop top → bottom.
+  std::vector<double> dh_flow = dh_top;
+  for (int li = n_layers - 1; li >= 1; --li) {
+    const int el = li - 1;
+    std::vector<double> dx_to_prev(static_cast<std::size_t>(hidden), 0.0);
+    std::vector<double> dh_prev_u(static_cast<std::size_t>(hidden), 0.0);
+    std::vector<double> dc_prev_u(static_cast<std::size_t>(hidden), 0.0);
+    backprop_layer(cache.layers[static_cast<std::size_t>(li)], Wx_l[static_cast<std::size_t>(el)].data(),
+                   Wh_l[static_cast<std::size_t>(el)].data(), out.dWx_l[static_cast<std::size_t>(el)],
+                   out.dWh_l[static_cast<std::size_t>(el)], out.db_l[static_cast<std::size_t>(el)],
+                   dh_flow, dx_to_prev, dh_prev_u, dc_prev_u, /*residual=*/true, nullptr, nullptr);
+    // Gradient into previous layer residual hidden.
+    dh_flow = dx_to_prev;
+    (void)dh_prev_u;
+    (void)dc_prev_u;
+  }
+
+  // Layer 0
+  std::vector<double> dx0(static_cast<std::size_t>(hidden), 0.0);
+  backprop_layer(cache.layers[0], Wx.data(), Wh.data(), out.dWx, out.dWh, out.db, dh_flow, dx0,
+                 out.dh_prev, out.dc_prev, /*residual=*/false, dh_next, dc_next);
+  for (int j = 0; j < hidden; ++j) {
+    out.dE[static_cast<std::size_t>(cache.token_id) * static_cast<std::size_t>(hidden) +
+           static_cast<std::size_t>(j)] = dx0[static_cast<std::size_t>(j)];
+  }
+}
+
 void CharLSTMHead::load_state(const std::vector<double>& E_in, const std::vector<double>& Wx_in,
                               const std::vector<double>& Wh_in, const std::vector<double>& b_in,
                               const std::vector<double>& Wy_in, const std::vector<double>& by_in) {
@@ -907,6 +1347,22 @@ void CharLSTMHead::load_state(const std::vector<double>& E_in, const std::vector
   b = b_in;
   Wy = Wy_in;
   by = by_in;
+  reset_state();
+  reset_optim_state();
+}
+
+void CharLSTMHead::load_extra_layers(const std::vector<std::vector<double>>& Wx_l_in,
+                                     const std::vector<std::vector<double>>& Wh_l_in,
+                                     const std::vector<std::vector<double>>& b_l_in) {
+  if (n_layers <= 1) return;
+  if (static_cast<int>(Wx_l_in.size()) != n_layers - 1 ||
+      static_cast<int>(Wh_l_in.size()) != n_layers - 1 ||
+      static_cast<int>(b_l_in.size()) != n_layers - 1) {
+    throw std::runtime_error("char_lstm: load_extra_layers size mismatch");
+  }
+  Wx_l = Wx_l_in;
+  Wh_l = Wh_l_in;
+  b_l = b_l_in;
   reset_state();
 }
 

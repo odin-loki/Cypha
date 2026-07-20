@@ -83,8 +83,7 @@ struct CyphaLMConfig {
     int gria_rank = 32;
 
     int context_length = 256;
-    /// Bare ``CyphaLMConfig`` defaults Hybrid for benches; product/Cypha entry points apply U06 via
-    /// ``apply_pgm_logits_recipe`` / ``apply_cell_variant("U06")``.
+    /// Default Hybrid (GRIA+LSTM) — production ~2.8 BPC path at WikiText-2 300k (D17 pin).
     ContextMode context_mode = ContextMode::Hybrid;
     int ngram_context = 2;
     /// B0: add online n-gram count Laplace log-prior onto GRIA logits. Off by default so
@@ -111,6 +110,9 @@ struct CyphaLMConfig {
     bool train_ssm = false;
 
     int lstm_hidden = 128;
+    /// Stacked residual char-LSTM depth. Production pin (2026-07-19) is **2** (BPC 2.816).
+    /// Override via profile JSON / ``--lstm-layers`` / ``CYPHA_LSTM_LAYERS`` (1 = historic L1).
+    int lstm_layers = 2;
     double lstm_lr = 0.05;
     /// Truncated BPTT window for char-LSTM (1 = historic BPTT-1). Opt-in; default preserves pin.
     int lstm_bptt_steps = 1;
@@ -147,6 +149,17 @@ struct CyphaLMConfig {
 
     int compress_interval = 64;
     int max_memory_slots = 256;
+    /// Residual softmax attention from top LSTM ``h`` over memory keys before ``Wy``.
+    /// Keys: ContextBank embeds when ``use_context_bank``, else compressive-memory slot means.
+    /// KILL @40k (raw/gated both worse than L2); default OFF. CLI: ``--lstm-memory-attn``.
+    bool use_lstm_memory_attn = false;
+    /// Peak residual scale ``h += scale * Attn`` (ramped by key count / ``2*min_slots``).
+    double lstm_memory_attn_scale = 0.10;
+    /// Do not apply attn until this many keys are available (cold-slot dilution guard).
+    int lstm_memory_attn_min_slots = 16;
+    /// Ring of ``(h, next_token)`` for codec-path hidden kNN retrieval (0 = off).
+    int hidden_knn_store = 2048;
+    int hidden_knn_k = 16;
 
     std::uint64_t seed = 42;
 
@@ -301,6 +314,24 @@ std::string bench_mode_name(BenchMode mode);
 
 /// Enable the integrated PGM→logits recipe (ContextMode::PgmLogits + H23-ish PGM knobs).
 void apply_pgm_logits_recipe(CyphaLMConfig& cfg);
+
+/// Production text default: Hybrid GRIA+LSTM with D17-style knobs (ngram fuse-split, no count prior).
+/// Clears PGM/unified-context flags. Full ~2.8 BPC still requires ~300k train tokens.
+void apply_hybrid_production_recipe(CyphaLMConfig& cfg);
+
+/// Quality Wave-2 LSTM recipe (opt-in; does not flip D17 defaults).
+/// Adam + classic init + grad clip + truncated BPTT at ``lstm_lr=0.001``.
+/// When ``train_steps > 0`` and ``with_schedule``, also sets linear warmup (~2.5% of steps,
+/// capped) then cosine decay over the remaining budget (floor = 0.1×lr).
+struct Wave2BpttOptions {
+    int bptt_steps = 8;
+    double lstm_lr = 0.001;
+    double grad_clip = 1.0;
+    bool with_schedule = false;
+    int train_steps = 0;  // approx token updates (n_train * epochs); used only if with_schedule
+};
+
+void apply_wave2_bptt_recipe(CyphaLMConfig& cfg, const Wave2BpttOptions& opt = {});
 
 std::string unified_context_source_name(UnifiedContextSource s);
 std::string unified_readout_name(UnifiedReadout r);

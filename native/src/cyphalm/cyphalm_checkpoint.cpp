@@ -69,7 +69,13 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"ssm_lr", cfg.ssm_lr},
         {"train_ssm", cfg.train_ssm},
         {"lstm_hidden", cfg.lstm_hidden},
+        {"lstm_layers", cfg.lstm_layers},
         {"lstm_lr", cfg.lstm_lr},
+        {"lstm_bptt_steps", cfg.lstm_bptt_steps},
+        {"lstm_optim", cfg.lstm_optim},
+        {"lstm_grad_clip", cfg.lstm_grad_clip},
+        {"lstm_init", cfg.lstm_init},
+        {"lstm_weight_decay", cfg.lstm_weight_decay},
         {"hybrid_blend_logit", cfg.hybrid_blend_logit},
         {"hybrid_blend_learnable", cfg.hybrid_blend_learnable},
         {"hybrid_blend_lr", cfg.hybrid_blend_lr},
@@ -85,6 +91,11 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"ssm_hebb_lr", cfg.ssm_hebb_lr},
         {"compress_interval", cfg.compress_interval},
         {"max_memory_slots", cfg.max_memory_slots},
+        {"use_lstm_memory_attn", cfg.use_lstm_memory_attn},
+        {"lstm_memory_attn_scale", cfg.lstm_memory_attn_scale},
+        {"lstm_memory_attn_min_slots", cfg.lstm_memory_attn_min_slots},
+        {"hidden_knn_store", cfg.hidden_knn_store},
+        {"hidden_knn_k", cfg.hidden_knn_k},
         {"seed", cfg.seed},
         {"bpe_merges_path", cfg.bpe_merges_path},
         {"bpe_vocab_path", cfg.bpe_vocab_path},
@@ -162,7 +173,14 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_d("ssm_lr", cfg.ssm_lr);
     get_b("train_ssm", cfg.train_ssm);
     get_i("lstm_hidden", cfg.lstm_hidden);
+    get_i("lstm_layers", cfg.lstm_layers);
+    if (cfg.lstm_layers < 1) cfg.lstm_layers = 1;
     get_d("lstm_lr", cfg.lstm_lr);
+    get_i("lstm_bptt_steps", cfg.lstm_bptt_steps);
+    if (c.contains("lstm_optim")) cfg.lstm_optim = c.at("lstm_optim").get<std::string>();
+    get_d("lstm_grad_clip", cfg.lstm_grad_clip);
+    if (c.contains("lstm_init")) cfg.lstm_init = c.at("lstm_init").get<std::string>();
+    get_d("lstm_weight_decay", cfg.lstm_weight_decay);
     get_d("hybrid_blend_logit", cfg.hybrid_blend_logit);
     get_b("hybrid_blend_learnable", cfg.hybrid_blend_learnable);
     get_d("hybrid_blend_lr", cfg.hybrid_blend_lr);
@@ -178,6 +196,11 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_d("ssm_hebb_lr", cfg.ssm_hebb_lr);
     get_i("compress_interval", cfg.compress_interval);
     get_i("max_memory_slots", cfg.max_memory_slots);
+    get_b("use_lstm_memory_attn", cfg.use_lstm_memory_attn);
+    get_d("lstm_memory_attn_scale", cfg.lstm_memory_attn_scale);
+    get_i("lstm_memory_attn_min_slots", cfg.lstm_memory_attn_min_slots);
+    get_i("hidden_knn_store", cfg.hidden_knn_store);
+    get_i("hidden_knn_k", cfg.hidden_knn_k);
     get_u64("seed", cfg.seed);
     if (c.contains("bpe_merges_path")) cfg.bpe_merges_path = c.at("bpe_merges_path").get<std::string>();
     if (c.contains("bpe_vocab_path")) cfg.bpe_vocab_path = c.at("bpe_vocab_path").get<std::string>();
@@ -254,7 +277,8 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
         };
     }
     if (model.lstm_) {
-        meta["lstm"] = {
+        nlohmann::json lstm = {
+            {"n_layers", model.lstm_->n_layers},
             {"E", vec_to_json(model.lstm_->E)},
             {"Wx", vec_to_json(model.lstm_->Wx)},
             {"Wh", vec_to_json(model.lstm_->Wh)},
@@ -262,6 +286,18 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
             {"Wy", vec_to_json(model.lstm_->Wy)},
             {"by", vec_to_json(model.lstm_->by)},
         };
+        if (model.lstm_->n_layers > 1) {
+            nlohmann::json Wx_l = nlohmann::json::array();
+            nlohmann::json Wh_l = nlohmann::json::array();
+            nlohmann::json b_l = nlohmann::json::array();
+            for (const auto& v : model.lstm_->Wx_l) Wx_l.push_back(vec_to_json(v));
+            for (const auto& v : model.lstm_->Wh_l) Wh_l.push_back(vec_to_json(v));
+            for (const auto& v : model.lstm_->b_l) b_l.push_back(vec_to_json(v));
+            lstm["Wx_l"] = std::move(Wx_l);
+            lstm["Wh_l"] = std::move(Wh_l);
+            lstm["b_l"] = std::move(b_l);
+        }
+        meta["lstm"] = std::move(lstm);
     }
     if (model.hierarchical_ssm_) {
         meta["hierarchical_ssm"] = model.hierarchical_ssm_->get_state();
@@ -371,6 +407,16 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
         const auto& l = meta.at("lstm");
         model.lstm_->load_state(json_to_vec(l.at("E")), json_to_vec(l.at("Wx")), json_to_vec(l.at("Wh")),
                                 json_to_vec(l.at("b")), json_to_vec(l.at("Wy")), json_to_vec(l.at("by")));
+        // Old checkpoints omit n_layers / Wx_l — layer-0 load above keeps D17 pin compatibility.
+        if (model.lstm_->n_layers > 1 && l.contains("Wx_l") && l.contains("Wh_l") && l.contains("b_l")) {
+            std::vector<std::vector<double>> Wx_l;
+            std::vector<std::vector<double>> Wh_l;
+            std::vector<std::vector<double>> b_l;
+            for (const auto& v : l.at("Wx_l")) Wx_l.push_back(json_to_vec(v));
+            for (const auto& v : l.at("Wh_l")) Wh_l.push_back(json_to_vec(v));
+            for (const auto& v : l.at("b_l")) b_l.push_back(json_to_vec(v));
+            model.lstm_->load_extra_layers(Wx_l, Wh_l, b_l);
+        }
     }
     if (meta.contains("hierarchical_ssm") && model.hierarchical_ssm_) {
         model.hierarchical_ssm_->set_state(meta.at("hierarchical_ssm"));

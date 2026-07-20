@@ -24,6 +24,9 @@ class ContextBank {
   int capacity() const { return capacity_; }
   int embed_dim() const { return embed_dim_; }
 
+  /// Chronological index ``0..size()-1`` (oldest→newest). Writes ``embed_dim`` into ``out``.
+  bool slot_at(int chronological_i, double* out) const;
+
  private:
   int embed_dim_;
   int capacity_;

@@ -37,6 +37,16 @@ void ContextBank::push(const double* embed, int dim) {
   }
 }
 
+bool ContextBank::slot_at(int chronological_i, double* out) const {
+  if (!out || chronological_i < 0 || chronological_i >= count_) return false;
+  const int slot = (head_ - count_ + chronological_i + capacity_) % capacity_;
+  const std::size_t off = static_cast<std::size_t>(slot * embed_dim_);
+  for (int d = 0; d < embed_dim_; ++d) {
+    out[static_cast<std::size_t>(d)] = storage_[off + static_cast<std::size_t>(d)];
+  }
+  return true;
+}
+
 std::vector<double> ContextBank::linear_attention(const std::vector<double>& query) const {
   if (static_cast<int>(query.size()) != embed_dim_) {
     throw std::invalid_argument("ContextBank::linear_attention: query dimension mismatch");

@@ -305,8 +305,10 @@ bool Cypha::init_default_sequence(int vocab_size, int d_model) {
   cyphalm::CyphaLMConfig cfg;
   cfg.vocab_size = vocab_size;
   cfg.d_embed = d_model;
-  cfg.d_state = d_model;
-  cyphalm::apply_cell_variant("U06", cfg);
+  cfg.d_state = std::max(d_model, 64);
+  cfg.lstm_hidden = std::max(d_model, 64);
+  cfg.ngram_context = 3;
+  cyphalm::apply_hybrid_production_recipe(cfg);
   seq_ = std::make_unique<cyphalm::CyphaLMModel>(cfg);
   return true;
 }
@@ -759,6 +761,38 @@ double Cypha::train_token(std::uint32_t token, std::uint32_t next) {
     return std::numeric_limits<double>::quiet_NaN();
   }
   return seq_->train_step(token, next).loss;
+}
+
+cyphalm::PredictiveCodecResult Cypha::compress_tokens(const std::vector<std::uint32_t>& tokens,
+                                                      const cyphalm::PredictiveCodecOptions& opt) {
+  cyphalm::PredictiveCodecResult out;
+  if (!seq_) {
+    out.detail = "No sequence model loaded";
+    return out;
+  }
+  return cyphalm::compress_tokens(*seq_, tokens, opt);
+}
+
+std::vector<std::uint32_t> Cypha::decompress_tokens(const std::vector<std::uint8_t>& bytes,
+                                                    std::uint32_t seed, std::size_t n_tokens,
+                                                    std::string* detail,
+                                                    const cyphalm::PredictiveCodecOptions& opt) {
+  if (!seq_) {
+    if (detail) *detail = "No sequence model loaded";
+    return {};
+  }
+  return cyphalm::decompress_tokens(*seq_, bytes, seed, n_tokens, detail, opt);
+}
+
+std::vector<std::uint32_t> Cypha::generate_via_bits(const std::vector<std::uint32_t>& prefix,
+                                                    std::size_t n_new, std::uint64_t rng_seed,
+                                                    std::string* detail,
+                                                    const cyphalm::PredictiveCodecOptions& opt) {
+  if (!seq_) {
+    if (detail) *detail = "No sequence model loaded";
+    return {};
+  }
+  return cyphalm::generate_via_bits(*seq_, prefix, n_new, rng_seed, detail, opt);
 }
 
 std::string Cypha::generate(const std::vector<int>& prompt_ids, const GenerateTokenOpts& o) {

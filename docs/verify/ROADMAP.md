@@ -62,14 +62,14 @@ Kernel LLR (Nyström) shipped in C++ with **`xor_kernel_bench`** (+10.6 pp XOR g
 
 ---
 
-## Phase 6 -- Sequence research (historical hybrid pin)
+## Phase 6 -- Sequence research (hybrid production + predictive AC)
 
-Native sequence stack lives in **`cypha_core`** (`cypha_lm_native` is an INTERFACE alias). Bench CLI: **`cyphalm_bench_native`**. Local gate: `ctest --test-dir native/build -R native_cyphalm --output-on-failure`.
+Native sequence stack lives in **`cypha_core`** (`cypha_lm_native` is an INTERFACE alias). Bench CLI: **`cyphalm_bench_native`** (default `--mode hybrid`). Local gate: `ctest --test-dir native/build -R 'native_cyphalm|native_predictive_codec' --output-on-failure`.
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| **Living sequence default** | **PGM->Wy (U06)** | Product spine via `cypha::Cypha::init_default_sequence` -- [`ONE_CYPHA_CUTOVER.md`](../reports/ONE_CYPHA_CUTOVER.md) |
-| **D17 hybrid BPC @ 300k** | **2.873** | **Historical pin only** (`bench/BASELINE_LOCK.json`); not the living production default |
+| **Living sequence default** | **Hybrid GRIA+LSTM** | `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` -- [`ONE_CYPHA_CUTOVER.md`](../reports/ONE_CYPHA_CUTOVER.md) |
+| **D17 hybrid BPC @ 300k** | **2.873** (lock) / **~2.88** | Living production target; predictive AC codes under the same `predict_next` |
 | **D04 "33.2 bpc"** | benchmark bug | Wrong prob indexing on legacy D04 path -- ignore as evidence |
 
 See [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) and [`CHANGELOG.md`](../../CHANGELOG.md).

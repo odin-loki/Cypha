@@ -18,10 +18,11 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 - Capabilities: classify + regress + sample latents + next-token + text generate
 - Latent sample ≠ full feature-row synthesis (no inverse encoder)
 
-## Historical pins (archived)
+## Sequence spine (living)
 
-- D17 hybrid GRIA+LSTM BPC **2.873** (`bench/BASELINE_LOCK.json`) — historical only; not the living production spine.
-- Unified-context smoke winner **U06** (PGM→Wy) is the internal token spine for `Cypha::predict_next` / `generate`.
+- D17 hybrid GRIA+LSTM BPC **~2.8** (`bench/BASELINE_LOCK.json` pin **2.873**; re-verified **2.883** @ 300k) is the **living production default** for modeling and generating text.
+- Predictive arithmetic coding (LLMZip-style) is integrated: next-token probs → range coder (`compress_tokens` / `decompress_tokens`, REST `/sequence/compress` + `/sequence/decompress`).
+- Unified-context smoke winner **U06** (PGM→Wy) remains an **opt-in** cell variant (`--mode pgm_logits` / `apply_cell_variant("U06")`), not the product default.
 
 ## Route map
 
@@ -47,7 +48,7 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 - `cypha::Cypha` in [`native/include/cypha/cypha.hpp`](../../native/include/cypha/cypha.hpp); `cypha_lm_native` is an INTERFACE alias compiled into `cypha_core`
 - REST: `/sample`, `/retrieve`, `/sequence/load`, `/predict_next`; health `model_type=Cypha`; metrics `sequence_loaded` (+ `lm_loaded` alias)
 - CLI: `--sequence-checkpoint` / `CYPHA_SEQUENCE_CHECKPOINT` (aliases: `--cyphalm-checkpoint`, `CYPHA_LM_CHECKPOINT`, `CYPHALM_CHECKPOINT`)
-- Living sequence default: **PGM→Wy** via product entry (`Cypha::init_default_sequence` → U06 / `apply_pgm_logits_recipe`); bare `CyphaLMConfig` struct defaults Hybrid for benches; checkpoint JSON persists unified/PGM flags + `pgm_wy`/`pgm_by` + **`pgm_cell` state**
+- Living sequence default: **Hybrid GRIA+LSTM** via `Cypha::init_default_sequence` → `apply_hybrid_production_recipe`; CLI `cyphalm_bench_native` defaults `--mode hybrid`; U06/PGM→Wy opt-in; checkpoint JSON still persists unified/PGM flags when used
 - Regression: `cypha/regression.hpp` (was `regression_stub`); `DifRegressorHead` deleted
 - **`Cypha::save`**: merges `mem_` into retained `.cypha` root; no phantom REST `/save`
 - REST sequence single-owner: `cyphalm_rest_configure(&g_mu, g_cypha)`; latent `/sample` + `/retrieve` via `g_cypha`
@@ -66,7 +67,16 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 
 **Residual**
 
-- Hybrid sources kept for historical benches (`--mode hybrid`, profiles `_meta.status=historical`) — not deleted
+- PGM→Wy (U06) kept as opt-in cell / bench mode — not deleted
+
+## Status (2026-07-19) — Hybrid default + predictive AC
+
+**Done**
+
+- Product + CLI default: Hybrid production recipe (`ngram_fuse_split`, no count prior, schedule_b when unset)
+- Arithmetic coder + predictive codec on `predict_next`; `Cypha::{compress,decompress}_tokens`, `generate_via_bits`
+- REST: `POST /sequence/compress`, `POST /sequence/decompress` (`bytes_hex`)
+- CTests: `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`; `cypha_one_smoke` asserts Hybrid + roundtrip
 
 ## Release
 

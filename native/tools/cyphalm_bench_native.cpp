@@ -25,7 +25,7 @@
 namespace {
 
 struct Args {
-    std::string mode = "pgm_logits";
+    std::string mode = "hybrid";
     std::string profile = "d17";
     std::string cell_variant;
     // Default 40k = same_order_e2 short-budget cap (see docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md).
@@ -68,6 +68,10 @@ struct Args {
     int max_memory_slots = -1;
     int compress_interval = -1;
     int lstm_hidden = -1;
+    int lstm_layers = -1;
+    bool lstm_memory_attn = false;
+    double lstm_memory_attn_scale = -1.0;
+    int lstm_memory_attn_min_slots = -1;
     int bptt_lstm = -1;
     std::string lstm_optim;
     double grad_clip = -1.0;
@@ -121,6 +125,11 @@ void usage() {
         << "       --max-memory-slots N\n"
         << "       --compress-interval N\n"
         << "       --lstm-hidden N  (LSTM head hidden width override; default: profile value, e.g. 128 for d17)\n"
+        << "       --lstm-layers N  (stacked residual LSTM depth; default 1 = D17 pin; or CYPHA_LSTM_LAYERS)\n"
+        << "       --lstm-memory-attn  (residual softmax attn over memory keys into LSTM h before Wy;\n"
+        << "                            ContextBank embeds if use_context_bank, else compressive slots)\n"
+        << "       --lstm-memory-attn-scale S  (peak residual scale; default 0.10, ramped by key fill)\n"
+        << "       --lstm-memory-attn-min-slots N  (gate: no attn until N keys available; default 16)\n"
         << "       --bptt-lstm N  (truncated BPTT window; default 1 = pin path; or CYPHA_LSTM_BPTT)\n"
         << "       --optim {sgd,adam}  (LSTM optimizer; default sgd; or CYPHA_LSTM_OPTIM)\n"
         << "       --grad-clip C  (global L2 clip; 0=off; or CYPHA_LSTM_GRAD_CLIP)\n"
@@ -244,6 +253,18 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--lstm-hidden") {
             a.lstm_hidden = std::stoi(need("--lstm-hidden"));
         }
+        else if (k == "--lstm-layers") {
+            a.lstm_layers = std::stoi(need("--lstm-layers"));
+        }
+        else if (k == "--lstm-memory-attn") {
+            a.lstm_memory_attn = true;
+        }
+        else if (k == "--lstm-memory-attn-scale") {
+            a.lstm_memory_attn_scale = std::stod(need("--lstm-memory-attn-scale"));
+        }
+        else if (k == "--lstm-memory-attn-min-slots") {
+            a.lstm_memory_attn_min_slots = std::stoi(need("--lstm-memory-attn-min-slots"));
+        }
         else if (k == "--bptt-lstm") {
             a.bptt_lstm = std::stoi(need("--bptt-lstm"));
         }
@@ -330,6 +351,18 @@ int main(int argc, char** argv) {
         // (128 for the d17 production profile).
         if (args.lstm_hidden > 0) {
             cfg.lstm_hidden = args.lstm_hidden;
+        }
+        if (args.lstm_layers > 0) {
+            cfg.lstm_layers = args.lstm_layers;
+        }
+        if (args.lstm_memory_attn) {
+            cfg.use_lstm_memory_attn = true;
+        }
+        if (args.lstm_memory_attn_scale >= 0.0) {
+            cfg.lstm_memory_attn_scale = args.lstm_memory_attn_scale;
+        }
+        if (args.lstm_memory_attn_min_slots > 0) {
+            cfg.lstm_memory_attn_min_slots = args.lstm_memory_attn_min_slots;
         }
         if (args.bptt_lstm > 0) {
             cfg.lstm_bptt_steps = args.bptt_lstm;

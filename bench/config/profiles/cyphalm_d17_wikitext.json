@@ -23,6 +23,7 @@
   "laplace_smoothing": 1.0,
   "gria_lr_decay": 0.3,
   "lstm_hidden": 128,
+  "lstm_layers": 2,
   "lstm_lr": 0.05,
   "hybrid_blend_learnable": true,
   "hybrid_blend_lr": 0.01,
@@ -45,8 +46,8 @@
     "delta_vs_char_lstm_baseline": -0.108,
     "recommended_n_train": 300000,
     "hybrid_gria_weight": 0.004,
-    "status": "historical",
-    "notes": "Historical hybrid GRIA+LSTM pin. Living Cypha sequence default is PGM→Wy (U06 / pgm_logits). C2 dual head; blend ~99.6% LSTM @ 300k",
+    "status": "production",
+    "notes": "Living Cypha sequence default (Hybrid GRIA+LSTM ~2.8 BPC @ 300k). Predictive arithmetic coding uses this spine. C2 dual head; blend ~99.6% LSTM @ 300k",
     "multiview_policy": {
       "doc": "docs/reports/D16_MULTIVIEW_POLICY_2026-07-17.md",
       "gria_only_budget_le_24k": "view_schedule=schedule_b, stop at n_train cap",

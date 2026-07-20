@@ -472,7 +472,8 @@ void CyphaLMModel::init_components() {
     }
     if (uses_lstm(mode)) {
         lstm_ = std::make_unique<CharLSTMHead>(cfg_.vocab_size, cfg_.lstm_hidden, cfg_.seed + 5,
-                                               parse_lstm_init_mode(cfg_.lstm_init));
+                                               parse_lstm_init_mode(cfg_.lstm_init),
+                                               std::max(1, cfg_.lstm_layers));
         lstm_->set_bptt_window(cfg_.lstm_bptt_steps);
         lstm_->set_optim(parse_lstm_optim(cfg_.lstm_optim));
         lstm_->set_grad_clip(cfg_.lstm_grad_clip);
@@ -503,6 +504,21 @@ void CyphaLMModel::init_components() {
             cfg_.nig_beta0, static_cast<std::uint32_t>(cfg_.seed + 17));
         memory_->set_compress_interval(static_cast<std::uint32_t>(cfg_.compress_interval));
         memory_->set_priority_replay(cfg_.use_priority_replay);
+    }
+    if (cfg_.use_lstm_memory_attn && lstm_) {
+        std::mt19937_64 rng(cfg_.seed + 71);
+        if (memory_) {
+            init_proj_from_rng(proj_mem_lstm_, cfg_.lstm_hidden, cfg_.field_dim, rng, 0.02);
+        }
+        if (cfg_.use_context_bank) {
+            init_proj_from_rng(proj_bank_lstm_, cfg_.lstm_hidden, cfg_.d_embed, rng, 0.02);
+        }
+        const int scratch_dim = std::max(cfg_.field_dim, cfg_.d_embed);
+        mem_attn_field_scratch_.assign(static_cast<std::size_t>(std::max(scratch_dim, 1)), 0.0);
+        mem_attn_h_scratch_.assign(static_cast<std::size_t>(cfg_.lstm_hidden), 0.0);
+    }
+    if (cfg_.hidden_knn_store > 0) {
+        hidden_knn_store_.clear();
     }
     if (cfg_.use_context_bank) {
         context_bank_ = std::make_unique<ContextBank>(cfg_.d_embed, cfg_.context_bank_slots);
@@ -612,6 +628,10 @@ void CyphaLMModel::save(const std::string& base_path) const {
     save_cyphalm_model(*this, base_path);
 }
 
+void CyphaLMModel::reset_optim_state() {
+    if (lstm_) lstm_->reset_optim_state();
+}
+
 void CyphaLMModel::reset_context() {
     if (hierarchical_ssm_) hierarchical_ssm_->reset();
     if (ssm_) ssm_->reset();
@@ -637,6 +657,8 @@ void CyphaLMModel::reset_context() {
     hybrid_lstm_has_cache_ = false;
     last_hybrid_log_g_.clear();
     last_hybrid_log_l_.clear();
+    last_predict_out_ = {};
+    hidden_knn_store_.clear();
     for (auto& row : embed_history_) {
         std::fill(row.begin(), row.end(), 0.0);
     }
@@ -1140,6 +1162,7 @@ PredictNextOutput CyphaLMModel::predict_next_unified(std::uint32_t token_id) {
         // keep external buffers aligned for reporting.
         ++step_count_;
         fill_top_k(out.log_probs, out);
+        remember_last_predict(out);
         return out;
     }
 
@@ -1186,11 +1209,178 @@ PredictNextOutput CyphaLMModel::predict_next_unified(std::uint32_t token_id) {
     }
     ++step_count_;
     fill_top_k(out.log_probs, out);
+    remember_last_predict(out);
+    return out;
+}
+
+void CyphaLMModel::remember_last_predict(const PredictNextOutput& out) {
+    last_predict_out_ = out;
+}
+
+void CyphaLMModel::apply_lstm_memory_attn(std::vector<double>& h, std::vector<double>& log_l) {
+    if (!cfg_.use_lstm_memory_attn || !lstm_) return;
+    const int min_slots = std::max(1, cfg_.lstm_memory_attn_min_slots);
+    // Prefer ContextBank embeds when enabled; else compressive-memory slot means.
+    const bool use_bank = cfg_.use_context_bank && context_bank_ && !proj_bank_lstm_.empty() &&
+                          context_bank_->size() >= min_slots;
+    const bool use_mem = !use_bank && memory_ && !proj_mem_lstm_.empty() &&
+                         static_cast<int>(memory_->num_slots()) >= min_slots;
+    if (!use_bank && !use_mem) return;
+
+    const int H = cfg_.lstm_hidden;
+    const int D = use_bank ? cfg_.d_embed : cfg_.field_dim;
+    const int V = cfg_.vocab_size;
+    const int nslots = use_bank ? context_bank_->size() : static_cast<int>(memory_->num_slots());
+    if (static_cast<int>(h.size()) != H || nslots < min_slots || D < 1) return;
+    const std::vector<double>& proj = use_bank ? proj_bank_lstm_ : proj_mem_lstm_;
+    if (static_cast<int>(proj.size()) < H * D) return;
+
+    // Ramp scale from 0→peak as keys fill from min_slots → 2*min_slots (then hold).
+    const double fill =
+        std::min(1.0, static_cast<double>(nslots) / static_cast<double>(2 * min_slots));
+    const double scale = cfg_.lstm_memory_attn_scale * fill;
+    if (!(scale > 1e-8)) return;
+
+    // Project each key into hidden, softmax-attend with query=h, residual into h.
+    if (static_cast<int>(mem_attn_field_scratch_.size()) < D) {
+        mem_attn_field_scratch_.assign(static_cast<std::size_t>(D), 0.0);
+    }
+    mem_attn_h_scratch_.assign(static_cast<std::size_t>(H), 0.0);
+    std::vector<double> logits(static_cast<std::size_t>(nslots), 0.0);
+    std::vector<std::vector<double>> keys(static_cast<std::size_t>(nslots),
+                                          std::vector<double>(static_cast<std::size_t>(H), 0.0));
+    double max_logit = -1e300;
+    const double inv_sqrt = 1.0 / std::sqrt(static_cast<double>(std::max(H, 1)));
+    for (int s = 0; s < nslots; ++s) {
+        const bool ok = use_bank
+                            ? context_bank_->slot_at(s, mem_attn_field_scratch_.data())
+                            : memory_->slot_mean(static_cast<std::uint32_t>(s),
+                                                 mem_attn_field_scratch_.data());
+        if (!ok) continue;
+        double* key = keys[static_cast<std::size_t>(s)].data();
+        for (int j = 0; j < H; ++j) {
+            double acc = 0.0;
+            for (int i = 0; i < D; ++i) {
+                acc += proj[static_cast<std::size_t>(j * D + i)] *
+                       mem_attn_field_scratch_[static_cast<std::size_t>(i)];
+            }
+            key[j] = acc;
+        }
+        double dot = 0.0;
+        for (int j = 0; j < H; ++j) dot += h[static_cast<std::size_t>(j)] * key[j];
+        logits[static_cast<std::size_t>(s)] = dot * inv_sqrt;
+        max_logit = std::max(max_logit, logits[static_cast<std::size_t>(s)]);
+    }
+    double sum = 0.0;
+    for (int s = 0; s < nslots; ++s) {
+        logits[static_cast<std::size_t>(s)] =
+            std::exp(logits[static_cast<std::size_t>(s)] - max_logit);
+        sum += logits[static_cast<std::size_t>(s)];
+    }
+    if (!(sum > 0.0)) return;
+    const double inv = 1.0 / sum;
+    for (int s = 0; s < nslots; ++s) {
+        const double w = logits[static_cast<std::size_t>(s)] * inv;
+        for (int j = 0; j < H; ++j) {
+            mem_attn_h_scratch_[static_cast<std::size_t>(j)] +=
+                w * keys[static_cast<std::size_t>(s)][static_cast<std::size_t>(j)];
+        }
+    }
+    for (int j = 0; j < H; ++j) {
+        h[static_cast<std::size_t>(j)] += scale * mem_attn_h_scratch_[static_cast<std::size_t>(j)];
+    }
+
+    // Recompute Wy readout so blend uses post-attention h.
+    log_l.resize(static_cast<std::size_t>(V));
+    const auto& Wy = lstm_->Wy;
+    const auto& by = lstm_->by;
+    std::vector<double> scores(static_cast<std::size_t>(V), 0.0);
+    double max_s = -1e300;
+    for (int k = 0; k < V; ++k) {
+        double z = by[static_cast<std::size_t>(k)];
+        const double* row = Wy.data() + static_cast<std::size_t>(k) * static_cast<std::size_t>(H);
+        for (int j = 0; j < H; ++j) z += row[j] * h[static_cast<std::size_t>(j)];
+        scores[static_cast<std::size_t>(k)] = z;
+        max_s = std::max(max_s, z);
+    }
+    double zsum = 0.0;
+    for (int k = 0; k < V; ++k) {
+        scores[static_cast<std::size_t>(k)] = std::exp(scores[static_cast<std::size_t>(k)] - max_s);
+        zsum += scores[static_cast<std::size_t>(k)];
+    }
+    const double zinv = 1.0 / std::max(zsum, 1e-300);
+    for (int k = 0; k < V; ++k) {
+        log_l[static_cast<std::size_t>(k)] =
+            std::log(scores[static_cast<std::size_t>(k)] * zinv + kLogEps);
+    }
+
+    // Align BPTT cache readout state with the h that produced log_l.
+    if (hybrid_lstm_has_cache_) {
+        hybrid_lstm_cache_.h_new = h;
+        if (!hybrid_lstm_cache_.layers.empty()) {
+            hybrid_lstm_cache_.layers.back().h_new = h;
+        }
+    }
+}
+
+void CyphaLMModel::remember_hidden_knn(std::uint32_t next_token_id) {
+    if (cfg_.hidden_knn_store <= 0 || lstm_h_.empty()) return;
+    if (next_token_id >= static_cast<std::uint32_t>(cfg_.vocab_size)) return;
+    HiddenKnnEntry e;
+    e.h.resize(lstm_h_.size());
+    for (std::size_t i = 0; i < lstm_h_.size(); ++i) {
+        e.h[i] = static_cast<float>(lstm_h_[i]);
+    }
+    e.next = next_token_id;
+    hidden_knn_store_.push_back(std::move(e));
+    while (static_cast<int>(hidden_knn_store_.size()) > cfg_.hidden_knn_store) {
+        hidden_knn_store_.pop_front();
+    }
+}
+
+std::vector<double> CyphaLMModel::hidden_knn_log_probs() const {
+    const int V = cfg_.vocab_size;
+    const int H = cfg_.lstm_hidden;
+    std::vector<double> out(static_cast<std::size_t>(V), std::log(1.0 / std::max(V, 1)));
+    const int need = std::max(4, cfg_.hidden_knn_k / 2);
+    if (static_cast<int>(hidden_knn_store_.size()) < need || static_cast<int>(lstm_h_.size()) != H) {
+        return out;
+    }
+    struct Hit {
+        float dist;
+        std::uint32_t next;
+    };
+    std::vector<Hit> hits;
+    hits.reserve(hidden_knn_store_.size());
+    for (const auto& e : hidden_knn_store_) {
+        if (static_cast<int>(e.h.size()) != H) continue;
+        float d2 = 0.0f;
+        for (int j = 0; j < H; ++j) {
+            const float d = static_cast<float>(lstm_h_[static_cast<std::size_t>(j)]) - e.h[static_cast<std::size_t>(j)];
+            d2 += d * d;
+        }
+        hits.push_back({d2, e.next});
+    }
+    if (hits.empty()) return out;
+    const int k = std::min(cfg_.hidden_knn_k, static_cast<int>(hits.size()));
+    std::partial_sort(hits.begin(), hits.begin() + k, hits.end(),
+                      [](const Hit& a, const Hit& b) { return a.dist < b.dist; });
+    std::vector<double> counts(static_cast<std::size_t>(V), 0.5);
+    double total = 0.5 * static_cast<double>(V);
+    for (int i = 0; i < k; ++i) {
+        const double w = 1.0 / (1e-3 + static_cast<double>(hits[static_cast<std::size_t>(i)].dist));
+        counts[hits[static_cast<std::size_t>(i)].next] += w;
+        total += w;
+    }
+    for (int s = 0; s < V; ++s) {
+        out[static_cast<std::size_t>(s)] =
+            std::log(counts[static_cast<std::size_t>(s)] / total + kLogEps);
+    }
     return out;
 }
 
 void CyphaLMModel::train_unified_readout(std::uint32_t next_token_id, double lstm_lr,
-                                         TrainStepMetrics& m) {
+                                         TrainStepMetrics& m, double gria_lr) {
     if (cfg_.unified_readout == UnifiedReadout::Lstm && lstm_ && hybrid_lstm_has_cache_) {
         const bool updated =
             lstm_->push_bptt_step(hybrid_lstm_cache_, static_cast<int>(next_token_id), lstm_lr,
@@ -1223,9 +1413,9 @@ void CyphaLMModel::train_unified_readout(std::uint32_t next_token_id, double lst
     if (cfg_.unified_readout == UnifiedReadout::Gria && gria_ && !gria_in_.empty()) {
         auto gria_grad =
             gria_->cross_entropy_gradients(gria_in_.data(), static_cast<int>(next_token_id));
-        gria_->update_weights(gria_grad, cfg_.gria_lr);
-        gria_->update_alpha(gria_grad, cfg_.gria_lr);
-        gria_->update_bias(gria_grad, cfg_.gria_lr);
+        gria_->update_weights(gria_grad, gria_lr);
+        gria_->update_alpha(gria_grad, gria_lr);
+        gria_->update_bias(gria_grad, gria_lr);
         return;
     }
     if (cfg_.unified_readout == UnifiedReadout::PgmWy && !pgm_wy_.empty() &&
@@ -1241,7 +1431,7 @@ void CyphaLMModel::train_unified_readout(std::uint32_t next_token_id, double lst
             dlogit[static_cast<std::size_t>(k)] = std::exp(log_p[static_cast<std::size_t>(k)]);
         }
         dlogit[static_cast<std::size_t>(t)] -= 1.0;
-        const double lr = cfg_.gria_lr;
+        const double lr = gria_lr;
         for (int k = 0; k < V; ++k) {
             const double g = dlogit[static_cast<std::size_t>(k)];
             pgm_by_[static_cast<std::size_t>(k)] -= lr * g;
@@ -1267,6 +1457,7 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         if (!lstm_) throw std::runtime_error("char_lstm without LSTM head");
         out.log_probs = lstm_->forward(static_cast<int>(token_id));
         fill_top_k(out.log_probs, out);
+        remember_last_predict(out);
         return out;
     }
 
@@ -1422,8 +1613,11 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
                                 &hybrid_lstm_cache_, forget_gate_scale);
             lstm_h_.swap(predict_lstm_h_scratch_);
             lstm_c_.swap(predict_lstm_c_scratch_);
-            append_lstm_hidden_history(lstm_h_);
             hybrid_lstm_has_cache_ = true;
+            if (cfg_.use_lstm_memory_attn) {
+                apply_lstm_memory_attn(lstm_h_, log_l);
+            }
+            append_lstm_hidden_history(lstm_h_);
             last_hybrid_log_g_ = log_g;
             last_hybrid_log_l_ = log_l;
         }
@@ -1470,6 +1664,7 @@ PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
         ++step_count_;
         fill_top_k(out.log_probs, out);
     }
+    remember_last_predict(out);
     return out;
 }
 
@@ -1562,11 +1757,30 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                                             LmIntelligenceMonitor* monitor) {
     if (g_perf_trace.enabled) ++g_perf_trace.calls;
     const auto perf_t0_predict = perf_trace_begin();
-    const auto pred = predict_next(token_id);
+    (void)predict_next(token_id);
     perf_trace_end(0, perf_t0_predict);
+    return adapt_after_predict(next_token_id, 1.0, profiler, monitor);
+}
+
+TrainStepMetrics CyphaLMModel::adapt_after_predict(std::uint32_t next_token_id, double lr_scale,
+                                                     cypha::intelligence::IntelligenceProfiler* profiler,
+                                                     LmIntelligenceMonitor* monitor) {
+    const PredictNextOutput& pred = last_predict_out_;
+    if (pred.log_probs.empty() ||
+        next_token_id >= static_cast<std::uint32_t>(pred.log_probs.size())) {
+        throw std::runtime_error("adapt_after_predict: require predict_next first / token OOB");
+    }
+    // Store (h, next) for codec-path hidden kNN before weight updates mutate the head.
+    remember_hidden_knn(next_token_id);
     // predict_next already ++step_count_; use 0-based index for the LR schedule.
     const int lstm_lr_step = static_cast<int>(step_count_ > 0 ? step_count_ - 1 : 0);
-    const double lstm_lr = lstm_lr_at_step(cfg_, lstm_lr_step);
+    const double lr_mul = std::max(0.0, lr_scale);
+    const double lstm_lr = lstm_lr_at_step(cfg_, lstm_lr_step) * lr_mul;
+    const double gria_lr = cfg_.gria_lr * lr_mul;
+    const double hybrid_blend_lr = cfg_.hybrid_blend_lr * lr_mul;
+    const double view_lr = cfg_.view_lr * lr_mul;
+    const double ssm_lr = cfg_.ssm_lr * lr_mul;
+    const double rpsm_lr = cfg_.rpsm_lr * lr_mul;
     TrainStepMetrics m;
     m.loss = -pred.log_probs[static_cast<std::size_t>(next_token_id)];
     m.epistemic_var = pred.epistemic_var;
@@ -1735,7 +1949,7 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
     if (cfg_.use_unified_context) {
         apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
                              navigation_hidden_nudge);
-        train_unified_readout(next_token_id, lstm_lr, m);
+        train_unified_readout(next_token_id, lstm_lr, m, gria_lr);
         if (cfg_.bptt_steps > 0 && active_ssm()) {
             bptt_ssm_update(next_token_id);
         }
@@ -1777,19 +1991,19 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
             has_gria_grad = true;
             apply_profile_guided(&gria_grad, navigation_blend_nudge, navigation_logit_nudge,
                                  navigation_hidden_nudge);
-            gria_->update_weights(gria_grad, cfg_.gria_lr);
-            gria_->update_alpha(gria_grad, cfg_.gria_lr);
-            gria_->update_bias(gria_grad, cfg_.gria_lr);
+            gria_->update_weights(gria_grad, gria_lr);
+            gria_->update_alpha(gria_grad, gria_lr);
+            gria_->update_bias(gria_grad, gria_lr);
             if (ngram_fusion_ && cfg_.ngram_position_weights &&
                 !ngram_fusion_->pos_weights().empty() && !gria_grad.dv.empty()) {
                 ngram_embedding_vector(ngram_embed_vec_scratch_);
                 ngram_fusion_->update_position_weights(gria_grad.dv, ngram_embed_vec_scratch_,
-                                                       cfg_.gria_lr);
+                                                       gria_lr);
             }
             if (view_emb_ && cfg_.view_learnable) {
                 const auto grad_v = gria_->grad_v_cross_entropy(gria_in_.data(), static_cast<int>(next_token_id));
                 view_emb_->update(current_view_slot_, grad_v.data() + cfg_.field_dim, cfg_.view_id_dim,
-                                  cfg_.view_lr);
+                                  view_lr);
             }
         } else {
             apply_profile_guided(nullptr, navigation_blend_nudge, navigation_logit_nudge,
@@ -1838,7 +2052,7 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
         if (hebbian_stack_ && cfg_.train_ssm && !field_x_.empty() && !last_e_.empty()) {
             const int nxt = static_cast<int>(next_token_id);
             hebbian_stack_->encoder_train_step(field_x_.data(), last_e_.data(), std::to_string(nxt),
-                                               std::to_string(nxt), cfg_.ssm_lr);
+                                               std::to_string(nxt), ssm_lr);
         }
     });
     perf_trace_scope(4, [&]() { bptt_ssm_update(next_token_id); });
@@ -1885,20 +2099,20 @@ TrainStepMetrics CyphaLMModel::train_step(std::uint32_t token_id, std::uint32_t 
                 hybrid_lstm_has_cache_ = false;
             }
             if (cfg_.hybrid_blend_learnable && !last_hybrid_log_g_.empty() && !last_hybrid_log_l_.empty()) {
-                hybrid_blend_logit_ -= cfg_.hybrid_blend_lr *
+                hybrid_blend_logit_ -= hybrid_blend_lr *
                                        blend_logit_grad(last_hybrid_log_g_.data(), last_hybrid_log_l_.data(),
                                                         cfg_.vocab_size, hybrid_blend_logit_,
                                                         static_cast<int>(next_token_id));
             }
             if (cfg_.hybrid_blend_learnable && cfg_.use_full_navigation_loss && navigation_blend_nudge != 0.0) {
-                hybrid_blend_logit_ -= cfg_.hybrid_blend_lr * navigation_blend_nudge * 0.02;
+                hybrid_blend_logit_ -= hybrid_blend_lr * navigation_blend_nudge * 0.02;
             }
         }
     });
     perf_trace_scope(6, [&]() {
         if (rpsm_layer_ && mode == ContextMode::Rpsm && !field_x_.empty()) {
             const auto rpsm_m = rpsm_layer_->train_step(field_x_.data(), static_cast<int>(field_x_.size()),
-                                                        static_cast<int>(next_token_id), cfg_.rpsm_lr);
+                                                        static_cast<int>(next_token_id), rpsm_lr);
             m.loss += rpsm_m.loss;
         }
     });

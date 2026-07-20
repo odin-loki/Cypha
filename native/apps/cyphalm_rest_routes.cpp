@@ -12,6 +12,7 @@
 
 #include "cypha/cypha.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
+#include "cypha/cyphalm/predictive_codec.hpp"
 #include "cypha/intelligence/epistemic_threshold.hpp"
 
 namespace cypha::cyphalm {
@@ -24,6 +25,34 @@ std::string g_lm_source;
 int g_lm_generations = 0;
 std::chrono::steady_clock::time_point g_lm_loaded = std::chrono::steady_clock::now();
 cypha::intelligence::EpistemicThreshold g_lm_epistemic_threshold(0.5, 5.0);
+
+std::string bytes_to_hex(const std::vector<std::uint8_t>& bytes) {
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.resize(bytes.size() * 2);
+    for (std::size_t i = 0; i < bytes.size(); ++i) {
+        out[2 * i] = kHex[bytes[i] >> 4];
+        out[2 * i + 1] = kHex[bytes[i] & 0x0f];
+    }
+    return out;
+}
+
+std::vector<std::uint8_t> hex_to_bytes(const std::string& hex) {
+    if (hex.size() % 2 != 0) {
+        throw std::runtime_error("bytes_hex length must be even");
+    }
+    auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        throw std::runtime_error("invalid hex digit");
+    };
+    std::vector<std::uint8_t> out(hex.size() / 2);
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        out[i] = static_cast<std::uint8_t>((nibble(hex[2 * i]) << 4) | nibble(hex[2 * i + 1]));
+    }
+    return out;
+}
 
 DecodeParams decode_params_from_json(const nlohmann::json& body) {
     DecodeParams p;
@@ -250,6 +279,88 @@ void register_cyphalm_rest_routes(httplib::Server& svr) {
         } catch (...) {
             res.status = 400;
             res.set_content(R"({"detail":"bad json"})", "application/json");
+        }
+    });
+
+    // Predictive arithmetic coding (LLMZip-style): tokens <-> bitstream under model P(next|prefix).
+    svr.Post("/sequence/compress", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const auto body = nlohmann::json::parse(req.body);
+            if (!body.contains("token_ids") || !body["token_ids"].is_array()) {
+                res.status = 400;
+                res.set_content(R"({"detail":"token_ids array required"})", "application/json");
+                return;
+            }
+            std::vector<std::uint32_t> tokens;
+            tokens.reserve(body["token_ids"].size());
+            for (const auto& t : body["token_ids"]) {
+                tokens.push_back(t.get<std::uint32_t>());
+            }
+            std::lock_guard<std::mutex> lk(*g_mu);
+            if (!g_cypha || !g_cypha->sequence()) {
+                res.status = 503;
+                res.set_content(R"({"detail":"No sequence model loaded"})", "application/json");
+                return;
+            }
+            auto result = g_cypha->compress_tokens(tokens);
+            if (!result.detail.empty()) {
+                res.status = 400;
+                nlohmann::json err;
+                err["detail"] = result.detail;
+                res.set_content(err.dump(), "application/json");
+                return;
+            }
+            nlohmann::json out;
+            out["bytes_hex"] = bytes_to_hex(result.bytes);
+            out["n_bytes"] = result.bytes.size();
+            out["n_coded"] = result.n_coded;
+            out["n_tokens"] = result.n_tokens;
+            out["model_bpc"] = result.model_bpc;
+            out["coded_bpc"] = result.coded_bpc;
+            out["seed"] = tokens.empty() ? 0 : tokens.front();
+            res.set_content(out.dump(), "application/json");
+        } catch (const std::exception& ex) {
+            res.status = 400;
+            nlohmann::json err;
+            err["detail"] = ex.what();
+            res.set_content(err.dump(), "application/json");
+        }
+    });
+
+    svr.Post("/sequence/decompress", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const auto body = nlohmann::json::parse(req.body);
+            if (!body.contains("bytes_hex") || !body.contains("seed") || !body.contains("n_tokens")) {
+                res.status = 400;
+                res.set_content(R"({"detail":"bytes_hex, seed, n_tokens required"})", "application/json");
+                return;
+            }
+            const auto bytes = hex_to_bytes(body.at("bytes_hex").get<std::string>());
+            const auto seed = body.at("seed").get<std::uint32_t>();
+            const auto n_tokens = body.at("n_tokens").get<std::size_t>();
+            std::lock_guard<std::mutex> lk(*g_mu);
+            if (!g_cypha || !g_cypha->sequence()) {
+                res.status = 503;
+                res.set_content(R"({"detail":"No sequence model loaded"})", "application/json");
+                return;
+            }
+            std::string detail;
+            auto tokens = g_cypha->decompress_tokens(bytes, seed, n_tokens, &detail);
+            if (!detail.empty() || tokens.size() != n_tokens) {
+                res.status = 400;
+                nlohmann::json err;
+                err["detail"] = detail.empty() ? "decompress failed" : detail;
+                res.set_content(err.dump(), "application/json");
+                return;
+            }
+            nlohmann::json out;
+            out["token_ids"] = tokens;
+            res.set_content(out.dump(), "application/json");
+        } catch (const std::exception& ex) {
+            res.status = 400;
+            nlohmann::json err;
+            err["detail"] = ex.what();
+            res.set_content(err.dump(), "application/json");
         }
     });
 }

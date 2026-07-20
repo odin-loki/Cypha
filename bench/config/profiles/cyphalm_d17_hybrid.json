@@ -23,6 +23,7 @@
   "laplace_smoothing": 1.0,
   "gria_lr_decay": 0.3,
   "lstm_hidden": 128,
+  "lstm_layers": 2,
   "lstm_lr": 0.05,
   "hybrid_blend_learnable": true,
   "hybrid_blend_lr": 0.01,

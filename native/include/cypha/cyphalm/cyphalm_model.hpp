@@ -115,10 +115,18 @@ class CyphaLMModel {
     const CyphaLMConfig& config() const { return cfg_; }
 
     void reset_context();
+    /// Clear LSTM Adam moments (and similar optim state). Used by predictive codec so
+    /// compress/decompress stay bit-aligned when ``online_adapt`` is on.
+    void reset_optim_state();
 
     PredictNextOutput predict_next(std::uint32_t token_id);
     /// Re-blend cached hybrid GRIA/LSTM logits without advancing recurrent state.
     PredictNextOutput repredict_hybrid_blend(double blend_logit) const;
+    /// Assumes predict_next(token_id) was just called. Applies weight updates for next_token_id
+    /// without advancing state again. Used by predictive codec online adapt.
+    TrainStepMetrics adapt_after_predict(std::uint32_t next_token_id, double lr_scale = 1.0,
+                                         cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
+                                         LmIntelligenceMonitor* monitor = nullptr);
     TrainStepMetrics train_step(std::uint32_t token_id, std::uint32_t next_token_id,
                                 cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
                                 LmIntelligenceMonitor* monitor = nullptr);
@@ -142,6 +150,9 @@ class CyphaLMModel {
     double hybrid_blend_logit() const { return hybrid_blend_logit_; }
     double hybrid_gria_weight() const;
     void set_hybrid_blend_logit(double logit) { hybrid_blend_logit_ = logit; }
+
+    /// kNN over stored ``(lstm_h, next_token)`` pairs (codec retrieval). Empty if ring cold.
+    std::vector<double> hidden_knn_log_probs() const;
 
     AlphaSpectrumSnapshot alpha_spectrum_snapshot() const;
     nlohmann::json compression_profile() const;
@@ -229,11 +240,26 @@ class CyphaLMModel {
     std::vector<double> proj_ngram_;
     std::vector<double> proj_ngram_embed_;
     DIFPredictOutput last_dif_out_;
+    /// Last ``predict_next`` output (for ``adapt_after_predict`` / codec online adapt).
+    PredictNextOutput last_predict_out_;
     std::vector<double> field_x_;
     /// Unified-context carrier (U01–U10); unused when ``!use_unified_context``.
     std::vector<double> unified_context_;
     /// proj: lstm_hidden × context_dim — additive conditioning of LSTM h from unified context.
     std::vector<double> proj_ctx_lstm_;
+    /// proj: lstm_hidden × field_dim — maps compressive-memory slot means into LSTM hidden.
+    std::vector<double> proj_mem_lstm_;
+    /// proj: lstm_hidden × d_embed — maps ContextBank embeds into LSTM hidden (memory-attn path).
+    std::vector<double> proj_bank_lstm_;
+    /// Scratch for memory attention residual path (sized to max(field_dim, d_embed)).
+    std::vector<double> mem_attn_field_scratch_;
+    std::vector<double> mem_attn_h_scratch_;
+
+    struct HiddenKnnEntry {
+        std::vector<float> h;
+        std::uint32_t next = 0;
+    };
+    std::deque<HiddenKnnEntry> hidden_knn_store_;
     /// U06: vocab × context_dim linear head on PGM/unified context.
     std::vector<double> pgm_wy_;
     std::vector<double> pgm_by_;
@@ -333,8 +359,13 @@ class CyphaLMModel {
     void unified_lstm_forward(std::uint32_t token_id, std::vector<double>& log_out);
     void unified_gria_forward(std::vector<double>& log_out);
     void unified_pgm_wy_forward(std::vector<double>& log_out);
-    void train_unified_readout(std::uint32_t next_token_id, double lstm_lr, TrainStepMetrics& m);
+    void train_unified_readout(std::uint32_t next_token_id, double lstm_lr, TrainStepMetrics& m,
+                               double gria_lr);
+    void remember_last_predict(const PredictNextOutput& out);
     void append_lstm_hidden_history(const std::vector<double>& h);
+    /// Residual memory attention into ``h`` then recompute LSTM log-probs via ``Wy``.
+    void apply_lstm_memory_attn(std::vector<double>& h, std::vector<double>& log_l);
+    void remember_hidden_knn(std::uint32_t next_token_id);
     double lstm_hidden_d_eff() const;
     void record_embedding(const std::vector<double>& e);
     void record_token_history(std::uint32_t token_id);

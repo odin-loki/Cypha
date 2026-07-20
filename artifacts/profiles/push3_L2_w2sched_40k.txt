@@ -1,0 +1,12 @@
+corpus="bench/data/wikitext2/wikitext-2/wiki.train.tokens" loaded=44008
+mode=hybrid ngram_fuse_split=1 lstm_hidden=128 lstm_layers=2 mem_attn=0 bptt=8 optim=adam lr=0.001 warm=1000 cos=39000
+n_train=40000 n_eval=4000 epochs=1
+eval_bpc=2.88413
+neural_bpc=2.78803 (no_mix=2.88413)
+mix_bpc=2.81693
+coded_bpc=2.8187
+mix_gain=-0.0289048
+mixer_order=3 neural_floor=0.55 neural_prior=6 min_ctx=16
+coded_bytes=1409 raw_bytes=4000
+uniform_byte_bpc=8.0
+predictive_codec_bench OK

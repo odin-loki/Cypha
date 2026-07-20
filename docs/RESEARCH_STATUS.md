@@ -17,7 +17,7 @@ Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appe
 | **Cypha regressor** | Working | Near Ridge on smooth domains; weak on hard nonlinear equations |
 | **Native stack (M1-M6 + P7)** | Shipped | Sole runtime; Kernel LLR in `native/src/kernel_memory.cpp`; CTest-gated CI |
 | **cypha::accel** | Working | Optional CUDA (`-DCYPHA_ENABLE_CUDA=ON`); ISO C++ thread fallback |
-| **Cypha sequence** | Living default **PGM->Wy (U06)** | Hybrid GRIA+LSTM **2.873 BPC** @ 300k is a **historical pin** only (`bench/BASELINE_LOCK.json`) |
+| **Cypha sequence** | Living default **Hybrid GRIA+LSTM** (~2.8 BPC @ 300k) | Predictive arithmetic coding on `predict_next`; U06 PGM→Wy remains an opt-in cell variant |
 | **cypha_som** | Archived, default OFF | Failed experiment -- [`archive/failed_experiments/cypha_som/`](archive/failed_experiments/cypha_som/README.md) |
 | **Bench harness** | 17 domains | Configs + reports under `bench/` |
 | **cypha_qt_shell / cypha_rest** | Working | `/predict`, `/update`, `/generate`, `/sample`, `/retrieve`, `/sequence/*` |
@@ -32,20 +32,20 @@ Restored after MSVC / hybrid-default drift (portable shuffle, D01 golden draws, 
 |--------|-----|-------|
 | **D01** linear 2-class | Cypha **0.9875** vs logistic **0.8875** | Golden synthetic draws + portable shuffle |
 | **D01** 4-Gaussian blobs | Cypha **0.8875** | Same harness |
-| **D04** Gutenberg @ 8k | BPC **~4.14-4.16** (hybrid bench mode) | Historical hybrid profile; living product sequence is PGM->Wy |
+| **D04** Gutenberg @ 8k | BPC **~4.14-4.16** (hybrid) | Regression pin for hybrid text |
 | **D16A** task discovery | **ARI = 1.0** | Native ARI recovery |
-| **D17** hybrid @ 300k | **2.873 BPC** (lock) / **2.883** re-run 2026-07-19 | **Historical pin only** -- not the living production spine; Δ=+0.010 within ±0.05 gate |
+| **D17** hybrid @ 300k | **2.816 BPC** (lock, `lstm_layers=2`) / prior L1 **2.873** | **Living production target**; re-pin 2026-07-19 push ceiling |
 
-**Reproduce historical hybrid pin** (must pass `--mode hybrid`; CLI default is `pgm_logits`):
+**Reproduce production hybrid ~2.8 BPC** (CLI default `--mode hybrid`):
 
 ```powershell
 $env:CYPHA_BENCH_FULL_CORPUS="1"; $env:CYPHA_BENCH_OVERNIGHT="1"
 cyphalm_bench_native --profile d17 --mode hybrid --overnight --n-train 300000 --n-eval 2000 --threads 1 --bench-seed 42
 ```
 
-Scale check (same flags, seed 42): 5k → ~4.05 BPC; 40k → ~3.42 BPC; 300k → ~2.88 BPC. Keep `use_ngram_count_prior=false` (default).
+Scale check (seed 42): 40k L2 → ~3.37 BPC; 300k L2 lock → **2.816** BPC. Keep `use_ngram_count_prior=false` (default). Width-256 and `--lstm-memory-attn` lost at 40k (not promoted).
 
-Living sequence: `Cypha::init_default_sequence` -> U06 / `apply_pgm_logits_recipe`. Bare `CyphaLMConfig` may still default Hybrid for **bench** compatibility.
+Living sequence: `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` (Hybrid GRIA+LSTM, ngram fuse-split). D17 profile **`lstm_layers=2`**. Predictive codec: mixer + online adapt + hidden kNN. Residual LSTM memory-attn is opt-in research (`--lstm-memory-attn`). CTests: `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`, `native_stacked_lstm_smoke`.
 
 ---
 
@@ -76,10 +76,11 @@ Everyday-profile era numbers (2026-05-31) plus later refresh notes. Full tables:
 
 | Pin | Value | Role |
 |-----|-------|------|
-| Hybrid D17 @ 300k | **2.873 BPC** | Historical lock -- beats bigram / char-LSTM bench of that era |
+| Hybrid D17 @ 300k | **2.816 BPC** (`lstm_layers=2`) | Production lock / living default target |
 | Hybrid D04 @ 8k | **~4.14 BPC** | Bench regression pin |
-| Living default | **PGM->Wy (U06)** | Product `predict_next` / `generate` |
+| Living default | **Hybrid GRIA+LSTM** | Product `predict_next` / `generate` / predictive AC |
 | GRIA-only @ 300k | 3.838 BPC | Ablation / archive |
+| U06 PGM→Wy | opt-in | Cell variant / `--mode pgm_logits` |
 
 Studies (algorithm, long-range, model class): [`archive/studies/`](archive/studies/). One Cypha sequence notes: [`archive/reports/one_cypha/`](archive/reports/one_cypha/).
 
@@ -102,13 +103,13 @@ Studies (algorithm, long-range, model class): [`archive/studies/`](archive/studi
 |-------|--------|
 | Nonlinear boundaries | Kernel LLR shipped; not default everyday profile |
 | Shared-model continual learning | Open; EWC opt-in only |
-| Sequence BPC race vs hybrid 2.873 | Hybrid is historical; living work is PGM->Wy quality, not "beat 2.873 as product default" |
+| Sequence BPC vs hybrid 2.816 | Hybrid L2 is the living default; codec mix ~2.55 @ 80k L2 slice |
 
 ---
 
 ## Current priorities
 
-1. **PGM->Wy quality** -- living sequence spine under `cypha::Cypha` ([cutover](reports/ONE_CYPHA_CUTOVER.md)).
+1. **Hybrid ~2.8 BPC + predictive arithmetic coding** -- living sequence spine under `cypha::Cypha` ([cutover](reports/ONE_CYPHA_CUTOVER.md)).
 2. **Kernel LLR / RFF** -- promote or keep opt-in after domain re-bench ([`research/upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md)).
 3. **Shared-model continual learning** -- EWC scoping archived; product claim remains isolation (D16F).
 4. **Human arXiv upload** -- paper bundle ready ([`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)).
