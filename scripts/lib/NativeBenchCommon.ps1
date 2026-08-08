@@ -66,6 +66,45 @@ function Get-DefaultNativeBuildDir {
     return (Join-Path $env:LOCALAPPDATA "cypha_native_build")
 }
 
+function Resolve-NativeBuildDir {
+    <#
+    .SYNOPSIS
+        Resolves BuildDir to an absolute path (supports repo-relative or absolute overrides).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$BuildDir
+    )
+
+    if ([System.IO.Path]::IsPathRooted($BuildDir)) {
+        return $BuildDir
+    }
+    return (Join-Path $RepoRoot $BuildDir)
+}
+
+function Resolve-NativeExePath {
+    <#
+    .SYNOPSIS
+        Finds a native tool executable under an absolute build directory.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$BuildDir,
+        [Parameter(Mandatory = $true)][string]$Stem
+    )
+
+    foreach ($candidate in @(
+        (Join-Path $BuildDir "$Stem.exe"),
+        (Join-Path $BuildDir $Stem),
+        (Join-Path $BuildDir "Release\$Stem.exe"),
+        (Join-Path $BuildDir "RelWithDebInfo\$Stem.exe")
+    )) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
 function Invoke-NativeWithProgressLog {
     <#
     .SYNOPSIS

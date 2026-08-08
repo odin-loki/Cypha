@@ -22,25 +22,24 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 
 $tierCount = @($Fast, $Medium, $Production | Where-Object { $_ }).Count
 if ($tierCount -gt 1) {
     throw "cannot combine -Fast, -Medium, and -Production"
 }
 
-$root = Split-Path $PSScriptRoot -Parent
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 $resultsDir = Join-Path $root "bench/results"
 New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $logPath = Join-Path $resultsDir "overnight_d17_$timestamp.log"
 Write-Host "Log: $logPath" -ForegroundColor Yellow
 
-$exe = Join-Path $root (Join-Path $BuildDir "cyphalm_bench_native.exe")
-if (-not (Test-Path $exe)) {
-    $exe = Join-Path $root (Join-Path $BuildDir "cyphalm_bench_native")
-}
-if (-not (Test-Path $exe)) {
-    throw "missing cyphalm_bench_native under $BuildDir (build native first)"
+$exe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cyphalm_bench_native"
+if (-not $exe) {
+    throw "missing cyphalm_bench_native under $buildAbs (build native first)"
 }
 
 $env:CYPHA_BENCH_FULL_CORPUS = "1"
@@ -54,32 +53,12 @@ if ($Fast) {
 
 $useMathIntegration = $MathIntegration -or ($env:CYPHA_OVERNIGHT_MATH_INTEGRATION -eq "1")
 
-function Invoke-NativeWithProgressLog {
-    param(
-        [string]$Exe,
-        [string[]]$NativeArgs,
-        [string]$LogPath
-    )
-    # Native tools log progress on stderr ([cyphalm], [cell_sweep]). With 2>&1 that becomes
-    # ErrorRecord output; ErrorActionPreference Stop would abort on the first progress line.
-    $prevEap = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        & $Exe @NativeArgs 2>&1 | Tee-Object -FilePath $LogPath -Append
-    } finally {
-        $ErrorActionPreference = $prevEap
-    }
-}
-
-Push-Location (Join-Path $root $BuildDir)
+Push-Location $buildAbs
 try {
     if ($CellSweep) {
-        $sweepExe = Join-Path (Get-Location) "cypha_cell_hypothesis_sweep.exe"
-        if (-not (Test-Path $sweepExe)) {
-            $sweepExe = Join-Path (Get-Location) "cypha_cell_hypothesis_sweep"
-        }
-        if (-not (Test-Path $sweepExe)) {
-            throw "missing cypha_cell_hypothesis_sweep in $BuildDir"
+        $sweepExe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cypha_cell_hypothesis_sweep"
+        if (-not $sweepExe) {
+            throw "missing cypha_cell_hypothesis_sweep in $buildAbs"
         }
         Write-Host "== cell hypothesis overnight sweep (28 variants, n_train=$NTrain) ==" -ForegroundColor Cyan
         $sweepArgs = @(

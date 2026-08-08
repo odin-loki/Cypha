@@ -9,13 +9,15 @@
 #   pwsh -File scripts/run_production_overnight.ps1
 #   pwsh -File scripts/run_production_overnight.ps1 -BuildDir native/build -SkipCellSweep
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [int]$Threads = 1,
     [switch]$SkipCellSweep,
     [switch]$MathIntegration
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 
 $root = Split-Path $PSScriptRoot -Parent
 $resultsDir = Join-Path $root "bench/results"

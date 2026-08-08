@@ -47,23 +47,13 @@ param(
 
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 
-
-
-$root = Split-Path $PSScriptRoot -Parent
-
-$exe = Join-Path $root (Join-Path $BuildDir "cypha_baseline_lock.exe")
-
-if (-not (Test-Path $exe)) {
-
-    $exe = Join-Path $root (Join-Path $BuildDir "cypha_baseline_lock")
-
-}
-
-if (-not (Test-Path $exe)) {
-
-    throw "missing cypha_baseline_lock under $BuildDir (build native first: cmake --build $BuildDir --target cypha_baseline_lock)"
-
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
+$exe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cypha_baseline_lock"
+if (-not $exe) {
+    throw "missing cypha_baseline_lock under $buildAbs (build native first: cmake --build $buildAbs --target cypha_baseline_lock)"
 }
 
 
@@ -74,7 +64,7 @@ if ($OutputDir -eq "" -and ($Run -eq "cell-sweep" -or $Run -eq "all")) {
     $OutputDir = "bench/results/cell_sweep"
 }
 
-$buildAbs = Join-Path $root $BuildDir
+$buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 
 $tierCount = @($Fast, $Medium, $Production | Where-Object { $_ }).Count
 if ($tierCount -gt 1) {

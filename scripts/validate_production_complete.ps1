@@ -10,7 +10,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 $PRODUCTION_N_TRAIN_MIN = 300000
 $PRODUCTION_STATUSES = @("production", "completed")
 
@@ -22,12 +24,9 @@ if (-not $LockFile) {
 
 $validateScript = Join-Path $PSScriptRoot "validate_baseline_lock.ps1"
 $finalizeScript = Join-Path $PSScriptRoot "finalize_production_overnight.ps1"
-$benchExe = Join-Path $root (Join-Path $BuildDir "cypha_bench_run.exe")
-if (-not (Test-Path $benchExe)) {
-    $benchExe = Join-Path $root (Join-Path $BuildDir "cypha_bench_run")
-}
-if (-not (Test-Path $benchExe)) {
-    throw "missing cypha_bench_run under $BuildDir (build native first)"
+$benchExe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cypha_bench_run"
+if (-not $benchExe) {
+    throw "missing cypha_bench_run under $buildAbs (build native first)"
 }
 
 function Test-DomainTagExists {

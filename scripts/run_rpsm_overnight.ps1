@@ -18,19 +18,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 
 $tierCount = @($Fast, $Medium, $Production | Where-Object { $_ }).Count
 if ($tierCount -gt 1) {
     throw "cannot combine -Fast, -Medium, and -Production"
 }
 
-$root = Split-Path $PSScriptRoot -Parent
-$exe = Join-Path $root (Join-Path $BuildDir "cyphalm_bench_native.exe")
-if (-not (Test-Path $exe)) {
-    $exe = Join-Path $root (Join-Path $BuildDir "cyphalm_bench_native")
-}
-if (-not (Test-Path $exe)) {
-    throw "missing cyphalm_bench_native under $BuildDir (build native first)"
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
+$exe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cyphalm_bench_native"
+if (-not $exe) {
+    throw "missing cyphalm_bench_native under $buildAbs (build native first)"
 }
 
 $resultsDir = Join-Path $root "bench/results"
@@ -58,7 +57,7 @@ if ($Fast) {
 # Native tools may log progress on stderr; with 2>&1 that becomes ErrorRecord output,
 # so relax ErrorActionPreference for the duration of the call (matches
 # Invoke-NativeWithProgressLog in run_d17_overnight.ps1).
-Push-Location (Join-Path $root $BuildDir)
+Push-Location $buildAbs
 try {
     Write-Host "== D21 RPSM overnight bench (profile=$Profile mode=$Mode n_train=$NTrain) ==" -ForegroundColor Cyan
     $prevEap = $ErrorActionPreference
