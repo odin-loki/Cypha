@@ -22,7 +22,7 @@
     "n_train": 300000,
     "profile": "d17",
     "run_at": "2026-07-17T17:03:08Z",
-    "notes": "HISTORICAL cell-hypothesis sweep (One Cypha cutover 2026-07-18). Living sequence spine is PGM→Wy via cypha::Cypha::init_default_sequence (U06). Numeric results retained for regression.",
+    "notes": "HISTORICAL cell-hypothesis sweep (One Cypha cutover 2026-07-18). Living sequence spine is Hybrid L2+Wave2 BPTT via apply_hybrid_production_recipe (2.664 BPC lock). Numeric results retained for regression.",
     "runner": "cypha_cell_hypothesis_sweep --overnight-sweep --intelligence-profile --math-integration",
     "status": "historical",
     "variant_count": 25

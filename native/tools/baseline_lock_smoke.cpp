@@ -16,7 +16,7 @@ using Json = nlohmann::json;
 
 namespace {
 
-constexpr double kD17PinBpc = 2.873;
+constexpr double kD17PinBpc = 2.664;
 constexpr double kD17PinTolerance = 0.05;
 constexpr double kD17ProductionPinTolerance = 0.05;
 constexpr int kProductionNTrainMin = 300000;

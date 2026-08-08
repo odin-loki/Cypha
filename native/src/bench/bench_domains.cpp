@@ -4257,7 +4257,7 @@ void validate_cell_sweep_lock_section(const Json& lock) {
     validate_overnight_lock_section(section, "overnight_results (cell-sweep)");
 }
 
-constexpr double kD17HybridPinBpc = 2.873;
+constexpr double kD17HybridPinBpc = 2.664;
 constexpr double kD17HybridPinTolerance = 0.02;
 constexpr double kD17ProductionPinTolerance = 0.05;
 constexpr int kProductionNTrainMin = 300000;

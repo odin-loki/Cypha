@@ -69,7 +69,7 @@ Native sequence stack lives in **`cypha_core`** (`cypha_lm_native` is an INTERFA
 | Metric | Value | Notes |
 |--------|-------|-------|
 | **Living sequence default** | **Hybrid GRIA+LSTM** | `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` -- [`ONE_CYPHA_CUTOVER.md`](../reports/ONE_CYPHA_CUTOVER.md) |
-| **D17 hybrid BPC @ 300k** | **2.873** (lock) / **~2.88** | Living production target; predictive AC codes under the same `predict_next` |
+| **D17 hybrid BPC @ 300k** | **2.664** (L2 + Wave2 BPTT lock) / prior L1 **2.873** | Living production target; predictive AC codes under the same `predict_next` |
 | **D04 "33.2 bpc"** | benchmark bug | Wrong prob indexing on legacy D04 path -- ignore as evidence |
 
 See [`docs/RESEARCH_STATUS.md`](../RESEARCH_STATUS.md) and [`CHANGELOG.md`](../../CHANGELOG.md).

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows — latest **[v2.3.25](https://github.com/odin-loki/Cypha/releases/tag/v2.3.25)**)
 
-> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + next-token / text generate. Built from first principles (AIXI/MDL, information geometry, free-energy world prior `θ₀ ⊕ Δk`, Information Bottleneck encoder). Native C++ sole runtime — REST, Qt Studio, optional CUDA — validated by CTests. Historical D17 hybrid BPC **2.873** is archived; living sequence spine is PGM→Wy (see `docs/reports/ONE_CYPHA_CUTOVER.md`).**
+> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + next-token / text generate. Built from first principles (AIXI/MDL, information geometry, free-energy world prior `θ₀ ⊕ Δk`, Information Bottleneck encoder). Native C++ sole runtime — REST, Qt Studio, optional CUDA — validated by CTests. Living sequence: **Hybrid GRIA+LSTM L2+Wave2 BPTT** (**2.664 BPC** @ 300k lock). Event forecasting Phases 1–9 shipped — see [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
 
 ---
 
@@ -85,7 +85,7 @@ Prebuilt bundles (**v2.3.25**): [Windows MSVC zip](https://github.com/odin-loki/
 | [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md) | One-page native install → validate → bench → tune → REST. |
 | [`docs/port/PORT_CONTRACT.md`](docs/port/PORT_CONTRACT.md) | The parity contract — `.cypha` v3, REST shapes, bench §6. |
 | [`docs/verify/VERIFICATION_STATUS.md`](docs/verify/VERIFICATION_STATUS.md) | Current CTest parity results across all fixtures. |
-| [`docs/reports/ONE_CYPHA_CUTOVER.md`](docs/reports/ONE_CYPHA_CUTOVER.md) | One Cypha cutover -- `cypha::Cypha`, PGM->Wy living default, hybrid 2.873 historical. |
+| [`docs/reports/ONE_CYPHA_CUTOVER.md`](docs/reports/ONE_CYPHA_CUTOVER.md) | One Cypha cutover — `cypha::Cypha`, Hybrid L2+Wave2 BPTT living default (2.664 BPC lock). |
 | [`docs/archive/README.md`](docs/archive/README.md) | Archived reports / studies / plans (not product spine). |
 | [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](docs/archive/reports/DIAGNOSTIC_REPORT.md) | 2026-05-30 diagnostic (archived). |
 | [`docs/archive/failed_experiments/cypha_som/README.md`](docs/archive/failed_experiments/cypha_som/README.md) | SOM upgrade failed experiment (archived). |

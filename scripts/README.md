@@ -2,7 +2,7 @@
 
 Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`). Narrative "when to run what" lives in **[`docs/README.md`](../docs/README.md)**. **Fixtures / native / schema cadence:** **[`docs/verify/MAINTENANCE.md`](../docs/verify/MAINTENANCE.md)**.
 
-> **Historical pin:** D17 hybrid GRIA+LSTM **2.873 BPC** in `bench/BASELINE_LOCK.json` is for lock / overnight validation only. Living sequence default is **PGM->Wy** -- [`docs/reports/ONE_CYPHA_CUTOVER.md`](../docs/reports/ONE_CYPHA_CUTOVER.md).
+> **Living pin:** D17 hybrid GRIA+LSTM L2 + Wave2 BPTT **2.664 BPC** in `bench/BASELINE_LOCK.json` is the production lock / overnight validation target. Prior L1 pin **2.873** is archived. Living sequence default is **Hybrid** -- [`docs/reports/ONE_CYPHA_CUTOVER.md`](../docs/reports/ONE_CYPHA_CUTOVER.md).
 
 ## Validation gates (primary)
 
@@ -105,7 +105,7 @@ Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/downlo
 | **`monitor_overnight.ps1 -LogFile`** | Poll lock JSON + tail production overnight log (auto-picks latest `bench/results/production_overnight_*.log` when `-LogFile` omitted) | manual |
 | **`watch_production_overnight.ps1`** | Watch production run — log byte growth, last line, process PIDs (`run_production_overnight.ps1`, `cyphalm_bench_native`, `cypha_cell_hypothesis_sweep`), cell sweep `variant_*.json` count (`done/28` while overnight running; latest variant mtime + `manifest.json` `n_train`; legacy `results/` fallback), lock sections; hints **`poll_and_finalize_overnight.ps1`** when processes disappear; `-Once` snapshot; warns if log stalled 30m+; notes legacy `results/summary.csv` | manual |
 | **`cypha_bench_run --domain-tag d27`** | Production overnight lock validation; profile `bench/config/d27_production_lock_profile.json` | `native_d27_production_lock_smoke` |
-| **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
+| **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of `d17_hybrid_baseline.bpc` pin | manual |
 | **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |
 
 Full 300k production overnight is **not** run in CI. Blocking gate **115 CTests** (+1 Phase 23: `native_d37_lock_refresh_smoke`; +1 Phase 22: `native_d36_pipeline_e2e_smoke`; +1 Phase 21: `native_d35_lock_commit_pipeline_smoke`; +1 Phase 20: `native_d34_repo_smoke_hygiene_smoke`; +2 Phase 14: `native_d28_overnight_complete_smoke`, `native_baseline_lock_validate_production_status`; +1 Phase 16: `native_d30_artifact_hygiene_smoke`; +1 Phase 17: `native_d31_post_overnight_pipeline_smoke`; +1 Phase 18: `native_d32_production_complete_smoke`; **116** when d38 merges). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.

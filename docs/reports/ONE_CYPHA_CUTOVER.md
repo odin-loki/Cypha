@@ -20,7 +20,8 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 
 ## Sequence spine (living)
 
-- D17 hybrid GRIA+LSTM BPC **~2.8** (`bench/BASELINE_LOCK.json` pin **2.873**; re-verified **2.883** @ 300k) is the **living production default** for modeling and generating text.
+- D17 hybrid GRIA+LSTM L2 + Wave2 BPTT BPC **2.664** (`bench/BASELINE_LOCK.json` production pin @ 300k) is the **living production default** for modeling and generating text (`apply_hybrid_production_recipe`: Adam, bptt=8, lr=0.001).
+- Prior stacked-L2 pin **2.816** and pre-BPTT **2.873** are archived in lock notes / `artifacts/profiles/`.
 - Predictive arithmetic coding (LLMZip-style) is integrated: next-token probs → range coder (`compress_tokens` / `decompress_tokens`, REST `/sequence/compress` + `/sequence/decompress`).
 - Unified-context smoke winner **U06** (PGM→Wy) remains an **opt-in** cell variant (`--mode pgm_logits` / `apply_cell_variant("U06")`), not the product default.
 
@@ -77,6 +78,15 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 - Arithmetic coder + predictive codec on `predict_next`; `Cypha::{compress,decompress}_tokens`, `generate_via_bits`
 - REST: `POST /sequence/compress`, `POST /sequence/decompress` (`bytes_hex`)
 - CTests: `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`; `cypha_one_smoke` asserts Hybrid + roundtrip
+
+## Status (2026-08-08) — Wave2 BPTT re-pin + forecasting v1
+
+**Done**
+
+- Production recipe: **L2 stacked LSTM + Wave2 BPTT** (Adam, bptt=8, lr=0.001) via `apply_hybrid_production_recipe`
+- `bench/BASELINE_LOCK.json` re-pinned **2.664 BPC** @ 300k; lock validators aligned (`validate_baseline_lock.ps1`, `baseline_lock_validate`, d27)
+- Event forecasting Phases 1–9 shipped (`native/include/cypha/forecast/`, REST `/forecast/*`, bench `--domain-tag forecast`)
+- SORF promotion gate passes (`orf_encoder_bench` → `promote=sorf`)
 
 ## Release
 

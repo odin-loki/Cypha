@@ -8,8 +8,8 @@ This document is the **normative checklist** for native ports. Behavior must mat
 |-------|----------------|
 | **Public type** | **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens |
 | **REST** | **`cypha_rest`** -- `/predict`, `/update`, `/sample`, `/retrieve`, `/sequence/*`, `/generate` |
-| **Sequence default** | **Hybrid GRIA+LSTM** via `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` (~2.8 BPC @ 300k) |
-| **Hybrid GRIA+LSTM** | **Bench / historical pin** (D17 **2.873 BPC** in `bench/BASELINE_LOCK.json`) -- not the product default |
+| **Sequence default** | **Hybrid GRIA+LSTM L2 + Wave2 BPTT** via `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` (**2.664 BPC** @ 300k lock) |
+| **Hybrid GRIA+LSTM** | **Living production pin** (D17 **2.664 BPC** in `bench/BASELINE_LOCK.json`; prior L1 **2.873** archived) |
 | **Python names** | **Wire-format history only** (`.cypha` v3 keys, parity fixtures). Runtime packages removed (P7). |
 
 > Dual brands "CyphaDIF" / "CyphaLM" in sections below are historical labels for the same product surfaces. Cutover: [`../reports/ONE_CYPHA_CUTOVER.md`](../reports/ONE_CYPHA_CUTOVER.md).
