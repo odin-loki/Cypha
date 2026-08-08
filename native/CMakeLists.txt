@@ -103,6 +103,7 @@ add_library(cypha_core STATIC
   src/forecast/interpretability.cpp
   src/forecast/theater_models.cpp
   src/forecast/views_scoring.cpp
+  src/forecast/views_holdout.cpp
   src/forecast/gdelt_monitor.cpp
   src/forecast/forecast_pipeline.cpp
   src/branch_a_router.cpp

@@ -36,6 +36,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/bench/bench_paths.hpp"
+#include "cypha/forecast/forecast_pipeline.hpp"
 #include "cypha/bench/bench_encoder_chess.hpp"
 #include "cypha/bench/bench_encoder_document.hpp"
 #include "cypha/bench/bench_encoder_go.hpp"
@@ -46,7 +48,6 @@
 #include "cypha/bench/bench_baselines.hpp"
 #include "cypha/bench/bench_figures.hpp"
 #include "cypha/bench/bench_metrics.hpp"
-#include "cypha/bench/bench_paths.hpp"
 #include "cypha/bench/bench_profile.hpp"
 #include "cypha/bench/bench_report_json.hpp"
 #include "cypha/bench/bench_cross_domain.hpp"
@@ -359,6 +360,8 @@ void fit_apply_preprocessor(std::vector<std::vector<double>>& train_x, std::vect
     pre.auto_rff_gamma = pre_cfg.value("auto_rff_gamma", false);
     pre.auto_rff_gamma_cv = pre_cfg.value("auto_rff_gamma_cv", false);
     pre.rff_gamma = pre_cfg.value("rff_gamma", 1.0);
+    pre.rff_sorf = pre_cfg.value("rff_sorf", false);
+    pre.rff_orf = pre_cfg.value("rff_orf", false);
     pre.seed = pre_cfg.value("seed", 42);
     const int n = static_cast<int>(train_x.size());
     const int d = static_cast<int>(train_x.front().size());
@@ -377,6 +380,8 @@ void fit_apply_preprocessor(std::vector<std::vector<double>>& train_x, std::vect
                          {"auto_rff_gamma", pre.auto_rff_gamma},
                          {"auto_rff_gamma_cv", pre.auto_rff_gamma_cv},
                          {"rff_gamma", pre.rff_gamma},
+                         {"rff_sorf", pre.rff_sorf},
+                         {"rff_orf", pre.rff_orf},
                          {"input_dim", pre.input_dim},
                          {"output_dim", pre.output_dim}};
     }
@@ -10229,6 +10234,27 @@ Json run_d76_compress_interval_grid_joint_validation() {
     return experiments;
 }
 
+Json run_d_forecast() {
+    const fs::path data_dir = cypha::bench::bench_root() / "data" / "forecast";
+    cypha::forecast::ForecastPipeline pipe;
+    const auto result = pipe.run(data_dir);
+    Json experiments = Json::object();
+    experiments["node_train_acc"] = result.node_result.train_accuracy;
+    experiments["node_eval_acc"] = result.node_result.eval_accuracy;
+    experiments["sequence_eval_bpc"] = result.sequence_eval_bpc;
+    experiments["tree_nodes"] = result.scenario_tree.nodes.size();
+    experiments["interpretable_paths"] = result.paths.size();
+    experiments["views_crps"] = result.views_validation.mean_crps;
+    experiments["views_ignorance"] = result.views_validation.mean_ignorance;
+    experiments["views_n_scored"] = result.views_validation.n_scored;
+    experiments["drift_alarms"] = result.drift_alarms;
+    if (!result.detail.empty()) {
+        experiments["detail"] = result.detail;
+    }
+    cypha::bench::finalize_domain("forecast", experiments);
+    return experiments;
+}
+
 std::vector<DomainSpec> build_all_domains() {
     return {
         {"d01", "cypha_bench.domains.d01_statistical_baselines", run_d01},
@@ -10352,6 +10378,7 @@ std::vector<DomainSpec> build_all_domains() {
          run_d75_max_memory_slots_grid_joint_validation},
         {"d76", "cypha_bench.domains.d76_compress_interval_grid_joint_validation",
          run_d76_compress_interval_grid_joint_validation},
+        {"forecast", "cypha_bench.domains.forecast", run_d_forecast},
     };
 }
 
