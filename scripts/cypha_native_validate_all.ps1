@@ -266,6 +266,20 @@ if (-not $SkipBench) {
         Step-Result "bench_smoke" $false "missing $benchExe"
         Step-Result "bench_report_png" $false "missing $benchExe"
     } else {
+        $fetchScript = Join-Path $root "scripts\fetch_forecast_data.ps1"
+        if (Test-Path $fetchScript) {
+            Write-Host "== fetch_forecast_data (sample aliases) ==" -ForegroundColor Yellow
+            Push-Location $root
+            try {
+                & $fetchScript
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "fetch_forecast_data warning: exit $LASTEXITCODE" -ForegroundColor DarkYellow
+                }
+            } finally {
+                Pop-Location
+            }
+            Write-Host ""
+        }
         $benchOk = $true
         $benchDetail = @()
         foreach ($domain in @(1, 4, 17)) {

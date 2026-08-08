@@ -83,6 +83,13 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | **`corpus_smoke`** (native) | Probe `load_bench_corpus("d17"|"d21", …)` — WikiText-2 or gutenberg fallback | `native_corpus_smoke` |
 | **`cypha_bench_run --domain-tag d25`** | Corpus readiness validation; writes `bench/report/tables/d25_corpus_readiness.json` | `native_d25_corpus_smoke` |
 
+## Forecast data (event-forecasting framework)
+
+| Script | Purpose |
+|--------|---------|
+| **`fetch_forecast_data.ps1`** | Ensure `bench/data/forecast/` sample aliases; `-Bulk` fetches public GDELT + CoW dyadic MID snapshots; `-Repair` fixes corrupted CSVs |
+| **`cypha_bench_run --domain-tag forecast`** | Full `ForecastPipeline` bench on forecast sample/bulk data |
+
 ## Medium overnight + baseline lock validator (Phase 12 — shipped everywhere)
 
 | Script / binary | Purpose | CTest |

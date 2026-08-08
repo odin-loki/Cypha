@@ -110,6 +110,8 @@ bench/data/wikitext2/
 !bench/data/wikitext2/README.md
 bench/data/ecg5000/*
 !bench/data/ecg5000/README.md
+bench/data/forecast/bulk/
+bench/data/forecast/views_bulk.csv
 bench/artifacts/tuning/
 bench/report/baselines/
 
