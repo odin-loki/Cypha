@@ -327,7 +327,10 @@ add_executable(forecast_smoke tools/forecast_smoke.cpp)
 target_link_libraries(forecast_smoke PRIVATE cypha_core cypha_lm_native)
 cypha_mingw_apply_exe_link_options(forecast_smoke)
 add_test(NAME native_forecast_smoke COMMAND "$<TARGET_FILE:forecast_smoke>")
-set_tests_properties(native_forecast_smoke PROPERTIES TIMEOUT 300)
+set_tests_properties(native_forecast_smoke PROPERTIES
+  TIMEOUT 300
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
+)
 
 add_executable(cypha_forecast_run tools/cypha_forecast_run.cpp)
 target_link_libraries(cypha_forecast_run PRIVATE cypha_core cypha_lm_native)
@@ -349,13 +352,19 @@ add_executable(forecast_gdelt_poll tools/forecast_gdelt_poll.cpp)
 target_link_libraries(forecast_gdelt_poll PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(forecast_gdelt_poll)
 add_test(NAME native_forecast_gdelt_poll COMMAND "$<TARGET_FILE:forecast_gdelt_poll>" --once)
-set_tests_properties(native_forecast_gdelt_poll PROPERTIES TIMEOUT 60)
+set_tests_properties(native_forecast_gdelt_poll PROPERTIES
+  TIMEOUT 60
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
+)
 
 add_executable(views_leaderboard_bench tools/views_leaderboard_bench.cpp)
 target_link_libraries(views_leaderboard_bench PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(views_leaderboard_bench)
 add_test(NAME native_views_leaderboard_bench COMMAND "$<TARGET_FILE:views_leaderboard_bench>")
-set_tests_properties(native_views_leaderboard_bench PROPERTIES TIMEOUT 60)
+set_tests_properties(native_views_leaderboard_bench PROPERTIES
+  TIMEOUT 60
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
+)
 
 add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
 target_link_libraries(cypha_federated_merge PRIVATE cypha_core)

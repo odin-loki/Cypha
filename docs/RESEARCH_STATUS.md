@@ -17,7 +17,7 @@ Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appe
 | **Cypha regressor** | Working | Near Ridge on smooth domains; weak on hard nonlinear equations |
 | **Native stack (M1-M6 + P7)** | Shipped | Sole runtime; Kernel LLR in `native/src/kernel_memory.cpp`; CTest-gated CI |
 | **cypha::accel** | Working | Optional CUDA (`-DCYPHA_ENABLE_CUDA=ON`); ISO C++ thread fallback |
-| **Cypha sequence** | Living default **Hybrid GRIA+LSTM** (~2.8 BPC @ 300k) | Predictive arithmetic coding on `predict_next`; U06 PGM→Wy remains an opt-in cell variant |
+| **Cypha sequence** | Living default **Hybrid GRIA+LSTM L2+Wave2 BPTT** (**2.664 BPC** @ 300k lock) | Predictive arithmetic coding on `predict_next`; U06 PGM→Wy remains an opt-in cell variant |
 | **cypha_som** | Archived, default OFF | Failed experiment -- [`archive/failed_experiments/cypha_som/`](archive/failed_experiments/cypha_som/README.md) |
 | **Bench harness** | 17 domains | Configs + reports under `bench/` |
 | **cypha_qt_shell / cypha_rest** | Working | `/predict`, `/update`, `/generate`, `/sample`, `/retrieve`, `/sequence/*`, `/forecast/run` |

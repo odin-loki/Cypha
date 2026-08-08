@@ -91,7 +91,7 @@ struct Args {
 void usage() {
     std::cerr
         << "usage: cyphalm_bench_native --mode {char_lstm,ssm,hybrid,ssm_gria,context_bank,spectral,rpsm}\n"
-        << "       (hybrid = HISTORICAL D17 GRIA+LSTM pin; living default is PGM->Wy via cypha::Cypha)\n"
+        << "       (hybrid = living D17 GRIA+LSTM pin via apply_hybrid_production_recipe; PGM->Wy opt-in)\n"
         << "       --cell-variant {B0..H23,U01..U10}  (HISTORICAL research; H23=PGM; U*=unified-context)\n"
         << "       --profile {d17,d21,d04} --n-train N --n-eval M --threads T\n"
         << "       --overnight  (D17/D21: full WikiText + 300k train budget; or CYPHA_BENCH_OVERNIGHT=1)\n"

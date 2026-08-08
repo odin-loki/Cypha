@@ -185,7 +185,7 @@ Owned by **`cypha::Cypha`**. Latent sampling when a `.cypha` model is loaded —
 
 ## 4b. Native sequence stack (inside `cypha_core`)
 
-> **Product note:** Living entry is `cypha::Cypha` sequence APIs. Hybrid `--mode hybrid` / `hybrid_gria_lstm` profiles remain for **historical BPC benches** and lock validation; they are not the shipping sequence default (PGM->Wy).
+> **Product note:** Living entry is `cypha::Cypha` sequence APIs via `apply_hybrid_production_recipe` (Hybrid L2+Wave2 BPTT, **2.664 BPC** lock). PGM->Wy (U06) remains opt-in; legacy `--mode hybrid` profiles support BPC benches and lock validation.
 
 Sequence sources live under `native/include/cypha/cyphalm/`, `native/src/cyphalm/`, compiled into **`cypha_core`** (compat alias target `cypha_lm_native` remains). Public facade: **`cypha::Cypha`**. Build notes: [`docs/native/CYPHALM_NATIVE_BUILD.md`](../native/CYPHALM_NATIVE_BUILD.md).
 
