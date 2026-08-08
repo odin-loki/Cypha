@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "cypha/cypha.hpp"
+#include "cypha/cyphalm/predictive_codec.hpp"
 
 int main(int argc, char** argv) {
   std::string cypha_path;
@@ -146,13 +147,28 @@ int main(int argc, char** argv) {
   std::cout << "generate chars=" << text.size() << "\n";
 
   const std::vector<std::uint32_t> stream = {1, 2, 3, 4, 5, 2, 3, 4};
-  auto packed = model.compress_tokens(stream);
+  for (std::size_t i = 0; i + 1 < stream.size(); ++i) {
+    (void)model.train_token(stream[i], stream[i + 1]);
+  }
+  const auto seq_ckpt = std::filesystem::temp_directory_path() / "cypha_one_smoke_seq";
+  model.save_sequence(seq_ckpt.string());
+  const std::string ckpt_json = seq_ckpt.string() + ".json";
+
+  cypha::cyphalm::PredictiveCodecOptions codec_opt;
+  codec_opt.online_adapt = false;
+  cypha::Cypha enc;
+  cypha::Cypha dec;
+  if (!enc.load_sequence(ckpt_json) || !dec.load_sequence(ckpt_json)) {
+    std::cerr << "reload sequence for codec failed\n";
+    return 11;
+  }
+  auto packed = enc.compress_tokens(stream, codec_opt);
   if (!packed.detail.empty() || packed.bytes.empty()) {
     std::cerr << "compress_tokens: " << packed.detail << "\n";
     return 11;
   }
   std::string detail;
-  auto round = model.decompress_tokens(packed.bytes, stream.front(), stream.size(), &detail);
+  auto round = dec.decompress_tokens(packed.bytes, stream.front(), stream.size(), &detail, codec_opt);
   if (!detail.empty() || round != stream) {
     std::cerr << "compress/decompress roundtrip failed: " << detail << "\n";
     return 12;

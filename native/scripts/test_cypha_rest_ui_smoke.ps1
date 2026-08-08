@@ -14,9 +14,8 @@ if (-not (Test-Path $exe)) { throw "Missing cypha_rest in $BuildDir" }
 
 $staticSrc = Join-Path $root "native\tools\static"
 $staticDst = Join-Path $BuildDir "static"
-if (-not (Test-Path (Join-Path $staticDst "index.html"))) {
-  Copy-Item -Recurse -Force $staticSrc $staticDst
-}
+if (Test-Path $staticDst) { Remove-Item -Recurse -Force $staticDst }
+Copy-Item -Recurse -Force $staticSrc $staticDst
 
 $args = @(
   "--listen", "127.0.0.1:18100",
@@ -24,7 +23,13 @@ $args = @(
   "--f-field-json", (Join-Path $root "fixtures\f_field.json")
 )
 
-$p = Start-Process -FilePath $exe -ArgumentList $args -PassThru -WindowStyle Hidden -WorkingDirectory $BuildDir
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $exe
+$psi.Arguments = ($args -join ' ')
+$psi.WorkingDirectory = $BuildDir
+$psi.UseShellExecute = $false
+$psi.EnvironmentVariables["CYPHA_REST_STATIC_DIR"] = $staticSrc
+$p = [System.Diagnostics.Process]::Start($psi)
 try {
   Start-Sleep -Seconds 2
   $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:18100/"

@@ -218,8 +218,10 @@ function Get-CtestPassedCount {
     param([object]$Output)
     $text = if ($Output -is [array]) { $Output -join "`n" } else { [string]$Output }
     foreach ($line in ($text -split "`n")) {
-        if ($line -match '(\d+)\s+tests?\s+failed out of (\d+)' -and $line -match 'tests passed') {
-            return [int]$Matches[2]
+        if ($line -match '(\d+)\s+tests?\s+failed out of (\d+)') {
+            $failed = [int]$Matches[1]
+            $total = [int]$Matches[2]
+            return $total - $failed
         }
     }
     if ($text -match '(?m)(\d+)\s+tests?\s+passed') {

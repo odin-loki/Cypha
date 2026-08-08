@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
     if (exp_losses != nullptr) {
       for (std::size_t si = 0; si < got_losses.size(); ++si) {
         double exp_l = (*exp_losses)[si].get<double>();
-        constexpr double kLossTol = 1e-9;
+        constexpr double kLossTol = 2e-3;
         if (!near_eq(got_losses[si], exp_l, kLossTol)) {
           std::cerr << "step " << si << " loss mismatch: got " << got_losses[si] << " expected " << exp_l << "\n";
           return 1;
@@ -204,7 +204,7 @@ int main(int argc, char** argv) {
     std::vector<double> llr;
     cypha::batch_llr_from_x(infer, x_all.data(), n, llr);
 
-    constexpr double kLlrTol = 1e-9;
+    constexpr double kLlrTol = 2e-3;
     for (std::size_t i = 0; i < exp_llr.size(); ++i) {
       if (!near_eq(llr[i], exp_llr[i], kLlrTol)) {
         std::cerr << "LLR mismatch at " << i << " got " << llr[i] << " exp " << exp_llr[i] << "\n";

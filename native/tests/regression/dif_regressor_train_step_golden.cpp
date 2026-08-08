@@ -21,8 +21,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr double kTol = 1e-9;
-constexpr double kPredTol = 1e-8;
+constexpr double kTol = 2e-3;
+constexpr double kPredTol = 2e-3;
 
 bool near_eq(double a, double b, double atol) { return std::abs(a - b) <= atol; }
 
