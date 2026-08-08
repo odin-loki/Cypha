@@ -11,8 +11,11 @@ milestone or a significant self-contained change.
 ### Added
 - **Predictive arithmetic coding (LLMZip-style):** 32-bit range coder + `predictive_codec` on `predict_next`; `Cypha::{compress,decompress}_tokens`, `generate_via_bits`; REST `POST /sequence/compress` + `/sequence/decompress`. CTests `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`.
 - **Hybrid production recipe:** `apply_hybrid_production_recipe` (GRIA+LSTM, ngram fuse-split, no count prior).
+- **Event-forecasting framework (Phases 1–9):** `native/include/cypha/forecast/` — CAMEO token vocabulary, MID node estimators, CyphaLM rollout tree, VIEWS CRPS scoring, GDELT drift monitor; tools `forecast_smoke`, `cypha_forecast_run`, `orf_encoder_bench`, `forecast_drift_backtest`; REST `POST /forecast/run`; sample data under `bench/data/forecast/`.
+- **Orthogonal RFF (ORF/SORF):** `RffProjectionKind::Orf`, `OrthogonalRffEncoder`, `PreprocessorState::rff_orf`; `active_query_score_from_probs`, `Cypha::drift_score()`.
 
 ### Changed
+- **Tabular bench profile:** `everyday_profile.json` enables `rff_sorf: true` for tabular RFF (SORF wins XOR smoke without breaking preprocessor goldens).
 - **Living sequence default → Hybrid (~2.8 BPC):** `Cypha::init_default_sequence` and `cyphalm_bench_native` default `--mode hybrid` (U06 PGM→Wy opt-in). Docs / D17 profile `_meta.status=production` updated.
 
 ### Fixed

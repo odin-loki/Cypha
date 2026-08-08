@@ -517,11 +517,13 @@ void PreprocessorState::fit_from_design_matrix(const std::vector<double>& row_ma
       rff_gamma = gamma;
     }
     NumpyDefaultRng rng(seed);
-    if (rff_sorf) {
+    if (rff_sorf || rff_orf) {
       std::vector<double> w_flat;
       std::vector<double> b_flat;
       std::mt19937 std_rng(static_cast<std::uint32_t>(seed & 0xffffffffu));
-      init_rff_weights(RffProjectionKind::Sorf, std_rng, gamma, rff_dim, d_work, w_flat, b_flat, false);
+      const RffProjectionKind kind =
+          rff_orf ? RffProjectionKind::Orf : RffProjectionKind::Sorf;
+      init_rff_weights(kind, std_rng, gamma, rff_dim, d_work, w_flat, b_flat, false);
       rff_w.resize(static_cast<std::size_t>(rff_dim));
       for (int r = 0; r < rff_dim; ++r) {
         rff_w[static_cast<std::size_t>(r)].resize(static_cast<std::size_t>(d_work));

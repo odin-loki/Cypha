@@ -96,6 +96,15 @@ add_library(cypha_core STATIC
   src/create_model.cpp
   src/kernel_memory.cpp
   src/rff_features.cpp
+  src/forecast/event_vocabulary.cpp
+  src/forecast/dispute_data.cpp
+  src/forecast/node_estimator.cpp
+  src/forecast/rollout_tree.cpp
+  src/forecast/interpretability.cpp
+  src/forecast/theater_models.cpp
+  src/forecast/views_scoring.cpp
+  src/forecast/gdelt_monitor.cpp
+  src/forecast/forecast_pipeline.cpp
   src/branch_a_router.cpp
   src/som/som_encoder.cpp
   src/som/temporal_som.cpp
@@ -310,6 +319,28 @@ add_test(
   COMMAND "$<TARGET_FILE:predictive_codec_bench>" --n-train 1500 --n-eval 400 --epochs 1
 )
 set_tests_properties(native_predictive_codec_bench_smoke PROPERTIES TIMEOUT 600)
+
+add_executable(forecast_smoke tools/forecast_smoke.cpp)
+target_link_libraries(forecast_smoke PRIVATE cypha_core cypha_lm_native)
+cypha_mingw_apply_exe_link_options(forecast_smoke)
+add_test(NAME native_forecast_smoke COMMAND "$<TARGET_FILE:forecast_smoke>")
+set_tests_properties(native_forecast_smoke PROPERTIES TIMEOUT 300)
+
+add_executable(cypha_forecast_run tools/cypha_forecast_run.cpp)
+target_link_libraries(cypha_forecast_run PRIVATE cypha_core cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cypha_forecast_run)
+
+add_executable(orf_encoder_bench tools/orf_encoder_bench.cpp)
+target_link_libraries(orf_encoder_bench PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(orf_encoder_bench)
+add_test(NAME native_orf_encoder_bench_smoke COMMAND "$<TARGET_FILE:orf_encoder_bench>")
+set_tests_properties(native_orf_encoder_bench_smoke PROPERTIES TIMEOUT 180)
+
+add_executable(forecast_drift_backtest tools/forecast_drift_backtest.cpp)
+target_link_libraries(forecast_drift_backtest PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(forecast_drift_backtest)
+add_test(NAME native_forecast_drift_backtest COMMAND "$<TARGET_FILE:forecast_drift_backtest>")
+set_tests_properties(native_forecast_drift_backtest PROPERTIES TIMEOUT 60)
 
 add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
 target_link_libraries(cypha_federated_merge PRIVATE cypha_core)

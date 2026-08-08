@@ -1,6 +1,7 @@
 #include "cypha/cyphalm/cyphalm_rest.hpp"
 
 #include <chrono>
+#include <filesystem>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
@@ -13,6 +14,7 @@
 #include "cypha/cypha.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/predictive_codec.hpp"
+#include "cypha/forecast/forecast_pipeline.hpp"
 #include "cypha/intelligence/epistemic_threshold.hpp"
 
 namespace cypha::cyphalm {
@@ -355,6 +357,41 @@ void register_cyphalm_rest_routes(httplib::Server& svr) {
             }
             nlohmann::json out;
             out["token_ids"] = tokens;
+            res.set_content(out.dump(), "application/json");
+        } catch (const std::exception& ex) {
+            res.status = 400;
+            nlohmann::json err;
+            err["detail"] = ex.what();
+            res.set_content(err.dump(), "application/json");
+        }
+    });
+
+    svr.Post("/forecast/run", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const auto body = nlohmann::json::parse(req.body.empty() ? "{}" : req.body);
+            std::filesystem::path data_dir = body.value("data_dir", std::string("bench/data/forecast"));
+            if (!std::filesystem::exists(data_dir)) {
+                const char* candidates[] = {"bench/data/forecast", "../bench/data/forecast"};
+                for (const char* c : candidates) {
+                    if (std::filesystem::exists(c)) {
+                        data_dir = c;
+                        break;
+                    }
+                }
+            }
+            cypha::forecast::ForecastPipeline pipe;
+            const auto result = pipe.run(data_dir);
+            nlohmann::json out;
+            out["node_eval_acc"] = result.node_result.eval_accuracy;
+            out["sequence_eval_bpc"] = result.sequence_eval_bpc;
+            out["tree_nodes"] = result.scenario_tree.nodes.size();
+            out["paths"] = result.paths.size();
+            out["views_crps"] = result.views_validation.mean_crps;
+            out["views_ignorance"] = result.views_validation.mean_ignorance;
+            out["drift_alarms"] = result.drift_alarms;
+            if (!result.detail.empty()) {
+                out["detail"] = result.detail;
+            }
             res.set_content(out.dump(), "application/json");
         } catch (const std::exception& ex) {
             res.status = 400;

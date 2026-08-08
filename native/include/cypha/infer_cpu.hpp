@@ -162,6 +162,9 @@ void softmax_batch_reference(const double* z_row_major, int n, int k, double eps
 /// Shannon entropy of one softmax row (nats).
 double row_entropy_from_probs(const double* p, int k, double eps = 1e-8);
 
+/// Active-learning exploration score: entropy × (1 − max p). Higher = more uncertain + near boundary.
+double active_query_score_from_probs(const double* p, int k, double eps = 1e-8);
+
 /// Active-learning order: row indices sorted by descending predictive entropy (``batch_encode`` +
 /// ``score_matrix_use_field`` + temperature-scaled softmax). ``n_rows`` rows of raw features in ``x_rowmajor``.
 std::vector<int> uncertainty_rank_indices(const CyphaInferModel& m, const PreprocessorState* pre,

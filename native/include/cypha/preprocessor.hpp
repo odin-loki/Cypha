@@ -20,6 +20,8 @@ struct PreprocessorState {
   bool auto_rff_gamma_cv{false};
   /// Phase 5: structured orthogonal RFF (SORF/Fastfood) instead of iid Gaussian rows.
   bool rff_sorf{false};
+  /// Forecasting Phase 1: dense ORF (QR-orthogonal blocks + chi row norms).
+  bool rff_orf{false};
   int seed{42};
   std::vector<double> mean;
   std::vector<double> stddev;

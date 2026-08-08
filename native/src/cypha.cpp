@@ -498,6 +498,19 @@ PredictOut Cypha::predict(const double* x_in, int n, const PredictOpts& o) {
   out.labels = infer_->labels;
   out.all_scores = llr_for_scores;
 
+  if (k > 0) {
+    std::vector<double> z(static_cast<std::size_t>(k));
+    for (int j = 0; j < k; ++j) {
+      z[static_cast<std::size_t>(j)] =
+          llr_for_scores[static_cast<std::size_t>(j)] / (infer_->temperature + kSoftmaxEps);
+    }
+    std::vector<double> probs;
+    softmax_batch_reference(z.data(), 1, k, kSoftmaxEps, probs);
+    last_active_query_score_ = active_query_score_from_probs(probs.data(), k, kSoftmaxEps);
+  } else {
+    last_active_query_score_ = 0.0;
+  }
+
   if (mke_active_) {
     std::vector<double> z(static_cast<std::size_t>(k));
     for (int j = 0; j < k; ++j) {
@@ -813,6 +826,13 @@ std::string Cypha::generate(const std::vector<int>& prompt_ids, const GenerateTo
     }
   }
   return s;
+}
+
+double Cypha::drift_score() const {
+  if (!mem_) {
+    return 0.0;
+  }
+  return mem_->world_drift_ema;
 }
 
 }  // namespace cypha

@@ -1,6 +1,6 @@
 # Cypha -- Research Status
 
-**Last updated:** 2026-07-19  
+**Last updated:** 2026-08-08  
 **Runtime:** native C++ only -- `cypha_rest`, `cypha_bench_run`, **~160 CTests** *(authoritative tally: `scripts/cypha_native_validate_all.ps1`)*  
 **Product:** one type **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens  
 **Planning:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md), cutover [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md)
@@ -20,7 +20,8 @@ Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appe
 | **Cypha sequence** | Living default **Hybrid GRIA+LSTM** (~2.8 BPC @ 300k) | Predictive arithmetic coding on `predict_next`; U06 PGM→Wy remains an opt-in cell variant |
 | **cypha_som** | Archived, default OFF | Failed experiment -- [`archive/failed_experiments/cypha_som/`](archive/failed_experiments/cypha_som/README.md) |
 | **Bench harness** | 17 domains | Configs + reports under `bench/` |
-| **cypha_qt_shell / cypha_rest** | Working | `/predict`, `/update`, `/generate`, `/sample`, `/retrieve`, `/sequence/*` |
+| **cypha_qt_shell / cypha_rest** | Working | `/predict`, `/update`, `/generate`, `/sample`, `/retrieve`, `/sequence/*`, `/forecast/run` |
+| **Event forecasting** | Shipped (2026-08) | Phases 1–9 in `native/include/cypha/forecast/`; see [`research/forecasting/README.md`](research/forecasting/README.md) |
 
 ---
 

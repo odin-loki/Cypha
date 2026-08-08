@@ -234,12 +234,42 @@ void init_rff_weights_sorf(std::mt19937& rng, double gamma, int D, int d_in, std
   }
 }
 
+void init_rff_weights_orf(std::mt19937& rng, double gamma, int D, int d_in, std::vector<double>& w_flat,
+                          std::vector<double>& b, bool kernel_memory_scale) {
+  w_flat.assign(static_cast<std::size_t>(D) * static_cast<std::size_t>(d_in), 0.0);
+  b.assign(static_cast<std::size_t>(D), 0.0);
+  const double base_scale =
+      kernel_memory_scale ? std::sqrt(std::max(2.0 * gamma, 1e-12)) : std::sqrt(std::max(gamma, 1e-12));
+  std::chi_squared_distribution<double> chi2(static_cast<double>(std::max(d_in, 1)));
+  std::uniform_real_distribution<double> udist(0.0, kTwoPi);
+  int r = 0;
+  while (r < D) {
+    std::vector<double> Q;
+    init_orthogonal_rows(rng, d_in, Q);
+    for (int i = 0; i < d_in && r < D; ++i, ++r) {
+      const double chi_norm = std::sqrt(chi2(rng) / static_cast<double>(std::max(d_in, 1)));
+      const double row_scale = base_scale * chi_norm;
+      for (int c = 0; c < d_in; ++c) {
+        w_flat[static_cast<std::size_t>(r * d_in + c)] =
+            row_scale * Q[static_cast<std::size_t>(i * d_in + c)];
+      }
+      b[static_cast<std::size_t>(r)] = udist(rng);
+    }
+  }
+}
+
 void init_rff_weights(RffProjectionKind kind, std::mt19937& rng, double gamma, int D, int d_in,
                       std::vector<double>& w_flat, std::vector<double>& b, bool kernel_memory_scale) {
-  if (kind == RffProjectionKind::Sorf) {
-    init_rff_weights_sorf(rng, gamma, D, d_in, w_flat, b, kernel_memory_scale);
-  } else {
-    init_rff_weights_iid(rng, gamma, D, d_in, w_flat, b, kernel_memory_scale);
+  switch (kind) {
+    case RffProjectionKind::Sorf:
+      init_rff_weights_sorf(rng, gamma, D, d_in, w_flat, b, kernel_memory_scale);
+      break;
+    case RffProjectionKind::Orf:
+      init_rff_weights_orf(rng, gamma, D, d_in, w_flat, b, kernel_memory_scale);
+      break;
+    default:
+      init_rff_weights_iid(rng, gamma, D, d_in, w_flat, b, kernel_memory_scale);
+      break;
   }
 }
 

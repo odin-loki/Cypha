@@ -12,6 +12,8 @@ enum class RffProjectionKind {
   IidGaussian,
   /// Structured orthogonal random features (SORF / Fastfood blocks; Yu et al.).
   Sorf,
+  /// Dense orthogonal random features (ORF): QR-orthogonalized Gaussian blocks with chi row norms.
+  Orf,
 };
 
 /// In-place Walsh–Hadamard transform; ``n`` must be a power of two.
@@ -29,6 +31,10 @@ void init_rff_weights_iid(std::mt19937& rng, double gamma, int D, int d_in, std:
 /// SORF / Fastfood structured orthogonal RFF weights (same layout as ``init_rff_weights_iid``).
 void init_rff_weights_sorf(std::mt19937& rng, double gamma, int D, int d_in, std::vector<double>& w_flat,
                            std::vector<double>& b, bool kernel_memory_scale = false);
+
+/// Dense ORF weights (Yu et al., NeurIPS 2016): block QR-orthogonal rows with chi-distributed norms.
+void init_rff_weights_orf(std::mt19937& rng, double gamma, int D, int d_in, std::vector<double>& w_flat,
+                          std::vector<double>& b, bool kernel_memory_scale = false);
 
 /// Dispatch by ``kind``; default ``IidGaussian`` preserves legacy numerics.
 void init_rff_weights(RffProjectionKind kind, std::mt19937& rng, double gamma, int D, int d_in,

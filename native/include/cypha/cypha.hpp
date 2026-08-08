@@ -230,6 +230,11 @@ class Cypha {
   double& ewc_lambda() { return ewc_lambda_; }
   const double& ewc_lambda() const { return ewc_lambda_; }
 
+  /// World-prior drift EMA from training (0 when no updates). Forecasting live-alarm signal.
+  double drift_score() const;
+  /// Active-learning score from last ``predict`` softmax: entropy × (1 − max p).
+  double active_query_score() const { return last_active_query_score_; }
+
   bool load_regression_json(const std::string& path);
 
  private:
@@ -276,6 +281,7 @@ class Cypha {
   intelligence::EpistemicThreshold epistemic_threshold_{0.5, 5.0};
   std::unique_ptr<EwcRegularizer> ewc_;
   double ewc_lambda_{0.0};
+  double last_active_query_score_{0.0};
 
   std::mt19937 rng_{424242};
   static constexpr double kOodThreshold = 3.0;

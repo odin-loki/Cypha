@@ -785,6 +785,14 @@ double row_entropy_from_probs(const double* p, int k, double eps) {
   return s;
 }
 
+double active_query_score_from_probs(const double* p, int k, double eps) {
+  double max_p = 0.0;
+  for (int j = 0; j < k; ++j) {
+    max_p = std::max(max_p, p[static_cast<std::size_t>(j)]);
+  }
+  return row_entropy_from_probs(p, k, eps) * (1.0 - max_p);
+}
+
 std::vector<int> uncertainty_rank_indices(const CyphaInferModel& m, const PreprocessorState* pre,
                                           const double* x_rowmajor, int n_rows, int n_features,
                                           double temperature) {

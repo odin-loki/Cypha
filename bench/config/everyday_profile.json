@@ -16,6 +16,7 @@
       "preprocessor": {
         "scale": true,
         "rff_dim": 256,
+        "rff_sorf": true,
         "seed": 42
       }
     },
