@@ -38,6 +38,7 @@ New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $logPath = Join-Path $resultsDir "overnight_d21_$timestamp.log"
 Write-Host "Log: $logPath" -ForegroundColor Yellow
+"$(Get-Date -Format o) starting $exe n_train=$NTrain n_eval=$NEval mode=$Mode profile=$Profile build=$buildAbs" | Out-File -FilePath $logPath -Encoding utf8
 
 $env:CYPHA_BENCH_FULL_CORPUS = "1"
 $env:CYPHA_BENCH_OVERNIGHT = "1"

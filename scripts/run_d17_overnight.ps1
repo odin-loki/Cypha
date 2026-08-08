@@ -42,6 +42,7 @@ $exe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cyphalm_bench_native"
 if (-not $exe) {
     throw "missing cyphalm_bench_native under $buildAbs (build native first)"
 }
+"$(Get-Date -Format o) starting $exe n_train=$NTrain n_eval=$NEval mode=$Mode profile=$Profile build=$buildAbs" | Out-File -FilePath $logPath -Encoding utf8
 
 $env:CYPHA_BENCH_FULL_CORPUS = "1"
 $env:CYPHA_BENCH_OVERNIGHT = "1"

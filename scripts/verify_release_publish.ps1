@@ -9,13 +9,15 @@
 #   pwsh -File scripts/verify_release_publish.ps1 -BuildDir native/build -Tag v2.3.25
 #   pwsh -File scripts/verify_release_publish.ps1 -AllowPending
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [string]$Tag = "",
     [switch]$AllowPending
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $DEFAULT_TAG = "v2.3.25"
 $PRODUCTION_N_TRAIN_MIN = 300000
 
