@@ -9,14 +9,15 @@
 #   pwsh -File scripts/start_poll_finalize_background.ps1 -LogFile bench/results/poll_finalize.log
 #   pwsh -File scripts/start_poll_finalize_background.ps1 -AutoCommit
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [string]$LogFile = "bench/results/poll_finalize.log",
     [switch]$AutoCommit
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
-$DEFAULT_BUILD_DIR = "native/build"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$DEFAULT_BUILD_DIR = ""
 $pollScript = Join-Path $PSScriptRoot "poll_and_finalize_overnight.ps1"
 
 if (-not (Test-Path $pollScript)) {
@@ -58,12 +59,12 @@ function Get-DetectedBuildDirFromOvernight {
 function Resolve-PollBuildDir {
     param([string]$Requested)
 
-    if ($Requested -ne $DEFAULT_BUILD_DIR) {
+    if ($Requested -and $Requested -ne $DEFAULT_BUILD_DIR) {
         return $Requested
     }
 
     if (-not (Test-OvernightStillRunning)) {
-        return $Requested
+        return (Get-DefaultNativeBuildDir -Override $Requested)
     }
 
     $detected = Get-DetectedBuildDirFromOvernight
@@ -72,10 +73,10 @@ function Resolve-PollBuildDir {
         return $detected
     }
 
-    return $Requested
+    return (Get-DefaultNativeBuildDir -Override $Requested)
 }
 
-$BuildDir = Resolve-PollBuildDir -Requested $BuildDir
+$BuildDir = Resolve-PollBuildDir -Requested (Get-DefaultNativeBuildDir -Override $BuildDir)
 
 function Stop-ExistingPollFinalizeProcesses {
     $killed = @()

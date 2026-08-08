@@ -6,13 +6,14 @@
 #   pwsh -File scripts/finalize_production_overnight.ps1
 #   pwsh -File scripts/finalize_production_overnight.ps1 -BuildDir native/build -LockFile bench/BASELINE_LOCK.json
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [string]$LockFile = ""
 )
 
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 
 if (-not $LockFile) {

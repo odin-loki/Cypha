@@ -15,14 +15,16 @@
 #   pwsh -File scripts/run_post_overnight.ps1 -AllowPending
 #   pwsh -File scripts/run_post_overnight.ps1 -SkipMigrate
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [switch]$SkipPoll,
     [switch]$AllowPending,
     [switch]$SkipMigrate
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $pollScript = Join-Path $PSScriptRoot "poll_and_finalize_overnight.ps1"
 $verifyScript = Join-Path $PSScriptRoot "verify_production_pipeline.ps1"
 $migrateScript = Join-Path $PSScriptRoot "migrate_inflight_overnight_artifacts.ps1"

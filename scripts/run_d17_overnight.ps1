@@ -8,7 +8,7 @@
 #   pwsh -File scripts/run_d17_overnight.ps1 -MathIntegration  # hybrid + profile-guided math loss
 #   $env:CYPHA_OVERNIGHT_MATH_INTEGRATION = "1"; pwsh -File scripts/run_d17_overnight.ps1
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [int]$NTrain = 300000,
     [int]$NEval = 2000,
     [int]$Threads = 1,
@@ -30,6 +30,7 @@ if ($tierCount -gt 1) {
 }
 
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 $resultsDir = Join-Path $root "bench/results"
 New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null

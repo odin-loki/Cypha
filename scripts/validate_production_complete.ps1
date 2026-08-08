@@ -4,7 +4,7 @@
 #   pwsh -File scripts/validate_production_complete.ps1 -BuildDir native/build -LockFile bench/BASELINE_LOCK.json
 #   pwsh -File scripts/validate_production_complete.ps1 -AllowPending   # smoke: pass when n_train < 300k
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [string]$LockFile = "",
     [switch]$AllowPending
 )
@@ -12,6 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 $PRODUCTION_N_TRAIN_MIN = 300000
 $PRODUCTION_STATUSES = @("production", "completed")

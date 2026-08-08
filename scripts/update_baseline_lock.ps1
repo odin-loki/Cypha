@@ -36,7 +36,7 @@ param(
 
     [switch]$MathIntegration,
 
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
 
     [string]$LockFile = "bench/BASELINE_LOCK.json",
 
@@ -50,6 +50,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 $exe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cypha_baseline_lock"
 if (-not $exe) {

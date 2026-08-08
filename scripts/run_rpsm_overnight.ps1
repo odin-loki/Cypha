@@ -6,7 +6,7 @@
 #   pwsh -File scripts/run_rpsm_overnight.ps1 -Medium  # 5k train, real WikiText/gutenberg
 #   pwsh -File scripts/run_rpsm_overnight.ps1 -Production  # 300k train, status=production in lock
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [int]$NTrain = 300000,
     [int]$NEval = 2000,
     [int]$Threads = 1,
@@ -26,6 +26,7 @@ if ($tierCount -gt 1) {
 }
 
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 $buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 $exe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cyphalm_bench_native"
 if (-not $exe) {
