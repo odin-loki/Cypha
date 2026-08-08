@@ -8,7 +8,7 @@ Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`)
 
 | Script | Purpose | Typical output |
 |--------|---------|----------------|
-| `cypha_native_validate_all.ps1` | Windows full gate: rebuild + CTest (`-R native_`) + bench fig01–09 + tune dry-run + REST smoke (`-SkipBuild` after rebuild) | console |
+| `cypha_native_validate_all.ps1` | Windows full gate: rebuild + CTest (`-R native_`, 214 tests) + bench d01/d04/d17/forecast + fig01–09 + tune dry-run + REST smoke (`-SkipBuild` after rebuild) | console |
 | `ci_native_linux.sh` | Linux/WSL mirror of CI **`build_and_test`**: cmake + `ctest -R native_` | console |
 | `ci_federated_tls_linux.sh` | Linux/WSL mirror of optional CI **`federated_tls`**: `-DCYPHA_ENABLE_OPENSSL=ON` + `ctest -R native_federated_tls` | console |
 | `ci_federated_tls_windows.ps1` | Windows mirror of optional CI **`federated_tls`**: OpenSSL via vcpkg / `OPENSSL_ROOT_DIR`, `ctest -R native_federated_tls_smoke` | console |

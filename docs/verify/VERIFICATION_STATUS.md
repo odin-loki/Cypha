@@ -8,7 +8,7 @@ Honest snapshot for **native production**. “Debugged” here means *automated 
 
 | Layer | What runs | Count / notes |
 |--------|-----------|----------------|
-| **`ctest -R native_`** | `cypha_core` math, encoders, regressors, save/load, parity fixtures, REST/Qt smokes | **~160 CTests** (see **`scripts/cypha_native_validate_all.ps1`** for authoritative tally; or `ctest -N` on your build tree) |
+| **`ctest -R native_`** | `cypha_core` math, encoders, regressors, save/load, parity fixtures, REST/Qt smokes | **214 CTests** (see **`scripts/cypha_native_validate_all.ps1`** or `ctest -N -R native_` on your build tree) |
 | **`cypha_parity`** | Reload `.cypha`, numeric targets vs `expected.npz`, Tier-1 context | CTest **`native_parity`** |
 | **`native/scripts/smoke_cypha_rest_mingw.ps1`** | Subprocess `cypha_rest` vs parity fixtures | REST smoke (set **`CYPHA_REST_BIN`**) |
 | **`cypha_diagnostics_run`** | Phases 1–4 orchestration over parity exes | CTest **`native_diagnostics_run`** |

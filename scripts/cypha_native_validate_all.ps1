@@ -164,54 +164,16 @@ function Test-DomainTagExists {
 }
 
 function Get-ExpectedNativeTestCount {
-    if (Test-DomainTagExists -Tag "d76") { return 160 }
-    if (Test-DomainTagExists -Tag "d75") { return 159 }
-    if (Test-DomainTagExists -Tag "d74") { return 158 }
-    if (Test-DomainTagExists -Tag "d73") { return 157 }
-    if (Test-DomainTagExists -Tag "d72") { return 156 }
-    if (Test-DomainTagExists -Tag "d71") { return 155 }
-    if (Test-DomainTagExists -Tag "d70") { return 154 }
-    if (Test-DomainTagExists -Tag "d69") { return 153 }
-    if (Test-DomainTagExists -Tag "d68") { return 152 }
-    if (Test-DomainTagExists -Tag "d67") { return 151 }
-    if (Test-DomainTagExists -Tag "d66") { return 150 }
-    if (Test-DomainTagExists -Tag "d65") { return 149 }
-    if (Test-DomainTagExists -Tag "d64") { return 148 }
-    if (Test-DomainTagExists -Tag "d63") { return 147 }
-    if (Test-DomainTagExists -Tag "d62") { return 146 }
-    if (Test-DomainTagExists -Tag "d61") { return 145 }
-    if (Test-DomainTagExists -Tag "d60") { return 144 }
-    if (Test-DomainTagExists -Tag "d59") { return 143 }
-    if (Test-DomainTagExists -Tag "d58") { return 142 }
-    if (Test-DomainTagExists -Tag "d57") { return 141 }
-    if (Test-DomainTagExists -Tag "d56") { return 140 }
-    if (Test-DomainTagExists -Tag "d55") { return 139 }
-    if (Test-DomainTagExists -Tag "d54") { return 138 }
-    if (Test-DomainTagExists -Tag "d53") { return 137 }
-    if (Test-DomainTagExists -Tag "d52") { return 136 }
-    if (Test-DomainTagExists -Tag "d51") { return 135 }
-    if (Test-DomainTagExists -Tag "d50") { return 134 }
-    if (Test-DomainTagExists -Tag "d49") { return 133 }
-    if (Test-DomainTagExists -Tag "d48") { return 132 }
-    if (Test-DomainTagExists -Tag "d47") { return 131 }
-    if (Test-DomainTagExists -Tag "d46") { return 130 }
-    if (Test-DomainTagExists -Tag "d45") { return 128 }
-    if (Test-DomainTagExists -Tag "d44") { return 127 }
-    if (Test-DomainTagExists -Tag "d43") { return 126 }
-    if (Test-DomainTagExists -Tag "d42") { return 124 }
-    if (Test-DomainTagExists -Tag "d41") { return 121 }
-    if (Test-DomainTagExists -Tag "d40") { return 118 }
-    if (Test-DomainTagExists -Tag "d39") { return 117 }
-    if (Test-DomainTagExists -Tag "d38") { return 116 }
-    if (Test-DomainTagExists -Tag "d37") { return 115 }
-    if (Test-DomainTagExists -Tag "d36") { return 114 }
-    if (Test-DomainTagExists -Tag "d35") { return 113 }
-    if (Test-DomainTagExists -Tag "d34") { return 112 }
-    if (Test-DomainTagExists -Tag "d33") { return 111 }
-    if (Test-DomainTagExists -Tag "d32") { return 110 }
-    if (Test-DomainTagExists -Tag "d31") { return 109 }
-    if (Test-DomainTagExists -Tag "d30") { return 108 }
-    return 107
+    param([string]$BuildDir = "")
+    if ($BuildDir -and (Test-Path (Join-Path $BuildDir "CTestTestfile.cmake"))) {
+        try {
+            $listOut = & ctest --test-dir $BuildDir -N -R native_ 2>&1 | Out-String
+            if ($listOut -match 'Total Tests:\s*(\d+)') {
+                return [int]$Matches[1]
+            }
+        } catch { }
+    }
+    return 214
 }
 
 function Get-CtestPassedCount {
@@ -278,7 +240,7 @@ try {
 }
 $ctestOut | Write-Host
 $ctestDetail = if ($ctestCode -eq 0) { "all native_ tests passed" } else { "exit $ctestCode" }
-$expectedTestCount = Get-ExpectedNativeTestCount
+$expectedTestCount = Get-ExpectedNativeTestCount -BuildDir $BuildDir
 $parsedTestCount = Get-CtestPassedCount -Output $ctestOut
 if ($null -ne $parsedTestCount -and $parsedTestCount -ne $expectedTestCount) {
     $countWarn = "expected $expectedTestCount native_ tests, parsed $parsedTestCount"
@@ -298,7 +260,7 @@ if ($null -ne $parsedTestCount -and $parsedTestCount -ne $expectedTestCount) {
 # --- Bench smoke ---
 if (-not $SkipBench) {
     Write-Host ""
-    Write-Host "== cypha_bench_run smoke (d01, d04, d17) ==" -ForegroundColor Yellow
+    Write-Host "== cypha_bench_run smoke (d01, d04, d17, forecast) ==" -ForegroundColor Yellow
     $benchExe = BinPath "cypha_bench_run"
     if (-not (Test-Path $benchExe)) {
         Step-Result "bench_smoke" $false "missing $benchExe"
@@ -340,6 +302,22 @@ if (-not $SkipBench) {
             $benchDetail += "d03_xor: exit $xorCode"
         } else {
             $benchDetail += "d03_xor: ok"
+        }
+
+        Write-Host ""
+        Write-Host "== forecast bench smoke ==" -ForegroundColor Yellow
+        Push-Location $root
+        try {
+            & $benchExe --domain-tag forecast
+            $forecastCode = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
+        if ($forecastCode -ne 0) {
+            $benchOk = $false
+            $benchDetail += "forecast: exit $forecastCode"
+        } else {
+            $benchDetail += "forecast: ok"
         }
         Step-Result "bench_smoke" $benchOk ($benchDetail -join "; ")
 

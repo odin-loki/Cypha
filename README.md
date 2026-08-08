@@ -40,7 +40,7 @@ Build outside OneDrive on Windows (cloud sync locks object files). Full guide: [
 cmake -S native -B C:\Temp\cypha_build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build C:\Temp\cypha_build --parallel
 
-# Validate (~160 CTests; authoritative tally in validate script header)
+# Validate (214 CTests; tally via `ctest -N -R native_` or validate script)
 ctest --test-dir C:\Temp\cypha_build -R native_ --output-on-failure
 
 # Full production gate (rebuild + CTest + bench smoke + tune dry-run)
@@ -194,7 +194,7 @@ These defaults come from a profiled medium-grid tuning programme, not from guess
 | `regression_m4_golden` | M4 regression |
 | `native_cuda_smoke` | CUDA path smoke (local CUDA builds only) |
 
-Full inventory in [`native/README.md`](native/README.md). CI: **`build_and_test`** (Linux) + **`windows_msvc`**; local full gate `scripts/cypha_native_validate_all.ps1` (~160 CTests).
+Full inventory in [`native/README.md`](native/README.md). CI: **`build_and_test`** (Linux) + **`windows_msvc`**; local full gate `scripts/cypha_native_validate_all.ps1` (214 CTests).
 
 ---
 

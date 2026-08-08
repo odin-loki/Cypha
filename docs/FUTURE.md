@@ -1,6 +1,6 @@
 # Future directions
 
-**One Cypha.** Public type `cypha::Cypha` (classify + regress + latent sample + tokens). Native port (M1-M6 + P7) is complete -- inference, training, REST, Qt shell, experiments DB, parity fixtures -- CI **~160 CTests** (see `scripts/cypha_native_validate_all.ps1`). Python runtime removed.
+**One Cypha.** Public type `cypha::Cypha` (classify + regress + latent sample + tokens). Native port (M1-M6 + P7) is complete -- inference, training, REST, Qt shell, experiments DB, parity fixtures -- CI **214 CTests** (see `scripts/cypha_native_validate_all.ps1`). Python runtime removed.
 
 **Forward path:** living sequence spine **Hybrid GRIA+LSTM L2+Wave2 BPTT (2.664 BPC lock)** under `cypha::Cypha`, with **predictive arithmetic coding** (model probs → entropy coder) as the text compress/generate path. U06 PGM→Wy remains opt-in. Cutover: [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md). Dated reports: [`archive/`](archive/README.md).
 

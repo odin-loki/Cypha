@@ -1,7 +1,7 @@
 # Cypha -- Research Status
 
 **Last updated:** 2026-08-08  
-**Runtime:** native C++ only -- `cypha_rest`, `cypha_bench_run`, **~160 CTests** *(authoritative tally: `scripts/cypha_native_validate_all.ps1`)*  
+**Runtime:** native C++ only -- `cypha_rest`, `cypha_bench_run`, **214 CTests** *(authoritative tally: `ctest -N -R native_` / `scripts/cypha_native_validate_all.ps1`)*  
 **Product:** one type **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens  
 **Planning:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md), cutover [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md)
 

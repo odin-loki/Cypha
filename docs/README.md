@@ -48,7 +48,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 
 | Doc | What it covers |
 |-----|----------------|
-| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: **~160 CTests** (see validate script), per-fixture status, known gaps |
+| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: **214 CTests** (see validate script / `ctest -N -R native_`), per-fixture status, known gaps |
 | [Roadmap](verify/ROADMAP.md) | Milestones M1-M6 complete; current engineering horizon |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
 | [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / MSVC-Linux workflow checklist |
