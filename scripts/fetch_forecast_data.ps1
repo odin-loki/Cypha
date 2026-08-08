@@ -1,4 +1,4 @@
-﻿# Fetch / materialize conflict-forecasting datasets for Cypha forecast pipeline.
+# Fetch / materialize conflict-forecasting datasets for Cypha forecast pipeline.
 # Run from repo root: .\scripts\fetch_forecast_data.ps1
 
 $ErrorActionPreference = "Stop"
@@ -19,7 +19,7 @@ Copy-IfMissing "sample_gdelt.csv" "gdelt_events.csv"
 
 $gmlPath = Join-Path $dest "gml_mid.csv"
 if (Test-Path $gmlPath) {
-    $rows = @(Get-Content $gmlPath)
+    $rows = @(Get-Content $gmlPath -Encoding UTF8)
     if ($rows.Count -lt 30) {
         $extra = @()
         foreach ($y in 2010..2018) {
@@ -28,14 +28,14 @@ if (Test-Path $gmlPath) {
             $extra += "$y,ISR_IRN,MID,3,2,1,2,0.8,0"
             $extra += "$y,PRK_KOR,PRK,2,2,1,3,0.6,0"
         }
-        ($rows + $extra) | Set-Content $gmlPath -Encoding utf8
-        Write-Host "expanded gml_mid.csv to $($rows.Count + $extra.Count) rows"
+        ($rows + $extra) | Out-File $gmlPath -Encoding utf8
+        Write-Host "expanded gml_mid.csv"
     }
 }
 
 $gdeltPath = Join-Path $dest "gdelt_events.csv"
 if (Test-Path $gdeltPath) {
-    $rows = @(Get-Content $gdeltPath)
+    $rows = @(Get-Content $gdeltPath -Encoding UTF8)
     if ($rows.Count -lt 40) {
         $extra = @()
         foreach ($m in 1..12) {
@@ -43,33 +43,11 @@ if (Test-Path $gdeltPath) {
             $extra += "2023,$m,15,RUS,UKR,190,-8,UKR"
             $extra += "2023,$m,20,ISR,IRN,200,-10,MID"
         }
-        ($rows + $extra) | Set-Content $gdeltPath -Encoding utf8
-        Write-Host "expanded gdelt_events.csv to $($rows.Count + $extra.Count) rows"
-    }
-}
-
-$viewsPath = Join-Path $dest "sample_views.csv"
-if (Test-Path $viewsPath) {
-    $raw = Get-Content $viewsPath -Raw
-    if ($raw -notmatch "split") {
-        $lines = @(Get-Content $viewsPath)
-        $out = @("country,year,month,fatalities,split")
-        for ($i = 1; $i -lt $lines.Count; $i++) {
-            $split = if ($i -le [math]::Ceiling(($lines.Count - 1) * 0.7)) { "train" } else { "holdout" }
-            $out += ($lines[$i].TrimEnd() + ",$split")
-        }
-        $out | Set-Content $viewsPath -Encoding utf8
-        Write-Host "added split column to sample_views.csv"
+        ($rows + $extra) | Out-File $gdeltPath -Encoding utf8
+        Write-Host "expanded gdelt_events.csv"
     }
 }
 
 Write-Host ""
 Write-Host "Forecast data ready under: $dest"
-Write-Host "Bulk loaders prefer: gml_mid.csv, gdelt_events.csv, sample_views.csv (train/holdout split)"
-Write-Host ""
-Write-Host "For full public datasets, download manually:"
-Write-Host "  MID v5: https://correlatesofwar.org/data-sets/militarized-intervening-disputes/"
-Write-Host "  UCDP: https://ucdp.uu.se/downloads/"
-Write-Host "  GDELT: https://www.gdeltproject.org/data.html"
-Write-Host "  VIEWS: https://views.pcr.uu.se/"
 Write-Host "fetch_forecast_data OK"

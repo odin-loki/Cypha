@@ -1,7 +1,20 @@
 # Cypha Event-Forecasting Framework — Design & Upgrade Plan
 
+**Status:** Shipped v1 (2026-08-08) — Phases 1–9 implemented under `native/include/cypha/forecast/`; see [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
+
+| Phase | Status |
+|-------|--------|
+| 1 ORF/SORF encoder | Shipped; SORF in `everyday_profile.json`; `orf_encoder_bench` gate |
+| 2 Token vocabulary | Shipped (`event_vocabulary.hpp`) |
+| 3 Node estimators | Shipped (`node_estimator.hpp`) |
+| 4 Sequence training | Shipped (GDELT tokens in `forecast_pipeline`) |
+| 5 Rollout tree | Shipped (`rollout_tree.hpp`) |
+| 6 Interpretability | Shipped (`interpretability.hpp`) |
+| 7 Forgetting mitigations | Shipped (per-theater + EWC) |
+| 8 VIEWS validation | Shipped (CRPS + leaderboard baselines) |
+| 9 Live monitoring | Shipped (`GdeltCsvTail`, REST `/forecast/ingest`) |
+
 **Author:** Odin Loch
-**Status:** Draft v1 — converges the design discussion into a single build plan
 **Scope:** (1) fix Cypha's documented nonlinear-boundary weakness, (2) repurpose Cypha as the node-level estimator inside a generative scenario-tree forecasting framework, (3) pick real datasets to train and validate it against.
 
 ---
@@ -39,7 +52,7 @@ This plan does **not** claim to solve everything. Two problems stay open regardl
 
 **Problem:** `RFFEncoder` samples its random projection matrix i.i.d. Gaussian. On XOR-class problems (S3 benchmark), Cypha scores 0.482 (near chance) vs. sklearn RBF-SVM's 0.825 — a ~2.7pp gap remains even with the current kernel-LLR mitigation.
 
-**Fix (literature-backed, not yet validated on Cypha):** replace the i.i.d. Gaussian projection with an **Orthogonal Random Features (ORF)** matrix — same interface (raw features → D-dim vector → existing LLR/NIG pipeline), different sampling procedure.
+**Fix (validated on Cypha 2026-08):** replace the i.i.d. Gaussian projection with an **Orthogonal Random Features (ORF)** matrix — same interface (raw features → D-dim vector → existing LLR/NIG pipeline), different sampling procedure.
 
 - ORF: orthogonalize the Gaussian matrix (e.g. via QR decomposition), rescale rows by their chi-distributed norms to preserve the marginal distribution. Proven to reduce kernel approximation error vs. plain RFF (Yu et al., NeurIPS 2016; Choromanski et al. follow-ups).
 - SORF (Structured ORF): uses Hadamard-structured matrices instead of dense orthogonal ones. Matches ORF's accuracy at O(d log d) instead of O(d²) — relevant given Cypha's native/HPC C++ focus and existing SGEMV-based kernels.

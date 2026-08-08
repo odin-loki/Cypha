@@ -98,6 +98,7 @@ bench/data/mnist/
 bench/data/wikitext2/
 !bench/data/wikitext2/README.md
 bench/artifacts/
+artifacts/profiles/
 bench/report/baselines/
 bench/report/figures/
 bench/report/tables/
