@@ -11,7 +11,7 @@
 | 5 Rollout tree | Shipped (`rollout_tree.hpp`) |
 | 6 Interpretability | Shipped (`interpretability.hpp`) |
 | 7 Forgetting mitigations | Shipped (per-theater + EWC) |
-| 8 VIEWS validation | Shipped (CRPS + leaderboard baselines) |
+| 8 VIEWS validation | Shipped (CRPS + leaderboard baselines; `views_bulk.csv` from VIEWS API via `fetch_forecast_data.ps1 -Bulk`) |
 | 9 Live monitoring | Shipped (`GdeltCsvTail`, REST `/forecast/ingest`) |
 
 **Author:** Odin Loch

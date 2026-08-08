@@ -392,7 +392,7 @@ void register_cyphalm_rest_routes(httplib::Server& svr) {
             out["views_crps"] = result.views_validation.mean_crps;
             out["views_ignorance"] = result.views_validation.mean_ignorance;
             out["drift_alarms"] = result.drift_alarms;
-            const auto views_path = data_dir / "sample_views.csv";
+            const auto views_path = cypha::forecast::resolve_views_csv_path(data_dir);
             if (std::filesystem::exists(views_path)) {
                 const auto train = cypha::forecast::load_views_csv(views_path, "train");
                 const auto holdout = cypha::forecast::load_views_csv(views_path, "holdout");

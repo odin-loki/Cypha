@@ -10250,7 +10250,7 @@ Json run_d_forecast() {
     experiments["views_ignorance"] = result.views_validation.mean_ignorance;
     experiments["views_n_scored"] = result.views_validation.n_scored;
     experiments["drift_alarms"] = result.drift_alarms;
-    const auto views_path = data_dir / "sample_views.csv";
+    const auto views_path = cypha::forecast::resolve_views_csv_path(data_dir);
     if (std::filesystem::exists(views_path)) {
         const auto train = cypha::forecast::load_views_csv(views_path, "train");
         const auto holdout = cypha::forecast::load_views_csv(views_path, "holdout");

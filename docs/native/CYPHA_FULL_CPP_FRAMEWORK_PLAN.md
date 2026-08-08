@@ -14,7 +14,7 @@ Changelog: [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ```
 scripts/cypha_native_validate_all.ps1  → OK
-  ~160 CTests | fig01-fig09 PNG | /retrieve | tune dry-run
+  214 CTests | fig01-fig09 PNG | /retrieve | tune dry-run
 ```
 
 GitHub Actions **CI**: Linux **`build_and_test`** + **`windows_msvc`** (MSVC Release). MinGW is optional local only — not a CI/release gate. CUDA jobs removed — validate locally. Release **v2.3.25** installers published.

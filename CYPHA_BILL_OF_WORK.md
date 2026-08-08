@@ -6,7 +6,7 @@
 `docs/CYPHALM_UPGRADE_V2.md`, `docs/CYPHA_TESTS_PHASE2.md`, `docs/native/*`, `CHANGELOG.md`.
 **Repo state at compile time of original bill of work (2026-06-14):** native C++ sole runtime (P7 complete).
 **Repo state as of this update (2026-07-18):** Continuum closed —
-[`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/archive/reports/CONTINUUM_CLOSEOUT_2026-07-18.md). **~160 CTests**
+[`CONTINUUM_CLOSEOUT_2026-07-18.md`](docs/archive/reports/CONTINUUM_CLOSEOUT_2026-07-18.md). **214 CTests**
 blocking gate (Linux + `windows_msvc`); release **v2.3.25** (One Cypha); **300k overnight COMPLETE** — lock `a552aee` — [`OVERNIGHT_COMPLETE_2026-07-18.md`](docs/archive/reports/OVERNIGHT_COMPLETE_2026-07-18.md).
 
 ---
