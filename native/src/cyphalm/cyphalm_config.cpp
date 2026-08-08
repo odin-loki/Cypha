@@ -102,8 +102,7 @@ void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
     cfg.use_multiscale = true;
     cfg.ngram_fuse_split = true;
     cfg.use_ngram_count_prior = false;
-    // KILL @40k (raw 3.634 / gated 3.570 vs L2 3.369). Keep opt-in research only.
-    cfg.use_lstm_memory_attn = false;
+    // KILL @40k (raw 3.634 / gated 3.570 vs L2 3.369). Default off via struct init; preserve opt-in.
     if (cfg.ngram_context < 2) {
         cfg.ngram_context = 3;
     }
@@ -117,6 +116,10 @@ void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
     if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
         cfg.view_schedule = "schedule_b";
     }
+    if (cfg.lstm_layers < 2) {
+        cfg.lstm_layers = 2;
+    }
+    apply_wave2_bptt_recipe(cfg);
 }
 
 void apply_wave2_bptt_recipe(CyphaLMConfig& cfg, const Wave2BpttOptions& opt) {

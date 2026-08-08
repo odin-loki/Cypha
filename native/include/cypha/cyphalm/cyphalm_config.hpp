@@ -110,11 +110,11 @@ struct CyphaLMConfig {
     bool train_ssm = false;
 
     int lstm_hidden = 128;
-    /// Stacked residual char-LSTM depth. Production pin (2026-07-19) is **2** (BPC 2.816).
+    /// Stacked residual char-LSTM depth. Production recipe sets **2** (2.664 BPC @300k lock).
     /// Override via profile JSON / ``--lstm-layers`` / ``CYPHA_LSTM_LAYERS`` (1 = historic L1).
     int lstm_layers = 2;
     double lstm_lr = 0.05;
-    /// Truncated BPTT window for char-LSTM (1 = historic BPTT-1). Opt-in; default preserves pin.
+    /// Truncated BPTT window. Production recipe sets **8** via ``apply_wave2_bptt_recipe``.
     int lstm_bptt_steps = 1;
     /// ``sgd`` (default) or ``adam``. Env: ``CYPHA_LSTM_OPTIM``.
     std::string lstm_optim = "sgd";

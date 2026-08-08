@@ -49,7 +49,7 @@ Prior SGD L2 recipe (2.816 BPC): omit `--bptt-lstm` / `--optim adam` flags (prof
 
 Scale check (seed 42): 40k L2 → ~3.37 BPC; 300k L2+Wave2 BPTT lock → **2.664** BPC. Keep `use_ngram_count_prior=false` (default). Width-256 and `--lstm-memory-attn` lost at 40k (not promoted).
 
-Living sequence: `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` (Hybrid GRIA+LSTM, ngram fuse-split). D17 profile **`lstm_layers=2`**. Predictive codec: mixer + online adapt + hidden kNN. Residual LSTM memory-attn is opt-in research (`--lstm-memory-attn`). CTests: `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`, `native_stacked_lstm_smoke`.
+Living sequence: `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` (Hybrid GRIA+LSTM L2+Wave2 BPTT). D17 profile **`lstm_layers=2`**, **`lstm_bptt_steps=8`**. Predictive codec: mixer + online adapt + hidden kNN. Residual LSTM memory-attn is opt-in research (`--lstm-memory-attn`). CTests: `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`, `native_stacked_lstm_smoke`.
 
 ---
 
