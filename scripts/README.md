@@ -87,7 +87,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 
 | Script | Purpose |
 |--------|---------|
-| **`fetch_forecast_data.ps1`** | Ensure `bench/data/forecast/` sample aliases; `-Bulk` fetches public GDELT + CoW dyadic MID snapshots; `-Repair` fixes corrupted CSVs |
+| **`fetch_forecast_data.ps1`** | Ensure `bench/data/forecast/` sample aliases; `-Bulk` fetches public GDELT + CoW dyadic MID + VIEWS API (UCDP GED fatalities) snapshots; `-Repair` fixes corrupted CSVs |
 | **`cypha_bench_run --domain-tag forecast`** | Full `ForecastPipeline` bench on forecast sample/bulk data |
 
 ## Medium overnight + baseline lock validator (Phase 12 — shipped everywhere)
@@ -115,7 +115,7 @@ Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/downlo
 | **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of `d17_hybrid_baseline.bpc` pin | manual |
 | **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |
 
-Full 300k production overnight is **not** run in CI. Blocking gate **115 CTests** (+1 Phase 23: `native_d37_lock_refresh_smoke`; +1 Phase 22: `native_d36_pipeline_e2e_smoke`; +1 Phase 21: `native_d35_lock_commit_pipeline_smoke`; +1 Phase 20: `native_d34_repo_smoke_hygiene_smoke`; +2 Phase 14: `native_d28_overnight_complete_smoke`, `native_baseline_lock_validate_production_status`; +1 Phase 16: `native_d30_artifact_hygiene_smoke`; +1 Phase 17: `native_d31_post_overnight_pipeline_smoke`; +1 Phase 18: `native_d32_production_complete_smoke`; **116** when d38 merges). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
+Full 300k production overnight is **not** run in CI. Blocking gate **214 `native_` CTests** (dynamic tally via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
 
 ## Overnight completion + finalize (Phase 14 — shipped)
 
@@ -134,7 +134,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate **115 CTests*
 |--------------|---------|-------|
 | **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d28`** after baseline lock validate | manual |
 | **`CYPHA_VALIDATE_RELEASE_READINESS=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d29`** when profile exists; graceful skip if not merged | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (**115**; **116** when d38 merged); default warns only | manual | |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (dynamic via `Get-ExpectedNativeTestCount`; currently **214**); default warns only | manual | |
 | **`commit_production_lock.ps1`** | Run **`finalize_production_overnight.ps1`**, then preview/commit lock when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** required to commit; never pushes) | manual |
 | **`cypha_bench_run --domain-tag d29`** | Release-readiness validation (when shipped); profile `bench/config/d29_release_readiness_profile.json` | `native_d29_release_readiness_smoke` *(when merged)* |
 
@@ -153,7 +153,7 @@ pwsh -File scripts\commit_production_lock.ps1 -DryRun
 pwsh -File scripts\commit_production_lock.ps1 -Force
 ```
 
-Blocking gate **115 CTests** (+1 `native_d37_lock_refresh_smoke` Phase 23; +1 `native_d36_pipeline_e2e_smoke` Phase 22; +1 `native_d35_lock_commit_pipeline_smoke` Phase 21; +1 `native_d34_repo_smoke_hygiene_smoke` Phase 20; +1 `native_d29_release_readiness_smoke` Phase 15; +1 `native_d30_artifact_hygiene_smoke` Phase 16; +1 `native_d31_post_overnight_pipeline_smoke` Phase 17; +1 `native_d32_production_complete_smoke` Phase 18; **116** when d38 merges).
+Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
 
 ## Artifact path hygiene + legacy migration (Phase 16 — shipped)
 
@@ -162,7 +162,7 @@ Blocking gate **115 CTests** (+1 `native_d37_lock_refresh_smoke` Phase 23; +1 `n
 | **`migrate_legacy_results.ps1`** | Merge repo-root **`results/`** cell-sweep artifacts into **`bench/results/cell_sweep/`**; never overwrites newer destination files; **`-DryRun`** prints plan only; after migration prints **`-RemoveLegacy`** / **`-ArchiveLegacy`** hints when destination has all files; **`-RemoveLegacy`** deletes legacy **`results/`**; **`-ArchiveLegacy`** moves legacy **`results/`** to **`bench/results/legacy_archive_<timestamp>/`** | manual |
 | **`cleanup_legacy_results.ps1`** | One-shot migrate + **`-RemoveLegacy`** wrapper; **`-DryRun`** previews migration only (no removal) | manual |
 | **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d30`** when profile exists | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (**115**; **116** when d38 merged); default warns only | manual | |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (dynamic via `Get-ExpectedNativeTestCount`; currently **214**); default warns only | manual | |
 | **`cypha_bench_run --domain-tag d30`** | Artifact path hygiene validation; profile `bench/config/d30_artifact_hygiene_profile.json` | `native_d30_artifact_hygiene_smoke` |
 
 ```powershell
@@ -198,7 +198,7 @@ pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 | **`watch_production_overnight.ps1`** | Stall-aware watcher — also tracks `cypha_cell_hypothesis_sweep`; prints hint to run **`poll_and_finalize_overnight.ps1`** when processes disappear between polls | manual |
 | **`run_production_overnight.ps1`** | On success: **`finalize_production_overnight.ps1`** then **`commit_production_lock.ps1 -DryRun`** (preview only; manual **`commit_production_lock.ps1 -Force`** or **`poll_and_finalize_overnight.ps1 -Force`** to commit) | manual |
 
-Blocking gate **115 CTests** (+1 `native_d37_lock_refresh_smoke` Phase 23; +1 `native_d36_pipeline_e2e_smoke` Phase 22; +1 `native_d35_lock_commit_pipeline_smoke` Phase 21; +1 `native_d34_repo_smoke_hygiene_smoke` Phase 20; +1 `native_d31_post_overnight_pipeline_smoke` Phase 17; +1 `native_d32_production_complete_smoke` Phase 18; **116** when d38 merges).
+Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
 
 ```powershell
 # Start production overnight (long-running)
@@ -251,7 +251,7 @@ $env:CYPHA_VALIDATE_PRODUCTION_COMPLETE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **115 CTests** (+1 `native_d37_lock_refresh_smoke` Phase 23; +1 `native_d36_pipeline_e2e_smoke` Phase 22; +1 `native_d35_lock_commit_pipeline_smoke` Phase 21; +1 `native_d34_repo_smoke_hygiene_smoke` Phase 20; +1 `native_d32_production_complete_smoke` Phase 18; **116** when d38 merges).
+Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
 
 ## Release publish smoke (Phase 19 — shipped)
 
@@ -283,7 +283,7 @@ pwsh -File scripts\poll_and_finalize_overnight.ps1
 pwsh -File scripts\start_poll_finalize_background.ps1
 ```
 
-Blocking gate **114 CTests** (+1 `native_d36_pipeline_e2e_smoke` Phase 22; +1 `native_d35_lock_commit_pipeline_smoke` Phase 21; +1 `native_d34_repo_smoke_hygiene_smoke` Phase 20).
+Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
 
 ## Repo smoke hygiene (Phase 20 - shipped)
 
@@ -342,7 +342,7 @@ $env:CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **114 CTests** (+1 `native_d36_pipeline_e2e_smoke`; Phase 22 shipped).
+Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
 
 ## Production pipeline E2E (Phase 22 - shipped)
 
@@ -369,7 +369,7 @@ $env:CYPHA_VALIDATE_PIPELINE_E2E = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **114 CTests** (+1 `native_d36_pipeline_e2e_smoke`; Phase 22 shipped).
+Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
 
 ## In-flight overnight artifact migration (Phase 23 - shipped)
 
@@ -402,7 +402,7 @@ $env:CYPHA_VALIDATE_LOCK_REFRESH = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **115 CTests** (+1 `native_d37_lock_refresh_smoke`; Phase 23 shipped).
+Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
 
 ## Auto-commit + variant stall detector (Phase 24 - prep)
 
@@ -429,7 +429,7 @@ $env:CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **115 CTests** today; **116** when **`native_d38_overnight_certificate_smoke`** merges (Phase 24 prep).
+Blocking gate **214 `native_` CTests** (dynamic tally via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`).
 
 ## Kernel LLR / XOR profiling
 

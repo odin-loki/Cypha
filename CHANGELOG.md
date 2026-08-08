@@ -12,7 +12,7 @@ milestone or a significant self-contained change.
 - **GDELT live monitor:** `GdeltCsvTail`, `forecast_gdelt_poll`, REST `POST /forecast/ingest` + `/forecast/monitor/reset`.
 - **SORF gate alignment:** `orf_encoder_bench` uses D01 golden linear-sep draws (400×10, seed 42). `bench/BASELINE_LOCK.json` updated to **2.664 BPC** @300k (L2 + Adam BPTT=8).
 - **VIEWS leaderboard baselines:** Conflictology mean, observed Markov, NegBin GLMM + `views_leaderboard_bench` tool.
-- **Forecast data script:** `scripts/fetch_forecast_data.ps1` materializes `gml_mid.csv` / `gdelt_events.csv` bulk paths.
+- **Forecast data script:** `scripts/fetch_forecast_data.ps1` materializes `gml_mid.csv` / `gdelt_events.csv` / `views_bulk.csv` (GDELT + CoW MID + VIEWS API bulk).
 - **Forecast bench + bulk loaders:** `cypha_bench_run --domain-tag forecast`; CSV loaders for GML MID, GDELT, VIEWS (`split` column); `validate_views_holdout`; expanded `gml_mid.csv` sample.
 - **Predictive arithmetic coding (LLMZip-style):** 32-bit range coder + `predictive_codec` on `predict_next`; `Cypha::{compress,decompress}_tokens`, `generate_via_bits`; REST `POST /sequence/compress` + `/sequence/decompress`. CTests `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`.
 - **Hybrid production recipe:** `apply_hybrid_production_recipe` (GRIA+LSTM, ngram fuse-split, no count prior).

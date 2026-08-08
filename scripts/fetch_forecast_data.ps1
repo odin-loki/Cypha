@@ -7,7 +7,8 @@
 param(
     [switch]$Bulk,
     [switch]$Repair,
-    [int]$GdeltMaxRows = 5000
+    [int]$GdeltMaxRows = 5000,
+    [int]$ViewsMaxRows = 4000
 )
 
 $ErrorActionPreference = "Stop"
@@ -214,14 +215,82 @@ function Fetch-MidBulk {
     }
 }
 
-function Fetch-ViewsBulk {
-    $outCsv = Join-Path $dest "views_bulk.csv"
+function Get-LatestViewsPredictorRun {
+    $index = Invoke-RestMethod -Uri "https://api.viewsforecasting.org/" -TimeoutSec 90
+    $pred = @($index.runs | Where-Object { $_ -match '^predictors_fatalities' } | Sort-Object -Descending)
+    if ($pred.Count -gt 0) {
+        return $pred[0]
+    }
+    $fat = @($index.runs | Where-Object { $_ -match '^fatalities00' } | Sort-Object -Descending)
+    if ($fat.Count -gt 0) {
+        return $fat[0]
+    }
+    return $null
+}
+
+function Copy-ViewsSampleScaffold([string]$outCsv) {
     $sample = Join-Path $dest "sample_views.csv"
-    # VIEWS full replication sets require portal login; copy sample as holdout scaffold.
     if (Test-Path $sample) {
         Copy-Item $sample $outCsv -Force
-        Write-Host "VIEWS bulk: portal data requires manual download from https://viewsforecasting.org/data/"
-        Write-Host "  scaffold copied sample_views.csv -> views_bulk.csv"
+        Write-Host "VIEWS bulk: scaffold copied sample_views.csv -> views_bulk.csv"
+        Write-Host "  full replication sets: https://viewsforecasting.org/data/"
+    }
+}
+
+function Fetch-ViewsBulk {
+    param([int]$MaxRows = 4000, [int]$PageSize = 500)
+    $outCsv = Join-Path $dest "views_bulk.csv"
+    try {
+        $run = Get-LatestViewsPredictorRun
+        if (-not $run) {
+            throw "no fatalities/predictors run in VIEWS API index"
+        }
+        Write-Host "fetching VIEWS API predictors run $run"
+        $obs = New-Object System.Collections.Generic.List[object]
+        $url = "https://api.viewsforecasting.org/${run}/cm?pagesize=$PageSize&page=1"
+        while ($url -and $obs.Count -lt $MaxRows) {
+            $page = Invoke-RestMethod -Uri $url -TimeoutSec 120
+            foreach ($row in $page.data) {
+                $fat = 0.0
+                foreach ($k in @('ucdp_ged_sb_best_sum', 'ucdp_ged_os_best_sum', 'ucdp_ged_ns_best_sum')) {
+                    if ($row.PSObject.Properties.Name -contains $k -and $null -ne $row.$k) {
+                        $fat += [double]$row.$k
+                    }
+                }
+                if ($fat -le 0.0 -or $row.year -lt 2020) { continue }
+                $country = if ($row.isoab) { [string]$row.isoab } else { [string]$row.name }
+                if ([string]::IsNullOrWhiteSpace($country)) { continue }
+                $obs.Add([pscustomobject]@{
+                    country    = $country.ToUpperInvariant()
+                    year       = [int]$row.year
+                    month      = [int]$row.month
+                    fatalities = [math]::Round($fat, 2)
+                    key        = ([int]$row.year * 100) + [int]$row.month
+                })
+                if ($obs.Count -ge $MaxRows) { break }
+            }
+            $url = if ($page.next_page) { [string]$page.next_page } else { $null }
+        }
+        if ($obs.Count -lt 80) {
+            throw "too few VIEWS rows with fatalities ($($obs.Count))"
+        }
+        $sorted = $obs | Sort-Object key
+        $holdoutKeys = @($sorted | Select-Object -ExpandProperty key -Unique | Sort-Object | Select-Object -Last 3)
+        $holdoutSet = @{}
+        foreach ($k in $holdoutKeys) { $holdoutSet[$k] = $true }
+        $rows = New-Object System.Collections.Generic.List[string]
+        $rows.Add("country,year,month,fatalities,split")
+        foreach ($o in $sorted) {
+            $split = if ($holdoutSet.ContainsKey($o.key)) { "holdout" } else { "train" }
+            $rows.Add("$($o.country),$($o.year),$($o.month),$($o.fatalities),$split")
+        }
+        Write-Utf8File $outCsv (($rows -join "`n") + "`n")
+        $trainN = @($sorted | Where-Object { -not $holdoutSet.ContainsKey($_.key) }).Count
+        $holdN = $sorted.Count - $trainN
+        Write-Host "VIEWS bulk: wrote $($sorted.Count) rows (train=$trainN holdout=$holdN) -> views_bulk.csv"
+    } catch {
+        Write-Host "VIEWS bulk: $($_.Exception.Message) (sample scaffold fallback)"
+        Copy-ViewsSampleScaffold $outCsv
     }
 }
 
@@ -236,7 +305,7 @@ if ($Bulk) {
     Write-Host "== bulk fetch (public snapshots) ==" -ForegroundColor Yellow
     Fetch-GdeltBulk -MaxRows $GdeltMaxRows
     Fetch-MidBulk
-    Fetch-ViewsBulk
+    Fetch-ViewsBulk -MaxRows $ViewsMaxRows
 }
 
 Write-Host ""
