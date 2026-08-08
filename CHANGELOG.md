@@ -9,7 +9,11 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
-- **Forecast bench + bulk loaders:** `cypha_bench_run --domain-tag forecast`; CSV loaders for GML MID, GDELT, VIEWS (`split` column); `validate_views_holdout`; expanded `gml_mid.csv` sample. 32-bit range coder + `predictive_codec` on `predict_next`; `Cypha::{compress,decompress}_tokens`, `generate_via_bits`; REST `POST /sequence/compress` + `/sequence/decompress`. CTests `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`.
+- **D17 Wave2 BPTT re-pin:** `bench/BASELINE_LOCK.json` updated to **2.664 BPC** @300k (L2 + Adam BPTT=8).
+- **VIEWS leaderboard baselines:** Conflictology mean, observed Markov, NegBin GLMM + `views_leaderboard_bench` tool.
+- **Forecast data script:** `scripts/fetch_forecast_data.ps1` materializes `gml_mid.csv` / `gdelt_events.csv` bulk paths.
+- **Forecast bench + bulk loaders:** `cypha_bench_run --domain-tag forecast`; CSV loaders for GML MID, GDELT, VIEWS (`split` column); `validate_views_holdout`; expanded `gml_mid.csv` sample.
+- **Predictive arithmetic coding (LLMZip-style):** 32-bit range coder + `predictive_codec` on `predict_next`; `Cypha::{compress,decompress}_tokens`, `generate_via_bits`; REST `POST /sequence/compress` + `/sequence/decompress`. CTests `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`.
 - **Hybrid production recipe:** `apply_hybrid_production_recipe` (GRIA+LSTM, ngram fuse-split, no count prior).
 - **Event-forecasting framework (Phases 1–9):** `native/include/cypha/forecast/` — CAMEO token vocabulary, MID node estimators, CyphaLM rollout tree, VIEWS CRPS scoring, GDELT drift monitor; tools `forecast_smoke`, `cypha_forecast_run`, `orf_encoder_bench`, `forecast_drift_backtest`; REST `POST /forecast/run`; sample data under `bench/data/forecast/`.
 - **Orthogonal RFF (ORF/SORF):** `RffProjectionKind::Orf`, `OrthogonalRffEncoder`, `PreprocessorState::rff_orf`; `active_query_score_from_probs`, `Cypha::drift_score()`.

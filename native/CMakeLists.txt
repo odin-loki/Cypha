@@ -104,6 +104,7 @@ add_library(cypha_core STATIC
   src/forecast/theater_models.cpp
   src/forecast/views_scoring.cpp
   src/forecast/views_holdout.cpp
+  src/forecast/views_baselines.cpp
   src/forecast/gdelt_monitor.cpp
   src/forecast/forecast_pipeline.cpp
   src/branch_a_router.cpp
@@ -342,6 +343,12 @@ target_link_libraries(forecast_drift_backtest PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(forecast_drift_backtest)
 add_test(NAME native_forecast_drift_backtest COMMAND "$<TARGET_FILE:forecast_drift_backtest>")
 set_tests_properties(native_forecast_drift_backtest PROPERTIES TIMEOUT 60)
+
+add_executable(views_leaderboard_bench tools/views_leaderboard_bench.cpp)
+target_link_libraries(views_leaderboard_bench PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(views_leaderboard_bench)
+add_test(NAME native_views_leaderboard_bench COMMAND "$<TARGET_FILE:views_leaderboard_bench>")
+set_tests_properties(native_views_leaderboard_bench PROPERTIES TIMEOUT 60)
 
 add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
 target_link_libraries(cypha_federated_merge PRIVATE cypha_core)

@@ -38,6 +38,8 @@
 
 #include "cypha/bench/bench_paths.hpp"
 #include "cypha/forecast/forecast_pipeline.hpp"
+#include "cypha/forecast/dispute_data.hpp"
+#include "cypha/forecast/views_baselines.hpp"
 #include "cypha/bench/bench_encoder_chess.hpp"
 #include "cypha/bench/bench_encoder_document.hpp"
 #include "cypha/bench/bench_encoder_go.hpp"
@@ -10248,6 +10250,20 @@ Json run_d_forecast() {
     experiments["views_ignorance"] = result.views_validation.mean_ignorance;
     experiments["views_n_scored"] = result.views_validation.n_scored;
     experiments["drift_alarms"] = result.drift_alarms;
+    const auto views_path = data_dir / "sample_views.csv";
+    if (std::filesystem::exists(views_path)) {
+        const auto train = cypha::forecast::load_views_csv(views_path, "train");
+        const auto holdout = cypha::forecast::load_views_csv(views_path, "holdout");
+        if (!train.empty() && !holdout.empty()) {
+            const auto board = cypha::forecast::run_views_leaderboard(train, holdout);
+            experiments["views_leaderboard"] = Json::object({
+                {"cypha_crps", board.cypha.result.mean_crps},
+                {"conflictology_crps", board.conflictology.result.mean_crps},
+                {"markov_crps", board.observed_markov.result.mean_crps},
+                {"negbin_crps", board.negbin_glmm.result.mean_crps},
+            });
+        }
+    }
     if (!result.detail.empty()) {
         experiments["detail"] = result.detail;
     }

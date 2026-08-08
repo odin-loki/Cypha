@@ -35,16 +35,19 @@ Restored after MSVC / hybrid-default drift (portable shuffle, D01 golden draws, 
 | **D01** 4-Gaussian blobs | Cypha **0.8875** | Same harness |
 | **D04** Gutenberg @ 8k | BPC **~4.14-4.16** (hybrid) | Regression pin for hybrid text |
 | **D16A** task discovery | **ARI = 1.0** | Native ARI recovery |
-| **D17** hybrid @ 300k | **2.816 BPC** (lock, `lstm_layers=2`) / prior L1 **2.873** | **Living production target**; re-pin 2026-07-19 push ceiling |
+| **D17** hybrid @ 300k | **2.664 BPC** (L2 + Wave2 BPTT lock) / prior SGD L2 **2.816** / L1 **2.873** | **Living production target**; re-pin 2026-08-08 |
 
-**Reproduce production hybrid ~2.8 BPC** (CLI default `--mode hybrid`):
+**Reproduce production hybrid ~2.66 BPC** (L2 + Wave2 BPTT @ 300k):
 
 ```powershell
-$env:CYPHA_BENCH_FULL_CORPUS="1"; $env:CYPHA_BENCH_OVERNIGHT="1"
-cyphalm_bench_native --profile d17 --mode hybrid --overnight --n-train 300000 --n-eval 2000 --threads 1 --bench-seed 42
+$env:CYPHA_BENCH_FULL_CORPUS="1"
+cyphalm_bench_native --profile d17 --mode hybrid --n-train 300000 --n-eval 2000 --threads 1 --bench-seed 42 `
+  --lstm-layers 2 --bptt-lstm 8 --optim adam --grad-clip 1.0 --lstm-init classic --lstm-lr 0.001
 ```
 
-Scale check (seed 42): 40k L2 → ~3.37 BPC; 300k L2 lock → **2.816** BPC. Keep `use_ngram_count_prior=false` (default). Width-256 and `--lstm-memory-attn` lost at 40k (not promoted).
+Prior SGD L2 recipe (2.816 BPC): omit `--bptt-lstm` / `--optim adam` flags (profile defaults).
+
+Scale check (seed 42): 40k L2 → ~3.37 BPC; 300k L2+Wave2 BPTT lock → **2.664** BPC. Keep `use_ngram_count_prior=false` (default). Width-256 and `--lstm-memory-attn` lost at 40k (not promoted).
 
 Living sequence: `Cypha::init_default_sequence` → `apply_hybrid_production_recipe` (Hybrid GRIA+LSTM, ngram fuse-split). D17 profile **`lstm_layers=2`**. Predictive codec: mixer + online adapt + hidden kNN. Residual LSTM memory-attn is opt-in research (`--lstm-memory-attn`). CTests: `native_predictive_codec_smoke`, `native_predictive_codec_bench_smoke`, `native_stacked_lstm_smoke`.
 
