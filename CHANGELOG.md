@@ -9,7 +9,8 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
-- **D17 Wave2 BPTT re-pin:** `bench/BASELINE_LOCK.json` updated to **2.664 BPC** @300k (L2 + Adam BPTT=8).
+- **GDELT live monitor:** `GdeltCsvTail`, `forecast_gdelt_poll`, REST `POST /forecast/ingest` + `/forecast/monitor/reset`.
+- **SORF gate alignment:** `orf_encoder_bench` uses D01 golden linear-sep draws (400×10, seed 42). `bench/BASELINE_LOCK.json` updated to **2.664 BPC** @300k (L2 + Adam BPTT=8).
 - **VIEWS leaderboard baselines:** Conflictology mean, observed Markov, NegBin GLMM + `views_leaderboard_bench` tool.
 - **Forecast data script:** `scripts/fetch_forecast_data.ps1` materializes `gml_mid.csv` / `gdelt_events.csv` bulk paths.
 - **Forecast bench + bulk loaders:** `cypha_bench_run --domain-tag forecast`; CSV loaders for GML MID, GDELT, VIEWS (`split` column); `validate_views_holdout`; expanded `gml_mid.csv` sample.

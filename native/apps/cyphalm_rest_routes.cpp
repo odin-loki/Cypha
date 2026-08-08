@@ -15,7 +15,9 @@
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/predictive_codec.hpp"
 #include "cypha/forecast/forecast_pipeline.hpp"
-#include "cypha/intelligence/epistemic_threshold.hpp"
+#include "cypha/forecast/gdelt_monitor.hpp"
+#include "cypha/forecast/views_baselines.hpp"
+#include "cypha/forecast/dispute_data.hpp"
 
 namespace cypha::cyphalm {
 
@@ -27,6 +29,7 @@ std::string g_lm_source;
 int g_lm_generations = 0;
 std::chrono::steady_clock::time_point g_lm_loaded = std::chrono::steady_clock::now();
 cypha::intelligence::EpistemicThreshold g_lm_epistemic_threshold(0.5, 5.0);
+cypha::forecast::GdeltMonitor g_forecast_monitor;
 
 std::string bytes_to_hex(const std::vector<std::uint8_t>& bytes) {
     static constexpr char kHex[] = "0123456789abcdef";
@@ -389,6 +392,20 @@ void register_cyphalm_rest_routes(httplib::Server& svr) {
             out["views_crps"] = result.views_validation.mean_crps;
             out["views_ignorance"] = result.views_validation.mean_ignorance;
             out["drift_alarms"] = result.drift_alarms;
+            const auto views_path = data_dir / "sample_views.csv";
+            if (std::filesystem::exists(views_path)) {
+                const auto train = cypha::forecast::load_views_csv(views_path, "train");
+                const auto holdout = cypha::forecast::load_views_csv(views_path, "holdout");
+                if (!train.empty() && !holdout.empty()) {
+                    const auto board = cypha::forecast::run_views_leaderboard(train, holdout);
+                    out["views_leaderboard"] = {
+                        {"cypha_crps", board.cypha.result.mean_crps},
+                        {"conflictology_crps", board.conflictology.result.mean_crps},
+                        {"markov_crps", board.observed_markov.result.mean_crps},
+                        {"negbin_crps", board.negbin_glmm.result.mean_crps},
+                    };
+                }
+            }
             if (!result.detail.empty()) {
                 out["detail"] = result.detail;
             }
@@ -399,6 +416,44 @@ void register_cyphalm_rest_routes(httplib::Server& svr) {
             err["detail"] = ex.what();
             res.set_content(err.dump(), "application/json");
         }
+    });
+
+    svr.Post("/forecast/ingest", [](const httplib::Request& req, httplib::Response& res) {
+        try {
+            const auto body = nlohmann::json::parse(req.body.empty() ? "{}" : req.body);
+            cypha::forecast::GdeltEvent ev;
+            ev.year = body.value("year", 0);
+            ev.month = body.value("month", 0);
+            ev.day = body.value("day", 0);
+            ev.actor1 = body.value("actor1", std::string());
+            ev.actor2 = body.value("actor2", std::string());
+            ev.cameo_code = body.value("cameo_code", 0);
+            ev.goldstein = body.value("goldstein", 0);
+            ev.theater = body.value("theater", std::string("GLB"));
+            const double drift = body.value("drift", 0.0);
+            const double anomaly = body.value("anomaly", 0.0);
+            std::lock_guard<std::mutex> lock(*g_mu);
+            const auto alarm = g_forecast_monitor.ingest(ev, drift, anomaly);
+            nlohmann::json out;
+            out["fired"] = alarm.fired;
+            out["drift_score"] = alarm.drift_score;
+            out["anomaly_score"] = alarm.anomaly_score;
+            out["reason"] = alarm.reason;
+            res.set_content(out.dump(), "application/json");
+        } catch (const std::exception& ex) {
+            res.status = 400;
+            nlohmann::json err;
+            err["detail"] = ex.what();
+            res.set_content(err.dump(), "application/json");
+        }
+    });
+
+    svr.Post("/forecast/monitor/reset", [](const httplib::Request&, httplib::Response& res) {
+        std::lock_guard<std::mutex> lock(*g_mu);
+        g_forecast_monitor = cypha::forecast::GdeltMonitor{};
+        nlohmann::json out;
+        out["status"] = "reset";
+        res.set_content(out.dump(), "application/json");
     });
 }
 

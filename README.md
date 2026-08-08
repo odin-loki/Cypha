@@ -216,7 +216,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: latent RFF auto-gamma reaches **~76.3%** (~2.7 pp vs sklearn ~79%); see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
-- **D04 / D17:** historical hybrid GRIA+LSTM pin **2.873 BPC** @ 300k WikiText-2 (`bench/BASELINE_LOCK.json`); living sequence spine is PGM→Wy (U06). Run via **`cypha_bench_run`**.
+- **D04 / D17:** hybrid GRIA+LSTM L2+Wave2 BPTT **2.664 BPC** @ 300k WikiText-2 (`bench/BASELINE_LOCK.json`); living sequence via `Cypha::init_default_sequence`. Run via **`cypha_bench_run`** / **`cyphalm_bench_native`**.
 - **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/archive/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
 - **Sequence REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE), plus `/sample`, `/retrieve`, `/sequence/*`.
 
@@ -229,7 +229,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - **Nonlinear decision boundaries:** Linear LLR caps XOR near chance; **latent RFF** closes most of the sklearn gap (~76.3% vs ~79%). See [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
 - **Optional CUDA.** Infer path only as a local build flag (`-DCYPHA_ENABLE_CUDA=ON`); no CUDA CI; full GPU training not implemented — see [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md).
-- **Status / next.** Release **v2.3.25** — One Cypha cutover (`cypha::Cypha` owns classify, regress, latent sample, sequence). D10A **90.11%**; D17 hybrid **2.873 BPC** historical; living sequence spine PGM→Wy. Paper bundle ready; remaining human step: arXiv upload. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/FUTURE.md`](docs/FUTURE.md), [`docs/reports/ONE_CYPHA_CUTOVER.md`](docs/reports/ONE_CYPHA_CUTOVER.md).
+- **Status / next.** Release **v2.3.25** — One Cypha cutover (`cypha::Cypha` owns classify, regress, latent sample, sequence). D10A **90.11%**; D17 hybrid **2.664 BPC** production lock; event-forecasting framework shipped. Paper bundle ready; remaining human step: arXiv upload. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/FUTURE.md`](docs/FUTURE.md), [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
 
 ---
 

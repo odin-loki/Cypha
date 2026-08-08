@@ -106,6 +106,7 @@ add_library(cypha_core STATIC
   src/forecast/views_holdout.cpp
   src/forecast/views_baselines.cpp
   src/forecast/gdelt_monitor.cpp
+  src/forecast/gdelt_stream.cpp
   src/forecast/forecast_pipeline.cpp
   src/branch_a_router.cpp
   src/som/som_encoder.cpp
@@ -343,6 +344,12 @@ target_link_libraries(forecast_drift_backtest PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(forecast_drift_backtest)
 add_test(NAME native_forecast_drift_backtest COMMAND "$<TARGET_FILE:forecast_drift_backtest>")
 set_tests_properties(native_forecast_drift_backtest PROPERTIES TIMEOUT 60)
+
+add_executable(forecast_gdelt_poll tools/forecast_gdelt_poll.cpp)
+target_link_libraries(forecast_gdelt_poll PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(forecast_gdelt_poll)
+add_test(NAME native_forecast_gdelt_poll COMMAND "$<TARGET_FILE:forecast_gdelt_poll>" --once)
+set_tests_properties(native_forecast_gdelt_poll PROPERTIES TIMEOUT 60)
 
 add_executable(views_leaderboard_bench tools/views_leaderboard_bench.cpp)
 target_link_libraries(views_leaderboard_bench PRIVATE cypha_core)
