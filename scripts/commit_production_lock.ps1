@@ -7,14 +7,16 @@
 #   pwsh -File scripts/commit_production_lock.ps1 -DryRun
 #   pwsh -File scripts/commit_production_lock.ps1 -BuildDir C:\Temp\cypha_full_cpp_build -Force
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [string]$LockFile = "",
     [switch]$DryRun,
     [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
 
 if (-not $LockFile) {
     $LockFile = Join-Path $root "bench\BASELINE_LOCK.json"

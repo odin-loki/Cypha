@@ -11,7 +11,7 @@
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -LogFile bench/results/poll_finalize.log
 #   pwsh -File scripts/poll_and_finalize_overnight.ps1 -AutoCommit
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [string]$LockFile = "",
     [string]$LogFile = "",
     [int]$IntervalSeconds = 60,
@@ -21,8 +21,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path $PSScriptRoot -Parent
-$DEFAULT_BUILD_DIR = "native/build"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$DEFAULT_BUILD_DIR = ""
 $PRODUCTION_N_TRAIN_MIN = 300000
 $transcriptTemp = $null
 $resolvedLogFile = $null
@@ -236,7 +237,7 @@ function Get-DetectedBuildDirFromOvernight {
 function Resolve-PollBuildDir {
     param([string]$Requested)
 
-    if ($Requested -ne $DEFAULT_BUILD_DIR) {
+    if ($Requested -and $Requested -ne $DEFAULT_BUILD_DIR) {
         return $Requested
     }
 
@@ -251,10 +252,10 @@ function Resolve-PollBuildDir {
         return $detected
     }
 
-    return $Requested
+    return (Get-DefaultNativeBuildDir -Override $Requested)
 }
 
-$BuildDir = Resolve-PollBuildDir -Requested $BuildDir
+$BuildDir = Resolve-PollBuildDir -Requested (Get-DefaultNativeBuildDir -Override $BuildDir)
 
 $finalizeScript = Join-Path $PSScriptRoot "finalize_production_overnight.ps1"
 $commitScript = Join-Path $PSScriptRoot "commit_production_lock.ps1"

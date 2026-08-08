@@ -6,7 +6,7 @@
 #   powershell -File scripts/run_overnight_all.ps1 -Medium  # 5k train, real WikiText/gutenberg
 #   powershell -File scripts/run_overnight_all.ps1 -Production  # 300k train, status=production in lock
 param(
-    [string]$BuildDir = "native/build",
+    [string]$BuildDir = "",
     [int]$NTrain = 300000,
     [int]$NEval = 2000,
     [int]$Threads = 1,
@@ -18,8 +18,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 
-$root = Split-Path $PSScriptRoot -Parent
+$root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
+$BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
+
 $tierCount = @($Fast, $Medium, $Production | Where-Object { $_ }).Count
 if ($tierCount -gt 1) {
     throw "cannot combine -Fast, -Medium, and -Production"
