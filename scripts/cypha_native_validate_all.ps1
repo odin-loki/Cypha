@@ -117,7 +117,7 @@
 #       gracefully skipped when d45 is not built/merged yet.
 #   CYPHA_STRICT_TEST_COUNT=1
 #       Fail the ctest_native step when the parsed native_ test count does not match the expected
-#       gate (128 with d45 merged, else 127 with d44 merged, else 126 with d43 merged, else 124 with d42 merged, else 121 with d41 merged, else 118 with d40 merged, else 117 with d39 merged, else 116 with d38 merged, else 115 with d37 merged, else 114 with d36 merged, else 113 with d35 merged, else 112 with d34 merged, else 111 with d33 merged, else 110 with d32 merged, else 109 with d31 merged, else 108 with d30 merged, else 107). Default: warn in step detail only.
+#       gate tally from Get-ExpectedNativeTestCount / ctest -N -R native_ (currently 214). Default: warn in step detail only.
 #
 # Usage:
 #   pwsh -File scripts/cypha_native_validate_all.ps1
