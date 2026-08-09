@@ -128,7 +128,10 @@ function Invoke-NativeWithProgressLog {
     $ErrorActionPreference = "Continue"
     try {
         if ($LogPath) {
-            & $Exe @NativeArgs 2>&1 | Tee-Object -FilePath $LogPath -Append
+            & $Exe @NativeArgs 2>&1 | ForEach-Object {
+                $_
+                $_ | Out-File -FilePath $LogPath -Append -Encoding utf8
+            }
         } else {
             & $Exe @NativeArgs 2>&1
         }
