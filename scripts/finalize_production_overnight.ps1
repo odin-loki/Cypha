@@ -102,11 +102,13 @@ try {
             $lockExe = Resolve-NativeExePath -BuildDir $buildAbs -Stem "cypha_baseline_lock"
             if (Test-Path $lockExe) {
                 Write-Host ""
-                Write-Host "== update_baseline_lock.ps1 -Run all -Production (overnight n_train=$overnightNTrain < $PRODUCTION_N_TRAIN_MIN) ==" -ForegroundColor Cyan
+                Write-Host "== update_baseline_lock.ps1 d17+d21 -Production (skip cell-sweep; use resume_cell_sweep.ps1) ==" -ForegroundColor Cyan
                 $updateScript = Join-Path $PSScriptRoot "update_baseline_lock.ps1"
-                & $updateScript -Run all -Production -BuildDir $BuildDir
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Host "finalize: WARN update_baseline_lock failed exit=$LASTEXITCODE (best-effort; continuing)" -ForegroundColor Yellow
+                foreach ($r in @("d17", "d21")) {
+                    & $updateScript -Run $r -Production -BuildDir $BuildDir
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Host "finalize: WARN update_baseline_lock $r failed exit=$LASTEXITCODE (best-effort; continuing)" -ForegroundColor Yellow
+                    }
                 }
             } else {
                 Write-Host ""

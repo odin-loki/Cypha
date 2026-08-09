@@ -11,7 +11,9 @@ $ErrorActionPreference = "Stop"
 
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
 $BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
+$buildAbs = Resolve-NativeBuildDir -RepoRoot $root -BuildDir $BuildDir
 $resultsDir = Join-Path $root "bench\results"
+$sweepDir = Join-Path $root "bench\results\cell_sweep"
 New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 $logPath = Join-Path $resultsDir ("cell_sweep_wait_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
 
@@ -21,23 +23,49 @@ function Write-Log([string]$Msg) {
     $line | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
-Write-Log "waiting for cypha_cell_hypothesis_sweep (poll=${PollSeconds}s)"
+function Get-ExpectedCellSweepVariantCount {
+    param([string]$BuildDirAbs)
+    $exe = Resolve-NativeExePath -BuildDir $BuildDirAbs -Stem "cypha_cell_hypothesis_sweep"
+    if (-not $exe) { return 36 }
+    try {
+        $listed = & $exe --list-variants 2>$null | ConvertFrom-Json
+        return @($listed | Where-Object { $_.runnable }).Count
+    } catch {
+        return 36
+    }
+}
+
+$expectedVariants = Get-ExpectedCellSweepVariantCount -BuildDirAbs $buildAbs
+Write-Log "waiting for cypha_cell_hypothesis_sweep (poll=${PollSeconds}s, expected_variants=$expectedVariants)"
 while (Get-Process -Name "cypha_cell_hypothesis_sweep" -ErrorAction SilentlyContinue) {
+    $done = @(Get-ChildItem -Path $sweepDir -Filter "variant_*.json" -File -ErrorAction SilentlyContinue).Count
+    if ($done -gt 0) {
+        Write-Log "progress: variant_json=$done/$expectedVariants"
+    }
     Start-Sleep -Seconds $PollSeconds
 }
 Write-Log "cell sweep finished; checking artifacts"
 
-$sweepDir = Join-Path $root "bench\results\cell_sweep"
-$variantCount = 0
-if (Test-Path $sweepDir) {
-    $variantCount = @(Get-ChildItem -Path $sweepDir -Filter "variant_*.json" -ErrorAction SilentlyContinue).Count
-}
+$variantCount = @(Get-ChildItem -Path $sweepDir -Filter "variant_*.json" -File -ErrorAction SilentlyContinue).Count
 $manifestPath = Join-Path $sweepDir "manifest.json"
-$hasManifest = Test-Path $manifestPath
-Write-Log "cell_sweep artifacts: variant_json=$variantCount manifest=$hasManifest"
+$manifestPartial = $true
+if (Test-Path $manifestPath) {
+    try {
+        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+        if ($manifest.PSObject.Properties.Name -contains "partial") {
+            $manifestPartial = [bool]$manifest.partial
+        } else {
+            $manifestPartial = $false
+        }
+    } catch {
+        Write-Log "WARN could not parse manifest.json"
+    }
+}
+Write-Log "cell_sweep artifacts: variant_json=$variantCount expected=$expectedVariants manifest_partial=$manifestPartial"
 
-if ($variantCount -lt 28 -and -not $hasManifest) {
-    Write-Log "FAIL cell sweep incomplete (variants=$variantCount, expected >=28 or manifest.json)"
+if ($variantCount -lt $expectedVariants -or $manifestPartial) {
+    Write-Log "FAIL cell sweep incomplete (variants=$variantCount/$expectedVariants partial=$manifestPartial)"
+    Write-Log "HINT: re-run with resume (default): scripts/resume_cell_sweep.ps1 -Production"
     exit 1
 }
 

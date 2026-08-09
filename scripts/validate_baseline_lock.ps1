@@ -127,6 +127,13 @@ Validate-ResultSection $lock.rpsm_results "rpsm_results" "d21" "rpsm"
 
 if ($lock.PSObject.Properties.Name -contains "cell_sweep_results" -and $null -ne $lock.cell_sweep_results) {
     Validate-ResultSection $lock.cell_sweep_results "cell_sweep_results" "d17" "cell-sweep"
+    if ($Production) {
+        $cs = $lock.cell_sweep_results
+        $csStatus = if ($cs.PSObject.Properties.Name -contains "status") { $cs.status } else { "?" }
+        if ($csStatus -eq "historical") {
+            Write-Host "  (-Production: cell_sweep_results status=historical; D17 hybrid pin is authoritative)" -ForegroundColor DarkGray
+        }
+    }
 }
 
 if ($Production) {

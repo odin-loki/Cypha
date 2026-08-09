@@ -46,6 +46,8 @@ struct Args {
     bool n_eval_explicit = false;
     bool intelligence_profile = false;
     bool math_integration = false;
+    bool resume = false;
+    bool resume_disabled = false;
     std::int64_t bench_seed = -1;
     std::string cell_variant;
     std::string output_dir;
@@ -55,6 +57,7 @@ void usage() {
     std::cerr << "usage: cypha_cell_hypothesis_sweep [--smoke] [--tier1-only] [--tier2-only]\n"
               << "       [--tier2-smoke] [--tier3-smoke] [--overnight-sweep] [--overnight-sweep-smoke]\n"
               << "       [--list-variants] [--cell-variant H06] [--output-dir PATH]\n"
+              << "       [--resume] [--no-resume]\n"
               << "       [--profile d17] [--n-train N] [--n-eval M] [--threads T]\n"
               << "       [--intelligence-profile] [--math-integration] [--bench-seed N]\n"
               << "  HISTORICAL research tool (One Cypha cutover 2026-07-18). Living spine: Hybrid L2+Wave2 BPTT / cypha::Cypha.\n"
@@ -62,7 +65,9 @@ void usage() {
                  "CYPHA_OVERNIGHT_MATH_INTEGRATION=1\n"
               << "  overnight sweep variants run isolated in child processes (re-invoking this "
                  "binary with --cell-variant); a variant crash is recorded in \"failed\" and does "
-                 "not discard other variants' results.\n";
+                 "not discard other variants' results.\n"
+              << "  --resume (default on overnight-sweep): skip variants with matching "
+                 "variant_<id>.json checkpoints; rewrite manifest after each variant.\n";
 }
 
 Args parse_args(int argc, char** argv) {
@@ -93,6 +98,8 @@ Args parse_args(int argc, char** argv) {
         else if (k == "--list-variants") a.list_variants = true;
         else if (k == "--cell-variant") a.cell_variant = need("--cell-variant");
         else if (k == "--output-dir") a.output_dir = need("--output-dir");
+        else if (k == "--resume") a.resume = true;
+        else if (k == "--no-resume") a.resume_disabled = true;
         else if (k == "--intelligence-profile") a.intelligence_profile = true;
         else if (k == "--math-integration") a.math_integration = true;
         else if (k == "--bench-seed") {
@@ -138,6 +145,14 @@ Args parse_args(int argc, char** argv) {
     }
     if (a.math_integration) {
         a.intelligence_profile = true;
+    }
+    if (a.overnight_sweep && !a.overnight_sweep_smoke && a.cell_variant.empty() && !a.resume_disabled) {
+        if (a.resume || cypha::bench::bench_env_truthy("CYPHA_CELL_SWEEP_RESUME")) {
+            a.resume = true;
+        } else if (!cypha::bench::bench_env_truthy("CYPHA_CELL_SWEEP_NO_RESUME")) {
+            // Default-on for production overnight sweeps so interrupted runs continue.
+            a.resume = true;
+        }
     }
     return a;
 }
@@ -440,15 +455,84 @@ void append_overnight_progress_log(const std::string& variant_id, int index, int
     }
 }
 
+std::filesystem::path resolve_artifacts_dir(const Args& args) {
+    if (!args.output_dir.empty()) {
+        return std::filesystem::path(args.output_dir);
+    }
+    return cypha::bench::results_dir() / "cell_sweep";
+}
+
+bool variant_row_matches_run(const nlohmann::json& row, const Args& args) {
+    if (!row.is_object() || row.value("id", "").empty()) {
+        return false;
+    }
+    if (row.value("n_train", -1) != args.n_train || row.value("n_eval", -1) != args.n_eval) {
+        return false;
+    }
+    if (row.contains("math_integration") && row["math_integration"].is_boolean() &&
+        row["math_integration"].get<bool>() != args.math_integration) {
+        return false;
+    }
+    return row.contains("bpc") && !row["bpc"].is_null();
+}
+
+std::optional<nlohmann::json> try_load_resumed_variant(const std::filesystem::path& out_dir,
+                                                         const std::string& id, const Args& args) {
+    const std::filesystem::path path = out_dir / ("variant_" + id + ".json");
+    if (!std::filesystem::is_regular_file(path)) {
+        return std::nullopt;
+    }
+    try {
+        std::ifstream in(path);
+        const nlohmann::json row = nlohmann::json::parse(in);
+        if (!variant_row_matches_run(row, args)) {
+            return std::nullopt;
+        }
+        return row;
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+nlohmann::json load_failed_from_manifest(const std::filesystem::path& out_dir) {
+    const std::filesystem::path manifest_path = out_dir / "manifest.json";
+    if (!std::filesystem::is_regular_file(manifest_path)) {
+        return nlohmann::json::array();
+    }
+    try {
+        std::ifstream in(manifest_path);
+        const nlohmann::json manifest = nlohmann::json::parse(in);
+        if (manifest.contains("failed") && manifest["failed"].is_array()) {
+            return manifest["failed"];
+        }
+    } catch (const std::exception&) {
+    }
+    return nlohmann::json::array();
+}
+
+void recompute_delta_vs_b2(nlohmann::json& results, double b2_bpc) {
+    for (auto& row : results) {
+        if (!row["bpc"].is_null() && std::isfinite(b2_bpc) && row.value("id", "") != "B2") {
+            row["delta_vs_b2"] = row["bpc"].get<double>() - b2_bpc;
+        }
+    }
+}
+
+void write_variant_artifact(const std::filesystem::path& out_dir, const nlohmann::json& row) {
+    std::filesystem::create_directories(out_dir);
+    const std::string id = row.value("id", "unknown");
+    std::ofstream variant_out(out_dir / ("variant_" + id + ".json"));
+    if (variant_out) {
+        variant_out << row.dump(2);
+    }
+}
+
 void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohmann::json& results,
-                               const Args& args, double b2_bpc, const nlohmann::json& failed) {
+                               const Args& args, double b2_bpc, const nlohmann::json& failed,
+                               bool partial = false) {
     std::filesystem::create_directories(out_dir);
     for (const auto& row : results) {
-        const std::string id = row.value("id", "unknown");
-        std::ofstream variant_out(out_dir / ("variant_" + id + ".json"));
-        if (variant_out) {
-            variant_out << row.dump(2);
-        }
+        write_variant_artifact(out_dir, row);
     }
 
     std::ofstream csv(out_dir / "summary.csv");
@@ -502,6 +586,8 @@ void write_overnight_artifacts(const std::filesystem::path& out_dir, const nlohm
         {"b2_bpc", std::isnan(b2_bpc) ? nullptr : nlohmann::json(b2_bpc)},
         {"results", results},
         {"failed", failed},
+        {"partial", partial},
+        {"updated_at", iso_timestamp_now()},
     };
     if (args.intelligence_profile) {
         manifest["pareto_ranked_variants"] = build_pareto_ranked_variants(results);
@@ -567,6 +653,16 @@ int main(int argc, char** argv) {
         nlohmann::json skipped = nlohmann::json::array();
         nlohmann::json failed = nlohmann::json::array();
         double b2_bpc = std::numeric_limits<double>::quiet_NaN();
+        int resumed_count = 0;
+
+        const bool write_artifacts = args.overnight_sweep || !args.output_dir.empty();
+        std::filesystem::path artifacts_dir;
+        if (write_artifacts) {
+            artifacts_dir = resolve_artifacts_dir(args);
+            if (args.resume && isolate_variants) {
+                failed = load_failed_from_manifest(artifacts_dir);
+            }
+        }
 
         int variant_total = 0;
         for (const auto& v : cypha::cyphalm::all_cell_variants()) {
@@ -586,6 +682,19 @@ int main(int argc, char** argv) {
                           << variant_total << ")" << std::endl;
                 append_overnight_progress_log(v.id, variant_index, variant_total);
             }
+            if (args.resume && write_artifacts && isolate_variants) {
+                if (auto cached = try_load_resumed_variant(artifacts_dir, v.id, args)) {
+                    auto row = std::move(*cached);
+                    if (v.id == "B2" && !row["bpc"].is_null()) {
+                        b2_bpc = row["bpc"].get<double>();
+                    }
+                    results.push_back(std::move(row));
+                    ++resumed_count;
+                    std::cerr << "[cell_sweep] variant " << v.id << " resumed from checkpoint"
+                              << std::endl;
+                    continue;
+                }
+            }
             if (isolate_variants) {
                 int child_exit = 0;
                 std::string child_error;
@@ -599,6 +708,9 @@ int main(int argc, char** argv) {
                                       {"tier", v.tier},
                                       {"exit_code", child_exit},
                                       {"error", child_error}});
+                    if (write_artifacts) {
+                        write_overnight_artifacts(artifacts_dir, results, args, b2_bpc, failed, true);
+                    }
                     continue;
                 }
                 auto row = std::move(*row_opt);
@@ -606,6 +718,11 @@ int main(int argc, char** argv) {
                     b2_bpc = row["bpc"].get<double>();
                 }
                 results.push_back(std::move(row));
+                if (write_artifacts) {
+                    recompute_delta_vs_b2(results, b2_bpc);
+                    write_variant_artifact(artifacts_dir, results.back());
+                    write_overnight_artifacts(artifacts_dir, results, args, b2_bpc, failed, true);
+                }
             } else {
                 auto row = run_variant(v, args);
                 if (v.id == "B2" && !row["bpc"].is_null()) {
@@ -615,22 +732,10 @@ int main(int argc, char** argv) {
             }
         }
 
-        for (auto& row : results) {
-            if (!row["bpc"].is_null() && !std::isnan(b2_bpc) && row.value("id", "") != "B2") {
-                row["delta_vs_b2"] = row["bpc"].get<double>() - b2_bpc;
-            }
-        }
+        recompute_delta_vs_b2(results, b2_bpc);
 
-        // Write variant_*.json / summary.csv whenever overnight-sweep OR an explicit
-        // --output-dir is set (single --cell-variant H15 re-rows previously only printed
-        // stdout and left variant_H15.json stale).
-        const bool write_artifacts = args.overnight_sweep || !args.output_dir.empty();
-        std::filesystem::path artifacts_dir;
         if (write_artifacts) {
-            artifacts_dir = args.output_dir.empty()
-                                ? cypha::bench::results_dir() / "cell_sweep"
-                                : std::filesystem::path(args.output_dir);
-            write_overnight_artifacts(artifacts_dir, results, args, b2_bpc, failed);
+            write_overnight_artifacts(artifacts_dir, results, args, b2_bpc, failed, false);
         }
 
         nlohmann::json out = {
@@ -645,6 +750,8 @@ int main(int argc, char** argv) {
             {"intelligence_profile", args.intelligence_profile},
             {"math_integration", args.math_integration},
             {"isolated_variants", isolate_variants},
+            {"resume", args.resume},
+            {"resumed_count", resumed_count},
             {"results", results},
             {"skipped", skipped},
             {"failed", failed},

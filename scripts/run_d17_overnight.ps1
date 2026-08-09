@@ -65,6 +65,7 @@ try {
         Write-Host "== cell hypothesis overnight sweep (28 variants, n_train=$NTrain) ==" -ForegroundColor Cyan
         $sweepArgs = @(
             "--overnight-sweep"
+            "--resume"
             "--profile", $Profile
             "--n-train", $NTrain
             "--n-eval", $NEval
