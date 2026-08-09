@@ -65,12 +65,14 @@ try {
         Write-Host "== cell hypothesis overnight sweep (28 variants, n_train=$NTrain) ==" -ForegroundColor Cyan
         $sweepArgs = @(
             "--overnight-sweep"
-            "--resume"
             "--profile", $Profile
             "--n-train", $NTrain
             "--n-eval", $NEval
             "--threads", $Threads
         )
+        if ($env:CYPHA_CELL_SWEEP_RESUME -eq "1") {
+            $sweepArgs += "--resume"
+        }
         if ($NTrain -ge 5000) {
             $cellSweepOut = Join-Path $root "bench\results\cell_sweep"
             $sweepArgs += @("--output-dir", $cellSweepOut)
