@@ -1,4 +1,4 @@
-﻿# Wait for cypha_cell_hypothesis_sweep to exit, then refresh cell_sweep_results in BASELINE_LOCK.
+# Wait for cypha_cell_hypothesis_sweep to exit, then refresh cell_sweep_results in BASELINE_LOCK.
 # Usage: powershell -File scripts/wait_cell_sweep_and_lock.ps1 [-AutoCommit]
 param(
     [string]$BuildDir = "",
@@ -25,10 +25,26 @@ Write-Log "waiting for cypha_cell_hypothesis_sweep (poll=${PollSeconds}s)"
 while (Get-Process -Name "cypha_cell_hypothesis_sweep" -ErrorAction SilentlyContinue) {
     Start-Sleep -Seconds $PollSeconds
 }
-Write-Log "cell sweep finished; updating lock"
+Write-Log "cell sweep finished; checking artifacts"
+
+$sweepDir = Join-Path $root "bench\results\cell_sweep"
+$variantCount = 0
+if (Test-Path $sweepDir) {
+    $variantCount = @(Get-ChildItem -Path $sweepDir -Filter "variant_*.json" -ErrorAction SilentlyContinue).Count
+}
+$manifestPath = Join-Path $sweepDir "manifest.json"
+$hasManifest = Test-Path $manifestPath
+Write-Log "cell_sweep artifacts: variant_json=$variantCount manifest=$hasManifest"
+
+if ($variantCount -lt 28 -and -not $hasManifest) {
+    Write-Log "FAIL cell sweep incomplete (variants=$variantCount, expected >=28 or manifest.json)"
+    exit 1
+}
+
+Write-Log "updating lock"
 
 $updateScript = Join-Path $PSScriptRoot "update_baseline_lock.ps1"
-& $updateScript -Run "cell-sweep" -Production -BuildDir $BuildDir
+& $updateScript -Run "cell-sweep" -Production -MathIntegration -BuildDir $BuildDir
 if ($LASTEXITCODE -ne 0) {
     Write-Log "FAIL update_baseline_lock cell-sweep exit=$LASTEXITCODE"
     exit $LASTEXITCODE

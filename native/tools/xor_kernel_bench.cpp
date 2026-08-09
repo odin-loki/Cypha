@@ -36,12 +36,12 @@ struct BenchConfig {
   double gamma_scale = 2.0;
   double kernel_lr_scale = 2.0;
   bool shuffle_train = true;
-  /// ``latent``, ``raw_x``, or ``xor_pair`` (default) kernel features.
-  std::string kernel_feature_mode = "xor_pair";
-  /// ``nystrom`` (default, online landmark sketch) or ``rff`` (fixed Random Fourier Features basis).
-  std::string kernel_basis = "nystrom";
+  /// ``latent`` (default), ``raw_x``, or ``xor_pair`` (XOR-specific hand features) kernel features.
+  std::string kernel_feature_mode = "latent";
+  /// ``rff`` (default, generalizable) or ``nystrom`` (online landmark sketch) kernel basis.
+  std::string kernel_basis = "rff";
   /// RFF projection dimension (``M``-equivalent) when ``kernel_basis == "rff"``.
-  int rff_dim = 512;
+  int rff_dim = 4096;
   /// Multiplier applied to the auto (median-heuristic) gamma when calibrating the RFF basis.
   double rff_gamma_scale = 1.0;
   /// Fixed RBF bandwidth for RFF, bypassing the auto-gamma median heuristic (comparison baseline).
@@ -344,11 +344,11 @@ void usage() {
             << "  --kernel-m M         Nyström landmarks (default 512)\n"
             << "  --gamma-scale G      RBF bandwidth multiplier (default 2.0)\n"
             << "  --kernel-lr-scale S  kernel weight lr scale (default 2.0)\n"
-            << "  --kernel-raw-x       Nyström kernel on standardized raw x (not latent h)\n"
-            << "  --kernel-xor-features  kernel on [x0,x1,x0*x1,x0^2,x1^2] (5-d)\n"
-            << "  --kernel-feature-mode {latent,raw_x,xor_pair}\n"
-            << "  --kernel-basis {nystrom,rff}  landmark sketch (default) or fixed RFF projection\n"
-            << "  --rff-dim N          RFF projection dimension (default 512, kernel_basis=rff)\n"
+            << "  --kernel-raw-x       kernel on standardized raw x (not latent h)\n"
+            << "  --kernel-xor-features  XOR-specific [x0,x1,x0*x1,x0^2,x1^2] (5-d); not generalizable\n"
+            << "  --kernel-feature-mode {latent,raw_x,xor_pair}  (default latent)\n"
+            << "  --kernel-basis {rff,nystrom}  fixed RFF projection (default) or landmark sketch\n"
+            << "  --rff-dim N          RFF projection dimension (default 4096, kernel_basis=rff)\n"
             << "  --rff-gamma-scale G  multiplier on RFF auto (median-heuristic) gamma (default 1.0)\n"
             << "  --rff-fixed-gamma G  fixed RBF bandwidth for RFF, bypassing auto-gamma (comparison)\n"
             << "  --nystrom-landmark-sampling {uniform,leverage}  Nyström reservoir (default uniform)\n"

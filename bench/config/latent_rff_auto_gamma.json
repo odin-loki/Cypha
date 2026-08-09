@@ -1,37 +1,28 @@
 {
-  "source": "latent RFF auto-gamma profile 2026-07-17 — recommended exploratory default for generalizable kernel path",
-  "generated_utc": "2026-07-17T12:00:00.000000+00:00",
-  "scope": "latent_feature_mode_only",
-  "production_default_unchanged": {
-    "kernel_feature_mode": "xor_pair",
-    "kernel_basis": "nystrom",
-    "kernel_m": 512,
-    "profile": "bench/config/kernel_llr_profile.json"
-  },
-  "recommended_latent": {
+  "source": "latent RFF auto-gamma profile 2026-08-09 — production default for generalizable kernel LLR",
+  "generated_utc": "2026-08-09T02:00:00.000000+00:00",
+  "scope": "latent_feature_mode_default",
+  "production_default": {
     "kernel_feature_mode": "latent",
     "kernel_basis": "rff",
     "rff_dim": 4096,
     "rff_gamma_mode": "auto_median_heuristic",
     "rff_gamma_scale": 1.0,
     "kernel_blend": 1.0,
-    "kernel_m": 512,
-    "gamma_scale": 2.0,
     "kernel_lr_scale": 2.0,
-    "seeds": 3,
-    "passes": 8
+    "profile": "bench/config/everyday_profile.json"
+  },
+  "legacy_xor_pair": {
+    "kernel_feature_mode": "xor_pair",
+    "kernel_basis": "nystrom",
+    "kernel_m": 512,
+    "note": "XOR-specific hand features; ~98% on d03 but not generalizable. Env: CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair"
   },
   "fast_smoke_latent": {
     "rff_dim": 512,
     "seeds": 1,
     "passes": 2,
-    "note": "Prior sweep: 68.0% kernel acc vs 51.2% linear at rff_dim=512 auto-gamma"
-  },
-  "env": {
-    "CYPHA_D03_KERNEL_FEATURE_MODE": "latent",
-    "CYPHA_D03_KERNEL_BASIS": "rff",
-    "CYPHA_D03_RFF_DIM": "4096",
-    "CYPHA_D03_RFF_GAMMA_SCALE": "1.0"
+    "note": "CTest/smoke: 68.0% kernel acc vs 51.2% linear at rff_dim=512 auto-gamma"
   },
   "xor_kernel_bench_cli": [
     "--kernel-feature-mode", "latent",
@@ -41,9 +32,8 @@
     "--passes", "8"
   ],
   "notes": [
-    "Exploratory default for generalizable latent kernel path — NOT the shipped d03_xor / xor_pair production default",
-    "Prior evidence: 76.3% kernel acc, ~2.7pp to sklearn RBF ceiling (3 seeds x 8 passes, 2026-07-11)",
-    "Enable via env block above or xor_kernel_bench_cli; see docs/reports/RFF_LATENT_PROMOTE_2026-07-17.md",
+    "Shipped default (Aug 2026): latent + RFF auto-gamma in everyday_profile, xor_kernel_bench, d03_xor",
+    "Evidence: 76.3% kernel acc, ~2.7pp to sklearn RBF ceiling (3 seeds x 8 passes, 2026-07-11)",
     "Auto-gamma is implicit (median heuristic); override with --rff-fixed-gamma for comparison only"
   ]
 }

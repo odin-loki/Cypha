@@ -13,6 +13,13 @@
       "context_win": 32,
       "n_epochs": 4,
       "train_passes_cap": 800,
+      "use_kernel_llr": true,
+      "kernel_basis": "rff",
+      "kernel_feature_mode": "latent",
+      "rff_dim": 4096,
+      "rff_gamma_scale": 1.0,
+      "kernel_blend": 1.0,
+      "kernel_lr_scale": 2.0,
       "preprocessor": {
         "scale": true,
         "rff_dim": 256,
@@ -89,7 +96,7 @@
     "phase2_fdr_2class": 0.019,
     "phase2_bottleneck_2class": "ENCODER_QUALITY",
     "phase2_nonlin_gap_2class": 0.156,
-    "phase2_nonlin_gap_xor": 0.323,
-    "verdict": "Primary fixes: disable deliberation + lower delta_lr. Secondary: multi-pass. Hard limit: XOR/nonlinear boundaries need kernel LLR (architectural change)."
+    "phase2_nonlin_gap_xor": 0.027,
+    "verdict": "Kernel LLR default-on: latent RFF auto-gamma (~76% XOR, ~2.7pp to sklearn). Encoder SORF + kernel RFF are separate layers."
   }
 }

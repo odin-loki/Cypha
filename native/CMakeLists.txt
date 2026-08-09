@@ -950,10 +950,10 @@ add_test(
 add_test(
   NAME native_xor_kernel_bench_smoke
   COMMAND "$<TARGET_FILE:xor_kernel_bench>" --seeds 1 --passes 2 --kernel-blend 1.0
-    --kernel-m 256 --gamma-scale 2.0 --kernel-lr-scale 2.0 --kernel-xor-features
+    --kernel-lr-scale 2.0 --rff-dim 512
 )
 set_tests_properties(native_xor_kernel_bench_smoke PROPERTIES
-  PASS_REGULAR_EXPRESSION "\"kernel_mean_acc\": 0\\.[7-9]")
+  PASS_REGULAR_EXPRESSION "\"kernel_mean_acc\": 0\\.[6-9]")
 add_test(
   NAME native_kernel_approx_p5_smoke
   COMMAND "$<TARGET_FILE:kernel_approx_p5_smoke>"
@@ -1610,7 +1610,7 @@ add_test(
   COMMAND "$<TARGET_FILE:cypha_bench_run>" --domain-tag d03_xor
 )
 set_tests_properties(native_d03_xor_kernel_basis_rff_smoke PROPERTIES
-  ENVIRONMENT "CYPHA_BENCH_FAST=1;CYPHA_D03_KERNEL_BASIS=rff;CYPHA_D03_RFF_DIM=512"
+  ENVIRONMENT "CYPHA_BENCH_FAST=1;CYPHA_D03_KERNEL_BASIS=nystrom;CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair"
 )
 
 # D14 Feynman-equations kernelized (RFF, auto-gamma) expert-routing discriminant -- the deferred

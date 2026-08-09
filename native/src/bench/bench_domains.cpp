@@ -69,6 +69,7 @@
 #include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
 #include "cypha/infer_cpu.hpp"
+#include "cypha/kernel_memory.hpp"
 #include "cypha/memory_train.hpp"
 #include "cypha/portable_shuffle.hpp"
 #include "cypha/preprocessor.hpp"
@@ -499,8 +500,42 @@ std::vector<int> curriculum_view_order(const cypha::CyphaInferModel& infer,
     return cypha::curriculum_order_windowed(confidences, train_n, window, curriculum_rng);
 }
 
+struct TabularKernelConfig {
+    bool enabled{false};
+    std::string basis{"rff"};
+    std::string feature_mode{"latent"};
+    int rff_dim{4096};
+    double rff_gamma_scale{1.0};
+    double kernel_blend{1.0};
+    double kernel_lr_scale{2.0};
+};
+
+TabularKernelConfig tabular_kernel_config_from_regime(const cypha::bench::ProfileJson& regime) {
+    TabularKernelConfig cfg;
+    if (!regime.value("use_kernel_llr", false)) {
+        return cfg;
+    }
+    cfg.enabled = true;
+    if (regime.contains("kernel_basis") && regime["kernel_basis"].is_string()) {
+        cfg.basis = regime["kernel_basis"].get<std::string>();
+    }
+    if (regime.contains("kernel_feature_mode") && regime["kernel_feature_mode"].is_string()) {
+        cfg.feature_mode = regime["kernel_feature_mode"].get<std::string>();
+    }
+    cfg.rff_dim = regime.value("rff_dim", 4096);
+    cfg.rff_gamma_scale = regime.value("rff_gamma_scale", 1.0);
+    cfg.kernel_blend = regime.value("kernel_blend", 1.0);
+    cfg.kernel_lr_scale = regime.value("kernel_lr_scale", 2.0);
+    return cfg;
+}
+
+void kernel_blend_llr_batched(const cypha::CyphaInferModel& infer, const double* h, int n,
+                              const cypha::KernelMemory* kernel_mem, double kernel_blend,
+                              std::vector<double>& llr);
+
 Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::vector<double>>& xs,
-                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out = nullptr);
+                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out = nullptr,
+                        const cypha::KernelMemory* kernel_mem = nullptr, double kernel_blend = 1.0);
 
 Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const std::vector<std::string>& train_y,
                         const std::vector<std::vector<double>>& test_x, const std::vector<std::string>& test_y,
@@ -543,6 +578,36 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     std::mt19937 rng = make_rng(42);
     int enc_updates = 0;
 
+    const TabularKernelConfig kernel_cfg = tabular_kernel_config_from_regime(regime);
+    std::unique_ptr<cypha::KernelMemory> kernel_mem;
+    cypha::TrainStepExtras kernel_extras;
+    int total_steps = 0;
+    if (kernel_cfg.enabled && kernel_cfg.basis == "rff" && kernel_cfg.feature_mode == "latent") {
+        const int kdim = infer.d_latent;
+        const std::size_t n_calib = std::min<std::size_t>(tr.size(), 256);
+        std::vector<double> calib_rowmajor;
+        if (n_calib > 0 && kdim > 0) {
+            std::vector<std::vector<double>> calib_slice;
+            calib_slice.reserve(n_calib);
+            for (std::size_t i = 0; i < n_calib; ++i) {
+                calib_slice.push_back(tr[i]);
+            }
+            const std::vector<double> calib_flat = flatten_rowmajor(calib_slice);
+            cypha::batch_encode(infer, calib_flat.data(), static_cast<int>(n_calib), calib_rowmajor);
+        }
+        const int n_calib_rows =
+            kdim > 0 ? static_cast<int>(calib_rowmajor.size() / static_cast<std::size_t>(kdim)) : 0;
+        const double gamma = cypha::KernelMemory::auto_gamma_median_heuristic(
+            calib_rowmajor.data(), n_calib_rows, kdim, kernel_cfg.rff_gamma_scale, 256, 42);
+        kernel_mem = std::make_unique<cypha::KernelMemory>(
+            cypha::KernelMemory::make_rff(kdim, kernel_cfg.rff_dim, gamma, 42));
+        kernel_extras.kernel_mem = kernel_mem.get();
+        kernel_extras.use_kernel_llr = true;
+        kernel_extras.kernel_blend = kernel_cfg.kernel_blend;
+        kernel_extras.kernel_lr_scale = kernel_cfg.kernel_lr_scale;
+        kernel_extras.total_steps = &total_steps;
+    }
+
     const int train_n = static_cast<int>(tr.size());
     const int passes = std::max(1, regime.value("n_epochs", 1));
     const int curriculum_window = curriculum_window_from_env();
@@ -560,13 +625,14 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
         for (int idx : order) {
             cypha::dif_train_step_vector(infer, mem, replay, tr[static_cast<std::size_t>(idx)].data(), d,
                                          train_y[static_cast<std::size_t>(idx)], world_lr, delta_lr, world_lr,
-                                         delta_lr, ood_sigma, tsp, rng, enc_updates, nullptr, nullptr);
+                                         delta_lr, ood_sigma, tsp, rng, enc_updates, nullptr,
+                                         kernel_mem ? &kernel_extras : nullptr);
         }
     }
     cypha::sync_infer_model_from_memory(infer, mem);
 
-    Json test_scores = clf_metrics_native(infer, te, test_y);
-    Json train_scores = clf_metrics_native(infer, tr, train_y);
+    Json test_scores = clf_metrics_native(infer, te, test_y, nullptr, kernel_mem.get(), kernel_cfg.kernel_blend);
+    Json train_scores = clf_metrics_native(infer, tr, train_y, nullptr, kernel_mem.get(), kernel_cfg.kernel_blend);
     if (train_scores.contains("accuracy") && test_scores.contains("accuracy")) {
         test_scores["train_accuracy"] = train_scores["accuracy"];
         test_scores["generalization_gap"] =
@@ -591,6 +657,15 @@ Json train_eval_vectors(const std::vector<std::vector<double>>& train_x, const s
     }
     if (class_block) {
         result["class_block"] = true;
+    }
+    if (kernel_mem) {
+        result["kernel_llr"] = Json{
+            {"enabled", true},
+            {"kernel_basis", kernel_cfg.basis},
+            {"kernel_feature_mode", kernel_cfg.feature_mode},
+            {"rff_dim", kernel_cfg.rff_dim},
+            {"kernel_blend", kernel_cfg.kernel_blend},
+        };
     }
     return result;
 }
@@ -715,7 +790,8 @@ double online_clf_epistemic(const cypha::CyphaInferModel& m, const std::vector<d
 }
 
 Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::vector<double>>& xs,
-                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out) {
+                        const std::vector<std::string>& ys, std::vector<double>* epistemic_out,
+                        const cypha::KernelMemory* kernel_mem, double kernel_blend) {
     const int n = static_cast<int>(xs.size());
     const int k = static_cast<int>(m.labels.size());
     std::vector<std::string> y_true;
@@ -730,7 +806,13 @@ Json clf_metrics_native(const cypha::CyphaInferModel& m, const std::vector<std::
     if (n > 0 && k > 0) {
         const std::vector<double> flat = flatten_rowmajor(xs);
         std::vector<double> llr;
-        cypha::batch_llr_from_x(m, flat.data(), n, llr);
+        if (kernel_mem != nullptr) {
+            std::vector<double> h_flat;
+            cypha::batch_encode(m, flat.data(), n, h_flat);
+            kernel_blend_llr_batched(m, h_flat.data(), n, kernel_mem, kernel_blend, llr);
+        } else {
+            cypha::batch_llr_from_x(m, flat.data(), n, llr);
+        }
         std::vector<double> probs;
         cypha::softmax_batch_reference(llr.data(), n, k, 1e-12, probs);
         confidences.reserve(static_cast<std::size_t>(n));
@@ -3751,15 +3833,12 @@ Json run_d12() {
     return experiments;
 }
 
-// Opt-in RFF auto-gamma kernel-LLR basis for the real D03 XOR bench domain (Fix 2 in
-// docs/research/upgrades/NONLINEAR_BOUNDARY.md; sweep in docs/RESEARCH_STATUS.md Priority 1). Follows
-// the same D03 env-var opt-in convention as `d03_view_schedule_from_env()`/`CYPHA_D03_VIEW_SCHEDULE`
-// above: unset/"nystrom" reproduces the pre-existing `--kernel-xor-features` Nystrom call byte-for-byte
-// (confirmed via rerun); "rff" swaps in `xor_kernel_bench --kernel-basis rff` (KernelMemory::make_rff +
-// auto_gamma_median_heuristic) on the same subprocess call instead of a second, parallel config system.
+// Default D03 XOR kernel path: latent features + RFF auto-gamma (generalizable; ~76% XOR vs sklearn
+// ~79%). Override via CYPHA_D03_KERNEL_* env vars; xor_pair+nystrom remains available for XOR-specific
+// regression tests (CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair CYPHA_D03_KERNEL_BASIS=nystrom).
 struct D03KernelExperimentConfig {
-    std::string basis = "nystrom";
-    std::string feature_mode = "xor_pair";
+    std::string basis = "rff";
+    std::string feature_mode = "latent";
     int rff_dim = 4096;
     double rff_gamma_scale = 1.0;
     std::string nystrom_landmark_sampling = "uniform";
@@ -3813,16 +3892,19 @@ Json run_d03_xor() {
         if (kernel_cfg.rff_projection == "sorf") {
             cmd << " --rff-projection sorf";
         }
-    } else if (kernel_cfg.nystrom_landmark_sampling == "leverage") {
-        cmd << " --nystrom-landmark-sampling leverage";
+    } else {
+        cmd << " --kernel-basis nystrom";
+        if (kernel_cfg.nystrom_landmark_sampling == "leverage") {
+            cmd << " --nystrom-landmark-sampling leverage";
+        }
     }
     const Json j = Json::parse(capture_process_output(cmd.str()));
     Json kernel_result{
         {"accuracy", j.at("kernel_mean_acc")},
         {"delta_pp", j.at("delta_pp")},
-        {"kernel_basis", j.value("kernel_basis", "nystrom")},
+        {"kernel_basis", j.value("kernel_basis", "rff")},
         {"kernel_m", j.value("kernel_m", 512)},
-        {"kernel_feature_mode", j.value("kernel_feature_mode", "xor_pair")},
+        {"kernel_feature_mode", j.value("kernel_feature_mode", "latent")},
         {"backend", "xor_kernel_bench_native"},
     };
     if (kernel_cfg.basis == "rff") {

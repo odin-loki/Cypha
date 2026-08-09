@@ -11,6 +11,11 @@
     "env": "CYPHA_BENCH_PROFILE_PATH=bench/config/auto_rff_gamma_cv_profile.json",
     "domains": ["d01"]
   },
+  "latent_kernel_llr": {
+    "path": "everyday_profile.json",
+    "regime": "tabular",
+    "notes": "Default-on latent RFF kernel LLR (use_kernel_llr, rff_dim=4096). Legacy xor_pair: CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair"
+  },
   "vision": {
     "path": "everyday_profile.json",
     "regime": "vision",
