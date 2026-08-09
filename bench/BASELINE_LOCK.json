@@ -89,10 +89,10 @@
   },
   "overnight_results": {
     "artifact_path": null,
-    "bpc": 2.864125041163193,
+    "bpc": 2.664300395908913,
     "context_mode": "hybrid_gria_lstm",
     "corpus": "wikitext2_official_split",
-    "description": "Fill after a real CYPHA_BENCH_OVERNIGHT=1 run (scripts/run_d17_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d17)",
+    "description": "Production re-confirm 2026-08-09: Wave2 BPTT recipe via apply_hybrid_production_recipe (cyphalm_bench_native fix)",
     "env": {
       "CYPHA_BENCH_FULL_CORPUS": "1",
       "CYPHA_BENCH_FULL_N_TRAIN": "300000",
@@ -102,16 +102,16 @@
     "n_eval": 2000,
     "n_train": 300000,
     "profile": "d17",
-    "run_at": "2026-07-12T01:52:47Z",
+    "run_at": "2026-08-08T23:03:33Z",
     "runner": "cyphalm_bench_native --overnight",
-    "status": "historical",
+    "status": "production",
     "synthetic": false
   },
   "rpsm_results": {
     "artifact_path": null,
-    "bpc": 7.3360806755698835,
+    "bpc": 3.849002288643633,
     "corpus": "wikitext2_official_split",
-    "description": "Fill after D21 RPSM overnight (scripts/run_rpsm_overnight.ps1 or scripts/update_baseline_lock.ps1 --Run d21)",
+    "description": "Production re-confirm 2026-08-09 overnight",
     "env": {
       "CYPHA_BENCH_FULL_CORPUS": "1",
       "CYPHA_BENCH_FULL_N_TRAIN": "300000",
@@ -121,7 +121,7 @@
     "n_eval": 2000,
     "n_train": 300000,
     "profile": "d21",
-    "run_at": "2026-07-12T01:55:40Z",
+    "run_at": "2026-08-08T23:03:33Z",
     "runner": "cyphalm_bench_native --overnight --mode rpsm",
     "status": "production",
     "synthetic": false
