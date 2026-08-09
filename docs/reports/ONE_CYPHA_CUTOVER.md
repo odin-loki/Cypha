@@ -49,7 +49,7 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 - `cypha::Cypha` in [`native/include/cypha/cypha.hpp`](../../native/include/cypha/cypha.hpp); `cypha_lm_native` is an INTERFACE alias compiled into `cypha_core`
 - REST: `/sample`, `/retrieve`, `/sequence/load`, `/predict_next`; health `model_type=Cypha`; metrics `sequence_loaded` (+ `lm_loaded` alias)
 - CLI: `--sequence-checkpoint` / `CYPHA_SEQUENCE_CHECKPOINT` (aliases: `--cyphalm-checkpoint`, `CYPHA_LM_CHECKPOINT`, `CYPHALM_CHECKPOINT`)
-- Living sequence default: **Hybrid GRIA+LSTM** via `Cypha::init_default_sequence` → `apply_hybrid_production_recipe`; CLI `cyphalm_bench_native` defaults `--mode hybrid`; U06/PGM→Wy opt-in; checkpoint JSON still persists unified/PGM flags when used
+- Living sequence default: **Hybrid GRIA+LSTM** via `Cypha::init_default_sequence` → `apply_hybrid_production_recipe`; CLI `cyphalm_bench_native --mode hybrid` applies the same production recipe (Wave2 BPTT, Adam); U06/PGM→Wy opt-in; checkpoint JSON still persists unified/PGM flags when used
 - Regression: `cypha/regression.hpp` (was `regression_stub`); `DifRegressorHead` deleted
 - **`Cypha::save`**: merges `mem_` into retained `.cypha` root; no phantom REST `/save`
 - REST sequence single-owner: `cyphalm_rest_configure(&g_mu, g_cypha)`; latent `/sample` + `/retrieve` via `g_cypha`

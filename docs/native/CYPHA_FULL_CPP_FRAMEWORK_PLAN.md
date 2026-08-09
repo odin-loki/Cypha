@@ -25,14 +25,14 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Full baseline lock (300k d17) ✅
 
-**Canonical pin:** **2.873 BPC** (`bench/BASELINE_LOCK.json` → `d17_hybrid_baseline`). Full reconciliation: [`docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`](../archive/reports/BASELINE_PIN_CANONICAL_2026-07-17.md).
+**Canonical pin:** **2.664 BPC** (`bench/BASELINE_LOCK.json` → `d17_hybrid_baseline`, recipe `l2_wave2_bptt`). Full reconciliation: [`docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md`](../archive/reports/BASELINE_PIN_CANONICAL_2026-07-17.md).
 
 | Figure | BPC | Role |
 |--------|-----|------|
-| **Pinned hybrid (canonical)** | **2.873** | Regression / `-Production` validator (±0.05) |
-| Native build6 sweep (2026-06-10) | 2.892 | Historical sweep — not an alternate lock |
-| Early v2.5 framework note | 2.897 | Historical release-time figure — superseded |
-| Latest overnight native run | 2.864 | `overnight_results` in BASELINE_LOCK.json |
+| **Pinned hybrid (canonical)** | **2.664** | Regression / `-Production` validator (±0.05) |
+| Prior SGD L2 pin | 2.816 | Archived (`prior_sgd_l2_pin_bpc`) |
+| Prior L1 pin | 2.873 | Archived (`prior_l1_pin_bpc`) |
+| Latest overnight native run | 2.864 | `overnight_results` in BASELINE_LOCK.json (historical; refresh after production overnight) |
 
 ---
 

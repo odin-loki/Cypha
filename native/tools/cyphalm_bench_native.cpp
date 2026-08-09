@@ -343,6 +343,11 @@ int main(int argc, char** argv) {
         } else {
             const auto bench_mode = cypha::cyphalm::parse_bench_mode(args.mode);
             cypha::cyphalm::apply_bench_mode(bench_mode, cfg);
+            // Living D17 production pin (2.664 @ 300k): Wave2 BPTT + Adam. apply_bench_mode(Hybrid)
+            // alone leaves profile SGD defaults (2.816-era); match Cypha::init_default_sequence.
+            if (bench_mode == cypha::cyphalm::BenchMode::Hybrid) {
+                cypha::cyphalm::apply_hybrid_production_recipe(cfg);
+            }
         }
         // Unconditional (not gated behind --math-integration like the grid-search overrides
         // below): hidden-dim needs to be settable in vanilla hybrid mode too, per the
@@ -564,6 +569,12 @@ int main(int argc, char** argv) {
             {"bpc", bpc},
             {"vocab_size", cfg.vocab_size},
             {"lstm_hidden", cfg.lstm_hidden},
+            {"lstm_layers", cfg.lstm_layers},
+            {"lstm_bptt_steps", cfg.lstm_bptt_steps},
+            {"lstm_optim", cfg.lstm_optim},
+            {"lstm_lr", cfg.lstm_lr},
+            {"hybrid_production_recipe",
+             mode_label == "hybrid" && args.cell_variant.empty()},
             {"use_self_correcting_loop", cfg.use_self_correcting_loop},
             {"ngram_position_weights", cfg.ngram_position_weights},
             {"ngram_bilinear_fusion", cfg.ngram_bilinear_fusion},

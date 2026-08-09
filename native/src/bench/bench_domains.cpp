@@ -4202,10 +4202,8 @@ Json run_baseline_lock_subprocess(const fs::path& exe_dir, const fs::path& lock_
 Json run_d23_overnight_lock_validation() {
     const fs::path exe_dir = resolve_native_exe_dir();
     const fs::path lock_path = fs::current_path() / "d23_overnight_lock_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const int n_train = cypha::bench::bench_scale(200, 200);
     const int n_eval = cypha::bench::bench_scale(64, 64);
@@ -4549,10 +4547,8 @@ Json run_d25_corpus_readiness() {
 Json run_d24_production_lock_validation() {
     const fs::path exe_dir = resolve_native_exe_dir();
     const fs::path lock_path = fs::current_path() / "d24_production_lock_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const int n_train = cypha::bench::bench_scale(200, 200);
     const int n_eval = cypha::bench::bench_scale(64, 64);
@@ -4594,10 +4590,8 @@ Json run_d24_production_lock_validation() {
 Json run_d26_medium_overnight_validation() {
     const fs::path exe_dir = resolve_native_exe_dir();
     const fs::path lock_path = fs::current_path() / "d26_medium_overnight_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const int n_train = cypha::bench::bench_scale(5000, 5000);
     const int n_eval = cypha::bench::bench_scale(256, 256);
@@ -4640,10 +4634,8 @@ Json run_d26_medium_overnight_validation() {
 
 Json run_d27_production_lock_validation() {
     const fs::path lock_path = fs::current_path() / "d27_production_lock_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -4672,10 +4664,8 @@ Json run_d27_production_lock_validation() {
 
 Json run_d28_overnight_complete_validation() {
     const fs::path lock_path = fs::current_path() / "d28_overnight_complete_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -4709,10 +4699,8 @@ Json run_d28_overnight_complete_validation() {
 Json run_d29_release_readiness_validation() {
     const fs::path exe_dir = resolve_native_exe_dir();
     const fs::path lock_path = fs::current_path() / "d29_release_readiness_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -4783,10 +4771,8 @@ Json run_d29_release_readiness_validation() {
 
 Json run_d30_artifact_hygiene_validation() {
     const fs::path lock_path = fs::current_path() / "d30_artifact_hygiene_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -4897,10 +4883,8 @@ Json run_d32_production_complete_validation() {
     }
 
     const fs::path lock_path = fs::current_path() / "d32_production_complete_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -5019,10 +5003,8 @@ Json run_d33_release_publish_validation() {
         gh_publish_script_present && publish_script_has_gh_auth_preflight(publish_script_path);
 
     const fs::path lock_path = fs::current_path() / "d33_release_publish_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -5083,10 +5065,8 @@ Json run_d33_release_publish_validation() {
 
 Json run_d34_repo_smoke_hygiene_validation() {
     const fs::path lock_path = fs::current_path() / "d34_repo_smoke_hygiene_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const fs::path repo = cypha::bench::bench_root().parent_path();
     std::vector<std::string> leaked_smoke_files;
@@ -5173,10 +5153,8 @@ Json run_d35_lock_commit_pipeline_validation() {
     const Json dryrun_force_flags = commit_script_has_dryrun_and_force(commit_script_path);
 
     const fs::path lock_path = fs::current_path() / "d35_lock_commit_pipeline_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -5278,10 +5256,8 @@ Json run_d36_pipeline_e2e_validation() {
     }
 
     const fs::path lock_path = fs::current_path() / "d36_pipeline_e2e_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -5366,10 +5342,8 @@ Json run_d37_lock_refresh_validation() {
     }
 
     const fs::path lock_path = fs::current_path() / "d37_lock_refresh_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);
@@ -5460,10 +5434,8 @@ Json run_d38_overnight_certificate_validation() {
     }
 
     const fs::path lock_path = fs::current_path() / "d38_overnight_certificate_smoke.json";
-    if (!fs::exists(lock_path)) {
-        fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
-                      fs::copy_options::overwrite_existing);
-    }
+    fs::copy_file(cypha::bench::bench_root() / "BASELINE_LOCK.json", lock_path,
+                  fs::copy_options::overwrite_existing);
 
     const Json lock = load_json_file(lock_path);
     validate_baseline_lock_schema(lock);

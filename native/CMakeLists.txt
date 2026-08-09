@@ -1453,6 +1453,10 @@ add_test(
 )
 set_tests_properties(native_d17_wikitext_overnight_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1;CYPHA_BENCH_OVERNIGHT=1;CYPHA_BENCH_FAST=1"
+  PASS_REGULAR_EXPRESSION
+    "\"hybrid_production_recipe\": true"
+    "\"lstm_optim\": \"adam\""
+    "\"lstm_bptt_steps\": 8"
 )
 
 add_test(
