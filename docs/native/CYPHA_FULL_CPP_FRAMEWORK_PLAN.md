@@ -2,7 +2,7 @@
 
 **Goal:** **P7 complete** — all production runtime, bench, REST, and validation runs in native C++ only.
 
-**Status:** **v2.5 complete — SHIPPED** ([`v2.3.25` release](https://github.com/odin-loki/Cypha/releases/tag/v2.3.25) — One Cypha cutover; Linux + Windows MSVC installers, AppImage, arxiv bundle; **CI fully green** — two blocking jobs: **`build_and_test`**, **`windows_msvc`**).
+**Status:** **v2.5 complete — SHIPPED** ([`v2.4.0` release](https://github.com/odin-loki/Cypha/releases/tag/v2.4.0) — Hybrid 2.664 BPC lock + forecasting; Linux + Windows MSVC installers, AppImage, arxiv bundle; **CI fully green** — two blocking jobs: **`build_and_test`**, **`windows_msvc`**).
 
 Normative contracts: [`PORT_CONTRACT.md`](../port/PORT_CONTRACT.md).  
 Quick start: [`NATIVE_QUICKSTART.md`](NATIVE_QUICKSTART.md).  
@@ -17,7 +17,7 @@ scripts/cypha_native_validate_all.ps1  → OK
   214 CTests | fig01-fig09 PNG | /retrieve | tune dry-run
 ```
 
-GitHub Actions **CI**: Linux **`build_and_test`** + **`windows_msvc`** (MSVC Release). MinGW is optional local only — not a CI/release gate. CUDA jobs removed — validate locally. Release **v2.3.25** installers published.
+GitHub Actions **CI**: Linux **`build_and_test`** + **`windows_msvc`** (MSVC Release). MinGW is optional local only — not a CI/release gate. CUDA jobs removed — validate locally. Release **v2.4.0** installers published.
 
 Build: `C:\Temp\cypha_full_cpp_build`
 
@@ -38,7 +38,8 @@ Build: `C:\Temp\cypha_full_cpp_build`
 
 ## Shipped (git)
 
-| **`v2.3.25`** tag | **Latest release** — One Cypha cutover; two CI jobs blocking (`build_and_test`, `windows_msvc`); CUDA local-only |
+| **`v2.4.0`** tag | **Latest release** — Hybrid 2.664 BPC + forecasting; two CI jobs blocking (`build_and_test`, `windows_msvc`); CUDA local-only |
+| **`v2.3.25`** tag | Prior — One Cypha cutover |
 | **`v2.3.24`** tag | Prior release — same CI layout |
 | **`v2.2.8`** tag | Prior release — same CI layout |
 | **`v2.2.7`** tag | MSVC CUDA CI green |
@@ -82,5 +83,5 @@ Phases 0–14 complete including Qt Studio parity (Settings, Confusion Matrix), 
 ```powershell
 powershell -File scripts\cypha_native_validate_all.ps1
 powershell -File scripts\cypha_bench_full_baseline.ps1
-git push origin main --tags   # publish release (see v2.3.25 on GitHub Releases)
+git push origin main --tags   # publish release (see v2.4.0 on GitHub Releases)
 ```

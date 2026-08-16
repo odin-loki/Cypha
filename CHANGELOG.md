@@ -8,6 +8,8 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-08-16 · Competition lock + forecasting
+
 ### Added
 - **Competition housekeeping:** root [`LICENSE`](LICENSE) (CC BY 4.0) and [`MODEL_CARD.md`](MODEL_CARD.md); living docs aligned to 2.664 BPC / 36 cell-sweep variants. Closed BoW / optimality / forecasting design moved under `docs/archive/`; root BoW is open items only. Forecast/codec sources rewritten UTF-8 (OneDrive UTF-16 broke GCC/Linux CI); `.gitattributes` pins `working-tree-encoding=UTF-8`. Historical XOR/D17 traces moved from `artifacts/profiles/` to [`data/archive/`](data/README.md); repo-root `d*_smoke.json` leaks removed. **GPU training closed** (CPU is faster); future CPU SIMD via xsimd in [`docs/FUTURE.md`](docs/FUTURE.md) §1b.
 - **Cell-sweep resume / checkpoints:** `cypha_cell_hypothesis_sweep --resume` plus `scripts/resume_cell_sweep.ps1`, `scripts/wait_cell_sweep_and_lock.ps1`, `scripts/run_cell_sweep_parallel.ps1`. **36** runnable variants (B0–B2, H01–H23, U01–U10). Lock `cell_sweep_results.status=historical` (July, 25 variants, H19 @ 2.921); living spine is Hybrid **2.664**, not the cell-sweep winner.
@@ -591,7 +593,8 @@ First committed state of the project. All six native port milestones signed off:
 
 ---
 
-[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.3.25...HEAD
+[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/odin-loki/Cypha/compare/v2.3.25...v2.4.0
 [2.3.25]: https://github.com/odin-loki/Cypha/compare/v2.3.24...v2.3.25
 [2.3.24]: https://github.com/odin-loki/Cypha/compare/v2.2.8...v2.3.24
 [2.2.8]: https://github.com/odin-loki/Cypha/compare/v2.2.7...v2.2.8

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(cypha_native VERSION 2.3.25 LANGUAGES CXX C)
+project(cypha_native VERSION 2.4.0 LANGUAGES CXX C)
 
 # Enable /MP (parallel single-target compilation within MSVC's cl.exe) so multi-TU targets
 # make use of all available cores; no-op for other compilers. Scope to CXX only — passing /MP

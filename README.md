@@ -1,6 +1,6 @@
 # Cypha — classify, regress, sample latents, generate tokens
 
-[![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows — latest **[v2.3.25](https://github.com/odin-loki/Cypha/releases/tag/v2.3.25)**)
+[![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows — latest **[v2.4.0](https://github.com/odin-loki/Cypha/releases/tag/v2.4.0)**)
 
 > **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + next-token / text generate. Built from first principles (AIXI/MDL, information geometry, free-energy world prior `θ₀ ⊕ Δk`, Information Bottleneck encoder). Native C++ sole runtime — REST, Qt Studio, optional CUDA — validated by CTests. Living sequence: **Hybrid GRIA+LSTM L2+Wave2 BPTT** (**2.664 BPC** @ 300k lock). Event forecasting Phases 1–9 shipped — see [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
 
@@ -69,7 +69,7 @@ cypha_bench_run --list-domains
 cypha_bench_run --from-domain 1
 ```
 
-Prebuilt bundles (**v2.3.25**): [Windows MSVC zip](https://github.com/odin-loki/Cypha/releases/download/v2.3.25/cypha-2.3.25-windows-x86_64.zip) · [Linux tar.gz](https://github.com/odin-loki/Cypha/releases/download/v2.3.25/cypha-2.3.25-linux-x86_64.tar.gz) · [AppImage](https://github.com/odin-loki/Cypha/releases/download/v2.3.25/cypha-2.3.25-linux-x86_64.AppImage) · [arXiv paper bundle](https://github.com/odin-loki/Cypha/releases/download/v2.3.25/cypha-2.3.25-arxiv-bundle.zip). Install via `packaging/install_release_windows.ps1` or `packaging/install_release_linux.sh`.
+Prebuilt bundles (**v2.4.0**): [Windows MSVC zip](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-windows-x86_64.zip) · [Linux tar.gz](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-linux-x86_64.tar.gz) · [AppImage](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-linux-x86_64.AppImage) · [arXiv paper bundle](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-arxiv-bundle.zip). Install via `packaging/install_release_windows.ps1` or `packaging/install_release_linux.sh`.
 
 ---
 
@@ -227,7 +227,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - **Nonlinear decision boundaries:** Linear LLR caps XOR near chance; **latent RFF** closes most of the sklearn gap (~76.3% vs ~79%). See [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
 - **Optional CUDA.** Infer-only local flag (`-DCYPHA_ENABLE_CUDA=ON`); no CUDA CI. Training stays on CPU — GPU training is slower here, so it is not a gap. Future CPU speed path is portable SIMD via xsimd — [`docs/FUTURE.md`](docs/FUTURE.md) §1b, [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md).
-- **Status / next.** Release **v2.3.25** — One Cypha cutover (`cypha::Cypha` owns classify, regress, latent sample, sequence). D10A **90.11%**; D17 hybrid **2.664 BPC** production lock; event-forecasting framework shipped. Paper bundle ready; remaining human step: arXiv upload. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/FUTURE.md`](docs/FUTURE.md), [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
+- **Status / next.** Release **v2.4.0** — Hybrid L2 + Wave2 BPTT **2.664 BPC** production lock; forecasting Phases 1–9; latent-RFF XOR default; Linux + Windows CI green. Paper bundle ships on the release; remaining human step: arXiv upload. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/FUTURE.md`](docs/FUTURE.md), [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
 
 ---
 

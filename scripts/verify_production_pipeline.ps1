@@ -17,7 +17,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
 $BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
-$DEFAULT_TAG = "v2.3.25"
+$DEFAULT_TAG = "v2.4.0"
 $PRODUCTION_N_TRAIN_MIN = 300000
 
 $validateCompleteScript = Join-Path $PSScriptRoot "validate_production_complete.ps1"

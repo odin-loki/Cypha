@@ -80,7 +80,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `poll_and_finalize_overnight.ps1` | Phase 17/19/20/21/24: poll until overnight processes exit, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1` (DryRun preview by default; `-Force` to git commit; **`-AutoCommit`** runs `-Force` when lock `n_train >= 300000` after finalize, logs **AUTO_COMMIT** to `-LogFile`); `-Once` exits 1 if still running; optional `-LogFile` append with per-cycle **HEARTBEAT**; **auto-detects `-BuildDir`** from running `run_production_overnight.ps1` when default `native/build`; poll query errors are logged and retried | console |
 | `migrate_inflight_overnight_artifacts.ps1` | Phase 23: merge in-flight `build_p13` overnight spill from repo-root `results/` into `bench/results/cell_sweep/`; never touches `bench/BASELINE_LOCK.json`; `-DryRun` preview (default), `-Force` copy | disk |
 | `cleanup_repo_smoke_artifacts.ps1` | Phase 20 (shipped): remove repo-root `d##_smoke.json` / `d##_*_smoke.json` CTest spill files (not under `native/build*`); never touches `bench/BASELINE_LOCK.json`; `-DryRun` lists, `-Force` removes | disk |
-| `verify_production_pipeline.ps1` | Phase 21 (shipped): unified maintainer smoke - production complete + release publish + repo smoke cleanup preview + optional d35 (`-AllowPending` when lock below 300k); default tag `v2.3.25` or `git describe` | console |
+| `verify_production_pipeline.ps1` | Phase 21 (shipped): unified maintainer smoke - production complete + release publish + repo smoke cleanup preview + optional d35 (`-AllowPending` when lock below 300k); default tag `v2.4.0` or `git describe` | console |
 | `run_post_overnight.ps1` | Phase 22 (shipped): post-overnight wrapper - `poll_and_finalize_overnight.ps1 -Once` pre-check then `-Force`, `migrate_inflight_overnight_artifacts.ps1 -DryRun` preview, then `verify_production_pipeline.ps1`; `-SkipPoll`, `-SkipMigrate`, `-AllowPending`; documents `gh auth login` after success | console |
 | `start_poll_finalize_background.ps1` | Phase 18/19/21/24: start `poll_and_finalize_overnight.ps1` in background (`-BuildDir`, `-LogFile` default `bench/results/poll_finalize.log`, optional **`-AutoCommit`** passthrough) after manual production overnight start; kills existing `poll_and_finalize_overnight.ps1` PIDs before spawn (dedupe); **same BuildDir auto-detect** when default | console |
 | `update_baseline_lock.ps1` | Wrapper for `cypha_baseline_lock` (`-Run d17\|d21\|cell-sweep\|all`; `-Fast` sets `CYPHA_BENCH_FAST=1`; `-Medium` → `--medium`; `-Production` → `--production`) | lock JSON |
@@ -271,7 +271,7 @@ Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#va
 
 | Script / binary | Purpose | CTest |
 |-----------------|---------|-------|
-| **`verify_release_publish.ps1`** | Maintainer smoke gate - chains **`validate_production_complete.ps1`** (auto **`-AllowPending`** when lock `n_train < 300000`), **`cypha_bench_run --domain-tag d33`** when exe + profile exist, **`publish_release.ps1 -DryRun`** for latest tag (`v2.3.25` default or `git describe --tags --abbrev=0`); does **not** call `gh` - run **`gh auth login`** manually before real publish | manual |
+| **`verify_release_publish.ps1`** | Maintainer smoke gate - chains **`validate_production_complete.ps1`** (auto **`-AllowPending`** when lock `n_train < 300000`), **`cypha_bench_run --domain-tag d33`** when exe + profile exist, **`publish_release.ps1 -DryRun`** for latest tag (`v2.4.0` default or `git describe --tags --abbrev=0`); does **not** call `gh` - run **`gh auth login`** manually before real publish | manual |
 | **`poll_and_finalize_overnight.ps1`** | When **`-BuildDir`** is default **`native/build`** and overnight processes are running, auto-detects BuildDir from **`run_production_overnight.ps1`** command line (e.g. **`native/build_p13`**) | manual |
 | **`start_poll_finalize_background.ps1`** | Same BuildDir auto-detect when default before spawning background poll; **kills existing `poll_and_finalize_overnight.ps1` PIDs** before starting a new background poll (dedupe) | manual |
 | **`cypha_bench_run --domain-tag d33`** | Release publish validation; profile `bench/config/d33_release_publish_profile.json` | `native_d33_release_publish_smoke` |
@@ -282,7 +282,7 @@ Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#va
 pwsh -File scripts\verify_release_publish.ps1
 
 # Explicit build dir + tag
-pwsh -File scripts\verify_release_publish.ps1 -BuildDir native\build -Tag v2.3.25
+pwsh -File scripts\verify_release_publish.ps1 -BuildDir native\build -Tag v2.4.0
 
 # Force -AllowPending even when lock is at 300k
 pwsh -File scripts\verify_release_publish.ps1 -AllowPending
@@ -290,7 +290,7 @@ pwsh -File scripts\verify_release_publish.ps1 -AllowPending
 # After smoke passes — authenticate and publish manually
 gh auth login
 gh auth status
-pwsh -File scripts\publish_release.ps1 -Tag v2.3.25
+pwsh -File scripts\publish_release.ps1 -Tag v2.4.0
 
 # Poll with auto-detected BuildDir (when overnight uses native/build_p13)
 pwsh -File scripts\poll_and_finalize_overnight.ps1
@@ -365,7 +365,7 @@ Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#va
 | **`run_post_overnight.ps1`** | Maintainer post-overnight wrapper - **`poll_and_finalize_overnight.ps1 -Once`** pre-check (exit 1 if processes still running), then **`-Force`** finalize+commit; then **`verify_production_pipeline.ps1`**; **`-SkipPoll`** when finalize/commit already done; **`-AllowPending`** for smoke verify; documents **`gh auth login`** after success | manual |
 | **`cypha_bench_run --domain-tag d36`** | Production pipeline E2E validation; profile `bench/config/d36_pipeline_e2e_profile.json` | `native_d36_pipeline_e2e_smoke` |
 | **`watch_production_overnight.ps1`** | Cell sweep progress shows **`effective_n_train`** in progress line - when overnight is running and **`manifest.json`** **`n_train < 300000`**, reads **`n_train`** from latest **`variant_*.json`** (manifest may lag during production sweep) | manual |
-| **`verify_production_pipeline.ps1`** | Default release tag **`v2.3.25`** (or **`git describe --tags --abbrev=0`** when available) | manual |
+| **`verify_production_pipeline.ps1`** | Default release tag **`v2.4.0`** (or **`git describe --tags --abbrev=0`** when available) | manual |
 | **`CYPHA_VALIDATE_PIPELINE_E2E=1`** | Optional extended validation on `cypha_native_validate_all.ps1` - runs d36 after lock commit pipeline step | manual |
 
 ```powershell

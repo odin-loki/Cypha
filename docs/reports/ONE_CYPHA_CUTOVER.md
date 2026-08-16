@@ -90,6 +90,6 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 
 ## Release
 
-**v2.3.25** (2026-07-18) -- One Cypha cutover shipped at commit `5efc585`; CI release assets live. See [`../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md`](../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md). Next intended tag is **v2.4.0** after Linux CI is green.
+**v2.4.0** (2026-08-16) -- competition lock: Hybrid L2 + Wave2 BPTT **2.664 BPC**, forecasting Phases 1–9, Linux + Windows CI green. See [`RELEASE_V2_4_0_2026-08-16.md`](RELEASE_V2_4_0_2026-08-16.md). Prior **v2.3.25** (2026-07-18) was the One Cypha cutover at `5efc585` — [`../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md`](../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md).
 
 Historical recipe traces: [`data/archive/profiles/`](../../data/archive/profiles/).

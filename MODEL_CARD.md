@@ -9,8 +9,8 @@ cite 2.873 BPC are **historical** (L1 pin).
 | Field | Value |
 |-------|-------|
 | Name | Cypha (`cypha::Cypha`) |
-| Version (latest GitHub release) | v2.3.25 (2026-07-18) |
-| Intended next release | v2.4.0 (unreleased on `main`) |
+| Version (latest GitHub release) | v2.4.0 (2026-08-16) |
+| Prior release | v2.3.25 (2026-07-18, One Cypha cutover) |
 | License | [CC BY 4.0](LICENSE) |
 | Runtime | Native C++ only (`cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`) |
 | Paper | `paper/arxiv_bundle/CyphaLM_paper.pdf` |
@@ -30,7 +30,7 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Corpus | WikiText-2 official train/valid |
 | Budget | 300k train tokens, 2k eval, seed 42 |
 | **BPC** | **2.664** (`overnight_results` 2.664300395908913, run 2026-08-08) |
-| Prior pins | L1 2.873 뿯½ SGD L2 2.816 (historical only; traces in `data/archive/profiles/`) |
+| Prior pins | L1 2.873 / SGD L2 2.816 (historical only; traces in `data/archive/profiles/`) |
 
 ## Other locked / attested numbers
 

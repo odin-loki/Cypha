@@ -23,9 +23,9 @@
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -Draft
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -DryRun          # notes to stdout + temp file; no gh
 #   pwsh -File scripts/publish_release.ps1 -Tag v2.3.14 -NotesOnly       # alias for -DryRun
-#   pwsh -File scripts/publish_release.ps1 -Tag v2.3.25 -NotesPath release_notes.md  # offline gh
+#   pwsh -File scripts/publish_release.ps1 -Tag v2.4.0 -NotesPath release_notes.md  # offline gh
 param(
-  [string]$Tag = "v2.3.25",
+  [string]$Tag = "v2.4.0",
   [string]$NotesPath = "",
   [switch]$Draft,
   [Alias("NotesOnly")]

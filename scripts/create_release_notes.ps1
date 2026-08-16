@@ -14,7 +14,7 @@ $highlights = @{
     "Event forecasting Phases 1–9: GDELT monitor, VIEWS leaderboard, REST ``POST /forecast/run``, ``scripts/fetch_forecast_data.ps1``",
     "Predictive arithmetic coding + REST ``/sequence/compress`` / ``/sequence/decompress``; Orthogonal RFF (ORF/SORF)",
     "XOR default path: latent RFF kernel LLR (~76% vs sklearn ~79%); cell-sweep resume/checkpoints (36 variants) + parallel runner",
-    "CTest tally via ``scripts/cypha_native_validate_all.ps1``; Windows ``windows_msvc`` CI; LICENSE + MODEL_CARD for competition submit"
+    "Linux + Windows CI green (UTF-8 sources, XOR smoke gate); LICENSE + MODEL_CARD for competition submit"
   )
   "2.3.25" = @(
     "One Cypha cutover: single public type cypha::Cypha (classify + regress + latent sample + sequence)",
