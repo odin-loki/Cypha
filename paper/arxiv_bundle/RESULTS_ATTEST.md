@@ -9,5 +9,7 @@ Companion to the paper draft. Living production pin is `bench/BASELINE_LOCK.json
 | D10A ECG5000 accuracy | **90.11%** (legacy 85.96% via `CYPHA_D10_ECG_ENRICH=0`) | `docs/archive/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md` |
 | Cell H15 @ 300k (post axiom fix) | **5.262** BPC, κ≈0.872 — **not a promote** | `docs/archive/reports/H15_300K_RERUN_2026-07-18.md` |
 | Best historical cell-sweep hypothesis | H19 **2.921** (status=`historical`; living spine is Hybrid 2.664) | `docs/archive/reports/CELL_SWEEP_SUMMARY_2026-07-18.md` |
+| B2 / H06 @ 300k (2026-08-16 rerun) | Both **3.681 BPC** (math-integration) — **not a promote** | `data/archive/cell_sweep/variant_B2.json`, `variant_H06.json` |
+| Best new unified-context row | U03 **2.822** (not a promote vs Hybrid 2.664) | live `bench/results/cell_sweep/variant_U03.json` |
 
 Honest product caveats (also in paper): shared-model continual learning open; zero forgetting = per-task isolation (D16F); GRIA blend LSTM-dominated (~99.6%).

@@ -1,208 +1,25 @@
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta charset="utf-8" />
-  <meta name="generator" content="pandoc 3.10" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>CyphaLM</title>
-  <style>
-    /* Default styles provided by pandoc.
-    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
-    */
-    html {
-      color: #1a1a1a;
-      background-color: #fdfdfd;
-    }
-    body {
-      margin: 0 auto;
-      max-width: 36em;
-      padding-left: 50px;
-      padding-right: 50px;
-      padding-top: 50px;
-      padding-bottom: 50px;
-      hyphens: auto;
-      overflow-wrap: break-word;
-      text-rendering: optimizeLegibility;
-      font-kerning: normal;
-    }
-    @media (max-width: 600px) {
-      body {
-        font-size: 0.9em;
-        padding: 12px;
-      }
-      h1 {
-        font-size: 1.8em;
-      }
-    }
-    @media print {
-      html {
-        background-color: white;
-      }
-      body {
-        background-color: transparent;
-        color: black;
-        font-size: 12pt;
-      }
-      p, h2, h3 {
-        orphans: 3;
-        widows: 3;
-      }
-      h2, h3, h4 {
-        page-break-after: avoid;
-      }
-    }
-    p {
-      margin: 1em 0;
-    }
-    a {
-      color: #1a1a1a;
-    }
-    a:visited {
-      color: #1a1a1a;
-    }
-    img {
-      max-width: 100%;
-    }
-    svg {
-      height: auto;
-      max-width: 100%;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      margin-top: 1.4em;
-    }
-    h5, h6 {
-      font-size: 1em;
-      font-style: italic;
-    }
-    h6 {
-      font-weight: normal;
-    }
-    ol, ul {
-      padding-left: 1.7em;
-      margin-top: 1em;
-    }
-    li > ol, li > ul {
-      margin-top: 0;
-    }
-    blockquote {
-      margin: 1em 0 1em 1.7em;
-      padding-left: 1em;
-      border-left: 2px solid #e6e6e6;
-      color: #606060;
-    }
-    code {
-      white-space: pre-wrap;
-      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
-      font-size: 85%;
-      margin: 0;
-      hyphens: manual;
-    }
-    pre {
-      margin: 1em 0;
-      overflow: auto;
-    }
-    pre code {
-      padding: 0;
-      overflow: visible;
-      overflow-wrap: normal;
-    }
-    .sourceCode {
-     background-color: transparent;
-     overflow: visible;
-    }
-    hr {
-      border: none;
-      border-top: 1px solid #1a1a1a;
-      height: 1px;
-      margin: 1em 0;
-    }
-    table {
-      margin: 1em 0;
-      border-collapse: collapse;
-      width: 100%;
-      overflow-x: auto;
-      display: block;
-      font-variant-numeric: lining-nums tabular-nums;
-    }
-    table caption {
-      margin-bottom: 0.75em;
-    }
-    tbody {
-      margin-top: 0.5em;
-      border-top: 1px solid #1a1a1a;
-      border-bottom: 1px solid #1a1a1a;
-    }
-    th {
-      border-top: 1px solid #1a1a1a;
-      padding: 0.25em 0.5em 0.25em 0.5em;
-    }
-    td {
-      padding: 0.125em 0.5em 0.25em 0.5em;
-    }
-    header {
-      margin-bottom: 4em;
-      text-align: center;
-    }
-    #TOC li {
-      list-style: none;
-    }
-    #TOC ul {
-      padding-left: 1.3em;
-    }
-    #TOC > ul {
-      padding-left: 0;
-    }
-    #TOC a:not(:hover) {
-      text-decoration: none;
-    }
-    span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: 1.5em;}
-    div.column{flex: auto;}
-    @media screen {
-    div.columns{gap: min(4vw, 1.5em);}
-    div.column{overflow-x: auto;}
-    }
-    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
-    /* The extra [class] is a hack that increases specificity enough to
-       override a similar rule in reveal.js */
-    ul.task-list[class]{list-style: none;}
-    ul.task-list li input[type="checkbox"] {
-      font-size: inherit;
-      width: 0.8em;
-      margin: 0 0.8em 0.2em -1.6em;
-      vertical-align: middle;
-    }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
-  </style>
-</head>
-<body>
-<header id="title-block-header">
-<h1 class="title">CyphaLM</h1>
-</header>
 <h1
 id="cyphalm-explicit-compression-uncertainty-and-self-organisation-for-online-language-modelling">CyphaLM:
 Explicit Compression, Uncertainty, and Self-Organisation for Online
 Language Modelling</h1>
 <p><strong>Author:</strong> Odin Loch <strong>Status:</strong> Draft —
-rewritten 2026-07-12; <strong>narrative reconciled 2026-07-17</strong>
-against canonical D17 hybrid 300k BPC pin <strong>2.873</strong>
-(<code>b0d39e7</code>, <a
-href="../docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md"><code>docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md</code></a>).
-Describes the current <strong>native C++</strong> CyphaLM (hybrid
-GRIA+LSTM, trained by real backpropagation). The Python prototype this
-paper originally described (<code>cypha_lm/</code>) was fully
-decommissioned in Phase P7 (see <code>CHANGELOG.md</code>, “[Unreleased]
-&gt; Removed”: <em>“Python runtime decommissioned (P7): …
-<code>cypha_lm/</code> … removed from the product path. Native C++ … is
-the sole runtime.”</em>). Metrics below are sourced from
-<code>bench/BASELINE_LOCK.json</code>,
-<code>bench/BASELINE_REPORT.md</code>, and
+rewritten 2026-07-12; <strong>living pin reconciled 2026-08-16</strong>
+against D17 hybrid L2 + Wave2 BPTT <strong>2.664 BPC</strong> @ 300k
+(<code>bench/BASELINE_LOCK.json</code>, run 2026-08-08). Prior L1 pin
+<strong>2.873</strong> (<code>b0d39e7</code>, <a
+href="../docs/archive/reports/BASELINE_PIN_CANONICAL_2026-07-17.md"><code>docs/archive/reports/BASELINE_PIN_CANONICAL_2026-07-17.md</code></a>)
+is historical only. Describes the current <strong>native C++</strong>
+CyphaLM (hybrid GRIA+LSTM, trained by real backpropagation). The Python
+prototype this paper originally described (<code>cypha_lm/</code>) was
+fully decommissioned in Phase P7 (see <code>CHANGELOG.md</code>).
+Metrics below are sourced from <code>bench/BASELINE_LOCK.json</code>,
+<code>MODEL_CARD.md</code>, <code>bench/BASELINE_REPORT.md</code>, and
 <code>docs/RESEARCH_STATUS.md</code>; every figure/table is annotated
 with its source, and any claim that could not be re-verified against the
 native implementation is explicitly flagged rather than carried over
 from the old draft. <strong>Canonical rule:</strong> cite
-<strong>2.873</strong> for the locked baseline, production gate, and
-RPSM stop/go target; other 300k hybrid figures (2.892, 2.864, etc.) are
+<strong>2.664</strong> for the locked baseline, production gate, and
+RPSM stop/go target; L1 2.873 / SGD L2 2.816 / overnight 2.864 are
 historical run artifacts only.</p>
 <hr />
 <h2 id="abstract">Abstract</h2>
@@ -227,15 +44,15 @@ NumPy scheme. GRIA’s output is blended, at the logit level via a learned
 sigmoid weight, with a parallel trainable character-level LSTM head; the
 model is referred to internally as <strong>“hybrid GRIA+LSTM.”</strong>
 On the D17 benchmark (WikiText-2, official train/valid split, 300k
-training characters), this hybrid model achieves <strong>2.873
-bits-per-character (BPC)</strong> held out, beating a bigram baseline
-(<strong>3.478</strong>, Δ −0.61) and a trigram baseline
-(<strong>4.398</strong>, Δ −1.53); a plain (non-hybrid) char-LSTM
-baseline trained under the same harness reaches 2.979 BPC, i.e. the
-hybrid’s advantage over n-gram baselines is real but the model’s own
-learned blend weight assigns roughly <strong>99.6% of the logit mix to
-the LSTM branch</strong>, so at the current operating point the
-GRIA/SSM/DIF pathway is contributing comparatively little of the
+training characters), this hybrid model achieves <strong>2.664
+bits-per-character (BPC)</strong> held out (L2 stacked LSTM + Wave2
+BPTT), beating a bigram baseline (<strong>3.478</strong>, Δ −0.81) and a
+trigram baseline (<strong>4.398</strong>, Δ −1.73); a plain (non-hybrid)
+char-LSTM baseline trained under the same harness reaches 2.979 BPC,
+i.e. the hybrid’s advantage over n-gram baselines is real but the
+model’s own learned blend weight assigns roughly <strong>99.6% of the
+logit mix to the LSTM branch</strong>, so at the current operating point
+the GRIA/SSM/DIF pathway is contributing comparatively little of the
 headline win. Online domain adaptation reduces held-out BPC by roughly
 <strong>0.25–0.29</strong> on out-of-distribution WikiText text.
 Single-threaded production training throughput is <strong>252.2
@@ -251,7 +68,8 @@ perplexity, transformer parameter-efficiency comparison) were specific
 to the now-removed Python prototype and could not be reproduced against
 the native implementation within this rewrite’s scope; they are reported
 below as historical, superseded values, not current results.</p>
-<p><strong>Key results (native, 2026-07-12):</strong></p>
+<p><strong>Key results (native, living pin 2026-08-08 / narrative
+2026-08-16):</strong></p>
 <table style="width:100%;">
 <colgroup>
 <col style="width: 34%" />
@@ -270,9 +88,17 @@ below as historical, superseded values, not current results.</p>
 <tbody>
 <tr>
 <td>D17 (WikiText-2, 300k train)</td>
-<td>Hybrid GRIA+LSTM held-out BPC (pinned)</td>
-<td><strong>2.873</strong></td>
-<td><code>bench/BASELINE_LOCK.json:d17_hybrid_baseline</code></td>
+<td>Hybrid GRIA+LSTM held-out BPC (living pin, L2 + Wave2 BPTT)</td>
+<td><strong>2.664</strong></td>
+<td><code>bench/BASELINE_LOCK.json:d17_hybrid_baseline</code> /
+<code>overnight_results</code></td>
+</tr>
+<tr>
+<td>D17 (WikiText-2, 300k train)</td>
+<td>Prior L1 hybrid pin (historical)</td>
+<td>2.873</td>
+<td>lock <code>prior_l1_pin_bpc</code>;
+<code>docs/archive/reports/BASELINE_PIN_CANONICAL_2026-07-17.md</code></td>
 </tr>
 <tr>
 <td>D17 (WikiText-2, 300k train)</td>
@@ -282,9 +108,9 @@ below as historical, superseded values, not current results.</p>
 </tr>
 <tr>
 <td>D17 (WikiText-2, 300k train)</td>
-<td>Overnight native run BPC (historical sweep, not lock)</td>
+<td>Pre-Wave2 overnight arm (historical)</td>
 <td>2.864</td>
-<td><code>bench/BASELINE_LOCK.json:overnight_results</code></td>
+<td>lock notes / <code>data/archive/profiles/</code></td>
 </tr>
 <tr>
 <td>D17 baselines @ 300k</td>
@@ -649,8 +475,8 @@ mode</strong> (<code>docs/RESEARCH_STATUS.md</code> “Language model (D04
 </tr>
 <tr>
 <td>300k</td>
-<td><code>hybrid_gria_lstm</code> (production)</td>
-<td><strong>2.873</strong></td>
+<td><code>hybrid_gria_lstm</code> (production, L2 + Wave2 BPTT)</td>
+<td><strong>2.664</strong></td>
 <td>3.478</td>
 <td>4.398</td>
 <td>2.979</td>
@@ -720,18 +546,17 @@ outcome below. Current native measurement
 <tr>
 <td>Shared model, block training on task B</td>
 <td><strong>0.813</strong></td>
-<td>❌ Substantial forgetting — <strong>not</strong>
-zero-forgetting</td>
+<td>Substantial forgetting — <strong>not</strong> zero-forgetting</td>
 </tr>
 <tr>
 <td>Per-task isolated model files (save/reload)</td>
 <td><strong>0.000</strong></td>
-<td>✅ Zero forgetting, but only by architectural isolation</td>
+<td>Zero forgetting, but only by architectural isolation</td>
 </tr>
 <tr>
 <td>Save/restore fidelity (single task)</td>
 <td>retention ratio 1.000</td>
-<td>✅ Lossless save/restore</td>
+<td>Lossless save/restore</td>
 </tr>
 </tbody>
 </table>
@@ -795,11 +620,13 @@ rather than a training-loop bug
 (<code>docs/RESEARCH_STATUS.md</code>).</li>
 <li>The <code>--math-integration</code> intelligence-profile-guided
 navigation loss measurably raises κ (0.826→0.870 at 5k steps) but at the
-cost of BPC in at least one uncommitted 300k run (2.873 pinned hybrid
-vs. 3.073 BPC / κ 0.860 with math-integration, per
-<code>docs/reports/DEV_PLAN_2026-07-11.md</code> — not yet merged into
-the baseline lock) — i.e. there is an observed κ/BPC trade-off at
-production scale, not a free improvement on both axes.</li>
+cost of BPC in at least one uncommitted 300k run (historical L1 pin
+<strong>2.873</strong> vs. 3.073 BPC / κ 0.860 with math-integration,
+per <code>docs/archive/reports/DEV_PLAN_2026-07-11.md</code>) —
+i.e. there is an observed κ/BPC trade-off at production scale, not a
+free improvement on both axes. The living production pin
+(<strong>2.664</strong>) is the L2 + Wave2 BPTT hybrid without promoting
+that math-integration arm.</li>
 </ul></li>
 </ul>
 <hr />
@@ -811,8 +638,8 @@ measurable, and now also <strong>gradient-trained</strong> quantities —
 a change from the original Python prototype’s gradient-free design, not
 merely a reimplementation of it. On its own headline task (D17,
 WikiText-2, 300k characters) it beats bigram and trigram baselines by a
-wide margin (2.873 vs. 3.478 / 4.398 BPC) and a dedicated char-LSTM
-baseline by a smaller one (2.873 vs. 2.979). The most important open
+wide margin (2.664 vs. 3.478 / 4.398 BPC) and a dedicated char-LSTM
+baseline by a smaller one (2.664 vs. 2.979). The most important open
 finding from this rewrite is that the model’s own learned blend weight
 currently blends GRIA out almost entirely (~99.6% LSTM) in favour of the
 LSTM branch — so the “explicit mechanisms” thesis this paper argues for
@@ -859,19 +686,16 @@ Translation of Rare Words with Subword Units. <em>ACL</em>.</li>
 </ol>
 <hr />
 <p><em>Rewritten 2026-07-12 against the native C++ runtime (post-P7);
-BPC narrative reconciled 2026-07-17 (<code>b0d39e7</code>, canonical pin
-<strong>2.873</strong>); bibliography + native figure PNGs closed
-2026-07-18. Primary sources: <code>bench/BASELINE_LOCK.json</code>,
-<code>bench/BASELINE_REPORT.md</code>,
+living BPC pin reconciled 2026-08-16 (<strong>2.664</strong>, L2 + Wave2
+BPTT); prior L1 <strong>2.873</strong> retained as historical. Primary
+sources: <code>bench/BASELINE_LOCK.json</code>,
+<code>MODEL_CARD.md</code>, <code>bench/BASELINE_REPORT.md</code>,
 <code>docs/RESEARCH_STATUS.md</code>,
-<code>docs/reports/BASELINE_PIN_CANONICAL_2026-07-17.md</code>,
+<code>docs/archive/reports/BASELINE_PIN_CANONICAL_2026-07-17.md</code>,
 <code>docs/reports/PERFORMANCE_PROFILE_2026-07-12.md</code>,
-<code>docs/reports/DEV_PLAN_2026-07-11.md</code>,
 <code>CHANGELOG.md</code>, and <code>native/src/cyphalm/</code> /
 <code>native/include/cypha/cyphalm/</code> source. Historical
 Python-prototype metrics remain under
 <code>paper/figures/exp*.json</code>; current native bar charts are
 <code>paper/figures/native_fig_*.json</code> / <code>.png</code>
 (render: <code>scripts/render_native_paper_figures.py</code>).</em></p>
-</body>
-</html>

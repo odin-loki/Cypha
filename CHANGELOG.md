@@ -8,6 +8,10 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Changed
+- **Paper camera-ready:** `paper/CyphaLM_paper.md` + arXiv bundle HTML/PDF regenerated to cite living Hybrid **2.664 BPC** (L1 2.873 historical).
+- **Cell-sweep B2 / H06:** 300k / eval 2k rerun after CTest clobber; both **3.681 BPC** (math-integration) — not a promote. Archived under `data/archive/cell_sweep/`.
+
 ## [2.4.0] — 2026-08-16 · Competition lock + forecasting
 
 ### Added

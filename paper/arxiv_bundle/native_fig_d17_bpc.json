@@ -13,5 +13,5 @@
     {"name": "GRIA-only stack", "bpc": 3.838},
     {"name": "RPSM d21 lock", "bpc": 7.3360806755698835}
   ],
-  "notes": "Living production pin is 2.664 (L2+Wave2 BPTT, data/archive/profiles/push2_L2_bptt_300k.txt). 2.873 / 2.864 are historical L1 / pre-Wave2 overnight arms. Paper PDF body may still cite 2.873."
+  "notes": "Living production pin is 2.664 (L2+Wave2 BPTT, data/archive/profiles/push2_L2_bptt_300k.txt). 2.873 / 2.864 are historical L1 / pre-Wave2 overnight arms."
 }

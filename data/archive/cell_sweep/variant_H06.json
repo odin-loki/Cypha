@@ -1,0 +1,38 @@
+{
+  "bench_mode": "hybrid",
+  "bpc": 3.6812679814158593,
+  "corpus": "wikitext2_official_split",
+  "id": "H06",
+  "kappa": 0.8745546932535118,
+  "math_integration": true,
+  "mean_alpha": 0.4865412371708906,
+  "n_eval": 2000,
+  "n_train": 300000,
+  "name": "NIG-state cell",
+  "notes": "NigStateCell Bayesian update on field path",
+  "profile_completeness": {
+    "all_complete": true,
+    "kappa": 0.8745546932535118,
+    "missing_stats": [],
+    "stat_observed": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    "update_counts": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ]
+  },
+  "synthetic": false,
+  "tier": 2
+}

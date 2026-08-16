@@ -18,8 +18,8 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 
 ## Open
 
-- [ ] **Cell sweep wrap-up** — parallel 300k run finished H14 / H23 / U01–U10. H15 restored from `data/archive/`. **B2 and H06** were overwritten by an 80-step smoke (likely CTest sharing `bench/results/cell_sweep/`) and need a 300k rerun. Best new row: U03 **2.822** (not a promote vs Hybrid 2.664).
-- [ ] **Paper PDF body** — `paper/arxiv_bundle/CyphaLM_paper.md` still cites 2.873; lock + `MODEL_CARD.md` + `RESULTS_ATTEST.md` are submission truth until the PDF is regenerated.
+- [x] **Cell sweep wrap-up** — B2 and H06 rerun 2026-08-16 @ 300k / eval 2k (isolated `bench/results/cell_sweep_rerun/`). Both **3.681 BPC** with math-integration (same as H14; not a promote vs Hybrid 2.664). Archived at `data/archive/cell_sweep/variant_B2.json` + `variant_H06.json`. Best new row remains U03 **2.822**.
+- [x] **Paper PDF body** — regenerated 2026-08-16; living pin **2.664** in `paper/CyphaLM_paper.md` + `paper/arxiv_bundle/` (HTML/PDF). L1 2.873 kept as historical.
 - [ ] **arXiv / venue upload** — human; bundle at `paper/arxiv_bundle/` (also attached on the v2.4.0 GitHub Release).
 
 ## Future (not blocking)

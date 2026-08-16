@@ -1,7 +1,7 @@
 ﻿# CyphaLM arXiv bundle (2026-08-16)
 
 ## Contents
-- `CyphaLM_paper.md` / `.html` / `.pdf` — camera-ready draft (PDF body may still cite 2.873; living pin is **2.664**)
+- `CyphaLM_paper.md` / `.html` / `.pdf` — camera-ready draft (living pin **2.664** BPC; L1 2.873 is historical)
 - `abstract.txt` — plain-text abstract for the arXiv form
 - `metadata.yaml` — title, author, suggested categories, license note
 - `RESULTS_ATTEST.md` — D10/H15/lock provenance snapshot (not in the PDF body)

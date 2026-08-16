@@ -18,6 +18,8 @@ Pinned traces that document a lock or a published experiment. Live runs do **not
 
 | File | Why it is here |
 |------|----------------|
+| `variant_B2.json` | B2 hybrid control rerun @ 300k / eval 2k (2026-08-16); **3.681 BPC**, math-integration on — not a promote vs Hybrid 2.664 |
+| `variant_H06.json` | H06 NIG-state rerun @ 300k / eval 2k (2026-08-16); **3.681 BPC**, same as B2 under this recipe — not a promote |
 | `variant_H15.json` | Preserved H15 @ 300k (not a promote; see paper `RESULTS_ATTEST.md`) |
 
 Live cell-sweep checkpoints: `bench/results/cell_sweep/variant_*.json` (gitignored).
