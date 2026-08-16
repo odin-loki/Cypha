@@ -28,7 +28,7 @@ Alternative to Option B in [RPSM_COMBINED_SPEC.md](RPSM_COMBINED_SPEC.md); may i
 | B1 | char-LSTM | ~2.979 |
 | B2 | hybrid_gria_lstm | **2.873** |
 
-Logging: `results/variant_NAME_run_N.json` → `summarise.py` → `results/summary.csv`.
+Logging: live runs write `bench/results/cell_sweep/variant_<id>.json` (gitignored). One preserved H15 row is in [`data/archive/cell_sweep/`](../../../data/archive/cell_sweep/). Do not write new dumps to repo-root `results/`.
 
 ---
 

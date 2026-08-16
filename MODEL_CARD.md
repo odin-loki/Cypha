@@ -30,7 +30,7 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Corpus | WikiText-2 official train/valid |
 | Budget | 300k train tokens, 2k eval, seed 42 |
 | **BPC** | **2.664** (`overnight_results` 2.664300395908913, run 2026-08-08) |
-| Prior pins | L1 2.873 · SGD L2 2.816 (historical only) |
+| Prior pins | L1 2.873 뿯½ SGD L2 2.816 (historical only; traces in `data/archive/profiles/`) |
 
 ## Other locked / attested numbers
 
@@ -62,3 +62,5 @@ powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
 CTest tally is whatever `ctest -N -R native_` / `scripts/cypha_native_validate_all.ps1` reports — do not hardcode a count in submissions.
+
+Historical recipe / XOR dumps: [`data/archive/`](data/README.md). Do not treat `artifacts/` or `bench/results/` as committed evidence.

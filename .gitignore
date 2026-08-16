@@ -91,14 +91,16 @@ native/build/
 *.exe
 
 # =====================================================
-# Bench data & generated reports
+# Bench data, local captures, generated reports
+# Historical committed traces live in data/archive/.
 # =====================================================
 
 bench/data/mnist/
 bench/data/wikitext2/
 !bench/data/wikitext2/README.md
 bench/artifacts/
-artifacts/profiles/
+artifacts/*
+!artifacts/README.md
 bench/report/baselines/
 bench/report/figures/
 bench/report/tables/

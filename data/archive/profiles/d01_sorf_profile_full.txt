@@ -1,0 +1,12 @@
+
+============================================================
+Running d01: cypha_bench.domains.d01_statistical_baselines
+============================================================
+  Completed in 11.7644s
+
+Running cross-domain analyses...
+
+Done. Report: c:\Users\odinl\OneDrive\Desktop\Cypha\bench\BASELINE_REPORT.md
+Summary JSON: c:\Users\odinl\OneDrive\Desktop\Cypha\bench\report\summary.json
+Figures: c:\Users\odinl\OneDrive\Desktop\Cypha\bench\report\figures (20 files, JSON+PNG)
+Tables: c:\Users\odinl\OneDrive\Desktop\Cypha\bench\report\tables

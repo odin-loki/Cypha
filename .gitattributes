@@ -6,6 +6,8 @@
 *.c text working-tree-encoding=UTF-8
 *.cu text working-tree-encoding=UTF-8
 *.ps1 text working-tree-encoding=UTF-8
+*.md text working-tree-encoding=UTF-8
+*.json text working-tree-encoding=UTF-8
 
 # Shell entrypoints must stay LF so WSL/bash do not see CRLF in `set -o pipefail`.
 scripts/*.sh text eol=lf

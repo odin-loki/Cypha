@@ -1,0 +1,128 @@
+[
+    {
+        "domain":  "d01",
+        "exit":  0,
+        "seconds":  12.9,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d02",
+        "exit":  0,
+        "seconds":  0.51,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d03",
+        "exit":  0,
+        "seconds":  6.48,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d03_xor",
+        "exit":  1,
+        "seconds":  0.42,
+        "ok":  false,
+        "fail_snip":  "  FAILED: xor_kernel_bench not found beside cypha_bench_run: C:\\Users\\odinl\\AppData\\Local\\cypha_native_build\\xor_kernel_bench.exe | 1 failure(s): |   - d03_xor: xor_kernel_bench not found beside cypha_bench_run: C:\\Users\\odinl\\AppData\\Local\\cypha_native_build\\xor_kernel_bench.exe"
+    },
+    {
+        "domain":  "d04",
+        "exit":  0,
+        "seconds":  3.58,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d05",
+        "exit":  0,
+        "seconds":  0.66,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d06",
+        "exit":  0,
+        "seconds":  2.52,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d07",
+        "exit":  0,
+        "seconds":  0.74,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d08",
+        "exit":  0,
+        "seconds":  23.77,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d09",
+        "exit":  0,
+        "seconds":  1.11,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d10",
+        "exit":  0,
+        "seconds":  7.43,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d11",
+        "exit":  0,
+        "seconds":  1.41,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d12",
+        "exit":  0,
+        "seconds":  25.06,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d13",
+        "exit":  0,
+        "seconds":  2.21,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d14",
+        "exit":  0,
+        "seconds":  1.32,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d15",
+        "exit":  0,
+        "seconds":  1.28,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d16",
+        "exit":  0,
+        "seconds":  2.71,
+        "ok":  true,
+        "fail_snip":  ""
+    },
+    {
+        "domain":  "d17",
+        "exit":  0,
+        "seconds":  5.26,
+        "ok":  true,
+        "fail_snip":  ""
+    }
+]

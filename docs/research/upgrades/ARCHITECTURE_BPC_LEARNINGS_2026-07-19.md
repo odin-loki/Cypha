@@ -39,7 +39,7 @@ Goal: move WikiText-2 char BPC from ~2.88 toward <=2.0 via **architecture**, not
 - Not in D17 production pin / baseline lock.
 - Further light blend tweaks deferred (CPU busy; gated already failed). Next memory path should be a different architecture (e.g. bank keys + learned readout, or external prior), not residual scale tuning.
 
-Artifacts: `artifacts/profiles/push_L2_40k.txt`, `push_L2_attn_40k.txt`, `push2_L2_attn_gated_40k.txt`.
+Artifacts: `data/archive/profiles/push_L2_40k.txt`, `push_L2_attn_40k.txt`, `push2_L2_attn_gated_40k.txt`.
 
 ## Measured snapshot
 
@@ -69,7 +69,7 @@ Artifacts: `artifacts/profiles/push_L2_40k.txt`, `push_L2_attn_40k.txt`, `push2_
 | 80k/8k prior L1-ish h64 | 2.612 / 2.694 / 2.929 |
 | Cold pattern (smoke) | ~2.02 / 6.00 |
 
-Artifacts: `artifacts/profiles/push_*.txt`.
+Artifacts: `data/archive/profiles/push_*.txt`.
 
 ## Path remaining toward <=2.0
 

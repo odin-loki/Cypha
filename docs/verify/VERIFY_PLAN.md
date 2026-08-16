@@ -65,7 +65,8 @@ Use **`cmake --preset windows-msvc-release`** (see [`native/README.md`](../../na
 **`cypha_bench_run --from-domain 1`** — accuracy/latency vs sklearn baselines on standard datasets.
 
 - Section 9 (streaming intrusion) uses `/tmp/X_intrusion.npy` when present; otherwise a **fixed synthetic stream**.
-- Baseline capture: `cypha_bench_run --from-domain 1 2>&1 | tee artifacts/profiles/benchmark_baseline.txt`
+- Baseline capture (local): `cypha_bench_run --from-domain 1 2>&1 | tee artifacts/benchmark_baseline.txt`
+- Historical committed traces: [`data/archive/profiles/`](../../data/archive/profiles/)
 
 ### 3.3 Manual / integration
 
@@ -87,7 +88,7 @@ Porting hint: hot paths are **encode → score_matrix → softmax/GH gate**; nat
 ## 5. Debugging checklist
 
 - [x] **`ctest -R native_`** green — CI + local gate
-- [ ] Benchmark within expected bands vs `artifacts/profiles/benchmark_baseline.txt`
+- [ ] Benchmark within expected bands vs a local `artifacts/benchmark_baseline.txt` (or the committed July capture in `data/archive/profiles/`)
 - [x] Registry save/load identical inference on sample batch — native registry CTests
 - [x] Document limitations — [`VERIFICATION_STATUS.md`](VERIFICATION_STATUS.md)
 

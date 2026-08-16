@@ -21,7 +21,7 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 ## Sequence spine (living)
 
 - D17 hybrid GRIA+LSTM L2 + Wave2 BPTT BPC **2.664** (`bench/BASELINE_LOCK.json` production pin @ 300k) is the **living production default** for modeling and generating text (`apply_hybrid_production_recipe`: Adam, bptt=8, lr=0.001).
-- Prior stacked-L2 pin **2.816** and pre-BPTT **2.873** are archived in lock notes / `artifacts/profiles/`.
+- Prior stacked-L2 pin **2.816** and pre-BPTT **2.873** are archived in lock notes / `data/archive/profiles/`.
 - Predictive arithmetic coding (LLMZip-style) is integrated: next-token probs → range coder (`compress_tokens` / `decompress_tokens`, REST `/sequence/compress` + `/sequence/decompress`).
 - Unified-context smoke winner **U06** (PGM→Wy) remains an **opt-in** cell variant (`--mode pgm_logits` / `apply_cell_variant("U06")`), not the product default.
 
@@ -90,4 +90,6 @@ Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single publ
 
 ## Release
 
-**v2.3.25** (2026-07-18) -- One Cypha cutover shipped at commit `5efc585`; CI release assets live. See [`../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md`](../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md).
+**v2.3.25** (2026-07-18) -- One Cypha cutover shipped at commit `5efc585`; CI release assets live. See [`../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md`](../archive/reports/one_cypha/RELEASE_V2_3_25_2026-07-18.md). Next intended tag is **v2.4.0** after Linux CI is green.
+
+Historical recipe traces: [`data/archive/profiles/`](../../data/archive/profiles/).

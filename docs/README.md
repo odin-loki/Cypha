@@ -118,12 +118,18 @@ Dated investigation reports, CyphaLM studies, and mega-plans live under **[`docs
 
 ---
 
-## Generated output (repo layout)
+## Repo layout
 
 | Path | Purpose |
 |------|---------|
-| `artifacts/profiles/` | Timing / profiling JSON (e.g. XOR kernel LLR sweeps) |
-| `artifacts/bench/` | JSON timing reports |
-| `artifacts/tuning/` | Tuning grid output from `cypha_tune_run` |
+| `native/` | C++ runtime, CMake, CTests |
+| `fixtures/` | Parity goldens |
+| `bench/` | Living lock + config + corpora (`BASELINE_LOCK.json`, `config/`, `data/`) |
+| `data/archive/` | Historical XOR / D17 traces (committed) |
+| `artifacts/` | Local captures only (gitignored) |
+| `docs/` | Living hub + `archive/` for closed writeups |
+| `scripts/` | Validate, overnight, release |
+| `paper/` | arXiv bundle |
+| `packaging/` | Installers |
 
-See [scripts/README.md](../scripts/README.md) for the script index (fixture generators, packaging, validation).
+See [scripts/README.md](../scripts/README.md) and [`data/README.md`](../data/README.md).

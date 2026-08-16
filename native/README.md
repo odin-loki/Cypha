@@ -13,7 +13,8 @@ Monorepo C++ core for **One Cypha** -- public type **`cypha::Cypha`** (classify 
 | Path | Role |
 |------|------|
 | **`fixtures/`** | Committed parity goldens (`.cypha`, `sidecar.json`, etc.) for CTest and **`cypha_diagnostics_run`**. |
-| **`bench/`** | Native benchmark tree: **`config/`** (profiles + sweep JSON), **`data/`**, **`report/`** (tables, figures, **`BASELINE_REPORT.md`**), **`artifacts/`**. |
+| **`bench/`** | Living lock + config + corpora: **`BASELINE_LOCK.json`**, **`config/`**, **`data/`**, **`report/`**. Local tune dumps: **`bench/artifacts/`** (gitignored). |
+| **`data/archive/`** | Historical XOR / D17 traces (committed). New captures go to repo-root **`artifacts/`**. |
 | **`native/`** | This C++ tree (CMake source root). |
 
 **Repo root discovery:** `cypha::bench::find_repo_root()` walks upward from the current directory (or **`CYPHA_REPO_ROOT`** if set) until **`fixtures/`**, **`bench/`**, and **`native/`** all exist as directories; otherwise it falls back to the compile-time path derived from `native/src/bench/bench_paths.cpp`. Bench helpers (`bench_root()`, `config_dir()`, …) resolve under **`bench/`**.

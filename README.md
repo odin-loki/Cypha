@@ -73,30 +73,26 @@ Prebuilt bundles (**v2.3.25**): [Windows MSVC zip](https://github.com/odin-loki/
 
 ---
 
-## 📑 Source documents
+## Repository layout
 
-| File | Role |
-|---|---|
-| [`README.md`](README.md) | This file. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Release history — milestones, bug fixes, benchmark deltas. |
-| [`LICENSE`](LICENSE) | CC BY 4.0 (code, docs, paper bundle). |
-| [`MODEL_CARD.md`](MODEL_CARD.md) | Competition / submission card — living 2.664 BPC pin and limits. |
-| [`bessel_ratios.npz`](bessel_ratios.npz) | Historical Python-era Bessel LUT input (native runtime uses compiled `native/src/bessel_table_data.cpp`). |
-| [`native/README.md`](native/README.md) | Native C++ core build & test guide — CTest harness, parity test inventory, SQLite amalgamation, CUDA smoke test. |
-| [`docs/README.md`](docs/README.md) | Documentation hub — all sub-documents indexed by purpose. |
-| [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md) | One-page native install → validate → bench → tune → REST. |
-| [`docs/port/PORT_CONTRACT.md`](docs/port/PORT_CONTRACT.md) | The parity contract — `.cypha` v3, REST shapes, bench §6. |
-| [`docs/verify/VERIFICATION_STATUS.md`](docs/verify/VERIFICATION_STATUS.md) | Current CTest parity results across all fixtures. |
-| [`docs/reports/ONE_CYPHA_CUTOVER.md`](docs/reports/ONE_CYPHA_CUTOVER.md) | One Cypha cutover — `cypha::Cypha`, Hybrid L2+Wave2 BPTT living default (2.664 BPC lock). |
-| [`docs/archive/README.md`](docs/archive/README.md) | Archived reports / studies / plans (not product spine). |
-| [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](docs/archive/reports/DIAGNOSTIC_REPORT.md) | 2026-05-30 diagnostic (archived). |
-| [`docs/archive/failed_experiments/cypha_som/README.md`](docs/archive/failed_experiments/cypha_som/README.md) | SOM upgrade failed experiment (archived). |
-| [`native/`](native/) | C++ native core. CMake build. Milestones M1–M6 complete. |
-| [`fixtures/`](fixtures/) | Committed parity assets — input vectors and expected outputs for CTest validation. |
-| [`bench/`](bench/) | Native benchmark tree: config, data, report, artifacts. |
-| [`packaging/`](packaging/) | Release install scripts; bundles built via `scripts/package_release_*.sh`. |
+| Path | Role |
+|------|------|
+| [`native/`](native/) | C++ runtime, CMake, CTests |
+| [`fixtures/`](fixtures/) | Parity goldens |
+| [`bench/`](bench/) | Living lock (`BASELINE_LOCK.json`), profiles, corpora |
+| [`data/`](data/README.md) | Historical XOR / D17 traces (committed archive) |
+| [`docs/`](docs/README.md) | Living hub; closed writeups under `docs/archive/` |
+| [`scripts/`](scripts/README.md) | Validate, overnight, release |
+| [`paper/`](paper/arxiv_bundle/) | arXiv bundle |
+| [`packaging/`](packaging/README.md) | Installers |
+| [`LICENSE`](LICENSE) · [`MODEL_CARD.md`](MODEL_CARD.md) · [`CHANGELOG.md`](CHANGELOG.md) | License, competition card, history |
+| [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md) | Open items only |
 
-> **Note on file paths.** The repository's HRNA / NMP research paper is *not* inside `Cypha/`; it lives at [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md). Cypha is the engineering implementation; that paper is the theoretical home.
+Start: [`docs/native/NATIVE_QUICKSTART.md`](docs/native/NATIVE_QUICKSTART.md) · contract: [`docs/port/PORT_CONTRACT.md`](docs/port/PORT_CONTRACT.md) · pins: [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md).
+
+Local captures go in `artifacts/` (gitignored). Do not commit `d*_smoke.json` at repo root.
+
+> Theoretical HRNA / NMP paper (not this repo): [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md).
 
 ---
 

@@ -94,7 +94,14 @@ Update [`CHANGELOG.md`](CHANGELOG.md) when:
 
 ## Layout
 
-- `native/` — authoritative runtime (Cypha, REST, Qt shell, bench/tune/diagnostics).
-- `fixtures/` — committed goldens for CTest parity.
-- `docs/reports/` — permanent experiment records; committed, not regenerated.
-- `docs/RESEARCH_STATUS.md` — benchmark journal and research priorities.
+| Path | Role |
+|------|------|
+| `native/` | Authoritative runtime (Cypha, REST, Qt shell, bench/tune/diagnostics) |
+| `fixtures/` | Committed goldens for CTest parity |
+| `bench/` | Living lock (`BASELINE_LOCK.json`), profiles, corpora |
+| `data/archive/` | Historical XOR / D17 traces (committed) |
+| `artifacts/` | Local captures only (gitignored) |
+| `docs/` | Living hub; closed writeups under `docs/archive/` |
+| `docs/RESEARCH_STATUS.md` | Benchmark journal and research priorities |
+
+See the root [`README.md`](README.md) layout table and [`data/README.md`](data/README.md).

@@ -19,11 +19,11 @@ Diagonal Gaussian LLR with tied covariances is linear in h. No nonlinear transfo
 
 | # | Fix | Status | Notes |
 |---|-----|--------|-------|
-| **1** | **Nyström kernel LLR** | **Partially shipped** | Whitened landmarks, median-γ RBF; `use_kernel_llr` in score path |
-| 2 | RFF kernel LLR | Partial (RFF encoder exists) | Extend to LLR path; preferred for streaming LM |
-| 3 | Learned nonlinear encoder (2-layer MLP) | Planned | Diagnostic — if XOR closes, bottleneck is encoder only |
-| 4 | GRIA-α kernel | Planned | Theoretically coherent; build on Fix 1 Nyström |
-| 5 | Spectral mixture kernel | Long-term | σ_k ∝ 1/k harmonic structure |
+| **1** | **Nyström kernel LLR** | Shipped (xor_pair opt-in) | Whitened landmarks; `CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair` |
+| **2** | **RFF kernel LLR** | **Living default** | Latent features, `rff_dim=4096`, ~76% vs sklearn ~79% |
+| 3 | Learned nonlinear encoder (2-layer MLP) | Historical / not default | Diagnostic only |
+| 4 | GRIA-α kernel | Historical | Not promoted |
+| 5 | Spectral mixture kernel | Historical | Not promoted |
 
 ---
 
@@ -43,7 +43,7 @@ LLR in RKHS: `log p(φ(h) | N(μ_k^φ, diag v_k^φ))`
 
 **Hyperparameters (profile `bench/config/kernel_llr_profile.json`):** M=512, γ_scale=2.0, kernel_lr_scale=2.0, blend=1.0, feature mode `xor_pair`.
 
-**Remaining work:** Auto-select xor_pair for XOR-like tasks; wire kernel_x into batched `score_matrix_use_field`; optional GRIA-α kernel (Fix 4).
+**Remaining work (historical):** xor_pair stays opt-in on purpose (XOR-specific features). Living default is latent RFF. Sweep JSON: [`data/archive/profiles/xor_kernel_llr*.json`](../../../data/archive/profiles/).
 
 ---
 
@@ -53,7 +53,7 @@ Random Fourier Features approximate RBF without landmark eigendecomp. Faster ini
 
 **Update (2026-07-11):** RFF kernel LLR basis (with auto-gamma via median heuristic as the default) now also implemented directly in `KernelMemory` (`make_rff` / `auto_gamma_median_heuristic` in `native/src/kernel_memory.cpp`) and exposed via `xor_kernel_bench --kernel-basis rff`, as a drop-in alternative to the Nyström landmark sketch for the XOR kernel-LLR benchmark — `O(M·d)` per step instead of `O(M^3)`, which let landmark/feature count scale well past the Nyström M=256–384 practical ceiling. Best found: `rff_dim=4096`, latent features, auto-gamma → 76.3% accuracy, ~2.7pp gap to the sklearn RBF ceiling (vs ~18pp at the Nyström M=256 default). Full sweep and fixed-vs-auto-gamma comparison in [`RESEARCH_STATUS.md`](../../RESEARCH_STATUS.md) Priority 1.
 
-**Update (2026-07-17):** **Promoted as recommended exploratory default for generalizable `latent` mode** (not production `xor_pair`). Profile: `bench/config/latent_rff_auto_gamma.json`; closeout report [`RFF_LATENT_PROMOTE_2026-07-17.md`](../../archive/reports/RFF_LATENT_PROMOTE_2026-07-17.md). Shipped `d03_xor` / `kernel_llr_profile.json` defaults unchanged.
+**Update (2026-07-17, living):** latent RFF is the **production D03 default**. Profile: `bench/config/latent_rff_auto_gamma.json`; closeout [`RFF_LATENT_PROMOTE_2026-07-17.md`](../../archive/reports/RFF_LATENT_PROMOTE_2026-07-17.md). `kernel_llr_profile.json` remains the xor_pair recipe. Restore xor_pair with `CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair`.
 
 **Update (2026-07-11, continued) — D03 bench-domain wiring + Feynman generalization check:**
 
@@ -61,7 +61,7 @@ Random Fourier Features approximate RBF without landmark eigendecomp. Faster ini
 - **Before/after, in the real bench domain** (`cypha_bench_run --domain-tag d03_xor`, `CYPHA_BENCH_FAST=1`, table written to `bench/report/tables/d03_xor_kernel.json`):
   - **Default (unchanged) path** — `xor_pair` features + Nyström M=512: linear **51.4%** → kernel **98.3%** (`+46.9pp`), byte-identical JSON shape to pre-existing behavior. `xor_pair` is XOR-specific hand-engineered features (`[x0,x1,x0·x1,x0²,x1²]`), so it already exceeds the sklearn RBF ceiling regardless of kernel basis — this path is not where the RFF gap-closing story applies.
   - **Latent (generalizable) mode, opt-in** — same real bench domain, `CYPHA_D03_KERNEL_FEATURE_MODE=latent`: Nyström M=512 → **54.7%** (FAST, 1 seed × 2 passes; full 3×8 run not completed — see practical-ceiling note in Priority 1 above, same `O(M^3)`-per-step cost applies here since it's basis-dependent, not feature-dependent). `CYPHA_D03_KERNEL_BASIS=rff CYPHA_D03_RFF_DIM=4096`, full 3 seeds × 8 passes (no `CYPHA_BENCH_FAST`): linear **51.2%** → RFF kernel **76.3%** (`0.763/0.743/0.784` per seed) — this **exactly reproduces the standalone tool's validated 76.3%/~2.7pp-gap figure**, live, inside the real wired bench domain, in **27 seconds total** (vs the Nyström latent path not finishing a full run in a reasonable time at M=512 — the RFF speedup is what makes the "live" comparison practical at all here).
-  - **Conclusion:** the wiring is correct and reproduces the standalone-tool study faithfully; the gap-closing effect is real in the real bench domain, but only visible when using the generalizable `latent` feature mode — the shipped default (`xor_pair`) already saturates near/above the sklearn ceiling via feature engineering, so RFF vs Nyström is moot there.
+  - **Conclusion:** the wiring is correct and reproduces the standalone-tool study faithfully; the gap-closing effect is real in the real bench domain, but only visible when using the generalizable `latent` feature mode. xor_pair saturates near/above the sklearn ceiling via feature engineering (that was the July default). **Living default is now latent RFF**; xor_pair is opt-in.
 - **Feynman (D14) generalization check — deferred, not a quick-pass fit.** Grepped `native/src` + `docs/` for "feynman"/"sinusoid": D14 (`run_d14()` in `bench_domains.cpp`, `14A_feynman_all_equations`) is the only real, currently-implemented nonlinear-regression domain with a baseline-comparison framing (per-equation Ridge `ridge_rmse`); "sinusoidal regression" only appears in doc prose (`RESEARCH_STATUS.md`'s regression table), not in any current native bench domain — it appears to be a stale/removed benchmark row, not a live domain to re-test. D14's regression path (`OnlineRegressor` / `online_reg_train_step` / `online_reg_predict`) does **not** use `KernelMemory`/`CyphaInferOptions.kernel_mem` at all — it routes to discrete "expert" clusters via a plain linear `batch_llr_from_x` discriminant, then predicts a continuous scalar via `regression::predict_mixture_scalar` over each expert's running mean/variance. This is architecturally disjoint from the classification kernel-LLR path (`infer_at_h` + `CyphaInferOptions.kernel_mem`) that Fix 1/2 target: wiring RFF here would mean building a *new* kernelized expert-routing discriminant for both the training step (`dif_train_step_vector`'s `TrainStepExtras.kernel_mem`, currently passed as `nullptr` from `online_reg_train_step`) **and** the prediction path (`online_reg_predict` calls `batch_llr_from_x` directly, no kernel option exists there at all) — a two-sided change to a different subsystem, not a cheap flag-add, and out of scope for this pass. **Deferred to its own dedicated pass.**
   - **D14 baseline re-run (current HEAD, `native/build_kernel2`)** for the record: full mode (`n_train=1600`), mean **R²=0.444**, mean RMSE dominated by a couple of large-constant equations (`coulombs_law`, `relativistic_KE`); per-equation R² ranges 0.03–0.79 and **CyphaDIF regression RMSE beats the per-equation Ridge baseline on all 20 equations** (e.g. `wave_speed` R²=0.79, `kinetic_energy`/`hooke`/`capacitor_energy` R²=0.76). This is a materially different (better) result than the stale `mean_r2=-0.010` figure in `RESEARCH_STATUS.md`'s regression table (dated 2026-05-31, pre-dating many intervening phases of general model fixes) — updated below. Confirms D14 is alive and beating its Ridge baseline today, but via the unrelated linear-expert-mixture path, not kernel LLR.
 
@@ -90,7 +90,7 @@ Every one of the 20 equations individually loses R² under the kernel path at th
 
 **Update (2026-07-17) — §1 P2 auto-γ defaults (clarification):**
 
-- **KernelMemory RFF:** auto-γ median heuristic already default (2026-07-11); D03 `xor_pair` Nyström default untouched.
+- **KernelMemory RFF:** auto-γ median heuristic already default (2026-07-11). Living D03 default is latent RFF; xor_pair Nyström is opt-in.
 - **Preprocessor RFFEncoder:** `auto_rff_gamma_cv` already default-on for tabular `input_dim ≤ 30` when `rff_gamma` left at 1.0 (`preprocessor_fit.cpp`); everyday profile documents this. D08 vision has no RFF preprocessor.
 - **2026-07-17 smoke (`build_rff_def`, FAST):** D01 tabular **98.75% / 88.75%** with CV **γ=0.1** (0 pp vs prior opt-in profile); D08 **100% / 100%** raw/hog (unaffected).
 - Full writeup: [`RESEARCH_STATUS.md`](../../RESEARCH_STATUS.md) Priority 2.

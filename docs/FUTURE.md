@@ -4,7 +4,7 @@
 
 **Forward path:** living sequence spine **Hybrid GRIA+LSTM L2+Wave2 BPTT (2.664 BPC lock)** under `cypha::Cypha`, with **predictive arithmetic coding** (model probs → entropy coder) as the text compress/generate path. U06 PGM→Wy remains opt-in. Cutover: [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md). Dated reports: [`archive/`](archive/README.md).
 
-**Last updated:** 2026-07-19
+**Last updated:** 2026-08-16
 
 ---
 
@@ -26,7 +26,9 @@ Nonlinearity gap = **32.3 pp** — unreachable with the current linear LLR discr
 2. `φ(h) = K(h, landmarks) · K(landmarks, landmarks)^{-1/2}` via Cholesky whitening.
 3. Online softmax gradient on `φ(h)`; blended into `score_matrix` when kernel enabled.
 
-**Measured gain (3 seeds, 8 passes, blend=1.0, M=256, replay off, 2026-06):** native linear **49.9%** → **59.2%** (+ **+9.3 pp**). RFF auto-γ (2026-07-11) closes the sklearn RBF ceiling gap to **~2.7pp** at `rff_dim=4096` (was ~18pp at Nyström M=256 default). `.cypha` kernel keys via `patch_kernel_into_root`; Qt shell + native `cypha_rest` train/infer/save/load wired. Bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`). Opt-in profile: `bench/config/kernel_llr_profile.json`. Full validate includes d03_xor fast smoke + REST kernel body test.
+**Living default (2026-07-17):** latent features + RFF kernel LLR (`rff_dim=4096`, ~76% vs sklearn ~79%). Legacy xor_pair (~97%) via `CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair`. Sweep JSON: `data/archive/profiles/xor_kernel_llr*.json`.
+
+**Measured gain (3 seeds, 8 passes, blend=1.0, M=256, replay off, 2026-06):** native linear **49.9%** → **59.2%** (+ **+9.3 pp**). RFF auto-γ (2026-07-11) closes the sklearn RBF ceiling gap to **~2.7pp** at `rff_dim=4096` (was ~18pp at Nyström M=256 default). `.cypha` kernel keys via `patch_kernel_into_root`; Qt shell + native `cypha_rest` train/infer/save/load wired. Bench domain **`d03_xor`** (`cypha_bench_run --domain-tag d03_xor`). xor_pair recipe: `bench/config/kernel_llr_profile.json`. Full validate includes d03_xor fast smoke + REST kernel body test.
 
 > **P7 note:** Python `cypha_core` / `KernelMemory` removed; native path is authoritative. Full fix taxonomy: [`research/upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md).
 

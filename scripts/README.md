@@ -4,6 +4,16 @@ Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`)
 
 > **Living pin:** D17 hybrid GRIA+LSTM L2 + Wave2 BPTT **2.664 BPC** in `bench/BASELINE_LOCK.json` is the production lock / overnight validation target. Prior L1 pin **2.873** is archived. Living sequence default is **Hybrid** -- [`docs/reports/ONE_CYPHA_CUTOVER.md`](../docs/reports/ONE_CYPHA_CUTOVER.md).
 
+## Where files go
+
+| Kind | Path |
+|------|------|
+| Production pins | `bench/BASELINE_LOCK.json` |
+| Historical traces | [`data/archive/`](../data/README.md) |
+| Local captures | `artifacts/` (gitignored) |
+| Live sweep / overnight dumps | `bench/results/` (gitignored) |
+| Parity goldens | `fixtures/` |
+
 ## Validation gates (primary)
 
 | Script | Purpose | Typical output |
@@ -48,7 +58,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | **`cypha_bench_report`** (native) | Regenerate bench report figures from JSON artifacts | disk |
 | **`cypha_tune_run`** (native) | Sweep JSON → per-cell native bench | disk |
 | **`cypha_diagnostics_run`** (native) | Phases 1–4 validation orchestrator (parity exes + inline checks) | stdout |
-| `cypha_bench_full_baseline.ps1` | Capture baseline bench profile | `artifacts/profiles/` |
+| `cypha_bench_full_baseline.ps1` | Capture baseline bench profile (local `artifacts/`; committed traces in `data/archive/profiles/`) | `artifacts/` |
 | `cypha_tune_smoke.ps1` | Dry-run tune sweep smoke | console |
 | `cyphalm_native_run_modes.ps1` | Cypha sequence mode matrix | console |
 | `cyphalm_native_sweep.ps1` / `cyphalm_native_sweep_safe.ps1` | Cypha sequence config sweeps | disk |
