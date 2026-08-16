@@ -1,6 +1,8 @@
 # Cypha accel — CUDA build (MSVC / Linux)
 
-**Policy — local-only (2026-07-17):** CUDA is an **optional, self-hosted build flag**. GitHub Actions **does not** compile or test CUDA (former **`windows_cuda_msvc`** / **`linux_cuda`** jobs removed in v2.2.8). There is **no** planned return of hosted CI GPU runners — validate on your own machine or a self-hosted runner with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** / **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`windows_msvc`**) remains the release gate.
+**Policy — infer-only, local flag (2026-08-16):** CUDA is an **optional, self-hosted build flag** for fused-LLR **inference**. **Training stays on CPU** — GPU training is slower than the CPU path on this workload and is not an open gap. The speed path worth pursuing is portable CPU SIMD ([xsimd](https://github.com/xtensor-stack/xsimd)); see [`docs/FUTURE.md`](../FUTURE.md) §1b.
+
+GitHub Actions **does not** compile or test CUDA (former **`windows_cuda_msvc`** / **`linux_cuda`** jobs removed in v2.2.8). There is **no** planned return of hosted CI GPU runners — validate infer CUDA on your own machine with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** / **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`windows_msvc`**) remains the release gate.
 
 Optional GPU path for **`cypha::accel`** (`native/src/accel_backend.cpp` + `accel_cuda.cu`).
 Without **`-DCYPHA_ENABLE_CUDA=ON`**, the same APIs use **ISO C++** `std::thread` row parallelism.

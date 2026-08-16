@@ -1,7 +1,7 @@
-﻿# CyphaLM arXiv bundle (2026-07-18)
+﻿# CyphaLM arXiv bundle (2026-08-16)
 
 ## Contents
-- `CyphaLM_paper.md` / `.html` / `.pdf` — camera-ready draft (canonical BPC pin 2.873)
+- `CyphaLM_paper.md` / `.html` / `.pdf` — camera-ready draft (PDF body may still cite 2.873; living pin is **2.664**)
 - `abstract.txt` — plain-text abstract for the arXiv form
 - `metadata.yaml` — title, author, suggested categories, license note
 - `RESULTS_ATTEST.md` — D10/H15/lock provenance snapshot (not in the PDF body)
@@ -17,6 +17,7 @@
 6. Preview and submit (agent cannot complete the authenticated upload).
 
 ## Honest claims to keep
-- Hybrid pin **2.873 BPC** @ 300k WikiText-2
+- Living hybrid pin **2.664 BPC** (L2 + Wave2 BPTT @ 300k WikiText-2). Cite `bench/BASELINE_LOCK.json` + `MODEL_CARD.md` + `RESULTS_ATTEST.md`. Prior L1 **2.873** is historical.
 - Shared-model CL open; zero forgetting = per-task isolation (D16F)
 - GRIA blend currently LSTM-dominated (~99.6%)
+- Training is CPU; optional CUDA is infer-only (GPU train is slower here)

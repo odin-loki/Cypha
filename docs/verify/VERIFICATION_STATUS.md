@@ -34,16 +34,17 @@ See [`fixtures/README.md`](../../fixtures/README.md) and the table in prior revi
 
 ## Known gaps (before you trust production scale)
 
-1. **Full GPU training** — not implemented; optional CUDA accel for fused LLR when built with **`-DCYPHA_ENABLE_CUDA=ON`**.
+1. **CUDA** — optional infer accel only (`-DCYPHA_ENABLE_CUDA=ON`). Training stays on CPU; GPU training is slower on this workload and is **not** an open gap.
 2. **Real-data profiling** — use native bench/tune binaries on your CSV dumps.
 3. **CUDA CI** — not in GitHub Actions and not planned; build locally with `-DCYPHA_ENABLE_CUDA=ON` and run **`native_cuda_smoke`** / **`native_score_batch`**; device benchmarks remain manual.
+4. **CPU SIMD (future)** — portable xsimd kernels; see [`docs/FUTURE.md`](../FUTURE.md) §1b.
 
 ## Green bar (keep this clean)
 
 - [x] GitHub Actions **CI green** on `main` — two blocking jobs
 - [x] **`ctest -R native_`** green on CI and local validate scripts
 - [x] Committed **`fixtures/`** match native parity tools
-- [ ] Optional: GPU box profile after LM/accel changes (see [`docs/FUTURE.md`](../FUTURE.md))
+- [ ] Optional: local CUDA infer smoke after accel changes (`native_cuda_smoke`); training stays CPU
 
 ## Full stack replacement — COMPLETE
 

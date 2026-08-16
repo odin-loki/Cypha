@@ -79,7 +79,21 @@ cmake --build --preset windows-msvc-release-build
 
 **CI — local-only (formal, 2026-07-17):** CUDA is **not** compiled or tested in GitHub Actions. The former **`windows_cuda_msvc`** and **`linux_cuda`** jobs were removed in v2.2.8 and **will not return** on hosted runners (no GPU fleet). Validate on a **self-hosted** or local CUDA box with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** and **`native_score_batch`**. CPU-only CI (**Linux CTest**, **`windows_msvc`**) is the release gate; MinGW is not a gate. See [`docs/native/ACCEL_CUDA.md`](native/ACCEL_CUDA.md).
 
-**Performance:** profile with `./cuda_smoke --bench` on GPU; small batches may be CPU-faster due to launch overhead.
+**Performance:** profile with `./cuda_smoke --bench` on GPU; small batches are usually CPU-faster due to launch overhead.
+
+**Training policy (2026-08-16):** GPU training is **closed, not a gap**. On this architecture (online / small-hidden LSTM, fp64, launch-per-step) the device path loses to CPU. Do not reopen unless a batched GEMM recipe is measured faster than the current CPU train loop. Optional CUDA remains infer-only.
+
+---
+
+## 1b — CPU SIMD via xsimd (future)
+
+**Status:** not started. This is the speed path that is actually worth it.
+
+Portable SIMD ([xsimd](https://github.com/xtensor-stack/xsimd)) over the hot CPU kernels — `score_matrix`, `matvec_rowmajor`, softmax / exp, Mahalanobis — so the same source hits AVX2 / AVX-512 / NEON without a CUDA training stack. Keep CTest goldens on the scalar path (or a bit-exact fallback) so CI stays portable.
+
+A July `/arch:AVX2` auto-vectorization trial did not move D17 train time; explicit xsimd kernels plus alignment are the next experiment, not another compiler-flag flip. Historical notes: [`archive/reports/PERFORMANCE_PROFILE_2026-07-12.md`](archive/reports/PERFORMANCE_PROFILE_2026-07-12.md), [`archive/plans/PERF_RESEARCH_ROADMAP_2026-07-18.md`](archive/plans/PERF_RESEARCH_ROADMAP_2026-07-18.md) §2.
+
+**Do not** treat this as a release blocker. Ship CPU scalar; add xsimd behind a CMake option when someone wants the win.
 
 ---
 
@@ -303,7 +317,8 @@ Both require new network coordination code outside the native training core — 
 | **Production pin** | Hybrid D17 **2.664 BPC** (L2 + Wave2 BPTT) | Living default target @ 300k WikiText-2 |
 | **Now -- shipped** | Qt UX 2a-2e; minimal Web UI -- 4 | Threaded train, charts, REST SPA |
 | **Shipped (v2.3.25)** | Packaged AppImage / Windows bundle -- 3 | One Cypha release |
-| **Done (policy)** | CUDA local-only validation -- 1 | No hosted GPU CI |
+| **Done (policy)** | CUDA infer-only; GPU training closed -- 1 | CPU train is faster; no hosted GPU CI |
+| **Future** | CPU SIMD via xsimd -- 1b | Portable AVX2/AVX-512/NEON; not a release blocker |
 | **Human-only** | Paper arXiv upload | `arxiv_bundle` ready -- [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) |
 | **2-4 months** | Multi-model `cypha_rest` -- 5 | Deployment |
 | **Closed** | RPSM Option B / cell sweep -- 10 | STOP; see archive |

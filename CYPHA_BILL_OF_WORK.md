@@ -16,13 +16,16 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 
 ## Open
 
-- [ ] **Linux CI green** — Windows / Federated TLS / Corpus+d25 green on [run 31922359793](https://github.com/odin-loki/Cypha/actions/runs/31922359793) (`97768c9`); Linux `build_and_test` compiled and is still running the long CTest suite. Last fully green `build_and_test` was v2.3.25.
+- [ ] **Linux CI green** — current run is [140](https://github.com/odin-loki/Cypha/actions/runs/31923605267) on `b3d7902` (docs/data move). Prior UTF-8-fix run was cancelled by that push. Last fully green `build_and_test` was v2.3.25.
 - [ ] **Cut v2.4.0** — bump `native/CMakeLists.txt` + script defaults; tag after CI is green. Notes template is in `scripts/create_release_notes.ps1`.
 - [ ] **Finish cell sweep gaps** — 12 variants at 300k (H14, H23, U01–U10). July 300k rows stay historical. Runner: `scripts/run_cell_sweep_parallel.ps1`.
 - [ ] **Paper PDF body** — `paper/arxiv_bundle/CyphaLM_paper.md` still cites 2.873; lock + `MODEL_CARD.md` + `RESULTS_ATTEST.md` are submission truth until the PDF is regenerated.
 - [ ] **arXiv / venue upload** — human; bundle at `paper/arxiv_bundle/`.
-- [ ] **GPU training** — infer CUDA only; gap documented in archive.
+
+## Future (not blocking)
+
+- **CPU SIMD via [xsimd](https://github.com/xtensor-stack/xsimd)** — portable AVX2/AVX-512/NEON kernels for `score_matrix` / matvec / softmax. Training stays on CPU; this is the speed path that is actually worth it. Spec: [`docs/FUTURE.md`](docs/FUTURE.md) §1b.
 
 ## Closed (do not reopen)
 
-Optimality P0–P9, RPSM Option B, 28-variant July cell sweep, v2.3.24 / v2.3.25 publish, D10A 90.11%, XOR latent RFF default, forecasting Phases 1–9. Details: archive BoW + [`docs/archive/README.md`](docs/archive/README.md).
+Optimality P0–P9, RPSM Option B, 28-variant July cell sweep, v2.3.24 / v2.3.25 publish, D10A 90.11%, XOR latent RFF default, forecasting Phases 1–9, **GPU training** (CUDA infer is optional; device training is slower than CPU on this workload — not a gap). Details: archive BoW + [`docs/archive/README.md`](docs/archive/README.md).

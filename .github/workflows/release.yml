@@ -323,7 +323,7 @@ jobs:
 
             ### Phase 7 maintainer notes
 
-            - **Baseline lock:** [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json) — D17 hybrid **2.873 BPC** @ 300k (Phase 1c reference).
+            - **Baseline lock:** [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json) — D17 hybrid **2.664 BPC** @ 300k (L2 + Wave2 BPTT). Prior L1 2.873 is historical.
             - **Local publish:** `pwsh -File scripts/publish_release.ps1 -Tag ${{ github.ref_name }}` (requires `gh auth login`; CI publish uses this workflow).
             - **Overnight bench:** `pwsh -File scripts/run_d17_overnight.ps1` — update `overnight_results` in `BASELINE_LOCK.json` after a real 300k run.
 

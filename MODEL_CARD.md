@@ -52,6 +52,7 @@ One public type owns classify, regress, latent sample, and next-token generate.
 - Shared-model continual learning (D16B) remains open; zero-forgetting is per-file isolation (D16F).
 - Cell-hypothesis sweep is a historical research tool; Hybrid 2.664 is the product default.
 - Windows CI compiles but does not run the full CTest matrix (Linux `build_and_test` does).
+- Training is CPU. Optional CUDA is infer-only; GPU training is slower on this workload and is not a gap. Future speed path: portable SIMD via xsimd (`docs/FUTURE.md` §1b).
 - Paper PDF / HTML in `paper/arxiv_bundle/` may still mention 2.873 in body text; lock + this card are authoritative.
 
 ## Evaluation how-to

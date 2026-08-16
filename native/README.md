@@ -6,7 +6,7 @@ Monorepo C++ core for **One Cypha** -- public type **`cypha::Cypha`** (classify 
 
 **Sequence:** living product default is **Hybrid GRIA+LSTM L2+Wave2 BPTT** (~2.66 BPC @ 300k) via `Cypha::init_default_sequence` / `apply_hybrid_production_recipe`. Compat alias target `cypha_lm_native` is an INTERFACE over `cypha_core`.
 
-**Accel** (`cypha/accel_backend.hpp`): optional **CUDA** (`-DCYPHA_ENABLE_CUDA=ON`, NVIDIA toolkit + driver); otherwise **ISO C++** parallel CPU via `std::thread`. **`cuda_smoke`** checks correctness vs a serial reference; **`cuda_smoke --bench`** compares CUDA vs CPU when a GPU is present (exit 2 skip otherwise).
+**Accel** (`cypha/accel_backend.hpp`): optional **CUDA infer** (`-DCYPHA_ENABLE_CUDA=ON`); otherwise **ISO C++** parallel CPU via `std::thread`. Training stays on CPU (GPU train is slower here). Future CPU SIMD: xsimd — [`docs/FUTURE.md`](../docs/FUTURE.md) §1b. **`cuda_smoke`** checks infer correctness vs a serial reference; **`cuda_smoke --bench`** compares CUDA vs CPU when a GPU is present (exit 2 skip otherwise).
 
 ## Repo layout (paths native code resolves)
 
