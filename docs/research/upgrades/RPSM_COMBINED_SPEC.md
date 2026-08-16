@@ -1,8 +1,8 @@
 # RPSM combined spec — CyphaDIF matrix refactor + CyphaLM sequence layer
 
 **Author:** Odin Loch  
-**Status:** Planned — ready for native implementation  
-**Target:** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k train
+**Status:** STOP / closed (2026-07-18) — historical spec. Living pin is Hybrid **2.664 BPC**.  
+**Historical target:** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k train (pre-Wave2 L1 pin; not met)
 
 See also: [RPSM_IMPLEMENTATION.md](RPSM_IMPLEMENTATION.md) (Option B core), [NONLINEAR_BOUNDARY.md](NONLINEAR_BOUNDARY.md) (Step 2), [README.md](README.md) (index).
 

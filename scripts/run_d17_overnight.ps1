@@ -62,7 +62,7 @@ try {
         if (-not $sweepExe) {
             throw "missing cypha_cell_hypothesis_sweep in $buildAbs"
         }
-        Write-Host "== cell hypothesis overnight sweep (28 variants, n_train=$NTrain) ==" -ForegroundColor Cyan
+        Write-Host "== cell hypothesis overnight sweep (36 variants, n_train=$NTrain) ==" -ForegroundColor Cyan
         $sweepArgs = @(
             "--overnight-sweep"
             "--profile", $Profile

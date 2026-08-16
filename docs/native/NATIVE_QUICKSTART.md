@@ -54,7 +54,7 @@ Adds **`cypha_rest`**, **`cypha_bench_run`**, **`cypha_bench_report`**, **`cypha
 powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
-Runs: Release build → **`ctest -R native_`** (**214 CTests**; see **`scripts/cypha_native_validate_all.ps1`** for the authoritative tally) → REST contract smoke → bench smoke (d01, d04, d17, forecast) → **`--report-only`** figures → tune dry-run (all smoke configs). Pass **`-TuneSmoke`** for a live **`cypha_tune_run`** sweep.
+Runs: Release build → **`ctest -R native_`** (authoritative tally: **`scripts/cypha_native_validate_all.ps1`** or `ctest -N -R native_`) → REST contract smoke → bench smoke (d01, d04, d17, forecast) → **`--report-only`** figures → tune dry-run (all smoke configs). Pass **`-TuneSmoke`** for a live **`cypha_tune_run`** sweep.
 
 **Manual subset:**
 

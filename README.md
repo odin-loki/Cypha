@@ -40,7 +40,7 @@ Build outside OneDrive on Windows (cloud sync locks object files). Full guide: [
 cmake -S native -B C:\Temp\cypha_build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build C:\Temp\cypha_build --parallel
 
-# Validate (214 CTests; tally via `ctest -N -R native_` or validate script)
+# Validate (authoritative CTest tally: scripts/cypha_native_validate_all.ps1 or `ctest -N -R native_`)
 ctest --test-dir C:\Temp\cypha_build -R native_ --output-on-failure
 
 # Full production gate (rebuild + CTest + bench smoke + tune dry-run)
@@ -79,6 +79,8 @@ Prebuilt bundles (**v2.3.25**): [Windows MSVC zip](https://github.com/odin-loki/
 |---|---|
 | [`README.md`](README.md) | This file. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history — milestones, bug fixes, benchmark deltas. |
+| [`LICENSE`](LICENSE) | CC BY 4.0 (code, docs, paper bundle). |
+| [`MODEL_CARD.md`](MODEL_CARD.md) | Competition / submission card — living 2.664 BPC pin and limits. |
 | [`bessel_ratios.npz`](bessel_ratios.npz) | Historical Python-era Bessel LUT input (native runtime uses compiled `native/src/bessel_table_data.cpp`). |
 | [`native/README.md`](native/README.md) | Native C++ core build & test guide — CTest harness, parity test inventory, SQLite amalgamation, CUDA smoke test. |
 | [`docs/README.md`](docs/README.md) | Documentation hub — all sub-documents indexed by purpose. |
@@ -194,7 +196,7 @@ These defaults come from a profiled medium-grid tuning programme, not from guess
 | `regression_m4_golden` | M4 regression |
 | `native_cuda_smoke` | CUDA path smoke (local CUDA builds only) |
 
-Full inventory in [`native/README.md`](native/README.md). CI: **`build_and_test`** (Linux) + **`windows_msvc`**; local full gate `scripts/cypha_native_validate_all.ps1` (214 CTests).
+Full inventory in [`native/README.md`](native/README.md). CI: **`build_and_test`** (Linux) + **`windows_msvc`**; local full gate `scripts/cypha_native_validate_all.ps1` (CTest tally via that script or `ctest -N -R native_`).
 
 ---
 
@@ -205,7 +207,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 | Task | Cypha | SGD (online) | SVM ceiling | Notes |
 |------|----------|--------------|-------------|-------|
 | S1 — linearly-separable 2-class | **0.783** | 0.644 | 0.898 | RFF + 4 passes + deliberation disabled |
-| S3 — XOR (nonlinear) | 0.482 | 0.498 | 0.825 | **Hard LLR-linearity limit** — kernel LLR required |
+| S3 — XOR (nonlinear, linear LLR only) | 0.482 | 0.498 | 0.825 | Historical 2026-05-30 diagnostic — living default is latent RFF (~76.3%) |
 | R1 — Iris | 0.900 | 0.821 | 0.968 | Auto-RFF for dim≤30 |
 | R2 — Wine | 0.969 | 0.964 | 0.987 | Near-saturated |
 | R3 — Digits (10-class) | **0.922** | 0.900 | 0.982 | delta_lr=0.03 fix |

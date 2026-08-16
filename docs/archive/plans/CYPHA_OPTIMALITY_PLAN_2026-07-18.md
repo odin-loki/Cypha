@@ -2,7 +2,7 @@
 
 **Author:** Odin Loch
 **Scope:** Native C++ only (Python parity retired). Turns the criticality/optimality discussion into a dependency-ordered build plan.
-**Status as of 2026-07-18:** **Phases 0–9 addressed** (mix of done / opt-in / no-go). Overnight cell sweep + H15@300k closed (best cell H19 ~2.921; H15 = 5.262 — **not** a promote; hybrid pin **2.873**). **Open (no default flip):** P3 XOR ≥75% for default-on (**STOP / REJECT** at ~50.5%); P9 mid-estimators / session extras. Quality/Perf Wave 1 substrate: see [`docs/archive/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md`](docs/archive/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Living BoW: [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md).
+**Status as of 2026-07-18:** **Phases 0–9 addressed** (mix of done / opt-in / no-go). Overnight cell sweep + H15@300k closed (best cell H19 ~2.921; H15 = 5.262 — **not** a promote; hybrid pin **2.873**). **Open (no default flip):** P3 XOR ≥75% for default-on (**STOP / REJECT** at ~50.5%); P9 mid-estimators / session extras. Quality/Perf Wave 1 substrate: see [`docs/archive/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md`](docs/archive/reports/ROADMAP_EXECUTION_LEDGER_2026-07-18.md). Archived BoW: [`CYPHA_BILL_OF_WORK_2026-07-18.md`](../reports/CYPHA_BILL_OF_WORK_2026-07-18.md). Living open items: [`CYPHA_BILL_OF_WORK.md`](../../CYPHA_BILL_OF_WORK.md).
 
 ---
 

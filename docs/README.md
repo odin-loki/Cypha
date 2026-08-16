@@ -2,7 +2,7 @@
 
 **One product:** `cypha::Cypha` -- classify + regress + sample latents + next-token / text generate. Native C++ only (`cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`).
 
-Living sequence default: **Hybrid GRIA+LSTM (~2.8 BPC)** with predictive arithmetic coding. See [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md) and [`research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md`](research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md).
+Living sequence default: **Hybrid GRIA+LSTM L2+Wave2 BPTT (2.664 BPC)** @ 300k lock, with predictive arithmetic coding. See [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md) and [`research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md`](research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md).
 
 Start here, then open the section that matches what you need.
 
@@ -37,7 +37,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Native quick start](native/NATIVE_QUICKSTART.md) | Build, CTest, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run` |
 | [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, REST routes |
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | Load-testing notes for REST |
-| [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership, routes, PGM default |
+| [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership, routes, Hybrid default (U06 PGM→Wy opt-in) |
 
 **Run native REST:** `./native/build/cypha_rest --model fixtures/reference.cypha`  
 **Run Qt shell:** build with `-DCYPHA_BUILD_QT=ON`, then `cypha_qt_shell` (see [`native/qt/README.md`](../native/qt/README.md))
@@ -48,7 +48,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 
 | Doc | What it covers |
 |-----|----------------|
-| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: **214 CTests** (see validate script / `ctest -N -R native_`), per-fixture status, known gaps |
+| [Verification status](verify/VERIFICATION_STATUS.md) | Snapshot: CTest tally via `scripts/cypha_native_validate_all.ps1` / `ctest -N -R native_`, per-fixture status, known gaps |
 | [Roadmap](verify/ROADMAP.md) | Milestones M1-M6 complete; current engineering horizon |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
 | [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / MSVC-Linux workflow checklist |
@@ -110,7 +110,7 @@ Canonical journal:
 
 **[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** -- current pins, confirmed properties, priorities.
 
-**[`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)** -- living task list.
+**[`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)** -- open items only (historical BoW archived).
 
 **[`docs/research/upgrades/README.md`](research/upgrades/README.md)** -- upgrade index (closed tracks + opt-ins).
 

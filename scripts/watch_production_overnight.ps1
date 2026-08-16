@@ -49,7 +49,7 @@ $lastVariantGrowthUtc = $null
 $resolvedLogPath = Resolve-LogFile -Path $ProductionLogFile
 $resolvedStallLogFile = $null
 $cellSweepProgressPath = Join-Path $root "bench\results\cell_sweep\overnight_progress.log"
-$CELL_SWEEP_EXPECTED_VARIANTS = 28
+$CELL_SWEEP_EXPECTED_VARIANTS = 36
 $PRODUCTION_N_TRAIN_MIN = 300000
 
 if ($LogFile) {

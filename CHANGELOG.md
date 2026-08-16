@@ -9,6 +9,10 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Competition housekeeping:** root [`LICENSE`](LICENSE) (CC BY 4.0) and [`MODEL_CARD.md`](MODEL_CARD.md); living docs aligned to 2.664 BPC / 36 cell-sweep variants. Closed BoW / optimality / forecasting design moved under `docs/archive/`; root BoW is open items only. Forecast/codec sources rewritten UTF-8 (OneDrive UTF-16 broke GCC/Linux CI); `.gitattributes` pins `working-tree-encoding=UTF-8`.
+- **Cell-sweep resume / checkpoints:** `cypha_cell_hypothesis_sweep --resume` plus `scripts/resume_cell_sweep.ps1`, `scripts/wait_cell_sweep_and_lock.ps1`, `scripts/run_cell_sweep_parallel.ps1`. **36** runnable variants (B0–B2, H01–H23, U01–U10). Lock `cell_sweep_results.status=historical` (July, 25 variants, H19 @ 2.921); living spine is Hybrid **2.664**, not the cell-sweep winner.
+- **Latent RFF XOR default:** D03 / kernel path defaults to latent features + RFF kernel LLR (`rff_dim=4096`, ~76% vs sklearn ~79%). Legacy `xor_pair` via `CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair`.
+- **MSVC C++ workload helper:** `scripts/install_msvc_cpp.ps1` installs the Visual Studio Native Desktop workload when STL headers are missing.
 - **GDELT live monitor:** `GdeltCsvTail`, `forecast_gdelt_poll`, REST `POST /forecast/ingest` + `/forecast/monitor/reset`.
 - **SORF gate alignment:** `orf_encoder_bench` uses D01 golden linear-sep draws (400×10, seed 42). `bench/BASELINE_LOCK.json` updated to **2.664 BPC** @300k (L2 + Adam BPTT=8).
 - **VIEWS leaderboard baselines:** Conflictology mean, observed Markov, NegBin GLMM + `views_leaderboard_bench` tool.
@@ -22,11 +26,12 @@ milestone or a significant self-contained change.
 ### Changed
 - **VIEWS bulk path resolution:** bench/REST/leaderboard prefer `views_bulk.csv` over `sample_views.csv` when bulk fetch has run (`resolve_views_csv_path`).
 - **SORF promotion gate:** `orf_encoder_bench` aligned with D01 golden split/training; `promote=sorf` when XOR +5pp and D01 +30pp lift vs iid. `apply_hybrid_production_recipe` now sets L2 + Wave2 BPTT (Adam, bptt=8, lr=0.001) matching the 2.664 BPC lock. `everyday_profile.json` enables `rff_sorf: true` for tabular RFF (SORF wins XOR smoke without breaking preprocessor goldens).
-- **Living sequence default → Hybrid (~2.8 BPC):** `Cypha::init_default_sequence` and `cyphalm_bench_native` default `--mode hybrid` (U06 PGM→Wy opt-in). Docs / D17 profile `_meta.status=production` updated.
+- **Living sequence default → Hybrid L2+Wave2 BPTT (2.664 BPC):** `Cypha::init_default_sequence` and `cyphalm_bench_native` default `--mode hybrid` (U06 PGM→Wy opt-in). Docs / D17 profile `_meta.status=production` updated.
 
 ### Fixed
+- **MSVC / overnight script pathing:** `install_msvc_cpp.ps1` for missing STL headers; `run_d17_overnight.ps1` cell-sweep banner reports **36** variants (was 28).
 - **Overnight scripts with external build dir:** `Resolve-NativeBuildDir` / `Resolve-NativeExePath` fix production overnight when `BuildDir` is absolute (e.g. `%LOCALAPPDATA%\cypha_native_build`); all overnight/finalize/poll scripts default to `Get-DefaultNativeBuildDir`. restored locked accuracy / BPC / routing numbers after MSVC and hybrid-default drift -- portable Fisher-Yates shuffle (`portable_shuffle.hpp`), golden D01 synthetic draws (`d01_synthetic_golden.inc`), raw-feature logistic baselines, **opt-in** n-gram count prior (off unless enabled), and native D16A ARI. Pins: D01 linear **0.9875** vs logistic **0.8875**; D04 ~**4.14 BPC** @ 8k; D16A **ARI = 1.0**.
-- **D17 hybrid pin re-verified:** WikiText-2 300k / eval 2k / seed 42 / `--mode hybrid` → **2.883 BPC** (lock **2.873**, Δ=+0.010 within ±0.05). Scale path: 5k≈4.05, 40k≈3.42, 300k≈2.88.
+- **D17 hybrid pin re-verified (prior L1 lock):** WikiText-2 300k / eval 2k / seed 42 / `--mode hybrid` → **2.883 BPC** vs archived L1 lock **2.873** (Δ=+0.010 within ±0.05). Living production lock is Hybrid L2+Wave2 BPTT **2.664 BPC**. Scale path (L1-era): 5k≈4.05, 40k≈3.42, 300k≈2.88.
 - **`native_rest_schema_contract` (Linux):** `ChildProcess` is now move-only so assigning the spawned `cypha_rest` no longer kills the server before `/health` (was flaky `server did not become ready` at ~15s).
 - **`cypha_cell_hypothesis_sweep`:** `--output-dir` now writes `variant_*.json` / `summary.csv` even for single `--cell-variant` runs (previously overnight-sweep only).
 
@@ -59,7 +64,7 @@ milestone or a significant self-contained change.
 - **Release install scripts:** under `packaging/` (`install_release_linux.sh`, `install_release_windows.ps1`).
 
 ### Added
-- **Kernel LLR XOR pair features:** d03_xor + smoke now use `xor_pair` kernel path — **97.8%** kernel acc (3 seeds, 8 passes); closes diagnostic 32 pp gap.
+- **Kernel LLR XOR pair features:** d03_xor + smoke historically used `xor_pair` — **97.8%** kernel acc (3 seeds, 8 passes); closes diagnostic 32 pp gap. **Historical / non-default** — living default is latent RFF (~76% vs sklearn ~79%); restore `xor_pair` with `CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair`.
 - **RPSM Option A scaffold:** `PsiMatrices` + `rpsm_score_matrix_batched` + CTest `native_rpsm_batched_llr_smoke`.
 - **Intelligence Stats Phase 3:** CyphaLM profiler hook (`--intelligence-profile`), Qt self-correct checkbox, `CausalGraphMonitor`, `profile_guided_loss`, cell hypothesis sweep (`d19`, `cypha_cell_hypothesis_sweep`).
 - **Intelligence Stats Phase 4:** EWC regularizer stub + curriculum sampler; `GET /intelligence/simulation`; REST `/update` batch+curriculum; Qt curriculum checkbox; epistemic halt on `/generate`; federated JSON merge (`cypha_federated_merge`).

@@ -26,7 +26,7 @@ Codec path also runs `AdaptivePredictorMixer` (gated n-grams + match + kNN) and 
 
 **Encode/decode contract:** if `online_adapt=true`, both sides must start from the same checkpoint (compress mutates weights).
 
-## Reproduce ~2.8 BPC (model rate)
+## Reproduce 2.664 BPC (model rate, production lock)
 
 ```powershell
 $env:CYPHA_BENCH_FULL_CORPUS="1"; $env:CYPHA_BENCH_OVERNIGHT="1"

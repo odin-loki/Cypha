@@ -276,7 +276,7 @@ Both require new network coordination code outside the native training core — 
 
 ## 10 -- RPSM matrix refactor + sequence layer (closed)
 
-**Status:** Option A **shipped**; Option B **STOP / deprioritized (2026-07-18)** -- see [`RPSM_UPGRADE_PLAN.md`](archive/plans/RPSM_UPGRADE_PLAN.md), [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](archive/reports/RPSM_SMALL_TIER_GATE_2026-07-18.md), and [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md). Do **not** treat "beat 2.873 via RPSM" as an open plan.
+**Status:** Option A **shipped**; Option B **STOP / deprioritized (2026-07-18)** -- see [`RPSM_UPGRADE_PLAN.md`](archive/plans/RPSM_UPGRADE_PLAN.md), [`RPSM_SMALL_TIER_GATE_2026-07-18.md`](archive/reports/RPSM_SMALL_TIER_GATE_2026-07-18.md), and [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) (open items). Do **not** treat "beat 2.873 via RPSM" as an open plan.
 
 **Historical target:** Beat `hybrid_gria_lstm` D17 BPC **2.873** @ 300k -- **not met** by RPSM Option B. Hybrid is the living default; further gains go through predictive AC + hybrid quality under `cypha::Cypha`.
 
@@ -295,7 +295,7 @@ Both require new network coordination code outside the native training core — 
 
 | When | What | Evidence |
 |------|------|----------|
-| **Now -- living** | Hybrid ~2.8 BPC + predictive AC | Product spine under `cypha::Cypha` |
+| **Now -- living** | Hybrid **2.664 BPC** + predictive AC | Product spine under `cypha::Cypha` |
 | **Now -- tuning** | Kernel LLR (Nystrom + RFF) -- 0a | Shipped; RFF auto-gamma closes XOR gap to **~2.7pp** |
 | **Now -- shipped** | D10 ECG -- 0c | **90.11%** ECG5000 (2026-07-18) |
 | **Production pin** | Hybrid D17 **2.664 BPC** (L2 + Wave2 BPTT) | Living default target @ 300k WikiText-2 |

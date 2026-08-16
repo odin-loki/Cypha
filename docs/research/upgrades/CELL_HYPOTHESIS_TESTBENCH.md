@@ -1,9 +1,9 @@
 # Cell hypothesis testbench
 
 **Author:** Odin Loch  
-**Purpose:** Systematic sweep of **28 recurrent cell hypotheses** to find a primitive that synergises with CyphaDIF/CyphaLM better than standard LSTM.  
-**Status:** partial — Tier 1+2+3 smoke (native harness: `cypha_cell_hypothesis_sweep`, `cyphalm_bench_native --cell-variant`); H02 EML, H05 profile-guided backprop, H06–H09/H11–H15/H18/H21/H22 native cell paths; Tier-2 CTest `native_cell_hypothesis_tier2_smoke` (H06/H08/H14); Tier-3 CTest `native_cell_hypothesis_tier3_smoke` (H09/H12/H18, `n_train=200`)  
-**Baseline:** `hybrid_gria_lstm` D17 BPC **2.873** @ 300k
+**Purpose:** Systematic sweep of recurrent cell hypotheses vs Hybrid. Code now has **36** runnable variants (B0–B2, H01–H23, U01–U10).  
+**Status:** historical research tool — lock `cell_sweep_results.status=historical`. Living spine is Hybrid L2+Wave2 BPTT **2.664 BPC**.  
+**Baseline (July historical):** `hybrid_gria_lstm` D17 BPC **2.873** @ 300k (pre-Wave2 pin)
 
 Alternative to Option B in [RPSM_COMBINED_SPEC.md](RPSM_COMBINED_SPEC.md); may inform RPSM level-0 design if a Cypha-derived cell wins.
 

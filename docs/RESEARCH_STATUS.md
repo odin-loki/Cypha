@@ -3,7 +3,7 @@
 **Last updated:** 2026-08-08  
 **Runtime:** native C++ only -- `cypha_rest`, `cypha_bench_run`, **214 CTests** *(authoritative tally: `ctest -N -R native_` / `scripts/cypha_native_validate_all.ps1`)*  
 **Product:** one type **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens  
-**Planning:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md), cutover [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md)
+**Planning:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) (open items), cutover [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md)
 
 Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appear only where needed for wire-format or archived study pointers. Dated reports -> [`archive/`](archive/README.md).
 
@@ -80,7 +80,7 @@ Everyday-profile era numbers (2026-05-31) plus later refresh notes. Full tables:
 
 | Pin | Value | Role |
 |-----|-------|------|
-| Hybrid D17 @ 300k | **2.816 BPC** (`lstm_layers=2`) | Production lock / living default target |
+| Hybrid D17 @ 300k | **2.664 BPC** (L2 + Wave2 BPTT, `lstm_layers=2`) | Production lock / living default target |
 | Hybrid D04 @ 8k | **~4.14 BPC** | Bench regression pin |
 | Living default | **Hybrid GRIA+LSTM** | Product `predict_next` / `generate` / predictive AC |
 | GRIA-only @ 300k | 3.838 BPC | Ablation / archive |
@@ -113,7 +113,7 @@ Studies (algorithm, long-range, model class): [`archive/studies/`](archive/studi
 
 ## Current priorities
 
-1. **Hybrid ~2.8 BPC + predictive arithmetic coding** -- living sequence spine under `cypha::Cypha` ([cutover](reports/ONE_CYPHA_CUTOVER.md)).
+1. **Hybrid 2.664 BPC + predictive arithmetic coding** -- living sequence spine under `cypha::Cypha` ([cutover](reports/ONE_CYPHA_CUTOVER.md)).
 2. **Kernel LLR / RFF** -- promote or keep opt-in after domain re-bench ([`research/upgrades/NONLINEAR_BOUNDARY.md`](research/upgrades/NONLINEAR_BOUNDARY.md)).
 3. **Shared-model continual learning** -- EWC scoping archived; product claim remains isolation (D16F).
 4. **Human arXiv upload** -- paper bundle ready ([`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)).

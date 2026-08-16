@@ -8,7 +8,8 @@ Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`)
 
 | Script | Purpose | Typical output |
 |--------|---------|----------------|
-| `cypha_native_validate_all.ps1` | Windows full gate: rebuild + CTest (`-R native_`, 214 tests) + bench d01/d04/d17/forecast + fig01–09 + tune dry-run + REST smoke (`-SkipBuild` after rebuild) | console |
+| `cypha_native_validate_all.ps1` | Windows full gate: rebuild + CTest (`-R native_`; tally via this script / `ctest -N -R native_`) + bench d01/d04/d17/forecast + fig01–09 + tune dry-run + REST smoke (`-SkipBuild` after rebuild) | console |
+| `install_msvc_cpp.ps1` | Install Visual Studio Native Desktop / MSVC STL headers when a local rebuild is missing `<algorithm>` | console |
 | `ci_native_linux.sh` | Linux/WSL mirror of CI **`build_and_test`**: cmake + `ctest -R native_` | console |
 | `ci_federated_tls_linux.sh` | Linux/WSL mirror of optional CI **`federated_tls`**: `-DCYPHA_ENABLE_OPENSSL=ON` + `ctest -R native_federated_tls` | console |
 | `ci_federated_tls_windows.ps1` | Windows mirror of optional CI **`federated_tls`**: OpenSSL via vcpkg / `OPENSSL_ROOT_DIR`, `ctest -R native_federated_tls_smoke` | console |
@@ -55,14 +56,17 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `download_wikitext2.sh` | Bash equivalent for Linux/CI | disk |
 | `run_unified_context_tournament.ps1` | U01–U10 unified-context BPC tournament vs B2 (40k screen, 300k crown) | `bench/results/unified_context_tournament/` |
 | `run_large_context_profile.ps1` | Large-context / large-data profiling: PGM N-scale + BPC tiers (hybrid/H23) + needle-haystack (`-Tier Medium\|Large\|XL`) | `bench/results/large_context_profile/` |
-| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep`, `-Fast`, `-Medium`, `-Production`) | disk |
+| `run_d17_overnight.ps1` | D17 WikiText 300k overnight (optional `-CellSweep` — 36 variants, `-Fast`, `-Medium`, `-Production`) | disk |
+| `resume_cell_sweep.ps1` | Resume an interrupted production cell sweep from `variant_*.json` checkpoints (`-Production`, optional `-StartWatcher`) | disk |
+| `wait_cell_sweep_and_lock.ps1` | Wait for `cypha_cell_hypothesis_sweep` to exit, then refresh `cell_sweep_results` in `BASELINE_LOCK.json` (optional `-AutoCommit`) | lock JSON |
+| `run_cell_sweep_parallel.ps1` | Run remaining cell-hypothesis variants in parallel (`-Production`, `-Parallelism`; 36 runnable: B0–B2, H01–H23, U01–U10) | disk |
 | `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`, `-Medium`, `-Production`) | disk |
 | `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast`, `-Medium`, or `-Production` to child scripts) | `bench/BASELINE_LOCK.json` |
 | `run_production_overnight.ps1` | Dedicated 300k production overnight wrapper — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1 -DryRun` preview | disk |
 | `finalize_production_overnight.ps1` | Post-overnight gate: `validate_baseline_lock.ps1 -Production`, best-effort `update_baseline_lock.ps1 -Run all -Production` when `overnight_results.n_train < 300000` and `cypha_baseline_lock` exists (Phase 23), `cypha_bench_run --domain-tag d27` (+ d28 when present); prints lock section summary (`n_train`, `status`, `bpc`) | console |
 | `commit_production_lock.ps1` | Phase 15: chains `finalize_production_overnight.ps1`, shows lock diff + suggested message; `-DryRun` preview, `-Force` to commit (never pushes) | console |
 | `monitor_overnight.ps1` | Poll `bench/BASELINE_LOCK.json` sections; optional `-LogFile` (default: latest `bench/results/production_overnight_*.log`, last 3 lines per poll) | console |
-| `watch_production_overnight.ps1` | Production overnight watcher — latest log size growth + last line, running `run_production_overnight.ps1` / `cyphalm_bench_native` / `cypha_cell_hypothesis_sweep` PIDs, cell sweep `variant_*.json` progress from whichever of `bench/results/cell_sweep` or repo-root `results/` has more variants (`done/28` + `effective_n_train` while overnight running; latest variant mtime + `manifest.json` `n_train`; highlights in-flight spill path), lock section summary; hints `poll_and_finalize_overnight.ps1` when processes exit; `-Once`, `-ProcessId`, `-ProductionLogFile`; stall warn after 30m without log growth or variant progress (**STALL_WARNING**); optional `-LogFile` append for stall warnings (Phase 24) | console |
+| `watch_production_overnight.ps1` | Production overnight watcher — latest log size growth + last line, running `run_production_overnight.ps1` / `cyphalm_bench_native` / `cypha_cell_hypothesis_sweep` PIDs, cell sweep `variant_*.json` progress from whichever of `bench/results/cell_sweep` or repo-root `results/` has more variants (`done/36` + `effective_n_train` while overnight running; latest variant mtime + `manifest.json` `n_train`; highlights in-flight spill path), lock section summary; hints `poll_and_finalize_overnight.ps1` when processes exit; `-Once`, `-ProcessId`, `-ProductionLogFile`; stall warn after 30m without log growth or variant progress (**STALL_WARNING**); optional `-LogFile` append for stall warnings (Phase 24) | console |
 | `poll_and_finalize_overnight.ps1` | Phase 17/19/20/21/24: poll until overnight processes exit, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1` (DryRun preview by default; `-Force` to git commit; **`-AutoCommit`** runs `-Force` when lock `n_train >= 300000` after finalize, logs **AUTO_COMMIT** to `-LogFile`); `-Once` exits 1 if still running; optional `-LogFile` append with per-cycle **HEARTBEAT**; **auto-detects `-BuildDir`** from running `run_production_overnight.ps1` when default `native/build`; poll query errors are logged and retried | console |
 | `migrate_inflight_overnight_artifacts.ps1` | Phase 23: merge in-flight `build_p13` overnight spill from repo-root `results/` into `bench/results/cell_sweep/`; never touches `bench/BASELINE_LOCK.json`; `-DryRun` preview (default), `-Force` copy | disk |
 | `cleanup_repo_smoke_artifacts.ps1` | Phase 20 (shipped): remove repo-root `d##_smoke.json` / `d##_*_smoke.json` CTest spill files (not under `native/build*`); never touches `bench/BASELINE_LOCK.json`; `-DryRun` lists, `-Force` removes | disk |
@@ -110,12 +114,12 @@ Optional CI job **`corpus_and_d25`** (`continue-on-error`): `bash scripts/downlo
 | **`run_production_overnight.ps1`** | Dedicated production wrapper — `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`, then **`finalize_production_overnight.ps1`** + **`commit_production_lock.ps1 -DryRun`** preview. Default **`-BuildDir`** is `%LOCALAPPDATA%\cypha_native_build` (or **`CYPHA_NATIVE_BUILD_DIR`**) | manual |
 | **`finalize_production_overnight.ps1`** | Post-overnight validation: **`validate_baseline_lock.ps1 -Production`**, **`cypha_bench_run --domain-tag d27`** (+ d28 when profile exists); lock section summary | manual |
 | **`monitor_overnight.ps1 -LogFile`** | Poll lock JSON + tail production overnight log (auto-picks latest `bench/results/production_overnight_*.log` when `-LogFile` omitted) | manual |
-| **`watch_production_overnight.ps1`** | Watch production run — log byte growth, last line, process PIDs (`run_production_overnight.ps1`, `cyphalm_bench_native`, `cypha_cell_hypothesis_sweep`), cell sweep `variant_*.json` count (`done/28` while overnight running; latest variant mtime + `manifest.json` `n_train`; legacy `results/` fallback), lock sections; hints **`poll_and_finalize_overnight.ps1`** when processes disappear; `-Once` snapshot; warns if log stalled 30m+; notes legacy `results/summary.csv` | manual |
+| **`watch_production_overnight.ps1`** | Watch production run — log byte growth, last line, process PIDs (`run_production_overnight.ps1`, `cyphalm_bench_native`, `cypha_cell_hypothesis_sweep`), cell sweep `variant_*.json` count (`done/36` while overnight running; latest variant mtime + `manifest.json` `n_train`; legacy `results/` fallback), lock sections; hints **`poll_and_finalize_overnight.ps1`** when processes disappear; `-Once` snapshot; warns if log stalled 30m+; notes legacy `results/summary.csv` | manual |
 | **`cypha_bench_run --domain-tag d27`** | Production overnight lock validation; profile `bench/config/d27_production_lock_profile.json` | `native_d27_production_lock_smoke` |
 | **`validate_baseline_lock.ps1 -Production`** | When `overnight_results.n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of `d17_hybrid_baseline.bpc` pin | manual |
 | **`baseline_lock_validate --production`** (native) | C++ production-tier validator | `native_baseline_lock_validate_smoke` |
 
-Full 300k production overnight is **not** run in CI. Blocking gate **214 `native_` CTests** (dynamic tally via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
+Full 300k production overnight is **not** run in CI. Blocking gate: `native_` CTests (authoritative tally via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`). Optional `CYPHA_VALIDATE_PRODUCTION=1` on `cypha_native_validate_all.ps1` runs `validate_baseline_lock.ps1 -Production`. Optional `CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1` runs `cypha_bench_run --domain-tag d28` after baseline lock validate.
 
 ## Overnight completion + finalize (Phase 14 — shipped)
 
@@ -134,7 +138,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate **214 `native
 |--------------|---------|-------|
 | **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d28`** after baseline lock validate | manual |
 | **`CYPHA_VALIDATE_RELEASE_READINESS=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d29`** when profile exists; graceful skip if not merged | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (dynamic via `Get-ExpectedNativeTestCount`; currently **214**); default warns only | manual | |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (dynamic via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`); default warns only | manual | |
 | **`commit_production_lock.ps1`** | Run **`finalize_production_overnight.ps1`**, then preview/commit lock when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** required to commit; never pushes) | manual |
 | **`cypha_bench_run --domain-tag d29`** | Release-readiness validation (when shipped); profile `bench/config/d29_release_readiness_profile.json` | `native_d29_release_readiness_smoke` *(when merged)* |
 
@@ -153,7 +157,7 @@ pwsh -File scripts\commit_production_lock.ps1 -DryRun
 pwsh -File scripts\commit_production_lock.ps1 -Force
 ```
 
-Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
+Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#validation-gates-primary)).
 
 ## Artifact path hygiene + legacy migration (Phase 16 — shipped)
 
@@ -162,7 +166,7 @@ Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#v
 | **`migrate_legacy_results.ps1`** | Merge repo-root **`results/`** cell-sweep artifacts into **`bench/results/cell_sweep/`**; never overwrites newer destination files; **`-DryRun`** prints plan only; after migration prints **`-RemoveLegacy`** / **`-ArchiveLegacy`** hints when destination has all files; **`-RemoveLegacy`** deletes legacy **`results/`**; **`-ArchiveLegacy`** moves legacy **`results/`** to **`bench/results/legacy_archive_<timestamp>/`** | manual |
 | **`cleanup_legacy_results.ps1`** | One-shot migrate + **`-RemoveLegacy`** wrapper; **`-DryRun`** previews migration only (no removal) | manual |
 | **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** | On `cypha_native_validate_all.ps1`, run **`cypha_bench_run --domain-tag d30`** when profile exists | manual |
-| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (dynamic via `Get-ExpectedNativeTestCount`; currently **214**); default warns only | manual | |
+| **`CYPHA_STRICT_TEST_COUNT=1`** | Fail `ctest_native` when parsed `native_` count != expected (dynamic via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`); default warns only | manual | |
 | **`cypha_bench_run --domain-tag d30`** | Artifact path hygiene validation; profile `bench/config/d30_artifact_hygiene_profile.json` | `native_d30_artifact_hygiene_smoke` |
 
 ```powershell
@@ -198,7 +202,7 @@ pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 | **`watch_production_overnight.ps1`** | Stall-aware watcher — also tracks `cypha_cell_hypothesis_sweep`; prints hint to run **`poll_and_finalize_overnight.ps1`** when processes disappear between polls | manual |
 | **`run_production_overnight.ps1`** | On success: **`finalize_production_overnight.ps1`** then **`commit_production_lock.ps1 -DryRun`** (preview only; manual **`commit_production_lock.ps1 -Force`** or **`poll_and_finalize_overnight.ps1 -Force`** to commit) | manual |
 
-Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
+Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#validation-gates-primary)).
 
 ```powershell
 # Start production overnight (long-running)
@@ -251,7 +255,7 @@ $env:CYPHA_VALIDATE_PRODUCTION_COMPLETE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
+Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#validation-gates-primary)).
 
 ## Release publish smoke (Phase 19 — shipped)
 
@@ -283,7 +287,7 @@ pwsh -File scripts\poll_and_finalize_overnight.ps1
 pwsh -File scripts\start_poll_finalize_background.ps1
 ```
 
-Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
+Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#validation-gates-primary)).
 
 ## Repo smoke hygiene (Phase 20 - shipped)
 
@@ -313,12 +317,12 @@ pwsh -File scripts\start_poll_finalize_background.ps1
 
 | Script / env | Purpose | CTest |
 |--------------|---------|-------|
-| **`watch_production_overnight.ps1`** | Cell sweep progress from **`variant_*.json`** count under **`bench/results/cell_sweep`** (fallback repo-root **`results/`** when primary empty); shows **`done/28`** while overnight processes run; latest variant mtime + **`manifest.json`** **`n_train`**; still tails **`overnight_progress.log`** when present | manual |
+| **`watch_production_overnight.ps1`** | Cell sweep progress from **`variant_*.json`** count under **`bench/results/cell_sweep`** (fallback repo-root **`results/`** when primary empty); shows **`done/36`** while overnight processes run; latest variant mtime + **`manifest.json`** **`n_train`**; still tails **`overnight_progress.log`** when present | manual |
 | **`poll_and_finalize_overnight.ps1`** | Comment typo fix; **`Write-PollHeartbeat`** / **`Write-PollError`** use **`$script:resolvedLogFile`** so **`-LogFile`** append is reliable inside functions | manual |
 | **`start_poll_finalize_background.ps1`** | Before **`Start-Process`**, kills existing **`poll_and_finalize_overnight.ps1`** PIDs and logs killed PID list (dedupe duplicate background polls) | manual |
 
 ```powershell
-# Watch overnight with cell sweep variant progress (done/28 while running)
+# Watch overnight with cell sweep variant progress (done/36 while running)
 pwsh -File scripts\watch_production_overnight.ps1 -Once
 
 # Background poll dedupes existing poll processes before starting
@@ -342,7 +346,7 @@ $env:CYPHA_VALIDATE_LOCK_COMMIT_PIPELINE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
+Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#validation-gates-primary)).
 
 ## Production pipeline E2E (Phase 22 - shipped)
 
@@ -369,7 +373,7 @@ $env:CYPHA_VALIDATE_PIPELINE_E2E = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
+Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#validation-gates-primary)).
 
 ## In-flight overnight artifact migration (Phase 23 - shipped)
 
@@ -402,7 +406,7 @@ $env:CYPHA_VALIDATE_LOCK_REFRESH = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **214 `native_` CTests** (dynamic tally; see [Validation gates](#validation-gates-primary)).
+Blocking gate: `native_` CTests (authoritative tally; see [Validation gates](#validation-gates-primary)).
 
 ## Auto-commit + variant stall detector (Phase 24 - prep)
 
@@ -429,7 +433,7 @@ $env:CYPHA_VALIDATE_OVERNIGHT_CERTIFICATE = "1"
 pwsh -File scripts\cypha_native_validate_all.ps1 -SkipBuild
 ```
 
-Blocking gate **214 `native_` CTests** (dynamic tally via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`).
+Blocking gate: `native_` CTests (authoritative tally via `Get-ExpectedNativeTestCount` / `ctest -N -R native_`).
 
 ## Kernel LLR / XOR profiling
 

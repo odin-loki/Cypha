@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install toolchain
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev qt6-base-dev libxkbcommon-x11-0 libxcb-cursor0 libegl1 libgl1-mesa-dri libglib2.0-0
       - name: Native build + CTest
@@ -46,7 +46,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup MSVC + Ninja
         uses: ilammy/msvc-dev-cmd@v1
       - name: Install Ninja
@@ -74,7 +74,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install OpenSSL toolchain
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libssl-dev openssl
       - name: Federated TLS CTest (OpenSSL)
@@ -87,7 +87,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install toolchain
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev unzip
       - name: Download WikiText-2 (best effort)

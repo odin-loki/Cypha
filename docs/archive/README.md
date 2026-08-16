@@ -21,6 +21,9 @@ docs/archive/
   reports/one_cypha/        # PGM / unified-context / large-context / v2.3.25 release notes
   studies/                  # CyphaLM algorithm studies, multi-view plans, doc-refresh notes
   plans/                    # mega plans and research roadmaps
+                            #   CYPHA_OPTIMALITY_PLAN_2026-07-18.md
+                            #   CYPHA_FORECASTING_PLAN_2026-08-08.md
+  reports/CYPHA_BILL_OF_WORK_2026-07-18.md  # closed continuum checklist
 ```
 
 ## What stayed living under `docs/reports/`

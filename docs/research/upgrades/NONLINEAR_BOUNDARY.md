@@ -3,7 +3,7 @@
 **Author:** Odin Loch  
 **Problem:** Linear LLR in latent space hard-ceils XOR at ~48.2% vs kernel SVM ~83.5% (**32.3 pp gap**). Same limit affects nonlinear regression (Feynman R²≈0) and weakens CyphaLM token routing.
 
-**Status:** **Fix 1 (Nyström kernel LLR) SHIPPED for XOR** — native C++ in `native/src/kernel_memory.cpp`; xor_pair features (`build_xor_pair_features`) wired in train + infer (`kernel_features` / `kernel_x`). CTests `native_kernel_llr`, `native_xor_kernel_bench_smoke`. Latent-only mode ~59–71%; xor_pair default ~97% (exceeds sklearn RBF ~79%). See [`docs/FUTURE.md`](../../FUTURE.md) §0a.
+**Status:** **Living default is latent RFF kernel LLR** (~76% vs sklearn ~79%, `rff_dim=4096`). Legacy `xor_pair` (~97%) is opt-in via `CYPHA_D03_KERNEL_FEATURE_MODE=xor_pair` — XOR-specific features, not the generalizable path. Native code: `native/src/kernel_memory.cpp`. CTests `native_kernel_llr`, `native_xor_kernel_bench_smoke`. See [`docs/FUTURE.md`](../../FUTURE.md) §0a.
 
 ---
 

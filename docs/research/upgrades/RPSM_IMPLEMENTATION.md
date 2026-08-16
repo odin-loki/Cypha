@@ -1,7 +1,7 @@
 # RPSM implementation spec
 
 **Author:** Odin Loch  
-**Status:** Planned — implements Option B in [RPSM_COMBINED_SPEC.md](RPSM_COMBINED_SPEC.md)
+**Status:** STOP / closed — historical Option B spec. See [RPSM_COMBINED_SPEC.md](RPSM_COMBINED_SPEC.md). Living pin is Hybrid **2.664 BPC**.
 
 ---
 

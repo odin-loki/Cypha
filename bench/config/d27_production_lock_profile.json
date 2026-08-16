@@ -23,7 +23,7 @@
     "Or: cypha_bench_run --domain-tag d27",
     "Validates bench/BASELINE_LOCK.json schema and production tier gate",
     "When overnight_results.n_train < 300000: validation_status=pending_production (smoke passes)",
-    "When n_train >= 300000: require status=production|completed and BPC within 0.05 of d17 pin (2.873)",
+    "When n_train >= 300000: require status=production|completed and BPC within 0.05 of d17 pin (2.664)",
     "CLI validators: scripts/validate_baseline_lock.ps1 -Production; baseline_lock_validate --production",
     "Phase 13: production tier baseline lock validation gate"
   ]

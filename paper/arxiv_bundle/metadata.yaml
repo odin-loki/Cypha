@@ -6,7 +6,7 @@ categories:
   primary: cs.LG
   secondary: [cs.CL, stat.ML]
 license: CC-BY-4.0  # or arXiv default — confirm at submit
-comments: "Draft bundle from paper/arxiv_bundle/; canonical D17 hybrid BPC pin 2.873"
+comments: "Draft bundle from paper/arxiv_bundle/; production D17 hybrid BPC pin 2.664 (L2 + Wave2 BPTT)"
 abstract_file: abstract.txt
 main_pdf: CyphaLM_paper.pdf
 main_md: CyphaLM_paper.md

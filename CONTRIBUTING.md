@@ -31,7 +31,7 @@ Optional CMake flags: **`-DCYPHA_ENABLE_CUDA=ON`**, **`-DCYPHA_BUILD_QT=ON`**, *
 ## Native production gate (required after C++ changes)
 
 ```powershell
-# Windows — full gate: rebuild + 214 CTests + bench smoke + tune dry-run + REST smoke
+# Windows — full gate: rebuild + CTest + bench smoke + tune dry-run + REST smoke
 powershell -File scripts\cypha_native_validate_all.ps1
 ```
 
