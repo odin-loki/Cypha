@@ -10,6 +10,7 @@
 /// existed. This test pins down: (1) the fixed behavior computes a real, hand-verifiable
 /// prefix-only penalty after `D` grows, (2) it is deterministic, and (3) `set_protect_world_field`
 /// engages an additional, independently-verifiable term.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>

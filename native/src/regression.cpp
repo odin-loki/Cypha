@@ -1,4 +1,5 @@
 // M4 — mixture-of-experts regression helpers (see `include/cypha/regression.hpp`).
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <vector>

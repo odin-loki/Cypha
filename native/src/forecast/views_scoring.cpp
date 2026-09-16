@@ -1,5 +1,6 @@
 #include "cypha/forecast/views_scoring.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 

@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/context_bank.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 

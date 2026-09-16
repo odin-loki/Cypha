@@ -1,5 +1,6 @@
 #include "bulk_train_worker.h"
 
+#include <algorithm>
 #include <QMetaType>
 #include <QVector>
 

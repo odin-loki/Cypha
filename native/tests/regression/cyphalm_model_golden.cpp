@@ -3,6 +3,7 @@
 //   cyphalm_model_golden
 //   cyphalm_model_golden <checkpoint.json>
 //   cyphalm_model_golden --mode ssm_gria_no_lstm
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>

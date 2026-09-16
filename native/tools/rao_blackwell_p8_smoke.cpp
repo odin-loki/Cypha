@@ -1,4 +1,5 @@
 // Phase 8: audit generation.hpp / replay_buffer.hpp for MC sample averages vs RB conditional expectations.
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <random>

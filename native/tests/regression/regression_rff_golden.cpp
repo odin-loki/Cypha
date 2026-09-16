@@ -1,4 +1,5 @@
 // CTest: RFF encode + ridge/bias + MKE expert dots vs fixtures/rff_regression/sidecar.json
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iostream>

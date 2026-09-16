@@ -1,4 +1,5 @@
 /// Smoke test for CyphaLM char-LSTM EWC on embed, Wx/Wh, and lm_head Wy/by.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>

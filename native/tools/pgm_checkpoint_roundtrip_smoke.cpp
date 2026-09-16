@@ -1,4 +1,5 @@
 // U06 PGM cell + Wy checkpoint round-trip smoke.
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <iostream>

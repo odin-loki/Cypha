@@ -1,5 +1,6 @@
 #include "cypha/forecast/event_vocabulary.hpp"
 
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 

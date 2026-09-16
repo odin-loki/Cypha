@@ -1,5 +1,6 @@
 #include "cypha/cypha.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>

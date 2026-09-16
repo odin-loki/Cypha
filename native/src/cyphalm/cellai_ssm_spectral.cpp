@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/cellai_ssm.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstddef>

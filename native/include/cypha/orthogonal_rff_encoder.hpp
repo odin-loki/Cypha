@@ -3,6 +3,7 @@
 #include "cypha/preprocessor.hpp"
 #include "cypha/rff_features.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 

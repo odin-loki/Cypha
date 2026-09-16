@@ -1,4 +1,5 @@
 // DIFRegressor-shaped online step: native dif_train_step_vector + expert_target_ema vs Python sidecar.
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>

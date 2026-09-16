@@ -1,6 +1,7 @@
 /// Regression test for `ReversibleSSMCell` (H11): `reconstruct()` must be an exact algebraic
 /// inverse of `forward()` — `x_hat = y - tanh(delta) == x` — since `delta` is cached verbatim
 /// rather than re-derived. See docs/reports/STUB_AUDIT_2026-07-11.md.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>

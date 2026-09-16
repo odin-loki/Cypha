@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/cyphalm_nig_expert.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 

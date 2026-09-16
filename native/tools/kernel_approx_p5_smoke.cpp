@@ -1,4 +1,5 @@
 // Phase 5 optimality acceptance: ‖K̂−K‖_F vs iid/uniform baselines at rff_D=256.
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>

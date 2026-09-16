@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/hierarchical_ssm.hpp"
 
+#include <algorithm>
 #include <numeric>
 #include <stdexcept>
 

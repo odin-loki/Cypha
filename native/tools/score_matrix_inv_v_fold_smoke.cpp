@@ -1,5 +1,6 @@
 /// Perf §3.1: CPU score_matrix inv_v fold — compare folded accel path to a serial
 /// reference with association (H−μ0)*(inv_v*D), and check finite outputs.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <vector>

@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/view_embedding.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 

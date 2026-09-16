@@ -1,4 +1,5 @@
 /// Smoke test for hybrid EWC on SSM multiscale alpha + GRIA per-token alpha.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>

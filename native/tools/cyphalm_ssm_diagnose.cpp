@@ -1,4 +1,5 @@
 // cyphalm_ssm_diagnose — Phase-5 CellAI SSM probe for D10/D17 (FUTURE.md §0c).
+#include <algorithm>
 #include <iostream>
 #include <string>
 

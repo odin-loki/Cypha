@@ -1,5 +1,6 @@
 // generation_golden — verify native generation math against Python fixture.
 // Usage: generation_golden <fixtures/generation/sidecar.json>
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>

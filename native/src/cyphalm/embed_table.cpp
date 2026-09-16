@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/embed_table.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>

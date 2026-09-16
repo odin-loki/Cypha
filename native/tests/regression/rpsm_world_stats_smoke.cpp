@@ -15,6 +15,7 @@
 //   3. Correctness preserved: the already-validated Phase 0 property (multiclass training beats
 //      a fresh, untrained layer) still holds with the new flag enabled, i.e. it does not regress
 //      the frozen-classifier fix it's layered on top of.
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <vector>

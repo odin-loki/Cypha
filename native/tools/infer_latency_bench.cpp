@@ -1,4 +1,5 @@
 /// Product infer latency: DIF REST /predict hot path vs batch score; CyphaLM predict_next.
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <fstream>

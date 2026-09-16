@@ -1,5 +1,6 @@
 #include "cypha/federated_aggregate.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 

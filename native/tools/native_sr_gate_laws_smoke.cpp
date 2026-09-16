@@ -1,4 +1,5 @@
 /// Smoke test for H16 symbolic-regression gate law fitting on LSTM traces.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>

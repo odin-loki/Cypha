@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/cyphalm_alpha_spectrum.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <numeric>
 

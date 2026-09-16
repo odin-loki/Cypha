@@ -1,5 +1,6 @@
 #include "cypha/mt19937_rng.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>

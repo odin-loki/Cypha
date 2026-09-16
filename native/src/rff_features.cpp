@@ -247,7 +247,13 @@ void init_rff_weights_orf(std::mt19937& rng, double gamma, int D, int d_in, std:
     std::vector<double> Q;
     init_orthogonal_rows(rng, d_in, Q);
     for (int i = 0; i < d_in && r < D; ++i, ++r) {
-      const double chi_norm = std::sqrt(chi2(rng) / static_cast<double>(std::max(d_in, 1)));
+      // Yu et al. draw the row norm from chi_d, so that an orthogonal row has
+      // the same length distribution as the Gaussian row it replaces: a
+      // N(0, s^2 I_d) row has norm s*sqrt(d), not s. Dividing by d_in here
+      // normalised every row to unit length, which is sqrt(d_in) too short
+      // and makes the features approximate a different kernel — the error
+      // against the exact RBF then plateaus instead of converging.
+      const double chi_norm = std::sqrt(chi2(rng));
       const double row_scale = base_scale * chi_norm;
       for (int c = 0; c < d_in; ++c) {
         w_flat[static_cast<std::size_t>(r * d_in + c)] =

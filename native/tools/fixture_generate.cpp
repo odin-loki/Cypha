@@ -1,4 +1,5 @@
 // cypha_fixture_gen — native parity fixture regeneration (replaces removed Python generators).
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>

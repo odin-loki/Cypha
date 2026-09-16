@@ -1,4 +1,5 @@
 // Phase 7 optimality acceptance: score-matching GH/NIG gate vs Bessel LUT on held-out log-likelihood.
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <iostream>

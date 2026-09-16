@@ -1,6 +1,7 @@
 // CTest: MKERegressor.train_step vs fixtures/mke_train_step/ (single) or mke_train_extended/ (multi).
 // RFF φ from sidecar x + enc; score_matrix_use_field(φ); expert RLS; dif_train_step_vector(pred).
 // Extended: refresh_world_log_norm_from_v each step; optional replay_warmup + TrainStepExtras.replay_u01.
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>

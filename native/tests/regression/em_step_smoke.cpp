@@ -1,4 +1,5 @@
 /// EM keystone smoke: recover two separated 1-D Gaussians; mixture log-likelihood non-decreasing.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <random>

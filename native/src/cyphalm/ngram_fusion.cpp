@@ -1,5 +1,6 @@
 #include "cypha/cyphalm/ngram_fusion.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 #include <stdexcept>

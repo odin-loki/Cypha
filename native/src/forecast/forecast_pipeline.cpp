@@ -2,6 +2,7 @@
 
 #include "cypha/cyphalm/cyphalm_config.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <random>
 #include <sstream>

@@ -1,4 +1,5 @@
 // cyphalm_train — train Cypha sequence from corpus text and save a checkpoint.
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <limits>

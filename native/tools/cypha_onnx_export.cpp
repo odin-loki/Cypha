@@ -6,6 +6,7 @@
 // Graph (field-conditioned μ₀ baked at export time):
 //   x [batch,d] -> Gemm(enc_W, transB=1) -> [Tanh?] -> Sub(mu0) -> Mul(inv_v)
 //   -> MatMul(D_T) -> Add(llr_bias) -> llr [-> Mul(1/T) -> Softmax -> probs]
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

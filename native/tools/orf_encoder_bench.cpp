@@ -10,6 +10,7 @@
 
 #include "../src/bench/d01_synthetic_golden.inc"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <random>

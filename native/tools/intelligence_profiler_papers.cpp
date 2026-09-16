@@ -1,4 +1,5 @@
 /// Papers II–V scenarios for intelligence profiler: applications, landscape, epistemic loop, soft world.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdint>

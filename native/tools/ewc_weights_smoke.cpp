@@ -1,4 +1,5 @@
 /// Smoke test for hybrid EWC weight Fisher on GRIA U/V and SSM W_fast layer-0.
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
