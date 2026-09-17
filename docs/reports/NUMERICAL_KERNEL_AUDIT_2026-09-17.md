@@ -30,10 +30,34 @@ CTest `native_gh_infer_deliberation`. Its Python counterpart computes something 
 `anomaly_score = 1.0 − ood_gate`, bounded in `[0,1]` (`root-monolith/Cypha.py:1362`), and `r_eff`
 occurs **zero** times in the archive — so there is no reference to check a change against.
 
-All three are left as-is deliberately. Because none of them had *any* test coverage,
-**R3 and R4 are now pinned** by CTest `native_ported_defects_pinned`, which asserts the defective
-behaviour on purpose so that changing it is a deliberate contract decision rather than an
-accident. Diverging from the reference remains the owner's call, not this report's.
+All three are left as-is. Because none of them had *any* test coverage, **R3 and R4 are pinned**
+by CTest `native_ported_defects_pinned`, which asserts the defective behaviour on purpose so that
+changing it is deliberate rather than accidental.
+
+> ### The parity argument above is weaker than it looks
+>
+> **Python is gone.** `CHANGELOG.md:55` records the runtime decommissioned at P7 (v2.4.0,
+> 2026-08-16): `Cypha.py`, `cypha_core/`, `cypha_studio/`, `cypha_lm/` and the rest removed from
+> the product path, with native C++ the sole runtime. Outside `docs/history/archive/` the
+> repository holds **five** `.py` files, all utility scripts — no runtime, and nothing that can
+> execute the reference these defects are "faithful" to.
+>
+> So "it matches Python" is a historical explanation for how each defect got here, **not a live
+> reason to keep it**. There is no second implementation to stay in step with, and no parity
+> test exercises any of R2/R3/R4. The port contract is now a record of how the port was done,
+> not a constraint on what the code may become.
+>
+> That makes these ordinary engineering calls, on their merits:
+>
+> | | Worth fixing? | Why |
+> |---|---|---|
+> | **R3** | **Yes** | An all-NaN evaluation scores a perfect `0.0`, and `adapt_temperature_ece` *minimises* this — so a temperature that produces NaN confidences does not merely evade detection, it **wins the search**. Plus a perfectly-confident, perfectly-wrong model reports ECE `0.000000`. Live on `POST /adapt_temperature`, no test coverage. |
+> | **R4** | **Probably** | Can install a worse temperature than the incumbent and report success (measured 1.44× ECE regression); `n_grid=1` sets `T_min` with no search at all. Small blast radius, one endpoint. Returning the chosen ECE alongside `T` fixes it without touching the search. |
+> | **R2** | **Judgement call** | The unit mismatch is real and it is the default `/predict` path, feeding the OOD flag users see. But its reference is unavailable, so "correct" has to be decided rather than looked up — the substantive question is what the anomaly score is *for*. |
+> | **L5–L13, N1–N4** | **Not now** | Wrong, sometimes spectacularly (L9's 183,085% interpolation error, L5 negative across 44% of its domain), but in paths nothing reaches. Fix opportunistically if that code is touched. |
+>
+> Recorded, not acted on, at the owner's direction. The pinning test means a later fix has to be
+> deliberate; it is not an argument that the behaviour is correct.
 
 ---
 
