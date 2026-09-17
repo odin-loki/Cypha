@@ -461,6 +461,48 @@ bilinear in `h_t`, can never move `W_T` from it. Training cannot start the field
 thing that would start it is not what training updates. The path carries signal only for models
 loaded from a Python-derived checkpoint or seeded through `initial_w_inject`.
 
+### And the root monolith's Phase 1 made the field unstable
+
+v8 builds four decay groups; the root monolith adds a fifth at τ = 0.99 and says so in the
+constant it changed — `_FIELD_DIM = 160  # 5 groups × 32 (Phase 1: added τ=0.99 group)`
+(`archive/root-monolith/Cypha.py:51`). That one group moves the field across the stability
+boundary. Instantiating each version's own `NIGField` and taking ρ of the float32 `A_eff` it
+actually uses:
+
+| | ρ(A_eff), d=128 | ρ(A_eff), d=160 | across 25 seeds |
+|---|---|---|---|
+| v8 (four τ) | **0.9718** | 0.9712 | above 1.0 in **0 / 25** |
+| root (five τ) | **1.0090** | 1.0117 | above 1.0 in **25 / 25** |
+
+ρ(W_T) is 0.0485 in both at d=128 — the `W_T` construction is identical — so the τ set is the
+only variable. The consequence, running each version's own class under an identical sequence of
+injections:
+
+```
+v8    ‖h‖:  3.7e-10 (step 1) → 1.1e-9 (100) → 1.3e-9 (600) → 1.3e-9 (6000)   plateau
+root  ‖h‖:  3.9e-10 (step 1) → 4.0e-9 (100) → 3.4e-7 (600) → 8.9e-4 (1500) → 50.0 (3000)
+```
+
+50.0 is `_H_CAP` (`archive/root-monolith/Cypha.py:914`), a constant v8 does not have and did
+not need. So the root monolith's field saturates its own clamp within a few thousand steps,
+and the clamp is the only thing bounding it — while v8's sits at the ε scale forever. **A
+result measured on v8's field does not transfer to the root monolith's**, and the root
+monolith is what the C++ ported: `native/src/nig_field.cpp:19-41` reproduces the five-group set
+including 0.99, and `:15` carries `kHCap = 50.0`.
+
+What the saturated field then perturbs is the world-prior mean, through `F_field` — the matrix
+established above as never trained. So the root field is not inert; it is a saturated random
+bias. The size of that bias is **not** worth quoting as a percentage: ‖F_field·h‖ is pinned by
+construction at ‖h‖ = 50 (≈ 0.001 · 50 · √d ≈ 0.57), while ‖μ₀‖ scales with the input data, so
+the ratio moved between 18% and 49% across the datasets tried. What survives is the shape, not
+a number.
+
+**One qualification, and it points back to the C++.** The instability needs τ = 0.99 *and* the
+random `W_T`. Zeroing `W_T` — which is exactly what `native/src/create_model.cpp:106` does —
+gives ρ = 0.9900 and the field stays at 2.7 × 10⁻⁹ after 6,000 steps. A freshly created native
+model is therefore stable for the same reason it is inert, and the divergence reaches the
+product only through a model imported from a Python-trained checkpoint.
+
 So the full shape of the subsystem is: an untrained input map, feeding a filter bank whose
 transition matrix is fitted to its own output, conditioning a prior through an untrained output
 map. It is the strongest line of continuity in the project — and the continuity is of the
