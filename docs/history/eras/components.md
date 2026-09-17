@@ -28,8 +28,11 @@ Its pipeline is genuinely closed-loop: content-defined chunking → D4 wavelet m
 `AdaptiveControlLoop` that reads `FieldStats` and writes back `EncoderParams`
 (`chunk_k`, `damr_radius`, `active_scales`).
 
-Unlike the encoder in `cypha-v3/Cypha.py`, this loop actually closes: feeding identical
-input under two different `EncoderParams` produces different output. And unlike v3's main
+Unlike the encoder in `cypha-v3/Cypha.py`, this loop actually closes. Encoding the same
+input under `EncoderParams(chunk_k=4, damr_radius=3)` and `(chunk_k=8, damr_radius=8)` gives
+different vectors — `max|diff| = 2.12`. v3's rewritten `BinaryEncoder.encode(self, data, p)`
+never dereferences `p` at all, and returns bitwise-identical output under the same two
+settings. And unlike v3's main
 program, CyphaMicro stores and queries `AnchorMemory` on the **resonator output** — the
 dynamical state — which is what the architecture documents say should happen.
 
