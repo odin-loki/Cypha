@@ -21,6 +21,30 @@ $ md5sum cypha-encoder/Cypha_Encoder.py cypha-v3/Cypha_Encoder.py
 It is not a separate line of development — it is the v3-era encoder kept aside as its own
 unit, presumably because it was the part worth reusing.
 
+### How it reached v4 onward, having been deleted
+
+`Cypha_Encoder.py` ships in exactly two places — here and `cypha-v3/`. It is gone from v4
+onward. Its classes are not:
+
+| | `cypha-encoder/` | v3 | v4 | v5 | v6 | v7 | v8 | root |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| of its 11 classes, present | 11 | 11 | 8 | 7 | 7 | 7 | **0** | **0** |
+
+The mechanism is visible in v3, which holds both files at once. `cypha-v3/Cypha.py` **does not
+import `Cypha_Encoder`** — its import block is numpy, math, typing, dataclasses, collections,
+enum, concurrent.futures, threading and heapq, and nothing else. Instead **8 of the module's 11
+classes are re-declared inside the monolith**, stripped as they go: 463 lines at 20% comment
+density in the module become 380 lines at 10% in `Cypha.py`. `EncoderParams` is the clearest
+case — `Cypha_Encoder.py:70` and `Cypha.py:35` are the same four fields in the same order, with
+the docstring and every trailing comment removed.
+
+So the module was not imported, refactored or extended. It was copy-pasted in and then the
+original was dropped, and the copy is what v4 through v7 inherited. The three classes that did
+not make the jump — `CyphaMicro`, `MicroMetrics` and `Resonator` — are the ones that made the
+prototype honest: the harness, its metrics, and the component whose state
+[CyphaMicro actually retrieved from](../LINEAGE.md#5-the-encoder--the-one-component-that-was-rewritten-every-time).
+What continued was the encoder's parts, not its closed loop.
+
 The program calls itself **CyphaMicro** and is the small, honest prototype of the v3 era.
 Its pipeline is genuinely closed-loop: content-defined chunking → D4 wavelet moments → a
 256-bin DAMR reservoir histogram → importance selection to 64 dimensions → `PhaseBridge`
@@ -73,8 +97,11 @@ was assembled rather than during integration. It is preserved as delivered.
 
 What it was can only be inferred from its neighbours: `cypha-v5/download.py` and
 `cypha-v5/convert.py` (both intact, 14,774 and 22,190 bytes) cover dataset acquisition and
-format conversion for the v5/v6 benchmarking effort, and `Big Data` was presumably the
-larger-corpus version of the same job. Nothing else in the archive references it.
+format conversion for the v5/v6 benchmarking effort, and `Big Data` was plausibly a variant of
+the same job. Nothing else in the archive references it, and the inference should be held
+loosely: at 8,755 bytes the corrupt file is **41% smaller** than `download.py`, so if the
+zeroing preserved the original length — which is usual, but not guaranteed — it was a
+different program, not a copy.
 
 This is the only corrupt file in the archive; a scan of all 142 text files found no other
 NUL bytes or missing content.
