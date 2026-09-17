@@ -55,6 +55,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I-V); C++ in `native/include/cypha/intelligence/` |
 | [Possible upgrades](research/upgrades/README.md) | Closed / opt-in tracks (default OFF) |
 | [Archive](archive/README.md) | Historical reports, studies, plans (not product spine) |
+| [Project history](history/README.md) | Pre-repository Cypha (Feb 2025 - Mar 2026): archived sources, timeline, Python-to-C++ bridge |
 | [C++2023 migration](native/migration/CPLUSPLUS_2023_MASTER_PLAN.md) | Python decommission phases (P7 complete) |
 | [Contributing](../CONTRIBUTING.md) | Setup, PR checklist, CTest gate reference |
 | [CHANGELOG](../CHANGELOG.md) | Release history |
@@ -116,6 +117,8 @@ Canonical journal:
 
 Dated investigation reports, CyphaLM studies, and mega-plans live under **[`docs/archive/`](archive/README.md)** (e.g. diagnostic, SOM, continuum closeout, PGM/unified-context notes).
 
+The project's **prehistory** -- every Cypha version before this repository's git history begins -- is archived and written up under **[`docs/history/`](history/README.md)**: the v1-v8 source trees, the 27,524-run settings sweep, and the evidence identifying which archived `Cypha.py` the native port was written from.
+
 ---
 
 ## Repo layout
@@ -127,7 +130,7 @@ Dated investigation reports, CyphaLM studies, and mega-plans live under **[`docs
 | `bench/` | Living lock + config + corpora (`BASELINE_LOCK.json`, `config/`, `data/`) |
 | `data/archive/` | Historical XOR / D17 traces (committed) |
 | `artifacts/` | Local captures only (gitignored) |
-| `docs/` | Living hub + `archive/` for closed writeups |
+| `docs/` | Living hub + `archive/` for closed writeups + `history/` for pre-repository provenance |
 | `scripts/` | Validate, overnight, release |
 | `paper/` | arXiv bundle |
 | `packaging/` | Installers |

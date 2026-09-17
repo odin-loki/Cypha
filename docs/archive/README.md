@@ -2,6 +2,11 @@
 
 Historical reports, studies, and mega-plans. **Do not treat these as the product spine.**
 
+> **Not to be confused with [`docs/history/`](../history/README.md).** This directory holds
+> closed writeups produced *by* this repository. `docs/history/` holds the project's
+> **prehistory** -- the Cypha versions that predate this repository's git history, recovered
+> from an external archive along with their original source trees.
+
 ## Living vs archive
 
 | Kind | Where | Rule |
