@@ -45,8 +45,17 @@ size and its `sha256`.
 
 The source was a 6,108,467-byte zip containing 164 files.
 
-**Excluded (30 files).** Every `__pycache__/*.pyc` — build artifacts, already covered by the
-repository `.gitignore`, and reconstructible from the `.py` files beside them.
+**Excluded (30 files).** Every `__pycache__/*.pyc`, all of them under `cypha-vchatgpt/` —
+build artifacts, covered by the repository `.gitignore`, and reconstructible from the `.py`
+files beside them.
+
+> **What was extracted from them first.** A CPython `.pyc` header embeds the *source* file's
+> mtime and size (PEP 552), and these 30 are the only files in the whole archive whose
+> timestamps survived the zip. They date vChatGPT to a single session on **2026-02-13,
+> 05:29:13–10:43:25 UTC**, with 29 of 30 embedded sizes matching the `.py` byte for byte. The
+> full per-file table is preserved in
+> [`../eras/branches.md`](../eras/branches.md#it-is-the-only-version-in-the-archive-that-can-be-dated-to-the-minute)
+> so the evidence outlives the binaries.
 
 **Copied verbatim (132 files).** Each was verified `sha256`-identical to its source after
 staging; the checksums are recorded in [`MANIFEST.md`](MANIFEST.md).

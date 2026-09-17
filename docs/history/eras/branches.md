@@ -13,7 +13,8 @@ vChatGPT shares **30** class names with v2 against 8 with each of v3–v7; vPatt
 ## `cypha-vchatgpt` — v2 taken apart
 
 **[`../archive/cypha-vchatgpt/`](../archive/cypha-vchatgpt/)** · 38 Python files, 1,906
-lines, 57 classes · the only modular package, the only test suite, the only GUI
+lines, 57 classes · the only modular package, the only test suite, the only GUI ·
+**authored 2026-02-13**
 
 This is v2's ten-layer architecture decomposed into packages. Its `core/` re-implements the
 named HRNA layers one per file:
@@ -40,6 +41,66 @@ nowhere else on the main line. That is what pins this branch to v2.
 
 Around the core it adds four packages the main line never had: `agi/`, `gui/` (PyQt6),
 `learning/` (scraper, Pile loader, trainer, pipeline), `security/`, and a `tests/` tree.
+
+### It is the only version in the archive that can be dated to the minute
+
+The zip destroyed every file mtime, but vChatGPT shipped its `__pycache__`, and a CPython
+`.pyc` header embeds the *source* file's mtime and size (PEP 552). All 30 of them decode to a
+single session on **13 February 2026**, and 29 of the 30 embedded sizes match the on-disk
+`.py` byte for byte:
+
+```
+05:29:13  core/thought.py          3417 B   <-- pyc says 3417, file is 3363
+05:33:28  agi/nlp.py               1317 B
+05:33:54  agi/code.py               879 B
+05:34:23  agi/files.py              716 B
+05:34:42  agi/system.py             519 B
+05:35:02  agi/memory.py             601 B
+05:35:20  agi/reasoning.py          360 B
+05:35:43  agi/monitoring.py         247 B
+05:36:43  learning/scraper.py      1134 B
+05:37:27  learning/trainer.py       707 B
+05:37:42  learning/pipeline.py      632 B
+05:37:58  learning/pile_loader.py   568 B
+05:39:07  gui/main_window.py       1043 B
+05:40:23  gui/chat.py               832 B
+05:40:36  gui/monitor.py            731 B
+05:40:48  gui/training.py           446 B
+05:41:02  gui/settings.py           592 B
+05:41:57  security/sandbox.py       435 B
+05:42:14  security/validation.py    341 B
+05:42:27  security/audit.py         389 B
+06:08:13  core/recursion.py        2765 B
+06:08:44  core/feedback.py         2883 B
+06:11:31  core/optimization.py     2434 B
+06:26:06  core/encoder.py          2477 B
+08:58:00  core/resonance.py        4388 B
+08:59:52  core/compression.py      4165 B
+09:00:35  core/events.py           3893 B
+09:17:54  core/metalearning.py     3797 B
+10:41:40  core/levels.py           7199 B
+10:43:25  cypha.py                19052 B
+```
+
+Three things fall out of it.
+
+**The whole package is 5 hours 14 minutes of work.** `agi/`, `learning/`, `gui/` and
+`security/` — the four packages that make this look like an AGI system — were written between
+05:33:28 and 05:42:27, **one file every 15 to 25 seconds**. That cadence is bulk generation,
+and it is consistent with the directory's name.
+
+**The session ended in debugging.** The last two files touched are `core/levels.py` and
+`cypha.py`, the two that carry the failure annotations.
+
+**One file was edited and never re-imported.** `core/thought.py` is the single size mismatch
+— the `.pyc` records 3417 bytes against a 3363-byte file — which fits a module with zero
+import sites.
+
+This is the most precise authoring evidence anywhere in the archive, and the only reason it
+survives is that someone zipped their `__pycache__`. It also independently confirms the DAG:
+13 February is before v6 (2026-02-27), and the directory mtime of 2026-02-21 20:35 is a bulk
+archival copy eight days after the work.
+
 
 ### The ambition, and the implementation
 

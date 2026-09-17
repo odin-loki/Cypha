@@ -21,7 +21,14 @@ zipping. **Per-file timestamps are worthless here.** Directory mtimes survived:
 | archive root | 2026-03-14 |
 
 Eight directories sharing one timestamp *to the minute* is a bulk copy, not eight
-simultaneous authorships. The ordering below therefore comes from internal evidence —
+simultaneous authorships.
+
+**One exception recovers a real date.** `cypha-vchatgpt/` shipped its `__pycache__`, and a
+CPython `.pyc` header embeds the source file's mtime and size. All 30 decode to a single
+session on **2026-02-13, 05:29–10:43 UTC** — eight days before the bulk copy, and two weeks
+before v6. It is the only precisely dated version in the archive, and it independently
+confirms vChatGPT's placement. See
+[`eras/branches.md`](eras/branches.md#it-is-the-only-version-in-the-archive-that-can-be-dated-to-the-minute). The ordering below therefore comes from internal evidence —
 module docstrings, class inventories, import sets and explicit supersession notices — and
 each edge is graded for confidence.
 
@@ -39,7 +46,7 @@ each edge is graded for confidence.
    Cypha v2 — torch + ray + scipy, 9,404 lines ─────────────┐
                        │                                    │
                        │  ◄── frameworks dropped            ▼
-                       ▼                              vChatGPT
+                       ▼                              vChatGPT   2026-02-13
    Cypha v3 — HRNA, BinaryEncoder, pure numpy ──┐     modular HRNA, 38 files
                        │                        │     + torch/transformers/PyQt6
                        ▼                        ▼     + agi/ gui/ security/ tests/
