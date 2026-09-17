@@ -197,6 +197,13 @@ void auto_recalibrate_temperature(CyphaInferModel& m, double decay = 0.995);
 
 /// Python `CyphaDIF.adapt_temperature`: grid-search T minimising ECE on labelled rows of `h` (same LLRs as `score_matrix_use_field`).
 /// `true_class_idx[i]` ∈ [0, K). Updates `infer.temperature` and returns the chosen T.
+/// Expected Calibration Error over ``n_bins`` equal-width confidence bins, as used by
+/// ``adapt_temperature_ece``. Exposed so the correctness of its bin edges and its non-finite
+/// handling can be tested directly (CTest ``native_ported_defects_pinned``); the top bin is
+/// closed at 1.0, non-finite confidences are excluded from both numerator and denominator, and
+/// an evaluation with no finite sample returns +infinity so it can never win a minimisation.
+double compute_ece_bins(const double* confs, const double* correct, int n, int n_bins);
+
 double adapt_temperature_ece(CyphaInferModel& infer, const double* h_row_major, int n_cal, const int* true_class_idx,
                              int n_grid = 20, double T_min = 0.3, double T_max = 8.0, int n_bins = 10);
 

@@ -863,27 +863,65 @@ std::vector<int> uncertainty_rank_indices(const CyphaInferModel& m, const Prepro
 
 namespace {
 
+}  // namespace
+
+// Expected Calibration Error over `n_bins` equal-width confidence bins.
+//
+// Two departures from the historical Python reference (`_compute_ece`, archived at
+// docs/history/archive/root-monolith/Cypha.py:137), both deliberate — see
+// docs/reports/NUMERICAL_KERNEL_AUDIT_2026-09-17.md finding R3:
+//
+//  1. The top bin is CLOSED at 1.0. The reference used `conf < hi` for every bin, so a sample
+//     at exactly 1.0 fell into no bin at all and was dropped from the numerator while `n` still
+//     counted it in the denominator. A perfectly confident, perfectly wrong classifier scored a
+//     perfect 0.0.
+//  2. Non-finite confidences are EXCLUDED from both numerator and denominator, and an
+//     evaluation with no finite sample returns +infinity. Under the reference every comparison
+//     against NaN was false, so NaN rows were silently dropped and an all-NaN evaluation scored
+//     0.0 — which, because `adapt_temperature_ece` MINIMISES this, meant a temperature that
+//     produced NaN confidences won the search outright.
+//
+// Python was decommissioned at P7 (CHANGELOG.md:55), so there is no second implementation to
+// stay bit-compatible with.
 double compute_ece_bins(const double* confs, const double* correct, int n, int n_bins) {
+  int n_finite = 0;
+  for (int i = 0; i < n; ++i) {
+    if (std::isfinite(confs[i])) {
+      ++n_finite;
+    }
+  }
+  if (n_finite == 0) {
+    // No usable sample: an invalid evaluation must never win a minimisation.
+    return std::numeric_limits<double>::infinity();
+  }
+
   double ece = 0.0;
   for (int b = 0; b < n_bins; ++b) {
-    double lo = static_cast<double>(b) / static_cast<double>(n_bins);
-    double hi = static_cast<double>(b + 1) / static_cast<double>(n_bins);
+    const double lo = static_cast<double>(b) / static_cast<double>(n_bins);
+    const double hi = static_cast<double>(b + 1) / static_cast<double>(n_bins);
+    const bool last = (b == n_bins - 1);
     double sum_w = 0.0;
     double sum_c = 0.0;
     double sum_corr = 0.0;
     for (int i = 0; i < n; ++i) {
-      if (confs[i] >= lo && confs[i] < hi) {
+      if (!std::isfinite(confs[i])) {
+        continue;
+      }
+      const bool in_bin = confs[i] >= lo && (last ? confs[i] <= hi : confs[i] < hi);
+      if (in_bin) {
         sum_w += 1.0;
         sum_c += confs[i];
         sum_corr += correct[i];
       }
     }
     if (sum_w > 0.0) {
-      ece += sum_w * std::abs(sum_c / sum_w - sum_corr / sum_w) / static_cast<double>(n);
+      ece += sum_w * std::abs(sum_c / sum_w - sum_corr / sum_w) / static_cast<double>(n_finite);
     }
   }
   return ece;
 }
+
+namespace {
 
 }  // namespace
 
@@ -902,7 +940,6 @@ double adapt_temperature_ece(CyphaInferModel& infer, const double* h_row_major, 
   std::vector<double> confs(static_cast<std::size_t>(n_cal));
   std::vector<double> corr(static_cast<std::size_t>(n_cal));
 
-  double best_ece = std::numeric_limits<double>::infinity();
   double best_T = infer.temperature;
 
   auto eval_T = [&](double T) {
@@ -929,10 +966,20 @@ double adapt_temperature_ece(CyphaInferModel& infer, const double* h_row_major, 
     return compute_ece_bins(confs.data(), corr.data(), n_cal, n_bins);
   };
 
+  // Score the incumbent first, so the search can only ever improve on it. The historical
+  // Python reference seeded this at +infinity (Cypha.py:3129), which meant the first grid point
+  // beat the incumbent unconditionally and the routine could install a WORSE temperature and
+  // report success. See docs/reports/NUMERICAL_KERNEL_AUDIT_2026-09-17.md finding R4.
+  double best_ece = eval_T(infer.temperature);
+
   if (n_grid <= 1) {
-    double T0 = T_min;
-    best_T = T0;
-    best_ece = eval_T(T0);
+    // Degenerate grid: evaluate the single point rather than storing it unscored.
+    const double T0 = T_min;
+    const double ece0 = eval_T(T0);
+    if (ece0 < best_ece) {
+      best_ece = ece0;
+      best_T = T0;
+    }
   } else {
     double log_a = std::log(T_min);
     double log_b = std::log(T_max);
