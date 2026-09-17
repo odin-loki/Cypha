@@ -7,6 +7,13 @@ architectural restart — survived only as a zip of loose directories.
 
 This section is that material: **archived, verified, and written up**.
 
+> **Status: complete, 2026-09-17.** The 175 source files are in, checksummed and byte-verified
+> against the delivered zip; the chronology is recovered from four independent embedded-metadata
+> channels; and every measurement, citation, quotation and link has been checked by the sweeps
+> described [below](#a-note-on-the-numbers-in-these-documents). Nothing here is pending. What
+> would change it is new material — the versions the archive names but does not contain, listed
+> in [`TIMELINE.md`](TIMELINE.md#three-implementations-named-by-the-archive-but-absent-from-it).
+
 > **Not the product spine.** Nothing here describes how Cypha works today. For that, start
 > at [`docs/README.md`](../README.md). This section explains how it got here, and is kept
 > because the native source still refers to Python files that existed nowhere in the
@@ -87,10 +94,18 @@ condenses a longer passage rather than quoting it, the attribution line says so.
 Every block carrying a `file:line` attribution has been diffed against the source it cites;
 those that differ do so only by the marked elisions and wraps above.
 
-Several conclusions here were reached by one pass and then overturned by a second. Where that
-happened the document states the corrected version and, when the error is instructive, says
-what the earlier reading was — v4's nonlinearity "fix", the twelve-day NIGField continuity, and
-the claim that v8's gate used the wrong GIG index are the three worth knowing about.
+**Several conclusions here were reached by one pass and overturned by a second.** That is
+recorded rather than tidied away, because it is the main reason to trust the rest: every
+substantive claim was put to an adversarial check that assumed it was wrong, and the ones that
+failed are named. Three are worth knowing about — v4's nonlinearity "fix" (it is not a fix; v7
+is), the "twelve-day" NIGField continuity (three days), and the claim that v8's gate used the
+wrong GIG index (it does not; λ = −1 is the correct posterior index). Where an error is
+instructive the document says what the earlier reading was.
+
+The checks that produced this are mechanical and repeatable: every `file:line` resolved and
+range-checked, every internal link and anchor followed, every attributed code block diffed
+against the source it cites, and every quoted measurement re-run against the archived code.
+Where a re-run disagreed with a reported figure, the re-run is what appears.
 
 A few numbers here are **threshold-dependent** rather than absolute — how many source lines
 two files share depends on whether you count `else:`. Where that is true, the full sweep is

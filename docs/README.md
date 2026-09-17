@@ -38,6 +38,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, REST routes |
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | Load-testing notes for REST |
 | [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership, routes, Hybrid default (U06 PGM→Wy opt-in) |
+| [Numerical kernel audit](reports/NUMERICAL_KERNEL_AUDIT_2026-09-17.md) | Four wrong limits in the GIG/Bessel gate — derived, reproduced, **not fixed**; none reachable in any shipped config |
 
 **Run native REST:** `./native/build/cypha_rest --model fixtures/reference.cypha`  
 **Run Qt shell:** build with `-DCYPHA_BUILD_QT=ON`, then `cypha_qt_shell` (see [`native/qt/README.md`](../native/qt/README.md))
