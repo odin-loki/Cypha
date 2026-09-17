@@ -58,9 +58,10 @@ deliberation band ships disabled by default, and that is the reason.
 | v2 — the specification that never ran | `cypha-v2/` | [`eras/02-v2.md`](eras/02-v2.md) |
 | v3 — the great simplification | `cypha-v3/` | [`eras/03-v3.md`](eras/03-v3.md) |
 | v4 — instrumentation and the thinking demonstration | `cypha-v4/` | [`eras/04-v4.md`](eras/04-v4.md) |
+| v5 — Omega-2, real datasets, and a self-audit | `cypha-v5/` | [`eras/05-v5.md`](eras/05-v5.md) |
 | Loose components and the RetDec side quest | several | [`eras/components.md`](eras/components.md) |
 
-*Writeups for v5–v8 and the two side branches are being added; the source for all of them is
+*Writeups for v6–v8 and the two side branches are being added; the source for all of them is
 already archived and inventoried under [`archive/`](archive/).*
 
 ---
