@@ -27,7 +27,7 @@ This section is that material: **archived, verified, and written up**.
 
 ---
 
-## The three things worth knowing
+## The four things worth knowing
 
 **1. Cypha has two unrelated architectures, and the version numbers hide the seam.**
 Versions 1 through 7 are *Cypha HRNA* — Harmonic Recursive Neural Architecture, a
@@ -50,6 +50,29 @@ A 1,070-core-hour factorial grid found two of its five knobs inert. Three separa
 profilers found adaptive strategies losing to fixed constants, an adaptation path that
 never fired once, and a detector that got *worse* with more evidence. The native product's
 deliberation band ships disabled by default, and that is the reason.
+
+**4. Two implementations are named by documents in the archive and are not in it.**
+`cypha-v6/game_benchmark.py` imports four symbols that exist in no archived `Cypha.py`, and
+the v6 README describes an engine — ensemble deliberator, hippocampal memory, reflexion,
+Platt calibration — that was never preserved. `GRIA`, which ships today, was implemented
+there. Separately, `cypha_synthesis.md` reports "U4 is now live in CyphaGalois.py", a file
+that does not exist. See
+[`TIMELINE.md`](TIMELINE.md#two-implementations-named-by-the-archive-but-absent-from-it).
+
+---
+
+## A note on the numbers in these documents
+
+Every measurement quoted here was re-run rather than taken on trust, and several did not
+survive. The v4 showcase emits 8 events on a fresh model, not the 11,163 first reported;
+CyphaMicro recalls 8 of its 14 pairs, not 7; v8's benchmark reaches macro 1.0000 in 12 runs
+out of 20, so the perfect score fifteen mathematical papers analysed is closer to a coin
+flip. Where a proposed explanation failed to replicate — the attribution of v8's collapse to
+its repulsion term, which measured 14/20 against a 12/20 baseline — it is described as a
+plausible mechanism and explicitly not as an established cause.
+
+Claims are cited to `file:line`, and every citation has been checked to resolve to a real
+file with the line in range.
 
 ---
 
