@@ -1,6 +1,6 @@
 # Numerical audit — inference gate, GIG/Bessel kernels, field, CUDA
 
-**Date:** 2026-09-17 · **Status:** **R1, R3, R4 fixed and CTest-guarded**; R2 open; the rest recorded
+**Date:** 2026-09-17 · **Status:** **R1–R4 and N1–N4, L5–L9 all fixed and CTest-guarded**; L11–L13 recorded
 **Scope:** `native/src/infer_cpu.cpp`, `nig_gig_math.cpp`, `nig_gig_score_match.cpp`,
 `bessel_table*`, `nig_field.cpp`, `accel_cuda.cu`
 
@@ -108,23 +108,23 @@ body is what produced the result above.
 | # | Where | Defect |
 |---|---|---|
 | ~~**R1**~~ | `infer_cpu.cpp` | `world_gate` applied **twice** on the kernel-LLR path — **FIXED**, guarded by CTest `native_kernel_gate_invariant` |
-| **R2** | `infer_cpu.cpp:1271-1280` | anomaly score divides a latent-variance-scaled `r_eff` by a dimensionless `mahal_ema` — **`use_gh` defaults to true**, so this is the default `/predict` path |
+| ~~**R2**~~ | `infer_cpu.cpp` | anomaly score divided a latent-variance-scaled `r_eff` by a dimensionless `mahal_ema` — **FIXED**, now `max(0, r_eff/r_base − 1)`, guarded by CTest `native_ported_defects_pinned` |
 | ~~**R3**~~ | `infer_cpu.cpp` | ECE binning dropped confidence exactly `1.0` and scored an all-NaN evaluation as a perfect `0.0` — **FIXED**, guarded by CTest `native_ported_defects_pinned` |
 | ~~**R4**~~ | `infer_cpu.cpp` | `adapt_temperature_ece` never scored the incumbent temperature — **FIXED**, guarded by the same CTest |
 
-### Latent — wrong, but not reachable today
+### Latent — wrong, but not reachable today (N1–N4 and L5–L9 have since been fixed)
 
 | # | Where | Defect |
 |---|---|---|
-| **N1** | `nig_gig_math.cpp:105-107` | large-`x` limit returns `psi/chi`; correct is `sqrt(psi/chi)` |
-| **N2** | `nig_gig_math.cpp:102-104` | small-`x` limit returns `psi/chi`; correct is `2/chi` |
-| **N3** | `nig_gig_math.cpp:97-99` | the `chi/psi < kEps` guard carries N2's wrong form |
-| **N4** | `nig_gig_score_match.cpp:62` | large-`x` series coefficient `6.75`; correct is `3/8` |
-| **L5** | `nig_gig_score_match.cpp:70` | `K₀/K₁` computed as `k2k1(x) − 2/x`; the fit's constant `a0 = 1.99945961 ≠ 2` leaves a residual that survives as `−5.4e-4/x`, so the result is **negative on 44.1%** of `[1e-6, 120]` — for a quantity provably in `(0,1)`. Zero-crossing at `x = 0.0036342844` |
-| **L6** | `nig_gig_math.cpp:85` | `active_k0k1` small-`x` returns `1/x` → `1e8`, where `K₀/K₁ → 0` (true value `2.08e-8` at `x=1e-9`). The limit is **inverted** |
-| **L7** | `nig_gig_math.cpp:119` | `gig_e_v_lam_neg1` small-`x` returns `chi/psi`: at `χ=1, ψ=1e-12` that is `1e12` against a true `E[V] = 13.93` — **11 orders of magnitude** |
-| **L8** | `nig_gig_math.cpp:61,65` | the `x → ∞` limit is clamped to the last table node `1.01252583`, never approaching 1: at `x = 1e4` the true value is `1.00015` — a **1.25%** floor that never decays |
-| **L9** | `bessel_table.hpp:7` | the grid is **uniform** (spacing `7.3247e-3`) over `[1e-6, 120]`, so the first cell spans `[1e-6, 7.33e-3]` where `K₂/K₁` falls from `2e6` to `273`. Linear interpolation at its midpoint gives `1.00e6` against a true `545.97` — a **183,085% error** |
+| ~~**N1**~~ | `nig_gig_math.cpp` | large-`x` limit returned `psi/chi`; correct is `sqrt(psi/chi)` — **FIXED** |
+| ~~**N2**~~ | `nig_gig_math.cpp` | small-`x` limit returned `psi/chi`; correct is `2/chi` — **FIXED** |
+| ~~**N3**~~ | `nig_gig_math.cpp` | the `chi/psi < kEps` guard carried N2's wrong form — **FIXED** |
+| ~~**N4**~~ | `nig_gig_score_match.cpp` | large-`x` series coefficient was `6.75`; correct is `3/8` — **FIXED** |
+| ~~**L5**~~ | `nig_gig_score_match.cpp:70` | `K₀/K₁` computed as `k2k1(x) − 2/x`; the fit's constant `a0 = 1.99945961 ≠ 2` leaves a residual that survives as `−5.4e-4/x`, so the result is **negative on 44.1%** of `[1e-6, 120]` — for a quantity provably in `(0,1)`. Zero-crossing at `x = 0.0036342844` — **FIXED** |
+| ~~**L6**~~ | `nig_gig_math.cpp:85` | `active_k0k1` small-`x` returns `1/x` → `1e8`, where `K₀/K₁ → 0` (true value `2.08e-8` at `x=1e-9`). The limit is **inverted** — **FIXED** |
+| ~~**L7**~~ | `nig_gig_math.cpp:119` | `gig_e_v_lam_neg1` small-`x` returns `chi/psi`: at `χ=1, ψ=1e-12` that is `1e12` against a true `E[V] = 13.93` — **11 orders of magnitude** — **FIXED** |
+| ~~**L8**~~ | `nig_gig_math.cpp:61,65` | the `x → ∞` limit is clamped to the last table node `1.01252583`, never approaching 1: at `x = 1e4` the true value is `1.00015` — a **1.25%** floor that never decays — **FIXED** |
+| ~~**L9**~~ | `bessel_table.hpp:7` | the grid is **uniform** (spacing `7.3247e-3`) over `[1e-6, 120]`, so the first cell spans `[1e-6, 7.33e-3]` where `K₂/K₁` falls from `2e6` to `273`. Linear interpolation at its midpoint gives `1.00e6` against a true `545.97` — a **183,085% error** — **FIXED** |
 | ~~L10~~ | `nig_gig_score_match.cpp:89` | **NOT CONFIRMED.** The claim was that `+0.5·psi·(x1−x0)` has the wrong sign. The natural operational check — that the predictive log-likelihood decreases as the observation grows more anomalous — **passes** (0 non-monotone steps over `mp ∈ [0, 200]`). The term is dimensionally odd and can dominate (`+74.1` against a `−5.0` penalty at `ψ=16`), but I could not show it is wrong. Recorded as unresolved |
 | **L11** | `accel_cuda.cu:157,178,41,54` | **NaN asymmetry verified by execution**: `fmax(NaN, 0.0) = 0.0` on the CUDA path while the CPU's `std::max(NaN, 0.0) = NaN` (`infer_cpu.cpp:126,1199`), so a NaN Mahalanobis silently becomes a maximally-confident gate on GPU. `pool_ensure` frees and nulls `g_pool` before `cudaMalloc` but leaves `g_pool_doubles` at the old capacity on failure, so a later call returns `cudaSuccess` with a null pool. No `GigNormalisationMode` dispatch on GPU |
 | **L12** | `nig_field.cpp:20` | `field_diag_a` calls `a_out.assign(static_cast<size_t>(fd), 0.0)` **before** its `fd <= 0` guard, so a negative `fd` throws `std::length_error` rather than returning. (The companion float32 power-iteration overflow at `:188` needs `W_T` entries above ~1e38 and is not reachable.) |
@@ -511,9 +511,224 @@ N1 and N4 therefore mask each other: the dead branch is dead *because* of the ot
 
 ---
 
+---
+
+## N1–N4, L5–L9 — fixed together, because they were one defect
+
+These nine findings were filed separately, against four functions and two backends. Working
+through them made it clear they are all the same mistake seen from different angles: **`K₂/K₁`
+was being treated as the primitive quantity, and `K₀/K₁` derived from it.**
+
+That is backwards. `K₂/K₁` carries a `2/x` pole — it runs to `2e6` at `x = 1e-6` — while `K₀/K₁`
+is confined to `[0, 1)`, increases monotonically, and is smooth everywhere. The two are related
+by an exact recurrence, with no approximation anywhere in it:
+
+```
+K₂(x) − K₀(x) = (2/x)·K₁(x)     ⟹     K₂/K₁ = 2/x + K₀/K₁
+```
+
+Approximating the bounded function and adding the pole back analytically is well conditioned.
+Doing it the other way round is not, and that produced every one of these findings:
+
+| Backend | What it did | What went wrong |
+|---|---|---|
+| LUT (default) | interpolated a `K₂/K₁` table | linear interpolation of a pole: **183,084%** worst-cell error (L9); clamped at both ends (L6, L8) |
+| ScoreMatch (opt-in) | fitted `z = x·K₂/K₁`, then `K₀/K₁ = z/x − 2/x` | catastrophic cancellation: **negative on 44.1%** of the domain (L5); wrong series coefficient (N4) |
+| GIG moments | hand-written limit branches to paper over both | every branch returned the wrong limit (N1, N2, N3, L7) |
+
+### The fix
+
+`K₀/K₁` is now the primitive in both backends, and `K₂/K₁ = 2/x + K₀/K₁` in both:
+
+- **`x ≤ 0.35`** — closed form. With `L = −ln(x/2) − γ`, the analytic expansion is
+  `x·L + x³·(L²/2 + L/2 + 1/4) + O(x⁵·poly(L))`; the `x⁵` coefficients are a least-squares fit of
+  the residual against `scipy.special.kv`.
+- **`0.35 < x < 0.65`** — a smoothstep blend into the mid-range approximant, so the two meet with
+  matching value and slope. Without it the seam left a `3.6e-5` step that made `K₀/K₁` **decrease**
+  at one point, which it must never do.
+- **`0.65 ≤ x ≤ 120`** — the shipped `K₀/K₁` table (LUT), or a degree-4/degree-4 rational fit of
+  `K₀/K₁` itself (ScoreMatch). Every denominator coefficient of that fit is positive, so it is
+  pole-free for all `x > 0` by construction rather than merely on the fitted interval.
+- **`x > 120`** — `1 − 1/(2x) + 3/(8x²)`, from the standard asymptotic series for `K_ν`. Adding
+  `2/x` recovers `1 + (3/2)/x + (3/8)/x²`, which is N4's correct coefficient — it now falls out of
+  the recurrence instead of being written down separately and got wrong.
+
+The table is still used, but only where interpolating it is actually accurate. Its first cell
+spans `[1e-6, 7.3e-3]` — four decades — which is where L9 lived.
+
+With `K₂/K₁` reproducing the pole analytically, **all four GIG moment special cases were deleted.**
+`gig_e_inv_v_lam_neg1` and `gig_e_v_lam_neg1` are now four lines each: clamp the parameters away
+from zero, evaluate the closed form. Every limit N1, N2, N3 and L7 asserted by hand now falls out
+of the algebra:
+
+| Regime | True limit | What the old branch returned |
+|---|---|---|
+| `psi → 0` | `E[1/V] → 2/chi` (the GIG degenerates to `InvGamma(1, chi/2)`) | `psi/chi`, i.e. ≈ 0 |
+| `psi → 0` | `E[V]` diverges logarithmically — `InvGamma(1, ·)` has **no mean** | `chi/psi`: `1e12` against a true `13.93` |
+| `chi → 0` | `E[V] → 0` | `chi/psi` |
+| `x → ∞` | `E[1/V] → sqrt(psi/chi)` | `psi/chi` — at `chi=1e4, psi=2e4` that is `2.0` against a true `1.414`, a **41%** overstatement |
+
+Note the `psi → 0` row for `E[V]`: an intermediate version of this fix returned `0.0` there, which
+is the right limit for `chi → 0` and the wrong one for `psi → 0`. The two degenerate directions
+are not interchangeable, and the guard had been testing `chi0 < kEps || psi < kEps` as though they
+were. Clamping `psi` and evaluating the series reports the divergence at the correct rate.
+
+### Measured result
+
+Relative error against `scipy.special.kv`, over `x ∈ [1e-9, 1e5]`:
+
+| | before | after |
+|---|---|---|
+| `K₂/K₁`, worst | **183,084%** (LUT first cell) | `1.9e-6` |
+| `K₀/K₁`, worst | `7415%` (LUT, below the first node) | `2.5e-5` |
+| `K₀/K₁`, sign | **negative on 44.1%** of the domain (ScoreMatch) | in `[0, 1)` everywhere, monotone |
+| `K₂/K₁` as `x → ∞` | floored at `1.0125` | `1.00015` at `x = 1e4` (true `1.00015`) |
+
+The ScoreMatch backend also got **three orders of magnitude more accurate** as a side effect: its
+`K₂/K₁` worst error fell from `1.3e-3` to `1.9e-6`, because it no longer approximates the pole at
+all. The two backends now agree with each other to `7.9e-7`.
+
+### The Phase 7 acceptance gate was inverted
+
+Fixing the kernels broke `native_gate_score_match_p7_smoke`, and the reason is worth recording,
+because the test had been passing for the wrong reason since it was written.
+
+Its only assertion was `loglik_score_match >= loglik_lut − 1e-6`. There was **no reference value**
+anywhere in it. That does not measure accuracy; it measures which backend reports the *higher*
+log-likelihood, and rewards whichever one overstates it. Evaluated against `scipy` on the test's
+own 512-sample holdout:
+
+| | held-out loglik | distance from exact |
+|---|---|---|
+| exact (`scipy.special.kv`) | −25.3006064719 | — |
+| **old** LUT | −25.3172787408 | `1.67e-2` |
+| **old** ScoreMatch | −25.1582268234 | **`1.42e-1`** |
+| **new** LUT | −25.3005467919 | `5.97e-5` |
+| **new** ScoreMatch | −25.3005712187 | `3.53e-5` |
+
+So the gate passed the score-match backend with a margin of **+0.159** at a moment when that
+backend was **8.5× further from the truth** than the LUT it was being compared against. After the
+fix the two agree to `2.4e-5` and score-match is the *closer* of the two — and the one-sided
+assertion started failing, precisely because score-match had stopped overstating.
+
+The test now pins the exact value and asserts that both backends track it, and that score-match is
+no further from it than the LUT. That is what "optimality acceptance" was meant to mean. The new
+bounds are ~270× and ~2800× tighter than what the old code delivered.
+
+### The CUDA device path carried the same defects
+
+`accel_cuda.cu` uploaded `kBesselK2K1` and re-implemented the same interpolation and the same three
+wrong limit branches. Left alone, the fix would have made the CPU correct and the GPU 183,084%
+wrong — a divergence that **CPU/GPU parity tests cannot catch**, because they compare the two paths
+against each other rather than against a reference.
+
+It now mirrors the host exactly: it uploads `kBesselK0K1`, rebuilds `K₂/K₁` from the recurrence,
+and shares the same constants and branch structure. There is no CUDA toolchain in this
+environment, so the device code is **not compile-tested here**; the arithmetic was verified by
+transcribing the device functions into host C++ (stripping `__device__`, mapping `fmax`/`fmin`/
+`log`/`sqrt` to `<cmath>`) and checking them against the host path — **bit-identical at every test
+point**, including both degenerate directions.
+
+`native_bessel_gig_limits` now also checks, as plain text, that the shared constants appear in both
+files and that the device references `kBesselK0K1` and not `kBesselK2K1`. That guard needs no GPU
+and was confirmed to fail when a single device constant is perturbed. `pool_ensure`'s stale-capacity
+bug (part of L11) was fixed in the same pass: it now clears `g_pool_doubles` when it frees the
+buffer, so a failed `cudaMalloc` can no longer leave a non-zero capacity that makes the next call
+return `cudaSuccess` with a null pool.
+
+### Adversarial review of the fix
+
+The change was put to an independent adversarial reviewer instructed to find reasons it was wrong
+or dangerous, plus two call-site and pinned-test audits. Nothing was found that blocks it; the
+reviewer specifically could not substantiate any cancellation at large `x`, any consumer relying on
+the old small-`x` behaviour, any overflow or NaN reachable from the new `2/chi` clamp (checked over
+the cross product of `chi, psi ∈ {0, 1e-300, 1e300}` — every result finite), or any compatibility
+break for serialised models. Its measured blast radius on the world gate across the reachable
+parameter band is at most **1.1%**, and in that case the new value is the correct one.
+
+Three of its findings were accepted and fixed:
+
+- `detail::k0k1_small_x` clamped its *result* to `[0,1]`, which turned the series' divergence above
+  `x ≈ 1.7` into an exact `0.0` — in range, silent, and the worst possible answer for a quantity
+  that tends to 1. Both helpers now saturate their *argument* to the documented domain instead, so
+  an out-of-range call returns the boundary value. All current callers guard correctly, so this is
+  defence in depth rather than a live bug.
+- The `Lut` enum was still documented as "unchanged numerics", which this change falsifies.
+- The `psi → 0` branch of `E[V]` returns a `kEps` artifact. The comment claimed the clamp "reports
+  that divergence at the right rate" — the rate is right, but the magnitude is set by a constant
+  that exists to guard a division, and the comment now says so.
+
+One was **refuted**: the reviewer measured the small-`x` series as *less* accurate than the table
+over `x ∈ [0.22, 0.5]` and put the crossover at `0.22`, concluding the blend window sits in the
+wrong place. Re-measuring on a **worst-in-cell** basis — linear interpolation is exact at the nodes
+and worst mid-cell, so comparing at arbitrary sample points flatters it — the series wins up to
+`x ≈ 0.44` and the table above. The window `[0.35, 0.65]` straddles that crossover. The loose
+comment it was reacting to has been replaced with the measured figure.
+
+Its remaining points were documentation and provenance debt, now closed by
+`scripts/gen_gig_k0k1_fit.py`.
+
+### Provenance
+
+`scripts/gen_gig_k0k1_fit.py` derives, validates and regenerates everything this change introduced:
+
+- `--fit` re-derives the series and rational coefficients from `scipy` and prints them C++-ready.
+- `--validate` (default) checks the shipped constants and the shipped table, and asserts range,
+  monotonicity, accuracy and cross-backend agreement. This is the same set of properties
+  `native_bessel_gig_limits` enforces in CI.
+- `--table` regenerates `native/src/bessel_table_data.cpp`, which had been unreproducible: its
+  header names `scripts/gen_native_bessel_table.py`, and **that script is not in the repository**.
+  The regenerated columns agree with the shipped ones to `2.6e-15` relative, and the grid is exact,
+  so the shipped file was left in place rather than churned for last-bit noise.
+- `--p7-reference` recomputes the exact held-out log-likelihood pinned by the Phase 7 test.
+
+
+### Guarded by
+
+CTest **`native_bessel_gig_limits`** (`native/tools/bessel_gig_limits.cpp`) drives **both**
+backends and checks three things separately, because the defects fell into three groups:
+accuracy against pinned `scipy` values across every seam; range and shape (`K₀/K₁ ∈ [0,1)` and
+non-decreasing, `K₂/K₁ > 1` and non-increasing, over 4,000 log-spaced points); and each limit
+above. It also pins `K₂/K₁` at `x = 0.00365` — L9's worst point — and checks the two backends
+against each other.
+
+### One golden fixture was regenerated
+
+`fixtures/gh_infer_deliberation/sidecar.json` pinned `expected_confidence`, `expected_r_eff` and
+`expected_chi_new` to `1e-10` absolute. Its own description read *"parity vs Cypha.py"*: the
+values were captured from the Python reference, which carried the same interpolation error the
+C++ inherited. Holding the fixed code to them would mean preserving bug-compatibility with a
+runtime that was decommissioned at P7 (`CHANGELOG.md`).
+
+It was regenerated with the repo's own `cypha_fixture_gen` — the sanctioned native path, which
+the header comment describes as replacing the removed Python generators — and its description now
+says it is a native golden rather than a parity fixture. `reference.cypha` and `f_field.json` are
+**byte-identical**; only the expectations moved, by `1e-7` to `1.6e-6`.
+
+Before accepting them, each was checked against `scipy` at the operating points the fixture
+actually exercises. The new values are **8–15× closer to truth**:
+
+| `x` | true `K₂/K₁` | old (interp `K₂/K₁`) | new (`2/x` + interp `K₀/K₁`) |
+|---|---|---|---|
+| 1.00 | 2.699483935594 | 2.699509054277 (`9.3e-6`) | 2.699482285144 (`6.1e-7`) |
+| 1.68 | 1.979140909120 | 1.979145628525 (`2.4e-6`) | 1.979140409177 (`2.5e-7`) |
+| 2.00 | 1.814307758764 | 1.814308323651 (`3.1e-7`) | 1.814307690258 (`3.8e-8`) |
+
+### Why this was safe to change
+
+The audit's own [What was checked and found sound](#what-was-checked-and-found-sound) section
+records that `bessel_table_data.cpp` satisfies `K₂/K₁ − K₀/K₁ = 2/x` at **every grid point**. The
+two tabulated columns are therefore already mutually consistent, so building `K₂/K₁` from the
+`K₀/K₁` column changes nothing at the nodes and only improves the values between them. No table
+data was edited.
+
+
 ## Test coverage
 
-No test or fixture exercises the affected range.
+*(As found during the audit. `native_bessel_gig_limits` has since been added and now covers all
+of this — see [the fix](#n1n4-l5l9--fixed-together-because-they-were-one-defect) above.)*
+
+No test or fixture exercised the affected range.
 
 - `native/tests/` contains no test for either function.
 - The only non-product caller, `native/tools/gate_score_match_p7_smoke.cpp`, draws

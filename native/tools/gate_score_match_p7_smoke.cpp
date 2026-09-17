@@ -1,4 +1,21 @@
-// Phase 7 optimality acceptance: score-matching GH/NIG gate vs Bessel LUT on held-out log-likelihood.
+// Phase 7 optimality acceptance: score-matching GH/NIG gate vs Bessel LUT on held-out
+// log-likelihood, measured against an exact reference.
+//
+// This test used to assert only `loglik_score_match >= loglik_lut`, with no reference at all. That
+// criterion does not measure accuracy -- it measures which backend reports the HIGHER likelihood,
+// and a backend is rewarded for overstating it. Measured against scipy at the time the Bessel
+// kernels were fixed (audit findings N1-N4, L5-L9), the old code sat at:
+//
+//     exact (scipy)      -25.3006064719
+//     old LUT            -25.3172787408    |err| = 1.67e-2
+//     old ScoreMatch     -25.1582268234    |err| = 1.42e-1     <- 8.5x FURTHER from truth
+//     delta = +0.159                                            <- and the old test PASSED on this
+//
+// So the acceptance gate passed the score-match backend by a comfortable margin precisely because
+// that backend was the less accurate of the two. With both kernels fixed the two agree to 2.4e-5
+// and the one-sided assertion started failing -- not because anything regressed, but because
+// score-match stopped overstating. The criterion is now distance from the exact value, which is
+// what "optimality acceptance" was meant to mean.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -80,14 +97,49 @@ int main() {
             << "  loglik_lut=" << ll_lut << "  loglik_sm=" << ll_sm << "  delta=" << delta << "\n"
             << "  max_abs_gate_delta=" << max_gate_delta << "\n";
 
-  constexpr double kLoglikTol = 1e-6;
-  const bool loglik_ok = ll_sm >= ll_lut - kLoglikTol;
-  if (!loglik_ok) {
-    std::cerr << "FAIL: held-out score-match loglik " << ll_sm << " < LUT " << ll_lut << " (tol " << kLoglikTol
-              << ")\n";
+  // Exact held-out log-likelihood for this seed and holdout, from scipy.special.kv at double
+  // precision. To re-derive: dump the 512 (mp, r_base, chi, psi) rows this file generates and pipe
+  // them to `scripts/gen_gig_k0k1_fit.py --p7-reference`, which evaluates the same formula with
+  // K_2/K_1 = kv(2,x)/kv(1,x). std::gamma_distribution is not reproducible outside libstdc++, so
+  // the samples have to come from here rather than being regenerated in Python.
+  constexpr double kExactLoglik = -25.3006064719;
+
+  const double err_lut = std::abs(ll_lut - kExactLoglik);
+  const double err_sm = std::abs(ll_sm - kExactLoglik);
+  std::cout << "  exact=" << kExactLoglik << "  err_lut=" << err_lut << "  err_sm=" << err_sm << "\n";
+
+  // Both backends must track the exact value. Measured at 5.97e-5 (LUT) and 3.53e-5 (score-match);
+  // the bound leaves an order of magnitude of headroom. Before the Bessel fix these were 1.67e-2
+  // and 1.42e-1, so this bound is ~270x and ~2800x tighter than what the code used to deliver.
+  constexpr double kMaxErr = 5e-4;
+  if (err_lut > kMaxErr) {
+    std::cerr << "FAIL: LUT held-out loglik " << ll_lut << " is " << err_lut << " from exact "
+              << kExactLoglik << " (max " << kMaxErr << ")\n";
+    return 1;
+  }
+  if (err_sm > kMaxErr) {
+    std::cerr << "FAIL: score-match held-out loglik " << ll_sm << " is " << err_sm << " from exact "
+              << kExactLoglik << " (max " << kMaxErr << ")\n";
     return 1;
   }
 
-  std::cout << "gate_score_match_p7_smoke: PASS (score-match loglik >= LUT; LUT retained; opt-in CYPHA_GIG_SCORE_MATCH=1)\n";
+  // The Phase 7 criterion, correctly stated: adopting the cheap backend must not cost accuracy.
+  // That is a comparison of DISTANCE FROM TRUTH, not of raw log-likelihood.
+  if (err_sm > err_lut * 1.5 + 1e-9) {
+    std::cerr << "FAIL: score-match is materially further from exact than the LUT (" << err_sm
+              << " vs " << err_lut << ")\n";
+    return 1;
+  }
+
+  // The two backends approximate the same function, so their gates must agree closely.
+  constexpr double kMaxGateDelta = 1e-5;
+  if (max_gate_delta > kMaxGateDelta) {
+    std::cerr << "FAIL: backends disagree on the world gate by " << max_gate_delta << " (max "
+              << kMaxGateDelta << ")\n";
+    return 1;
+  }
+
+  std::cout << "gate_score_match_p7_smoke: PASS (both backends track the exact held-out loglik; "
+               "score-match is no further from it than the LUT; opt-in CYPHA_GIG_SCORE_MATCH=1)\n";
   return 0;
 }

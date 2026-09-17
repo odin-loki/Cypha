@@ -1,6 +1,6 @@
 {
   "fixture_schema": 1,
-  "description": "gh_infer + deliberation parity vs Cypha.py",
+  "description": "gh_infer + deliberation native golden. Regenerated 2026-09-17 by cypha_fixture_gen after the Bessel-ratio fix (audit findings L8/L9): the previous expectations were pinned against Cypha.py, which carried the same K_2/K_1 interpolation error. Python was decommissioned at P7 (CHANGELOG.md), so this is a native golden, not a parity fixture.",
   "reference_cypha": "reference.cypha",
   "f_field_json": "f_field.json",
   "input_dim": 8,
@@ -13,6 +13,7 @@
   "nig_alpha": 0.98,
   "cases": [
     {
+      "name": "gh_infer_row_0",
       "x": [
         1.8,
         0.1,
@@ -27,13 +28,13 @@
       "chi": 1.0,
       "psi": 1.0,
       "expected_label": "0",
-      "expected_confidence": 0.9448556011331373,
-      "expected_r_eff": 0.10302373796329652,
-      "expected_chi_new": 1.6822776504995298,
-      "expected_psi_new": 1.0,
-      "name": "gh_infer_row_0"
+      "expected_confidence": 0.9448553451943982,
+      "expected_r_eff": 0.10302389932097182,
+      "expected_chi_new": 1.68227765049953,
+      "expected_psi_new": 1.0
     },
     {
+      "name": "gh_infer_row_1",
       "x": [
         0.1,
         1.7,
@@ -48,13 +49,13 @@
       "chi": 1.6822776504995298,
       "psi": 1.0,
       "expected_label": "1",
-      "expected_confidence": 0.9110128536719266,
-      "expected_r_eff": 0.11344798061271372,
-      "expected_chi_new": 1.8173505738918048,
-      "expected_psi_new": 1.0,
-      "name": "gh_infer_row_1"
+      "expected_confidence": 0.9110126460378875,
+      "expected_r_eff": 0.11344808926370971,
+      "expected_chi_new": 1.8173505738918045,
+      "expected_psi_new": 1.0
     },
     {
+      "name": "gh_infer_row_2",
       "x": [
         0.0,
         0.1,
@@ -69,13 +70,13 @@
       "chi": 1.8173505738918048,
       "psi": 1.0,
       "expected_label": "2",
-      "expected_confidence": 0.5361317330650422,
-      "expected_r_eff": 0.18900129505870528,
+      "expected_confidence": 0.5361315941759366,
+      "expected_r_eff": 0.1890013853028663,
       "expected_chi_new": 2.7590896433709333,
-      "expected_psi_new": 1.0,
-      "name": "gh_infer_row_2"
+      "expected_psi_new": 1.0
     },
     {
+      "name": "gh_infer_row_3",
       "x": [
         -0.09208587916557001,
         0.6170239888514847,
@@ -90,13 +91,13 @@
       "chi": 2.7590896433709333,
       "psi": 1.0,
       "expected_label": "1",
-      "expected_confidence": 0.3523735480959249,
-      "expected_r_eff": 0.21324157714011954,
+      "expected_confidence": 0.35237335215277615,
+      "expected_r_eff": 0.21324158859064551,
       "expected_chi_new": 3.0522962668759472,
-      "expected_psi_new": 1.0,
-      "name": "gh_infer_row_3"
+      "expected_psi_new": 1.0
     },
     {
+      "name": "infer_deliberation_disabled",
       "x": [
         1.8,
         0.1,
@@ -108,13 +109,13 @@
         0.0
       ],
       "use_gh": false,
-      "deliberation_lo": 1.0,
-      "deliberation_hi": 0.0,
       "expected_label": "0",
       "expected_confidence": 0.9674469993610232,
-      "name": "infer_deliberation_disabled"
+      "deliberation_lo": 1.0,
+      "deliberation_hi": 0.0
     },
     {
+      "name": "infer_deliberation_abstain",
       "x": [
         -0.33345583573387855,
         -0.03928848462334406,
@@ -126,11 +127,10 @@
         0.0405858161763242
       ],
       "use_gh": false,
-      "deliberation_lo": 0.35,
-      "deliberation_hi": 0.65,
       "expected_label": "__unknown__",
       "expected_confidence": 0.2741129909353442,
-      "name": "infer_deliberation_abstain"
+      "deliberation_lo": 0.35,
+      "deliberation_hi": 0.65
     }
   ]
 }

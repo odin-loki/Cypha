@@ -255,6 +255,10 @@ add_executable(kernel_gate_invariant tools/kernel_gate_invariant.cpp)
 target_link_libraries(kernel_gate_invariant PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(kernel_gate_invariant)
 
+add_executable(bessel_gig_limits tools/bessel_gig_limits.cpp)
+target_link_libraries(bessel_gig_limits PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(bessel_gig_limits)
+
 add_executable(nig_bma_p4_smoke tools/nig_bma_p4_smoke.cpp)
 target_link_libraries(nig_bma_p4_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(nig_bma_p4_smoke)
@@ -1079,6 +1083,7 @@ add_test(
 )
 add_test(NAME native_nig_adapt COMMAND "$<TARGET_FILE:nig_adapt_golden>")
 add_test(NAME native_kernel_gate_invariant COMMAND "$<TARGET_FILE:kernel_gate_invariant>")
+add_test(NAME native_bessel_gig_limits COMMAND "$<TARGET_FILE:bessel_gig_limits>" "${CMAKE_CURRENT_SOURCE_DIR}/src")
 add_test(NAME native_ported_defects_pinned COMMAND "$<TARGET_FILE:ported_defects_pinned>")
 add_test(
   NAME native_train_step_vector

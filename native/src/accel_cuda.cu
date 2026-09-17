@@ -16,7 +16,7 @@ char g_name[256]{};
 double* g_pool = nullptr;
 std::size_t g_pool_doubles = 0;
 
-double* d_bessel_k2k1 = nullptr;
+double* d_bessel_k0k1 = nullptr;
 
 void chk(cudaError_t e, const char* where) {
   if (e != cudaSuccess) {
@@ -34,6 +34,10 @@ cudaError_t pool_ensure(std::size_t nd) {
   if (g_pool_doubles > 0 && n < g_pool_doubles * 2) {
     n = g_pool_doubles * 2;
   }
+  // The buffer is gone from here on. Clearing the recorded capacity too means a failed cudaMalloc
+  // below cannot leave a stale non-zero capacity that makes the next call short-circuit to
+  // cudaSuccess while g_pool is null. See the audit report, finding L11.
+  g_pool_doubles = 0;
   if (n < 4096) {
     n = 4096;
   }
@@ -50,21 +54,23 @@ void pool_clear() {
   g_pool_doubles = 0;
 }
 
+// The device now uploads the K_0/K_1 column, not K_2/K_1, and rebuilds K_2/K_1 from the exact
+// recurrence -- mirroring the host fix in nig_gig_math.cpp. See the audit report, finding L9.
 cudaError_t ensure_bessel_table() {
-  if (d_bessel_k2k1 != nullptr) {
+  if (d_bessel_k0k1 != nullptr) {
     return cudaSuccess;
   }
   const std::size_t nb = cypha::detail::kBesselN * sizeof(double);
-  cudaError_t e = cudaMalloc(&d_bessel_k2k1, nb);
+  cudaError_t e = cudaMalloc(&d_bessel_k0k1, nb);
   if (e != cudaSuccess) {
     return e;
   }
-  return cudaMemcpy(d_bessel_k2k1, cypha::detail::kBesselK2K1, nb, cudaMemcpyHostToDevice);
+  return cudaMemcpy(d_bessel_k0k1, cypha::detail::kBesselK0K1, nb, cudaMemcpyHostToDevice);
 }
 
 void bessel_clear() {
-  cudaFree(d_bessel_k2k1);
-  d_bessel_k2k1 = nullptr;
+  cudaFree(d_bessel_k0k1);
+  d_bessel_k0k1 = nullptr;
 }
 
 __global__ void k_batch_encode(const double* X, const double* W, int n, int d, double* H) {
@@ -124,7 +130,7 @@ __global__ void k_world_gate(const double* H, int n, int d, const double* psi, d
   gates[i] = tanh(chi * dot);
 }
 
-__device__ double d_np_interp_k2k1(const double* tab, double x) {
+__device__ double d_np_interp_k0k1(const double* tab, double x) {
   const int N = 16384;
   const double x0 = 1e-6;
   const double x1 = 120.0;
@@ -138,26 +144,57 @@ __device__ double d_np_interp_k2k1(const double* tab, double x) {
   return tab[i] * (1.0 - t) + tab[i + 1] * t;
 }
 
+// Mirrors cypha::detail::k0k1_small_x / k0k1_large_x / k0k1_blend and the host k0k1_lut. Keep the
+// constants and the branch structure identical to native/src/nig_gig_score_match.cpp and
+// native/src/nig_gig_math.cpp -- a divergence here is invisible to CPU/GPU parity tests, which
+// compare the two paths against each other rather than against a reference.
+__device__ double d_k0k1_small_x(double x) {
+  const double kEulerGamma = 0.5772156649015329;
+  const double c3 = 0.23513844126021524;
+  const double c2 = 0.37929893852576335;
+  const double c1 = 0.50510404194744363;
+  const double c0 = 0.20476904886486919;
+  // Argument saturated to the valid interval, mirroring the host: an out-of-domain call returns
+  // the boundary value, not the series' blow-up.
+  double xs = fmin(fmax(x, 1e-300), 0.65);
+  double L = -log(0.5 * xs) - kEulerGamma;
+  double x2 = xs * xs;
+  double x3 = x2 * xs;
+  double x5 = x3 * x2;
+  double v = xs * L + x3 * (0.5 * L * L + 0.5 * L + 0.25) + x5 * (((c3 * L + c2) * L + c1) * L + c0);
+  return fmin(fmax(v, 0.0), 1.0);
+}
+
+__device__ double d_k0k1_large_x(double x) {
+  // Saturated below 120: the series exceeds 1 for x < ~1.2 and diverges as x -> 0.
+  double xs = fmax(x, 120.0);
+  return 1.0 - 0.5 / xs + 0.375 / (xs * xs);
+}
+
+__device__ double d_k0k1(const double* tab, double x) {
+  const double kBlendLo = 0.35;
+  const double kBlendHi = 0.65;
+  if (x <= 0.0) return 0.0;
+  if (x >= 120.0) return d_k0k1_large_x(x);
+  if (x <= kBlendLo) return d_k0k1_small_x(x);
+  double mid = d_np_interp_k0k1(tab, x);
+  if (x >= kBlendHi) return mid;
+  double t = (x - kBlendLo) / (kBlendHi - kBlendLo);
+  double w = t * t * (3.0 - 2.0 * t);
+  return (1.0 - w) * d_k0k1_small_x(x) + w * mid;
+}
+
+// K_2/K_1 = 2/x + K_0/K_1 (exact recurrence), then E[1/V] = sqrt(psi/chi) * K_2/K_1.
+// Every small-x / large-x special case the old version carried returned the wrong limit
+// (findings N1, N2, N3); clamping the parameters and evaluating the closed form gives all of
+// them correctly, exactly as on the host.
 __device__ double d_gig_e_inv_v(const double* bessel_tab, double chi0, double psi) {
   const double eps = 1e-8;
-  if (chi0 < eps || psi < eps) {
-    return psi / fmax(chi0, eps);
-  }
   double chi_g = fmax(chi0, eps);
-  double xv = sqrt(chi_g * psi);
-  if (xv < 1e-6) {
-    return psi / chi_g;
-  }
-  double chi_b = chi_g;
-  double x_b = xv;
-  if (x_b <= 120.0) {
-    const double lo = 1e-6;
-    const double hi = 120.0;
-    double xt = fmin(fmax(x_b, lo), hi);
-    double ratio = d_np_interp_k2k1(bessel_tab, xt);
-    return sqrt(psi / chi_b) * ratio;
-  }
-  return psi / chi_b;
+  double psi_g = fmax(psi, eps);
+  double xv = sqrt(chi_g * psi_g);
+  double k2k1 = 2.0 / xv + d_k0k1(bessel_tab, xv);
+  return sqrt(psi_g / chi_g) * k2k1;
 }
 
 __global__ void k_world_gate_nig(const double* H, int n, int d, const double* mu0, const double* inv_v,
@@ -336,7 +373,7 @@ void cypha_accel_cuda_world_gate_nig(const double* H, int n, int d, const double
   cudaMemcpy(d_inv, inv_v, nd * sizeof(double), cudaMemcpyHostToDevice);
   int block = 256;
   int grid = threads_for(n);
-  k_world_gate_nig<<<grid, block>>>(d_H, n, d, d_mu, d_inv, r_base, gh_chi, gh_psi, d_bessel_k2k1, d_g);
+  k_world_gate_nig<<<grid, block>>>(d_H, n, d, d_mu, d_inv, r_base, gh_chi, gh_psi, d_bessel_k0k1, d_g);
   chk(cudaGetLastError(), "k_world_gate_nig");
   cudaMemcpy(gates, d_g, ng * sizeof(double), cudaMemcpyDeviceToHost);
 }
