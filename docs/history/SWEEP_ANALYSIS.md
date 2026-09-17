@@ -109,6 +109,33 @@ so this is reported as recorded rather than interpreted.
 
 ---
 
+## Which architecture was swept
+
+This corpus profiles the **family-A (HRNA) line**, not CyphaDIF. The tier-2 knobs give it
+away: `K_TARGET`, `LAMBDA_LP`, `GAIN_K`, `GAIN_RHO` and `GAIN_A` are constants defined in
+v3's header block —
+
+```python
+K_TARGET  = 0.5
+LAMBDA_LP = 0.15
+GAIN_K    = 0.05
+GAIN_RHO  = 0.03
+GAIN_A    = 0.04
+```
+— `archive/cypha-v3/Cypha.py:20-24`
+
+— and they occur in v3, v4, v5, v6 and v7, and **zero times in v8 or the root monolith**.
+The same applies to `anchor_cap`, `lvq_lr`, `lvq_window` and `dead_staleness`, which name the
+v5/v6 `AnchorMemory` prototype store. The records also carry an `n_anchors` field.
+
+So the sweep measured the predecessor architecture, and the highest `final_acc` it ever
+reached anywhere is 0.9219. When v8 cites it — see
+[`eras/08-v8.md`](eras/08-v8.md#the-source-is-annotated-with-the-sweep) — it is importing
+constants selected against a different system. Five of the knobs it swept do not exist in
+the code that quotes it.
+
+---
+
 ## The result that mattered: two knobs were inert
 
 Marginal mean `fitness` per level, stage 1 (each column averages 5,250 runs):
@@ -139,6 +166,19 @@ fit=0.6206 acc=0.8656 ece=0.1719  n=5  {dedup 0.6, delib 0.2, post_trans_alpha 0
 
 A parameter whose five settings produce identical accuracy, identical calibration error and
 identical fitness across 25 runs is not influencing the model at all.
+
+> **Ranking configurations, not runs.** Every leaderboard here ranks *configurations* by mean
+> fitness over their 5 seeds. Ranking the 26,250 individual runs instead gives a different
+> answer, and the difference is not cosmetic: the top 100 *configurations* have
+> `dedup_threshold` 0.6 in 75 and 0.65 in 25, while the top 100 individual *runs* have 0.55 in
+> 75 and 0.65 in 25 — 0.60 does not appear at all. With 5 seeds per cell, the
+> configuration-level ranking is the meaningful one, and it is the one that agrees with both
+> the marginal means above and the value that shipped. A reader ranking rows will reach the
+> opposite conclusion about which threshold won.
+>
+> The same distinction explains `top_fit = 0.6206`, the figure recorded at
+> `archive/cypha-v8/Cypha.py:889`. It is the best configuration mean; the best single run is
+> 0.6571, and 3,506 individual runs exceed 0.6206.
 
 ---
 
