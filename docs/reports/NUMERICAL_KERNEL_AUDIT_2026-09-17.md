@@ -1,6 +1,6 @@
 # Numerical audit — inference gate, GIG/Bessel kernels, field, CUDA
 
-**Date:** 2026-09-17 · **Status:** **R1 fixed**; **R3/R4 pinned by a CTest**; the rest recorded
+**Date:** 2026-09-17 · **Status:** **R1, R3, R4 fixed and CTest-guarded**; R2 open; the rest recorded
 **Scope:** `native/src/infer_cpu.cpp`, `nig_gig_math.cpp`, `nig_gig_score_match.cpp`,
 `bessel_table*`, `nig_field.cpp`, `accel_cuda.cu`
 
@@ -56,8 +56,48 @@ changing it is deliberate rather than accidental.
 > | **R2** | **Judgement call** | The unit mismatch is real and it is the default `/predict` path, feeding the OOD flag users see. But its reference is unavailable, so "correct" has to be decided rather than looked up — the substantive question is what the anomaly score is *for*. |
 > | **L5–L13, N1–N4** | **Not now** | Wrong, sometimes spectacularly (L9's 183,085% interpolation error, L5 negative across 44% of its domain), but in paths nothing reaches. Fix opportunistically if that code is touched. |
 >
-> Recorded, not acted on, at the owner's direction. The pinning test means a later fix has to be
-> deliberate; it is not an argument that the behaviour is correct.
+> **R3 and R4 were subsequently fixed on exactly this reasoning.** See below. R2 remains open:
+> its reference is unavailable, so "correct" has to be decided rather than looked up, and its
+> `anomaly > 3.0` threshold was tuned against the current scale — changing the formula without
+> retuning the threshold would move OOD rates on the default path.
+
+---
+
+## R3 and R4 — fixed
+
+Both are corrected in `native/src/infer_cpu.cpp` and guarded by CTest
+`native_ported_defects_pinned`, which asserts the **correct** behaviour. (That test previously
+asserted the defective behaviour, to stop an accidental change while the parity question was
+open; the question is settled, so it was rewritten rather than worked around.)
+
+**R3, `compute_ece_bins`:** the top bin is now closed at 1.0; non-finite confidences are
+excluded from both numerator and denominator, so they neither score nor dilute; and an
+evaluation with no finite sample returns `+infinity`, so it can never win a minimisation.
+
+**R4, `adapt_temperature_ece`:** the incumbent temperature is scored before the grid, so the
+search can only improve on it, and the `n_grid <= 1` path evaluates its single point instead of
+storing it unscored.
+
+### Verified red-then-green against the shipped function
+
+`compute_ece_bins` was moved out of its anonymous namespace and declared in `infer_cpu.hpp`, so
+the test drives the real function rather than a copy of it. With the old ECE body restored in
+place — signature kept, so it still compiles and links — three assertions fail:
+
+```
+FAIL  conf==1.0, all wrong -> ECE is 1.0        got 0.000000000, want 1.000000000
+FAIL  all-NaN evaluation -> +inf                got 0.000000000, want inf
+FAIL  5 NaN + 5 confident-wrong -> ECE is 1.0   got 0.000000000, want 1.000000000
+```
+
+and with the old `+infinity` seeding, the end-to-end R4 check — which finds the grid's own
+optimum, adopts it as the incumbent, then re-runs with a single grid point pinned elsewhere —
+returns `0.300000` where the incumbent `8.000000` was better. All pass after the fix.
+
+An earlier attempt at this red test was **invalid** and is recorded as such: stashing the whole
+source file left the header declaring a symbol the old file did not define, the build failed,
+and the runner silently executed a stale binary that reported PASS. Reverting only the function
+body is what produced the result above.
 
 ---
 
@@ -69,8 +109,8 @@ changing it is deliberate rather than accidental.
 |---|---|---|
 | ~~**R1**~~ | `infer_cpu.cpp` | `world_gate` applied **twice** on the kernel-LLR path — **FIXED**, guarded by CTest `native_kernel_gate_invariant` |
 | **R2** | `infer_cpu.cpp:1271-1280` | anomaly score divides a latent-variance-scaled `r_eff` by a dimensionless `mahal_ema` — **`use_gh` defaults to true**, so this is the default `/predict` path |
-| **R3** | `infer_cpu.cpp:865-885` | ECE binning drops any sample at confidence exactly `1.0`, and scores an **all-NaN evaluation as a perfect 0.0** |
-| **R4** | `infer_cpu.cpp:903-950` | `adapt_temperature_ece` never scores the incumbent temperature, so it can replace a better one with a worse one and report success |
+| ~~**R3**~~ | `infer_cpu.cpp` | ECE binning dropped confidence exactly `1.0` and scored an all-NaN evaluation as a perfect `0.0` — **FIXED**, guarded by CTest `native_ported_defects_pinned` |
+| ~~**R4**~~ | `infer_cpu.cpp` | `adapt_temperature_ece` never scored the incumbent temperature — **FIXED**, guarded by the same CTest |
 
 ### Latent — wrong, but not reachable today
 
