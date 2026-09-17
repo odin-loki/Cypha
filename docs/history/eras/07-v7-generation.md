@@ -87,14 +87,61 @@ the output. The docstring's claim — "All cognitive machinery from the parent C
 is used live during generation — nothing is bypassed or simplified" — is, for the generation
 path, true.
 
-Classification in v7 is unchanged and still bypasses all of it. The architecture became
-load-bearing only when the task changed.
+Classification in v7 is unchanged and still bypasses all of it — `infer()` queries memory with
+`q = res['anchor_q']` (`Cypha.py:4205`), the pre-field encoder vector, exactly as v3 did. The
+architecture became load-bearing only when the task changed.
+
+### But only one of the three couplings does any work
 
 The generation loop's own documentation lists eight steps per token: goal-field injection,
 κ-scaled temperature, a thought cascade when the top-2 logits are within `cascade_margin`,
 schema attractor bias, a planning trajectory to avoid low-probability dead ends, episodic
 surprise gating, the `W_T` state transition, and token re-injection. Sampling is top-k
 (default 8) plus top-p (0.95); there is no beam search anywhere in the file.
+
+Three of those steps carry field state into the output. Measured on a model trained for
+2 epochs on 10 pairs and a decoder trained on one sentence, they do not carry equal weight.
+
+**The per-step ψ blend is the real channel.** At `:5518-5521` the loop evolves the field one
+step and mixes it into the decoder state at 95/5:
+
+```python
+cypha.field.evolve(1)
+psi_now = cypha.field.psi.real.astype(np.float64)
+n_pn = min(len(psi_now), self.state_dim)
+h[:n_pn] = 0.95 * h[:n_pn] + 0.05 * psi_now[:n_pn]
+```
+— `Cypha.py:5518-5521`
+
+`evolve()` renormalises ψ to unit norm every step while `h` decays, so the 5% term is the
+*larger* contribution by norm: measured ‖0.05·ψ‖ / ‖0.95·h‖ = **1.69**. Suppressing it changes
+the top-8 candidate set on **48 of 48** steps — a mean 5.88 tokens swapped — and moves
+`argmax(C·h)` on 43 of 48. And the field is prime-dependent, not autonomous: cos(ψ | *"cat
+sound"*, ψ | *"capital of Japan"*) averages 0.036 over the run.
+
+**The κ-scaled temperature is wired but inert.** `kappa_temp_scale` defaults to 0.5, κ is
+genuinely nonzero (mean 0.194), and τ reaches `sample_token` — but the logits are flat, at
+full-softmax entropy 5.545177 against ln 256 = 5.545177. Total variation between the
+κ-scaled and unscaled sampling distributions is 5.2 × 10⁻⁵, and the candidate set is identical
+on 48 of 48 steps.
+
+**`W_T` erases the priming rather than propagating it.** `_W_T` is initialised to
+`eye(dim)*0.01` with online lr 5 × 10⁻⁴ and barely moves — measured spectral radius **0.0138**,
+diagonal mean 0.010007, largest off-diagonal 2.9 × 10⁻⁴. So `h = W_T @ h` at `:5484` contracts
+the state by a factor of 0.010 per step, and the field-derived priming of `h` is gone within
+one or two tokens. The in-file comment at `:5481` claiming `sr≈0.077` did not replicate.
+
+So the exception to [the computed-and-discarded pathology](../LINEAGE.md#3-computed-and-discarded--the-pathology-that-ended-the-hrna-line)
+is genuine but narrower than the docstring's "nothing is bypassed or simplified" suggests: of
+three advertised field couplings, one does the work. It is also code the archive never runs —
+the file's own `__main__` smoke test calls neither `generate()` nor `train_decoder()`, and
+nothing else in the archive calls them either.
+
+> **On these numbers.** v7's pipeline is not reproducible run to run — wall-clock timestamps
+> enter event scheduling and priorities, so two identical builds diverge. The figures above are
+> therefore within-run counterfactuals, computed by recording intermediate norms during a
+> single real `generate()` call without altering any value or consuming any RNG, rather than
+> by ablate-and-rerun.
 
 ---
 

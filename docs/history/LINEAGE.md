@@ -120,13 +120,58 @@ with self._time_block("global"):
 discarded and the downstream value is a slice of the resonator output. `GlobalLevel` is
 constructed and never invoked. Of ten decomposed layers, four are on the working path.
 
-**v7** grows to 55 classes and 5,650 lines on top of that same core.
+**v7** grows to 55 classes and 5,650 lines on top of that same core — and breaks the pattern
+once, in one direction, five days before it was deleted.
+
+`CyphaDecoder` is the only place in thirteen months of HRNA where the resonance field is
+load-bearing. Not for classification — v7's `infer()` still queries memory with the pre-field
+encoder vector (`archive/cypa-v7-generation/Cypha.py:4205`, `q = res['anchor_q']`), exactly as
+v3 did. For **generation**. `generate()` primes its state from the field-derived output of
+`forward()`:
+
+```python
+prime_out = cypha.forward(prime_text, training=False)
+h = prime_out['state'].astype(np.float64)   # 256-dim real state
+```
+— `archive/cypa-v7-generation/Cypha.py:5376-5377`
+
+and then re-injects the live field into that state on every single step:
+
+```python
+cypha.field.evolve(1)
+psi_now = cypha.field.psi.real.astype(np.float64)
+n_pn = min(len(psi_now), self.state_dim)
+h[:n_pn] = 0.95 * h[:n_pn] + 0.05 * psi_now[:n_pn]
+```
+— `archive/cypa-v7-generation/Cypha.py:5518-5521`
+
+That 5% term is not decorative. `evolve()` renormalises ψ to unit norm every step while `h`
+decays, so the measured norm ratio `‖0.05·ψ‖ / ‖0.95·h‖` is **1.69** — the live field is the
+larger of the two contributions to the state that produces logits. Removing the blend changes
+the top-8 sampling candidates on **48 of 48** steps, a mean of 5.88 tokens swapped, and moves
+`argmax(C·h)` on 43 of 48. The field is also prime-dependent rather than free-running:
+cos(ψ | *"cat sound"*, ψ | *"capital of Japan"*) averages 0.036 across the run.
+
+**Two of the three advertised field couplings do not survive measurement, though.** The
+criticality-scaled temperature at `:5416-5417` (`tau = temperature * (1.0 + kappa_temp_scale *
+kappa)`) is genuinely wired and κ is genuinely nonzero (mean 0.194) — but the logits are flat
+(full-softmax entropy 5.545177 against ln 256 = 5.545177), so it moves the sampling
+distribution by a total variation of 5.2 × 10⁻⁵ and never once changes the candidate set. And
+`W_T = cypha.recursive._W_T  # live causal matrix` (`:5404`) is initialised to `eye(dim)*0.01`
+and barely moves: measured spectral radius **0.0138**, so `h = W_T @ h` (`:5484`) contracts the
+state hundred-fold per step and *erases* the priming rather than propagating it. The comment
+at `:5481` claiming `sr≈0.077` did not replicate.
+
+So the exception is real but narrow: one channel of three, in the one capability v8 removed.
+It is also never exercised — the file's own `__main__` smoke test never calls `generate()` or
+`train_decoder()`, and nothing else in the archive does either.
 
 **v8 restarts.** 1,412 lines, 9 classes, zero class names in common with v7, and a docstring
 claiming derivation "from first principles". Every equation in the new core — world prior,
 class differential, MDL decay, Fisher–Rao residual — is on the critical path by construction.
 
-After five versions of accumulating machinery on a core that was never load-bearing, starting
+After five versions of accumulating machinery on a core that was never load-bearing for
+classification — the one exception above being a generation path v8 deleted outright — starting
 from a small set of equations that are *all* load-bearing was the cheaper move. That is the
 best explanation the archive supports for the restart, and every step of it is in the source.
 
@@ -260,18 +305,22 @@ World prior: θ₀ updated via Welford
 ```
 — condensed from the module docstring, `archive/cypha-v8/Cypha.py:3-31`
 
-**"NIG" is three different things in this project, and only one of them is in v8.** The
-acronym is worth pulling apart before the thread continues, because every document in the
-archive uses it loosely and two of v8's own papers expand it differently — `cypha_synthesis.md:12`
-as Normal-Inverse-**Gamma**, `cypha_stat_mech.md:140` as Normal-Inverse-**Gaussian**.
+**"NIG" names four different things in this project, and they are not even the same
+distribution.** The acronym is worth pulling apart before the thread continues, because every
+document in the archive uses it loosely and two of v8's own papers expand it differently —
+`cypha_synthesis.md:12` as Normal-Inverse-**Gamma**, `cypha_stat_mech.md:140` as
+Normal-Inverse-**Gaussian**. Both expansions are in use in the product, for different objects.
 
 | | what it is | where |
 |---|---|---|
 | `NIGField` | a bank of four exponential decays with a learned `W_T` — **no NIG mathematics at all**; `alpha`, `beta`, `kappa` occur zero times in its 95 lines, and zero times in its C++ port | v8, root, `native/src/nig_field.cpp` |
-| the GH/GIG world gate | a Generalised Hyperbolic mixing-variable gate — and GIG(λ = −1), not the λ = −½ that *Normal-Inverse-Gaussian* actually denotes, as its own `gig_e_inv_v_lam_neg1` says | C++ only, no Python ancestor |
-| `NIGExpert` | the genuine conjugate prior, correctly parameterised `(κ₀, α₀, β₀)` with per-dimension `kappa_n_`, `alpha_n_`, `beta_n_` | `native/include/cypha/cyphalm/cyphalm_nig_expert.hpp:12,27-33` — the **language model**, not the classifier |
+| the Normal-Inverse-**Gaussian** world gate | a mixing-variable gate over GIG moments. Its `gig_e_inv_v_lam_neg1` evaluates GIG(λ = −1) — which *is* NIG: λ = −½ is the prior index, and the callers form the conjugate update `χ + innovation²/R` before evaluating, which takes λ to −1 | C++ only, no Python ancestor |
+| Normal-Inverse-**Gamma**, as `NIGExpert` | the conjugate prior over (μ, σ²), fully parameterised `(κ₀, α₀, β₀)` with per-dimension `kappa_n_`, `alpha_n_`, `beta_n_` | `native/include/cypha/cyphalm/cyphalm_nig_expert.hpp:12,27-33` — the **language model**, not the classifier |
+| Normal-Inverse-**Gamma**, as a posterior scale | `nig_delta_posterior_scale`, τ = `v_mean/(n_obs+1)` — the Normal half only, no α or β anywhere — inherited verbatim from v8's `u_k` (`archive/cypha-v8/Cypha.py:631`), but reached only when `CYPHA_USE_NIG_BMA` is set; `use_nig_bma` is `false` by default | `native/src/nig_gig_math.cpp:141-143` |
 
-Only the first is continuous with the archive. See
+Only the last is continuous with the archive — and v8 names it: `Cypha.py:410` calls `WorldPrior`
+"shared NIG base distribution θ₀". The Gaussian gate is native-only, so "arrived fully formed in v8"
+would be false of it. See
 [`eras/08-v8.md`](eras/08-v8.md#nigfield-does-not-contain-the-mathematics-its-name-claims).
 
 `NIGField` appears in v8 as an EMA filter bank over multiple timescales, gains a τ = 0.99
