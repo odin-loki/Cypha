@@ -138,7 +138,8 @@ record the verdict.
 | structured | 200 | Fixed α=0.05 (0.658) | **1** | 6 / 9 |
 | structured | 500 | Fixed α=0.05 (0.655) | **1** | 7 / 36 |
 
-`Adaptive (TP)` is never better than sixth. The one non-fixed winner, "Switch adaptive→0.05",
+`Adaptive (TP)` is never better than sixth, and fixed α = 0.05 beats it in **9 of 9** cells by
+between **5.2 and 22.8 percentage points**. The one non-fixed winner, "Switch adaptive→0.05",
 ends at 0.05 anyway. The report states its own decision rule verbatim:
 
 > If fixed_low always wins → adaptive mechanism should be disabled entirely.
