@@ -145,6 +145,41 @@ generate → propagate → regenerate loop. This was a deliberate removal, not a
 > the same thing.
 > — `Cell AI v2 Thinking Convo Log.txt:2298`
 
+### The graphs came back, as an opt-in variant
+
+Sixteen months later the current tree carries a graph cell again:
+
+```cpp
+{"H23", "PGM cell", 3, true, "hybrid",
+ "Plastic Graph Machine: hierarchical log-N address + sparse slot graph (no dense attn)"},
+```
+— `native/src/cyphalm/cypha_cell_hypothesis.cpp:37-38`
+
+It is implemented rather than declared — `native/src/cyphalm/pgm_cell.cpp`, plus four
+unified-context variants built on it (U04 PGM→LSTM, U05 PGM→GRIA, U06 PGM→logits, U09
+PGM-large) — and it is reachable when switched on. But it is not in the product. The
+production recipe does not merely leave it at its default; it writes the flag off explicitly:
+
+```cpp
+cfg.use_pgm_cell = false;
+cfg.use_unified_context = false;
+```
+— `native/src/cyphalm/cyphalm_config.cpp:97-98`
+
+and it did not win its bake-off. The 2026-07-18 head-to-head reports H23 as indistinguishable
+from the hybrid baseline — the report's own conclusion is that "PGM is **not yet a BPC
+competitor** as wired: no BPTT into the graph, no replacement of the LSTM head, field path
+nearly muted."
+
+Two caveats on reading this as a reversal. The BPC figures in those reports could not be
+reproduced here — no build tree exists and the result artifacts are gitignored and absent — so
+they are report-asserted, not independently confirmed. And the roles differ: 2025 abandoned
+graphs as the *reasoning substrate*, replacing them with astrocyte calcium waves, whereas H23's
+sparse slot graph sits inside a memory cell. The idea returned; the architectural position did
+not.
+
+---
+
 The dialogue also fixes what "cell" means in this project, and it is not biology:
 
 > A good one is cells. What happens in cells? They "think" in ways and so does the brain...
@@ -217,7 +252,7 @@ This era abandons more than it keeps, usually within the same conversation.
 
 | Abandoned | Evidence |
 |---|---|
-| Explicit graphs and graph algorithms | proposed at v2 turn 2, binned by turn 4, finally rejected at `:2298` |
+| Explicit graphs and graph algorithms | proposed at v2 turn 2, binned by turn 4, finally rejected at `:2298` — and [partially back, sixteen months later](#the-graphs-came-back-as-an-opt-in-variant) |
 | Three stacked Cell AI instances claiming ~10¹⁸× total speedup | dropped after v2 turns 5–6 |
 | Species-specific neural modules (insect, mammal, cephalopod, electric fish, bat, cetacean) | Brain Model §4.3; absent from v2 and v3 |
 | Neuromodulator vector `[DA, NE, 5HT, ACh]` | Brain Model §5.3; absent later |
