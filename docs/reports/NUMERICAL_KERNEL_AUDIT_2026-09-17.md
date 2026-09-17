@@ -9,7 +9,9 @@ This began while tracing the GIG world gate back through the Python archive duri
 (**N1–N4** below). Those were narrow and unreachable, so the surrounding numerical kernels were
 audited in full to see whether the list was complete. **It was not.** Six module audits produced
 25 candidate findings; each was then put to an independent adversarial check that assumed it was
-wrong. **21 survived, 2 were refuted, 2 checks were still running when this was written.**
+wrong. **21 survived and 2 were refuted.** Two of the 25 checks were lost when the machine
+restarted; both of those findings (R3 and L13) were instead verified by hand, so nothing here
+rests on a check that did not finish.
 
 Four of the survivors are reachable through shipped defaults, and three of those affect numbers
 a user actually sees. They are recorded rather than fixed, at the owner's direction.
@@ -43,17 +45,27 @@ a user actually sees. They are recorded rather than fixed, at the owner's direct
 | L10 | `nig_gig_score_match.cpp:89` | `nig_gate_predictive_loglik` adds `+0.5·psi·(x1−x0)` with the wrong sign and scale |
 | L11 | `accel_cuda.cu:157,178,41,54` | no `GigNormalisationMode` dispatch on GPU; `fmax` vs `std::max` NaN asymmetry; two allocator/caching faults that survive a failed `cudaMalloc` |
 | L12 | `nig_field.cpp:188,20` | float32 power iteration overflows for huge `W_T`; `field_diag_a` allocates before its `fd <= 0` guard |
-| L13 | `infer_cpu.cpp:1252` | `CyphaInferOptions::gh_chi/gh_psi/gh_alpha` are never read — `infer_at_h` hardcodes the values |
+| **L13** | `infer_cpu.cpp:1252` | `infer_at_h` hardcodes `gh_chi = gh_psi = 1.0`, silently ignoring the `CyphaInferOptions` fields that callers set |
 
 **Refuted** on adversarial check: `accel_cuda.cu:128` (device interpolator geometry — the
 hardcoded literals equal the real ones) and `nig_field.cpp:100` (inject early-return).
 
 ### What I verified personally
 
-R1–R4 and N1–N4 I read in the source and reproduced numerically myself; the workings are below
-and the commands are in [Reproducing](#reproducing). **L5–L13 rest on the audit and its
-adversarial check, not on my own reproduction** — they are recorded at that weaker standard and
-flagged here so nobody treats the two tiers as equivalent.
+**R1–R4, N1–N4 and L13** I read in the source and checked myself; the workings are below and the
+commands are in [Reproducing](#reproducing). **L5–L12 rest on the audit and its adversarial
+check, not on my own reproduction** — they are recorded at that weaker standard, and flagged here
+so the two tiers are not treated as equivalent.
+
+L13, verified by hand: `infer_at_h` calls
+`classify_at_h(m, h, h_field, m.temperature, mahal_ema_opt, m.mahal_std_ema, 1.0, 1.0, …)` at
+`infer_cpu.cpp:1252` — the two literals are `gh_chi` and `gh_psi`. Meanwhile
+`CyphaInferOptions::gh_chi/gh_psi/gh_alpha` exist at `infer_cpu.hpp:33-35` and *are* written by
+callers, at `cypha.cpp:471` and `cypha_rest.cpp:1039`. So on the `infer_at_h` path those settings
+are silently discarded. The GH path is unaffected — `gh_infer_at_h` takes them as explicit
+arguments (`cypha_rest.cpp:1042`) — and since `use_gh` defaults to true, the default path honours
+them. The failure is confined to the non-GH path, where a caller's configuration is accepted and
+ignored.
 
 ---
 
