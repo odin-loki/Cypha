@@ -30,57 +30,88 @@ each edge is graded for confidence.
 ## The DAG
 
 ```
-        Prototypes — Brain Model → Cell AI v2 → Cell AI v3          2025-02-26
-                              │
-                              ▼
-        "Cypha V1" — IRENA → HRNA  (the name Cypha does not exist yet)   2025-03-04
-                              │
-                              ▼
-        Cypha v2 — torch + ray + scipy monolith, 9,404 lines
-                              │
-                              │  ◄── frameworks dropped
-                              ▼
-   ┌───  Cypha v3 — HRNA, BinaryEncoder, pure numpy  ───┐
-   │                          │                        │
-   │                          ▼                        │
-   │    Cypha v4 — + benchmark_suite, verify_thinking   │
-   │                          │                        │
-   │                          │  ◄── encoder replaced   │
-   │                          ▼                        │
-   │    Cypha v5 — HRNA, OmegaEncoder ("Omega-2")       │
-   │                          │                        │
-   │                          ▼                        │
-   │    Cypha v6 — + 4 profilers, game benchmarks       │
-   │                          │                        │
-   │                          ▼                        │
-   │    Cypa v7 Generation — HRNA peak, 55 classes      │   2026-03-06
-   │                          ┊                        │
-   │              ╔═══════════┊═══════════╗            │
-   │              ║  CLEAN-SHEET RESTART  ║            │
-   │              ╚═══════════┊═══════════╝            │
-   │                          ▼                        │
-   │    Cypha v8 — CyphaDIF, 9 classes, 1,412 lines     │   2026-03-11
-   │                          │                        │
-   │                          ▼                        │
-   │    root Cypha.py — CyphaDIF "v2", +5 phases        │   2026-03-14
-   │                          ┊                        │
-   ▼                          ┊                        ▼
- vChatGPT                     ┊              vPattern Matching
- modular HRNA                 ┊              "production" HRNA
- + torch/transformers/PyQt6   ┊              distillation, 996 lines
-                              ┊
-                              ┊  ◄── undocumented interval, 2026-03-14 → 2026-08-16
-                              ▼
-     prior repository — CHANGELOG v0.1.0 (2026-03-31) … v2.3.24
-     commits 127bbe9 / 8945c95 / 1dbfa13, none reachable from here
-                              │
-                              ▼
-     this repository — git history from 2026-07-18 (v2.3.25)
-     Python decommissioned at P7, v2.4.0, 2026-08-16
-                              │
-                              ▼
-                  native C++ `cypha::Cypha`
+   Prototypes — Brain Model · Cell AI v2 · Cell AI v3/OICFHS      2025-02-26
+                       │
+                       ▼
+   "Cypha V1" — IRENA → HRNA   (the name Cypha does not exist yet) 2025-03-04
+                       │
+                       ▼
+   Cypha v2 — torch + ray + scipy, 9,404 lines ─────────────┐
+                       │                                    │
+                       │  ◄── frameworks dropped            ▼
+                       ▼                              vChatGPT
+   Cypha v3 — HRNA, BinaryEncoder, pure numpy ──┐     modular HRNA, 38 files
+                       │                        │     + torch/transformers/PyQt6
+                       ▼                        ▼     + agi/ gui/ security/ tests/
+   Cypha v4 — + benchmark_suite,          vPattern Matching
+              verify_thinking             "production" HRNA
+                       │                  distillation, 996 lines
+                       │  ◄── BinaryEncoder replaced by OmegaEncoder
+                       ▼
+   Cypha v5 — HRNA "Omega-2" + dataset tooling
+                       │
+                       ▼
+   Cypha v6 — + 4 profilers + game benchmarks                     2026-02-27
+                       │
+                       ▼
+   Cypa v7 Generation — HRNA peak, 55 classes                     2026-03-06
+                       ┊
+           ╔═══════════┊════════════╗
+           ║   CLEAN-SHEET RESTART  ║   family A ends here
+           ╚═══════════┊════════════╝
+                       ▼
+   Cypha v8 — CyphaDIF, 9 classes, 1,412 lines                    2026-03-11
+                       │
+                       ▼
+   root Cypha.py — CyphaDIF "v2", +5 phases                       2026-03-14
+                       ┊
+                       ┊  ◄── undocumented interval → 2026-08-16
+                       ▼
+   prior repository — CHANGELOG v0.1.0 (2026-03-31) … v2.3.24
+   commits 127bbe9 / 8945c95 / 1dbfa13, none reachable from here
+                       │
+                       ▼
+   this repository — git history from 2026-07-18 (v2.3.25)
+   Python decommissioned at P7, v2.4.0, 2026-08-16
+                       │
+                       ▼
+             native C++ `cypha::Cypha`
 ```
+
+### The class-overlap matrix that fixes the branch points
+
+Counting shared `class` names between every pair of archived trees:
+
+|          | v2 | v3 | v4 | v5 | v6 | v7 | **v8** | **root** | vChatGPT | vPattern |
+|---|---|---|---|---|---|---|---|---|---|---|
+| v2       | 48 | 10 | 10 | 8 | 8 | 8 | **0** | **0** | **30** | 2 |
+| v3       | 10 | 33 | 30 | 24 | 24 | 24 | **0** | **0** | 8 | 5 |
+| v4       | 10 | 30 | 39 | 24 | 24 | 24 | **0** | **0** | 8 | 4 |
+| v5       | 8 | 24 | 24 | 26 | 26 | 26 | **0** | **0** | 8 | 4 |
+| v6       | 8 | 24 | 24 | 26 | 34 | 29 | **0** | **0** | 8 | 4 |
+| v7       | 8 | 24 | 24 | 26 | 29 | 53 | **0** | **0** | 8 | 4 |
+| **v8**   | **0** | **0** | **0** | **0** | **0** | **0** | 9 | 6 | **0** | **0** |
+| **root** | **0** | **0** | **0** | **0** | **0** | **0** | 6 | 19 | **0** | **0** |
+
+Two things fall straight out of it.
+
+**The family break is total.** v8 and the root monolith share **zero** class names with
+*every* family-A tree — v2, v3, v4, v5, v6, v7, vChatGPT and vPattern Matching alike — while
+sharing 6 with each other. There is no gradual transition to find.
+
+**vChatGPT forks from v2, not v3.** It shares 30 classes with v2 against 8 with each of
+v3–v7, and those 30 include classes that exist *only* in v2 on the main line —
+`AlternativeFastOperations`, `NaturalMathematicalShortcuts`, `StrategicStochasticNoise`,
+`PrecisionControl` (v2's Speed Enhancement Layer), plus `CyphaSystem`, `CyphaMonitor`,
+`RecursiveEventCascades`, `SelfGeneratedEventStreams` and `ResonantEventChains`. The 8 it
+shares with v3–v7 are just the HRNA level names, which v2 also has. vChatGPT is v2 taken
+apart into modules and given a GUI, a trainer and an `agi/` package — not a branch off the
+simplified line.
+
+**vPattern Matching forks from the v3 era.** Its `Resonator`, `AnchorMemory`, `MetaLearning`
+and `Cypha` are v3-generation names absent from v2; it shares 5 classes with v3 and 4 with
+the standalone encoder, against only 2 with v2.
+
 
 ---
 
@@ -119,7 +150,7 @@ filenames as evidence.
 The single most important fact about Cypha's history is that it has **two unrelated
 architectures**, and the version numbers conceal the break.
 
-### Family A — Cypha HRNA (v1, v3–v7, and both side branches)
+### Family A — Cypha HRNA (v1, v2–v7, and both side branches)
 
 HRNA is **Harmonic Recursive Neural Architecture**, expanded in
 [`archive/cypha-vpattern-matching/README.md`](archive/cypha-vpattern-matching/README.md):
@@ -202,8 +233,9 @@ the twelve days that produced v8 and the root monolith.
 
 Neither `vChatGPT` nor `vPattern Matching` is on the main line; both are HRNA experiments.
 
-**`cypha-vchatgpt`** is the HRNA hierarchy modularised. Its `core/` package re-implements
-the named HRNA layers across separate files —
+**`cypha-vchatgpt`** is **v2** taken apart into modules (see the overlap matrix above: 30
+shared classes with v2, 8 with v3–v7). Its `core/` package re-implements the named HRNA
+layers across separate files —
 `levels.py` defines `ResonatorLevel`, `AssemblyLevel`, `ModuleLevel`, `GlobalLevel`;
 `resonance.py` defines `ResonanceField`; alongside `recursion.py`, `feedback.py`,
 `metalearning.py`, `compression.py`, `events.py`, `encoder.py`, `optimization.py`,
@@ -254,8 +286,8 @@ eventual C++ port — see [`PYTHON_TO_CPP_BRIDGE.md`](PYTHON_TO_CPP_BRIDGE.md).
 | v5 → v6 → v7 | **high** | byte-identical Omega-2 docstrings; monotonic growth; v7 matches the declared layer list |
 | v7 ⇸ v8 | **high** (as a *break*) | zero shared classes, 75% shrink, "derived from first principles" |
 | v8 → root monolith | **high** | shared header plus root's own "Enhancement summary (v2)" listing five phases added |
-| v3 ⇢ vChatGPT | medium | shares the HRNA level hierarchy by name; independently modularised, so not a direct extraction |
-| v3 ⇢ vPattern Matching | medium | HRNA core distilled; `torch` retained, so it forks before or beside the v3 framework drop |
+| **v2 ⇢ vChatGPT** | **high** | shares **30** class names with v2 but only 8 with v3–v7, and the 30 include v2-only Speed-Layer classes (`AlternativeFastOperations`, `NaturalMathematicalShortcuts`, `StrategicStochasticNoise`, `PrecisionControl`) plus `CyphaSystem` and `CyphaMonitor` |
+| v3 ⇢ vPattern Matching | medium | its `Resonator`, `AnchorMemory`, `MetaLearning` and `Cypha` are v3-era names absent from v2 (5 shared with v3, 4 with the standalone encoder, only 2 with v2) |
 | root monolith → native C++ | **high** | 21 identifiers cited in `native/` resolve there and nowhere else |
 
 The weakest links are the two side branches. They are securely placed in **family A** by
