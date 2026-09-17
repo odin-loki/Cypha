@@ -69,6 +69,12 @@ and may drop figures, equation formatting and styling.
 
 Total: **173 files, 12 MB.**
 
+**Line counts.** Every line count quoted in this section is what `wc -l` reports, i.e. a
+count of newline characters. Nine archived files have no trailing newline — among them
+`cypha-v2/Cypha.py`, `cypha-v3/Cypha.py`, `cypha-v4/Cypha.py`, `cypha-v1/Cypha Convo Log.txt`
+and both long prototype logs — so for those the logical line count is one higher than the
+figure quoted. Byte counts are exact.
+
 **Integrity.** All 132 verbatim copies were verified `sha256`-identical to source. A scan of
 all 142 text files found exactly one corrupt file — `big-data/download_datasets.py`, which is
 8,755 NUL bytes with no recoverable content and which arrived that way in the source zip. No
