@@ -57,9 +57,10 @@ deliberation band ships disabled by default, and that is the reason.
 | V1 — IRENA → HAEDF → HRNA | `cypha-v1/` | [`eras/01-v1.md`](eras/01-v1.md) |
 | v2 — the specification that never ran | `cypha-v2/` | [`eras/02-v2.md`](eras/02-v2.md) |
 | v3 — the great simplification | `cypha-v3/` | [`eras/03-v3.md`](eras/03-v3.md) |
+| v4 — instrumentation and the thinking demonstration | `cypha-v4/` | [`eras/04-v4.md`](eras/04-v4.md) |
 | Loose components and the RetDec side quest | several | [`eras/components.md`](eras/components.md) |
 
-*Writeups for v4–v8 and the two side branches are being added; the source for all of them is
+*Writeups for v5–v8 and the two side branches are being added; the source for all of them is
 already archived and inventoried under [`archive/`](archive/).*
 
 ---
