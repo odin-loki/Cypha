@@ -247,6 +247,10 @@ add_executable(gate_score_match_p7_smoke tools/gate_score_match_p7_smoke.cpp)
 target_link_libraries(gate_score_match_p7_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(gate_score_match_p7_smoke)
 
+add_executable(kernel_gate_invariant tools/kernel_gate_invariant.cpp)
+target_link_libraries(kernel_gate_invariant PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(kernel_gate_invariant)
+
 add_executable(nig_bma_p4_smoke tools/nig_bma_p4_smoke.cpp)
 target_link_libraries(nig_bma_p4_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(nig_bma_p4_smoke)
@@ -1070,6 +1074,7 @@ add_test(
     "${_golden_fix}/csv_preprocess_classify_hotpath"
 )
 add_test(NAME native_nig_adapt COMMAND "$<TARGET_FILE:nig_adapt_golden>")
+add_test(NAME native_kernel_gate_invariant COMMAND "$<TARGET_FILE:kernel_gate_invariant>")
 add_test(
   NAME native_train_step_vector
   COMMAND "$<TARGET_FILE:train_step_vector_golden>"

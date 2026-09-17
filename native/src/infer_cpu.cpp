@@ -1102,23 +1102,9 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
     apply_nig_bma_llr_row(m, rp.data(), K, out.llrs.data());
   }
 
+  // Retained for the kernel blend below; the linear softmax that used to accompany it fed only
+  // the removed rescale block (see the note further down) and is gone with it.
   std::vector<double> linear_llrs = out.llrs;
-  int linear_best = 0;
-  double linear_best_llr = linear_llrs[0];
-  for (int k = 1; k < K; ++k) {
-    if (linear_llrs[static_cast<std::size_t>(k)] > linear_best_llr) {
-      linear_best_llr = linear_llrs[static_cast<std::size_t>(k)];
-      linear_best = k;
-    }
-  }
-
-  std::vector<double> z_lin(static_cast<std::size_t>(K));
-  for (int k = 0; k < K; ++k) {
-    z_lin[static_cast<std::size_t>(k)] = linear_llrs[static_cast<std::size_t>(k)] / (temperature + kEps);
-  }
-  std::vector<double> p_lin;
-  softmax_batch_reference(z_lin.data(), 1, K, kEps, p_lin);
-  const double disc_lin = p_lin[static_cast<std::size_t>(linear_best)];
 
   if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4) {
     std::vector<double> kernel_scores(static_cast<std::size_t>(K));
@@ -1162,11 +1148,13 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
   out.r_eff = nig_r_eff_scalar(out.mahal_per_dim, r_base, gh_chi, gh_psi);
   out.world_gate = r_base / std::max(out.r_eff, r_base);
 
-  if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0 && disc_lin > kEps) {
-    const double conf_lin = disc_lin * out.world_gate;
-    const double disc_new = probs[static_cast<std::size_t>(best_i)];
-    out.disc = disc_new * (conf_lin / disc_lin);
-  }
+  // NOTE: a kernel-LLR rescale block used to sit here. It computed
+  //   out.disc = disc_new * (disc_lin * world_gate) / disc_lin
+  // in which `disc_lin` cancels exactly, leaving `out.disc *= world_gate` — and the tail of this
+  // function then applies `world_gate` a second time, so the kernel path returned
+  // `disc * world_gate^2` while every other path returned `disc * world_gate`. `out.disc` already
+  // holds the blended softmax maximum from above, which is the quantity the tail expects.
+  // Guarded by CTest `native_kernel_gate_invariant`.
 
   if (m.use_nig_bma) {
     const double nobs = m.n_obs[static_cast<std::size_t>(best_i)];

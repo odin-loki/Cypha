@@ -1,6 +1,6 @@
 # Numerical audit — inference gate, GIG/Bessel kernels, field, CUDA
 
-**Date:** 2026-09-17 · **Status:** findings recorded, **no code changed**
+**Date:** 2026-09-17 · **Status:** **R1 fixed and guarded by a CTest**; the rest recorded, not fixed
 **Scope:** `native/src/infer_cpu.cpp`, `nig_gig_math.cpp`, `nig_gig_score_match.cpp`,
 `bessel_table*`, `nig_field.cpp`, `accel_cuda.cu`
 
@@ -14,7 +14,18 @@ restarted; both of those findings (R3 and L13) were instead verified by hand, so
 rests on a check that did not finish.
 
 Four of the survivors are reachable through shipped defaults, and three of those affect numbers
-a user actually sees. They are recorded rather than fixed, at the owner's direction.
+a user actually sees.
+
+**Of those four, exactly one was ours to fix.** R1 lives in the kernel-LLR path, which has no
+Python ancestor at all — `kernel_llr`, `KernelMemory` and `kernel_blend` occur **zero** times in
+both `root-monolith/Cypha.py` and `cypha-v8/Cypha.py` — and `docs/port/PORT_CONTRACT.md:65` states
+outright that *"Fixtures assume `use_kernel_llr=False`"*. Nothing documented constrains it, so it
+was fixed and a regression test now guards it.
+
+R2, R3 and R4 are **faithful ports of Python defects**, and changing them would break the parity
+the port contract asserts. The Python originals are cited in each section below. They are left
+as-is, deliberately; the decision to diverge from the reference implementation is the owner's, not
+this report's.
 
 ---
 
@@ -24,7 +35,7 @@ a user actually sees. They are recorded rather than fixed, at the owner's direct
 
 | # | Where | Defect |
 |---|---|---|
-| **R1** | `infer_cpu.cpp:1165-1169` | `world_gate` applied **twice** on the kernel-LLR path: `confidence = disc·gate²` where every other path gives `disc·gate` |
+| ~~**R1**~~ | `infer_cpu.cpp` | `world_gate` applied **twice** on the kernel-LLR path — **FIXED**, guarded by CTest `native_kernel_gate_invariant` |
 | **R2** | `infer_cpu.cpp:1271-1280` | anomaly score divides a latent-variance-scaled `r_eff` by a dimensionless `mahal_ema` — **`use_gh` defaults to true**, so this is the default `/predict` path |
 | **R3** | `infer_cpu.cpp:865-885` | ECE binning drops any sample at confidence exactly `1.0`, and scores an **all-NaN evaluation as a perfect 0.0** |
 | **R4** | `infer_cpu.cpp:903-950` | `adapt_temperature_ece` never scores the incumbent temperature, so it can replace a better one with a worse one and report success |
@@ -110,8 +121,31 @@ just a changed number.
 No test can catch it: `kernel_llr_golden.cpp` never calls `classify_at_h`, and
 `xor_kernel_bench.cpp` compares `res.label` only, never `res.confidence`.
 
-The minimal fix is to delete `:1165-1169`; `out.disc` already holds the right quantity from
-`:1150`. **Not applied.**
+### Fixed
+
+The block was deleted; `out.disc` already holds the blended softmax maximum, which is what the
+tail of the function expects. The linear softmax above it (`linear_best`, `z_lin`, `p_lin`,
+`disc_lin`) fed only this block and went with it, removing a redundant softmax per call on the
+kernel path. `linear_llrs` is kept — the blend still uses it.
+
+**Proven against the built binary, not on paper.** `native/tools/kernel_gate_invariant.cpp`
+exercises the `kernel_blend = 0.0` invariant, where the blended LLRs are bit-identical to the
+linear ones so every downstream quantity must match. Before the fix:
+
+```
+world_gate = 0.541920330374
+  ok    label       1.000000000000 == 1.000000000000
+  ok    world_gate  0.541920330374 == 0.541920330374
+  FAIL  disc        0.997472568864 != 0.540550664058   (diff 4.569e-01)
+  FAIL  confidence  0.540550664058 != 0.292935394450   (diff 2.476e-01)
+  FAIL  kernel confidence equals disc*gate^2 (0.292935394450) - the gate is applied twice
+```
+
+A **45.8% understatement** of confidence on an identical label. After the fix all four match
+exactly. Registered as CTest **`native_kernel_gate_invariant`**.
+
+The test asserts `world_gate < 1` before checking anything, so it fails loudly rather than
+passing vacuously if a future change stops the input exercising the gated path.
 
 ---
 
@@ -190,6 +224,19 @@ or to NaN does not merely evade detection — it **wins the search**.
 Confidence exactly 1.0 is not exotic: it is `disc · world_gate`, and a saturated softmax rounds
 to 1.0 in double precision while `world_gate` is exactly 1.0 whenever `r_eff ≤ r_base`.
 
+### Not fixed: it is a faithful port
+
+The Python reference has the identical predicate:
+
+```python
+mask = (confs >= lo) & (confs < hi)
+```
+— `docs/history/archive/root-monolith/Cypha.py:137` (`_compute_ece`)
+
+so the C++ reproduces its reference exactly. Correcting the bin edge would change results against
+the parity the port contract asserts, which makes it a deliberate divergence rather than a bug
+fix. **Left as-is.**
+
 ---
 
 ## R4 — the temperature search has no non-regression guarantee
@@ -214,11 +261,20 @@ with **no evaluation at all**; the REST handler clamps `n_grid < 1` up to 1 rath
 it, so `POST /adapt_temperature` with `n_grid` of 0 or 1 silently sets `temperature = 0.3`
 regardless of the data.
 
-Note this function is a documented 1:1 port of Python `CyphaDIF.adapt_temperature`
-(`docs/history/archive/root-monolith/Cypha.py:3075-3140`), with the parity stated as a contract at
+### Not fixed: it is a faithful port
+
+The Python reference seeds the search the same way:
+
+```python
+best_ece, best_T = float('inf'), self.temperature
+```
+— `docs/history/archive/root-monolith/Cypha.py:3129`
+
+so the incumbent goes unscored there too. The parity is stated as a contract at
 `infer_cpu.hpp:198`. Seeding `best_ece` from the incumbent would diverge from the reference, so it
-is a deliberate decision to make, not a silent fix. Returning the chosen ECE alongside `T` would
-preserve parity and let the caller reject a regression itself.
+is a deliberate decision to make, not a silent fix. **Left as-is.** Returning the chosen ECE
+alongside `T` would preserve parity exactly while letting the caller reject a regression itself —
+that is the change worth considering.
 
 ---
 
