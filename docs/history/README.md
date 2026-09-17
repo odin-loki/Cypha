@@ -21,6 +21,7 @@ This section is that material: **archived, verified, and written up**.
 | [`TIMELINE.md`](TIMELINE.md) | What happened when, in what order, and how confident we are of each edge |
 | [`PYTHON_TO_CPP_BRIDGE.md`](PYTHON_TO_CPP_BRIDGE.md) | Which archived `Cypha.py` the native C++ was ported from, and how we know |
 | [`SWEEP_ANALYSIS.md`](SWEEP_ANALYSIS.md) | The 27,524-run experiment behind a default that still ships |
+| [`LINEAGE.md`](LINEAGE.md) | Six threads traced end to end, from the 2025 dialogues to code shipping today |
 | [`archive/README.md`](archive/README.md) | The preserved source trees, and how they were integrated |
 | [`archive/MANIFEST.md`](archive/MANIFEST.md) | Byte-exact inventory with `sha256` for every file |
 
