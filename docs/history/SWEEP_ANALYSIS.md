@@ -27,10 +27,32 @@ post-hoc diagnostic profile of the run:
 Totals: **27,524 runs**, **5,397 distinct configurations**, **1,070.8 core-hours**,
 median run 133 s.
 
-The `archetype` field is the tie to the v6 profiling work — it is the same diagnostic
-vocabulary produced by [`archive/cypha-v6/Profiling/cypha_profiler4_archetype.py`](archive/cypha-v6/Profiling/cypha_profiler4_archetype.py).
-Only two labels occur: `C_mismatch` (23,582 runs, median accuracy 0.8438) and `C_ceiling`
-(3,942 runs, median accuracy 0.8047).
+### The archetype labels are worse news than they look
+
+The `archetype` field ties this corpus to the v6 profiling work. It is the taxonomy defined
+by [`archive/cypha-v6/Profiling/cypha_profiler4_archetype.py`](archive/cypha-v6/Profiling/cypha_profiler4_archetype.py):
+
+```
+IF early_acc > 0.50 AND sigma_mean < 0.02                        → Type A
+IF early_acc < 0.35 AND acc_slope > 0.001 AND sigma_slope < 0    → Type B
+IF early_acc < 0.35 AND acc_slope < 0.002                        → Type C (slow or stalled)
+```
+— `cypha_profiler4_archetype.py:41-43`
+
+Type A is the fast learner, Type B the slow-but-improving one, **Type C the stalled one**.
+The profiler's ground-truth table assigns audio → A; text, image, video → B; and
+`structured` → C with `rf_iq` → **"C (ceiling)"** (`cypha_profiler4_archetype.py:206-212`) —
+so the sweep's two labels are already named here, one per Type-C failure mode.
+
+Only two labels occur anywhere in these 27,524 runs: `C_mismatch` (23,582 runs, median
+accuracy 0.8438) and `C_ceiling` (3,942 runs, median accuracy 0.8047). **Both are subtypes
+of Type C.** Not one run in the corpus was diagnosed as a fast or a still-improving learner;
+every configuration was classified as stalled, differing only in whether the diagnosis was
+"wrong model for this data" or "hit a capacity ceiling".
+
+That is the context in which the knob results below should be read. A grid search across a
+plateau will find the best point on the plateau, and the marginal effects reported here are
+consistent with exactly that.
 
 ---
 
