@@ -348,10 +348,13 @@ their class vocabulary, but nothing in the archive fixes *where* along v3–v7 t
 
 ---
 
-## A gap inside the archive: the v6 engine
+## Two implementations named by the archive but absent from it
 
-The seventeen-day gap at the end is not the only hole. **`archive/cypha-v6/Cypha.py` is not
-the engine that v6's own files were written against.**
+The seventeen-day gap at the end is not the only hole. Two implementations are named by
+documents inside the archive and are not present in it.
+
+**The first is the v6 engine.** `archive/cypha-v6/Cypha.py` is not the engine that v6's own
+files were written against.
 
 `game_benchmark.py:54-58` imports `deliberate_iterative`, `pnq_lookup`, `mcts_search` and
 `gria_cascade` from `Cypha`, and none of the four exists in the `Cypha.py` beside it — the
@@ -365,6 +368,17 @@ calibration — was never archived. `GRIA`, which ships in the native product to
 implemented there.
 
 See [`LINEAGE.md`](LINEAGE.md#7-gria--the-one-family-a-idea-that-came-back).
+
+**The second is CyphaGalois.** The v8 papers name their subject `CyphaDIF` 131 times across
+seventeen documents. `cypha_synthesis.md` — and only it — says `CyphaGalois` three times,
+including "U4 is now live in CyphaGalois.py. The implementation tracks orbit radius via EMA
+in `ClassDifferential.orbit_r`". No such file exists in the archive, and `orbit_r` appears in
+no Python file. The synthesis was written against a successor to the archived v8 that was
+never preserved.
+
+Both gaps have the same shape: a document survives, names an implementation, and the
+implementation does not. See
+[`eras/08-v8.md`](eras/08-v8.md#and-the-system-they-analysed-is-not-quite-the-archived-one).
 
 ---
 
