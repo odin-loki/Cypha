@@ -295,7 +295,10 @@ the only one with a test suite, the only one with a GUI (`PyQt6`), the only one 
 **`cypha-vpattern-matching`** is the opposite move: the HRNA core distilled to 996 lines
 and 7 classes — `UniversalEncoder`, `ResonanceField`, `Resonator`, `AnchorMemory`,
 `MetaLearning`, `Cypha` — and labelled "Production Implementation". It is the only branch
-in the archive presented as production-ready, and it ships a 3.5 MB demo PDF.
+in the archive presented as production-ready, and it ships a 3.5 MB demo PDF. The label does
+not survive inspection: its `infer()` answers seen inputs from an exact-string dict and
+learns nothing, and its headline separation figure is measured against the wrong baseline —
+see [`eras/branches.md`](eras/branches.md#it-does-not-retrieve-from-the-resonator-either).
 
 Both kept a framework (`torch`), and neither continued.
 
