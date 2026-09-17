@@ -85,8 +85,11 @@ contribute nothing. Verified by ablation: replacing `forward()` with a constant 
 at 200/200 and runs 13× faster.
 
 **v4** leaves the data flow untouched and lowers two thresholds by 7× and 15× so the unused
-machinery produces visible activity — a measured showcase emits 11,163 THOUGHT events against
-50 RESONANCE.
+machinery produces visible activity. On a fresh model `showcase()` emits **8** events over ten
+steps and no cascade ignites; after training on 120 pairs the same call emits **6,340**, almost
+all THOUGHT. The absolute count depends on training history — it is driven by
+`self._patterns[-5:]` — so it is the ~790× ratio, not either number, that is the finding. See
+[`eras/04-v4.md`](eras/04-v4.md#what-the-patch-manufactured-the-thinking).
 
 **v5 finds it.** Not the big one, but the pattern:
 
