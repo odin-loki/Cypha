@@ -55,7 +55,16 @@ The file the changelog deleted is archived here as
 
 ## The native source still cites it
 
-35 files under `native/src` and `native/include` mention Python — 56 across `native/` as a whole. Between them they name **79 distinct Python
+35 files under `native/src` and `native/include` mention Python — 56 across `native/` as a whole.
+
+> **What the archive does *not* supply.** The `.cypha` v3 binary container that
+> `docs/port/PORT_CONTRACT.md` freezes as normative is not here: the root monolith has **zero**
+> occurrences of `.cypha`, `cypha_save_binary`, `cypha_load_binary` or a magic constant. What
+> it contributes is the *dict shape* of `CyphaDIF._save_state()`, not the serialised format —
+> that was built in the in-repo Python after the archive closes. The same holds for
+> `gh_train_step`, `gh_infer`, `KernelMemory`, `ClassGMM`, `EWC` and `curriculum`, all named by
+> the native headers and none present in any archived version. The archive establishes the
+> port's starting point, not the whole Python surface that was eventually ported. Between them they name **79 distinct Python
 identifiers** in doc comments — classes, methods and attributes described as the behaviour
 the C++ is matching. These are not vague nods; they are precise parity references:
 
