@@ -272,15 +272,15 @@ not the pages.
 `infer()` runs the full pipeline and then, for anything it has seen, ignores it:
 
 ```python
-out = self.forward(x, raw_input=text)      # resonance pipeline, computed
+out = self.forward(x, raw_input=text)      ← resonance pipeline, computed
 
-if text in self.target_mappings:           # exact-string dict hit
+if text in self.target_mappings:           ← exact-string dict hit
     return self.target_mappings[text], 1.0
 
-gs = out["global"].detach().cpu().numpy()  # only reached for UNSEEN input
+gs = out["global"].detach().cpu().numpy()  ← only reached for UNSEEN input
 for word, anchor in self.vocab_anchors.items(): ...
 ```
-— `cypha_production.py:485-500`
+— `cypha_production.py:487-500`
 
 For any trained input the answer is an `O(1)` dict lookup on the raw string and `out` is
 discarded. The resonance state is consulted only as the fallback for inputs not in the

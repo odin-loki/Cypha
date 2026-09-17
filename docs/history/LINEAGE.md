@@ -242,7 +242,7 @@ Repulsion:   Δj −= η · wj · residual(h, θj)
 MDL decay:   Δk *= (1 − λ)
 World prior: θ₀ updated via Welford
 ```
-— `archive/cypha-v8/Cypha.py:1-30`
+— condensed from the module docstring, `archive/cypha-v8/Cypha.py:3-31`
 
 `NIGField` appears in v8 as an EMA filter bank over multiple timescales, gains a τ = 0.99
 group in the root monolith's "Phase 1", and is named three times in the header of the C++

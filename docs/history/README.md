@@ -72,7 +72,19 @@ its repulsion term, which measured 14/20 against a 12/20 baseline — it is desc
 plausible mechanism and explicitly not as an established cause.
 
 Claims are cited to `file:line`, and every citation has been checked to resolve to a real
-file with the line in range.
+file with the line in range — 120 of them, plus 167 internal links and 47 anchors.
+
+**Quoted code is verbatim; anything after a `←` is not.** Where a code block needed a
+pointer — *this value is computed and never read*, *this branch is only reached for unseen
+input* — the annotation is set off with `←`, which is not valid syntax in any language quoted
+here and so cannot be mistaken for source. Comments beginning `#` or `///` inside a quoted
+block are the original author's. Where a block condenses a longer passage rather than quoting
+it, the attribution line says so.
+
+A few numbers here are **threshold-dependent** rather than absolute — how many source lines
+two files share depends on whether you count `else:`. Where that is true, the full sweep is
+published rather than the most favourable row; see
+[`TIMELINE.md`](TIMELINE.md#the-break-is-real-not-a-refactor).
 
 ---
 
