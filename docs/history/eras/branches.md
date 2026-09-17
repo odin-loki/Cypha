@@ -222,9 +222,50 @@ MetaLearning · Cypha
 ```
 
 and a linear pipeline: `Input → Encoder → Resonance Field → Resonator → Output`, with
-`AnchorMemory` alongside. It is the only version in the archive whose retrieval sits where
-the architecture documents say it should — on the resonator output — while still being
-presented as production-ready.
+`AnchorMemory` alongside.
+
+### It does not retrieve from the resonator either
+
+`infer()` runs the full pipeline and then, for anything it has seen, ignores it:
+
+```python
+out = self.forward(x, raw_input=text)      # resonance pipeline, computed
+
+if text in self.target_mappings:           # exact-string dict hit
+    return self.target_mappings[text], 1.0
+
+gs = out["global"].detach().cpu().numpy()  # only reached for UNSEEN input
+for word, anchor in self.vocab_anchors.items(): ...
+```
+— `cypha_production.py:485-500`
+
+For any trained input the answer is an `O(1)` dict lookup on the raw string and `out` is
+discarded. The resonance state is consulted only as the fallback for inputs not in the
+mapping. `AnchorMemory.get` is defined at `:205` and the k-d tree only spaces anchors during
+their own creation.
+
+**Nothing is learned, either.** `amp_weights` and `phase_weights` are `torch.randn` draws
+assigned once at `:39-40` and never reassigned; `MetaLearning` holds `recent_states` and no
+parameters at all, so its `update()` computes losses that change nothing. "Training" builds
+the `target_mappings` dict and allocates anchors.
+
+That makes the demo's headline result circular: all five `test_cases` in `showcase_demo.py`
+are among the 13 pairs written to `demo_data.txt`, so 5/5 is the dict answering questions it
+was just given.
+
+### Its claims, checked
+
+| Claim | Reality |
+|---|---|
+| "Strong Separation: Average state distance > 0.9 (vs 0.0 for collapsed systems)" (`README.md:12`) | the null is wrong. Two independent random unit vectors in ℝ⁶⁴ are **1.4112** apart on average (≈ √2, measured over 200,000 pairs). A separation of 0.9 is *below* chance, not above a collapse baseline of 0. |
+| "Semantic Clustering: Similar inputs produce similar states" | the mechanism is character-code proximity — the encoder is a fixed random projection of `text_to_tensor`, so nearby byte patterns give nearby states |
+| "Fast Learning ... trains on thousands of examples in seconds" | dict construction and anchor allocation; no parameter is updated |
+| "Anchor Memory (k-d tree lookup) → Output" (`README.md:30`) | retrieval for seen inputs is a Python dict hit; the k-d tree is not on the query path |
+
+So vPattern does not escape the pattern its siblings are caught in — it adds an exact-match
+shortcut *in front of* it. The distinction that matters is still real, though: it is the only
+branch where the resonance state is on the query path **at all**, even if only for unseen
+inputs, and the only one that kept the no-gradient commitment literally.
 
 `README.md` gives the clearest statement of the HRNA thesis anywhere in the archive:
 
@@ -253,14 +294,10 @@ That is a meaningful distinction from vChatGPT, which pulled in `transformers` a
 and wrote an Adam loop. vPattern kept the framework as a numerical backend while keeping the
 project's actual commitment — no gradients — intact.
 
-### Its claims
-
-The README advertises "Fast Learning" (thousands of examples in seconds), "Strong
-Separation" (average state distance > 0.9 versus 0.0 for collapsed systems), "Semantic
-Clustering", `O(N log N)` complexity via FFT, and scaling across "math, language, logic,
-sorting". The separation metric is the interesting one: it is the same anti-collapse
-diagnostic that v3 shipped as `AnchorMemory.separation_stats` with its "⚠ COLLAPSING"
-warning. Measuring representational collapse was a standing concern across the whole line.
+The separation metric is worth one note: it is the same anti-collapse diagnostic v3 shipped
+as `AnchorMemory.separation_stats` with its "⚠ COLLAPSING" warning. Measuring
+representational collapse was a standing concern across the whole line — the baseline it was
+measured against is what went wrong here.
 
 ---
 
@@ -273,15 +310,22 @@ back. vChatGPT is the maximal version of the opposite bet — 22 dependencies, a
 scraper, an `agi/` package — and its core capability modules are 8-to-23-line stubs while
 its trainer cannot attach to its model. Breadth was added where depth was missing.
 
-**Against vPattern Matching:** it does the honest thing — retrieving from the dynamical
-state — and the main line had already measured what that costs. `CyphaMicro`, the same
-approach at 64 dimensions, is non-deterministic across repeated calls and scores 7/14 on its
-own training set (see [`components.md`](components.md#cypha-encoder--the-standalone-encoder)).
-v3 moved retrieval to encoder features precisely to escape that, and never went back.
+**Against vPattern Matching:** it is labelled production while answering from an exact-string
+dict, learning nothing, and reporting a separation figure against a baseline of 0 when the
+random-vector baseline is 1.41. There is nothing here for the main line to adopt. Its one
+real distinction — keeping the resonance state on the query path, even if only for unseen
+inputs — is the thing v3 had already abandoned deliberately, having measured what it costs:
+`CyphaMicro`, the same approach at 64 dimensions, is non-deterministic across repeated calls
+(see [`components.md`](components.md#cypha-encoder--the-standalone-encoder)).
 
 Both branches kept a framework. Both stopped. The line that continued was the one that had
 already thrown the framework away, and it is the only one that could be translated to C++
 as arithmetic rather than reimplemented.
+
+Both branches also carry the archive's recurring pathology in its purest forms — vChatGPT
+annotating the bypass in a comment, vPattern short-circuiting past it with a dict. Whatever
+else the main line got wrong, it never shipped a version whose demonstrated capability was
+`dict.__getitem__`.
 
 ---
 
