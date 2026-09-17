@@ -170,9 +170,10 @@ falls 0.333 → 0.200 → 0.167 as the detection step moves 6 → 10 → 20/30/5
 detected at any step (F1 = 0.00 throughout); Type B collapses from F1 0.48 to 0.00 by step 20.
 The detector converges on predicting Type A for everything.
 
-**The sweep — two of five knobs are inert.** A complete 5,250-cell factorial grid at 1,070.8
-core-hours found `deliberate_thresh` and `post_trans_alpha` varying only in the fourth decimal
-across their full ranges. See [`SWEEP_ANALYSIS.md`](SWEEP_ANALYSIS.md).
+**The sweep — two of five knobs are inert.** A complete 5,250-cell factorial grid — 26,250
+runs at **1,013.2 core-hours**, the tier-1 share of the programme's 1,070.8 total — found
+`deliberate_thresh` and `post_trans_alpha` varying only in the fourth decimal across their full
+ranges. See [`SWEEP_ANALYSIS.md`](SWEEP_ANALYSIS.md).
 
 **The outcome, in code shipping today.** The single `deliberate_thresh` was replaced by a
 two-sided hysteresis band, ported to C++, kept under regression test — and shipped **off**:
@@ -192,9 +193,24 @@ The stated reason is not the sweep, though. `native/src/train_step_vector.cpp:24
 that "the old hardcoded 0.25–0.40 band re-enabled deliberation during train and amplified
 MSVC/MinGW FP drift" — it was switched off for cross-compiler floating-point reproducibility.
 
-So an expensive programme of negative results did not delete a feature, and neither did it
-disable one: it demoted a formulation, and a portability problem later closed the switch. The
-two causes agree in direction and should not be collapsed into one.
+That is the *training*-side switch. The *inference*-side one was closed two months earlier,
+and for a different and larger reason — accuracy:
+
+> Bug 1: Deliberation band `[0.4, 0.6]` was masking ~40% of predictions as
+> `__unknown__` on binary problems. Fix: `deliberation_lo=1.0, deliberation_hi=0.0`
+> (disabled). Effect: +23.5 pp on S1_2class_linear; regression R² −0.007 → 0.756.
+> — `CHANGELOG.md:524-526`, under `[1.0.0] — 2026-05-30`
+
+`bench/config/everyday_profile.json` still carries the measurement, as
+`diagnostic_upgrade_notes.phase1_deliberation_penalty = {S1_2class: 0.118, R1_iris: 0.079,
+S4_multimodal: 0.028}`. Note the band it indicts is `[0.4, 0.6]`, not the archived Python's
+`[0.25, 0.40]` — the parameter had already been retuned once by then.
+
+So there are **three** causes, not two, and they arrive in this order: the sweep demoted the
+single-threshold formulation (2026-03); an accuracy diagnostic closed the inference-side switch
+(2026-05-30); a cross-compiler floating-point concern closed the training-side one. They agree
+in direction and should not be collapsed into one — least of all into the portability reason,
+which is the smallest of the three.
 
 ---
 
@@ -231,7 +247,7 @@ five encoders that preceded them.
 ## 6. The information field — the only mathematics that survived
 
 Family A's resonance field (`∂R/∂t = −i[H,R] + γ(R² − R)`) is gone. What reached the product
-is family B's **Normal-Inverse-Gamma** machinery, and it arrived fully formed in v8:
+is family B's differential-offset scheme, which arrived fully formed in v8:
 
 ```
 Class k model  =  θ₀ ⊕ Δk          world prior + differential offset (natural parameters)
@@ -244,6 +260,20 @@ World prior: θ₀ updated via Welford
 ```
 — condensed from the module docstring, `archive/cypha-v8/Cypha.py:3-31`
 
+**"NIG" is three different things in this project, and only one of them is in v8.** The
+acronym is worth pulling apart before the thread continues, because every document in the
+archive uses it loosely and two of v8's own papers expand it differently — `cypha_synthesis.md:12`
+as Normal-Inverse-**Gamma**, `cypha_stat_mech.md:140` as Normal-Inverse-**Gaussian**.
+
+| | what it is | where |
+|---|---|---|
+| `NIGField` | a bank of four exponential decays with a learned `W_T` — **no NIG mathematics at all**; `alpha`, `beta`, `kappa` occur zero times in its 95 lines, and zero times in its C++ port | v8, root, `native/src/nig_field.cpp` |
+| the GH/GIG world gate | a Generalised Hyperbolic mixing-variable gate — and GIG(λ = −1), not the λ = −½ that *Normal-Inverse-Gaussian* actually denotes, as its own `gig_e_inv_v_lam_neg1` says | C++ only, no Python ancestor |
+| `NIGExpert` | the genuine conjugate prior, correctly parameterised `(κ₀, α₀, β₀)` with per-dimension `kappa_n_`, `alpha_n_`, `beta_n_` | `native/include/cypha/cyphalm/cyphalm_nig_expert.hpp:12,27-33` — the **language model**, not the classifier |
+
+Only the first is continuous with the archive. See
+[`eras/08-v8.md`](eras/08-v8.md#nigfield-does-not-contain-the-mathematics-its-name-claims).
+
 `NIGField` appears in v8 as an EMA filter bank over multiple timescales, gains a τ = 0.99
 group in the root monolith's "Phase 1", and is named three times in the header of the C++
 file that implements it:
@@ -255,9 +285,25 @@ file that implements it:
 ```
 — `native/include/cypha/nig_field.hpp:9,20,26`
 
-Around it sit `nig_gig_math.hpp`, `nig_gig_score_match.hpp` and `bessel_table.hpp`. This is
-the strongest line of continuity in the project — and it is only twelve days long on the
-Python side, running from v8 (2026-03-11) to the root monolith (2026-03-14) before the port.
+Around it sit `nig_gig_math.hpp`, `nig_gig_score_match.hpp` and `bessel_table.hpp`. Those
+three are **not** part of this continuity: across all 175 archived files — including the
+`.docx` bodies, the PDF and the gzipped sweep — there is not one occurrence of *Bessel*, *GIG*,
+*K₂/K₁*, *score matching*, *Hyvärinen*, *scale mixture*, *variance-mean*, *generalised
+hyperbolic*, `r_eff`, `gh_chi` or `gh_psi`. The only "gig" strings anywhere in the archive are
+`gigantic_moyo` and `multi-gigabyte`.
+
+What the GIG layer inherits is a **slot, not a method**. The root monolith already computed a
+`world_gate` from `mahal_per_dim` and multiplied it into `disc`
+(`archive/root-monolith/Cypha.py:548-557`), as a plain sigmoid of a Mahalanobis margin. The C++
+keeps all three names and the same composition and replaces only the body — a substitution its
+own error message records, throwing `legacy sigmoid gate removed` at
+`native/src/infer_cpu.cpp:1158`. The name `world_gate` does not appear in v8 at all; it enters
+with the root monolith.
+
+So `NIGField` is the strongest line of continuity in the project — and it is **three days long**
+on the Python side, from v8 (2026-03-11) to the root monolith (2026-03-14) before the port;
+seven if v8 is dated from its [earliest recovered stamp](TIMELINE.md#dating-the-archive) of
+2026-03-07 rather than its directory.
 
 Thirteen months of resonance mathematics produced the engineering culture, the single-core
 constraint, the numpy floor and the measurement habits. Almost all of the mathematics that

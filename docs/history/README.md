@@ -78,8 +78,13 @@ file with the line in range — 120 of them, plus 167 internal links and 47 anch
 pointer — *this value is computed and never read*, *this branch is only reached for unseen
 input* — the annotation is set off with `←`, which is not valid syntax in any language quoted
 here and so cannot be mistaken for source. Comments beginning `#` or `///` inside a quoted
-block are the original author's. Where a block condenses a longer passage rather than quoting
-it, the attribution line says so.
+block are the original author's. An inline `...` marks an elision. Long `///` comments are
+wrapped to the page width, so a one-line source comment may appear as two. Where a block
+condenses a longer passage rather than quoting it, the attribution line says so.
+
+Every one of the 33 blocks carrying a `file:line` attribution has been diffed against the
+source it cites; 24 match verbatim and the other 9 differ only by those marked elisions and
+wraps.
 
 A few numbers here are **threshold-dependent** rather than absolute — how many source lines
 two files share depends on whether you count `else:`. Where that is true, the full sweep is
