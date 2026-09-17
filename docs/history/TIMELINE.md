@@ -222,10 +222,52 @@ v8's nine are
 `StructuralParser`, `EncoderProjection`, `WorldPrior`, `ClassDifferential`, `DIFMemory`,
 `ContextBuffer`, `NIGField`, `ReplayBuffer`, `CyphaDIF`. They have **no name in common**.
 
-A 75% reduction in lines (77% in bytes) with zero shared classes and a docstring claiming derivation "from
-first principles" is a restart. The resonance/harmonic programme that ran from v1 to v7 —
-roughly thirteen months — was abandoned, and the surviving product descends entirely from
-the twelve days that produced v8 and the root monolith.
+A 75% reduction in lines (77% in bytes) with zero shared classes and a docstring claiming
+derivation "from first principles" is a restart. The resonance/harmonic programme that ran
+from v1 to v7 — roughly thirteen months — was abandoned.
+
+### But the break is in the class structure, not in everything
+
+"Zero shared class names" is exact, and it is also narrower than it sounds. At least one
+*mechanism* crosses the gap intact.
+
+`W_T`, an online-learned linear state-transition matrix, is introduced in v7:
+
+> `W_T` is a dim×dim transition matrix trained online via rank-1 Oja-style update:
+> `W_T += lr * (psi - W_T @ psi_prev) ⊗ psi_prev`
+> This makes `W_T` approximate the local Jacobian of state dynamics.
+> — `archive/cypa-v7-generation/Cypha.py:2148-2150`
+
+and it is in v8 and the root monolith with the same rank-1 outer-product update, written in
+the error-descent sign convention:
+
+```python
+err   = self._W_T @ h_t - h_target
+W_new = self._W_T - lr * np.outer(err, h_t) / self.d
+```
+— `archive/cypha-v8/Cypha.py:857-858`, identical at `archive/root-monolith/Cypha.py:949-950`
+
+Counting occurrences per archived monolith:
+
+| | v5 | v6 | **v7** | **v8** | **root** |
+|---|---|---|---|---|---|
+| `W_T` | 0 | 0 | **23** | **6** | **15** |
+| `update_causal` | 0 | 0 | 0 | **2** | **2** |
+| `field_W_T` | 0 | 0 | 0 | 0 | **5** |
+
+It appears nowhere before v7, survives the restart, gains its `update_causal` method in v8,
+gains the `field_W_T` name in the root monolith, and ships today as
+
+```cpp
+/// Causal `W_T` SGD step + spectral-radius trim + refresh `a_eff` (Python `update_causal`).
+void nig_field_update_causal(...)
+```
+— `native/include/cypha/nig_field.hpp:26`
+
+So v8 discarded family A's *code* wholesale while keeping at least one of its mechanisms. A
+second family-A idea, GRIA, took a stranger route back — see
+[`LINEAGE.md`](LINEAGE.md#7-gria--the-one-family-a-idea-that-came-back). The restart is real,
+but it was a rewrite with salvage, not a blank page.
 
 ---
 

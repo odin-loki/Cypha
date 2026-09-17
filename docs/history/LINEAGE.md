@@ -241,9 +241,13 @@ Python side, running from v8 (2026-03-11) to the root monolith (2026-03-14) befo
 
 Thirteen months of resonance mathematics produced the engineering culture, the single-core
 constraint, the numpy floor and the measurement habits. Almost all of the mathematics that
-ships as the classifier core was written in the last week and a half.
+ships as the *classifier core* was written in the last week and a half.
 
-**Almost.** There is one substantial exception, and it takes a strange route — see thread 7.
+**Two exceptions.** `W_T`, the online-learned causal transition matrix, is introduced in v7
+and crosses the restart intact — same rank-1 outer-product update in v8 and the root
+monolith, shipping today as `nig_field_update_causal` with its spectral-radius trim (see
+[`TIMELINE.md`](TIMELINE.md#but-the-break-is-in-the-class-structure-not-in-everything)). And
+`GRIA` takes a stranger route still — thread 7.
 
 ---
 

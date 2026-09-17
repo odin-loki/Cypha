@@ -33,8 +33,11 @@ This section is that material: **archived, verified, and written up**.
 Versions 1 through 7 are *Cypha HRNA* — Harmonic Recursive Neural Architecture, a
 resonance-and-oscillator system. Version 8 is *CyphaDIF*, a Bayesian classifier built on
 Normal-Inverse-Gamma priors, "derived from first principles". They share **zero class
-names**. Only the second one reaches the product. See
-[`TIMELINE.md`](TIMELINE.md#two-architectural-families).
+names**, and the classifier that ships descends from the second. But the break is in the
+class structure, not in everything: the causal transition matrix `W_T` crosses it intact,
+and `GRIA` leaves the archive entirely and comes back in the C++. See
+[`TIMELINE.md`](TIMELINE.md#two-architectural-families) and
+[`LINEAGE.md`](LINEAGE.md#7-gria--the-one-family-a-idea-that-came-back).
 
 **2. The native C++ was ported from a file this repository had lost.**
 35 files under `native/` cite 79 distinct Python identifiers in their doc comments. 41 of
