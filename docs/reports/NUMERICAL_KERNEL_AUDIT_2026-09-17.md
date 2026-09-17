@@ -1,6 +1,6 @@
 # Numerical audit — inference gate, GIG/Bessel kernels, field, CUDA
 
-**Date:** 2026-09-17 · **Status:** **R1 fixed and guarded by a CTest**; the rest recorded, not fixed
+**Date:** 2026-09-17 · **Status:** **R1 fixed**; **R3/R4 pinned by a CTest**; the rest recorded
 **Scope:** `native/src/infer_cpu.cpp`, `nig_gig_math.cpp`, `nig_gig_score_match.cpp`,
 `bessel_table*`, `nig_field.cpp`, `accel_cuda.cu`
 
@@ -22,10 +22,18 @@ both `root-monolith/Cypha.py` and `cypha-v8/Cypha.py` — and `docs/port/PORT_CO
 outright that *"Fixtures assume `use_kernel_llr=False`"*. Nothing documented constrains it, so it
 was fixed and a regression test now guards it.
 
-R2, R3 and R4 are **faithful ports of Python defects**, and changing them would break the parity
-the port contract asserts. The Python originals are cited in each section below. They are left
-as-is, deliberately; the decision to diverge from the reference implementation is the owner's, not
-this report's.
+R3 and R4 are **faithful ports of Python defects** — the originals are at `Cypha.py:137` and
+`:3129` — and changing them would break the parity the port contract asserts. **R2 is different
+again:** its reference is the FastAPI `InferenceEngine` (`infer_cpu.hpp:226`), which is not in the
+archive at all, and `PORT_CONTRACT.md:75` pins the `R_eff`-vs-`_mahal_ema` pairing explicitly with
+CTest `native_gh_infer_deliberation`. Its Python counterpart computes something else entirely —
+`anomaly_score = 1.0 − ood_gate`, bounded in `[0,1]` (`root-monolith/Cypha.py:1362`), and `r_eff`
+occurs **zero** times in the archive — so there is no reference to check a change against.
+
+All three are left as-is deliberately. Because none of them had *any* test coverage,
+**R3 and R4 are now pinned** by CTest `native_ported_defects_pinned`, which asserts the defective
+behaviour on purpose so that changing it is a deliberate contract decision rather than an
+accident. Diverging from the reference remains the owner's call, not this report's.
 
 ---
 
@@ -48,14 +56,14 @@ this report's.
 | **N2** | `nig_gig_math.cpp:102-104` | small-`x` limit returns `psi/chi`; correct is `2/chi` |
 | **N3** | `nig_gig_math.cpp:97-99` | the `chi/psi < kEps` guard carries N2's wrong form |
 | **N4** | `nig_gig_score_match.cpp:62` | large-`x` series coefficient `6.75`; correct is `3/8` |
-| L5 | `nig_gig_score_match.cpp:70` | `K₀/K₁` computed as `k2k1(x) − 2/x`; the fit's constant residual survives as an `O(1/x)` error and the result goes **negative** — for a quantity provably in `(0,1)` — below `x ≈ 0.0036` |
-| L6 | `nig_gig_math.cpp:85` | `active_k0k1` small-`x` branch returns `1/x`, but `K₀/K₁ → 0`: the limit is inverted |
-| L7 | `nig_gig_math.cpp:119` | `gig_e_v_lam_neg1` small-`x` branch returns `chi/psi`, dimensionally wrong |
-| L8 | `nig_gig_math.cpp:61,65` | LUT escape threshold sits five decades below the first table cell; the `x → ∞` limit is clamped to the last node (1.0125…) rather than 1 |
-| L9 | `bessel_table.hpp:7` | a uniform 16,384-point grid cannot represent the `2/x` pole of `K₂/K₁` near zero |
-| L10 | `nig_gig_score_match.cpp:89` | `nig_gate_predictive_loglik` adds `+0.5·psi·(x1−x0)` with the wrong sign and scale |
-| L11 | `accel_cuda.cu:157,178,41,54` | no `GigNormalisationMode` dispatch on GPU; `fmax` vs `std::max` NaN asymmetry; two allocator/caching faults that survive a failed `cudaMalloc` |
-| L12 | `nig_field.cpp:188,20` | float32 power iteration overflows for huge `W_T`; `field_diag_a` allocates before its `fd <= 0` guard |
+| **L5** | `nig_gig_score_match.cpp:70` | `K₀/K₁` computed as `k2k1(x) − 2/x`; the fit's constant `a0 = 1.99945961 ≠ 2` leaves a residual that survives as `−5.4e-4/x`, so the result is **negative on 44.1%** of `[1e-6, 120]` — for a quantity provably in `(0,1)`. Zero-crossing at `x = 0.0036342844` |
+| **L6** | `nig_gig_math.cpp:85` | `active_k0k1` small-`x` returns `1/x` → `1e8`, where `K₀/K₁ → 0` (true value `2.08e-8` at `x=1e-9`). The limit is **inverted** |
+| **L7** | `nig_gig_math.cpp:119` | `gig_e_v_lam_neg1` small-`x` returns `chi/psi`: at `χ=1, ψ=1e-12` that is `1e12` against a true `E[V] = 13.93` — **11 orders of magnitude** |
+| **L8** | `nig_gig_math.cpp:61,65` | the `x → ∞` limit is clamped to the last table node `1.01252583`, never approaching 1: at `x = 1e4` the true value is `1.00015` — a **1.25%** floor that never decays |
+| **L9** | `bessel_table.hpp:7` | the grid is **uniform** (spacing `7.3247e-3`) over `[1e-6, 120]`, so the first cell spans `[1e-6, 7.33e-3]` where `K₂/K₁` falls from `2e6` to `273`. Linear interpolation at its midpoint gives `1.00e6` against a true `545.97` — a **183,085% error** |
+| ~~L10~~ | `nig_gig_score_match.cpp:89` | **NOT CONFIRMED.** The claim was that `+0.5·psi·(x1−x0)` has the wrong sign. The natural operational check — that the predictive log-likelihood decreases as the observation grows more anomalous — **passes** (0 non-monotone steps over `mp ∈ [0, 200]`). The term is dimensionally odd and can dominate (`+74.1` against a `−5.0` penalty at `ψ=16`), but I could not show it is wrong. Recorded as unresolved |
+| **L11** | `accel_cuda.cu:157,178,41,54` | **NaN asymmetry verified by execution**: `fmax(NaN, 0.0) = 0.0` on the CUDA path while the CPU's `std::max(NaN, 0.0) = NaN` (`infer_cpu.cpp:126,1199`), so a NaN Mahalanobis silently becomes a maximally-confident gate on GPU. `pool_ensure` frees and nulls `g_pool` before `cudaMalloc` but leaves `g_pool_doubles` at the old capacity on failure, so a later call returns `cudaSuccess` with a null pool. No `GigNormalisationMode` dispatch on GPU |
+| **L12** | `nig_field.cpp:20` | `field_diag_a` calls `a_out.assign(static_cast<size_t>(fd), 0.0)` **before** its `fd <= 0` guard, so a negative `fd` throws `std::length_error` rather than returning. (The companion float32 power-iteration overflow at `:188` needs `W_T` entries above ~1e38 and is not reachable.) |
 | **L13** | `infer_cpu.cpp:1252` | `infer_at_h` hardcodes `gh_chi = gh_psi = 1.0`, silently ignoring the `CyphaInferOptions` fields that callers set |
 
 **Refuted** on adversarial check: `accel_cuda.cu:128` (device interpolator geometry — the
@@ -63,10 +71,20 @@ hardcoded literals equal the real ones) and `nig_field.cpp:100` (inject early-re
 
 ### What I verified personally
 
-**R1–R4, N1–N4 and L13** I read in the source and checked myself; the workings are below and the
-commands are in [Reproducing](#reproducing). **L5–L12 rest on the audit and its adversarial
-check, not on my own reproduction** — they are recorded at that weaker standard, and flagged here
-so the two tiers are not treated as equivalent.
+**Everything in both tables has now been checked by hand.** R1–R4, N1–N4 and L13 were read in
+the source and reproduced; the workings are below and the commands are in
+[Reproducing](#reproducing). L5–L12 were subsequently re-derived and re-measured the same way,
+and the table entries above carry those measurements rather than the audit's.
+
+That pass changed two entries:
+
+- **L10 did not survive.** It was recorded as a wrong-sign term. The operational check — a
+  predictive log-likelihood must fall as the observation gets more anomalous — passes cleanly
+  over `mp ∈ [0, 200]`. It is now marked unresolved rather than confirmed.
+- **L9 was understated.** "Cannot represent the pole" turns out to mean a 183,085% interpolation
+  error in the first grid cell.
+
+No finding in this report now rests on someone else's measurement.
 
 L13, verified by hand: `infer_at_h` calls
 `classify_at_h(m, h, h_field, m.temperature, mahal_ema_opt, m.mahal_std_ema, 1.0, 1.0, …)` at

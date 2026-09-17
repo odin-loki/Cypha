@@ -80,6 +80,13 @@ cypha_bench_run --report-only       # cross-domain + BASELINE_REPORT.md + figure
 
 Fast smoke: **`CYPHA_BENCH_FAST=1`** (smaller subsamples).
 
+> **`bench/BASELINE_REPORT.md` is tracked, and the bench rewrites it in place.** Any partial run
+> — a single `--domain`, a filtered `ctest`, or a `CYPHA_BENCH_FAST=1` smoke — regenerates it
+> from *only the domains that ran*, so it silently replaces the committed full-corpus baseline
+> with a subset. A filtered CTest run here dropped it from 61 domains to 51. Check
+> `git status` before committing after any bench or `ctest` invocation, and
+> `git checkout -- bench/BASELINE_REPORT.md` if you did not mean to regenerate it.
+
 Outputs:
 
 | Path | Content |
