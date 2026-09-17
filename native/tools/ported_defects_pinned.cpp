@@ -53,7 +53,7 @@ bool expect(const char* what, double got, double want, double tol) {
 
 int main() {
   bool ok = true;
-  std::printf("R3/R4 - previously-ported defects, now fixed\n");
+  std::printf("R2/R3/R4 - previously-ported defects, now fixed\n");
 
   // --- R3 -----------------------------------------------------------------------------------
   // Ten perfectly confident samples, every one wrong. True ECE is 1.0. This reported 0.0 before
@@ -152,6 +152,30 @@ int main() {
       std::printf("  FAIL  model temperature (%.6f) disagrees with the return value\n", b.temperature);
       ok = false;
     }
+  }
+
+  // --- R2, the anomaly score's units ---------------------------------------------------------
+  // r_eff is in h^2 units, formed against r_base = 1/mean(inv_v). Dividing it by mahal_ema (a
+  // dimensionless per-dim Mahalanobis EMA) mixed units, and on any model whose latent variance
+  // is below mahal_ema the score was pinned at 0 for EVERY input - the OOD flag never fired.
+  // It is now max(0, r_eff/r_base - 1): dimensionless, 0 in distribution, growing with anomaly.
+  {
+    // Scale invariance: multiplying both r_eff and its baseline by the same factor must not
+    // change the score. This fails under the old formula, which has a fixed denominator.
+    const double a1 = cypha::gh_infer_anomaly_score(4.0, 1.0);
+    const double a2 = cypha::gh_infer_anomaly_score(0.4, 0.1);
+    const double a3 = cypha::gh_infer_anomaly_score(400.0, 100.0);
+    ok &= expect("anomaly is scale-invariant (r_eff=4, base=1)", a1, 3.0, 1e-12);
+    ok &= expect("  ... same ratio at 1/10 scale", a2, 3.0, 1e-12);
+    ok &= expect("  ... same ratio at 100x scale", a3, 3.0, 1e-12);
+
+    // No inflation at all is exactly in-distribution.
+    ok &= expect("no inflation (r_eff == r_base) -> 0", cypha::gh_infer_anomaly_score(0.0875, 0.0875), 0.0, 1e-12);
+
+    // A small-variance model must not be permanently pinned at 0. Under the old formula, a model
+    // with r_base = 0.0875 against mahal_ema = 1.0 scored 0 for every r_eff below 1.0.
+    const double small_var = cypha::gh_infer_anomaly_score(0.35, 0.0875);
+    ok &= expect("small-variance model still scores (was pinned at 0)", small_var, 3.0, 1e-12);
   }
 
   std::printf("%s\n", ok ? "PASS" : "FAILED");

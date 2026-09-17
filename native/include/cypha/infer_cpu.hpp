@@ -57,6 +57,9 @@ struct GhInferAtHResult {
   std::string label;
   double confidence{};
   double r_eff{};
+  /// The latent-variance baseline ``r_eff`` was formed against (``1 / mean(inv_v)``). Returned so
+  /// callers cannot pair ``r_eff`` with a different scale — see ``gh_infer_anomaly_score``.
+  double r_base{};
   double chi_new{1.0};
   double psi_new{1.0};
   double t_adj{};
@@ -230,7 +233,15 @@ std::vector<RetrieveHit> retrieve_from_x(const CyphaInferModel& m, const double*
                                          int n_db, int input_dim, int top_k, const CyphaInferOptions& opt,
                                          const std::optional<std::string>& label = std::nullopt);
 
-/// FastAPI ``InferenceEngine`` anomaly from ``gh_infer`` ``R_eff`` and ``_mahal_ema``.
-double gh_infer_anomaly_score(double r_eff, double mahal_ema_fallback);
+/// Dimensionless OOD score: how far the GH/GIG gate inflated the latent scale, as
+/// ``max(0, r_eff / r_base - 1)``. ``r_base`` **must** be the baseline ``r_eff`` was formed
+/// against — ``GhInferAtHResult::r_base``. 0 means no inflation (in distribution) and the value
+/// grows without bound as the input gets more anomalous.
+///
+/// Previously this divided ``r_eff`` by ``mahal_ema``, a dimensionless per-dimension Mahalanobis
+/// EMA, while ``r_eff`` is in ``h²`` units — so the score was governed by the model's latent
+/// variance scale rather than by how anomalous the input was, and on a typical model it was
+/// pinned at 0 for every input. See docs/reports/NUMERICAL_KERNEL_AUDIT_2026-09-17.md (R2).
+double gh_infer_anomaly_score(double r_eff, double r_base);
 
 }  // namespace cypha

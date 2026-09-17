@@ -475,8 +475,8 @@ PredictOut Cypha::predict(const double* x_in, int n, const PredictOpts& o) {
     out.confidence = gh.confidence;
     out.r_eff = gh.r_eff;
     llr_for_scores = std::move(gh.llrs);
-    const double r_base = (infer_->has_mahal_ema && infer_->mahal_ema > 0.0) ? infer_->mahal_ema : 1.0;
-    out.anomaly_score = gh_infer_anomaly_score(out.r_eff, r_base);
+    // Pair r_eff with the baseline it was formed against, not with mahal_ema (different units).
+    out.anomaly_score = gh_infer_anomaly_score(out.r_eff, gh.r_base);
     out.is_ood = out.anomaly_score > kOodThreshold;
   } else if (o.self_correct) {
     const auto scr = intelligence::self_correcting_infer_at_h(*infer_, H.data(), iopt, epistemic_threshold_,

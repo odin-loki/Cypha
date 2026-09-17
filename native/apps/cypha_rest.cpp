@@ -1044,8 +1044,8 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
     conf = gh.confidence;
     r_eff = gh.r_eff;
     llr_for_scores = std::move(gh.llrs);
-    const double r_base = (model.has_mahal_ema && model.mahal_ema > 0.0) ? model.mahal_ema : 1.0;
-    anomaly = cypha::gh_infer_anomaly_score(r_eff, r_base);
+    // Pair r_eff with the baseline it was formed against, not with mahal_ema (different units).
+    anomaly = cypha::gh_infer_anomaly_score(r_eff, gh.r_base);
     is_ood = anomaly > kOodThreshold;
   } else {
     const bool self_correct = body.value("self_correct", false);

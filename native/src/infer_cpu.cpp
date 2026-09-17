@@ -1244,6 +1244,7 @@ GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double
   const double inv_mean = mean_inv_v(m);
   const double r_base = 1.0 / (inv_mean + kEps);
   out.r_eff = nig_r_eff_scalar(std::max(mahal_sq, 0.0), r_base, chi, psi);
+  out.r_base = r_base;
   const double gh_scale = r_base / std::max(out.r_eff, r_base);
   out.t_adj = m.temperature / std::max(gh_scale, 0.01);
 
@@ -1303,15 +1304,16 @@ std::vector<RetrieveHit> retrieve_from_x(const CyphaInferModel& m, const double*
   return retrieve_at_h(m, h_q.data(), h_db.data(), n_db, top_k, opt, label);
 }
 
-double gh_infer_anomaly_score(double r_eff, double mahal_ema_fallback) {
+double gh_infer_anomaly_score(double r_eff, double r_base) {
   if (!(r_eff > 0.0) || !std::isfinite(r_eff)) {
     return 0.0;
   }
-  const double r_base = (mahal_ema_fallback > 0.0 && std::isfinite(mahal_ema_fallback)) ? mahal_ema_fallback : 1.0;
-  if (r_base <= 0.0) {
-    return 0.0;
-  }
-  return std::max(0.0, (r_eff - r_base) / r_base);
+  // `r_base` must be the baseline `r_eff` was formed against (GhInferAtHResult::r_base), so that
+  // the ratio is the dimensionless gate inflation `1 / E[1/V]`. Dividing by anything else - the
+  // old code used `mahal_ema` - mixes units and makes the score track the model's latent variance
+  // instead of the input's anomaly.
+  const double base = (r_base > 0.0 && std::isfinite(r_base)) ? r_base : 1.0;
+  return std::max(0.0, r_eff / base - 1.0);
 }
 
 }  // namespace cypha
