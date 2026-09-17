@@ -42,12 +42,13 @@ nowhere else on the main line. That is what pins this branch to v2.
 Around the core it adds four packages the main line never had: `agi/`, `gui/` (PyQt6),
 `learning/` (scraper, Pile loader, trainer, pipeline), `security/`, and a `tests/` tree.
 
-### It is the only version in the archive that can be dated to the minute
+### It is the most precisely dated version in the archive
 
 The zip destroyed every file mtime, but vChatGPT shipped its `__pycache__`, and a CPython
-`.pyc` header embeds the *source* file's mtime and size (PEP 552). All 30 of them decode to a
-single session on **13 February 2026**, and 29 of the 30 embedded sizes match the on-disk
-`.py` byte for byte:
+`.pyc` header embeds the *source* file's mtime and size (PEP 552). Six directories can be
+dated from evidence inside their files; this is the only one dated **per file**, thirty times
+over. All 30 decode to a single session on **13 February 2026**, and 29 of the 30 embedded
+sizes match the on-disk `.py` byte for byte:
 
 ```
 05:29:13  core/thought.py          3417 B   <-- pyc says 3417, file is 3363
@@ -99,8 +100,14 @@ import sites.
 
 This is the most precise authoring evidence anywhere in the archive, and the only reason it
 survives is that someone zipped their `__pycache__`. It also independently confirms the DAG:
-13 February is before v6 (2026-02-27), and the directory mtime of 2026-02-21 20:35 is a bulk
-archival copy eight days after the work.
+13 February is before v5's documentation (2026-02-21) and before v6 (2026-02-20 onward), and
+the directory mtime of 2026-02-21 20:35 is a bulk archival copy eight days after the work.
+
+The five `.pyc` files sitting in `cypha-v3/`, `cypha-v4/`, `cypha-v6/`, `cypha-v8/` and
+`cypha-encoder/` are **not** part of this evidence and carry no historical information: they
+are `cpython-311` artifacts generated while re-running the archived code during this analysis,
+and their embedded source mtimes read 2026-09-17. They are untracked and gitignored. The
+original zip contains exactly 30 `.pyc` files, all `cpython-312`, all under vChatGPT.
 
 
 ### The layers are bypassed in the source, and it says so
@@ -223,6 +230,42 @@ MetaLearning · Cypha
 
 and a linear pipeline: `Input → Encoder → Resonance Field → Resonator → Output`, with
 `AnchorMemory` alongside.
+
+### Its PDF dates it to 23 minutes after vChatGPT stopped
+
+The 3.5 MB `Cypha Demo.pdf` is dead weight in every other respect, and it is the only reason
+this branch can be dated at all. A PDF trailer carries its own creation metadata, and this one
+survived the repack intact:
+
+```
+/CreationDate  D:20260213220627+11'00'      /Producer  Microsoft: Print To PDF
+/ModDate       D:20260213220627+11'00'      /Author    Odin Loch
+/Title         INTRODUCTION.md              18 pages, 3,542,797 bytes
+```
+
+`22:06:27 +11:00` is **2026-02-13 11:06:27 UTC**. The last file vChatGPT ever touched,
+`cypha.py`, was saved at 10:43:25 UTC — [above](#it-is-the-most-precisely-dated-version-in-the-archive).
+The two branches are **23 minutes and 2 seconds apart**, on the same evening.
+
+That is a much stronger statement than the DAG alone can make. These are not two independent
+experiments that happen to sit side by side in the archive: vPattern Matching was printed in
+the same sitting in which vChatGPT was abandoned, minutes after someone wrote
+`# BYPASS broken layers` and closed the file. Expanding v2 into 38 files and distilling v3
+into one are the same evening's work, in that order.
+
+Two smaller things fall out of the same block.
+
+**The `+11'00'` offset is the archive's only explicit timezone.** It fixes the author's clock
+at AEDT, which is what makes the UTC stamps elsewhere convertible — and it matches the
+`+1000`/`+1100` offsets on this repository's own commits. Read locally, vChatGPT's "05:29 to
+10:43" session is 16:29 to 21:43, and the PDF lands at 22:06.
+
+**`INTRODUCTION.md` does not exist.** The PDF was printed from a Markdown file of that name,
+and no file called `INTRODUCTION.md` appears anywhere in the archive — not in this directory,
+not in any other. The branch ships an 18-page print of a document it does not contain. It joins
+the [implementations the archive names but does not hold](../TIMELINE.md#two-implementations-named-by-the-archive-but-absent-from-it),
+and it is the reason the PDF is worth keeping despite its size: the metadata is the evidence,
+not the pages.
 
 ### It does not retrieve from the resonator either
 

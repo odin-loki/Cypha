@@ -50,12 +50,17 @@ build artifacts, covered by the repository `.gitignore`, and reconstructible fro
 files beside them.
 
 > **What was extracted from them first.** A CPython `.pyc` header embeds the *source* file's
-> mtime and size (PEP 552), and these 30 are the only files in the whole archive whose
-> timestamps survived the zip. They date vChatGPT to a single session on **2026-02-13,
+> mtime and size (PEP 552). These 30 date vChatGPT to a single session on **2026-02-13,
 > 05:29:13–10:43:25 UTC**, with 29 of 30 embedded sizes matching the `.py` byte for byte. The
 > full per-file table is preserved in
-> [`../eras/branches.md`](../eras/branches.md#it-is-the-only-version-in-the-archive-that-can-be-dated-to-the-minute)
+> [`../eras/branches.md`](../eras/branches.md#it-is-the-most-precisely-dated-version-in-the-archive)
 > so the evidence outlives the binaries.
+
+> **Do not confuse these with the `.pyc` files you may find in a working tree.** Re-running
+> archived code regenerates `__pycache__/` under `cypha-v3/`, `cypha-v4/`, `cypha-v6/`,
+> `cypha-v8/` and `cypha-encoder/`. Those are `cpython-311`, their embedded source mtimes read
+> 2026-09-17, and they carry no historical information. The originals are all `cpython-312`
+> and all under `cypha-vchatgpt/`.
 
 **Copied verbatim (132 files).** Each was verified `sha256`-identical to its source after
 staging; the checksums are recorded in [`MANIFEST.md`](MANIFEST.md).
@@ -70,7 +75,16 @@ staging; the checksums are recorded in [`MANIFEST.md`](MANIFEST.md).
   readable and searchable in place rather than opaque inside a nested archive.
 
 **Derived (31 files).** Every `.docx` was converted to Markdown with a stdlib
-(`zipfile` + `xml.etree`) extractor and written beside its original. The prose in these
+(`zipfile` + `xml.etree`) extractor and written beside its original.
+
+> **The originals are kept for their metadata as much as their bytes.** A `.docx` is a zip
+> carrying `docProps/core.xml`, and a PDF carries a `/CreationDate` — both *inside* the file,
+> so both survived the repack that destroyed every per-file mtime. Between them the 31
+> documents and one PDF date v2, v5, v6, v8 and vPattern Matching, which is most of the
+> archive's chronology; 28 of the 31 agree with their own zip entry stamps to within one
+> second. The full account, including the three that do not, is in
+> [`../TIMELINE.md`](../TIMELINE.md#dating-the-archive). A Markdown conversion preserves none
+> of this, which is why the binaries stay. The prose in these
 documents — seventeen mathematical papers in `cypha-v8/` alone — is a large part of the
 archive's value, and it is useless if it can only be opened by a word processor. **The
 `.docx` originals are retained and remain authoritative**; the `.md` files are a convenience

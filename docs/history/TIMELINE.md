@@ -5,32 +5,87 @@ Cypha's development from February 2025 to the native C++ product, reconstructed 
 
 ---
 
-## Why the dates in the archive cannot be trusted
+## Dating the archive
 
-Every file in the source zip carries the same modification time, rewritten at the moment of
-zipping. **Per-file timestamps are worthless here.** Directory mtimes survived:
+Every file in the source zip carries the same modification time — `2026-09-17 12:24`,
+rewritten at the moment of zipping. **Per-file timestamps are worthless here.** Directory
+mtimes survived the repack:
 
 | Directory | mtime |
 |---|---|
-| `Prototypes` | 2025-02-26 |
-| `Cypha V1` | 2025-03-04 |
-| `Big Data`, `Cypha Encoder`, `Cypha v2`, `v3`, `v4`, `v5`, `Cypha vChatGPT`, `Cypha vPattern Matching` | **2026-02-21 20:35** |
-| `Cypha v6` | 2026-02-27 |
-| `Cypa v7 Generation` | 2026-03-06 |
-| `Cypha v8` | 2026-03-11 |
-| archive root | 2026-03-14 |
+| `Prototypes` | 2025-02-26 18:34 |
+| `Cypha V1` | 2025-03-04 21:26 |
+| `Big Data`, `Cypha Encoder`, `Cypha v2`, `v3`, `v4`, `v5`, `Cypha vChatGPT`, `Cypha vPattern Matching` | **2026-02-21 20:35:08** |
+| `Cypha v6` | 2026-02-27 17:44 |
+| `Cypa v7 Generation` | 2026-03-06 19:19 |
+| `Cypha v8` | 2026-03-11 19:43 |
+| archive root | 2026-03-14 14:26 |
 
-Eight directories sharing one timestamp *to the minute* is a bulk copy, not eight
-simultaneous authorships.
+Eight directories sharing one timestamp *to the second* is a bulk copy, not eight
+simultaneous authorships. A directory mtime is therefore an **upper bound** on the work
+inside it, and for those eight it is a very loose one.
 
-**One exception recovers a real date.** `cypha-vchatgpt/` shipped its `__pycache__`, and a
-CPython `.pyc` header embeds the source file's mtime and size. All 30 decode to a single
-session on **2026-02-13, 05:29–10:43 UTC** — eight days before the bulk copy, and two weeks
-before v6. It is the only precisely dated version in the archive, and it independently
-confirms vChatGPT's placement. See
-[`eras/branches.md`](eras/branches.md#it-is-the-only-version-in-the-archive-that-can-be-dated-to-the-minute). The ordering below therefore comes from internal evidence —
-module docstrings, class inventories, import sets and explicit supersession notices — and
-each edge is graded for confidence.
+### Four channels survive inside the files
+
+Repacking rewrites the zip's own metadata. It cannot touch bytes *inside* a file, and four
+formats in this archive record a timestamp there:
+
+| Channel | Where | Covers | Files |
+|---|---|---|---|
+| CPython `.pyc` header | source mtime + size, [PEP 552](https://peps.python.org/pep-0552/) | vChatGPT | 30 |
+| OOXML `docProps/core.xml` | `dcterms:created` / `dcterms:modified` | v2, v5, v6, v8 | 31 |
+| PDF trailer | `/CreationDate`, `/ModDate` | vPattern Matching | 1 |
+| nested zip central directory | per-entry mtimes | each `.docx`, `retdec_upgrades5.zip` | 32 |
+
+Together they date **six** of the fourteen directories, and every recovered date falls
+strictly *before* its directory's mtime — exactly as it must if those mtimes are copy times.
+That agreement across four independent channels is the strongest evidence in the archive that
+the reconstruction below is sound.
+
+| Recovered | Directory | Evidence |
+|---|---|---|
+| **2025-05-05 07:24** | `Cypha v2` | `Cypha.docx` `dcterms:created` |
+| **2026-02-13 05:29–10:43** | `Cypha vChatGPT` | 30 `.pyc` headers |
+| **2026-02-13 11:06:27** | `Cypha vPattern Matching` | `Cypha Demo.pdf` `/CreationDate` |
+| **2026-02-20 06:48** | `Cypha v6` | `Cypha Encoder Math Proving.docx` |
+| **2026-02-21 08:17–08:49** | `Cypha v5` | five `README_*.docx` |
+| **2026-02-22 10:08–10:46** | `Cypha v6` | three more `.docx` |
+| **2026-03-07 – 2026-03-10** | `Cypha v8` | 17 `.docx` |
+
+All times UTC. The zip's own stamps are local (`+11:00`, AEDT), which is why the bulk copy
+reads `20:35` against document stamps of `08:xx` the same day — those are `19:xx` local, some
+46 minutes earlier. The `+11'00'` offset written into the PDF confirms the zone, and matches
+the `+1000`/`+1100` offsets on this repository's own commits.
+
+### What the documents date, and what they do not
+
+29 of the 31 `.docx` files were produced by a Markdown-to-Word converter, not typed: `cp:revision`
+is 1, `dcterms:created` equals `dcterms:modified` to the millisecond, and `docProps/app.xml` has
+no editing statistics. Their timestamps date the **conversion**, which is an upper bound on the
+Markdown they were made from — but since 28 of the 31 have zip entries stamped within ±1 second
+of their own `created` property, that bound is tight and self-consistent.
+
+Three files break the pattern, and each breaks it in an informative way:
+
+- **`Cypha v2/Cypha.docx`** is the only genuinely hand-saved document in the archive —
+  `Microsoft Office Word 16.0`, `Normal.dotm`, creator and last-modified-by both `Odin Loch`,
+  4,004 words over 35 pages. Word zeroes zip entry times to the DOS epoch (`1980-01-01`), so
+  here the *core.xml* stamp is the real one. It dates to **2025-05-05**, nine months before
+  anything else in the archive. See [v2](eras/02-v2.md#the-oldest-dated-artifact-in-the-archive).
+- **`Cypha v8/cypha_synthesis.docx`** is stamped 977 seconds — 16 minutes 17 seconds — after
+  its own `created` property, and is the only one of the fifteen v8 papers whose zip omits the
+  explicit directory entries its siblings carry. It was re-saved, by a different code path,
+  after the batch finished. It is also the paper that synthesises the other fourteen.
+- **`Cypha v8/Cypha_Research_Paper.docx`** claims `2013-12-23T23:15:00Z`. That is not a date:
+  it is generator-default metadata left untouched — creator `python-docx`, and an `app.xml`
+  reporting **0 words, 1 page, 0 paragraphs** for a document that extracts to 32,395 bytes of
+  Markdown. The statistics are demonstrably not this document's, so neither is the timestamp.
+  Its zip entries are stamped **2026-03-08 04:12:28**, which sits between `CyphaREADME.docx`
+  (03-07) and the paper batch (03-10) whichever zone that stamp is in.
+
+The ordering below rests on this dating where it exists, and elsewhere on internal evidence —
+module docstrings, class inventories, import sets and explicit supersession notices. Each edge
+is graded for confidence.
 
 ---
 
@@ -43,22 +98,22 @@ each edge is graded for confidence.
    "Cypha V1" — IRENA → HRNA   (the name Cypha does not exist yet) 2025-03-04
                        │
                        ▼
-   Cypha v2 — torch + ray + scipy, 9,404 lines ─────────────┐
+   Cypha v2 — torch + ray + scipy, 9,404 lines ────────────┐  spec *2025-05-05
                        │                                    │
                        │  ◄── frameworks dropped            ▼
-                       ▼                              vChatGPT   2026-02-13
+                       ▼                              vChatGPT  *2026-02-13
    Cypha v3 — HRNA, BinaryEncoder, pure numpy ──┐     modular HRNA, 38 files
                        │                        │     + torch/transformers/PyQt6
                        ▼                        ▼     + agi/ gui/ security/ tests/
-   Cypha v4 — + benchmark_suite,          vPattern Matching
+   Cypha v4 — + benchmark_suite,          vPattern Matching *2026-02-13
               verify_thinking             "production" HRNA
                        │                  distillation, 996 lines
                        │  ◄── BinaryEncoder replaced by OmegaEncoder
                        ▼
-   Cypha v5 — HRNA "Omega-2" + dataset tooling
+   Cypha v5 — HRNA "Omega-2" + dataset tooling                   *2026-02-21
                        │
                        ▼
-   Cypha v6 — + 4 profilers + game benchmarks                     2026-02-27
+   Cypha v6 — + 4 profilers + game benchmarks              *2026-02-22 … 02-27
                        │
                        ▼
    Cypa v7 Generation — HRNA peak, 55 classes                     2026-03-06
@@ -67,7 +122,7 @@ each edge is graded for confidence.
            ║   CLEAN-SHEET RESTART  ║   family A ends here
            ╚═══════════┊════════════╝
                        ▼
-   Cypha v8 — CyphaDIF, 9 classes, 1,412 lines                    2026-03-11
+   Cypha v8 — CyphaDIF, 9 classes, 1,412 lines             *2026-03-07 … 03-11
                        │
                        ▼
    root Cypha.py — CyphaDIF "v2", +5 phases                       2026-03-14
@@ -84,6 +139,10 @@ each edge is graded for confidence.
                        ▼
              native C++ `cypha::Cypha`
 ```
+
+`*` marks a date recovered from *inside* the files, per the table above; unmarked dates are
+directory mtimes, which bound the work from above rather than pinning it. Where both exist the
+range runs from the earliest recovered date to the directory stamp.
 
 ### The class-overlap matrix that fixes the branch points
 
@@ -139,14 +198,21 @@ itself **IRENA** — "Integrated Recursive Event-Driven Neural Architecture"
 rename. The string "Cypha" first appears inside a file at **v2**, in
 `archive/cypha-v2/Cypha.py`.
 
+And it appears there *only* in the code. Within `cypha-v2/` the count is 30 in `Cypha.py`
+and **0 in all four documents** — including `Cypha.docx`, whose own title is *"Comprehensive
+Mathematical Framework for Optimized Event-Driven HRNA"*. Since that document is
+[dated 2025-05-05](eras/02-v2.md#the-oldest-dated-artifact-in-the-archive) and a `.docx`
+stores no filename, the boundary is not between directories at all — it runs **through v2**,
+between a dated HRNA specification and the undated code that renamed it.
+
 So the naming sequence is:
 
 ```
 Cell AI / Brain Model / OICFHS  →  IRENA  →  HRNA  →  Cypha (from v2)
 ```
 
-Directories named `Cypha V1` and files named `Cypha Convo Log.txt` were titled later, when
-the archive was assembled. **Any statement that this era "was Cypha" is a retroactive
+Directories named `Cypha V1`, and files named `Cypha Convo Log.txt` and `Cypha.docx`, were
+titled later, when the archive was assembled. **Any statement that this era "was Cypha" is a retroactive
 label, not a contemporaneous fact** — worth keeping in mind when reading the archive's own
 filenames as evidence.
 
