@@ -10,6 +10,17 @@ excluded as build artifacts (they are also covered by the repository `.gitignore
 all rewritten to the moment of zipping. See [`../TIMELINE.md`](../TIMELINE.md) for the
 reconstructed chronology, which relies on internal evidence rather than these stamps.
 
+## Integrity exception
+
+**`big-data/download_datasets.py` is corrupt and contains no recoverable content.**
+It is 8,755 bytes of `0x00` and nothing else — a single distinct byte value, zero printable
+characters. It arrived that way: the copy inside the source zip is byte-identical, so this
+is not a staging artifact. The file is preserved as delivered rather than deleted, because
+its presence and size are themselves part of the record.
+
+A scan of all 142 text files in the archive found **no other file with NUL bytes or missing
+content**. Everything else is intact.
+
 ## Directories
 
 | Archived as | Original name in zip | Directory mtime | Files | Bytes |

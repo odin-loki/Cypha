@@ -20,8 +20,8 @@ describes the tree.
 | Path | Original name in zip | What it is |
 |---|---|---|
 | [`prototypes/`](prototypes/) | `Prototypes` | Brain Model and Cell AI v2/v3 — design dialogues and math models, no code |
-| [`cypha-v1/`](cypha-v1/) | `Cypha V1` | first use of the name Cypha; HRNA and event-driven mathematics, no code |
-| [`cypha-v2/`](cypha-v2/) | `Cypha v2` | the 9,404-line monolith; the only version using `torch`, `ray` and `scipy` |
+| [`cypha-v1/`](cypha-v1/) | `Cypha V1` | IRENA → HRNA and the event-driven mathematics, no code — the name "Cypha" does **not** appear in these files |
+| [`cypha-v2/`](cypha-v2/) | `Cypha v2` | first use of the name Cypha; the 9,404-line monolith, the only version using `torch`, `ray` and `scipy`, and the only one that does not parse |
 | [`cypha-v3/`](cypha-v3/) | `Cypha v3` | the great simplification — frameworks dropped, pure `numpy` |
 | [`cypha-v4/`](cypha-v4/) | `Cypha v4` | adds `benchmark_suite.py` and `verify_thinking.py` |
 | [`cypha-v5/`](cypha-v5/) | `Cypha v5` | real-dataset tooling: `download.py`, `convert.py`, `synthetic_benchmark.py` |
@@ -32,7 +32,7 @@ describes the tree.
 | [`cypha-vchatgpt/`](cypha-vchatgpt/) | `Cypha vChatGPT` | side branch: the only modular package, only test suite, only GUI, only `transformers` |
 | [`cypha-vpattern-matching/`](cypha-vpattern-matching/) | `Cypha vPattern Matching` | side branch: the only one labelled "production" |
 | [`cypha-encoder/`](cypha-encoder/) | `Cypha Encoder` | the encoder extracted as a standalone unit |
-| [`big-data/`](big-data/) | `Big Data` | dataset acquisition tooling |
+| [`big-data/`](big-data/) | `Big Data` | dataset acquisition tooling — **the single file here is corrupt**, see [`MANIFEST.md`](MANIFEST.md#integrity-exception) |
 | [`datasets/`](datasets/) | `Cypha Classification Settings.jsonl` | 27,524-run sweep, gzipped — analysed in [`../SWEEP_ANALYSIS.md`](../SWEEP_ANALYSIS.md) |
 | [`side-quests/retdec-upgrades5/`](side-quests/retdec-upgrades5/) | `retdec_upgrades5.zip` | RetDec decompiler optimiser patches, dated the same day as v8 |
 
@@ -68,6 +68,11 @@ archive's value, and it is useless if it can only be opened by a word processor.
 and may drop figures, equation formatting and styling.
 
 Total: **173 files, 12 MB.**
+
+**Integrity.** All 132 verbatim copies were verified `sha256`-identical to source. A scan of
+all 142 text files found exactly one corrupt file — `big-data/download_datasets.py`, which is
+8,755 NUL bytes with no recoverable content and which arrived that way in the source zip. No
+other file has NUL bytes or missing content.
 
 ---
 
