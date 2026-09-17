@@ -1,0 +1,239 @@
+══════════════════════════════════════════════════════════════════════════════
+  PROFILER 2 — DISTRIBUTION SHIFT & ADAPTATION
+  Train=200/class on A  |  Adapt=2000 steps on B  |  probe_n=300
+  Shifts=[0.1, 0.2, 0.3, 0.5, 0.7]  |  Conf thresholds=[0.0, 1.1, 1.5, 2.0]
+  Replay ratio=0.5 (when enabled)
+══════════════════════════════════════════════════════════════════════════════
+
+  ──────────────────────────────────────────────────────────────────────────
+  MODALITY: TEXT  (base acc(A)=0.847)
+  ──────────────────────────────────────────────────────────────────────────
+
+  ACCURACY DROP BY SHIFT MAGNITUDE:
+   shift   acc(A)   acc(B)pre    drop   drop_pct
+     0.1    0.847       0.770  +0.077       9.1%
+     0.2    0.847       0.810  +0.037       4.3%
+     0.3    0.847       0.657  +0.190      22.4%
+     0.5    0.847       0.407  +0.440      52.0%
+     0.7    0.847       0.223  +0.623      73.6%
+
+  ADAPTATION RESULTS (best conf_threshold, no replay):
+   shift   conf_thr   writes   write_acc   recovery   forgetting   net_gain
+     0.1        1.5        0       0.000     +0.000       +0.000     +0.000
+     0.2        1.5        0       0.000     +0.000       +0.000     +0.000
+     0.3        1.5        0       0.000     +0.000       +0.000     +0.000
+     0.5        1.5        0       0.000     +0.000       +0.000     +0.000
+     0.7        1.5        0       0.000     +0.000       +0.000     +0.000
+
+  REPLAY BUFFER EFFECT (shift=0.3, all conf thresholds):
+   conf_thr   replay   writes   write_acc   recovery    forget      net
+        0.0       no     2000       0.174     -0.467    +0.700   -1.167
+        0.0      yes     2000       0.420     -0.270    +0.267   -0.537
+        1.1       no       83       0.663     -0.333    +0.397   -0.730
+        1.1      yes       75       0.920     -0.057    -0.050   -0.007
+        1.5       no        0       0.000     +0.000    +0.000   +0.000
+        1.5      yes        0       0.000     -0.150    -0.013   -0.137
+        2.0       no        0       0.000     +0.000    +0.000   +0.000
+        2.0      yes        0       0.000     -0.037    +0.030   -0.067
+
+  WRITE_RATE vs CONF_THRESHOLD (shift=0.3, no replay):
+  (write_rate = fraction of inference steps that triggered a write)
+   conf_thr   write_rate   writes   write_acc
+        0.0       1.0000     2000       0.174
+        1.1       0.0415       83       0.663
+        1.5       0.0000        0       0.000
+        2.0       0.0000        0       0.000
+
+  ADAPTATION TRACE (shift=0.3, best conf threshold):
+  conf_threshold=1.5
+    step   acc_A(no-rpl)   acc_B(no-rpl)   acc_A(replay)   acc_B(replay)
+       0           0.847           0.657           0.847           0.657
+     100           0.847           0.657           0.887           0.587
+     200           0.847           0.657           0.880           0.570
+     300           0.847           0.657           0.820           0.610
+     400           0.847           0.657           0.833           0.553
+     500           0.847           0.657           0.897           0.613
+     600           0.847           0.657           0.863           0.600
+     700           0.847           0.657           0.820           0.587
+     800           0.847           0.657           0.890           0.597
+     900           0.847           0.657           0.850           0.587
+    1000           0.847           0.657           0.877           0.600
+    1100           0.847           0.657           0.877           0.573
+    1200           0.847           0.657           0.903           0.630
+    1300           0.847           0.657           0.903           0.633
+    1400           0.847           0.657           0.820           0.583
+    1500           0.847           0.657           0.877           0.633
+    1600           0.847           0.657           0.870           0.633
+    1700           0.847           0.657           0.803           0.557
+    1800           0.847           0.657           0.907           0.603
+    1900           0.847           0.657           0.863           0.613
+    2000           0.847           0.657           0.860           0.507
+
+  ──────────────────────────────────────────────────────────────────────────
+  MODALITY: AUDIO  (base acc(A)=0.767)
+  ──────────────────────────────────────────────────────────────────────────
+
+  ACCURACY DROP BY SHIFT MAGNITUDE:
+   shift   acc(A)   acc(B)pre    drop   drop_pct
+     0.1    0.767       0.490  +0.277      36.1%
+     0.2    0.767       0.397  +0.370      48.3%
+     0.3    0.767       0.397  +0.370      48.3%
+     0.5    0.767       0.367  +0.400      52.2%
+     0.7    0.767       0.410  +0.357      46.5%
+
+  ADAPTATION RESULTS (best conf_threshold, no replay):
+   shift   conf_thr   writes   write_acc   recovery   forgetting   net_gain
+     0.1        1.1        0       0.000     +0.000       +0.000     +0.000
+     0.2        1.1        0       0.000     +0.000       +0.000     +0.000
+     0.3        1.1        0       0.000     +0.000       +0.000     +0.000
+     0.5        1.1        0       0.000     +0.000       +0.000     +0.000
+     0.7        1.1        0       0.000     +0.000       +0.000     +0.000
+
+  REPLAY BUFFER EFFECT (shift=0.3, all conf thresholds):
+   conf_thr   replay   writes   write_acc   recovery    forget      net
+        0.0       no     2000       0.270     -0.123    +0.500   -0.623
+        0.0      yes     2000       0.330     +0.193    -0.010   +0.203
+        1.1       no        0       0.000     +0.000    +0.000   +0.000
+        1.1      yes        0       0.000     -0.113    +0.000   -0.113
+        1.5       no        0       0.000     +0.000    +0.000   +0.000
+        1.5      yes        0       0.000     -0.040    -0.113   +0.073
+        2.0       no        0       0.000     +0.000    +0.000   +0.000
+        2.0      yes        0       0.000     -0.047    +0.063   -0.110
+
+  WRITE_RATE vs CONF_THRESHOLD (shift=0.3, no replay):
+  (write_rate = fraction of inference steps that triggered a write)
+   conf_thr   write_rate   writes   write_acc
+        0.0       1.0000     2000       0.270
+        1.1       0.0000        0       0.000
+        1.5       0.0000        0       0.000
+        2.0       0.0000        0       0.000
+
+  ADAPTATION TRACE (shift=0.3, best conf threshold):
+  conf_threshold=1.1
+    step   acc_A(no-rpl)   acc_B(no-rpl)   acc_A(replay)   acc_B(replay)
+       0           0.767           0.397           0.767           0.397
+     100           0.767           0.397           0.863           0.280
+     200           0.767           0.397           0.823           0.357
+     300           0.767           0.397           0.813           0.370
+     400           0.767           0.397           0.773           0.160
+     500           0.767           0.397           0.867           0.350
+     600           0.767           0.397           0.827           0.187
+     700           0.767           0.397           0.757           0.380
+     800           0.767           0.397           0.837           0.380
+     900           0.767           0.397           0.873           0.270
+    1000           0.767           0.397           0.743           0.330
+    1100           0.767           0.397           0.870           0.327
+    1200           0.767           0.397           0.750           0.537
+    1300           0.767           0.397           0.893           0.450
+    1400           0.767           0.397           0.860           0.393
+    1500           0.767           0.397           0.733           0.240
+    1600           0.767           0.397           0.783           0.320
+    1700           0.767           0.397           0.777           0.293
+    1800           0.767           0.397           0.767           0.373
+    1900           0.767           0.397           0.850           0.397
+    2000           0.767           0.397           0.767           0.283
+
+  ──────────────────────────────────────────────────────────────────────────
+  MODALITY: VIDEO  (base acc(A)=0.993)
+  ──────────────────────────────────────────────────────────────────────────
+
+  ACCURACY DROP BY SHIFT MAGNITUDE:
+   shift   acc(A)   acc(B)pre    drop   drop_pct
+     0.1    0.993       0.897  +0.097       9.7%
+     0.2    0.993       0.770  +0.223      22.5%
+     0.3    0.993       0.643  +0.350      35.2%
+     0.5    0.993       0.413  +0.580      58.4%
+     0.7    0.993       0.307  +0.687      69.1%
+
+  ADAPTATION RESULTS (best conf_threshold, no replay):
+   shift   conf_thr   writes   write_acc   recovery   forgetting   net_gain
+     0.1        0.0     2000       0.873     +0.000       -0.003     +0.003
+     0.2        0.0     2000       0.801     +0.047       -0.003     +0.050
+     0.3        2.0        0       0.000     +0.000       +0.000     +0.000
+     0.5        2.0        0       0.000     +0.000       +0.000     +0.000
+     0.7        1.5       41       0.293     +0.003       +0.000     +0.003
+
+  REPLAY BUFFER EFFECT (shift=0.3, all conf thresholds):
+   conf_thr   replay   writes   write_acc   recovery    forget      net
+        0.0       no     2000       0.673     +0.050    +0.093   -0.043
+        0.0      yes     2000       0.669     +0.040    +0.000   +0.040
+        1.1       no     1716       0.705     +0.050    +0.150   -0.100
+        1.1      yes     1656       0.707     +0.003    -0.003   +0.007
+        1.5       no       54       0.611     -0.003    +0.003   -0.007
+        1.5      yes       46       0.674     +0.000    -0.003   +0.003
+        2.0       no        0       0.000     +0.000    +0.000   +0.000
+        2.0      yes        1       0.000     +0.000    -0.003   +0.003
+
+  WRITE_RATE vs CONF_THRESHOLD (shift=0.3, no replay):
+  (write_rate = fraction of inference steps that triggered a write)
+   conf_thr   write_rate   writes   write_acc
+        0.0       1.0000     2000       0.673
+        1.1       0.8580     1716       0.705
+        1.5       0.0270       54       0.611
+        2.0       0.0000        0       0.000
+
+  ADAPTATION TRACE (shift=0.3, best conf threshold):
+  conf_threshold=2.0
+    step   acc_A(no-rpl)   acc_B(no-rpl)   acc_A(replay)   acc_B(replay)
+       0           0.993           0.643           0.993           0.643
+     100           0.993           0.643           0.993           0.640
+     200           0.993           0.643           0.997           0.633
+     300           0.993           0.643           0.997           0.643
+     400           0.993           0.643           0.997           0.660
+     500           0.993           0.643           0.997           0.667
+     600           0.993           0.643           0.990           0.623
+     700           0.993           0.643           0.993           0.663
+     800           0.993           0.643           0.997           0.660
+     900           0.993           0.643           0.997           0.640
+    1000           0.993           0.643           0.997           0.690
+    1100           0.993           0.643           0.997           0.627
+    1200           0.993           0.643           0.997           0.660
+    1300           0.993           0.643           0.997           0.633
+    1400           0.993           0.643           0.997           0.653
+    1500           0.993           0.643           0.997           0.653
+    1600           0.993           0.643           0.993           0.640
+    1700           0.993           0.643           0.993           0.653
+    1800           0.993           0.643           0.993           0.643
+    1900           0.993           0.643           0.997           0.643
+    2000           0.993           0.643           0.997           0.643
+
+══════════════════════════════════════════════════════════════════════════════
+  SYNTHESIS — DISTRIBUTION SHIFT
+══════════════════════════════════════════════════════════════════════════════
+
+  DROP vs SHIFT:
+    Expected: monotonically increasing drop with shift magnitude.
+    If drop is non-linear (slow then fast), there is a 'tolerance zone'
+    where the centroid is robust to small perturbations.
+    If drop is linear, every increase in shift costs proportional accuracy.
+
+  RECOVERY vs WRITE_ACCURACY:
+    Pseudo-labelling only helps when write_accuracy > ~70-85% (from EXP2).
+    Recovery = f(write_accuracy × n_writes) — both matter.
+    High write_acc + few writes (high conf_threshold) = slow but clean recovery.
+    Low  write_acc + many writes (low conf_threshold) = fast but polluted.
+    The optimal conf_threshold maximises net_gain = recovery - forgetting.
+
+  REPLAY BUFFER:
+    Replay prevents forgetting by keeping A-centroid anchored.
+    Net_gain with replay > net_gain without replay when:
+      forgetting_no_replay > recovery_improvement_from_replay
+    If forgetting is already ~0, replay adds no benefit.
+
+  CATASTROPHIC FORGETTING CONDITION:
+    Forgetting is large when:
+      - The shift is large (B is far from A)
+      - Write accuracy is low (wrong labels pull centroid toward B noise)
+      - No replay (A-centroid has no anchor)
+    Forgetting approaches zero when:
+      - The shift is small (B overlaps A)
+      - Write accuracy is high (B-pseudo-labels are correct)
+      - Replay is active
+
+  SHIFT TOLERANCE THRESHOLD:
+    The shift magnitude where acc(B) first drops below 0.80 defines the
+    practical deployment tolerance. Beyond this, adaptation is required.
+    The shift magnitude where adaptation fails (recovery < 0.05) defines
+    the recovery limit — beyond which retraining from scratch is needed.
+
+══════════════════════════════════════════════════════════════════════════════

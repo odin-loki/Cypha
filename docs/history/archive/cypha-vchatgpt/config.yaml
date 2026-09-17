@@ -1,0 +1,21 @@
+hardware:
+  use_gpu: false
+  max_memory: 16GB
+compression:
+  target_ratio: 500000
+  thresholds:
+    amplitude: 0.01
+    periodicity: 0.1
+event:
+  priority_alpha: 0.1
+  criticality_start: 0.5
+scraper:
+  rate_limit: 1.0
+  obey_robots: true
+training:
+  batch_size: 64
+  learning_rate: 0.0003
+  continual: true
+security:
+  command_whitelist: [ls, pwd, head, tail]
+  encrypted_storage: true

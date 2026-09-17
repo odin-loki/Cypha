@@ -1,0 +1,263 @@
+════════════════════════════════════════════════════════════════════════════
+  PROFILER 3 — EMA-ALPHA DYNAMICS & SWITCHING HYPOTHESIS
+  6 classes  |  probe_n=300  |  k=2 margins  |  seeds=2
+  n/class sweep: [50, 200, 500]
+════════════════════════════════════════════════════════════════════════════
+
+  MODALITY: TEXT
+
+  n/class=50  (n_total=300)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Fixed α=0.05                      0.990  0.007        10
+      2  Anneal 0.40→0.05                  0.983  0.003        10
+      3  Switch adaptive→0.05              0.978  0.002        10
+      4  Fixed α=0.15                      0.950  0.007        10
+      5  Switch 0.05→adaptive              0.935  0.015        10
+      6  Switch 0.15→adaptive              0.898  0.008        10
+      7  Fixed α=0.30                      0.868  0.022        10
+      8  Adaptive (TP)                     0.863  0.003        10
+      9  Fixed α=0.40                      0.840  0.007        10
+
+  n/class=200  (n_total=1200)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Switch adaptive→0.05              0.998  0.002        40
+      2  Fixed α=0.05                      0.995  0.005        40
+      3  Anneal 0.40→0.05                  0.988  0.002        40
+      4  Fixed α=0.15                      0.952  0.015        40
+      5  Switch 0.05→adaptive              0.940  0.003        40
+      6  Fixed α=0.30                      0.898  0.052        40
+      7  Adaptive (TP)                     0.895  0.012        40
+      8  Switch 0.15→adaptive              0.893  0.023        40
+      9  Fixed α=0.40                      0.855  0.018        40
+
+  n/class=500  (n_total=3000)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Fixed α=0.05                      0.998  0.002       100
+      2  Anneal 0.40→0.05                  0.998  0.002       100
+      3  Switch adaptive→0.05              0.997  0.003       100
+      4  Fixed α=0.15                      0.955  0.035       100
+      5  Fixed α=0.30                      0.880  0.007       100
+      6  Adaptive (TP)                     0.875  0.008       100
+      7  Switch 0.15→adaptive              0.860  0.027       100
+      8  Switch 0.05→adaptive              0.815  0.058       100
+      9  Fixed α=0.40                      0.795  0.018       100
+
+
+  MODALITY: AUDIO
+
+  n/class=50  (n_total=300)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Anneal 0.40→0.05                  0.905  0.032        10
+      2  Fixed α=0.05                      0.885  0.005        10
+      3  Switch adaptive→0.05              0.852  0.002        10
+      4  Switch 0.15→adaptive              0.850  0.020        10
+      5  Fixed α=0.15                      0.838  0.048        10
+      6  Fixed α=0.30                      0.838  0.005        10
+      7  Adaptive (TP)                     0.833  0.007        10
+      8  Switch 0.05→adaptive              0.788  0.048        10
+      9  Fixed α=0.40                      0.778  0.002        10
+
+  n/class=200  (n_total=1200)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Fixed α=0.05                      0.892  0.008        40
+      2  Anneal 0.40→0.05                  0.870  0.007        40
+      3  Fixed α=0.15                      0.857  0.010        40
+      4  Switch adaptive→0.05              0.848  0.022        40
+      5  Fixed α=0.30                      0.810  0.030        40
+      6  Adaptive (TP)                     0.797  0.003        40
+      7  Switch 0.15→adaptive              0.792  0.008        40
+      8  Fixed α=0.40                      0.785  0.035        40
+      9  Switch 0.05→adaptive              0.733  0.030        40
+
+  n/class=500  (n_total=3000)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Fixed α=0.15                      0.877  0.020       100
+      2  Switch adaptive→0.05              0.877  0.007       100
+      3  Anneal 0.40→0.05                  0.867  0.000       100
+      4  Fixed α=0.05                      0.857  0.010       100
+      5  Switch 0.15→adaptive              0.838  0.042       100
+      6  Switch 0.05→adaptive              0.837  0.030       100
+      7  Fixed α=0.40                      0.827  0.040       100
+      8  Fixed α=0.30                      0.800  0.007       100
+      9  Adaptive (TP)                     0.750  0.000       100
+
+
+  MODALITY: STRUCTURED
+
+  n/class=50  (n_total=300)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Fixed α=0.05                      0.653  0.017        10
+      2  Anneal 0.40→0.05                  0.645  0.012        10
+      3  Switch adaptive→0.05              0.592  0.002        10
+      4  Fixed α=0.15                      0.563  0.000        10
+      5  Fixed α=0.40                      0.472  0.038        10
+      6  Fixed α=0.30                      0.468  0.035        10
+      7  Switch 0.05→adaptive              0.427  0.003        10
+      8  Adaptive (TP)                     0.425  0.038        10
+      9  Switch 0.15→adaptive              0.403  0.013        10
+
+  n/class=200  (n_total=1200)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Fixed α=0.05                      0.658  0.052        40
+      2  Switch adaptive→0.05              0.638  0.012        40
+      3  Anneal 0.40→0.05                  0.608  0.025        40
+      4  Fixed α=0.15                      0.593  0.003        40
+      5  Fixed α=0.30                      0.503  0.030        40
+      6  Adaptive (TP)                     0.488  0.025        40
+      7  Switch 0.15→adaptive              0.472  0.042        40
+      8  Fixed α=0.40                      0.417  0.010        40
+      9  Switch 0.05→adaptive              0.393  0.023        40
+
+  n/class=500  (n_total=3000)
+   Rank  Strategy                       FinalAcc    Std    TransN
+  ──────────────────────────────────────────────────────────────────────────
+      1  Fixed α=0.05                      0.655  0.048       100
+      2  Switch adaptive→0.05              0.648  0.025       100
+      3  Anneal 0.40→0.05                  0.647  0.027       100
+      4  Fixed α=0.15                      0.595  0.008       100
+      5  Fixed α=0.30                      0.468  0.005       100
+      6  Switch 0.05→adaptive              0.465  0.035       100
+      7  Adaptive (TP)                     0.462  0.015       100
+      8  Fixed α=0.40                      0.425  0.038       100
+      9  Switch 0.15→adaptive              0.410  0.033       100
+
+
+  SWITCHING STRATEGY ANALYSIS
+  Does switching at transition beat both parent strategies?
+
+  Modality         n/cls   fixed_005    adaptive   switch_005_ad   switch_015_ad   switch_ad_005  winner
+  ──────────────────────────────────────────────────────────────────────────
+  text                50       0.990       0.863           0.935           0.898           0.978  fixed_005
+  text               200       0.995       0.895           0.940           0.893           0.998  SWITCH ✓
+  text               500       0.998       0.875           0.815           0.860           0.997  fixed_005
+  audio               50       0.885       0.833           0.788           0.850           0.852  fixed_005
+  audio              200       0.892       0.797           0.733           0.792           0.848  fixed_005
+  audio              500       0.857       0.750           0.837           0.838           0.877  SWITCH ✓
+  structured          50       0.653       0.425           0.427           0.403           0.592  fixed_005
+  structured         200       0.658       0.488           0.393           0.472           0.638  fixed_005
+  structured         500       0.655       0.462           0.465           0.410           0.648  fixed_005
+
+  ANNEALING vs FIXED-LOW  (does smooth decay beat step function?)
+
+  Modality         n/cls   fixed_005    anneal    diff  winner
+  ──────────────────────────────────────────────────────────────────────────
+  text                50       0.990     0.983  -0.007  fixed_005
+  text               200       0.995     0.988  -0.007  fixed_005
+  text               500       0.998     0.998  +0.000  tie
+  audio               50       0.885     0.905  +0.020  anneal
+  audio              200       0.892     0.870  -0.022  fixed_005
+  audio              500       0.857     0.867  +0.010  anneal
+  structured          50       0.653     0.645  -0.008  fixed_005
+  structured         200       0.658     0.608  -0.050  fixed_005
+  structured         500       0.655     0.647  -0.008  fixed_005
+
+  CONVERGENCE SPEED: n to reach 0.80 accuracy
+  (from cold-start traces, n/class=200)
+
+  Modality        Strategy                        n@0.80
+  ──────────────────────────────────────────────────────────────────────────
+  text            Fixed α=0.05                       120
+  text            Fixed α=0.15                        80
+  text            Adaptive (TP)                       40
+  text            Switch 0.05→adaptive               120
+  text            Anneal 0.40→0.05                    40
+  audio           Fixed α=0.05                       120
+  audio           Fixed α=0.15                        80
+  audio           Adaptive (TP)                       40
+  audio           Switch 0.05→adaptive               120
+  audio           Anneal 0.40→0.05                    80
+  structured      Fixed α=0.05                    >1,200
+  structured      Fixed α=0.15                    >1,200
+  structured      Adaptive (TP)                   >1,200
+  structured      Switch 0.05→adaptive            >1,200
+  structured      Anneal 0.40→0.05                >1,200
+
+  ACCURACY TRACES — best vs worst strategy per modality (n/class=200, seed 0)
+
+  text  n/class=200:
+         n   best_acc (Switch adaptive→0.05)   worst_acc (Fixed α=0.40)
+         1      0.167       0.167
+       120      0.977       0.880
+       240      1.000       0.790
+       360      0.990       0.830
+       480      0.990       0.837
+       600      0.987       0.840
+       720      1.000       0.890
+       840      1.000       0.853
+       960      1.000       0.863
+     1,080      0.997       0.757
+     1,200      1.000       0.837
+
+  audio  n/class=200:
+         n   best_acc (Fixed α=0.05)   worst_acc (Switch 0.05→adaptive)
+         1      0.167       0.167
+       120      0.827       0.823
+       240      0.887       0.737
+       360      0.850       0.763
+       480      0.883       0.703
+       600      0.870       0.753
+       720      0.860       0.867
+       840      0.893       0.790
+       960      0.880       0.730
+     1,080      0.917       0.853
+     1,200      0.900       0.703
+
+  structured  n/class=200:
+         n   best_acc (Fixed α=0.05)   worst_acc (Switch 0.05→adaptive)
+         1      0.167       0.167
+       120      0.397       0.380
+       240      0.547       0.443
+       360      0.650       0.443
+       480      0.727       0.503
+       600      0.697       0.460
+       720      0.667       0.493
+       840      0.657       0.480
+       960      0.657       0.413
+     1,080      0.700       0.407
+     1,200      0.710       0.370
+
+════════════════════════════════════════════════════════════════════════════
+  SYNTHESIS — ALPHA DYNAMICS
+════════════════════════════════════════════════════════════════════════════
+
+  HYPOTHESIS VERDICT:
+    "Pre-transition: fixed low beats adaptive"
+    → CONFIRMED if fixed_005 > adaptive at same probe points pre-transition
+    → REJECTED if adaptive matches or exceeds fixed_005 throughout
+
+    "Post-transition: adaptive beats fixed"
+    → CONFIRMED if acc_post_trans(adaptive) > acc_post_trans(fixed_005)
+    → Look at trace values after transition_n
+
+    "Switching at transition beats both"
+    → CONFIRMED if switch_005_ad or switch_015_ad > max(fixed_005, adaptive)
+    → Even if marginally — shows the mechanism is real
+
+  ANNEALING:
+    Annealing mimics switching without needing transition detection.
+    If anneal beats switch: transition detection is unreliable/unnecessary.
+    If switch beats anneal: real-time detection adds value.
+
+  OPTIMAL ALPHA BY MODALITY:
+    The best fixed alpha per modality reveals the regime:
+    - Best α < 0.15 → pre-transition dominated run (centroid still migrating)
+    - Best α ≈ 0.15 → balanced run (transition midway)  
+    - Best α > 0.15 → post-transition dominated (fast adaptation needed)
+
+  ADAPTIVE LEARNER IMPLICATION:
+    If switch beats both parents → use switch strategy in adaptive learner:
+      1. Train with fixed_low (0.05) until transition detected
+      2. Switch to adaptive post-transition
+      3. Transition detection: real-time σ drop (k=2 probe required)
+    If anneal ≈ switch → simpler: just anneal α from 0.40 to 0.05 over budget.
+    If fixed_low always wins → adaptive mechanism should be disabled entirely.
+
+════════════════════════════════════════════════════════════════════════════

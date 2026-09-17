@@ -1,0 +1,126 @@
+flowchart TD
+    subgraph "Enhanced Event-Driven HRNA"
+        direction TB
+        
+        subgraph "Core Enhancement Integration"
+            direction TB
+            CE["Enhanced Core Mechanisms"] --- AET & ECM & EMD & ETP & SR & PEG & EV
+            
+            AET["Adaptive Event\nThresholds"]
+            ECM["Event Consolidation\nMechanism"]
+            EMD["Event Memory\nwith Decay"]
+            ETP["Event-Triggered\nPlasticity"]
+            SR["Stochastic\nResonance"]
+            PEG["Predictive Event\nGeneration"]
+            EV["Emotional Valence\nfor Events"]
+            
+            AET -.- AETM["θ_adaptive(t) = θ_base × [1 - α_context · relevance(context)\n- β_history · novelty(event)]"]
+            ECM -.- ECMM["E_consolidated = consolidate({E_similar}, similarity_threshold)"]
+            EMD -.- EMDM["M_event(t) = ∑ᵢ E_i(t_i) × exp(-(t-t_i)/τ_i)"]
+            ETP -.- ETPM["dW_ij/dt = η × E_i × E_j × f(timing) × priority(E_i) × priority(E_j)"]
+            SR -.- SRM["R_noisy(ω, ψ) = R_enhanced(ω, ψ) + η(t)"]
+            PEG -.- PEGM["E_predictive(t) = P(E|ψ̂(t+Δt)) × δ(t-t_predict)"]
+            EV -.- EVM["priority_emotional(E) = priority_base(E) × [1 + α_emotion × valence(E)]"]
+        end
+        
+        subgraph "Enhanced Event Generation"
+            direction TB
+            EEG["Enhanced Event Generation"] --- EEG1 & EEG2 & EEG3 & EEG4
+            
+            EEG1["Adaptive Threshold\nEvent Generation"]
+            EEG2["Emotion-Weighted\nEvents"]
+            EEG3["Noise-Enhanced\nEvent Detection"]
+            EEG4["Predictive\nEvents"]
+            
+            EEG1 -.- EEG1M["E_adaptive(ψ,t) = [R(ψ,t) > θ_adaptive(t)] × δ(t-t_detect)"]
+            EEG2 -.- EEG2M["P(E|emotional) = P_base(E) × valence_modulation(E)"]
+            EEG3 -.- EEG3M["P(E|noisy) = P(E|R_noisy(ω,ψ) > θ)"]
+            EEG4 -.- EEG4M["E(ψ̂(t+Δt)) = P(E|ψ̂(t+Δt)) × δ(t-t_predict)"]
+        end
+        
+        subgraph "Enhanced Event Processing"
+            direction TB
+            EEP["Enhanced Event Processing"] --- EEP1 & EEP2 & EEP3 & EEP4
+            
+            EEP1["Consolidated Event\nProcessing"]
+            EEP2["Memory-Informed\nProcessing"]
+            EEP3["Emotionally-Biased\nProcessing"]
+            EEP4["Plasticity-Enhanced\nProcessing"]
+            
+            EEP1 -.- EEP1M["P(E_consolidated) = ∑ᵢ wᵢ × P(E_i)"]
+            EEP2 -.- EEP2M["F_memory(ψ,E,t) = F_base(ψ,E,t) × [1 + γ_memory × M_event(t)]"]
+            EEP3 -.- EEP3M["priority(E) = priority_emotional(E)"]
+            EEP4 -.- EEP4M["Response(E) = Response_base(E) × ∏ᵢⱼ(W_ij + ΔW_ij(E))"]
+        end
+        
+        subgraph "Level-Specific Enhancements"
+            direction TB
+            LSE["Level-Specific Enhancements"] --- LSE1 & LSE2 & LSE3 & LSE4
+            
+            LSE1["Resonator Level\nEnhancements"]
+            LSE2["Assembly Level\nEnhancements"]
+            LSE3["Module Level\nEnhancements"]
+            LSE4["Global Level\nEnhancements"]
+            
+            LSE1 -.- LSE1M["R_i(t) = R_base_i(t) + noise(t) + ∑ₑ E_emotional(t)δ(t-t_e)"]
+            LSE2 -.- LSE2M["A_k(t) = A_base_k(t) + ∑ₑ E_consolidated(t)δ(t-t_e)"]
+            LSE3 -.- LSE3M["M_s(t) = M_base_s(t) + M_event(t) + ∑ₑ E_predictive(t)δ(t-t_e)"]
+            LSE4 -.- LSE4M["G(t) = G_base(t) + emotional_bias(t) + ∑ₑ E_e(t)δ(t-t_e)"]
+        end
+        
+        subgraph "Synergistic Interactions"
+            direction TB
+            SI["Synergistic Interactions"] --- SI1 & SI2 & SI3 & SI4
+            
+            SI1["Memory + Plasticity"]
+            SI2["Emotion + Adaptive\nThresholds"]
+            SI3["Stochastic + Predictive"]
+            SI4["Consolidation + Emotion"]
+            
+            SI1 -.- SI1M["dW_ij/dt = η × E_i × E_j × f(timing) × M_event(t)"]
+            SI2 -.- SI2M["θ_adaptive(t) = θ_base × [1 - α_context · relevance(context)\n- β_history · novelty(event) - γ_emotion · |valence(E)|]"]
+            SI3 -.- SI3M["E_predictive(t) = P(E|ψ̂(t+Δt) + η(t)) × δ(t-t_predict)"]
+            SI4 -.- SI4M["E_consolidated = consolidate({E_similar}, similarity_threshold, emotional_weighting)"]
+        end
+        
+        subgraph "Recursive Thought Enhancement"
+            direction TB
+            RT["Enhanced Thought\nProcesses"] --- RT1 & RT2 & RT3 & RT4
+            
+            RT1["Emotionally Guided\nThought"]
+            RT2["Memory-Enhanced\nThought"]
+            RT3["Predictive Thought\nCascades"]
+            RT4["Consolidated Abstract\nThought"]
+            
+            RT1 -.- RT1M["T_emotional(t) = T_base(t) × emotional_bias(t)"]
+            RT2 -.- RT2M["T_memory(t) = T_base(t) × [1 + δ_mem · M_event(t)]"]
+            RT3 -.- RT3M["T_predictive(t) = cascade(E_predictive(t))"]
+            RT4 -.- RT4M["T_abstract(t) = process(E_consolidated)"]
+        end
+    end
+    
+    %% Main connections
+    CE -->|"Enhances"| EEG
+    CE -->|"Improves"| EEP
+    CE -->|"Optimizes"| LSE
+    CE -->|"Creates"| SI
+    
+    EEG -->|"Generates"| EEP
+    EEP -->|"Processes at"| LSE
+    LSE -->|"Enables"| RT
+    
+    SI -->|"Amplifies"| EEG & EEP & LSE & RT
+    
+    %% Specific connections
+    AET -->|"Modulates"| EEG1
+    ECM -->|"Creates"| EEP1
+    EMD -->|"Informs"| EEP2
+    ETP -->|"Enhances"| EEP4
+    SR -->|"Improves"| EEG3
+    PEG -->|"Generates"| EEG4
+    EV -->|"Prioritizes"| EEG2
+    
+    SI1 -->|"Strengthens"| RT2
+    SI2 -->|"Directs"| RT1
+    SI3 -->|"Enables"| RT3
+    SI4 -->|"Creates"| RT4

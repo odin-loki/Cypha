@@ -1,0 +1,163 @@
+════════════════════════════════════════════════════════════════════════════
+  PROFILER 4 — ARCHETYPE DETECTION (Type A / B / C)
+  Full training: 300/class  |  Detection at steps: [6, 10, 20, 30, 50]
+  Seeds: 5  |  probe_n=300  |  k=2 margins
+  Thresholds: acc_A>0.5  σ_A<0.02  slope_C<0.002
+════════════════════════════════════════════════════════════════════════════
+
+  DETECTION ACCURACY vs DETECTION STEP
+    Step    Overall     Type_A P/R/F1     Type_B P/R/F1     Type_C P/R/F1
+  ──────────────────────────────────────────────────────────────────────────
+       6      0.333    0.19/0.60/0.29      0.50/0.47/0.48      0.00/0.00/0.00
+      10      0.200    0.15/0.60/0.24      0.30/0.20/0.24      0.00/0.00/0.00
+      20      0.167    0.20/1.00/0.33      0.00/0.00/0.00      0.00/0.00/0.00
+      30      0.167    0.20/1.00/0.33      0.00/0.00/0.00      0.00/0.00/0.00
+      50      0.167    0.19/1.00/0.32      0.00/0.00/0.00      0.00/0.00/0.00
+
+  PER-MODALITY DETECTION (all seeds, all checkpoints)
+  Modality          GT  n=6  n=10  n=20  n=30  n=50  Final  Pred
+  ──────────────────────────────────────────────────────────────────────────
+  audio              A  B(✗)  B(✗)  A(✓)  A(✓)  A(✓)  0.810  1.0
+  audio              A  A(✓)  A(✓)  A(✓)  A(✓)  A(✓)  0.853  1.0
+  audio              A  A(✓)  A(✓)  A(✓)  A(✓)  A(✓)  0.853  1.0
+  audio              A  B(✗)  B(✗)  A(✓)  A(✓)  A(✓)  0.870  1.0
+  audio              A  A(✓)  A(✓)  A(✓)  A(✓)  A(✓)  0.730  1.0
+  text               B  B(✓)  B(✓)  A(✗)  A(✗)  A(✗)  0.943  1.0
+  text               B  B(✓)  B(✓)  A(✗)  A(✗)  A(✗)  0.863  1.0
+  text               B  B(✓)  A(✗)  A(✗)  A(✗)  A(✗)  0.897  1.0
+  text               B  B(✓)  B(✓)  A(✗)  A(✗)  A(✗)  0.903  1.0
+  text               B  B(✓)  A(✗)  A(✗)  A(✗)  A(✗)  0.873  1.0
+  image              B  B(✓)  A(✗)  A(✗)  A(✗)  A(✗)  0.927  1.0
+  image              B  B(✓)  A(✗)  A(✗)  A(✗)  A(✗)  0.933  1.0
+  image              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.967  1.0
+  image              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.943  1.0
+  image              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.880  1.0
+  video              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.997  1.0
+  video              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.997  1.0
+  video              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.997  1.0
+  video              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.990  1.0
+  video              B  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.997  1.0
+  structured         C  B(✗)  B(✗)  B(✗)  B(✗)  B(✗)  0.403  1.0
+  structured         C  B(✗)  B(✗)  B(✗)  B(✗)  B(✗)  0.513  1.0
+  structured         C  B(✗)  B(✗)  B(✗)  B(✗)  A(✗)  0.403  1.0
+  structured         C  B(✗)  B(✗)  B(✗)  B(✗)  B(✗)  0.447  1.0
+  structured         C  B(✗)  B(✗)  B(✗)  B(✗)  B(✗)  0.443  1.0
+  rf_iq              C  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.723  1.0
+  rf_iq              C  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.733  1.0
+  rf_iq              C  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.717  1.0
+  rf_iq              C  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.753  1.0
+  rf_iq              C  A(✗)  A(✗)  A(✗)  A(✗)  A(✗)  0.733  1.0
+
+  SIGNAL DISTRIBUTIONS AT STEP 50 BY ARCHETYPE
+  (mean ± std across all seeds of that archetype)
+
+  Archetype         acc   acc_slope     sigma   sigma_slope   anchors
+  ──────────────────────────────────────────────────────────────────────────
+  Type A           +0.8020±0.0524    +0.0865±0.0200    +0.0059±0.0004    -0.0009±0.0003       6.0
+  Type B           +0.9013±0.0713    +0.1069±0.0169    +0.1114±0.0471    -0.0095±0.0075       6.9
+  Type C           +0.5887±0.1418    +0.0575±0.0131    +0.0170±0.0081    -0.0047±0.0012       6.0
+
+  EARLY TRACES (seed 0, first 50 steps)
+    step     audio acc      text acc     image acc     video acc  structured acc     rf_iq acc
+  ──────────────────────────────────────────────────────────────────────────
+       1         0.167         0.167         0.167         0.167         0.167         0.167
+       2         0.167         0.257         0.303         0.323         0.173         0.333
+       4         0.217         0.347         0.423         0.657         0.243         0.467
+       6         0.283         0.343         0.463         0.657         0.307         0.500
+       8         0.407         0.373         0.517         0.823         0.303         0.520
+      10         0.490         0.420         0.610         0.823         0.290         0.683
+      12         0.520         0.450         0.610         0.823         0.300         0.657
+      14         0.693         0.523         0.620         0.823         0.310         0.660
+      16         0.700         0.580         0.620         0.823         0.287         0.660
+      18         0.680         0.633         0.647         0.830         0.283         0.660
+      20         0.667         0.710         0.633         0.830         0.307         0.650
+      22         0.623         0.733         0.727         0.997         0.290         0.650
+      24         0.663         0.693         0.853         0.997         0.340         0.637
+      26         0.640         0.700         0.850         0.997         0.397         0.657
+      28         0.660         0.713         0.850         0.987         0.433         0.670
+      30         0.660         0.710         0.847         0.987         0.453         0.657
+      32         0.657         0.740         0.893         0.987         0.443         0.657
+      34         0.710         0.773         0.887         0.993         0.470         0.657
+      36         0.667         0.797         0.890         0.990         0.430         0.657
+      38         0.820         0.763         0.890         0.990         0.427         0.660
+      40         0.727         0.870         0.873         0.990         0.417         0.633
+      42         0.707         0.883         0.873         0.993         0.393         0.643
+      44         0.700         0.893         0.873         0.997         0.397         0.647
+      46         0.707         0.853         0.883         0.997         0.437         0.647
+      48         0.700         0.860         0.890         0.993         0.427         0.677
+      50         0.707         0.850         0.897         0.993         0.450         0.687
+
+  FINAL ACCURACY PREDICTION (from step-50 extrapolation)
+  Modality         GT_type    Actual   Predicted    Error
+  ──────────────────────────────────────────────────────────────────────────
+  audio             Type_A     0.810         1.0     0.19
+  audio             Type_A     0.853         1.0    0.147
+  audio             Type_A     0.853         1.0    0.147
+  audio             Type_A     0.870         1.0     0.13
+  audio             Type_A     0.730         1.0     0.27
+  text              Type_B     0.943         1.0    0.057
+  text              Type_B     0.863         1.0    0.137
+  text              Type_B     0.897         1.0    0.103
+  text              Type_B     0.903         1.0    0.097
+  text              Type_B     0.873         1.0    0.127
+  image             Type_B     0.927         1.0    0.073
+  image             Type_B     0.933         1.0    0.067
+  image             Type_B     0.967         1.0    0.033
+  image             Type_B     0.943         1.0    0.057
+  image             Type_B     0.880         1.0     0.12
+  video             Type_B     0.997         1.0    0.003
+  video             Type_B     0.997         1.0    0.003
+  video             Type_B     0.997         1.0    0.003
+  video             Type_B     0.990         1.0     0.01
+  video             Type_B     0.997         1.0    0.003
+  structured        Type_C     0.403         1.0    0.597
+  structured        Type_C     0.513         1.0    0.487
+  structured        Type_C     0.403         1.0    0.597
+  structured        Type_C     0.447         1.0    0.553
+  structured        Type_C     0.443         1.0    0.557
+  rf_iq             Type_C     0.723         1.0    0.277
+  rf_iq             Type_C     0.733         1.0    0.267
+  rf_iq             Type_C     0.717         1.0    0.283
+  rf_iq             Type_C     0.753         1.0    0.247
+  rf_iq             Type_C     0.733         1.0    0.267
+
+════════════════════════════════════════════════════════════════════════════
+  SYNTHESIS — ARCHETYPE DETECTION
+════════════════════════════════════════════════════════════════════════════
+
+  DETECTION RELIABILITY:
+    The table above shows precision/recall/F1 at each detection step.
+    Key question: does detection accuracy improve from step 10 → 50?
+    If accuracy plateaus by step 10: you don't need 50 steps.
+    If accuracy is still improving at step 50: you need more early probing.
+
+  TYPE A DETECTION (audio):
+    Should be detectable by step 6-10 from acc > 0.5 alone.
+    If audio is mis-classified as B at step 10: threshold needs raising.
+    Low false-positive rate for A is critical — wrong A-classification
+    means you stop training a B-type system too early.
+
+  TYPE C DETECTION (structured, rf_iq):
+    The hard case. Type C looks like Type B early on (both have low acc).
+    The discriminator is sigma_slope: B has falling σ, C has flat/rising σ.
+    Also: Type C shows anchor_rate > 0 (multiple prototypes forming)
+    without matching accuracy improvement — this is the fingerprint.
+
+  TYPE B DETECTION:
+    Residual category — anything not A or C.
+    Main risk: calling B too early when it's actually a slow A.
+    Guard: require sigma_mean < 0.02 for A classification.
+
+  OPTIMAL DETECTION STEP:
+    The step at which overall_accuracy plateaus is the recommended
+    detection point for the adaptive learner. Earlier = faster startup,
+    but more misclassifications. Later = more reliable, wastes training.
+
+  PREDICTION ACCURACY:
+    Simple linear extrapolation from step-50 signals gives rough final acc.
+    Systematic bias: extrapolation undershoots Type B (misses transition),
+    overshoots Type C (assumes improvement that doesn't come).
+    A better predictor uses the Q(n) model fit from profiler 1.
+    Combined: archetype classification → correct Q(n) template → n* prediction.
+
+════════════════════════════════════════════════════════════════════════════

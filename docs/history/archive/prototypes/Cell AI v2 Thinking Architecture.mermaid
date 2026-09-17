@@ -1,0 +1,115 @@
+flowchart TB
+    subgraph "Event System"
+        direction TB
+        E1["Event Generation"] --> E2["Event Router"] --> E3["Priority Scheduler"]
+        EQ1["Urgent Queue"] --> EQ2["Normal Queue"] --> EQ3["Background Queue"]
+    end
+
+    subgraph "Core Mathematical Systems"
+        direction TB
+        subgraph "Field Equations"
+            FE1["dS/dt = ∑ₑ E(e,x,t) × [F(S) + D∇²S + W(S) + A(S) + O(S)]"] --> FE2["Event-Driven Field Evolution"] --> FE3["Sparse Field Updates"]
+        end
+
+        subgraph "Oscillator Dynamics"
+            OD1["dθᵢ/dt = ωᵢ + ∑ⱼ Kᵢⱼsin(θⱼ - θᵢ) + ∑ₑ η(e,t)"] --> OD2["Async Phase Coupling"] --> OD3["Event-Phase Resonance"]
+        end
+
+        subgraph "Wave Propagation"
+            WP1["∂C/∂t = D∇²C + f(C) - γC + ∑ₑ I(e,x,t)"] --> WP2["Event-Triggered Waves"] --> WP3["Threshold Propagation"]
+        end
+
+        subgraph "DNA Compression"
+            DC1["F(S,E) = ∏ᵢ₌₁ⁿ [Fᵢ(S) + Gᵢ(E,t)] × H(S,E)"] --> DC2["Event-Aware Compression"] --> DC3["Dynamic ~50,000:1 Ratio"]
+        end
+    end
+
+    subgraph "Processing Pathways"
+        direction TB
+        subgraph "Training Pathway"
+            TP1["Asynchronous Learning"] --> TP2["Event-Driven Field Updates"] --> TP3["Continuous Model Evolution"]
+            TPF1["dS_train/dt = ∑ₑ₌₍ₜᵣₐᵢₙ₎ E(e) × Field"] --> TPF2["Background Priority"] --> TPF3["Parameter Updates"]
+        end
+
+        subgraph "Inference Pathway"
+            IP1["Reactive Processing"] --> IP2["Event-Triggered Recognition"] --> IP3["Immediate Response"]
+            IPF1["dS_infer/dt = ∑ₑ₌₍ᵢₙₚᵤₜ₎ E(e) × Field"] --> IPF2["Urgent Priority"] --> IPF3["Output Generation"]
+        end
+    end
+
+    subgraph "Distributed System"
+        direction TB
+        subgraph "Sharded Processing"
+            SP1["Independent Field Shards"] --> SP2["Event-Local Updates"] --> SP3["Sparse Computation"]
+            SPF1["dS_shard(i)/dt = ∑ₑ₌₍ₗₒcₐₗ₎ E(e) × Field"] --> SPF2["Async Processing"] --> SPF3["Local Consistency"]
+        end
+
+        subgraph "Replication System"
+            RS1["Async Field Replication"] --> RS2["Event-Driven Sync"] --> RS3["Delta Updates"]
+            RSF1["ΔR = C(R' - R)"] --> RSF2["Background Processing"] --> RSF3["Eventual Consistency"]
+        end
+    end
+
+    subgraph "Thinking System"
+        direction TB
+        subgraph "Fast Processing"
+            FP1["Urgent Event Handling"] --> FP2["Immediate Pattern Matching"] --> FP3["Quick Response"]
+            FPF1["dS_fast/dt = ∑ₑ₌₍ᵤᵣgₑₙₜ₎ E(e) × Field"] --> FPF2["35-80Hz"] --> FPF3["Pattern Recognition"]
+        end
+
+        subgraph "Active Processing"
+            AP1["Ongoing Event Processing"] --> AP2["Context Integration"] --> AP3["Continuous Thought"]
+            APF1["dS_active/dt = ∑ₑ₌₍ₒₙgₒᵢₙg₎ E(e) × Field"] --> APF2["12-35Hz"] --> APF3["Relationship Processing"]
+        end
+
+        subgraph "Deep Processing"
+            DP1["Background Event Processing"] --> DP2["Abstract Integration"] --> DP3["Complex Thought"]
+            DPF1["dS_deep/dt = ∑ₑ₌₍bₐcₖgᵣₒᵤₙd₎ E(e) × Field"] --> DPF2["4-12Hz"] --> DPF3["Abstract Reasoning"]
+        end
+    end
+
+    subgraph "Resource Optimization"
+        direction TB
+        RO1["Event-Based Allocation"] --> RO2["Load Balancing"] --> RO3["Energy Efficiency"]
+        ROF1["R(e) = importance(e) × urgency(e) × efficiency(e)"] --> ROF2["Dynamic Prioritization"] --> ROF3["Resource Scaling"]
+    end
+
+    %% Event routing
+    E3 --> |Urgent Events| FP1 & IP1
+    E3 --> |Normal Events| AP1
+    E3 --> |Background Events| DP1 & TP1 & RS1
+    
+    %% Core system application
+    FE1 -.-> |Same Equation| TPF1 & IPF1 & SPF1 & FPF1 & APF1 & DPF1
+    OD1 -.-> |Same Dynamics| TP2 & IP2 & SP2 & FP2 & AP2 & DP2
+    WP1 -.-> |Same Mechanism| TP3 & IP3 & SP3 & FP3 & AP3 & DP3
+    DC1 -.-> |Same Compression| TPF2 & IPF2 & SPF2 & FPF2 & APF2 & DPF2
+    
+    %% Event generation
+    FP3 --> |Generates Events| E1
+    AP3 --> |Generates Events| E1
+    DP3 --> |Generates Events| E1
+    IP3 --> |Response Events| E1
+    TP3 --> |Update Events| E1
+    
+    %% Field interactions
+    FE3 -.-> |Field States| OD1
+    OD3 -.-> |Phase Info| WP1
+    WP3 -.-> |Wave Activity| FE1
+    DC3 -.-> |Compressed State| FE2
+    
+    %% Processing interactions
+    TPF3 -.-> |Model Updates| IPF1
+    IPF3 -.-> |Feedback| TPF1
+    SPF3 -.-> |Local State| RSF1
+    RSF3 -.-> |Consistent State| SPF1
+    
+    %% Thinking process flow
+    FPF3 -.-> |Fast Patterns| APF1
+    APF3 -.-> |Active Context| DPF1
+    DPF3 -.-> |Deep Insights| FPF1
+    
+    %% Resource management
+    ROF3 --> |Optimizes| E3
+    RO3 -.-> |Efficiency Controls| FE2 & DC2
+    ROF2 -.-> |Priority Control| E2
