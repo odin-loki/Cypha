@@ -74,7 +74,7 @@ its repulsion term, which measured 14/20 against a 12/20 baseline — it is desc
 plausible mechanism and explicitly not as an established cause.
 
 Claims are cited to `file:line`, and every citation has been checked to resolve to a real
-file with the line in range — 120 of them, plus 167 internal links and 47 anchors.
+file with the line in range — 165 of them, plus 181 internal links and 61 anchors.
 
 **Quoted code is verbatim; anything after a `←` is not.** Where a code block needed a
 pointer — *this value is computed and never read*, *this branch is only reached for unseen
@@ -84,9 +84,13 @@ block are the original author's. An inline `...` marks an elision. Long `///` co
 wrapped to the page width, so a one-line source comment may appear as two. Where a block
 condenses a longer passage rather than quoting it, the attribution line says so.
 
-Every one of the 33 blocks carrying a `file:line` attribution has been diffed against the
-source it cites; 24 match verbatim and the other 9 differ only by those marked elisions and
-wraps.
+Every block carrying a `file:line` attribution has been diffed against the source it cites;
+those that differ do so only by the marked elisions and wraps above.
+
+Several conclusions here were reached by one pass and then overturned by a second. Where that
+happened the document states the corrected version and, when the error is instructive, says
+what the earlier reading was — v4's nonlinearity "fix", the twelve-day NIGField continuity, and
+the claim that v8's gate used the wrong GIG index are the three worth knowing about.
 
 A few numbers here are **threshold-dependent** rather than absolute — how many source lines
 two files share depends on whether you count `else:`. Where that is true, the full sweep is
