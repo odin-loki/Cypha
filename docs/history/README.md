@@ -64,10 +64,11 @@ deliberation band ships disabled by default, and that is the reason.
 | v4 — instrumentation and the thinking demonstration | `cypha-v4/` | [`eras/04-v4.md`](eras/04-v4.md) |
 | v5 — Omega-2, real datasets, and a self-audit | `cypha-v5/` | [`eras/05-v5.md`](eras/05-v5.md) |
 | v6 — the measurement era, and a missing engine | `cypha-v6/` | [`eras/06-v6.md`](eras/06-v6.md) |
+| v7 — Generation, and the moment the architecture mattered | `cypa-v7-generation/` | [`eras/07-v7-generation.md`](eras/07-v7-generation.md) |
 | The two side branches | `cypha-vchatgpt/`, `cypha-vpattern-matching/` | [`eras/branches.md`](eras/branches.md) |
 | Loose components and the RetDec side quest | several | [`eras/components.md`](eras/components.md) |
 
-*Writeups for v7 and v8 are being added; the source for all of them is
+*The v8 writeup is being added; the source for all of them is
 already archived and inventoried under [`archive/`](archive/).*
 
 ---
