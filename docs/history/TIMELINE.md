@@ -362,6 +362,14 @@ second family-A idea, GRIA, took a stranger route back — see
 [`LINEAGE.md`](LINEAGE.md#7-gria--the-one-family-a-idea-that-came-back). The restart is real,
 but it was a rewrite with salvage, not a blank page.
 
+What crossed intact, though, is the *code* — not the mechanism. In v7 the rule regressed `W_T`
+onto the state the FFT integrator actually produced, an independent target. v8 deleted that
+integrator and substituted an `evolve` that contains `W_T` itself, so from v8 onward the rule
+fits `W_T` against its own output and the residual collapses to `−diag(a)·h`. The derivation
+and the measurements are in
+[`LINEAGE.md`](LINEAGE.md#and-the-restart-broke-the-mechanism-it-salvaged). The rank-1 update
+that family B inherited is the same six lines doing a different and much smaller thing.
+
 ---
 
 ## The two side branches are both family A
