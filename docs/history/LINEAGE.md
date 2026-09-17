@@ -123,7 +123,7 @@ with self._time_block("global"):
 discarded and the downstream value is a slice of the resonator output. `GlobalLevel` is
 constructed and never invoked. Of ten decomposed layers, four are on the working path.
 
-**v7** grows to 55 classes and 5,650 lines on top of that same core — and breaks the pattern
+**v7** grows to 53 classes and 5,650 lines on top of that same core — and breaks the pattern
 once, in one direction, five days before it was deleted.
 
 `CyphaDecoder` is the only place in thirteen months of HRNA where the resonance field is

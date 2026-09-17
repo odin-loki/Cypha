@@ -116,7 +116,7 @@ is graded for confidence.
    Cypha v6 — + 4 profilers + game benchmarks              *2026-02-22 … 02-27
                        │
                        ▼
-   Cypa v7 Generation — HRNA peak, 55 classes                     2026-03-06
+   Cypa v7 Generation — HRNA peak, 53 classes                     2026-03-06
                        ┊
            ╔═══════════┊════════════╗
            ║   CLEAN-SHEET RESTART  ║   family A ends here
@@ -285,11 +285,11 @@ Architecture derived from first principles, unifying:
 | | v7 (family A) | v8 (family B) |
 |---|---|---|
 | lines | 5,650 | 1,412 |
-| classes | 55 | 9 |
+| classes | 53 | 9 |
 | bytes | 272,560 | 62,385 |
 | shared class names | — | **zero** |
 
-v7's 55 classes include `EventScheduler`, `AssemblyLevel`, `AnalogicalReasoner`,
+v7's 53 classes include `EventScheduler`, `AssemblyLevel`, `AnalogicalReasoner`,
 `EpisodicMemory`, `CyphaDecoder`, `CyphaStateful`, `FeedbackController`, `AnchorMemory`.
 v8's nine are
 `StructuralParser`, `EncoderProjection`, `WorldPrior`, `ClassDifferential`, `DIFMemory`,
@@ -452,10 +452,10 @@ their class vocabulary, but nothing in the archive fixes *where* along v3–v7 t
 
 ---
 
-## Two implementations named by the archive but absent from it
+## Three implementations named by the archive but absent from it
 
-The seventeen-day gap at the end is not the only hole. Two implementations are named by
-documents inside the archive and are not present in it.
+The seventeen-day gap at the end is not the only hole. Three implementations are named by files
+inside the archive and are not present in it.
 
 **The first is the v6 engine.** `archive/cypha-v6/Cypha.py` is not the engine that v6's own
 files were written against.
@@ -480,7 +480,28 @@ in `ClassDifferential.orbit_r`". No such file exists in the archive, and `orbit_
 no Python file. The synthesis was written against a successor to the archived v8 that was
 never preserved.
 
-Both gaps have the same shape: a document survives, names an implementation, and the
+**The third is CyphaOmega, and it is the one that matters.** `NIGField` is the single
+component of family B with an unbroken line into the C++ product — and v8 does not claim to
+have written it:
+
+```python
+# NIGField  —  temporal state evolution (reused from CyphaOmega)
+```
+— `archive/cypha-v8/Cypha.py:803`
+
+The string `CyphaOmega` occurs **exactly once in the entire archive**, in that comment, and
+nowhere in the current product either. And the reuse cannot be from v7, which is the obvious
+candidate: `NIGField` appears **zero** times in `cypa-v7-generation/Cypha.py`. v7's temporal
+component is a different object, `TemporalFieldHierarchy` — three cascaded `ResonanceField`s at
+decays 0.7 / 0.95 / 0.998 (`archive/cypa-v7-generation/Cypha.py:3417-3418`) — not a five-τ
+linear filter bank.
+
+So the component that survives the restart, the port and everything since was, by v8's own
+account, inherited from a version that is not here. That also sharpens the
+[zero-shared-class-names](#the-break-is-real-not-a-refactor) finding: v8 is not a reduction of
+v7 at all, and `NIGField` is not the exception it might look like.
+
+All three gaps have the same shape: a file survives, names an implementation, and the
 implementation does not. See
 [`eras/08-v8.md`](eras/08-v8.md#and-the-system-they-analysed-is-not-quite-the-archived-one).
 

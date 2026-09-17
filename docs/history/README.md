@@ -51,13 +51,15 @@ profilers found adaptive strategies losing to fixed constants, an adaptation pat
 never fired once, and a detector that got *worse* with more evidence. The native product's
 deliberation band ships disabled by default, and that is the reason.
 
-**4. Two implementations are named by documents in the archive and are not in it.**
+**4. Three implementations are named by files in the archive and are not in it.**
 `cypha-v6/game_benchmark.py` imports four symbols that exist in no archived `Cypha.py`, and
 the v6 README describes an engine — ensemble deliberator, hippocampal memory, reflexion,
 Platt calibration — that was never preserved. `GRIA`, which ships today, was implemented
-there. Separately, `cypha_synthesis.md` reports "U4 is now live in CyphaGalois.py", a file
-that does not exist. See
-[`TIMELINE.md`](TIMELINE.md#two-implementations-named-by-the-archive-but-absent-from-it).
+there. `cypha_synthesis.md` reports "U4 is now live in CyphaGalois.py", a file that does not
+exist. And `NIGField` — the one component with an unbroken line into the C++ product — is
+annotated in v8 as "reused from CyphaOmega", a name occurring exactly once in the whole
+archive and nowhere in the product. See
+[`TIMELINE.md`](TIMELINE.md#three-implementations-named-by-the-archive-but-absent-from-it).
 
 ---
 

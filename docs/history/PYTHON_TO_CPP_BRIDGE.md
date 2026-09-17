@@ -55,7 +55,7 @@ The file the changelog deleted is archived here as
 
 ## The native source still cites it
 
-35 files under `native/` mention Python. Between them they name **79 distinct Python
+35 files under `native/src` and `native/include` mention Python — 56 across `native/` as a whole. Between them they name **79 distinct Python
 identifiers** in doc comments — classes, methods and attributes described as the behaviour
 the C++ is matching. These are not vague nods; they are precise parity references:
 
@@ -124,7 +124,7 @@ count and in md5 — and they share **zero** class names:
 |---|---|---|
 | md5 | `b91a59b0408854f0ac95eb84aa19eaef` | `174df63c0efe3b9ba2338f19333393e6` |
 | lines | 5,346 | 5,650 |
-| classes | 19 | 55 |
+| classes | 19 | 53 |
 
 The root monolith's classes are the v8 DIF lineage extended — `CyphaDIF`, `WorldPrior`,
 `ClassDifferential`, `DIFMemory`, `NIGField`, `EncoderProjection` (all present in v8) plus

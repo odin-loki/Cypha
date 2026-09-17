@@ -263,7 +263,7 @@ at AEDT, which is what makes the UTC stamps elsewhere convertible — and it mat
 **`INTRODUCTION.md` does not exist.** The PDF was printed from a Markdown file of that name,
 and no file called `INTRODUCTION.md` appears anywhere in the archive — not in this directory,
 not in any other. The branch ships an 18-page print of a document it does not contain. It joins
-the [implementations the archive names but does not hold](../TIMELINE.md#two-implementations-named-by-the-archive-but-absent-from-it),
+the [implementations the archive names but does not hold](../TIMELINE.md#three-implementations-named-by-the-archive-but-absent-from-it),
 and it is the reason the PDF is worth keeping despite its size: the metadata is the evidence,
 not the pages.
 
