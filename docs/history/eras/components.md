@@ -102,9 +102,31 @@ Analysed in full in [`../SWEEP_ANALYSIS.md`](../SWEEP_ANALYSIS.md).
 
 Nothing to do with Cypha. These are patches for
 [RetDec](https://github.com/avast/retdec), Avast's machine-code decompiler — four optimiser
-passes plus an installer script, internally dated 2024 and zipped **2026-03-11, the same day
-as `Cypha v8`**. The directory name says "round 5", so rounds 1–4 existed elsewhere and are
-not in this archive.
+passes plus an installer script, with 2024 copyright headers. The directory name says
+"round 5", so rounds 1–4 existed elsewhere and are not in this archive.
+
+**The nested zip is the best-dated object in the whole archive.** Its central directory kept
+real per-entry mtimes, which the outer repack destroyed everywhere else:
+
+```
+2026-03-11 13:58  patches5/{intrinsic_conv_ext,if_structure_ext,pow2_arithm_ext,
+                            var_renamer_ext,intrinsics_opt_ext,strength_reduction}/
+2026-03-11 14:00  patches5/if_structure_ext/…      (2 files)
+2026-03-11 14:00  patches5/intrinsic_conv_ext/…    (2 files)
+2026-03-11 14:02  patches5/pow2_arithm_ext/…       (2 files)
+2026-03-11 14:02  patches5/strength_reduction/…    (2 files)
+2026-03-11 14:03  patches5/
+2026-03-11 14:04  patches5/apply_patches5.sh
+```
+
+A **six-minute** authoring window on **2026-03-11** — the same day as the `Cypha v8`
+directory.
+
+Two things are visible in that first line. It is a `mkdir` brace expression that **never
+expanded** — run under a shell that does not support brace expansion, it created a single
+directory with a literal brace in its name, and that directory is still in the zip. And
+because it never expanded, it preserves the author's *intended* patch set: six passes, not
+four. `var_renamer_ext` and `intrinsics_opt_ext` were planned and never written.
 
 `apply_patches5.sh` (10,102 bytes) is a real installer: it copies sources into a RetDec
 checkout, edits the relevant `CMakeLists.txt` with `sed`, and rewrites call sites with an

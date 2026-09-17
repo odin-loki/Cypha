@@ -182,6 +182,53 @@ identical fitness across 25 runs is not influencing the model at all.
 
 ---
 
+## Effect sizes, and what the grid was really worth
+
+Ranking every knob by the spread of its level means — the same marginal measure used above,
+applied to both stages:
+
+| Stage | Knob | Spread in mean fitness |
+|---|---|---|
+| tier 1 | **`dedup_threshold`** | **0.1133** |
+| tier 1 | `temperature_init` | 0.0189 |
+| tier 1 | `temperature_decay` | 0.0090 |
+| tier 1 | `deliberate_thresh` | 0.0002 |
+| tier 1 | `post_trans_alpha` | 0.0001 |
+| tiers 2–6 | **`replay_ratio`** | **0.0578** |
+| tiers 2–6 | `consolidate_every` | 0.0205 |
+| tiers 2–6 | `ema_alpha_store` | 0.0177 |
+| tiers 2–6 | `deliberate_hi` | 0.0148 |
+| tiers 2–6 | `deliberate_lo` | 0.0081 |
+| tiers 2–6 | everything else (31 knobs) | ≤ 0.0012 |
+
+`dedup_threshold` is the largest effect in the corpus at roughly twice `replay_ratio`, which
+is the largest in its own stage. The two stages are not strictly comparable — different run
+counts, seed counts and baselines — but on a like-for-like measure the ordering is clear, and
+it matches what v8's source comments say: dedup first, replay high but not first.
+
+Below `deliberate_lo` the curve falls off a cliff: **31 of the 36 knobs varied in the deep
+sweep move mean fitness by 0.0012 or less.**
+
+### The grid is smaller than it looks
+
+Tier 1 enumerates 5,250 configurations. But two of its five knobs are inert, so the number of
+**behaviourally distinct** cells is
+
+```
+6 (temperature_init) × 5 (temperature_decay) × 7 (dedup_threshold) = 210
+```
+
+— confirmed by counting distinct `(temperature_init, temperature_decay, dedup_threshold)`
+triples in the data. The other 25 variants of each are re-runs under a different label.
+
+So 26,250 runs and roughly 1,000 core-hours explored **210 meaningfully different
+configurations**, at 125 runs each. Framed as a seed study that is generous replication;
+framed as a search, 96% of the grid was spent distinguishing settings that do not differ.
+This is the strongest practical consequence of the inert-knob result, and it is why the
+corpus is better read as a very well-replicated 210-cell experiment than as a 5,250-cell one.
+
+---
+
 ## What happened to the inert knobs
 
 `deliberate_thresh` — the single scalar gate on whether the classifier should "think
