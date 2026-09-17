@@ -253,12 +253,30 @@ So the honest summary is not "deliberation was measured useless and deleted". It
 
 1. the **single-threshold** formulation was measured useless, over a complete factorial grid;
 2. it was **reformulated** as a hysteresis band rather than abandoned;
-3. the band was **ported to C++** and is still tested;
-4. and it ships **disabled by default** — the defaults satisfy `lo >= hi`, which the header
+3. the band was **ported to C++** with the Python values, and is still tested;
+4. and it was then **switched off** — the defaults satisfy `lo >= hi`, which the header
    comment states turns abstention off.
 
-An expensive negative result therefore did not delete a feature; it demoted one from a
-default to an opt-in, and that demotion is still visible in the shipping defaults.
+### Why it was switched off is not what you would guess
+
+It is tempting to read step 4 as the sweep's verdict finally taking effect. The source says
+otherwise:
+
+```cpp
+// Python CyphaDIF defaults: lo >= hi disables the mid-confidence contrastive nudge. The old
+// hardcoded 0.25–0.40 band re-enabled deliberation during train and amplified MSVC/MinGW FP drift.
+constexpr double kDeliberateLo = 1.0;
+constexpr double kDeliberateHi = 0.0;
+```
+— `native/src/train_step_vector.cpp:24-27`
+
+The 0.25–0.40 band is exactly the root monolith's `_DELIBERATE_LO` / `_DELIBERATE_HI`, so the
+port carried the Python values across and then turned them off — **for floating-point
+reproducibility between MSVC and MinGW builds**, not for model quality.
+
+Two independent forces therefore point the same way, and it is worth keeping them apart: a
+1,070-core-hour experiment found the single-threshold form inert, and a cross-compiler
+numerical-drift problem disabled the band form. The second is what the code records.
 
 ---
 

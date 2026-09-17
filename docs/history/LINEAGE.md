@@ -188,8 +188,13 @@ The Python ancestor shipped it **on** (`_DELIBERATE_LO = 0.25`, `_DELIBERATE_HI 
 `archive/root-monolith/Cypha.py`). The native port kept the mechanism and the parameter
 names, and inverted the sentinel.
 
-An expensive programme of negative results did not delete a feature. It demoted one from a
-default to an opt-in, and that demotion is still legible in two constants.
+The stated reason is not the sweep, though. `native/src/train_step_vector.cpp:24-27` records
+that "the old hardcoded 0.25–0.40 band re-enabled deliberation during train and amplified
+MSVC/MinGW FP drift" — it was switched off for cross-compiler floating-point reproducibility.
+
+So an expensive programme of negative results did not delete a feature, and neither did it
+disable one: it demoted a formulation, and a portability problem later closed the switch. The
+two causes agree in direction and should not be collapsed into one.
 
 ---
 

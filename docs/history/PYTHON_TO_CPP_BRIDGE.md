@@ -163,6 +163,40 @@ native translation units that carry their behaviour:
 | `ClassifierDistillation` (5233) | — | no native counterpart |
 | `PerformanceMonitor` (4394) | `bench/` runners | superseded by `cypha_bench_run` |
 
+### Where the port deliberately diverges
+
+The native code is close to a transliteration, but three divergences are documented in its
+own comments and are worth knowing before treating it as a faithful copy.
+
+**The production encoder starts as the identity.** The Python ancestor initialises
+`EncoderProjection` with a random projection. A freshly created native model does not:
+
+```cpp
+// Encoder: identity (VectorEncoder with no learning at start)
+root.map.push_back({"enc_W", identity_2d(d)});
+```
+— `native/src/create_model.cpp:132-133`
+
+`init_encoder_projection_w` — the orthogonalising initialiser that mirrors the Python — exists
+in `encoder_contrastive.cpp:254` but is called only from `native/tools/`
+(`class_gmm_p3_smoke`, `kernel_cypha_roundtrip`, `encoder_ib_p6_smoke`, `xor_kernel_bench`).
+It is reference and bench code, not the product path.
+
+**Deliberation is off, for a portability reason.** `train_step_vector.cpp:24-27` disables the
+mid-confidence contrastive nudge because "the old hardcoded 0.25–0.40 band re-enabled
+deliberation during train and amplified MSVC/MinGW FP drift" — the Python band, carried
+across and then switched off for cross-compiler floating-point reproducibility. See
+[`SWEEP_ANALYSIS.md`](SWEEP_ANALYSIS.md#why-it-was-switched-off-is-not-what-you-would-guess).
+
+**Temperature recalibration is off.** `temp_recalib_every{0}`, documented as "default off",
+with the note that "Python has no per-step hook" — so this is a native addition that is
+disabled rather than a Python behaviour that was dropped
+(`native/include/cypha/train_step_vector.hpp:25-26`).
+
+The pattern across all three: the port preserves the mechanism and the parameter names, and
+chooses different defaults. Anyone reading the archive to predict native behaviour should
+check the defaults rather than assume parity.
+
 ### What the archive does *not* explain
 
 38 of the 79 cited identifiers resolve in **no** archived version:
