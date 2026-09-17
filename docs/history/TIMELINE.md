@@ -306,6 +306,26 @@ their class vocabulary, but nothing in the archive fixes *where* along v3–v7 t
 
 ---
 
+## A gap inside the archive: the v6 engine
+
+The seventeen-day gap at the end is not the only hole. **`archive/cypha-v6/Cypha.py` is not
+the engine that v6's own files were written against.**
+
+`game_benchmark.py:54-58` imports `deliberate_iterative`, `pnq_lookup`, `mcts_search` and
+`gria_cascade` from `Cypha`, and none of the four exists in the `Cypha.py` beside it — the
+harness cannot import. Those four names appear **zero** times in the `Cypha.py` of v5, v6, v7,
+v8 *and* the root monolith. Yet `cypha-v6/Cypha_README.md` mentions `gria` 14 times, `hippo`
+25, `pnq` 8, `mcts` 8, `rocchio` 5, `reflexion` 2 and `platt` 2.
+
+The archived v6 engine is essentially v5's Omega-2 code. The engine its README documents and
+its benchmark targets — with an ensemble deliberator, hippocampal memory, reflexion and Platt
+calibration — was never archived. `GRIA`, which ships in the native product today, was
+implemented there.
+
+See [`LINEAGE.md`](LINEAGE.md#7-gria--the-one-family-a-idea-that-came-back).
+
+---
+
 ## Where the record goes dark
 
 The archive's last artifact is dated 2026-03-14. `CHANGELOG.md`'s oldest release is

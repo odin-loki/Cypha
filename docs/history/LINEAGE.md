@@ -1,6 +1,6 @@
 # Threads that run the whole length
 
-Five ideas that can be traced continuously from the 2025 design dialogues to code shipping
+Seven ideas that can be traced from the 2025 design dialogues to code shipping
 in `native/` today, and one pathology that explains why the project restarted from scratch.
 
 Each thread is stated with its evidence. Where a thread dies, that is said plainly.
@@ -240,8 +240,109 @@ the strongest line of continuity in the project — and it is only twelve days l
 Python side, running from v8 (2026-03-11) to the root monolith (2026-03-14) before the port.
 
 Thirteen months of resonance mathematics produced the engineering culture, the single-core
-constraint, the numpy floor and the measurement habits. The mathematics that actually ships
-was written in the last week and a half.
+constraint, the numpy floor and the measurement habits. Almost all of the mathematics that
+ships as the classifier core was written in the last week and a half.
+
+**Almost.** There is one substantial exception, and it takes a strange route — see thread 7.
+
+---
+
+## 7. GRIA — the one family-A idea that came back
+
+`GRIA` is **Graded Reversible-Irreversible Algebra**, defined in v6:
+
+> GRIA is a unified mathematical framework for compression and cryptography. The central
+> idea is a grade parameter alpha in the range [0, 1] that interpolates smoothly [between
+> two] operational modes: reversible (alpha = 0, lossless) and irreversible (alpha = 1,
+> destructive). At intermediate values, a GRIA operation is partially reversible — some
+> information is preserved, the rest is committed.
+> — `archive/cypha-v6/Cypha_README.md`
+
+In v6 it is live code: `gria_cascade(query, adapter, levy, noise, cg, ne_volatility, domain,
+grade, candidates)` is one of the deliberation strategies the game benchmark monkey-patches
+and profiles, alongside Rocchio, MCTS and PNQ.
+
+Then it disappears. Counting files containing "gria" per archived tree:
+
+| tree | v2 | v3 | v4 | v5 | **v6** | v7 | v8 | root | vChatGPT | vPattern |
+|---|---|---|---|---|---|---|---|---|---|---|
+| files | 0 | 0 | 0 | 0 | **5** | 0 | 0 | 0 | 0 | 0 |
+
+It is in v6 and **nowhere else in the archive** — not in v7, not in the v8 restart, not in
+the root monolith that the native port was written from.
+
+And yet it is in the product today, with the α-grade concept intact:
+
+```cpp
+/// GRIA alpha live topology controller (U3; off by default).
+class GRIAController {
+  /// Entropy-based structural readiness in [0, 1] (0.5 until buffer warm).
+  double alpha() const;
+  /// Periodic GNG topology action: "skip", "hold", "split", or "merge".
+```
+— `native/include/cypha/som/gria_controller.hpp`
+
+alongside `native/src/cyphalm/gria_lowrank.cpp`, `gria_projection_alpha` in
+`cyphalm_alpha_spectrum.hpp`, and `anchor_gria_alpha_` in the EWC regulariser, whose header
+describes "Hybrid EWC: char-LSTM + SSM multiscale ``alpha`` + GRIA per-token ``alpha``".
+The living sequence default named in [`docs/README.md`](../README.md) is
+**Hybrid GRIA+LSTM L2+Wave2 BPTT**.
+
+### The v6 engine is missing from the archive
+
+The explanation is that `archive/cypha-v6/Cypha.py` is **not the engine v6's own files were
+written against.**
+
+`game_benchmark.py` opens with
+
+```python
+from Cypha import (CyphaStateful, _build_offset_index, _read_at_offset,
+                   deliberate_iterative as _orig_delib,
+                   pnq_lookup           as _orig_pnq,
+                   mcts_search          as _orig_mcts,
+                   gria_cascade         as _orig_gria)
+```
+— `archive/cypha-v6/game_benchmark.py:54-58`
+
+and **four of those seven names do not exist** in the `Cypha.py` sitting beside it:
+
+| symbol | in `cypha-v6/Cypha.py`? |
+|---|---|
+| `CyphaStateful`, `_build_offset_index`, `_read_at_offset` | yes — all v5-era |
+| `deliberate_iterative`, `pnq_lookup`, `mcts_search`, `gria_cascade` | **no** |
+
+`game_benchmark.py` cannot even import against the archived engine. Counting the terms across
+every archived monolith confirms it — `gria`, `pnq`, `mcts` and `deliberate_iterative` appear
+**zero** times in the `Cypha.py` of v5, v6, v7, v8 *and* the root monolith:
+
+| `Cypha.py` in | gria | pnq | mcts | deliberate_iterative |
+|---|---|---|---|---|
+| v5, v6, v7, v8, root | 0 | 0 | 0 | 0 |
+
+Meanwhile `archive/cypha-v6/Cypha_README.md` — the documentation shipped in the same
+directory — mentions **gria 14 times, hippo 25, pnq 8, mcts 8, rocchio 5, reflexion 2,
+platt 2**.
+
+So the v6 directory holds three things that do not agree: an engine that is essentially v5's
+Omega-2 code, a README describing a far more elaborate engine with an ensemble deliberator
+(Rocchio + MCTS + PNQ + GRIA), hippocampal memory, reflexion and Platt calibration, and a
+benchmark harness written against *that* engine. **The engine the README and the benchmark
+describe was never archived.**
+
+That is where `gria_cascade` lived, and it is the most substantial single gap in the record —
+larger than the seventeen days between the archive's end and the changelog's start, because
+it sits in the middle of the archive rather than after it.
+
+### What this means for the restart
+
+A piece of family-A mathematics — specified in v6, implemented in an engine the archive does
+not contain, absent from v7, absent from the v8 restart, absent from the porting source — is
+a named component of the current product's default configuration.
+
+So the restart was **not** a clean break in practice. v8 discarded family A's code, but the
+ideas survived in documents and in a lost implementation, and at least one was brought back
+once the new core worked. The undocumented window from 2026-03-14 to the P7 decommission
+should be read as a period of recovery as much as of new work.
 
 ---
 
