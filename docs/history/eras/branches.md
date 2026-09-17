@@ -89,8 +89,9 @@ Three things fall out of it.
 05:33:28 and 05:42:27, **one file every 15 to 25 seconds**. That cadence is bulk generation,
 and it is consistent with the directory's name.
 
-**The session ended in debugging.** The last two files touched are `core/levels.py` and
-`cypha.py`, the two that carry the failure annotations.
+**The session ended in debugging.** The last two files touched are `core/levels.py`
+(10:41:40) and `cypha.py` (10:43:25) — the level hierarchy and the orchestrator that gave up
+on it, below.
 
 **One file was edited and never re-imported.** `core/thought.py` is the single size mismatch
 — the `.pyc` records 3417 bytes against a 3363-byte file — which fits a module with zero
@@ -101,6 +102,39 @@ survives is that someone zipped their `__pycache__`. It also independently confi
 13 February is before v6 (2026-02-27), and the directory mtime of 2026-02-21 20:35 is a bulk
 archival copy eight days after the work.
 
+
+### The layers are bypassed in the source, and it says so
+
+This is the archive's most explicit admission of the pattern traced in
+[`../LINEAGE.md`](../LINEAGE.md#3-computed-and-discarded--the-pathology-that-ended-the-hrna-line).
+In both the inference and the training path, `cypha.py` computes the level hierarchy and then
+throws it away — with a comment:
+
+```python
+with self._time_block("assembly"):
+    assem = self.assembly.update(reso)
+with self._time_block("module"):
+    module = self.module.update(assem)
+with self._time_block("global"):
+    # BYPASS broken layers - use Resonator directly
+    globalv = reso[:64]          # Take first 64 elements from Resonator
+    g = self._normalize(globalv) # Put normalization back
+```
+— `cypha.py:169-175`, repeated verbatim at `:215-221`
+
+`AssemblyLevel` and `ModuleLevel` are still called, and still timed, and their outputs `assem`
+and `module` are still returned in the result dict — but `g`, the value that goes on to the
+meta-learner, is the **first 64 elements of the resonator output**, sliced. `GlobalLevel` is
+constructed at `:79` and never invoked at all.
+
+So of the ten layers vChatGPT decomposed out of v2, the working path is
+encoder → resonance field → resonator → meta-learner. The rest is instrumented, timed, and
+discarded.
+
+Every other version in the archive does this silently, and the documentation describes the
+discarded path as the mechanism. vChatGPT is the one place where someone wrote
+`# BYPASS broken layers` and left it in. It is also, on the `.pyc` evidence above, the last
+thing edited before the session ended.
 
 ### The ambition, and the implementation
 

@@ -106,6 +106,20 @@ working exactly as it should.
 `forward()` still feeds only the loss and the verbose print. The 0.254 ms orphan was removed;
 the architectural orphan was not.
 
+**vChatGPT says it out loud.** The one branch that annotates the pathology instead of hiding
+it. In both its inference and training paths:
+
+```python
+with self._time_block("global"):
+    # BYPASS broken layers - use Resonator directly
+    globalv = reso[:64]
+```
+— `archive/cypha-vchatgpt/cypha.py:173-175` and `:219-221`
+
+`AssemblyLevel` and `ModuleLevel` are still called and still timed; their outputs are
+discarded and the downstream value is a slice of the resonator output. `GlobalLevel` is
+constructed and never invoked. Of ten decomposed layers, four are on the working path.
+
 **v7** grows to 55 classes and 5,650 lines on top of that same core.
 
 **v8 restarts.** 1,412 lines, 9 classes, zero class names in common with v7, and a docstring
