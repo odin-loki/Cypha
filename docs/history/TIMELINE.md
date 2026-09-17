@@ -299,6 +299,26 @@ A 75% reduction in lines (77% in bytes) with zero shared classes and a docstring
 derivation "from first principles" is a restart. The resonance/harmonic programme that ran
 from v1 to v7 — roughly thirteen months — was abandoned.
 
+**And it is not an artifact of renaming.** Class names are the cheapest thing to change in a
+refactor, so the same break was measured at the line level — counting distinct source lines
+v8 holds in common with each other monolith. Because any two Python files share boilerplate
+(`return out`, `else:`, `import numpy as np`), the count is meaningless without a length
+threshold, so here it is across five:
+
+| min. line length | comments | v5 | v6 | v7 | **root** | root ÷ best family A |
+|---:|:--|---:|---:|---:|---:|---:|
+| 1 | included | 27 | 29 | 30 | **262** | 8.7× |
+| 1 | excluded | 27 | 29 | 30 | **255** | 8.5× |
+| 10 | excluded | 13 | 15 | 16 | **240** | 15.0× |
+| 25 | excluded | 2 | 3 | 3 | **145** | 48.3× |
+| 40 | excluded | 1 | 1 | 1 | **86** | 86.0× |
+
+The ratio is not stable — but its *direction* is, and so is what happens as the threshold
+rises. Family-A overlap collapses to nothing (30 → 1) because it was always coincidental
+boilerplate; the root-monolith overlap survives (262 → 86) because it is descent. At a
+40-character threshold v8 and the root monolith still share 86 lines, and v8 shares **one**
+with the entire thirteen months that preceded it.
+
 ### But the break is in the class structure, not in everything
 
 "Zero shared class names" is exact, and it is also narrower than it sounds. At least one
