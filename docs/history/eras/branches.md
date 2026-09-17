@@ -315,8 +315,9 @@ dict, learning nothing, and reporting a separation figure against a baseline of 
 random-vector baseline is 1.41. There is nothing here for the main line to adopt. Its one
 real distinction — keeping the resonance state on the query path, even if only for unseen
 inputs — is the thing v3 had already abandoned deliberately, having measured what it costs:
-`CyphaMicro`, the same approach at 64 dimensions, is non-deterministic across repeated calls
-(see [`components.md`](components.md#cypha-encoder--the-standalone-encoder)).
+`CyphaMicro`, the same approach at 64 dimensions, recalls 8 of its own 14 training pairs and
+returns different answers to identical repeated queries (see
+[`components.md`](components.md#cypha-encoder--the-standalone-encoder)).
 
 Both branches kept a framework. Both stopped. The line that continued was the one that had
 already thrown the framework away, and it is the only one that could be translated to C++

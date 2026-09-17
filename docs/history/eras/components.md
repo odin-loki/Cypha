@@ -33,9 +33,18 @@ input under two different `EncoderParams` produces different output. And unlike 
 program, CyphaMicro stores and queries `AnchorMemory` on the **resonator output** — the
 dynamical state — which is what the architecture documents say should happen.
 
-It pays for that honesty. CyphaMicro's retrieval is non-deterministic across repeated calls
-and manages 7/14 recall on its own training set. v3's main program abandoned resonance-space
-retrieval for exactly this reason; see [`03-v3.md`](03-v3.md#the-core-is-computed-and-discarded).
+It pays for that honesty. Trained three epochs on its own 14 built-in pairs and then asked
+for them back, it recalls **8 of 14**. And because `infer()` does not reset the field, the
+answer depends on what was asked before it — eight identical queries for `'cat sound'`
+returned `false` once and `bark` seven times:
+
+```
+infer('cat sound') x8 -> ['false','bark','bark','bark','bark','bark','bark','bark']
+```
+
+The correct answer is `meow`, which it never gives. v3's main program abandoned
+resonance-space retrieval for exactly this reason; see
+[`03-v3.md`](03-v3.md#the-core-is-computed-and-discarded).
 
 So the two files in `cypha-v3/` are a matched pair: the prototype that does what the
 architecture claims and works poorly, and the production file that does something simpler
