@@ -3,6 +3,10 @@
 /// Cypha adapter for odin-loki/CompressionAlgorithm hp::Predictor.
 /// Integer-exact context mixing lives in hp/; this layer exposes byte-level
 /// log-probabilities for the CyphaLM public API (BPC path uses double log_probs).
+///
+/// RAM note: holds two ``hp::Predictor`` instances (``pred_`` + ``scratch_``).
+/// ``next_byte_log_probs()`` clones ``*pred_`` once per vocab byte — a known
+/// RAM/CPU hotspot at large vocab; not optimized in the default integration.
 
 #include <cstdint>
 #include <memory>

@@ -17,6 +17,10 @@ token (byte 0..255) ─► HpSequenceBackend ─► hp::Predictor
 
 Public API (`CyphaLMModel`, `Cypha::init_default_sequence`, `predict_next`, `generate`, BPC eval) is unchanged; the implementation delegates to `hp::Predictor` via `HpSequenceBackend`.
 
+### RAM hotspot (documented, not optimized)
+
+`HpSequenceBackend` keeps two `hp::Predictor` heap instances (`pred_` for live state, `scratch_` for lookahead). `next_byte_log_probs()` clones `*pred_` once per vocab byte to score each candidate without advancing main state. At `vocab_size=256` this multiplies predictor footprint during scoring; acceptable for the light profile but worth knowing for champ builds.
+
 ## Context mode
 
 | Enum | Alias | Meaning |
@@ -39,10 +43,11 @@ Configure with `apply_hp_production_recipe()` (default) or `apply_hp_champ_recip
 
 ### CMake / memory profiles
 
-| Build | CMake | `HP_SLOT_MAX` | Lab RSS @ mem 22 (harness) |
-|-------|-------|---------------|----------------------------|
-| **Production (default)** | (none) | 24 | ~1.6 GB |
-| **Champ / research** | `-DCYPHA_HP_CHAMP_BUILD=ON` | 35 | ~15 GB |
+| Build | CMake | `HP_SLOT_MAX` | v78 flags | Lab RSS @ mem 22 (harness) |
+|-------|-------|---------------|-----------|----------------------------|
+| **Light (default)** | `-DCYPHA_HP_PROFILE=light` | 24 | OFF (features.hpp defaults) | ~1.6 GB |
+| **Champ / research** | `-DCYPHA_HP_PROFILE=champ` | 35 | ON (v78_flags.ps1) | ~15 GB |
+| **Champ mem-26** | `-DCYPHA_HP_PROFILE=champ -DCYPHA_HP_SLOT_MAX=31` | 31 | ON | (between light and full champ) |
 
 Lab numbers from `native/third_party/hp/tools/hp_harness.sh` (RECORD H34: Pearson +0.96 vs SLOT_MAX=35, +895 B on 8 MB gate).
 

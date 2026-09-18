@@ -1,5 +1,9 @@
 # hp (odin-loki/CompressionAlgorithm) integration for Cypha LLM path.
 # Integer-exact context mixer — no float/double in hp/include or hp/src.
+#
+# Profiles (see cmake/HpFlags.cmake):
+#   -DCYPHA_HP_PROFILE=light   (default) HP_SLOT_MAX=24, grow flags OFF
+#   -DCYPHA_HP_PROFILE=champ    v78_flags.ps1 + HP_SLOT_MAX=35
 
 set(CYPHA_HP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/hp")
 

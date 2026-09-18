@@ -15,6 +15,6 @@
   "online": true,
   "_meta": {
     "status": "research",
-    "notes": "hp champ profile (HP_SLOT_MAX=35). Requires Cypha build with -DCYPHA_HP_CHAMP_BUILD=ON. Lab RSS ~15 GB @ mem 22 (hp/tools/hp_harness.sh). Default production uses hp_slot_max=24 (~1.6 GB)."
+    "notes": "hp champ profile (HP_SLOT_MAX=35). Requires Cypha build with -DCYPHA_HP_PROFILE=champ. Lab RSS ~15 GB @ mem 22 (hp/tools/hp_harness.sh). Default light profile uses hp_slot_max=24 (~1.6 GB). mem-26-class: -DCYPHA_HP_SLOT_MAX=31."
   }
 }

@@ -10,7 +10,7 @@ milestone or a significant self-contained change.
 
 ### Added
 - **hp LLM integration:** Vendored `native/third_party/hp/` from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm). `CyphaLMModel` delegates to `HpSequenceBackend` / `hp::Predictor`. New tests: `hp_llm_smoke`, `hp_roundtrip_smoke`. CMake: `cmake/HpIntegration.cmake`, optional `-DCYPHA_HP_XSIMD=ON`.
-- **CyphaLM dual hp profiles:** Production default `HP_SLOT_MAX=24` (~1.6 GB RSS lab ref @ mem 22); optional champ build `-DCYPHA_HP_CHAMP_BUILD=ON` → `HP_SLOT_MAX=35`. `apply_hp_champ_recipe()`, `hp_slot_max` config knob, `profiles/cyphalm_hp_champ.json`.
+- **CyphaLM dual hp profiles:** Light default `-DCYPHA_HP_PROFILE=light` → `HP_SLOT_MAX=24`, grow flags OFF (~1.6 GB RSS @ mem 22); champ `-DCYPHA_HP_PROFILE=champ` → v78_flags.ps1 + `HP_SLOT_MAX=35` (~15 GB). `apply_hp_champ_recipe()`, `hp_slot_max` config knob, `profiles/cyphalm_hp_champ.json`.
 
 ### Changed
 - **Production sequence algorithm:** Hybrid GRIA+LSTM is **no longer** the default LLM path. `ContextMode::Hp` + `apply_hp_production_recipe()` replace `apply_hybrid_production_recipe()` for sequence duties. `hybrid` CLI/profile aliases map to hp.
