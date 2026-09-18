@@ -38,10 +38,12 @@ CyphaLMConfig tiny_config(ContextMode mode) {
     cfg.lstm_hidden = 16;
     cfg.ngram_context = 1;
     cfg.ngram_fuse_split = true;
-    cfg.context_mode = mode;
+    cfg.context_mode = (mode == ContextMode::Hybrid) ? ContextMode::Hp : mode;
     cfg.compress_interval = 4;
     cfg.max_memory_slots = 8;
     cfg.seed = 42;
+    cfg.hp_table_bits = 16;
+    cfg.hp_mixer_lr = 2;
     cfg.gria_lr = 0.05;
     if (mode == ContextMode::AblationNoSsm) {
         cfg.bptt_steps = 0;
@@ -90,7 +92,7 @@ int run_scaffold(ContextMode mode, const std::string& json_path) {
 
 int main(int argc, char** argv) {
     try {
-        ContextMode mode = ContextMode::SsmGria;
+        ContextMode mode = ContextMode::Hp;
         std::string json_path;
         bool smoke_ablations = false;
         for (int i = 1; i < argc; ++i) {

@@ -143,7 +143,7 @@ class Cypha {
 
   /// Load sequence checkpoint (JSON config path).
   bool load_sequence(const std::string& json_path);
-  /// Fresh sequence model: Hybrid GRIA+LSTM production recipe (~2.8 BPC after ~300k train).
+  /// Fresh sequence model: hp context mixer (odin-loki/CompressionAlgorithm).
   bool init_default_sequence(int vocab_size = 256, int d_model = 64);
 
   void save(const std::string& cypha_path) const;

@@ -26,9 +26,10 @@ std::string lower_copy(std::string s) {
 
 ContextMode parse_context_mode(const std::string& s) {
     const std::string k = lower_copy(s);
+    if (k == "hp" || k == "hutter" || k == "context_mixer") return ContextMode::Hp;
     if (k == "full") return ContextMode::Full;
     if (k == "gria_ngram") return ContextMode::GriaNgram;
-    if (k == "hybrid" || k == "hybrid_gria_lstm") return ContextMode::Hybrid;
+    if (k == "hybrid" || k == "hybrid_gria_lstm") return ContextMode::Hp;
     if (k == "char_lstm") return ContextMode::CharLstm;
     if (k == "ssm_gria" || k == "ssm_only" || k == "ssm-only") return ContextMode::SsmGria;
     if (k == "ssm_gria_no_lstm") return ContextMode::SsmGriaNoLstm;
@@ -41,9 +42,10 @@ ContextMode parse_context_mode(const std::string& s) {
 
 std::string context_mode_name(ContextMode mode) {
     switch (mode) {
+        case ContextMode::Hp: return "hp";
         case ContextMode::Full: return "full";
         case ContextMode::GriaNgram: return "gria_ngram";
-        case ContextMode::Hybrid: return "hybrid";
+        case ContextMode::Hybrid: return "hp";
         case ContextMode::CharLstm: return "char_lstm";
         case ContextMode::SsmGria: return "ssm_gria";
         case ContextMode::SsmGriaNoLstm: return "ssm_gria_no_lstm";
@@ -57,7 +59,8 @@ std::string context_mode_name(ContextMode mode) {
 
 std::string context_mode_string(ContextMode mode) {
     switch (mode) {
-        case ContextMode::Hybrid: return "hybrid_gria_lstm";
+        case ContextMode::Hp:
+        case ContextMode::Hybrid: return "hp";
         case ContextMode::SsmGria: return "ssm_only";
         case ContextMode::PgmLogits: return "pgm_logits";
         default: return context_mode_name(mode);
@@ -92,17 +95,35 @@ void apply_pgm_logits_recipe(CyphaLMConfig& cfg) {
     cfg.ngram_fuse_split = false;
 }
 
-void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
-    cfg.context_mode = ContextMode::Hybrid;
+void apply_hp_production_recipe(CyphaLMConfig& cfg) {
+    cfg.context_mode = ContextMode::Hp;
     cfg.use_pgm_cell = false;
     cfg.use_unified_context = false;
     cfg.unified_context_source = UnifiedContextSource::None;
     cfg.unified_readout = UnifiedReadout::None;
     cfg.use_rpsm_layer = false;
+    cfg.use_kernel_llr = false;
+    if (cfg.vocab_size <= 0 || cfg.vocab_size > 256) {
+        cfg.vocab_size = 256;
+    }
+    if (cfg.hp_table_bits < 16) {
+        cfg.hp_table_bits = 22;
+    }
+    if (cfg.hp_mixer_lr <= 0) {
+        cfg.hp_mixer_lr = 2;
+    }
+    cfg.hp_gria = true;
+    if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
+        cfg.view_schedule = "schedule_b";
+    }
+}
+
+void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
+    apply_hp_production_recipe(cfg);
+    // Legacy field defaults preserved for profile JSON compatibility (ignored by hp path).
     cfg.use_multiscale = true;
     cfg.ngram_fuse_split = true;
     cfg.use_ngram_count_prior = false;
-    // KILL @40k (raw 3.634 / gated 3.570 vs L2 3.369). Default off via struct init; preserve opt-in.
     if (cfg.ngram_context < 2) {
         cfg.ngram_context = 3;
     }
@@ -112,9 +133,6 @@ void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
     }
     if (cfg.d_state < cfg.lstm_hidden) {
         cfg.d_state = cfg.lstm_hidden;
-    }
-    if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
-        cfg.view_schedule = "schedule_b";
     }
     if (cfg.lstm_layers < 2) {
         cfg.lstm_layers = 2;

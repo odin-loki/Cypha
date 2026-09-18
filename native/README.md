@@ -4,7 +4,7 @@ Monorepo C++ core for **One Cypha** -- public type **`cypha::Cypha`** (classify 
 
 **Vendored:** `third_party/nlohmann/json.hpp`, `third_party/httplib.h` (OpenSSL is optional -- see **Federated TLS** below).
 
-**Sequence:** living product default is **Hybrid GRIA+LSTM L2+Wave2 BPTT** (~2.66 BPC @ 300k) via `Cypha::init_default_sequence` / `apply_hybrid_production_recipe`. Compat alias target `cypha_lm_native` is an INTERFACE over `cypha_core`.
+**Sequence / LLM:** living product default is the **hp** context mixer (vendored from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm)) via `Cypha::init_default_sequence` / `apply_hp_production_recipe`. Legacy Hybrid GRIA+LSTM sources are not linked into `cypha_core`. Compat alias `cypha_lm_native` is an INTERFACE over `cypha_core`. Optional: `-DCYPHA_HP_XSIMD=ON` (SSE4.1).
 
 **Accel** (`cypha/accel_backend.hpp`): optional **CUDA infer** (`-DCYPHA_ENABLE_CUDA=ON`); otherwise **ISO C++** parallel CPU via `std::thread`. Training stays on CPU (GPU train is slower here). Future CPU SIMD: xsimd — [`docs/FUTURE.md`](../docs/FUTURE.md) §1b. **`cuda_smoke`** checks infer correctness vs a serial reference; **`cuda_smoke --bench`** compares CUDA vs CPU when a GPU is present (exit 2 skip otherwise).
 

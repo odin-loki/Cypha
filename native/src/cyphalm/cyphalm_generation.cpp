@@ -246,7 +246,8 @@ PredictNextOutput self_correct_predict(CyphaLMModel& model, const PredictNextOut
     const double saved_blend = model.hybrid_blend_logit();
     double pass_blend = saved_blend;
     double pass_temp = std::max(params.temperature, 1e-6);
-    const bool hybrid = model.config().context_mode == ContextMode::Hybrid;
+    const bool hybrid = model.config().context_mode == ContextMode::Hybrid ||
+                        model.config().context_mode == ContextMode::Hp;
     double best_conf = pred_max_confidence(best);
 
     while (passes_out < kMaxSelfCorrectPasses &&

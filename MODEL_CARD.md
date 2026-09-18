@@ -22,15 +22,17 @@ One public type owns classify, regress, latent sample, and next-token generate.
 - Research / competition: online classification and regression on vector features, sequence modelling on WikiText-style corpora, event-forecasting benches (GDELT / VIEWS / MID).
 - Not a drop-in transformer replacement. Proof surface is CTest parity + locked BPC, not a public LLM leaderboard.
 
-## Production sequence pin (living)
+## Production sequence algorithm (living)
 
 | Item | Value |
 |------|-------|
-| Recipe | Hybrid GRIA+LSTM, L2 + Wave2 BPTT (Adam, bptt=8, lr=0.001) |
-| Corpus | WikiText-2 official train/valid |
-| Budget | 300k train tokens, 2k eval, seed 42 |
-| **BPC** | **2.664** (`overnight_results` 2.664300395908913, run 2026-08-08) |
-| Prior pins | L1 2.873 / SGD L2 2.816 (historical only; traces in `data/archive/profiles/`) |
+| Algorithm | **hp** integer-exact context mixer ([CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm)) |
+| Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` |
+| Default knobs | `hp_table_bits=22`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
+| Cypha BPC | Measured via `eval_bpc` on token streams — **not** hp archive bytes |
+| Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; do not compare to hp BPC without relabeling |
+
+> **Note:** Pre-hp BPC numbers in `bench/BASELINE_LOCK.json` are historical. New hp-backed BPC baselines are not yet locked in that file.
 
 ## Other locked / attested numbers
 
@@ -50,7 +52,7 @@ One public type owns classify, regress, latent sample, and next-token generate.
 ## Limits (honest)
 
 - Shared-model continual learning (D16B) remains open; zero-forgetting is per-file isolation (D16F).
-- Cell-hypothesis sweep is a historical research tool; Hybrid 2.664 is the product default.
+- Cell-hypothesis sweep and Hybrid GRIA+LSTM pins are historical; **hp** is the product LLM algorithm.
 - Windows CI compiles but does not run the full CTest matrix (Linux `build_and_test` does).
 - Training is CPU. Optional CUDA is infer-only; GPU training is slower on this workload and is not a gap. Future speed path: portable SIMD via xsimd (`docs/FUTURE.md` §1b).
 - Paper PDF / HTML in `paper/arxiv_bundle/` may still mention 2.873 in body text; lock + this card are authoritative.

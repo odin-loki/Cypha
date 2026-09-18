@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows — latest **[v2.4.0](https://github.com/odin-loki/Cypha/releases/tag/v2.4.0)**)
 
-> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + next-token / text generate. Built from first principles (AIXI/MDL, information geometry, free-energy world prior `θ₀ ⊕ Δk`, Information Bottleneck encoder). Native C++ sole runtime — REST, Qt Studio, optional CUDA — validated by CTests. Living sequence: **Hybrid GRIA+LSTM L2+Wave2 BPTT** (**2.664 BPC** @ 300k lock). Event forecasting Phases 1–9 shipped — see [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
+> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + next-token / text generate. Built from first principles (AIXI/MDL, information geometry, free-energy world prior `θ₀ ⊕ Δk`, Information Bottleneck encoder). Native C++ sole runtime — REST, Qt Studio, optional CUDA — validated by CTests. Living sequence / LLM: **hp** integer-exact context mixer from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm) (`apply_hp_production_recipe`). Cypha BPC and hp archive sizes are separate metrics — see [`MODEL_CARD.md`](MODEL_CARD.md). Event forecasting Phases 1–9 shipped — see [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
 
 ---
 
@@ -214,7 +214,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: latent RFF auto-gamma reaches **~76.3%** (~2.7 pp vs sklearn ~79%); see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
-- **D04 / D17:** hybrid GRIA+LSTM L2+Wave2 BPTT **2.664 BPC** @ 300k WikiText-2 (`bench/BASELINE_LOCK.json`); living sequence via `Cypha::init_default_sequence`. Run via **`cypha_bench_run`** / **`cyphalm_bench_native`**.
+- **Sequence / LLM:** **hp** context mixer via `Cypha::init_default_sequence` / `apply_hp_production_recipe`. Historical Hybrid GRIA+LSTM **2.664 BPC** pin remains in `bench/BASELINE_LOCK.json` for comparison only. Run via **`cypha_bench_run`** / **`cyphalm_bench_native`** (bench profiles may need hp relabeling).
 - **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/archive/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
 - **Sequence REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE), plus `/sample`, `/retrieve`, `/sequence/*`.
 
@@ -227,7 +227,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - **Nonlinear decision boundaries:** Linear LLR caps XOR near chance; **latent RFF** closes most of the sklearn gap (~76.3% vs ~79%). See [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
 - **Optional CUDA.** Infer-only local flag (`-DCYPHA_ENABLE_CUDA=ON`); no CUDA CI. Training stays on CPU — GPU training is slower here, so it is not a gap. Future CPU speed path is portable SIMD via xsimd — [`docs/FUTURE.md`](docs/FUTURE.md) §1b, [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md).
-- **Status / next.** Release **v2.4.0** — Hybrid L2 + Wave2 BPTT **2.664 BPC** production lock; forecasting Phases 1–9; latent-RFF XOR default; Linux + Windows CI green. Paper bundle ships on the release; remaining human step: arXiv upload. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/FUTURE.md`](docs/FUTURE.md), [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
+- **Status / next.** Release **v2.4.0** + hp LLM integration — **hp** is the production sequence algorithm; forecasting Phases 1–9; latent-RFF XOR default; Linux + Windows CI green. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/native/CYPHALM_TIER2_MODEL.md`](docs/native/CYPHALM_TIER2_MODEL.md), [`docs/FUTURE.md`](docs/FUTURE.md).
 
 ---
 

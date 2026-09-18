@@ -146,13 +146,9 @@ if(CYPHA_ENABLE_CUDA)
   set_target_properties(cypha_core PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
 endif()
 
-file(GLOB CYPHALM_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/*.cpp")
-list(REMOVE_ITEM CYPHALM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/lm_intelligence_monitor.cpp")
-if(NOT CYPHALM_SOURCES)
-  message(FATAL_ERROR "cypha_core: no sources under native/src/cyphalm/")
-endif()
-# One Cypha: sequence stack + facade compile into cypha_core (no second product library).
-target_sources(cypha_core PRIVATE ${CYPHALM_SOURCES} src/cypha.cpp)
+# CyphaLM sequence stack: hp context mixer (odin-loki/CompressionAlgorithm).
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpIntegration.cmake")
+target_sources(cypha_core PRIVATE ${CYPHA_CYPHALM_HP_SOURCES} src/cypha.cpp)
 
 # Compatibility alias for existing target_link_libraries(... cypha_lm_native).
 add_library(cypha_lm_native INTERFACE)
@@ -487,8 +483,8 @@ cypha_mingw_apply_exe_link_options(score_matrix_inv_v_fold_smoke)
 add_executable(navigation_loss_hybrid_smoke tools/navigation_loss_hybrid_smoke.cpp)
 target_link_libraries(navigation_loss_hybrid_smoke PRIVATE cypha_lm_native)
 
-add_executable(kernel_llm_h04_smoke tools/kernel_llm_h04_smoke.cpp)
-target_link_libraries(kernel_llm_h04_smoke PRIVATE cypha_lm_native)
+add_executable(hp_llm_smoke tools/hp_llm_smoke.cpp)
+target_link_libraries(hp_llm_smoke PRIVATE cypha_lm_native)
 
 add_executable(tau_forget_gate_smoke tools/tau_forget_gate_smoke.cpp)
 target_link_libraries(tau_forget_gate_smoke PRIVATE cypha_lm_native)
@@ -1187,6 +1183,11 @@ endif()
 add_test(
   NAME native_cyphalm_model_golden
   COMMAND "$<TARGET_FILE:cyphalm_model_golden>"
+)
+
+add_test(
+  NAME native_hp_roundtrip_smoke
+  COMMAND "$<TARGET_FILE:hp_roundtrip_smoke>"
 )
 
 add_test(
@@ -2265,8 +2266,8 @@ add_test(
 )
 
 add_test(
-  NAME native_kernel_llm_h04_smoke
-  COMMAND "$<TARGET_FILE:kernel_llm_h04_smoke>"
+  NAME native_hp_llm_smoke
+  COMMAND "$<TARGET_FILE:hp_llm_smoke>"
 )
 
 add_test(

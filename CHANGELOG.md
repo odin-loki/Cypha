@@ -8,9 +8,18 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Added
+- **hp LLM integration:** Vendored `native/third_party/hp/` from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm). `CyphaLMModel` delegates to `HpSequenceBackend` / `hp::Predictor`. New tests: `hp_llm_smoke`, `hp_roundtrip_smoke`. CMake: `cmake/HpIntegration.cmake`, optional `-DCYPHA_HP_XSIMD=ON`.
+
 ### Changed
-- **Paper camera-ready:** `paper/CyphaLM_paper.md` + arXiv bundle HTML/PDF regenerated to cite living Hybrid **2.664 BPC** (L1 2.873 historical).
+- **Production sequence algorithm:** Hybrid GRIA+LSTM is **no longer** the default LLM path. `ContextMode::Hp` + `apply_hp_production_recipe()` replace `apply_hybrid_production_recipe()` for sequence duties. `hybrid` CLI/profile aliases map to hp.
+- **Docs:** `docs/native/CYPHALM_TIER2_MODEL.md`, `MODEL_CARD.md`, `README.md` updated; Cypha BPC vs hp archive metrics explicitly separated.
+- **Checkpoints:** `save_cyphalm_model` persists hp config; predictor tables are session-local (online adaptation).
+- **Paper camera-ready:** `paper/CyphaLM_paper.md` + arXiv bundle HTML/PDF regenerated to cite living Hybrid **2.664 BPC** (L1 2.873 historical) — **superseded by hp for LLM; paper text not yet regenerated.**
 - **Cell-sweep B2 / H06:** 300k / eval 2k rerun after CTest clobber; both **3.681 BPC** (math-integration) — not a promote. Archived under `data/archive/cell_sweep/`.
+
+### Removed
+- **Default build:** Legacy cyphalm component sources (GRIA, LSTM, SSM, compressive_memory, etc.) excluded from `cypha_core`; headers remain for reference. `kernel_llm_h04_smoke` replaced by `hp_llm_smoke`.
 
 ## [2.4.0] — 2026-08-16 · Competition lock + forecasting
 

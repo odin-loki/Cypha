@@ -9,16 +9,19 @@
 namespace cypha::cyphalm {
 
 enum class ContextMode {
+    /// hp integer-exact context mixer (odin-loki/CompressionAlgorithm). Production default.
+    Hp,
+    /// Alias kept for CLI/profile compatibility — maps to ``Hp``.
+    Hybrid,
     Full,
     GriaNgram,
-    Hybrid,
     CharLstm,
     SsmGria,
     SsmGriaNoLstm,
     AblationNoDif,
     AblationNoSsm,
     Rpsm,
-    /// Single-context PGM spine: SSM→field→PGM h → Wy logits (U06 tournament winner).
+    /// Legacy PGM spine (research only; not the production LLM path).
     PgmLogits,
 };
 
@@ -83,8 +86,8 @@ struct CyphaLMConfig {
     int gria_rank = 32;
 
     int context_length = 256;
-    /// Default Hybrid (GRIA+LSTM) — production ~2.8 BPC path at WikiText-2 300k (D17 pin).
-    ContextMode context_mode = ContextMode::Hybrid;
+    /// Production LLM path: hp context mixer (see ``hp_table_bits``).
+    ContextMode context_mode = ContextMode::Hp;
     int ngram_context = 2;
     /// B0: add online n-gram count Laplace log-prior onto GRIA logits. Off by default so
     /// ordinary hybrid (ngram_context>0 for embed fusion only) keeps pre-685dbf2 blend dynamics.
@@ -296,12 +299,19 @@ struct CyphaLMConfig {
     /// Elastic weight consolidation on char-LSTM ``Wx``/``Wh`` (0 = off).
     double ewc_lambda = 0.0;
 
-    /// Blend DIF expert LLR softmax with Nyström kernel LLR (H04 / Phase 31).
+    /// Blend DIF expert LLR softmax with Nyström kernel LLR (H04 / Phase 31). Legacy; hp path ignores.
     bool use_kernel_llr = false;
     double kernel_blend = 0.25;
     int kernel_m = 256;
     double kernel_gamma_scale = 1.0;
     double kernel_lr_scale = 1.0;
+
+    /// hp table bits per model (``--mem`` in hp CLI). Default 22 ≈ 4 MiB tables.
+    int hp_table_bits = 22;
+    /// hp mixer learning rate (integer, default 2).
+    int hp_mixer_lr = 2;
+    /// Enable hp GRIA alpha gating.
+    bool hp_gria = true;
 };
 
 ContextMode parse_context_mode(const std::string& s);
@@ -315,8 +325,10 @@ std::string bench_mode_name(BenchMode mode);
 /// Enable the integrated PGM→logits recipe (ContextMode::PgmLogits + H23-ish PGM knobs).
 void apply_pgm_logits_recipe(CyphaLMConfig& cfg);
 
-/// Production text default: Hybrid GRIA+LSTM with D17-style knobs (ngram fuse-split, no count prior).
-/// Clears PGM/unified-context flags. Full ~2.8 BPC still requires ~300k train tokens.
+/// Production text default: hp context mixer (odin-loki/CompressionAlgorithm).
+void apply_hp_production_recipe(CyphaLMConfig& cfg);
+
+/// Back-compat alias for ``apply_hp_production_recipe``.
 void apply_hybrid_production_recipe(CyphaLMConfig& cfg);
 
 /// Quality Wave-2 LSTM recipe (opt-in; does not flip D17 defaults).
