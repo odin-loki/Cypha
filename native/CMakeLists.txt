@@ -421,8 +421,10 @@ endif()
 add_executable(d17b_expert_diagnose tools/d17b_expert_diagnose.cpp)
 target_link_libraries(d17b_expert_diagnose PRIVATE cypha_lm_native)
 
-add_executable(ewc_weights_smoke tools/ewc_weights_smoke.cpp)
-target_link_libraries(ewc_weights_smoke PRIVATE cypha_lm_native)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_executable(ewc_weights_smoke tools/ewc_weights_smoke.cpp)
+  target_link_libraries(ewc_weights_smoke PRIVATE cypha_lm_native)
+endif()
 
 add_executable(federated_worker_smoke tools/federated_worker_smoke.cpp)
 target_include_directories(federated_worker_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
@@ -1371,10 +1373,12 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   set_tests_properties(native_pgm_checkpoint_roundtrip_smoke PROPERTIES TIMEOUT 120)
 endif()
 
-add_test(
-  NAME native_ewc_weights_smoke
-  COMMAND "$<TARGET_FILE:ewc_weights_smoke>"
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_ewc_weights_smoke
+    COMMAND "$<TARGET_FILE:ewc_weights_smoke>"
+  )
+endif()
 
 if(CYPHA_BUILD_LEGACY_CYPHALM)
   add_test(

@@ -23,6 +23,7 @@ set(CYPHA_LEGACY_CYPHALM_EXE_TARGETS
   reversible_ssm_cell_smoke
   pgm_cell_smoke
   pgm_checkpoint_roundtrip_smoke
+  ewc_weights_smoke
   pgm_cell_bench
   cyphalm_ssm_golden
   embed_table_golden
