@@ -1,4 +1,4 @@
-// cyphalm_golden — meta-runner for native CyphaLM parity tools / fixtures.
+// cyphalm_golden — meta-runner for native CyphaLM parity tools (hp path).
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
@@ -23,15 +23,6 @@ fs::path exe_dir(int argc, char** argv) {
         if (!ec) return p.parent_path();
     }
     return fs::current_path();
-}
-
-fs::path find_repo_root(const fs::path& start) {
-    fs::path cur = start;
-    for (int i = 0; i < 8 && !cur.empty(); ++i) {
-        if (fs::is_directory(cur / "fixtures")) return cur;
-        cur = cur.parent_path();
-    }
-    return start;
 }
 
 std::string sibling_exe(const fs::path& dir, const char* stem) {
@@ -100,44 +91,14 @@ int run_tool(const fs::path& dir, const char* stem, const std::vector<std::strin
     return run_process(exe, args);
 }
 
-std::vector<fs::path> discover_sidecars(int argc, char** argv, const fs::path& repo_root) {
-    std::vector<fs::path> out;
-    if (argc >= 2) {
-        fs::path p(argv[1]);
-        if (p.is_relative()) p = repo_root / p;
-        out.push_back(fs::absolute(p));
-        return out;
-    }
-    const fs::path root = repo_root / "fixtures";
-    if (!fs::is_directory(root)) return out;
-    for (const auto& ent : fs::directory_iterator(root)) {
-        if (!ent.is_directory()) continue;
-        const fs::path side = ent.path() / "sidecar.json";
-        if (fs::is_regular_file(side) && ent.path().filename().string().rfind("cyphalm_", 0) == 0) {
-            out.push_back(fs::absolute(side));
-        }
-    }
-    return out;
-}
-
 }  // namespace
 
 int main(int argc, char** argv) {
     const fs::path tool_dir = exe_dir(argc, argv);
-    const fs::path repo_root = find_repo_root(tool_dir);
     int failures = 0;
 
-    failures += run_tool(tool_dir, "cyphalm_ssm_golden") != 0 ? 1 : 0;
     failures += run_tool(tool_dir, "cyphalm_model_golden") != 0 ? 1 : 0;
-    failures += run_tool(tool_dir, "cyphalm_hebbian_golden") != 0 ? 1 : 0;
-
-    const auto sidecars = discover_sidecars(argc, argv, repo_root);
-    for (const auto& side : sidecars) {
-        const std::string dir_name = side.parent_path().filename().string();
-        if (dir_name.find("char_lstm") != std::string::npos) {
-            failures += run_tool(tool_dir, "cyphalm_char_lstm_golden", {side.string()}) != 0 ? 1 : 0;
-        }
-    }
+    failures += run_tool(tool_dir, "hp_roundtrip_smoke") != 0 ? 1 : 0;
 
     if (failures == 0) {
         std::cout << "All CyphaLM native parity checks PASSED.\n";

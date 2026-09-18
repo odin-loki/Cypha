@@ -11,6 +11,8 @@ namespace cypha::cyphalm {
 enum class ContextMode {
     /// hp integer-exact context mixer (odin-loki/CompressionAlgorithm). Production default.
     Hp,
+    /// hp champ / research profile (requires ``CYPHA_HP_CHAMP_BUILD`` / HP_SLOT_MAX=35 binary).
+    HpChamp,
     /// Alias kept for CLI/profile compatibility — maps to ``Hp``.
     Hybrid,
     Full,
@@ -308,11 +310,19 @@ struct CyphaLMConfig {
 
     /// hp table bits per model (``--mem`` in hp CLI). Default 22 ≈ 4 MiB tables.
     int hp_table_bits = 22;
+    /// Requested hp slot cap (compile-time ``HP_SLOT_MAX`` is authoritative; 24 prod, 35 champ).
+    int hp_slot_max = 24;
     /// hp mixer learning rate (integer, default 2).
     int hp_mixer_lr = 2;
     /// Enable hp GRIA alpha gating.
     bool hp_gria = true;
 };
+
+/// Compile-time ``HP_SLOT_MAX`` baked into this binary (24 production, 35 champ build).
+int hp_compile_slot_max();
+
+/// Clamp ``hp_table_bits`` to ``min(hp_slot_max, hp_compile_slot_max())``.
+void normalize_hp_table_bits(CyphaLMConfig& cfg);
 
 ContextMode parse_context_mode(const std::string& s);
 std::string context_mode_name(ContextMode mode);
@@ -325,8 +335,11 @@ std::string bench_mode_name(BenchMode mode);
 /// Enable the integrated PGM→logits recipe (ContextMode::PgmLogits + H23-ish PGM knobs).
 void apply_pgm_logits_recipe(CyphaLMConfig& cfg);
 
-/// Production text default: hp context mixer (odin-loki/CompressionAlgorithm).
+/// Production CyphaLM default: hp RAM-speed profile (table_bits=22, slot_max=24).
 void apply_hp_production_recipe(CyphaLMConfig& cfg);
+
+/// Champ / research hp profile (slot_max=35). Requires champ build (``-DCYPHA_HP_CHAMP_BUILD=ON``).
+void apply_hp_champ_recipe(CyphaLMConfig& cfg);
 
 /// Back-compat alias for ``apply_hp_production_recipe``.
 void apply_hybrid_production_recipe(CyphaLMConfig& cfg);

@@ -27,6 +27,7 @@ std::string lower_copy(std::string s) {
 ContextMode parse_context_mode(const std::string& s) {
     const std::string k = lower_copy(s);
     if (k == "hp" || k == "hutter" || k == "context_mixer") return ContextMode::Hp;
+    if (k == "hp_champ" || k == "champ") return ContextMode::HpChamp;
     if (k == "full") return ContextMode::Full;
     if (k == "gria_ngram") return ContextMode::GriaNgram;
     if (k == "hybrid" || k == "hybrid_gria_lstm") return ContextMode::Hp;
@@ -43,6 +44,7 @@ ContextMode parse_context_mode(const std::string& s) {
 std::string context_mode_name(ContextMode mode) {
     switch (mode) {
         case ContextMode::Hp: return "hp";
+        case ContextMode::HpChamp: return "hp_champ";
         case ContextMode::Full: return "full";
         case ContextMode::GriaNgram: return "gria_ngram";
         case ContextMode::Hybrid: return "hp";
@@ -61,6 +63,7 @@ std::string context_mode_string(ContextMode mode) {
     switch (mode) {
         case ContextMode::Hp:
         case ContextMode::Hybrid: return "hp";
+        case ContextMode::HpChamp: return "hp_champ";
         case ContextMode::SsmGria: return "ssm_only";
         case ContextMode::PgmLogits: return "pgm_logits";
         default: return context_mode_name(mode);
@@ -95,6 +98,24 @@ void apply_pgm_logits_recipe(CyphaLMConfig& cfg) {
     cfg.ngram_fuse_split = false;
 }
 
+int hp_compile_slot_max() {
+#if defined(CYPHA_HP_SLOT_MAX)
+    return CYPHA_HP_SLOT_MAX;
+#else
+    return 24;
+#endif
+}
+
+void normalize_hp_table_bits(CyphaLMConfig& cfg) {
+    const int cap = std::min(cfg.hp_slot_max, hp_compile_slot_max());
+    if (cfg.hp_table_bits > cap) {
+        cfg.hp_table_bits = cap;
+    }
+    if (cfg.hp_table_bits < 16) {
+        cfg.hp_table_bits = 16;
+    }
+}
+
 void apply_hp_production_recipe(CyphaLMConfig& cfg) {
     cfg.context_mode = ContextMode::Hp;
     cfg.use_pgm_cell = false;
@@ -106,6 +127,7 @@ void apply_hp_production_recipe(CyphaLMConfig& cfg) {
     if (cfg.vocab_size <= 0 || cfg.vocab_size > 256) {
         cfg.vocab_size = 256;
     }
+    cfg.hp_slot_max = 24;
     if (cfg.hp_table_bits < 16) {
         cfg.hp_table_bits = 22;
     }
@@ -113,9 +135,21 @@ void apply_hp_production_recipe(CyphaLMConfig& cfg) {
         cfg.hp_mixer_lr = 2;
     }
     cfg.hp_gria = true;
+    normalize_hp_table_bits(cfg);
     if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
         cfg.view_schedule = "schedule_b";
     }
+}
+
+void apply_hp_champ_recipe(CyphaLMConfig& cfg) {
+    apply_hp_production_recipe(cfg);
+    cfg.context_mode = ContextMode::HpChamp;
+    cfg.hp_slot_max = 35;
+    if (hp_compile_slot_max() < 35) {
+        // Binary is production SLOT_MAX; champ recipe still runs at compile cap.
+        cfg.hp_slot_max = hp_compile_slot_max();
+    }
+    normalize_hp_table_bits(cfg);
 }
 
 void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
@@ -430,6 +464,16 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_b("use_priority_replay", cfg.use_priority_replay);
     set_b("use_hebbian_stack", cfg.use_hebbian_stack);
     set_d("ewc_lambda", cfg.ewc_lambda);
+    set_i("hp_table_bits", cfg.hp_table_bits);
+    set_i("hp_slot_max", cfg.hp_slot_max);
+    set_i("hp_mixer_lr", cfg.hp_mixer_lr);
+    set_b("hp_gria", cfg.hp_gria);
+    if (j.contains("context_mode") && j["context_mode"].is_string()) {
+        const std::string cm = j["context_mode"].get<std::string>();
+        if (cm == "hp_champ" || cm == "champ") {
+            apply_hp_champ_recipe(cfg);
+        }
+    }
 }
 
 }  // namespace

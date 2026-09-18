@@ -85,8 +85,8 @@ int test_hybrid_default_and_codec() {
     auto* lm = model.sequence();
     if (!lm) return fail("sequence null");
     const auto& cfg = lm->config();
-    if (cfg.context_mode != cypha::cyphalm::ContextMode::Hybrid) {
-        return fail("expected Hybrid context_mode, got " +
+    if (cfg.context_mode != cypha::cyphalm::ContextMode::Hp) {
+        return fail("expected hp context_mode, got " +
                     cypha::cyphalm::context_mode_name(cfg.context_mode));
     }
     if (cfg.use_pgm_cell || cfg.use_unified_context) {
@@ -94,7 +94,7 @@ int test_hybrid_default_and_codec() {
     }
     if (!cfg.ngram_fuse_split) return fail("ngram_fuse_split should be true");
     if (cfg.use_ngram_count_prior) return fail("use_ngram_count_prior should be false");
-    std::cout << "hybrid_default OK mode=" << cypha::cyphalm::context_mode_name(cfg.context_mode)
+    std::cout << "hp_default OK mode=" << cypha::cyphalm::context_mode_name(cfg.context_mode)
               << " lstm_hidden=" << cfg.lstm_hidden << "\n";
 
     const auto tokens = make_pattern_tokens(256, 7);

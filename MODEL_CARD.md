@@ -27,8 +27,10 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Item | Value |
 |------|-------|
 | Algorithm | **hp** integer-exact context mixer ([CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm)) |
-| Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` |
-| Default knobs | `hp_table_bits=22`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
+| Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` (production) / `apply_hp_champ_recipe()` (research) |
+| Production knobs | `hp_table_bits=22`, `hp_slot_max=24`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
+| Compile default | `HP_SLOT_MAX=24` (v78 feature set, RAM-speed). CMake: `-DCYPHA_HP_CHAMP_BUILD=ON` → `HP_SLOT_MAX=35` |
+| Lab RSS (hp harness, mem 22) | **~1.6 GB** @ `SLOT_MAX=24`; **~15 GB** @ `SLOT_MAX=35` (`hp/tools/hp_harness.sh` RECORD H34) |
 | Cypha BPC | Measured via `eval_bpc` on token streams — **not** hp archive bytes |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; do not compare to hp BPC without relabeling |
 

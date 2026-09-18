@@ -13,6 +13,9 @@ target_include_directories(cypha_core PUBLIC
 
 target_compile_definitions(cypha_core PUBLIC CYPHA_LLM_ALGORITHM_HP=1)
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpFlags.cmake")
+cypha_apply_hp_compile_flags(cypha_core)
+
 # hp SIMD mixer dots (HP_XSIMD=1) require SSE4.1 + matching xsimd arch support.
 # Default scalar path for portability; enable with -DCYPHA_HP_XSIMD=ON on capable hosts.
 option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1)" OFF)
@@ -33,6 +36,10 @@ set(CYPHA_CYPHALM_HP_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_generation.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_alpha_spectrum.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_views.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_corpus.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_parallel.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_math_integration.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cypha_cell_hypothesis.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/predictive_codec.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/adaptive_predictor_mixer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/arithmetic_coder.cpp"
@@ -40,4 +47,5 @@ set(CYPHA_CYPHALM_HP_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/npz_util.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/memory_policy.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_intelligence_hook.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/text_algebraic_fingerprint.cpp"
 )

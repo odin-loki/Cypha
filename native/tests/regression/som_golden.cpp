@@ -4,7 +4,6 @@
 #include <iostream>
 #include <vector>
 
-#include "cypha/cyphalm/cellai_ssm.hpp"
 #include "cypha/mt19937_rng.hpp"
 #include "cypha/som/discriminative_feedback.hpp"
 #include "cypha/som/gng_expert.hpp"
@@ -97,27 +96,6 @@ int main() {
     if (out.empty() || out[0] <= dW[0]) {
       std::cerr << "som_golden: discriminative modulate out[0]=" << (out.empty() ? 0.0 : out[0])
                 << " expected > " << dW[0] << "\n";
-      return 1;
-    }
-  }
-
-  // CellAISSM + temporal SOM wiring smoke.
-  {
-    cypha::cyphalm::CellAISSMConfig sc;
-    sc.d_input = 4;
-    sc.d_state = 4;
-    sc.n_layers = 1;
-    sc.seed = 7;
-    sc.use_spectral_pde = false;
-    cypha::cyphalm::CellAISSM ssm(sc);
-    cypha::som::TemporalSOMConfig tc;
-    tc.M = 4;
-    tc.L_max = 8;
-    ssm.enable_temporal_som(tc);
-    std::vector<double> e(4, 0.1);
-    const auto out = ssm.step(e);
-    if (out.empty()) {
-      std::cerr << "som_golden: CellAISSM step with temporal SOM returned empty context\n";
       return 1;
     }
   }

@@ -24,6 +24,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"field_dim", cfg.field_dim},
         {"context_mode", context_mode_string(cfg.context_mode)},
         {"hp_table_bits", cfg.hp_table_bits},
+        {"hp_slot_max", cfg.hp_slot_max},
         {"hp_mixer_lr", cfg.hp_mixer_lr},
         {"hp_gria", cfg.hp_gria},
         {"train_epochs", cfg.train_epochs},
@@ -54,8 +55,10 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_i("d_state", cfg.d_state);
     get_i("field_dim", cfg.field_dim);
     get_i("hp_table_bits", cfg.hp_table_bits);
+    get_i("hp_slot_max", cfg.hp_slot_max);
     get_i("hp_mixer_lr", cfg.hp_mixer_lr);
     get_b("hp_gria", cfg.hp_gria);
+    normalize_hp_table_bits(cfg);
     if (c.contains("context_mode")) {
         cfg.context_mode = parse_context_mode(c.at("context_mode").get<std::string>());
     }

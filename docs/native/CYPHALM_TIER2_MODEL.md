@@ -21,19 +21,30 @@ Public API (`CyphaLMModel`, `Cypha::init_default_sequence`, `predict_next`, `gen
 
 | Enum | Alias | Meaning |
 |------|-------|---------|
-| `Hp` | `hp`, `hybrid`, `hybrid_gria_lstm` | **Production** — hp context mixer |
+| `Hp` | `hp`, `hybrid`, `hybrid_gria_lstm` | **Production** — hp RAM-speed (`HP_SLOT_MAX=24`) |
+| `HpChamp` | `hp_champ`, `champ` | **Research** — full slot cap (`HP_SLOT_MAX=35`; requires champ build) |
 | Others | `char_lstm`, `ssm_gria`, … | Legacy research enums; map to hp or no-op stubs |
 
-Configure with `apply_hp_production_recipe()` or `apply_hybrid_production_recipe()` (alias).
+Configure with `apply_hp_production_recipe()` (default) or `apply_hp_champ_recipe()` (research).
 
 ## hp knobs (`CyphaLMConfig`)
 
 | Field | Default | hp flag |
 |-------|---------|---------|
 | `hp_table_bits` | 22 | `--mem` (table size; 22 ≈ 4 MiB) |
+| `hp_slot_max` | 24 | Requested slot cap; compile-time `HP_SLOT_MAX` is authoritative |
 | `hp_mixer_lr` | 2 | mixer learning rate |
 | `hp_gria` | true | GRIA alpha gating |
 | `vocab_size` | 256 | byte tokens (must be ≤ 256) |
+
+### CMake / memory profiles
+
+| Build | CMake | `HP_SLOT_MAX` | Lab RSS @ mem 22 (harness) |
+|-------|-------|---------------|----------------------------|
+| **Production (default)** | (none) | 24 | ~1.6 GB |
+| **Champ / research** | `-DCYPHA_HP_CHAMP_BUILD=ON` | 35 | ~15 GB |
+
+Lab numbers from `native/third_party/hp/tools/hp_harness.sh` (RECORD H34: Pearson +0.96 vs SLOT_MAX=35, +895 B on 8 MB gate).
 
 CMake: `-DCYPHA_HP_XSIMD=ON` enables hp xsimd mixer dots (SSE4.1); default OFF for portability.
 

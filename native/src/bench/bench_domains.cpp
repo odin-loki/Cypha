@@ -66,7 +66,6 @@
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/cyphalm_parallel.hpp"
 #include "cypha/cyphalm/cyphalm_views.hpp"
-#include "cypha/cyphalm/ssm_diagnose.hpp"
 #include "cypha/intelligence/profile_from_model.hpp"
 #include "cypha/infer_cpu.hpp"
 #include "cypha/kernel_memory.hpp"
@@ -1783,35 +1782,31 @@ Json run_d08() {
 Json run_d10_ssm_diagnose() {
     cypha::bench::TimeSeriesEncoder enc(32, 16);
     const auto ecg = cypha::bench::load_ecg5000(kBenchSeed);
-    cypha::cyphalm::CellAISSMConfig cfg;
-    cfg.d_input = enc.feature_dim();
-    cfg.d_state = 128;
-    cfg.tau_fast = 10.0;
-    cfg.tau_slow = 100.0;
-    cfg.n_layers = 2;
-    cfg.seed = static_cast<int>(kBenchSeed + 1);
-    cfg.use_spectral_pde = true;
-    cfg.use_multiscale = true;
-    cfg.use_sparse_hebbian = true;
-    cypha::cyphalm::CellAISSM ssm(cfg);
+    cypha::cyphalm::CyphaLMConfig cfg;
+    cfg.vocab_size = 64;
+    cfg.field_dim = enc.feature_dim();
+    cfg.hp_table_bits = 16;
+    cypha::cyphalm::apply_hp_production_recipe(cfg);
+    cypha::cyphalm::CyphaLMModel model(cfg);
 
     const int steps = cypha::bench::bench_scale(512, 128);
-    std::vector<std::vector<double>> inputs;
-    inputs.reserve(static_cast<std::size_t>(steps));
+    std::vector<int> token_ids;
+    token_ids.reserve(static_cast<std::size_t>(steps));
     for (const auto& series : ecg.x_train) {
         const auto feat = enc.encode_series(series);
-        inputs.push_back(cypha::cyphalm::fit_input_dim(
-            std::vector<double>(feat.begin(), feat.end()), ssm.d_input()));
-        if (static_cast<int>(inputs.size()) >= steps) break;
+        for (float v : feat) {
+            const int tok = 1 + (static_cast<int>(std::abs(v) * 1000.0) % (cfg.vocab_size - 1));
+            token_ids.push_back(tok);
+            if (static_cast<int>(token_ids.size()) >= steps) break;
+        }
+        if (static_cast<int>(token_ids.size()) >= steps) break;
     }
-    while (static_cast<int>(inputs.size()) < steps && !ecg.x_train.empty()) {
-        const auto& series = ecg.x_train[inputs.size() % ecg.x_train.size()];
-        const auto feat = enc.encode_series(series);
-        inputs.push_back(cypha::cyphalm::fit_input_dim(
-            std::vector<double>(feat.begin(), feat.end()), ssm.d_input()));
+    while (static_cast<int>(token_ids.size()) < steps) {
+        token_ids.push_back(1 + static_cast<int>(token_ids.size() % (cfg.vocab_size - 1)));
     }
 
-    auto report = cypha::cyphalm::diagnose_cellai_sequence(ssm, inputs, std::max(1, steps / 16), "d10");
+    auto report = model.ssm_diagnostic_report(token_ids, std::max(1, steps / 16));
+    report["backend"] = "hp";
     report["data_source"] = ecg.source;
     report["encoder"] = Json{{"window", 32}, {"n_fft", 16}, {"feature_dim", enc.feature_dim()}};
     return report;
@@ -1820,7 +1815,7 @@ Json run_d10_ssm_diagnose() {
 Json run_cyphalm_domain(const std::string& domain_id, const std::string& profile) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile(profile, cfg);
-    cypha::cyphalm::apply_bench_mode(cypha::cyphalm::BenchMode::Hybrid, cfg);
+    cypha::cyphalm::apply_hp_production_recipe(cfg);
     if (profile == "d17" && cfg.vocab_size < 256) cfg.vocab_size = 256;
     if (profile == "d04" && cfg.vocab_size < 128) cfg.vocab_size = 128;
 

@@ -31,6 +31,10 @@
     "env": "CYPHALM_PROFILE=llm",
     "domains": ["d04", "d17"]
   },
+  "llm_hp_champ": {
+    "path": "profiles/cyphalm_hp_champ.json",
+    "notes": "hp champ/research (HP_SLOT_MAX=35 build required). Lab RSS ~15 GB @ mem 22."
+  },
   "llm_d04": {
     "path": "profiles/cyphalm_d04_gutenberg.json",
     "env": "CYPHALM_PROFILE=d04",

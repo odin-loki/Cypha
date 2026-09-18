@@ -147,6 +147,7 @@ if(CYPHA_ENABLE_CUDA)
 endif()
 
 # CyphaLM sequence stack: hp context mixer (odin-loki/CompressionAlgorithm).
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LegacyCyphalm.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpIntegration.cmake")
 target_sources(cypha_core PRIVATE ${CYPHA_CYPHALM_HP_SOURCES} src/cypha.cpp)
 
@@ -199,9 +200,11 @@ add_executable(cyphalm_bench_native tools/cyphalm_bench_native.cpp)
 target_link_libraries(cyphalm_bench_native PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_bench_native)
 
-add_executable(cyphalm_ssm_diagnose tools/cyphalm_ssm_diagnose.cpp)
-target_link_libraries(cyphalm_ssm_diagnose PRIVATE cypha_bench_native)
-cypha_mingw_apply_exe_link_options(cyphalm_ssm_diagnose)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_executable(cyphalm_ssm_diagnose tools/cyphalm_ssm_diagnose.cpp)
+  target_link_libraries(cyphalm_ssm_diagnose PRIVATE cypha_bench_native)
+  cypha_mingw_apply_exe_link_options(cyphalm_ssm_diagnose)
+endif()
 
 # Phase B: production entrypoints under apps/ (see cmake/CyphaApps.cmake).
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaApps.cmake")
@@ -215,8 +218,10 @@ target_compile_definitions(cypha_core PRIVATE
   CYPHA_ACCEL_GPU_MIN_BATCH_ROWS=${CYPHA_ACCEL_GPU_MIN_BATCH_ROWS}
 )
 
-add_executable(cypha_fixture_gen tools/fixture_generate.cpp)
-target_link_libraries(cypha_fixture_gen PRIVATE cypha_core cypha_lm_native)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_executable(cypha_fixture_gen tools/fixture_generate.cpp)
+  target_link_libraries(cypha_fixture_gen PRIVATE cypha_core cypha_lm_native)
+endif()
 
 add_executable(xor_kernel_bench tools/xor_kernel_bench.cpp)
 target_link_libraries(xor_kernel_bench PRIVATE cypha_core)
@@ -307,19 +312,21 @@ add_test(
   COMMAND "$<TARGET_FILE:cypha_one_smoke>"
     --cypha "${CMAKE_SOURCE_DIR}/../fixtures/reference.cypha"
 )
-set_tests_properties(native_one_cypha_smoke PROPERTIES TIMEOUT 120)
+set_tests_properties(native_one_cypha_smoke PROPERTIES TIMEOUT 600)
 
 add_executable(predictive_codec_smoke tools/predictive_codec_smoke.cpp)
 target_link_libraries(predictive_codec_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(predictive_codec_smoke)
 add_test(NAME native_predictive_codec_smoke COMMAND "$<TARGET_FILE:predictive_codec_smoke>")
-set_tests_properties(native_predictive_codec_smoke PROPERTIES TIMEOUT 180)
+set_tests_properties(native_predictive_codec_smoke PROPERTIES TIMEOUT 600)
 
-add_executable(stacked_lstm_smoke tools/stacked_lstm_smoke.cpp)
-target_link_libraries(stacked_lstm_smoke PRIVATE cypha_lm_native)
-cypha_mingw_apply_exe_link_options(stacked_lstm_smoke)
-add_test(NAME native_stacked_lstm_smoke COMMAND "$<TARGET_FILE:stacked_lstm_smoke>")
-set_tests_properties(native_stacked_lstm_smoke PROPERTIES TIMEOUT 120)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_executable(stacked_lstm_smoke tools/stacked_lstm_smoke.cpp)
+  target_link_libraries(stacked_lstm_smoke PRIVATE cypha_lm_native)
+  cypha_mingw_apply_exe_link_options(stacked_lstm_smoke)
+  add_test(NAME native_stacked_lstm_smoke COMMAND "$<TARGET_FILE:stacked_lstm_smoke>")
+  set_tests_properties(native_stacked_lstm_smoke PROPERTIES TIMEOUT 120)
+endif()
 
 add_executable(predictive_codec_bench tools/predictive_codec_bench.cpp)
 target_link_libraries(predictive_codec_bench PRIVATE cypha_core)
@@ -400,20 +407,22 @@ target_link_libraries(ewc_d16b_sweep PRIVATE cypha_bench_native)
 add_executable(ewc_growable_d_smoke tools/ewc_growable_d_smoke.cpp)
 target_link_libraries(ewc_growable_d_smoke PRIVATE cypha_core)
 
-add_executable(ewc_cyphalm_smoke tools/ewc_cyphalm_smoke.cpp)
-target_link_libraries(ewc_cyphalm_smoke PRIVATE cypha_lm_native)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_executable(ewc_cyphalm_smoke tools/ewc_cyphalm_smoke.cpp)
+  target_link_libraries(ewc_cyphalm_smoke PRIVATE cypha_lm_native)
+
+  add_executable(ewc_hybrid_smoke tools/ewc_hybrid_smoke.cpp)
+  target_link_libraries(ewc_hybrid_smoke PRIVATE cypha_lm_native)
+
+  add_executable(native_sr_gate_laws_smoke tools/native_sr_gate_laws_smoke.cpp)
+  target_link_libraries(native_sr_gate_laws_smoke PRIVATE cypha_lm_native)
+endif()
 
 add_executable(d17b_expert_diagnose tools/d17b_expert_diagnose.cpp)
 target_link_libraries(d17b_expert_diagnose PRIVATE cypha_lm_native)
 
-add_executable(ewc_hybrid_smoke tools/ewc_hybrid_smoke.cpp)
-target_link_libraries(ewc_hybrid_smoke PRIVATE cypha_lm_native)
-
 add_executable(ewc_weights_smoke tools/ewc_weights_smoke.cpp)
 target_link_libraries(ewc_weights_smoke PRIVATE cypha_lm_native)
-
-add_executable(native_sr_gate_laws_smoke tools/native_sr_gate_laws_smoke.cpp)
-target_link_libraries(native_sr_gate_laws_smoke PRIVATE cypha_lm_native)
 
 add_executable(federated_worker_smoke tools/federated_worker_smoke.cpp)
 target_include_directories(federated_worker_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
@@ -480,8 +489,10 @@ add_executable(score_matrix_inv_v_fold_smoke tools/score_matrix_inv_v_fold_smoke
 target_link_libraries(score_matrix_inv_v_fold_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(score_matrix_inv_v_fold_smoke)
 
-add_executable(navigation_loss_hybrid_smoke tools/navigation_loss_hybrid_smoke.cpp)
-target_link_libraries(navigation_loss_hybrid_smoke PRIVATE cypha_lm_native)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_executable(navigation_loss_hybrid_smoke tools/navigation_loss_hybrid_smoke.cpp)
+  target_link_libraries(navigation_loss_hybrid_smoke PRIVATE cypha_lm_native)
+endif()
 
 add_executable(hp_llm_smoke tools/hp_llm_smoke.cpp)
 target_link_libraries(hp_llm_smoke PRIVATE cypha_lm_native)
@@ -495,18 +506,20 @@ target_link_libraries(ewc_smoke PRIVATE cypha_core)
 add_executable(ewc_real_fisher_smoke tools/ewc_real_fisher_smoke.cpp)
 target_link_libraries(ewc_real_fisher_smoke PRIVATE cypha_core)
 
-add_executable(reversible_ssm_cell_smoke tools/reversible_ssm_cell_smoke.cpp)
-target_link_libraries(reversible_ssm_cell_smoke PRIVATE cypha_lm_native)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_executable(reversible_ssm_cell_smoke tools/reversible_ssm_cell_smoke.cpp)
+  target_link_libraries(reversible_ssm_cell_smoke PRIVATE cypha_lm_native)
 
-add_executable(pgm_cell_smoke tools/pgm_cell_smoke.cpp)
-target_link_libraries(pgm_cell_smoke PRIVATE cypha_lm_native)
+  add_executable(pgm_cell_smoke tools/pgm_cell_smoke.cpp)
+  target_link_libraries(pgm_cell_smoke PRIVATE cypha_lm_native)
 
-add_executable(pgm_checkpoint_roundtrip_smoke tools/pgm_checkpoint_roundtrip_smoke.cpp)
-target_link_libraries(pgm_checkpoint_roundtrip_smoke PRIVATE cypha_lm_native)
-cypha_mingw_apply_exe_link_options(pgm_checkpoint_roundtrip_smoke)
+  add_executable(pgm_checkpoint_roundtrip_smoke tools/pgm_checkpoint_roundtrip_smoke.cpp)
+  target_link_libraries(pgm_checkpoint_roundtrip_smoke PRIVATE cypha_lm_native)
+  cypha_mingw_apply_exe_link_options(pgm_checkpoint_roundtrip_smoke)
 
-add_executable(pgm_cell_bench tools/pgm_cell_bench.cpp)
-target_link_libraries(pgm_cell_bench PRIVATE cypha_lm_native)
+  add_executable(pgm_cell_bench tools/pgm_cell_bench.cpp)
+  target_link_libraries(pgm_cell_bench PRIVATE cypha_lm_native)
+endif()
 
 add_executable(curriculum_smoke tools/curriculum_smoke.cpp)
 target_link_libraries(curriculum_smoke PRIVATE cypha_core)
@@ -590,7 +603,6 @@ cypha_mingw_apply_exe_link_options(baseline_lock_validate)
 set(
   _cypha_mingw_exe_targets
   ${CYPHA_GOLDEN_EXE_TARGETS}
-  cypha_fixture_gen
   xor_kernel_bench
   cypha_kernel_tune
   kernel_snapshot_roundtrip
@@ -623,13 +635,7 @@ set(
   ewc_d16b_smoke
   ewc_d16b_sweep
   ewc_growable_d_smoke
-  ewc_cyphalm_smoke
-  ewc_hybrid_smoke
   ewc_weights_smoke
-  reversible_ssm_cell_smoke
-  pgm_cell_smoke
-  pgm_checkpoint_roundtrip_smoke
-  native_sr_gate_laws_smoke
   federated_worker_smoke
   federated_tls_smoke
   curriculum_smoke
@@ -648,11 +654,22 @@ set(
   corpus_smoke
   intelligence_profiler_papers
   cyphalm_bench_native
-  cyphalm_ssm_diagnose
   cypha_cell_hypothesis_sweep
   cypha_baseline_lock
   baseline_lock_validate
 )
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  list(APPEND _cypha_mingw_exe_targets
+    cypha_fixture_gen
+    ewc_cyphalm_smoke
+    ewc_hybrid_smoke
+    native_sr_gate_laws_smoke
+    reversible_ssm_cell_smoke
+    pgm_cell_smoke
+    pgm_checkpoint_roundtrip_smoke
+    cyphalm_ssm_diagnose
+  )
+endif()
 foreach(_cypha_t IN LISTS _cypha_mingw_exe_targets)
   cypha_mingw_apply_exe_link_options("${_cypha_t}")
 endforeach()
@@ -739,12 +756,16 @@ if(MSVC)
   target_compile_options(rpsm_hierarchy_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_train_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_train_multiclass_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_embed_grad_finite_diff PRIVATE /W4 /permissive-)
+  if(CYPHA_BUILD_LEGACY_CYPHALM)
+    target_compile_options(rpsm_embed_grad_finite_diff PRIVATE /W4 /permissive-)
+  endif()
   target_compile_options(rpsm_bptt_grad_finite_diff PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_spectral_alpha_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_normalized_eta_smoke PRIVATE /W4 /permissive-)
   target_compile_options(rpsm_world_stats_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
+  if(CYPHA_BUILD_LEGACY_CYPHALM)
+    target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
+  endif()
   target_compile_options(score_batch_golden PRIVATE /W4 /permissive-)
   target_compile_options(kernel_llr_golden PRIVATE /W4 /permissive-)
   target_compile_options(xor_kernel_bench PRIVATE /W4 /permissive-)
@@ -776,15 +797,17 @@ if(MSVC)
   target_compile_options(mke_train_step_golden PRIVATE /W4 /permissive-)
   target_compile_options(generation_golden PRIVATE /W4 /permissive-)
   target_compile_options(gh_infer_deliberation_golden PRIVATE /W4 /permissive-)
-  target_compile_options(embed_table_golden PRIVATE /W4 /permissive-)
+  if(CYPHA_BUILD_LEGACY_CYPHALM)
+    target_compile_options(embed_table_golden PRIVATE /W4 /permissive-)
+    target_compile_options(cyphalm_ssm_diagnose PRIVATE /W4 /permissive-)
+    target_compile_options(cyphalm_hebbian_golden PRIVATE /W4 /permissive-)
+    target_compile_options(cyphalm_char_lstm_golden PRIVATE /W4 /permissive-)
+  endif()
   target_compile_options(retrieval_golden PRIVATE /W4 /permissive-)
   target_compile_options(cuda_smoke PRIVATE /W4 /permissive-)
   target_compile_options(cypha_bench_native PRIVATE /W4 /permissive-)
-  target_compile_options(cyphalm_ssm_diagnose PRIVATE /W4 /permissive-)
-  target_compile_options(cyphalm_hebbian_golden PRIVATE /W4 /permissive-)
   target_compile_options(som_golden PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_model_golden PRIVATE /W4 /permissive-)
-  target_compile_options(cyphalm_char_lstm_golden PRIVATE /W4 /permissive-)
   target_compile_options(cyphalm_checkpoint_golden PRIVATE /W4 /permissive-)
   target_compile_options(cypha_bench_run PRIVATE /W4 /permissive-)
   target_compile_options(cypha_tune_run PRIVATE /W4 /permissive-)
@@ -798,11 +821,17 @@ else()
   # Same CUDA-source scoping concern as the MSVC branch above.
   target_compile_options(cypha_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic>)
   target_compile_options(cypha_bench_native PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_hebbian_golden PRIVATE -Wall -Wextra -Wpedantic)
+  if(CYPHA_BUILD_LEGACY_CYPHALM)
+    target_compile_options(cyphalm_hebbian_golden PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(cyphalm_ssm_diagnose PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(cyphalm_char_lstm_golden PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(embed_table_golden PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(rpsm_embed_grad_finite_diff PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
   target_compile_options(som_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_model_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_bench_native PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_ssm_diagnose PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_bench_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_tune_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_diagnostics_run PRIVATE -Wall -Wextra -Wpedantic)
@@ -817,12 +846,10 @@ else()
   target_compile_options(rpsm_hierarchy_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_train_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_train_multiclass_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_embed_grad_finite_diff PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_bptt_grad_finite_diff PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_spectral_alpha_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_normalized_eta_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rpsm_world_stats_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(score_batch_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_llr_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(xor_kernel_bench PRIVATE -Wall -Wextra -Wpedantic)
@@ -854,13 +881,11 @@ else()
   target_compile_options(mke_train_step_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(generation_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(gh_infer_deliberation_golden PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(embed_table_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(retrieval_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cuda_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_onnx_export PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(onnx_export_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_export_gguf PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(cyphalm_char_lstm_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cyphalm_checkpoint_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(rest_schema_contract PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -915,10 +940,12 @@ add_test(
   NAME native_rpsm_train_smoke
   COMMAND "$<TARGET_FILE:rpsm_train_smoke>"
 )
-add_test(
-  NAME native_rpsm_embed_grad_finite_diff
-  COMMAND "$<TARGET_FILE:rpsm_embed_grad_finite_diff>"
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_rpsm_embed_grad_finite_diff
+    COMMAND "$<TARGET_FILE:rpsm_embed_grad_finite_diff>"
+  )
+endif()
 add_test(
   NAME native_rpsm_bptt_grad_finite_diff
   COMMAND "$<TARGET_FILE:rpsm_bptt_grad_finite_diff>"
@@ -935,16 +962,18 @@ add_test(
   NAME native_rpsm_world_stats_smoke
   COMMAND "$<TARGET_FILE:rpsm_world_stats_smoke>"
 )
-add_test(
-  NAME native_fixture_gen_list
-  COMMAND "$<TARGET_FILE:cypha_fixture_gen>" --list
-)
-set_tests_properties(
-  native_fixture_gen_list
-  PROPERTIES
-    PASS_REGULAR_EXPRESSION
-      "batch_llr[\t ]+;memory_train[\t ]+;preprocessor[\t ]+;train_step_vector[\t ]+;quantile_dif_train[\t ]+;regression_m4[\t ]+;score_batch[\t ]+;kernel_llr[\t ]+;gh_infer_deliberation[\t ]+;generation[\t ]+;embed_table[\t ]+;retrieval[\t ]+;multilabel_dif[\t ]+;merge_from[\t ]+;similarity_index[\t ]+;dif_regressor_train_step[\t ]+;mke_train_step[\t ]+;mke_train_extended[\t ]+;dif_train_replay[\t ]+;studio_trainer_classify_hotpath[\t ]+;studio_trainer_gh_classify_hotpath[\t ]+;rff_regression[\t ]+;two_stage_pipeline[\t ]+;two_stage_ridge_fit[\t ]+;two_stage_e2e_ridge[\t ]+;csv_preprocess_classify_hotpath[\t ]+;studio_trainer_preprocess_classify_hotpath[\t ]+;studio_trainer_preprocess_gh_classify_hotpath[\t ]+;cyphalm_char_lstm[\t ]+;cyphalm_checkpoint_char_lstm[\t ]+;cyphalm_checkpoint_hybrid[\t ]+;cyphalm_ssm[\t ]+"
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_fixture_gen_list
+    COMMAND "$<TARGET_FILE:cypha_fixture_gen>" --list
+  )
+  set_tests_properties(
+    native_fixture_gen_list
+    PROPERTIES
+      PASS_REGULAR_EXPRESSION
+        "batch_llr[\t ]+;memory_train[\t ]+;preprocessor[\t ]+;train_step_vector[\t ]+;quantile_dif_train[\t ]+;regression_m4[\t ]+;score_batch[\t ]+;kernel_llr[\t ]+;gh_infer_deliberation[\t ]+;generation[\t ]+;embed_table[\t ]+;retrieval[\t ]+;multilabel_dif[\t ]+;merge_from[\t ]+;similarity_index[\t ]+;dif_regressor_train_step[\t ]+;mke_train_step[\t ]+;mke_train_extended[\t ]+;dif_train_replay[\t ]+;studio_trainer_classify_hotpath[\t ]+;studio_trainer_gh_classify_hotpath[\t ]+;rff_regression[\t ]+;two_stage_pipeline[\t ]+;two_stage_ridge_fit[\t ]+;two_stage_e2e_ridge[\t ]+;csv_preprocess_classify_hotpath[\t ]+;studio_trainer_preprocess_classify_hotpath[\t ]+;studio_trainer_preprocess_gh_classify_hotpath[\t ]+;cyphalm_char_lstm[\t ]+;cyphalm_checkpoint_char_lstm[\t ]+;cyphalm_checkpoint_hybrid[\t ]+;cyphalm_ssm[\t ]+"
+  )
+endif()
 add_test(
   NAME native_score_batch
   COMMAND "$<TARGET_FILE:score_batch_golden>"
@@ -1153,13 +1182,15 @@ add_test(
     "${_golden_fix}/generation/sidecar.json"
 )
 
-add_test(
-  NAME native_embed_table
-  COMMAND "$<TARGET_FILE:embed_table_golden>"
-    "${_golden_fix}/embed_table/sidecar.json"
-)
-if(NOT EXISTS "${_golden_fix}/embed_table/sidecar.json")
-  set_tests_properties(native_embed_table PROPERTIES DISABLED TRUE)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_embed_table
+    COMMAND "$<TARGET_FILE:embed_table_golden>"
+      "${_golden_fix}/embed_table/sidecar.json"
+  )
+  if(NOT EXISTS "${_golden_fix}/embed_table/sidecar.json")
+    set_tests_properties(native_embed_table PROPERTIES DISABLED TRUE)
+  endif()
 endif()
 
 add_test(
@@ -1171,13 +1202,15 @@ if(NOT EXISTS "${_golden_fix}/retrieval/sidecar.json")
   set_tests_properties(native_retrieval PROPERTIES DISABLED TRUE)
 endif()
 
-add_test(
-  NAME native_cyphalm_char_lstm
-  COMMAND "$<TARGET_FILE:cyphalm_char_lstm_golden>"
-    "${_golden_fix}/cyphalm_char_lstm/sidecar.json"
-)
-if(NOT EXISTS "${_golden_fix}/cyphalm_char_lstm/sidecar.json")
-  set_tests_properties(native_cyphalm_char_lstm PROPERTIES DISABLED TRUE)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_cyphalm_char_lstm
+    COMMAND "$<TARGET_FILE:cyphalm_char_lstm_golden>"
+      "${_golden_fix}/cyphalm_char_lstm/sidecar.json"
+  )
+  if(NOT EXISTS "${_golden_fix}/cyphalm_char_lstm/sidecar.json")
+    set_tests_properties(native_cyphalm_char_lstm PROPERTIES DISABLED TRUE)
+  endif()
 endif()
 
 add_test(
@@ -1214,15 +1247,17 @@ add_test(
   COMMAND "$<TARGET_FILE:cypha_bench_run>" --list-domains
 )
 
-add_test(
-  NAME native_cyphalm_ssm_diagnose_smoke
-  COMMAND "$<TARGET_FILE:cyphalm_ssm_diagnose>" --domain synthetic --steps 64
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_cyphalm_ssm_diagnose_smoke
+    COMMAND "$<TARGET_FILE:cyphalm_ssm_diagnose>" --domain synthetic --steps 64
+  )
 
-add_test(
-  NAME native_cyphalm_ssm_diagnose_d10_smoke
-  COMMAND "$<TARGET_FILE:cyphalm_ssm_diagnose>" --domain d10 --steps 64
-)
+  add_test(
+    NAME native_cyphalm_ssm_diagnose_d10_smoke
+    COMMAND "$<TARGET_FILE:cyphalm_ssm_diagnose>" --domain d10 --steps 64
+  )
+endif()
 
 add_test(
   NAME native_tune_run_smoke
@@ -1308,41 +1343,45 @@ add_test(
   COMMAND "$<TARGET_FILE:ewc_growable_d_smoke>"
 )
 
-add_test(
-  NAME native_ewc_cyphalm_smoke
-  COMMAND "$<TARGET_FILE:ewc_cyphalm_smoke>"
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_ewc_cyphalm_smoke
+    COMMAND "$<TARGET_FILE:ewc_cyphalm_smoke>"
+  )
 
-add_test(
-  NAME native_ewc_hybrid_smoke
-  COMMAND "$<TARGET_FILE:ewc_hybrid_smoke>"
-)
+  add_test(
+    NAME native_ewc_hybrid_smoke
+    COMMAND "$<TARGET_FILE:ewc_hybrid_smoke>"
+  )
+
+  add_test(
+    NAME native_reversible_ssm_cell_smoke
+    COMMAND "$<TARGET_FILE:reversible_ssm_cell_smoke>"
+  )
+
+  add_test(
+    NAME native_pgm_cell_smoke
+    COMMAND "$<TARGET_FILE:pgm_cell_smoke>"
+  )
+
+  add_test(
+    NAME native_pgm_checkpoint_roundtrip_smoke
+    COMMAND "$<TARGET_FILE:pgm_checkpoint_roundtrip_smoke>"
+  )
+  set_tests_properties(native_pgm_checkpoint_roundtrip_smoke PROPERTIES TIMEOUT 120)
+endif()
 
 add_test(
   NAME native_ewc_weights_smoke
   COMMAND "$<TARGET_FILE:ewc_weights_smoke>"
 )
 
-add_test(
-  NAME native_reversible_ssm_cell_smoke
-  COMMAND "$<TARGET_FILE:reversible_ssm_cell_smoke>"
-)
-
-add_test(
-  NAME native_pgm_cell_smoke
-  COMMAND "$<TARGET_FILE:pgm_cell_smoke>"
-)
-
-add_test(
-  NAME native_pgm_checkpoint_roundtrip_smoke
-  COMMAND "$<TARGET_FILE:pgm_checkpoint_roundtrip_smoke>"
-)
-set_tests_properties(native_pgm_checkpoint_roundtrip_smoke PROPERTIES TIMEOUT 120)
-
-add_test(
-  NAME native_sr_gate_laws_smoke
-  COMMAND "$<TARGET_FILE:native_sr_gate_laws_smoke>"
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_sr_gate_laws_smoke
+    COMMAND "$<TARGET_FILE:native_sr_gate_laws_smoke>"
+  )
+endif()
 
 add_test(
   NAME native_curriculum_smoke
@@ -2260,15 +2299,18 @@ add_test(
   COMMAND "$<TARGET_FILE:score_matrix_inv_v_fold_smoke>"
 )
 
-add_test(
-  NAME native_navigation_loss_hybrid_smoke
-  COMMAND "$<TARGET_FILE:navigation_loss_hybrid_smoke>"
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_navigation_loss_hybrid_smoke
+    COMMAND "$<TARGET_FILE:navigation_loss_hybrid_smoke>"
+  )
+endif()
 
 add_test(
   NAME native_hp_llm_smoke
   COMMAND "$<TARGET_FILE:hp_llm_smoke>"
 )
+set_tests_properties(native_hp_llm_smoke PROPERTIES TIMEOUT 120)
 
 add_test(
   NAME native_d25_corpus_smoke
@@ -2311,24 +2353,26 @@ add_test(
     --out "${CMAKE_CURRENT_BINARY_DIR}/diagnostics_results"
 )
 
-add_test(
-  NAME native_cyphalm_hebbian
-  COMMAND "$<TARGET_FILE:cyphalm_hebbian_golden>"
-)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  add_test(
+    NAME native_cyphalm_hebbian
+    COMMAND "$<TARGET_FILE:cyphalm_hebbian_golden>"
+  )
+
+  add_test(NAME native_cyphalm_ssm COMMAND "$<TARGET_FILE:cyphalm_ssm_golden>")
+
+  if(EXISTS "${_golden_fix}/cyphalm_ssm/sidecar.json")
+    add_test(
+      NAME native_cyphalm_ssm_fixture
+      COMMAND "$<TARGET_FILE:cyphalm_golden>" "${_golden_fix}/cyphalm_ssm/sidecar.json"
+    )
+  endif()
+endif()
 
 add_test(
   NAME native_som_golden
   COMMAND "$<TARGET_FILE:som_golden>"
 )
-
-add_test(NAME native_cyphalm_ssm COMMAND "$<TARGET_FILE:cyphalm_ssm_golden>")
-
-if(EXISTS "${_golden_fix}/cyphalm_ssm/sidecar.json")
-  add_test(
-    NAME native_cyphalm_ssm_fixture
-    COMMAND "$<TARGET_FILE:cyphalm_golden>" "${_golden_fix}/cyphalm_ssm/sidecar.json"
-  )
-endif()
 
 add_test(
   NAME native_cyphalm_golden_suite

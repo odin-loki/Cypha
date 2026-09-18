@@ -32,6 +32,15 @@ CyphaLMModel::CyphaLMModel(CyphaLMConfig cfg) : cfg_(std::move(cfg)) {
 CyphaLMModel::~CyphaLMModel() = default;
 
 void CyphaLMModel::init_components() {
+    if (cfg_.context_mode == ContextMode::HpChamp) {
+        apply_hp_champ_recipe(cfg_);
+    } else if (cfg_.context_mode == ContextMode::Hp || cfg_.context_mode == ContextMode::Hybrid) {
+        if (cfg_.hp_slot_max <= 0) {
+            apply_hp_production_recipe(cfg_);
+        } else {
+            normalize_hp_table_bits(cfg_);
+        }
+    }
     hp_ = std::make_unique<HpSequenceBackend>(
         hp_config_from_cyphalm(cfg_.hp_table_bits, cfg_.hp_mixer_lr, cfg_.hp_gria));
     if (!cfg_.bpe_merges_path.empty() && !cfg_.bpe_vocab_path.empty()) {
@@ -239,10 +248,18 @@ nlohmann::json CyphaLMModel::compression_profile() const {
     return {
         {"algorithm", "hp"},
         {"hp_table_bits", cfg_.hp_table_bits},
+        {"hp_slot_max", cfg_.hp_slot_max},
+        {"hp_slot_compile_max", hp_compile_slot_max()},
         {"hp_mixer_lr", cfg_.hp_mixer_lr},
         {"hp_gria", cfg_.hp_gria},
         {"vocab_size", cfg_.vocab_size},
         {"context_mode", context_mode_name(cfg_.context_mode)},
+        {"hp_profile",
+         (cfg_.context_mode == ContextMode::HpChamp) ? "champ" : "production"},
+        {"rss_lab_reference",
+         nlohmann::json{{"slot_max_24_mem22_kb", 1600000},
+                        {"slot_max_35_mem22_kb", 15000000},
+                        {"source", "hp/tools/hp_harness.sh RECORD H34"}}},
         {"note",
          "Cypha BPC uses hp next-byte log_probs; hp archive sizes are separate metrics "
          "(see MODEL_CARD.md)."},

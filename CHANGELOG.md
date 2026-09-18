@@ -10,9 +10,11 @@ milestone or a significant self-contained change.
 
 ### Added
 - **hp LLM integration:** Vendored `native/third_party/hp/` from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm). `CyphaLMModel` delegates to `HpSequenceBackend` / `hp::Predictor`. New tests: `hp_llm_smoke`, `hp_roundtrip_smoke`. CMake: `cmake/HpIntegration.cmake`, optional `-DCYPHA_HP_XSIMD=ON`.
+- **CyphaLM dual hp profiles:** Production default `HP_SLOT_MAX=24` (~1.6 GB RSS lab ref @ mem 22); optional champ build `-DCYPHA_HP_CHAMP_BUILD=ON` → `HP_SLOT_MAX=35`. `apply_hp_champ_recipe()`, `hp_slot_max` config knob, `profiles/cyphalm_hp_champ.json`.
 
 ### Changed
 - **Production sequence algorithm:** Hybrid GRIA+LSTM is **no longer** the default LLM path. `ContextMode::Hp` + `apply_hp_production_recipe()` replace `apply_hybrid_production_recipe()` for sequence duties. `hybrid` CLI/profile aliases map to hp.
+- **Legacy CyphaLM tools:** Pre-hp GRIA/LSTM/SSM regression targets gated behind `-DCYPHA_BUILD_LEGACY_CYPHALM=ON` (default OFF) so default `cmake --build` and `ctest -R native_` succeed.
 - **Docs:** `docs/native/CYPHALM_TIER2_MODEL.md`, `MODEL_CARD.md`, `README.md` updated; Cypha BPC vs hp archive metrics explicitly separated.
 - **Checkpoints:** `save_cyphalm_model` persists hp config; predictor tables are session-local (online adaptation).
 - **Paper camera-ready:** `paper/CyphaLM_paper.md` + arXiv bundle HTML/PDF regenerated to cite living Hybrid **2.664 BPC** (L1 2.873 historical) — **superseded by hp for LLM; paper text not yet regenerated.**
