@@ -67,8 +67,20 @@ cd native/build-wsl-gcc
 ./hp_llm_smoke
 ./hp_roundtrip_smoke
 ./cyphalm_model_golden --mode hp
+# PR CI fast gate (Linux): scripts/ci_native_fast.sh  (-LE cypha_slow)
+# macOS CI: scripts/ci_native_hp_smoke.sh
 ctest -R 'native_hp|native_cyphalm_model_golden' --output-on-failure
 ```
+
+### CI platforms (CyphaLM light profile)
+
+| Platform | Job | Gate |
+|----------|-----|------|
+| Linux | `Build and test (Linux)` | `scripts/ci_native_fast.sh` |
+| Windows | `Build (Windows MSVC)` | compile + artifact check |
+| macOS | `Build and test (macOS)` | `scripts/ci_native_hp_smoke.sh` |
+
+Slow maintainer tests (`native_tune_run_smoke`, `native_cyphalm_train_smoke`, d41–d76 grid smokes, …) carry the CTest label `cypha_slow` and are excluded from the default PR gate.
 
 ## Checkpoints
 

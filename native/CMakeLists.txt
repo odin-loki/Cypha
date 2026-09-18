@@ -637,7 +637,6 @@ set(
   ewc_d16b_smoke
   ewc_d16b_sweep
   ewc_growable_d_smoke
-  ewc_weights_smoke
   federated_worker_smoke
   federated_tls_smoke
   curriculum_smoke
@@ -665,6 +664,7 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
     cypha_fixture_gen
     ewc_cyphalm_smoke
     ewc_hybrid_smoke
+    ewc_weights_smoke
     native_sr_gate_laws_smoke
     reversible_ssm_cell_smoke
     pgm_cell_smoke
@@ -1243,6 +1243,7 @@ add_test(
     --max-train-steps 128
     --out "${CMAKE_CURRENT_BINARY_DIR}/cyphalm_train_smoke_ckpt"
 )
+set_tests_properties(native_cyphalm_train_smoke PROPERTIES TIMEOUT 900)
 
 add_test(
   NAME native_bench_run_list_domains
@@ -1269,6 +1270,7 @@ add_test(
 )
 set_tests_properties(native_tune_run_smoke PROPERTIES
   ENVIRONMENT "CYPHA_BENCH_FAST=1"
+  TIMEOUT 300
 )
 
 add_test(
@@ -2513,3 +2515,6 @@ if(TARGET cypha_qt_shell)
       ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   )
 endif()
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaCTest.cmake")
+cypha_apply_ctest_slow_labels()
