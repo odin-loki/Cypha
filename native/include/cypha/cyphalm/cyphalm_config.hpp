@@ -11,6 +11,8 @@ namespace cypha::cyphalm {
 enum class ContextMode {
     /// hp integer-exact context mixer (odin-loki/CompressionAlgorithm). Production default.
     Hp,
+    /// hp gate24 quality screen (requires ``-DCYPHA_HP_PROFILE=gate24`` / v78 + HP_SLOT_MAX=24).
+    HpGate24,
     /// hp champ / research profile (requires ``-DCYPHA_HP_PROFILE=champ`` / HP_SLOT_MAX=35 binary).
     HpChamp,
     /// Alias kept for CLI/profile compatibility — maps to ``Hp``.
@@ -321,6 +323,9 @@ void apply_pgm_logits_recipe(CyphaLMConfig& cfg);
 
 /// Production CyphaLM default: hp RAM-speed profile (table_bits=22, slot_max=24).
 void apply_hp_production_recipe(CyphaLMConfig& cfg);
+
+/// Gate24 quality screen (v78 flags + slot_max=24). Requires gate24 build (``-DCYPHA_HP_PROFILE=gate24``).
+void apply_hp_gate24_recipe(CyphaLMConfig& cfg);
 
 /// Champ / research hp profile (slot_max=35). Requires champ build (``-DCYPHA_HP_PROFILE=champ``).
 void apply_hp_champ_recipe(CyphaLMConfig& cfg);

@@ -1,0 +1,16 @@
+hp_light c --mem 22 --lr 2 --profile enwik8.8mb (8388608 B)
+archive: 1804979 B → 1.721362 BPC, RT PASS
+compress wall: ~203 s (2026-09-19, 4-core Xeon, 15 GiB VM)
+
+--- redundancy profile (67108864 bits over 8388608 B) ---
+  total spent       1805029 B   1.721 bpc
+    best-expert  137438953472 B   30408.704 bpc
+    after mixer     1830091 B   1.745 bpc
+    sparse ctx       509547 B   0.485 bpc
+    dense ctx       1295481 B   1.235 bpc
+  model redundancy (mixer vs best expert): -137437123380 B
+  coding redundancy (APM+coder vs mixer):  -25061 B
+  parameter share (sparse contexts):       28%
+
+Note: light SKU enables only a subset of v78 experts; best-expert hindsight line is not
+meaningful at this flag set (numerical overflow in the profiler denominator).

@@ -4,10 +4,11 @@
 /// Integer-exact context mixing lives in hp/; this layer exposes byte-level
 /// log-probabilities for the CyphaLM public API (BPC path uses double log_probs).
 ///
-/// RAM note: holds two ``hp::Predictor`` instances (``pred_`` + ``scratch_``).
-/// ``next_byte_log_probs()`` expands an MSB-first bit prefix tree (≤255 fork clones
-/// vs 256×8 bit steps on the legacy per-byte clone path). BPC / train loss should
-/// use ``observe_next_byte`` / ``observe_stream_bits`` (O(8) bits per byte, no fan-out).
+/// RAM note: holds ``pred_`` + ``scratch_`` + a depth checkpoint pool for bit-tree
+/// scoring. ``next_byte_log_probs()`` walks an MSB-first bit prefix tree on
+/// ``scratch_`` with ``assign_from`` backtracking (no per-fork ``clone_from``).
+/// BPC / train loss should use ``observe_next_byte`` / ``observe_stream_bits``
+/// (O(8) bits per byte, no fan-out).
 
 #include <cstdint>
 #include <memory>
@@ -60,13 +61,15 @@ class HpSequenceBackend {
     hp::Config cfg_;
     std::unique_ptr<hp::Predictor> pred_;
     mutable std::unique_ptr<hp::Predictor> scratch_;
+    /// Per-depth DFS checkpoints (light profile bit-tree; max 9 assign_from slots).
+    mutable std::vector<std::unique_ptr<hp::Predictor>> dfs_ckpts_;
 
     static double byte_log_prob(hp::Predictor& snap, int byte);
 
     static bool branch_reaches_vocab(int vocab_size, int prefix, int depth, int bit);
-    static void expand_bit_tree_dfs(const hp::Config& cfg, int vocab_size, int depth, int prefix,
-                                    double log_p_nats, hp::Predictor& node,
-                                    std::vector<double>& out_log_nats);
+    void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
+                             hp::Predictor& node, std::vector<double>& out_log_nats) const;
+    void init_dfs_ckpts_();
 };
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria);

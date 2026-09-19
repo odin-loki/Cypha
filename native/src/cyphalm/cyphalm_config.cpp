@@ -27,6 +27,7 @@ std::string lower_copy(std::string s) {
 ContextMode parse_context_mode(const std::string& s) {
     const std::string k = lower_copy(s);
     if (k == "hp" || k == "hutter" || k == "context_mixer") return ContextMode::Hp;
+    if (k == "hp_gate24" || k == "gate24") return ContextMode::HpGate24;
     if (k == "hp_champ" || k == "champ") return ContextMode::HpChamp;
     if (k == "full") return ContextMode::Full;
     if (k == "gria_ngram") return ContextMode::GriaNgram;
@@ -44,6 +45,7 @@ ContextMode parse_context_mode(const std::string& s) {
 std::string context_mode_name(ContextMode mode) {
     switch (mode) {
         case ContextMode::Hp: return "hp";
+        case ContextMode::HpGate24: return "hp_gate24";
         case ContextMode::HpChamp: return "hp_champ";
         case ContextMode::Full: return "full";
         case ContextMode::GriaNgram: return "gria_ngram";
@@ -62,6 +64,7 @@ std::string context_mode_string(ContextMode mode) {
     switch (mode) {
         case ContextMode::Hp:
         case ContextMode::Hybrid: return "hp";
+        case ContextMode::HpGate24: return "hp_gate24";
         case ContextMode::HpChamp: return "hp_champ";
         case ContextMode::SsmGria: return "ssm_only";
         case ContextMode::PgmLogits: return "pgm_logits";
@@ -137,6 +140,13 @@ void apply_hp_production_recipe(CyphaLMConfig& cfg) {
     if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
         cfg.view_schedule = "schedule_b";
     }
+}
+
+void apply_hp_gate24_recipe(CyphaLMConfig& cfg) {
+    apply_hp_production_recipe(cfg);
+    cfg.context_mode = ContextMode::HpGate24;
+    cfg.hp_slot_max = 24;
+    normalize_hp_table_bits(cfg);
 }
 
 void apply_hp_champ_recipe(CyphaLMConfig& cfg) {
@@ -449,7 +459,9 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_b("hp_gria", cfg.hp_gria);
     if (j.contains("context_mode") && j["context_mode"].is_string()) {
         const std::string cm = j["context_mode"].get<std::string>();
-        if (cm == "hp_champ" || cm == "champ") {
+        if (cm == "hp_gate24" || cm == "gate24") {
+            apply_hp_gate24_recipe(cfg);
+        } else if (cm == "hp_champ" || cm == "champ") {
             apply_hp_champ_recipe(cfg);
         }
     }
@@ -465,6 +477,10 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
         path = root / "cyphalm_d17_wikitext.json";
     } else if (profile == "d17_bpe") {
         path = root / "cyphalm_d17_wikitext_bpe.json";
+    } else if (profile == "hp_gate24" || profile == "gate24") {
+        path = root / "cyphalm_hp_gate24.json";
+    } else if (profile == "hp_champ" || profile == "champ") {
+        path = root / "cyphalm_hp_champ.json";
     } else if (profile == "d21" || profile == "d21_small") {
         path = root / "cyphalm_d21_hp.json";
     } else if (profile == "d04") {

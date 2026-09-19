@@ -1,0 +1,23 @@
+{
+  "sku": "gate24",
+  "corpus": "/workspace/bench/data/enwik8/enwik8.8mb",
+  "corpus_bytes": 8388608,
+  "corpus_sha256": "09f6dd7241a8ae21edfd6762f3c6712a1fd02f7f322c5e77cab8bb88f292ee8e",
+  "hp_slot_compile_max": 24,
+  "hp_table_bits": 22,
+  "upstream_champ_ref_bpc": 1.610906,
+  "upstream_gate24_ref_bpc": 1.607,
+  "observe_bpc": 1.611729,
+  "observe_ms": 430395.7,
+  "observe_bytes_per_sec": 19490.5,
+  "archive_bpc": 1.611759,
+  "archive_bytes": 1690052,
+  "observe_minus_archive_bpc": -0.00003,
+  "delta_vs_upstream_champ": 0.000823,
+  "delta_vs_upstream_gate24": 0.004729,
+  "roundtrip_ok": true,
+  "roundtrip_sha256": "09f6dd7241a8ae21edfd6762f3c6712a1fd02f7f322c5e77cab8bb88f292ee8e",
+  "vm_rss_construct_kb": 3156572,
+  "vm_hwm_observe_kb": 4720256,
+  "status": "ok"
+}

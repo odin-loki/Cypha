@@ -27,14 +27,14 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Item | Value |
 |------|-------|
 | Algorithm | **hp** integer-exact context mixer ([CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm)) |
-| Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` (production) / `apply_hp_champ_recipe()` (research) |
+| Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` (light) / `apply_hp_gate24_recipe()` (quality screen) / `apply_hp_champ_recipe()` (champ) |
 | Production knobs | `hp_table_bits=22`, `hp_slot_max=24`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
-| Compile default | `HP_SLOT_MAX=24`, grow flags OFF (`-DCYPHA_HP_PROFILE=light`). Champ: `-DCYPHA_HP_PROFILE=champ` → v78_flags.ps1 + `HP_SLOT_MAX=35` |
-| RAM hotspot | `HpSequenceBackend` holds dual `hp::Predictor`; full-vocab `next_byte_log_probs()` clones 256× (hot path); **BPC default uses bit-serial observe** (no 256 fan-out) |
+| Compile SKUs | **light** (CI default, fast/dev, 0/78 v78, ~1.72 BPC enwik8MB) · **gate24** (`-DCYPHA_HP_PROFILE=gate24`, 78/78 v78 + SLOT_MAX=24, ~1.61 BPC class) · **champ** (`-DCYPHA_HP_PROFILE=champ`, 78/78 + SLOT_MAX=35, ~1.610 bar, ~15 GB RSS) |
+| RAM hotspot | `HpSequenceBackend` holds `pred_` + `scratch_` + DFS checkpoint pool; full-vocab `next_byte_log_probs()` uses **bit-tree prefix DFS** (legacy 256-clone: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`); **BPC default uses bit-serial observe** |
 | Lab RSS (hp harness, mem 22) | **~1.6 GB** @ `SLOT_MAX=24`; **~15 GB** @ `SLOT_MAX=35` (`hp/tools/hp_harness.sh` RECORD H34) |
 | Cypha BPC (default) | **`eval_bpc` / `compress_equivalent_bpc`**: bit-serial observe NLL — **matches hp archive BPC** on same corpus/flags (see gap report) |
 | Cypha BPC (API / top-k) | **`predict_next` + 256-clone path**: different metric; **not** hp archive BPC — use only when reporting REST/inference behavior |
-| **hp profile (measured 2026-09-19)** | **Protocol:** Cypha light = **0/78** v78 flags; user **~1.610** = v82 champ (**78/78** + `SLOT_MAX=35`). **Bare light observe:** enwik 8 MB **1.721 BPC** (matches archive). **v78 gate24 hp CLI:** **1.612 BPC** (1,690,052 B). Clone-API WikiText n=16: **7.25 BPC** — not comparable to 1.610. See [`docs/reports/CYPHALM_BPC_GAP_REPORT.md`](docs/reports/CYPHALM_BPC_GAP_REPORT.md) |
+| **hp profile (measured 2026-09-19)** | **Win metric:** enwik8.8mb vs RECORD **1.607** (s24) / **1.610** (champ) per [upstream HP_ALGORITHM_PROFILE](https://github.com/odin-loki/CompressionAlgorithm/blob/master/docs/reports/HP_ALGORITHM_PROFILE.md). **Cypha gate24 (vendored hp):** archive **1.611759**, observe **1.611729** (+4.5 KB vs upstream s24). **champ:** OOM @ 15 GiB. WikiText ~2.1 not comparable. See [`CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md) |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; do not compare to hp BPC without relabeling |
 
 > **Note:** Pre-hp BPC numbers in `bench/BASELINE_LOCK.json` are historical. New hp-backed BPC baselines are not yet locked in that file.
