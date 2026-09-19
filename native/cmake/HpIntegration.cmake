@@ -18,13 +18,23 @@ target_compile_definitions(cypha_core PUBLIC CYPHA_LLM_ALGORITHM_HP=1)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpFlags.cmake")
 cypha_apply_hp_compile_flags(cypha_core)
 
-# hp SIMD mixer dots (HP_XSIMD=1) require SSE4.1 + matching xsimd arch support.
-# gate24 default ON (v82 recipe uses -msse4.1); override with -DCYPHA_HP_XSIMD=OFF on hosts without SSE4.1.
-option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1)" ON)
-if(CYPHA_HP_XSIMD)
+# hp SIMD mixer dots (HP_XSIMD=1) use SSE4.1 batches in simd_dot.hpp (x86 only).
+# gate24 default ON on x86; auto-fallback to scalar on macOS arm64 and other non-SSE hosts.
+option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1 on x86)" ON)
+
+set(_cypha_hp_xsimd_effective ${CYPHA_HP_XSIMD})
+if(_cypha_hp_xsimd_effective AND NOT MSVC)
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-msse4.1" _CYPHA_HP_HAS_MSSE41)
+  if(NOT _CYPHA_HP_HAS_MSSE41)
+    set(_cypha_hp_xsimd_effective OFF)
+    message(STATUS "CyphaLM hp: -msse4.1 unavailable; CYPHA_HP_XSIMD=OFF (scalar path, gate24 flags unchanged)")
+  endif()
+endif()
+
+if(_cypha_hp_xsimd_effective)
   target_compile_definitions(cypha_core PUBLIC HP_XSIMD=1)
   if(NOT MSVC)
-    # PUBLIC: consumers include hp headers that pull xsimd SSE4.1 batches.
     target_compile_options(cypha_core PUBLIC -msse4.1)
   endif()
 else()
