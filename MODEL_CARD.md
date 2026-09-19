@@ -33,6 +33,7 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | RAM hotspot | `HpSequenceBackend` holds dual `hp::Predictor` + per-byte clone in `next_byte_log_probs()` |
 | Lab RSS (hp harness, mem 22) | **~1.6 GB** @ `SLOT_MAX=24`; **~15 GB** @ `SLOT_MAX=35` (`hp/tools/hp_harness.sh` RECORD H34) |
 | Cypha BPC | Measured via `eval_bpc` on token streams — **not** hp archive bytes |
+| **hp profile (measured 2026-09-19)** | WikiText-2 bytes, light profile: **5.48 BPC** after 32 online train steps (n=16 eval); cold **6.77 BPC**. See [`docs/reports/CYPHALM_LLM_PROFILE_REPORT.md`](docs/reports/CYPHALM_LLM_PROFILE_REPORT.md) |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; do not compare to hp BPC without relabeling |
 
 > **Note:** Pre-hp BPC numbers in `bench/BASELINE_LOCK.json` are historical. New hp-backed BPC baselines are not yet locked in that file.
