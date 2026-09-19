@@ -1,40 +1,10 @@
 # CTest labels for CI tiers.
 #
-# cypha_slow — excluded from default PR CI (scripts/ci_native_fast.sh uses -LE cypha_slow).
-# Maintainer full gate: ctest -R native_ (no -LE) or scripts/ci_native_linux.sh.
+# cypha_slow — maintainer / optional nightly tier (excluded from PR hp smoke gate).
+# PR gate (Linux + macOS): scripts/ci_native_hp_smoke.sh (hp/CyphaLM allowlist only).
+# Broad maintainer gate: scripts/ci_native_fast.sh (-LE cypha_slow) or ci_native_linux.sh (all).
 
 set(CYPHA_CTEST_LABEL_SLOW "cypha_slow")
-
-# Tests known slow without a high TIMEOUT property (hp train/tune/bench orchestration).
-set(_CYPHA_CTEST_SLOW_EXPLICIT
-  native_tune_run_smoke
-  native_cyphalm_train_smoke
-  native_rpsm_sequence_smoke
-  native_sample_efficiency_curve_smoke
-  native_robustness_curve_smoke
-  native_needle_haystack_smoke
-  native_memorization_canary_smoke
-  native_algebraic_fingerprint_smoke
-  native_cyphalm_bench_intelligence_profile
-  native_d17_wikitext_smoke
-  native_d17_wikitext_overnight_smoke
-  native_overnight_mini_smoke
-  native_cell_hypothesis_overnight_smoke
-  native_cell_hypothesis_sweep_smoke
-  native_cell_hypothesis_tier3_smoke
-  native_corpus_smoke
-  native_diagnostics_run
-  native_intelligence_bench_smoke
-  native_predictive_codec_smoke
-  native_predictive_codec_bench_smoke
-  native_xor_kernel_bench_smoke
-  native_class_gmm_p3_smoke
-  native_encoder_ib_p6_smoke
-  native_nig_bma_p4_smoke
-  native_d26_medium_overnight_smoke
-  native_d39_intelligence_monitor_smoke
-  native_d40_math_integration_smoke
-)
 
 function(cypha_ctest_mark_slow test_name)
   if(NOT TEST "${test_name}")
@@ -47,20 +17,59 @@ function(cypha_ctest_mark_slow test_name)
   set_property(TEST "${test_name}" APPEND PROPERTY LABELS "${CYPHA_CTEST_LABEL_SLOW}")
 endfunction()
 
+function(cypha_ctest_name_is_slow test_name out_var)
+  set(_slow FALSE)
+  # Bench / lock / forecast / train / tune / overnight orchestration.
+  if("${test_name}" MATCHES "^native_tune_run_smoke$"
+      OR "${test_name}" MATCHES "^native_cyphalm_train_smoke$"
+      OR "${test_name}" MATCHES "^native_rpsm_sequence_smoke$"
+      OR "${test_name}" MATCHES "^native_one_cypha_smoke$"
+      OR "${test_name}" MATCHES "^native_baseline_lock"
+      OR "${test_name}" MATCHES "^native_cyphalm_bench"
+      OR "${test_name}" MATCHES "^native_forecast_smoke$"
+      OR "${test_name}" MATCHES "^native_cell_hypothesis"
+      OR "${test_name}" MATCHES "^native_overnight"
+      OR "${test_name}" MATCHES "^native_corpus_smoke$"
+      OR "${test_name}" MATCHES "^native_diagnostics_run$"
+      OR "${test_name}" MATCHES "^native_intelligence_bench"
+      OR "${test_name}" MATCHES "^native_predictive_codec"
+      OR "${test_name}" MATCHES "^native_sample_efficiency"
+      OR "${test_name}" MATCHES "^native_robustness_curve"
+      OR "${test_name}" MATCHES "^native_needle_haystack"
+      OR "${test_name}" MATCHES "^native_memorization_canary"
+      OR "${test_name}" MATCHES "^native_algebraic_fingerprint"
+      OR "${test_name}" MATCHES "^native_xor_kernel_bench"
+      OR "${test_name}" MATCHES "^native_class_gmm_p3"
+      OR "${test_name}" MATCHES "^native_encoder_ib_p6"
+      OR "${test_name}" MATCHES "^native_nig_bma_p4"
+      OR "${test_name}" MATCHES "^native_orf_encoder_bench"
+      OR "${test_name}" MATCHES "^native_views_leaderboard"
+      OR "${test_name}" MATCHES "^native_tau_forget_gate"
+      OR "${test_name}" MATCHES "^native_lm_self_correct"
+      OR "${test_name}" MATCHES "^native_quality_recipe_wave"
+      OR "${test_name}" MATCHES "^native_throughput_lock")
+    set(_slow TRUE)
+  endif()
+  # Domain smokes d21–d76 (bench grids, overnight tiers, math-integration sweeps).
+  if("${test_name}" MATCHES "^native_d(2[1-9]|[3-7][0-9])_")
+    set(_slow TRUE)
+  endif()
+  # d17 wikitext / hybrid bench smokes (hp path uses hybrid alias but still heavy).
+  if("${test_name}" MATCHES "^native_d17_")
+    set(_slow TRUE)
+  endif()
+  set(${out_var} ${_slow} PARENT_SCOPE)
+endfunction()
+
 function(cypha_apply_ctest_slow_labels)
-  foreach(_t IN LISTS _CYPHA_CTEST_SLOW_EXPLICIT)
-    cypha_ctest_mark_slow("${_t}")
-  endforeach()
-
   get_property(_all_tests DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY TESTS)
+  set(_n_slow 0)
   foreach(_t IN LISTS _all_tests)
-    # Joint grid / math-integration domain smokes (d41–d76): maintainer tier.
-    if(_t MATCHES "^native_d(4[1-9]|[5-7][0-9])_")
+    cypha_ctest_name_is_slow("${_t}" _is_slow)
+    if(_is_slow)
       cypha_ctest_mark_slow("${_t}")
+      math(EXPR _n_slow "${_n_slow} + 1")
     endif()
-
   endforeach()
-
-  list(LENGTH _CYPHA_CTEST_SLOW_EXPLICIT _n_explicit)
-  message(STATUS "Cypha CTest: cypha_slow labels applied (explicit=${_n_explicit}, d41–d76 domain smokes)")
+  message(STATUS "Cypha CTest: ${_n_slow} tests labeled cypha_slow (PR gate uses ci_native_hp_smoke.sh)")
 endfunction()

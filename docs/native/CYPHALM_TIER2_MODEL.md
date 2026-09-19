@@ -76,11 +76,11 @@ ctest -R 'native_hp|native_cyphalm_model_golden' --output-on-failure
 
 | Platform | Job | Gate |
 |----------|-----|------|
-| Linux | `Build and test (Linux)` | `scripts/ci_native_fast.sh` |
+| Linux | `Build and test (Linux)` | `scripts/ci_native_hp_smoke.sh` |
 | Windows | `Build (Windows MSVC)` | compile + artifact check |
 | macOS | `Build and test (macOS)` | `scripts/ci_native_hp_smoke.sh` |
 
-Slow maintainer tests (`native_tune_run_smoke`, `native_cyphalm_train_smoke`, d41–d76 grid smokes, …) carry the CTest label `cypha_slow` and are excluded from the default PR gate.
+Optional: `Native slow CTest (optional)` runs `scripts/ci_native_fast.sh` (`-LE cypha_slow`). Bench/lock/forecast/d21–d76 smokes are labeled `cypha_slow` and are not in the PR gate.
 
 ## Checkpoints
 

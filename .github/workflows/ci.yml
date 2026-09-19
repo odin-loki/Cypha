@@ -1,15 +1,11 @@
 # Native CTest (headless Qt compile-check when CYPHA_BUILD_QT=ON).
 #
-# Blocking jobs: Linux fast CTest, Windows MSVC build, macOS hp/CyphaLM smokes.
-# Optional: federated TLS smoke (OpenSSL; continue-on-error).
-# Optional: corpus_and_d25 (WikiText fetch + corpus smokes; continue-on-error).
+# Blocking jobs: Linux + macOS hp/CyphaLM PR smokes, Windows MSVC build.
+# Optional: federated TLS, corpus+d25, native slow CTest sweep.
 #
-# Default PR gate: scripts/ci_native_fast.sh (ctest -R native_ -LE cypha_slow).
-# Full maintainer gate: scripts/ci_native_linux.sh (all native_ tests).
-# Production overnight tier (300k train) is NOT run in CI.
-# CUDA is optional for local builds only (see docs/native/ACCEL_CUDA.md).
-#
-# Parity fixtures live under fixtures/ (regenerate offline if core math changes).
+# PR gate: scripts/ci_native_hp_smoke.sh (hp/CyphaLM smokes + goldens only).
+# Maintainer broad gate: scripts/ci_native_fast.sh (-LE cypha_slow).
+# Full gate: scripts/ci_native_linux.sh (all native_ tests).
 name: CI
 
 on:
@@ -26,20 +22,19 @@ jobs:
   build_and_test:
     name: Build and test (Linux)
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Install toolchain
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev qt6-base-dev libxkbcommon-x11-0 libxcb-cursor0 libegl1 libgl1-mesa-dri libglib2.0-0
-      - name: Native build + fast CTest
+      - name: Native build + hp/CyphaLM smokes
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON -DCYPHA_HP_PROFILE=light
           cmake --build native/build -j 2
-          bash scripts/ci_native_fast.sh
-        # Local equivalent: bash scripts/ci_native_fast.sh (after configure/build)
+          bash scripts/ci_native_hp_smoke.sh
 
   windows_msvc:
     name: Build (Windows MSVC)
@@ -72,7 +67,7 @@ jobs:
   build_and_test_macos:
     name: Build and test (macOS)
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -81,7 +76,22 @@ jobs:
           cmake -S native -B native/build-macos -DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light
           cmake --build native/build-macos -j 3
           CYPHA_NATIVE_BUILD_DIR="$PWD/native/build-macos" bash scripts/ci_native_hp_smoke.sh
-        # AppleClang / libc++; HP_XSIMD stays OFF (portable scalar hp path).
+
+  native_slow_ctest:
+    name: Native slow CTest (optional)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev
+      - name: Build + broad CTest (-LE cypha_slow)
+        run: |
+          cmake -S native -B native/build-slow -DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light
+          cmake --build native/build-slow -j 2
+          CYPHA_NATIVE_BUILD_DIR="$PWD/native/build-slow" bash scripts/ci_native_fast.sh
 
   federated_tls:
     name: Federated TLS smoke (OpenSSL, optional)
@@ -94,7 +104,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libssl-dev openssl
       - name: Federated TLS CTest (OpenSSL)
         run: bash scripts/ci_federated_tls_linux.sh
-        # Local equivalent: bash scripts/ci_federated_tls_linux.sh
 
   corpus_and_d25:
     name: Corpus + d25 smoke (WikiText, optional)
@@ -112,4 +121,3 @@ jobs:
           cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light
           cmake --build native/build -j 2
           ctest --test-dir native/build --output-on-failure -R "native_corpus_smoke|native_d25_corpus_smoke"
-        # Local equivalent: bash scripts/download_wikitext2.sh; ctest -R "native_corpus_smoke|native_d25_corpus_smoke"

@@ -14,7 +14,7 @@ milestone or a significant self-contained change.
 
 ### Changed
 - **Production sequence algorithm:** Hybrid GRIA+LSTM is **no longer** the default LLM path. `ContextMode::Hp` + `apply_hp_production_recipe()` replace `apply_hybrid_production_recipe()` for sequence duties. `hybrid` CLI/profile aliases map to hp.
-- **CI tiers:** Default PR gate runs `scripts/ci_native_fast.sh` (`-LE cypha_slow`); slow train/tune/bench smokes labeled `cypha_slow`. macOS job added (`Build and test (macOS)`). Full gate: `scripts/ci_native_linux.sh`.
+- **CI tiers:** PR gate (Linux + macOS) runs `scripts/ci_native_hp_smoke.sh` (hp/CyphaLM smokes + goldens only). Bench/lock/forecast/d21–d76 smokes labeled `cypha_slow`. Optional `Native slow CTest` job runs `ci_native_fast.sh`. Full gate: `scripts/ci_native_linux.sh`.
 - **Legacy CyphaLM tools:** Pre-hp GRIA/LSTM/SSM regression targets gated behind `-DCYPHA_BUILD_LEGACY_CYPHALM=ON` (default OFF) so default `cmake --build` and `ctest -R native_` succeed.
 - **Docs:** `docs/native/CYPHALM_TIER2_MODEL.md`, `MODEL_CARD.md`, `README.md` updated; Cypha BPC vs hp archive metrics explicitly separated.
 - **Checkpoints:** `save_cyphalm_model` persists hp config; predictor tables are session-local (online adaptation).
