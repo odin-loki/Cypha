@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Local mirror of the "Native build + CTest" step from .github/workflows/ci.yml (Linux host or WSL).
+# Full native_ CTest gate (all tests, including cypha_slow). Maintainer / overnight use.
+# PR CI uses scripts/ci_native_fast.sh instead (-LE cypha_slow).
 # Optional: CYPHA_BUILD_QT=1 and apt install qt6-base-dev → cypha_qt_stub + CTest native_qt_stub_load_reference.
 # Optional: CYPHA_QT_CHARTS=1 with qt6-charts-dev (or distro Qt6 Charts) → -DCYPHA_QT_CHARTS=ON for cypha_qt_shell.
 set -euo pipefail

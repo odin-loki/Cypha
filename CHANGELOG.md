@@ -8,9 +8,23 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Added
+- **hp LLM integration:** Vendored `native/third_party/hp/` from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm). `CyphaLMModel` delegates to `HpSequenceBackend` / `hp::Predictor`. New tests: `hp_llm_smoke`, `hp_roundtrip_smoke`. CMake: `cmake/HpIntegration.cmake`, optional `-DCYPHA_HP_XSIMD=ON`.
+- **CyphaLM dual hp profiles:** Light default `-DCYPHA_HP_PROFILE=light` → `HP_SLOT_MAX=24`, grow flags OFF (~1.6 GB RSS @ mem 22); champ `-DCYPHA_HP_PROFILE=champ` → v78_flags.ps1 + `HP_SLOT_MAX=35` (~15 GB). `apply_hp_champ_recipe()`, `hp_slot_max` config knob, `profiles/cyphalm_hp_champ.json`.
+
 ### Changed
-- **Paper camera-ready:** `paper/CyphaLM_paper.md` + arXiv bundle HTML/PDF regenerated to cite living Hybrid **2.664 BPC** (L1 2.873 historical).
+- **Production sequence algorithm:** Hybrid GRIA+LSTM is **no longer** the default LLM path. `ContextMode::Hp` + `apply_hp_production_recipe()` replace `apply_hybrid_production_recipe()` for sequence duties. `hybrid` CLI/profile aliases map to hp.
+- **CI tiers:** PR gate (Linux + macOS) runs `scripts/ci_native_hp_smoke.sh` (hp/CyphaLM smokes + goldens only). Bench/lock/forecast/d21–d76 smokes labeled `cypha_slow`. Optional `Native slow CTest` job runs `ci_native_fast.sh`. Full gate: `scripts/ci_native_linux.sh`.
+- **Legacy CyphaLM tools:** Pre-hp GRIA/LSTM/SSM regression targets gated behind `-DCYPHA_BUILD_LEGACY_CYPHALM=ON` (default OFF) so default `cmake --build` and `ctest -R native_` succeed.
+- **Docs:** `docs/native/CYPHALM_TIER2_MODEL.md`, `MODEL_CARD.md`, `README.md` updated; Cypha BPC vs hp archive metrics explicitly separated. Removal narratives: `docs/history/REMOVED_RPSM.md`, `docs/history/LEGACY_LLM.md`.
+- **Checkpoints:** `save_cyphalm_model` persists hp config; predictor tables are session-local (online adaptation).
+- **Paper camera-ready:** `paper/CyphaLM_paper.md` + arXiv bundle HTML/PDF regenerated to cite living Hybrid **2.664 BPC** (L1 2.873 historical) — **superseded by hp for LLM; paper text not yet regenerated.**
 - **Cell-sweep B2 / H06:** 300k / eval 2k rerun after CTest clobber; both **3.681 BPC** (math-integration) — not a promote. Archived under `data/archive/cell_sweep/`.
+
+### Removed
+- **RPSM (full retirement):** All RPSM sources, headers, CTests, CMake targets, bench profiles (`cyphalm_d21_rpsm*.json`, `d21_rpsm_profile.json`), and `scripts/run_rpsm_overnight.ps1`. Retired `ContextMode::Rpsm`, `BenchMode::Rpsm`, `rpsm_*` config fields, and `CYPHA_USE_RPSM_LLR` / `rpsm_score_matrix_batched` in `infer_cpu`. d21 lock section `rpsm_results` now records `mode=hp`; schema key kept for compat. **Why:** unused; superseded by hp CyphaLM. **History:** [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md); git history on `main`/PR #1 retains pre-removal code.
+- **RPSM CTests (representative):** `native_rpsm_sequence_smoke`, `native_rpsm_batched_llr_smoke`, `native_cyphalm_bench_rpsm_smoke`, `native_d21_rpsm_smoke`, `native_score_matrix_parallel_parity`, `native_rpsm_*` regression suite — removed from default build/CI.
+- **Default build:** Legacy cyphalm component sources (GRIA, LSTM, SSM, compressive_memory, etc.) excluded from `cypha_core`; headers remain for reference. `kernel_llm_h04_smoke` replaced by `hp_llm_smoke`. **Gated** (not deleted): `-DCYPHA_BUILD_LEGACY_CYPHALM=ON` rebuilds hybrid tools — see [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md).
 
 ## [2.4.0] — 2026-08-16 · Competition lock + forecasting
 

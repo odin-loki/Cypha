@@ -140,15 +140,10 @@ call site under `native/src/**` and `native/tools/**` and tracing upward:
   **yes, `batch_encode` is reachable from live bench domains — D03 and D08 confirmed, plus D14's
   expert-routing discriminant (`bench_domains.cpp:846-848` `kernel_blend_llr`) and D07/D09/D10/D12/
   D15/D16 which reuse the same `OnlineClassifier`/`dif_train_step_vector` machinery.**
-- **`cypha::accel::score_matrix`** is reached only through `score_matrix_use_field`
-  (`native/src/infer_cpu.cpp:623-635`), but that function's *first* branch checks
-  `use_rpsm_llr_from_env()` (`infer_cpu.cpp:33-37`), which **defaults to `true`** (unset
-  `CYPHA_USE_RPSM_LLR` ⇒ RPSM) and early-returns via `rpsm_score_matrix_batched` →
-  `rpsm::batched_llr_gemm` (`native/src/rpsm/psi_matrices.cpp:46`) — a plain CPU GEMM with **no
-  accel/CUDA involvement at all**. `cypha::accel::score_matrix` is only reached if a caller
-  explicitly sets `CYPHA_USE_RPSM_LLR=0`. No bench domain, app, or tool in this repo sets that
-  env var. **Every real bench domain's LLR scoring bypasses the CUDA-accelerated `score_matrix`
-  entirely, by design, via the documented RPSM default.**
+- **`cypha::accel::score_matrix`** is reached through `score_matrix_use_field`
+  (`native/src/infer_cpu.cpp`) for standard DIF models (non–class-GMM path). RPSM's
+  `CYPHA_USE_RPSM_LLR` bypass was **removed** in 2026-09 ([`docs/history/REMOVED_RPSM.md`](../../history/REMOVED_RPSM.md));
+  LLR scoring now dispatches to `cypha::accel::score_matrix` when CUDA is enabled.
 - **`cypha::accel::world_gate_batch`/`world_gate_nig_field_batch`** is reached only through
   `world_gate_vector_use_field` (`native/src/infer_cpu.cpp:882-916`, unconditional call at
   `:914`). The *only* call site for this function in the whole repo is
@@ -230,7 +225,7 @@ slowdown, and §2 explains exactly why: these domains are irreducibly single-row
 learners (one `dif_train_step_vector` call per training example, one `batch_llr_from_x` call per
 eval example), so `batch_encode` never sees a batch bigger than `n=1` no matter how the accel
 plumbing is configured. The other two accelerated ops are worse than inert for these domains —
-`score_matrix` is bypassed entirely by the RPSM default before it ever reaches `cypha::accel`, and
+`score_matrix` may still be CPU-bound for class-GMM models, and
 `world_gate*` has no caller outside the parity test tool. Raising `CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`
 would not help here either — it would just make these `n=1` calls fall back to the (already fast)
 CPU path, i.e. functionally reproduce the CUDA-OFF build.
@@ -239,7 +234,7 @@ CPU path, i.e. functionally reproduce the CUDA-OFF build.
 again here: 4.5x/1.13x on a second measurement) but currently fully inert in practice** — no bench
 domain a normal `cypha_bench_run`/`cyphalm_bench_run` invocation exercises ever reaches a batch
 size where it would pay off, and one of the three accelerated ops (`score_matrix`) is architecturally
-bypassed by the RPSM default before it can ever dispatch to CUDA regardless of batch size. The
+unreachable from CyphaLM hp inference (hp uses its own predictor, not DIF `score_matrix`). The
 correctness plumbing (`score_batch_parity`, `cuda_smoke`) is valuable to keep as a regression guard
 for whenever a genuinely batched call site appears (e.g. a future vectorized eval pass that scores
 many rows in one call, or REST/Studio-GUI bulk endpoints — `native/apps/cypha_rest.cpp:1142` and
@@ -286,8 +281,7 @@ section).
 `train_eval_vectors` in `native/src/bench/bench_domains.cpp` (shared by **D03** and **D08**) used
 to call `batch_llr_from_x(..., n=1)` once per test row. It now flattens the full test matrix and
 calls `batch_llr_from_x(infer, flat, test_n, llr)` once. That reaches
-`cypha::accel::batch_encode` with `n = n_test` (and RPSM LLR scoring for the score stage — still
-CPU GEMM by default). Training remains online `n=1` (unchanged; still not GPU-amortizable).
+`cypha::accel::batch_encode` with `n = n_test` (and `cypha::accel::score_matrix` for the score stage when CUDA is on). Training remains online `n=1` (unchanged; still not GPU-amortizable).
 
 ### Build note
 

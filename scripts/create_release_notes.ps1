@@ -111,7 +111,7 @@ $highlights = @{
   "2.3.11" = @(
     "Intelligence Stats **Phase 11**: WikiText-2 download (``scripts/download_wikitext2.ps1``, ``scripts/download_wikitext2.sh``); gutenberg fallback for d17/d21 when WikiText absent.",
     "``corpus_smoke`` CLI + bench **d25** corpus readiness validation; CTest ``native_d25_corpus_smoke``, ``native_corpus_smoke``.",
-    "Overnight ``-Fast`` propagates ``CYPHA_BENCH_FAST=1`` through ``run_d17_overnight.ps1``, ``run_rpsm_overnight.ps1``, ``run_overnight_all.ps1``, ``update_baseline_lock.ps1``.",
+    "Overnight ``-Fast`` propagates ``CYPHA_BENCH_FAST=1`` through ``run_d17_overnight.ps1``, ``run_overnight_all.ps1``, ``update_baseline_lock.ps1``.",
     "CI gate **101 CTests**; release notes v2.3.11 Phase 11 template."
   )
   "2.3.10" = @(
@@ -123,7 +123,7 @@ $highlights = @{
   )
   "2.3.9" = @(
     "Intelligence Stats **Phase 9**: hybrid EWC **weight** Fisher on GRIA **U**/**V** + SSM **W_fast**; EWC anchor/Fisher in Cypha ``checkpoint.json``.",
-    "``scripts/run_overnight_all.ps1`` - unified overnight runner (D17 + d21 RPSM + cell sweep + baseline-lock refresh).",
+    "``scripts/run_overnight_all.ps1`` - unified overnight runner (D17 hp + d21 hp lock + cell sweep + baseline-lock refresh). RPSM retired: ``docs/history/REMOVED_RPSM.md``.",
     "Bench **d23** overnight lock validation; CTest ``native_d23_overnight_lock_smoke``.",
     "CI gate **98 CTests**; optional federated TLS job (``scripts/ci_federated_tls_linux.sh``)."
   )

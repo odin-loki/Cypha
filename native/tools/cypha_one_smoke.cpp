@@ -126,8 +126,8 @@ int main(int argc, char** argv) {
     return 5;
   }
   if (!model.sequence() ||
-      model.sequence()->config().context_mode != cypha::cyphalm::ContextMode::Hybrid) {
-    std::cerr << "init_default_sequence should use Hybrid production recipe\n";
+      model.sequence()->config().context_mode != cypha::cyphalm::ContextMode::Hp) {
+    std::cerr << "init_default_sequence should use hp production recipe\n";
     return 10;
   }
   (void)model.train_token(1, 2);

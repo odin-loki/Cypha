@@ -144,17 +144,11 @@ struct CyphaInferModel {
 
 void batch_encode(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& h_out);
 
-/// Field-adjusted LLR matrix. Default path uses ``rpsm_score_matrix_batched``; set
-/// ``CYPHA_USE_RPSM_LLR=0`` to opt out to the legacy accel kernel.
+/// Field-adjusted LLR matrix via accel kernel. ``llr_out`` is **n×K** row-major.
 void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
                             std::vector<double>& llr_out,
                             const KernelMemory* kernel_mem = nullptr, bool use_kernel_llr = false,
                             double kernel_blend = 0.5);
-
-/// RPSM Option A: batched Ψ-matrix LLR (``rpsm::batched_llr_gemm``). Default in
-/// ``score_matrix_use_field`` unless ``CYPHA_USE_RPSM_LLR=0``. ``llr_out`` is **n×K** row-major.
-void rpsm_score_matrix_batched(const CyphaInferModel& m, const double* h_row_major, int n,
-                               std::vector<double>& llr_out);
 
 /// Convenience: ``batch_encode`` then ``score_matrix_use_field`` — ``llr_out`` is **n×K** row-major (``K = len(labels)``).
 void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n, std::vector<double>& llr_out);

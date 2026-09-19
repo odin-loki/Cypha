@@ -1,107 +1,93 @@
-# CyphaLM Native — Tier 2 Model Class
+# CyphaLM Native — hp context mixer (Tier 2)
 
-**Status:** implemented (2026-06-10)  
-**Library target:** `cypha_lm_native`  
-**Parity tool:** `cyphalm_model_parity`
+**Status:** production LLM path (2026-09-18)  
+**Library target:** `cypha_lm_native` (INTERFACE → `cypha_core`)  
+**Algorithm source:** [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm) `hp/` tree (vendored under `native/third_party/hp/`)
 
 ## Overview
 
-Tier 2 adds a unified native CyphaLM stack under `native/include/cypha/cyphalm/` with selectable **context modes**, a **Mamba-lite selective SSM** head, **compressive memory** slots, and an inference-only **BPE tokenizer** stub.
+Cypha's sequence / LLM algorithm is the **hp** integer-exact Hutter Prize context-mixing compressor. The previous Hybrid GRIA+LSTM stack is **not** the production path; its sources remain in the tree for reference but are excluded from the default `cypha_core` build. **RPSM** was fully removed in 2026-09.
+
+**Superseded / removed (history):** [`docs/history/LEGACY_LLM.md`](../../history/LEGACY_LLM.md) · [`docs/history/REMOVED_RPSM.md`](../../history/REMOVED_RPSM.md) — git history on `main`/this PR retains pre-removal code for archaeology.
 
 ```
-token ─► EmbedTable ─► CellAISSM ─► field projection ─► CompressiveMemory bias
-                              │                              │
-                              └► SelectiveSSM (optional) ────┘
-                                              │
-                                              ▼
-                                    LowRankGRIA ─► log_probs
-                              CharLSTM (hybrid / char_lstm modes)
+token (byte 0..255) ─► HpSequenceBackend ─► hp::Predictor
+                              │
+                              ├─ per-bit: experts → mixer → APM → log_prob
+                              └─ next-byte log_probs ─► CyphaLMModel::predict_next
 ```
 
-## Context modes (`ContextMode`)
+Public API (`CyphaLMModel`, `Cypha::init_default_sequence`, `predict_next`, `generate`, BPC eval) is unchanged; the implementation delegates to `hp::Predictor` via `HpSequenceBackend`.
 
-| Enum | Python alias | Path |
-|------|--------------|------|
-| `Full` | `full` | SSM → DIF-style epistemic blend → GRIA + SelectiveSSM |
-| `GriaNgram` | `gria_ngram` | SSM field + n-gram embed history → GRIA |
-| `Hybrid` | `hybrid_gria_lstm` | GRIA + CharLSTM log-prob blend |
-| `CharLstm` | `char_lstm` | CharLSTM only |
-| `SsmGria` | `ssm_gria` / `ssm_only` | SSM → GRIA |
-| `SsmGriaNoLstm` | `ssm_gria_no_lstm` | SelectiveSSM + SSM → GRIA (no LSTM) |
+### RAM hotspot (documented, not optimized)
 
-## B1 — SelectiveSSM (`selective_ssm.hpp`)
+`HpSequenceBackend` keeps two `hp::Predictor` heap instances (`pred_` for live state, `scratch_` for lookahead). `next_byte_log_probs()` clones `*pred_` once per vocab byte to score each candidate without advancing main state. At `vocab_size=256` this multiplies predictor footprint during scoring; acceptable for the light profile but worth knowing for champ builds.
 
-Mamba-lite diagonal state:
+## Context mode
 
-- Learnable log-decay vector `A_log` → per-dim `exp(A)` decay
-- Input-dependent gates: `B(x)=σ(W_b x)`, `C(h)=σ(W_c h)`
-- Recurrence: `h_i ← A_i h_i + B_i · (W_b row · x)` — **O(d_state)** per token
-- Output: `y = C ⊙ (W_c h) + W_d x`
-- `pooled_state()` L2-normalized state for compressive memory
+| Enum | Alias | Meaning |
+|------|-------|---------|
+| `Hp` | `hp`, `hybrid`, `hybrid_gria_lstm` | **Production** — hp RAM-speed (`HP_SLOT_MAX=24`) |
+| `HpChamp` | `hp_champ`, `champ` | **Research** — full slot cap (`HP_SLOT_MAX=35`; requires champ build) |
+| Others | `char_lstm`, `ssm_gria`, … | Legacy research enums; map to hp or no-op stubs |
 
-## B2 — CyphaLMModel (`cyphalm_model.hpp`)
+Configure with `apply_hp_production_recipe()` (default) or `apply_hp_champ_recipe()` (research).
 
-Public API:
+## hp knobs (`CyphaLMConfig`)
 
-```cpp
-CyphaLMModel model(CyphaLMConfig{});
-CyphaLMModel::from_json_npz("checkpoint.json");
-CyphaLMModel::from_embedded(config, weights);
+| Field | Default | hp flag |
+|-------|---------|---------|
+| `hp_table_bits` | 22 | `--mem` (table size; 22 ≈ 4 MiB) |
+| `hp_slot_max` | 24 | Requested slot cap; compile-time `HP_SLOT_MAX` is authoritative |
+| `hp_mixer_lr` | 2 | mixer learning rate |
+| `hp_gria` | true | GRIA alpha gating |
+| `vocab_size` | 256 | byte tokens (must be ≤ 256) |
 
-model.reset_context();
-auto pred = model.predict_next(token_id);
-auto metrics = model.train_step(token_id, next_token_id);
-auto lp = model.forward_log_probs(token_id);
-```
+### CMake / memory profiles
 
-Weight loading:
+| Build | CMake | `HP_SLOT_MAX` | v78 flags | Lab RSS @ mem 22 (harness) |
+|-------|-------|---------------|-----------|----------------------------|
+| **Light (default)** | `-DCYPHA_HP_PROFILE=light` | 24 | OFF (features.hpp defaults) | ~1.6 GB |
+| **Champ / research** | `-DCYPHA_HP_PROFILE=champ` | 35 | ON (v78_flags.ps1) | ~15 GB |
+| **Champ mem-26** | `-DCYPHA_HP_PROFILE=champ -DCYPHA_HP_SLOT_MAX=31` | 31 | ON | (between light and full champ) |
 
-- **JSON + NPZ:** matches Python `CyphaLM.save()` layout (`config`, `gria`, `proj_*` arrays)
-- **Embedded struct:** deterministic tiny weights for parity without files
+Lab numbers from `native/third_party/hp/tools/hp_harness.sh` (RECORD H34: Pearson +0.96 vs SLOT_MAX=35, +895 B on 8 MB gate).
 
-## B3 — CompressiveMemory (`compressive_memory.hpp`)
+CMake: `-DCYPHA_HP_XSIMD=ON` enables hp xsimd mixer dots (SSE4.1); default OFF for portability.
 
-CyphaDIF-style slot storage (simplified NIG expert means):
+## Metrics — do not mix
 
-- Every `compress_interval` tokens: pool SSM / selective state → running mean in next slot
-- `retrieve(query)` → LLR vs prior → softmax weights → bias vector added to GRIA input
-- Uses `kappa0`, `alpha0`, `beta0` from config (mirrors `CyphaDIF` NIG hyperparams)
+| Metric | What it measures |
+|--------|------------------|
+| **Cypha BPC** | `-log2 P(next_byte)` from `eval_bpc` / `predict_next` on a token stream |
+| **hp archive size** | Compressed bytes from `hp c` CLI on a raw file — **not comparable** to Cypha BPC without explicit labeling |
 
-## B4 — BpeTokenizer (`bpe_tokenizer.hpp`)
-
-Inference-only stub:
-
-```cpp
-auto tok = BpeTokenizer::load("merges.txt", "vocab.json");
-auto ids = tok.encode("hello");
-auto text = tok.decode(ids);
-```
-
-No training; loads merge rules + vocab id map from disk.
-
-## Build
+## Tests
 
 ```bash
-cmake --build native/build --target cypha_lm_native cyphalm_model_parity
-./native/build/cyphalm_model_parity
-./native/build/cyphalm_model_parity --mode hybrid
-./native/build/cyphalm_model_parity path/to/checkpoint.json
+cd native/build-wsl-gcc
+./hp_llm_smoke
+./hp_roundtrip_smoke
+./cyphalm_model_golden --mode hp
+# PR CI fast gate (Linux): scripts/ci_native_fast.sh  (-LE cypha_slow)
+# macOS CI: scripts/ci_native_hp_smoke.sh
+ctest -R 'native_hp|native_cyphalm_model_golden' --output-on-failure
 ```
 
-## Parity scaffold
+### CI platforms (CyphaLM light profile)
 
-`cyphalm_model_parity` runs a fixed 10-token sequence with train + predict steps, printing per-step loss and top log-probs. Full numeric parity vs Python checkpoints is tracked in the master upgrade doc (`cyphalm_parity` integration item).
+| Platform | Job | Gate |
+|----------|-----|------|
+| Linux | `Build and test (Linux)` | `scripts/ci_native_hp_smoke.sh` |
+| Windows | `Build (Windows MSVC)` | compile + artifact check |
+| macOS | `Build and test (macOS)` | `scripts/ci_native_hp_smoke.sh` |
 
-## File map
+Optional: `Native slow CTest (optional)` runs `scripts/ci_native_fast.sh` (`-LE cypha_slow`). Bench/lock/forecast/d21–d76 smokes are labeled `cypha_slow` and are not in the PR gate.
 
-| File | Role |
-|------|------|
-| `selective_ssm.*` | B1 selective head |
-| `cyphalm_model.*` | B2 unified stack |
-| `compressive_memory.*` | B3 memory slots |
-| `bpe_tokenizer.*` | B4 tokenizer stub |
-| `cellai_ssm.*` | CellAI rank-2 SSM (Tier 0 dep) |
-| `gria_lowrank.*` | Low-rank GRIA projection |
-| `char_lstm.*` | Char LSTM head |
-| `embed_table.*` | Fixed embedding lookup |
-| `npz_util.*` | Minimal NPZ reader for checkpoints |
+## Checkpoints
+
+`save_cyphalm_model` / `load_cyphalm_model` persist **config** (algorithm=`hp`). hp predictor tables are session-local (online adaptation); re-run `train_sequence` on a corpus to warm tables after load.
+
+## Third party
+
+See `native/third_party/hp/THIRD_PARTY.md` for provenance and xsimd license.

@@ -26,30 +26,33 @@ std::string lower_copy(std::string s) {
 
 ContextMode parse_context_mode(const std::string& s) {
     const std::string k = lower_copy(s);
+    if (k == "hp" || k == "hutter" || k == "context_mixer") return ContextMode::Hp;
+    if (k == "hp_champ" || k == "champ") return ContextMode::HpChamp;
     if (k == "full") return ContextMode::Full;
     if (k == "gria_ngram") return ContextMode::GriaNgram;
-    if (k == "hybrid" || k == "hybrid_gria_lstm") return ContextMode::Hybrid;
+    if (k == "hybrid" || k == "hybrid_gria_lstm") return ContextMode::Hp;
     if (k == "char_lstm") return ContextMode::CharLstm;
     if (k == "ssm_gria" || k == "ssm_only" || k == "ssm-only") return ContextMode::SsmGria;
     if (k == "ssm_gria_no_lstm") return ContextMode::SsmGriaNoLstm;
     if (k == "ablation_no_dif") return ContextMode::AblationNoDif;
     if (k == "ablation_no_ssm") return ContextMode::AblationNoSsm;
-    if (k == "rpsm") return ContextMode::Rpsm;
+    if (k == "rpsm") return ContextMode::Hp;  // retired alias → hp
     if (k == "pgm_logits" || k == "pgm") return ContextMode::PgmLogits;
     throw std::runtime_error("unknown context mode: " + s);
 }
 
 std::string context_mode_name(ContextMode mode) {
     switch (mode) {
+        case ContextMode::Hp: return "hp";
+        case ContextMode::HpChamp: return "hp_champ";
         case ContextMode::Full: return "full";
         case ContextMode::GriaNgram: return "gria_ngram";
-        case ContextMode::Hybrid: return "hybrid";
+        case ContextMode::Hybrid: return "hp";
         case ContextMode::CharLstm: return "char_lstm";
         case ContextMode::SsmGria: return "ssm_gria";
         case ContextMode::SsmGriaNoLstm: return "ssm_gria_no_lstm";
         case ContextMode::AblationNoDif: return "ablation_no_dif";
         case ContextMode::AblationNoSsm: return "ablation_no_ssm";
-        case ContextMode::Rpsm: return "rpsm";
         case ContextMode::PgmLogits: return "pgm_logits";
     }
     return "unknown";
@@ -57,7 +60,9 @@ std::string context_mode_name(ContextMode mode) {
 
 std::string context_mode_string(ContextMode mode) {
     switch (mode) {
-        case ContextMode::Hybrid: return "hybrid_gria_lstm";
+        case ContextMode::Hp:
+        case ContextMode::Hybrid: return "hp";
+        case ContextMode::HpChamp: return "hp_champ";
         case ContextMode::SsmGria: return "ssm_only";
         case ContextMode::PgmLogits: return "pgm_logits";
         default: return context_mode_name(mode);
@@ -71,7 +76,7 @@ BenchMode parse_bench_mode(const std::string& s) {
     if (s == "ssm_gria") return BenchMode::SsmGria;
     if (s == "context_bank") return BenchMode::ContextBank;
     if (s == "spectral") return BenchMode::Spectral;
-    if (s == "rpsm") return BenchMode::Rpsm;
+    if (s == "rpsm") return BenchMode::Hybrid;  // retired alias → hp
     if (s == "pgm_logits" || s == "pgm") return BenchMode::PgmLogits;
     throw std::runtime_error("unknown bench mode: " + s);
 }
@@ -92,17 +97,65 @@ void apply_pgm_logits_recipe(CyphaLMConfig& cfg) {
     cfg.ngram_fuse_split = false;
 }
 
-void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
-    cfg.context_mode = ContextMode::Hybrid;
+int hp_compile_slot_max() {
+#if defined(CYPHA_HP_SLOT_MAX)
+    return CYPHA_HP_SLOT_MAX;
+#else
+    return 24;
+#endif
+}
+
+void normalize_hp_table_bits(CyphaLMConfig& cfg) {
+    const int cap = std::min(cfg.hp_slot_max, hp_compile_slot_max());
+    if (cfg.hp_table_bits > cap) {
+        cfg.hp_table_bits = cap;
+    }
+    if (cfg.hp_table_bits < 16) {
+        cfg.hp_table_bits = 16;
+    }
+}
+
+void apply_hp_production_recipe(CyphaLMConfig& cfg) {
+    cfg.context_mode = ContextMode::Hp;
     cfg.use_pgm_cell = false;
     cfg.use_unified_context = false;
     cfg.unified_context_source = UnifiedContextSource::None;
     cfg.unified_readout = UnifiedReadout::None;
-    cfg.use_rpsm_layer = false;
+    cfg.use_kernel_llr = false;
+    if (cfg.vocab_size <= 0 || cfg.vocab_size > 256) {
+        cfg.vocab_size = 256;
+    }
+    cfg.hp_slot_max = 24;
+    if (cfg.hp_table_bits < 16) {
+        cfg.hp_table_bits = 22;
+    }
+    if (cfg.hp_mixer_lr <= 0) {
+        cfg.hp_mixer_lr = 2;
+    }
+    cfg.hp_gria = true;
+    normalize_hp_table_bits(cfg);
+    if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
+        cfg.view_schedule = "schedule_b";
+    }
+}
+
+void apply_hp_champ_recipe(CyphaLMConfig& cfg) {
+    apply_hp_production_recipe(cfg);
+    cfg.context_mode = ContextMode::HpChamp;
+    cfg.hp_slot_max = 35;
+    if (hp_compile_slot_max() < 35) {
+        // Binary is production SLOT_MAX; champ recipe still runs at compile cap.
+        cfg.hp_slot_max = hp_compile_slot_max();
+    }
+    normalize_hp_table_bits(cfg);
+}
+
+void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
+    apply_hp_production_recipe(cfg);
+    // Legacy field defaults preserved for profile JSON compatibility (ignored by hp path).
     cfg.use_multiscale = true;
     cfg.ngram_fuse_split = true;
     cfg.use_ngram_count_prior = false;
-    // KILL @40k (raw 3.634 / gated 3.570 vs L2 3.369). Default off via struct init; preserve opt-in.
     if (cfg.ngram_context < 2) {
         cfg.ngram_context = 3;
     }
@@ -112,9 +165,6 @@ void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
     }
     if (cfg.d_state < cfg.lstm_hidden) {
         cfg.d_state = cfg.lstm_hidden;
-    }
-    if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
-        cfg.view_schedule = "schedule_b";
     }
     if (cfg.lstm_layers < 2) {
         cfg.lstm_layers = 2;
@@ -161,7 +211,6 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
             cfg.use_unified_context = false;
             cfg.unified_context_source = UnifiedContextSource::None;
             cfg.unified_readout = UnifiedReadout::None;
-            cfg.use_rpsm_layer = false;
             cfg.ngram_fuse_split = true;
             cfg.use_ngram_count_prior = false;
             break;
@@ -175,13 +224,6 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
         case BenchMode::Spectral:
             cfg.context_mode = ContextMode::SsmGria;
             cfg.use_spectral_pde = true;
-            break;
-        case BenchMode::Rpsm:
-            // Do not hardcode Tiny (L=4,D=128,feat=64) here — that overwrote profile JSON after
-            // apply_bench_profile and blocked Small-tier capacity gates (BACKLOG Phase C1).
-            // Dims/memory knobs come from the profile (d21 Tiny lock vs d21_small).
-            cfg.context_mode = ContextMode::Rpsm;
-            cfg.use_rpsm_layer = true;
             break;
         case BenchMode::PgmLogits:
             apply_pgm_logits_recipe(cfg);
@@ -197,7 +239,6 @@ std::string bench_mode_name(BenchMode mode) {
         case BenchMode::SsmGria: return "ssm_gria";
         case BenchMode::ContextBank: return "context_bank";
         case BenchMode::Spectral: return "spectral";
-        case BenchMode::Rpsm: return "rpsm";
         case BenchMode::PgmLogits: return "pgm_logits";
     }
     return "unknown";
@@ -330,16 +371,6 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_b("ngram_fuse_split", cfg.ngram_fuse_split);
     set_s("bpe_merges_path", cfg.bpe_merges_path);
     set_s("bpe_vocab_path", cfg.bpe_vocab_path);
-    set_b("use_rpsm_layer", cfg.use_rpsm_layer);
-    set_i("rpsm_n_levels", cfg.rpsm_n_levels);
-    set_i("rpsm_state_dim", cfg.rpsm_state_dim);
-    set_i("rpsm_feat_dim", cfg.rpsm_feat_dim);
-    set_d("rpsm_lr", cfg.rpsm_lr);
-    set_i("rpsm_n_memory_slots", cfg.rpsm_n_memory_slots);
-    set_d("rpsm_beta_memory", cfg.rpsm_beta_memory);
-    set_d("rpsm_surprise_threshold", cfg.rpsm_surprise_threshold);
-    set_d("rpsm_hierarchy_loss_weight", cfg.rpsm_hierarchy_loss_weight);
-    set_i("rpsm_bptt_window", cfg.rpsm_bptt_window);
     set_b("profile_guided_loss", cfg.profile_guided_loss);
     set_b("use_full_navigation_loss", cfg.use_full_navigation_loss);
     set_b("use_profile_curriculum", cfg.use_profile_curriculum);
@@ -412,6 +443,16 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_b("use_priority_replay", cfg.use_priority_replay);
     set_b("use_hebbian_stack", cfg.use_hebbian_stack);
     set_d("ewc_lambda", cfg.ewc_lambda);
+    set_i("hp_table_bits", cfg.hp_table_bits);
+    set_i("hp_slot_max", cfg.hp_slot_max);
+    set_i("hp_mixer_lr", cfg.hp_mixer_lr);
+    set_b("hp_gria", cfg.hp_gria);
+    if (j.contains("context_mode") && j["context_mode"].is_string()) {
+        const std::string cm = j["context_mode"].get<std::string>();
+        if (cm == "hp_champ" || cm == "champ") {
+            apply_hp_champ_recipe(cfg);
+        }
+    }
 }
 
 }  // namespace
@@ -424,10 +465,8 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
         path = root / "cyphalm_d17_wikitext.json";
     } else if (profile == "d17_bpe") {
         path = root / "cyphalm_d17_wikitext_bpe.json";
-    } else if (profile == "d21") {
-        path = root / "cyphalm_d21_rpsm.json";
-    } else if (profile == "d21_small") {
-        path = root / "cyphalm_d21_rpsm_small.json";
+    } else if (profile == "d21" || profile == "d21_small") {
+        path = root / "cyphalm_d21_hp.json";
     } else if (profile == "d04") {
         path = root / "cyphalm_d04_gutenberg.json";
         if (!fs::is_regular_file(path)) {

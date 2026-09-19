@@ -17,8 +17,6 @@
 #include "cypha/infer_cpu.hpp"
 #include "cypha/load_cypha.hpp"
 #include "cypha/parallel_rows.hpp"
-#include "cypha/rpsm/psi_matrices.hpp"
-
 #include <cstdlib>
 
 namespace {
@@ -160,72 +158,6 @@ void set_env_parallel_rows(const char* value) {
 #endif
 }
 
-void bench_synth_parallel_gemm() {
-  constexpr int kD = 256;
-  constexpr int kK = 32;
-  constexpr int kWarm = 50;
-  constexpr int kIters = 400;
-
-  cypha::rpsm::PsiMatrices psi;
-  psi.feat_dim = kD;
-  psi.n_classes = kK;
-  psi.mu.assign(static_cast<std::size_t>((1 + kK) * kD), 0.0);
-  psi.inv_var.assign(static_cast<std::size_t>(kD), 1.0);
-  psi.counts.assign(static_cast<std::size_t>(kK), 10.0);
-  psi.v_mean = 1.0;
-  for (int j = 0; j < kD; ++j) {
-    psi.mu[static_cast<std::size_t>(j)] = 0.01 * static_cast<double>(j);
-  }
-  for (int k = 0; k < kK; ++k) {
-    for (int j = 0; j < kD; ++j) {
-      psi.mu[static_cast<std::size_t>((1 + k) * kD + j)] =
-          0.1 * static_cast<double>(k + 1) + 0.001 * static_cast<double>(j);
-    }
-  }
-  std::vector<double> ctx(static_cast<std::size_t>(kK), 0.0);
-
-  std::printf("infer_latency_bench (synth RPSM GEMM d=%d K=%d, work-gated OpenMP):\n", kD, kK);
-
-  for (int n : {32, 256}) {
-    std::vector<double> H(static_cast<std::size_t>(n * kD));
-    for (int i = 0; i < n; ++i) {
-      for (int j = 0; j < kD; ++j) {
-        H[static_cast<std::size_t>(i * kD + j)] =
-            0.02 * static_cast<double>(i) + 0.003 * static_cast<double>(j);
-      }
-    }
-    std::vector<double> llr(static_cast<std::size_t>(n * kK));
-
-    set_env_parallel_rows("0");
-    for (int i = 0; i < kWarm; ++i) {
-      cypha::rpsm::batched_llr_gemm(H.data(), n, psi, ctx.data(), llr.data());
-    }
-    const auto t0 = Clock::now();
-    for (int i = 0; i < kIters; ++i) {
-      cypha::rpsm::batched_llr_gemm(H.data(), n, psi, ctx.data(), llr.data());
-    }
-    const double ser_us = elapsed_us(t0, kIters);
-
-    set_env_parallel_rows("1");
-    if (!cypha::should_parallel_score_rows(n, kD, kK)) {
-      std::printf("  gemm_n%d: work gate OFF unexpectedly\n", n);
-      continue;
-    }
-    for (int i = 0; i < kWarm; ++i) {
-      cypha::rpsm::batched_llr_gemm(H.data(), n, psi, ctx.data(), llr.data());
-    }
-    const auto t1 = Clock::now();
-    for (int i = 0; i < kIters; ++i) {
-      cypha::rpsm::batched_llr_gemm(H.data(), n, psi, ctx.data(), llr.data());
-    }
-    const double par_us = elapsed_us(t1, kIters);
-    const double speedup = ser_us / std::max(par_us, 1e-9);
-    std::printf("  gemm_n%d_serial_us=%.2f parallel_us=%.2f speedup=%.2fx (per_row ser=%.3f par=%.3f)\n",
-                n, ser_us, par_us, speedup, ser_us / n, par_us / n);
-  }
-  set_env_parallel_rows("1");
-}
-
 void bench_cyphalm() {
   cypha::cyphalm::CyphaLMConfig cfg;
   cypha::cyphalm::apply_bench_profile("d17", cfg);
@@ -285,9 +217,7 @@ int main() {
                 model.labels.size());
     bench_dif(model, x.data(), model.d_latent);
 
-    bench_synth_parallel_gemm();
-
-    std::printf("infer_latency_bench (Cypha d17 hybrid synthetic):\n");
+    std::printf("infer_latency_bench (Cypha d17 hp synthetic):\n");
     bench_cyphalm();
 
     return 0;

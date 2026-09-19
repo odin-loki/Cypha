@@ -18,18 +18,7 @@ endfunction()
 # --- cypha_core golden regression tools ---
 cypha_add_golden_exe(cypha_golden SOURCE "${CYPHA_REGRESSION_DIR}/golden_main.cpp")
 cypha_add_golden_exe(batch_llr_golden)
-cypha_add_golden_exe(rpsm_batched_llr_smoke)
-cypha_add_golden_exe(score_matrix_parallel_parity)
 cypha_add_golden_exe(em_step_smoke)
-cypha_add_golden_exe(rpsm_sequence_smoke LINK cypha_lm_native)
-cypha_add_golden_exe(rpsm_hierarchy_smoke)
-cypha_add_golden_exe(rpsm_train_smoke)
-cypha_add_golden_exe(rpsm_train_multiclass_smoke)
-cypha_add_golden_exe(rpsm_embed_grad_finite_diff LINK cypha_lm_native)
-cypha_add_golden_exe(rpsm_bptt_grad_finite_diff)
-cypha_add_golden_exe(rpsm_spectral_alpha_smoke)
-cypha_add_golden_exe(rpsm_normalized_eta_smoke)
-cypha_add_golden_exe(rpsm_world_stats_smoke)
 cypha_add_golden_exe(score_batch_golden)
 cypha_add_golden_exe(kernel_llr_golden)
 cypha_add_golden_exe(memory_train_golden)
@@ -57,11 +46,14 @@ cypha_add_golden_exe(retrieval_golden)
 
 # --- cypha_lm_native golden regression tools ---
 cypha_add_golden_exe(cyphalm_model_golden LINK cypha_lm_native)
-cypha_add_golden_exe(cyphalm_ssm_golden LINK cypha_lm_native)
-cypha_add_golden_exe(embed_table_golden LINK cypha_lm_native)
-cypha_add_golden_exe(cyphalm_hebbian_golden LINK cypha_lm_native)
+cypha_add_golden_exe(hp_roundtrip_smoke LINK cypha_lm_native)
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  cypha_add_golden_exe(cyphalm_ssm_golden LINK cypha_lm_native)
+  cypha_add_golden_exe(embed_table_golden LINK cypha_lm_native)
+  cypha_add_golden_exe(cyphalm_hebbian_golden LINK cypha_lm_native)
+  cypha_add_golden_exe(cyphalm_char_lstm_golden LINK cypha_lm_native)
+endif()
 cypha_add_golden_exe(som_golden LINK cypha_lm_native)
-cypha_add_golden_exe(cyphalm_char_lstm_golden LINK cypha_lm_native)
 cypha_add_golden_exe(cyphalm_checkpoint_golden LINK cypha_lm_native)
 cypha_add_golden_exe(cyphalm_golden LINK cypha_lm_native)
 
@@ -71,24 +63,12 @@ target_link_libraries(cypha_golden_run PRIVATE cypha_core)
 set(
   CYPHA_GOLDEN_EXE_TARGETS
   cyphalm_model_golden
-  cyphalm_ssm_golden
+  hp_roundtrip_smoke
   cypha_golden
   gh_infer_deliberation_golden
-  embed_table_golden
   retrieval_golden
   batch_llr_golden
-  rpsm_batched_llr_smoke
-  score_matrix_parallel_parity
   em_step_smoke
-  rpsm_sequence_smoke
-  rpsm_hierarchy_smoke
-  rpsm_train_smoke
-  rpsm_train_multiclass_smoke
-  rpsm_embed_grad_finite_diff
-  rpsm_bptt_grad_finite_diff
-  rpsm_spectral_alpha_smoke
-  rpsm_normalized_eta_smoke
-  rpsm_world_stats_smoke
   score_batch_golden
   kernel_llr_golden
   memory_train_golden
@@ -111,10 +91,16 @@ set(
   quantile_dif_train_golden
   mke_train_step_golden
   generation_golden
-  cyphalm_hebbian_golden
   som_golden
-  cyphalm_char_lstm_golden
   cyphalm_checkpoint_golden
   cyphalm_golden
   cypha_golden_run
 )
+if(CYPHA_BUILD_LEGACY_CYPHALM)
+  list(APPEND CYPHA_GOLDEN_EXE_TARGETS
+    cyphalm_ssm_golden
+    embed_table_golden
+    cyphalm_hebbian_golden
+    cyphalm_char_lstm_golden
+  )
+endif()

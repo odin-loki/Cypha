@@ -64,8 +64,12 @@ void validate_result_section(const Json& section, const char* name, const char* 
     if (section["profile"].get<std::string>() != expected_profile) {
         fail(std::string(name) + " profile mismatch");
     }
-    if (section["mode"].get<std::string>() != expected_mode) {
-        fail(std::string(name) + " mode mismatch");
+    if (expected_mode != nullptr) {
+        const std::string mode = section["mode"].get<std::string>();
+        if (mode != expected_mode && !(std::string(name) == "rpsm_results" &&
+                                       (mode == "rpsm" || mode == "hp"))) {
+            fail(std::string(name) + " mode mismatch");
+        }
     }
     if (!section["env"].is_object()) {
         fail(std::string(name) + " env must be an object");
@@ -190,7 +194,8 @@ void validate_lock(const Json& lock, bool production) {
     require_key(lock, "overnight_results", "lock");
     require_key(lock, "rpsm_results", "lock");
     validate_result_section(lock["overnight_results"], "overnight_results", "d17", "hybrid");
-    validate_result_section(lock["rpsm_results"], "rpsm_results", "d21", "rpsm");
+    // Historical lock section (key rpsm_results); mode may be legacy "rpsm" or current "hp".
+    validate_result_section(lock["rpsm_results"], "rpsm_results", "d21", nullptr);
 
     if (lock.contains("cell_sweep_results") && !lock["cell_sweep_results"].is_null()) {
         validate_result_section(lock["cell_sweep_results"], "cell_sweep_results", "d17", "cell-sweep");

@@ -1,0 +1,20 @@
+{
+  "vocab_size": 256,
+  "d_embed": 64,
+  "d_state": 128,
+  "field_dim": 160,
+  "context_length": 256,
+  "context_mode": "hp",
+  "hp_table_bits": 22,
+  "hp_slot_max": 24,
+  "hp_mixer_lr": 2,
+  "hp_gria": true,
+  "train_epochs": 2,
+  "view_schedule": "schedule_b",
+  "seed": 42,
+  "online": true,
+  "_meta": {
+    "status": "living",
+    "notes": "d21 overnight hp profile (replaces retired RPSM). Same light defaults as d17."
+  }
+}

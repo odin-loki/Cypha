@@ -3,8 +3,6 @@
 #include "cypha/class_gmm.hpp"
 #include "cypha/kernel_memory.hpp"
 #include "cypha/preprocessor.hpp"
-#include "cypha/rpsm/psi_matrices.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -31,14 +29,6 @@ namespace {
 
 constexpr double kEps = 1e-8;
 constexpr double kMinVar = 1e-4;
-
-bool use_rpsm_llr_from_env() {
-  const std::optional<std::string> v = cypha::env_get("CYPHA_USE_RPSM_LLR");
-  if (!v.has_value() || v->empty()) {
-    return true;
-  }
-  return (*v)[0] != '0';
-}
 
 bool use_nig_bma_from_env() {
   const std::optional<std::string> v = cypha::env_get("CYPHA_USE_NIG_BMA");
@@ -619,9 +609,6 @@ void batch_llr_from_x(const CyphaInferModel& m, const double* x_row_major, int n
   score_matrix_use_field(m, h.data(), n, llr_out);
 }
 
-void rpsm_score_matrix_batched(const CyphaInferModel& m, const double* h_row_major, int n,
-                               std::vector<double>& llr_out);
-
 void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major, int n,
                             std::vector<double>& llr_out, const KernelMemory* kernel_mem,
                             bool use_kernel_llr, double kernel_blend) {
@@ -684,23 +671,6 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
     }
     return;
   }
-  if (!m.use_nig_bma && use_rpsm_llr_from_env()) {
-    rpsm_score_matrix_batched(m, h_row_major, n, llr_out);
-    if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K > 0) {
-      std::vector<double> kernel_scores(static_cast<std::size_t>(K));
-      for (int i = 0; i < n; ++i) {
-        kernel_mem->score_all(h_row_major + static_cast<std::size_t>(i) * d, m.labels, kernel_scores);
-        for (int k = 0; k < K; ++k) {
-          const double lin = llr_out[static_cast<std::size_t>(i * K + k)];
-          const double ker = kernel_scores[static_cast<std::size_t>(k)];
-          llr_out[static_cast<std::size_t>(i * K + k)] =
-              (1.0 - kernel_blend) * lin + kernel_blend * ker;
-        }
-      }
-    }
-    return;
-  }
-
   std::vector<double> ctx;
   context_prior_for_labels(m, m.labels, ctx);
 
@@ -748,22 +718,6 @@ void score_matrix_use_field(const CyphaInferModel& m, const double* h_row_major,
       }
     }
   }
-}
-
-void rpsm_score_matrix_batched(const CyphaInferModel& m, const double* h_row_major, int n,
-                               std::vector<double>& llr_out) {
-  const int K = static_cast<int>(m.labels.size());
-  llr_out.assign(static_cast<std::size_t>(n * K), 0.0);
-  if (K == 0) {
-    return;
-  }
-  // Perf (2026-07-17): thread_local Ψ + ctx scratch — default score_matrix_use_field path
-  // (RPSM batched LLR) reused per call instead of heap-allocating PsiMatrices + ctx vectors.
-  thread_local rpsm::PsiMatrices psi_scratch;
-  thread_local std::vector<double> ctx_scratch;
-  rpsm::build_psi_from_model_into(psi_scratch, m);
-  context_prior_for_labels(m, m.labels, ctx_scratch);
-  rpsm::batched_llr_gemm(h_row_major, n, psi_scratch, ctx_scratch.data(), llr_out.data());
 }
 
 void softmax_batch_reference(const double* z_row_major, int n, int k, double eps,

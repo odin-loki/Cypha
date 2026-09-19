@@ -10,7 +10,10 @@
   "alpha_init": 0.5,
   "alpha_learnable": false,
   "context_length": 256,
-  "context_mode": "hybrid_gria_lstm",
+  "context_mode": "hp",
+  "hp_table_bits": 22,
+  "hp_mixer_lr": 2,
+  "hp_gria": true,
   "ngram_context": 3,
   "ngram_fuse_split": true,
   "ngram_fusion": "sum",
@@ -42,6 +45,6 @@
     "corpus": "wikitext2+bpe",
     "recommended_n_train": 5000,
     "status": "historical",
-    "notes": "Historical hybrid GRIA+LSTM profile. Living Cypha sequence default is Hybrid L2+Wave2 BPTT (2.664 BPC lock). Char-BPE hybrid gate vs char hybrid ~4.04@5k. Train assets via scripts/train_wikitext_bpe.py."
+    "notes": "BPE vocab>256 is incompatible with hp byte-token path; profile retained for asset wiring only. TODO: separate BPE bench path or cap vocab<=256 for hp. Train assets via scripts/train_wikitext_bpe.py."
   }
 }
