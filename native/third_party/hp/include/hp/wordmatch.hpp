@@ -31,6 +31,13 @@ class WordMatchModel {
         counter_init(st_.data(), st_.size());
     }
 
+    void set_ring(ByteRing* ring) {
+        ring_ = ring;
+        if (ring != nullptr) {
+            ring_mask_ = ring->mask();
+        }
+    }
+
     // Called once per byte after the shared ring has been updated.
     // whist is the rolling hash of the last `order_` completed words.
     void push_byte(int byte, std::uint64_t whist, int at_word_boundary) {

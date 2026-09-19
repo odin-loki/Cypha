@@ -8,9 +8,11 @@
 
 ## Executive summary
 
+> **BPC gap (2026-09-19):** **PROTOCOL MISMATCH:** Cypha light sets **0/78** v78 flags — **not** the user’s v82 champ recipe (~**1.610 BPC** @ `SLOT_MAX=35`). Cypha light observe **1.721** matches bare hp archive on enwik 8 MB. Headline **5.48 BPC** = 256-clone API (WikiText n=16), not archive BPC. Full flag diff + measurements: [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md).
+
 CyphaLM on **main** is backed by the vendored **hp** integer-exact context mixer (`HpSequenceBackend` → `hp::Predictor`) with the **light** compile profile (`CYPHA_HP_PROFILE=light`, `HP_SLOT_MAX=24`, `hp_table_bits=22`).
 
-**Capability (headline — WikiText-2 natural language, byte tokens):**
+**Capability (headline — WikiText-2 natural language, byte tokens, *clone-API metric*):**
 
 | Metric | Cold eval (no train) | After 32 online train steps |
 |--------|----------------------|-----------------------------|
@@ -76,8 +78,9 @@ Wraps vendored `hp::Predictor` (integer-exact context mixer). Key paths:
 | Method | Behavior |
 |--------|----------|
 | `consume_byte` | 8 bit steps: `predict()` → `update(bit)` per bit of the byte; advances **main** `pred_` |
-| `next_byte_log_probs(vocab)` | For each candidate byte `b ∈ [0,vocab)`: **clone** live `*pred_` into `scratch_`, score 8 bits via `byte_log_prob`, **do not** advance main |
-| `observe_next_byte` | Score + update main predictor on the observed byte (train path) |
+| `next_byte_log_probs(vocab)` | For each candidate byte `b ∈ [0,vocab)`: **clone** live `*pred_` into scratch via `clone_from`, score 8 bits; **do not** advance main. Opt-in bit-tree: `CYPHA_HP_BIT_TREE_LOGPROBS=1` |
+| `observe_next_byte` | Score + update main predictor on the observed byte (train / compress-equivalent BPC path) |
+| `log_prob_byte` / `sample_next_byte` | Single-clone O(8) bit path (train fast path / bit-serial generation) |
 
 ```7:9:native/include/cypha/cyphalm/hp_backend.hpp
 /// RAM note: holds two ``hp::Predictor`` instances (``pred_`` + ``scratch_``).
@@ -90,8 +93,8 @@ Wraps vendored `hp::Predictor` (integer-exact context mixer). Key paths:
 | API | Path |
 |-----|------|
 | `predict_next(token)` | `consume_byte(tok)` → `next_byte_log_probs(vocab_size)` → top-k fill |
-| `train_step` / `eval_bpc` | Online loop over `predict_next` + `adapt_after_predict` / scoring |
-| `eval_bpc` | Mean −log₂ P(next byte); **Cypha token-stream metric**, not hp archive size |
+| `train_step` / `eval_bpc` | Default **`eval_bpc` → `eval_bpc_compress_equivalent`** (bit-serial observe NLL). Legacy clone API still available via `predict_next` scoring |
+| `eval_bpc` | Default: mean −log₂ p(bit) via observe (matches hp archive BPC). Clone-API eval requires explicit `predict_next` loop |
 | Generation | `cyphalm_generation.*` — `generate_decode` with `DecodeStrategy` greedy / temperature / top-k / top-p |
 
 Recipes (`cyphalm_config.cpp`):
@@ -112,9 +115,10 @@ Recipes (`cyphalm_config.cpp`):
 | Metric | What it measures |
 |--------|------------------|
 | **hp compressed archive** | Arithmetic-coded bitstream size from the hp compressor tool — lossless coding of input |
-| **Cypha `eval_bpc`** | Mean −log₂ P_model(next byte \| context) on a held-out byte stream via `HpSequenceBackend::next_byte_log_probs` |
+| **Cypha `eval_bpc` (default)** | **`eval_bpc_compress_equivalent`**: Σ −log₂ p(bit) with update on observed bytes — **matches hp archive BPC** on same corpus/flags (see [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md)) |
+| **Cypha clone-API BPC** | Mean −log₂ P(next byte) via `predict_next` + 256× `next_byte_log_probs` — **different metric**; pre-fix copy bug inflated error |
 
-These are related in theory (good predictors compress well) but **not interchangeable** in this integration: Cypha does not report hp archive bytes as BPC, and `compression_profile()` explicitly labels the algorithm as `hp` with a note to see this report / `MODEL_CARD.md`.
+These are related in theory (good predictors compress well). **Do not compare** hp archive **1.610** (v78 champ) to WikiText clone-API **5.48** (light, n=16) without relabeling profile and metric.
 
 ---
 
@@ -278,6 +282,7 @@ Measurements show **`next_byte_log_probs` ≈ `predict_next` latency** and **`co
 
 | Field | Detail |
 |-------|--------|
+| **Status (2026-09-19)** | **`next_byte_log_probs_bit_tree` implemented**; parity OK vs legacy (`hp_bit_tree_smoke`). **Not default** — ~510 full clones @ table_bits=22 → **~3× slower** than fixed 256-clone legacy. Needs undo-stack (#2) |
 | **Goal** | Score all 256 byte candidates sharing one bit-prefix walk; branch only where candidate sets diverge |
 | **Expected RAM / speed** | **~10–50×** faster full-vocab score; scratch RAM bounded to trie depth, not 256× `Predictor` |
 | **Quality risk** | **Low** if bit-path math matches current clone semantics |

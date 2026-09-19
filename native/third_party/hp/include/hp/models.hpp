@@ -271,6 +271,8 @@ class MatchModel {
         counter_init(st_.data(), st_.size());
     }
 
+    void set_ring(ByteRing* ring) { ring_ = ring; }
+
     // Called once per byte after the shared ring has been updated.
     // `hist` holds the current kMinLen-byte suffix in its low bytes.
     void push_byte(int byte, std::uint64_t hist) {

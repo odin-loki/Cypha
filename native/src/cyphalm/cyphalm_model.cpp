@@ -160,8 +160,13 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
         reset_context();
         const int steps = std::min(n_steps, static_cast<int>(ids.size()) - 1);
         for (int i = 0; i < steps; ++i) {
-            train_step(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]),
-                       static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i + 1)]));
+            if (i == 0) {
+                hp_->consume_byte(token_to_byte(static_cast<std::uint32_t>(ids[0])));
+            }
+            const int nxt = ids[static_cast<std::size_t>(i + 1)];
+            last_train_loss_ = -hp_->log_prob_byte(token_to_byte(static_cast<std::uint32_t>(nxt)));
+            hp_->observe_next_byte(token_to_byte(static_cast<std::uint32_t>(nxt)));
+            ++step_count_;
         }
     }
 }
@@ -178,27 +183,23 @@ void CyphaLMModel::train_sequence_views(const std::vector<int>& ids,
 
 double CyphaLMModel::eval_bpc(const std::vector<int>& ids, int n_eval,
                               cypha::intelligence::IntelligenceProfiler*) {
+    /// Bit-serial compress-equivalent BPC (``observe_next_byte`` on ``n_eval`` bytes).
+    /// Does not use the 256-way ``next_byte_log_probs`` fan-out.
+    return eval_bpc_compress_equivalent(ids, n_eval);
+}
+
+double CyphaLMModel::eval_bpc_compress_equivalent(const std::vector<int>& ids, int n_eval) {
     reset_context();
-    const int n = std::min(n_eval, static_cast<int>(ids.size()) - 1);
+    const int n = std::min(n_eval, static_cast<int>(ids.size()));
     if (n <= 0) {
         return std::numeric_limits<double>::quiet_NaN();
     }
-    double bits = 0.0;
-    int scored = 0;
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(n));
     for (int i = 0; i < n; ++i) {
-        const auto pred = predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i)]));
-        const int nxt = ids[static_cast<std::size_t>(i + 1)];
-        if (nxt < 0 || nxt >= cfg_.vocab_size ||
-            static_cast<std::size_t>(nxt) >= pred.log_probs.size()) {
-            continue;
-        }
-        bits += -pred.log_probs[static_cast<std::size_t>(nxt)] / kLog2;
-        ++scored;
+        bytes[static_cast<std::size_t>(i)] = token_to_byte(static_cast<std::uint32_t>(ids[i]));
     }
-    if (scored <= 0) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    return bits / static_cast<double>(scored);
+    const double bits = hp_->observe_stream_bits(bytes.data(), bytes.size());
+    return bits / static_cast<double>(n);
 }
 
 void CyphaLMModel::accumulate_intelligence_profile(const std::vector<int>& ids, int n_steps,
@@ -261,8 +262,8 @@ nlohmann::json CyphaLMModel::compression_profile() const {
                         {"slot_max_35_mem22_kb", 15000000},
                         {"source", "hp/tools/hp_harness.sh RECORD H34"}}},
         {"note",
-         "Cypha BPC uses hp next-byte log_probs; hp archive sizes are separate metrics "
-         "(see MODEL_CARD.md)."},
+         "Cypha BPC (eval_bpc / compress_equivalent_bpc) uses bit-serial observe NLL; "
+         "hp archive bytes are a separate metric (see CYPHALM_BPC_GAP_REPORT.md)."},
     };
 }
 
