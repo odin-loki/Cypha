@@ -34,7 +34,11 @@ endif()
 
 if(_cypha_hp_xsimd_effective)
   target_compile_definitions(cypha_core PUBLIC HP_XSIMD=1)
-  if(NOT MSVC)
+  if(MSVC)
+    # hp/simd_dot.hpp gates on __SSE4_1__; MSVC does not define it unless /arch:SSE4.2+.
+    target_compile_options(cypha_core PUBLIC /arch:SSE4.2)
+    target_compile_definitions(cypha_core PUBLIC __SSE4_1__=1)
+  else()
     target_compile_options(cypha_core PUBLIC -msse4.1)
   endif()
 else()
