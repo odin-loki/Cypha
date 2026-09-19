@@ -4,7 +4,7 @@
 
 #include <cstdio>
 
-#ifndef popen
+#if defined(_WIN32) && !defined(popen)
 #define popen _popen
 #define pclose _pclose
 #endif
