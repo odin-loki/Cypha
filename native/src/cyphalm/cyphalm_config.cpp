@@ -36,7 +36,7 @@ ContextMode parse_context_mode(const std::string& s) {
     if (k == "ssm_gria_no_lstm") return ContextMode::SsmGriaNoLstm;
     if (k == "ablation_no_dif") return ContextMode::AblationNoDif;
     if (k == "ablation_no_ssm") return ContextMode::AblationNoSsm;
-    if (k == "rpsm") return ContextMode::Rpsm;
+    if (k == "rpsm") return ContextMode::Hp;  // retired alias → hp
     if (k == "pgm_logits" || k == "pgm") return ContextMode::PgmLogits;
     throw std::runtime_error("unknown context mode: " + s);
 }
@@ -53,7 +53,6 @@ std::string context_mode_name(ContextMode mode) {
         case ContextMode::SsmGriaNoLstm: return "ssm_gria_no_lstm";
         case ContextMode::AblationNoDif: return "ablation_no_dif";
         case ContextMode::AblationNoSsm: return "ablation_no_ssm";
-        case ContextMode::Rpsm: return "rpsm";
         case ContextMode::PgmLogits: return "pgm_logits";
     }
     return "unknown";
@@ -77,7 +76,7 @@ BenchMode parse_bench_mode(const std::string& s) {
     if (s == "ssm_gria") return BenchMode::SsmGria;
     if (s == "context_bank") return BenchMode::ContextBank;
     if (s == "spectral") return BenchMode::Spectral;
-    if (s == "rpsm") return BenchMode::Rpsm;
+    if (s == "rpsm") return BenchMode::Hybrid;  // retired alias → hp
     if (s == "pgm_logits" || s == "pgm") return BenchMode::PgmLogits;
     throw std::runtime_error("unknown bench mode: " + s);
 }
@@ -122,7 +121,6 @@ void apply_hp_production_recipe(CyphaLMConfig& cfg) {
     cfg.use_unified_context = false;
     cfg.unified_context_source = UnifiedContextSource::None;
     cfg.unified_readout = UnifiedReadout::None;
-    cfg.use_rpsm_layer = false;
     cfg.use_kernel_llr = false;
     if (cfg.vocab_size <= 0 || cfg.vocab_size > 256) {
         cfg.vocab_size = 256;
@@ -213,7 +211,6 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
             cfg.use_unified_context = false;
             cfg.unified_context_source = UnifiedContextSource::None;
             cfg.unified_readout = UnifiedReadout::None;
-            cfg.use_rpsm_layer = false;
             cfg.ngram_fuse_split = true;
             cfg.use_ngram_count_prior = false;
             break;
@@ -227,13 +224,6 @@ void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
         case BenchMode::Spectral:
             cfg.context_mode = ContextMode::SsmGria;
             cfg.use_spectral_pde = true;
-            break;
-        case BenchMode::Rpsm:
-            // Do not hardcode Tiny (L=4,D=128,feat=64) here — that overwrote profile JSON after
-            // apply_bench_profile and blocked Small-tier capacity gates (BACKLOG Phase C1).
-            // Dims/memory knobs come from the profile (d21 Tiny lock vs d21_small).
-            cfg.context_mode = ContextMode::Rpsm;
-            cfg.use_rpsm_layer = true;
             break;
         case BenchMode::PgmLogits:
             apply_pgm_logits_recipe(cfg);
@@ -249,7 +239,6 @@ std::string bench_mode_name(BenchMode mode) {
         case BenchMode::SsmGria: return "ssm_gria";
         case BenchMode::ContextBank: return "context_bank";
         case BenchMode::Spectral: return "spectral";
-        case BenchMode::Rpsm: return "rpsm";
         case BenchMode::PgmLogits: return "pgm_logits";
     }
     return "unknown";
@@ -382,16 +371,6 @@ void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
     set_b("ngram_fuse_split", cfg.ngram_fuse_split);
     set_s("bpe_merges_path", cfg.bpe_merges_path);
     set_s("bpe_vocab_path", cfg.bpe_vocab_path);
-    set_b("use_rpsm_layer", cfg.use_rpsm_layer);
-    set_i("rpsm_n_levels", cfg.rpsm_n_levels);
-    set_i("rpsm_state_dim", cfg.rpsm_state_dim);
-    set_i("rpsm_feat_dim", cfg.rpsm_feat_dim);
-    set_d("rpsm_lr", cfg.rpsm_lr);
-    set_i("rpsm_n_memory_slots", cfg.rpsm_n_memory_slots);
-    set_d("rpsm_beta_memory", cfg.rpsm_beta_memory);
-    set_d("rpsm_surprise_threshold", cfg.rpsm_surprise_threshold);
-    set_d("rpsm_hierarchy_loss_weight", cfg.rpsm_hierarchy_loss_weight);
-    set_i("rpsm_bptt_window", cfg.rpsm_bptt_window);
     set_b("profile_guided_loss", cfg.profile_guided_loss);
     set_b("use_full_navigation_loss", cfg.use_full_navigation_loss);
     set_b("use_profile_curriculum", cfg.use_profile_curriculum);
@@ -486,10 +465,8 @@ void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
         path = root / "cyphalm_d17_wikitext.json";
     } else if (profile == "d17_bpe") {
         path = root / "cyphalm_d17_wikitext_bpe.json";
-    } else if (profile == "d21") {
-        path = root / "cyphalm_d21_rpsm.json";
-    } else if (profile == "d21_small") {
-        path = root / "cyphalm_d21_rpsm_small.json";
+    } else if (profile == "d21" || profile == "d21_small") {
+        path = root / "cyphalm_d21_hp.json";
     } else if (profile == "d04") {
         path = root / "cyphalm_d04_gutenberg.json";
         if (!fs::is_regular_file(path)) {

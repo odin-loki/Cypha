@@ -1088,12 +1088,10 @@ struct RegExpertStat {
     int n_updates{0};
 };
 
-// ``score_matrix_use_field``'s own ``kernel_mem``/``use_kernel_llr`` args are a no-op by default:
-// it early-returns via ``rpsm_score_matrix_batched`` whenever ``CYPHA_USE_RPSM_LLR`` is unset (the
-// documented default), *before* reaching its kernel-blend branch. Blend manually here instead --
+// ``score_matrix_use_field``'s own ``kernel_mem``/``use_kernel_llr`` args are a no-op by default
+// (kernel blend is applied only when callers pass ``use_kernel_llr=true``). Blend manually here instead --
 // same ``(1-blend)*lin + blend*ker`` formula as ``classify_at_h``/``score_matrix_use_field``, applied
-// on top of whatever linear (RPSM or legacy) scores the model actually produces -- so the D14 opt-in
-// kernel path works regardless of the RPSM env toggle.
+// on top of linear DIF scores so the D14 opt-in kernel path works regardless of caller defaults.
 void kernel_blend_llr_batched(const cypha::CyphaInferModel& infer, const double* h, int n,
                               const cypha::KernelMemory* kernel_mem, double kernel_blend,
                               std::vector<double>& llr) {
@@ -1885,10 +1883,10 @@ Json run_d04() { return run_cyphalm_domain("d04", "d04"); }
 
 Json run_d17() { return run_cyphalm_domain("d17", "d17"); }
 
-Json run_d21_rpsm_overnight_smoke() {
+Json run_d21_hp_overnight_smoke() {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_bench_profile("d21", cfg);
-    cypha::cyphalm::apply_bench_mode(cypha::cyphalm::BenchMode::Rpsm, cfg);
+    cypha::cyphalm::apply_hp_production_recipe(cfg);
     if (cfg.vocab_size < 256) cfg.vocab_size = 256;
     cfg.view_schedule = "same_order";
 
@@ -1928,7 +1926,7 @@ Json run_d21_rpsm_overnight_smoke() {
 
     const Json experiments{
         {"profile", "d21"},
-        {"mode", "rpsm"},
+        {"mode", "hp"},
         {"corpus", corpus.source},
         {"synthetic", synthetic},
         {"full_corpus", full_corpus},
@@ -1936,9 +1934,8 @@ Json run_d21_rpsm_overnight_smoke() {
         {"n_eval", n_eval},
         {"bpc", std::isnan(bpc) ? Json(nullptr) : Json(bpc)},
         {"vocab_size", cfg.vocab_size},
-        {"rpsm_n_levels", cfg.rpsm_n_levels},
-        {"rpsm_state_dim", cfg.rpsm_state_dim},
-        {"rpsm_feat_dim", cfg.rpsm_feat_dim},
+        {"hp_table_bits", cfg.hp_table_bits},
+        {"hp_slot_max", cfg.hp_slot_max},
         {"17B_alpha_spectrum",
          Json{{"mean_alpha", alpha_profile.value("mean_alpha", 0.0)},
               {"mean_expert_alpha", alpha_profile.value("mean_expert_alpha", 0.0)},
@@ -1948,7 +1945,7 @@ Json run_d21_rpsm_overnight_smoke() {
               {"n_experts", alpha_profile.value("n_experts", 0)}}},
         {"backend", "cypha_lm_native"},
     };
-    cypha::bench::finalize_domain("d21_rpsm_overnight", experiments);
+    cypha::bench::finalize_domain("d21_hp_overnight", experiments);
     return experiments;
 }
 
@@ -10343,7 +10340,7 @@ std::vector<DomainSpec> build_all_domains() {
         {"d18", "cypha_bench.domains.d18_intelligence_profile", run_d18_intelligence_profile},
         {"d19", "cypha_bench.domains.d19_cell_hypothesis", run_d19_cell_hypothesis_smoke},
         {"d20", "cypha_bench.domains.d20_cell_hypothesis_overnight", run_d20_cell_hypothesis_overnight_smoke},
-        {"d21", "cypha_bench.domains.d21_rpsm_overnight", run_d21_rpsm_overnight_smoke},
+        {"d21", "cypha_bench.domains.d21_hp_overnight", run_d21_hp_overnight_smoke},
         {"d22", "cypha_bench.domains.d22_intelligence_cross_profile", run_d22_intelligence_cross_profile},
         {"d23", "cypha_bench.domains.d23_overnight_lock_validation", run_d23_overnight_lock_validation},
         {"d24", "cypha_bench.domains.d24_production_lock_validation", run_d24_production_lock_validation},

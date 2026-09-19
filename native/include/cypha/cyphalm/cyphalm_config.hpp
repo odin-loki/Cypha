@@ -22,7 +22,6 @@ enum class ContextMode {
     SsmGriaNoLstm,
     AblationNoDif,
     AblationNoSsm,
-    Rpsm,
     /// Legacy PGM spine (research only; not the production LLM path).
     PgmLogits,
 };
@@ -35,7 +34,6 @@ enum class BenchMode {
     SsmGria,
     ContextBank,
     Spectral,
-    Rpsm,
     PgmLogits,
 };
 
@@ -225,20 +223,6 @@ struct CyphaLMConfig {
 
     double mdl_forget_max_norm = 4.0;
     double free_energy_beta = 0.05;
-
-    /// Option B RPSM sequence layer (level-0 CyphaDIF LLR scaffold).
-    bool use_rpsm_layer = false;
-    int rpsm_n_levels = 4;
-    int rpsm_state_dim = 128;
-    int rpsm_feat_dim = 64;
-    double rpsm_lr = 0.01;
-    /// Working-memory ring size / write gate (defaults match ``RpsmSequenceConfig``).
-    int rpsm_n_memory_slots = 32;
-    double rpsm_beta_memory = 0.1;
-    double rpsm_surprise_threshold = 0.05;
-    double rpsm_hierarchy_loss_weight = 0.1;
-    /// Research BPTT window (1 = local grads; >1 measured negative @ 5k — keep profile default 1).
-    int rpsm_bptt_window = 1;
 
     /// Paper IV: add profile-guided regularizers to per-step train loss.
     bool profile_guided_loss = false;

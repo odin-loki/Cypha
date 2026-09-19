@@ -52,6 +52,15 @@ One public type owns classify, regress, latent sample, and next-token generate.
 - Forecast benches: sample CSVs under `bench/data/forecast/`; optional bulk via `scripts/fetch_forecast_data.ps1`.
 - Classification benches: synthetic goldens + sklearn-style sets documented in `docs/RESEARCH_STATUS.md`.
 
+## History / superseded (not current product)
+
+| Stack | Status | Doc |
+|-------|--------|-----|
+| Hybrid GRIA+LSTM (2.664 / 2.873 BPC pins) | Gated (`-DCYPHA_BUILD_LEGACY_CYPHALM=ON`); not default | [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md) |
+| RPSM (d21) | Removed 2026-09; superseded by hp | [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md) |
+
+Pre-removal source remains in git history on `main` and PR #1 commits.
+
 ## Limits (honest)
 
 - Shared-model continual learning (D16B) remains open; zero-forgetting is per-file isolation (D16F).

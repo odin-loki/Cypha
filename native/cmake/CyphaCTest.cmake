@@ -22,7 +22,6 @@ function(cypha_ctest_name_is_slow test_name out_var)
   # Bench / lock / forecast / train / tune / overnight orchestration.
   if("${test_name}" MATCHES "^native_tune_run_smoke$"
       OR "${test_name}" MATCHES "^native_cyphalm_train_smoke$"
-      OR "${test_name}" MATCHES "^native_rpsm_sequence_smoke$"
       OR "${test_name}" MATCHES "^native_one_cypha_smoke$"
       OR "${test_name}" MATCHES "^native_baseline_lock"
       OR "${test_name}" MATCHES "^native_cyphalm_bench"

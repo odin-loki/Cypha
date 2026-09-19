@@ -129,8 +129,6 @@ add_library(cypha_core STATIC
   src/intelligence/causal_graph.cpp
   src/intelligence/profile_guided_loss.cpp
   src/cyphalm/lm_intelligence_monitor.cpp
-  src/rpsm/psi_matrices.cpp
-  src/rpsm/rpsm_sequence_layer.cpp
   src/bench/bench_paths.cpp
 )
 
@@ -752,19 +750,7 @@ if(MSVC)
   target_compile_options(cypha_golden PRIVATE /W4 /permissive-)
   target_compile_options(cypha_golden_run PRIVATE /W4 /permissive-)
   target_compile_options(batch_llr_golden PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_batched_llr_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(score_matrix_parallel_parity PRIVATE /W4 /permissive-)
   target_compile_options(em_step_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_hierarchy_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_train_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_train_multiclass_smoke PRIVATE /W4 /permissive-)
-  if(CYPHA_BUILD_LEGACY_CYPHALM)
-    target_compile_options(rpsm_embed_grad_finite_diff PRIVATE /W4 /permissive-)
-  endif()
-  target_compile_options(rpsm_bptt_grad_finite_diff PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_spectral_alpha_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_normalized_eta_smoke PRIVATE /W4 /permissive-)
-  target_compile_options(rpsm_world_stats_smoke PRIVATE /W4 /permissive-)
   if(CYPHA_BUILD_LEGACY_CYPHALM)
     target_compile_options(cypha_fixture_gen PRIVATE /W4 /permissive-)
   endif()
@@ -828,7 +814,6 @@ else()
     target_compile_options(cyphalm_ssm_diagnose PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(cyphalm_char_lstm_golden PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(embed_table_golden PRIVATE -Wall -Wextra -Wpedantic)
-    target_compile_options(rpsm_embed_grad_finite_diff PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(cypha_fixture_gen PRIVATE -Wall -Wextra -Wpedantic)
   endif()
   target_compile_options(som_golden PRIVATE -Wall -Wextra -Wpedantic)
@@ -842,16 +827,7 @@ else()
   target_compile_options(cypha_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(cypha_golden_run PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(batch_llr_golden PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_batched_llr_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(score_matrix_parallel_parity PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(em_step_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_hierarchy_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_train_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_train_multiclass_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_bptt_grad_finite_diff PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_spectral_alpha_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_normalized_eta_smoke PRIVATE -Wall -Wextra -Wpedantic)
-  target_compile_options(rpsm_world_stats_smoke PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(score_batch_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(kernel_llr_golden PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(xor_kernel_bench PRIVATE -Wall -Wextra -Wpedantic)
@@ -918,52 +894,7 @@ add_test(
   COMMAND "$<TARGET_FILE:batch_llr_golden>"
     "${_golden_fix}/batch_llr/sidecar.json"
 )
-add_test(
-  NAME native_rpsm_batched_llr_smoke
-  COMMAND "$<TARGET_FILE:rpsm_batched_llr_smoke>"
-    "${_golden_fix}/reference.cypha"
-    "${_golden_fix}/native_parity.bin"
-)
-add_test(NAME native_score_matrix_parallel_parity COMMAND "$<TARGET_FILE:score_matrix_parallel_parity>")
 add_test(NAME native_em_step_smoke COMMAND "$<TARGET_FILE:em_step_smoke>")
-add_test(
-  NAME native_rpsm_sequence_smoke
-  COMMAND "$<TARGET_FILE:rpsm_sequence_smoke>"
-)
-add_test(
-  NAME native_rpsm_hierarchy_smoke
-  COMMAND "$<TARGET_FILE:rpsm_hierarchy_smoke>"
-)
-add_test(
-  NAME native_rpsm_train_multiclass_smoke
-  COMMAND "$<TARGET_FILE:rpsm_train_multiclass_smoke>"
-)
-add_test(
-  NAME native_rpsm_train_smoke
-  COMMAND "$<TARGET_FILE:rpsm_train_smoke>"
-)
-if(CYPHA_BUILD_LEGACY_CYPHALM)
-  add_test(
-    NAME native_rpsm_embed_grad_finite_diff
-    COMMAND "$<TARGET_FILE:rpsm_embed_grad_finite_diff>"
-  )
-endif()
-add_test(
-  NAME native_rpsm_bptt_grad_finite_diff
-  COMMAND "$<TARGET_FILE:rpsm_bptt_grad_finite_diff>"
-)
-add_test(
-  NAME native_rpsm_spectral_alpha_smoke
-  COMMAND "$<TARGET_FILE:rpsm_spectral_alpha_smoke>"
-)
-add_test(
-  NAME native_rpsm_normalized_eta_smoke
-  COMMAND "$<TARGET_FILE:rpsm_normalized_eta_smoke>"
-)
-add_test(
-  NAME native_rpsm_world_stats_smoke
-  COMMAND "$<TARGET_FILE:rpsm_world_stats_smoke>"
-)
 if(CYPHA_BUILD_LEGACY_CYPHALM)
   add_test(
     NAME native_fixture_gen_list
@@ -1610,24 +1541,6 @@ add_test(
     "${CMAKE_CURRENT_BINARY_DIR}/federated_tls_smoke.json"
 )
 set_tests_properties(native_federated_tls_smoke PROPERTIES SKIP_RETURN_CODE 2)
-
-add_test(
-  NAME native_cyphalm_bench_rpsm_smoke
-  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
-    --profile d17 --mode rpsm --n-train 100 --n-eval 32
-)
-set_tests_properties(native_cyphalm_bench_rpsm_smoke PROPERTIES
-  ENVIRONMENT "CYPHA_BENCH_FAST=1"
-)
-
-add_test(
-  NAME native_d21_rpsm_smoke
-  COMMAND "$<TARGET_FILE:cyphalm_bench_native>"
-    --profile d21 --mode rpsm --overnight --n-train 500 --n-eval 64
-)
-set_tests_properties(native_d21_rpsm_smoke PROPERTIES
-  ENVIRONMENT "CYPHA_BENCH_FULL_CORPUS=1;CYPHA_BENCH_OVERNIGHT=1;CYPHA_BENCH_FAST=1"
-)
 
 add_test(
   NAME native_d22_cross_smoke

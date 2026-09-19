@@ -14,7 +14,7 @@ Historical reports, studies, and mega-plans. **Do not treat these as the product
 | **Living** | `docs/` hub, `docs/verify/`, `docs/port/`, `docs/native/`, `docs/RESEARCH_STATUS.md`, `docs/FUTURE.md`, `docs/reports/ONE_CYPHA_CUTOVER.md` | Current product truth for **One Cypha** (`cypha::Cypha`: classify + regress + tokens) |
 | **Archive** | `docs/archive/**` | Dated experiments, cutover notes, CyphaLM studies, closed roadmaps -- keep for history; update living docs instead of editing here |
 
-Living sequence default: **Hybrid L2+Wave2 BPTT** (2.664 BPC lock). Prior L1 hybrid **2.873 BPC** is archived (`bench/BASELINE_LOCK.json` notes; recipe traces in [`data/archive/`](../../data/README.md)). PGM->Wy (U06) remains opt-in.
+Living sequence default (2026-09+): **hp** CyphaLM — see [`docs/native/CYPHALM_TIER2_MODEL.md`](../native/CYPHALM_TIER2_MODEL.md). Hybrid L2+Wave2 BPTT **2.664 BPC** and L1 **2.873 BPC** pins in `bench/BASELINE_LOCK.json` are **historical** only ([`docs/history/LEGACY_LLM.md`](../history/LEGACY_LLM.md)). RPSM was removed 2026-09 ([`docs/history/REMOVED_RPSM.md`](../history/REMOVED_RPSM.md)). PGM→Wy (U06) remains opt-in research.
 
 ## Layout
 

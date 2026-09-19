@@ -1,4 +1,4 @@
-# Phase 9: D17 hybrid + D21 RPSM overnight automation, optional cell sweep,
+# Phase 9: D17 hybrid (hp) + d21 hp lock + optional cell sweep,
 #          merge BPC into bench/BASELINE_LOCK.json via cypha_baseline_lock.
 # Usage:
 #   powershell -File scripts/run_overnight_all.ps1
@@ -42,7 +42,6 @@ if ($Fast) {
 }
 
 $d17Script = Join-Path $PSScriptRoot "run_d17_overnight.ps1"
-$rpsmScript = Join-Path $PSScriptRoot "run_rpsm_overnight.ps1"
 $lockScript = Join-Path $PSScriptRoot "update_baseline_lock.ps1"
 
 Write-Host "== Phase 9 overnight automation (fast=$Fast medium=$Medium production=$Production n_train=$effectiveNTrain n_eval=$effectiveNEval) ==" -ForegroundColor Cyan
@@ -66,16 +65,10 @@ if ($MathIntegration) {
     $overnightArgs.MathIntegration = $true
 }
 
-Write-Host "== D17 hybrid overnight ==" -ForegroundColor Cyan
+Write-Host "== D17 hp overnight ==" -ForegroundColor Cyan
 & $d17Script @overnightArgs
 if ($LASTEXITCODE -ne 0) {
     throw "run_d17_overnight failed exit=$LASTEXITCODE"
-}
-
-Write-Host "== D21 RPSM overnight ==" -ForegroundColor Cyan
-& $rpsmScript @overnightArgs
-if ($LASTEXITCODE -ne 0) {
-    throw "run_rpsm_overnight failed exit=$LASTEXITCODE"
 }
 
 if (-not $SkipCellSweep) {
@@ -120,7 +113,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "cypha_baseline_lock d17 failed exit=$LASTEXITCODE"
 }
 
-Write-Host "== baseline lock: d21 ==" -ForegroundColor Cyan
+Write-Host "== baseline lock: d21 (hp; lock key rpsm_results) ==" -ForegroundColor Cyan
 & $lockScript -Run d21 @lockArgs
 if ($LASTEXITCODE -ne 0) {
     throw "cypha_baseline_lock d21 failed exit=$LASTEXITCODE"

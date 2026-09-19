@@ -29,5 +29,4 @@ set(CYPHA_LEGACY_CYPHALM_EXE_TARGETS
   embed_table_golden
   cyphalm_hebbian_golden
   cyphalm_char_lstm_golden
-  rpsm_embed_grad_finite_diff
 )

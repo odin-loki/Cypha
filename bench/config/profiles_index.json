@@ -63,13 +63,12 @@
     "corpus": "wikitext2",
     "notes": "300k token budget overnight run; see bench/config/d17_wikitext_overnight_profile.json"
   },
-  "llm_d21_rpsm": {
-    "path": "profiles/cyphalm_d21_rpsm.json",
-    "config": "d21_rpsm_profile.json",
+  "llm_d21_hp": {
+    "path": "profiles/cyphalm_d21_hp.json",
     "env": "CYPHA_BENCH_OVERNIGHT=1;CYPHA_BENCH_FULL_CORPUS=1",
     "domain": "d21",
     "corpus": "wikitext2",
-    "notes": "300k RPSM end-to-end train; see bench/config/d21_rpsm_profile.json"
+    "notes": "300k hp overnight train (replaces retired RPSM d21 profile)"
   },
   "intelligence_cross_d22": {
     "path": "everyday_profile.json",

@@ -6,7 +6,9 @@
 
 ## Overview
 
-Cypha's sequence / LLM algorithm is the **hp** integer-exact Hutter Prize context-mixing compressor. The previous Hybrid GRIA+LSTM stack is **not** the production path; its sources remain in the tree for reference but are excluded from the default `cypha_core` build.
+Cypha's sequence / LLM algorithm is the **hp** integer-exact Hutter Prize context-mixing compressor. The previous Hybrid GRIA+LSTM stack is **not** the production path; its sources remain in the tree for reference but are excluded from the default `cypha_core` build. **RPSM** was fully removed in 2026-09.
+
+**Superseded / removed (history):** [`docs/history/LEGACY_LLM.md`](../../history/LEGACY_LLM.md) · [`docs/history/REMOVED_RPSM.md`](../../history/REMOVED_RPSM.md) — git history on `main`/this PR retains pre-removal code for archaeology.
 
 ```
 token (byte 0..255) ─► HpSequenceBackend ─► hp::Predictor

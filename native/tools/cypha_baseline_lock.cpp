@@ -473,7 +473,7 @@ ProcessResult run_d21_bench(const fs::path& exe_dir, const Args& args) {
     if (!fs::is_regular_file(exe)) {
         throw std::runtime_error("missing executable: " + exe.string());
     }
-    return run_capture(exe, {"--profile", "d21", "--mode", "rpsm", "--overnight", "--n-train",
+    return run_capture(exe, {"--profile", "d21", "--mode", "hybrid", "--overnight", "--n-train",
                              std::to_string(args.n_train), "--n-eval", std::to_string(args.n_eval),
                              "--threads", std::to_string(args.threads)},
                      exe_dir);
@@ -652,12 +652,12 @@ void merge_rpsm_results(Json& lock, const Args& args, double bpc, const Json& be
     Json& section = lock["rpsm_results"];
     section["status"] = run_status_label(args);
     section["profile"] = "d21";
-    section["mode"] = "rpsm";
+    section["mode"] = "hp";
     section["n_train"] = args.n_train;
     section["n_eval"] = args.n_eval;
     section["bpc"] = bpc;
     section["run_at"] = iso_timestamp_now();
-    section["runner"] = "cyphalm_bench_native --overnight --mode rpsm";
+    section["runner"] = "cyphalm_bench_native --overnight --mode hybrid";
     section["env"] = make_env_snapshot(args);
     if (bench_json.contains("corpus")) {
         section["corpus"] = bench_json["corpus"];

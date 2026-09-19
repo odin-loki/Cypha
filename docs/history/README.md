@@ -21,7 +21,16 @@ This section is that material: **archived, verified, and written up**.
 
 ---
 
-## Start here
+## Retired product subsystems (this repository)
+
+Removals and gated-off stacks **after** 2026-07-18 git start — code may be gone or behind CMake flags; narrative stays here.
+
+| Document | What it answers |
+|---|---|
+| [`REMOVED_RPSM.md`](REMOVED_RPSM.md) | RPSM (d21): what it was, removed paths, hp replacement, git archaeology |
+| [`LEGACY_LLM.md`](LEGACY_LLM.md) | Hybrid GRIA+LSTM / SSM / CharLSTM: gated build, BPC pin lineage, vs hp |
+
+## Start here (pre-repo archive)
 
 | Document | What it answers |
 |---|---|

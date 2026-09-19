@@ -70,8 +70,7 @@ ctest --test-dir native/build -R native_ --output-on-failure
 | `resume_cell_sweep.ps1` | Resume an interrupted production cell sweep from `variant_*.json` checkpoints (`-Production`, optional `-StartWatcher`) | disk |
 | `wait_cell_sweep_and_lock.ps1` | Wait for `cypha_cell_hypothesis_sweep` to exit, then refresh `cell_sweep_results` in `BASELINE_LOCK.json` (optional `-AutoCommit`) | lock JSON |
 | `run_cell_sweep_parallel.ps1` | Run remaining cell-hypothesis variants in parallel (`-Production`, `-Parallelism`; 36 runnable: B0–B2, H01–H23, U01–U10) | disk |
-| `run_rpsm_overnight.ps1` | RPSM d21 overnight bench (optional `-Fast`, `-Medium`, `-Production`) | disk |
-| `run_overnight_all.ps1` | D17 + d21 + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast`, `-Medium`, or `-Production` to child scripts) | `bench/BASELINE_LOCK.json` |
+| `run_overnight_all.ps1` | D17 hp + d21 hp lock (`cypha_baseline_lock --run d21`) + cell sweep + `update_baseline_lock.ps1` merge (passes `-Fast`, `-Medium`, or `-Production` to child scripts). Retired RPSM: [`docs/history/REMOVED_RPSM.md`](../docs/history/REMOVED_RPSM.md) | `bench/BASELINE_LOCK.json` |
 | `run_production_overnight.ps1` | Dedicated 300k production overnight wrapper — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`, then `finalize_production_overnight.ps1` + `commit_production_lock.ps1 -DryRun` preview | disk |
 | `finalize_production_overnight.ps1` | Post-overnight gate: `validate_baseline_lock.ps1 -Production`, best-effort `update_baseline_lock.ps1 -Run all -Production` when `overnight_results.n_train < 300000` and `cypha_baseline_lock` exists (Phase 23), `cypha_bench_run --domain-tag d27` (+ d28 when present); prints lock section summary (`n_train`, `status`, `bpc`) | console |
 | `commit_production_lock.ps1` | Phase 15: chains `finalize_production_overnight.ps1`, shows lock diff + suggested message; `-DryRun` preview, `-Force` to commit (never pushes) | console |
@@ -135,7 +134,7 @@ Full 300k production overnight is **not** run in CI. Blocking gate: `native_` CT
 
 | Script / binary | Purpose | CTest |
 |-----------------|---------|-------|
-| **`cypha_bench_run --domain-tag d28`** | Unified overnight completion validation — cross-check `overnight_results`, `rpsm_results`, `cell_sweep_results` share `n_train`/`n_eval`; profile `bench/config/d28_overnight_complete_profile.json` | `native_d28_overnight_complete_smoke` |
+| **`cypha_bench_run --domain-tag d28`** | Unified overnight completion validation — cross-check `overnight_results`, `rpsm_results` (d21 hp; legacy key name), `cell_sweep_results` share `n_train`/`n_eval`; profile `bench/config/d28_overnight_complete_profile.json` | `native_d28_overnight_complete_smoke` |
 | **`finalize_production_overnight.ps1`** | Post-overnight gate: `validate_baseline_lock.ps1 -Production`, d27 + d28 bench domains, lock section summary | manual (chained from `run_production_overnight.ps1`) |
 | Status validator fix | `validate_baseline_lock.ps1` / `baseline_lock_validate` accept `medium_smoke` and `production` | `native_baseline_lock_validate_production_status` |
 | Cell sweep artifact path | Default overnight output `bench/results/cell_sweep` via `bench_paths::results_dir()` | manual |

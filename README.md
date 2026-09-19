@@ -214,7 +214,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: latent RFF auto-gamma reaches **~76.3%** (~2.7 pp vs sklearn ~79%); see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
-- **Sequence / LLM:** **hp** context mixer via `Cypha::init_default_sequence` / `apply_hp_production_recipe`. Historical Hybrid GRIA+LSTM **2.664 BPC** pin remains in `bench/BASELINE_LOCK.json` for comparison only. Run via **`cypha_bench_run`** / **`cyphalm_bench_native`** (bench profiles may need hp relabeling).
+- **Sequence / LLM:** **hp** context mixer via `Cypha::init_default_sequence` / `apply_hp_production_recipe` (light default `HP_SLOT_MAX=24`; champ via `CYPHA_HP_PROFILE=champ`). Historical Hybrid GRIA+LSTM **2.664 BPC** pin remains in `bench/BASELINE_LOCK.json` for comparison only — not hp. Run via **`cypha_bench_run`** / **`cyphalm_bench_native`**. **Superseded stacks:** [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md) (hybrid GRIA+LSTM, gated build), [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md) (RPSM removed 2026-09; git history retains code).
 - **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/archive/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
 - **Sequence REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE), plus `/sample`, `/retrieve`, `/sequence/*`.
 

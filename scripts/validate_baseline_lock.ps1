@@ -1,4 +1,5 @@
-# Validate bench/BASELINE_LOCK.json schema, d17 pin, and overnight/rpsm/cell-sweep sections.
+# Validate bench/BASELINE_LOCK.json schema, d17 pin, and overnight/d21-hp/cell-sweep sections.
+# Lock section key rpsm_results is historical; mode must be hp (or legacy rpsm).
 param(
     [string]$LockFile = "",
     [switch]$Strict,
@@ -79,8 +80,10 @@ function Validate-ResultSection {
     if ($Section.profile -ne $ExpectedProfile) {
         Fail "$Name profile expected '$ExpectedProfile', got '$($Section.profile)'"
     }
-    if ($Section.mode -ne $ExpectedMode) {
-        Fail "$Name mode expected '$ExpectedMode', got '$($Section.mode)'"
+    if ($null -ne $ExpectedMode -and $ExpectedMode -ne "") {
+        if ($Section.mode -ne $ExpectedMode) {
+            Fail "$Name mode expected '$ExpectedMode', got '$($Section.mode)'"
+        }
     }
     if ($Section.env -isnot [pscustomobject]) {
         Fail "$Name env must be an object"
@@ -123,7 +126,11 @@ if ($D17_PIN_BPC -lt 2.0 -or $D17_PIN_BPC -gt 4.0) {
 }
 
 Validate-ResultSection $lock.overnight_results "overnight_results" "d17" "hybrid"
-Validate-ResultSection $lock.rpsm_results "rpsm_results" "d21" "rpsm"
+Validate-ResultSection $lock.rpsm_results "rpsm_results" "d21" $null
+$d21Mode = $lock.rpsm_results.mode
+if ($d21Mode -notin @("hp", "rpsm")) {
+    Fail "rpsm_results mode expected 'hp' or legacy 'rpsm', got '$d21Mode'"
+}
 
 if ($lock.PSObject.Properties.Name -contains "cell_sweep_results" -and $null -ne $lock.cell_sweep_results) {
     Validate-ResultSection $lock.cell_sweep_results "cell_sweep_results" "d17" "cell-sweep"
