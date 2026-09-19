@@ -103,6 +103,15 @@ class CyphaLMModel {
     double eval_bpc(const std::vector<int>& ids, int n_eval,
                     cypha::intelligence::IntelligenceProfiler* profiler = nullptr);
 
+    /// Mean −log₂ P(byte) via ``observe_next_byte`` (hp compress encode math, no 256-clone path).
+    /// Scores every byte including the first; online-adapts like ``hp c``.
+    double eval_bpc_compress_equivalent(const std::vector<int>& ids, int n_eval);
+
+    /// Alias for ``eval_bpc_compress_equivalent`` (harness / reporting name).
+    double compress_equivalent_bpc(const std::vector<int>& ids, int n_eval) {
+        return eval_bpc_compress_equivalent(ids, n_eval);
+    }
+
     void accumulate_intelligence_profile(const std::vector<int>& ids, int n_steps,
                                          cypha::intelligence::IntelligenceProfiler& profiler);
 

@@ -3,9 +3,12 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <optional>
 #include <sstream>
@@ -403,6 +406,194 @@ void print_section(const char* name, const nlohmann::json& j) {
     std::cout.flush();
 }
 
+std::vector<int> load_raw_bytes_file(const std::string& path, int max_bytes) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("cannot open corpus file: " + path);
+    }
+    std::vector<int> ids;
+    ids.reserve(static_cast<std::size_t>(std::max(0, max_bytes)));
+    int ch = 0;
+    while (max_bytes <= 0 || static_cast<int>(ids.size()) < max_bytes) {
+        ch = in.get();
+        if (ch == std::char_traits<char>::eof()) {
+            break;
+        }
+        ids.push_back(ch & 0xff);
+    }
+    if (ids.empty()) {
+        throw std::runtime_error("corpus file empty: " + path);
+    }
+    return ids;
+}
+
+struct HpCompressResult {
+    bool ok = false;
+    long long input_bytes = 0;
+    long long archive_bytes = 0;
+    double archive_bpc = std::numeric_limits<double>::quiet_NaN();
+    std::string stderr_tail;
+};
+
+HpCompressResult run_hp_compress(const std::string& hp_tool, const std::string& corpus_path,
+                                 const std::string& archive_path, int mem_bits, int mixer_lr,
+                                 bool gria) {
+    HpCompressResult out;
+    std::ostringstream cmd;
+    cmd << "\"" << hp_tool << "\" c --mem " << mem_bits << " --lr " << mixer_lr;
+    if (!gria) {
+        cmd << " --no-gria";
+    }
+    cmd << " \"" << corpus_path << "\" \"" << archive_path << "\" 2>&1";
+    std::FILE* pipe = popen(cmd.str().c_str(), "r");
+    if (!pipe) {
+        out.stderr_tail = "popen failed";
+        return out;
+    }
+    std::string captured;
+    char buf[512];
+    while (std::fgets(buf, sizeof(buf), pipe) != nullptr) {
+        captured += buf;
+    }
+    const int rc = pclose(pipe);
+    out.stderr_tail = captured.size() > 4000 ? captured.substr(captured.size() - 4000) : captured;
+
+    long long in_bytes = 0;
+    long long arc_bytes = 0;
+    long long bpc_whole = 0;
+    long long bpc_frac = 0;
+    if (std::sscanf(captured.c_str(), "\rin %lld B  out %ld B", &in_bytes,
+                    reinterpret_cast<long*>(&arc_bytes)) >= 2 ||
+        std::sscanf(captured.c_str(), "in %lld B  out %ld B", &in_bytes,
+                    reinterpret_cast<long*>(&arc_bytes)) >= 2) {
+        out.input_bytes = in_bytes;
+        out.archive_bytes = arc_bytes;
+    }
+    const char* bpc_pos = std::strstr(captured.c_str(), "bpc ");
+    if (bpc_pos != nullptr &&
+        std::sscanf(bpc_pos, "bpc %lld.%lld", &bpc_whole, &bpc_frac) >= 2) {
+        out.archive_bpc =
+            static_cast<double>(bpc_whole) + static_cast<double>(bpc_frac) / 1000.0;
+    } else if (out.input_bytes > 0 && out.archive_bytes > 0) {
+        out.archive_bpc =
+            static_cast<double>(out.archive_bytes) * 8.0 / static_cast<double>(out.input_bytes);
+    }
+    out.ok = (rc == 0 && out.input_bytes > 0 && std::isfinite(out.archive_bpc));
+    return out;
+}
+
+std::string write_temp_corpus(const std::vector<int>& ids, int n_bytes) {
+    const int n = std::min(n_bytes, static_cast<int>(ids.size()));
+    const std::string path = "/tmp/cyphalm_bpc_gap_corpus.bin";
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("cannot write temp corpus: " + path);
+    }
+    for (int i = 0; i < n; ++i) {
+        const char b = static_cast<char>(ids[static_cast<std::size_t>(i)] & 0xff);
+        out.put(b);
+    }
+    if (!out) {
+        throw std::runtime_error("temp corpus write failed: " + path);
+    }
+    return path;
+}
+
+nlohmann::json measure_bpc_gap(cypha::cyphalm::CyphaLMModel& model, const std::vector<int>& ids,
+                               int observe_bytes, int clone_eval_n, int clone_train_steps,
+                               const std::string& corpus_label, const std::string& corpus_path,
+                               const std::string& hp_tool, bool run_hp) {
+    nlohmann::json j;
+    j["corpus_label"] = corpus_label;
+    j["corpus_path"] = corpus_path;
+    j["total_bytes_available"] = ids.size();
+    j["hp_table_bits"] = model.config().hp_table_bits;
+    j["hp_slot_max"] = model.config().hp_slot_max;
+    j["hp_slot_compile_max"] = cypha::cyphalm::hp_compile_slot_max();
+    j["hp_mixer_lr"] = model.config().hp_mixer_lr;
+    j["hp_gria"] = model.config().hp_gria;
+
+    const int n_observe = std::min(observe_bytes, static_cast<int>(ids.size()));
+    j["observe_bytes"] = n_observe;
+
+    std::cerr << "bpc_gap: observe_stream n=" << n_observe << " ...\n";
+    const auto t0 = Clock::now();
+    const double observe_bpc = model.eval_bpc_compress_equivalent(ids, n_observe);
+    j["cypha_observe_bpc"] = observe_bpc;
+    j["cypha_compress_equivalent_bpc"] = observe_bpc;
+    j["cypha_observe_ms"] = elapsed_ms(t0);
+    j["cypha_observe_method"] =
+        "eval_bpc_compress_equivalent: reset_context; sum -log2 p(bit) via observe_next_byte";
+
+    if (run_hp && !hp_tool.empty()) {
+        std::string compress_path = corpus_path;
+        std::string temp_corpus;
+        if (compress_path.empty() || n_observe < static_cast<int>(ids.size())) {
+            temp_corpus = write_temp_corpus(ids, n_observe);
+            compress_path = temp_corpus;
+        }
+        const std::string archive_path = compress_path + ".cyhp.tmp";
+        std::cerr << "bpc_gap: hp compress via " << hp_tool << " on " << compress_path
+                  << " ...\n";
+        const auto t1 = Clock::now();
+        const HpCompressResult hp =
+            run_hp_compress(hp_tool, compress_path, archive_path, model.config().hp_table_bits,
+                            model.config().hp_mixer_lr, model.config().hp_gria);
+        j["hp_compress_corpus_path"] = compress_path;
+        j["hp_compress_ms"] = elapsed_ms(t1);
+        j["hp_compress_ok"] = hp.ok;
+        j["hp_input_bytes"] = hp.input_bytes;
+        j["hp_archive_bytes"] = hp.archive_bytes;
+        j["hp_archive_bpc"] = hp.archive_bpc;
+        j["hp_archive_bpc_formula"] = "archive_bytes * 8 / input_bytes (includes header+arith)";
+        j["hp_stderr_tail"] = hp.stderr_tail;
+        std::remove(archive_path.c_str());
+        if (!temp_corpus.empty()) {
+            std::remove(temp_corpus.c_str());
+        }
+        if (hp.ok && std::isfinite(observe_bpc)) {
+            j["observe_minus_archive_bpc"] = observe_bpc - hp.archive_bpc;
+        }
+    } else {
+        j["hp_compress_skipped"] = true;
+        if (hp_tool.empty()) {
+            j["hp_compress_skip_reason"] = "pass --hp-tool PATH to measure archive BPC";
+        }
+    }
+
+    const int n_clone = std::min(clone_eval_n, static_cast<int>(ids.size()) - 1);
+    j["clone_eval_n"] = n_clone;
+    if (n_clone > 0) {
+        std::cerr << "bpc_gap: eval_bpc clone path n=" << n_clone << " (cold) ...\n";
+        const auto t2 = Clock::now();
+        j["cypha_eval_bpc_cold"] = model.eval_bpc(ids, n_clone);
+        j["cypha_eval_bpc_cold_ms"] = elapsed_ms(t2);
+        j["cypha_eval_bpc_cold_method"] =
+            "eval_bpc: reset; predict_next(token_i) + clone log_probs; scores n-1 transitions";
+
+        if (clone_train_steps > 0 && ids.size() >= 2) {
+            std::cerr << "bpc_gap: train_sequence " << clone_train_steps
+                      << " then eval_bpc n=" << n_clone << " ...\n";
+            model.reset_context();
+            model.train_sequence(ids, clone_train_steps, 1, nullptr);
+            const auto t3 = Clock::now();
+            j["cypha_eval_bpc_after_train"] = model.eval_bpc(ids, n_clone);
+            j["cypha_eval_bpc_after_train_ms"] = elapsed_ms(t3);
+            j["clone_train_steps"] = clone_train_steps;
+            j["cypha_eval_bpc_after_train_method"] =
+                "train_sequence (predict_next+adapt) then eval_bpc without reset";
+        }
+    }
+
+    j["metric_definitions"] = {
+        {"hp_archive_bpc", "Lossless CYHP file size / raw bytes (overhead included)"},
+        {"cypha_observe_bpc", "Ideal NLL from hp::Predictor bit path (no arith rounding)"},
+        {"cypha_eval_bpc_cold", "256-clone predict_next API; cold start; skips P(b0|empty)"},
+        {"cypha_eval_bpc_after_train", "Same clone API after train_sequence (may double-consume)"},
+    };
+    return j;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -425,6 +616,13 @@ int main(int argc, char** argv) {
     int gen_tokens = 32;
     int wiki_train_steps = 128;
     int wiki_eval_n = 64;
+    bool skip_bpc_gap = false;
+    bool bpc_gap_only = false;
+    int bpc_gap_bytes = 100000;
+    int bpc_gap_clone_n = 16;
+    int bpc_gap_clone_train = 32;
+    std::string corpus_file;
+    std::string hp_tool;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--skip-wiki") {
@@ -463,12 +661,29 @@ int main(int argc, char** argv) {
             topk_n = std::stoi(argv[++i]);
         } else if (a == "--gen-tokens" && i + 1 < argc) {
             gen_tokens = std::stoi(argv[++i]);
+        } else if (a == "--skip-bpc-gap") {
+            skip_bpc_gap = true;
+        } else if (a == "--bpc-gap-only") {
+            bpc_gap_only = true;
+        } else if (a == "--bpc-gap-bytes" && i + 1 < argc) {
+            bpc_gap_bytes = std::stoi(argv[++i]);
+        } else if (a == "--bpc-gap-clone-n" && i + 1 < argc) {
+            bpc_gap_clone_n = std::stoi(argv[++i]);
+        } else if (a == "--bpc-gap-clone-train" && i + 1 < argc) {
+            bpc_gap_clone_train = std::stoi(argv[++i]);
+        } else if (a == "--corpus-file" && i + 1 < argc) {
+            corpus_file = argv[++i];
+        } else if (a == "--hp-tool" && i + 1 < argc) {
+            hp_tool = argv[++i];
         } else if (a == "--help" || a == "-h") {
             std::puts(
-                "cyphalm_llm_profile [--wiki-only] [--skip-wiki] [--skip-negative-control] "
-                "[--skip-roundtrip] [--wiki-max-chars N] [--wiki-train-steps N] "
-                "[--wiki-eval-n N] [--wiki-prompt-len N] [--latency-iters N] "
-                "[--train-cap N] [--eval-cap N] [--topk-n N] [--gen-tokens N]");
+                "cyphalm_llm_profile [--wiki-only] [--bpc-gap-only] [--skip-bpc-gap] "
+                "[--skip-wiki] [--skip-negative-control] [--skip-roundtrip] "
+                "[--wiki-max-chars N] [--wiki-train-steps N] [--wiki-eval-n N] "
+                "[--bpc-gap-bytes N] [--bpc-gap-clone-n N] [--bpc-gap-clone-train N] "
+                "[--corpus-file PATH] [--hp-tool PATH] [--wiki-prompt-len N] "
+                "[--latency-iters N] [--train-cap N] [--eval-cap N] [--topk-n N] "
+                "[--gen-tokens N]");
             return 0;
         }
     }
@@ -485,6 +700,16 @@ int main(int argc, char** argv) {
             skip_negative_control = true;
             skip_context = true;
             skip_roundtrip = true;
+        }
+        if (bpc_gap_only) {
+            skip_construct = true;
+            skip_latency = true;
+            skip_throughput = true;
+            skip_negative_control = true;
+            skip_context = true;
+            skip_roundtrip = true;
+            skip_wiki = true;
+            skip_generation_wiki = true;
         }
 
         auto cfg = production_cfg();
@@ -554,6 +779,39 @@ int main(int argc, char** argv) {
             }
             print_section("codec_roundtrip",
                           report["codec_roundtrip"] = capability_roundtrip(model, rt));
+        }
+
+        if (!skip_bpc_gap) {
+            try {
+                std::string gap_path = corpus_file;
+                std::vector<int> gap_ids;
+                std::string gap_label;
+                if (!gap_path.empty()) {
+                    gap_ids = load_raw_bytes_file(gap_path, bpc_gap_bytes);
+                    gap_label = gap_path;
+                } else {
+                    if (wiki_corpus == nullptr) {
+                        wiki_loaded =
+                            cypha::cyphalm::load_bench_corpus("d21", wiki_max_chars, cfg.vocab_size);
+                        wiki_corpus = &wiki_loaded.value();
+                    }
+                    gap_ids = wiki_corpus->train_ids;
+                    if (static_cast<int>(gap_ids.size()) > bpc_gap_bytes) {
+                        gap_ids.resize(static_cast<std::size_t>(bpc_gap_bytes));
+                    }
+                    gap_label = "wikitext2_train_bytes_cap";
+                    gap_path = "bench/data/wikitext2/wikitext-2/wiki.train.tokens";
+                }
+                const bool run_hp = !hp_tool.empty();
+                print_section("bpc_gap_same_corpus",
+                              report["bpc_gap_same_corpus"] = measure_bpc_gap(
+                                  model, gap_ids, bpc_gap_bytes, bpc_gap_clone_n,
+                                  bpc_gap_clone_train, gap_label, gap_path, hp_tool, run_hp));
+            } catch (const std::exception& ex) {
+                nlohmann::json err;
+                err["error"] = ex.what();
+                print_section("bpc_gap_same_corpus", report["bpc_gap_same_corpus"] = err);
+            }
         }
 
         const auto rss_final = read_proc_status();
