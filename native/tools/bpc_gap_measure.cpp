@@ -153,7 +153,13 @@ int main(int argc, char** argv) {
     std::printf("{\n");
     std::printf("  \"corpus\": \"%s\",\n", corpus.c_str());
     std::printf("  \"bytes\": %d,\n", n);
+#if defined(CYPHA_HP_PROFILE_CHAMP)
+    std::printf("  \"hp_profile\": \"champ\",\n");
+#elif defined(CYPHA_HP_PROFILE_GATE24)
+    std::printf("  \"hp_profile\": \"gate24\",\n");
+#else
     std::printf("  \"hp_profile\": \"light\",\n");
+#endif
     std::printf("  \"hp_table_bits\": %d,\n", cfg.hp_table_bits);
     std::printf("  \"hp_slot_compile_max\": %d,\n", cypha::cyphalm::hp_compile_slot_max());
     std::printf("  \"observe_bpc\": %.6f,\n", observe_bpc);

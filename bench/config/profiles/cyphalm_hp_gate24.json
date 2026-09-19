@@ -1,0 +1,20 @@
+{
+  "vocab_size": 256,
+  "d_embed": 64,
+  "d_state": 128,
+  "field_dim": 160,
+  "context_length": 256,
+  "context_mode": "hp_gate24",
+  "hp_table_bits": 22,
+  "hp_slot_max": 24,
+  "hp_mixer_lr": 2,
+  "hp_gria": true,
+  "train_epochs": 2,
+  "view_schedule": "schedule_b",
+  "seed": 42,
+  "online": true,
+  "_meta": {
+    "status": "quality_screen",
+    "notes": "hp gate24 profile (v78_flags.ps1 + HP_SLOT_MAX=24). Requires Cypha build with -DCYPHA_HP_PROFILE=gate24. PLAN 8MB screen class (~1.61 BPC enwik8MB). Not the CI default (light); use for quality claims. Champ (-DCYPHA_HP_PROFILE=champ, SLOT_MAX=35) is the user ~1.610 bar (~15 GB RSS)."
+  }
+}

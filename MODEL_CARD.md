@@ -27,10 +27,10 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Item | Value |
 |------|-------|
 | Algorithm | **hp** integer-exact context mixer ([CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm)) |
-| Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` (production) / `apply_hp_champ_recipe()` (research) |
+| Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` (light) / `apply_hp_gate24_recipe()` (quality screen) / `apply_hp_champ_recipe()` (champ) |
 | Production knobs | `hp_table_bits=22`, `hp_slot_max=24`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
-| Compile default | `HP_SLOT_MAX=24`, grow flags OFF (`-DCYPHA_HP_PROFILE=light`). Champ: `-DCYPHA_HP_PROFILE=champ` → v78_flags.ps1 + `HP_SLOT_MAX=35` |
-| RAM hotspot | `HpSequenceBackend` holds dual `hp::Predictor`; full-vocab `next_byte_log_probs()` clones 256× (hot path); **BPC default uses bit-serial observe** (no 256 fan-out) |
+| Compile SKUs | **light** (CI default, fast/dev, 0/78 v78, ~1.72 BPC enwik8MB) · **gate24** (`-DCYPHA_HP_PROFILE=gate24`, 78/78 v78 + SLOT_MAX=24, ~1.61 BPC class) · **champ** (`-DCYPHA_HP_PROFILE=champ`, 78/78 + SLOT_MAX=35, ~1.610 bar, ~15 GB RSS) |
+| RAM hotspot | `HpSequenceBackend` holds `pred_` + `scratch_` + DFS checkpoint pool; full-vocab `next_byte_log_probs()` uses **bit-tree prefix DFS** (legacy 256-clone: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`); **BPC default uses bit-serial observe** |
 | Lab RSS (hp harness, mem 22) | **~1.6 GB** @ `SLOT_MAX=24`; **~15 GB** @ `SLOT_MAX=35` (`hp/tools/hp_harness.sh` RECORD H34) |
 | Cypha BPC (default) | **`eval_bpc` / `compress_equivalent_bpc`**: bit-serial observe NLL — **matches hp archive BPC** on same corpus/flags (see gap report) |
 | Cypha BPC (API / top-k) | **`predict_next` + 256-clone path**: different metric; **not** hp archive BPC — use only when reporting REST/inference behavior |
