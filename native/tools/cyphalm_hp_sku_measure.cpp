@@ -18,8 +18,9 @@
 namespace {
 
 constexpr int kEnwikBytes = 8388608;
-constexpr double kUserChampBpc = 1.610906;
-constexpr double kGate24RefBpc = 1.611759;
+// CompressionAlgorithm RECORD bars (HP_ALGORITHM_PROFILE.md, same enwik8.8mb SHA).
+constexpr double kUserChampBpc = 1.610906;  // 1,689,157 B @ SLOT_MAX=35
+constexpr double kGate24RefBpc = 1.607000;  // 1,685,481 B @ SLOT_MAX=24 (upstream s24)
 
 struct ProcStatus {
     long vm_rss_kb = -1;
@@ -170,12 +171,14 @@ int main(int argc, char** argv) {
     std::string hp_tool;
     std::string work_dir = "/tmp/cyphalm_sku_measure";
     int latency_iters = 2;
+    bool skip_archive = false;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--corpus" && i + 1 < argc) corpus = argv[++i];
         else if (a == "--hp-tool" && i + 1 < argc) hp_tool = argv[++i];
         else if (a == "--work-dir" && i + 1 < argc) work_dir = argv[++i];
         else if (a == "--latency-iters" && i + 1 < argc) latency_iters = std::stoi(argv[++i]);
+        else if (a == "--skip-archive") skip_archive = true;
     }
     if (hp_tool.empty()) {
         std::fprintf(stderr, "--hp-tool required\n");
@@ -194,7 +197,31 @@ int main(int argc, char** argv) {
 
     // Archive compress is independent of Cypha observe; run first so a slow
     // 8 MB observe pass does not block hp CLI timing / --profile capture.
-    const ArchiveResult arc = run_hp_archive(hp_tool, corpus, work_dir);
+    ArchiveResult arc;
+    if (skip_archive) {
+        arc.status = "skipped";
+        const std::string arc_path = work_dir + "/out.cyhp";
+        if (std::ifstream(arc_path)) {
+            arc.archive_bytes = static_cast<long long>(std::filesystem::file_size(arc_path));
+            arc.raw_bytes = kEnwikBytes;
+            if (arc.raw_bytes > 0) {
+                arc.archive_bpc = static_cast<double>(arc.archive_bytes) * 8.0 /
+                                  static_cast<double>(arc.raw_bytes);
+            }
+            arc.status = "ok";
+            const std::string raw = work_dir + "/raw.bin";
+            arc.rt_sha256 = sha256_file(raw);
+            const std::string dec = work_dir + "/dec.bin";
+            if (std::ifstream(dec)) {
+                arc.rt_ok = (sha256_file(raw) == sha256_file(dec));
+            }
+            std::ifstream prof(work_dir + "/compress.stderr");
+            arc.profile_text = std::string((std::istreambuf_iterator<char>(prof)),
+                                           std::istreambuf_iterator<char>());
+        }
+    } else {
+        arc = run_hp_archive(hp_tool, corpus, work_dir);
+    }
 
     std::printf("{\n");
     std::printf("  \"sku\": \"%s\",\n", sku.c_str());
@@ -203,8 +230,8 @@ int main(int argc, char** argv) {
     std::printf("  \"corpus_sha256\": \"%s\",\n", sha256_file(corpus).c_str());
     std::printf("  \"hp_slot_compile_max\": %d,\n", cypha::cyphalm::hp_compile_slot_max());
     std::printf("  \"hp_table_bits\": %d,\n", cfg.hp_table_bits);
-    std::printf("  \"user_champ_ref_bpc\": %.6f,\n", kUserChampBpc);
-    std::printf("  \"gate24_ref_bpc\": %.6f,\n", kGate24RefBpc);
+    std::printf("  \"upstream_champ_ref_bpc\": %.6f,\n", kUserChampBpc);
+    std::printf("  \"upstream_gate24_ref_bpc\": %.6f,\n", kGate24RefBpc);
 
     const auto rss0 = read_proc_status();
     cypha::cyphalm::CyphaLMModel model(cfg);
@@ -216,22 +243,44 @@ int main(int argc, char** argv) {
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     const auto rss2 = read_proc_status();
 
-    model.reset_context();
-    for (int i = 0; i < 64; ++i) {
-        model.hp_backend().consume_byte(static_cast<std::uint8_t>(ids[static_cast<std::size_t>(i)]));
-    }
-    const int iters = std::max(1, latency_iters);
     double bit_tree_us = 0, legacy_us = 0;
-    {
-        const auto t1 = std::chrono::steady_clock::now();
-        for (int i = 0; i < iters; ++i) {
-            (void)model.hp_backend().next_byte_log_probs_bit_tree(256);
+#if !defined(CYPHA_HP_PROFILE_GATE24) && !defined(CYPHA_HP_PROFILE_CHAMP)
+    if (latency_iters > 0) {
+        model.reset_context();
+        for (int i = 0; i < 64; ++i) {
+            model.hp_backend().consume_byte(
+                static_cast<std::uint8_t>(ids[static_cast<std::size_t>(i)]));
         }
-        bit_tree_us =
-            std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t1).count() /
-            iters;
+        const int iters = latency_iters;
+        {
+            const auto t1 = std::chrono::steady_clock::now();
+            for (int i = 0; i < iters; ++i) {
+                (void)model.hp_backend().next_byte_log_probs_bit_tree(256);
+            }
+            bit_tree_us =
+                std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t1)
+                    .count() /
+                iters;
+        }
+        {
+            const auto t2 = std::chrono::steady_clock::now();
+            for (int i = 0; i < iters; ++i) {
+                (void)model.hp_backend().next_byte_log_probs_legacy(256);
+            }
+            legacy_us =
+                std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t2)
+                    .count() /
+                iters;
+        }
     }
-    {
+#else
+    if (latency_iters > 0) {
+        model.reset_context();
+        for (int i = 0; i < 64; ++i) {
+            model.hp_backend().consume_byte(
+                static_cast<std::uint8_t>(ids[static_cast<std::size_t>(i)]));
+        }
+        const int iters = latency_iters;
         const auto t2 = std::chrono::steady_clock::now();
         for (int i = 0; i < iters; ++i) {
             (void)model.hp_backend().next_byte_log_probs_legacy(256);
@@ -240,6 +289,7 @@ int main(int argc, char** argv) {
             std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t2).count() /
             iters;
     }
+#endif
 
     std::printf("  \"observe_bpc\": %.6f,\n", observe_bpc);
     std::printf("  \"observe_ms\": %.1f,\n", observe_ms);
@@ -248,7 +298,8 @@ int main(int argc, char** argv) {
     std::printf("  \"archive_bpc\": %.6f,\n", arc.archive_bpc);
     std::printf("  \"archive_bytes\": %lld,\n", arc.archive_bytes);
     std::printf("  \"observe_minus_archive_bpc\": %.6f,\n", observe_bpc - arc.archive_bpc);
-    std::printf("  \"delta_vs_user_champ\": %.6f,\n", observe_bpc - kUserChampBpc);
+    std::printf("  \"delta_vs_upstream_champ\": %.6f,\n", observe_bpc - kUserChampBpc);
+    std::printf("  \"delta_vs_upstream_gate24\": %.6f,\n", observe_bpc - kGate24RefBpc);
     std::printf("  \"compress_ms\": %.1f,\n", arc.compress_ms);
     std::printf("  \"roundtrip_ok\": %s,\n", arc.rt_ok ? "true" : "false");
     std::printf("  \"roundtrip_sha256\": \"%s\",\n", arc.rt_sha256.c_str());
@@ -269,5 +320,6 @@ int main(int argc, char** argv) {
     std::printf("\",\n");
     std::printf("  \"status\": \"ok\"\n");
     std::printf("}\n");
+    if (skip_archive) return 0;
     return arc.status == "ok" ? 0 : 1;
 }

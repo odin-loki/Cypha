@@ -10,7 +10,10 @@ mkdir -p "$OUT" "$MEASURE_DIR"
 HP_SRC="$ROOT/native/third_party/hp/src/main.cpp"
 HP_INC="$ROOT/native/third_party/hp/include"
 XSIMD="$ROOT/native/third_party/hp/third_party/xsimd/include"
-V78=$(grep -oE '\-DHP_[A-Z0-9_]+=[0-9]+' "$ROOT/native/third_party/hp/tools/v78_flags.ps1" | grep -v HP_SLOT_MAX | tr '\n' ' ')
+# v82-era recipe: strip post-v82 accepts per CompressionAlgorithm HP_ALGORITHM_PROFILE.md §4.2
+V78=$(grep -oE '\-DHP_[A-Z0-9_]+=[0-9]+' "$ROOT/native/third_party/hp/tools/v78_flags.ps1" \
+  | grep -vE 'HP_LR1_SCALE|HP_REFGROUP|HP_SENTPOS|HP_STATETRANS|HP_CAPPARA|HP_WIKIBOLD' \
+  | grep -v HP_SLOT_MAX | tr '\n' ' ')
 
 build_hp_cli() {
   local name=$1 slot=$2

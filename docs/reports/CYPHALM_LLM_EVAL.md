@@ -2,120 +2,96 @@
 
 **Date:** 2026-09-19  
 **Branch:** `cursor/bit-tree-gate24-eval-9d44`  
-**Harness:** `native/tools/cyphalm_hp_sku_measure.cpp`, `scripts/measure_enwik_skus.sh`, `scripts/hp_v78_flag_diff.py`  
-**Corpus:** `bench/data/enwik8/enwik8.8mb` (8,388,608 B)
+**Harness:** `native/tools/cyphalm_hp_sku_measure.cpp`, `scripts/measure_enwik_skus.sh`  
+**Corpus:** `bench/data/enwik8/enwik8.8mb` (8,388,608 B, SHA256 `09f6dd72…`)
 
-**Win metric:** enwik8.8mb archive + bit-serial observe BPC vs user **1.610906** (champ) / **1.611759** (gate24). WikiText numbers are secondary only.
+**Win metric:** enwik8.8mb archive + bit-serial observe BPC vs CompressionAlgorithm RECORD bars **1.607** (s24) / **1.610** (champ). See [upstream `HP_ALGORITHM_PROFILE.md`](https://github.com/odin-loki/CompressionAlgorithm/blob/master/docs/reports/HP_ALGORITHM_PROFILE.md).
 
----
-
-## Headline — enwik8.8mb BPC vs user bar
-
-Reference bars (CompressionAlgorithm encyclopedia / re-measured hp CLI):
-
-| Bar | Archive bytes | BPC |
-|-----|---------------|-----|
-| **User champ (v82)** | 1,689,157 | **1.610906** |
-| **gate24 screen** | 1,690,052 | **1.611759** |
-
-Measured on this VM (g++ 13.3, 4-core Xeon, **15 GiB RAM**):
-
-| SKU | v78 flags | `SLOT_MAX` | XSIMD | hp archive BPC | Cypha observe BPC | Δ obs−arch | RT SHA | Status |
-|-----|-----------|------------|-------|----------------|-------------------|------------|--------|--------|
-| **light** | 0/78 | 24 | OFF | **1.721362** (1,804,979 B) | **1.721331** | +0.000031 | PASS | OK |
-| **gate24** | **78/78** | 24 | ON | **1.611759** (1,690,052 B) | **1.611729** | +0.000030 | PASS | OK |
-| **champ** | **78/78** | 35 | ON | — | — | — | — | **OOM** (exit 137, ~5–11 s) |
-
-| SKU | Δ observe vs champ (1.610906) | Δ observe vs gate24 ref |
-|-----|------------------------------|-------------------------|
-| light | **+0.110425** | +0.109572 |
-| gate24 | **+0.000823** | **−0.000030** |
-| champ | *not measured* | *not measured* |
-
-**Conclusion:** gate24 matches the PLAN 8 MB screen bar within **0.001 BPC** of champ reference. light is **~0.11 BPC** worse — expected (0/78 v78 flags). champ requires **≥32 GiB** RAM on this workload; not completed here.
+WikiText ~2.1 (light SKU) is **secondary only** — not comparable to 1.607/1.610.
 
 ---
 
-## Flag parity (78/78)
+## Headline — enwik8.8mb vs RECORD bars
+
+### Reference (CompressionAlgorithm master, same corpus SHA)
+
+| Bar | Archive bytes | BPC | Source |
+|-----|---------------|-----|--------|
+| **s24 screen** (`SLOT_MAX=24`, mem 22) | **1,685,481** | **1.607** | upstream measured 2026-09-19 |
+| **v82 champ** (`SLOT_MAX=35`, mem 22) | **1,689,157** | **1.610** | RECORD (not re-run @ 15 GiB) |
+
+### Cypha measured (vendored hp, this VM: 15 GiB, 4-core Xeon, g++ 13.3)
+
+| SKU | v78 | `SLOT_MAX` | hp archive BPC | Cypha observe BPC | Δ vs **1.607** | Δ vs **1.610** | RT |
+|-----|-----|------------|----------------|-------------------|----------------|----------------|-----|
+| **light** | 0/78 | 24 | **1.721362** | **1.721331** | +0.114 | +0.110 | PASS |
+| **gate24** | 78/78 | 24 | **1.611759** | **1.611729** | +0.0048 | +0.0008 | PASS |
+| **champ** | 78/78 | 35 | — | — | — | — | **OOM** |
+
+**gate24 observe** re-measured 2026-09-19: **1.611729** in **430 s** (Δ obs−archive **−0.000030**).
+
+**Vendored hp note:** Cypha gate24 archive is **+4,571 B** vs upstream s24 ref (1,685,481) — tree version drift in `native/third_party/hp`, not observe math. Observe≡archive within Cypha.
+
+---
+
+## Flag parity
 
 ```bash
 python3 scripts/hp_v78_flag_diff.py
 # light: 0/78   gate24: 78/78   champ: 78/78
-# HP_SLOT_MAX: light=24  gate24=24  champ=35  v82=35
 ```
 
-gate24 and champ use full `v78_flags.ps1` + `HP_XSIMD=1` + `-msse4.1` (v82 recipe). light uses `features.hpp` defaults only.
+gate24/champ: `v78_flags.ps1` + `HP_XSIMD=1` + `-msse4.1`. Upstream v82-era recipe also strips post-v82 accepts (`HP_LR1_SCALE`, `HP_WIKIBOLD_MOD`, …) — see upstream §4.2–4.4.
 
 ---
 
-## Timing (enwik8.8mb, measured)
+## Timing (measured)
 
-| SKU | hp `c` wall | Cypha observe wall | Observe throughput |
-|-----|-------------|--------------------|--------------------|
-| light | ~203 s | ~187 s | **44,813 B/s** |
-| gate24 | ~743 s | ~902 s | **~9,300 B/s** |
-| champ | OOM @ ~5 s | OOM @ ~11 s | — |
+| SKU | hp `c` wall | Cypha observe wall | Throughput |
+|-----|-------------|--------------------|------------|
+| light | ~200 s | ~191–212 s | **~40–45k B/s** |
+| gate24 | ~425 s | **430 s** | **~19.5k B/s** |
+| champ | OOM ~5 s | OOM ~11 s | — |
 
----
-
-## Full-vocab latency (light only — honest bit-tree profile)
-
-64-byte warm context, 2 timed iterations (`cyphalm_hp_sku_measure`):
-
-| Path | µs/call | vs legacy |
-|------|---------|-----------|
-| bit-tree `next_byte_log_probs` (default light) | **36,894,104** | 1.86× slower |
-| legacy 256-clone | **19,811,989** | 1.00× |
-
-gate24/champ use **legacy 256-clone** for full-vocab scoring (bit-tree checkpoint pool OOMs on v78 table sizes). Bit-tree code is kept; it is not a latency win until hp undo stack lands. Parity: `hp_bit_tree_smoke` max Δ = 0 on light.
+Upstream s24 reference: **502 s**, **1.54 GB** peak RSS.
 
 ---
 
-## hp `--profile` (redundancy decomposition)
+## Bit-tree latency (light, honest)
 
-gate24 enwik8.8mb (`hp_gate24 c --mem 22 --lr 2 --profile`):
+64 B warm context, 2 iters:
 
-- **model redundancy** (mixer vs best expert): **+1,531,856 B**
-- **coding redundancy** (APM+coder vs mixer): **−25,718 B**
-- **parameter share** (sparse contexts): **47%**
+| Path | µs/call |
+|------|---------|
+| bit-tree (default light) | **~37M** |
+| legacy 256-clone | **~19M** |
 
-See [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) and [`enwik_sku_profiles/`](enwik_sku_profiles/).
+gate24/champ: legacy 256-clone only (checkpoint pool OOM). Parity: `hp_bit_tree_smoke` Δ=0. **Undo stack** is the planned speed fix.
 
 ---
 
-## WikiText-2 (secondary — not comparable to 1.610)
+## hp `--profile` (redundancy, not CPU)
 
-light SKU only, `cyphalm_llm_eval`, n=100,000 bytes, bit-serial observe:
+gate24 vendored hp: model redundancy **+1,531,856 B**; parameter sparse share **47%**. See upstream §2.1 and [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md).
 
-| Slice | BPC | Throughput |
-|-------|-----|------------|
-| train | 2.106972 | 30,476 B/s |
-| eval | 2.138972 | 34,326 B/s |
+---
 
-Different corpus, different SKU — **do not** headline these vs enwik champ.
+## WikiText-2 (secondary)
+
+light SKU, n=100k observe: train **2.107**, eval **2.139** BPC. Different corpus + SKU — **do not headline vs 1.607**.
 
 ---
 
 ## Reproduce
 
 ```bash
-# Download corpus (see bench/data/enwik8/README.md)
 bash scripts/measure_enwik_skus.sh bench/data/enwik8/enwik8.8mb
-
-# Or per-SKU:
-cmake -S native -B native/build-gate24 -DCMAKE_BUILD_TYPE=Release \
-  -DCYPHA_HP_PROFILE=gate24 -DCMAKE_CXX_COMPILER=g++
-cmake --build native/build-gate24 --target cyphalm_hp_sku_measure -j$(nproc)
-./native/build-gate24/cyphalm_hp_sku_measure \
-  --corpus bench/data/enwik8/enwik8.8mb \
-  --hp-tool native/build-sku-measure/hp_gate24 \
-  --work-dir /tmp/gate24_measure
 ```
 
 ---
 
 ## Related
 
-- [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) — architecture, RAM, bottlenecks  
-- [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md) — observe≡archive parity proof  
-- [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) — undo stack / lossy LLM roadmap
+- [Upstream `HP_ALGORITHM_PROFILE.md`](https://github.com/odin-loki/CompressionAlgorithm/blob/master/docs/reports/HP_ALGORITHM_PROFILE.md)  
+- [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) — Cypha integration supplement  
+- [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md)

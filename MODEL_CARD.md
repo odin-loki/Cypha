@@ -34,7 +34,7 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Lab RSS (hp harness, mem 22) | **~1.6 GB** @ `SLOT_MAX=24`; **~15 GB** @ `SLOT_MAX=35` (`hp/tools/hp_harness.sh` RECORD H34) |
 | Cypha BPC (default) | **`eval_bpc` / `compress_equivalent_bpc`**: bit-serial observe NLL — **matches hp archive BPC** on same corpus/flags (see gap report) |
 | Cypha BPC (API / top-k) | **`predict_next` + 256-clone path**: different metric; **not** hp archive BPC — use only when reporting REST/inference behavior |
-| **hp profile (measured 2026-09-19)** | **Win metric:** enwik8.8mb vs **1.610906** (champ) / **1.611759** (gate24). **light:** archive/observe **1.721** (0/78 v78). **gate24:** archive **1.611759**, observe **1.611729** (78/78, RT PASS). **champ:** OOM @ 15 GiB VM. WikiText ~2.1 (light) is **not** comparable. See [`docs/reports/CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md), [`docs/reports/CYPHALM_HP_ALGORITHM_PROFILE.md`](docs/reports/CYPHALM_HP_ALGORITHM_PROFILE.md) |
+| **hp profile (measured 2026-09-19)** | **Win metric:** enwik8.8mb vs RECORD **1.607** (s24) / **1.610** (champ) per [upstream HP_ALGORITHM_PROFILE](https://github.com/odin-loki/CompressionAlgorithm/blob/master/docs/reports/HP_ALGORITHM_PROFILE.md). **Cypha gate24 (vendored hp):** archive **1.611759**, observe **1.611729** (+4.5 KB vs upstream s24). **champ:** OOM @ 15 GiB. WikiText ~2.1 not comparable. See [`CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md) |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; do not compare to hp BPC without relabeling |
 
 > **Note:** Pre-hp BPC numbers in `bench/BASELINE_LOCK.json` are historical. New hp-backed BPC baselines are not yet locked in that file.
