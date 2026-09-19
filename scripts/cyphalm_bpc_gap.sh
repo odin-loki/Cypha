@@ -27,6 +27,8 @@ CLONE_N="${3:-16}"
 
 echo "# cyphalm_bpc_gap $STAMP corpus=$CORPUS bytes=$BYTES" | tee "$OUT/run_${STAMP}.meta"
 
+python3 "$ROOT/scripts/hp_v78_flag_diff.py" 2>&1 | tee "$OUT/v78_flag_diff_${STAMP}.tsv"
+
 "$BUILD/bpc_gap_verify" --random "${BPC_GAP_VERIFY_RANDOM:-8}" --corpus "$CORPUS" \
   2>&1 | tee "$OUT/verify_${STAMP}.json"
 

@@ -34,7 +34,7 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Lab RSS (hp harness, mem 22) | **~1.6 GB** @ `SLOT_MAX=24`; **~15 GB** @ `SLOT_MAX=35` (`hp/tools/hp_harness.sh` RECORD H34) |
 | Cypha BPC (default) | **`eval_bpc` / `compress_equivalent_bpc`**: bit-serial observe NLL — **matches hp archive BPC** on same corpus/flags (see gap report) |
 | Cypha BPC (API / top-k) | **`predict_next` + 256-clone path**: different metric; **not** hp archive BPC — use only when reporting REST/inference behavior |
-| **hp profile (measured 2026-09-19)** | **Compress-equivalent:** enwik 8 MB **1.721 BPC** (light); hp v78 champ archive **1.611 BPC**. **Clone-API headline** (WikiText n=16): **5.48 BPC** after 32 train steps — **not comparable** to 1.61 without relabeling. See [`docs/reports/CYPHALM_BPC_GAP_REPORT.md`](docs/reports/CYPHALM_BPC_GAP_REPORT.md) and [`docs/reports/CYPHALM_LLM_PROFILE_REPORT.md`](docs/reports/CYPHALM_LLM_PROFILE_REPORT.md) |
+| **hp profile (measured 2026-09-19)** | **Protocol:** Cypha light = **0/78** v78 flags; user **~1.610** = v82 champ (**78/78** + `SLOT_MAX=35`). **Bare light observe:** enwik 8 MB **1.721 BPC** (matches archive). **v78 gate24 hp CLI:** **1.612 BPC** (1,690,052 B). Clone-API WikiText n=16: **7.25 BPC** — not comparable to 1.610. See [`docs/reports/CYPHALM_BPC_GAP_REPORT.md`](docs/reports/CYPHALM_BPC_GAP_REPORT.md) |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; do not compare to hp BPC without relabeling |
 
 > **Note:** Pre-hp BPC numbers in `bench/BASELINE_LOCK.json` are historical. New hp-backed BPC baselines are not yet locked in that file.

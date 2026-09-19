@@ -8,7 +8,7 @@
 
 ## Executive summary
 
-> **BPC gap (2026-09-19):** Headline **5.48 BPC** below is the **256-clone `predict_next` API** on WikiText n=16 — **not** hp archive BPC. Default `eval_bpc` now uses **bit-serial observe NLL**, which matches hp archive on the same corpus/flags (enwik 8 MB light: **1.721** observe vs **1.721** archive). User **~1.610** is **v78/champ** flags, not light. Full analysis: [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md).
+> **BPC gap (2026-09-19):** **PROTOCOL MISMATCH:** Cypha light sets **0/78** v78 flags — **not** the user’s v82 champ recipe (~**1.610 BPC** @ `SLOT_MAX=35`). Cypha light observe **1.721** matches bare hp archive on enwik 8 MB. Headline **5.48 BPC** = 256-clone API (WikiText n=16), not archive BPC. Full flag diff + measurements: [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md).
 
 CyphaLM on **main** is backed by the vendored **hp** integer-exact context mixer (`HpSequenceBackend` → `hp::Predictor`) with the **light** compile profile (`CYPHA_HP_PROFILE=light`, `HP_SLOT_MAX=24`, `hp_table_bits=22`).
 
