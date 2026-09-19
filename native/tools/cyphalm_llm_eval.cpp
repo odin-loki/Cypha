@@ -33,25 +33,9 @@ std::vector<int> load_bytes_file(const std::string& path, int max_n) {
     return out;
 }
 
-std::string hp_profile_name() {
-#if defined(CYPHA_HP_PROFILE_CHAMP)
-    return "champ";
-#elif defined(CYPHA_HP_PROFILE_GATE24)
-    return "gate24";
-#else
-    return "light";
-#endif
-}
-
 cypha::cyphalm::CyphaLMConfig eval_cfg() {
     cypha::cyphalm::CyphaLMConfig cfg;
-#if defined(CYPHA_HP_PROFILE_CHAMP)
-    cypha::cyphalm::apply_hp_champ_recipe(cfg);
-#elif defined(CYPHA_HP_PROFILE_GATE24)
-    cypha::cyphalm::apply_hp_gate24_recipe(cfg);
-#else
     cypha::cyphalm::apply_hp_production_recipe(cfg);
-#endif
     cfg.vocab_size = 256;
     return cfg;
 }
@@ -213,7 +197,7 @@ int main(int argc, char** argv) {
 
     nlohmann::json out;
     auto cfg = eval_cfg();
-    out["hp_profile"] = hp_profile_name();
+    out["hp_profile"] = "gate24";
     out["hp_table_bits"] = cfg.hp_table_bits;
     out["hp_slot_max"] = cfg.hp_slot_max;
     out["hp_slot_compile_max"] = cypha::cyphalm::hp_compile_slot_max();

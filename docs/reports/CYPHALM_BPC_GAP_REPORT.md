@@ -10,7 +10,9 @@
 
 ### PROTOCOL MISMATCH (read this first)
 
-**Cypha production default (`CYPHA_HP_PROFILE=light`) is NOT the user’s v82 champ recipe.**
+**CyphaLM builds gate24 only** (v78_flags.ps1 + `HP_SLOT_MAX=24`). Removed light/champ SKUs: [`REMOVED_HP_SKUS.md`](../history/REMOVED_HP_SKUS.md).
+
+**Historical note:** the light profile (`CYPHA_HP_PROFILE=light`, 0/78 v78 flags) measured ~1.72 BPC on enwik8MB — not the quality bar.
 
 | Profile | v78 `-D` flags matched (of 78 non-SLOT) | `HP_SLOT_MAX` | enwik 8 MB archive BPC (measured this VM) |
 |---------|----------------------------------------|---------------|-------------------------------------------|

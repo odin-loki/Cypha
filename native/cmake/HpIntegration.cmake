@@ -1,9 +1,7 @@
 # hp (odin-loki/CompressionAlgorithm) integration for Cypha LLM path.
 # Integer-exact context mixer — no float/double in hp/include or hp/src.
 #
-# Profiles (see cmake/HpFlags.cmake):
-#   -DCYPHA_HP_PROFILE=light   (default) HP_SLOT_MAX=24, grow flags OFF
-#   -DCYPHA_HP_PROFILE=champ    v78_flags.ps1 + HP_SLOT_MAX=35
+# CyphaLM always builds gate24: v78_flags.ps1 + HP_SLOT_MAX=24 (see cmake/HpFlags.cmake).
 
 set(CYPHA_HP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/hp")
 
@@ -21,14 +19,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpFlags.cmake")
 cypha_apply_hp_compile_flags(cypha_core)
 
 # hp SIMD mixer dots (HP_XSIMD=1) require SSE4.1 + matching xsimd arch support.
-# gate24/champ default ON (v82 recipe uses -msse4.1); light stays scalar unless forced.
-option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1)" OFF)
-if(CYPHA_HP_PROFILE STREQUAL "gate24" OR CYPHA_HP_PROFILE STREQUAL "champ")
-  if(NOT CYPHA_HP_XSIMD)
-    set(CYPHA_HP_XSIMD ON)
-    message(STATUS "CYPHA_HP_PROFILE=${CYPHA_HP_PROFILE}: enabling CYPHA_HP_XSIMD (v82 SIMD path)")
-  endif()
-endif()
+# gate24 default ON (v82 recipe uses -msse4.1); override with -DCYPHA_HP_XSIMD=OFF on hosts without SSE4.1.
+option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1)" ON)
 if(CYPHA_HP_XSIMD)
   target_compile_definitions(cypha_core PUBLIC HP_XSIMD=1)
   if(NOT MSVC)

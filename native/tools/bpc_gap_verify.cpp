@@ -243,11 +243,11 @@ int main(int argc, char** argv) {
                       static_cast<std::streamsize>(raw.size()));
         }
         std::ostringstream cmd;
-        cmd << "./native/build/hp_light c --mem 22 --lr 2 \"" << raw_path << "\" \"" << arc_path
+        cmd << "./native/build/hp_gate24 c --mem 22 --lr 2 \"" << raw_path << "\" \"" << arc_path
             << "\" 2>&1";
         std::system(cmd.str().c_str());
         std::ostringstream cmd2;
-        cmd2 << "./native/build/hp_light d \"" << arc_path << "\" \"" << dec_path << "\" 2>&1";
+        cmd2 << "./native/build/hp_gate24 d \"" << arc_path << "\" \"" << dec_path << "\" 2>&1";
         std::system(cmd2.str().c_str());
         std::ifstream dec(dec_path, std::ios::binary);
         std::vector<std::uint8_t> got;

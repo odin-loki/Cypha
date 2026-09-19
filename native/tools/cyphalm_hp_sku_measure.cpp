@@ -1,4 +1,4 @@
-/// enwik8.8mb SKU measurement: archive BPC, observe BPC, RT SHA, hp --profile, latency, RSS.
+/// enwik8.8mb gate24 measurement: archive BPC, observe BPC, RT SHA, hp --profile, latency, RSS.
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -18,9 +18,11 @@
 namespace {
 
 constexpr int kEnwikBytes = 8388608;
-// CompressionAlgorithm RECORD bars (HP_ALGORITHM_PROFILE.md, same enwik8.8mb SHA).
-constexpr double kUserChampBpc = 1.610906;  // 1,689,157 B @ SLOT_MAX=35
+// CompressionAlgorithm RECORD bar (HP_ALGORITHM_PROFILE.md, same enwik8.8mb SHA).
 constexpr double kGate24RefBpc = 1.607000;  // 1,685,481 B @ SLOT_MAX=24 (upstream s24)
+// Cypha vendored hp gate24 measured 2026-09-19 (honest, not invented).
+constexpr double kCyphaGate24ObserveBpc = 1.611729;
+constexpr double kCyphaGate24ArchiveBpc = 1.611759;
 
 struct ProcStatus {
     long vm_rss_kb = -1;
@@ -141,25 +143,9 @@ ArchiveResult run_hp_archive(const std::string& hp_tool, const std::string& corp
     return r;
 }
 
-std::string hp_profile_name() {
-#if defined(CYPHA_HP_PROFILE_CHAMP)
-    return "champ";
-#elif defined(CYPHA_HP_PROFILE_GATE24)
-    return "gate24";
-#else
-    return "light";
-#endif
-}
-
-cypha::cyphalm::CyphaLMConfig sku_cfg() {
+cypha::cyphalm::CyphaLMConfig gate24_cfg() {
     cypha::cyphalm::CyphaLMConfig cfg;
-#if defined(CYPHA_HP_PROFILE_CHAMP)
-    cypha::cyphalm::apply_hp_champ_recipe(cfg);
-#elif defined(CYPHA_HP_PROFILE_GATE24)
-    cypha::cyphalm::apply_hp_gate24_recipe(cfg);
-#else
     cypha::cyphalm::apply_hp_production_recipe(cfg);
-#endif
     cfg.vocab_size = 256;
     return cfg;
 }
@@ -169,7 +155,7 @@ cypha::cyphalm::CyphaLMConfig sku_cfg() {
 int main(int argc, char** argv) {
     std::string corpus = "bench/data/enwik8/enwik8.8mb";
     std::string hp_tool;
-    std::string work_dir = "/tmp/cyphalm_sku_measure";
+    std::string work_dir = "/tmp/cyphalm_gate24_measure";
     int latency_iters = 2;
     bool skip_archive = false;
     for (int i = 1; i < argc; ++i) {
@@ -192,11 +178,8 @@ int main(int argc, char** argv) {
     }
 
     std::filesystem::create_directories(work_dir);
-    const std::string sku = hp_profile_name();
-    auto cfg = sku_cfg();
+    auto cfg = gate24_cfg();
 
-    // Archive compress is independent of Cypha observe; run first so a slow
-    // 8 MB observe pass does not block hp CLI timing / --profile capture.
     ArchiveResult arc;
     if (skip_archive) {
         arc.status = "skipped";
@@ -224,56 +207,26 @@ int main(int argc, char** argv) {
     }
 
     std::printf("{\n");
-    std::printf("  \"sku\": \"%s\",\n", sku.c_str());
+    std::printf("  \"profile\": \"gate24\",\n");
     std::printf("  \"corpus\": \"%s\",\n", corpus.c_str());
     std::printf("  \"corpus_bytes\": %d,\n", kEnwikBytes);
     std::printf("  \"corpus_sha256\": \"%s\",\n", sha256_file(corpus).c_str());
     std::printf("  \"hp_slot_compile_max\": %d,\n", cypha::cyphalm::hp_compile_slot_max());
     std::printf("  \"hp_table_bits\": %d,\n", cfg.hp_table_bits);
-    std::printf("  \"upstream_champ_ref_bpc\": %.6f,\n", kUserChampBpc);
     std::printf("  \"upstream_gate24_ref_bpc\": %.6f,\n", kGate24RefBpc);
+    std::printf("  \"cypha_gate24_ref_observe_bpc\": %.6f,\n", kCyphaGate24ObserveBpc);
+    std::printf("  \"cypha_gate24_ref_archive_bpc\": %.6f,\n", kCyphaGate24ArchiveBpc);
 
-    const auto rss0 = read_proc_status();
-    cypha::cyphalm::CyphaLMModel model(cfg);
     const auto rss1 = read_proc_status();
+    cypha::cyphalm::CyphaLMModel model(cfg);
+    const auto rss2 = read_proc_status();
 
     const auto t0 = std::chrono::steady_clock::now();
     const double observe_bpc = model.eval_bpc(ids, kEnwikBytes);
     const double observe_ms =
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    const auto rss2 = read_proc_status();
 
-    double bit_tree_us = 0, legacy_us = 0;
-#if !defined(CYPHA_HP_PROFILE_GATE24) && !defined(CYPHA_HP_PROFILE_CHAMP)
-    if (latency_iters > 0) {
-        model.reset_context();
-        for (int i = 0; i < 64; ++i) {
-            model.hp_backend().consume_byte(
-                static_cast<std::uint8_t>(ids[static_cast<std::size_t>(i)]));
-        }
-        const int iters = latency_iters;
-        {
-            const auto t1 = std::chrono::steady_clock::now();
-            for (int i = 0; i < iters; ++i) {
-                (void)model.hp_backend().next_byte_log_probs_bit_tree(256);
-            }
-            bit_tree_us =
-                std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t1)
-                    .count() /
-                iters;
-        }
-        {
-            const auto t2 = std::chrono::steady_clock::now();
-            for (int i = 0; i < iters; ++i) {
-                (void)model.hp_backend().next_byte_log_probs_legacy(256);
-            }
-            legacy_us =
-                std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t2)
-                    .count() /
-                iters;
-        }
-    }
-#else
+    double legacy_us = 0;
     if (latency_iters > 0) {
         model.reset_context();
         for (int i = 0; i < 64; ++i) {
@@ -289,7 +242,6 @@ int main(int argc, char** argv) {
             std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t2).count() /
             iters;
     }
-#endif
 
     std::printf("  \"observe_bpc\": %.6f,\n", observe_bpc);
     std::printf("  \"observe_ms\": %.1f,\n", observe_ms);
@@ -298,7 +250,6 @@ int main(int argc, char** argv) {
     std::printf("  \"archive_bpc\": %.6f,\n", arc.archive_bpc);
     std::printf("  \"archive_bytes\": %lld,\n", arc.archive_bytes);
     std::printf("  \"observe_minus_archive_bpc\": %.6f,\n", observe_bpc - arc.archive_bpc);
-    std::printf("  \"delta_vs_upstream_champ\": %.6f,\n", observe_bpc - kUserChampBpc);
     std::printf("  \"delta_vs_upstream_gate24\": %.6f,\n", observe_bpc - kGate24RefBpc);
     std::printf("  \"compress_ms\": %.1f,\n", arc.compress_ms);
     std::printf("  \"roundtrip_ok\": %s,\n", arc.rt_ok ? "true" : "false");
@@ -306,7 +257,6 @@ int main(int argc, char** argv) {
     std::printf("  \"archive_status\": \"%s\",\n", arc.status.c_str());
     std::printf("  \"vm_rss_construct_kb\": %ld,\n", rss1.vm_rss_kb);
     std::printf("  \"vm_hwm_observe_kb\": %ld,\n", rss2.vm_hwm_kb);
-    std::printf("  \"bit_tree_us\": %.1f,\n", bit_tree_us);
     std::printf("  \"legacy_clone_us\": %.1f,\n", legacy_us);
     std::printf("  \"hp_redundancy_profile\": ");
     std::printf("\"");

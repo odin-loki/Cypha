@@ -50,7 +50,7 @@ void HpSequenceBackend::reset() {
 }
 
 void HpSequenceBackend::init_dfs_ckpts_() {
-#if !defined(CYPHA_HP_PROFILE_GATE24) && !defined(CYPHA_HP_PROFILE_CHAMP)
+#if !defined(CYPHA_HP_GATE24)
     dfs_ckpts_.reserve(static_cast<std::size_t>(kByteBitDepth + 1));
     for (int d = 0; d <= kByteBitDepth; ++d) {
         dfs_ckpts_.push_back(std::make_unique<hp::Predictor>(cfg_));
@@ -127,8 +127,8 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) const
     if (use_legacy_byte_log_probs()) {
         return next_byte_log_probs_legacy(vocab_size);
     }
-#if defined(CYPHA_HP_PROFILE_GATE24) || defined(CYPHA_HP_PROFILE_CHAMP)
-    // gate24/champ: bit-tree DFS needs O(depth) predictor checkpoints; use legacy
+#if defined(CYPHA_HP_GATE24)
+    // gate24: bit-tree DFS needs O(depth) predictor checkpoints; use legacy
     // 256-clone until undo stack lands (see CYPHALM_HP_ALGORITHM_PROFILE.md).
     return next_byte_log_probs_legacy(vocab_size);
 #else

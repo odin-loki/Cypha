@@ -746,7 +746,7 @@ int main(int argc, char** argv) {
                 wiki_loaded = cypha::cyphalm::load_bench_corpus("d21", wiki_max_chars, cfg.vocab_size);
                 wiki_corpus = &wiki_loaded.value();
                 nlohmann::json wiki_cfg;
-                wiki_cfg["hp_profile"] = "light";
+                wiki_cfg["hp_profile"] = "gate24";
                 wiki_cfg["hp_table_bits"] = cfg.hp_table_bits;
                 wiki_cfg["hp_slot_max"] = cfg.hp_slot_max;
                 wiki_cfg["wiki_max_chars"] = wiki_max_chars;

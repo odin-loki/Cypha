@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
     std::string corpus = "bench/data/enwik8/enwik8.8mb";
     int nbytes = 65536;
     int clone_n = 0;
-    std::string hp_tool = "./native/build/hp_light";
+    std::string hp_tool = "./native/build/hp_gate24";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--corpus" && i + 1 < argc) corpus = argv[++i];
@@ -76,13 +76,7 @@ int main(int argc, char** argv) {
     const int n = std::min(nbytes, static_cast<int>(ids.size()));
 
     cypha::cyphalm::CyphaLMConfig cfg;
-#if defined(CYPHA_HP_PROFILE_CHAMP)
-    cypha::cyphalm::apply_hp_champ_recipe(cfg);
-#elif defined(CYPHA_HP_PROFILE_GATE24)
-    cypha::cyphalm::apply_hp_gate24_recipe(cfg);
-#else
     cypha::cyphalm::apply_hp_production_recipe(cfg);
-#endif
     cfg.vocab_size = 256;
     cypha::cyphalm::CyphaLMModel model(cfg);
 
@@ -159,13 +153,7 @@ int main(int argc, char** argv) {
     std::printf("{\n");
     std::printf("  \"corpus\": \"%s\",\n", corpus.c_str());
     std::printf("  \"bytes\": %d,\n", n);
-#if defined(CYPHA_HP_PROFILE_CHAMP)
-    std::printf("  \"hp_profile\": \"champ\",\n");
-#elif defined(CYPHA_HP_PROFILE_GATE24)
     std::printf("  \"hp_profile\": \"gate24\",\n");
-#else
-    std::printf("  \"hp_profile\": \"light\",\n");
-#endif
     std::printf("  \"hp_table_bits\": %d,\n", cfg.hp_table_bits);
     std::printf("  \"hp_slot_compile_max\": %d,\n", cypha::cyphalm::hp_compile_slot_max());
     std::printf("  \"observe_bpc\": %.6f,\n", observe_bpc);

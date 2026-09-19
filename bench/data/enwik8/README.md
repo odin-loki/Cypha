@@ -11,4 +11,4 @@ sha256sum bench/data/enwik8/enwik8.8mb
 # 09f6dd7241a8ae21edfd6762f3c6712a1fd02f7f322c5e77cab8bb88f292ee8e
 ```
 
-Used by `scripts/measure_enwik_skus.sh`, `native/tools/cyphalm_hp_sku_measure`, and BPC gap reports.
+Used by `scripts/measure_enwik_gate24.sh`, `native/tools/cyphalm_hp_sku_measure`, and BPC gap reports.

@@ -32,9 +32,7 @@ CyphaLMModel::CyphaLMModel(CyphaLMConfig cfg) : cfg_(std::move(cfg)) {
 CyphaLMModel::~CyphaLMModel() = default;
 
 void CyphaLMModel::init_components() {
-    if (cfg_.context_mode == ContextMode::HpChamp) {
-        apply_hp_champ_recipe(cfg_);
-    } else if (cfg_.context_mode == ContextMode::Hp || cfg_.context_mode == ContextMode::Hybrid) {
+    if (cfg_.context_mode == ContextMode::Hp || cfg_.context_mode == ContextMode::Hybrid) {
         if (cfg_.hp_slot_max <= 0) {
             apply_hp_production_recipe(cfg_);
         } else {
@@ -255,11 +253,9 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"hp_gria", cfg_.hp_gria},
         {"vocab_size", cfg_.vocab_size},
         {"context_mode", context_mode_name(cfg_.context_mode)},
-        {"hp_profile",
-         (cfg_.context_mode == ContextMode::HpChamp) ? "champ" : "production"},
+        {"hp_profile", "gate24"},
         {"rss_lab_reference",
          nlohmann::json{{"slot_max_24_mem22_kb", 1600000},
-                        {"slot_max_35_mem22_kb", 15000000},
                         {"source", "hp/tools/hp_harness.sh RECORD H34"}}},
         {"note",
          "Cypha BPC (eval_bpc / compress_equivalent_bpc) uses bit-serial observe NLL; "
