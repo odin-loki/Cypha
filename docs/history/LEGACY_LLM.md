@@ -11,7 +11,7 @@
 | 2026-06 | Hybrid GRIA+LSTM (L1) | **2.873** @ 300k WikiText | First hybrid production default |
 | 2026-08 | Hybrid L2 + Wave2 BPTT | **2.664** @ 300k | `apply_hybrid_production_recipe`; lock in `bench/BASELINE_LOCK.json` |
 | 2026-07–08 | RPSM (d21) | research only | See [`REMOVED_RPSM.md`](REMOVED_RPSM.md) — code removed 2026-09 |
-| 2026-09+ | **hp** (CyphaLM) | not locked in BASELINE_LOCK yet | Light `HP_SLOT_MAX=24` (~1.6 GB); champ opt-in `CYPHA_HP_PROFILE=champ` |
+| 2026-09+ | **hp gate24** (CyphaLM) | not locked in BASELINE_LOCK yet | v78 + `HP_SLOT_MAX=24`; enwik observe ~1.6117 BPC |
 
 Historical BPC numbers in the lock file and paper draft are **not** hp metrics. Do not invent new BPC locks for hp without a measured overnight run.
 

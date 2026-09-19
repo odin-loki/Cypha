@@ -17,6 +17,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/portable_popen.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
@@ -104,7 +105,7 @@ nlohmann::json profile_construct_and_rss() {
     j["hp_slot_compile_max"] = cypha::cyphalm::hp_compile_slot_max();
     j["vocab_size"] = cfg.vocab_size;
     j["dual_predictor_note"] =
-        "HpSequenceBackend holds pred_ + scratch_; next_byte_log_probs clones per vocab byte";
+        "HpSequenceBackend holds pred_ + scratch_ + DFS checkpoints; next_byte_log_probs uses bit-tree DFS (legacy: CYPHA_HP_LEGACY_BYTE_LOGPROBS=1)";
     return j;
 }
 
@@ -746,7 +747,7 @@ int main(int argc, char** argv) {
                 wiki_loaded = cypha::cyphalm::load_bench_corpus("d21", wiki_max_chars, cfg.vocab_size);
                 wiki_corpus = &wiki_loaded.value();
                 nlohmann::json wiki_cfg;
-                wiki_cfg["hp_profile"] = "light";
+                wiki_cfg["hp_profile"] = "gate24";
                 wiki_cfg["hp_table_bits"] = cfg.hp_table_bits;
                 wiki_cfg["hp_slot_max"] = cfg.hp_slot_max;
                 wiki_cfg["wiki_max_chars"] = wiki_max_chars;

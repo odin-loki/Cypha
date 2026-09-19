@@ -20,12 +20,11 @@
     {
       "name": "wsl-gcc-release",
       "displayName": "WSL / Linux — GCC Release (recommended native tree)",
-      "description": "Single build directory native/build-wsl-gcc. CyphaLM light profile default. PR CI: scripts/ci_native_fast.sh (-LE cypha_slow). Full gate: scripts/ci_native_linux.sh. Install: build-essential cmake ninja-build libsqlite3-dev. Optional Qt: qt6-base-dev; optional CUDA: nvidia-cuda-toolkit + -DCYPHA_ENABLE_CUDA=ON.",
+      "description": "Single build directory native/build-wsl-gcc. CyphaLM gate24 hp (v78 + HP_SLOT_MAX=24). PR CI: scripts/ci_native_fast.sh (-LE cypha_slow). Full gate: scripts/ci_native_linux.sh. Install: build-essential cmake ninja-build libsqlite3-dev. Optional Qt: qt6-base-dev; optional CUDA: nvidia-cuda-toolkit + -DCYPHA_ENABLE_CUDA=ON.",
       "binaryDir": "${sourceDir}/build-wsl-gcc",
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CYPHA_HP_PROFILE": "light"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -40,13 +39,12 @@
     {
       "name": "windows-msvc-release",
       "displayName": "Windows — MSVC x64 (Visual Studio 2022)",
-      "description": "Build tree native/build-windows-msvc. CyphaLM light profile default. Requires VS 2022 + CMake. Optional Qt: add -DCYPHA_BUILD_QT=ON -DCMAKE_PREFIX_PATH=C:/Qt/6.x.x/msvc2022_64",
+      "description": "Build tree native/build-windows-msvc. CyphaLM gate24 hp default. Requires VS 2022 + CMake. Optional Qt: add -DCYPHA_BUILD_QT=ON -DCMAKE_PREFIX_PATH=C:/Qt/6.x.x/msvc2022_64",
       "binaryDir": "${sourceDir}/build-windows-msvc",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CYPHA_HP_PROFILE": "light"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -62,13 +60,12 @@
     },
     {
       "name": "macos-clang-release",
-      "displayName": "macOS — AppleClang Release (CyphaLM light profile)",
-      "description": "native/build-macos. CyphaLM hp light profile (HP_SLOT_MAX=24, grow OFF). HP_XSIMD=OFF. PR CI runs scripts/ci_native_hp_smoke.sh after build.",
+      "displayName": "macOS — AppleClang Release (CyphaLM gate24 hp)",
+      "description": "native/build-macos. CyphaLM gate24 (v78_flags.ps1 + HP_SLOT_MAX=24). PR CI runs scripts/ci_native_hp_smoke.sh after build.",
       "binaryDir": "${sourceDir}/build-macos",
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CYPHA_HP_PROFILE": "light"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ],

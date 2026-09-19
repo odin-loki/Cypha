@@ -512,6 +512,16 @@ cypha_mingw_apply_exe_link_options(bpc_gap_measure)
 add_executable(hp_bit_tree_smoke tools/hp_bit_tree_smoke.cpp)
 target_link_libraries(hp_bit_tree_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_bit_tree_smoke)
+add_test(NAME native_hp_bit_tree_smoke COMMAND "$<TARGET_FILE:hp_bit_tree_smoke>")
+set_tests_properties(native_hp_bit_tree_smoke PROPERTIES TIMEOUT 120)
+
+add_executable(cyphalm_llm_eval tools/cyphalm_llm_eval.cpp)
+target_link_libraries(cyphalm_llm_eval PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_llm_eval)
+
+add_executable(cyphalm_hp_sku_measure tools/cyphalm_hp_sku_measure.cpp)
+target_link_libraries(cyphalm_hp_sku_measure PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_hp_sku_measure)
 
 add_executable(tau_forget_gate_smoke tools/tau_forget_gate_smoke.cpp)
 target_link_libraries(tau_forget_gate_smoke PRIVATE cypha_lm_native)

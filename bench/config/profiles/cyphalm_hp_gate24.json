@@ -14,7 +14,7 @@
   "seed": 42,
   "online": true,
   "_meta": {
-    "status": "living",
-    "notes": "d21 overnight hp profile (replaces retired RPSM). gate24 defaults."
+    "status": "production",
+    "notes": "CyphaLM gate24 hp (v78_flags.ps1 + HP_SLOT_MAX=24). enwik8.8mb observe ~1.611729 BPC, archive ~1.611759 BPC (measured 2026-09-19)."
   }
 }

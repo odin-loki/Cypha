@@ -8,7 +8,7 @@
 
 Cypha's sequence / LLM algorithm is the **hp** integer-exact Hutter Prize context-mixing compressor. The previous Hybrid GRIA+LSTM stack is **not** the production path; its sources remain in the tree for reference but are excluded from the default `cypha_core` build. **RPSM** was fully removed in 2026-09.
 
-**Superseded / removed (history):** [`docs/history/LEGACY_LLM.md`](../../history/LEGACY_LLM.md) · [`docs/history/REMOVED_RPSM.md`](../../history/REMOVED_RPSM.md) — git history on `main`/this PR retains pre-removal code for archaeology.
+**Superseded / removed (history):** [`docs/history/LEGACY_LLM.md`](../../history/LEGACY_LLM.md) · [`docs/history/REMOVED_RPSM.md`](../../history/REMOVED_RPSM.md) · [`docs/history/REMOVED_HP_SKUS.md`](../../history/REMOVED_HP_SKUS.md)
 
 ```
 token (byte 0..255) ─► HpSequenceBackend ─► hp::Predictor
@@ -21,39 +21,36 @@ Public API (`CyphaLMModel`, `Cypha::init_default_sequence`, `predict_next`, `gen
 
 ### RAM hotspot (documented, not optimized)
 
-`HpSequenceBackend` keeps two `hp::Predictor` heap instances (`pred_` for live state, `scratch_` for lookahead). `next_byte_log_probs()` clones `*pred_` once per vocab byte to score each candidate without advancing main state. At `vocab_size=256` this multiplies predictor footprint during scoring; acceptable for the light profile but worth knowing for champ builds.
+`HpSequenceBackend` keeps two `hp::Predictor` heap instances (`pred_` for live state, `scratch_` for lookahead). At gate24 table sizes, full-vocab scoring uses legacy 256-clone (bit-tree checkpoint pool OOMs at v78 scale).
 
 ## Context mode
 
 | Enum | Alias | Meaning |
 |------|-------|---------|
-| `Hp` | `hp`, `hybrid`, `hybrid_gria_lstm` | **Production** — hp RAM-speed (`HP_SLOT_MAX=24`) |
-| `HpChamp` | `hp_champ`, `champ` | **Research** — full slot cap (`HP_SLOT_MAX=35`; requires champ build) |
+| `Hp` | `hp`, `hybrid`, `gate24`, `champ`, … | **Production** — gate24 (v78 + `HP_SLOT_MAX=24`) |
 | Others | `char_lstm`, `ssm_gria`, … | Legacy research enums; map to hp or no-op stubs |
 
-Configure with `apply_hp_production_recipe()` (default) or `apply_hp_champ_recipe()` (research).
+Configure with `apply_hp_production_recipe()` (the only hp recipe).
 
 ## hp knobs (`CyphaLMConfig`)
 
 | Field | Default | hp flag |
 |-------|---------|---------|
 | `hp_table_bits` | 22 | `--mem` (table size; 22 ≈ 4 MiB) |
-| `hp_slot_max` | 24 | Requested slot cap; compile-time `HP_SLOT_MAX` is authoritative |
+| `hp_slot_max` | 24 | Requested slot cap; compile-time `HP_SLOT_MAX=24` is authoritative |
 | `hp_mixer_lr` | 2 | mixer learning rate |
 | `hp_gria` | true | GRIA alpha gating |
 | `vocab_size` | 256 | byte tokens (must be ≤ 256) |
 
-### CMake / memory profiles
+### Compile profile (gate24 only)
 
-| Build | CMake | `HP_SLOT_MAX` | v78 flags | Lab RSS @ mem 22 (harness) |
-|-------|-------|---------------|-----------|----------------------------|
-| **Light (default)** | `-DCYPHA_HP_PROFILE=light` | 24 | OFF (features.hpp defaults) | ~1.6 GB |
-| **Champ / research** | `-DCYPHA_HP_PROFILE=champ` | 35 | ON (v78_flags.ps1) | ~15 GB |
-| **Champ mem-26** | `-DCYPHA_HP_PROFILE=champ -DCYPHA_HP_SLOT_MAX=31` | 31 | ON | (between light and full champ) |
+| Build | CMake | `HP_SLOT_MAX` | v78 flags | enwik8.8mb BPC (measured) |
+|-------|-------|---------------|-----------|---------------------------|
+| **gate24 (default)** | (none required) | 24 | ON (`v78_flags.ps1`) | observe **1.611729**, archive **1.611759** |
 
-Lab numbers from `native/third_party/hp/tools/hp_harness.sh` (RECORD H34: Pearson +0.96 vs SLOT_MAX=35, +895 B on 8 MB gate).
+Removed by choice: **light** (~1.72 BPC, 0/78 flags) and **champ** (`SLOT_MAX=35`, ~15 GB RSS). See [`REMOVED_HP_SKUS.md`](../../history/REMOVED_HP_SKUS.md).
 
-CMake: `-DCYPHA_HP_XSIMD=ON` enables hp xsimd mixer dots (SSE4.1); default OFF for portability.
+CMake: `-DCYPHA_HP_XSIMD=OFF` disables hp xsimd mixer dots on hosts without SSE4.1; default ON.
 
 ## Metrics — do not mix
 
@@ -74,7 +71,7 @@ cd native/build-wsl-gcc
 ctest -R 'native_hp|native_cyphalm_model_golden' --output-on-failure
 ```
 
-### CI platforms (CyphaLM light profile)
+### CI platforms (CyphaLM gate24)
 
 | Platform | Job | Gate |
 |----------|-----|------|

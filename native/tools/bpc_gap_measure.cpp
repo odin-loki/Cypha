@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "cypha/portable_popen.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 
@@ -59,7 +60,7 @@ int main(int argc, char** argv) {
     std::string corpus = "bench/data/enwik8/enwik8.8mb";
     int nbytes = 65536;
     int clone_n = 0;
-    std::string hp_tool = "./native/build/hp_light";
+    std::string hp_tool = "./native/build/hp_gate24";
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--corpus" && i + 1 < argc) corpus = argv[++i];
@@ -153,7 +154,7 @@ int main(int argc, char** argv) {
     std::printf("{\n");
     std::printf("  \"corpus\": \"%s\",\n", corpus.c_str());
     std::printf("  \"bytes\": %d,\n", n);
-    std::printf("  \"hp_profile\": \"light\",\n");
+    std::printf("  \"hp_profile\": \"gate24\",\n");
     std::printf("  \"hp_table_bits\": %d,\n", cfg.hp_table_bits);
     std::printf("  \"hp_slot_compile_max\": %d,\n", cypha::cyphalm::hp_compile_slot_max());
     std::printf("  \"observe_bpc\": %.6f,\n", observe_bpc);

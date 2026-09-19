@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diff Cypha hp compile profiles against vendored v78_flags.ps1 (v82 champ protocol)."""
+"""Verify Cypha gate24 hp compile flags against vendored v78_flags.ps1."""
 from __future__ import annotations
 
 import re
@@ -25,27 +25,23 @@ def parse_v78_flags(text: str) -> dict[str, str]:
 def main() -> int:
     defaults = parse_features_defaults(FEATURES.read_text())
     v78 = parse_v78_flags(V78_PS1.read_text())
-    light = dict(defaults)
-    light["HP_SLOT_MAX"] = "24"
-    champ = dict(defaults)
-    champ.update(v78)
+    gate24 = dict(defaults)
+    gate24.update(v78)
+    gate24["HP_SLOT_MAX"] = "24"
 
     non_slot = [k for k in sorted(v78) if k != "HP_SLOT_MAX"]
-    light_match = sum(1 for k in non_slot if light.get(k) == v78[k])
-    champ_match = sum(1 for k in non_slot if champ.get(k) == v78[k])
+    gate24_match = sum(1 for k in non_slot if gate24.get(k) == v78[k])
 
     print(f"v78_flags.ps1 HP -D count: {len(v78)}")
-    print(f"Cypha light matches v82 (non-SLOT): {light_match}/{len(non_slot)}")
-    print(f"Cypha champ matches v82 (non-SLOT): {champ_match}/{len(non_slot)}")
-    print(f"HP_SLOT_MAX: light=24 champ=35 v82=35")
+    print(f"Cypha gate24 matches v78 (non-SLOT): {gate24_match}/{len(non_slot)}")
+    print("HP_SLOT_MAX: gate24=24 (fixed)")
     print()
-    print("flag\tdefault\tlight\tchamp\tlight_ok\tchamp_ok")
+    print("flag\tdefault\tgate24\tgate24_ok")
     for k in sorted(v78):
         d = defaults.get(k, "?")
-        lv = light.get(k, "?")
-        cv = champ.get(k, v78[k])
+        gv = gate24.get(k, v78[k])
         v = v78[k]
-        print(f"{k}\t{d}\t{lv}\t{cv}\t{'Y' if lv == v else 'N'}\t{'Y' if cv == v else 'N'}")
+        print(f"{k}\t{d}\t{gv}\t{'Y' if gv == v else 'N'}")
     return 0
 
 

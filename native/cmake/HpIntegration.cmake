@@ -1,9 +1,7 @@
 # hp (odin-loki/CompressionAlgorithm) integration for Cypha LLM path.
 # Integer-exact context mixer — no float/double in hp/include or hp/src.
 #
-# Profiles (see cmake/HpFlags.cmake):
-#   -DCYPHA_HP_PROFILE=light   (default) HP_SLOT_MAX=24, grow flags OFF
-#   -DCYPHA_HP_PROFILE=champ    v78_flags.ps1 + HP_SLOT_MAX=35
+# CyphaLM always builds gate24: v78_flags.ps1 + HP_SLOT_MAX=24 (see cmake/HpFlags.cmake).
 
 set(CYPHA_HP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/hp")
 
@@ -20,13 +18,28 @@ target_compile_definitions(cypha_core PUBLIC CYPHA_LLM_ALGORITHM_HP=1)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpFlags.cmake")
 cypha_apply_hp_compile_flags(cypha_core)
 
-# hp SIMD mixer dots (HP_XSIMD=1) require SSE4.1 + matching xsimd arch support.
-# Default scalar path for portability; enable with -DCYPHA_HP_XSIMD=ON on capable hosts.
-option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1)" OFF)
-if(CYPHA_HP_XSIMD)
+# hp SIMD mixer dots (HP_XSIMD=1) use SSE4.1 batches in simd_dot.hpp (x86 only).
+# gate24 default ON on x86; auto-fallback to scalar on macOS arm64 and other non-SSE hosts.
+option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1 on x86)" ON)
+
+set(_cypha_hp_xsimd_effective ${CYPHA_HP_XSIMD})
+if(_cypha_hp_xsimd_effective AND NOT MSVC)
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-msse4.1" _CYPHA_HP_HAS_MSSE41)
+  if(NOT _CYPHA_HP_HAS_MSSE41)
+    set(_cypha_hp_xsimd_effective OFF)
+    message(STATUS "CyphaLM hp: -msse4.1 unavailable; CYPHA_HP_XSIMD=OFF (scalar path, gate24 flags unchanged)")
+  endif()
+endif()
+
+if(_cypha_hp_xsimd_effective)
   target_compile_definitions(cypha_core PUBLIC HP_XSIMD=1)
-  if(NOT MSVC)
-    target_compile_options(cypha_core PRIVATE -msse4.1)
+  if(MSVC)
+    # hp/simd_dot.hpp gates on __SSE4_1__; MSVC does not define it unless /arch:SSE4.2+.
+    target_compile_options(cypha_core PUBLIC /arch:SSE4.2)
+    target_compile_definitions(cypha_core PUBLIC __SSE4_1__=1)
+  else()
+    target_compile_options(cypha_core PUBLIC -msse4.1)
   endif()
 else()
   target_compile_definitions(cypha_core PUBLIC HP_XSIMD=0)

@@ -98,6 +98,9 @@ native/build/
 bench/data/mnist/
 bench/data/wikitext2/
 !bench/data/wikitext2/README.md
+bench/data/enwik8/enwik8.8mb
+bench/data/enwik8/enwik8
+!bench/data/enwik8/README.md
 bench/artifacts/
 artifacts/*
 !artifacts/README.md
@@ -110,6 +113,9 @@ bench/report/summary.json
 bench/data/mnist/
 bench/data/wikitext2/
 !bench/data/wikitext2/README.md
+bench/data/enwik8/enwik8.8mb
+bench/data/enwik8/enwik8
+!bench/data/enwik8/README.md
 bench/data/ecg5000/*
 !bench/data/ecg5000/README.md
 bench/data/forecast/bulk/

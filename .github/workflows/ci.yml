@@ -32,7 +32,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON -DCYPHA_HP_PROFILE=light
+          cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_BUILD_QT=ON
           cmake --build native/build -j 2
           bash scripts/ci_native_hp_smoke.sh
 
@@ -50,7 +50,7 @@ jobs:
       - name: Configure + build (MSVC Release)
         shell: cmd
         run: |
-          cmake -S native -B native/build-msvc-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light
+          cmake -S native -B native/build-msvc-release -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build native/build-msvc-release --parallel
       - name: Verify MSVC build artifacts
         shell: powershell
@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@v5
       - name: Native build + hp/CyphaLM smokes
         run: |
-          cmake -S native -B native/build-macos -DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light
+          cmake -S native -B native/build-macos -DCMAKE_BUILD_TYPE=Release
           cmake --build native/build-macos -j 3
           CYPHA_NATIVE_BUILD_DIR="$PWD/native/build-macos" bash scripts/ci_native_hp_smoke.sh
 
@@ -89,7 +89,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev libz-dev
       - name: Build + broad CTest (-LE cypha_slow)
         run: |
-          cmake -S native -B native/build-slow -DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light
+          cmake -S native -B native/build-slow -DCMAKE_BUILD_TYPE=Release
           cmake --build native/build-slow -j 2
           CYPHA_NATIVE_BUILD_DIR="$PWD/native/build-slow" bash scripts/ci_native_fast.sh
 
@@ -118,6 +118,6 @@ jobs:
         run: bash scripts/download_wikitext2.sh || true
       - name: Native build + corpus CTests
         run: |
-          cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light
+          cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
           cmake --build native/build -j 2
           ctest --test-dir native/build --output-on-failure -R "native_corpus_smoke|native_d25_corpus_smoke"

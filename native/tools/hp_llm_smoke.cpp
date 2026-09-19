@@ -1,4 +1,4 @@
-/// Smoke: CyphaLM hp backend — finite BPC, production RAM-speed profile, RSS sample.
+/// Smoke: CyphaLM hp backend — finite BPC, gate24 profile, RSS sample.
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -48,8 +48,9 @@ int main() {
     }
 
     const int compile_slot = cypha::cyphalm::hp_compile_slot_max();
-    if (compile_slot != 24 && compile_slot != 35) {
-        std::printf("hp_llm_smoke: FAIL (unexpected compile HP_SLOT_MAX=%d)\n", compile_slot);
+    if (compile_slot != 24) {
+        std::printf("hp_llm_smoke: FAIL (unexpected compile HP_SLOT_MAX=%d, expected 24)\n",
+                    compile_slot);
         return 1;
     }
 
@@ -70,15 +71,15 @@ int main() {
         std::puts("hp_llm_smoke: FAIL (compression_profile algorithm != hp)");
         return 1;
     }
-    if (profile.at("hp_profile") != "production") {
-        std::puts("hp_llm_smoke: FAIL (hp_profile != production)");
+    if (profile.at("hp_profile") != "gate24") {
+        std::puts("hp_llm_smoke: FAIL (hp_profile != gate24)");
         return 1;
     }
 
     const long rss_kb = read_vmhwm_kb();
     std::printf(
         "hp_llm_smoke OK bpc=%.4f table_bits=%d slot_max=%d compile_slot=%d "
-        "rss_kb=%ld lab_ref_slot24_mem22_kb=1600000 lab_ref_slot35_mem22_kb=15000000\n",
+        "rss_kb=%ld lab_ref_slot24_mem22_kb=1600000\n",
         bpc, cfg.hp_table_bits, cfg.hp_slot_max, compile_slot, rss_kb);
     return 0;
 }
