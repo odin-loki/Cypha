@@ -17,7 +17,8 @@
 | **Cypha light / bare hp** | **0 / 78** | 24 | **1.721362** (archive **1,804,979 B**) |
 | **v78 + SLOT_MAX=24 gate** | **78 / 78** | 24 | **1.611759** (archive **1,690,052 B**) |
 | **v82 champ (PLAN/RECORD ref)** | **78 / 78** | **35** | **1.610906** (archive **1,689,157 B**) — *cited from CompressionAlgorithm encyclopedia; not re-measured here (OOM on 16 GiB VM)* |
-| **Cypha champ build** | **78 / 78** (via `HpFlags.cmake`) | 35 | *not built — ~15 GB RSS; compress OOM-killed* |
+| **Cypha gate24 build** | **78 / 78** (via `HpFlags.cmake`) | 24 | **1.611759** archive / **1.611729** observe — **re-measured 2026-09-19** |
+| **Cypha champ build** | **78 / 78** (via `HpFlags.cmake`) | 35 | *OOM-killed @ 15 GiB VM (exit 137, ~5–11 s); ~15 GB RSS per hp harness* |
 
 **Cypha light observe BPC matches hp archive BPC only when both use the same bare-light flags** (Δ **+0.000331** @ 8 MB). Comparing Cypha light **1.721** to user **1.610** is a **protocol + metric** gap, not an integration math bug.
 

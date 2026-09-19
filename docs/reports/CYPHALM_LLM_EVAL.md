@@ -1,133 +1,121 @@
-# CyphaLM LLM Eval — measured bit-serial BPC (large-n)
+# CyphaLM LLM Eval — enwik8.8mb SKU measurements
 
 **Date:** 2026-09-19  
 **Branch:** `cursor/bit-tree-gate24-eval-9d44`  
-**Harness:** `native/tools/cyphalm_llm_eval.cpp`, `scripts/cyphalm_llm_eval.sh`  
-**Build:** `-DCMAKE_BUILD_TYPE=Release -DCYPHA_HP_PROFILE=light -DCMAKE_CXX_COMPILER=g++`
+**Harness:** `native/tools/cyphalm_hp_sku_measure.cpp`, `scripts/measure_enwik_skus.sh`, `scripts/hp_v78_flag_diff.py`  
+**Corpus:** `bench/data/enwik8/enwik8.8mb` (8,388,608 B)
 
-All numbers below were measured on this VM. None are extrapolated.
-
----
-
-## Build / SKU under test
-
-| Item | Value |
-|------|-------|
-| `CYPHA_HP_PROFILE` | **light** (CI default; fast/dev — **not** quality-champ tier) |
-| `HP_SLOT_MAX` (compile) | 24 |
-| v78 flags matched | **0 / 78** (see [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md)) |
-| `hp_table_bits` | 22 |
-| `hp_mixer_lr` | 2 |
-| Metric | **`observe_bit_serial_bpc`** via `CyphaLMModel::eval_bpc()` (compress-equivalent) |
-
-Quality claims require **gate24** or **champ** builds (`-DCYPHA_HP_PROFILE=gate24|champ`). enwik8.8mb was **not available** on this VM; WikiText-2 only for large-n observe here. Prior enwik8MB light observe: **1.721 BPC** @ 8,388,608 bytes ([`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md)).
+**Win metric:** enwik8.8mb archive + bit-serial observe BPC vs user **1.610906** (champ) / **1.611759** (gate24). WikiText numbers are secondary only.
 
 ---
 
-## Hardware
+## Headline — enwik8.8mb BPC vs user bar
 
-| Item | Value |
-|------|-------|
-| OS | Linux 6.12.94+ (KVM) |
-| CPU | Intel Xeon, 4 cores |
-| RAM | 15 GiB |
-| Compiler | g++ 13.3.0 |
+Reference bars (CompressionAlgorithm encyclopedia / re-measured hp CLI):
+
+| Bar | Archive bytes | BPC |
+|-----|---------------|-----|
+| **User champ (v82)** | 1,689,157 | **1.610906** |
+| **gate24 screen** | 1,690,052 | **1.611759** |
+
+Measured on this VM (g++ 13.3, 4-core Xeon, **15 GiB RAM**):
+
+| SKU | v78 flags | `SLOT_MAX` | XSIMD | hp archive BPC | Cypha observe BPC | Δ obs−arch | RT SHA | Status |
+|-----|-----------|------------|-------|----------------|-------------------|------------|--------|--------|
+| **light** | 0/78 | 24 | OFF | **1.721362** (1,804,979 B) | **1.721331** | +0.000031 | PASS | OK |
+| **gate24** | **78/78** | 24 | ON | **1.611759** (1,690,052 B) | **1.611729** | +0.000030 | PASS | OK |
+| **champ** | **78/78** | 35 | ON | — | — | — | — | **OOM** (exit 137, ~5–11 s) |
+
+| SKU | Δ observe vs champ (1.610906) | Δ observe vs gate24 ref |
+|-----|------------------------------|-------------------------|
+| light | **+0.110425** | +0.109572 |
+| gate24 | **+0.000823** | **−0.000030** |
+| champ | *not measured* | *not measured* |
+
+**Conclusion:** gate24 matches the PLAN 8 MB screen bar within **0.001 BPC** of champ reference. light is **~0.11 BPC** worse — expected (0/78 v78 flags). champ requires **≥32 GiB** RAM on this workload; not completed here.
 
 ---
 
-## Observe BPC (bit-serial, n = 100,000 bytes)
-
-**Command:**
+## Flag parity (78/78)
 
 ```bash
-./native/build/cyphalm_llm_eval --observe-n 100000 --topk-n 8 --latency-iters 5
+python3 scripts/hp_v78_flag_diff.py
+# light: 0/78   gate24: 78/78   champ: 78/78
+# HP_SLOT_MAX: light=24  gate24=24  champ=35  v82=35
 ```
 
-Corpus: WikiText-2 (`bench/data/wikitext2/wikitext-2/`), loader profile `d21`, 80/20 split capped at 500k chars.
-
-| Corpus slice | Bytes | BPC | Wall (ms) | Throughput (B/s) |
-|--------------|-------|-----|-----------|------------------|
-| WikiText-2 train | 100,000 | **2.106972** | 3,281.3 | 30,476 |
-| WikiText-2 eval | 100,000 | **2.138972** | 2,913.3 | 34,326 |
+gate24 and champ use full `v78_flags.ps1` + `HP_XSIMD=1` + `-msse4.1` (v82 recipe). light uses `features.hpp` defaults only.
 
 ---
 
-## Observe BPC (bit-serial, n = 10,000 bytes)
+## Timing (enwik8.8mb, measured)
 
-**Command:**
-
-```bash
-./native/build/cyphalm_llm_eval --observe-n 10000 --skip-topk --latency-iters 3
-```
-
-| Corpus slice | Bytes | BPC | Wall (ms) | Throughput (B/s) |
-|--------------|-------|-----|-----------|------------------|
-| WikiText-2 train | 10,000 | **2.680266** | 887.3 | 11,270 |
-| WikiText-2 eval | 10,000 | **2.806720** | 701.4 | 14,258 |
+| SKU | hp `c` wall | Cypha observe wall | Observe throughput |
+|-----|-------------|--------------------|--------------------|
+| light | ~203 s | ~187 s | **44,813 B/s** |
+| gate24 | ~743 s | ~902 s | **~9,300 B/s** |
+| champ | OOM @ ~5 s | OOM @ ~11 s | — |
 
 ---
 
-## Bit-tree top-k (predict_next path, n = 8 pairs)
+## Full-vocab latency (light only — honest bit-tree profile)
 
-Uses default **bit-tree** `next_byte_log_probs` (not legacy 256-clone). Cold context; no online training.
+64-byte warm context, 2 timed iterations (`cyphalm_hp_sku_measure`):
 
-| Corpus | Pairs | BPC (NLL) | Top-1 | Top-5 | Top-10 | Mean H(pred) bits | `predict_next` µs/call |
-|--------|-------|-----------|-------|-------|--------|-------------------|------------------------|
-| WikiText-2 train | 8 | **7.725** | 0% | 25% | 25% | 7.617 | **37,073,906** |
+| Path | µs/call | vs legacy |
+|------|---------|-----------|
+| bit-tree `next_byte_log_probs` (default light) | **36,894,104** | 1.86× slower |
+| legacy 256-clone | **19,811,989** | 1.00× |
 
-**Note:** Clone-API BPC is a different metric from observe/archive BPC. Do not compare 7.73 to enwik **1.721** light observe or **1.610** champ archive.
-
----
-
-## Full-vocab latency — bit-tree (checkpoint DFS) vs legacy 256-clone
-
-**Command:**
-
-```bash
-./native/build/bpc_gap_measure --corpus bench/data/wikitext2/wikitext-2/wiki.train.tokens \
-  --bytes 65536 --clone-n 3
-```
-
-Warm context: 64 bytes consumed; 3 timed iterations.
-
-| Path | Latency (µs/call) | vs legacy |
-|------|-------------------|-----------|
-| **bit-tree** `next_byte_log_probs` (default) | **40,424,640** | **0.86×** (faster) |
-| legacy 256-clone (`CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`) | 46,967,565 | 1.00× |
-| `predict_next` (bit-tree default) | 38,826,194 | 0.83× |
-
-**Command (eval harness, 5 iters):**
-
-```bash
-./native/build/cyphalm_llm_eval --observe-n 100000 --topk-n 8 --latency-iters 5
-```
-
-| Path | Latency (µs/call) | vs legacy |
-|------|-------------------|-----------|
-| bit-tree (checkpoint DFS) | **38,813,756** | **0.92×** (legacy ~8% faster this run) |
-| legacy 256-clone | 35,771,945 | 1.00× |
-
-**Interpretation:** Bit-tree joint logprobs match legacy exactly (`hp_bit_tree_smoke` max Δ = 0). Default path eliminates **256 heap `clone_from` allocations** per full-vocab score; latency is in the same ballpark as legacy (run-to-run variance ±~15%). Further speed requires a true hp `undo` stack (see [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md)).
+gate24/champ use **legacy 256-clone** for full-vocab scoring (bit-tree checkpoint pool OOMs on v78 table sizes). Bit-tree code is kept; it is not a latency win until hp undo stack lands. Parity: `hp_bit_tree_smoke` max Δ = 0 on light.
 
 ---
 
-## Parity
+## hp `--profile` (redundancy decomposition)
 
-```bash
-./native/build/hp_bit_tree_smoke
-# hp_bit_tree_smoke OK max_tree_legacy_delta=0 single_delta=0
-```
+gate24 enwik8.8mb (`hp_gate24 c --mem 22 --lr 2 --profile`):
+
+- **model redundancy** (mixer vs best expert): **+1,531,856 B**
+- **coding redundancy** (APM+coder vs mixer): **−25,718 B**
+- **parameter share** (sparse contexts): **47%**
+
+See [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) and [`enwik_sku_profiles/`](enwik_sku_profiles/).
+
+---
+
+## WikiText-2 (secondary — not comparable to 1.610)
+
+light SKU only, `cyphalm_llm_eval`, n=100,000 bytes, bit-serial observe:
+
+| Slice | BPC | Throughput |
+|-------|-----|------------|
+| train | 2.106972 | 30,476 B/s |
+| eval | 2.138972 | 34,326 B/s |
+
+Different corpus, different SKU — **do not** headline these vs enwik champ.
 
 ---
 
 ## Reproduce
 
 ```bash
-bash scripts/download_wikitext2.sh
-cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release \
-  -DCYPHA_HP_PROFILE=light -DCMAKE_CXX_COMPILER=g++
-cmake --build native/build --target cyphalm_llm_eval bpc_gap_measure hp_bit_tree_smoke -j$(nproc)
-bash scripts/cyphalm_llm_eval.sh 100000 8
+# Download corpus (see bench/data/enwik8/README.md)
+bash scripts/measure_enwik_skus.sh bench/data/enwik8/enwik8.8mb
+
+# Or per-SKU:
+cmake -S native -B native/build-gate24 -DCMAKE_BUILD_TYPE=Release \
+  -DCYPHA_HP_PROFILE=gate24 -DCMAKE_CXX_COMPILER=g++
+cmake --build native/build-gate24 --target cyphalm_hp_sku_measure -j$(nproc)
+./native/build-gate24/cyphalm_hp_sku_measure \
+  --corpus bench/data/enwik8/enwik8.8mb \
+  --hp-tool native/build-sku-measure/hp_gate24 \
+  --work-dir /tmp/gate24_measure
 ```
 
-Gate24 / champ eval: rebuild with `-DCYPHA_HP_PROFILE=gate24` or `champ` and rerun the same harness.
+---
+
+## Related
+
+- [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) — architecture, RAM, bottlenecks  
+- [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md) — observe≡archive parity proof  
+- [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) — undo stack / lossy LLM roadmap

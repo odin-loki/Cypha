@@ -21,12 +21,19 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpFlags.cmake")
 cypha_apply_hp_compile_flags(cypha_core)
 
 # hp SIMD mixer dots (HP_XSIMD=1) require SSE4.1 + matching xsimd arch support.
-# Default scalar path for portability; enable with -DCYPHA_HP_XSIMD=ON on capable hosts.
+# gate24/champ default ON (v82 recipe uses -msse4.1); light stays scalar unless forced.
 option(CYPHA_HP_XSIMD "Enable hp xsimd SIMD mixer dots (requires SSE4.1)" OFF)
+if(CYPHA_HP_PROFILE STREQUAL "gate24" OR CYPHA_HP_PROFILE STREQUAL "champ")
+  if(NOT CYPHA_HP_XSIMD)
+    set(CYPHA_HP_XSIMD ON)
+    message(STATUS "CYPHA_HP_PROFILE=${CYPHA_HP_PROFILE}: enabling CYPHA_HP_XSIMD (v82 SIMD path)")
+  endif()
+endif()
 if(CYPHA_HP_XSIMD)
   target_compile_definitions(cypha_core PUBLIC HP_XSIMD=1)
   if(NOT MSVC)
-    target_compile_options(cypha_core PRIVATE -msse4.1)
+    # PUBLIC: consumers include hp headers that pull xsimd SSE4.1 batches.
+    target_compile_options(cypha_core PUBLIC -msse4.1)
   endif()
 else()
   target_compile_definitions(cypha_core PUBLIC HP_XSIMD=0)

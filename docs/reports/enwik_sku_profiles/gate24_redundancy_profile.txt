@@ -1,0 +1,11 @@
+1 MB2 MB3 MB4 MB5 MB6 MB7 MBin 8388608 B  out 1690052 B  (hdr+dict 29)  bpc 1.611
+
+--- redundancy profile (67108864 bits over 8388608 B) ---
+  total spent       1690105 B   1.611 bpc
+    best-expert      183967 B   0.175 bpc
+    after mixer     1715824 B   1.636 bpc
+    sparse ctx       804353 B   0.767 bpc
+    dense ctx        885751 B   0.844 bpc
+  model redundancy (mixer vs best expert): +1531856 B
+  coding redundancy (APM+coder vs mixer):  -25718 B
+  parameter share (sparse contexts):       47%

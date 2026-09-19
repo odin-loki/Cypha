@@ -61,7 +61,7 @@ class HpSequenceBackend {
     hp::Config cfg_;
     std::unique_ptr<hp::Predictor> pred_;
     mutable std::unique_ptr<hp::Predictor> scratch_;
-    /// One checkpoint per bit depth (0..8) for DFS backtracking on ``scratch_``.
+    /// Per-depth DFS checkpoints (light profile bit-tree; max 9 assign_from slots).
     mutable std::vector<std::unique_ptr<hp::Predictor>> dfs_ckpts_;
 
     static double byte_log_prob(hp::Predictor& snap, int byte);
@@ -69,6 +69,7 @@ class HpSequenceBackend {
     static bool branch_reaches_vocab(int vocab_size, int prefix, int depth, int bit);
     void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
                              hp::Predictor& node, std::vector<double>& out_log_nats) const;
+    void init_dfs_ckpts_();
 };
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria);

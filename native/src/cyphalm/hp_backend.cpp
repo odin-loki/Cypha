@@ -39,20 +39,23 @@ HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
     : cfg_(cfg),
       pred_(std::make_unique<hp::Predictor>(cfg)),
       scratch_(std::make_unique<hp::Predictor>(cfg)) {
-    dfs_ckpts_.reserve(static_cast<std::size_t>(kByteBitDepth + 1));
-    for (int d = 0; d <= kByteBitDepth; ++d) {
-        dfs_ckpts_.push_back(std::make_unique<hp::Predictor>(cfg));
-    }
+    init_dfs_ckpts_();
 }
 
 void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
     scratch_ = std::make_unique<hp::Predictor>(cfg_);
     dfs_ckpts_.clear();
+    init_dfs_ckpts_();
+}
+
+void HpSequenceBackend::init_dfs_ckpts_() {
+#if !defined(CYPHA_HP_PROFILE_GATE24) && !defined(CYPHA_HP_PROFILE_CHAMP)
     dfs_ckpts_.reserve(static_cast<std::size_t>(kByteBitDepth + 1));
     for (int d = 0; d <= kByteBitDepth; ++d) {
         dfs_ckpts_.push_back(std::make_unique<hp::Predictor>(cfg_));
     }
+#endif
 }
 
 double HpSequenceBackend::byte_log_prob(hp::Predictor& snap, int byte) {
@@ -124,7 +127,13 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) const
     if (use_legacy_byte_log_probs()) {
         return next_byte_log_probs_legacy(vocab_size);
     }
+#if defined(CYPHA_HP_PROFILE_GATE24) || defined(CYPHA_HP_PROFILE_CHAMP)
+    // gate24/champ: bit-tree DFS needs O(depth) predictor checkpoints; use legacy
+    // 256-clone until undo stack lands (see CYPHALM_HP_ALGORITHM_PROFILE.md).
+    return next_byte_log_probs_legacy(vocab_size);
+#else
     return next_byte_log_probs_bit_tree(vocab_size);
+#endif
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {

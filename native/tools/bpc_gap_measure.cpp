@@ -76,7 +76,13 @@ int main(int argc, char** argv) {
     const int n = std::min(nbytes, static_cast<int>(ids.size()));
 
     cypha::cyphalm::CyphaLMConfig cfg;
+#if defined(CYPHA_HP_PROFILE_CHAMP)
+    cypha::cyphalm::apply_hp_champ_recipe(cfg);
+#elif defined(CYPHA_HP_PROFILE_GATE24)
+    cypha::cyphalm::apply_hp_gate24_recipe(cfg);
+#else
     cypha::cyphalm::apply_hp_production_recipe(cfg);
+#endif
     cfg.vocab_size = 256;
     cypha::cyphalm::CyphaLMModel model(cfg);
 
