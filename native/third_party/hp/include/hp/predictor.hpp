@@ -906,6 +906,23 @@ class Predictor {
         set_byte_contexts();
     }
 
+    /// Deep copy with pointer rebind (``ctx_chain_``, match rings). Requires ``cfg`` used at
+    /// construction because ``Predictor`` has no default constructor.
+    static Predictor clone_from(const Predictor& o, const Config& cfg) {
+        Predictor p(cfg);
+        p.assign_from_(o);
+        return p;
+    }
+
+    Predictor& operator=(const Predictor& o) {
+        if (this == &o) return *this;
+        assign_from_(o);
+        return *this;
+    }
+
+    Predictor(Predictor&&) noexcept = default;
+    Predictor& operator=(Predictor&&) noexcept = default;
+
     int predict() {
         mixer_.reset_inputs();
         const int bias_p = counter_predict_p(bias_[c0_]);
@@ -2750,6 +2767,169 @@ class Predictor {
         refidxmod_.set_context(h2(161, static_cast<std::uint64_t>(wiki_.ref_idx()) +
                                        ((hist_ & 0xffffffull) << 8)));
 #endif
+    }
+
+    void rebind_internal_pointers_() {
+        init_ctx_chain_();
+        for (int i = 0; i < kMatchModels; ++i) match_[i].set_ring(&byte_ring_);
+#if HP_SPARSE_UTF8
+        smatch_.set_ring(&byte_ring_);
+#endif
+#if HP_SKIPK_MOD
+        skipk_.set_ring(&byte_ring_);
+#endif
+#if HP_SKIP3_MOD
+        skip3_.set_ring(&byte_ring_);
+#endif
+#if HP_SKIP4_MOD
+        skip4_.set_ring(&byte_ring_);
+#endif
+#if HP_SKIP5_MOD
+        skip5_.set_ring(&byte_ring_);
+#endif
+#if HP_WORD_MATCH
+        for (int i = 0; i < static_cast<int>(sizeof(wmatch_) / sizeof(wmatch_[0])); ++i) {
+            wmatch_[i].set_ring(&byte_ring_);
+        }
+#endif
+        set_byte_contexts();
+    }
+
+    void assign_from_(const Predictor& o) {
+        byte_ring_ = o.byte_ring_;
+        o1_ = o.o1_;
+        o2_ = o.o2_;
+        o3_ = o.o3_;
+        o4_ = o.o4_;
+        o6_ = o.o6_;
+#if HP_HASH2_O6
+        o6b_ = o.o6b_;
+#endif
+        word_ = o.word_;
+        col_ = o.col_;
+        tag_ = o.tag_;
+        wbi_ = o.wbi_;
+        sp13_ = o.sp13_;
+        sp24_ = o.sp24_;
+#if HP_WORD_STREAMS
+        wstr_sp_ = o.wstr_sp_;
+#endif
+#if HP_BRACKET
+        brk_ = o.brk_;
+#endif
+#if HP_LINKWORD
+        link_ = o.link_;
+#endif
+#if HP_NUMERIC
+        num_ = o.num_;
+#endif
+#if HP_PAT_MODEL
+        pat_ = o.pat_;
+#endif
+#if HP_PPMD
+        ppm_ = o.ppm_;
+#endif
+#if HP_STEMMER
+        stem0_ = o.stem0_;
+#if HP_STEMMER_N >= 2
+        stem1_ = o.stem1_;
+#endif
+#endif
+#if HP_SENWORD
+        sen_ = o.sen_;
+#endif
+#if HP_SENT_STREAM
+        sentst_ = o.sentst_;
+#endif
+#if HP_SENT_MEM
+        sentmem_ = o.sentmem_;
+        sentmem_cm_ = o.sentmem_cm_;
+#endif
+#if HP_SENGRP_MOD
+        sengrp_ = o.sengrp_;
+#endif
+        for (int i = 0; i < kMatchModels; ++i) match_[i] = o.match_[i];
+#if HP_SPARSE_UTF8
+        smatch_ = o.smatch_;
+#endif
+#if HP_SKIPK_MOD
+        skipk_ = o.skipk_;
+#endif
+#if HP_SKIP3_MOD
+        skip3_ = o.skip3_;
+#endif
+#if HP_SKIP4_MOD
+        skip4_ = o.skip4_;
+#endif
+#if HP_SKIP5_MOD
+        skip5_ = o.skip5_;
+#endif
+#if HP_LZP_MOD
+        lzp_ = o.lzp_;
+#endif
+#if HP_DMC_MOD
+        dmc_ = o.dmc_;
+#endif
+#if HP_WORD_MATCH
+        for (int i = 0; i < static_cast<int>(sizeof(wmatch_) / sizeof(wmatch_[0])); ++i) {
+            wmatch_[i] = o.wmatch_[i];
+        }
+#endif
+        hebb_ = o.hebb_;
+        pool_ = o.pool_;
+        mixer_ = o.mixer_;
+        apm_c0_ = o.apm_c0_;
+        apm_lex_ = o.apm_lex_;
+        apm_gria_ = o.apm_gria_;
+        hedge_ = o.hedge_;
+        bias_ = o.bias_;
+        gria_ = o.gria_;
+        wiki_ = o.wiki_;
+        streams_ = o.streams_;
+#if HP_STEMMER || HP_STEM_FOLD || HP_POS_GATE || HP_WT3_CTX
+        stems_ = o.stems_;
+#endif
+        brackets_ = o.brackets_;
+        cache_ = o.cache_;
+#if HP_NUMERIC
+        numbers_ = o.numbers_;
+#endif
+#if HP_GATE_BRANCH
+        branch3_ = o.branch3_;
+#endif
+#if HP_GATE_BREAK
+        break_age_ = o.break_age_;
+#endif
+        hist_ = o.hist_;
+        word_hash_ = o.word_hash_;
+        letter_hash_ = o.letter_hash_;
+        hist2_ = o.hist2_;
+        std::memcpy(line_buf_, o.line_buf_, sizeof(line_buf_));
+        cur_line_idx_ = o.cur_line_idx_;
+        col_pos_ = o.col_pos_;
+        tag_depth_ = o.tag_depth_;
+        in_tag_ = o.in_tag_;
+        tag_name_ = o.tag_name_;
+        prev_word_ = o.prev_word_;
+        word_hash_prev_ = o.word_hash_prev_;
+        std::memcpy(word_ring_, o.word_ring_, sizeof(word_ring_));
+        c0_ = o.c0_;
+        bitpos_ = o.bitpos_;
+        pr_final_ = o.pr_final_;
+        std::memcpy(exp_p_, o.exp_p_, sizeof(exp_p_));
+        n_exp_ = o.n_exp_;
+        mixed_p_ = o.mixed_p_;
+        last_mlen_ = o.last_mlen_;
+        sparse_ = o.sparse_;
+#if HP_PRONOUN_MOD
+        std::memcpy(pw_, o.pw_, sizeof(pw_));
+        pw_n_ = o.pw_n_;
+        pronoun_ = o.pronoun_;
+#endif
+#if HP_UTF8_IDLE || HP_GATE_UTF8
+        utf8left_ = o.utf8left_;
+#endif
+        rebind_internal_pointers_();
     }
 
     void init_ctx_chain_() {

@@ -497,6 +497,22 @@ endif()
 add_executable(hp_llm_smoke tools/hp_llm_smoke.cpp)
 target_link_libraries(hp_llm_smoke PRIVATE cypha_lm_native)
 
+add_executable(cyphalm_llm_profile tools/cyphalm_llm_profile.cpp)
+target_link_libraries(cyphalm_llm_profile PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_llm_profile)
+
+add_executable(bpc_gap_verify tools/bpc_gap_verify.cpp)
+target_link_libraries(bpc_gap_verify PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(bpc_gap_verify)
+
+add_executable(bpc_gap_measure tools/bpc_gap_measure.cpp)
+target_link_libraries(bpc_gap_measure PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(bpc_gap_measure)
+
+add_executable(hp_bit_tree_smoke tools/hp_bit_tree_smoke.cpp)
+target_link_libraries(hp_bit_tree_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_bit_tree_smoke)
+
 add_executable(tau_forget_gate_smoke tools/tau_forget_gate_smoke.cpp)
 target_link_libraries(tau_forget_gate_smoke PRIVATE cypha_lm_native)
 
