@@ -3939,10 +3939,19 @@ class Predictor {
 #endif
 };
 
+inline UndoFrame::~UndoFrame() = default;
+
 inline void UndoFrame::clear() {
     patches_.clear();
     snap_.reset();
     has_snap_ = false;
+}
+
+inline void PredictorUndoStack::clear() { frames_.clear(); }
+
+inline UndoFrame& PredictorUndoStack::push_frame() {
+    frames_.emplace_back();
+    return frames_.back();
 }
 
 inline void PredictorUndoStack::pop_frame(Predictor& pred) {

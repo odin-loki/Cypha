@@ -17,6 +17,9 @@ class Predictor;
 
 class UndoFrame {
  public:
+    UndoFrame() = default;
+    ~UndoFrame();
+
     void clear();
 
     bool empty() const { return !has_snap_ && patches_.empty(); }
@@ -124,12 +127,9 @@ inline void hp_undo_note(std::int16_t& cell) {
 
 class PredictorUndoStack {
  public:
-    void clear() { frames_.clear(); }
+    void clear();
 
-    UndoFrame& push_frame() {
-        frames_.emplace_back();
-        return frames_.back();
-    }
+    UndoFrame& push_frame();
 
     void pop_frame(Predictor& pred);
 
