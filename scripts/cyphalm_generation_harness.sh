@@ -15,8 +15,8 @@ if [[ ! -x "$HARNESS" ]]; then
   cmake --build "$BUILD_DIR" --target cyphalm_generation_harness -j"$(nproc)" >/dev/null
 fi
 
-MAX_TOKENS=48
-TABLE_BITS=22
+MAX_TOKENS=32
+TABLE_BITS=16
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --max-tokens) MAX_TOKENS="$2"; shift 2 ;;

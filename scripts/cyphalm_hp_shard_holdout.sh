@@ -10,7 +10,7 @@ mkdir -p "$OUT_DIR"
 
 CORPUS="${1:-$ROOT/bench/data/canterbury/alice29.txt}"
 MAX_BYTES=0
-TABLE_BITS=22
+TABLE_BITS=16
 HOLDOUT_FRAC=0.2
 SHARDS=2
 EXTRA=()

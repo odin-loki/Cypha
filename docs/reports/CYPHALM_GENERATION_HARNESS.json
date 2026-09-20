@@ -1,0 +1,4150 @@
+{
+  "harness": "cyphalm_generation_harness",
+  "hp_profile": "gate24",
+  "hp_table_bits": 16,
+  "max_tokens": 32,
+  "note": "Qualitative sampling only. No BLEU/perplexity/quality scores. Completions are from untrained gate24 hp (cold start) via generate_decode serve path.",
+  "run_count": 15,
+  "runs": [
+    {
+      "completion_bytes": [
+        10,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32
+      ],
+      "completion_text": "\\n                               ",
+      "decode_ms": 2664.038234,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.5449489745640109,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.39006565553182726,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.31525320312539806,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4237307785193286,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.23522539035960302,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4168884527857938,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.20207976359451135,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.15715636184836043,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.12225926162059725,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.0962976408576971,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07156226257844629,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07957351729387681,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.0675737611807132,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07052089432419383,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.045204958946609836,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.041991611351248966,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.03677594927179208,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.028418648762929256,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.028437029794596013,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.019090491952041207,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.01614569622869669,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.012960700617941533,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.011247379474845151,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.009044282987290524,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.009044282987290524,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.007332519400522744,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.007087392960484709,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.007331623026419668,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.006353686448467394,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.006353686448467394,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.005375331617316117,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.005375331617316117,
+          "token_id": 32
+        }
+      ],
+      "prompt_bytes": 269,
+      "prompt_id": "enwik_opening",
+      "prompt_source": "enwik8 XML header",
+      "prompt_text": "<mediawiki xmlns=\\\"http://www.mediawiki.org/xml/export-0.3/\\\" xmlns:xsi=\\\"http://www.w3.org/2001/XMLSchema-instance\\\" xsi:schemaLocation=\\\"http://www.mediawiki.org/xml/export-0.3/ http://www.mediawiki.org/xml/export-0.3.xsd\\\" version=\\\"0.3\\\" xml:lang=\\\"en\\\">\\n  <page>\\n    <title>",
+      "seed": 42,
+      "strategy": "greedy",
+      "temperature": 0.0,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        28,
+        97,
+        116,
+        45,
+        110,
+        34,
+        101,
+        108,
+        83,
+        99,
+        12,
+        85,
+        104,
+        116,
+        116,
+        116,
+        116,
+        105,
+        46,
+        46,
+        111,
+        99,
+        97,
+        45,
+        48,
+        45,
+        49,
+        47,
+        115,
+        47,
+        89,
+        51
+      ],
+      "completion_text": "\\u001cat-n\\\"elSc\\u000cUhtttti..oca-0-1/s/Y3",
+      "decode_ms": 9578.851734,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.326924248226875,
+          "token_id": 28
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.025720540354112,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9551013085711286,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.9667050821998757,
+          "token_id": 45
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.213033955995737,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.58737797010503,
+          "token_id": 34
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.933517120713646,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.251061177128792,
+          "token_id": 108
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.580372031018001,
+          "token_id": 83
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.737237223708353,
+          "token_id": 99
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.812624840836311,
+          "token_id": 12
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.802273675004102,
+          "token_id": 85
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.510011557960388,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.26315081992349,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.6741621238122273,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.665174994913593,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.4123136042620512,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.3846211615942714,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.271239229831716,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.632968046740287,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.5107801285693756,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.548640973014042,
+          "token_id": 99
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.0541773131637866,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.9369747576922383,
+          "token_id": 45
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.3190545936434694,
+          "token_id": 48
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.5505514615022284,
+          "token_id": 45
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.3205700591862515,
+          "token_id": 49
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2516872866029274,
+          "token_id": 47
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.231100399334718,
+          "token_id": 115
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.137058063164684,
+          "token_id": 47
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.9154328947472035,
+          "token_id": 89
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.327177369394535,
+          "token_id": 51
+        }
+      ],
+      "prompt_bytes": 269,
+      "prompt_id": "enwik_opening",
+      "prompt_source": "enwik8 XML header",
+      "prompt_text": "<mediawiki xmlns=\\\"http://www.mediawiki.org/xml/export-0.3/\\\" xmlns:xsi=\\\"http://www.w3.org/2001/XMLSchema-instance\\\" xsi:schemaLocation=\\\"http://www.mediawiki.org/xml/export-0.3/ http://www.mediawiki.org/xml/export-0.3.xsd\\\" version=\\\"0.3\\\" xml:lang=\\\"en\\\">\\n  <page>\\n    <title>",
+      "seed": 42,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        10,
+        48,
+        48,
+        46,
+        51,
+        34,
+        101,
+        120,
+        112,
+        111,
+        114,
+        116,
+        45,
+        48,
+        46,
+        51,
+        34,
+        101,
+        120,
+        109,
+        97,
+        45,
+        29,
+        97,
+        110,
+        103,
+        32,
+        104,
+        116,
+        105,
+        107,
+        105
+      ],
+      "completion_text": "\\n00.3\\\"export-0.3\\\"exma-\\u001dang htiki",
+      "decode_ms": 9421.076443,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.638660118489109,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.146571023197383,
+          "token_id": 48
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.634037387006442,
+          "token_id": 48
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.9520559216120386,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.5519893977837707,
+          "token_id": 51
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.255859486004087,
+          "token_id": 34
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.500639680483535,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.7551270487162183,
+          "token_id": 120
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2807900065861713,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.9189607750933884,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.3711721654183812,
+          "token_id": 114
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.5165831689597633,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.2840686605029485,
+          "token_id": 45
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.3251288704812136,
+          "token_id": 48
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.3883446420182599,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.25518712762090995,
+          "token_id": 51
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.915969856283904,
+          "token_id": 34
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.4781728069710314,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.47730240172612576,
+          "token_id": 120
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9062766773821735,
+          "token_id": 109
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.080520581286226,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.148081450202072,
+          "token_id": 45
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 7.942141440854377,
+          "token_id": 29
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.755445283008811,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.98077138026402,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.7504726398850492,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.784821810630364,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.03089665589395,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.681859966422118,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.9856181912100066,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.5917788394521635,
+          "token_id": 107
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.3783804748386726,
+          "token_id": 105
+        }
+      ],
+      "prompt_bytes": 269,
+      "prompt_id": "enwik_opening",
+      "prompt_source": "enwik8 XML header",
+      "prompt_text": "<mediawiki xmlns=\\\"http://www.mediawiki.org/xml/export-0.3/\\\" xmlns:xsi=\\\"http://www.w3.org/2001/XMLSchema-instance\\\" xsi:schemaLocation=\\\"http://www.mediawiki.org/xml/export-0.3/ http://www.mediawiki.org/xml/export-0.3.xsd\\\" version=\\\"0.3\\\" xml:lang=\\\"en\\\">\\n  <page>\\n    <title>",
+      "seed": 137,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        105,
+        110,
+        103,
+        32,
+        105,
+        110,
+        103,
+        32,
+        105,
+        110,
+        103,
+        32,
+        105,
+        110,
+        103,
+        32,
+        105,
+        110,
+        103,
+        32,
+        105,
+        110,
+        103,
+        32,
+        105,
+        110,
+        103,
+        32,
+        105,
+        110,
+        103,
+        32
+      ],
+      "completion_text": "ing ing ing ing ing ing ing ing ",
+      "decode_ms": 2433.913694,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.8450695537003083,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.1432506424462663,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.923433726269449,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.5596080625726397,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.5918866081382697,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.5969659147889455,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.0738762149831762,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.3522094753267443,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.6959954326574906,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.28853163316696123,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.41423592431810996,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.10149880308476084,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4481583920559685,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.1650663488643197,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.2295478912214965,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.12648605067107774,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.30732327034768203,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.12567786948604562,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.16337335445873233,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07045225389546278,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.19991469456602678,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07651766678281988,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.09546398209012624,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.056411504140563326,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.13680990833687665,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.0621516827838378,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.0723507132942151,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.04273749923151915,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.1114353537820139,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.052260692932803846,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.06737727639866328,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.04049903382779461,
+          "token_id": 32
+        }
+      ],
+      "prompt_bytes": 219,
+      "prompt_id": "alice_opening",
+      "prompt_source": "gutenberg/alice",
+      "prompt_text": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, ",
+      "seed": 42,
+      "strategy": "greedy",
+      "temperature": 0.0,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        115,
+        105,
+        115,
+        97,
+        116,
+        44,
+        32,
+        105,
+        108,
+        104,
+        32,
+        108,
+        105,
+        111,
+        114,
+        120,
+        114,
+        101,
+        32,
+        98,
+        116,
+        32,
+        108,
+        97,
+        100,
+        32,
+        108,
+        104,
+        104,
+        32,
+        112,
+        101
+      ],
+      "completion_text": "sisat, ilh liorxre bt lad lhh pe",
+      "decode_ms": 9958.571711,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.39168585239879,
+          "token_id": 115
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.3216025236052293,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.7940336937664472,
+          "token_id": 115
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.789890557543406,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.0868378613174756,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.328858261102379,
+          "token_id": 44
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.5684020986635081,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.8491403559891793,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.017024737945663,
+          "token_id": 108
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.8582012877296155,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.2260412398169604,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.866226887108769,
+          "token_id": 108
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.9128234186414388,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.580946532366163,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.85913276760495,
+          "token_id": 114
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.0019297877802105,
+          "token_id": 120
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.251545027799692,
+          "token_id": 114
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.9974314845434988,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.7679887655767341,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.7250320785596376,
+          "token_id": 98
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9176385999650787,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.532018736680316,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.7377218728083608,
+          "token_id": 108
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.5134440293334315,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.046071786289906,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.8981762243595328,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.0205859649745856,
+          "token_id": 108
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.108179377285649,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.1861958703967304,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.6512118710407078,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.3158225292137953,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.1760785793191226,
+          "token_id": 101
+        }
+      ],
+      "prompt_bytes": 219,
+      "prompt_id": "alice_opening",
+      "prompt_source": "gutenberg/alice",
+      "prompt_text": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, ",
+      "seed": 42,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        98,
+        117,
+        116,
+        32,
+        105,
+        110,
+        112,
+        122,
+        105,
+        110,
+        116,
+        116,
+        116,
+        116,
+        101,
+        116,
+        32,
+        112,
+        105,
+        99,
+        101,
+        32,
+        97,
+        110,
+        105,
+        110,
+        32,
+        111,
+        114,
+        32,
+        105,
+        112
+      ],
+      "completion_text": "but inpzinttttet pice anin or ip",
+      "decode_ms": 9782.450518,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.6507400382490753,
+          "token_id": 98
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.154538422668642,
+          "token_id": 117
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.982842546308819,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.883664618116182,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.059156441811335,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.539300933146411,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.731905672924953,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.696173450485557,
+          "token_id": 122
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9920460379451637,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.4627256347665725,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.2189733232064954,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.6744207874985624,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.198473528834165,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.4478606785334085,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.809506679980332,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.6947305408041335,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.6098280454500613,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.97169641572354,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.8545067698545838,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2461916557133703,
+          "token_id": 99
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2695151260894655,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.1975631596146337,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.3843857414402385,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2963999453166748,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.0994198854491466,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.021962972367055,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.0289014001892056,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.5584902837900003,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.056796370212914,
+          "token_id": 114
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.8997328843775488,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.102695449821875,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.4969826589214374,
+          "token_id": 112
+        }
+      ],
+      "prompt_bytes": 219,
+      "prompt_id": "alice_opening",
+      "prompt_source": "gutenberg/alice",
+      "prompt_text": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, ",
+      "seed": 137,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32
+      ],
+      "completion_text": "                                ",
+      "decode_ms": 2597.087282,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.6158598887511246,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.0580676730172955,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.7315870910778397,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.6215957415233438,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4218149728535429,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.38977715073994934,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.30691919808451906,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.27853028871371227,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.22281330816990605,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.19841766227713287,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.1694547338009757,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.15571262088047952,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.11457294396038684,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.0966781032759689,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07016346936897372,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.059675811758285166,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.05301056493399988,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.03907223566151864,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.034598050237569435,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.02942117282597473,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.027686116191724924,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.023510515604217685,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.020808130243065534,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.01786357187407365,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.01614676788513335,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.014676055799112419,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.013940670997780283,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.01222663035743743,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.01173769210479253,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.011002847697282245,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.010267823775913863,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.009778227330827501,
+          "token_id": 32
+        }
+      ],
+      "prompt_bytes": 87,
+      "prompt_id": "code_c",
+      "prompt_source": "synthetic C",
+      "prompt_text": "#include <stdio.h>\\n\\nint main(void) {\\n    printf(\\\"Hello, world\\\\n\\\");\\n    return 0;\\n}\\n\\n// ",
+      "seed": 42,
+      "strategy": "greedy",
+      "temperature": 0.0,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        102,
+        94,
+        110,
+        32,
+        118,
+        32,
+        102,
+        77,
+        41,
+        44,
+        5,
+        49,
+        95,
+        96,
+        112,
+        124,
+        112,
+        105,
+        10,
+        10,
+        105,
+        10,
+        32,
+        10,
+        10,
+        10,
+        10,
+        10,
+        32,
+        10,
+        32,
+        10
+      ],
+      "completion_text": "f^n v fM),\\u00051_`p|pi\\n\\ni\\n \\n\\n\\n\\n\\n \\n \\n",
+      "decode_ms": 10587.702873,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.461908317853333,
+          "token_id": 102
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.844348197928007,
+          "token_id": 94
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.63312055408141,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.3633948713184982,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.399642983823137,
+          "token_id": 118
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.8782119385277136,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.4778217612386304,
+          "token_id": 102
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.927084589968668,
+          "token_id": 77
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.491723384266619,
+          "token_id": 41
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.314985952132609,
+          "token_id": 44
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.482631085574342,
+          "token_id": 5
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.279213338304472,
+          "token_id": 49
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.24706077586541,
+          "token_id": 95
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.986043505076386,
+          "token_id": 96
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.58279708693018,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.753751075811436,
+          "token_id": 124
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.8359455512453544,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.084971240598162,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.050596060929367,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.2027837056134016,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9172519560419765,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.1656432764619833,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.893087083280953,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.7651640472069325,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.157126327961144,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.0536744466577184,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.8101726428079815,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.780954870553914,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.423574628648366,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.153214142993795,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.469089109531304,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.9448728404369052,
+          "token_id": 10
+        }
+      ],
+      "prompt_bytes": 87,
+      "prompt_id": "code_c",
+      "prompt_source": "synthetic C",
+      "prompt_text": "#include <stdio.h>\\n\\nint main(void) {\\n    printf(\\\"Hello, world\\\\n\\\");\\n    return 0;\\n}\\n\\n// ",
+      "seed": 42,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        10,
+        112,
+        112,
+        44,
+        32,
+        32,
+        59,
+        124,
+        60,
+        62,
+        116,
+        119,
+        117,
+        118,
+        46,
+        116,
+        32,
+        110,
+        99,
+        32,
+        32,
+        11,
+        4,
+        58,
+        60,
+        60,
+        3,
+        62,
+        108,
+        46,
+        46,
+        101
+      ],
+      "completion_text": "\\npp,  ;|<>twuv.t nc  \\u000b\\u0004:<<\\u0003>l..e",
+      "decode_ms": 9953.110888,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.6191056977284775,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.725944986593496,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.122638666842428,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.480010773379398,
+          "token_id": 44
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.9587589837153394,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.5148352404705263,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.555204421271248,
+          "token_id": 59
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.660517658983539,
+          "token_id": 124
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.617017686615596,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.406438777355468,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.508048420635613,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.175325423108296,
+          "token_id": 119
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.7003029573100363,
+          "token_id": 117
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.653124331441705,
+          "token_id": 118
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.235107578126432,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.181534814588867,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.8316668727849668,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.072023922838541,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.96997458189993,
+          "token_id": 99
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.821474313758017,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.7558123688930756,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.297867864241468,
+          "token_id": 11
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.873350181959635,
+          "token_id": 4
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.252433758246008,
+          "token_id": 58
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.057266728424879,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9511381475025127,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.784261354616072,
+          "token_id": 3
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.8109132918285367,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.553702980295918,
+          "token_id": 108
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.009308567929604,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.982734520784372,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.743188065696776,
+          "token_id": 101
+        }
+      ],
+      "prompt_bytes": 87,
+      "prompt_id": "code_c",
+      "prompt_source": "synthetic C",
+      "prompt_text": "#include <stdio.h>\\n\\nint main(void) {\\n    printf(\\\"Hello, world\\\\n\\\");\\n    return 0;\\n}\\n\\n// ",
+      "seed": 137,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101,
+        100,
+        101
+      ],
+      "completion_text": "dededededededededededededededede",
+      "decode_ms": 2562.658181,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.258991788529769,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2311636811446272,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.3434092529958175,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.6723185629660081,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.8858811311721215,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4463052249913921,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.46876087723585225,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.23226030353368202,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.2454247232612174,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.15128289509260193,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.2229962922122378,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.17215737263929168,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.18196876018383842,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.16268575452781986,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.1735924363284723,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.15608443252279158,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.1204463590083994,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.10731026640334179,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.08313985353267311,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.080308901294115,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.06779846547968614,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07190857226036754,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.058921836304209385,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.06056024072828316,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.05616428336900028,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.04825780914671104,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.04631731884698892,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.043099260270524825,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.04164385111212429,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.040396460119085,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.039191173574027634,
+          "token_id": 100
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.03843134005351857,
+          "token_id": 101
+        }
+      ],
+      "prompt_bytes": 122,
+      "prompt_id": "ascii_prose",
+      "prompt_source": "synthetic prose",
+      "prompt_text": "The quick brown fox jumps over the lazy dog. In 2026, byte-level language models predict the next character from context. ",
+      "seed": 42,
+      "strategy": "greedy",
+      "temperature": 0.0,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        111,
+        111,
+        111,
+        67,
+        117,
+        72,
+        105,
+        99,
+        104,
+        99,
+        32,
+        106,
+        116,
+        104,
+        107,
+        117,
+        109,
+        109,
+        32,
+        37,
+        110,
+        32,
+        98,
+        40,
+        32,
+        32,
+        55,
+        52,
+        106,
+        32,
+        106,
+        51
+      ],
+      "completion_text": "oooCuHichc jthkumm %n b(  74j j3",
+      "decode_ms": 11399.517317,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.270975457061157,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.914935713312264,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.920017479433803,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 7.318099239011958,
+          "token_id": 67
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.1372871661203305,
+          "token_id": 117
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.101034046007234,
+          "token_id": 72
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.139354829837739,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.2508935207586798,
+          "token_id": 99
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.697003501764703,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.8243848460340937,
+          "token_id": 99
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.414774422167693,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.533759982407922,
+          "token_id": 106
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.6276190083497872,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.8852058531549147,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.268773541269314,
+          "token_id": 107
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.9683153640428452,
+          "token_id": 117
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.96141876695,
+          "token_id": 109
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.4535610477930687,
+          "token_id": 109
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.996017267968438,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 7.254939156892273,
+          "token_id": 37
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.778733247745119,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.648875184001698,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.82020912643765,
+          "token_id": 98
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.093938928067111,
+          "token_id": 40
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.0171150164356915,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.8341614763587029,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.521504031269449,
+          "token_id": 55
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.751653036183681,
+          "token_id": 52
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.476547810496548,
+          "token_id": 106
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.426327474690576,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.3923352611793356,
+          "token_id": 106
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.350354199957653,
+          "token_id": 51
+        }
+      ],
+      "prompt_bytes": 122,
+      "prompt_id": "ascii_prose",
+      "prompt_source": "synthetic prose",
+      "prompt_text": "The quick brown fox jumps over the lazy dog. In 2026, byte-level language models predict the next character from context. ",
+      "seed": 42,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        32,
+        114,
+        110,
+        48,
+        48,
+        48,
+        50,
+        122,
+        112,
+        114,
+        114,
+        116,
+        116,
+        116,
+        56,
+        116,
+        47,
+        111,
+        110,
+        41,
+        32,
+        32,
+        32,
+        50,
+        97,
+        110,
+        32,
+        54,
+        75,
+        42,
+        43,
+        98
+      ],
+      "completion_text": " rn0002zprrttt8t/on)   2an 6K*+b",
+      "decode_ms": 11950.144554,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.3622991791721084,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.8422978913152224,
+          "token_id": 114
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.217849731156549,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.416962784942741,
+          "token_id": 48
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.878433099252,
+          "token_id": 48
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.689658961747643,
+          "token_id": 48
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.5759751475105255,
+          "token_id": 50
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.572598218630045,
+          "token_id": 122
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.98423077278257,
+          "token_id": 112
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.5065479490799774,
+          "token_id": 114
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.3397549615022024,
+          "token_id": 114
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.3066269905508983,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.8417967536089863,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.402915573187823,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 7.004768745282415,
+          "token_id": 56
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.792585926116511,
+          "token_id": 116
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.114539423591637,
+          "token_id": 47
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.87430432001017,
+          "token_id": 111
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.668774381475707,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.947442126979918,
+          "token_id": 41
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.461849420022419,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.7770577276655248,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2691197422531189,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9471139395311226,
+          "token_id": 50
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.472941765410077,
+          "token_id": 97
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.2990241571439505,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.8571943644701296,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.526033597030084,
+          "token_id": 54
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.987868217305956,
+          "token_id": 75
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.304835287127699,
+          "token_id": 42
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.753650991224915,
+          "token_id": 43
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.597705707013895,
+          "token_id": 98
+        }
+      ],
+      "prompt_bytes": 122,
+      "prompt_id": "ascii_prose",
+      "prompt_source": "synthetic prose",
+      "prompt_text": "The quick brown fox jumps over the lazy dog. In 2026, byte-level language models predict the next character from context. ",
+      "seed": 137,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63,
+        62,
+        60,
+        63
+      ],
+      "completion_text": "<?><?><?><?><?><?><?><?><?><?><?",
+      "decode_ms": 2676.757844,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.829517243006841,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.0124642244561546,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.2423603237906236,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.7697783454163847,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.538606017043771,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4673087491535728,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.3548007604388066,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.2553054649258145,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.21761571453284584,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.2320789413774679,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.16213112495205495,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.12763663177989354,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.17352846539459188,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.12484453693176077,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.10977312211360322,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.1327207118754996,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.08015833128278074,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.0760350117798625,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.09070720750839661,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.05763334173287447,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.059911057795208056,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.07264642256303741,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.05244468491203444,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.05715408543650041,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.06253555877797433,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.04654020324093111,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.050745815701109274,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.05686743369781879,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.04211660529250005,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.0472957860781113,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.05243646138809514,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.03867829328384387,
+          "token_id": 63
+        }
+      ],
+      "prompt_bytes": 58,
+      "prompt_id": "xml_tag",
+      "prompt_source": "synthetic XML",
+      "prompt_text": "<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<root><item id=\\\"1\\\">",
+      "seed": 42,
+      "strategy": "greedy",
+      "temperature": 0.0,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        62,
+        62,
+        62,
+        32,
+        118,
+        33,
+        63,
+        61,
+        34,
+        49,
+        10,
+        60,
+        107,
+        85,
+        107,
+        118,
+        107,
+        105,
+        32,
+        32,
+        105,
+        32,
+        103,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32,
+        32
+      ],
+      "completion_text": ">>> v!?=\\\"1\\n<kUkvki  i g         ",
+      "decode_ms": 10818.142175,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.9508683268684046,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.4468692867188588,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.9204510521973865,
+          "token_id": 62
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.9557785715339757,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.6302497155782727,
+          "token_id": 118
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.669633854474696,
+          "token_id": 33
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.639016497489493,
+          "token_id": 63
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.448872883476477,
+          "token_id": 61
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.0694991652368235,
+          "token_id": 34
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.209679559417821,
+          "token_id": 49
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.662392863437847,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.8038196673708788,
+          "token_id": 60
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.213283131284903,
+          "token_id": 107
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.88790728951212,
+          "token_id": 85
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.111751626222087,
+          "token_id": 107
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.9568768111368184,
+          "token_id": 118
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.2357385967684484,
+          "token_id": 107
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.262242672546277,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.988005512891646,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.1767058710569627,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.367797146017962,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.1806308394421627,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.393846085990195,
+          "token_id": 103
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 2.647850526626611,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 1.7331283017524177,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.7989659269238544,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4926607290933162,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.605843505197249,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.42973872443049616,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.4373173238036859,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.37745869867142606,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 0.3572857628800188,
+          "token_id": 32
+        }
+      ],
+      "prompt_bytes": 58,
+      "prompt_id": "xml_tag",
+      "prompt_source": "synthetic XML",
+      "prompt_text": "<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<root><item id=\\\"1\\\">",
+      "seed": 42,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    },
+    {
+      "completion_bytes": [
+        10,
+        95,
+        101,
+        82,
+        59,
+        49,
+        80,
+        236,
+        84,
+        85,
+        127,
+        186,
+        179,
+        191,
+        51,
+        181,
+        34,
+        105,
+        104,
+        34,
+        32,
+        32,
+        8,
+        85,
+        95,
+        96,
+        6,
+        104,
+        110,
+        49,
+        46,
+        95
+      ],
+      "completion_text": "\\n_eR;1P\\u00ecTU\\u00ba\\u00b3\\u00bf3\\u00b5\\\"ih\\\"  \\u0008U_`\\u0006hn1._",
+      "decode_ms": 10406.126111,
+      "generated_bytes": 32,
+      "halted_on_epistemic": false,
+      "halted_on_uncertainty": false,
+      "max_tokens": 32,
+      "per_step": [
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.321622402139434,
+          "token_id": 10
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.346808047524805,
+          "token_id": 95
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.265129948338179,
+          "token_id": 101
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.83080032686966,
+          "token_id": 82
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.139196155872976,
+          "token_id": 59
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.8995525929328165,
+          "token_id": 49
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.551880615731773,
+          "token_id": 80
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 7.194682873274654,
+          "token_id": 236
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.5240099594080805,
+          "token_id": 84
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.9995032171788787,
+          "token_id": 85
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.553189870521655,
+          "token_id": 127
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 6.795333456098606,
+          "token_id": 186
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.8972939381540925,
+          "token_id": 179
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.198912023855461,
+          "token_id": 191
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.4603906358480945,
+          "token_id": 51
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.407768849117746,
+          "token_id": 181
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.223980549510022,
+          "token_id": 34
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.63656863951295,
+          "token_id": 105
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.556162931037182,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.783320833270758,
+          "token_id": 34
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.3788996806885243,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.252355922412903,
+          "token_id": 32
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.397010478024365,
+          "token_id": 8
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.631732437537203,
+          "token_id": 85
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.729337131228847,
+          "token_id": 95
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.214039369306493,
+          "token_id": 96
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 5.923073091111786,
+          "token_id": 6
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.235950003449678,
+          "token_id": 104
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.605648702187876,
+          "token_id": 110
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.519586640426052,
+          "token_id": 49
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 3.601845406696578,
+          "token_id": 46
+        },
+        {
+          "aleatoric_var": 0.0,
+          "epistemic_var": 0.0,
+          "halted": false,
+          "loss": 4.558137076397357,
+          "token_id": 95
+        }
+      ],
+      "prompt_bytes": 58,
+      "prompt_id": "xml_tag",
+      "prompt_source": "synthetic XML",
+      "prompt_text": "<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<root><item id=\\\"1\\\">",
+      "seed": 137,
+      "strategy": "temperature",
+      "temperature": 0.9,
+      "top_k": 40
+    }
+  ]
+}

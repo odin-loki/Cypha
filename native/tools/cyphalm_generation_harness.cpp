@@ -72,7 +72,8 @@ std::string ids_to_text(const std::vector<int>& ids) {
     return out;
 }
 
-std::string escape_json_string(const std::string& s) {
+/// JSON-safe view of byte completion (invalid UTF-8 escaped as \\u00XX).
+std::string json_safe_bytes(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 8);
     for (unsigned char c : s) {
@@ -85,7 +86,7 @@ std::string escape_json_string(const std::string& s) {
             out += "\\r";
         } else if (c == '\t') {
             out += "\\t";
-        } else if (c < 0x20) {
+        } else if (c < 0x20 || c >= 0x80) {
             char buf[8];
             std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned>(c));
             out += buf;
@@ -94,6 +95,14 @@ std::string escape_json_string(const std::string& s) {
         }
     }
     return out;
+}
+
+nlohmann::json byte_array(const std::vector<int>& ids) {
+    nlohmann::json arr = nlohmann::json::array();
+    for (int id : ids) {
+        arr.push_back(id);
+    }
+    return arr;
 }
 
 nlohmann::json step_array(const std::vector<cypha::cyphalm::GenerateStep>& steps) {
@@ -115,7 +124,7 @@ nlohmann::json run_case(cypha::cyphalm::CyphaLMModel& model, const PromptCase& p
     nlohmann::json j;
     j["prompt_id"] = prompt.id;
     j["prompt_source"] = prompt.source;
-    j["prompt_text"] = prompt.text;
+    j["prompt_text"] = json_safe_bytes(prompt.text);
     j["prompt_bytes"] = std::string(prompt.text).size();
     j["strategy"] = params.strategy == cypha::cyphalm::DecodeStrategy::Greedy ? "greedy" : "temperature";
     j["temperature"] = params.temperature;
@@ -130,7 +139,9 @@ nlohmann::json run_case(cypha::cyphalm::CyphaLMModel& model, const PromptCase& p
     const double ms = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
 
     j["generated_bytes"] = out.generated_ids.size();
-    j["completion_text"] = ids_to_text(out.generated_ids);
+    const std::string completion = ids_to_text(out.generated_ids);
+    j["completion_bytes"] = byte_array(out.generated_ids);
+    j["completion_text"] = json_safe_bytes(completion);
     j["decode_ms"] = ms;
     j["halted_on_uncertainty"] = out.halted_on_uncertainty;
     j["halted_on_epistemic"] = out.halted_on_epistemic;
