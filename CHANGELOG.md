@@ -11,6 +11,7 @@ milestone or a significant self-contained change.
 ### Added
 - **hp delta undo API:** `hp/undo.hpp` with `UndoRecorderScope`, patch-based `UndoFrame`, `PredictorUndoStack`, and `Predictor::update_tracked`. Bit-tree inference records table/counter mutations only; speculative scoring skips `end_of_byte` stream updates (log-prob parity with legacy clones). Smokes: `hp_undo_smoke`, `hp_bit_tree_smoke`, `hp_inference_bench`.
 - **CyphaLM serve / generation surface:** explicit `serve_predict_next` / `serve_advance` on `CyphaLMModel`; `serve_*` helpers on `HpSequenceBackend`; `cyphalm_generate` CLI; `cyphalm_serve_smoke` CTest.
+- **Docs:** `MODEL_CARD.md` + `README.md` CyphaLM sections — hp framed as byte LLM (train/serve, generation, ~1.61 gate24 BPC, inference-first).
 - **hp LLM integration:** Vendored `native/third_party/hp/` from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm). `CyphaLMModel` delegates to `HpSequenceBackend` / `hp::Predictor`. New tests: `hp_llm_smoke`, `hp_roundtrip_smoke`. CMake: `cmake/HpIntegration.cmake`, optional `-DCYPHA_HP_XSIMD=OFF` on non-SSE hosts.
 
 ### Changed
