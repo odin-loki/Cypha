@@ -3,8 +3,11 @@
 // hp/mixer.hpp -- two-layer gated logistic mixer network + APM (SSE) stage.
 
 #include <cstdint>
+#include <istream>
+#include <ostream>
 #include <vector>
 
+#include "hp/blob_io.hpp"
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
 #include "hp/mixer_weights.hpp"
@@ -216,6 +219,69 @@ class MixerNet {
 #endif
     }
 
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, n_);
+        blob::write_pod(os, k_);
+        blob::write_pod(os, lr_);
+        blob::write_vec(os, ctx_sizes_);
+        blob::write_vec(os, ctx_);
+        blob::write_vec(os, st_);
+        blob::write_vec(os, dot_);
+        blob::write_vec(os, pr_);
+        blob::write_vec(os, lr1_);
+        for (const auto& row : w_) {
+            blob::write_vec(os, row);
+        }
+        blob::write_vec(os, v_);
+#if HP_MIXER_RANK
+        for (const auto& row : ufac_) {
+            blob::write_vec(os, row);
+        }
+        for (const auto& row : vfac_) {
+            blob::write_vec(os, row);
+        }
+        blob::write_vec(os, hid_);
+#endif
+        blob::write_pod(os, energy_);
+        blob::write_pod(os, m_);
+        blob::write_pod(os, ctx2_);
+        blob::write_pod(os, final_dot_);
+        blob::write_pod(os, final_pr_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, n_);
+        blob::read_pod(is, k_);
+        blob::read_pod(is, lr_);
+        blob::read_vec(is, ctx_sizes_);
+        blob::read_vec(is, ctx_);
+        blob::read_vec(is, st_);
+        blob::read_vec(is, dot_);
+        blob::read_vec(is, pr_);
+        blob::read_vec(is, lr1_);
+        w_.resize(ctx_sizes_.size());
+        for (auto& row : w_) {
+            blob::read_vec(is, row);
+        }
+        blob::read_vec(is, v_);
+#if HP_MIXER_RANK
+        ufac_.resize(ctx_sizes_.size());
+        for (auto& row : ufac_) {
+            blob::read_vec(is, row);
+        }
+        vfac_.resize(ctx_sizes_.size());
+        for (auto& row : vfac_) {
+            blob::read_vec(is, row);
+        }
+        blob::read_vec(is, hid_);
+#endif
+        blob::read_pod(is, energy_);
+        blob::read_pod(is, m_);
+        blob::read_pod(is, ctx2_);
+        blob::read_pod(is, final_dot_);
+        blob::read_pod(is, final_pr_);
+    }
+
  private:
     int n_, k_, lr_;
     std::vector<int> ctx_sizes_;
@@ -285,6 +351,16 @@ class APM {
         if (src.t_.size() == t_.size()) {
             t_ = src.t_;
         }
+    }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_vec(os, t_);
+        blob::write_pod(os, idx_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_vec(is, t_);
+        blob::read_pod(is, idx_);
     }
 
  private:

@@ -33,7 +33,10 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <istream>
+#include <ostream>
 
+#include "hp/blob_io.hpp"
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
 #include "hp/undo.hpp"
@@ -161,6 +164,16 @@ class StateMap {
     }
 
     void copy_tables_from(const StateMap& src) { t_ = src.t_; }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_array(os, t_);
+        blob::write_pod(os, idx_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_array(is, t_);
+        blob::read_pod(is, idx_);
+    }
 
  private:
     std::array<std::uint32_t, StateTable::kStates> t_{};

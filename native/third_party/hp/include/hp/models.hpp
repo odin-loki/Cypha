@@ -12,8 +12,11 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <istream>
+#include <ostream>
 #include <vector>
 
+#include "hp/blob_io.hpp"
 #include "hp/hash_table.hpp"
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
@@ -264,6 +267,44 @@ class ContextModel {
         t_.ref(idx_) = static_cast<std::uint16_t>(st.next(state_, y));
     }
 
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, mask_);
+#if HP_HASH_CHK
+        blob::write_pod(os, bits_);
+#endif
+        blob::write_pod(os, limit_);
+        t_.checkpoint_write(os);
+#if HP_HASH_CHK
+        blob::write_vec(os, chk_);
+#endif
+        sm_.checkpoint_write(os);
+        blob::write_pod(os, h_);
+        blob::write_pod(os, idle_);
+        blob::write_pod(os, idx_);
+        blob::write_pod(os, state_);
+        blob::write_pod(os, p_ind_);
+        blob::write_pod(os, p_py_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, mask_);
+#if HP_HASH_CHK
+        blob::read_pod(is, bits_);
+#endif
+        blob::read_pod(is, limit_);
+        t_.checkpoint_read(is);
+#if HP_HASH_CHK
+        blob::read_vec(is, chk_);
+#endif
+        sm_.checkpoint_read(is);
+        blob::read_pod(is, h_);
+        blob::read_pod(is, idle_);
+        blob::read_pod(is, idx_);
+        blob::read_pod(is, state_);
+        blob::read_pod(is, p_ind_);
+        blob::read_pod(is, p_py_);
+    }
+
  private:
     std::uint32_t mask_;
 #if HP_HASH_CHK
@@ -313,6 +354,18 @@ class ByteRing {
     void reset() {
         std::fill(buf_.begin(), buf_.end(), 0);
         pos_ = 0;
+    }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, mask_);
+        blob::write_vec(os, buf_);
+        blob::write_pod(os, pos_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, mask_);
+        blob::read_vec(is, buf_);
+        blob::read_pod(is, pos_);
     }
 
  private:
@@ -449,6 +502,32 @@ class MatchModel {
     }
 
     void copy_counters_from(const MatchModel& src) { st_ = src.st_; }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, order_);
+        blob::write_pod(os, skip_);
+        blob::write_pod(os, tab_mask_);
+        tab_.checkpoint_write(os);
+        blob::write_array(os, st_);
+        blob::write_pod(os, ptr_);
+        blob::write_pod(os, len_);
+        blob::write_pod(os, expected_);
+        blob::write_pod(os, sidx_);
+        blob::write_pod(os, valid_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, order_);
+        blob::read_pod(is, skip_);
+        blob::read_pod(is, tab_mask_);
+        tab_.checkpoint_read(is);
+        blob::read_array(is, st_);
+        blob::read_pod(is, ptr_);
+        blob::read_pod(is, len_);
+        blob::read_pod(is, expected_);
+        blob::read_pod(is, sidx_);
+        blob::read_pod(is, valid_);
+    }
 
  private:
     static void merge_counter(Counter& dst, const Counter& src, std::uint64_t src_weight,
@@ -624,6 +703,34 @@ class HebbianModel {
         syn_strength_ = src.syn_strength_;
     }
 
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, mask_);
+        blob::write_vec(os, syn_target_);
+        blob::write_vec(os, syn_strength_);
+        sm_.checkpoint_write(os);
+        t_.checkpoint_write(os);
+        blob::write_pod(os, limit_);
+        blob::write_pod(os, h_);
+        blob::write_pod(os, idx_);
+        blob::write_pod(os, state_);
+        blob::write_pod(os, strength_);
+        blob::write_pod(os, tick_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, mask_);
+        blob::read_vec(is, syn_target_);
+        blob::read_vec(is, syn_strength_);
+        sm_.checkpoint_read(is);
+        t_.checkpoint_read(is);
+        blob::read_pod(is, limit_);
+        blob::read_pod(is, h_);
+        blob::read_pod(is, idx_);
+        blob::read_pod(is, state_);
+        blob::read_pod(is, strength_);
+        blob::read_pod(is, tick_);
+    }
+
  private:
     std::uint32_t mask_;
     std::vector<std::uint64_t> syn_target_;
@@ -695,6 +802,33 @@ class DmcModel {
         cur_ = nxt;
     }
 
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, cap_);
+        blob::write_pod(os, cur_);
+        const std::uint64_t n = nodes_.size();
+        blob::write_pod(os, n);
+        for (const auto& node : nodes_) {
+            blob::write_pod(os, node.n0);
+            blob::write_pod(os, node.n1);
+            blob::write_pod(os, node.nx[0]);
+            blob::write_pod(os, node.nx[1]);
+        }
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, cap_);
+        blob::read_pod(is, cur_);
+        std::uint64_t n = 0;
+        blob::read_pod(is, n);
+        nodes_.resize(n);
+        for (auto& node : nodes_) {
+            blob::read_pod(is, node.n0);
+            blob::read_pod(is, node.n1);
+            blob::read_pod(is, node.nx[0]);
+            blob::read_pod(is, node.nx[1]);
+        }
+    }
+
  private:
     struct Node {
         std::uint16_t n0 = 1, n1 = 1;
@@ -736,6 +870,28 @@ class LzpModel {
 
     void update(int y) {
         if (valid_) counter_update(st_[sidx_], y, 255);
+    }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, mask_);
+        blob::write_vec(os, pred_);
+        blob::write_array(os, st_);
+        blob::write_pod(os, expected_);
+        blob::write_pod(os, expected_bit_);
+        blob::write_pod(os, sidx_);
+        blob::write_pod(os, have_);
+        blob::write_pod(os, valid_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, mask_);
+        blob::read_vec(is, pred_);
+        blob::read_array(is, st_);
+        blob::read_pod(is, expected_);
+        blob::read_pod(is, expected_bit_);
+        blob::read_pod(is, sidx_);
+        blob::read_pod(is, have_);
+        blob::read_pod(is, valid_);
     }
 
  private:

@@ -83,6 +83,7 @@ void HpSequenceBackend::prune_cold_slots(int min_total) {
 
 void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
+    log_probs_buf_.clear();
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -160,7 +161,20 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) {
-    return byte_log_probs_bit_tree(*pred_, vocab_size);
+    const int n = std::max(1, std::min(vocab_size, 256));
+    if (log_probs_buf_.size() != static_cast<std::size_t>(n)) {
+        log_probs_buf_.assign(static_cast<std::size_t>(n),
+                              std::log(1.0 / static_cast<double>(n)));
+    } else {
+        const double uniform = std::log(1.0 / static_cast<double>(n));
+        for (double& v : log_probs_buf_) {
+            v = uniform;
+        }
+    }
+    hp::PredictorUndoStack undo;
+    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo, log_probs_buf_);
+    return std::vector<double>(log_probs_buf_.begin(),
+                               log_probs_buf_.begin() + static_cast<std::size_t>(n));
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_assign_reuse(int vocab_size) const {
@@ -176,13 +190,16 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_assign_reuse(int voca
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size) const {
     const int n = std::max(1, std::min(vocab_size, 256));
-    std::vector<double> out(static_cast<std::size_t>(n), 0.0);
+    if (log_probs_buf_.size() != static_cast<std::size_t>(n)) {
+        log_probs_buf_.resize(static_cast<std::size_t>(n));
+    }
     for (int b = 0; b < n; ++b) {
         hp::Predictor snap(cfg_);
         snap.copy_state_from(*pred_);
-        out[static_cast<std::size_t>(b)] = byte_log_prob(snap, b);
+        log_probs_buf_[static_cast<std::size_t>(b)] = byte_log_prob(snap, b);
     }
-    return out;
+    return std::vector<double>(log_probs_buf_.begin(),
+                               log_probs_buf_.begin() + static_cast<std::size_t>(n));
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
