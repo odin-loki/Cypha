@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-20 (updated)  
 **Status:** Phase 0 done; **first concrete lossy levers landed** (mem tier, serve-compact, cold-slot prune)  
-**Inputs:** [`CYPHALM_LLM_PROFILE_REPORT.md`](CYPHALM_LLM_PROFILE_REPORT.md), [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md), [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md), [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json)
+**Inputs:** [`CYPHALM_LLM_PROFILE_REPORT.md`](CYPHALM_LLM_PROFILE_REPORT.md), [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md), [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md), [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json), [`CYPHALM_LOSSY_ENWIK_SCREEN.json`](CYPHALM_LOSSY_ENWIK_SCREEN.json)
 
 ---
 
@@ -12,7 +12,7 @@ Priority = expected **RAM/speed payoff** vs **quality risk** at gate24 compile p
 
 | Rank | Lever | API / flag | RAM | Speed | Quality risk | Status |
 |------|-------|------------|-----|-------|--------------|--------|
-| **1** | **Lower `table_bits` (mem tier)** | `apply_hp_lossy_recipe(cfg, mem)` / `CYPHA_HP_LOSSY_MEM=20` | **−4× per −2 bits** (mem 20 ≈ −54% RSS init) | **~4.8×** faster `predict_next` @ mem20 (smaller clones) | **Low–med** on long corpora; must re-measure enwik | **Implemented** |
+| **1** | **Lower `table_bits` (mem tier)** | `apply_hp_lossy_recipe(cfg, mem)` / `CYPHA_HP_LOSSY_MEM=20` | **−38%** RSS @ mem20 enwik | Faster observe + clones | **+0.0063 BPC** on enwik8MB — **fails ~1.612 bar** | **Opt-in only** |
 | **2** | **Serve-compact (drop scratch + DFS pool)** | `hp_serve_compact` / `CYPHA_HP_SERVE_COMPACT=1` / `compact_hp_for_serve()` | **−~50%** construct RSS (lazy recreate) | Neutral (first `predict_next` pays recreate) | **None** (identical math) | **Implemented** |
 | **3** | **Cold hash-slot prune** | `hp_prune_cold_min_n` / `CYPHA_HP_PRUNE_COLD_MIN_N=4` / `prune_hp_cold_slots()` | No table shrink (fixed arrays) | **~1.7×** faster `predict_next` @ min4 (measured) | **Low** if threshold small; rises with aggressive min | **Implemented** |
 | **4** | True undo stack (latency, not lossy) | delta-undo on `hp::Predictor::update` | Drop 9 DFS checkpoints | **10–50×** bit-tree score (est.) | **None** if exact | **PR #7** (other agent) |
@@ -39,18 +39,40 @@ Corpus: WikiText-2 train slice, 32k warmup + 50k observe eval, 1× `predict_next
 | prune_cold min4 mem22 | 3053 | 0 | 16.6k | 105.4 |
 | combo mem20+compact+prune4 | 1708 | +0.00012 | 21.1k | **63.1** |
 
-**Takeaways:**
-- **mem20** is the strongest RAM/speed lever with negligible BPC delta on WikiText online observe.
-- **serve_compact** cuts ~50% construct RSS with **zero** BPC change; lazy scratch recreate adds first-call latency.
-- **prune_cold_min4** after 32k warmup: no measurable BPC hit here; speeds `predict_next` ~1.7× (hash table hotter).
-- Combo stacks RAM + speed; enwik gate24 screen still required before calling any tier production-ready.
+**Takeaways (WikiText — relative screen only):**
+- **mem20** looked negligible on WikiText (+0.00012 BPC) — **misleading**; see enwik screen below.
+- **serve_compact** cuts ~50% construct RSS with **zero** BPC change on WikiText; lazy scratch recreate adds first-call latency.
+- **prune_cold_min4** after 32k warmup: no measurable BPC hit on WikiText; speeds `predict_next` ~1.7×.
+
+---
+
+## enwik gate24 screen (2026-09-20, authoritative)
+
+Full **enwik8.8MB** compress-faithful bit-serial observe (`eval_bpc`, 8,388,608 bytes). SHA256 `09f6dd7241a8ae21edfd6762f3c6712a1fd02f7f322c5e77cab8bb88f292ee8e`. JSON: [`CYPHALM_LOSSY_ENWIK_SCREEN.json`](CYPHALM_LOSSY_ENWIK_SCREEN.json).
+
+| Variant | observe BPC | Δ vs mem22 baseline | vs ~1.612 bar | RSS init (MiB) |
+|---------|-------------|----------------------|---------------|----------------|
+| **gate24 baseline mem22** | **1.611729** | — | on bar | 3083 |
+| lossy mem20 | 1.618017 | **+0.00629** | **+0.00602** (fail) | 1913 (−38%) |
+| combo mem20+compact+prune4 | 1.618017 | **+0.00629** | fail | 1913 |
+
+**Verdict:** **mem20 does not pass the gate24 quality bar.** Baseline mem22 matches the cited Cypha gate24 observe reference (1.611729). mem20 adds **+0.0063 BPC** (~0.39% relative) — material for compression, not a blow-up, but above the ~1.612 production threshold. compact+prune on mem20 add **no extra** BPC loss beyond mem20 alone.
+
+**Production default:** keep **mem22** gate24. Safe serve levers on mem22:
+- `hp_serve_compact` (lossless RAM, −~50% construct RSS on WikiText)
+- `hp_prune_cold_min_n` (re-screen per threshold; 0 Δ on WikiText @ min4)
+
+**mem20** remains an **opt-in lossy tier** (`CYPHA_HP_LOSSY_MEM=20`) when −38% RSS is worth +0.0063 BPC.
 
 Reproduce:
 
 ```bash
 cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
 cmake --build native/build --target cyphalm_lossy_bench
+# WikiText relative screen
 native/build/cyphalm_lossy_bench --warmup-n 32768 --eval-n 50000 --latency-iters 1
+# enwik gate24 screen (full 8MB, ~20 min)
+native/build/cyphalm_lossy_bench --enwik-screen
 ```
 
 ---
@@ -168,7 +190,7 @@ Default stays **light** for CI RAM. Document any quality headline with SKU + met
 | Quality risk | **Medium** — measure WikiText observe BPC only |
 | Experiment | Sweep in `cyphalm_llm_eval`; plot RSS vs BPC |
 
-**Status:** mem20 tier implemented; enwik gate24 screen pending.
+**Status:** mem20 tier implemented; enwik screen shows +0.0063 BPC — opt-in only, mem22 stays default.
 
 ---
 
@@ -223,6 +245,7 @@ Uses bit-tree naturally: stop DFS when outside top-M prefix support.
 |-------|--------|
 | CI `native_hp_bit_tree_smoke` | Parity gate (in CTest) |
 | `cyphalm_lossy_bench` | RSS / BPC / predict_next deltas per lever |
+| `cyphalm_lossy_bench --enwik-screen` | Full enwik8MB gate24 quality gate for mem tiers |
 | Nightly `cyphalm_llm_eval` @ n≥100k | Observe BPC drift per SKU |
 | Top-k @ n≥64 | After phase 1 undo (currently ~37 s/step) |
 | gate24 / champ enwik8MB | Host with corpus + ≥32 GiB for champ compress |
@@ -246,7 +269,8 @@ Uses bit-tree naturally: stop DFS when outside top-M prefix support.
 
 ## Related
 
-- [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json) — first-cut measured numbers  
+- [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json) — WikiText relative screen  
+- [`CYPHALM_LOSSY_ENWIK_SCREEN.json`](CYPHALM_LOSSY_ENWIK_SCREEN.json) — enwik8MB gate24 screen (authoritative)  
 - [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md) — large-n measured numbers  
 - [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md) — protocol / SKU / enwik archive  
 - [`native/cmake/HpFlags.cmake`](../../native/cmake/HpFlags.cmake) — gate24  

@@ -1,9 +1,12 @@
 /// Lossy LLM lever benchmark: RSS, observe BPC, predict_next latency (measured only).
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -39,8 +42,42 @@ ProcStatus read_proc_status() {
     return s;
 }
 
+std::string sha256_file(const std::string& path) {
+    std::ostringstream cmd;
+    cmd << "sha256sum \"" << path << "\" 2>/dev/null | awk '{print $1}'";
+    std::FILE* pipe = popen(cmd.str().c_str(), "r");
+    if (!pipe) return "";
+    char buf[128];
+    std::string hex;
+    if (std::fgets(buf, sizeof(buf), pipe) != nullptr) {
+        hex = buf;
+        while (!hex.empty() && (hex.back() == '\n' || hex.back() == '\r')) hex.pop_back();
+    }
+    pclose(pipe);
+    return hex;
+}
+
+std::string resolve_corpus_path(const std::string& path) {
+    namespace fs = std::filesystem;
+    if (path.empty()) return path;
+    const fs::path p(path);
+    if (fs::exists(p)) return fs::absolute(p).string();
+    const fs::path native = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path repo = native.parent_path();
+    const std::vector<fs::path> candidates = {
+        repo / path,
+        fs::path("..") / path,
+        fs::path("../..") / path,
+    };
+    for (const auto& c : candidates) {
+        if (fs::exists(c)) return fs::absolute(c).string();
+    }
+    return path;
+}
+
 std::vector<int> load_bytes_file(const std::string& path, int max_n) {
-    std::ifstream in(path, std::ios::binary);
+    const std::string resolved = resolve_corpus_path(path);
+    std::ifstream in(resolved, std::ios::binary);
     std::vector<int> out;
     int ch;
     while (in && (max_n <= 0 || static_cast<int>(out.size()) < max_n)) {
@@ -98,15 +135,19 @@ nlohmann::json run_variant(const char* label, cypha::cyphalm::CyphaLMConfig cfg,
     for (int i = 0; i < std::min(64, static_cast<int>(ids.size())); ++i) {
         model.hp_backend().consume_byte(static_cast<std::uint8_t>(ids[static_cast<std::size_t>(i)]));
     }
-    const int lit = std::max(1, latency_iters);
-    const auto t_lat = Clock::now();
-    for (int i = 0; i < lit; ++i) {
-        (void)model.predict_next(static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i % ids.size())]));
+    if (latency_iters > 0) {
+        const auto t_lat = Clock::now();
+        for (int i = 0; i < latency_iters; ++i) {
+            (void)model.predict_next(
+                static_cast<std::uint32_t>(ids[static_cast<std::size_t>(i % ids.size())]));
+        }
+        const double lat_ms =
+            std::chrono::duration<double, std::milli>(Clock::now() - t_lat).count();
+        j["predict_next_ms_per_call"] = lat_ms / latency_iters;
+        j["predict_next_iters"] = latency_iters;
+    } else {
+        j["predict_next_skipped"] = true;
     }
-    const double lat_ms =
-        std::chrono::duration<double, std::milli>(Clock::now() - t_lat).count();
-    j["predict_next_ms_per_call"] = lat_ms / lit;
-    j["predict_next_iters"] = lit;
 
     const auto rss_peak = read_proc_status();
     j["vm_rss_kb_after_bench"] = rss_peak.vm_rss_kb;
@@ -121,17 +162,32 @@ int main(int argc, char** argv) {
     int eval_n = 100000;
     int latency_iters = 2;
     std::string corpus_path;
+    bool enwik_screen = false;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--warmup-n" && i + 1 < argc) warmup_n = std::stoi(argv[++i]);
         else if (a == "--eval-n" && i + 1 < argc) eval_n = std::stoi(argv[++i]);
         else if (a == "--latency-iters" && i + 1 < argc) latency_iters = std::stoi(argv[++i]);
         else if (a == "--corpus" && i + 1 < argc) corpus_path = argv[++i];
+        else if (a == "--enwik-screen") {
+            enwik_screen = true;
+            corpus_path = "bench/data/enwik8/enwik8.8mb";
+            warmup_n = 0;
+            eval_n = 8388608;
+            latency_iters = 0;
+        }
     }
 
     std::vector<int> ids;
     if (!corpus_path.empty()) {
+        corpus_path = resolve_corpus_path(corpus_path);
         ids = load_bytes_file(corpus_path, std::max(warmup_n, eval_n) + 1024);
+        if (enwik_screen && static_cast<int>(ids.size()) < eval_n) {
+            std::fprintf(stderr,
+                         "enwik screen: corpus %s has %zu bytes, need %d\n", corpus_path.c_str(),
+                         ids.size(), eval_n);
+            return 1;
+        }
     }
     if (ids.empty()) {
         const cypha::cyphalm::LMCorpus wiki =
@@ -143,46 +199,53 @@ int main(int argc, char** argv) {
     }
 
     nlohmann::json out;
-    out["harness"] = "cyphalm_lossy_bench";
+    out["harness"] = enwik_screen ? "cyphalm_lossy_enwik_screen" : "cyphalm_lossy_bench";
+    out["corpus_path"] = corpus_path;
+    if (!corpus_path.empty()) {
+        out["corpus_sha256"] = sha256_file(corpus_path);
+    }
     out["corpus_bytes"] = ids.size();
     out["warmup_n"] = warmup_n;
     out["eval_n"] = eval_n;
+    out["latency_iters"] = latency_iters;
     out["gate24_quality_bar_bpc"] = 1.612;
+    out["cypha_gate24_ref_observe_bpc"] = 1.611729;
     out["note"] =
-        "observe_bpc is compress-faithful (bit-serial); predict_next uses legacy 256-clone @ gate24";
+        "observe_bpc is compress-faithful bit-serial (eval_bpc); predict_next skipped when "
+        "latency_iters=0";
 
     nlohmann::json variants = nlohmann::json::array();
 
-    {
+    auto add_baseline = [&]() {
         auto cfg = cypha::cyphalm::CyphaLMConfig{};
         cypha::cyphalm::apply_hp_production_recipe(cfg);
         cfg.vocab_size = 256;
         variants.push_back(run_variant("gate24_baseline_mem22", cfg, ids, warmup_n, eval_n,
                                        latency_iters));
-    }
-    {
+    };
+    auto add_mem20 = [&]() {
         auto cfg = cypha::cyphalm::CyphaLMConfig{};
         cypha::cyphalm::apply_hp_lossy_recipe(cfg, 20);
         cfg.vocab_size = 256;
         variants.push_back(run_variant("lossy_mem20", cfg, ids, warmup_n, eval_n, latency_iters));
-    }
-    {
+    };
+    auto add_serve_compact = [&]() {
         auto cfg = cypha::cyphalm::CyphaLMConfig{};
         cypha::cyphalm::apply_hp_production_recipe(cfg);
         cfg.vocab_size = 256;
         cfg.hp_serve_compact = true;
         variants.push_back(run_variant("serve_compact_mem22", cfg, ids, warmup_n, eval_n,
                                        latency_iters));
-    }
-    {
+    };
+    auto add_prune = [&]() {
         auto cfg = cypha::cyphalm::CyphaLMConfig{};
         cypha::cyphalm::apply_hp_production_recipe(cfg);
         cfg.vocab_size = 256;
         cfg.hp_prune_cold_min_n = 4;
         variants.push_back(run_variant("prune_cold_min4_mem22", cfg, ids, warmup_n, eval_n,
                                        latency_iters));
-    }
-    {
+    };
+    auto add_combo = [&]() {
         auto cfg = cypha::cyphalm::CyphaLMConfig{};
         cypha::cyphalm::apply_hp_lossy_recipe(cfg, 20);
         cfg.vocab_size = 256;
@@ -190,6 +253,18 @@ int main(int argc, char** argv) {
         cfg.hp_prune_cold_min_n = 4;
         variants.push_back(run_variant("combo_mem20_compact_prune4", cfg, ids, warmup_n, eval_n,
                                        latency_iters));
+    };
+
+    if (enwik_screen) {
+        add_baseline();
+        add_mem20();
+        add_combo();
+    } else {
+        add_baseline();
+        add_mem20();
+        add_serve_compact();
+        add_prune();
+        add_combo();
     }
 
     out["variants"] = variants;
