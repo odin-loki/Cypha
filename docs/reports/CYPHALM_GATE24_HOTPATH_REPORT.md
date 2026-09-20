@@ -75,7 +75,7 @@ Implementation: `hp/blob_io.hpp`, `hp/checkpoint.hpp` (serialized ContextModels,
 | Test | Gate |
 |------|------|
 | `native_hp_gate24_ci_gate` | Fixture BPC **6.53989 ± 0.05** (compress-equivalent, 16-token pattern) |
-| | `log_prob_byte` **≤ 5 ms** median-of-5 (measured ~3.5 ms + slack) |
+| | `log_prob_byte` **≤ 7.5 ms** median-of-5 (measured ~5.9 ms GHA macOS + slack) |
 | | `next_byte_log_probs(32)` **≤ 30 ms** median-of-3 (measured ~20 ms + slack) |
 | `native_hp_checkpoint_roundtrip_smoke` | BPC identical before/after `.hpbin` load |
 
