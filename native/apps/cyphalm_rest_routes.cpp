@@ -74,6 +74,16 @@ DecodeParams decode_params_from_json(const nlohmann::json& body) {
     if (p.self_correct) {
         p.epistemic_halt = true;
     }
+    p.beam_width = body.value("beam_width", body.value("beam", 1));
+    p.ban_last_k = body.value("ban_last_k", 0);
+    p.repetition_penalty = body.value("repetition_penalty", 1.0);
+    p.repetition_window = body.value("repetition_window", 32);
+    p.text_like_prior = body.value("text_like_prior", 0.0);
+    if (body.contains("warmup_ids") && body["warmup_ids"].is_array()) {
+        for (const auto& v : body["warmup_ids"]) {
+            p.warmup_ids.push_back(v.get<int>());
+        }
+    }
     return p;
 }
 

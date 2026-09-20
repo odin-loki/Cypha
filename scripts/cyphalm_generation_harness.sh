@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generation quality harness: greedy + temperature samples via cyphalm_generation_harness.
+# Generation quality harness: cold vs primed+penalty samples via cyphalm_generation_harness.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${CYPHA_GEN_HARNESS_BUILD:-$ROOT/native/build-gen-harness}"
@@ -17,10 +17,14 @@ fi
 
 MAX_TOKENS=32
 TABLE_BITS=16
+WARMUP_FILE="${CYPHA_GEN_WARMUP_FILE:-$ROOT/bench/data/canterbury/alice29.txt}"
+WARMUP_BYTES=4096
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --max-tokens) MAX_TOKENS="$2"; shift 2 ;;
     --table-bits) TABLE_BITS="$2"; shift 2 ;;
+    --warmup-file) WARMUP_FILE="$2"; shift 2 ;;
+    --warmup-bytes) WARMUP_BYTES="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -30,52 +34,59 @@ MD_OUT="$OUT_DIR/generation_harness_${STAMP}.md"
 DOCS_JSON="$ROOT/docs/reports/CYPHALM_GENERATION_HARNESS.json"
 DOCS_MD="$ROOT/docs/reports/CYPHALM_GENERATION_HARNESS.md"
 
-echo "=== cyphalm_generation_harness ==="
-"$HARNESS" --out "$JSON_OUT" --max-tokens "$MAX_TOKENS" --table-bits "$TABLE_BITS" >/dev/null
+echo "=== cyphalm_generation_harness (cold vs primed) ==="
+"$HARNESS" --out "$JSON_OUT" --max-tokens "$MAX_TOKENS" --table-bits "$TABLE_BITS" \
+  --warmup-file "$WARMUP_FILE" --warmup-bytes "$WARMUP_BYTES" >/dev/null
 
 python3 - "$JSON_OUT" "$MD_OUT" <<'PY'
-import json, sys, textwrap
+import json, sys
 from pathlib import Path
 
 src, dst = Path(sys.argv[1]), Path(sys.argv[2])
 data = json.loads(src.read_text())
 
 lines = [
-    "# CyphaLM generation harness (qualitative)",
+    "# CyphaLM generation harness (cold vs primed, qualitative)",
     "",
     f"- harness: `{data.get('harness')}`",
     f"- hp_table_bits: {data.get('hp_table_bits')}",
     f"- max_tokens: {data.get('max_tokens')}",
+    f"- warmup_file: `{data.get('warmup_file')}`",
+    f"- warmup_bytes: {data.get('warmup_bytes')}",
+    f"- primed defaults: {data.get('primed_decode_defaults')}",
     f"- runs: {data.get('run_count')}",
     "",
     data.get("note", ""),
     "",
-    "## Samples",
+    "## Samples (before / after per prompt)",
     "",
 ]
 
+by_prompt = {}
 for run in data.get("runs", []):
-    lines.append(f"### {run['prompt_id']} — {run['strategy']} (seed={run.get('seed', '-')})")
-    lines.append(f"- source: {run.get('prompt_source', '')}")
-    lines.append(f"- prompt ({run.get('prompt_bytes', 0)} B): `{run.get('prompt_text', '')[:120]}`")
-    lines.append(f"- decode_ms: {run.get('decode_ms', 0):.1f}")
-    comp = run.get("completion_text", "")
-    lines.append(f"- completion ({run.get('generated_bytes', 0)} B):")
-    lines.append("```")
-    lines.append(comp if comp else "(empty)")
-    lines.append("```")
-    halted = run.get("halted_on_uncertainty") or run.get("halted_on_epistemic")
-    if halted:
-        lines.append("- halted early on uncertainty/epistemic gate")
+    by_prompt.setdefault(run["prompt_id"], []).append(run)
+
+for prompt_id, group in by_prompt.items():
+    lines.append(f"### {prompt_id}")
+    lines.append(f"- source: {group[0].get('prompt_source', '')}")
+    lines.append(f"- prompt ({group[0].get('prompt_bytes', 0)} B): `{group[0].get('prompt_text', '')[:120]}`")
+    lines.append("")
+    for run in group:
+        lines.append(f"#### {run['profile']} — {run['decode_params'].get('strategy')} "
+                     f"(decode_ms={run.get('decode_ms', 0):.1f})")
+        comp = run.get("completion_text", "")
+        lines.append("```")
+        lines.append(comp if comp else "(empty)")
+        lines.append("```")
+        lines.append("")
     lines.append("")
 
 lines.extend([
-    "## Qualitative notes (human-readable, not scores)",
+    "## Latency notes",
     "",
-    "- **Cold start:** gate24 hp with no corpus warmup; expect repetitive or markup-like continuations.",
-    "- **Greedy vs temperature:** greedy should be deterministic per prompt; temperature runs differ by seed.",
-    "- **Structure:** XML/C/code prompts test whether continuations stay in-token class (tags, braces, semicolons).",
-    "- **No automated quality metric** — inspect completions above for coherence, repetition, and charset drift.",
+    "- Compare `decode_ms` for `cold_*` vs `primed_*` per prompt/strategy.",
+    "- Warmup cost is included in primed `decode_ms` (one-shot serve_advance over warmup corpus).",
+    "- No automated quality metric — inspect completions for repetition, charset, and structure.",
     "",
 ])
 

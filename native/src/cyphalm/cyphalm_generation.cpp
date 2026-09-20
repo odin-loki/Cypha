@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <memory>
 #include <random>
+#include <stdexcept>
 #include <utility>
 
 #include "cypha/curriculum.hpp"
@@ -119,14 +121,98 @@ int sample_token(const std::vector<double>& lp, const DecodeParams& params, std:
     return sample_full_vocab(lp, temp, rng);
 }
 
-void consume_prompt(CyphaLMModel& model, const std::vector<int>& prompt_ids) {
+constexpr double kLogNegInf = -1e30;
+
+bool decode_modifiers_active(const DecodeParams& params) {
+    return params.ban_last_k > 0 || params.repetition_penalty > 1.0 + 1e-9 || params.text_like_prior > 0.0;
+}
+
+double text_like_log_bonus(int byte, double strength) {
+    if (strength <= 0.0) {
+        return 0.0;
+    }
+    if (byte >= 32 && byte <= 126) {
+        return strength;
+    }
+    if (byte == '\n' || byte == '\t' || byte == '\r') {
+        return strength * 0.5;
+    }
+    if (byte < 32 || byte == 127) {
+        return -strength;
+    }
+    return 0.0;
+}
+
+void apply_decode_modifiers(std::vector<double>& lp, const std::vector<int>& recent,
+                            const DecodeParams& params) {
+    const int n = static_cast<int>(lp.size());
+    if (n <= 0) {
+        return;
+    }
+    const int rep_win = params.repetition_window > 0 ? params.repetition_window : 32;
+    const int rep_start = std::max(0, static_cast<int>(recent.size()) - rep_win);
+
+    if (params.ban_last_k > 0) {
+        const int ban_start =
+            std::max(0, static_cast<int>(recent.size()) - params.ban_last_k);
+        for (int i = ban_start; i < static_cast<int>(recent.size()); ++i) {
+            const int b = recent[static_cast<std::size_t>(i)];
+            if (b >= 0 && b < n) {
+                lp[static_cast<std::size_t>(b)] = kLogNegInf;
+            }
+        }
+    }
+
+    if (params.repetition_penalty > 1.0) {
+        const double pen = std::log(params.repetition_penalty);
+        for (int i = rep_start; i < static_cast<int>(recent.size()); ++i) {
+            const int b = recent[static_cast<std::size_t>(i)];
+            if (b >= 0 && b < n) {
+                lp[static_cast<std::size_t>(b)] -= pen;
+            }
+        }
+    }
+
+    if (params.text_like_prior > 0.0) {
+        for (int b = 0; b < n; ++b) {
+            lp[static_cast<std::size_t>(b)] += text_like_log_bonus(b, params.text_like_prior);
+        }
+    }
+}
+
+void prime_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids,
+                         const std::vector<int>& prompt_ids) {
     model.reset_context();
+    for (int id : warmup_ids) {
+        model.serve_advance(static_cast<std::uint32_t>(id));
+    }
     if (prompt_ids.size() <= 1) {
         return;
     }
     for (std::size_t i = 0; i + 1 < prompt_ids.size(); ++i) {
         model.serve_advance(static_cast<std::uint32_t>(prompt_ids[i]));
     }
+}
+
+std::vector<int> build_recent_context(const std::vector<int>& warmup_ids,
+                                      const std::vector<int>& prompt_ids,
+                                      const std::vector<int>& generated_ids) {
+    std::vector<int> recent;
+    recent.reserve(warmup_ids.size() + prompt_ids.size() + generated_ids.size());
+    recent.insert(recent.end(), warmup_ids.begin(), warmup_ids.end());
+    recent.insert(recent.end(), prompt_ids.begin(), prompt_ids.end());
+    recent.insert(recent.end(), generated_ids.begin(), generated_ids.end());
+    return recent;
+}
+
+int pick_token_from_pred(const PredictNextOutput& pred, const std::vector<int>& recent,
+                         const DecodeParams& sample_params, std::mt19937_64& rng) {
+    std::vector<double> lp = pred.log_probs;
+    apply_decode_modifiers(lp, recent, sample_params);
+    if (sample_params.strategy == DecodeStrategy::Greedy || sample_params.temperature <= 1e-6) {
+        return argmax_log_probs(lp);
+    }
+    return sample_token(lp, sample_params, rng);
 }
 
 DecodeStrategy effective_sample_strategy(const DecodeParams& params) {
@@ -315,15 +401,15 @@ DecodeStrategy decode_strategy_from_string(const std::string& name) {
 }
 
 GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_bytes,
-                             int beam_width) {
+                             const DecodeParams& params) {
     GenerateOutput out;
     out.strategy = DecodeStrategy::Beam;
-    const int width = std::max(1, beam_width);
+    const int width = std::max(1, params.beam_width);
     if (max_bytes <= 0) {
         return out;
     }
 
-    consume_prompt(model, prompt_ids);
+    prime_serve_context(model, params.warmup_ids, prompt_ids);
     if (!prompt_ids.empty()) {
         model.serve_advance(static_cast<std::uint32_t>(prompt_ids.back()));
     }
@@ -357,7 +443,10 @@ GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt
 
         for (const BeamHypothesis& hyp : beam) {
             replay_tokens(hyp.tokens);
-            const std::vector<double> lp = HpSequenceBackend::byte_log_probs_bit_tree(work, vocab);
+            std::vector<double> lp = HpSequenceBackend::byte_log_probs_bit_tree(work, vocab);
+            const std::vector<int> recent =
+                build_recent_context(params.warmup_ids, prompt_ids, hyp.tokens);
+            apply_decode_modifiers(lp, recent, params);
             std::vector<int> order(static_cast<std::size_t>(vocab));
             for (int i = 0; i < vocab; ++i) {
                 order[static_cast<std::size_t>(i)] = i;
@@ -411,16 +500,19 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
     const int beam_width =
         params.strategy == DecodeStrategy::Beam ? std::max(2, params.beam_width) : params.beam_width;
     if (beam_width > 1) {
-        return generate_beam(model, prompt_ids, max_tokens, beam_width);
+        return generate_beam(model, prompt_ids, max_tokens, params);
     }
 
     GenerateOutput out;
     out.strategy = params.strategy;
-    consume_prompt(model, prompt_ids);
+    prime_serve_context(model, params.warmup_ids, prompt_ids);
     int last = prompt_ids.empty() ? 0 : prompt_ids.back();
     std::mt19937_64 rng(params.seed);
     DecodeParams sample_params = params;
     sample_params.strategy = effective_sample_strategy(params);
+    const bool use_fast_greedy =
+        params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6 &&
+        !decode_modifiers_active(params);
     LmIntelligenceMonitor local_monitor;
     LmIntelligenceMonitor* active_monitor = monitor != nullptr ? monitor : nullptr;
     if (profiler != nullptr && active_monitor == nullptr) {
@@ -430,7 +522,9 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
     for (int i = 0; i < max_tokens; ++i) {
         PredictNextOutput pred;
         int tok = 0;
-        if (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6) {
+        const std::vector<int> recent =
+            build_recent_context(params.warmup_ids, prompt_ids, out.generated_ids);
+        if (use_fast_greedy) {
             tok = static_cast<int>(model.serve_greedy_next(static_cast<std::uint32_t>(last)));
         } else {
             pred = model.serve_predict_next(static_cast<std::uint32_t>(last));
@@ -451,7 +545,8 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
                     out.self_corrected = true;
                     out.self_correct_passes = std::max(out.self_correct_passes, passes);
                     const std::uint32_t ctx = static_cast<std::uint32_t>(last);
-                    last = argmax_log_probs(pred.log_probs);
+                    tok = pick_token_from_pred(pred, recent, sample_params, rng);
+                    last = tok;
                     const double loss =
                         pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
                     observe_decode_step(model, profiler, active_monitor, ctx, pred,
@@ -474,10 +569,10 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
                 }
                 break;
             }
-            tok = sample_token(pred.log_probs, sample_params, rng);
+            tok = pick_token_from_pred(pred, recent, sample_params, rng);
         }
         const double loss =
-            (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6)
+            use_fast_greedy
                 ? -model.hp_backend().log_prob_byte(static_cast<std::uint8_t>(tok))
                 : (pred.log_probs.empty() || tok < 0 ||
                    tok >= static_cast<int>(pred.log_probs.size()))
@@ -517,12 +612,16 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
                      cypha::intelligence::EpistemicThreshold* epistemic_threshold,
                      cypha::intelligence::IntelligenceProfiler* profiler,
                      LmIntelligenceMonitor* monitor) {
-    consume_prompt(model, prompt_ids);
+    prime_serve_context(model, params.warmup_ids, prompt_ids);
     int last = prompt_ids.empty() ? 0 : prompt_ids.back();
     std::mt19937_64 rng(params.seed);
     DecodeParams sample_params = params;
     sample_params.strategy = effective_sample_strategy(params);
+    const bool use_fast_greedy =
+        params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6 &&
+        !decode_modifiers_active(params);
     int index = 0;
+    std::vector<int> generated_ids;
     LmIntelligenceMonitor local_monitor;
     LmIntelligenceMonitor* active_monitor = monitor != nullptr ? monitor : nullptr;
     if (profiler != nullptr && active_monitor == nullptr) {
@@ -532,7 +631,9 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
     for (int i = 0; i < max_tokens; ++i) {
         PredictNextOutput pred;
         int tok = 0;
-        if (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6) {
+        const std::vector<int> recent =
+            build_recent_context(params.warmup_ids, prompt_ids, generated_ids);
+        if (use_fast_greedy) {
             tok = static_cast<int>(model.serve_greedy_next(static_cast<std::uint32_t>(last)));
         } else {
             pred = model.serve_predict_next(static_cast<std::uint32_t>(last));
@@ -551,12 +652,14 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
                     int passes = 1;
                     pred = self_correct_predict(model, pred, params, epistemic_threshold, passes);
                     const std::uint32_t ctx = static_cast<std::uint32_t>(last);
-                    last = argmax_log_probs(pred.log_probs);
+                    tok = pick_token_from_pred(pred, recent, sample_params, rng);
+                    last = tok;
                     const double loss =
                         pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
                     observe_decode_step(model, profiler, active_monitor, ctx, pred,
                                         static_cast<std::uint32_t>(last));
                     GenerateStep step = step_from_pred(pred, last, loss);
+                    generated_ids.push_back(last);
                     if (!cb(step_record_json(step, index, false, false))) return;
                     ++index;
                     continue;
@@ -570,10 +673,10 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
                 }
                 return;
             }
-            tok = sample_token(pred.log_probs, sample_params, rng);
+            tok = pick_token_from_pred(pred, recent, sample_params, rng);
         }
         const double loss =
-            (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6)
+            use_fast_greedy
                 ? -model.hp_backend().log_prob_byte(static_cast<std::uint8_t>(tok))
                 : (pred.log_probs.empty() || tok < 0 ||
                    tok >= static_cast<int>(pred.log_probs.size()))
@@ -582,6 +685,7 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
         observe_decode_step(model, profiler, active_monitor, static_cast<std::uint32_t>(last), pred,
                             static_cast<std::uint32_t>(tok));
         GenerateStep step = step_from_pred(pred, tok, loss);
+        generated_ids.push_back(tok);
         if (!cb(step_record_json(step, index, false, false))) return;
         last = tok;
         ++index;
@@ -606,6 +710,35 @@ nlohmann::json predict_next_json(CyphaLMModel& model, int token_id) {
     j["dominant_expert"] = 0;
     j["routing_probs"] = nlohmann::json::array();
     return j;
+}
+
+std::vector<int> load_warmup_bytes(const std::string& path, int max_bytes, int vocab_size) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("cannot open warmup file: " + path);
+    }
+    std::vector<int> out;
+    if (max_bytes <= 0) {
+        return out;
+    }
+    out.reserve(static_cast<std::size_t>(max_bytes));
+    for (int i = 0; i < max_bytes; ++i) {
+        char ch = 0;
+        if (!in.get(ch)) {
+            break;
+        }
+        const unsigned char c = static_cast<unsigned char>(ch);
+        if (static_cast<int>(c) < vocab_size) {
+            out.push_back(static_cast<int>(c));
+        }
+    }
+    return out;
+}
+
+void warmup_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids) {
+    for (int id : warmup_ids) {
+        model.serve_advance(static_cast<std::uint32_t>(id));
+    }
 }
 
 nlohmann::json lm_summary_json(const CyphaLMModel& model, const std::string& source_path, int n_generations) {

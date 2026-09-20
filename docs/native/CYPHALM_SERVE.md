@@ -40,7 +40,21 @@ cmake --build native/build --target cyphalm_generate -j$(nproc)
 ./native/build/cyphalm_generate --prompt "Hello " --max-bytes 32 --strategy top_p --top-p 0.9 --temperature 0.8
 ./native/build/cyphalm_generate --strategy greedy --max-bytes 16
 ./native/build/cyphalm_generate --strategy beam --beam 4 --max-bytes 16 --latency
+./native/build/cyphalm_generate --warmup-file bench/data/canterbury/alice29.txt --warmup-bytes 4096 \
+  --ban-last-k 3 --repetition-penalty 1.15 --text-like-prior 0.35 --strategy greedy --max-bytes 32
 ```
+
+Serve-time decode modifiers (do not change compress/BPC fidelity):
+
+| Flag / JSON field | Role |
+|-------------------|------|
+| `--warmup-file` / `warmup_ids` | Prime context via `serve_advance` before the prompt |
+| `--warmup-bytes` | Cap bytes read from warmup file |
+| `--ban-last-k` / `ban_last_k` | Hard-ban bytes in the last k context bytes |
+| `--repetition-penalty` / `repetition_penalty` | Down-weight repeats in the repetition window |
+| `--text-like-prior` / `text_like_prior` | Soft log-prob bonus for printable ASCII |
+
+Harness: `bash scripts/cyphalm_generation_harness.sh` — cold vs primed before/after samples + `decode_ms`.
 
 REST: `POST /cyphalm/generate` (see `cyphalm_rest_routes.cpp`) uses the same `generate_decode` path.
 

@@ -69,7 +69,10 @@ int main() {
     }
 
     model.reset_context();
-    const auto beam4 = cypha::cyphalm::generate_beam(model, prompt, 4, 4);
+    cypha::cyphalm::DecodeParams beam4p;
+    beam4p.beam_width = 4;
+    beam4p.strategy = cypha::cyphalm::DecodeStrategy::Beam;
+    const auto beam4 = cypha::cyphalm::generate_beam(model, prompt, 4, beam4p);
     if (!non_empty(beam4)) {
         std::puts("cyphalm_generate_smoke FAIL generate_beam empty");
         return 1;

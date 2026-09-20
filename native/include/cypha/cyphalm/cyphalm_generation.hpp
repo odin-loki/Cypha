@@ -36,6 +36,16 @@ struct DecodeParams {
     /// On high r_eu, emit one greedy token before halting (LM self-correct stub).
     bool self_correct = false;
     std::uint64_t seed = 42;
+    /// Bytes fed via ``serve_advance`` before the prompt (context priming; serve-time only).
+    std::vector<int> warmup_ids;
+    /// Hard-ban bytes appearing in the last ``ban_last_k`` context bytes (0 = off).
+    int ban_last_k = 0;
+    /// Divide repeat-byte mass by this factor within ``repetition_window`` (1.0 = off).
+    double repetition_penalty = 1.0;
+    /// Lookback window for ``repetition_penalty`` (bytes).
+    int repetition_window = 32;
+    /// Soft log-prob bonus for printable ASCII / common whitespace (serve-time only; 0 = off).
+    double text_like_prior = 0.0;
 };
 
 DecodeStrategy decode_strategy_from_string(const std::string& name);
@@ -68,7 +78,7 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
 
 /// Byte-level beam search on bit-tree log probs (``beam_width`` hypotheses, predictor snapshots).
 GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_bytes,
-                             int beam_width);
+                             const DecodeParams& params);
 
 /// Greedy decode (legacy wrapper).
 GenerateOutput generate_greedy(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens);
@@ -85,6 +95,12 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
                      LmIntelligenceMonitor* monitor = nullptr);
 
 nlohmann::json predict_next_json(CyphaLMModel& model, int token_id);
+
+/// Load up to ``max_bytes`` raw bytes from ``path`` as token ids (vocab-clamped).
+std::vector<int> load_warmup_bytes(const std::string& path, int max_bytes, int vocab_size);
+
+/// Advance serve context on ``warmup_ids`` without resetting first (caller may ``reset_context``).
+void warmup_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids);
 
 nlohmann::json lm_summary_json(const CyphaLMModel& model, const std::string& source_path, int n_generations);
 
