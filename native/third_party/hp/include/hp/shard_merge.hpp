@@ -164,6 +164,37 @@ inline void Predictor::transfer_tables_from(const Predictor& src) {
     hedge_.copy_from(src.hedge_);
 }
 
+/// Strategy C: byte offset to start replaying ``replay_bytes`` before shard boundary.
+inline std::size_t boundary_replay_begin(std::size_t boundary_byte, std::size_t replay_bytes) {
+    if (replay_bytes == 0 || boundary_byte == 0) {
+        return boundary_byte;
+    }
+    return boundary_byte > replay_bytes ? boundary_byte - replay_bytes : 0;
+}
+
+/// Merge shard tables in shard order. Boundary replay (consume prefix windows) is
+/// performed by the caller between merges — see ``boundary_replay_begin``.
+inline MergeStatus merge_predictor_tables_sequential(
+    Predictor& dst, const std::vector<const Predictor*>& shards,
+    const std::vector<std::uint64_t>& shard_bytes) {
+    if (shards.size() != shard_bytes.size() || shards.empty()) {
+        return MergeStatus::EmptyInput;
+    }
+    std::uint64_t merged_bytes = 0;
+    for (std::size_t i = 0; i < shards.size(); ++i) {
+        if (shards[i] == nullptr || shard_bytes[i] == 0) {
+            return MergeStatus::EmptyInput;
+        }
+        const MergeStatus st =
+            merge_predictor_tables(dst, merged_bytes, *shards[i], shard_bytes[i]);
+        if (st != MergeStatus::Ok) {
+            return st;
+        }
+        merged_bytes += shard_bytes[i];
+    }
+    return MergeStatus::Ok;
+}
+
 inline void Predictor::reset_stream_state() {
     byte_ring_.reset();
     hist_ = 0;
