@@ -122,13 +122,27 @@ void CyphaLMModel::remember_last_predict(const PredictNextOutput& out) {
     last_predict_out_ = out;
 }
 
-PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
+PredictNextOutput CyphaLMModel::serve_predict_next(std::uint32_t token_id) {
     PredictNextOutput out;
-    hp_->consume_byte(token_to_byte(token_id));
-    out.log_probs = hp_->next_byte_log_probs(cfg_.vocab_size);
+    hp_->serve_advance_byte(token_to_byte(token_id));
+    out.log_probs = hp_->serve_next_byte_log_probs(cfg_.vocab_size);
     out.epistemic_var = 0.0;
     out.aleatoric_var = 0.0;
     fill_top_k(out.log_probs, out);
+    return out;
+}
+
+void CyphaLMModel::serve_advance(std::uint32_t token_id) {
+    hp_->serve_advance_byte(token_to_byte(token_id));
+}
+
+std::uint32_t CyphaLMModel::serve_greedy_next(std::uint32_t token_id) {
+    hp_->serve_advance_byte(token_to_byte(token_id));
+    return static_cast<std::uint32_t>(hp_->serve_greedy_next_byte());
+}
+
+PredictNextOutput CyphaLMModel::predict_next(std::uint32_t token_id) {
+    PredictNextOutput out = serve_predict_next(token_id);
     remember_last_predict(out);
     ++step_count_;
     return out;

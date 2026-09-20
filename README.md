@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows — latest **[v2.4.0](https://github.com/odin-loki/Cypha/releases/tag/v2.4.0)**)
 
-> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + next-token / text generate. Built from first principles (AIXI/MDL, information geometry, free-energy world prior `θ₀ ⊕ Δk`, Information Bottleneck encoder). Native C++ sole runtime — REST, Qt Studio, optional CUDA — validated by CTests. Living sequence / LLM: **hp** integer-exact context mixer from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm) (`apply_hp_production_recipe`). Cypha BPC and hp archive sizes are separate metrics — see [`MODEL_CARD.md`](MODEL_CARD.md). Event forecasting Phases 1–9 shipped — see [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
+> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + **CyphaLM byte LLM** (train + serve + generate). Living sequence stack: **hp** gate24 context mixer from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm) — **~1.61 BPC** quality bar on enwik8, **inference-first** serve path for generation. See [`MODEL_CARD.md`](MODEL_CARD.md) and [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md). Event forecasting Phases 1–9 shipped — [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
 
 ---
 
@@ -70,6 +70,32 @@ cypha_bench_run --from-domain 1
 ```
 
 Prebuilt bundles (**v2.4.0**): [Windows MSVC zip](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-windows-x86_64.zip) · [Linux tar.gz](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-linux-x86_64.tar.gz) · [AppImage](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-linux-x86_64.AppImage) · [arXiv paper bundle](https://github.com/odin-loki/Cypha/releases/download/v2.4.0/cypha-2.4.0-arxiv-bundle.zip). Install via `packaging/install_release_windows.ps1` or `packaging/install_release_linux.sh`.
+
+---
+
+## CyphaLM — byte LLM (hp gate24)
+
+CyphaLM is the living **language-model surface** of Cypha: a trainable, servable byte LLM backed by vendored **hp**, not a separate compressor-only tool. One stack supports **training/BPC eval**, **inference/generation**, and REST/CLI.
+
+| Mode | Entry points | Role |
+|------|--------------|------|
+| **Train** | `cyphalm_train`, `train_step`, `eval_bpc_compress_equivalent` | Online hp table updates; compress-faithful BPC (~**1.6117** observe on enwik8 gate24) |
+| **Serve** | `serve_advance`, `serve_predict_next`, `serve_greedy_next` | Generation without train bookkeeping; **inference latency first** |
+| **Generate** | `generate_decode`, `cyphalm_generate`, `POST /generate` | Greedy (O(8) bits), temperature, top-k |
+
+```bash
+# Build + sample completion (after cmake configure)
+cmake --build native/build --target cyphalm_generate -j$(nproc)
+./native/build/cyphalm_generate --prompt "Hello " --max-tokens 32 --strategy greedy
+
+# REST (sequence model loaded)
+cypha_rest --listen 127.0.0.1:8099 --cypha fixtures/reference.cypha
+# POST /generate  { "prompt_ids": [...], "max_tokens": 64, "strategy": "temperature" }
+```
+
+- **Quality bar:** gate24 enwik8 observe **1.611729 BPC** / archive **1.611759 BPC** (2026-09-19, vendored hp). Train metric ≠ generation log-prob path — see [`MODEL_CARD.md`](MODEL_CARD.md).
+- **Docs:** [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md) (train vs serve API), [`docs/reports/CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md) (BPC harness).
+- **Superseded stacks** (history only): Hybrid GRIA+LSTM [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md), RPSM [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md), hp light/champ SKUs [`docs/history/REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md).
 
 ---
 
@@ -214,7 +240,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - Label-noise robustness at 30% noise: **79.1%** accuracy (well above chance for 5-class).
 - Convergence to 100% on well-separated 5-class Gaussian clusters: **step 50** (matches SGD online).
 - XOR / nonlinear boundaries: latent RFF auto-gamma reaches **~76.3%** (~2.7 pp vs sklearn ~79%); see [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
-- **Sequence / LLM:** **hp** gate24 context mixer via `Cypha::init_default_sequence` / `apply_hp_production_recipe` (v78 flags + `HP_SLOT_MAX=24`; enwik observe **~1.6117 BPC**). Historical Hybrid GRIA+LSTM **2.664 BPC** pin remains in `bench/BASELINE_LOCK.json` for comparison only — not hp. Run via **`cypha_bench_run`** / **`cyphalm_bench_native`**. **Superseded stacks:** [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md), [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md), [`docs/history/REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md).
+- **CyphaLM / sequence:** **hp** gate24 byte LLM — train (`cyphalm_train`, BPC **~1.61** enwik) + serve (`cyphalm_generate`, REST `/generate`). Inference-first; not a transformer drop-in. Details: [CyphaLM section above](#cyphalm--byte-llm-hp-gate24). Superseded: [`LEGACY_LLM`](docs/history/LEGACY_LLM.md), [`REMOVED_RPSM`](docs/history/REMOVED_RPSM.md), [`REMOVED_HP_SKUS`](docs/history/REMOVED_HP_SKUS.md).
 - **D10A ECG5000:** real-data default **90.11%** ([`D10_ECG5000_GT90_ATTEMPT_2026-07-18.md`](docs/archive/reports/D10_ECG5000_GT90_ATTEMPT_2026-07-18.md)).
 - **Sequence REST:** native `cypha_rest` — `POST /generate` and `/generate/stream` (SSE), plus `/sample`, `/retrieve`, `/sequence/*`.
 
@@ -227,7 +253,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - **Nonlinear decision boundaries:** Linear LLR caps XOR near chance; **latent RFF** closes most of the sklearn gap (~76.3% vs ~79%). See [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
 - **Optional CUDA.** Infer-only local flag (`-DCYPHA_ENABLE_CUDA=ON`); no CUDA CI. Training stays on CPU — GPU training is slower here, so it is not a gap. Future CPU speed path is portable SIMD via xsimd — [`docs/FUTURE.md`](docs/FUTURE.md) §1b, [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md).
-- **Status / next.** Release **v2.4.0** + hp LLM integration — **hp** is the production sequence algorithm; forecasting Phases 1–9; latent-RFF XOR default; Linux + Windows CI green. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/native/CYPHALM_TIER2_MODEL.md`](docs/native/CYPHALM_TIER2_MODEL.md), [`docs/FUTURE.md`](docs/FUTURE.md).
+- **Status / next.** Release **v2.4.0** + hp CyphaLM (train/serve/generate); gate24 **~1.61 BPC** enwik quality bar; forecasting Phases 1–9; latent-RFF XOR default; Linux + Windows CI green. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md), [`docs/FUTURE.md`](docs/FUTURE.md).
 
 ---
 

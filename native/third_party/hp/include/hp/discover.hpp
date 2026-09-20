@@ -46,6 +46,7 @@
 #include "hp/int_math.hpp"
 #include "hp/undo.hpp"
 #include "hp/models.hpp"
+#include "hp/undo.hpp"
 
 namespace hp {
 

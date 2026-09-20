@@ -34,9 +34,11 @@ CyphaLMModel::eval_bpc
     → HpSequenceBackend bit-serial observe (8 bits, live pred_)
     ≡ hp archive BPC @ same compile flags
 
-CyphaLMModel::predict_next
-    → HpSequenceBackend::next_byte_log_probs_legacy (256-clone)
-    (bit-tree checkpoint pool OOMs at v78 table sizes)
+CyphaLMModel::serve_predict_next / generate_decode
+    → HpSequenceBackend::serve_next_byte_log_probs (bit-tree checkpoint DFS)
+    → greedy: serve_greedy_next (O(8) scratch fork)
+
+See [`docs/native/CYPHALM_SERVE.md`](../native/CYPHALM_SERVE.md).
 ```
 
 Redundancy `--profile` stderr: [`enwik_sku_profiles/gate24_redundancy_profile.txt`](enwik_sku_profiles/gate24_redundancy_profile.txt).

@@ -4,6 +4,11 @@
 /// Integer-exact context mixing lives in hp/; this layer exposes byte-level
 /// log-probabilities for the CyphaLM public API (BPC path uses double log_probs).
 ///
+/// **Train vs serve:** BPC / train loss use ``observe_next_byte`` / ``observe_stream_bits``
+/// (O(8) bits per byte, no vocab fan-out). Serve / generation use ``serve_*`` helpers:
+/// ``serve_advance_byte`` advances live context; ``serve_next_byte_log_probs`` and
+/// ``serve_greedy_next_byte`` score on a scratch fork without train bookkeeping.
+///
 /// RAM note: holds live ``pred_`` plus optional ``scratch_`` for single-byte fork
 /// scoring. MSB bit-tree uses delta undo on ``scratch_`` (one fork copy), not
 /// depth-indexed full Predictor snapshots.
@@ -26,29 +31,42 @@ class HpSequenceBackend {
 
     void reset();
 
-    /// Consume one byte (token id) through the hp bit path (predict + update per bit).
+    /// Train / compress: consume one byte on the live predictor (predict + update per bit).
     void consume_byte(std::uint8_t byte);
 
-    /// P(next_byte | history including bytes consumed so far). Does not advance main state.
+    /// Serve alias — same as ``consume_byte`` (online hp context advance, no loss fan-out).
+    void serve_advance_byte(std::uint8_t byte) { consume_byte(byte); }
+
+    /// P(next_byte | history). Does not advance main state. Default: bit-tree with delta undo.
     std::vector<double> next_byte_log_probs(int vocab_size);
+
+    /// Serve alias for ``next_byte_log_probs`` (explicit generation surface).
+    std::vector<double> serve_next_byte_log_probs(int vocab_size) {
+        return next_byte_log_probs(vocab_size);
+    }
 
     /// MSB prefix-tree fan-out with delta undo backtracking (default inference path).
     std::vector<double> next_byte_log_probs_bit_tree(int vocab_size);
 
-    /// Legacy 256× deep-clone path (``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`` or parity tests).
+    /// Legacy 256× fork path (``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`` or parity tests).
     std::vector<double> next_byte_log_probs_legacy(int vocab_size) const;
 
-    /// log P(single byte | current history); one fork clone + 8 bit steps (train / top-1).
+    /// log P(single byte | current history); one scratch fork + 8 bit steps.
     double log_prob_byte(std::uint8_t byte) const;
+
+    /// Serve: O(8) greedy next byte on scratch fork (no 256-way fan-out).
+    std::uint8_t serve_greedy_next_byte() const;
 
     /// Sample one byte MSB-first (8 bit steps on a single fork clone). Does not advance main.
     std::uint8_t sample_next_byte(double (*rng01)()) const;
 
-    /// Cross-entropy loss in nats for observing `next` after current history.
+    /// Serve: temperature-scaled bit sampling (temperature <= 0 → greedy).
+    std::uint8_t serve_sample_next_byte(double temperature, double (*rng01)()) const;
+
+    /// Train: cross-entropy loss in nats for observing ``next`` after current history.
     double observe_next_byte(std::uint8_t next);
 
-    /// Cumulative cross-entropy in **bits** over ``bytes[0..len)`` (hp compress encode path).
-    /// Each byte is predict→score→update on the main predictor; no vocab clone fan-out.
+    /// Train: cumulative cross-entropy in **bits** over ``bytes[0..len)`` (hp compress encode).
     double observe_stream_bits(const std::uint8_t* bytes, std::size_t len);
 
     const hp::Predictor& predictor() const { return *pred_; }

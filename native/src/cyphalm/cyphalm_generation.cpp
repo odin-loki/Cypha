@@ -118,9 +118,11 @@ int sample_token(const std::vector<double>& lp, const DecodeParams& params, std:
 
 void consume_prompt(CyphaLMModel& model, const std::vector<int>& prompt_ids) {
     model.reset_context();
-    if (prompt_ids.size() <= 1) return;
+    if (prompt_ids.size() <= 1) {
+        return;
+    }
     for (std::size_t i = 0; i + 1 < prompt_ids.size(); ++i) {
-        model.predict_next(static_cast<std::uint32_t>(prompt_ids[i]));
+        model.serve_advance(static_cast<std::uint32_t>(prompt_ids[i]));
     }
 }
 
@@ -327,49 +329,61 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
     }
 
     for (int i = 0; i < max_tokens; ++i) {
-        auto pred = model.predict_next(static_cast<std::uint32_t>(last));
-        if (uncertainty_halt(params, pred.epistemic_var)) {
-            out.halted_on_uncertainty = true;
-            out.r_eu_proxy = r_eu_from_pred(pred);
-            GenerateStep halt_step;
-            halt_step.epistemic_var = pred.epistemic_var;
-            halt_step.aleatoric_var = pred.aleatoric_var;
-            halt_step.halted = true;
-            out.per_step.push_back(halt_step);
-            break;
-        }
-        if (epistemic_should_halt(params, pred, epistemic_threshold)) {
-            if (params.self_correct) {
-                int passes = 1;
-                pred = self_correct_predict(model, pred, params, epistemic_threshold, passes);
-                out.self_corrected = true;
-                out.self_correct_passes = std::max(out.self_correct_passes, passes);
-                const std::uint32_t ctx = static_cast<std::uint32_t>(last);
-                last = argmax_log_probs(pred.log_probs);
-                const double loss =
-                    pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
-                observe_decode_step(model, profiler, active_monitor, ctx, pred,
-                                    static_cast<std::uint32_t>(last));
-                out.generated_ids.push_back(last);
-                out.per_step.push_back(step_from_pred(pred, last, loss));
-                continue;
+        PredictNextOutput pred;
+        int tok = 0;
+        if (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6) {
+            tok = static_cast<int>(model.serve_greedy_next(static_cast<std::uint32_t>(last)));
+        } else {
+            pred = model.serve_predict_next(static_cast<std::uint32_t>(last));
+            if (uncertainty_halt(params, pred.epistemic_var)) {
+                out.halted_on_uncertainty = true;
+                out.r_eu_proxy = r_eu_from_pred(pred);
+                GenerateStep halt_step;
+                halt_step.epistemic_var = pred.epistemic_var;
+                halt_step.aleatoric_var = pred.aleatoric_var;
+                halt_step.halted = true;
+                out.per_step.push_back(halt_step);
+                break;
             }
-            const double r_eu = r_eu_from_pred(pred);
-            out.halted_on_epistemic = true;
-            out.halted_on_uncertainty = true;
-            out.r_eu_proxy = r_eu;
-            GenerateStep halt_step;
-            halt_step.epistemic_var = pred.epistemic_var;
-            halt_step.aleatoric_var = pred.aleatoric_var;
-            halt_step.halted = true;
-            out.per_step.push_back(halt_step);
-            if (epistemic_threshold != nullptr) {
-                epistemic_threshold->update(r_eu, false);
+            if (epistemic_should_halt(params, pred, epistemic_threshold)) {
+                if (params.self_correct) {
+                    int passes = 1;
+                    pred = self_correct_predict(model, pred, params, epistemic_threshold, passes);
+                    out.self_corrected = true;
+                    out.self_correct_passes = std::max(out.self_correct_passes, passes);
+                    const std::uint32_t ctx = static_cast<std::uint32_t>(last);
+                    last = argmax_log_probs(pred.log_probs);
+                    const double loss =
+                        pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
+                    observe_decode_step(model, profiler, active_monitor, ctx, pred,
+                                        static_cast<std::uint32_t>(last));
+                    out.generated_ids.push_back(last);
+                    out.per_step.push_back(step_from_pred(pred, last, loss));
+                    continue;
+                }
+                const double r_eu = r_eu_from_pred(pred);
+                out.halted_on_epistemic = true;
+                out.halted_on_uncertainty = true;
+                out.r_eu_proxy = r_eu;
+                GenerateStep halt_step;
+                halt_step.epistemic_var = pred.epistemic_var;
+                halt_step.aleatoric_var = pred.aleatoric_var;
+                halt_step.halted = true;
+                out.per_step.push_back(halt_step);
+                if (epistemic_threshold != nullptr) {
+                    epistemic_threshold->update(r_eu, false);
+                }
+                break;
             }
-            break;
+            tok = sample_token(pred.log_probs, sample_params, rng);
         }
-        const int tok = sample_token(pred.log_probs, sample_params, rng);
-        const double loss = -pred.log_probs[static_cast<std::size_t>(tok)];
+        const double loss =
+            (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6)
+                ? -model.hp_backend().log_prob_byte(static_cast<std::uint8_t>(tok))
+                : (pred.log_probs.empty() || tok < 0 ||
+                   tok >= static_cast<int>(pred.log_probs.size()))
+                      ? 0.0
+                      : -pred.log_probs[static_cast<std::size_t>(tok)];
         observe_decode_step(model, profiler, active_monitor, static_cast<std::uint32_t>(last), pred,
                             static_cast<std::uint32_t>(tok));
         out.generated_ids.push_back(tok);
@@ -417,43 +431,55 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
     }
 
     for (int i = 0; i < max_tokens; ++i) {
-        auto pred = model.predict_next(static_cast<std::uint32_t>(last));
-        if (uncertainty_halt(params, pred.epistemic_var)) {
-            GenerateStep halt_step;
-            halt_step.epistemic_var = pred.epistemic_var;
-            halt_step.aleatoric_var = pred.aleatoric_var;
-            if (!cb(step_record_json(halt_step, index, true, true))) return;
-            if (profiler != nullptr && active_monitor != nullptr) {
-                active_monitor->flush_to_profiler(*profiler);
+        PredictNextOutput pred;
+        int tok = 0;
+        if (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6) {
+            tok = static_cast<int>(model.serve_greedy_next(static_cast<std::uint32_t>(last)));
+        } else {
+            pred = model.serve_predict_next(static_cast<std::uint32_t>(last));
+            if (uncertainty_halt(params, pred.epistemic_var)) {
+                GenerateStep halt_step;
+                halt_step.epistemic_var = pred.epistemic_var;
+                halt_step.aleatoric_var = pred.aleatoric_var;
+                if (!cb(step_record_json(halt_step, index, true, true))) return;
+                if (profiler != nullptr && active_monitor != nullptr) {
+                    active_monitor->flush_to_profiler(*profiler);
+                }
+                return;
             }
-            return;
+            if (epistemic_should_halt(params, pred, epistemic_threshold)) {
+                if (params.self_correct) {
+                    int passes = 1;
+                    pred = self_correct_predict(model, pred, params, epistemic_threshold, passes);
+                    const std::uint32_t ctx = static_cast<std::uint32_t>(last);
+                    last = argmax_log_probs(pred.log_probs);
+                    const double loss =
+                        pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
+                    observe_decode_step(model, profiler, active_monitor, ctx, pred,
+                                        static_cast<std::uint32_t>(last));
+                    GenerateStep step = step_from_pred(pred, last, loss);
+                    if (!cb(step_record_json(step, index, false, false))) return;
+                    ++index;
+                    continue;
+                }
+                GenerateStep halt_step;
+                halt_step.epistemic_var = pred.epistemic_var;
+                halt_step.aleatoric_var = pred.aleatoric_var;
+                if (!cb(step_record_json(halt_step, index, true, true))) return;
+                if (profiler != nullptr && active_monitor != nullptr) {
+                    active_monitor->flush_to_profiler(*profiler);
+                }
+                return;
+            }
+            tok = sample_token(pred.log_probs, sample_params, rng);
         }
-        if (epistemic_should_halt(params, pred, epistemic_threshold)) {
-            if (params.self_correct) {
-                int passes = 1;
-                pred = self_correct_predict(model, pred, params, epistemic_threshold, passes);
-                const std::uint32_t ctx = static_cast<std::uint32_t>(last);
-                last = argmax_log_probs(pred.log_probs);
-                const double loss =
-                    pred.log_probs.empty() ? 0.0 : -pred.log_probs[static_cast<std::size_t>(last)];
-                observe_decode_step(model, profiler, active_monitor, ctx, pred,
-                                    static_cast<std::uint32_t>(last));
-                GenerateStep step = step_from_pred(pred, last, loss);
-                if (!cb(step_record_json(step, index, false, false))) return;
-                ++index;
-                continue;
-            }
-            GenerateStep halt_step;
-            halt_step.epistemic_var = pred.epistemic_var;
-            halt_step.aleatoric_var = pred.aleatoric_var;
-            if (!cb(step_record_json(halt_step, index, true, true))) return;
-            if (profiler != nullptr && active_monitor != nullptr) {
-                active_monitor->flush_to_profiler(*profiler);
-            }
-            return;
-        }
-        const int tok = sample_token(pred.log_probs, sample_params, rng);
-        const double loss = -pred.log_probs[static_cast<std::size_t>(tok)];
+        const double loss =
+            (params.strategy == DecodeStrategy::Greedy && params.temperature <= 1e-6)
+                ? -model.hp_backend().log_prob_byte(static_cast<std::uint8_t>(tok))
+                : (pred.log_probs.empty() || tok < 0 ||
+                   tok >= static_cast<int>(pred.log_probs.size()))
+                      ? 0.0
+                      : -pred.log_probs[static_cast<std::size_t>(tok)];
         observe_decode_step(model, profiler, active_monitor, static_cast<std::uint32_t>(last), pred,
                             static_cast<std::uint32_t>(tok));
         GenerateStep step = step_from_pred(pred, tok, loss);
@@ -469,7 +495,7 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
 }
 
 nlohmann::json predict_next_json(CyphaLMModel& model, int token_id) {
-    const auto pred = model.predict_next(static_cast<std::uint32_t>(token_id));
+    const auto pred = model.serve_predict_next(static_cast<std::uint32_t>(token_id));
     nlohmann::json j;
     j["token_id"] = token_id;
     j["log_probs"] = pred.log_probs;

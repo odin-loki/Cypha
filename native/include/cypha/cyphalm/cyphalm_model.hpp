@@ -86,6 +86,17 @@ class CyphaLMModel {
     void reset_context();
     void reset_optim_state();
 
+    /// Serve/inference: consume ``context_byte``, score next-byte distribution (bit-tree default).
+    /// Does not increment ``train_step_count`` or record state for ``adapt_after_predict``.
+    PredictNextOutput serve_predict_next(std::uint32_t context_byte);
+
+    /// Serve: advance hp context without full-vocab log-prob fan-out (prompt priming).
+    void serve_advance(std::uint32_t token_id);
+
+    /// Serve: O(8) greedy next byte after consuming ``context_byte`` (no 256-clone fan-out).
+    std::uint32_t serve_greedy_next(std::uint32_t context_byte);
+
+    /// Legacy/train-facing predict (increments step counter; use ``serve_predict_next`` for generation).
     PredictNextOutput predict_next(std::uint32_t token_id);
     PredictNextOutput repredict_hybrid_blend(double blend_logit) const;
     TrainStepMetrics adapt_after_predict(std::uint32_t next_token_id, double lr_scale = 1.0,
