@@ -83,6 +83,16 @@ class HpSequenceBackend {
     int table_bits() const { return cfg_.table_bits; }
     int mixer_lr() const { return cfg_.mixer_lr; }
     bool gria_enabled() const { return cfg_.gria; }
+    const hp::Config& hp_config() const { return cfg_; }
+
+    /// Copy live predictor state (beam / fork scoring).
+    std::unique_ptr<hp::Predictor> predictor_snapshot() const;
+
+    /// Bit-tree joint log P(next byte) on ``pred``; restores ``pred`` via undo.
+    static std::vector<double> byte_log_probs_bit_tree(hp::Predictor& pred, int vocab_size);
+
+    /// Advance ``pred`` by one byte (8 bit updates).
+    static void consume_byte_on(hp::Predictor& pred, std::uint8_t byte);
 
  private:
     hp::Config cfg_;

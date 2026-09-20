@@ -85,6 +85,8 @@ std::string body_strategy_name(DecodeStrategy s) {
             return "top_k";
         case DecodeStrategy::TopP:
             return "top_p";
+        case DecodeStrategy::Beam:
+            return "beam";
         case DecodeStrategy::UncertaintyGated:
             return "uncertainty_gated";
         default:

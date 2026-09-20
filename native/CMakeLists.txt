@@ -507,6 +507,12 @@ cypha_mingw_apply_exe_link_options(cyphalm_serve_smoke)
 add_test(NAME native_cyphalm_serve_smoke COMMAND "$<TARGET_FILE:cyphalm_serve_smoke>")
 set_tests_properties(native_cyphalm_serve_smoke PROPERTIES TIMEOUT 120)
 
+add_executable(cyphalm_generate_smoke tools/cyphalm_generate_smoke.cpp)
+target_link_libraries(cyphalm_generate_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_generate_smoke)
+add_test(NAME native_cyphalm_generate_smoke COMMAND "$<TARGET_FILE:cyphalm_generate_smoke>")
+set_tests_properties(native_cyphalm_generate_smoke PROPERTIES TIMEOUT 180)
+
 add_executable(cyphalm_llm_profile tools/cyphalm_llm_profile.cpp)
 target_link_libraries(cyphalm_llm_profile PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_llm_profile)
