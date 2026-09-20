@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **hp shard-merge holdout improvements:** `ShardMergeOptions` confidence gating, `BoundaryReplayConfig` with distance-weighted replay and full-train bridge fine-tune; `prepare_merged_predictor_for_holdout`; holdout ablation mode in `cyphalm_hp_shard_spike`. Measured: full-train bridge closes 57–63% of holdout gap vs PR #15 baseline (still +0.02–0.06 BPC vs single-stream). Report: `docs/reports/CYPHALM_SHARD_HOLDOUT.md`.
 - **hp delta undo API:** `hp/undo.hpp` with `UndoRecorderScope`, patch-based `UndoFrame`, `PredictorUndoStack`, and `Predictor::update_tracked`. Bit-tree inference records table/counter mutations only; speculative scoring skips `end_of_byte` stream updates (log-prob parity with legacy clones). Smokes: `hp_undo_smoke`, `hp_bit_tree_smoke`, `hp_inference_bench`.
 - **CyphaLM serve / generation surface:** explicit `serve_predict_next` / `serve_advance` on `CyphaLMModel`; `serve_*` helpers on `HpSequenceBackend`; `cyphalm_generate` CLI; `cyphalm_serve_smoke` CTest.
 - **CyphaLM beam + nucleus CLI:** byte-level `generate_beam` (pruned bit-tree expansions, predictor replay); `cyphalm_generate` flags `--beam`, `--top-p`, `--temperature`, `--max-bytes`; `cyphalm_generate_smoke` CTest; sample outputs in `docs/reports/CYPHALM_GENERATION_SAMPLES.md`.

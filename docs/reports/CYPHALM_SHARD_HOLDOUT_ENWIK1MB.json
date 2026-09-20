@@ -1,0 +1,146 @@
+{
+  "boundary_replay_bytes": 4096,
+  "cold_holdout_bpc": {
+    "bpc": 1.9079043843253007,
+    "bytes": 209715,
+    "label": "cold_holdout",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "corpus": "/workspace/bench/data/enwik8/enwik8.8mb",
+  "holdout_bytes": 209715,
+  "holdout_frac": 0.2,
+  "holdout_improved_vs_baseline_delta_bpc": -0.03771561442010585,
+  "hp_profile": "gate24",
+  "hp_table_bits": 16,
+  "merge_detail": "In-sample eval (shard train bytes overlap eval corpus). profile=in_sample",
+  "merge_ok": true,
+  "merge_profile_mode": "both",
+  "merge_status": "in_sample:weighted_table_merge",
+  "merged_bpc": 0.6687713743410187,
+  "merged_full_corpus_bpc": {
+    "bpc": 0.6687713743410187,
+    "bytes": 1048576,
+    "label": "merged_full_corpus_in_sample",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "merged_holdout": {
+    "merged_holdout_bpc": 1.6947200250599272,
+    "profile": {
+      "bridge_finetune_bytes": 0,
+      "distance_weighted": false,
+      "max_passes_per_byte": 4,
+      "min_counter_n": 0,
+      "min_statemap_count": 0,
+      "name": "baseline",
+      "replay_bytes": 4096,
+      "replay_passes": 1
+    },
+    "status": "baseline:weighted_table_merge+boundary_replay",
+    "vs_single_delta_bpc": 0.059801079215889175
+  },
+  "merged_holdout_bpc": {
+    "bpc": 1.6947200250599272,
+    "bytes": 209715,
+    "label": "merged_holdout_baseline",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "merged_holdout_improved": {
+    "merged_holdout_bpc": 1.6570044106398214,
+    "profile": {
+      "bridge_finetune_bytes": 838861,
+      "distance_weighted": false,
+      "max_passes_per_byte": 4,
+      "min_counter_n": 8,
+      "min_statemap_count": 4,
+      "name": "holdout",
+      "replay_bytes": 4096,
+      "replay_passes": 1
+    },
+    "status": "holdout:weighted_table_merge+boundary_replay+bridge_finetune+confidence_gated",
+    "vs_single_delta_bpc": 0.022085464795783327
+  },
+  "merged_holdout_improved_bpc": {
+    "bpc": 1.6570044106398214,
+    "bytes": 209715,
+    "label": "merged_holdout_improved",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "merged_holdout_improved_ok": true,
+  "merged_holdout_improved_profile": {
+    "bridge_finetune_bytes": 838861,
+    "distance_weighted": false,
+    "max_passes_per_byte": 4,
+    "min_counter_n": 8,
+    "min_statemap_count": 4,
+    "name": "holdout",
+    "replay_bytes": 4096,
+    "replay_passes": 1
+  },
+  "merged_holdout_improved_status": "holdout:weighted_table_merge+boundary_replay+bridge_finetune+confidence_gated",
+  "merged_holdout_improved_vs_single_delta_bpc": 0.022085464795783327,
+  "merged_holdout_ok": true,
+  "merged_holdout_profile": {
+    "bridge_finetune_bytes": 0,
+    "distance_weighted": false,
+    "max_passes_per_byte": 4,
+    "min_counter_n": 0,
+    "min_statemap_count": 0,
+    "name": "baseline",
+    "replay_bytes": 4096,
+    "replay_passes": 1
+  },
+  "merged_holdout_status": "baseline:weighted_table_merge+boundary_replay",
+  "merged_holdout_vs_single_delta_bpc": 0.059801079215889175,
+  "merged_vs_single_delta_bpc": -1.0584400970886922,
+  "n_shards": 2,
+  "note": "merged_full_corpus_bpc is in-sample (optimistic). Prefer merged_holdout_bpc vs single_stream_holdout_bpc for fair merge comparison. enwik gate24 ref 1.611729 @ mem 22 via scripts/measure_enwik_gate24.sh.",
+  "parallel_shard_isolated_bpc": [
+    {
+      "bpc": 1.791051613087378,
+      "bytes": 524288,
+      "label": "shard0_isolated_observe",
+      "metric": "observe_bit_serial_bpc"
+    },
+    {
+      "bpc": 1.824163972139897,
+      "bytes": 524288,
+      "label": "shard1_isolated_observe",
+      "metric": "observe_bit_serial_bpc"
+    }
+  ],
+  "sequential_matches_single": true,
+  "sequential_shards_bpc": {
+    "bpc": 1.7272114714295053,
+    "bytes": 1048576,
+    "label": "sequential_shards",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "shard_byte_counts": [
+    524288,
+    524288
+  ],
+  "single_pass_bpc": {
+    "bpc": 1.7272114714297109,
+    "bytes": 1048576,
+    "label": "single_stream",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "single_stream_bpc": {
+    "bpc": 1.7272114714297109,
+    "bytes": 1048576,
+    "label": "single_stream",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "single_stream_holdout_bpc": {
+    "bpc": 1.634918945844038,
+    "bytes": 209715,
+    "label": "single_stream_holdout",
+    "metric": "observe_bit_serial_bpc"
+  },
+  "total_bytes": 1048576,
+  "train_bytes": 838861,
+  "train_shard_byte_counts": [
+    419431,
+    419430
+  ]
+}

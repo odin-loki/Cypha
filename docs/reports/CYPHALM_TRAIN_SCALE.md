@@ -312,16 +312,16 @@ Isolated shard BPC is higher than single-stream because each shard starts from a
 
 Also build spike tools with `cypha_apply_hp_compile_flags` — without gate24 compile defs, `hp::Predictor` layout mismatches `cypha_core` and merge spikes segfault.
 
-### 6.6 Holdout + boundary replay (2026-09-20, PR #8 follow-up)
+### 6.6 Holdout + boundary replay (2026-09-20, PR #8 / #15 follow-up)
 
-Run: `cyphalm_hp_shard_spike --corpus <path> --holdout-frac 0.2 --table-bits 16`
+Run: `bash scripts/cyphalm_hp_shard_holdout.sh <corpus> [--max-bytes N]`
 
-| Corpus | single_stream_holdout_bpc | merged_holdout_bpc | Δ holdout | boundary_replay_bytes |
-|--------|---------------------------|--------------------|-----------|-----------------------|
-| alice29.txt | **1.8072** | **1.9449** | **+0.1378** | 4096 |
-| enwik8.8mb (first 1 MiB) | **1.6349** | **1.6947** | **+0.0598** | 4096 |
+| Corpus | single_stream_holdout | merged baseline Δ | merged improved Δ | Notes |
+|--------|----------------------|---------------------|-------------------|-------|
+| alice29.txt | **1.8072** | **+0.1378** | **+0.0592** | improved = gated merge + full-train bridge |
+| enwik8.8mb (first 1 MiB) | **1.6349** | **+0.0598** | **+0.0221** | bridge closes ~63% of gap |
 
-Holdout Δ **positive** ⇒ merged tables are **worse** than sequential single-stream training on unseen holdout bytes (expected: parallel cold-shard train + approximate merge loses cross-shard context). Negative Δ would mean merge beats sequential on holdout.
+Holdout Δ **positive** ⇒ merged still **worse** than single-stream on unseen bytes. **Full-train bridge fine-tune** (`hp::holdout_boundary_replay_config` with `bridge_finetune_bytes = train_bytes`) is the largest measured improvement; see [`CYPHALM_SHARD_HOLDOUT.md`](CYPHALM_SHARD_HOLDOUT.md) for ablations and structural limits.
 
 ---
 

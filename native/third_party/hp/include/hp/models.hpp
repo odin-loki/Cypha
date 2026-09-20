@@ -55,6 +55,47 @@ struct Counter {
     std::uint16_t n;
 };
 
+/// Confidence gating for shard table merge (Strategy B+).
+struct ShardMergeOptions {
+    std::uint16_t min_counter_n = 0;
+    std::uint16_t min_statemap_count = 0;
+};
+
+/// Weighted merge of one counter cell with optional confidence gating.
+inline void merge_counter_cell(Counter& dst, const Counter& src, std::uint64_t src_weight,
+                               std::uint64_t dst_weight, std::uint16_t min_n = 0) {
+    if (src.n == 0) {
+        return;
+    }
+    if (dst.n == 0) {
+        dst = src;
+        return;
+    }
+    if (min_n > 0) {
+        if (src.n < min_n) {
+            return;
+        }
+        if (dst.n < min_n) {
+            dst = src;
+            return;
+        }
+    }
+    const std::uint64_t total = dst_weight + src_weight;
+    if (total == 0) {
+        return;
+    }
+    const int merged_p = static_cast<int>(
+        (static_cast<std::uint64_t>(dst.p) * dst_weight +
+         static_cast<std::uint64_t>(src.p) * src_weight) /
+        total);
+    const int merged_n = static_cast<int>(
+        std::min<std::uint64_t>(65535u, (static_cast<std::uint64_t>(dst.n) * dst_weight +
+                                         static_cast<std::uint64_t>(src.n) * src_weight) /
+                                            total));
+    dst.p = static_cast<std::uint16_t>(merged_p);
+    dst.n = static_cast<std::uint16_t>(merged_n);
+}
+
 inline void hp_undo_note(Counter& cell) {
     if (UndoRecorderScope::active()) {
         UndoRecorderScope::active()->note(cell);
@@ -189,8 +230,8 @@ class ContextModel {
 
     /// Merge learned tables from ``src`` (StateMap + hash slot states).
     void merge_tables_from(const ContextModel& src, std::uint64_t src_weight,
-                           std::uint64_t dst_weight) {
-        sm_.merge_from(src.sm_, src_weight, dst_weight);
+                           std::uint64_t dst_weight, std::uint16_t min_statemap_count = 0) {
+        sm_.merge_from(src.sm_, src_weight, dst_weight, min_statemap_count);
         const std::size_t n = t_.size();
         const StateTable& st = state_table();
         for (std::size_t i = 0; i < n; ++i) {
@@ -442,39 +483,13 @@ class MatchModel {
     int match_len() const { return len_; }
 
     void merge_counters_from(const MatchModel& src, std::uint64_t src_weight,
-                             std::uint64_t dst_weight) {
+                             std::uint64_t dst_weight, std::uint16_t min_counter_n = 0) {
         for (std::size_t i = 0; i < st_.size(); ++i) {
-            merge_counter(st_[i], src.st_[i], src_weight, dst_weight);
+            merge_counter_cell(st_[i], src.st_[i], src_weight, dst_weight, min_counter_n);
         }
     }
 
     void copy_counters_from(const MatchModel& src) { st_ = src.st_; }
-
- private:
-    static void merge_counter(Counter& dst, const Counter& src, std::uint64_t src_weight,
-                              std::uint64_t dst_weight) {
-        if (src.n == 0) {
-            return;
-        }
-        if (dst.n == 0) {
-            dst = src;
-            return;
-        }
-        const std::uint64_t total = dst_weight + src_weight;
-        if (total == 0) {
-            return;
-        }
-        const int merged_p = static_cast<int>(
-            (static_cast<std::uint64_t>(dst.p) * dst_weight +
-             static_cast<std::uint64_t>(src.p) * src_weight) /
-            total);
-        const int merged_n = static_cast<int>(
-            std::min<std::uint64_t>(65535u, (static_cast<std::uint64_t>(dst.n) * dst_weight +
-                                             static_cast<std::uint64_t>(src.n) * src_weight) /
-                                                total));
-        dst.p = static_cast<std::uint16_t>(merged_p);
-        dst.n = static_cast<std::uint16_t>(merged_n);
-    }
 
  private:
     ByteRing* ring_;
@@ -588,8 +603,8 @@ class HebbianModel {
     int strength() const { return strength_; }
 
     void merge_tables_from(const HebbianModel& src, std::uint64_t src_weight,
-                           std::uint64_t dst_weight) {
-        sm_.merge_from(src.sm_, src_weight, dst_weight);
+                           std::uint64_t dst_weight, std::uint16_t min_statemap_count = 0) {
+        sm_.merge_from(src.sm_, src_weight, dst_weight, min_statemap_count);
         const std::size_t n = t_.size();
         const StateTable& st = state_table();
         for (std::size_t i = 0; i < n; ++i) {
