@@ -1669,6 +1669,16 @@ class Predictor {
     int entropy_bucket() const { return gria_.entropy_bucket(); }
     int last_match_len() const { return last_mlen_; }
 
+    /// Weighted merge of additive hp tables from an independently trained shard.
+    void merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+                            std::uint64_t dst_bytes);
+
+    /// Copy mergeable tables into a fresh predictor (runtime path state unchanged).
+    void transfer_tables_from(const Predictor& src);
+
+    /// Clear path-dependent runtime state; learned tables are preserved.
+    void reset_stream_state();
+
  private:
     static const std::vector<int>& gate_sizes() {
         static const std::vector<int> s = [] {

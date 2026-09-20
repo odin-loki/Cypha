@@ -134,6 +134,28 @@ class Hedge {
     int last() const { return pr_; }
     int size() const { return n_; }
 
+    void merge_from(const Hedge& src, std::uint64_t src_weight, std::uint64_t dst_weight) {
+        if (static_cast<int>(src.w_.size()) != n_) {
+            return;
+        }
+        const std::uint64_t total = dst_weight + src_weight;
+        if (total == 0) {
+            return;
+        }
+        for (int d = 0; d < n_; ++d) {
+            w_[d] = static_cast<Weight>(
+                static_cast<std::uint64_t>((static_cast<std::uint64_t>(w_[d]) * dst_weight +
+                                            static_cast<std::uint64_t>(src.w_[d]) * src_weight) /
+                                           total));
+        }
+    }
+
+    void copy_from(const Hedge& src) {
+        if (static_cast<int>(src.w_.size()) == n_) {
+            w_ = src.w_;
+        }
+    }
+
  private:
 #if HP_HEDGE_W16
     using Weight = std::uint16_t;

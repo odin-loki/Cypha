@@ -133,7 +133,7 @@ Federated infra is production-tested for **DIF field memory**, not hp gate24. A 
 | **D. Checkpoint + incremental** | Worker returns full `assign_from`-able snapshot; coordinator replays shard in order | Exact | Not parallel training — sequential with checkpoints |
 | **E. Map-reduce BPC only** | Workers return BPC contributions; no merged model | N/A for serve | Valid for **measurement** only |
 
-**Spike status (2026-09-20):** Strategy A–C are **not implemented** for hp. `cyphalm_hp_shard_spike` validates split + parallel adapt + reports `merge_status: stub`.
+**Spike status (2026-09-20, PR #8):** `hp/shard_merge.hpp` implements **weighted table merge** (Strategy B + hash-slot max-evidence) and a **Strategy C boundary-replay spike** (`boundary_replay_begin`, consume windows at shard joins + train tail). `cyphalm_hp_shard_spike` reports `merged_holdout_bpc` vs `single_stream_holdout_bpc` (fair holdout) plus in-sample `merged_bpc`.
 
 ### 2.5 Risks to ~1.61 enwik BPC
 
@@ -246,8 +246,9 @@ Undo and train-scale are **orthogonal**: undo fixes **inference** fan-out; shard
 2. **Single-stream baseline** — one gate24 `HpSequenceBackend`, `observe_stream_bits` over full corpus.
 3. **Sequential equivalence check** — one predictor, shard₀ then shard₁ (must match baseline bit-for-bit).
 4. **Parallel adapt** — predictor A on shard₀ only, predictor B on shard₁ only.
-5. **Merge attempt** — stub returns `merge_status: stub` (no hp counter export yet).
-6. JSON report: BPC values, byte counts, merge TODO.
+5. **Merge attempt** — `hp::merge_predictor_tables` (StateMap/Counter/mixer/APM weighted merge).
+6. **`merged_full_corpus_bpc`** — full-corpus observe on a fresh predictor with merged tables transferred in.
+7. JSON report: BPC values, byte counts, `merged_vs_single_delta_bpc`.
 
 ### 6.2 Commands
 
@@ -278,8 +279,14 @@ bash scripts/cyphalm_hp_shard_spike.sh bench/data/wikitext2/wiki.train.tokens --
 | `single_stream_bpc` | Ground truth for this corpus @ gate24 observe |
 | `sequential_shards_bpc` | Must equal `single_stream_bpc` (validates split) |
 | `parallel_shard_isolated_bpc` | Per-shard observe from fresh predictor (not full-corpus bar) |
-| `merged_full_corpus_bpc` | `null` until merge implemented |
-| `merge_status` | `stub` + TODO pointer |
+| `merged_full_corpus_bpc` | Full-corpus observe after weighted table merge (see caveat below) |
+| `merged_bpc` | Scalar duplicate of `merged_full_corpus_bpc.bpc` |
+| `merged_vs_single_delta_bpc` | `merged_bpc − single_stream_bpc` (negative ⇒ merged looks better) |
+| `merge_status` | `weighted_table_merge` or `weighted_table_merge+boundary_replay` |
+| `merged_holdout_bpc` | Holdout-tail observe after shard train on train prefix only |
+| `single_stream_holdout_bpc` | Sequential train on train prefix, same holdout observe |
+| `merged_holdout_vs_single_delta_bpc` | Fair merge comparison (negative ⇒ merged better on holdout) |
+| `boundary_replay_bytes` | Strategy C replay window W (auto min(4096, train/10) when holdout on) |
 
 ### 6.4 Measured spike (alice29.txt, table_bits=16, 2026-09-20)
 
@@ -290,9 +297,31 @@ bash scripts/cyphalm_hp_shard_spike.sh bench/data/wikitext2/wiki.train.tokens --
 | `shard0_isolated_observe` | 2.1612 | 74,241 |
 | `shard1_isolated_observe` | 2.0793 | 74,240 |
 | `sequential_matches_single` | **true** | — |
-| `merge_status` | **stub** | — |
+| `merge_status` (pre-merge PR) | **stub** | — |
 
-Isolated shard BPC is higher than single-stream because each shard starts from a cold predictor (no cross-shard context). `merged_full_corpus_bpc` remains null until hp table merge lands. This is **not** the enwik ~1.61 bar — use `scripts/measure_enwik_gate24.sh` for that.
+Isolated shard BPC is higher than single-stream because each shard starts from a cold predictor (no cross-shard context). Post-merge PR numbers are in §6.5.
+
+### 6.5 Weighted merge measurements (2026-09-20, `hp/shard_merge.hpp`)
+
+| Corpus | table_bits | single_stream_bpc | merged_bpc | Δ vs single | Notes |
+|--------|------------|-------------------|------------|-------------|-------|
+| alice29.txt | 16 | **1.9775** | **0.6910** | −1.2865 | in-sample tables |
+| enwik8.8mb (first 1 MiB) | 16 | **1.7272** | **0.6688** | −1.0584 | in-sample tables |
+
+**Interpretation (honest):** `merged_bpc` / `merged_full_corpus_bpc` are **in-sample** (optimistic). Prefer **`merged_holdout_bpc` vs `single_stream_holdout_bpc`** (`--holdout-frac 0.2`, default): shard workers train only on the train prefix; holdout tail is unseen. Strategy C **`boundary_replay_bytes`** warms path state at shard joins before holdout observe.
+
+Also build spike tools with `cypha_apply_hp_compile_flags` — without gate24 compile defs, `hp::Predictor` layout mismatches `cypha_core` and merge spikes segfault.
+
+### 6.6 Holdout + boundary replay (2026-09-20, PR #8 follow-up)
+
+Run: `cyphalm_hp_shard_spike --corpus <path> --holdout-frac 0.2 --table-bits 16`
+
+| Corpus | single_stream_holdout_bpc | merged_holdout_bpc | Δ holdout | boundary_replay_bytes |
+|--------|---------------------------|--------------------|-----------|-----------------------|
+| alice29.txt | **1.8072** | **1.9449** | **+0.1378** | 4096 |
+| enwik8.8mb (first 1 MiB) | **1.6349** | **1.6947** | **+0.0598** | 4096 |
+
+Holdout Δ **positive** ⇒ merged tables are **worse** than sequential single-stream training on unseen holdout bytes (expected: parallel cold-shard train + approximate merge loses cross-shard context). Negative Δ would mean merge beats sequential on holdout.
 
 ---
 
