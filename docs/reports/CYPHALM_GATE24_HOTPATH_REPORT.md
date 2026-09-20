@@ -42,7 +42,7 @@ Gate24 production uses the **legacy 256-assign** path for full-vocab scoring (`C
 }
 ```
 
-**Interpretation:** Training/BPC (`observe_stream_bits`) is **~21k bytes/s** at mem 16 — suitable for CI. Full-vocab REST `predict_next` remains **seconds per call** until undo stack lands ([`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) Phase 1).
+**Interpretation:** Training/BPC (`observe_stream_bits`) is **~21k bytes/s** at mem 16 — suitable for CI. Full-vocab REST `predict_next` remains **seconds per call** until delta-undo lands ([#7](https://github.com/odin-loki/Cypha/pull/7); see also [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) Phase 1).
 
 ---
 
@@ -100,4 +100,5 @@ native/build/hp_checkpoint_roundtrip_smoke
 
 - [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) — enwik gate24 BPC bar  
 - [`CYPHALM_TRAIN_SCALE.md`](CYPHALM_TRAIN_SCALE.md) — shard/undo roadmap  
-- [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) — undo stack (next latency win)
+- [#7 delta-undo](https://github.com/odin-loki/Cypha/pull/7) — next latency win for full-vocab `predict_next`
+- [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) — undo stack roadmap
