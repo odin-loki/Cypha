@@ -293,9 +293,9 @@ bash scripts/cyphalm_hp_shard_spike.sh bench/data/wikitext2/wiki.train.tokens --
 | `shard0_isolated_observe` | 2.1612 | 74,241 |
 | `shard1_isolated_observe` | 2.0793 | 74,240 |
 | `sequential_matches_single` | **true** | — |
-| `merge_status` | **stub** | — |
+| `merge_status` (pre-merge PR) | **stub** | — |
 
-Isolated shard BPC is higher than single-stream because each shard starts from a cold predictor (no cross-shard context).
+Isolated shard BPC is higher than single-stream because each shard starts from a cold predictor (no cross-shard context). Post-merge PR numbers are in §6.5.
 
 ### 6.5 Weighted merge measurements (2026-09-20, `hp/shard_merge.hpp`)
 
