@@ -9,8 +9,8 @@ cite 2.873 BPC are **historical** (L1 pin).
 | Field | Value |
 |-------|-------|
 | Name | Cypha (`cypha::Cypha`) |
-| Version (latest GitHub release) | v2.4.0 (2026-08-16) |
-| Prior release | v2.3.25 (2026-07-18, One Cypha cutover) |
+| Version (latest GitHub release) | v2.5.0 (2026-09-20) |
+| Prior release | v2.4.0 (2026-08-16, competition lock; retired) |
 | License | [CC BY 4.0](LICENSE) |
 | Runtime | Native C++ only (`cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`) |
 | Paper | `paper/arxiv_bundle/CyphaLM_paper.pdf` |

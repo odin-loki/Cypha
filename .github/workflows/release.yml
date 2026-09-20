@@ -1,14 +1,15 @@
-﻿# Build Linux + Windows (native MSVC) release archives and publish a GitHub Release on tag push.
+﻿# Build Linux + Windows (MSVC) + macOS release archives and publish a GitHub Release on tag push.
 # Native-only assets — no Python venv. Linux also ships a Qt AppImage (cypha_qt_shell + cypha_rest).
 #
 # Create a release:
-#   git tag v2.0.0
-#   git push origin v2.0.0
+#   git tag v2.5.0
+#   git push origin v2.5.0
 #
 # Artifacts:
 #   cypha-<version>-linux-x86_64.tar.gz
 #   cypha-<version>-linux-x86_64.AppImage
 #   cypha-<version>-windows-x86_64.zip
+#   cypha-<version>-macos-arm64.tar.gz   (macos-latest / Apple Silicon)
 #   cypha-<version>-arxiv-bundle.zip
 #
 # Phase 7 (v2.3.7+): maintainer may also attach bench/BASELINE_LOCK.json snapshot
@@ -207,9 +208,65 @@ jobs:
           name: windows-x86_64
           path: dist/cypha-*-windows-x86_64.zip
 
+  build-macos:
+    name: macOS arm64 package
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure + build (Release)
+        run: |
+          cmake -S native -B native/build-macos -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }}
+          cmake --build native/build-macos --parallel 3
+
+      - name: Smoke hp / CyphaLM gate
+        run: CYPHA_NATIVE_BUILD_DIR="$PWD/native/build-macos" bash scripts/ci_native_hp_smoke.sh
+
+      - name: Smoke CLI (release binaries)
+        run: |
+          native/build-macos/cypha_bench_run --list-domains
+          native/build-macos/cypha_bench_report --help
+          native/build-macos/cypha_diagnostics_run --list
+          native/build-macos/cypha_tune_run --help
+          test -x native/build-macos/cyphalm_bench_native
+
+      - name: Package tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          chmod +x scripts/package_release_macos.sh packaging/install_release_macos.sh
+          bash scripts/package_release_macos.sh "$VERSION" native/build-macos dist
+
+      - name: Verify release bundle contents
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCH="$(uname -m)"
+          case "$ARCH" in arm64|aarch64) ARCH_LABEL=arm64 ;; *) ARCH_LABEL=x86_64 ;; esac
+          ARCHIVE="dist/cypha-${VERSION}-macos-${ARCH_LABEL}.tar.gz"
+          test -f "$ARCHIVE"
+          tar xzf "$ARCHIVE" -C dist
+          STAGE="dist/cypha-${VERSION}-macos-${ARCH_LABEL}"
+          for bin in cypha_rest cypha_bench_run cypha_bench_report cypha_diagnostics_run cypha_tune_run \
+                     cyphalm_bench_native cypha_baseline_lock baseline_lock_validate \
+                     registry_register create_model_smoke; do
+            test -x "$STAGE/bin/$bin"
+          done
+          for bin in score_batch_golden multilabel_dif_golden merge_from_golden similarity_index_golden \
+                     embed_table_golden retrieval_golden som_golden kernel_llr_golden \
+                     gh_infer_deliberation_golden cyphalm_checkpoint_golden; do
+            test -x "$STAGE/bin/dev/$bin"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          if-no-files-found: error
+          path: dist/cypha-*-macos-*.tar.gz
+
   publish:
     name: Publish GitHub Release
-    needs: [build-linux, build-windows]
+    needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -263,11 +320,12 @@ jobs:
             dist/cypha-*-linux-x86_64.tar.gz
             dist/cypha-*-linux-x86_64.AppImage
             dist/cypha-*-windows-x86_64.zip
+            dist/cypha-*-macos-*.tar.gz
             dist/cypha-*-arxiv-bundle.zip
           body: |
             ## Cypha ${{ github.ref_name }} — native C++ framework
 
-            Prebuilt **native C++** runtime only (no Python venv): Cypha REST (`/sample`, `/retrieve`, `/sequence/*`), native bench (d01–d17), Cypha sequence, diagnostics orchestrator, parity smoke tools, and a **standalone Qt shell AppImage** on Linux.
+            Prebuilt **native C++** runtime only (no Python venv): Cypha REST (`/sample`, `/retrieve`, `/sequence/*`), native bench, CyphaLM (hp), diagnostics, and a **standalone Qt shell AppImage** on Linux.
 
             ### Linux CLI (`cypha-*-linux-x86_64.tar.gz`)
 
@@ -288,8 +346,6 @@ jobs:
             ./cypha-*-linux-x86_64.AppImage
             ```
 
-            Build locally: `bash packaging/build_appimage.sh <version>` (see [`packaging/README.md`](packaging/README.md)).
-
             ### Windows CLI (`cypha-*-windows-x86_64.zip`)
 
             ```powershell
@@ -300,109 +356,29 @@ jobs:
 
             Native **MSVC** x64 binaries (Visual Studio / VC++ redistributable on clean machines).
 
-            **Windows Qt GUI:** build natively on Windows with `packaging/build_windows_bundle.ps1` (`windeployqt`; see [`packaging/README.md`](packaging/README.md)).
+            ### macOS CLI (`cypha-*-macos-arm64.tar.gz`)
+
+            Apple Silicon (arm64) CLI tools from GitHub Actions `macos-latest`.
+
+            ```bash
+            tar xzf cypha-*-macos-arm64.tar.gz
+            cd cypha-*-macos-arm64
+            bash install.sh
+            ```
 
             ### Production binaries (`bin/`, on PATH after install)
 
             | Binary | Role |
             |--------|------|
             | `cypha_rest` | Native REST server (classifier + `/sample`, `/retrieve`, `/sequence/*`) |
-            | `cypha_bench_run` | Bench master runner (domains d01–d17) |
-            | `cypha_bench_report` | Report-only rebuild (`BASELINE_REPORT.md` + `summary.json`) |
-            | `cypha_diagnostics_run` | Phases 1–4 diagnostics orchestrator |
+            | `cypha_bench_run` | Bench master runner |
+            | `cypha_bench_report` | Report-only rebuild |
+            | `cypha_diagnostics_run` | Diagnostics orchestrator |
             | `cypha_tune_run` | Native tuning sweep runner |
-            | `cyphalm_bench_native` | WikiText BPC bench CLI |
+            | `cyphalm_bench_native` | CyphaLM / hp bench CLI |
             | `cypha_baseline_lock`, `baseline_lock_validate` | Baseline lock update / validate |
             | `registry_register`, `create_model_smoke` | Registry + model creation smoke |
 
-            ### Dev golden tools (`bin/dev/`, not on PATH)
+            ### arXiv paper bundle
 
-            - `score_batch_golden`, `multilabel_dif_golden`, `merge_from_golden`, `similarity_index_golden`
-            - `embed_table_golden`, `retrieval_golden`, `som_golden`, `kernel_llr_golden`
-            - `gh_infer_deliberation_golden`, `cyphalm_checkpoint_golden`
-
-            ### Phase 7 maintainer notes
-
-            - **Baseline lock:** [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json) — D17 hybrid **2.664 BPC** @ 300k (L2 + Wave2 BPTT). Prior L1 2.873 is historical.
-            - **Local publish:** `pwsh -File scripts/publish_release.ps1 -Tag ${{ github.ref_name }}` (requires `gh auth login`; CI publish uses this workflow).
-            - **Overnight bench:** `pwsh -File scripts/run_d17_overnight.ps1` — update `overnight_results` in `BASELINE_LOCK.json` after a real 300k run.
-
-            ### Phase 8 maintainer notes
-
-            - **Baseline lock update:** `pwsh -File scripts/update_baseline_lock.ps1 -Run d17` (or `-Run d21`, `-Run cell-sweep`; add `-Fast` for smoke) — wraps **`cypha_baseline_lock`** CLI.
-            - **Cross-profile bench:** `cypha_bench_run --domain-tag d22` — d18 intelligence + d16 EWC probe + d20 cell sweep; profile [`bench/config/d22_intelligence_cross_profile.json`](bench/config/d22_intelligence_cross_profile.json).
-            - **Hybrid EWC:** SSM/GRIA α Fisher overlay + B0 **`ngram_count_table`** prior; H01 α forget gate; Cypha sequence checkpoint persists ngram counts.
-            - **CI gate:** **96 CTests** (`ctest -R native_`); optional **`federated_tls`** job runs **`native_federated_tls_smoke`** with **`-DCYPHA_ENABLE_OPENSSL=ON`** (`bash scripts/ci_federated_tls_linux.sh` locally).
-
-            ### Phase 9 maintainer notes (v2.3.9, shipped)
-
-            - **Unified overnight:** `pwsh -File scripts/run_overnight_all.ps1` — D17 hp + d21 hp lock + 28-variant cell sweep + `update_baseline_lock.ps1` refresh of [`bench/BASELINE_LOCK.json`](bench/BASELINE_LOCK.json). Add `-Fast` for smoke token budgets. (RPSM retired — see [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md).)
-            - **Overnight lock validation:** `cypha_bench_run --domain-tag d23` — FAST wiring check for baseline-lock schema and mini overnight path; profile [`bench/config/d23_overnight_lock_profile.json`](bench/config/d23_overnight_lock_profile.json).
-            - **Hybrid EWC weight Fisher:** diagonal Fisher on GRIA **U**/**V** + SSM **W_fast** (extends Phase 8 α Fisher); EWC anchor/Fisher blocks persisted in Cypha `checkpoint.json`.
-            - **CI gate:** **98 CTests** (`ctest -R native_`); smokes **`native_d23_overnight_lock_smoke`**, **`native_ewc_weights_smoke`**.
-
-            ### Phase 10 maintainer notes (v2.3.10, shipped)
-
-            - **Hybrid EWC bias + W_slow Fisher:** diagonal Fisher on GRIA **`bias`** + SSM **`W_slow`** (extends Phase 9 weight Fisher); CTest **`native_ewc_weights_smoke`**.
-            - **Baseline lock all runs:** `cypha_baseline_lock --run all --fast --lock-file bench/BASELINE_LOCK.json` — or `pwsh -File scripts/update_baseline_lock.ps1 -Run all -Fast`.
-            - **Production lock validation:** `cypha_bench_run --domain-tag d24` — end-to-end `BASELINE_LOCK.json` check under production profiles; profile [`bench/config/d24_production_lock_profile.json`](bench/config/d24_production_lock_profile.json).
-            - **Federated TLS Windows mirror:** `pwsh -File scripts/ci_federated_tls_windows.ps1` — local Windows mirror of optional **`federated_tls`** CI job (`-DCYPHA_ENABLE_OPENSSL=ON`, `native_federated_tls_smoke`; skip without OpenSSL).
-            - **CI gate:** **99 CTests** (`ctest -R native_`); smokes **`native_d24_production_lock_smoke`**, **`native_ewc_weights_smoke`**.
-
-            ### Phase 11 maintainer notes (v2.3.11, shipped)
-
-            - **WikiText-2 download:** `pwsh -File scripts/download_wikitext2.ps1` or `bash scripts/download_wikitext2.sh` — extracts to [`bench/data/wikitext2/wikitext-2/`](bench/data/wikitext2/README.md) (`wiki.{train,valid,test}.tokens`).
-            - **Gutenberg fallback:** when WikiText is absent, d17/d21 bench uses `bench/data/gutenberg/*.txt` with source tag **`gutenberg_fallback`** (Moby Dick preferred).
-            - **Corpus readiness:** `corpus_smoke` (direct d17/d21 load probe); `cypha_bench_run --domain-tag d25` — profile [`bench/config/d25_corpus_readiness_profile.json`](bench/config/d25_corpus_readiness_profile.json); report [`bench/report/tables/d25_corpus_readiness.json`](bench/report/tables/d25_corpus_readiness.json).
-            - **Overnight without WikiText:** add `-Fast` to `run_d17_overnight.ps1` or `run_overnight_all.ps1` — sets **`CYPHA_BENCH_FAST=1`** for synthetic corpus fallback.
-            - **CI gate:** **101 CTests** (`ctest -R native_`); new smokes **`native_d25_corpus_smoke`**, **`native_corpus_smoke`**.
-
-            ### Phase 12 maintainer notes (v2.3.12, shipped everywhere)
-
-            - **Medium overnight tier:** add `-Medium` to `run_d17_overnight.ps1` or `run_overnight_all.ps1` — 5k train / 256 eval with real WikiText or gutenberg (no `CYPHA_BENCH_FAST`). `cypha_baseline_lock --medium` writes `status=medium_smoke`.
-            - **Medium lock validation:** `cypha_bench_run --domain-tag d26` — profile [`bench/config/d26_medium_overnight_profile.json`](bench/config/d26_medium_overnight_profile.json); report [`bench/report/tables/d26_medium_overnight_validation.json`](bench/report/tables/d26_medium_overnight_validation.json).
-            - **Baseline lock validator:** `pwsh -File scripts/validate_baseline_lock.ps1` (add `-Strict` to reject `fast_smoke`-only overnight); C++ CLI `baseline_lock_validate --lock-file bench/BASELINE_LOCK.json`.
-            - **Release preview:** `pwsh -File scripts/publish_release.ps1 -Tag v2.3.12 -DryRun` (or `-NotesOnly`) — notes to stdout without `gh`.
-            - **Optional CI:** `corpus_and_d25` job — WikiText fetch + `native_corpus_smoke` / `native_d25_corpus_smoke` (`continue-on-error`).
-            - **CI gate:** **103 CTests** at Phase 12 (`ctest -R native_`); new smokes **`native_d26_medium_overnight_smoke`**, **`native_baseline_lock_validate_smoke`**.
-
-            ### Phase 13 maintainer notes (v2.3.13, shipped)
-
-            - **Production overnight tier:** add `-Production` to `run_d17_overnight.ps1` or `run_overnight_all.ps1` — 300k train / 2000 eval with real WikiText or gutenberg (mutually exclusive with `-Fast`/`-Medium`). `cypha_baseline_lock --production` writes `status=production` and sets `CYPHA_BENCH_FULL_CORPUS=1`, `CYPHA_BENCH_OVERNIGHT=1`, `CYPHA_BENCH_FULL_N_TRAIN=300000`.
-            - **Dedicated production runner:** `pwsh -File scripts/run_production_overnight.ps1` — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log`. Maintainer-only; not run in CI.
-            - **Production lock validation:** `cypha_bench_run --domain-tag d27` — profile [`bench/config/d27_production_lock_profile.json`](bench/config/d27_production_lock_profile.json); report [`bench/report/tables/d27_production_lock_validation.json`](bench/report/tables/d27_production_lock_validation.json). Smoke passes with `pending_production` when lock has no 300k run yet.
-            - **Production validator:** `pwsh -File scripts/validate_baseline_lock.ps1 -Production` — when `overnight_results.n_train >= 300000`, require `status=production` or `completed` and BPC within 0.05 of d17 hybrid **2.873** pin; C++ CLI `baseline_lock_validate --production`.
-            - **CI gate:** **104 CTests** (`ctest -R native_`); new smoke **`native_d27_production_lock_smoke`**. Full 300k production overnight remains maintainer workflow.
-
-            ### Phase 14 maintainer notes (v2.3.14, shipped)
-
-            - **Status validator fix:** `pwsh -File scripts/validate_baseline_lock.ps1` and **`baseline_lock_validate`** accept **`medium_smoke`** and **`production`** (fixes lock validation after medium/production overnight runs).
-            - **Cell sweep artifact path:** default overnight output **`bench/results/cell_sweep`** via **`bench_paths::results_dir()`**; wired through **`cypha_baseline_lock --output-dir`**, **`update_baseline_lock.ps1`**, and **`run_overnight_all.ps1`**.
-            - **Unified overnight completion:** `cypha_bench_run --domain-tag d28` — cross-check **`overnight_results`**, **`rpsm_results`** (d21 hp; legacy key), and **`cell_sweep_results`** for matching **`n_train`** / **`n_eval`**; profile [`bench/config/d28_overnight_complete_profile.json`](bench/config/d28_overnight_complete_profile.json).
-            - **Post-overnight finalize:** `pwsh -File scripts/finalize_production_overnight.ps1` — **`validate_baseline_lock.ps1 -Production`**, d27 + d28 bench domains, lock section summary; chained from **`run_production_overnight.ps1`** on success.
-            - **Optional local gate:** set **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`** on **`cypha_native_validate_all.ps1`** to run d28 after baseline lock validate.
-            - **CI gate:** **106 CTests** (`ctest -R native_`); new smokes **`native_d28_overnight_complete_smoke`**, **`native_baseline_lock_validate_production_status`**. Full 300k production overnight remains maintainer workflow.
-
-            ### Phase 15 maintainer notes (v2.3.15, shipped)
-
-            - **Release readiness validation:** `cypha_bench_run --domain-tag d29` — schema + production tier (d27) + overnight-complete (d28) + release script presence; profile [`bench/config/d29_release_readiness_profile.json`](bench/config/d29_release_readiness_profile.json); report [`bench/report/tables/d29_release_readiness_validation.json`](bench/report/tables/d29_release_readiness_validation.json). **`pending_release`** when gates pending (smoke pass); **`release_ready`** when both production and overnight-complete validated @ 300k.
-            - **Lock commit helper:** `pwsh -File scripts/commit_production_lock.ps1` — chains **`finalize_production_overnight.ps1`**, then stage/commit **`bench/BASELINE_LOCK.json`** when **`overnight_results.n_train >= 300000`** (`-DryRun` preview; **`-Force`** to commit; never pushes).
-            - **Production overnight watcher:** `pwsh -File scripts/watch_production_overnight.ps1` — log growth, process PIDs, lock section summary; `-Once` snapshot; stall warn after 30m without log growth.
-            - **Local validate env vars:** set **`CYPHA_VALIDATE_OVERNIGHT_COMPLETE=1`**, **`CYPHA_VALIDATE_RELEASE_READINESS=1`**, **`CYPHA_VALIDATE_PRODUCTION=1`**, or **`CYPHA_STRICT_TEST_COUNT=1`** on **`cypha_native_validate_all.ps1`** for optional d28/d29/production gates and strict **107** CTest count check.
-            - **CI gate:** **107 CTests** (`ctest -R native_`); new smoke **`native_d29_release_readiness_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.
-
-            ### Phase 16 maintainer notes (v2.3.16, shipped)
-
-            - **Artifact path hygiene validation:** `cypha_bench_run --domain-tag d30` — legacy repo-root **`results/`** path detection in **`cell_sweep_results.artifact_path`**, verifies **`bench/results/.gitkeep`**; profile [`bench/config/d30_artifact_hygiene_profile.json`](bench/config/d30_artifact_hygiene_profile.json); report [`bench/report/tables/d30_artifact_hygiene_validation.json`](bench/report/tables/d30_artifact_hygiene_validation.json).
-            - **Legacy results migration:** `pwsh -File scripts/migrate_legacy_results.ps1 -DryRun` (preview) or `-RemoveLegacy` (copy then delete repo-root **`results/`** when destination has all files).
-            - **Overnight progress logging:** **`run_d17_overnight.ps1`** tees to **`bench/results/overnight_d17_<timestamp>.log`**; stderr **`[cyphalm]`** / **`[cell_sweep]`** tags during full overnight runs.
-            - **Local validate env var:** set **`CYPHA_VALIDATE_ARTIFACT_HYGIENE=1`** on **`cypha_native_validate_all.ps1`** to run d30 after rebuild.
-            - **CI gate:** **108 CTests** (`ctest -R native_`); new smoke **`native_d30_artifact_hygiene_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.
-
-            ### Phase 17 maintainer notes (v2.3.17, shipped)
-
-            - **Post-overnight pipeline validation:** `cypha_bench_run --domain-tag d31` — d27→d30 chain + pipeline script presence (`poll_and_finalize_overnight.ps1`, `finalize_production_overnight.ps1`, `commit_production_lock.ps1`, `migrate_legacy_results.ps1`); profile [`bench/config/d31_post_overnight_pipeline_profile.json`](bench/config/d31_post_overnight_pipeline_profile.json); report [`bench/report/tables/d31_post_overnight_pipeline_validation.json`](bench/report/tables/d31_post_overnight_pipeline_validation.json).
-            - **Poll + finalize:** `pwsh -File scripts/poll_and_finalize_overnight.ps1` — poll until overnight processes exit, then **`finalize_production_overnight.ps1`** + **`commit_production_lock.ps1`** (`-DryRun` preview by default; **`-Force`** to git commit; never pushes); **`watch_production_overnight.ps1`** hints this when processes disappear.
-            - **Legacy cleanup:** `pwsh -File scripts/cleanup_legacy_results.ps1 -DryRun` (preview) or without `-DryRun` (migrate + remove repo-root **`results/`**); **`migrate_legacy_results.ps1 -ArchiveLegacy`** archives legacy **`results/`** to **`bench/results/legacy_archive_<timestamp>/`**.
-            - **Local validate env var:** set **`CYPHA_VALIDATE_POST_OVERNIGHT_PIPELINE=1`** on **`cypha_native_validate_all.ps1`** to run d31 after rebuild.
-            - **CI gate:** **109 CTests** (`ctest -R native_`); new smoke **`native_d31_post_overnight_pipeline_smoke`**. Full 300k production overnight **in progress** — not run in CI; **`gh auth login`** required for local **`publish_release.ps1`** publish.
+            `cypha-*-arxiv-bundle.zip` — camera-ready paper + figures (see `paper/arxiv_bundle/`).

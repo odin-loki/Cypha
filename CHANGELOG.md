@@ -8,10 +8,10 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
-### Removed
-- **`native_navigation_loss_char_lstm_smoke`:** legacy CharLSTM math-integration smoke (broken under the hp default path); dropped executable + CTest from the optional slow suite.
+## [2.5.0] — 2026-09-20 · Cross-platform release + CyphaLM hp
 
 ### Added
+- **macOS arm64 release packages:** `scripts/package_release_macos.sh` + `packaging/install_release_macos.sh`; GitHub Actions `release.yml` `build-macos` job publishes `cypha-*-macos-arm64.tar.gz` alongside Linux and Windows.
 - **CyphaLM eval harnesses (honest numbers):** `cyphalm_generation_harness` + `scripts/cyphalm_generation_harness.sh` (greedy/temperature qualitative samples); `scripts/cyphalm_hp_shard_holdout.sh` (fair holdout shard-merge BPC); `scripts/cyphalm_lossy_enwik_screen.sh` (full enwik8MB mem20 vs mem22). Reports: `docs/reports/CYPHALM_GENERATION_HARNESS.{json,md}`, `CYPHALM_SHARD_HOLDOUT.json`, refreshed `CYPHALM_LOSSY_ENWIK_SCREEN.json`.
 - **hp shard-merge holdout improvements:** `ShardMergeOptions` confidence gating, `BoundaryReplayConfig` with distance-weighted replay and full-train bridge fine-tune; `prepare_merged_predictor_for_holdout`; holdout ablation mode in `cyphalm_hp_shard_spike`. Measured: full-train bridge closes 57–63% of holdout gap vs PR #15 baseline (still +0.02–0.06 BPC vs single-stream). Report: `docs/reports/CYPHALM_SHARD_HOLDOUT.md`.
 - **hp delta undo API:** `hp/undo.hpp` with `UndoRecorderScope`, patch-based `UndoFrame`, `PredictorUndoStack`, and `Predictor::update_tracked`. Bit-tree inference records table/counter mutations only; speculative scoring skips `end_of_byte` stream updates (log-prob parity with legacy clones). Smokes: `hp_undo_smoke`, `hp_bit_tree_smoke`, `hp_inference_bench`.
@@ -22,6 +22,7 @@ milestone or a significant self-contained change.
 - **hp LLM integration:** Vendored `native/third_party/hp/` from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm). `CyphaLMModel` delegates to `HpSequenceBackend` / `hp::Predictor`. New tests: `hp_llm_smoke`, `hp_roundtrip_smoke`. CMake: `cmake/HpIntegration.cmake`, optional `-DCYPHA_HP_XSIMD=OFF` on non-SSE hosts.
 
 ### Changed
+- **Sole public GitHub Release:** `v2.5.0` is the only retained release (Linux + Windows + macOS arm64); older tags/releases retired after publish.
 - **CyphaLM hp profile:** Single **gate24** build only (v78_flags.ps1 + `HP_SLOT_MAX=24`). Default CMake no longer exposes `CYPHA_HP_PROFILE=light|champ`. See [`docs/history/REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md).
 - **CyphaLM inference (gate24):** `next_byte_log_probs` / `predict_next` use MSB **bit-tree** with delta undo on the live `pred_` (single-predictor serve — no standing `scratch_` twin). Speculative scoring skips `end_of_byte` stream side effects (log-prob parity with legacy per-byte clones). Legacy 256× clone path: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`. Greedy generation uses O(8) `serve_greedy_next_byte`; temperature/top-k sampling via `serve_sample_next_byte`. **Measured** on Linux VM (`hp_inference_bench`, 64 KB warm `consume_byte`, `--iters 5`): @ `table_bits=22` **163664 µs/call** `predict_next`, VmRSS after construct **1564100 kB** (~1.5 GiB). Prior checkpoint tree @ tb22: **~48×10⁶ µs**, **~4.3 GB RSS** (PR #7 pre-undo baseline) — **~293×** faster, **~−64%** construct RSS vs 4.3 GB class. Report: [`docs/reports/GATE24_POST_UNDO_BENCH.md`](docs/reports/GATE24_POST_UNDO_BENCH.md).
 - **Production sequence algorithm:** Hybrid GRIA+LSTM is **no longer** the default LLM path. `ContextMode::Hp` + `apply_hp_production_recipe()` replace `apply_hybrid_production_recipe()` for sequence duties. `hybrid` CLI/profile aliases map to hp.
@@ -33,6 +34,7 @@ milestone or a significant self-contained change.
 - **Cell-sweep B2 / H06:** 300k / eval 2k rerun after CTest clobber; both **3.681 BPC** (math-integration) — not a promote. Archived under `data/archive/cell_sweep/`.
 
 ### Removed
+- **`native_navigation_loss_char_lstm_smoke`:** legacy CharLSTM math-integration smoke (broken under the hp default path); dropped executable + CTest from the optional slow suite.
 - **RPSM (full retirement):** All RPSM sources, headers, CTests, CMake targets, bench profiles (`cyphalm_d21_rpsm*.json`, `d21_rpsm_profile.json`), and `scripts/run_rpsm_overnight.ps1`. Retired `ContextMode::Rpsm`, `BenchMode::Rpsm`, `rpsm_*` config fields, and `CYPHA_USE_RPSM_LLR` / `rpsm_score_matrix_batched` in `infer_cpu`. d21 lock section `rpsm_results` now records `mode=hp`; schema key kept for compat. **Why:** unused; superseded by hp CyphaLM. **History:** [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md); git history on `main`/PR #1 retains pre-removal code.
 - **RPSM CTests (representative):** `native_rpsm_sequence_smoke`, `native_rpsm_batched_llr_smoke`, `native_cyphalm_bench_rpsm_smoke`, `native_d21_rpsm_smoke`, `native_score_matrix_parallel_parity`, `native_rpsm_*` regression suite — removed from default build/CI.
 - **Default build:** Legacy cyphalm component sources (GRIA, LSTM, SSM, compressive_memory, etc.) excluded from `cypha_core`; headers remain for reference. `kernel_llm_h04_smoke` replaced by `hp_llm_smoke`. **Gated** (not deleted): `-DCYPHA_BUILD_LEGACY_CYPHALM=ON` rebuilds hybrid tools — see [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md).
@@ -623,7 +625,8 @@ First committed state of the project. All six native port milestones signed off:
 
 ---
 
-[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/odin-loki/Cypha/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/odin-loki/Cypha/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/odin-loki/Cypha/compare/v2.3.25...v2.4.0
 [2.3.25]: https://github.com/odin-loki/Cypha/compare/v2.3.24...v2.3.25
 [2.3.24]: https://github.com/odin-loki/Cypha/compare/v2.2.8...v2.3.24

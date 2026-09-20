@@ -9,6 +9,13 @@ $ErrorActionPreference = "Stop"
 $ver = $Tag -replace '^v', ''
 
 $highlights = @{
+  "2.5.0" = @(
+    "Sole public release: Linux + Windows + **macOS arm64** packages via GitHub Actions ``release.yml``",
+    "CyphaLM **hp / gate24** production sequence path (train / serve / generate); Hybrid L2+Wave2 historical",
+    "Holdout shard-merge improvements + full-train bridge adapt; cold-start generation priming",
+    "Paper camera-ready at living Hybrid **2.664 BPC** pin; LICENSE + MODEL_CARD",
+    "Older GitHub Releases retired — use this tag only"
+  )
   "2.4.0" = @(
     "Production D17 lock re-pin: Hybrid L2 + Wave2 BPTT **2.664 BPC** @ 300k (prior L1 2.873 / SGD L2 2.816 retained as historical)",
     "Event forecasting Phases 1–9: GDELT monitor, VIEWS leaderboard, REST ``POST /forecast/run``, ``scripts/fetch_forecast_data.ps1``",

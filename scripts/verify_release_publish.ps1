@@ -2,11 +2,11 @@
 # Does not call gh; authenticate manually before a real publish:
 #   gh auth login
 #   gh auth status
-# Then: pwsh -File scripts/publish_release.ps1 -Tag v2.4.0
+# Then: pwsh -File scripts/publish_release.ps1 -Tag v2.5.0
 #
 # Usage:
 #   pwsh -File scripts/verify_release_publish.ps1
-#   pwsh -File scripts/verify_release_publish.ps1 -BuildDir native/build -Tag v2.4.0
+#   pwsh -File scripts/verify_release_publish.ps1 -BuildDir native/build -Tag v2.5.0
 #   pwsh -File scripts/verify_release_publish.ps1 -AllowPending
 param(
     [string]$BuildDir = "",
@@ -18,7 +18,7 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "lib\NativeBenchCommon.ps1")
 $root = Get-CyphaRepoRoot -ScriptRoot $PSScriptRoot
 $BuildDir = Get-DefaultNativeBuildDir -Override $BuildDir
-$DEFAULT_TAG = "v2.4.0"
+$DEFAULT_TAG = "v2.5.0"
 $PRODUCTION_N_TRAIN_MIN = 300000
 
 $validateCompleteScript = Join-Path $PSScriptRoot "validate_production_complete.ps1"

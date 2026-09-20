@@ -316,7 +316,7 @@ Both require new network coordination code outside the native training core — 
 | **Now -- shipped** | D10 ECG -- 0c | **90.11%** ECG5000 (2026-07-18) |
 | **Production pin** | Hybrid D17 **2.664 BPC** (L2 + Wave2 BPTT) | Living default target @ 300k WikiText-2 |
 | **Now -- shipped** | Qt UX 2a-2e; minimal Web UI -- 4 | Threaded train, charts, REST SPA |
-| **Shipped (v2.4.0)** | Packaged AppImage / Windows bundle -- 3 | Competition lock + forecasting |
+| **Shipped (v2.5.0)** | Packaged AppImage / Windows / macOS arm64 -- 3 | Competition lock + forecasting + hp CyphaLM |
 | **Shipped (v2.3.25)** | One Cypha cutover | Prior public type collapse |
 | **Done (policy)** | CUDA infer-only; GPU training closed -- 1 | CPU train is faster; no hosted GPU CI |
 | **Future** | CPU SIMD via xsimd -- 1b | Portable AVX2/AVX-512/NEON; not a release blocker |
