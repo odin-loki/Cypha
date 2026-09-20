@@ -8,6 +8,7 @@
 
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/cyphalm/hp_backend.hpp"
 
 namespace cypha::cyphalm {
 
@@ -80,6 +81,34 @@ fs::path resolve_json_path(const std::string& path) {
     return p;
 }
 
+fs::path hpbin_path(const fs::path& base) {
+    fs::path p = base;
+    p.replace_extension(".hpbin");
+    return p;
+}
+
+void write_hpbin(const CyphaLMModel& model, const fs::path& path) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        throw std::runtime_error("cannot write hp checkpoint: " + path.string());
+    }
+    model.hp_backend().predictor().write_checkpoint(out);
+    if (!out) {
+        throw std::runtime_error("hp checkpoint write failed: " + path.string());
+    }
+}
+
+void read_hpbin(CyphaLMModel& model, const fs::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        throw std::runtime_error("cannot open hp checkpoint: " + path.string());
+    }
+    model.hp_backend().predictor().read_checkpoint(in);
+    if (!in) {
+        throw std::runtime_error("hp checkpoint read failed: " + path.string());
+    }
+}
+
 }  // namespace
 
 void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path) {
@@ -87,15 +116,18 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     if (base.extension() == ".json") base.replace_extension("");
     fs::path json_file = base;
     json_file.replace_extension(".json");
+    const fs::path bin_file = hpbin_path(base);
     fs::create_directories(base.parent_path());
+
+    write_hpbin(model, bin_file);
 
     nlohmann::json meta;
     meta["algorithm"] = "hp";
     meta["config"] = config_to_json(model.config());
     meta["train_step_count"] = model.train_step_count();
+    meta["hp_checkpoint"] = bin_file.filename().string();
     meta["note"] =
-        "hp predictor tables are session-local (online adaptation). Config is persisted; "
-        "re-run train_sequence to warm tables for a corpus.";
+        "hp predictor state in sibling .hpbin (HPCP v1). JSON carries config metadata only.";
 
     std::ofstream out(json_file);
     if (!out) throw std::runtime_error("cannot write checkpoint json: " + json_file.string());
@@ -109,7 +141,13 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
     nlohmann::json meta;
     in >> meta;
     if (!meta.contains("config")) throw std::runtime_error("checkpoint missing config");
-    return CyphaLMModel(config_from_json(meta.at("config")));
+    CyphaLMModel model(config_from_json(meta.at("config")));
+
+    const fs::path bin_file = hpbin_path(jp);
+    if (fs::exists(bin_file)) {
+        read_hpbin(model, bin_file);
+    }
+    return model;
 }
 
 }  // namespace cypha::cyphalm

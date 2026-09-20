@@ -1697,6 +1697,11 @@ class Predictor {
     int expert_p(int i) const { return exp_p_[i]; }
     int mixed_p() const { return mixed_p_; }
     int sparse_fraction() const { return sparse_; }
+
+    /// Binary checkpoint (Cypha train-once / serve-many). Format: ``HPCP`` v1.
+    void write_checkpoint(std::ostream& os) const;
+    void read_checkpoint(std::istream& is);
+
     int mixer_n() const { return mixer_.num_layer1(); }
     int mixer_dot(int j) const { return mixer_.layer1_dot(j); }
     int mixer_p(int j) const { return mixer_.layer1_p(j); }
@@ -4355,5 +4360,7 @@ inline void UndoFrame::pop_predictor(Predictor& p) const {
         p.copy_state_from(*snap_);
     }
 }
+
+#include "hp/checkpoint.hpp"
 
 }  // namespace hp

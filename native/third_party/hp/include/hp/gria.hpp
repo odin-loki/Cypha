@@ -43,7 +43,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include <istream>
+#include <ostream>
 
+#include "hp/blob_io.hpp"
 #include "hp/int_math.hpp"
 #include "hp/undo.hpp"
 
@@ -152,6 +155,42 @@ class GriaGate {
             since_refresh_ = 0;
             recompute();
         }
+    }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, enabled_);
+        os.write(reinterpret_cast<const char*>(ring_), kWindow);
+        os.write(reinterpret_cast<const char*>(cost_), sizeof(cost_));
+        os.write(reinterpret_cast<const char*>(hist_), sizeof(hist_));
+        blob::write_pod(os, cost_sum_);
+        blob::write_pod(os, pending_cost_);
+        blob::write_pod(os, pos_);
+        blob::write_pod(os, n_);
+        blob::write_pod(os, filled_);
+        blob::write_pod(os, since_refresh_);
+        blob::write_pod(os, alpha_level_);
+        blob::write_pod(os, traj_);
+        blob::write_pod(os, ent_bucket_);
+        blob::write_pod(os, alpha_q16_);
+        blob::write_pod(os, abs_delta_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, enabled_);
+        is.read(reinterpret_cast<char*>(ring_), kWindow);
+        is.read(reinterpret_cast<char*>(cost_), sizeof(cost_));
+        is.read(reinterpret_cast<char*>(hist_), sizeof(hist_));
+        blob::read_pod(is, cost_sum_);
+        blob::read_pod(is, pending_cost_);
+        blob::read_pod(is, pos_);
+        blob::read_pod(is, n_);
+        blob::read_pod(is, filled_);
+        blob::read_pod(is, since_refresh_);
+        blob::read_pod(is, alpha_level_);
+        blob::read_pod(is, traj_);
+        blob::read_pod(is, ent_bucket_);
+        blob::read_pod(is, alpha_q16_);
+        blob::read_pod(is, abs_delta_);
     }
 
  private:

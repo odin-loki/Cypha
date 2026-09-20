@@ -47,6 +47,8 @@ cypha_add_golden_exe(retrieval_golden)
 # --- cypha_lm_native golden regression tools ---
 cypha_add_golden_exe(cyphalm_model_golden LINK cypha_lm_native)
 cypha_add_golden_exe(hp_roundtrip_smoke LINK cypha_lm_native)
+cypha_add_golden_exe(hp_checkpoint_roundtrip_smoke LINK cypha_lm_native)
+cypha_add_golden_exe(hp_gate24_ci_gate LINK cypha_lm_native)
 if(CYPHA_BUILD_LEGACY_CYPHALM)
   cypha_add_golden_exe(cyphalm_ssm_golden LINK cypha_lm_native)
   cypha_add_golden_exe(embed_table_golden LINK cypha_lm_native)
@@ -64,6 +66,8 @@ set(
   CYPHA_GOLDEN_EXE_TARGETS
   cyphalm_model_golden
   hp_roundtrip_smoke
+  hp_checkpoint_roundtrip_smoke
+  hp_gate24_ci_gate
   cypha_golden
   gh_infer_deliberation_golden
   retrieval_golden

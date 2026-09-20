@@ -13,8 +13,11 @@
 
 #include <array>
 #include <cstdint>
+#include <istream>
+#include <ostream>
 #include <vector>
 
+#include "hp/blob_io.hpp"
 #include "hp/models.hpp"
 
 namespace hp {
@@ -90,6 +93,32 @@ class WordMatchModel {
     }
 
     int match_len() const { return len_; }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, order_);
+        blob::write_pod(os, tab_mask_);
+        blob::write_pod(os, ring_mask_);
+        tab_.checkpoint_write(os);
+        blob::write_array(os, st_);
+        blob::write_pod(os, ptr_);
+        blob::write_pod(os, len_);
+        blob::write_pod(os, expected_);
+        blob::write_pod(os, sidx_);
+        blob::write_pod(os, valid_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, order_);
+        blob::read_pod(is, tab_mask_);
+        blob::read_pod(is, ring_mask_);
+        tab_.checkpoint_read(is);
+        blob::read_array(is, st_);
+        blob::read_pod(is, ptr_);
+        blob::read_pod(is, len_);
+        blob::read_pod(is, expected_);
+        blob::read_pod(is, sidx_);
+        blob::read_pod(is, valid_);
+    }
 
  private:
     ByteRing* ring_;

@@ -45,8 +45,11 @@
 // is actually for.
 
 #include <cstdint>
+#include <istream>
+#include <ostream>
 #include <vector>
 
+#include "hp/blob_io.hpp"
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
 #include "hp/undo.hpp"
@@ -161,6 +164,20 @@ class Hedge {
         if (static_cast<int>(src.w_.size()) == n_) {
             w_ = src.w_;
         }
+    }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, n_);
+        blob::write_vec(os, w_);
+        blob::write_vec(os, p_);
+        blob::write_pod(os, pr_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, n_);
+        blob::read_vec(is, w_);
+        blob::read_vec(is, p_);
+        blob::read_pod(is, pr_);
     }
 
  private:

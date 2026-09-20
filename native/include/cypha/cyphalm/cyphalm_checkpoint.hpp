@@ -6,10 +6,10 @@ namespace cypha::cyphalm {
 
 class CyphaLMModel;
 
-/// Save ``{base}.json`` + ``{base}.npz`` (Python-compatible layout; GRIA stored as low-rank U/V).
+/// Save ``{base}.json`` (config metadata) + ``{base}.hpbin`` (HPCP v1 predictor state).
 void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
-/// Load checkpoint from ``{path}.json`` or ``path`` when suffix is ``.json``.
+/// Load checkpoint from ``{path}.json`` (and sibling ``.hpbin`` when present).
 CyphaLMModel load_cyphalm_model(const std::string& json_path);
 
 }  // namespace cypha::cyphalm

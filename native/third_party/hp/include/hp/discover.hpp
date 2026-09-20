@@ -40,8 +40,11 @@
 // "learner collusion" failure mode reported for jointly-trained ensembles.
 
 #include <cstdint>
+#include <istream>
+#include <ostream>
 #include <vector>
 
+#include "hp/blob_io.hpp"
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
 #include "hp/undo.hpp"
@@ -58,6 +61,10 @@ class Rng {
         s_ ^= s_ << 13; s_ ^= s_ >> 7; s_ ^= s_ << 17;
         return s_;
     }
+
+    void checkpoint_write(std::ostream& os) const { blob::write_pod(os, s_); }
+    void checkpoint_read(std::istream& is) { blob::read_pod(is, s_); }
+
  private:
     std::uint64_t s_;
 };
@@ -161,6 +168,36 @@ class DiscoveryPool {
                 models_[i].copy_tables_from(src.models_[i]);
             }
         }
+    }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_trivial_object(os, rng_);
+        for (const auto& m : models_) {
+            m.checkpoint_write(os);
+        }
+        for (int i = 0; i < kSlots; ++i) {
+            blob::write_pod(os, mask_[i]);
+            blob::write_pod(os, loss_[i]);
+            blob::write_pod(os, age_[i]);
+            blob::write_pod(os, p_[i]);
+        }
+        blob::write_pod(os, bytes_);
+        blob::write_pod(os, replaced_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_trivial_object(is, rng_);
+        for (auto& m : models_) {
+            m.checkpoint_read(is);
+        }
+        for (int i = 0; i < kSlots; ++i) {
+            blob::read_pod(is, mask_[i]);
+            blob::read_pod(is, loss_[i]);
+            blob::read_pod(is, age_[i]);
+            blob::read_pod(is, p_[i]);
+        }
+        blob::read_pod(is, bytes_);
+        blob::read_pod(is, replaced_);
     }
 
  private:

@@ -102,6 +102,8 @@ class HpSequenceBackend {
  private:
     hp::Config cfg_;
     std::unique_ptr<hp::Predictor> pred_;
+    /// Reused output buffer for ``next_byte_log_probs`` (avoids per-call alloc).
+    mutable std::vector<double> log_probs_buf_;
 
     static double byte_log_prob(hp::Predictor& snap, int byte);
 

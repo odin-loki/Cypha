@@ -3,7 +3,11 @@
 // hp/hash_table.hpp — eager zero-init hash tables for context/match slots.
 
 #include <cstdint>
+#include <istream>
+#include <ostream>
 #include <vector>
+
+#include "hp/blob_io.hpp"
 
 namespace hp {
 
@@ -21,6 +25,16 @@ class HashTable {
     std::size_t size() const { return tab_.size(); }
     const T* data() const { return tab_.data(); }
     T* data() { return tab_.data(); }
+
+    void checkpoint_write(std::ostream& os) const {
+        blob::write_pod(os, mask_);
+        blob::write_vec(os, tab_);
+    }
+
+    void checkpoint_read(std::istream& is) {
+        blob::read_pod(is, mask_);
+        blob::read_vec(is, tab_);
+    }
 
  private:
     std::uint32_t mask_;
