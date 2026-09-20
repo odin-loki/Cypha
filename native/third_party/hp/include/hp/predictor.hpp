@@ -3939,6 +3939,12 @@ class Predictor {
 #endif
 };
 
+inline void UndoFrame::clear() {
+    patches_.clear();
+    snap_.reset();
+    has_snap_ = false;
+}
+
 inline void PredictorUndoStack::pop_frame(Predictor& pred) {
     if (frames_.empty()) {
         return;

@@ -12,16 +12,12 @@
 
 namespace hp {
 
-class Config;
+struct Config;
 class Predictor;
 
 class UndoFrame {
  public:
-    void clear() {
-        patches_.clear();
-        snap_.reset();
-        has_snap_ = false;
-    }
+    void clear();
 
     bool empty() const { return !has_snap_ && patches_.empty(); }
 
