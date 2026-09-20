@@ -8,16 +8,16 @@
 
 ## Executive summary
 
-Profiled the gate24 `hp::Predictor` adapt/serve paths on top of **delta-undo bit-tree inference** ([#7](https://github.com/odin-loki/Cypha/pull/7)). Applied **safe micro-optimizations** in `HpSequenceBackend` (reused `log_probs_buf_`). Added **binary HPCP v1 checkpoint** (`.hpbin`) for train-once / serve-many, plus **CI gates** for compress-faithful BPC and measured latency ceilings.
+Profiled the gate24 `hp::Predictor` adapt/serve paths on **delta-undo bit-tree** ([#7](https://github.com/odin-loki/Cypha/pull/7)) and **single-predictor serve** ([#12](https://github.com/odin-loki/Cypha/pull/12)). Applied **safe micro-optimizations** in `HpSequenceBackend` (reused `log_probs_buf_`). Added **binary HPCP v1 checkpoint** (`.hpbin`) for train-once / serve-many, plus **CI gates** for compress-faithful BPC and measured latency ceilings.
 
-| Path | Hotspot (measured, table_bits=16, post #7) | Change |
-|------|-------------------------------------------|--------|
-| `observe_next_byte` / `eval_bpc` | **~42 µs/byte** (compress-equivalent) | Unchanged |
-| `log_prob_byte` | **~23–26 ms** (`copy_state_from` + 8 bits) | Reused `scratch_` |
-| `next_byte_log_probs(32)` | **~46 ms** (delta-undo bit-tree) | Was ~3.7 s pre-#7 (legacy clone) |
-| `next_byte_log_probs(256)` | **~228 ms** (delta-undo bit-tree) | Was ~22 s pre-#7 |
+| Path | Hotspot (measured, table_bits=16, post #7+#12) | Change |
+|------|-----------------------------------------------|--------|
+| `observe_next_byte` / `eval_bpc` | **~36 µs/byte** (compress-equivalent) | Unchanged |
+| `log_prob_byte` | **~3.5 ms** (undo on live `pred_`) | Single-pred from #12 |
+| `next_byte_log_probs(32)` | **~20 ms** (delta-undo bit-tree on `pred_`) | Was ~3.7 s pre-#7 |
+| `next_byte_log_probs(256)` | **~155 ms** (delta-undo bit-tree) | Was ~22 s pre-#7 |
 
-**RAM:** `VmHWM` construct ~761 MB → after profile ~1.27 GB @ mem 16 (single `scratch_` fork + main predictor).
+**RAM:** `VmHWM` construct ~508 MB @ mem 16 (one `pred_`, no standing scratch twin — see [`GATE24_POST_UNDO_BENCH.md`](GATE24_POST_UNDO_BENCH.md)).
 
 ---
 
@@ -27,22 +27,22 @@ Gate24 production now uses **delta-undo MSB bit-tree** for full-vocab scoring (d
 
 1. **Experts + ctx chain** — inside each `predict()` (dominant CPU)
 2. **Mixer + APM + hedge** — per bit inside DFS branches
-3. **Undo stack** — one `scratch_` fork; `UndoRecorderScope` + `pop_frame` per branch (replaces 256× `clone_from`)
+3. **Undo stack** — delta undo on live `pred_`; `UndoRecorderScope` + `pop_frame` per branch (replaces 256× `clone_from`)
 
-### Measured latencies (2026-09-20, Linux KVM, 4 vCPU, gate24, `hp_table_bits=16`, rebased on #7)
+### Measured latencies (2026-09-20, Linux KVM, 4 vCPU, gate24, `hp_table_bits=16`, post #7+#12)
 
 ```json
 {
-  "observe_next_byte_us": 41.6,
-  "log_prob_byte_us": 22929,
-  "next_byte_log_probs32_ms": 46,
-  "next_byte_log_probs256_us": 227780,
-  "vm_hwm_kb_construct": 760916,
-  "vm_hwm_kb_after_serve": 1265392
+  "observe_next_byte_us": 35.7,
+  "log_prob_byte_us": 3855,
+  "next_byte_log_probs32_ms": 20,
+  "next_byte_log_probs256_us": 155212,
+  "vm_hwm_kb_construct": 508368,
+  "vm_hwm_kb_after_serve": 760968
 }
 ```
 
-**Interpretation:** Training/BPC (`observe_stream_bits`) remains fast (~24k bytes/s at mem 16). Full-vocab REST `predict_next` is now **sub-second** at vocab 256 via delta-undo (was seconds pre-#7).
+**Interpretation:** Training/BPC (`observe_stream_bits`) remains fast. Full-vocab REST `predict_next` is **sub-second** at vocab 256 (see [`GATE24_POST_UNDO_BENCH.md`](GATE24_POST_UNDO_BENCH.md) for mem22 bench).
 
 ---
 
@@ -53,7 +53,7 @@ Gate24 production now uses **delta-undo MSB bit-tree** for full-vocab scoring (d
 | Opt | Before | After |
 |-----|--------|-------|
 | `next_byte_log_probs` output | Fresh `std::vector` each call | **Reused** `log_probs_buf_` (explicit copy on return) |
-| Serve path | Legacy 256× `clone_from` (gate24) | **Delta-undo bit-tree** (from #7; this PR keeps buffer reuse) |
+| Serve path | Legacy 256× fork (gate24) | **Single-pred undo bit-tree** (#7+#12; this PR keeps `log_probs_buf_` reuse) |
 
 No change to hp integer math, mixer weights, or BPC semantics.
 
@@ -75,8 +75,8 @@ Implementation: `hp/blob_io.hpp`, `hp/checkpoint.hpp` (serialized ContextModels,
 | Test | Gate |
 |------|------|
 | `native_hp_gate24_ci_gate` | Fixture BPC **6.53989 ± 0.05** (compress-equivalent, 16-token pattern) |
-| | `log_prob_byte` **≤ 50 ms** median-of-5 (measured ~25 ms KVM / ~38.7 ms GHA + slack) |
-| | `next_byte_log_probs(32)` **≤ 75 ms** median-of-3 (measured ~46 ms + slack) |
+| | `log_prob_byte` **≤ 5 ms** median-of-5 (measured ~3.5 ms + slack) |
+| | `next_byte_log_probs(32)` **≤ 30 ms** median-of-3 (measured ~20 ms + slack) |
 | `native_hp_checkpoint_roundtrip_smoke` | BPC identical before/after `.hpbin` load |
 
 PR script: `scripts/ci_native_hp_smoke.sh` (regex `native_hp_*`).
@@ -100,5 +100,7 @@ native/build/hp_checkpoint_roundtrip_smoke
 - [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) — enwik gate24 BPC bar  
 - [`CYPHALM_TRAIN_SCALE.md`](CYPHALM_TRAIN_SCALE.md) — shard/undo roadmap  
 - [#7 delta-undo](https://github.com/odin-loki/Cypha/pull/7) — bit-tree undo inference (merged)
-- [#9 lossy LLM](https://github.com/odin-loki/Cypha/pull/9) — `prune_cold_slots` / serve compact (merged)
+- [#12 single-pred serve](https://github.com/odin-loki/Cypha/pull/12) — undo on live `pred_` (merged)
+- [#9 lossy LLM](https://github.com/odin-loki/Cypha/pull/9) — `prune_cold_slots` (merged)
+- [`GATE24_POST_UNDO_BENCH.md`](GATE24_POST_UNDO_BENCH.md) — mem22 serve latency + RSS bench
 - [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) — lossy roadmap
