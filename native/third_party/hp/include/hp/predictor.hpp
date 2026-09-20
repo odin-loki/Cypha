@@ -3962,14 +3962,6 @@ inline void PredictorUndoStack::pop_frame(Predictor& pred) {
     frames_.pop_back();
 }
 
-inline UndoFrame::~UndoFrame() = default;
-
-inline void UndoFrame::clear() {
-    patches_.clear();
-    snap_.reset();
-    has_snap_ = false;
-}
-
 inline void UndoFrame::push_predictor(const Predictor& p, const Config& cfg) {
     if (!snap_) {
         snap_ = std::make_unique<Predictor>(cfg);

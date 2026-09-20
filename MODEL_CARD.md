@@ -40,14 +40,14 @@ Corpus: `bench/data/enwik8/enwik8.8mb` — vendored hp gate24, mem 22, `HP_SLOT_
 | **hp archive BPC** | **1.611759** | hp `c`/`d` archive bytes |
 | Upstream RECORD (s24) | 1.607 | Reference only; vendored-tree drift ~+0.005 BPC |
 
-Generation log-probs use the **serve** path (legacy fork by default; opt-in bit-tree: `CYPHA_HP_BIT_TREE_LOGPROBS=1`). That is **inference math**, not the compress-faithful BPC claim above.
+Generation log-probs use the **serve** path (bit-tree joint scoring by default; legacy 256-clone: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`). That is **inference math**, not the compress-faithful BPC claim above.
 
 ### Train vs serve (hp backend)
 
 | Path | When | Cost profile |
 |------|------|----------------|
 | **Train** | `train_step`, BPC eval, `cyphalm_train` | Bit-serial observe; online table updates; no 256-vocab fan-out |
-| **Serve** | `generate_decode`, `cyphalm_generate`, REST `/generate` | Prompt priming via `serve_advance`; greedy skips full-vocab scoring; top-k/temperature uses legacy fork log probs |
+| **Serve** | `generate_decode`, `cyphalm_generate`, REST `/generate` | Prompt priming via `serve_advance`; greedy skips full-vocab scoring; top-k/temperature uses bit-tree log probs |
 
 Removed light/champ hp SKUs: [`docs/history/REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md). Superseded Hybrid GRIA+LSTM stack: [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md).
 
@@ -65,10 +65,10 @@ Removed light/champ hp SKUs: [`docs/history/REMOVED_HP_SKUS.md`](docs/history/RE
 | Production knobs | `hp_table_bits=22`, `hp_slot_max=24`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
 | Compile profile | **gate24 only** — v78_flags.ps1 + `HP_SLOT_MAX=24` + XSIMD (no light/champ SKU matrix) |
 | Priority | **Inference / generation latency** first; train and BPC eval may be slower |
-| RAM hotspot | `HpSequenceBackend`: live `pred_` + scratch fork + depth checkpoints for opt-in bit-tree |
+| RAM hotspot | `HpSequenceBackend`: live `pred_` + scratch fork; bit-tree uses delta undo (one fork, patch backtrack) |
 | Lab RSS (hp harness, mem 22) | **~1.5–2 GB** @ `SLOT_MAX=24` (`hp/tools/hp_harness.sh`) |
 | Cypha BPC (train/eval) | **`eval_bpc` / `compress_equivalent_bpc`**: bit-serial observe NLL |
-| Serve log probs | **`serve_predict_next`** — legacy fork default; opt-in bit-tree: `CYPHA_HP_BIT_TREE_LOGPROBS=1` |
+| Serve log probs | **`serve_predict_next`** — bit-tree default; legacy fork: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1` |
 | Generation | **`generate_decode` / `cyphalm_generate`** — serve path; greedy uses O(8) `serve_greedy_next` |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; see [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md) |
 

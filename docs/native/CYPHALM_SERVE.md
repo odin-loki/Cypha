@@ -14,7 +14,7 @@ bookkeeping and can use faster scoring paths.
 ### HpSequenceBackend
 
 - `serve_advance_byte` — advance live context (alias of `consume_byte`).
-- `serve_next_byte_log_probs` — full-vocab log P(next byte). **Default:** legacy fork path (`copy_state_from` + 8-bit scoring). Opt-in bit-tree: `CYPHA_HP_BIT_TREE_LOGPROBS=1` (see `hp_undo_smoke`).
+- `serve_next_byte_log_probs` — full-vocab log P(next byte). **Default:** MSB bit-tree with delta undo (parity with legacy: `hp_bit_tree_smoke`). Legacy 256-clone path: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`.
 - `serve_greedy_next_byte` — O(8) argmax on a scratch fork (no 256-way fan-out).
 - `serve_sample_next_byte` — O(8) temperature bit sampling on scratch.
 
