@@ -21,13 +21,15 @@ class LmIntelligenceMonitor;
 
 namespace cypha::cyphalm {
 
-enum class DecodeStrategy { Greedy, Temperature, TopK, TopP, UncertaintyGated };
+enum class DecodeStrategy { Greedy, Temperature, TopK, TopP, Beam, UncertaintyGated };
 
 struct DecodeParams {
     DecodeStrategy strategy = DecodeStrategy::Temperature;
     double temperature = 0.9;
     int top_k = 40;
     double top_p = 0.9;
+    /// Byte-level beam width (1 = off). ``strategy=beam`` or ``beam_width>1`` selects beam search.
+    int beam_width = 1;
     std::optional<double> uncertainty_threshold;
     /// Halt when epistemic ratio r_eu exceeds ``EpistemicThreshold`` (Paper IV).
     bool epistemic_halt = false;
@@ -63,6 +65,10 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
                                cypha::intelligence::EpistemicThreshold* epistemic_threshold = nullptr,
                                cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
                                LmIntelligenceMonitor* monitor = nullptr);
+
+/// Byte-level beam search on bit-tree log probs (``beam_width`` hypotheses, predictor snapshots).
+GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_bytes,
+                             int beam_width);
 
 /// Greedy decode (legacy wrapper).
 GenerateOutput generate_greedy(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens);

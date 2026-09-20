@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <random>
+#include <utility>
 
 #include "cypha/curriculum.hpp"
+#include "cypha/cyphalm/hp_backend.hpp"
 #include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
 #include "cypha/cyphalm/lm_intelligence_monitor.hpp"
 #include "cypha/intelligence/measurers.hpp"
@@ -306,8 +309,98 @@ DecodeStrategy decode_strategy_from_string(const std::string& name) {
     if (name == "greedy") return DecodeStrategy::Greedy;
     if (name == "top_k") return DecodeStrategy::TopK;
     if (name == "top_p") return DecodeStrategy::TopP;
+    if (name == "beam") return DecodeStrategy::Beam;
     if (name == "uncertainty_gated") return DecodeStrategy::UncertaintyGated;
     return DecodeStrategy::Temperature;
+}
+
+GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_bytes,
+                             int beam_width) {
+    GenerateOutput out;
+    out.strategy = DecodeStrategy::Beam;
+    const int width = std::max(1, beam_width);
+    if (max_bytes <= 0) {
+        return out;
+    }
+
+    consume_prompt(model, prompt_ids);
+    if (!prompt_ids.empty()) {
+        model.serve_advance(static_cast<std::uint32_t>(prompt_ids.back()));
+    }
+    const int vocab = model.config().vocab_size;
+    HpSequenceBackend& hp = model.hp_backend();
+    const std::unique_ptr<hp::Predictor> root = hp.predictor_snapshot();
+    hp::Predictor work(root->config());
+    auto replay_tokens = [&](const std::vector<int>& tokens) {
+        work.copy_state_from(*root);
+        for (int t : tokens) {
+            HpSequenceBackend::consume_byte_on(work, static_cast<std::uint8_t>(t));
+        }
+    };
+
+    struct BeamHypothesis {
+        double score = 0.0;
+        std::vector<int> tokens;
+    };
+
+    std::vector<BeamHypothesis> beam;
+    beam.push_back({});
+
+    const int expand_k = std::min(vocab, std::max(2 * width, 16));
+
+    for (int step = 0; step < max_bytes; ++step) {
+        struct Candidate {
+            BeamHypothesis hyp;
+            double score = 0.0;
+        };
+        std::vector<Candidate> candidates;
+
+        for (const BeamHypothesis& hyp : beam) {
+            replay_tokens(hyp.tokens);
+            const std::vector<double> lp = HpSequenceBackend::byte_log_probs_bit_tree(work, vocab);
+            std::vector<int> order(static_cast<std::size_t>(vocab));
+            for (int i = 0; i < vocab; ++i) {
+                order[static_cast<std::size_t>(i)] = i;
+            }
+            const int kk = std::min(expand_k, vocab);
+            std::partial_sort(order.begin(), order.begin() + kk, order.end(), [&](int a, int b) {
+                return lp[static_cast<std::size_t>(a)] > lp[static_cast<std::size_t>(b)];
+            });
+            for (int i = 0; i < kk; ++i) {
+                const int b = order[static_cast<std::size_t>(i)];
+                Candidate cand;
+                cand.hyp.tokens = hyp.tokens;
+                cand.hyp.tokens.push_back(b);
+                cand.hyp.score = hyp.score + lp[static_cast<std::size_t>(b)];
+                cand.score = cand.hyp.score;
+                candidates.push_back(std::move(cand));
+            }
+        }
+
+        const int keep = std::min(width, static_cast<int>(candidates.size()));
+        std::partial_sort(candidates.begin(), candidates.begin() + keep, candidates.end(),
+                          [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
+        beam.clear();
+        for (int i = 0; i < keep; ++i) {
+            beam.push_back(std::move(candidates[static_cast<std::size_t>(i)].hyp));
+        }
+    }
+
+    if (beam.empty()) {
+        return out;
+    }
+    std::sort(beam.begin(), beam.end(),
+              [](const BeamHypothesis& a, const BeamHypothesis& b) { return a.score > b.score; });
+    const BeamHypothesis& best = beam[0];
+    out.generated_ids = best.tokens;
+    for (int id : best.tokens) {
+        GenerateStep step_row;
+        step_row.token_id = id;
+        step_row.loss = -hp.log_prob_byte(static_cast<std::uint8_t>(id));
+        out.per_step.push_back(step_row);
+        model.serve_advance(static_cast<std::uint32_t>(id));
+    }
+    return out;
 }
 
 GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens,
@@ -315,6 +408,12 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
                                cypha::intelligence::EpistemicThreshold* epistemic_threshold,
                                cypha::intelligence::IntelligenceProfiler* profiler,
                                LmIntelligenceMonitor* monitor) {
+    const int beam_width =
+        params.strategy == DecodeStrategy::Beam ? std::max(2, params.beam_width) : params.beam_width;
+    if (beam_width > 1) {
+        return generate_beam(model, prompt_ids, max_tokens, beam_width);
+    }
+
     GenerateOutput out;
     out.strategy = params.strategy;
     consume_prompt(model, prompt_ids);

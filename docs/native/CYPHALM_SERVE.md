@@ -29,15 +29,17 @@ bookkeeping and can use faster scoring paths.
 
 High-level decode lives in `cyphalm_generation.hpp`:
 
-- `generate_decode` — greedy, temperature, top-k, top-p, uncertainty-gated.
-- Prompt priming uses `serve_advance`; greedy decode uses `serve_greedy_next`; sampling uses `serve_predict_next` + bit-tree log probs.
+- `generate_decode` — greedy, beam, temperature, top-k, top-p, uncertainty-gated.
+- `generate_beam` — byte-level beam search with bit-tree log probs and `hp::Predictor` snapshots.
+- Prompt priming uses `serve_advance`; greedy decode uses `serve_greedy_next`; sampling uses `serve_predict_next` + bit-tree log probs; beam uses `HpSequenceBackend::byte_log_probs_bit_tree` per hypothesis.
 
 CLI example:
 
 ```bash
 cmake --build native/build --target cyphalm_generate -j$(nproc)
-./native/build/cyphalm_generate --prompt "Hello " --max-tokens 32 --strategy temperature
-./native/build/cyphalm_generate --strategy greedy --max-tokens 16
+./native/build/cyphalm_generate --prompt "Hello " --max-bytes 32 --strategy top_p --top-p 0.9 --temperature 0.8
+./native/build/cyphalm_generate --strategy greedy --max-bytes 16
+./native/build/cyphalm_generate --strategy beam --beam 4 --max-bytes 16 --latency
 ```
 
 REST: `POST /cyphalm/generate` (see `cyphalm_rest_routes.cpp`) uses the same `generate_decode` path.

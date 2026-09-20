@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <memory>
 
 namespace cypha::cyphalm {
 
@@ -84,6 +85,29 @@ void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
 }
 
+std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
+    auto snap = std::make_unique<hp::Predictor>(cfg_);
+    snap->copy_state_from(*pred_);
+    return snap;
+}
+
+std::vector<double> HpSequenceBackend::byte_log_probs_bit_tree(hp::Predictor& pred, int vocab_size) {
+    const int n = std::max(1, std::min(vocab_size, 256));
+    std::vector<double> out(static_cast<std::size_t>(n),
+                            std::log(1.0 / static_cast<double>(n)));
+    hp::PredictorUndoStack undo;
+    expand_bit_tree_dfs(n, 0, 0, 0.0, pred, undo, out);
+    return out;
+}
+
+void HpSequenceBackend::consume_byte_on(hp::Predictor& pred, std::uint8_t byte) {
+    for (int i = 7; i >= 0; --i) {
+        const int bit = (static_cast<int>(byte) >> i) & 1;
+        (void)pred.predict();
+        pred.update(bit);
+    }
+}
+
 double HpSequenceBackend::byte_log_prob(hp::Predictor& snap, int byte) {
     double log_p = 0.0;
     for (int i = 7; i >= 0; --i) {
@@ -136,12 +160,7 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) {
-    const int n = std::max(1, std::min(vocab_size, 256));
-    std::vector<double> out(static_cast<std::size_t>(n),
-                            std::log(1.0 / static_cast<double>(n)));
-    hp::PredictorUndoStack undo;
-    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo, out);
-    return out;
+    return byte_log_probs_bit_tree(*pred_, vocab_size);
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size) const {
