@@ -9,9 +9,9 @@
 /// ``serve_advance_byte`` advances live context; ``serve_next_byte_log_probs`` and
 /// ``serve_greedy_next_byte`` score on a scratch fork without train bookkeeping.
 ///
-/// RAM note: holds live ``pred_`` plus optional ``scratch_`` for single-byte fork
-/// scoring. MSB bit-tree uses delta undo on ``scratch_`` (one fork copy), not
-/// depth-indexed full Predictor snapshots.
+/// RAM note: holds one live ``pred_`` for context advance. MSB bit-tree and
+/// single-byte fork scoring use delta undo on ``pred_`` directly (no standing
+/// scratch twin). Legacy 256-clone path allocates ephemeral forks per byte.
 /// ``next_byte_log_probs()`` defaults to bit-tree joint scoring; legacy 256-clone path:
 /// ``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1``. BPC / train use ``observe_stream_bits`` (no fan-out).
 
@@ -72,7 +72,7 @@ class HpSequenceBackend {
     const hp::Predictor& predictor() const { return *pred_; }
     hp::Predictor& predictor() { return *pred_; }
 
-    /// Drop ``scratch_`` to cut RSS on serve paths (lazy recreate).
+    /// Serve hint: legacy API to drop optional scratch (no-op when single-predictor).
     void compact_for_serve();
 
     /// Lossy: reset cold hash slots (see ``hp::Predictor::prune_cold_hash_slots``).
@@ -87,7 +87,6 @@ class HpSequenceBackend {
  private:
     hp::Config cfg_;
     std::unique_ptr<hp::Predictor> pred_;
-    mutable std::unique_ptr<hp::Predictor> scratch_;
 
     static double byte_log_prob(hp::Predictor& snap, int byte);
 
@@ -95,7 +94,7 @@ class HpSequenceBackend {
     static void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
                                     hp::Predictor& node, hp::PredictorUndoStack& undo,
                                     std::vector<double>& out_log_nats);
-    void ensure_scratch_() const;
+    double byte_log_prob_on_pred_(std::uint8_t byte) const;
 
     bool serve_compact_ = false;
 };

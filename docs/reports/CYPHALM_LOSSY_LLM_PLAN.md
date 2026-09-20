@@ -13,9 +13,9 @@ Priority = expected **RAM/speed payoff** vs **quality risk** at gate24 compile p
 | Rank | Lever | API / flag | RAM | Speed | Quality risk | Status |
 |------|-------|------------|-----|-------|--------------|--------|
 | **1** | **Lower `table_bits` (mem tier)** | `apply_hp_lossy_recipe(cfg, mem)` / `CYPHA_HP_LOSSY_MEM=20` | **−38%** RSS @ mem20 enwik | Faster observe + clones | **+0.0063 BPC** on enwik8MB — **fails ~1.612 bar** | **Opt-in only** |
-| **2** | **Serve-compact (drop scratch + DFS pool)** | `hp_serve_compact` / `CYPHA_HP_SERVE_COMPACT=1` / `compact_hp_for_serve()` | **−~50%** construct RSS (lazy recreate) | Neutral (first `predict_next` pays recreate) | **None** (identical math) | **Implemented** |
+| **2** | **Single-predictor serve** | delta undo on live `pred_` (no `scratch_` twin) | **−~50%** construct RSS (~1.5 GiB vs ~3.1 GiB dual) | Neutral | **None** (identical math) | **Done** (this PR) |
 | **3** | **Cold hash-slot prune** | `hp_prune_cold_min_n` / `CYPHA_HP_PRUNE_COLD_MIN_N=4` / `prune_hp_cold_slots()` | No table shrink (fixed arrays) | **~1.7×** faster `predict_next` @ min4 (measured) | **Low** if threshold small; rises with aggressive min | **Implemented** |
-| **4** | True undo stack (latency, not lossy) | delta-undo on `hp::Predictor::update` | Drop 9 DFS checkpoints | **10–50×** bit-tree score (est.) | **None** if exact | **PR #7** (other agent) |
+| **4** | True undo stack (latency, not lossy) | delta-undo on `hp::Predictor::update` | Drop 9 DFS checkpoints | **~293×** `predict_next` vs pre-undo (measured) | **None** if exact | **Done** (PR #7 + [`GATE24_POST_UNDO_BENCH.md`](GATE24_POST_UNDO_BENCH.md)) |
 | **5** | Frozen serve snapshot | train online → export RO `HpSequenceBackend` | One RO predictor + mmap | Faster init; multi-worker share | **Med** (stale vs online) | Planned |
 | **6** | Quantized mixer / APM | `HP_MIXER_WT16` (hp compile) | **−50%** mixer RAM | Neutral | **Low** if byte-identical proxy holds | hp upstream option |
 | **7** | Top-M partial expansion | expand top-M bytes only | Neutral | **~256/M×** generation | **Med–high** | Planned (phase 4) |
@@ -103,8 +103,8 @@ hp internals: `hp::Predictor::prune_cold_hash_slots(min_total)` walks `ctx_chain
 
 | Bottleneck | Measurement | Implication |
 |------------|-------------|-------------|
-| **256-clone / full-vocab score** | `predict_next` **~37–41 s/call**; legacy 256-clone **~36–47 s/call** | REST `/predict_next` and generation are unusable at scale without trie / undo / partial expansion |
-| **Bit-tree checkpoint DFS (new default)** | **~39–40 s/call**; parity Δ=0 vs legacy | Prefix-shared scoring works; `assign_from` backtrack still dominates — needs true undo |
+| **256-clone / full-vocab score (pre-undo)** | `predict_next` **~48 s/call**; legacy 256-clone **~24 s/call** @ 64 KB warm | Superseded by delta undo — see [`GATE24_POST_UNDO_BENCH.md`](GATE24_POST_UNDO_BENCH.md) |
+| **Bit-tree + delta undo (current default)** | **~0.16 s/call** `predict_next`; **~0.003 s** greedy | Single `pred_`; parity Δ=0 vs legacy (`hp_bit_tree_smoke`) |
 | **Bit-serial observe** | **~30–34k B/s** on WikiText 100k slice | `eval_bpc` / training loss path is fine; this is the compress-equivalent metric |
 | **Dual predictor RSS** | Construct **~782 MiB**; peak under load **~1.15 GiB** | Standing `pred_` + `scratch_` + 9 DFS checkpoints adds RAM vs single-predictor serve |
 | **Protocol mismatch** | Light observe enwik 8MB **1.721** vs gate24 **~1.612** vs champ **~1.610** | Quality claims require **gate24/champ** SKU, not CI light |

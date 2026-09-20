@@ -35,8 +35,10 @@ CyphaLMModel::eval_bpc
     ≡ hp archive BPC @ same compile flags
 
 CyphaLMModel::serve_predict_next / generate_decode
-    → HpSequenceBackend::serve_next_byte_log_probs (bit-tree checkpoint DFS)
-    → greedy: serve_greedy_next (O(8) scratch fork)
+    → HpSequenceBackend::serve_next_byte_log_probs (bit-tree + delta undo on pred_)
+    → greedy: serve_greedy_next (O(8) undo fork on pred_)
+
+Post-undo bench: [`GATE24_POST_UNDO_BENCH.md`](GATE24_POST_UNDO_BENCH.md).
 
 See [`docs/native/CYPHALM_SERVE.md`](../native/CYPHALM_SERVE.md).
 ```

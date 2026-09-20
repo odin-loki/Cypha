@@ -302,7 +302,7 @@ struct CyphaLMConfig {
     /// Lossy RAM: when >0, overrides ``hp_table_bits`` (gate24 compile flags unchanged).
     /// Env: ``CYPHA_HP_LOSSY_MEM``. Typical tiers: 20 (−4× table RAM), 18 (−16×).
     int hp_lossy_mem = 0;
-    /// Lossy serve: drop ``scratch_`` + DFS checkpoint pool after init (RSS −~40%).
+    /// Serve hint: legacy flag when twin scratch existed; now no-op (single-predictor default).
     /// Env: ``CYPHA_HP_SERVE_COMPACT=1``.
     bool hp_serve_compact = false;
     /// Lossy quality: prune hash slots with total state count below this (0=off).

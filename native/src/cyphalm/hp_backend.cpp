@@ -56,21 +56,22 @@ hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria) {
 }
 
 HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
-    : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)) {
-    if (!serve_compact_) {
-        scratch_ = std::make_unique<hp::Predictor>(cfg);
-    }
-}
+    : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)) {}
 
-void HpSequenceBackend::ensure_scratch_() const {
-    if (!scratch_) {
-        scratch_ = std::make_unique<hp::Predictor>(cfg_);
+double HpSequenceBackend::byte_log_prob_on_pred_(std::uint8_t byte) const {
+    hp::PredictorUndoStack undo;
+    hp::UndoFrame& frame = undo.push_frame();
+    double log_p = 0.0;
+    {
+        hp::UndoRecorderScope scope(frame);
+        log_p = byte_log_prob(*pred_, static_cast<int>(byte));
     }
+    undo.pop_frame(*pred_);
+    return log_p;
 }
 
 void HpSequenceBackend::compact_for_serve() {
     serve_compact_ = true;
-    scratch_.reset();
 }
 
 void HpSequenceBackend::prune_cold_slots(int min_total) {
@@ -81,10 +82,6 @@ void HpSequenceBackend::prune_cold_slots(int min_total) {
 
 void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
-    scratch_.reset();
-    if (!serve_compact_) {
-        scratch_ = std::make_unique<hp::Predictor>(cfg_);
-    }
 }
 
 double HpSequenceBackend::byte_log_prob(hp::Predictor& snap, int byte) {
@@ -139,18 +136,15 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) {
-    ensure_scratch_();
     const int n = std::max(1, std::min(vocab_size, 256));
     std::vector<double> out(static_cast<std::size_t>(n),
                             std::log(1.0 / static_cast<double>(n)));
-    scratch_->copy_state_from(*pred_);
     hp::PredictorUndoStack undo;
-    expand_bit_tree_dfs(n, 0, 0, 0.0, *scratch_, undo, out);
+    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo, out);
     return out;
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size) const {
-    ensure_scratch_();
     const int n = std::max(1, std::min(vocab_size, 256));
     std::vector<double> out(static_cast<std::size_t>(n), 0.0);
     for (int b = 0; b < n; ++b) {
@@ -169,22 +163,24 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
-    ensure_scratch_();
-    scratch_->copy_state_from(*pred_);
-    return byte_log_prob(*scratch_, static_cast<int>(byte));
+    return byte_log_prob_on_pred_(byte);
 }
 
 std::uint8_t HpSequenceBackend::serve_greedy_next_byte() const {
-    ensure_scratch_();
-    scratch_->copy_state_from(*pred_);
-    hp::Predictor& snap = *scratch_;
+    hp::PredictorUndoStack undo;
+    hp::UndoFrame& frame = undo.push_frame();
     int byte = 0;
-    for (int i = 7; i >= 0; --i) {
-        const int p12 = snap.predict();
-        const int bit = greedy_bit(p12);
-        byte = (byte << 1) | bit;
-        snap.update(bit);
+    {
+        hp::UndoRecorderScope scope(frame);
+        hp::Predictor& snap = *pred_;
+        for (int i = 7; i >= 0; --i) {
+            const int p12 = snap.predict();
+            const int bit = greedy_bit(p12);
+            byte = (byte << 1) | bit;
+            snap.update(bit);
+        }
     }
+    undo.pop_frame(*pred_);
     return static_cast<std::uint8_t>(byte);
 }
 
@@ -197,16 +193,20 @@ std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
     if (rng01 == nullptr) {
         return serve_greedy_next_byte();
     }
-    ensure_scratch_();
-    scratch_->copy_state_from(*pred_);
-    hp::Predictor& snap = *scratch_;
+    hp::PredictorUndoStack undo;
+    hp::UndoFrame& frame = undo.push_frame();
     int byte = 0;
-    for (int i = 7; i >= 0; --i) {
-        const int p12 = snap.predict();
-        const int bit = sample_bit(p12, temperature, rng01);
-        byte = (byte << 1) | bit;
-        snap.update(bit);
+    {
+        hp::UndoRecorderScope scope(frame);
+        hp::Predictor& snap = *pred_;
+        for (int i = 7; i >= 0; --i) {
+            const int p12 = snap.predict();
+            const int bit = sample_bit(p12, temperature, rng01);
+            byte = (byte << 1) | bit;
+            snap.update(bit);
+        }
     }
+    undo.pop_frame(*pred_);
     return static_cast<std::uint8_t>(byte);
 }
 
