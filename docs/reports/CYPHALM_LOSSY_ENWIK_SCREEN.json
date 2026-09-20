@@ -1,0 +1,56 @@
+{
+  "date": "2026-09-20",
+  "harness": "cyphalm_lossy_enwik_screen",
+  "vm": "cloud-agent linux",
+  "corpus": "/workspace/bench/data/enwik8/enwik8.8mb",
+  "corpus_sha256": "09f6dd7241a8ae21edfd6762f3c6712a1fd02f7f322c5e77cab8bb88f292ee8e",
+  "corpus_bytes": 8388608,
+  "metric": "observe_bit_serial_bpc",
+  "gate24_quality_bar_bpc": 1.612,
+  "cypha_gate24_ref_observe_bpc": 1.611729,
+  "verdict": "mem20_fails_gate24_bar_keep_mem22_default",
+  "variants": [
+    {
+      "variant": "gate24_baseline_mem22",
+      "hp_effective_mem": 22,
+      "observe_bpc": 1.6117287457806113,
+      "observe_bpc_ms": 442800.95,
+      "observe_bytes_per_sec": 18944.42,
+      "vm_rss_kb_init": 3156580,
+      "delta_bpc_vs_baseline": 0.0,
+      "delta_bpc_vs_bar": -0.0000002542193887,
+      "passes_gate24_bar": true
+    },
+    {
+      "variant": "lossy_mem20",
+      "hp_effective_mem": 20,
+      "observe_bpc": 1.6180174808678682,
+      "observe_bpc_ms": 384661.0,
+      "observe_bytes_per_sec": 21807.79,
+      "vm_rss_kb_init": 1959032,
+      "delta_bpc_vs_baseline": 0.0062887350872569,
+      "delta_bpc_vs_bar": 0.0060174808678682,
+      "passes_gate24_bar": false,
+      "rss_reduction_pct": 37.9
+    },
+    {
+      "variant": "combo_mem20_compact_prune4",
+      "hp_effective_mem": 20,
+      "hp_serve_compact": true,
+      "hp_prune_cold_min_n": 4,
+      "observe_bpc": 1.6180174808678682,
+      "observe_bpc_ms": 378352.26,
+      "observe_bytes_per_sec": 22171.42,
+      "vm_rss_kb_init": 1959032,
+      "delta_bpc_vs_baseline": 0.0062887350872569,
+      "delta_bpc_vs_bar": 0.0060174808678682,
+      "passes_gate24_bar": false,
+      "note": "compact+prune add no extra BPC loss beyond mem20 alone"
+    }
+  ],
+  "recommendation": {
+    "default_serve": "mem22 (gate24 baseline)",
+    "safe_levers": ["hp_serve_compact on mem22 (lossless RAM)", "hp_prune_cold_min_n on mem22 (re-screen per threshold)"],
+    "opt_in_lossy": "mem20 tier — ~38% RSS reduction, +0.0063 BPC on enwik8MB; not gate24-qualified"
+  }
+}

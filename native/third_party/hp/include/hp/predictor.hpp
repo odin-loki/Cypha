@@ -1639,6 +1639,21 @@ class Predictor {
         }
     }
 
+    /// Lossy serve: reset context hash slots with fewer than ``min_total`` bit
+    /// observations (n0+n1) across all chained context models and cold bias counters.
+    void prune_cold_hash_slots(int min_total) {
+        if (min_total <= 0) return;
+        for (int i = 0; i < n_ctx_chain_; ++i) {
+            ctx_chain_[i]->prune_cold_hash_slots(min_total);
+        }
+        for (auto& c : bias_) {
+            if (c.n < min_total) {
+                c.p = 32768;
+                c.n = 0;
+            }
+        }
+    }
+
     const GriaGate& gria() const { return gria_; }
     int discovery_replacements() const { return pool_.replaced(); }
     int cache_hits() const {

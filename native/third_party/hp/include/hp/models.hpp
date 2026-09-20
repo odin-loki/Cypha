@@ -212,6 +212,25 @@ class ContextModel {
 #endif
     }
 
+    /// Lossy serve: reset hash slots whose bit-history state has fewer than
+    /// ``min_total`` observations (n0+n1). Cold entries fall back to uniform.
+    void prune_cold_hash_slots(int min_total) {
+        if (min_total <= 0) return;
+        const StateTable& st = state_table();
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+#if HP_HASH_CHK
+            if (chk_[i] == 0) continue;
+#endif
+            const int state = static_cast<int>(t_.data()[i]);
+            if (st.n0(state) + st.n1(state) < min_total) {
+                t_.data()[i] = 0;
+#if HP_HASH_CHK
+                chk_[i] = 0;
+#endif
+            }
+        }
+    }
+
     void update(int y, int ens_p12 = -1) {
         if (idle_) return;
         std::int32_t ncl = 0;
