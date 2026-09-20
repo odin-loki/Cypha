@@ -1714,6 +1714,10 @@ class Predictor {
     void merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
                             std::uint64_t dst_bytes);
 
+    /// Weighted merge with optional confidence gating (see ``hp/shard_merge.hpp``).
+    void merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+                            std::uint64_t dst_bytes, const ShardMergeOptions& opts);
+
     /// Copy mergeable tables into a fresh predictor (runtime path state unchanged).
     void transfer_tables_from(const Predictor& src);
 

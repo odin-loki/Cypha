@@ -65,13 +65,6 @@ void adapt_consume_ids(cypha::cyphalm::CyphaLMModel& model, const std::vector<in
     }
 }
 
-void consume_range(cypha::cyphalm::CyphaLMModel& model, const std::vector<int>& ids,
-                   std::size_t begin, std::size_t end) {
-    for (std::size_t i = begin; i < end && i < ids.size(); ++i) {
-        model.hp_backend().consume_byte(static_cast<std::uint8_t>(ids[i]));
-    }
-}
-
 std::vector<std::vector<int>> split_shards(const std::vector<int>& data, int n_shards) {
     n_shards = std::max(1, n_shards);
     std::vector<std::vector<int>> shards(static_cast<std::size_t>(n_shards));
@@ -123,6 +116,12 @@ bool write_shard_files(const std::vector<std::vector<int>>& shards, const std::s
     return true;
 }
 
+struct MergeProfile {
+    std::string name;
+    hp::ShardMergeOptions merge_opts;
+    hp::BoundaryReplayConfig replay_cfg;
+};
+
 struct MergeAttempt {
     bool ok = false;
     std::string status = "stub";
@@ -150,51 +149,108 @@ const hp::Predictor& predictor(const cypha::cyphalm::CyphaLMModel& model) {
     return model.hp_backend().predictor();
 }
 
-/// Strategy C: replay ``replay_bytes`` ending at each shard join in ``train_ids``.
-void boundary_replay_shard_joins(cypha::cyphalm::CyphaLMModel& model,
-                                 const std::vector<int>& train_ids,
-                                 const std::vector<std::vector<int>>& train_shards,
-                                 std::size_t replay_bytes) {
-    if (replay_bytes == 0 || train_shards.size() < 2) {
-        return;
+std::vector<std::uint8_t> to_bytes(const std::vector<int>& ids) {
+    std::vector<std::uint8_t> bytes(ids.size());
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        bytes[i] = static_cast<std::uint8_t>(ids[i]);
     }
-    std::size_t boundary = 0;
-    for (std::size_t i = 0; i + 1 < train_shards.size(); ++i) {
-        boundary += train_shards[i].size();
-        const std::size_t begin = hp::boundary_replay_begin(boundary, replay_bytes);
-        consume_range(model, train_ids, begin, boundary);
-    }
+    return bytes;
 }
 
-/// Replay tail of train prefix before holdout / eval (Strategy C).
-void boundary_replay_train_tail(cypha::cyphalm::CyphaLMModel& model,
-                                const std::vector<int>& train_ids, std::size_t replay_bytes) {
-    if (replay_bytes == 0 || train_ids.empty()) {
-        return;
+std::vector<std::size_t> shard_boundaries_from_sizes(
+    const std::vector<std::vector<int>>& shards) {
+    std::vector<std::size_t> bounds;
+    bounds.reserve(shards.size() + 1);
+    std::size_t off = 0;
+    for (const auto& shard : shards) {
+        off += shard.size();
+        bounds.push_back(off);
     }
-    const std::size_t boundary = train_ids.size();
-    const std::size_t begin = hp::boundary_replay_begin(boundary, replay_bytes);
-    consume_range(model, train_ids, begin, boundary);
+    return bounds;
 }
 
 cypha::cyphalm::CyphaLMModel make_eval_from_merged_tables(
     const cypha::cyphalm::CyphaLMConfig& cfg, cypha::cyphalm::CyphaLMModel& merged_tables,
     const std::vector<int>& train_ids, const std::vector<std::vector<int>>& train_shards,
-    std::size_t boundary_replay_bytes) {
+    const hp::BoundaryReplayConfig& replay_cfg) {
     cypha::cyphalm::CyphaLMModel eval_model(cfg);
     predictor(eval_model).transfer_tables_from(predictor(merged_tables));
-    if (boundary_replay_bytes > 0) {
-        boundary_replay_shard_joins(eval_model, train_ids, train_shards, boundary_replay_bytes);
-        boundary_replay_train_tail(eval_model, train_ids, boundary_replay_bytes);
+    if (replay_cfg.replay_bytes > 0 && !train_ids.empty()) {
+        const auto train_bytes = to_bytes(train_ids);
+        const auto bounds = shard_boundaries_from_sizes(train_shards);
+        hp::prepare_merged_predictor_for_holdout(predictor(eval_model), train_bytes.data(),
+                                                 train_bytes.size(), bounds, replay_cfg);
     }
     return eval_model;
+}
+
+MergeProfile baseline_merge_profile(std::size_t replay_bytes) {
+    MergeProfile p;
+    p.name = "baseline";
+    p.replay_cfg.replay_bytes = replay_bytes;
+    p.replay_cfg.passes = 1;
+    p.replay_cfg.distance_weighted = false;
+    p.replay_cfg.bridge_finetune_bytes = 0;
+    return p;
+}
+
+MergeProfile gated_only_profile(std::size_t replay_bytes) {
+    MergeProfile p = baseline_merge_profile(replay_bytes);
+    p.name = "gated_only";
+    p.merge_opts = hp::holdout_merge_options();
+    return p;
+}
+
+MergeProfile replay_distance_profile(std::size_t replay_bytes) {
+    MergeProfile p = baseline_merge_profile(replay_bytes);
+    p.name = "replay_distance";
+    p.replay_cfg.distance_weighted = true;
+    p.replay_cfg.max_passes_per_byte = 4;
+    return p;
+}
+
+MergeProfile bridge_finetune_profile(std::size_t replay_bytes, std::size_t bridge_bytes) {
+    MergeProfile p = baseline_merge_profile(replay_bytes);
+    p.name = "bridge_finetune";
+    p.replay_cfg.bridge_finetune_bytes = bridge_bytes;
+    return p;
+}
+
+MergeProfile full_train_bridge_profile(std::size_t replay_bytes, std::size_t train_bytes) {
+    MergeProfile p = baseline_merge_profile(replay_bytes);
+    p.name = "full_train_bridge";
+    p.replay_cfg.bridge_finetune_bytes = train_bytes;
+    return p;
+}
+
+MergeProfile gated_full_train_bridge_profile(std::size_t replay_bytes, std::size_t train_bytes) {
+    MergeProfile p = full_train_bridge_profile(replay_bytes, train_bytes);
+    p.name = "gated_full_train_bridge";
+    p.merge_opts = hp::holdout_merge_options();
+    return p;
+}
+
+MergeProfile holdout_merge_profile(std::size_t replay_bytes, std::size_t train_bytes) {
+    MergeProfile p = gated_full_train_bridge_profile(replay_bytes, train_bytes);
+    p.name = "holdout";
+    return p;
+}
+
+std::vector<MergeProfile> holdout_ablation_profiles(std::size_t replay_bytes,
+                                                    std::size_t train_bytes) {
+    return {baseline_merge_profile(replay_bytes), gated_only_profile(replay_bytes),
+            replay_distance_profile(replay_bytes),
+            bridge_finetune_profile(replay_bytes, std::min(replay_bytes, std::size_t{4096})),
+            full_train_bridge_profile(replay_bytes, train_bytes),
+            gated_full_train_bridge_profile(replay_bytes, train_bytes),
+            holdout_merge_profile(replay_bytes, train_bytes)};
 }
 
 MergeAttempt merge_workers_and_measure(
     const cypha::cyphalm::CyphaLMConfig& cfg, const std::vector<int>& eval_ids,
     const std::vector<std::vector<int>>& shards,
     const std::vector<std::unique_ptr<cypha::cyphalm::CyphaLMModel>>& workers,
-    std::size_t boundary_replay_bytes, const std::vector<int>& train_ids_for_replay,
+    const MergeProfile& profile, const std::vector<int>& train_ids_for_replay,
     const std::vector<std::vector<int>>& train_shards_for_replay, bool in_sample_eval) {
     MergeAttempt r;
     if (workers.empty() || shards.empty() || workers.size() != shards.size()) {
@@ -208,7 +264,8 @@ MergeAttempt merge_workers_and_measure(
     for (std::size_t i = 0; i < workers.size(); ++i) {
         const std::uint64_t shard_bytes = static_cast<std::uint64_t>(shards[i].size());
         const hp::MergeStatus st = hp::merge_predictor_tables(
-            predictor(merged_tables), merged_bytes, predictor(*workers[i]), shard_bytes);
+            predictor(merged_tables), merged_bytes, predictor(*workers[i]), shard_bytes,
+            profile.merge_opts);
         if (st == hp::MergeStatus::EmptyInput) {
             r.status = "error";
             r.detail = "empty shard byte weight";
@@ -218,19 +275,38 @@ MergeAttempt merge_workers_and_measure(
     }
 
     auto eval_model = make_eval_from_merged_tables(cfg, merged_tables, train_ids_for_replay,
-                                                   train_shards_for_replay, boundary_replay_bytes);
+                                                   train_shards_for_replay, profile.replay_cfg);
     r.merged_bpc = observe_bpc_keep_tables(eval_model, eval_ids);
     r.ok = std::isfinite(r.merged_bpc);
-    r.status = boundary_replay_bytes > 0 ? "weighted_table_merge+boundary_replay"
-                                         : "weighted_table_merge";
+    r.status = profile.name + ":weighted_table_merge";
+    if (profile.replay_cfg.replay_bytes > 0) {
+        r.status += "+boundary_replay";
+        if (profile.replay_cfg.distance_weighted) {
+            r.status += "_distance_weighted";
+        }
+        if (profile.replay_cfg.bridge_finetune_bytes > 0) {
+            r.status += "+bridge_finetune";
+        }
+    }
+    if (profile.merge_opts.min_counter_n > 0 || profile.merge_opts.min_statemap_count > 0) {
+        r.status += "+confidence_gated";
+    }
     r.detail = in_sample_eval
                    ? "In-sample eval (shard train bytes overlap eval corpus). "
                    : "Holdout eval (eval bytes not in shard training). ";
-    r.detail +=
-        boundary_replay_bytes > 0
-            ? "Strategy C boundary replay at shard joins + train tail before observe."
-            : "No boundary replay.";
+    r.detail += "profile=" + profile.name;
     return r;
+}
+
+nlohmann::json merge_profile_json(const MergeProfile& profile) {
+    return nlohmann::json{{"name", profile.name},
+                          {"min_counter_n", profile.merge_opts.min_counter_n},
+                          {"min_statemap_count", profile.merge_opts.min_statemap_count},
+                          {"replay_bytes", profile.replay_cfg.replay_bytes},
+                          {"replay_passes", profile.replay_cfg.passes},
+                          {"distance_weighted", profile.replay_cfg.distance_weighted},
+                          {"max_passes_per_byte", profile.replay_cfg.max_passes_per_byte},
+                          {"bridge_finetune_bytes", profile.replay_cfg.bridge_finetune_bytes}};
 }
 
 nlohmann::json shard_bpc_json(const std::string& label, double bpc, std::size_t nbytes) {
@@ -241,14 +317,7 @@ nlohmann::json shard_bpc_json(const std::string& label, double bpc, std::size_t 
 }
 
 int default_boundary_replay_bytes(std::size_t train_bytes, int cli_override) {
-    if (cli_override > 0) {
-        return cli_override;
-    }
-    if (train_bytes < 512) {
-        return 0;
-    }
-    const std::size_t tenth = train_bytes / 10;
-    return static_cast<int>(std::min<std::size_t>(4096, std::max<std::size_t>(256, tenth)));
+    return static_cast<int>(hp::default_boundary_replay_bytes(train_bytes, cli_override));
 }
 
 }  // namespace
@@ -262,6 +331,7 @@ int main(int argc, char** argv) {
     bool write_shards = false;
     double holdout_frac = 0.2;
     int boundary_replay_bytes = -1;  // -1 => auto when holdout enabled
+    std::string merge_profile_mode = "both";  // baseline | holdout | both | ablation
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -277,6 +347,8 @@ int main(int argc, char** argv) {
             holdout_frac = std::stod(argv[++i]);
         } else if (arg == "--boundary-replay-bytes" && i + 1 < argc) {
             boundary_replay_bytes = std::stoi(argv[++i]);
+        } else if (arg == "--merge-profile" && i + 1 < argc) {
+            merge_profile_mode = argv[++i];
         } else if (arg == "--write-shards" && i + 1 < argc) {
             write_shards = true;
             shard_dir = argv[++i];
@@ -285,6 +357,7 @@ int main(int argc, char** argv) {
                          "usage: cyphalm_hp_shard_spike --corpus <path> "
                          "[--max-bytes N] [--shards 2] [--table-bits 22] "
                          "[--holdout-frac 0.2] [--boundary-replay-bytes W] "
+                         "[--merge-profile baseline|holdout|both|ablation] "
                          "[--write-shards <dir>]\n");
             return 0;
         }
@@ -330,6 +403,7 @@ int main(int argc, char** argv) {
     out["train_bytes"] = train_ids.size();
     out["holdout_bytes"] = holdout_ids.size();
     out["boundary_replay_bytes"] = replay_bytes;
+    out["merge_profile_mode"] = merge_profile_mode;
     if (write_shards) {
         out["shard_dir"] = shard_dir;
     }
@@ -398,8 +472,11 @@ int main(int argc, char** argv) {
     }
 
     if (!full_workers.empty()) {
-        const MergeAttempt m = merge_workers_and_measure(cfg, ids, full_shards, full_workers, 0,
-                                                         ids, full_shards, true);
+        MergeProfile in_sample_profile;
+        in_sample_profile.name = "in_sample";
+        const MergeAttempt m = merge_workers_and_measure(cfg, ids, full_shards, full_workers,
+                                                         in_sample_profile, ids, full_shards,
+                                                         true);
         out["merge_status"] = m.status;
         out["merge_ok"] = m.ok;
         out["merge_detail"] = m.detail;
@@ -415,28 +492,104 @@ int main(int argc, char** argv) {
 
     // (d) fair holdout eval: train shards on train prefix only, eval on holdout tail
     if (holdout_enabled && !workers.empty()) {
-        const MergeAttempt merged_holdout = merge_workers_and_measure(
-            cfg, holdout_ids, train_shards, workers, static_cast<std::size_t>(replay_bytes),
-            train_ids, train_shards, false);
-        out["merged_holdout_bpc"] =
-            shard_bpc_json("merged_holdout", merged_holdout.merged_bpc, holdout_ids.size());
-        out["merged_holdout_ok"] = merged_holdout.ok;
-        out["merged_holdout_status"] = merged_holdout.status;
+        const std::size_t replay_window = static_cast<std::size_t>(replay_bytes);
+        const bool run_ablation = merge_profile_mode == "ablation";
+        const bool run_baseline =
+            merge_profile_mode == "baseline" || merge_profile_mode == "both" || run_ablation;
+        const bool run_holdout =
+            merge_profile_mode == "holdout" || merge_profile_mode == "both";
 
         cypha::cyphalm::CyphaLMModel single_train(cfg);
         adapt_consume_ids(single_train, train_ids);
+        hp::BoundaryReplayConfig single_replay;
+        single_replay.replay_bytes = replay_window;
         auto single_eval = make_eval_from_merged_tables(cfg, single_train, train_ids, train_shards,
-                                                        static_cast<std::size_t>(replay_bytes));
+                                                        single_replay);
         const double single_holdout_bpc = observe_bpc_keep_tables(single_eval, holdout_ids);
         out["single_stream_holdout_bpc"] =
             shard_bpc_json("single_stream_holdout", single_holdout_bpc, holdout_ids.size());
 
-        if (std::isfinite(merged_holdout.merged_bpc) && std::isfinite(single_holdout_bpc)) {
-            out["merged_holdout_vs_single_delta_bpc"] =
-                merged_holdout.merged_bpc - single_holdout_bpc;
+        auto record_holdout_profile = [&](const MergeProfile& profile, const std::string& key) {
+            const MergeAttempt attempt = merge_workers_and_measure(
+                cfg, holdout_ids, train_shards, workers, profile, train_ids, train_shards,
+                false);
+            nlohmann::json row;
+            row["profile"] = merge_profile_json(profile);
+            row["merged_holdout_bpc"] = attempt.merged_bpc;
+            row["status"] = attempt.status;
+            if (std::isfinite(attempt.merged_bpc) && std::isfinite(single_holdout_bpc)) {
+                row["vs_single_delta_bpc"] = attempt.merged_bpc - single_holdout_bpc;
+            }
+            out[key] = row;
+            return attempt;
+        };
+
+        if (run_baseline) {
+            const MergeProfile baseline = baseline_merge_profile(replay_window);
+            const MergeAttempt merged_holdout = record_holdout_profile(baseline, "merged_holdout");
+            out["merged_holdout_bpc"] =
+                shard_bpc_json("merged_holdout_baseline", merged_holdout.merged_bpc,
+                               holdout_ids.size());
+            out["merged_holdout_ok"] = merged_holdout.ok;
+            out["merged_holdout_status"] = merged_holdout.status;
+            out["merged_holdout_profile"] = merge_profile_json(baseline);
+            if (std::isfinite(merged_holdout.merged_bpc) && std::isfinite(single_holdout_bpc)) {
+                out["merged_holdout_vs_single_delta_bpc"] =
+                    merged_holdout.merged_bpc - single_holdout_bpc;
+            }
         }
 
-        // Cold holdout baseline (no train tables) for context
+        if (run_holdout) {
+            const MergeProfile improved = holdout_merge_profile(replay_window, train_ids.size());
+            const MergeAttempt merged_improved =
+                record_holdout_profile(improved, "merged_holdout_improved");
+            out["merged_holdout_improved_bpc"] =
+                shard_bpc_json("merged_holdout_improved", merged_improved.merged_bpc,
+                               holdout_ids.size());
+            out["merged_holdout_improved_ok"] = merged_improved.ok;
+            out["merged_holdout_improved_status"] = merged_improved.status;
+            out["merged_holdout_improved_profile"] = merge_profile_json(improved);
+            if (std::isfinite(merged_improved.merged_bpc) && std::isfinite(single_holdout_bpc)) {
+                out["merged_holdout_improved_vs_single_delta_bpc"] =
+                    merged_improved.merged_bpc - single_holdout_bpc;
+            }
+            if (run_baseline && out.contains("merged_holdout_vs_single_delta_bpc")) {
+                const double baseline_delta =
+                    out["merged_holdout_vs_single_delta_bpc"].get<double>();
+                const double improved_delta =
+                    out["merged_holdout_improved_vs_single_delta_bpc"].get<double>();
+                out["holdout_improved_vs_baseline_delta_bpc"] = improved_delta - baseline_delta;
+            }
+        }
+
+        if (run_ablation) {
+            nlohmann::json ablation = nlohmann::json::array();
+            double best_delta = std::numeric_limits<double>::infinity();
+            std::string best_name;
+            for (const MergeProfile& profile :
+                 holdout_ablation_profiles(replay_window, train_ids.size())) {
+                const MergeAttempt attempt = merge_workers_and_measure(
+                    cfg, holdout_ids, train_shards, workers, profile, train_ids, train_shards,
+                    false);
+                nlohmann::json row;
+                row["name"] = profile.name;
+                row["profile"] = merge_profile_json(profile);
+                row["merged_holdout_bpc"] = attempt.merged_bpc;
+                if (std::isfinite(attempt.merged_bpc) && std::isfinite(single_holdout_bpc)) {
+                    const double delta = attempt.merged_bpc - single_holdout_bpc;
+                    row["vs_single_delta_bpc"] = delta;
+                    if (delta < best_delta) {
+                        best_delta = delta;
+                        best_name = profile.name;
+                    }
+                }
+                ablation.push_back(row);
+            }
+            out["holdout_ablation"] = ablation;
+            out["holdout_ablation_best_profile"] = best_name;
+            out["holdout_ablation_best_vs_single_delta_bpc"] = best_delta;
+        }
+
         {
             cypha::cyphalm::CyphaLMModel cold(cfg);
             const double cold_bpc = observe_bpc_ids(cold, holdout_ids);

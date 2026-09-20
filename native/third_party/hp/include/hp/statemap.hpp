@@ -132,7 +132,8 @@ class StateMap {
     }
 
     /// Weighted merge of packed (prob<<10)|count entries (train-scale shard merge).
-    void merge_from(const StateMap& src, std::uint64_t src_weight, std::uint64_t dst_weight) {
+    void merge_from(const StateMap& src, std::uint64_t src_weight, std::uint64_t dst_weight,
+                    std::uint16_t min_count = 0) {
         for (std::size_t i = 0; i < t_.size(); ++i) {
             const std::uint32_t sv = src.t_[i];
             const std::uint32_t sn = sv & 1023u;
@@ -144,6 +145,15 @@ class StateMap {
             if (dn == 0) {
                 t_[i] = sv;
                 continue;
+            }
+            if (min_count > 0) {
+                if (sn < min_count) {
+                    continue;
+                }
+                if (dn < min_count) {
+                    t_[i] = sv;
+                    continue;
+                }
             }
             const std::uint64_t total = dst_weight + src_weight;
             if (total == 0) {

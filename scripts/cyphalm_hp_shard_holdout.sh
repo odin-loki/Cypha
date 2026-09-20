@@ -32,7 +32,8 @@ if [[ ! -x "$SPIKE" ]]; then
   cmake --build "$BUILD_DIR" --target cyphalm_hp_shard_spike -j"$(nproc)" >/dev/null
 fi
 
-ARGS=(--corpus "$CORPUS" --holdout-frac "$HOLDOUT_FRAC" --shards "$SHARDS" --table-bits "$TABLE_BITS")
+ARGS=(--corpus "$CORPUS" --holdout-frac "$HOLDOUT_FRAC" --shards "$SHARDS" --table-bits "$TABLE_BITS"
+  --boundary-replay-bytes 4096 --merge-profile both)
 if [[ "$MAX_BYTES" -gt 0 ]]; then
   ARGS+=(--max-bytes "$MAX_BYTES")
 fi

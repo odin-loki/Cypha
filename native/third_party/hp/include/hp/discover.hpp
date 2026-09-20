@@ -153,12 +153,13 @@ class DiscoveryPool {
     int replaced() const { return replaced_; }
 
     void merge_tables_from(const DiscoveryPool& src, std::uint64_t src_weight,
-                           std::uint64_t dst_weight) {
+                           std::uint64_t dst_weight, std::uint16_t min_statemap_count = 0) {
         if (static_cast<int>(src.models_.size()) != static_cast<int>(models_.size())) {
             return;
         }
         for (int i = 0; i < kSlots; ++i) {
-            models_[i].merge_tables_from(src.models_[i], src_weight, dst_weight);
+            models_[i].merge_tables_from(src.models_[i], src_weight, dst_weight,
+                                         min_statemap_count);
         }
     }
 
