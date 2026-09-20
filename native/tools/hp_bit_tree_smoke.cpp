@@ -1,4 +1,4 @@
-/// Parity: MSB bit-tree joint log P(byte) vs legacy per-byte clone.
+/// Parity: undo round-trip, MSB bit-tree vs legacy fork, assign reuse vs legacy fork.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -50,18 +50,38 @@ int main() {
 
     const auto tree = hp.next_byte_log_probs_bit_tree(256);
     const auto legacy = hp.next_byte_log_probs_legacy(256);
+    const auto reuse = hp.next_byte_log_probs_assign_reuse(256);
 
-    double max_delta = 0.0;
+    double max_tree_legacy_delta = 0.0;
+    double max_assign_legacy_delta = 0.0;
     for (int b = 0; b < 256; ++b) {
-        max_delta = std::max(max_delta, std::abs(tree[static_cast<std::size_t>(b)] -
-                                                   legacy[static_cast<std::size_t>(b)]));
+        max_tree_legacy_delta =
+            std::max(max_tree_legacy_delta,
+                     std::abs(tree[static_cast<std::size_t>(b)] -
+                              legacy[static_cast<std::size_t>(b)]));
+        max_assign_legacy_delta =
+            std::max(max_assign_legacy_delta,
+                     std::abs(reuse[static_cast<std::size_t>(b)] -
+                              legacy[static_cast<std::size_t>(b)]));
     }
 
-    if (max_delta > 1e-6) {
-        std::printf("hp_bit_tree_smoke FAIL max_tree_legacy_delta=%.9g\n", max_delta);
+    const int truth = byte_dist(rng);
+    const double single = hp.log_prob_byte(static_cast<std::uint8_t>(truth));
+    const double single_delta =
+        std::abs(single - legacy[static_cast<std::size_t>(truth)]);
+
+    if (max_tree_legacy_delta > 1e-6 || max_assign_legacy_delta > 1e-6 ||
+        single_delta > 1e-6) {
+        std::printf(
+            "hp_bit_tree_smoke FAIL max_tree_legacy_delta=%.9g "
+            "max_assign_legacy_delta=%.9g single_delta=%.9g\n",
+            max_tree_legacy_delta, max_assign_legacy_delta, single_delta);
         return 1;
     }
 
-    std::printf("hp_bit_tree_smoke OK max_tree_legacy_delta=%.9g\n", max_delta);
+    std::printf(
+        "hp_bit_tree_smoke OK max_tree_legacy_delta=%.9g max_assign_legacy_delta=%.9g "
+        "single_delta=%.9g\n",
+        max_tree_legacy_delta, max_assign_legacy_delta, single_delta);
     return 0;
 }
