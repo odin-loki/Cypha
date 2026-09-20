@@ -11,9 +11,11 @@
 ///
 /// RAM note: holds one live ``pred_`` for context advance. MSB bit-tree and
 /// single-byte fork scoring use delta undo on ``pred_`` directly (no standing
-/// scratch twin). Legacy 256-clone path allocates ephemeral forks per byte.
-/// ``next_byte_log_probs()`` defaults to bit-tree joint scoring; legacy 256-clone path:
-/// ``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1``. BPC / train use ``observe_stream_bits`` (no fan-out).
+/// scratch twin). Legacy 256-fork path allocates ephemeral forks per byte.
+/// ``Predictor::copy_state_from`` / ``assign_from_`` must copy all ctx-chain models
+/// (parity tests and any reuse path).
+/// ``next_byte_log_probs()`` defaults to bit-tree joint scoring; legacy path:
+/// ``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1``.
 
 #include <cstdint>
 #include <memory>
@@ -51,7 +53,10 @@ class HpSequenceBackend {
     /// Legacy 256× fork path (``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`` or parity tests).
     std::vector<double> next_byte_log_probs_legacy(int vocab_size) const;
 
-    /// log P(single byte | current history); one scratch fork + 8 bit steps.
+    /// Loop-local ``copy_state_from`` reuse (parity vs legacy; not production default).
+    std::vector<double> next_byte_log_probs_assign_reuse(int vocab_size) const;
+
+    /// log P(single byte | current history); undo on live ``pred_`` (no standing scratch).
     double log_prob_byte(std::uint8_t byte) const;
 
     /// Serve: O(8) greedy next byte on scratch fork (no 256-way fan-out).

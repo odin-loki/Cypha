@@ -2910,6 +2910,378 @@ class Predictor {
 #if HP_SENGRP_MOD
         sengrp_ = o.sengrp_;
 #endif
+#if HP_NEST_MOD
+        nestmod_ = o.nestmod_;
+#endif
+#if HP_PARA_MOD
+        paramod_ = o.paramod_;
+#endif
+#if HP_LINE_MOD
+        linemod_ = o.linemod_;
+#endif
+#if HP_STATE_MOD
+        statemod_ = o.statemod_;
+#endif
+#if HP_DOM_MOD
+        dommod_ = o.dommod_;
+#endif
+#if HP_HDR_MOD
+        hdrmod_ = o.hdrmod_;
+#endif
+#if HP_DEPTH_MOD
+        depthmod_ = o.depthmod_;
+#endif
+#if HP_FCCXT_MOD
+        fccxtmod_ = o.fccxtmod_;
+#endif
+#if HP_TPLNAME_MOD
+        tplmod_ = o.tplmod_;
+#endif
+#if HP_INFOKEY_MOD
+        infokeymod_ = o.infokeymod_;
+#endif
+#if HP_BARIDX_MOD
+        baridxmod_ = o.baridxmod_;
+#endif
+#if HP_PERIOD_MOD
+        periodmod_ = o.periodmod_;
+#endif
+#if HP_PRONOUN_MOD
+        pronounmod_ = o.pronounmod_;
+#endif
+#if HP_LINKPIPE_MOD
+        linkpipemod_ = o.linkpipemod_;
+#endif
+#if HP_CITE_MOD
+        citemod_ = o.citemod_;
+#endif
+#if HP_CAT_MOD
+        catmod_ = o.catmod_;
+#endif
+#if HP_REDIR_MOD
+        redirmod_ = o.redirmod_;
+#endif
+#if HP_HEADING_MOD
+        headingmod_ = o.headingmod_;
+#endif
+#if HP_EXTLINK_MOD
+        extlinkmod_ = o.extlinkmod_;
+#endif
+#if HP_REFNAME_MOD
+        refnamemod_ = o.refnamemod_;
+#endif
+#if HP_QOCXT_MOD
+        qocxtmod_ = o.qocxtmod_;
+#endif
+#if HP_ENTITY_MOD
+        entitymod_ = o.entitymod_;
+#endif
+#if HP_INDENT_MOD
+        indentmod_ = o.indentmod_;
+#endif
+#if HP_LISTLEVEL_MOD
+        listlevelmod_ = o.listlevelmod_;
+#endif
+#if HP_ISSE_MOD
+        issemod_ = o.issemod_;
+#endif
+#if HP_MAGIC_MOD
+        magicmod_ = o.magicmod_;
+#endif
+#if HP_NOWIKI_MOD
+        nowikimod_ = o.nowikimod_;
+#endif
+#if HP_TITLE_MOD
+        titlemod_ = o.titlemod_;
+#endif
+#if HP_PAGEID_MOD
+        pageidmod_ = o.pageidmod_;
+#endif
+#if HP_USER_MOD
+        usermod_ = o.usermod_;
+#endif
+#if HP_TEXT_MOD
+        textmod_ = o.textmod_;
+#endif
+#if HP_NS_MOD
+        nsmod_ = o.nsmod_;
+#endif
+#if HP_DUMPREDIR_MOD
+        dumpredirmod_ = o.dumpredirmod_;
+#endif
+#if HP_IP_MOD
+        ipmod_ = o.ipmod_;
+#endif
+#if HP_REVCOMMENT_MOD
+        revcommentmod_ = o.revcommentmod_;
+#endif
+#if HP_MINOR_MOD
+        minormod_ = o.minormod_;
+#endif
+#if HP_WIKIMODEL_MOD
+        wikimodelmod_ = o.wikimodelmod_;
+#endif
+#if HP_SECTITLE_MOD
+        sectitlemod_ = o.sectitlemod_;
+#endif
+#if HP_PARSERFN_MOD
+        parserfnmod_ = o.parserfnmod_;
+#endif
+#if HP_TABLECLASS_MOD
+        tableclassmod_ = o.tableclassmod_;
+#endif
+#if HP_ANCHOR_MOD
+        anchormod_ = o.anchormod_;
+#endif
+#if HP_PUBID_MOD
+        pubidmod_ = o.pubidmod_;
+#endif
+#if HP_TEMPPOS_MOD
+        tempposmod_ = o.tempposmod_;
+#endif
+#if HP_WIKISTACK_MOD
+        wikistackmod_ = o.wikistackmod_;
+#endif
+#if HP_LANG_MOD
+        langmod_ = o.langmod_;
+#endif
+#if HP_CATSORT_MOD
+        catsortmod_ = o.catsortmod_;
+#endif
+#if HP_TBLROW_MOD
+        tblrowmod_ = o.tblrowmod_;
+#endif
+#if HP_FILEOPT_MOD
+        fileoptmod_ = o.fileoptmod_;
+#endif
+#if HP_DEFAULTSORT_MOD
+        defaultsortmod_ = o.defaultsortmod_;
+#endif
+#if HP_REDIRTARGET_MOD
+        redirtargetmod_ = o.redirtargetmod_;
+#endif
+#if HP_DAB_MOD
+        dabmod_ = o.dabmod_;
+#endif
+#if HP_HATNOTE_MOD
+        hatnotemod_ = o.hatnotemod_;
+#endif
+#if HP_LASTLINK_MOD
+        lastlinkmod_ = o.lastlinkmod_;
+#endif
+#if HP_FWORD_MOD
+        fwordmod_ = o.fwordmod_;
+#endif
+#if HP_YEAR_MOD
+        yearmod_ = o.yearmod_;
+#endif
+#if HP_CAPMASK_MOD
+        capmaskmod_ = o.capmaskmod_;
+#endif
+#if HP_CELLTXT_MOD
+        celltxtmod_ = o.celltxtmod_;
+#endif
+#if HP_HTTPHOST_MOD
+        httphostmod_ = o.httphostmod_;
+#endif
+#if HP_PAREN_MOD
+        parenmod_ = o.parenmod_;
+#endif
+#if HP_LISTPOS_MOD
+        listposmod_ = o.listposmod_;
+#endif
+#if HP_SHAPE_MOD
+        shapemod_ = o.shapemod_;
+#endif
+#if HP_SUFFIX_MOD
+        suffixmod_ = o.suffixmod_;
+#endif
+#if HP_PREFIX_MOD
+        prefixmod_ = o.prefixmod_;
+#endif
+#if HP_CHARCLS_MOD
+        charclsmod_ = o.charclsmod_;
+#endif
+#if HP_VOWEL_MOD
+        vowelmod_ = o.vowelmod_;
+#endif
+#if HP_CONTR_MOD
+        contrmod_ = o.contrmod_;
+#endif
+#if HP_HYPHEN_MOD
+        hyphenmod_ = o.hyphenmod_;
+#endif
+#if HP_TOKENCLS_MOD
+        tokenclsmod_ = o.tokenclsmod_;
+#endif
+#if HP_RUNLEN_MOD
+        runlenmod_ = o.runlenmod_;
+#endif
+#if HP_WPOS_MOD
+        wposmod_ = o.wposmod_;
+#endif
+#if HP_BLANK_MOD
+        blankmod_ = o.blankmod_;
+#endif
+#if HP_SPRUN_MOD
+        sprunmod_ = o.sprunmod_;
+#endif
+#if HP_LINELEN_MOD
+        linelenmod_ = o.linelenmod_;
+#endif
+#if HP_TAGDIST_MOD
+        tagdistmod_ = o.tagdistmod_;
+#endif
+#if HP_MARKDIST_MOD
+        markdistmod_ = o.markdistmod_;
+#endif
+#if HP_UPPERGAP_MOD
+        uppergapmod_ = o.uppergapmod_;
+#endif
+#if HP_MONTH_MOD
+        monthmod_ = o.monthmod_;
+#endif
+#if HP_GALLERY_MOD
+        gallerymod_ = o.gallerymod_;
+#endif
+#if HP_SECKIND_MOD
+        seckindmod_ = o.seckindmod_;
+#endif
+#if HP_CITEKIND_MOD
+        citekindmod_ = o.citekindmod_;
+#endif
+#if HP_TAGNAME_MOD
+        tagnamemod_ = o.tagnamemod_;
+#endif
+#if HP_COLSPAN_MOD
+        colspanmod_ = o.colspanmod_;
+#endif
+#if HP_STYLE_MOD
+        stylemod_ = o.stylemod_;
+#endif
+#if HP_COORD_MOD
+        coordmod_ = o.coordmod_;
+#endif
+#if HP_DIGITGAP_MOD
+        digitgapmod_ = o.digitgapmod_;
+#endif
+#if HP_DOTGAP_MOD
+        dotgapmod_ = o.dotgapmod_;
+#endif
+#if HP_COMMAGAP_MOD
+        commagapmod_ = o.commagapmod_;
+#endif
+#if HP_WORDLEN_MOD
+        wordlenmod_ = o.wordlenmod_;
+#endif
+#if HP_SENTLEN_MOD
+        sentlenmod_ = o.sentlenmod_;
+#endif
+#if HP_LOWERGAP_MOD
+        lowergapmod_ = o.lowergapmod_;
+#endif
+#if HP_DIGITPOS_MOD
+        digitposmod_ = o.digitposmod_;
+#endif
+#if HP_SLASHGAP_MOD
+        slashgapmod_ = o.slashgapmod_;
+#endif
+#if HP_DIGLEN_MOD
+        diglenmod_ = o.diglenmod_;
+#endif
+#if HP_PREVLINE_MOD
+        prevlinemod_ = o.prevlinemod_;
+#endif
+#if HP_PREVSENT_MOD
+        prevsentmod_ = o.prevsentmod_;
+#endif
+#if HP_LINKLEN_MOD
+        linklenmod_ = o.linklenmod_;
+#endif
+#if HP_TPLLEN_MOD
+        tpllenmod_ = o.tpllenmod_;
+#endif
+#if HP_PARALEN_MOD
+        paralenmod_ = o.paralenmod_;
+#endif
+#if HP_ALNUMLEN_MOD
+        alnumlenmod_ = o.alnumlenmod_;
+#endif
+#if HP_SPLEN_MOD
+        splenmod_ = o.splenmod_;
+#endif
+#if HP_TITLEWORD_MOD
+        titlewordmod_ = o.titlewordmod_;
+#endif
+#if HP_HEADWORD_MOD
+        headwordmod_ = o.headwordmod_;
+#endif
+#if HP_INIT_MOD
+        initmod_ = o.initmod_;
+#endif
+#if HP_ORDINAL_MOD
+        ordinalmod_ = o.ordinalmod_;
+#endif
+#if HP_UNIT_MOD
+        unitmod_ = o.unitmod_;
+#endif
+#if HP_DECIMAL_MOD
+        decimalmod_ = o.decimalmod_;
+#endif
+#if HP_REPEAT_MOD
+        repeatmod_ = o.repeatmod_;
+#endif
+#if HP_CASEFLIP_MOD
+        caseflipmod_ = o.caseflipmod_;
+#endif
+#if HP_LEAD_MOD
+        leadmod_ = o.leadmod_;
+#endif
+#if HP_INFOVAL_MOD
+        infovalmod_ = o.infovalmod_;
+#endif
+#if HP_LINKTRAIL_MOD
+        linktrailmod_ = o.linktrailmod_;
+#endif
+#if HP_CELLKIND_MOD
+        cellkindmod_ = o.cellkindmod_;
+#endif
+#if HP_TBLCOL_MOD
+        tblcolmod_ = o.tblcolmod_;
+#endif
+#if HP_HEADIDX_MOD
+        headidxmod_ = o.headidxmod_;
+#endif
+#if HP_HTMLFMT_MOD
+        htmlfmtmod_ = o.htmlfmtmod_;
+#endif
+#if HP_INFOBOX_MOD
+        infoboxmod_ = o.infoboxmod_;
+#endif
+#if HP_SECLEVEL_MOD
+        seclevelmod_ = o.seclevelmod_;
+#endif
+#if HP_BRACE3_MOD
+        brace3mod_ = o.brace3mod_;
+#endif
+#if HP_NAMEDARG_MOD
+        namedargmod_ = o.namedargmod_;
+#endif
+#if HP_INCLUDE_MOD
+        includemod_ = o.includemod_;
+#endif
+#if HP_SIG_MOD
+        sigmod_ = o.sigmod_;
+#endif
+#if HP_WIKIBOLD_MOD
+        wikiboldmod_ = o.wikiboldmod_;
+#endif
+#if HP_URLPART_MOD
+        urlpartmod_ = o.urlpartmod_;
+#endif
+#if HP_REFIDX_MOD
+        refidxmod_ = o.refidxmod_;
+#endif
         for (int i = 0; i < kMatchModels; ++i) match_[i] = o.match_[i];
 #if HP_SPARSE_UTF8
         smatch_ = o.smatch_;
@@ -2928,6 +3300,9 @@ class Predictor {
 #endif
 #if HP_LZP_MOD
         lzp_ = o.lzp_;
+#endif
+#if HP_SR_MOD
+        sr_ = o.sr_;
 #endif
 #if HP_DMC_MOD
         dmc_ = o.dmc_;
@@ -2992,6 +3367,7 @@ class Predictor {
         utf8left_ = o.utf8left_;
 #endif
         rebind_internal_pointers_();
+        mixer_.reset_inputs();
     }
 
     void init_ctx_chain_() {

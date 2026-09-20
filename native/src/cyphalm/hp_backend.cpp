@@ -163,6 +163,17 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_si
     return byte_log_probs_bit_tree(*pred_, vocab_size);
 }
 
+std::vector<double> HpSequenceBackend::next_byte_log_probs_assign_reuse(int vocab_size) const {
+    const int n = std::max(1, std::min(vocab_size, 256));
+    std::vector<double> out(static_cast<std::size_t>(n), 0.0);
+    hp::Predictor scratch(cfg_);
+    for (int b = 0; b < n; ++b) {
+        scratch.copy_state_from(*pred_);
+        out[static_cast<std::size_t>(b)] = byte_log_prob(scratch, b);
+    }
+    return out;
+}
+
 std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size) const {
     const int n = std::max(1, std::min(vocab_size, 256));
     std::vector<double> out(static_cast<std::size_t>(n), 0.0);

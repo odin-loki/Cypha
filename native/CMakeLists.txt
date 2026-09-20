@@ -531,6 +531,17 @@ cypha_mingw_apply_exe_link_options(hp_bit_tree_smoke)
 add_test(NAME native_hp_bit_tree_smoke COMMAND "$<TARGET_FILE:hp_bit_tree_smoke>")
 set_tests_properties(native_hp_bit_tree_smoke PROPERTIES TIMEOUT 120)
 
+add_executable(hp_assign_reuse_bench tools/hp_assign_reuse_bench.cpp)
+target_link_libraries(hp_assign_reuse_bench PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_assign_reuse_bench)
+
+add_executable(hp_predictor_assign_parity_smoke tests/regression/hp_predictor_assign_parity_smoke.cpp)
+target_link_libraries(hp_predictor_assign_parity_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_predictor_assign_parity_smoke)
+add_test(NAME native_hp_predictor_assign_parity_smoke
+         COMMAND "$<TARGET_FILE:hp_predictor_assign_parity_smoke>")
+set_tests_properties(native_hp_predictor_assign_parity_smoke PROPERTIES TIMEOUT 180)
+
 add_executable(cyphalm_llm_eval tools/cyphalm_llm_eval.cpp)
 target_link_libraries(cyphalm_llm_eval PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_llm_eval)
