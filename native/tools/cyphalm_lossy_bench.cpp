@@ -12,6 +12,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/portable_popen.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_corpus.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
