@@ -45,6 +45,7 @@
 #include <cstring>
 
 #include "hp/int_math.hpp"
+#include "hp/undo.hpp"
 
 namespace hp {
 
@@ -109,29 +110,45 @@ class GriaGate {
     // -log2(p/4096) = 12 - log2(p), in Q16.
     void account_bit(int p_actual) {
         if (p_actual < 1) p_actual = 1;
+        hp_undo_note(pending_cost_);
         pending_cost_ += (12u << 16) - log2_q16(static_cast<std::uint32_t>(p_actual));
     }
 
     // Call once per byte, after the byte is known on both sides.
     void account_byte(int byte) {
-        // Evict the byte leaving the window.
         const int old = ring_[pos_];
         if (filled_) {
-            if (hist_[old] > 0) --hist_[old];
+            if (hist_[old] > 0) {
+                hp_undo_note(hist_[old]);
+                --hist_[old];
+            }
+            hp_undo_note(cost_sum_);
             cost_sum_ -= cost_[pos_];
         }
-        // Admit the new byte.
+        hp_undo_note(ring_[pos_]);
         ring_[pos_] = static_cast<std::uint8_t>(byte);
+        hp_undo_note(cost_[pos_]);
         cost_[pos_] = pending_cost_;
+        hp_undo_note(cost_sum_);
         cost_sum_ += pending_cost_;
+        hp_undo_note(hist_[byte]);
         ++hist_[byte];
+        hp_undo_note(pending_cost_);
         pending_cost_ = 0;
 
+        hp_undo_note(pos_);
         pos_ = (pos_ + 1) & (kWindow - 1);
-        if (pos_ == 0) filled_ = true;
-        if (!filled_) ++n_;
+        if (pos_ == 0) {
+            hp_undo_note(filled_);
+            filled_ = true;
+        }
+        if (!filled_) {
+            hp_undo_note(n_);
+            ++n_;
+        }
 
         if (++since_refresh_ >= kRefresh) {
+            hp_undo_note(since_refresh_);
             since_refresh_ = 0;
             recompute();
         }
@@ -160,23 +177,28 @@ class GriaGate {
         if (a < 0) a = 0;
         if (a > 65535) a = 65535;
         const int prev = alpha_q16_;
+        hp_undo_note(alpha_q16_);
         alpha_q16_ = static_cast<int>(a);
 
         // Level: rescale the observed dynamic range across 8 steps.
         std::int64_t lvl = (static_cast<std::int64_t>(alpha_q16_) - kAlphaLo) * 8 /
                            (kAlphaHi - kAlphaLo);
+        hp_undo_note(alpha_level_);
         alpha_level_ = static_cast<int>(lvl < 0 ? 0 : (lvl > 7 ? 7 : lvl));
 
         // Trajectory: falling / flat / rising. The dead band keeps the gate
         // from thrashing on sampling noise.
         const int d = alpha_q16_ - prev;
+        hp_undo_note(traj_);
         traj_ = (d < -768) ? 0 : ((d > 768) ? 2 : 1);
         // Smoothed |delta alpha| -- the regime-change magnitude.
         const std::uint32_t ad = static_cast<std::uint32_t>(d < 0 ? -d : d);
+        hp_undo_note(abs_delta_);
         abs_delta_ = (abs_delta_ * 3 + ad) >> 2;
 
         // Source entropy in half-bit steps: h_src is Q16 bits/byte.
         int eb = static_cast<int>(h_src >> 15);
+        hp_undo_note(ent_bucket_);
         ent_bucket_ = eb < 0 ? 0 : (eb > kEntBuckets - 1 ? kEntBuckets - 1 : eb);
     }
 

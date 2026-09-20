@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <random>
 
 namespace cypha::cyphalm {
 
@@ -11,7 +12,6 @@ namespace {
 
 constexpr double kLogEps = 1e-300;
 constexpr double kLog2 = 0.6931471805599453;
-constexpr int kByteBitDepth = 8;
 
 double bit_log_prob(int p12, int bit) {
     const double p1 = static_cast<double>(p12) / 4096.0;
@@ -37,23 +37,20 @@ hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria) {
 
 HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
     : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)) {
-    scratch_ = std::make_unique<hp::Predictor>(cfg);
-    init_dfs_ckpts_();
+    if (!serve_compact_) {
+        scratch_ = std::make_unique<hp::Predictor>(cfg);
+    }
 }
 
 void HpSequenceBackend::ensure_scratch_() const {
     if (!scratch_) {
         scratch_ = std::make_unique<hp::Predictor>(cfg_);
     }
-    if (dfs_ckpts_.empty()) {
-        init_dfs_ckpts_();
-    }
 }
 
 void HpSequenceBackend::compact_for_serve() {
     serve_compact_ = true;
     scratch_.reset();
-    dfs_ckpts_.clear();
 }
 
 void HpSequenceBackend::prune_cold_slots(int min_total) {
@@ -65,20 +62,9 @@ void HpSequenceBackend::prune_cold_slots(int min_total) {
 void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
     scratch_.reset();
-    dfs_ckpts_.clear();
     if (!serve_compact_) {
         scratch_ = std::make_unique<hp::Predictor>(cfg_);
-        init_dfs_ckpts_();
     }
-}
-
-void HpSequenceBackend::init_dfs_ckpts_() const {
-#if !defined(CYPHA_HP_GATE24)
-    dfs_ckpts_.reserve(static_cast<std::size_t>(kByteBitDepth + 1));
-    for (int d = 0; d <= kByteBitDepth; ++d) {
-        dfs_ckpts_.push_back(std::make_unique<hp::Predictor>(cfg_));
-    }
-#endif
 }
 
 double HpSequenceBackend::byte_log_prob(hp::Predictor& snap, int byte) {
@@ -104,36 +90,42 @@ bool HpSequenceBackend::branch_reaches_vocab(int vocab_size, int prefix, int dep
     return hi >= 0;
 }
 
-void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
-                                            hp::Predictor& node,
-                                            std::vector<double>& out_log_nats) const {
-    if (depth == kByteBitDepth) {
+void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefix,
+                                            double log_p_nats, hp::Predictor& node,
+                                            hp::PredictorUndoStack& undo,
+                                            std::vector<double>& out_log_nats) {
+    if (depth == 8) {
         if (prefix >= 0 && prefix < static_cast<int>(out_log_nats.size())) {
             out_log_nats[static_cast<std::size_t>(prefix)] = log_p_nats;
         }
         return;
     }
-    const int p12 = node.predict();
-    *dfs_ckpts_[static_cast<std::size_t>(depth)] = node;
     for (int bit = 0; bit <= 1; ++bit) {
         if (!branch_reaches_vocab(vocab_size, prefix, depth, bit)) {
             continue;
         }
-        node.update(bit);
-        const int next_prefix = (prefix << 1) | bit;
-        expand_bit_tree_dfs(vocab_size, depth + 1, next_prefix,
-                            log_p_nats + bit_log_prob(p12, bit), node, out_log_nats);
-        node = *dfs_ckpts_[static_cast<std::size_t>(depth)];
+        hp::UndoFrame& frame = undo.push_frame();
+        {
+            hp::UndoRecorderScope scope(frame);
+            const int p12 = node.predict();
+            const double child_log = log_p_nats + bit_log_prob(p12, bit);
+            node.update(bit);
+            const int next_prefix = (prefix << 1) | bit;
+            expand_bit_tree_dfs(vocab_size, depth + 1, next_prefix, child_log, node, undo,
+                                out_log_nats);
+        }
+        undo.pop_frame(node);
     }
 }
 
-std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) const {
+std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) {
     ensure_scratch_();
     const int n = std::max(1, std::min(vocab_size, 256));
     std::vector<double> out(static_cast<std::size_t>(n),
                             std::log(1.0 / static_cast<double>(n)));
-    *scratch_ = *pred_;
-    expand_bit_tree_dfs(n, 0, 0, 0.0, *scratch_, out);
+    scratch_->copy_state_from(*pred_);
+    hp::PredictorUndoStack undo;
+    expand_bit_tree_dfs(n, 0, 0, 0.0, *scratch_, undo, out);
     return out;
 }
 
@@ -142,28 +134,23 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
     const int n = std::max(1, std::min(vocab_size, 256));
     std::vector<double> out(static_cast<std::size_t>(n), 0.0);
     for (int b = 0; b < n; ++b) {
-        hp::Predictor snap = hp::Predictor::clone_from(*pred_, cfg_);
+        hp::Predictor snap(cfg_);
+        snap.copy_state_from(*pred_);
         out[static_cast<std::size_t>(b)] = byte_log_prob(snap, b);
     }
     return out;
 }
 
-std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) const {
+std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     if (use_legacy_byte_log_probs()) {
         return next_byte_log_probs_legacy(vocab_size);
     }
-#if defined(CYPHA_HP_GATE24)
-    // gate24: bit-tree DFS needs O(depth) predictor checkpoints; use legacy
-    // 256-clone until undo stack lands (see CYPHALM_HP_ALGORITHM_PROFILE.md).
-    return next_byte_log_probs_legacy(vocab_size);
-#else
     return next_byte_log_probs_bit_tree(vocab_size);
-#endif
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
     ensure_scratch_();
-    *scratch_ = *pred_;
+    scratch_->copy_state_from(*pred_);
     return byte_log_prob(*scratch_, static_cast<int>(byte));
 }
 
@@ -172,16 +159,17 @@ std::uint8_t HpSequenceBackend::sample_next_byte(double (*rng01)()) const {
         return 0;
     }
     ensure_scratch_();
-    *scratch_ = *pred_;
+    scratch_->copy_state_from(*pred_);
+    hp::Predictor& snap = *scratch_;
     int byte = 0;
     for (int i = 7; i >= 0; --i) {
-        const int p12 = scratch_->predict();
+        const int p12 = snap.predict();
         const double p1 = static_cast<double>(p12) / 4096.0;
         const double p0 = 1.0 - p1;
         const double r = rng01();
         const int bit = (r < p0 / (p0 + p1 + kLogEps)) ? 0 : 1;
         byte = (byte << 1) | bit;
-        scratch_->update(bit);
+        snap.update(bit);
     }
     return static_cast<std::uint8_t>(byte);
 }

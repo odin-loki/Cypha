@@ -18,6 +18,7 @@
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
 #include "hp/statemap.hpp"
+#include "hp/undo.hpp"
 
 namespace hp {
 
@@ -54,6 +55,12 @@ struct Counter {
     std::uint16_t n;
 };
 
+inline void hp_undo_note(Counter& cell) {
+    if (UndoRecorderScope::active()) {
+        UndoRecorderScope::active()->note(cell);
+    }
+}
+
 inline void counter_init(Counter* c, std::size_t n) {
     for (std::size_t i = 0; i < n; ++i) { c[i].p = 32768; c[i].n = 0; }
 }
@@ -65,6 +72,7 @@ inline int counter_predict(const Counter& c) {
 }
 
 inline void counter_update(Counter& c, int y, int limit) {
+    hp_undo_note(c);
     const int target = y ? 65535 : 0;
     const int d = target - static_cast<int>(c.p);
     c.p = static_cast<std::uint16_t>(static_cast<int>(c.p) + d / (c.n + 2));
@@ -130,15 +138,21 @@ class ContextModel {
             }
         }
         if (found >= 0) {
+            hp_undo_note(idx_);
             idx_ = static_cast<std::uint32_t>(found);
         } else {
+            hp_undo_note(idx_);
             idx_ = static_cast<std::uint32_t>(best);
+            hp_undo_note(t_.ref(idx_));
             t_.ref(idx_) = 0;
+            hp_undo_note(chk_[idx_]);
             chk_[idx_] = want;
         }
 #else
+        hp_undo_note(idx_);
         idx_ = mixed & mask_;
 #endif
+        hp_undo_note(state_);
         state_ = t_.get(idx_);
         p_ind_ = sm_.predict(state_);
 #if HP_PY_EXPERT
@@ -246,6 +260,7 @@ class ContextModel {
 #endif
         sm_.update(y, limit_, ncl);
         const StateTable& st = state_table();
+        hp_undo_note(t_.ref(idx_));
         t_.ref(idx_) = static_cast<std::uint16_t>(st.next(state_, y));
     }
 
@@ -284,6 +299,8 @@ class ByteRing {
           buf_(static_cast<std::size_t>(1) << buf_bits, 0) {}
 
     void push(std::uint8_t byte) {
+        hp_undo_note(buf_[pos_ & mask_]);
+        hp_undo_note(pos_);
         buf_[pos_ & mask_] = byte;
         ++pos_;
     }
@@ -344,9 +361,14 @@ class MatchModel {
         // 1. Verify the standing prediction before anything else.
         if (len_ > 0) {
             if (ptr_ < pos && ring_->at(ptr_) == static_cast<std::uint8_t>(byte)) {
-                if (len_ < 65535) ++len_;
+                if (len_ < 65535) {
+                    hp_undo_note(len_);
+                    ++len_;
+                }
+                hp_undo_note(ptr_);
                 ++ptr_;
             } else {
+                hp_undo_note(len_);
                 len_ = 0;
             }
         }
@@ -372,14 +394,20 @@ class MatchModel {
         if (len_ == 0) {
             const std::uint32_t cand = tab_.get(h);
             if (cand > 0 && cand < pos) {
+                hp_undo_note(ptr_);
+                hp_undo_note(len_);
                 ptr_ = cand;
                 len_ = 1;
             }
         }
+        hp_undo_note(tab_.ref(h));
         tab_.ref(h) = pos;
 
         // 3. Drop the match if it has fallen out of the ring buffer.
-        if (len_ > 0 && (pos - ptr_) > ring_->mask()) len_ = 0;
+        if (len_ > 0 && (pos - ptr_) > ring_->mask()) {
+            hp_undo_note(len_);
+            len_ = 0;
+        }
     }
 
     // Once per bit. bitpos is 0..7, c0 is the partial byte with sentinel.
@@ -393,12 +421,15 @@ class MatchModel {
         // byte agree with the predicted byte.
         if (bitpos > 0) {
             if (((pred_byte | 0x100) >> (8 - bitpos)) != c0) {
+                hp_undo_note(len_);
                 len_ = 0;
                 return 0;
             }
         }
         expected_ = (pred_byte >> (7 - bitpos)) & 1;
-        const int lq = len_ > 31 ? 31 : len_;  // quantised length
+        const int lq = len_ > 31 ? 31 : len_;
+        hp_undo_note(sidx_);
+        hp_undo_note(valid_);
         sidx_ = lq * 2 + expected_;
         valid_ = true;
         return counter_predict(st_[sidx_]);
@@ -501,17 +532,30 @@ class HebbianModel {
         std::uint64_t& target = syn_target_[slot];
         std::uint8_t& strength = syn_strength_[slot];
         if (target == cur_word) {
-            if (strength < 255) ++strength;          // potentiation
+            if (strength < 255) {
+                hp_undo_note(strength);
+                ++strength;          // potentiation
+            }
         } else if (strength > 0) {
+            hp_undo_note(strength);
             --strength;                               // competition
-            if (strength == 0) target = cur_word;     // takeover
+            if (strength == 0) {
+                hp_undo_note(target);
+                target = cur_word;     // takeover
+            }
         } else {
+            hp_undo_note(target);
+            hp_undo_note(strength);
             target = cur_word;
             strength = 1;
         }
         // Synaptic scaling: global slow decay keeps strengths bounded and
         // lets the network forget associations that stop being reinforced.
-        if ((++tick_ & 0x3FF) == 0 && strength > 0) --strength;
+        hp_undo_note(tick_);
+        if ((++tick_ & 0x3FF) == 0 && strength > 0) {
+            hp_undo_note(strength);
+            --strength;
+        }
     }
 
     // Context for the current bit: the strongest association from the
@@ -537,6 +581,7 @@ class HebbianModel {
     void update(int y) {
         sm_.update(y, limit_);
         const StateTable& st = state_table();
+        hp_undo_note(t_.ref(idx_));
         t_.ref(idx_) = static_cast<std::uint16_t>(st.next(state_, y));
     }
 

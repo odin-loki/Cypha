@@ -36,6 +36,7 @@
 #include "hp/wordmatch.hpp"
 #include "hp/wordstream.hpp"
 #include "hp/sentmem.hpp"
+#include "hp/undo.hpp"
 
 #ifndef HP_W0
 #define HP_W0 0
@@ -362,7 +363,8 @@ class Predictor {
     }
 
     explicit Predictor(const Config& cfg)
-        : byte_ring_(cfg.buf_bits),
+        : cfg_(cfg),
+          byte_ring_(cfg.buf_bits),
           o1_(add_bits(slot_bits(cfg.table_bits, -2), HP_SLOT_O12 ? 1 : 0), 1023),
           o2_(add_bits(slot_bits(cfg.table_bits, -2), HP_SLOT_O12 ? 1 : 0), 1023),
           o3_(add_bits(slot_bits(cfg.table_bits, 0),
@@ -906,22 +908,35 @@ class Predictor {
         set_byte_contexts();
     }
 
-    /// Deep copy with pointer rebind (``ctx_chain_``, match rings). Requires ``cfg`` used at
-    /// construction because ``Predictor`` has no default constructor.
-    static Predictor clone_from(const Predictor& o, const Config& cfg) {
-        Predictor p(cfg);
-        p.assign_from_(o);
-        return p;
-    }
+    /// Deep copy with pointer rebind into ``dst`` (must share ``dst``'s construction config).
+    static void clone_from(const Predictor& o, Predictor& dst) { dst.copy_state_from(o); }
 
+    Predictor(const Predictor&) = delete;
     Predictor& operator=(const Predictor& o) {
         if (this == &o) return *this;
         assign_from_(o);
         return *this;
     }
 
-    Predictor(Predictor&&) noexcept = default;
-    Predictor& operator=(Predictor&&) noexcept = default;
+    Predictor(Predictor&&) = delete;
+    Predictor& operator=(Predictor&&) = delete;
+
+    /// Deep copy live state from ``o`` with pointer rebind (preferred over rvalue assign).
+    void copy_state_from(const Predictor& o) {
+        if (this != &o) {
+            assign_from_(o);
+        }
+    }
+
+    /// Record mutations during ``update(y)``; restore with ``undo_checkpoint(frame)``.
+    void update_tracked(int y, UndoFrame& frame) {
+        frame.push_predictor(*this, cfg_);
+        update(y);
+    }
+
+    void undo_checkpoint(const UndoFrame& frame) { frame.pop_predictor(*this); }
+
+    const Config& config() const { return cfg_; }
 
     int predict() {
         mixer_.reset_inputs();
@@ -1629,13 +1644,19 @@ class Predictor {
         hebb_.update(y);
         pool_.update(y, y ? (4096 - pr_final_) >> 4 : pr_final_ >> 4);
 
+        hp_undo_note(c0_);
+        hp_undo_note(bitpos_);
         c0_ = (c0_ << 1) | y;
         ++bitpos_;
         if (bitpos_ == 8) {
             const int byte = c0_ & 0xff;
+            hp_undo_note(c0_);
+            hp_undo_note(bitpos_);
             c0_ = 1;
             bitpos_ = 0;
-            end_of_byte(byte);
+            if (UndoRecorderScope::active() == nullptr) {
+                end_of_byte(byte);
+            }
         }
     }
 
@@ -1693,6 +1714,9 @@ class Predictor {
 
     /// Clear path-dependent runtime state; learned tables are preserved.
     void reset_stream_state();
+
+    /// Rebind match/wordstream internal pointers after copy (bit-tree scratch fork).
+    void rebind_streams() { rebind_internal_pointers_(); }
 
  private:
     static const std::vector<int>& gate_sizes() {
@@ -1849,6 +1873,7 @@ class Predictor {
     }
 
     void end_of_byte(int byte) {
+        hp_undo_note(hist_);
         hist_ = (hist_ << 8) | static_cast<std::uint64_t>(byte);
 
         const bool alnum = (byte >= 'a' && byte <= 'z') ||
@@ -1858,12 +1883,14 @@ class Predictor {
         const bool letter = (byte >= 'a' && byte <= 'z') ||
                             (byte >= 'A' && byte <= 'Z');
         if (alnum) {
+            hp_undo_note(word_hash_);
             word_hash_ = mix64(word_hash_ * 0x100000001B3ull +
                                static_cast<std::uint64_t>(byte | 0x20));
 #if HP_PRONOUN_MOD
             if (pw_n_ < 11) pw_[pw_n_++] = static_cast<std::uint8_t>(byte | 32);
 #endif
         } else {
+            hp_undo_note(word_hash_);
             word_hash_ = 0;
 #if HP_PRONOUN_MOD
             if (pw_n_ > 0) {
@@ -1873,9 +1900,11 @@ class Predictor {
 #endif
         }
         if (letter) {
+            hp_undo_note(letter_hash_);
             letter_hash_ = mix64(letter_hash_ * 0x100000001B3ull +
                                  static_cast<std::uint64_t>(byte | 0x20));
         } else {
+            hp_undo_note(letter_hash_);
             letter_hash_ = 0;
         }
 
@@ -1883,12 +1912,19 @@ class Predictor {
             if (col_pos_ < kLineMax)
                 std::memset(line_buf_[cur_line_idx_] + col_pos_, 0,
                             static_cast<std::size_t>(kLineMax - col_pos_));
+            hp_undo_note(cur_line_idx_);
             cur_line_idx_ ^= 1;
+            hp_undo_note(col_pos_);
             col_pos_ = 0;
         } else {
-            if (col_pos_ < kLineMax)
+            if (col_pos_ < kLineMax) {
+                hp_undo_note(line_buf_[cur_line_idx_][col_pos_]);
                 line_buf_[cur_line_idx_][col_pos_] = static_cast<std::uint8_t>(byte);
-            if (col_pos_ < kLineMax - 1) ++col_pos_;
+            }
+            if (col_pos_ < kLineMax - 1) {
+                hp_undo_note(col_pos_);
+                ++col_pos_;
+            }
         }
 
 #if HP_WIKI_STATES
@@ -1942,6 +1978,7 @@ class Predictor {
 #if HP_GATE_BRANCH
         branch3_.push_byte(byte, hist_);
 #endif
+        hp_undo_note(hist2_);
         hist2_ = (hist2_ << 8) | ((hist_ >> 56) & 0xffull);
         pool_.end_byte();
         pool_.set_contexts(hist_, hist2_);
@@ -3399,6 +3436,7 @@ class Predictor {
     }
 
     ByteRing byte_ring_;
+    Config cfg_;
     ContextModel o1_, o2_, o3_, o4_, o6_;
 #if HP_HASH2_O6
     ContextModel o6b_;
@@ -3900,5 +3938,31 @@ class Predictor {
     int utf8left_ = 0;
 #endif
 };
+
+inline void PredictorUndoStack::pop_frame(Predictor& pred) {
+    if (frames_.empty()) {
+        return;
+    }
+    frames_.back().pop_predictor(pred);
+    frames_.pop_back();
+}
+
+inline void UndoFrame::push_predictor(const Predictor& p, const Config& cfg) {
+    if (!snap_) {
+        snap_ = std::make_unique<Predictor>(cfg);
+    }
+    snap_->copy_state_from(p);
+    has_snap_ = true;
+}
+
+inline void UndoFrame::pop_predictor(Predictor& p) const {
+    if (!patches_.empty()) {
+        restore_patches();
+        return;
+    }
+    if (has_snap_ && snap_) {
+        p.copy_state_from(*snap_);
+    }
+}
 
 }  // namespace hp

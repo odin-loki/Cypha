@@ -9,6 +9,7 @@
 #include "hp/int_math.hpp"
 #include "hp/mixer_weights.hpp"
 #include "hp/simd_dot.hpp"
+#include "hp/undo.hpp"
 
 namespace hp {
 
@@ -116,6 +117,7 @@ class MixerNet {
         for (int j = 0; j < k_; ++j) {
             const std::int32_t dv = static_cast<std::int32_t>(
                 (static_cast<std::int64_t>(dot_[j]) * err2 * lr_) >> 14);
+            hp_undo_note(v[j]);
             v[j] = mixer_wt_pack(
                 clamp_int(mixer_wt_expand(v[j]) + dv, -kMixerClamp, kMixerClamp));
         }
@@ -140,6 +142,7 @@ class MixerNet {
                 const std::int32_t dU = static_cast<std::int32_t>(
                     (static_cast<std::int64_t>(hid_[static_cast<std::size_t>(j) * r + f]) *
                      err * l1) >> 14);
+                hp_undo_note(U[f]);
                 U[f] = mixer_wt_pack(clamp_int(Uk + dU, -kMixerClamp, kMixerClamp));
                 int l1k = static_cast<int>(
                     (static_cast<std::int64_t>(l1) * (Uk >> 8) + 128) >> 8);
@@ -253,6 +256,8 @@ class APM {
     }
 
     void update(int y, int rate = 7) {
+        hp_undo_note(t_[idx_]);
+        hp_undo_note(t_[idx_ + 1]);
         const int g = (y << 16) + (y << rate) - y - y;
         t_[idx_] = static_cast<std::uint16_t>(
             t_[idx_] + ((g - static_cast<int>(t_[idx_])) >> rate));

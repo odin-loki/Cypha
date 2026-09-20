@@ -532,6 +532,15 @@ add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
 target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_lossy_bench)
 
+add_executable(hp_undo_smoke tools/hp_undo_smoke.cpp)
+target_link_libraries(hp_undo_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_undo_smoke)
+
+add_executable(hp_inference_bench tools/hp_inference_bench.cpp)
+target_link_libraries(hp_inference_bench PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_inference_bench)
+
+
 add_executable(hp_shard_merge_spike tools/hp_shard_merge_spike.cpp)
 target_link_libraries(hp_shard_merge_spike PRIVATE cypha_lm_native)
 cypha_apply_hp_compile_flags(hp_shard_merge_spike)

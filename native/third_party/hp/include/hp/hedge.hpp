@@ -49,6 +49,7 @@
 
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
+#include "hp/undo.hpp"
 
 #ifndef HP_HEDGE_ETA
 #define HP_HEDGE_ETA 96
@@ -101,9 +102,13 @@ class Hedge {
             // the average degenerates.
             const std::uint32_t decay = ((loss_q16 >> 8) * HP_HEDGE_ETA) >> 8;
             const std::uint32_t keepf = 65536u - (decay > 8192u ? 8192u : decay);
+            hp_undo_note(w_[d]);
             w_[d] = static_cast<Weight>(
                 (static_cast<std::uint64_t>(w_[d]) * keepf) >> 16);
-            if (w_[d] < 16) w_[d] = 16;   // floor: never fully kill an expert
+            if (w_[d] < 16) {
+                hp_undo_note(w_[d]);
+                w_[d] = 16;
+            }   // floor: never fully kill an expert
             wsum += w_[d];
         }
 
@@ -111,6 +116,7 @@ class Hedge {
         //    underflow. Total is 1<<16.
         if (wsum > 0) {
             for (int d = 0; d < n_; ++d) {
+                hp_undo_note(w_[d]);
                 w_[d] = static_cast<Weight>(
                     (static_cast<std::uint64_t>(w_[d]) << 16) / wsum);
             }
@@ -125,6 +131,7 @@ class Hedge {
                     (static_cast<std::uint64_t>(w_[d]) * (65536u - sigma_q16)) >> 16;
                 const std::uint64_t share =
                     (static_cast<std::uint64_t>(unif) * sigma_q16) >> 16;
+                hp_undo_note(w_[d]);
                 w_[d] = static_cast<Weight>(keep + share);
             }
         }

@@ -44,6 +44,7 @@
 
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
+#include "hp/undo.hpp"
 #include "hp/models.hpp"
 
 namespace hp {
@@ -111,6 +112,7 @@ class DiscoveryPool {
                 (12u << 16) - log2_q16(static_cast<std::uint32_t>(pa < 1 ? 1 : pa));
             // Weight the charge by ensemble difficulty: covering easy bits
             // earns a slot nothing.
+            hp_undo_note(loss_[i]);
             loss_[i] += (static_cast<std::uint64_t>(cost) *
                          static_cast<std::uint32_t>(ens_err + 64)) >> 8;
         }
