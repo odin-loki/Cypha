@@ -298,6 +298,16 @@ struct CyphaLMConfig {
     int hp_mixer_lr = 2;
     /// Enable hp GRIA alpha gating.
     bool hp_gria = true;
+
+    /// Lossy RAM: when >0, overrides ``hp_table_bits`` (gate24 compile flags unchanged).
+    /// Env: ``CYPHA_HP_LOSSY_MEM``. Typical tiers: 20 (−4× table RAM), 18 (−16×).
+    int hp_lossy_mem = 0;
+    /// Lossy serve: drop ``scratch_`` + DFS checkpoint pool after init (RSS −~40%).
+    /// Env: ``CYPHA_HP_SERVE_COMPACT=1``.
+    bool hp_serve_compact = false;
+    /// Lossy quality: prune hash slots with total state count below this (0=off).
+    /// Env: ``CYPHA_HP_PRUNE_COLD_MIN_N``. Applied after warmup via ``prune_cold_slots()``.
+    int hp_prune_cold_min_n = 0;
 };
 
 /// Compile-time ``HP_SLOT_MAX`` baked into this binary (24, gate24).
@@ -319,6 +329,17 @@ void apply_pgm_logits_recipe(CyphaLMConfig& cfg);
 
 /// Production CyphaLM default: gate24 hp (v78 flags + table_bits=22, slot_max=24).
 void apply_hp_production_recipe(CyphaLMConfig& cfg);
+
+/// Lossy gate24 tier: same v78 compile profile, smaller ``hp_table_bits`` (RAM lever).
+/// ``mem_bits`` clamped to [16, 24]. Does not change ``HP_SLOT_MAX``.
+void apply_hp_lossy_recipe(CyphaLMConfig& cfg, int mem_bits);
+
+/// Overlay lossy env vars (``CYPHA_HP_LOSSY_MEM``, ``CYPHA_HP_SERVE_COMPACT``,
+/// ``CYPHA_HP_PRUNE_COLD_MIN_N``). Safe no-op when unset.
+void apply_hp_lossy_env(CyphaLMConfig& cfg);
+
+/// Effective table bits after lossy override.
+int hp_effective_table_bits(const CyphaLMConfig& cfg);
 
 /// Back-compat alias for ``apply_hp_production_recipe``.
 void apply_hybrid_production_recipe(CyphaLMConfig& cfg);

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -110,6 +111,37 @@ void normalize_hp_table_bits(CyphaLMConfig& cfg) {
     }
     if (cfg.hp_table_bits < 16) {
         cfg.hp_table_bits = 16;
+    }
+}
+
+int hp_effective_table_bits(const CyphaLMConfig& cfg) {
+    if (cfg.hp_lossy_mem > 0) {
+        return std::max(16, std::min(cfg.hp_lossy_mem, 24));
+    }
+    return cfg.hp_table_bits;
+}
+
+void apply_hp_lossy_recipe(CyphaLMConfig& cfg, int mem_bits) {
+    apply_hp_production_recipe(cfg);
+    cfg.hp_lossy_mem = std::max(16, std::min(mem_bits, 24));
+    normalize_hp_table_bits(cfg);
+}
+
+void apply_hp_lossy_env(CyphaLMConfig& cfg) {
+    const char* mem = std::getenv("CYPHA_HP_LOSSY_MEM");
+    if (mem != nullptr && mem[0] != '\0') {
+        cfg.hp_lossy_mem = std::max(16, std::min(std::atoi(mem), 24));
+    }
+    const char* compact = std::getenv("CYPHA_HP_SERVE_COMPACT");
+    if (compact != nullptr && compact[0] == '1' && compact[1] == '\0') {
+        cfg.hp_serve_compact = true;
+    }
+    const char* prune = std::getenv("CYPHA_HP_PRUNE_COLD_MIN_N");
+    if (prune != nullptr && prune[0] != '\0') {
+        cfg.hp_prune_cold_min_n = std::max(0, std::atoi(prune));
+    }
+    if (cfg.hp_lossy_mem > 0) {
+        normalize_hp_table_bits(cfg);
     }
 }
 

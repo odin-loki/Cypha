@@ -160,6 +160,12 @@ class CyphaLMModel {
     const HpSequenceBackend& hp_backend() const { return *hp_; }
     HpSequenceBackend& hp_backend() { return *hp_; }
 
+    /// Lossy serve: drop auxiliary predictors (RSS). Idempotent.
+    void compact_hp_for_serve();
+
+    /// Lossy quality: prune cold hash slots after warmup (see ``hp_prune_cold_min_n``).
+    void prune_hp_cold_slots(int min_total = 0);
+
     friend void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path);
 
  private:

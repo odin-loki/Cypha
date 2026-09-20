@@ -53,6 +53,14 @@ class HpSequenceBackend {
     const hp::Predictor& predictor() const { return *pred_; }
     hp::Predictor& predictor() { return *pred_; }
 
+    /// Drop ``scratch_`` + DFS checkpoints to cut RSS on serve paths (lazy recreate).
+    void compact_for_serve();
+
+    /// Lossy: reset cold hash slots (see ``hp::Predictor::prune_cold_hash_slots``).
+    void prune_cold_slots(int min_total);
+
+    bool serve_compact() const { return serve_compact_; }
+
     int table_bits() const { return cfg_.table_bits; }
     int mixer_lr() const { return cfg_.mixer_lr; }
     bool gria_enabled() const { return cfg_.gria; }
@@ -69,7 +77,10 @@ class HpSequenceBackend {
     static bool branch_reaches_vocab(int vocab_size, int prefix, int depth, int bit);
     void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
                              hp::Predictor& node, std::vector<double>& out_log_nats) const;
-    void init_dfs_ckpts_();
+    void init_dfs_ckpts_() const;
+    void ensure_scratch_() const;
+
+    bool serve_compact_ = false;
 };
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria);

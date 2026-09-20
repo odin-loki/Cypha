@@ -1,12 +1,83 @@
 # CyphaLM lossy LLM execution plan
 
-**Date:** 2026-09-19  
-**Status:** Phased roadmap from lossless hp mixer → serve-time probability distribution with less RAM  
-**Inputs:** [`CYPHALM_LLM_PROFILE_REPORT.md`](CYPHALM_LLM_PROFILE_REPORT.md), [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md), [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md)
+**Date:** 2026-09-20 (updated)  
+**Status:** Phase 0 done; **first concrete lossy levers landed** (mem tier, serve-compact, cold-slot prune)  
+**Inputs:** [`CYPHALM_LLM_PROFILE_REPORT.md`](CYPHALM_LLM_PROFILE_REPORT.md), [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md), [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md), [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json)
 
 ---
 
-## Measured bottlenecks (this VM, light profile, `table_bits=22`)
+## Ranked lossy levers (gate24 base, quality bar ~1.61 enwik BPC)
+
+Priority = expected **RAM/speed payoff** vs **quality risk** at gate24 compile profile (`v78_flags.ps1` + `HP_SLOT_MAX=24`). All levers keep gate24 recipe; lossy tiers are runtime/config overlays.
+
+| Rank | Lever | API / flag | RAM | Speed | Quality risk | Status |
+|------|-------|------------|-----|-------|--------------|--------|
+| **1** | **Lower `table_bits` (mem tier)** | `apply_hp_lossy_recipe(cfg, mem)` / `CYPHA_HP_LOSSY_MEM=20` | **−4× per −2 bits** (mem 20 ≈ −54% RSS init) | **~4.8×** faster `predict_next` @ mem20 (smaller clones) | **Low–med** on long corpora; must re-measure enwik | **Implemented** |
+| **2** | **Serve-compact (drop scratch + DFS pool)** | `hp_serve_compact` / `CYPHA_HP_SERVE_COMPACT=1` / `compact_hp_for_serve()` | **−~50%** construct RSS (lazy recreate) | Neutral (first `predict_next` pays recreate) | **None** (identical math) | **Implemented** |
+| **3** | **Cold hash-slot prune** | `hp_prune_cold_min_n` / `CYPHA_HP_PRUNE_COLD_MIN_N=4` / `prune_hp_cold_slots()` | No table shrink (fixed arrays) | **~1.7×** faster `predict_next` @ min4 (measured) | **Low** if threshold small; rises with aggressive min | **Implemented** |
+| **4** | True undo stack (latency, not lossy) | delta-undo on `hp::Predictor::update` | Drop 9 DFS checkpoints | **10–50×** bit-tree score (est.) | **None** if exact | **PR #7** (other agent) |
+| **5** | Frozen serve snapshot | train online → export RO `HpSequenceBackend` | One RO predictor + mmap | Faster init; multi-worker share | **Med** (stale vs online) | Planned |
+| **6** | Quantized mixer / APM | `HP_MIXER_WT16` (hp compile) | **−50%** mixer RAM | Neutral | **Low** if byte-identical proxy holds | hp upstream option |
+| **7** | Top-M partial expansion | expand top-M bytes only | Neutral | **~256/M×** generation | **Med–high** | Planned (phase 4) |
+| **8** | Distillation to smaller tables | train gate24 → export mem18 weights | Same as mem tier | Same as mem tier | **Med** | Research |
+| **9** | Slot / count floors (compile) | lower `HP_SLOT_MAX` SKU | Large at slot 35 | Slower at high slot | **Med** | gate24 fixed @24 |
+| **10** | mmap shared RO tables | post-freeze snapshot | **~N×** workers | Neutral | **Low** | Planned (phase 6) |
+
+**Quality bar:** gate24 enwik8MB observe/archive **~1.612 BPC** must not be destroyed for production lossy tiers. WikiText online observe is a **relative** screen only (absolute BPC ≠ enwik archive).
+
+---
+
+## Measured first cut (2026-09-20, `cyphalm_lossy_bench`)
+
+Corpus: WikiText-2 train slice, 32k warmup + 50k observe eval, 1× `predict_next` latency. Full JSON: [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json).
+
+| Variant | RSS init (MiB) | Δ BPC vs baseline | observe B/s | predict_next (s) |
+|---------|----------------|-------------------|-------------|------------------|
+| gate24 baseline mem22 | 3053 | — | 14.5k | 175.5 |
+| **lossy mem20** | 1400 | +0.00012 | 20.7k | **36.6** |
+| serve_compact mem22 | 1538 | 0 | 18.1k | 187.2 |
+| prune_cold min4 mem22 | 3053 | 0 | 16.6k | 105.4 |
+| combo mem20+compact+prune4 | 1708 | +0.00012 | 21.1k | **63.1** |
+
+**Takeaways:**
+- **mem20** is the strongest RAM/speed lever with negligible BPC delta on WikiText online observe.
+- **serve_compact** cuts ~50% construct RSS with **zero** BPC change; lazy scratch recreate adds first-call latency.
+- **prune_cold_min4** after 32k warmup: no measurable BPC hit here; speeds `predict_next` ~1.7× (hash table hotter).
+- Combo stacks RAM + speed; enwik gate24 screen still required before calling any tier production-ready.
+
+Reproduce:
+
+```bash
+cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
+cmake --build native/build --target cyphalm_lossy_bench
+native/build/cyphalm_lossy_bench --warmup-n 32768 --eval-n 50000 --latency-iters 1
+```
+
+---
+
+## API surface (this PR)
+
+| Config field | Env var | Effect |
+|--------------|---------|--------|
+| `hp_lossy_mem` | `CYPHA_HP_LOSSY_MEM` | Override effective `table_bits` (16–24) |
+| `hp_serve_compact` | `CYPHA_HP_SERVE_COMPACT=1` | Drop `scratch_` + DFS checkpoints at init |
+| `hp_prune_cold_min_n` | `CYPHA_HP_PRUNE_COLD_MIN_N` | Prune hash slots with state count `< N` after warmup |
+
+```cpp
+apply_hp_lossy_recipe(cfg, 20);   // gate24 compile + mem20 tables
+cfg.hp_serve_compact = true;
+cfg.hp_prune_cold_min_n = 4;
+CyphaLMModel model(cfg);
+// ... warmup bytes ...
+model.prune_hp_cold_slots();      // optional explicit call
+model.compact_hp_for_serve();     // idempotent
+```
+
+hp internals: `hp::Predictor::prune_cold_hash_slots(min_total)` walks `ctx_chain_` context models + bias counters.
+
+---
+
+## Measured bottlenecks (reference, light profile, `table_bits=22`)
 
 | Bottleneck | Measurement | Implication |
 |------------|-------------|-------------|
@@ -30,17 +101,29 @@ Default stays **light** for CI RAM. Document any quality headline with SKU + met
 
 ---
 
-## Phase 0 — Done (this PR stack)
+## Phase 0 — Done
 
 | Item | Status |
 |------|--------|
 | `eval_bpc` → bit-serial observe (compress-equivalent) | **Done** |
 | `next_byte_log_probs` → MSB bit-tree default (not 256× clone) | **Done** |
 | Checkpoint-pool DFS on `scratch_` (no per-fork `clone_from`) | **Done** |
-| `sample_next_byte` / generation bit-serial on one scratch | **Done** (pre-existing) |
+| `sample_next_byte` / generation bit-serial on one scratch | **Done** |
 | `gate24` CMake profile + `apply_hp_gate24_recipe()` | **Done** |
 | Large-n observe eval harness + report | **Done** |
 | Legacy 256-clone opt-in: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1` | **Done** |
+
+---
+
+## Phase 0b — Done (this PR): first lossy levers
+
+| Item | Status |
+|------|--------|
+| `apply_hp_lossy_recipe` + `CYPHA_HP_LOSSY_MEM` | **Done** |
+| `hp_serve_compact` + `compact_for_serve()` | **Done** |
+| `prune_cold_hash_slots` on hp context chain + Cypha API | **Done** |
+| `cyphalm_lossy_bench` harness + measured JSON | **Done** |
+| Ranked lever table (this doc) | **Done** |
 
 ---
 
@@ -55,7 +138,8 @@ Default stays **light** for CI RAM. Document any quality headline with SKU + met
 | Quality risk | **Low** if undo is exact inverse of `hp::Predictor::update` |
 | Experiment | Implement undo in `hp_backend` or thin hp wrapper; parity vs `hp_bit_tree_smoke` on 1k contexts; target `predict_next` < 1 s @ mem 22 |
 
-**Gate:** `hp_bit_tree_smoke` + extended random grid; latency regression doc in `CYPHALM_LLM_EVAL.md`.
+**Gate:** `hp_bit_tree_smoke` + extended random grid; latency regression doc in `CYPHALM_LLM_EVAL.md`.  
+**Coordination:** delta-undo may land on PR #7 — keep branch independent.
 
 ---
 
@@ -70,6 +154,8 @@ Default stays **light** for CI RAM. Document any quality headline with SKU + met
 | Quality risk | **Medium** — stale snapshot vs online adapter |
 | Experiment | `CyphaLMModel::save` → load RO `HpSequenceBackend`; WikiText observe BPC online vs frozen after N train bytes |
 
+**Note:** `hp_serve_compact` (phase 0b) is a RAM subset of this — drops auxiliary predictors but tables still mutate.
+
 ---
 
 ## Phase 3 — Lower `table_bits` / slot LLM SKU
@@ -81,6 +167,8 @@ Default stays **light** for CI RAM. Document any quality headline with SKU + met
 | Expected RAM | **−4–16×** vs mem 22 (hp harness axis) |
 | Quality risk | **Medium** — measure WikiText observe BPC only |
 | Experiment | Sweep in `cyphalm_llm_eval`; plot RSS vs BPC |
+
+**Status:** mem20 tier implemented; enwik gate24 screen pending.
 
 ---
 
@@ -133,7 +221,8 @@ Uses bit-tree naturally: stop DFS when outside top-M prefix support.
 
 | Suite | Target |
 |-------|--------|
-| CI `native_hp_bit_tree_smoke` | Parity gate (in CTest this PR) |
+| CI `native_hp_bit_tree_smoke` | Parity gate (in CTest) |
+| `cyphalm_lossy_bench` | RSS / BPC / predict_next deltas per lever |
 | Nightly `cyphalm_llm_eval` @ n≥100k | Observe BPC drift per SKU |
 | Top-k @ n≥64 | After phase 1 undo (currently ~37 s/step) |
 | gate24 / champ enwik8MB | Host with corpus + ≥32 GiB for champ compress |
@@ -148,6 +237,8 @@ Uses bit-tree naturally: stop DFS when outside top-M prefix support.
 | `eval_bpc()` / observe | Yes | **Yes** (= hp archive @ same flags) |
 | `next_byte_log_probs` bit-tree | Yes (dist only) | No (no main-state update) |
 | `predict_next` + top-k | Yes (dist) | No — **clone-API class** |
+| `hp_lossy_mem` / mem tier | **Lossy RAM** | Re-measure; online observe may match |
+| `prune_cold_hash_slots` | **Lossy** | Re-measure |
 | Top-M partial (phase 4+) | **Lossy** | No |
 | Frozen serve snapshot | Yes if refreshed | Yes if same flags + fresh enough |
 
@@ -155,7 +246,8 @@ Uses bit-tree naturally: stop DFS when outside top-M prefix support.
 
 ## Related
 
+- [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json) — first-cut measured numbers  
 - [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md) — large-n measured numbers  
 - [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md) — protocol / SKU / enwik archive  
-- [`native/cmake/HpFlags.cmake`](../../native/cmake/HpFlags.cmake) — light / gate24 / champ  
+- [`native/cmake/HpFlags.cmake`](../../native/cmake/HpFlags.cmake) — gate24  
 - [`bench/config/profiles/cyphalm_hp_gate24.json`](../../bench/config/profiles/cyphalm_hp_gate24.json)

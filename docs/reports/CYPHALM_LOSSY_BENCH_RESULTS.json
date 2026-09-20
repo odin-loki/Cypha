@@ -1,0 +1,63 @@
+{
+  "date": "2026-09-20",
+  "harness": "cyphalm_lossy_bench",
+  "vm": "cloud-agent linux",
+  "corpus": "wikitext2_train_slice (400k bytes available)",
+  "warmup_n": 32768,
+  "eval_n": 50000,
+  "gate24_quality_bar_bpc": 1.612,
+  "note": "observe_bpc is online bit-serial on WikiText slice (not enwik8MB archive). Relative deltas across variants are valid; absolute BPC != gate24 enwik bar.",
+  "variants": [
+    {
+      "variant": "gate24_baseline_mem22",
+      "vm_rss_kb_init": 3125936,
+      "vm_rss_kb_after_warmup": 3126228,
+      "observe_bpc": 2.7051746170426143,
+      "observe_bytes_per_sec": 14525.23,
+      "predict_next_ms_per_call": 175539.62,
+      "construct_ms": 2905.72
+    },
+    {
+      "variant": "lossy_mem20",
+      "vm_rss_kb_init": 1432912,
+      "observe_bpc": 2.7052921451409353,
+      "observe_bpc_delta_vs_baseline": 0.000117528098321,
+      "observe_bytes_per_sec": 20692.40,
+      "predict_next_ms_per_call": 36649.15,
+      "predict_next_speedup_vs_baseline": 4.79,
+      "construct_ms": 510.54,
+      "rss_reduction_pct": 54.1
+    },
+    {
+      "variant": "serve_compact_mem22",
+      "vm_rss_kb_init": 1575392,
+      "observe_bpc": 2.7051746170426143,
+      "observe_bpc_delta_vs_baseline": 0.0,
+      "observe_bytes_per_sec": 18130.30,
+      "predict_next_ms_per_call": 187227.96,
+      "construct_ms": 1719.76,
+      "rss_reduction_pct": 49.6
+    },
+    {
+      "variant": "prune_cold_min4_mem22",
+      "vm_rss_kb_init": 3125988,
+      "observe_bpc": 2.7051746170426143,
+      "observe_bpc_delta_vs_baseline": 0.0,
+      "observe_bytes_per_sec": 16625.57,
+      "predict_next_ms_per_call": 105393.48,
+      "predict_next_speedup_vs_baseline": 1.67,
+      "construct_ms": 614.01
+    },
+    {
+      "variant": "combo_mem20_compact_prune4",
+      "vm_rss_kb_init": 1749548,
+      "observe_bpc": 2.7052921451409353,
+      "observe_bpc_delta_vs_baseline": 0.000117528098321,
+      "observe_bytes_per_sec": 21136.13,
+      "predict_next_ms_per_call": 63073.27,
+      "predict_next_speedup_vs_baseline": 2.78,
+      "construct_ms": 104.41,
+      "rss_reduction_pct": 44.0
+    }
+  ]
+}

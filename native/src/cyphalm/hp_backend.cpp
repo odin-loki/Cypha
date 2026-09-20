@@ -36,20 +36,43 @@ hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria) {
 }
 
 HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
-    : cfg_(cfg),
-      pred_(std::make_unique<hp::Predictor>(cfg)),
-      scratch_(std::make_unique<hp::Predictor>(cfg)) {
+    : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)) {
+    scratch_ = std::make_unique<hp::Predictor>(cfg);
     init_dfs_ckpts_();
+}
+
+void HpSequenceBackend::ensure_scratch_() const {
+    if (!scratch_) {
+        scratch_ = std::make_unique<hp::Predictor>(cfg_);
+    }
+    if (dfs_ckpts_.empty()) {
+        init_dfs_ckpts_();
+    }
+}
+
+void HpSequenceBackend::compact_for_serve() {
+    serve_compact_ = true;
+    scratch_.reset();
+    dfs_ckpts_.clear();
+}
+
+void HpSequenceBackend::prune_cold_slots(int min_total) {
+    if (min_total > 0) {
+        pred_->prune_cold_hash_slots(min_total);
+    }
 }
 
 void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
-    scratch_ = std::make_unique<hp::Predictor>(cfg_);
+    scratch_.reset();
     dfs_ckpts_.clear();
-    init_dfs_ckpts_();
+    if (!serve_compact_) {
+        scratch_ = std::make_unique<hp::Predictor>(cfg_);
+        init_dfs_ckpts_();
+    }
 }
 
-void HpSequenceBackend::init_dfs_ckpts_() {
+void HpSequenceBackend::init_dfs_ckpts_() const {
 #if !defined(CYPHA_HP_GATE24)
     dfs_ckpts_.reserve(static_cast<std::size_t>(kByteBitDepth + 1));
     for (int d = 0; d <= kByteBitDepth; ++d) {
@@ -105,6 +128,7 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) const {
+    ensure_scratch_();
     const int n = std::max(1, std::min(vocab_size, 256));
     std::vector<double> out(static_cast<std::size_t>(n),
                             std::log(1.0 / static_cast<double>(n)));
@@ -114,6 +138,7 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_si
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size) const {
+    ensure_scratch_();
     const int n = std::max(1, std::min(vocab_size, 256));
     std::vector<double> out(static_cast<std::size_t>(n), 0.0);
     for (int b = 0; b < n; ++b) {
@@ -137,6 +162,7 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) const
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
+    ensure_scratch_();
     *scratch_ = *pred_;
     return byte_log_prob(*scratch_, static_cast<int>(byte));
 }
@@ -145,6 +171,7 @@ std::uint8_t HpSequenceBackend::sample_next_byte(double (*rng01)()) const {
     if (rng01 == nullptr) {
         return 0;
     }
+    ensure_scratch_();
     *scratch_ = *pred_;
     int byte = 0;
     for (int i = 7; i >= 0; --i) {

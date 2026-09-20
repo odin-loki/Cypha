@@ -523,10 +523,16 @@ add_executable(cyphalm_hp_sku_measure tools/cyphalm_hp_sku_measure.cpp)
 target_link_libraries(cyphalm_hp_sku_measure PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_hp_sku_measure)
 
+<<<<<<< HEAD
 add_executable(cyphalm_hp_shard_spike tools/cyphalm_hp_shard_spike.cpp)
 target_link_libraries(cyphalm_hp_shard_spike PRIVATE cypha_lm_native)
 cypha_apply_hp_compile_flags(cyphalm_hp_shard_spike)
 cypha_mingw_apply_exe_link_options(cyphalm_hp_shard_spike)
+=======
+add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
+target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_lossy_bench)
+>>>>>>> fc96882 (feat(cyphalm): first lossy LLM levers — mem tier, serve-compact, cold-slot prune)
 
 add_executable(hp_shard_merge_spike tools/hp_shard_merge_spike.cpp)
 target_link_libraries(hp_shard_merge_spike PRIVATE cypha_lm_native)

@@ -33,14 +33,19 @@ CyphaLMModel::~CyphaLMModel() = default;
 
 void CyphaLMModel::init_components() {
     if (cfg_.context_mode == ContextMode::Hp || cfg_.context_mode == ContextMode::Hybrid) {
+        apply_hp_lossy_env(cfg_);
         if (cfg_.hp_slot_max <= 0) {
             apply_hp_production_recipe(cfg_);
         } else {
             normalize_hp_table_bits(cfg_);
         }
     }
+    const int mem = hp_effective_table_bits(cfg_);
     hp_ = std::make_unique<HpSequenceBackend>(
-        hp_config_from_cyphalm(cfg_.hp_table_bits, cfg_.hp_mixer_lr, cfg_.hp_gria));
+        hp_config_from_cyphalm(mem, cfg_.hp_mixer_lr, cfg_.hp_gria));
+    if (cfg_.hp_serve_compact) {
+        hp_->compact_for_serve();
+    }
     if (!cfg_.bpe_merges_path.empty() && !cfg_.bpe_vocab_path.empty()) {
         bpe_ = std::make_unique<BpeTokenizer>(
             BpeTokenizer::load(cfg_.bpe_merges_path, cfg_.bpe_vocab_path));
@@ -50,6 +55,20 @@ void CyphaLMModel::init_components() {
 
 CyphaLMModel CyphaLMModel::from_json_npz(const std::string& json_path) {
     return load_cyphalm_model(json_path);
+}
+
+void CyphaLMModel::compact_hp_for_serve() {
+    if (hp_) {
+        hp_->compact_for_serve();
+    }
+}
+
+void CyphaLMModel::prune_hp_cold_slots(int min_total) {
+    if (!hp_) {
+        return;
+    }
+    const int thr = min_total > 0 ? min_total : cfg_.hp_prune_cold_min_n;
+    hp_->prune_cold_slots(thr);
 }
 
 void CyphaLMModel::reset_context() {
@@ -247,6 +266,10 @@ nlohmann::json CyphaLMModel::compression_profile() const {
     return {
         {"algorithm", "hp"},
         {"hp_table_bits", cfg_.hp_table_bits},
+        {"hp_effective_table_bits", hp_effective_table_bits(cfg_)},
+        {"hp_lossy_mem", cfg_.hp_lossy_mem},
+        {"hp_serve_compact", cfg_.hp_serve_compact},
+        {"hp_prune_cold_min_n", cfg_.hp_prune_cold_min_n},
         {"hp_slot_max", cfg_.hp_slot_max},
         {"hp_slot_compile_max", hp_compile_slot_max()},
         {"hp_mixer_lr", cfg_.hp_mixer_lr},
