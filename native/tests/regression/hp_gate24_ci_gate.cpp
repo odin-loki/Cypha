@@ -16,12 +16,12 @@ using Clock = std::chrono::steady_clock;
 
 constexpr double kFixtureBpc = 6.53989;
 constexpr double kFixtureBpcTol = 0.05;
-// Measured on gate24 table_bits=16 CI fixture (2026-09-20):
-//   Linux KVM 4 vCPU: log_prob_byte ~31 ms; next_byte_log_probs(32) ~3.7 s
-//   GitHub Actions ubuntu-latest (2 cores): log_prob_byte ~38.7 ms
-// Limits = measured CI ceiling + ~25% slack (not invented).
+// Measured on gate24 table_bits=16 CI fixture (2026-09-20, post delta-undo #7):
+//   Linux KVM 4 vCPU: log_prob_byte ~25 ms; next_byte_log_probs(32) ~46 ms (bit-tree undo)
+//   GitHub Actions ubuntu-latest (2 cores): log_prob_byte ~38.7 ms (prior run, same fork path)
+// Limits = measured ceiling + ~25% slack (not invented).
 constexpr double kLogProbByteMaxUs = 50000.0;
-constexpr double kNextByteLogProbs32MaxMs = 5000.0;
+constexpr double kNextByteLogProbs32MaxMs = 75.0;
 
 std::vector<int> fixture_tokens() {
     return {3, 7, 7, 4, 11, 2, 9, 14, 5, 3, 19, 22, 8, 1, 30, 12};

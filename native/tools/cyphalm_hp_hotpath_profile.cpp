@@ -144,8 +144,20 @@ int main(int argc, char** argv) {
     }
 
     out["vm_hwm_kb_after"] = read_vmhwm_kb();
+    out["next_byte_log_probs32_us"] = [&]() {
+        for (int i = 0; i < std::min(warm, 2); ++i) {
+            (void)hp.next_byte_log_probs(32);
+        }
+        const auto t32 = Clock::now();
+        const int it32 = std::max(1, iters / 2);
+        for (int i = 0; i < it32; ++i) {
+            (void)hp.next_byte_log_probs(32);
+        }
+        return elapsed_us(t32, it32);
+    }();
+    out["next_byte_log_probs32_iters"] = std::max(1, iters / 2);
     out["note"] =
-        "observe_next_byte = compress/adapt hot path; next_byte_log_probs256 = legacy 256-assign serve path";
+        "observe_next_byte = compress/adapt; next_byte_log_probs* = delta-undo bit-tree (default)";
 
     std::cout << out.dump(2) << '\n';
     return 0;

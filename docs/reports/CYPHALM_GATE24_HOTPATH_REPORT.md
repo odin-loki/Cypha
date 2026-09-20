@@ -8,41 +8,41 @@
 
 ## Executive summary
 
-Profiled the gate24 `hp::Predictor` adapt/serve paths and applied **safe micro-optimizations** in `HpSequenceBackend` (no undo stack). Added **binary HPCP v1 checkpoint** (`.hpbin`) for train-once / serve-many, plus **CI gates** for compress-faithful BPC and measured latency ceilings.
+Profiled the gate24 `hp::Predictor` adapt/serve paths on top of **delta-undo bit-tree inference** ([#7](https://github.com/odin-loki/Cypha/pull/7)). Applied **safe micro-optimizations** in `HpSequenceBackend` (reused `log_probs_buf_`). Added **binary HPCP v1 checkpoint** (`.hpbin`) for train-once / serve-many, plus **CI gates** for compress-faithful BPC and measured latency ceilings.
 
-| Path | Hotspot (measured, table_bits=16) | Change |
-|------|-----------------------------------|--------|
-| `observe_next_byte` / `eval_bpc` | **~47 µs/bit-byte** (compress-equivalent) | Unchanged (already fast) |
-| `log_prob_byte` | **~27–29 ms** (single assign_from + 8 bits) | Lazy `scratch_` alloc |
-| `next_byte_log_probs(32)` | **~3.7 s** (32× `clone_from` legacy path) | Reused `log_probs_buf_`; legacy path still clone-bound |
-| `next_byte_log_probs(256)` | **~7.15 s** (gate24 legacy path) | Same assign_from reuse; still serve-bound |
+| Path | Hotspot (measured, table_bits=16, post #7) | Change |
+|------|-------------------------------------------|--------|
+| `observe_next_byte` / `eval_bpc` | **~42 µs/byte** (compress-equivalent) | Unchanged |
+| `log_prob_byte` | **~23–26 ms** (`copy_state_from` + 8 bits) | Reused `scratch_` |
+| `next_byte_log_probs(32)` | **~46 ms** (delta-undo bit-tree) | Was ~3.7 s pre-#7 (legacy clone) |
+| `next_byte_log_probs(256)` | **~228 ms** (delta-undo bit-tree) | Was ~22 s pre-#7 |
 
-**RAM:** lazy `scratch_` defers second full predictor until first serve-path call (`VmHWM` construct ~509 MB → after profile ~1.27 GB @ mem 16).
+**RAM:** `VmHWM` construct ~761 MB → after profile ~1.27 GB @ mem 16 (single `scratch_` fork + main predictor).
 
 ---
 
 ## Hot-path breakdown
 
-Gate24 production uses the **legacy 256-assign** path for full-vocab scoring (`CYPHA_HP_GATE24` — bit-tree DFS checkpoint pool OOM at v78 table sizes). Per call:
+Gate24 production now uses **delta-undo MSB bit-tree** for full-vocab scoring (default `next_byte_log_probs`). Legacy 256-fork path: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`. Per bit-tree call:
 
-1. **Experts + ctx chain** — inside each `predict()` (dominant CPU in upstream hp)
-2. **Mixer + APM + hedge** — per bit inside `byte_log_prob` / `observe_next_byte`
-3. **assign_from / clone_from** — Cypha adapter overhead on serve path (addressed by scratch reuse)
+1. **Experts + ctx chain** — inside each `predict()` (dominant CPU)
+2. **Mixer + APM + hedge** — per bit inside DFS branches
+3. **Undo stack** — one `scratch_` fork; `UndoRecorderScope` + `pop_frame` per branch (replaces 256× `clone_from`)
 
-### Measured latencies (2026-09-20, Linux KVM, 4 vCPU, gate24, `hp_table_bits=16`)
+### Measured latencies (2026-09-20, Linux KVM, 4 vCPU, gate24, `hp_table_bits=16`, rebased on #7)
 
 ```json
 {
-  "observe_next_byte_us": 47.2,
-  "log_prob_byte_us": 26171,
-  "next_byte_log_probs256_us": 21982207,
-  "next_byte_log_probs32_ms": 3700,
-  "vm_hwm_kb_construct": 508636,
-  "vm_hwm_kb_after_serve": 1265356
+  "observe_next_byte_us": 41.6,
+  "log_prob_byte_us": 22929,
+  "next_byte_log_probs32_ms": 46,
+  "next_byte_log_probs256_us": 227780,
+  "vm_hwm_kb_construct": 760916,
+  "vm_hwm_kb_after_serve": 1265392
 }
 ```
 
-**Interpretation:** Training/BPC (`observe_stream_bits`) is **~21k bytes/s** at mem 16 — suitable for CI. Full-vocab REST `predict_next` remains **seconds per call** until delta-undo lands ([#7](https://github.com/odin-loki/Cypha/pull/7); see also [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) Phase 1).
+**Interpretation:** Training/BPC (`observe_stream_bits`) remains fast (~24k bytes/s at mem 16). Full-vocab REST `predict_next` is now **sub-second** at vocab 256 via delta-undo (was seconds pre-#7).
 
 ---
 
@@ -52,9 +52,8 @@ Gate24 production uses the **legacy 256-assign** path for full-vocab scoring (`C
 
 | Opt | Before | After |
 |-----|--------|-------|
-| `scratch_` lifetime | Constructed with `pred_` always | **Lazy** on first serve-path call (~509 MB → defer 2nd predictor) |
 | `next_byte_log_probs` output | Fresh `std::vector` each call | **Reused** `log_probs_buf_` (explicit copy on return) |
-| Legacy `assign_from` reuse | — | **Rejected** — breaks `hp_bit_tree_smoke` parity vs `clone_from` (Δ≈2.59 nats); needs hp investigation |
+| Serve path | Legacy 256× `clone_from` (gate24) | **Delta-undo bit-tree** (from #7; this PR keeps buffer reuse) |
 
 No change to hp integer math, mixer weights, or BPC semantics.
 
@@ -76,8 +75,8 @@ Implementation: `hp/blob_io.hpp`, `hp/checkpoint.hpp` (serialized ContextModels,
 | Test | Gate |
 |------|------|
 | `native_hp_gate24_ci_gate` | Fixture BPC **6.53989 ± 0.05** (compress-equivalent, 16-token pattern) |
-| | `log_prob_byte` **≤ 50 ms** median-of-5 (measured ~38.7 ms on GHA Linux + slack) |
-| | `next_byte_log_probs(32)` **≤ 5000 ms** median-of-3 (measured ~3.7 s + slack) |
+| | `log_prob_byte` **≤ 50 ms** median-of-5 (measured ~25 ms KVM / ~38.7 ms GHA + slack) |
+| | `next_byte_log_probs(32)` **≤ 75 ms** median-of-3 (measured ~46 ms + slack) |
 | `native_hp_checkpoint_roundtrip_smoke` | BPC identical before/after `.hpbin` load |
 
 PR script: `scripts/ci_native_hp_smoke.sh` (regex `native_hp_*`).
@@ -100,5 +99,6 @@ native/build/hp_checkpoint_roundtrip_smoke
 
 - [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md) — enwik gate24 BPC bar  
 - [`CYPHALM_TRAIN_SCALE.md`](CYPHALM_TRAIN_SCALE.md) — shard/undo roadmap  
-- [#7 delta-undo](https://github.com/odin-loki/Cypha/pull/7) — next latency win for full-vocab `predict_next`
-- [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) — undo stack roadmap
+- [#7 delta-undo](https://github.com/odin-loki/Cypha/pull/7) — bit-tree undo inference (merged)
+- [#9 lossy LLM](https://github.com/odin-loki/Cypha/pull/9) — `prune_cold_slots` / serve compact (merged)
+- [`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) — lossy roadmap
