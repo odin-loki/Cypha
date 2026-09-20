@@ -1,152 +1,144 @@
-# CyphaLM generation harness (qualitative)
+# CyphaLM generation harness (cold vs primed, qualitative)
 
 - harness: `cyphalm_generation_harness`
 - hp_table_bits: 16
-- max_tokens: 32
-- runs: 15
+- max_tokens: 16
+- warmup_file: `bench/data/canterbury/alice29.txt`
+- warmup_bytes: 4096
+- primed defaults: {'ban_last_k': 3, 'repetition_penalty': 1.15, 'repetition_window': 24, 'text_like_prior': 0.35}
+- runs: 20
 
-Qualitative sampling only. No BLEU/perplexity/quality scores. Completions are from untrained gate24 hp (cold start) via generate_decode serve path.
+Qualitative before/after only. No BLEU/perplexity/quality scores. Cold = no warmup and no serve-time penalties; primed = alice warmup + ban_last_k + repetition_penalty + text_like_prior (serve-time only).
 
-## Samples
+## Samples (before / after per prompt)
 
-### enwik_opening — greedy (seed=42)
+### enwik_opening
 - source: enwik8 XML header
 - prompt (269 B): `<mediawiki xmlns=\"http://www.mediawiki.org/xml/export-0.3/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xs`
-- decode_ms: 2664.0
-- completion (32 B):
+
+#### cold_greedy — greedy (decode_ms=179.5)
 ```
-\n                               
+\n               
 ```
 
-### enwik_opening — temperature (seed=42)
-- source: enwik8 XML header
-- prompt (269 B): `<mediawiki xmlns=\"http://www.mediawiki.org/xml/export-0.3/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xs`
-- decode_ms: 9578.9
-- completion (32 B):
+#### primed_greedy — greedy (decode_ms=2861.3)
 ```
-\u001cat-n\"elSc\u000cUhtttti..oca-0-1/s/Y3
+\n (and she tried
 ```
 
-### enwik_opening — temperature (seed=137)
-- source: enwik8 XML header
-- prompt (269 B): `<mediawiki xmlns=\"http://www.mediawiki.org/xml/export-0.3/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xs`
-- decode_ms: 9421.1
-- completion (32 B):
+#### cold_top_p — top_p (decode_ms=2721.9)
 ```
-\n00.3\"export-0.3\"exma-\u001dang htiki
+\n   <title>\n    
 ```
 
-### alice_opening — greedy (seed=42)
+#### primed_top_p — top_p (decode_ms=2823.8)
+```
+'ve down ther id
+```
+
+
+### alice_opening
 - source: gutenberg/alice
 - prompt (219 B): `Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice s`
-- decode_ms: 2433.9
-- completion (32 B):
+
+#### cold_greedy — greedy (decode_ms=148.8)
 ```
-ing ing ing ing ing ing ing ing 
+inning nothing n
 ```
 
-### alice_opening — temperature (seed=42)
-- source: gutenberg/alice
-- prompt (219 B): `Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice s`
-- decode_ms: 9958.6
-- completion (32 B):
+#### primed_greedy — greedy (decode_ms=2725.7)
 ```
-sisat, ilh liorxre bt lad lhh pe
+`and what is, bu
 ```
 
-### alice_opening — temperature (seed=137)
-- source: gutenberg/alice
-- prompt (219 B): `Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice s`
-- decode_ms: 9782.5
-- completion (32 B):
+#### cold_top_p — top_p (decode_ms=2594.3)
 ```
-but inpzinttttet pice anin or ip
+rsat into titicd
 ```
 
-### code_c — greedy (seed=42)
+#### primed_top_p — top_p (decode_ms=2709.5)
+```
+`and what is, ha
+```
+
+
+### code_c
 - source: synthetic C
 - prompt (87 B): `#include <stdio.h>\n\nint main(void) {\n    printf(\"Hello, world\\n\");\n    return 0;\n}\n\n// `
-- decode_ms: 2597.1
-- completion (32 B):
+
+#### cold_greedy — greedy (decode_ms=108.1)
 ```
-                                
+                
 ```
 
-### code_c — temperature (seed=42)
-- source: synthetic C
-- prompt (87 B): `#include <stdio.h>\n\nint main(void) {\n    printf(\"Hello, world\\n\");\n    return 0;\n}\n\n// `
-- decode_ms: 10587.7
-- completion (32 B):
+#### primed_greedy — greedy (decode_ms=2811.5)
 ```
-f^n v fM),\u00051_`p|pi\n\ni\n \n\n\n\n\n \n \n
+(and she tried t
 ```
 
-### code_c — temperature (seed=137)
-- source: synthetic C
-- prompt (87 B): `#include <stdio.h>\n\nint main(void) {\n    printf(\"Hello, world\\n\");\n    return 0;\n}\n\n// `
-- decode_ms: 9953.1
-- completion (32 B):
+#### cold_top_p — top_p (decode_ms=2654.8)
 ```
-\npp,  ;|<>twuv.t nc  \u000b\u0004:<<\u0003>l..e
+tf}\n, t         
 ```
 
-### ascii_prose — greedy (seed=42)
+#### primed_top_p — top_p (decode_ms=2760.8)
+```
+des before askem
+```
+
+
+### ascii_prose
 - source: synthetic prose
 - prompt (122 B): `The quick brown fox jumps over the lazy dog. In 2026, byte-level language models predict the next character from context`
-- decode_ms: 2562.7
-- completion (32 B):
+
+#### cold_greedy — greedy (decode_ms=123.6)
 ```
-dededededededededededededededede
+dededededededede
 ```
 
-### ascii_prose — temperature (seed=42)
-- source: synthetic prose
-- prompt (122 B): `The quick brown fox jumps over the lazy dog. In 2026, byte-level language models predict the next character from context`
-- decode_ms: 11399.5
-- completion (32 B):
+#### primed_greedy — greedy (decode_ms=2715.8)
 ```
-oooCuHichc jthkumm %n b(  74j j3
+(as the she she 
 ```
 
-### ascii_prose — temperature (seed=137)
-- source: synthetic prose
-- prompt (122 B): `The quick brown fox jumps over the lazy dog. In 2026, byte-level language models predict the next character from context`
-- decode_ms: 11950.1
-- completion (32 B):
+#### cold_top_p — top_p (decode_ms=2623.1)
 ```
- rn0002zprrttt8t/on)   2an 6K*+b
+exexythe nexelrl
 ```
 
-### xml_tag — greedy (seed=42)
+#### primed_top_p — top_p (decode_ms=2756.4)
+```
+it'listenichends
+```
+
+
+### xml_tag
 - source: synthetic XML
 - prompt (58 B): `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root><item id=\"1\">`
-- decode_ms: 2676.8
-- completion (32 B):
+
+#### cold_greedy — greedy (decode_ms=114.9)
 ```
-<?><?><?><?><?><?><?><?><?><?><?
+<?><?><?><?><?><
 ```
 
-### xml_tag — temperature (seed=42)
-- source: synthetic XML
-- prompt (58 B): `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root><item id=\"1\">`
-- decode_ms: 10818.1
-- completion (32 B):
+#### primed_greedy — greedy (decode_ms=2750.5)
 ```
->>> v!?=\"1\n<kUkvki  i g         
+\n (and the the t
 ```
 
-### xml_tag — temperature (seed=137)
-- source: synthetic XML
-- prompt (58 B): `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root><item id=\"1\">`
-- decode_ms: 10406.1
-- completion (32 B):
+#### cold_top_p — top_p (decode_ms=2621.6)
 ```
-\n_eR;1P\u00ecTU\u00ba\u00b3\u00bf3\u00b5\"ih\"  \u0008U_`\u0006hn1._
+\u000b:\u000e<w\"=\"1\">\n:\u000fx2
 ```
 
-## Qualitative notes (human-readable, not scores)
+#### primed_top_p — top_p (decode_ms=2774.0)
+```
+8(no\nsay it, nor
+```
 
-- **Cold start:** gate24 hp with no corpus warmup; expect repetitive or markup-like continuations.
-- **Greedy vs temperature:** greedy should be deterministic per prompt; temperature runs differ by seed.
-- **Structure:** XML/C/code prompts test whether continuations stay in-token class (tags, braces, semicolons).
-- **No automated quality metric** — inspect completions above for coherence, repetition, and charset drift.
+
+## Latency notes
+
+- Compare `decode_ms` for `cold_*` vs `primed_*` per prompt/strategy.
+- Warmup cost is included in primed `decode_ms` (one-shot serve_advance over warmup corpus).
+- No automated quality metric — inspect completions for repetition, charset, and structure.

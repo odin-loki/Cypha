@@ -1,4 +1,4 @@
-/// Generation quality harness: greedy + temperature samples via generate_decode (serve path).
+/// Generation quality harness: cold vs primed+penalty samples via generate_decode (serve path).
 /// Saves JSON artifacts only — no invented quality scores.
 #include <chrono>
 #include <cstdio>
@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/bench/bench_paths.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
@@ -72,7 +73,6 @@ std::string ids_to_text(const std::vector<int>& ids) {
     return out;
 }
 
-/// JSON-safe view of byte completion (invalid UTF-8 escaped as \\u00XX).
 std::string json_safe_bytes(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 8);
@@ -97,39 +97,32 @@ std::string json_safe_bytes(const std::string& s) {
     return out;
 }
 
-nlohmann::json byte_array(const std::vector<int>& ids) {
-    nlohmann::json arr = nlohmann::json::array();
-    for (int id : ids) {
-        arr.push_back(id);
-    }
-    return arr;
-}
-
-nlohmann::json step_array(const std::vector<cypha::cyphalm::GenerateStep>& steps) {
-    nlohmann::json arr = nlohmann::json::array();
-    for (const auto& s : steps) {
-        nlohmann::json row;
-        row["token_id"] = s.token_id;
-        row["loss"] = s.loss;
-        row["epistemic_var"] = s.epistemic_var;
-        row["aleatoric_var"] = s.aleatoric_var;
-        row["halted"] = s.halted;
-        arr.push_back(row);
-    }
-    return arr;
+nlohmann::json params_json(const cypha::cyphalm::DecodeParams& params) {
+    nlohmann::json j;
+    j["strategy"] =
+        params.strategy == cypha::cyphalm::DecodeStrategy::Greedy ? "greedy" : "top_p";
+    j["temperature"] = params.temperature;
+    j["top_p"] = params.top_p;
+    j["top_k"] = params.top_k;
+    j["seed"] = params.seed;
+    j["warmup_bytes"] = params.warmup_ids.size();
+    j["ban_last_k"] = params.ban_last_k;
+    j["repetition_penalty"] = params.repetition_penalty;
+    j["repetition_window"] = params.repetition_window;
+    j["text_like_prior"] = params.text_like_prior;
+    return j;
 }
 
 nlohmann::json run_case(cypha::cyphalm::CyphaLMModel& model, const PromptCase& prompt,
-                        const cypha::cyphalm::DecodeParams& params, int max_tokens) {
+                        const cypha::cyphalm::DecodeParams& params, int max_tokens,
+                        const char* profile_label) {
     nlohmann::json j;
+    j["profile"] = profile_label;
     j["prompt_id"] = prompt.id;
     j["prompt_source"] = prompt.source;
     j["prompt_text"] = json_safe_bytes(prompt.text);
     j["prompt_bytes"] = std::string(prompt.text).size();
-    j["strategy"] = params.strategy == cypha::cyphalm::DecodeStrategy::Greedy ? "greedy" : "temperature";
-    j["temperature"] = params.temperature;
-    j["top_k"] = params.top_k;
-    j["seed"] = params.seed;
+    j["decode_params"] = params_json(params);
     j["max_tokens"] = max_tokens;
 
     const std::vector<int> prompt_ids =
@@ -140,19 +133,55 @@ nlohmann::json run_case(cypha::cyphalm::CyphaLMModel& model, const PromptCase& p
 
     j["generated_bytes"] = out.generated_ids.size();
     const std::string completion = ids_to_text(out.generated_ids);
-    j["completion_bytes"] = byte_array(out.generated_ids);
     j["completion_text"] = json_safe_bytes(completion);
     j["decode_ms"] = ms;
     j["halted_on_uncertainty"] = out.halted_on_uncertainty;
     j["halted_on_epistemic"] = out.halted_on_epistemic;
-    j["per_step"] = step_array(out.per_step);
     return j;
+}
+
+cypha::cyphalm::DecodeParams cold_greedy() {
+    cypha::cyphalm::DecodeParams p;
+    p.strategy = cypha::cyphalm::DecodeStrategy::Greedy;
+    p.temperature = 0.0;
+    p.seed = 42;
+    return p;
+}
+
+cypha::cyphalm::DecodeParams cold_top_p() {
+    cypha::cyphalm::DecodeParams p;
+    p.strategy = cypha::cyphalm::DecodeStrategy::TopP;
+    p.temperature = 0.8;
+    p.top_p = 0.9;
+    p.seed = 42;
+    return p;
+}
+
+cypha::cyphalm::DecodeParams primed_greedy(const std::vector<int>& warmup) {
+    cypha::cyphalm::DecodeParams p = cold_greedy();
+    p.warmup_ids = warmup;
+    p.ban_last_k = 3;
+    p.repetition_penalty = 1.15;
+    p.repetition_window = 24;
+    p.text_like_prior = 0.35;
+    return p;
+}
+
+cypha::cyphalm::DecodeParams primed_top_p(const std::vector<int>& warmup) {
+    cypha::cyphalm::DecodeParams p = cold_top_p();
+    p.warmup_ids = warmup;
+    p.ban_last_k = 3;
+    p.repetition_penalty = 1.15;
+    p.repetition_window = 24;
+    p.text_like_prior = 0.35;
+    return p;
 }
 
 void usage(const char* argv0) {
     std::fprintf(stderr,
-                 "usage: %s [--out <path.json>] [--max-tokens N] [--table-bits M]\n"
-                 "  Runs built-in prompt battery with greedy + temperature decoding.\n",
+                 "usage: %s [--out <path.json>] [--max-tokens N] [--table-bits M] "
+                 "[--warmup-file PATH] [--warmup-bytes N]\n"
+                 "  Runs built-in prompts: cold vs primed+penalty greedy and top_p.\n",
                  argv0);
 }
 
@@ -160,8 +189,10 @@ void usage(const char* argv0) {
 
 int main(int argc, char** argv) {
     std::string out_path;
-    int max_tokens = 48;
-    int table_bits = 22;
+    int max_tokens = 32;
+    int table_bits = 16;
+    std::string warmup_file;
+    int warmup_bytes = 4096;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -171,6 +202,10 @@ int main(int argc, char** argv) {
             max_tokens = std::atoi(argv[++i]);
         } else if (arg == "--table-bits" && i + 1 < argc) {
             table_bits = std::atoi(argv[++i]);
+        } else if (arg == "--warmup-file" && i + 1 < argc) {
+            warmup_file = argv[++i];
+        } else if (arg == "--warmup-bytes" && i + 1 < argc) {
+            warmup_bytes = std::atoi(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             usage(argv[0]);
             return 0;
@@ -181,11 +216,19 @@ int main(int argc, char** argv) {
         }
     }
 
+    if (warmup_file.empty()) {
+        warmup_file =
+            (cypha::bench::repo_root() / "bench" / "data" / "canterbury" / "alice29.txt").string();
+    }
+
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_hp_production_recipe(cfg);
     cfg.vocab_size = 256;
     cfg.hp_table_bits = table_bits;
     cypha::cyphalm::normalize_hp_table_bits(cfg);
+
+    const std::vector<int> warmup_ids =
+        cypha::cyphalm::load_warmup_bytes(warmup_file, warmup_bytes, cfg.vocab_size);
 
     cypha::cyphalm::CyphaLMModel model(cfg);
 
@@ -194,31 +237,31 @@ int main(int argc, char** argv) {
     root["hp_profile"] = "gate24";
     root["hp_table_bits"] = cfg.hp_table_bits;
     root["max_tokens"] = max_tokens;
+    const auto repo = cypha::bench::repo_root();
+    std::string warmup_rel = warmup_file;
+    try {
+        warmup_rel = std::filesystem::relative(warmup_file, repo).string();
+    } catch (...) {
+    }
+    root["warmup_file"] = warmup_rel;
+    root["warmup_bytes"] = warmup_ids.size();
+    root["primed_decode_defaults"] = {
+        {"ban_last_k", 3},
+        {"repetition_penalty", 1.15},
+        {"repetition_window", 24},
+        {"text_like_prior", 0.35},
+    };
     root["note"] =
-        "Qualitative sampling only. No BLEU/perplexity/quality scores. Completions are from "
-        "untrained gate24 hp (cold start) via generate_decode serve path.";
+        "Qualitative before/after only. No BLEU/perplexity/quality scores. Cold = no warmup and "
+        "no serve-time penalties; primed = alice warmup + ban_last_k + repetition_penalty + "
+        "text_like_prior (serve-time only).";
 
     nlohmann::json runs = nlohmann::json::array();
     for (const auto& prompt : kDefaultPrompts) {
-        cypha::cyphalm::DecodeParams greedy;
-        greedy.strategy = cypha::cyphalm::DecodeStrategy::Greedy;
-        greedy.temperature = 0.0;
-        greedy.seed = 42;
-        runs.push_back(run_case(model, prompt, greedy, max_tokens));
-
-        cypha::cyphalm::DecodeParams temp;
-        temp.strategy = cypha::cyphalm::DecodeStrategy::Temperature;
-        temp.temperature = 0.9;
-        temp.top_k = 40;
-        temp.seed = 42;
-        runs.push_back(run_case(model, prompt, temp, max_tokens));
-
-        cypha::cyphalm::DecodeParams temp2;
-        temp2.strategy = cypha::cyphalm::DecodeStrategy::Temperature;
-        temp2.temperature = 0.9;
-        temp2.top_k = 40;
-        temp2.seed = 137;
-        runs.push_back(run_case(model, prompt, temp2, max_tokens));
+        runs.push_back(run_case(model, prompt, cold_greedy(), max_tokens, "cold_greedy"));
+        runs.push_back(run_case(model, prompt, primed_greedy(warmup_ids), max_tokens, "primed_greedy"));
+        runs.push_back(run_case(model, prompt, cold_top_p(), max_tokens, "cold_top_p"));
+        runs.push_back(run_case(model, prompt, primed_top_p(warmup_ids), max_tokens, "primed_top_p"));
     }
     root["runs"] = runs;
     root["run_count"] = runs.size();
