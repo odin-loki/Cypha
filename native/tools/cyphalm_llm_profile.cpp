@@ -105,7 +105,7 @@ nlohmann::json profile_construct_and_rss() {
     j["hp_slot_compile_max"] = cypha::cyphalm::hp_compile_slot_max();
     j["vocab_size"] = cfg.vocab_size;
     j["dual_predictor_note"] =
-        "HpSequenceBackend holds pred_ + scratch_ + DFS checkpoints; next_byte_log_probs uses bit-tree DFS (legacy: CYPHA_HP_LEGACY_BYTE_LOGPROBS=1)";
+        "HpSequenceBackend holds one pred_; bit-tree uses delta undo on pred_ (legacy: CYPHA_HP_LEGACY_BYTE_LOGPROBS=1)";
     return j;
 }
 

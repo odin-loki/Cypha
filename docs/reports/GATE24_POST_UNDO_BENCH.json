@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-20",
+  "commit": "740d15e18b97b44d00bd824ad38afd4748bca786",
+  "branch_base": "main @ 740d15e (PR #7 undo + PR #10 serve landed)",
+  "harness": "hp_inference_bench",
+  "profile": "gate24",
+  "hp_table_bits": 22,
+  "hp_slot_compile_max": 24,
+  "warmup_bytes": 65536,
+  "latency_iters": 5,
+  "vm": "cloud-agent linux (KVM)",
+  "pre_undo_baseline_source": "CHANGELOG.md PR #7 checkpoint-tree baseline; CYPHALM_BPC_GAP_REPORT.md 64 KB enwik warm context",
+  "pre_undo_documented": {
+    "predict_next_us": 48000000,
+    "predict_next_us_note": "CHANGELOG: ~48e6 µs/call @ table_bits=22 (checkpoint DFS + scratch twin)",
+    "vm_rss_kb": 4400000,
+    "vm_rss_kb_note": "CHANGELOG: ~4.3 GB VmRSS class (dual pred_ + 9 DFS checkpoints)",
+    "legacy_clone_us_64k": 23551000,
+    "legacy_clone_us_source": "CYPHALM_BPC_GAP_REPORT.md",
+    "bit_tree_checkpoint_us_64k": 71112000,
+    "bit_tree_checkpoint_us_source": "CYPHALM_BPC_GAP_REPORT.md (pre-undo assign_from DFS)"
+  },
+  "post_undo_single_predictor": {
+    "predict_next_us": 163664.0,
+    "next_byte_log_probs_us": 162038.0,
+    "bit_tree_us": 161083.3,
+    "serve_greedy_next_byte_us": 3228.9,
+    "vm_rss_after_model_kb": 1564100,
+    "vm_rss_after_warmup_kb": 1564484,
+    "vm_hwm_after_bench_kb": 3124020,
+    "hp_bit_tree_smoke": "PASS max_tree_legacy_delta=0",
+    "hp_undo_smoke": "PASS",
+    "cyphalm_serve_smoke": "PASS"
+  },
+  "speedup_vs_pre_undo_checkpoint": {
+    "predict_next_x": 293.2,
+    "note": "48e6 / 163664"
+  },
+  "rss_after_model_reduction_vs_pre_undo": {
+    "pre_undo_kb": 3124004,
+    "pre_undo_source": "CHANGELOG post-undo-with-scratch measurement",
+    "post_undo_kb": 1564100,
+    "reduction_pct": 49.9
+  },
+  "status": "ok"
+}
