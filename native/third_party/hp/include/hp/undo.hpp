@@ -18,6 +18,10 @@ class Predictor;
 class UndoFrame {
  public:
     UndoFrame() = default;
+    UndoFrame(UndoFrame&&) = default;
+    UndoFrame& operator=(UndoFrame&&) = default;
+    UndoFrame(const UndoFrame&) = delete;
+    UndoFrame& operator=(const UndoFrame&) = delete;
     ~UndoFrame();
 
     void clear();
