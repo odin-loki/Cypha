@@ -1,0 +1,41 @@
+{
+  "date": "2026-09-20",
+  "harness": "cyphalm_hp_shard_holdout",
+  "metric": "observe_bit_serial_bpc",
+  "holdout_frac": 0.2,
+  "n_shards": 2,
+  "boundary_replay": "Strategy C at shard joins + train tail (auto min(4096, train/10))",
+  "note": "Fair comparison: merged_holdout_bpc vs single_stream_holdout_bpc. In-sample merged_bpc is optimistic.",
+  "corpora": [
+    {
+      "corpus": "bench/data/canterbury/alice29.txt",
+      "total_bytes": 148481,
+      "holdout_bytes": 29696,
+      "hp_table_bits": 16,
+      "boundary_replay_bytes": 4096,
+      "single_stream_holdout_bpc": 1.8071523574533563,
+      "merged_holdout_bpc": 1.9449466058433769,
+      "merged_holdout_vs_single_delta_bpc": 0.13779424839002052,
+      "cold_holdout_bpc": 2.3453118705280036,
+      "single_stream_bpc": 1.9775391221404728,
+      "merged_full_corpus_bpc": 0.6910357956094685,
+      "sequential_matches_single": true
+    },
+    {
+      "corpus": "bench/data/enwik8/enwik8.8mb",
+      "slice_bytes": 1048576,
+      "total_bytes": 1048576,
+      "holdout_bytes": 209715,
+      "hp_table_bits": 16,
+      "boundary_replay_bytes": 4096,
+      "single_stream_holdout_bpc": 1.634918945844038,
+      "merged_holdout_bpc": 1.6947200250599272,
+      "merged_holdout_vs_single_delta_bpc": 0.059801079215889175,
+      "cold_holdout_bpc": 1.9079043843253007,
+      "single_stream_bpc": 1.7272114714297109,
+      "merged_full_corpus_bpc": 0.6687713743410187,
+      "sequential_matches_single": true
+    }
+  ],
+  "interpretation": "Holdout delta positive on both corpora: merged shard tables are worse than sequential single-stream training on unseen holdout bytes. Boundary replay reduces but does not eliminate the gap."
+}

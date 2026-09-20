@@ -501,6 +501,10 @@ add_executable(cyphalm_generate tools/cyphalm_generate.cpp)
 target_link_libraries(cyphalm_generate PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_generate)
 
+add_executable(cyphalm_generation_harness tools/cyphalm_generation_harness.cpp)
+target_link_libraries(cyphalm_generation_harness PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_generation_harness)
+
 add_executable(cyphalm_serve_smoke tools/cyphalm_serve_smoke.cpp)
 target_link_libraries(cyphalm_serve_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_serve_smoke)

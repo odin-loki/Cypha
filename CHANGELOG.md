@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **CyphaLM eval harnesses (honest numbers):** `cyphalm_generation_harness` + `scripts/cyphalm_generation_harness.sh` (greedy/temperature qualitative samples); `scripts/cyphalm_hp_shard_holdout.sh` (fair holdout shard-merge BPC); `scripts/cyphalm_lossy_enwik_screen.sh` (full enwik8MB mem20 vs mem22). Reports: `docs/reports/CYPHALM_GENERATION_HARNESS.{json,md}`, `CYPHALM_SHARD_HOLDOUT.json`, refreshed `CYPHALM_LOSSY_ENWIK_SCREEN.json`.
 - **hp delta undo API:** `hp/undo.hpp` with `UndoRecorderScope`, patch-based `UndoFrame`, `PredictorUndoStack`, and `Predictor::update_tracked`. Bit-tree inference records table/counter mutations only; speculative scoring skips `end_of_byte` stream updates (log-prob parity with legacy clones). Smokes: `hp_undo_smoke`, `hp_bit_tree_smoke`, `hp_inference_bench`.
 - **CyphaLM serve / generation surface:** explicit `serve_predict_next` / `serve_advance` on `CyphaLMModel`; `serve_*` helpers on `HpSequenceBackend`; `cyphalm_generate` CLI; `cyphalm_serve_smoke` CTest.
 - **CyphaLM beam + nucleus CLI:** byte-level `generate_beam` (pruned bit-tree expansions, predictor replay); `cyphalm_generate` flags `--beam`, `--top-p`, `--temperature`, `--max-bytes`; `cyphalm_generate_smoke` CTest; sample outputs in `docs/reports/CYPHALM_GENERATION_SAMPLES.md`.

@@ -62,6 +62,17 @@ REST: `POST /cyphalm/generate` (see `cyphalm_rest_routes.cpp`) uses the same `ge
 **Generation log probs** use the bit-tree joint path; greedy generation can skip the full tree.
 These are the same hp math; greedy/top-k sampling is an inference convenience, not a BPC claim.
 
+## Generation quality harness
+
+Qualitative sampling (no invented scores):
+
+```bash
+bash scripts/cyphalm_generation_harness.sh
+# → bench/results/generation_harness/*.json + docs/reports/CYPHALM_GENERATION_HARNESS.md
+```
+
+Runs greedy + temperature completions on built-in prompts via `generate_decode` (cold gate24 hp).
+
 ## Tests
 
 - `cyphalm_serve_smoke` — serve generation does not bump `train_step_count`; train_step does.

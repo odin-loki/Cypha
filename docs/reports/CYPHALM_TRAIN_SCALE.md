@@ -312,9 +312,11 @@ Isolated shard BPC is higher than single-stream because each shard starts from a
 
 Also build spike tools with `cypha_apply_hp_compile_flags` — without gate24 compile defs, `hp::Predictor` layout mismatches `cypha_core` and merge spikes segfault.
 
-### 6.6 Holdout + boundary replay (2026-09-20, PR #8 follow-up)
+### 6.6 Holdout + boundary replay (2026-09-20, re-measured)
 
-Run: `cyphalm_hp_shard_spike --corpus <path> --holdout-frac 0.2 --table-bits 16`
+Run: `bash scripts/cyphalm_hp_shard_holdout.sh <corpus> [--max-bytes N] [--table-bits 16]`
+
+Full JSON: [`CYPHALM_SHARD_HOLDOUT.json`](CYPHALM_SHARD_HOLDOUT.json).
 
 | Corpus | single_stream_holdout_bpc | merged_holdout_bpc | Δ holdout | boundary_replay_bytes |
 |--------|---------------------------|--------------------|-----------|-----------------------|
