@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
-#include <random>
 
 namespace cypha::cyphalm {
 
@@ -22,6 +21,27 @@ double bit_log_prob(int p12, int bit) {
 bool use_legacy_byte_log_probs() {
     const char* v = std::getenv("CYPHA_HP_LEGACY_BYTE_LOGPROBS");
     return v != nullptr && v[0] == '1' && v[1] == '\0';
+}
+
+int greedy_bit(int p12) {
+    const double p1 = static_cast<double>(p12) / 4096.0;
+    const double p0 = 1.0 - p1;
+    return (p1 >= p0) ? 1 : 0;
+}
+
+int sample_bit(int p12, double temperature, double (*rng01)()) {
+    if (temperature <= 1e-6 || rng01 == nullptr) {
+        return greedy_bit(p12);
+    }
+    const double p1 = static_cast<double>(p12) / 4096.0;
+    const double p0 = 1.0 - p1;
+    const double log_p0 = std::log(std::max(p0, kLogEps)) / temperature;
+    const double log_p1 = std::log(std::max(p1, kLogEps)) / temperature;
+    const double mx = std::max(log_p0, log_p1);
+    const double w0 = std::exp(log_p0 - mx);
+    const double w1 = std::exp(log_p1 - mx);
+    const double r = rng01();
+    return (r < w0 / (w0 + w1 + kLogEps)) ? 0 : 1;
 }
 
 }  // namespace
@@ -154,9 +174,28 @@ double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
     return byte_log_prob(*scratch_, static_cast<int>(byte));
 }
 
+std::uint8_t HpSequenceBackend::serve_greedy_next_byte() const {
+    ensure_scratch_();
+    scratch_->copy_state_from(*pred_);
+    hp::Predictor& snap = *scratch_;
+    int byte = 0;
+    for (int i = 7; i >= 0; --i) {
+        const int p12 = snap.predict();
+        const int bit = greedy_bit(p12);
+        byte = (byte << 1) | bit;
+        snap.update(bit);
+    }
+    return static_cast<std::uint8_t>(byte);
+}
+
 std::uint8_t HpSequenceBackend::sample_next_byte(double (*rng01)()) const {
+    return serve_sample_next_byte(1.0, rng01);
+}
+
+std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
+                                                       double (*rng01)()) const {
     if (rng01 == nullptr) {
-        return 0;
+        return serve_greedy_next_byte();
     }
     ensure_scratch_();
     scratch_->copy_state_from(*pred_);
@@ -164,10 +203,7 @@ std::uint8_t HpSequenceBackend::sample_next_byte(double (*rng01)()) const {
     int byte = 0;
     for (int i = 7; i >= 0; --i) {
         const int p12 = snap.predict();
-        const double p1 = static_cast<double>(p12) / 4096.0;
-        const double p0 = 1.0 - p1;
-        const double r = rng01();
-        const int bit = (r < p0 / (p0 + p1 + kLogEps)) ? 0 : 1;
+        const int bit = sample_bit(p12, temperature, rng01);
         byte = (byte << 1) | bit;
         snap.update(bit);
     }

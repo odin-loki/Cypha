@@ -30,10 +30,11 @@ One public type owns classify, regress, latent sample, and next-token generate.
 | Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` (gate24: v78 + `HP_SLOT_MAX=24`) |
 | Production knobs | `hp_table_bits=22`, `hp_slot_max=24`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
 | Compile profile | **gate24 only** — v78_flags.ps1 + `HP_SLOT_MAX=24` + XSIMD (no light/champ SKU matrix) |
-| RAM hotspot | `HpSequenceBackend` holds `pred_` + `scratch_`; gate24 uses legacy 256-clone for full-vocab scoring (bit-tree checkpoint pool OOM at v78 table sizes) |
+| RAM hotspot | `HpSequenceBackend` holds `pred_` + `scratch_` + nine depth checkpoints; serve uses bit-tree DFS (`copy_state_from` backtrack) |
 | Lab RSS (hp harness, mem 22) | **~1.5–2 GB** @ `SLOT_MAX=24` (`hp/tools/hp_harness.sh`) |
 | Cypha BPC (default) | **`eval_bpc` / `compress_equivalent_bpc`**: bit-serial observe NLL |
-| Cypha BPC (API / top-k) | **`predict_next` + 256-clone path**: different metric; **not** hp archive BPC |
+| Cypha BPC (API / top-k) | **`serve_predict_next` + legacy fork log probs** (opt-in bit-tree: `CYPHA_HP_BIT_TREE_LOGPROBS=1`) |
+| **Generation** | `generate_decode` / `cyphalm_generate` — serve path; greedy uses O(8) `serve_greedy_next` |
 | **hp enwik8.8mb (measured 2026-09-19)** | **observe 1.611729**, **archive 1.611759** (vendored hp gate24). Upstream RECORD s24 ref **1.607**. See [`CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md). Removed SKUs: [`REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md) |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; do not compare to hp BPC without relabeling |
 
