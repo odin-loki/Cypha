@@ -129,7 +129,7 @@ jobs:
             test -x "$STAGE/bin/$bin"
           done
           for bin in score_batch_golden multilabel_dif_golden merge_from_golden similarity_index_golden \
-                     embed_table_golden retrieval_golden som_golden kernel_llr_golden \
+                     retrieval_golden som_golden kernel_llr_golden \
                      gh_infer_deliberation_golden cyphalm_checkpoint_golden; do
             test -x "$STAGE/bin/dev/$bin"
           done
@@ -192,7 +192,7 @@ jobs:
           )
           $dev = @(
             'score_batch_golden.exe','multilabel_dif_golden.exe','merge_from_golden.exe',
-            'similarity_index_golden.exe','embed_table_golden.exe','retrieval_golden.exe',
+            'similarity_index_golden.exe','retrieval_golden.exe',
             'som_golden.exe','kernel_llr_golden.exe','gh_infer_deliberation_golden.exe',
             'cyphalm_checkpoint_golden.exe'
           )
@@ -253,7 +253,7 @@ jobs:
             test -x "$STAGE/bin/$bin"
           done
           for bin in score_batch_golden multilabel_dif_golden merge_from_golden similarity_index_golden \
-                     embed_table_golden retrieval_golden som_golden kernel_llr_golden \
+                     retrieval_golden som_golden kernel_llr_golden \
                      gh_infer_deliberation_golden cyphalm_checkpoint_golden; do
             test -x "$STAGE/bin/dev/$bin"
           done

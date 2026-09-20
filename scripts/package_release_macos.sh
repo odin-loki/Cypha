@@ -39,12 +39,12 @@ BINARIES=(
   create_model_smoke
 )
 
+# Dev goldens built by default (embed_table_golden needs CYPHA_BUILD_LEGACY_CYPHALM=ON)
 DEV_BINARIES=(
   score_batch_golden
   multilabel_dif_golden
   merge_from_golden
   similarity_index_golden
-  embed_table_golden
   retrieval_golden
   som_golden
   kernel_llr_golden

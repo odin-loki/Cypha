@@ -44,13 +44,12 @@ $Binaries = @(
     "create_model_smoke.exe"
 )
 
-# Dev / research golden tools (bin/dev/, not on PATH)
+# Dev goldens built by default (embed_table_golden needs CYPHA_BUILD_LEGACY_CYPHALM=ON)
 $DevBinaries = @(
     "score_batch_golden.exe",
     "multilabel_dif_golden.exe",
     "merge_from_golden.exe",
     "similarity_index_golden.exe",
-    "embed_table_golden.exe",
     "retrieval_golden.exe",
     "som_golden.exe",
     "kernel_llr_golden.exe",
