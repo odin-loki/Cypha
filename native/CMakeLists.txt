@@ -470,9 +470,6 @@ target_link_libraries(intelligence_lm_monitor_smoke PRIVATE cypha_core)
 add_executable(lm_self_correct_smoke tools/lm_self_correct_smoke.cpp)
 target_link_libraries(lm_self_correct_smoke PRIVATE cypha_lm_native)
 
-add_executable(navigation_loss_char_lstm_smoke tools/navigation_loss_char_lstm_smoke.cpp)
-target_link_libraries(navigation_loss_char_lstm_smoke PRIVATE cypha_lm_native)
-
 add_executable(quality_recipe_wave1_smoke tools/quality_recipe_wave1_smoke.cpp)
 target_link_libraries(quality_recipe_wave1_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(quality_recipe_wave1_smoke)
@@ -2289,11 +2286,6 @@ add_test(
 add_test(
   NAME native_lm_self_correct_smoke
   COMMAND "$<TARGET_FILE:lm_self_correct_smoke>"
-)
-
-add_test(
-  NAME native_navigation_loss_char_lstm_smoke
-  COMMAND "$<TARGET_FILE:navigation_loss_char_lstm_smoke>"
 )
 
 add_test(
