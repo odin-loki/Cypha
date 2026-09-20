@@ -8,6 +8,9 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Removed
+- **`native_navigation_loss_char_lstm_smoke`:** legacy CharLSTM math-integration smoke (broken under the hp default path); dropped executable + CTest from the optional slow suite.
+
 ### Added
 - **CyphaLM eval harnesses (honest numbers):** `cyphalm_generation_harness` + `scripts/cyphalm_generation_harness.sh` (greedy/temperature qualitative samples); `scripts/cyphalm_hp_shard_holdout.sh` (fair holdout shard-merge BPC); `scripts/cyphalm_lossy_enwik_screen.sh` (full enwik8MB mem20 vs mem22). Reports: `docs/reports/CYPHALM_GENERATION_HARNESS.{json,md}`, `CYPHALM_SHARD_HOLDOUT.json`, refreshed `CYPHALM_LOSSY_ENWIK_SCREEN.json`.
 - **hp shard-merge holdout improvements:** `ShardMergeOptions` confidence gating, `BoundaryReplayConfig` with distance-weighted replay and full-train bridge fine-tune; `prepare_merged_predictor_for_holdout`; holdout ablation mode in `cyphalm_hp_shard_spike`. Measured: full-train bridge closes 57–63% of holdout gap vs PR #15 baseline (still +0.02–0.06 BPC vs single-stream). Report: `docs/reports/CYPHALM_SHARD_HOLDOUT.md`.
