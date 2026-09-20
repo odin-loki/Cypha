@@ -4,17 +4,18 @@
 /// Integer-exact context mixing lives in hp/; this layer exposes byte-level
 /// log-probabilities for the CyphaLM public API (BPC path uses double log_probs).
 ///
-/// RAM note: holds ``pred_`` + ``scratch_`` + a depth checkpoint pool for bit-tree
-/// scoring. ``next_byte_log_probs()`` walks an MSB-first bit prefix tree on
-/// ``scratch_`` with ``assign_from`` backtracking (no per-fork ``clone_from``).
-/// BPC / train loss should use ``observe_next_byte`` / ``observe_stream_bits``
-/// (O(8) bits per byte, no fan-out).
+/// RAM note: holds live ``pred_`` plus optional ``scratch_`` for single-byte fork
+/// scoring. MSB bit-tree uses delta undo on ``scratch_`` (one fork copy), not
+/// depth-indexed full Predictor snapshots.
+/// ``next_byte_log_probs()`` defaults to bit-tree joint scoring; legacy 256-clone path:
+/// ``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1``. BPC / train use ``observe_stream_bits`` (no fan-out).
 
 #include <cstdint>
 #include <memory>
 #include <vector>
 
 #include "hp/predictor.hpp"
+#include "hp/undo.hpp"
 
 namespace cypha::cyphalm {
 
@@ -29,10 +30,10 @@ class HpSequenceBackend {
     void consume_byte(std::uint8_t byte);
 
     /// P(next_byte | history including bytes consumed so far). Does not advance main state.
-    std::vector<double> next_byte_log_probs(int vocab_size) const;
+    std::vector<double> next_byte_log_probs(int vocab_size);
 
-    /// MSB prefix-tree fan-out (default ``next_byte_log_probs`` implementation).
-    std::vector<double> next_byte_log_probs_bit_tree(int vocab_size) const;
+    /// MSB prefix-tree fan-out with delta undo backtracking (default inference path).
+    std::vector<double> next_byte_log_probs_bit_tree(int vocab_size);
 
     /// Legacy 256× deep-clone path (``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`` or parity tests).
     std::vector<double> next_byte_log_probs_legacy(int vocab_size) const;
@@ -53,7 +54,7 @@ class HpSequenceBackend {
     const hp::Predictor& predictor() const { return *pred_; }
     hp::Predictor& predictor() { return *pred_; }
 
-    /// Drop ``scratch_`` + DFS checkpoints to cut RSS on serve paths (lazy recreate).
+    /// Drop ``scratch_`` to cut RSS on serve paths (lazy recreate).
     void compact_for_serve();
 
     /// Lossy: reset cold hash slots (see ``hp::Predictor::prune_cold_hash_slots``).
@@ -69,15 +70,13 @@ class HpSequenceBackend {
     hp::Config cfg_;
     std::unique_ptr<hp::Predictor> pred_;
     mutable std::unique_ptr<hp::Predictor> scratch_;
-    /// Per-depth DFS checkpoints (light profile bit-tree; max 9 assign_from slots).
-    mutable std::vector<std::unique_ptr<hp::Predictor>> dfs_ckpts_;
 
     static double byte_log_prob(hp::Predictor& snap, int byte);
 
     static bool branch_reaches_vocab(int vocab_size, int prefix, int depth, int bit);
-    void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
-                             hp::Predictor& node, std::vector<double>& out_log_nats) const;
-    void init_dfs_ckpts_() const;
+    static void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
+                                    hp::Predictor& node, hp::PredictorUndoStack& undo,
+                                    std::vector<double>& out_log_nats);
     void ensure_scratch_() const;
 
     bool serve_compact_ = false;

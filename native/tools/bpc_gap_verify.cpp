@@ -21,7 +21,8 @@ namespace {
 constexpr double kLog2 = 0.6931471805599453;
 
 double byte_nll_bits_clone(const hp::Config& cfg, hp::Predictor& pred, int byte) {
-    hp::Predictor scratch = hp::Predictor::clone_from(pred, cfg);
+    hp::Predictor scratch(cfg);
+    hp::Predictor::clone_from(pred, scratch);
     double log_p = 0.0;
     for (int i = 7; i >= 0; --i) {
         const int p12 = scratch.predict();

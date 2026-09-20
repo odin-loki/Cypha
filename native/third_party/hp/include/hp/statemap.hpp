@@ -36,6 +36,7 @@
 
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
+#include "hp/undo.hpp"
 
 namespace hp {
 
@@ -115,6 +116,7 @@ class StateMap {
     // Default 0 preserves the original update. Both sides pass the same
     // ensemble p (already computed), so determinism holds.
     void update(int y, int limit = 1023, std::int32_t ncl_extra = 0) {
+        hp_undo_note(t_[idx_]);
         const std::uint32_t p = t_[idx_] >> 10;      // 22-bit probability
         std::uint32_t n = t_[idx_] & 1023u;          // count
         if (n < static_cast<std::uint32_t>(limit)) ++n;
