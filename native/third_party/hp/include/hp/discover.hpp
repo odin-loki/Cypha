@@ -142,6 +142,24 @@ class DiscoveryPool {
     std::uint32_t mask(int i) const { return mask_[i]; }
     int replaced() const { return replaced_; }
 
+    void merge_tables_from(const DiscoveryPool& src, std::uint64_t src_weight,
+                           std::uint64_t dst_weight) {
+        if (static_cast<int>(src.models_.size()) != static_cast<int>(models_.size())) {
+            return;
+        }
+        for (int i = 0; i < kSlots; ++i) {
+            models_[i].merge_tables_from(src.models_[i], src_weight, dst_weight);
+        }
+    }
+
+    void copy_tables_from(const DiscoveryPool& src) {
+        if (static_cast<int>(src.models_.size()) == static_cast<int>(models_.size())) {
+            for (int i = 0; i < kSlots; ++i) {
+                models_[i].copy_tables_from(src.models_[i]);
+            }
+        }
+    }
+
  private:
     // A candidate: 2-5 byte positions out of the last 16.
     //

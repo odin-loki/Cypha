@@ -16,6 +16,7 @@
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/hp_backend.hpp"
+#include "hp/shard_merge.hpp"
 
 namespace {
 
@@ -103,18 +104,59 @@ struct MergeAttempt {
     bool ok = false;
     std::string status = "stub";
     std::string detail;
+    double merged_bpc = std::numeric_limits<double>::quiet_NaN();
 };
 
-MergeAttempt attempt_hp_predictor_merge(cypha::cyphalm::CyphaLMModel& /*dst*/,
-                                        const cypha::cyphalm::CyphaLMModel& /*a*/,
-                                        const cypha::cyphalm::CyphaLMModel& /*b*/) {
+double observe_bpc_keep_tables(cypha::cyphalm::CyphaLMModel& model, const std::vector<int>& ids) {
+    if (ids.empty()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    // Caller must provide a fresh predictor (or call reset_stream_state only after
+    // transfer_tables_from onto a newly constructed model).
+    std::vector<std::uint8_t> bytes(ids.size());
+    for (std::size_t i = 0; i < ids.size(); ++i) {
+        bytes[i] = static_cast<std::uint8_t>(ids[i]);
+    }
+    const double bits = model.hp_backend().observe_stream_bits(bytes.data(), bytes.size());
+    return bits / static_cast<double>(ids.size());
+}
+
+MergeAttempt merge_workers_and_measure(
+    const cypha::cyphalm::CyphaLMConfig& cfg, const std::vector<int>& full_ids,
+    const std::vector<std::vector<int>>& shards,
+    const std::vector<std::unique_ptr<cypha::cyphalm::CyphaLMModel>>& workers) {
     MergeAttempt r;
-    r.ok = false;
-    r.status = "stub";
+    if (workers.empty() || shards.empty() || workers.size() != shards.size()) {
+        r.status = "error";
+        r.detail = "worker/shard count mismatch";
+        return r;
+    }
+
+    cypha::cyphalm::CyphaLMModel merged_tables(cfg);
+    std::uint64_t merged_bytes = 0;
+    for (std::size_t i = 0; i < workers.size(); ++i) {
+        const std::uint64_t shard_bytes = static_cast<std::uint64_t>(shards[i].size());
+        const hp::MergeStatus st = hp::merge_predictor_tables(
+            merged_tables.hp_backend().predictor(), merged_bytes, workers[i]->hp_backend().predictor(),
+            shard_bytes);
+        if (st == hp::MergeStatus::EmptyInput) {
+            r.status = "error";
+            r.detail = "empty shard byte weight";
+            return r;
+        }
+        merged_bytes += shard_bytes;
+    }
+
+    cypha::cyphalm::CyphaLMModel eval_model(cfg);
+    eval_model.hp_backend().predictor().transfer_tables_from(merged_tables.hp_backend().predictor());
+    r.merged_bpc = observe_bpc_keep_tables(eval_model, full_ids);
+    r.ok = true;
+    r.status = "weighted_table_merge";
     r.detail =
-        "TODO: hp::Predictor has no counter/table export or merge_from. "
-        "Cypha federated_average_payloads covers CyphaDIF only (native/src/federated_aggregate.cpp). "
-        "Next: define HpShardPayload with additive counter merge + boundary replay.";
+        "StateMap/Counter/mixer/APM weighted merge; context hash slots keep richer "
+        "bit-history; eval uses transfer_tables_from onto a fresh predictor then "
+        "full-corpus observe. In-sample (shard train bytes == eval corpus); not "
+        "compress-equivalent to single_stream_bpc. Boundary replay not applied.";
     return r;
 }
 
@@ -238,22 +280,34 @@ int main(int argc, char** argv) {
         workers.push_back(std::move(model));
     }
 
-    // (c) merge stub
-    if (workers.size() >= 2) {
-        cypha::cyphalm::CyphaLMModel merged(cfg);
-        const MergeAttempt m = attempt_hp_predictor_merge(merged, *workers[0], *workers[1]);
+    // (c) merge trained shard tables + measure full-corpus BPC
+    if (!workers.empty()) {
+        const MergeAttempt m = merge_workers_and_measure(cfg, ids, shards, workers);
         out["merge_status"] = m.status;
         out["merge_ok"] = m.ok;
         out["merge_detail"] = m.detail;
-        out["merged_full_corpus_bpc"] = nullptr;
+        if (m.ok && std::isfinite(m.merged_bpc)) {
+            out["merged_full_corpus_bpc"] =
+                shard_bpc_json("merged_full_corpus", m.merged_bpc, ids.size());
+            out["merged_bpc"] = m.merged_bpc;
+        } else {
+            out["merged_full_corpus_bpc"] = nullptr;
+            out["merged_bpc"] = nullptr;
+        }
     }
 
     const double single_bpc = out["single_stream_bpc"]["bpc"].get<double>();
     const double seq_bpc = out["sequential_shards_bpc"]["bpc"].get<double>();
     out["sequential_matches_single"] = std::abs(single_bpc - seq_bpc) < 1e-9;
+    out["single_pass_bpc"] = out["single_stream_bpc"];
+    if (out.contains("merged_bpc") && !out["merged_bpc"].is_null()) {
+        const double merged_bpc = out["merged_bpc"].get<double>();
+        out["merged_vs_single_delta_bpc"] = merged_bpc - single_bpc;
+    }
     out["note"] =
-        "merged_full_corpus_bpc stays null until hp table export+merge lands; "
-        "use single_stream_bpc for gate24-quality comparison (enwik ref 1.611729 @ mem 22).";
+        "merged_full_corpus_bpc uses weighted table merge (approximate); "
+        "single_stream_bpc is exact single-pass observe. "
+        "enwik gate24 ref 1.611729 @ mem 22 via scripts/measure_enwik_gate24.sh.";
 
     std::cout << out.dump(2) << '\n';
     return 0;

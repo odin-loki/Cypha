@@ -525,7 +525,13 @@ cypha_mingw_apply_exe_link_options(cyphalm_hp_sku_measure)
 
 add_executable(cyphalm_hp_shard_spike tools/cyphalm_hp_shard_spike.cpp)
 target_link_libraries(cyphalm_hp_shard_spike PRIVATE cypha_lm_native)
+cypha_apply_hp_compile_flags(cyphalm_hp_shard_spike)
 cypha_mingw_apply_exe_link_options(cyphalm_hp_shard_spike)
+
+add_executable(hp_shard_merge_spike tools/hp_shard_merge_spike.cpp)
+target_link_libraries(hp_shard_merge_spike PRIVATE cypha_lm_native)
+cypha_apply_hp_compile_flags(hp_shard_merge_spike)
+cypha_mingw_apply_exe_link_options(hp_shard_merge_spike)
 
 add_executable(tau_forget_gate_smoke tools/tau_forget_gate_smoke.cpp)
 target_link_libraries(tau_forget_gate_smoke PRIVATE cypha_lm_native)

@@ -8,6 +8,7 @@
 // not a maximal model zoo. Adding models is the step-2/3 work and it bolts on
 // here without touching the coder or the mixer.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -172,6 +173,45 @@ class ContextModel {
         return n >= 8 ? 0 : 255 - n * 32;
     }
 
+    /// Merge learned tables from ``src`` (StateMap + hash slot states).
+    void merge_tables_from(const ContextModel& src, std::uint64_t src_weight,
+                           std::uint64_t dst_weight) {
+        sm_.merge_from(src.sm_, src_weight, dst_weight);
+        const std::size_t n = t_.size();
+        const StateTable& st = state_table();
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::uint16_t ds = t_.data()[i];
+            const std::uint16_t ss = src.t_.data()[i];
+            if (ss == 0) {
+                continue;
+            }
+            if (ds == 0) {
+                t_.data()[i] = ss;
+#if HP_HASH_CHK
+                chk_[i] = src.chk_[i];
+#endif
+                continue;
+            }
+            const int d_ev = st.n0(ds) + st.n1(ds);
+            const int s_ev = st.n0(ss) + st.n1(ss);
+            if (s_ev > d_ev) {
+                t_.data()[i] = ss;
+#if HP_HASH_CHK
+                chk_[i] = src.chk_[i];
+#endif
+            }
+        }
+    }
+
+    void copy_tables_from(const ContextModel& src) {
+        sm_.copy_tables_from(src.sm_);
+        const std::size_t n = t_.size();
+        std::memcpy(t_.data(), src.t_.data(), n * sizeof(std::uint16_t));
+#if HP_HASH_CHK
+        chk_ = src.chk_;
+#endif
+    }
+
     void update(int y, int ens_p12 = -1) {
         if (idle_) return;
         std::int32_t ncl = 0;
@@ -233,6 +273,11 @@ class ByteRing {
     std::uint32_t mask() const { return mask_; }
 
     std::uint8_t at(std::uint32_t p) const { return buf_[p & mask_]; }
+
+    void reset() {
+        std::fill(buf_.begin(), buf_.end(), 0);
+        pos_ = 0;
+    }
 
  private:
     std::uint32_t mask_;
@@ -346,6 +391,41 @@ class MatchModel {
 
     int match_len() const { return len_; }
 
+    void merge_counters_from(const MatchModel& src, std::uint64_t src_weight,
+                             std::uint64_t dst_weight) {
+        for (std::size_t i = 0; i < st_.size(); ++i) {
+            merge_counter(st_[i], src.st_[i], src_weight, dst_weight);
+        }
+    }
+
+    void copy_counters_from(const MatchModel& src) { st_ = src.st_; }
+
+ private:
+    static void merge_counter(Counter& dst, const Counter& src, std::uint64_t src_weight,
+                              std::uint64_t dst_weight) {
+        if (src.n == 0) {
+            return;
+        }
+        if (dst.n == 0) {
+            dst = src;
+            return;
+        }
+        const std::uint64_t total = dst_weight + src_weight;
+        if (total == 0) {
+            return;
+        }
+        const int merged_p = static_cast<int>(
+            (static_cast<std::uint64_t>(dst.p) * dst_weight +
+             static_cast<std::uint64_t>(src.p) * src_weight) /
+            total);
+        const int merged_n = static_cast<int>(
+            std::min<std::uint64_t>(65535u, (static_cast<std::uint64_t>(dst.n) * dst_weight +
+                                             static_cast<std::uint64_t>(src.n) * src_weight) /
+                                                total));
+        dst.p = static_cast<std::uint16_t>(merged_p);
+        dst.n = static_cast<std::uint16_t>(merged_n);
+    }
+
  private:
     ByteRing* ring_;
     int order_;
@@ -442,6 +522,43 @@ class HebbianModel {
     }
 
     int strength() const { return strength_; }
+
+    void merge_tables_from(const HebbianModel& src, std::uint64_t src_weight,
+                           std::uint64_t dst_weight) {
+        sm_.merge_from(src.sm_, src_weight, dst_weight);
+        const std::size_t n = t_.size();
+        const StateTable& st = state_table();
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::uint16_t ds = t_.data()[i];
+            const std::uint16_t ss = src.t_.data()[i];
+            if (ss == 0) {
+                continue;
+            }
+            if (ds == 0) {
+                t_.data()[i] = ss;
+                continue;
+            }
+            const int d_ev = st.n0(ds) + st.n1(ds);
+            const int s_ev = st.n0(ss) + st.n1(ss);
+            if (s_ev > d_ev) {
+                t_.data()[i] = ss;
+            }
+        }
+        for (std::size_t i = 0; i < syn_target_.size(); ++i) {
+            if (src.syn_strength_[i] > syn_strength_[i]) {
+                syn_target_[i] = src.syn_target_[i];
+                syn_strength_[i] = src.syn_strength_[i];
+            }
+        }
+    }
+
+    void copy_tables_from(const HebbianModel& src) {
+        sm_.copy_tables_from(src.sm_);
+        const std::size_t n = t_.size();
+        std::memcpy(t_.data(), src.t_.data(), n * sizeof(std::uint16_t));
+        syn_target_ = src.syn_target_;
+        syn_strength_ = src.syn_strength_;
+    }
 
  private:
     std::uint32_t mask_;

@@ -30,6 +30,7 @@
 // nonstationary sources should forget contradicted evidence rather than
 // average it forever. Cap 20 per side keeps the table small and adaptive.
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 
@@ -124,6 +125,40 @@ class StateMap {
                                 d / static_cast<std::int32_t>(n + 2);
         t_[idx_] = (static_cast<std::uint32_t>(np) << 10) | n;
     }
+
+    /// Weighted merge of packed (prob<<10)|count entries (train-scale shard merge).
+    void merge_from(const StateMap& src, std::uint64_t src_weight, std::uint64_t dst_weight) {
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            const std::uint32_t sv = src.t_[i];
+            const std::uint32_t sn = sv & 1023u;
+            if (sn == 0) {
+                continue;
+            }
+            const std::uint32_t dv = t_[i];
+            const std::uint32_t dn = dv & 1023u;
+            if (dn == 0) {
+                t_[i] = sv;
+                continue;
+            }
+            const std::uint64_t total = dst_weight + src_weight;
+            if (total == 0) {
+                continue;
+            }
+            const std::uint32_t sp = sv >> 10;
+            const std::uint32_t dp = dv >> 10;
+            const std::uint32_t mp =
+                static_cast<std::uint32_t>((static_cast<std::uint64_t>(dp) * dst_weight +
+                                            static_cast<std::uint64_t>(sp) * src_weight) /
+                                           total);
+            const std::uint32_t mn = static_cast<std::uint32_t>(
+                std::min<std::uint64_t>(1023u, (static_cast<std::uint64_t>(dn) * dst_weight +
+                                                  static_cast<std::uint64_t>(sn) * src_weight) /
+                                                     total));
+            t_[i] = (mp << 10) | mn;
+        }
+    }
+
+    void copy_tables_from(const StateMap& src) { t_ = src.t_; }
 
  private:
     std::array<std::uint32_t, StateTable::kStates> t_{};

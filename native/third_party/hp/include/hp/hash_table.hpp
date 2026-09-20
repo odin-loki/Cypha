@@ -17,6 +17,10 @@ class HashTable {
     T get(std::uint32_t idx) const { return tab_[idx & mask_]; }
     T& ref(std::uint32_t idx) { return tab_[idx & mask_]; }
 
+    std::size_t size() const { return tab_.size(); }
+    const T* data() const { return tab_.data(); }
+    T* data() { return tab_.data(); }
+
  private:
     std::uint32_t mask_;
     std::vector<T> tab_;

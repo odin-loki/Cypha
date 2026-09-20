@@ -159,6 +159,60 @@ class MixerNet {
     int layer1_p(int j) const { return pr_[static_cast<std::size_t>(j)]; }
     int layer1_dot(int j) const { return dot_[static_cast<std::size_t>(j)]; }
 
+    static MixerWt merge_mixer_wt(MixerWt dst, MixerWt src, std::uint64_t src_weight,
+                                  std::uint64_t dst_weight) {
+        const std::uint64_t total = dst_weight + src_weight;
+        if (total == 0) {
+            return dst;
+        }
+        const int merged = static_cast<int>(
+            (static_cast<std::uint64_t>(mixer_wt_expand(dst)) * dst_weight +
+             static_cast<std::uint64_t>(mixer_wt_expand(src)) * src_weight) /
+            total);
+        return mixer_wt_pack(clamp_int(merged, -kMixerClamp, kMixerClamp));
+    }
+
+    void merge_from(const MixerNet& src, std::uint64_t src_weight, std::uint64_t dst_weight) {
+        if (src.n_ != n_ || src.k_ != k_ || src.w_.size() != w_.size() ||
+            src.v_.size() != v_.size()) {
+            return;
+        }
+        for (std::size_t j = 0; j < w_.size(); ++j) {
+            for (std::size_t i = 0; i < w_[j].size(); ++i) {
+                w_[j][i] = merge_mixer_wt(w_[j][i], src.w_[j][i], src_weight, dst_weight);
+            }
+        }
+        for (std::size_t i = 0; i < v_.size(); ++i) {
+            v_[i] = merge_mixer_wt(v_[i], src.v_[i], src_weight, dst_weight);
+        }
+#if HP_MIXER_RANK
+        if (src.ufac_.size() == ufac_.size() && src.vfac_.size() == vfac_.size()) {
+            for (std::size_t j = 0; j < ufac_.size(); ++j) {
+                for (std::size_t i = 0; i < ufac_[j].size(); ++i) {
+                    ufac_[j][i] =
+                        merge_mixer_wt(ufac_[j][i], src.ufac_[j][i], src_weight, dst_weight);
+                }
+                for (std::size_t i = 0; i < vfac_[j].size(); ++i) {
+                    vfac_[j][i] =
+                        merge_mixer_wt(vfac_[j][i], src.vfac_[j][i], src_weight, dst_weight);
+                }
+            }
+        }
+#endif
+    }
+
+    void copy_from(const MixerNet& src) {
+        if (src.n_ != n_ || src.k_ != k_) {
+            return;
+        }
+        w_ = src.w_;
+        v_ = src.v_;
+#if HP_MIXER_RANK
+        ufac_ = src.ufac_;
+        vfac_ = src.vfac_;
+#endif
+    }
+
  private:
     int n_, k_, lr_;
     std::vector<int> ctx_sizes_;
@@ -204,6 +258,28 @@ class APM {
             t_[idx_] + ((g - static_cast<int>(t_[idx_])) >> rate));
         t_[idx_ + 1] = static_cast<std::uint16_t>(
             t_[idx_ + 1] + ((g - static_cast<int>(t_[idx_ + 1])) >> rate));
+    }
+
+    void merge_from(const APM& src, std::uint64_t src_weight, std::uint64_t dst_weight) {
+        if (src.t_.size() != t_.size()) {
+            return;
+        }
+        const std::uint64_t total = dst_weight + src_weight;
+        if (total == 0) {
+            return;
+        }
+        for (std::size_t i = 0; i < t_.size(); ++i) {
+            t_[i] = static_cast<std::uint16_t>(
+                (static_cast<std::uint64_t>(t_[i]) * dst_weight +
+                 static_cast<std::uint64_t>(src.t_[i]) * src_weight) /
+                total);
+        }
+    }
+
+    void copy_from(const APM& src) {
+        if (src.t_.size() == t_.size()) {
+            t_ = src.t_;
+        }
     }
 
  private:
