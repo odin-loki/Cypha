@@ -40,14 +40,20 @@ class MixerNet {
     }
 
     // Lossy knobs (Config::mixer_skip / Config::gate_drop). Defaults keep gate24.
-    /// Serve-time adaptation: scale every learning rate by num/den (min 1).
-    void scale_rates(int num, int den) {
+    /// Serve-time adaptation: every learning rate = its trained value x num/den
+    /// (min 1), skip threshold = ``skip`` (<0: trained value). Idempotent;
+    /// (1, 1, -1) restores the trained rates.
+    void set_rate_scale(int num, int den, int skip) {
+        if (base_lr1_.empty()) {
+            base_lr_ = lr_;
+            base_lr1_ = lr1_;
+            base_skip_ = skip_;
+        }
         auto sc = [&](int r) { const int v = r * num / den; return v < 1 ? 1 : v; };
-        lr_ = sc(lr_);
-        for (int& r : lr1_) r = sc(r);
+        lr_ = sc(base_lr_);
+        for (std::size_t j = 0; j < lr1_.size(); ++j) lr1_[j] = sc(base_lr1_[j]);
+        skip_ = skip >= 0 ? skip : base_skip_;
     }
-    void set_skip(int skip) { skip_ = skip; }
-    int skip() const { return skip_; }
 
     void set_lossy(int skip, std::uint32_t gate_drop) {
         if (skip > 0) skip_ = skip;
@@ -156,13 +162,15 @@ class MixerNet {
     void checkpoint_write(std::ostream& os) const {
         blob::write_pod(os, n_);
         blob::write_pod(os, k_);
-        blob::write_pod(os, lr_);
+        // Trained rates, not a serve-time scaling (set_rate_scale).
+        const bool scaled = !base_lr1_.empty();
+        blob::write_pod(os, scaled ? base_lr_ : lr_);
         blob::write_vec(os, ctx_sizes_);
         blob::write_vec(os, ctx_);
         blob::write_vec(os, st_);
         blob::write_vec(os, dot_);
         blob::write_vec(os, pr_);
-        blob::write_vec(os, lr1_);
+        blob::write_vec(os, scaled ? base_lr1_ : lr1_);
         for (const auto& row : w_) {
             blob::write_vec(os, row);
         }
@@ -184,6 +192,7 @@ class MixerNet {
         blob::read_vec(is, dot_);
         blob::read_vec(is, pr_);
         blob::read_vec(is, lr1_);
+        base_lr1_.clear();  // the checkpoint holds trained rates
         w_.resize(ctx_sizes_.size());
         for (auto& row : w_) {
             blob::read_vec(is, row);
@@ -206,6 +215,9 @@ class MixerNet {
     std::vector<std::vector<MixerWt>> w_;
     std::vector<MixerWt> v_;
     int skip_ = 32;                 // gate24 HP_MIXER_SKIP
+    // Trained rates, saved by the first set_rate_scale (runtime only).
+    int base_lr_ = 0, base_skip_ = 0;
+    std::vector<int> base_lr1_;
     std::uint32_t gate_drop_ = 0;
     std::int64_t energy_ = 0;
     int m_ = 0;

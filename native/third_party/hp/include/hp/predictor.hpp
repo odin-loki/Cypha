@@ -416,12 +416,10 @@ class Predictor {
     }
     bool learning() const { return learning_; }
 
-    /// Serve-time adaptation speed: scale mixer learning rates by num/den and
-    /// set the mixer's small-error skip threshold (<0 keeps it). Runtime only.
-    void set_serve_adaptation(int num, int den, int skip) {
-        mixer_.scale_rates(num, den);
-        if (skip >= 0) mixer_.set_skip(skip);
-    }
+    /// Serve-time adaptation speed: mixer learning rates = trained x num/den,
+    /// small-error skip threshold = ``skip`` (<0: trained). Idempotent, runtime
+    /// only; (1, 1, -1) restores training behaviour.
+    void set_serve_adaptation(int num, int den, int skip) { mixer_.set_rate_scale(num, den, skip); }
 
 
     /// Hash of everything that learns: context/pool/Hebbian tables and StateMaps,

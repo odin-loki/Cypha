@@ -38,6 +38,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"hp_pool_slots", cfg.hp_pool_slots},
         {"hp_pool_bits_cap", cfg.hp_pool_bits_cap},
         {"hp_frozen_scoring", cfg.hp_frozen_scoring},
+        {"hp_serve_mixer_lr_scale", cfg.hp_serve_mixer_lr_scale},
         {"train_epochs", cfg.train_epochs},
         {"view_schedule", cfg.view_schedule},
         {"view_block_size", cfg.view_block_size},
@@ -79,6 +80,8 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_i("hp_pool_slots", cfg.hp_pool_slots);
     get_i("hp_pool_bits_cap", cfg.hp_pool_bits_cap);
     get_b("hp_frozen_scoring", cfg.hp_frozen_scoring);
+    if (c.contains("hp_serve_mixer_lr_scale"))
+        cfg.hp_serve_mixer_lr_scale = c.at("hp_serve_mixer_lr_scale").get<double>();
     normalize_hp_table_bits(cfg);
     if (c.contains("context_mode")) {
         cfg.context_mode = parse_context_mode(c.at("context_mode").get<std::string>());

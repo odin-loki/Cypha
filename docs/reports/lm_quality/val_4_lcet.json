@@ -1,0 +1,96 @@
+{
+  "eval": {
+    "bit_greedy_equals_argmax": 0.88067626953125,
+    "bytes": 16384,
+    "calibration_bins": [
+      {
+        "accuracy": 0.125,
+        "bin": 0,
+        "confidence": 0.08345632668835717,
+        "n": 104
+      },
+      {
+        "accuracy": 0.16906228610540724,
+        "bin": 1,
+        "confidence": 0.15620026982800306,
+        "n": 1461
+      },
+      {
+        "accuracy": 0.2824314306893996,
+        "bin": 2,
+        "confidence": 0.2459916495700574,
+        "n": 1349
+      },
+      {
+        "accuracy": 0.4023372287145242,
+        "bin": 3,
+        "confidence": 0.3489010653426832,
+        "n": 1198
+      },
+      {
+        "accuracy": 0.47540983606557374,
+        "bin": 4,
+        "confidence": 0.4502210024183482,
+        "n": 1281
+      },
+      {
+        "accuracy": 0.5812030075187969,
+        "bin": 5,
+        "confidence": 0.5486481969078518,
+        "n": 1330
+      },
+      {
+        "accuracy": 0.680327868852459,
+        "bin": 6,
+        "confidence": 0.6497728086280621,
+        "n": 1342
+      },
+      {
+        "accuracy": 0.784217877094972,
+        "bin": 7,
+        "confidence": 0.751864983759736,
+        "n": 1432
+      },
+      {
+        "accuracy": 0.8681793625067531,
+        "bin": 8,
+        "confidence": 0.8538711638577684,
+        "n": 1851
+      },
+      {
+        "accuracy": 0.9710087370929309,
+        "bin": 9,
+        "confidence": 0.9656284863844337,
+        "n": 5036
+      }
+    ],
+    "distribution_ms": 6.068847508239766,
+    "ece_top1": 0.021531017005265548,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 1.7118876786772208,
+    "ms_per_byte": 6.4014127749633785,
+    "nll_bits_by_temperature": {
+      "0.7": 1.7060949903977927,
+      "0.8": 1.650138834604332,
+      "0.9": 1.6261046689455367,
+      "1.0": 1.6251901455338011,
+      "1.1": 1.6420660398413278,
+      "1.2": 1.673364125124742,
+      "1.3": 1.7168460920799498,
+      "1.4": 1.7709196322454652
+    },
+    "nll_bits_per_byte": 1.625190145533801,
+    "offset": 50000,
+    "path": "/home/user/corpora/cant/lcet10.txt",
+    "perplexity_per_byte": 3.0848282008043557,
+    "top1": 0.6737060546875,
+    "top5": 0.89874267578125
+  },
+  "harness": "cyphalm_lm_quality",
+  "loaded": "/home/user/ckpt/pre_lean.json",
+  "reset_stream": "none",
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 9.688032746,
+  "tier": "lean"
+}

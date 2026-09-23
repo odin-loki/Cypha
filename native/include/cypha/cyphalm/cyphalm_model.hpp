@@ -89,6 +89,10 @@ class CyphaLMModel {
     /// and match pointers; keeps every learned table. Use before a new prompt.
     /// keep_history keeps the byte history match models copy from.
     void reset_stream(bool keep_history = false);
+    /// Serving (generation) adapts the hp mixer at
+    /// ``hp_serve_mixer_lr_scale`` x its trained rate; off restores it.
+    /// Training entry points switch it off.
+    void set_serve_mode(bool on);
     void reset_optim_state();
 
     /// Serve/inference: consume ``context_byte``, score next-byte distribution (bit-tree default).

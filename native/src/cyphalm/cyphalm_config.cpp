@@ -145,6 +145,10 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
     if (frozen != nullptr && frozen[0] != '\0') {
         cfg.hp_frozen_scoring = frozen[0] == '1';
     }
+    const char* serve_lr = std::getenv("CYPHA_HP_SERVE_MIXER_LR_SCALE");
+    if (serve_lr != nullptr && serve_lr[0] != '\0') {
+        cfg.hp_serve_mixer_lr_scale = std::atof(serve_lr);
+    }
     const char* prune = std::getenv("CYPHA_HP_PRUNE_COLD_MIN_N");
     if (prune != nullptr && prune[0] != '\0') {
         cfg.hp_prune_cold_min_n = std::max(0, std::atoi(prune));

@@ -87,6 +87,13 @@ void CyphaLMModel::reset_stream(bool keep_history) {
     last_predict_out_ = {};
 }
 
+void CyphaLMModel::set_serve_mode(bool on) {
+    if (!hp_) return;
+    // Mixer rates = trained x scale (in 1/16ths) while serving; trained otherwise.
+    const int num = on ? std::max(1, static_cast<int>(std::lround(cfg_.hp_serve_mixer_lr_scale * 16.0))) : 16;
+    hp_->predictor().set_serve_adaptation(num, 16, -1);
+}
+
 void CyphaLMModel::reset_optim_state() {
     reset_context();
 }
@@ -167,6 +174,7 @@ TrainStepMetrics CyphaLMModel::adapt_after_predict(std::uint32_t next_token_id, 
         next_token_id >= static_cast<std::uint32_t>(pred.log_probs.size())) {
         throw std::runtime_error("adapt_after_predict: require predict_next first / token OOB");
     }
+    set_serve_mode(false);
     TrainStepMetrics m;
     m.loss = -pred.log_probs[static_cast<std::size_t>(next_token_id)];
     m.epistemic_var = pred.epistemic_var;
@@ -194,6 +202,7 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
         return;
     }
     const int ep_count = std::max(1, epochs);
+    set_serve_mode(false);
     for (int ep = 0; ep < ep_count; ++ep) {
         // First epoch trains from scratch (historic behaviour); later epochs keep
         // what was learned and only restart the stream.
@@ -306,6 +315,7 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"hp_pool_slots", cfg_.hp_pool_slots},
         {"hp_pool_bits_cap", cfg_.hp_pool_bits_cap},
         {"hp_frozen_scoring", cfg_.hp_frozen_scoring},
+        {"hp_serve_mixer_lr_scale", cfg_.hp_serve_mixer_lr_scale},
         {"hp_slot_max", cfg_.hp_slot_max},
         {"hp_slot_compile_max", hp_compile_slot_max()},
         {"hp_mixer_lr", cfg_.hp_mixer_lr},

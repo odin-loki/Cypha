@@ -327,6 +327,11 @@ struct CyphaLMConfig {
     /// (enwik8 8 MiB pretrain; CYPHALM_LM_QUALITY_REPORT.md). Training / eval_bpc
     /// are unaffected. Env ``CYPHA_HP_FROZEN_SCORING=0`` restores exact hp scoring.
     bool hp_frozen_scoring = true;
+    /// Serve-time mixer learning rate as a fraction of the trained rate, applied
+    /// while generating (``CyphaLMModel::set_serve_mode``). Adapting half as fast
+    /// to a prompt measured -0.005 to -0.007 bits/byte held-out.
+    /// Env ``CYPHA_HP_SERVE_MIXER_LR_SCALE``.
+    double hp_serve_mixer_lr_scale = 0.5;
 };
 
 /// Compile-time ``HP_SLOT_MAX`` baked into this binary (24, gate24).

@@ -226,6 +226,7 @@ void prime_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids
     // byte history is kept: match models copy from it, and wiping it cost
     // 0.02-0.03 bits/byte held-out (CYPHALM_LM_QUALITY_REPORT.md).
     model.reset_stream(/*keep_history=*/true);
+    model.set_serve_mode(true);
     for (int id : warmup_ids) {
         model.serve_advance(static_cast<std::uint32_t>(id));
     }

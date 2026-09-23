@@ -1,0 +1,96 @@
+{
+  "eval": {
+    "bit_greedy_equals_argmax": 0.75537109375,
+    "bytes": 16384,
+    "calibration_bins": [
+      {
+        "accuracy": 0.10989010989010989,
+        "bin": 0,
+        "confidence": 0.09078051190364889,
+        "n": 364
+      },
+      {
+        "accuracy": 0.14640776699029126,
+        "bin": 1,
+        "confidence": 0.1441910835738263,
+        "n": 2575
+      },
+      {
+        "accuracy": 0.2621145374449339,
+        "bin": 2,
+        "confidence": 0.2500754697969042,
+        "n": 1816
+      },
+      {
+        "accuracy": 0.36952089704383284,
+        "bin": 3,
+        "confidence": 0.3489666101387679,
+        "n": 1962
+      },
+      {
+        "accuracy": 0.45741150442477874,
+        "bin": 4,
+        "confidence": 0.4481843936388296,
+        "n": 1808
+      },
+      {
+        "accuracy": 0.5915678524374176,
+        "bin": 5,
+        "confidence": 0.5486674493211948,
+        "n": 1518
+      },
+      {
+        "accuracy": 0.6950704225352112,
+        "bin": 6,
+        "confidence": 0.6501348935579202,
+        "n": 1420
+      },
+      {
+        "accuracy": 0.7510271158586689,
+        "bin": 7,
+        "confidence": 0.7484724579182069,
+        "n": 1217
+      },
+      {
+        "accuracy": 0.8626964433416047,
+        "bin": 8,
+        "confidence": 0.8500030598117784,
+        "n": 1209
+      },
+      {
+        "accuracy": 0.9783567134268537,
+        "bin": 9,
+        "confidence": 0.9620822159067618,
+        "n": 2495
+      }
+    ],
+    "distribution_ms": 3.9233019549560626,
+    "ece_top1": 0.01706105842980563,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 2.3258061423466105,
+    "ms_per_byte": 4.139106762329102,
+    "nll_bits_by_temperature": {
+      "0.7": 2.37052285665725,
+      "0.8": 2.3021843488345297,
+      "0.9": 2.271235715711625,
+      "1.0": 2.266552895004079,
+      "1.1": 2.2812985273512196,
+      "1.2": 2.311061956349615,
+      "1.3": 2.352855447727614,
+      "1.4": 2.4045381447305716
+    },
+    "nll_bits_per_byte": 2.266552895004079,
+    "offset": 50000,
+    "path": "/home/user/corpora/cant/plrabn12.txt",
+    "perplexity_per_byte": 4.811720674633411,
+    "top1": 0.53271484375,
+    "top5": 0.83270263671875
+  },
+  "harness": "cyphalm_lm_quality",
+  "loaded": "/home/user/ckpt/pre_lean.json",
+  "reset_stream": "none",
+  "serve_lr_quarters": 2,
+  "serve_skip": -1,
+  "setup_seconds": 2.728462287,
+  "tier": "lean"
+}
