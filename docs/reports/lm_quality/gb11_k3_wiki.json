@@ -1,0 +1,84 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/s11_0.json",
+  "mean_distinct_4gram": 0.8153553299492385,
+  "mean_judge_bits": 1.4651285906036224,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.1335467702385307,
+  "members": [
+    "/home/user/ckpt/s11_1.json",
+    "/home/user/ckpt/s11_2.json",
+    "/home/user/ckpt/s11_3.json",
+    "/home/user/ckpt/s11_4.json",
+    "/home/user/ckpt/s11_5.json",
+    "/home/user/ckpt/s11_6.json",
+    "/home/user/ckpt/s11_7.json",
+    "/home/user/ckpt/s11_8.json",
+    "/home/user/ckpt/s11_9.json",
+    "/home/user/ckpt/s11_10.json"
+  ],
+  "min_p": 0.1,
+  "ms_per_byte": 22.00918987875,
+  "prompts": [
+    {
+      "distinct_4gram": 0.868020304568528,
+      "judge_bits": 1.4264012026321384,
+      "offset": 96000000,
+      "reference_judge_bits": 2.1566436959239015,
+      "text": "The term &quot;[[Management that the reasons of critical history]]. The same as the concerned with the [[electromagnetic compromised the Constitution]] and the article that the second reading the the "
+    },
+    {
+      "distinct_4gram": 0.817258883248731,
+      "judge_bits": 1.4072548259056716,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145869652111995,
+      "text": "t;br/&gt;\\n  20. Malpighian tubes&lt;br/&gt;\\n  21. pillow&lt;br/&gt;\\n  20. The second subject to allow are between the early commentator station with the expression to the continued to public statesman"
+    },
+    {
+      "distinct_4gram": 0.7208121827411168,
+      "judge_bits": 1.2209941978813834,
+      "offset": 96016384,
+      "reference_judge_bits": 2.025624057870249,
+      "text": " the alliance the article and the areas of the existence of the conservation of the most of the interesting the control the beginning of the international the descriptions of the followed by another t"
+    },
+    {
+      "distinct_4gram": 0.868020304568528,
+      "judge_bits": 1.4949850648339582,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160953773233524,
+      "text": "s of the [[Democratic Republic]] and and fundamental ganglia)&lt;br/&gt;\\n  20. Malpighian tubes&lt;br/&gt;\\n  20. [[Palace]] of the record with the contributor>\\n      <text xml:space=\"preserve\">:''For "
+    },
+    {
+      "distinct_4gram": 0.7360406091370558,
+      "judge_bits": 1.5973155822923402,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109538680574844,
+      "text": "tml Dictionary of the annihilation of the marriage for some the traditional violation of the extreme soldiers of the [http://chandracourse and the portion of the household and the confines of the exis"
+    },
+    {
+      "distinct_4gram": 0.766497461928934,
+      "judge_bits": 1.5091022720734668,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213895532253161,
+      "text": "andard concerned with the [[Portugal]], allowing standard for displayed for the same the national states the animal of the word the states of the energy and the same climate from the second state of t"
+    },
+    {
+      "distinct_4gram": 0.8274111675126904,
+      "judge_bits": 1.4282588823386106,
+      "offset": 96049152,
+      "reference_judge_bits": 2.487194811583468,
+      "text": "utions of cooperative examples of the infinite scripted music]]\\n* [[International phases of the creation of the most of the north of the European Community of the Anglican Churchill]] of [[Germany]] ["
+    },
+    {
+      "distinct_4gram": 0.9187817258883249,
+      "judge_bits": 1.6367166968714095,
+      "offset": 96057344,
+      "reference_judge_bits": 1.161159937384947,
+      "text": "g concerned to incrementally significantly orthodox]]\\n[[fi:John Barbitrary structure in Britain]]\\n[[sv:Algerian]]\\n[[sv:Jones Characteristics of international television (television States]]) and all t"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 3
+}

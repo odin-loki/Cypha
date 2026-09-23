@@ -1,0 +1,84 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/s11_0.json",
+  "mean_distinct_4gram": 0.8388324873096447,
+  "mean_judge_bits": 1.2669757357675253,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.1335467702385307,
+  "members": [
+    "/home/user/ckpt/s11_1.json",
+    "/home/user/ckpt/s11_2.json",
+    "/home/user/ckpt/s11_3.json",
+    "/home/user/ckpt/s11_4.json",
+    "/home/user/ckpt/s11_5.json",
+    "/home/user/ckpt/s11_6.json",
+    "/home/user/ckpt/s11_7.json",
+    "/home/user/ckpt/s11_8.json",
+    "/home/user/ckpt/s11_9.json",
+    "/home/user/ckpt/s11_10.json"
+  ],
+  "min_p": 0.1,
+  "ms_per_byte": 66.082903330625,
+  "prompts": [
+    {
+      "distinct_4gram": 0.7969543147208121,
+      "judge_bits": 1.2382775595792852,
+      "offset": 96000000,
+      "reference_judge_bits": 2.1566436959239015,
+      "text": "The character and the same subject the same structure without the same reality and the words and the area and the considered the official website]\\n*[http://www.government of the first international co"
+    },
+    {
+      "distinct_4gram": 0.8730964467005076,
+      "judge_bits": 1.2827243732923252,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145869652111995,
+      "text": "t;br/&gt;\\n  20. Malpighian tubes and the considered the official website]\\n*[http://www.government of the first international commentaries of the demonstrated anticipated the interaction between the co"
+    },
+    {
+      "distinct_4gram": 0.8324873096446701,
+      "judge_bits": 1.230058133758571,
+      "offset": 96016384,
+      "reference_judge_bits": 2.025624057870249,
+      "text": " the former considered the official website]\\n*[http://www.government of the first international commentaries of the demonstrated anticipated the interaction between the existence of the excluding the "
+    },
+    {
+      "distinct_4gram": 0.883248730964467,
+      "judge_bits": 1.6719098588379857,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160953773233524,
+      "text": "a]] (sentimentary&lt;br/&gt;\\n  20. Malpighian tubes and the considered the official website]\\n*[http://www.government of the first international commentaries of the demonstrated anticipated the interac"
+    },
+    {
+      "distinct_4gram": 0.8781725888324873,
+      "judge_bits": 0.8994284582719283,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109538680574844,
+      "text": "tml American England contains the contributor>\\n      <comment>\\n      <text xml:space=\"preserve\">#REDIRECT [[History of the British Parliamentary]]. The complicated by the first international commentar"
+    },
+    {
+      "distinct_4gram": 0.7918781725888325,
+      "judge_bits": 1.3077707458051657,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213895532253161,
+      "text": "ructure with the reality and the words and the area and the considered the official website]\\n*[http://www.government of the first international commonly reference of the completed the conditional the "
+    },
+    {
+      "distinct_4gram": 0.817258883248731,
+      "judge_bits": 1.4266651624266231,
+      "offset": 96049152,
+      "reference_judge_bits": 2.487194811583468,
+      "text": "diers of the considered the office of the international mathematician philosopher]]\\n* [[Gottfried the reality and the words and the area and the horizontal engineers]]\\n* [[Ice house]]\\n* [[United State"
+    },
+    {
+      "distinct_4gram": 0.8375634517766497,
+      "judge_bits": 1.0789715941683173,
+      "offset": 96057344,
+      "reference_judge_bits": 1.161159937384947,
+      "text": "]]\\n[[sv:Jonathan Jonathan Governor of the international mathematician philosopher]]\\n[[sv:Anatomically and the terminology and allegedly and institution]]</text>\\n    </revision>\\n  </page>\\n  <page>\\n    "
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 8
+}

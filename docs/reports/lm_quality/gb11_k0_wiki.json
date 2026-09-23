@@ -1,0 +1,84 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/s11_0.json",
+  "mean_distinct_4gram": 0.8978426395939085,
+  "mean_judge_bits": 1.7635945681202043,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.1335467702385307,
+  "members": [
+    "/home/user/ckpt/s11_1.json",
+    "/home/user/ckpt/s11_2.json",
+    "/home/user/ckpt/s11_3.json",
+    "/home/user/ckpt/s11_4.json",
+    "/home/user/ckpt/s11_5.json",
+    "/home/user/ckpt/s11_6.json",
+    "/home/user/ckpt/s11_7.json",
+    "/home/user/ckpt/s11_8.json",
+    "/home/user/ckpt/s11_9.json",
+    "/home/user/ckpt/s11_10.json"
+  ],
+  "min_p": 0.1,
+  "ms_per_byte": 12.828199973750001,
+  "prompts": [
+    {
+      "distinct_4gram": 0.8883248730964467,
+      "judge_bits": 1.555305917085092,
+      "offset": 96000000,
+      "reference_judge_bits": 2.1566436959239015,
+      "text": "The assumption technique to another in terms of structure but the words and an every process successful effect but where the primary commercial areas and at the animal all the pronunciation states mar"
+    },
+    {
+      "distinct_4gram": 0.8883248730964467,
+      "judge_bits": 1.746321382084234,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145869652111995,
+      "text": "t;br/&gt;\\n  23 racer western states in the the article and the lifted foods and literature destiny growing him as an &quot; and content for lung single reasons in the gain the members to the terms of "
+    },
+    {
+      "distinct_4gram": 0.7563451776649747,
+      "judge_bits": 1.4454025597447357,
+      "offset": 96016384,
+      "reference_judge_bits": 2.025624057870249,
+      "text": "tersections notable by the alliance his court for the conditional the existence of the exoskeleton into believe that and light chemical engineer the end of the exoskeleton into believed and other and "
+    },
+    {
+      "distinct_4gram": 0.9238578680203046,
+      "judge_bits": 2.03519471356347,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160953773233524,
+      "text": "s worst and human and component of interests deaths (secondary in which choper growth social public origined by the early recorded the beginning the early while [[Werner Cases]] (real the host new ins"
+    },
+    {
+      "distinct_4gram": 0.9644670050761421,
+      "judge_bits": 1.6230262654436496,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109538680574844,
+      "text": "tml]\\n*[http://www.cirrusimage.com/ North American Insects] A library of 2002 large noted in any consistently complex [[Commissionally performs the reference production a based melodic states]]\\n*[http:"
+    },
+    {
+      "distinct_4gram": 0.9187817258883249,
+      "judge_bits": 1.7329418397327156,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213895532253161,
+      "text": "udy contain reason several also means of the example perfect projects in the particularly in the world. Eastern measure the conditional intersections also while [[Phase (based on models]], one of a co"
+    },
+    {
+      "distinct_4gram": 0.934010152284264,
+      "judge_bits": 2.054532737365448,
+      "offset": 96049152,
+      "reference_judge_bits": 2.487194811583468,
+      "text": "uble trucks it sacked crash cricket]] as origin of marie Basic Society become [[New Testament]]\\n* [[Internal energy]]\\n* [[Males content for its as species while America]]\\n* [[Shelli]]\\n* [[Punk insecti"
+    },
+    {
+      "distinct_4gram": 0.9086294416243654,
+      "judge_bits": 1.9160311299422919,
+      "offset": 96057344,
+      "reference_judge_bits": 1.161159937384947,
+      "text": "o voluntary local body serial particles]]\\n[[ro:Antonio Giants]]\\n[[subconscious information infrared nurse series)|Furar]]\\n[[nn:George Washington instinction musical come a scouse]]\\n[[it:Association en"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 0
+}

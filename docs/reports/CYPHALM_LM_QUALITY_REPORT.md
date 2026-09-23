@@ -292,6 +292,17 @@ top-1 65.4%, ECE 2.1% / 1.3%.
 - Shards train in parallel on separate cores, so the recipe scales training
   time and quality together.
 
+**Building one.** `cyphalm_shard_train` splits a corpus into N shards, trains
+them on worker threads, and writes the checkpoints plus an `ensemble.json`
+manifest. `load_cyphalm_model` reads a manifest as one model, so
+`cyphalm_generate --load`, the REST server and the harnesses serve it
+unchanged:
+
+```bash
+cyphalm_shard_train --train enwik8 --bytes 95000000 --shards 11 --tier lean --table-bits 20 --threads 4 --out /tmp/ens
+cyphalm_generate --load /tmp/ens/ensemble.json --prompt "..."
+```
+
 `CyphaLMModel::add_ensemble_member(model, weight)` attaches pretrained models
 for serving. Every serve path fans out (scoring, context advance, learning
 switch, stream reset, serve mixer rate), and `hp::StreamRewind` covers every
@@ -319,6 +330,9 @@ benchmark (8 wiki prompts, `cyphalm_gen_bench`, judge lean 16 MiB):
 | 95 MB, lookahead K 8 | 1.642 | 0.810 | 15 |
 | 2-shard ensemble, K 8 | 1.158 | 0.789 | 37 |
 | 5-shard ensemble, K 8 | 1.195 | 0.769 | 92 |
+| 11-shard ensemble, byte sampling | 1.764 | 0.898 | 12.8 |
+| 11-shard ensemble, K 3 | 1.465 | 0.815 | 22 |
+| 11-shard ensemble, K 8 | 1.267 | 0.839 | 66 |
 
 The judge was trained on the first 16 MiB, so it favours models trained there.
 Compare decoders on one model, not models against each other (held-out NLL
