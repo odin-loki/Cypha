@@ -124,10 +124,12 @@ class HpSequenceBackend {
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).
     void reset_stream(bool keep_history);
-    /// Fold this model's tables (``hp::Predictor::fold_tables``); members untouched.
+    /// Fold this model's and every ensemble member's tables to the caps and
+    /// drops in ``target`` (``hp::Predictor::fold_tables``).
     void fold_tables(const hp::Config& target) {
         pred_->fold_tables(target);
         cfg_ = pred_->config();
+        for (auto& m : members_) m.backend->fold_tables(target);
         last_valid_ = false;
     }
     /// Serve mixer rate on every model (``hp::Predictor::set_serve_adaptation``).

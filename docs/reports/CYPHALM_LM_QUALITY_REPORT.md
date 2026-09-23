@@ -388,6 +388,12 @@ smaller slots, smaller tables or fewer of them.
   (16 bits: +0.009 / +0.004) but not for one trained on 95 MB (+0.020 /
   +0.013), where they index far more text. `slim` therefore keeps match
   tables at lean's size.
+- **Byte-match models** can be dropped too (`Config::match_drop`,
+  `--match-drop`). On the 95 MB model, where match tables are 38% of slim, five
+  of the thirteen (orders 4, 5, 6 and skip-2 / skip-3) each moved held-out
+  NLL by ≤0.001. Dropping all five: 577 → 496 MB for +0.0009 / −0.0003 /
+  −0.0001. Three more cost another 48 MB for +0.005 on wiki. `slim` now drops
+  the five.
 - **Merging shards** into one model (`--merge`, `merge_shard_tables`): two
   8.6 MB shards merged into one table set gain 0.039 over one shard at the
   same RAM, but merging all eleven collapses (2.006 wiki), because one set of
@@ -407,7 +413,8 @@ Held-out wiki NLL (lower is better) against resident footprint:
 |---|---:|---:|---:|
 | 95 MB model, packed + context 22 + match/pool 16 | 343 MB | 1.8577 | 2.2961 |
 | 8 MiB model, slim | 576 MB | 1.8341 | 2.2685 |
-| **95 MB model, slim drop + pool/Hebbian 16** | **577 MB** | **1.7729** | **2.2445** |
+| **95 MB model, slim (incl. 5 match models dropped)** | **496 MB** | **1.7738** | **2.2442** |
+| 95 MB model, slim drop + pool/Hebbian 16 | 577 MB | 1.7729 | 2.2445 |
 | 95 MB model, packed | 819 MB | 1.7660 | 2.2263 |
 | 95 MB model, unpacked (before) | 1071 MB | 1.7608 | 2.2158 |
 | 5 shards, context 22 + match/pool 16 | 810 MB | 1.7717 | 2.2301 |
@@ -415,15 +422,19 @@ Held-out wiki NLL (lower is better) against resident footprint:
 | 5 shards, match/pool 16 | 1.72 GB | 1.7399 | 2.2039 |
 | **11 shards, slim drop + pool/Hebbian 16** | **4.0 GB** | **1.7069** | **2.1936** |
 | 11 shards trained slim (`cyphalm_shard_train --tier slim`) | 3.9 GB | 1.7058 | 2.1949 |
+| **11 slim shards, 5 match models dropped** | **3.55 GB** | **1.7085** | **2.1957** |
+| **11 slim shards at table bits 18, 5 match models dropped** | **2.29 GB** | **1.7268** | **2.2004** |
 | **95 MB slim + 11 slim shards** | **4.5 GB** | **1.6916** | **2.1812** |
 | 11 shards, packed | 5.04 GB | 1.7009 | 2.1834 |
 | 11 shards, unpacked (before) | 7.2 GB | 1.6994 | 2.1797 |
 
 - **Up to ~1 GB,** one model trained on all the data is the best use of
-  memory. Slim plus packing takes the 95 MB model from 1071 to 577 MB (−46%)
-  for +0.012 wiki / +0.029 Alice.
+  memory. Slim plus packing takes the 95 MB model from 1071 to 496 MB (−54%)
+  for +0.013 wiki / +0.028 Alice.
 - **Above ~1 GB,** ensembles of shard models win. The 11-shard ensemble drops
-  from 7.2 to 4.0 GB (−44%) for +0.008 / +0.014.
+  from 7.2 GB to 3.55 GB (−51%) for +0.009 / +0.016. Trained at table bits
+  18, it drops to 2.29 GB (−68%) for +0.027 / +0.021, still well ahead of the
+  single 95 MB model (1.7608 / 2.2158 at 1.07 GB).
 - **With mapped loading,** a single model's tables stay shareable file-backed
   pages when served frozen. Learning from the prompt writes pages, though, and
   an ensemble's members all learn. After 8 KB of prompt, the 11 slim shards

@@ -199,6 +199,7 @@ void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
     cfg.hp_pool_slots = 0;
     cfg.hp_pool_bits_cap = 0;
     cfg.hp_hebb_bits_cap = 0;
+    cfg.hp_match_drop = 0;
     if (tier.empty() || tier == "gate24") {
         cfg.hp_lossy_tier.clear();
         return;
@@ -234,6 +235,9 @@ void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
         cfg.hp_match_bits_cap = 22;
         cfg.hp_pool_bits_cap = 16;
         cfg.hp_hebb_bits_cap = 16;
+        // Five byte-match models (orders 4, 5, 6; skip 2, 3) each within
+        // ±0.001 held-out when dropped from a 95 MB model: -84 MB there.
+        cfg.hp_match_drop = (1u << 1) | (1u << 2) | (1u << 8) | (1u << 10) | (1u << 11);
     }
     if (cfg.hp_cm_drop == 0) {
         throw std::runtime_error("unknown CyphaLM lossy tier: " + tier);

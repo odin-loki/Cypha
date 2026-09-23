@@ -1,0 +1,111 @@
+{
+  "drop_mask": 0,
+  "eval": {
+    "bit_greedy_equals_argmax": 0.885986328125,
+    "bytes": 8192,
+    "calibration_bins": [
+      {
+        "accuracy": 0.08695652173913043,
+        "bin": 0,
+        "confidence": 0.08435867180378699,
+        "n": 46
+      },
+      {
+        "accuracy": 0.15,
+        "bin": 1,
+        "confidence": 0.1587312889127646,
+        "n": 580
+      },
+      {
+        "accuracy": 0.2878120411160059,
+        "bin": 2,
+        "confidence": 0.249659956418807,
+        "n": 681
+      },
+      {
+        "accuracy": 0.4090150250417362,
+        "bin": 3,
+        "confidence": 0.3512745739611951,
+        "n": 599
+      },
+      {
+        "accuracy": 0.47865853658536583,
+        "bin": 4,
+        "confidence": 0.4516765788942405,
+        "n": 656
+      },
+      {
+        "accuracy": 0.5993740219092332,
+        "bin": 5,
+        "confidence": 0.5474546001563753,
+        "n": 639
+      },
+      {
+        "accuracy": 0.6507177033492823,
+        "bin": 6,
+        "confidence": 0.6500453587169682,
+        "n": 627
+      },
+      {
+        "accuracy": 0.7917847025495751,
+        "bin": 7,
+        "confidence": 0.7484465542220661,
+        "n": 706
+      },
+      {
+        "accuracy": 0.8633405639913232,
+        "bin": 8,
+        "confidence": 0.8557340972093851,
+        "n": 922
+      },
+      {
+        "accuracy": 0.9733187134502924,
+        "bin": 9,
+        "confidence": 0.966378990725058,
+        "n": 2736
+      }
+    ],
+    "distribution_ms": 7.143606005859384,
+    "ece_top1": 0.0211971386524403,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 1.6479152442582088,
+    "ms_per_byte": 7.355372958862304,
+    "nll_bits_by_temperature": {
+      "0.7": 1.6654935357461245,
+      "0.8": 1.6050758100063796,
+      "0.9": 1.5779119662701253,
+      "1.0": 1.5750524940695003,
+      "1.1": 1.5910908044708374,
+      "1.2": 1.6226365157437028,
+      "1.3": 1.6674656635342975,
+      "1.4": 1.7240110091619796
+    },
+    "nll_bits_per_byte": 1.5750524940694985,
+    "offset": 50000,
+    "path": "/home/user/corpora/cant/lcet10.txt",
+    "perplexity_per_byte": 2.979463335372439,
+    "top1": 0.6903076171875,
+    "top5": 0.9010009765625
+  },
+  "fold": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "harness": "cyphalm_lm_quality",
+  "loaded": "/home/user/ckpt/slim95.json",
+  "match_drop": 512,
+  "reset_stream": "none",
+  "rss_anon_mb_after_eval": 556.49609375,
+  "rss_anon_mb_after_setup": 556.1015625,
+  "rss_file_mb_after_eval": 4.43359375,
+  "rss_file_mb_after_setup": 4.17578125,
+  "rss_hwm_mb": 576.19140625,
+  "rss_mb_after_eval": 560.9296875,
+  "rss_mb_after_setup": 560.27734375,
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 0.281914841,
+  "tier": "lean"
+}
