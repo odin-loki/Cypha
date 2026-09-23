@@ -393,6 +393,12 @@ smaller slots, smaller tables or fewer of them.
   same RAM, but merging all eleven collapses (2.006 wiki), because one set of
   tables cannot hold them.
 
+- **Freezing the big tables while serving** keeps pages shared, but in-context
+  learning lives largely in the context tables. Slim 8 MiB model, 16 KB of
+  text: all tables learning, 1.8049 / 2.1050 and 493 MB private. Tables of
+  23+ bits frozen, 1.8412 / 2.1507 and 239 MB private. All frozen, 1.8839 /
+  2.2745 and 194 MB private (match, history and pool writes remain). Not kept.
+
 ### RAM / quality frontier
 
 Held-out wiki NLL (lower is better) against resident footprint:
