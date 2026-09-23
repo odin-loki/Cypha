@@ -85,6 +85,14 @@ class HpSequenceBackend {
 
     bool serve_compact() const { return serve_compact_; }
 
+    /// Frozen scoring: distributions (bit tree, greedy, sampling, log_prob_byte)
+    /// are computed from the model as it stands at the byte boundary, with no
+    /// learning inside the hypothetical byte. Faster (no update work to record
+    /// and undo); still a normalised distribution. Off = hp's compression
+    /// semantics (each hypothetical bit trains the model before the next).
+    void set_frozen_scoring(bool on) { frozen_scoring_ = on; }
+    bool frozen_scoring() const { return frozen_scoring_; }
+
     /// Online learning on/off for subsequent bytes (``hp::Predictor::set_learning``).
     void set_learning(bool on) { pred_->set_learning(on); }
     bool learning() const { return pred_->learning(); }
@@ -118,6 +126,7 @@ class HpSequenceBackend {
     double byte_log_prob_on_pred_(std::uint8_t byte) const;
 
     bool serve_compact_ = false;
+    bool frozen_scoring_ = false;
 };
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria);

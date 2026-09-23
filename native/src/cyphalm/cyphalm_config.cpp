@@ -141,6 +141,10 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
     if (tier != nullptr && tier[0] != '\0') {
         apply_hp_lossy_tier(cfg, tier);
     }
+    const char* frozen = std::getenv("CYPHA_HP_FROZEN_SCORING");
+    if (frozen != nullptr && frozen[0] != '\0') {
+        cfg.hp_frozen_scoring = frozen[0] == '1';
+    }
     const char* prune = std::getenv("CYPHA_HP_PRUNE_COLD_MIN_N");
     if (prune != nullptr && prune[0] != '\0') {
         cfg.hp_prune_cold_min_n = std::max(0, std::atoi(prune));

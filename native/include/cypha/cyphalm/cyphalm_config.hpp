@@ -322,6 +322,9 @@ struct CyphaLMConfig {
     int hp_pool_slots = 0;           ///< keep this many discovered-context slots (gate24 = 12)
     int hp_pool_bits_cap = 0;        ///< cap discovered-context tables at this many bits
     std::string hp_lossy_tier;       ///< name of the applied tier ("" = gate24), informational
+    /// Serve-time frozen scoring (``HpSequenceBackend::set_frozen_scoring``).
+    /// Env ``CYPHA_HP_FROZEN_SCORING=1``.
+    bool hp_frozen_scoring = false;
 };
 
 /// Compile-time ``HP_SLOT_MAX`` baked into this binary (24, gate24).

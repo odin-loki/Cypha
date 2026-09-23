@@ -1,5 +1,6 @@
 /// Frozen serve: with learning off, consuming bytes must not change anything the
 /// model has learned (hp::Predictor::learned_digest), only its context.
+#include <cmath>
 #include <cstdio>
 #include <random>
 #include <string>
@@ -44,6 +45,23 @@ int main() {
         std::printf("hp_frozen_smoke FAIL control: learning on changed nothing\n");
         return 1;
     }
+    // Frozen scoring: normalised distribution, and scoring changes nothing.
+    hp.set_frozen_scoring(true);
+    const std::uint64_t before_scoring = hp.predictor().learned_digest();
+    const auto lp = hp.next_byte_log_probs(256);
+    (void)hp.serve_greedy_next_byte();
+    (void)hp.log_prob_byte('t');
+    double z = 0.0;
+    for (double v : lp) z += std::exp(v);
+    if (std::abs(z - 1.0) > 1e-9 || hp.predictor().learned_digest() != before_scoring ||
+        !hp.predictor().learning()) {
+        std::printf("hp_frozen_smoke FAIL frozen scoring: sum=%.12f digest %s learning %d\n", z,
+                    hp.predictor().learned_digest() == before_scoring ? "same" : "changed",
+                    hp.predictor().learning() ? 1 : 0);
+        return 1;
+    }
+    hp.set_frozen_scoring(false);
+
     std::printf("hp_frozen_smoke OK digest %016llx unchanged over 2000 frozen bytes\n",
                 static_cast<unsigned long long>(trained));
     return 0;

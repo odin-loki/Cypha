@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
     int table_bits = 22, gen_bytes = 200, prompt_bytes = 256;
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
+    bool compare_scoring = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() -> std::string {
@@ -102,6 +103,7 @@ int main(int argc, char** argv) {
         else if (a == "--temperature") temperature = std::stod(next());
         else if (a == "--top-p") top_p = std::stod(next());
         else if (a == "--frozen-eval") frozen_eval = true;
+        else if (a == "--compare-scoring") compare_scoring = true;
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -152,10 +154,29 @@ int main(int argc, char** argv) {
         constexpr int kBins = 10;
         double bin_conf[kBins] = {}, bin_acc[kBins] = {};
         std::size_t bin_n[kBins] = {};
+        const double temps[] = {0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4};
+        constexpr int kTemps = 8;
+        double nll_t[kTemps] = {};
+        double f_nll = 0.0, f_secs = 0.0, e_secs = 0.0;
+        std::size_t f_top1 = 0;
         const auto t0 = Clock::now();
         for (std::size_t k = 0; k < n_eval; ++k) {
-            const auto lp = hp.serve_next_byte_log_probs(256);
             const int truth = ev[k];
+            if (compare_scoring) {
+                hp.set_frozen_scoring(true);
+                const auto tf = Clock::now();
+                const auto lpf = hp.serve_next_byte_log_probs(256);
+                f_secs += seconds_since(tf);
+                hp.set_frozen_scoring(false);
+                f_nll += -lpf[static_cast<std::size_t>(truth)] / kLn2;
+                int am = 0;
+                for (int b = 1; b < 256; ++b)
+                    if (lpf[static_cast<std::size_t>(b)] > lpf[static_cast<std::size_t>(am)]) am = b;
+                if (am == truth) ++f_top1;
+            }
+            const auto te = Clock::now();
+            const auto lp = hp.serve_next_byte_log_probs(256);
+            e_secs += seconds_since(te);
             int argmax = 0;
             double pmax = -1.0, h = 0.0;
             int rank = 0;
@@ -169,6 +190,14 @@ int main(int argc, char** argv) {
                 if (lp[static_cast<std::size_t>(b)] > lp[static_cast<std::size_t>(truth)]) ++rank;
             }
             nll_bits += -lp[static_cast<std::size_t>(truth)] / kLn2;
+            for (int t = 0; t < kTemps; ++t) {
+                // log softmax(lp / T) at the true byte
+                double mx = -1e300;
+                for (int b = 0; b < 256; ++b) mx = std::max(mx, lp[static_cast<std::size_t>(b)] / temps[t]);
+                double z = 0.0;
+                for (int b = 0; b < 256; ++b) z += std::exp(lp[static_cast<std::size_t>(b)] / temps[t] - mx);
+                nll_t[t] += -(lp[static_cast<std::size_t>(truth)] / temps[t] - mx - std::log(z)) / kLn2;
+            }
             entropy_bits += h / kLn2;
             if (rank == 0) ++top1;
             if (rank < 5) ++top5;
@@ -192,6 +221,8 @@ int main(int argc, char** argv) {
             bins.push_back({{"bin", b}, {"n", bin_n[b]}, {"confidence", c}, {"accuracy", acc}});
         }
         const double n = static_cast<double>(n_eval);
+        nlohmann::json tsweep = nlohmann::json::object();
+        for (int t = 0; t < kTemps; ++t) tsweep[std::to_string(temps[t]).substr(0, 3)] = nll_t[t] / n;
         out["eval"] = {{"path", eval_path},
                        {"learning", frozen_eval ? "frozen (pretrained only)" : "online (in-context)"},
                        {"offset", eval_offset},
@@ -204,7 +235,14 @@ int main(int argc, char** argv) {
                        {"ece_top1", ece},
                        {"bit_greedy_equals_argmax", greedy_is_argmax / n},
                        {"calibration_bins", bins},
-                       {"ms_per_byte", 1e3 * secs / n}};
+                       {"nll_bits_by_temperature", tsweep},
+                       {"ms_per_byte", 1e3 * secs / n},
+                       {"distribution_ms", 1e3 * e_secs / n}};
+        if (compare_scoring) {
+            out["frozen_scoring"] = {{"nll_bits_per_byte", f_nll / n},
+                                     {"top1", f_top1 / n},
+                                     {"distribution_ms", 1e3 * f_secs / n}};
+        }
 
         // Continuations from the held-out prompt that follows the eval slice.
         if (gen_bytes > 0 && prompt_bytes > 0 && ev.size() > n_eval) {

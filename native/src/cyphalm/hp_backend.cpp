@@ -47,6 +47,25 @@ int sample_bit(int p12, double temperature, double (*rng01)()) {
     return (r < w0 / (w0 + w1 + kLogEps)) ? 0 : 1;
 }
 
+/// Turns learning off for the duration of a scoring call when frozen scoring
+/// is on, and restores the previous setting.
+class ScoringScope {
+ public:
+    ScoringScope(hp::Predictor& p, bool frozen) : p_(p), prev_(p.learning()), active_(frozen) {
+        if (active_) p_.set_learning(false);
+    }
+    ~ScoringScope() {
+        if (active_) p_.set_learning(prev_);
+    }
+    ScoringScope(const ScoringScope&) = delete;
+    ScoringScope& operator=(const ScoringScope&) = delete;
+
+ private:
+    hp::Predictor& p_;
+    bool prev_;
+    bool active_;
+};
+
 }  // namespace
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria) {
@@ -74,6 +93,7 @@ HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
     : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)) {}
 
 double HpSequenceBackend::byte_log_prob_on_pred_(std::uint8_t byte) const {
+    ScoringScope scoring(*pred_, frozen_scoring_);
     hp::PredictorUndoStack undo;
     hp::UndoFrame& frame = undo.push_frame();
     double log_p = 0.0;
@@ -199,6 +219,7 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) {
+    ScoringScope scoring(*pred_, frozen_scoring_);
     const int n = std::max(1, std::min(vocab_size, 256));
     if (log_probs_buf_.size() != static_cast<std::size_t>(n)) {
         log_probs_buf_.assign(static_cast<std::size_t>(n),
@@ -252,6 +273,7 @@ double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
 }
 
 std::uint8_t HpSequenceBackend::serve_greedy_next_byte() const {
+    ScoringScope scoring(*pred_, frozen_scoring_);
     hp::PredictorUndoStack undo;
     hp::UndoFrame& frame = undo.push_frame();
     int byte = 0;
@@ -275,6 +297,7 @@ std::uint8_t HpSequenceBackend::sample_next_byte(double (*rng01)()) const {
 
 std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
                                                        double (*rng01)()) const {
+    ScoringScope scoring(*pred_, frozen_scoring_);
     if (rng01 == nullptr) {
         return serve_greedy_next_byte();
     }
