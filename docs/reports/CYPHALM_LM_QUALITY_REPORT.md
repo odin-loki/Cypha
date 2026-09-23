@@ -194,17 +194,24 @@ so that is everything that changes. `hp_stream_rewind_smoke` checks that full
 checkpoints are byte-identical after 60 random rewinds, with bit-tree and serve
 scoring nested inside, and that 1000 later distributions match an untouched
 copy. A first version copied the model (1.1 GB) per candidate and ran at
-~400 ms/byte; with rewinds it is ~1.8× the cost of byte sampling.
+~400 ms/byte. With rewinds, and with candidates sharing each prefix's
+distribution (they start from the same state and often agree), generation
+latency from `cyphalm_generate` (300 bytes, lean, one core) is:
 
-400 bytes from the held-out prompts (judge bits / distinct 4-grams / ms per
-byte on a loaded 4-core machine):
+| decode | ms/byte |
+|---|---:|
+| byte sampling | 1.8 |
+| word lookahead K 4 | 5.6 |
+| word lookahead K 8 (default) | 12.7 |
+
+400 bytes from the held-out prompts (judge bits / distinct 4-grams):
 
 | decode | wiki | Alice |
 |---|---|---|
 | reference (true continuation) | 1.68 / 0.86 | 2.17 / 0.92 |
-| byte sampling (min-p 0.1, T 0.8) | 1.10 / 0.68 / 20 | 1.59 / 0.86 / 19 |
-| word lookahead K 4 | 0.86 / 0.69 / 27 | 1.22 / 0.73 / 28 |
-| **word lookahead K 8 (new default)** | 0.70 / 0.74 / 37 | 0.96 / 0.72 / 36 |
+| byte sampling (min-p 0.1, T 0.8) | 1.10 / 0.68 | 1.59 / 0.86 |
+| word lookahead K 4 | 0.86 / 0.69 | 1.22 / 0.73 |
+| **word lookahead K 8 (new default)** | 0.70 / 0.74 | 0.96 / 0.72 |
 
 Samples, K 8:
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <map>
 #include <memory>
 #include <random>
 #include <stdexcept>
@@ -606,14 +607,25 @@ GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<in
         std::vector<Cand> cands;
         {
             hp::StreamRewind rewind(hp.predictor());
+            // Candidates share prefixes: cache each prefix's distribution and
+            // advance the model only when a new prefix needs one.
+            std::map<std::vector<int>, std::vector<double>> dist_cache;
             for (int k = 0; k < k_cands; ++k) {
                 Cand c;
                 bool seen_word = false;
                 std::vector<int> so_far = gen;
+                std::size_t advanced = 0;  // bytes of c.bytes consumed by the model
                 for (int j = 0; j < kMaxWordBytes &&
                                 static_cast<int>(gen.size() + c.bytes.size()) < max_bytes;
                      ++j) {
-                    const std::vector<double> lp = hp.serve_next_byte_log_probs(vocab);
+                    auto hit = dist_cache.find(c.bytes);
+                    if (hit == dist_cache.end()) {
+                        for (; advanced < c.bytes.size(); ++advanced) {
+                            hp.serve_advance_byte(static_cast<std::uint8_t>(c.bytes[advanced]));
+                        }
+                        hit = dist_cache.emplace(c.bytes, hp.serve_next_byte_log_probs(vocab)).first;
+                    }
+                    const std::vector<double>& lp = hit->second;
                     std::vector<double> mod = lp;
                     apply_decode_modifiers(mod, build_recent_context(params.warmup_ids, prompt_ids, so_far), sp);
                     const int b = (sp.strategy == DecodeStrategy::Greedy || sp.temperature <= 1e-6)
@@ -623,7 +635,6 @@ GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<in
                     c.lp.push_back(lp[static_cast<std::size_t>(b)]);
                     c.sum += lp[static_cast<std::size_t>(b)];
                     so_far.push_back(b);
-                    hp.serve_advance_byte(static_cast<std::uint8_t>(b));
                     if (is_word_byte(b)) seen_word = true;
                     else if (seen_word) break;  // the word and its delimiter
                 }

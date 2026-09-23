@@ -395,6 +395,7 @@ int main(int argc, char** argv) {
                 p.learn_from_output = m.learn_from_output;
                 p.min_p = m.min_p;
                 p.no_repeat_ngram = m.no_repeat;
+                p.word_candidates = 0;  // byte-level modes
                 const auto t_gen = Clock::now();
                 const auto g = cypha::cyphalm::generate_decode(fresh, prompt, gen_bytes, p);
                 // Judge: the pretrained model reads the prompt (learning on), then
