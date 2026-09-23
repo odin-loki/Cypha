@@ -27,6 +27,8 @@
 #include "hp/int_math.hpp"
 #include "hp/mixer.hpp"
 #include "hp/models.hpp"
+#include <optional>
+
 #include "hp/numeric.hpp"
 #include "hp/pattern_cache.hpp"
 #include "hp/stat_gates.hpp"
@@ -515,7 +517,8 @@ class Predictor {
             hp_undo_note(bitpos_);
             c0_ = 1;
             bitpos_ = 0;
-            if (UndoRecorderScope::active() == nullptr) {
+            if (UndoRecorderScope::active() == nullptr ||
+                UndoRecorderScope::active()->records_byte_end()) {
                 end_of_byte(byte);
             }
         }
@@ -1039,6 +1042,40 @@ class Predictor {
     int mixed_p_ = 2048;
     int last_mlen_ = 0;
     int sparse_ = 0;
+};
+
+/// Exact, cheap rewind of frozen advances (learning off): generate a few
+/// bytes on the live predictor, then return it bit-for-bit to where it was.
+/// Saves the predictor's inline state (~170 KB) and records every heap write
+/// made while advancing (ring, match tables) in an undo frame. Learned tables
+/// are not written while learning is off, so nothing else changes. Used for
+/// lookahead decoding without copying the model (~1 GB).
+/// Relies on no container being resized while frozen.
+class StreamRewind {
+ public:
+    explicit StreamRewind(Predictor& p)
+        : p_(p), saved_(new unsigned char[sizeof(Predictor)]) {
+        frame_.set_records_byte_end(true);
+        std::memcpy(saved_.get(), static_cast<const void*>(&p_), sizeof(Predictor));
+        scope_.emplace(frame_);
+    }
+    ~StreamRewind() { scope_.reset(); }
+
+    StreamRewind(const StreamRewind&) = delete;
+    StreamRewind& operator=(const StreamRewind&) = delete;
+
+    /// Back to the state at construction. Recording continues.
+    void rewind() {
+        frame_.restore_patches();
+        frame_.clear();
+        std::memcpy(static_cast<void*>(&p_), saved_.get(), sizeof(Predictor));
+    }
+
+ private:
+    Predictor& p_;
+    std::unique_ptr<unsigned char[]> saved_;
+    UndoFrame frame_;
+    std::optional<UndoRecorderScope> scope_;
 };
 
 inline UndoFrame::~UndoFrame() = default;

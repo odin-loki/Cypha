@@ -92,6 +92,29 @@ int main() {
         }
     }
 
+    {
+        // Word lookahead: exact rewinds leave the model as a plain frozen decode would.
+        cypha::cyphalm::CyphaLMModel model(cfg);
+        std::vector<int> ids(text.begin(), text.begin() + 5000);
+        for (int b : ids) model.hp_backend().consume_byte(static_cast<std::uint8_t>(b));
+        cypha::cyphalm::DecodeParams p;
+        p.word_candidates = 4;
+        std::vector<int> prompt = {'t'};
+        const auto g = cypha::cyphalm::generate_decode(model, prompt, 40, p);
+        cypha::cyphalm::CyphaLMModel twin(cfg);
+        for (int b : ids) twin.hp_backend().consume_byte(static_cast<std::uint8_t>(b));
+        twin.reset_stream(/*keep_history=*/true);
+        twin.set_serve_mode(true);
+        twin.serve_advance('t');
+        if (g.generated_ids.size() != 40 ||
+            model.hp_backend().predictor().learned_digest() !=
+                twin.hp_backend().predictor().learned_digest()) {
+            std::printf("hp_frozen_smoke FAIL word lookahead: %zu bytes, digest changed\n",
+                        g.generated_ids.size());
+            return 1;
+        }
+    }
+
     std::printf("hp_frozen_smoke OK digest %016llx unchanged over 2000 frozen bytes\n",
                 static_cast<unsigned long long>(trained));
     return 0;

@@ -66,6 +66,7 @@ class WordMatchModel {
                     len_ = 1;
                 }
             }
+            hp_undo_note(tab_.ref(h));
             tab_.ref(h) = pos;
         }
         if (len_ > 0 && (pos - ptr_) > ring_mask_) len_ = 0;

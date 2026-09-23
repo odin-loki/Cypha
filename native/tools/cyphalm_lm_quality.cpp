@@ -10,7 +10,6 @@
 ///   cyphalm_lm_quality --train enwik8 --train-bytes 8388608 --save /tmp/pre
 ///   cyphalm_lm_quality --load /tmp/pre.json --eval enwik8 --eval-offset 96000000 --eval-bytes 32768
 #include <algorithm>
-#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -389,133 +388,27 @@ int main(int argc, char** argv) {
                                 {"judge_bits_per_byte", jbits / std::max<std::size_t>(1, g.generated_ids.size())},
                                 {"text", printable(g.generated_ids)}});
             }
-            // Word-level best-of-K: at each word, sample K candidate words (min-p 0.1,
-            // T 0.8, frozen) on a copy of the model, keep one by a selection rule,
-            // then advance the real model along it.
-            if (word_k > 0) {
-                for (const char* rule : {"mean", "sir", "mean_norep", "soft_norep"}) {
+            // Word lookahead (DecodeParams::word_candidates) at K/2 and K candidates,
+            // default byte-level settings otherwise.
+            if (word_k > 1) {
+                for (int k : {std::max(2, word_k / 2), word_k}) {
                     auto fresh = cypha::cyphalm::load_cyphalm_model(blob + ".json");
-                    auto& fh = fresh.hp_backend();
-                    fresh.reset_stream(true);
-                    for (int b : prompt) fh.consume_byte(static_cast<std::uint8_t>(b));
-                    fh.set_learning(false);
-                    auto work = fh.predictor_snapshot();
-                    std::mt19937_64 rng(1234);
-                    std::uniform_real_distribution<double> u01(0.0, 1.0);
-                    std::vector<int> gen;
+                    cypha::cyphalm::DecodeParams p;
+                    p.seed = 1234;
+                    p.word_candidates = k;
                     const auto t_gen = Clock::now();
-                    while (static_cast<int>(gen.size()) < gen_bytes) {
-                        struct Cand { std::vector<int> bytes; double lp = 0.0, lq = 0.0; };
-                        std::vector<Cand> cands;
-                        for (int k = 0; k < word_k; ++k) {
-                            work->copy_state_from(fh.predictor());
-                            Cand c;
-                            bool seen_letter = false;
-                            for (int j = 0; j < 24; ++j) {
-                                auto lp = cypha::cyphalm::HpSequenceBackend::byte_log_probs_bit_tree(*work, 256);
-                                double mx = -1e300;
-                                for (double v : lp) mx = std::max(mx, v);
-                                std::vector<double> q(256, 0.0);
-                                double z = 0.0;
-                                for (int b = 0; b < 256; ++b) {
-                                    const double v = lp[static_cast<std::size_t>(b)];
-                                    if (v < mx + std::log(0.1)) continue;
-                                    q[static_cast<std::size_t>(b)] = std::exp((v - mx) / 0.8);
-                                    z += q[static_cast<std::size_t>(b)];
-                                }
-                                double r = u01(rng) * z;
-                                int pick = 0;
-                                for (int b = 0; b < 256; ++b) {
-                                    r -= q[static_cast<std::size_t>(b)];
-                                    if (r <= 0 && q[static_cast<std::size_t>(b)] > 0) { pick = b; break; }
-                                }
-                                c.bytes.push_back(pick);
-                                c.lp += lp[static_cast<std::size_t>(pick)];
-                                c.lq += std::log(q[static_cast<std::size_t>(pick)] / z);
-                                cypha::cyphalm::HpSequenceBackend::consume_byte_on(*work, static_cast<std::uint8_t>(pick));
-                                const bool letter = std::isalnum(pick) != 0;
-                                if (letter) seen_letter = true;
-                                else if (seen_letter) break;  // word plus its delimiter
-                            }
-                            cands.push_back(std::move(c));
-                        }
-                        std::size_t best = 0;
-                        const std::string rs(rule);
-                        // A candidate "repeats" if any 12-byte window ending inside it
-                        // already occurs in the last 1 KiB of prompt + output.
-                        auto repeats = [&](const Cand& c) {
-                            std::vector<int> ctx(prompt.end() - std::min<std::ptrdiff_t>(512, static_cast<std::ptrdiff_t>(prompt.size())), prompt.end());
-                            ctx.insert(ctx.end(), gen.end() - std::min<std::ptrdiff_t>(512, static_cast<std::ptrdiff_t>(gen.size())), gen.end());
-                            const std::size_t base = ctx.size();
-                            ctx.insert(ctx.end(), c.bytes.begin(), c.bytes.end());
-                            constexpr std::size_t kN = 12;
-                            for (std::size_t e = base; e < ctx.size(); ++e) {
-                                if (e + 1 < kN) continue;
-                                const std::size_t st = e + 1 - kN;
-                                for (std::size_t j = 0; j < st; ++j) {
-                                    if (std::equal(ctx.begin() + static_cast<std::ptrdiff_t>(j),
-                                                   ctx.begin() + static_cast<std::ptrdiff_t>(j + kN),
-                                                   ctx.begin() + static_cast<std::ptrdiff_t>(st)))
-                                        return true;
-                                }
-                            }
-                            return false;
-                        };
-                        if (rs == "mean_norep" || rs == "soft_norep") {
-                            std::vector<double> sc;
-                            double mx = -1e300;
-                            for (const auto& c : cands) {
-                                const double v = repeats(c) ? -1e300 : c.lp / static_cast<double>(c.bytes.size());
-                                sc.push_back(v);
-                                mx = std::max(mx, v);
-                            }
-                            if (mx <= -1e299) {
-                                best = 0;  // every candidate repeats: take the first sample
-                            } else if (rs == "mean_norep") {
-                                for (std::size_t i = 0; i < sc.size(); ++i) if (sc[i] == mx) { best = i; break; }
-                            } else {
-                                // Soft: pick ∝ exp(mean log p / 0.25) among non-repeating.
-                                double zw = 0.0;
-                                std::vector<double> w;
-                                for (double v : sc) { w.push_back(v <= -1e299 ? 0.0 : std::exp((v - mx) / 0.25)); zw += w.back(); }
-                                double r = u01(rng) * zw;
-                                for (std::size_t i = 0; i < w.size(); ++i) { r -= w[i]; if (r <= 0 && w[i] > 0) { best = i; break; } }
-                            }
-                        } else if (rs == "sir") {
-                            // Sampling-importance-resampling: pick ∝ p/q, i.e. draw
-                            // from the model's own (untempered) word distribution.
-                            std::vector<double> w;
-                            double mw = -1e300;
-                            for (const auto& c : cands) { w.push_back(c.lp - c.lq); mw = std::max(mw, w.back()); }
-                            double zw = 0.0;
-                            for (double& x : w) { x = std::exp(x - mw); zw += x; }
-                            double r = u01(rng) * zw;
-                            for (std::size_t i = 0; i < w.size(); ++i) { r -= w[i]; if (r <= 0) { best = i; break; } }
-                        } else {
-                            auto score = [&](const Cand& c) {
-                                return rs == "sum" ? c.lp
-                                                                  : c.lp / static_cast<double>(c.bytes.size());
-                            };
-                            for (std::size_t i = 1; i < cands.size(); ++i)
-                                if (score(cands[i]) > score(cands[best])) best = i;
-                        }
-                        for (int b : cands[best].bytes) {
-                            if (static_cast<int>(gen.size()) >= gen_bytes) break;
-                            fh.consume_byte(static_cast<std::uint8_t>(b));
-                            gen.push_back(b);
-                        }
-                    }
+                    const auto g = cypha::cyphalm::generate_decode(fresh, prompt, gen_bytes, p);
                     auto judge = cypha::cyphalm::load_cyphalm_model(blob + ".json");
                     auto& jh = judge.hp_backend();
                     for (int b : prompt) jh.consume_byte(static_cast<std::uint8_t>(b));
                     jh.set_learning(false);
                     double jbits = 0.0;
-                    for (int b : gen) jbits += jh.observe_next_byte(static_cast<std::uint8_t>(b)) / kLn2;
-                    gens.push_back({{"mode", std::string("word best-of-") + std::to_string(word_k) + " " + rule},
+                    for (int b : g.generated_ids) jbits += jh.observe_next_byte(static_cast<std::uint8_t>(b)) / kLn2;
+                    gens.push_back({{"mode", "word lookahead K" + std::to_string(k)},
                                     {"ms_per_byte", 1e3 * seconds_since(t_gen) / std::max(1, gen_bytes)},
-                                    {"distinct_4gram", distinct_ngram_ratio(gen, 4)},
-                                    {"judge_bits_per_byte", jbits / std::max<std::size_t>(1, gen.size())},
-                                    {"text", printable(gen)}});
+                                    {"distinct_4gram", distinct_ngram_ratio(g.generated_ids, 4)},
+                                    {"judge_bits_per_byte", jbits / std::max<std::size_t>(1, g.generated_ids.size())},
+                                    {"text", printable(g.generated_ids)}});
                 }
             }
             std::error_code ec;

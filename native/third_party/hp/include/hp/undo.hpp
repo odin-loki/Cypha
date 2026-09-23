@@ -28,6 +28,11 @@ class UndoFrame {
 
     bool empty() const { return !has_snap_ && patches_.empty() && sizes_.empty(); }
 
+    /// A frame that also records byte boundaries (StreamRewind). Bit-tree
+    /// frames leave it off: the predictor then skips end-of-byte work.
+    void set_records_byte_end(bool on) { byte_end_ = on; }
+    bool records_byte_end() const { return byte_end_; }
+
     void push_predictor(const Predictor& p, const Config& cfg);
     void pop_predictor(Predictor& p) const;
 
@@ -86,6 +91,7 @@ class UndoFrame {
     std::vector<SizeRec> sizes_;
     std::unique_ptr<Predictor> snap_;
     bool has_snap_ = false;
+    bool byte_end_ = false;
 };
 
 class UndoRecorderScope {

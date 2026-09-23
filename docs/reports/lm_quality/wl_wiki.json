@@ -1,0 +1,126 @@
+{
+  "eval": {
+    "bit_greedy_equals_argmax": 0.844482421875,
+    "bytes": 16384,
+    "calibration_bins": [
+      {
+        "accuracy": 0.07971014492753623,
+        "bin": 0,
+        "confidence": 0.08491441082805277,
+        "n": 138
+      },
+      {
+        "accuracy": 0.16211401425178149,
+        "bin": 1,
+        "confidence": 0.1566384288508769,
+        "n": 1684
+      },
+      {
+        "accuracy": 0.2694575471698113,
+        "bin": 2,
+        "confidence": 0.2495377901992041,
+        "n": 1696
+      },
+      {
+        "accuracy": 0.3559105431309904,
+        "bin": 3,
+        "confidence": 0.34956369925006064,
+        "n": 1565
+      },
+      {
+        "accuracy": 0.45410628019323673,
+        "bin": 4,
+        "confidence": 0.44976855888194206,
+        "n": 1449
+      },
+      {
+        "accuracy": 0.5716510903426791,
+        "bin": 5,
+        "confidence": 0.5488488072827404,
+        "n": 1284
+      },
+      {
+        "accuracy": 0.6564685314685315,
+        "bin": 6,
+        "confidence": 0.6496015126994981,
+        "n": 1144
+      },
+      {
+        "accuracy": 0.8047244094488188,
+        "bin": 7,
+        "confidence": 0.7515829298938108,
+        "n": 1270
+      },
+      {
+        "accuracy": 0.8902654867256637,
+        "bin": 8,
+        "confidence": 0.8541545101592788,
+        "n": 1695
+      },
+      {
+        "accuracy": 0.9737609329446064,
+        "bin": 9,
+        "confidence": 0.9654370533709267,
+        "n": 4459
+      }
+    ],
+    "distribution_ms": 3.3606584372558617,
+    "ece_top1": 0.016045478237299907,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 1.8752872243833922,
+    "ms_per_byte": 3.542012609680176,
+    "nll_bits_by_temperature": {
+      "0.7": 1.884542436001422,
+      "0.8": 1.825860851364582,
+      "0.9": 1.8002861438968567,
+      "1.0": 1.7983179290733522,
+      "1.1": 1.8141869429197799,
+      "1.2": 1.8442505884941989,
+      "1.3": 1.8861127155554378,
+      "1.4": 1.9381066226069539
+    },
+    "nll_bits_per_byte": 1.7983179290733509,
+    "offset": 96000000,
+    "path": "/home/user/corpora/enwik8",
+    "perplexity_per_byte": 3.478144640351946,
+    "top1": 0.6295166015625,
+    "top5": 0.88043212890625
+  },
+  "generations": [
+    {
+      "distinct_4gram": 0.8564231738035264,
+      "judge_bits_per_byte": 1.6750686429326689,
+      "mode": "reference (true continuation)",
+      "text": " order to increase in size, then grows a new outer covering.  In most types of insects, the young, called '''nymphs''', are basically similar in form to the adults (an example is the grasshopper), though wings are not developed until the adult stage.  This is called ''incomplete  [[metamorphosis (biology)|metamorphosis]]''. ''Complete metamorphosis'' distinguishes the [[Endopterygota]], which incl"
+    },
+    {
+      "distinct_4gram": 0.6775818639798489,
+      "judge_bits_per_byte": 1.1000922031876001,
+      "mode": "minp0.1 T0.8 frozen",
+      "ms_per_byte": 20.2374406625,
+      "text": "ternational local complete abounds of the tracheal the classicized from office in the tracheal of the trachea little and members of series of the exoskeleton the exoskeleton the exoskeleton the exoskeleton a links between an understood that some links in the experiments on or held the collections of the fact and even surpassed a such that by the fact is little of insects main even an arrangement o"
+    },
+    {
+      "distinct_4gram": 0.690176322418136,
+      "judge_bits_per_byte": 0.8641644694702308,
+      "mode": "word lookahead K4",
+      "ms_per_byte": 26.82061394,
+      "text": "ternational insects. The complexity of the abdominal ganglions and/or fusing thorax and the body and other insects like the tracheal tubes of the additions of the insects, the pressure the head of the mosque the existence of the exception. The internal section of the father of the front of the incomplete metamorphosis of the heart of the members of the most powerful and also experiments the heart "
+    },
+    {
+      "distinct_4gram": 0.7405541561712846,
+      "judge_bits_per_byte": 0.6964871449113713,
+      "mode": "word lookahead K8",
+      "ms_per_byte": 37.40351382,
+      "text": "ternational organizations of the abdominal spiracle and associated trachea of caterpillars in the administration of the insects are the internal existing the trachea are often the tracheole cell basement membrane. Since they are considered the heart relationship between the spiracles are also the heart of the heart attacks on the hemolymph seeps back into the heart.\\n\\nThe history of the exocuticle "
+    }
+  ],
+  "harness": "cyphalm_lm_quality",
+  "loaded": "/home/user/ckpt/pre_lean.json",
+  "prompt_tail": " is a process by which the individual escapes the confines of the exoskeleton in",
+  "reset_stream": "none",
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 5.770666721,
+  "tier": "lean"
+}

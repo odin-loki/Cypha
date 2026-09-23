@@ -147,7 +147,12 @@ class ContextModel {
           chk_(static_cast<std::size_t>(1) << (table_bits > 0 ? table_bits : 0)),
           sm_() {}
 
-    void set_context(std::uint32_t h) { h_ = h; idle_ = false; }
+    void set_context(std::uint32_t h) {
+        hp_undo_note(h_);
+        hp_undo_note(idle_);
+        h_ = h;
+        idle_ = false;
+    }
     // Frozen models neither learn nor claim hash slots (Predictor::set_learning).
     void set_frozen(bool f) { frozen_ = f; }
 
@@ -157,7 +162,12 @@ class ContextModel {
         return sm_.learned_digest(h);
     }
     // fx2 sets(): keep a mixer slot but do not pollute the table.
-    void set_idle() { idle_ = true; h_ = 0; }
+    void set_idle() {
+        hp_undo_note(idle_);
+        hp_undo_note(h_);
+        idle_ = true;
+        h_ = 0;
+    }
 
     // Writes kOutputs stretched values into out[]. backoff is the parent
     // order's probability, used by the PY estimate.
@@ -883,6 +893,7 @@ class LzpModel {
         const std::uint32_t h =
             hash2(0x4C5A5033ull, hist & 0xffffffull) & mask_;
         expected_ = pred_[h];
+        hp_undo_note(pred_[h]);
         pred_[h] = static_cast<std::uint8_t>(byte);
         have_ = 1;
     }

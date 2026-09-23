@@ -546,6 +546,120 @@ GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt
     return out;
 }
 
+namespace {
+
+/// True if a ``n``-byte window ending inside ``tail`` (appended to ``ctx``)
+/// already occurs earlier in ``ctx`` + ``tail``.
+bool repeats_ngram(const std::vector<int>& ctx, const std::vector<int>& tail, int n) {
+    if (n <= 0) return false;
+    std::vector<int> all(ctx);
+    const std::size_t base = all.size();
+    all.insert(all.end(), tail.begin(), tail.end());
+    const std::size_t kn = static_cast<std::size_t>(n);
+    for (std::size_t e = base; e < all.size(); ++e) {
+        if (e + 1 < kn) continue;
+        const std::size_t st = e + 1 - kn;
+        for (std::size_t j = 0; j < st; ++j) {
+            if (std::equal(all.begin() + static_cast<std::ptrdiff_t>(j),
+                           all.begin() + static_cast<std::ptrdiff_t>(j + kn),
+                           all.begin() + static_cast<std::ptrdiff_t>(st))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool is_word_byte(int b) {
+    return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b >= 0x80;
+}
+
+}  // namespace
+
+GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<int>& prompt_ids,
+                                       int max_bytes, const DecodeParams& params) {
+    GenerateOutput out;
+    out.strategy = params.strategy;
+    if (max_bytes <= 0) return out;
+    prime_serve_context(model, params.warmup_ids, prompt_ids);
+    HpSequenceBackend& hp = model.hp_backend();
+    LearningGuard learning_guard(hp);
+    // The prompt's last byte is learned like the rest of the prompt.
+    if (!prompt_ids.empty()) model.serve_advance(static_cast<std::uint32_t>(prompt_ids.back()));
+    hp.set_learning(false);
+
+    const int vocab = model.config().vocab_size;
+    const int k_cands = std::max(1, params.word_candidates);
+    constexpr int kMaxWordBytes = 24;
+    constexpr std::size_t kRepeatWindow = 1024;
+    std::mt19937_64 rng(params.seed);
+    DecodeParams sp = params;
+    sp.strategy = effective_sample_strategy(params);
+
+    struct Cand {
+        std::vector<int> bytes;
+        std::vector<double> lp;
+        double sum = 0.0;
+    };
+    std::vector<int>& gen = out.generated_ids;
+    while (static_cast<int>(gen.size()) < max_bytes) {
+        std::vector<Cand> cands;
+        {
+            hp::StreamRewind rewind(hp.predictor());
+            for (int k = 0; k < k_cands; ++k) {
+                Cand c;
+                bool seen_word = false;
+                std::vector<int> so_far = gen;
+                for (int j = 0; j < kMaxWordBytes &&
+                                static_cast<int>(gen.size() + c.bytes.size()) < max_bytes;
+                     ++j) {
+                    const std::vector<double> lp = hp.serve_next_byte_log_probs(vocab);
+                    std::vector<double> mod = lp;
+                    apply_decode_modifiers(mod, build_recent_context(params.warmup_ids, prompt_ids, so_far), sp);
+                    const int b = (sp.strategy == DecodeStrategy::Greedy || sp.temperature <= 1e-6)
+                                      ? argmax_log_probs(mod)
+                                      : sample_token(mod, sp, rng);
+                    c.bytes.push_back(b);
+                    c.lp.push_back(lp[static_cast<std::size_t>(b)]);
+                    c.sum += lp[static_cast<std::size_t>(b)];
+                    so_far.push_back(b);
+                    hp.serve_advance_byte(static_cast<std::uint8_t>(b));
+                    if (is_word_byte(b)) seen_word = true;
+                    else if (seen_word) break;  // the word and its delimiter
+                }
+                cands.push_back(std::move(c));
+                rewind.rewind();
+            }
+        }
+        // Highest mean log p among candidates that do not repeat recent text.
+        std::vector<int> recent = build_recent_context(params.warmup_ids, prompt_ids, gen);
+        if (recent.size() > kRepeatWindow) {
+            recent.erase(recent.begin(), recent.end() - static_cast<std::ptrdiff_t>(kRepeatWindow));
+        }
+        std::size_t best = 0;
+        double best_score = -1e300;
+        for (std::size_t i = 0; i < cands.size(); ++i) {
+            if (cands[i].bytes.empty() || repeats_ngram(recent, cands[i].bytes, params.word_no_repeat)) continue;
+            const double score = cands[i].sum / static_cast<double>(cands[i].bytes.size());
+            if (score > best_score) {
+                best_score = score;
+                best = i;
+            }
+        }
+        const Cand& pick = cands[best];  // all repeat: the first sample
+        if (pick.bytes.empty()) break;
+        for (std::size_t j = 0; j < pick.bytes.size(); ++j) {
+            hp.serve_advance_byte(static_cast<std::uint8_t>(pick.bytes[j]));
+            gen.push_back(pick.bytes[j]);
+            GenerateStep step;
+            step.token_id = pick.bytes[j];
+            step.loss = -pick.lp[j];
+            out.per_step.push_back(step);
+        }
+    }
+    return out;
+}
+
 GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens,
                                const DecodeParams& params,
                                cypha::intelligence::EpistemicThreshold* epistemic_threshold,
@@ -555,6 +669,9 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
         params.strategy == DecodeStrategy::Beam ? std::max(2, params.beam_width) : params.beam_width;
     if (beam_width > 1) {
         return generate_beam(model, prompt_ids, max_tokens, params);
+    }
+    if (params.word_candidates > 1 && !params.learn_from_output) {
+        return generate_word_lookahead(model, prompt_ids, max_tokens, params);
     }
 
     GenerateOutput out;
@@ -670,6 +787,15 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
                      cypha::intelligence::EpistemicThreshold* epistemic_threshold,
                      cypha::intelligence::IntelligenceProfiler* profiler,
                      LmIntelligenceMonitor* monitor) {
+    if (params.word_candidates > 1 && !params.learn_from_output) {
+        // Word lookahead picks whole words; emit its bytes once decoded.
+        const GenerateOutput g = generate_word_lookahead(model, prompt_ids, max_tokens, params);
+        for (std::size_t i = 0; i < g.per_step.size(); ++i) {
+            if (!cb(step_record_json(g.per_step[i], static_cast<int>(i), false, false))) return;
+        }
+        (void)cb(step_record_json(GenerateStep{}, static_cast<int>(g.per_step.size()), true, false));
+        return;
+    }
     prime_serve_context(model, params.warmup_ids, prompt_ids);
     int last = prompt_ids.empty() ? 0 : prompt_ids.back();
     std::mt19937_64 rng(params.seed);

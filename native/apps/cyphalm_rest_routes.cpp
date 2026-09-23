@@ -66,6 +66,8 @@ DecodeParams decode_params_from_json(const nlohmann::json& body) {
     p.top_k = body.value("top_k", p.top_k);
     p.top_p = body.value("top_p", p.top_p);
     p.min_p = body.value("min_p", p.min_p);
+    p.word_candidates = body.value("word_candidates", p.word_candidates);
+    p.word_no_repeat = body.value("word_no_repeat", p.word_no_repeat);
     p.no_repeat_ngram = body.value("no_repeat_ngram", p.no_repeat_ngram);
     p.no_repeat_window = body.value("no_repeat_window", p.no_repeat_window);
     p.learn_from_output = body.value("learn_from_output", p.learn_from_output);

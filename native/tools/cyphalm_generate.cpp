@@ -20,7 +20,7 @@ void usage(const char* argv0) {
                  "[--warmup-file PATH] [--warmup-bytes N] [--ban-last-k K] "
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
-                 "[--learn-from-output] [--latency]\n",
+                 "[--word-candidates K] [--learn-from-output] [--latency]\n",
                  argv0);
 }
 
@@ -75,6 +75,7 @@ int main(int argc, char** argv) {
     double min_p = defaults.min_p;
     int no_repeat = defaults.no_repeat_ngram;
     bool learn_from_output = defaults.learn_from_output;
+    int word_candidates = defaults.word_candidates;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -118,6 +119,8 @@ int main(int argc, char** argv) {
             min_p = std::atof(argv[++i]);
         } else if (arg == "--no-repeat" && i + 1 < argc) {
             no_repeat = std::atoi(argv[++i]);
+        } else if (arg == "--word-candidates" && i + 1 < argc) {
+            word_candidates = std::atoi(argv[++i]);
         } else if (arg == "--learn-from-output") {
             learn_from_output = true;
         } else if (arg == "--help" || arg == "-h") {
@@ -157,6 +160,7 @@ int main(int argc, char** argv) {
     params.min_p = min_p;
     params.no_repeat_ngram = no_repeat;
     params.learn_from_output = learn_from_output;
+    params.word_candidates = word_candidates;
     if (!warmup_file.empty() && warmup_bytes > 0) {
         params.warmup_ids =
             cypha::cyphalm::load_warmup_bytes(warmup_file, warmup_bytes, cfg.vocab_size);

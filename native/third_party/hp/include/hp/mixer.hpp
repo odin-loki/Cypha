@@ -65,7 +65,10 @@ class MixerNet {
         if (m_ < n_) st_[m_++] = static_cast<MixerSt>(stretched);
     }
 
-    void set_ctx(int j, int c) { ctx_[j] = c % ctx_sizes_[j]; }
+    void set_ctx(int j, int c) {
+        hp_undo_note(ctx_[j]);
+        ctx_[j] = c % ctx_sizes_[j];
+    }
     void set_ctx2(int c) { ctx2_ = c; }
 
     int mix() {

@@ -66,6 +66,16 @@ struct DecodeParams {
     /// mem 22). Off: the O(8) bit-by-bit greedy walk, which is faster but picks a
     /// different byte ~20% of the time on enwik8 (``cyphalm_lm_quality``).
     bool exact_greedy = true;
+    /// Word lookahead (0/1 = off): at each word, sample this many candidate
+    /// words (to the next delimiter) with the byte-level settings above, rewind
+    /// exactly after each (hp::StreamRewind, no model copy), and keep the one
+    /// with the highest mean log-probability that does not repeat a
+    /// ``word_no_repeat``-byte sequence of the recent text. More coherent
+    /// text than byte sampling alone (CYPHALM_LM_QUALITY_REPORT.md). Needs
+    /// ``learn_from_output`` off (ignored otherwise). Default 8: ~1.8x the
+    /// per-byte cost of byte sampling. 0 = byte sampling only.
+    int word_candidates = 8;
+    int word_no_repeat = 12;
 };
 
 DecodeStrategy decode_strategy_from_string(const std::string& name);
@@ -99,6 +109,10 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
 /// Byte-level beam search on bit-tree log probs (``beam_width`` hypotheses, predictor snapshots).
 GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_bytes,
                              const DecodeParams& params);
+
+/// Word-lookahead decode (``DecodeParams::word_candidates``).
+GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<int>& prompt_ids,
+                                       int max_bytes, const DecodeParams& params);
 
 /// Greedy decode (legacy wrapper).
 GenerateOutput generate_greedy(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_tokens);
