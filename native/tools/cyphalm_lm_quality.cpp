@@ -85,8 +85,8 @@ int main(int argc, char** argv) {
     bool compare_scoring = false;
     std::string reset_mode = "none";
     int serve_lr = 4, serve_skip = -1, epochs = 1;
-    std::string ensemble_json;
     std::vector<std::string> members;  // library ensemble, equal weights
+    double ensemble_lr = -1.0;  // <0: the model's config default
     int word_k = 0;
     bool only_default = false;
     for (int i = 1; i < argc; ++i) {
@@ -115,8 +115,8 @@ int main(int argc, char** argv) {
         else if (a == "--serve-lr") serve_lr = std::stoi(next());
         else if (a == "--serve-skip") serve_skip = std::stoi(next());
         else if (a == "--epochs") epochs = std::stoi(next());
-        else if (a == "--ensemble") ensemble_json = next();
         else if (a == "--member") members.push_back(next());
+        else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
         else if (a == "--word-k") word_k = std::stoi(next());
         else if (a == "--only-default") only_default = true;
         else {
@@ -139,6 +139,7 @@ int main(int argc, char** argv) {
                                        1.0 / static_cast<double>(members.size() + 1));
         }
         if (!members.empty()) out["members"] = members;
+        if (ensemble_lr >= 0.0) model->hp_backend().set_ensemble_learning_rate(ensemble_lr);
     } else {
         cypha::cyphalm::CyphaLMConfig cfg;
         cfg.hp_table_bits = table_bits;
@@ -180,21 +181,6 @@ int main(int argc, char** argv) {
         out["reset_stream"] = reset_mode;
         // Serve-time adaptation: mixer rates x serve_lr/4, skip threshold.
         hp.predictor().set_serve_adaptation(serve_lr, 4, serve_skip);
-        // Optional second model: its distribution is mixed with the first.
-        std::unique_ptr<cypha::cyphalm::CyphaLMModel> model2;
-        if (!ensemble_json.empty()) {
-            model2 = std::make_unique<cypha::cyphalm::CyphaLMModel>(
-                cypha::cyphalm::load_cyphalm_model(ensemble_json));
-            if (reset_mode == "full") model2->reset_stream(false);
-            else if (reset_mode == "keep") model2->reset_stream(true);
-            model2->hp_backend().predictor().set_serve_adaptation(serve_lr, 4, serve_skip);
-        }
-        double e2_nll = 0.0, lin_nll = 0.0, geo_nll = 0.0, bayes_nll = 0.0;
-        // Weighted geometric grid: log p = a*lp1 + b*lp2 - log Z.
-        const double geo_w1[] = {0.4, 0.5, 0.6, 0.7};
-        const double geo_sum[] = {0.9, 1.0, 1.1, 1.2};
-        double geo_grid[4][4] = {};
-        double w_bayes = 0.5;
         out["serve_lr_quarters"] = serve_lr;
         out["serve_skip"] = serve_skip;
         const auto ev = read_slice(eval_path, eval_offset, eval_bytes + prompt_bytes);
@@ -242,39 +228,6 @@ int main(int argc, char** argv) {
                 if (lp[static_cast<std::size_t>(b)] > lp[static_cast<std::size_t>(truth)]) ++rank;
             }
             nll_bits += -lp[static_cast<std::size_t>(truth)] / kLn2;
-            if (model2) {
-                auto& h2 = model2->hp_backend();
-                const auto lp2 = h2.serve_next_byte_log_probs(256);
-                const double p1 = std::exp(lp[static_cast<std::size_t>(truth)]);
-                const double p2 = std::exp(lp2[static_cast<std::size_t>(truth)]);
-                e2_nll += -std::log2(p2);
-                lin_nll += -std::log2(0.5 * p1 + 0.5 * p2);
-                double zg = 0.0;
-                for (int b = 0; b < 256; ++b)
-                    zg += std::exp(0.5 * (lp[static_cast<std::size_t>(b)] + lp2[static_cast<std::size_t>(b)]));
-                geo_nll += -(0.5 * (lp[static_cast<std::size_t>(truth)] + lp2[static_cast<std::size_t>(truth)]) -
-                             std::log(zg)) / kLn2;
-                for (int wi = 0; wi < 4; ++wi) {
-                    for (int si = 0; si < 4; ++si) {
-                        const double a = geo_w1[wi] * geo_sum[si], bb = (1.0 - geo_w1[wi]) * geo_sum[si];
-                        double mxg = -1e300;
-                        for (int b = 0; b < 256; ++b)
-                            mxg = std::max(mxg, a * lp[static_cast<std::size_t>(b)] + bb * lp2[static_cast<std::size_t>(b)]);
-                        double zz = 0.0;
-                        for (int b = 0; b < 256; ++b)
-                            zz += std::exp(a * lp[static_cast<std::size_t>(b)] + bb * lp2[static_cast<std::size_t>(b)] - mxg);
-                        geo_grid[wi][si] += -(a * lp[static_cast<std::size_t>(truth)] + bb * lp2[static_cast<std::size_t>(truth)] -
-                                              mxg - std::log(zz)) / kLn2;
-                    }
-                }
-                // Fixed-share Bayesian weight on model 1 (tracks which model is better lately).
-                const double pm = w_bayes * p1 + (1.0 - w_bayes) * p2;
-                bayes_nll += -std::log2(pm);
-                w_bayes = 0.98 * (w_bayes * p1 / pm) + 0.02 * 0.5;
-                h2.set_learning(!frozen_eval);
-                h2.observe_next_byte(static_cast<std::uint8_t>(truth));
-                h2.set_learning(true);
-            }
             for (int t = 0; t < kTemps; ++t) {
                 // log softmax(lp / T) at the true byte
                 double mx = -1e300;
@@ -286,7 +239,8 @@ int main(int argc, char** argv) {
             entropy_bits += h / kLn2;
             if (rank == 0) ++top1;
             if (rank < 5) ++top5;
-            if (static_cast<int>(hp.serve_greedy_next_byte()) == argmax) ++greedy_is_argmax;
+            // (With --member the greedy byte is the mix's argmax by construction.)
+            if (members.empty() && static_cast<int>(hp.serve_greedy_next_byte()) == argmax) ++greedy_is_argmax;
             const int bin = std::min(kBins - 1, static_cast<int>(pmax * kBins));
             bin_conf[bin] += pmax;
             bin_acc[bin] += (argmax == truth) ? 1.0 : 0.0;
@@ -323,18 +277,9 @@ int main(int argc, char** argv) {
                        {"nll_bits_by_temperature", tsweep},
                        {"ms_per_byte", 1e3 * secs / n},
                        {"distribution_ms", 1e3 * e_secs / n}};
-        if (model2) {
-            out["ensemble"] = {{"with", ensemble_json},
-                               {"model2_nll", e2_nll / n},
-                               {"linear_half_nll", lin_nll / n},
-                               {"geometric_half_nll", geo_nll / n},
-                               {"fixed_share_nll", bayes_nll / n}};
-            nlohmann::json grid = nlohmann::json::object();
-            for (int wi = 0; wi < 4; ++wi)
-                for (int si = 0; si < 4; ++si)
-                    grid["w1=" + std::to_string(geo_w1[wi]).substr(0, 3) + " sum=" +
-                         std::to_string(geo_sum[si]).substr(0, 3)] = geo_grid[wi][si] / n;
-            out["ensemble"]["geometric_grid_nll"] = grid;
+        if (!members.empty()) {
+            out["ensemble_lr"] = ensemble_lr;
+            out["ensemble_weights_final"] = model->hp_backend().ensemble_weights();
         }
         if (compare_scoring) {
             out["frozen_scoring"] = {{"nll_bits_per_byte", f_nll / n},

@@ -332,6 +332,11 @@ struct CyphaLMConfig {
     /// to a prompt measured -0.005 to -0.007 bits/byte held-out.
     /// Env ``CYPHA_HP_SERVE_MIXER_LR_SCALE``.
     double hp_serve_mixer_lr_scale = 0.5;
+    /// Ensembles (``CyphaLMModel::add_ensemble_member``): mixing weights adapt
+    /// online at this rate while reading with learning on. Finds the right
+    /// split for unequal members (95 MB + 8 MiB: 0.65/0.35, better than any
+    /// fixed weight); equal-size shards stay near equal. 0 = fixed weights.
+    double hp_ensemble_learning_rate = 0.01;
 };
 
 /// Compile-time ``HP_SLOT_MAX`` baked into this binary (24, gate24).

@@ -92,6 +92,7 @@ class HpSequenceBackend {
     /// semantics (each hypothetical bit trains the model before the next).
     void set_frozen_scoring(bool on) {
         frozen_scoring_ = on;
+        last_valid_ = false;
         for (auto& m : members_) m.backend->set_frozen_scoring(on);
     }
     bool frozen_scoring() const { return frozen_scoring_; }
@@ -111,6 +112,14 @@ class HpSequenceBackend {
     /// (``reset()`` drops them).
     void add_ensemble_member(std::unique_ptr<HpSequenceBackend> member, double weight);
     std::size_t ensemble_size() const { return members_.size(); }
+    /// Adapt the mixing weights online (exponentiated gradient on the mix's log
+    /// loss) at this rate, whenever a scored byte is consumed with learning on.
+    /// 0 = fixed weights.
+    void set_ensemble_learning_rate(double eta) { ens_eta_ = eta; }
+    /// Current weights: [self, member 0, member 1, ...].
+    std::vector<double> ensemble_weights() const;
+    /// Forget the last scored ensemble distribution (after rewinding state).
+    void invalidate_scoring_cache() { last_valid_ = false; }
     /// This predictor and every member's (for ``hp::StreamRewind``).
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).
@@ -154,8 +163,16 @@ class HpSequenceBackend {
         double weight = 0.0;
     };
     std::vector<Member> members_;
+    double self_weight_ = 1.0;   // 1 - sum of member weights
+    double ens_eta_ = 0.0;
+    // Last scored distributions, for the weight update in consume_byte.
+    bool last_valid_ = false;
+    std::vector<double> last_own_, last_mix_;
+    std::vector<std::vector<double>> last_member_lp_;
+    void update_ensemble_weights_(std::uint8_t byte);
     /// Ensemble: geometric mix of this model's ``own`` log probs with members'.
-    std::vector<double> mix_with_members_(const std::vector<double>& own, int vocab_size);
+    std::vector<double> mix_with_members_(const std::vector<double>& own,
+                                          const std::vector<std::vector<double>>& member_lp);
     std::vector<double> ensemble_log_probs_(int vocab_size) const;
 };
 

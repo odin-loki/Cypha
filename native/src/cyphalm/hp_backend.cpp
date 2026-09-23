@@ -9,6 +9,7 @@
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 
 namespace cypha::cyphalm {
 
@@ -21,6 +22,15 @@ double bit_log_prob(int p12, int bit) {
     const double p1 = static_cast<double>(p12) / 4096.0;
     const double p = bit ? p1 : (1.0 - p1);
     return std::log(std::max(p, kLogEps));
+}
+
+/// Ensemble members score on worker threads unless CYPHA_HP_ENSEMBLE_THREADS=0.
+bool ensemble_threads_enabled() {
+    static const bool on = [] {
+        const char* v = std::getenv("CYPHA_HP_ENSEMBLE_THREADS");
+        return v == nullptr || v[0] != '0';
+    }();
+    return on;
 }
 
 bool use_legacy_byte_log_probs() {
@@ -121,6 +131,8 @@ void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
     log_probs_buf_.clear();
     members_.clear();
+    self_weight_ = 1.0;
+    last_valid_ = false;
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -265,10 +277,57 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
+    if (members_.empty()) {
+        return use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
+                                           : next_byte_log_probs_bit_tree(vocab_size);
+    }
+    // Members score on worker threads while this model scores here. Scoring
+    // restores each predictor's state, and each thread records its own undo.
+    std::vector<std::vector<double>> member_lp(members_.size());
+    std::vector<std::thread> workers;
+    const bool threaded = ensemble_threads_enabled();
+    for (std::size_t i = 0; i < members_.size(); ++i) {
+        auto job = [this, i, vocab_size, &member_lp] {
+            member_lp[i] = members_[i].backend->next_byte_log_probs(vocab_size);
+        };
+        if (threaded) workers.emplace_back(job);
+        else job();
+    }
     std::vector<double> own = use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
                                                           : next_byte_log_probs_bit_tree(vocab_size);
-    if (members_.empty()) return own;
-    return mix_with_members_(own, vocab_size);
+    for (auto& w : workers) w.join();
+    std::vector<double> mix = mix_with_members_(own, member_lp);
+    // Kept until the next byte is consumed: observe_next_byte reuses the mix,
+    // and the weight update needs every model's distribution.
+    last_own_ = std::move(own);
+    last_member_lp_ = std::move(member_lp);
+    last_mix_ = mix;
+    last_valid_ = true;
+    return mix;
+}
+
+std::vector<double> HpSequenceBackend::ensemble_weights() const {
+    std::vector<double> w{self_weight_};
+    for (const auto& m : members_) w.push_back(m.weight);
+    return w;
+}
+
+void HpSequenceBackend::update_ensemble_weights_(std::uint8_t byte) {
+    // d(-log p_mix(y))/dw_i = -(log p_i(y) - E_mix[log p_i]); multiplicative step.
+    auto grad = [&](const std::vector<double>& lp) {
+        double e = 0.0;
+        for (std::size_t b = 0; b < lp.size(); ++b) e += std::exp(last_mix_[b]) * lp[b];
+        return lp[byte] - e;
+    };
+    std::vector<double> w = ensemble_weights();
+    w[0] *= std::exp(ens_eta_ * std::clamp(grad(last_own_), -20.0, 20.0));
+    for (std::size_t i = 0; i < members_.size(); ++i) {
+        w[i + 1] *= std::exp(ens_eta_ * std::clamp(grad(last_member_lp_[i]), -20.0, 20.0));
+    }
+    double z = 0.0;
+    for (double& v : w) z += (v = std::max(v, 1e-4));
+    self_weight_ = w[0] / z;
+    for (std::size_t i = 0; i < members_.size(); ++i) members_[i].weight = w[i + 1] / z;
 }
 
 void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> member, double weight) {
@@ -281,6 +340,8 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     member->set_frozen_scoring(frozen_scoring_);
     member->set_learning(pred_->learning());
     members_.push_back(Member{std::move(member), weight});
+    self_weight_ = 1.0 - total;
+    last_valid_ = false;
 }
 
 std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
@@ -293,6 +354,7 @@ std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
 }
 
 void HpSequenceBackend::reset_stream(bool keep_history) {
+    last_valid_ = false;
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
 }
@@ -302,14 +364,14 @@ void HpSequenceBackend::set_serve_adaptation(int num, int den, int skip) {
     for (auto& m : members_) m.backend->set_serve_adaptation(num, den, skip);
 }
 
-std::vector<double> HpSequenceBackend::mix_with_members_(const std::vector<double>& own, int vocab_size) {
-    double w_self = 1.0;
-    for (const auto& m : members_) w_self -= m.weight;
+std::vector<double> HpSequenceBackend::mix_with_members_(const std::vector<double>& own,
+                                                         const std::vector<std::vector<double>>& member_lp) {
+    const double w_self = self_weight_;
     std::vector<double> mix(own.size());
     for (std::size_t b = 0; b < own.size(); ++b) mix[b] = w_self * own[b];
-    for (auto& m : members_) {
-        const std::vector<double> lp = m.backend->next_byte_log_probs(vocab_size);
-        for (std::size_t b = 0; b < mix.size() && b < lp.size(); ++b) mix[b] += m.weight * lp[b];
+    for (std::size_t i = 0; i < members_.size(); ++i) {
+        const std::vector<double>& lp = member_lp[i];
+        for (std::size_t b = 0; b < mix.size() && b < lp.size(); ++b) mix[b] += members_[i].weight * lp[b];
     }
     double mx = -std::numeric_limits<double>::infinity();
     for (double v : mix) mx = std::max(mx, v);
@@ -401,11 +463,13 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         pred_->update(bit);
     }
     for (auto& m : members_) m.backend->consume_byte(byte);
+    if (last_valid_ && ens_eta_ > 0.0 && pred_->learning()) update_ensemble_weights_(byte);
+    last_valid_ = false;
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {
     if (!members_.empty()) {
-        const double lp = next_byte_log_probs(256)[next];
+        const double lp = last_valid_ ? last_mix_[next] : next_byte_log_probs(256)[next];
         consume_byte(next);
         return -lp;
     }

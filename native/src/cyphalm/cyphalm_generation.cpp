@@ -640,6 +640,7 @@ GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<in
                 }
                 cands.push_back(std::move(c));
                 rewind.rewind();
+                hp.invalidate_scoring_cache();
             }
         }
         // Highest mean log p among candidates that do not repeat recent text.

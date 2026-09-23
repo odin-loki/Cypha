@@ -97,6 +97,7 @@ void CyphaLMModel::set_serve_mode(bool on) {
 void CyphaLMModel::add_ensemble_member(CyphaLMModel&& other, double weight) {
     if (!hp_ || !other.hp_) throw std::runtime_error("add_ensemble_member: hp backends required");
     hp_->add_ensemble_member(std::move(other.hp_), weight);
+    hp_->set_ensemble_learning_rate(cfg_.hp_ensemble_learning_rate);
 }
 
 void CyphaLMModel::reset_optim_state() {
@@ -321,6 +322,7 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"hp_pool_bits_cap", cfg_.hp_pool_bits_cap},
         {"hp_frozen_scoring", cfg_.hp_frozen_scoring},
         {"hp_serve_mixer_lr_scale", cfg_.hp_serve_mixer_lr_scale},
+        {"hp_ensemble_learning_rate", cfg_.hp_ensemble_learning_rate},
         {"hp_slot_max", cfg_.hp_slot_max},
         {"hp_slot_compile_max", hp_compile_slot_max()},
         {"hp_mixer_lr", cfg_.hp_mixer_lr},

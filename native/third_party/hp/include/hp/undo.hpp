@@ -109,7 +109,8 @@ class UndoRecorderScope {
 
  private:
     UndoFrame* prev_;
-    static inline UndoFrame* active_ = nullptr;
+    // Per thread: ensemble members score on worker threads, each with its own frames.
+    static inline thread_local UndoFrame* active_ = nullptr;
 };
 
 inline void hp_undo_note(std::uint8_t& cell) {

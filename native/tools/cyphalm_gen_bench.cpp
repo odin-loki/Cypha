@@ -75,6 +75,7 @@ double judge_bits(cypha::cyphalm::CyphaLMModel& judge, const std::vector<int>& p
     double bits = 0.0;
     for (int b : text) bits += h.observe_next_byte(static_cast<std::uint8_t>(b)) / std::log(2.0);
     rewind.rewind();
+    h.invalidate_scoring_cache();
     return bits / static_cast<double>(std::max<std::size_t>(1, text.size()));
 }
 

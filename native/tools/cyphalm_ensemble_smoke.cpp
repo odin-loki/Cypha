@@ -51,6 +51,7 @@ int main() {
     train(ens, ta);
     train(mem, tb);
     ens.add_ensemble_member(std::move(mem), w);
+    ens.hp_backend().set_ensemble_learning_rate(0.0);  // fixed weights for the exact check
 
     // Mixed distribution == normalised a^(1-w) b^w, over 300 shared bytes.
     const std::string probe = "the insects sat on a mat. The body has six legs and the dog ran.\n";
@@ -96,6 +97,31 @@ int main() {
                     g.generated_ids.size());
         return 1;
     }
-    std::printf("cyphalm_ensemble_smoke OK mix exact over 300 bytes; lookahead kept both models\n");
+    // Online weights: observe returns the mix's log p, weights stay a
+    // distribution, and on text from corpus B the B-trained member gains weight.
+    {
+        cypha::cyphalm::CyphaLMModel e2(cfg), m2(cfg);
+        train(e2, ta);
+        train(m2, tb);
+        e2.add_ensemble_member(std::move(m2), 0.5);
+        auto& h = e2.hp_backend();
+        h.set_ensemble_learning_rate(0.05);
+        const std::string tb_more = corpus(3, 1);
+        for (int i = 0; i < 400; ++i) {
+            const auto c = static_cast<std::uint8_t>(tb_more[static_cast<std::size_t>(i)]);
+            const double lp = h.serve_next_byte_log_probs(256)[c];
+            const double loss = h.observe_next_byte(c);
+            if (std::abs(loss + lp) > 1e-12) {
+                std::printf("cyphalm_ensemble_smoke FAIL observe %.12f != -log p %.12f\n", loss, -lp);
+                return 1;
+            }
+        }
+        const auto w = h.ensemble_weights();
+        if (w.size() != 2 || std::abs(w[0] + w[1] - 1.0) > 1e-9 || !(w[1] > 0.5)) {
+            std::printf("cyphalm_ensemble_smoke FAIL learned weights %.4f %.4f\n", w[0], w.size() > 1 ? w[1] : -1.0);
+            return 1;
+        }
+    }
+    std::printf("cyphalm_ensemble_smoke OK mix exact over 300 bytes; lookahead kept both models; weights learn\n");
     return 0;
 }
