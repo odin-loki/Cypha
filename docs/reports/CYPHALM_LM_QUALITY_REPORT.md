@@ -255,6 +255,15 @@ lean tier; shards are 8 MiB slices of enwik8 at 0, 16, 32, 48 and 80 MB:
 | 95 MB + 5 × 8 MiB | | 6.6 GB | **1.6978** | **2.1642** | 65.4% |
 | 2 × 8 MiB, table bits 20 | 16 MiB | 1.3 GB | 1.7624 | 2.2082 | 64.7% |
 | 4 × 8 MiB, table bits 20 | 32 MiB | 2.6 GB | 1.7302 | 2.1925 | 64.9% |
+| **11 × 8.6 MB, table bits 20 (all 95 MB)** | 95 MB | 7.2 GB | **1.6994** | **2.1797** | 65.4% |
+| **95 MB + those 11 shards** | 95 MB | 8.3 GB | **1.6860** | **2.1636** | 65.4% |
+
+The last two rows use learned mixing weights (below). The 95 MB split
+into 11 slices of 8.6 MB, each trained as a small-table model, beats one lean
+model trained on the same 95 MB by 0.061 on wiki and 0.036 on Alice. One of
+those small slice models alone scores 1.8527 / 2.2855. Adding the 95 MB model to
+the 11 shards gives the best distribution measured: wiki 1.686, Alice 2.164,
+top-1 65.4%, ECE 2.1% / 1.3%.
 
 - **Diversity, not capacity.** One model on 16 MiB gains 0.05 on wiki and
   *loses* on Alice; two models on the same 16 MiB gain 0.07 and 0.05. Four
@@ -263,11 +272,21 @@ lean tier; shards are 8 MiB slices of enwik8 at 0, 16, 32, 48 and 80 MB:
   so that model is not table-bound either.
 - **At equal memory**, two table-bits-20 shards (1.3 GB) beat one table-bits-22
   model (1.1 GB) by 0.064 on wiki and 0.045 on Alice.
-- Returns diminish (2 → 4 → 5 shards: −0.034, −0.008), and each member adds its
-  scoring time (~3 ms/byte on one core).
-- Weights: equal weights are close to best. For 95 MB + 8 MiB the best was 0.6
-  on the bigger model (1.7213 vs 1.7248 equal). Linear mixing is worse than
-  geometric (1.7352), and fixed-share switching is worse still.
+- Returns diminish per shard (2 → 4 → 5 shards: −0.034, −0.008), but shards
+  that cover more data keep helping (11 shards over all 95 MB: 1.699). Each
+  member costs ~3 ms/byte of CPU.
+- Weights: linear mixing is worse than geometric (1.7352 vs 1.7248), and
+  fixed-share switching is worse still. **Learned weights** are the default
+  (`hp_ensemble_learning_rate` 0.01). The mixture's log loss drives an
+  exponentiated-gradient step each time a scored byte is read with learning
+  on, i.e. while reading prompts, never while generating. For 95 MB + 8 MiB
+  they settle near 0.65 / 0.35, which beats equal weights and every fixed
+  weight tried (wiki 1.7210 vs 1.7248 equal and 1.7213 best fixed; Alice
+  2.1729 vs 2.1759 and 2.1747). For equal-size shards they stay within 0.001
+  of equal.
+- Speed: members score on worker threads. On 4 cores, 11 members take 8.2
+  instead of 26 ms/byte (3.2×), with identical results
+  (`CYPHA_HP_ENSEMBLE_THREADS=0` turns it off).
 - Calibration: ECE rises from 1.4% to ~2.5% and the best temperature moves to
   about 0.9 on wiki (−0.004) but stays 1.0 on Alice. Not worth a knob.
 - Shards train in parallel on separate cores, so the recipe scales training
