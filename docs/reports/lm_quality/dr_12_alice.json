@@ -1,0 +1,109 @@
+{
+  "drop_mask": 4096,
+  "eval": {
+    "bit_greedy_equals_argmax": 0.83935546875,
+    "bytes": 8192,
+    "calibration_bins": [
+      {
+        "accuracy": 0.057971014492753624,
+        "bin": 0,
+        "confidence": 0.08212474491300431,
+        "n": 138
+      },
+      {
+        "accuracy": 0.15988372093023256,
+        "bin": 1,
+        "confidence": 0.1534066702862251,
+        "n": 1032
+      },
+      {
+        "accuracy": 0.24867724867724866,
+        "bin": 2,
+        "confidence": 0.24657419142779802,
+        "n": 945
+      },
+      {
+        "accuracy": 0.39165701042873696,
+        "bin": 3,
+        "confidence": 0.3512725706746014,
+        "n": 863
+      },
+      {
+        "accuracy": 0.4648241206030151,
+        "bin": 4,
+        "confidence": 0.4475329524808692,
+        "n": 796
+      },
+      {
+        "accuracy": 0.5793650793650794,
+        "bin": 5,
+        "confidence": 0.5500432770522605,
+        "n": 756
+      },
+      {
+        "accuracy": 0.6882022471910112,
+        "bin": 6,
+        "confidence": 0.6492654037752549,
+        "n": 712
+      },
+      {
+        "accuracy": 0.7801507537688442,
+        "bin": 7,
+        "confidence": 0.7508161042668621,
+        "n": 796
+      },
+      {
+        "accuracy": 0.8594771241830066,
+        "bin": 8,
+        "confidence": 0.8497262705793583,
+        "n": 918
+      },
+      {
+        "accuracy": 0.9538834951456311,
+        "bin": 9,
+        "confidence": 0.9550303914205178,
+        "n": 1236
+      }
+    ],
+    "distribution_ms": 2.144713499755851,
+    "ece_top1": 0.017606201777879,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 2.3166093676624433,
+    "ms_per_byte": 2.2642603935546877,
+    "nll_bits_by_temperature": {
+      "0.7": 2.3959605675369313,
+      "0.8": 2.309288002104845,
+      "0.9": 2.2687719111160844,
+      "1.0": 2.261046615055805,
+      "1.1": 2.277609016843834,
+      "1.2": 2.3127263387444543,
+      "1.3": 2.3623217951258204,
+      "1.4": 2.423351651103804
+    },
+    "nll_bits_per_byte": 2.261046615055804,
+    "offset": 20000,
+    "path": "/home/user/corpora/cant/alice29.txt",
+    "perplexity_per_byte": 4.793390962563913,
+    "top1": 0.5655517578125,
+    "top5": 0.844970703125
+  },
+  "fold": [
+    0,
+    0,
+    0
+  ],
+  "harness": "cyphalm_lm_quality",
+  "loaded": "/home/user/ckpt/pre_lean.json",
+  "reset_stream": "none",
+  "rss_anon_mb_after_eval": 806.421875,
+  "rss_anon_mb_after_setup": 806.36328125,
+  "rss_file_mb_after_eval": 4.48046875,
+  "rss_file_mb_after_setup": 4.12890625,
+  "rss_hwm_mb": 819.41015625,
+  "rss_mb_after_eval": 810.90234375,
+  "rss_mb_after_setup": 810.4921875,
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 0.985885209,
+  "tier": "lean"
+}

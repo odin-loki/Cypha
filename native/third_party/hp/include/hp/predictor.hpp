@@ -59,6 +59,7 @@ struct Config {
     int match_bits_cap = 0;       // >0: cap byte-match hash tables (13 models) at this many bits
     int pool_slots = 0;           // 1..11: keep only this many discovered-context slots (gate24 = 12)
     int pool_bits_cap = 0;        // >0: cap discovered-context tables at this many bits
+    int hebb_bits_cap = 0;        // >0: cap the Hebbian word-association tables at this many bits
 
     // Encoder and decoder must agree. match/buf sizes are a function of
     // table_bits (the only size the archive header carries).
@@ -248,7 +249,9 @@ class Predictor {
                                cfg.match_bits > 2 ? cfg.match_bits - 2 : cfg.match_bits, 3,
                                cfg.buf_bits > 2 ? cfg.buf_bits - 2 : cfg.buf_bits)
           },
-          hebb_(cfg.table_bits, 255),
+          hebb_(cfg.hebb_bits_cap > 0 && cfg.hebb_bits_cap < cfg.table_bits ? cfg.hebb_bits_cap
+                                                                            : cfg.table_bits,
+                255),
           pool_(cfg.pool_bits_cap > 0 && cfg.pool_bits_cap < cfg.table_bits ? cfg.pool_bits_cap
                                                                             : cfg.table_bits,
                 0xC0FFEEull, cfg.pool_slots),
@@ -306,8 +309,13 @@ class Predictor {
     void fold_tables(const Config& target) {
         for (int i = 0; i < n_ctx_chain_; ++i) {
             ContextModel& m = *ctx_chain_[i];
+            if ((target.cm_drop >> i) & 1u) {
+                m.drop();
+                continue;
+            }
             if (target.cm_bits_cap > 0 && m.table_bits() > target.cm_bits_cap) m.fold_to(target.cm_bits_cap);
         }
+        cfg_.cm_drop |= target.cm_drop;
         if (target.match_bits_cap > 0) {
             for (int i = 0; i < kMatchModels; ++i) match_[i].fold_to(target.match_bits_cap);
             smatch_.fold_to(target.match_bits_cap);
@@ -316,6 +324,8 @@ class Predictor {
             skip4_.fold_to(target.match_bits_cap);
         }
         if (target.pool_bits_cap > 0) pool_.fold_to(target.pool_bits_cap);
+        if (target.hebb_bits_cap > 0) hebb_.fold_to(target.hebb_bits_cap);
+        cfg_.hebb_bits_cap = target.hebb_bits_cap > 0 ? target.hebb_bits_cap : cfg_.hebb_bits_cap;
         cfg_.cm_bits_cap = target.cm_bits_cap > 0 ? target.cm_bits_cap : cfg_.cm_bits_cap;
         cfg_.match_bits_cap = target.match_bits_cap > 0 ? target.match_bits_cap : cfg_.match_bits_cap;
         cfg_.pool_bits_cap = target.pool_bits_cap > 0 ? target.pool_bits_cap : cfg_.pool_bits_cap;

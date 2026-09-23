@@ -94,8 +94,11 @@ void CyphaLMModel::set_serve_mode(bool on) {
     hp_->set_serve_adaptation(num, 16, -1);
 }
 
-void CyphaLMModel::fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_bits_cap) {
+void CyphaLMModel::fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_bits_cap,
+                                  std::uint64_t cm_drop, int hebb_bits_cap) {
+    if (hebb_bits_cap > 0) cfg_.hp_hebb_bits_cap = hebb_bits_cap;
     if (!hp_) return;
+    cfg_.hp_cm_drop |= cm_drop;
     if (cm_bits_cap > 0) cfg_.hp_cm_bits_cap = cm_bits_cap;
     if (match_bits_cap > 0) cfg_.hp_match_bits_cap = match_bits_cap;
     if (pool_bits_cap > 0) cfg_.hp_pool_bits_cap = pool_bits_cap;
@@ -103,6 +106,8 @@ void CyphaLMModel::fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_
     target.cm_bits_cap = cm_bits_cap;
     target.match_bits_cap = match_bits_cap;
     target.pool_bits_cap = pool_bits_cap;
+    target.cm_drop = cm_drop;
+    target.hebb_bits_cap = hebb_bits_cap;
     hp_->fold_tables(target);
 }
 
@@ -332,6 +337,7 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"hp_match_bits_cap", cfg_.hp_match_bits_cap},
         {"hp_pool_slots", cfg_.hp_pool_slots},
         {"hp_pool_bits_cap", cfg_.hp_pool_bits_cap},
+        {"hp_hebb_bits_cap", cfg_.hp_hebb_bits_cap},
         {"hp_frozen_scoring", cfg_.hp_frozen_scoring},
         {"hp_serve_mixer_lr_scale", cfg_.hp_serve_mixer_lr_scale},
         {"hp_ensemble_learning_rate", cfg_.hp_ensemble_learning_rate},

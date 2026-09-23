@@ -100,7 +100,8 @@ class CyphaLMModel {
     /// Serve-time RAM cut: fold trained hp tables down to these caps (bits;
     /// 0 = keep) and record them in the config, so the model saves and loads
     /// at the smaller size (``hp::Predictor::fold_tables``).
-    void fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_bits_cap);
+    void fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_bits_cap,
+                        std::uint64_t cm_drop = 0, int hebb_bits_cap = 0);
     void reset_optim_state();
 
     /// Serve/inference: consume ``context_byte``, score next-byte distribution (bit-tree default).

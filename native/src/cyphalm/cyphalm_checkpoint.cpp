@@ -43,6 +43,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"hp_match_bits_cap", cfg.hp_match_bits_cap},
         {"hp_pool_slots", cfg.hp_pool_slots},
         {"hp_pool_bits_cap", cfg.hp_pool_bits_cap},
+        {"hp_hebb_bits_cap", cfg.hp_hebb_bits_cap},
         {"hp_frozen_scoring", cfg.hp_frozen_scoring},
         {"hp_serve_mixer_lr_scale", cfg.hp_serve_mixer_lr_scale},
         {"hp_ensemble_learning_rate", cfg.hp_ensemble_learning_rate},
@@ -86,6 +87,7 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_i("hp_match_bits_cap", cfg.hp_match_bits_cap);
     get_i("hp_pool_slots", cfg.hp_pool_slots);
     get_i("hp_pool_bits_cap", cfg.hp_pool_bits_cap);
+    get_i("hp_hebb_bits_cap", cfg.hp_hebb_bits_cap);
     get_b("hp_frozen_scoring", cfg.hp_frozen_scoring);
     if (c.contains("hp_ensemble_learning_rate"))
         cfg.hp_ensemble_learning_rate = c.at("hp_ensemble_learning_rate").get<double>();

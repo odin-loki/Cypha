@@ -30,6 +30,7 @@
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/hp_backend.hpp"
+#include "hp/shard_merge.hpp"
 
 namespace {
 
@@ -98,7 +99,9 @@ int main(int argc, char** argv) {
     int serve_lr = 4, serve_skip = -1, epochs = 1;
     std::vector<std::string> members;  // library ensemble, equal weights
     double ensemble_lr = -1.0;  // <0: the model's config default
-    int fold_cm = 0, fold_match = 0, fold_pool = 0;
+    int fold_cm = 0, fold_match = 0, fold_pool = 0, fold_hebb = 0;
+    std::uint64_t drop_mask = 0;
+    std::vector<std::string> merges;  // shard models merged into --load (equal data)
     int word_k = 0;
     bool only_default = false;
     for (int i = 1; i < argc; ++i) {
@@ -129,9 +132,11 @@ int main(int argc, char** argv) {
         else if (a == "--epochs") epochs = std::stoi(next());
         else if (a == "--member") members.push_back(next());
         else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
+        else if (a == "--merge") merges.push_back(next());
+        else if (a == "--drop") drop_mask = std::stoull(next(), nullptr, 0);  // cm_drop bits
         else if (a == "--fold") {  // CM,MATCH,POOL table bits (0 = keep)
             const std::string v = next();
-            std::sscanf(v.c_str(), "%d,%d,%d", &fold_cm, &fold_match, &fold_pool);
+            std::sscanf(v.c_str(), "%d,%d,%d,%d", &fold_cm, &fold_match, &fold_pool, &fold_hebb);
         }
         else if (a == "--word-k") word_k = std::stoi(next());
         else if (a == "--only-default") only_default = true;
@@ -150,13 +155,26 @@ int main(int argc, char** argv) {
         model = std::make_unique<cypha::cyphalm::CyphaLMModel>(
             cypha::cyphalm::load_cyphalm_model(load_json));
         out["loaded"] = load_json;
-        if (fold_cm > 0 || fold_match > 0 || fold_pool > 0) {
-            model->fold_hp_tables(fold_cm, fold_match, fold_pool);
-            out["fold"] = {fold_cm, fold_match, fold_pool};
+        // Merge equally-sized shard models' tables into the loaded one: one
+        // model's RAM for all shards' data (hp::Predictor::merge_shard_tables).
+        for (std::size_t k = 0; k < merges.size(); ++k) {
+            auto src = cypha::cyphalm::load_cyphalm_model(merges[k]);
+            model->hp_backend().predictor().merge_shard_tables(src.hp_backend().predictor(), 1,
+                                                               static_cast<std::uint64_t>(k + 1));
+        }
+        if (!merges.empty()) {
+            model->reset_stream(/*keep_history=*/true);
+            out["merged"] = merges;
+        }
+        if (fold_cm > 0 || fold_match > 0 || fold_pool > 0 || fold_hebb > 0 || drop_mask != 0) {
+            model->fold_hp_tables(fold_cm, fold_match, fold_pool, drop_mask, fold_hebb);
+            out["fold"] = {fold_cm, fold_match, fold_pool, fold_hebb};
+            out["drop_mask"] = drop_mask;
         }
         for (const auto& m : members) {
             auto mm = cypha::cyphalm::load_cyphalm_model(m);
-            if (fold_cm > 0 || fold_match > 0 || fold_pool > 0) mm.fold_hp_tables(fold_cm, fold_match, fold_pool);
+            if (fold_cm > 0 || fold_match > 0 || fold_pool > 0 || fold_hebb > 0 || drop_mask != 0)
+                mm.fold_hp_tables(fold_cm, fold_match, fold_pool, drop_mask, fold_hebb);
             model->add_ensemble_member(std::move(mm), 1.0 / static_cast<double>(members.size() + 1));
         }
         if (!members.empty()) out["members"] = members;

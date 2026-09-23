@@ -177,6 +177,18 @@ class ContextModel {
 
     int table_bits() const { return off_ ? 0 : bits_; }
 
+    /// Turn the model off and free its table (serve-time Config::cm_drop):
+    /// it then predicts 0.5 like a model built dropped.
+    void drop() {
+        if (off_) return;
+        off_ = true;
+        bits_ = 0;
+        mask_ = 0;
+        t_.resize_bits(0);
+        idx_ = 0;
+        state_ = 0;
+    }
+
     /// Shrink a trained table to ``bits`` by folding halves together, as if it
     /// had been trained that size: slot i and i + half share an index at one
     /// bit fewer, and the dropped index bit moves into the checksum
@@ -739,6 +751,39 @@ class HebbianModel {
     }
 
     int strength() const { return strength_; }
+
+    int table_bits() const {
+        int b = 0;
+        while ((1u << b) - 1 < mask_) ++b;
+        return b;
+    }
+
+    /// Shrink to ``bits`` as if built that size: synapses keep the stronger of
+    /// two folded slots, bit-history slots the busier state.
+    void fold_to(int bits) {
+        const int cur = table_bits();
+        if (bits <= 0 || bits >= cur) return;
+        const std::size_t n = static_cast<std::size_t>(1) << bits;
+        std::vector<std::uint64_t> nt(n, 0);
+        std::vector<std::uint8_t> ns(n, 0);
+        std::vector<std::uint16_t> nst(n, 0);
+        const StateTable& st = state_table();
+        for (std::size_t k = 0; k < syn_target_.size(); ++k) {
+            const std::size_t j = k & (n - 1);
+            if (syn_strength_[k] > ns[j]) {
+                ns[j] = syn_strength_[k];
+                nt[j] = syn_target_[k];
+            }
+            const std::uint16_t v = t_.data()[k];
+            if (v != 0 && st.n0(v) + st.n1(v) > st.n0(nst[j]) + st.n1(nst[j])) nst[j] = v;
+        }
+        syn_target_ = std::move(nt);
+        syn_strength_ = std::move(ns);
+        t_.resize_bits(bits);
+        std::memcpy(t_.data(), nst.data(), n * sizeof(std::uint16_t));
+        mask_ = static_cast<std::uint32_t>(n - 1);
+        idx_ &= mask_;
+    }
     std::uint64_t learned_digest(std::uint64_t h) const {
         h = fnv_bytes(h, syn_target_.data(), syn_target_.size() * sizeof(syn_target_[0]));
         h = fnv_bytes(h, syn_strength_.data(), syn_strength_.size());
