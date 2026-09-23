@@ -1,0 +1,110 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.8193359375,
+  "bytes": 1024,
+  "distribution_ms": 3.1289771044921864,
+  "ece_top1": 0.031220892850367395,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 2.5141884063073947,
+  "ms_per_byte": 3.2965310947265625,
+  "nll_bits_by_temperature": {
+   "0.7": 2.7869850277822072,
+   "0.8": 2.6749677424253506,
+   "0.9": 2.615408657531981,
+   "1.0": 2.592725086739525,
+   "1.1": 2.5970874814734035,
+   "1.2": 2.6219563865964033,
+   "1.3": 2.662766988761834,
+   "1.4": 2.7161812342247034
+  },
+  "nll_bits_per_byte": 2.5927250867395246,
+  "offset": 20000,
+  "path": "/home/user/corpora/cant/alice29.txt",
+  "perplexity_per_byte": 6.032370696699754,
+  "top1": 0.5322265625,
+  "top5": 0.8095703125
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.9090909090909091,
+   "judge_bits_per_byte": 2.7920090499895682,
+   "mode": "reference (true continuation)",
+   "text": "t.  And yet I wish I could show you our cat Dinah:?\\nI think you'd take a fancy to cats if you could only see her.?\\nShe is such a dear quiet thing,' Alice went on, half to herself,?\\nas she swam lazily about in the pool, `and she sits purring so?\\nnicely by the fire, licking her paws and washing her fa"
+  },
+  {
+   "distinct_4gram": 0.030303030303030304,
+   "judge_bits_per_byte": 0.41766720099075544,
+   "mode": "greedy (default)",
+   "ms_per_byte": 4.291626283333334,
+   "text": "t she had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had had ha"
+  },
+  {
+   "distinct_4gram": 0.6161616161616161,
+   "judge_bits_per_byte": 1.2461199592890309,
+   "mode": "greedy norepeat8",
+   "ms_per_byte": 4.3923762900000005,
+   "text": "t she had had hastily about, and seemed to and sentenced to a sooty and self-self-serving to a she has in a she religion and serving. and seminar and seized the reliefs and separate and several and settled the has and said the hereditary and salmon and the history and that he has the harbour and thi"
+  },
+  {
+   "distinct_4gram": 0.3872053872053872,
+   "judge_bits_per_byte": 0.9960793982318445,
+   "mode": "greedy norepeat16",
+   "ms_per_byte": 4.068030953333333,
+   "text": "t she had had had had hastily about it she religion and seemed to and seemed to the religion and, and seemed to seemed to seemingly about it she?\\nand seemed to she religion a soothing to she religious and seemed to particular and seemed to religious and particular and, and seeme]] and seemed to quit"
+  },
+  {
+   "distinct_4gram": 0.3569023569023569,
+   "judge_bits_per_byte": 1.015065756208628,
+   "mode": "greedy frozen norepeat16",
+   "ms_per_byte": 3.739948586666667,
+   "text": "t she had had had had hastily about it she interior and seemed to and seemed to the interior and, and seemed to she had had hastiles in a soothing a soothing a she had had happened to she had her and seemed too and seemed took the had had had in a soothing to a soothing to the had had hastened to sh"
+  },
+  {
+   "distinct_4gram": 0.22895622895622897,
+   "judge_bits_per_byte": 0.7135889826674802,
+   "mode": "top_p T0.8 (default)",
+   "ms_per_byte": 4.93404135,
+   "text": "n milligral identified has in the cats of long to categories in monarchs of long to categories in monarchs of long to categories in monarchs of long to categories in monarchs of long to categories in monarchs of long to categories in monarchs of long to categories in monarchs of long to categories i"
+  },
+  {
+   "distinct_4gram": 0.24915824915824916,
+   "judge_bits_per_byte": 0.6666217051108478,
+   "mode": "minp0.1 T0.8 learn",
+   "ms_per_byte": 5.86427913,
+   "text": "t with the Mouse a shrimp and the defenders, and the earliest she was in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she had not in a she "
+  },
+  {
+   "distinct_4gram": 0.8720538720538721,
+   "judge_bits_per_byte": 1.6933101441379261,
+   "mode": "minp0.1 T0.8 frozen",
+   "ms_per_byte": 5.04790335,
+   "text": "t winter out the Mouse said in [[Algeria]].'  Maryland able of it way in a map of struggle in the introduction and was a not like cats! `To his and the like centered in [[1107]] and passage, the of best has a mistakenly seaplane almost like for perhaps not by the wounding a shipmates of [[Married of"
+  },
+  {
+   "distinct_4gram": 0.7777777777777778,
+   "judge_bits_per_byte": 1.3543410867398258,
+   "mode": "minp0.2 T1.0 frozen",
+   "ms_per_byte": 5.948185896666667,
+   "text": "t were the Mouse a shrimps a son of his cousin and said not, in having been and seemed the cattle of the area of integer in a period had his thinkers and puritan bishop and attempts if you were me?'?\\n?\\n  `Well, perhaps not said not, he in a soon he her main the a tool the Mouse a soothe Mouse and pa"
+  },
+  {
+   "distinct_4gram": 0.4612794612794613,
+   "judge_bits_per_byte": 1.1655890431410596,
+   "mode": "minp0.1 T0.8 learn norepeat16",
+   "ms_per_byte": 4.940975076666666,
+   "text": "t with the Mouse a shrimp and the defenders, and the earliest she was in a she had not in a she had never the earliest sing began a she had notice in a she had name in a she had had had had ha had had had happened had had had hurried had had had nothing ad had never the had never thought in a she ha"
+  },
+  {
+   "distinct_4gram": 0.8720538720538721,
+   "judge_bits_per_byte": 1.6933101441379261,
+   "mode": "minp0.1 T0.8 frozen norepeat16",
+   "ms_per_byte": 4.012712633333334,
+   "text": "t winter out the Mouse said in [[Algeria]].'  Maryland able of it way in a map of struggle in the introduction and was a not like cats! `To his and the like centered in [[1107]] and passage, the of best has a mistakenly seaplane almost like for perhaps not by the wounding a shipmates of [[Married of"
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean.json",
+ "prompt_tail": "\\n  `Well, perhaps not,' said Alice in a soothing tone:  `don't be?\\nangry about i",
+ "setup_seconds": 5.648610135,
+ "tier": "lean"
+}

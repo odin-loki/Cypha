@@ -72,40 +72,57 @@ exactly 1, and scoring leaves the model untouched (`hp_frozen_smoke`).
 
 ## Generation
 
-Lean, 8 MiB pretrain, 300 bytes. Reference: wiki judge 1.92–1.97 / d4 0.89;
-Alice judge 2.42–2.79 / d4 0.89–0.91.
+**Bug found and fixed first.** Every decoder primed the prompt through
+`prime_serve_context`, which called `reset_context()`. That replaced the hp
+predictor with an untrained one, so generation (and REST `/generate`) ignored
+all training and ran on a model that had read only the prompt. A first round
+of measurements made under that bug looked like "letter salad, hp cannot
+generalise"; that conclusion was wrong and is withdrawn (its raw data is kept
+as `g2_*` / `g3_*`). Priming now uses `reset_stream()`, which keeps every
+learned table (`hp_frozen_smoke` checks it).
 
-| decode | wiki judge / d4 | Alice judge / d4 | what it looks like |
-|---|---|---|---|
-| greedy (learn from output) | 0.79–0.91 / 0.03–0.29 | 0.36–0.42 / 0.14 | loops a phrase from the prompt |
-| greedy, no-repeat 16 | 3.39 / 0.20 | **0.46 / 0.75** | Alice: copies real later text; wiki: breaks words |
-| greedy, frozen, no-repeat 16 | 1.65 / 0.29 | 1.28 / 0.40 | loops with variations |
-| top-p 0.9, T 0.8 (learn) | 2.09–2.54 / 0.12–0.23 | 0.92–1.45 / 0.05–0.08 | collapses into a repeated fragment |
-| min-p 0.1, T 0.8, learn | 0.99 / 0.09 | 0.66 / 0.14 | loops |
-| min-p 0.1, T 0.8, frozen | 4.55 / 0.92 | 4.13 / 0.95 | letter salad |
-| stop self-indexing (`index_output=false`) | no change | no change | loops live in the context models too |
+With the fix, lean pretrained on 8 MiB, 300 bytes from a 256-byte held-out
+prompt:
 
-Two failure modes:
+| decode | wiki judge / d4 | Alice judge / d4 |
+|---|---|---|
+| **reference (true continuation)** | 1.97 / 0.89 | 2.79 / 0.91 |
+| greedy | 0.99 / 0.04 | 0.42 / 0.03 |
+| greedy, no-repeat 8 | 1.48 / 0.52 | 1.25 / 0.62 |
+| top-p 0.9, T 0.8, learning from output (old default) | 1.29 / 0.59 | 0.71 / 0.23 |
+| min-p 0.1, T 0.8, learning from output | 1.33 / 0.58 | 0.67 / 0.25 |
+| **min-p 0.1, T 0.8, frozen output (new default)** | **1.45 / 0.89** | **1.69 / 0.87** |
+| min-p 0.2, T 1.0, frozen | 1.51 / 0.90 | 1.35 / 0.78 |
 
-1. **With online learning on its own output,** the model reinforces whatever it
-   just wrote and falls into loops. Greedy on any fixed-context model cycles
-   anyway.
-2. **Frozen,** it does not loop, but sampled text drifts into letter salad. For
-   text sampled from a calibrated model, judge bits should be near the model's
-   entropy (~2–2.7). They come out at 4+, because after a few sampled bytes the
-   context is one hp has never counted, and its hashed-context statistics carry
-   no information there. hp does not generalise across contexts.
+Samples:
 
-So the next-byte distributions are excellent where the model has evidence
-(which includes everything in the prompt), and near-uninformative in novel
-contexts. Better decoding can't fix that. The model needs a component that
-generalises, which is why a small LSTM expert was added
-([below](#lstm-expert)).
+- wiki, new default: *"…with there a link which space of such that time
+  serialisms several council of the medical announcing the married the school…"*
+- Alice, new default: *"…winter out the Mouse said in [[Algeria]].'
+  Maryland able of it way in a map of struggle in the introduction…"*
+- wiki, greedy: *"…the set the set the set the set…"*
+
+What this shows:
+
+- **The model now writes words** at the same distinct-4-gram diversity as real
+  text (0.87–0.89). The sentences don't hold together yet, and on Alice it
+  drifts into wiki style (its pretraining domain). Judge bits sit below the
+  reference because the samples are, by construction, what the model finds
+  likely.
+- **Learning from its own output makes it loop** (d4 0.23–0.59). Keeping
+  learned statistics fixed while it writes (`learn_from_output=false`) removes
+  the loops. Prompt bytes are still learned.
+- **Greedy always cycles**, as argmax decoding of any finite-context model will.
+  No-repeat helps diversity but breaks words at byte level. Use sampling.
+- New `DecodeParams` defaults: temperature 0.8, `min_p` 0.1,
+  `learn_from_output` false.
 
 ## LSTM expert
 
-`ByteLstm` (embed → LSTM(H) → softmax over 256 bytes, truncated BPTT 20, Adam)
-trains online next to hp. `ByteMixGate` mixes the two distributions per byte:
+Independently of the fix above, hp's hashed contexts can only predict from
+contexts it has counted. `ByteLstm` (byte → LSTM(H) → softmax over 256 bytes,
+truncated BPTT 20, Adam) is a component that generalises across contexts, and
+it trains online next to hp. `ByteMixGate` mixes the two distributions per byte:
 w = σ(θ·[1, H_hp, H_lstm, max log p_hp, max log p_lstm]), learned online by
 log-loss. Where hp is sharp it keeps hp; where hp is flat and the LSTM is not,
 the mix can move toward the LSTM.
@@ -117,9 +134,10 @@ Pretraining with the LSTM on 8 MiB is running; results will be added here. At 30
 | `DecodeParams` | default | effect |
 |---|---|---|
 | `exact_greedy` | on | greedy = argmax of the full distribution |
-| `learn_from_output` | on | learn from generated bytes (off = context only) |
+| `learn_from_output` | **off** | learn from generated bytes (off = context only) |
 | `index_output` | on | index generated bytes for match copying |
-| `min_p` | 0 | drop bytes with p < min_p · p_max |
+| `min_p` | **0.1** | drop bytes with p < min_p · p_max |
+| `temperature` | **0.8** | |
 | `no_repeat_ngram` / `no_repeat_window` | 0 / 256 | ban bytes that repeat an n-byte sequence in the window |
 
 ## Reproduce
