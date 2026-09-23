@@ -78,7 +78,7 @@ double distinct_ngram_ratio(const std::vector<int>& ids, int n) {
 
 int main(int argc, char** argv) {
     std::string train_path, eval_path, save_base, load_json, tier;
-    std::uint64_t train_bytes = 0, eval_offset = 0, eval_bytes = 16384;
+    std::uint64_t train_bytes = 0, train_offset = 0, eval_offset = 0, eval_bytes = 16384;
     int table_bits = 22, gen_bytes = 200, prompt_bytes = 256;
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
         };
         if (a == "--train") train_path = next();
         else if (a == "--train-bytes") train_bytes = std::stoull(next());
+        else if (a == "--train-offset") train_offset = std::stoull(next());
         else if (a == "--eval") eval_path = next();
         else if (a == "--eval-offset") eval_offset = std::stoull(next());
         else if (a == "--eval-bytes") eval_bytes = std::stoull(next());
@@ -142,7 +143,7 @@ int main(int argc, char** argv) {
     out["tier"] = model->config().hp_lossy_tier.empty() ? "gate24" : model->config().hp_lossy_tier;
 
     if (!train_path.empty() && train_bytes > 0) {
-        const auto train = read_slice(train_path, 0, train_bytes);
+        const auto train = read_slice(train_path, train_offset, train_bytes);
         const auto t0 = Clock::now();
         nlohmann::json per_epoch = nlohmann::json::array();
         double bits = 0.0;
@@ -151,6 +152,7 @@ int main(int argc, char** argv) {
             per_epoch.push_back(bits / static_cast<double>(train.size()));
         }
         out["train"] = {{"path", train_path},
+                        {"offset", train_offset},
                         {"bytes", train.size()},
                         {"epochs", std::max(1, epochs)},
                         {"online_bpc", per_epoch.front()},
@@ -181,6 +183,10 @@ int main(int argc, char** argv) {
             model2->hp_backend().predictor().set_serve_adaptation(serve_lr, 4, serve_skip);
         }
         double e2_nll = 0.0, lin_nll = 0.0, geo_nll = 0.0, bayes_nll = 0.0;
+        // Weighted geometric grid: log p = a*lp1 + b*lp2 - log Z.
+        const double geo_w1[] = {0.4, 0.5, 0.6, 0.7};
+        const double geo_sum[] = {0.9, 1.0, 1.1, 1.2};
+        double geo_grid[4][4] = {};
         double w_bayes = 0.5;
         out["serve_lr_quarters"] = serve_lr;
         out["serve_skip"] = serve_skip;
@@ -241,6 +247,19 @@ int main(int argc, char** argv) {
                     zg += std::exp(0.5 * (lp[static_cast<std::size_t>(b)] + lp2[static_cast<std::size_t>(b)]));
                 geo_nll += -(0.5 * (lp[static_cast<std::size_t>(truth)] + lp2[static_cast<std::size_t>(truth)]) -
                              std::log(zg)) / kLn2;
+                for (int wi = 0; wi < 4; ++wi) {
+                    for (int si = 0; si < 4; ++si) {
+                        const double a = geo_w1[wi] * geo_sum[si], bb = (1.0 - geo_w1[wi]) * geo_sum[si];
+                        double mxg = -1e300;
+                        for (int b = 0; b < 256; ++b)
+                            mxg = std::max(mxg, a * lp[static_cast<std::size_t>(b)] + bb * lp2[static_cast<std::size_t>(b)]);
+                        double zz = 0.0;
+                        for (int b = 0; b < 256; ++b)
+                            zz += std::exp(a * lp[static_cast<std::size_t>(b)] + bb * lp2[static_cast<std::size_t>(b)] - mxg);
+                        geo_grid[wi][si] += -(a * lp[static_cast<std::size_t>(truth)] + bb * lp2[static_cast<std::size_t>(truth)] -
+                                              mxg - std::log(zz)) / kLn2;
+                    }
+                }
                 // Fixed-share Bayesian weight on model 1 (tracks which model is better lately).
                 const double pm = w_bayes * p1 + (1.0 - w_bayes) * p2;
                 bayes_nll += -std::log2(pm);
@@ -303,6 +322,12 @@ int main(int argc, char** argv) {
                                {"linear_half_nll", lin_nll / n},
                                {"geometric_half_nll", geo_nll / n},
                                {"fixed_share_nll", bayes_nll / n}};
+            nlohmann::json grid = nlohmann::json::object();
+            for (int wi = 0; wi < 4; ++wi)
+                for (int si = 0; si < 4; ++si)
+                    grid["w1=" + std::to_string(geo_w1[wi]).substr(0, 3) + " sum=" +
+                         std::to_string(geo_sum[si]).substr(0, 3)] = geo_grid[wi][si] / n;
+            out["ensemble"]["geometric_grid_nll"] = grid;
         }
         if (compare_scoring) {
             out["frozen_scoring"] = {{"nll_bits_per_byte", f_nll / n},

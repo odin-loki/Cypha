@@ -1,0 +1,103 @@
+{
+  "ensemble": {
+    "fixed_share_nll": 1.7423381854197648,
+    "geometric_half_nll": 1.7248394626078927,
+    "linear_half_nll": 1.7351940504528132,
+    "model2_nll": 1.8258918335961205,
+    "with": "/home/user/ckpt/pre_lean.json"
+  },
+  "eval": {
+    "bit_greedy_equals_argmax": 0.8616943359375,
+    "bytes": 8192,
+    "calibration_bins": [
+      {
+        "accuracy": 0.12345679012345678,
+        "bin": 0,
+        "confidence": 0.08276968599998889,
+        "n": 81
+      },
+      {
+        "accuracy": 0.1634349030470914,
+        "bin": 1,
+        "confidence": 0.15772943638346898,
+        "n": 722
+      },
+      {
+        "accuracy": 0.26375,
+        "bin": 2,
+        "confidence": 0.24856124624383125,
+        "n": 800
+      },
+      {
+        "accuracy": 0.3697916666666667,
+        "bin": 3,
+        "confidence": 0.3501572957654868,
+        "n": 768
+      },
+      {
+        "accuracy": 0.4137466307277628,
+        "bin": 4,
+        "confidence": 0.449773350070142,
+        "n": 742
+      },
+      {
+        "accuracy": 0.5666666666666667,
+        "bin": 5,
+        "confidence": 0.5485418286889986,
+        "n": 660
+      },
+      {
+        "accuracy": 0.6746765249537893,
+        "bin": 6,
+        "confidence": 0.6515607667357638,
+        "n": 541
+      },
+      {
+        "accuracy": 0.7569444444444444,
+        "bin": 7,
+        "confidence": 0.7509341079914147,
+        "n": 576
+      },
+      {
+        "accuracy": 0.8886107634543179,
+        "bin": 8,
+        "confidence": 0.8549742853997117,
+        "n": 799
+      },
+      {
+        "accuracy": 0.9740311626048741,
+        "bin": 9,
+        "confidence": 0.9673826110358393,
+        "n": 2503
+      }
+    ],
+    "distribution_ms": 15.243289652954061,
+    "ece_top1": 0.01621385138858704,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 1.8107304999472713,
+    "ms_per_byte": 22.565334178833005,
+    "nll_bits_by_temperature": {
+      "0.7": 1.8607054641606289,
+      "0.8": 1.7960845021422405,
+      "0.9": 1.7660122859312448,
+      "1.0": 1.7607771210608223,
+      "1.1": 1.7744768350457474,
+      "1.2": 1.8033962300353013,
+      "1.3": 1.8451075555606666,
+      "1.4": 1.8979314204944568
+    },
+    "nll_bits_per_byte": 1.7607771210608203,
+    "offset": 96000000,
+    "path": "/home/user/corpora/enwik8",
+    "perplexity_per_byte": 3.388806169766099,
+    "top1": 0.6412353515625,
+    "top5": 0.8807373046875
+  },
+  "harness": "cyphalm_lm_quality",
+  "loaded": "/home/user/ckpt/pre_lean95.json",
+  "reset_stream": "none",
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 1.301466373,
+  "tier": "lean"
+}
