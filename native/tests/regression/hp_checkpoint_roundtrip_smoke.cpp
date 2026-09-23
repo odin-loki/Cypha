@@ -64,6 +64,47 @@ int main() {
         return 1;
     }
 
+    // Lossy knobs must survive save/load, and the trained tables must come back
+    // into a predictor of the same shape. eval_bpc() resets the model, so compare
+    // the live predictors by continuing the stream instead.
+    {
+        CyphaLMConfig lc = cfg;
+        lc.hp_cm_drop = (1ull << 19) | (1ull << 25);  // nestmod, o6b
+        lc.hp_cm_bits_cap = 17;
+        lc.hp_match_bits_cap = 17;
+        lc.hp_pool_slots = 8;
+        lc.hp_pool_bits_cap = 16;
+        lc.hp_lossy_mem = 17;
+        CyphaLMModel lm(lc);
+        lm.train_sequence(train_ids, static_cast<int>(train_ids.size()) - 1, 1);
+        const std::string lbase = "/tmp/cyphalm_hp_ckpt_roundtrip_lossy";
+        std::filesystem::remove(lbase + ".json", ec);
+        std::filesystem::remove(lbase + ".hpbin", ec);
+        cypha::cyphalm::save_cyphalm_model(lm, lbase);
+        CyphaLMModel ll = cypha::cyphalm::load_cyphalm_model(lbase + ".json");
+        const auto& c2 = ll.config();
+        if (c2.hp_cm_drop != lc.hp_cm_drop || c2.hp_cm_bits_cap != 17 ||
+            c2.hp_match_bits_cap != 17 || c2.hp_pool_slots != 8 || c2.hp_pool_bits_cap != 16 ||
+            c2.hp_lossy_mem != 17) {
+            std::cerr << "hp_checkpoint_roundtrip_smoke FAIL lossy knobs not restored\n";
+            return 1;
+        }
+        std::vector<std::uint8_t> tail(eval_ids.begin(), eval_ids.end());
+        const double a = lm.hp_backend().observe_stream_bits(tail.data(), tail.size());
+        const double b = ll.hp_backend().observe_stream_bits(tail.data(), tail.size());
+        CyphaLMModel fresh(lc);  // control: untrained tables must score differently
+        const double f = fresh.hp_backend().observe_stream_bits(tail.data(), tail.size());
+        if (near(a, f, 1e-9)) {
+            std::cerr << "hp_checkpoint_roundtrip_smoke FAIL control: trained == fresh\n";
+            return 1;
+        }
+        if (!near(a, b, 1e-9)) {
+            std::cerr << "hp_checkpoint_roundtrip_smoke FAIL lossy live bits " << a << " vs " << b
+                      << "\n";
+            return 1;
+        }
+    }
+
     std::cout << "hp_checkpoint_roundtrip_smoke OK bpc=" << bpc_before << "\n";
     return 0;
 }

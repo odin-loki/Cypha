@@ -8,6 +8,19 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Added
+- **CyphaLM lossy tiers** (`apply_hp_lossy_tier`, env `CYPHA_HP_LOSSY_TIER`): `lean`, `balanced`, `compact`, `small`, `tiny`, built from new runtime `hp::Config` knobs (context-model drop, table caps for context/match/discovery-pool models, pool slot count, mixer weight-set drop, mixer update skip). Measured on enwik8 8 MiB against gate24's 1.611729 bpc / 1,538 MB: `lean` **1.609866 / 1,078 MB** (better and 30% smaller), `balanced` 1.612457 / 814 MB, `compact` 1.617400 / 670 MB, `small` 1.629798 / 404 MB, `tiny` 1.652317 / 253 MB. Knobs are saved in the checkpoint JSON. `cyphalm_lossy_bench --tiers`. Report: [`docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md`](docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md).
+
+### Changed
+- **Vendored hp is gate24-only:** all 289 ablation flags resolved into the source and the rejected branches deleted (hp include + main: 15,706 → 6,687 lines). Predictions and archives are bit-identical; `HpFlags.cmake` no longer parses `v78_flags.ps1`. Lab-only tooling removed. [`docs/reports/CYPHALM_HP_GATE24_STRIP.md`](docs/reports/CYPHALM_HP_GATE24_STRIP.md).
+- **Bit-tree serve DFS:** one `predict()` per node and no update at leaves (382 + 254 calls instead of 510 + 510). Undo log appends without the O(n²) duplicate scan.
+- **hp tables are demand-zero again** (`mmap` + `MADV_HUGEPAGE`; `calloc` on Windows): gate24 constructs in ~55 ms instead of ~8 s, and RSS grows with use. Context-slot prefetch. Both are prediction-identical.
+
+### Fixed
+- **Serve scoring leaked into the live model.** `DmcModel::update` and the `WordMatchModel` mismatch reset were not undo-recorded, so each `serve_predict_next` could change later predictions (up to 0.18 nats) and the served distribution differed from fresh-clone scoring (up to 0.27 nats). Now exact; `hp_bit_tree_smoke` checks it on text.
+- **ODR split between `cypha_core` and tools:** the v78 flags were `PRIVATE` to `cypha_core`, so tools including hp headers compiled a different `hp::Predictor` (64 vs 115 experts). Gone with the gate24-only tree.
+- **`hp_lossy_mem` was not saved** in the checkpoint JSON, so a lossy-mem model reloaded at mem 22 against mismatched `.hpbin` tables.
+
 ## [2.5.0] — 2026-09-20 · Cross-platform release + CyphaLM hp
 
 ### Added

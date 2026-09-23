@@ -94,6 +94,7 @@ cypha_rest --listen 127.0.0.1:8099 --cypha fixtures/reference.cypha
 ```
 
 - **Quality bar:** gate24 enwik8 observe **1.611729 BPC** / archive **1.611759 BPC** (2026-09-19, vendored hp). Train metric ≠ generation log-prob path — see [`MODEL_CARD.md`](MODEL_CARD.md).
+- **Lossy tiers:** `CYPHA_HP_LOSSY_TIER=lean` is 1.609866 BPC on enwik8 8 MiB with 30% less RAM than gate24 and a faster observe path; `compact` halves RAM for +0.0057 BPC. See [`docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md`](docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md).
 - **Docs:** [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md) (train vs serve API), [`docs/reports/CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md) (BPC harness).
 - **Superseded stacks** (history only): Hybrid GRIA+LSTM [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md), RPSM [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md), hp light/champ SKUs [`docs/history/REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md).
 

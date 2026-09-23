@@ -1,7 +1,7 @@
 # CyphaLM lossy LLM execution plan
 
-**Date:** 2026-09-20 (updated)  
-**Status:** Phase 0 done; **first concrete lossy levers landed** (mem tier, serve-compact, cold-slot prune)  
+**Date:** 2026-09-20, updated 2026-09-23
+**Status:** Phase 0 done; mem tier / serve-compact / cold-slot prune landed 2026-09-20. **2026-09-23:** per-component lossy knobs and measured tiers (`lean` beats gate24 on enwik8: −0.0019 bpc, −30% RAM, faster; `compact` −56% RAM for +0.0057), serve-path leak fixed, bit-tree DFS ~1.85× faster, demand-zero tables. Full write-up: [`CYPHALM_LOSSY_MIXER_REPORT.md`](CYPHALM_LOSSY_MIXER_REPORT.md).  
 **Inputs:** [`CYPHALM_LLM_PROFILE_REPORT.md`](CYPHALM_LLM_PROFILE_REPORT.md), [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md), [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md), [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json), [`CYPHALM_LOSSY_ENWIK_SCREEN.json`](CYPHALM_LOSSY_ENWIK_SCREEN.json)
 
 ---
@@ -12,6 +12,7 @@ Priority = expected **RAM/speed payoff** vs **quality risk** at gate24 compile p
 
 | Rank | Lever | API / flag | RAM | Speed | Quality risk | Status |
 |------|-------|------------|-----|-------|--------------|--------|
+| **0** | **Per-component tiers** (drop 8 wiki CMs, pool 8 slots, capped match/pool/CM tables) | `apply_hp_lossy_tier(cfg, tier)`, tier = `lean` / `compact` / `small` / `CYPHA_HP_LOSSY_TIER` | **−30%** (lean) … **−56%** (compact) peak RSS | Faster observe | lean **−0.0019 BPC** (better); compact **+0.0057** | **Done** ([report](CYPHALM_LOSSY_MIXER_REPORT.md)) |
 | **1** | **Lower `table_bits` (mem tier)** | `apply_hp_lossy_recipe(cfg, mem)` / `CYPHA_HP_LOSSY_MEM=20` | **−38%** RSS @ mem20 enwik | Faster observe + clones | **+0.0063 BPC** on enwik8MB — **fails ~1.612 bar** | **Opt-in only** |
 | **2** | **Single-predictor serve** | delta undo on live `pred_` (no `scratch_` twin) | **−~50%** construct RSS (~1.5 GiB vs ~3.1 GiB dual) | Neutral | **None** (identical math) | **Done** (this PR) |
 | **3** | **Cold hash-slot prune** | `hp_prune_cold_min_n` / `CYPHA_HP_PRUNE_COLD_MIN_N=4` / `prune_hp_cold_slots()` | No table shrink (fixed arrays) | **~1.7×** faster `predict_next` @ min4 (measured) | **Low** if threshold small; rises with aggressive min | **Implemented** |

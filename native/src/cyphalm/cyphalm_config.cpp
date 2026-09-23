@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include "cypha/env.hpp"
+#include "hp/predictor.hpp"
 
 namespace cypha::cyphalm {
 
@@ -150,8 +151,23 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
 }
 
 std::vector<std::string> hp_lossy_tier_names() {
-    return {"gate24"};
+    return {"gate24", "lean", "balanced", "compact", "small", "tiny"};
 }
+
+namespace {
+
+/// Eight wiki context models that cost more than they return on enwik8
+/// (drop-one and stacked screens, docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md).
+std::uint64_t lean_cm_drop() {
+    using P = hp::Predictor;
+    const int ids[] = {P::kCmParaMod,     P::kCmNestMod,    P::kCmInfokeyMod, P::kCmLinkpipeMod,
+                       P::kCmTplMod,      P::kCmO6b,        P::kCmHeadingMod, P::kCmCapmaskMod};
+    std::uint64_t m = 0;
+    for (int id : ids) m |= std::uint64_t{1} << id;
+    return m;
+}
+
+}  // namespace
 
 void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
     cfg.hp_cm_drop = 0;
@@ -165,7 +181,31 @@ void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
         cfg.hp_lossy_tier.clear();
         return;
     }
-    throw std::runtime_error("unknown CyphaLM lossy tier: " + tier);
+    // Measured on enwik8 8 MiB, mem 22 (gate24: 1.611729 bpc, 1,538 MB peak RSS).
+    // Every tier starts from lean; the others add table caps.
+    struct Tier {
+        const char* name;
+        int cm_cap, match_cap, pool_cap;
+    };
+    static const Tier kTiers[] = {
+        {"lean", 0, 22, 20},      // 1.609866 bpc, 1,078 MB
+        {"balanced", 23, 22, 20}, // 1.612457 bpc,   814 MB
+        {"compact", 22, 22, 20},  // 1.617400 bpc,   670 MB
+        {"small", 21, 21, 20},    // 1.629798 bpc,   404 MB
+        {"tiny", 20, 20, 18},     // 1.652317 bpc,   253 MB
+    };
+    for (const Tier& t : kTiers) {
+        if (tier != t.name) continue;
+        cfg.hp_cm_drop = lean_cm_drop();
+        cfg.hp_pool_slots = 8;
+        cfg.hp_cm_bits_cap = t.cm_cap;
+        cfg.hp_match_bits_cap = t.match_cap;
+        cfg.hp_pool_bits_cap = t.pool_cap;
+    }
+    if (cfg.hp_cm_drop == 0) {
+        throw std::runtime_error("unknown CyphaLM lossy tier: " + tier);
+    }
+    cfg.hp_lossy_tier = tier;
 }
 
 void apply_hp_production_recipe(CyphaLMConfig& cfg) {

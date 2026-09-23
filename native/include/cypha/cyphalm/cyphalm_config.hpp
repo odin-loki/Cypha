@@ -352,8 +352,10 @@ void apply_hp_lossy_recipe(CyphaLMConfig& cfg, int mem_bits);
 /// ``CYPHA_HP_PRUNE_COLD_MIN_N``). Safe no-op when unset.
 void apply_hp_lossy_env(CyphaLMConfig& cfg);
 
-/// Lossy mixer tier by name: "" / "gate24" (exact), plus the measured tiers listed in
-/// ``hp_lossy_tier_names()``. Throws on an unknown name. Keeps ``hp_lossy_mem``.
+/// Lossy mixer tier by name. "" / "gate24" is exact. Measured on enwik8 8 MiB (bpc, peak RSS):
+/// lean 1.6099 / 1.08 GB (better than gate24's 1.6117 / 1.54 GB), balanced 1.6125 / 0.81 GB,
+/// compact 1.6174 / 0.67 GB, small 1.6298 / 0.40 GB, tiny 1.6523 / 0.25 GB.
+/// Throws on an unknown name. Keeps ``hp_lossy_mem``.
 void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier);
 std::vector<std::string> hp_lossy_tier_names();
 
