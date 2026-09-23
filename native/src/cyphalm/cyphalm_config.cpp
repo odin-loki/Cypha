@@ -159,7 +159,7 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
 }
 
 std::vector<std::string> hp_lossy_tier_names() {
-    return {"gate24", "lean", "balanced", "compact", "small", "tiny"};
+    return {"gate24", "lean", "balanced", "compact", "small", "tiny", "slim"};
 }
 
 namespace {
@@ -175,6 +175,19 @@ std::uint64_t lean_cm_drop() {
     return m;
 }
 
+/// slim: thirteen more context models whose held-out value is within noise
+/// when dropped one at a time from a lean 8 MiB model
+/// (CYPHALM_LM_QUALITY_REPORT.md, "RAM").
+std::uint64_t slim_cm_drop() {
+    using P = hp::Predictor;
+    const int ids[] = {P::kCmSp13, P::kCmSp24,     P::kCmCol,     P::kCmTag,      P::kCmWstrSp,
+                       P::kCmLink, P::kCmNum,      P::kCmSentmemCm, P::kCmStateMod, P::kCmCatMod,
+                       P::kCmTitleMod, P::kCmUppergapMod, P::kCmWordlenMod};
+    std::uint64_t m = lean_cm_drop();
+    for (int id : ids) m |= std::uint64_t{1} << id;
+    return m;
+}
+
 }  // namespace
 
 void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
@@ -185,6 +198,7 @@ void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
     cfg.hp_match_bits_cap = 0;
     cfg.hp_pool_slots = 0;
     cfg.hp_pool_bits_cap = 0;
+    cfg.hp_hebb_bits_cap = 0;
     if (tier.empty() || tier == "gate24") {
         cfg.hp_lossy_tier.clear();
         return;
@@ -209,6 +223,17 @@ void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
         cfg.hp_cm_bits_cap = t.cm_cap;
         cfg.hp_match_bits_cap = t.match_cap;
         cfg.hp_pool_bits_cap = t.pool_cap;
+    }
+    if (tier == "slim") {
+        // LLM serving: lean minus 13 low-value context models, small pool
+        // and Hebbian tables. Match tables stay at lean's size: they hold
+        // the training text's positions, and shrinking them costs more the
+        // more text a model has seen (see report).
+        cfg.hp_cm_drop = slim_cm_drop();
+        cfg.hp_pool_slots = 8;
+        cfg.hp_match_bits_cap = 22;
+        cfg.hp_pool_bits_cap = 16;
+        cfg.hp_hebb_bits_cap = 16;
     }
     if (cfg.hp_cm_drop == 0) {
         throw std::runtime_error("unknown CyphaLM lossy tier: " + tier);

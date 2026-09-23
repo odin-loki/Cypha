@@ -338,6 +338,87 @@ The judge was trained on the first 16 MiB, so it favours models trained there.
 Compare decoders on one model, not models against each other (held-out NLL
 does that). ms/byte figures come from a loaded 4-core box.
 
+## RAM
+
+Everything a served model holds, and what each cut costs. Footprints are
+resident memory with tables copied into RAM (`CYPHA_HP_MMAP=0`); held-out NLL
+in bits/byte on 8 KiB of wiki / Alice (and *lcet10*, a second book, where
+shown).
+
+**Where the memory is** (lean, table bits 22, 8 MiB model, 1071 MB): context
+model hash tables ~70% (seven of 50 MB), byte-match position tables 13 × 17
+MB, Hebbian word associations 46 MB, byte history 32 MB, discovery pool 25
+MB, everything else (mixer, APMs, DMC) ~8 MB. Tables are 96–99% full after
+pretraining, so demand-zero pages do not help. The saving has to come from
+smaller slots, smaller tables or fewer of them.
+
+### Cuts that cost (almost) nothing
+
+| cut | 8 MiB model | cost wiki / Alice |
+|---|---|---|
+| **packed context slots**: 16-bit (10-bit state + 6-bit checksum) instead of 24-bit | 1071 → 819 MB | +0.0007 / +0.0048 |
+| **Hebbian tables** folded to 16 bits | −44 MB | +0.000 / −0.001 |
+| **discovery pool** folded to 16 bits | −24 MB | +0.002 / +0.002 |
+| **mapped loading**: serve tables straight from the checkpoint file | private RAM 1066 → 164 MB (frozen serving) | none |
+
+- **Packed slots** changed hp itself. Checkpoint format v3 converts older ones
+  on load. Compressing 2 MiB from scratch costs +0.0014 bpc (0.08%).
+- **Mapped loading** needs no retraining (`hp::MapScope`, default on): tables
+  are `mmap`ed copy-on-write from the `.hpbin`. After 4 KB of text, frozen
+  serving holds 164 MB private plus 905 MB of clean file-backed pages. Those
+  are shared by every process serving that model and reclaimable by the
+  kernel. With learning on while reading a prompt, private memory grows with
+  each page written (624 MB after 4 KB). Loading takes 0.1 s instead of 4.2 s,
+  and results are identical.
+
+### Cuts that trade quality
+
+- **Serve-time drop of low-value context models.** Each context model was
+  dropped from a trained model one at a time (`--drop`, freeing its table).
+  Thirteen changed held-out NLL by less than the eval noise (±0.002). Dropping
+  all thirteen frees 185 MB: 819 → 634 MB for +0.004 / +0.007 / +0.009
+  (wiki / Alice / lcet10). Training without them from the start (`slim` tier)
+  is no better than dropping them afterwards (8 MiB, 576 MB: 1.8341 vs
+  1.8327). So existing lean models convert after training. The tier still
+  halves training memory.
+- **Table folding** (`CyphaLMModel::fold_hp_tables`, `--fold`) shrinks trained
+  tables as if they had been trained smaller: the dropped index bit moves into
+  the slot checksum. Context tables are the expensive ones to fold (22 bits:
+  +0.013 / +0.020). Match tables are cheap for a model trained on 8 MiB
+  (16 bits: +0.009 / +0.004) but not for one trained on 95 MB (+0.020 /
+  +0.013), where they index far more text. `slim` therefore keeps match
+  tables at lean's size.
+- **Merging shards** into one model (`--merge`, `merge_shard_tables`): two
+  8.6 MB shards merged into one table set gain 0.039 over one shard at the
+  same RAM, but merging all eleven collapses (2.006 wiki), because one set of
+  tables cannot hold them.
+
+### RAM / quality frontier
+
+Held-out wiki NLL (lower is better) against resident footprint:
+
+| config | footprint | wiki | Alice |
+|---|---:|---:|---:|
+| 95 MB model, packed + context 22 + match/pool 16 | 343 MB | 1.8577 | 2.2961 |
+| 8 MiB model, slim | 576 MB | 1.8341 | 2.2685 |
+| **95 MB model, slim drop + pool/Hebbian 16** | **577 MB** | **1.7729** | **2.2445** |
+| 95 MB model, packed | 819 MB | 1.7660 | 2.2263 |
+| 95 MB model, unpacked (before) | 1071 MB | 1.7608 | 2.2158 |
+| 5 shards, context 22 + match/pool 16 | 810 MB | 1.7717 | 2.2301 |
+| 3 shards, match/pool 16 | 1.03 GB | 1.7629 | 2.2178 |
+| 5 shards, match/pool 16 | 1.72 GB | 1.7399 | 2.2039 |
+| **11 shards, slim drop + pool/Hebbian 16** | **4.0 GB** | **1.7069** | **2.1936** |
+| 11 shards, packed | 5.04 GB | 1.7009 | 2.1834 |
+| 11 shards, unpacked (before) | 7.2 GB | 1.6994 | 2.1797 |
+
+- **Up to ~1 GB,** one model trained on all the data is the best use of
+  memory. Slim plus packing takes the 95 MB model from 1071 to 577 MB (−46%)
+  for +0.012 wiki / +0.029 Alice.
+- **Above ~1 GB,** ensembles of shard models win. The 11-shard ensemble drops
+  from 7.2 to 4.0 GB (−44%) for +0.008 / +0.014.
+- **With mapped loading,** most of any of these is shareable file-backed page
+  cache rather than private memory.
+
 ## Other results this round
 
 - **Two training epochs hurt.** Epoch 2 trains at 0.004 bpc because the match

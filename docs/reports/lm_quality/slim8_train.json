@@ -1,0 +1,20 @@
+{
+  "harness": "cyphalm_lm_quality",
+  "rss_anon_mb_after_setup": 572.0078125,
+  "rss_file_mb_after_setup": 4.421875,
+  "rss_mb_after_setup": 576.4296875,
+  "saved": "/home/user/ckpt/slim8",
+  "setup_seconds": 401.556540187,
+  "tier": "slim",
+  "train": {
+    "bpc_by_epoch": [
+      1.6262395282506457
+    ],
+    "bytes": 8388608,
+    "epochs": 1,
+    "offset": 0,
+    "online_bpc": 1.6262395282506457,
+    "path": "/home/user/corpora/enwik8",
+    "seconds": 399.425456061
+  }
+}
