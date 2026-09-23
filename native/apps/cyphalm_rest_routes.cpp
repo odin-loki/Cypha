@@ -60,11 +60,17 @@ std::vector<std::uint8_t> hex_to_bytes(const std::string& hex) {
 }
 
 DecodeParams decode_params_from_json(const nlohmann::json& body) {
-    DecodeParams p;
+    DecodeParams p;  // unspecified fields keep the DecodeParams defaults
     p.strategy = decode_strategy_from_string(body.value("strategy", std::string("temperature")));
-    p.temperature = body.value("temperature", 0.9);
-    p.top_k = body.value("top_k", 40);
-    p.top_p = body.value("top_p", 0.9);
+    p.temperature = body.value("temperature", p.temperature);
+    p.top_k = body.value("top_k", p.top_k);
+    p.top_p = body.value("top_p", p.top_p);
+    p.min_p = body.value("min_p", p.min_p);
+    p.no_repeat_ngram = body.value("no_repeat_ngram", p.no_repeat_ngram);
+    p.no_repeat_window = body.value("no_repeat_window", p.no_repeat_window);
+    p.learn_from_output = body.value("learn_from_output", p.learn_from_output);
+    p.index_output = body.value("index_output", p.index_output);
+    p.exact_greedy = body.value("exact_greedy", p.exact_greedy);
     p.seed = body.value("seed", static_cast<std::uint64_t>(42));
     if (body.contains("uncertainty_threshold") && !body["uncertainty_threshold"].is_null()) {
         p.uncertainty_threshold = body["uncertainty_threshold"].get<double>();
