@@ -99,6 +99,7 @@ hp::Config hp_config_from_cyphalm(const CyphaLMConfig& c) {
     cfg.pool_slots = c.hp_pool_slots;
     cfg.pool_bits_cap = c.hp_pool_bits_cap;
     cfg.hebb_bits_cap = c.hp_hebb_bits_cap;
+    cfg.match_drop = c.hp_match_drop;
     return cfg;
 }
 

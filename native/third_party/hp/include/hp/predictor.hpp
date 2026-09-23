@@ -60,6 +60,7 @@ struct Config {
     int pool_slots = 0;           // 1..11: keep only this many discovered-context slots (gate24 = 12)
     int pool_bits_cap = 0;        // >0: cap discovered-context tables at this many bits
     int hebb_bits_cap = 0;        // >0: cap the Hebbian word-association tables at this many bits
+    std::uint32_t match_drop = 0; // bit k: drop byte-match model k (match_[0..8], smatch, skipk, skip3, skip4)
 
     // Encoder and decoder must agree. match/buf sizes are a function of
     // table_bits (the only size the archive header carries).
@@ -154,7 +155,8 @@ class Predictor {
     }
 
     // Table bits for the byte-match models, capped by Config::match_bits_cap.
-    static int byte_match_bits_(const Config& cfg) {
+    static int byte_match_bits_(const Config& cfg, int id) {
+        if ((cfg.match_drop >> id) & 1u) return 0;
         const int b = match_bits(cfg.match_bits);
         return (cfg.match_bits_cap > 0 && b > cfg.match_bits_cap) ? cfg.match_bits_cap : b;
     }
@@ -218,20 +220,20 @@ class Predictor {
           capmaskmod_(cm_bits_(cfg, kCmCapmaskMod, cfg.table_bits), 255),
           uppergapmod_(cm_bits_(cfg, kCmUppergapMod, cfg.table_bits), 255),
           wordlenmod_(cm_bits_(cfg, kCmWordlenMod, cfg.table_bits), 255),
-          match_{ {&byte_ring_, byte_match_bits_(cfg), 3},
-                  {&byte_ring_, byte_match_bits_(cfg), 4},
-                  {&byte_ring_, byte_match_bits_(cfg), 6},
-                  {&byte_ring_, byte_match_bits_(cfg), 10},
-                  {&byte_ring_, byte_match_bits_(cfg), 16}
-                  , {&byte_ring_, byte_match_bits_(cfg), 8}
-                  , {&byte_ring_, byte_match_bits_(cfg), 1}
-                  , {&byte_ring_, byte_match_bits_(cfg), 2}
-                  , {&byte_ring_, byte_match_bits_(cfg), 5}
+          match_{ {&byte_ring_, byte_match_bits_(cfg, 0), 3},
+                  {&byte_ring_, byte_match_bits_(cfg, 1), 4},
+                  {&byte_ring_, byte_match_bits_(cfg, 2), 6},
+                  {&byte_ring_, byte_match_bits_(cfg, 3), 10},
+                  {&byte_ring_, byte_match_bits_(cfg, 4), 16}
+                  , {&byte_ring_, byte_match_bits_(cfg, 5), 8}
+                  , {&byte_ring_, byte_match_bits_(cfg, 6), 1}
+                  , {&byte_ring_, byte_match_bits_(cfg, 7), 2}
+                  , {&byte_ring_, byte_match_bits_(cfg, 8), 5}
           },
-          smatch_(&byte_ring_, byte_match_bits_(cfg), 4),
-          skipk_(&byte_ring_, byte_match_bits_(cfg), 3, 2),
-          skip3_(&byte_ring_, byte_match_bits_(cfg), 3, 3),
-          skip4_(&byte_ring_, byte_match_bits_(cfg), 3, 4),
+          smatch_(&byte_ring_, byte_match_bits_(cfg, 9), 4),
+          skipk_(&byte_ring_, byte_match_bits_(cfg, 10), 3, 2),
+          skip3_(&byte_ring_, byte_match_bits_(cfg, 11), 3, 3),
+          skip4_(&byte_ring_, byte_match_bits_(cfg, 12), 3, 4),
           lzp_(match_bits(cfg.match_bits) > 2 ? match_bits(cfg.match_bits) - 2
                                               : match_bits(cfg.match_bits)),
           dmc_(18),
@@ -316,12 +318,16 @@ class Predictor {
             if (target.cm_bits_cap > 0 && m.table_bits() > target.cm_bits_cap) m.fold_to(target.cm_bits_cap);
         }
         cfg_.cm_drop |= target.cm_drop;
-        if (target.match_bits_cap > 0) {
-            for (int i = 0; i < kMatchModels; ++i) match_[i].fold_to(target.match_bits_cap);
-            smatch_.fold_to(target.match_bits_cap);
-            skipk_.fold_to(target.match_bits_cap);
-            skip3_.fold_to(target.match_bits_cap);
-            skip4_.fold_to(target.match_bits_cap);
+        {
+            MatchModel* ms[] = {&match_[0], &match_[1], &match_[2], &match_[3], &match_[4],
+                                &match_[5], &match_[6], &match_[7], &match_[8], &smatch_,
+                                &skipk_,    &skip3_,    &skip4_};
+            static_assert(kMatchModels == 9, "byte-match model list");
+            for (int k = 0; k < 13; ++k) {
+                if ((target.match_drop >> k) & 1u) ms[k]->drop();
+                else if (target.match_bits_cap > 0) ms[k]->fold_to(target.match_bits_cap);
+            }
+            cfg_.match_drop |= target.match_drop;
         }
         if (target.pool_bits_cap > 0) pool_.fold_to(target.pool_bits_cap);
         if (target.hebb_bits_cap > 0) hebb_.fold_to(target.hebb_bits_cap);

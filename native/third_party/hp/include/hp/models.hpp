@@ -491,8 +491,9 @@ class MatchModel {
     // adjacent context models do.
     MatchModel(ByteRing* ring, int table_bits, int order = 6, int skip = 1)
         : ring_(ring), order_(order), skip_(skip < 1 ? 1 : skip),
-          tab_mask_((1u << table_bits) - 1),
-          tab_(table_bits) {
+          off_(table_bits <= 0),
+          tab_mask_((1u << (table_bits > 0 ? table_bits : 0)) - 1),
+          tab_(table_bits > 0 ? table_bits : 0) {
         counter_init(st_.data(), st_.size());
     }
 
@@ -501,6 +502,7 @@ class MatchModel {
     // Called once per byte after the shared ring has been updated.
     // `hist` holds the current kMinLen-byte suffix in its low bytes.
     void push_byte(int byte, std::uint64_t hist) {
+        if (off_) return;  // dropped (Config::match_drop): predicts nothing
         const std::uint32_t pos = ring_->pos();
         // 1. Verify the standing prediction before anything else.
         if (len_ > 0) {
@@ -556,6 +558,10 @@ class MatchModel {
 
     // Once per bit. bitpos is 0..7, c0 is the partial byte with sentinel.
     int predict(int c0, int bitpos) {
+        if (off_) {
+            valid_ = false;
+            return 0;
+        }
         valid_ = false;
         const std::uint32_t pos = ring_->pos();
         if (len_ == 0 || ptr_ >= pos) return 0;
@@ -596,6 +602,14 @@ class MatchModel {
     }
 
     void copy_counters_from(const MatchModel& src) { st_ = src.st_; }
+
+    /// Turn the model off and free its table (serve-time Config::match_drop).
+    void drop() {
+        off_ = true;
+        tab_.resize_bits(0);
+        tab_mask_ = 0;
+        len_ = 0;
+    }
 
     /// Shrink the position table to ``bits``: of two folded entries keep the
     /// more recent position (what a smaller table would hold).
@@ -645,6 +659,7 @@ class MatchModel {
     ByteRing* ring_;
     int order_;
     int skip_;
+    bool off_ = false;
     std::uint32_t tab_mask_;
     HashTable<std::uint32_t> tab_;
     std::array<Counter, 64> st_{};

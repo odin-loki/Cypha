@@ -322,6 +322,7 @@ struct CyphaLMConfig {
     int hp_pool_slots = 0;           ///< keep this many discovered-context slots (gate24 = 12)
     int hp_pool_bits_cap = 0;        ///< cap discovered-context tables at this many bits
     int hp_hebb_bits_cap = 0;        ///< cap the Hebbian word-association tables at this many bits
+    std::uint32_t hp_match_drop = 0; ///< bit k: drop byte-match model k (hp::Config::match_drop)
     std::string hp_lossy_tier;       ///< name of the applied tier ("" = gate24), informational
     /// Serve-time frozen scoring (``HpSequenceBackend::set_frozen_scoring``): full
     /// next-byte distributions 2.1-2.5x faster for +0.003-0.008 bits/byte held-out

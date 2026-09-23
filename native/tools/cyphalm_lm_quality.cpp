@@ -101,6 +101,7 @@ int main(int argc, char** argv) {
     double ensemble_lr = -1.0;  // <0: the model's config default
     int fold_cm = 0, fold_match = 0, fold_pool = 0, fold_hebb = 0;
     std::uint64_t drop_mask = 0;
+    std::uint32_t match_drop = 0;
     std::vector<std::string> merges;  // shard models merged into --load (equal data)
     int word_k = 0;
     bool only_default = false;
@@ -133,6 +134,7 @@ int main(int argc, char** argv) {
         else if (a == "--member") members.push_back(next());
         else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
         else if (a == "--merge") merges.push_back(next());
+        else if (a == "--match-drop") match_drop = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 0));
         else if (a == "--drop") drop_mask = std::stoull(next(), nullptr, 0);  // cm_drop bits
         else if (a == "--fold") {  // CM,MATCH,POOL table bits (0 = keep)
             const std::string v = next();
@@ -166,15 +168,16 @@ int main(int argc, char** argv) {
             model->reset_stream(/*keep_history=*/true);
             out["merged"] = merges;
         }
-        if (fold_cm > 0 || fold_match > 0 || fold_pool > 0 || fold_hebb > 0 || drop_mask != 0) {
-            model->fold_hp_tables(fold_cm, fold_match, fold_pool, drop_mask, fold_hebb);
+        if (fold_cm > 0 || fold_match > 0 || fold_pool > 0 || fold_hebb > 0 || drop_mask != 0 || match_drop != 0) {
+            model->fold_hp_tables(fold_cm, fold_match, fold_pool, drop_mask, fold_hebb, match_drop);
             out["fold"] = {fold_cm, fold_match, fold_pool, fold_hebb};
             out["drop_mask"] = drop_mask;
+            out["match_drop"] = match_drop;
         }
         for (const auto& m : members) {
             auto mm = cypha::cyphalm::load_cyphalm_model(m);
-            if (fold_cm > 0 || fold_match > 0 || fold_pool > 0 || fold_hebb > 0 || drop_mask != 0)
-                mm.fold_hp_tables(fold_cm, fold_match, fold_pool, drop_mask, fold_hebb);
+            if (fold_cm > 0 || fold_match > 0 || fold_pool > 0 || fold_hebb > 0 || drop_mask != 0 || match_drop != 0)
+                mm.fold_hp_tables(fold_cm, fold_match, fold_pool, drop_mask, fold_hebb, match_drop);
             model->add_ensemble_member(std::move(mm), 1.0 / static_cast<double>(members.size() + 1));
         }
         if (!members.empty()) out["members"] = members;
