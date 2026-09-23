@@ -11,12 +11,17 @@ namespace {
 
 inline float sigm(float x) { return 1.0f / (1.0f + std::exp(-x)); }
 
-// y += W x, W is rows x cols row-major.
+// y += W x, W is rows x cols row-major. Eight independent partial sums let
+// the compiler vectorise the reduction without -ffast-math (deterministic).
 inline void gemv_add(const float* W, const float* x, float* y, int rows, int cols) {
     for (int r = 0; r < rows; ++r) {
         const float* w = W + static_cast<std::size_t>(r) * cols;
-        float s = 0.0f;
-        for (int k = 0; k < cols; ++k) s += w[k] * x[k];
+        float acc[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        int k = 0;
+        for (; k + 8 <= cols; k += 8)
+            for (int u = 0; u < 8; ++u) acc[u] += w[k + u] * x[k + u];
+        float s = ((acc[0] + acc[4]) + (acc[1] + acc[5])) + ((acc[2] + acc[6]) + (acc[3] + acc[7]));
+        for (; k < cols; ++k) s += w[k] * x[k];
         y[r] += s;
     }
 }
@@ -77,15 +82,13 @@ ByteLstm::ByteLstm(ByteLstmOptions opt) : opt_(opt), H_(opt.hidden) {
         for (auto& x : w) x = nd(rng) * scale;
     };
     const float s = 1.0f / std::sqrt(static_cast<float>(H));
-    init(E_, 256u * H, 0.1f);
-    init(Wx_, static_cast<std::size_t>(G) * H, s);
+    init(P_, 256u * G, 0.1f);
     init(Wh_, static_cast<std::size_t>(G) * H, s);
     init(Wy_, 256u * H, s);
     b_.assign(G, 0.0f);
     for (int j = H; j < 2 * H; ++j) b_[j] = 1.0f;  // forget-gate bias
     by_.assign(256, 0.0f);
-    for (auto* p : {&mE_, &vE_}) p->assign(E_.size(), 0.0f);
-    for (auto* p : {&mWx_, &vWx_}) p->assign(Wx_.size(), 0.0f);
+    for (auto* p : {&mP_, &vP_}) p->assign(P_.size(), 0.0f);
     for (auto* p : {&mWh_, &vWh_}) p->assign(Wh_.size(), 0.0f);
     for (auto* p : {&mb_, &vb_}) p->assign(b_.size(), 0.0f);
     for (auto* p : {&mWy_, &vWy_}) p->assign(Wy_.size(), 0.0f);
@@ -110,7 +113,8 @@ void ByteLstm::reset_state() {
 void ByteLstm::forward_(int x) {
     const int H = H_, G = 4 * H;
     std::vector<float> a(b_);
-    gemv_add(Wx_.data(), &E_[static_cast<std::size_t>(x) * H], a.data(), G, H);
+    const float* px = &P_[static_cast<std::size_t>(x) * G];
+    for (int k = 0; k < G; ++k) a[k] += px[k];
     gemv_add(Wh_.data(), h_.data(), a.data(), G, H);
     Step st;
     st.x = x;
@@ -166,8 +170,8 @@ float ByteLstm::observe(int byte, bool learn) {
 
 void ByteLstm::backprop_window_() {
     const int H = H_, G = 4 * H;
-    std::vector<float> gE(E_.size(), 0.0f), gWx(Wx_.size(), 0.0f), gWh(Wh_.size(), 0.0f),
-        gb(b_.size(), 0.0f), gWy(Wy_.size(), 0.0f), gby(by_.size(), 0.0f);
+    std::vector<float> gP(P_.size(), 0.0f), gWh(Wh_.size(), 0.0f), gb(b_.size(), 0.0f),
+        gWy(Wy_.size(), 0.0f), gby(by_.size(), 0.0f);
     std::vector<float> dh_next(H, 0.0f), dc_next(H, 0.0f), dh(H), dc(H), da(G);
     for (int s = static_cast<int>(window_.size()) - 1; s >= 0; --s) {
         const Step& st = window_[static_cast<std::size_t>(s)];
@@ -188,26 +192,26 @@ void ByteLstm::backprop_window_() {
             da[3 * H + j] = d_o * st.o[j] * (1.0f - st.o[j]);
             dc_next[j] = dc[j] * st.f[j];
         }
-        const float* ex = &E_[static_cast<std::size_t>(st.x) * H];
-        outer_add(gWx.data(), da.data(), ex, G, H);
         outer_add(gWh.data(), da.data(), st.h_prev.data(), G, H);
-        for (int k = 0; k < G; ++k) gb[k] += da[k];
-        gemv_t_add(Wx_.data(), da.data(), &gE[static_cast<std::size_t>(st.x) * H], G, H);
+        float* gpx = &gP[static_cast<std::size_t>(st.x) * G];
+        for (int k = 0; k < G; ++k) {
+            gb[k] += da[k];
+            gpx[k] += da[k];
+        }
         std::fill(dh_next.begin(), dh_next.end(), 0.0f);
         gemv_t_add(Wh_.data(), da.data(), dh_next.data(), G, H);
     }
     double norm2 = 0.0;
-    for (const auto* g : {&gE, &gWx, &gWh, &gb, &gWy, &gby})
+    for (const auto* g : {&gP, &gWh, &gb, &gWy, &gby})
         for (float v : *g) norm2 += static_cast<double>(v) * v;
     const double norm = std::sqrt(norm2);
     if (norm > opt_.clip) {
         const float sc = static_cast<float>(opt_.clip / norm);
-        for (auto* g : {&gE, &gWx, &gWh, &gb, &gWy, &gby})
+        for (auto* g : {&gP, &gWh, &gb, &gWy, &gby})
             for (float& v : *g) v *= sc;
     }
     ++adam_t_;
-    adam_(E_, mE_, vE_, gE);
-    adam_(Wx_, mWx_, vWx_, gWx);
+    adam_(P_, mP_, vP_, gP);
     adam_(Wh_, mWh_, vWh_, gWh);
     adam_(b_, mb_, vb_, gb);
     adam_(Wy_, mWy_, vWy_, gWy);
@@ -229,16 +233,31 @@ void ByteLstm::adam_(std::vector<float>& w, std::vector<float>& m, std::vector<f
 }
 
 void ByteLstm::write(std::ostream& os) const {
-    const std::int32_t hdr[3] = {H_, opt_.bptt, 1};
+    const std::int32_t hdr[3] = {H_, opt_.bptt, 2};
     os.write(reinterpret_cast<const char*>(hdr), sizeof(hdr));
-    for (const auto* w : {&E_, &Wx_, &Wh_, &b_, &Wy_, &by_, &h_, &c_}) write_vec(os, *w);
+    for (const auto* w : {&P_, &Wh_, &b_, &Wy_, &by_, &h_, &c_}) write_vec(os, *w);
 }
 
 void ByteLstm::read(std::istream& is) {
     std::int32_t hdr[3] = {};
     is.read(reinterpret_cast<char*>(hdr), sizeof(hdr));
     if (hdr[0] != H_) throw std::runtime_error("ByteLstm::read: hidden size mismatch");
-    for (auto* w : {&E_, &Wx_, &Wh_, &b_, &Wy_, &by_, &h_, &c_}) read_vec(is, *w);
+    if (hdr[2] == 1) {
+        // v1 stored embedding E (256 x H) and input weights Wx (4H x H); fold them
+        // into the per-byte table P[x] = Wx E[x] (exact).
+        std::vector<float> E, Wx;
+        read_vec(is, E);
+        read_vec(is, Wx);
+        const int G = 4 * H_;
+        for (int x = 0; x < 256; ++x) {
+            float* px = &P_[static_cast<std::size_t>(x) * G];
+            std::fill(px, px + G, 0.0f);
+            gemv_add(Wx.data(), &E[static_cast<std::size_t>(x) * H_], px, G, H_);
+        }
+        for (auto* w : {&Wh_, &b_, &Wy_, &by_, &h_, &c_}) read_vec(is, *w);
+    } else {
+        for (auto* w : {&P_, &Wh_, &b_, &Wy_, &by_, &h_, &c_}) read_vec(is, *w);
+    }
     window_.clear();
     pending_ = -1;
     for (int k = 0; k < 256; ++k) logits_[k] = by_[k];

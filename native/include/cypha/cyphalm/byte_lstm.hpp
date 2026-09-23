@@ -7,8 +7,10 @@
 /// mixture of the two (``ByteMixGate``) keeps hp's sharpness where hp has
 /// evidence and falls back on the LSTM where it has none.
 ///
-/// One layer: embed(byte) -> LSTM(H) -> softmax(256). Online training with
-/// truncated BPTT over non-overlapping windows of ``bptt`` bytes and Adam.
+/// One layer: byte -> LSTM(H) -> softmax(256). The input projection is a
+/// per-byte table of gate pre-activations (equivalent to embedding x W_x, since
+/// the input is one of 256 symbols). Online training with truncated BPTT over
+/// non-overlapping windows of ``bptt`` bytes and Adam.
 
 #include <cstdint>
 #include <istream>
@@ -59,10 +61,10 @@ class ByteLstm {
 
     ByteLstmOptions opt_;
     int H_;
-    // Parameters. Wx: 4H x H (input = embedding), Wh: 4H x H, b: 4H, E: 256 x H,
-    // Wy: 256 x H, by: 256. Gate order i, f, g, o.
-    std::vector<float> E_, Wx_, Wh_, b_, Wy_, by_;
-    std::vector<float> mE_, vE_, mWx_, vWx_, mWh_, vWh_, mb_, vb_, mWy_, vWy_, mby_, vby_;
+    // Parameters. P: 256 x 4H input gate table, Wh: 4H x H, b: 4H, Wy: 256 x H,
+    // by: 256. Gate order i, f, g, o.
+    std::vector<float> P_, Wh_, b_, Wy_, by_;
+    std::vector<float> mP_, vP_, mWh_, vWh_, mb_, vb_, mWy_, vWy_, mby_, vby_;
     long adam_t_ = 0;
     // State.
     std::vector<float> h_, c_, logits_, logp_;
