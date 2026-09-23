@@ -85,6 +85,10 @@ class HpSequenceBackend {
 
     bool serve_compact() const { return serve_compact_; }
 
+    /// Online learning on/off for subsequent bytes (``hp::Predictor::set_learning``).
+    void set_learning(bool on) { pred_->set_learning(on); }
+    bool learning() const { return pred_->learning(); }
+
     int table_bits() const { return cfg_.table_bits; }
     int mixer_lr() const { return cfg_.mixer_lr; }
     bool gria_enabled() const { return cfg_.gria; }

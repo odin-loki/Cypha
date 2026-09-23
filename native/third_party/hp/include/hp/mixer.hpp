@@ -9,6 +9,7 @@
 
 #include "hp/blob_io.hpp"
 #include "hp/features.hpp"
+#include "hp/hash_table.hpp"
 #include "hp/int_math.hpp"
 #include "hp/mixer_weights.hpp"
 #include "hp/simd_dot.hpp"
@@ -100,6 +101,10 @@ class MixerNet {
     }
 
     int num_layer1() const { return k_; }
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        for (const auto& row : w_) h = fnv_bytes(h, row.data(), row.size() * sizeof(MixerWt));
+        return fnv_bytes(h, v_.data(), v_.size() * sizeof(MixerWt));
+    }
     int layer1_p(int j) const { return pr_[static_cast<std::size_t>(j)]; }
     int layer1_dot(int j) const { return dot_[static_cast<std::size_t>(j)]; }
 
@@ -209,6 +214,10 @@ class APM {
                     static_cast<std::uint16_t>(squash((j - 16) * 128) * 16);
             }
         }
+    }
+
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        return fnv_bytes(h, t_.data(), t_.size() * sizeof(t_[0]));
     }
 
     int refine(int pr, int ctx) {

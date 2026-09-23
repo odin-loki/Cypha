@@ -38,6 +38,7 @@
 
 #include "hp/blob_io.hpp"
 #include "hp/features.hpp"
+#include "hp/hash_table.hpp"
 #include "hp/int_math.hpp"
 #include "hp/undo.hpp"
 
@@ -108,6 +109,10 @@ class StateMap {
  public:
     StateMap() {
         for (auto& v : t_) v = (1u << 31) | 0u;  // p = 0.5, count = 0
+    }
+
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        return fnv_bytes(h, t_.data(), t_.size() * sizeof(t_[0]));
     }
 
     int predict(int cx) {

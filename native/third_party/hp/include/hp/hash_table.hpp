@@ -25,6 +25,13 @@
 
 namespace hp {
 
+// FNV-1a over raw bytes; Predictor::learned_digest() folds learned state with it.
+inline std::uint64_t fnv_bytes(std::uint64_t h, const void* p, std::size_t n) {
+    const auto* b = static_cast<const unsigned char*>(p);
+    for (std::size_t i = 0; i < n; ++i) h = (h ^ b[i]) * 0x100000001B3ull;
+    return h;
+}
+
 // Fixed-size, zero-initialised array backed by demand-zero pages.
 // Copyable (deep copy) so Predictor::copy_state_from keeps working.
 template <typename T>

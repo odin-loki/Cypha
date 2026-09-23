@@ -536,6 +536,12 @@ cypha_mingw_apply_exe_link_options(hp_bit_tree_smoke)
 add_test(NAME native_hp_bit_tree_smoke COMMAND "$<TARGET_FILE:hp_bit_tree_smoke>")
 set_tests_properties(native_hp_bit_tree_smoke PROPERTIES TIMEOUT 120)
 
+add_executable(hp_frozen_smoke tools/hp_frozen_smoke.cpp)
+target_link_libraries(hp_frozen_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_frozen_smoke)
+add_test(NAME native_hp_frozen_smoke COMMAND "$<TARGET_FILE:hp_frozen_smoke>")
+set_tests_properties(native_hp_frozen_smoke PROPERTIES TIMEOUT 120)
+
 add_executable(hp_assign_reuse_bench tools/hp_assign_reuse_bench.cpp)
 target_link_libraries(hp_assign_reuse_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_assign_reuse_bench)
@@ -559,6 +565,10 @@ add_executable(cyphalm_hp_shard_spike tools/cyphalm_hp_shard_spike.cpp)
 target_link_libraries(cyphalm_hp_shard_spike PRIVATE cypha_lm_native)
 cypha_apply_hp_compile_flags(cyphalm_hp_shard_spike)
 cypha_mingw_apply_exe_link_options(cyphalm_hp_shard_spike)
+
+add_executable(cyphalm_lm_quality tools/cyphalm_lm_quality.cpp)
+target_link_libraries(cyphalm_lm_quality PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_lm_quality)
 
 add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
 target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)

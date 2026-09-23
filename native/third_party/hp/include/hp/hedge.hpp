@@ -49,6 +49,8 @@
 #include <ostream>
 #include <vector>
 
+#include "hp/hash_table.hpp"
+
 #include "hp/blob_io.hpp"
 #include "hp/features.hpp"
 #include "hp/int_math.hpp"
@@ -66,6 +68,10 @@ class Hedge {
           p_(static_cast<std::size_t>(n), 2048) {}
 
     // Record expert d's 12-bit probability for this bit.
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        return fnv_bytes(h, w_.data(), w_.size() * sizeof(w_[0]));
+    }
+
     void set(int d, int p12) { p_[d] = clamp_int(p12, 1, 4094); }
 
     // Weighted average, 12-bit out.

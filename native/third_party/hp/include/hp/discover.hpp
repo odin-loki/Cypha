@@ -106,6 +106,17 @@ class DiscoveryPool {
         }
     }
 
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        for (const auto& m : models_) h = m.learned_digest(h);
+        h = fnv_bytes(h, mask_, sizeof(mask_));
+        h = fnv_bytes(h, loss_, sizeof(loss_));
+        return fnv_bytes(h, age_, sizeof(age_));
+    }
+
+    void set_frozen(bool f) {
+        for (auto& m : models_) m.set_frozen(f);
+    }
+
     void predict(int c0, int backoff_p12, int* out) {
         for (int i = 0; i < kSlots; ++i)
             models_[i].predict(c0, backoff_p12, out + i * ContextModel::kOutputs);

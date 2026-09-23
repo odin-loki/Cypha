@@ -148,6 +148,14 @@ class ContextModel {
           sm_() {}
 
     void set_context(std::uint32_t h) { h_ = h; idle_ = false; }
+    // Frozen models neither learn nor claim hash slots (Predictor::set_learning).
+    void set_frozen(bool f) { frozen_ = f; }
+
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        h = fnv_bytes(h, t_.data(), t_.size() * sizeof(std::uint16_t));
+        h = fnv_bytes(h, chk_.data(), chk_.size());
+        return sm_.learned_digest(h);
+    }
     // fx2 sets(): keep a mixer slot but do not pollute the table.
     void set_idle() { idle_ = true; h_ = 0; }
 
@@ -186,7 +194,7 @@ class ContextModel {
         if (found >= 0) {
             hp_undo_note(idx_);
             idx_ = static_cast<std::uint32_t>(found);
-        } else {
+        } else if (!frozen_) {
             hp_undo_note(idx_);
             idx_ = static_cast<std::uint32_t>(best);
             hp_undo_note(t_.ref(idx_));
@@ -195,7 +203,8 @@ class ContextModel {
             chk_[idx_] = want;
         }
         hp_undo_note(state_);
-        state_ = t_.get(idx_);
+        // Frozen: an unseen context reads as the empty state and claims no slot.
+        state_ = (found >= 0 || !frozen_) ? t_.get(idx_) : 0;
         p_ind_ = sm_.predict(state_);
         {
             int a0 = st.n0(state_), a1 = st.n1(state_);
@@ -268,7 +277,7 @@ class ContextModel {
     }
 
     void update(int y, int ens_p12 = -1) {
-        if (idle_ || off_) return;
+        if (idle_ || off_ || frozen_) return;
         std::int32_t ncl = 0;
         if (ens_p12 >= 0) {
             const std::int32_t diff =
@@ -314,6 +323,7 @@ class ContextModel {
 
  private:
     bool off_;
+    bool frozen_ = false;
     std::uint32_t mask_;
     int bits_;
     int limit_;
@@ -497,6 +507,9 @@ class MatchModel {
     }
 
     int match_len() const { return len_; }
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        return fnv_bytes(h, st_.data(), sizeof(st_));
+    }
 
     void merge_counters_from(const MatchModel& src, std::uint64_t src_weight,
                              std::uint64_t dst_weight, std::uint16_t min_counter_n = 0) {
@@ -643,6 +656,12 @@ class HebbianModel {
     }
 
     int strength() const { return strength_; }
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        h = fnv_bytes(h, syn_target_.data(), syn_target_.size() * sizeof(syn_target_[0]));
+        h = fnv_bytes(h, syn_strength_.data(), syn_strength_.size());
+        h = fnv_bytes(h, t_.data(), t_.size() * sizeof(std::uint16_t));
+        return sm_.learned_digest(h);
+    }
 
     void merge_tables_from(const HebbianModel& src, std::uint64_t src_weight,
                            std::uint64_t dst_weight, std::uint16_t min_statemap_count = 0) {
@@ -749,6 +768,25 @@ class DmcModel {
         return stretch(p12);
     }
 
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        const std::uint64_t n = nodes_.size();
+        h = fnv_bytes(h, &n, sizeof(n));
+        for (const Node& nd : nodes_) {
+            h = fnv_bytes(h, &nd.n0, sizeof(nd.n0));
+            h = fnv_bytes(h, &nd.n1, sizeof(nd.n1));
+            h = fnv_bytes(h, nd.nx, sizeof(nd.nx));
+        }
+        return h;
+    }
+
+    // Follow the y edge without counting or splitting (frozen serve).
+    void advance(int y) {
+        std::uint32_t nxt = nodes_[cur_].nx[y];
+        if (nxt >= nodes_.size()) nxt = 0;
+        hp_undo_note(cur_);
+        cur_ = nxt;
+    }
+
     void update(int y) {
         Node& n = nodes_[cur_];
         if (y) {
@@ -835,6 +873,10 @@ class LzpModel {
         : mask_((1u << table_bits) - 1),
           pred_(static_cast<std::size_t>(1) << table_bits, 0) {
         counter_init(st_.data(), st_.size());
+    }
+
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        return fnv_bytes(h, st_.data(), sizeof(st_));
     }
 
     void push_byte(int byte, std::uint64_t hist) {

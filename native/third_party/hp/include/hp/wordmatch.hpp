@@ -95,6 +95,9 @@ class WordMatchModel {
     }
 
     int match_len() const { return len_; }
+    std::uint64_t learned_digest(std::uint64_t h) const {
+        return fnv_bytes(h, st_.data(), sizeof(st_));
+    }
 
     void checkpoint_write(std::ostream& os) const {
         blob::write_pod(os, order_);
