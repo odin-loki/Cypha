@@ -35,12 +35,10 @@ class WordMatchModel {
         counter_init(st_.data(), st_.size());
     }
 
-    void set_ring(ByteRing* ring) {
-        ring_ = ring;
-        if (ring != nullptr) {
-            ring_mask_ = ring->mask();
-        }
-    }
+    // Rebind only (copies, checkpoint loads): the match window ring_mask_ was
+    // fixed at construction and must survive, or a loaded or copied model
+    // predicts differently from the one it came from.
+    void set_ring(ByteRing* ring) { ring_ = ring; }
 
     // Called once per byte after the shared ring has been updated.
     // whist is the rolling hash of the last `order_` completed words.

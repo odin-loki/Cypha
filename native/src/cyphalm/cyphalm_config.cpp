@@ -223,9 +223,9 @@ void apply_hp_production_recipe(CyphaLMConfig& cfg) {
     cfg.unified_context_source = UnifiedContextSource::None;
     cfg.unified_readout = UnifiedReadout::None;
     cfg.use_kernel_llr = false;
-    if (cfg.vocab_size <= 0 || cfg.vocab_size > 256) {
-        cfg.vocab_size = 256;
-    }
+    // hp models bytes: a smaller vocabulary would only truncate its next-byte
+    // distribution (no UTF-8 in generation or scoring).
+    cfg.vocab_size = 256;
     cfg.hp_slot_max = 24;
     if (cfg.hp_table_bits < 16) {
         cfg.hp_table_bits = 22;

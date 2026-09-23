@@ -25,7 +25,8 @@ inline void checkpoint_read_trivial(std::istream& is, T& o) {
 inline void Predictor::write_checkpoint(std::ostream& os) const {
     const char magic[4] = {'H', 'P', 'C', 'P'};
     os.write(magic, 4);
-    const std::uint32_t ver = 1;
+    // v2 appends the sentence memory (stream state v1 left out).
+    const std::uint32_t ver = 2;
     blob::write_pod(os, ver);
     byte_ring_.checkpoint_write(os);
     HP_CKPT_WRITE_CM(os, o1_);
@@ -108,6 +109,7 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
     blob::write_pod(os, mixed_p_);
     blob::write_pod(os, last_mlen_);
     blob::write_pod(os, sparse_);
+    checkpoint_write_trivial(os, sentmem_);
 }
 
 inline void Predictor::read_checkpoint(std::istream& is) {
@@ -118,7 +120,7 @@ inline void Predictor::read_checkpoint(std::istream& is) {
     }
     std::uint32_t ver = 0;
     blob::read_pod(is, ver);
-    if (ver != 1) return;
+    if (ver != 1 && ver != 2) return;
     byte_ring_.checkpoint_read(is);
     HP_CKPT_READ_CM(is, o1_);
     HP_CKPT_READ_CM(is, o2_);
@@ -200,5 +202,6 @@ inline void Predictor::read_checkpoint(std::istream& is) {
     blob::read_pod(is, mixed_p_);
     blob::read_pod(is, last_mlen_);
     blob::read_pod(is, sparse_);
+    if (ver >= 2) checkpoint_read_trivial(is, sentmem_);  // v1: sentence memory starts empty
     rebind_internal_pointers_();
 }
