@@ -1,12 +1,14 @@
 #include "cypha/cyphalm/hp_backend.hpp"
 
 #include "cypha/cyphalm/cyphalm_config.hpp"
+#include "hp/shard_merge.hpp"  // Predictor::reset_stream_state
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 
 namespace cypha::cyphalm {
 
@@ -118,6 +120,7 @@ void HpSequenceBackend::prune_cold_slots(int min_total) {
 void HpSequenceBackend::reset() {
     pred_ = std::make_unique<hp::Predictor>(cfg_);
     log_probs_buf_.clear();
+    members_.clear();
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -262,17 +265,76 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
-    if (use_legacy_byte_log_probs()) {
-        return next_byte_log_probs_legacy(vocab_size);
+    std::vector<double> own = use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
+                                                          : next_byte_log_probs_bit_tree(vocab_size);
+    if (members_.empty()) return own;
+    return mix_with_members_(own, vocab_size);
+}
+
+void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> member, double weight) {
+    if (!member) throw std::invalid_argument("add_ensemble_member: null member");
+    double total = weight;
+    for (const auto& m : members_) total += m.weight;
+    if (!(weight > 0.0) || !(total < 1.0)) {
+        throw std::invalid_argument("add_ensemble_member: weights must be > 0 and sum below 1");
     }
-    return next_byte_log_probs_bit_tree(vocab_size);
+    member->set_frozen_scoring(frozen_scoring_);
+    member->set_learning(pred_->learning());
+    members_.push_back(Member{std::move(member), weight});
+}
+
+std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
+    std::vector<hp::Predictor*> out{pred_.get()};
+    for (auto& m : members_) {
+        const auto sub = m.backend->all_predictors();
+        out.insert(out.end(), sub.begin(), sub.end());
+    }
+    return out;
+}
+
+void HpSequenceBackend::reset_stream(bool keep_history) {
+    pred_->reset_stream_state(keep_history);
+    for (auto& m : members_) m.backend->reset_stream(keep_history);
+}
+
+void HpSequenceBackend::set_serve_adaptation(int num, int den, int skip) {
+    pred_->set_serve_adaptation(num, den, skip);
+    for (auto& m : members_) m.backend->set_serve_adaptation(num, den, skip);
+}
+
+std::vector<double> HpSequenceBackend::mix_with_members_(const std::vector<double>& own, int vocab_size) {
+    double w_self = 1.0;
+    for (const auto& m : members_) w_self -= m.weight;
+    std::vector<double> mix(own.size());
+    for (std::size_t b = 0; b < own.size(); ++b) mix[b] = w_self * own[b];
+    for (auto& m : members_) {
+        const std::vector<double> lp = m.backend->next_byte_log_probs(vocab_size);
+        for (std::size_t b = 0; b < mix.size() && b < lp.size(); ++b) mix[b] += m.weight * lp[b];
+    }
+    double mx = -std::numeric_limits<double>::infinity();
+    for (double v : mix) mx = std::max(mx, v);
+    double z = 0.0;
+    for (double v : mix) z += std::exp(v - mx);
+    const double log_z = mx + std::log(z);
+    for (double& v : mix) v -= log_z;
+    return mix;
+}
+
+std::vector<double> HpSequenceBackend::ensemble_log_probs_(int vocab_size) const {
+    // Scoring restores all state; const_cast keeps the const serve API.
+    return const_cast<HpSequenceBackend*>(this)->next_byte_log_probs(vocab_size);
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
+    if (!members_.empty()) return ensemble_log_probs_(256)[byte];
     return byte_log_prob_on_pred_(byte);
 }
 
 std::uint8_t HpSequenceBackend::serve_greedy_next_byte() const {
+    if (!members_.empty()) {
+        const auto lp = ensemble_log_probs_(256);
+        return static_cast<std::uint8_t>(std::max_element(lp.begin(), lp.end()) - lp.begin());
+    }
     ScoringScope scoring(*pred_, frozen_scoring_);
     hp::PredictorUndoStack undo;
     hp::UndoFrame& frame = undo.push_frame();
@@ -297,10 +359,24 @@ std::uint8_t HpSequenceBackend::sample_next_byte(double (*rng01)()) const {
 
 std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
                                                        double (*rng01)()) const {
-    ScoringScope scoring(*pred_, frozen_scoring_);
-    if (rng01 == nullptr) {
+    if (rng01 == nullptr || temperature <= 1e-6) {
         return serve_greedy_next_byte();
     }
+    if (!members_.empty()) {
+        const auto lp = ensemble_log_probs_(256);
+        double mx = -std::numeric_limits<double>::infinity();
+        for (double v : lp) mx = std::max(mx, v / temperature);
+        std::vector<double> w(lp.size());
+        double z = 0.0;
+        for (std::size_t b = 0; b < lp.size(); ++b) z += (w[b] = std::exp(lp[b] / temperature - mx));
+        double r = rng01() * z;
+        for (std::size_t b = 0; b < w.size(); ++b) {
+            r -= w[b];
+            if (r <= 0.0) return static_cast<std::uint8_t>(b);
+        }
+        return static_cast<std::uint8_t>(w.size() - 1);
+    }
+    ScoringScope scoring(*pred_, frozen_scoring_);
     hp::PredictorUndoStack undo;
     hp::UndoFrame& frame = undo.push_frame();
     int byte = 0;
@@ -324,9 +400,15 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         (void)pred_->predict();
         pred_->update(bit);
     }
+    for (auto& m : members_) m.backend->consume_byte(byte);
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {
+    if (!members_.empty()) {
+        const double lp = next_byte_log_probs(256)[next];
+        consume_byte(next);
+        return -lp;
+    }
     double log_p = 0.0;
     for (int i = 7; i >= 0; --i) {
         const int p12 = pred_->predict();

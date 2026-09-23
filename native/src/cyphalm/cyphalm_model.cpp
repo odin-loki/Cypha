@@ -82,7 +82,7 @@ void CyphaLMModel::reset_context() {
 
 void CyphaLMModel::reset_stream(bool keep_history) {
     if (hp_) {
-        hp_->predictor().reset_stream_state(keep_history);
+        hp_->reset_stream(keep_history);
     }
     last_predict_out_ = {};
 }
@@ -91,7 +91,12 @@ void CyphaLMModel::set_serve_mode(bool on) {
     if (!hp_) return;
     // Mixer rates = trained x scale (in 1/16ths) while serving; trained otherwise.
     const int num = on ? std::max(1, static_cast<int>(std::lround(cfg_.hp_serve_mixer_lr_scale * 16.0))) : 16;
-    hp_->predictor().set_serve_adaptation(num, 16, -1);
+    hp_->set_serve_adaptation(num, 16, -1);
+}
+
+void CyphaLMModel::add_ensemble_member(CyphaLMModel&& other, double weight) {
+    if (!hp_ || !other.hp_) throw std::runtime_error("add_ensemble_member: hp backends required");
+    hp_->add_ensemble_member(std::move(other.hp_), weight);
 }
 
 void CyphaLMModel::reset_optim_state() {

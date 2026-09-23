@@ -606,7 +606,7 @@ GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<in
     while (static_cast<int>(gen.size()) < max_bytes) {
         std::vector<Cand> cands;
         {
-            hp::StreamRewind rewind(hp.predictor());
+            hp::StreamRewind rewind(hp.all_predictors());
             // Candidates share prefixes: cache each prefix's distribution and
             // advance the model only when a new prefix needs one.
             std::map<std::vector<int>, std::vector<double>> dist_cache;

@@ -86,6 +86,7 @@ int main(int argc, char** argv) {
     std::string reset_mode = "none";
     int serve_lr = 4, serve_skip = -1, epochs = 1;
     std::string ensemble_json;
+    std::vector<std::string> members;  // library ensemble, equal weights
     int word_k = 0;
     bool only_default = false;
     for (int i = 1; i < argc; ++i) {
@@ -115,6 +116,7 @@ int main(int argc, char** argv) {
         else if (a == "--serve-skip") serve_skip = std::stoi(next());
         else if (a == "--epochs") epochs = std::stoi(next());
         else if (a == "--ensemble") ensemble_json = next();
+        else if (a == "--member") members.push_back(next());
         else if (a == "--word-k") word_k = std::stoi(next());
         else if (a == "--only-default") only_default = true;
         else {
@@ -132,6 +134,11 @@ int main(int argc, char** argv) {
         model = std::make_unique<cypha::cyphalm::CyphaLMModel>(
             cypha::cyphalm::load_cyphalm_model(load_json));
         out["loaded"] = load_json;
+        for (const auto& m : members) {
+            model->add_ensemble_member(cypha::cyphalm::load_cyphalm_model(m),
+                                       1.0 / static_cast<double>(members.size() + 1));
+        }
+        if (!members.empty()) out["members"] = members;
     } else {
         cypha::cyphalm::CyphaLMConfig cfg;
         cfg.hp_table_bits = table_bits;
@@ -336,7 +343,9 @@ int main(int argc, char** argv) {
         }
 
         // Continuations from the held-out prompt that follows the eval slice.
-        if (gen_bytes > 0 && prompt_bytes > 0 && ev.size() > n_eval) {
+        // Generation reloads the saved model, which does not carry --member models.
+        if (gen_bytes > 0 && !members.empty()) out["generations"] = "skipped: use cyphalm_generate --ensemble";
+        if (gen_bytes > 0 && members.empty() && prompt_bytes > 0 && ev.size() > n_eval) {
             std::vector<int> prompt(ev.begin() + static_cast<std::ptrdiff_t>(n_eval), ev.end());
             nlohmann::json gens = nlohmann::json::array();
             const std::string blob =

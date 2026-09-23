@@ -90,12 +90,33 @@ class HpSequenceBackend {
     /// learning inside the hypothetical byte. Faster (no update work to record
     /// and undo); still a normalised distribution. Off = hp's compression
     /// semantics (each hypothetical bit trains the model before the next).
-    void set_frozen_scoring(bool on) { frozen_scoring_ = on; }
+    void set_frozen_scoring(bool on) {
+        frozen_scoring_ = on;
+        for (auto& m : members_) m.backend->set_frozen_scoring(on);
+    }
     bool frozen_scoring() const { return frozen_scoring_; }
 
     /// Online learning on/off for subsequent bytes (``hp::Predictor::set_learning``).
-    void set_learning(bool on) { pred_->set_learning(on); }
+    void set_learning(bool on) {
+        pred_->set_learning(on);
+        for (auto& m : members_) m.backend->set_learning(on);
+    }
     bool learning() const { return pred_->learning(); }
+
+    /// Serve-time ensemble: another pretrained hp model advanced alongside this
+    /// one. Next-byte distributions are mixed geometrically,
+    /// log p = (1 - sum w_i) log p_self + sum w_i log p_i - log Z (sum w_i < 1).
+    /// Every serve / generation path fans out to members; ``observe_*`` scores
+    /// the mixture. Training a model with members attached is not supported
+    /// (``reset()`` drops them).
+    void add_ensemble_member(std::unique_ptr<HpSequenceBackend> member, double weight);
+    std::size_t ensemble_size() const { return members_.size(); }
+    /// This predictor and every member's (for ``hp::StreamRewind``).
+    std::vector<hp::Predictor*> all_predictors();
+    /// New stream on every model (``hp::Predictor::reset_stream_state``).
+    void reset_stream(bool keep_history);
+    /// Serve mixer rate on every model (``hp::Predictor::set_serve_adaptation``).
+    void set_serve_adaptation(int num, int den, int skip);
 
     int table_bits() const { return cfg_.table_bits; }
     int mixer_lr() const { return cfg_.mixer_lr; }
@@ -127,6 +148,15 @@ class HpSequenceBackend {
 
     bool serve_compact_ = false;
     bool frozen_scoring_ = false;
+
+    struct Member {
+        std::unique_ptr<HpSequenceBackend> backend;
+        double weight = 0.0;
+    };
+    std::vector<Member> members_;
+    /// Ensemble: geometric mix of this model's ``own`` log probs with members'.
+    std::vector<double> mix_with_members_(const std::vector<double>& own, int vocab_size);
+    std::vector<double> ensemble_log_probs_(int vocab_size) const;
 };
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria);

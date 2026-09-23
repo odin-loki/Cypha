@@ -1053,10 +1053,14 @@ class Predictor {
 /// Relies on no container being resized while frozen.
 class StreamRewind {
  public:
-    explicit StreamRewind(Predictor& p)
-        : p_(p), saved_(new unsigned char[sizeof(Predictor)]) {
+    explicit StreamRewind(Predictor& p) : StreamRewind(std::vector<Predictor*>{&p}) {}
+    /// Several predictors advanced together (an ensemble): one undo frame.
+    explicit StreamRewind(const std::vector<Predictor*>& ps) : ps_(ps) {
         frame_.set_records_byte_end(true);
-        std::memcpy(saved_.get(), static_cast<const void*>(&p_), sizeof(Predictor));
+        for (Predictor* p : ps_) {
+            saved_.emplace_back(new unsigned char[sizeof(Predictor)]);
+            std::memcpy(saved_.back().get(), static_cast<const void*>(p), sizeof(Predictor));
+        }
         scope_.emplace(frame_);
     }
     ~StreamRewind() { scope_.reset(); }
@@ -1068,12 +1072,14 @@ class StreamRewind {
     void rewind() {
         frame_.restore_patches();
         frame_.clear();
-        std::memcpy(static_cast<void*>(&p_), saved_.get(), sizeof(Predictor));
+        for (std::size_t i = 0; i < ps_.size(); ++i) {
+            std::memcpy(static_cast<void*>(ps_[i]), saved_[i].get(), sizeof(Predictor));
+        }
     }
 
  private:
-    Predictor& p_;
-    std::unique_ptr<unsigned char[]> saved_;
+    std::vector<Predictor*> ps_;
+    std::vector<std::unique_ptr<unsigned char[]>> saved_;
     UndoFrame frame_;
     std::optional<UndoRecorderScope> scope_;
 };

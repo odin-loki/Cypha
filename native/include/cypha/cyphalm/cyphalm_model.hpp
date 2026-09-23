@@ -93,6 +93,10 @@ class CyphaLMModel {
     /// ``hp_serve_mixer_lr_scale`` x its trained rate; off restores it.
     /// Training entry points switch it off.
     void set_serve_mode(bool on);
+    /// Serve-time ensemble: mix ``other``'s next-byte distribution in with
+    /// weight ``weight`` (geometric; ``HpSequenceBackend::add_ensemble_member``).
+    /// ``other`` is consumed. For serving and generation only.
+    void add_ensemble_member(CyphaLMModel&& other, double weight);
     void reset_optim_state();
 
     /// Serve/inference: consume ``context_byte``, score next-byte distribution (bit-tree default).

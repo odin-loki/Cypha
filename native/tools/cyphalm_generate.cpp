@@ -20,7 +20,7 @@ void usage(const char* argv0) {
                  "[--warmup-file PATH] [--warmup-bytes N] [--ban-last-k K] "
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
-                 "[--word-candidates K] [--learn-from-output] [--latency]\n",
+                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--learn-from-output] [--latency]\n",
                  argv0);
 }
 
@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
     int no_repeat = defaults.no_repeat_ngram;
     bool learn_from_output = defaults.learn_from_output;
     int word_candidates = defaults.word_candidates;
+    std::vector<std::string> ensemble_specs;  // CKPT.json[:weight]
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -119,6 +120,8 @@ int main(int argc, char** argv) {
             min_p = std::atof(argv[++i]);
         } else if (arg == "--no-repeat" && i + 1 < argc) {
             no_repeat = std::atoi(argv[++i]);
+        } else if (arg == "--ensemble" && i + 1 < argc) {
+            ensemble_specs.push_back(argv[++i]);
         } else if (arg == "--word-candidates" && i + 1 < argc) {
             word_candidates = std::atoi(argv[++i]);
         } else if (arg == "--learn-from-output") {
@@ -143,6 +146,16 @@ int main(int argc, char** argv) {
     cypha::cyphalm::CyphaLMModel model = load_json.empty()
                                              ? cypha::cyphalm::CyphaLMModel(cfg)
                                              : cypha::cyphalm::load_cyphalm_model(load_json);
+    // Serve-time ensemble members: weight given, else equal shares with --load.
+    for (const std::string& spec : ensemble_specs) {
+        const auto colon = spec.rfind(':');
+        const bool has_w = colon != std::string::npos && colon + 1 < spec.size() &&
+                           spec.find(".json", colon) == std::string::npos;
+        const std::string path = has_w ? spec.substr(0, colon) : spec;
+        const double w = has_w ? std::atof(spec.c_str() + colon + 1)
+                               : 1.0 / static_cast<double>(ensemble_specs.size() + 1);
+        model.add_ensemble_member(cypha::cyphalm::load_cyphalm_model(path), w);
+    }
     cfg = model.config();
     const std::vector<int> prompt_ids = bytes_from_text(prompt, cfg.vocab_size);
 
