@@ -1,0 +1,74 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.8519287109375,
+  "bytes": 16384,
+  "distribution_ms": 7.47087702526855,
+  "ece_top1": 0.014061611621894761,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 1.8626891885232548,
+  "ms_per_byte": 10.865424561340332,
+  "nll_bits_by_temperature": {
+   "0.7": 1.8884987030120557,
+   "0.8": 1.826347526731147,
+   "0.9": 1.7983714638754296,
+   "1.0": 1.7949838377588152,
+   "1.1": 1.8104445052763949,
+   "1.2": 1.8412170213232386,
+   "1.3": 1.8850491279812691,
+   "1.4": 1.9404132012456723
+  },
+  "nll_bits_per_byte": 1.7949838377588139,
+  "offset": 96000000,
+  "path": "/home/user/corpora/enwik8",
+  "perplexity_per_byte": 3.4701158733350823,
+  "top1": 0.6307373046875,
+  "top5": 0.88104248046875
+ },
+ "frozen_scoring": {
+  "distribution_ms": 3.1214354138793943,
+  "nll_bits_per_byte": 1.7983179290733509,
+  "top1": 0.6295166015625
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.37373737373737376,
+   "judge_bits_per_byte": 0.4751367280025562,
+   "mode": "greedy_bitwise_learn (old default)",
+   "ms_per_byte": 18.499830319999997,
+   "text": "dividual escapes of growth is necessitated by the exoskeleton. Moulting is a process by which the individual escapes the confines of the exoskeleton individual escapes of growth is necessitated by the exoskeleton. Moulting is a process by which the individual escapes the confines of the exoskeleton "
+  },
+  {
+   "distinct_4gram": 0.16498316498316498,
+   "judge_bits_per_byte": 0.4120641045204738,
+   "mode": "greedy_exact_learn",
+   "ms_per_byte": 11.52384106,
+   "text": "dividual escapes the confines of the exoskeleton individual escapes the confines of the exoskeleton individual escapes the confines of the exoskeleton individual escapes the confines of the exoskeleton individual escapes the confines of the exoskeleton individual escapes the confines of the exoskele"
+  },
+  {
+   "distinct_4gram": 0.3063973063973064,
+   "judge_bits_per_byte": 0.597566540663346,
+   "mode": "greedy_exact_frozen (new default)",
+   "ms_per_byte": 10.495521993333334,
+   "text": "dividual escapes of the exoskeleton individual escapes of growth is necessitated by the exoskeleton individual escapes of growth is and all undergo a series of growth is and all undergo a series of growth is and all undergo a series of growth is and all undergo a series of the exoskeleton individual"
+  },
+  {
+   "distinct_4gram": 0.13468013468013468,
+   "judge_bits_per_byte": 1.0793734023065589,
+   "mode": "top_p_learn (old default)",
+   "ms_per_byte": 11.614235166666667,
+   "text": "nnovicihissinfines of the exoskeleton innnovicihissinfines of the exoskeleton innnovicihissinfines of the exoskeleton innnovicihissinfines of the exoskeleton innnovicihissinfines of the exoskeleton innnovicihissinfines of the exoskeleton innnovicihissinfines of the exoskeleton innnovicihissinfines o"
+  },
+  {
+   "distinct_4gram": 0.7542087542087542,
+   "judge_bits_per_byte": 3.534188929177141,
+   "mode": "top_p_frozen (new default)",
+   "ms_per_byte": 10.98099748,
+   "text": "nedl dhnecnnnl grow in aned by the exos is manner is manner of gros undergnnes of elethe exos maner ono in size. infinneted by the by which tin size and gr inf they develop aln es necetelnndiw anes of indines of onnd bs neceskos inevelonner ines of eeof growvedvinapiloindergro ces manesines esccdio "
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean.json",
+ "prompt_tail": " is a process by which the individual escapes the confines of the exoskeleton in",
+ "setup_seconds": 9.587125019,
+ "tier": "lean"
+}

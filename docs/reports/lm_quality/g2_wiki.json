@@ -1,0 +1,103 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.8193359375,
+  "bytes": 2048,
+  "distribution_ms": 7.578480873046858,
+  "ece_top1": 0.022889751606380116,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 2.045205753833538,
+  "ms_per_byte": 7.868591346679688,
+  "nll_bits_by_temperature": {
+   "0.7": 2.1337635126742422,
+   "0.8": 2.0612535139146497,
+   "0.9": 2.0262225145291457,
+   "1.0": 2.017953826229956,
+   "1.1": 2.030031089427803,
+   "1.2": 2.0584924096969615,
+   "1.3": 2.100794224414564,
+   "1.4": 2.1551819865976944
+  },
+  "nll_bits_per_byte": 2.017953826229956,
+  "offset": 96000000,
+  "path": "/home/user/corpora/enwik8",
+  "perplexity_per_byte": 4.05008960332484,
+  "top1": 0.59130859375,
+  "top5": 0.86962890625
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.8922558922558923,
+   "judge_bits_per_byte": 1.9236541757972832,
+   "mode": "reference (true continuation)",
+   "text": "ten at a festival sessions will be got together in the beer tent or in the vendor's booth of a music-loving craftsman or dealer.  When a particularly large musical event &quot;takes over&quot; an entire village, spontaneous sessions may erupt on the street corners.  \\n\\nThe objective in a session is n"
+  },
+  {
+   "distinct_4gram": 0.030303030303030304,
+   "judge_bits_per_byte": 0.9077315627062793,
+   "mode": "greedy learn index (default)",
+   "ms_per_byte": 24.31185365,
+   "text": "o to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to"
+  },
+  {
+   "distinct_4gram": 0.030303030303030304,
+   "judge_bits_per_byte": 0.9077315627062793,
+   "mode": "greedy learn noindex",
+   "ms_per_byte": 10.877418653333333,
+   "text": "o to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to"
+  },
+  {
+   "distinct_4gram": 0.030303030303030304,
+   "judge_bits_per_byte": 0.9077315627062793,
+   "mode": "greedy frozen noindex",
+   "ms_per_byte": 10.309333126666667,
+   "text": "o to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to pubs to"
+  },
+  {
+   "distinct_4gram": 0.2255892255892256,
+   "judge_bits_per_byte": 2.0922199763478218,
+   "mode": "top_p learn index (default)",
+   "ms_per_byte": 14.488701153333334,
+   "text": "foee chbeed phes publy he leacic held homedin homeel places homes thomes homes publy phes publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces publaces pub"
+  },
+  {
+   "distinct_4gram": 0.18181818181818182,
+   "judge_bits_per_byte": 2.4979026678697935,
+   "mode": "top_p learn noindex",
+   "ms_per_byte": 10.09793442,
+   "text": "foee chbeed iheon thereld thesicele to heoston toncesicele ton tond on toncesicele ton toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesicele toncesice"
+  },
+  {
+   "distinct_4gram": 0.9831649831649831,
+   "judge_bits_per_byte": 4.87303183899243,
+   "mode": "top_p frozen noindex",
+   "ms_per_byte": 9.204312386666667,
+   "text": "foametapupc so l to pd wial mnc ssin ptr bhmo o hmmans an alddadt fn! o pud times hassdus to ie tnd clbl owik anc pbl l lle tin he dans wiiti sd dab and o v ihar osito pubse dbto bn o fitardtt on thesche ous prooerealtbmiananhppl poes ian ofhas dat vruro addpthr pcrstoe ius be pt oernr r andt suuabe"
+  },
+  {
+   "distinct_4gram": 0.12794612794612795,
+   "judge_bits_per_byte": 1.3463592202172578,
+   "mode": "top_p T0.6 learn noindex",
+   "ms_per_byte": 12.503971113333334,
+   "text": "ithat ss aces aces in addition to pubs; ofithat ss aces aces in addition to pubs; ofithat ss aces aces in addition to pubs; ofithat ss aces aces in addition to pubs; ofithat ss aces aces in addition to pubs; ofithat ss aces aces in addition to pubs; ofithat ss aces aces in addition to pubs; ofithat "
+  },
+  {
+   "distinct_4gram": 0.8249158249158249,
+   "judge_bits_per_byte": 4.073314701536289,
+   "mode": "top_p T0.6 frozen noindex",
+   "ms_per_byte": 4.363950646666667,
+   "text": "itrheoft ius l held is l ian held hel shorss pubs; pubs pube as s fow o pul t the ld os to s se al t bn pus s or dare s sian on there o s be be ho ic pl s win to sian be hes se to be hon s sil at theshat times t dd siltimes tsic pldt able ples times bo and t acl aeald l sho be pro lduo c t as ompts "
+  },
+  {
+   "distinct_4gram": 0.3602693602693603,
+   "judge_bits_per_byte": 3.4465897471273856,
+   "mode": "top_p learn noindex rep1.3",
+   "ms_per_byte": 14.384447716666667,
+   "text": "wij~l?'?rr'?pkean be s fost aduldin acorer'?dulearosion to tssheatr ldin and and cefor'?pkeandubsshear for'?pkeanduldin acoresitoubeshear at for'?pkeanduldin acoresitoubeshear at for'?pkeanduldin acoresitoubeshear at for'?pkeanduldin acoresitoubeshear at for'?pkeanduldin acoresitoubeshear at for'?pk"
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean.json",
+ "prompt_tail": "essions can be held in homes or at various public places in addition to pubs; of",
+ "setup_seconds": 5.980065672,
+ "tier": "lean"
+}

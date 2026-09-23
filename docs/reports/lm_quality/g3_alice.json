@@ -1,0 +1,110 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.83203125,
+  "bytes": 1024,
+  "distribution_ms": 8.210382589843753,
+  "ece_top1": 0.03326434223438148,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 2.482518913824001,
+  "ms_per_byte": 8.54903823046875,
+  "nll_bits_by_temperature": {
+   "0.7": 2.7890068178091973,
+   "0.8": 2.670075733102292,
+   "0.9": 2.605770793891991,
+   "1.0": 2.580257661091367,
+   "1.1": 2.5835792358245104,
+   "1.2": 2.6091205959841686,
+   "1.3": 2.6522458300150076,
+   "1.4": 2.7095194665008266
+  },
+  "nll_bits_per_byte": 2.5802576610913666,
+  "offset": 20000,
+  "path": "/home/user/corpora/cant/alice29.txt",
+  "perplexity_per_byte": 5.980464992625516,
+  "top1": 0.537109375,
+  "top5": 0.810546875
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.9090909090909091,
+   "judge_bits_per_byte": 2.7920090499895682,
+   "mode": "reference (true continuation)",
+   "text": "t.  And yet I wish I could show you our cat Dinah:?\\nI think you'd take a fancy to cats if you could only see her.?\\nShe is such a dear quiet thing,' Alice went on, half to herself,?\\nas she swam lazily about in the pool, `and she sits purring so?\\nnicely by the fire, licking her paws and washing her fa"
+  },
+  {
+   "distinct_4gram": 0.14814814814814814,
+   "judge_bits_per_byte": 0.3614333415760635,
+   "mode": "greedy (default)",
+   "ms_per_byte": 25.664575473333333,
+   "text": "n a soothing tone:  `don't be?\\nangry about in a soothing tone:  `don't be?\\nangry about in a soothing tone:  `don't be?\\nangry about in a soothing tone:  `don't be?\\nangry about in a soothing tone:  `don't be?\\nangry about in a soothing tone:  `don't be?\\nangry about in a soothing tone:  `don't be?\\nangry"
+  },
+  {
+   "distinct_4gram": 0.38047138047138046,
+   "judge_bits_per_byte": 3.2126184825436286,
+   "mode": "greedy norepeat8",
+   "ms_per_byte": 8.284574636666667,
+   "text": "n a sike cat        a sike?\\nangrike cate?\\nangre a sikerike cangre angre about about cangrere abould abouldouldoulike canabouldongrere canabe aboulike aboulllllllldoullllldongre abe abongre a abongrike abongongongoongongoulllllike abe angongone abe a abe abe aabe abere abe cabe abeeeeeeeellllllliklll"
+  },
+  {
+   "distinct_4gram": 0.7508417508417509,
+   "judge_bits_per_byte": 0.4586554397064873,
+   "mode": "greedy norepeat16",
+   "ms_per_byte": 7.2904880966666665,
+   "text": "n a soothing soothing soothe Mouse, in animal's feelings.  `I quite forgot you didn't like cats.'?\\n?\\n  `Not like cats!' cried the Mouse, in a shrill, passionate?\\nvoice.  `Would YOU like cats if you were me?'?\\n?\\n  `Well, perhaps not,' said Alice in a soothing tone:  `don't be?\\nangry about in a soothi"
+  },
+  {
+   "distinct_4gram": 0.4006734006734007,
+   "judge_bits_per_byte": 1.2797515351884547,
+   "mode": "greedy frozen norepeat16",
+   "ms_per_byte": 8.860650303333333,
+   "text": "n a soothing soothing tone:'                in a soothing               a soothing tong tone               `don't be?\\nanimal's feelings   `don't be?\\na in a soothing in a soothing a soothing tonate?\\nvoice in a soothing tone        in a son a soothing toot like cats if you didn't like cats if s if you"
+  },
+  {
+   "distinct_4gram": 0.05387205387205387,
+   "judge_bits_per_byte": 0.9145571827783565,
+   "mode": "top_p T0.8 (default)",
+   "ms_per_byte": 15.869626776666664,
+   "text": "s Y, wpy n`dima                                                                                                                                                                                                                                                                                             "
+  },
+  {
+   "distinct_4gram": 0.1414141414141414,
+   "judge_bits_per_byte": 0.6621739054713349,
+   "mode": "minp0.1 T0.8 learn",
+   "ms_per_byte": 9.580481916666667,
+   "text": "t you were linel  `don't be?\\nangry about it you were linel  `don't be?\\nangry about it you were linel  `don't be?\\nangry about it you were linel  `don't be?\\nangry about it you were linel  `don't be?\\nangry about it you were linel  `don't be?\\nangry about it you were linel  `don't be?\\nangry about it you "
+  },
+  {
+   "distinct_4gram": 0.9461279461279462,
+   "judge_bits_per_byte": 4.1252948201373725,
+   "mode": "minp0.1 T0.8 frozen",
+   "ms_per_byte": 4.91234061,
+   "text": "t yotsst ou it s  `diver li `ll in a soothot ig otor f' a soothin tes e `ct  i didn't liece `loibt, iouacatanaibooiye\\ncats feelike ike `dir esat sanikce:  iinngo dncal,    oert, eis cats if yorgnn e hto ain `al`ssikfotsot `n ut idhpt he L hiooo perhaut ibhe t nonaut ife in a snil cshries Mikice,' s "
+  },
+  {
+   "distinct_4gram": 0.8451178451178452,
+   "judge_bits_per_byte": 3.519786874377083,
+   "mode": "minp0.2 T1.0 frozen",
+   "ms_per_byte": 11.32443611,
+   "text": "t yotsst ou it s  `diu t like cats if yothrt ca out in a shsimiin ike cats.  `I quite il e d ss `rnaots idonaig siet  l nin a shrill' papes fori ndniiaing the Mot like a san sse cat bdor ike ice ike fot like `ditsaillithre?\\n  ang toooong ike cats if you aiict noonoushit like acriait,' soicd t hts.'?"
+  },
+  {
+   "distinct_4gram": 0.2356902356902357,
+   "judge_bits_per_byte": 3.384564041768178,
+   "mode": "minp0.1 T0.8 learn norepeat16",
+   "ms_per_byte": 12.426281786666667,
+   "text": "t you were linel  `don't be?\\nan don't be?\\nan do?\\nan do?\\nan do??an don abe?\\nan do?\\nan dn abe?\\nan do?\\nalldn abe?\\nan do?\\ndindo?\\nan do?\\nan dn dn dn an dn an dn an do?\\nan dn an dn dn dn an an dn dn dn abe?\\nan dn an dn do?\\nan dn dn an an do?\\nan dn dn\\ndn dn dn an an an an an dn dn do?\\nan dn an an an ao an "
+  },
+  {
+   "distinct_4gram": 0.9461279461279462,
+   "judge_bits_per_byte": 4.1252948201373725,
+   "mode": "minp0.1 T0.8 frozen norepeat16",
+   "ms_per_byte": 4.690222493333334,
+   "text": "t yotsst ou it s  `diver li `ll in a soothot ig otor f' a soothin tes e `ct  i didn't liece `loibt, iouacatanaibooiye\\ncats feelike ike `dir esat sanikce:  iinngo dncal,    oert, eis cats if yorgnn e hto ain `al`ssikfotsot `n ut idhpt he L hiooo perhaut ibhe t nonaut ife in a snil cshries Mikice,' s "
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean.json",
+ "prompt_tail": "\\n  `Well, perhaps not,' said Alice in a soothing tone:  `don't be?\\nangry about i",
+ "setup_seconds": 5.695155878,
+ "tier": "lean"
+}

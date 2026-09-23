@@ -1,0 +1,110 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.8232421875,
+  "bytes": 1024,
+  "distribution_ms": 8.003465811523442,
+  "ece_top1": 0.025748750735733135,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 2.0791330877973033,
+  "ms_per_byte": 8.304856680664063,
+  "nll_bits_by_temperature": {
+   "0.7": 2.144131117235408,
+   "0.8": 2.0742694877830568,
+   "0.9": 2.041485635831382,
+   "1.0": 2.0350809047913625,
+   "1.1": 2.048665338609372,
+   "1.2": 2.0783184572834883,
+   "1.3": 2.121553133345087,
+   "1.4": 2.176680285019592
+  },
+  "nll_bits_per_byte": 2.035080904791363,
+  "offset": 96000000,
+  "path": "/home/user/corpora/enwik8",
+  "perplexity_per_byte": 4.098457122768827,
+  "top1": 0.5869140625,
+  "top5": 0.8681640625
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.8888888888888888,
+   "judge_bits_per_byte": 1.9718893060874363,
+   "mode": "reference (true continuation)",
+   "text": "etween sets.\\n\\nSessions are often held in [[pub]]s (with the hope that listeners will buy drink for the musicians) and everyone who is able to play Irish music is welcome, within limits; this can be problematic when non-Irish musicians encounter a session and imagine that they may &quot;jam&quot; wit"
+  },
+  {
+   "distinct_4gram": 0.29292929292929293,
+   "judge_bits_per_byte": 0.7867750820996351,
+   "mode": "greedy (default)",
+   "ms_per_byte": 25.69125877666667,
+   "text": "e session leaders.  At times a song will be sung or a slow air played by a single musican be session leaders.  At times a song will be sung or a slow air played by a single musican be session leaders.  At times a song will be sung or a slow air played by a single musican be session leaders.  At time"
+  },
+  {
+   "distinct_4gram": 0.43097643097643096,
+   "judge_bits_per_byte": 3.111425982960865,
+   "mode": "greedy norepeat8",
+   "ms_per_byte": 7.91893102,
+   "text": "e sessiometimetimessiomeone sessingle sessimession singlession theression a singngngngne sesssion sessiossion ssion song ssion anotheresssiong ssingngne will ssiong or anothe sessill ssill singnglessill anothessill be sesill besill by a single more-or-lessillllllllosilllllossillllosssillllngle mosss"
+  },
+  {
+   "distinct_4gram": 0.19528619528619529,
+   "judge_bits_per_byte": 3.3907712777187395,
+   "mode": "greedy norepeat16",
+   "ms_per_byte": 6.808858706666667,
+   "text": "e session leadere are are are are more-or-or-or-or-or-ore-or-or-or-ore-ose-or-or-or-or-ose-or-or-or-ose-ose-ose-ose-osse-ose-ose-ose-lession leadere more-ose-ose-ose-or-ose-ose-ose more-ose-ose-lessingle more-ose-ose-more-ose-ose-osse-lessingle mose-ose-ose-ose mose-ose-ose-lese-ose-ose-ose-more-les"
+  },
+  {
+   "distinct_4gram": 0.28619528619528617,
+   "judge_bits_per_byte": 1.648017701741859,
+   "mode": "greedy frozen norepeat16",
+   "ms_per_byte": 8.200768016666666,
+   "text": "e session leadere are are are are session leades a song will session leader s session leadert a song will bes a song will a song will ber s session le are are are a song will bed session leaders a song will be session lea song will be a song will set ends, someone session leadere are are are are ses"
+  },
+  {
+   "distinct_4gram": 0.11784511784511785,
+   "judge_bits_per_byte": 2.5399423440064264,
+   "mode": "top_p T0.8 (default)",
+   "ms_per_byte": 16.242112056666667,
+   "text": "melimttmeoonoftttttttmedeteteeone seteteteeteeteteeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  {
+   "distinct_4gram": 0.09090909090909091,
+   "judge_bits_per_byte": 0.9846473857794517,
+   "mode": "minp0.1 T0.8 learn",
+   "ms_per_byte": 9.3348837,
+   "text": "y suarts suarts a somest sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes sometimes somet"
+  },
+  {
+   "distinct_4gram": 0.9191919191919192,
+   "judge_bits_per_byte": 4.544903522317324,
+   "mode": "minp0.1 T0.8 frozen",
+   "ms_per_byte": 4.538393723333333,
+   "text": "y suarst os ft s a set o re are more nmr stifca sssl r be buoml r uno leader s d more ol leades are mtsa are an on wh s sln bfn aeds. mea sdasir setea lil will b lla fa  a s ssiigll bare slotiad s menos be a bfcote reotioe s times fsecal Ahesih sesletimeade tert cyion tene bt mre by or s aads ftren "
+  },
+  {
+   "distinct_4gram": 0.898989898989899,
+   "judge_bits_per_byte": 4.160617763656307,
+   "mode": "minp0.2 T1.0 frozen",
+   "ms_per_byte": 11.546365646666667,
+   "text": "y by ste suait s  al w s on bso nimene setind b rsther bd are nin the ser te o ends, someone ss are musibar oftane will sond mon one eo ear etes sethe ses thesil eomeome a s stare o e so slotiaean baiss eer a sioseanglsir a song edeseade  lere are enothe sersanoa tsines nn by a s lsior s adar esser "
+  },
+  {
+   "distinct_4gram": 0.3063973063973064,
+   "judge_bits_per_byte": 2.710338623013827,
+   "mode": "minp0.1 T0.8 learn norepeat16",
+   "ms_per_byte": 12.58866944,
+   "text": "y suarts suarts a somest sometimes sometimes somestarts a somestarts a single are more-or-la sometimestarts a sing will timestarts somestarts somestes sometimestartsimestartsomestartsimestarstarstarstarstasomestasomestasomes somestasomestasngle more-or-la sore-or-less somestasomestesoresomestasomest"
+  },
+  {
+   "distinct_4gram": 0.9191919191919192,
+   "judge_bits_per_byte": 4.544903522317324,
+   "mode": "minp0.1 T0.8 frozen norepeat16",
+   "ms_per_byte": 4.295238843333333,
+   "text": "y suarst os ft s a set o re are more nmr stifca sssl r be buoml r uno leader s d more ol leades are mtsa are an on wh s sln bfn aeds. mea sdasir setea lil will b lla fa  a s ssiigll bare slotiad s menos be a bfcote reotioe s times fsecal Ahesih sesletimeade tert cyion tene bt mre by or s aads ftren "
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean.json",
+ "prompt_tail": "eaders.  At times a song will be sung or a slow air played by a single musican b",
+ "setup_seconds": 5.695810595,
+ "tier": "lean"
+}
