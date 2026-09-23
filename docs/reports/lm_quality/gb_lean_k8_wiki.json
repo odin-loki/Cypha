@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.8267766497461929,
+  "mean_judge_bits": 1.1967278242767243,
+  "mean_reference_distinct_4gram": 0.7829949238578681,
+  "mean_reference_judge_bits": 2.1042673723935694,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 7.511322607500001,
+  "prompts": [
+    {
+      "distinct_4gram": 0.8527918781725888,
+      "judge_bits": 1.2862253539695356,
+      "offset": 96000000,
+      "reference_judge_bits": 2.157405785955072,
+      "text": "The meaning of the building the theologians of the significant miles and commentaries which included the [[United States]], the subject of the Algerian and computer scientists influence of the length "
+    },
+    {
+      "distinct_4gram": 0.9086294416243654,
+      "judge_bits": 1.9338120629295232,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145857158973773,
+      "text": "t;br/&gt;\\n  21. pillow&lt;br/&gt;\\n  15. aboriginal followed by another two or three tunes in a ''set''.  The art of putting together a set is hard to put into words, but the tunes must flow from one t"
+    },
+    {
+      "distinct_4gram": 0.7918781725888325,
+      "judge_bits": 1.3045779682073566,
+      "offset": 96016384,
+      "reference_judge_bits": 2.0253552161003503,
+      "text": " the influence of the theologians of the existence of a great shipbuilder the experiments to another the present of the invasion of the philosophical and the relations between the earliest work to the"
+    },
+    {
+      "distinct_4gram": 0.9644670050761421,
+      "judge_bits": 0.8026918537711651,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160906395728389,
+      "text": "]])\\n*''Peter the [http://www.wga.hu/art/a/allori/alessand/venus_cu.jpg image]\\n\\n==External links==\\n\\n* {{MacTutor Biography|id=Al-Haytham}}\\n* http://www-groups.dcs.st-and.ac.uk/~history/Mathematicians/A"
+    },
+    {
+      "distinct_4gram": 0.883248730964467,
+      "judge_bits": 0.6155727291240413,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109431580493407,
+      "text": "tml Historic image]\\n* [http://www.newadvent.org/cathen/01310c.htm Catholic Encyclopedia article]\\n\\n[[Category:Roman Catholic priests]]\\n[[Category:Historical anniversaries|listing of all days]]\\n\\n{{month"
+    },
+    {
+      "distinct_4gram": 0.6903553299492385,
+      "judge_bits": 1.319175633675983,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213549133702411,
+      "text": "ructure of the fourth founded the reserved the task of the desert, and international history of the founder of the building the theologians of the introduction which the influence of the theory of the"
+    },
+    {
+      "distinct_4gram": 0.8223350253807107,
+      "judge_bits": 1.1681105096202649,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4870946590608485,
+      "text": "ubility]]\\n* [[American Civil War]]\\n* [[Second Battle of the reconstruction]]\\n* [[Sedevacantism]]\\n* [[Sea of the circumferences in archipelago]], [[Independence of the companies in the ancient history "
+    },
+    {
+      "distinct_4gram": 0.700507614213198,
+      "judge_bits": 1.1436564829159233,
+      "offset": 96057344,
+      "reference_judge_bits": 0.9267332694664742,
+      "text": "]]\\n[[fa:&amp;#1489;&amp;#1488;&amp;#1497;&amp;#1492; &amp;#1488;&amp;#1595]]\\n[[fi:Alfred the Institute]]\\n[[ja:Alfred annihilation]]\\n[[ja:Alessandro Allori]]\\n[[nl:Langsta contributions)]]\\n[[nl:Algiers]"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 8
+}

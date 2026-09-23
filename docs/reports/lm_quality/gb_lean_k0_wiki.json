@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.858502538071066,
+  "mean_judge_bits": 1.7452642602937445,
+  "mean_reference_distinct_4gram": 0.7829949238578681,
+  "mean_reference_judge_bits": 2.1042673723935694,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 1.8538700262499999,
+  "prompts": [
+    {
+      "distinct_4gram": 0.8781725888324873,
+      "judge_bits": 1.6788049338903825,
+      "offset": 96000000,
+      "reference_judge_bits": 2.157405785955072,
+      "text": "The attracted as a pitch of alpaca in the work as that he founded with a disastrous extended to as a trademark and warrior and chief goddess was the campaign was killed a breeding the to the the same "
+    },
+    {
+      "distinct_4gram": 0.9593908629441624,
+      "judge_bits": 1.8159580916321385,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145857158973773,
+      "text": "t;br/&gt;\\n  23 m) and friends&quot; but his fellow of a central passu Yahweh occupying of him. Along with the earliest article'' in a particular settled law on of the baby tastes of identify. Many in "
+    },
+    {
+      "distinct_4gram": 0.9137055837563451,
+      "judge_bits": 1.6697318265331953,
+      "offset": 96016384,
+      "reference_judge_bits": 2.0253552161003503,
+      "text": "testines to it the offices and [[born]], to fighting the choice of much conservation of birthday to surplus position as the desert, but the horses successes of the ingenious structure which started by"
+    },
+    {
+      "distinct_4gram": 0.8781725888324873,
+      "judge_bits": 2.035342449736586,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160906395728389,
+      "text": "y world.\\n\\nThe [[Abdominions infantry mispiry lamory: The Almoravides]]) and [[11748]]), and anti-sometimes commercial person process commercial and standard on of the cabinet the or of the problem of "
+    },
+    {
+      "distinct_4gram": 0.9035532994923858,
+      "judge_bits": 1.449837885581649,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109431580493407,
+      "text": "tml/anova/wall safety. [[Planta in Hersions: He moved for animals were characteristics]]\\n* [[Premiers]]\\n\\n==External links==\\n* [http://www.cirrusimage.com/ North American Insects]\\n* [http://www.circle."
+    },
+    {
+      "distinct_4gram": 0.9390862944162437,
+      "judge_bits": 1.933097132201775,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213549133702411,
+      "text": "ratory.  [[Beta Adam]] the Almond Benjaminst deaths|Alger of foreigned formally for confederation. Almost the a rectal area of a literary services to [[Michael Ranking Macedon|Macedonia]]. Instead of "
+    },
+    {
+      "distinct_4gram": 0.8527918781725888,
+      "judge_bits": 1.9351992885195262,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4870946590608485,
+      "text": "vay.jpg|frame|Alessandro Algardi]] [[Rosary]]\\n* [[Social antipope of Algeria ice]]\\n* [[Hamlet]]\\n* [[Isoleuke]]\\n* [[Wilton]]\\n* [[Dietary of Almost drop kills on individual architecture sparry]]\\n* [[Ice"
+    },
+    {
+      "distinct_4gram": 0.5431472081218274,
+      "judge_bits": 1.4441424742547033,
+      "offset": 96057344,
+      "reference_judge_bits": 0.9267332694664742,
+      "text": "o transparents radio watched roads indiscist)]]\\n[[tr:II. Ahmet]]\\n[[sv:Alfonso VI]]\\n[[sv:Alfonso VI]]\\n[[sv:Alfonso VI]]\\n[[sv:Alfonso VI]]\\n[[sv:Alfonso VI]]\\n[[sv:Alfonso VII of of concepts sooner ionic "
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 0
+}

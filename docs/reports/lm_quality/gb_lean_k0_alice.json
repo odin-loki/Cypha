@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.9041878172588832,
+  "mean_judge_bits": 1.9060122749889596,
+  "mean_reference_distinct_4gram": 0.9067258883248732,
+  "mean_reference_judge_bits": 3.0373487558156183,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 1.8173330462500001,
+  "prompts": [
+    {
+      "distinct_4gram": 0.9289340101522843,
+      "judge_bits": 1.9236754271610037,
+      "offset": 20000,
+      "reference_judge_bits": 2.8549029189306783,
+      "text": "g with the altar a performance and harbour, conquest the [[Singer | year St_ i Simple:Alexander Islamic ideas in category:Information the sees the of Innocent]] (and in [[1017]] and development of the"
+    },
+    {
+      "distinct_4gram": 0.9035532994923858,
+      "judge_bits": 1.7338654421046382,
+      "offset": 28192,
+      "reference_judge_bits": 3.030439895671322,
+      "text": " attaining, hoping revival and and in modern he survey decision says, had the Almoravides had the population of the harbour finally, but in honor of influence of inspiration to him.\\n\\n== Andersen==\\nThe"
+    },
+    {
+      "distinct_4gram": 0.868020304568528,
+      "judge_bits": 1.8509501572385951,
+      "offset": 36384,
+      "reference_judge_bits": 3.1303989902570053,
+      "text": "s world's were the revival and and in modern he took the best poses was developed species in the whole, have been conformis he fell, he has host the hands which almost all the more and the title the m"
+    },
+    {
+      "distinct_4gram": 0.8730964467005076,
+      "judge_bits": 1.835415386894463,
+      "offset": 44576,
+      "reference_judge_bits": 2.5724745505714157,
+      "text": "unded the waters and was preserved in the work as that he explain why maintain on the their country one has no doubt as the desert, and probably service of new main building to find?\\nand\\nthe the schem"
+    },
+    {
+      "distinct_4gram": 0.868020304568528,
+      "judge_bits": 1.991685079303507,
+      "offset": 52768,
+      "reference_judge_bits": 3.8159420200283307,
+      "text": "oritatively home and you so awfully clever?'?\\n?\\n    \\n                \\n\\n== The ''[[Politician musician]] and on and was and a military parameters the early years and cities scourge of [[Raymond Pope Ce"
+    },
+    {
+      "distinct_4gram": 0.9289340101522843,
+      "judge_bits": 2.084347889371871,
+      "offset": 60960,
+      "reference_judge_bits": 2.633380631253076,
+      "text": "use must public achiever pocket on instrument)|Almoravid and more vespecial and mental editions donation as regard]] and on and enjoyable sentence stones at the angle of a particular attained and alie"
+    },
+    {
+      "distinct_4gram": 0.8781725888324873,
+      "judge_bits": 1.7336304703266034,
+      "offset": 69152,
+      "reference_judge_bits": 2.669455763675492,
+      "text": "way, who translated by the Almoravides she was asked to find the by was close.\\n\\nIn some are animated to find on the ideal see main the chiefs. The subject was meant for a comprising mathematical the l"
+    },
+    {
+      "distinct_4gram": 0.9847715736040609,
+      "judge_bits": 2.0945283475109973,
+      "offset": 77344,
+      "reference_judge_bits": 3.591795276137629,
+      "text": "ut way,'\\n       \\n\\n'''[[Salmond]]'s marriage.\\n\\n== Triangle constitution begun of sonic that is was shipwrecked has broke out in [[1172]]\\nAlmoravides''' ([[1925]]'' - [[Bab Azoun]] him as &quot; and on "
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/cant/alice29.txt",
+  "word_candidates": 0
+}
