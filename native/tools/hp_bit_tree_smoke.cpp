@@ -1,8 +1,10 @@
-/// Parity: undo round-trip, MSB bit-tree vs legacy fork, assign reuse vs legacy fork.
+/// Parity: undo round-trip, MSB bit-tree vs legacy fork, assign reuse vs legacy fork,
+/// and no leak: scoring the next-byte distribution must not change the live model.
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "cypha/cyphalm/cyphalm_config.hpp"
@@ -77,6 +79,45 @@ int main() {
             "max_assign_legacy_delta=%.9g single_delta=%.9g\n",
             max_tree_legacy_delta, max_assign_legacy_delta, single_delta);
         return 1;
+    }
+
+    // Leak check on text. Word matches and DMC node splits only happen on
+    // structured input; before the undo fix a speculative branch could reset
+    // the live word match or leave a DMC split behind.
+    {
+        std::string text;
+        const char* words[] = {"the ", "cat ", "sat ", "on ", "a ", "mat ", "and ", "the ",
+                               "dog ", "ran ", "[[link]] ", "{{cite}} ", "\n"};
+        std::mt19937 wr(7);
+        while (text.size() < 6000) text += words[wr() % 13];
+        const hp::Config hcfg = cypha::cyphalm::hp_config_from_cyphalm(cfg);
+        cypha::cyphalm::HpSequenceBackend served(hcfg), twin(hcfg);
+        const std::size_t warm_n = 4000;
+        for (std::size_t i = 0; i < warm_n; ++i) {
+            served.consume_byte(static_cast<std::uint8_t>(text[i]));
+            twin.consume_byte(static_cast<std::uint8_t>(text[i]));
+        }
+        double max_leak = 0.0;
+        double max_parity = 0.0;
+        for (std::size_t i = warm_n; i < warm_n + 48; ++i) {
+            const auto dist = served.next_byte_log_probs(256);
+            if (i == warm_n) {
+                const auto ref = served.next_byte_log_probs_assign_reuse(256);
+                for (int b = 0; b < 256; ++b) {
+                    max_parity = std::max(max_parity, std::abs(dist[static_cast<std::size_t>(b)] -
+                                                               ref[static_cast<std::size_t>(b)]));
+                }
+            }
+            const auto nb = static_cast<std::uint8_t>(text[i]);
+            max_leak = std::max(max_leak, std::abs(served.observe_next_byte(nb) -
+                                                   twin.observe_next_byte(nb)));
+        }
+        if (max_leak > 0.0 || max_parity > 1e-9) {
+            std::printf("hp_bit_tree_smoke FAIL text max_leak=%.9g max_parity=%.9g\n", max_leak,
+                        max_parity);
+            return 1;
+        }
+        std::printf("hp_bit_tree_smoke text max_leak=0 max_parity=%.3g\n", max_parity);
     }
 
     std::printf(

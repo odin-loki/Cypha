@@ -136,8 +136,11 @@ class ContextModel {
     // which is itself worth a couple of percent.
     static constexpr int kOutputs = 2;
 
+    // table_bits == 0 builds a dropped model: one-slot tables, predicts 0.5
+    // (stretch 0) and never learns. Used by Config::cm_drop.
     ContextModel(int table_bits, int limit)
-        : mask_((1u << table_bits) - 1),
+        : off_(table_bits <= 0),
+          mask_((1u << (table_bits > 0 ? table_bits : 0)) - 1),
           bits_(table_bits),
           limit_(limit),
           t_(table_bits),
@@ -148,9 +151,23 @@ class ContextModel {
     // fx2 sets(): keep a mixer slot but do not pollute the table.
     void set_idle() { idle_ = true; h_ = 0; }
 
+    // Warm the cache line predict(c0) will probe. No state change, so the
+    // result is bit-identical; it only lets the 35 misses overlap.
+    void prefetch(int c0) const {
+        if (off_) return;
+        const std::uint32_t i =
+            (h_ ^ (static_cast<std::uint32_t>(c0) * 0x9E3779B1u)) & mask_;
+        hp_prefetch(t_.data() + i);
+        hp_prefetch(chk_.data() + i);
+    }
+
     // Writes kOutputs stretched values into out[]. backoff is the parent
     // order's probability, used by the PY estimate.
     void predict(int c0, int backoff_p12, int* out) {
+        if (off_) {
+            for (int j = 0; j < kOutputs; ++j) out[j] = 0;
+            return;
+        }
         const std::uint32_t mixed =
             h_ ^ (static_cast<std::uint32_t>(c0) * 0x9E3779B1u);
         const StateTable& st = state_table();
@@ -261,7 +278,7 @@ class ContextModel {
     }
 
     void update(int y, int ens_p12 = -1) {
-        if (idle_) return;
+        if (idle_ || off_) return;
         std::int32_t ncl = 0;
         if (ens_p12 >= 0) {
             const std::int32_t diff =
@@ -306,6 +323,7 @@ class ContextModel {
     }
 
  private:
+    bool off_;
     std::uint32_t mask_;
     int bits_;
     int limit_;
@@ -718,6 +736,9 @@ class DmcModel {
  public:
     explicit DmcModel(int cap_bits = 18)
         : cap_(static_cast<std::uint32_t>(1u << (cap_bits > 20 ? 20 : cap_bits))) {
+        // Full capacity up front: speculative (undo-recorded) splits patch cells
+        // inside nodes_, so the buffer must never move. Untouched pages cost no RSS.
+        nodes_.reserve(cap_);
         nodes_.resize(256);
         for (int i = 0; i < 256; ++i) {
             nodes_[static_cast<std::size_t>(i)].n0 = 1;
@@ -741,8 +762,10 @@ class DmcModel {
     void update(int y) {
         Node& n = nodes_[cur_];
         if (y) {
+            hp_undo_note(n.n1);
             if (n.n1 < 65535) ++n.n1;
         } else {
+            hp_undo_note(n.n0);
             if (n.n0 < 65535) ++n.n0;
         }
         std::uint32_t nxt = n.nx[y];
@@ -761,14 +784,19 @@ class DmcModel {
             if (nn.n0 > ch.n0) nn.n0 = ch.n0;
             if (nn.n1 > ch.n1) nn.n1 = ch.n1;
             const std::uint32_t parent = cur_;
+            hp_undo_note(nodes_[nxt].n0);
+            hp_undo_note(nodes_[nxt].n1);
             if (ch.n0 > nn.n0)
                 nodes_[nxt].n0 = static_cast<std::uint16_t>(ch.n0 - nn.n0 + 1);
             if (ch.n1 > nn.n1)
                 nodes_[nxt].n1 = static_cast<std::uint16_t>(ch.n1 - nn.n1 + 1);
+            hp_undo_note_size(nodes_);
             nodes_.push_back(nn);
+            hp_undo_note(nodes_[parent].nx[y]);
             nodes_[parent].nx[y] = static_cast<std::uint32_t>(nodes_.size() - 1);
             nxt = nodes_[parent].nx[y];
         }
+        hp_undo_note(cur_);
         cur_ = nxt;
     }
 
@@ -790,6 +818,7 @@ class DmcModel {
         blob::read_pod(is, cur_);
         std::uint64_t n = 0;
         blob::read_pod(is, n);
+        nodes_.reserve(cap_ > n ? cap_ : n);
         nodes_.resize(n);
         for (auto& node : nodes_) {
             blob::read_pod(is, node.n0);

@@ -38,6 +38,12 @@ class MixerNet {
         for (auto& x : v_) x = v0p;
     }
 
+    // Lossy knobs (Config::mixer_skip / Config::gate_drop). Defaults keep gate24.
+    void set_lossy(int skip, std::uint32_t gate_drop) {
+        if (skip > 0) skip_ = skip;
+        gate_drop_ = gate_drop;
+    }
+
     void reset_inputs() { m_ = 0; }
     void add(int stretched) {
         if (m_ < n_) st_[m_++] = static_cast<MixerSt>(stretched);
@@ -48,6 +54,11 @@ class MixerNet {
 
     int mix() {
         for (int j = 0; j < k_; ++j) {
+            if ((gate_drop_ >> j) & 1u) {
+                dot_[j] = 0;
+                pr_[j] = 2048;
+                continue;
+            }
             const MixerWt* w = &w_[j][static_cast<std::size_t>(ctx_[j]) * n_];
             const std::int64_t sum = dot_mixer_wt(w, st_.data(), m_);
             dot_[j] = clamp_int(static_cast<int>(sum >> 16), -2047, 2047);
@@ -67,7 +78,7 @@ class MixerNet {
         const int err2 = t - final_pr_;
         {
             const int ae = err2 < 0 ? -err2 : err2;
-            if (ae < 32) return;
+            if (ae < skip_) return;
         }
 
         MixerWt* v = &v_[static_cast<std::size_t>(ctx2_) * k_];
@@ -80,6 +91,7 @@ class MixerNet {
         }
 
         for (int j = 0; j < k_; ++j) {
+            if ((gate_drop_ >> j) & 1u) continue;
             const int err = t - pr_[j];
             const int l1 = lr1_[static_cast<std::size_t>(j)];
             MixerWt* w = &w_[j][static_cast<std::size_t>(ctx_[j]) * n_];
@@ -179,6 +191,8 @@ class MixerNet {
     std::vector<int> lr1_;
     std::vector<std::vector<MixerWt>> w_;
     std::vector<MixerWt> v_;
+    int skip_ = 32;                 // gate24 HP_MIXER_SKIP
+    std::uint32_t gate_drop_ = 0;
     std::int64_t energy_ = 0;
     int m_ = 0;
     int ctx2_ = 0;

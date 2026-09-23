@@ -99,6 +99,14 @@ nlohmann::json run_variant(const char* label, cypha::cyphalm::CyphaLMConfig cfg,
     j["hp_effective_mem"] = cypha::cyphalm::hp_effective_table_bits(cfg);
     j["hp_serve_compact"] = cfg.hp_serve_compact;
     j["hp_prune_cold_min_n"] = cfg.hp_prune_cold_min_n;
+    j["hp_lossy_tier"] = cfg.hp_lossy_tier;
+    j["hp_cm_drop"] = cfg.hp_cm_drop;
+    j["hp_cm_bits_cap"] = cfg.hp_cm_bits_cap;
+    j["hp_gate_drop"] = cfg.hp_gate_drop;
+    j["hp_mixer_skip"] = cfg.hp_mixer_skip;
+    j["hp_match_bits_cap"] = cfg.hp_match_bits_cap;
+    j["hp_pool_slots"] = cfg.hp_pool_slots;
+    j["hp_pool_bits_cap"] = cfg.hp_pool_bits_cap;
 
     const auto t_construct = Clock::now();
     cypha::cyphalm::CyphaLMModel model(cfg);
@@ -164,12 +172,14 @@ int main(int argc, char** argv) {
     int latency_iters = 2;
     std::string corpus_path;
     bool enwik_screen = false;
+    std::string tiers;  // --tiers gate24,lean,... : run exactly these lossy tiers
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--warmup-n" && i + 1 < argc) warmup_n = std::stoi(argv[++i]);
         else if (a == "--eval-n" && i + 1 < argc) eval_n = std::stoi(argv[++i]);
         else if (a == "--latency-iters" && i + 1 < argc) latency_iters = std::stoi(argv[++i]);
         else if (a == "--corpus" && i + 1 < argc) corpus_path = argv[++i];
+        else if (a == "--tiers" && i + 1 < argc) tiers = argv[++i];
         else if (a == "--enwik-screen") {
             enwik_screen = true;
             corpus_path = "bench/data/enwik8/enwik8.8mb";
@@ -256,7 +266,20 @@ int main(int argc, char** argv) {
                                        latency_iters));
     };
 
-    if (enwik_screen) {
+    if (!tiers.empty()) {
+        std::string rest = tiers + ",";
+        for (std::size_t pos; (pos = rest.find(',')) != std::string::npos; rest.erase(0, pos + 1)) {
+            const std::string name = rest.substr(0, pos);
+            if (name.empty()) continue;
+            auto cfg = cypha::cyphalm::CyphaLMConfig{};
+            cypha::cyphalm::apply_hp_production_recipe(cfg);
+            cypha::cyphalm::apply_hp_lossy_tier(cfg, name);
+            cfg.vocab_size = 256;
+            const std::string label = "tier_" + name;
+            variants.push_back(
+                run_variant(label.c_str(), cfg, ids, warmup_n, eval_n, latency_iters));
+        }
+    } else if (enwik_screen) {
         add_baseline();
         add_mem20();
         add_combo();

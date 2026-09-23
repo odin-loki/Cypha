@@ -1,5 +1,7 @@
 #include "cypha/cyphalm/hp_backend.hpp"
 
+#include "cypha/cyphalm/cyphalm_config.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -53,6 +55,18 @@ hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria) {
     cfg.mixer_lr = mixer_lr;
     cfg.gria = gria;
     cfg.normalize();
+    return cfg;
+}
+
+hp::Config hp_config_from_cyphalm(const CyphaLMConfig& c) {
+    hp::Config cfg = hp_config_from_cyphalm(hp_effective_table_bits(c), c.hp_mixer_lr, c.hp_gria);
+    cfg.cm_drop = c.hp_cm_drop;
+    cfg.cm_bits_cap = c.hp_cm_bits_cap;
+    cfg.gate_drop = c.hp_gate_drop;
+    cfg.mixer_skip = c.hp_mixer_skip;
+    cfg.match_bits_cap = c.hp_match_bits_cap;
+    cfg.pool_slots = c.hp_pool_slots;
+    cfg.pool_bits_cap = c.hp_pool_bits_cap;
     return cfg;
 }
 
@@ -142,22 +156,46 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
         }
         return;
     }
+    const bool take0 = branch_reaches_vocab(vocab_size, prefix, depth, 0);
+    const bool take1 = branch_reaches_vocab(vocab_size, prefix, depth, 1);
+    if (!take0 && !take1) {
+        return;
+    }
+    // One predict() gives both children's bit probability. update() also reads
+    // predict()'s scratch (mixer inputs, layer-1 outputs), which the bit-0 subtree
+    // overwrites, so the bit-1 child re-predicts before its update. Leaves
+    // (depth 7) need no update at all: 382 predicts + 254 updates per call
+    // instead of 510 + 510, with identical log-probs.
+    hp::UndoFrame& pframe = undo.push_frame();
+    int p12 = 0;
+    {
+        hp::UndoRecorderScope scope(pframe);
+        p12 = node.predict();
+    }
     for (int bit = 0; bit <= 1; ++bit) {
-        if (!branch_reaches_vocab(vocab_size, prefix, depth, bit)) {
+        if (!(bit ? take1 : take0)) {
+            continue;
+        }
+        const double child_log = log_p_nats + bit_log_prob(p12, bit);
+        const int next_prefix = (prefix << 1) | bit;
+        if (depth == 7) {
+            // Leaf: the byte's probability is complete; no state to advance.
+            expand_bit_tree_dfs(vocab_size, 8, next_prefix, child_log, node, undo, out_log_nats);
             continue;
         }
         hp::UndoFrame& frame = undo.push_frame();
         {
             hp::UndoRecorderScope scope(frame);
-            const int p12 = node.predict();
-            const double child_log = log_p_nats + bit_log_prob(p12, bit);
+            if (bit == 1 && take0) {
+                (void)node.predict();
+            }
             node.update(bit);
-            const int next_prefix = (prefix << 1) | bit;
             expand_bit_tree_dfs(vocab_size, depth + 1, next_prefix, child_log, node, undo,
                                 out_log_nats);
         }
         undo.pop_frame(node);
     }
+    undo.pop_frame(node);
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_size) {

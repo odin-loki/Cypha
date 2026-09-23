@@ -118,4 +118,8 @@ class HpSequenceBackend {
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria);
 
+struct CyphaLMConfig;
+/// Full mapping: effective table bits, mixer lr, GRIA and the lossy mixer knobs.
+hp::Config hp_config_from_cyphalm(const CyphaLMConfig& cfg);
+
 }  // namespace cypha::cyphalm

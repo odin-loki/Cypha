@@ -47,9 +47,20 @@ struct Config {
     int mixer_lr = 2;
     bool gria = true;
 
+    // Lossy knobs (CyphaLM serve tiers). Defaults reproduce gate24 exactly;
+    // any non-default value changes predictions, so a model must be read back
+    // with the same values it was trained with. Not carried in hp archives.
+    std::uint64_t cm_drop = 0;    // bit i: drop context model i (Predictor::CmId); no table, zero input
+    int cm_bits_cap = 0;          // >0: cap every context-model table at this many bits
+    std::uint32_t gate_drop = 0;  // bit j: drop mixer layer-1 weight set j (Predictor::Gate)
+    int mixer_skip = 0;           // >0: skip the mixer update when |err| < this (gate24 = 32)
+    int match_bits_cap = 0;       // >0: cap byte-match hash tables (13 models) at this many bits
+    int pool_slots = 0;           // 1..11: keep only this many discovered-context slots (gate24 = 12)
+    int pool_bits_cap = 0;        // >0: cap discovered-context tables at this many bits
+
     // Encoder and decoder must agree. match/buf sizes are a function of
     // table_bits (the only size the archive header carries).
-    // buf_bits = table_bits + HP_BUF_DELTA (default 3 -> 25 at mem 22).
+    // buf_bits = table_bits + 3 (25 at mem 22).
     void normalize() {
         if (table_bits < 16) table_bits = 16;
         if (table_bits > 28) table_bits = 28;
@@ -83,6 +94,52 @@ class Predictor {
         kNumGates
     };
 
+    // Context models in ctx_chain_ order (bit index for Config::cm_drop).
+    enum CmId {
+        kCmO1 = 0,
+        kCmO2,
+        kCmO3,
+        kCmO4,
+        kCmO6,
+        kCmWord,
+        kCmSp13,
+        kCmSp24,
+        kCmCol,
+        kCmTag,
+        kCmWbi,
+        kCmWstrSp,
+        kCmBrk,
+        kCmLink,
+        kCmNum,
+        kCmSen,
+        kCmSentst,
+        kCmSentmemCm,
+        kCmSengrp,
+        kCmNestMod,
+        kCmParaMod,
+        kCmLineMod,
+        kCmStateMod,
+        kCmTplMod,
+        kCmInfokeyMod,
+        kCmO6b,
+        kCmLinkpipeMod,
+        kCmCatMod,
+        kCmHeadingMod,
+        kCmTitleMod,
+        kCmSectitleMod,
+        kCmWikistackMod,
+        kCmCapmaskMod,
+        kCmUppergapMod,
+        kCmWordlenMod,
+        kNumCm
+    };
+    static const char* cm_name(int i) {
+        static const char* const k[] = {"o1", "o2", "o3", "o4", "o6", "word", "sp13", "sp24", "col", "tag", "wbi", "wstr_sp", "brk", "link", "num", "sen", "sentst", "sentmem_cm", "sengrp", "nestmod", "paramod", "linemod", "statemod", "tplmod", "infokeymod", "o6b", "linkpipemod", "catmod", "headingmod", "titlemod", "sectitlemod", "wikistackmod", "capmaskmod", "uppergapmod", "wordlenmod"};
+        return (i >= 0 && i < kNumCm) ? k[i] : "?";
+    }
+
+    static_assert(kNumCm == kCtxModels, "CmId must list every chained context model");
+
     static int slot_bits(int base, int delta) {
         if (delta < 0) delta = 0;
         int b = base + delta;
@@ -93,11 +150,24 @@ class Predictor {
         return b;
     }
 
+    // Table bits for the byte-match models, capped by Config::match_bits_cap.
+    static int byte_match_bits_(const Config& cfg) {
+        const int b = match_bits(cfg.match_bits);
+        return (cfg.match_bits_cap > 0 && b > cfg.match_bits_cap) ? cfg.match_bits_cap : b;
+    }
+
     static int match_bits(int b) {
         b += 1;
         if (b < 16) b = 16;
         if (b > 28) b = 28;
         return b;
+    }
+
+    // Table bits for context model ``id``: 0 = dropped, else capped by cm_bits_cap.
+    static int cm_bits_(const Config& cfg, int id, int bits) {
+        if ((cfg.cm_drop >> id) & 1u) return 0;
+        if (cfg.cm_bits_cap > 0 && bits > cfg.cm_bits_cap) return cfg.cm_bits_cap;
+        return bits;
     }
 
     static int add_bits(int b, int extra) {
@@ -108,57 +178,57 @@ class Predictor {
     }
 
     explicit Predictor(const Config& cfg)
-        : cfg_(cfg),
-          byte_ring_(cfg.buf_bits),
-          o1_(slot_bits(cfg.table_bits, -2), 1023),
-          o2_(slot_bits(cfg.table_bits, -2), 1023),
-          o3_(add_bits(slot_bits(cfg.table_bits, 0), 6), 511),
-          o4_(add_bits(slot_bits(cfg.table_bits, 0), 6), 255),
-          o6_(add_bits(slot_bits(cfg.table_bits, 0), 9), 127),
-          o6b_(add_bits(slot_bits(cfg.table_bits, 0), 9), 127),
-          word_(slot_bits(cfg.table_bits, 1), 255),
-          col_(add_bits(slot_bits(cfg.table_bits, 0), 1), 255),
-          tag_(slot_bits(cfg.table_bits, 2), 255),
-          wbi_(slot_bits(cfg.table_bits, 1), 255),
-          sp13_(slot_bits(cfg.table_bits, 0), 255),
-          sp24_(slot_bits(cfg.table_bits, 0), 255),
-          wstr_sp_(slot_bits(cfg.table_bits, 2), 255),
-          brk_(slot_bits(cfg.table_bits, 0), 255),
-          link_(slot_bits(cfg.table_bits, 2), 255),
-          num_(slot_bits(cfg.table_bits, 0), 255),
-          sen_(slot_bits(cfg.table_bits, 2), 255),
-          sentst_(slot_bits(cfg.table_bits, 3), 255),
-          sentmem_cm_(slot_bits(cfg.table_bits, 0), 255),
-          sengrp_(slot_bits(cfg.table_bits, 2), 255),
-          nestmod_(cfg.table_bits, 255),
-          paramod_(cfg.table_bits, 255),
-          linemod_(cfg.table_bits, 255),
-          statemod_(cfg.table_bits, 255),
-          tplmod_(cfg.table_bits, 255),
-          infokeymod_(cfg.table_bits, 255),
-          linkpipemod_(cfg.table_bits, 255),
-          catmod_(cfg.table_bits, 255),
-          headingmod_(cfg.table_bits, 255),
-          titlemod_(cfg.table_bits, 255),
-          sectitlemod_(cfg.table_bits, 255),
-          wikistackmod_(cfg.table_bits, 255),
-          capmaskmod_(cfg.table_bits, 255),
-          uppergapmod_(cfg.table_bits, 255),
-          wordlenmod_(cfg.table_bits, 255),
-          match_{ {&byte_ring_, match_bits(cfg.match_bits), 3},
-                  {&byte_ring_, match_bits(cfg.match_bits), 4},
-                  {&byte_ring_, match_bits(cfg.match_bits), 6},
-                  {&byte_ring_, match_bits(cfg.match_bits), 10},
-                  {&byte_ring_, match_bits(cfg.match_bits), 16}
-                  , {&byte_ring_, match_bits(cfg.match_bits), 8}
-                  , {&byte_ring_, match_bits(cfg.match_bits), 1}
-                  , {&byte_ring_, match_bits(cfg.match_bits), 2}
-                  , {&byte_ring_, match_bits(cfg.match_bits), 5}
+        : byte_ring_(cfg.buf_bits),
+          cfg_(cfg),
+          o1_(cm_bits_(cfg, kCmO1, slot_bits(cfg.table_bits, -2)), 1023),
+          o2_(cm_bits_(cfg, kCmO2, slot_bits(cfg.table_bits, -2)), 1023),
+          o3_(cm_bits_(cfg, kCmO3, add_bits(slot_bits(cfg.table_bits, 0), 6)), 511),
+          o4_(cm_bits_(cfg, kCmO4, add_bits(slot_bits(cfg.table_bits, 0), 6)), 255),
+          o6_(cm_bits_(cfg, kCmO6, add_bits(slot_bits(cfg.table_bits, 0), 9)), 127),
+          o6b_(cm_bits_(cfg, kCmO6b, add_bits(slot_bits(cfg.table_bits, 0), 9)), 127),
+          word_(cm_bits_(cfg, kCmWord, slot_bits(cfg.table_bits, 1)), 255),
+          col_(cm_bits_(cfg, kCmCol, add_bits(slot_bits(cfg.table_bits, 0), 1)), 255),
+          tag_(cm_bits_(cfg, kCmTag, slot_bits(cfg.table_bits, 2)), 255),
+          wbi_(cm_bits_(cfg, kCmWbi, slot_bits(cfg.table_bits, 1)), 255),
+          sp13_(cm_bits_(cfg, kCmSp13, slot_bits(cfg.table_bits, 0)), 255),
+          sp24_(cm_bits_(cfg, kCmSp24, slot_bits(cfg.table_bits, 0)), 255),
+          wstr_sp_(cm_bits_(cfg, kCmWstrSp, slot_bits(cfg.table_bits, 2)), 255),
+          brk_(cm_bits_(cfg, kCmBrk, slot_bits(cfg.table_bits, 0)), 255),
+          link_(cm_bits_(cfg, kCmLink, slot_bits(cfg.table_bits, 2)), 255),
+          num_(cm_bits_(cfg, kCmNum, slot_bits(cfg.table_bits, 0)), 255),
+          sen_(cm_bits_(cfg, kCmSen, slot_bits(cfg.table_bits, 2)), 255),
+          sentst_(cm_bits_(cfg, kCmSentst, slot_bits(cfg.table_bits, 3)), 255),
+          sentmem_cm_(cm_bits_(cfg, kCmSentmemCm, slot_bits(cfg.table_bits, 0)), 255),
+          sengrp_(cm_bits_(cfg, kCmSengrp, slot_bits(cfg.table_bits, 2)), 255),
+          nestmod_(cm_bits_(cfg, kCmNestMod, cfg.table_bits), 255),
+          paramod_(cm_bits_(cfg, kCmParaMod, cfg.table_bits), 255),
+          linemod_(cm_bits_(cfg, kCmLineMod, cfg.table_bits), 255),
+          statemod_(cm_bits_(cfg, kCmStateMod, cfg.table_bits), 255),
+          tplmod_(cm_bits_(cfg, kCmTplMod, cfg.table_bits), 255),
+          infokeymod_(cm_bits_(cfg, kCmInfokeyMod, cfg.table_bits), 255),
+          linkpipemod_(cm_bits_(cfg, kCmLinkpipeMod, cfg.table_bits), 255),
+          catmod_(cm_bits_(cfg, kCmCatMod, cfg.table_bits), 255),
+          headingmod_(cm_bits_(cfg, kCmHeadingMod, cfg.table_bits), 255),
+          titlemod_(cm_bits_(cfg, kCmTitleMod, cfg.table_bits), 255),
+          sectitlemod_(cm_bits_(cfg, kCmSectitleMod, cfg.table_bits), 255),
+          wikistackmod_(cm_bits_(cfg, kCmWikistackMod, cfg.table_bits), 255),
+          capmaskmod_(cm_bits_(cfg, kCmCapmaskMod, cfg.table_bits), 255),
+          uppergapmod_(cm_bits_(cfg, kCmUppergapMod, cfg.table_bits), 255),
+          wordlenmod_(cm_bits_(cfg, kCmWordlenMod, cfg.table_bits), 255),
+          match_{ {&byte_ring_, byte_match_bits_(cfg), 3},
+                  {&byte_ring_, byte_match_bits_(cfg), 4},
+                  {&byte_ring_, byte_match_bits_(cfg), 6},
+                  {&byte_ring_, byte_match_bits_(cfg), 10},
+                  {&byte_ring_, byte_match_bits_(cfg), 16}
+                  , {&byte_ring_, byte_match_bits_(cfg), 8}
+                  , {&byte_ring_, byte_match_bits_(cfg), 1}
+                  , {&byte_ring_, byte_match_bits_(cfg), 2}
+                  , {&byte_ring_, byte_match_bits_(cfg), 5}
           },
-          smatch_(&byte_ring_, match_bits(cfg.match_bits), 4),
-          skipk_(&byte_ring_, match_bits(cfg.match_bits), 3, 2),
-          skip3_(&byte_ring_, match_bits(cfg.match_bits), 3, 3),
-          skip4_(&byte_ring_, match_bits(cfg.match_bits), 3, 4),
+          smatch_(&byte_ring_, byte_match_bits_(cfg), 4),
+          skipk_(&byte_ring_, byte_match_bits_(cfg), 3, 2),
+          skip3_(&byte_ring_, byte_match_bits_(cfg), 3, 3),
+          skip4_(&byte_ring_, byte_match_bits_(cfg), 3, 4),
           lzp_(match_bits(cfg.match_bits) > 2 ? match_bits(cfg.match_bits) - 2
                                               : match_bits(cfg.match_bits)),
           dmc_(18),
@@ -177,7 +247,9 @@ class Predictor {
                                cfg.buf_bits > 2 ? cfg.buf_bits - 2 : cfg.buf_bits)
           },
           hebb_(cfg.table_bits, 255),
-          pool_(cfg.table_bits, 0xC0FFEEull),
+          pool_(cfg.pool_bits_cap > 0 && cfg.pool_bits_cap < cfg.table_bits ? cfg.pool_bits_cap
+                                                                            : cfg.table_bits,
+                0xC0FFEEull, cfg.pool_slots),
           mixer_(kNumExperts, gate_sizes(), 256, cfg.mixer_lr, gate_rates(cfg.mixer_lr)),
           apm_c0_(256),
           apm_lex_(256 * 256),
@@ -190,6 +262,7 @@ class Predictor {
                 static_cast<std::uint16_t>(english_bit_prior16(i));
         }
         gria_.set_enabled(cfg.gria);
+        mixer_.set_lossy(cfg.mixer_skip, cfg.gate_drop);
         init_ctx_chain_();
         set_byte_contexts();
     }
@@ -332,6 +405,7 @@ class Predictor {
     }
 
     void update(int y) {
+        if (bitpos_ < 7) prefetch_ctx_((c0_ << 1) | y);
         gria_.account_bit(y ? pr_final_ : 4096 - pr_final_);
 
         mixer_.update(y);
@@ -394,7 +468,13 @@ class Predictor {
             if (UndoRecorderScope::active() == nullptr) {
                 end_of_byte(byte);
             }
+            prefetch_ctx_(1);
         }
+    }
+
+    void prefetch_ctx_(int c0) const {
+        for (int i = 0; i < n_ctx_chain_; ++i) ctx_chain_[i]->prefetch(c0);
+        pool_.prefetch(c0);
     }
 
     /// Lossy serve: reset context hash slots with fewer than ``min_total`` bit
@@ -918,6 +998,7 @@ inline UndoFrame::~UndoFrame() = default;
 
 inline void UndoFrame::clear() {
     patches_.clear();
+    sizes_.clear();
     snap_.reset();
     has_snap_ = false;
 }
@@ -925,6 +1006,9 @@ inline void UndoFrame::clear() {
 inline void PredictorUndoStack::clear() { frames_.clear(); }
 
 inline UndoFrame& PredictorUndoStack::push_frame() {
+    // Frames are referenced by live UndoRecorderScopes while deeper frames are
+    // pushed; reserve so emplace_back never relocates them (bit-tree depth <= 17).
+    if (frames_.capacity() < kReserve) frames_.reserve(kReserve);
     frames_.emplace_back();
     return frames_.back();
 }

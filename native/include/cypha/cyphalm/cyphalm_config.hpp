@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace cypha::cyphalm {
 
@@ -308,6 +309,19 @@ struct CyphaLMConfig {
     /// Lossy quality: prune hash slots with total state count below this (0=off).
     /// Env: ``CYPHA_HP_PRUNE_COLD_MIN_N``. Applied after warmup via ``prune_cold_slots()``.
     int hp_prune_cold_min_n = 0;
+
+    /// Lossy mixer knobs; each maps 1:1 onto ``hp::Config`` and 0 keeps gate24 exactly.
+    /// Set together by ``apply_hp_lossy_tier`` (env ``CYPHA_HP_LOSSY_TIER``). They change
+    /// predictions, so they are saved with the model and must match the ``.hpbin`` tables.
+    /// Measurements: docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md.
+    std::uint64_t hp_cm_drop = 0;    ///< bit i drops context model i (``hp::Predictor::CmId``)
+    int hp_cm_bits_cap = 0;          ///< cap every context-model table at this many bits
+    std::uint32_t hp_gate_drop = 0;  ///< bit j drops mixer weight set j (``hp::Predictor::Gate``)
+    int hp_mixer_skip = 0;           ///< skip mixer update when |err| < this (gate24 = 32)
+    int hp_match_bits_cap = 0;       ///< cap the 13 byte-match hash tables at this many bits
+    int hp_pool_slots = 0;           ///< keep this many discovered-context slots (gate24 = 12)
+    int hp_pool_bits_cap = 0;        ///< cap discovered-context tables at this many bits
+    std::string hp_lossy_tier;       ///< name of the applied tier ("" = gate24), informational
 };
 
 /// Compile-time ``HP_SLOT_MAX`` baked into this binary (24, gate24).
@@ -337,6 +351,11 @@ void apply_hp_lossy_recipe(CyphaLMConfig& cfg, int mem_bits);
 /// Overlay lossy env vars (``CYPHA_HP_LOSSY_MEM``, ``CYPHA_HP_SERVE_COMPACT``,
 /// ``CYPHA_HP_PRUNE_COLD_MIN_N``). Safe no-op when unset.
 void apply_hp_lossy_env(CyphaLMConfig& cfg);
+
+/// Lossy mixer tier by name: "" / "gate24" (exact), plus the measured tiers listed in
+/// ``hp_lossy_tier_names()``. Throws on an unknown name. Keeps ``hp_lossy_mem``.
+void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier);
+std::vector<std::string> hp_lossy_tier_names();
 
 /// Effective table bits after lossy override.
 int hp_effective_table_bits(const CyphaLMConfig& cfg);

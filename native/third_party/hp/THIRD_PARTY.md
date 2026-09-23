@@ -2,6 +2,14 @@
 
 Source: https://github.com/odin-loki/CompressionAlgorithm (branch `master`, `hp/` tree)
 
+**Local changes.** Reduced to the gate24 recipe: every ablation flag resolved to its
+gate24 value and the rejected branches removed (bit-identical; see
+`docs/reports/CYPHALM_HP_GATE24_STRIP.md`). Added on top: runtime lossy knobs on
+`hp::Config`, cache-line prefetch of the next context slots, and undo-log fixes so
+speculative bit-tree scoring leaves the live predictor untouched (DMC node splits
+and word-match resets were not recorded). See
+`docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md`.
+
 Cypha uses this integer-exact Hutter Prize context-mixing compressor as its LLM /
 sequence algorithm. Encoder and decoder share the same model code path inside
 `hp::Predictor`.

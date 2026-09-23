@@ -17,6 +17,7 @@
 #include <ostream>
 #include <vector>
 
+#include "hp/undo.hpp"
 #include "hp/blob_io.hpp"
 #include "hp/models.hpp"
 
@@ -77,6 +78,7 @@ class WordMatchModel {
         const int pred_byte = ring_->at(ptr_);
         if (bitpos > 0) {
             if (((pred_byte | 0x100) >> (8 - bitpos)) != c0) {
+                hp_undo_note(len_);  // speculative bit-tree branches must not kill the live match
                 len_ = 0;
                 return 0;
             }

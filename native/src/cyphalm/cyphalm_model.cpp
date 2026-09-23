@@ -40,9 +40,7 @@ void CyphaLMModel::init_components() {
             normalize_hp_table_bits(cfg_);
         }
     }
-    const int mem = hp_effective_table_bits(cfg_);
-    hp_ = std::make_unique<HpSequenceBackend>(
-        hp_config_from_cyphalm(mem, cfg_.hp_mixer_lr, cfg_.hp_gria));
+    hp_ = std::make_unique<HpSequenceBackend>(hp_config_from_cyphalm(cfg_));
     if (cfg_.hp_serve_compact) {
         hp_->compact_for_serve();
     }
@@ -284,6 +282,14 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"hp_lossy_mem", cfg_.hp_lossy_mem},
         {"hp_serve_compact", cfg_.hp_serve_compact},
         {"hp_prune_cold_min_n", cfg_.hp_prune_cold_min_n},
+        {"hp_lossy_tier", cfg_.hp_lossy_tier},
+        {"hp_cm_drop", cfg_.hp_cm_drop},
+        {"hp_cm_bits_cap", cfg_.hp_cm_bits_cap},
+        {"hp_gate_drop", cfg_.hp_gate_drop},
+        {"hp_mixer_skip", cfg_.hp_mixer_skip},
+        {"hp_match_bits_cap", cfg_.hp_match_bits_cap},
+        {"hp_pool_slots", cfg_.hp_pool_slots},
+        {"hp_pool_bits_cap", cfg_.hp_pool_bits_cap},
         {"hp_slot_max", cfg_.hp_slot_max},
         {"hp_slot_compile_max", hp_compile_slot_max()},
         {"hp_mixer_lr", cfg_.hp_mixer_lr},

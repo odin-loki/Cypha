@@ -28,6 +28,15 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"hp_slot_max", cfg.hp_slot_max},
         {"hp_mixer_lr", cfg.hp_mixer_lr},
         {"hp_gria", cfg.hp_gria},
+        {"hp_lossy_mem", cfg.hp_lossy_mem},
+        {"hp_lossy_tier", cfg.hp_lossy_tier},
+        {"hp_cm_drop", cfg.hp_cm_drop},
+        {"hp_cm_bits_cap", cfg.hp_cm_bits_cap},
+        {"hp_gate_drop", cfg.hp_gate_drop},
+        {"hp_mixer_skip", cfg.hp_mixer_skip},
+        {"hp_match_bits_cap", cfg.hp_match_bits_cap},
+        {"hp_pool_slots", cfg.hp_pool_slots},
+        {"hp_pool_bits_cap", cfg.hp_pool_bits_cap},
         {"train_epochs", cfg.train_epochs},
         {"view_schedule", cfg.view_schedule},
         {"view_block_size", cfg.view_block_size},
@@ -59,6 +68,15 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_i("hp_slot_max", cfg.hp_slot_max);
     get_i("hp_mixer_lr", cfg.hp_mixer_lr);
     get_b("hp_gria", cfg.hp_gria);
+    get_i("hp_lossy_mem", cfg.hp_lossy_mem);
+    if (c.contains("hp_lossy_tier")) cfg.hp_lossy_tier = c.at("hp_lossy_tier").get<std::string>();
+    get_u64("hp_cm_drop", cfg.hp_cm_drop);
+    get_i("hp_cm_bits_cap", cfg.hp_cm_bits_cap);
+    if (c.contains("hp_gate_drop")) cfg.hp_gate_drop = c.at("hp_gate_drop").get<std::uint32_t>();
+    get_i("hp_mixer_skip", cfg.hp_mixer_skip);
+    get_i("hp_match_bits_cap", cfg.hp_match_bits_cap);
+    get_i("hp_pool_slots", cfg.hp_pool_slots);
+    get_i("hp_pool_bits_cap", cfg.hp_pool_bits_cap);
     normalize_hp_table_bits(cfg);
     if (c.contains("context_mode")) {
         cfg.context_mode = parse_context_mode(c.at("context_mode").get<std::string>());

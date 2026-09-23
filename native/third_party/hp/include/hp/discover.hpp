@@ -75,9 +75,12 @@ class DiscoveryPool {
     static constexpr int kEvalBytes = 1024;   // review cadence
     static constexpr int kMinAge = 3;         // reviews before a slot is eligible
 
-    DiscoveryPool(int table_bits, std::uint64_t seed) : rng_(seed) {
+    // ``active`` < kSlots keeps only the first ``active`` slots (Config::pool_slots);
+    // the rest are dropped context models (no table, zero mixer input).
+    DiscoveryPool(int table_bits, std::uint64_t seed, int active = kSlots)
+        : active_(active > 0 && active < kSlots ? active : kSlots), rng_(seed) {
         for (int i = 0; i < kSlots; ++i) {
-            models_.emplace_back(table_bits, 255);
+            models_.emplace_back(i < active_ ? table_bits : 0, 255);
             mask_[i] = fresh_mask();
             loss_[i] = 0;
             age_[i] = 0;
@@ -103,6 +106,10 @@ class DiscoveryPool {
         }
     }
 
+    void prefetch(int c0) const {
+        for (int i = 0; i < active_; ++i) models_[i].prefetch(c0);
+    }
+
     void predict(int c0, int backoff_p12, int* out) {
         for (int i = 0; i < kSlots; ++i)
             models_[i].predict(c0, backoff_p12, out + i * ContextModel::kOutputs);
@@ -113,7 +120,7 @@ class DiscoveryPool {
     // ens_err: |ensemble probability - outcome| in 12-bit. Slots are charged
     // and credited relative to how hard this bit was for the ensemble.
     void update(int y, int ens_err) {
-        for (int i = 0; i < kSlots; ++i) {
+        for (int i = 0; i < active_; ++i) {
             models_[i].update(y);
             const int pa = y ? p_[i] : 4096 - p_[i];
             const std::uint32_t cost =
@@ -135,7 +142,7 @@ class DiscoveryPool {
         // Kill the worst eligible slot; recycle it onto a fresh candidate.
         int worst = -1;
         std::uint64_t worst_loss = 0;
-        for (int i = 0; i < kSlots; ++i) {
+        for (int i = 0; i < active_; ++i) {
             if (age_[i] < kMinAge) continue;
             if (worst < 0 || loss_[i] > worst_loss) { worst = i; worst_loss = loss_[i]; }
         }
@@ -241,6 +248,7 @@ class DiscoveryPool {
         return 0x0110u;
     }
 
+    int active_;
     Rng rng_;
     std::vector<ContextModel> models_;
     std::uint32_t mask_[kSlots];

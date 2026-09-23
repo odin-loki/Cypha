@@ -136,6 +136,10 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
     if (compact != nullptr && compact[0] == '1' && compact[1] == '\0') {
         cfg.hp_serve_compact = true;
     }
+    const char* tier = std::getenv("CYPHA_HP_LOSSY_TIER");
+    if (tier != nullptr && tier[0] != '\0') {
+        apply_hp_lossy_tier(cfg, tier);
+    }
     const char* prune = std::getenv("CYPHA_HP_PRUNE_COLD_MIN_N");
     if (prune != nullptr && prune[0] != '\0') {
         cfg.hp_prune_cold_min_n = std::max(0, std::atoi(prune));
@@ -143,6 +147,25 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
     if (cfg.hp_lossy_mem > 0) {
         normalize_hp_table_bits(cfg);
     }
+}
+
+std::vector<std::string> hp_lossy_tier_names() {
+    return {"gate24"};
+}
+
+void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
+    cfg.hp_cm_drop = 0;
+    cfg.hp_cm_bits_cap = 0;
+    cfg.hp_gate_drop = 0;
+    cfg.hp_mixer_skip = 0;
+    cfg.hp_match_bits_cap = 0;
+    cfg.hp_pool_slots = 0;
+    cfg.hp_pool_bits_cap = 0;
+    if (tier.empty() || tier == "gate24") {
+        cfg.hp_lossy_tier.clear();
+        return;
+    }
+    throw std::runtime_error("unknown CyphaLM lossy tier: " + tier);
 }
 
 void apply_hp_production_recipe(CyphaLMConfig& cfg) {
