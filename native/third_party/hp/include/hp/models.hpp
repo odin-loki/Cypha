@@ -151,16 +151,6 @@ class ContextModel {
     // fx2 sets(): keep a mixer slot but do not pollute the table.
     void set_idle() { idle_ = true; h_ = 0; }
 
-    // Warm the cache line predict(c0) will probe. No state change, so the
-    // result is bit-identical; it only lets the 35 misses overlap.
-    void prefetch(int c0) const {
-        if (off_) return;
-        const std::uint32_t i =
-            (h_ ^ (static_cast<std::uint32_t>(c0) * 0x9E3779B1u)) & mask_;
-        hp_prefetch(t_.data() + i);
-        hp_prefetch(chk_.data() + i);
-    }
-
     // Writes kOutputs stretched values into out[]. backoff is the parent
     // order's probability, used by the PY estimate.
     void predict(int c0, int backoff_p12, int* out) {

@@ -405,7 +405,6 @@ class Predictor {
     }
 
     void update(int y) {
-        if (bitpos_ < 7) prefetch_ctx_((c0_ << 1) | y);
         gria_.account_bit(y ? pr_final_ : 4096 - pr_final_);
 
         mixer_.update(y);
@@ -468,13 +467,7 @@ class Predictor {
             if (UndoRecorderScope::active() == nullptr) {
                 end_of_byte(byte);
             }
-            prefetch_ctx_(1);
         }
-    }
-
-    void prefetch_ctx_(int c0) const {
-        for (int i = 0; i < n_ctx_chain_; ++i) ctx_chain_[i]->prefetch(c0);
-        pool_.prefetch(c0);
     }
 
     /// Lossy serve: reset context hash slots with fewer than ``min_total`` bit

@@ -17,15 +17,38 @@ serve-path problems that turned up on the way.
 | tier (`CYPHA_HP_LOSSY_TIER`) | enwik8 8 MiB bpc | Δ vs gate24 | peak RSS | observe time |
 |---|---:|---:|---:|---:|
 | `gate24` (default, exact) | 1.611729 | — | 1,538 MB | 1.00× |
-| **`lean`** | **1.609866** | **−0.0019** | **1,078 MB (−30%)** | pending |
-| `balanced` | 1.612457 | +0.0007 | 814 MB (−47%) | pending |
-| `compact` | 1.617400 | +0.0057 | 670 MB (−56%) | pending |
-| `small` | 1.629798 | +0.0181 | 404 MB (−74%) | pending |
-| `tiny` | 1.652317 | +0.0406 | 253 MB (−84%) | pending |
+| **`lean`** | **1.609866** | **−0.0019** | **1,078 MB (−30%)** | **1.35× faster** |
+| `balanced` | 1.612457 | +0.0007 | 814 MB (−47%) | 1.38× |
+| `compact` | 1.617400 | +0.0057 | 670 MB (−56%) | 1.37× |
+| `small` | 1.629798 | +0.0181 | 404 MB (−74%) | 1.37× |
+| `tiny` | 1.652317 | +0.0406 | 253 MB (−84%) | 1.39× |
 | old `mem20` (plan, for reference) | 1.618017 | +0.0063 | 1,913 MB* | — |
 
 \* The plan's mem20 RSS was measured on the old eager-zero tables with a
 second predictor, so it isn't directly comparable. Its bpc is.
+
+Observe time is solo on the first 2 MiB (one process on an idle box), relative
+to gate24 on the same binary. gate24 on this branch is itself 1.16× faster
+than the v2.5.0 vendored tree (huge-page tables), so `lean` is ~1.55× faster
+than v2.5.0. The tiers ran on the build that still had prefetch; it made no
+measurable difference (last two gate24 rows), so it was removed afterwards:
+
+| build (2 MiB, mem 22) | seconds | bytes/s | bpc |
+|---|---:|---:|---:|
+| v2.5.0 vendored hp (eager `std::vector` tables) | 274.9 (+1.1 construct) | 7,629 | 1.684211 |
+| this branch, gate24, with next-slot prefetch (the build the tiers ran on) | 239.6 (+0.06 construct) | 8,752 | 1.684211 |
+| this branch, gate24, no `MADV_HUGEPAGE` | 312.9 | 6,703 | 1.684211 |
+| this branch, gate24, prefetch removed (shipped) | 237.0 | 8,849 | 1.684211 |
+| `lean` | 177.2 | 11,837 | 1.681291 |
+| `balanced` | 173.3 | 12,103 | 1.681735 |
+| `compact` | 174.4 | 12,028 | 1.682953 |
+| `small` | 175.4 | 11,955 | 1.686952 |
+| `tiny` | 172.8 | 12,138 | 1.695866 |
+
+Tier speed comes from doing 20% fewer context lookups per bit (8 models and
+4 pool slots fewer). Smaller tables barely help beyond that once huge pages
+are on. The lever for speed is fewer experts, and the lever for RAM is
+smaller tables.
 
 - **`lean` beats gate24 on every axis at once.** It drops 8 wiki context
   models, shrinks the discovery pool to 8 slots and caps the pool and
@@ -40,8 +63,8 @@ second predictor, so it isn't directly comparable. Its bpc is.
   are its inputs: which experts it gets, and how big their tables are.
 - **Serve path fixes (lossless):** speculative bit-tree scoring was leaking
   into the live model (up to 0.18 nats on later predictions). It is now
-  exact, ~1.85× faster, and the predictor constructs in ~55 ms instead of
-  ~8 s. See [Serve path](#serve-path-correctness-and-speed).
+  exact. Full-vocab `predict_next` at mem 22 goes from 208 ms to 8 ms (26×),
+  and the predictor constructs in ~60 ms instead of ~1–8 s. See [Serve path](#serve-path-correctness-and-speed).
 
 ## Where the time and RAM go (gate24, mem 22)
 
@@ -203,14 +226,14 @@ call instead of 510 + 510.
 |---|---:|---:|
 | max \|Δ log p\| bit-tree vs fresh clone | 0.27 | 0 |
 | live model drift after serving (50 bytes) | 0.18 | 0 |
-| `next_byte_log_probs(256)` | 17.8 ms | 9.6 ms |
+| `next_byte_log_probs(256)`, old vs new DFS on the fixed undo log | 17.8 ms | 9.6 ms |
 
 Serve latency at mem 22, `hp_inference_bench --iters 5` (64 KiB warmup), solo on
 this machine, `main` build vs this branch:
 
 | | `main` | this branch | speedup |
 |---|---:|---:|---:|
-| `predict_next` (full 256-way distribution) | 207.6 ms | 8.1 ms | 25.8× |
+| `predict_next` (full 256-way distribution) | 207.6 / 211.4 ms | 8.1 / 8.7 ms | 25× |
 | `next_byte_log_probs(256)` | 207.2 ms | 7.3 ms | 28× |
 | `serve_greedy_next` | 4.37 ms | 0.26 ms | 17× |
 | RSS after model construct | 1,564 MB | 81 MB | |
@@ -225,9 +248,11 @@ up front). It's back to demand-zero pages (`mmap`; `calloc` on Windows) with
 `MADV_HUGEPAGE`. Predictions are identical; construct drops from ~8 s to
 ~55 ms at mem 22, and RSS starts at ~80 MB and grows with use.
 
-**Prefetch:** the next hash slot of every context model and pool slot is
-prefetched as soon as the coded bit is known, so the ~47 cache misses per bit
-overlap. Predictions are identical. Speed A/B pending (solo run in progress).
+**Prefetch (tried, dropped):** prefetching every model's next slot as soon as
+the coded bit is known looked ~25% faster in a noisy early test. Solo, with
+huge-page tables, it measured 237.0 s against 239.6 s without, which is noise.
+Huge pages already remove the TLB misses the prefetch was hiding. It was
+removed again; upstream hp's "no prefetch" note stands.
 
 ## Tests
 
@@ -272,4 +297,4 @@ CYPHA_HP_LOSSY_TIER=compact build/cyphalm_generate --prompt "The " --max-bytes 3
 - Only enwik8 was measured. The dropped models are wiki-markup models, so
   expect `lean` to be neutral-to-better on plain text, but that is untested.
 - Windows uses `calloc` for tables (may zero eagerly), and MSVC gets
-  `_mm_prefetch`. Not compiled here: no MSVC/mingw on this machine.
+  no huge pages. Not compiled here: no MSVC/mingw on this machine.

@@ -106,10 +106,6 @@ class DiscoveryPool {
         }
     }
 
-    void prefetch(int c0) const {
-        for (int i = 0; i < active_; ++i) models_[i].prefetch(c0);
-    }
-
     void predict(int c0, int backoff_p12, int* out) {
         for (int i = 0; i < kSlots; ++i)
             models_[i].predict(c0, backoff_p12, out + i * ContextModel::kOutputs);

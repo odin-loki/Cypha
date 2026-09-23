@@ -14,7 +14,7 @@ milestone or a significant self-contained change.
 ### Changed
 - **Vendored hp is gate24-only:** all 289 ablation flags resolved into the source and the rejected branches deleted (hp include + main: 15,706 → 6,687 lines). Predictions and archives are bit-identical; `HpFlags.cmake` no longer parses `v78_flags.ps1`. Lab-only tooling removed. [`docs/reports/CYPHALM_HP_GATE24_STRIP.md`](docs/reports/CYPHALM_HP_GATE24_STRIP.md).
 - **Bit-tree serve DFS:** one `predict()` per node and no update at leaves (382 + 254 calls instead of 510 + 510). Undo log appends without the O(n²) duplicate scan.
-- **hp tables are demand-zero again** (`mmap` + `MADV_HUGEPAGE`; `calloc` on Windows): gate24 constructs in ~55 ms instead of ~8 s, and RSS grows with use. Context-slot prefetch. Both are prediction-identical.
+- **hp tables are demand-zero again** (`mmap` + `MADV_HUGEPAGE`; `calloc` on Windows): gate24 constructs in ~55 ms instead of ~8 s, and RSS grows with use. Observe is 1.16× faster than v2.5.0 (huge pages), `lean` 1.55×; full-vocab `predict_next` at mem 22 208 ms → 8 ms. Prediction-identical.
 
 ### Fixed
 - **Serve scoring leaked into the live model.** `DmcModel::update` and the `WordMatchModel` mismatch reset were not undo-recorded, so each `serve_predict_next` could change later predictions (up to 0.18 nats) and the served distribution differed from fresh-clone scoring (up to 0.27 nats). Now exact; `hp_bit_tree_smoke` checks it on text.

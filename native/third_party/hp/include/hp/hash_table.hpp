@@ -20,24 +20,10 @@
 #if !defined(_WIN32)
 #include <sys/mman.h>
 #endif
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
-#include <xmmintrin.h>
-#endif
 
 #include "hp/blob_io.hpp"
 
 namespace hp {
-
-// Cache-line prefetch hint (no semantic effect).
-inline void hp_prefetch(const void* p) {
-#if defined(__GNUC__) || defined(__clang__)
-    __builtin_prefetch(p);
-#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
-    _mm_prefetch(static_cast<const char*>(p), _MM_HINT_T0);
-#else
-    (void)p;
-#endif
-}
 
 // Fixed-size, zero-initialised array backed by demand-zero pages.
 // Copyable (deep copy) so Predictor::copy_state_from keeps working.

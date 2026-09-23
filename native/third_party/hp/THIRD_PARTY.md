@@ -5,7 +5,7 @@ Source: https://github.com/odin-loki/CompressionAlgorithm (branch `master`, `hp/
 **Local changes.** Reduced to the gate24 recipe: every ablation flag resolved to its
 gate24 value and the rejected branches removed (bit-identical; see
 `docs/reports/CYPHALM_HP_GATE24_STRIP.md`). Added on top: runtime lossy knobs on
-`hp::Config`, cache-line prefetch of the next context slots, and undo-log fixes so
+`hp::Config`, demand-zero huge-page tables (as upstream), and undo-log fixes so
 speculative bit-tree scoring leaves the live predictor untouched (DMC node splits
 and word-match resets were not recorded). See
 `docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md`.
