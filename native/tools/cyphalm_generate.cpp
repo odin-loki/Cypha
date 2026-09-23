@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
@@ -18,7 +19,8 @@ void usage(const char* argv0) {
                  "[--beam W] [--temperature T] [--top-p P] [--top-k K] [--seed S] [--table-bits M] "
                  "[--warmup-file PATH] [--warmup-bytes N] [--ban-last-k K] "
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
-                 "[--latency]\n",
+                 "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
+                 "[--learn-from-output] [--latency]\n",
                  argv0);
 }
 
@@ -55,7 +57,7 @@ int main(int argc, char** argv) {
     std::string prompt = "The quick brown fox ";
     int max_bytes = 32;
     std::string strategy = "temperature";
-    double temperature = 0.9;
+    double temperature = cypha::cyphalm::DecodeParams{}.temperature;
     double top_p = 0.9;
     int top_k = 40;
     int beam = 1;
@@ -68,6 +70,11 @@ int main(int argc, char** argv) {
     double repetition_penalty = 1.0;
     int repetition_window = 32;
     double text_like_prior = 0.0;
+    std::string load_json, tier;
+    const cypha::cyphalm::DecodeParams defaults;
+    double min_p = defaults.min_p;
+    int no_repeat = defaults.no_repeat_ngram;
+    bool learn_from_output = defaults.learn_from_output;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -103,6 +110,16 @@ int main(int argc, char** argv) {
             repetition_window = std::atoi(argv[++i]);
         } else if (arg == "--text-like-prior" && i + 1 < argc) {
             text_like_prior = std::atof(argv[++i]);
+        } else if (arg == "--load" && i + 1 < argc) {
+            load_json = argv[++i];
+        } else if (arg == "--tier" && i + 1 < argc) {
+            tier = argv[++i];
+        } else if (arg == "--min-p" && i + 1 < argc) {
+            min_p = std::atof(argv[++i]);
+        } else if (arg == "--no-repeat" && i + 1 < argc) {
+            no_repeat = std::atoi(argv[++i]);
+        } else if (arg == "--learn-from-output") {
+            learn_from_output = true;
         } else if (arg == "--help" || arg == "-h") {
             usage(argv[0]);
             return 0;
@@ -117,8 +134,13 @@ int main(int argc, char** argv) {
     cypha::cyphalm::apply_hp_production_recipe(cfg);
     cfg.vocab_size = 256;
     cfg.hp_table_bits = table_bits;
+    if (!tier.empty()) cypha::cyphalm::apply_hp_lossy_tier(cfg, tier);
 
-    cypha::cyphalm::CyphaLMModel model(cfg);
+    // A trained checkpoint (cyphalm_train / cyphalm_lm_quality --save) or a cold model.
+    cypha::cyphalm::CyphaLMModel model = load_json.empty()
+                                             ? cypha::cyphalm::CyphaLMModel(cfg)
+                                             : cypha::cyphalm::load_cyphalm_model(load_json);
+    cfg = model.config();
     const std::vector<int> prompt_ids = bytes_from_text(prompt, cfg.vocab_size);
 
     cypha::cyphalm::DecodeParams params;
@@ -132,6 +154,9 @@ int main(int argc, char** argv) {
     params.repetition_penalty = repetition_penalty;
     params.repetition_window = repetition_window;
     params.text_like_prior = text_like_prior;
+    params.min_p = min_p;
+    params.no_repeat_ngram = no_repeat;
+    params.learn_from_output = learn_from_output;
     if (!warmup_file.empty() && warmup_bytes > 0) {
         params.warmup_ids =
             cypha::cyphalm::load_warmup_bytes(warmup_file, warmup_bytes, cfg.vocab_size);
