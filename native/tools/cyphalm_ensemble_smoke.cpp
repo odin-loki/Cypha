@@ -3,11 +3,13 @@
 /// members advance in step, and word-lookahead generation (exact rewinds over
 /// every model) changes nothing learned.
 #include <cmath>
+#include <filesystem>
 #include <cstdio>
 #include <random>
 #include <string>
 #include <vector>
 
+#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
@@ -122,6 +124,32 @@ int main() {
             return 1;
         }
     }
-    std::printf("cyphalm_ensemble_smoke OK mix exact over 300 bytes; lookahead kept both models; weights learn\n");
+    // Manifest: save two checkpoints + manifest, load it as one model, and get
+    // the same distribution as an ensemble built directly.
+    {
+        const auto dir = std::filesystem::temp_directory_path() / "cyphalm_ensemble_smoke";
+        std::filesystem::create_directories(dir);
+        cypha::cyphalm::CyphaLMModel p(cfg), q(cfg), direct(cfg), dm(cfg);
+        train(p, ta);
+        train(q, tb);
+        train(direct, ta);
+        train(dm, tb);
+        cypha::cyphalm::save_cyphalm_model(p, (dir / "a").string());
+        cypha::cyphalm::save_cyphalm_model(q, (dir / "b").string());
+        cypha::cyphalm::save_cyphalm_ensemble_manifest((dir / "ens.json").string(), {"a.json", "b.json"});
+        auto loaded = cypha::cyphalm::load_cyphalm_model((dir / "ens.json").string());
+        direct.add_ensemble_member(std::move(dm), 0.5);
+        const auto l1 = loaded.hp_backend().serve_next_byte_log_probs(256);
+        const auto l2 = direct.hp_backend().serve_next_byte_log_probs(256);
+        double err = 0.0;
+        for (int i = 0; i < 256; ++i) err = std::max(err, std::abs(l1[i] - l2[i]));
+        std::filesystem::remove_all(dir);
+        if (loaded.hp_backend().ensemble_size() != 1 || err > 1e-9) {
+            std::printf("cyphalm_ensemble_smoke FAIL manifest: %zu members, err %.3g\n",
+                        loaded.hp_backend().ensemble_size(), err);
+            return 1;
+        }
+    }
+    std::printf("cyphalm_ensemble_smoke OK mix exact over 300 bytes; lookahead kept both models; weights learn; manifest\n");
     return 0;
 }

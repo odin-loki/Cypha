@@ -160,12 +160,55 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     out << meta.dump(2) << "\n";
 }
 
+namespace {
+
+/// Ensemble manifest: {"cyphalm_ensemble": 1, "members": [{"checkpoint": path,
+/// "weight": w?}, ...], "learning_rate": r?}. The first member is the primary;
+/// paths are relative to the manifest; weights default to equal shares.
+CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& meta) {
+    const auto& ms = meta.at("members");
+    if (!ms.is_array() || ms.empty()) throw std::runtime_error("ensemble manifest has no members");
+    auto resolve = [&](const std::string& p) {
+        const fs::path q(p);
+        return (q.is_absolute() ? q : jp.parent_path() / q).string();
+    };
+    const double equal = 1.0 / static_cast<double>(ms.size());
+    CyphaLMModel model = load_cyphalm_model(resolve(ms.at(0).at("checkpoint").get<std::string>()));
+    for (std::size_t i = 1; i < ms.size(); ++i) {
+        const auto& m = ms.at(i);
+        model.add_ensemble_member(load_cyphalm_model(resolve(m.at("checkpoint").get<std::string>())),
+                                  m.value("weight", equal));
+    }
+    if (meta.contains("learning_rate")) {
+        model.hp_backend().set_ensemble_learning_rate(meta.at("learning_rate").get<double>());
+    }
+    return model;
+}
+
+}  // namespace
+
+void save_cyphalm_ensemble_manifest(const std::string& manifest_path,
+                                    const std::vector<std::string>& member_checkpoints,
+                                    double learning_rate) {
+    nlohmann::json meta;
+    meta["cyphalm_ensemble"] = 1;
+    meta["note"] = "Serve-time ensemble: the first member is the primary; distributions are "
+                   "mixed geometrically (CyphaLMModel::add_ensemble_member).";
+    meta["members"] = nlohmann::json::array();
+    for (const auto& c : member_checkpoints) meta["members"].push_back({{"checkpoint", c}});
+    meta["learning_rate"] = learning_rate;
+    std::ofstream out(manifest_path);
+    if (!out) throw std::runtime_error("cannot write ensemble manifest: " + manifest_path);
+    out << meta.dump(2) << "\n";
+}
+
 CyphaLMModel load_cyphalm_model(const std::string& json_path) {
     const fs::path jp = resolve_json_path(json_path);
     std::ifstream in(jp);
     if (!in) throw std::runtime_error("cannot open checkpoint json: " + jp.string());
     nlohmann::json meta;
     in >> meta;
+    if (meta.contains("cyphalm_ensemble")) return load_ensemble_manifest(jp, meta);
     if (!meta.contains("config")) throw std::runtime_error("checkpoint missing config");
     CyphaLMModel model(config_from_json(meta.at("config")));
 
