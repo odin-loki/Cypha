@@ -235,6 +235,91 @@ decoder picks what the model finds likely, so read them with distinct
 `word_no_repeat` (12). CLI `--word-candidates`; REST `word_candidates`,
 `word_no_repeat`; streaming emits the bytes once a word is chosen.
 
+## Ensembles of shard models
+
+The largest gain in held-out quality this round came from ensembles, not a
+bigger model. hp models trained independently on **disjoint** slices of the
+data and mixed geometrically (normalised weighted mean of log probabilities)
+beat one model trained on all of those slices at once. Held-out NLL, 8 KiB,
+lean tier; shards are 8 MiB slices of enwik8 at 0, 16, 32, 48 and 80 MB:
+
+| model | data | RAM | wiki | Alice | top-1 wiki |
+|---|---|---:|---:|---:|---:|
+| 1 × 8 MiB | 8 MiB | 1.1 GB | 1.8259 | 2.2532 | 63.1% |
+| 1 × 16 MiB (both slices) | 16 MiB | 1.1 GB | 1.7746 | 2.2704 | 64.0% |
+| **2 × 8 MiB ensemble** | 16 MiB | 2.2 GB | **1.7583** | **2.2060** | 64.8% |
+| 4 × 8 MiB ensemble | 32 MiB | 4.4 GB | 1.7248 | 2.1906 | 64.9% |
+| 5 × 8 MiB ensemble | 40 MiB | 5.5 GB | 1.7168 | 2.1841 | 65.0% |
+| 1 × 95 MB | 95 MB | 1.1 GB | 1.7608 | 2.2158 | 64.1% |
+| 1 × 95 MB, table bits 24 | 95 MB | 2.0 GB | 1.7234 (16 KiB) | 2.0605 (16 KiB) | |
+| 95 MB + 5 × 8 MiB | | 6.6 GB | **1.6978** | **2.1642** | 65.4% |
+| 2 × 8 MiB, table bits 20 | 16 MiB | 1.3 GB | 1.7624 | 2.2082 | 64.7% |
+| 4 × 8 MiB, table bits 20 | 32 MiB | 2.6 GB | 1.7302 | 2.1925 | 64.9% |
+
+- **Diversity, not capacity.** One model on 16 MiB gains 0.05 on wiki and
+  *loses* on Alice; two models on the same 16 MiB gain 0.07 and 0.05. Four
+  8 MiB shards beat the model trained on 95 MB. Quadrupling the 95 MB model's
+  tables gains only 0.008 (wiki, 16 KiB: 1.7312 → 1.7234) and nothing on Alice,
+  so that model is not table-bound either.
+- **At equal memory**, two table-bits-20 shards (1.3 GB) beat one table-bits-22
+  model (1.1 GB) by 0.064 on wiki and 0.045 on Alice.
+- Returns diminish (2 → 4 → 5 shards: −0.034, −0.008), and each member adds its
+  scoring time (~3 ms/byte on one core).
+- Weights: equal weights are close to best. For 95 MB + 8 MiB the best was 0.6
+  on the bigger model (1.7213 vs 1.7248 equal). Linear mixing is worse than
+  geometric (1.7352), and fixed-share switching is worse still.
+- Calibration: ECE rises from 1.4% to ~2.5% and the best temperature moves to
+  about 0.9 on wiki (−0.004) but stays 1.0 on Alice. Not worth a knob.
+- Shards train in parallel on separate cores, so the recipe scales training
+  time and quality together.
+
+`CyphaLMModel::add_ensemble_member(model, weight)` attaches pretrained models
+for serving. Every serve path fans out (scoring, context advance, learning
+switch, stream reset, serve mixer rate), and `hp::StreamRewind` covers every
+member, so word lookahead works on ensembles. `cyphalm_ensemble_smoke` checks
+the mix against a hand-computed blend. CLI: `cyphalm_generate --ensemble
+CKPT[:W]`; harness: `cyphalm_lm_quality --member CKPT`.
+
+**Generation from ensembles.** Mixing flattens the confident, copied runs a
+single model produces (a single 8 MiB model with lookahead sometimes quotes
+training text verbatim: *"The art of putting together a set is hard to put
+into words, but the tunes must flow from one…"*). With word lookahead on top,
+ensemble samples lean to safe function words (*"…the information and
+commission and the prototype and the original sources and the southern…"*).
+Ensembles are the better *distribution*. For free generation a single model,
+or an ensemble with lower `word_candidates`, reads better. Generation
+benchmark (8 wiki prompts, `cyphalm_gen_bench`, judge lean 16 MiB):
+
+| generator | judge bits (ref 2.13) | distinct 4-grams (ref 0.80) | ms/byte |
+|---|---:|---:|---:|
+| lean 8 MiB, byte sampling | 1.745 | 0.859 | 1.9 |
+| lean 8 MiB, lookahead K 8 | 1.128 | 0.824 | 7.5–14 |
+| 95 MB, byte sampling | 1.925 | 0.902 | 3.2 |
+| 95 MB, lookahead K 8 | 1.642 | 0.810 | 15 |
+| 2-shard ensemble, K 8 | 1.158 | 0.789 | 37 |
+| 5-shard ensemble, K 8 | 1.195 | 0.769 | 92 |
+
+The judge was trained on the first 16 MiB, so it favours models trained there.
+Compare decoders on one model, not models against each other (held-out NLL
+does that). ms/byte figures come from a loaded 4-core box.
+
+## Other results this round
+
+- **Two training epochs hurt.** Epoch 2 trains at 0.004 bpc because the match
+  models replay the memorised text, and held-out NLL gets worse (wiki
+  1.8259 → 1.8545, Alice 2.2532 → 2.2821). One pass is right for hp.
+- **Serve-time StateMap limits and APM rates** (slower or faster adaptation
+  of the context models and APMs) moved wiki and Alice in opposite directions
+  by ≤0.004. Not kept.
+- **Two checkpoint bugs fixed.** A loaded or copied predictor lost its
+  word-match window (the rebind replaced it with the full ring mask), and
+  checkpoints left out the sentence memory. Both made a reloaded model predict
+  differently from the saved one; format v2 now round-trips byte-identically.
+  Re-measured, the held-out numbers above are unchanged.
+- **Vocabulary.** hp checkpoints made with the default config had
+  `vocab_size` 128, which truncated serve distributions to ASCII (no UTF-8 in
+  generation). `apply_hp_production_recipe` now always uses 256.
+
 ## LSTM expert (tried, removed)
 
 hp predicts only from contexts it has counted. A recurrent model generalises
@@ -279,6 +364,10 @@ Q=native/build/cyphalm_lm_quality
 $Q --tier lean --train enwik8 --train-bytes 8388608 --save /tmp/pre_lean
 $Q --load /tmp/pre_lean.json --eval enwik8 --eval-offset 96000000 --eval-bytes 16384 --compare-scoring
 $Q --load /tmp/pre_lean.json --eval alice29.txt --eval-offset 20000 --eval-bytes 16384 --frozen-eval --gen-bytes 0
+# ensembles: shards trained on disjoint slices, then mixed
+$Q --tier lean --train enwik8 --train-offset 48000000 --train-bytes 8388608 --save /tmp/pre_48m
+$Q --load /tmp/pre_lean.json --member /tmp/pre_48m.json --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+native/build/cyphalm_gen_bench --load /tmp/pre_lean.json --judge /tmp/pre_16.json --text enwik8 --offset 96000000 --prompts 8
 # serving: history on reset, mixer rate (quarters of trained), word lookahead
 $Q --load /tmp/pre_lean.json --reset-stream full --frozen-eval --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
 $Q --load /tmp/pre_lean.json --serve-lr 2 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0

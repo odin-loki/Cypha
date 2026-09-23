@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean95.json",
+  "mean_distinct_4gram": 0.9022842639593909,
+  "mean_judge_bits": 1.9247116128311963,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.1335930570699135,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 3.242781305625,
+  "prompts": [
+    {
+      "distinct_4gram": 0.8934010152284264,
+      "judge_bits": 1.8987484626916638,
+      "offset": 96000000,
+      "reference_judge_bits": 2.157405785955072,
+      "text": "The attract is said symbolic station sounds, but the the also short was a tied by the the meant art programming simple, the high specific to the same manner of the healed as to or the transmits on set"
+    },
+    {
+      "distinct_4gram": 0.9644670050761421,
+      "judge_bits": 2.103137944771604,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145857158973773,
+      "text": "t;br/&gt;\\n  23. \\n\\n==== part consideration word  is remained little fuel (Eve icons of the image is not in the has built on clear report for such resulted by still state '''icon'' is important but also"
+    },
+    {
+      "distinct_4gram": 0.8730964467005076,
+      "judge_bits": 1.68554478272683,
+      "offset": 96016384,
+      "reference_judge_bits": 2.0253552161003503,
+      "text": "dexing the could affects the sides of the originating engines of the changing and other details is contemporary significant for information is the problem which allows a chicken in a condones and all "
+    },
+    {
+      "distinct_4gram": 0.8984771573604061,
+      "judge_bits": 2.0262305278160806,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160906395728389,
+      "text": "ultuovovery is said it was [[Spanish language|Sants (of allowing Italian cricket]]s and all any by introduced in patients painted in or intervened to become stiles inclinations inclinations or never l"
+    },
+    {
+      "distinct_4gram": 0.9187817258883249,
+      "judge_bits": 1.8879649829162242,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109431580493407,
+      "text": "tml/], the Interactive Fiction Archive] This in the Arab Christians was a very large independent to strictly following and details the and alteration and at one and enforcement cont.  [[Asia]]\\n\\n== His"
+    },
+    {
+      "distinct_4gram": 0.883248730964467,
+      "judge_bits": 1.771878037619282,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213549133702411,
+      "text": "retching to the ability and even the the two changing been very reverence what is to the images as educational experience of the image has a western Orthodox veneration 10) (such as important but also"
+    },
+    {
+      "distinct_4gram": 0.8426395939086294,
+      "judge_bits": 2.028143124293994,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4870946590608485,
+      "text": "uble]]\\n* [[Amphibian]]\\n* [[Amphetamines]]\\n* [[Dattilam]]\\n* [[Ice cream]]\\n* [[Paleologus|Paleologan Person shooter]] a nation and by Geography]\\n* [[Polish authorities for Economic crane|SAS]] the palat"
+    },
+    {
+      "distinct_4gram": 0.9441624365482234,
+      "judge_bits": 1.9960450398138923,
+      "offset": 96057344,
+      "reference_judge_bits": 1.1613387468772267,
+      "text": "g voluntary is of an unsettled (king]]\\n[[sv:Jon]] to the Seventh Crusaders.\\n\\nIn [[Political Interpreters are applications]] are also common fuel of the image to a meaning (seven in 16 so the same [[Em"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 0
+}

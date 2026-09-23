@@ -1,0 +1,75 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.7893401015228427,
+  "mean_judge_bits": 1.1583059791250023,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.1335930570699135,
+  "members": [
+    "/home/user/ckpt/pre_lean_48m.json"
+  ],
+  "min_p": 0.1,
+  "ms_per_byte": 37.585286190625,
+  "prompts": [
+    {
+      "distinct_4gram": 0.8324873096446701,
+      "judge_bits": 1.208541890675647,
+      "offset": 96000000,
+      "reference_judge_bits": 2.157405785955072,
+      "text": "The first relations and the scientific literature of the &quot;.\\n\\n== Relations the construction of the [[Trigonometric algorithms|Allied]] and the [[Catholic Encyclopedia of America]] and the publishe"
+    },
+    {
+      "distinct_4gram": 0.8020304568527918,
+      "judge_bits": 1.1095239367459195,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145857158973773,
+      "text": "t;br/&gt;\\n  20. Malpighian tubes&lt;br/&gt;\\n  20 and the transformation of the [[United Kingdom]] for the original and the religious and structure of the &quot;, &quot;\\n  </revision>\\n  </page>\\n  <page"
+    },
+    {
+      "distinct_4gram": 0.7563451776649747,
+      "judge_bits": 0.9354063060752533,
+      "offset": 96016384,
+      "reference_judge_bits": 2.0253552161003503,
+      "text": " the existence of the continent the external links and the official documentation of the experience the contributor>\\n      <id>1190</id>\\n      <timestamp>2006-03-03T21:23:12Z</timestamp>\\n      <contri"
+    },
+    {
+      "distinct_4gram": 0.8730964467005076,
+      "judge_bits": 1.1786297006737874,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160906395728389,
+      "text": "a]] (which the historical disagreements of the preserve\">[[Image:The Science fictional allegiance]] and the disambiguation). The consolidation of the experience the contributor>\\n      <id>158998</id>\\n"
+    },
+    {
+      "distinct_4gram": 0.7817258883248731,
+      "judge_bits": 0.8524957373025192,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109431580493407,
+      "text": "tml International discovered the experience the contributor>\\n      <id>158999</id>\\n      <timestamp>2006-03-03T21:23:10Z</timestamp>\\n      <contributor>\\n        <username>Alexander proclaimed formulat"
+    },
+    {
+      "distinct_4gram": 0.7157360406091371,
+      "judge_bits": 1.2676520625049923,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213549133702411,
+      "text": "ructure of the &quot;, &quot; and the formation of the extensive and the southern and formally the description of physical and the published the character of the existence of the continent the example"
+    },
+    {
+      "distinct_4gram": 0.8274111675126904,
+      "judge_bits": 1.3651042900317605,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4870946590608485,
+      "text": "ution]]\\n* [[Social behavior exposition Revolution]], [[Belgium]]\\n* [[Saint Lambert of the University of South Africa]]\\n* [[May 21]], [[William Kingdom of the first of the Australia]]\\n* [[Nashville and"
+    },
+    {
+      "distinct_4gram": 0.7258883248730964,
+      "judge_bits": 1.349093908990139,
+      "offset": 96057344,
+      "reference_judge_bits": 1.1613387468772267,
+      "text": "]]\\n[[sv:Konstantin]]\\n[[sv:Konstantinov]]\\n[[sv:Dialect]]\\n[[sv:Ionica]]\\n[[sv:Ligation]]\\n[[sv:Light of the Mediterranean Polynesia]]\\n[[sv:Arthur institutional allegiance]]\\n[[sv:Alfonso de Albuquerque]]\\n["
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 8
+}

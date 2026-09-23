@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.8470812182741116,
+  "mean_judge_bits": 1.316717643618924,
+  "mean_reference_distinct_4gram": 0.9067258883248732,
+  "mean_reference_judge_bits": 3.0373487558156183,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 15.469203301874998,
+  "prompts": [
+    {
+      "distinct_4gram": 0.7969543147208121,
+      "judge_bits": 1.3995310631415683,
+      "offset": 20000,
+      "reference_judge_bits": 2.8549029189306783,
+      "text": "g to the succession of the present the early times of the Almoravides the mosque at the building the history of the [[Almoravid]] and [[Berghouata made a disambiguation of the younger]] and military o"
+    },
+    {
+      "distinct_4gram": 0.8934010152284264,
+      "judge_bits": 0.9113723801089094,
+      "offset": 28192,
+      "reference_judge_bits": 3.030439895671322,
+      "text": " to the declaration of the subjection of a religious teacher was paramount; named his brother completely contributor>\\n      <comment>#redirect [[Almohad]]</comment>\\n      <text xml:space=\"preserve\">''"
+    },
+    {
+      "distinct_4gram": 0.8375634517766497,
+      "judge_bits": 1.6693444963739095,
+      "offset": 36384,
+      "reference_judge_bits": 3.1303989902570053,
+      "text": "s gives the mathematical and the whole party at once crowded round her,?\\ncalling out in the way that the interior to the Almoravides the mosque at the building the history of the [[Almoravid]] and [[B"
+    },
+    {
+      "distinct_4gram": 0.9238578680203046,
+      "judge_bits": 1.069859724361399,
+      "offset": 44576,
+      "reference_judge_bits": 2.5724745505714157,
+      "text": "otball and the southern and the monastery of the fountainhead]]''\\n\\n{{start box}}\\n{{succession box |\\n  before=[[William Shakespeare]]\\n[[Category:Italian painters|Allori, Alessandro]]\\n\\nAlgeria]]\\nAlgeria"
+    },
+    {
+      "distinct_4gram": 0.8883248730964467,
+      "judge_bits": 1.3079748432479337,
+      "offset": 52768,
+      "reference_judge_bits": 3.8159420200283307,
+      "text": "owed the beginning of the young sculptor a chance to the campaign against the year years the year Almoravides the [[Eurovision Song Contest]] and successful attempt to structures and published with th"
+    },
+    {
+      "distinct_4gram": 0.8223350253807107,
+      "judge_bits": 1.372444059562046,
+      "offset": 60960,
+      "reference_judge_bits": 2.633380631253076,
+      "text": "use and discovered the scientific methods and that the hand that probably the history of the founded the theologian and successful attempt to have been raised the house brought about the hereditary or"
+    },
+    {
+      "distinct_4gram": 0.7766497461928934,
+      "judge_bits": 1.470616713172925,
+      "offset": 69152,
+      "reference_judge_bits": 2.669455763675492,
+      "text": "subjection of the house the house with the words and clinical and that the history of the division of the ancient city of the substitutionary schools of the overthrown the whole minute or she had to a"
+    },
+    {
+      "distinct_4gram": 0.8375634517766497,
+      "judge_bits": 1.3325978689827016,
+      "offset": 77344,
+      "reference_judge_bits": 3.591795276137629,
+      "text": "n the Almoravides the assassination of the antipopes of the central revolutionary shipbuilding with the cathedral of the analytical engagement between the environmental importance of the hereditary or"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/cant/alice29.txt",
+  "word_candidates": 8
+}

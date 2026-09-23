@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean95.json",
+  "mean_distinct_4gram": 0.8102791878172589,
+  "mean_judge_bits": 1.6422005081303512,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.1335930570699135,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 15.029301048125001,
+  "prompts": [
+    {
+      "distinct_4gram": 0.7055837563451777,
+      "judge_bits": 1.4852704283643896,
+      "offset": 96000000,
+      "reference_judge_bits": 2.157405785955072,
+      "text": " The article and the article before the same period the infection with the same significant structure and the introduction of infection of the Information of seven the same separate symbolism]] | [[Ve"
+    },
+    {
+      "distinct_4gram": 0.8984771573604061,
+      "judge_bits": 1.6698614051617435,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145857158973773,
+      "text": "t;br/&gt;\\n  21. pillow&lt;br/&gt;\\n  21. pillow reciprocating (telecommunication (linguistics)|stress]]\\n*[http://www.undernet.org/library/books/tech/medicine/Edward Colossians &quot;officially consider"
+    },
+    {
+      "distinct_4gram": 0.7563451776649747,
+      "judge_bits": 1.5221278896276107,
+      "offset": 96016384,
+      "reference_judge_bits": 2.0253552161003503,
+      "text": " the appearance of the infection with the same significant structure and the introduction of infection of the Information of seven the same separate symbolism]] | [[Veneration of religious topics]] | "
+    },
+    {
+      "distinct_4gram": 0.868020304568528,
+      "judge_bits": 1.898574208170981,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160906395728389,
+      "text": "a]] (press)\\n*[http://www.unitconversion.org/unit_converter/length-ex.html Information of the Orthodox Iconoclastic classification of article because of the appearance of the infection with the same si"
+    },
+    {
+      "distinct_4gram": 0.6142131979695431,
+      "judge_bits": 1.4360191570201704,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109431580493407,
+      "text": "tml Information of the combustion of and the internal Commission of the history of the commercial interaction of Infocom's interactive fiction of Internal individual information and the configuration "
+    },
+    {
+      "distinct_4gram": 0.934010152284264,
+      "judge_bits": 1.686810670400216,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213549133702411,
+      "text": "ructure the [[Philippines]]\\n[[Image:Iconography]\\n*[http://www.washingtonpost.com/content/section/9/147/ European &amp; North American Hockey Scores and Statistics]\\n*[http://www.unitconversion.org/unit"
+    },
+    {
+      "distinct_4gram": 0.8020304568527918,
+      "judge_bits": 1.6010004823136752,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4870946590608485,
+      "text": "ution of the religious topics]]\\n* [[Ice skate]]\\n* [[Ice hockey something the connection configuration of infection of icons contemporary historical scientific congestion]]\\n* [[Images of the invisible "
+    },
+    {
+      "distinct_4gram": 0.9035532994923858,
+      "judge_bits": 1.8379398239840217,
+      "offset": 96057344,
+      "reference_judge_bits": 1.1613387468772267,
+      "text": "g]]\\n[[pt:Ionisidos]]\\n[[sv:Inferior Incarnation of Jesus himself as elucidated in the Ecumenical Councils and the internal combustion engine|Reciprocating]]\\n[[pt:Mannonly information configuration]]\\n[["
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 8
+}

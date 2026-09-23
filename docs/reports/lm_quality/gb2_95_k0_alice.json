@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean95.json",
+  "mean_distinct_4gram": 0.7614213197969543,
+  "mean_judge_bits": 1.7110424288827986,
+  "mean_reference_distinct_4gram": 0.9067258883248732,
+  "mean_reference_judge_bits": 3.0373487558156183,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 3.28667268375,
+  "prompts": [
+    {
+      "distinct_4gram": 0.8578680203045685,
+      "judge_bits": 2.0707662833480756,
+      "offset": 20000,
+      "reference_judge_bits": 2.8549029189306783,
+      "text": "g worldwide or said it was a to the image wide area.\\n\\n=== Compression ===\\n*[[Occurred the final Orthodox Inform]]&quot;\\n                     = passes and by our and he a believe the icon the tended in"
+    },
+    {
+      "distinct_4gram": 0.9796954314720813,
+      "judge_bits": 2.135756047252087,
+      "offset": 28192,
+      "reference_judge_bits": 3.030439895671322,
+      "text": " attains such as a patent names\\n\\n=== Protestant council hans hang who in his objects properly wearing which of in-cylinder compression and any screen.\\n\\nThe alternative a believe the icon veneration (i"
+    },
+    {
+      "distinct_4gram": 0.9137055837563451,
+      "judge_bits": 1.9523840753301993,
+      "offset": 36384,
+      "reference_judge_bits": 3.1303989902570053,
+      "text": "s worldwide over a reverence to the looking-?\\nglass.\\n\\n== Catholic who in his objects to be less hormone in in of the Computers can the Image with other on which air in a ban on in the users to man for"
+    },
+    {
+      "distinct_4gram": 0.8883248730964467,
+      "judge_bits": 1.8775271941135299,
+      "offset": 44576,
+      "reference_judge_bits": 2.5724745505714157,
+      "text": "unded to the was a reverence to the information on rather or oral to a felt and the first mechanism one new the there\\nof the in-contemporary with other on which also had a seven in a broad or domestic"
+    },
+    {
+      "distinct_4gram": 0.8071065989847716,
+      "judge_bits": 1.94192138441959,
+      "offset": 52768,
+      "reference_judge_bits": 3.8159420200283307,
+      "text": "ows anything you and you po as [[Romania]]ns and word &quot;engine}}\\n\\nAccounts of the the pictures in the the parties the recorded the air.\\n\\nThe thought thought and in a ban on in the world or in a co"
+    },
+    {
+      "distinct_4gram": 0.030456852791878174,
+      "judge_bits": 0.43879482813067305,
+      "offset": 60960,
+      "reference_judge_bits": 2.633380631253076,
+      "text": "use.\\n                                                                                                                                                                                                   "
+    },
+    {
+      "distinct_4gram": 0.8934010152284264,
+      "judge_bits": 1.653691326073765,
+      "offset": 69152,
+      "reference_judge_bits": 2.669455763675492,
+      "text": "way, the substance of the icon.\\n\\nIn most resembles the end some several developed the second subject to develop socialists depicting heavenly become separate success, and are the or should not part of"
+    },
+    {
+      "distinct_4gram": 0.7208121827411168,
+      "judge_bits": 1.6174982923944687,
+      "offset": 77344,
+      "reference_judge_bits": 3.591795276137629,
+      "text": "ut the term it that out and from that or two or two are image should be have of the house press, which can be made you can be made you can be made you can find out the answer to it?'?\\nsaid the March H"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/cant/alice29.txt",
+  "word_candidates": 0
+}

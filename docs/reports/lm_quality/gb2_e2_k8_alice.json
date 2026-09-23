@@ -1,0 +1,75 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.7671319796954315,
+  "mean_judge_bits": 1.3324809838987732,
+  "mean_reference_distinct_4gram": 0.9067258883248732,
+  "mean_reference_judge_bits": 3.0373487558156183,
+  "members": [
+    "/home/user/ckpt/pre_lean_48m.json"
+  ],
+  "min_p": 0.1,
+  "ms_per_byte": 35.745436584375,
+  "prompts": [
+    {
+      "distinct_4gram": 0.7918781725888325,
+      "judge_bits": 1.2695558556963298,
+      "offset": 20000,
+      "reference_judge_bits": 2.8549029189306783,
+      "text": "g the influence of the classical and the medieval and the description of the relationships between the population of singular features the principal features were complete specifically the letters of "
+    },
+    {
+      "distinct_4gram": 0.7969543147208121,
+      "judge_bits": 1.3218138651454725,
+      "offset": 28192,
+      "reference_judge_bits": 3.030439895671322,
+      "text": " to the other and preserve the Discworld and brother of supporting the encouraged the right way of the description of the relationships between the population of singular extending to the conclusion o"
+    },
+    {
+      "distinct_4gram": 0.7614213197969543,
+      "judge_bits": 1.3215174638975327,
+      "offset": 36384,
+      "reference_judge_bits": 3.1303989902570053,
+      "text": "s frequently the literature the kingdom of the collapse of the discussion of the distinguished the words and the western countries and the background the whole that the whole party at once the present"
+    },
+    {
+      "distinct_4gram": 0.7868020304568528,
+      "judge_bits": 1.2580178479410096,
+      "offset": 44576,
+      "reference_judge_bits": 2.5724745505714157,
+      "text": "r the looking to the principal features were complete specifically the largest of the interior of the monasteries and the kingdom of the collapse of the discussion of the distinguished the words and t"
+    },
+    {
+      "distinct_4gram": 0.7868020304568528,
+      "judge_bits": 1.3873216070240093,
+      "offset": 52768,
+      "reference_judge_bits": 3.8159420200283307,
+      "text": "owed the year after the western and that starting to the protagonist prominently the administrative and the year with the hereditary complementary and the commutative and and because the greatest is t"
+    },
+    {
+      "distinct_4gram": 0.6903553299492385,
+      "judge_bits": 1.2825467038424834,
+      "offset": 60960,
+      "reference_judge_bits": 2.633380631253076,
+      "text": "use and the house style of the house with the majority of the the development of the sanctioned by the teaching the government and the purchase the house of the decomposition of the first conclusion o"
+    },
+    {
+      "distinct_4gram": 0.7817258883248731,
+      "judge_bits": 1.435230236465745,
+      "offset": 69152,
+      "reference_judge_bits": 2.669455763675492,
+      "text": "hereditary completes and the house style of the house with the majority of the the classical and the background the whole that the whole party at once the struggle between the population of singular t"
+    },
+    {
+      "distinct_4gram": 0.7411167512690355,
+      "judge_bits": 1.383844291177603,
+      "offset": 77344,
+      "reference_judge_bits": 3.591795276137629,
+      "text": "n the March [[1927]] and the Government of the organization that the beginning of the March Institutions, and the rhetorical and the short stories and the Dominion that is confusing the Discworld the "
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/cant/alice29.txt",
+  "word_candidates": 8
+}

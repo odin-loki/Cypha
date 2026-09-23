@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean95.json",
+  "mean_distinct_4gram": 0.7373096446700508,
+  "mean_judge_bits": 1.5450492313578106,
+  "mean_reference_distinct_4gram": 0.9067258883248732,
+  "mean_reference_judge_bits": 3.0373487558156183,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 14.985726899374999,
+  "prompts": [
+    {
+      "distinct_4gram": 0.6192893401015228,
+      "judge_bits": 1.362165804771267,
+      "offset": 20000,
+      "reference_judge_bits": 2.8549029189306783,
+      "text": "g to the image of the iconography of the image of the huge numbers of the properties of the portrait image of the church of the traditionalists the image of the church in the bicameral [[Christian the"
+    },
+    {
+      "distinct_4gram": 0.6852791878172588,
+      "judge_bits": 1.6930845879472884,
+      "offset": 28192,
+      "reference_judge_bits": 3.030439895671322,
+      "text": " the properties of the portrait image of the church of the the iconostasis]]'' (the furniture the image of image of connecting, and the weapons in the theology of the image of state of the interpolati"
+    },
+    {
+      "distinct_4gram": 0.6548223350253807,
+      "judge_bits": 1.5793504660812645,
+      "offset": 36384,
+      "reference_judge_bits": 3.1303989902570053,
+      "text": "s the image of the image that the image numbers of the properties of the iconostasis]], and the veneration of the the theology of the words for the traditional the imperial the construction of image o"
+    },
+    {
+      "distinct_4gram": 0.751269035532995,
+      "judge_bits": 1.6250177127222998,
+      "offset": 44576,
+      "reference_judge_bits": 2.5724745505714157,
+      "text": "r the first this interpretation of the image of the attack the manner of the generally the word that the image that the iconostasis]].\\n\\n=== Protestant ===\\n*[[Image:green the first order of the Incarna"
+    },
+    {
+      "distinct_4gram": 0.8274111675126904,
+      "judge_bits": 1.5022396499615867,
+      "offset": 52768,
+      "reference_judge_bits": 3.8159420200283307,
+      "text": "egiance and that the image that the iconoclasm of the inclination]]\\n*[http://www.ethnologue.com/show_language.asp?code=ita Ethnologue report on Italian]\\n*[http://www.traditionaliconography.com/webgall"
+    },
+    {
+      "distinct_4gram": 0.6751269035532995,
+      "judge_bits": 1.4188030359777088,
+      "offset": 60960,
+      "reference_judge_bits": 2.633380631253076,
+      "text": "use of the house allegiance and veneration of the iconoclasm of the inclinations of the image of the attacker everything from that the history of the tradition of the iconoclasm and restored the house"
+    },
+    {
+      "distinct_4gram": 0.8324873096446701,
+      "judge_bits": 1.5132454713327086,
+      "offset": 69152,
+      "reference_judge_bits": 2.669455763675492,
+      "text": "first should not significance and other development was given the first heavenly being made out in the theology of the image of the canonical Israelis}}\\n\\nThe image to the image or two separate and in "
+    },
+    {
+      "distinct_4gram": 0.8527918781725888,
+      "judge_bits": 1.6664871220683606,
+      "offset": 77344,
+      "reference_judge_bits": 3.591795276137629,
+      "text": "ut the beginning of the canonical Israelis}}\\n\\nThe image veneration of the image of the miraculous island is the Iconoclasm, and the Eastern Orthodox consider it the only authoritative text of those Sc"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/cant/alice29.txt",
+  "word_candidates": 8
+}

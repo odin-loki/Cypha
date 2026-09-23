@@ -1,0 +1,78 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.769035532994924,
+  "mean_judge_bits": 1.1953362110396197,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.1335930570699135,
+  "members": [
+    "/home/user/ckpt/pre_lean_16000000.json",
+    "/home/user/ckpt/pre_lean_32000000.json",
+    "/home/user/ckpt/pre_lean_48m.json",
+    "/home/user/ckpt/pre_lean_80000000.json"
+  ],
+  "min_p": 0.1,
+  "ms_per_byte": 92.28386137000001,
+  "prompts": [
+    {
+      "distinct_4gram": 0.7157360406091371,
+      "judge_bits": 1.2338553741203622,
+      "offset": 96000000,
+      "reference_judge_bits": 2.157405785955072,
+      "text": "The article from the official language of the ancient and the same time the same the &quot;information and commission and the prototype and the original sources and the southern and the control of the"
+    },
+    {
+      "distinct_4gram": 0.7411167512690355,
+      "judge_bits": 1.2756076044975933,
+      "offset": 96008192,
+      "reference_judge_bits": 2.145857158973773,
+      "text": "t;br/&gt;\\n  20. Malpighian tubes&lt;br/&gt;\\n  20. In the transformation of the introduction of a &quot; however, the information and commission and the prototype and the original sources and the south"
+    },
+    {
+      "distinct_4gram": 0.7360406091370558,
+      "judge_bits": 1.2583164603359647,
+      "offset": 96016384,
+      "reference_judge_bits": 2.0253552161003503,
+      "text": " the existing the following the first the existence of the classical independence of all the influence of companies the interest in the conservative language of the ancient and the same time the same "
+    },
+    {
+      "distinct_4gram": 0.7868020304568528,
+      "judge_bits": 1.327943397861543,
+      "offset": 96024576,
+      "reference_judge_bits": 3.160906395728389,
+      "text": "a]] (supporting the first the existence of the classical independence of all the influence of companies the interest in the conservative language of the ancient and the same time the same original in "
+    },
+    {
+      "distinct_4gram": 0.8629441624365483,
+      "judge_bits": 1.3704176737083915,
+      "offset": 96032768,
+      "reference_judge_bits": 2.109431580493407,
+      "text": "tml Biography of the announces the history of the declared &quot;Christian Religious and American commonly reference reference the same original in &quot;]\\n*[http://www.students.html Publishing the an"
+    },
+    {
+      "distinct_4gram": 0.8223350253807107,
+      "judge_bits": 1.453039867504398,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8213549133702411,
+      "text": "atistical conference the same original in &quot;]\\n*[http://www.students.html Publishing the answer the control of the existence of the classical independence of all the influence of companies the inte"
+    },
+    {
+      "distinct_4gram": 0.868020304568528,
+      "judge_bits": 1.2759817435509926,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4870946590608485,
+      "text": "ution (mathematics)|field]]\\n* [[Associated from the international airport]]\\n* [[Ice orthodox Christian Comparison of the apparently Christian American government translation]]\\n* [[France]]\\n* [[North A"
+    },
+    {
+      "distinct_4gram": 0.6192893401015228,
+      "judge_bits": 0.3675275667377121,
+      "offset": 96057344,
+      "reference_judge_bits": 1.1613387468772267,
+      "text": "]]</text>\\n    </revision>\\n  </page>\\n  <page>\\n    <title>\\n    <id>15859</id>\\n    <revision>\\n      <id>4202160</id>\\n      <timestamp>\\n      <contributor>\\n        <username>Magnus Manske</username>\\n     "
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 8
+}

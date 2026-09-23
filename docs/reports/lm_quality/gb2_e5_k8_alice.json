@@ -1,0 +1,78 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/pre_lean.json",
+  "mean_distinct_4gram": 0.7703045685279186,
+  "mean_judge_bits": 1.271501065299507,
+  "mean_reference_distinct_4gram": 0.9067258883248732,
+  "mean_reference_judge_bits": 3.0373487558156183,
+  "members": [
+    "/home/user/ckpt/pre_lean_16000000.json",
+    "/home/user/ckpt/pre_lean_32000000.json",
+    "/home/user/ckpt/pre_lean_48m.json",
+    "/home/user/ckpt/pre_lean_80000000.json"
+  ],
+  "min_p": 0.1,
+  "ms_per_byte": 100.54129084062498,
+  "prompts": [
+    {
+      "distinct_4gram": 0.7157360406091371,
+      "judge_bits": 1.3285877785589788,
+      "offset": 20000,
+      "reference_judge_bits": 2.8549029189306783,
+      "text": "g the traditional and the transcription of the interpreted in the persecution of this complexity of the publication of the successful attempting to the declaration of such a third the such a way of th"
+    },
+    {
+      "distinct_4gram": 0.7868020304568528,
+      "judge_bits": 1.231601971715917,
+      "offset": 28192,
+      "reference_judge_bits": 3.030439895671322,
+      "text": " the hand conservative reconstruction of the introduction of controlling the mountains and punishment of the working with the publication of a history of the published in the subject to the official a"
+    },
+    {
+      "distinct_4gram": 0.8477157360406091,
+      "judge_bits": 1.225046315499079,
+      "offset": 36384,
+      "reference_judge_bits": 3.1303989902570053,
+      "text": "s the general the divided the words destroyed the [[International Analysis]]\\n[[Image:Thermodynamics]]\\n[[Category:Living people|Sanskrit]] and the daughter of the government of the interchange of the w"
+    },
+    {
+      "distinct_4gram": 0.7055837563451777,
+      "judge_bits": 1.2723696196245442,
+      "offset": 44576,
+      "reference_judge_bits": 2.5724745505714157,
+      "text": "r the government of the interchange of the works of the conclusion of the conversion of several other distinguished the television and the origin of the third and the began to the official and the wor"
+    },
+    {
+      "distinct_4gram": 0.817258883248731,
+      "judge_bits": 1.2481219020047114,
+      "offset": 52768,
+      "reference_judge_bits": 3.8159420200283307,
+      "text": "egations and consistency and the ancient and development of the revolutionary that the history of the published in the subject to the official and the withdrawal of the contradicts the associated with"
+    },
+    {
+      "distinct_4gram": 0.751269035532995,
+      "judge_bits": 1.2858430939627545,
+      "offset": 60960,
+      "reference_judge_bits": 2.633380631253076,
+      "text": "use and that the highest scientific metropolitan are different production of the contributor== Presidents of the house of the independent of the hand the historical and the with the house was the hous"
+    },
+    {
+      "distinct_4gram": 0.7360406091370558,
+      "judge_bits": 1.2948406467168594,
+      "offset": 69152,
+      "reference_judge_bits": 2.669455763675492,
+      "text": "double and the house was the house the scientific methods are the international expansion and the movement of the hand the historical and the with the house and the successful attempting to the declar"
+    },
+    {
+      "distinct_4gram": 0.8020304568527918,
+      "judge_bits": 1.2855971943132125,
+      "offset": 77344,
+      "reference_judge_bits": 3.591795276137629,
+      "text": "n the March [[1982]] and the house and the successful attempting to the declaration of the information of a history of the published in the subject to the official website]\\n\\n==Classical subject was th"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/cant/alice29.txt",
+  "word_candidates": 8
+}
