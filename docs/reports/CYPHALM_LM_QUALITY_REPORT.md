@@ -115,7 +115,8 @@ What this shows:
 - **Greedy always cycles**, as argmax decoding of any finite-context model will.
   No-repeat helps diversity but breaks words at byte level. Use sampling.
 - New `DecodeParams` defaults: temperature 0.8, `min_p` 0.1,
-  `learn_from_output` false.
+  `learn_from_output` false. (Word lookahead, added later, now runs on top of
+  these by default: see *Serving improvements*.)
 
 ## Scaling with pretraining data
 
@@ -137,6 +138,95 @@ with the default decoder becomes more on-topic without becoming coherent. wiki:
 *"…in size is a necessary to have reduced insects chambers are communicantly…"*
 (judge 1.26, d4 0.86); reference judge 1.74, d4 0.91. Greedy and
 learn-from-output decoding still loop. Raw data: `lm_quality/s95_*.json`.
+
+## Serving improvements (second round)
+
+Three changes to how the pretrained model is served, each measured on the
+lean 8 MiB model with held-out text.
+
+### Keep the byte history when starting a prompt
+
+`prime_serve_context` began a new stream with `reset_stream()`, which also
+wiped the byte ring (32 MB of the most recent text) that the match models copy
+from. Frozen held-out NLL, 8 KiB:
+
+| start of eval | wiki | Alice |
+|---|---:|---:|
+| continue the training stream | 2.0285 | 2.9380 |
+| `reset_stream()` (old priming) | 2.0606 (+0.032) | 2.9585 (+0.021) |
+| `reset_stream(keep_history=true)` (new priming) | 2.0285 | 2.9379 |
+
+Priming now resets per-stream contexts but keeps the history.
+
+### Adapt to the prompt at half the trained mixer rate
+
+`hp::Predictor::set_serve_adaptation` scales the mixer learning rates at serve
+time (idempotent; checkpoints always store trained rates). Online held-out NLL
+with the mixer at a fraction of its trained rate:
+
+| text (8-16 KiB) | ×1 (trained) | **×0.5** | ×0.25 | ×1.5 | ×2 | ×3 |
+|---|---:|---:|---:|---:|---:|---:|
+| enwik8 @96M | 1.8259 | **1.8212** | 1.8214 | 1.8325 | 1.8450 | 1.8728 |
+| Alice | 2.2532 | **2.2467** | 2.2460 | 2.2638 | 2.2809 | 2.3199 |
+| enwik8 @97.5M (check) | 1.7517 | **1.7466** | | | | |
+| lcet10 (check) | 1.6252 | **1.6237** | | | | |
+| plrabn12 (check) | 2.2750 | **2.2666** | | | | |
+
+Faster adaptation is worse everywhere and half speed is better on all five
+texts (−0.0015 to −0.008). Removing the mixer's small-error skip adds nothing
+reliable. `CyphaLMConfig::hp_serve_mixer_lr_scale = 0.5` (env
+`CYPHA_HP_SERVE_MIXER_LR_SCALE`) is applied by `CyphaLMModel::set_serve_mode`:
+generation turns it on, training entry points turn it off.
+
+### Word lookahead decoding
+
+Byte sampling writes real words but invents some ("communicantly") and loses
+the thread. Word lookahead samples K candidate words (up to and including the
+next delimiter) with the normal byte-level settings, rewinds after each, and
+keeps the candidate with the highest mean log-probability that does not repeat
+a 12-byte sequence of the recent text (without that ban, best-of-K loops:
+distinct 4-grams 0.23–0.53).
+
+Rewinding must be exact and cheap. `hp::StreamRewind` saves the predictor's
+inline state (~170 KB) and records heap writes in an undo frame that also
+covers byte boundaries. Learned tables are not written while learning is off,
+so that is everything that changes. `hp_stream_rewind_smoke` checks that full
+checkpoints are byte-identical after 60 random rewinds, with bit-tree and serve
+scoring nested inside, and that 1000 later distributions match an untouched
+copy. A first version copied the model (1.1 GB) per candidate and ran at
+~400 ms/byte; with rewinds it is ~1.8× the cost of byte sampling.
+
+400 bytes from the held-out prompts (judge bits / distinct 4-grams / ms per
+byte on a loaded 4-core machine):
+
+| decode | wiki | Alice |
+|---|---|---|
+| reference (true continuation) | 1.68 / 0.86 | 2.17 / 0.92 |
+| byte sampling (min-p 0.1, T 0.8) | 1.10 / 0.68 / 20 | 1.59 / 0.86 / 19 |
+| word lookahead K 4 | 0.86 / 0.69 / 27 | 1.22 / 0.73 / 28 |
+| **word lookahead K 8 (new default)** | 0.70 / 0.74 / 37 | 0.96 / 0.72 / 36 |
+
+Samples, K 8:
+
+- wiki: *"…organizations of the abdominal spiracle and associated trachea of
+  caterpillars in the administration of the insects are the internal existing
+  the trachea are often the tracheole cell basement membrane. Since they are
+  considered the heart relationship between the spiracles…the hemolymph seeps
+  back into the heart."*
+- Alice: *"…and began to explain the direction and began in the supported by
+  the Dodo said to herself, and was high time with supporter the said the
+  obligations and began wrapping itself up very career and discovered the pair
+  of white kid…"*
+- byte sampling, same wiki prompt: *"…the tracheal the classicized from office
+  in the tracheal of the trachea little and members of series of the
+  exoskeleton the exoskeleton the exoskeleton…"*
+
+Phrases now hold together over several words and stay on topic. Whole
+sentences still don't. Judge bits fall well below the reference because the
+decoder picks what the model finds likely, so read them with distinct
+4-grams. `DecodeParams::word_candidates` (default 8; 0 = off),
+`word_no_repeat` (12). CLI `--word-candidates`; REST `word_candidates`,
+`word_no_repeat`; streaming emits the bytes once a word is chosen.
 
 ## LSTM expert (tried, removed)
 
@@ -169,6 +259,11 @@ commit `ee1325c` (`native/include/cypha/cyphalm/byte_lstm.hpp`,
 | `min_p` | **0.1** | drop bytes with p < min_p · p_max |
 | `temperature` | **0.8** | |
 | `no_repeat_ngram` / `no_repeat_window` | 0 / 256 | ban bytes that repeat an n-byte sequence in the window |
+| `word_candidates` | **8** | word lookahead: best of K sampled words (0 = byte sampling only) |
+| `word_no_repeat` | 12 | word lookahead rejects words that repeat a sequence this long |
+
+Serve-time model settings: `hp_frozen_scoring` (on), `hp_serve_mixer_lr_scale`
+(0.5), and priming keeps the byte history.
 
 ## Reproduce
 
@@ -177,4 +272,8 @@ Q=native/build/cyphalm_lm_quality
 $Q --tier lean --train enwik8 --train-bytes 8388608 --save /tmp/pre_lean
 $Q --load /tmp/pre_lean.json --eval enwik8 --eval-offset 96000000 --eval-bytes 16384 --compare-scoring
 $Q --load /tmp/pre_lean.json --eval alice29.txt --eval-offset 20000 --eval-bytes 16384 --frozen-eval --gen-bytes 0
+# serving: history on reset, mixer rate (quarters of trained), word lookahead
+$Q --load /tmp/pre_lean.json --reset-stream full --frozen-eval --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+$Q --load /tmp/pre_lean.json --serve-lr 2 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+$Q --load /tmp/pre_lean.json --eval enwik8 --eval-offset 96000000 --eval-bytes 16384 --gen-bytes 400 --only-default --word-k 8
 ```
