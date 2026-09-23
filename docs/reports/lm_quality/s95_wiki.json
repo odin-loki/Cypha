@@ -1,0 +1,110 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.85919189453125,
+  "bytes": 16384,
+  "distribution_ms": 8.005324627075227,
+  "ece_top1": 0.016143116763793187,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 1.7961266625703984,
+  "ms_per_byte": 8.299861822387696,
+  "nll_bits_by_temperature": {
+   "0.7": 1.8209563768707961,
+   "0.8": 1.7613037904706055,
+   "0.9": 1.734477853791192,
+   "1.0": 1.7312409884071285,
+   "1.1": 1.7460223784710427,
+   "1.2": 1.7753525031979507,
+   "1.3": 1.8169939984978203,
+   "1.4": 1.869419486094619
+  },
+  "nll_bits_per_byte": 1.7312409884071276,
+  "offset": 96000000,
+  "path": "/home/user/corpora/enwik8",
+  "perplexity_per_byte": 3.32013289248494,
+  "top1": 0.64263916015625,
+  "top5": 0.88641357421875
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.9057239057239057,
+   "judge_bits_per_byte": 1.7369774969696228,
+   "mode": "reference (true continuation)",
+   "text": " order to increase in size, then grows a new outer covering.  In most types of insects, the young, called '''nymphs''', are basically similar in form to the adults (an example is the grasshopper), though wings are not developed until the adult stage.  This is called ''incomplete  [[metamorphosis (bi"
+  },
+  {
+   "distinct_4gram": 0.0707070707070707,
+   "judge_bits_per_byte": 0.5133336920727587,
+   "mode": "greedy (default)",
+   "ms_per_byte": 6.31389836,
+   "text": " the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the abdomen, and all the a"
+  },
+  {
+   "distinct_4gram": 0.6464646464646465,
+   "judge_bits_per_byte": 1.2992802600829982,
+   "mode": "greedy norepeat8",
+   "ms_per_byte": 7.008409666666666,
+   "text": " the abdomen, and and an internal combustion in trachea are abdominal common in turn and antenna and any and another and animals and announced and all and analogy and also and ancient and angles and alternative and answer and contain and always and among and anus and accepted and commonly and activi"
+  },
+  {
+   "distinct_4gram": 0.3164983164983165,
+   "judge_bits_per_byte": 0.9567516897492986,
+   "mode": "greedy norepeat16",
+   "ms_per_byte": 8.12534957,
+   "text": " the abdomen, and all the abdomen, a series of the abdomen, as the abdomen, all the abdome]] in the abdomen. The abdomen, and, and all the amount of the abdomen. Traditional the abdomen, the abdomen, among the abdomen, are abdomen, and the abdomen, at the abdomen, and all the abdomen, a series of th"
+  },
+  {
+   "distinct_4gram": 0.42424242424242425,
+   "judge_bits_per_byte": 1.022569720511703,
+   "mode": "greedy frozen norepeat16",
+   "ms_per_byte": 4.049885613333333,
+   "text": " the abdomen, and all the abdomen, as the abdomen, all the abdomes of the exoskd the exoskeleto a series of the exoska and all the above the abdomen, in the abdomen. The first of the exoskell and all the able to a series of insects are also the insects are all the insects article in the abdomen, is "
+  },
+  {
+   "distinct_4gram": 0.15488215488215487,
+   "judge_bits_per_byte": 1.0283787266749655,
+   "mode": "top_p T0.8 (default)",
+   "ms_per_byte": 5.22463375,
+   "text": "dictment the species surrounded the species of the the the wings the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the"
+  },
+  {
+   "distinct_4gram": 0.08080808080808081,
+   "judge_bits_per_byte": 0.6205815915855356,
+   "mode": "minp0.1 T0.8 learn",
+   "ms_per_byte": 6.0256794466666665,
+   "text": "terpolation is of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of change of ch"
+  },
+  {
+   "distinct_4gram": 0.8552188552188552,
+   "judge_bits_per_byte": 1.2563830441847168,
+   "mode": "minp0.1 T0.8 frozen",
+   "ms_per_byte": 3.7189680666666662,
+   "text": "terpolation is of characteristics of the internal spare in the excreted also in size is a necessary to have reduced insects chambers are communicantly exhaustive more face the heart into the of insects, flight is nevertheless, on one insects, insects. More are the tract standardised the abdomen. The"
+  },
+  {
+   "distinct_4gram": 0.8047138047138047,
+   "judge_bits_per_byte": 1.2296807003636145,
+   "mode": "minp0.2 T1.0 frozen",
+   "ms_per_byte": 13.19000579,
+   "text": "ternal there was a sessions are not only the exclusive fictional are also the activity.  In and as and elevated the exoskeleton and closed and the insects the heart is a confirmed the tracheal place of a modern times the cases, include the heart is most and the chosen the about of the are lively in "
+  },
+  {
+   "distinct_4gram": 0.5622895622895623,
+   "judge_bits_per_byte": 1.4499619777191226,
+   "mode": "minp0.1 T0.8 learn norepeat16",
+   "ms_per_byte": 7.041079893333333,
+   "text": "terpolation is of change of change of computers of same make of same are are abdominal families are are abdomid-figure are abdominate failures of complete of the exoskel and other of and other of all the exoskeleto mouthparts of all the exodus are also fall the exoskel antennae exoskel and of and of"
+  },
+  {
+   "distinct_4gram": 0.8552188552188552,
+   "judge_bits_per_byte": 1.2563830441847168,
+   "mode": "minp0.1 T0.8 frozen norepeat16",
+   "ms_per_byte": 5.8891136133333335,
+   "text": "terpolation is of characteristics of the internal spare in the excreted also in size is a necessary to have reduced insects chambers are communicantly exhaustive more face the heart into the of insects, flight is nevertheless, on one insects, insects. More are the tract standardised the abdomen. The"
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean95.json",
+ "prompt_tail": " is a process by which the individual escapes the confines of the exoskeleton in",
+ "setup_seconds": 5.825579098,
+ "tier": "lean"
+}

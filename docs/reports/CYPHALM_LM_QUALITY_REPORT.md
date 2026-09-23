@@ -117,6 +117,27 @@ What this shows:
 - New `DecodeParams` defaults: temperature 0.8, `min_p` 0.1,
   `learn_from_output` false.
 
+## Scaling with pretraining data
+
+Lean, 95 MB of enwik8 (bytes 0–95,000,000; ~2.3 h at ~11 kB/s, 1.08 GB) against
+the 8 MiB pretrain. The held-out text is unchanged: wiki starts at byte 96,000,000,
+past all training bytes.
+
+| held-out | 8 MiB | 95 MB | Δ |
+|---|---:|---:|---:|
+| wiki NLL, bits/byte | 1.7950 | 1.7312 | −0.064 |
+| wiki top-1 / top-5 | 63.1% / 88.1% | 64.3% / 88.6% | |
+| Alice NLL, bits/byte | 2.0852 | 2.0587 | −0.027 |
+| Alice top-1 / top-5 | 59.6% / 85.8% | 60.1% / 86.2% | |
+| ECE, wiki / Alice | 1.4% / 1.1% | 1.6% / 1.0% | |
+| online training bpc | 1.6099 | 1.5058 | |
+
+About 12× the data buys a real but modest gain, mostly in-domain. Generation
+with the default decoder becomes more on-topic without becoming coherent. wiki:
+*"…in size is a necessary to have reduced insects chambers are communicantly…"*
+(judge 1.26, d4 0.86); reference judge 1.74, d4 0.91. Greedy and
+learn-from-output decoding still loop. Raw data: `lm_quality/s95_*.json`.
+
 ## LSTM expert (tried, removed)
 
 hp predicts only from contexts it has counted. A recurrent model generalises
