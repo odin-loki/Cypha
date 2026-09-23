@@ -29,16 +29,10 @@ class PatternCache {
     static constexpr int kLines = 32;
 
     std::uint32_t hash_memo(std::uint64_t salt, std::uint64_t key) {
-#if HP_PATTERN_CACHE_STATS
-        ++lookups_;
-#endif
         const std::uint64_t sig = mix64(salt ^ (key * 0x9E3779B97F4A7C15ull));
         const int slot = static_cast<int>(sig) & (kLines - 1);
         if (line_[slot].valid && line_[slot].salt == salt &&
             line_[slot].key == key) {
-#if HP_PATTERN_CACHE_STATS
-            ++hits_;
-#endif
             return line_[slot].out;
         }
         const std::uint32_t out = hash2(salt, key);
@@ -95,19 +89,9 @@ class PatternCache {
         else if (first_class == 3)
             cls_ = kNumeric;
 
-#if HP_PATTERN_CACHE_STATS
-        ++class_count_[cls_];
-        ++bytes_;
-#endif
     }
 
     int cls() const { return cls_; }
-#if HP_PATTERN_CACHE_STATS
-    int lookups() const { return lookups_; }
-    int hits() const { return hits_; }
-    int class_count(int c) const { return class_count_[c]; }
-    int bytes() const { return bytes_; }
-#endif
 
  private:
     struct Line {
@@ -116,11 +100,6 @@ class PatternCache {
         bool valid = false;
     };
     Line line_[kLines];
-#if HP_PATTERN_CACHE_STATS
-    int lookups_ = 0, hits_ = 0;
-    int bytes_ = 0;
-    int class_count_[kNClass] = {0};
-#endif
     int cls_ = 0;
     int line_has_bar_ = 0, line_has_digit_ = 0, line_has_colon_ = 0;
     int line_len_ = 0;

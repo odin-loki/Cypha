@@ -13,20 +13,14 @@
 
 #include "hp/models.hpp"
 
-#ifndef HP_SENT_MEM_BIG
-#define HP_SENT_MEM_BIG 0
-#endif
-#ifndef HP_SENT_DOM
-#define HP_SENT_DOM 0
-#endif
 
 namespace hp {
 
 class SentenceMemory {
  public:
-    static constexpr int kRing = HP_SENT_MEM_BIG ? 128 : 64;
-    static constexpr int kWords = HP_SENT_MEM_BIG ? 32 : 16;
-    static constexpr int kDom = HP_SENT_DOM ? 4 : 1;
+    static constexpr int kRing = 64;
+    static constexpr int kWords = 16;
+    static constexpr int kDom = 1;
 
     void set_domain(int d) {
         if (d < 0) d = 0;

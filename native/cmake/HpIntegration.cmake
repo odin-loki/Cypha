@@ -1,7 +1,7 @@
 # hp (odin-loki/CompressionAlgorithm) integration for Cypha LLM path.
 # Integer-exact context mixer — no float/double in hp/include or hp/src.
 #
-# CyphaLM always builds gate24: v78_flags.ps1 + HP_SLOT_MAX=24 (see cmake/HpFlags.cmake).
+# CyphaLM always builds gate24: gate24-only hp tree + HP_SLOT_MAX=24 (see cmake/HpFlags.cmake).
 
 set(CYPHA_HP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/hp")
 

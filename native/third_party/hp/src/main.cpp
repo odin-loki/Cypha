@@ -31,7 +31,6 @@
 #include "hp/features.hpp"
 #include "hp/predictor.hpp"
 #include "hp/profile.hpp"
-#include "hp/reorder.hpp"
 
 namespace {
 
@@ -152,7 +151,7 @@ int compress(const char* inp, const char* outp, hp::Config cfg, bool use_dict,
     const std::uint8_t* raw_ptr = nullptr;
     std::size_t raw_len = 0;
 
-    if (use_dict || HP_REORDER || HP_PAYLOAD_LEX) {
+    if (use_dict || 0 || 0) {
         if (!read_all(inp, raw)) return 1;
         raw_ptr = raw.data();
         raw_len = raw.size();
@@ -194,15 +193,6 @@ int compress(const char* inp, const char* outp, hp::Config cfg, bool use_dict,
 
     std::vector<std::uint32_t> page_perm;
     std::vector<std::uint8_t> page_body;
-#if HP_REORDER || HP_PAYLOAD_LEX
-    {
-        std::vector<std::uint8_t> src(encode_ptr, encode_ptr + encode_len);
-        hp::page_permute(src, page_body, page_perm, HP_PAYLOAD_LEX ? 1 : 0);
-        encode_ptr = page_body.data();
-        encode_len = page_body.size();
-        std::fprintf(stderr, "pages perm %zu\n", page_perm.size());
-    }
-#endif
 
     std::FILE* out = std::fopen(outp, "wb");
     if (!out) { std::perror(outp); return 1; }
@@ -221,10 +211,6 @@ int compress(const char* inp, const char* outp, hp::Config cfg, bool use_dict,
     put64(out, encode_len);
     put32(out, static_cast<std::uint32_t>(dser.size()));
     if (!dser.empty()) std::fwrite(dser.data(), 1, dser.size(), out);
-#if HP_REORDER || HP_PAYLOAD_LEX
-    put32(out, static_cast<std::uint32_t>(page_perm.size()));
-    for (std::uint32_t v : page_perm) put32(out, v);
-#endif
     const long hdr = std::ftell(out);
 
     hp::Profiler prof;
@@ -283,18 +269,11 @@ int decompress(const char* inp, const char* outp) {
     }
 
     std::vector<std::uint32_t> page_perm;
-#if HP_REORDER || HP_PAYLOAD_LEX
-    {
-        const std::uint32_t np = get32(in);
-        page_perm.resize(np);
-        for (std::uint32_t k = 0; k < np; ++k) page_perm[k] = get32(in);
-    }
-#endif
 
     hp::Predictor pred(cfg);
     hp::Decoder dec(in);
     std::vector<std::uint8_t> body;
-    const bool buf_body = use_dict || HP_REORDER || HP_PAYLOAD_LEX;
+    const bool buf_body = use_dict || 0 || 0;
     if (buf_body) body.reserve(static_cast<std::size_t>(nbody));
 
     std::FILE* out = nullptr;
@@ -342,13 +321,6 @@ int decompress(const char* inp, const char* outp) {
         hp::dict_decode(body, dict, raw);
         body.swap(raw);
     }
-#if HP_REORDER || HP_PAYLOAD_LEX
-    {
-        std::vector<std::uint8_t> un;
-        hp::page_unpermute(body, page_perm, un);
-        body.swap(un);
-    }
-#endif
     if (buf_body) {
         if (body.size() != nraw) {
             std::fprintf(stderr, "\nsize mismatch: got %zu want %llu\n",

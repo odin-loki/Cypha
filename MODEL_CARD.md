@@ -63,7 +63,7 @@ Removed light/champ hp SKUs: [`docs/history/REMOVED_HP_SKUS.md`](docs/history/RE
 | Algorithm | **hp** integer-exact context mixer ([CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm)) |
 | Integration | `HpSequenceBackend` → `hp::Predictor`; `apply_hp_production_recipe()` (gate24: v78 + `HP_SLOT_MAX=24`) |
 | Production knobs | `hp_table_bits=22`, `hp_slot_max=24`, `hp_mixer_lr=2`, `hp_gria=true`, byte vocab ≤ 256 |
-| Compile profile | **gate24 only** — v78_flags.ps1 + `HP_SLOT_MAX=24` + XSIMD (no light/champ SKU matrix) |
+| Compile profile | **gate24 only** — gate24-only vendored hp (v78 set baked in, no `-DHP_*` list; [strip](docs/reports/CYPHALM_HP_GATE24_STRIP.md)) + `HP_SLOT_MAX=24` + XSIMD |
 | Priority | **Inference / generation latency** first; train and BPC eval may be slower |
 | RAM hotspot | `HpSequenceBackend`: live `pred_` + scratch fork; bit-tree uses delta undo (one fork, patch backtrack) |
 | Lab RSS (hp harness, mem 22) | **~1.5–2 GB** @ `SLOT_MAX=24` (`hp/tools/hp_harness.sh`) |

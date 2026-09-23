@@ -7,10 +7,6 @@ OUT="${CYPHA_BPC_GAP_OUT:-$ROOT/bench/results/cyphalm_bpc_gap}"
 HP_TOOL="${HP_TOOL:-$BUILD/hp_gate24}"
 mkdir -p "$OUT"
 
-V78=$(grep -oE '\-DHP_[A-Z0-9_]+=[0-9]+' "$ROOT/native/third_party/hp/tools/v78_flags.ps1" \
-  | grep -vE 'HP_LR1_SCALE|HP_REFGROUP|HP_SENTPOS|HP_STATETRANS|HP_CAPPARA|HP_WIKIBOLD' \
-  | grep -v HP_SLOT_MAX | tr '\n' ' ')
-
 if [[ ! -x "$BUILD/cyphalm_llm_profile" ]]; then
   cmake -S "$ROOT/native" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
   cmake --build "$BUILD" --target cyphalm_llm_profile bpc_gap_verify -j"$(nproc 2>/dev/null || echo 4)"
@@ -21,7 +17,6 @@ if [[ ! -x "$HP_TOOL" ]]; then
     -I "$ROOT/native/third_party/hp/include" \
     -I "$ROOT/native/third_party/hp/third_party/xsimd/include" \
     -DHP_SLOT_MAX=24 -DHP_XSIMD=1 \
-    $V78 \
     "$ROOT/native/third_party/hp/src/main.cpp" -o "$HP_TOOL"
 fi
 
@@ -31,8 +26,6 @@ BYTES="${2:-100000}"
 CLONE_N="${3:-16}"
 
 echo "# cyphalm_bpc_gap $STAMP corpus=$CORPUS bytes=$BYTES profile=gate24" | tee "$OUT/run_${STAMP}.meta"
-
-python3 "$ROOT/scripts/hp_v78_flag_diff.py" 2>&1 | tee "$OUT/v78_flag_diff_${STAMP}.tsv"
 
 "$BUILD/bpc_gap_verify" --random "${BPC_GAP_VERIFY_RANDOM:-8}" --corpus "$CORPUS" \
   2>&1 | tee "$OUT/verify_${STAMP}.json"

@@ -94,12 +94,9 @@ inline std::int64_t dot_i32_i16(const std::int32_t* w, const std::int16_t* st, i
 }
 
 inline std::int64_t dot_mixer_wt(const MixerWt* w, const MixerSt* st, int n) {
-#if HP_XSIMD && !HP_MIXER_W16 && HP_MIXER_ST16
+#if HP_XSIMD
     return dot_i32_i16(reinterpret_cast<const std::int32_t*>(w),
                        reinterpret_cast<const std::int16_t*>(st), n);
-#elif HP_XSIMD && !HP_MIXER_W16 && !HP_MIXER_ST16
-    return dot_i32(reinterpret_cast<const std::int32_t*>(w),
-                   reinterpret_cast<const std::int32_t*>(st), n);
 #else
     std::int64_t sum = 0;
     for (int i = 0; i < n; ++i)
@@ -110,22 +107,10 @@ inline std::int64_t dot_mixer_wt(const MixerWt* w, const MixerSt* st, int n) {
 
 inline void axpy_mixer_wt(MixerWt* w, const MixerSt* st, int n, std::int32_t err,
                           std::int32_t l1, std::int64_t energy = 0) {
-#if HP_MIXER_NLMS
-    // NLMS: scale the step by ETYP/||st||^2 so the effective step size is
-    // invariant to how many experts are currently saturated. Integer-exact.
-    const std::int64_t den = energy + HP_NLMS_EPS;
-#else
     (void)energy;
-#endif
     for (int i = 0; i < n; ++i) {
-#if HP_MIXER_NLMS
-        const std::int32_t dw = static_cast<std::int32_t>(
-            ((static_cast<std::int64_t>(st[i]) * err * l1 *
-              static_cast<std::int64_t>(HP_NLMS_ETYP)) / den) >> 14);
-#else
         const std::int32_t dw = static_cast<std::int32_t>(
             (static_cast<std::int64_t>(st[i]) * err * l1) >> 14);
-#endif
         hp_undo_note(w[i]);
         w[i] = mixer_wt_pack(
             clamp_int(mixer_wt_expand(w[i]) + dw, -kMixerClamp, kMixerClamp));

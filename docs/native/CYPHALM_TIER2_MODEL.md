@@ -46,7 +46,7 @@ Configure with `apply_hp_production_recipe()` (the only hp recipe).
 
 | Build | CMake | `HP_SLOT_MAX` | v78 flags | enwik8.8mb BPC (measured) |
 |-------|-------|---------------|-----------|---------------------------|
-| **gate24 (default)** | (none required) | 24 | ON (`v78_flags.ps1`) | observe **1.611729**, archive **1.611759** |
+| **gate24 (default)** | (none required) | 24 | baked into the vendored tree ([strip](../reports/CYPHALM_HP_GATE24_STRIP.md)) | observe **1.611729**, archive **1.611759** |
 
 Removed by choice: **light** (~1.72 BPC, 0/78 flags) and **champ** (`SLOT_MAX=35`, ~15 GB RSS). See [`REMOVED_HP_SKUS.md`](../../history/REMOVED_HP_SKUS.md).
 

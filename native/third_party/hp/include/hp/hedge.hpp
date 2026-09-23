@@ -54,9 +54,6 @@
 #include "hp/int_math.hpp"
 #include "hp/undo.hpp"
 
-#ifndef HP_HEDGE_ETA
-#define HP_HEDGE_ETA 96
-#endif
 
 namespace hp {
 
@@ -64,12 +61,8 @@ class Hedge {
  public:
     explicit Hedge(int n)
         : n_(n),
-#if HP_HEDGE_W16
           w_(static_cast<std::size_t>(n),
              static_cast<std::uint16_t>((1u << 16) / (n ? n : 1))),
-#else
-          w_(static_cast<std::size_t>(n), (1u << 16) / (n ? n : 1)),
-#endif
           p_(static_cast<std::size_t>(n), 2048) {}
 
     // Record expert d's 12-bit probability for this bit.
@@ -103,7 +96,7 @@ class Hedge {
             // magnitude below the naive choice. Getting this wrong collapses
             // the posterior onto one expert within a few thousand bits and
             // the average degenerates.
-            const std::uint32_t decay = ((loss_q16 >> 8) * HP_HEDGE_ETA) >> 8;
+            const std::uint32_t decay = ((loss_q16 >> 8) * 96) >> 8;
             const std::uint32_t keepf = 65536u - (decay > 8192u ? 8192u : decay);
             hp_undo_note(w_[d]);
             w_[d] = static_cast<Weight>(
@@ -181,11 +174,7 @@ class Hedge {
     }
 
  private:
-#if HP_HEDGE_W16
     using Weight = std::uint16_t;
-#else
-    using Weight = std::uint32_t;
-#endif
     int n_;
     std::vector<Weight> w_;
     std::vector<int> p_;

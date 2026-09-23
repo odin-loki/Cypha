@@ -71,8 +71,8 @@ class Rng {
 
 class DiscoveryPool {
  public:
-    static constexpr int kSlots = HP_DISC_SLOTS;
-    static constexpr int kEvalBytes = HP_DISC_EVAL;   // review cadence
+    static constexpr int kSlots = 12;
+    static constexpr int kEvalBytes = 1024;   // review cadence
     static constexpr int kMinAge = 3;         // reviews before a slot is eligible
 
     DiscoveryPool(int table_bits, std::uint64_t seed) : rng_(seed) {
@@ -211,7 +211,6 @@ class DiscoveryPool {
     // duplicated an existing expert. Novelty is the entire point, so we
     // reject contiguous-from-zero masks and require reach beyond offset 3.
     std::uint32_t fresh_mask() {
-#if HP_META_PATTERNS
         // B.2: one in four candidates is a skip-k template (every kth
         // position). That is a pattern class over byte *layout*, not a
         // contiguous suffix — the axis discover.hpp was missing.
@@ -221,7 +220,6 @@ class DiscoveryPool {
             for (int i = 0; i < 16; i += k) m |= (1u << i);
             if (m != 0 && (m & 0xFFF0u) != 0) return m;
         }
-#endif
         for (int attempt = 0; attempt < 8; ++attempt) {
             const std::uint64_t r = rng_.next();
             const int nbits = 2 + static_cast<int>(r & 3);

@@ -15,6 +15,6 @@
   "online": true,
   "_meta": {
     "status": "production",
-    "notes": "CyphaLM gate24 hp (v78_flags.ps1 + HP_SLOT_MAX=24). enwik8.8mb observe ~1.611729 BPC, archive ~1.611759 BPC (measured 2026-09-19)."
+    "notes": "CyphaLM gate24 hp (gate24-only vendored hp tree + HP_SLOT_MAX=24). enwik8.8mb observe ~1.611729 BPC, archive ~1.611759 BPC (measured 2026-09-19)."
   }
 }

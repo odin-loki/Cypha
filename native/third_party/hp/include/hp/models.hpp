@@ -134,18 +134,14 @@ class ContextModel {
     // Both come from the SAME stored state, so cost is 2 bytes per slot instead
     // of the 4 the old {p,n} counter used -- twice the table for the same RAM,
     // which is itself worth a couple of percent.
-    static constexpr int kOutputs = HP_PY_EXPERT ? 2 : 1;
+    static constexpr int kOutputs = 2;
 
     ContextModel(int table_bits, int limit)
         : mask_((1u << table_bits) - 1),
-#if HP_HASH_CHK
           bits_(table_bits),
-#endif
           limit_(limit),
           t_(table_bits),
-#if HP_HASH_CHK
           chk_(static_cast<std::size_t>(1) << table_bits, 0),
-#endif
           sm_() {}
 
     void set_context(std::uint32_t h) { h_ = h; idle_ = false; }
@@ -158,14 +154,13 @@ class ContextModel {
         const std::uint32_t mixed =
             h_ ^ (static_cast<std::uint32_t>(c0) * 0x9E3779B1u);
         const StateTable& st = state_table();
-#if HP_HASH_CHK
         const std::uint32_t idx0 = mixed & mask_;
         const std::uint8_t want =
             static_cast<std::uint8_t>(((mixed >> bits_) & 255u) + 1u);
         int best = 0;
         int best_pri = 1 << 30;
         int found = -1;
-        const int nprobe = HP_HASH_P5 ? 5 : 3;
+        const int nprobe = 3;
         for (int p = 0; p < nprobe; ++p) {
             const std::uint32_t i = idx0 ^ static_cast<std::uint32_t>(p);
             if (chk_[i] == want) {
@@ -192,31 +187,17 @@ class ContextModel {
             hp_undo_note(chk_[idx_]);
             chk_[idx_] = want;
         }
-#else
-        hp_undo_note(idx_);
-        idx_ = mixed & mask_;
-#endif
         hp_undo_note(state_);
         state_ = t_.get(idx_);
         p_ind_ = sm_.predict(state_);
-#if HP_PY_EXPERT
-#if HP_STATE_TABLE2
         {
             int a0 = st.n0(state_), a1 = st.n1(state_);
             if (a0 > 12) a0 = 12;
             if (a1 > 12) a1 = 12;
             p_py_ = py_estimate(a0, a1, backoff_p12);
         }
-#else
-        p_py_ = py_estimate(st.n0(state_), st.n1(state_), backoff_p12);
-#endif
         out[0] = stretch(p_ind_);
         out[1] = stretch(p_py_);
-#else
-        (void)backoff_p12;
-        (void)st;
-        out[0] = stretch(p_ind_);
-#endif
     }
 
     int last_p() const { return p_ind_; }
@@ -245,18 +226,14 @@ class ContextModel {
             }
             if (ds == 0) {
                 t_.data()[i] = ss;
-#if HP_HASH_CHK
                 chk_[i] = src.chk_[i];
-#endif
                 continue;
             }
             const int d_ev = st.n0(ds) + st.n1(ds);
             const int s_ev = st.n0(ss) + st.n1(ss);
             if (s_ev > d_ev) {
                 t_.data()[i] = ss;
-#if HP_HASH_CHK
                 chk_[i] = src.chk_[i];
-#endif
             }
         }
     }
@@ -265,9 +242,7 @@ class ContextModel {
         sm_.copy_tables_from(src.sm_);
         const std::size_t n = t_.size();
         std::memcpy(t_.data(), src.t_.data(), n * sizeof(std::uint16_t));
-#if HP_HASH_CHK
         chk_ = src.chk_;
-#endif
     }
 
     /// Lossy serve: reset hash slots whose bit-history state has fewer than
@@ -276,15 +251,11 @@ class ContextModel {
         if (min_total <= 0) return;
         const StateTable& st = state_table();
         for (std::size_t i = 0; i < t_.size(); ++i) {
-#if HP_HASH_CHK
             if (chk_[i] == 0) continue;
-#endif
             const int state = static_cast<int>(t_.data()[i]);
             if (st.n0(state) + st.n1(state) < min_total) {
                 t_.data()[i] = 0;
-#if HP_HASH_CHK
                 chk_[i] = 0;
-#endif
             }
         }
     }
@@ -292,16 +263,12 @@ class ContextModel {
     void update(int y, int ens_p12 = -1) {
         if (idle_) return;
         std::int32_t ncl = 0;
-#if HP_NCL
         if (ens_p12 >= 0) {
             const std::int32_t diff =
                 (static_cast<std::int32_t>(p_ind_) -
                  static_cast<std::int32_t>(ens_p12)) << 10;
-            ncl = (diff * HP_NCL_LAMBDA) >> 8;
+            ncl = (diff * 4) >> 8;
         }
-#else
-        (void)ens_p12;
-#endif
         sm_.update(y, limit_, ncl);
         const StateTable& st = state_table();
         hp_undo_note(t_.ref(idx_));
@@ -310,14 +277,10 @@ class ContextModel {
 
     void checkpoint_write(std::ostream& os) const {
         blob::write_pod(os, mask_);
-#if HP_HASH_CHK
         blob::write_pod(os, bits_);
-#endif
         blob::write_pod(os, limit_);
         t_.checkpoint_write(os);
-#if HP_HASH_CHK
         blob::write_vec(os, chk_);
-#endif
         sm_.checkpoint_write(os);
         blob::write_pod(os, h_);
         blob::write_pod(os, idle_);
@@ -329,14 +292,10 @@ class ContextModel {
 
     void checkpoint_read(std::istream& is) {
         blob::read_pod(is, mask_);
-#if HP_HASH_CHK
         blob::read_pod(is, bits_);
-#endif
         blob::read_pod(is, limit_);
         t_.checkpoint_read(is);
-#if HP_HASH_CHK
         blob::read_vec(is, chk_);
-#endif
         sm_.checkpoint_read(is);
         blob::read_pod(is, h_);
         blob::read_pod(is, idle_);
@@ -348,14 +307,10 @@ class ContextModel {
 
  private:
     std::uint32_t mask_;
-#if HP_HASH_CHK
     int bits_;
-#endif
     int limit_;
     HashTable<std::uint16_t> t_;  // bit-history states (882 states -> 16 bit)
-#if HP_HASH_CHK
     std::vector<std::uint8_t> chk_;
-#endif
     StateMap sm_;
     std::uint32_t h_ = 0;
     bool idle_ = false;
@@ -918,39 +873,6 @@ class LzpModel {
     int sidx_ = 0;
     int have_ = 0;
     bool valid_ = false;
-};
-
-// Move-to-front rank of the previous byte, mixed with c0.
-class SrModel {
- public:
-    SrModel() {
-        for (int i = 0; i < 256; ++i) mtf_[i] = static_cast<std::uint8_t>(i);
-        counter_init(st_, 256);
-    }
-
-    void push_byte(int byte) {
-        int r = 0;
-        while (r < 256 && mtf_[r] != static_cast<std::uint8_t>(byte)) ++r;
-        last_rank_ = r > 31 ? 31 : r;
-        if (r > 0 && r < 256) {
-            const std::uint8_t v = mtf_[r];
-            for (int i = r; i > 0; --i) mtf_[i] = mtf_[i - 1];
-            mtf_[0] = v;
-        }
-    }
-
-    int predict(int c0) {
-        sidx_ = (last_rank_ << 3) | (c0 & 7);
-        return counter_predict(st_[sidx_]);
-    }
-
-    void update(int y) { counter_update(st_[sidx_], y, 255); }
-
- private:
-    std::uint8_t mtf_[256];
-    Counter st_[256];
-    int last_rank_ = 0;
-    int sidx_ = 0;
 };
 
 }  // namespace hp

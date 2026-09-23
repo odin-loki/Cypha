@@ -13,26 +13,12 @@
 
 namespace hp {
 
-inline constexpr int kMixerClamp = (1 << HP_MIXER_CLAMP_BITS);
+inline constexpr int kMixerClamp = (1 << 16);
 
-#if HP_MIXER_W16
-using MixerWt = std::int16_t;
-inline std::int32_t mixer_wt_expand(MixerWt w) {
-    return static_cast<std::int32_t>(w) << 1;
-}
-inline MixerWt mixer_wt_pack(std::int32_t w) {
-    return static_cast<MixerWt>(w >> 1);
-}
-#else
 using MixerWt = std::int32_t;
 inline std::int32_t mixer_wt_expand(MixerWt w) { return w; }
 inline MixerWt mixer_wt_pack(std::int32_t w) { return w; }
-#endif
 
-#if HP_MIXER_ST16
 using MixerSt = std::int16_t;
-#else
-using MixerSt = std::int32_t;
-#endif
 
 }  // namespace hp

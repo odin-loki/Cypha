@@ -11,7 +11,6 @@
 // Output format: int16 little-endian, (n_experts + 1) values per record.
 // Last value is the true bit (0 or 1).
 
-#define HP_TRACK_EXP_P 1
 
 #include <cstdio>
 #include <cstdint>

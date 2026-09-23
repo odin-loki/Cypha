@@ -48,7 +48,7 @@ namespace hp {
 // ---------------------------------------------------------------------------
 class StateTable {
  public:
-    static constexpr int kCap = HP_STATE_CAP;
+    static constexpr int kCap = 20;
     static constexpr int kStates = (kCap + 1) * (kCap + 1) * 2;
 
     StateTable() {

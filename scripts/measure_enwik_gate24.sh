@@ -10,16 +10,11 @@ mkdir -p "$OUT" "$MEASURE_DIR"
 HP_SRC="$ROOT/native/third_party/hp/src/main.cpp"
 HP_INC="$ROOT/native/third_party/hp/include"
 XSIMD="$ROOT/native/third_party/hp/third_party/xsimd/include"
-V78=$(grep -oE '\-DHP_[A-Z0-9_]+=[0-9]+' "$ROOT/native/third_party/hp/tools/v78_flags.ps1" \
-  | grep -vE 'HP_LR1_SCALE|HP_REFGROUP|HP_SENTPOS|HP_STATETRANS|HP_CAPPARA|HP_WIKIBOLD' \
-  | grep -v HP_SLOT_MAX | tr '\n' ' ')
-
 build_hp_cli() {
   local out="$MEASURE_DIR/hp_gate24"
   [[ -x "$out" ]] && return 0
   echo "Building hp_gate24 CLI..."
-  g++ -std=c++17 -O3 -msse4.1 -I "$HP_INC" -I "$XSIMD" -DHP_SLOT_MAX=24 -DHP_XSIMD=1 \
-    $V78 "$HP_SRC" -o "$out"
+  g++ -std=c++17 -O3 -msse4.1 -I "$HP_INC" -I "$XSIMD" -DHP_SLOT_MAX=24 -DHP_XSIMD=1 "$HP_SRC" -o "$out"
 }
 
 build_cypha() {
@@ -34,8 +29,6 @@ build_hp_cli
 build_cypha
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-python3 "$ROOT/scripts/hp_v78_flag_diff.py" | tee "$OUT/v78_flag_diff_${STAMP}.tsv"
-
 outfile="$OUT/gate24_${STAMP}.json"
 echo "=== Measuring gate24 ==="
 set +e

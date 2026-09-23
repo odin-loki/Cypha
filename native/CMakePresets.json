@@ -20,7 +20,7 @@
     {
       "name": "wsl-gcc-release",
       "displayName": "WSL / Linux — GCC Release (recommended native tree)",
-      "description": "Single build directory native/build-wsl-gcc. CyphaLM gate24 hp (v78 + HP_SLOT_MAX=24). PR CI: scripts/ci_native_fast.sh (-LE cypha_slow). Full gate: scripts/ci_native_linux.sh. Install: build-essential cmake ninja-build libsqlite3-dev. Optional Qt: qt6-base-dev; optional CUDA: nvidia-cuda-toolkit + -DCYPHA_ENABLE_CUDA=ON.",
+      "description": "Single build directory native/build-wsl-gcc. CyphaLM gate24 hp (gate24-only hp tree, HP_SLOT_MAX=24). PR CI: scripts/ci_native_fast.sh (-LE cypha_slow). Full gate: scripts/ci_native_linux.sh. Install: build-essential cmake ninja-build libsqlite3-dev. Optional Qt: qt6-base-dev; optional CUDA: nvidia-cuda-toolkit + -DCYPHA_ENABLE_CUDA=ON.",
       "binaryDir": "${sourceDir}/build-wsl-gcc",
       "generator": "Ninja",
       "cacheVariables": {
@@ -61,7 +61,7 @@
     {
       "name": "macos-clang-release",
       "displayName": "macOS — AppleClang Release (CyphaLM gate24 hp)",
-      "description": "native/build-macos. CyphaLM gate24 (v78_flags.ps1 + HP_SLOT_MAX=24). PR CI runs scripts/ci_native_hp_smoke.sh after build.",
+      "description": "native/build-macos. CyphaLM gate24 (gate24-only hp tree, HP_SLOT_MAX=24). PR CI runs scripts/ci_native_hp_smoke.sh after build.",
       "binaryDir": "${sourceDir}/build-macos",
       "generator": "Ninja",
       "cacheVariables": {

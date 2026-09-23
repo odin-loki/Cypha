@@ -67,21 +67,10 @@ inline void Predictor::merge_shard_tables(const Predictor& src, std::uint64_t sr
     for (int i = 0; i < kMatchModels; ++i) {
         match_[i].merge_counters_from(src.match_[i], src_bytes, dst_bytes, opts.min_counter_n);
     }
-#if HP_SPARSE_UTF8
     smatch_.merge_counters_from(src.smatch_, src_bytes, dst_bytes, opts.min_counter_n);
-#endif
-#if HP_SKIPK_MOD
     skipk_.merge_counters_from(src.skipk_, src_bytes, dst_bytes, opts.min_counter_n);
-#endif
-#if HP_SKIP3_MOD
     skip3_.merge_counters_from(src.skip3_, src_bytes, dst_bytes, opts.min_counter_n);
-#endif
-#if HP_SKIP4_MOD
     skip4_.merge_counters_from(src.skip4_, src_bytes, dst_bytes, opts.min_counter_n);
-#endif
-#if HP_SKIP5_MOD
-    skip5_.merge_counters_from(src.skip5_, src_bytes, dst_bytes, opts.min_counter_n);
-#endif
 
     hebb_.merge_tables_from(src.hebb_, src_bytes, dst_bytes, opts.min_statemap_count);
     pool_.merge_tables_from(src.pool_, src_bytes, dst_bytes, opts.min_statemap_count);
@@ -139,21 +128,10 @@ inline void Predictor::transfer_tables_from(const Predictor& src) {
     for (int i = 0; i < kMatchModels; ++i) {
         match_[i].copy_counters_from(src.match_[i]);
     }
-#if HP_SPARSE_UTF8
     smatch_.copy_counters_from(src.smatch_);
-#endif
-#if HP_SKIPK_MOD
     skipk_.copy_counters_from(src.skipk_);
-#endif
-#if HP_SKIP3_MOD
     skip3_.copy_counters_from(src.skip3_);
-#endif
-#if HP_SKIP4_MOD
     skip4_.copy_counters_from(src.skip4_);
-#endif
-#if HP_SKIP5_MOD
-    skip5_.copy_counters_from(src.skip5_);
-#endif
 
     hebb_.copy_tables_from(src.hebb_);
     pool_.copy_tables_from(src.pool_);
@@ -335,17 +313,6 @@ inline void Predictor::reset_stream_state() {
     mixed_p_ = 2048;
     last_mlen_ = 0;
     sparse_ = 0;
-#if HP_GATE_BREAK
-    break_age_ = 0;
-#endif
-#if HP_PRONOUN_MOD
-    std::memset(pw_, 0, sizeof(pw_));
-    pw_n_ = 0;
-    pronoun_ = 0;
-#endif
-#if HP_UTF8_IDLE || HP_GATE_UTF8
-    utf8left_ = 0;
-#endif
     rebind_internal_pointers_();
     set_byte_contexts();
 }
