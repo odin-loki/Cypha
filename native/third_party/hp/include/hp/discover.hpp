@@ -87,6 +87,11 @@ class DiscoveryPool {
         }
     }
 
+    /// Fold every slot's table to ``bits`` (ContextModel::fold_to).
+    void fold_to(int bits) {
+        for (auto& m : models_) m.fold_to(bits);
+    }
+
     // Set each slot's context from the byte history, using its mask.
     void set_contexts(std::uint64_t hist, std::uint64_t hist2) {
         for (int i = 0; i < kSlots; ++i) {

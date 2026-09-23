@@ -299,6 +299,28 @@ class Predictor {
 
     const Config& config() const { return cfg_; }
 
+    /// Serve-time RAM cut: shrink trained tables to the caps in ``target``
+    /// (cm_bits_cap, match_bits_cap, pool_bits_cap; 0 = keep) by folding, and
+    /// adopt those caps, so the result saves and reloads like a model built
+    /// with them. Other Config fields must match.
+    void fold_tables(const Config& target) {
+        for (int i = 0; i < n_ctx_chain_; ++i) {
+            ContextModel& m = *ctx_chain_[i];
+            if (target.cm_bits_cap > 0 && m.table_bits() > target.cm_bits_cap) m.fold_to(target.cm_bits_cap);
+        }
+        if (target.match_bits_cap > 0) {
+            for (int i = 0; i < kMatchModels; ++i) match_[i].fold_to(target.match_bits_cap);
+            smatch_.fold_to(target.match_bits_cap);
+            skipk_.fold_to(target.match_bits_cap);
+            skip3_.fold_to(target.match_bits_cap);
+            skip4_.fold_to(target.match_bits_cap);
+        }
+        if (target.pool_bits_cap > 0) pool_.fold_to(target.pool_bits_cap);
+        cfg_.cm_bits_cap = target.cm_bits_cap > 0 ? target.cm_bits_cap : cfg_.cm_bits_cap;
+        cfg_.match_bits_cap = target.match_bits_cap > 0 ? target.match_bits_cap : cfg_.match_bits_cap;
+        cfg_.pool_bits_cap = target.pool_bits_cap > 0 ? target.pool_bits_cap : cfg_.pool_bits_cap;
+    }
+
     int predict() {
         mixer_.reset_inputs();
         const int bias_p = counter_predict_p(bias_[c0_]);

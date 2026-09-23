@@ -94,6 +94,18 @@ void CyphaLMModel::set_serve_mode(bool on) {
     hp_->set_serve_adaptation(num, 16, -1);
 }
 
+void CyphaLMModel::fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_bits_cap) {
+    if (!hp_) return;
+    if (cm_bits_cap > 0) cfg_.hp_cm_bits_cap = cm_bits_cap;
+    if (match_bits_cap > 0) cfg_.hp_match_bits_cap = match_bits_cap;
+    if (pool_bits_cap > 0) cfg_.hp_pool_bits_cap = pool_bits_cap;
+    hp::Config target = hp_->predictor().config();
+    target.cm_bits_cap = cm_bits_cap;
+    target.match_bits_cap = match_bits_cap;
+    target.pool_bits_cap = pool_bits_cap;
+    hp_->fold_tables(target);
+}
+
 void CyphaLMModel::add_ensemble_member(CyphaLMModel&& other, double weight) {
     if (!hp_ || !other.hp_) throw std::runtime_error("add_ensemble_member: hp backends required");
     hp_->add_ensemble_member(std::move(other.hp_), weight);

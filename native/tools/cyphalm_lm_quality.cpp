@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -44,6 +45,16 @@ std::vector<std::uint8_t> read_slice(const std::string& path, std::uint64_t offs
     in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(n));
     out.resize(static_cast<std::size_t>(in.gcount()));
     return out;
+}
+
+/// Resident set size of this process in MB (Linux /proc; 0 elsewhere).
+double rss_mb(const char* field = "VmRSS:") {
+    std::ifstream f("/proc/self/status");
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.rfind(field, 0) == 0) return std::stod(line.substr(std::strlen(field))) / 1024.0;
+    }
+    return 0.0;
 }
 
 double seconds_since(Clock::time_point t0) {
@@ -87,6 +98,7 @@ int main(int argc, char** argv) {
     int serve_lr = 4, serve_skip = -1, epochs = 1;
     std::vector<std::string> members;  // library ensemble, equal weights
     double ensemble_lr = -1.0;  // <0: the model's config default
+    int fold_cm = 0, fold_match = 0, fold_pool = 0;
     int word_k = 0;
     bool only_default = false;
     for (int i = 1; i < argc; ++i) {
@@ -117,6 +129,10 @@ int main(int argc, char** argv) {
         else if (a == "--epochs") epochs = std::stoi(next());
         else if (a == "--member") members.push_back(next());
         else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
+        else if (a == "--fold") {  // CM,MATCH,POOL table bits (0 = keep)
+            const std::string v = next();
+            std::sscanf(v.c_str(), "%d,%d,%d", &fold_cm, &fold_match, &fold_pool);
+        }
         else if (a == "--word-k") word_k = std::stoi(next());
         else if (a == "--only-default") only_default = true;
         else {
@@ -134,9 +150,14 @@ int main(int argc, char** argv) {
         model = std::make_unique<cypha::cyphalm::CyphaLMModel>(
             cypha::cyphalm::load_cyphalm_model(load_json));
         out["loaded"] = load_json;
+        if (fold_cm > 0 || fold_match > 0 || fold_pool > 0) {
+            model->fold_hp_tables(fold_cm, fold_match, fold_pool);
+            out["fold"] = {fold_cm, fold_match, fold_pool};
+        }
         for (const auto& m : members) {
-            model->add_ensemble_member(cypha::cyphalm::load_cyphalm_model(m),
-                                       1.0 / static_cast<double>(members.size() + 1));
+            auto mm = cypha::cyphalm::load_cyphalm_model(m);
+            if (fold_cm > 0 || fold_match > 0 || fold_pool > 0) mm.fold_hp_tables(fold_cm, fold_match, fold_pool);
+            model->add_ensemble_member(std::move(mm), 1.0 / static_cast<double>(members.size() + 1));
         }
         if (!members.empty()) out["members"] = members;
         if (ensemble_lr >= 0.0) model->hp_backend().set_ensemble_learning_rate(ensemble_lr);
@@ -172,6 +193,9 @@ int main(int argc, char** argv) {
         out["saved"] = save_base;
     }
     out["setup_seconds"] = seconds_since(t_setup);
+    out["rss_mb_after_setup"] = rss_mb();
+    out["rss_anon_mb_after_setup"] = rss_mb("RssAnon:");
+    out["rss_file_mb_after_setup"] = rss_mb("RssFile:");
 
     if (!eval_path.empty()) {
         // none: continue the training stream; full: new stream, empty history;
@@ -281,6 +305,10 @@ int main(int argc, char** argv) {
             out["ensemble_lr"] = ensemble_lr;
             out["ensemble_weights_final"] = model->hp_backend().ensemble_weights();
         }
+        out["rss_mb_after_eval"] = rss_mb();
+        out["rss_anon_mb_after_eval"] = rss_mb("RssAnon:");
+        out["rss_file_mb_after_eval"] = rss_mb("RssFile:");
+        out["rss_hwm_mb"] = rss_mb("VmHWM:");
         if (compare_scoring) {
             out["frozen_scoring"] = {{"nll_bits_per_byte", f_nll / n},
                                      {"top1", f_top1 / n},

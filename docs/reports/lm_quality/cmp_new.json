@@ -1,0 +1,19 @@
+{
+  "harness": "cyphalm_lm_quality",
+  "rss_anon_mb_after_setup": 814.30859375,
+  "rss_file_mb_after_setup": 4.1328125,
+  "rss_mb_after_setup": 818.37890625,
+  "setup_seconds": 112.509782414,
+  "tier": "lean",
+  "train": {
+    "bpc_by_epoch": [
+      1.6827043877347998
+    ],
+    "bytes": 2097152,
+    "epochs": 1,
+    "offset": 0,
+    "online_bpc": 1.6827043877347998,
+    "path": "/home/user/corpora/e2m",
+    "seconds": 112.370444182
+  }
+}

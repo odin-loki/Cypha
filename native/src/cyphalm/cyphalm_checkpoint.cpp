@@ -1,5 +1,11 @@
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 
+#include <cstdlib>
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -124,12 +130,29 @@ void write_hpbin(const CyphaLMModel& model, const fs::path& path) {
     }
 }
 
+/// Large tables are mapped copy-on-write from the checkpoint file instead of
+/// copied into anonymous memory (hp::MapScope); CYPHA_HP_MMAP=0 turns it off.
+bool hp_mmap_enabled() {
+    const char* v = std::getenv("CYPHA_HP_MMAP");
+    return v == nullptr || v[0] != '0';
+}
+
 void read_hpbin(CyphaLMModel& model, const fs::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         throw std::runtime_error("cannot open hp checkpoint: " + path.string());
     }
-    model.hp_backend().predictor().read_checkpoint(in);
+    hp::MapSource src;
+#if !defined(_WIN32)
+    if (hp_mmap_enabled()) src.fd = ::open(path.c_str(), O_RDONLY);
+#endif
+    {
+        hp::MapScope scope(&src);
+        model.hp_backend().predictor().read_checkpoint(in);
+    }
+#if !defined(_WIN32)
+    if (src.fd >= 0) ::close(src.fd);  // mappings outlive the descriptor
+#endif
     if (!in) {
         throw std::runtime_error("hp checkpoint read failed: " + path.string());
     }

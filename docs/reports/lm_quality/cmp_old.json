@@ -1,0 +1,16 @@
+{
+  "harness": "cyphalm_lm_quality",
+  "setup_seconds": 117.943172652,
+  "tier": "lean",
+  "train": {
+    "bpc_by_epoch": [
+      1.6812910677614925
+    ],
+    "bytes": 2097152,
+    "epochs": 1,
+    "offset": 0,
+    "online_bpc": 1.6812910677614925,
+    "path": "/home/user/corpora/e2m",
+    "seconds": 117.880410747
+  }
+}

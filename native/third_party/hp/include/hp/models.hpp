@@ -126,6 +126,10 @@ inline void counter_update(Counter& c, int y, int limit) {
 // ---------------------------------------------------------------------------
 // A single hashed context model
 // ---------------------------------------------------------------------------
+/// Checkpoint format version being read (Predictor::read_checkpoint sets it);
+/// ContextModel converts pre-v3 tables.
+inline thread_local int g_hp_ckpt_read_version = 3;
+
 class ContextModel {
  public:
     // Two outputs per bit now:
@@ -144,8 +148,23 @@ class ContextModel {
           bits_(table_bits),
           limit_(limit),
           t_(table_bits),
-          chk_(static_cast<std::size_t>(1) << (table_bits > 0 ? table_bits : 0)),
           sm_() {}
+
+    // A slot is 16 bits: bit-history state (882 states) in the low 10 bits and
+    // a 6-bit checksum of the context above them (0 = empty slot). Formerly a
+    // 16-bit state plus an 8-bit checksum: 3 bytes a slot, now 2.
+    static constexpr unsigned kStateBits = 10;
+    static constexpr std::uint16_t kStateMask = (1u << kStateBits) - 1;
+    static int slot_state(std::uint16_t v) { return v & kStateMask; }
+    static unsigned slot_chk(std::uint16_t v) { return v >> kStateBits; }
+    static std::uint16_t slot_pack(int state, unsigned chk) {
+        return static_cast<std::uint16_t>((chk << kStateBits) | static_cast<unsigned>(state));
+    }
+    // Checksum from the context bits above the index: 1..63 (0 marks empty).
+    static unsigned chk_of(std::uint32_t above_index) {
+        const unsigned v = above_index & 63u;
+        return v == 0 ? 63u : v;
+    }
 
     void set_context(std::uint32_t h) {
         hp_undo_note(h_);
@@ -156,9 +175,44 @@ class ContextModel {
     // Frozen models neither learn nor claim hash slots (Predictor::set_learning).
     void set_frozen(bool f) { frozen_ = f; }
 
+    int table_bits() const { return off_ ? 0 : bits_; }
+
+    /// Shrink a trained table to ``bits`` by folding halves together, as if it
+    /// had been trained that size: slot i and i + half share an index at one
+    /// bit fewer, and the dropped index bit moves into the checksum
+    /// (want = ((mixed >> bits) & 255) + 1, so it is exactly recomputable).
+    /// On a collision the slot with more observations stays.
+    void fold_to(int bits) {
+        if (off_ || bits <= 0 || bits >= bits_) return;
+        const StateTable& st = state_table();
+        while (bits_ > bits) {
+            const std::size_t half = static_cast<std::size_t>(1) << (bits_ - 1);
+            std::vector<std::uint16_t> nt(half, 0);
+            const std::uint16_t* t = t_.data();
+            for (std::size_t i = 0; i < half; ++i) {
+                int best_pri = -1;
+                for (unsigned top = 0; top < 2; ++top) {
+                    const std::uint16_t v = t[i + (top ? half : 0)];
+                    const unsigned c6 = slot_chk(v);
+                    if (c6 == 0) continue;
+                    const int pri = st.n0(slot_state(v)) + st.n1(slot_state(v));
+                    if (pri <= best_pri) continue;
+                    best_pri = pri;
+                    // The dropped index bit becomes the checksum's low bit
+                    // (63 stands for 0 too, so that case is approximate).
+                    nt[i] = slot_pack(slot_state(v), chk_of((c6 << 1) | top));
+                }
+            }
+            --bits_;
+            mask_ = (1u << bits_) - 1;
+            t_.resize_bits(bits_);
+            std::memcpy(t_.data(), nt.data(), half * sizeof(std::uint16_t));
+        }
+        idx_ &= mask_;
+    }
+
     std::uint64_t learned_digest(std::uint64_t h) const {
         h = fnv_bytes(h, t_.data(), t_.size() * sizeof(std::uint16_t));
-        h = fnv_bytes(h, chk_.data(), chk_.size());
         return sm_.learned_digest(h);
     }
     // fx2 sets(): keep a mixer slot but do not pollute the table.
@@ -180,22 +234,20 @@ class ContextModel {
             h_ ^ (static_cast<std::uint32_t>(c0) * 0x9E3779B1u);
         const StateTable& st = state_table();
         const std::uint32_t idx0 = mixed & mask_;
-        const std::uint8_t want =
-            static_cast<std::uint8_t>(((mixed >> bits_) & 255u) + 1u);
+        const unsigned want = chk_of(mixed >> bits_);
         int best = 0;
         int best_pri = 1 << 30;
         int found = -1;
         const int nprobe = 3;
         for (int p = 0; p < nprobe; ++p) {
             const std::uint32_t i = idx0 ^ static_cast<std::uint32_t>(p);
-            if (chk_[i] == want) {
+            const std::uint16_t v = t_.get(i);
+            if (slot_chk(v) == want) {
                 found = static_cast<int>(i);
                 break;
             }
-            const int stt = t_.get(i);
-            const int pri = (chk_[i] == 0)
-                                ? -1
-                                : (st.n0(stt) + st.n1(stt));
+            const int stt = slot_state(v);
+            const int pri = (slot_chk(v) == 0) ? -1 : (st.n0(stt) + st.n1(stt));
             if (pri < best_pri) {
                 best_pri = pri;
                 best = static_cast<int>(i);
@@ -208,13 +260,11 @@ class ContextModel {
             hp_undo_note(idx_);
             idx_ = static_cast<std::uint32_t>(best);
             hp_undo_note(t_.ref(idx_));
-            t_.ref(idx_) = 0;
-            hp_undo_note(chk_[idx_]);
-            chk_[idx_] = want;
+            t_.ref(idx_) = slot_pack(0, want);
         }
         hp_undo_note(state_);
         // Frozen: an unseen context reads as the empty state and claims no slot.
-        state_ = (found >= 0 || !frozen_) ? t_.get(idx_) : 0;
+        state_ = (found >= 0 || !frozen_) ? slot_state(t_.get(idx_)) : 0;
         p_ind_ = sm_.predict(state_);
         {
             int a0 = st.n0(state_), a1 = st.n1(state_);
@@ -245,21 +295,20 @@ class ContextModel {
         const std::size_t n = t_.size();
         const StateTable& st = state_table();
         for (std::size_t i = 0; i < n; ++i) {
-            const std::uint16_t ds = t_.data()[i];
-            const std::uint16_t ss = src.t_.data()[i];
+            const std::uint16_t dv = t_.data()[i];
+            const std::uint16_t sv = src.t_.data()[i];
+            const int ds = slot_state(dv), ss = slot_state(sv);
             if (ss == 0) {
                 continue;
             }
             if (ds == 0) {
-                t_.data()[i] = ss;
-                chk_[i] = src.chk_[i];
+                t_.data()[i] = sv;
                 continue;
             }
             const int d_ev = st.n0(ds) + st.n1(ds);
             const int s_ev = st.n0(ss) + st.n1(ss);
             if (s_ev > d_ev) {
-                t_.data()[i] = ss;
-                chk_[i] = src.chk_[i];
+                t_.data()[i] = sv;
             }
         }
     }
@@ -268,7 +317,6 @@ class ContextModel {
         sm_.copy_tables_from(src.sm_);
         const std::size_t n = t_.size();
         std::memcpy(t_.data(), src.t_.data(), n * sizeof(std::uint16_t));
-        chk_ = src.chk_;
     }
 
     /// Lossy serve: reset hash slots whose bit-history state has fewer than
@@ -277,11 +325,10 @@ class ContextModel {
         if (min_total <= 0) return;
         const StateTable& st = state_table();
         for (std::size_t i = 0; i < t_.size(); ++i) {
-            if (chk_[i] == 0) continue;
-            const int state = static_cast<int>(t_.data()[i]);
+            if (slot_chk(t_.data()[i]) == 0) continue;
+            const int state = slot_state(t_.data()[i]);
             if (st.n0(state) + st.n1(state) < min_total) {
                 t_.data()[i] = 0;
-                chk_[i] = 0;
             }
         }
     }
@@ -298,15 +345,14 @@ class ContextModel {
         sm_.update(y, limit_, ncl);
         const StateTable& st = state_table();
         hp_undo_note(t_.ref(idx_));
-        t_.ref(idx_) = static_cast<std::uint16_t>(st.next(state_, y));
+        t_.ref(idx_) = slot_pack(st.next(state_, y), slot_chk(t_.get(idx_)));
     }
 
     void checkpoint_write(std::ostream& os) const {
         blob::write_pod(os, mask_);
         blob::write_pod(os, bits_);
         blob::write_pod(os, limit_);
-        t_.checkpoint_write(os);
-        chk_.write(os);
+        t_.checkpoint_write(os);  // packed slots (checkpoint v3)
         sm_.checkpoint_write(os);
         blob::write_pod(os, h_);
         blob::write_pod(os, idle_);
@@ -321,7 +367,17 @@ class ContextModel {
         blob::read_pod(is, bits_);
         blob::read_pod(is, limit_);
         t_.checkpoint_read(is);
-        chk_.read(is);
+        if (g_hp_ckpt_read_version < 3) {
+            // v1/v2: 16-bit states + separate 8-bit checksums; pack them.
+            ZeroBuf<std::uint8_t> chk;
+            chk.read(is);
+            std::uint16_t* t = t_.data();
+            for (std::size_t i = 0; i < t_.size(); ++i) {
+                const std::uint8_t c8 = chk[i];
+                t[i] = c8 == 0 ? static_cast<std::uint16_t>(0)
+                               : slot_pack(t[i] & kStateMask, chk_of(static_cast<std::uint8_t>(c8 - 1u)));
+            }
+        }
         sm_.checkpoint_read(is);
         blob::read_pod(is, h_);
         blob::read_pod(is, idle_);
@@ -337,8 +393,7 @@ class ContextModel {
     std::uint32_t mask_;
     int bits_;
     int limit_;
-    HashTable<std::uint16_t> t_;  // bit-history states (882 states -> 16 bit)
-    ZeroBuf<std::uint8_t> chk_;
+    HashTable<std::uint16_t> t_;  // packed slots: state (10 bits) | checksum (6 bits)
     StateMap sm_;
     std::uint32_t h_ = 0;
     bool idle_ = false;
@@ -529,6 +584,24 @@ class MatchModel {
     }
 
     void copy_counters_from(const MatchModel& src) { st_ = src.st_; }
+
+    /// Shrink the position table to ``bits``: of two folded entries keep the
+    /// more recent position (what a smaller table would hold).
+    void fold_to(int bits) {
+        int cur = 0;
+        while ((1u << cur) - 1 < tab_mask_) ++cur;
+        if (bits <= 0 || bits >= cur) return;
+        const std::size_t n = static_cast<std::size_t>(1) << bits;
+        std::vector<std::uint32_t> nt(n, 0);
+        for (std::size_t k = 0; k < tab_.size(); ++k) {
+            const std::uint32_t v = tab_.at(k);
+            std::uint32_t& d = nt[k & (n - 1)];
+            if (v > d) d = v;
+        }
+        tab_.resize_bits(bits);
+        std::memcpy(tab_.data(), nt.data(), n * sizeof(std::uint32_t));
+        tab_mask_ = static_cast<std::uint32_t>(n - 1);
+    }
 
     void checkpoint_write(std::ostream& os) const {
         blob::write_pod(os, order_);
