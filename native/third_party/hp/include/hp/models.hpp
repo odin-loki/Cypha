@@ -144,7 +144,7 @@ class ContextModel {
           bits_(table_bits),
           limit_(limit),
           t_(table_bits),
-          chk_(static_cast<std::size_t>(1) << table_bits, 0),
+          chk_(static_cast<std::size_t>(1) << (table_bits > 0 ? table_bits : 0)),
           sm_() {}
 
     void set_context(std::uint32_t h) { h_ = h; idle_ = false; }
@@ -297,7 +297,7 @@ class ContextModel {
         blob::write_pod(os, bits_);
         blob::write_pod(os, limit_);
         t_.checkpoint_write(os);
-        blob::write_vec(os, chk_);
+        chk_.write(os);
         sm_.checkpoint_write(os);
         blob::write_pod(os, h_);
         blob::write_pod(os, idle_);
@@ -312,7 +312,7 @@ class ContextModel {
         blob::read_pod(is, bits_);
         blob::read_pod(is, limit_);
         t_.checkpoint_read(is);
-        blob::read_vec(is, chk_);
+        chk_.read(is);
         sm_.checkpoint_read(is);
         blob::read_pod(is, h_);
         blob::read_pod(is, idle_);
@@ -328,7 +328,7 @@ class ContextModel {
     int bits_;
     int limit_;
     HashTable<std::uint16_t> t_;  // bit-history states (882 states -> 16 bit)
-    std::vector<std::uint8_t> chk_;
+    ZeroBuf<std::uint8_t> chk_;
     StateMap sm_;
     std::uint32_t h_ = 0;
     bool idle_ = false;

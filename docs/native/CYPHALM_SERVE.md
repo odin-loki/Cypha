@@ -14,7 +14,7 @@ bookkeeping and can use faster scoring paths.
 ### HpSequenceBackend
 
 - `serve_advance_byte` — advance live context (alias of `consume_byte`).
-- `serve_next_byte_log_probs` — full-vocab log P(next byte). **Default:** MSB bit-tree with delta undo on the live `pred_` (parity with legacy: `hp_bit_tree_smoke`). Legacy 256-clone path: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`.
+- `serve_next_byte_log_probs` — full-vocab log P(next byte). **Default:** MSB bit-tree with delta undo on the live `pred_`: one `predict()` per node, a re-predict only before the bit-1 update, no update at leaves (382 predicts + 254 updates instead of 510 + 510). Exact against fresh-clone scoring, and scoring leaves the live model untouched (`hp_bit_tree_smoke`; before 2026-09-22 DMC splits and word-match resets leaked, see [`CYPHALM_LOSSY_MIXER_REPORT.md`](../reports/CYPHALM_LOSSY_MIXER_REPORT.md)). Legacy 256-clone path: `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1`.
 - `serve_greedy_next_byte` — O(8) argmax via undo on `pred_` (no 256-way fan-out).
 - `serve_sample_next_byte` — O(8) temperature bit sampling via undo on `pred_`.
 
@@ -64,7 +64,10 @@ REST: `POST /cyphalm/generate` (see `cyphalm_rest_routes.cpp`) uses the same `ge
 |--------|----------------------|-------|
 | Pre-undo checkpoint tree + dual `pred_` | **~4.3 GB** class | CHANGELOG PR #7 baseline |
 | Post-undo dual `pred_` + `scratch_` | **~3.1 GB** | PR #7 landed |
-| **Single-predictor serve (this tree)** | **~1.5 GB** | [`GATE24_POST_UNDO_BENCH.md`](../reports/GATE24_POST_UNDO_BENCH.md) |
+| Single-predictor serve | **~1.5 GB** | [`GATE24_POST_UNDO_BENCH.md`](../reports/GATE24_POST_UNDO_BENCH.md) |
+| **Demand-zero tables (this tree)** | **~80 MB** at construct, grows to ~1.5 GB as slots fill | construct ~55 ms instead of ~8 s; see lossy mixer report |
+
+Lossy tiers (`apply_hp_lossy_tier`, `CYPHA_HP_LOSSY_TIER`) cut the table footprint further; measured RAM / bpc / speed per tier: [`CYPHALM_LOSSY_MIXER_REPORT.md`](../reports/CYPHALM_LOSSY_MIXER_REPORT.md).
 
 `hp_serve_compact` is retained for API compatibility but is a no-op when only one predictor is allocated.
 
@@ -90,5 +93,5 @@ Runs greedy + temperature completions on built-in prompts via `generate_decode` 
 ## Tests
 
 - `cyphalm_serve_smoke` — serve generation does not bump `train_step_count`; train_step does.
-- `hp_bit_tree_smoke` — bit-tree ≡ legacy fork log probs.
+- `hp_bit_tree_smoke` — bit-tree ≡ legacy fork log probs; on text, a served model and an unserved twin stay identical (no speculative-state leak).
 - `hp_undo_smoke` — predictor checkpoint round-trip (when undo headers are present).

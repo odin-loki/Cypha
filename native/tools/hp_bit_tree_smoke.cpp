@@ -17,6 +17,12 @@ int main() {
     cypha::cyphalm::apply_hp_production_recipe(cfg);
     cfg.vocab_size = 256;
     cfg.hp_table_bits = 16;
+    // gate24 grows some tables +9 bits (capped at 2^24), so a mem-16 predictor
+    // is still ~400 MB and the fresh-copy reference paths below copy it 256x.
+    // Cap every table at 2^16: same code paths, a fraction of the bytes.
+    cfg.hp_cm_bits_cap = 16;
+    cfg.hp_match_bits_cap = 16;
+    cfg.hp_pool_bits_cap = 16;
     cypha::cyphalm::CyphaLMModel model(cfg);
 
     std::mt19937 rng(123);
