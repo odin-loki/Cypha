@@ -221,7 +221,9 @@ void apply_decode_modifiers(std::vector<double>& lp, const std::vector<int>& rec
 
 void prime_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids,
                          const std::vector<int>& prompt_ids) {
-    model.reset_context();
+    // New stream on the trained model. (reset_context() here used to replace the
+    // predictor with an untrained one, so generation ignored all training.)
+    model.reset_stream();
     for (int id : warmup_ids) {
         model.serve_advance(static_cast<std::uint32_t>(id));
     }

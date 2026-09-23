@@ -4,8 +4,11 @@
 #include <cstdio>
 #include <random>
 #include <string>
+#include <vector>
 
 #include "cypha/cyphalm/cyphalm_config.hpp"
+#include "cypha/cyphalm/cyphalm_generation.hpp"
+#include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/hp_backend.hpp"
 
 int main() {
@@ -61,6 +64,32 @@ int main() {
         return 1;
     }
     hp.set_frozen_scoring(false);
+
+    // Generation must continue from the trained model. prime_serve_context used
+    // to call reset_context(), which replaced the predictor with an untrained one.
+    {
+        cypha::cyphalm::CyphaLMModel model(cfg);
+        std::vector<int> ids(text.begin(), text.begin() + 5000);
+        for (int b : ids) model.hp_backend().consume_byte(static_cast<std::uint8_t>(b));
+        const std::uint64_t trained_model = model.hp_backend().predictor().learned_digest();
+        cypha::cyphalm::DecodeParams p;
+        p.strategy = cypha::cyphalm::DecodeStrategy::Greedy;
+        p.learn_from_output = false;
+        std::vector<int> prompt = {'t'};  // one byte: the prompt's last byte is learned
+        (void)cypha::cyphalm::generate_decode(model, prompt, 16, p);
+        // Only the single prompt byte may have been learned; an untrained predictor
+        // would have a completely different digest.
+        cypha::cyphalm::CyphaLMModel twin(cfg);
+        for (int b : ids) twin.hp_backend().consume_byte(static_cast<std::uint8_t>(b));
+        twin.reset_stream();
+        twin.serve_advance('t');
+        if (model.hp_backend().predictor().learned_digest() !=
+                twin.hp_backend().predictor().learned_digest() ||
+            trained_model == cypha::cyphalm::CyphaLMModel(cfg).hp_backend().predictor().learned_digest()) {
+            std::printf("hp_frozen_smoke FAIL generation did not keep the trained model\n");
+            return 1;
+        }
+    }
 
     std::printf("hp_frozen_smoke OK digest %016llx unchanged over 2000 frozen bytes\n",
                 static_cast<unsigned long long>(trained));

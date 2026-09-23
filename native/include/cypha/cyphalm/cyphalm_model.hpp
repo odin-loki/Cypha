@@ -83,7 +83,11 @@ class CyphaLMModel {
 
     const CyphaLMConfig& config() const { return cfg_; }
 
+    /// Full reset: a brand-new, untrained hp predictor (compression from scratch).
     void reset_context();
+    /// Start a new text stream on the trained model: clears byte history, hashes
+    /// and match pointers; keeps every learned table. Use before a new prompt.
+    void reset_stream();
     void reset_optim_state();
 
     /// Serve/inference: consume ``context_byte``, score next-byte distribution (bit-tree default).

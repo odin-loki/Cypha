@@ -11,6 +11,7 @@
 
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_views.hpp"
+#include "hp/shard_merge.hpp"  // Predictor::reset_stream_state
 #include "cypha/intelligence/intelligence_profiler.hpp"
 
 namespace cypha {
@@ -77,6 +78,13 @@ void CyphaLMModel::reset_context() {
     last_predict_out_ = {};
     step_count_ = 0;
     last_train_loss_ = 0.0;
+}
+
+void CyphaLMModel::reset_stream() {
+    if (hp_) {
+        hp_->predictor().reset_stream_state();
+    }
+    last_predict_out_ = {};
 }
 
 void CyphaLMModel::reset_optim_state() {
@@ -187,7 +195,13 @@ void CyphaLMModel::train_sequence(const std::vector<int>& ids, int n_steps, int 
     }
     const int ep_count = std::max(1, epochs);
     for (int ep = 0; ep < ep_count; ++ep) {
-        reset_context();
+        // First epoch trains from scratch (historic behaviour); later epochs keep
+        // what was learned and only restart the stream.
+        if (ep == 0) {
+            reset_context();
+        } else {
+            reset_stream();
+        }
         const int steps = std::min(n_steps, static_cast<int>(ids.size()) - 1);
         for (int i = 0; i < steps; ++i) {
             if (i == 0) {
