@@ -80,9 +80,9 @@ void CyphaLMModel::reset_context() {
     last_train_loss_ = 0.0;
 }
 
-void CyphaLMModel::reset_stream() {
+void CyphaLMModel::reset_stream(bool keep_history) {
     if (hp_) {
-        hp_->predictor().reset_stream_state();
+        hp_->predictor().reset_stream_state(keep_history);
     }
     last_predict_out_ = {};
 }

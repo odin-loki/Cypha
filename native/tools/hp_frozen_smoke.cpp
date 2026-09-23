@@ -81,7 +81,7 @@ int main() {
         // would have a completely different digest.
         cypha::cyphalm::CyphaLMModel twin(cfg);
         for (int b : ids) twin.hp_backend().consume_byte(static_cast<std::uint8_t>(b));
-        twin.reset_stream();
+        twin.reset_stream(/*keep_history=*/true);
         twin.serve_advance('t');
         if (model.hp_backend().predictor().learned_digest() !=
                 twin.hp_backend().predictor().learned_digest() ||

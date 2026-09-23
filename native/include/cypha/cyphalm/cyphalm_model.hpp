@@ -87,7 +87,8 @@ class CyphaLMModel {
     void reset_context();
     /// Start a new text stream on the trained model: clears byte history, hashes
     /// and match pointers; keeps every learned table. Use before a new prompt.
-    void reset_stream();
+    /// keep_history keeps the byte history match models copy from.
+    void reset_stream(bool keep_history = false);
     void reset_optim_state();
 
     /// Serve/inference: consume ``context_byte``, score next-byte distribution (bit-tree default).

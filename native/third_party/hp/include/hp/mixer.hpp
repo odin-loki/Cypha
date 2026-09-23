@@ -40,6 +40,15 @@ class MixerNet {
     }
 
     // Lossy knobs (Config::mixer_skip / Config::gate_drop). Defaults keep gate24.
+    /// Serve-time adaptation: scale every learning rate by num/den (min 1).
+    void scale_rates(int num, int den) {
+        auto sc = [&](int r) { const int v = r * num / den; return v < 1 ? 1 : v; };
+        lr_ = sc(lr_);
+        for (int& r : lr1_) r = sc(r);
+    }
+    void set_skip(int skip) { skip_ = skip; }
+    int skip() const { return skip_; }
+
     void set_lossy(int skip, std::uint32_t gate_drop) {
         if (skip > 0) skip_ = skip;
         gate_drop_ = gate_drop;

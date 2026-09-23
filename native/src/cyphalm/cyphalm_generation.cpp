@@ -222,8 +222,10 @@ void apply_decode_modifiers(std::vector<double>& lp, const std::vector<int>& rec
 void prime_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids,
                          const std::vector<int>& prompt_ids) {
     // New stream on the trained model. (reset_context() here used to replace the
-    // predictor with an untrained one, so generation ignored all training.)
-    model.reset_stream();
+    // predictor with an untrained one, so generation ignored all training.) The
+    // byte history is kept: match models copy from it, and wiping it cost
+    // 0.02-0.03 bits/byte held-out (CYPHALM_LM_QUALITY_REPORT.md).
+    model.reset_stream(/*keep_history=*/true);
     for (int id : warmup_ids) {
         model.serve_advance(static_cast<std::uint32_t>(id));
     }

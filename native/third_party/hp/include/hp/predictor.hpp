@@ -416,6 +416,13 @@ class Predictor {
     }
     bool learning() const { return learning_; }
 
+    /// Serve-time adaptation speed: scale mixer learning rates by num/den and
+    /// set the mixer's small-error skip threshold (<0 keeps it). Runtime only.
+    void set_serve_adaptation(int num, int den, int skip) {
+        mixer_.scale_rates(num, den);
+        if (skip >= 0) mixer_.set_skip(skip);
+    }
+
 
     /// Hash of everything that learns: context/pool/Hebbian tables and StateMaps,
     /// match/LZP/word-match counters, DMC graph, mixer, APMs, hedge, bias
@@ -570,7 +577,8 @@ class Predictor {
     void transfer_tables_from(const Predictor& src);
 
     /// Clear path-dependent runtime state; learned tables are preserved.
-    void reset_stream_state();
+    /// keep_history: keep the byte ring (the text match models copy from).
+    void reset_stream_state(bool keep_history = false);
 
     /// Rebind match/wordstream internal pointers after copy (bit-tree scratch fork).
     void rebind_streams() { rebind_internal_pointers_(); }

@@ -83,6 +83,9 @@ int main(int argc, char** argv) {
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
     bool compare_scoring = false;
+    std::string reset_mode = "none";
+    int serve_lr = 2, serve_skip = -1, epochs = 1;
+    std::string ensemble_json;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() -> std::string {
@@ -104,6 +107,11 @@ int main(int argc, char** argv) {
         else if (a == "--top-p") top_p = std::stod(next());
         else if (a == "--frozen-eval") frozen_eval = true;
         else if (a == "--compare-scoring") compare_scoring = true;
+        else if (a == "--reset-stream") reset_mode = next();
+        else if (a == "--serve-lr") serve_lr = std::stoi(next());
+        else if (a == "--serve-skip") serve_skip = std::stoi(next());
+        else if (a == "--epochs") epochs = std::stoi(next());
+        else if (a == "--ensemble") ensemble_json = next();
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -132,10 +140,17 @@ int main(int argc, char** argv) {
     if (!train_path.empty() && train_bytes > 0) {
         const auto train = read_slice(train_path, 0, train_bytes);
         const auto t0 = Clock::now();
-        const double bits = hp.observe_stream_bits(train.data(), train.size());
+        nlohmann::json per_epoch = nlohmann::json::array();
+        double bits = 0.0;
+        for (int e = 0; e < std::max(1, epochs); ++e) {
+            bits = hp.observe_stream_bits(train.data(), train.size());
+            per_epoch.push_back(bits / static_cast<double>(train.size()));
+        }
         out["train"] = {{"path", train_path},
                         {"bytes", train.size()},
-                        {"online_bpc", bits / static_cast<double>(train.size())},
+                        {"epochs", std::max(1, epochs)},
+                        {"online_bpc", per_epoch.front()},
+                        {"bpc_by_epoch", per_epoch},
                         {"seconds", seconds_since(t0)}};
     }
     if (!save_base.empty()) {
@@ -145,6 +160,26 @@ int main(int argc, char** argv) {
     out["setup_seconds"] = seconds_since(t_setup);
 
     if (!eval_path.empty()) {
+        // none: continue the training stream; full: new stream, empty history;
+        // keep: new stream that keeps the byte history match models copy from.
+        if (reset_mode == "full") model->reset_stream(false);
+        else if (reset_mode == "keep") model->reset_stream(true);
+        out["reset_stream"] = reset_mode;
+        // Serve-time adaptation: mixer rates x serve_lr/2, skip threshold.
+        hp.predictor().set_serve_adaptation(serve_lr, 2, serve_skip);
+        // Optional second model: its distribution is mixed with the first.
+        std::unique_ptr<cypha::cyphalm::CyphaLMModel> model2;
+        if (!ensemble_json.empty()) {
+            model2 = std::make_unique<cypha::cyphalm::CyphaLMModel>(
+                cypha::cyphalm::load_cyphalm_model(ensemble_json));
+            if (reset_mode == "full") model2->reset_stream(false);
+            else if (reset_mode == "keep") model2->reset_stream(true);
+            model2->hp_backend().predictor().set_serve_adaptation(serve_lr, 2, serve_skip);
+        }
+        double e2_nll = 0.0, lin_nll = 0.0, geo_nll = 0.0, bayes_nll = 0.0;
+        double w_bayes = 0.5;
+        out["serve_lr_half_units"] = serve_lr;
+        out["serve_skip"] = serve_skip;
         const auto ev = read_slice(eval_path, eval_offset, eval_bytes + prompt_bytes);
         const std::size_t n_eval = ev.size() > static_cast<std::size_t>(prompt_bytes)
                                        ? ev.size() - static_cast<std::size_t>(prompt_bytes)
@@ -190,6 +225,26 @@ int main(int argc, char** argv) {
                 if (lp[static_cast<std::size_t>(b)] > lp[static_cast<std::size_t>(truth)]) ++rank;
             }
             nll_bits += -lp[static_cast<std::size_t>(truth)] / kLn2;
+            if (model2) {
+                auto& h2 = model2->hp_backend();
+                const auto lp2 = h2.serve_next_byte_log_probs(256);
+                const double p1 = std::exp(lp[static_cast<std::size_t>(truth)]);
+                const double p2 = std::exp(lp2[static_cast<std::size_t>(truth)]);
+                e2_nll += -std::log2(p2);
+                lin_nll += -std::log2(0.5 * p1 + 0.5 * p2);
+                double zg = 0.0;
+                for (int b = 0; b < 256; ++b)
+                    zg += std::exp(0.5 * (lp[static_cast<std::size_t>(b)] + lp2[static_cast<std::size_t>(b)]));
+                geo_nll += -(0.5 * (lp[static_cast<std::size_t>(truth)] + lp2[static_cast<std::size_t>(truth)]) -
+                             std::log(zg)) / kLn2;
+                // Fixed-share Bayesian weight on model 1 (tracks which model is better lately).
+                const double pm = w_bayes * p1 + (1.0 - w_bayes) * p2;
+                bayes_nll += -std::log2(pm);
+                w_bayes = 0.98 * (w_bayes * p1 / pm) + 0.02 * 0.5;
+                h2.set_learning(!frozen_eval);
+                h2.observe_next_byte(static_cast<std::uint8_t>(truth));
+                h2.set_learning(true);
+            }
             for (int t = 0; t < kTemps; ++t) {
                 // log softmax(lp / T) at the true byte
                 double mx = -1e300;
@@ -238,6 +293,13 @@ int main(int argc, char** argv) {
                        {"nll_bits_by_temperature", tsweep},
                        {"ms_per_byte", 1e3 * secs / n},
                        {"distribution_ms", 1e3 * e_secs / n}};
+        if (model2) {
+            out["ensemble"] = {{"with", ensemble_json},
+                               {"model2_nll", e2_nll / n},
+                               {"linear_half_nll", lin_nll / n},
+                               {"geometric_half_nll", geo_nll / n},
+                               {"fixed_share_nll", bayes_nll / n}};
+        }
         if (compare_scoring) {
             out["frozen_scoring"] = {{"nll_bits_per_byte", f_nll / n},
                                      {"top1", f_top1 / n},

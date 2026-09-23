@@ -290,8 +290,8 @@ inline MergeStatus merge_predictor_tables_sequential(
     return MergeStatus::Ok;
 }
 
-inline void Predictor::reset_stream_state() {
-    byte_ring_.reset();
+inline void Predictor::reset_stream_state(bool keep_history) {
+    if (!keep_history) byte_ring_.reset();
     hist_ = 0;
     word_hash_ = 0;
     letter_hash_ = 0;
