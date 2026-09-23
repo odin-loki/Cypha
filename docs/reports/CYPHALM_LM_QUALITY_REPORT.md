@@ -287,7 +287,9 @@ into words, but the tunes must flow from one…"*). With word lookahead on top,
 ensemble samples lean to safe function words (*"…the information and
 commission and the prototype and the original sources and the southern…"*).
 Ensembles are the better *distribution*. For free generation a single model,
-or an ensemble with lower `word_candidates`, reads better. Generation
+or an ensemble with lower `word_candidates`, reads better. Proposing candidate
+words from the primary model and choosing by the ensemble did not help
+(2-shard, wiki: judge 1.272 / d4 0.735 vs 1.158 / 0.789), so it was not kept. Generation
 benchmark (8 wiki prompts, `cyphalm_gen_bench`, judge lean 16 MiB):
 
 | generator | judge bits (ref 2.13) | distinct 4-grams (ref 0.80) | ms/byte |
