@@ -46,6 +46,7 @@ int main() {
     cypha::cyphalm::apply_hp_production_recipe(cfg);
     cfg.vocab_size = 256;
     cfg.hp_table_bits = 16;
+    cfg.hp_frozen_scoring = false;  // this test checks exact (compression-semantics) parity
     cypha::cyphalm::CyphaLMModel model(cfg);
 
     std::mt19937 rng(4242);

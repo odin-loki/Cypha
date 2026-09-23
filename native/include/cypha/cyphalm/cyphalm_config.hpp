@@ -322,9 +322,11 @@ struct CyphaLMConfig {
     int hp_pool_slots = 0;           ///< keep this many discovered-context slots (gate24 = 12)
     int hp_pool_bits_cap = 0;        ///< cap discovered-context tables at this many bits
     std::string hp_lossy_tier;       ///< name of the applied tier ("" = gate24), informational
-    /// Serve-time frozen scoring (``HpSequenceBackend::set_frozen_scoring``).
-    /// Env ``CYPHA_HP_FROZEN_SCORING=1``.
-    bool hp_frozen_scoring = false;
+    /// Serve-time frozen scoring (``HpSequenceBackend::set_frozen_scoring``): full
+    /// next-byte distributions 2.1-2.5x faster for +0.003-0.008 bits/byte held-out
+    /// (enwik8 8 MiB pretrain; CYPHALM_LM_QUALITY_REPORT.md). Training / eval_bpc
+    /// are unaffected. Env ``CYPHA_HP_FROZEN_SCORING=0`` restores exact hp scoring.
+    bool hp_frozen_scoring = true;
 };
 
 /// Compile-time ``HP_SLOT_MAX`` baked into this binary (24, gate24).

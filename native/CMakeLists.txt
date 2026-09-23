@@ -536,6 +536,12 @@ cypha_mingw_apply_exe_link_options(hp_bit_tree_smoke)
 add_test(NAME native_hp_bit_tree_smoke COMMAND "$<TARGET_FILE:hp_bit_tree_smoke>")
 set_tests_properties(native_hp_bit_tree_smoke PROPERTIES TIMEOUT 120)
 
+add_executable(byte_lstm_smoke tools/byte_lstm_smoke.cpp)
+target_link_libraries(byte_lstm_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(byte_lstm_smoke)
+add_test(NAME native_byte_lstm_smoke COMMAND "$<TARGET_FILE:byte_lstm_smoke>")
+set_tests_properties(native_byte_lstm_smoke PROPERTIES TIMEOUT 120)
+
 add_executable(hp_frozen_smoke tools/hp_frozen_smoke.cpp)
 target_link_libraries(hp_frozen_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_frozen_smoke)

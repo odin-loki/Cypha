@@ -467,8 +467,10 @@ class MatchModel {
                 len_ = 1;
             }
         }
-        hp_undo_note(tab_.ref(h));
-        tab_.ref(h) = pos;
+        if (index_) {
+            hp_undo_note(tab_.ref(h));
+            tab_.ref(h) = pos;
+        }
 
         // 3. Drop the match if it has fallen out of the ring buffer.
         if (len_ > 0 && (pos - ptr_) > ring_->mask()) {
@@ -506,6 +508,9 @@ class MatchModel {
         if (valid_) counter_update(st_[sidx_], y, 255);
     }
 
+    // Indexing off: this byte advances a running match but is not added to the
+    // history index, so later bytes cannot adopt it as a copy source.
+    void set_indexing(bool on) { index_ = on; }
     int match_len() const { return len_; }
     std::uint64_t learned_digest(std::uint64_t h) const {
         return fnv_bytes(h, st_.data(), sizeof(st_));
@@ -558,6 +563,7 @@ class MatchModel {
     int expected_ = 0;
     int sidx_ = 0;
     bool valid_ = false;
+    bool index_ = true;
 };
 
 
@@ -879,11 +885,13 @@ class LzpModel {
         return fnv_bytes(h, st_.data(), sizeof(st_));
     }
 
+    void set_indexing(bool on) { index_ = on; }
+
     void push_byte(int byte, std::uint64_t hist) {
         const std::uint32_t h =
             hash2(0x4C5A5033ull, hist & 0xffffffull) & mask_;
         expected_ = pred_[h];
-        pred_[h] = static_cast<std::uint8_t>(byte);
+        if (index_) pred_[h] = static_cast<std::uint8_t>(byte);
         have_ = 1;
     }
 
@@ -934,6 +942,7 @@ class LzpModel {
     int sidx_ = 0;
     int have_ = 0;
     bool valid_ = false;
+    bool index_ = true;
 };
 
 }  // namespace hp

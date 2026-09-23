@@ -416,6 +416,22 @@ class Predictor {
     }
     bool learning() const { return learning_; }
 
+    /// History indexing on (default): every byte is added to the match / word
+    /// match / LZP indexes, so later context can copy from it. Off: bytes still
+    /// advance running matches but are not indexed. CyphaLM can turn it off for
+    /// its own output so it copies from what it read, not from what it wrote.
+    void set_history_indexing(bool on) {
+        indexing_ = on;
+        for (int i = 0; i < kMatchModels; ++i) match_[i].set_indexing(on);
+        smatch_.set_indexing(on);
+        skipk_.set_indexing(on);
+        skip3_.set_indexing(on);
+        skip4_.set_indexing(on);
+        lzp_.set_indexing(on);
+        for (int i = 0; i < kWordMatch; ++i) wmatch_[i].set_indexing(on);
+    }
+    bool history_indexing() const { return indexing_; }
+
     /// Hash of everything that learns: context/pool/Hebbian tables and StateMaps,
     /// match/LZP/word-match counters, DMC graph, mixer, APMs, hedge, bias
     /// counters. Excludes context state (history, hashes, match history index,
@@ -815,6 +831,7 @@ class Predictor {
 
     void assign_from_(const Predictor& o) {
         learning_ = o.learning_;
+        indexing_ = o.indexing_;
         byte_ring_ = o.byte_ring_;
         o1_ = o.o1_;
         o2_ = o.o2_;
@@ -1023,6 +1040,7 @@ class Predictor {
     std::uint64_t word_ring_[4] = {0, 0, 0, 0};
     ContextModel* ctx_chain_[kCtxModels];
     bool learning_ = true;
+    bool indexing_ = true;
     int n_ctx_chain_ = 0;
     int c0_ = 1;
     int bitpos_ = 0;
