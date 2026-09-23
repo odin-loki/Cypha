@@ -97,9 +97,6 @@ class HpSequenceBackend {
     void set_learning(bool on) { pred_->set_learning(on); }
     bool learning() const { return pred_->learning(); }
 
-    /// Match/word-match/LZP history indexing (``hp::Predictor::set_history_indexing``).
-    void set_history_indexing(bool on) { pred_->set_history_indexing(on); }
-
     int table_bits() const { return cfg_.table_bits; }
     int mixer_lr() const { return cfg_.mixer_lr; }
     bool gria_enabled() const { return cfg_.gria; }

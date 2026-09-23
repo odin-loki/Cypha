@@ -28,7 +28,6 @@
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/byte_lstm.hpp"
 #include "cypha/cyphalm/hp_backend.hpp"
 
 namespace {
@@ -84,8 +83,6 @@ int main(int argc, char** argv) {
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
     bool compare_scoring = false;
-    int lstm_hidden = 0;
-    double lstm_lr = 2e-3;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         auto next = [&]() -> std::string {
@@ -107,8 +104,6 @@ int main(int argc, char** argv) {
         else if (a == "--top-p") top_p = std::stod(next());
         else if (a == "--frozen-eval") frozen_eval = true;
         else if (a == "--compare-scoring") compare_scoring = true;
-        else if (a == "--lstm-hidden") lstm_hidden = std::stoi(next());
-        else if (a == "--lstm-lr") lstm_lr = std::stod(next());
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -132,23 +127,6 @@ int main(int argc, char** argv) {
         model = std::make_unique<cypha::cyphalm::CyphaLMModel>(cfg);
     }
     auto& hp = model->hp_backend();
-    std::unique_ptr<cypha::cyphalm::ByteLstm> lstm;
-    cypha::cyphalm::ByteMixGate gate;
-    cypha::cyphalm::ByteLstmOptions lopt;
-    if (lstm_hidden > 0) {
-        lopt.hidden = lstm_hidden;
-        lopt.lr = static_cast<float>(lstm_lr);
-        lstm = std::make_unique<cypha::cyphalm::ByteLstm>(lopt);
-        if (!load_json.empty()) {
-            const std::string lpath = load_json.substr(0, load_json.size() - 5) + ".lstm";
-            std::ifstream lin(lpath, std::ios::binary);
-            if (lin) {
-                lstm->read(lin);
-                gate.read(lin);
-                out["lstm_loaded"] = lpath;
-            }
-        }
-    }
     out["tier"] = model->config().hp_lossy_tier.empty() ? "gate24" : model->config().hp_lossy_tier;
 
     if (!train_path.empty() && train_bytes > 0) {
@@ -159,27 +137,8 @@ int main(int argc, char** argv) {
                         {"bytes", train.size()},
                         {"online_bpc", bits / static_cast<double>(train.size())},
                         {"seconds", seconds_since(t0)}};
-        if (lstm) {
-            const auto tl = Clock::now();
-            double lbits = 0.0, tail_bits = 0.0;
-            const std::size_t tail_from = train.size() > 65536 ? train.size() - 65536 : 0;
-            for (std::size_t i = 0; i < train.size(); ++i) {
-                const double l = lstm->observe(train[i]) / kLn2;
-                lbits += l;
-                if (i >= tail_from) tail_bits += l;
-            }
-            out["train"]["lstm_online_bpc"] = lbits / static_cast<double>(train.size());
-            out["train"]["lstm_last64k_bpc"] = tail_bits / static_cast<double>(train.size() - tail_from);
-            out["train"]["lstm_seconds"] = seconds_since(tl);
-            out["train"]["lstm_hidden"] = lstm_hidden;
-        }
     }
     if (!save_base.empty()) {
-        if (lstm) {
-            std::ofstream lout(save_base + ".lstm", std::ios::binary);
-            lstm->write(lout);
-            gate.write(lout);
-        }
         cypha::cyphalm::save_cyphalm_model(*model, save_base);
         out["saved"] = save_base;
     }
@@ -199,8 +158,6 @@ int main(int argc, char** argv) {
         constexpr int kTemps = 8;
         double nll_t[kTemps] = {};
         double f_nll = 0.0, f_secs = 0.0, e_secs = 0.0;
-        double l_nll = 0.0, m_nll = 0.0, w_sum = 0.0;
-        std::size_t l_top1 = 0, m_top1 = 0;
         std::size_t f_top1 = 0;
         const auto t0 = Clock::now();
         for (std::size_t k = 0; k < n_eval; ++k) {
@@ -249,22 +206,6 @@ int main(int argc, char** argv) {
             bin_conf[bin] += pmax;
             bin_acc[bin] += (argmax == truth) ? 1.0 : 0.0;
             ++bin_n[bin];
-            if (lstm) {
-                const auto& ll = lstm->log_probs();
-                const auto& mx = gate.mix(lp, ll);
-                l_nll += -ll[static_cast<std::size_t>(truth)] / kLn2;
-                m_nll += -mx[static_cast<std::size_t>(truth)] / kLn2;
-                w_sum += gate.last_weight();
-                int la = 0, ma = 0;
-                for (int b = 1; b < 256; ++b) {
-                    if (ll[static_cast<std::size_t>(b)] > ll[static_cast<std::size_t>(la)]) la = b;
-                    if (mx[static_cast<std::size_t>(b)] > mx[static_cast<std::size_t>(ma)]) ma = b;
-                }
-                if (la == truth) ++l_top1;
-                if (ma == truth) ++m_top1;
-                gate.learn(truth);
-                lstm->observe(truth, !frozen_eval);
-            }
             hp.set_learning(!frozen_eval);
             hp.observe_next_byte(static_cast<std::uint8_t>(truth));
             hp.set_learning(true);
@@ -297,15 +238,6 @@ int main(int argc, char** argv) {
                        {"nll_bits_by_temperature", tsweep},
                        {"ms_per_byte", 1e3 * secs / n},
                        {"distribution_ms", 1e3 * e_secs / n}};
-        if (lstm) {
-            out["lstm"] = {{"hidden", lstm_hidden},
-                           {"nll_bits_per_byte", l_nll / n},
-                           {"top1", l_top1 / n}};
-            out["mix"] = {{"nll_bits_per_byte", m_nll / n},
-                          {"top1", m_top1 / n},
-                          {"mean_hp_weight", w_sum / n},
-                          {"theta", std::vector<double>(gate.theta(), gate.theta() + cypha::cyphalm::ByteMixGate::kF)}};
-        }
         if (compare_scoring) {
             out["frozen_scoring"] = {{"nll_bits_per_byte", f_nll / n},
                                      {"top1", f_top1 / n},
@@ -321,11 +253,6 @@ int main(int argc, char** argv) {
                  ("cyphalm_lm_quality_gen_" + std::to_string(std::random_device{}())))
                     .string();
             cypha::cyphalm::save_cyphalm_model(*model, blob);
-            if (lstm) {
-                std::ofstream lo(blob + ".lstm", std::ios::binary);
-                lstm->write(lo);
-                gate.write(lo);
-            }
             struct Mode {
                 const char* name;
                 cypha::cyphalm::DecodeStrategy strategy;
@@ -393,117 +320,6 @@ int main(int argc, char** argv) {
                                 {"distinct_4gram", distinct_ngram_ratio(g.generated_ids, 4)},
                                 {"judge_bits_per_byte", jbits / std::max<std::size_t>(1, g.generated_ids.size())},
                                 {"text", printable(g.generated_ids)}});
-            }
-            if (lstm) {
-                // Generation from the hp + LSTM mixture (harness-local decode loop).
-                auto load_pair = [&](cypha::cyphalm::CyphaLMModel& m,
-                                     cypha::cyphalm::ByteLstm& l,
-                                     cypha::cyphalm::ByteMixGate& g) {
-                    (void)m;
-                    std::ifstream li(blob + ".lstm", std::ios::binary);
-                    l.read(li);
-                    g.read(li);
-                };
-                auto pick = [&](std::vector<double> lp, const std::vector<int>& ctx,
-                                double temp, double min_p, int no_rep, std::mt19937_64& rng) {
-                    if (no_rep > 1 && static_cast<int>(ctx.size()) >= no_rep - 1) {
-                        const int sz = static_cast<int>(ctx.size());
-                        const int ws = std::max(0, sz - 256);
-                        std::vector<int> ban;
-                        for (int i = ws; i + no_rep - 1 < sz; ++i) {
-                            bool same = true;
-                            for (int k = 0; k < no_rep - 1 && same; ++k)
-                                same = ctx[i + k] == ctx[sz - (no_rep - 1) + k];
-                            if (same) ban.push_back(ctx[i + no_rep - 1]);
-                        }
-                        if (static_cast<int>(ban.size()) < 256)
-                            for (int b : ban) lp[static_cast<std::size_t>(b)] = -1e30;
-                    }
-                    const double mx = *std::max_element(lp.begin(), lp.end());
-                    if (temp <= 0.0) return static_cast<int>(std::max_element(lp.begin(), lp.end()) - lp.begin());
-                    std::vector<double> pr(256);
-                    double z = 0.0;
-                    for (int b = 0; b < 256; ++b) {
-                        const double v = lp[static_cast<std::size_t>(b)];
-                        pr[static_cast<std::size_t>(b)] =
-                            (min_p > 0.0 && v < mx + std::log(min_p)) ? 0.0 : std::exp((v - mx) / temp);
-                        z += pr[static_cast<std::size_t>(b)];
-                    }
-                    std::uniform_real_distribution<double> U(0.0, z);
-                    double r = U(rng);
-                    for (int b = 0; b < 256; ++b) {
-                        r -= pr[static_cast<std::size_t>(b)];
-                        if (r <= 0.0) return b;
-                    }
-                    return 255;
-                };
-                struct MixMode {
-                    const char* name;
-                    double temp, min_p;
-                    int no_rep;
-                    bool learn;
-                };
-                const MixMode mm[] = {
-                    {"MIX greedy norepeat16", 0.0, 0.0, 16, true},
-                    {"MIX minp0.1 T0.8 learn", 0.8, 0.1, 0, true},
-                    {"MIX minp0.1 T0.8 frozen", 0.8, 0.1, 0, false},
-                    {"MIX minp0.05 T1.0 frozen", 1.0, 0.05, 0, false},
-                };
-                for (const MixMode& m : mm) {
-                    auto gm = cypha::cyphalm::load_cyphalm_model(blob + ".json");
-                    cypha::cyphalm::ByteLstm gl(lopt);
-                    cypha::cyphalm::ByteMixGate gg;
-                    load_pair(gm, gl, gg);
-                    auto& gh = gm.hp_backend();
-                    for (int b : prompt) {
-                        gh.consume_byte(static_cast<std::uint8_t>(b));
-                        gl.observe(b, true);
-                    }
-                    std::vector<int> ctx(prompt.begin(), prompt.end()), outb;
-                    std::mt19937_64 rng(1234);
-                    const auto t_gen = Clock::now();
-                    for (int k = 0; k < gen_bytes; ++k) {
-                        const auto lp = gh.serve_next_byte_log_probs(256);
-                        const auto& mixd = gg.mix(lp, gl.log_probs());
-                        const int tok = pick(mixd, ctx, m.temp, m.min_p, m.no_rep, rng);
-                        gh.set_learning(m.learn);
-                        gh.consume_byte(static_cast<std::uint8_t>(tok));
-                        gh.set_learning(true);
-                        gl.observe(tok, m.learn);
-                        ctx.push_back(tok);
-                        outb.push_back(tok);
-                    }
-                    const double gen_ms = 1e3 * seconds_since(t_gen) / std::max(1, gen_bytes);
-                    // Judges: hp-only (as for the other rows) and the frozen mixture.
-                    auto jm = cypha::cyphalm::load_cyphalm_model(blob + ".json");
-                    cypha::cyphalm::ByteLstm jl(lopt);
-                    cypha::cyphalm::ByteMixGate jg;
-                    load_pair(jm, jl, jg);
-                    auto& jh = jm.hp_backend();
-                    for (int b : prompt) {
-                        jh.consume_byte(static_cast<std::uint8_t>(b));
-                        jl.observe(b, true);
-                    }
-                    jh.set_learning(false);
-                    double hp_bits = 0.0, mix_bits = 0.0;
-                    for (int b : outb) {
-                        const auto lp = jh.serve_next_byte_log_probs(256);
-                        const auto& mixd = jg.mix(lp, jl.log_probs());
-                        hp_bits += -lp[static_cast<std::size_t>(b)] / kLn2;
-                        mix_bits += -mixd[static_cast<std::size_t>(b)] / kLn2;
-                        jh.consume_byte(static_cast<std::uint8_t>(b));
-                        jl.observe(b, false);
-                    }
-                    const double nb = static_cast<double>(std::max<std::size_t>(1, outb.size()));
-                    gens.push_back({{"mode", m.name},
-                                    {"ms_per_byte", gen_ms},
-                                    {"distinct_4gram", distinct_ngram_ratio(outb, 4)},
-                                    {"judge_bits_per_byte", hp_bits / nb},
-                                    {"mix_judge_bits_per_byte", mix_bits / nb},
-                                    {"text", printable(outb)}});
-                }
-                std::error_code ec2;
-                std::filesystem::remove(blob + ".lstm", ec2);
             }
             std::error_code ec;
             std::filesystem::remove(blob + ".json", ec);

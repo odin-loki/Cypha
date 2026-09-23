@@ -66,7 +66,7 @@ class WordMatchModel {
                     len_ = 1;
                 }
             }
-            if (index_) tab_.ref(h) = pos;
+            tab_.ref(h) = pos;
         }
         if (len_ > 0 && (pos - ptr_) > ring_mask_) len_ = 0;
     }
@@ -95,7 +95,6 @@ class WordMatchModel {
     }
 
     int match_len() const { return len_; }
-    void set_indexing(bool on) { index_ = on; }
     std::uint64_t learned_digest(std::uint64_t h) const {
         return fnv_bytes(h, st_.data(), sizeof(st_));
     }
@@ -136,7 +135,6 @@ class WordMatchModel {
     std::uint32_t ptr_ = 0;
     int len_ = 0, expected_ = 0, sidx_ = 0;
     bool valid_ = false;
-    bool index_ = true;
 };
 
 }  // namespace hp

@@ -1,0 +1,160 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.86248779296875,
+  "bytes": 16384,
+  "distribution_ms": 8.360629140197782,
+  "ece_top1": 0.010983553815819105,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 2.1256009341028523,
+  "ms_per_byte": 8.898395205566406,
+  "nll_bits_by_temperature": {
+   "0.7": 2.2261874286363446,
+   "0.8": 2.137769604979211,
+   "0.9": 2.09489990795029,
+   "1.0": 2.085203776502345,
+   "1.1": 2.100908336030401,
+   "1.2": 2.1367820779409437,
+   "1.3": 2.1890316699620986,
+   "1.4": 2.2546982173480012
+  },
+  "nll_bits_per_byte": 2.0852037765023446,
+  "offset": 20000,
+  "path": "/home/user/corpora/cant/alice29.txt",
+  "perplexity_per_byte": 4.243350284101994,
+  "top1": 0.59619140625,
+  "top5": 0.85821533203125
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.9427609427609428,
+   "judge_bits_per_byte": 2.264463372247152,
+   "mode": "reference (true continuation)",
+   "text": "s she uncorked it and put it to her lips.  `I know?\\nSOMETHING interesting is sure to happen,' she said to herself,?\\n`whenever I eat or drink anything; so I'll just see what this?\\nbottle does.  I do hope it'll make me grow large again, for?\\nreally I'm quite tired of being such a tiny little thing!'?\\n"
+  },
+  {
+   "distinct_4gram": 0.050505050505050504,
+   "judge_bits_per_byte": 0.6267337519849414,
+   "mode": "greedy (default)",
+   "ms_per_byte": 6.420100303333333,
+   "text": "s the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the words and the "
+  },
+  {
+   "distinct_4gram": 0.5050505050505051,
+   "judge_bits_per_byte": 1.374633951809428,
+   "mode": "greedy norepeat8",
+   "ms_per_byte": 11.32581707,
+   "text": "s the would be the wonder the wood of the?\\nwonder in the women the was the way the woe the walls of the water the the west the war the wandering the wages of this the went on the well the weakness them the wedding them to her the here the whole the with the words the would be the wonder the wood of "
+  },
+  {
+   "distinct_4gram": 0.3367003367003367,
+   "judge_bits_per_byte": 1.201613899983997,
+   "mode": "greedy norepeat16",
+   "ms_per_byte": 11.834589719999999,
+   "text": "s the words and the words and she words and short the words and was and the words, and the words of the words and a little bottling the words and her and her and head of the words a little bottle bottle both the words a like the words a line of the words a?\\nmouse of the words the words a light the w"
+  },
+  {
+   "distinct_4gram": 0.3838383838383838,
+   "judge_bits_per_byte": 1.0968535692864074,
+   "mode": "greedy frozen norepeat16",
+   "ms_per_byte": 3.78293569,
+   "text": "s the words of the words and the words and she was so the words and was the words of an and the words the words and her was the words and?\\na three with the word and the words of time with the fan and?\\na three went on the words and a little bottle that the words and you and the words and the words we"
+  },
+  {
+   "distinct_4gram": 0.4713804713804714,
+   "judge_bits_per_byte": 1.1130591488884274,
+   "mode": "top_p T0.8 (default)",
+   "ms_per_byte": 10.620386719999999,
+   "text": "s during her not the don't this mind was held in was no and had instead of the head of the door to the heard a little she did the feet and the gloves, and in a mouse on the feet and the fan and the fan and the fan and the fan and the fan and the fan and the fan and the fan and the fan and the fan an"
+  },
+  {
+   "distinct_4gram": 0.3468013468013468,
+   "judge_bits_per_byte": 1.2827271478797548,
+   "mode": "minp0.1 T0.8 learn",
+   "ms_per_byte": 9.044694886666667,
+   "text": "s woolfson, long age who on how the institute had to mainland she who is it and the integer but and the hand in the integer but and the hand the integer but and the hand in and the hand here the integer but and the hand in and the hand here the integer but and the hand in and the hand here the integ"
+  },
+  {
+   "distinct_4gram": 0.8552188552188552,
+   "judge_bits_per_byte": 1.464472370669203,
+   "mode": "minp0.1 T0.8 frozen",
+   "ms_per_byte": 4.5737970699999995,
+   "text": "s wool, and out I format of?\\nthat the northumbrian and?\\nbegan on and be gloves and the last between this does not by a bottle that the beginning to place at once in a leader with that?\\nwater the the rough, I don't minutes and went such main, but in this be a little to tell house and the Dodo, how th"
+  },
+  {
+   "distinct_4gram": 0.6767676767676768,
+   "judge_bits_per_byte": 1.2253237324468702,
+   "mode": "minp0.2 T1.0 frozen",
+   "ms_per_byte": 8.367292513333334,
+   "text": "s wonder that  the sensitive to me let the white use of the remains were for the mouse, and began on the fine great half of the got in a feature the meeting to handed of a saint and sent to modern many Alice?\\nseen his with?\\n                                                                            "
+  },
+  {
+   "distinct_4gram": 0.5387205387205387,
+   "judge_bits_per_byte": 1.5057165374052055,
+   "mode": "minp0.1 T0.8 learn norepeat16",
+   "ms_per_byte": 7.974603826666667,
+   "text": "s woolfson, long age who on how the institute had to mainland she who is it and the integer but and the hand in the integer bureaucracy in a think the interior seemed in a think the?\\nbegan on a the hand in a the interior in a the interest in a little interest in and she in a little in a little is ma"
+  },
+  {
+   "distinct_4gram": 0.8552188552188552,
+   "judge_bits_per_byte": 1.464472370669203,
+   "mode": "minp0.1 T0.8 frozen norepeat16",
+   "ms_per_byte": 5.09976163,
+   "text": "s wool, and out I format of?\\nthat the northumbrian and?\\nbegan on and be gloves and the last between this does not by a bottle that the beginning to place at once in a leader with that?\\nwater the the rough, I don't minutes and went such main, but in this be a little to tell house and the Dodo, how th"
+  },
+  {
+   "distinct_4gram": 0.49158249158249157,
+   "judge_bits_per_byte": 1.212726684592632,
+   "mix_judge_bits_per_byte": 1.2056635514923784,
+   "mode": "MIX greedy norepeat16",
+   "ms_per_byte": 8.634554923333333,
+   "text": "s the world has a little bottly the world has not the world has the world has?\\nand the world has she world has show the world has promised to tell me the world has won the world has his the world has!  And the world had has his the was no label the world had found her way into a tidy little room wit"
+  },
+  {
+   "distinct_4gram": 0.5521885521885522,
+   "judge_bits_per_byte": 1.3962267742829393,
+   "mix_judge_bits_per_byte": 1.3983709123877028,
+   "mode": "MIX minp0.1 T0.8 learn",
+   "ms_per_byte": 8.448126916666666,
+   "text": "s world!  There a little so extant here and in a trial and the horseman a that she she in the white low she mind, and the name and the horsement she little door and she began on it and the mouse of the began a mouse only a this of the fan and the little and the fan and the fan and the fan and the fa"
+  },
+  {
+   "distinct_4gram": 0.8484848484848485,
+   "judge_bits_per_byte": 1.577973222637198,
+   "mix_judge_bits_per_byte": 1.5820390972099687,
+   "mode": "MIX minp0.1 T0.8 frozen",
+   "ms_per_byte": 9.03233691,
+   "text": "s world!?\\nthe come short?\\nseems to island work and the head of the much a them no soon, and a there were all her levelled on standard of the with the commercial and in a cat sorted a conclusively and what the mistake to see how the white and microscopy paintings its little?\\nquite it she added in a c"
+  },
+  {
+   "distinct_4gram": 0.7171717171717171,
+   "judge_bits_per_byte": 1.3234384080240564,
+   "mix_judge_bits_per_byte": 1.3353236163694961,
+   "mode": "MIX minp0.05 T1.0 frozen",
+   "ms_per_byte": 8.600747823333334,
+   "text": "s worthy?\\nwas building the Mouse once more.  His too read by the butt of?\\nthat she should likely timestamp>\\n                                                             \\n\\n?\\n?\\n  It was that soon hope, wish that it this use by the early in 134851 the mythical this low-spirit doesn't this was known in "
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean_lstm.json",
+ "lstm": {
+  "hidden": 128,
+  "nll_bits_per_byte": 3.9156380100153445,
+  "top1": 0.46026611328125
+ },
+ "lstm_loaded": "/home/user/ckpt/pre_lean_lstm.lstm",
+ "mix": {
+  "mean_hp_weight": 0.9512169915709605,
+  "nll_bits_per_byte": 2.0887460268650053,
+  "theta": [
+   3.2659406784055482,
+   0.3259240945751901,
+   0.5373839941254155,
+   -0.12219037555957664,
+   -0.274831887900422
+  ],
+  "top1": 0.59661865234375
+ },
+ "prompt_tail": "glass.  There was no label this time with the words `DRINK ME,'?\\nbut nevertheles",
+ "setup_seconds": 5.866167699,
+ "tier": "lean"
+}

@@ -69,7 +69,6 @@ DecodeParams decode_params_from_json(const nlohmann::json& body) {
     p.no_repeat_ngram = body.value("no_repeat_ngram", p.no_repeat_ngram);
     p.no_repeat_window = body.value("no_repeat_window", p.no_repeat_window);
     p.learn_from_output = body.value("learn_from_output", p.learn_from_output);
-    p.index_output = body.value("index_output", p.index_output);
     p.exact_greedy = body.value("exact_greedy", p.exact_greedy);
     p.seed = body.value("seed", static_cast<std::uint64_t>(42));
     if (body.contains("uncertainty_threshold") && !body["uncertainty_threshold"].is_null()) {

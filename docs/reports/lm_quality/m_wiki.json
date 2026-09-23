@@ -1,0 +1,160 @@
+{
+ "eval": {
+  "bit_greedy_equals_argmax": 0.8519287109375,
+  "bytes": 16384,
+  "distribution_ms": 8.310165088867183,
+  "ece_top1": 0.014061611621894761,
+  "learning": "online (in-context)",
+  "mean_entropy_bits": 1.8626891885232548,
+  "ms_per_byte": 8.833293907043457,
+  "nll_bits_by_temperature": {
+   "0.7": 1.8884987030120557,
+   "0.8": 1.826347526731147,
+   "0.9": 1.7983714638754296,
+   "1.0": 1.7949838377588152,
+   "1.1": 1.8104445052763949,
+   "1.2": 1.8412170213232386,
+   "1.3": 1.8850491279812691,
+   "1.4": 1.9404132012456723
+  },
+  "nll_bits_per_byte": 1.7949838377588139,
+  "offset": 96000000,
+  "path": "/home/user/corpora/enwik8",
+  "perplexity_per_byte": 3.4701158733350823,
+  "top1": 0.6307373046875,
+  "top5": 0.88104248046875
+ },
+ "generations": [
+  {
+   "distinct_4gram": 0.9057239057239057,
+   "judge_bits_per_byte": 1.7829689660103407,
+   "mode": "reference (true continuation)",
+   "text": " order to increase in size, then grows a new outer covering.  In most types of insects, the young, called '''nymphs''', are basically similar in form to the adults (an example is the grasshopper), though wings are not developed until the adult stage.  This is called ''incomplete  [[metamorphosis (bi"
+  },
+  {
+   "distinct_4gram": 0.05723905723905724,
+   "judge_bits_per_byte": 0.7279305197165652,
+   "mode": "greedy (default)",
+   "ms_per_byte": 8.250154036666666,
+   "text": " the abdomen, and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and and an"
+  },
+  {
+   "distinct_4gram": 0.6127946127946128,
+   "judge_bits_per_byte": 1.1691270429992364,
+   "mode": "greedy norepeat8",
+   "ms_per_byte": 8.295567866666667,
+   "text": " the abdomen, and and an and antipopes of to a service of these insects are and another and animals and anarchists and all the absorption and also a series of traditional and although and always and a serious and among its and for and alphabets and ended and almost all and and an and antipopes of to"
+  },
+  {
+   "distinct_4gram": 0.39730639730639733,
+   "judge_bits_per_byte": 1.1779971572914176,
+   "mode": "greedy norepeat16",
+   "ms_per_byte": 9.055136293333334,
+   "text": " the abdomen, and and and and an and and and another and and and analysis of the abdomen, all and and and animals and and and announced and and and all and and anothe and and and an]] and and and anchors and and and also and and and anechoic and and and antiparticles and and and a considerable and a"
+  },
+  {
+   "distinct_4gram": 0.43097643097643096,
+   "judge_bits_per_byte": 0.9507008040328765,
+   "mode": "greedy frozen norepeat16",
+   "ms_per_byte": 10.19405352,
+   "text": " the abdomen, and and and and an and and and antipopes of the exoskgroup of the exoskely the exoskeletal and and and another and and and anechoic rooms are also a series of the exosking the insects are also a second and and and the exoskeleton in the abdomen, and and and and an and and and antipopes"
+  },
+  {
+   "distinct_4gram": 0.26262626262626265,
+   "judge_bits_per_byte": 1.0316812136209699,
+   "mode": "top_p T0.8 (default)",
+   "ms_per_byte": 8.508169626666668,
+   "text": "to what into has an additional and many of second confined flight extended and many of second many of and confined of second many of and confined of second many of and confined of second many of and confined of second many of and confined of second many of and confined of second many of and confined"
+  },
+  {
+   "distinct_4gram": 0.2828282828282828,
+   "judge_bits_per_byte": 0.7174825173909772,
+   "mode": "minp0.1 T0.8 learn",
+   "ms_per_byte": 8.642811846666667,
+   "text": "ternational music complete abounds into a time and manufactured of the exoskeleton international music complete abounds into a time and manufactured of the exoskeleton international music complete abounds into a time and manufactured of the exoskeleton international music complete abounds into a tim"
+  },
+  {
+   "distinct_4gram": 0.7777777777777778,
+   "judge_bits_per_byte": 1.113232840031544,
+   "mode": "minp0.1 T0.8 frozen",
+   "ms_per_byte": 7.046923486666667,
+   "text": "ternational music completed by a series of the amount in a series the departed by the heart attacks on learned and when the confines of the exoskeleton instituting in second time of series of all and the exceptional original tracheal species of the exoskeleton wastes from [[silphium]].\\n\\n==Chomsky oc"
+  },
+  {
+   "distinct_4gram": 0.7676767676767676,
+   "judge_bits_per_byte": 1.1497277953506602,
+   "mode": "minp0.2 T1.0 frozen",
+   "ms_per_byte": 3.9980258233333332,
+   "text": "ternational music by which also exoskeleton in all the chairman of the exoskeleton of the exoskeleton. More similarly the farming or dies the exoskeleton at the advent of an order the tracheal strangers in a links between are species of a new far insects have on its one of an insects, and consistenc"
+  },
+  {
+   "distinct_4gram": 0.6666666666666666,
+   "judge_bits_per_byte": 1.2346026779613524,
+   "mode": "minp0.1 T0.8 learn norepeat16",
+   "ms_per_byte": 14.036983540000001,
+   "text": "ternational music complete abounds into a time and manufactured of the exoskel lines of all arthropods. A single development of all arthrop]]s of considerable deals and all arthropods of the exoske and all arthro'' ones of catering the exoskeleton into a series of the exoskeletoo contrast internatio"
+  },
+  {
+   "distinct_4gram": 0.8114478114478114,
+   "judge_bits_per_byte": 1.1122584765764503,
+   "mode": "minp0.1 T0.8 frozen norepeat16",
+   "ms_per_byte": 3.9124084,
+   "text": "ternational music completed by a series of the amount in a series the departed by the heart attacks on learned and when the confines or first is situated at the advent of an order the tracheal spiracles in a has the heresiarch of spiracles on the exoskeleton. The with the abdominal organelles one of"
+  },
+  {
+   "distinct_4gram": 0.9057239057239057,
+   "judge_bits_per_byte": 0.7021352415437865,
+   "mix_judge_bits_per_byte": 0.686021272607603,
+   "mode": "MIX greedy norepeat16",
+   "ms_per_byte": 8.813752016666667,
+   "text": " the abdomen, is called the father of the exoskelop and for the exoskeletous and make it seems most likely that they are supplying the hemocytes with oxygen.  \\nThe [[Madagascar hissing cockroach]] expels air from certain spiracles to create a loud hissing sound.\\n\\nA diffuse tissue of cells found thro"
+  },
+  {
+   "distinct_4gram": 0.494949494949495,
+   "judge_bits_per_byte": 1.0011799180005077,
+   "mix_judge_bits_per_byte": 1.0137144193510812,
+   "mode": "MIX minp0.1 T0.8 learn",
+   "ms_per_byte": 8.623192346666666,
+   "text": "ternational music by which also helped the second, of commercial as well as an exception in his as and complete on where the heart the adult stage of an international music and complete and his as and complete on where the heart the adult stage of an international music and complete and his as and c"
+  },
+  {
+   "distinct_4gram": 0.8922558922558923,
+   "judge_bits_per_byte": 1.3643128501608413,
+   "mix_judge_bits_per_byte": 1.3730025416384892,
+   "mode": "MIX minp0.1 T0.8 frozen",
+   "ms_per_byte": 8.945579713333332,
+   "text": "ternational music by which also helped the second, of chiefs of the the conference. Mountain the trachea are born at [[Bernard Sanitary first on the chief wasted existed [[satrap]]s carrel-established, and a links between are still the individual little against a with the [[sediment]], when the the "
+  },
+  {
+   "distinct_4gram": 0.8451178451178452,
+   "judge_bits_per_byte": 1.5204508667520076,
+   "mix_judge_bits_per_byte": 1.5256829817725657,
+   "mode": "MIX minp0.05 T1.0 frozen",
+   "ms_per_byte": 8.216174126666669,
+   "text": "ternational local deer the above reflected, especial pair doned offer in it an epistles and antimattery elected the fate of essays the adopted the insects which and come about is on into the region, it allowed from the more arrested for a position into one contracts of bricks is a this the from the "
+  }
+ ],
+ "harness": "cyphalm_lm_quality",
+ "loaded": "/home/user/ckpt/pre_lean_lstm.json",
+ "lstm": {
+  "hidden": 128,
+  "nll_bits_per_byte": 2.6605750162992687,
+  "top1": 0.480712890625
+ },
+ "lstm_loaded": "/home/user/ckpt/pre_lean_lstm.lstm",
+ "mix": {
+  "mean_hp_weight": 0.9438528852809789,
+  "nll_bits_per_byte": 1.7983954259454467,
+  "theta": [
+   3.259384430193509,
+   0.10835501326665521,
+   0.5164717182004389,
+   -0.024118733733619963,
+   -0.2740761950620993
+  ],
+  "top1": 0.62945556640625
+ },
+ "prompt_tail": " is a process by which the individual escapes the confines of the exoskeleton in",
+ "setup_seconds": 5.773579593,
+ "tier": "lean"
+}

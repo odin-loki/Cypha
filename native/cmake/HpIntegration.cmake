@@ -47,7 +47,6 @@ endif()
 
 set(CYPHA_CYPHALM_HP_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/hp_backend.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/byte_lstm.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_model.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_config.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_checkpoint.cpp"
