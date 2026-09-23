@@ -414,6 +414,8 @@ Held-out wiki NLL (lower is better) against resident footprint:
 | 3 shards, match/pool 16 | 1.03 GB | 1.7629 | 2.2178 |
 | 5 shards, match/pool 16 | 1.72 GB | 1.7399 | 2.2039 |
 | **11 shards, slim drop + pool/Hebbian 16** | **4.0 GB** | **1.7069** | **2.1936** |
+| 11 shards trained slim (`cyphalm_shard_train --tier slim`) | 3.9 GB | 1.7058 | 2.1949 |
+| **95 MB slim + 11 slim shards** | **4.5 GB** | **1.6916** | **2.1812** |
 | 11 shards, packed | 5.04 GB | 1.7009 | 2.1834 |
 | 11 shards, unpacked (before) | 7.2 GB | 1.6994 | 2.1797 |
 
@@ -422,8 +424,15 @@ Held-out wiki NLL (lower is better) against resident footprint:
   for +0.012 wiki / +0.029 Alice.
 - **Above ~1 GB,** ensembles of shard models win. The 11-shard ensemble drops
   from 7.2 to 4.0 GB (−44%) for +0.008 / +0.014.
-- **With mapped loading,** most of any of these is shareable file-backed page
-  cache rather than private memory.
+- **With mapped loading,** a single model's tables stay shareable file-backed
+  pages when served frozen. Learning from the prompt writes pages, though, and
+  an ensemble's members all learn. After 8 KB of prompt, the 11 slim shards
+  hold 3.6 GB private of 3.9 GB (the slim 95 MB model alone: 470 MB of 577).
+  Keeping the members frozen while only the primary learns cuts that to 1.3 GB
+  but costs +0.06 wiki and +0.11 Alice (members still write match positions).
+  Not kept: in-context learning is worth the memory.
+- **The best ensemble before this work** (95 MB + 11 shards, unpacked, 8.3 GB:
+  1.6860 / 2.1636) is now 1.6916 / 2.1812 at 4.5 GB.
 
 ## Other results this round
 
