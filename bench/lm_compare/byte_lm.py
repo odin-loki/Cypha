@@ -387,6 +387,24 @@ def cmd_bench(a):
                       "peak_rss_mb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024}))
 
 
+def cmd_export(a):
+    """Write an LSTM checkpoint as BLM1 for CyphaLM (native neural_expert.hpp)."""
+    model, cfg = load(a.ckpt)
+    if cfg["arch"] != "lstm":
+        raise SystemExit("export: only the LSTM has a native runtime")
+    rnn = model.rnn
+    with open(a.out, "wb") as f:
+        f.write(b"BLM1")
+        f.write(np.array([rnn.num_layers, rnn.hidden_size, model.emb.embedding_dim], dtype=np.uint32).tobytes())
+        arrs = [model.emb.weight]
+        for l in range(rnn.num_layers):
+            arrs += [getattr(rnn, f"weight_ih_l{l}"), getattr(rnn, f"weight_hh_l{l}"),
+                     getattr(rnn, f"bias_ih_l{l}"), getattr(rnn, f"bias_hh_l{l}")]
+        arrs += [model.out.weight, model.out.bias]
+        for t in arrs:
+            f.write(t.detach().float().contiguous().numpy().tobytes())
+
+
 def main():
     ap = argparse.ArgumentParser()
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -434,8 +452,11 @@ def main():
     b.add_argument("--steps", type=int, default=400)
     b.add_argument("--threads", type=int, default=4)
     b.add_argument("--fp32", action="store_true")
+    x = sp.add_parser("export")
+    x.add_argument("--ckpt", required=True)
+    x.add_argument("--out", required=True)
     a = ap.parse_args()
-    {"train": cmd_train, "eval": cmd_eval, "gen": cmd_gen, "bench": cmd_bench}[a.cmd](a)
+    {"train": cmd_train, "eval": cmd_eval, "gen": cmd_gen, "bench": cmd_bench, "export": cmd_export}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ void usage(const char* argv0) {
                  "[--warmup-file PATH] [--warmup-bytes N] [--ban-last-k K] "
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
-                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX] [--learn-from-output] [--latency]\n",
+                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX] [--neural LSTM.blm] [--learn-from-output] [--latency]\n",
                  argv0);
 }
 
@@ -78,6 +78,7 @@ int main(int argc, char** argv) {
     int word_candidates = defaults.word_candidates;
     std::vector<std::string> ensemble_specs;  // CKPT.json[:weight]
     std::string infinigram_path;
+    std::string neural_path;  // BLM1 byte LSTM expert
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -123,6 +124,8 @@ int main(int argc, char** argv) {
             no_repeat = std::atoi(argv[++i]);
         } else if (arg == "--infinigram" && i + 1 < argc) {
             infinigram_path = argv[++i];
+        } else if (arg == "--neural" && i + 1 < argc) {
+            neural_path = argv[++i];
         } else if (arg == "--ensemble" && i + 1 < argc) {
             ensemble_specs.push_back(argv[++i]);
         } else if (arg == "--word-candidates" && i + 1 < argc) {
@@ -160,6 +163,7 @@ int main(int argc, char** argv) {
         model.add_ensemble_member(cypha::cyphalm::load_cyphalm_model(path), w);
     }
     if (!infinigram_path.empty()) model.attach_infinigram(infinigram_path);
+    if (!neural_path.empty()) model.attach_neural(neural_path);
     cfg = model.config();
     const std::vector<int> prompt_ids = bytes_from_text(prompt, cfg.vocab_size);
 

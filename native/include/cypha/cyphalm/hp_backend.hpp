@@ -22,6 +22,7 @@
 #include <memory>
 #include <vector>
 
+#include "cypha/cyphalm/neural_expert.hpp"
 #include "hp/predictor.hpp"
 #include "hp/undo.hpp"
 
@@ -103,12 +104,12 @@ class HpSequenceBackend {
     void set_tree_prune(double min_prob) {
         prune_log_ = min_prob > 0.0 ? std::log(min_prob) : -1e300;
         for (auto& m : members_) m.backend->set_tree_prune(min_prob);
-        last_valid_ = ig_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = false;
     }
 
     void set_frozen_scoring(bool on) {
         frozen_scoring_ = on;
-        last_valid_ = ig_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = false;
         for (auto& m : members_) m.backend->set_frozen_scoring(on);
     }
     bool frozen_scoring() const { return frozen_scoring_; }
@@ -136,7 +137,7 @@ class HpSequenceBackend {
     std::vector<double> ensemble_weights() const;
     /// Forget the last scored ensemble distribution (after rewinding state).
     void invalidate_scoring_cache() {
-        last_valid_ = ig_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = false;
     }
 
     /// ∞-gram expert (InfiniGram over the pretraining corpus): the served
@@ -153,6 +154,20 @@ class HpSequenceBackend {
     /// weights learned on held-out text and start from them later.
     std::vector<double> infinigram_weights() const;
     void set_infinigram_weights(const std::vector<double>& w);
+    /// Neural expert (a pretrained byte LSTM, ``ByteLstmExpert``): the served
+    /// distribution becomes w p + (1 - w) p_nn after the ∞-gram mix, with w
+    /// learned online per (model confidence, top-byte agreement) bucket while
+    /// learning is on. The LSTM reads every consumed byte; attaching primes it
+    /// with the recent history.
+    void set_neural(std::shared_ptr<const ByteLstmExpert> nn, double eta = 0.02);
+    bool has_neural() const { return static_cast<bool>(nn_); }
+    std::vector<double> neural_weights() const { return nn_w_; }
+    /// Recurrent state, to restore after rewinding the predictors.
+    const ByteLstmExpert::State& neural_state() const { return nn_state_; }
+    void set_neural_state(const ByteLstmExpert::State& s) {
+        nn_state_ = s;
+        nn_valid_ = false;
+    }
     /// This predictor and every member's (for ``hp::StreamRewind``).
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).
@@ -169,7 +184,7 @@ class HpSequenceBackend {
         pred_->fold_tables(target);
         cfg_ = pred_->config();
         for (auto& m : members_) m.backend->fold_tables(target);
-        last_valid_ = ig_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = false;
     }
     /// Serve mixer rate on every model (``hp::Predictor::set_serve_adaptation``).
     void set_serve_adaptation(int num, int den, int skip);
@@ -231,6 +246,17 @@ class HpSequenceBackend {
     int ig_bucket_ = 0;
     std::vector<double> ig_p_[3];       // model, longest, reliable (probabilities)
     std::vector<double> last_final_;    // served log probs, for observe_next_byte
+    // Neural expert.
+    std::vector<double> neural_mix_(const std::vector<double>& base);
+    void prime_neural_();
+    std::shared_ptr<const ByteLstmExpert> nn_;
+    ByteLstmExpert::State nn_state_;
+    double nn_eta_ = 0.02;
+    static constexpr int kNnBuckets = 16;
+    std::vector<double> nn_w_;
+    bool nn_valid_ = false;
+    int nn_bucket_ = 0;
+    std::vector<double> nn_pin_;        // probabilities before the neural mix
     /// Ensemble: geometric mix of this model's ``own`` log probs with members'.
     std::vector<double> mix_with_members_(const std::vector<double>& own,
                                           const std::vector<std::vector<double>>& member_lp);

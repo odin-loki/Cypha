@@ -100,6 +100,9 @@ class CyphaLMModel {
     /// Attach an ∞-gram index over the pretraining corpus
     /// (``HpSequenceBackend::set_infinigram``; ``cyphalm_infinigram_build``).
     void attach_infinigram(const std::string& index_path);
+    /// Attach a pretrained byte LSTM (BLM1 file from ``byte_lm.py export``) as
+    /// a neural expert (``HpSequenceBackend::set_neural``).
+    void attach_neural(const std::string& blm_path);
     /// Serve-time RAM cut: fold trained hp tables down to these caps (bits;
     /// 0 = keep) and record them in the config, so the model saves and loads
     /// at the smaller size (``hp::Predictor::fold_tables``).

@@ -607,6 +607,7 @@ GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<in
         std::vector<Cand> cands;
         {
             hp::StreamRewind rewind(hp.all_predictors());
+            const ByteLstmExpert::State nn_saved = hp.neural_state();  // the rewind covers predictors only
             // Candidates share prefixes: cache each prefix's distribution and
             // advance the model only when a new prefix needs one.
             std::map<std::vector<int>, std::vector<double>> dist_cache;
@@ -640,6 +641,7 @@ GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<in
                 }
                 cands.push_back(std::move(c));
                 rewind.rewind();
+                if (hp.has_neural()) hp.set_neural_state(nn_saved);
                 hp.invalidate_scoring_cache();
             }
         }

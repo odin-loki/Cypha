@@ -48,6 +48,7 @@ endif()
 set(CYPHA_CYPHALM_HP_SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/hp_backend.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/infinigram.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/neural_expert.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_model.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_config.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cyphalm/cyphalm_checkpoint.cpp"
