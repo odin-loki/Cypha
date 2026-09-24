@@ -91,6 +91,9 @@ class DiscoveryPool {
     void fold_to(int bits) {
         for (auto& m : models_) m.fold_to(bits);
     }
+    /// Per-slot access for occupancy folding (Predictor::fold_auto).
+    int num_slots() const { return static_cast<int>(models_.size()); }
+    ContextModel& slot_model(int i) { return models_[static_cast<std::size_t>(i)]; }
 
     // Set each slot's context from the byte history, using its mask.
     void set_contexts(std::uint64_t hist, std::uint64_t hist2) {

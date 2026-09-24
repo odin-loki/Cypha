@@ -326,42 +326,35 @@ class Predictor {
     /// byte-match table by halves while its projected occupancy (two folded
     /// slots in use -> one: 1 - (1 - occ)^2) stays at or under
     /// ``max_occupancy``. Sparse tables (e.g. a skip model at 1%) shrink a
-    /// lot, busy ones not at all. Tables keep >= ``min_bits`` bits. Returns
-    /// the bytes freed.
+    /// lot, busy ones not at all. Covers the discovered-context pool and the
+    /// Hebbian tables too. Tables keep >= ``min_bits`` bits. Returns the
+    /// bytes freed.
     std::size_t fold_auto(double max_occupancy, int min_bits = 12) {
         std::size_t freed = 0;
-        auto projected = [](double o) { return 1.0 - (1.0 - o) * (1.0 - o); };
-        for (int i = 0; i < n_ctx_chain_; ++i) {
-            ContextModel& m = *ctx_chain_[i];
-            int bits = m.table_bits();
-            if (bits == 0) continue;
+        // Any model with table_bits(), occupancy() and fold_to(bits);
+        // ``slot_bytes`` is the table's bytes per slot.
+        auto fold_one = [&](auto& m, std::size_t slot_bytes) {
+            const int bits = m.table_bits();
+            if (bits == 0) return;
             double occ = m.occupancy();
             int target = bits;
-            while (target > min_bits && projected(occ) <= max_occupancy) {
-                occ = projected(occ);
+            while (target > min_bits) {
+                const double next = 1.0 - (1.0 - occ) * (1.0 - occ);  // two slots in use -> one
+                if (next > max_occupancy) break;
+                occ = next;
                 --target;
             }
             if (target < bits) {
-                freed += ((std::size_t{1} << bits) - (std::size_t{1} << target)) * sizeof(std::uint16_t);
+                freed += ((std::size_t{1} << bits) - (std::size_t{1} << target)) * slot_bytes;
                 m.fold_to(target);
             }
-        }
+        };
+        for (int i = 0; i < n_ctx_chain_; ++i) fold_one(*ctx_chain_[i], sizeof(std::uint16_t));
         MatchModel* ms[] = {&match_[0], &match_[1], &match_[2], &match_[3], &match_[4], &match_[5], &match_[6],
                             &match_[7], &match_[8], &smatch_,   &skipk_,    &skip3_,    &skip4_};
-        for (MatchModel* mm : ms) {
-            int bits = mm->table_bits();
-            if (bits == 0) continue;
-            double occ = mm->occupancy();
-            int target = bits;
-            while (target > min_bits && projected(occ) <= max_occupancy) {
-                occ = projected(occ);
-                --target;
-            }
-            if (target < bits) {
-                freed += ((std::size_t{1} << bits) - (std::size_t{1} << target)) * sizeof(std::uint32_t);
-                mm->fold_to(target);
-            }
-        }
+        for (MatchModel* mm : ms) fold_one(*mm, sizeof(std::uint32_t));
+        for (int i = 0; i < pool_.num_slots(); ++i) fold_one(pool_.slot_model(i), sizeof(std::uint16_t));
+        fold_one(hebb_, sizeof(std::uint64_t) + sizeof(std::uint8_t) + sizeof(std::uint16_t));
         return freed;
     }
 

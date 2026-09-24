@@ -791,6 +791,18 @@ class HebbianModel {
         return b;
     }
 
+    /// Share of synapse or bit-history slots in use, whichever is higher (fold_auto).
+    double occupancy() const {
+        if (syn_target_.empty()) return 0.0;
+        std::size_t syn = 0, bh = 0;
+        for (std::size_t k = 0; k < syn_target_.size(); ++k) {
+            syn += syn_strength_[k] != 0;
+            bh += t_.data()[k] != 0;
+        }
+        const std::size_t used = syn > bh ? syn : bh;
+        return static_cast<double>(used) / static_cast<double>(syn_target_.size());
+    }
+
     /// Shrink to ``bits`` as if built that size: synapses keep the stronger of
     /// two folded slots, bit-history slots the busier state.
     void fold_to(int bits) {
