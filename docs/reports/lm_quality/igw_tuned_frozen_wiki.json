@@ -1,0 +1,104 @@
+{
+  "eval": {
+    "bit_greedy_equals_argmax": 1.0,
+    "bytes": 16384,
+    "calibration_bins": [
+      {
+        "accuracy": 0.08196721311475409,
+        "bin": 0,
+        "confidence": 0.08134138672715588,
+        "n": 122
+      },
+      {
+        "accuracy": 0.12789526686807653,
+        "bin": 1,
+        "confidence": 0.15809957152223275,
+        "n": 993
+      },
+      {
+        "accuracy": 0.253671562082777,
+        "bin": 2,
+        "confidence": 0.25266827968169697,
+        "n": 1498
+      },
+      {
+        "accuracy": 0.3061694290976059,
+        "bin": 3,
+        "confidence": 0.35386059991898866,
+        "n": 2172
+      },
+      {
+        "accuracy": 0.4323936932632585,
+        "bin": 4,
+        "confidence": 0.4479897379978316,
+        "n": 2093
+      },
+      {
+        "accuracy": 0.5902731512325117,
+        "bin": 5,
+        "confidence": 0.5461063937950803,
+        "n": 1501
+      },
+      {
+        "accuracy": 0.6844708209693373,
+        "bin": 6,
+        "confidence": 0.6472747360114682,
+        "n": 1011
+      },
+      {
+        "accuracy": 0.7665706051873199,
+        "bin": 7,
+        "confidence": 0.7533767861822203,
+        "n": 1041
+      },
+      {
+        "accuracy": 0.8792093704245973,
+        "bin": 8,
+        "confidence": 0.8518778117140146,
+        "n": 1366
+      },
+      {
+        "accuracy": 0.9659908436886854,
+        "bin": 9,
+        "confidence": 0.9583164598217907,
+        "n": 4587
+      }
+    ],
+    "distribution_ms": 7.9918177146606295,
+    "ece_top1": 0.021848846766210184,
+    "learning": "frozen (pretrained only)",
+    "mean_entropy_bits": 1.9896464246191532,
+    "ms_per_byte": 15.722402045959472,
+    "nll_bits_by_temperature": {
+      "0.7": 2.0916033921640746,
+      "0.8": 2.0044695135165567,
+      "0.9": 1.9625757751915942,
+      "1.0": 1.95303888914816,
+      "1.1": 1.9677615141191445,
+      "1.2": 2.0014529949067605,
+      "1.3": 2.050500706162333,
+      "1.4": 2.1122905662461644
+    },
+    "nll_bits_per_byte": 1.9530388891481603,
+    "offset": 96000000,
+    "path": "/home/user/corpora/enwik8",
+    "perplexity_per_byte": 3.8718924765278424,
+    "top1": 0.61614990234375,
+    "top5": 0.86553955078125
+  },
+  "harness": "cyphalm_lm_quality",
+  "infinigram": "/home/user/ckpt/enwik8_95m.igr",
+  "loaded": "/home/user/ckpt/slim95.json",
+  "reset_stream": "none",
+  "rss_anon_mb_after_eval": 497.82421875,
+  "rss_anon_mb_after_setup": 42.99609375,
+  "rss_file_mb_after_eval": 518.4921875,
+  "rss_file_mb_after_setup": 5.984375,
+  "rss_hwm_mb": 1016.6015625,
+  "rss_mb_after_eval": 1016.31640625,
+  "rss_mb_after_setup": 48.98046875,
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 0.057906639,
+  "tier": "lean"
+}

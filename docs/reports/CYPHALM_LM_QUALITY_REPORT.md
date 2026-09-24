@@ -385,6 +385,18 @@ outside it):
   (Alice) it is 0.012–0.017.
 - Calibration stays within 1–2.3% ECE.
 
+- **Tried:** a fourth backoff level (the longest suffix seen at least 256
+  times) is ~0.001 worse everywhere, so three parts stay. Starting weights
+  learned on 256 KB of held-out wiki (`--ig-weights-out`, loaded from
+  `X.igr.weights.json`) barely matter online (−0.0006) and are domain-bound
+  when nothing adapts (frozen: wiki −0.003, lcet10 −0.009, Alice +0.010), so
+  none ship by default.
+- **Generation** (8 wiki prompts, K 8): distinct 4-grams rise from 0.827 to
+  0.879 at the same judge score. The ∞-gram lets the decoder follow long
+  verbatim runs of the training text (*"…(Colossians 1:15) to the image of
+  Caesar on a Roman coin (Matthew 22:20)…"*). That is more fluent, and it is
+  recall.
+
 `cyphalm_infinigram_build --text CORPUS --bytes N --out X.igr`; serve with
 `--infinigram X.igr` (`cyphalm_generate`, `cyphalm_lm_quality`,
 `cyphalm_gen_bench`) or `"infinigram"` in an ensemble manifest.

@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/slim95.json",
+  "mean_distinct_4gram": 0.8794416243654822,
+  "mean_judge_bits": 1.5608237174545443,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.145082301619873,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 6.243182491875,
+  "prompts": [
+    {
+      "distinct_4gram": 0.9187817258883249,
+      "judge_bits": 1.278944026987578,
+      "offset": 96000000,
+      "reference_judge_bits": 2.1715842466814474,
+      "text": "The original combustion engines are often referred to as &quot;mother (telecommunications of the first seven contemporary and independent of the interpretation of the Prototype]] would provide the use"
+    },
+    {
+      "distinct_4gram": 0.9390862944162437,
+      "judge_bits": 1.7432489810306373,
+      "offset": 96008192,
+      "reference_judge_bits": 2.157307942620862,
+      "text": "t;br/&gt;\\n  21. pillow&quot;). The island is considered to be living icons, and are therefore &quot;censed&quot; along with painted icons during Orthodox prayer services. [[Image:ac.byzantine1.jpg|thu"
+    },
+    {
+      "distinct_4gram": 0.8375634517766497,
+      "judge_bits": 1.8550459759152162,
+      "offset": 96016384,
+      "reference_judge_bits": 2.01913293606998,
+      "text": " the thermodynamic developed over the interpretation of the Apollodorus of the existence of the invisible God (Colossians 1:15) to the image of Caesar on a Roman coin (Matthew 22:20) to the influence "
+    },
+    {
+      "distinct_4gram": 0.8984771573604061,
+      "judge_bits": 1.3951940086107415,
+      "offset": 96024576,
+      "reference_judge_bits": 3.222844424514031,
+      "text": "a]], ''&quot;The Greek word ''&quot;\\n  </contributor>\\n      <comment>/* Catholic */</comment>\\n      <text xml:space=\"preserve\">[[Image:rublev's_saviour.jpg|right|thumb|[[Christ the Redeemer]] (1410s, "
+    },
+    {
+      "distinct_4gram": 0.8578680203045685,
+      "judge_bits": 1.3904765996405606,
+      "offset": 96032768,
+      "reference_judge_bits": 2.1344247079411374,
+      "text": "tml Combustion Engineering the similar scientifically formation of the small portable combustion systems and reconstructed with national languages of the University of the Western Christendom and the "
+    },
+    {
+      "distinct_4gram": 0.8071065989847716,
+      "judge_bits": 1.4034915129269103,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8046774570690016,
+      "text": "atistically measured the experiment the technology and the combustion system and the interpreters and the individual reconciliation of the Orthodox religions and the New Testament the term is used for"
+    },
+    {
+      "distinct_4gram": 0.8527918781725888,
+      "judge_bits": 1.2189690820998915,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4982683619571793,
+      "text": "ution of the Second Settlements]]\\n[[Category:National liberation of icons the three distinction contemporary contributions incarceration]]\\n* [[American Revolution]]\\n* [[Constantinople associated with "
+    },
+    {
+      "distinct_4gram": 0.9238578680203046,
+      "judge_bits": 2.2012195524248215,
+      "offset": 96057344,
+      "reference_judge_bits": 1.152418336105344,
+      "text": "g]]\\n[[pt:Internet services industrial infection]]\\n[[ja:?????????]]\\n[[pt:Immaterialr??tt]]\\n[[uk:???????????????????????????? ??????????????????]]\\n[[zh:????????????]]\\n[[th:??????????????????????????????"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 8
+}

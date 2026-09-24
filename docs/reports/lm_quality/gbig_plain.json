@@ -1,0 +1,73 @@
+{
+  "harness": "cyphalm_gen_bench",
+  "judge": "/home/user/ckpt/pre_lean16.json",
+  "load": "/home/user/ckpt/slim95.json",
+  "mean_distinct_4gram": 0.8267766497461928,
+  "mean_judge_bits": 1.5407466355248753,
+  "mean_reference_distinct_4gram": 0.8026649746192893,
+  "mean_reference_judge_bits": 2.145082301619873,
+  "members": [],
+  "min_p": 0.1,
+  "ms_per_byte": 6.418748809999999,
+  "prompts": [
+    {
+      "distinct_4gram": 0.817258883248731,
+      "judge_bits": 1.6345479899641089,
+      "offset": 96000000,
+      "reference_judge_bits": 2.1715842466814474,
+      "text": " The art and the same religious structure.  The word the internal combustion engines of the same stroke and the second the difference of Western Religious Art and Orthodox Iconography]\\n\\n=== Catholic ="
+    },
+    {
+      "distinct_4gram": 0.8375634517766497,
+      "judge_bits": 1.7112358371367682,
+      "offset": 96008192,
+      "reference_judge_bits": 2.157307942620862,
+      "text": "t;br/&gt;\\n  21. pillow&lt;br/&gt;\\n  22. claws&lt;br/&gt;\\n  20. In the theology of the Incarnation (Christ being the ''eikon'' of the English Bible numberings and names are not uniformly identical.\\n\\n=="
+    },
+    {
+      "distinct_4gram": 0.8071065989847716,
+      "judge_bits": 1.3748801529420118,
+      "offset": 96016384,
+      "reference_judge_bits": 2.01913293606998,
+      "text": " protestant underlying the infection with the iconography and many other confined the influence of the conservative the chemical elements the existence of an understanding of the image of the first th"
+    },
+    {
+      "distinct_4gram": 0.8477157360406091,
+      "judge_bits": 1.4368611631780157,
+      "offset": 96024576,
+      "reference_judge_bits": 3.222844424514031,
+      "text": "a]] (walls the mathematicians were although the iconography and many other confined the infection with the inscription of the introduction of information of images'', Orthodox Christianity originates "
+    },
+    {
+      "distinct_4gram": 0.8477157360406091,
+      "judge_bits": 1.6548518103918894,
+      "offset": 96032768,
+      "reference_judge_bits": 2.1344247079411374,
+      "text": "tml Interactive Fiction of Andrew Plotkin]]\\n\\n== Publications of the image of the first thorough internal combustion engines of the same stroke and the second the difference of Western Religious image "
+    },
+    {
+      "distinct_4gram": 0.7309644670050761,
+      "judge_bits": 1.438797905720058,
+      "offset": 96040960,
+      "reference_judge_bits": 1.8046774570690016,
+      "text": "ructure the iconography and many other confined the infection with the interpretation of the existence of the contemporary source connection of icons the confined to the constantinople configuration i"
+    },
+    {
+      "distinct_4gram": 0.8578680203045685,
+      "judge_bits": 1.5195597414835718,
+      "offset": 96049152,
+      "reference_judge_bits": 2.4982683619571793,
+      "text": "ution exoskeleton in the the iconostasis]]\\n* [[Southern Israeli conflict constitutional and distinguish representation of the constantinople configuration interstate interactive fiction]]\\n* [[Richard "
+    },
+    {
+      "distinct_4gram": 0.868020304568528,
+      "judge_bits": 1.5552384833825799,
+      "offset": 96057344,
+      "reference_judge_bits": 1.152418336105344,
+      "text": "g]]\\n[[pt:Internet information internal combustion engines of the same stroke and the second the difference of Western Religious image removed from many other confined the infection with the interpreta"
+    }
+  ],
+  "temperature": 0.8,
+  "text": "/home/user/corpora/enwik8",
+  "word_candidates": 8
+}
