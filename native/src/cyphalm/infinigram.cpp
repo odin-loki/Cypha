@@ -126,19 +126,29 @@ void InfiniGram::build(const std::uint8_t* text, std::size_t n, const std::strin
 
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("InfiniGram: cannot write " + path);
-    const char magic[4] = {'I', 'G', 'R', '1'};
+    int bits = 1;
+    while ((std::size_t{1} << bits) < n) ++bits;
+    const char magic[4] = {'I', 'G', 'R', '2'};
     out.write(magic, 4);
-    const std::uint64_t n64 = n;
+    const std::uint64_t n64 = n, bits64 = static_cast<std::uint64_t>(bits);
     out.write(reinterpret_cast<const char*>(&n64), 8);
+    out.write(reinterpret_cast<const char*>(&bits64), 8);
     out.write(reinterpret_cast<const char*>(text), static_cast<std::streamsize>(n));
-    const std::size_t pad = (8 - (12 + n) % 8) % 8;
+    const std::size_t pad = (8 - (20 + n) % 8) % 8;
     const char zeros[8] = {};
     out.write(zeros, static_cast<std::streamsize>(pad));
-    // SA[0] is the sentinel suffix; the rest are the text's suffixes in order.
-    for (std::size_t i = 1; i <= n; ++i) {
-        const std::uint32_t v = static_cast<std::uint32_t>(SA[i]);
-        out.write(reinterpret_cast<const char*>(&v), 4);
+    // SA[0] is the sentinel suffix; the rest are the text's suffixes in order,
+    // packed little-endian at ``bits`` each.
+    std::vector<std::uint8_t> packed((n * static_cast<std::size_t>(bits) + 7) / 8 + 8, 0);
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::uint64_t v = static_cast<std::uint64_t>(SA[i + 1]);
+        const std::size_t bit = i * static_cast<std::size_t>(bits);
+        std::uint64_t w;
+        std::memcpy(&w, packed.data() + bit / 8, 8);
+        w |= v << (bit % 8);
+        std::memcpy(packed.data() + bit / 8, &w, 8);
     }
+    out.write(reinterpret_cast<const char*>(packed.data()), static_cast<std::streamsize>(packed.size()));
     if (!out) throw std::runtime_error("InfiniGram: write failed " + path);
 }
 
@@ -158,14 +168,27 @@ InfiniGram::InfiniGram(const std::string& path) {
         throw std::runtime_error("InfiniGram: mmap failed " + path);
     }
     const auto* p = static_cast<const std::uint8_t*>(map_);
-    if (map_len_ < 12 || std::memcmp(p, "IGR1", 4) != 0) throw std::runtime_error("InfiniGram: bad index " + path);
+    const bool v2 = map_len_ >= 20 && std::memcmp(p, "IGR2", 4) == 0;
+    if (!v2 && (map_len_ < 12 || std::memcmp(p, "IGR1", 4) != 0)) throw std::runtime_error("InfiniGram: bad index " + path);
     std::uint64_t n = 0;
     std::memcpy(&n, p + 4, 8);
     n_ = static_cast<std::size_t>(n);
-    text_ = p + 12;
-    const std::size_t pad = (8 - (12 + n_) % 8) % 8;
-    sa_ = reinterpret_cast<const std::uint32_t*>(p + 12 + n_ + pad);
-    if (12 + n_ + pad + 4 * n_ > map_len_) throw std::runtime_error("InfiniGram: truncated index " + path);
+    if (v2) {
+        std::uint64_t bits = 0;
+        std::memcpy(&bits, p + 12, 8);
+        bits_ = static_cast<int>(bits);
+        mask_ = (std::uint64_t{1} << bits_) - 1;
+        text_ = p + 20;
+        const std::size_t pad = (8 - (20 + n_) % 8) % 8;
+        packed_ = p + 20 + n_ + pad;
+        if (bits_ < 1 || bits_ > 32 || 20 + n_ + pad + (n_ * static_cast<std::size_t>(bits_) + 7) / 8 + 8 > map_len_)
+            throw std::runtime_error("InfiniGram: truncated index " + path);
+    } else {
+        text_ = p + 12;
+        const std::size_t pad = (8 - (12 + n_) % 8) % 8;
+        sa32_ = reinterpret_cast<const std::uint32_t*>(p + 12 + n_ + pad);
+        if (12 + n_ + pad + 4 * n_ > map_len_) throw std::runtime_error("InfiniGram: truncated index " + path);
+    }
 #endif
 }
 
@@ -178,7 +201,7 @@ InfiniGram::~InfiniGram() {
 void InfiniGram::range(const std::uint8_t* pat, std::size_t m, std::size_t& lo, std::size_t& hi) const {
     // Compare the suffix at SA[i] with pat over m bytes (a shorter suffix sorts first).
     auto cmp = [&](std::size_t i) {
-        const std::size_t pos = sa_[i];
+        const std::size_t pos = sa(i);
         const std::size_t avail = n_ - pos;
         const std::size_t k = std::min(avail, m);
         const int c = std::memcmp(text_ + pos, pat, k);
@@ -216,7 +239,7 @@ InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, i
         }
         // Occurrences at the very end of the corpus have no next byte; they sort
         // first in the range (shortest suffix).
-        while (lo < hi && sa_[lo] + static_cast<std::size_t>(n) >= n_) ++lo;
+        while (lo < hi && sa(lo) + static_cast<std::size_t>(n) >= n_) ++lo;
         return lo < hi;
     };
     int good = 0, bad = (hint >= 0 ? std::min(cap, hint) : cap) + 1;
@@ -240,11 +263,11 @@ InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, i
     std::size_t i = glo;
     const std::size_t off = static_cast<std::size_t>(good);
     while (i < ghi) {
-        const std::uint8_t b = text_[sa_[i] + off];
+        const std::uint8_t b = text_[sa(i) + off];
         std::size_t a = i + 1, e = ghi;
         while (a < e) {
             const std::size_t mid = a + (e - a) / 2;
-            if (text_[sa_[mid] + off] <= b) a = mid + 1;
+            if (text_[sa(mid) + off] <= b) a = mid + 1;
             else e = mid;
         }
         r.count[b] += static_cast<std::uint32_t>(a - i);
