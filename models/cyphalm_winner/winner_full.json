@@ -1,0 +1,42 @@
+{
+ "cyphalm_ensemble": 1,
+ "note": "CyphaLM winner v2 (docs/reports/CYPHALM_LM_QUALITY_REPORT.md, \"Winner v2\"); rebuild with scripts/build_cyphalm_winner.sh (full: 11 shards)",
+ "members": [
+  {
+   "checkpoint": "shard_0.json"
+  },
+  {
+   "checkpoint": "shard_1.json"
+  },
+  {
+   "checkpoint": "shard_2.json"
+  },
+  {
+   "checkpoint": "shard_3.json"
+  },
+  {
+   "checkpoint": "shard_4.json"
+  },
+  {
+   "checkpoint": "shard_5.json"
+  },
+  {
+   "checkpoint": "shard_6.json"
+  },
+  {
+   "checkpoint": "shard_7.json"
+  },
+  {
+   "checkpoint": "shard_8.json"
+  },
+  {
+   "checkpoint": "shard_9.json"
+  },
+  {
+   "checkpoint": "shard_10.json"
+  }
+ ],
+ "learning_rate": 0.01,
+ "infinigram": "enwik8_95m.igr",
+ "neural": "lstm.blm"
+}

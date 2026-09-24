@@ -36,4 +36,4 @@ python3 "$HERE/bench/lm_compare/byte_lm.py" export --ckpt "$OUT/lstm_ckpt/final.
     --save "$OUT/slim95" --gen-bytes 0 > "$OUT/slim95_train.json"
 wait
 cp "$HERE"/models/cyphalm_winner/winner*.json "$OUT/"
-echo "built $OUT: serve with --load $OUT/winner.json (winner_k4.json, winner_light.json)"
+echo "built $OUT: serve with --load $OUT/winner.json (4 shards; winner_full.json, winner_light.json)"

@@ -722,12 +722,12 @@ The upstream wiki context models (bold/italic, sentence position, capitals × pa
 | manifest | wiki | Alice | lcet10 | RAM |
 |---|---:|---:|---:|---|
 | old winner (11 slim shards + ∞-gram) | 1.6510 | 2.0257 | 1.5117 | 3.3 + 0.6 GB |
-| `winner.json`: 11 lean+upstream shards, OCC 0.8, no `sentst_`, ∞-gram, LSTM | **1.6158** | **2.0113** | **1.5038** | **2.7 + 0.4 GB** |
-| `winner_k4.json`: first 4 of those shards | 1.6192 | 2.0191 | 1.5160 | 1.0 + 0.4 GB |
+| `winner_full.json`: 11 lean+upstream shards, OCC 0.8, no `sentst_`, ∞-gram, LSTM | **1.6158** | **2.0113** | **1.5038** | 2.7 + 0.4 GB |
+| **`winner.json` (default)**: first 4 of those shards | 1.6192 | 2.0191 | 1.5160 | **1.0 + 0.4 GB** |
 | `winner_light.json`: slim 95 MB + ∞-gram + LSTM | 1.6393 | 2.0466 | 1.5388 | 0.46 + 0.44 GB |
 | old light (no LSTM) | 1.6909 | 2.0639 | 1.5566 | 0.44 + 0.45 GB |
 
-The shards take 2,737 MB on disk (old 3,544 MB) and train in 24.0 min on 4 cores; the LSTM takes 60 min. Before folding, the 11 lean shards score 1.6465 / 2.0102 / 1.5064 with ∞-gram and no LSTM, at about 5 GB.
+The 4-shard default is within 0.003 (wiki) to 0.012 (lcet10) of the full ensemble at 37% of its private RAM, and is better than the old 11-shard winner on every text. The 11 shards take 2,737 MB on disk (old 3,544 MB; the default's 4 take about 1 GB) and train in 24.0 min on 4 cores; the LSTM takes 60 min. Before folding, the 11 lean shards score 1.6465 / 2.0102 / 1.5064 with ∞-gram and no LSTM, at about 5 GB.
 
 ## Against neural baselines
 

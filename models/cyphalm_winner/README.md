@@ -11,8 +11,8 @@ native/build/cyphalm_generate --load /path/to/winner/winner.json --prompt "..."
 
 | manifest | what | held-out wiki / Alice / lcet10 (bits/byte) | RAM (private + mapped) |
 |---|---|---|---|
-| `winner.json` | 11 lean shards (upstream mixer settings, occupancy fold 0.8, sentst_ dropped) + ∞-gram index + byte LSTM | 1.6158 / 2.0113 / 1.5038 | 2.7 GB + 0.4 GB |
-| `winner_k4.json` | the first 4 of those shards + index + LSTM | 1.6192 / 2.0191 / 1.5160 | 1.0 GB + 0.4 GB |
+| `winner.json` (default) | 4 lean shards (upstream mixer settings, occupancy fold 0.8, sentst_ dropped) + ∞-gram index + byte LSTM | 1.6192 / 2.0191 / 1.5160 | 1.0 GB + 0.4 GB |
+| `winner_full.json` | all 11 such shards + index + LSTM | 1.6158 / 2.0113 / 1.5038 | 2.7 GB + 0.4 GB |
 | `winner_light.json` | one slim model on 95 MB + index + LSTM | 1.6393 / 2.0466 / 1.5388 | 0.46 GB + 0.44 GB |
 
 Paths (`shard_N.json`, `slim95.json`, `enwik8_95m.igr`, `lstm.blm`) are
