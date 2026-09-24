@@ -152,6 +152,7 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
     env_int("CYPHA_HP_LR1_SCALE", cfg.hp_lr1_scale);
     env_int("CYPHA_HP_MIXER_SCALE", cfg.hp_mixer_scale);
     env_int("CYPHA_HP_MIXER_SKIP_L1", cfg.hp_mixer_skip_l1);
+    env_int("CYPHA_HP_MIXER_SKIP", cfg.hp_mixer_skip);  // tiers re-apply it after their own value
     const char* extra_cms = std::getenv("CYPHA_HP_EXTRA_CMS");  // decimal or 0x hex bitmask
     if (extra_cms != nullptr && extra_cms[0] != '\0') {
         cfg.hp_extra_cms = static_cast<std::uint32_t>(std::strtoul(extra_cms, nullptr, 0));
