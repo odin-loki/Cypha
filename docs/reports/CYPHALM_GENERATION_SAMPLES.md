@@ -4,6 +4,13 @@ Unprimed `CyphaLMModel` with production hp recipe (`table_bits=16`, vocab 256). 
 
 Host: cloud agent VM, `cyphalm_generate` built Release with g++.
 
+**Superseded defaults (2026-09-23).** These samples predate the decode
+changes in [`CYPHALM_LM_QUALITY_REPORT.md`](CYPHALM_LM_QUALITY_REPORT.md):
+temperature 0.8, min-p 0.1, no learning from output, exact greedy, and word
+lookahead (K 8) are now the defaults, and `cyphalm_generate --load` serves a
+trained checkpoint or ensemble. Rerunning the commands below today gives
+different output.
+
 ## CLI flags exercised
 
 | Flag | Role |

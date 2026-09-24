@@ -8,7 +8,15 @@
 | `CYPHA_CORS_ORIGINS` | Comma-separated allowed browser origins, or `*` for all | `*` |
 | `CYPHA_CSV_CHUNK_ROWS` | Stream large CSV imports in chunks of this row count (unset = load whole file into memory first) | *(unset)* |
 | `CYPHA_REGRESSION_HEAD` | Path to optional `regression_head.json` (same schema as native `cypha_rest --regression-json`) — MoE **`regression_val`** / **`uncertainty`** on **`POST /predict`** | *(unset)* |
-| `CYPHA_SEQUENCE_CHECKPOINT` | Path to Cypha sequence checkpoint base (``.json`` + ``.npz``). Native **`cypha_rest`** loads the sequence model for **`/generate`**, **`/sequence/*`**, **`/predict_next`** when built with sequence support. Aliases: **`CYPHALM_CHECKPOINT`**, **`CYPHA_LM_CHECKPOINT`**. Health/metrics report **`sequence_loaded`** (alias **`lm_loaded`**). | *(unset)* |
+| `CYPHA_SEQUENCE_CHECKPOINT` | Path to a CyphaLM checkpoint (`BASE.json` + `BASE.hpbin`) or ensemble manifest (`{"cyphalm_ensemble": 1, ...}`). Native **`cypha_rest`** loads the sequence model for **`/generate`**, **`/sequence/*`**, **`/predict_next`** when built with sequence support. Aliases: **`CYPHALM_CHECKPOINT`**, **`CYPHA_LM_CHECKPOINT`**. Health/metrics report **`sequence_loaded`** (alias **`lm_loaded`**). | *(unset)* |
+| `CYPHA_HP_FROZEN_SCORING` | CyphaLM: `1` scores next-byte distributions with learning off inside the hypothetical byte, `0` = exact hp semantics. Overrides the checkpoint value. | `1` |
+| `CYPHA_HP_TREE_PRUNE` | CyphaLM: bit-tree subtrees below this probability are not expanded (`0` = exact). Overrides the checkpoint value. | `1e-4` |
+| `CYPHA_HP_SERVE_MIXER_LR_SCALE` | CyphaLM: mixer learning rate while serving, as a fraction of the trained rate | `0.5` |
+| `CYPHA_HP_LOSSY_TIER` | CyphaLM: lossy tier (`lean`, `balanced`, `compact`, `small`, `tiny`, `slim`) for new models; also overrides a loaded checkpoint's tier fields | *(gate24)* |
+| `CYPHA_HP_LOSSY_MEM`, `CYPHA_HP_SERVE_COMPACT`, `CYPHA_HP_PRUNE_COLD_MIN_N` | CyphaLM: older RAM levers (`docs/reports/CYPHALM_LOSSY_LLM_PLAN.md`) | *(unset)* |
+| `CYPHA_HP_MMAP` | CyphaLM: `0` copies checkpoint tables into RAM instead of mapping the `.hpbin` copy-on-write (Linux) | *(mapped)* |
+| `CYPHA_HP_ENSEMBLE_THREADS` | CyphaLM: `0` scores ensemble members serially instead of on worker threads | *(threads)* |
+| `CYPHA_HP_LEGACY_BYTE_LOGPROBS` | CyphaLM: `1` uses the old 256-clone next-byte scoring | *(off)* |
 | `CYPHA_BRANCH_A_EPISTEMIC_THRESHOLD` | Epistemic variance gate for **`POST /route/text`** and **`POST /route/generate`** (abstain → Ollama) | `0.5` |
 | `CYPHA_BRANCH_A_N_TRAIN` | 20 Newsgroups samples for lazy Branch A router training on first `/route/*` call | `1200` |
 | `CYPHA_BRANCH_A_EMBED_BACKEND` | Text embedder: `auto`, `sentence_transformers`, or `hashing` | `auto` |

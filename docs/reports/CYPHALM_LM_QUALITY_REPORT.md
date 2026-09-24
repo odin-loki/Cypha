@@ -1,11 +1,14 @@
 # CyphaLM as a language model: next-byte distribution quality
 
-**Date:** 2026-09-23
+**Date:** 2026-09-23 to 2026-09-24 (last commit covered: `2a003bf`)
 **Harness:** `native/tools/cyphalm_lm_quality.cpp`
-**Pretraining:** enwik8, first 8 MiB, mem 22, one online pass (`gate24` and `lean` tiers)
+**Pretraining:** enwik8, first 8 MiB, mem 22, one online pass (`gate24` and `lean` tiers);
+later sections state their own (95 MB, shards, `slim`)
 **Held-out:** enwik8 from byte 96,000,000 (wiki, in-domain; never seen in pretraining)
 and *Alice in Wonderland* (`alice29.txt` from byte 20,000; plain English, out of domain).
-16 KiB per eval. Raw JSON: [`lm_quality/`](lm_quality/).
+16 KiB per eval unless a table says 8 KiB. Raw JSON: [`lm_quality/`](lm_quality/).
+Tools, flags, config fields, env vars, file formats, changelog and negative
+results: [Reference](#reference) at the end.
 
 The compression reports measure bits to code a file from scratch. For LLM use
 the question is different: after pretraining, how good is the full next-byte
@@ -334,6 +337,10 @@ benchmark (8 wiki prompts, `cyphalm_gen_bench`, judge lean 16 MiB):
 | 11-shard ensemble, K 3 | 1.465 | 0.815 | 22 |
 | 11-shard ensemble, K 8 | 1.267 | 0.839 | 66 |
 
+The first row comes from the first benchmark run (`gb_lean_k0_wiki.json`,
+reference 2.104 / 0.783), the rest from the second (`gb2_*`, `gb11_*`,
+reference 2.134 / 0.803); in the lookahead row, 7.5 ms/byte is from the first
+run (`gb_lean_k8`: 1.197 / 0.827) and 14 from the second.
 The judge was trained on the first 16 MiB, so it favours models trained there.
 Compare decoders on one model, not models against each other (held-out NLL
 does that). ms/byte figures come from a loaded 4-core box.
@@ -354,7 +361,8 @@ corpus.
 
 **Implementation.** `InfiniGram` builds a suffix array (SA-IS, linear time)
 over the training bytes. For 95 MB that is 20 s and a 475 MB file (5 bytes per
-byte), mapped read-only and shared. A query bisects on the suffix length and
+byte; the packed IGR2 format from the speed round makes it 416 MB), mapped
+read-only and shared. A query bisects on the suffix length and
 reads next-byte counts from the SA range with one binary search per distinct
 next byte: 0.03 ms. `HpSequenceBackend::set_infinigram` serves
 
@@ -393,7 +401,10 @@ outside it):
   learned on 256 KB of held-out wiki (`--ig-weights-out`, loaded from
   `X.igr.weights.json`) barely matter online (−0.0006) and are domain-bound
   when nothing adapts (frozen: wiki −0.003, lcet10 −0.009, Alice +0.010), so
-  none ship by default.
+  none ship by default. Those weights were learned before the agreement split
+  below doubled the buckets (128 → 256): `igw_trained.json` holds 384 values,
+  and `set_infinigram_weights` now needs 768, so a weights file from before
+  `2d30e6a` makes `attach_infinigram` throw. Delete or relearn it.
 - **Generation** (8 wiki prompts, K 8): distinct 4-grams rise from 0.827 to
   0.879 at the same judge score. The ∞-gram lets the decoder follow long
   verbatim runs of the training text (*"…(Colossians 1:15) to the image of
@@ -547,7 +558,7 @@ their bytes, so the distribution stays normalised. Slim 95 MB + ∞-gram, 8 KiB:
 |---|---:|---:|---:|---:|
 | exact | 12.8 | 1.7068 | 2.2128 | 1.5427 |
 | 1e-5 | 3.7–4.2 | 1.7068 | 2.2124 | 1.5427 |
-| **1e-4** | **1.9–2.8** | **1.7067** | **2.2125** | **1.5432** |
+| **1e-4** | **2.3–2.8** | **1.7067** | **2.2125** | **1.5432** |
 | 1e-3 | 1.3–1.8 | 1.7089 | 2.2163 | 1.5447 |
 
 **Packed ∞-gram index** (IGR2): suffix-array entries at ceil(log2 n) bits,
@@ -565,6 +576,23 @@ trade: a 48 MB index costs +0.011 on wiki, 24 MB +0.027.
 Against the lean 95 MB model at the start of this work (1.7608 / 2.2158 on 8
 KiB, 1.1 GB, ~8 ms per distribution), the light winner is better on every
 text at under 1 GB and ~4× faster. The full winner cuts another 0.04 on wiki.
+
+The two manifests (paths relative to the manifest; `winner.json` lists
+`shard_0.json` … `shard_10.json` in order):
+
+```json
+{"cyphalm_ensemble": 1, "members": [{"checkpoint": "shard_0.json"}, …, {"checkpoint": "shard_10.json"}],
+ "learning_rate": 0.01, "infinigram": "enwik8_95m.igr"}
+{"cyphalm_ensemble": 1, "members": [{"checkpoint": "slim95.json"}], "infinigram": "enwik8_95m.igr"}
+```
+
+Provenance: the measured `slim95` checkpoint records tier `lean` in its config
+(`win_winner_light_*.json`, `sl_s95_*.json`). It is the lean 95 MB model cut
+to slim after training (`--drop`, `--fold`). `build_cyphalm_winner.sh`
+instead trains `--tier slim` from scratch. The two routes measured equal at
+8 MiB (1.8341 trained slim vs 1.8327 converted) but were not compared at
+95 MB. Both winner rows were scored at the harness defaults (trained mixer
+rate, see [Measurement conventions](#measurement-conventions)).
 
 ## LSTM expert (tried, removed)
 
@@ -601,7 +629,8 @@ commit `ee1325c` (`native/include/cypha/cyphalm/byte_lstm.hpp`,
 | `word_no_repeat` | 12 | word lookahead rejects words that repeat a sequence this long |
 
 Serve-time model settings: `hp_frozen_scoring` (on), `hp_serve_mixer_lr_scale`
-(0.5), and priming keeps the byte history.
+(0.5), `hp_tree_prune` (1e-4), learned ensemble and ∞-gram weights, and
+priming keeps the byte history. Full list: [Reference](#reference).
 
 ## Reproduce
 
@@ -613,9 +642,288 @@ $Q --load /tmp/pre_lean.json --eval alice29.txt --eval-offset 20000 --eval-bytes
 # ensembles: shards trained on disjoint slices, then mixed
 $Q --tier lean --train enwik8 --train-offset 48000000 --train-bytes 8388608 --save /tmp/pre_48m
 $Q --load /tmp/pre_lean.json --member /tmp/pre_48m.json --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+$Q --tier lean --train enwik8 --train-bytes 16777216 --save /tmp/pre_16 --gen-bytes 0   # the judge
 native/build/cyphalm_gen_bench --load /tmp/pre_lean.json --judge /tmp/pre_16.json --text enwik8 --offset 96000000 --prompts 8
 # serving: history on reset, mixer rate (quarters of trained), word lookahead
 $Q --load /tmp/pre_lean.json --reset-stream full --frozen-eval --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
 $Q --load /tmp/pre_lean.json --serve-lr 2 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
 $Q --load /tmp/pre_lean.json --eval enwik8 --eval-offset 96000000 --eval-bytes 16384 --gen-bytes 400 --only-default --word-k 8
+# ensembles through the library: shard trainer, manifest, learned weights
+native/build/cyphalm_shard_train --train enwik8 --bytes 95000000 --shards 11 --tier slim --table-bits 20 --threads 4 --out /tmp/s11
+$Q --load /tmp/s11/ensemble.json --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+$Q --load /tmp/pre_lean.json --member /tmp/pre_48m.json --ensemble-lr 0 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+native/build/cyphalm_generate --load /tmp/pre_lean.json --ensemble /tmp/pre_48m.json:0.5 --prompt "..." --max-bytes 300
+# RAM: serve-time conversion of a lean model to slim (13 context models, pool/Hebbian 16 bits, 5 match models)
+$Q --load /tmp/pre_lean.json --drop 0x628426bc0 --fold 0,0,16,16 --match-drop 0xd06 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+$Q --load /tmp/pre_lean.json --fold 22,16,16 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0   # context 22, match/pool 16
+$Q --load /tmp/s11/shard_0.json --merge /tmp/s11/shard_1.json --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+CYPHA_HP_MMAP=0 $Q --load /tmp/pre_lean.json --frozen-eval --eval enwik8 --eval-offset 96000000 --eval-bytes 4096 --gen-bytes 0  # copied tables
+$Q --tier lean --train enwik8 --train-bytes 8388608 --epochs 2 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+# ∞-gram index, starting weights, bit-tree pruning
+$Q --tier lean --train enwik8 --train-bytes 95000000 --save /tmp/lean95 --gen-bytes 0   # ~2.3 h
+$Q --load /tmp/lean95.json --drop 0x628426bc0 --fold 0,0,16,16 --save /tmp/slim95 --gen-bytes 0   # cut to slim
+native/build/cyphalm_infinigram_build --text enwik8 --bytes 95000000 --out /tmp/enwik8_95m.igr
+$Q --load /tmp/slim95.json --infinigram /tmp/enwik8_95m.igr --eval enwik8 --eval-offset 96000000 --eval-bytes 16384 --gen-bytes 0
+$Q --load /tmp/slim95.json --infinigram /tmp/enwik8_95m.igr --eval enwik8 --eval-offset 95000000 --eval-bytes 262144 --gen-bytes 0 --ig-weights-out /tmp/w.json
+$Q --load /tmp/slim95.json --infinigram /tmp/enwik8_95m.igr --tree-prune 1e-3 --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0
+CYPHA_HP_TREE_PRUNE=0 $Q --load /tmp/slim95.json --eval enwik8 --eval-offset 96000000 --eval-bytes 8192 --gen-bytes 0   # exact tree
+native/build/cyphalm_gen_bench --load /tmp/slim95.json --infinigram /tmp/enwik8_95m.igr --judge /tmp/pre_16.json --text enwik8 --prompts 8
+# the winner
+scripts/build_cyphalm_winner.sh enwik8 /tmp/winner native/build 4
+$Q --load /tmp/winner/winner.json --eval enwik8 --eval-offset 96000000 --eval-bytes 16384 --gen-bytes 0
 ```
+
+The ∞-gram, pruning and winner lines match the configurations behind the raw
+JSON; the paths are placeholders. `slim95.json` in the report is the
+converted lean 95 MB model (see *Speed round and the winner*).
+
+## Reference
+
+State at commit `2a003bf` (2026-09-24). Everything below is read from the code
+and the commit messages; numbers are the ones measured above.
+
+### Measurement conventions
+
+- Held-out slices: wiki = enwik8 @ 96,000,000; Alice = `alice29.txt` @ 20,000;
+  lcet10 = `lcet10.txt` @ 50,000; checks: enwik8 @ 97,500,000 and
+  `plrabn12.txt` @ 50,000. The harness scores `--eval-bytes` from the offset;
+  the next `--prompt-bytes` (256) are the generation prompt.
+- **Mixer rate.** `cyphalm_lm_quality` scores at the *trained* mixer rate
+  (`--serve-lr 4`, quarters) and does not call `set_serve_mode`. Serving
+  (`generate_decode`, REST) runs at 0.5× (`hp_serve_mixer_lr_scale`). Every
+  held-out NLL in this report is at 1× unless it says ×0.5 (the serve-rate
+  table, `aq_2_*`, `val_2_*`). The 0.5× rate was 0.0015–0.008 better there.
+- **Stream.** `--reset-stream none` (default): evaluation continues the
+  pretraining stream. Serving primes with `reset_stream(keep_history=true)`,
+  measured identical for frozen NLL (2.0285 both, `rs_*`).
+- **Scoring.** Frozen scoring on (default since `f9c24d0`) except the
+  exact-vs-frozen table. Bit-tree pruning follows the checkpoint config
+  (`hp_tree_prune`, default 1e-4 since `d7694b5`; checkpoints saved before it
+  have no key and load with 1e-4). Earlier sections were measured before
+  pruning existed, i.e. exact. `--tree-prune P` only overrides for P > 0; for
+  exact scoring set `CYPHA_HP_TREE_PRUNE=0`.
+- Timings (ms/byte, ms/distribution) come from a shared 4-core box under load
+  unless marked solo. Compare within a table only.
+- RSS in the raw JSON: `rss_mb_*` (total), `rss_anon_mb_*` (private),
+  `rss_file_mb_*` (file-backed, shareable), `rss_hwm_mb` (peak).
+
+### Tools
+
+| tool | purpose | flags (default) |
+|---|---|---|
+| `cyphalm_lm_quality` | pretrain or load, score held-out next-byte distributions, generate | see below |
+| `cyphalm_generate` | generate from a cold model, checkpoint or manifest | see below |
+| `cyphalm_gen_bench` | continue N held-out prompts, score with a fixed judge (learning off, exact rewind) | `--load CKPT` · `--member CKPT` (repeatable) · `--infinigram IDX` · `--judge CKPT` · `--text FILE` · `--offset` (96000000) · `--prompts` (8) · `--prompt-bytes` (256) · `--gen-bytes` (200) · `--stride` (8192) · `--word-candidates` (8) · `--temperature` (0.8) · `--min-p` (0.1) · `--seed` (1234) |
+| `cyphalm_shard_train` | split `--bytes` from `--offset` into N equal shards (remainder dropped), train one model per shard on threads, write `shard_<i>.json/.hpbin` + `ensemble.json` | `--train FILE` · `--bytes N` · `--offset` (0) · `--shards` (4) · `--threads` (all cores) · `--tier` (lean) · `--table-bits` (20) · `--out DIR` |
+| `cyphalm_infinigram_build` | SA-IS suffix array over a corpus slice, IGR2 file | `--text FILE` · `--bytes N` · `--offset` (0) · `--out X.igr` |
+| `scripts/build_cyphalm_winner.sh` | rebuild the winner checkpoints + index | `ENWIK8 OUT_DIR [BUILD_DIR] [THREADS]` |
+
+`cyphalm_lm_quality`:
+
+| flag | default | effect |
+|---|---|---|
+| `--train FILE` `--train-bytes N` `--train-offset N` | —, 0, 0 | pretrain (one online pass per epoch) |
+| `--epochs N` | 1 | passes over the training slice (2 hurt, see below) |
+| `--tier NAME` `--table-bits N` | gate24, 22 | new model's tier / table bits |
+| `--save BASE` / `--load CKPT.json` | | write `BASE.json` + `BASE.hpbin` / load a checkpoint or ensemble manifest |
+| `--member CKPT` | | attach an ensemble member (repeatable, equal weights 1/(n+1)) |
+| `--ensemble-lr R` | config (0.01) | ensemble weight learning rate; 0 = fixed |
+| `--merge CKPT` | | merge an equal-data shard's tables into `--load` (`merge_shard_tables`, repeatable) |
+| `--fold CM,MATCH,POOL[,HEBB]` | 0 = keep | fold trained tables to these bits (load path; also every `--member`) |
+| `--drop MASK` | 0 | drop context models, bit i = `hp::Predictor::CmId` i (slim's extra 13: `0x628426bc0`) |
+| `--match-drop MASK` | 0 | drop byte-match models, bit k over `match_[0..8], smatch, skipk, skip3, skip4` (slim: `0xd06`) |
+| `--infinigram X.igr` | | attach the ∞-gram expert (loads `X.igr.weights.json` if present) |
+| `--ig-weights-out FILE` | | after eval, write the learned ∞-gram weights (name it `X.igr.weights.json` to auto-load) |
+| `--tree-prune P` | checkpoint config | override bit-tree pruning (only P > 0) |
+| `--eval FILE` `--eval-offset N` `--eval-bytes N` | —, 0, 16384 | held-out slice |
+| `--prompt-bytes N` | 256 | generation prompt: the bytes right after the scored slice |
+| `--frozen-eval` | off | learning off while scoring (pretrained knowledge only) |
+| `--compare-scoring` | off | exact and frozen distributions per byte |
+| `--reset-stream none\|full\|keep` | none | new stream before eval: none, wipe history, keep history |
+| `--serve-lr Q` `--serve-skip S` | 4, −1 | mixer rate × Q/4, small-error skip threshold (−1 = trained) |
+| `--gen-bytes N` | 200 | generation length (0 = none; skipped when `--member` is given, use `cyphalm_gen_bench`) |
+| `--temperature T` `--top-p P` | 0.8, 0.9 | byte-level generation grid |
+| `--only-default` | off | only the default byte-level decoder in the grid |
+| `--word-k K` | 0 | also generate with word lookahead at K/2 and K (library decoder) |
+| `--dump-dist FILE` | | float32 natural-log P, 256 per held-out byte (working tree, not in `2a003bf`) |
+
+`cyphalm_generate` flags added in this work (older ones: `docs/native/CYPHALM_SERVE.md`):
+`--load CKPT.json` (checkpoint or manifest; cold model otherwise, table bits
+16), `--tier NAME`, `--min-p P` (0.1), `--no-repeat N` (0), `--learn-from-output`
+(off), `--word-candidates K` (8; 0 or 1 = byte sampling), `--ensemble
+CKPT.json[:W]` (repeatable; no `:W` = equal shares 1/(n+1)), `--infinigram
+X.igr`. Temperature defaults to 0.8. Word lookahead runs for every non-beam
+strategy while `learn_from_output` is off, so plain greedy needs
+`--word-candidates 0`.
+
+### Config fields (`CyphaLMConfig`, saved in the checkpoint JSON `config`)
+
+| field | default | env | effect |
+|---|---|---|---|
+| `hp_table_bits` | 22 | | table size (mem) |
+| `hp_lossy_tier` | "" (gate24) | `CYPHA_HP_LOSSY_TIER` | tier name: `lean`, `balanced`, `compact`, `small`, `tiny`, `slim` |
+| `hp_cm_drop` | 0 | | bit i drops context model i |
+| `hp_cm_bits_cap` / `hp_match_bits_cap` / `hp_pool_bits_cap` / `hp_hebb_bits_cap` | 0 = none | | cap context / match / pool / Hebbian tables |
+| `hp_pool_slots` | 0 = 12 | | discovery-pool slots kept |
+| `hp_gate_drop`, `hp_mixer_skip` | 0 | | mixer weight-set drop, update skip (no tier uses them) |
+| `hp_match_drop` | 0 | | bit k drops byte-match model k |
+| `hp_frozen_scoring` | true | `CYPHA_HP_FROZEN_SCORING` (0/1) | score with learning off inside the hypothetical byte |
+| `hp_tree_prune` | 1e-4 | `CYPHA_HP_TREE_PRUNE` (0 = exact) | bit-tree subtrees below this are not expanded |
+| `hp_serve_mixer_lr_scale` | 0.5 | `CYPHA_HP_SERVE_MIXER_LR_SCALE` | serve mixer rate, applied by `set_serve_mode` |
+| `hp_ensemble_learning_rate` | 0.01 | | ensemble weights' exponentiated-gradient rate |
+| `hp_lossy_mem`, `hp_serve_compact`, `hp_prune_cold_min_n` | 0, false, 0 | `CYPHA_HP_LOSSY_MEM`, `CYPHA_HP_SERVE_COMPACT`, `CYPHA_HP_PRUNE_COLD_MIN_N` | older RAM levers ([plan](CYPHALM_LOSSY_LLM_PLAN.md)) |
+| `vocab_size` | 256 | | `apply_hp_production_recipe` now always sets 256 |
+
+Tier contents (`apply_hp_lossy_tier`): `lean` drops 8 wiki context models,
+keeps 8 pool slots, match 22 / pool 20 bits; `balanced` / `compact` /
+`small` / `tiny` add context caps 23 / 22 / 21 / 20 (small: match 21; tiny:
+match 20, pool 18); `slim` = lean's drops + 13 more context models
+(`slim_cm_drop()`), pool and Hebbian 16 bits, match 22 bits, match drop
+`0xd06`. Env vars are applied in `CyphaLMModel::init_components`, so they
+override the values stored in a loaded checkpoint.
+
+Other env vars: `CYPHA_HP_MMAP=0` copies tables into RAM instead of mapping
+the `.hpbin` (Linux only; tables ≥ 64 KiB are mapped). `CYPHA_HP_ENSEMBLE_THREADS=0`
+scores members serially. `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1` uses the old
+256-clone scoring. REST: `CYPHALM_CHECKPOINT` / `CYPHA_LM_CHECKPOINT` /
+`CYPHA_SEQUENCE_CHECKPOINT` or `cypha_rest --cyphalm-checkpoint` auto-load a
+checkpoint or manifest at start.
+
+### Decoding (`DecodeParams`, REST `POST /generate` and `/generate/stream`)
+
+REST body fields that map to the table in *Decode controls added*:
+`temperature`, `top_k`, `top_p`, `min_p`, `word_candidates`, `word_no_repeat`,
+`no_repeat_ngram`, `no_repeat_window`, `learn_from_output`, `exact_greedy`,
+`seed` (42). Unspecified fields take the `DecodeParams` defaults (before
+`ee1325c` REST hard-coded temperature 0.9). `POST /sequence/load
+{"checkpoint_path": ...}` loads a checkpoint or ensemble manifest.
+
+### Library API added
+
+| API | what |
+|---|---|
+| `CyphaLMModel::reset_stream(keep_history)` | new stream, learned tables kept (priming uses `true`) |
+| `CyphaLMModel::set_serve_mode(on)` | serve mixer rate on / off (generation on, training off) |
+| `CyphaLMModel::add_ensemble_member(model, w)` | attach a pretrained model for serving |
+| `CyphaLMModel::attach_infinigram(path)` | ∞-gram expert (+ `path.weights.json`) |
+| `CyphaLMModel::fold_hp_tables(cm, match, pool, drop, hebb, match_drop)` | fold / drop on the model and every member |
+| `load_cyphalm_model` / `save_cyphalm_ensemble_manifest` | checkpoints and manifests |
+| `HpSequenceBackend::set_frozen_scoring`, `set_tree_prune`, `set_learning`, `set_ensemble_learning_rate`, `ensemble_weights`, `infinigram_weights`, `set_infinigram_weights` | serve knobs |
+| `hp::Predictor::set_learning`, `learned_digest`, `set_serve_adaptation`, `fold_tables`, `reset_stream_state` | hp side |
+| `hp::StreamRewind` | exact rewind of one or more predictors across bytes |
+| `hp::MapScope` | map large tables from the `.hpbin` on load |
+| `InfiniGram::build` / `InfiniGram(path)` / `query` | index build, load, longest-suffix counts |
+
+### File formats
+
+| file | format |
+|---|---|
+| `BASE.json` | `{"algorithm": "hp", "config": {...CyphaLMConfig...}, "hp_checkpoint": "BASE.hpbin", "train_step_count", "note"}` |
+| `BASE.hpbin` | magic `HPCP` + version. v1: original. v2 (`39ddaf9`): + sentence memory. v3 (`74a2a13`): context slots packed to 16 bits (10-bit state + 6-bit checksum, was 16 + 8). v1/v2 convert on load; saves are v3. Folded models store their caps in the JSON and reload at the smaller size. |
+| ensemble manifest | `{"cyphalm_ensemble": 1, "members": [{"checkpoint": "a.json", "weight": w?}, ...], "learning_rate": r?, "infinigram": "x.igr"?, "note"?}`. First member is the primary. Paths are relative to the manifest. Member weights default to 1/N each (the primary keeps the rest). `learning_rate` overrides `hp_ensemble_learning_rate`. |
+| `X.igr` (IGR2, `2b8b1b9`) | `"IGR2"`, uint64 n, uint64 bits (= ceil(log2 n), 27 for 95 MB), n text bytes, zero pad to 8, suffix array bit-packed little-endian at `bits` each, 8 bytes pad. `mmap`ed read-only and shared. IGR1 (`46592ff`): `"IGR1"`, uint64 n, text, pad, n uint32 entries. Not on Windows. |
+| `X.igr.weights.json` | `{"weights": [3 per bucket × 256 buckets], "learned_on", "offset", "note"}` from `--ig-weights-out` |
+
+∞-gram expert constants: 3 parts (model, longest suffix, longest suffix with
+≥ 16 occurrences), starting weights 0.8 / 0.1 / 0.1, learning rate 0.3,
+256 buckets = 8 match-length × 4 count × 4 model-confidence × 2 top-byte
+agreement.
+
+### Tests (CTest)
+
+| test | checks |
+|---|---|
+| `native_hp_bit_tree_smoke` | bit-tree scoring equals fresh-copy scoring; no speculative leak |
+| `native_hp_frozen_smoke` | frozen scoring normalised and leak-free; generation keeps the trained model |
+| `native_hp_stream_rewind_smoke` | checkpoints byte-identical after 60 random rewinds; 1000 later distributions match |
+| `native_hp_fold_smoke` | folded + dropped model saves, reloads identically, checkpoint shrinks |
+| `native_hp_checkpoint_roundtrip_smoke` | lossy knobs survive save/load; reloaded predictor continues exactly |
+| `native_cyphalm_ensemble_smoke` | mix equals a hand-computed blend; manifest load equals direct build; lookahead leaves members unchanged |
+| `native_cyphalm_infinigram_smoke` | index queries against brute force; expert normalisation, observe, rewind |
+
+### Changelog
+
+| commit | change | details |
+|---|---|---|
+| `68bcfdf` | vendored hp reduced to gate24 (289 flags resolved, 15,706 → 6,687 lines) | [strip](CYPHALM_HP_GATE24_STRIP.md) |
+| `9c14efd` | serve leak fixed (DMC, word-match undo); bit-tree DFS ~1.85× faster; lossy `hp::Config` knobs | [lossy](CYPHALM_LOSSY_MIXER_REPORT.md) |
+| `8ada3c0` | demand-zero table pages (construct ~55 ms, ~80 MB) | lossy |
+| `a88a5ab` | tiers `lean` … `tiny` | lossy |
+| `02aefd6` | context-slot prefetch removed (noise) | lossy |
+| `ae92146` | `cyphalm_lm_quality`; `exact_greedy`; `Predictor::set_learning`, `learned_digest` | Distribution quality |
+| `7eaff1e`, `f9c24d0` | frozen scoring, then default on; `min_p`, `no_repeat_ngram`; byte LSTM (later removed) | Frozen scoring |
+| `e6cc556`, `01f836a`, `f29bba6` | first report; LSTM mixture generation; LSTM speed-up | LSTM expert |
+| `d05523b` | fix: generation replaced the trained predictor with an untrained one | Generation |
+| `8ede50f` | decode defaults T 0.8, min-p 0.1, no learning from output | Generation |
+| `bf34a87`, `ee1325c` | `cyphalm_generate --load` and decode flags; REST decode fields | Tools |
+| `bbcb383` | byte LSTM and `index_output` removed | LSTM expert |
+| `95ff0a4` | 95 MB scaling | Scaling |
+| `b134076` | priming keeps byte history; `--reset-stream`, `--serve-lr`, `--serve-skip`, `--epochs`, two-model `--ensemble` | Serving improvements |
+| `73ef7e6` | serve mixer rate 0.5; `--word-k` prototype (model copy) | Serving improvements |
+| `a8ce4e7` | `hp::StreamRewind`; word lookahead, default K 8 | Serving improvements |
+| `4137015` | report round 2 | |
+| `fba6453` | `--train-offset`, ensemble weight grid; StateMap / APM raw data | Other results |
+| `bbb3b65` | lookahead shares prefix distributions (37 → 12.7 ms/byte) | Serving improvements |
+| `936b0e4` | serve-time ensembles; `--ensemble` (generate), `--member` (harness) | Ensembles |
+| `2587ef1` | `cyphalm_gen_bench` | Ensembles |
+| `39ddaf9` | checkpoint v2 (sentence memory, word-match window); vocab 256 | Other results |
+| `9d1f295`, `7cbc201` | report: ensembles, epochs; primary-proposal lookahead not kept | Ensembles |
+| `0f290f4` | learned ensemble weights; threaded member scoring; `--ensemble-lr`; two-model `--ensemble` path removed | Ensembles |
+| `75cc6da`, `9f7893c` | report: 11 shards; generation benchmark | Ensembles |
+| `cc02ccc` | ensemble manifests; `cyphalm_shard_train` | Ensembles |
+| `74a2a13` | table folding; mapped loading; packed slots, checkpoint v3 | RAM |
+| `a5a7784` | serve-time context-model drop; Hebbian fold; `--merge`; `hp_fold_smoke` | RAM |
+| `8ae22c6`, `0462ddb`, `c0587fb` | `slim` tier; frontier; frozen tables / members not kept | RAM |
+| `3aafeee`, `4bcea2b` | droppable match models; `slim` drops five; folding reaches members | RAM |
+| `46592ff`, `29f1947`, `317c645`, `2d30e6a` | ∞-gram expert, IGR1, weights save/load, backoff / weights / generation measured, agreement buckets | ∞-gram |
+| `d7694b5` | bit-tree pruning 1e-4 | Speed round |
+| `2b8b1b9` | IGR2 packed index | Speed round |
+| `c02a6d0`, `2a003bf` | winner manifests, rebuild script; report | Speed round |
+
+### Negative results
+
+| tried | result | code |
+|---|---|---|
+| byte LSTM expert + learned gate | +0.003 / +0.004 wiki / Alice (`m_*`) | removed `bbcb383`; recover from `ee1325c` (`byte_lstm.hpp/.cpp`, harness `--lstm-hidden`) |
+| `index_output` (no match copying from generated bytes) | no effect | removed `bbcb383`; recover from `ee1325c` (`DecodeParams::index_output`, `Predictor::set_history_indexing`) |
+| learning from own output while generating | loops, d4 0.23–0.59 (`g4_*`) | kept as `learn_from_output` (off) |
+| greedy, greedy + no-repeat | cycles; no-repeat breaks words (`g4_*`) | kept as options |
+| bug-era generations ("letter salad") | withdrawn, caused by `d05523b`'s bug (`g2_*`, `g3_*`) | fixed |
+| serve mixer rate ≠ 0.5, no small-error skip | ×0.25 ≈ ×0.5, faster worse; skip 0 no reliable gain (`ad_*`, `aq_*`) | kept as `--serve-lr`, `--serve-skip` |
+| serve-time StateMap limits, APM rates | ≤ 0.004, wiki and Alice move opposite (`lim_*`) | harness code never committed |
+| two training epochs | +0.029 wiki (`ep2_*`) | `--epochs` kept |
+| table bits 24 | 8 MiB: 1.7962 vs 1.7950 (`t24_*`); 95 MB: −0.008 wiki, none on Alice (`t24_95_*`) | config only |
+| linear, fixed-share and grid ensemble weights | linear 1.7352 vs geometric 1.7248; fixed-share worse (`ens_*`, `div_*`) | removed `0f290f4`; recover `git show 0f290f4^:native/tools/cyphalm_lm_quality.cpp` |
+| word best-of-K by sum / mean without ban / SIR / soft ban (model-copy prototype, ~400 ms/byte) | sum 0.52 / 0.229, mean 0.54 / 0.441, SIR 1.351 / 0.845 judge / d4 (`wk_*`, `wk2_*`) | replaced by the library decoder in `a8ce4e7`; recover from `73ef7e6` |
+| candidate words from the primary, chosen by the ensemble | 1.272 / 0.735 vs 1.158 / 0.789 | not committed; no raw JSON |
+| training `slim` from scratch vs converting | equal (1.8341 vs 1.8327) | both work |
+| folding context tables; match tables of a 95 MB model | +0.013 / +0.020 at 22 bits; +0.020 / +0.013 at 16 bits (`fd_*`, `pa_*`) | `--fold` kept |
+| merging all 11 shards into one table set | 2.006 wiki (`mg11_*`) | `--merge` kept |
+| freezing big tables while serving | +0.036 to +0.079 wiki (`fz_*`) | harness code never committed |
+| frozen ensemble members | +0.06 wiki, +0.11 Alice (`slf_*`) | harness code never committed |
+| ∞-gram as one fixed-λ linear mix (first analysis) | best λ 0.20: 1.7000 wiki vs 1.6925 for the shipped 3-part mix (`ig_*`, `ig2_*`, `igl_*`) | never committed |
+| ∞-gram fourth backoff level (≥ 256 occurrences) | ~0.001 worse (`ig4_*`) | never committed |
+| ∞-gram pretrained starting weights | −0.0006 online; frozen domain-bound (`igw_*`) | `--ig-weights-out` kept, none shipped |
+| smaller ∞-gram corpus (48 / 24 MB) | +0.011 / +0.027 wiki (`isz_*`) | index size only |
+| pruning at 1e-3 | +0.002 wiki, +0.004 Alice (`pr_1e-3_*`) | 1e-4 kept |
+| ensemble temperature | ~0.9 on wiki (−0.004), 1.0 on Alice | not added |
+| context-slot prefetch | 237.0 s vs 239.6 s (noise) | removed `02aefd6`; recover from `9c14efd` |
+
+### Raw JSON index (`lm_quality/`)
+
+| prefix | experiment |
+|---|---|
+| `q_g_*`, `q_l_*` | gate24 / lean 8 MiB distribution quality, frozen, exact vs frozen scoring |
+| `g2_*`, `g3_*` | bug-era generations (withdrawn); `g4_*`: decode grid after the fix |
+| `m_*` | byte LSTM mixture |
+| `s95_*`, `t24_*`, `t24_95_*` | 95 MB scaling; table bits 24 |
+| `rs_*`, `ad_*`, `aq_*`, `val_*`, `lim_*` | stream reset; serve mixer rate (half units / quarters); checks; StateMap / APM |
+| `wk_*`, `wk2_*`, `wl_*` | word best-of-K prototype variants; library lookahead K 4 / 8 |
+| `div_*`, `ens*`, `ep2_*` | two-model ensembles vs 16 MiB; weight schemes; two epochs |
+| `ne_*`, `fx_*`, `elr*`, `sm_*`, `e11*`, `thr_*` | library ensembles; re-measured after the checkpoint fixes; weight learning rate; table-bits-20 shards; 11 shards; threads on / off |
+| `gb_*`, `gb2_*`, `gb11_*`, `gbig_*` | generation benchmark runs 1 and 2; 11 shards; ∞-gram generation |
+| `mm_*`, `pk_*`, `cmp_*` | mapped loading; packed slots (8 MiB eval, 2 MiB compress old / new) |
+| `fd_*`, `dr_*`, `dc_*`, `cb_*`, `ef_*`, `pa_*`, `a3_*`, `slim8_*` | fold screen; per-context-model drop (bit N); drop sets; fold+drop combos; 11-shard fold presets; packed frontier; serve-time slim conversion; trained slim |
+| `mg*`, `fz_*`, `sl_*`, `slf_*`, `md_*`, `mdc_*`, `t18b_*` | merge; frozen tables; slim ensembles mapped; frozen members; per-match-model drop (bit N); match drop sets (A = slim); 11 slim shards at table bits 18 / 20 |
+| `ig_*`, `ig2_*`, `igl_*`, `eig_*`, `ig4_*`, `igag*`, `igw_*`, `isz_*`, `igv2_*` | ∞-gram: fixed λ; shipped mix; ensemble + index; 4th level; agreement buckets (`igag8` shipped); starting weights; index size; IGR2 |
+| `pr_*`, `win_*` | bit-tree pruning; the winner manifests |

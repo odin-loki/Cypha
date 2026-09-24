@@ -107,9 +107,15 @@ model (`.json`) and must match its `.hpbin`.
 | `hp_match_bits_cap` | `match_bits_cap` | cap the 13 byte-match hash tables |
 | `hp_pool_slots` | `pool_slots` | keep N of the 12 discovery-pool slots |
 | `hp_pool_bits_cap` | `pool_bits_cap` | cap discovery-pool tables |
+| `hp_hebb_bits_cap` | `hebb_bits_cap` | cap the Hebbian word-association tables (added `a5a7784`) |
+| `hp_match_drop` | `match_drop` | bit *k* drops byte-match model *k* (added `3aafeee`) |
 
 `apply_hp_lossy_tier(cfg, name)` / `CYPHA_HP_LOSSY_TIER=name` sets a
-measured bundle. `cyphalm_lossy_bench --tiers gate24,lean,…` measures them
+measured bundle. A seventh tier, `slim` (lean minus 13 more context models,
+pool and Hebbian tables at 16 bits, five match models dropped), was added
+later for serving; it is measured on held-out text in
+[`CYPHALM_LM_QUALITY_REPORT.md`](CYPHALM_LM_QUALITY_REPORT.md#ram), not on
+this compression screen. `cyphalm_lossy_bench --tiers gate24,lean,…` measures them
 (its numbers match the standalone screen harness exactly).
 
 ## Screens (1 MiB, mem 22, gate24 = 1.711967)

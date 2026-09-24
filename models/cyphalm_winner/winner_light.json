@@ -1,0 +1,10 @@
+{
+  "cyphalm_ensemble": 1,
+  "note": "CyphaLM winner (see docs/reports/CYPHALM_LM_QUALITY_REPORT.md); rebuild with scripts/build_cyphalm_winner.sh (light: one model)",
+  "members": [
+    {
+      "checkpoint": "slim95.json"
+    }
+  ],
+  "infinigram": "enwik8_95m.igr"
+}

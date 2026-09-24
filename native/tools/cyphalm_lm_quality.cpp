@@ -95,6 +95,7 @@ int main(int argc, char** argv) {
     int table_bits = 22, gen_bytes = 200, prompt_bytes = 256;
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
+    std::string dump_dist;  // float32 natural-log P, 256 per held-out byte
     bool compare_scoring = false;
     std::string reset_mode = "none";
     int serve_lr = 4, serve_skip = -1, epochs = 1;
@@ -148,6 +149,7 @@ int main(int argc, char** argv) {
         }
         else if (a == "--word-k") word_k = std::stoi(next());
         else if (a == "--only-default") only_default = true;
+        else if (a == "--dump-dist") dump_dist = next();
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -256,6 +258,8 @@ int main(int argc, char** argv) {
         double nll_t[kTemps] = {};
         double f_nll = 0.0, f_secs = 0.0, e_secs = 0.0;
         std::size_t f_top1 = 0;
+        std::ofstream dump;
+        if (!dump_dist.empty()) dump.open(dump_dist, std::ios::binary);
         const auto t0 = Clock::now();
         for (std::size_t k = 0; k < n_eval; ++k) {
             const int truth = ev[k];
@@ -274,6 +278,11 @@ int main(int argc, char** argv) {
             const auto te = Clock::now();
             const auto lp = hp.serve_next_byte_log_probs(256);
             e_secs += seconds_since(te);
+            if (dump.is_open()) {
+                float row[256];
+                for (int b = 0; b < 256; ++b) row[b] = static_cast<float>(lp[static_cast<std::size_t>(b)]);
+                dump.write(reinterpret_cast<const char*>(row), sizeof(row));
+            }
             int argmax = 0;
             double pmax = -1.0, h = 0.0;
             int rank = 0;

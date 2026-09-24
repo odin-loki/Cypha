@@ -182,7 +182,7 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     meta["train_step_count"] = model.train_step_count();
     meta["hp_checkpoint"] = bin_file.filename().string();
     meta["note"] =
-        "hp predictor state in sibling .hpbin (HPCP v2). JSON carries config metadata only.";
+        "hp predictor state in sibling .hpbin (HPCP v3). JSON carries config metadata only.";
 
     std::ofstream out(json_file);
     if (!out) throw std::runtime_error("cannot write checkpoint json: " + json_file.string());
