@@ -48,13 +48,121 @@ enum WikiState : int {
     kWkN = 16
 };
 
+// Tracker state for the optional upstream context models (Config::extra_cms):
+// wiki bold/italic, word-in-sentence, wiki-state transition, <ref> class.
+// Kept outside WikiMachine so the machine's bytes (written raw into v1-v4
+// checkpoints) are unchanged; Predictor owns it inline (StreamRewind's memcpy
+// covers it) and every write is undo-recorded.
+struct WikiExtra {
+    int wikibold = 0;   // bit 0 italic '', bit 1 bold '''
+    int wb_run = 0;
+    int sentpos = 0;    // nth word in the current sentence, 0..31
+    int sp_inword = 0;
+    int prev_state = 0; // wiki state before the last byte
+    int refgroup = 0;   // 0 none/closed, 1 <ref>, 2 <ref name=, 3 <ref group=
+    int rg_slash = 0;
+    int rg_n = 0;
+    int rg_name = 0;
+    int rg_group = 0;
+    std::uint64_t rg_win = 0;
+    std::uint8_t rg_buf[4] = {};
+
+    template <typename T>
+    static void set(T& f, T v) {
+        if (f != v) {
+            hp_undo_note(f);
+            f = v;
+        }
+    }
+    int state_trans(int state) const { return (prev_state & 15) | ((state & 15) << 4); }
+    void tag_open() {
+        set(rg_slash, 0);
+        set(rg_n, 0);
+        set(rg_win, std::uint64_t{0});
+        set(rg_name, 0);
+        set(rg_group, 0);
+    }
+    void page_reset() {
+        set(wikibold, 0);
+        set(wb_run, 0);
+        set(sentpos, 0);
+        set(sp_inword, 0);
+        set(prev_state, 0);
+        set(refgroup, 0);
+        tag_open();
+    }
+    // Per byte, before any state change (upstream HP_STATETRANS_MOD,
+    // HP_WIKIBOLD_MOD, HP_SENTPOS_MOD).
+    void byte_pre(int c, int state) {
+        set(prev_state, state);
+        if (c == '\n') {
+            set(wikibold, 0);
+            set(wb_run, 0);
+        } else if (c == '\'') {
+            if (wb_run < 5) set(wb_run, wb_run + 1);
+        } else {
+            if (wb_run == 2)
+                set(wikibold, wikibold ^ 1);
+            else if (wb_run == 3)
+                set(wikibold, wikibold ^ 2);
+            else if (wb_run == 4 || wb_run == 5)
+                set(wikibold, wikibold ^ 3);
+            set(wb_run, 0);
+        }
+        const int letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+        if (c == '.' || c == '?' || c == '!' || c == '\n') {
+            set(sentpos, 0);
+            set(sp_inword, 0);
+        } else if (letter) {
+            if (!sp_inword) {
+                if (sentpos < 31) set(sentpos, sentpos + 1);
+                set(sp_inword, 1);
+            }
+        } else {
+            set(sp_inword, 0);
+        }
+    }
+    // A byte inside a tag (after '<', not '/' or '>'); upstream HP_REFGROUP_MOD.
+    void tag_byte(int c) {
+        const unsigned ch = static_cast<unsigned>(c & 255);
+        const unsigned lc = ch | 32u;
+        const unsigned packed = (ch == '=') ? '=' : lc;
+        if (lc >= 'a' && lc <= 'z' && rg_n < 4) {
+            hp_undo_note(rg_buf[rg_n]);
+            rg_buf[rg_n] = static_cast<std::uint8_t>(lc);
+            set(rg_n, rg_n + 1);
+        }
+        set(rg_win, (rg_win << 8) | packed);
+        if ((rg_win & 0xffffffffffull) == 0x6e616d653dull) set(rg_name, 1);       // name=
+        if ((rg_win & 0xffffffffffffull) == 0x67726f75703dull) set(rg_group, 1);  // group=
+    }
+    void tag_slash() {
+        if (rg_n == 0) set(rg_slash, 1);
+    }
+    void tag_close() {
+        if (rg_n == 3 && rg_buf[0] == 'r' && rg_buf[1] == 'e' && rg_buf[2] == 'f') {
+            if (rg_slash)
+                set(refgroup, 0);
+            else if (rg_group)
+                set(refgroup, 3);
+            else if (rg_name)
+                set(refgroup, 2);
+            else
+                set(refgroup, 1);
+        }
+    }
+};
+
 class WikiMachine {
  public:
-    void push(int byte) {
+    /// ``ex``: trackers for the optional upstream context models (Predictor
+    /// passes them only when one is enabled); nullptr is gate24 exactly.
+    void push(int byte, WikiExtra* ex = nullptr) {
         const int c = byte;
         prev2_ = prev1_;
         prev1_ = last_;
         last_ = c;
+        if (ex) ex->byte_pre(c, state_);
         stack_feed(c);
         if (c >= 'A' && c <= 'Z') uppergap_ = 0;
         else if (uppergap_ < 255) ++uppergap_;
@@ -116,16 +224,19 @@ class WikiMachine {
             xml_n_ = 0;
             xml_name_ = 0;
             xml_done_ = 0;
+            if (ex) ex->tag_open();
             return;
         }
         if (c == '>' && in_tag_) {
-            dump_apply_();
+            dump_apply_(ex);
+            if (ex) ex->tag_close();
             in_tag_ = 0;
             state_ = kWkText;
             return;
         }
         if (c == '/' && in_tag_) {
             if (xml_n_ == 0) xml_slash_ = 1;
+            if (ex) ex->tag_slash();
             if (depth_ > 0) --depth_;
             state_ = kWkTagEnd;
             return;
@@ -141,6 +252,7 @@ class WikiMachine {
                     xml_done_ = 1;
                 }
             }
+            if (ex) ex->tag_byte(c);
             if (prev1_ == '!' && c == '-') state_ = kWkComment;
             return;
         }
@@ -786,7 +898,7 @@ class WikiMachine {
     int wl_run_ = 0;
     int heading_ = 0;
     int heading_run_ = 0;
-    void dump_apply_() {
+    void dump_apply_(WikiExtra* ex) {
         auto eq = [&](const char* s) {
             std::uint64_t w = 0;
             int m = 0;
@@ -808,6 +920,7 @@ class WikiMachine {
             uppergap_ = 0;
             wordlen_ = 0;
             wl_run_ = 0;
+            if (ex) ex->page_reset();
         }
     }
     int xml_slash_ = 0;

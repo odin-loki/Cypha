@@ -324,6 +324,11 @@ struct CyphaLMConfig {
     int hp_lr1_scale = 100;
     int hp_mixer_scale = 0;
     int hp_mixer_skip_l1 = 0;
+    /// Optional upstream context models (hp::Config::extra_cms): bit k adds
+    /// hp::Predictor::ExtraCm k (0 wikibold, 1 sentpos, 2 cappara, 3 refgroup,
+    /// 4 statetrans, 5 cross o2 x sentmem, 6 cross word x brk; 127 = all).
+    /// 0 reproduces gate24 bit for bit. Env CYPHA_HP_EXTRA_CMS.
+    std::uint32_t hp_extra_cms = 0;
     int hp_match_bits_cap = 0;       ///< cap the 13 byte-match hash tables at this many bits
     int hp_pool_slots = 0;           ///< keep this many discovered-context slots (gate24 = 12)
     int hp_pool_bits_cap = 0;        ///< cap discovered-context tables at this many bits

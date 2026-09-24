@@ -68,6 +68,12 @@ struct Config {
     int mixer_scale = 0;          // Q16 multiplier on layer-1 dots, 0 = off (upstream 49152 = 0.75)
     int mixer_skip_l1 = 0;        // skip a layer-1 set's update when its |err| < this (upstream 80)
 
+    // Upstream context models (CompressionAlgorithm hp), off by default.
+    // Bit k adds Predictor::ExtraCm k: its table and two mixer inputs. 0 is
+    // gate24 exactly (no table, no input, v4 checkpoint). Part of the trained
+    // model: a checkpoint loads only into a predictor with the same value.
+    std::uint32_t extra_cms = 0;
+
     // Encoder and decoder must agree. match/buf sizes are a function of
     // table_bits (the only size the archive header carries).
     // buf_bits = table_bits + 3 (25 at mem 22).
@@ -93,7 +99,36 @@ class Predictor {
         + kWordMatch + 1 /*sparse utf8*/
         + 1 /*hebb*/ + kDiscovered
         + 5 /*dmc, lzp, skipk, skip3, skip4*/;
-    static constexpr int kNumExperts = kBaseExperts;
+    static constexpr int kNumExperts = kBaseExperts;  // gate24 (extra_cms = 0)
+
+    // Optional upstream context models (Config::extra_cms bit k), appended to
+    // the context-model chain after the gate24 set, in this order. Upstream
+    // 8 MiB enwik8 gains at SLOT_MAX 24 in the comments.
+    enum ExtraCm {
+        kXWikibold = 0,   // HP_WIKIBOLD_MOD: '' / ''' bold-italic state, salt 159 (-1,703 B)
+        kXSentpos,        // HP_SENTPOS_MOD: nth word in the sentence, salt 185 (-461 B)
+        kXCappara,        // HP_CAPPARA_MOD: cap_mask x is_paragraph, salt 206 (-256 B)
+        kXRefgroup,       // HP_REFGROUP_MOD: <ref> / name= / group= class, salt 211 (-217 B)
+        kXStatetrans,     // HP_STATETRANS_MOD: previous x current wiki state, salt 194 (-213 B)
+        kXCrossO2Sentmem, // HP_CROSS_STACK cross0: o2 x sentmem_cm live hashes, salt 0x5858
+        kXCrossWordBrk,   // HP_CROSS_STACK cross1: word x brk live hashes, salt 0x5859
+        kNumExtraCm
+    };
+    static constexpr std::uint32_t kExtraCmMask = (1u << kNumExtraCm) - 1u;
+    static constexpr int kMaxCtxModels = kCtxModels + kNumExtraCm;
+    static constexpr int kMaxExperts = kNumExperts + kNumExtraCm * ContextModel::kOutputs;
+    /// Extra-CM bits that need the WikiExtra trackers.
+    static constexpr std::uint32_t kExtraWikiMask =
+        (1u << kXWikibold) | (1u << kXSentpos) | (1u << kXRefgroup) | (1u << kXStatetrans);
+    static int num_extra_cms(std::uint32_t extra_cms) {
+        int n = 0;
+        for (int k = 0; k < kNumExtraCm; ++k) n += (extra_cms >> k) & 1u;
+        return n;
+    }
+    /// Mixer input count for ``cfg``.
+    static int num_experts(const Config& cfg) {
+        return kNumExperts + num_extra_cms(cfg.extra_cms) * ContextModel::kOutputs;
+    }
 
     enum Gate {
         kGateC0 = 0, kGateAlpha, kGatePrev, kGateMatch, kGateEntropy,
@@ -141,14 +176,30 @@ class Predictor {
         kCmCapmaskMod,
         kCmUppergapMod,
         kCmWordlenMod,
+        // Config::extra_cms (ExtraCm order); chained only when enabled.
+        kCmWikiboldMod,
+        kCmSentposMod,
+        kCmCapparaMod,
+        kCmRefgroupMod,
+        kCmStatetransMod,
+        kCmCrossO2Sentmem,
+        kCmCrossWordBrk,
         kNumCm
     };
     static const char* cm_name(int i) {
-        static const char* const k[] = {"o1", "o2", "o3", "o4", "o6", "word", "sp13", "sp24", "col", "tag", "wbi", "wstr_sp", "brk", "link", "num", "sen", "sentst", "sentmem_cm", "sengrp", "nestmod", "paramod", "linemod", "statemod", "tplmod", "infokeymod", "o6b", "linkpipemod", "catmod", "headingmod", "titlemod", "sectitlemod", "wikistackmod", "capmaskmod", "uppergapmod", "wordlenmod"};
+        static const char* const k[] = {"o1", "o2", "o3", "o4", "o6", "word", "sp13", "sp24", "col", "tag", "wbi", "wstr_sp", "brk", "link", "num", "sen", "sentst", "sentmem_cm", "sengrp", "nestmod", "paramod", "linemod", "statemod", "tplmod", "infokeymod", "o6b", "linkpipemod", "catmod", "headingmod", "titlemod", "sectitlemod", "wikistackmod", "capmaskmod", "uppergapmod", "wordlenmod", "wikiboldmod", "sentposmod", "capparamod", "refgroupmod", "statetransmod", "cross_o2_sentmem", "cross_word_brk"};
         return (i >= 0 && i < kNumCm) ? k[i] : "?";
     }
 
-    static_assert(kNumCm == kCtxModels, "CmId must list every chained context model");
+    static_assert(kCmWordlenMod + 1 == kCtxModels, "CmId must list every gate24 context model");
+    static_assert(kNumCm == kMaxCtxModels, "CmId must list every optional context model");
+    static_assert(kNumCm <= 64, "Config::cm_drop is a 64-bit mask");
+
+    // Table bits for optional context model ``k``: 0 (no table) unless enabled.
+    static int extra_cm_bits_(const Config& cfg, int k, int bits) {
+        if (!((cfg.extra_cms >> k) & 1u)) return 0;
+        return cm_bits_(cfg, kCtxModels + k, bits);
+    }
 
     static int slot_bits(int base, int delta) {
         if (delta < 0) delta = 0;
@@ -226,6 +277,13 @@ class Predictor {
           capmaskmod_(cm_bits_(cfg, kCmCapmaskMod, cfg.table_bits), 255),
           uppergapmod_(cm_bits_(cfg, kCmUppergapMod, cfg.table_bits), 255),
           wordlenmod_(cm_bits_(cfg, kCmWordlenMod, cfg.table_bits), 255),
+          wikiboldmod_(extra_cm_bits_(cfg, kXWikibold, cfg.table_bits), 255),
+          sentposmod_(extra_cm_bits_(cfg, kXSentpos, cfg.table_bits), 255),
+          capparamod_(extra_cm_bits_(cfg, kXCappara, cfg.table_bits), 255),
+          refgroupmod_(extra_cm_bits_(cfg, kXRefgroup, cfg.table_bits), 255),
+          statetransmod_(extra_cm_bits_(cfg, kXStatetrans, cfg.table_bits), 255),
+          cross0_(extra_cm_bits_(cfg, kXCrossO2Sentmem, cfg.table_bits), 255),
+          cross1_(extra_cm_bits_(cfg, kXCrossWordBrk, cfg.table_bits), 255),
           match_{ {&byte_ring_, byte_match_bits_(cfg, 0), 3},
                   {&byte_ring_, byte_match_bits_(cfg, 1), 4},
                   {&byte_ring_, byte_match_bits_(cfg, 2), 6},
@@ -263,7 +321,7 @@ class Predictor {
           pool_(cfg.pool_bits_cap > 0 && cfg.pool_bits_cap < cfg.table_bits ? cfg.pool_bits_cap
                                                                             : cfg.table_bits,
                 0xC0FFEEull, cfg.pool_slots),
-          mixer_(kNumExperts, gate_sizes(), 256, cfg.mixer_lr, scaled_gate_rates(cfg.lr1_scale)),
+          mixer_(num_experts(cfg), gate_sizes(), 256, cfg.mixer_lr, scaled_gate_rates(cfg.lr1_scale)),
           apm_c0_(256),
           apm_lex_(256 * 256),
           apm_gria_(GriaGate::kBuckets * 256),
@@ -277,6 +335,7 @@ class Predictor {
         gria_.set_enabled(cfg.gria);
         mixer_.set_lossy(cfg.mixer_skip, cfg.gate_drop);
         mixer_.set_upstream(cfg.mixer_scale, cfg.mixer_skip_l1);
+        xcms_ = cfg.extra_cms & kExtraCmMask;
         init_ctx_chain_();
         set_byte_contexts();
     }
@@ -372,7 +431,7 @@ class Predictor {
     void fold_tables(const Config& target) {
         for (int i = 0; i < n_ctx_chain_; ++i) {
             ContextModel& m = *ctx_chain_[i];
-            if ((target.cm_drop >> i) & 1u) {
+            if ((target.cm_drop >> ctx_chain_id_[i]) & 1u) {
                 m.drop();
                 continue;
             }
@@ -592,6 +651,7 @@ class Predictor {
         capmaskmod_.update(y, ens);
         uppergapmod_.update(y, ens);
         wordlenmod_.update(y, ens);
+        for (int i = kCtxModels; i < n_ctx_chain_; ++i) ctx_chain_[i]->update(y, ens);
         for (int i = 0; i < kMatchModels; ++i) match_[i].update(y);
         smatch_.update(y);
         skipk_.update(y);
@@ -777,7 +837,7 @@ class Predictor {
             }
         }
 
-        wiki_.push(byte);
+        wiki_.push(byte, (xcms_ & kExtraWikiMask) ? &wx_ : nullptr);
 
         brackets_.push(byte);
         streams_.push(byte, alnum);
@@ -919,6 +979,38 @@ class Predictor {
                                          ((hist_ & 0xffffffull) << 8)));
         wordlenmod_.set_context(h2(125, static_cast<std::uint64_t>(wiki_.word_len()) +
                                         ((hist_ & 0xffffffull) << 8)));
+        if (xcms_) set_extra_contexts_();
+    }
+
+    // Optional upstream context models: hashing as upstream hp (salts, keys).
+    // Only enabled ones are hashed, so extra_cms = 0 leaves the hash memo alone.
+    void set_extra_contexts_() {
+        const std::uint64_t h3 = (hist_ & 0xffffffull) << 8;
+        if ((xcms_ >> kXWikibold) & 1u)
+            wikiboldmod_.set_context(h2(159, static_cast<std::uint64_t>(wx_.wikibold) + h3));
+        if ((xcms_ >> kXSentpos) & 1u)
+            sentposmod_.set_context(h2(185, static_cast<std::uint64_t>(wx_.sentpos) + h3));
+        if ((xcms_ >> kXStatetrans) & 1u)
+            statetransmod_.set_context(
+                h2(194, static_cast<std::uint64_t>(wx_.state_trans(wiki_.state())) + h3));
+        if ((xcms_ >> kXCappara) & 1u)
+            capparamod_.set_context(h2(206, static_cast<std::uint64_t>(wiki_.cap_mask()) +
+                                                (static_cast<std::uint64_t>(wiki_.is_paragraph()) << 8) +
+                                                ((hist_ & 0xffffffull) << 16)));
+        if ((xcms_ >> kXRefgroup) & 1u)
+            refgroupmod_.set_context(h2(211, static_cast<std::uint64_t>(wx_.refgroup) + h3));
+        // HP_CROSS_STACK (upstream bind_one_cross_): mix the live hashes of two
+        // chained models, bound after every other context is set.
+        if ((xcms_ >> kXCrossO2Sentmem) & 1u) bind_cross_(cross0_, o2_, sentmem_cm_, 0x5858u);
+        if ((xcms_ >> kXCrossWordBrk) & 1u) bind_cross_(cross1_, word_, brk_, 0x5859u);
+    }
+
+    void bind_cross_(ContextModel& cm, const ContextModel& a, const ContextModel& b,
+                     std::uint32_t salt) {
+        const std::uint64_t mix =
+            (static_cast<std::uint64_t>(a.last_h()) * 0x9E3779B97F4A7C15ull) ^
+            (static_cast<std::uint64_t>(b.last_h()) * 0xBF58476D1CE4E5B9ull);
+        cm.set_context(h2(salt, mix));
     }
 
     void rebind_internal_pointers_() {
@@ -973,6 +1065,15 @@ class Predictor {
         capmaskmod_ = o.capmaskmod_;
         uppergapmod_ = o.uppergapmod_;
         wordlenmod_ = o.wordlenmod_;
+        wikiboldmod_ = o.wikiboldmod_;
+        sentposmod_ = o.sentposmod_;
+        capparamod_ = o.capparamod_;
+        refgroupmod_ = o.refgroupmod_;
+        statetransmod_ = o.statetransmod_;
+        cross0_ = o.cross0_;
+        cross1_ = o.cross1_;
+        xcms_ = o.xcms_;
+        wx_ = o.wx_;
         for (int i = 0; i < kMatchModels; ++i) match_[i] = o.match_[i];
         smatch_ = o.smatch_;
         skipk_ = o.skipk_;
@@ -1059,6 +1160,15 @@ class Predictor {
         ctx_chain_[n_ctx_chain_++] = &capmaskmod_;
         ctx_chain_[n_ctx_chain_++] = &uppergapmod_;
         ctx_chain_[n_ctx_chain_++] = &wordlenmod_;
+        for (int i = 0; i < n_ctx_chain_; ++i) ctx_chain_id_[i] = static_cast<std::int8_t>(i);
+        ContextModel* const extra[kNumExtraCm] = {&wikiboldmod_,   &sentposmod_, &capparamod_,
+                                                  &refgroupmod_,   &statetransmod_,
+                                                  &cross0_,        &cross1_};
+        for (int k = 0; k < kNumExtraCm; ++k) {
+            if (!((xcms_ >> k) & 1u)) continue;
+            ctx_chain_id_[n_ctx_chain_] = static_cast<std::int8_t>(kCtxModels + k);
+            ctx_chain_[n_ctx_chain_++] = extra[k];
+        }
     }
 
     static int pronoun_word(const std::uint8_t* w, int n) {
@@ -1107,6 +1217,14 @@ class Predictor {
     ContextModel capmaskmod_;
     ContextModel uppergapmod_;
     ContextModel wordlenmod_;
+    // Config::extra_cms (ExtraCm order); tableless unless enabled.
+    ContextModel wikiboldmod_;
+    ContextModel sentposmod_;
+    ContextModel capparamod_;
+    ContextModel refgroupmod_;
+    ContextModel statetransmod_;
+    ContextModel cross0_;
+    ContextModel cross1_;
     MatchModel match_[kMatchModels];
     MatchModel smatch_;
     MatchModel skipk_;
@@ -1127,6 +1245,8 @@ class Predictor {
     BracketMachine brackets_;
     PatternCache cache_;
     NumericField numbers_;
+    std::uint32_t xcms_ = 0;  // Config::extra_cms & kExtraCmMask
+    WikiExtra wx_;            // trackers for the optional wiki context models
 
     std::uint64_t hist_ = 0;
     std::uint64_t word_hash_ = 0;
@@ -1142,13 +1262,17 @@ class Predictor {
     std::uint64_t prev_word_ = 0;
     std::uint64_t word_hash_prev_ = 0;
     std::uint64_t word_ring_[4] = {0, 0, 0, 0};
-    ContextModel* ctx_chain_[kCtxModels];
+    ContextModel* ctx_chain_[kMaxCtxModels];
+    std::int8_t ctx_chain_id_[kMaxCtxModels] = {};  // CmId of each chained model (cm_drop bit)
     bool learning_ = true;
     int n_ctx_chain_ = 0;
     int c0_ = 1;
     int bitpos_ = 0;
     int pr_final_ = 2048;
-    int exp_p_[kNumExperts + 8] = {0};
+    // First kExpPBase entries: the v1-v4 checkpoint layout; the tail holds the
+    // optional context models' outputs.
+    static constexpr int kExpPBase = kNumExperts + 8;
+    int exp_p_[kMaxExperts + 8] = {0};
     int n_exp_ = 0;
     int mixed_p_ = 2048;
     int last_mlen_ = 0;

@@ -294,6 +294,8 @@ class ContextModel {
 
     int last_p() const { return p_ind_; }
     int last_py() const { return p_py_; }
+    /// Context hash last bound by set_context (upstream cross models mix these).
+    std::uint32_t last_h() const { return h_; }
     int n0() const { return state_table().n0(state_); }
     int n1() const { return state_table().n1(state_); }
 

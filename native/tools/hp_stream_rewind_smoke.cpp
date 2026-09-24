@@ -1,6 +1,8 @@
 /// hp::StreamRewind: after frozen advances (with bit-tree scoring nested inside),
 /// rewind() must return the predictor bit-for-bit to its saved state. Checked by
 /// comparing full checkpoints, then by continuing both it and an untouched copy.
+/// Run for gate24 and again with every optional upstream context model on
+/// (hp_extra_cms = 127: their tables and wiki trackers must rewind too).
 #include <cstdio>
 #include <random>
 #include <sstream>
@@ -20,11 +22,10 @@ std::string serialize(hp::Predictor& p) {
     return os.str();
 }
 
-}  // namespace
-
-int main() {
+int run(std::uint32_t extra_cms) {
     cypha::cyphalm::CyphaLMConfig cfg;
     cypha::cyphalm::apply_hp_production_recipe(cfg);
+    cfg.hp_extra_cms = extra_cms;
     cfg.hp_table_bits = 16;
     cfg.hp_cm_bits_cap = 16;
     cfg.hp_match_bits_cap = 16;
@@ -33,9 +34,12 @@ int main() {
 
     std::string text;
     const char* words[] = {"the ", "cat ", "sat ", "on ", "a ", "mat. ", "Then ", "the ",
-                           "dog ", "ran ", "[[link]] ", "{{cite}} ", "\n", "1984 ", "'''x''' "};
+                           "dog ", "ran ", "[[link]] ", "{{cite}} ", "\n", "1984 ", "'''x''' ",
+                           "''y'' ", "<ref name=\"a\">", "<ref>", "<ref group=n>", "</ref> ",
+                           "<ref name=b/> ", "<page>", "</page>\n"};
+    const int nwords = extra_cms != 0 ? 23 : 15;
     std::mt19937 rng(7);
-    while (text.size() < 12000) text += words[rng() % 15];
+    while (text.size() < 12000) text += words[rng() % nwords];
     for (std::size_t i = 0; i < 8000; ++i) hp.consume_byte(static_cast<std::uint8_t>(text[i]));
 
     hp.set_learning(false);
@@ -91,6 +95,14 @@ int main() {
             }
         }
     }
-    std::printf("hp_stream_rewind_smoke OK 60 rewinds exact, 1000 bytes identical after\n");
+    std::printf("hp_stream_rewind_smoke OK extra_cms=%u: 60 rewinds exact, 1000 bytes identical after\n",
+                extra_cms);
     return 0;
+}
+
+}  // namespace
+
+int main() {
+    if (run(0) != 0) return 1;
+    return run(127);
 }
