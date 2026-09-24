@@ -677,6 +677,58 @@ The ∞-gram, pruning and winner lines match the configurations behind the raw
 JSON; the paths are placeholders. `slim95.json` in the report is the
 converted lean 95 MB model (see *Speed round and the winner*).
 
+## Winner v2: smaller weights, upstream gains, neural expert
+
+**Where the 4 GB went.** `HP_CKPT_SIZES=1` prints each component's checkpoint size. A slim shard is 338 MB:
+- six context-model tables of 33.5 MB each;
+- the order-0 match table (48 MB);
+- the byte ring (8 MB);
+- smaller tables.
+
+How full the tables are varies widely. `skip4_` is 0.8% used, `o3_` 7.7%, `word_` 13%, `o4_` 23%, while `wbi_` is 94% and `sen_` 100%.
+
+**Occupancy fold** (`Predictor::fold_auto`, `--fold-auto OCC`). Each context, match, pool and Hebbian table is halved while its projected occupancy stays at or under OCC. Old winner, 16 KiB:
+
+| OCC | freed | wiki | Alice |
+|---|---:|---:|---:|
+| — | — | 1.6510 | 2.0257 |
+| 0.4 | 0.80 GB | 1.6520 | 2.0269 |
+| 0.6 | 1.17 GB | 1.6530 | 2.0298 |
+| 0.8 | 1.60 GB | 1.6597 | 2.0323 |
+
+Dropping whole tables costs more. `o3_` +0.0125 and `o4_` +0.0149 on wiki; `sentst_` is the exception (+0.002 wiki, +0.0001 Alice).
+
+**Upstream compression gains** (CompressionAlgorithm; ported as config fields, checkpoint v4):
+- layer-1 rate scale 40;
+- layer-1 dot scale 0.75;
+- mixer skip 56;
+- layer-1 skip 80.
+
+On gate24 8 MiB, the rate scale alone saves 6,741 B (upstream 7,038). These settings do **not** help the slim tier (one 8.6 MB shard: wiki 1.8178 → 1.8177, frozen worse). On lean they do, and lean beats gate24 at every size after folding:
+
+| one 8.6 MB shard | size after fold | wiki | Alice |
+|---|---:|---:|---:|
+| slim (old winner shard), unfolded | 322 MB | 1.8178 | 2.1395 |
+| lean + upstream, OCC 0.6 | 326 MB | **1.8106** | **2.1169** |
+| lean + upstream, OCC 0.8 | 268 MB | 1.8193 | 2.1235 |
+| gate24 + upstream, OCC 0.6 | 380 MB | 1.8101 | 2.1179 |
+
+The upstream wiki context models (bold/italic, sentence position, capitals × paragraph, `<ref>` group, state transitions, two cross contexts) are ported behind `hp_extra_cms` / `CYPHA_HP_EXTRA_CMS` (default 0, bit-identical when off; checkpoint v5 when on). They save 5,252 B on gate24 8 MiB, but on a lean shard only −0.0008 wiki / −0.0027 Alice for +4% size, so they are off in the winner.
+
+**Neural expert** (`ByteLstmExpert`, manifest key `neural`, `--neural`). The 1-hour byte LSTM from the comparison (3.4M params, 13 MB) runs in C++ and matches PyTorch to 1e-6 bits/byte. It is mixed after the ∞-gram step as w·p + (1−w)·p_nn, with w learned per (confidence, agreement) bucket.
+
+**Winner v2** (`models/cyphalm_winner/`, 16 KiB held-out, private + mapped RAM):
+
+| manifest | wiki | Alice | lcet10 | RAM |
+|---|---:|---:|---:|---|
+| old winner (11 slim shards + ∞-gram) | 1.6510 | 2.0257 | 1.5117 | 3.3 + 0.6 GB |
+| `winner.json`: 11 lean+upstream shards, OCC 0.8, no `sentst_`, ∞-gram, LSTM | **1.6158** | **2.0113** | **1.5038** | **2.7 + 0.4 GB** |
+| `winner_k4.json`: first 4 of those shards | 1.6192 | 2.0191 | 1.5160 | 1.0 + 0.4 GB |
+| `winner_light.json`: slim 95 MB + ∞-gram + LSTM | 1.6393 | 2.0466 | 1.5388 | 0.46 + 0.44 GB |
+| old light (no LSTM) | 1.6909 | 2.0639 | 1.5566 | 0.44 + 0.45 GB |
+
+The shards take 2,737 MB on disk (old 3,544 MB) and train in 24.0 min on 4 cores; the LSTM takes 60 min. Before folding, the 11 lean shards score 1.6465 / 2.0102 / 1.5064 with ∞-gram and no LSTM, at about 5 GB.
+
 ## Against neural baselines
 
 [`CYPHALM_VS_NEURAL_LM.md`](CYPHALM_VS_NEURAL_LM.md) sets the winner against a byte-level Transformer (3.35M params) and an LSTM (3.43M params). Each trains for at most 1 hour on the same 4 cores and the same 95 MB, and all are scored by one code path.
