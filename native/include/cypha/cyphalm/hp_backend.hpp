@@ -17,6 +17,7 @@
 /// ``next_byte_log_probs()`` defaults to bit-tree joint scoring; legacy path:
 /// ``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1``.
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -96,6 +97,15 @@ class HpSequenceBackend {
     /// learning inside the hypothetical byte. Faster (no update work to record
     /// and undo); still a normalised distribution. Off = hp's compression
     /// semantics (each hypothetical bit trains the model before the next).
+    /// Speed: bit-tree subtrees whose probability falls below ``min_prob`` are
+    /// not expanded; their mass is spread evenly over their bytes (still a
+    /// normalised distribution). 0 = exact.
+    void set_tree_prune(double min_prob) {
+        prune_log_ = min_prob > 0.0 ? std::log(min_prob) : -1e300;
+        for (auto& m : members_) m.backend->set_tree_prune(min_prob);
+        last_valid_ = ig_valid_ = false;
+    }
+
     void set_frozen_scoring(bool on) {
         frozen_scoring_ = on;
         last_valid_ = ig_valid_ = false;
@@ -183,10 +193,12 @@ class HpSequenceBackend {
     static bool branch_reaches_vocab(int vocab_size, int prefix, int depth, int bit);
     static void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
                                     hp::Predictor& node, hp::PredictorUndoStack& undo,
-                                    std::vector<double>& out_log_nats);
+                                    std::vector<double>& out_log_nats,
+                                    double prune_log = -1e300);
     double byte_log_prob_on_pred_(std::uint8_t byte) const;
 
     bool serve_compact_ = false;
+    double prune_log_ = -1e300;  // set_tree_prune
     bool frozen_scoring_ = false;
 
     struct Member {

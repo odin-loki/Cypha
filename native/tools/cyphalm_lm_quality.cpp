@@ -104,6 +104,7 @@ int main(int argc, char** argv) {
     std::uint64_t drop_mask = 0;
     std::uint32_t match_drop = 0;
     std::string infinigram_path, ig_weights_out;
+    double tree_prune = 0.0;
     std::vector<std::string> merges;  // shard models merged into --load (equal data)
     int word_k = 0;
     bool only_default = false;
@@ -137,6 +138,7 @@ int main(int argc, char** argv) {
         else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
         else if (a == "--merge") merges.push_back(next());
         else if (a == "--infinigram") infinigram_path = next();
+        else if (a == "--tree-prune") tree_prune = std::stod(next());
         else if (a == "--ig-weights-out") ig_weights_out = next();
         else if (a == "--match-drop") match_drop = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 0));
         else if (a == "--drop") drop_mask = std::stoull(next(), nullptr, 0);  // cm_drop bits
@@ -232,6 +234,10 @@ int main(int argc, char** argv) {
         if (reset_mode == "full") model->reset_stream(false);
         else if (reset_mode == "keep") model->reset_stream(true);
         out["reset_stream"] = reset_mode;
+        if (tree_prune > 0.0) {
+            hp.set_tree_prune(tree_prune);
+            out["tree_prune"] = tree_prune;
+        }
         // Serve-time adaptation: mixer rates x serve_lr/4, skip threshold.
         hp.predictor().set_serve_adaptation(serve_lr, 4, serve_skip);
         out["serve_lr_quarters"] = serve_lr;

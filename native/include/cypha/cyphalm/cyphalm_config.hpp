@@ -339,6 +339,11 @@ struct CyphaLMConfig {
     /// split for unequal members (95 MB + 8 MiB: 0.65/0.35, better than any
     /// fixed weight); equal-size shards stay near equal. 0 = fixed weights.
     double hp_ensemble_learning_rate = 0.01;
+    /// Serve-time bit-tree pruning (``HpSequenceBackend::set_tree_prune``):
+    /// subtrees under this probability are not expanded. 1e-4: 5.5x faster
+    /// next-byte distributions, held-out NLL within ±0.0005. 0 = exact.
+    /// Env ``CYPHA_HP_TREE_PRUNE``.
+    double hp_tree_prune = 1e-4;
 };
 
 /// Compile-time ``HP_SLOT_MAX`` baked into this binary (24, gate24).

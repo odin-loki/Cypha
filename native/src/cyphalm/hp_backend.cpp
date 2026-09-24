@@ -187,7 +187,8 @@ bool HpSequenceBackend::branch_reaches_vocab(int vocab_size, int prefix, int dep
 void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefix,
                                             double log_p_nats, hp::Predictor& node,
                                             hp::PredictorUndoStack& undo,
-                                            std::vector<double>& out_log_nats) {
+                                            std::vector<double>& out_log_nats,
+                                            double prune_log) {
     if (depth == 8) {
         if (prefix >= 0 && prefix < static_cast<int>(out_log_nats.size())) {
             out_log_nats[static_cast<std::size_t>(prefix)] = log_p_nats;
@@ -216,9 +217,21 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
         }
         const double child_log = log_p_nats + bit_log_prob(p12, bit);
         const int next_prefix = (prefix << 1) | bit;
+        if (depth < 7 && child_log < prune_log) {
+            // Pruned: this subtree's mass is spread evenly over its bytes, so
+            // the distribution stays normalised without expanding it.
+            const int shift = 7 - depth;
+            const int first = next_prefix << shift;
+            const int last = std::min(static_cast<int>(out_log_nats.size()), (next_prefix + 1) << shift);
+            if (first < last) {
+                const double each = child_log - std::log(static_cast<double>(last - first));
+                for (int b = first; b < last; ++b) out_log_nats[static_cast<std::size_t>(b)] = each;
+            }
+            continue;
+        }
         if (depth == 7) {
             // Leaf: the byte's probability is complete; no state to advance.
-            expand_bit_tree_dfs(vocab_size, 8, next_prefix, child_log, node, undo, out_log_nats);
+            expand_bit_tree_dfs(vocab_size, 8, next_prefix, child_log, node, undo, out_log_nats, prune_log);
             continue;
         }
         hp::UndoFrame& frame = undo.push_frame();
@@ -229,7 +242,7 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
             }
             node.update(bit);
             expand_bit_tree_dfs(vocab_size, depth + 1, next_prefix, child_log, node, undo,
-                                out_log_nats);
+                                out_log_nats, prune_log);
         }
         undo.pop_frame(node);
     }
@@ -249,7 +262,7 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_si
         }
     }
     hp::PredictorUndoStack undo;
-    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo, log_probs_buf_);
+    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo, log_probs_buf_, prune_log_);
     return std::vector<double>(log_probs_buf_.begin(),
                                log_probs_buf_.begin() + static_cast<std::size_t>(n));
 }

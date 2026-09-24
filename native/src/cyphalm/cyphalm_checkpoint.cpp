@@ -48,6 +48,7 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"hp_frozen_scoring", cfg.hp_frozen_scoring},
         {"hp_serve_mixer_lr_scale", cfg.hp_serve_mixer_lr_scale},
         {"hp_ensemble_learning_rate", cfg.hp_ensemble_learning_rate},
+        {"hp_tree_prune", cfg.hp_tree_prune},
         {"train_epochs", cfg.train_epochs},
         {"view_schedule", cfg.view_schedule},
         {"view_block_size", cfg.view_block_size},
@@ -91,6 +92,7 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_i("hp_hebb_bits_cap", cfg.hp_hebb_bits_cap);
     if (c.contains("hp_match_drop")) cfg.hp_match_drop = c.at("hp_match_drop").get<std::uint32_t>();
     get_b("hp_frozen_scoring", cfg.hp_frozen_scoring);
+    if (c.contains("hp_tree_prune")) cfg.hp_tree_prune = c.at("hp_tree_prune").get<double>();
     if (c.contains("hp_ensemble_learning_rate"))
         cfg.hp_ensemble_learning_rate = c.at("hp_ensemble_learning_rate").get<double>();
     if (c.contains("hp_serve_mixer_lr_scale"))

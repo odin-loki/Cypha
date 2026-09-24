@@ -44,6 +44,7 @@ void CyphaLMModel::init_components() {
     }
     hp_ = std::make_unique<HpSequenceBackend>(hp_config_from_cyphalm(cfg_));
     hp_->set_frozen_scoring(cfg_.hp_frozen_scoring);
+    hp_->set_tree_prune(cfg_.hp_tree_prune);
     if (cfg_.hp_serve_compact) {
         hp_->compact_for_serve();
     }
@@ -359,6 +360,7 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"hp_frozen_scoring", cfg_.hp_frozen_scoring},
         {"hp_serve_mixer_lr_scale", cfg_.hp_serve_mixer_lr_scale},
         {"hp_ensemble_learning_rate", cfg_.hp_ensemble_learning_rate},
+        {"hp_tree_prune", cfg_.hp_tree_prune},
         {"hp_slot_max", cfg_.hp_slot_max},
         {"hp_slot_compile_max", hp_compile_slot_max()},
         {"hp_mixer_lr", cfg_.hp_mixer_lr},
