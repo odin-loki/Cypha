@@ -55,6 +55,13 @@ class MixerNet {
         skip_ = skip >= 0 ? skip : base_skip_;
     }
 
+    /// Upstream gains: layer-1 dot scale (Q16, 0 = off) and layer-1 update
+    /// skip (0 = off). Part of the trained model: saved in checkpoints (v4).
+    void set_upstream(int scale_q16, int skip_l1) {
+        scale_ = scale_q16;
+        skip_l1_ = skip_l1;
+    }
+
     void set_lossy(int skip, std::uint32_t gate_drop) {
         if (skip > 0) skip_ = skip;
         gate_drop_ = gate_drop;
@@ -81,6 +88,8 @@ class MixerNet {
             const MixerWt* w = &w_[j][static_cast<std::size_t>(ctx_[j]) * n_];
             const std::int64_t sum = dot_mixer_wt(w, st_.data(), m_);
             dot_[j] = clamp_int(static_cast<int>(sum >> 16), -2047, 2047);
+            if (scale_ != 0)
+                dot_[j] = clamp_int(static_cast<int>((static_cast<std::int64_t>(dot_[j]) * scale_) >> 16), -2047, 2047);
             pr_[j] = squash(dot_[j]);
         }
         const MixerWt* v = &v_[static_cast<std::size_t>(ctx2_) * k_];
@@ -112,6 +121,7 @@ class MixerNet {
         for (int j = 0; j < k_; ++j) {
             if ((gate_drop_ >> j) & 1u) continue;
             const int err = t - pr_[j];
+            if (skip_l1_ > 0 && (err < 0 ? -err : err) < skip_l1_) continue;
             const int l1 = lr1_[static_cast<std::size_t>(j)];
             MixerWt* w = &w_[j][static_cast<std::size_t>(ctx_[j]) * n_];
             axpy_mixer_wt(w, st_.data(), m_, err, l1, energy_);
@@ -183,6 +193,8 @@ class MixerNet {
         blob::write_pod(os, ctx2_);
         blob::write_pod(os, final_dot_);
         blob::write_pod(os, final_pr_);
+        blob::write_pod(os, scale_);    // v4
+        blob::write_pod(os, skip_l1_);  // v4
     }
 
     void checkpoint_read(std::istream& is) {
@@ -206,6 +218,12 @@ class MixerNet {
         blob::read_pod(is, ctx2_);
         blob::read_pod(is, final_dot_);
         blob::read_pod(is, final_pr_);
+        scale_ = 0;
+        skip_l1_ = 0;
+        if (g_hp_ckpt_read_version >= 4) {
+            blob::read_pod(is, scale_);
+            blob::read_pod(is, skip_l1_);
+        }
     }
 
  private:
@@ -218,6 +236,8 @@ class MixerNet {
     std::vector<std::vector<MixerWt>> w_;
     std::vector<MixerWt> v_;
     int skip_ = 32;                 // gate24 HP_MIXER_SKIP
+    int scale_ = 0;                 // Q16 layer-1 dot scale, 0 = off (upstream HP_MIXER_SCALE)
+    int skip_l1_ = 0;               // layer-1 update skip (upstream HP_MIXER_SKIP_L1)
     // Trained rates, saved by the first set_rate_scale (runtime only).
     int base_lr_ = 0, base_skip_ = 0;
     std::vector<int> base_lr1_;

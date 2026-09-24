@@ -96,6 +96,9 @@ hp::Config hp_config_from_cyphalm(const CyphaLMConfig& c) {
     cfg.cm_bits_cap = c.hp_cm_bits_cap;
     cfg.gate_drop = c.hp_gate_drop;
     cfg.mixer_skip = c.hp_mixer_skip;
+    cfg.lr1_scale = c.hp_lr1_scale;
+    cfg.mixer_scale = c.hp_mixer_scale;
+    cfg.mixer_skip_l1 = c.hp_mixer_skip_l1;
     cfg.match_bits_cap = c.hp_match_bits_cap;
     cfg.pool_slots = c.hp_pool_slots;
     cfg.pool_bits_cap = c.hp_pool_bits_cap;

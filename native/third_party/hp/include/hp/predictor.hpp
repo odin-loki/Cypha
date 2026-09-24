@@ -62,6 +62,12 @@ struct Config {
     int hebb_bits_cap = 0;        // >0: cap the Hebbian word-association tables at this many bits
     std::uint32_t match_drop = 0; // bit k: drop byte-match model k (match_[0..8], smatch, skipk, skip3, skip4)
 
+    // Upstream mixer gains (CompressionAlgorithm H33, v91, v93). Defaults
+    // reproduce gate24; the trained values are carried in the checkpoint.
+    int lr1_scale = 100;          // percent scale on the layer-1 per-set rates (upstream best 40)
+    int mixer_scale = 0;          // Q16 multiplier on layer-1 dots, 0 = off (upstream 49152 = 0.75)
+    int mixer_skip_l1 = 0;        // skip a layer-1 set's update when its |err| < this (upstream 80)
+
     // Encoder and decoder must agree. match/buf sizes are a function of
     // table_bits (the only size the archive header carries).
     // buf_bits = table_bits + 3 (25 at mem 22).
@@ -257,7 +263,7 @@ class Predictor {
           pool_(cfg.pool_bits_cap > 0 && cfg.pool_bits_cap < cfg.table_bits ? cfg.pool_bits_cap
                                                                             : cfg.table_bits,
                 0xC0FFEEull, cfg.pool_slots),
-          mixer_(kNumExperts, gate_sizes(), 256, cfg.mixer_lr, gate_rates(cfg.mixer_lr)),
+          mixer_(kNumExperts, gate_sizes(), 256, cfg.mixer_lr, scaled_gate_rates(cfg.lr1_scale)),
           apm_c0_(256),
           apm_lex_(256 * 256),
           apm_gria_(GriaGate::kBuckets * 256),
@@ -270,6 +276,7 @@ class Predictor {
         }
         gria_.set_enabled(cfg.gria);
         mixer_.set_lossy(cfg.mixer_skip, cfg.gate_drop);
+        mixer_.set_upstream(cfg.mixer_scale, cfg.mixer_skip_l1);
         init_ctx_chain_();
         set_byte_contexts();
     }
@@ -313,6 +320,49 @@ class Predictor {
         if (k > static_cast<std::size_t>(byte_ring_.mask()) + 1) k = static_cast<std::size_t>(byte_ring_.mask()) + 1;
         for (std::size_t i = 0; i < k; ++i) out[i] = byte_ring_.at(pos - static_cast<std::uint32_t>(k - i));
         return k;
+    }
+
+    /// Serve-time RAM cut sized per table: fold each context-model and
+    /// byte-match table by halves while its projected occupancy (two folded
+    /// slots in use -> one: 1 - (1 - occ)^2) stays at or under
+    /// ``max_occupancy``. Sparse tables (e.g. a skip model at 1%) shrink a
+    /// lot, busy ones not at all. Tables keep >= ``min_bits`` bits. Returns
+    /// the bytes freed.
+    std::size_t fold_auto(double max_occupancy, int min_bits = 12) {
+        std::size_t freed = 0;
+        auto projected = [](double o) { return 1.0 - (1.0 - o) * (1.0 - o); };
+        for (int i = 0; i < n_ctx_chain_; ++i) {
+            ContextModel& m = *ctx_chain_[i];
+            int bits = m.table_bits();
+            if (bits == 0) continue;
+            double occ = m.occupancy();
+            int target = bits;
+            while (target > min_bits && projected(occ) <= max_occupancy) {
+                occ = projected(occ);
+                --target;
+            }
+            if (target < bits) {
+                freed += ((std::size_t{1} << bits) - (std::size_t{1} << target)) * sizeof(std::uint16_t);
+                m.fold_to(target);
+            }
+        }
+        MatchModel* ms[] = {&match_[0], &match_[1], &match_[2], &match_[3], &match_[4], &match_[5], &match_[6],
+                            &match_[7], &match_[8], &smatch_,   &skipk_,    &skip3_,    &skip4_};
+        for (MatchModel* mm : ms) {
+            int bits = mm->table_bits();
+            if (bits == 0) continue;
+            double occ = mm->occupancy();
+            int target = bits;
+            while (target > min_bits && projected(occ) <= max_occupancy) {
+                occ = projected(occ);
+                --target;
+            }
+            if (target < bits) {
+                freed += ((std::size_t{1} << bits) - (std::size_t{1} << target)) * sizeof(std::uint32_t);
+                mm->fold_to(target);
+            }
+        }
+        return freed;
     }
 
     /// Serve-time RAM cut: shrink trained tables to the caps in ``target``
@@ -658,6 +708,18 @@ class Predictor {
         return out;
         }();
         return r;
+    }
+
+    // Layer-1 rates x lr1_scale / 100, rounded, at least 1 (upstream HP_LR1_SCALE).
+    static std::vector<int> scaled_gate_rates(int lr1_scale) {
+        std::vector<int> out = gate_rates(0);
+        if (lr1_scale != 100) {
+            for (int& r : out) {
+                const int v = (r * lr1_scale + 50) / 100;
+                r = v < 1 ? 1 : v;
+            }
+        }
+        return out;
     }
 
     static int backoff_kt_(const Counter& c) {

@@ -125,10 +125,6 @@ inline void counter_update(Counter& c, int y, int limit) {
 
 // ---------------------------------------------------------------------------
 // A single hashed context model
-// ---------------------------------------------------------------------------
-/// Checkpoint format version being read (Predictor::read_checkpoint sets it);
-/// ContextModel converts pre-v3 tables.
-inline thread_local int g_hp_ckpt_read_version = 3;
 
 class ContextModel {
  public:
@@ -176,6 +172,14 @@ class ContextModel {
     void set_frozen(bool f) { frozen_ = f; }
 
     int table_bits() const { return off_ ? 0 : bits_; }
+    /// Share of slots in use (fold_auto).
+    double occupancy() const {
+        if (off_ || t_.size() == 0) return 0.0;
+        std::size_t used = 0;
+        const std::uint16_t* t = t_.data();
+        for (std::size_t i = 0; i < t_.size(); ++i) used += t[i] != 0;
+        return static_cast<double>(used) / static_cast<double>(t_.size());
+    }
 
     /// Turn the model off and free its table (serve-time Config::cm_drop):
     /// it then predicts 0.5 like a model built dropped.
@@ -609,6 +613,20 @@ class MatchModel {
         tab_.resize_bits(0);
         tab_mask_ = 0;
         len_ = 0;
+    }
+
+    int table_bits() const {
+        if (off_) return 0;
+        int cur = 0;
+        while ((1u << cur) - 1 < tab_mask_) ++cur;
+        return cur;
+    }
+    /// Share of position entries in use (fold_auto).
+    double occupancy() const {
+        if (off_ || tab_.size() == 0) return 0.0;
+        std::size_t used = 0;
+        for (std::size_t k = 0; k < tab_.size(); ++k) used += tab_.at(k) != 0;
+        return static_cast<double>(used) / static_cast<double>(tab_.size());
     }
 
     /// Shrink the position table to ``bits``: of two folded entries keep the

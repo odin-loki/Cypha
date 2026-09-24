@@ -145,6 +145,13 @@ void apply_hp_lossy_env(CyphaLMConfig& cfg) {
     if (frozen != nullptr && frozen[0] != '\0') {
         cfg.hp_frozen_scoring = frozen[0] == '1';
     }
+    auto env_int = [](const char* name, int& field) {
+        const char* v = std::getenv(name);
+        if (v != nullptr && v[0] != '\0') field = std::atoi(v);
+    };
+    env_int("CYPHA_HP_LR1_SCALE", cfg.hp_lr1_scale);
+    env_int("CYPHA_HP_MIXER_SCALE", cfg.hp_mixer_scale);
+    env_int("CYPHA_HP_MIXER_SKIP_L1", cfg.hp_mixer_skip_l1);
     const char* prune_env = std::getenv("CYPHA_HP_TREE_PRUNE");
     if (prune_env != nullptr && prune_env[0] != '\0') cfg.hp_tree_prune = std::atof(prune_env);
     const char* serve_lr = std::getenv("CYPHA_HP_SERVE_MIXER_LR_SCALE");
@@ -245,6 +252,8 @@ void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
         throw std::runtime_error("unknown CyphaLM lossy tier: " + tier);
     }
     cfg.hp_lossy_tier = tier;
+    const char* skip = std::getenv("CYPHA_HP_MIXER_SKIP");  // after the tier's own value
+    if (skip != nullptr && skip[0] != '\0') cfg.hp_mixer_skip = std::atoi(skip);
 }
 
 void apply_hp_production_recipe(CyphaLMConfig& cfg) {

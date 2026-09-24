@@ -318,6 +318,12 @@ struct CyphaLMConfig {
     int hp_cm_bits_cap = 0;          ///< cap every context-model table at this many bits
     std::uint32_t hp_gate_drop = 0;  ///< bit j drops mixer weight set j (``hp::Predictor::Gate``)
     int hp_mixer_skip = 0;           ///< skip mixer update when |err| < this (gate24 = 32)
+    /// Upstream mixer gains (hp::Config::lr1_scale / mixer_scale / mixer_skip_l1);
+    /// defaults reproduce gate24. Env CYPHA_HP_LR1_SCALE, CYPHA_HP_MIXER_SCALE,
+    /// CYPHA_HP_MIXER_SKIP_L1 (and CYPHA_HP_MIXER_SKIP after the tier).
+    int hp_lr1_scale = 100;
+    int hp_mixer_scale = 0;
+    int hp_mixer_skip_l1 = 0;
     int hp_match_bits_cap = 0;       ///< cap the 13 byte-match hash tables at this many bits
     int hp_pool_slots = 0;           ///< keep this many discovered-context slots (gate24 = 12)
     int hp_pool_bits_cap = 0;        ///< cap discovered-context tables at this many bits

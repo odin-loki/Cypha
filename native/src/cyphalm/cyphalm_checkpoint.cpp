@@ -40,6 +40,9 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"hp_cm_bits_cap", cfg.hp_cm_bits_cap},
         {"hp_gate_drop", cfg.hp_gate_drop},
         {"hp_mixer_skip", cfg.hp_mixer_skip},
+        {"hp_lr1_scale", cfg.hp_lr1_scale},
+        {"hp_mixer_scale", cfg.hp_mixer_scale},
+        {"hp_mixer_skip_l1", cfg.hp_mixer_skip_l1},
         {"hp_match_bits_cap", cfg.hp_match_bits_cap},
         {"hp_pool_slots", cfg.hp_pool_slots},
         {"hp_pool_bits_cap", cfg.hp_pool_bits_cap},
@@ -86,6 +89,9 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_i("hp_cm_bits_cap", cfg.hp_cm_bits_cap);
     if (c.contains("hp_gate_drop")) cfg.hp_gate_drop = c.at("hp_gate_drop").get<std::uint32_t>();
     get_i("hp_mixer_skip", cfg.hp_mixer_skip);
+    get_i("hp_lr1_scale", cfg.hp_lr1_scale);
+    get_i("hp_mixer_scale", cfg.hp_mixer_scale);
+    get_i("hp_mixer_skip_l1", cfg.hp_mixer_skip_l1);
     get_i("hp_match_bits_cap", cfg.hp_match_bits_cap);
     get_i("hp_pool_slots", cfg.hp_pool_slots);
     get_i("hp_pool_bits_cap", cfg.hp_pool_bits_cap);
@@ -172,7 +178,7 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     fs::path json_file = base;
     json_file.replace_extension(".json");
     const fs::path bin_file = hpbin_path(base);
-    fs::create_directories(base.parent_path());
+    if (base.has_parent_path()) fs::create_directories(base.parent_path());  // "--save name" in the cwd
 
     write_hpbin(model, bin_file);
 
@@ -182,7 +188,7 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     meta["train_step_count"] = model.train_step_count();
     meta["hp_checkpoint"] = bin_file.filename().string();
     meta["note"] =
-        "hp predictor state in sibling .hpbin (HPCP v3). JSON carries config metadata only.";
+        "hp predictor state in sibling .hpbin (HPCP v4). JSON carries config metadata only.";
 
     std::ofstream out(json_file);
     if (!out) throw std::runtime_error("cannot write checkpoint json: " + json_file.string());

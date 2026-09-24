@@ -1,6 +1,8 @@
 #pragma once
 // hp/checkpoint.hpp — binary Predictor checkpoint (Cypha train-once / serve-many).
 
+#include <cstdio>
+#include <cstdlib>
 #include <istream>
 #include <ostream>
 #include <type_traits>
@@ -26,64 +28,126 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
     const char magic[4] = {'H', 'P', 'C', 'P'};
     os.write(magic, 4);
     // v2 appends the sentence memory (stream state v1 left out); v3 packs
-    // context-model slots to 16 bits (state + 6-bit checksum).
-    const std::uint32_t ver = 3;
+    // context-model slots to 16 bits (state + 6-bit checksum); v4 adds the
+    // mixer's layer-1 scale and skip.
+    const std::uint32_t ver = 4;
     blob::write_pod(os, ver);
+    // HP_CKPT_SIZES=1: report each component's size on stderr.
+    static const bool sizes = std::getenv("HP_CKPT_SIZES") != nullptr;
+    std::streamoff mark_at = os.tellp();
+    auto mark = [&](const char* name) {
+        if (!sizes) return;
+        const std::streamoff now = os.tellp();
+        std::fprintf(stderr, "ckpt %-14s %12lld\n", name, static_cast<long long>(now - mark_at));
+        mark_at = now;
+    };
     byte_ring_.checkpoint_write(os);
+    mark("byte_ring_");
     HP_CKPT_WRITE_CM(os, o1_);
+    mark("o1_");
     HP_CKPT_WRITE_CM(os, o2_);
+    mark("o2_");
     HP_CKPT_WRITE_CM(os, o3_);
+    mark("o3_");
     HP_CKPT_WRITE_CM(os, o4_);
+    mark("o4_");
     HP_CKPT_WRITE_CM(os, o6_);
+    mark("o6_");
     HP_CKPT_WRITE_CM(os, o6b_);
+    mark("o6b_");
     HP_CKPT_WRITE_CM(os, word_);
+    mark("word_");
     HP_CKPT_WRITE_CM(os, col_);
+    mark("col_");
     HP_CKPT_WRITE_CM(os, tag_);
+    mark("tag_");
     HP_CKPT_WRITE_CM(os, wbi_);
+    mark("wbi_");
     HP_CKPT_WRITE_CM(os, sp13_);
+    mark("sp13_");
     HP_CKPT_WRITE_CM(os, sp24_);
+    mark("sp24_");
     HP_CKPT_WRITE_CM(os, wstr_sp_);
+    mark("wstr_sp_");
     HP_CKPT_WRITE_CM(os, brk_);
+    mark("brk_");
     HP_CKPT_WRITE_CM(os, link_);
+    mark("link_");
     HP_CKPT_WRITE_CM(os, num_);
+    mark("num_");
     HP_CKPT_WRITE_CM(os, sen_);
+    mark("sen_");
     HP_CKPT_WRITE_CM(os, sentst_);
+    mark("sentst_");
     HP_CKPT_WRITE_CM(os, sentmem_cm_);
+    mark("sentmem_cm_");
     HP_CKPT_WRITE_CM(os, sengrp_);
+    mark("sengrp_");
     HP_CKPT_WRITE_CM(os, nestmod_);
+    mark("nestmod_");
     HP_CKPT_WRITE_CM(os, paramod_);
+    mark("paramod_");
     HP_CKPT_WRITE_CM(os, linemod_);
+    mark("linemod_");
     HP_CKPT_WRITE_CM(os, statemod_);
+    mark("statemod_");
     HP_CKPT_WRITE_CM(os, tplmod_);
+    mark("tplmod_");
     HP_CKPT_WRITE_CM(os, infokeymod_);
+    mark("infokeymod_");
     HP_CKPT_WRITE_CM(os, linkpipemod_);
+    mark("linkpipemod_");
     HP_CKPT_WRITE_CM(os, catmod_);
+    mark("catmod_");
     HP_CKPT_WRITE_CM(os, headingmod_);
+    mark("headingmod_");
     HP_CKPT_WRITE_CM(os, titlemod_);
+    mark("titlemod_");
     HP_CKPT_WRITE_CM(os, sectitlemod_);
+    mark("sectitlemod_");
     HP_CKPT_WRITE_CM(os, wikistackmod_);
+    mark("wikistackmod_");
     HP_CKPT_WRITE_CM(os, capmaskmod_);
+    mark("capmaskmod_");
     HP_CKPT_WRITE_CM(os, uppergapmod_);
+    mark("uppergapmod_");
     HP_CKPT_WRITE_CM(os, wordlenmod_);
+    mark("wordlenmod_");
     for (int i = 0; i < kMatchModels; ++i) match_[i].checkpoint_write(os);
+    mark("match_[]");
     smatch_.checkpoint_write(os);
+    mark("smatch_");
     skipk_.checkpoint_write(os);
+    mark("skipk_");
     skip3_.checkpoint_write(os);
+    mark("skip3_");
     skip4_.checkpoint_write(os);
+    mark("skip4_");
     lzp_.checkpoint_write(os);
+    mark("lzp_");
     dmc_.checkpoint_write(os);
+    mark("dmc_");
     for (int i = 0; i < static_cast<int>(sizeof(wmatch_) / sizeof(wmatch_[0])); ++i) {
         wmatch_[i].checkpoint_write(os);
+    mark("match_[]");
     }
     hebb_.checkpoint_write(os);
+    mark("hebb_");
     pool_.checkpoint_write(os);
+    mark("pool_");
     mixer_.checkpoint_write(os);
+    mark("mixer_");
     apm_c0_.checkpoint_write(os);
+    mark("apm_c0_");
     apm_lex_.checkpoint_write(os);
+    mark("apm_lex_");
     apm_gria_.checkpoint_write(os);
+    mark("apm_gria_");
     hedge_.checkpoint_write(os);
+    mark("hedge_");
     blob::write_array(os, bias_);
     gria_.checkpoint_write(os);
+    mark("gria_");
     checkpoint_write_trivial(os, wiki_);
     checkpoint_write_trivial(os, streams_);
     checkpoint_write_trivial(os, brackets_);
@@ -111,6 +175,7 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
     blob::write_pod(os, last_mlen_);
     blob::write_pod(os, sparse_);
     checkpoint_write_trivial(os, sentmem_);
+    mark("rest");
 }
 
 inline void Predictor::read_checkpoint(std::istream& is) {
@@ -121,7 +186,7 @@ inline void Predictor::read_checkpoint(std::istream& is) {
     }
     std::uint32_t ver = 0;
     blob::read_pod(is, ver);
-    if (ver < 1 || ver > 3) return;
+    if (ver < 1 || ver > 4) return;
     g_hp_ckpt_read_version = static_cast<int>(ver);
     byte_ring_.checkpoint_read(is);
     HP_CKPT_READ_CM(is, o1_);
@@ -205,6 +270,6 @@ inline void Predictor::read_checkpoint(std::istream& is) {
     blob::read_pod(is, last_mlen_);
     blob::read_pod(is, sparse_);
     if (ver >= 2) checkpoint_read_trivial(is, sentmem_);  // v1: sentence memory starts empty
-    g_hp_ckpt_read_version = 3;
+    g_hp_ckpt_read_version = 4;
     rebind_internal_pointers_();
 }

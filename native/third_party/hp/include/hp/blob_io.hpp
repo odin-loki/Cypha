@@ -68,3 +68,9 @@ void read_trivial_object(std::istream& is, T& o) {
 }
 
 }  // namespace hp::blob
+
+namespace hp {
+/// Checkpoint format version being read (Predictor::read_checkpoint sets it):
+/// ContextModel converts pre-v3 tables, MixerNet reads v4 fields.
+inline thread_local int g_hp_ckpt_read_version = 4;
+}  // namespace hp

@@ -159,6 +159,12 @@ class HpSequenceBackend {
     void reset_stream(bool keep_history);
     /// Fold this model's and every ensemble member's tables to the caps and
     /// drops in ``target`` (``hp::Predictor::fold_tables``).
+    /// Per-table occupancy fold (``hp::Predictor::fold_auto``), members too.
+    std::size_t fold_auto(double max_occupancy) {
+        std::size_t freed = pred_->fold_auto(max_occupancy);
+        for (auto& m : members_) freed += m.backend->fold_auto(max_occupancy);
+        return freed;
+    }
     void fold_tables(const hp::Config& target) {
         pred_->fold_tables(target);
         cfg_ = pred_->config();

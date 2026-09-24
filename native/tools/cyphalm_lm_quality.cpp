@@ -95,6 +95,7 @@ int main(int argc, char** argv) {
     int table_bits = 22, gen_bytes = 200, prompt_bytes = 256;
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
+    double fold_auto = 0.0;  // per-table occupancy fold target (0 = off)
     std::string dump_dist;  // float32 natural-log P, 256 per held-out byte
     bool compare_scoring = false;
     std::string reset_mode = "none";
@@ -150,6 +151,7 @@ int main(int argc, char** argv) {
         else if (a == "--word-k") word_k = std::stoi(next());
         else if (a == "--only-default") only_default = true;
         else if (a == "--dump-dist") dump_dist = next();
+        else if (a == "--fold-auto") fold_auto = std::stod(next());
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -189,6 +191,10 @@ int main(int argc, char** argv) {
             model->add_ensemble_member(std::move(mm), 1.0 / static_cast<double>(members.size() + 1));
         }
         if (!members.empty()) out["members"] = members;
+        if (fold_auto > 0.0) {
+            out["fold_auto"] = fold_auto;
+            out["fold_auto_freed_mb"] = static_cast<double>(model->hp_backend().fold_auto(fold_auto)) / 1048576.0;
+        }
         if (!infinigram_path.empty()) {
             model->attach_infinigram(infinigram_path);
             out["infinigram"] = infinigram_path;
