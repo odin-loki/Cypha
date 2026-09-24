@@ -385,6 +385,9 @@ outside it):
   (Alice) it is 0.012–0.017.
 - Calibration stays within 1–2.3% ECE.
 
+- **Mixing buckets** also split on whether the model's and the longest
+  match's top bytes agree: wiki 1.6925 → 1.6890, Alice 2.0654 → 2.0645,
+  lcet10 1.5572 → 1.5574 (kept).
 - **Tried:** a fourth backoff level (the longest suffix seen at least 256
   times) is ~0.001 worse everywhere, so three parts stay. Starting weights
   learned on 256 KB of held-out wiki (`--ig-weights-out`, loaded from

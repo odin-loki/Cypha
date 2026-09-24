@@ -134,7 +134,8 @@ class HpSequenceBackend {
     /// p_longest counts the bytes after every corpus occurrence of the
     /// longest matching context suffix and p_reliable those after the longest
     /// suffix seen at least 16 times. Weights are learned online (exponentiated
-    /// gradient) per (match length, count, model confidence) bucket while
+    /// gradient) per (match length, count, model confidence, whether the
+    /// model and the longest match agree on the top byte) bucket while
     /// learning is on. Shared and read-only: many models can use one index.
     void set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta = 0.3);
     bool has_infinigram() const { return static_cast<bool>(ig_); }
@@ -206,7 +207,7 @@ class HpSequenceBackend {
     std::vector<double> infinigram_mix_(const std::vector<double>& base);
     std::shared_ptr<const InfiniGram> ig_;
     double ig_eta_ = 0.3;
-    static constexpr int kIgBuckets = 8 * 4 * 4;
+    static constexpr int kIgBuckets = 8 * 4 * 8;
     std::vector<std::array<double, 3>> ig_w_;
     bool ig_valid_ = false;
     int ig_bucket_ = 0;

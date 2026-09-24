@@ -336,8 +336,15 @@ std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>
     fill(rr, ig_p_[2]);
     const int nb = r.n == 0 ? 0 : std::min(7, 1 + static_cast<int>(std::log2(static_cast<double>(r.n))));
     const int cb = r.total <= 1 ? 0 : r.total <= 3 ? 1 : r.total <= 15 ? 2 : 3;
-    const int hb = pmax < 0.3 ? 0 : pmax < 0.6 ? 1 : pmax < 0.9 ? 2 : 3;
-    ig_bucket_ = (nb * 4 + cb) * 4 + hb;
+    // Model confidence (low / high) x whether the model's and the longest
+    // match's top bytes agree.
+    std::size_t top_m = 0, top_i = 0;
+    for (std::size_t b = 1; b < v; ++b) {
+        if (ig_p_[0][b] > ig_p_[0][top_m]) top_m = b;
+        if (ig_p_[1][b] > ig_p_[1][top_i]) top_i = b;
+    }
+    const int hb = (pmax < 0.3 ? 0 : pmax < 0.6 ? 2 : pmax < 0.9 ? 4 : 6) + (top_m == top_i ? 1 : 0);
+    ig_bucket_ = (nb * 4 + cb) * 8 + hb;
     const auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
     std::vector<double> out(v);
     for (std::size_t b = 0; b < v; ++b) {
