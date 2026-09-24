@@ -715,7 +715,7 @@ On gate24 8 MiB, the rate scale alone saves 6,741 B (upstream 7,038). These sett
 
 The upstream wiki context models (bold/italic, sentence position, capitals × paragraph, `<ref>` group, state transitions, two cross contexts) are ported behind `hp_extra_cms` / `CYPHA_HP_EXTRA_CMS` (default 0, bit-identical when off; checkpoint v5 when on). They save 5,252 B on gate24 8 MiB, but on a lean shard only −0.0008 wiki / −0.0027 Alice for +4% size, so they are off in the winner.
 
-**Neural expert** (`ByteLstmExpert`, manifest key `neural`, `--neural`). The 1-hour byte LSTM from the comparison (3.4M params, 13 MB) runs in C++ and matches PyTorch to 1e-6 bits/byte. It is mixed after the ∞-gram step as w·p + (1−w)·p_nn, with w learned per (confidence, agreement) bucket.
+**Neural expert** (`ByteLstmExpert`, manifest key `neural`, `--neural`). The 1-hour byte LSTM from the comparison (3.4M params, 13 MB) runs in C++ and matches PyTorch to 1e-6 bits/byte. It is mixed after the ∞-gram step as w·p + (1−w)·p_nn, with w learned per (confidence, agreement) bucket. Its matrices are held as bf16: 0.66 ms per byte on one idle core (2.28 ms as float32; the step is bound by reading the weights), same held-out NLL.
 
 **Winner v2** (`models/cyphalm_winner/`, 16 KiB held-out, private + mapped RAM):
 

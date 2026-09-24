@@ -12,6 +12,8 @@
 /// File "BLM1": u32 magic, u32 layers, u32 d, u32 emb, then float32 arrays:
 /// embedding [256][emb]; per layer W_ih [4d][in], W_hh [4d][d], b_ih [4d],
 /// b_hh [4d] (in = emb for layer 0, else d); output W [256][d], b [256].
+/// Matrices are held as bf16 in memory (the LSTM is trained under bf16
+/// autocast); embeddings and biases stay float32.
 
 #include <array>
 #include <cstdint>
@@ -43,9 +45,10 @@ class ByteLstmExpert {
  private:
     int layers_ = 0, d_ = 0, emb_ = 0;
     std::vector<float> emb_w_;              // [256][emb]
-    std::vector<std::vector<float>> w_;     // per layer [4d][in + d], rows = [W_ih | W_hh]
+    std::vector<std::vector<std::uint16_t>> w_;  // bf16, per layer [4d][in + d], rows = [W_ih | W_hh]
     std::vector<std::vector<float>> b_;     // per layer [4d] = b_ih + b_hh
-    std::vector<float> out_w_, out_b_;      // [256][d], [256]
+    std::vector<std::uint16_t> out_w_;      // bf16 [256][d]
+    std::vector<float> out_b_;              // [256]
 };
 
 }  // namespace cypha::cyphalm

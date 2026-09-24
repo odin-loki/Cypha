@@ -70,9 +70,17 @@ int main() {
     std::mt19937 rng(3);
     std::normal_distribution<float> nd(0.0f, 0.3f);
     Ref ref{layers, d, emb, {}, std::vector<double>(layers * d, 0.0), std::vector<double>(layers * d, 0.0), {}};
+    // Values exactly representable in bf16, the runtime's matrix format.
+    auto bf16 = [](float f) {
+        std::uint32_t u;
+        std::memcpy(&u, &f, sizeof(u));
+        u &= 0xFFFF0000u;
+        std::memcpy(&f, &u, sizeof(f));
+        return f;
+    };
     auto add = [&](std::size_t n) {
         std::vector<double> v(n);
-        for (auto& x : v) x = nd(rng);
+        for (auto& x : v) x = bf16(nd(rng));
         ref.w.push_back(v);
     };
     add(256 * emb);

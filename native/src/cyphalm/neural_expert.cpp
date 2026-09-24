@@ -16,40 +16,38 @@ namespace {
 #define CYPHA_NN_CLONES
 #endif
 
-// out[r] = bias[r] + sum_k w[r][k] * x[k]. Eight independent partial sums
-// per row (and two rows at a time) so the compiler vectorises without
-// reassociating a single float sum.
+// bf16 weights (the upper 16 bits of a float32): half the memory traffic,
+// which is what bounds a single stream.
 CYPHA_NN_CLONES
-void matvec(const float* w, const float* x, const float* bias, float* out, int rows, int cols) {
+void matvec_bf16(const std::uint16_t* w, const float* x, const float* bias, float* out, int rows, int cols) {
     const int c8 = cols & ~7;
-    int r = 0;
-    for (; r + 1 < rows; r += 2) {
-        const float* w0 = w + static_cast<std::size_t>(r) * cols;
-        const float* w1 = w0 + cols;
-        float a0[8] = {}, a1[8] = {};
+    for (int r = 0; r < rows; ++r) {
+        const std::uint16_t* wr = w + static_cast<std::size_t>(r) * cols;
+        float a[8] = {};
         for (int k = 0; k < c8; k += 8)
             for (int j = 0; j < 8; ++j) {
-                a0[j] += w0[k + j] * x[k + j];
-                a1[j] += w1[k + j] * x[k + j];
+                const std::uint32_t u = static_cast<std::uint32_t>(wr[k + j]) << 16;
+                float f;
+                std::memcpy(&f, &u, sizeof(f));
+                a[j] += f * x[k + j];
             }
-        float s0 = 0.0f, s1 = 0.0f;
-        for (int j = 0; j < 8; ++j) {
-            s0 += a0[j];
-            s1 += a1[j];
-        }
+        float s = 0.0f;
+        for (int j = 0; j < 8; ++j) s += a[j];
         for (int k = c8; k < cols; ++k) {
-            s0 += w0[k] * x[k];
-            s1 += w1[k] * x[k];
+            const std::uint32_t u = static_cast<std::uint32_t>(wr[k]) << 16;
+            float f;
+            std::memcpy(&f, &u, sizeof(f));
+            s += f * x[k];
         }
-        out[r] = s0 + bias[r];
-        out[r + 1] = s1 + bias[r + 1];
+        out[r] = s + bias[r];
     }
-    for (; r < rows; ++r) {
-        const float* wr = w + static_cast<std::size_t>(r) * cols;
-        float acc = 0.0f;
-        for (int k = 0; k < cols; ++k) acc += wr[k] * x[k];
-        out[r] = acc + bias[r];
-    }
+}
+
+std::uint16_t to_bf16(float f) {  // round to nearest even
+    std::uint32_t u;
+    std::memcpy(&u, &f, sizeof(u));
+    u += 0x7FFFu + ((u >> 16) & 1u);
+    return static_cast<std::uint16_t>(u >> 16);
 }
 
 float sigmoid(float v) { return 1.0f / (1.0f + std::exp(-v)); }
@@ -92,10 +90,15 @@ std::shared_ptr<const ByteLstmExpert> ByteLstmExpert::load(const std::string& pa
             std::copy_n(&whh[r * d], d, &w[r * (in + d) + in]);
         }
         for (std::size_t r = 0; r < 4 * d; ++r) bih[r] += bhh[r];
-        m->w_.push_back(std::move(w));
+        std::vector<std::uint16_t> wb(w.size());
+        for (std::size_t i = 0; i < w.size(); ++i) wb[i] = to_bf16(w[i]);
+        m->w_.push_back(std::move(wb));
         m->b_.push_back(std::move(bih));
     }
-    read_array(is, m->out_w_, 256 * d);
+    std::vector<float> ow;
+    read_array(is, ow, 256 * d);
+    m->out_w_.resize(ow.size());
+    for (std::size_t i = 0; i < ow.size(); ++i) m->out_w_[i] = to_bf16(ow[i]);
     read_array(is, m->out_b_, 256);
     if (!is) throw std::runtime_error("ByteLstmExpert: truncated " + path);
     return m;
@@ -125,7 +128,7 @@ void ByteLstmExpert::step(State& s, std::uint8_t byte) const {
         float* c = &s.c[static_cast<std::size_t>(l) * d];
         xin.assign(x.begin(), x.end());
         xin.insert(xin.end(), h, h + d);
-        matvec(w_[l].data(), xin.data(), b_[l].data(), gates.data(), 4 * d, static_cast<int>(xin.size()));
+        matvec_bf16(w_[l].data(), xin.data(), b_[l].data(), gates.data(), 4 * d, static_cast<int>(xin.size()));
         for (int k = 0; k < d; ++k) {
             const float i = sigmoid(gates[k]);
             const float f = sigmoid(gates[d + k]);
@@ -137,7 +140,7 @@ void ByteLstmExpert::step(State& s, std::uint8_t byte) const {
         x.assign(h, h + d);
     }
     float logits[256];
-    matvec(out_w_.data(), x.data(), out_b_.data(), logits, 256, d);
+    matvec_bf16(out_w_.data(), x.data(), out_b_.data(), logits, 256, d);
     const float mx = *std::max_element(logits, logits + 256);
     double z = 0.0;
     for (float v : logits) z += std::exp(static_cast<double>(v - mx));
