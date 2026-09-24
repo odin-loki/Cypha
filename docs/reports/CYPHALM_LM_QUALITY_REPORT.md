@@ -729,6 +729,12 @@ The upstream wiki context models (bold/italic, sentence position, capitals × pa
 
 The 4-shard default is within 0.003 (wiki) to 0.012 (lcet10) of the full ensemble at 37% of its private RAM, and is better than the old 11-shard winner on every text. The 11 shards take 2,737 MB on disk (old 3,544 MB; the default's 4 take about 1 GB) and train in 24.0 min on 4 cores; the LSTM takes 60 min. Before folding, the 11 lean shards score 1.6465 / 2.0102 / 1.5064 with ∞-gram and no LSTM, at about 5 GB.
 
+**Just-in-time ∞-gram index.** The suffix array no longer needs to be stored. libsais (induced sorting, Apache-2.0, vendored in `native/third_party/libsais`) sorts the 95 MB corpus in 5.6 s on one core of this machine, even while it is busy (the old SA-IS code took 20–29 s). The published libsais benchmark gives 1.2 s for enwik8 on one desktop core. `InfiniGram::open` takes either a stored IGR file or the plain corpus plus `infinigram_bytes`. Given the corpus, it builds the same bit-packed index in memory at load time. The winner manifests now point at `enwik8` with 95,000,000 bytes:
+- held-out numbers are identical (4-shard wiki 1.6191);
+- load time is 7.4 s in total, index included;
+- the 416 MB index file is gone;
+- the same ~0.4 GB of RAM moves from mapped to private.
+
 ## Against neural baselines
 
 [`CYPHALM_VS_NEURAL_LM.md`](CYPHALM_VS_NEURAL_LM.md) sets the winner against a byte-level Transformer (3.35M params) and an LSTM (3.43M params). Each trains for at most 1 hour on the same 4 cores and the same 95 MB, and all are scored by one code path.

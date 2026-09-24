@@ -148,6 +148,8 @@ endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LegacyCyphalm.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpIntegration.cmake")
 target_sources(cypha_core PRIVATE ${CYPHA_CYPHALM_HP_SOURCES} src/cypha.cpp)
+# libsais (Apache-2.0, third_party/libsais): suffix sorting for the ∞-gram index.
+target_include_directories(cypha_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
 
 # Compatibility alias for existing target_link_libraries(... cypha_lm_native).
 add_library(cypha_lm_native INTERFACE)

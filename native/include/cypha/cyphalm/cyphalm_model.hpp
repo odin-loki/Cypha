@@ -99,7 +99,9 @@ class CyphaLMModel {
     void add_ensemble_member(CyphaLMModel&& other, double weight);
     /// Attach an ∞-gram index over the pretraining corpus
     /// (``HpSequenceBackend::set_infinigram``; ``cyphalm_infinigram_build``).
-    void attach_infinigram(const std::string& index_path);
+    /// ``index_path`` may also be the plain corpus: it is then indexed in
+    /// memory at attach time (its first ``max_bytes`` bytes; 0 = all).
+    void attach_infinigram(const std::string& index_path, std::size_t max_bytes = 0);
     /// Attach a pretrained byte LSTM (BLM1 file from ``byte_lm.py export``) as
     /// a neural expert (``HpSequenceBackend::set_neural``).
     void attach_neural(const std::string& blm_path);

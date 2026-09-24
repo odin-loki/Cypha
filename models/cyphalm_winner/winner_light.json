@@ -6,6 +6,7 @@
    "checkpoint": "slim95.json"
   }
  ],
- "infinigram": "enwik8_95m.igr",
- "neural": "lstm.blm"
+ "infinigram": "enwik8",
+ "neural": "lstm.blm",
+ "infinigram_bytes": 95000000
 }

@@ -222,7 +222,12 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
     if (meta.contains("learning_rate")) {
         model.hp_backend().set_ensemble_learning_rate(meta.at("learning_rate").get<double>());
     }
-    if (meta.contains("infinigram")) model.attach_infinigram(resolve(meta.at("infinigram").get<std::string>()));
+    if (meta.contains("infinigram")) {
+        // A stored index, or the corpus itself (indexed at load, first
+        // "infinigram_bytes" bytes).
+        model.attach_infinigram(resolve(meta.at("infinigram").get<std::string>()),
+                                meta.value("infinigram_bytes", std::size_t{0}));
+    }
     if (meta.contains("neural")) model.attach_neural(resolve(meta.at("neural").get<std::string>()));
     return model;
 }

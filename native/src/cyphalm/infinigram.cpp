@@ -1,5 +1,7 @@
 #include "cypha/cyphalm/infinigram.hpp"
 
+#include "libsais.h"
+
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -17,117 +19,34 @@ namespace cypha::cyphalm {
 
 namespace {
 
-// SA-IS (Nong, Zhang & Chan 2009). s[n-1] must be the unique smallest symbol
-// (0); symbols lie in [0, K]. SA receives the suffix array of s.
-template <typename Ch>
-void get_buckets(const Ch* s, std::vector<std::int64_t>& bkt, std::int64_t n, std::int64_t K, bool end) {
-    std::fill(bkt.begin(), bkt.end(), 0);
-    for (std::int64_t i = 0; i < n; ++i) ++bkt[static_cast<std::size_t>(s[i])];
-    std::int64_t sum = 0;
-    for (std::int64_t i = 0; i <= K; ++i) {
-        sum += bkt[static_cast<std::size_t>(i)];
-        bkt[static_cast<std::size_t>(i)] = end ? sum : sum - bkt[static_cast<std::size_t>(i)];
+// Suffix array of text[0..n) (libsais, induced sorting), packed little-endian
+// at ``bits`` = ceil(log2 n) per entry with 8 bytes of padding.
+std::vector<std::uint8_t> sort_and_pack(const std::uint8_t* text, std::size_t n, int& bits) {
+    if (n == 0 || n >= (std::size_t{1} << 31) - 2) throw std::runtime_error("InfiniGram: bad corpus size");
+    std::vector<std::int32_t> SA(n);
+    if (libsais(text, SA.data(), static_cast<std::int32_t>(n), 0, nullptr) != 0)
+        throw std::runtime_error("InfiniGram: suffix sort failed");
+    bits = 1;
+    while ((std::size_t{1} << bits) < n) ++bits;
+    std::vector<std::uint8_t> packed((n * static_cast<std::size_t>(bits) + 7) / 8 + 8, 0);
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::uint64_t v = static_cast<std::uint64_t>(SA[i]);
+        const std::size_t bit = i * static_cast<std::size_t>(bits);
+        std::uint64_t w;
+        std::memcpy(&w, packed.data() + bit / 8, 8);
+        w |= v << (bit % 8);
+        std::memcpy(packed.data() + bit / 8, &w, 8);
     }
-}
-
-template <typename Ch>
-void induce(const std::vector<bool>& t, std::int32_t* SA, const Ch* s, std::vector<std::int64_t>& bkt,
-            std::int64_t n, std::int64_t K) {
-    get_buckets(s, bkt, n, K, false);
-    for (std::int64_t i = 0; i < n; ++i) {
-        const std::int64_t j = static_cast<std::int64_t>(SA[i]) - 1;
-        if (j >= 0 && !t[static_cast<std::size_t>(j)]) SA[bkt[static_cast<std::size_t>(s[j])]++] = static_cast<std::int32_t>(j);
-    }
-    get_buckets(s, bkt, n, K, true);
-    for (std::int64_t i = n - 1; i >= 0; --i) {
-        const std::int64_t j = static_cast<std::int64_t>(SA[i]) - 1;
-        if (j >= 0 && t[static_cast<std::size_t>(j)]) SA[--bkt[static_cast<std::size_t>(s[j])]] = static_cast<std::int32_t>(j);
-    }
-}
-
-template <typename Ch>
-void sais(const Ch* s, std::int32_t* SA, std::int64_t n, std::int64_t K) {
-    std::vector<bool> t(static_cast<std::size_t>(n), false);  // true = S-type
-    t[static_cast<std::size_t>(n - 1)] = true;
-    for (std::int64_t i = n - 2; i >= 0; --i) {
-        t[static_cast<std::size_t>(i)] =
-            s[i] < s[i + 1] || (s[i] == s[i + 1] && t[static_cast<std::size_t>(i + 1)]);
-    }
-    auto lms = [&](std::int64_t i) { return i > 0 && t[static_cast<std::size_t>(i)] && !t[static_cast<std::size_t>(i - 1)]; };
-
-    std::vector<std::int64_t> bkt(static_cast<std::size_t>(K + 1));
-    get_buckets(s, bkt, n, K, true);
-    std::fill(SA, SA + n, -1);
-    for (std::int64_t i = 1; i < n; ++i)
-        if (lms(i)) SA[--bkt[static_cast<std::size_t>(s[i])]] = static_cast<std::int32_t>(i);
-    induce(t, SA, s, bkt, n, K);
-
-    // Name the sorted LMS substrings.
-    std::int64_t n1 = 0;
-    for (std::int64_t i = 0; i < n; ++i)
-        if (lms(SA[i])) SA[n1++] = SA[i];
-    std::fill(SA + n1, SA + n, -1);
-    std::int64_t name = 0, prev = -1;
-    for (std::int64_t i = 0; i < n1; ++i) {
-        const std::int64_t pos = SA[i];
-        bool diff = false;
-        for (std::int64_t d = 0; d < n; ++d) {
-            if (prev == -1 || s[pos + d] != s[prev + d] ||
-                t[static_cast<std::size_t>(pos + d)] != t[static_cast<std::size_t>(prev + d)]) {
-                diff = true;
-                break;
-            }
-            if (d > 0 && (lms(pos + d) || lms(prev + d))) break;
-        }
-        if (diff) {
-            ++name;
-            prev = pos;
-        }
-        SA[n1 + pos / 2] = static_cast<std::int32_t>(name - 1);
-    }
-    for (std::int64_t i = n - 1, j = n - 1; i >= n1; --i)
-        if (SA[i] >= 0) SA[j--] = SA[i];
-
-    // Sort the reduced problem.
-    std::int32_t* s1 = SA + n - n1;
-    std::int32_t* SA1 = SA;
-    if (name < n1) {
-        sais<std::int32_t>(s1, SA1, n1, name - 1);
-    } else {
-        for (std::int64_t i = 0; i < n1; ++i) SA1[s1[i]] = static_cast<std::int32_t>(i);
-    }
-
-    // Induce the full array from the sorted LMS suffixes.
-    get_buckets(s, bkt, n, K, true);
-    for (std::int64_t i = 1, j = 0; i < n; ++i)
-        if (lms(i)) s1[j++] = static_cast<std::int32_t>(i);
-    for (std::int64_t i = 0; i < n1; ++i) SA1[i] = s1[SA1[i]];
-    std::fill(SA + n1, SA + n, -1);
-    for (std::int64_t i = n1 - 1; i >= 0; --i) {
-        const std::int32_t j = SA[i];
-        SA[i] = -1;
-        SA[--bkt[static_cast<std::size_t>(s[j])]] = j;
-    }
-    induce(t, SA, s, bkt, n, K);
+    return packed;
 }
 
 }  // namespace
 
 void InfiniGram::build(const std::uint8_t* text, std::size_t n, const std::string& path) {
-    if (n == 0 || n >= (std::size_t{1} << 31) - 2) throw std::runtime_error("InfiniGram: bad corpus size");
-    // Symbols 1..256 plus the 0 sentinel.
-    std::vector<std::uint16_t> s(n + 1);
-    for (std::size_t i = 0; i < n; ++i) s[i] = static_cast<std::uint16_t>(text[i] + 1);
-    s[n] = 0;
-    std::vector<std::int32_t> SA(n + 1);
-    sais<std::uint16_t>(s.data(), SA.data(), static_cast<std::int64_t>(n + 1), 256);
-    s.clear();
-    s.shrink_to_fit();
-
+    int bits = 0;
+    const std::vector<std::uint8_t> packed = sort_and_pack(text, n, bits);
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("InfiniGram: cannot write " + path);
-    int bits = 1;
-    while ((std::size_t{1} << bits) < n) ++bits;
     const char magic[4] = {'I', 'G', 'R', '2'};
     out.write(magic, 4);
     const std::uint64_t n64 = n, bits64 = static_cast<std::uint64_t>(bits);
@@ -137,19 +56,37 @@ void InfiniGram::build(const std::uint8_t* text, std::size_t n, const std::strin
     const std::size_t pad = (8 - (20 + n) % 8) % 8;
     const char zeros[8] = {};
     out.write(zeros, static_cast<std::streamsize>(pad));
-    // SA[0] is the sentinel suffix; the rest are the text's suffixes in order,
-    // packed little-endian at ``bits`` each.
-    std::vector<std::uint8_t> packed((n * static_cast<std::size_t>(bits) + 7) / 8 + 8, 0);
-    for (std::size_t i = 0; i < n; ++i) {
-        const std::uint64_t v = static_cast<std::uint64_t>(SA[i + 1]);
-        const std::size_t bit = i * static_cast<std::size_t>(bits);
-        std::uint64_t w;
-        std::memcpy(&w, packed.data() + bit / 8, 8);
-        w |= v << (bit % 8);
-        std::memcpy(packed.data() + bit / 8, &w, 8);
-    }
     out.write(reinterpret_cast<const char*>(packed.data()), static_cast<std::streamsize>(packed.size()));
     if (!out) throw std::runtime_error("InfiniGram: write failed " + path);
+}
+
+InfiniGram::InfiniGram(const std::uint8_t* text, std::size_t n)
+    : own_text_(text, text + n) {
+    own_packed_ = sort_and_pack(own_text_.data(), n, bits_);
+    n_ = n;
+    mask_ = (std::uint64_t{1} << bits_) - 1;
+    text_ = own_text_.data();
+    packed_ = own_packed_.data();
+}
+
+std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std::size_t max_bytes) {
+    char magic[4] = {};
+    {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) throw std::runtime_error("InfiniGram: cannot open " + path);
+        f.read(magic, 4);
+    }
+    if (std::memcmp(magic, "IGR1", 4) == 0 || std::memcmp(magic, "IGR2", 4) == 0)
+        return std::make_shared<const InfiniGram>(path);
+    // Plain text: index it now (just in time) instead of storing an index.
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    std::size_t n = static_cast<std::size_t>(f.tellg());
+    if (max_bytes > 0 && max_bytes < n) n = max_bytes;
+    std::vector<std::uint8_t> text(n);
+    f.seekg(0);
+    f.read(reinterpret_cast<char*>(text.data()), static_cast<std::streamsize>(n));
+    if (!f) throw std::runtime_error("InfiniGram: cannot read " + path);
+    return std::make_shared<const InfiniGram>(text.data(), n);
 }
 
 InfiniGram::InfiniGram(const std::string& path) {

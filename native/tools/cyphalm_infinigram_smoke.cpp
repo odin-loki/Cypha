@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <string>
 #include <vector>
@@ -28,6 +29,18 @@ int main() {
     cypha::cyphalm::InfiniGram::build(reinterpret_cast<const std::uint8_t*>(text.data()), text.size(), path);
     cypha::cyphalm::InfiniGram ig(path);
     const std::size_t n = text.size();
+    // The same index built just in time from the plain corpus (plus a tail
+    // that max_bytes must leave out).
+    const auto txt = (std::filesystem::temp_directory_path() / "cyphalm_infinigram_smoke.txt").string();
+    {
+        std::ofstream(txt, std::ios::binary) << text << "HELD-OUT TAIL";
+    }
+    const auto jit = cypha::cyphalm::InfiniGram::open(txt, n);
+    std::filesystem::remove(txt);
+    if (jit->size() != n) {
+        std::printf("cyphalm_infinigram_smoke FAIL: just-in-time index has %zu bytes\n", jit->size());
+        return 1;
+    }
 
     for (int trial = 0; trial < 300; ++trial) {
         // Context: a random corpus slice, sometimes with a novel byte mixed in.
@@ -54,8 +67,9 @@ int main() {
                 break;
             }
         }
-        bool same = r.n == best;
-        for (int b = 0; b < 256 && same; ++b) same = r.count[b] == cnt[b];
+        const auto rj = jit->query(reinterpret_cast<const std::uint8_t*>(ctx.data()), ctx.size(), 64);
+        bool same = r.n == best && rj.n == best && rj.total == r.total;
+        for (int b = 0; b < 256 && same; ++b) same = r.count[b] == cnt[b] && rj.count[b] == cnt[b];
         if (!same) {
             std::printf("cyphalm_infinigram_smoke FAIL trial %d: n %d vs %d\n", trial, r.n, best);
             return 1;

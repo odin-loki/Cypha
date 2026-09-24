@@ -11,12 +11,15 @@
 /// text bytes (padded to 8), then the n suffix-array entries bit-packed at
 /// ``bits`` = ceil(log2 n) each (27 for 95 MB: 4.4 bytes a text byte instead
 /// of 5), 8 bytes of padding. "IGR1" (32-bit entries) still loads. Mapped
-/// read-only, so every process serving it shares one copy.
+/// read-only, so every process serving it shares one copy. Or skip the file:
+/// ``open`` on the plain corpus builds the same index in memory at load time. Or skip the file:
+/// ``open`` on the plain corpus builds the same index in memory at load time.
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,10 +27,16 @@ namespace cypha::cyphalm {
 
 class InfiniGram {
  public:
-    /// Build the index for ``text`` (SA-IS, O(n)) and write it to ``path``.
+    /// Build the index for ``text`` (libsais induced sorting, O(n)) and write it to ``path``.
     static void build(const std::uint8_t* text, std::size_t n, const std::string& path);
 
+    /// Map a stored index (IGR1 / IGR2).
     explicit InfiniGram(const std::string& path);
+    /// Index ``text`` in memory, just in time (~6 s for 95 MB on one core).
+    InfiniGram(const std::uint8_t* text, std::size_t n);
+    /// A stored index, or a plain-text corpus indexed on the spot (its first
+    /// ``max_bytes`` bytes; 0 = all), chosen by the file's magic.
+    static std::shared_ptr<const InfiniGram> open(const std::string& path, std::size_t max_bytes = 0);
     ~InfiniGram();
     InfiniGram(const InfiniGram&) = delete;
     InfiniGram& operator=(const InfiniGram&) = delete;
@@ -66,6 +75,7 @@ class InfiniGram {
     const std::uint8_t* packed_ = nullptr;
     int bits_ = 32;
     std::uint64_t mask_ = 0;
+    std::vector<std::uint8_t> own_text_, own_packed_;  // in-memory (just-in-time) index
 };
 
 }  // namespace cypha::cyphalm

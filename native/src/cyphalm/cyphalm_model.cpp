@@ -116,9 +116,9 @@ void CyphaLMModel::fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_
     hp_->fold_tables(target);
 }
 
-void CyphaLMModel::attach_infinigram(const std::string& index_path) {
+void CyphaLMModel::attach_infinigram(const std::string& index_path, std::size_t max_bytes) {
     if (!hp_) throw std::runtime_error("attach_infinigram: hp backend required");
-    hp_->set_infinigram(std::make_shared<const InfiniGram>(index_path));
+    hp_->set_infinigram(InfiniGram::open(index_path, max_bytes));
     // Starting weights learned on held-out text, if saved next to the index
     // (cyphalm_lm_quality --ig-weights-out INDEX.weights.json).
     std::ifstream wf(index_path + ".weights.json");

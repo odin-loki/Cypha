@@ -95,7 +95,8 @@ int main(int argc, char** argv) {
     int table_bits = 22, gen_bytes = 200, prompt_bytes = 256;
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
-    std::string neural_path;  // BLM1 byte LSTM expert
+    std::string neural_path;
+    std::size_t infinigram_bytes = 0;  // BLM1 byte LSTM expert
     double fold_auto = 0.0;  // per-table occupancy fold target (0 = off)
     std::string dump_dist;  // float32 natural-log P, 256 per held-out byte
     bool compare_scoring = false;
@@ -141,6 +142,7 @@ int main(int argc, char** argv) {
         else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
         else if (a == "--merge") merges.push_back(next());
         else if (a == "--infinigram") infinigram_path = next();
+        else if (a == "--infinigram-bytes") infinigram_bytes = std::stoull(next());  // corpus given: index its first N bytes
         else if (a == "--tree-prune") tree_prune = std::stod(next());
         else if (a == "--ig-weights-out") ig_weights_out = next();
         else if (a == "--match-drop") match_drop = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 0));
@@ -202,7 +204,9 @@ int main(int argc, char** argv) {
             out["neural"] = neural_path;
         }
         if (!infinigram_path.empty()) {
-            model->attach_infinigram(infinigram_path);
+            const auto t_ig = Clock::now();
+            model->attach_infinigram(infinigram_path, infinigram_bytes);
+            out["infinigram_attach_seconds"] = seconds_since(t_ig);
             out["infinigram"] = infinigram_path;
         }
         if (ensemble_lr >= 0.0) model->hp_backend().set_ensemble_learning_rate(ensemble_lr);
