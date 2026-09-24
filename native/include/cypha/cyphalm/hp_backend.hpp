@@ -24,6 +24,12 @@
 #include "hp/predictor.hpp"
 #include "hp/undo.hpp"
 
+#include <array>
+
+namespace cypha::cyphalm {
+class InfiniGram;
+}
+
 namespace cypha::cyphalm {
 
 /// Wraps hp::Predictor for byte/token sequence modelling inside Cypha.
@@ -92,7 +98,7 @@ class HpSequenceBackend {
     /// semantics (each hypothetical bit trains the model before the next).
     void set_frozen_scoring(bool on) {
         frozen_scoring_ = on;
-        last_valid_ = false;
+        last_valid_ = ig_valid_ = false;
         for (auto& m : members_) m.backend->set_frozen_scoring(on);
     }
     bool frozen_scoring() const { return frozen_scoring_; }
@@ -119,7 +125,19 @@ class HpSequenceBackend {
     /// Current weights: [self, member 0, member 1, ...].
     std::vector<double> ensemble_weights() const;
     /// Forget the last scored ensemble distribution (after rewinding state).
-    void invalidate_scoring_cache() { last_valid_ = false; }
+    void invalidate_scoring_cache() {
+        last_valid_ = ig_valid_ = false;
+    }
+
+    /// ∞-gram expert (InfiniGram over the pretraining corpus): the served
+    /// distribution becomes w0 p_model + w1 p_longest + w2 p_reliable, where
+    /// p_longest counts the bytes after every corpus occurrence of the
+    /// longest matching context suffix and p_reliable those after the longest
+    /// suffix seen at least 16 times. Weights are learned online (exponentiated
+    /// gradient) per (match length, count, model confidence) bucket while
+    /// learning is on. Shared and read-only: many models can use one index.
+    void set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta = 0.3);
+    bool has_infinigram() const { return static_cast<bool>(ig_); }
     /// This predictor and every member's (for ``hp::StreamRewind``).
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).
@@ -130,7 +148,7 @@ class HpSequenceBackend {
         pred_->fold_tables(target);
         cfg_ = pred_->config();
         for (auto& m : members_) m.backend->fold_tables(target);
-        last_valid_ = false;
+        last_valid_ = ig_valid_ = false;
     }
     /// Serve mixer rate on every model (``hp::Predictor::set_serve_adaptation``).
     void set_serve_adaptation(int num, int den, int skip);
@@ -178,6 +196,18 @@ class HpSequenceBackend {
     std::vector<double> last_own_, last_mix_;
     std::vector<std::vector<double>> last_member_lp_;
     void update_ensemble_weights_(std::uint8_t byte);
+
+    // Model (+ ensemble) distribution before the ∞-gram mix.
+    std::vector<double> scored_log_probs_(int vocab_size);
+    std::vector<double> infinigram_mix_(const std::vector<double>& base);
+    std::shared_ptr<const InfiniGram> ig_;
+    double ig_eta_ = 0.3;
+    static constexpr int kIgBuckets = 8 * 4 * 4;
+    std::vector<std::array<double, 3>> ig_w_;
+    bool ig_valid_ = false;
+    int ig_bucket_ = 0;
+    std::vector<double> ig_p_[3];       // model, longest, reliable (probabilities)
+    std::vector<double> last_final_;    // served log probs, for observe_next_byte
     /// Ensemble: geometric mix of this model's ``own`` log probs with members'.
     std::vector<double> mix_with_members_(const std::vector<double>& own,
                                           const std::vector<std::vector<double>>& member_lp);

@@ -304,6 +304,17 @@ class Predictor {
 
     const Config& config() const { return cfg_; }
 
+    /// The last up-to-``n`` bytes of history, oldest first (from the byte
+    /// ring, so exact rewinds cover it). Returns how many were written.
+    std::size_t recent_bytes(std::uint8_t* out, std::size_t n) const {
+        const std::uint32_t pos = byte_ring_.pos();
+        std::size_t k = n;
+        if (k > pos) k = pos;
+        if (k > static_cast<std::size_t>(byte_ring_.mask()) + 1) k = static_cast<std::size_t>(byte_ring_.mask()) + 1;
+        for (std::size_t i = 0; i < k; ++i) out[i] = byte_ring_.at(pos - static_cast<std::uint32_t>(k - i));
+        return k;
+    }
+
     /// Serve-time RAM cut: shrink trained tables to the caps in ``target``
     /// (cm_bits_cap, match_bits_cap, pool_bits_cap; 0 = keep) by folding, and
     /// adopt those caps, so the result saves and reloads like a model built

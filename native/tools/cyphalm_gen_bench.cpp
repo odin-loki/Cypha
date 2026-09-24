@@ -84,6 +84,7 @@ double judge_bits(cypha::cyphalm::CyphaLMModel& judge, const std::vector<int>& p
 int main(int argc, char** argv) {
     std::string load, judge_path, text_path;
     std::vector<std::string> members;
+    std::string infinigram_path;
     std::uint64_t offset = 96000000;
     int prompts = 8, prompt_bytes = 256, gen_bytes = 200, stride = 8192;
     cypha::cyphalm::DecodeParams params;
@@ -96,6 +97,7 @@ int main(int argc, char** argv) {
         };
         if (a == "--load") load = next();
         else if (a == "--member") members.push_back(next());
+        else if (a == "--infinigram") infinigram_path = next();
         else if (a == "--judge") judge_path = next();
         else if (a == "--text") text_path = next();
         else if (a == "--offset") offset = std::stoull(next());
@@ -122,6 +124,7 @@ int main(int argc, char** argv) {
         model.add_ensemble_member(cypha::cyphalm::load_cyphalm_model(m),
                                   1.0 / static_cast<double>(members.size() + 1));
     }
+    if (!infinigram_path.empty()) model.attach_infinigram(infinigram_path);
     auto judge = cypha::cyphalm::load_cyphalm_model(judge_path);
     judge.hp_backend().set_learning(false);
     judge.reset_stream(/*keep_history=*/true);

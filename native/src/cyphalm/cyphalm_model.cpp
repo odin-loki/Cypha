@@ -11,6 +11,7 @@
 
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_views.hpp"
+#include "cypha/cyphalm/infinigram.hpp"
 #include "hp/shard_merge.hpp"  // Predictor::reset_stream_state
 #include "cypha/intelligence/intelligence_profiler.hpp"
 
@@ -112,6 +113,11 @@ void CyphaLMModel::fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_
     target.hebb_bits_cap = hebb_bits_cap;
     target.match_drop = match_drop;
     hp_->fold_tables(target);
+}
+
+void CyphaLMModel::attach_infinigram(const std::string& index_path) {
+    if (!hp_) throw std::runtime_error("attach_infinigram: hp backend required");
+    hp_->set_infinigram(std::make_shared<const InfiniGram>(index_path));
 }
 
 void CyphaLMModel::add_ensemble_member(CyphaLMModel&& other, double weight) {

@@ -1,0 +1,251 @@
+{
+  "eval": {
+    "bit_greedy_equals_argmax": 0.8858642578125,
+    "bytes": 16384,
+    "calibration_bins": [
+      {
+        "accuracy": 0.13043478260869565,
+        "bin": 0,
+        "confidence": 0.08572652436578912,
+        "n": 69
+      },
+      {
+        "accuracy": 0.16551193225558122,
+        "bin": 1,
+        "confidence": 0.15824211121307036,
+        "n": 1299
+      },
+      {
+        "accuracy": 0.2725947521865889,
+        "bin": 2,
+        "confidence": 0.24779297492054472,
+        "n": 1372
+      },
+      {
+        "accuracy": 0.39782244556113905,
+        "bin": 3,
+        "confidence": 0.35075191620569823,
+        "n": 1194
+      },
+      {
+        "accuracy": 0.4716394716394716,
+        "bin": 4,
+        "confidence": 0.4504504161678362,
+        "n": 1287
+      },
+      {
+        "accuracy": 0.5833333333333334,
+        "bin": 5,
+        "confidence": 0.5480571164945534,
+        "n": 1320
+      },
+      {
+        "accuracy": 0.6618589743589743,
+        "bin": 6,
+        "confidence": 0.6497986427598887,
+        "n": 1248
+      },
+      {
+        "accuracy": 0.7879432624113475,
+        "bin": 7,
+        "confidence": 0.7503157635075643,
+        "n": 1410
+      },
+      {
+        "accuracy": 0.8618843683083511,
+        "bin": 8,
+        "confidence": 0.856082586207714,
+        "n": 1868
+      },
+      {
+        "accuracy": 0.9691555388376905,
+        "bin": 9,
+        "confidence": 0.965609167829367,
+        "n": 5317
+      }
+    ],
+    "distribution_ms": 7.071084060852057,
+    "ece_top1": 0.01674764339213955,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 1.6669373226502167,
+    "ms_per_byte": 7.385110888671875,
+    "nll_bits_by_temperature": {
+      "0.7": 1.685535442208941,
+      "0.8": 1.6255422937809014,
+      "0.9": 1.5985680465121197,
+      "1.0": 1.595666167788033,
+      "1.1": 1.6114271110022853,
+      "1.2": 1.6424551496573283,
+      "1.3": 1.6865194011745637,
+      "1.4": 1.7420463556673527
+    },
+    "nll_bits_per_byte": 1.5956661677880324,
+    "offset": 50000,
+    "path": "/home/user/corpora/cant/lcet10.txt",
+    "perplexity_per_byte": 3.022340421684563,
+    "top1": 0.6805419921875,
+    "top5": 0.902099609375
+  },
+  "harness": "cyphalm_lm_quality",
+  "infinigram": {
+    "fixed_lambda_nll": {
+      "0.05": 1.5768226910501464,
+      "0.10": 1.5719253889450573,
+      "0.20": 1.5791544818398071,
+      "0.30": 1.6023807836748327,
+      "0.50": 1.69377321471951
+    },
+    "index": "/home/user/ckpt/enwik8_95m.igr",
+    "learned_lambda": [
+      {
+        "bytes": 264,
+        "count_bucket": 3,
+        "lambda": 0.0,
+        "n_bucket": 0
+      },
+      {
+        "bytes": 270,
+        "count_bucket": 3,
+        "lambda": 0.049447167402966306,
+        "n_bucket": 1
+      },
+      {
+        "bytes": 1,
+        "count_bucket": 0,
+        "lambda": 0.17500000000000002,
+        "n_bucket": 2
+      },
+      {
+        "bytes": 3,
+        "count_bucket": 1,
+        "lambda": 0.25793609142417634,
+        "n_bucket": 2
+      },
+      {
+        "bytes": 32,
+        "count_bucket": 2,
+        "lambda": 0.009348518315030304,
+        "n_bucket": 2
+      },
+      {
+        "bytes": 531,
+        "count_bucket": 3,
+        "lambda": 0.36875648258253746,
+        "n_bucket": 2
+      },
+      {
+        "bytes": 391,
+        "count_bucket": 0,
+        "lambda": 0.009208683941502215,
+        "n_bucket": 3
+      },
+      {
+        "bytes": 349,
+        "count_bucket": 1,
+        "lambda": 0.0478955281409064,
+        "n_bucket": 3
+      },
+      {
+        "bytes": 568,
+        "count_bucket": 2,
+        "lambda": 0.018948071959707588,
+        "n_bucket": 3
+      },
+      {
+        "bytes": 936,
+        "count_bucket": 3,
+        "lambda": 0.18594793145487742,
+        "n_bucket": 3
+      },
+      {
+        "bytes": 2984,
+        "count_bucket": 0,
+        "lambda": 0.24361678657639416,
+        "n_bucket": 4
+      },
+      {
+        "bytes": 2238,
+        "count_bucket": 1,
+        "lambda": 0.28544739673253106,
+        "n_bucket": 4
+      },
+      {
+        "bytes": 2523,
+        "count_bucket": 2,
+        "lambda": 0.2006483915212447,
+        "n_bucket": 4
+      },
+      {
+        "bytes": 1769,
+        "count_bucket": 3,
+        "lambda": 0.4902500319655445,
+        "n_bucket": 4
+      },
+      {
+        "bytes": 2025,
+        "count_bucket": 0,
+        "lambda": 0.057673881144938655,
+        "n_bucket": 5
+      },
+      {
+        "bytes": 740,
+        "count_bucket": 1,
+        "lambda": 0.105748334582738,
+        "n_bucket": 5
+      },
+      {
+        "bytes": 595,
+        "count_bucket": 2,
+        "lambda": 0.38529476031461696,
+        "n_bucket": 5
+      },
+      {
+        "bytes": 144,
+        "count_bucket": 3,
+        "lambda": 0.19726302181837213,
+        "n_bucket": 5
+      },
+      {
+        "bytes": 11,
+        "count_bucket": 0,
+        "lambda": 0.09653065984381144,
+        "n_bucket": 6
+      },
+      {
+        "bytes": 1,
+        "count_bucket": 1,
+        "lambda": 0.20641816616586056,
+        "n_bucket": 6
+      },
+      {
+        "bytes": 2,
+        "count_bucket": 2,
+        "lambda": 0.2569046735854937,
+        "n_bucket": 6
+      },
+      {
+        "bytes": 7,
+        "count_bucket": 3,
+        "lambda": 0.13679317094946075,
+        "n_bucket": 6
+      }
+    ],
+    "mean_match_len": 11.6846923828125,
+    "mixed3_nll": 1.5613354094732383,
+    "mixed_nll": 1.5692782448627502,
+    "query_ms": 0.02795869250488297
+  },
+  "loaded": "/home/user/ckpt/slim95.json",
+  "reset_stream": "none",
+  "rss_anon_mb_after_eval": 487.3984375,
+  "rss_anon_mb_after_setup": 42.9765625,
+  "rss_file_mb_after_eval": 527.359375,
+  "rss_file_mb_after_setup": 4.23046875,
+  "rss_hwm_mb": 1015.01171875,
+  "rss_mb_after_eval": 1014.7578125,
+  "rss_mb_after_setup": 47.20703125,
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 0.052159276,
+  "tier": "lean"
+}

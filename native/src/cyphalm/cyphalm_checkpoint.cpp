@@ -209,6 +209,7 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
     if (meta.contains("learning_rate")) {
         model.hp_backend().set_ensemble_learning_rate(meta.at("learning_rate").get<double>());
     }
+    if (meta.contains("infinigram")) model.attach_infinigram(resolve(meta.at("infinigram").get<std::string>()));
     return model;
 }
 

@@ -10,6 +10,7 @@
 ///   cyphalm_lm_quality --train enwik8 --train-bytes 8388608 --save /tmp/pre
 ///   cyphalm_lm_quality --load /tmp/pre.json --eval enwik8 --eval-offset 96000000 --eval-bytes 32768
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -102,6 +103,7 @@ int main(int argc, char** argv) {
     int fold_cm = 0, fold_match = 0, fold_pool = 0, fold_hebb = 0;
     std::uint64_t drop_mask = 0;
     std::uint32_t match_drop = 0;
+    std::string infinigram_path;
     std::vector<std::string> merges;  // shard models merged into --load (equal data)
     int word_k = 0;
     bool only_default = false;
@@ -134,6 +136,7 @@ int main(int argc, char** argv) {
         else if (a == "--member") members.push_back(next());
         else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
         else if (a == "--merge") merges.push_back(next());
+        else if (a == "--infinigram") infinigram_path = next();
         else if (a == "--match-drop") match_drop = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 0));
         else if (a == "--drop") drop_mask = std::stoull(next(), nullptr, 0);  // cm_drop bits
         else if (a == "--fold") {  // CM,MATCH,POOL table bits (0 = keep)
@@ -181,6 +184,10 @@ int main(int argc, char** argv) {
             model->add_ensemble_member(std::move(mm), 1.0 / static_cast<double>(members.size() + 1));
         }
         if (!members.empty()) out["members"] = members;
+        if (!infinigram_path.empty()) {
+            model->attach_infinigram(infinigram_path);
+            out["infinigram"] = infinigram_path;
+        }
         if (ensemble_lr >= 0.0) model->hp_backend().set_ensemble_learning_rate(ensemble_lr);
     } else {
         cypha::cyphalm::CyphaLMConfig cfg;

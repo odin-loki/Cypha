@@ -1,6 +1,7 @@
 #include "cypha/cyphalm/hp_backend.hpp"
 
 #include "cypha/cyphalm/cyphalm_config.hpp"
+#include "cypha/cyphalm/infinigram.hpp"
 #include "hp/shard_merge.hpp"  // Predictor::reset_stream_state
 
 #include <algorithm>
@@ -134,7 +135,7 @@ void HpSequenceBackend::reset() {
     log_probs_buf_.clear();
     members_.clear();
     self_weight_ = 1.0;
-    last_valid_ = false;
+    last_valid_ = ig_valid_ = false;
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -279,6 +280,59 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
+    std::vector<double> base = scored_log_probs_(vocab_size);
+    if (!ig_) return base;
+    last_final_ = infinigram_mix_(base);
+    ig_valid_ = true;
+    return last_final_;
+}
+
+void HpSequenceBackend::set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta) {
+    ig_ = std::move(ig);
+    ig_eta_ = eta;
+    ig_w_.assign(kIgBuckets, {0.8, 0.1, 0.1});
+    ig_valid_ = false;
+}
+
+std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>& base) {
+    constexpr std::size_t kCtx = 256;
+    std::uint8_t ctx[kCtx];
+    const std::size_t len = pred_->recent_bytes(ctx, kCtx);
+    const InfiniGram::Result r = ig_->query(ctx, len, static_cast<int>(kCtx));
+    InfiniGram::Result rr = r;
+    for (int m = r.n; rr.total < 16 && m > 0;) {  // back off to a well-attested suffix
+        m /= 2;
+        rr = ig_->query(ctx, len, m, m);
+    }
+    const std::size_t v = base.size();
+    for (auto& p : ig_p_) p.assign(v, 0.0);
+    double pmax = 0.0;
+    for (std::size_t b = 0; b < v; ++b) pmax = std::max(pmax, ig_p_[0][b] = std::exp(base[b]));
+    auto fill = [&](const InfiniGram::Result& q, std::vector<double>& out) {
+        double tot = 0.0;
+        for (std::size_t b = 0; b < v; ++b) tot += q.count[b];
+        if (tot <= 0.0) {
+            out = ig_p_[0];  // no evidence in-vocabulary: defer to the model
+            return;
+        }
+        for (std::size_t b = 0; b < v; ++b) out[b] = q.count[b] / tot;
+    };
+    fill(r, ig_p_[1]);
+    fill(rr, ig_p_[2]);
+    const int nb = r.n == 0 ? 0 : std::min(7, 1 + static_cast<int>(std::log2(static_cast<double>(r.n))));
+    const int cb = r.total <= 1 ? 0 : r.total <= 3 ? 1 : r.total <= 15 ? 2 : 3;
+    const int hb = pmax < 0.3 ? 0 : pmax < 0.6 ? 1 : pmax < 0.9 ? 2 : 3;
+    ig_bucket_ = (nb * 4 + cb) * 4 + hb;
+    const auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
+    std::vector<double> out(v);
+    for (std::size_t b = 0; b < v; ++b) {
+        const double p = w[0] * ig_p_[0][b] + w[1] * ig_p_[1][b] + w[2] * ig_p_[2][b];
+        out[b] = std::log(std::max(p, 1e-300));
+    }
+    return out;
+}
+
+std::vector<double> HpSequenceBackend::scored_log_probs_(int vocab_size) {
     if (members_.empty()) {
         return use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
                                            : next_byte_log_probs_bit_tree(vocab_size);
@@ -343,7 +397,7 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     member->set_learning(pred_->learning());
     members_.push_back(Member{std::move(member), weight});
     self_weight_ = 1.0 - total;
-    last_valid_ = false;
+    last_valid_ = ig_valid_ = false;
 }
 
 std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
@@ -356,7 +410,7 @@ std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
 }
 
 void HpSequenceBackend::reset_stream(bool keep_history) {
-    last_valid_ = false;
+    last_valid_ = ig_valid_ = false;
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
 }
@@ -390,12 +444,12 @@ std::vector<double> HpSequenceBackend::ensemble_log_probs_(int vocab_size) const
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
-    if (!members_.empty()) return ensemble_log_probs_(256)[byte];
+    if (!members_.empty() || ig_) return ensemble_log_probs_(256)[byte];
     return byte_log_prob_on_pred_(byte);
 }
 
 std::uint8_t HpSequenceBackend::serve_greedy_next_byte() const {
-    if (!members_.empty()) {
+    if (!members_.empty() || ig_) {
         const auto lp = ensemble_log_probs_(256);
         return static_cast<std::uint8_t>(std::max_element(lp.begin(), lp.end()) - lp.begin());
     }
@@ -426,7 +480,7 @@ std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
     if (rng01 == nullptr || temperature <= 1e-6) {
         return serve_greedy_next_byte();
     }
-    if (!members_.empty()) {
+    if (!members_.empty() || ig_) {
         const auto lp = ensemble_log_probs_(256);
         double mx = -std::numeric_limits<double>::infinity();
         for (double v : lp) mx = std::max(mx, v / temperature);
@@ -466,10 +520,26 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
     }
     for (auto& m : members_) m.backend->consume_byte(byte);
     if (last_valid_ && ens_eta_ > 0.0 && pred_->learning()) update_ensemble_weights_(byte);
-    last_valid_ = false;
+    if (ig_valid_ && ig_eta_ > 0.0 && pred_->learning() && byte < ig_p_[0].size()) {
+        // Exponentiated gradient on the mixture's log loss for this bucket.
+        auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
+        const double pm = w[0] * ig_p_[0][byte] + w[1] * ig_p_[1][byte] + w[2] * ig_p_[2][byte];
+        double z = 0.0;
+        for (int e = 0; e < 3; ++e) {
+            const double g = std::clamp(ig_eta_ * (ig_p_[e][byte] / std::max(pm, 1e-12) - 1.0), -2.0, 2.0);
+            z += (w[static_cast<std::size_t>(e)] = std::max(1e-4, w[static_cast<std::size_t>(e)] * std::exp(g)));
+        }
+        for (double& x : w) x /= z;
+    }
+    last_valid_ = ig_valid_ = false;
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {
+    if (ig_) {
+        const double lp = ig_valid_ ? last_final_[next] : next_byte_log_probs(256)[next];
+        consume_byte(next);
+        return -lp;
+    }
     if (!members_.empty()) {
         const double lp = last_valid_ ? last_mix_[next] : next_byte_log_probs(256)[next];
         consume_byte(next);
