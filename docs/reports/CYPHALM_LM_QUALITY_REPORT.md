@@ -528,6 +528,44 @@ Held-out wiki NLL (lower is better) against resident footprint:
   `vocab_size` 128, which truncated serve distributions to ASCII (no UTF-8 in
   generation). `apply_hp_production_recipe` now always uses 256.
 
+## Speed round and the winner
+
+Ideas adapted from related work:
+- **min-p sampling and lpaq / zpaq** spend effort only where probability is.
+  Here that becomes pruning of hp's next-byte bit tree.
+- **infini-gram mini** (FM-index, arXiv:2506.12229) shrinks suffix-array
+  storage. Here that becomes bit-packing the SA entries.
+- **paq8px** multithreads models ahead of a serial mixer. Here the ensemble
+  members already score on threads.
+
+**Bit-tree pruning** (`hp_tree_prune`, default 1e-4). A next-byte
+distribution walks the 255-node bit tree through the whole mixer. Subtrees
+under 1e-4 probability are not expanded, and their mass is spread evenly over
+their bytes, so the distribution stays normalised. Slim 95 MB + ∞-gram, 8 KiB:
+
+| prune | ms per distribution | wiki | Alice | lcet10 |
+|---|---:|---:|---:|---:|
+| exact | 12.8 | 1.7068 | 2.2128 | 1.5427 |
+| 1e-5 | 3.7–4.2 | 1.7068 | 2.2124 | 1.5427 |
+| **1e-4** | **1.9–2.8** | **1.7067** | **2.2125** | **1.5432** |
+| 1e-3 | 1.3–1.8 | 1.7089 | 2.2163 | 1.5447 |
+
+**Packed ∞-gram index** (IGR2): suffix-array entries at ceil(log2 n) bits,
+27 for 95 MB. 475 → 416 MB, identical results. A smaller corpus is not a good
+trade: a 48 MB index costs +0.011 on wiki, 24 MB +0.027.
+
+**The winner** (`models/cyphalm_winner/`, rebuilt by
+`scripts/build_cyphalm_winner.sh`), 16 KiB held-out:
+
+| manifest | wiki | Alice | lcet10 | top-1 / top-5 wiki | ECE | ms/dist | RAM private + shared |
+|---|---:|---:|---:|---|---:|---:|---|
+| `winner.json`: 11 slim shards + ∞-gram | **1.6516** | **2.0258** | **1.5124** | 65.9% / 89.4% | 1.2% | 2.3 | 3.3 + 0.6 GB |
+| `winner_light.json`: slim 95 MB + ∞-gram | 1.6909 | 2.0639 | 1.5566 | 65.1% / 89.2% | 1.0% | 1.8 | 0.44 + 0.45 GB |
+
+Against the lean 95 MB model at the start of this work (1.7608 / 2.2158 on 8
+KiB, 1.1 GB, ~8 ms per distribution), the light winner is better on every
+text at under 1 GB and ~4× faster. The full winner cuts another 0.04 on wiki.
+
 ## LSTM expert (tried, removed)
 
 hp predicts only from contexts it has counted. A recurrent model generalises
