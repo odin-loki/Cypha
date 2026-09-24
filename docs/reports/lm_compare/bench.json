@@ -1,0 +1,114 @@
+{
+ "gpt/t4": {
+  "params": 3346944,
+  "fp32_mb": 12.767578125,
+  "ckpt_mb": 12.777194023132324,
+  "ms_per_distribution": 4.025385275003828,
+  "threads": 4,
+  "fp32": false,
+  "rss_mb": 257.75390625,
+  "rss_model_mb": 40.3359375,
+  "peak_rss_mb": 261.83203125
+ },
+ "gpt/t4/fp32": {
+  "params": 3346944,
+  "fp32_mb": 12.767578125,
+  "ckpt_mb": 12.777194023132324,
+  "ms_per_distribution": 1.2436334924996117,
+  "threads": 4,
+  "fp32": true,
+  "rss_mb": 251.60546875,
+  "rss_model_mb": 34.140625,
+  "peak_rss_mb": 252.34765625
+ },
+ "gpt/t1": {
+  "params": 3346944,
+  "fp32_mb": 12.767578125,
+  "ckpt_mb": 12.777194023132324,
+  "ms_per_distribution": 5.059612927498165,
+  "threads": 1,
+  "fp32": false,
+  "rss_mb": 259.66796875,
+  "rss_model_mb": 42.24609375,
+  "peak_rss_mb": 262.0390625
+ },
+ "gpt/t1/fp32": {
+  "params": 3346944,
+  "fp32_mb": 12.767578125,
+  "ckpt_mb": 12.777194023132324,
+  "ms_per_distribution": 2.6564515949985434,
+  "threads": 1,
+  "fp32": true,
+  "rss_mb": 250.88671875,
+  "rss_model_mb": 33.3515625,
+  "peak_rss_mb": 251.38671875
+ },
+ "lstm/t4": {
+  "params": 3432704,
+  "fp32_mb": 13.0947265625,
+  "ckpt_mb": 13.098297119140625,
+  "ms_per_distribution": 4.397414402496906,
+  "threads": 4,
+  "fp32": false,
+  "rss_mb": 266.95703125,
+  "rss_model_mb": 49.46484375,
+  "peak_rss_mb": 266.75390625
+ },
+ "lstm/t4/fp32": {
+  "params": 3432704,
+  "fp32_mb": 13.0947265625,
+  "ckpt_mb": 13.098297119140625,
+  "ms_per_distribution": 2.7293414525001936,
+  "threads": 4,
+  "fp32": true,
+  "rss_mb": 257.609375,
+  "rss_model_mb": 40.140625,
+  "peak_rss_mb": 257.32421875
+ },
+ "lstm/t1": {
+  "params": 3432704,
+  "fp32_mb": 13.0947265625,
+  "ckpt_mb": 13.098297119140625,
+  "ms_per_distribution": 6.012398117500197,
+  "threads": 1,
+  "fp32": false,
+  "rss_mb": 269.00390625,
+  "rss_model_mb": 51.50390625,
+  "peak_rss_mb": 276.6875
+ },
+ "lstm/t1/fp32": {
+  "params": 3432704,
+  "fp32_mb": 13.0947265625,
+  "ckpt_mb": 13.098297119140625,
+  "ms_per_distribution": 4.6457307675018455,
+  "threads": 1,
+  "fp32": true,
+  "rss_mb": 253.3203125,
+  "rss_model_mb": 35.8046875,
+  "peak_rss_mb": 261.10546875
+ },
+ "cyphalm/t4": {
+  "ms_per_distribution": 2.421568171630864,
+  "ms_per_byte_with_update": 5.284910435546875,
+  "rss_mb": 3875.73828125,
+  "rss_anon_mb": 606.16015625
+ },
+ "cyphalm/t1": {
+  "ms_per_distribution": 2.4849114812011655,
+  "ms_per_byte_with_update": 5.384382533691406,
+  "rss_mb": 3875.73828125,
+  "rss_anon_mb": 606.15234375
+ },
+ "cyphalm_light/t4": {
+  "ms_per_distribution": 2.5593951708984433,
+  "ms_per_byte_with_update": 4.832390199951171,
+  "rss_mb": 871.2265625,
+  "rss_anon_mb": 399.88671875
+ },
+ "cyphalm_light/t1": {
+  "ms_per_distribution": 2.6628139331054754,
+  "ms_per_byte_with_update": 5.036021635009766,
+  "rss_mb": 871.203125,
+  "rss_anon_mb": 399.890625
+ }
+}

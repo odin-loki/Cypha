@@ -1,0 +1,16 @@
+{
+ "cmd": [
+  "/home/user/cypha_build/cyphalm_infinigram_build",
+  "--text",
+  "/home/user/corpora/enwik8",
+  "--bytes",
+  "95000000",
+  "--out",
+  "/home/user/ckpt/compare/cyphalm/enwik8_95m.igr"
+ ],
+ "wall_seconds": 20.441760263000106,
+ "cpu_seconds": 20.196333,
+ "peak_rss_mb": 762.44140625,
+ "returncode": 0,
+ "stdout": "built /home/user/ckpt/compare/cyphalm/enwik8_95m.igr: 95000000 bytes indexed in 20.3 s\n"
+}

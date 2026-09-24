@@ -1,0 +1,1958 @@
+{
+ "tune_gpt": {
+  "best_lr": 0.003,
+  "grid": {
+   "0.001": 1.6604948976692744,
+   "0.003": 1.6480737311002664,
+   "0.01": 1.6506641049275594,
+   "0.03": 2.187638960359383,
+   "0.1": 7.825773693953025,
+   "0.0": 1.6815031569825054
+  }
+ },
+ "cyphalm/online/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 0.7823797062811098,
+  "perplexity_per_byte": 1.719965594686528,
+  "word_perplexity": 237.72842953984875,
+  "top1": 0.84423828125,
+  "top5": 0.949462890625,
+  "mean_entropy_bits": 0.9153299981055707,
+  "ece_top1": 0.024680106948888718,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 0.7743703847697956,
+  "bits_by_position": {
+   "0-256": 1.4019122333784246,
+   "256-1024": 1.7105999600739092,
+   "1024-4096": 0.49869693224146694
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 1.2190112769064283
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 0.7685272104954155
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 1.3743843392610702
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.2877046090191452
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 2.0371021822951403
+   }
+  },
+  "next_word_greedy_acc": 0.7241379310344828,
+  "word_first_byte_top1": 0.854679802955665,
+  "words": 406,
+  "first_copy_bits": 1.5168032893236947,
+  "second_copy_bits": 0.04795612323852483,
+  "run": {
+   "distribution_ms": 2.2725757243652356,
+   "ms_per_byte": 5.504244877685546,
+   "rss_mb": 3947.1484375,
+   "rss_anon_mb": 2157.08984375,
+   "rss_file_mb": 1790.05859375,
+   "rss_hwm_mb": 3947.5234375,
+   "harness_bits": 0.7823797070736331
+  }
+ },
+ "cyphalm/online/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 2.7314455232924177,
+  "perplexity_per_byte": 6.641207260640179,
+  "word_perplexity": 12455041.890553644,
+  "top1": 0.51953125,
+  "top5": 0.5859375,
+  "mean_entropy_bits": 2.7182502477406145,
+  "ece_top1": 0.041805101910878086,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 2.7314455239251076,
+  "bits_by_position": {
+   "0-256": 5.473400381567278,
+   "256-768": 1.3604680941549878
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 2.750959820837459
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 2.3565655967692565
+   }
+  },
+  "next_word_greedy_acc": 0.4943820224719101,
+  "word_first_byte_top1": 0.5280898876404494,
+  "words": 89,
+  "first_copy_bits": 5.302969379230513,
+  "second_copy_bits": 0.15992166735432245,
+  "run": {
+   "distribution_ms": 3.1692832486979117,
+   "ms_per_byte": 8.142667044270832,
+   "rss_mb": 3944.79296875,
+   "rss_anon_mb": 1171.59375,
+   "rss_file_mb": 2773.19921875,
+   "rss_hwm_mb": 3945.23046875,
+   "harness_bits": 2.7314455234973525
+  }
+ },
+ "cyphalm/frozen/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 1.1771491885122325,
+  "perplexity_per_byte": 2.2612949617588187,
+  "word_perplexity": 3758.3133612189695,
+  "top1": 0.79345703125,
+  "top5": 0.94287109375,
+  "mean_entropy_bits": 1.6800367043520126,
+  "ece_top1": 0.12015272995868158,
+  "best_temperature": 0.7,
+  "bits_at_best_temperature": 1.088207031351567,
+  "bits_by_position": {
+   "0-256": 1.4533337805482622,
+   "256-1024": 1.924665631822302,
+   "1024-4096": 0.9672546950150457
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 2.132388187039734
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 1.115823356266002
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 2.364153419956398
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.39390852418769823
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 3.1341417218246477
+   }
+  },
+  "next_word_greedy_acc": 0.6428571428571429,
+  "word_first_byte_top1": 0.8201970443349754,
+  "words": 406,
+  "first_copy_bits": 1.7332918435925282,
+  "second_copy_bits": 0.6210065334319366,
+  "run": {
+   "distribution_ms": 2.2110052849121127,
+   "ms_per_byte": 4.808654638427734,
+   "rss_mb": 3946.98046875,
+   "rss_anon_mb": 469.171875,
+   "rss_file_mb": 3477.80859375,
+   "rss_hwm_mb": 3947.359375,
+   "harness_bits": 1.1771491882826108
+  }
+ },
+ "cyphalm/frozen/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 4.434358475202096,
+  "perplexity_per_byte": 21.62095697572341,
+  "word_perplexity": 330309141945.36053,
+  "top1": 0.3671875,
+  "top5": 0.5690104166666666,
+  "mean_entropy_bits": 3.828463951001533,
+  "ece_top1": 0.10992699796913777,
+  "best_temperature": 1.2,
+  "bits_at_best_temperature": 4.386703302348798,
+  "bits_by_position": {
+   "0-256": 6.877347412780224,
+   "256-768": 3.2128640064130325
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 4.54196127441339
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 2.3672520693009345
+   }
+  },
+  "next_word_greedy_acc": 0.29213483146067415,
+  "word_first_byte_top1": 0.42696629213483145,
+  "words": 89,
+  "first_copy_bits": 6.8800316055791475,
+  "second_copy_bits": 1.9886853448250452,
+  "run": {
+   "distribution_ms": 3.6194379453124994,
+   "ms_per_byte": 7.656105781249999,
+   "rss_mb": 3944.51171875,
+   "rss_anon_mb": 296.2734375,
+   "rss_file_mb": 3648.23828125,
+   "rss_hwm_mb": 3945.0625,
+   "harness_bits": 4.434358483474019
+  }
+ },
+ "cyphalm_light/online/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 0.8256784906829856,
+  "perplexity_per_byte": 1.7723683762753664,
+  "word_perplexity": 321.7949282405835,
+  "top1": 0.837158203125,
+  "top5": 0.9462890625,
+  "mean_entropy_bits": 0.9675108848652271,
+  "ece_top1": 0.025639171149790627,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 0.8172379288511744,
+  "bits_by_position": {
+   "0-256": 1.5437911684505836,
+   "256-1024": 1.790739443433066,
+   "1024-4096": 0.5245705293481656
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 1.3554343991823843
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 0.8070023427866211
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 1.4246422506964336
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.3357936250410954
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 2.2609954832725996
+   }
+  },
+  "next_word_greedy_acc": 0.7093596059113301,
+  "word_first_byte_top1": 0.8522167487684729,
+  "words": 406,
+  "first_copy_bits": 1.5977277620500931,
+  "second_copy_bits": 0.05362921931587799,
+  "run": {
+   "distribution_ms": 1.7036412675781274,
+   "ms_per_byte": 3.2073709934082033,
+   "rss_mb": 857.10546875,
+   "rss_anon_mb": 371.45703125,
+   "rss_file_mb": 485.6484375,
+   "rss_hwm_mb": 857.41796875,
+   "harness_bits": 0.8256784897516255
+  }
+ },
+ "cyphalm_light/online/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 2.838177177607413,
+  "perplexity_per_byte": 7.151159479961443,
+  "word_perplexity": 23582883.10205932,
+  "top1": 0.5078125,
+  "top5": 0.5859375,
+  "mean_entropy_bits": 2.7209987479283986,
+  "ece_top1": 0.06565776016666602,
+  "best_temperature": 1.1,
+  "bits_at_best_temperature": 2.835210500117939,
+  "bits_by_position": {
+   "0-256": 5.706576378288522,
+   "256-768": 1.4039775772668586
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 2.8356873718907374
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 2.8860076558488172
+   }
+  },
+  "next_word_greedy_acc": 0.48314606741573035,
+  "word_first_byte_top1": 0.5056179775280899,
+  "words": 89,
+  "first_copy_bits": 5.494397586208226,
+  "second_copy_bits": 0.1819567690066002,
+  "run": {
+   "distribution_ms": 3.431596226562505,
+   "ms_per_byte": 6.319283809895833,
+   "rss_mb": 760.05078125,
+   "rss_anon_mb": 307.578125,
+   "rss_file_mb": 452.47265625,
+   "rss_hwm_mb": 760.12109375,
+   "harness_bits": 2.8381771793041843
+  }
+ },
+ "cyphalm_light/frozen/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 1.3640712591491764,
+  "perplexity_per_byte": 2.5741056344638613,
+  "word_perplexity": 13889.09255014569,
+  "top1": 0.776123046875,
+  "top5": 0.93798828125,
+  "mean_entropy_bits": 2.126300597948006,
+  "ece_top1": 0.17316514287659635,
+  "best_temperature": 0.7,
+  "bits_at_best_temperature": 1.192952493130669,
+  "bits_by_position": {
+   "0-256": 1.6634294347014285,
+   "256-1024": 2.0262336634472007,
+   "1024-4096": 1.1735841434453158
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 2.305128335488268
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 1.3301482513239888
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 2.1782275380622638
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.7056887585014753
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 3.7748814406197844
+   }
+  },
+  "next_word_greedy_acc": 0.5985221674876847,
+  "word_first_byte_top1": 0.8103448275862069,
+  "words": 406,
+  "first_copy_bits": 1.872747464914094,
+  "second_copy_bits": 0.8553950533842585,
+  "run": {
+   "distribution_ms": 2.574967175537119,
+   "ms_per_byte": 4.89736584350586,
+   "rss_mb": 857.0625,
+   "rss_anon_mb": 374.52734375,
+   "rss_file_mb": 482.53515625,
+   "rss_hwm_mb": 857.46875,
+   "harness_bits": 1.3640712576231082
+  }
+ },
+ "cyphalm_light/frozen/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 4.452102102648721,
+  "perplexity_per_byte": 21.888513905100513,
+  "word_perplexity": 367292757586.24396,
+  "top1": 0.39453125,
+  "top5": 0.5533854166666666,
+  "mean_entropy_bits": 4.657640730333753,
+  "ece_top1": 0.1773990138463035,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 4.4504663030922496,
+  "bits_by_position": {
+   "0-256": 6.790720704835087,
+   "256-768": 3.282792801555538
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 4.4828645935090865
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 3.8611384624364375
+   }
+  },
+  "next_word_greedy_acc": 0.33707865168539325,
+  "word_first_byte_top1": 0.43820224719101125,
+  "words": 89,
+  "first_copy_bits": 6.7793097994931495,
+  "second_copy_bits": 2.1248944058042913,
+  "run": {
+   "distribution_ms": 5.5367754661458255,
+   "ms_per_byte": 10.453543872395834,
+   "rss_mb": 760.0390625,
+   "rss_anon_mb": 310.23828125,
+   "rss_file_mb": 449.80078125,
+   "rss_hwm_mb": 760.078125,
+   "harness_bits": 4.452102110240912
+  }
+ },
+ "gpt/static/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 1.6207985580040583,
+  "perplexity_per_byte": 3.0754522103916306,
+  "word_perplexity": 83628.18943972689,
+  "top1": 0.665283203125,
+  "top5": 0.88671875,
+  "mean_entropy_bits": 1.7021999459752182,
+  "ece_top1": 0.01314673624109266,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.6207985920358263,
+  "bits_by_position": {
+   "0-256": 1.5995371956518005,
+   "256-1024": 1.6587592286142334,
+   "1024-4096": 1.613080170547536
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 2.6128273116611433
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 1.6322261784629124
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 2.716710191087924
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.48877315796889215
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 4.309521933651338
+   }
+  },
+  "next_word_greedy_acc": 0.4605911330049261,
+  "word_first_byte_top1": 0.6896551724137931,
+  "words": 406,
+  "first_copy_bits": 1.6312998768160936,
+  "second_copy_bits": 1.6102972391920232,
+  "run": {
+   "bits_per_byte": 1.6207985877990723,
+   "bytes": 4096,
+   "seconds": 0.14635564799937129,
+   "ms_per_byte_batched": 0.035731359374846505
+  }
+ },
+ "gpt/static/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 6.626233997629228,
+  "perplexity_per_byte": 98.78595247195695,
+  "word_perplexity": 1.631738805468678e+17,
+  "top1": 0.10026041666666667,
+  "top5": 0.2643229166666667,
+  "mean_entropy_bits": 3.326843574255219,
+  "ece_top1": 0.26798435542340004,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 5.968560692027829,
+  "bits_by_position": {
+   "0-256": 7.546094150978314,
+   "256-768": 6.166303920954687
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 6.718389634868921
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 4.855875703287756
+   }
+  },
+  "next_word_greedy_acc": 0.011235955056179775,
+  "word_first_byte_top1": 0.2696629213483146,
+  "words": 89,
+  "first_copy_bits": 7.359177623327915,
+  "second_copy_bits": 5.893290371930543,
+  "run": {
+   "bits_per_byte": 6.62623405456543,
+   "bytes": 768,
+   "seconds": 0.039467075001084595,
+   "ms_per_byte_batched": 0.0513894205743289
+  }
+ },
+ "gpt/dynamic/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 1.547381386608162,
+  "perplexity_per_byte": 2.9228613339748737,
+  "word_perplexity": 50047.836957743035,
+  "top1": 0.680908203125,
+  "top5": 0.894775390625,
+  "mean_entropy_bits": 1.6500733456721357,
+  "ece_top1": 0.014744996216365089,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 1.545660186556768,
+  "bits_by_position": {
+   "0-256": 1.5931103739179069,
+   "256-1024": 1.6406086352717881,
+   "1024-4096": 1.520263825499777
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 2.5904621180504126
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 1.5686765569755257
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 2.4825533849915162
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.5017796458416868
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 4.101427027074597
+   }
+  },
+  "next_word_greedy_acc": 0.4753694581280788,
+  "word_first_byte_top1": 0.6945812807881774,
+  "words": 406,
+  "first_copy_bits": 1.6060534750236364,
+  "second_copy_bits": 1.4887092981926875,
+  "run": {
+   "bits_per_byte": 1.5473811626434326,
+   "bytes": 4096,
+   "seconds": 2.3303235760013195,
+   "ms_per_byte_batched": 0.5689266542971971
+  }
+ },
+ "gpt/dynamic/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 5.671227585510604,
+  "perplexity_per_byte": 50.95767627425776,
+  "word_perplexity": 539356891778854.1,
+  "top1": 0.12369791666666667,
+  "top5": 0.3020833333333333,
+  "mean_entropy_bits": 3.97269904568808,
+  "ece_top1": 0.14294125621370182,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 5.369802751998729,
+  "bits_by_position": {
+   "0-256": 7.044411195235584,
+   "256-768": 4.984635780648113
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 5.697407146511504
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 5.168304439966967
+   }
+  },
+  "next_word_greedy_acc": 0.02247191011235955,
+  "word_first_byte_top1": 0.29213483146067415,
+  "words": 89,
+  "first_copy_bits": 6.7194549565373025,
+  "second_copy_bits": 4.623000214483904,
+  "run": {
+   "bits_per_byte": 5.67122745513916,
+   "bytes": 768,
+   "seconds": 1.5154448679986672,
+   "ms_per_byte_batched": 1.973235505206598
+  }
+ },
+ "lstm/static/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 1.8277301664080692,
+  "perplexity_per_byte": 3.549781355782315,
+  "word_perplexity": 355469.5380559603,
+  "top1": 0.61181640625,
+  "top5": 0.879150390625,
+  "mean_entropy_bits": 1.8600721488591812,
+  "ece_top1": 0.02497141978215787,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.8277301921751958,
+  "bits_by_position": {
+   "0-256": 1.5047369862187556,
+   "256-1024": 1.920577876209758,
+   "1024-4096": 1.8314343373067565
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 4.514005204559958
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 1.858475474816563
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 2.9104378125067303
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.5569836502128898
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 4.915255984293505
+   }
+  },
+  "next_word_greedy_acc": 0.3891625615763547,
+  "word_first_byte_top1": 0.6379310344827587,
+  "words": 406,
+  "first_copy_bits": 1.8233981484494604,
+  "second_copy_bits": 1.832062184366678,
+  "run": {
+   "bits_per_byte": 1.8277301788330078,
+   "bytes": 4096,
+   "seconds": 0.1813316389998363,
+   "ms_per_byte_batched": 0.044270419677694406
+  }
+ },
+ "lstm/static/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 6.3041358164626855,
+  "perplexity_per_byte": 79.01944544470915,
+  "word_perplexity": 2.3765755565446664e+16,
+  "top1": 0.0234375,
+  "top5": 0.14713541666666666,
+  "mean_entropy_bits": 4.749554447542643,
+  "ece_top1": 0.15827446913025134,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 6.029189590125367,
+  "bits_by_position": {
+   "0-256": 6.362902406500579,
+   "256-768": 6.274752521443737
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 6.367451432751363
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 5.0878095035486295
+   }
+  },
+  "next_word_greedy_acc": 0.0,
+  "word_first_byte_top1": 0.033707865168539325,
+  "words": 89,
+  "first_copy_bits": 6.330010189092705,
+  "second_copy_bits": 6.278261443832665,
+  "run": {
+   "bits_per_byte": 6.304135322570801,
+   "bytes": 768,
+   "seconds": 0.03948808200038911,
+   "ms_per_byte_batched": 0.05141677343800666
+  }
+ },
+ "tune_lstm": {
+  "best_lr": 0.3,
+  "grid": {
+   "0.001": 1.766951302040724,
+   "0.003": 1.7615881579495356,
+   "0.01": 1.7459041860155666,
+   "0.03": 1.715811641842354,
+   "0.1": 1.667886872511503,
+   "0.3": 1.6382302198087881,
+   "1.0": 1.7834587709700631,
+   "0.0": 1.7697038863759764
+  }
+ },
+ "lstm/dynamic/copy_wiki_2k": {
+  "bytes": 4096,
+  "bits_per_byte": 1.437681816478003,
+  "perplexity_per_byte": 2.708852457062704,
+  "word_perplexity": 23239.59555063542,
+  "top1": 0.697021484375,
+  "top5": 0.9052734375,
+  "mean_entropy_bits": 1.6419009528525168,
+  "ece_top1": 0.045517953823872366,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 1.4242714327719985,
+  "bits_by_position": {
+   "0-256": 1.5028307834079624,
+   "256-1024": 1.694482888605897,
+   "1024-4096": 1.368052467868533
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.001953125,
+    "bits": 3.9477269161574955
+   },
+   "lower": {
+    "share": 0.7294921875,
+    "bits": 1.4651574147346258
+   },
+   "punct/markup": {
+    "share": 0.1142578125,
+    "bits": 2.1435046986166255
+   },
+   "space": {
+    "share": 0.14404296875,
+    "bits": 0.5185618409718629
+   },
+   "upper": {
+    "share": 0.01025390625,
+    "bits": 4.051449157419028
+   }
+  },
+  "next_word_greedy_acc": 0.4876847290640394,
+  "word_first_byte_top1": 0.7142857142857143,
+  "words": 406,
+  "first_copy_bits": 1.633603698232966,
+  "second_copy_bits": 1.24175993472304,
+  "run": {
+   "bits_per_byte": 1.437681794166565,
+   "bytes": 4096,
+   "seconds": 3.3511726330016245,
+   "ms_per_byte_batched": 0.8181573811039122
+  }
+ },
+ "lstm/dynamic/copy_random_384": {
+  "bytes": 768,
+  "bits_per_byte": 5.366341876725663,
+  "perplexity_per_byte": 41.25056219977044,
+  "word_perplexity": 87074147567034.6,
+  "top1": 0.037760416666666664,
+  "top5": 0.20703125,
+  "mean_entropy_bits": 4.8934563172383365,
+  "ece_top1": 0.07859618358620157,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 5.315324001524261,
+  "bits_by_position": {
+   "0-256": 5.967129045654591,
+   "256-768": 5.065948292261197
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.9505208333333334,
+    "bits": 5.380639083230953
+   },
+   "space": {
+    "share": 0.049479166666666664,
+    "bits": 5.091685014913483
+   }
+  },
+  "next_word_greedy_acc": 0.0,
+  "word_first_byte_top1": 0.033707865168539325,
+  "words": 89,
+  "first_copy_bits": 5.769132428681071,
+  "second_copy_bits": 4.963551324770255,
+  "run": {
+   "bits_per_byte": 5.366342067718506,
+   "bytes": 768,
+   "seconds": 1.4889521919994877,
+   "ms_per_byte_batched": 1.9387398333326662
+  }
+ },
+ "cyphalm/online/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.6509563234571742,
+  "perplexity_per_byte": 3.140417399402965,
+  "word_perplexity": 1408.4447347852367,
+  "top1": 0.65838623046875,
+  "top5": 0.894287109375,
+  "mean_entropy_bits": 1.7094345251225367,
+  "ece_top1": 0.01172178238862511,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.650956323466827,
+  "bits_by_position": {
+   "0-256": 1.7983941081432597,
+   "256-1024": 1.87383206290937,
+   "1024-4096": 1.6856326364844498,
+   "4096-16384": 1.6252858909702994
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 2.979281108398548
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 1.7336620917873942
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 3.8535637490790196
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 2.444021498941479
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.5500015014952411
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.974492270003584
+   }
+  },
+  "next_word_greedy_acc": 0.19953596287703015,
+  "word_first_byte_top1": 0.29040989945862333,
+  "words": 2586,
+  "run": {
+   "distribution_ms": 2.4187967301635744,
+   "ms_per_byte": 6.105429027832031,
+   "rss_mb": 3897.6015625,
+   "rss_anon_mb": 3333.01953125,
+   "rss_file_mb": 564.58203125,
+   "rss_hwm_mb": 3898.05859375,
+   "harness_bits": 1.6509563230112878
+  }
+ },
+ "cyphalm/online/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 2.0257059699757605,
+  "perplexity_per_byte": 4.0719108342908035,
+  "word_perplexity": 2977.8265821202613,
+  "top1": 0.60626220703125,
+  "top5": 0.86773681640625,
+  "mean_entropy_bits": 2.0560923367320916,
+  "ece_top1": 0.010460289050567504,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 2.025705969586065,
+  "bits_by_position": {
+   "0-256": 2.793545375018703,
+   "256-1024": 2.4076609683081203,
+   "1024-4096": 2.234796261493367,
+   "4096-16384": 1.9335645554288587
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.113672953165133
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 4.748560572477815
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 0.8819049753124796
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 5.864712763189698
+   }
+  },
+  "next_word_greedy_acc": 0.10570236439499305,
+  "word_first_byte_top1": 0.20549374130737136,
+  "words": 2876,
+  "run": {
+   "distribution_ms": 2.701899769714372,
+   "ms_per_byte": 6.247013693969726,
+   "rss_mb": 3875.76953125,
+   "rss_anon_mb": 3269.9609375,
+   "rss_file_mb": 605.80859375,
+   "rss_hwm_mb": 3876.28515625,
+   "harness_bits": 2.025705970291879
+  }
+ },
+ "cyphalm/online/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 1.5117395593065948,
+  "perplexity_per_byte": 2.8515366182281636,
+  "word_perplexity": 1140.2396317934931,
+  "top1": 0.6959228515625,
+  "top5": 0.90655517578125,
+  "mean_entropy_bits": 1.6024642890487382,
+  "ece_top1": 0.020008617032114623,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 1.5116994776866959,
+  "bits_by_position": {
+   "0-256": 1.9888119957846233,
+   "256-1024": 1.6507013822242136,
+   "1024-4096": 1.482793992020639,
+   "4096-16384": 1.5003518281024404
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 4.75406897996935
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.5082231853953283
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 2.4704777026948737
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 0.9924537885235428
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 3.4529596042660535
+   }
+  },
+  "next_word_greedy_acc": 0.13530135301353013,
+  "word_first_byte_top1": 0.2562525625256253,
+  "words": 2439,
+  "run": {
+   "distribution_ms": 2.5088294190063514,
+   "ms_per_byte": 6.072497040771485,
+   "rss_mb": 3877.203125,
+   "rss_anon_mb": 3265.74609375,
+   "rss_file_mb": 611.45703125,
+   "rss_hwm_mb": 3877.671875,
+   "harness_bits": 1.5117395591888831
+  }
+ },
+ "cyphalm/frozen/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.8190884516787185,
+  "perplexity_per_byte": 3.528581791618582,
+  "word_perplexity": 2947.16915108627,
+  "top1": 0.621337890625,
+  "top5": 0.882568359375,
+  "mean_entropy_bits": 1.925111185810743,
+  "ece_top1": 0.015038829526710209,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 1.8180915562523492,
+  "bits_by_position": {
+   "0-256": 1.8191658727761602,
+   "256-1024": 1.9672947703326376,
+   "1024-4096": 1.751987604706672,
+   "4096-16384": 1.8265991555663301
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 3.8589620515492857
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 1.9117876081346121
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 3.243789930386123
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 2.6987252943069557
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.6176526620437327
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.775275289712165
+   }
+  },
+  "next_word_greedy_acc": 0.18136117556071152,
+  "word_first_byte_top1": 0.2846094354215004,
+  "words": 2586,
+  "run": {
+   "distribution_ms": 2.519698614868162,
+   "ms_per_byte": 5.424026990234375,
+   "rss_mb": 3897.7421875,
+   "rss_anon_mb": 739.09375,
+   "rss_file_mb": 3158.6484375,
+   "rss_hwm_mb": 3898.265625,
+   "harness_bits": 1.8190884505940914
+  }
+ },
+ "cyphalm/frozen/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 2.695215927789603,
+  "perplexity_per_byte": 6.476506996951738,
+  "word_perplexity": 41883.927067027136,
+  "top1": 0.5396728515625,
+  "top5": 0.81878662109375,
+  "mean_entropy_bits": 2.5174608575277966,
+  "ece_top1": 0.03235422611973392,
+  "best_temperature": 1.1,
+  "bits_at_best_temperature": 2.691036365601635,
+  "bits_by_position": {
+   "0-256": 2.875056929251432,
+   "256-1024": 2.783116338979829,
+   "1024-4096": 2.77404620305456,
+   "4096-16384": 2.6662678957435197
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.353392698795781
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 7.01910709162581
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 2.31087735514039
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 6.502941106081525
+   }
+  },
+  "next_word_greedy_acc": 0.08762169680111266,
+  "word_first_byte_top1": 0.17732962447844228,
+  "words": 2876,
+  "run": {
+   "distribution_ms": 3.220858187683116,
+   "ms_per_byte": 6.778134609375,
+   "rss_mb": 3875.80078125,
+   "rss_anon_mb": 724.34765625,
+   "rss_file_mb": 3151.453125,
+   "rss_hwm_mb": 3876.265625,
+   "harness_bits": 2.6952159275898677
+  }
+ },
+ "cyphalm/frozen/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 1.9703016705376992,
+  "perplexity_per_byte": 3.918500471297515,
+  "word_perplexity": 9644.666310197887,
+  "top1": 0.66192626953125,
+  "top5": 0.87786865234375,
+  "mean_entropy_bits": 2.0222602302263026,
+  "ece_top1": 0.059492589543264966,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.970301670348673,
+  "bits_by_position": {
+   "0-256": 2.0413142660466037,
+   "256-1024": 1.8772175312292079,
+   "1024-4096": 1.8498666245855173,
+   "4096-16384": 2.0047487616594233
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 5.188333688688944
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.6640016237748627
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 3.5640235378312926
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 2.3814361068479086
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 5.509449240206982
+   }
+  },
+  "next_word_greedy_acc": 0.12792127921279212,
+  "word_first_byte_top1": 0.23165231652316523,
+  "words": 2439,
+  "run": {
+   "distribution_ms": 2.651167304077136,
+   "ms_per_byte": 5.686599797058106,
+   "rss_mb": 3877.15234375,
+   "rss_anon_mb": 712.171875,
+   "rss_file_mb": 3164.98046875,
+   "rss_hwm_mb": 3877.609375,
+   "harness_bits": 1.9703016700196136
+  }
+ },
+ "cyphalm_light/online/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.6908575422705394,
+  "perplexity_per_byte": 3.2284854881477467,
+  "word_perplexity": 1678.1867314627661,
+  "top1": 0.65081787109375,
+  "top5": 0.89190673828125,
+  "mean_entropy_bits": 1.7383973994540476,
+  "ece_top1": 0.009512528235032309,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.6908575421801166,
+  "bits_by_position": {
+   "0-256": 1.9324480080793087,
+   "256-1024": 1.950627434745977,
+   "1024-4096": 1.720959063947296,
+   "4096-16384": 1.6620634088672857
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 3.054295783984102
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 1.7782017303926547
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 2.7757050075067924
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 2.466154371820437
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.5898055819602296
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.841610464949998
+   }
+  },
+  "next_word_greedy_acc": 0.1968290796597061,
+  "word_first_byte_top1": 0.288476411446249,
+  "words": 2586,
+  "run": {
+   "distribution_ms": 2.0686145106811424,
+   "ms_per_byte": 3.9009252788696287,
+   "rss_mb": 877.93359375,
+   "rss_anon_mb": 438.32421875,
+   "rss_file_mb": 439.609375,
+   "rss_hwm_mb": 878.140625,
+   "harness_bits": 1.6908575427865116
+  }
+ },
+ "cyphalm_light/online/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 2.063912235221011,
+  "perplexity_per_byte": 4.181186035192479,
+  "word_perplexity": 3462.737999672237,
+  "top1": 0.60186767578125,
+  "top5": 0.8614501953125,
+  "mean_entropy_bits": 2.0755132960459983,
+  "ece_top1": 0.00877891110466738,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 2.063912235213022,
+  "bits_by_position": {
+   "0-256": 2.885734008740716,
+   "256-1024": 2.5040873290261474,
+   "1024-4096": 2.2817385410286612,
+   "4096-16384": 1.9648234284579498
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.134596102978843
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 4.882036272605568
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 0.9469779428698509
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 5.879785735542048
+   }
+  },
+  "next_word_greedy_acc": 0.10535465924895689,
+  "word_first_byte_top1": 0.206884561891516,
+  "words": 2876,
+  "run": {
+   "distribution_ms": 2.356469734252939,
+   "ms_per_byte": 4.534663524780274,
+   "rss_mb": 877.84375,
+   "rss_anon_mb": 434.91796875,
+   "rss_file_mb": 442.92578125,
+   "rss_hwm_mb": 878.0078125,
+   "harness_bits": 2.0639122356228863
+  }
+ },
+ "cyphalm_light/online/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 1.5565505218434033,
+  "perplexity_per_byte": 2.9414969122869885,
+  "word_perplexity": 1404.7905199575246,
+  "top1": 0.68963623046875,
+  "top5": 0.90643310546875,
+  "mean_entropy_bits": 1.6446047507710162,
+  "ece_top1": 0.019964249140282928,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.5565505219629276,
+  "bits_by_position": {
+   "0-256": 2.1108779442151984,
+   "256-1024": 1.706990114290946,
+   "1024-4096": 1.5344389387556792,
+   "4096-16384": 1.5411274551212835
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 4.8208773669728675
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.5489044520163884
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 2.541850207797215
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 1.0541073078270464
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 3.4650760483685117
+   }
+  },
+  "next_word_greedy_acc": 0.13776137761377613,
+  "word_first_byte_top1": 0.25420254202542025,
+  "words": 2439,
+  "run": {
+   "distribution_ms": 1.959447539855963,
+   "ms_per_byte": 3.742522196472168,
+   "rss_mb": 877.7734375,
+   "rss_anon_mb": 432.21484375,
+   "rss_file_mb": 445.55859375,
+   "rss_hwm_mb": 878.16796875,
+   "harness_bits": 1.5565505216192685
+  }
+ },
+ "cyphalm_light/frozen/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.9692432704925902,
+  "perplexity_per_byte": 3.9156268077516345,
+  "word_perplexity": 5698.802408259472,
+  "top1": 0.61328125,
+  "top5": 0.866943359375,
+  "mean_entropy_bits": 2.3232645970204384,
+  "ece_top1": 0.056021123307167686,
+  "best_temperature": 0.8,
+  "bits_at_best_temperature": 1.9426160314521699,
+  "bits_by_position": {
+   "0-256": 2.068058305817445,
+   "256-1024": 2.0889961788463443,
+   "1024-4096": 1.8929700360772788,
+   "4096-16384": 1.9787683757550407
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 4.174416509036089
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 2.0559916646045195
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 1.979989222128505
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 2.6176666023238346
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.9109781410346864
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.673608920425711
+   }
+  },
+  "next_word_greedy_acc": 0.17246713070378963,
+  "word_first_byte_top1": 0.26875483372003095,
+  "words": 2586,
+  "run": {
+   "distribution_ms": 2.6626963079223636,
+   "ms_per_byte": 5.088070915832519,
+   "rss_mb": 879.03125,
+   "rss_anon_mb": 438.4140625,
+   "rss_file_mb": 440.6171875,
+   "rss_hwm_mb": 879.2890625,
+   "harness_bits": 1.9692432703366718
+  }
+ },
+ "cyphalm_light/frozen/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 2.7821967306617763,
+  "perplexity_per_byte": 6.878989867773108,
+  "word_perplexity": 59048.85362150206,
+  "top1": 0.53662109375,
+  "top5": 0.80694580078125,
+  "mean_entropy_bits": 3.148927427735262,
+  "ece_top1": 0.08954557487970273,
+  "best_temperature": 0.9,
+  "bits_at_best_temperature": 2.760619777190943,
+  "bits_by_position": {
+   "0-256": 2.987124339996221,
+   "256-1024": 2.918495274472446,
+   "1024-4096": 2.831348713150337,
+   "4096-16384": 2.757120750857002
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.5097795203152797
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 5.964907687671671
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 2.46331734020496
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 6.4236584605326925
+   }
+  },
+  "next_word_greedy_acc": 0.08066759388038942,
+  "word_first_byte_top1": 0.16481223922114047,
+  "words": 2876,
+  "run": {
+   "distribution_ms": 4.122177912536634,
+   "ms_per_byte": 7.996932087097168,
+   "rss_mb": 877.91796875,
+   "rss_anon_mb": 435.015625,
+   "rss_file_mb": 442.90234375,
+   "rss_hwm_mb": 878.15625,
+   "harness_bits": 2.782196731443583
+  }
+ },
+ "cyphalm_light/frozen/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 2.0928180227780153,
+  "perplexity_per_byte": 4.265805013550062,
+  "word_perplexity": 17062.247600285176,
+  "top1": 0.6492919921875,
+  "top5": 0.865966796875,
+  "mean_entropy_bits": 2.526715877482358,
+  "ece_top1": 0.10541455193598454,
+  "best_temperature": 0.8,
+  "bits_at_best_temperature": 2.0522727429861005,
+  "bits_by_position": {
+   "0-256": 2.232632544996906,
+   "256-1024": 2.0517811378842157,
+   "1024-4096": 2.0416188778988986,
+   "4096-16384": 2.1052698117574296
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 4.410808726137106
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.8587164074851446
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 2.790647762845279
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 2.499734339335392
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 4.936590244124087
+   }
+  },
+  "next_word_greedy_acc": 0.11644116441164412,
+  "word_first_byte_top1": 0.1996719967199672,
+  "words": 2439,
+  "run": {
+   "distribution_ms": 3.118952085815439,
+   "ms_per_byte": 5.9804345087280275,
+   "rss_mb": 877.75390625,
+   "rss_anon_mb": 432.375,
+   "rss_file_mb": 445.37890625,
+   "rss_hwm_mb": 878.03125,
+   "harness_bits": 2.092818023783676
+  }
+ },
+ "gpt/static/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.8049743973012105,
+  "perplexity_per_byte": 3.4942295729863897,
+  "word_perplexity": 2770.042492114992,
+  "top1": 0.62408447265625,
+  "top5": 0.87652587890625,
+  "mean_entropy_bits": 1.7027535742712758,
+  "ece_top1": 0.021226670601160628,
+  "best_temperature": 1.1,
+  "bits_at_best_temperature": 1.8032737155484653,
+  "bits_by_position": {
+   "0-256": 1.9474341440298675,
+   "256-1024": 1.8381819806588429,
+   "1024-4096": 1.7558647708714938,
+   "4096-16384": 1.8122084185586071
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 3.159233177086749
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 1.982388526340619
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 8.213110002033545
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 2.0775711970797217
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.5172681869932756
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.777970772264027
+   }
+  },
+  "next_word_greedy_acc": 0.18445475638051045,
+  "word_first_byte_top1": 0.2703016241299304,
+  "words": 2586,
+  "run": {
+   "bits_per_byte": 1.8049741983413696,
+   "bytes": 16384,
+   "seconds": 0.5038996509993012,
+   "ms_per_byte_batched": 0.03075559393306282
+  }
+ },
+ "gpt/static/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 3.499944289068278,
+  "perplexity_per_byte": 11.313271618664066,
+  "word_perplexity": 1004806.6733138462,
+  "top1": 0.504150390625,
+  "top5": 0.77911376953125,
+  "mean_entropy_bits": 2.236580247609348,
+  "ece_top1": 0.060829945774416104,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 3.288350105667963,
+  "bits_by_position": {
+   "0-256": 3.5112070483909426,
+   "256-1024": 3.429854529118795,
+   "1024-4096": 3.5211175842398608,
+   "4096-16384": 3.498796934453003
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.540348651151674
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 7.387933572005661
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 4.752928400236141
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 7.092203489659974
+   }
+  },
+  "next_word_greedy_acc": 0.07406119610570236,
+  "word_first_byte_top1": 0.16237830319888735,
+  "words": 2876,
+  "run": {
+   "bits_per_byte": 3.4999446868896484,
+   "bytes": 16384,
+   "seconds": 0.5722628620005707,
+   "ms_per_byte_batched": 0.03492815319827702
+  }
+ },
+ "gpt/static/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 2.465974512521952,
+  "perplexity_per_byte": 5.5250001838911205,
+  "word_perplexity": 96966.68086566926,
+  "top1": 0.62579345703125,
+  "top5": 0.85833740234375,
+  "mean_entropy_bits": 1.7808993028478173,
+  "ece_top1": 0.017079658393482394,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 2.372528688447261,
+  "bits_by_position": {
+   "0-256": 2.8052053673963613,
+   "256-1024": 2.3475800082344342,
+   "1024-4096": 2.3813020594984606,
+   "4096-16384": 2.487474972819245
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 4.689645864779502
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.739631484902835
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 3.004637593690018
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 5.0894167719577705
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 4.958751095641642
+   }
+  },
+  "next_word_greedy_acc": 0.1090610906109061,
+  "word_first_byte_top1": 0.2078720787207872,
+  "words": 2439,
+  "run": {
+   "bits_per_byte": 2.4659743309020996,
+   "bytes": 16384,
+   "seconds": 0.5007074759996613,
+   "ms_per_byte_batched": 0.03056075903318245
+  }
+ },
+ "gpt/dynamic/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.776024813713088,
+  "perplexity_per_byte": 3.424812042923267,
+  "word_perplexity": 2439.3445960989584,
+  "top1": 0.63043212890625,
+  "top5": 0.8792724609375,
+  "mean_entropy_bits": 1.7500239551739307,
+  "ece_top1": 0.007114596519715709,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.7760248455613947,
+  "bits_by_position": {
+   "0-256": 1.9386515514072422,
+   "256-1024": 1.8397954263124798,
+   "1024-4096": 1.7392871169364899,
+   "4096-16384": 1.7778355175844804
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 3.0693406556248646
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 1.9370563763545836
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 8.163994766643517
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 1.9909063550193238
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.5896209635441241
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.807055793345817
+   }
+  },
+  "next_word_greedy_acc": 0.18252126836813612,
+  "word_first_byte_top1": 0.2737819025522042,
+  "words": 2586,
+  "run": {
+   "bits_per_byte": 1.7760246992111206,
+   "bytes": 16384,
+   "seconds": 6.752132721001544,
+   "ms_per_byte_batched": 0.4121174756470669
+  }
+ },
+ "gpt/dynamic/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 2.6852600117659837,
+  "perplexity_per_byte": 6.431967031899137,
+  "word_perplexity": 40269.28462221604,
+  "top1": 0.54132080078125,
+  "top5": 0.81500244140625,
+  "mean_entropy_bits": 2.4380938378638315,
+  "ece_top1": 0.013911458178263595,
+  "best_temperature": 1.1,
+  "bits_at_best_temperature": 2.67513468903254,
+  "bits_by_position": {
+   "0-256": 3.4897460590399905,
+   "256-1024": 3.3328955291874487,
+   "1024-4096": 3.047993692007305,
+   "4096-16384": 2.5373392458819373
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.4453954618298983
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 5.848701224728194
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 2.239340332453941
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 6.806660636440509
+   }
+  },
+  "next_word_greedy_acc": 0.08657858136300417,
+  "word_first_byte_top1": 0.1665507649513213,
+  "words": 2876,
+  "run": {
+   "bits_per_byte": 2.685260057449341,
+   "bytes": 16384,
+   "seconds": 6.7994301010003255,
+   "ms_per_byte_batched": 0.41500427862550815
+  }
+ },
+ "gpt/dynamic/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 2.027816665254888,
+  "perplexity_per_byte": 4.077872491340815,
+  "word_perplexity": 12606.437345504286,
+  "top1": 0.6451416015625,
+  "top5": 0.87921142578125,
+  "mean_entropy_bits": 1.778289136971479,
+  "ece_top1": 0.010433367460733737,
+  "best_temperature": 1.1,
+  "bits_at_best_temperature": 2.0142350337387027,
+  "bits_by_position": {
+   "0-256": 2.778002149396658,
+   "256-1024": 2.309013133821564,
+   "1024-4096": 2.1053268754689305,
+   "4096-16384": 1.9752354691630067
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 4.3391998169595745
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.699695227830187
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 2.5750470653344144
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 2.938289147705091
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 4.445257131552785
+   }
+  },
+  "next_word_greedy_acc": 0.10742107421074211,
+  "word_first_byte_top1": 0.2074620746207462,
+  "words": 2439,
+  "run": {
+   "bits_per_byte": 2.0278165340423584,
+   "bytes": 16384,
+   "seconds": 6.802714919000209,
+   "ms_per_byte_batched": 0.41520476800538386
+  }
+ },
+ "lstm/static/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.9011059105138148,
+  "perplexity_per_byte": 3.7349939613828176,
+  "word_perplexity": 4225.037268216316,
+  "top1": 0.60333251953125,
+  "top5": 0.86883544921875,
+  "mean_entropy_bits": 1.8165997498790638,
+  "ece_top1": 0.01820148701275602,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.9011059368858563,
+  "bits_by_position": {
+   "0-256": 1.7874746804408297,
+   "256-1024": 1.9406697293400172,
+   "1024-4096": 1.7295749612049953,
+   "4096-16384": 1.943883226457569
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 4.011980037190683
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 2.0718999775232234
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 8.464984871588884
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 2.1091118108620788
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.6209653529782546
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.905832652040763
+   }
+  },
+  "next_word_greedy_acc": 0.18561484918793503,
+  "word_first_byte_top1": 0.285769528228925,
+  "words": 2586,
+  "run": {
+   "bits_per_byte": 1.9011058807373047,
+   "bytes": 16384,
+   "seconds": 0.8256422030008252,
+   "ms_per_byte_batched": 0.05039320086674959
+  }
+ },
+ "lstm/static/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 3.256453862358516,
+  "perplexity_per_byte": 9.556311376379679,
+  "word_perplexity": 384165.9123222131,
+  "top1": 0.51092529296875,
+  "top5": 0.79266357421875,
+  "mean_entropy_bits": 2.1225820594225278,
+  "ece_top1": 0.06742272980230339,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 3.0707399170915357,
+  "bits_by_position": {
+   "0-256": 3.07701230648032,
+   "256-1024": 3.1800033151721316,
+   "1024-4096": 3.2365207255418924,
+   "4096-16384": 3.2699536715092834
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.498818769332947
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 8.792899580511543
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 3.657909693148045
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 7.166573991886851
+   }
+  },
+  "next_word_greedy_acc": 0.07927677329624479,
+  "word_first_byte_top1": 0.1599443671766342,
+  "words": 2876,
+  "run": {
+   "bits_per_byte": 3.2564537525177,
+   "bytes": 16384,
+   "seconds": 0.7652332659999956,
+   "ms_per_byte_batched": 0.046706131958007546
+  }
+ },
+ "lstm/static/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 2.4381358986908914,
+  "perplexity_per_byte": 5.419410382403554,
+  "word_perplexity": 85178.12742500758,
+  "top1": 0.6058349609375,
+  "top5": 0.84075927734375,
+  "mean_entropy_bits": 1.7809462083550238,
+  "ece_top1": 0.027521077712717168,
+  "best_temperature": 1.3,
+  "bits_at_best_temperature": 2.345653990596157,
+  "bits_by_position": {
+   "0-256": 2.335742420907727,
+   "256-1024": 2.258099941511897,
+   "1024-4096": 2.2597355937011367,
+   "4096-16384": 2.4961214197158332
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 5.378220776867987
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.7613371533529596
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 5.104564763403538
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 4.205310397107444
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 6.090955346754054
+   }
+  },
+  "next_word_greedy_acc": 0.12464124641246413,
+  "word_first_byte_top1": 0.21894218942189422,
+  "words": 2439,
+  "run": {
+   "bits_per_byte": 2.4381356239318848,
+   "bytes": 16384,
+   "seconds": 0.8651484609999898,
+   "ms_per_byte_batched": 0.05280447149658141
+  }
+ },
+ "lstm/dynamic/wiki": {
+  "bytes": 16384,
+  "bits_per_byte": 1.7387935532909216,
+  "perplexity_per_byte": 3.337559492512517,
+  "word_perplexity": 2071.4043594488826,
+  "top1": 0.63311767578125,
+  "top5": 0.8858642578125,
+  "mean_entropy_bits": 1.7729090198111153,
+  "ece_top1": 0.009456781932753865,
+  "best_temperature": 1.0,
+  "bits_at_best_temperature": 1.7387935809133452,
+  "bits_by_position": {
+   "0-256": 1.7732549425409807,
+   "256-1024": 1.875013463786173,
+   "1024-4096": 1.6811089767572163,
+   "4096-16384": 1.7439830074090186
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.01043701171875,
+    "bits": 3.4909292973671198
+   },
+   "lower": {
+    "share": 0.74444580078125,
+    "bits": 1.8856396187081714
+   },
+   "non-ascii": {
+    "share": 0.000244140625,
+    "bits": 8.985912409850393
+   },
+   "punct/markup": {
+    "share": 0.07171630859375,
+    "bits": 1.9212966152227091
+   },
+   "space": {
+    "share": 0.16009521484375,
+    "bits": 0.5945601060610427
+   },
+   "upper": {
+    "share": 0.0130615234375,
+    "bits": 4.8565416222472715
+   }
+  },
+  "next_word_greedy_acc": 0.191415313225058,
+  "word_first_byte_top1": 0.279969064191802,
+  "words": 2586,
+  "run": {
+   "bits_per_byte": 1.7387936115264893,
+   "bytes": 16384,
+   "seconds": 10.248402883999006,
+   "ms_per_byte_batched": 0.62551287133783
+  }
+ },
+ "lstm/dynamic/alice": {
+  "bytes": 16384,
+  "bits_per_byte": 2.427398734604287,
+  "perplexity_per_byte": 5.379226491299694,
+  "word_perplexity": 14546.735550375928,
+  "top1": 0.5662841796875,
+  "top5": 0.83837890625,
+  "mean_entropy_bits": 2.2648597938322563,
+  "ece_top1": 0.019168272585847138,
+  "best_temperature": 1.1,
+  "bits_at_best_temperature": 2.4238292538764936,
+  "bits_by_position": {
+   "0-256": 3.0335586612891516,
+   "256-1024": 2.9929664328017833,
+   "1024-4096": 2.820744475817666,
+   "4096-16384": 2.2810859863576636
+  },
+  "bits_by_class": {
+   "lower": {
+    "share": 0.6563720703125,
+    "bits": 2.2632224180207823
+   },
+   "punct/markup": {
+    "share": 0.05108642578125,
+    "bits": 5.95375224081014
+   },
+   "space": {
+    "share": 0.264892578125,
+    "bits": 1.730852245282449
+   },
+   "upper": {
+    "share": 0.02764892578125,
+    "bits": 6.482599590015955
+   }
+  },
+  "next_word_greedy_acc": 0.0890125173852573,
+  "word_first_byte_top1": 0.17767732962447844,
+  "words": 2876,
+  "run": {
+   "bits_per_byte": 2.427398681640625,
+   "bytes": 16384,
+   "seconds": 10.720326795000801,
+   "ms_per_byte_batched": 0.6543168209839356
+  }
+ },
+ "lstm/dynamic/lcet10": {
+  "bytes": 16384,
+  "bits_per_byte": 2.0147388250924676,
+  "perplexity_per_byte": 4.041074153358342,
+  "word_perplexity": 11861.694610062774,
+  "top1": 0.635498046875,
+  "top5": 0.8746337890625,
+  "mean_entropy_bits": 1.7752343603450393,
+  "ece_top1": 0.019499004974896907,
+  "best_temperature": 1.1,
+  "bits_at_best_temperature": 2.001382709929414,
+  "bits_by_position": {
+   "0-256": 2.3297492972452,
+   "256-1024": 2.1573365758642677,
+   "1024-4096": 1.9797544998397856,
+   "4096-16384": 2.008009828812552
+  },
+  "bits_by_class": {
+   "digit": {
+    "share": 0.0018310546875,
+    "bits": 5.298517780653879
+   },
+   "lower": {
+    "share": 0.75836181640625,
+    "bits": 1.689385038304325
+   },
+   "punct/markup": {
+    "share": 0.037841796875,
+    "bits": 4.147812977146829
+   },
+   "space": {
+    "share": 0.1754150390625,
+    "bits": 2.4656687530649655
+   },
+   "upper": {
+    "share": 0.02655029296875,
+    "bits": 5.061931572010095
+   }
+  },
+  "next_word_greedy_acc": 0.12054120541205413,
+  "word_first_byte_top1": 0.22304223042230423,
+  "words": 2439,
+  "run": {
+   "bits_per_byte": 2.0147387981414795,
+   "bytes": 16384,
+   "seconds": 10.78713022500051,
+   "ms_per_byte_batched": 0.6583941787720038
+  }
+ }
+}

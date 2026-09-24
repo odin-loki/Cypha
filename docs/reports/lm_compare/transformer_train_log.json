@@ -1,0 +1,48 @@
+{
+ "cfg": {
+  "arch": "gpt",
+  "d": 256,
+  "layers": 4,
+  "heads": 8,
+  "ctx": 512,
+  "emb": 64,
+  "bf16": true
+ },
+ "params": 3346944,
+ "batch": 16,
+ "budget_min": 60.0,
+ "data_bytes": 95000000,
+ "points": [
+  {
+   "minutes": 5.0,
+   "step": 687,
+   "bytes_seen": 5627904,
+   "val_bits_per_byte": 3.247921943664551
+  },
+  {
+   "minutes": 15.0,
+   "step": 2112,
+   "bytes_seen": 17301504,
+   "val_bits_per_byte": 2.0944581031799316
+  },
+  {
+   "minutes": 30.0,
+   "step": 4169,
+   "bytes_seen": 34152448,
+   "val_bits_per_byte": 1.7525806427001953
+  },
+  {
+   "minutes": 60.01,
+   "step": 8418,
+   "bytes_seen": 68960256,
+   "val_bits_per_byte": 1.5616323947906494
+  }
+ ],
+ "steps": 8418,
+ "bytes_seen": 68960256,
+ "train_seconds": 3600.3239184660633,
+ "bytes_per_s": 19153.90324917789,
+ "epochs": 0.7258974315789474,
+ "peak_rss_mb": 994.1875,
+ "rss_train_mb": 938.63671875
+}

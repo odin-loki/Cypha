@@ -677,6 +677,18 @@ The ∞-gram, pruning and winner lines match the configurations behind the raw
 JSON; the paths are placeholders. `slim95.json` in the report is the
 converted lean 95 MB model (see *Speed round and the winner*).
 
+## Against neural baselines
+
+[`CYPHALM_VS_NEURAL_LM.md`](CYPHALM_VS_NEURAL_LM.md) sets the winner against a byte-level Transformer (3.35M params) and an LSTM (3.43M params). Each trains for at most 1 hour on the same 4 cores and the same 95 MB, and all are scored by one code path.
+
+| wiki / Alice / lcet10, bits/byte | CyphaLM | Transformer | LSTM |
+|---|---|---|---|
+| adapting to the text (reading / dynamic eval) | **1.651 / 2.026 / 1.512** | 1.776 / 2.685 / 2.028 | 1.739 / 2.427 / 2.015 |
+| no adaptation (frozen / static) | 1.819 / **2.695 / 1.970** | **1.805** / 3.500 / 2.466 | 1.901 / 3.257 / 2.438 |
+| training time | 17 min | 60 min | 60 min |
+
+The Transformer is ahead only with no adaptation on in-domain text. CyphaLM copies from context (0.05 bits/byte on a repeated passage, against 1.2–1.8 for the neural models) and generates real words (99.4%). The neural models are about 300× smaller to serve and better at predicting markup and punctuation.
+
 ## Reference
 
 State at commit `2a003bf` (2026-09-24). Everything below is read from the code

@@ -39,6 +39,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | Load-testing notes for REST |
 | [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership, routes, Hybrid default (U06 PGM→Wy opt-in) |
 | [CyphaLM as a language model](reports/CYPHALM_LM_QUALITY_REPORT.md) | hp next-byte distribution quality, decoding, ensembles, ∞-gram, RAM, speed, the winner; tools / flags / formats reference |
+| [CyphaLM vs a Transformer and an LSTM](reports/CYPHALM_VS_NEURAL_LM.md) | same data, same CPU, ≤ 1 h training each: held-out quality, in-context learning, copying, byte classes, calibration, generation with cross-judges, latency, RAM, learning curves |
 | [Numerical audit](reports/NUMERICAL_KERNEL_AUDIT_2026-09-17.md) | 20 hand-verified defects in the inference gate and numerical kernels. **R1–R4 and N1–N4, L5–L9 fixed** and CTest-guarded; L11–L13 recorded |
 
 **Run native REST:** `./native/build/cypha_rest --model fixtures/reference.cypha`  

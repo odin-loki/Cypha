@@ -1,0 +1,24 @@
+{
+ "cmd": [
+  "/home/user/cypha_build/cyphalm_shard_train",
+  "--train",
+  "/home/user/corpora/enwik8",
+  "--bytes",
+  "95000000",
+  "--shards",
+  "11",
+  "--tier",
+  "slim",
+  "--table-bits",
+  "20",
+  "--threads",
+  "4",
+  "--out",
+  "/home/user/ckpt/compare/cyphalm"
+ ],
+ "wall_seconds": 1005.63076095,
+ "cpu_seconds": 3632.920713,
+ "peak_rss_mb": 1326.30078125,
+ "returncode": 0,
+ "stdout": "shard 3: 8636363 bytes, 1.6190 bpc, 337 s\nshard 2: 8636363 bytes, 1.6333 bpc, 340 s\nshard 0: 8636363 bytes, 1.6289 bpc, 340 s\nshard 1: 8636363 bytes, 1.6548 bpc, 342 s\nshard 4: 8636363 bytes, 1.6339 bpc, 336 s\nshard 6: 8636363 bytes, 1.6480 bpc, 337 s\nshard 5: 8636363 bytes, 1.6380 bpc, 337 s\nshard 7: 8636363 bytes, 1.6326 bpc, 339 s\nshard 8: 8636363 bytes, 1.6126 bpc, 325 s\nshard 10: 8636363 bytes, 1.6539 bpc, 329 s\nshard 9: 8636363 bytes, 1.6661 bpc, 329 s\nwrote /home/user/ckpt/compare/cyphalm/ensemble.json (11 members)\n"
+}
