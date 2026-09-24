@@ -71,6 +71,7 @@ void read_trivial_object(std::istream& is, T& o) {
 
 namespace hp {
 /// Checkpoint format version being read (Predictor::read_checkpoint sets it):
-/// ContextModel converts pre-v3 tables, MixerNet reads v4 fields.
-inline thread_local int g_hp_ckpt_read_version = 4;
+/// ContextModel converts pre-v3 tables, MixerNet reads v4 fields (v5 adds
+/// the optional context models, read by Predictor itself).
+inline thread_local int g_hp_ckpt_read_version = 5;
 }  // namespace hp

@@ -29,8 +29,9 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
     os.write(magic, 4);
     // v2 appends the sentence memory (stream state v1 left out); v3 packs
     // context-model slots to 16 bits (state + 6-bit checksum); v4 adds the
-    // mixer's layer-1 scale and skip.
-    const std::uint32_t ver = 4;
+    // mixer's layer-1 scale and skip; v5 appends the optional upstream context
+    // models (Config::extra_cms != 0 only: extra_cms = 0 still writes v4).
+    const std::uint32_t ver = xcms_ ? 5 : 4;
     blob::write_pod(os, ver);
     // HP_CKPT_SIZES=1: report each component's size on stderr.
     static const bool sizes = std::getenv("HP_CKPT_SIZES") != nullptr;
@@ -169,13 +170,21 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
     blob::write_pod(os, c0_);
     blob::write_pod(os, bitpos_);
     blob::write_pod(os, pr_final_);
-    os.write(reinterpret_cast<const char*>(exp_p_), sizeof(exp_p_));
+    os.write(reinterpret_cast<const char*>(exp_p_), static_cast<std::streamsize>(kExpPBase * sizeof(exp_p_[0])));
     blob::write_pod(os, n_exp_);
     blob::write_pod(os, mixed_p_);
     blob::write_pod(os, last_mlen_);
     blob::write_pod(os, sparse_);
     checkpoint_write_trivial(os, sentmem_);
     mark("rest");
+    if (ver >= 5) {
+        blob::write_pod(os, xcms_);
+        for (int i = kCtxModels; i < n_ctx_chain_; ++i) HP_CKPT_WRITE_CM(os, *ctx_chain_[i]);
+        os.write(reinterpret_cast<const char*>(exp_p_ + kExpPBase),
+                 static_cast<std::streamsize>(sizeof(exp_p_) - kExpPBase * sizeof(exp_p_[0])));
+        checkpoint_write_trivial(os, wx_);
+        mark("extra_cms");
+    }
 }
 
 inline void Predictor::read_checkpoint(std::istream& is) {
@@ -186,7 +195,13 @@ inline void Predictor::read_checkpoint(std::istream& is) {
     }
     std::uint32_t ver = 0;
     blob::read_pod(is, ver);
-    if (ver < 1 || ver > 4) return;
+    if (ver < 1 || ver > 5) return;
+    // The optional context models shape the mixer and the chain: the file
+    // must have been written with this predictor's Config::extra_cms.
+    if ((ver >= 5) != (xcms_ != 0)) {
+        is.setstate(std::ios::failbit);
+        return;
+    }
     g_hp_ckpt_read_version = static_cast<int>(ver);
     byte_ring_.checkpoint_read(is);
     HP_CKPT_READ_CM(is, o1_);
@@ -264,12 +279,25 @@ inline void Predictor::read_checkpoint(std::istream& is) {
     blob::read_pod(is, c0_);
     blob::read_pod(is, bitpos_);
     blob::read_pod(is, pr_final_);
-    is.read(reinterpret_cast<char*>(exp_p_), sizeof(exp_p_));
+    is.read(reinterpret_cast<char*>(exp_p_), static_cast<std::streamsize>(kExpPBase * sizeof(exp_p_[0])));
     blob::read_pod(is, n_exp_);
     blob::read_pod(is, mixed_p_);
     blob::read_pod(is, last_mlen_);
     blob::read_pod(is, sparse_);
     if (ver >= 2) checkpoint_read_trivial(is, sentmem_);  // v1: sentence memory starts empty
-    g_hp_ckpt_read_version = 4;
+    if (ver >= 5) {
+        std::uint32_t x = 0;
+        blob::read_pod(is, x);
+        if (x != xcms_) {
+            is.setstate(std::ios::failbit);
+            g_hp_ckpt_read_version = 5;
+            return;
+        }
+        for (int i = kCtxModels; i < n_ctx_chain_; ++i) HP_CKPT_READ_CM(is, *ctx_chain_[i]);
+        is.read(reinterpret_cast<char*>(exp_p_ + kExpPBase),
+                static_cast<std::streamsize>(sizeof(exp_p_) - kExpPBase * sizeof(exp_p_[0])));
+        checkpoint_read_trivial(is, wx_);
+    }
+    g_hp_ckpt_read_version = 5;
     rebind_internal_pointers_();
 }

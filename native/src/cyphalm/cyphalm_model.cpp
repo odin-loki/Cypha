@@ -360,6 +360,7 @@ nlohmann::json CyphaLMModel::compression_profile() const {
         {"hp_lr1_scale", cfg_.hp_lr1_scale},
         {"hp_mixer_scale", cfg_.hp_mixer_scale},
         {"hp_mixer_skip_l1", cfg_.hp_mixer_skip_l1},
+        {"hp_extra_cms", cfg_.hp_extra_cms},
         {"hp_match_bits_cap", cfg_.hp_match_bits_cap},
         {"hp_pool_slots", cfg_.hp_pool_slots},
         {"hp_pool_bits_cap", cfg_.hp_pool_bits_cap},

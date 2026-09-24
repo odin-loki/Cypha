@@ -23,7 +23,7 @@ namespace {
 namespace fs = std::filesystem;
 
 nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
-    return {
+    nlohmann::json j = {
         {"algorithm", "hp"},
         {"vocab_size", cfg.vocab_size},
         {"d_embed", cfg.d_embed},
@@ -61,6 +61,9 @@ nlohmann::json config_to_json(const CyphaLMConfig& cfg) {
         {"bpe_merges_path", cfg.bpe_merges_path},
         {"bpe_vocab_path", cfg.bpe_vocab_path},
     };
+    // Written only when set, so gate24 checkpoints stay byte-identical.
+    if (cfg.hp_extra_cms != 0) j["hp_extra_cms"] = cfg.hp_extra_cms;
+    return j;
 }
 
 CyphaLMConfig config_from_json(const nlohmann::json& c) {
@@ -92,6 +95,7 @@ CyphaLMConfig config_from_json(const nlohmann::json& c) {
     get_i("hp_lr1_scale", cfg.hp_lr1_scale);
     get_i("hp_mixer_scale", cfg.hp_mixer_scale);
     get_i("hp_mixer_skip_l1", cfg.hp_mixer_skip_l1);
+    if (c.contains("hp_extra_cms")) cfg.hp_extra_cms = c.at("hp_extra_cms").get<std::uint32_t>();
     get_i("hp_match_bits_cap", cfg.hp_match_bits_cap);
     get_i("hp_pool_slots", cfg.hp_pool_slots);
     get_i("hp_pool_bits_cap", cfg.hp_pool_bits_cap);
@@ -187,8 +191,9 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
     meta["config"] = config_to_json(model.config());
     meta["train_step_count"] = model.train_step_count();
     meta["hp_checkpoint"] = bin_file.filename().string();
-    meta["note"] =
-        "hp predictor state in sibling .hpbin (HPCP v4). JSON carries config metadata only.";
+    meta["note"] = model.config().hp_extra_cms != 0
+                       ? "hp predictor state in sibling .hpbin (HPCP v5). JSON carries config metadata only."
+                       : "hp predictor state in sibling .hpbin (HPCP v4). JSON carries config metadata only.";
 
     std::ofstream out(json_file);
     if (!out) throw std::runtime_error("cannot write checkpoint json: " + json_file.string());
