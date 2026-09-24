@@ -338,6 +338,57 @@ The judge was trained on the first 16 MiB, so it favours models trained there.
 Compare decoders on one model, not models against each other (held-out NLL
 does that). ms/byte figures come from a loaded 4-core box.
 
+## ∞-gram expert (after infini-gram)
+
+Related work: infini-gram (Liu et al. 2024, arXiv:2401.17377) builds an
+n-gram LM with *unbounded* n over trillions of tokens. A suffix array finds,
+for the current context, the longest suffix that occurs anywhere in the
+corpus, and counts the tokens after every occurrence. Interpolated with neural
+LMs it cut perplexity by up to 73%. kNN-LM (Khandelwal et al. 2020) and
+StateSMix / Nacrith (neural models plus n-gram context mixing) point the same
+way: a big exact memory of the training text complements a parametric model.
+
+hp already has match models, but each follows only the **most recent**
+occurrence of a context. The ∞-gram counts **every** occurrence in the whole
+corpus.
+
+**Implementation.** `InfiniGram` builds a suffix array (SA-IS, linear time)
+over the training bytes. For 95 MB that is 20 s and a 475 MB file (5 bytes per
+byte), mapped read-only and shared. A query bisects on the suffix length and
+reads next-byte counts from the SA range with one binary search per distinct
+next byte: 0.03 ms. `HpSequenceBackend::set_infinigram` serves
+
+p = w0 · p_model + w1 · p_longest + w2 · p_reliable
+
+where p_longest counts bytes after the longest matching suffix, and p_reliable
+does the same for the longest suffix seen at least 16 times. Weights are
+learned online (exponentiated gradient) per bucket of (match length, count,
+model confidence) while learning is on. Context comes from the predictor's
+byte history, so exact rewinds and word lookahead cover it.
+`cyphalm_infinigram_smoke` checks queries against brute force and the
+expert's normalisation, observe and rewind.
+
+Held-out, 16 KiB (index over the same 95 MB the models trained on; eval text
+outside it):
+
+| model | wiki | Alice | lcet10 | top-1 wiki |
+|---|---:|---:|---:|---:|
+| slim 95 MB model | 1.7436 | 2.0828 | 1.5957 | 63.9% |
+| **+ ∞-gram** | **1.6925** | **2.0654** | **1.5572** | 65.1% |
+| 11 slim shards (ensemble) | 1.6951 | 2.0411 | 1.5356 | 64.8% |
+| **11 slim shards + ∞-gram** | **1.6562** | **2.0290** | **1.5141** | 65.8% |
+
+- One slim model plus the index (496 MB + 475 MB shared) now matches the
+  11-model ensemble on wiki.
+- On the ensemble, the index still takes another 0.039 off wiki.
+- The gain is largest in-domain (the index is Wikipedia). On plain English
+  (Alice) it is 0.012–0.017.
+- Calibration stays within 1–2.3% ECE.
+
+`cyphalm_infinigram_build --text CORPUS --bytes N --out X.igr`; serve with
+`--infinigram X.igr` (`cyphalm_generate`, `cyphalm_lm_quality`,
+`cyphalm_gen_bench`) or `"infinigram"` in an ensemble manifest.
+
 ## RAM
 
 Everything a served model holds, and what each cut costs. Footprints are

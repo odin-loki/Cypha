@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
     int fold_cm = 0, fold_match = 0, fold_pool = 0, fold_hebb = 0;
     std::uint64_t drop_mask = 0;
     std::uint32_t match_drop = 0;
-    std::string infinigram_path;
+    std::string infinigram_path, ig_weights_out;
     std::vector<std::string> merges;  // shard models merged into --load (equal data)
     int word_k = 0;
     bool only_default = false;
@@ -137,6 +137,7 @@ int main(int argc, char** argv) {
         else if (a == "--ensemble-lr") ensemble_lr = std::stod(next());
         else if (a == "--merge") merges.push_back(next());
         else if (a == "--infinigram") infinigram_path = next();
+        else if (a == "--ig-weights-out") ig_weights_out = next();
         else if (a == "--match-drop") match_drop = static_cast<std::uint32_t>(std::stoul(next(), nullptr, 0));
         else if (a == "--drop") drop_mask = std::stoull(next(), nullptr, 0);  // cm_drop bits
         else if (a == "--fold") {  // CM,MATCH,POOL table bits (0 = keep)
@@ -329,6 +330,13 @@ int main(int argc, char** argv) {
                        {"nll_bits_by_temperature", tsweep},
                        {"ms_per_byte", 1e3 * secs / n},
                        {"distribution_ms", 1e3 * e_secs / n}};
+        if (!ig_weights_out.empty() && hp.has_infinigram()) {
+            std::ofstream wf(ig_weights_out);
+            wf << nlohmann::json({{"note", "∞-gram mixing weights learned on held-out text"},
+                                  {"learned_on", eval_path},
+                                  {"offset", eval_offset},
+                                  {"weights", hp.infinigram_weights()}}).dump(1) << "\n";
+        }
         if (!members.empty()) {
             out["ensemble_lr"] = ensemble_lr;
             out["ensemble_weights_final"] = model->hp_backend().ensemble_weights();

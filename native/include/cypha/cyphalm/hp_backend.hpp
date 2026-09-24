@@ -138,6 +138,10 @@ class HpSequenceBackend {
     /// learning is on. Shared and read-only: many models can use one index.
     void set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta = 0.3);
     bool has_infinigram() const { return static_cast<bool>(ig_); }
+    /// The per-bucket mixing weights (bucket-major, 3 per bucket), to save
+    /// weights learned on held-out text and start from them later.
+    std::vector<double> infinigram_weights() const;
+    void set_infinigram_weights(const std::vector<double>& w);
     /// This predictor and every member's (for ``hp::StreamRewind``).
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).

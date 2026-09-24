@@ -118,6 +118,14 @@ void CyphaLMModel::fold_hp_tables(int cm_bits_cap, int match_bits_cap, int pool_
 void CyphaLMModel::attach_infinigram(const std::string& index_path) {
     if (!hp_) throw std::runtime_error("attach_infinigram: hp backend required");
     hp_->set_infinigram(std::make_shared<const InfiniGram>(index_path));
+    // Starting weights learned on held-out text, if saved next to the index
+    // (cyphalm_lm_quality --ig-weights-out INDEX.weights.json).
+    std::ifstream wf(index_path + ".weights.json");
+    if (wf) {
+        nlohmann::json j;
+        wf >> j;
+        hp_->set_infinigram_weights(j.at("weights").get<std::vector<double>>());
+    }
 }
 
 void CyphaLMModel::add_ensemble_member(CyphaLMModel&& other, double weight) {

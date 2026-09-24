@@ -294,6 +294,21 @@ void HpSequenceBackend::set_infinigram(std::shared_ptr<const InfiniGram> ig, dou
     ig_valid_ = false;
 }
 
+std::vector<double> HpSequenceBackend::infinigram_weights() const {
+    std::vector<double> out;
+    for (const auto& w : ig_w_) out.insert(out.end(), w.begin(), w.end());
+    return out;
+}
+
+void HpSequenceBackend::set_infinigram_weights(const std::vector<double>& w) {
+    if (w.size() != static_cast<std::size_t>(kIgBuckets) * 3) {
+        throw std::invalid_argument("set_infinigram_weights: need 3 weights per bucket");
+    }
+    ig_w_.assign(kIgBuckets, {0.0, 0.0, 0.0});
+    for (std::size_t i = 0; i < w.size(); ++i) ig_w_[i / 3][i % 3] = w[i];
+    ig_valid_ = false;
+}
+
 std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>& base) {
     constexpr std::size_t kCtx = 256;
     std::uint8_t ctx[kCtx];
