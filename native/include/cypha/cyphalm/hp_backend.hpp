@@ -187,6 +187,7 @@ class HpSequenceBackend {
     /// loss) at this rate, whenever a scored byte is consumed with learning on.
     /// 0 = fixed weights.
     void set_ensemble_learning_rate(double eta) { ens_eta_ = eta; }
+    double ensemble_learning_rate() const { return ens_eta_; }
     /// Current weights: [self, member 0, member 1, ...].
     std::vector<double> ensemble_weights() const;
     /// Context-gated ensemble weights (default off): the geometric mix uses
@@ -227,6 +228,22 @@ class HpSequenceBackend {
         for (auto& m : members_) m.backend->set_mixing_learning(on);
     }
     bool mixing_learning() const { return mix_learning_; }
+    /// What the last ``next_byte_log_probs`` of a composite model mixed, for
+    /// replaying the mixing stages offline (``cyphalm_lm_quality
+    /// --dump-components``, bench/lm_compare/mixsim.py). Pointers into this
+    /// model, valid until the next byte is read or the model is scored again;
+    /// empty on a plain model (its served distribution is its own).
+    struct ScoredParts {
+        /// Log probs before the ensemble mix: this model's, then each member's.
+        std::vector<const std::vector<double>*> models;
+        /// The ∞-gram query for this position: the longest match and the
+        /// reliable (≥16) part as mixed (null without an index).
+        const InfiniGram::Result* ig_longest = nullptr;
+        const InfiniGram::Result* ig_reliable = nullptr;
+        /// Each neural expert's log P, from before it reads the byte.
+        std::vector<const std::array<double, 256>*> neural;
+    };
+    ScoredParts scored_parts() const;
     /// Worker threads (default on; ``CYPHA_HP_ENSEMBLE_THREADS=0`` makes the
     /// default off), members too. On: members score on a persistent pool
     /// while this model scores, and when a byte is read the neural experts
@@ -255,6 +272,7 @@ class HpSequenceBackend {
     /// read-only: many models can use one index.
     void set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta = 0.3);
     bool has_infinigram() const { return static_cast<bool>(ig_); }
+    double infinigram_learning_rate() const { return ig_eta_; }
     /// The per-bucket mixing weights (bucket-major, 3 per bucket), to save
     /// weights learned on held-out text and start from them later.
     std::vector<double> infinigram_weights() const;

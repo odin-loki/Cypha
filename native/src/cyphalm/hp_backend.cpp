@@ -484,6 +484,7 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     if (ig_) infinigram_query_();
     std::vector<double> out = scored_log_probs_(vocab_size);
     if (!mixed_()) return out;
+    if (members_.empty()) last_own_ = out;  // scored_parts (with members, scored_log_probs_ keeps it)
     if (ig_) {
         out = infinigram_mix_(out);
         ig_valid_ = true;
@@ -893,6 +894,21 @@ std::vector<double> HpSequenceBackend::scored_log_probs_(int vocab_size) {
     last_mix_ = mix;
     last_valid_ = true;
     return mix;
+}
+
+HpSequenceBackend::ScoredParts HpSequenceBackend::scored_parts() const {
+    ScoredParts p;
+    if (!mixed_()) return p;
+    p.models.push_back(&last_own_);
+    for (std::size_t i = 0; i < members_.size() && i < last_member_lp_.size(); ++i) {
+        p.models.push_back(&last_member_lp_[i]);
+    }
+    if (ig_) {
+        p.ig_longest = &ig_r_;
+        p.ig_reliable = &ig_rr_;
+    }
+    for (const auto& s : nn_) p.neural.push_back(&s.state.log_p);
+    return p;
 }
 
 std::vector<double> HpSequenceBackend::ensemble_weights() const {

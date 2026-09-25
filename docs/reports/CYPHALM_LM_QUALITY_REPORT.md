@@ -906,6 +906,7 @@ and the commit messages; numbers are the ones measured above.
 | `cyphalm_trace` | spans of a text found verbatim in the corpus (∞-gram index), JSON on stdout. An unreadable `--text` exits 1 before the index is built | `--corpus IGR\|TEXT` · `--corpus-bytes` (0 = all) · `--text FILE` · `--offset` (0) · `--bytes` (0 = rest) · `--min-len` (32) · `--top` (20) |
 | `cyphalm_infinigram_build` | SA-IS suffix array over a corpus slice, IGR2 file | `--text FILE` · `--bytes N` · `--offset` (0) · `--out X.igr` |
 | `scripts/build_cyphalm_winner.sh` | rebuild the winner checkpoints + index | `ENWIK8 OUT_DIR [BUILD_DIR] [THREADS]` |
+| `bench/lm_compare/mixsim.py` | replay a `--dump-components` dump's mixing stages (ensemble / gate, ∞-gram, neural, final temperature, and their updates) exactly, or with changed settings; paired block bootstrap ([README](../../bench/lm_compare/README.md#mixing-simulator-mixsimpy)) | `check DUMP… [--tol T]` · `check DUMP --set K=V… --against DUMP` · `run DUMP --set K=V… [--save-nll F.npy]` · `compare DUMP… --a K=V… --b K=V… [--block 1024] [--boot 10000]` · `compare-dumps A B` |
 
 `cyphalm_lm_quality`:
 
@@ -945,6 +946,8 @@ and the commit messages; numbers are the ones measured above.
 | `--only-default` | off | only the default byte-level decoder in the grid |
 | `--word-k K` | 0 | also generate with word lookahead at K/2 and K (library decoder) |
 | `--dump-dist FILE` | | float32 natural-log P, 256 per held-out byte (working tree, not in `2a003bf`) |
+| `--dump-components DIR` | | per scored byte, the inputs of every mixing stage (`ComponentDump`): each model's and expert's log P, the ∞-gram counts, the served log P. `meta.json` holds the settings and start weights. `bench/lm_compare/mixsim.py` replays the stages from it (2 KiB v3: 1.2e-10 bits/byte from f32). Needs `--eval` (exit 2); a session cache is refused (exit 1) |
+| `--dump-dtype f16\|f32\|f64` | f32 | precision of the dumped log P. An unknown name, or the flag without `--dump-components`, exits 2 |
 
 `nll_bits_by_temperature` in the JSON rescores each served distribution at
 T 0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 1.1 … 1.4 (0.85 and 0.95 added with
@@ -1053,6 +1056,9 @@ the `DecodeParams` defaults (before `ee1325c` REST hard-coded temperature 0.9). 
 | `InfiniGram(std::vector<std::uint8_t>&&)` | just-in-time index that keeps the corpus buffer (`open` no longer copies it) |
 | `HpSequenceBackend::set_parallel(on)` / `parallel` | worker pool (default on unless `CYPHA_HP_ENSEMBLE_THREADS=0`; members follow): members score there; experts step and members read each byte there (members only while no undo recorder / `hp::StreamRewind` is active on the calling thread). Jobs are claimed, the caller helps. Bit-identical either way |
 | `HpSequenceBackend::neural_primes` | experts primed so far; an expert primed on the same last 512 bytes and adaptation setting that has read nothing since is not primed again (`reset_stream`, `reset`, attaching, `set_neural_adaptation`) |
+| `ComponentDump(dir, hp, dtype, learn_mix)`, `write(hp, truth, served)`, `finish(extra)` | per-byte mixing inputs for `mixsim.py` (`--dump-components`); refuses a session cache |
+| `HpSequenceBackend::scored_parts` | what the last `next_byte_log_probs` of a composite model mixed: this model's and each member's log P, the ∞-gram longest / reliable results, each expert's log P before it reads the byte |
+| `HpSequenceBackend::ensemble_learning_rate`, `infinigram_learning_rate` | the mixing rates, for dumps |
 | `hp::Predictor::resume_prediction(p12)` | with learning off, reuse a prediction for the next `update` (the bit tree's bit-1 child); with learning on it predicts again |
 
 ### File formats
@@ -1064,6 +1070,7 @@ the `DecodeParams` defaults (before `ee1325c` REST hard-coded temperature 0.9). 
 | ensemble manifest | `{"cyphalm_ensemble": 1, "members": [{"checkpoint": "a.json", "weight": w?}, ...], "learning_rate": r?, "infinigram": "x.igr"?, "note"?}`. First member is the primary. Paths are relative to the manifest. Member weights default to 1/N each (the primary keeps the rest). `learning_rate` overrides `hp_ensemble_learning_rate`. Mixing variants (absent = today's mix): `"final_temperature": T` (1), `"final_temperature_lr": r` (0), `"infinigram_mode": "halving"\|"longest16"`, `"neural_mix": "linear"\|"log"\|"switch"`, `"ensemble_gate": bool` (false); applied after every member and stage is attached (the ∞-gram mode before the index); an unknown name or T ≤ 0 fails the load. |
 | `X.igr` (IGR2, `2b8b1b9`) | `"IGR2"`, uint64 n, uint64 bits (= ceil(log2 n), 27 for 95 MB), n text bytes, zero pad to 8, suffix array bit-packed little-endian at `bits` each, 8 bytes pad. `mmap`ed read-only and shared. IGR1 (`46592ff`): `"IGR1"`, uint64 n, text, pad, n uint32 entries. Not on Windows. |
 | `X.igr.weights.json` | `{"weights": [3 per bucket × 256 buckets], "learned_on", "offset", "note"}` from `--ig-weights-out` |
+| component dump `DIR/` | `--dump-components`: flat little-endian arrays, one row per scored byte. `truth.bin` u8. `models.bin` [models][256] (the primary, then the members). `neural.bin` [experts][256]. `served.bin` [256]; these three are in the `--dump-dtype`. `ig_n.bin` i32 [2], `ig_total.bin` u64 [2] and `ig_count.bin` u32 [2][256] hold the longest match and the reliable part. `meta.json` has `format` "cyphalm_components", `version` 1, `dtype` (numpy name), shapes, stage modes and rates, `learn_mix`, `start` (every mixing weight at the first byte) and the harness's `eval` block |
 
 ∞-gram expert constants: 3 parts (model, longest suffix, a suffix with
 ≥ 16 occurrences: by default the first that halving the match length finds,
@@ -1095,6 +1102,11 @@ top-byte agreement (`longest16`: × 4 fertility × 2 determinism = 2048).
 | `native_cyphalm_generate_infinigram_whole`, `native_cyphalm_generate_infinigram_bytes` | `cyphalm_generate` warns about a plain corpus indexed whole; `--infinigram-bytes` silences it |
 | `native_cyphalm_mixing_variants_smoke` | `InfiniGram::query` with `min_total` against brute force, bounded ≥16 queries along a stream; manifest keys written only when not default and loaded back, bad names / T refused; explicit default keys serve bit for bit the plain manifest; every variant (fixed / learned T, `longest16`, `log`, `switch`, gate, all) normalised, observe = served log p, repeatable across loads and with the pool off, `set_mixing_state` round trip; fixed T equals the scan's log softmax(lp / T) and learns nothing else; learned T moves only while mixing learns, within bounds, and `reset()` restarts it; the gate starts at today's mix; `longest16` has 2048 buckets |
 | `native_cyphalm_lm_quality_mixing_flags` | an unknown `--neural-mix` name is an error before loading |
+| `native_cyphalm_component_dump_smoke` | the first byte rebuilt from `scored_parts` at the start weights equals the served one. Dumping serves the same distributions bit for bit. The array sizes match `meta.json`. f32 / f16 rows are the served log P rounded. A plain model dumps its served distribution. A session cache and an unknown dtype are refused. It leaves the dumps (defaults, variants, `longest16`, frozen mixing, member-less, plain) for the tests below |
+| `native_cyphalm_lm_quality_dump_dtype`, `native_cyphalm_lm_quality_dump_components` | an unknown `--dump-dtype` is an error. The harness dumps a switch / gate / T 1.1 manifest |
+| `native_cyphalm_mixsim_check` | `mixsim.py` reproduces every dump's NLL (f64 1e-9, f32 1e-6, f16 1e-2 bits/byte), the harness's included (needs python3 + numpy) |
+| `native_cyphalm_mixsim_predict_*` | one run's dump replayed with another run's settings reproduces that run's NLL. This covers restarting to switch + gate + T, back to linear, to log + learned T, and frozen mixing |
+| `native_cyphalm_mixsim_compare` | changed settings (an expert subset, gate, T) and the pooled paired block bootstrap |
 
 ### Changelog
 

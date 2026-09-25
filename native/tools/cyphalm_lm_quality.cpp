@@ -7,6 +7,8 @@
 /// the top-1 confidence, mean entropy, and how often bit-greedy decoding picks
 /// the distribution's argmax (plain models only). Ends with greedy / sampled
 /// continuations (plain models only: generation reloads the saved primary).
+/// ``--dump-components DIR`` writes each scored byte's mixing inputs
+/// (``ComponentDump``) for bench/lm_compare/mixsim.py.
 ///
 ///   cyphalm_lm_quality --train enwik8 --train-bytes 8388608 --save /tmp/pre
 ///   cyphalm_lm_quality --load /tmp/pre.json --eval enwik8 --eval-offset 96000000 --eval-bytes 32768
@@ -28,6 +30,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cypha/cyphalm/component_dump.hpp"
 #include "cypha/cyphalm/cyphalm_checkpoint.hpp"
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
@@ -104,6 +107,7 @@ int main(int argc, char** argv) {
     std::size_t infinigram_bytes = 0;       // --infinigram given the corpus: index its first N bytes
     double fold_auto = 0.0;  // per-table occupancy fold target (0 = off)
     std::string dump_dist;  // float32 natural-log P, 256 per held-out byte
+    std::string dump_components, dump_dtype;  // per-byte mixing inputs (ComponentDump), f16 / f32 / f64
     bool compare_scoring = false;
     std::string reset_mode = "none";
     int serve_lr = 4, serve_skip = -1, epochs = 1;
@@ -174,6 +178,8 @@ int main(int argc, char** argv) {
         else if (a == "--word-k") word_k = std::stoi(next());
         else if (a == "--only-default") only_default = true;
         else if (a == "--dump-dist") dump_dist = next();
+        else if (a == "--dump-components") dump_components = next();
+        else if (a == "--dump-dtype") dump_dtype = next();
         else if (a == "--fold-auto") fold_auto = std::stod(next());
         else if (a == "--neural") neural_paths.push_back(next());  // repeatable
         else if (a == "--session-cache") session_cache = true;
@@ -204,6 +210,21 @@ int main(int argc, char** argv) {
         if (!neural_mix.empty()) (void)cypha::cyphalm::parse_neural_mix(neural_mix);
     } catch (const std::invalid_argument& e) {
         std::cerr << e.what() << "\n";
+        return 2;
+    }
+    auto components_dtype = cypha::cyphalm::ComponentDump::Dtype::F32;
+    try {
+        if (!dump_dtype.empty()) components_dtype = cypha::cyphalm::ComponentDump::parse_dtype(dump_dtype);
+    } catch (const std::invalid_argument& e) {
+        std::cerr << e.what() << "\n";
+        return 2;
+    }
+    if (!dump_dtype.empty() && dump_components.empty()) {
+        std::cerr << "--dump-dtype needs --dump-components\n";
+        return 2;
+    }
+    if (!dump_components.empty() && eval_path.empty()) {
+        std::cerr << "--dump-components needs --eval (it records the scored bytes)\n";
         return 2;
     }
     if (!(final_temp > 0.0) || !(final_temp_lr >= 0.0)) {
@@ -380,6 +401,18 @@ int main(int argc, char** argv) {
         const bool composite = hp.is_composite();
         std::ofstream dump;
         if (!dump_dist.empty()) dump.open(dump_dist, std::ios::binary);
+        // Every stage's inputs per byte, and the mixing weights they start
+        // from, for replaying the mix offline (bench/lm_compare/mixsim.py).
+        std::unique_ptr<cypha::cyphalm::ComponentDump> components;
+        if (!dump_components.empty()) {
+            try {
+                components = std::make_unique<cypha::cyphalm::ComponentDump>(
+                    dump_components, hp, components_dtype, !frozen_eval && hp.mixing_learning());
+            } catch (const std::exception& e) {
+                std::cerr << e.what() << "\n";
+                return 1;
+            }
+        }
         const auto t0 = Clock::now();
         for (std::size_t k = 0; k < n_eval; ++k) {
             const int truth = ev[k];
@@ -398,6 +431,7 @@ int main(int argc, char** argv) {
             const auto te = Clock::now();
             const auto lp = hp.serve_next_byte_log_probs(256);
             e_secs += seconds_since(te);
+            if (components) components->write(hp, static_cast<std::uint8_t>(truth), lp);
             if (dump.is_open()) {
                 float row[256];
                 for (int b = 0; b < 256; ++b) row[b] = static_cast<float>(lp[static_cast<std::size_t>(b)]);
@@ -468,6 +502,10 @@ int main(int argc, char** argv) {
                        {"nll_bits_by_temperature", tsweep},
                        {"ms_per_byte", 1e3 * secs / n},
                        {"distribution_ms", 1e3 * e_secs / n}};
+        if (components) {
+            components->finish({{"harness", "cyphalm_lm_quality"}, {"loaded", load_json}, {"eval", out["eval"]}});
+            out["dump_components"] = dump_components;
+        }
         if (!ig_weights_out.empty() && hp.has_infinigram()) {
             std::ofstream wf(ig_weights_out);
             wf << nlohmann::json({{"note", "∞-gram mixing weights learned on held-out text"},
