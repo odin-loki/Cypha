@@ -1,12 +1,17 @@
 {
  "cyphalm_ensemble": 1,
- "note": "CyphaLM winner v2 (docs/reports/CYPHALM_LM_QUALITY_REPORT.md, \"Winner v2\"); rebuild with scripts/build_cyphalm_winner.sh (light: one slim model)",
+ "note": "CyphaLM winner v3 (docs/reports/CYPHALM_LM_QUALITY_REPORT.md, \"Winner v3\"); rebuild with scripts/build_cyphalm_winner.sh (light: one slim model)",
  "members": [
   {
    "checkpoint": "slim95.json"
   }
  ],
  "infinigram": "enwik8",
- "neural": "lstm.blm",
- "infinigram_bytes": 95000000
+ "neural": [
+  "lstm.blm",
+  "gpt.bgt"
+ ],
+ "infinigram_bytes": 95000000,
+ "neural_learning_rate": 0.05,
+ "neural_adapt": 0.002
 }

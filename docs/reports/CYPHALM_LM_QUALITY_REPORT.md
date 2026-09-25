@@ -763,6 +763,53 @@ The 4-shard default is within 0.003 (wiki) to 0.012 (lcet10) of the full ensembl
   Not implemented.
 - **Replacing hp's match models with the index** does not work either: with the ∞-gram attached, dropping the order-0 match model costs +0.0017 wiki / +0.0015 Alice, and dropping `smatch` costs +0.0013 / +0.0005 (drop sweep above). The mixer uses the match models' recency signal, which the index lacks.
 
+## Winner v3: two neural experts that adapt while reading
+
+**Reproducible rebuild.** `scripts/build_cyphalm_winner.sh` was run end to end on this machine (148 min wall time).
+- The rebuilt shards reproduce the published scores exactly when served with the published LSTM: 4-shard wiki 1.6191, 11-shard 1.6157, against 1.6192 / 1.6158.
+- The rebuilt LSTM was weaker (4-shard 1.6220 / 2.0222 / 1.5181). Its training stopped on a 60-minute wall-clock budget, and a concurrent compile left it with 65.9 MB read instead of 81.1 MB.
+- `byte_lm.py train --budget-bytes` now stops on bytes read instead, and the script uses the published runs' byte counts.
+
+Raw data: [`lm_quality/v3/`](lm_quality/v3/).
+
+**Transformer expert** (`ByteGptExpert`, "BGT1", `byte_lm.py export`). The 1-hour 3.35M-parameter Transformer from the comparison runs in C++:
+- pre-LN, exact GELU, a KV cache and bf16 matrices;
+- a full 512-byte window re-primes on its last 256 bytes, as the PyTorch stepper does;
+- it matches PyTorch fp32 to 1e-4 bits/byte (1.85854 vs 1.85866 on 1,500 wiki bytes);
+- 1.46 ms/byte on one core.
+
+An offline estimate from the saved distributions showed the LSTM and the Transformer complement each other: old winner + both, wiki 1.5941 against 1.6115 with the LSTM alone.
+
+**Several experts, one mix** (`add_neural`, manifest `"neural": [...]`, repeatable `--neural`). After the ∞-gram step the served distribution is the linear mix w₀·p + Σ wᵢ·p_nn,i. The weights are learned by exponentiated gradient per (model confidence × agreement with expert 0) bucket.
+
+**Output-layer adaptation** (`set_neural_adaptation`, `--neural-adapt`, manifest `neural_adapt`). This is dynamic evaluation of the last layer only. Each stream keeps its own float copy of the experts' output layer (LSTM output weights and bias; the Transformer's tied embedding) and takes one SGD step on each read byte's log loss, only while learning is on.
+
+In PyTorch on an 8 KiB tuning slice, the LSTM alone scores 1.770 static, 1.638 with full dynamic evaluation (SGD 0.3 per 128 bytes) and 1.684 with the output layer only. So the output layer carries two-thirds of the gain at a fraction of the cost: about 131K multiply-adds per byte, and 0.5 MB of state per stream for the LSTM.
+
+**Tuning on separate slices.** Rates were tuned on enwik8 @97,000,000, Alice @100,000 and lcet10 @200,000, 16 KiB each. The test texts were not used.
+
+| 4-shard winner + … (tuning slices) | wiki | Alice | lcet10 |
+|---|---:|---:|---:|
+| no neural expert | 1.3083 | 1.9472 | 1.6578 |
+| LSTM, mixing rate 0.05 | 1.2449 | 1.9361 | 1.6404 |
+| LSTM + Transformer, 0.05 | 1.2216 | 1.9371 | 1.6354 |
+| … + output adaptation 0.002 | **1.2132** | **1.9242** | **1.6232** |
+| … + output adaptation 0.005 | 1.2197 | 1.9219 | 1.6222 |
+
+Mixing rates 0.02 / 0.1 / 0.3 were within ±0.001 of 0.05, or worse at 0.3.
+
+**Winner v3** (held-out test texts, 16 KiB; neural rate 0.05, adaptation 0.002):
+
+| manifest | wiki | Alice | lcet10 | top-1 wiki | private RAM |
+|---|---:|---:|---:|---:|---:|
+| v2 `winner.json` (4 shards + LSTM) | 1.6192 | 2.0191 | 1.5160 | | 1.0 GB |
+| **v3 `winner.json`** (4 shards + LSTM + Transformer, adapting) | **1.5927** | **1.9992** | **1.4984** | 66.7% | 1.0 GB |
+| v3 `winner_full.json` (11 shards) | 1.5920 | 1.9929 | 1.4889 | 66.7% | 2.7 GB |
+| v3 `winner_light.json` (one slim model) | 1.5997 | 2.0192 | 1.5186 | 66.5% | 0.46 GB |
+| v2 `winner_light.json` | 1.6393 | 2.0466 | 1.5388 | | 0.46 GB |
+
+The light model (0.46 GB) now beats the v2 11-shard winner on wiki. The 13.4 MB Transformer adds about 1.5 ms per byte on one core.
+
 ## Against neural baselines
 
 [`CYPHALM_VS_NEURAL_LM.md`](CYPHALM_VS_NEURAL_LM.md) sets the winner against a byte-level Transformer (3.35M params) and an LSTM (3.43M params). Each trains for at most 1 hour on the same 4 cores and the same 95 MB, and all are scored by one code path.
