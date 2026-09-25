@@ -608,6 +608,11 @@ cypha_mingw_apply_exe_link_options(cyphalm_hp_shard_spike)
 add_executable(cyphalm_lm_quality tools/cyphalm_lm_quality.cpp)
 target_link_libraries(cyphalm_lm_quality PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_lm_quality)
+# Load-only harness flags without --load are an error, not silently ignored.
+add_test(NAME native_cyphalm_lm_quality_load_only_flags
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --neural-lr 0.05 --gen-bytes 0)
+set_tests_properties(native_cyphalm_lm_quality_load_only_flags PROPERTIES
+                     PASS_REGULAR_EXPRESSION "--neural-lr needs --load" TIMEOUT 30)
 
 add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
 target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)

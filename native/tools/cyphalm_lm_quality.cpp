@@ -5,7 +5,8 @@
 /// model learns the true byte (in-context adaptation, as when reading a prompt).
 /// Reports NLL (bits/byte), top-1/top-5 accuracy, expected calibration error of
 /// the top-1 confidence, mean entropy, and how often bit-greedy decoding picks
-/// the distribution's argmax. Ends with greedy / sampled continuations.
+/// the distribution's argmax (plain models only). Ends with greedy / sampled
+/// continuations (plain models only: generation reloads the saved primary).
 ///
 ///   cyphalm_lm_quality --train enwik8 --train-bytes 8388608 --save /tmp/pre
 ///   cyphalm_lm_quality --load /tmp/pre.json --eval enwik8 --eval-offset 96000000 --eval-bytes 32768
@@ -21,6 +22,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -97,7 +99,7 @@ int main(int argc, char** argv) {
     bool frozen_eval = false;
     std::vector<std::string> neural_paths;  // byte LSTM (BLM1) / Transformer (BGT1) experts
     bool session_cache = false;             // ∞-gram index over the text read so far
-    double neural_lr = 0.1;                 // neural mixing weight step (exponentiated gradient)
+    double neural_lr = -1.0;                // neural mixing weight step (exponentiated gradient), <0 = manifest/0.1
     double neural_adapt = -1.0;             // output-layer SGD rate (dynamic evaluation), <0 = manifest/default
     std::size_t infinigram_bytes = 0;       // --infinigram given the corpus: index its first N bytes
     double fold_auto = 0.0;  // per-table occupancy fold target (0 = off)
@@ -115,8 +117,16 @@ int main(int argc, char** argv) {
     std::vector<std::string> merges;  // shard models merged into --load (equal data)
     int word_k = 0;
     bool only_default = false;
+    // Flags that act on a loaded checkpoint or manifest: without --load they
+    // would be ignored, so they are an error there.
+    const std::set<std::string> load_only = {
+        "--member", "--ensemble-lr", "--merge", "--fold", "--drop", "--match-drop", "--fold-auto",
+        "--session-cache", "--neural", "--neural-lr", "--neural-adapt", "--infinigram",
+        "--infinigram-bytes", "--ig-weights-out"};
+    std::vector<std::string> load_only_given;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
+        if (load_only.count(a) != 0) load_only_given.push_back(a);
         auto next = [&]() -> std::string {
             if (i + 1 >= argc) throw std::runtime_error("missing value for " + a);
             return argv[++i];
@@ -167,6 +177,10 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    if (load_json.empty() && !load_only_given.empty()) {
+        std::cerr << load_only_given.front() << " needs --load (it applies to a loaded checkpoint or manifest)\n";
+        return 2;
+    }
 
     nlohmann::json out;
     out["harness"] = "cyphalm_lm_quality";
@@ -209,8 +223,14 @@ int main(int argc, char** argv) {
             model->hp_backend().set_session_cache(true);
             out["session_cache"] = true;
         }
-        if (!neural_paths.empty()) {
-            for (const auto& np : neural_paths) model->attach_neural(np, neural_lr);
+        // One mixing rate for all experts: --neural-lr if given (manifest
+        // experts too), else the manifest's, else 0.1.
+        auto& hb = model->hp_backend();
+        const double nn_eta = neural_lr >= 0.0 ? neural_lr : hb.has_neural() ? hb.neural_learning_rate() : 0.1;
+        for (const auto& np : neural_paths) model->attach_neural(np, nn_eta);
+        if (hb.has_neural()) {
+            hb.set_neural_learning_rate(nn_eta);
+            out["neural_learning_rate"] = hb.neural_learning_rate();
         }
         if (neural_adapt >= 0.0 && model->hp_backend().has_neural()) {
             model->hp_backend().set_neural_adaptation(neural_adapt);
@@ -272,8 +292,9 @@ int main(int argc, char** argv) {
             hp.set_tree_prune(tree_prune);
             out["tree_prune"] = tree_prune;
         }
-        // Serve-time adaptation: mixer rates x serve_lr/4, skip threshold.
-        hp.predictor().set_serve_adaptation(serve_lr, 4, serve_skip);
+        // Serve-time adaptation: mixer rates x serve_lr/4, skip threshold, on
+        // every model (the primary and each ensemble member).
+        hp.set_serve_adaptation(serve_lr, 4, serve_skip);
         out["serve_lr_quarters"] = serve_lr;
         out["serve_skip"] = serve_skip;
         const auto ev = read_slice(eval_path, eval_offset, eval_bytes + prompt_bytes);
@@ -290,6 +311,10 @@ int main(int argc, char** argv) {
         double nll_t[kTemps] = {};
         double f_nll = 0.0, f_secs = 0.0, e_secs = 0.0;
         std::size_t f_top1 = 0;
+        // Composite (members, ∞-gram, neural experts, session cache): the bit
+        // path is the primary's alone and serve_greedy_next_byte is the mix's
+        // argmax by construction, so the bit-greedy metric is not measured.
+        const bool composite = hp.is_composite();
         std::ofstream dump;
         if (!dump_dist.empty()) dump.open(dump_dist, std::ios::binary);
         const auto t0 = Clock::now();
@@ -339,8 +364,7 @@ int main(int argc, char** argv) {
             entropy_bits += h / kLn2;
             if (rank == 0) ++top1;
             if (rank < 5) ++top5;
-            // (With --member the greedy byte is the mix's argmax by construction.)
-            if (members.empty() && static_cast<int>(hp.serve_greedy_next_byte()) == argmax) ++greedy_is_argmax;
+            if (!composite && static_cast<int>(hp.serve_greedy_next_byte()) == argmax) ++greedy_is_argmax;
             const int bin = std::min(kBins - 1, static_cast<int>(pmax * kBins));
             bin_conf[bin] += pmax;
             bin_acc[bin] += (argmax == truth) ? 1.0 : 0.0;
@@ -372,7 +396,7 @@ int main(int argc, char** argv) {
                        {"top5", top5 / n},
                        {"mean_entropy_bits", entropy_bits / n},
                        {"ece_top1", ece},
-                       {"bit_greedy_equals_argmax", greedy_is_argmax / n},
+                       {"bit_greedy_equals_argmax", composite ? nlohmann::json() : nlohmann::json(greedy_is_argmax / n)},
                        {"calibration_bins", bins},
                        {"nll_bits_by_temperature", tsweep},
                        {"ms_per_byte", 1e3 * secs / n},
@@ -399,9 +423,13 @@ int main(int argc, char** argv) {
         }
 
         // Continuations from the held-out prompt that follows the eval slice.
-        // Generation reloads the saved model, which does not carry --member models.
-        if (gen_bytes > 0 && !members.empty()) out["generations"] = "skipped: use cyphalm_generate --ensemble";
-        if (gen_bytes > 0 && members.empty() && prompt_bytes > 0 && ev.size() > n_eval) {
+        // Generation and the judge reload the saved model, which is the
+        // primary predictor alone (no members, ∞-gram, experts or session
+        // cache): skipped for composite models rather than measuring the primary.
+        if (gen_bytes > 0 && composite) {
+            out["generations"] = "skipped: composite model; use cyphalm_generate --load MANIFEST or cyphalm_gen_bench";
+        }
+        if (gen_bytes > 0 && !composite && prompt_bytes > 0 && ev.size() > n_eval) {
             std::vector<int> prompt(ev.begin() + static_cast<std::ptrdiff_t>(n_eval), ev.end());
             nlohmann::json gens = nlohmann::json::array();
             const std::string blob =

@@ -48,6 +48,13 @@ class HpSequenceBackend {
     void serve_advance_byte(std::uint8_t byte) { consume_byte(byte); }
 
     /// P(next_byte | history). Does not advance main state. Default: bit-tree with delta undo.
+    /// Always scores. When a mixing stage is active (``is_composite``) the
+    /// result is also kept as the served distribution of this position:
+    /// ``observe_next_byte``, ``log_prob_byte``, ``serve_greedy_next_byte``
+    /// and ``serve_sample_next_byte`` reuse it instead of re-scoring the whole
+    /// mixture. Consuming a byte, rewinding (``invalidate_scoring_cache``) or
+    /// changing a stage drops it; the last three also re-score after
+    /// ``set_learning`` or ``set_serve_adaptation`` changed a setting.
     std::vector<double> next_byte_log_probs(int vocab_size);
 
     /// Serve alias for ``next_byte_log_probs`` (explicit generation surface).
@@ -65,16 +72,24 @@ class HpSequenceBackend {
     std::vector<double> next_byte_log_probs_assign_reuse(int vocab_size) const;
 
     /// log P(single byte | current history); undo on live ``pred_`` (no standing scratch).
+    /// Composite models: the entry of the full served distribution.
     double log_prob_byte(std::uint8_t byte) const;
 
     /// Serve: O(8) greedy next byte on scratch fork (no 256-way fan-out).
+    /// Composite models: the served distribution's argmax.
     std::uint8_t serve_greedy_next_byte() const;
 
     /// Sample one byte MSB-first (8 bit steps on a single fork clone). Does not advance main.
     std::uint8_t sample_next_byte(double (*rng01)()) const;
 
     /// Serve: temperature-scaled bit sampling (temperature <= 0 → greedy).
+    /// Composite models: sampled from the served distribution ^ (1 / temperature).
     std::uint8_t serve_sample_next_byte(double temperature, double (*rng01)()) const;
+
+    /// True when any mixing stage is active (ensemble members, ∞-gram,
+    /// neural experts, session cache): the served distribution is then not
+    /// the primary predictor's alone, and every serve path uses the full mix.
+    bool is_composite() const { return mixed_(); }
 
     /// Train: cross-entropy loss in nats for observing ``next`` after current history.
     double observe_next_byte(std::uint8_t next);
@@ -104,18 +119,19 @@ class HpSequenceBackend {
     void set_tree_prune(double min_prob) {
         prune_log_ = min_prob > 0.0 ? std::log(min_prob) : -1e300;
         for (auto& m : members_) m.backend->set_tree_prune(min_prob);
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
     }
 
     void set_frozen_scoring(bool on) {
         frozen_scoring_ = on;
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
         for (auto& m : members_) m.backend->set_frozen_scoring(on);
     }
     bool frozen_scoring() const { return frozen_scoring_; }
 
     /// Online learning on/off for subsequent bytes (``hp::Predictor::set_learning``).
     void set_learning(bool on) {
+        if (on != pred_->learning()) ++settings_epoch_;
         pred_->set_learning(on);
         for (auto& m : members_) m.backend->set_learning(on);
     }
@@ -135,9 +151,11 @@ class HpSequenceBackend {
     void set_ensemble_learning_rate(double eta) { ens_eta_ = eta; }
     /// Current weights: [self, member 0, member 1, ...].
     std::vector<double> ensemble_weights() const;
-    /// Forget the last scored ensemble distribution (after rewinding state).
+    /// Forget the last scored distributions, this model's and every member's
+    /// (after rewinding state).
     void invalidate_scoring_cache() {
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+        for (auto& m : members_) m.backend->invalidate_scoring_cache();
     }
 
     /// ∞-gram expert (InfiniGram over the pretraining corpus): the served
@@ -163,7 +181,9 @@ class HpSequenceBackend {
     void add_neural(std::shared_ptr<const ByteNeuralExpert> nn);
     /// Replace all neural experts by ``nn`` (null: none).
     void set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta = 0.1);
+    /// Mixing-weight rate for every attached expert (one rate for all).
     void set_neural_learning_rate(double eta) { nn_eta_ = eta; }
+    double neural_learning_rate() const { return nn_eta_; }
     /// Dynamic evaluation of the experts' output layers: per-byte SGD at
     /// ``lr`` while learning is on (0 = frozen experts). Resets the adapted
     /// layers.
@@ -183,7 +203,7 @@ class HpSequenceBackend {
     }
     void set_neural_states(const std::vector<ByteNeuralExpert::State>& st) {
         for (std::size_t i = 0; i < nn_.size() && i < st.size(); ++i) nn_[i].state = st[i];
-        nn_valid_ = false;
+        nn_valid_ = served_valid_ = false;
     }
     /// Session cache: an ∞-gram index over the bytes this stream has read
     /// (prompt, conversation, document), rebuilt just in time as it grows
@@ -203,6 +223,7 @@ class HpSequenceBackend {
     /// drops in ``target`` (``hp::Predictor::fold_tables``).
     /// Per-table occupancy fold (``hp::Predictor::fold_auto``), members too.
     std::size_t fold_auto(double max_occupancy) {
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
         std::size_t freed = pred_->fold_auto(max_occupancy);
         for (auto& m : members_) freed += m.backend->fold_auto(max_occupancy);
         return freed;
@@ -211,7 +232,7 @@ class HpSequenceBackend {
         pred_->fold_tables(target);
         cfg_ = pred_->config();
         for (auto& m : members_) m.backend->fold_tables(target);
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
     }
     /// Serve mixer rate on every model (``hp::Predictor::set_serve_adaptation``).
     void set_serve_adaptation(int num, int den, int skip);
@@ -272,7 +293,16 @@ class HpSequenceBackend {
     bool ig_valid_ = false;
     int ig_bucket_ = 0;
     std::vector<double> ig_p_[3];       // model, longest, reliable (probabilities)
-    std::vector<double> last_final_;    // served log probs, for observe_next_byte
+    // Served distribution (after every mixing stage) at this position, kept
+    // while ``served_valid_``: dropped with the stage caches above.
+    bool mixed_() const { return !members_.empty() || ig_ || !nn_.empty() || ss_on_; }
+    std::vector<double> served_;
+    bool served_valid_ = false;
+    std::uint64_t settings_epoch_ = 0;  // bumped when learning or the serve rate changes
+    std::uint64_t served_epoch_ = 0;    // settings_epoch_ when served_ was scored
+    std::array<int, 3> serve_rate_{0, 0, 0};  // last set_serve_adaptation
+    /// ``served_`` if it is valid for the current settings, else a fresh score.
+    const std::vector<double>& served_log_probs_() const;
     // Session cache.
     std::vector<double> session_mix_(const std::vector<double>& base);
     bool ss_on_ = false;
@@ -303,7 +333,6 @@ class HpSequenceBackend {
     /// Ensemble: geometric mix of this model's ``own`` log probs with members'.
     std::vector<double> mix_with_members_(const std::vector<double>& own,
                                           const std::vector<std::vector<double>>& member_lp);
-    std::vector<double> ensemble_log_probs_(int vocab_size) const;
 };
 
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria);

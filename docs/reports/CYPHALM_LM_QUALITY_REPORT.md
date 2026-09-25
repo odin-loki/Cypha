@@ -851,6 +851,15 @@ and the commit messages; numbers are the ones measured above.
   unless marked solo. Compare within a table only.
 - RSS in the raw JSON: `rss_mb_*` (total), `rss_anon_mb_*` (private),
   `rss_file_mb_*` (file-backed, shareable), `rss_hwm_mb` (peak).
+- **Composite models** (members, ∞-gram, neural experts or session cache).
+  Before the harness-fix commit, `ms_per_byte` in their JSON counted a second
+  full scoring per byte (the bit-greedy check re-scored the mixture); tables
+  here use `distribution_ms`, which was unaffected. `bit_greedy_equals_argmax`
+  is now `null` for them, since serve greedy is the mix's argmax by
+  construction, and the generation grid is skipped because it reloads the
+  saved primary alone. Earlier manifest runs with `--serve-lr`/`--serve-skip`
+  set them on the primary only, and `--neural-lr` did not reach manifest
+  experts.
 
 ### Tools
 
@@ -872,6 +881,9 @@ and the commit messages; numbers are the ones measured above.
 | `--tier NAME` `--table-bits N` | gate24, 22 | new model's tier / table bits |
 | `--save BASE` / `--load CKPT.json` | | write `BASE.json` + `BASE.hpbin` / load a checkpoint or ensemble manifest |
 | `--member CKPT` | | attach an ensemble member (repeatable, equal weights 1/(n+1)) |
+| `--neural FILE` | | attach a byte LSTM (BLM1) / Transformer (BGT1) expert (repeatable) |
+| `--neural-lr R` | manifest `neural_learning_rate`, else 0.1 | mixing-weight rate of every expert, manifest ones included; the effective rate is written as `neural_learning_rate` |
+| `--neural-adapt LR` | manifest | output-layer SGD rate of the experts (0 = frozen) |
 | `--ensemble-lr R` | config (0.01) | ensemble weight learning rate; 0 = fixed |
 | `--merge CKPT` | | merge an equal-data shard's tables into `--load` (`merge_shard_tables`, repeatable) |
 | `--fold CM,MATCH,POOL[,HEBB]` | 0 = keep | fold trained tables to these bits (load path; also every `--member`) |
@@ -885,12 +897,17 @@ and the commit messages; numbers are the ones measured above.
 | `--frozen-eval` | off | learning off while scoring (pretrained knowledge only) |
 | `--compare-scoring` | off | exact and frozen distributions per byte |
 | `--reset-stream none\|full\|keep` | none | new stream before eval: none, wipe history, keep history |
-| `--serve-lr Q` `--serve-skip S` | 4, −1 | mixer rate × Q/4, small-error skip threshold (−1 = trained) |
-| `--gen-bytes N` | 200 | generation length (0 = none; skipped when `--member` is given, use `cyphalm_gen_bench`) |
+| `--serve-lr Q` `--serve-skip S` | 4, −1 | mixer rate × Q/4, small-error skip threshold (−1 = trained), on the primary and every member |
+| `--gen-bytes N` | 200 | generation length (0 = none; skipped for composite models: members, ∞-gram, experts, session cache; use `cyphalm_generate --load` or `cyphalm_gen_bench`) |
 | `--temperature T` `--top-p P` | 0.8, 0.9 | byte-level generation grid |
 | `--only-default` | off | only the default byte-level decoder in the grid |
 | `--word-k K` | 0 | also generate with word lookahead at K/2 and K (library decoder) |
 | `--dump-dist FILE` | | float32 natural-log P, 256 per held-out byte (working tree, not in `2a003bf`) |
+
+Flags that act on a loaded model (`--member`, `--ensemble-lr`, `--merge`,
+`--fold`, `--drop`, `--match-drop`, `--fold-auto`, `--session-cache`,
+`--neural`, `--neural-lr`, `--neural-adapt`, `--infinigram`,
+`--infinigram-bytes`, `--ig-weights-out`) exit with status 2 without `--load`.
 
 `cyphalm_generate` flags added in this work (older ones: `docs/native/CYPHALM_SERVE.md`):
 `--load CKPT.json` (checkpoint or manifest; cold model otherwise, table bits
@@ -953,7 +970,8 @@ REST body fields that map to the table in *Decode controls added*:
 | `CyphaLMModel::attach_infinigram(path)` | ∞-gram expert (+ `path.weights.json`) |
 | `CyphaLMModel::fold_hp_tables(cm, match, pool, drop, hebb, match_drop)` | fold / drop on the model and every member |
 | `load_cyphalm_model` / `save_cyphalm_ensemble_manifest` | checkpoints and manifests |
-| `HpSequenceBackend::set_frozen_scoring`, `set_tree_prune`, `set_learning`, `set_ensemble_learning_rate`, `ensemble_weights`, `infinigram_weights`, `set_infinigram_weights` | serve knobs |
+| `HpSequenceBackend::set_frozen_scoring`, `set_tree_prune`, `set_learning`, `set_ensemble_learning_rate`, `ensemble_weights`, `infinigram_weights`, `set_infinigram_weights`, `neural_learning_rate` | serve knobs |
+| `HpSequenceBackend::is_composite` | any mixing stage active; `log_prob_byte`, `serve_greedy_next_byte`, `serve_sample_next_byte` then use the full mix, and reuse the distribution `next_byte_log_probs` served at this position (as `observe_next_byte` does) |
 | `hp::Predictor::set_learning`, `learned_digest`, `set_serve_adaptation`, `fold_tables`, `reset_stream_state` | hp side |
 | `hp::StreamRewind` | exact rewind of one or more predictors across bytes |
 | `hp::MapScope` | map large tables from the `.hpbin` on load |
@@ -983,7 +1001,9 @@ agreement.
 | `native_hp_stream_rewind_smoke` | checkpoints byte-identical after 60 random rewinds; 1000 later distributions match |
 | `native_hp_fold_smoke` | folded + dropped model saves, reloads identically, checkpoint shrinks |
 | `native_hp_checkpoint_roundtrip_smoke` | lossy knobs survive save/load; reloaded predictor continues exactly |
-| `native_cyphalm_ensemble_smoke` | mix equals a hand-computed blend; manifest load equals direct build; lookahead leaves members unchanged |
+| `native_cyphalm_ensemble_smoke` | mix equals a hand-computed blend; manifest load equals direct build; lookahead leaves members unchanged; `log_prob_byte` / greedy / sampling read the served mix, cold or reused, without changing what is learned |
+| `native_cyphalm_neural_smoke` | LSTM / Transformer experts against a reference; mix normalised; `log_prob_byte` / greedy use the neural and session mix |
+| `native_cyphalm_lm_quality_load_only_flags` | a load-only harness flag without `--load` is an error |
 | `native_cyphalm_infinigram_smoke` | index queries against brute force; expert normalisation, observe, rewind |
 
 ### Changelog

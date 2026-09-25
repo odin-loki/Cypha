@@ -131,6 +131,7 @@ void HpSequenceBackend::compact_for_serve() {
 void HpSequenceBackend::prune_cold_slots(int min_total) {
     if (min_total > 0) {
         pred_->prune_cold_hash_slots(min_total);
+        served_valid_ = false;
     }
 }
 
@@ -139,7 +140,9 @@ void HpSequenceBackend::reset() {
     log_probs_buf_.clear();
     members_.clear();
     self_weight_ = 1.0;
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+    serve_rate_ = {0, 0, 0};  // the new predictor runs at its trained rates
+    ++settings_epoch_;
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -298,7 +301,7 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     std::vector<double> out = scored_log_probs_(vocab_size);
-    if (!ig_ && nn_.empty() && !ss_on_) return out;
+    if (!mixed_()) return out;
     if (ig_) {
         out = infinigram_mix_(out);
         ig_valid_ = true;
@@ -311,8 +314,12 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
         out = neural_mix_(out);
         nn_valid_ = true;
     }
-    last_final_ = out;
-    return last_final_;
+    // Served until the next byte: every stage ran (session and neural need
+    // the full 256-byte vocabulary).
+    served_ = out;
+    served_valid_ = out.size() == 256 || (!ss_on_ && nn_.empty());
+    served_epoch_ = settings_epoch_;
+    return out;
 }
 
 void HpSequenceBackend::set_session_cache(bool on, double eta) {
@@ -322,7 +329,7 @@ void HpSequenceBackend::set_session_cache(bool on, double eta) {
     ss_hist_.clear();
     ss_ig_.reset();
     ss_built_ = 0;
-    ss_valid_ = false;
+    ss_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::truncate_session(std::size_t n) {
@@ -332,7 +339,7 @@ void HpSequenceBackend::truncate_session(std::size_t n) {
         ss_ig_.reset();
         ss_built_ = 0;
     }
-    ss_valid_ = false;
+    ss_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& base) {
@@ -379,7 +386,7 @@ void HpSequenceBackend::set_neural(std::shared_ptr<const ByteNeuralExpert> nn, d
     nn_.clear();
     nn_w_.clear();
     nn_eta_ = eta;
-    nn_valid_ = false;
+    nn_valid_ = served_valid_ = false;
     add_neural(std::move(nn));
 }
 
@@ -392,7 +399,7 @@ void HpSequenceBackend::prime_neural_() {
         if (nn_adapt_ > 0.0) s.model->init_adaptation(s.state);
         for (std::size_t i = 0; i < len; ++i) s.model->step(s.state, ctx[i]);  // priming does not adapt
     }
-    nn_valid_ = false;
+    nn_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::neural_mix_(const std::vector<double>& base) {
@@ -421,7 +428,7 @@ void HpSequenceBackend::set_infinigram(std::shared_ptr<const InfiniGram> ig, dou
     ig_ = std::move(ig);
     ig_eta_ = eta;
     ig_w_.assign(kIgBuckets, {0.8, 0.1, 0.1});
-    ig_valid_ = false;
+    ig_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::infinigram_weights() const {
@@ -436,7 +443,7 @@ void HpSequenceBackend::set_infinigram_weights(const std::vector<double>& w) {
     }
     ig_w_.assign(kIgBuckets, {0.0, 0.0, 0.0});
     for (std::size_t i = 0; i < w.size(); ++i) ig_w_[i / 3][i % 3] = w[i];
-    ig_valid_ = false;
+    ig_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>& base) {
@@ -549,7 +556,7 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     member->set_learning(pred_->learning());
     members_.push_back(Member{std::move(member), weight});
     self_weight_ = 1.0 - total;
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
 }
 
 std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
@@ -562,7 +569,7 @@ std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
 }
 
 void HpSequenceBackend::reset_stream(bool keep_history) {
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
     prime_neural_();  // the LSTM re-reads whatever history the predictor kept
@@ -570,6 +577,10 @@ void HpSequenceBackend::reset_stream(bool keep_history) {
 }
 
 void HpSequenceBackend::set_serve_adaptation(int num, int den, int skip) {
+    if (serve_rate_ != std::array<int, 3>{num, den, skip}) {
+        serve_rate_ = {num, den, skip};
+        ++settings_epoch_;
+    }
     pred_->set_serve_adaptation(num, den, skip);
     for (auto& m : members_) m.backend->set_serve_adaptation(num, den, skip);
 }
@@ -592,19 +603,24 @@ std::vector<double> HpSequenceBackend::mix_with_members_(const std::vector<doubl
     return mix;
 }
 
-std::vector<double> HpSequenceBackend::ensemble_log_probs_(int vocab_size) const {
-    // Scoring restores all state; const_cast keeps the const serve API.
-    return const_cast<HpSequenceBackend*>(this)->next_byte_log_probs(vocab_size);
+const std::vector<double>& HpSequenceBackend::served_log_probs_() const {
+    // A distribution scored under other learning / serve-rate settings is
+    // stale here (non-frozen scoring trains inside the hypothetical byte).
+    if (!served_valid_ || served_.size() != 256 || served_epoch_ != settings_epoch_) {
+        // Scoring restores all state; const_cast keeps the const serve API.
+        (void)const_cast<HpSequenceBackend*>(this)->next_byte_log_probs(256);
+    }
+    return served_;
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
-    if (!members_.empty() || ig_) return ensemble_log_probs_(256)[byte];
+    if (mixed_()) return served_log_probs_()[byte];
     return byte_log_prob_on_pred_(byte);
 }
 
 std::uint8_t HpSequenceBackend::serve_greedy_next_byte() const {
-    if (!members_.empty() || ig_) {
-        const auto lp = ensemble_log_probs_(256);
+    if (mixed_()) {
+        const auto& lp = served_log_probs_();
         return static_cast<std::uint8_t>(std::max_element(lp.begin(), lp.end()) - lp.begin());
     }
     ScoringScope scoring(*pred_, frozen_scoring_);
@@ -634,8 +650,8 @@ std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
     if (rng01 == nullptr || temperature <= 1e-6) {
         return serve_greedy_next_byte();
     }
-    if (!members_.empty() || ig_) {
-        const auto lp = ensemble_log_probs_(256);
+    if (mixed_()) {
+        const auto& lp = served_log_probs_();
         double mx = -std::numeric_limits<double>::infinity();
         for (double v : lp) mx = std::max(mx, v / temperature);
         std::vector<double> w(lp.size());
@@ -718,18 +734,15 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
             s.model->step(s.state, byte);
         }
     }
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {
-    if (ig_ || !nn_.empty() || ss_on_) {
-        const bool cached = (!ig_ || ig_valid_) && (nn_.empty() || nn_valid_) && (!ss_on_ || ss_valid_);
-        const double lp = cached ? last_final_[next] : next_byte_log_probs(256)[next];
-        consume_byte(next);
-        return -lp;
-    }
-    if (!members_.empty()) {
-        const double lp = last_valid_ ? last_mix_[next] : next_byte_log_probs(256)[next];
+    if (mixed_()) {
+        // The distribution served at this position, whatever the settings
+        // since: the loss of what was scored, and the stage updates in
+        // consume_byte read that same scoring.
+        const double lp = served_valid_ && next < served_.size() ? served_[next] : next_byte_log_probs(256)[next];
         consume_byte(next);
         return -lp;
     }

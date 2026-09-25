@@ -1,7 +1,10 @@
 /// Serve-time ensemble (CyphaLMModel::add_ensemble_member): the mixed
 /// distribution is the normalised weighted geometric mean of the members',
 /// members advance in step, and word-lookahead generation (exact rewinds over
-/// every model) changes nothing learned.
+/// every model) changes nothing learned. log_prob_byte / greedy / sampling
+/// read the full mix and reuse the served distribution without changing what
+/// is learned.
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <cstdio>
@@ -38,6 +41,26 @@ std::string corpus(unsigned seed, int variant) {
 
 void train(cypha::cyphalm::CyphaLMModel& m, const std::string& t) {
     for (char c : t) m.hp_backend().consume_byte(static_cast<std::uint8_t>(c));
+}
+
+double rng_fixed() { return 0.37; }
+
+int argmax(const std::vector<double>& lp) {
+    return static_cast<int>(std::max_element(lp.begin(), lp.end()) - lp.begin());
+}
+
+/// The byte serve_sample_next_byte draws at temperature 1 for uniform ``r``.
+int draw(const std::vector<double>& lp, double r) {
+    double mx = -1e300, z = 0.0;
+    for (double v : lp) mx = std::max(mx, v);
+    std::vector<double> w(lp.size());
+    for (std::size_t b = 0; b < lp.size(); ++b) z += (w[b] = std::exp(lp[b] - mx));
+    double left = r * z;
+    for (std::size_t b = 0; b < w.size(); ++b) {
+        left -= w[b];
+        if (left <= 0.0) return static_cast<int>(b);
+    }
+    return static_cast<int>(w.size()) - 1;
 }
 
 }  // namespace
@@ -124,6 +147,72 @@ int main() {
             return 1;
         }
     }
+    // Served distribution reuse: log_prob_byte, greedy and sampling read the
+    // full mix whether or not it was just scored, observe returns the same
+    // log p, and the extra calls change nothing learned (a twin that only
+    // scores and observes ends bit-identical).
+    {
+        cypha::cyphalm::CyphaLMModel e3(cfg), m3(cfg), t3(cfg), tm3(cfg);
+        train(e3, ta);
+        train(m3, tb);
+        train(t3, ta);
+        train(tm3, tb);
+        e3.add_ensemble_member(std::move(m3), 0.5);
+        t3.add_ensemble_member(std::move(tm3), 0.5);
+        auto& h = e3.hp_backend();
+        auto& twin = t3.hp_backend();
+        h.set_ensemble_learning_rate(0.05);
+        twin.set_ensemble_learning_rate(0.05);
+        const std::string tb_more = corpus(4, 1);
+        for (int i = 0; i < 300; ++i) {
+            const auto c = static_cast<std::uint8_t>(tb_more[static_cast<std::size_t>(i)]);
+            double lp_c = 0.0;
+            int greedy = 0, sampled = 0;
+            if (i % 3 == 1) h.invalidate_scoring_cache();
+            if (i % 2 == 0) {  // cold: these score the mix themselves
+                lp_c = h.log_prob_byte(c);
+                greedy = h.serve_greedy_next_byte();
+                sampled = h.serve_sample_next_byte(1.0, rng_fixed);
+            }
+            const auto lp = h.serve_next_byte_log_probs(256);
+            if (i % 2 == 1) {  // warm: reuse the distribution just served
+                lp_c = h.log_prob_byte(c);
+                greedy = h.serve_greedy_next_byte();
+                sampled = h.serve_sample_next_byte(1.0, rng_fixed);
+            }
+            if (lp_c != lp[c] || greedy != argmax(lp) || sampled != draw(lp, rng_fixed())) {
+                std::printf("cyphalm_ensemble_smoke FAIL served reuse at %d: %.12f vs %.12f, %d/%d, %d/%d\n", i,
+                            lp_c, lp[c], greedy, argmax(lp), sampled, draw(lp, rng_fixed()));
+                return 1;
+            }
+            const double loss = h.observe_next_byte(c);
+            (void)twin.serve_next_byte_log_probs(256);
+            (void)twin.observe_next_byte(c);
+            if (loss != -lp[c]) {
+                std::printf("cyphalm_ensemble_smoke FAIL observe after reuse %.12f != %.12f\n", loss, -lp[c]);
+                return 1;
+            }
+        }
+        const auto pa = h.all_predictors(), pb = twin.all_predictors();
+        if (h.ensemble_weights() != twin.ensemble_weights() || pa[0]->learned_digest() != pb[0]->learned_digest() ||
+            pa[1]->learned_digest() != pb[1]->learned_digest()) {
+            std::printf("cyphalm_ensemble_smoke FAIL served reuse changed learning\n");
+            return 1;
+        }
+        // Non-frozen scoring trains inside the hypothetical byte, so a
+        // distribution scored with learning on is stale once learning is off.
+        h.set_frozen_scoring(false);
+        const auto c = static_cast<std::uint8_t>('s');
+        (void)h.serve_next_byte_log_probs(256);
+        h.set_learning(false);
+        const double lp_off = h.log_prob_byte(c);
+        const double want = h.serve_next_byte_log_probs(256)[c];
+        h.set_learning(true);
+        if (lp_off != want) {
+            std::printf("cyphalm_ensemble_smoke FAIL stale served distribution after set_learning\n");
+            return 1;
+        }
+    }
     // Manifest: save two checkpoints + manifest, load it as one model, and get
     // the same distribution as an ensemble built directly.
     {
@@ -150,6 +239,7 @@ int main() {
             return 1;
         }
     }
-    std::printf("cyphalm_ensemble_smoke OK mix exact over 300 bytes; lookahead kept both models; weights learn; manifest\n");
+    std::printf("cyphalm_ensemble_smoke OK mix exact over 300 bytes; lookahead kept both models; weights learn; "
+                "served reuse exact; manifest\n");
     return 0;
 }
