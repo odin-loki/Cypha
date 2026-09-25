@@ -98,6 +98,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> neural_paths;  // byte LSTM (BLM1) / Transformer (BGT1) experts
     bool session_cache = false;             // ∞-gram index over the text read so far
     double neural_lr = 0.1;                 // neural mixing weight step (exponentiated gradient)
+    double neural_adapt = -1.0;             // output-layer SGD rate (dynamic evaluation), <0 = manifest/default
     std::size_t infinigram_bytes = 0;       // --infinigram given the corpus: index its first N bytes
     double fold_auto = 0.0;  // per-table occupancy fold target (0 = off)
     std::string dump_dist;  // float32 natural-log P, 256 per held-out byte
@@ -160,6 +161,7 @@ int main(int argc, char** argv) {
         else if (a == "--neural") neural_paths.push_back(next());  // repeatable
         else if (a == "--session-cache") session_cache = true;
         else if (a == "--neural-lr") neural_lr = std::stod(next());
+        else if (a == "--neural-adapt") neural_adapt = std::stod(next());
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -209,6 +211,12 @@ int main(int argc, char** argv) {
         }
         if (!neural_paths.empty()) {
             for (const auto& np : neural_paths) model->attach_neural(np, neural_lr);
+        }
+        if (neural_adapt >= 0.0 && model->hp_backend().has_neural()) {
+            model->hp_backend().set_neural_adaptation(neural_adapt);
+            out["neural_adapt"] = neural_adapt;
+        }
+        if (!neural_paths.empty()) {
             out["neural"] = neural_paths;
         }
         if (!infinigram_path.empty()) {

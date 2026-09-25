@@ -164,6 +164,13 @@ class HpSequenceBackend {
     /// Replace all neural experts by ``nn`` (null: none).
     void set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta = 0.1);
     void set_neural_learning_rate(double eta) { nn_eta_ = eta; }
+    /// Dynamic evaluation of the experts' output layers: per-byte SGD at
+    /// ``lr`` while learning is on (0 = frozen experts). Resets the adapted
+    /// layers.
+    void set_neural_adaptation(double lr) {
+        nn_adapt_ = lr;
+        prime_neural_();
+    }
     bool has_neural() const { return !nn_.empty(); }
     std::size_t neural_count() const { return nn_.size(); }
     /// Per bucket: [model, expert 0, expert 1, ...].
@@ -287,6 +294,7 @@ class HpSequenceBackend {
     };
     std::vector<NnSlot> nn_;
     double nn_eta_ = 0.1;
+    double nn_adapt_ = 0.0;
     static constexpr int kNnBuckets = 16;
     std::vector<double> nn_w_;          // kNnBuckets x (1 + experts)
     bool nn_valid_ = false;

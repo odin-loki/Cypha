@@ -235,6 +235,7 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
             for (const auto& p : nj) model.attach_neural(resolve(p.get<std::string>()), eta);
         else
             model.attach_neural(resolve(nj.get<std::string>()), eta);
+        if (meta.contains("neural_adapt")) model.hp_backend().set_neural_adaptation(meta.at("neural_adapt").get<double>());
     }
     if (meta.value("session_cache", false)) model.hp_backend().set_session_cache(true);
     return model;

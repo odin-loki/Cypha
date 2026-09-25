@@ -38,6 +38,12 @@ class ByteNeuralExpert {
         std::vector<std::uint8_t> hist;   // GPT: bytes in the window
         int pos = 0;                      // GPT: next position
         std::array<double, 256> log_p{};  // natural-log P(next byte)
+        // Output-layer adaptation (dynamic evaluation of the last layer):
+        // this stream's float copy of the output weights and bias, the
+        // hidden vector the current log_p came from, and the SGD rate for
+        // the next step (0 = frozen).
+        std::vector<float> ow, ob, hlast;
+        float adapt_lr = 0.0f;
     };
     virtual ~ByteNeuralExpert() = default;
     /// State after reading a zero byte (the models are trained to predict the
@@ -47,6 +53,15 @@ class ByteNeuralExpert {
     virtual void step(State& s, std::uint8_t byte) const = 0;
     virtual std::size_t parameter_count() const = 0;
     virtual std::string kind() const = 0;
+    /// Give ``s`` its own copy of the output layer, so ``step`` can adapt it
+    /// (SGD on each read byte's log loss at ``s.adapt_lr``).
+    virtual void init_adaptation(State& s) const = 0;
+
+ protected:
+    /// Shared tail of ``step``: SGD on the output layer for ``byte`` (if
+    /// adapting), then logits from hidden ``h`` (the adapted copy if any).
+    static void adapt_output(State& s, std::uint8_t byte, int d);
+    static void output_logits(State& s, const float* h, int d, const std::uint16_t* w_bf16, const float* bias);
 };
 
 /// Load a BLM1 or BGT1 file (by magic).
@@ -59,6 +74,7 @@ class ByteLstmExpert final : public ByteNeuralExpert {
     void step(State& s, std::uint8_t byte) const override;
     std::size_t parameter_count() const override;
     std::string kind() const override { return "lstm"; }
+    void init_adaptation(State& s) const override;
     int layers() const { return layers_; }
     int hidden() const { return d_; }
 
@@ -78,6 +94,7 @@ class ByteGptExpert final : public ByteNeuralExpert {
     void step(State& s, std::uint8_t byte) const override;
     std::size_t parameter_count() const override;
     std::string kind() const override { return "gpt"; }
+    void init_adaptation(State& s) const override;
 
  private:
     struct Layer {

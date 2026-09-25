@@ -389,7 +389,8 @@ void HpSequenceBackend::prime_neural_() {
     const std::size_t len = nn_.empty() ? 0 : pred_->recent_bytes(ctx, kPrime);
     for (auto& s : nn_) {
         s.state = s.model->initial_state();
-        for (std::size_t i = 0; i < len; ++i) s.model->step(s.state, ctx[i]);
+        if (nn_adapt_ > 0.0) s.model->init_adaptation(s.state);
+        for (std::size_t i = 0; i < len; ++i) s.model->step(s.state, ctx[i]);  // priming does not adapt
     }
     nn_valid_ = false;
 }
@@ -711,7 +712,11 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
             }
             for (std::size_t i = 0; i <= k; ++i) w[i] /= z;
         }
-        for (auto& s : nn_) s.model->step(s.state, byte);
+        const float lr = pred_->learning() ? static_cast<float>(nn_adapt_) : 0.0f;
+        for (auto& s : nn_) {
+            s.state.adapt_lr = lr;
+            s.model->step(s.state, byte);
+        }
     }
     last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
 }

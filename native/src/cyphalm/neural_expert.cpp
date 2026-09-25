@@ -109,6 +109,30 @@ std::shared_ptr<const ByteNeuralExpert> load_neural_expert(const std::string& pa
     throw std::runtime_error("neural expert: unknown file " + path);
 }
 
+void ByteNeuralExpert::adapt_output(State& s, std::uint8_t byte, int d) {
+    if (s.adapt_lr <= 0.0f || s.ow.empty() || s.hlast.size() != static_cast<std::size_t>(d)) return;
+    // d(-log p_y)/d logit_b = p_b - [b == y]; logits = ow h + ob.
+    for (int b = 0; b < 256; ++b) {
+        const float g = static_cast<float>(std::exp(s.log_p[static_cast<std::size_t>(b)])) - (b == byte ? 1.0f : 0.0f);
+        const float step = s.adapt_lr * g;
+        float* row = &s.ow[static_cast<std::size_t>(b) * d];
+        for (int k = 0; k < d; ++k) row[k] -= step * s.hlast[static_cast<std::size_t>(k)];
+        s.ob[static_cast<std::size_t>(b)] -= step;
+    }
+}
+
+void ByteNeuralExpert::output_logits(State& s, const float* h, int d, const std::uint16_t* w_bf16,
+                                     const float* bias) {
+    float logits[256];
+    if (!s.ow.empty()) {
+        for (int b = 0; b < 256; ++b) logits[b] = dot(&s.ow[static_cast<std::size_t>(b) * d], h, d) + s.ob[static_cast<std::size_t>(b)];
+        s.hlast.assign(h, h + d);
+    } else {
+        matvec_bf16(w_bf16, h, bias, logits, 256, d);
+    }
+    log_softmax(logits, s.log_p);
+}
+
 // ---------------------------------------------------------------- LSTM
 
 std::shared_ptr<const ByteLstmExpert> ByteLstmExpert::load(const std::string& path) {
@@ -166,7 +190,18 @@ ByteNeuralExpert::State ByteLstmExpert::initial_state() const {
     return s;
 }
 
+void ByteLstmExpert::init_adaptation(State& s) const {
+    s.ow.resize(out_w_.size());
+    for (std::size_t i = 0; i < out_w_.size(); ++i) {
+        const std::uint32_t u = static_cast<std::uint32_t>(out_w_[i]) << 16;
+        std::memcpy(&s.ow[i], &u, sizeof(float));
+    }
+    s.ob = out_b_;
+    s.hlast.assign(s.a.end() - d_, s.a.end());  // top layer h (log_p came from it)
+}
+
 void ByteLstmExpert::step(State& s, std::uint8_t byte) const {
+    adapt_output(s, byte, d_);
     const int d = d_;
     std::vector<float> x(emb_w_.begin() + static_cast<std::ptrdiff_t>(byte) * emb_,
                          emb_w_.begin() + static_cast<std::ptrdiff_t>(byte + 1) * emb_);
@@ -187,9 +222,7 @@ void ByteLstmExpert::step(State& s, std::uint8_t byte) const {
         }
         x.assign(h, h + d);
     }
-    float logits[256];
-    matvec_bf16(out_w_.data(), x.data(), out_b_.data(), logits, 256, d);
-    log_softmax(logits, s.log_p);
+    output_logits(s, x.data(), d, out_w_.data(), out_b_.data());
 }
 
 // ---------------------------------------------------------------- Transformer
@@ -255,7 +288,14 @@ ByteNeuralExpert::State ByteGptExpert::initial_state() const {
     return s;
 }
 
+void ByteGptExpert::init_adaptation(State& s) const {
+    s.ow = emb_;  // tied output = token embedding
+    s.ob.assign(256, 0.0f);
+    s.hlast.clear();  // filled by the next step's logits
+}
+
 void ByteGptExpert::step(State& s, std::uint8_t byte) const {
+    adapt_output(s, byte, d_);
     if (s.pos >= ctx_) {
         // Window full: re-prime on the last ctx/2 bytes read (learned absolute
         // positions, so the cache cannot slide).
@@ -312,9 +352,7 @@ void ByteGptExpert::forward_(State& s, std::uint8_t byte, bool want_logits) cons
     s.pos = p + 1;
     if (!want_logits) return;
     layer_norm(x.data(), lnf_w_.data(), lnf_b_.data(), h.data(), d);
-    float logits[256];
-    matvec_bf16(emb_bf_.data(), h.data(), nullptr, logits, 256, d);
-    log_softmax(logits, s.log_p);
+    output_logits(s, h.data(), d, emb_bf_.data(), nullptr);
 }
 
 }  // namespace cypha::cyphalm
