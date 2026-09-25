@@ -7,7 +7,7 @@
 ///
 ///   cyphalm_gen_bench --load A.json [--member B.json]... --judge J.json \
 ///       --text enwik8 --offset 96000000 --prompts 8 [--word-candidates 8]
-///       [--infinigram INDEX|CORPUS [--infinigram-bytes N]]
+///       [--infinigram INDEX|CORPUS [--infinigram-bytes N]] [--prompt-score-bytes N]
 ///
 /// A plain-text ``--infinigram`` corpus is indexed whole unless
 /// ``--infinigram-bytes`` caps it; when it is the ``--text`` file and the index
@@ -123,6 +123,7 @@ int main(int argc, char** argv) {
         else if (a == "--temperature") params.temperature = std::stod(next());
         else if (a == "--min-p") params.min_p = std::stod(next());
         else if (a == "--seed") params.seed = std::stoull(next());
+        else if (a == "--prompt-score-bytes") params.prompt_score_bytes = std::stoi(next());
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -193,6 +194,7 @@ int main(int argc, char** argv) {
                           {"word_candidates", params.word_candidates},
                           {"temperature", params.temperature},
                           {"min_p", params.min_p},
+                          {"prompt_score_bytes", params.prompt_score_bytes},
                           {"mean_judge_bits", sum_gen / n},
                           {"mean_reference_judge_bits", sum_ref / n},
                           {"mean_distinct_4gram", sum_d4 / n},

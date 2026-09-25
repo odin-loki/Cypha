@@ -76,6 +76,21 @@ struct DecodeParams {
     /// per-byte cost of byte sampling. 0 = byte sampling only.
     int word_candidates = 8;
     int word_no_repeat = 12;
+    /// Composite models (``HpSequenceBackend::is_composite``): score the last
+    /// ``prompt_score_bytes`` context bytes (warmup, then prompt) with the
+    /// full served distribution before generating, so the mixing weights
+    /// (ensemble, ∞-gram, session, neural) adapt to the prompt as they do on
+    /// held-out text in ``cyphalm_lm_quality``. Priming alone scores nothing,
+    /// so without it generation serves the start weights. Every prompt byte
+    /// is learned either way (the experts' output layers adapt on each), and
+    /// scoring restores all model state, so only the weights differ. Costs one
+    /// full distribution per scored byte. 0 = off; plain models skip it.
+    int prompt_score_bytes = 512;
+    /// Restore every mixing weight when the request ends (default on), so one
+    /// prompt's adaptation does not carry into the next request. What the
+    /// prompt taught the learned tables stays, as always; the experts' output
+    /// layers restart at the next request's priming anyway.
+    bool restore_mixing = true;
 };
 
 DecodeStrategy decode_strategy_from_string(const std::string& name);
@@ -106,7 +121,13 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
                                cypha::intelligence::IntelligenceProfiler* profiler = nullptr,
                                LmIntelligenceMonitor* monitor = nullptr);
 
-/// Byte-level beam search on bit-tree log probs (``beam_width`` hypotheses, predictor snapshots).
+/// Byte-level beam search on the full served distribution (members, ∞-gram,
+/// session, neural experts): ``beam_width`` hypotheses, each replayed on the
+/// live model with learning off and rewound exactly (hp::StreamRewind, neural
+/// states, session), expanding the ``max(2 * width, 16)`` best bytes after the
+/// decode modifiers. Bytes every hypothesis shares are committed as the search
+/// goes, learned per ``learn_from_output``; each step's loss is its byte's
+/// served log p from the search.
 GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt_ids, int max_bytes,
                              const DecodeParams& params);
 

@@ -23,6 +23,7 @@ bookkeeping and can use faster scoring paths.
 - `serve_advance(token)` — priming long prompts without vocab fan-out.
 - `serve_predict_next(context)` — consume context + bit-tree log probs + top-k fill.
 - `serve_greedy_next(context)` — consume context + O(8) greedy byte.
+- `serve_observe(token)` — score the byte with the full served distribution, then advance (prompt scoring: the mixing weights learn from it).
 - `predict_next` — legacy wrapper that also records state for `adapt_after_predict` / `train_step_count`.
 
 ## Generation
@@ -30,8 +31,8 @@ bookkeeping and can use faster scoring paths.
 High-level decode lives in `cyphalm_generation.hpp`:
 
 - `generate_decode` — greedy, beam, temperature, top-k, top-p, uncertainty-gated.
-- `generate_beam` — byte-level beam search with bit-tree log probs and `hp::Predictor` snapshots.
-- Prompt priming (`prime_serve_context`) starts a new stream on the trained model with `reset_stream(keep_history=true)`, switches serve mode on (mixer at `hp_serve_mixer_lr_scale`, 0.5) and feeds the prompt with `serve_advance`. Greedy takes the argmax of the full distribution (`exact_greedy`, default on; off = O(8) `serve_greedy_next`); sampling uses `serve_predict_next` + bit-tree log probs; beam uses `HpSequenceBackend::byte_log_probs_bit_tree` per hypothesis.
+- `generate_beam` — byte-level beam search on the full served distribution (members, ∞-gram, session cache, neural experts). Each hypothesis is replayed on the live model with learning off and rewound exactly (`hp::StreamRewind`, neural states, session), as word lookahead does; bytes all hypotheses share are committed, learned per `learn_from_output`. It used to rank with the primary predictor alone on a predictor copy and learn from its own output.
+- Prompt priming (`prime_serve_context`) starts a new stream on the trained model with `reset_stream(keep_history=true)`, switches serve mode on (mixer at `hp_serve_mixer_lr_scale`, 0.5) and feeds the prompt with `serve_advance`. On composite models it scores the last `prompt_score_bytes` (512) context bytes with `serve_observe` instead, so the mixing weights adapt to the prompt (priming alone never scored, so generation served the start weights); every mixing weight is restored when the request ends (`restore_mixing`, default on). Greedy takes the argmax of the full distribution (`exact_greedy`, default on; off = O(8) `serve_greedy_next`); sampling uses `serve_predict_next` + bit-tree log probs.
 - Word lookahead (`word_candidates`, default 8) runs for every non-beam strategy while `learn_from_output` is off: K candidate words, exact rewind (`hp::StreamRewind`), best mean log-probability. `--word-candidates 0` gives plain byte decoding.
 
 CLI example:
@@ -69,7 +70,7 @@ Serve-time decode modifiers (do not change compress/BPC fidelity):
 
 Harness: `bash scripts/cyphalm_generation_harness.sh` — cold vs primed before/after samples + `decode_ms`.
 
-REST: `POST /generate` and `POST /generate/stream` (see `cyphalm_rest_routes.cpp`) use the same `generate_decode` path. Body fields: `prompt_ids`, `max_tokens`, `strategy`, `temperature`, `top_k`, `top_p`, `min_p`, `word_candidates`, `word_no_repeat`, `no_repeat_ngram`, `no_repeat_window`, `learn_from_output`, `exact_greedy`, `seed`, plus the modifiers below; unspecified fields take the `DecodeParams` defaults. `POST /sequence/load {"checkpoint_path": ...}` loads a checkpoint or an ensemble manifest.
+REST: `POST /generate` and `POST /generate/stream` (see `cyphalm_rest_routes.cpp`) use the same `generate_decode` path. Body fields: `prompt_ids`, `max_tokens`, `strategy`, `temperature`, `top_k`, `top_p`, `min_p`, `word_candidates`, `word_no_repeat`, `no_repeat_ngram`, `no_repeat_window`, `learn_from_output`, `exact_greedy`, `prompt_score_bytes`, `restore_mixing`, `seed`, plus the modifiers below; unspecified fields take the `DecodeParams` defaults. `POST /sequence/load {"checkpoint_path": ...}` loads a checkpoint or an ensemble manifest.
 
 ## RAM note (gate24 mem22, measured 2026-09-20)
 

@@ -157,6 +157,30 @@ class HpSequenceBackend {
     void set_ensemble_learning_rate(double eta) { ens_eta_ = eta; }
     /// Current weights: [self, member 0, member 1, ...].
     std::vector<double> ensemble_weights() const;
+    /// Every learned mixing weight: the ensemble's (``ensemble_weights``),
+    /// the ∞-gram, session and neural buckets, and each member's own.
+    /// Generation takes it before a request and restores it after
+    /// (``DecodeParams::restore_mixing``), so what one prompt taught the
+    /// weights does not carry into the next request.
+    struct MixingState {
+        std::vector<double> ensemble;
+        std::vector<std::array<double, 3>> ig;
+        std::vector<double> session, neural;
+        std::vector<MixingState> members;
+        bool operator==(const MixingState&) const = default;
+    };
+    MixingState mixing_state() const;
+    /// Back to ``s``; a stage whose shape changed since keeps its weights.
+    void set_mixing_state(const MixingState& s);
+    /// Mixing-weight learning (default on). Off: no stage's weights move
+    /// (ensemble, ∞-gram, session, neural; members too), while the models,
+    /// the session text and the experts' output layers still learn as set.
+    /// Measures the start-weight mixture (``cyphalm_lm_quality --freeze-mixing``).
+    void set_mixing_learning(bool on) {
+        mix_learning_ = on;
+        for (auto& m : members_) m.backend->set_mixing_learning(on);
+    }
+    bool mixing_learning() const { return mix_learning_; }
     /// Forget the last scored distributions, this model's and every member's
     /// (after rewinding state).
     void invalidate_scoring_cache() {
@@ -302,6 +326,7 @@ class HpSequenceBackend {
     std::vector<Member> members_;
     double self_weight_ = 1.0;   // 1 - sum of member weights
     double ens_eta_ = 0.0;
+    bool mix_learning_ = true;   // set_mixing_learning
     // Last scored distributions, for the weight update in consume_byte.
     bool last_valid_ = false;
     std::vector<double> last_own_, last_mix_;

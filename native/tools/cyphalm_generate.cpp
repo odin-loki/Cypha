@@ -23,7 +23,8 @@ void usage(const char* argv0) {
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
                  "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX|CORPUS] [--infinigram-bytes N] "
-                 "[--neural EXPERT.blm|.bgt]... [--neural-lr R] [--session-cache] [--learn-from-output] [--latency]\n",
+                 "[--neural EXPERT.blm|.bgt]... [--neural-lr R] [--session-cache] [--learn-from-output] "
+                 "[--prompt-score-bytes N] [--no-restore-mixing] [--latency]\n",
                  argv0);
 }
 
@@ -79,6 +80,8 @@ int main(int argc, char** argv) {
     int no_repeat = defaults.no_repeat_ngram;
     bool learn_from_output = defaults.learn_from_output;
     int word_candidates = defaults.word_candidates;
+    int prompt_score_bytes = defaults.prompt_score_bytes;  // composite models: prompt bytes scored first
+    bool restore_mixing = defaults.restore_mixing;
     std::vector<std::string> ensemble_specs;  // CKPT.json[:weight]
     std::string infinigram_path;
     std::size_t infinigram_bytes = 0;       // plain corpus: index its first N bytes (0 = all)
@@ -144,6 +147,10 @@ int main(int argc, char** argv) {
             word_candidates = std::atoi(argv[++i]);
         } else if (arg == "--learn-from-output") {
             learn_from_output = true;
+        } else if (arg == "--prompt-score-bytes" && i + 1 < argc) {
+            prompt_score_bytes = std::atoi(argv[++i]);
+        } else if (arg == "--no-restore-mixing") {
+            restore_mixing = false;
         } else if (arg == "--help" || arg == "-h") {
             usage(argv[0]);
             return 0;
@@ -215,6 +222,8 @@ int main(int argc, char** argv) {
     params.no_repeat_ngram = no_repeat;
     params.learn_from_output = learn_from_output;
     params.word_candidates = word_candidates;
+    params.prompt_score_bytes = prompt_score_bytes;
+    params.restore_mixing = restore_mixing;
     if (!warmup_file.empty() && warmup_bytes > 0) {
         params.warmup_ids =
             cypha::cyphalm::load_warmup_bytes(warmup_file, warmup_bytes, cfg.vocab_size);

@@ -556,6 +556,31 @@ std::vector<double> HpSequenceBackend::ensemble_weights() const {
     return w;
 }
 
+HpSequenceBackend::MixingState HpSequenceBackend::mixing_state() const {
+    MixingState s;
+    s.ensemble = ensemble_weights();
+    s.ig = ig_w_;
+    s.session = ss_w_;
+    s.neural = nn_w_;
+    for (const auto& m : members_) s.members.push_back(m.backend->mixing_state());
+    return s;
+}
+
+void HpSequenceBackend::set_mixing_state(const MixingState& s) {
+    if (s.ensemble.size() == members_.size() + 1) {
+        self_weight_ = s.ensemble[0];
+        for (std::size_t i = 0; i < members_.size(); ++i) members_[i].weight = s.ensemble[i + 1];
+    }
+    if (s.ig.size() == ig_w_.size()) ig_w_ = s.ig;
+    if (s.session.size() == ss_w_.size()) ss_w_ = s.session;
+    if (s.neural.size() == nn_w_.size()) nn_w_ = s.neural;
+    for (std::size_t i = 0; i < members_.size() && i < s.members.size(); ++i) {
+        members_[i].backend->set_mixing_state(s.members[i]);
+    }
+    // The served distribution and the stage caches were mixed with the old weights.
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+}
+
 void HpSequenceBackend::update_ensemble_weights_(std::uint8_t byte) {
     // d(-log p_mix(y))/dw_i = -(log p_i(y) - E_mix[log p_i]); multiplicative step.
     auto grad = [&](const std::vector<double>& lp) {
@@ -583,6 +608,7 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     }
     member->set_frozen_scoring(frozen_scoring_);
     member->set_learning(pred_->learning());
+    member->set_mixing_learning(mix_learning_);
     members_.push_back(Member{std::move(member), weight});
     self_weight_ = 1.0 - total;
     last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
@@ -718,8 +744,11 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         pred_->update(bit);
     }
     for (auto& m : members_) m.backend->consume_byte(byte);
-    if (last_valid_ && ens_eta_ > 0.0 && pred_->learning()) update_ensemble_weights_(byte);
-    if (ig_valid_ && ig_eta_ > 0.0 && pred_->learning() && byte < ig_p_[0].size()) {
+    // Mixing weights learn from a scored byte while learning is on, unless
+    // frozen (set_mixing_learning).
+    const bool learn_mix = pred_->learning() && mix_learning_;
+    if (last_valid_ && ens_eta_ > 0.0 && learn_mix) update_ensemble_weights_(byte);
+    if (ig_valid_ && ig_eta_ > 0.0 && learn_mix && byte < ig_p_[0].size()) {
         // Exponentiated gradient on the mixture's log loss for this bucket.
         auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
         const double pm = w[0] * ig_p_[0][byte] + w[1] * ig_p_[1][byte] + w[2] * ig_p_[2][byte];
@@ -731,7 +760,7 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         for (double& x : w) x /= z;
     }
     if (ss_on_) {
-        if (ss_valid_ && ss_bucket_ >= 0 && ss_eta_ > 0.0 && pred_->learning()) {
+        if (ss_valid_ && ss_bucket_ >= 0 && ss_eta_ > 0.0 && learn_mix) {
             double& w = ss_w_[static_cast<std::size_t>(ss_bucket_)];
             const double pa = ss_pin_[byte], pb = ss_p_[byte];
             const double p = std::max(w * pa + (1.0 - w) * pb, 1e-12);
@@ -745,7 +774,7 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         if (hp::UndoRecorderScope::active() == nullptr) session_grow_();
     }
     if (!nn_.empty()) {
-        if (nn_valid_ && nn_eta_ > 0.0 && pred_->learning()) {
+        if (nn_valid_ && nn_eta_ > 0.0 && learn_mix) {
             // Exponentiated gradient on the mixture's log loss for this bucket.
             const std::size_t k = nn_.size();
             double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];

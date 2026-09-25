@@ -117,12 +117,13 @@ int main(int argc, char** argv) {
     std::vector<std::string> merges;  // shard models merged into --load (equal data)
     int word_k = 0;
     bool only_default = false;
+    bool freeze_mixing = false;  // mixing weights stay at their start values (the pre-fix served mixture)
     // Flags that act on a loaded checkpoint or manifest: without --load they
     // would be ignored, so they are an error there.
     const std::set<std::string> load_only = {
         "--member", "--ensemble-lr", "--merge", "--fold", "--drop", "--match-drop", "--fold-auto",
         "--session-cache", "--neural", "--neural-lr", "--neural-adapt", "--infinigram",
-        "--infinigram-bytes", "--ig-weights-out"};
+        "--infinigram-bytes", "--ig-weights-out", "--freeze-mixing"};
     std::vector<std::string> load_only_given;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -172,6 +173,7 @@ int main(int argc, char** argv) {
         else if (a == "--session-cache") session_cache = true;
         else if (a == "--neural-lr") neural_lr = std::stod(next());
         else if (a == "--neural-adapt") neural_adapt = std::stod(next());
+        else if (a == "--freeze-mixing") freeze_mixing = true;
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -254,6 +256,13 @@ int main(int argc, char** argv) {
             out["infinigram"] = infinigram_path;
         }
         if (ensemble_lr >= 0.0) model->hp_backend().set_ensemble_learning_rate(ensemble_lr);
+        if (freeze_mixing) {
+            // Every stage's mixing weights stay at their start values while
+            // the models still learn: the mixture generation served before
+            // prompts were scored.
+            model->hp_backend().set_mixing_learning(false);
+            out["freeze_mixing"] = true;
+        }
     } else {
         cypha::cyphalm::CyphaLMConfig cfg;
         cfg.hp_table_bits = table_bits;
