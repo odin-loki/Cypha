@@ -8,7 +8,7 @@ Raw JSON and logs for every number below are in this folder.
 | what | where | state |
 |---|---|---|
 | Review fixes, fractional serve rates, prompt scoring, speed (bit-identical), mixing variants behind flags, component dumps + `mixsim.py` | merged onto `wip/v4-upgrades` with `ig-mem` | review findings fixed (see below); not yet on `main` |
-| Neural expert speed (AVX kernels, experts on pool workers) | branch `upgrade-nnspeed-wip` | dropped: stopped mid-stage, not built or tested. Do not merge until parity is within 1e-6 |
+| Neural expert speed (AVX kernels, experts on pool workers) | `main` (from `upgrade-nnspeed-wip`) | built. Portable kernels match the reference within 1e-6 (`cyphalm_neural_smoke`, max step error 2e-07). AVX-2/AVX-512 are compiled only where GCC can realign YMM spills; MinGW x64 stays on the portable kernels |
 | ∞-gram index: suffix array packed in place, corpus mapped | merged onto `wip/v4-upgrades` | done: IGR2 files byte-identical, same NLL; peak RSS 1694 → 1136 MB (205 MB datastore behind one shard) |
 | PG-19 book data: download by id, digests, corpora | `scripts/cyphalm_books.py`, `models/cyphalm_winner/pg19_*_ids.txt` (main) | done: rebuilds all four corpora byte for byte |
 | `byte_lm.py train --init` (fine-tune from a checkpoint) | main | done |
@@ -140,7 +140,7 @@ Not run: `infinigram_mode longest16`, learned temperature at rate 0.01, and all 
 
 ### Next steps (when resumed)
 
-1. Review findings fixed and `upgrade-fixes` + `ig-mem` merged onto `wip/v4-upgrades`. `upgrade-nnspeed-wip` dropped (unverified).
+1. Review findings fixed. `upgrade-fixes`, `ig-mem`, and `upgrade-nnspeed-wip` are on `main`.
 2. Finish the mixing sweep, then confirm T 0.9 (or the learned T) on the test slices.
 3. Missing test numbers: wiki for the books tier (c3).
 4. v4 manifests (default c1 + four experts, light, books), the build script, and the report section.

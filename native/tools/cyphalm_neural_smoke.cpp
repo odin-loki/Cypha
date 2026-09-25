@@ -7,6 +7,7 @@
 /// the session cache attached (no members, no ∞-gram), log_prob_byte and
 /// greedy still serve the full mix.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -265,6 +266,37 @@ int main() {
             return 1;
         }
         hp.observe_next_byte(static_cast<std::uint8_t>(ch));
+    }
+    // AVX2 / AVX-512 must match the portable kernels within 1e-6 (float
+    // rounding only). Replay the same bytes under each set.
+    auto kernel_gap = [](const cypha::cyphalm::ByteNeuralExpert& expert, const std::string& bytes) {
+        if (!cypha::cyphalm::set_neural_kernel("portable")) return -1.0;
+        auto base = expert.initial_state();
+        std::vector<std::array<double, 256>> seq;
+        seq.push_back(base.log_p);
+        for (unsigned char ch : bytes) {
+            expert.step(base, ch);
+            seq.push_back(base.log_p);
+        }
+        double worst = 0.0;
+        for (const char* name : {"avx2", "avx512"}) {
+            if (!cypha::cyphalm::set_neural_kernel(name)) continue;
+            auto alt = expert.initial_state();
+            for (std::size_t i = 0; i < seq.size(); ++i) {
+                for (int b = 0; b < 256; ++b)
+                    worst = std::max(worst, std::abs(alt.log_p[static_cast<std::size_t>(b)] - seq[i][static_cast<std::size_t>(b)]));
+                if (i + 1 < seq.size()) expert.step(alt, static_cast<std::uint8_t>(bytes[i]));
+            }
+        }
+        cypha::cyphalm::set_neural_kernel("portable");
+        return worst;
+    };
+    const double lstm_gap = kernel_gap(*nn, text);
+    const double gpt_gap = kernel_gap(*gpt, text);
+    if (lstm_gap < 0.0 || gpt_gap < 0.0 || lstm_gap > 1e-6 || gpt_gap > 1e-6) {
+        std::printf("cyphalm_neural_smoke FAIL: kernel parity lstm %.3g gpt %.3g (limit 1e-6, kernel %s)\n",
+                    lstm_gap, gpt_gap, cypha::cyphalm::neural_kernel().c_str());
+        return 1;
     }
     std::filesystem::remove(gpath);
     std::filesystem::remove(path);

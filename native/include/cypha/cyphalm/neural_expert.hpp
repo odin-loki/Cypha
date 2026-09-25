@@ -24,7 +24,8 @@
 /// autocast; one stream is bound by reading the weights); vectors stay float32.
 /// Products and attention run on one kernel set per process
 /// (``neural_kernel``): AVX-512 or AVX2 with FMA where the CPU has them, else
-/// the portable kernels.
+/// the portable kernels. MinGW x64 stays on the portable kernels: its GCC
+/// cannot realign YMM spills and the AVX entry points fault.
 
 #include <array>
 #include <cstdint>

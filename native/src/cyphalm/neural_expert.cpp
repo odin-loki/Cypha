@@ -8,11 +8,15 @@
 #include <fstream>
 #include <stdexcept>
 
-#if defined(__x86_64__) && defined(__GNUC__)
+// MinGW's x64 GCC refuses a 32-byte stack boundary, then still emits vmovaps
+// for YMM spills, which faults. The AVX kernels stay available everywhere else.
+#if defined(__x86_64__) && defined(__GNUC__) && !defined(__MINGW32__)
 #include <immintrin.h>
 #define CYPHA_NN_X86 1
-#define CYPHA_NN_AVX2 __attribute__((target("avx2,fma")))
-#define CYPHA_NN_AVX512 __attribute__((target("avx512f,avx2,fma")))
+// MinGW callers keep the 16-byte SysV/x64 stack. AVX spills use aligned moves,
+// so a target("avx*") function must realign the stack on entry or it faults.
+#define CYPHA_NN_AVX2 __attribute__((target("avx2,fma"), force_align_arg_pointer))
+#define CYPHA_NN_AVX512 __attribute__((target("avx512f,avx2,fma"), force_align_arg_pointer))
 #else
 #define CYPHA_NN_X86 0
 #endif
@@ -192,7 +196,7 @@ CYPHA_NN_AVX2 inline void mv_bf16_rows_avx2(const std::uint16_t* w, std::size_t 
         for (int i = 0; i < R; ++i) wr[i] += 32;
     }
     if (tail != 0) {  // last partial chunk, zero-padded
-        alignas(32) std::uint16_t tw[R][32] = {};
+        std::uint16_t tw[R][32] = {};
         const std::uint16_t* tr[R];
         for (int i = 0; i < R; ++i) {
             std::copy_n(wr[i], tail, tw[i]);
@@ -223,7 +227,7 @@ CYPHA_NN_AVX2 inline void mv_f32_rows_avx2(const float* w, std::size_t cols, con
                                            const float* bias, float* out) {
     __m256 a0[R], a1[R], a2[R], a3[R];
     for (int i = 0; i < R; ++i) a0[i] = a1[i] = a2[i] = a3[i] = _mm256_setzero_ps();
-    alignas(32) float tw[R][32], tx[32];
+    float tw[R][32], tx[32];
     for (int m = 0; m <= full; ++m) {
         const float* wr[R];
         const float* xm = x + 32 * static_cast<std::size_t>(m);
@@ -363,7 +367,7 @@ CYPHA_NN_AVX512 inline void mv_bf16_rows_avx512(const std::uint16_t* w, std::siz
         for (int i = 0; i < R; ++i) wr[i] += 32;
     }
     if (tail != 0) {
-        alignas(64) std::uint16_t tw[R][32] = {};
+        std::uint16_t tw[R][32] = {};
         const std::uint16_t* tr[R];
         for (int i = 0; i < R; ++i) {
             std::copy_n(wr[i], tail, tw[i]);
@@ -395,7 +399,7 @@ CYPHA_NN_AVX512 inline void mv_f32_rows_avx512(const float* w, std::size_t cols,
                                                const float* bias, float* out) {
     __m512 a0[R], a1[R];
     for (int i = 0; i < R; ++i) a0[i] = a1[i] = _mm512_setzero_ps();
-    alignas(64) float tw[R][32], tx[32];
+    float tw[R][32], tx[32];
     for (int m = 0; m <= full; ++m) {
         const float* wr[R];
         const float* xm = x + 32 * static_cast<std::size_t>(m);
