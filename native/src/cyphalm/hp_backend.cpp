@@ -5,10 +5,15 @@
 #include "hp/shard_merge.hpp"  // Predictor::reset_stream_state
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
+#include <cstring>
+#include <exception>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
 
@@ -25,7 +30,7 @@ double bit_log_prob(int p12, int bit) {
     return std::log(std::max(p, kLogEps));
 }
 
-/// Ensemble members score on worker threads unless CYPHA_HP_ENSEMBLE_THREADS=0.
+/// Worker threads default (set_parallel): on unless CYPHA_HP_ENSEMBLE_THREADS=0.
 bool ensemble_threads_enabled() {
     static const bool on = [] {
         const char* v = std::getenv("CYPHA_HP_ENSEMBLE_THREADS");
@@ -36,6 +41,12 @@ bool ensemble_threads_enabled() {
 
 bool use_legacy_byte_log_probs() {
     const char* v = std::getenv("CYPHA_HP_LEGACY_BYTE_LOGPROBS");
+    return v != nullptr && v[0] == '1' && v[1] == '\0';
+}
+
+/// Parity reference: the bit tree's old re-predict schedule.
+bool use_tree_repredict() {
+    const char* v = std::getenv("CYPHA_HP_TREE_REPREDICT");
     return v != nullptr && v[0] == '1' && v[1] == '\0';
 }
 
@@ -81,6 +92,136 @@ class ScoringScope {
 
 }  // namespace
 
+/// Persistent worker threads for members and neural experts, so no thread is
+/// started per byte. run() publishes jobs 0..n-1, runs here() on the calling
+/// thread, then claims jobs too until none is left, and returns when every
+/// job is done (rethrowing the first exception). Jobs are claimed, not
+/// assigned, and run() waits only for claimed jobs: on a busy machine a
+/// worker that is not scheduled in time leaves its jobs to the others and
+/// the caller, so the worst case is about serial.
+class HpSequenceBackend::WorkerPool {
+ public:
+    explicit WorkerPool(std::size_t threads) : count_(threads) {
+        for (std::size_t t = 0; t < count_; ++t) threads_.emplace_back([this] { loop_(); });
+    }
+    ~WorkerPool() {
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            stop_ = true;
+        }
+        wake_.notify_all();
+        for (auto& t : threads_) t.join();
+    }
+    WorkerPool(const WorkerPool&) = delete;
+    WorkerPool& operator=(const WorkerPool&) = delete;
+
+    std::size_t size() const { return count_; }
+
+    void run(std::size_t n, const std::function<void(std::size_t)>& job, const std::function<void()>& here) {
+        std::uint32_t round = 0;
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            job_ = &job;
+            n_ = n;
+            round = ++round_;
+            err_ = nullptr;
+            done_n_.store(0, std::memory_order_relaxed);
+            claim_.store(static_cast<std::uint64_t>(round) << 32, std::memory_order_release);
+        }
+        for (std::size_t k = 0; k < std::min(n, count_); ++k) wake_.notify_one();
+        try {
+            here();
+        } catch (...) {
+            keep_error_(std::current_exception());
+        }
+        work_(round, job, n);
+        std::exception_ptr err;
+        {
+            std::unique_lock<std::mutex> lk(mu_);
+            done_.wait(lk, [&] { return done_n_.load(std::memory_order_acquire) == n; });
+            job_ = nullptr;
+            err = err_;
+        }
+        if (err) std::rethrow_exception(err);
+    }
+
+ private:
+    // Claims (round << 32 | next job) and runs jobs of ``round`` until none
+    // is left. A worker still holding an older round's job finds the round
+    // changed and claims nothing; a claimed job keeps its round open, so
+    // ``job`` stays valid while it runs.
+    void work_(std::uint32_t round, const std::function<void(std::size_t)>& job, std::size_t n) {
+        for (;;) {
+            std::uint64_t v = claim_.load(std::memory_order_acquire);
+            do {
+                if (static_cast<std::uint32_t>(v >> 32) != round || (v & 0xffffffffu) >= n) return;
+            } while (!claim_.compare_exchange_weak(v, v + 1, std::memory_order_acq_rel));
+            try {
+                job(static_cast<std::size_t>(v & 0xffffffffu));
+            } catch (...) {
+                keep_error_(std::current_exception());
+            }
+            if (done_n_.fetch_add(1, std::memory_order_acq_rel) + 1 == n) {
+                std::lock_guard<std::mutex> lk(mu_);
+                done_.notify_one();
+            }
+        }
+    }
+    void keep_error_(std::exception_ptr e) {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (!err_) err_ = e;
+    }
+    void loop_() {
+        std::uint32_t seen = 0;
+        for (;;) {
+            const std::function<void(std::size_t)>* job = nullptr;
+            std::size_t n = 0;
+            {
+                std::unique_lock<std::mutex> lk(mu_);
+                wake_.wait(lk, [&] { return stop_ || round_ != seen; });
+                if (stop_) return;
+                seen = round_;
+                if (job_ == nullptr) continue;  // that round is over
+                job = job_;
+                n = n_;
+            }
+            work_(seen, *job, n);
+        }
+    }
+
+    const std::size_t count_;
+    std::vector<std::thread> threads_;
+    std::mutex mu_;
+    std::condition_variable wake_, done_;
+    const std::function<void(std::size_t)>* job_ = nullptr;  // set while a round runs
+    std::size_t n_ = 0;
+    std::uint32_t round_ = 0;
+    std::atomic<std::uint64_t> claim_{0};                    // round << 32 | next unclaimed job
+    std::atomic<std::size_t> done_n_{0};                     // jobs finished this round
+    bool stop_ = false;
+    std::exception_ptr err_;
+};
+
+void HpSequenceBackend::run_parallel_(std::size_t n, const std::function<void(std::size_t)>& job,
+                                      const std::function<void()>& here) {
+    // One worker per member and expert, at most one per other core (the
+    // calling thread works too).
+    const unsigned hw = std::thread::hardware_concurrency();
+    const std::size_t want = std::max<std::size_t>(
+        1, std::min<std::size_t>(members_.size() + nn_.size(), hw > 1 ? hw - 1 : 1));
+    if (!pool_ || pool_->size() != want) {
+        pool_.reset();  // join the old workers before starting new ones
+        pool_ = std::make_shared<WorkerPool>(want);
+    }
+    pool_->run(n, job, here);
+}
+
+void HpSequenceBackend::set_parallel(bool on) {
+    parallel_ = on;
+    if (!on) pool_.reset();
+    for (auto& m : members_) m.backend->set_parallel(on);
+}
+
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria) {
     hp::Config cfg;
     cfg.table_bits = table_bits;
@@ -109,7 +250,7 @@ hp::Config hp_config_from_cyphalm(const CyphaLMConfig& c) {
 }
 
 HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
-    : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)) {}
+    : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)), parallel_(ensemble_threads_enabled()) {}
 
 double HpSequenceBackend::byte_log_prob_on_pred_(std::uint8_t byte) const {
     ScoringScope scoring(*pred_, frozen_scoring_);
@@ -201,7 +342,7 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
                                             double log_p_nats, hp::Predictor& node,
                                             hp::PredictorUndoStack& undo,
                                             std::vector<double>& out_log_nats,
-                                            double prune_log) {
+                                            double prune_log, bool reference) {
     if (depth == 8) {
         if (prefix >= 0 && prefix < static_cast<int>(out_log_nats.size())) {
             out_log_nats[static_cast<std::size_t>(prefix)] = log_p_nats;
@@ -214,16 +355,20 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
         return;
     }
     // One predict() gives both children's bit probability. update() also reads
-    // predict()'s scratch (mixer inputs, layer-1 outputs), which the bit-0 subtree
-    // overwrites, so the bit-1 child re-predicts before its update. Leaves
-    // (depth 7) need no update at all: 382 predicts + 254 updates per call
-    // instead of 510 + 510, with identical log-probs.
+    // predict()'s scratch (mixer inputs, layer-1 outputs), which an expanded
+    // bit-0 subtree overwrites, so the bit-1 child then re-predicts before its
+    // update; with learning off update() reads only the final probability,
+    // which resume_prediction() restores without predicting. A pruned bit 0
+    // leaves the scratch as it was. Leaves (depth 7) need no update at all:
+    // at most 382 predicts + 254 updates per call instead of 510 + 510
+    // (255 predicts with learning off), with identical log-probs.
     hp::UndoFrame& pframe = undo.push_frame();
     int p12 = 0;
     {
         hp::UndoRecorderScope scope(pframe);
         p12 = node.predict();
     }
+    bool fresh = true;  // predict()'s scratch is still this node's
     for (int bit = 0; bit <= 1; ++bit) {
         if (!(bit ? take1 : take0)) {
             continue;
@@ -244,18 +389,22 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
         }
         if (depth == 7) {
             // Leaf: the byte's probability is complete; no state to advance.
-            expand_bit_tree_dfs(vocab_size, 8, next_prefix, child_log, node, undo, out_log_nats, prune_log);
+            expand_bit_tree_dfs(vocab_size, 8, next_prefix, child_log, node, undo, out_log_nats, prune_log,
+                                reference);
             continue;
         }
         hp::UndoFrame& frame = undo.push_frame();
         {
             hp::UndoRecorderScope scope(frame);
-            if (bit == 1 && take0) {
-                (void)node.predict();
+            if (reference) {
+                if (bit == 1 && take0) (void)node.predict();
+            } else if (!fresh) {
+                (void)node.resume_prediction(p12);
             }
             node.update(bit);
+            fresh = false;
             expand_bit_tree_dfs(vocab_size, depth + 1, next_prefix, child_log, node, undo,
-                                out_log_nats, prune_log);
+                                out_log_nats, prune_log, reference);
         }
         undo.pop_frame(node);
     }
@@ -274,8 +423,8 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_si
             v = uniform;
         }
     }
-    hp::PredictorUndoStack undo;
-    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo, log_probs_buf_, prune_log_);
+    if (undo_.depth() != 0) undo_.clear();  // left over by an exception
+    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo_, log_probs_buf_, prune_log_, use_tree_repredict());
     return std::vector<double>(log_probs_buf_.begin(),
                                log_probs_buf_.begin() + static_cast<std::size_t>(n));
 }
@@ -394,9 +543,11 @@ std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& b
 
 void HpSequenceBackend::add_neural(std::shared_ptr<const ByteNeuralExpert> nn) {
     if (!nn) return;
-    nn_.push_back({std::move(nn), {}});
+    NnSlot slot;
+    slot.model = std::move(nn);
+    nn_.push_back(std::move(slot));
     reset_neural_weights_();
-    prime_neural_();
+    prime_neural_();  // the new expert (the others are primed already)
 }
 
 void HpSequenceBackend::reset_neural_weights_() {
@@ -422,9 +573,20 @@ void HpSequenceBackend::prime_neural_() {
     std::uint8_t ctx[kPrime];
     const std::size_t len = nn_.empty() ? 0 : pred_->recent_bytes(ctx, kPrime);
     for (auto& s : nn_) {
+        // Priming is a function of these bytes and the adaptation setting:
+        // an expert primed on them that has read nothing since holds the
+        // very state it would rebuild (0.3-1 s per expert).
+        if (s.primed && s.primed_adapt == nn_adapt_ && s.primed_ctx.size() == len &&
+            std::equal(ctx, ctx + len, s.primed_ctx.begin())) {
+            continue;
+        }
         s.state = s.model->initial_state();
         if (nn_adapt_ > 0.0) s.model->init_adaptation(s.state);
         for (std::size_t i = 0; i < len; ++i) s.model->step(s.state, ctx[i]);  // priming does not adapt
+        s.primed = true;
+        s.primed_adapt = nn_adapt_;
+        s.primed_ctx.assign(ctx, ctx + len);
+        ++nn_primes_;
     }
     nn_valid_ = served_valid_ = false;
 }
@@ -453,6 +615,7 @@ std::vector<double> HpSequenceBackend::neural_mix_(const std::vector<double>& ba
 
 void HpSequenceBackend::set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta) {
     ig_ = std::move(ig);
+    ig_prev_n_ = -1;  // a match length in another index bounds nothing
     ig_eta_ = eta;
     ig_w_.assign(kIgBuckets, {0.8, 0.1, 0.1});
     ig_w0_ = ig_w_;
@@ -479,11 +642,22 @@ std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>
     constexpr std::size_t kCtx = 256;
     std::uint8_t ctx[kCtx];
     const std::size_t len = pred_->recent_bytes(ctx, kCtx);
-    const InfiniGram::Result r = ig_->query(ctx, len, static_cast<int>(kCtx));
+    // A match grows by at most one byte per byte read: when this context
+    // without its last byte ends the previous query's context, that query's
+    // n + 1 bounds this one (usually it is the answer: one range search).
+    int hint = -1;
+    if (ig_prev_n_ >= 0 && len >= 1 && len - 1 <= ig_prev_len_ &&
+        std::memcmp(ctx, ig_prev_ctx_.data() + (ig_prev_len_ - (len - 1)), len - 1) == 0) {
+        hint = ig_prev_n_ + 1;
+    }
+    const InfiniGram::Result r = ig_->query(ctx, len, static_cast<int>(kCtx), hint);
+    std::memcpy(ig_prev_ctx_.data(), ctx, len);
+    ig_prev_len_ = len;
+    ig_prev_n_ = r.n;
     InfiniGram::Result rr = r;
     for (int m = r.n; rr.total < 16 && m > 0;) {  // back off to a well-attested suffix
         m /= 2;
-        rr = ig_->query(ctx, len, m, m);
+        rr = ig_->query(ctx, len, m, m);  // m <= r.n occurs: the bound is the answer
     }
     const std::size_t v = base.size();
     for (auto& p : ig_p_) p.assign(v, 0.0);
@@ -525,21 +699,23 @@ std::vector<double> HpSequenceBackend::scored_log_probs_(int vocab_size) {
         return use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
                                            : next_byte_log_probs_bit_tree(vocab_size);
     }
-    // Members score on worker threads while this model scores here. Scoring
+    // Members score on the worker pool while this model scores here. Scoring
     // restores each predictor's state, and each thread records its own undo.
     std::vector<std::vector<double>> member_lp(members_.size());
-    std::vector<std::thread> workers;
-    const bool threaded = ensemble_threads_enabled();
-    for (std::size_t i = 0; i < members_.size(); ++i) {
-        auto job = [this, i, vocab_size, &member_lp] {
-            member_lp[i] = members_[i].backend->next_byte_log_probs(vocab_size);
-        };
-        if (threaded) workers.emplace_back(job);
-        else job();
+    std::vector<double> own;
+    const std::function<void()> score_own = [&] {
+        own = use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
+                                          : next_byte_log_probs_bit_tree(vocab_size);
+    };
+    const std::function<void(std::size_t)> score_member = [&](std::size_t i) {
+        member_lp[i] = members_[i].backend->next_byte_log_probs(vocab_size);
+    };
+    if (parallel_) {
+        run_parallel_(members_.size(), score_member, score_own);
+    } else {
+        for (std::size_t i = 0; i < members_.size(); ++i) score_member(i);
+        score_own();
     }
-    std::vector<double> own = use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
-                                                          : next_byte_log_probs_bit_tree(vocab_size);
-    for (auto& w : workers) w.join();
     std::vector<double> mix = mix_with_members_(own, member_lp);
     // Kept until the next byte is consumed: observe_next_byte reuses the mix,
     // and the weight update needs every model's distribution.
@@ -583,9 +759,11 @@ void HpSequenceBackend::set_mixing_state(const MixingState& s) {
 
 void HpSequenceBackend::update_ensemble_weights_(std::uint8_t byte) {
     // d(-log p_mix(y))/dw_i = -(log p_i(y) - E_mix[log p_i]); multiplicative step.
+    ens_p_.resize(last_mix_.size());
+    for (std::size_t b = 0; b < last_mix_.size(); ++b) ens_p_[b] = std::exp(last_mix_[b]);  // once for all models
     auto grad = [&](const std::vector<double>& lp) {
         double e = 0.0;
-        for (std::size_t b = 0; b < lp.size(); ++b) e += std::exp(last_mix_[b]) * lp[b];
+        for (std::size_t b = 0; b < lp.size(); ++b) e += ens_p_[b] * lp[b];
         return lp[byte] - e;
     };
     std::vector<double> w = ensemble_weights();
@@ -609,6 +787,7 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     member->set_frozen_scoring(frozen_scoring_);
     member->set_learning(pred_->learning());
     member->set_mixing_learning(mix_learning_);
+    member->set_parallel(parallel_);
     members_.push_back(Member{std::move(member), weight});
     self_weight_ = 1.0 - total;
     last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
@@ -627,7 +806,7 @@ void HpSequenceBackend::reset_stream(bool keep_history) {
     last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
-    prime_neural_();  // the LSTM re-reads whatever history the predictor kept
+    prime_neural_();  // the experts re-read whatever history the predictor kept (unless they hold it)
     if (!keep_history) set_session_cache(ss_on_, ss_eta_, ss_window_);  // a new session
 }
 
@@ -738,44 +917,13 @@ std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
 }
 
 void HpSequenceBackend::consume_byte(std::uint8_t byte) {
-    for (int i = 7; i >= 0; --i) {
-        const int bit = (static_cast<int>(byte) >> i) & 1;
-        (void)pred_->predict();
-        pred_->update(bit);
-    }
-    for (auto& m : members_) m.backend->consume_byte(byte);
     // Mixing weights learn from a scored byte while learning is on, unless
     // frozen (set_mixing_learning).
     const bool learn_mix = pred_->learning() && mix_learning_;
-    if (last_valid_ && ens_eta_ > 0.0 && learn_mix) update_ensemble_weights_(byte);
-    if (ig_valid_ && ig_eta_ > 0.0 && learn_mix && byte < ig_p_[0].size()) {
-        // Exponentiated gradient on the mixture's log loss for this bucket.
-        auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
-        const double pm = w[0] * ig_p_[0][byte] + w[1] * ig_p_[1][byte] + w[2] * ig_p_[2][byte];
-        double z = 0.0;
-        for (int e = 0; e < 3; ++e) {
-            const double g = std::clamp(ig_eta_ * (ig_p_[e][byte] / std::max(pm, 1e-12) - 1.0), -2.0, 2.0);
-            z += (w[static_cast<std::size_t>(e)] = std::max(1e-4, w[static_cast<std::size_t>(e)] * std::exp(g)));
-        }
-        for (double& x : w) x /= z;
-    }
-    if (ss_on_) {
-        if (ss_valid_ && ss_bucket_ >= 0 && ss_eta_ > 0.0 && learn_mix) {
-            double& w = ss_w_[static_cast<std::size_t>(ss_bucket_)];
-            const double pa = ss_pin_[byte], pb = ss_p_[byte];
-            const double p = std::max(w * pa + (1.0 - w) * pb, 1e-12);
-            w = std::clamp(w + ss_eta_ * (pa - pb) / p, 0.01, 0.99);
-        }
-        ss_hist_.push_back(byte);
-        ++ss_len_;
-        // A byte read under an undo recorder (hp::StreamRewind lookahead) is
-        // speculative: truncate_session takes it back, and a rebuild over it
-        // would be thrown away with it (and redone for every candidate).
-        if (hp::UndoRecorderScope::active() == nullptr) session_grow_();
-    }
     if (!nn_.empty()) {
         if (nn_valid_ && nn_eta_ > 0.0 && learn_mix) {
-            // Exponentiated gradient on the mixture's log loss for this bucket.
+            // Exponentiated gradient on the mixture's log loss for this bucket,
+            // from the experts' distributions before they read the byte.
             const std::size_t k = nn_.size();
             double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];
             std::vector<double> pe(k + 1);
@@ -794,8 +942,68 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         const float lr = pred_->learning() ? static_cast<float>(nn_adapt_) : 0.0f;
         for (auto& s : nn_) {
             s.state.adapt_lr = lr;
-            s.model->step(s.state, byte);
+            s.primed = false;  // it reads a byte
         }
+    }
+    // With worker threads (set_parallel) the experts step there, and the
+    // members read the byte there unless an undo recorder is active: it is
+    // per thread, and an hp::StreamRewind on this thread must record the
+    // members' writes (expert state is restored by value, not recorded).
+    // Every model reads the same byte on its own state either way.
+    const std::size_t member_jobs =
+        parallel_ && hp::UndoRecorderScope::active() == nullptr ? members_.size() : 0;
+    const std::size_t nn_jobs = parallel_ ? nn_.size() : 0;  // first: the longest jobs
+    const std::size_t jobs = nn_jobs + member_jobs;
+    const std::function<void()> here = [&] {
+        for (int i = 7; i >= 0; --i) {
+            const int bit = (static_cast<int>(byte) >> i) & 1;
+            (void)pred_->predict();
+            pred_->update(bit);
+        }
+        if (member_jobs == 0) {
+            for (auto& m : members_) m.backend->consume_byte(byte);
+        }
+        if (last_valid_ && ens_eta_ > 0.0 && learn_mix) update_ensemble_weights_(byte);
+        if (ig_valid_ && ig_eta_ > 0.0 && learn_mix && byte < ig_p_[0].size()) {
+            // Exponentiated gradient on the mixture's log loss for this bucket.
+            auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
+            const double pm = w[0] * ig_p_[0][byte] + w[1] * ig_p_[1][byte] + w[2] * ig_p_[2][byte];
+            double z = 0.0;
+            for (int e = 0; e < 3; ++e) {
+                const double g = std::clamp(ig_eta_ * (ig_p_[e][byte] / std::max(pm, 1e-12) - 1.0), -2.0, 2.0);
+                z += (w[static_cast<std::size_t>(e)] = std::max(1e-4, w[static_cast<std::size_t>(e)] * std::exp(g)));
+            }
+            for (double& x : w) x /= z;
+        }
+        if (ss_on_) {
+            if (ss_valid_ && ss_bucket_ >= 0 && ss_eta_ > 0.0 && learn_mix) {
+                double& w = ss_w_[static_cast<std::size_t>(ss_bucket_)];
+                const double pa = ss_pin_[byte], pb = ss_p_[byte];
+                const double p = std::max(w * pa + (1.0 - w) * pb, 1e-12);
+                w = std::clamp(w + ss_eta_ * (pa - pb) / p, 0.01, 0.99);
+            }
+            ss_hist_.push_back(byte);
+            ++ss_len_;
+            // A byte read under an undo recorder (hp::StreamRewind lookahead) is
+            // speculative: truncate_session takes it back, and a rebuild over it
+            // would be thrown away with it (and redone for every candidate).
+            if (hp::UndoRecorderScope::active() == nullptr) session_grow_();
+        }
+        if (nn_jobs == 0) {
+            for (auto& s : nn_) s.model->step(s.state, byte);
+        }
+    };
+    if (jobs > 0) {
+        run_parallel_(jobs, [&](std::size_t i) {
+            if (i < nn_jobs) {
+                NnSlot& s = nn_[i];
+                s.model->step(s.state, byte);
+            } else {
+                members_[i - nn_jobs].backend->consume_byte(byte);
+            }
+        }, here);
+    } else {
+        here();
     }
     last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
 }

@@ -254,11 +254,12 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
     if (meta.contains("neural")) {  // one path or a list
         const auto& nj = meta.at("neural");
         const double eta = meta.value("neural_learning_rate", 0.1);
+        // Adaptation first, so each expert is primed once, as it attaches.
+        if (meta.contains("neural_adapt")) model.hp_backend().set_neural_adaptation(meta.at("neural_adapt").get<double>());
         if (nj.is_array())
             for (const auto& p : nj) model.attach_neural(resolve(p.get<std::string>()), eta);
         else
             model.attach_neural(resolve(nj.get<std::string>()), eta);
-        if (meta.contains("neural_adapt")) model.hp_backend().set_neural_adaptation(meta.at("neural_adapt").get<double>());
     }
     if (meta.value("session_cache", false)) {
         // "session_window": bytes the session index covers (0 = all).

@@ -989,8 +989,11 @@ override the values stored in a loaded checkpoint.
 
 Other env vars: `CYPHA_HP_MMAP=0` copies tables into RAM instead of mapping
 the `.hpbin` (Linux only; tables ≥ 64 KiB are mapped). `CYPHA_HP_ENSEMBLE_THREADS=0`
-scores members serially. `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1` uses the old
-256-clone scoring. REST: `CYPHALM_CHECKPOINT` / `CYPHA_LM_CHECKPOINT` /
+runs everything on the calling thread (default: a persistent worker pool,
+`HpSequenceBackend::set_parallel`). `CYPHA_HP_LEGACY_BYTE_LOGPROBS=1` uses the old
+256-clone scoring. `CYPHA_HP_TREE_REPREDICT=1` makes the bit tree predict
+again before every bit-1 update, as before the speed fixes (parity
+reference: same distributions, slower). REST: `CYPHALM_CHECKPOINT` / `CYPHA_LM_CHECKPOINT` /
 `CYPHA_SEQUENCE_CHECKPOINT` or `cypha_rest --cyphalm-checkpoint` auto-load a
 checkpoint or manifest at start.
 
@@ -1028,6 +1031,11 @@ the `DecodeParams` defaults (before `ee1325c` REST hard-coded temperature 0.9). 
 | `InfiniGram::is_index_file(path)` | stored index (IGR1/IGR2) or plain corpus |
 | `hp::MapScope` | map large tables from the `.hpbin` on load |
 | `InfiniGram::build` / `InfiniGram(path)` / `query` | index build, load, longest-suffix counts |
+| `InfiniGram::query(ctx, len, max_n, hint)` | `hint` bounds the match length (the previous byte's n + 1, or a backoff length known to occur); tried first, same result as without it. The backend passes it when the context extends the last query's |
+| `InfiniGram(std::vector<std::uint8_t>&&)` | just-in-time index that keeps the corpus buffer (`open` no longer copies it) |
+| `HpSequenceBackend::set_parallel(on)` / `parallel` | worker pool (default on unless `CYPHA_HP_ENSEMBLE_THREADS=0`; members follow): members score there; experts step and members read each byte there (members only while no undo recorder / `hp::StreamRewind` is active on the calling thread). Jobs are claimed, the caller helps. Bit-identical either way |
+| `HpSequenceBackend::neural_primes` | experts primed so far; an expert primed on the same last 512 bytes and adaptation setting that has read nothing since is not primed again (`reset_stream`, `reset`, attaching, `set_neural_adaptation`) |
+| `hp::Predictor::resume_prediction(p12)` | with learning off, reuse a prediction for the next `update` (the bit tree's bit-1 child); with learning on it predicts again |
 
 ### File formats
 
@@ -1060,7 +1068,8 @@ agreement.
 | `native_cyphalm_ensemble_smoke` | mix equals a hand-computed blend; manifest load equals direct build; lookahead leaves members unchanged; `log_prob_byte` / greedy / sampling read the served mix, cold or reused, without changing what is learned |
 | `native_cyphalm_neural_smoke` | LSTM / Transformer experts against a reference; mix normalised; `log_prob_byte` / greedy use the neural and session mix |
 | `native_cyphalm_lm_quality_load_only_flags` | a load-only harness flag without `--load` is an error |
-| `native_cyphalm_infinigram_smoke` | index queries against brute force; expert normalisation, observe, rewind |
+| `native_cyphalm_infinigram_smoke` | index queries against brute force; hinted and backoff queries equal unhinted ones; expert normalisation, observe, rewind |
+| `native_hp_speed_parity_smoke` | bit tree equals the old re-predict schedule (frozen / learning, pruned / exact) and frozen forks; a composite model (members, ∞-gram, two adapting experts, session) on the worker pool serves and learns the same as on one thread with the old schedule, and rewinds exactly under `StreamRewind`; experts are not re-primed on kept history and a re-prime equals a fresh one; the int32-lane mixer dot equals the scalar sum |
 | `native_cyphalm_serve_state_smoke` | serve rate scale in 1/16ths (×1 bit-identical, ×0.5 ≠ ×0.25 on lr1_scale 40, checkpoint keeps trained rates); session cache window, doubling cadence, no rebuild under `StreamRewind`, exact rewind, `reset_stream(false)` clears; `reset()` scores like a fresh twin (∞-gram, adapting expert, session); top-p at T 1e-5 equals greedy |
 | `native_cyphalm_serve_mixing_smoke` | manifest-style composite: no prompt scoring leaves the start weights; scoring adapts ensemble / ∞-gram / neural weights with the learned tables unchanged, `restore_mixing` puts them back; `set_mixing_learning(false)` freezes them; beam width 1 starts with the served argmax (not the primary's), equals greedy bytes and losses; beam learns only the prompt, or the output with `learn_from_output` |
 | `native_cyphalm_generate_infinigram_whole`, `native_cyphalm_generate_infinigram_bytes` | `cyphalm_generate` warns about a plain corpus indexed whole; `--infinigram-bytes` silences it |

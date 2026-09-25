@@ -560,6 +560,20 @@ class Predictor {
         return pr_final_;
     }
 
+    /// Bit-tree scoring: make ``p12``, what predict() returned at this very
+    /// state, the prediction the next update() reads, without predicting
+    /// again. With learning off update() reads nothing of predict()'s work
+    /// but pr_final_ (GRIA's cost), so a sibling branch can reuse its
+    /// parent's prediction after the other subtree overwrote the scratch.
+    /// With learning on update() trains from that scratch (mixer inputs,
+    /// slot and APM indices): this predicts again. pr_final_ is scratch as
+    /// in predict() (not undo-recorded).
+    int resume_prediction(int p12) {
+        if (learning_) return predict();
+        pr_final_ = p12;
+        return p12;
+    }
+
     /// Learning on (default) trains every table, counter, mixer and APM on each
     /// bit. Off: bits only advance context (history, hashes, match pointers, DMC
     /// position); nothing learned changes and no hash slot is claimed. CyphaLM
@@ -1332,22 +1346,29 @@ inline void UndoFrame::clear() {
     has_snap_ = false;
 }
 
-inline void PredictorUndoStack::clear() { frames_.clear(); }
+inline void PredictorUndoStack::clear() {
+    frames_.clear();
+    depth_ = 0;
+}
 
 inline UndoFrame& PredictorUndoStack::push_frame() {
     // Frames are referenced by live UndoRecorderScopes while deeper frames are
     // pushed; reserve so emplace_back never relocates them (bit-tree depth <= 17).
     if (frames_.capacity() < kReserve) frames_.reserve(kReserve);
-    frames_.emplace_back();
-    return frames_.back();
+    if (depth_ == frames_.size()) frames_.emplace_back();
+    // A popped frame comes back cleared, with its patch buffers still allocated.
+    UndoFrame& f = frames_[depth_++];
+    f.set_records_byte_end(false);
+    return f;
 }
 
 inline void PredictorUndoStack::pop_frame(Predictor& pred) {
-    if (frames_.empty()) {
+    if (depth_ == 0) {
         return;
     }
-    frames_.back().pop_predictor(pred);
-    frames_.pop_back();
+    UndoFrame& f = frames_[--depth_];
+    f.pop_predictor(pred);
+    f.clear();
 }
 
 inline void UndoFrame::push_predictor(const Predictor& p, const Config& cfg) {

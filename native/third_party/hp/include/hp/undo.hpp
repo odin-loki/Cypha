@@ -170,11 +170,15 @@ class PredictorUndoStack {
 
     void pop_frame(Predictor& pred);
 
-    std::size_t depth() const { return frames_.size(); }
+    std::size_t depth() const { return depth_; }
 
  private:
     static constexpr std::size_t kReserve = 64;
+    // frames_[0..depth_) are live. Popped frames stay allocated and the next
+    // push reuses them, so a scorer that keeps its stack across calls does
+    // not reallocate patch buffers at every tree node.
     std::vector<UndoFrame> frames_;
+    std::size_t depth_ = 0;
 };
 
 }  // namespace hp

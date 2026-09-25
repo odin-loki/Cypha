@@ -15,10 +15,13 @@
 /// ``Predictor::copy_state_from`` / ``assign_from_`` must copy all ctx-chain models
 /// (parity tests and any reuse path).
 /// ``next_byte_log_probs()`` defaults to bit-tree joint scoring; legacy path:
-/// ``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1``.
+/// ``CYPHA_HP_LEGACY_BYTE_LOGPROBS=1``. ``CYPHA_HP_TREE_REPREDICT=1`` makes
+/// the bit tree predict again before every bit-1 update, as it used to
+/// (reference for parity tests; same distributions, slower).
 
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -181,6 +184,15 @@ class HpSequenceBackend {
         for (auto& m : members_) m.backend->set_mixing_learning(on);
     }
     bool mixing_learning() const { return mix_learning_; }
+    /// Worker threads (default on; ``CYPHA_HP_ENSEMBLE_THREADS=0`` makes the
+    /// default off), members too. On: members score on a persistent pool
+    /// while this model scores, and when a byte is read the neural experts
+    /// step and the members read it there too, unless an undo recorder
+    /// (hp::StreamRewind) is active on the calling thread: recorders are per
+    /// thread, so the members then read it here. Results are the same bit
+    /// for bit either way; off runs everything on the calling thread.
+    void set_parallel(bool on);
+    bool parallel() const { return parallel_; }
     /// Forget the last scored distributions, this model's and every member's
     /// (after rewinding state).
     void invalidate_scoring_cache() {
@@ -232,9 +244,18 @@ class HpSequenceBackend {
         return out;
     }
     void set_neural_states(const std::vector<ByteNeuralExpert::State>& st) {
-        for (std::size_t i = 0; i < nn_.size() && i < st.size(); ++i) nn_[i].state = st[i];
+        for (std::size_t i = 0; i < nn_.size() && i < st.size(); ++i) {
+            nn_[i].state = st[i];
+            nn_[i].primed = false;
+        }
         nn_valid_ = served_valid_ = false;
     }
+    /// Experts primed so far (diagnostics, tests). Priming reads the last
+    /// 512 bytes of history into an expert's initial state; an expert that
+    /// was primed on the same bytes (and adaptation setting) and has read
+    /// nothing since already holds that state and is not primed again
+    /// (``reset_stream``, ``reset``, adding experts, ``set_neural_adaptation``).
+    std::size_t neural_primes() const { return nn_primes_; }
     /// Session cache: an ∞-gram index over the last ``window`` bytes this
     /// stream has read (prompt, conversation, document; 0 = all of them),
     /// rebuilt just in time as it grows: at 1 KiB, then whenever the bytes
@@ -309,15 +330,26 @@ class HpSequenceBackend {
     static double byte_log_prob(hp::Predictor& snap, int byte);
 
     static bool branch_reaches_vocab(int vocab_size, int prefix, int depth, int bit);
+    /// ``reference``: predict again before every bit-1 update that follows a
+    /// taken bit 0 (the old schedule; CYPHA_HP_TREE_REPREDICT=1).
     static void expand_bit_tree_dfs(int vocab_size, int depth, int prefix, double log_p_nats,
                                     hp::Predictor& node, hp::PredictorUndoStack& undo,
                                     std::vector<double>& out_log_nats,
-                                    double prune_log = -1e300);
+                                    double prune_log = -1e300, bool reference = false);
     double byte_log_prob_on_pred_(std::uint8_t byte) const;
 
     bool serve_compact_ = false;
     double prune_log_ = -1e300;  // set_tree_prune
     bool frozen_scoring_ = false;
+    hp::PredictorUndoStack undo_;  // bit-tree frames, kept so their buffers are reused
+
+    // Worker threads (set_parallel), shared out by claiming (hp_backend.cpp).
+    class WorkerPool;
+    std::shared_ptr<WorkerPool> pool_;
+    bool parallel_ = true;
+    /// job(i) for i in [0, n) on the pool while this thread runs here().
+    void run_parallel_(std::size_t n, const std::function<void(std::size_t)>& job,
+                       const std::function<void()>& here);
 
     struct Member {
         std::unique_ptr<HpSequenceBackend> backend;
@@ -331,6 +363,7 @@ class HpSequenceBackend {
     bool last_valid_ = false;
     std::vector<double> last_own_, last_mix_;
     std::vector<std::vector<double>> last_member_lp_;
+    std::vector<double> ens_p_;  // exp(last_mix_), for the weight update
     void update_ensemble_weights_(std::uint8_t byte);
 
     // Model (+ ensemble) distribution before the ∞-gram mix.
@@ -344,6 +377,11 @@ class HpSequenceBackend {
     bool ig_valid_ = false;
     int ig_bucket_ = 0;
     std::vector<double> ig_p_[3];       // model, longest, reliable (probabilities)
+    // The last query's context and match length: its n + 1 bounds the next
+    // query when the next context extends this one (InfiniGram::query hint).
+    std::array<std::uint8_t, 256> ig_prev_ctx_{};
+    std::size_t ig_prev_len_ = 0;
+    int ig_prev_n_ = -1;                // -1: no previous query
     // Served distribution (after every mixing stage) at this position, kept
     // while ``served_valid_``: dropped with the stage caches above.
     bool mixed_() const { return !members_.empty() || ig_ || !nn_.empty() || ss_on_; }
@@ -378,8 +416,14 @@ class HpSequenceBackend {
     struct NnSlot {
         std::shared_ptr<const ByteNeuralExpert> model;
         ByteNeuralExpert::State state;
+        // ``state`` is what priming on ``primed_ctx`` (adaptation
+        // ``primed_adapt``) built, and no byte was read since.
+        bool primed = false;
+        double primed_adapt = 0.0;
+        std::vector<std::uint8_t> primed_ctx;
     };
     std::vector<NnSlot> nn_;
+    std::size_t nn_primes_ = 0;
     double nn_eta_ = 0.1;
     double nn_adapt_ = 0.0;
     static constexpr int kNnBuckets = 16;
