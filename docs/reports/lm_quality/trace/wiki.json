@@ -1,0 +1,128 @@
+{
+ "bytes": 16384,
+ "corpus": "/home/user/ckpt/winner/enwik8_95m.igr",
+ "corpus_bytes": 95000000,
+ "coverage": 0.04180908203125,
+ "index_seconds": 0.000363761,
+ "longest_match": 133,
+ "longest_spans": [
+  {
+   "corpus_offset": 37107268,
+   "len": 133,
+   "occurrences": 1,
+   "snippet": ":37Z</timestamp>.      <contributor>.        <username>Samsara</username>.      ",
+   "text_offset": 96004439
+  },
+  {
+   "corpus_offset": 18608747,
+   "len": 84,
+   "occurrences": 1,
+   "snippet": "'''.| classis_authority = [[Carolus Linnaeus|Linnaeus]], 1758.| subdivision_rank",
+   "text_offset": 96004896
+  },
+  {
+   "corpus_offset": 13822996,
+   "len": 83,
+   "occurrences": 1,
+   "snippet": " link</comment>.      <text xml:space=\"preserve\">{{Taxobox.| color = pink.| name",
+   "text_offset": 96004602
+  },
+  {
+   "corpus_offset": 18579184,
+   "len": 67,
+   "occurrences": 1,
+   "snippet": ".| regnum = [[Animal]]ia.| phylum = [[Arthropod]]a.| subphylum = [[",
+   "text_offset": 96004796
+  },
+  {
+   "corpus_offset": 71720873,
+   "len": 63,
+   "occurrences": 1,
+   "snippet": "ic-stub}}</text>.    </revision>.  </page>.  <page>.    <title>",
+   "text_offset": 96004270
+  },
+  {
+   "corpus_offset": 27147086,
+   "len": 59,
+   "occurrences": 1,
+   "snippet": "1:53:37Z</timestamp>.      <contributor>.        <username>",
+   "text_offset": 96004435
+  },
+  {
+   "corpus_offset": 1166144,
+   "len": 56,
+   "occurrences": 1,
+   "snippet": "a'''.| classis_authority = [[Carolus Linnaeus|Linnaeus]]",
+   "text_offset": 96004895
+  },
+  {
+   "corpus_offset": 46635540,
+   "len": 52,
+   "occurrences": 6,
+   "snippet": "e link</comment>.      <text xml:space=\"preserve\">{{",
+   "text_offset": 96004601
+  },
+  {
+   "corpus_offset": 55345660,
+   "len": 45,
+   "occurrences": 2,
+   "snippet": ".jpg.| image_width = 300px.| image_caption = ",
+   "text_offset": 96004715
+  },
+  {
+   "corpus_offset": 92864208,
+   "len": 39,
+   "occurrences": 5,
+   "snippet": ").| regnum = [[Animal]]ia.| phylum = [[",
+   "text_offset": 96004795
+  },
+  {
+   "corpus_offset": 2813260,
+   "len": 38,
+   "occurrences": 3,
+   "snippet": "7</id>.      <timestamp>2006-03-01T11:",
+   "text_offset": 96004399
+  },
+  {
+   "corpus_offset": 12429603,
+   "len": 37,
+   "occurrences": 1,
+   "snippet": "44</id>.    <revision>.      <id>4173",
+   "text_offset": 96004359
+  },
+  {
+   "corpus_offset": 29346078,
+   "len": 36,
+   "occurrences": 1,
+   "snippet": "4944</id>.    <revision>.      <id>4",
+   "text_offset": 96004357
+  },
+  {
+   "corpus_offset": 39726835,
+   "len": 34,
+   "occurrences": 2,
+   "snippet": ".arp.750pix.jpg|thumb|right|200px|",
+   "text_offset": 96016171
+  },
+  {
+   "corpus_offset": 76624971,
+   "len": 33,
+   "occurrences": 1,
+   "snippet": "s played an important part in the",
+   "text_offset": 96011385
+  },
+  {
+   "corpus_offset": 9468732,
+   "len": 32,
+   "occurrences": 1,
+   "snippet": "es...== See also ==.* [[List of ",
+   "text_offset": 96004144
+  }
+ ],
+ "mean_match": 12.7491455078125,
+ "min_len": 32,
+ "offset": 96000000,
+ "spans": 16,
+ "text": "/home/user/corpora/enwik8",
+ "trace_seconds": 0.730305406
+}

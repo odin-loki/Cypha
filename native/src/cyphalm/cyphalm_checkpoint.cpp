@@ -229,6 +229,7 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
                                 meta.value("infinigram_bytes", std::size_t{0}));
     }
     if (meta.contains("neural")) model.attach_neural(resolve(meta.at("neural").get<std::string>()));
+    if (meta.value("session_cache", false)) model.hp_backend().set_session_cache(true);
     return model;
 }
 

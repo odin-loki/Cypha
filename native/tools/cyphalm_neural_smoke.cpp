@@ -1,7 +1,8 @@
 /// Neural expert (ByteLstmExpert, BLM1): a random two-layer LSTM written to a
 /// file steps exactly like a straightforward double-precision reference, and
 /// an hp model with it attached serves normalised distributions whose mixing
-/// weights move, and whose state restores after a rewind.
+/// weights move, and whose state restores after a rewind; plus the session
+/// cache (an ∞-gram index over the text read so far).
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -153,6 +154,27 @@ int main() {
         return 1;
     }
     (void)before;
+    // Session cache (∞-gram over the text read): normalised, rebuilt as the
+    // text grows, and truncated back on rewind.
+    hp.set_session_cache(true);
+    for (int rep = 0; rep < 3; ++rep)
+        for (char ch : corpus) {
+            const auto lp = hp.next_byte_log_probs(256);
+            double z = 0.0;
+            for (double v : lp) z += std::exp(v);
+            if (std::abs(z - 1.0) > 1e-6) {
+                std::printf("cyphalm_neural_smoke FAIL: session mix sums to %.12f\n", z);
+                return 1;
+            }
+            hp.observe_next_byte(static_cast<std::uint8_t>(ch));
+        }
+    const std::size_t n_read = hp.session_size();
+    hp.consume_byte('q');
+    hp.truncate_session(n_read);
+    if (n_read != 3 * corpus.size() || hp.session_size() != n_read) {
+        std::printf("cyphalm_neural_smoke FAIL: session size %zu\n", hp.session_size());
+        return 1;
+    }
     std::filesystem::remove(path);
     std::printf("cyphalm_neural_smoke OK: max step error %.2g; mix normalised; weights adapt\n", worst);
     return 0;

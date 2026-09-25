@@ -20,7 +20,7 @@ void usage(const char* argv0) {
                  "[--warmup-file PATH] [--warmup-bytes N] [--ban-last-k K] "
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
-                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX] [--neural LSTM.blm] [--learn-from-output] [--latency]\n",
+                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX] [--neural LSTM.blm] [--session-cache] [--learn-from-output] [--latency]\n",
                  argv0);
 }
 
@@ -79,6 +79,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> ensemble_specs;  // CKPT.json[:weight]
     std::string infinigram_path;
     std::string neural_path;  // BLM1 byte LSTM expert
+    bool session_cache = false;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -126,6 +127,8 @@ int main(int argc, char** argv) {
             infinigram_path = argv[++i];
         } else if (arg == "--neural" && i + 1 < argc) {
             neural_path = argv[++i];
+        } else if (arg == "--session-cache") {
+            session_cache = true;
         } else if (arg == "--ensemble" && i + 1 < argc) {
             ensemble_specs.push_back(argv[++i]);
         } else if (arg == "--word-candidates" && i + 1 < argc) {
@@ -164,6 +167,7 @@ int main(int argc, char** argv) {
     }
     if (!infinigram_path.empty()) model.attach_infinigram(infinigram_path);
     if (!neural_path.empty()) model.attach_neural(neural_path);
+    if (session_cache) model.hp_backend().set_session_cache(true);
     cfg = model.config();
     const std::vector<int> prompt_ids = bytes_from_text(prompt, cfg.vocab_size);
 

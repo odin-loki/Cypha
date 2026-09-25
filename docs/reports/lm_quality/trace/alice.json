@@ -1,0 +1,23 @@
+{
+ "bytes": 16384,
+ "corpus": "/home/user/ckpt/winner/enwik8_95m.igr",
+ "corpus_bytes": 95000000,
+ "coverage": 0.00372314453125,
+ "index_seconds": 5.8775e-05,
+ "longest_match": 61,
+ "longest_spans": [
+  {
+   "corpus_offset": 39311239,
+   "len": 61,
+   "occurrences": 1,
+   "snippet": "The first question of course was, how to get dry again:  they",
+   "text_offset": 23930
+  }
+ ],
+ "mean_match": 8.78204345703125,
+ "min_len": 32,
+ "offset": 20000,
+ "spans": 1,
+ "text": "/home/user/corpora/cant/alice29.txt",
+ "trace_seconds": 0.185793859
+}

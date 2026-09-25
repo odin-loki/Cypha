@@ -139,7 +139,7 @@ void HpSequenceBackend::reset() {
     log_probs_buf_.clear();
     members_.clear();
     self_weight_ = 1.0;
-    last_valid_ = ig_valid_ = nn_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -298,10 +298,14 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     std::vector<double> out = scored_log_probs_(vocab_size);
-    if (!ig_ && !nn_) return out;
+    if (!ig_ && !nn_ && !ss_on_) return out;
     if (ig_) {
         out = infinigram_mix_(out);
         ig_valid_ = true;
+    }
+    if (ss_on_ && out.size() == 256) {
+        out = session_mix_(out);
+        ss_valid_ = true;
     }
     if (nn_ && out.size() == 256) {
         out = neural_mix_(out);
@@ -309,6 +313,57 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     }
     last_final_ = out;
     return last_final_;
+}
+
+void HpSequenceBackend::set_session_cache(bool on, double eta) {
+    ss_on_ = on;
+    ss_eta_ = eta;
+    ss_w_.assign(kSsBuckets, 0.97);
+    ss_hist_.clear();
+    ss_ig_.reset();
+    ss_built_ = 0;
+    ss_valid_ = false;
+}
+
+void HpSequenceBackend::truncate_session(std::size_t n) {
+    if (n >= ss_hist_.size()) return;
+    ss_hist_.resize(n);
+    if (ss_built_ > n) {  // the index saw bytes that are gone: rebuild later
+        ss_ig_.reset();
+        ss_built_ = 0;
+    }
+    ss_valid_ = false;
+}
+
+std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& base) {
+    const std::size_t h = ss_hist_.size();
+    // Rebuild at 1 KiB, on doubling, then every 64 KiB.
+    const std::size_t next = ss_built_ == 0 ? 1024 : std::min(ss_built_ * 2, ss_built_ + (std::size_t{1} << 16));
+    if (h >= next) {
+        ss_ig_ = std::make_shared<const InfiniGram>(ss_hist_.data(), h);
+        ss_built_ = h;
+    }
+    ss_bucket_ = -1;
+    if (!ss_ig_) return base;
+    constexpr std::size_t kCtx = 256;
+    const std::size_t len = std::min(kCtx, h);
+    const InfiniGram::Result r = ss_ig_->query(ss_hist_.data() + h - len, len, static_cast<int>(kCtx));
+    // Only long repeats: shorter ones are what hp's own match models and
+    // online learning already capture.
+    if (r.n < 16 || r.total == 0) return base;
+    const int nb = std::min(7, static_cast<int>(std::log2(static_cast<double>(r.n))));
+    const int cb = r.total <= 1 ? 0 : r.total <= 3 ? 1 : r.total <= 15 ? 2 : 3;
+    ss_bucket_ = nb * 4 + cb;
+    ss_pin_.resize(256);
+    ss_p_.resize(256);
+    for (std::size_t b = 0; b < 256; ++b) {
+        ss_pin_[b] = std::exp(base[b]);
+        ss_p_[b] = static_cast<double>(r.count[b]) / static_cast<double>(r.total);
+    }
+    const double w = ss_w_[static_cast<std::size_t>(ss_bucket_)];
+    std::vector<double> out(256);
+    for (std::size_t b = 0; b < 256; ++b) out[b] = std::log(std::max(w * ss_pin_[b] + (1.0 - w) * ss_p_[b], 1e-300));
+    return out;
 }
 
 void HpSequenceBackend::set_neural(std::shared_ptr<const ByteLstmExpert> nn, double eta) {
@@ -481,7 +536,7 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     member->set_learning(pred_->learning());
     members_.push_back(Member{std::move(member), weight});
     self_weight_ = 1.0 - total;
-    last_valid_ = ig_valid_ = nn_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
 }
 
 std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
@@ -494,10 +549,11 @@ std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
 }
 
 void HpSequenceBackend::reset_stream(bool keep_history) {
-    last_valid_ = ig_valid_ = nn_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
     prime_neural_();  // the LSTM re-reads whatever history the predictor kept
+    if (!keep_history) truncate_session(0);
 }
 
 void HpSequenceBackend::set_serve_adaptation(int num, int den, int skip) {
@@ -616,6 +672,15 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         }
         for (double& x : w) x /= z;
     }
+    if (ss_on_) {
+        if (ss_valid_ && ss_bucket_ >= 0 && ss_eta_ > 0.0 && pred_->learning()) {
+            double& w = ss_w_[static_cast<std::size_t>(ss_bucket_)];
+            const double pa = ss_pin_[byte], pb = ss_p_[byte];
+            const double p = std::max(w * pa + (1.0 - w) * pb, 1e-12);
+            w = std::clamp(w + ss_eta_ * (pa - pb) / p, 0.01, 0.99);
+        }
+        ss_hist_.push_back(byte);
+    }
     if (nn_) {
         if (nn_valid_ && nn_eta_ > 0.0 && pred_->learning()) {
             // Gradient step on the two-way mixture's log loss for this bucket.
@@ -626,12 +691,12 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         }
         nn_->step(nn_state_, byte);
     }
-    last_valid_ = ig_valid_ = nn_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {
-    if (ig_ || nn_) {
-        const bool cached = (!ig_ || ig_valid_) && (!nn_ || nn_valid_);
+    if (ig_ || nn_ || ss_on_) {
+        const bool cached = (!ig_ || ig_valid_) && (!nn_ || nn_valid_) && (!ss_on_ || ss_valid_);
         const double lp = cached ? last_final_[next] : next_byte_log_probs(256)[next];
         consume_byte(next);
         return -lp;

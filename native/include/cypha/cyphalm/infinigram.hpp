@@ -54,6 +54,12 @@ class InfiniGram {
 
     std::size_t size() const { return n_; }
 
+    /// Longest prefix of ``s[0..len)`` (at most ``cap`` bytes) that occurs in
+    /// the corpus, at least ``at_least`` (a known lower bound); ``pos`` is one
+    /// corpus position where it occurs and ``count`` how often.
+    std::size_t match_prefix(const std::uint8_t* s, std::size_t len, std::size_t cap, std::size_t at_least,
+                             std::size_t& pos, std::size_t& count) const;
+
  private:
     // [lo, hi) of suffixes starting with pat[0..m).
     void range(const std::uint8_t* pat, std::size_t m, std::size_t& lo, std::size_t& hi) const;

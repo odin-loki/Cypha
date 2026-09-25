@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
     std::string neural_path;
+    bool session_cache = false;  // ∞-gram index over the text read so far
     std::size_t infinigram_bytes = 0;  // BLM1 byte LSTM expert
     double fold_auto = 0.0;  // per-table occupancy fold target (0 = off)
     std::string dump_dist;  // float32 natural-log P, 256 per held-out byte
@@ -156,6 +157,7 @@ int main(int argc, char** argv) {
         else if (a == "--dump-dist") dump_dist = next();
         else if (a == "--fold-auto") fold_auto = std::stod(next());
         else if (a == "--neural") neural_path = next();
+        else if (a == "--session-cache") session_cache = true;
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -198,6 +200,10 @@ int main(int argc, char** argv) {
         if (fold_auto > 0.0) {
             out["fold_auto"] = fold_auto;
             out["fold_auto_freed_mb"] = static_cast<double>(model->hp_backend().fold_auto(fold_auto)) / 1048576.0;
+        }
+        if (session_cache) {
+            model->hp_backend().set_session_cache(true);
+            out["session_cache"] = true;
         }
         if (!neural_path.empty()) {
             model->attach_neural(neural_path);

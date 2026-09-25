@@ -735,6 +735,34 @@ The 4-shard default is within 0.003 (wiki) to 0.012 (lcet10) of the full ensembl
 - the 416 MB index file is gone;
 - the same ~0.4 GB of RAM moves from mapped to private.
 
+**The index as a cache.** An in-memory index costs seconds, so it can be built for any text, not only the corpus.
+
+- **Tracing** (`cyphalm_trace`, after OLMoTrace). For every position of a text it finds the longest corpus match and its location, via `InfiniGram::match_prefix`. It reports:
+  - the spans of at least `--min-len` bytes;
+  - the share of the text they cover.
+
+  A 16 KiB text traces in 0.2–0.7 s. Raw data: [`lm_quality/trace/`](lm_quality/trace/).
+
+  | text | share in ≥32-byte corpus matches | longest match | what matches |
+  |---|---:|---:|---|
+  | wiki held-out (16 KiB) | 4.2% | 133 | XML page headers, taxobox templates |
+  | Alice (16 KiB) | 0.4% | 61 | one sentence quoted in Wikipedia |
+  | lcet10 (16 KiB) | 1.5% | 35 | whitespace runs |
+  | true continuations (12 × 400 B) | 16% | 202 | |
+  | CyphaLM, word lookahead | **28%** | 67 | |
+  | CyphaLM, byte sampling | 3.7% | 55 | |
+  | LSTM | 8.9% | 67 | |
+  | Transformer | 1.3% | 58 | |
+
+  The held-out texts are not contaminated. Word lookahead copies whole corpus phrases more than any other decoder, which is part of why every judge rated its output so probable.
+- **Session cache** (`set_session_cache`, `--session-cache`, manifest `"session_cache": true`). An index over the text the stream has read is rebuilt at 1 KiB, on each doubling, then every 64 KiB. Its longest-match counts are mixed in with a weight learned per (length, count) bucket. Mixing every match hurts (4-shard winner: wiki +0.012, lcet10 +0.008), because hp's match models and online learning already cover short repeats. Using only matches of 16 bytes or more is neutral to slightly positive (wiki ±0, Alice −0.0004, lcet10 −0.0010). It is off by default; it is for long sessions that paste or repeat long text.
+- **Draft bytes from the index** (speculative decoding) does not pay here:
+  - a Transformer verifies k drafted tokens in one parallel pass, but hp reads bytes serially, so checking a draft costs as much as generating it;
+  - the geometric ensemble mix needs every member's full distribution to normalise, so even a single-byte check needs the whole distribution.
+
+  Not implemented.
+- **Replacing hp's match models with the index** does not work either: with the ∞-gram attached, dropping the order-0 match model costs +0.0017 wiki / +0.0015 Alice, and dropping `smatch` costs +0.0013 / +0.0005 (drop sweep above). The mixer uses the match models' recency signal, which the index lacks.
+
 ## Against neural baselines
 
 [`CYPHALM_VS_NEURAL_LM.md`](CYPHALM_VS_NEURAL_LM.md) sets the winner against a byte-level Transformer (3.35M params) and an LSTM (3.43M params). Each trains for at most 1 hour on the same 4 cores and the same 95 MB, and all are scored by one code path.

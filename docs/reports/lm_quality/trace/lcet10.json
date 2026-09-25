@@ -1,0 +1,65 @@
+{
+ "bytes": 16384,
+ "corpus": "/home/user/ckpt/winner/enwik8_95m.igr",
+ "corpus_bytes": 95000000,
+ "coverage": 0.0145263671875,
+ "index_seconds": 6.0886e-05,
+ "longest_match": 35,
+ "longest_spans": [
+  {
+   "corpus_offset": 4762192,
+   "len": 35,
+   "occurrences": 1,
+   "snippet": " within the scientific community.  ",
+   "text_offset": 55399
+  },
+  {
+   "corpus_offset": 9646258,
+   "len": 35,
+   "occurrences": 38,
+   "snippet": ".                                  ",
+   "text_offset": 63636
+  },
+  {
+   "corpus_offset": 9646258,
+   "len": 34,
+   "occurrences": 39,
+   "snippet": ".                                 ",
+   "text_offset": 56237
+  },
+  {
+   "corpus_offset": 42131147,
+   "len": 34,
+   "occurrences": 1,
+   "snippet": " to determine the most appropriate",
+   "text_offset": 58756
+  },
+  {
+   "corpus_offset": 38707142,
+   "len": 34,
+   "occurrences": 1,
+   "snippet": " around the turn of the century.  ",
+   "text_offset": 62602
+  },
+  {
+   "corpus_offset": 81585641,
+   "len": 33,
+   "occurrences": 1,
+   "snippet": " research and education networks ",
+   "text_offset": 55534
+  },
+  {
+   "corpus_offset": 15362540,
+   "len": 33,
+   "occurrences": 1,
+   "snippet": " are best understood in terms of ",
+   "text_offset": 55738
+  }
+ ],
+ "mean_match": 11.685302734375,
+ "min_len": 32,
+ "offset": 50000,
+ "spans": 7,
+ "text": "/home/user/corpora/cant/lcet10.txt",
+ "trace_seconds": 0.183900673
+}

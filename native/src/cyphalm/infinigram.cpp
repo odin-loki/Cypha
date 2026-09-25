@@ -161,6 +161,34 @@ void InfiniGram::range(const std::uint8_t* pat, std::size_t m, std::size_t& lo, 
     hi = a;
 }
 
+std::size_t InfiniGram::match_prefix(const std::uint8_t* s, std::size_t len, std::size_t cap,
+                                     std::size_t at_least, std::size_t& pos, std::size_t& count) const {
+    // Occurrence is monotone in the prefix length: bisect.
+    std::size_t good = std::min(at_least, std::min(len, cap)), bad = std::min(len, cap) + 1;
+    std::size_t lo = 0, hi = n_;
+    if (good > 0) range(s, good, lo, hi);
+    if (lo >= hi) {  // the lower bound was wrong: start from nothing
+        good = 0;
+        lo = 0;
+        hi = n_;
+    }
+    while (bad - good > 1) {
+        const std::size_t mid = good + (bad - good) / 2;
+        std::size_t a = 0, b = 0;
+        range(s, mid, a, b);
+        if (a < b) {
+            good = mid;
+            lo = a;
+            hi = b;
+        } else {
+            bad = mid;
+        }
+    }
+    pos = lo < hi ? sa(lo) : 0;
+    count = hi - lo;
+    return good;
+}
+
 InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint) const {
     Result r;
     const int cap = static_cast<int>(std::min<std::size_t>(len, static_cast<std::size_t>(std::max(0, max_n))));

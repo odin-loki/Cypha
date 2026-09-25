@@ -104,12 +104,12 @@ class HpSequenceBackend {
     void set_tree_prune(double min_prob) {
         prune_log_ = min_prob > 0.0 ? std::log(min_prob) : -1e300;
         for (auto& m : members_) m.backend->set_tree_prune(min_prob);
-        last_valid_ = ig_valid_ = nn_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
     }
 
     void set_frozen_scoring(bool on) {
         frozen_scoring_ = on;
-        last_valid_ = ig_valid_ = nn_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
         for (auto& m : members_) m.backend->set_frozen_scoring(on);
     }
     bool frozen_scoring() const { return frozen_scoring_; }
@@ -137,7 +137,7 @@ class HpSequenceBackend {
     std::vector<double> ensemble_weights() const;
     /// Forget the last scored ensemble distribution (after rewinding state).
     void invalidate_scoring_cache() {
-        last_valid_ = ig_valid_ = nn_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
     }
 
     /// ∞-gram expert (InfiniGram over the pretraining corpus): the served
@@ -168,6 +168,16 @@ class HpSequenceBackend {
         nn_state_ = s;
         nn_valid_ = false;
     }
+    /// Session cache: an ∞-gram index over the bytes this stream has read
+    /// (prompt, conversation, document), rebuilt just in time as it grows
+    /// (at 1 KiB, then every time it doubles, then every 64 KiB). Its
+    /// longest-match next-byte counts are mixed in as w p + (1 - w) p_sess,
+    /// w learned online per (match length, count) bucket.
+    void set_session_cache(bool on, double eta = 0.02);
+    bool has_session_cache() const { return ss_on_; }
+    /// Bytes read so far, and rewinding to an earlier length (generation).
+    std::size_t session_size() const { return ss_hist_.size(); }
+    void truncate_session(std::size_t n);
     /// This predictor and every member's (for ``hp::StreamRewind``).
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).
@@ -184,7 +194,7 @@ class HpSequenceBackend {
         pred_->fold_tables(target);
         cfg_ = pred_->config();
         for (auto& m : members_) m.backend->fold_tables(target);
-        last_valid_ = ig_valid_ = nn_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
     }
     /// Serve mixer rate on every model (``hp::Predictor::set_serve_adaptation``).
     void set_serve_adaptation(int num, int den, int skip);
@@ -246,6 +256,18 @@ class HpSequenceBackend {
     int ig_bucket_ = 0;
     std::vector<double> ig_p_[3];       // model, longest, reliable (probabilities)
     std::vector<double> last_final_;    // served log probs, for observe_next_byte
+    // Session cache.
+    std::vector<double> session_mix_(const std::vector<double>& base);
+    bool ss_on_ = false;
+    double ss_eta_ = 0.02;
+    std::vector<std::uint8_t> ss_hist_;
+    std::shared_ptr<const InfiniGram> ss_ig_;
+    std::size_t ss_built_ = 0;          // bytes indexed by ss_ig_
+    static constexpr int kSsBuckets = 8 * 4;
+    std::vector<double> ss_w_;
+    bool ss_valid_ = false;
+    int ss_bucket_ = -1;                // -1: no session evidence this byte
+    std::vector<double> ss_pin_, ss_p_;
     // Neural expert.
     std::vector<double> neural_mix_(const std::vector<double>& base);
     void prime_neural_();

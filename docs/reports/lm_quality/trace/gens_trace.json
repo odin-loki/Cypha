@@ -1,0 +1,27 @@
+{
+ "reference": {
+  "coverage32": 0.16145833333333334,
+  "longest_max": 202,
+  "longest_mean": 58.416666666666664
+ },
+ "cyphalm": {
+  "coverage32": 0.28020833333333334,
+  "longest_max": 67,
+  "longest_mean": 41.916666666666664
+ },
+ "cyphalm_bytes": {
+  "coverage32": 0.036875,
+  "longest_max": 55,
+  "longest_mean": 28.666666666666668
+ },
+ "gpt": {
+  "coverage32": 0.012708333333333334,
+  "longest_max": 58,
+  "longest_mean": 25.5
+ },
+ "lstm": {
+  "coverage32": 0.08875,
+  "longest_max": 67,
+  "longest_mean": 31.833333333333332
+ }
+}
