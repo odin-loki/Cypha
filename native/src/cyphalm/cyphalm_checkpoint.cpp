@@ -225,10 +225,33 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
 
 namespace {
 
+/// The flag-gated mixing keys of a manifest; absent keys keep today's mixing.
+MixingOptions mixing_options_from_json(const nlohmann::json& meta) {
+    MixingOptions o;
+    o.final_temperature = meta.value("final_temperature", o.final_temperature);
+    o.final_temperature_lr = meta.value("final_temperature_lr", o.final_temperature_lr);
+    if (meta.contains("infinigram_mode"))
+        o.infinigram_mode = parse_infinigram_mode(meta.at("infinigram_mode").get<std::string>());
+    if (meta.contains("neural_mix")) o.neural_mix = parse_neural_mix(meta.at("neural_mix").get<std::string>());
+    o.ensemble_gate = meta.value("ensemble_gate", o.ensemble_gate);
+    return o;
+}
+
+/// Only the keys that differ from the defaults (old readers ignore them).
+void mixing_options_to_json(const MixingOptions& o, nlohmann::json& meta) {
+    const MixingOptions d;
+    if (o.final_temperature != d.final_temperature) meta["final_temperature"] = o.final_temperature;
+    if (o.final_temperature_lr != d.final_temperature_lr) meta["final_temperature_lr"] = o.final_temperature_lr;
+    if (o.infinigram_mode != d.infinigram_mode) meta["infinigram_mode"] = infinigram_mode_name(o.infinigram_mode);
+    if (o.neural_mix != d.neural_mix) meta["neural_mix"] = neural_mix_name(o.neural_mix);
+    if (o.ensemble_gate != d.ensemble_gate) meta["ensemble_gate"] = o.ensemble_gate;
+}
+
 /// Ensemble manifest: {"cyphalm_ensemble": 1, "members": [{"checkpoint": path,
 /// "weight": w?}, ...], "learning_rate": r?}. The first member is the primary;
 /// paths are relative to the manifest; weights default to equal shares.
 CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& meta) {
+    const MixingOptions mixing = mixing_options_from_json(meta);  // bad names throw before loading
     const auto& ms = meta.at("members");
     if (!ms.is_array() || ms.empty()) throw std::runtime_error("ensemble manifest has no members");
     auto resolve = [&](const std::string& p) {
@@ -247,7 +270,9 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
     }
     if (meta.contains("infinigram")) {
         // A stored index, or the corpus itself (indexed at load, first
-        // "infinigram_bytes" bytes).
+        // "infinigram_bytes" bytes). The mode first: a saved weights file
+        // next to the index must have its bucket count.
+        model.hp_backend().set_infinigram_mode(mixing.infinigram_mode);
         model.attach_infinigram(resolve(meta.at("infinigram").get<std::string>()),
                                 meta.value("infinigram_bytes", std::size_t{0}));
     }
@@ -266,6 +291,8 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
         model.hp_backend().set_session_cache(
             true, 0.02, meta.value("session_window", HpSequenceBackend::kSessionWindow));
     }
+    // Every member and stage attached: the gate starts at the members' weights.
+    model.hp_backend().set_mixing_options(mixing);
     return model;
 }
 
@@ -274,6 +301,12 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
 void save_cyphalm_ensemble_manifest(const std::string& manifest_path,
                                     const std::vector<std::string>& member_checkpoints,
                                     double learning_rate) {
+    save_cyphalm_ensemble_manifest(manifest_path, member_checkpoints, learning_rate, MixingOptions{});
+}
+
+void save_cyphalm_ensemble_manifest(const std::string& manifest_path,
+                                    const std::vector<std::string>& member_checkpoints,
+                                    double learning_rate, const MixingOptions& mixing) {
     nlohmann::json meta;
     meta["cyphalm_ensemble"] = 1;
     meta["note"] = "Serve-time ensemble: the first member is the primary; distributions are "
@@ -281,6 +314,7 @@ void save_cyphalm_ensemble_manifest(const std::string& manifest_path,
     meta["members"] = nlohmann::json::array();
     for (const auto& c : member_checkpoints) meta["members"].push_back({{"checkpoint", c}});
     meta["learning_rate"] = learning_rate;
+    mixing_options_to_json(mixing, meta);
     std::ofstream out(manifest_path);
     if (!out) throw std::runtime_error("cannot write ensemble manifest: " + manifest_path);
     out << meta.dump(2) << "\n";

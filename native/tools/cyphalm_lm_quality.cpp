@@ -118,12 +118,18 @@ int main(int argc, char** argv) {
     int word_k = 0;
     bool only_default = false;
     bool freeze_mixing = false;  // mixing weights stay at their start values (the pre-fix served mixture)
+    // Flag-gated mixing variants (manifest keys of the same names); unset = the manifest's.
+    double final_temp = 1.0, final_temp_lr = 0.0;
+    bool final_temp_given = false, final_temp_lr_given = false;
+    std::string infinigram_mode, neural_mix;
+    bool ensemble_gate = false;
     // Flags that act on a loaded checkpoint or manifest: without --load they
     // would be ignored, so they are an error there.
     const std::set<std::string> load_only = {
         "--member", "--ensemble-lr", "--merge", "--fold", "--drop", "--match-drop", "--fold-auto",
         "--session-cache", "--neural", "--neural-lr", "--neural-adapt", "--infinigram",
-        "--infinigram-bytes", "--ig-weights-out", "--freeze-mixing"};
+        "--infinigram-bytes", "--ig-weights-out", "--freeze-mixing", "--final-temp", "--final-temp-lr",
+        "--infinigram-mode", "--neural-mix", "--ensemble-gate"};
     std::vector<std::string> load_only_given;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -174,6 +180,16 @@ int main(int argc, char** argv) {
         else if (a == "--neural-lr") neural_lr = std::stod(next());
         else if (a == "--neural-adapt") neural_adapt = std::stod(next());
         else if (a == "--freeze-mixing") freeze_mixing = true;
+        else if (a == "--final-temp") {
+            final_temp = std::stod(next());
+            final_temp_given = true;
+        } else if (a == "--final-temp-lr") {
+            final_temp_lr = std::stod(next());
+            final_temp_lr_given = true;
+        }
+        else if (a == "--infinigram-mode") infinigram_mode = next();
+        else if (a == "--neural-mix") neural_mix = next();
+        else if (a == "--ensemble-gate") ensemble_gate = true;
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -181,6 +197,17 @@ int main(int argc, char** argv) {
     }
     if (!(fold_auto >= 0.0 && fold_auto < 1.0)) {  // 0 = off
         std::cerr << "--fold-auto must be in (0, 1), a projected table occupancy (0 = off)\n";
+        return 2;
+    }
+    try {
+        if (!infinigram_mode.empty()) (void)cypha::cyphalm::parse_infinigram_mode(infinigram_mode);
+        if (!neural_mix.empty()) (void)cypha::cyphalm::parse_neural_mix(neural_mix);
+    } catch (const std::invalid_argument& e) {
+        std::cerr << e.what() << "\n";
+        return 2;
+    }
+    if (!(final_temp > 0.0) || !(final_temp_lr >= 0.0)) {
+        std::cerr << "--final-temp must be > 0 and --final-temp-lr >= 0\n";
         return 2;
     }
     if (load_json.empty() && !load_only_given.empty()) {
@@ -256,6 +283,25 @@ int main(int argc, char** argv) {
             out["infinigram"] = infinigram_path;
         }
         if (ensemble_lr >= 0.0) model->hp_backend().set_ensemble_learning_rate(ensemble_lr);
+        // Mixing variants over the manifest's, after every stage is attached
+        // (the gate starts at the members' weights). Written when not the
+        // defaults.
+        {
+            cypha::cyphalm::MixingOptions mo = hb.mixing_options();
+            if (final_temp_given) mo.final_temperature = final_temp;
+            if (final_temp_lr_given) mo.final_temperature_lr = final_temp_lr;
+            if (!infinigram_mode.empty()) mo.infinigram_mode = cypha::cyphalm::parse_infinigram_mode(infinigram_mode);
+            if (!neural_mix.empty()) mo.neural_mix = cypha::cyphalm::parse_neural_mix(neural_mix);
+            if (ensemble_gate) mo.ensemble_gate = true;
+            if (!(mo == hb.mixing_options())) hb.set_mixing_options(mo);
+            const cypha::cyphalm::MixingOptions d;
+            if (mo.final_temperature != d.final_temperature) out["final_temperature"] = mo.final_temperature;
+            if (mo.final_temperature_lr != d.final_temperature_lr) out["final_temperature_lr"] = mo.final_temperature_lr;
+            if (mo.infinigram_mode != d.infinigram_mode)
+                out["infinigram_mode"] = cypha::cyphalm::infinigram_mode_name(mo.infinigram_mode);
+            if (mo.neural_mix != d.neural_mix) out["neural_mix"] = cypha::cyphalm::neural_mix_name(mo.neural_mix);
+            if (mo.ensemble_gate) out["ensemble_gate"] = true;
+        }
         if (freeze_mixing) {
             // Every stage's mixing weights stay at their start values while
             // the models still learn: the mixture generation served before
@@ -323,8 +369,8 @@ int main(int argc, char** argv) {
         constexpr int kBins = 10;
         double bin_conf[kBins] = {}, bin_acc[kBins] = {};
         std::size_t bin_n[kBins] = {};
-        const double temps[] = {0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4};
-        constexpr int kTemps = 8;
+        const double temps[] = {0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 1.1, 1.2, 1.3, 1.4};
+        constexpr int kTemps = 10;
         double nll_t[kTemps] = {};
         double f_nll = 0.0, f_secs = 0.0, e_secs = 0.0;
         std::size_t f_top1 = 0;
@@ -402,7 +448,11 @@ int main(int argc, char** argv) {
         }
         const double n = static_cast<double>(n_eval);
         nlohmann::json tsweep = nlohmann::json::object();
-        for (int t = 0; t < kTemps; ++t) tsweep[std::to_string(temps[t]).substr(0, 3)] = nll_t[t] / n;
+        for (int t = 0; t < kTemps; ++t) {
+            std::string key = std::to_string(temps[t]).substr(0, 4);  // "0.85", "0.90" -> "0.9", "1.00" -> "1.0"
+            if (key.back() == '0') key.pop_back();
+            tsweep[key] = nll_t[t] / n;
+        }
         out["eval"] = {{"path", eval_path},
                        {"learning", frozen_eval ? "frozen (pretrained only)" : "online (in-context)"},
                        {"offset", eval_offset},

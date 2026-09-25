@@ -24,8 +24,10 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
+#include "cypha/cyphalm/infinigram.hpp"
 #include "cypha/cyphalm/neural_expert.hpp"
 #include "hp/predictor.hpp"
 #include "hp/undo.hpp"
@@ -33,10 +35,36 @@
 #include <array>
 
 namespace cypha::cyphalm {
-class InfiniGram;
-}
 
-namespace cypha::cyphalm {
+/// ∞-gram stage variants (``HpSequenceBackend::set_infinigram_mode``).
+enum class InfinigramMode {
+    Halving,    ///< the ≥16 part halves the match length until 16 occurrences (default)
+    Longest16,  ///< the longest suffix with ≥16 occurrences; fertility / determinism buckets
+};
+/// Neural stage variants (``HpSequenceBackend::set_neural_mix``).
+enum class NeuralMix {
+    Linear,  ///< w_0 p + sum_i w_i p_nn_i (default)
+    Log,     ///< log-linear: p ∝ exp(a_0 log p + sum_i a_i log p_nn_i)
+    Switch,  ///< s p_linear + (1 - s) p_log, s learned per bucket
+};
+/// Names as in manifests and on the command line ("halving", "longest16";
+/// "linear", "log", "switch"); an unknown name throws std::invalid_argument.
+const char* infinigram_mode_name(InfinigramMode m);
+InfinigramMode parse_infinigram_mode(const std::string& name);
+const char* neural_mix_name(NeuralMix m);
+NeuralMix parse_neural_mix(const std::string& name);
+
+/// Flag-gated mixing variants, all off by default (today's mixing, bit for
+/// bit). Manifest keys ``final_temperature``, ``final_temperature_lr``,
+/// ``infinigram_mode``, ``neural_mix``, ``ensemble_gate``.
+struct MixingOptions {
+    double final_temperature = 1.0;
+    double final_temperature_lr = 0.0;
+    InfinigramMode infinigram_mode = InfinigramMode::Halving;
+    NeuralMix neural_mix = NeuralMix::Linear;
+    bool ensemble_gate = false;
+    bool operator==(const MixingOptions&) const = default;
+};
 
 /// Wraps hp::Predictor for byte/token sequence modelling inside Cypha.
 class HpSequenceBackend {
@@ -96,8 +124,9 @@ class HpSequenceBackend {
     std::uint8_t serve_sample_next_byte(double temperature, double (*rng01)()) const;
 
     /// True when any mixing stage is active (ensemble members, ∞-gram,
-    /// neural experts, session cache): the served distribution is then not
-    /// the primary predictor's alone, and every serve path uses the full mix.
+    /// neural experts, session cache, a final temperature): the served
+    /// distribution is then not the primary predictor's alone, and every
+    /// serve path uses the full mix.
     bool is_composite() const { return mixed_(); }
 
     /// Train: cross-entropy loss in nats for observing ``next`` after current history.
@@ -128,12 +157,12 @@ class HpSequenceBackend {
     void set_tree_prune(double min_prob) {
         prune_log_ = min_prob > 0.0 ? std::log(min_prob) : -1e300;
         for (auto& m : members_) m.backend->set_tree_prune(min_prob);
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
     }
 
     void set_frozen_scoring(bool on) {
         frozen_scoring_ = on;
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
         for (auto& m : members_) m.backend->set_frozen_scoring(on);
     }
     bool frozen_scoring() const { return frozen_scoring_; }
@@ -160,6 +189,17 @@ class HpSequenceBackend {
     void set_ensemble_learning_rate(double eta) { ens_eta_ = eta; }
     /// Current weights: [self, member 0, member 1, ...].
     std::vector<double> ensemble_weights() const;
+    /// Context-gated ensemble weights (default off): the geometric mix uses
+    /// w_i = b_i + theta[g_i][i] with no simplex constraint, where g_i =
+    /// model i's top probability (8) x whether its top byte is the pool's
+    /// (the mix at weights b; 2) x the ∞-gram match-length bucket (4; 0
+    /// without an index). b starts at ``ensemble_weights()`` and theta at 0,
+    /// so the first distributions are today's; both then learn by AdaGrad
+    /// on the mix's log loss at the ensemble rate (in place of the
+    /// exponentiated gradient on ``ensemble_weights``), each in [-4, 4].
+    /// Switching it on (or adding a member while on) restarts it.
+    void set_ensemble_gate(bool on);
+    bool ensemble_gate() const { return eg_on_; }
     /// Every learned mixing weight: the ensemble's (``ensemble_weights``),
     /// the ∞-gram, session and neural buckets, and each member's own.
     /// Generation takes it before a request and restores it after
@@ -169,6 +209,9 @@ class HpSequenceBackend {
         std::vector<double> ensemble;
         std::vector<std::array<double, 3>> ig;
         std::vector<double> session, neural;
+        // The flag-gated variants: log-linear neural weights and switches,
+        // the ensemble gate (b, theta, AdaGrad sums), final temperatures.
+        std::vector<double> neural_log, neural_switch, gate, final_temp;
         std::vector<MixingState> members;
         bool operator==(const MixingState&) const = default;
     };
@@ -196,24 +239,37 @@ class HpSequenceBackend {
     /// Forget the last scored distributions, this model's and every member's
     /// (after rewinding state).
     void invalidate_scoring_cache() {
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
         for (auto& m : members_) m.backend->invalidate_scoring_cache();
     }
 
     /// ∞-gram expert (InfiniGram over the pretraining corpus): the served
     /// distribution becomes w0 p_model + w1 p_longest + w2 p_reliable, where
     /// p_longest counts the bytes after every corpus occurrence of the
-    /// longest matching context suffix and p_reliable those after the longest
-    /// suffix seen at least 16 times. Weights are learned online (exponentiated
-    /// gradient) per (match length, count, model confidence, whether the
-    /// model and the longest match agree on the top byte) bucket while
-    /// learning is on. Shared and read-only: many models can use one index.
+    /// longest matching context suffix and p_reliable those after a suffix
+    /// seen at least 16 times (``set_infinigram_mode``: the longest such
+    /// suffix, or by default the first one halving the match length finds).
+    /// Weights are learned online (exponentiated gradient) per (match
+    /// length, count, model confidence, whether the model and the longest
+    /// match agree on the top byte) bucket while learning is on. Shared and
+    /// read-only: many models can use one index.
     void set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta = 0.3);
     bool has_infinigram() const { return static_cast<bool>(ig_); }
     /// The per-bucket mixing weights (bucket-major, 3 per bucket), to save
     /// weights learned on held-out text and start from them later.
     std::vector<double> infinigram_weights() const;
     void set_infinigram_weights(const std::vector<double>& w);
+    /// ``Halving`` (default): p_reliable halves the match length until the
+    /// suffix has 16 occurrences (it may stop short of the longest such
+    /// suffix). ``Longest16``: p_reliable is the longest suffix followed by a
+    /// byte at least 16 times (``InfiniGram::query`` with ``min_total`` 16),
+    /// and the bucket key also holds the longest match's fertility (distinct
+    /// next bytes: 1, 2, 3-4, 5+; with the count bucket this marks a
+    /// deterministic match, one next byte seen at least twice) and whether
+    /// the ≥16 suffix is deterministic: 2048 buckets instead of 256.
+    /// Changing the mode puts the weights back to the start 0.8 / 0.1 / 0.1.
+    void set_infinigram_mode(InfinigramMode m);
+    InfinigramMode infinigram_mode() const { return ig_mode_; }
     /// Neural experts (pretrained byte LSTM / Transformer, ``ByteNeuralExpert``):
     /// after the ∞-gram mix the served distribution becomes the linear mix
     /// w_0 p + sum_i w_i p_nn_i, weights learned online (exponentiated
@@ -223,6 +279,17 @@ class HpSequenceBackend {
     void add_neural(std::shared_ptr<const ByteNeuralExpert> nn);
     /// Replace all neural experts by ``nn`` (null: none).
     void set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta = 0.1);
+    /// ``Linear`` (default): the linear mix above. ``Log``: log-linear,
+    /// p ∝ exp(a_0 log p + sum_i a_i log p_nn_i), weights unconstrained
+    /// (each in [0, 4], no sum) per bucket, starting at the linear start
+    /// weights and learned by online gradient ascent on the log loss at the
+    /// neural rate, gradient log p_i(y) - E_p[log p_i] clamped to [-2, 2].
+    /// ``Switch``: s p_linear + (1 - s) p_log, both parts learning as alone
+    /// and s (start 0.5, in [0.01, 0.99]) by gradient on the mix's log loss.
+    /// Both new modes add the ∞-gram match-length bucket (4) to the bucket
+    /// key: 64 buckets instead of 16. Changing the mode restarts the weights.
+    void set_neural_mix(NeuralMix m);
+    NeuralMix neural_mix() const { return nn_mix_; }
     /// Mixing-weight rate for every attached expert (one rate for all).
     void set_neural_learning_rate(double eta) { nn_eta_ = eta; }
     double neural_learning_rate() const { return nn_eta_; }
@@ -235,8 +302,26 @@ class HpSequenceBackend {
     }
     bool has_neural() const { return !nn_.empty(); }
     std::size_t neural_count() const { return nn_.size(); }
-    /// Per bucket: [model, expert 0, expert 1, ...].
+    /// Per bucket: [model, expert 0, expert 1, ...] (the linear weights).
     std::vector<double> neural_weights() const { return nn_w_; }
+    /// Final sharpening (default T = 1: off): after every other stage the
+    /// served distribution becomes log softmax(log p / T), the same
+    /// arithmetic as the harness's temperature scan. With ``eta`` > 0, T is
+    /// learned per bucket of the top probability before it (8), starting at
+    /// ``t``: log(1/T) += eta (1/T) g with g = log p(y) - E_served[log p]
+    /// (clamped to [-20, 20]), 1/T kept in [min(0.8, 1/t), max(1.6, 1/t)],
+    /// while mixing weights learn. No other stage's update reads the served
+    /// distribution, so a fixed T changes nothing else. Throws
+    /// std::invalid_argument unless t > 0 and eta >= 0.
+    void set_final_temperature(double t, double eta = 0.0);
+    double final_temperature() const { return ft_t_; }
+    double final_temperature_learning_rate() const { return ft_eta_; }
+    /// Current temperature per bucket.
+    std::vector<double> final_temperatures() const { return ft_temp_; }
+    /// All of the variants at once, and back (a setting that does not
+    /// change keeps its stage's learned state).
+    MixingOptions mixing_options() const;
+    void set_mixing_options(const MixingOptions& o);
     /// Expert states, to restore after rewinding the predictors.
     std::vector<ByteNeuralExpert::State> neural_states() const {
         std::vector<ByteNeuralExpert::State> out;
@@ -248,7 +333,7 @@ class HpSequenceBackend {
             nn_[i].state = st[i];
             nn_[i].primed = false;
         }
-        nn_valid_ = served_valid_ = false;
+        nn_valid_ = ft_valid_ = served_valid_ = false;
     }
     /// Experts primed so far (diagnostics, tests). Priming reads the last
     /// 512 bytes of history into an expert's initial state; an expert that
@@ -291,7 +376,7 @@ class HpSequenceBackend {
     std::size_t fold_auto(double max_occupancy) {
         if (!(max_occupancy > 0.0 && max_occupancy < 1.0))
             throw std::invalid_argument("fold_auto: max_occupancy must be in (0, 1)");
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
         std::size_t freed = pred_->fold_auto(max_occupancy);
         for (auto& m : members_) freed += m.backend->fold_auto(max_occupancy);
         return freed;
@@ -302,7 +387,7 @@ class HpSequenceBackend {
         pred_->fold_tables(target);
         cfg_ = pred_->config();
         for (auto& m : members_) m.backend->fold_tables(target);
-        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+        last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
     }
     /// Serve mixer rate on every model (``hp::Predictor::set_serve_adaptation``).
     void set_serve_adaptation(int num, int den, int skip);
@@ -365,13 +450,29 @@ class HpSequenceBackend {
     std::vector<std::vector<double>> last_member_lp_;
     std::vector<double> ens_p_;  // exp(last_mix_), for the weight update
     void update_ensemble_weights_(std::uint8_t byte);
+    // Ensemble gate (set_ensemble_gate), models ordered [self, members...].
+    bool eg_on_ = false;
+    static constexpr int kEgBuckets = 8 * 2 * 4;
+    std::vector<double> eg_b_;          // per model
+    std::vector<double> eg_theta_;      // kEgBuckets x models
+    std::vector<double> eg_g2_;         // AdaGrad sums: b's, then theta's
+    std::vector<int> eg_bucket_;        // per model, at the last scoring
+    void reset_gate_();
+    void update_gate_(std::uint8_t byte);
 
     // Model (+ ensemble) distribution before the ∞-gram mix.
     std::vector<double> scored_log_probs_(int vocab_size);
     std::vector<double> infinigram_mix_(const std::vector<double>& base);
+    // The index query for this position (context only): ig_r_, ig_rr_ and
+    // ig_lb_, before any scoring so the gates can read the match length.
+    void infinigram_query_();
     std::shared_ptr<const InfiniGram> ig_;
     double ig_eta_ = 0.3;
+    InfinigramMode ig_mode_ = InfinigramMode::Halving;
     static constexpr int kIgBuckets = 8 * 4 * 8;
+    int ig_buckets_() const { return ig_mode_ == InfinigramMode::Halving ? kIgBuckets : kIgBuckets * 8; }
+    InfiniGram::Result ig_r_, ig_rr_;   // longest match, reliable (≥16) part
+    int ig_lb_ = 0;                     // match-length bucket for the gates: < 8, < 16, < 32, more
     std::vector<std::array<double, 3>> ig_w_;
     std::vector<std::array<double, 3>> ig_w0_;  // start weights (reset)
     bool ig_valid_ = false;
@@ -382,9 +483,10 @@ class HpSequenceBackend {
     std::array<std::uint8_t, 256> ig_prev_ctx_{};
     std::size_t ig_prev_len_ = 0;
     int ig_prev_n_ = -1;                // -1: no previous query
+    int ig_prev_rn_ = -1;               // its ≥16 length (Longest16), which + 1 bounds this one
     // Served distribution (after every mixing stage) at this position, kept
     // while ``served_valid_``: dropped with the stage caches above.
-    bool mixed_() const { return !members_.empty() || ig_ || !nn_.empty() || ss_on_; }
+    bool mixed_() const { return !members_.empty() || ig_ || !nn_.empty() || ss_on_ || ft_on_(); }
     std::vector<double> served_;
     bool served_valid_ = false;
     std::uint64_t settings_epoch_ = 0;  // bumped when learning or the serve rate changes
@@ -427,10 +529,25 @@ class HpSequenceBackend {
     double nn_eta_ = 0.1;
     double nn_adapt_ = 0.0;
     static constexpr int kNnBuckets = 16;
-    std::vector<double> nn_w_;          // kNnBuckets x (1 + experts)
+    NeuralMix nn_mix_ = NeuralMix::Linear;
+    int nn_buckets_() const { return nn_mix_ == NeuralMix::Linear ? kNnBuckets : kNnBuckets * 4; }
+    std::vector<double> nn_w_;          // nn_buckets_() x (1 + experts)
+    std::vector<double> nn_a_;          // Log / Switch: log-linear weights, same shape
+    std::vector<double> nn_s_;          // Switch: the linear part's share per bucket
     bool nn_valid_ = false;
     int nn_bucket_ = 0;
     std::vector<double> nn_pin_;        // probabilities before the neural mix
+    std::vector<double> nn_lpin_, nn_plog_;  // Log / Switch: log probs before, log-linear probs
+    // Final sharpening (set_final_temperature).
+    std::vector<double> final_sharpen_(const std::vector<double>& in);
+    bool ft_on_() const { return ft_t_ != 1.0 || ft_eta_ > 0.0; }
+    double ft_t_ = 1.0;
+    double ft_eta_ = 0.0;
+    static constexpr int kFtBuckets = 8;
+    std::vector<double> ft_temp_ = std::vector<double>(kFtBuckets, 1.0);
+    bool ft_valid_ = false;
+    int ft_bucket_ = 0;
+    std::vector<double> ft_in_, ft_p_;  // log probs before, probabilities after (learning)
     /// Ensemble: geometric mix of this model's ``own`` log probs with members'.
     std::vector<double> mix_with_members_(const std::vector<double>& own,
                                           const std::vector<std::vector<double>>& member_lp);

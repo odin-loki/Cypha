@@ -386,7 +386,9 @@ next byte: 0.03 ms. `HpSequenceBackend::set_infinigram` serves
 p = w0 · p_model + w1 · p_longest + w2 · p_reliable
 
 where p_longest counts bytes after the longest matching suffix, and p_reliable
-does the same for the longest suffix seen at least 16 times. Weights are
+does the same for a suffix seen at least 16 times (found by halving the match
+length, so not always the longest such suffix; `infinigram_mode longest16`
+takes the longest, see the Reference). Weights are
 learned online (exponentiated gradient) per bucket of (match length, count,
 model confidence) while learning is on. Context comes from the predictor's
 byte history, so exact rewinds and word lookahead cover it.
@@ -919,6 +921,11 @@ and the commit messages; numbers are the ones measured above.
 | `--neural-adapt LR` | manifest | output-layer SGD rate of the experts (0 = frozen) |
 | `--ensemble-lr R` | config (0.01) | ensemble weight learning rate; 0 = fixed |
 | `--freeze-mixing` | off | no mixing weight learns (ensemble, ∞-gram, session, neural; `set_mixing_learning(false)`) while the models still learn: scores the start-weight mixture that generation served before prompt scoring |
+| `--final-temp T` | manifest `final_temperature`, else 1 | final sharpening: the served distribution becomes log softmax(log p / T) after every stage (`set_final_temperature`). Same arithmetic as the `nll_bits_by_temperature` scan, which it therefore reproduces; no other stage's update reads it. Generation's sampling temperature applies on top of it (a manifest with T 0.9 samples at 0.8 × 0.9 unless the decoder's T is changed). Written to the JSON when ≠ 1 |
+| `--final-temp-lr R` | manifest `final_temperature_lr`, else 0 | learn T per bucket of the top probability (8), starting at `--final-temp`: log(1/T) += R (1/T) (log p(y) − E[log p]), 1/T in [min(0.8, 1/T₀), max(1.6, 1/T₀)], only while mixing weights learn |
+| `--infinigram-mode M` | manifest `infinigram_mode`, else `halving` | `halving`: the ≥16 part halves the match length until 16 occurrences. `longest16`: the longest suffix followed by a byte ≥ 16 times (`InfiniGram::query(…, min_total)`), and the bucket key adds the longest match's fertility (distinct next bytes 1 / 2 / 3–4 / 5+) and whether the ≥16 suffix is deterministic: 2048 buckets. Changing the mode restarts the ∞-gram weights (a 256-bucket `X.igr.weights.json` is refused in `longest16`) |
+| `--neural-mix M` | manifest `neural_mix`, else `linear` | `linear`: today's w₀ p + Σ wᵢ p_nnᵢ. `log`: p ∝ exp(a₀ log p + Σ aᵢ log p_nnᵢ), aᵢ ∈ [0, 4] unconstrained per bucket, start = the linear start weights, gradient ascent at the neural rate (gradient clamped to ±2). `switch`: s p_linear + (1 − s) p_log, s per bucket from 0.5 in [0.01, 0.99]. Both new modes add the ∞-gram match-length bucket (< 8, < 16, < 32, more) to the key: 64 buckets |
+| `--ensemble-gate` | manifest `ensemble_gate`, else off | context-gated shard weights wᵢ = bᵢ + θ[gᵢ][i], no simplex; gᵢ = model i's top probability (8) × its top byte is the pool's (2) × ∞-gram match-length bucket (4). b starts at the ensemble weights, θ at 0 (so the first distributions are today's); AdaGrad on both at the ensemble rate, each in [−4, 4], replacing the exponentiated gradient |
 | `--merge CKPT` | | merge an equal-data shard's tables into `--load` (`merge_shard_tables`, repeatable). Exits 1 when table sizes differ (folded or dropped models): merge before folding |
 | `--fold CM,MATCH,POOL[,HEBB]` | 0 = keep | fold trained tables to these bits (load path; also every `--member`) |
 | `--fold-auto OCC` | 0 = off | fold each table while its projected occupancy stays ≤ OCC (`fold_auto`, members too); OCC outside (0, 1) exits 2 |
@@ -939,11 +946,17 @@ and the commit messages; numbers are the ones measured above.
 | `--word-k K` | 0 | also generate with word lookahead at K/2 and K (library decoder) |
 | `--dump-dist FILE` | | float32 natural-log P, 256 per held-out byte (working tree, not in `2a003bf`) |
 
+`nll_bits_by_temperature` in the JSON rescores each served distribution at
+T 0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 1.1 … 1.4 (0.85 and 0.95 added with
+`--final-temp`; keys "0.85", "0.9", "1.0", …).
+
 Flags that act on a loaded model (`--member`, `--ensemble-lr`, `--merge`,
 `--fold`, `--drop`, `--match-drop`, `--fold-auto`, `--session-cache`,
 `--neural`, `--neural-lr`, `--neural-adapt`, `--infinigram`,
-`--infinigram-bytes`, `--ig-weights-out`, `--freeze-mixing`) exit with
-status 2 without `--load`.
+`--infinigram-bytes`, `--ig-weights-out`, `--freeze-mixing`, `--final-temp`,
+`--final-temp-lr`, `--infinigram-mode`, `--neural-mix`, `--ensemble-gate`)
+exit with status 2 without `--load`, as do an unknown `--infinigram-mode` /
+`--neural-mix` name, `--final-temp` ≤ 0 and a negative `--final-temp-lr`.
 
 `cyphalm_generate` flags added in this work (older ones: `docs/native/CYPHALM_SERVE.md`):
 `--load CKPT.json` (checkpoint or manifest; cold model otherwise, table bits
@@ -1024,7 +1037,12 @@ the `DecodeParams` defaults (before `ee1325c` REST hard-coded temperature 0.9). 
 | `hp::StreamRewind` | exact rewind of one or more predictors across bytes |
 | `hp::MixerNet::set_rate_scale`, `rate_q4`, `layer1_rate_q4` | serve rate scale; effective rates in 1/16ths (`kMixerRateFrac`), checkpoints keep trained rates |
 | `HpSequenceBackend::set_session_cache(on, eta, window)` | session cache over the last `window` bytes (default `kSessionWindow` 1 MiB, 0 = all); `session_size` (bytes read), `session_held`, `session_indexed`, `session_builds` |
-| `HpSequenceBackend::mixing_state`, `set_mixing_state`, `set_mixing_learning` | snapshot / restore every mixing weight (ensemble, ∞-gram, session, neural; members too); freeze their learning |
+| `HpSequenceBackend::mixing_state`, `set_mixing_state`, `set_mixing_learning` | snapshot / restore every mixing weight (ensemble, ∞-gram, session, neural; the variants' log-linear weights, switches, gate and final temperatures; members too); freeze their learning |
+| `MixingOptions`, `HpSequenceBackend::mixing_options` / `set_mixing_options` | the flag-gated variants at once (`final_temperature`, `final_temperature_lr`, `infinigram_mode`, `neural_mix`, `ensemble_gate`); defaults serve today's mix bit for bit |
+| `HpSequenceBackend::set_final_temperature(t, eta)`, `final_temperatures` | final sharpening (fixed or learned per top-probability bucket); a final temperature ≠ 1 makes a model composite |
+| `HpSequenceBackend::set_infinigram_mode`, `set_neural_mix`, `set_ensemble_gate` | the variants one by one (see the `cyphalm_lm_quality` flags); each restarts its stage's weights when it changes |
+| `InfiniGram::query(ctx, len, max_n, hint, min_total)` | the longest suffix followed by a byte at least `min_total` times (bisection on the count, which never grows with the length); `hint` must bound that length (the backend passes min(longest − 1, previous ≥16 length + 1)) |
+| `save_cyphalm_ensemble_manifest(path, members, lr, mixing)` | also writes the variants' keys that differ from the defaults |
 | `CyphaLMModel::serve_observe(token)` | score with the full served distribution, then advance (prompt scoring) |
 | `generate_beam` | beam search on the full served distribution, replayed under `hp::StreamRewind` with learning off; shared bytes committed per `learn_from_output`; losses from the searched distribution |
 | `HpSequenceBackend::reset()` | cold model: also ∞-gram / neural weights back to their start values, experts re-initialised, session emptied |
@@ -1043,14 +1061,16 @@ the `DecodeParams` defaults (before `ee1325c` REST hard-coded temperature 0.9). 
 |---|---|
 | `BASE.json` | `{"algorithm": "hp", "config": {...CyphaLMConfig...}, "hp_checkpoint": "BASE.hpbin", "train_step_count", "note"}` |
 | `BASE.hpbin` | magic `HPCP` + version. v1: original. v2 (`39ddaf9`): + sentence memory. v3 (`74a2a13`): context slots packed to 16 bits (10-bit state + 6-bit checksum, was 16 + 8). v4: mixer layer-1 scale and skip. v5: the optional upstream context models (`hp_extra_cms` ≠ 0 only). Older versions convert on load; saves are v4 (v5 with extra context models). Folded models store their caps in the JSON and reload at the smaller size; per-table sizes (`fold_auto`) come from the file, and a model saved dropped loads dropped. `load_cyphalm_model` throws on a bad magic, an unknown version, a truncated file, a mixer or table whose shape does not match the JSON config, and a missing `.hpbin` next to a JSON that names one (`hp_checkpoint` / `"algorithm": "hp"`; legacy JSON-only checkpoints still load). `HP_CKPT_SIZES=1` prints each component's size on save (byte-match `match_[]` and word-match `wmatch_[]` separately). |
-| ensemble manifest | `{"cyphalm_ensemble": 1, "members": [{"checkpoint": "a.json", "weight": w?}, ...], "learning_rate": r?, "infinigram": "x.igr"?, "note"?}`. First member is the primary. Paths are relative to the manifest. Member weights default to 1/N each (the primary keeps the rest). `learning_rate` overrides `hp_ensemble_learning_rate`. |
+| ensemble manifest | `{"cyphalm_ensemble": 1, "members": [{"checkpoint": "a.json", "weight": w?}, ...], "learning_rate": r?, "infinigram": "x.igr"?, "note"?}`. First member is the primary. Paths are relative to the manifest. Member weights default to 1/N each (the primary keeps the rest). `learning_rate` overrides `hp_ensemble_learning_rate`. Mixing variants (absent = today's mix): `"final_temperature": T` (1), `"final_temperature_lr": r` (0), `"infinigram_mode": "halving"\|"longest16"`, `"neural_mix": "linear"\|"log"\|"switch"`, `"ensemble_gate": bool` (false); applied after every member and stage is attached (the ∞-gram mode before the index); an unknown name or T ≤ 0 fails the load. |
 | `X.igr` (IGR2, `2b8b1b9`) | `"IGR2"`, uint64 n, uint64 bits (= ceil(log2 n), 27 for 95 MB), n text bytes, zero pad to 8, suffix array bit-packed little-endian at `bits` each, 8 bytes pad. `mmap`ed read-only and shared. IGR1 (`46592ff`): `"IGR1"`, uint64 n, text, pad, n uint32 entries. Not on Windows. |
 | `X.igr.weights.json` | `{"weights": [3 per bucket × 256 buckets], "learned_on", "offset", "note"}` from `--ig-weights-out` |
 
-∞-gram expert constants: 3 parts (model, longest suffix, longest suffix with
-≥ 16 occurrences), starting weights 0.8 / 0.1 / 0.1, learning rate 0.3,
-256 buckets = 8 match-length × 4 count × 4 model-confidence × 2 top-byte
-agreement.
+∞-gram expert constants: 3 parts (model, longest suffix, a suffix with
+≥ 16 occurrences: by default the first that halving the match length finds,
+which can be shorter than the longest such suffix; `infinigram_mode
+longest16` takes the longest), starting weights 0.8 / 0.1 / 0.1, learning
+rate 0.3, 256 buckets = 8 match-length × 4 count × 4 model-confidence × 2
+top-byte agreement (`longest16`: × 4 fertility × 2 determinism = 2048).
 
 ### Tests (CTest)
 
@@ -1073,6 +1093,8 @@ agreement.
 | `native_cyphalm_serve_state_smoke` | serve rate scale in 1/16ths (×1 bit-identical, ×0.5 ≠ ×0.25 on lr1_scale 40, checkpoint keeps trained rates); session cache window, doubling cadence, no rebuild under `StreamRewind`, exact rewind, `reset_stream(false)` clears; `reset()` scores like a fresh twin (∞-gram, adapting expert, session); top-p at T 1e-5 equals greedy |
 | `native_cyphalm_serve_mixing_smoke` | manifest-style composite: no prompt scoring leaves the start weights; scoring adapts ensemble / ∞-gram / neural weights with the learned tables unchanged, `restore_mixing` puts them back; `set_mixing_learning(false)` freezes them; beam width 1 starts with the served argmax (not the primary's), equals greedy bytes and losses; beam learns only the prompt, or the output with `learn_from_output` |
 | `native_cyphalm_generate_infinigram_whole`, `native_cyphalm_generate_infinigram_bytes` | `cyphalm_generate` warns about a plain corpus indexed whole; `--infinigram-bytes` silences it |
+| `native_cyphalm_mixing_variants_smoke` | `InfiniGram::query` with `min_total` against brute force, bounded ≥16 queries along a stream; manifest keys written only when not default and loaded back, bad names / T refused; explicit default keys serve bit for bit the plain manifest; every variant (fixed / learned T, `longest16`, `log`, `switch`, gate, all) normalised, observe = served log p, repeatable across loads and with the pool off, `set_mixing_state` round trip; fixed T equals the scan's log softmax(lp / T) and learns nothing else; learned T moves only while mixing learns, within bounds, and `reset()` restarts it; the gate starts at today's mix; `longest16` has 2048 buckets |
+| `native_cyphalm_lm_quality_mixing_flags` | an unknown `--neural-mix` name is an error before loading |
 
 ### Changelog
 

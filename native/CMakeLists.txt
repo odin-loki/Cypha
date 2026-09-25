@@ -632,6 +632,11 @@ target_link_libraries(cyphalm_ensemble_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_ensemble_smoke)
 add_test(NAME native_cyphalm_ensemble_smoke COMMAND "$<TARGET_FILE:cyphalm_ensemble_smoke>")
 set_tests_properties(native_cyphalm_ensemble_smoke PROPERTIES TIMEOUT 120)
+add_executable(cyphalm_mixing_variants_smoke tools/cyphalm_mixing_variants_smoke.cpp)
+target_link_libraries(cyphalm_mixing_variants_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_mixing_variants_smoke)
+add_test(NAME native_cyphalm_mixing_variants_smoke COMMAND "$<TARGET_FILE:cyphalm_mixing_variants_smoke>")
+set_tests_properties(native_cyphalm_mixing_variants_smoke PROPERTIES TIMEOUT 300)
 
 add_executable(hp_assign_reuse_bench tools/hp_assign_reuse_bench.cpp)
 target_link_libraries(hp_assign_reuse_bench PRIVATE cypha_lm_native)
@@ -669,6 +674,12 @@ add_test(NAME native_cyphalm_lm_quality_fold_auto_range
          COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --fold-auto 1.5 --gen-bytes 0)
 set_tests_properties(native_cyphalm_lm_quality_fold_auto_range PROPERTIES
                      PASS_REGULAR_EXPRESSION "--fold-auto must be in \\(0, 1\\)" TIMEOUT 30)
+# Mixing variant names and values are checked before anything loads.
+add_test(NAME native_cyphalm_lm_quality_mixing_flags
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --load "${CMAKE_CURRENT_BINARY_DIR}/no_such_manifest.json"
+                 --neural-mix geometric --gen-bytes 0)
+set_tests_properties(native_cyphalm_lm_quality_mixing_flags PROPERTIES
+                     PASS_REGULAR_EXPRESSION "neural_mix: expected linear, log or switch" TIMEOUT 30)
 
 add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
 target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)

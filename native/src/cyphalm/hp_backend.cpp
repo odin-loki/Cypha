@@ -249,6 +249,27 @@ hp::Config hp_config_from_cyphalm(const CyphaLMConfig& c) {
     return cfg;
 }
 
+const char* infinigram_mode_name(InfinigramMode m) {
+    return m == InfinigramMode::Longest16 ? "longest16" : "halving";
+}
+
+InfinigramMode parse_infinigram_mode(const std::string& name) {
+    if (name == "halving") return InfinigramMode::Halving;
+    if (name == "longest16") return InfinigramMode::Longest16;
+    throw std::invalid_argument("infinigram_mode: expected halving or longest16, got \"" + name + "\"");
+}
+
+const char* neural_mix_name(NeuralMix m) {
+    return m == NeuralMix::Log ? "log" : m == NeuralMix::Switch ? "switch" : "linear";
+}
+
+NeuralMix parse_neural_mix(const std::string& name) {
+    if (name == "linear") return NeuralMix::Linear;
+    if (name == "log") return NeuralMix::Log;
+    if (name == "switch") return NeuralMix::Switch;
+    throw std::invalid_argument("neural_mix: expected linear, log or switch, got \"" + name + "\"");
+}
+
 HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
     : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)), parallel_(ensemble_threads_enabled()) {}
 
@@ -272,7 +293,7 @@ void HpSequenceBackend::compact_for_serve() {
 void HpSequenceBackend::prune_cold_slots(int min_total) {
     if (min_total > 0) {
         pred_->prune_cold_hash_slots(min_total);
-        served_valid_ = false;
+        ft_valid_ = served_valid_ = false;
     }
 }
 
@@ -281,12 +302,15 @@ void HpSequenceBackend::reset() {
     log_probs_buf_.clear();
     members_.clear();
     self_weight_ = 1.0;
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
     serve_rate_ = {0, 0, 0};  // the new predictor runs at its trained rates
     ++settings_epoch_;
     // The attached stages restart with it: start mixing weights, experts at
     // their initial state (no history to prime from), an empty session.
     ig_w_ = ig_w0_;
+    ig_prev_n_ = ig_prev_rn_ = -1;
+    reset_gate_();
+    ft_temp_.assign(kFtBuckets, ft_t_);
     reset_neural_weights_();
     prime_neural_();
     set_session_cache(ss_on_, ss_eta_, ss_window_);
@@ -455,6 +479,9 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
+    // The index query reads only the context: first, so the ensemble and
+    // neural gates can key on the match length.
+    if (ig_) infinigram_query_();
     std::vector<double> out = scored_log_probs_(vocab_size);
     if (!mixed_()) return out;
     if (ig_) {
@@ -468,6 +495,10 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     if (!nn_.empty() && out.size() == 256) {
         out = neural_mix_(out);
         nn_valid_ = true;
+    }
+    if (ft_on_()) {
+        out = final_sharpen_(out);
+        ft_valid_ = true;
     }
     // Served until the next byte: every stage ran (session and neural need
     // the full 256-byte vocabulary).
@@ -486,7 +517,7 @@ void HpSequenceBackend::set_session_cache(bool on, double eta, std::size_t windo
     ss_len_ = 0;
     ss_ig_.reset();
     ss_built_ = ss_indexed_ = 0;
-    ss_valid_ = served_valid_ = false;
+    ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::truncate_session(std::size_t n) {
@@ -498,7 +529,7 @@ void HpSequenceBackend::truncate_session(std::size_t n) {
         ss_ig_.reset();
         ss_built_ = ss_indexed_ = 0;
     }
-    ss_valid_ = served_valid_ = false;
+    ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::session_grow_() {
@@ -552,19 +583,31 @@ void HpSequenceBackend::add_neural(std::shared_ptr<const ByteNeuralExpert> nn) {
 
 void HpSequenceBackend::reset_neural_weights_() {
     const std::size_t k = nn_.size();
+    nn_a_.clear();
+    nn_s_.clear();
     if (k == 0) {
         nn_w_.clear();
         return;
     }
-    nn_w_.assign(kNnBuckets * (k + 1), 0.3 / static_cast<double>(k));
-    for (int b = 0; b < kNnBuckets; ++b) nn_w_[static_cast<std::size_t>(b) * (k + 1)] = 0.7;
+    const int nb = nn_buckets_();
+    nn_w_.assign(static_cast<std::size_t>(nb) * (k + 1), 0.3 / static_cast<double>(k));
+    for (int b = 0; b < nb; ++b) nn_w_[static_cast<std::size_t>(b) * (k + 1)] = 0.7;
+    if (nn_mix_ != NeuralMix::Linear) nn_a_ = nn_w_;  // log-linear: the same start (a geometric mix)
+    if (nn_mix_ == NeuralMix::Switch) nn_s_.assign(static_cast<std::size_t>(nb), 0.5);
+}
+
+void HpSequenceBackend::set_neural_mix(NeuralMix m) {
+    if (m == nn_mix_) return;
+    nn_mix_ = m;
+    reset_neural_weights_();
+    nn_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta) {
     nn_.clear();
     nn_w_.clear();
     nn_eta_ = eta;
-    nn_valid_ = served_valid_ = false;
+    nn_valid_ = ft_valid_ = served_valid_ = false;
     add_neural(std::move(nn));
 }
 
@@ -588,7 +631,7 @@ void HpSequenceBackend::prime_neural_() {
         s.primed_ctx.assign(ctx, ctx + len);
         ++nn_primes_;
     }
-    nn_valid_ = served_valid_ = false;
+    nn_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::neural_mix_(const std::vector<double>& base) {
@@ -603,23 +646,116 @@ std::vector<double> HpSequenceBackend::neural_mix_(const std::vector<double>& ba
     }
     const int conf = std::min(7, static_cast<int>(nn_pin_[top_m] * 8.0));
     nn_bucket_ = conf * 2 + (top_m == top_n ? 1 : 0);
-    const double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];
+    if (nn_mix_ != NeuralMix::Linear) nn_bucket_ = nn_bucket_ * 4 + ig_lb_;
+    const std::size_t row = static_cast<std::size_t>(nn_bucket_) * (k + 1);
     std::vector<double> out(256);
+    if (nn_mix_ == NeuralMix::Linear) {
+        const double* w = &nn_w_[row];
+        for (std::size_t b = 0; b < 256; ++b) {
+            double p = w[0] * nn_pin_[b];
+            for (std::size_t i = 0; i < k; ++i) p += w[i + 1] * std::exp(nn_[i].state.log_p[b]);
+            out[b] = std::log(std::max(p, 1e-300));
+        }
+        return out;
+    }
+    // Log-linear part: a_0 log p + sum_i a_i log p_i, normalised.
+    const double* a = &nn_a_[row];
+    nn_lpin_ = base;
+    double mx = -std::numeric_limits<double>::infinity();
+    for (std::size_t b = 0; b < 256; ++b) {
+        double z = a[0] * base[b];
+        for (std::size_t i = 0; i < k; ++i) z += a[i + 1] * nn_[i].state.log_p[b];
+        mx = std::max(mx, out[b] = z);
+    }
+    double sum = 0.0;
+    for (std::size_t b = 0; b < 256; ++b) sum += std::exp(out[b] - mx);
+    const double lse = mx + std::log(sum);
+    nn_plog_.resize(256);
+    for (std::size_t b = 0; b < 256; ++b) nn_plog_[b] = std::exp(out[b] -= lse);
+    if (nn_mix_ == NeuralMix::Log) return out;
+    // Switch: s p_linear + (1 - s) p_log.
+    const double* w = &nn_w_[row];
+    const double s = nn_s_[static_cast<std::size_t>(nn_bucket_)];
     for (std::size_t b = 0; b < 256; ++b) {
         double p = w[0] * nn_pin_[b];
         for (std::size_t i = 0; i < k; ++i) p += w[i + 1] * std::exp(nn_[i].state.log_p[b]);
-        out[b] = std::log(std::max(p, 1e-300));
+        out[b] = std::log(std::max(s * p + (1.0 - s) * nn_plog_[b], 1e-300));
     }
     return out;
 }
 
+void HpSequenceBackend::set_final_temperature(double t, double eta) {
+    if (!(t > 0.0) || !std::isfinite(t) || !(eta >= 0.0) || !std::isfinite(eta)) {
+        throw std::invalid_argument("set_final_temperature: need a temperature > 0 and a rate >= 0");
+    }
+    ft_t_ = t;
+    ft_eta_ = eta;
+    ft_temp_.assign(kFtBuckets, t);
+    ft_valid_ = served_valid_ = false;
+}
+
+std::vector<double> HpSequenceBackend::final_sharpen_(const std::vector<double>& in) {
+    const std::size_t v = in.size();
+    double top = -std::numeric_limits<double>::infinity();
+    for (double x : in) top = std::max(top, x);
+    ft_bucket_ = std::min(kFtBuckets - 1, static_cast<int>(std::exp(top) * kFtBuckets));
+    // log softmax(in / T), exactly as cyphalm_lm_quality's temperature scan
+    // computes it (division by T, the same order), so a fixed T reproduces
+    // its column.
+    const double t = ft_temp_[static_cast<std::size_t>(ft_bucket_)];
+    double mx = -std::numeric_limits<double>::infinity();
+    for (std::size_t b = 0; b < v; ++b) mx = std::max(mx, in[b] / t);
+    double z = 0.0;
+    for (std::size_t b = 0; b < v; ++b) z += std::exp(in[b] / t - mx);
+    const double log_z = std::log(z);
+    std::vector<double> out(v);
+    for (std::size_t b = 0; b < v; ++b) out[b] = in[b] / t - mx - log_z;
+    if (ft_eta_ > 0.0) {  // kept for the update in consume_byte
+        ft_in_ = in;
+        ft_p_.resize(v);
+        for (std::size_t b = 0; b < v; ++b) ft_p_[b] = std::exp(out[b]);
+    }
+    return out;
+}
+
+MixingOptions HpSequenceBackend::mixing_options() const {
+    MixingOptions o;
+    o.final_temperature = ft_t_;
+    o.final_temperature_lr = ft_eta_;
+    o.infinigram_mode = ig_mode_;
+    o.neural_mix = nn_mix_;
+    o.ensemble_gate = eg_on_;
+    return o;
+}
+
+void HpSequenceBackend::set_mixing_options(const MixingOptions& o) {
+    // Only what changes restarts (its stage's learned state).
+    if (o.final_temperature != ft_t_ || o.final_temperature_lr != ft_eta_)
+        set_final_temperature(o.final_temperature, o.final_temperature_lr);
+    set_infinigram_mode(o.infinigram_mode);
+    set_neural_mix(o.neural_mix);
+    if (o.ensemble_gate != eg_on_) set_ensemble_gate(o.ensemble_gate);
+}
+
 void HpSequenceBackend::set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta) {
     ig_ = std::move(ig);
-    ig_prev_n_ = -1;  // a match length in another index bounds nothing
+    ig_prev_n_ = ig_prev_rn_ = -1;  // a match length in another index bounds nothing
     ig_eta_ = eta;
-    ig_w_.assign(kIgBuckets, {0.8, 0.1, 0.1});
+    ig_w_.assign(static_cast<std::size_t>(ig_buckets_()), {0.8, 0.1, 0.1});
     ig_w0_ = ig_w_;
-    ig_valid_ = served_valid_ = false;
+    ig_lb_ = 0;
+    ig_valid_ = last_valid_ = ft_valid_ = served_valid_ = false;
+}
+
+void HpSequenceBackend::set_infinigram_mode(InfinigramMode m) {
+    if (m == ig_mode_) return;
+    ig_mode_ = m;
+    ig_prev_rn_ = -1;
+    if (ig_) {
+        ig_w_.assign(static_cast<std::size_t>(ig_buckets_()), {0.8, 0.1, 0.1});
+        ig_w0_ = ig_w_;
+    }
+    ig_valid_ = last_valid_ = nn_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::infinigram_weights() const {
@@ -629,36 +765,56 @@ std::vector<double> HpSequenceBackend::infinigram_weights() const {
 }
 
 void HpSequenceBackend::set_infinigram_weights(const std::vector<double>& w) {
-    if (w.size() != static_cast<std::size_t>(kIgBuckets) * 3) {
-        throw std::invalid_argument("set_infinigram_weights: need 3 weights per bucket");
+    if (w.size() != static_cast<std::size_t>(ig_buckets_()) * 3) {
+        throw std::invalid_argument("set_infinigram_weights: need 3 weights per bucket (" +
+                                    std::to_string(ig_buckets_()) + " buckets in infinigram mode " +
+                                    infinigram_mode_name(ig_mode_) + ")");
     }
-    ig_w_.assign(kIgBuckets, {0.0, 0.0, 0.0});
+    ig_w_.assign(static_cast<std::size_t>(ig_buckets_()), {0.0, 0.0, 0.0});
     for (std::size_t i = 0; i < w.size(); ++i) ig_w_[i / 3][i % 3] = w[i];
     ig_w0_ = ig_w_;  // start weights: reset() returns to them
-    ig_valid_ = served_valid_ = false;
+    ig_valid_ = ft_valid_ = served_valid_ = false;
 }
 
-std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>& base) {
+void HpSequenceBackend::infinigram_query_() {
     constexpr std::size_t kCtx = 256;
     std::uint8_t ctx[kCtx];
     const std::size_t len = pred_->recent_bytes(ctx, kCtx);
     // A match grows by at most one byte per byte read: when this context
     // without its last byte ends the previous query's context, that query's
     // n + 1 bounds this one (usually it is the answer: one range search).
-    int hint = -1;
-    if (ig_prev_n_ >= 0 && len >= 1 && len - 1 <= ig_prev_len_ &&
-        std::memcmp(ctx, ig_prev_ctx_.data() + (ig_prev_len_ - (len - 1)), len - 1) == 0) {
-        hint = ig_prev_n_ + 1;
+    const bool extends = ig_prev_n_ >= 0 && len >= 1 && len - 1 <= ig_prev_len_ &&
+                         std::memcmp(ctx, ig_prev_ctx_.data() + (ig_prev_len_ - (len - 1)), len - 1) == 0;
+    ig_r_ = ig_->query(ctx, len, static_cast<int>(kCtx), extends ? ig_prev_n_ + 1 : -1);
+    const InfiniGram::Result& r = ig_r_;
+    if (ig_mode_ == InfinigramMode::Halving) {
+        ig_rr_ = r;
+        for (int m = r.n; ig_rr_.total < 16 && m > 0;) {  // back off to a well-attested suffix
+            m /= 2;
+            ig_rr_ = ig_->query(ctx, len, m, m);  // m <= r.n occurs: the bound is the answer
+        }
+    } else if (r.total >= 16 || r.n == 0) {
+        ig_rr_ = r;
+    } else {
+        // The longest suffix followed by a byte 16 times is shorter than r's.
+        // Its occurrences, minus their last byte, are occurrences of a
+        // suffix of the previous context: the previous such length + 1
+        // bounds it too.
+        int bound = r.n - 1;
+        if (extends && ig_prev_rn_ >= 0) bound = std::min(bound, ig_prev_rn_ + 1);
+        ig_rr_ = ig_->query(ctx, len, r.n - 1, bound, 16);
     }
-    const InfiniGram::Result r = ig_->query(ctx, len, static_cast<int>(kCtx), hint);
     std::memcpy(ig_prev_ctx_.data(), ctx, len);
     ig_prev_len_ = len;
     ig_prev_n_ = r.n;
-    InfiniGram::Result rr = r;
-    for (int m = r.n; rr.total < 16 && m > 0;) {  // back off to a well-attested suffix
-        m /= 2;
-        rr = ig_->query(ctx, len, m, m);  // m <= r.n occurs: the bound is the answer
-    }
+    ig_prev_rn_ = ig_mode_ == InfinigramMode::Longest16 ? ig_rr_.n : -1;
+    // Match length for the gates: < 8, 8-15, 16-31, 32+ bytes.
+    ig_lb_ = r.n < 8 ? 0 : r.n < 16 ? 1 : r.n < 32 ? 2 : 3;
+}
+
+std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>& base) {
+    const InfiniGram::Result& r = ig_r_;
+    const InfiniGram::Result& rr = ig_rr_;
     const std::size_t v = base.size();
     for (auto& p : ig_p_) p.assign(v, 0.0);
     double pmax = 0.0;
@@ -685,6 +841,19 @@ std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>
     }
     const int hb = (pmax < 0.3 ? 0 : pmax < 0.6 ? 2 : pmax < 0.9 ? 4 : 6) + (top_m == top_i ? 1 : 0);
     ig_bucket_ = (nb * 4 + cb) * 8 + hb;
+    if (ig_mode_ == InfinigramMode::Longest16) {
+        // Fertility of the longest match (distinct next bytes: 1, 2, 3-4,
+        // 5+) and whether the ≥16 suffix has a single next byte.
+        auto distinct = [](const InfiniGram::Result& q) {
+            int t = 0;
+            for (std::uint32_t c : q.count) t += c != 0 ? 1 : 0;
+            return t;
+        };
+        const int t = distinct(r);
+        const int tb = t <= 1 ? 0 : t == 2 ? 1 : t <= 4 ? 2 : 3;
+        const int det = distinct(rr) == 1 && rr.total >= 2 ? 1 : 0;
+        ig_bucket_ = (((nb * 4 + cb) * 4 + tb) * 2 + det) * 8 + hb;
+    }
     const auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
     std::vector<double> out(v);
     for (std::size_t b = 0; b < v; ++b) {
@@ -738,6 +907,14 @@ HpSequenceBackend::MixingState HpSequenceBackend::mixing_state() const {
     s.ig = ig_w_;
     s.session = ss_w_;
     s.neural = nn_w_;
+    s.neural_log = nn_a_;
+    s.neural_switch = nn_s_;
+    if (eg_on_) {
+        s.gate = eg_b_;
+        s.gate.insert(s.gate.end(), eg_theta_.begin(), eg_theta_.end());
+        s.gate.insert(s.gate.end(), eg_g2_.begin(), eg_g2_.end());
+    }
+    s.final_temp = ft_temp_;
     for (const auto& m : members_) s.members.push_back(m.backend->mixing_state());
     return s;
 }
@@ -750,11 +927,21 @@ void HpSequenceBackend::set_mixing_state(const MixingState& s) {
     if (s.ig.size() == ig_w_.size()) ig_w_ = s.ig;
     if (s.session.size() == ss_w_.size()) ss_w_ = s.session;
     if (s.neural.size() == nn_w_.size()) nn_w_ = s.neural;
+    if (s.neural_log.size() == nn_a_.size()) nn_a_ = s.neural_log;
+    if (s.neural_switch.size() == nn_s_.size()) nn_s_ = s.neural_switch;
+    if (eg_on_ && s.gate.size() == eg_b_.size() + eg_theta_.size() + eg_g2_.size()) {
+        auto it = s.gate.begin();
+        for (auto* v : {&eg_b_, &eg_theta_, &eg_g2_}) {
+            std::copy(it, it + static_cast<std::ptrdiff_t>(v->size()), v->begin());
+            it += static_cast<std::ptrdiff_t>(v->size());
+        }
+    }
+    if (s.final_temp.size() == ft_temp_.size()) ft_temp_ = s.final_temp;
     for (std::size_t i = 0; i < members_.size() && i < s.members.size(); ++i) {
         members_[i].backend->set_mixing_state(s.members[i]);
     }
     // The served distribution and the stage caches were mixed with the old weights.
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::update_ensemble_weights_(std::uint8_t byte) {
@@ -777,6 +964,47 @@ void HpSequenceBackend::update_ensemble_weights_(std::uint8_t byte) {
     for (std::size_t i = 0; i < members_.size(); ++i) members_[i].weight = w[i + 1] / z;
 }
 
+void HpSequenceBackend::set_ensemble_gate(bool on) {
+    eg_on_ = on;
+    reset_gate_();
+    last_valid_ = ft_valid_ = served_valid_ = false;
+}
+
+void HpSequenceBackend::reset_gate_() {
+    if (!eg_on_) {
+        eg_b_.clear();
+        eg_theta_.clear();
+        eg_g2_.clear();
+        return;
+    }
+    eg_b_ = ensemble_weights();  // today's weights: theta 0 serves the same mix
+    const std::size_t m = eg_b_.size();
+    eg_theta_.assign(kEgBuckets * m, 0.0);
+    eg_g2_.assign((1 + kEgBuckets) * m, 0.0);
+    eg_bucket_.assign(m, 0);
+}
+
+void HpSequenceBackend::update_gate_(std::uint8_t byte) {
+    // d log p_mix(y) / dw_i = log p_i(y) - E_mix[log p_i], the same for b_i
+    // and theta[g_i][i]; AdaGrad steps on each.
+    ens_p_.resize(last_mix_.size());
+    for (std::size_t b = 0; b < last_mix_.size(); ++b) ens_p_[b] = std::exp(last_mix_[b]);
+    const std::size_t m = eg_b_.size();
+    for (std::size_t i = 0; i < m; ++i) {
+        const std::vector<double>& lp = i == 0 ? last_own_ : last_member_lp_[i - 1];
+        double e = 0.0;
+        for (std::size_t b = 0; b < lp.size(); ++b) e += ens_p_[b] * lp[b];
+        const double g = std::clamp(lp[byte] - e, -20.0, 20.0);
+        const std::size_t t = static_cast<std::size_t>(eg_bucket_[i]) * m + i;
+        double& gb = eg_g2_[i];
+        double& gt = eg_g2_[m + t];
+        gb += g * g;
+        gt += g * g;
+        if (gb > 0.0) eg_b_[i] = std::clamp(eg_b_[i] + ens_eta_ * g / std::sqrt(gb), -4.0, 4.0);
+        if (gt > 0.0) eg_theta_[t] = std::clamp(eg_theta_[t] + ens_eta_ * g / std::sqrt(gt), -4.0, 4.0);
+    }
+}
+
 void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> member, double weight) {
     if (!member) throw std::invalid_argument("add_ensemble_member: null member");
     double total = weight;
@@ -790,7 +1018,8 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     member->set_parallel(parallel_);
     members_.push_back(Member{std::move(member), weight});
     self_weight_ = 1.0 - total;
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+    reset_gate_();  // on: restarts at the new weights
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
@@ -803,7 +1032,7 @@ std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
 }
 
 void HpSequenceBackend::reset_stream(bool keep_history) {
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
     prime_neural_();  // the experts re-read whatever history the predictor kept (unless they hold it)
@@ -821,12 +1050,33 @@ void HpSequenceBackend::set_serve_adaptation(int num, int den, int skip) {
 
 std::vector<double> HpSequenceBackend::mix_with_members_(const std::vector<double>& own,
                                                          const std::vector<std::vector<double>>& member_lp) {
-    const double w_self = self_weight_;
+    std::vector<double> w = ensemble_weights();
+    if (eg_on_) {
+        // Gate g_i per model: its top probability x whether its top byte is
+        // the pool's (the mix at weights b) x the ∞-gram match length.
+        auto top = [](const std::vector<double>& lp) {
+            return static_cast<std::size_t>(std::max_element(lp.begin(), lp.end()) - lp.begin());
+        };
+        std::vector<double> pool(own.size());
+        for (std::size_t b = 0; b < own.size(); ++b) pool[b] = eg_b_[0] * own[b];
+        for (std::size_t i = 0; i < members_.size(); ++i) {
+            const std::vector<double>& lp = member_lp[i];
+            for (std::size_t b = 0; b < pool.size() && b < lp.size(); ++b) pool[b] += eg_b_[i + 1] * lp[b];
+        }
+        const std::size_t pool_top = top(pool);
+        for (std::size_t i = 0; i < w.size(); ++i) {
+            const std::vector<double>& lp = i == 0 ? own : member_lp[i - 1];
+            const std::size_t t = top(lp);
+            const int conf = std::min(7, static_cast<int>(std::exp(lp[t]) * 8.0));
+            eg_bucket_[i] = (conf * 2 + (t == pool_top ? 1 : 0)) * 4 + ig_lb_;
+            w[i] = eg_b_[i] + eg_theta_[static_cast<std::size_t>(eg_bucket_[i]) * w.size() + i];
+        }
+    }
     std::vector<double> mix(own.size());
-    for (std::size_t b = 0; b < own.size(); ++b) mix[b] = w_self * own[b];
+    for (std::size_t b = 0; b < own.size(); ++b) mix[b] = w[0] * own[b];
     for (std::size_t i = 0; i < members_.size(); ++i) {
         const std::vector<double>& lp = member_lp[i];
-        for (std::size_t b = 0; b < mix.size() && b < lp.size(); ++b) mix[b] += members_[i].weight * lp[b];
+        for (std::size_t b = 0; b < mix.size() && b < lp.size(); ++b) mix[b] += w[i + 1] * lp[b];
     }
     double mx = -std::numeric_limits<double>::infinity();
     for (double v : mix) mx = std::max(mx, v);
@@ -925,19 +1175,47 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
             // Exponentiated gradient on the mixture's log loss for this bucket,
             // from the experts' distributions before they read the byte.
             const std::size_t k = nn_.size();
-            double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];
+            const std::size_t row = static_cast<std::size_t>(nn_bucket_) * (k + 1);
+            double* w = &nn_w_[row];
             std::vector<double> pe(k + 1);
             pe[0] = nn_pin_[byte];
             for (std::size_t i = 0; i < k; ++i) pe[i + 1] = std::exp(nn_[i].state.log_p[byte]);
             double pm = 0.0;
             for (std::size_t i = 0; i <= k; ++i) pm += w[i] * pe[i];
-            pm = std::max(pm, 1e-12);
-            double z = 0.0;
-            for (std::size_t i = 0; i <= k; ++i) {
-                const double g = std::clamp(nn_eta_ * (pe[i] / pm - 1.0), -2.0, 2.0);
-                z += (w[i] = std::max(1e-4, w[i] * std::exp(g)));
+            const double p_lin = pm;  // the linear part's p(y) as served (Switch)
+            if (nn_mix_ != NeuralMix::Log) {
+                pm = std::max(pm, 1e-12);
+                double z = 0.0;
+                for (std::size_t i = 0; i <= k; ++i) {
+                    const double g = std::clamp(nn_eta_ * (pe[i] / pm - 1.0), -2.0, 2.0);
+                    z += (w[i] = std::max(1e-4, w[i] * std::exp(g)));
+                }
+                for (std::size_t i = 0; i <= k; ++i) w[i] /= z;
             }
-            for (std::size_t i = 0; i <= k; ++i) w[i] /= z;
+            if (nn_mix_ != NeuralMix::Linear) {
+                // Log-linear weights: gradient ascent on log p_log(y),
+                // d/da_i = log p_i(y) - E_p_log[log p_i].
+                double* a = &nn_a_[row];
+                for (std::size_t i = 0; i <= k; ++i) {
+                    double e = 0.0;
+                    double ly = 0.0;
+                    if (i == 0) {
+                        for (std::size_t b = 0; b < 256; ++b) e += nn_plog_[b] * nn_lpin_[b];
+                        ly = nn_lpin_[byte];
+                    } else {
+                        const auto& lp = nn_[i - 1].state.log_p;
+                        for (std::size_t b = 0; b < 256; ++b) e += nn_plog_[b] * lp[b];
+                        ly = lp[byte];
+                    }
+                    a[i] = std::clamp(a[i] + nn_eta_ * std::clamp(ly - e, -2.0, 2.0), 0.0, 4.0);
+                }
+            }
+            if (nn_mix_ == NeuralMix::Switch) {
+                double& sw = nn_s_[static_cast<std::size_t>(nn_bucket_)];
+                const double pg = nn_plog_[byte];
+                const double p = std::max(sw * p_lin + (1.0 - sw) * pg, 1e-12);
+                sw = std::clamp(sw + nn_eta_ * (p_lin - pg) / p, 0.01, 0.99);
+            }
         }
         const float lr = pred_->learning() ? static_cast<float>(nn_adapt_) : 0.0f;
         for (auto& s : nn_) {
@@ -963,7 +1241,22 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         if (member_jobs == 0) {
             for (auto& m : members_) m.backend->consume_byte(byte);
         }
-        if (last_valid_ && ens_eta_ > 0.0 && learn_mix) update_ensemble_weights_(byte);
+        if (last_valid_ && ens_eta_ > 0.0 && learn_mix) {
+            if (eg_on_) update_gate_(byte);
+            else update_ensemble_weights_(byte);
+        }
+        if (ft_valid_ && ft_eta_ > 0.0 && learn_mix && byte < ft_in_.size()) {
+            // Final temperature of this bucket: d log p(y) / d(1/T) = log
+            // p_in(y) - E_served[log p_in]; a step on log(1/T).
+            double e = 0.0;
+            for (std::size_t b = 0; b < ft_in_.size(); ++b) e += ft_p_[b] * ft_in_[b];
+            const double g = std::clamp(ft_in_[byte] - e, -20.0, 20.0);
+            double& t = ft_temp_[static_cast<std::size_t>(ft_bucket_)];
+            const double beta0 = 1.0 / ft_t_;
+            const double beta = std::clamp((1.0 / t) * std::exp(ft_eta_ * g / t), std::min(0.8, beta0),
+                                           std::max(1.6, beta0));
+            t = 1.0 / beta;
+        }
         if (ig_valid_ && ig_eta_ > 0.0 && learn_mix && byte < ig_p_[0].size()) {
             // Exponentiated gradient on the mixture's log loss for this bucket.
             auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
@@ -1005,7 +1298,7 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
     } else {
         here();
     }
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {

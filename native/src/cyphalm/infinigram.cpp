@@ -197,12 +197,15 @@ std::size_t InfiniGram::match_prefix(const std::uint8_t* s, std::size_t len, std
     return good;
 }
 
-InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint) const {
+InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint,
+                                     std::uint64_t min_total) const {
     Result r;
     const int cap = static_cast<int>(std::min<std::size_t>(len, static_cast<std::size_t>(std::max(0, max_n))));
-    // Longest n in [0, cap] whose suffix occurs followed by some byte. Occurrence
-    // is monotone in n, so bisect; ``hint`` caps it (the longest match grows by
-    // at most one byte per step).
+    const std::size_t need = static_cast<std::size_t>(std::max<std::uint64_t>(1, min_total));
+    // Longest n in [0, cap] whose suffix occurs followed by some byte at least
+    // ``need`` times. That count never grows with n (every occurrence of a
+    // longer suffix is one of the shorter), so bisect; ``hint`` caps it (the
+    // longest match grows by at most one byte per step).
     auto usable = [&](int n, std::size_t& lo, std::size_t& hi) {
         if (n == 0) {
             lo = 0;
@@ -213,7 +216,7 @@ InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, i
         // Occurrences at the very end of the corpus have no next byte; they sort
         // first in the range (shortest suffix).
         while (lo < hi && sa(lo) + static_cast<std::size_t>(n) >= n_) ++lo;
-        return lo < hi;
+        return hi - lo >= need;
     };
     int good = 0, bad = (hint >= 0 ? std::min(cap, hint) : cap) + 1;
     std::size_t glo = 0, ghi = 0;
