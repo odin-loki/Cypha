@@ -158,6 +158,40 @@ int check_session_cache() {
     for (std::size_t i = 0; i < 5000; ++i) all.consume_byte(static_cast<std::uint8_t>(text[i]));
     if (all.session_held() != 5000 || all.session_builds() != 3 || all.session_indexed() != 4096)
         return fail("window 0 does not keep the whole session");
+
+    // Session cache alone (no ensemble, ∞-gram, or neural expert) mixes once
+    // a 16-byte repeat is in the index, and invalidating the score cache
+    // recomputes instead of reusing the distribution from before the advance.
+    {
+        cypha::cyphalm::CyphaLMConfig cfg;
+        cfg.hp_table_bits = 16;
+        cypha::cyphalm::apply_hp_production_recipe(cfg);
+        const std::string cycle = "abcdefghijklmnopqrstuvwxyz012345";
+        std::string block;
+        for (int i = 0; i < 40; ++i) block += cycle;
+        cypha::cyphalm::HpSequenceBackend plain(pc), sess(pc);
+        sess.set_session_cache(true, 0.02, 8192);
+        for (std::size_t i = 0; i < 1024; ++i) {
+            plain.consume_byte(static_cast<std::uint8_t>(block[i]));
+            sess.consume_byte(static_cast<std::uint8_t>(block[i]));
+        }
+        if (sess.session_builds() < 1) return fail("session-only mix never built an index");
+        const auto before = sess.mixing_state();
+        const auto lp_plain = plain.next_byte_log_probs(256);
+        const auto lp_sess = sess.next_byte_log_probs(256);
+        if (lp_plain == lp_sess) return fail("session-only mix served the unmixed distribution");
+        const auto nb = static_cast<std::uint8_t>(block[1024]);
+        (void)plain.observe_next_byte(nb);
+        (void)sess.observe_next_byte(nb);
+        if (sess.mixing_state().session == before.session) return fail("session-only mix did not learn a weight");
+        const auto cached = sess.next_byte_log_probs(256);
+        sess.invalidate_scoring_cache();
+        if (sess.next_byte_log_probs(256) != cached) return fail("invalidate changed the distribution with no new byte");
+        sess.serve_advance_byte(static_cast<std::uint8_t>(block[1025]));
+        sess.invalidate_scoring_cache();
+        plain.serve_advance_byte(static_cast<std::uint8_t>(block[1025]));
+        if (sess.next_byte_log_probs(256) == cached) return fail("stale distribution survived invalidate after a byte");
+    }
     return 0;
 }
 

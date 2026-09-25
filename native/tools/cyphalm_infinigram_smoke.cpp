@@ -116,6 +116,32 @@ int main() {
         for (std::size_t i = 0; i < 8000; ++i) model.hp_backend().consume_byte(static_cast<std::uint8_t>(text[i]));
         model.attach_infinigram(path);
         auto& h = model.hp_backend();
+        // The backend's match-length hint (previous n + 1 when the context
+        // grows by one byte) must agree with an unhinted query. A twin walks
+        // the same bytes so this model stays where the checks below expect.
+        {
+            cypha::cyphalm::CyphaLMModel twin(cfg);
+            for (std::size_t i = 0; i < 8000; ++i) twin.hp_backend().consume_byte(static_cast<std::uint8_t>(text[i]));
+            twin.attach_infinigram(path);
+            auto& th = twin.hp_backend();
+            int prev_n = -1;
+            std::vector<std::uint8_t> prev_ctx;
+            for (std::size_t i = 8000; i < 8300; ++i) {
+                th.consume_byte(static_cast<std::uint8_t>(text[i]));
+                std::uint8_t ctx[256];
+                const std::size_t len = th.predictor().recent_bytes(ctx, 256);
+                const bool extends = prev_n >= 0 && len >= 1 && len - 1 <= prev_ctx.size() &&
+                                     std::memcmp(ctx, prev_ctx.data() + (prev_ctx.size() - (len - 1)), len - 1) == 0;
+                const auto hinted = ig.query(ctx, len, 256, extends ? prev_n + 1 : -1);
+                const auto plain = ig.query(ctx, len, 256, -1);
+                if (hinted.n != plain.n || hinted.total != plain.total || hinted.count != plain.count) {
+                    std::printf("cyphalm_infinigram_smoke FAIL backend hint differs at %zu\n", i);
+                    return 1;
+                }
+                prev_n = plain.n;
+                prev_ctx.assign(ctx, ctx + len);
+            }
+        }
         for (std::size_t i = 8000; i < 8400; ++i) {
             const auto lp = h.serve_next_byte_log_probs(256);
             double z = 0.0;

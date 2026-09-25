@@ -315,6 +315,32 @@ int check_variants(const fs::path& dir) {
             return fail(tag + "not repeatable (fresh load, worker pool off)");
         // Learned state moves, and set_mixing_state puts it back exactly.
         if (r1.state == s0) return fail(tag + "no mixing weight moved");
+        // Each variant owns its state: the others stay empty.
+        const auto& st = r1.state;
+        const auto& b = base.state;
+        const std::string name = v.name;
+        auto same = [](const auto& x, const auto& y) { return x == y; };
+        if (name == "final_temperature" || name == "final_temperature_lr") {
+            if (st.final_temp == b.final_temp || !same(st.neural_log, b.neural_log) ||
+                !same(st.neural_switch, b.neural_switch) || !same(st.gate, b.gate))
+                return fail(tag + "state leaked into another variant");
+        } else if (name == "log") {
+            if (st.neural_log == b.neural_log || !same(st.neural_switch, b.neural_switch) ||
+                !same(st.gate, b.gate) || !same(st.final_temp, b.final_temp))
+                return fail(tag + "log mix state is not its own");
+        } else if (name == "switch") {
+            // Switch keeps the log-linear start weights too; its own state is the switches.
+            if (st.neural_switch == b.neural_switch || !same(st.gate, b.gate) || !same(st.final_temp, b.final_temp))
+                return fail(tag + "switch mix state is not its own");
+        } else if (name == "gate") {
+            if (st.gate == b.gate || !same(st.neural_log, b.neural_log) ||
+                !same(st.neural_switch, b.neural_switch) || !same(st.final_temp, b.final_temp))
+                return fail(tag + "gate state is not its own");
+        } else if (name == "longest16") {
+            if (!same(st.neural_log, b.neural_log) || !same(st.neural_switch, b.neural_switch) ||
+                !same(st.gate, b.gate) || !same(st.final_temp, b.final_temp))
+                return fail(tag + "longest16 carries another variant's state");
+        }
         m1.hp_backend().set_mixing_state(s0);
         if (m1.hp_backend().mixing_state() != s0) return fail(tag + "set_mixing_state does not round-trip");
     }

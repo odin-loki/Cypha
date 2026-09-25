@@ -11,7 +11,8 @@
 /// text bytes (padded to 8), then the n suffix-array entries bit-packed at
 /// ``bits`` = ceil(log2 n) each (27 for 95 MB: 4.4 bytes a text byte instead
 /// of 5), 8 bytes of padding. "IGR1" (32-bit entries) still loads. Mapped
-/// read-only, so every process serving it shares one copy. Or skip the file:
+/// read-only on Unix, so every process serving it shares one copy; Windows
+/// reads the file into private memory. Or skip the file:
 /// ``open`` on the plain corpus builds the same index in memory at load time.
 /// It maps the corpus too (shared page cache, not private memory), sorts into
 /// one 4-bytes-a-byte buffer and packs that in place, so the peak is 4 bytes

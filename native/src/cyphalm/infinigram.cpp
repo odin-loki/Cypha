@@ -151,7 +151,38 @@ std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std:
 
 InfiniGram::InfiniGram(const std::string& path) {
 #if defined(_WIN32)
-    throw std::runtime_error("InfiniGram: not supported on Windows");
+    // No mmap: read the index into private memory. The layout matches the
+    // mapped path below, so text_ and packed_ point into own_text_.
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f) throw std::runtime_error("InfiniGram: cannot open " + path);
+    map_len_ = static_cast<std::size_t>(f.tellg());
+    own_text_.resize(map_len_);
+    f.seekg(0);
+    f.read(reinterpret_cast<char*>(own_text_.data()), static_cast<std::streamsize>(map_len_));
+    if (!f) throw std::runtime_error("InfiniGram: cannot read " + path);
+    const auto* p = own_text_.data();
+    const bool v2 = map_len_ >= 20 && std::memcmp(p, "IGR2", 4) == 0;
+    if (!v2 && (map_len_ < 12 || std::memcmp(p, "IGR1", 4) != 0))
+        throw std::runtime_error("InfiniGram: bad index " + path);
+    std::uint64_t n = 0;
+    std::memcpy(&n, p + 4, 8);
+    n_ = static_cast<std::size_t>(n);
+    if (v2) {
+        std::uint64_t bits = 0;
+        std::memcpy(&bits, p + 12, 8);
+        bits_ = static_cast<int>(bits);
+        mask_ = (std::uint64_t{1} << bits_) - 1;
+        text_ = p + 20;
+        const std::size_t pad = (8 - (20 + n_) % 8) % 8;
+        packed_ = p + 20 + n_ + pad;
+        if (bits_ < 1 || bits_ > 32 || 20 + n_ + pad + (n_ * static_cast<std::size_t>(bits_) + 7) / 8 + 8 > map_len_)
+            throw std::runtime_error("InfiniGram: truncated index " + path);
+    } else {
+        text_ = p + 12;
+        const std::size_t pad = (8 - (12 + n_) % 8) % 8;
+        sa32_ = reinterpret_cast<const std::uint32_t*>(p + 12 + n_ + pad);
+        if (12 + n_ + pad + 4 * n_ > map_len_) throw std::runtime_error("InfiniGram: truncated index " + path);
+    }
 #else
     const int fd = ::open(path.c_str(), O_RDONLY);
     if (fd < 0) throw std::runtime_error("InfiniGram: cannot open " + path);

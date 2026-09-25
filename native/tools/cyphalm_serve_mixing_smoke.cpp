@@ -248,6 +248,18 @@ int check_beam(const fs::path& manifest) {
             return fail(learn ? "beam learn_from_output: tables differ from observing the output"
                               : "beam changed learned tables beyond the prompt");
         }
+        if (!learn) {
+            // Replay the beam on a fresh model: each recorded loss is the
+            // served distribution's, not a later rescore.
+            auto replay = cypha::cyphalm::load_cyphalm_model(manifest.string());
+            prime_like_generation(replay, prompt);
+            for (std::size_t i = 0; i < g.generated_ids.size(); ++i) {
+                const auto lp = replay.hp_backend().serve_next_byte_log_probs(256);
+                const auto b = static_cast<std::size_t>(g.generated_ids[i]);
+                if (g.per_step[i].loss != -lp[b]) return fail("beam replay loss is not the served distribution's");
+                replay.serve_advance(static_cast<std::uint32_t>(g.generated_ids[i]));
+            }
+        }
     }
     return 0;
 }
