@@ -131,6 +131,9 @@ def cmd_train(a):
     val = np.array(np.memmap(a.data, dtype=np.uint8, mode="r")[a.val_offset: a.val_offset + a.val_bytes])
     cfg = dict(arch=a.arch, d=a.d, layers=a.layers, heads=a.heads, ctx=a.ctx, emb=a.emb, bf16=not a.fp32)
     model = build(cfg)
+    if a.init:  # continue from a checkpoint (e.g. fine-tune on a new data mix); same shape required
+        ck = torch.load(a.init, map_location="cpu", weights_only=False)
+        model.load_state_dict(ck["model"])
     nparams = sum(p.numel() for p in model.parameters())
     decay = [p for p in model.parameters() if p.dim() >= 2]
     nodecay = [p for p in model.parameters() if p.dim() < 2]
@@ -139,6 +142,7 @@ def cmd_train(a):
                             lr=a.lr, betas=(0.9, 0.95), fused=False)
     os.makedirs(a.out, exist_ok=True)
     log = {"cfg": cfg, "params": nparams, "batch": a.batch, "budget_min": a.budget_min, "budget_bytes": a.budget_bytes,
+           "init": a.init, "data": a.data,
            "data_bytes": len(data), "points": []}
     budget = a.budget_min * 60.0
     marks = sorted(set(x * 60.0 for x in a.marks) | {budget})
@@ -440,6 +444,7 @@ def main():
     t.add_argument("--warmup", type=int, default=200)
     t.add_argument("--budget-min", type=float, default=60)
     t.add_argument("--budget-bytes", type=int, default=0, help="stop after this many training bytes instead")
+    t.add_argument("--init", default="", help="start from this checkpoint's weights")
     t.add_argument("--marks", type=float, nargs="*", default=[5, 15, 30])
     t.add_argument("--fp32", action="store_true")
     t.add_argument("--threads", type=int, default=4)

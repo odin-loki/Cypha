@@ -1,0 +1,105 @@
+{
+  "eval": {
+    "bit_greedy_equals_argmax": 1.0,
+    "bytes": 16384,
+    "calibration_bins": [
+      {
+        "accuracy": 0.043478260869565216,
+        "bin": 0,
+        "confidence": 0.08486153282387265,
+        "n": 115
+      },
+      {
+        "accuracy": 0.13882532418001525,
+        "bin": 1,
+        "confidence": 0.15456150317194908,
+        "n": 1311
+      },
+      {
+        "accuracy": 0.2660891089108911,
+        "bin": 2,
+        "confidence": 0.24989182900503,
+        "n": 1616
+      },
+      {
+        "accuracy": 0.4036860879904875,
+        "bin": 3,
+        "confidence": 0.3499098490175432,
+        "n": 1682
+      },
+      {
+        "accuracy": 0.50801393728223,
+        "bin": 4,
+        "confidence": 0.44823719338335,
+        "n": 1435
+      },
+      {
+        "accuracy": 0.6057838660578386,
+        "bin": 5,
+        "confidence": 0.54788344490678,
+        "n": 1314
+      },
+      {
+        "accuracy": 0.7305164319248826,
+        "bin": 6,
+        "confidence": 0.6488297175314145,
+        "n": 1065
+      },
+      {
+        "accuracy": 0.8251533742331288,
+        "bin": 7,
+        "confidence": 0.7540831668673902,
+        "n": 1304
+      },
+      {
+        "accuracy": 0.9025270758122743,
+        "bin": 8,
+        "confidence": 0.8523508771096818,
+        "n": 1662
+      },
+      {
+        "accuracy": 0.9795081967213115,
+        "bin": 9,
+        "confidence": 0.9663969842070378,
+        "n": 4880
+      }
+    ],
+    "distribution_ms": 2.5188603954467808,
+    "ece_top1": 0.03850853800343321,
+    "learning": "online (in-context)",
+    "mean_entropy_bits": 1.8007885715674732,
+    "ms_per_byte": 8.140022215148925,
+    "nll_bits_by_temperature": {
+      "0.7": 1.6209398252877492,
+      "0.8": 1.5853446900039332,
+      "0.9": 1.5779282841972861,
+      "1.0": 1.590662647178272,
+      "1.1": 1.618715160244834,
+      "1.2": 1.6591081640324639,
+      "1.3": 1.7099741882381185,
+      "1.4": 1.7701028806850727
+    },
+    "nll_bits_per_byte": 1.5906626471474772,
+    "offset": 96000000,
+    "path": "/home/user/corpora/enwik8",
+    "perplexity_per_byte": 3.0118765682229798,
+    "top1": 0.66864013671875,
+    "top5": 0.90020751953125
+  },
+  "harness": "cyphalm_lm_quality",
+  "infinigram": "/home/user/corpora/wiki95_books.txt",
+  "infinigram_attach_seconds": 16.362237204,
+  "loaded": "/home/user/ckpt/win2c/v3_winner.json",
+  "reset_stream": "none",
+  "rss_anon_mb_after_eval": 1893.78515625,
+  "rss_anon_mb_after_setup": 1007.87890625,
+  "rss_file_mb_after_eval": 10.515625,
+  "rss_file_mb_after_setup": 4.50390625,
+  "rss_hwm_mb": 1990.890625,
+  "rss_mb_after_eval": 1904.30078125,
+  "rss_mb_after_setup": 1012.3828125,
+  "serve_lr_quarters": 4,
+  "serve_skip": -1,
+  "setup_seconds": 18.750889223,
+  "tier": "lean"
+}
