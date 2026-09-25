@@ -51,10 +51,17 @@ def retry(fn):
 
 def download(split, book_id, dst_dir):
     dst = os.path.join(dst_dir, book_id + ".txt")
-    if not os.path.exists(dst):
-        os.makedirs(dst_dir, exist_ok=True)
-        retry(lambda: urllib.request.urlretrieve(f"{BUCKET}/{split}/{book_id}.txt", dst + ".part"))
-        os.rename(dst + ".part", dst)
+    part = dst + ".part"
+    if os.path.exists(dst):
+        if os.path.exists(part):
+            os.remove(part)
+        return dst
+    os.makedirs(dst_dir, exist_ok=True)
+    retry(lambda: urllib.request.urlretrieve(f"{BUCKET}/{split}/{book_id}.txt", part))
+    if os.path.exists(dst):
+        os.remove(part)
+    else:
+        os.rename(part, dst)
     return dst
 
 
