@@ -70,10 +70,14 @@ int sample_top_p(const std::vector<double>& lp, double temperature, double top_p
     std::sort(order.begin(), order.end(), [&](int a, int b) {
         return lp[static_cast<std::size_t>(a)] > lp[static_cast<std::size_t>(b)];
     });
+    // Relative to the top byte: exp(lp / T) underflows to 0 for every byte
+    // at low T (and would pick the least likely one).
+    const double mx = n > 0 ? lp[static_cast<std::size_t>(order[0])] : 0.0;
     std::vector<double> probs(static_cast<std::size_t>(n));
     double sum = 0.0;
     for (int i = 0; i < n; ++i) {
-        probs[static_cast<std::size_t>(i)] = std::exp(lp[static_cast<std::size_t>(order[static_cast<std::size_t>(i)])] / temperature);
+        probs[static_cast<std::size_t>(i)] =
+            std::exp((lp[static_cast<std::size_t>(order[static_cast<std::size_t>(i)])] - mx) / temperature);
         sum += probs[static_cast<std::size_t>(i)];
     }
     for (int i = 0; i < n; ++i) probs[static_cast<std::size_t>(i)] /= sum + 1e-12;

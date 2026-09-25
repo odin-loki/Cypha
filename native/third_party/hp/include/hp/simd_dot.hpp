@@ -105,12 +105,13 @@ inline std::int64_t dot_mixer_wt(const MixerWt* w, const MixerSt* st, int n) {
 #endif
 }
 
+/// w += (st * err * l1_q4) >> kMixerRateShift, clamped; ``l1_q4`` is the rate in 1/16ths.
 inline void axpy_mixer_wt(MixerWt* w, const MixerSt* st, int n, std::int32_t err,
-                          std::int32_t l1, std::int64_t energy = 0) {
+                          std::int32_t l1_q4, std::int64_t energy = 0) {
     (void)energy;
     for (int i = 0; i < n; ++i) {
         const std::int32_t dw = static_cast<std::int32_t>(
-            (static_cast<std::int64_t>(st[i]) * err * l1) >> 14);
+            (static_cast<std::int64_t>(st[i]) * err * l1_q4) >> kMixerRateShift);
         hp_undo_note(w[i]);
         w[i] = mixer_wt_pack(
             clamp_int(mixer_wt_expand(w[i]) + dw, -kMixerClamp, kMixerClamp));

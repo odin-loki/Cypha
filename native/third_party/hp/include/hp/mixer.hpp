@@ -37,23 +37,29 @@ class MixerNet {
         const int v0 = (1 << 16) / (k_ > 0 ? k_ : 1);
         const MixerWt v0p = mixer_wt_pack(v0);
         for (auto& x : v_) x = v0p;
+        scale_rates_();
     }
 
     // Lossy knobs (Config::mixer_skip / Config::gate_drop). Defaults keep gate24.
-    /// Serve-time adaptation: every learning rate = its trained value x num/den
-    /// (min 1), skip threshold = ``skip`` (<0: trained value). Idempotent;
-    /// (1, 1, -1) restores the trained rates.
+    /// Serve-time adaptation: every learning rate = its trained value x num/den,
+    /// skip threshold = ``skip`` (<0: trained value). The effective rates are
+    /// kept in 1/16ths (kMixerRateFrac, at least 1/16), so x0.5 halves even a
+    /// rate-1 weight set (lr1_scale 40 shards); x1 is bit-identical to the
+    /// trained rates. Runtime only (checkpoints keep the trained rates).
+    /// Idempotent; (1, 1, -1) restores the trained rates.
     void set_rate_scale(int num, int den, int skip) {
-        if (base_lr1_.empty()) {
-            base_lr_ = lr_;
-            base_lr1_ = lr1_;
+        if (!serve_scaled_) {
             base_skip_ = skip_;
+            serve_scaled_ = true;
         }
-        auto sc = [&](int r) { const int v = r * num / den; return v < 1 ? 1 : v; };
-        lr_ = sc(base_lr_);
-        for (std::size_t j = 0; j < lr1_.size(); ++j) lr1_[j] = sc(base_lr1_[j]);
+        rate_num_ = num;
+        rate_den_ = den > 0 ? den : 1;
+        scale_rates_();
         skip_ = skip >= 0 ? skip : base_skip_;
     }
+    /// Effective rates in 1/16ths: final layer, layer-1 set ``j``.
+    int rate_q4() const { return lr_q4_; }
+    int layer1_rate_q4(int j) const { return lr1_q4_[static_cast<std::size_t>(j)]; }
 
     /// Upstream gains: layer-1 dot scale (Q16, 0 = off) and layer-1 update
     /// skip (0 = off). Part of the trained model: saved in checkpoints (v4).
@@ -112,7 +118,7 @@ class MixerNet {
         MixerWt* v = &v_[static_cast<std::size_t>(ctx2_) * k_];
         for (int j = 0; j < k_; ++j) {
             const std::int32_t dv = static_cast<std::int32_t>(
-                (static_cast<std::int64_t>(dot_[j]) * err2 * lr_) >> 14);
+                (static_cast<std::int64_t>(dot_[j]) * err2 * lr_q4_) >> kMixerRateShift);
             hp_undo_note(v[j]);
             v[j] = mixer_wt_pack(
                 clamp_int(mixer_wt_expand(v[j]) + dv, -kMixerClamp, kMixerClamp));
@@ -122,9 +128,9 @@ class MixerNet {
             if ((gate_drop_ >> j) & 1u) continue;
             const int err = t - pr_[j];
             if (skip_l1_ > 0 && (err < 0 ? -err : err) < skip_l1_) continue;
-            const int l1 = lr1_[static_cast<std::size_t>(j)];
+            const int l1_q4 = lr1_q4_[static_cast<std::size_t>(j)];
             MixerWt* w = &w_[j][static_cast<std::size_t>(ctx_[j]) * n_];
-            axpy_mixer_wt(w, st_.data(), m_, err, l1, energy_);
+            axpy_mixer_wt(w, st_.data(), m_, err, l1_q4, energy_);
         }
     }
 
@@ -180,15 +186,14 @@ class MixerNet {
     void checkpoint_write(std::ostream& os) const {
         blob::write_pod(os, n_);
         blob::write_pod(os, k_);
-        // Trained rates, not a serve-time scaling (set_rate_scale).
-        const bool scaled = !base_lr1_.empty();
-        blob::write_pod(os, scaled ? base_lr_ : lr_);
+        // Trained rates: a serve-time scaling (set_rate_scale) lives in lr*_q4_ only.
+        blob::write_pod(os, lr_);
         blob::write_vec(os, ctx_sizes_);
         blob::write_vec(os, ctx_);
         blob::write_vec(os, st_);
         blob::write_vec(os, dot_);
         blob::write_vec(os, pr_);
-        blob::write_vec(os, scaled ? base_lr1_ : lr1_);
+        blob::write_vec(os, lr1_);
         for (const auto& row : w_) {
             blob::write_vec(os, row);
         }
@@ -216,8 +221,7 @@ class MixerNet {
         blob::read_vec(is, st_);
         blob::read_vec(is, dot_);
         blob::read_vec(is, pr_);
-        blob::read_vec(is, lr1_);
-        base_lr1_.clear();  // the checkpoint holds trained rates
+        blob::read_vec(is, lr1_);  // trained rates
         w_.resize(ctx_sizes_.size());
         for (auto& row : w_) {
             blob::read_vec(is, row);
@@ -234,7 +238,11 @@ class MixerNet {
             blob::read_pod(is, scale_);
             blob::read_pod(is, skip_l1_);
         }
-        if (!shape_ok_(n0, k0, sizes0, v0)) is.setstate(std::ios::failbit);
+        if (!shape_ok_(n0, k0, sizes0, v0)) {
+            is.setstate(std::ios::failbit);
+            return;
+        }
+        scale_rates_();  // any serve-time scale applies to the loaded rates
     }
 
  private:
@@ -255,20 +263,36 @@ class MixerNet {
         return k_ == 0 || (ctx2_ >= 0 && static_cast<std::size_t>(ctx2_) < v_.size() / k);
     }
 
-    int n_, k_, lr_;
+    /// Effective Q4 rates = trained x rate_num_ / rate_den_ in 1/16ths, at
+    /// least 1/16 (x1: exactly 16 x trained, so the update is unchanged).
+    void scale_rates_() {
+        auto sc = [&](int r) {
+            const std::int64_t v = (static_cast<std::int64_t>(r) << kMixerRateFrac) * rate_num_ / rate_den_;
+            return v < 1 ? 1 : static_cast<int>(v);
+        };
+        lr_q4_ = sc(lr_);
+        lr1_q4_.resize(lr1_.size());
+        for (std::size_t j = 0; j < lr1_.size(); ++j) lr1_q4_[j] = sc(lr1_[j]);
+    }
+
+    int n_, k_, lr_;                // lr_, lr1_: trained rates (checkpointed)
     std::vector<int> ctx_sizes_;
     std::vector<int> ctx_;
     std::vector<MixerSt> st_;
     std::vector<int> dot_, pr_;
     std::vector<int> lr1_;
+    int lr_q4_ = 0;                 // effective rates in 1/16ths (scale_rates_)
+    std::vector<int> lr1_q4_;
     std::vector<std::vector<MixerWt>> w_;
     std::vector<MixerWt> v_;
     int skip_ = 32;                 // gate24 HP_MIXER_SKIP
     int scale_ = 0;                 // Q16 layer-1 dot scale, 0 = off (upstream HP_MIXER_SCALE)
     int skip_l1_ = 0;               // layer-1 update skip (upstream HP_MIXER_SKIP_L1)
-    // Trained rates, saved by the first set_rate_scale (runtime only).
-    int base_lr_ = 0, base_skip_ = 0;
-    std::vector<int> base_lr1_;
+    // Serve-time rate scale and the trained skip, saved by the first
+    // set_rate_scale (runtime only).
+    int rate_num_ = 1, rate_den_ = 1;
+    bool serve_scaled_ = false;
+    int base_skip_ = 0;
     std::uint32_t gate_drop_ = 0;
     std::int64_t energy_ = 0;
     int m_ = 0;

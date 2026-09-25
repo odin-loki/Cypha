@@ -10,6 +10,8 @@
 #include "cypha/cyphalm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/cyphalm/hp_backend.hpp"
+#include "cypha/cyphalm/infinigram.hpp"
 
 namespace {
 
@@ -20,7 +22,8 @@ void usage(const char* argv0) {
                  "[--warmup-file PATH] [--warmup-bytes N] [--ban-last-k K] "
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
-                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX] [--neural EXPERT.blm|.bgt]... [--session-cache] [--learn-from-output] [--latency]\n",
+                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX|CORPUS] [--infinigram-bytes N] "
+                 "[--neural EXPERT.blm|.bgt]... [--neural-lr R] [--session-cache] [--learn-from-output] [--latency]\n",
                  argv0);
 }
 
@@ -78,7 +81,9 @@ int main(int argc, char** argv) {
     int word_candidates = defaults.word_candidates;
     std::vector<std::string> ensemble_specs;  // CKPT.json[:weight]
     std::string infinigram_path;
+    std::size_t infinigram_bytes = 0;       // plain corpus: index its first N bytes (0 = all)
     std::vector<std::string> neural_paths;  // byte LSTM / Transformer experts (repeatable)
+    double neural_lr = -1.0;                // <0: the manifest's rate (0.1 without one)
     bool session_cache = false;
 
     for (int i = 1; i < argc; ++i) {
@@ -125,8 +130,12 @@ int main(int argc, char** argv) {
             no_repeat = std::atoi(argv[++i]);
         } else if (arg == "--infinigram" && i + 1 < argc) {
             infinigram_path = argv[++i];
+        } else if (arg == "--infinigram-bytes" && i + 1 < argc) {
+            infinigram_bytes = static_cast<std::size_t>(std::strtoull(argv[++i], nullptr, 10));
         } else if (arg == "--neural" && i + 1 < argc) {
             neural_paths.push_back(argv[++i]);
+        } else if (arg == "--neural-lr" && i + 1 < argc) {
+            neural_lr = std::atof(argv[++i]);
         } else if (arg == "--session-cache") {
             session_cache = true;
         } else if (arg == "--ensemble" && i + 1 < argc) {
@@ -165,8 +174,28 @@ int main(int argc, char** argv) {
                                : 1.0 / static_cast<double>(ensemble_specs.size() + 1);
         model.add_ensemble_member(cypha::cyphalm::load_cyphalm_model(path), w);
     }
-    if (!infinigram_path.empty()) model.attach_infinigram(infinigram_path);
-    for (const auto& np : neural_paths) model.attach_neural(np);
+    if (!infinigram_path.empty()) {
+        // A plain corpus is indexed on the spot, all of it unless told
+        // otherwise: held-out text in it (enwik8 past 96,000,000) is then
+        // quotable by generation.
+        const bool stored = cypha::cyphalm::InfiniGram::is_index_file(infinigram_path);
+        if (!stored && infinigram_bytes == 0) {
+            std::fprintf(stderr,
+                         "warning: --infinigram %s is a plain-text corpus and is indexed whole, including any "
+                         "held-out region; pass --infinigram-bytes N to index only its first N bytes\n",
+                         infinigram_path.c_str());
+        } else if (stored && infinigram_bytes > 0) {
+            std::fprintf(stderr, "warning: --infinigram-bytes ignored: %s is a stored index\n",
+                         infinigram_path.c_str());
+        }
+        model.attach_infinigram(infinigram_path, infinigram_bytes);
+    }
+    // One mixing rate for all experts: --neural-lr if given (manifest experts
+    // too), else the manifest's, else 0.1.
+    auto& hb = model.hp_backend();
+    const double nn_eta = neural_lr >= 0.0 ? neural_lr : hb.has_neural() ? hb.neural_learning_rate() : 0.1;
+    for (const auto& np : neural_paths) model.attach_neural(np, nn_eta);
+    if (hb.has_neural()) hb.set_neural_learning_rate(nn_eta);
     if (session_cache) model.hp_backend().set_session_cache(true);
     cfg = model.config();
     const std::vector<int> prompt_ids = bytes_from_text(prompt, cfg.vocab_size);

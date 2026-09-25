@@ -342,7 +342,9 @@ struct CyphaLMConfig {
     bool hp_frozen_scoring = true;
     /// Serve-time mixer learning rate as a fraction of the trained rate, applied
     /// while generating (``CyphaLMModel::set_serve_mode``). Adapting half as fast
-    /// to a prompt measured -0.005 to -0.007 bits/byte held-out.
+    /// to a prompt measured -0.005 to -0.007 bits/byte held-out. Resolution
+    /// 1/16 of a rate (``hp::MixerNet::set_rate_scale``): on lr1_scale 40
+    /// shards, whose layer-1 rates are 1-2, the scale used to floor at 1.
     /// Env ``CYPHA_HP_SERVE_MIXER_LR_SCALE``.
     double hp_serve_mixer_lr_scale = 0.5;
     /// Ensembles (``CyphaLMModel::add_ensemble_member``): mixing weights adapt

@@ -7,11 +7,18 @@
 ///
 ///   cyphalm_gen_bench --load A.json [--member B.json]... --judge J.json \
 ///       --text enwik8 --offset 96000000 --prompts 8 [--word-candidates 8]
+///       [--infinigram INDEX|CORPUS [--infinigram-bytes N]]
+///
+/// A plain-text ``--infinigram`` corpus is indexed whole unless
+/// ``--infinigram-bytes`` caps it; when it is the ``--text`` file and the index
+/// reaches ``--offset``, the model can quote the reference continuations
+/// (warned on stderr).
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -23,6 +30,7 @@
 #include "cypha/cyphalm/cyphalm_generation.hpp"
 #include "cypha/cyphalm/cyphalm_model.hpp"
 #include "cypha/cyphalm/hp_backend.hpp"
+#include "cypha/cyphalm/infinigram.hpp"
 
 namespace {
 
@@ -66,15 +74,19 @@ std::string printable(const std::vector<int>& ids) {
 }
 
 /// Judge bits/byte of ``text`` after ``prompt``; the judge is returned exactly
-/// to its state on entry.
+/// to its state on entry (predictors, neural experts, session cache).
 double judge_bits(cypha::cyphalm::CyphaLMModel& judge, const std::vector<int>& prompt,
                   const std::vector<int>& text) {
     auto& h = judge.hp_backend();
     hp::StreamRewind rewind(h.all_predictors());
+    const auto nn_saved = h.neural_states();  // the rewind covers predictors only
+    const std::size_t session_saved = h.session_size();
     for (int b : prompt) h.serve_advance_byte(static_cast<std::uint8_t>(b));
     double bits = 0.0;
     for (int b : text) bits += h.observe_next_byte(static_cast<std::uint8_t>(b)) / std::log(2.0);
     rewind.rewind();
+    if (h.has_neural()) h.set_neural_states(nn_saved);
+    h.truncate_session(session_saved);
     h.invalidate_scoring_cache();
     return bits / static_cast<double>(std::max<std::size_t>(1, text.size()));
 }
@@ -85,6 +97,7 @@ int main(int argc, char** argv) {
     std::string load, judge_path, text_path;
     std::vector<std::string> members;
     std::string infinigram_path;
+    std::uint64_t infinigram_bytes = 0;  // plain corpus: index its first N bytes (0 = all)
     std::uint64_t offset = 96000000;
     int prompts = 8, prompt_bytes = 256, gen_bytes = 200, stride = 8192;
     cypha::cyphalm::DecodeParams params;
@@ -98,6 +111,7 @@ int main(int argc, char** argv) {
         if (a == "--load") load = next();
         else if (a == "--member") members.push_back(next());
         else if (a == "--infinigram") infinigram_path = next();
+        else if (a == "--infinigram-bytes") infinigram_bytes = std::stoull(next());
         else if (a == "--judge") judge_path = next();
         else if (a == "--text") text_path = next();
         else if (a == "--offset") offset = std::stoull(next());
@@ -124,7 +138,23 @@ int main(int argc, char** argv) {
         model.add_ensemble_member(cypha::cyphalm::load_cyphalm_model(m),
                                   1.0 / static_cast<double>(members.size() + 1));
     }
-    if (!infinigram_path.empty()) model.attach_infinigram(infinigram_path);
+    if (!infinigram_path.empty()) {
+        const bool stored = cypha::cyphalm::InfiniGram::is_index_file(infinigram_path);
+        std::error_code ec;
+        const bool same = std::filesystem::equivalent(infinigram_path, text_path, ec);
+        if (!stored && same && (infinigram_bytes == 0 || infinigram_bytes > offset)) {
+            std::cerr << "warning: --infinigram indexes " << text_path << " past --offset " << offset
+                      << ": the model can quote the reference continuations; pass --infinigram-bytes "
+                      << offset << " (or less)\n";
+        } else if (!stored && infinigram_bytes == 0) {
+            std::cerr << "warning: --infinigram " << infinigram_path
+                      << " is a plain-text corpus and is indexed whole, including any held-out region; "
+                         "pass --infinigram-bytes N to index only its first N bytes\n";
+        } else if (stored && infinigram_bytes > 0) {
+            std::cerr << "warning: --infinigram-bytes ignored: " << infinigram_path << " is a stored index\n";
+        }
+        model.attach_infinigram(infinigram_path, static_cast<std::size_t>(infinigram_bytes));
+    }
     auto judge = cypha::cyphalm::load_cyphalm_model(judge_path);
     judge.hp_backend().set_learning(false);
     judge.reset_stream(/*keep_history=*/true);
@@ -156,6 +186,8 @@ int main(int argc, char** argv) {
     nlohmann::json out = {{"harness", "cyphalm_gen_bench"},
                           {"load", load},
                           {"members", members},
+                          {"infinigram", infinigram_path},
+                          {"infinigram_bytes", infinigram_bytes},
                           {"judge", judge_path},
                           {"text", text_path},
                           {"word_candidates", params.word_candidates},

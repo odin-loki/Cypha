@@ -499,6 +499,18 @@ target_link_libraries(hp_llm_smoke PRIVATE cypha_lm_native)
 add_executable(cyphalm_generate tools/cyphalm_generate.cpp)
 target_link_libraries(cyphalm_generate PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_generate)
+# A plain-text --infinigram corpus indexed whole is warned about (it may hold
+# held-out text); --infinigram-bytes caps it and silences the warning.
+add_test(NAME native_cyphalm_generate_infinigram_whole
+         COMMAND "$<TARGET_FILE:cyphalm_generate>" --infinigram "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt"
+                 --max-bytes 4 --word-candidates 0)
+set_tests_properties(native_cyphalm_generate_infinigram_whole PROPERTIES
+                     PASS_REGULAR_EXPRESSION "is a plain-text corpus and is indexed whole" TIMEOUT 60)
+add_test(NAME native_cyphalm_generate_infinigram_bytes
+         COMMAND "$<TARGET_FILE:cyphalm_generate>" --infinigram "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt"
+                 --infinigram-bytes 4096 --max-bytes 4 --word-candidates 0)
+set_tests_properties(native_cyphalm_generate_infinigram_bytes PROPERTIES
+                     FAIL_REGULAR_EXPRESSION "indexed whole" TIMEOUT 60)
 
 add_executable(cyphalm_generation_harness tools/cyphalm_generation_harness.cpp)
 target_link_libraries(cyphalm_generation_harness PRIVATE cypha_lm_native)
@@ -599,6 +611,11 @@ set_tests_properties(native_cyphalm_neural_smoke PROPERTIES TIMEOUT 120)
 add_executable(cyphalm_gen_bench tools/cyphalm_gen_bench.cpp)
 target_link_libraries(cyphalm_gen_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_gen_bench)
+add_executable(cyphalm_serve_state_smoke tools/cyphalm_serve_state_smoke.cpp)
+target_link_libraries(cyphalm_serve_state_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_serve_state_smoke)
+add_test(NAME native_cyphalm_serve_state_smoke COMMAND "$<TARGET_FILE:cyphalm_serve_state_smoke>")
+set_tests_properties(native_cyphalm_serve_state_smoke PROPERTIES TIMEOUT 180)
 add_executable(cyphalm_ensemble_smoke tools/cyphalm_ensemble_smoke.cpp)
 target_link_libraries(cyphalm_ensemble_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_ensemble_smoke)

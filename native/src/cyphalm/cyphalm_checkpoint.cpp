@@ -260,7 +260,11 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
             model.attach_neural(resolve(nj.get<std::string>()), eta);
         if (meta.contains("neural_adapt")) model.hp_backend().set_neural_adaptation(meta.at("neural_adapt").get<double>());
     }
-    if (meta.value("session_cache", false)) model.hp_backend().set_session_cache(true);
+    if (meta.value("session_cache", false)) {
+        // "session_window": bytes the session index covers (0 = all).
+        model.hp_backend().set_session_cache(
+            true, 0.02, meta.value("session_window", HpSequenceBackend::kSessionWindow));
+    }
     return model;
 }
 

@@ -572,9 +572,10 @@ class Predictor {
     }
     bool learning() const { return learning_; }
 
-    /// Serve-time adaptation speed: mixer learning rates = trained x num/den,
-    /// small-error skip threshold = ``skip`` (<0: trained). Idempotent, runtime
-    /// only; (1, 1, -1) restores training behaviour.
+    /// Serve-time adaptation speed: mixer learning rates = trained x num/den
+    /// (in 1/16ths, so fractions act on rate-1 sets too), small-error skip
+    /// threshold = ``skip`` (<0: trained). Idempotent, runtime only; (1, 1, -1)
+    /// restores training behaviour.
     void set_serve_adaptation(int num, int den, int skip) { mixer_.set_rate_scale(num, den, skip); }
 
 

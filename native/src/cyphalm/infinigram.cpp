@@ -69,15 +69,16 @@ InfiniGram::InfiniGram(const std::uint8_t* text, std::size_t n)
     packed_ = own_packed_.data();
 }
 
-std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std::size_t max_bytes) {
+bool InfiniGram::is_index_file(const std::string& path) {
     char magic[4] = {};
-    {
-        std::ifstream f(path, std::ios::binary);
-        if (!f) throw std::runtime_error("InfiniGram: cannot open " + path);
-        f.read(magic, 4);
-    }
-    if (std::memcmp(magic, "IGR1", 4) == 0 || std::memcmp(magic, "IGR2", 4) == 0)
-        return std::make_shared<const InfiniGram>(path);
+    std::ifstream f(path, std::ios::binary);
+    if (!f) throw std::runtime_error("InfiniGram: cannot open " + path);
+    f.read(magic, 4);
+    return std::memcmp(magic, "IGR1", 4) == 0 || std::memcmp(magic, "IGR2", 4) == 0;
+}
+
+std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std::size_t max_bytes) {
+    if (is_index_file(path)) return std::make_shared<const InfiniGram>(path);
     // Plain text: index it now (just in time) instead of storing an index.
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     std::size_t n = static_cast<std::size_t>(f.tellg());

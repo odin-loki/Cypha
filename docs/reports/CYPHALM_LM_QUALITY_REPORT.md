@@ -181,6 +181,19 @@ reliable. `CyphaLMConfig::hp_serve_mixer_lr_scale = 0.5` (env
 `CYPHA_HP_SERVE_MIXER_LR_SCALE`) is applied by `CyphaLMModel::set_serve_mode`:
 generation turns it on, training entry points turn it off.
 
+These rates were integers with a floor of 1: ×0.5 turned the layer-1 rates
+2 / 3 / 4 into 1 / 1 / 2 and ×0.25 turned all of them into 1, so the two
+columns above are nearly the same setting. On the lr1_scale 40 shards of
+winners v2 and v3 (layer-1 rates 1-2) ×0.5 changed only the final layer and
+the two rate-2 sets. Since the serve-state fix the effective rates run in
+1/16ths (`hp::MixerNet`, update `>> 18` instead of `>> 14`), bit-identical
+at ×1 (8 MiB gate24 online bpc and the v3 wiki 1.5927 unchanged); ×0.5 now
+halves every rate. Wiki 16 KiB at ×0.5 (`--serve-lr 2`), floored → real:
+v3 winner 1.5942 → 1.5954 (×1: 1.5927); gate24 table bits 18 with the
+upstream mixer gains, 8 MiB: 1.8142 → 1.8173. On v3 ×0.5 is worse than ×1
+either way, so the 0.5 serving default needs re-measuring for lr1_scale 40
+models (upgrade plan candidate 4).
+
 ### Word lookahead decoding
 
 Byte sampling writes real words but invents some ("communicantly") and loses
@@ -755,7 +768,7 @@ The 4-shard default is within 0.003 (wiki) to 0.012 (lcet10) of the full ensembl
   | Transformer | 1.3% | 58 | |
 
   The held-out texts are not contaminated. Word lookahead copies whole corpus phrases more than any other decoder, which is part of why every judge rated its output so probable.
-- **Session cache** (`set_session_cache`, `--session-cache`, manifest `"session_cache": true`). An index over the text the stream has read is rebuilt at 1 KiB, on each doubling, then every 64 KiB. Its longest-match counts are mixed in with a weight learned per (length, count) bucket. Mixing every match hurts (4-shard winner: wiki +0.012, lcet10 +0.008), because hp's match models and online learning already cover short repeats. Using only matches of 16 bytes or more is neutral to slightly positive (wiki ±0, Alice −0.0004, lcet10 −0.0010). It is off by default; it is for long sessions that paste or repeat long text.
+- **Session cache** (`set_session_cache`, `--session-cache`, manifest `"session_cache": true`). An index over the text the stream has read is rebuilt at 1 KiB, on each doubling, then every 64 KiB. Since the serve-state fix it covers the last 1 MiB only (`window`, manifest `"session_window"`, 0 = all; rebuilds at most window / 16 apart, so each costs at most 1 MiB), bytes read under `hp::StreamRewind` lookahead never trigger a rebuild (before, each word candidate past a threshold rebuilt the whole history), and `reset_stream(false)` / `reset()` start an empty session. Its longest-match counts are mixed in with a weight learned per (length, count) bucket. Mixing every match hurts (4-shard winner: wiki +0.012, lcet10 +0.008), because hp's match models and online learning already cover short repeats. Using only matches of 16 bytes or more is neutral to slightly positive (wiki ±0, Alice −0.0004, lcet10 −0.0010). It is off by default; it is for long sessions that paste or repeat long text.
 - **Draft bytes from the index** (speculative decoding) does not pay here:
   - a Transformer verifies k drafted tokens in one parallel pass, but hp reads bytes serially, so checking a draft costs as much as generating it;
   - the geometric ensemble mix needs every member's full distribution to normalise, so even a single-byte check needs the whole distribution.
@@ -860,6 +873,10 @@ and the commit messages; numbers are the ones measured above.
   saved primary alone. Earlier manifest runs with `--serve-lr`/`--serve-skip`
   set them on the primary only, and `--neural-lr` did not reach manifest
   experts.
+- **Fractional serve rates.** `--serve-lr Q` below 4 scales in 1/16ths of a
+  rate since the serve-state fix; before, each rate floored at 1, so ×0.5 was
+  a no-op on the layer-1 sets of lr1_scale 40 shards. ×1 (the default) is
+  bit-identical either way.
 
 ### Tools
 
@@ -867,7 +884,7 @@ and the commit messages; numbers are the ones measured above.
 |---|---|---|
 | `cyphalm_lm_quality` | pretrain or load, score held-out next-byte distributions, generate | see below |
 | `cyphalm_generate` | generate from a cold model, checkpoint or manifest | see below |
-| `cyphalm_gen_bench` | continue N held-out prompts, score with a fixed judge (learning off, exact rewind) | `--load CKPT` · `--member CKPT` (repeatable) · `--infinigram IDX` · `--judge CKPT` · `--text FILE` · `--offset` (96000000) · `--prompts` (8) · `--prompt-bytes` (256) · `--gen-bytes` (200) · `--stride` (8192) · `--word-candidates` (8) · `--temperature` (0.8) · `--min-p` (0.1) · `--seed` (1234) |
+| `cyphalm_gen_bench` | continue N held-out prompts, score with a fixed judge (learning off, exact rewind of predictors, neural experts and session cache). A plain-text `--infinigram` corpus indexed whole is warned about on stderr, more loudly when it is the `--text` file and reaches `--offset` (the model could quote the references) | `--load CKPT` · `--member CKPT` (repeatable) · `--infinigram IDX\|CORPUS` · `--infinigram-bytes N` (0 = all; plain corpus only) · `--judge CKPT` · `--text FILE` · `--offset` (96000000) · `--prompts` (8) · `--prompt-bytes` (256) · `--gen-bytes` (200) · `--stride` (8192) · `--word-candidates` (8) · `--temperature` (0.8) · `--min-p` (0.1) · `--seed` (1234) |
 | `cyphalm_shard_train` | split `--bytes` from `--offset` into N equal shards (remainder dropped), train one model per shard on threads, write `shard_<i>.json/.hpbin` + `ensemble.json`. `--threads` below 1 exits 2; a shard that fails (unreadable or empty slice, save error) is reported and the run exits 1 without a manifest | `--train FILE` · `--bytes N` · `--offset` (0) · `--shards` (4) · `--threads` (all cores, ≥ 1) · `--tier` (lean) · `--table-bits` (20) · `--out DIR` |
 | `cyphalm_trace` | spans of a text found verbatim in the corpus (∞-gram index), JSON on stdout. An unreadable `--text` exits 1 before the index is built | `--corpus IGR\|TEXT` · `--corpus-bytes` (0 = all) · `--text FILE` · `--offset` (0) · `--bytes` (0 = rest) · `--min-len` (32) · `--top` (20) |
 | `cyphalm_infinigram_build` | SA-IS suffix array over a corpus slice, IGR2 file | `--text FILE` · `--bytes N` · `--offset` (0) · `--out X.igr` |
@@ -916,7 +933,12 @@ Flags that act on a loaded model (`--member`, `--ensemble-lr`, `--merge`,
 16), `--tier NAME`, `--min-p P` (0.1), `--no-repeat N` (0), `--learn-from-output`
 (off), `--word-candidates K` (8; 0 or 1 = byte sampling), `--ensemble
 CKPT.json[:W]` (repeatable; no `:W` = equal shares 1/(n+1)), `--infinigram
-X.igr`. Temperature defaults to 0.8. Word lookahead runs for every non-beam
+X.igr|CORPUS`, `--infinigram-bytes N` (plain corpus: index only its first N
+bytes; 0 = all, with a stderr warning, since a whole corpus may hold the
+held-out text), `--neural FILE` (repeatable), `--neural-lr R` (mixing rate of
+every expert; default: the manifest's `neural_learning_rate`, else 0.1 —
+`--neural` used to reset a manifest's rate to 0.1), `--session-cache`.
+Temperature defaults to 0.8. Word lookahead runs for every non-beam
 strategy while `learn_from_output` is off, so plain greedy needs
 `--word-candidates 0`.
 
@@ -933,7 +955,7 @@ strategy while `learn_from_output` is off, so plain greedy needs
 | `hp_match_drop` | 0 | | bit k drops byte-match model k |
 | `hp_frozen_scoring` | true | `CYPHA_HP_FROZEN_SCORING` (0/1) | score with learning off inside the hypothetical byte |
 | `hp_tree_prune` | 1e-4 | `CYPHA_HP_TREE_PRUNE` (0 = exact) | bit-tree subtrees below this are not expanded |
-| `hp_serve_mixer_lr_scale` | 0.5 | `CYPHA_HP_SERVE_MIXER_LR_SCALE` | serve mixer rate, applied by `set_serve_mode` |
+| `hp_serve_mixer_lr_scale` | 0.5 | `CYPHA_HP_SERVE_MIXER_LR_SCALE` | serve mixer rate, applied by `set_serve_mode`; resolution 1/16 of each rate (floored at 1 before the serve-state fix) |
 | `hp_ensemble_learning_rate` | 0.01 | | ensemble weights' exponentiated-gradient rate |
 | `hp_lossy_mem`, `hp_serve_compact`, `hp_prune_cold_min_n` | 0, false, 0 | `CYPHA_HP_LOSSY_MEM`, `CYPHA_HP_SERVE_COMPACT`, `CYPHA_HP_PRUNE_COLD_MIN_N` | older RAM levers ([plan](CYPHALM_LOSSY_LLM_PLAN.md)) |
 | `vocab_size` | 256 | | `apply_hp_production_recipe` now always sets 256 |
@@ -978,6 +1000,10 @@ REST body fields that map to the table in *Decode controls added*:
 | `hp::Predictor::tables_match(src)` | every mergeable table (context, Hebbian, pool, mixer) the same size as in `src`. `merge_shard_tables` and `transfer_tables_from` return `false` and change nothing when it is false; `hp::merge_predictor_tables` returns `MergeStatus::ConfigMismatch` |
 | `hp::Predictor::fold_auto(occ)` / `HpSequenceBackend::fold_auto(occ)` | occupancy fold; outside (0, 1) the hp side folds nothing and the backend throws `std::invalid_argument` |
 | `hp::StreamRewind` | exact rewind of one or more predictors across bytes |
+| `hp::MixerNet::set_rate_scale`, `rate_q4`, `layer1_rate_q4` | serve rate scale; effective rates in 1/16ths (`kMixerRateFrac`), checkpoints keep trained rates |
+| `HpSequenceBackend::set_session_cache(on, eta, window)` | session cache over the last `window` bytes (default `kSessionWindow` 1 MiB, 0 = all); `session_size` (bytes read), `session_held`, `session_indexed`, `session_builds` |
+| `HpSequenceBackend::reset()` | cold model: also ∞-gram / neural weights back to their start values, experts re-initialised, session emptied |
+| `InfiniGram::is_index_file(path)` | stored index (IGR1/IGR2) or plain corpus |
 | `hp::MapScope` | map large tables from the `.hpbin` on load |
 | `InfiniGram::build` / `InfiniGram(path)` / `query` | index build, load, longest-suffix counts |
 
@@ -1013,6 +1039,8 @@ agreement.
 | `native_cyphalm_neural_smoke` | LSTM / Transformer experts against a reference; mix normalised; `log_prob_byte` / greedy use the neural and session mix |
 | `native_cyphalm_lm_quality_load_only_flags` | a load-only harness flag without `--load` is an error |
 | `native_cyphalm_infinigram_smoke` | index queries against brute force; expert normalisation, observe, rewind |
+| `native_cyphalm_serve_state_smoke` | serve rate scale in 1/16ths (×1 bit-identical, ×0.5 ≠ ×0.25 on lr1_scale 40, checkpoint keeps trained rates); session cache window, doubling cadence, no rebuild under `StreamRewind`, exact rewind, `reset_stream(false)` clears; `reset()` scores like a fresh twin (∞-gram, adapting expert, session); top-p at T 1e-5 equals greedy |
+| `native_cyphalm_generate_infinigram_whole`, `native_cyphalm_generate_infinigram_bytes` | `cyphalm_generate` warns about a plain corpus indexed whole; `--infinigram-bytes` silences it |
 
 ### Changelog
 
@@ -1062,7 +1090,7 @@ agreement.
 | learning from own output while generating | loops, d4 0.23–0.59 (`g4_*`) | kept as `learn_from_output` (off) |
 | greedy, greedy + no-repeat | cycles; no-repeat breaks words (`g4_*`) | kept as options |
 | bug-era generations ("letter salad") | withdrawn, caused by `d05523b`'s bug (`g2_*`, `g3_*`) | fixed |
-| serve mixer rate ≠ 0.5, no small-error skip | ×0.25 ≈ ×0.5, faster worse; skip 0 no reliable gain (`ad_*`, `aq_*`) | kept as `--serve-lr`, `--serve-skip` |
+| serve mixer rate ≠ 0.5, no small-error skip | ×0.25 ≈ ×0.5, faster worse; skip 0 no reliable gain (`ad_*`, `aq_*`). ×0.25 then floored most layer-1 rates at 1 (see *Adapt to the prompt*) | kept as `--serve-lr`, `--serve-skip` |
 | serve-time StateMap limits, APM rates | ≤ 0.004, wiki and Alice move opposite (`lim_*`) | harness code never committed |
 | two training epochs | +0.029 wiki (`ep2_*`) | `--epochs` kept |
 | table bits 24 | 8 MiB: 1.7962 vs 1.7950 (`t24_*`); 95 MB: −0.008 wiki, none on Alice (`t24_95_*`) | config only |

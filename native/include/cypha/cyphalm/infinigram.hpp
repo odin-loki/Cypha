@@ -37,6 +37,9 @@ class InfiniGram {
     /// A stored index, or a plain-text corpus indexed on the spot (its first
     /// ``max_bytes`` bytes; 0 = all), chosen by the file's magic.
     static std::shared_ptr<const InfiniGram> open(const std::string& path, std::size_t max_bytes = 0);
+    /// True when ``path`` is a stored index (IGR1 / IGR2 magic), false for a
+    /// plain-text corpus (``open`` then indexes its bytes). Throws if unreadable.
+    static bool is_index_file(const std::string& path);
     ~InfiniGram();
     InfiniGram(const InfiniGram&) = delete;
     InfiniGram& operator=(const InfiniGram&) = delete;

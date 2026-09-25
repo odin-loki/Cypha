@@ -143,6 +143,12 @@ void HpSequenceBackend::reset() {
     last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
     serve_rate_ = {0, 0, 0};  // the new predictor runs at its trained rates
     ++settings_epoch_;
+    // The attached stages restart with it: start mixing weights, experts at
+    // their initial state (no history to prime from), an empty session.
+    ig_w_ = ig_w0_;
+    reset_neural_weights_();
+    prime_neural_();
+    set_session_cache(ss_on_, ss_eta_, ss_window_);
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -322,34 +328,47 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     return out;
 }
 
-void HpSequenceBackend::set_session_cache(bool on, double eta) {
+void HpSequenceBackend::set_session_cache(bool on, double eta, std::size_t window) {
     ss_on_ = on;
     ss_eta_ = eta;
+    ss_window_ = window;
     ss_w_.assign(kSsBuckets, 0.97);
     ss_hist_.clear();
+    ss_len_ = 0;
     ss_ig_.reset();
-    ss_built_ = 0;
+    ss_built_ = ss_indexed_ = 0;
     ss_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::truncate_session(std::size_t n) {
-    if (n >= ss_hist_.size()) return;
-    ss_hist_.resize(n);
+    if (n >= ss_len_) return;
+    const std::size_t front = ss_len_ - ss_hist_.size();  // bytes already out of the window
+    ss_hist_.resize(n > front ? n - front : 0);
+    ss_len_ = n;
     if (ss_built_ > n) {  // the index saw bytes that are gone: rebuild later
         ss_ig_.reset();
-        ss_built_ = 0;
+        ss_built_ = ss_indexed_ = 0;
     }
     ss_valid_ = served_valid_ = false;
 }
 
+void HpSequenceBackend::session_grow_() {
+    // First at 1 KiB, then when the new bytes equal the indexed length
+    // (doubling), at most window / 16 apart.
+    const std::size_t cap = ss_window_ > 0 ? std::max<std::size_t>(ss_window_ / 16, 1) : std::size_t{1} << 16;
+    const std::size_t step = ss_indexed_ == 0 ? 1024 : std::min(ss_indexed_, cap);
+    if (ss_len_ - ss_built_ < step) return;
+    if (ss_window_ > 0 && ss_hist_.size() > ss_window_) {
+        ss_hist_.erase(ss_hist_.begin(), ss_hist_.end() - static_cast<std::ptrdiff_t>(ss_window_));
+    }
+    ss_ig_ = std::make_shared<const InfiniGram>(ss_hist_.data(), ss_hist_.size());
+    ss_built_ = ss_len_;
+    ss_indexed_ = ss_hist_.size();
+    ++ss_builds_;
+}
+
 std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& base) {
     const std::size_t h = ss_hist_.size();
-    // Rebuild at 1 KiB, on doubling, then every 64 KiB.
-    const std::size_t next = ss_built_ == 0 ? 1024 : std::min(ss_built_ * 2, ss_built_ + (std::size_t{1} << 16));
-    if (h >= next) {
-        ss_ig_ = std::make_shared<const InfiniGram>(ss_hist_.data(), h);
-        ss_built_ = h;
-    }
     ss_bucket_ = -1;
     if (!ss_ig_) return base;
     constexpr std::size_t kCtx = 256;
@@ -376,10 +395,18 @@ std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& b
 void HpSequenceBackend::add_neural(std::shared_ptr<const ByteNeuralExpert> nn) {
     if (!nn) return;
     nn_.push_back({std::move(nn), {}});
+    reset_neural_weights_();
+    prime_neural_();
+}
+
+void HpSequenceBackend::reset_neural_weights_() {
     const std::size_t k = nn_.size();
+    if (k == 0) {
+        nn_w_.clear();
+        return;
+    }
     nn_w_.assign(kNnBuckets * (k + 1), 0.3 / static_cast<double>(k));
     for (int b = 0; b < kNnBuckets; ++b) nn_w_[static_cast<std::size_t>(b) * (k + 1)] = 0.7;
-    prime_neural_();
 }
 
 void HpSequenceBackend::set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta) {
@@ -428,6 +455,7 @@ void HpSequenceBackend::set_infinigram(std::shared_ptr<const InfiniGram> ig, dou
     ig_ = std::move(ig);
     ig_eta_ = eta;
     ig_w_.assign(kIgBuckets, {0.8, 0.1, 0.1});
+    ig_w0_ = ig_w_;
     ig_valid_ = served_valid_ = false;
 }
 
@@ -443,6 +471,7 @@ void HpSequenceBackend::set_infinigram_weights(const std::vector<double>& w) {
     }
     ig_w_.assign(kIgBuckets, {0.0, 0.0, 0.0});
     for (std::size_t i = 0; i < w.size(); ++i) ig_w_[i / 3][i % 3] = w[i];
+    ig_w0_ = ig_w_;  // start weights: reset() returns to them
     ig_valid_ = served_valid_ = false;
 }
 
@@ -573,7 +602,7 @@ void HpSequenceBackend::reset_stream(bool keep_history) {
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
     prime_neural_();  // the LSTM re-reads whatever history the predictor kept
-    if (!keep_history) truncate_session(0);
+    if (!keep_history) set_session_cache(ss_on_, ss_eta_, ss_window_);  // a new session
 }
 
 void HpSequenceBackend::set_serve_adaptation(int num, int den, int skip) {
@@ -709,6 +738,11 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
             w = std::clamp(w + ss_eta_ * (pa - pb) / p, 0.01, 0.99);
         }
         ss_hist_.push_back(byte);
+        ++ss_len_;
+        // A byte read under an undo recorder (hp::StreamRewind lookahead) is
+        // speculative: truncate_session takes it back, and a rebuild over it
+        // would be thrown away with it (and redone for every candidate).
+        if (hp::UndoRecorderScope::active() == nullptr) session_grow_();
     }
     if (!nn_.empty()) {
         if (nn_valid_ && nn_eta_ > 0.0 && pred_->learning()) {

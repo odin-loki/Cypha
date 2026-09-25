@@ -40,6 +40,11 @@ class HpSequenceBackend {
  public:
     explicit HpSequenceBackend(hp::Config cfg);
 
+    /// A cold model: an untrained predictor, no ensemble members, and every
+    /// attached stage back to its start: ∞-gram and neural mixing weights
+    /// (as attached / loaded), neural experts at their initial state (and
+    /// output layers un-adapted), an empty session cache. Two models reset
+    /// alike score alike whatever each read before (codec symmetry).
     void reset();
 
     /// Train / compress: consume one byte on the live predictor (predict + update per bit).
@@ -206,19 +211,35 @@ class HpSequenceBackend {
         for (std::size_t i = 0; i < nn_.size() && i < st.size(); ++i) nn_[i].state = st[i];
         nn_valid_ = served_valid_ = false;
     }
-    /// Session cache: an ∞-gram index over the bytes this stream has read
-    /// (prompt, conversation, document), rebuilt just in time as it grows
-    /// (at 1 KiB, then every time it doubles, then every 64 KiB). Its
+    /// Session cache: an ∞-gram index over the last ``window`` bytes this
+    /// stream has read (prompt, conversation, document; 0 = all of them),
+    /// rebuilt just in time as it grows: at 1 KiB, then whenever the bytes
+    /// read since the last build equal the indexed length (doubling), at
+    /// most ``window`` / 16 bytes apart (64 KiB for 0). So a rebuild costs at
+    /// most ``window`` bytes and all of them cost O(16) per byte read. Bytes
+    /// read while an undo recorder is active (hp::StreamRewind lookahead)
+    /// are speculative: they are matched against but never trigger a
+    /// rebuild, so ``truncate_session`` back over them keeps the index. The
     /// longest-match next-byte counts are mixed in as w p + (1 - w) p_sess,
-    /// w learned online per (match length, count) bucket.
-    void set_session_cache(bool on, double eta = 0.02);
+    /// w learned online per (match length, count) bucket. Sets up an empty
+    /// session (also what ``reset_stream(false)`` and ``reset`` do).
+    static constexpr std::size_t kSessionWindow = std::size_t{1} << 20;
+    void set_session_cache(bool on, double eta = 0.02, std::size_t window = kSessionWindow);
     bool has_session_cache() const { return ss_on_; }
-    /// Bytes read so far, and rewinding to an earlier length (generation).
-    std::size_t session_size() const { return ss_hist_.size(); }
+    /// Bytes read so far in this session (not capped by the window), and
+    /// rewinding to an earlier count (generation lookahead).
+    std::size_t session_size() const { return ss_len_; }
     void truncate_session(std::size_t n);
+    /// Session bytes held (<= window + window / 16) and indexed (<= window),
+    /// and how many times the index was built (tests, diagnostics).
+    std::size_t session_held() const { return ss_hist_.size(); }
+    std::size_t session_indexed() const { return ss_indexed_; }
+    std::size_t session_builds() const { return ss_builds_; }
     /// This predictor and every member's (for ``hp::StreamRewind``).
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).
+    /// Without the history the session cache starts empty too (text, index
+    /// and weights); with it, the session is kept like the byte history.
     void reset_stream(bool keep_history);
     /// Per-table occupancy fold (``hp::Predictor::fold_auto``), members too.
     /// Throws std::invalid_argument unless 0 < ``max_occupancy`` < 1.
@@ -294,6 +315,7 @@ class HpSequenceBackend {
     double ig_eta_ = 0.3;
     static constexpr int kIgBuckets = 8 * 4 * 8;
     std::vector<std::array<double, 3>> ig_w_;
+    std::vector<std::array<double, 3>> ig_w0_;  // start weights (reset)
     bool ig_valid_ = false;
     int ig_bucket_ = 0;
     std::vector<double> ig_p_[3];       // model, longest, reliable (probabilities)
@@ -309,11 +331,16 @@ class HpSequenceBackend {
     const std::vector<double>& served_log_probs_() const;
     // Session cache.
     std::vector<double> session_mix_(const std::vector<double>& base);
+    void session_grow_();               // trim to the window and rebuild when due
     bool ss_on_ = false;
     double ss_eta_ = 0.02;
-    std::vector<std::uint8_t> ss_hist_;
+    std::size_t ss_window_ = kSessionWindow;
+    std::vector<std::uint8_t> ss_hist_; // the last session bytes (session_size() - size() dropped)
+    std::size_t ss_len_ = 0;            // session bytes read
     std::shared_ptr<const InfiniGram> ss_ig_;
-    std::size_t ss_built_ = 0;          // bytes indexed by ss_ig_
+    std::size_t ss_built_ = 0;          // ss_len_ when ss_ig_ was built
+    std::size_t ss_indexed_ = 0;        // bytes indexed by ss_ig_ (0: none)
+    std::size_t ss_builds_ = 0;
     static constexpr int kSsBuckets = 8 * 4;
     std::vector<double> ss_w_;
     bool ss_valid_ = false;
@@ -322,6 +349,7 @@ class HpSequenceBackend {
     // Neural expert.
     std::vector<double> neural_mix_(const std::vector<double>& base);
     void prime_neural_();
+    void reset_neural_weights_();       // start weights for the attached experts
     struct NnSlot {
         std::shared_ptr<const ByteNeuralExpert> model;
         ByteNeuralExpert::State state;
