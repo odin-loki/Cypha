@@ -129,9 +129,10 @@ void CyphaLMModel::attach_infinigram(const std::string& index_path, std::size_t 
     }
 }
 
-void CyphaLMModel::attach_neural(const std::string& blm_path) {
+void CyphaLMModel::attach_neural(const std::string& path, double eta) {
     if (!hp_) throw std::runtime_error("attach_neural: hp backend required");
-    hp_->set_neural(ByteLstmExpert::load(blm_path));
+    hp_->set_neural_learning_rate(eta);
+    hp_->add_neural(load_neural_expert(path));
 }
 
 void CyphaLMModel::add_ensemble_member(CyphaLMModel&& other, double weight) {

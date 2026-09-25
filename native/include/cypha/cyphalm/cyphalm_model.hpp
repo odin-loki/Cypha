@@ -102,9 +102,10 @@ class CyphaLMModel {
     /// ``index_path`` may also be the plain corpus: it is then indexed in
     /// memory at attach time (its first ``max_bytes`` bytes; 0 = all).
     void attach_infinigram(const std::string& index_path, std::size_t max_bytes = 0);
-    /// Attach a pretrained byte LSTM (BLM1 file from ``byte_lm.py export``) as
-    /// a neural expert (``HpSequenceBackend::set_neural``).
-    void attach_neural(const std::string& blm_path);
+    /// Add a pretrained byte LSTM (BLM1) or Transformer (BGT1) from
+    /// ``byte_lm.py export`` as a neural expert (``HpSequenceBackend::add_neural``);
+    /// ``eta`` sets the mixing-weight learning rate.
+    void attach_neural(const std::string& path, double eta = 0.1);
     /// Serve-time RAM cut: fold trained hp tables down to these caps (bits;
     /// 0 = keep) and record them in the config, so the model saves and loads
     /// at the smaller size (``hp::Predictor::fold_tables``).

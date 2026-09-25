@@ -154,18 +154,28 @@ class HpSequenceBackend {
     /// weights learned on held-out text and start from them later.
     std::vector<double> infinigram_weights() const;
     void set_infinigram_weights(const std::vector<double>& w);
-    /// Neural expert (a pretrained byte LSTM, ``ByteLstmExpert``): the served
-    /// distribution becomes w p + (1 - w) p_nn after the ∞-gram mix, with w
-    /// learned online per (model confidence, top-byte agreement) bucket while
-    /// learning is on. The LSTM reads every consumed byte; attaching primes it
-    /// with the recent history.
-    void set_neural(std::shared_ptr<const ByteLstmExpert> nn, double eta = 0.02);
-    bool has_neural() const { return static_cast<bool>(nn_); }
+    /// Neural experts (pretrained byte LSTM / Transformer, ``ByteNeuralExpert``):
+    /// after the ∞-gram mix the served distribution becomes the linear mix
+    /// w_0 p + sum_i w_i p_nn_i, weights learned online (exponentiated
+    /// gradient, rate ``eta``) per (model confidence, top-byte agreement with
+    /// the first expert) bucket while learning is on. Experts read every
+    /// consumed byte; adding one primes it with the recent history.
+    void add_neural(std::shared_ptr<const ByteNeuralExpert> nn);
+    /// Replace all neural experts by ``nn`` (null: none).
+    void set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta = 0.1);
+    void set_neural_learning_rate(double eta) { nn_eta_ = eta; }
+    bool has_neural() const { return !nn_.empty(); }
+    std::size_t neural_count() const { return nn_.size(); }
+    /// Per bucket: [model, expert 0, expert 1, ...].
     std::vector<double> neural_weights() const { return nn_w_; }
-    /// Recurrent state, to restore after rewinding the predictors.
-    const ByteLstmExpert::State& neural_state() const { return nn_state_; }
-    void set_neural_state(const ByteLstmExpert::State& s) {
-        nn_state_ = s;
+    /// Expert states, to restore after rewinding the predictors.
+    std::vector<ByteNeuralExpert::State> neural_states() const {
+        std::vector<ByteNeuralExpert::State> out;
+        for (const auto& s : nn_) out.push_back(s.state);
+        return out;
+    }
+    void set_neural_states(const std::vector<ByteNeuralExpert::State>& st) {
+        for (std::size_t i = 0; i < nn_.size() && i < st.size(); ++i) nn_[i].state = st[i];
         nn_valid_ = false;
     }
     /// Session cache: an ∞-gram index over the bytes this stream has read
@@ -271,11 +281,14 @@ class HpSequenceBackend {
     // Neural expert.
     std::vector<double> neural_mix_(const std::vector<double>& base);
     void prime_neural_();
-    std::shared_ptr<const ByteLstmExpert> nn_;
-    ByteLstmExpert::State nn_state_;
-    double nn_eta_ = 0.02;
+    struct NnSlot {
+        std::shared_ptr<const ByteNeuralExpert> model;
+        ByteNeuralExpert::State state;
+    };
+    std::vector<NnSlot> nn_;
+    double nn_eta_ = 0.1;
     static constexpr int kNnBuckets = 16;
-    std::vector<double> nn_w_;
+    std::vector<double> nn_w_;          // kNnBuckets x (1 + experts)
     bool nn_valid_ = false;
     int nn_bucket_ = 0;
     std::vector<double> nn_pin_;        // probabilities before the neural mix

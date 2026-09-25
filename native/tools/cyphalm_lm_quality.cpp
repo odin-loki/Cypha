@@ -95,9 +95,10 @@ int main(int argc, char** argv) {
     int table_bits = 22, gen_bytes = 200, prompt_bytes = 256;
     double temperature = 0.8, top_p = 0.9;
     bool frozen_eval = false;
-    std::string neural_path;
-    bool session_cache = false;  // ∞-gram index over the text read so far
-    std::size_t infinigram_bytes = 0;  // BLM1 byte LSTM expert
+    std::vector<std::string> neural_paths;  // byte LSTM (BLM1) / Transformer (BGT1) experts
+    bool session_cache = false;             // ∞-gram index over the text read so far
+    double neural_lr = 0.1;                 // neural mixing weight step (exponentiated gradient)
+    std::size_t infinigram_bytes = 0;       // --infinigram given the corpus: index its first N bytes
     double fold_auto = 0.0;  // per-table occupancy fold target (0 = off)
     std::string dump_dist;  // float32 natural-log P, 256 per held-out byte
     bool compare_scoring = false;
@@ -156,8 +157,9 @@ int main(int argc, char** argv) {
         else if (a == "--only-default") only_default = true;
         else if (a == "--dump-dist") dump_dist = next();
         else if (a == "--fold-auto") fold_auto = std::stod(next());
-        else if (a == "--neural") neural_path = next();
+        else if (a == "--neural") neural_paths.push_back(next());  // repeatable
         else if (a == "--session-cache") session_cache = true;
+        else if (a == "--neural-lr") neural_lr = std::stod(next());
         else {
             std::cerr << "unknown arg " << a << "\n";
             return 2;
@@ -205,9 +207,9 @@ int main(int argc, char** argv) {
             model->hp_backend().set_session_cache(true);
             out["session_cache"] = true;
         }
-        if (!neural_path.empty()) {
-            model->attach_neural(neural_path);
-            out["neural"] = neural_path;
+        if (!neural_paths.empty()) {
+            for (const auto& np : neural_paths) model->attach_neural(np, neural_lr);
+            out["neural"] = neural_paths;
         }
         if (!infinigram_path.empty()) {
             const auto t_ig = Clock::now();

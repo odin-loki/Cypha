@@ -138,7 +138,7 @@ def cmd_train(a):
                              {"params": nodecay, "weight_decay": 0.0}],
                             lr=a.lr, betas=(0.9, 0.95), fused=False)
     os.makedirs(a.out, exist_ok=True)
-    log = {"cfg": cfg, "params": nparams, "batch": a.batch, "budget_min": a.budget_min,
+    log = {"cfg": cfg, "params": nparams, "batch": a.batch, "budget_min": a.budget_min, "budget_bytes": a.budget_bytes,
            "data_bytes": len(data), "points": []}
     budget = a.budget_min * 60.0
     marks = sorted(set(x * 60.0 for x in a.marks) | {budget})
@@ -150,9 +150,14 @@ def cmd_train(a):
     spent, step, seen, mark_i = 0.0, 0, 0, 0
     rss_train = 0.0
     print(json.dumps({"params": nparams, "cfg": cfg}), flush=True)
-    while spent < budget:
+    # --budget-bytes stops after a fixed amount of text (reproducible on a busy
+    # machine); otherwise the wall-clock budget decides.
+    def progress():
+        return seen / a.budget_bytes if a.budget_bytes > 0 else spent / budget
+
+    while progress() < 1.0:
         t0 = time.perf_counter()
-        frac = spent / budget
+        frac = progress()
         lr = a.lr * min(1.0, (step + 1) / a.warmup) * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * frac)))
         for g in opt.param_groups:
             g["lr"] = lr
@@ -185,12 +190,13 @@ def cmd_train(a):
             rss_train = max(rss_train, rss_mb())
             print(json.dumps({"step": step, "min": round(spent / 60, 2), "loss_bits": loss.item() / math.log(2),
                               "lr": lr, "bytes_seen": seen, "bytes_per_s": seen / spent}), flush=True)
-        if mark_i < len(marks) and spent >= marks[mark_i]:
+        done = progress() >= 1.0
+        if done or (a.budget_bytes <= 0 and mark_i < len(marks) and spent >= marks[mark_i]):
             vb = val_bits(model, cfg, val)
             pt = {"minutes": round(spent / 60, 2), "step": step, "bytes_seen": seen, "val_bits_per_byte": vb}
             log["points"].append(pt)
             print(json.dumps(pt), flush=True)
-            name = "final.pt" if spent >= budget else f"min{int(round(marks[mark_i] / 60))}.pt"
+            name = "final.pt" if done else f"min{int(round(marks[mark_i] / 60))}.pt"
             torch.save({"cfg": cfg, "model": model.state_dict()}, os.path.join(a.out, name))
             mark_i += 1
             model.train()
@@ -388,10 +394,20 @@ def cmd_bench(a):
 
 
 def cmd_export(a):
-    """Write an LSTM checkpoint as BLM1 for CyphaLM (native neural_expert.hpp)."""
+    """Write a checkpoint for CyphaLM's native runtime (neural_expert.hpp): LSTM as BLM1, Transformer as BGT1."""
     model, cfg = load(a.ckpt)
-    if cfg["arch"] != "lstm":
-        raise SystemExit("export: only the LSTM has a native runtime")
+    if cfg["arch"] == "gpt":  # BGT1 (native ByteGptExpert)
+        with open(a.out, "wb") as f:
+            f.write(b"BGT1")
+            f.write(np.array([cfg["layers"], cfg["d"], cfg["heads"], cfg["ctx"]], dtype=np.uint32).tobytes())
+            arrs = [model.emb.weight, model.pos.weight]
+            for blk in model.blocks:
+                arrs += [blk.ln1.weight, blk.ln1.bias, blk.qkv.weight, blk.proj.weight,
+                         blk.ln2.weight, blk.ln2.bias, blk.fc.weight, blk.fc2.weight]
+            arrs += [model.lnf.weight, model.lnf.bias]
+            for t in arrs:
+                f.write(t.detach().float().contiguous().numpy().tobytes())
+        return
     rnn = model.rnn
     with open(a.out, "wb") as f:
         f.write(b"BLM1")
@@ -423,6 +439,7 @@ def main():
     t.add_argument("--lr", type=float, default=1e-3)
     t.add_argument("--warmup", type=int, default=200)
     t.add_argument("--budget-min", type=float, default=60)
+    t.add_argument("--budget-bytes", type=int, default=0, help="stop after this many training bytes instead")
     t.add_argument("--marks", type=float, nargs="*", default=[5, 15, 30])
     t.add_argument("--fp32", action="store_true")
     t.add_argument("--threads", type=int, default=4)

@@ -20,7 +20,7 @@ void usage(const char* argv0) {
                  "[--warmup-file PATH] [--warmup-bytes N] [--ban-last-k K] "
                  "[--repetition-penalty P] [--repetition-window W] [--text-like-prior S] "
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
-                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX] [--neural LSTM.blm] [--session-cache] [--learn-from-output] [--latency]\n",
+                 "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX] [--neural EXPERT.blm|.bgt]... [--session-cache] [--learn-from-output] [--latency]\n",
                  argv0);
 }
 
@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
     int word_candidates = defaults.word_candidates;
     std::vector<std::string> ensemble_specs;  // CKPT.json[:weight]
     std::string infinigram_path;
-    std::string neural_path;  // BLM1 byte LSTM expert
+    std::vector<std::string> neural_paths;  // byte LSTM / Transformer experts (repeatable)
     bool session_cache = false;
 
     for (int i = 1; i < argc; ++i) {
@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
         } else if (arg == "--infinigram" && i + 1 < argc) {
             infinigram_path = argv[++i];
         } else if (arg == "--neural" && i + 1 < argc) {
-            neural_path = argv[++i];
+            neural_paths.push_back(argv[++i]);
         } else if (arg == "--session-cache") {
             session_cache = true;
         } else if (arg == "--ensemble" && i + 1 < argc) {
@@ -166,7 +166,7 @@ int main(int argc, char** argv) {
         model.add_ensemble_member(cypha::cyphalm::load_cyphalm_model(path), w);
     }
     if (!infinigram_path.empty()) model.attach_infinigram(infinigram_path);
-    if (!neural_path.empty()) model.attach_neural(neural_path);
+    for (const auto& np : neural_paths) model.attach_neural(np);
     if (session_cache) model.hp_backend().set_session_cache(true);
     cfg = model.config();
     const std::vector<int> prompt_ids = bytes_from_text(prompt, cfg.vocab_size);

@@ -1,7 +1,8 @@
 /// Neural expert (ByteLstmExpert, BLM1): a random two-layer LSTM written to a
 /// file steps exactly like a straightforward double-precision reference, and
 /// an hp model with it attached serves normalised distributions whose mixing
-/// weights move, and whose state restores after a rewind; plus the session
+/// weights move, and whose state restores after a rewind; a random small
+/// Transformer (BGT1) past its window as a second expert; plus the session
 /// cache (an ∞-gram index over the text read so far).
 #include <cmath>
 #include <cstdio>
@@ -144,12 +145,12 @@ int main() {
         std::printf("cyphalm_neural_smoke FAIL: mixing weights never moved\n");
         return 1;
     }
-    const auto saved = hp.neural_state();
+    const auto saved = hp.neural_states();
     const auto before = hp.next_byte_log_probs(256);
     hp.consume_byte('x');
-    hp.set_neural_state(saved);
-    // The predictor moved on; only the LSTM part is restored, so compare it.
-    if (std::memcmp(hp.neural_state().log_p.data(), saved.log_p.data(), sizeof(double) * 256) != 0) {
+    hp.set_neural_states(saved);
+    // The predictor moved on; only the expert state is restored, so compare it.
+    if (std::memcmp(hp.neural_states()[0].log_p.data(), saved[0].log_p.data(), sizeof(double) * 256) != 0) {
         std::printf("cyphalm_neural_smoke FAIL: state restore\n");
         return 1;
     }
@@ -175,6 +176,64 @@ int main() {
         std::printf("cyphalm_neural_smoke FAIL: session size %zu\n", hp.session_size());
         return 1;
     }
+    // A small random Transformer (BGT1): steps past its window (re-prime),
+    // normalised, deterministic, and mixes as a second expert.
+    const auto gpath = std::filesystem::temp_directory_path() / "cyphalm_neural_smoke.bgt";
+    {
+        const std::uint32_t gl = 2, gd = 16, gh = 2, gctx = 8;
+        std::ofstream os(gpath, std::ios::binary);
+        os.write("BGT1", 4);
+        const std::uint32_t hdr[4] = {gl, gd, gh, gctx};
+        os.write(reinterpret_cast<const char*>(hdr), sizeof(hdr));
+        auto put = [&](std::size_t n, float mean) {
+            for (std::size_t i = 0; i < n; ++i) {
+                const float f = mean + nd(rng);
+                os.write(reinterpret_cast<const char*>(&f), sizeof(f));
+            }
+        };
+        put(256 * gd, 0.0f);
+        put(gctx * gd, 0.0f);
+        for (std::uint32_t l = 0; l < gl; ++l) {
+            put(gd, 1.0f);
+            put(gd, 0.0f);
+            put(3 * gd * gd, 0.0f);
+            put(gd * gd, 0.0f);
+            put(gd, 1.0f);
+            put(gd, 0.0f);
+            put(4 * gd * gd, 0.0f);
+            put(4 * gd * gd, 0.0f);
+        }
+        put(gd, 1.0f);
+        put(gd, 0.0f);
+    }
+    auto gpt = cypha::cyphalm::load_neural_expert(gpath.string());
+    auto g1 = gpt->initial_state(), g2 = gpt->initial_state();
+    for (int i = 0; i < 40; ++i) {
+        double z = 0.0;
+        for (double v : g1.log_p) z += std::exp(v);
+        if (std::abs(z - 1.0) > 1e-6 || std::memcmp(g1.log_p.data(), g2.log_p.data(), sizeof(double) * 256) != 0) {
+            std::printf("cyphalm_neural_smoke FAIL: transformer step %d (sum %.9f)\n", i, z);
+            return 1;
+        }
+        gpt->step(g1, static_cast<std::uint8_t>(text[static_cast<std::size_t>(i) % text.size()]));
+        gpt->step(g2, static_cast<std::uint8_t>(text[static_cast<std::size_t>(i) % text.size()]));
+    }
+    model.attach_neural(gpath.string());
+    if (hp.neural_count() != 2 || hp.neural_weights().size() != 16 * 3) {
+        std::printf("cyphalm_neural_smoke FAIL: two experts expected\n");
+        return 1;
+    }
+    for (char ch : corpus) {
+        const auto lp = hp.next_byte_log_probs(256);
+        double z = 0.0;
+        for (double v : lp) z += std::exp(v);
+        if (std::abs(z - 1.0) > 1e-6) {
+            std::printf("cyphalm_neural_smoke FAIL: two-expert mix sums to %.12f\n", z);
+            return 1;
+        }
+        hp.observe_next_byte(static_cast<std::uint8_t>(ch));
+    }
+    std::filesystem::remove(gpath);
     std::filesystem::remove(path);
     std::printf("cyphalm_neural_smoke OK: max step error %.2g; mix normalised; weights adapt\n", worst);
     return 0;

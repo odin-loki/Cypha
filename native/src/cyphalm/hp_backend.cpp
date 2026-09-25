@@ -298,7 +298,7 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
     std::vector<double> out = scored_log_probs_(vocab_size);
-    if (!ig_ && !nn_ && !ss_on_) return out;
+    if (!ig_ && nn_.empty() && !ss_on_) return out;
     if (ig_) {
         out = infinigram_mix_(out);
         ig_valid_ = true;
@@ -307,7 +307,7 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
         out = session_mix_(out);
         ss_valid_ = true;
     }
-    if (nn_ && out.size() == 256) {
+    if (!nn_.empty() && out.size() == 256) {
         out = neural_mix_(out);
         nn_valid_ = true;
     }
@@ -366,39 +366,51 @@ std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& b
     return out;
 }
 
-void HpSequenceBackend::set_neural(std::shared_ptr<const ByteLstmExpert> nn, double eta) {
-    nn_ = std::move(nn);
-    nn_eta_ = eta;
-    nn_w_.assign(kNnBuckets, 0.7);
-    nn_valid_ = false;
+void HpSequenceBackend::add_neural(std::shared_ptr<const ByteNeuralExpert> nn) {
+    if (!nn) return;
+    nn_.push_back({std::move(nn), {}});
+    const std::size_t k = nn_.size();
+    nn_w_.assign(kNnBuckets * (k + 1), 0.3 / static_cast<double>(k));
+    for (int b = 0; b < kNnBuckets; ++b) nn_w_[static_cast<std::size_t>(b) * (k + 1)] = 0.7;
     prime_neural_();
 }
 
+void HpSequenceBackend::set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta) {
+    nn_.clear();
+    nn_w_.clear();
+    nn_eta_ = eta;
+    nn_valid_ = false;
+    add_neural(std::move(nn));
+}
+
 void HpSequenceBackend::prime_neural_() {
-    if (!nn_) return;
-    nn_state_ = nn_->initial_state();
     constexpr std::size_t kPrime = 512;
     std::uint8_t ctx[kPrime];
-    const std::size_t len = pred_->recent_bytes(ctx, kPrime);
-    for (std::size_t i = 0; i < len; ++i) nn_->step(nn_state_, ctx[i]);
+    const std::size_t len = nn_.empty() ? 0 : pred_->recent_bytes(ctx, kPrime);
+    for (auto& s : nn_) {
+        s.state = s.model->initial_state();
+        for (std::size_t i = 0; i < len; ++i) s.model->step(s.state, ctx[i]);
+    }
     nn_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::neural_mix_(const std::vector<double>& base) {
+    const std::size_t k = nn_.size();
     nn_pin_.resize(256);
     std::size_t top_m = 0, top_n = 0;
+    const auto& lp0 = nn_[0].state.log_p;
     for (std::size_t b = 0; b < 256; ++b) {
         nn_pin_[b] = std::exp(base[b]);
         if (nn_pin_[b] > nn_pin_[top_m]) top_m = b;
-        if (nn_state_.log_p[b] > nn_state_.log_p[top_n]) top_n = b;
+        if (lp0[b] > lp0[top_n]) top_n = b;
     }
-    const double pmax = nn_pin_[top_m];
-    const int conf = std::min(7, static_cast<int>(pmax * 8.0));
+    const int conf = std::min(7, static_cast<int>(nn_pin_[top_m] * 8.0));
     nn_bucket_ = conf * 2 + (top_m == top_n ? 1 : 0);
-    const double w = nn_w_[static_cast<std::size_t>(nn_bucket_)];
+    const double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];
     std::vector<double> out(256);
     for (std::size_t b = 0; b < 256; ++b) {
-        const double p = w * nn_pin_[b] + (1.0 - w) * std::exp(nn_state_.log_p[b]);
+        double p = w[0] * nn_pin_[b];
+        for (std::size_t i = 0; i < k; ++i) p += w[i + 1] * std::exp(nn_[i].state.log_p[b]);
         out[b] = std::log(std::max(p, 1e-300));
     }
     return out;
@@ -681,22 +693,32 @@ void HpSequenceBackend::consume_byte(std::uint8_t byte) {
         }
         ss_hist_.push_back(byte);
     }
-    if (nn_) {
+    if (!nn_.empty()) {
         if (nn_valid_ && nn_eta_ > 0.0 && pred_->learning()) {
-            // Gradient step on the two-way mixture's log loss for this bucket.
-            double& w = nn_w_[static_cast<std::size_t>(nn_bucket_)];
-            const double pa = nn_pin_[byte], pb = std::exp(nn_state_.log_p[byte]);
-            const double p = std::max(w * pa + (1.0 - w) * pb, 1e-12);
-            w = std::clamp(w + nn_eta_ * (pa - pb) / p, 0.01, 0.99);
+            // Exponentiated gradient on the mixture's log loss for this bucket.
+            const std::size_t k = nn_.size();
+            double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];
+            std::vector<double> pe(k + 1);
+            pe[0] = nn_pin_[byte];
+            for (std::size_t i = 0; i < k; ++i) pe[i + 1] = std::exp(nn_[i].state.log_p[byte]);
+            double pm = 0.0;
+            for (std::size_t i = 0; i <= k; ++i) pm += w[i] * pe[i];
+            pm = std::max(pm, 1e-12);
+            double z = 0.0;
+            for (std::size_t i = 0; i <= k; ++i) {
+                const double g = std::clamp(nn_eta_ * (pe[i] / pm - 1.0), -2.0, 2.0);
+                z += (w[i] = std::max(1e-4, w[i] * std::exp(g)));
+            }
+            for (std::size_t i = 0; i <= k; ++i) w[i] /= z;
         }
-        nn_->step(nn_state_, byte);
+        for (auto& s : nn_) s.model->step(s.state, byte);
     }
     last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {
-    if (ig_ || nn_ || ss_on_) {
-        const bool cached = (!ig_ || ig_valid_) && (!nn_ || nn_valid_) && (!ss_on_ || ss_valid_);
+    if (ig_ || !nn_.empty() || ss_on_) {
+        const bool cached = (!ig_ || ig_valid_) && (nn_.empty() || nn_valid_) && (!ss_on_ || ss_valid_);
         const double lp = cached ? last_final_[next] : next_byte_log_probs(256)[next];
         consume_byte(next);
         return -lp;
