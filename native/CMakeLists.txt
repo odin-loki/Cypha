@@ -150,6 +150,17 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HpIntegration.cmake")
 target_sources(cypha_core PRIVATE ${CYPHA_CYPHALM_HP_SOURCES} src/cypha.cpp)
 # libsais (Apache-2.0, third_party/libsais): suffix sorting for the ∞-gram index.
 target_include_directories(cypha_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
+# With OpenMP, libsais sorts on every core (same suffix array). Off by default:
+# on a busy machine OpenMP's spin-waiting made a 30 MB sort 7x slower (15 s
+# against 2 s serial, 4 cores shared with two scoring jobs).
+option(CYPHA_INFINIGRAM_OPENMP "Build libsais with OpenMP for the ∞-gram index" OFF)
+if(CYPHA_INFINIGRAM_OPENMP)
+  find_package(OpenMP COMPONENTS C)
+  if(OpenMP_C_FOUND)  # OpenMP::OpenMP_C carries the flags for C sources (libsais.c)
+    target_compile_definitions(cypha_core PRIVATE LIBSAIS_OPENMP)
+    target_link_libraries(cypha_core PUBLIC OpenMP::OpenMP_C)
+  endif()
+endif()
 
 # Compatibility alias for existing target_link_libraries(... cypha_lm_native).
 add_library(cypha_lm_native INTERFACE)
