@@ -3,7 +3,10 @@
 #include "libsais.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <new>
 #include <fstream>
 #include <stdexcept>
 #include <utility>
@@ -21,31 +24,54 @@ namespace cypha::cyphalm {
 namespace {
 
 // Suffix array of text[0..n) (libsais, induced sorting), packed little-endian
-// at ``bits`` = ceil(log2 n) per entry with 8 bytes of padding.
-std::vector<std::uint8_t> sort_and_pack(const std::uint8_t* text, std::size_t n, int& bits) {
+// at ``bits`` = ceil(log2 n) per entry with 8 bytes of padding. The sort
+// writes 32-bit entries into the result's own buffer, which is then packed in
+// place (entry i is read before any packed byte reaches it: i entries write
+// i * bits / 8 < 4 i bytes) and shrunk, so the peak is 4 n bytes, not 4 n plus
+// the packed copy.
+struct Packed {
+    std::uint8_t* data;  // std::malloc; the caller frees it
+    std::size_t size;
+};
+
+Packed sort_and_pack(const std::uint8_t* text, std::size_t n, int& bits) {
     if (n == 0 || n >= (std::size_t{1} << 31) - 2) throw std::runtime_error("InfiniGram: bad corpus size");
-    std::vector<std::int32_t> SA(n);
-    if (libsais(text, SA.data(), static_cast<std::int32_t>(n), 0, nullptr) != 0)
+    auto* buf = static_cast<std::uint8_t*>(std::malloc(4 * n + 8));
+    if (buf == nullptr) throw std::bad_alloc();
+    auto* sa = reinterpret_cast<std::int32_t*>(buf);
+#if defined(LIBSAIS_OPENMP)
+    const std::int32_t rc = libsais_omp(text, sa, static_cast<std::int32_t>(n), 0, nullptr, 0);  // 0: all threads
+#else
+    const std::int32_t rc = libsais(text, sa, static_cast<std::int32_t>(n), 0, nullptr);
+#endif
+    if (rc != 0) {
+        std::free(buf);
         throw std::runtime_error("InfiniGram: suffix sort failed");
+    }
     bits = 1;
     while ((std::size_t{1} << bits) < n) ++bits;
-    std::vector<std::uint8_t> packed((n * static_cast<std::size_t>(bits) + 7) / 8 + 8, 0);
+    std::uint64_t acc = 0;
+    int have = 0;
+    std::size_t out = 0;
     for (std::size_t i = 0; i < n; ++i) {
-        const std::uint64_t v = static_cast<std::uint64_t>(SA[i]);
-        const std::size_t bit = i * static_cast<std::size_t>(bits);
-        std::uint64_t w;
-        std::memcpy(&w, packed.data() + bit / 8, 8);
-        w |= v << (bit % 8);
-        std::memcpy(packed.data() + bit / 8, &w, 8);
+        std::uint32_t v;
+        std::memcpy(&v, buf + 4 * i, 4);
+        acc |= static_cast<std::uint64_t>(v) << have;
+        for (have += bits; have >= 8; have -= 8, acc >>= 8) buf[out++] = static_cast<std::uint8_t>(acc);
     }
-    return packed;
+    if (have > 0) buf[out++] = static_cast<std::uint8_t>(acc);
+    const std::size_t size = out + 8;
+    std::memset(buf + out, 0, 8);
+    if (void* smaller = std::realloc(buf, size)) buf = static_cast<std::uint8_t*>(smaller);
+    return {buf, size};
 }
 
 }  // namespace
 
 void InfiniGram::build(const std::uint8_t* text, std::size_t n, const std::string& path) {
     int bits = 0;
-    const std::vector<std::uint8_t> packed = sort_and_pack(text, n, bits);
+    const Packed packed = sort_and_pack(text, n, bits);
+    const std::unique_ptr<std::uint8_t, FreeBytes> hold(packed.data);
     std::ofstream out(path, std::ios::binary);
     if (!out) throw std::runtime_error("InfiniGram: cannot write " + path);
     const char magic[4] = {'I', 'G', 'R', '2'};
@@ -57,7 +83,7 @@ void InfiniGram::build(const std::uint8_t* text, std::size_t n, const std::strin
     const std::size_t pad = (8 - (20 + n) % 8) % 8;
     const char zeros[8] = {};
     out.write(zeros, static_cast<std::streamsize>(pad));
-    out.write(reinterpret_cast<const char*>(packed.data()), static_cast<std::streamsize>(packed.size()));
+    out.write(reinterpret_cast<const char*>(packed.data), static_cast<std::streamsize>(packed.size));
     if (!out) throw std::runtime_error("InfiniGram: write failed " + path);
 }
 
@@ -65,12 +91,16 @@ InfiniGram::InfiniGram(const std::uint8_t* text, std::size_t n)
     : InfiniGram(std::vector<std::uint8_t>(text, text + n)) {}
 
 InfiniGram::InfiniGram(std::vector<std::uint8_t>&& text) : own_text_(std::move(text)) {
-    const std::size_t n = own_text_.size();
-    own_packed_ = sort_and_pack(own_text_.data(), n, bits_);
-    n_ = n;
-    mask_ = (std::uint64_t{1} << bits_) - 1;
     text_ = own_text_.data();
-    packed_ = own_packed_.data();
+    n_ = own_text_.size();
+    index_text_();
+}
+
+void InfiniGram::index_text_() {
+    const Packed packed = sort_and_pack(text_, n_, bits_);
+    own_packed_.reset(packed.data);
+    mask_ = (std::uint64_t{1} << bits_) - 1;
+    packed_ = own_packed_.get();
 }
 
 bool InfiniGram::is_index_file(const std::string& path) {
@@ -84,6 +114,30 @@ bool InfiniGram::is_index_file(const std::string& path) {
 std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std::size_t max_bytes) {
     if (is_index_file(path)) return std::make_shared<const InfiniGram>(path);
     // Plain text: index it now (just in time) instead of storing an index.
+#if !defined(_WIN32)
+    // Map the corpus rather than copy it: page cache, shared, not private memory.
+    std::shared_ptr<InfiniGram> g(new InfiniGram());
+    const int fd = ::open(path.c_str(), O_RDONLY);
+    if (fd < 0) throw std::runtime_error("InfiniGram: cannot open " + path);
+    struct stat st {};
+    ::fstat(fd, &st);
+    std::size_t n = static_cast<std::size_t>(st.st_size);
+    if (max_bytes > 0 && max_bytes < n) n = max_bytes;
+    if (n == 0) {
+        ::close(fd);
+        throw std::runtime_error("InfiniGram: empty corpus " + path);
+    }
+    void* map = ::mmap(nullptr, n, PROT_READ, MAP_SHARED, fd, 0);
+    ::close(fd);
+    if (map == MAP_FAILED) throw std::runtime_error("InfiniGram: mmap failed " + path);
+    ::madvise(map, n, MADV_WILLNEED);
+    g->map_ = map;  // unmapped by the destructor, also if indexing throws
+    g->map_len_ = n;
+    g->text_ = static_cast<const std::uint8_t*>(map);
+    g->n_ = n;
+    g->index_text_();
+    return g;
+#else
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     std::size_t n = static_cast<std::size_t>(f.tellg());
     if (max_bytes > 0 && max_bytes < n) n = max_bytes;
@@ -92,6 +146,7 @@ std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std:
     f.read(reinterpret_cast<char*>(text.data()), static_cast<std::streamsize>(n));
     if (!f) throw std::runtime_error("InfiniGram: cannot read " + path);
     return std::make_shared<const InfiniGram>(std::move(text));  // no second copy of the corpus
+#endif
 }
 
 InfiniGram::InfiniGram(const std::string& path) {

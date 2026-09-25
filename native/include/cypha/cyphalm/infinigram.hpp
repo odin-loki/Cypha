@@ -13,10 +13,14 @@
 /// of 5), 8 bytes of padding. "IGR1" (32-bit entries) still loads. Mapped
 /// read-only, so every process serving it shares one copy. Or skip the file:
 /// ``open`` on the plain corpus builds the same index in memory at load time.
+/// It maps the corpus too (shared page cache, not private memory), sorts into
+/// one 4-bytes-a-byte buffer and packs that in place, so the peak is 4 bytes
+/// a text byte and the index then keeps ceil(log2 n) / 8 of private memory.
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -31,12 +35,15 @@ class InfiniGram {
 
     /// Map a stored index (IGR1 / IGR2).
     explicit InfiniGram(const std::string& path);
-    /// Index ``text`` in memory, just in time (~6 s for 95 MB on one core).
+    /// Index ``text`` in memory, just in time (~6 s for 95 MB on one core;
+    /// every core with cmake -DCYPHA_INFINIGRAM_OPENMP=ON).
     InfiniGram(const std::uint8_t* text, std::size_t n);
     /// The same, keeping ``text`` itself (no copy).
     explicit InfiniGram(std::vector<std::uint8_t>&& text);
     /// A stored index, or a plain-text corpus indexed on the spot (its first
-    /// ``max_bytes`` bytes; 0 = all), chosen by the file's magic.
+    /// ``max_bytes`` bytes; 0 = all), chosen by the file's magic. The corpus
+    /// stays mapped read-only while the index lives: do not rewrite the file
+    /// under a running server.
     static std::shared_ptr<const InfiniGram> open(const std::string& path, std::size_t max_bytes = 0);
     /// True when ``path`` is a stored index (IGR1 / IGR2 magic), false for a
     /// plain-text corpus (``open`` then indexes its bytes). Throws if unreadable.
@@ -72,6 +79,10 @@ class InfiniGram {
                              std::size_t& pos, std::size_t& count) const;
 
  private:
+    InfiniGram() = default;
+    // Sort text_[0..n_) and pack the suffix array into own_packed_.
+    void index_text_();
+
     // [lo, hi) of suffixes starting with pat[0..m).
     void range(const std::uint8_t* pat, std::size_t m, std::size_t& lo, std::size_t& hi) const;
 
@@ -92,7 +103,11 @@ class InfiniGram {
     const std::uint8_t* packed_ = nullptr;
     int bits_ = 32;
     std::uint64_t mask_ = 0;
-    std::vector<std::uint8_t> own_text_, own_packed_;  // in-memory (just-in-time) index
+    struct FreeBytes {
+        void operator()(std::uint8_t* p) const noexcept { std::free(p); }
+    };
+    std::vector<std::uint8_t> own_text_;  // in-memory (just-in-time) index: corpus when not mapped
+    std::unique_ptr<std::uint8_t, FreeBytes> own_packed_;  // and its packed suffix array
 };
 
 }  // namespace cypha::cyphalm
