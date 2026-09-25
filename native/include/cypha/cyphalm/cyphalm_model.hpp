@@ -121,6 +121,11 @@ class CyphaLMModel {
     /// Serve: advance hp context without full-vocab log-prob fan-out (prompt priming).
     void serve_advance(std::uint32_t token_id);
 
+    /// Serve: score ``token_id`` with the full served distribution, then advance on
+    /// it, so the mixing weights learn from it too while learning is on (prompt
+    /// scoring, ``DecodeParams::prompt_score_bytes``). Returns the loss in nats.
+    double serve_observe(std::uint32_t token_id);
+
     /// Serve: O(8) greedy next byte after consuming ``context_byte`` (no 256-clone fan-out).
     std::uint32_t serve_greedy_next(std::uint32_t context_byte);
 

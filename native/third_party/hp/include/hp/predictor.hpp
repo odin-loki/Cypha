@@ -387,8 +387,11 @@ class Predictor {
     /// ``max_occupancy``. Sparse tables (e.g. a skip model at 1%) shrink a
     /// lot, busy ones not at all. Covers the discovered-context pool and the
     /// Hebbian tables too. Tables keep >= ``min_bits`` bits. Returns the
-    /// bytes freed.
+    /// bytes freed; ``max_occupancy`` outside (0, 1) folds nothing.
     std::size_t fold_auto(double max_occupancy, int min_bits = 12) {
+        // An occupancy is a share: at 1 or more every table would fold to
+        // min_bits, at 0 or less only empty ones would. Refused: frees nothing.
+        if (!(max_occupancy > 0.0 && max_occupancy < 1.0)) return 0;
         std::size_t freed = 0;
         // Any model with table_bits(), occupancy() and fold_to(bits);
         // ``slot_bytes`` is the table's bytes per slot.
@@ -557,6 +560,20 @@ class Predictor {
         return pr_final_;
     }
 
+    /// Bit-tree scoring: make ``p12``, what predict() returned at this very
+    /// state, the prediction the next update() reads, without predicting
+    /// again. With learning off update() reads nothing of predict()'s work
+    /// but pr_final_ (GRIA's cost), so a sibling branch can reuse its
+    /// parent's prediction after the other subtree overwrote the scratch.
+    /// With learning on update() trains from that scratch (mixer inputs,
+    /// slot and APM indices): this predicts again. pr_final_ is scratch as
+    /// in predict() (not undo-recorded).
+    int resume_prediction(int p12) {
+        if (learning_) return predict();
+        pr_final_ = p12;
+        return p12;
+    }
+
     /// Learning on (default) trains every table, counter, mixer and APM on each
     /// bit. Off: bits only advance context (history, hashes, match pointers, DMC
     /// position); nothing learned changes and no hash slot is claimed. CyphaLM
@@ -569,9 +586,10 @@ class Predictor {
     }
     bool learning() const { return learning_; }
 
-    /// Serve-time adaptation speed: mixer learning rates = trained x num/den,
-    /// small-error skip threshold = ``skip`` (<0: trained). Idempotent, runtime
-    /// only; (1, 1, -1) restores training behaviour.
+    /// Serve-time adaptation speed: mixer learning rates = trained x num/den
+    /// (in 1/16ths, so fractions act on rate-1 sets too), small-error skip
+    /// threshold = ``skip`` (<0: trained). Idempotent, runtime only; (1, 1, -1)
+    /// restores training behaviour.
     void set_serve_adaptation(int num, int den, int skip) { mixer_.set_rate_scale(num, den, skip); }
 
 
@@ -718,16 +736,23 @@ class Predictor {
     int entropy_bucket() const { return gria_.entropy_bucket(); }
     int last_match_len() const { return last_mlen_; }
 
+    /// Every mergeable table has the same size as in ``src`` (context models,
+    /// Hebbian, discovery pool, mixer). Folded or dropped models differ and
+    /// cannot be merged slot for slot.
+    bool tables_match(const Predictor& src) const;
+
     /// Weighted merge of additive hp tables from an independently trained shard.
-    void merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+    /// Returns false, changing nothing, when ``tables_match(src)`` is false.
+    bool merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
                             std::uint64_t dst_bytes);
 
     /// Weighted merge with optional confidence gating (see ``hp/shard_merge.hpp``).
-    void merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+    bool merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
                             std::uint64_t dst_bytes, const ShardMergeOptions& opts);
 
     /// Copy mergeable tables into a fresh predictor (runtime path state unchanged).
-    void transfer_tables_from(const Predictor& src);
+    /// Returns false, changing nothing, when ``tables_match(src)`` is false.
+    bool transfer_tables_from(const Predictor& src);
 
     /// Clear path-dependent runtime state; learned tables are preserved.
     /// keep_history: keep the byte ring (the text match models copy from).
@@ -1321,22 +1346,29 @@ inline void UndoFrame::clear() {
     has_snap_ = false;
 }
 
-inline void PredictorUndoStack::clear() { frames_.clear(); }
+inline void PredictorUndoStack::clear() {
+    frames_.clear();
+    depth_ = 0;
+}
 
 inline UndoFrame& PredictorUndoStack::push_frame() {
     // Frames are referenced by live UndoRecorderScopes while deeper frames are
     // pushed; reserve so emplace_back never relocates them (bit-tree depth <= 17).
     if (frames_.capacity() < kReserve) frames_.reserve(kReserve);
-    frames_.emplace_back();
-    return frames_.back();
+    if (depth_ == frames_.size()) frames_.emplace_back();
+    // A popped frame comes back cleared, with its patch buffers still allocated.
+    UndoFrame& f = frames_[depth_++];
+    f.set_records_byte_end(false);
+    return f;
 }
 
 inline void PredictorUndoStack::pop_frame(Predictor& pred) {
-    if (frames_.empty()) {
+    if (depth_ == 0) {
         return;
     }
-    frames_.back().pop_predictor(pred);
-    frames_.pop_back();
+    UndoFrame& f = frames_[--depth_];
+    f.pop_predictor(pred);
+    f.clear();
 }
 
 inline void UndoFrame::push_predictor(const Predictor& p, const Config& cfg) {

@@ -3,7 +3,10 @@
 /// an hp model with it attached serves normalised distributions whose mixing
 /// weights move, and whose state restores after a rewind; a random small
 /// Transformer (BGT1) past its window as a second expert; plus the session
-/// cache (an ∞-gram index over the text read so far).
+/// cache (an ∞-gram index over the text read so far). With only experts or
+/// the session cache attached (no members, no ∞-gram), log_prob_byte and
+/// greedy still serve the full mix.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -64,6 +67,24 @@ struct Ref {
         for (int b = 0; b < 256; ++b) logp[b] = z[b] - mx - std::log(tot);
     }
 };
+
+/// log_prob_byte and greedy equal the served mix at ``c`` (cold: before
+/// scoring it; warm: right after), and observe returns the same log p.
+bool serve_paths_use_mix(cypha::cyphalm::HpSequenceBackend& hp, std::uint8_t c, bool cold) {
+    double lp_c = 0.0;
+    int greedy = 0;
+    if (cold) {
+        lp_c = hp.log_prob_byte(c);
+        greedy = hp.serve_greedy_next_byte();
+    }
+    const auto lp = hp.next_byte_log_probs(256);
+    if (!cold) {
+        lp_c = hp.log_prob_byte(c);
+        greedy = hp.serve_greedy_next_byte();
+    }
+    const int am = static_cast<int>(std::max_element(lp.begin(), lp.end()) - lp.begin());
+    return hp.is_composite() && lp_c == lp[c] && greedy == am && hp.observe_next_byte(c) == -lp[c];
+}
 
 }  // namespace
 
@@ -145,6 +166,12 @@ int main() {
         std::printf("cyphalm_neural_smoke FAIL: mixing weights never moved\n");
         return 1;
     }
+    for (std::size_t i = 0; i < 64; ++i) {
+        if (!serve_paths_use_mix(hp, static_cast<std::uint8_t>(text[i % text.size()]), i % 2 == 0)) {
+            std::printf("cyphalm_neural_smoke FAIL: log_prob_byte / greedy skip the neural mix\n");
+            return 1;
+        }
+    }
     const auto saved = hp.neural_states();
     const auto before = hp.next_byte_log_probs(256);
     hp.consume_byte('x');
@@ -175,6 +202,12 @@ int main() {
     if (n_read != 3 * corpus.size() || hp.session_size() != n_read) {
         std::printf("cyphalm_neural_smoke FAIL: session size %zu\n", hp.session_size());
         return 1;
+    }
+    for (std::size_t i = 0; i < 64; ++i) {
+        if (!serve_paths_use_mix(hp, static_cast<std::uint8_t>(corpus[i]), i % 2 == 1)) {
+            std::printf("cyphalm_neural_smoke FAIL: log_prob_byte / greedy skip the session mix\n");
+            return 1;
+        }
     }
     // A small random Transformer (BGT1): steps past its window (re-prime),
     // normalised, deterministic, and mixes as a second expert.

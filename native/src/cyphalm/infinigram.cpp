@@ -6,6 +6,7 @@
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #if !defined(_WIN32)
@@ -61,7 +62,10 @@ void InfiniGram::build(const std::uint8_t* text, std::size_t n, const std::strin
 }
 
 InfiniGram::InfiniGram(const std::uint8_t* text, std::size_t n)
-    : own_text_(text, text + n) {
+    : InfiniGram(std::vector<std::uint8_t>(text, text + n)) {}
+
+InfiniGram::InfiniGram(std::vector<std::uint8_t>&& text) : own_text_(std::move(text)) {
+    const std::size_t n = own_text_.size();
     own_packed_ = sort_and_pack(own_text_.data(), n, bits_);
     n_ = n;
     mask_ = (std::uint64_t{1} << bits_) - 1;
@@ -69,15 +73,16 @@ InfiniGram::InfiniGram(const std::uint8_t* text, std::size_t n)
     packed_ = own_packed_.data();
 }
 
-std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std::size_t max_bytes) {
+bool InfiniGram::is_index_file(const std::string& path) {
     char magic[4] = {};
-    {
-        std::ifstream f(path, std::ios::binary);
-        if (!f) throw std::runtime_error("InfiniGram: cannot open " + path);
-        f.read(magic, 4);
-    }
-    if (std::memcmp(magic, "IGR1", 4) == 0 || std::memcmp(magic, "IGR2", 4) == 0)
-        return std::make_shared<const InfiniGram>(path);
+    std::ifstream f(path, std::ios::binary);
+    if (!f) throw std::runtime_error("InfiniGram: cannot open " + path);
+    f.read(magic, 4);
+    return std::memcmp(magic, "IGR1", 4) == 0 || std::memcmp(magic, "IGR2", 4) == 0;
+}
+
+std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std::size_t max_bytes) {
+    if (is_index_file(path)) return std::make_shared<const InfiniGram>(path);
     // Plain text: index it now (just in time) instead of storing an index.
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     std::size_t n = static_cast<std::size_t>(f.tellg());
@@ -86,7 +91,7 @@ std::shared_ptr<const InfiniGram> InfiniGram::open(const std::string& path, std:
     f.seekg(0);
     f.read(reinterpret_cast<char*>(text.data()), static_cast<std::streamsize>(n));
     if (!f) throw std::runtime_error("InfiniGram: cannot read " + path);
-    return std::make_shared<const InfiniGram>(text.data(), n);
+    return std::make_shared<const InfiniGram>(std::move(text));  // no second copy of the corpus
 }
 
 InfiniGram::InfiniGram(const std::string& path) {
@@ -145,14 +150,17 @@ void InfiniGram::range(const std::uint8_t* pat, std::size_t m, std::size_t& lo, 
         if (c != 0) return c;
         return avail < m ? -1 : 0;
     };
-    std::size_t a = 0, b = n_;
+    // Lower bound; every suffix seen above pat also bounds the upper search.
+    std::size_t a = 0, b = n_, above = n_;
     while (a < b) {
         const std::size_t mid = a + (b - a) / 2;
-        if (cmp(mid) < 0) a = mid + 1;
+        const int c = cmp(mid);
+        if (c < 0) a = mid + 1;
         else b = mid;
+        if (c > 0) above = mid;
     }
     lo = a;
-    b = n_;
+    b = above;
     while (a < b) {
         const std::size_t mid = a + (b - a) / 2;
         if (cmp(mid) <= 0) a = mid + 1;
@@ -189,12 +197,15 @@ std::size_t InfiniGram::match_prefix(const std::uint8_t* s, std::size_t len, std
     return good;
 }
 
-InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint) const {
+InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint,
+                                     std::uint64_t min_total) const {
     Result r;
     const int cap = static_cast<int>(std::min<std::size_t>(len, static_cast<std::size_t>(std::max(0, max_n))));
-    // Longest n in [0, cap] whose suffix occurs followed by some byte. Occurrence
-    // is monotone in n, so bisect; ``hint`` caps it (the longest match grows by
-    // at most one byte per step).
+    const std::size_t need = static_cast<std::size_t>(std::max<std::uint64_t>(1, min_total));
+    // Longest n in [0, cap] whose suffix occurs followed by some byte at least
+    // ``need`` times. That count never grows with n (every occurrence of a
+    // longer suffix is one of the shorter), so bisect; ``hint`` caps it (the
+    // longest match grows by at most one byte per step).
     auto usable = [&](int n, std::size_t& lo, std::size_t& hi) {
         if (n == 0) {
             lo = 0;
@@ -205,11 +216,24 @@ InfiniGram::Result InfiniGram::query(const std::uint8_t* ctx, std::size_t len, i
         // Occurrences at the very end of the corpus have no next byte; they sort
         // first in the range (shortest suffix).
         while (lo < hi && sa(lo) + static_cast<std::size_t>(n) >= n_) ++lo;
-        return lo < hi;
+        return hi - lo >= need;
     };
     int good = 0, bad = (hint >= 0 ? std::min(cap, hint) : cap) + 1;
     std::size_t glo = 0, ghi = 0;
     usable(0, glo, ghi);
+    if (hint >= 0 && bad > 1) {
+        // The bound is usually the answer (the match grew by a byte, or a
+        // backoff asks for a length known to occur): one range() instead of
+        // a bisection. Same result: the longest usable n in [0, bound].
+        std::size_t lo = 0, hi = 0;
+        if (usable(bad - 1, lo, hi)) {
+            good = bad - 1;
+            glo = lo;
+            ghi = hi;
+        } else {
+            bad = bad - 1;
+        }
+    }
     while (bad - good > 1) {
         const int mid = good + (bad - good) / 2;
         std::size_t lo = 0, hi = 0;

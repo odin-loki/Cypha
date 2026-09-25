@@ -266,9 +266,10 @@ MergeAttempt merge_workers_and_measure(
         const hp::MergeStatus st = hp::merge_predictor_tables(
             predictor(merged_tables), merged_bytes, predictor(*workers[i]), shard_bytes,
             profile.merge_opts);
-        if (st == hp::MergeStatus::EmptyInput) {
+        if (st != hp::MergeStatus::Ok) {
             r.status = "error";
-            r.detail = "empty shard byte weight";
+            r.detail = st == hp::MergeStatus::EmptyInput ? "empty shard byte weight"
+                                                         : "shard table sizes differ";
             return r;
         }
         merged_bytes += shard_bytes;

@@ -5,10 +5,15 @@
 #include "hp/shard_merge.hpp"  // Predictor::reset_stream_state
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
+#include <cstring>
+#include <exception>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
 
@@ -25,7 +30,7 @@ double bit_log_prob(int p12, int bit) {
     return std::log(std::max(p, kLogEps));
 }
 
-/// Ensemble members score on worker threads unless CYPHA_HP_ENSEMBLE_THREADS=0.
+/// Worker threads default (set_parallel): on unless CYPHA_HP_ENSEMBLE_THREADS=0.
 bool ensemble_threads_enabled() {
     static const bool on = [] {
         const char* v = std::getenv("CYPHA_HP_ENSEMBLE_THREADS");
@@ -36,6 +41,12 @@ bool ensemble_threads_enabled() {
 
 bool use_legacy_byte_log_probs() {
     const char* v = std::getenv("CYPHA_HP_LEGACY_BYTE_LOGPROBS");
+    return v != nullptr && v[0] == '1' && v[1] == '\0';
+}
+
+/// Parity reference: the bit tree's old re-predict schedule.
+bool use_tree_repredict() {
+    const char* v = std::getenv("CYPHA_HP_TREE_REPREDICT");
     return v != nullptr && v[0] == '1' && v[1] == '\0';
 }
 
@@ -81,6 +92,136 @@ class ScoringScope {
 
 }  // namespace
 
+/// Persistent worker threads for members and neural experts, so no thread is
+/// started per byte. run() publishes jobs 0..n-1, runs here() on the calling
+/// thread, then claims jobs too until none is left, and returns when every
+/// job is done (rethrowing the first exception). Jobs are claimed, not
+/// assigned, and run() waits only for claimed jobs: on a busy machine a
+/// worker that is not scheduled in time leaves its jobs to the others and
+/// the caller, so the worst case is about serial.
+class HpSequenceBackend::WorkerPool {
+ public:
+    explicit WorkerPool(std::size_t threads) : count_(threads) {
+        for (std::size_t t = 0; t < count_; ++t) threads_.emplace_back([this] { loop_(); });
+    }
+    ~WorkerPool() {
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            stop_ = true;
+        }
+        wake_.notify_all();
+        for (auto& t : threads_) t.join();
+    }
+    WorkerPool(const WorkerPool&) = delete;
+    WorkerPool& operator=(const WorkerPool&) = delete;
+
+    std::size_t size() const { return count_; }
+
+    void run(std::size_t n, const std::function<void(std::size_t)>& job, const std::function<void()>& here) {
+        std::uint32_t round = 0;
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            job_ = &job;
+            n_ = n;
+            round = ++round_;
+            err_ = nullptr;
+            done_n_.store(0, std::memory_order_relaxed);
+            claim_.store(static_cast<std::uint64_t>(round) << 32, std::memory_order_release);
+        }
+        for (std::size_t k = 0; k < std::min(n, count_); ++k) wake_.notify_one();
+        try {
+            here();
+        } catch (...) {
+            keep_error_(std::current_exception());
+        }
+        work_(round, job, n);
+        std::exception_ptr err;
+        {
+            std::unique_lock<std::mutex> lk(mu_);
+            done_.wait(lk, [&] { return done_n_.load(std::memory_order_acquire) == n; });
+            job_ = nullptr;
+            err = err_;
+        }
+        if (err) std::rethrow_exception(err);
+    }
+
+ private:
+    // Claims (round << 32 | next job) and runs jobs of ``round`` until none
+    // is left. A worker still holding an older round's job finds the round
+    // changed and claims nothing; a claimed job keeps its round open, so
+    // ``job`` stays valid while it runs.
+    void work_(std::uint32_t round, const std::function<void(std::size_t)>& job, std::size_t n) {
+        for (;;) {
+            std::uint64_t v = claim_.load(std::memory_order_acquire);
+            do {
+                if (static_cast<std::uint32_t>(v >> 32) != round || (v & 0xffffffffu) >= n) return;
+            } while (!claim_.compare_exchange_weak(v, v + 1, std::memory_order_acq_rel));
+            try {
+                job(static_cast<std::size_t>(v & 0xffffffffu));
+            } catch (...) {
+                keep_error_(std::current_exception());
+            }
+            if (done_n_.fetch_add(1, std::memory_order_acq_rel) + 1 == n) {
+                std::lock_guard<std::mutex> lk(mu_);
+                done_.notify_one();
+            }
+        }
+    }
+    void keep_error_(std::exception_ptr e) {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (!err_) err_ = e;
+    }
+    void loop_() {
+        std::uint32_t seen = 0;
+        for (;;) {
+            const std::function<void(std::size_t)>* job = nullptr;
+            std::size_t n = 0;
+            {
+                std::unique_lock<std::mutex> lk(mu_);
+                wake_.wait(lk, [&] { return stop_ || round_ != seen; });
+                if (stop_) return;
+                seen = round_;
+                if (job_ == nullptr) continue;  // that round is over
+                job = job_;
+                n = n_;
+            }
+            work_(seen, *job, n);
+        }
+    }
+
+    const std::size_t count_;
+    std::vector<std::thread> threads_;
+    std::mutex mu_;
+    std::condition_variable wake_, done_;
+    const std::function<void(std::size_t)>* job_ = nullptr;  // set while a round runs
+    std::size_t n_ = 0;
+    std::uint32_t round_ = 0;
+    std::atomic<std::uint64_t> claim_{0};                    // round << 32 | next unclaimed job
+    std::atomic<std::size_t> done_n_{0};                     // jobs finished this round
+    bool stop_ = false;
+    std::exception_ptr err_;
+};
+
+void HpSequenceBackend::run_parallel_(std::size_t n, const std::function<void(std::size_t)>& job,
+                                      const std::function<void()>& here) {
+    // One worker per member and expert, at most one per other core (the
+    // calling thread works too).
+    const unsigned hw = std::thread::hardware_concurrency();
+    const std::size_t want = std::max<std::size_t>(
+        1, std::min<std::size_t>(members_.size() + nn_.size(), hw > 1 ? hw - 1 : 1));
+    if (!pool_ || pool_->size() != want) {
+        pool_.reset();  // join the old workers before starting new ones
+        pool_ = std::make_shared<WorkerPool>(want);
+    }
+    pool_->run(n, job, here);
+}
+
+void HpSequenceBackend::set_parallel(bool on) {
+    parallel_ = on;
+    if (!on) pool_.reset();
+    for (auto& m : members_) m.backend->set_parallel(on);
+}
+
 hp::Config hp_config_from_cyphalm(int table_bits, int mixer_lr, bool gria) {
     hp::Config cfg;
     cfg.table_bits = table_bits;
@@ -108,8 +249,29 @@ hp::Config hp_config_from_cyphalm(const CyphaLMConfig& c) {
     return cfg;
 }
 
+const char* infinigram_mode_name(InfinigramMode m) {
+    return m == InfinigramMode::Longest16 ? "longest16" : "halving";
+}
+
+InfinigramMode parse_infinigram_mode(const std::string& name) {
+    if (name == "halving") return InfinigramMode::Halving;
+    if (name == "longest16") return InfinigramMode::Longest16;
+    throw std::invalid_argument("infinigram_mode: expected halving or longest16, got \"" + name + "\"");
+}
+
+const char* neural_mix_name(NeuralMix m) {
+    return m == NeuralMix::Log ? "log" : m == NeuralMix::Switch ? "switch" : "linear";
+}
+
+NeuralMix parse_neural_mix(const std::string& name) {
+    if (name == "linear") return NeuralMix::Linear;
+    if (name == "log") return NeuralMix::Log;
+    if (name == "switch") return NeuralMix::Switch;
+    throw std::invalid_argument("neural_mix: expected linear, log or switch, got \"" + name + "\"");
+}
+
 HpSequenceBackend::HpSequenceBackend(hp::Config cfg)
-    : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)) {}
+    : cfg_(cfg), pred_(std::make_unique<hp::Predictor>(cfg)), parallel_(ensemble_threads_enabled()) {}
 
 double HpSequenceBackend::byte_log_prob_on_pred_(std::uint8_t byte) const {
     ScoringScope scoring(*pred_, frozen_scoring_);
@@ -131,6 +293,7 @@ void HpSequenceBackend::compact_for_serve() {
 void HpSequenceBackend::prune_cold_slots(int min_total) {
     if (min_total > 0) {
         pred_->prune_cold_hash_slots(min_total);
+        ft_valid_ = served_valid_ = false;
     }
 }
 
@@ -139,7 +302,18 @@ void HpSequenceBackend::reset() {
     log_probs_buf_.clear();
     members_.clear();
     self_weight_ = 1.0;
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
+    serve_rate_ = {0, 0, 0};  // the new predictor runs at its trained rates
+    ++settings_epoch_;
+    // The attached stages restart with it: start mixing weights, experts at
+    // their initial state (no history to prime from), an empty session.
+    ig_w_ = ig_w0_;
+    ig_prev_n_ = ig_prev_rn_ = -1;
+    reset_gate_();
+    ft_temp_.assign(kFtBuckets, ft_t_);
+    reset_neural_weights_();
+    prime_neural_();
+    set_session_cache(ss_on_, ss_eta_, ss_window_);
 }
 
 std::unique_ptr<hp::Predictor> HpSequenceBackend::predictor_snapshot() const {
@@ -192,7 +366,7 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
                                             double log_p_nats, hp::Predictor& node,
                                             hp::PredictorUndoStack& undo,
                                             std::vector<double>& out_log_nats,
-                                            double prune_log) {
+                                            double prune_log, bool reference) {
     if (depth == 8) {
         if (prefix >= 0 && prefix < static_cast<int>(out_log_nats.size())) {
             out_log_nats[static_cast<std::size_t>(prefix)] = log_p_nats;
@@ -205,16 +379,20 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
         return;
     }
     // One predict() gives both children's bit probability. update() also reads
-    // predict()'s scratch (mixer inputs, layer-1 outputs), which the bit-0 subtree
-    // overwrites, so the bit-1 child re-predicts before its update. Leaves
-    // (depth 7) need no update at all: 382 predicts + 254 updates per call
-    // instead of 510 + 510, with identical log-probs.
+    // predict()'s scratch (mixer inputs, layer-1 outputs), which an expanded
+    // bit-0 subtree overwrites, so the bit-1 child then re-predicts before its
+    // update; with learning off update() reads only the final probability,
+    // which resume_prediction() restores without predicting. A pruned bit 0
+    // leaves the scratch as it was. Leaves (depth 7) need no update at all:
+    // at most 382 predicts + 254 updates per call instead of 510 + 510
+    // (255 predicts with learning off), with identical log-probs.
     hp::UndoFrame& pframe = undo.push_frame();
     int p12 = 0;
     {
         hp::UndoRecorderScope scope(pframe);
         p12 = node.predict();
     }
+    bool fresh = true;  // predict()'s scratch is still this node's
     for (int bit = 0; bit <= 1; ++bit) {
         if (!(bit ? take1 : take0)) {
             continue;
@@ -235,18 +413,22 @@ void HpSequenceBackend::expand_bit_tree_dfs(int vocab_size, int depth, int prefi
         }
         if (depth == 7) {
             // Leaf: the byte's probability is complete; no state to advance.
-            expand_bit_tree_dfs(vocab_size, 8, next_prefix, child_log, node, undo, out_log_nats, prune_log);
+            expand_bit_tree_dfs(vocab_size, 8, next_prefix, child_log, node, undo, out_log_nats, prune_log,
+                                reference);
             continue;
         }
         hp::UndoFrame& frame = undo.push_frame();
         {
             hp::UndoRecorderScope scope(frame);
-            if (bit == 1 && take0) {
-                (void)node.predict();
+            if (reference) {
+                if (bit == 1 && take0) (void)node.predict();
+            } else if (!fresh) {
+                (void)node.resume_prediction(p12);
             }
             node.update(bit);
+            fresh = false;
             expand_bit_tree_dfs(vocab_size, depth + 1, next_prefix, child_log, node, undo,
-                                out_log_nats, prune_log);
+                                out_log_nats, prune_log, reference);
         }
         undo.pop_frame(node);
     }
@@ -265,8 +447,8 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_bit_tree(int vocab_si
             v = uniform;
         }
     }
-    hp::PredictorUndoStack undo;
-    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo, log_probs_buf_, prune_log_);
+    if (undo_.depth() != 0) undo_.clear();  // left over by an exception
+    expand_bit_tree_dfs(n, 0, 0, 0.0, *pred_, undo_, log_probs_buf_, prune_log_, use_tree_repredict());
     return std::vector<double>(log_probs_buf_.begin(),
                                log_probs_buf_.begin() + static_cast<std::size_t>(n));
 }
@@ -297,8 +479,12 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs_legacy(int vocab_size
 }
 
 std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
+    // The index query reads only the context: first, so the ensemble and
+    // neural gates can key on the match length.
+    if (ig_) infinigram_query_();
     std::vector<double> out = scored_log_probs_(vocab_size);
-    if (!ig_ && nn_.empty() && !ss_on_) return out;
+    if (!mixed_()) return out;
+    if (members_.empty()) last_own_ = out;  // scored_parts (with members, scored_log_probs_ keeps it)
     if (ig_) {
         out = infinigram_mix_(out);
         ig_valid_ = true;
@@ -311,38 +497,59 @@ std::vector<double> HpSequenceBackend::next_byte_log_probs(int vocab_size) {
         out = neural_mix_(out);
         nn_valid_ = true;
     }
-    last_final_ = out;
-    return last_final_;
+    if (ft_on_()) {
+        out = final_sharpen_(out);
+        ft_valid_ = true;
+    }
+    // Served until the next byte: every stage ran (session and neural need
+    // the full 256-byte vocabulary).
+    served_ = out;
+    served_valid_ = out.size() == 256 || (!ss_on_ && nn_.empty());
+    served_epoch_ = settings_epoch_;
+    return out;
 }
 
-void HpSequenceBackend::set_session_cache(bool on, double eta) {
+void HpSequenceBackend::set_session_cache(bool on, double eta, std::size_t window) {
     ss_on_ = on;
     ss_eta_ = eta;
+    ss_window_ = window;
     ss_w_.assign(kSsBuckets, 0.97);
     ss_hist_.clear();
+    ss_len_ = 0;
     ss_ig_.reset();
-    ss_built_ = 0;
-    ss_valid_ = false;
+    ss_built_ = ss_indexed_ = 0;
+    ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::truncate_session(std::size_t n) {
-    if (n >= ss_hist_.size()) return;
-    ss_hist_.resize(n);
+    if (n >= ss_len_) return;
+    const std::size_t front = ss_len_ - ss_hist_.size();  // bytes already out of the window
+    ss_hist_.resize(n > front ? n - front : 0);
+    ss_len_ = n;
     if (ss_built_ > n) {  // the index saw bytes that are gone: rebuild later
         ss_ig_.reset();
-        ss_built_ = 0;
+        ss_built_ = ss_indexed_ = 0;
     }
-    ss_valid_ = false;
+    ss_valid_ = ft_valid_ = served_valid_ = false;
+}
+
+void HpSequenceBackend::session_grow_() {
+    // First at 1 KiB, then when the new bytes equal the indexed length
+    // (doubling), at most window / 16 apart.
+    const std::size_t cap = ss_window_ > 0 ? std::max<std::size_t>(ss_window_ / 16, 1) : std::size_t{1} << 16;
+    const std::size_t step = ss_indexed_ == 0 ? 1024 : std::min(ss_indexed_, cap);
+    if (ss_len_ - ss_built_ < step) return;
+    if (ss_window_ > 0 && ss_hist_.size() > ss_window_) {
+        ss_hist_.erase(ss_hist_.begin(), ss_hist_.end() - static_cast<std::ptrdiff_t>(ss_window_));
+    }
+    ss_ig_ = std::make_shared<const InfiniGram>(ss_hist_.data(), ss_hist_.size());
+    ss_built_ = ss_len_;
+    ss_indexed_ = ss_hist_.size();
+    ++ss_builds_;
 }
 
 std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& base) {
     const std::size_t h = ss_hist_.size();
-    // Rebuild at 1 KiB, on doubling, then every 64 KiB.
-    const std::size_t next = ss_built_ == 0 ? 1024 : std::min(ss_built_ * 2, ss_built_ + (std::size_t{1} << 16));
-    if (h >= next) {
-        ss_ig_ = std::make_shared<const InfiniGram>(ss_hist_.data(), h);
-        ss_built_ = h;
-    }
     ss_bucket_ = -1;
     if (!ss_ig_) return base;
     constexpr std::size_t kCtx = 256;
@@ -368,18 +575,40 @@ std::vector<double> HpSequenceBackend::session_mix_(const std::vector<double>& b
 
 void HpSequenceBackend::add_neural(std::shared_ptr<const ByteNeuralExpert> nn) {
     if (!nn) return;
-    nn_.push_back({std::move(nn), {}});
+    NnSlot slot;
+    slot.model = std::move(nn);
+    nn_.push_back(std::move(slot));
+    reset_neural_weights_();
+    prime_neural_();  // the new expert (the others are primed already)
+}
+
+void HpSequenceBackend::reset_neural_weights_() {
     const std::size_t k = nn_.size();
-    nn_w_.assign(kNnBuckets * (k + 1), 0.3 / static_cast<double>(k));
-    for (int b = 0; b < kNnBuckets; ++b) nn_w_[static_cast<std::size_t>(b) * (k + 1)] = 0.7;
-    prime_neural_();
+    nn_a_.clear();
+    nn_s_.clear();
+    if (k == 0) {
+        nn_w_.clear();
+        return;
+    }
+    const int nb = nn_buckets_();
+    nn_w_.assign(static_cast<std::size_t>(nb) * (k + 1), 0.3 / static_cast<double>(k));
+    for (int b = 0; b < nb; ++b) nn_w_[static_cast<std::size_t>(b) * (k + 1)] = 0.7;
+    if (nn_mix_ != NeuralMix::Linear) nn_a_ = nn_w_;  // log-linear: the same start (a geometric mix)
+    if (nn_mix_ == NeuralMix::Switch) nn_s_.assign(static_cast<std::size_t>(nb), 0.5);
+}
+
+void HpSequenceBackend::set_neural_mix(NeuralMix m) {
+    if (m == nn_mix_) return;
+    nn_mix_ = m;
+    reset_neural_weights_();
+    nn_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 void HpSequenceBackend::set_neural(std::shared_ptr<const ByteNeuralExpert> nn, double eta) {
     nn_.clear();
     nn_w_.clear();
     nn_eta_ = eta;
-    nn_valid_ = false;
+    nn_valid_ = ft_valid_ = served_valid_ = false;
     add_neural(std::move(nn));
 }
 
@@ -388,11 +617,22 @@ void HpSequenceBackend::prime_neural_() {
     std::uint8_t ctx[kPrime];
     const std::size_t len = nn_.empty() ? 0 : pred_->recent_bytes(ctx, kPrime);
     for (auto& s : nn_) {
+        // Priming is a function of these bytes and the adaptation setting:
+        // an expert primed on them that has read nothing since holds the
+        // very state it would rebuild (0.3-1 s per expert).
+        if (s.primed && s.primed_adapt == nn_adapt_ && s.primed_ctx.size() == len &&
+            std::equal(ctx, ctx + len, s.primed_ctx.begin())) {
+            continue;
+        }
         s.state = s.model->initial_state();
         if (nn_adapt_ > 0.0) s.model->init_adaptation(s.state);
         for (std::size_t i = 0; i < len; ++i) s.model->step(s.state, ctx[i]);  // priming does not adapt
+        s.primed = true;
+        s.primed_adapt = nn_adapt_;
+        s.primed_ctx.assign(ctx, ctx + len);
+        ++nn_primes_;
     }
-    nn_valid_ = false;
+    nn_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::neural_mix_(const std::vector<double>& base) {
@@ -407,21 +647,116 @@ std::vector<double> HpSequenceBackend::neural_mix_(const std::vector<double>& ba
     }
     const int conf = std::min(7, static_cast<int>(nn_pin_[top_m] * 8.0));
     nn_bucket_ = conf * 2 + (top_m == top_n ? 1 : 0);
-    const double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];
+    if (nn_mix_ != NeuralMix::Linear) nn_bucket_ = nn_bucket_ * 4 + ig_lb_;
+    const std::size_t row = static_cast<std::size_t>(nn_bucket_) * (k + 1);
     std::vector<double> out(256);
+    if (nn_mix_ == NeuralMix::Linear) {
+        const double* w = &nn_w_[row];
+        for (std::size_t b = 0; b < 256; ++b) {
+            double p = w[0] * nn_pin_[b];
+            for (std::size_t i = 0; i < k; ++i) p += w[i + 1] * std::exp(nn_[i].state.log_p[b]);
+            out[b] = std::log(std::max(p, 1e-300));
+        }
+        return out;
+    }
+    // Log-linear part: a_0 log p + sum_i a_i log p_i, normalised.
+    const double* a = &nn_a_[row];
+    nn_lpin_ = base;
+    double mx = -std::numeric_limits<double>::infinity();
+    for (std::size_t b = 0; b < 256; ++b) {
+        double z = a[0] * base[b];
+        for (std::size_t i = 0; i < k; ++i) z += a[i + 1] * nn_[i].state.log_p[b];
+        mx = std::max(mx, out[b] = z);
+    }
+    double sum = 0.0;
+    for (std::size_t b = 0; b < 256; ++b) sum += std::exp(out[b] - mx);
+    const double lse = mx + std::log(sum);
+    nn_plog_.resize(256);
+    for (std::size_t b = 0; b < 256; ++b) nn_plog_[b] = std::exp(out[b] -= lse);
+    if (nn_mix_ == NeuralMix::Log) return out;
+    // Switch: s p_linear + (1 - s) p_log.
+    const double* w = &nn_w_[row];
+    const double s = nn_s_[static_cast<std::size_t>(nn_bucket_)];
     for (std::size_t b = 0; b < 256; ++b) {
         double p = w[0] * nn_pin_[b];
         for (std::size_t i = 0; i < k; ++i) p += w[i + 1] * std::exp(nn_[i].state.log_p[b]);
-        out[b] = std::log(std::max(p, 1e-300));
+        out[b] = std::log(std::max(s * p + (1.0 - s) * nn_plog_[b], 1e-300));
     }
     return out;
 }
 
+void HpSequenceBackend::set_final_temperature(double t, double eta) {
+    if (!(t > 0.0) || !std::isfinite(t) || !(eta >= 0.0) || !std::isfinite(eta)) {
+        throw std::invalid_argument("set_final_temperature: need a temperature > 0 and a rate >= 0");
+    }
+    ft_t_ = t;
+    ft_eta_ = eta;
+    ft_temp_.assign(kFtBuckets, t);
+    ft_valid_ = served_valid_ = false;
+}
+
+std::vector<double> HpSequenceBackend::final_sharpen_(const std::vector<double>& in) {
+    const std::size_t v = in.size();
+    double top = -std::numeric_limits<double>::infinity();
+    for (double x : in) top = std::max(top, x);
+    ft_bucket_ = std::min(kFtBuckets - 1, static_cast<int>(std::exp(top) * kFtBuckets));
+    // log softmax(in / T), exactly as cyphalm_lm_quality's temperature scan
+    // computes it (division by T, the same order), so a fixed T reproduces
+    // its column.
+    const double t = ft_temp_[static_cast<std::size_t>(ft_bucket_)];
+    double mx = -std::numeric_limits<double>::infinity();
+    for (std::size_t b = 0; b < v; ++b) mx = std::max(mx, in[b] / t);
+    double z = 0.0;
+    for (std::size_t b = 0; b < v; ++b) z += std::exp(in[b] / t - mx);
+    const double log_z = std::log(z);
+    std::vector<double> out(v);
+    for (std::size_t b = 0; b < v; ++b) out[b] = in[b] / t - mx - log_z;
+    if (ft_eta_ > 0.0) {  // kept for the update in consume_byte
+        ft_in_ = in;
+        ft_p_.resize(v);
+        for (std::size_t b = 0; b < v; ++b) ft_p_[b] = std::exp(out[b]);
+    }
+    return out;
+}
+
+MixingOptions HpSequenceBackend::mixing_options() const {
+    MixingOptions o;
+    o.final_temperature = ft_t_;
+    o.final_temperature_lr = ft_eta_;
+    o.infinigram_mode = ig_mode_;
+    o.neural_mix = nn_mix_;
+    o.ensemble_gate = eg_on_;
+    return o;
+}
+
+void HpSequenceBackend::set_mixing_options(const MixingOptions& o) {
+    // Only what changes restarts (its stage's learned state).
+    if (o.final_temperature != ft_t_ || o.final_temperature_lr != ft_eta_)
+        set_final_temperature(o.final_temperature, o.final_temperature_lr);
+    set_infinigram_mode(o.infinigram_mode);
+    set_neural_mix(o.neural_mix);
+    if (o.ensemble_gate != eg_on_) set_ensemble_gate(o.ensemble_gate);
+}
+
 void HpSequenceBackend::set_infinigram(std::shared_ptr<const InfiniGram> ig, double eta) {
     ig_ = std::move(ig);
+    ig_prev_n_ = ig_prev_rn_ = -1;  // a match length in another index bounds nothing
     ig_eta_ = eta;
-    ig_w_.assign(kIgBuckets, {0.8, 0.1, 0.1});
-    ig_valid_ = false;
+    ig_w_.assign(static_cast<std::size_t>(ig_buckets_()), {0.8, 0.1, 0.1});
+    ig_w0_ = ig_w_;
+    ig_lb_ = 0;
+    ig_valid_ = last_valid_ = ft_valid_ = served_valid_ = false;
+}
+
+void HpSequenceBackend::set_infinigram_mode(InfinigramMode m) {
+    if (m == ig_mode_) return;
+    ig_mode_ = m;
+    ig_prev_rn_ = -1;
+    if (ig_) {
+        ig_w_.assign(static_cast<std::size_t>(ig_buckets_()), {0.8, 0.1, 0.1});
+        ig_w0_ = ig_w_;
+    }
+    ig_valid_ = last_valid_ = nn_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 std::vector<double> HpSequenceBackend::infinigram_weights() const {
@@ -431,24 +766,56 @@ std::vector<double> HpSequenceBackend::infinigram_weights() const {
 }
 
 void HpSequenceBackend::set_infinigram_weights(const std::vector<double>& w) {
-    if (w.size() != static_cast<std::size_t>(kIgBuckets) * 3) {
-        throw std::invalid_argument("set_infinigram_weights: need 3 weights per bucket");
+    if (w.size() != static_cast<std::size_t>(ig_buckets_()) * 3) {
+        throw std::invalid_argument("set_infinigram_weights: need 3 weights per bucket (" +
+                                    std::to_string(ig_buckets_()) + " buckets in infinigram mode " +
+                                    infinigram_mode_name(ig_mode_) + ")");
     }
-    ig_w_.assign(kIgBuckets, {0.0, 0.0, 0.0});
+    ig_w_.assign(static_cast<std::size_t>(ig_buckets_()), {0.0, 0.0, 0.0});
     for (std::size_t i = 0; i < w.size(); ++i) ig_w_[i / 3][i % 3] = w[i];
-    ig_valid_ = false;
+    ig_w0_ = ig_w_;  // start weights: reset() returns to them
+    ig_valid_ = ft_valid_ = served_valid_ = false;
 }
 
-std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>& base) {
+void HpSequenceBackend::infinigram_query_() {
     constexpr std::size_t kCtx = 256;
     std::uint8_t ctx[kCtx];
     const std::size_t len = pred_->recent_bytes(ctx, kCtx);
-    const InfiniGram::Result r = ig_->query(ctx, len, static_cast<int>(kCtx));
-    InfiniGram::Result rr = r;
-    for (int m = r.n; rr.total < 16 && m > 0;) {  // back off to a well-attested suffix
-        m /= 2;
-        rr = ig_->query(ctx, len, m, m);
+    // A match grows by at most one byte per byte read: when this context
+    // without its last byte ends the previous query's context, that query's
+    // n + 1 bounds this one (usually it is the answer: one range search).
+    const bool extends = ig_prev_n_ >= 0 && len >= 1 && len - 1 <= ig_prev_len_ &&
+                         std::memcmp(ctx, ig_prev_ctx_.data() + (ig_prev_len_ - (len - 1)), len - 1) == 0;
+    ig_r_ = ig_->query(ctx, len, static_cast<int>(kCtx), extends ? ig_prev_n_ + 1 : -1);
+    const InfiniGram::Result& r = ig_r_;
+    if (ig_mode_ == InfinigramMode::Halving) {
+        ig_rr_ = r;
+        for (int m = r.n; ig_rr_.total < 16 && m > 0;) {  // back off to a well-attested suffix
+            m /= 2;
+            ig_rr_ = ig_->query(ctx, len, m, m);  // m <= r.n occurs: the bound is the answer
+        }
+    } else if (r.total >= 16 || r.n == 0) {
+        ig_rr_ = r;
+    } else {
+        // The longest suffix followed by a byte 16 times is shorter than r's.
+        // Its occurrences, minus their last byte, are occurrences of a
+        // suffix of the previous context: the previous such length + 1
+        // bounds it too.
+        int bound = r.n - 1;
+        if (extends && ig_prev_rn_ >= 0) bound = std::min(bound, ig_prev_rn_ + 1);
+        ig_rr_ = ig_->query(ctx, len, r.n - 1, bound, 16);
     }
+    std::memcpy(ig_prev_ctx_.data(), ctx, len);
+    ig_prev_len_ = len;
+    ig_prev_n_ = r.n;
+    ig_prev_rn_ = ig_mode_ == InfinigramMode::Longest16 ? ig_rr_.n : -1;
+    // Match length for the gates: < 8, 8-15, 16-31, 32+ bytes.
+    ig_lb_ = r.n < 8 ? 0 : r.n < 16 ? 1 : r.n < 32 ? 2 : 3;
+}
+
+std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>& base) {
+    const InfiniGram::Result& r = ig_r_;
+    const InfiniGram::Result& rr = ig_rr_;
     const std::size_t v = base.size();
     for (auto& p : ig_p_) p.assign(v, 0.0);
     double pmax = 0.0;
@@ -475,6 +842,19 @@ std::vector<double> HpSequenceBackend::infinigram_mix_(const std::vector<double>
     }
     const int hb = (pmax < 0.3 ? 0 : pmax < 0.6 ? 2 : pmax < 0.9 ? 4 : 6) + (top_m == top_i ? 1 : 0);
     ig_bucket_ = (nb * 4 + cb) * 8 + hb;
+    if (ig_mode_ == InfinigramMode::Longest16) {
+        // Fertility of the longest match (distinct next bytes: 1, 2, 3-4,
+        // 5+) and whether the ≥16 suffix has a single next byte.
+        auto distinct = [](const InfiniGram::Result& q) {
+            int t = 0;
+            for (std::uint32_t c : q.count) t += c != 0 ? 1 : 0;
+            return t;
+        };
+        const int t = distinct(r);
+        const int tb = t <= 1 ? 0 : t == 2 ? 1 : t <= 4 ? 2 : 3;
+        const int det = distinct(rr) == 1 && rr.total >= 2 ? 1 : 0;
+        ig_bucket_ = (((nb * 4 + cb) * 4 + tb) * 2 + det) * 8 + hb;
+    }
     const auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
     std::vector<double> out(v);
     for (std::size_t b = 0; b < v; ++b) {
@@ -489,21 +869,23 @@ std::vector<double> HpSequenceBackend::scored_log_probs_(int vocab_size) {
         return use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
                                            : next_byte_log_probs_bit_tree(vocab_size);
     }
-    // Members score on worker threads while this model scores here. Scoring
+    // Members score on the worker pool while this model scores here. Scoring
     // restores each predictor's state, and each thread records its own undo.
     std::vector<std::vector<double>> member_lp(members_.size());
-    std::vector<std::thread> workers;
-    const bool threaded = ensemble_threads_enabled();
-    for (std::size_t i = 0; i < members_.size(); ++i) {
-        auto job = [this, i, vocab_size, &member_lp] {
-            member_lp[i] = members_[i].backend->next_byte_log_probs(vocab_size);
-        };
-        if (threaded) workers.emplace_back(job);
-        else job();
+    std::vector<double> own;
+    const std::function<void()> score_own = [&] {
+        own = use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
+                                          : next_byte_log_probs_bit_tree(vocab_size);
+    };
+    const std::function<void(std::size_t)> score_member = [&](std::size_t i) {
+        member_lp[i] = members_[i].backend->next_byte_log_probs(vocab_size);
+    };
+    if (parallel_) {
+        run_parallel_(members_.size(), score_member, score_own);
+    } else {
+        for (std::size_t i = 0; i < members_.size(); ++i) score_member(i);
+        score_own();
     }
-    std::vector<double> own = use_legacy_byte_log_probs() ? next_byte_log_probs_legacy(vocab_size)
-                                                          : next_byte_log_probs_bit_tree(vocab_size);
-    for (auto& w : workers) w.join();
     std::vector<double> mix = mix_with_members_(own, member_lp);
     // Kept until the next byte is consumed: observe_next_byte reuses the mix,
     // and the weight update needs every model's distribution.
@@ -514,17 +896,77 @@ std::vector<double> HpSequenceBackend::scored_log_probs_(int vocab_size) {
     return mix;
 }
 
+HpSequenceBackend::ScoredParts HpSequenceBackend::scored_parts() const {
+    ScoredParts p;
+    if (!mixed_()) return p;
+    p.models.push_back(&last_own_);
+    for (std::size_t i = 0; i < members_.size() && i < last_member_lp_.size(); ++i) {
+        p.models.push_back(&last_member_lp_[i]);
+    }
+    if (ig_) {
+        p.ig_longest = &ig_r_;
+        p.ig_reliable = &ig_rr_;
+    }
+    for (const auto& s : nn_) p.neural.push_back(&s.state.log_p);
+    return p;
+}
+
 std::vector<double> HpSequenceBackend::ensemble_weights() const {
     std::vector<double> w{self_weight_};
     for (const auto& m : members_) w.push_back(m.weight);
     return w;
 }
 
+HpSequenceBackend::MixingState HpSequenceBackend::mixing_state() const {
+    MixingState s;
+    s.ensemble = ensemble_weights();
+    s.ig = ig_w_;
+    s.session = ss_w_;
+    s.neural = nn_w_;
+    s.neural_log = nn_a_;
+    s.neural_switch = nn_s_;
+    if (eg_on_) {
+        s.gate = eg_b_;
+        s.gate.insert(s.gate.end(), eg_theta_.begin(), eg_theta_.end());
+        s.gate.insert(s.gate.end(), eg_g2_.begin(), eg_g2_.end());
+    }
+    s.final_temp = ft_temp_;
+    for (const auto& m : members_) s.members.push_back(m.backend->mixing_state());
+    return s;
+}
+
+void HpSequenceBackend::set_mixing_state(const MixingState& s) {
+    if (s.ensemble.size() == members_.size() + 1) {
+        self_weight_ = s.ensemble[0];
+        for (std::size_t i = 0; i < members_.size(); ++i) members_[i].weight = s.ensemble[i + 1];
+    }
+    if (s.ig.size() == ig_w_.size()) ig_w_ = s.ig;
+    if (s.session.size() == ss_w_.size()) ss_w_ = s.session;
+    if (s.neural.size() == nn_w_.size()) nn_w_ = s.neural;
+    if (s.neural_log.size() == nn_a_.size()) nn_a_ = s.neural_log;
+    if (s.neural_switch.size() == nn_s_.size()) nn_s_ = s.neural_switch;
+    if (eg_on_ && s.gate.size() == eg_b_.size() + eg_theta_.size() + eg_g2_.size()) {
+        auto it = s.gate.begin();
+        for (auto* v : {&eg_b_, &eg_theta_, &eg_g2_}) {
+            std::copy(it, it + static_cast<std::ptrdiff_t>(v->size()), v->begin());
+            it += static_cast<std::ptrdiff_t>(v->size());
+        }
+    }
+    if (s.final_temp.size() == ft_temp_.size()) ft_temp_ = s.final_temp;
+    for (std::size_t i = 0; i < members_.size() && i < s.members.size(); ++i) {
+        members_[i].backend->set_mixing_state(s.members[i]);
+    }
+    // The served distribution and the stage caches were mixed with the old weights.
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
+}
+
 void HpSequenceBackend::update_ensemble_weights_(std::uint8_t byte) {
     // d(-log p_mix(y))/dw_i = -(log p_i(y) - E_mix[log p_i]); multiplicative step.
+    ens_p_.resize(last_mix_.size());
+    for (std::size_t b = 0; b < last_mix_.size(); ++b) ens_p_[b] = std::exp(last_mix_[b]);  // once for all models
     auto grad = [&](const std::vector<double>& lp) {
         double e = 0.0;
-        for (std::size_t b = 0; b < lp.size(); ++b) e += std::exp(last_mix_[b]) * lp[b];
+        for (std::size_t b = 0; b < lp.size(); ++b) e += ens_p_[b] * lp[b];
         return lp[byte] - e;
     };
     std::vector<double> w = ensemble_weights();
@@ -538,6 +980,47 @@ void HpSequenceBackend::update_ensemble_weights_(std::uint8_t byte) {
     for (std::size_t i = 0; i < members_.size(); ++i) members_[i].weight = w[i + 1] / z;
 }
 
+void HpSequenceBackend::set_ensemble_gate(bool on) {
+    eg_on_ = on;
+    reset_gate_();
+    last_valid_ = ft_valid_ = served_valid_ = false;
+}
+
+void HpSequenceBackend::reset_gate_() {
+    if (!eg_on_) {
+        eg_b_.clear();
+        eg_theta_.clear();
+        eg_g2_.clear();
+        return;
+    }
+    eg_b_ = ensemble_weights();  // today's weights: theta 0 serves the same mix
+    const std::size_t m = eg_b_.size();
+    eg_theta_.assign(kEgBuckets * m, 0.0);
+    eg_g2_.assign((1 + kEgBuckets) * m, 0.0);
+    eg_bucket_.assign(m, 0);
+}
+
+void HpSequenceBackend::update_gate_(std::uint8_t byte) {
+    // d log p_mix(y) / dw_i = log p_i(y) - E_mix[log p_i], the same for b_i
+    // and theta[g_i][i]; AdaGrad steps on each.
+    ens_p_.resize(last_mix_.size());
+    for (std::size_t b = 0; b < last_mix_.size(); ++b) ens_p_[b] = std::exp(last_mix_[b]);
+    const std::size_t m = eg_b_.size();
+    for (std::size_t i = 0; i < m; ++i) {
+        const std::vector<double>& lp = i == 0 ? last_own_ : last_member_lp_[i - 1];
+        double e = 0.0;
+        for (std::size_t b = 0; b < lp.size(); ++b) e += ens_p_[b] * lp[b];
+        const double g = std::clamp(lp[byte] - e, -20.0, 20.0);
+        const std::size_t t = static_cast<std::size_t>(eg_bucket_[i]) * m + i;
+        double& gb = eg_g2_[i];
+        double& gt = eg_g2_[m + t];
+        gb += g * g;
+        gt += g * g;
+        if (gb > 0.0) eg_b_[i] = std::clamp(eg_b_[i] + ens_eta_ * g / std::sqrt(gb), -4.0, 4.0);
+        if (gt > 0.0) eg_theta_[t] = std::clamp(eg_theta_[t] + ens_eta_ * g / std::sqrt(gt), -4.0, 4.0);
+    }
+}
+
 void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> member, double weight) {
     if (!member) throw std::invalid_argument("add_ensemble_member: null member");
     double total = weight;
@@ -547,9 +1030,12 @@ void HpSequenceBackend::add_ensemble_member(std::unique_ptr<HpSequenceBackend> m
     }
     member->set_frozen_scoring(frozen_scoring_);
     member->set_learning(pred_->learning());
+    member->set_mixing_learning(mix_learning_);
+    member->set_parallel(parallel_);
     members_.push_back(Member{std::move(member), weight});
     self_weight_ = 1.0 - total;
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    reset_gate_();  // on: restarts at the new weights
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
@@ -562,26 +1048,51 @@ std::vector<hp::Predictor*> HpSequenceBackend::all_predictors() {
 }
 
 void HpSequenceBackend::reset_stream(bool keep_history) {
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
     pred_->reset_stream_state(keep_history);
     for (auto& m : members_) m.backend->reset_stream(keep_history);
-    prime_neural_();  // the LSTM re-reads whatever history the predictor kept
-    if (!keep_history) truncate_session(0);
+    prime_neural_();  // the experts re-read whatever history the predictor kept (unless they hold it)
+    if (!keep_history) set_session_cache(ss_on_, ss_eta_, ss_window_);  // a new session
 }
 
 void HpSequenceBackend::set_serve_adaptation(int num, int den, int skip) {
+    if (serve_rate_ != std::array<int, 3>{num, den, skip}) {
+        serve_rate_ = {num, den, skip};
+        ++settings_epoch_;
+    }
     pred_->set_serve_adaptation(num, den, skip);
     for (auto& m : members_) m.backend->set_serve_adaptation(num, den, skip);
 }
 
 std::vector<double> HpSequenceBackend::mix_with_members_(const std::vector<double>& own,
                                                          const std::vector<std::vector<double>>& member_lp) {
-    const double w_self = self_weight_;
+    std::vector<double> w = ensemble_weights();
+    if (eg_on_) {
+        // Gate g_i per model: its top probability x whether its top byte is
+        // the pool's (the mix at weights b) x the ∞-gram match length.
+        auto top = [](const std::vector<double>& lp) {
+            return static_cast<std::size_t>(std::max_element(lp.begin(), lp.end()) - lp.begin());
+        };
+        std::vector<double> pool(own.size());
+        for (std::size_t b = 0; b < own.size(); ++b) pool[b] = eg_b_[0] * own[b];
+        for (std::size_t i = 0; i < members_.size(); ++i) {
+            const std::vector<double>& lp = member_lp[i];
+            for (std::size_t b = 0; b < pool.size() && b < lp.size(); ++b) pool[b] += eg_b_[i + 1] * lp[b];
+        }
+        const std::size_t pool_top = top(pool);
+        for (std::size_t i = 0; i < w.size(); ++i) {
+            const std::vector<double>& lp = i == 0 ? own : member_lp[i - 1];
+            const std::size_t t = top(lp);
+            const int conf = std::min(7, static_cast<int>(std::exp(lp[t]) * 8.0));
+            eg_bucket_[i] = (conf * 2 + (t == pool_top ? 1 : 0)) * 4 + ig_lb_;
+            w[i] = eg_b_[i] + eg_theta_[static_cast<std::size_t>(eg_bucket_[i]) * w.size() + i];
+        }
+    }
     std::vector<double> mix(own.size());
-    for (std::size_t b = 0; b < own.size(); ++b) mix[b] = w_self * own[b];
+    for (std::size_t b = 0; b < own.size(); ++b) mix[b] = w[0] * own[b];
     for (std::size_t i = 0; i < members_.size(); ++i) {
         const std::vector<double>& lp = member_lp[i];
-        for (std::size_t b = 0; b < mix.size() && b < lp.size(); ++b) mix[b] += members_[i].weight * lp[b];
+        for (std::size_t b = 0; b < mix.size() && b < lp.size(); ++b) mix[b] += w[i + 1] * lp[b];
     }
     double mx = -std::numeric_limits<double>::infinity();
     for (double v : mix) mx = std::max(mx, v);
@@ -592,19 +1103,24 @@ std::vector<double> HpSequenceBackend::mix_with_members_(const std::vector<doubl
     return mix;
 }
 
-std::vector<double> HpSequenceBackend::ensemble_log_probs_(int vocab_size) const {
-    // Scoring restores all state; const_cast keeps the const serve API.
-    return const_cast<HpSequenceBackend*>(this)->next_byte_log_probs(vocab_size);
+const std::vector<double>& HpSequenceBackend::served_log_probs_() const {
+    // A distribution scored under other learning / serve-rate settings is
+    // stale here (non-frozen scoring trains inside the hypothetical byte).
+    if (!served_valid_ || served_.size() != 256 || served_epoch_ != settings_epoch_) {
+        // Scoring restores all state; const_cast keeps the const serve API.
+        (void)const_cast<HpSequenceBackend*>(this)->next_byte_log_probs(256);
+    }
+    return served_;
 }
 
 double HpSequenceBackend::log_prob_byte(std::uint8_t byte) const {
-    if (!members_.empty() || ig_) return ensemble_log_probs_(256)[byte];
+    if (mixed_()) return served_log_probs_()[byte];
     return byte_log_prob_on_pred_(byte);
 }
 
 std::uint8_t HpSequenceBackend::serve_greedy_next_byte() const {
-    if (!members_.empty() || ig_) {
-        const auto lp = ensemble_log_probs_(256);
+    if (mixed_()) {
+        const auto& lp = served_log_probs_();
         return static_cast<std::uint8_t>(std::max_element(lp.begin(), lp.end()) - lp.begin());
     }
     ScoringScope scoring(*pred_, frozen_scoring_);
@@ -634,8 +1150,8 @@ std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
     if (rng01 == nullptr || temperature <= 1e-6) {
         return serve_greedy_next_byte();
     }
-    if (!members_.empty() || ig_) {
-        const auto lp = ensemble_log_probs_(256);
+    if (mixed_()) {
+        const auto& lp = served_log_probs_();
         double mx = -std::numeric_limits<double>::infinity();
         for (double v : lp) mx = std::max(mx, v / temperature);
         std::vector<double> w(lp.size());
@@ -667,69 +1183,146 @@ std::uint8_t HpSequenceBackend::serve_sample_next_byte(double temperature,
 }
 
 void HpSequenceBackend::consume_byte(std::uint8_t byte) {
-    for (int i = 7; i >= 0; --i) {
-        const int bit = (static_cast<int>(byte) >> i) & 1;
-        (void)pred_->predict();
-        pred_->update(bit);
-    }
-    for (auto& m : members_) m.backend->consume_byte(byte);
-    if (last_valid_ && ens_eta_ > 0.0 && pred_->learning()) update_ensemble_weights_(byte);
-    if (ig_valid_ && ig_eta_ > 0.0 && pred_->learning() && byte < ig_p_[0].size()) {
-        // Exponentiated gradient on the mixture's log loss for this bucket.
-        auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
-        const double pm = w[0] * ig_p_[0][byte] + w[1] * ig_p_[1][byte] + w[2] * ig_p_[2][byte];
-        double z = 0.0;
-        for (int e = 0; e < 3; ++e) {
-            const double g = std::clamp(ig_eta_ * (ig_p_[e][byte] / std::max(pm, 1e-12) - 1.0), -2.0, 2.0);
-            z += (w[static_cast<std::size_t>(e)] = std::max(1e-4, w[static_cast<std::size_t>(e)] * std::exp(g)));
-        }
-        for (double& x : w) x /= z;
-    }
-    if (ss_on_) {
-        if (ss_valid_ && ss_bucket_ >= 0 && ss_eta_ > 0.0 && pred_->learning()) {
-            double& w = ss_w_[static_cast<std::size_t>(ss_bucket_)];
-            const double pa = ss_pin_[byte], pb = ss_p_[byte];
-            const double p = std::max(w * pa + (1.0 - w) * pb, 1e-12);
-            w = std::clamp(w + ss_eta_ * (pa - pb) / p, 0.01, 0.99);
-        }
-        ss_hist_.push_back(byte);
-    }
+    // Mixing weights learn from a scored byte while learning is on, unless
+    // frozen (set_mixing_learning).
+    const bool learn_mix = pred_->learning() && mix_learning_;
     if (!nn_.empty()) {
-        if (nn_valid_ && nn_eta_ > 0.0 && pred_->learning()) {
-            // Exponentiated gradient on the mixture's log loss for this bucket.
+        if (nn_valid_ && nn_eta_ > 0.0 && learn_mix) {
+            // Exponentiated gradient on the mixture's log loss for this bucket,
+            // from the experts' distributions before they read the byte.
             const std::size_t k = nn_.size();
-            double* w = &nn_w_[static_cast<std::size_t>(nn_bucket_) * (k + 1)];
+            const std::size_t row = static_cast<std::size_t>(nn_bucket_) * (k + 1);
+            double* w = &nn_w_[row];
             std::vector<double> pe(k + 1);
             pe[0] = nn_pin_[byte];
             for (std::size_t i = 0; i < k; ++i) pe[i + 1] = std::exp(nn_[i].state.log_p[byte]);
             double pm = 0.0;
             for (std::size_t i = 0; i <= k; ++i) pm += w[i] * pe[i];
-            pm = std::max(pm, 1e-12);
-            double z = 0.0;
-            for (std::size_t i = 0; i <= k; ++i) {
-                const double g = std::clamp(nn_eta_ * (pe[i] / pm - 1.0), -2.0, 2.0);
-                z += (w[i] = std::max(1e-4, w[i] * std::exp(g)));
+            const double p_lin = pm;  // the linear part's p(y) as served (Switch)
+            if (nn_mix_ != NeuralMix::Log) {
+                pm = std::max(pm, 1e-12);
+                double z = 0.0;
+                for (std::size_t i = 0; i <= k; ++i) {
+                    const double g = std::clamp(nn_eta_ * (pe[i] / pm - 1.0), -2.0, 2.0);
+                    z += (w[i] = std::max(1e-4, w[i] * std::exp(g)));
+                }
+                for (std::size_t i = 0; i <= k; ++i) w[i] /= z;
             }
-            for (std::size_t i = 0; i <= k; ++i) w[i] /= z;
+            if (nn_mix_ != NeuralMix::Linear) {
+                // Log-linear weights: gradient ascent on log p_log(y),
+                // d/da_i = log p_i(y) - E_p_log[log p_i].
+                double* a = &nn_a_[row];
+                for (std::size_t i = 0; i <= k; ++i) {
+                    double e = 0.0;
+                    double ly = 0.0;
+                    if (i == 0) {
+                        for (std::size_t b = 0; b < 256; ++b) e += nn_plog_[b] * nn_lpin_[b];
+                        ly = nn_lpin_[byte];
+                    } else {
+                        const auto& lp = nn_[i - 1].state.log_p;
+                        for (std::size_t b = 0; b < 256; ++b) e += nn_plog_[b] * lp[b];
+                        ly = lp[byte];
+                    }
+                    a[i] = std::clamp(a[i] + nn_eta_ * std::clamp(ly - e, -2.0, 2.0), 0.0, 4.0);
+                }
+            }
+            if (nn_mix_ == NeuralMix::Switch) {
+                double& sw = nn_s_[static_cast<std::size_t>(nn_bucket_)];
+                const double pg = nn_plog_[byte];
+                const double p = std::max(sw * p_lin + (1.0 - sw) * pg, 1e-12);
+                sw = std::clamp(sw + nn_eta_ * (p_lin - pg) / p, 0.01, 0.99);
+            }
         }
         const float lr = pred_->learning() ? static_cast<float>(nn_adapt_) : 0.0f;
         for (auto& s : nn_) {
             s.state.adapt_lr = lr;
-            s.model->step(s.state, byte);
+            s.primed = false;  // it reads a byte
         }
     }
-    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = false;
+    // With worker threads (set_parallel) the experts step there, and the
+    // members read the byte there unless an undo recorder is active: it is
+    // per thread, and an hp::StreamRewind on this thread must record the
+    // members' writes (expert state is restored by value, not recorded).
+    // Every model reads the same byte on its own state either way.
+    const std::size_t member_jobs =
+        parallel_ && hp::UndoRecorderScope::active() == nullptr ? members_.size() : 0;
+    const std::size_t nn_jobs = parallel_ ? nn_.size() : 0;  // first: the longest jobs
+    const std::size_t jobs = nn_jobs + member_jobs;
+    const std::function<void()> here = [&] {
+        for (int i = 7; i >= 0; --i) {
+            const int bit = (static_cast<int>(byte) >> i) & 1;
+            (void)pred_->predict();
+            pred_->update(bit);
+        }
+        if (member_jobs == 0) {
+            for (auto& m : members_) m.backend->consume_byte(byte);
+        }
+        if (last_valid_ && ens_eta_ > 0.0 && learn_mix) {
+            if (eg_on_) update_gate_(byte);
+            else update_ensemble_weights_(byte);
+        }
+        if (ft_valid_ && ft_eta_ > 0.0 && learn_mix && byte < ft_in_.size()) {
+            // Final temperature of this bucket: d log p(y) / d(1/T) = log
+            // p_in(y) - E_served[log p_in]; a step on log(1/T).
+            double e = 0.0;
+            for (std::size_t b = 0; b < ft_in_.size(); ++b) e += ft_p_[b] * ft_in_[b];
+            const double g = std::clamp(ft_in_[byte] - e, -20.0, 20.0);
+            double& t = ft_temp_[static_cast<std::size_t>(ft_bucket_)];
+            const double beta0 = 1.0 / ft_t_;
+            const double beta = std::clamp((1.0 / t) * std::exp(ft_eta_ * g / t), std::min(0.8, beta0),
+                                           std::max(1.6, beta0));
+            t = 1.0 / beta;
+        }
+        if (ig_valid_ && ig_eta_ > 0.0 && learn_mix && byte < ig_p_[0].size()) {
+            // Exponentiated gradient on the mixture's log loss for this bucket.
+            auto& w = ig_w_[static_cast<std::size_t>(ig_bucket_)];
+            const double pm = w[0] * ig_p_[0][byte] + w[1] * ig_p_[1][byte] + w[2] * ig_p_[2][byte];
+            double z = 0.0;
+            for (int e = 0; e < 3; ++e) {
+                const double g = std::clamp(ig_eta_ * (ig_p_[e][byte] / std::max(pm, 1e-12) - 1.0), -2.0, 2.0);
+                z += (w[static_cast<std::size_t>(e)] = std::max(1e-4, w[static_cast<std::size_t>(e)] * std::exp(g)));
+            }
+            for (double& x : w) x /= z;
+        }
+        if (ss_on_) {
+            if (ss_valid_ && ss_bucket_ >= 0 && ss_eta_ > 0.0 && learn_mix) {
+                double& w = ss_w_[static_cast<std::size_t>(ss_bucket_)];
+                const double pa = ss_pin_[byte], pb = ss_p_[byte];
+                const double p = std::max(w * pa + (1.0 - w) * pb, 1e-12);
+                w = std::clamp(w + ss_eta_ * (pa - pb) / p, 0.01, 0.99);
+            }
+            ss_hist_.push_back(byte);
+            ++ss_len_;
+            // A byte read under an undo recorder (hp::StreamRewind lookahead) is
+            // speculative: truncate_session takes it back, and a rebuild over it
+            // would be thrown away with it (and redone for every candidate).
+            if (hp::UndoRecorderScope::active() == nullptr) session_grow_();
+        }
+        if (nn_jobs == 0) {
+            for (auto& s : nn_) s.model->step(s.state, byte);
+        }
+    };
+    if (jobs > 0) {
+        run_parallel_(jobs, [&](std::size_t i) {
+            if (i < nn_jobs) {
+                NnSlot& s = nn_[i];
+                s.model->step(s.state, byte);
+            } else {
+                members_[i - nn_jobs].backend->consume_byte(byte);
+            }
+        }, here);
+    } else {
+        here();
+    }
+    last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = ft_valid_ = served_valid_ = false;
 }
 
 double HpSequenceBackend::observe_next_byte(std::uint8_t next) {
-    if (ig_ || !nn_.empty() || ss_on_) {
-        const bool cached = (!ig_ || ig_valid_) && (nn_.empty() || nn_valid_) && (!ss_on_ || ss_valid_);
-        const double lp = cached ? last_final_[next] : next_byte_log_probs(256)[next];
-        consume_byte(next);
-        return -lp;
-    }
-    if (!members_.empty()) {
-        const double lp = last_valid_ ? last_mix_[next] : next_byte_log_probs(256)[next];
+    if (mixed_()) {
+        // The distribution served at this position, whatever the settings
+        // since: the loss of what was scored, and the stage updates in
+        // consume_byte read that same scoring.
+        const double lp = served_valid_ && next < served_.size() ? served_[next] : next_byte_log_probs(256)[next];
         consume_byte(next);
         return -lp;
     }

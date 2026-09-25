@@ -1,6 +1,7 @@
 /// ∞-gram index: the suffix array is sorted and complete, and query() returns
 /// the longest context suffix that occurs plus exact next-byte counts
-/// (checked against brute force on a small random corpus).
+/// (checked against brute force on a small random corpus), with or without
+/// a length hint.
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -75,6 +76,33 @@ int main() {
             return 1;
         }
     }
+    // Hints give the unhinted result: along a stream (a sliding 64-byte
+    // context, novel bytes mixed in) the previous byte's n + 1, and in a
+    // backoff a length known to occur.
+    {
+        std::string stream = text.substr(3000, 3000);
+        for (std::size_t i = 97; i < stream.size(); i += 211) stream[i] = 'Z';
+        auto same = [](const cypha::cyphalm::InfiniGram::Result& x, const cypha::cyphalm::InfiniGram::Result& y) {
+            return x.n == y.n && x.total == y.total && x.count == y.count;
+        };
+        int prev = 0;  // the empty context matches n = 0
+        for (std::size_t t = 1; t <= stream.size(); ++t) {
+            const std::size_t len = std::min<std::size_t>(t, 64);
+            const auto* c = reinterpret_cast<const std::uint8_t*>(stream.data()) + (t - len);
+            const auto plain = ig.query(c, len, 64);
+            if (!same(ig.query(c, len, 64, prev + 1), plain)) {
+                std::printf("cyphalm_infinigram_smoke FAIL hinted query differs at %zu\n", t);
+                return 1;
+            }
+            for (int m = plain.n / 2; m > 0; m /= 2) {
+                if (!same(ig.query(c, len, m, m), ig.query(c, len, m))) {
+                    std::printf("cyphalm_infinigram_smoke FAIL backoff query differs at %zu (m %d)\n", t, m);
+                    return 1;
+                }
+            }
+            prev = plain.n;
+        }
+    }
     // As a model expert: normalised, observe == -log p of the served mix,
     // exact rewinds over it, and generation runs.
     {
@@ -124,6 +152,6 @@ int main() {
         }
     }
     std::filesystem::remove(path);
-    std::printf("cyphalm_infinigram_smoke OK 300 queries match brute force; expert normalised, rewinds, generates\n");
+    std::printf("cyphalm_infinigram_smoke OK 300 queries match brute force; hints exact; expert normalised, rewinds, generates\n");
     return 0;
 }

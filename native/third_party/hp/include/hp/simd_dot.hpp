@@ -70,19 +70,28 @@ inline std::int64_t dot_i32(const std::int32_t* a, const std::int32_t* b, int n)
 #endif
 }
 
+/// Mixer dot: ``w`` are weights (|w| <= kMixerClamp = 2^16: every write
+/// clamps) and ``st`` stretched inputs (|st| <= 2047, stretch()'s range).
 inline std::int64_t dot_i32_i16(const std::int32_t* w, const std::int16_t* st, int n) {
 #if HP_XSIMD
+    // Each product is under 2^27, so an int32 lane holds 16 of them exactly;
+    // lanes take kBlock (8, a 2x margin) products, then widen to int64.
+    // Integer adds are associative: the scalar loop's sum, bit for bit.
+    constexpr int kBlock = 8;
     std::int64_t sum = 0;
     int i = 0;
     using batch32_4 = xsimd::batch<std::int32_t, xsimd::sse4_1>;
-    for (; i + 4 <= n; i += 4) {
-        const __m128i ws = batch32_4::load_unaligned(w + i);
-        const __m128i ss =
-            _mm_cvtepi16_epi32(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(st + i)));
-        const __m128i prod = _mm_mullo_epi32(ws, ss);
-        alignas(16) std::int32_t parts[4];
-        _mm_storeu_si128(reinterpret_cast<__m128i*>(parts), prod);
-        sum += static_cast<std::int64_t>(parts[0]) + parts[1] + parts[2] + parts[3];
+    while (i + 4 <= n) {
+        __m128i acc = _mm_setzero_si128();
+        for (int k = 0; k < kBlock && i + 4 <= n; ++k, i += 4) {
+            const __m128i ws = batch32_4::load_unaligned(w + i);
+            const __m128i ss =
+                _mm_cvtepi16_epi32(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(st + i)));
+            acc = _mm_add_epi32(acc, _mm_mullo_epi32(ws, ss));
+        }
+        const __m128i wide = _mm_add_epi64(_mm_cvtepi32_epi64(acc),
+                                           _mm_cvtepi32_epi64(_mm_unpackhi_epi64(acc, acc)));
+        sum += _mm_cvtsi128_si64(_mm_add_epi64(wide, _mm_unpackhi_epi64(wide, wide)));
     }
     for (; i < n; ++i) sum += static_cast<std::int64_t>(w[i]) * st[i];
     return sum;
@@ -105,12 +114,13 @@ inline std::int64_t dot_mixer_wt(const MixerWt* w, const MixerSt* st, int n) {
 #endif
 }
 
+/// w += (st * err * l1_q4) >> kMixerRateShift, clamped; ``l1_q4`` is the rate in 1/16ths.
 inline void axpy_mixer_wt(MixerWt* w, const MixerSt* st, int n, std::int32_t err,
-                          std::int32_t l1, std::int64_t energy = 0) {
+                          std::int32_t l1_q4, std::int64_t energy = 0) {
     (void)energy;
     for (int i = 0; i < n; ++i) {
         const std::int32_t dw = static_cast<std::int32_t>(
-            (static_cast<std::int64_t>(st[i]) * err * l1) >> 14);
+            (static_cast<std::int64_t>(st[i]) * err * l1_q4) >> kMixerRateShift);
         hp_undo_note(w[i]);
         w[i] = mixer_wt_pack(
             clamp_int(mixer_wt_expand(w[i]) + dw, -kMixerClamp, kMixerClamp));

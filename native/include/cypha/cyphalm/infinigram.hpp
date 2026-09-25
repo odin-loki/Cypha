@@ -12,7 +12,6 @@
 /// ``bits`` = ceil(log2 n) each (27 for 95 MB: 4.4 bytes a text byte instead
 /// of 5), 8 bytes of padding. "IGR1" (32-bit entries) still loads. Mapped
 /// read-only, so every process serving it shares one copy. Or skip the file:
-/// ``open`` on the plain corpus builds the same index in memory at load time. Or skip the file:
 /// ``open`` on the plain corpus builds the same index in memory at load time.
 
 #include <array>
@@ -34,9 +33,14 @@ class InfiniGram {
     explicit InfiniGram(const std::string& path);
     /// Index ``text`` in memory, just in time (~6 s for 95 MB on one core).
     InfiniGram(const std::uint8_t* text, std::size_t n);
+    /// The same, keeping ``text`` itself (no copy).
+    explicit InfiniGram(std::vector<std::uint8_t>&& text);
     /// A stored index, or a plain-text corpus indexed on the spot (its first
     /// ``max_bytes`` bytes; 0 = all), chosen by the file's magic.
     static std::shared_ptr<const InfiniGram> open(const std::string& path, std::size_t max_bytes = 0);
+    /// True when ``path`` is a stored index (IGR1 / IGR2 magic), false for a
+    /// plain-text corpus (``open`` then indexes its bytes). Throws if unreadable.
+    static bool is_index_file(const std::string& path);
     ~InfiniGram();
     InfiniGram(const InfiniGram&) = delete;
     InfiniGram& operator=(const InfiniGram&) = delete;
@@ -49,8 +53,15 @@ class InfiniGram {
 
     /// Next-byte counts after the longest suffix of ``ctx[0..len)`` (oldest
     /// byte first) that occurs in the corpus, trying at most ``max_n`` bytes.
-    /// ``hint`` (the previous call's n + 1, or -1) bounds the search.
-    Result query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint = -1) const;
+    /// ``hint`` (-1: none) must bound that length: the previous byte's n + 1
+    /// (a match grows by at most one byte per byte read), or a length known
+    /// to occur (a backoff). The bound itself is tried first, then bisected
+    /// below; the result is the same as without it. ``min_total`` > 1 asks
+    /// instead for the longest suffix followed by a byte at least that many
+    /// times (``hint`` must then bound that length; n = 0 when even the
+    /// empty context has fewer, a corpus that short).
+    Result query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint = -1,
+                 std::uint64_t min_total = 1) const;
 
     std::size_t size() const { return n_; }
 

@@ -19,7 +19,12 @@ THREADS=${4:-4}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 BYTES=95000000
 mkdir -p "$OUT/raw"
-ln -sf "$(cd "$(dirname "$ENWIK8")" && pwd)/$(basename "$ENWIK8")" "$OUT/enwik8"
+# The manifests name OUT/enwik8. Link it unless it already is the corpus
+# (ENWIK8 given as OUT/enwik8, or linked before): ln -sf onto the corpus or
+# its link would leave a link to itself.
+if [ ! "$OUT/enwik8" -ef "$ENWIK8" ]; then
+    ln -sf "$(cd "$(dirname "$ENWIK8")" && pwd)/$(basename "$ENWIK8")" "$OUT/enwik8"
+fi
 # Upstream mixer gains (CompressionAlgorithm H33 / v91 / v93).
 CYPHA_HP_LR1_SCALE=40 CYPHA_HP_MIXER_SCALE=49152 CYPHA_HP_MIXER_SKIP=56 CYPHA_HP_MIXER_SKIP_L1=80 \
     "$BUILD/cyphalm_shard_train" --train "$ENWIK8" --bytes $BYTES --shards 11 --tier lean \

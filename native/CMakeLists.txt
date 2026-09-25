@@ -499,6 +499,18 @@ target_link_libraries(hp_llm_smoke PRIVATE cypha_lm_native)
 add_executable(cyphalm_generate tools/cyphalm_generate.cpp)
 target_link_libraries(cyphalm_generate PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_generate)
+# A plain-text --infinigram corpus indexed whole is warned about (it may hold
+# held-out text); --infinigram-bytes caps it and silences the warning.
+add_test(NAME native_cyphalm_generate_infinigram_whole
+         COMMAND "$<TARGET_FILE:cyphalm_generate>" --infinigram "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt"
+                 --max-bytes 4 --word-candidates 0)
+set_tests_properties(native_cyphalm_generate_infinigram_whole PROPERTIES
+                     PASS_REGULAR_EXPRESSION "is a plain-text corpus and is indexed whole" TIMEOUT 60)
+add_test(NAME native_cyphalm_generate_infinigram_bytes
+         COMMAND "$<TARGET_FILE:cyphalm_generate>" --infinigram "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt"
+                 --infinigram-bytes 4096 --max-bytes 4 --word-candidates 0)
+set_tests_properties(native_cyphalm_generate_infinigram_bytes PROPERTIES
+                     FAIL_REGULAR_EXPRESSION "indexed whole" TIMEOUT 60)
 
 add_executable(cyphalm_generation_harness tools/cyphalm_generation_harness.cpp)
 target_link_libraries(cyphalm_generation_harness PRIVATE cypha_lm_native)
@@ -543,6 +555,12 @@ target_link_libraries(hp_frozen_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_frozen_smoke)
 add_test(NAME native_hp_frozen_smoke COMMAND "$<TARGET_FILE:hp_frozen_smoke>")
 set_tests_properties(native_hp_frozen_smoke PROPERTIES TIMEOUT 120)
+
+add_executable(hp_speed_parity_smoke tools/hp_speed_parity_smoke.cpp)
+target_link_libraries(hp_speed_parity_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_speed_parity_smoke)
+add_test(NAME native_hp_speed_parity_smoke COMMAND "$<TARGET_FILE:hp_speed_parity_smoke>")
+set_tests_properties(native_hp_speed_parity_smoke PROPERTIES TIMEOUT 300)
 add_executable(hp_stream_rewind_smoke tools/hp_stream_rewind_smoke.cpp)
 target_link_libraries(hp_stream_rewind_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_stream_rewind_smoke)
@@ -553,9 +571,27 @@ target_link_libraries(hp_fold_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_fold_smoke)
 add_test(NAME native_hp_fold_smoke COMMAND "$<TARGET_FILE:hp_fold_smoke>")
 set_tests_properties(native_hp_fold_smoke PROPERTIES TIMEOUT 120)
+add_executable(hp_checkpoint_robust_smoke tools/hp_checkpoint_robust_smoke.cpp)
+target_link_libraries(hp_checkpoint_robust_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_checkpoint_robust_smoke)
+add_test(NAME native_hp_checkpoint_robust_smoke COMMAND "$<TARGET_FILE:hp_checkpoint_robust_smoke>")
+set_tests_properties(native_hp_checkpoint_robust_smoke PROPERTIES TIMEOUT 120)
 add_executable(cyphalm_shard_train tools/cyphalm_shard_train.cpp)
 target_link_libraries(cyphalm_shard_train PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_shard_train)
+# --threads 0 is an error (it used to write an empty manifest); a failing
+# shard (here: no such corpus) is reported and no manifest is written.
+add_test(NAME native_cyphalm_shard_train_threads
+         COMMAND "$<TARGET_FILE:cyphalm_shard_train>" --train none --bytes 100 --threads 0
+                 --out "${CMAKE_CURRENT_BINARY_DIR}/shard_train_threads")
+set_tests_properties(native_cyphalm_shard_train_threads PROPERTIES
+                     PASS_REGULAR_EXPRESSION "--threads must be at least 1" TIMEOUT 30)
+add_test(NAME native_cyphalm_shard_train_worker_error
+         COMMAND "$<TARGET_FILE:cyphalm_shard_train>" --train "${CMAKE_CURRENT_BINARY_DIR}/no_such_corpus"
+                 --bytes 100 --shards 2 --threads 1 --table-bits 16
+                 --out "${CMAKE_CURRENT_BINARY_DIR}/shard_train_worker_error")
+set_tests_properties(native_cyphalm_shard_train_worker_error PROPERTIES
+                     PASS_REGULAR_EXPRESSION "no manifest written" TIMEOUT 60)
 add_executable(cyphalm_infinigram_build tools/cyphalm_infinigram_build.cpp)
 target_link_libraries(cyphalm_infinigram_build PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_infinigram_build)
@@ -567,6 +603,12 @@ set_tests_properties(native_cyphalm_infinigram_smoke PROPERTIES TIMEOUT 120)
 add_executable(cyphalm_trace tools/cyphalm_trace.cpp)
 target_link_libraries(cyphalm_trace PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_trace)
+# A missing --text is reported before the corpus is indexed.
+add_test(NAME native_cyphalm_trace_missing_text
+         COMMAND "$<TARGET_FILE:cyphalm_trace>" --corpus "${CMAKE_CURRENT_BINARY_DIR}/no_such_corpus"
+                 --text "${CMAKE_CURRENT_BINARY_DIR}/no_such_text")
+set_tests_properties(native_cyphalm_trace_missing_text PROPERTIES
+                     PASS_REGULAR_EXPRESSION "cannot open --text" TIMEOUT 30)
 add_executable(cyphalm_neural_smoke tools/cyphalm_neural_smoke.cpp)
 target_link_libraries(cyphalm_neural_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_neural_smoke)
@@ -575,11 +617,38 @@ set_tests_properties(native_cyphalm_neural_smoke PROPERTIES TIMEOUT 120)
 add_executable(cyphalm_gen_bench tools/cyphalm_gen_bench.cpp)
 target_link_libraries(cyphalm_gen_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_gen_bench)
+add_executable(cyphalm_serve_state_smoke tools/cyphalm_serve_state_smoke.cpp)
+target_link_libraries(cyphalm_serve_state_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_serve_state_smoke)
+add_test(NAME native_cyphalm_serve_state_smoke COMMAND "$<TARGET_FILE:cyphalm_serve_state_smoke>")
+set_tests_properties(native_cyphalm_serve_state_smoke PROPERTIES TIMEOUT 180)
+add_executable(cyphalm_serve_mixing_smoke tools/cyphalm_serve_mixing_smoke.cpp)
+target_link_libraries(cyphalm_serve_mixing_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_serve_mixing_smoke)
+add_test(NAME native_cyphalm_serve_mixing_smoke COMMAND "$<TARGET_FILE:cyphalm_serve_mixing_smoke>")
+set_tests_properties(native_cyphalm_serve_mixing_smoke PROPERTIES TIMEOUT 300)
 add_executable(cyphalm_ensemble_smoke tools/cyphalm_ensemble_smoke.cpp)
 target_link_libraries(cyphalm_ensemble_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_ensemble_smoke)
 add_test(NAME native_cyphalm_ensemble_smoke COMMAND "$<TARGET_FILE:cyphalm_ensemble_smoke>")
 set_tests_properties(native_cyphalm_ensemble_smoke PROPERTIES TIMEOUT 120)
+add_executable(cyphalm_mixing_variants_smoke tools/cyphalm_mixing_variants_smoke.cpp)
+target_link_libraries(cyphalm_mixing_variants_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_mixing_variants_smoke)
+add_test(NAME native_cyphalm_mixing_variants_smoke COMMAND "$<TARGET_FILE:cyphalm_mixing_variants_smoke>")
+set_tests_properties(native_cyphalm_mixing_variants_smoke PROPERTIES TIMEOUT 300)
+# Component dumps for bench/lm_compare/mixsim.py: the smoke test writes the
+# parts, manifests and in-process dumps; the harness dumps one manifest
+# again (below, with cyphalm_lm_quality); mixsim replays every dump against
+# its NLL (when python3 with numpy is found).
+set(CYPHA_COMPONENT_DUMP_DIR "${CMAKE_CURRENT_BINARY_DIR}/component_dump_smoke")
+add_executable(cyphalm_component_dump_smoke tools/cyphalm_component_dump_smoke.cpp)
+target_link_libraries(cyphalm_component_dump_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cyphalm_component_dump_smoke)
+add_test(NAME native_cyphalm_component_dump_smoke
+         COMMAND "$<TARGET_FILE:cyphalm_component_dump_smoke>" "${CYPHA_COMPONENT_DUMP_DIR}")
+set_tests_properties(native_cyphalm_component_dump_smoke PROPERTIES
+                     TIMEOUT 300 FIXTURES_SETUP cyphalm_component_dumps)
 
 add_executable(hp_assign_reuse_bench tools/hp_assign_reuse_bench.cpp)
 target_link_libraries(hp_assign_reuse_bench PRIVATE cypha_lm_native)
@@ -608,6 +677,79 @@ cypha_mingw_apply_exe_link_options(cyphalm_hp_shard_spike)
 add_executable(cyphalm_lm_quality tools/cyphalm_lm_quality.cpp)
 target_link_libraries(cyphalm_lm_quality PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_lm_quality)
+# Load-only harness flags without --load are an error, not silently ignored.
+add_test(NAME native_cyphalm_lm_quality_load_only_flags
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --neural-lr 0.05 --gen-bytes 0)
+set_tests_properties(native_cyphalm_lm_quality_load_only_flags PROPERTIES
+                     PASS_REGULAR_EXPRESSION "--neural-lr needs --load" TIMEOUT 30)
+add_test(NAME native_cyphalm_lm_quality_fold_auto_range
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --fold-auto 1.5 --gen-bytes 0)
+set_tests_properties(native_cyphalm_lm_quality_fold_auto_range PROPERTIES
+                     PASS_REGULAR_EXPRESSION "--fold-auto must be in \\(0, 1\\)" TIMEOUT 30)
+# Mixing variant names and values are checked before anything loads.
+add_test(NAME native_cyphalm_lm_quality_mixing_flags
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --load "${CMAKE_CURRENT_BINARY_DIR}/no_such_manifest.json"
+                 --neural-mix geometric --gen-bytes 0)
+set_tests_properties(native_cyphalm_lm_quality_mixing_flags PROPERTIES
+                     PASS_REGULAR_EXPRESSION "neural_mix: expected linear, log or switch" TIMEOUT 30)
+add_test(NAME native_cyphalm_lm_quality_dump_dtype
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --load "${CMAKE_CURRENT_BINARY_DIR}/no_such_manifest.json"
+                 --eval "${CMAKE_CURRENT_BINARY_DIR}/no_such_text" --dump-components "${CMAKE_CURRENT_BINARY_DIR}/no_dump"
+                 --dump-dtype f8 --gen-bytes 0)
+set_tests_properties(native_cyphalm_lm_quality_dump_dtype PROPERTIES
+                     PASS_REGULAR_EXPRESSION "dump dtype: expected f16, f32 or f64" TIMEOUT 30)
+# The harness dumps the component dump smoke test's switch / gate / tempered
+# manifest (float64, so the replay below is exact to rounding).
+add_test(NAME native_cyphalm_lm_quality_dump_components
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --load "${CYPHA_COMPONENT_DUMP_DIR}/switch_gate.json"
+                 --eval "${CYPHA_COMPONENT_DUMP_DIR}/eval.txt" --eval-bytes 1000000 --prompt-bytes 0 --gen-bytes 0
+                 --dump-components "${CYPHA_COMPONENT_DUMP_DIR}/dumps/harness" --dump-dtype f64)
+set_tests_properties(native_cyphalm_lm_quality_dump_components PROPERTIES
+                     TIMEOUT 120 FIXTURES_REQUIRED cyphalm_component_dumps FIXTURES_SETUP cyphalm_harness_dump)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  execute_process(COMMAND "${Python3_EXECUTABLE}" -c "import numpy"
+                  RESULT_VARIABLE CYPHA_NUMPY_RC OUTPUT_QUIET ERROR_QUIET)
+endif()
+if(Python3_Interpreter_FOUND AND CYPHA_NUMPY_RC EQUAL 0)
+  set(CYPHA_MIXSIM "${CMAKE_CURRENT_SOURCE_DIR}/../bench/lm_compare/mixsim.py")
+  set(CYPHA_DUMPS "${CYPHA_COMPONENT_DUMP_DIR}/dumps")
+  # Every dump replayed against the NLL it was scored with (float64 to
+  # 1e-9, float32 1e-6, float16 1e-2 bits/byte).
+  add_test(NAME native_cyphalm_mixsim_check
+           COMMAND "${Python3_EXECUTABLE}" "${CYPHA_MIXSIM}" check
+                   "${CYPHA_DUMPS}/linear" "${CYPHA_DUMPS}/variants" "${CYPHA_DUMPS}/switch_gate"
+                   "${CYPHA_DUMPS}/longest16" "${CYPHA_DUMPS}/linear_f32" "${CYPHA_DUMPS}/linear_f16" "${CYPHA_DUMPS}/frozen_mixing"
+                   "${CYPHA_DUMPS}/single" "${CYPHA_DUMPS}/plain" "${CYPHA_DUMPS}/harness")
+  set_tests_properties(native_cyphalm_mixsim_check PROPERTIES
+                       TIMEOUT 120 FIXTURES_REQUIRED "cyphalm_component_dumps;cyphalm_harness_dump")
+  # One run's dump replayed with another run's settings predicts that run's
+  # NLL: stages whose mode changes restart as the C++ setters do.
+  add_test(NAME native_cyphalm_mixsim_predict_switch_gate
+           COMMAND "${Python3_EXECUTABLE}" "${CYPHA_MIXSIM}" check "${CYPHA_DUMPS}/linear"
+                   --set neural_mix=switch ensemble_gate=1 final_temperature=1.1 --against "${CYPHA_DUMPS}/switch_gate")
+  add_test(NAME native_cyphalm_mixsim_predict_linear
+           COMMAND "${Python3_EXECUTABLE}" "${CYPHA_MIXSIM}" check "${CYPHA_DUMPS}/switch_gate"
+                   --set neural_mix=linear ensemble_gate=0 final_temperature=1 --against "${CYPHA_DUMPS}/linear")
+  add_test(NAME native_cyphalm_mixsim_predict_log
+           COMMAND "${Python3_EXECUTABLE}" "${CYPHA_MIXSIM}" check "${CYPHA_DUMPS}/longest16"
+                   --set neural_mix=log final_temperature=0.9 final_temperature_lr=0.02 --against "${CYPHA_DUMPS}/variants")
+  add_test(NAME native_cyphalm_mixsim_predict_frozen
+           COMMAND "${Python3_EXECUTABLE}" "${CYPHA_MIXSIM}" check "${CYPHA_DUMPS}/linear"
+                   --set learn_mix=0 --against "${CYPHA_DUMPS}/frozen_mixing")
+  set_tests_properties(native_cyphalm_mixsim_predict_switch_gate native_cyphalm_mixsim_predict_linear
+                       native_cyphalm_mixsim_predict_log native_cyphalm_mixsim_predict_frozen PROPERTIES
+                       TIMEOUT 120 FIXTURES_REQUIRED cyphalm_component_dumps)
+  # Changed settings (restarted stages, a subset) and the paired block
+  # bootstrap over two pooled dumps.
+  add_test(NAME native_cyphalm_mixsim_compare
+           COMMAND "${Python3_EXECUTABLE}" "${CYPHA_MIXSIM}" compare "${CYPHA_DUMPS}/linear" "${CYPHA_DUMPS}/switch_gate"
+                   --a final_temperature=0.9 ensemble_gate=1 neural=1 --b --block 256 --boot 200)
+  set_tests_properties(native_cyphalm_mixsim_compare PROPERTIES
+                       TIMEOUT 120 FIXTURES_REQUIRED cyphalm_component_dumps PASS_REGULAR_EXPRESSION "p_two_sided")
+else()
+  message(STATUS "python3 with numpy not found: mixsim tests skipped")
+endif()
 
 add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
 target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)

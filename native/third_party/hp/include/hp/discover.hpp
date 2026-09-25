@@ -174,23 +174,33 @@ class DiscoveryPool {
     std::uint32_t mask(int i) const { return mask_[i]; }
     int replaced() const { return replaced_; }
 
-    void merge_tables_from(const DiscoveryPool& src, std::uint64_t src_weight,
+    /// Every slot's table the same size as in ``src`` (folded or fewer
+    /// active slots differ). Checked up front so a refused merge changes nothing.
+    bool tables_match(const DiscoveryPool& src) const {
+        if (src.models_.size() != models_.size()) return false;
+        for (std::size_t i = 0; i < models_.size(); ++i)
+            if (!models_[i].tables_match(src.models_[i])) return false;
+        return true;
+    }
+
+    /// Returns false, changing nothing, when any slot's table differs in size.
+    bool merge_tables_from(const DiscoveryPool& src, std::uint64_t src_weight,
                            std::uint64_t dst_weight, std::uint16_t min_statemap_count = 0) {
-        if (static_cast<int>(src.models_.size()) != static_cast<int>(models_.size())) {
-            return;
-        }
+        if (!tables_match(src)) return false;
         for (int i = 0; i < kSlots; ++i) {
             models_[i].merge_tables_from(src.models_[i], src_weight, dst_weight,
                                          min_statemap_count);
         }
+        return true;
     }
 
-    void copy_tables_from(const DiscoveryPool& src) {
-        if (static_cast<int>(src.models_.size()) == static_cast<int>(models_.size())) {
-            for (int i = 0; i < kSlots; ++i) {
-                models_[i].copy_tables_from(src.models_[i]);
-            }
+    /// Returns false, changing nothing, when any slot's table differs in size.
+    bool copy_tables_from(const DiscoveryPool& src) {
+        if (!tables_match(src)) return false;
+        for (int i = 0; i < kSlots; ++i) {
+            models_[i].copy_tables_from(src.models_[i]);
         }
+        return true;
     }
 
     void checkpoint_write(std::ostream& os) const {

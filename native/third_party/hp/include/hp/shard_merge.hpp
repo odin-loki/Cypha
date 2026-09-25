@@ -45,15 +45,27 @@ inline void copy_counter_arrays(Counter* dst, const Counter* src, std::size_t n)
     std::memcpy(dst, src, n * sizeof(Counter));
 }
 
-inline void Predictor::merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+inline bool Predictor::tables_match(const Predictor& src) const {
+    if (src.n_ctx_chain_ != n_ctx_chain_) return false;
+    for (int i = 0; i < n_ctx_chain_; ++i) {
+        if (!ctx_chain_[i]->tables_match(*src.ctx_chain_[i])) return false;
+    }
+    return hebb_.tables_match(src.hebb_) && pool_.tables_match(src.pool_) &&
+           mixer_.same_shape(src.mixer_);
+}
+
+inline bool Predictor::merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
                                           std::uint64_t dst_bytes,
                                           const ShardMergeOptions& opts) {
+    // Checked before anything is written: a refused merge changes nothing.
+    if (!tables_match(src)) {
+        return false;
+    }
     if (src_bytes == 0) {
-        return;
+        return true;
     }
     if (dst_bytes == 0) {
-        transfer_tables_from(src);
-        return;
+        return transfer_tables_from(src);
     }
 
     merge_counter_arrays(bias_.data(), src.bias_.data(), bias_.size(), src_bytes, dst_bytes,
@@ -79,6 +91,7 @@ inline void Predictor::merge_shard_tables(const Predictor& src, std::uint64_t sr
     apm_lex_.merge_from(src.apm_lex_, src_bytes, dst_bytes);
     apm_gria_.merge_from(src.apm_gria_, src_bytes, dst_bytes);
     hedge_.merge_from(src.hedge_, src_bytes, dst_bytes);
+    return true;
 }
 
 inline MergeStatus merge_predictor_tables(Predictor& dst, std::uint64_t dst_bytes,
@@ -86,6 +99,9 @@ inline MergeStatus merge_predictor_tables(Predictor& dst, std::uint64_t dst_byte
                                           const ShardMergeOptions& opts = {}) {
     if (src_bytes == 0) {
         return MergeStatus::EmptyInput;
+    }
+    if (!dst.tables_match(src)) {
+        return MergeStatus::ConfigMismatch;  // folded / dropped tables differ in size
     }
     if (dst_bytes == 0) {
         dst.transfer_tables_from(src);
@@ -102,6 +118,9 @@ inline MergeStatus merge_predictor_tables(Predictor& dst, const Predictor& a,
     if (a_bytes == 0 && b_bytes == 0) {
         return MergeStatus::EmptyInput;
     }
+    if (!dst.tables_match(a) || !dst.tables_match(b)) {
+        return MergeStatus::ConfigMismatch;
+    }
     if (a_bytes == 0) {
         dst.transfer_tables_from(b);
         return MergeStatus::Ok;
@@ -113,12 +132,15 @@ inline MergeStatus merge_predictor_tables(Predictor& dst, const Predictor& a,
     return merge_predictor_tables(dst, a_bytes, b, b_bytes, opts);
 }
 
-inline void Predictor::merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+inline bool Predictor::merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
                                           std::uint64_t dst_bytes) {
-    merge_shard_tables(src, src_bytes, dst_bytes, {});
+    return merge_shard_tables(src, src_bytes, dst_bytes, {});
 }
 
-inline void Predictor::transfer_tables_from(const Predictor& src) {
+inline bool Predictor::transfer_tables_from(const Predictor& src) {
+    if (!tables_match(src)) {
+        return false;
+    }
     copy_counter_arrays(bias_.data(), src.bias_.data(), bias_.size());
 
     for (int i = 0; i < n_ctx_chain_; ++i) {
@@ -140,6 +162,7 @@ inline void Predictor::transfer_tables_from(const Predictor& src) {
     apm_lex_.copy_from(src.apm_lex_);
     apm_gria_.copy_from(src.apm_gria_);
     hedge_.copy_from(src.hedge_);
+    return true;
 }
 
 /// Consume one byte on ``pred`` (MSB-first, train path).
@@ -274,6 +297,12 @@ inline MergeStatus merge_predictor_tables_sequential(
     const std::vector<std::uint64_t>& shard_bytes, const ShardMergeOptions& opts = {}) {
     if (shards.size() != shard_bytes.size() || shards.empty()) {
         return MergeStatus::EmptyInput;
+    }
+    // All shards first, so a mismatch leaves ``dst`` untouched.
+    for (const Predictor* s : shards) {
+        if (s != nullptr && !dst.tables_match(*s)) {
+            return MergeStatus::ConfigMismatch;
+        }
     }
     std::uint64_t merged_bytes = 0;
     for (std::size_t i = 0; i < shards.size(); ++i) {

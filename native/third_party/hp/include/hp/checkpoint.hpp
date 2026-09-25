@@ -130,8 +130,8 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
     mark("dmc_");
     for (int i = 0; i < static_cast<int>(sizeof(wmatch_) / sizeof(wmatch_[0])); ++i) {
         wmatch_[i].checkpoint_write(os);
-    mark("match_[]");
     }
+    mark("wmatch_[]");  // word-match tables (byte-match: match_[] above)
     hebb_.checkpoint_write(os);
     mark("hebb_");
     pool_.checkpoint_write(os);
@@ -147,6 +147,7 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
     hedge_.checkpoint_write(os);
     mark("hedge_");
     blob::write_array(os, bias_);
+    mark("bias_");
     gria_.checkpoint_write(os);
     mark("gria_");
     checkpoint_write_trivial(os, wiki_);
@@ -190,12 +191,18 @@ inline void Predictor::write_checkpoint(std::ostream& os) const {
 inline void Predictor::read_checkpoint(std::istream& is) {
     char magic[4] = {};
     is.read(magic, 4);
+    // Not an hp checkpoint, or a version this code does not know: fail the
+    // stream (the loader reports it) instead of leaving an untrained model.
     if (magic[0] != 'H' || magic[1] != 'P' || magic[2] != 'C' || magic[3] != 'P') {
+        is.setstate(std::ios::failbit);
         return;
     }
     std::uint32_t ver = 0;
     blob::read_pod(is, ver);
-    if (ver < 1 || ver > 5) return;
+    if (!is || ver < 1 || ver > 5) {
+        is.setstate(std::ios::failbit);
+        return;
+    }
     // The optional context models shape the mixer and the chain: the file
     // must have been written with this predictor's Config::extra_cms.
     if ((ver >= 5) != (xcms_ != 0)) {

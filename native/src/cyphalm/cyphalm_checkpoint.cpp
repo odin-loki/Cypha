@@ -6,9 +6,11 @@
 #include <unistd.h>
 #endif
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -153,6 +155,23 @@ bool hp_mmap_enabled() {
     return v == nullptr || v[0] != '0';
 }
 
+/// Why ``path`` did not load, from its 8-byte header (magic ``HPCP`` + version).
+std::string hpbin_failure(const fs::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    char head[8] = {};
+    in.read(head, 8);
+    if (in.gcount() < 8 || std::string(head, 4) != "HPCP") {
+        return "not an hp checkpoint (no HPCP header): " + path.string();
+    }
+    std::uint32_t ver = 0;
+    std::memcpy(&ver, head + 4, 4);
+    if (ver < 1 || ver > 5) {
+        return "unsupported hp checkpoint version " + std::to_string(ver) + ": " + path.string();
+    }
+    return "hp checkpoint read failed (truncated, or its tables or mixer do not match the "
+           "JSON config): " + path.string();
+}
+
 void read_hpbin(CyphaLMModel& model, const fs::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
@@ -161,16 +180,20 @@ void read_hpbin(CyphaLMModel& model, const fs::path& path) {
     hp::MapSource src;
 #if !defined(_WIN32)
     if (hp_mmap_enabled()) src.fd = ::open(path.c_str(), O_RDONLY);
+    // Mappings outlive the descriptor; close it on every exit, throws included.
+    struct FdClose {
+        int fd;
+        ~FdClose() {
+            if (fd >= 0) ::close(fd);
+        }
+    } fd_close{src.fd};
 #endif
     {
         hp::MapScope scope(&src);
         model.hp_backend().predictor().read_checkpoint(in);
     }
-#if !defined(_WIN32)
-    if (src.fd >= 0) ::close(src.fd);  // mappings outlive the descriptor
-#endif
     if (!in) {
-        throw std::runtime_error("hp checkpoint read failed: " + path.string());
+        throw std::runtime_error(hpbin_failure(path));
     }
 }
 
@@ -202,10 +225,33 @@ void save_cyphalm_model(const CyphaLMModel& model, const std::string& base_path)
 
 namespace {
 
+/// The flag-gated mixing keys of a manifest; absent keys keep today's mixing.
+MixingOptions mixing_options_from_json(const nlohmann::json& meta) {
+    MixingOptions o;
+    o.final_temperature = meta.value("final_temperature", o.final_temperature);
+    o.final_temperature_lr = meta.value("final_temperature_lr", o.final_temperature_lr);
+    if (meta.contains("infinigram_mode"))
+        o.infinigram_mode = parse_infinigram_mode(meta.at("infinigram_mode").get<std::string>());
+    if (meta.contains("neural_mix")) o.neural_mix = parse_neural_mix(meta.at("neural_mix").get<std::string>());
+    o.ensemble_gate = meta.value("ensemble_gate", o.ensemble_gate);
+    return o;
+}
+
+/// Only the keys that differ from the defaults (old readers ignore them).
+void mixing_options_to_json(const MixingOptions& o, nlohmann::json& meta) {
+    const MixingOptions d;
+    if (o.final_temperature != d.final_temperature) meta["final_temperature"] = o.final_temperature;
+    if (o.final_temperature_lr != d.final_temperature_lr) meta["final_temperature_lr"] = o.final_temperature_lr;
+    if (o.infinigram_mode != d.infinigram_mode) meta["infinigram_mode"] = infinigram_mode_name(o.infinigram_mode);
+    if (o.neural_mix != d.neural_mix) meta["neural_mix"] = neural_mix_name(o.neural_mix);
+    if (o.ensemble_gate != d.ensemble_gate) meta["ensemble_gate"] = o.ensemble_gate;
+}
+
 /// Ensemble manifest: {"cyphalm_ensemble": 1, "members": [{"checkpoint": path,
 /// "weight": w?}, ...], "learning_rate": r?}. The first member is the primary;
 /// paths are relative to the manifest; weights default to equal shares.
 CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& meta) {
+    const MixingOptions mixing = mixing_options_from_json(meta);  // bad names throw before loading
     const auto& ms = meta.at("members");
     if (!ms.is_array() || ms.empty()) throw std::runtime_error("ensemble manifest has no members");
     auto resolve = [&](const std::string& p) {
@@ -224,20 +270,29 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
     }
     if (meta.contains("infinigram")) {
         // A stored index, or the corpus itself (indexed at load, first
-        // "infinigram_bytes" bytes).
+        // "infinigram_bytes" bytes). The mode first: a saved weights file
+        // next to the index must have its bucket count.
+        model.hp_backend().set_infinigram_mode(mixing.infinigram_mode);
         model.attach_infinigram(resolve(meta.at("infinigram").get<std::string>()),
                                 meta.value("infinigram_bytes", std::size_t{0}));
     }
     if (meta.contains("neural")) {  // one path or a list
         const auto& nj = meta.at("neural");
         const double eta = meta.value("neural_learning_rate", 0.1);
+        // Adaptation first, so each expert is primed once, as it attaches.
+        if (meta.contains("neural_adapt")) model.hp_backend().set_neural_adaptation(meta.at("neural_adapt").get<double>());
         if (nj.is_array())
             for (const auto& p : nj) model.attach_neural(resolve(p.get<std::string>()), eta);
         else
             model.attach_neural(resolve(nj.get<std::string>()), eta);
-        if (meta.contains("neural_adapt")) model.hp_backend().set_neural_adaptation(meta.at("neural_adapt").get<double>());
     }
-    if (meta.value("session_cache", false)) model.hp_backend().set_session_cache(true);
+    if (meta.value("session_cache", false)) {
+        // "session_window": bytes the session index covers (0 = all).
+        model.hp_backend().set_session_cache(
+            true, 0.02, meta.value("session_window", HpSequenceBackend::kSessionWindow));
+    }
+    // Every member and stage attached: the gate starts at the members' weights.
+    model.hp_backend().set_mixing_options(mixing);
     return model;
 }
 
@@ -246,6 +301,12 @@ CyphaLMModel load_ensemble_manifest(const fs::path& jp, const nlohmann::json& me
 void save_cyphalm_ensemble_manifest(const std::string& manifest_path,
                                     const std::vector<std::string>& member_checkpoints,
                                     double learning_rate) {
+    save_cyphalm_ensemble_manifest(manifest_path, member_checkpoints, learning_rate, MixingOptions{});
+}
+
+void save_cyphalm_ensemble_manifest(const std::string& manifest_path,
+                                    const std::vector<std::string>& member_checkpoints,
+                                    double learning_rate, const MixingOptions& mixing) {
     nlohmann::json meta;
     meta["cyphalm_ensemble"] = 1;
     meta["note"] = "Serve-time ensemble: the first member is the primary; distributions are "
@@ -253,6 +314,7 @@ void save_cyphalm_ensemble_manifest(const std::string& manifest_path,
     meta["members"] = nlohmann::json::array();
     for (const auto& c : member_checkpoints) meta["members"].push_back({{"checkpoint", c}});
     meta["learning_rate"] = learning_rate;
+    mixing_options_to_json(mixing, meta);
     std::ofstream out(manifest_path);
     if (!out) throw std::runtime_error("cannot write ensemble manifest: " + manifest_path);
     out << meta.dump(2) << "\n";
@@ -271,6 +333,10 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
     const fs::path bin_file = hpbin_path(jp);
     if (fs::exists(bin_file)) {
         read_hpbin(model, bin_file);
+    } else if (meta.contains("hp_checkpoint") || meta.value("algorithm", std::string()) == "hp") {
+        // save_cyphalm_model wrote the state next to the JSON: without it the
+        // model would load untrained. (Legacy JSON-only checkpoints have neither key.)
+        throw std::runtime_error("hp checkpoint missing: " + bin_file.string() + " (for " + jp.string() + ")");
     }
     return model;
 }

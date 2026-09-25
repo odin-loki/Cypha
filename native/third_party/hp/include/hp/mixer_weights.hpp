@@ -15,6 +15,13 @@ namespace hp {
 
 inline constexpr int kMixerClamp = (1 << 16);
 
+/// Mixer learning rates run in 1/16ths (Q4): the update is
+/// (x * rate_q4) >> 18, which equals (x * rate) >> 14 for rate_q4 = 16 rate,
+/// so trained integer rates are bit-identical and a serve-time scale can go
+/// below 1 (MixerNet::set_rate_scale).
+inline constexpr int kMixerRateFrac = 4;
+inline constexpr int kMixerRateShift = 14 + kMixerRateFrac;
+
 using MixerWt = std::int32_t;
 inline std::int32_t mixer_wt_expand(MixerWt w) { return w; }
 inline MixerWt mixer_wt_pack(std::int32_t w) { return w; }

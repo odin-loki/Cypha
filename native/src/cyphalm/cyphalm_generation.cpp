@@ -70,10 +70,14 @@ int sample_top_p(const std::vector<double>& lp, double temperature, double top_p
     std::sort(order.begin(), order.end(), [&](int a, int b) {
         return lp[static_cast<std::size_t>(a)] > lp[static_cast<std::size_t>(b)];
     });
+    // Relative to the top byte: exp(lp / T) underflows to 0 for every byte
+    // at low T (and would pick the least likely one).
+    const double mx = n > 0 ? lp[static_cast<std::size_t>(order[0])] : 0.0;
     std::vector<double> probs(static_cast<std::size_t>(n));
     double sum = 0.0;
     for (int i = 0; i < n; ++i) {
-        probs[static_cast<std::size_t>(i)] = std::exp(lp[static_cast<std::size_t>(order[static_cast<std::size_t>(i)])] / temperature);
+        probs[static_cast<std::size_t>(i)] =
+            std::exp((lp[static_cast<std::size_t>(order[static_cast<std::size_t>(i)])] - mx) / temperature);
         sum += probs[static_cast<std::size_t>(i)];
     }
     for (int i = 0; i < n; ++i) probs[static_cast<std::size_t>(i)] /= sum + 1e-12;
@@ -220,7 +224,7 @@ void apply_decode_modifiers(std::vector<double>& lp, const std::vector<int>& rec
     }
 }
 
-void prime_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids,
+void prime_serve_context(CyphaLMModel& model, const DecodeParams& params,
                          const std::vector<int>& prompt_ids) {
     // New stream on the trained model. (reset_context() here used to replace the
     // predictor with an untrained one, so generation ignored all training.) The
@@ -228,16 +232,46 @@ void prime_serve_context(CyphaLMModel& model, const std::vector<int>& warmup_ids
     // 0.02-0.03 bits/byte held-out (CYPHALM_LM_QUALITY_REPORT.md).
     model.reset_stream(/*keep_history=*/true);
     model.set_serve_mode(true);
-    for (int id : warmup_ids) {
-        model.serve_advance(static_cast<std::uint32_t>(id));
+    // Read here: the warmup bytes, then the prompt but its last byte (the
+    // decoder reads that one, learning on).
+    std::vector<int> ctx(params.warmup_ids);
+    if (prompt_ids.size() > 1) ctx.insert(ctx.end(), prompt_ids.begin(), prompt_ids.end() - 1);
+    // Composite models score the last prompt_score_bytes of warmup + prompt
+    // (DecodeParams::prompt_score_bytes), so their mixing weights adapt to
+    // the prompt. Plain models learn the same either way.
+    HpSequenceBackend& hp = model.hp_backend();
+    const bool score = params.prompt_score_bytes > 0 && hp.is_composite();
+    const bool last_pending = !prompt_ids.empty();
+    const std::size_t want = score ? static_cast<std::size_t>(params.prompt_score_bytes) : 0;
+    const std::size_t n_score = std::min(ctx.size(), want - (score && last_pending ? 1 : 0));
+    for (std::size_t i = 0; i < ctx.size(); ++i) {
+        const auto id = static_cast<std::uint32_t>(ctx[i]);
+        if (i + n_score < ctx.size()) model.serve_advance(id);
+        else (void)model.serve_observe(id);
     }
-    if (prompt_ids.size() <= 1) {
-        return;
-    }
-    for (std::size_t i = 0; i + 1 < prompt_ids.size(); ++i) {
-        model.serve_advance(static_cast<std::uint32_t>(prompt_ids[i]));
-    }
+    // The decoder's first read of the last prompt byte then learns the
+    // weights from this distribution too.
+    if (score && last_pending) (void)hp.serve_next_byte_log_probs(model.config().vocab_size);
 }
+
+/// Every mixing weight as the request found it, put back when it ends
+/// (DecodeParams::restore_mixing).
+class MixingRestore {
+ public:
+    MixingRestore(HpSequenceBackend& hp, bool on) : hp_(hp), on_(on) {
+        if (on_) saved_ = hp_.mixing_state();
+    }
+    ~MixingRestore() {
+        if (on_) hp_.set_mixing_state(saved_);
+    }
+    MixingRestore(const MixingRestore&) = delete;
+    MixingRestore& operator=(const MixingRestore&) = delete;
+
+ private:
+    HpSequenceBackend& hp_;
+    bool on_;
+    HpSequenceBackend::MixingState saved_;
+};
 
 std::vector<int> build_recent_context(const std::vector<int>& warmup_ids,
                                       const std::vector<int>& prompt_ids,
@@ -463,87 +497,133 @@ GenerateOutput generate_beam(CyphaLMModel& model, const std::vector<int>& prompt
         return out;
     }
 
-    prime_serve_context(model, params.warmup_ids, prompt_ids);
+    HpSequenceBackend& hp = model.hp_backend();
+    MixingRestore mixing_restore(hp, params.restore_mixing);
+    prime_serve_context(model, params, prompt_ids);
+    LearningGuard learning_guard(hp);
+    // The prompt's last byte is learned like the rest of the prompt.
     if (!prompt_ids.empty()) {
         model.serve_advance(static_cast<std::uint32_t>(prompt_ids.back()));
     }
+    hp.set_learning(false);
     const int vocab = model.config().vocab_size;
-    HpSequenceBackend& hp = model.hp_backend();
-    const std::unique_ptr<hp::Predictor> root = hp.predictor_snapshot();
-    hp::Predictor work(root->config());
-    auto replay_tokens = [&](const std::vector<int>& tokens) {
-        work.copy_state_from(*root);
-        work.set_learning(params.learn_from_output);
-        for (int t : tokens) {
-            HpSequenceBackend::consume_byte_on(work, static_cast<std::uint8_t>(t));
+    const int expand_k = std::min(vocab, std::max(2 * width, 16));
+
+    // A hypothesis: its bytes after the committed ones, each byte's served
+    // log p (the step loss) and its score (the sum of log p after the decode
+    // modifiers, which ranks it).
+    struct BeamHypothesis {
+        std::vector<int> tokens;
+        std::vector<double> lp;
+        double score = 0.0;
+    };
+    std::vector<BeamHypothesis> beam(1);
+    std::vector<int>& gen = out.generated_ids;
+    // Commit the first n bytes of the hypotheses (shared by all of them):
+    // advance the live model on them, learning per learn_from_output (then
+    // scored first, so the mixing weights learn from them too, as when the
+    // byte decoders learn from output).
+    auto commit = [&](std::size_t n) {
+        const BeamHypothesis lead = beam[0];
+        hp.set_learning(params.learn_from_output);
+        for (std::size_t j = 0; j < n; ++j) {
+            const auto id = static_cast<std::uint32_t>(lead.tokens[j]);
+            if (params.learn_from_output) (void)model.serve_observe(id);
+            else model.serve_advance(id);
+            gen.push_back(lead.tokens[j]);
+            GenerateStep step_row;
+            step_row.token_id = lead.tokens[j];
+            step_row.loss = -lead.lp[j];
+            out.per_step.push_back(step_row);
+        }
+        hp.set_learning(false);
+        for (BeamHypothesis& h : beam) {
+            h.tokens.erase(h.tokens.begin(), h.tokens.begin() + static_cast<std::ptrdiff_t>(n));
+            h.lp.erase(h.lp.begin(), h.lp.begin() + static_cast<std::ptrdiff_t>(n));
         }
     };
-
-    struct BeamHypothesis {
-        double score = 0.0;
-        std::vector<int> tokens;
-    };
-
-    std::vector<BeamHypothesis> beam;
-    beam.push_back({});
-
-    const int expand_k = std::min(vocab, std::max(2 * width, 16));
 
     for (int step = 0; step < max_bytes; ++step) {
         struct Candidate {
-            BeamHypothesis hyp;
+            std::size_t parent = 0;
+            int byte = 0;
+            double lp = 0.0;
             double score = 0.0;
         };
         std::vector<Candidate> candidates;
+        {
+            // Each hypothesis is replayed on the live model (learning off) and
+            // scored with the full served distribution, then rewound exactly,
+            // as word lookahead does: no model copy.
+            hp::StreamRewind rewind(hp.all_predictors());
+            const auto nn_saved = hp.neural_states();  // the rewind covers predictors only
+            const std::size_t session_saved = hp.session_size();
+            for (std::size_t h = 0; h < beam.size(); ++h) {
+                const BeamHypothesis& hyp = beam[h];
+                for (int t : hyp.tokens) hp.serve_advance_byte(static_cast<std::uint8_t>(t));
+                const std::vector<double> lp = hp.serve_next_byte_log_probs(vocab);
+                rewind.rewind();
+                if (hp.has_neural()) hp.set_neural_states(nn_saved);
+                hp.truncate_session(session_saved);
+                hp.invalidate_scoring_cache();
 
-        for (const BeamHypothesis& hyp : beam) {
-            replay_tokens(hyp.tokens);
-            std::vector<double> lp = HpSequenceBackend::byte_log_probs_bit_tree(work, vocab);
-            const std::vector<int> recent =
-                build_recent_context(params.warmup_ids, prompt_ids, hyp.tokens);
-            apply_decode_modifiers(lp, recent, params);
-            std::vector<int> order(static_cast<std::size_t>(vocab));
-            for (int i = 0; i < vocab; ++i) {
-                order[static_cast<std::size_t>(i)] = i;
-            }
-            const int kk = std::min(expand_k, vocab);
-            std::partial_sort(order.begin(), order.begin() + kk, order.end(), [&](int a, int b) {
-                return lp[static_cast<std::size_t>(a)] > lp[static_cast<std::size_t>(b)];
-            });
-            for (int i = 0; i < kk; ++i) {
-                const int b = order[static_cast<std::size_t>(i)];
-                Candidate cand;
-                cand.hyp.tokens = hyp.tokens;
-                cand.hyp.tokens.push_back(b);
-                cand.hyp.score = hyp.score + lp[static_cast<std::size_t>(b)];
-                cand.score = cand.hyp.score;
-                candidates.push_back(std::move(cand));
+                std::vector<int> so_far = gen;
+                so_far.insert(so_far.end(), hyp.tokens.begin(), hyp.tokens.end());
+                std::vector<double> mod = lp;
+                apply_decode_modifiers(mod, build_recent_context(params.warmup_ids, prompt_ids, so_far), params);
+                const int n = static_cast<int>(mod.size());
+                std::vector<int> order(static_cast<std::size_t>(n));
+                for (int i = 0; i < n; ++i) {
+                    order[static_cast<std::size_t>(i)] = i;
+                }
+                // Ties go to the lower byte, as argmax_log_probs.
+                const int kk = std::min(expand_k, n);
+                std::partial_sort(order.begin(), order.begin() + kk, order.end(), [&](int a, int b) {
+                    const double la = mod[static_cast<std::size_t>(a)], lb = mod[static_cast<std::size_t>(b)];
+                    return la > lb || (la == lb && a < b);
+                });
+                for (int i = 0; i < kk; ++i) {
+                    const int b = order[static_cast<std::size_t>(i)];
+                    candidates.push_back({h, b, lp[static_cast<std::size_t>(b)],
+                                          hyp.score + mod[static_cast<std::size_t>(b)]});
+                }
             }
         }
-
         const int keep = std::min(width, static_cast<int>(candidates.size()));
+        if (keep == 0) break;
         std::partial_sort(candidates.begin(), candidates.begin() + keep, candidates.end(),
-                          [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
-        beam.clear();
+                          [](const Candidate& a, const Candidate& b) {
+                              if (a.score != b.score) return a.score > b.score;
+                              return a.parent != b.parent ? a.parent < b.parent : a.byte < b.byte;
+                          });
+        std::vector<BeamHypothesis> next;
         for (int i = 0; i < keep; ++i) {
-            beam.push_back(std::move(candidates[static_cast<std::size_t>(i)].hyp));
+            const Candidate& c = candidates[static_cast<std::size_t>(i)];
+            BeamHypothesis hyp = beam[c.parent];
+            hyp.tokens.push_back(c.byte);
+            hyp.lp.push_back(c.lp);
+            hyp.score = c.score;
+            next.push_back(std::move(hyp));
         }
+        beam = std::move(next);
+        // Bytes every hypothesis shares are final: commit them, which keeps
+        // the replays short.
+        std::size_t common = beam[0].tokens.size();
+        for (const BeamHypothesis& hyp : beam) {
+            std::size_t j = 0;
+            while (j < common && j < hyp.tokens.size() && hyp.tokens[j] == beam[0].tokens[j]) ++j;
+            common = j;
+        }
+        if (common > 0) commit(common);
     }
 
-    if (beam.empty()) {
-        return out;
+    // The best hypothesis's remaining bytes (the first of equal scores).
+    std::size_t best = 0;
+    for (std::size_t h = 1; h < beam.size(); ++h) {
+        if (beam[h].score > beam[best].score) best = h;
     }
-    std::sort(beam.begin(), beam.end(),
-              [](const BeamHypothesis& a, const BeamHypothesis& b) { return a.score > b.score; });
-    const BeamHypothesis& best = beam[0];
-    out.generated_ids = best.tokens;
-    for (int id : best.tokens) {
-        GenerateStep step_row;
-        step_row.token_id = id;
-        step_row.loss = -hp.log_prob_byte(static_cast<std::uint8_t>(id));
-        out.per_step.push_back(step_row);
-        model.serve_advance(static_cast<std::uint32_t>(id));
-    }
+    beam = {beam[best]};
+    commit(beam[0].tokens.size());
     return out;
 }
 
@@ -582,8 +662,9 @@ GenerateOutput generate_word_lookahead(CyphaLMModel& model, const std::vector<in
     GenerateOutput out;
     out.strategy = params.strategy;
     if (max_bytes <= 0) return out;
-    prime_serve_context(model, params.warmup_ids, prompt_ids);
     HpSequenceBackend& hp = model.hp_backend();
+    MixingRestore mixing_restore(hp, params.restore_mixing);
+    prime_serve_context(model, params, prompt_ids);
     LearningGuard learning_guard(hp);
     // The prompt's last byte is learned like the rest of the prompt.
     if (!prompt_ids.empty()) model.serve_advance(static_cast<std::uint32_t>(prompt_ids.back()));
@@ -692,7 +773,8 @@ GenerateOutput generate_decode(CyphaLMModel& model, const std::vector<int>& prom
 
     GenerateOutput out;
     out.strategy = params.strategy;
-    prime_serve_context(model, params.warmup_ids, prompt_ids);
+    MixingRestore mixing_restore(model.hp_backend(), params.restore_mixing);
+    prime_serve_context(model, params, prompt_ids);
     int last = prompt_ids.empty() ? 0 : prompt_ids.back();
     std::mt19937_64 rng(params.seed);
     DecodeParams sample_params = params;
@@ -812,7 +894,8 @@ void stream_generate(CyphaLMModel& model, const std::vector<int>& prompt_ids, in
         (void)cb(step_record_json(GenerateStep{}, static_cast<int>(g.per_step.size()), true, false));
         return;
     }
-    prime_serve_context(model, params.warmup_ids, prompt_ids);
+    MixingRestore mixing_restore(model.hp_backend(), params.restore_mixing);
+    prime_serve_context(model, params, prompt_ids);
     int last = prompt_ids.empty() ? 0 : prompt_ids.back();
     std::mt19937_64 rng(params.seed);
     DecodeParams sample_params = params;

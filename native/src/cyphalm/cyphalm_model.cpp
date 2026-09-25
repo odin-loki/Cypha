@@ -197,6 +197,10 @@ void CyphaLMModel::serve_advance(std::uint32_t token_id) {
     hp_->serve_advance_byte(token_to_byte(token_id));
 }
 
+double CyphaLMModel::serve_observe(std::uint32_t token_id) {
+    return hp_->observe_next_byte(token_to_byte(token_id));
+}
+
 std::uint32_t CyphaLMModel::serve_greedy_next(std::uint32_t token_id) {
     hp_->serve_advance_byte(token_to_byte(token_id));
     return static_cast<std::uint32_t>(hp_->serve_greedy_next_byte());
