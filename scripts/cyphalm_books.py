@@ -49,19 +49,30 @@ def retry(fn):
             time.sleep(2 ** attempt)
 
 
+def _drop_part(part):
+    try:
+        if os.path.exists(part):
+            os.remove(part)
+    except OSError:
+        pass
+
+
 def download(split, book_id, dst_dir):
     dst = os.path.join(dst_dir, book_id + ".txt")
     part = dst + ".part"
     if os.path.exists(dst):
-        if os.path.exists(part):
-            os.remove(part)
+        _drop_part(part)
         return dst
     os.makedirs(dst_dir, exist_ok=True)
-    retry(lambda: urllib.request.urlretrieve(f"{BUCKET}/{split}/{book_id}.txt", part))
-    if os.path.exists(dst):
-        os.remove(part)
-    else:
-        os.rename(part, dst)
+
+    def grab():
+        urllib.request.urlretrieve(f"{BUCKET}/{split}/{book_id}.txt", part)
+        if os.path.exists(dst):
+            _drop_part(part)
+            return
+        os.replace(part, dst)
+
+    retry(grab)
     return dst
 
 
