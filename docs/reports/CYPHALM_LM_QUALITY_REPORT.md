@@ -868,7 +868,8 @@ and the commit messages; numbers are the ones measured above.
 | `cyphalm_lm_quality` | pretrain or load, score held-out next-byte distributions, generate | see below |
 | `cyphalm_generate` | generate from a cold model, checkpoint or manifest | see below |
 | `cyphalm_gen_bench` | continue N held-out prompts, score with a fixed judge (learning off, exact rewind) | `--load CKPT` · `--member CKPT` (repeatable) · `--infinigram IDX` · `--judge CKPT` · `--text FILE` · `--offset` (96000000) · `--prompts` (8) · `--prompt-bytes` (256) · `--gen-bytes` (200) · `--stride` (8192) · `--word-candidates` (8) · `--temperature` (0.8) · `--min-p` (0.1) · `--seed` (1234) |
-| `cyphalm_shard_train` | split `--bytes` from `--offset` into N equal shards (remainder dropped), train one model per shard on threads, write `shard_<i>.json/.hpbin` + `ensemble.json` | `--train FILE` · `--bytes N` · `--offset` (0) · `--shards` (4) · `--threads` (all cores) · `--tier` (lean) · `--table-bits` (20) · `--out DIR` |
+| `cyphalm_shard_train` | split `--bytes` from `--offset` into N equal shards (remainder dropped), train one model per shard on threads, write `shard_<i>.json/.hpbin` + `ensemble.json`. `--threads` below 1 exits 2; a shard that fails (unreadable or empty slice, save error) is reported and the run exits 1 without a manifest | `--train FILE` · `--bytes N` · `--offset` (0) · `--shards` (4) · `--threads` (all cores, ≥ 1) · `--tier` (lean) · `--table-bits` (20) · `--out DIR` |
+| `cyphalm_trace` | spans of a text found verbatim in the corpus (∞-gram index), JSON on stdout. An unreadable `--text` exits 1 before the index is built | `--corpus IGR\|TEXT` · `--corpus-bytes` (0 = all) · `--text FILE` · `--offset` (0) · `--bytes` (0 = rest) · `--min-len` (32) · `--top` (20) |
 | `cyphalm_infinigram_build` | SA-IS suffix array over a corpus slice, IGR2 file | `--text FILE` · `--bytes N` · `--offset` (0) · `--out X.igr` |
 | `scripts/build_cyphalm_winner.sh` | rebuild the winner checkpoints + index | `ENWIK8 OUT_DIR [BUILD_DIR] [THREADS]` |
 
@@ -885,8 +886,9 @@ and the commit messages; numbers are the ones measured above.
 | `--neural-lr R` | manifest `neural_learning_rate`, else 0.1 | mixing-weight rate of every expert, manifest ones included; the effective rate is written as `neural_learning_rate` |
 | `--neural-adapt LR` | manifest | output-layer SGD rate of the experts (0 = frozen) |
 | `--ensemble-lr R` | config (0.01) | ensemble weight learning rate; 0 = fixed |
-| `--merge CKPT` | | merge an equal-data shard's tables into `--load` (`merge_shard_tables`, repeatable) |
+| `--merge CKPT` | | merge an equal-data shard's tables into `--load` (`merge_shard_tables`, repeatable). Exits 1 when table sizes differ (folded or dropped models): merge before folding |
 | `--fold CM,MATCH,POOL[,HEBB]` | 0 = keep | fold trained tables to these bits (load path; also every `--member`) |
+| `--fold-auto OCC` | 0 = off | fold each table while its projected occupancy stays ≤ OCC (`fold_auto`, members too); OCC outside (0, 1) exits 2 |
 | `--drop MASK` | 0 | drop context models, bit i = `hp::Predictor::CmId` i (slim's extra 13: `0x628426bc0`) |
 | `--match-drop MASK` | 0 | drop byte-match models, bit k over `match_[0..8], smatch, skipk, skip3, skip4` (slim: `0xd06`) |
 | `--infinigram X.igr` | | attach the ∞-gram expert (loads `X.igr.weights.json` if present) |
@@ -973,6 +975,8 @@ REST body fields that map to the table in *Decode controls added*:
 | `HpSequenceBackend::set_frozen_scoring`, `set_tree_prune`, `set_learning`, `set_ensemble_learning_rate`, `ensemble_weights`, `infinigram_weights`, `set_infinigram_weights`, `neural_learning_rate` | serve knobs |
 | `HpSequenceBackend::is_composite` | any mixing stage active; `log_prob_byte`, `serve_greedy_next_byte`, `serve_sample_next_byte` then use the full mix, and reuse the distribution `next_byte_log_probs` served at this position (as `observe_next_byte` does) |
 | `hp::Predictor::set_learning`, `learned_digest`, `set_serve_adaptation`, `fold_tables`, `reset_stream_state` | hp side |
+| `hp::Predictor::tables_match(src)` | every mergeable table (context, Hebbian, pool, mixer) the same size as in `src`. `merge_shard_tables` and `transfer_tables_from` return `false` and change nothing when it is false; `hp::merge_predictor_tables` returns `MergeStatus::ConfigMismatch` |
+| `hp::Predictor::fold_auto(occ)` / `HpSequenceBackend::fold_auto(occ)` | occupancy fold; outside (0, 1) the hp side folds nothing and the backend throws `std::invalid_argument` |
 | `hp::StreamRewind` | exact rewind of one or more predictors across bytes |
 | `hp::MapScope` | map large tables from the `.hpbin` on load |
 | `InfiniGram::build` / `InfiniGram(path)` / `query` | index build, load, longest-suffix counts |
@@ -982,7 +986,7 @@ REST body fields that map to the table in *Decode controls added*:
 | file | format |
 |---|---|
 | `BASE.json` | `{"algorithm": "hp", "config": {...CyphaLMConfig...}, "hp_checkpoint": "BASE.hpbin", "train_step_count", "note"}` |
-| `BASE.hpbin` | magic `HPCP` + version. v1: original. v2 (`39ddaf9`): + sentence memory. v3 (`74a2a13`): context slots packed to 16 bits (10-bit state + 6-bit checksum, was 16 + 8). v1/v2 convert on load; saves are v3. Folded models store their caps in the JSON and reload at the smaller size. |
+| `BASE.hpbin` | magic `HPCP` + version. v1: original. v2 (`39ddaf9`): + sentence memory. v3 (`74a2a13`): context slots packed to 16 bits (10-bit state + 6-bit checksum, was 16 + 8). v4: mixer layer-1 scale and skip. v5: the optional upstream context models (`hp_extra_cms` ≠ 0 only). Older versions convert on load; saves are v4 (v5 with extra context models). Folded models store their caps in the JSON and reload at the smaller size; per-table sizes (`fold_auto`) come from the file, and a model saved dropped loads dropped. `load_cyphalm_model` throws on a bad magic, an unknown version, a truncated file, a mixer or table whose shape does not match the JSON config, and a missing `.hpbin` next to a JSON that names one (`hp_checkpoint` / `"algorithm": "hp"`; legacy JSON-only checkpoints still load). `HP_CKPT_SIZES=1` prints each component's size on save (byte-match `match_[]` and word-match `wmatch_[]` separately). |
 | ensemble manifest | `{"cyphalm_ensemble": 1, "members": [{"checkpoint": "a.json", "weight": w?}, ...], "learning_rate": r?, "infinigram": "x.igr"?, "note"?}`. First member is the primary. Paths are relative to the manifest. Member weights default to 1/N each (the primary keeps the rest). `learning_rate` overrides `hp_ensemble_learning_rate`. |
 | `X.igr` (IGR2, `2b8b1b9`) | `"IGR2"`, uint64 n, uint64 bits (= ceil(log2 n), 27 for 95 MB), n text bytes, zero pad to 8, suffix array bit-packed little-endian at `bits` each, 8 bytes pad. `mmap`ed read-only and shared. IGR1 (`46592ff`): `"IGR1"`, uint64 n, text, pad, n uint32 entries. Not on Windows. |
 | `X.igr.weights.json` | `{"weights": [3 per bucket × 256 buckets], "learned_on", "offset", "note"}` from `--ig-weights-out` |
@@ -1001,6 +1005,10 @@ agreement.
 | `native_hp_stream_rewind_smoke` | checkpoints byte-identical after 60 random rewinds; 1000 later distributions match |
 | `native_hp_fold_smoke` | folded + dropped model saves, reloads identically, checkpoint shrinks |
 | `native_hp_checkpoint_roundtrip_smoke` | lossy knobs survive save/load; reloaded predictor continues exactly |
+| `native_hp_checkpoint_robust_smoke` | bad magic / version, truncated and missing `.hpbin` throw; mixer shape and table mask checks; dropped context / match models reload dropped (and live ones into dropped builds); folded context / pool / Hebbian merges refused unchanged; `fold_auto` range |
+| `native_cyphalm_shard_train_threads`, `native_cyphalm_shard_train_worker_error` | `--threads 0` is an error; a failing shard is reported, no manifest |
+| `native_cyphalm_trace_missing_text` | a missing `--text` is reported before indexing |
+| `native_cyphalm_lm_quality_fold_auto_range` | `--fold-auto` outside (0, 1) is an error |
 | `native_cyphalm_ensemble_smoke` | mix equals a hand-computed blend; manifest load equals direct build; lookahead leaves members unchanged; `log_prob_byte` / greedy / sampling read the served mix, cold or reused, without changing what is learned |
 | `native_cyphalm_neural_smoke` | LSTM / Transformer experts against a reference; mix normalised; `log_prob_byte` / greedy use the neural and session mix |
 | `native_cyphalm_lm_quality_load_only_flags` | a load-only harness flag without `--load` is an error |

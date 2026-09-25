@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #include "cypha/cyphalm/neural_expert.hpp"
@@ -219,15 +220,18 @@ class HpSequenceBackend {
     std::vector<hp::Predictor*> all_predictors();
     /// New stream on every model (``hp::Predictor::reset_stream_state``).
     void reset_stream(bool keep_history);
-    /// Fold this model's and every ensemble member's tables to the caps and
-    /// drops in ``target`` (``hp::Predictor::fold_tables``).
     /// Per-table occupancy fold (``hp::Predictor::fold_auto``), members too.
+    /// Throws std::invalid_argument unless 0 < ``max_occupancy`` < 1.
     std::size_t fold_auto(double max_occupancy) {
+        if (!(max_occupancy > 0.0 && max_occupancy < 1.0))
+            throw std::invalid_argument("fold_auto: max_occupancy must be in (0, 1)");
         last_valid_ = ig_valid_ = nn_valid_ = ss_valid_ = served_valid_ = false;
         std::size_t freed = pred_->fold_auto(max_occupancy);
         for (auto& m : members_) freed += m.backend->fold_auto(max_occupancy);
         return freed;
     }
+    /// Fold this model's and every ensemble member's tables to the caps and
+    /// drops in ``target`` (``hp::Predictor::fold_tables``).
     void fold_tables(const hp::Config& target) {
         pred_->fold_tables(target);
         cfg_ = pred_->config();

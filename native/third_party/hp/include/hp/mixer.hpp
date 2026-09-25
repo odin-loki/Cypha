@@ -149,6 +149,11 @@ class MixerNet {
         return mixer_wt_pack(clamp_int(merged, -kMixerClamp, kMixerClamp));
     }
 
+    /// Same inputs, weight sets and set sizes as ``o`` (merge / copy need it).
+    bool same_shape(const MixerNet& o) const {
+        return o.n_ == n_ && o.k_ == k_ && o.ctx_sizes_ == ctx_sizes_ && o.v_.size() == v_.size();
+    }
+
     void merge_from(const MixerNet& src, std::uint64_t src_weight, std::uint64_t dst_weight) {
         if (src.n_ != n_ || src.k_ != k_ || src.w_.size() != w_.size() ||
             src.v_.size() != v_.size()) {
@@ -198,6 +203,11 @@ class MixerNet {
     }
 
     void checkpoint_read(std::istream& is) {
+        // The predictor's Config fixed the shape at construction; a file with
+        // another one (expert count, weight sets) must not load (failbit).
+        const int n0 = n_, k0 = k_;
+        const std::vector<int> sizes0 = ctx_sizes_;
+        const std::size_t v0 = v_.size();
         blob::read_pod(is, n_);
         blob::read_pod(is, k_);
         blob::read_pod(is, lr_);
@@ -224,9 +234,27 @@ class MixerNet {
             blob::read_pod(is, scale_);
             blob::read_pod(is, skip_l1_);
         }
+        if (!shape_ok_(n0, k0, sizes0, v0)) is.setstate(std::ios::failbit);
     }
 
  private:
+    /// Loaded state has the constructed shape and is self-consistent: every
+    /// per-set vector has k_ entries, weight set j is ctx_sizes_[j] x n_, and
+    /// the selected rows are in range (mix() indexes them unchecked).
+    bool shape_ok_(int n0, int k0, const std::vector<int>& sizes0, std::size_t v0) const {
+        const auto k = static_cast<std::size_t>(k_);
+        if (n_ != n0 || k_ != k0 || ctx_sizes_ != sizes0 || v_.size() != v0) return false;
+        if (st_.size() != static_cast<std::size_t>(n_) || ctx_.size() != k || dot_.size() != k ||
+            pr_.size() != k || lr1_.size() != k || w_.size() != k || m_ < 0 || m_ > n_)
+            return false;
+        for (std::size_t j = 0; j < k; ++j) {
+            if (w_[j].size() != static_cast<std::size_t>(ctx_sizes_[j]) * static_cast<std::size_t>(n_) ||
+                ctx_[j] < 0 || ctx_[j] >= ctx_sizes_[j])
+                return false;
+        }
+        return k_ == 0 || (ctx2_ >= 0 && static_cast<std::size_t>(ctx2_) < v_.size() / k);
+    }
+
     int n_, k_, lr_;
     std::vector<int> ctx_sizes_;
     std::vector<int> ctx_;

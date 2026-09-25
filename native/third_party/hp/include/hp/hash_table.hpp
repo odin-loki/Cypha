@@ -19,6 +19,7 @@
 #include <vector>
 #if !defined(_WIN32)
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -112,7 +113,12 @@ class ZeroBuf {
         const MapSource* src = MapScope::active();
         if (src != nullptr && src->fd >= 0 && bytes >= src->min_bytes) {
             const std::streamoff off = is.tellg();
-            if (off >= 0) {
+            // Map only what the file holds: pages past the end of a truncated
+            // checkpoint would fault (SIGBUS) on first touch. A short file
+            // takes the read below, which fails the stream instead.
+            struct stat fst {};
+            if (off >= 0 && fstat(src->fd, &fst) == 0 &&
+                static_cast<std::size_t>(off) + bytes <= static_cast<std::size_t>(fst.st_size)) {
                 const long page = sysconf(_SC_PAGESIZE);
                 const std::size_t start = static_cast<std::size_t>(off);
                 const std::size_t aligned = start - start % static_cast<std::size_t>(page);
@@ -218,6 +224,8 @@ class HashTable {
     void checkpoint_read(std::istream& is) {
         blob::read_pod(is, mask_);
         tab_.read(is);
+        // get()/ref() index through mask_: it must cover exactly the table read.
+        if (static_cast<std::size_t>(mask_) + 1 != tab_.size()) is.setstate(std::ios::failbit);
     }
 
  private:

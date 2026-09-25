@@ -177,6 +177,10 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    if (!(fold_auto >= 0.0 && fold_auto < 1.0)) {  // 0 = off
+        std::cerr << "--fold-auto must be in (0, 1), a projected table occupancy (0 = off)\n";
+        return 2;
+    }
     if (load_json.empty() && !load_only_given.empty()) {
         std::cerr << load_only_given.front() << " needs --load (it applies to a loaded checkpoint or manifest)\n";
         return 2;
@@ -195,8 +199,12 @@ int main(int argc, char** argv) {
         // model's RAM for all shards' data (hp::Predictor::merge_shard_tables).
         for (std::size_t k = 0; k < merges.size(); ++k) {
             auto src = cypha::cyphalm::load_cyphalm_model(merges[k]);
-            model->hp_backend().predictor().merge_shard_tables(src.hp_backend().predictor(), 1,
-                                                               static_cast<std::uint64_t>(k + 1));
+            if (!model->hp_backend().predictor().merge_shard_tables(src.hp_backend().predictor(), 1,
+                                                                    static_cast<std::uint64_t>(k + 1))) {
+                std::cerr << "--merge " << merges[k] << ": table sizes differ from --load (folded or "
+                          << "dropped models cannot be merged; merge before folding)\n";
+                return 1;
+            }
         }
         if (!merges.empty()) {
             model->reset_stream(/*keep_history=*/true);

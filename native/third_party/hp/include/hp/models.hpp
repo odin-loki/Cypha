@@ -306,9 +306,15 @@ class ContextModel {
         return n >= 8 ? 0 : 255 - n * 32;
     }
 
+    /// Slot-for-slot compatible with ``src`` (same table size): merging or
+    /// copying needs it. A folded or dropped model is not.
+    bool tables_match(const ContextModel& src) const { return t_.size() == src.t_.size(); }
+
     /// Merge learned tables from ``src`` (StateMap + hash slot states).
-    void merge_tables_from(const ContextModel& src, std::uint64_t src_weight,
+    /// Returns false, changing nothing, when the tables differ in size.
+    bool merge_tables_from(const ContextModel& src, std::uint64_t src_weight,
                            std::uint64_t dst_weight, std::uint16_t min_statemap_count = 0) {
+        if (!tables_match(src)) return false;
         sm_.merge_from(src.sm_, src_weight, dst_weight, min_statemap_count);
         const std::size_t n = t_.size();
         const StateTable& st = state_table();
@@ -329,12 +335,16 @@ class ContextModel {
                 t_.data()[i] = sv;
             }
         }
+        return true;
     }
 
-    void copy_tables_from(const ContextModel& src) {
+    /// Returns false, changing nothing, when the tables differ in size.
+    bool copy_tables_from(const ContextModel& src) {
+        if (!tables_match(src)) return false;
         sm_.copy_tables_from(src.sm_);
         const std::size_t n = t_.size();
         std::memcpy(t_.data(), src.t_.data(), n * sizeof(std::uint16_t));
+        return true;
     }
 
     /// Lossy serve: reset hash slots whose bit-history state has fewer than
@@ -385,12 +395,22 @@ class ContextModel {
         blob::read_pod(is, bits_);
         blob::read_pod(is, limit_);
         t_.checkpoint_read(is);
+        // The file's table decides the shape, not the constructor: a model
+        // saved dropped (one slot, bits 0) is off whatever this one was built
+        // as, and a live one needs mask_ and the table to agree with bits_.
+        off_ = bits_ <= 0;
+        if (bits_ > 30 ||
+            t_.size() != (off_ ? std::size_t{1} : std::size_t{1} << bits_) ||
+            mask_ != (off_ ? 0u : (1u << bits_) - 1)) {
+            is.setstate(std::ios::failbit);
+        }
         if (g_hp_ckpt_read_version < 3) {
             // v1/v2: 16-bit states + separate 8-bit checksums; pack them.
             ZeroBuf<std::uint8_t> chk;
             chk.read(is);
+            if (chk.size() != t_.size()) is.setstate(std::ios::failbit);
             std::uint16_t* t = t_.data();
-            for (std::size_t i = 0; i < t_.size(); ++i) {
+            for (std::size_t i = 0; is && i < t_.size(); ++i) {
                 const std::uint8_t c8 = chk[i];
                 t[i] = c8 == 0 ? static_cast<std::uint16_t>(0)
                                : slot_pack(t[i] & kStateMask, chk_of(static_cast<std::uint8_t>(c8 - 1u)));
@@ -667,6 +687,10 @@ class MatchModel {
         blob::read_pod(is, skip_);
         blob::read_pod(is, tab_mask_);
         tab_.checkpoint_read(is);
+        // As ContextModel: the table read decides. Saved dropped (one slot,
+        // mask 0) means off; a live table needs tab_mask_ to cover it exactly.
+        off_ = tab_mask_ == 0;
+        if (static_cast<std::size_t>(tab_mask_) + 1 != tab_.size()) is.setstate(std::ios::failbit);
         blob::read_array(is, st_);
         blob::read_pod(is, ptr_);
         blob::read_pod(is, len_);
@@ -838,8 +862,16 @@ class HebbianModel {
         return sm_.learned_digest(h);
     }
 
-    void merge_tables_from(const HebbianModel& src, std::uint64_t src_weight,
+    /// Same synapse and bit-history table sizes as ``src`` (a folded model differs).
+    bool tables_match(const HebbianModel& src) const {
+        return t_.size() == src.t_.size() && syn_target_.size() == src.syn_target_.size() &&
+               syn_strength_.size() == src.syn_strength_.size();
+    }
+
+    /// Returns false, changing nothing, when the tables differ in size.
+    bool merge_tables_from(const HebbianModel& src, std::uint64_t src_weight,
                            std::uint64_t dst_weight, std::uint16_t min_statemap_count = 0) {
+        if (!tables_match(src)) return false;
         sm_.merge_from(src.sm_, src_weight, dst_weight, min_statemap_count);
         const std::size_t n = t_.size();
         const StateTable& st = state_table();
@@ -865,14 +897,18 @@ class HebbianModel {
                 syn_strength_[i] = src.syn_strength_[i];
             }
         }
+        return true;
     }
 
-    void copy_tables_from(const HebbianModel& src) {
+    /// Returns false, changing nothing, when the tables differ in size.
+    bool copy_tables_from(const HebbianModel& src) {
+        if (!tables_match(src)) return false;
         sm_.copy_tables_from(src.sm_);
         const std::size_t n = t_.size();
         std::memcpy(t_.data(), src.t_.data(), n * sizeof(std::uint16_t));
         syn_target_ = src.syn_target_;
         syn_strength_ = src.syn_strength_;
+        return true;
     }
 
     void checkpoint_write(std::ostream& os) const {
@@ -895,6 +931,11 @@ class HebbianModel {
         blob::read_vec(is, syn_strength_);
         sm_.checkpoint_read(is);
         t_.checkpoint_read(is);
+        // Synapses and bit histories are indexed through mask_ (possibly folded).
+        const std::size_t n = static_cast<std::size_t>(mask_) + 1;
+        if (syn_target_.size() != n || syn_strength_.size() != n || t_.size() != n) {
+            is.setstate(std::ios::failbit);
+        }
         blob::read_pod(is, limit_);
         blob::read_pod(is, h_);
         blob::read_pod(is, idx_);

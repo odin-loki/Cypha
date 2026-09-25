@@ -553,9 +553,27 @@ target_link_libraries(hp_fold_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_fold_smoke)
 add_test(NAME native_hp_fold_smoke COMMAND "$<TARGET_FILE:hp_fold_smoke>")
 set_tests_properties(native_hp_fold_smoke PROPERTIES TIMEOUT 120)
+add_executable(hp_checkpoint_robust_smoke tools/hp_checkpoint_robust_smoke.cpp)
+target_link_libraries(hp_checkpoint_robust_smoke PRIVATE cypha_lm_native)
+cypha_mingw_apply_exe_link_options(hp_checkpoint_robust_smoke)
+add_test(NAME native_hp_checkpoint_robust_smoke COMMAND "$<TARGET_FILE:hp_checkpoint_robust_smoke>")
+set_tests_properties(native_hp_checkpoint_robust_smoke PROPERTIES TIMEOUT 120)
 add_executable(cyphalm_shard_train tools/cyphalm_shard_train.cpp)
 target_link_libraries(cyphalm_shard_train PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_shard_train)
+# --threads 0 is an error (it used to write an empty manifest); a failing
+# shard (here: no such corpus) is reported and no manifest is written.
+add_test(NAME native_cyphalm_shard_train_threads
+         COMMAND "$<TARGET_FILE:cyphalm_shard_train>" --train none --bytes 100 --threads 0
+                 --out "${CMAKE_CURRENT_BINARY_DIR}/shard_train_threads")
+set_tests_properties(native_cyphalm_shard_train_threads PROPERTIES
+                     PASS_REGULAR_EXPRESSION "--threads must be at least 1" TIMEOUT 30)
+add_test(NAME native_cyphalm_shard_train_worker_error
+         COMMAND "$<TARGET_FILE:cyphalm_shard_train>" --train "${CMAKE_CURRENT_BINARY_DIR}/no_such_corpus"
+                 --bytes 100 --shards 2 --threads 1 --table-bits 16
+                 --out "${CMAKE_CURRENT_BINARY_DIR}/shard_train_worker_error")
+set_tests_properties(native_cyphalm_shard_train_worker_error PROPERTIES
+                     PASS_REGULAR_EXPRESSION "no manifest written" TIMEOUT 60)
 add_executable(cyphalm_infinigram_build tools/cyphalm_infinigram_build.cpp)
 target_link_libraries(cyphalm_infinigram_build PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_infinigram_build)
@@ -567,6 +585,12 @@ set_tests_properties(native_cyphalm_infinigram_smoke PROPERTIES TIMEOUT 120)
 add_executable(cyphalm_trace tools/cyphalm_trace.cpp)
 target_link_libraries(cyphalm_trace PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_trace)
+# A missing --text is reported before the corpus is indexed.
+add_test(NAME native_cyphalm_trace_missing_text
+         COMMAND "$<TARGET_FILE:cyphalm_trace>" --corpus "${CMAKE_CURRENT_BINARY_DIR}/no_such_corpus"
+                 --text "${CMAKE_CURRENT_BINARY_DIR}/no_such_text")
+set_tests_properties(native_cyphalm_trace_missing_text PROPERTIES
+                     PASS_REGULAR_EXPRESSION "cannot open --text" TIMEOUT 30)
 add_executable(cyphalm_neural_smoke tools/cyphalm_neural_smoke.cpp)
 target_link_libraries(cyphalm_neural_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_neural_smoke)
@@ -613,6 +637,10 @@ add_test(NAME native_cyphalm_lm_quality_load_only_flags
          COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --neural-lr 0.05 --gen-bytes 0)
 set_tests_properties(native_cyphalm_lm_quality_load_only_flags PROPERTIES
                      PASS_REGULAR_EXPRESSION "--neural-lr needs --load" TIMEOUT 30)
+add_test(NAME native_cyphalm_lm_quality_fold_auto_range
+         COMMAND "$<TARGET_FILE:cyphalm_lm_quality>" --fold-auto 1.5 --gen-bytes 0)
+set_tests_properties(native_cyphalm_lm_quality_fold_auto_range PROPERTIES
+                     PASS_REGULAR_EXPRESSION "--fold-auto must be in \\(0, 1\\)" TIMEOUT 30)
 
 add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
 target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)

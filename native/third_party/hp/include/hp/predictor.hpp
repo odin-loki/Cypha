@@ -387,8 +387,11 @@ class Predictor {
     /// ``max_occupancy``. Sparse tables (e.g. a skip model at 1%) shrink a
     /// lot, busy ones not at all. Covers the discovered-context pool and the
     /// Hebbian tables too. Tables keep >= ``min_bits`` bits. Returns the
-    /// bytes freed.
+    /// bytes freed; ``max_occupancy`` outside (0, 1) folds nothing.
     std::size_t fold_auto(double max_occupancy, int min_bits = 12) {
+        // An occupancy is a share: at 1 or more every table would fold to
+        // min_bits, at 0 or less only empty ones would. Refused: frees nothing.
+        if (!(max_occupancy > 0.0 && max_occupancy < 1.0)) return 0;
         std::size_t freed = 0;
         // Any model with table_bits(), occupancy() and fold_to(bits);
         // ``slot_bytes`` is the table's bytes per slot.
@@ -718,16 +721,23 @@ class Predictor {
     int entropy_bucket() const { return gria_.entropy_bucket(); }
     int last_match_len() const { return last_mlen_; }
 
+    /// Every mergeable table has the same size as in ``src`` (context models,
+    /// Hebbian, discovery pool, mixer). Folded or dropped models differ and
+    /// cannot be merged slot for slot.
+    bool tables_match(const Predictor& src) const;
+
     /// Weighted merge of additive hp tables from an independently trained shard.
-    void merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+    /// Returns false, changing nothing, when ``tables_match(src)`` is false.
+    bool merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
                             std::uint64_t dst_bytes);
 
     /// Weighted merge with optional confidence gating (see ``hp/shard_merge.hpp``).
-    void merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
+    bool merge_shard_tables(const Predictor& src, std::uint64_t src_bytes,
                             std::uint64_t dst_bytes, const ShardMergeOptions& opts);
 
     /// Copy mergeable tables into a fresh predictor (runtime path state unchanged).
-    void transfer_tables_from(const Predictor& src);
+    /// Returns false, changing nothing, when ``tables_match(src)`` is false.
+    bool transfer_tables_from(const Predictor& src);
 
     /// Clear path-dependent runtime state; learned tables are preserved.
     /// keep_history: keep the byte ring (the text match models copy from).

@@ -6,9 +6,11 @@
 #include <unistd.h>
 #endif
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -153,6 +155,23 @@ bool hp_mmap_enabled() {
     return v == nullptr || v[0] != '0';
 }
 
+/// Why ``path`` did not load, from its 8-byte header (magic ``HPCP`` + version).
+std::string hpbin_failure(const fs::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    char head[8] = {};
+    in.read(head, 8);
+    if (in.gcount() < 8 || std::string(head, 4) != "HPCP") {
+        return "not an hp checkpoint (no HPCP header): " + path.string();
+    }
+    std::uint32_t ver = 0;
+    std::memcpy(&ver, head + 4, 4);
+    if (ver < 1 || ver > 5) {
+        return "unsupported hp checkpoint version " + std::to_string(ver) + ": " + path.string();
+    }
+    return "hp checkpoint read failed (truncated, or its tables or mixer do not match the "
+           "JSON config): " + path.string();
+}
+
 void read_hpbin(CyphaLMModel& model, const fs::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) {
@@ -161,16 +180,20 @@ void read_hpbin(CyphaLMModel& model, const fs::path& path) {
     hp::MapSource src;
 #if !defined(_WIN32)
     if (hp_mmap_enabled()) src.fd = ::open(path.c_str(), O_RDONLY);
+    // Mappings outlive the descriptor; close it on every exit, throws included.
+    struct FdClose {
+        int fd;
+        ~FdClose() {
+            if (fd >= 0) ::close(fd);
+        }
+    } fd_close{src.fd};
 #endif
     {
         hp::MapScope scope(&src);
         model.hp_backend().predictor().read_checkpoint(in);
     }
-#if !defined(_WIN32)
-    if (src.fd >= 0) ::close(src.fd);  // mappings outlive the descriptor
-#endif
     if (!in) {
-        throw std::runtime_error("hp checkpoint read failed: " + path.string());
+        throw std::runtime_error(hpbin_failure(path));
     }
 }
 
@@ -271,6 +294,10 @@ CyphaLMModel load_cyphalm_model(const std::string& json_path) {
     const fs::path bin_file = hpbin_path(jp);
     if (fs::exists(bin_file)) {
         read_hpbin(model, bin_file);
+    } else if (meta.contains("hp_checkpoint") || meta.value("algorithm", std::string()) == "hp") {
+        // save_cyphalm_model wrote the state next to the JSON: without it the
+        // model would load untrained. (Legacy JSON-only checkpoints have neither key.)
+        throw std::runtime_error("hp checkpoint missing: " + bin_file.string() + " (for " + jp.string() + ")");
     }
     return model;
 }

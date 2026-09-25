@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -20,38 +22,59 @@
 int main(int argc, char** argv) {
     std::string corpus, text_path;
     std::size_t corpus_bytes = 0, offset = 0, bytes = 0, min_len = 32, cap = 1 << 16, top = 20;
-    for (int i = 1; i < argc; ++i) {
-        const std::string a = argv[i];
-        auto next = [&]() -> std::string {
-            if (i + 1 >= argc) throw std::runtime_error("missing value for " + a);
-            return argv[++i];
-        };
-        if (a == "--corpus") corpus = next();
-        else if (a == "--corpus-bytes") corpus_bytes = std::stoull(next());
-        else if (a == "--text") text_path = next();
-        else if (a == "--offset") offset = std::stoull(next());
-        else if (a == "--bytes") bytes = std::stoull(next());
-        else if (a == "--min-len") min_len = std::stoull(next());
-        else if (a == "--top") top = std::stoull(next());
-        else {
-            std::cerr << "unknown arg " << a << "\n";
-            return 2;
+    try {
+        for (int i = 1; i < argc; ++i) {
+            const std::string a = argv[i];
+            auto next = [&]() -> std::string {
+                if (i + 1 >= argc) throw std::runtime_error("missing value for " + a);
+                return argv[++i];
+            };
+            if (a == "--corpus") corpus = next();
+            else if (a == "--corpus-bytes") corpus_bytes = std::stoull(next());
+            else if (a == "--text") text_path = next();
+            else if (a == "--offset") offset = std::stoull(next());
+            else if (a == "--bytes") bytes = std::stoull(next());
+            else if (a == "--min-len") min_len = std::stoull(next());
+            else if (a == "--top") top = std::stoull(next());
+            else {
+                std::cerr << "unknown arg " << a << "\n";
+                return 2;
+            }
         }
+    } catch (const std::exception& e) {  // missing value, not a number
+        std::cerr << "cyphalm_trace: bad arguments: " << e.what() << "\n";
+        return 2;
     }
     if (corpus.empty() || text_path.empty()) {
         std::cerr << "need --corpus (IGR index or plain text) and --text\n";
         return 2;
     }
-    const auto t0 = std::chrono::steady_clock::now();
-    const auto ig = cypha::cyphalm::InfiniGram::open(corpus, corpus_bytes);
-    const double index_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    // Read the text before building the index (minutes on a large corpus).
     std::ifstream f(text_path, std::ios::binary | std::ios::ate);
-    const std::size_t fsize = static_cast<std::size_t>(f.tellg());
+    const std::streamoff end = f ? static_cast<std::streamoff>(f.tellg()) : -1;
+    if (end < 0) {
+        std::cerr << "cyphalm_trace: cannot open --text " << text_path << "\n";
+        return 1;
+    }
+    const std::size_t fsize = static_cast<std::size_t>(end);
     if (offset > fsize) offset = fsize;
     if (bytes == 0 || offset + bytes > fsize) bytes = fsize - offset;
     std::vector<std::uint8_t> t(bytes);
     f.seekg(static_cast<std::streamoff>(offset));
     f.read(reinterpret_cast<char*>(t.data()), static_cast<std::streamsize>(bytes));
+    if (!f) {
+        std::cerr << "cyphalm_trace: cannot read " << bytes << " bytes of " << text_path << "\n";
+        return 1;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    std::shared_ptr<const cypha::cyphalm::InfiniGram> ig;
+    try {
+        ig = cypha::cyphalm::InfiniGram::open(corpus, corpus_bytes);
+    } catch (const std::exception& e) {
+        std::cerr << "cyphalm_trace: cannot index --corpus " << corpus << ": " << e.what() << "\n";
+        return 1;
+    }
+    const double index_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 
     // Matching statistics: ms[i] = longest prefix of t[i..] in the corpus;
     // ms[i] >= ms[i-1] - 1.
