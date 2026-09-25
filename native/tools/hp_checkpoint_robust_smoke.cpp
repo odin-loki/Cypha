@@ -27,6 +27,8 @@
 #include "cypha/cyphalm/hp_backend.hpp"
 #include "hp/shard_merge.hpp"
 
+#include <nlohmann/json.hpp>
+
 namespace fs = std::filesystem;
 using cypha::cyphalm::CyphaLMConfig;
 using cypha::cyphalm::CyphaLMModel;
@@ -104,6 +106,22 @@ void loader_failures(const CyphaLMConfig& cfg, const fs::path& dir) {
         auto loaded = cypha::cyphalm::load_cyphalm_model((dir / "good.json").string());
         check(loaded.hp_backend().predictor().learned_digest() == m.hp_backend().predictor().learned_digest(),
               "a good checkpoint must still load identically");
+    }
+    {
+        // A lossy config must stay dropped after the file restores live tables.
+        nlohmann::json meta = nlohmann::json::parse(json);
+        meta["config"]["hp_cm_drop"] = std::uint64_t{1} << hp::Predictor::kCmParaMod;
+        meta["config"]["hp_pool_slots"] = 8;
+        spit(dir / "lossy.json", meta.dump(2) + "\n");
+        spit(dir / "lossy.hpbin", good);
+        auto lossy = cypha::cyphalm::load_cyphalm_model((dir / "lossy.json").string());
+        hp::Predictor& lp = lossy.hp_backend().predictor();
+        check(lp.context_model_bits(hp::Predictor::kCmParaMod) == 0,
+              "cm_drop must survive loading a checkpoint that has the model");
+        check(lp.pool_slot_bits(0) > 0, "an active pool slot must stay live");
+        check(lp.pool_slot_bits(8) == 0, "a pool slot past pool_slots must load dropped");
+        lossy.hp_backend().consume_byte(static_cast<std::uint8_t>('a'));
+        check(lp.pool_slot_bits(8) == 0, "an inactive pool slot must not learn");
     }
     auto variant = [&](const char* name, const std::string& bin) {
         spit(dir / (std::string(name) + ".json"), json);

@@ -71,6 +71,9 @@ int check_mixer_rates() {
         return fail("checkpoint does not carry the trained rates");
     m.set_rate_scale(1, 1, -1);
     if (m.rate_q4() != 32 || m.layer1_rate_q4(0) != 16) return fail("(1, 1) does not restore the trained rates");
+    hp::MixerNet zero(4, {2}, 2, 0, {0});
+    if (zero.rate_q4() != 0 || zero.layer1_rate_q4(0) != 0)
+        return fail("trained rate 0 was raised to 1/16");
 
     // Predictor with the upstream layer-1 rates (lr1_scale 40: rates 1-2).
     hp::Config pc;

@@ -341,12 +341,13 @@ struct CyphaLMConfig {
     /// are unaffected. Env ``CYPHA_HP_FROZEN_SCORING=0`` restores exact hp scoring.
     bool hp_frozen_scoring = true;
     /// Serve-time mixer learning rate as a fraction of the trained rate, applied
-    /// while generating (``CyphaLMModel::set_serve_mode``). Adapting half as fast
-    /// to a prompt measured -0.005 to -0.007 bits/byte held-out. Resolution
-    /// 1/16 of a rate (``hp::MixerNet::set_rate_scale``): on lr1_scale 40
-    /// shards, whose layer-1 rates are 1-2, the scale used to floor at 1.
-    /// Env ``CYPHA_HP_SERVE_MIXER_LR_SCALE``.
-    double hp_serve_mixer_lr_scale = 0.5;
+    /// while generating (``CyphaLMModel::set_serve_mode``). Resolution 1/16 of
+    /// a rate (``hp::MixerNet::set_rate_scale``). Default 1: on lr1_scale 40
+    /// shards (winners v2/v3) ×0.5 now really halves every rate and generation
+    /// is worse (v3 wiki 1.5954 vs 1.5927 at ×1). The older −0.005 to −0.007
+    /// held-out gain was measured when ×0.5 floored at rate 1. Set
+    /// ``CYPHA_HP_SERVE_MIXER_LR_SCALE`` to opt into a fraction.
+    double hp_serve_mixer_lr_scale = 1.0;
     /// Ensembles (``CyphaLMModel::add_ensemble_member``): mixing weights adapt
     /// online at this rate while reading with learning on. Finds the right
     /// split for unequal members (95 MB + 8 MiB: 0.65/0.35, better than any

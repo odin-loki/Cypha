@@ -43,9 +43,10 @@ class MixerNet {
     // Lossy knobs (Config::mixer_skip / Config::gate_drop). Defaults keep gate24.
     /// Serve-time adaptation: every learning rate = its trained value x num/den,
     /// skip threshold = ``skip`` (<0: trained value). The effective rates are
-    /// kept in 1/16ths (kMixerRateFrac, at least 1/16), so x0.5 halves even a
-    /// rate-1 weight set (lr1_scale 40 shards); x1 is bit-identical to the
-    /// trained rates. Runtime only (checkpoints keep the trained rates).
+    /// kept in 1/16ths (kMixerRateFrac). A positive trained rate floors at
+    /// 1/16, so x0.5 halves even a rate-1 weight set (lr1_scale 40 shards);
+    /// a trained rate of 0 stays 0. x1 is bit-identical to the trained rates.
+    /// Runtime only (checkpoints keep the trained rates).
     /// Idempotent; (1, 1, -1) restores the trained rates.
     void set_rate_scale(int num, int den, int skip) {
         if (!serve_scaled_) {
@@ -263,10 +264,12 @@ class MixerNet {
         return k_ == 0 || (ctx2_ >= 0 && static_cast<std::size_t>(ctx2_) < v_.size() / k);
     }
 
-    /// Effective Q4 rates = trained x rate_num_ / rate_den_ in 1/16ths, at
-    /// least 1/16 (x1: exactly 16 x trained, so the update is unchanged).
+    /// Effective Q4 rates = trained x rate_num_ / rate_den_ in 1/16ths.
+    /// A positive rate floors at 1/16 (x1: exactly 16 x trained, so the
+    /// update is unchanged). A trained rate of 0, or a scale of 0, stays 0.
     void scale_rates_() {
         auto sc = [&](int r) {
+            if (r <= 0 || rate_num_ <= 0) return 0;
             const std::int64_t v = (static_cast<std::int64_t>(r) << kMixerRateFrac) * rate_num_ / rate_den_;
             return v < 1 ? 1 : static_cast<int>(v);
         };

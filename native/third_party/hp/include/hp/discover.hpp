@@ -94,6 +94,15 @@ class DiscoveryPool {
     /// Per-slot access for occupancy folding (Predictor::fold_auto).
     int num_slots() const { return static_cast<int>(models_.size()); }
     ContextModel& slot_model(int i) { return models_[static_cast<std::size_t>(i)]; }
+    const ContextModel& slot_model(int i) const { return models_[static_cast<std::size_t>(i)]; }
+    int active_slots() const { return active_; }
+
+    /// Slots at or above ``active_`` predict 0.5 and never learn. A checkpoint
+    /// load restores every slot's table from the file, so call this afterwards
+    /// when ``Config::pool_slots`` kept only the first slots.
+    void drop_inactive() {
+        for (int i = active_; i < kSlots; ++i) models_[static_cast<std::size_t>(i)].drop();
+    }
 
     // Set each slot's context from the byte history, using its mask.
     void set_contexts(std::uint64_t hist, std::uint64_t hist2) {

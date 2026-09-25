@@ -297,6 +297,11 @@ int main(int argc, char** argv) {
         if (!neural_paths.empty()) {
             out["neural"] = neural_paths;
         }
+        // Mode before the index: attach loads INDEX.weights.json, whose
+        // bucket count depends on the mode. Setting the mode afterwards
+        // either rejects a longest16 file or drops a 256-bucket file.
+        if (!infinigram_mode.empty())
+            hb.set_infinigram_mode(cypha::cyphalm::parse_infinigram_mode(infinigram_mode));
         if (!infinigram_path.empty()) {
             const auto t_ig = Clock::now();
             model->attach_infinigram(infinigram_path, infinigram_bytes);

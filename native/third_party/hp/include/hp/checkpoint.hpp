@@ -307,4 +307,8 @@ inline void Predictor::read_checkpoint(std::istream& is) {
     }
     g_hp_ckpt_read_version = 5;
     rebind_internal_pointers_();
+    // The file's tables decide each model's shape, which turns back on
+    // anything Config dropped and restores pool slots this build does not
+    // learn. Re-apply this predictor's drops and caps.
+    if (is) reapply_config_after_load();
 }

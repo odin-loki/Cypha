@@ -453,6 +453,22 @@ class Predictor {
         cfg_.pool_bits_cap = target.pool_bits_cap > 0 ? target.pool_bits_cap : cfg_.pool_bits_cap;
     }
 
+    /// Checkpoint bytes replace the tables the constructor built, including
+    /// models this ``Config`` dropped and pool slots past ``pool_slots``.
+    /// Put those drops and the bit caps back. Called at the end of a
+    /// successful ``read_checkpoint``.
+    void reapply_config_after_load() {
+        fold_tables(cfg_);
+        pool_.drop_inactive();
+    }
+
+    int context_model_bits(int id) const {
+        for (int i = 0; i < n_ctx_chain_; ++i)
+            if (ctx_chain_id_[i] == id) return ctx_chain_[i]->table_bits();
+        return -1;
+    }
+    int pool_slot_bits(int i) const { return pool_.slot_model(i).table_bits(); }
+
     int predict() {
         mixer_.reset_inputs();
         const int bias_p = counter_predict_p(bias_[c0_]);
