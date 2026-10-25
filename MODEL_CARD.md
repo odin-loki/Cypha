@@ -72,7 +72,26 @@ Removed light/champ hp SKUs: [`docs/history/REMOVED_HP_SKUS.md`](docs/history/RE
 | Generation | **`generate_decode` / `cyphalm_generate`** — serve path; greedy uses O(8) `serve_greedy_next` |
 | Historical pin | Hybrid GRIA+LSTM **2.664 BPC** @ 300k WikiText-2 (Aug 2026) — **superseded**; see [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md) |
 
-> **Note:** Pre-hp BPC numbers in `bench/BASELINE_LOCK.json` are historical. Gate24 hp enwik numbers above are the living LLM quality bar (see [`CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md)).
+> **Note:** Pre-hp BPC numbers in `bench/BASELINE_LOCK.json` are historical. Gate24 hp enwik numbers above are the living LLM quality bar (see [`CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md)). The D17 hybrid **2.664** pin is a bench lock, not this quality bar.
+
+## Small trie (not the shipping LLM)
+
+A packed byte trie plus a six-expert mixture, measured October 2026 on enwik9's first 8 MiB. It is not gate24 and it is not the best writer. The tiny hp mixer (~1.92 BPC, ~40 MB, surface about 0.997 on its best sample) still writes closer to the file.
+
+| Item | Measured |
+|------|----------|
+| Fixed backoff, orders 1–4 + match | **2.386 BPC**, surface about **0.74–0.83** |
+| Learned mixture, frozen | **2.298 BPC**. Weights about **0.93** order 4, **0.06** match |
+| Packed-layout accounting | **5.4 MB** stored counts |
+| Live training RAM | Still keeps singletons. About **25 MB** of nodes on this slice. The 5.4 MB figure is not resident yet. |
+| Dolly, 15,011 turns | Seen `User:` / `Assistant:` prompts copy the stored reply. Unseen prompts do not answer. Wiki BPC after that pass **2.341**. Stored about **11 MB**. |
+| Tried and worse than backoff | PPMD ~**2.42** BPC. GRIA used as a probability gate **2.642**. Long chains and inheritance did not help. |
+
+Hashes of whole contexts are uniform. The structure worth storing is the bytes, parent first. `r_eu` and `32/(32+n)` are not mix weights. Uncertainty for the match is `u = H(order-1) / ln(256)`.
+
+BPC is the held-out negative log probability. It is not a generation score. Surface score `S = H·D·L` is implemented in `native/tools/surface_score.cpp`.
+
+Details and the corpus plan: [`docs/CURRENT.md`](docs/CURRENT.md).
 
 ## Other locked / attested numbers
 

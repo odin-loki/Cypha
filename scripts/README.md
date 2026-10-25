@@ -2,7 +2,14 @@
 
 Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`). Narrative "when to run what" lives in **[`docs/README.md`](../docs/README.md)**. **Fixtures / native / schema cadence:** **[`docs/verify/MAINTENANCE.md`](../docs/verify/MAINTENANCE.md)**.
 
-> **Living pin:** D17 hybrid GRIA+LSTM L2 + Wave2 BPTT **2.664 BPC** in `bench/BASELINE_LOCK.json` is the production lock / overnight validation target. Prior L1 pin **2.873** is archived. Living sequence default is **Hybrid** -- [`docs/reports/ONE_CYPHA_CUTOVER.md`](../docs/reports/ONE_CYPHA_CUTOVER.md).
+> **Two different pins.** `bench/BASELINE_LOCK.json` still records the D17 Hybrid GRIA+LSTM lock (**2.664 BPC** at 300k) for overnight bench checks. The living byte LLM in the product is **hp gate24** (~1.61 BPC on enwik8). The small trie and the D: corpus fetch are [`docs/CURRENT.md`](../docs/CURRENT.md).
+
+## Corpus fetch
+
+| Script | Purpose |
+|--------|---------|
+| `fetch_corpus.py` | Stoppable download toward ~1 TB under `D:\cypha_llm\corpus`. `--check` probes seed URLs. Ctrl+C resumes. |
+| `run_fetch.sh` | WSL launcher for that fetch. |
 
 ## Where files go
 

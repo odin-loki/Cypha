@@ -1,5 +1,7 @@
 # CyphaLM training scale research — gate24 hp adapt
 
+**Historical note (2026-09-20).** This page is about scaling the hp gate24 mixer. It is not the plan for the packed trie. Current numbers, the corpus fetch, and why a large trie train is not ready: [`../CURRENT.md`](../CURRENT.md).
+
 **Date:** 2026-09-20  
 **Branch context:** gate24-only `main`; undo-stack work proceeds separately ([`CYPHALM_LOSSY_LLM_PLAN.md`](CYPHALM_LOSSY_LLM_PLAN.md) Phase 1).  
 **Quality bar:** enwik8.8mb observe BPC **1.611729** (vendored gate24, measured 2026-09-19) — see [`CYPHALM_HP_ALGORITHM_PROFILE.md`](CYPHALM_HP_ALGORITHM_PROFILE.md). Do not invent BPC; cite measured values only.

@@ -131,7 +131,53 @@ def probe(url: str) -> tuple[int, str]:
         return 0, str(exc)
 
 
-def download(url: str, dest: Path, timeout: int = 120) -> None:
+def format_eta(seconds: float | None) -> str:
+    if seconds is None or seconds < 0 or seconds > 99 * 24 * 3600:
+        return "--:--:--"
+    seconds = int(seconds)
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:d}:{minutes:02d}:{secs:02d}"
+
+
+class Progress:
+    """One updating line: bar, bytes against the 1 TB budget, speed, time left."""
+
+    def __init__(self, target: int, already: int) -> None:
+        self.target = target
+        self.base = already
+        self.session = 0
+        self.t0 = time.monotonic()
+        self.label = ""
+
+    def add(self, nbytes: int, label: str) -> None:
+        self.session += nbytes
+        self.label = label
+        self.draw()
+
+    def draw(self) -> None:
+        have = self.base + self.session
+        frac = min(1.0, have / self.target) if self.target else 0.0
+        elapsed = max(time.monotonic() - self.t0, 0.001)
+        speed = self.session / elapsed
+        left = format_eta((self.target - have) / speed if speed > 1 else None)
+        width = 30
+        filled = int(width * frac)
+        bar = "#" * filled + "-" * (width - filled)
+        line = (
+            f"\r[{bar}] {have / GB:7.2f}/{self.target / GB:.0f} GB"
+            f"  {speed / (1024 * 1024):6.1f} MB/s  left {left}  {self.label}"
+        )
+        sys.stdout.write(line[:118].ljust(118))
+        sys.stdout.flush()
+
+    def finish_file(self) -> None:
+        self.draw()
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+
+def download(url: str, dest: Path, progress: Progress | None = None, timeout: int = 120) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0:
         return
@@ -140,16 +186,23 @@ def download(url: str, dest: Path, timeout: int = 120) -> None:
     headers = {"User-Agent": "cypha-corpus-fetch/1.0"}
     if existing:
         headers["Range"] = f"bytes={existing}-"
+    label = dest.name
     with request(url, headers, timeout) as resp:
         code = getattr(resp, "status", 200)
         mode = "ab" if code == 206 and existing else "wb"
+        if progress is not None and existing and mode == "ab":
+            progress.add(0, label)
         with part.open(mode) as out:
             while True:
                 chunk = resp.read(1024 * 1024)
                 if not chunk:
                     break
                 out.write(chunk)
+                if progress is not None:
+                    progress.add(len(chunk), label)
     part.replace(dest)
+    if progress is not None:
+        progress.finish_file()
 
 
 def fetch_text(url: str) -> str:
@@ -166,21 +219,21 @@ def under_budget(root: Path, category: str, extra_cap: int | None = None) -> boo
     return True
 
 
-def take(root: Path, category: str, url: str, dest: Path, state: dict, state_path: Path) -> None:
+def take(root: Path, category: str, url: str, dest: Path, state: dict, state_path: Path,
+         progress: Progress | None = None) -> None:
     key = url
     if key in state["done"]:
         return
     if not under_budget(root, category):
         return
-    print(f"get {category} {url}", flush=True)
-    download(url, dest)
+    download(url, dest, progress)
     state["done"][key] = {"path": str(dest), "bytes": dest.stat().st_size if dest.exists() else 0}
     save_state(state_path, state)
 
 
-def gutenberg(root: Path, state: dict, state_path: Path) -> None:
+def gutenberg(root: Path, state: dict, state_path: Path, progress: Progress | None = None) -> None:
     catalog = root / "books" / "pg_catalog.csv"
-    take(root, "books", GUTENBERG_CATALOG, catalog, state, state_path)
+    take(root, "books", GUTENBERG_CATALOG, catalog, state, state_path, progress)
     if not catalog.exists():
         return
     with catalog.open(encoding="utf-8", errors="replace", newline="") as handle:
@@ -201,7 +254,7 @@ def gutenberg(root: Path, state: dict, state_path: Path) -> None:
                 continue
             time.sleep(GUTENBERG_DELAY)
             try:
-                download(url, dest)
+                download(url, dest, progress)
             except urllib.error.HTTPError as exc:
                 if exc.code == 404:
                     state["skipped"][url] = 404
@@ -212,7 +265,8 @@ def gutenberg(root: Path, state: dict, state_path: Path) -> None:
             save_state(state_path, state)
 
 
-def from_list(root: Path, category: str, list_url: str, state: dict, state_path: Path, cap: int | None = None) -> None:
+def from_list(root: Path, category: str, list_url: str, state: dict, state_path: Path,
+              progress: Progress | None = None, cap: int | None = None) -> None:
     text = fetch_text(list_url)
     for line in text.splitlines():
         url = line.strip()
@@ -223,12 +277,12 @@ def from_list(root: Path, category: str, list_url: str, state: dict, state_path:
         name = url.rstrip("/").split("/")[-1]
         sub = "wet" if "commoncrawl.org" in url else url.split("/")[-2] if "/" in url[8:] else "files"
         dest = root / category / sub / name
-        take(root, category, url, dest, state, state_path)
+        take(root, category, url, dest, state, state_path, progress)
 
 
-def wet(root: Path, state: dict, state_path: Path) -> None:
+def wet(root: Path, state: dict, state_path: Path, progress: Progress | None = None) -> None:
     listing = root / "articles" / "wet.paths.gz"
-    take(root, "articles", WET_PATHS, listing, state, state_path)
+    take(root, "articles", WET_PATHS, listing, state, state_path, progress)
     if not listing.exists():
         return
     with gzip.open(listing, "rt", encoding="utf-8", errors="replace") as handle:
@@ -247,7 +301,7 @@ def wet(root: Path, state: dict, state_path: Path) -> None:
                 return
             url = "https://data.commoncrawl.org/" + path.lstrip("/")
             dest = root / "articles" / "wet" / Path(path).name
-            take(root, "articles", url, dest, state, state_path)
+            take(root, "articles", url, dest, state, state_path, progress)
 
 
 def check() -> int:
@@ -273,13 +327,18 @@ def main() -> int:
     root.mkdir(parents=True, exist_ok=True)
     state_path = root / "state.json"
     state = load_state(state_path)
+    target = sum(BUDGET.values())
+    already = sum(used_bytes(root, category) for category in BUDGET)
+    progress = Progress(target, already)
+    print(f"downloading to {root}", flush=True)
+    print(f"target {target / GB:.0f} GB   already {already / GB:.2f} GB", flush=True)
     try:
         for category, rel, url in DIRECT:
-            take(root, category, url, root / category / rel, state, state_path)
+            take(root, category, url, root / category / rel, state, state_path, progress)
         for category, list_url in LISTS:
-            from_list(root, category, list_url, state, state_path)
-        wet(root, state, state_path)
-        gutenberg(root, state, state_path)
+            from_list(root, category, list_url, state, state_path, progress)
+        wet(root, state, state_path, progress)
+        gutenberg(root, state, state_path, progress)
     except KeyboardInterrupt:
         save_state(state_path, state)
         print("\nstopped. run the same command to continue.", file=sys.stderr)

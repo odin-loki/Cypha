@@ -1,8 +1,10 @@
 ﻿# Cypha -- documentation hub
 
-**One product:** `cypha::Cypha` -- classify + regress + sample latents + next-token / text generate. Native C++ only (`cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`).
+**One product:** `cypha::Cypha` -- classify + regress + sample latents + next-byte generation. Native C++ only.
 
-Living sequence default: **Hybrid GRIA+LSTM L2+Wave2 BPTT (2.664 BPC)** @ 300k lock, with predictive arithmetic coding. See [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md) and [`research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md`](research/upgrades/PREDICTIVE_ARITHMETIC_CODING.md).
+The shipping language model is the **hp gate24** context mixer (~**1.61 BPC** on enwik8, about **1.5 GB**). The separate small-model line is a packed byte trie plus a learned mixture (~**2.30 BPC**, a few megabytes of stored counts). Where those two sit, and how the corpus on D: is fetched, is [`CURRENT.md`](CURRENT.md).
+
+The D17 bench lock in `bench/BASELINE_LOCK.json` (Hybrid GRIA+LSTM **2.664 BPC** at 300k) is a classifier/sequence pin. It is not the CyphaLM quality bar. History of the retired hybrid stack: [`history/LEGACY_LLM.md`](history/LEGACY_LLM.md).
 
 Start here, then open the section that matches what you need.
 
@@ -37,7 +39,8 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Native quick start](native/NATIVE_QUICKSTART.md) | Build, CTest, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run` |
 | [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, REST routes |
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | Load-testing notes for REST |
-| [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership, routes, Hybrid default (U06 PGM→Wy opt-in) |
+| [Current numbers](CURRENT.md) | Small trie, hp gate24, corpus fetch, what is not ready to scale |
+| [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership and routes. The hybrid default named there is historical. |
 | [CyphaLM as a language model](reports/CYPHALM_LM_QUALITY_REPORT.md) | hp next-byte distribution quality, decoding, ensembles, ∞-gram, RAM, speed, the winner; tools / flags / formats reference |
 | [CyphaLM vs a Transformer and an LSTM](reports/CYPHALM_VS_NEURAL_LM.md) | same data, same CPU, ≤ 1 h training each: held-out quality, in-context learning, copying, byte classes, calibration, generation with cross-judges, latency, RAM, learning curves |
 | [Numerical audit](reports/NUMERICAL_KERNEL_AUDIT_2026-09-17.md) | 20 hand-verified defects in the inference gate and numerical kernels. **R1–R4 and N1–N4, L5–L9 fixed** and CTest-guarded; L11–L13 recorded |

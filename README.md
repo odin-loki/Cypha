@@ -98,6 +98,19 @@ cypha_rest --listen 127.0.0.1:8099 --cypha fixtures/reference.cypha
 - **Docs:** [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md) (train vs serve API), [`docs/reports/CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md) (BPC harness).
 - **Superseded stacks** (history only): Hybrid GRIA+LSTM [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md), RPSM [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md), hp light/champ SKUs [`docs/history/REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md).
 
+## Small model and corpus
+
+The packed byte trie is a separate experiment from gate24. It is the small model, not a replacement for the mixer above. Measured on the first 8 MiB of enwik9 (train 7,340,032 bytes, frozen holdout the rest): fixed backoff **2.386 BPC**, learned mixture **2.298 BPC** with about **0.93** of the weight on order 4. Surface scores of its samples are about **0.74–0.83**. Exact Dolly questions copy the stored answer. A question that was not stored is not answered.
+
+The **5.4 MB** figure is the packed layout on paper. Training still keeps every context, including ones seen once. Do not start a terabyte train of this trie until that packed layout is what is resident.
+
+Corpus fetch, category budgets, and the full number table: [`docs/CURRENT.md`](docs/CURRENT.md).
+
+```text
+python scripts/fetch_corpus.py --check
+python scripts/fetch_corpus.py
+```
+
 ---
 
 ## Repository layout
