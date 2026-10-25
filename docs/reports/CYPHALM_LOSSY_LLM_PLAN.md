@@ -1,5 +1,7 @@
 # CyphaLM lossy LLM execution plan
 
+**Historical SKU names.** `light` and `champ` compile profiles were removed. The tree is gate24-only. The tier measurements in the status line above that change (`lean`, `compact`, `small`) still describe runtime overlays on gate24. Current map: [`../CURRENT.md`](../CURRENT.md).
+
 **Date:** 2026-09-20, updated 2026-09-23
 **Status:** Phase 0 done; mem tier / serve-compact / cold-slot prune landed 2026-09-20. **2026-09-23:** per-component lossy knobs and measured tiers (`lean` beats gate24 on enwik8: −0.0019 bpc, −30% RAM, faster; `compact` −56% RAM for +0.0057), serve-path leak fixed, bit-tree DFS ~1.85× faster, demand-zero tables. Full write-up: [`CYPHALM_LOSSY_MIXER_REPORT.md`](CYPHALM_LOSSY_MIXER_REPORT.md).  
 **Inputs:** [`CYPHALM_LLM_PROFILE_REPORT.md`](CYPHALM_LLM_PROFILE_REPORT.md), [`CYPHALM_BPC_GAP_REPORT.md`](CYPHALM_BPC_GAP_REPORT.md), [`CYPHALM_LLM_EVAL.md`](CYPHALM_LLM_EVAL.md), [`CYPHALM_LOSSY_BENCH_RESULTS.json`](CYPHALM_LOSSY_BENCH_RESULTS.json), [`CYPHALM_LOSSY_ENWIK_SCREEN.json`](CYPHALM_LOSSY_ENWIK_SCREEN.json)

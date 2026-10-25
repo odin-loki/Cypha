@@ -1,5 +1,7 @@
 # One Cypha cutover
 
+**Historical (July 2026).** The hybrid GRIA+LSTM recipe named below is not the shipping language model. That is hp gate24. The small trie and the corpus fetch are [`../CURRENT.md`](../CURRENT.md). This page is the cutover inventory from when the hybrid was the sequence default.
+
 Inventory and cutover notes for collapsing CyphaDIF + CyphaLM into a single public type `cypha::Cypha`.
 
 ## Product brains (before)

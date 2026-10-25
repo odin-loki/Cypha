@@ -1,5 +1,7 @@
 # CyphaLM (hp) LLM Profile Report
 
+**Historical (2026-09-19).** This report’s “production light” profile is gone. The shipping compile is gate24-only. Do not set `CYPHA_HP_PROFILE=light`. Current map: [`../CURRENT.md`](../CURRENT.md).
+
 **Date:** 2026-09-19  
 **Commit:** `bbf385360abcd48319b44ae9afd923e9d0422102` (main after PR #1 hp integration)  
 **Harness:** `native/tools/cyphalm_llm_profile.cpp` + `scripts/cyphalm_llm_profile.sh`
