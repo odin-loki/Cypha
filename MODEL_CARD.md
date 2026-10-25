@@ -83,7 +83,7 @@ A packed byte trie plus a six-expert mixture, measured October 2026 on enwik9's 
 | Fixed backoff, orders 1–4 + match | **2.386 BPC**, surface about **0.74–0.83** |
 | Learned mixture, frozen | **2.298 BPC**. Weights about **0.93** order 4, **0.06** match |
 | Packed-layout accounting | **5.4 MB** stored counts |
-| Live training RAM | Still keeps singletons. About **25 MB** of nodes on this slice. The 5.4 MB figure is not resident yet. |
+| Live training RAM | Keeps singletons during the pass. About **116 MB** peak on the 8 MiB slice, about **400 MB** peak across 10⁹ bytes of enwik9. Packed upper bound at that size is about **45 MB**. |
 | Dolly, 15,011 turns | Seen `User:` / `Assistant:` prompts copy the stored reply. Unseen prompts do not answer. Wiki BPC after that pass **2.341**. Stored about **11 MB**. |
 | Tried and worse than backoff | PPMD ~**2.42** BPC. GRIA used as a probability gate **2.642**. Long chains and inheritance did not help. |
 

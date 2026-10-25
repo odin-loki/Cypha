@@ -38,11 +38,22 @@ BPC is held-out `−log2 p`. It is not a generation score.
 - A word-sized trie added as another expert fell to weight **0.0005** and did not change the samples.
 - Dolly questions that occur byte-for-byte in the stored chat are copied back. The copy is a search for that prompt, not the order-4 model reading the question. An unseen question stays Wikipedia-shaped. A `<|doc|>` marker is written between the Wikipedia bytes and the chat so those contexts do not glue together.
 
-### Not ready to scale
+### What grows, and what must stay separate
 
-Training still allocates a node for every context, including the ones seen once. The 5.4 MB number is what `measure()` would keep. It is not the resident size. On the 8 MiB slice the node and follower vectors are already about **25 MB**. At a few gigabytes those vectors are the first thing to run out, and the match table doubles while it grows. The Dolly lookup also builds a second string of the whole corpus.
+Training keeps a node for every context, including ones seen once. The **5.4 MB** figure is the later packed pass (drop counts below 2, one byte per kept count). It is not the resident size during the pass. On the 8 MiB slice the node and follower vectors are about **25 MB**, and the process peaks near **116 MB**.
 
-Do not train this trie on the terabyte until the packed nodes are what the process keeps, the match table compacts without holding two copies, and long context is a walk of a stored position rather than a new node per longer gram.
+Counted across all **10⁹** bytes of enwik9, distinct 4-byte contexts do not grow in proportion to the file:
+
+| Bytes | Distinct 4-grams | Seen once | Peak training RAM |
+|------:|-----------------:|----------:|------------------:|
+| 8 MB | 331,145 | 43% | 116 MB |
+| 64 MB | 979,017 | 41% | 128 MB |
+| 256 MB | 1,865,580 | 39% | 256 MB |
+| 10⁹ | 3,222,263 | 37% | 400 MB |
+
+From 512 MB to 10⁹ bytes the 4-gram count grows like about N^0.47. The packed upper bound at 10⁹ bytes is about **45 MB**. A gigabyte of Wikipedia-like text fits this trie. The match record is a `uint32` offset into the file, so a corpus past 4 GiB needs the next byte stored in the record instead of an index.
+
+Chat must not be poured into those counts. On the 8 MiB split, the 4-byte match fires on **96%** of holdout bytes, and **75.7%** of holdout bytes use a 4-gram that also occurs in Dolly. The match table keeps only the latest follower, so those wiki predictions become the last Dolly byte. Every Dolly prompt also ends in the same 12 bytes, `\nAssistant: `, so a fixed 8-byte or 16-byte key does not tell the questions apart (0 of 15,011 prompts are unique at 12 bytes; **19%** are unique at 16). The chat index has to be the whole prompt pointing at its answer, in its own table, after the wiki counts and the mixture weights are frozen.
 
 ## Corpus on D:
 

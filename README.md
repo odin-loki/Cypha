@@ -102,7 +102,7 @@ cypha_rest --listen 127.0.0.1:8099 --cypha fixtures/reference.cypha
 
 The packed byte trie is a separate experiment from gate24. It is the small model, not a replacement for the mixer above. Measured on the first 8 MiB of enwik9 (train 7,340,032 bytes, frozen holdout the rest): fixed backoff **2.386 BPC**, learned mixture **2.298 BPC** with about **0.93** of the weight on order 4. Surface scores of its samples are about **0.74–0.83**. Exact Dolly questions copy the stored answer. A question that was not stored is not answered.
 
-The **5.4 MB** figure is the packed layout on paper. Training still keeps every context, including ones seen once. Do not start a terabyte train of this trie until that packed layout is what is resident.
+The **5.4 MB** figure is the packed layout after counts seen once are dropped. Training keeps those nodes, so the 8 MiB slice peaks near **116 MB**. A full pass of enwik9 (10⁹ bytes) peaks near **400 MB**, with about **3.2 million** distinct 4-grams. Chat has to stay in its own prompt index. Pouring Dolly into the wiki counts overwrites followers the holdout still uses.
 
 Corpus fetch, category budgets, and the full number table: [`docs/CURRENT.md`](docs/CURRENT.md).
 
