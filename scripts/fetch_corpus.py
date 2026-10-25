@@ -332,13 +332,31 @@ def main() -> int:
     progress = Progress(target, already)
     print(f"downloading to {root}", flush=True)
     print(f"target {target / GB:.0f} GB   already {already / GB:.2f} GB", flush=True)
+    print("small files first so the trie can train while the big dumps continue", flush=True)
     try:
-        for category, rel, url in DIRECT:
-            take(root, category, url, root / category / rel, state, state_path, progress)
+        # One short book so a finished file exists quickly. The 27 GB Wikipedia
+        # dump resumes later from its .part file.
+        take(
+            root,
+            "books",
+            "https://www.gutenberg.org/cache/epub/1342/pg1342.txt",
+            root / "books" / "gutenberg" / "pg1342.txt",
+            state,
+            state_path,
+            progress,
+        )
         for category, list_url in LISTS:
             from_list(root, category, list_url, state, state_path, progress)
-        wet(root, state, state_path, progress)
+        for category, rel, url in DIRECT:
+            if rel.endswith("enwiki-pages-articles-multistream.xml.bz2"):
+                continue
+            take(root, category, url, root / category / rel, state, state_path, progress)
         gutenberg(root, state, state_path, progress)
+        wet(root, state, state_path, progress)
+        for category, rel, url in DIRECT:
+            if not rel.endswith("enwiki-pages-articles-multistream.xml.bz2"):
+                continue
+            take(root, category, url, root / category / rel, state, state_path, progress)
     except KeyboardInterrupt:
         save_state(state_path, state)
         print("\nstopped. run the same command to continue.", file=sys.stderr)
