@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <random>
 #include <string>
 #include <vector>
@@ -24,7 +25,7 @@ void usage(const char* argv0) {
                  "[--load CKPT.json] [--tier NAME] [--min-p P] [--no-repeat N] "
                  "[--word-candidates K] [--ensemble CKPT.json[:W]]... [--infinigram INDEX|CORPUS] [--infinigram-bytes N] "
                  "[--neural EXPERT.blm|.bgt]... [--neural-lr R] [--session-cache] [--learn-from-output] "
-                 "[--prompt-score-bytes N] [--no-restore-mixing] [--latency]\n",
+                 "[--prompt-score-bytes N] [--no-restore-mixing] [--latency] [--repl]\n",
                  argv0);
 }
 
@@ -88,13 +89,18 @@ int main(int argc, char** argv) {
     std::vector<std::string> neural_paths;  // byte LSTM / Transformer experts (repeatable)
     double neural_lr = -1.0;                // <0: the manifest's rate (0.1 without one)
     bool session_cache = false;
+    bool repl = false;
+    bool max_bytes_set = false;
+    bool prompt_set = false;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
         if (arg == "--prompt" && i + 1 < argc) {
             prompt = argv[++i];
+            prompt_set = true;
         } else if ((arg == "--max-bytes" || arg == "--max-tokens") && i + 1 < argc) {
             max_bytes = std::atoi(argv[++i]);
+            max_bytes_set = true;
         } else if (arg == "--strategy" && i + 1 < argc) {
             strategy = argv[++i];
         } else if (arg == "--temperature" && i + 1 < argc) {
@@ -111,6 +117,8 @@ int main(int argc, char** argv) {
             table_bits = std::atoi(argv[++i]);
         } else if (arg == "--latency") {
             print_latency = true;
+        } else if (arg == "--repl") {
+            repl = true;
         } else if (arg == "--warmup-file" && i + 1 < argc) {
             warmup_file = argv[++i];
         } else if (arg == "--warmup-bytes" && i + 1 < argc) {
@@ -205,7 +213,7 @@ int main(int argc, char** argv) {
     if (hb.has_neural()) hb.set_neural_learning_rate(nn_eta);
     if (session_cache) model.hp_backend().set_session_cache(true);
     cfg = model.config();
-    const std::vector<int> prompt_ids = bytes_from_text(prompt, cfg.vocab_size);
+    if (repl && !max_bytes_set) max_bytes = 240;
 
     cypha::cyphalm::DecodeParams params;
     params.strategy = cypha::cyphalm::decode_strategy_from_string(strategy);
@@ -233,30 +241,59 @@ int main(int argc, char** argv) {
         params.beam_width = 4;
     }
 
-    const auto t0 = std::chrono::steady_clock::now();
-    const auto out = cypha::cyphalm::generate_decode(model, prompt_ids, max_bytes, params);
-    const auto t1 = std::chrono::steady_clock::now();
-    const double elapsed_ms =
-        std::chrono::duration<double, std::milli>(t1 - t0).count();
-
-    std::string completion;
-    completion.reserve(out.generated_ids.size());
-    for (int id : out.generated_ids) {
-        if (id >= 0 && id < 256) {
-            completion.push_back(static_cast<char>(id));
+    // One loaded model. --repl keeps it resident and continues the session text
+    // so the next line is predicted from what was just written.
+    auto complete = [&](const std::string& text) -> std::string {
+        const std::vector<int> prompt_ids = bytes_from_text(text, cfg.vocab_size);
+        const auto t0 = std::chrono::steady_clock::now();
+        const auto out = cypha::cyphalm::generate_decode(model, prompt_ids, max_bytes, params);
+        const auto t1 = std::chrono::steady_clock::now();
+        const double elapsed_ms =
+            std::chrono::duration<double, std::milli>(t1 - t0).count();
+        std::string completion;
+        completion.reserve(out.generated_ids.size());
+        for (int id : out.generated_ids) {
+            if (id >= 0 && id < 256) completion.push_back(static_cast<char>(id));
         }
+        const std::string label = strategy_label(params);
+        std::printf(
+            "strategy=%s beam=%d top_p=%.3f temperature=%.3f warmup_bytes=%zu ban_last_k=%d "
+            "rep_penalty=%.3f text_like_prior=%.3f prompt_bytes=%zu generated_bytes=%zu\n",
+            label.c_str(), params.beam_width, top_p, temperature, params.warmup_ids.size(),
+            params.ban_last_k, params.repetition_penalty, params.text_like_prior, text.size(),
+            completion.size());
+        if (print_latency) std::printf("latency_ms=%.3f\n", elapsed_ms);
+        std::printf("--- completion ---\n%s\n", completion.c_str());
+        std::fflush(stdout);
+        ++params.seed;
+        return completion;
+    };
+
+    if (!repl) {
+        return complete(prompt).empty() ? 1 : 0;
     }
 
-    const std::string label = strategy_label(params);
-    std::printf(
-        "strategy=%s beam=%d top_p=%.3f temperature=%.3f warmup_bytes=%zu ban_last_k=%d "
-        "rep_penalty=%.3f text_like_prior=%.3f prompt_bytes=%zu generated_bytes=%zu\n",
-        label.c_str(), params.beam_width, top_p, temperature, params.warmup_ids.size(),
-        params.ban_last_k, params.repetition_penalty, params.text_like_prior, prompt.size(),
-        completion.size());
-    if (print_latency) {
-        std::printf("latency_ms=%.3f\n", elapsed_ms);
+    std::fprintf(stderr,
+                 "CyphaLM chat. Type a passage; the model continues it one byte at a time.\n"
+                 "It was trained to predict Wikipedia bytes, so it continues text rather than "
+                 "following instructions.\n"
+                 "Empty line or /quit exits. max_bytes=%d\n",
+                 max_bytes);
+    std::string session;
+    constexpr std::size_t kMaxPrompt = 4096;
+    if (prompt_set) {
+        session = prompt;
+        session += complete(session);
     }
-    std::printf("--- completion ---\n%s\n", completion.c_str());
-    return out.generated_ids.empty() ? 1 : 0;
+    std::string line;
+    while (std::fprintf(stderr, "\n> "), std::getline(std::cin, line)) {
+        if (line.empty() || line == "/quit" || line == "/exit") break;
+        if (!session.empty()) session.push_back('\n');
+        session += line;
+        const std::string view =
+            session.size() > kMaxPrompt ? session.substr(session.size() - kMaxPrompt) : session;
+        session += complete(view);
+        if (session.size() > kMaxPrompt * 2) session.erase(0, session.size() - kMaxPrompt);
+    }
+    return 0;
 }

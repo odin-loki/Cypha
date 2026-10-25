@@ -103,7 +103,22 @@ int main(int argc, char** argv) {
                 cypha::cyphalm::CyphaLMModel model(cfg);
                 const auto data = read_slice(train, offset + static_cast<std::uint64_t>(s) * per, per);
                 if (data.empty()) throw std::runtime_error("no training bytes at this offset");
-                const double bits = model.hp_backend().observe_stream_bits(data.data(), data.size());
+                // Same causal observe as one call, printed as the shard advances so a
+                // multi-hour run is not silent. State carries across chunks.
+                double bits = 0.0;
+                std::size_t done = 0;
+                constexpr std::size_t kProgress = 2 * 1024 * 1024;
+                while (done < data.size()) {
+                    const std::size_t n = std::min(kProgress, data.size() - done);
+                    bits += model.hp_backend().observe_stream_bits(data.data() + done, n);
+                    done += n;
+                    const double secs =
+                        std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+                    std::lock_guard<std::mutex> lock(io);
+                    std::printf("shard %d: %zu/%zu bytes %.4f bpc %.0f s\n", s, done, data.size(),
+                                bits / static_cast<double>(std::max<std::size_t>(1, done)), secs);
+                    std::fflush(stdout);
+                }
                 const std::string name = "shard_" + std::to_string(s);
                 cypha::cyphalm::save_cyphalm_model(model, (fs::path(out_dir) / name).string());
                 names[static_cast<std::size_t>(s)] = name + ".json";
