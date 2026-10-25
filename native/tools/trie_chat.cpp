@@ -1180,7 +1180,10 @@ int main() {
     }
     std::cerr << "dolly_turns " << turns.size() << " chat_bytes " << chat.size() << "\n";
     const std::size_t chat_at = data.size();
-    data.push_back('\n');
+    // A document boundary, not a one-byte newline. Order-4 must not learn the
+    // last bytes of Wikipedia as the left context of "User:".
+    const char* boundary = "\n\n<|doc|>\n\n";
+    data.insert(data.end(), boundary, boundary + std::strlen(boundary));
     data.insert(data.end(), reinterpret_cast<const std::uint8_t*>(chat.data()),
                 reinterpret_cast<const std::uint8_t*>(chat.data()) + chat.size());
     model.data = data.data();
