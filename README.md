@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows/macOS — latest **[v2.5.0](https://github.com/odin-loki/Cypha/releases/tag/v2.5.0)**)
 
-> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + **CyphaLM byte LLM** (train + serve + generate). Living sequence stack: **hp** gate24 context mixer from [odin-loki/CompressionAlgorithm](https://github.com/odin-loki/CompressionAlgorithm) — **~1.61 BPC** quality bar on enwik8, **inference-first** serve path for generation. See [`MODEL_CARD.md`](MODEL_CARD.md) and [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md). Event forecasting Phases 1–9 shipped — [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
+> **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + **CyphaLM byte LLM**. The language model being taken forward is the **packed byte trie** (learned mixture, about **2.30 BPC** on an 8 MiB holdout, hundreds of megabytes at a gigabyte of text). **hp gate24** stays in the tree as a comparison (~**1.61 BPC**, about **1.5 GB**). It is not the model to train at scale. See [`docs/CURRENT.md`](docs/CURRENT.md).
 
 ---
 
@@ -73,42 +73,28 @@ Prebuilt bundles (**v2.5.0**): [Windows MSVC zip](https://github.com/odin-loki/C
 
 ---
 
-## CyphaLM — byte LLM (hp gate24)
+## CyphaLM — packed trie
 
-CyphaLM is the living **language-model surface** of Cypha: a trainable, servable byte LLM backed by vendored **hp**, not a separate compressor-only tool. One stack supports **training/BPC eval**, **inference/generation**, and REST/CLI.
+The language model to train and use is the packed byte trie. hp gate24 scores better on the 8 MiB slice (**1.611729 BPC**) and uses about **1.5 GB**. That table size is allocated up front. It does not train on a terabyte, and it is the wrong footprint for day-to-day use. Gate24 remains the comparison baseline. Its serve path is still in the tree until the trie is wired through `generate_decode`. Plan and measurements: [`docs/CURRENT.md`](docs/CURRENT.md).
 
-| Mode | Entry points | Role |
-|------|--------------|------|
-| **Train** | `cyphalm_train`, `train_step`, `eval_bpc_compress_equivalent` | Online hp table updates; compress-faithful BPC (~**1.6117** observe on enwik8 gate24) |
-| **Serve** | `serve_advance`, `serve_predict_next`, `serve_greedy_next` | Generation without train bookkeeping; **inference latency first** |
-| **Generate** | `generate_decode`, `cyphalm_generate`, `POST /generate` | Greedy (O(8) bits), temperature, top-k |
+| | Packed trie | hp gate24 (comparison) |
+|--|-------------|------------------------|
+| Frozen 8 MiB holdout | **2.298 BPC** (learned mixture) | **1.612 BPC** |
+| Surface of samples | about **0.74–0.83** | tiny-tier best sample about **0.997** |
+| RAM at 8 MiB | peak about **116 MB**; packed accounting **5.4 MB** | about **1.5 GB** at mem 22; tiny tier about **40 MB** and **1.92 BPC** |
+| RAM at 10⁹ bytes | peak about **400 MB**; packed upper bound about **45 MB** | not trained; tables stay at the slot size |
 
-```bash
-# Build + sample completion (after cmake configure)
-cmake --build native/build --target cyphalm_generate -j$(nproc)
-./native/build/cyphalm_generate --prompt "Hello " --max-tokens 32 --strategy greedy
-
-# REST (sequence model loaded)
-cypha_rest --listen 127.0.0.1:8099 --cypha fixtures/reference.cypha
-# POST /generate  { "prompt_ids": [...], "max_tokens": 64, "strategy": "temperature" }
-```
-
-- **Quality bar:** gate24 enwik8 observe **1.611729 BPC** / archive **1.611759 BPC** (2026-09-19, vendored hp). Train metric ≠ generation log-prob path — see [`MODEL_CARD.md`](MODEL_CARD.md).
-- **Lossy tiers:** `CYPHA_HP_LOSSY_TIER=lean` is 1.609866 BPC on enwik8 8 MiB with 30% less RAM than gate24 and a faster observe path; `compact` halves RAM for +0.0057 BPC. See [`docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md`](docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md).
-- **Docs:** [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md) (train vs serve API), [`docs/reports/CYPHALM_LLM_EVAL.md`](docs/reports/CYPHALM_LLM_EVAL.md) (BPC harness).
-- **Superseded stacks** (history only): Hybrid GRIA+LSTM [`docs/history/LEGACY_LLM.md`](docs/history/LEGACY_LLM.md), RPSM [`docs/history/REMOVED_RPSM.md`](docs/history/REMOVED_RPSM.md), hp light/champ SKUs [`docs/history/REMOVED_HP_SKUS.md`](docs/history/REMOVED_HP_SKUS.md).
-
-## Small model and corpus
-
-The packed byte trie is a separate experiment from gate24. It is the small model, not a replacement for the mixer above. Measured on the first 8 MiB of enwik9 (train 7,340,032 bytes, frozen holdout the rest): fixed backoff **2.386 BPC**, learned mixture **2.298 BPC** with about **0.93** of the weight on order 4. Surface scores of its samples are about **0.74–0.83**. Exact Dolly questions copy the stored answer. A question that was not stored is not answered.
-
-The **5.4 MB** figure is the packed layout after counts seen once are dropped. Training keeps those nodes, so the 8 MiB slice peaks near **116 MB**. A full pass of enwik9 (10⁹ bytes) peaks near **400 MB**, with about **3.2 million** distinct 4-grams. Chat has to stay in its own prompt index. Pouring Dolly into the wiki counts overwrites followers the holdout still uses.
-
-Corpus fetch, category budgets, and the full number table: [`docs/CURRENT.md`](docs/CURRENT.md).
+Backoff alone on that slice is **2.386 BPC**. The mixture puts about **0.93** of its weight on order 4 and **0.06** on the match. Exact stored questions copy their saved answer. A question that was not stored is not answered.
 
 ```text
-python scripts/fetch_corpus.py --check
 python scripts/fetch_corpus.py
+```
+
+The serve CLI below still loads hp. It is the comparison binary, not the trie.
+
+```bash
+cmake --build native/build --target cyphalm_generate -j$(nproc)
+./native/build/cyphalm_generate --prompt "Hello " --max-tokens 32 --strategy greedy
 ```
 
 ---

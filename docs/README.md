@@ -2,7 +2,7 @@
 
 **One product:** `cypha::Cypha` -- classify + regress + sample latents + next-byte generation. Native C++ only.
 
-The shipping language model is the **hp gate24** context mixer (~**1.61 BPC** on enwik8, about **1.5 GB**). The separate small-model line is a packed byte trie plus a learned mixture (~**2.30 BPC**, a few megabytes of stored counts). Where those two sit, and how the corpus on D: is fetched, is [`CURRENT.md`](CURRENT.md).
+The language model being taken forward is the **packed byte trie** (~**2.30 BPC** on an 8 MiB holdout). **hp gate24** (~**1.61 BPC**, about **1.5 GB**) is the comparison baseline. It is not trained at terabyte scale. Map, measurements, and the 1 TB train plan: [`CURRENT.md`](CURRENT.md).
 
 The D17 bench lock in `bench/BASELINE_LOCK.json` (Hybrid GRIA+LSTM **2.664 BPC** at 300k) is a classifier/sequence pin. It is not the CyphaLM quality bar. History of the retired hybrid stack: [`history/LEGACY_LLM.md`](history/LEGACY_LLM.md).
 

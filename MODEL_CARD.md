@@ -15,11 +15,13 @@ cite 2.873 BPC are **historical** (L1 pin).
 | Runtime | Native C++ only (`cypha_rest`, `cypha_qt_shell`, `cypha_bench_run`) |
 | Paper | `paper/arxiv_bundle/CyphaLM_paper.pdf` |
 
-One public type owns classify, regress, latent sample, and **byte-level LLM generation** (CyphaLM / hp gate24).
+One public type owns classify, regress, latent sample, and **byte-level generation**. The language model being taken forward is the **packed byte trie**. **hp gate24** remains in the tree as the comparison baseline.
 
-## CyphaLM — living byte LLM (hp gate24)
+## CyphaLM — packed trie first
 
-CyphaLM is a **trainable, servable byte LLM**, not only a compressor. The same vendored **hp** context mixer powers (1) **compress-faithful BPC training/eval**, (2) **fast inference / generation**, and (3) REST + CLI surfaces. **Inference latency is the headline metric**; training may be slower.
+The model to train on the corpus is the packed byte trie. hp gate24 is the comparison, not the training target. Gate24's observe score on enwik8 is **1.611729 BPC** at about **1.5 GB**. The trie mixture on the same size of text is **2.298 BPC**, peaking near **116 MB** on that slice and near **400 MB** across 10⁹ bytes. Gate24's tables are sized in advance. They do not grow with the data in a way that can be trained through a terabyte, and they are the wrong footprint for day-to-day use.
+
+The serve CLI and REST `/generate` path still call hp. That wiring has not moved. The decision is which model the next train builds.
 
 | Surface | APIs | Notes |
 |---------|------|-------|
@@ -121,7 +123,7 @@ Pre-removal source remains in git history on `main` and PR #1 commits.
 ## Limits (honest)
 
 - Shared-model continual learning (D16B) remains open; zero-forgetting is per-file isolation (D16F).
-- Cell-hypothesis sweep and Hybrid GRIA+LSTM pins are historical; **hp** is the product LLM algorithm.
+- Cell-hypothesis sweep and Hybrid GRIA+LSTM pins are historical. **hp gate24** is the comparison baseline (~1.61 BPC, ~1.5 GB). The language model being trained next is the **packed trie**.
 - Windows CI compiles but does not run the full CTest matrix (Linux `build_and_test` does).
 - Training is CPU. Optional CUDA is infer-only (DIF/classify path); CyphaLM hp train stays on CPU. GPU training is slower on this workload and is not a gap. **CyphaLM optimizes inference latency** over train throughput; future CPU speed path: portable SIMD via xsimd (`docs/FUTURE.md` §1b).
 - Paper PDF / HTML in `paper/arxiv_bundle/` may still mention 2.873 in body text; lock + this card are authoritative.

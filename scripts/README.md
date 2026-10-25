@@ -2,7 +2,7 @@
 
 Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`). Narrative "when to run what" lives in **[`docs/README.md`](../docs/README.md)**. **Fixtures / native / schema cadence:** **[`docs/verify/MAINTENANCE.md`](../docs/verify/MAINTENANCE.md)**.
 
-> **Two different pins.** `bench/BASELINE_LOCK.json` still records the D17 Hybrid GRIA+LSTM lock (**2.664 BPC** at 300k) for overnight bench checks. The living byte LLM in the product is **hp gate24** (~1.61 BPC on enwik8). The small trie and the D: corpus fetch are [`docs/CURRENT.md`](../docs/CURRENT.md).
+> **Two different pins.** `bench/BASELINE_LOCK.json` records the D17 Hybrid lock (**2.664 BPC** at 300k) for overnight bench checks. The language model being taken forward is the packed trie. hp gate24 is the comparison baseline. [`docs/CURRENT.md`](../docs/CURRENT.md).
 
 ## Corpus fetch
 

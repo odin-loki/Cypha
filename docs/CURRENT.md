@@ -1,20 +1,12 @@
 # Where the numbers are
 
-Two language-model lines live in this repo. They are not the same model.
+The language model being taken forward is the packed byte trie. hp gate24 stays in the tree as a comparison. It scores better on a small slice and it costs too much RAM to train on a terabyte or to keep loaded for day-to-day use.
 
-## Shipping CyphaLM
-
-hp gate24 context mixer. Quality bar on enwik8: observe **1.611729 BPC**, archive **1.611759 BPC** (measured 2026-09-19). Lab RSS at mem 22 is about **1.5–2 GB**. Lossy tiers are smaller: lean about **1.08 GB** and **1.610 BPC**, tiny about **253 MB** and **1.652 BPC** in the lossy report. A tiny-tier run on the first 8 MiB in October 2026 used about **40 MB** RSS and scored about **1.92 BPC**, with a best sample surface near **0.997**.
-
-Serve and train notes: [`native/CYPHALM_SERVE.md`](native/CYPHALM_SERVE.md). Lossy table: [`reports/CYPHALM_LOSSY_MIXER_REPORT.md`](reports/CYPHALM_LOSSY_MIXER_REPORT.md).
-
-The D17 number **2.664 BPC** in `bench/BASELINE_LOCK.json` is the Hybrid GRIA+LSTM bench lock. That stack is retired as the language model. [`history/LEGACY_LLM.md`](history/LEGACY_LLM.md).
-
-## Small trie
+## Packed trie (the model to train)
 
 Tools: `native/tools/trie_fold_lm.cpp`, `trie_online_mix.cpp`, `trie_together.cpp`, `trie_chat.cpp`. Surface score: `native/tools/surface_score.cpp`.
 
-Protocol: enwik9 bytes `[0, 7340032)` train, `[7340032, 8388608)` frozen holdout.
+Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 8388608)` frozen holdout, unless a row says otherwise.
 
 | Read | BPC | What it means |
 |------|----:|---------------|
@@ -72,4 +64,21 @@ The RedPajama book files are not downloaded. That slice was removed for copyrigh
 
 Seed URLs were probed on 2026-10-25 (`python scripts/fetch_corpus.py --check`). Each returned HTTP 206 with a real body.
 
-When the bytes are on disk, the train order is unstructured text first, then labelled chat as `User:` / `Assistant:` turns. A question is answerable when that exact turn was stored.
+## hp gate24 (comparison only)
+
+Observe **1.611729 BPC**, archive **1.611759 BPC** on enwik8 (2026-09-19). Lab RSS at mem 22 is about **1.5–2 GB**. A tiny-tier run on the first 8 MiB used about **40 MB** and scored about **1.92 BPC**, with a best sample surface near **0.997**. Those tables are sized in advance. They are not the model trained on this corpus. Serve notes for that binary: [`native/CYPHALM_SERVE.md`](native/CYPHALM_SERVE.md).
+
+The D17 number **2.664 BPC** in `bench/BASELINE_LOCK.json` is a bench lock for the retired hybrid. [`history/LEGACY_LLM.md`](history/LEGACY_LLM.md).
+
+## Plan: train the trie on about 1 TB
+
+Unstructured text and labelled chat are different jobs.
+
+1. **Hold out text first.** From each category, set aside a frozen slice before any count is updated. Score BPC and surface `S` there. Score the same 8 MiB enwik holdout with the existing gate24 and tiny checkpoints. That is the comparison. Gate24 is not trained on the terabyte.
+2. **Shard the unstructured text at about 1 GB.** A full pass of enwik9 (10⁹ bytes) peaked near **400 MB**. One shard at a time stays in that range. Write a `<|doc|>` break between files so order 4 does not glue the end of one file to the start of the next.
+3. **Pack the shard, then free it.** Drop counts below 2, store the kept counts in one byte, and drop the fat nodes before the next shard. Merge shards by adding the counts for the same context, then drop counts below 2 again. The mixture weights stay the ones fit on the 8 MiB slice (about **0.93** on order 4 and **0.06** on the match). They are not re-learned across the terabyte.
+4. **Match record stores the next byte.** A `uint32` index into the file wraps past 4 GiB. After a shard is packed, the match entry is the predicted byte, not an offset that pins the corpus in RAM.
+5. **Labelled chat is a second index.** Freeze the trie and the mixture. Build a map from the whole `User: … Assistant:` prompt to the stored answer. Do not `observe` Dolly into the trie. On the 8 MiB split, **75.7%** of holdout bytes shared a 4-gram with Dolly, and the match keeps only the latest follower, so those wiki predictions became the last Dolly byte. A fixed 8-byte or 16-byte key cannot separate the prompts: every one of the 15,011 ends in `\nAssistant: `.
+6. **Ask both ways.** A prompt that is in the chat index returns the stored answer. A prompt that is not is a sample from the packed trie. Report BPC, surface `S`, and the resident size of the packed model next to the gate24 numbers on the small slice.
+
+Order of the unstructured shards: Wikipedia and articles, then books, code, and papers, then Stack Exchange. The labelled index is last.

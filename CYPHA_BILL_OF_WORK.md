@@ -12,7 +12,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 | Historical optimality plan | [`docs/archive/plans/CYPHA_OPTIMALITY_PLAN_2026-07-18.md`](docs/archive/plans/CYPHA_OPTIMALITY_PLAN_2026-07-18.md) |
 | Historical forecasting design | [`docs/archive/plans/CYPHA_FORECASTING_PLAN_2026-08-08.md`](docs/archive/plans/CYPHA_FORECASTING_PLAN_2026-08-08.md) |
 
-**D17 bench lock:** Hybrid L2 + Wave2 BPTT **2.664 BPC** @ 300k (`bench/BASELINE_LOCK.json`). That is the overnight classifier/sequence pin, not the language model. The shipping byte LLM is hp gate24 (~1.61 BPC on enwik8). The small trie and the corpus fetch are [`docs/CURRENT.md`](docs/CURRENT.md). Prior L1 2.873 / SGD L2 2.816 are historical.
+**D17 bench lock:** Hybrid L2 + Wave2 BPTT **2.664 BPC** @ 300k (`bench/BASELINE_LOCK.json`). That is the overnight classifier/sequence pin, not the language model. The language model being taken forward is the packed trie. hp gate24 is the comparison baseline. [`docs/CURRENT.md`](docs/CURRENT.md). Prior L1 2.873 / SGD L2 2.816 are historical.
 
 **Latest release:** **[v2.5.0](https://github.com/odin-loki/Cypha/releases/tag/v2.5.0)** (2026-09-20). Prior notes: [`docs/reports/RELEASE_V2_4_0_2026-08-16.md`](docs/reports/RELEASE_V2_4_0_2026-08-16.md).
 
