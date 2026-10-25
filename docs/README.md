@@ -115,7 +115,7 @@ See [RESEARCH_STATUS.md](RESEARCH_STATUS.md) for interpretation of benchmark num
 
 Canonical journal:
 
-**[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** -- current pins, confirmed properties, priorities.
+**[`docs/RESEARCH_STATUS.md`](RESEARCH_STATUS.md)** -- bench journal. The language-model decision is [`CURRENT.md`](CURRENT.md).
 
 **[`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md)** -- open items only (historical BoW archived).
 

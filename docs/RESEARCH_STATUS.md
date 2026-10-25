@@ -1,9 +1,9 @@
 # Cypha -- Research Status
 
-**Last updated:** 2026-08-16  
+**Last updated:** 2026-10-25  
 **Runtime:** native C++ only -- `cypha_rest`, `cypha_bench_run`, **214 CTests** *(authoritative tally: `ctest -N -R native_` / `scripts/cypha_native_validate_all.ps1`)*  
 **Product:** one type **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens  
-**Planning:** [`CYPHA_BILL_OF_WORK.md`](../CYPHA_BILL_OF_WORK.md) (open items), cutover [`reports/ONE_CYPHA_CUTOVER.md`](reports/ONE_CYPHA_CUTOVER.md)
+**Language model:** packed byte trie. hp gate24 is the comparison baseline. [`CURRENT.md`](CURRENT.md). The hybrid rows below are the D17 bench lock, not that model.
 
 Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appear only where needed for wire-format or archived study pointers. Dated reports -> [`archive/`](archive/README.md).
 
@@ -17,7 +17,7 @@ Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appe
 | **Cypha regressor** | Working | Near Ridge on smooth domains; weak on hard nonlinear equations |
 | **Native stack (M1-M6 + P7)** | Shipped | Sole runtime; Kernel LLR in `native/src/kernel_memory.cpp`; CTest-gated CI |
 | **cypha::accel** | Working | Optional CUDA infer (`-DCYPHA_ENABLE_CUDA=ON`); training stays CPU (GPU train is slower). Future: xsimd — [`FUTURE.md`](FUTURE.md) §1b |
-| **Cypha sequence** | Living default **Hybrid GRIA+LSTM L2+Wave2 BPTT** (**2.664 BPC** @ 300k lock) | Predictive arithmetic coding on `predict_next`; U06 PGM→Wy remains an opt-in cell variant |
+| **Cypha sequence** | D17 bench lock **2.664 BPC** (Hybrid, 300k). Not the language model. | Trie is the model to train. hp gate24 is the comparison. [`CURRENT.md`](CURRENT.md) |
 | **cypha_som** | Archived, default OFF | Failed experiment -- [`archive/failed_experiments/cypha_som/`](archive/failed_experiments/cypha_som/README.md) |
 | **Bench harness** | 17 domains | Configs + lock under `bench/`; historical traces in `data/archive/` |
 | **cypha_qt_shell / cypha_rest** | Working | `/predict`, `/update`, `/generate`, `/sample`, `/retrieve`, `/sequence/*`, `/forecast/run` |
@@ -80,9 +80,9 @@ Everyday-profile era numbers (2026-05-31) plus later refresh notes. Full tables:
 
 | Pin | Value | Role |
 |-----|-------|------|
-| Hybrid D17 @ 300k | **2.664 BPC** (L2 + Wave2 BPTT, `lstm_layers=2`) | Production lock / living default target |
+| Hybrid D17 @ 300k | **2.664 BPC** (L2 + Wave2 BPTT, `lstm_layers=2`) | Bench lock only. Not the language model |
 | Hybrid D04 @ 8k | **~4.14 BPC** | Bench regression pin |
-| Living default | **Hybrid GRIA+LSTM** | Product `predict_next` / `generate` / predictive AC |
+| Language model | **Packed byte trie** | Train target. hp gate24 is the comparison. [`CURRENT.md`](CURRENT.md) |
 | GRIA-only @ 300k | 3.838 BPC | Ablation / archive |
 | U06 PGM→Wy | opt-in | Cell variant / `--mode pgm_logits` |
 
