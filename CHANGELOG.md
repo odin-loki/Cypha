@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Count-based word vectors** (PLAN C1, [report](docs/reports/C1_PPMI_SVD_VECTORS.md)): `native/tools/ppmi_svd.cpp` builds PPMI with smoothed contexts and a home-built randomised SVD, plus random indexing, from enwik8. No neural network is involved. Scores: WordSim-353 0.672, SimLex-999 0.255, MEN 0.637. This is the baseline the other Cypha encoders must beat.
 - **T-QA-wiki, 200 blind questions** (`bench/eval/t_qa_wiki.tsv`, [report](docs/reports/T_QA_WIKI_200.md)): 150 answerable from the training slice and 50 not.
   - `qa_infobox`: 3 right / 197 abstained / 0 wrong. The 8/8 seed score was in-sample.
   - `chat_index`: 2 right / 194 abstained / 4 wrong.
