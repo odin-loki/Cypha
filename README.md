@@ -3,6 +3,8 @@
 [![CI](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml/badge.svg)](https://github.com/odin-loki/Cypha/actions/workflows/ci.yml) · **[Releases](https://github.com/odin-loki/Cypha/releases)** (native Linux/Windows/macOS — latest **[v2.5.0](https://github.com/odin-loki/Cypha/releases/tag/v2.5.0)**)
 
 > **One public type `cypha::Cypha`**: classify + regress + latent sample (`POST /sample`) + **CyphaLM byte LLM**. The language model being taken forward is the **packed byte trie** (learned mixture, about **2.30 BPC** on an 8 MiB holdout, hundreds of megabytes at a gigabyte of text). **hp gate24** stays in the tree as a comparison (~**1.61 BPC**, about **1.5 GB**). It is not the model to train at scale. See [`docs/CURRENT.md`](docs/CURRENT.md).
+>
+> **Default plan: [`docs/PLAN.md`](docs/PLAN.md)** (2026-10-26). The trie is a strong compressor, but it answers only questions stored byte for byte, and a longer byte context does not change that ([test](docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md)). The plan builds language understanding from statistics plus a data pack, with the Cypha classifier making the decisions and no neural network at runtime. It also defines the SCRIBE text metric and the ECS and LCI certainty metrics. The 1 TB trie run continues inside it as Track A.
 
 ---
 
@@ -84,7 +86,7 @@ The language model to train and use is the packed byte trie. hp gate24 scores be
 | RAM at 8 MiB | peak about **116 MB**; packed accounting **5.4 MB** | about **1.5 GB** at mem 22; tiny tier about **40 MB** and **1.92 BPC** |
 | RAM at 10⁹ bytes | peak about **400 MB**; packed upper bound about **45 MB** | not trained; tables stay at the slot size |
 
-Backoff alone on that slice is **2.386 BPC**. The mixture puts about **0.93** of its weight on order 4 and **0.06** on the match. Exact stored questions copy their saved answer. A question that was not stored is not answered.
+Backoff alone on that slice is **2.386 BPC**. The mixture puts about **0.93** of its weight on order 4 and **0.06** on the match. Exact stored questions copy their saved answer. A question that was not stored is not answered. On 2026-10-26 that copy (a string search for the whole prompt) fired on 975/975 verbatim Dolly prompts and 0/975 with one letter lowercased. An order-8192 count context took BPC from 2.32 to 2.06, with all of the gain by 16 bytes, and answered 0/8 Wikipedia facts and 1/30 held-out questions ([report](docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md)). What comes next: [`docs/PLAN.md`](docs/PLAN.md).
 
 ```text
 python scripts/fetch_corpus.py

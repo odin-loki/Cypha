@@ -1,9 +1,10 @@
 # Cypha -- Research Status
 
-**Last updated:** 2026-10-25  
+**Last updated:** 2026-10-26  
 **Runtime:** native C++ only -- `cypha_rest`, `cypha_bench_run`, **214 CTests** *(authoritative tally: `ctest -N -R native_` / `scripts/cypha_native_validate_all.ps1`)*  
 **Product:** one type **`cypha::Cypha`** -- classify + regress + latent sample + sequence tokens  
-**Language model:** packed byte trie. hp gate24 is the comparison baseline. [`CURRENT.md`](CURRENT.md). The hybrid rows below are the D17 bench lock, not that model.
+**Language model:** packed byte trie. hp gate24 is the comparison baseline. [`CURRENT.md`](CURRENT.md). The hybrid rows below are the D17 bench lock, not that model.  
+**Default plan:** [`PLAN.md`](PLAN.md) (2026-10-26). Evidence: [`reports/CYPHALM_QA_AND_CONTEXT_TEST.md`](reports/CYPHALM_QA_AND_CONTEXT_TEST.md).
 
 Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appear only where needed for wire-format or archived study pointers. Dated reports -> [`archive/`](archive/README.md).
 

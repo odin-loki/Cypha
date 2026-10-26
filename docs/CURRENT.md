@@ -2,6 +2,8 @@
 
 The language model being taken forward is the packed byte trie. hp gate24 stays in the tree as a comparison. It scores better on a small slice and it costs too much RAM to train on a terabyte or to keep loaded for day-to-day use.
 
+**The default plan is now [`PLAN.md`](PLAN.md)** (2026-10-26). The 1 TB run below continues inside it as Track A, with its predictions registered there. The question-answering and 8K count-context results are in [`reports/CYPHALM_QA_AND_CONTEXT_TEST.md`](reports/CYPHALM_QA_AND_CONTEXT_TEST.md).
+
 ## Packed trie (the model to train)
 
 Tools: `native/tools/trie_fold_lm.cpp`, `trie_online_mix.cpp`, `trie_together.cpp`, `trie_chat.cpp`. Surface score: `native/tools/surface_score.cpp`.
@@ -71,6 +73,8 @@ Observe **1.611729 BPC**, archive **1.611759 BPC** on enwik8 (2026-09-19). Lab R
 The D17 number **2.664 BPC** in `bench/BASELINE_LOCK.json` is a bench lock for the retired hybrid. [`history/LEGACY_LLM.md`](history/LEGACY_LLM.md).
 
 ## Plan: train the trie on about 1 TB
+
+This is Track A of [`PLAN.md`](PLAN.md). The experiments A1–A8 and predictions P-A1 to P-A5 are recorded there.
 
 Unstructured text and labelled chat are different jobs.
 

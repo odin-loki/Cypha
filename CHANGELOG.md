@@ -9,6 +9,15 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Default plan** ([`docs/PLAN.md`](docs/PLAN.md), 2026-10-26):
+  - Language understanding from statistics plus a data pack (Wikidata, Open English WordNet, Wiktionary, ConceptNet, OpenCyc upper ontology, UD treebank), with the Cypha classifier making the decisions and learning online through rewards. No neural network at runtime.
+  - Self-improvement is promoted only through a referee.
+  - Defines **SCRIBE** (generated-text metric, six axes, normalised against human text, with control ladders it must pass), **ECS** (evidence certainty: subjective-logic fusion of source trust, extraction confidence, independence, time and derivation) and **LCI** (learning certainty: paired Bayesian gain, canary non-inferiority, generalisation ratio, calibration, stability, cost, e-value multiplicity control, reusable holdout).
+  - The 1 TB trie run becomes Track A, with predictions registered in advance.
+- **Question-answering and count-context test** ([report](docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md)). New tools `native/tools/trie_qa_probe.cpp`, `trie_context_8k.cpp` and `surface_controls.cpp` reuse `trie_chat.cpp`'s model and take paths as arguments. Findings:
+  - The chat "answers" are a string search for the whole prompt: 975/975 verbatim, 0/975 with one letter lowercased.
+  - An order-8192 count context takes BPC from 2.32 to 2.06, all of it by 16 bytes (median match 10 bytes). It answers 0/8 Wikipedia facts and 1/30 held-out questions.
+  - Surface `S` rates random corpus words (0.918) above the trie's sample (0.775).
 - **Corpus fetch** (`scripts/fetch_corpus.py`, `scripts/run_fetch.sh`): stoppable download toward about 1 TB on `D:\cypha_llm\corpus`. Books (Gutenberg, Wikisource, Wikibooks), code (RedPajama GitHub), articles (C4, RedPajama Common Crawl, English Wikipedia, a capped Common Crawl WET sample), papers (RedPajama arXiv), structured (Stack Exchange), labelled (Dolly, OpenAssistant, AG News, SQuAD, IMDB). The RedPajama book slice is excluded. Progress bar and time left. `--check` probes the seed URLs.
 - **Language model decision:** the packed trie is the model to train. hp gate24 stays as the comparison (~1.61 BPC, ~1.5 GB) and is not the terabyte train. Plan: [`docs/CURRENT.md`](docs/CURRENT.md).
 - **CyphaLM winner v2 and the ∞-gram as a cache** ([report](docs/reports/CYPHALM_LM_QUALITY_REPORT.md), "Winner v2"): occupancy fold (`--fold-auto`), upstream CompressionAlgorithm mixer gains and context models (config fields, checkpoint v4/v5), a byte-LSTM neural expert (`--neural`, bf16, 0.66 ms/byte), libsais just-in-time ∞-gram index (no stored index), `cyphalm_trace` (corpus attribution / contamination), session cache (`--session-cache`). Default winner: 4 shards, wiki / Alice / lcet10 1.6192 / 2.0191 / 1.5160 at 1.0 GB private RAM.
