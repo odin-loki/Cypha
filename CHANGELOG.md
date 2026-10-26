@@ -9,6 +9,10 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Fact-store Q/A** (PLAN F1, [report](docs/reports/F1_INFOBOX_QA.md)): `native/tools/qa_infobox.cpp` extracts infobox fields and a few sentence patterns from the training slice into 141 facts. A question classifier v0 answers from them or abstains.
+  - 8/8 on the seed questions (in-sample), up from the trie's 0/8.
+  - Fact precision 0.90, with a Wilson lower bound of 0.744.
+  - Seed suite at `bench/eval/t_qa_wiki_seed.tsv`.
 - **Fuzzy chat index** (PLAN B7, [report](docs/reports/B7_CHAT_INDEX.md)): `native/tools/chat_index.cpp`, a BM25 + character 3-gram retrieval index over Dolly that returns a stored answer or abstains.
   - Every perturbed form (lowercased, " Thanks.", no punctuation, synonym) keeps ≥ 0.99 of verbatim accuracy with no abstain, and 0.957–0.964 with abstain on.
   - It abstains on 92.6% of held-out questions.
