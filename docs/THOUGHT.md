@@ -3,12 +3,12 @@
 **Odin Loch** · 2026-10-27 · Track K of [PLAN.md](PLAN.md)
 
 This gives Cypha a library of the processes people use to think and work, written so Cypha can run them, choose between them, and improve them with the same online statistics it already uses.
-- It covers reasoning, problem solving, deciding, planning, learning, metacognition, creativity, science, engineering, quality, fault finding, intelligence analysis, communication, negotiation, software, management, finance, law, teaching, estimation and perception.
+- It covers reasoning, problem solving, deciding, planning, learning, metacognition, creativity, science, engineering, quality, fault finding, intelligence analysis, communication, negotiation, software, management, finance, law, teaching, estimation, perception, data science, and AI/ML engineering, including Cypha's own daily upkeep.
 - It uses the same statistics as the rest of Cypha: Beta and Dirichlet counts, Welford running moments, the DIF classifier, Thompson sampling, ECS and LCI.
 
 | File | What it is |
 |---|---|
-| [`thought/processes.yaml`](thought/processes.yaml) | The library: **106 processes in 23 categories, 626 steps**, machine-readable |
+| [`thought/processes.yaml`](thought/processes.yaml) | The library: **142 processes in 25 categories, 840 steps**, machine-readable |
 | [`thought/INDEX.md`](thought/INDEX.md) | Generated index: every process with its source, when to use it and its core maths |
 | [`../scripts/thought_check.py`](../scripts/thought_check.py) | Validator, index builder, and UML export (`--uml <id>` for PlantUML, `--mermaid <id>`) |
 
@@ -96,6 +96,8 @@ A shared **working memory** (the global workspace, process `global_workspace`) h
 | teach | 2 | scaffolded teaching, Socratic questioning |
 | estimate | 3 | Fermi estimation, forecasting (outside then inside view), reference-class forecasting |
 | perceive | 2 | where to look (salience), change detection (CUSUM) |
+| data | 17 | CRISP-DM, exploratory analysis, cleaning, quality scorecard, hypothesis tests, A/B tests, regression, time series, clustering, anomaly detection, observational causal effects, honest charts, feature engineering, survey sampling, record linkage, near-duplicates, ETL with reconciliation |
+| ai | 19 | ML workflow, cross-validation, hyperparameter search (successive halving), error analysis, model evaluation, ablation, leakage check, drift monitoring (PSI, KS, CUSUM), active learning, Cypha's safe online update, model selection (AIC, BIC, MDL), retrieval pipeline, teacher queries, benchmark hygiene, experiment tracking, slice audit, bandit loop, **daily upkeep**, model card |
 
 Every process carries its source (`ref`) and its core maths (`math`). Some examples:
 - RPN = S·O·D (FMEA);
@@ -182,6 +184,24 @@ Before each step after the first, the run is checked against three rules:
 
 ---
 
+### 3.9 Day-to-day use: the AI and data-science processes
+
+The `ai` and `data` categories are the processes Cypha uses on itself and on its data every day.
+
+- **`daily_upkeep` runs once a day.** In order:
+  1. canary suites;
+  2. drift checks (`drift_monitoring`: PSI, KS and CUSUM);
+  3. an audit sample of new facts and abstentions;
+  4. calibration refresh;
+  5. the gap map and frontier report;
+  6. the curiosity scheduler's discovery budget;
+  7. a dated journal for Odin.
+- **Admissions pause** if the audit's Wilson lower bound falls below 0.90.
+- **Every incoming item** goes through `online_update`. It predicts first (prequential scoring), learns, checks canaries and rolls back on a drop.
+- **Every model or default change** runs `ml_workflow` → `model_evaluation` → LCI. It also uses `leakage_check` and `benchmark_hygiene`, so test sets stay honest, and `model_card` so the card stays true.
+- **New data** runs `data_quality_check` before it can train anything or support an answer. Its scores update the source's trust Beta.
+- **Choices that repeat** (thresholds, scorers, which teacher prompt to use) run as `bandit_loop`s.
+
 ## 4. Fast and slow thinking
 
 **System 1** is the fast route: case recall and compiled rules. It covers:
@@ -208,7 +228,7 @@ Fast answers never bypass the answer-mode rules. A chunked rule's answers carry 
 
 ## 5. Composition, impasses and hierarchy
 
-- **Calls.** `op: "call:<id>"` runs another process as a step. The library has 25 such calls (for example, `dmaic` calls `ishikawa` and `spc_control`, `ach` is called by the intelligence cycle, and `five_whys` is called from five places).
+- **Calls.** `op: "call:<id>"` runs another process as a step. The library has 43 such calls (for example, `dmaic` calls `ishikawa` and `spc_control`, `ach` is called by the intelligence cycle, `five_whys` is called from five places, and `crisp_dm` chains `eda`, `data_cleaning` and `ml_workflow`).
 - **Recursion** is allowed (`means_ends`, `htn_plan`) with a depth cap of 5.
 - **Impasse** (Soar): when no process has `P(applicable) ≥ θ`, or all applicable ones fail, `impasse` makes "resolve the impasse" a goal. It then tries, by learned success:
   - decomposing the problem;
@@ -345,7 +365,7 @@ The reward is always measured, never self-assessed. Every source maps to R ∈ [
 
 | ID | Work | Gate |
 |---|---|---|
-| K1 | Library, schema and validator (done 2026-10-27: 106 processes, 0 errors) | `thought_check.py` passes |
+| K1 | Library, schema and validator (done 2026-10-27: 142 processes, 0 errors) | `thought_check.py` passes |
 | K2 | C++ interpreter: steps, guards, calls, budgets, traces to the experiment DB (`native/include/cypha/thought/`) | Replays a trace bit-identically; CTest |
 | K3 | Standard learners: Beta, Dirichlet, Welford, DIF applicability, Thompson selection, TD(λ) credit, VOC stop, calibration | Known-answer CTests; regret falls on a synthetic bandit of processes |
 | K4 | Primitives bound to existing tools (`chat_index`, `qa_infobox`, ECS, LCI, epistemic, SCRIBE, `gguf_mine.py`) | Each primitive has a test |

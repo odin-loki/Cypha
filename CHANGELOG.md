@@ -9,6 +9,10 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **AI and data-science processes** in the thought library ([`docs/THOUGHT.md`](docs/THOUGHT.md) §3.9): 36 more processes, for 142 in total.
+  - 17 data science: CRISP-DM, EDA, cleaning, quality scorecard, tests, A/B, regression, time series, clustering, anomalies, observational causal effects, honest charts, features, sampling, record linkage, near-duplicates, ETL.
+  - 19 AI/ML: workflow, cross-validation, successive-halving search, error analysis, evaluation, ablation, leakage, drift (PSI/KS/CUSUM), active learning, safe online update, model selection, retrieval, teacher queries, benchmark hygiene, tracking, slice audit, bandits, model cards.
+  - A `daily_upkeep` routine for Cypha itself.
 - **Thought-process library** (PLAN Track K, [`docs/THOUGHT.md`](docs/THOUGHT.md)):
   - 106 human thinking and work processes in 23 categories (`docs/thought/processes.yaml`), each a control graph with its source and core maths.
   - The model is a learnable option with Beta, Dirichlet and Welford learners, DIF applicability, Thompson selection, TD(λ) credit, a value-of-computation stop, fast/slow arbitration, chunking, process mining and MDL edits promoted through LCI.

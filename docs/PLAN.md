@@ -463,7 +463,7 @@ The full design, work items S1–S15 and gates are in [`DISCOVERY.md`](DISCOVERY
 
 ### Track K: thought processes
 
-A learnable library of human thinking and work processes. It has 106 processes in 23 categories, each a control graph with its source and core maths. Cypha runs, selects and improves them with its own statistics:
+A learnable library of human thinking and work processes, plus the AI and data-science processes Cypha uses day to day. It has 142 processes in 25 categories, each a control graph with its source and core maths. Cypha runs, selects and improves them with its own statistics:
 - Beta and Dirichlet counts and Welford moments;
 - DIF applicability;
 - Thompson selection, TD(λ) credit and the value-of-computation stop;

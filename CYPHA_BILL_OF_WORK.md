@@ -46,7 +46,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - the standard learners (Beta, Dirichlet, Welford, Thompson, TD(λ), value of computation);
   - primitives bound to the existing tools;
   - the first executable processes on their benchmarks.
-  - K1 (106 processes, validator) is done.
+  - K1 (142 processes including AI and data science, validator) is done.
 - [ ] **H1–H3**: pick a permissively licensed GGUF teacher. Run `scripts/gguf_mine.py calibrate` on a Wikidata gold sample, then `facts`, `lexical` and `crawl` with that calibration. List: [`docs/GGUF_MINING.md`](docs/GGUF_MINING.md).
 
 - [x] **Cell sweep wrap-up** — B2 and H06 rerun 2026-08-16 @ 300k / eval 2k (isolated `bench/results/cell_sweep_rerun/`). Both **3.681 BPC** with math-integration (same as H14; not a promote vs Hybrid 2.664). Archived at `data/archive/cell_sweep/variant_B2.json` + `variant_H06.json`. Best new row remains U03 **2.822**.
