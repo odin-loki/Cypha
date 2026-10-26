@@ -9,6 +9,10 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Fuzzy chat index** (PLAN B7, [report](docs/reports/B7_CHAT_INDEX.md)): `native/tools/chat_index.cpp`, a BM25 + character 3-gram retrieval index over Dolly that returns a stored answer or abstains.
+  - Every perturbed form (lowercased, " Thanks.", no punctuation, synonym) keeps ≥ 0.99 of verbatim accuracy with no abstain, and 0.957–0.964 with abstain on.
+  - It abstains on 92.6% of held-out questions.
+  - Query p50 0.34 ms, 28 MB index.
 - **ECS and LCI library** (PLAN M1, [report](docs/reports/M1_ECS_LCI_LIBRARY.md)): header-only `native/include/cypha/eval/ecs.hpp` and `lci.hpp`. Covers evidence fusion, grades, calibration, the Bayesian-bootstrap learning gain, canaries, e-process with alpha spending, Benjamini–Hochberg, Thresholdout, BWT and learning-curve fit. CTest `native_ecs_lci_test` runs 242 known-answer checks.
 - **GGUF mining** ([`docs/GGUF_MINING.md`](docs/GGUF_MINING.md), [`scripts/gguf_mine.py`](scripts/gguf_mine.py)): PLAN Track H.
   - The full list of what can be statistically extracted from a neural model in GGUF format, with references, status and how each output feeds the data pack and ECS.
