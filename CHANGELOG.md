@@ -9,6 +9,9 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **T-QA-wiki, 200 blind questions** (`bench/eval/t_qa_wiki.tsv`, [report](docs/reports/T_QA_WIKI_200.md)): 150 answerable from the training slice and 50 not.
+  - `qa_infobox`: 3 right / 197 abstained / 0 wrong. The 8/8 seed score was in-sample.
+  - `chat_index`: 2 right / 194 abstained / 4 wrong.
 - **Discovery design** ([`docs/DISCOVERY.md`](docs/DISCOVERY.md), PLAN Track S):
   - answer mode and discovery mode behind a firewall;
   - epistemic states and the two kinds of uncertainty;
