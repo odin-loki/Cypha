@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **SCRIBE v1** ([report](docs/reports/SCRIBE_V1.md)): real packed-trie samples (`native/tools/trie_sample.cpp`), SIF sentence vectors, an I gate, length parity. On a fresh ladder it passes 3 of 6 adjacent pairs (v0 passed 1); surface S passes 2. Human text beats trie output in 99.3% of pairs.
 - **Epistemic layer and chat-index reason codes** (DISCOVERY S1/S2, [report](docs/reports/S1_S2_EPISTEMIC.md)): header-only `epistemic.hpp` covers states, degree of conflict, uncertainty split, 11 reason codes, Good–Turing, Chao1, Chapman, Heaps and the four card formats; CTest `native_epistemic_test`, 195 checks. `chat_index` explains every refusal with a reason code, and answers in 1.3 s instead of 53 s.
 - **SCRIBE v0** (PLAN §6, [report](docs/reports/SCRIBE_V0.md)): header-only `native/include/cypha/eval/scribe.hpp` covers the open-text axes S, C, I and E, with human-reference normalisation. `native/tools/scribe_ladder.cpp` runs the V1 control ladder; CTest `native_scribe_selftest`.
   - It fails the ladder: 1 of 6 adjacent pairs pass, as does surface S. Recorded as a negative result, with the fixes.

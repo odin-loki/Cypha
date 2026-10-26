@@ -1,8 +1,8 @@
-// SCRIBE v0: the generated-text quality metric (docs/PLAN.md section 6).
+// SCRIBE v1: the generated-text quality metric (docs/PLAN.md section 6).
 //
-// Header-only, standard library only, no neural network. Scope of v0 is the OPEN-CONTINUATION
-// profile with axes S (syntax), C (coherence), I (integrity) and E (expression, set level).
-// R (relevance) and B (belief) need question and fact machinery that does not exist yet.
+// Header-only, standard library only, no neural network. Scope is the OPEN-CONTINUATION profile with
+// axes S (syntax), C (coherence), I (integrity) and E (expression, set level). R (relevance) and B (belief)
+// need question and fact machinery that does not exist yet. Results: docs/reports/SCRIBE_V1.md.
 //
 // Sub-scores (all raw statistics are normalised by the empirical CDF of human reference
 // samples of the same length bucket, PLAN 6.1; one-sided s = min(1, 2F), two-sided
@@ -12,34 +12,43 @@
 //   S3 word fluency       mean log-probability per predicted token (words and </s>) under an
 //                         interpolated Kneser-Ney word trigram; every out-of-vocabulary word
 //                         pays a flat extra 8 nats                                    one-sided
-//   S4 well-formedness    pass rate of six checks: valid UTF-8, sentence-initial capital
-//                         (fraction of sentences), terminal punctuation at the end, balanced
-//                         brackets, even number of double quotes, no mid-word cut at the end
-//   C1 local cohesion     mean cosine of adjacent sentences' TF-IDF bag-of-words vectors
-//                         (stand-in for the C6 sentence vectors)                      two-sided
-//   C3 topic drift        Jensen-Shannon divergence (bits) of the content-word distribution
-//                         of the first half against the second half                   two-sided
+//   S4 well-formedness    pass rate of six checks: valid UTF-8, sentence-initial capital (fraction
+//                         of sentences), terminal punctuation at the end, balanced brackets, even
+//                         number of double quotes, no mid-word cut at the end
+//   C0 word cohesion      mean cosine over all pairs of distinct content words (idf >= 3 and known
+//                         to the word vectors; >= 4 of them)                          two-sided
+//   C1 sentence cohesion  mean cosine over ALL pairs of sentence vectors (C6: PPMI-SVD word vectors,
+//                         SIF weights a/(a+p(w)) with a = 1e-3, first principal component removed).
+//                         A sample with fewer than two embeddable sentences is cut into two halves of
+//                         its tokens (>= 8 tokens), so short samples have the axis    two-sided
+//   C3 topic drift        Jensen-Shannon divergence (bits) of the content-word distribution of the first
+//                         half against the second half (>= 4 content words)           two-sided
+//                         The C axis is the geometric mean of the C sub-scores that exist.
 //   I2 self-repetition    geometric mean of the scores of loop8 and of the repeated-sentence
 //                         rate (lower is better)                                      one-sided
 //   I3 diversity          geometric mean of distinct-1..4 (word n-grams)              two-sided
 //   E1 Zipf slope         rank-frequency slope of a SET of samples against human sets of
 //                         the same size and bucket                                    two-sided
-//   E3 sentence lengths   1 - JSD(sentence-length histogram, human histogram), against human
-//                         sets of the same size                                       one-sided
-// C needs >= 2 sentences; without them the axis is absent and the weights renormalise.
+//   E3 sentence lengths   Kolmogorov distance between the set's sentence-length distribution and the
+//                         human one, against the same distance for human sets         one-sided
 //
-// Combining (6.3): axis = geometric mean of its sub-scores; per-sample SCRIBE = weighted
-// geometric mean of S, C, I with eps = 0.01; gate: S < 0.2 caps the sample at S. The set-level
-// value is the mean of SCRIBE_x times E^w_E. Profile weights for open continuation: S 2, C 2,
-// I 1, E 1 (R and B are 0 in v0).
+// Combining (6.3): axis = geometric mean of its sub-scores; per-sample SCRIBE = weighted geometric mean
+// of S, C, I with eps = 0.01 (open continuation weights S 2, C 2, I 1, E 1). Gates: S < 0.2 caps the sample
+// at S, and (new in v1) I < 0.2 caps it at I. The set-level value is the mean of SCRIBE_x times E^w_E.
+// ScribeProfile also carries two variants that were tried and not adopted (one-sided C scores; scaling
+// instead of capping); see the report.
 //
-// Also here: a Wikipedia markup cleaner, a sentence splitter, a word tokenizer, the old
-// surface score S = H*D*L (ported from native/tools/surface_score.cpp), and the small
-// statistics helpers the ladder needs (bootstrap interval, pairwise ordering accuracy,
-// Pearson and Spearman correlation).
+// E null (build_set_reference): human sets drawn from a third of ~20 stretches of the human corpus, so
+// that it carries between-stretch variation; the length distribution they are compared with comes from
+// text outside those stretches.
 //
-// Independence (PLAN V5): the lexicon, the trigram and the IDF come from text the caller
-// passes to ScribeModel::train; the ladder uses text disjoint from everything it scores.
+// Also here: a Wikipedia markup cleaner (human text), clean_generated_text (model continuations), a
+// sentence splitter, a word tokenizer, the old surface score S = H*D*L (ported from
+// native/tools/surface_score.cpp), and the small statistics helpers the ladder needs (bootstrap
+// interval, pairwise ordering accuracy, Pearson and Spearman correlation).
+//
+// Independence (PLAN V5): the lexicon, the trigram, the IDF and the word vectors come from text the caller
+// passes in; the ladder uses text disjoint from everything it scores and from the trie's training text.
 //
 // Author: Odin Loch
 #pragma once
@@ -49,6 +58,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <istream>
 #include <numeric>
 #include <random>
 #include <string>
@@ -427,8 +438,9 @@ inline bool prose_line(const std::string& l) {
 
 }  // namespace scribe_detail
 
-// Cleans one page body (the text between <text ...> and </text>, still XML-escaped) to prose.
-inline std::string clean_wiki_body(const std::string& body) {
+// The markup-stripping steps shared by the human-text cleaner and the model-output cleaner:
+// entities, tags, tables, templates, links, bold and italic quotes.
+inline std::string strip_wiki_markup(const std::string& body) {
   using namespace scribe_detail;
   std::string t = decode_entities(body);
   t = strip_tags(t);
@@ -436,18 +448,22 @@ inline std::string clean_wiki_body(const std::string& body) {
   t = strip_wiki_links(t);
   t = strip_external_links(t);
   t = decode_entities(t);  // second pass: "&amp;nbsp;" in 2006 dumps
-  {
-    std::string o;
-    o.reserve(t.size());
-    for (size_t i = 0; i < t.size();) {  // '' and ''' -> nothing
-      if (t[i] == '\'' && t.compare(i, 2, "''") == 0) {
-        while (i < t.size() && t[i] == '\'') ++i;
-      } else {
-        o.push_back(t[i++]);
-      }
+  std::string o;
+  o.reserve(t.size());
+  for (size_t i = 0; i < t.size();) {  // '' and ''' -> nothing
+    if (t[i] == '\'' && t.compare(i, 2, "''") == 0) {
+      while (i < t.size() && t[i] == '\'') ++i;
+    } else {
+      o.push_back(t[i++]);
     }
-    t.swap(o);
   }
+  return o;
+}
+
+// Cleans one page body (the text between <text ...> and </text>, still XML-escaped) to prose.
+inline std::string clean_wiki_body(const std::string& body) {
+  using namespace scribe_detail;
+  const std::string t = strip_wiki_markup(body);
   std::string doc;
   size_t pos = 0;
   while (pos < t.size()) {
@@ -554,6 +570,50 @@ inline std::vector<std::string> split_sentences(const std::string& text) {
   return out;
 }
 
+// Prepares a CONTINUATION generated by a model that was trained on raw wiki text, so that it can be
+// scored next to cleaned human prose. Wiki markup is stripped with the same steps as for human text;
+// then leftover markup characters ({ } [ ] | < > = * # _ \ ~) become spaces and every run of white
+// space (newlines included) one space. A continuation starts where the prompt was cut and stops where
+// the length limit cut it, so: a first word that starts without a space (the prompt cut it) and a
+// last word not followed by a sentence terminator are dropped; then, if the text has two or more
+// sentences, the first one (the rest of the prompt's sentence) is dropped, and so is a last sentence
+// without a terminator if one or more sentences remain before it. Text without any sentence boundary
+// is kept whole: a model that writes 600 bytes without one has that scored by S4, not hidden by
+// dropping the sample. Unlike the human cleaner it never drops whole lines. Returns "" if nothing is left.
+inline std::string clean_generated_text(const std::string& raw) {
+  using namespace scribe_detail;
+  const bool starts_clean = !raw.empty() && is_space_a(static_cast<unsigned char>(raw[0]));
+  std::string t = strip_wiki_markup(raw);
+  for (char& c : t) {
+    if (c == '{' || c == '}' || c == '[' || c == ']' || c == '|' || c == '<' || c == '>' || c == '=' || c == '*' || c == '#' ||
+        c == '_' || c == '\\' || c == '~' || c == '\n' || c == '\r' || c == '\t')
+      c = ' ';
+  }
+  t = collapse_ws(t);
+  if (!starts_clean) {
+    const size_t sp = t.find(' ');
+    t = sp == std::string::npos ? std::string() : t.substr(sp + 1);
+  }
+  auto terminated = [](const std::string& x) {
+    size_t e = x.size();
+    while (e > 0 && (x[e - 1] == '"' || x[e - 1] == ')' || x[e - 1] == '\'')) --e;
+    return e > 0 && (x[e - 1] == '.' || x[e - 1] == '!' || x[e - 1] == '?');
+  };
+  if (!terminated(t)) {
+    const size_t sp = t.rfind(' ');
+    t = sp == std::string::npos ? std::string() : t.substr(0, sp);
+  }
+  std::vector<std::string> s = split_sentences(t);
+  if (s.size() >= 2) s.erase(s.begin());
+  if (s.size() >= 2 && !terminated(s.back())) s.pop_back();
+  std::string o;
+  for (const std::string& x : s) {
+    if (!o.empty()) o.push_back(' ');
+    o += x;
+  }
+  return o;
+}
+
 inline bool numeric_token(const std::string& t) {
   using namespace scribe_detail;
   if (t.empty() || !is_digit_a(static_cast<unsigned char>(t[0]))) return false;
@@ -627,6 +687,8 @@ struct Ecdf {
   // PLAN 6.1: one-sided (higher is better) and two-sided (typical is best).
   double one_sided(double x) const { return std::min(1.0, 2.0 * F(x)); }
   double two_sided(double x) const { return 1.0 - std::fabs(2.0 * F(x) - 1.0); }
+  // One-sided with lower being better: min(1, 2 (1 - F)).
+  double one_sided_low(double x) const { return std::min(1.0, 2.0 * (1.0 - F(x))); }
 };
 
 inline double jsd_bits(const std::vector<double>& p, const std::vector<double>& q) {
@@ -718,6 +780,7 @@ inline double spearman(const std::vector<double>& x, const std::vector<double>& 
 
 // Sentence length histogram: 11 bins of 4 tokens (1-4, 5-8, ..., 37-40), the last bin is >= 41.
 constexpr int kLenBins = 11;
+constexpr size_t kMaxLen = 120;  // sentence lengths above this share one entry of the pmf
 inline size_t len_bin(size_t L) { return std::min<size_t>(kLenBins - 1, (std::max<size_t>(L, 1) - 1) / 4); }
 
 class ScribeModel {
@@ -763,11 +826,14 @@ class ScribeModel {
     sent_off.push_back(static_cast<std::uint32_t>(flat.size()));
     n_sent_ = sent_off.size() - 1;
     len_hist_.assign(kLenBins, 0.0);
+    len_pmf_.assign(kMaxLen + 1, 0.0);
     for (size_t s = 0; s + 1 < sent_off.size(); ++s) {
       const std::uint32_t L = sent_off[s + 1] - sent_off[s];
       len_hist_[len_bin(L)] += 1.0;
+      len_pmf_[std::min<size_t>(L, kMaxLen)] += 1.0;
     }
     for (double& x : len_hist_) x /= static_cast<double>(std::max<std::uint64_t>(1, n_sent_));
+    for (double& x : len_pmf_) x /= static_cast<double>(std::max<std::uint64_t>(1, n_sent_));
     // Lexicon: provisional ids with count >= min_count, ranked by count (ties by string).
     std::vector<std::uint32_t> keep;
     for (std::uint32_t p = 4; p < prov_words.size(); ++p)
@@ -857,6 +923,9 @@ class ScribeModel {
   const std::vector<std::string>& words() const { return words_; }
   // Sentence-length histogram (kLenBins bins) of the training text: the human reference for E3.
   const std::vector<double>& length_histogram() const { return len_hist_; }
+  // Sentence-length pmf of the training text, index = tokens per sentence (0..kMaxLen, the last
+  // entry holds every longer sentence): the human reference for the E3 Kolmogorov distance.
+  const std::vector<double>& length_pmf() const { return len_pmf_; }
 
   // Id of a token: numeric -> kNum, lexicon word -> its id, otherwise kUnk.
   std::uint32_t word_id(const std::string& tok) const {
@@ -965,10 +1034,162 @@ class ScribeModel {
   std::vector<std::uint64_t> counts_, cum_;
   std::unordered_map<std::string, std::uint32_t> lex_;
   std::vector<std::uint32_t> df_, cc1_;
-  std::vector<double> len_hist_;
+  std::vector<double> len_hist_, len_pmf_;
   KV tri_, bi_;
   Ctx c3_, c2_;
   double D1_ = 0.5, D2_ = 0.5, D3_ = 0.5, tot1_ = 1, distinct1_ = 1;
+};
+
+// ===========================================================================
+// C6: word vectors (PPMI-SVD, native/tools/ppmi_svd.cpp) and SIF sentence vectors
+// ===========================================================================
+
+// Word vectors from counts only. File format = ppmi_svd's output: <prefix>.vectors.f32 is V x dim
+// float32, row-major, unit rows; <prefix>.vocab.tsv has "word<TAB>count" per line, row i = line i.
+// On load the count-weighted mean vector is subtracted and the rows are re-normalised, which
+// removes the direction every word shares; word-level cohesion needs that.
+class WordVectors {
+ public:
+  void set(std::vector<std::string> words, std::vector<double> counts, std::vector<float> vecs, size_t dim, bool center = true) {
+    words_ = std::move(words);
+    dim_ = dim;
+    v_ = std::move(vecs);
+    const size_t V = words_.size();
+    total_ = 0;
+    for (double c : counts) total_ += c;
+    p_.assign(V, 0.0);
+    for (size_t i = 0; i < V; ++i) p_[i] = total_ > 0 ? counts[i] / total_ : 0.0;
+    idx_.clear();
+    idx_.reserve(V * 2);
+    for (size_t i = 0; i < V; ++i) idx_.emplace(words_[i], static_cast<int>(i));
+    if (center && V > 0) {
+      std::vector<double> m(dim_, 0.0);
+      for (size_t i = 0; i < V; ++i)
+        for (size_t k = 0; k < dim_; ++k) m[k] += p_[i] * v_[i * dim_ + k];
+      for (size_t i = 0; i < V; ++i) {
+        double n2 = 0;
+        for (size_t k = 0; k < dim_; ++k) {
+          const double x = v_[i * dim_ + k] - m[k];
+          v_[i * dim_ + k] = static_cast<float>(x);
+          n2 += x * x;
+        }
+        const double inv = n2 > 0 ? 1.0 / std::sqrt(n2) : 0.0;
+        for (size_t k = 0; k < dim_; ++k) v_[i * dim_ + k] = static_cast<float>(v_[i * dim_ + k] * inv);
+      }
+    }
+  }
+  // False if the files are unreadable or their sizes disagree.
+  bool load_streams(std::istream& vec, std::istream& vocab, size_t dim) {
+    std::vector<std::string> words;
+    std::vector<double> counts;
+    std::string line;
+    while (std::getline(vocab, line)) {
+      const size_t t = line.find('\t');
+      if (t == std::string::npos) continue;
+      words.push_back(line.substr(0, t));
+      counts.push_back(std::strtod(line.c_str() + t + 1, nullptr));
+    }
+    if (words.empty() || dim == 0) return false;
+    std::vector<float> v(words.size() * dim);
+    vec.read(reinterpret_cast<char*>(v.data()), static_cast<std::streamsize>(v.size() * sizeof(float)));
+    if (static_cast<size_t>(vec.gcount()) != v.size() * sizeof(float)) return false;
+    set(std::move(words), std::move(counts), std::move(v), dim);
+    return true;
+  }
+  bool load(const std::string& prefix, size_t dim = 300) {
+    std::ifstream a(prefix + ".vectors.f32", std::ios::binary), b(prefix + ".vocab.tsv");
+    return a && b && load_streams(a, b, dim);
+  }
+  size_t dim() const { return dim_; }
+  size_t size() const { return words_.size(); }
+  int index(const std::string& w) const {
+    const auto it = idx_.find(w);
+    return it == idx_.end() ? -1 : it->second;
+  }
+  const float* row(int i) const { return v_.data() + static_cast<size_t>(i) * dim_; }
+  double prob(int i) const { return p_[static_cast<size_t>(i)]; }
+
+ private:
+  size_t dim_ = 0;
+  double total_ = 0;
+  std::vector<std::string> words_;
+  std::vector<float> v_;
+  std::vector<double> p_;
+  std::unordered_map<std::string, int> idx_;
+};
+
+// Arora, Liang and Ma (2017): sentence vector = mean of a/(a+p(w)) * v_w, minus its projection on
+// the first principal direction of a sample of such vectors (fit_pc), then L2-normalised.
+class SentenceEmbedder {
+ public:
+  explicit SentenceEmbedder(const WordVectors* wv = nullptr, double a = 1e-3) : wv_(wv), a_(a) {}
+  bool ready() const { return wv_ != nullptr && wv_->size() > 0; }
+  const WordVectors& vectors() const { return *wv_; }
+  size_t dim() const { return wv_ ? wv_->dim() : 0; }
+
+  // Weighted mean of the word vectors of the known tokens; false if fewer than min_known are known.
+  bool raw(const std::vector<std::string>& toks, std::vector<float>& out, int min_known = 2) const {
+    const size_t d = dim();
+    out.assign(d, 0.0f);
+    int known = 0;
+    for (const std::string& t : toks) {
+      const int i = wv_->index(t);
+      if (i < 0) continue;
+      const float w = static_cast<float>(a_ / (a_ + wv_->prob(i)));
+      const float* r = wv_->row(i);
+      for (size_t k = 0; k < d; ++k) out[k] += w * r[k];
+      ++known;
+    }
+    if (known < min_known || known == 0) return false;
+    for (float& x : out) x /= static_cast<float>(known);
+    return true;
+  }
+  // First right singular vector of the (uncentred) matrix of raw sentence vectors, by power iteration.
+  void fit_pc(const std::vector<std::vector<float>>& X, int iters = 60) {
+    const size_t d = dim();
+    pc_.assign(d, 0.0f);
+    if (X.empty() || d == 0) return;
+    std::vector<double> v(d), nv(d);
+    std::mt19937_64 rng(12345);
+    std::normal_distribution<double> N(0.0, 1.0);
+    for (double& x : v) x = N(rng);
+    for (int it = 0; it < iters; ++it) {
+      std::fill(nv.begin(), nv.end(), 0.0);
+      for (const auto& x : X) {
+        double dot = 0;
+        for (size_t k = 0; k < d; ++k) dot += x[k] * v[k];
+        for (size_t k = 0; k < d; ++k) nv[k] += dot * x[k];
+      }
+      double n2 = 0;
+      for (double x : nv) n2 += x * x;
+      if (!(n2 > 0)) return;
+      const double inv = 1.0 / std::sqrt(n2);
+      for (size_t k = 0; k < d; ++k) v[k] = nv[k] * inv;
+    }
+    for (size_t k = 0; k < d; ++k) pc_[k] = static_cast<float>(v[k]);
+  }
+  const std::vector<float>& pc() const { return pc_; }
+  // Unit sentence vector with the first principal component removed; false if there is nothing to embed.
+  bool embed(const std::vector<std::string>& toks, std::vector<float>& out, int min_known = 2) const {
+    if (!raw(toks, out, min_known)) return false;
+    const size_t d = dim();
+    if (pc_.size() == d) {
+      double dot = 0;
+      for (size_t k = 0; k < d; ++k) dot += out[k] * pc_[k];
+      for (size_t k = 0; k < d; ++k) out[k] -= static_cast<float>(dot) * pc_[k];
+    }
+    double n2 = 0;
+    for (float x : out) n2 += double(x) * x;
+    if (!(n2 > 1e-18)) return false;
+    const float inv = static_cast<float>(1.0 / std::sqrt(n2));
+    for (float& x : out) x *= inv;
+    return true;
+  }
+
+ private:
+  const WordVectors* wv_;
+  double a_;
+  std::vector<float> pc_;
 };
 
 // ===========================================================================
@@ -995,9 +1216,10 @@ struct Features {
   size_t bytes = 0;
   int n_sent = 0;   // sentences with at least one token
   int n_words = 0;  // word tokens
-  bool has_c = false;
+  bool has_c = false;                     // at least one coherence statistic is defined
+  bool has_c0 = false, has_c1 = false, has_c3 = false;
   // raw statistics
-  double s1 = 0, s3 = -30, s4 = 0, c1 = 0, c3 = 1, loop8 = 0, rep = 0, d[4] = {1, 1, 1, 1};
+  double s1 = 0, s3 = -30, s4 = 0, c0 = 0, c1 = 0, c3 = 1, loop8 = 0, rep = 0, d[4] = {1, 1, 1, 1};
   // set level
   std::vector<std::uint32_t> ids;       // WordDict ids of the tokens
   std::vector<std::uint16_t> sent_len;  // tokens per sentence
@@ -1102,30 +1324,74 @@ inline double cosine(const SparseVec& a, const SparseVec& b) {
   return (na > 0 && nb > 0) ? dot / std::sqrt(na * nb) : 0.0;
 }
 
+// Mean cosine over ALL pairs i < j of unit vectors (dense, dim d): (|sum|^2 - n) / (n (n - 1)).
+inline double mean_pairwise_cosine(const std::vector<std::vector<float>>& U) {
+  const size_t n = U.size();
+  if (n < 2) return 0;
+  const size_t d = U[0].size();
+  std::vector<double> sum(d, 0.0);
+  double self = 0;
+  for (const auto& u : U)
+    for (size_t k = 0; k < d; ++k) {
+      sum[k] += u[k];
+      self += double(u[k]) * u[k];
+    }
+  double s2 = 0;
+  for (double x : sum) s2 += x * x;
+  return (s2 - self) / (static_cast<double>(n) * static_cast<double>(n - 1));
+}
+
 }  // namespace scribe_detail
 
 // Content words for C3: sentence-df fraction below exp(-kContentIdf), i.e. not a function word.
 constexpr double kContentIdf = 3.0;
 
-inline Features extract_features(const ScribeModel& m, WordDict& dict, const std::string& text) {
-  using namespace scribe_detail;
-  Features f;
-  f.bytes = text.size();
-  const std::vector<std::string> sents = split_sentences(text);
+// Tokens of the text, one list per sentence (sentences without tokens are dropped).
+inline std::vector<std::vector<std::string>> sentence_tokens(const std::string& text, std::vector<std::string>* sents_out = nullptr) {
+  std::vector<std::string> sents = split_sentences(text);
   std::vector<std::vector<std::string>> toks;
   for (const std::string& s : sents) {
     std::vector<std::string> t;
     tokenize_words(s, t);
     if (!t.empty()) toks.push_back(std::move(t));
   }
+  if (sents_out) *sents_out = std::move(sents);
+  return toks;
+}
+
+// Cheap features for the set-level (E) pools: only the dense word ids and the sentence lengths.
+inline Features extract_set_features(WordDict& dict, const std::string& text) {
+  Features f;
+  f.bytes = text.size();
+  for (const auto& t : sentence_tokens(text)) {
+    for (const std::string& w : t) f.ids.push_back(dict.id(w));
+    f.sent_len.push_back(static_cast<std::uint16_t>(std::min<size_t>(t.size(), 65535)));
+    f.n_words += static_cast<int>(t.size());
+  }
+  f.n_sent = static_cast<int>(f.sent_len.size());
+  return f;
+}
+
+// emb: the C6 sentence embedder; with nullptr (or an embedder that is not ready) C1 and C0 fall
+// back to TF-IDF bag-of-words cosines (C0 is then absent).
+inline Features extract_features(const ScribeModel& m, WordDict& dict, const std::string& text,
+                                 const SentenceEmbedder* emb = nullptr) {
+  using namespace scribe_detail;
+  Features f;
+  f.bytes = text.size();
+  std::vector<std::string> sents;
+  const std::vector<std::vector<std::string>> toks = sentence_tokens(text, &sents);
   f.n_sent = static_cast<int>(toks.size());
-  f.has_c = f.n_sent >= 2;
+  const bool use_vec = emb != nullptr && emb->ready();
   std::vector<std::string> flat;
   int hit = 0;
   double lp = 0;
   size_t npred = 0;
   std::vector<SparseVec> vecs;
   std::vector<std::pair<std::uint64_t, double>> content;  // key, idf in order
+  std::vector<std::vector<float>> sentence_vecs;
+  std::vector<std::vector<float>> content_word_vecs;  // unique content words known to the vectors
+  std::unordered_set<int> content_seen;
   for (const auto& t : toks) {
     std::vector<std::uint32_t> ids;
     std::unordered_map<std::uint64_t, float> tf;
@@ -1139,7 +1405,16 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
         const std::uint64_t key = (id != ScribeModel::kUnk) ? id : ((std::uint64_t(1) << 63) | (fnv1a(w) >> 1));
         const double idf = m.idf(id);
         tf[key] += 1.0f;
-        if (idf >= kContentIdf) content.emplace_back(key, idf);
+        if (idf >= kContentIdf) {
+          content.emplace_back(key, idf);
+          if (use_vec) {
+            const int vi = emb->vectors().index(w);
+            if (vi >= 0 && content_seen.insert(vi).second) {
+              const float* r = emb->vectors().row(vi);
+              content_word_vecs.emplace_back(r, r + emb->dim());
+            }
+          }
+        }
       }
     }
     f.sent_len.push_back(static_cast<std::uint16_t>(std::min<size_t>(t.size(), 65535)));
@@ -1152,19 +1427,52 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
     }
     std::sort(v.begin(), v.end());
     vecs.push_back(std::move(v));
+    if (use_vec) {
+      std::vector<float> sv;
+      if (emb->embed(t, sv)) sentence_vecs.push_back(std::move(sv));
+    }
   }
   f.n_words = static_cast<int>(flat.size());
   f.s1 = f.n_words ? static_cast<double>(hit) / f.n_words : 0.0;
   f.s3 = npred ? lp / static_cast<double>(npred) : -30.0;
   f.s4 = well_formedness(text, sents);
-  // C1: adjacent-sentence cohesion.
-  if (f.has_c) {
+  // C1: mean cosine over ALL pairs of segments. Segments are the sentences; a sample with fewer than
+  // two embeddable sentences is cut into two halves of its tokens instead, so that short samples
+  // have the axis too.
+  if (use_vec) {
+    if (sentence_vecs.size() >= 2) {
+      f.c1 = mean_pairwise_cosine(sentence_vecs);
+      f.has_c1 = true;
+    } else if (flat.size() >= 8) {
+      const std::vector<std::string> a(flat.begin(), flat.begin() + static_cast<std::ptrdiff_t>(flat.size() / 2));
+      const std::vector<std::string> b(flat.begin() + static_cast<std::ptrdiff_t>(flat.size() / 2), flat.end());
+      std::vector<std::vector<float>> two(2);
+      if (emb->embed(a, two[0]) && emb->embed(b, two[1])) {
+        f.c1 = mean_pairwise_cosine(two);
+        f.has_c1 = true;
+      }
+    }
+    // C0: mean cosine over all pairs of distinct content words (word-level cohesion).
+    if (content_word_vecs.size() >= 4) {
+      f.c0 = mean_pairwise_cosine(content_word_vecs);
+      f.has_c0 = true;
+    }
+  } else if (vecs.size() >= 2) {
     double s = 0;
-    for (size_t i = 0; i + 1 < vecs.size(); ++i) s += cosine(vecs[i], vecs[i + 1]);
-    f.c1 = s / static_cast<double>(vecs.size() - 1);
-    // C3: JSD of first-half vs second-half content-word distributions.
+    size_t np = 0;
+    for (size_t i = 0; i < vecs.size(); ++i)
+      for (size_t j = i + 1; j < vecs.size(); ++j) {
+        s += cosine(vecs[i], vecs[j]);
+        ++np;
+      }
+    f.c1 = s / static_cast<double>(np);
+    f.has_c1 = true;
+  }
+  // C3: JSD of first-half vs second-half content-word distributions (halves of the content words,
+  // so it is defined for one sentence too).
+  {
     const size_t mc = content.size();
-    if (mc >= 2) {
+    if (mc >= 4) {
       std::unordered_map<std::uint64_t, std::pair<double, double>> cnt;
       for (size_t i = 0; i < mc; ++i) {
         auto& e = cnt[content[i].first];
@@ -1177,10 +1485,10 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
         q.push_back(kv.second.second / nb);
       }
       f.c3 = jsd_bits(p, q);
-    } else {
-      f.c3 = 1.0;
+      f.has_c3 = true;
     }
   }
+  f.has_c = f.has_c0 || f.has_c1 || f.has_c3;
   // I2: loop8 and repeated-sentence rate.
   f.loop8 = loop8_bytes(text);
   if (toks.size() >= 2) {
@@ -1224,7 +1532,7 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
 inline int length_bucket(size_t bytes) { return bytes < 300 ? 0 : 1; }  // 0: short, 1: standard
 
 struct BucketReference {
-  Ecdf s1, s3, s4, c1, c3, nloop, nrep, d1, d2, d3, d4;
+  Ecdf s1, s3, s4, c0, c1, c3, nloop, nrep, d1, d2, d3, d4;
   size_t n = 0;
   void add(const Features& f) {
     ++n;
@@ -1237,32 +1545,39 @@ struct BucketReference {
     d2.add(f.d[1]);
     d3.add(f.d[2]);
     d4.add(f.d[3]);
-    if (f.has_c) {
-      c1.add(f.c1);
-      c3.add(f.c3);
-    }
+    if (f.has_c0) c0.add(f.c0);
+    if (f.has_c1) c1.add(f.c1);
+    if (f.has_c3) c3.add(f.c3);
   }
   void finish() {
-    for (Ecdf* e : {&s1, &s3, &s4, &c1, &c3, &nloop, &nrep, &d1, &d2, &d3, &d4}) e->finish();
+    for (Ecdf* e : {&s1, &s3, &s4, &c0, &c1, &c3, &nloop, &nrep, &d1, &d2, &d3, &d4}) e->finish();
   }
 };
 
 struct ScribeProfile {
-  double wS = 2, wC = 2, wI = 1, wE = 1;  // open continuation (R and B are 0 in v0)
+  double wS = 2, wC = 2, wI = 1, wE = 1;  // open continuation (R and B are 0 in v0/v1)
   double eps = 0.01;
   double gate = 0.2;
+  // false (default) = PLAN 6.2: C1 and C3 two-sided, and C0 too. true = one-sided (more cohesion and less drift are
+  // better; too much cohesion is the I axis's job). Tried on the development ladder: +0.02 on human > sentences shuffled,
+  // nothing elsewhere, so the PLAN's scoring stays.
+  bool c_one_sided = false;
+  // Which gate the headline `scribe` uses: 0 = PLAN 6.3 caps (S < gate caps at S, I < gate caps at I),
+  // 1 = scales (raw * min(1, S/gate) * min(1, I/gate)).
+  int gate_mode = 0;
 };
 
 struct Scored {
-  double s1 = 0, s3 = 0, s4 = 0, c1 = 0, c3 = 0, i2 = 0, i3 = 0;  // sub-scores in [0,1]
-  double S = 0, C = 0, I = 0;                                     // axes
+  double s1 = 0, s3 = 0, s4 = 0, c0 = 0, c1 = 0, c3 = 0, i2 = 0, i3 = 0;  // sub-scores in [0,1]
+  double S = 0, C = 0, I = 0;                                           // axes
   bool has_c = false;
-  double scribe = 0;      // PLAN 6.3 exactly: gate S < 0.2 caps at S
-  bool s_gate = false;    // S gate fired
-  double scribe_raw = 0;    // weighted geometric mean before any gate
-  // Proposals, NOT in the PLAN (tried after the first ladder run, so they are not evidence):
-  double scribe_igate = 0;  // the PLAN gate plus a cap at I when I < 0.2
-  double scribe_soft = 0;   // raw * min(1, S/0.2) * min(1, I/0.2): scales instead of capping
+  double scribe = 0;       // the headline score: gate_mode of the profile
+  bool s_gate = false;     // S gate fired
+  bool i_gate = false;     // I gate fired
+  double scribe_cap = 0;   // PLAN 6.3 caps: S < 0.2 caps at S, and (v1) I < 0.2 caps at I
+  double scribe_soft = 0;  // raw * min(1, S/0.2) * min(1, I/0.2)
+  double scribe_s = 0;     // the PLAN 6.3 gate alone (S only), as in v0
+  double scribe_raw = 0;   // weighted geometric mean before any gate
 };
 
 class ScribeScorer {
@@ -1285,9 +1600,12 @@ class ScribeScorer {
     o.i3 = geo_mean({r.d1.two_sided(f.d[0]), r.d2.two_sided(f.d[1]), r.d3.two_sided(f.d[2]), r.d4.two_sided(f.d[3])});
     o.has_c = f.has_c;
     if (f.has_c) {
-      o.c1 = r.c1.two_sided(f.c1);
-      o.c3 = r.c3.two_sided(f.c3);
-      o.C = geo_mean({o.c1, o.c3});
+      std::vector<double> cs;
+      const bool one = profile.c_one_sided;
+      if (f.has_c0) cs.push_back(o.c0 = one ? r.c0.one_sided(f.c0) : r.c0.two_sided(f.c0));
+      if (f.has_c1) cs.push_back(o.c1 = one ? r.c1.one_sided(f.c1) : r.c1.two_sided(f.c1));
+      if (f.has_c3) cs.push_back(o.c3 = one ? r.c3.one_sided_low(f.c3) : r.c3.two_sided(f.c3));
+      o.C = geo_mean(cs);
     }
     o.S = geo_mean({o.s1, o.s3, o.s4});
     o.I = geo_mean({o.i2, o.i3});
@@ -1299,41 +1617,52 @@ class ScribeScorer {
       den += p.wC;
     }
     o.scribe_raw = std::exp(num / den);
-    o.scribe = o.scribe_raw;
+    o.scribe_s = o.scribe_raw;
     if (o.S < p.gate) {
-      o.scribe = std::min(o.scribe, o.S);
+      o.scribe_s = std::min(o.scribe_s, o.S);
       o.s_gate = true;
     }
-    o.scribe_igate = o.scribe;
-    if (o.I < p.gate) o.scribe_igate = std::min(o.scribe_igate, o.I);
+    o.scribe_cap = o.scribe_s;
+    if (o.I < p.gate) {
+      o.scribe_cap = std::min(o.scribe_cap, o.I);
+      o.i_gate = true;
+    }
     o.scribe_soft = o.scribe_raw * std::min(1.0, o.S / p.gate) * std::min(1.0, o.I / p.gate);
+    o.scribe = p.gate_mode == 1 ? o.scribe_soft : o.scribe_cap;
     return o;
   }
 };
 
 // ===========================================================================
-// Set level: E1 Zipf slope, E3 sentence-length distribution
+// Set level: E1 Zipf slope, E3 Kolmogorov distance of the sentence-length distribution
 // ===========================================================================
 
 struct SetValues {
-  double zipf = 0, e3 = 0;
+  double zipf = 0;  // rank-frequency slope
+  double ks = 1;    // Kolmogorov distance of the sentence lengths from the human length pmf
 };
 
-inline std::vector<double> length_hist(const std::vector<const Features*>& set) {
-  std::vector<double> h(kLenBins, 0.0);
+// sup_L |F_set(L) - F_ref(L)| over sentence lengths (tokens), ref_pmf from ScribeModel::length_pmf.
+inline double ks_lengths(const std::vector<const Features*>& set, const std::vector<double>& ref_pmf) {
+  std::vector<double> c(kMaxLen + 1, 0.0);
   double n = 0;
   for (const Features* f : set)
     for (std::uint16_t l : f->sent_len) {
-      h[len_bin(l)] += 1;
+      c[std::min<size_t>(l, kMaxLen)] += 1;
       n += 1;
     }
-  if (n > 0)
-    for (double& x : h) x /= n;
-  return h;
+  if (n <= 0) return 1.0;
+  double a = 0, b = 0, d = 0;
+  for (size_t L = 0; L <= kMaxLen && L < ref_pmf.size(); ++L) {
+    a += c[L] / n;
+    b += ref_pmf[L];
+    d = std::max(d, std::fabs(a - b));
+  }
+  return d;
 }
 
 // scratch must have size >= number of WordDict entries and be all zero on entry (left all zero).
-inline SetValues set_values(const std::vector<const Features*>& set, const std::vector<double>& ref_hist,
+inline SetValues set_values(const std::vector<const Features*>& set, const std::vector<double>& ref_pmf,
                             std::vector<std::uint32_t>& scratch) {
   SetValues o;
   std::vector<std::uint32_t> touched;
@@ -1359,47 +1688,51 @@ inline SetValues set_values(const std::vector<const Features*>& set, const std::
     const double dm = static_cast<double>(m);
     o.zipf = (dm * sxy - sx * sy) / (dm * sxx - sx * sx);
   }
-  o.e3 = 1.0 - jsd_bits(length_hist(set), ref_hist);
+  o.ks = ks_lengths(set, ref_pmf);
   return o;
 }
 
 struct SetReference {
-  std::vector<double> hist;  // human sentence-length histogram
-  Ecdf zipf, e3;             // human sets of the same size
+  std::vector<double> pmf;  // human sentence-length pmf
+  Ecdf zipf, ks;            // human sets of the same size; ks holds -distance, so higher is better
   // E in [0,1]: geometric mean of the Zipf score (two-sided) and the length score (one-sided).
   double E(const SetValues& v, double* e1s = nullptr, double* e3s = nullptr) const {
-    const double a = zipf.two_sided(v.zipf), b = e3.one_sided(v.e3);
+    const double a = zipf.two_sided(v.zipf), b = ks.one_sided(-v.ks);
     if (e1s) *e1s = a;
     if (e3s) *e3s = b;
     return geo_mean({a, b});
   }
 };
 
-// Human sets of set_size samples. Each set is drawn without replacement from ONE slice of human
-// text (slices = disjoint stretches of the corpus, each a pool of reference samples of the length
-// bucket, built with the same per-document cap as the sets they are compared with), and the slice
-// is chosen at random per set. The spread of the null therefore includes the variation between
-// stretches of the corpus, not just resampling noise inside one stretch. ref_hist is the human
-// sentence-length histogram of a much larger text (ScribeModel::length_histogram).
-inline SetReference build_set_reference(const std::vector<std::vector<const Features*>>& slices, const std::vector<double>& ref_hist,
-                                        size_t set_size, size_t dict_size, int n_sets = 200, std::uint64_t seed = 7) {
+// Null for E: n_sets human sets of set_size samples. `stretches` are many disjoint stretches of
+// the human corpus (the caller cuts [16, 56) MiB of enwik8 into about two dozen), each a pool of
+// samples of the length bucket. A null set picks about a third of the stretches at random, pools
+// them and draws set_size samples from the pool without replacement. So the null carries the
+// variation between stretches and, because the pool is much larger than a set, almost none of the
+// finite-population shrinkage that made v0's null too narrow (it drew 500 of ~1,900 samples).
+inline SetReference build_set_reference(const std::vector<std::vector<const Features*>>& stretches,
+                                        const std::vector<double>& ref_pmf, size_t set_size, size_t dict_size,
+                                        int n_sets = 300, std::uint64_t seed = 7) {
   SetReference r;
-  r.hist = ref_hist;
+  r.pmf = ref_pmf;
   std::mt19937_64 rng(seed);
   std::vector<std::uint32_t> scratch(dict_size, 0);
+  const size_t G = stretches.size();
+  const size_t take = std::max<size_t>(1, G / 3);
+  std::vector<size_t> order(G);
   for (int s = 0; s < n_sets; ++s) {
-    const std::vector<const Features*>& pool = slices[rng() % slices.size()];
-    std::vector<size_t> idx(pool.size());
-    std::iota(idx.begin(), idx.end(), size_t{0});
-    std::shuffle(idx.begin(), idx.end(), rng);
-    std::vector<const Features*> set;
-    for (size_t i = 0; i < std::min(set_size, pool.size()); ++i) set.push_back(pool[idx[i]]);
-    const SetValues v = set_values(set, r.hist, scratch);
+    std::iota(order.begin(), order.end(), size_t{0});
+    std::shuffle(order.begin(), order.end(), rng);
+    std::vector<const Features*> pool;
+    for (size_t g = 0; g < take && g < G; ++g) pool.insert(pool.end(), stretches[order[g]].begin(), stretches[order[g]].end());
+    std::shuffle(pool.begin(), pool.end(), rng);
+    if (pool.size() > set_size) pool.resize(set_size);
+    const SetValues v = set_values(pool, r.pmf, scratch);
     r.zipf.add(v.zipf);
-    r.e3.add(v.e3);
+    r.ks.add(-v.ks);
   }
   r.zipf.finish();
-  r.e3.finish();
+  r.ks.finish();
   return r;
 }
 
