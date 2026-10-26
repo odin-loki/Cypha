@@ -33,6 +33,10 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - **Still open:** the C0 baselines and the 20 Newsgroups gate.
 - [ ] **E1**: Cypha part-of-speech tagger on UD EWT (gate ≥ 94%).
 - [ ] **S1–S3, S5** ([`docs/DISCOVERY.md`](docs/DISCOVERY.md)): reason codes and evidence cards on every answer and every "I don't know"; epistemic states; the hypothesis store and firewall; the gap map.
+  - **Done 2026-10-27** ([report](docs/reports/S1_S2_EPISTEMIC.md)):
+    - **S1 for `chat_index`:** reason codes and evidence cards; `--ask`/`--ask-file` fast path, 1.3 s instead of 53 s. On the 200 blind questions the strict reading gives 4 wrong; counting true Dolly facts as evidence gives 1.
+    - **S2:** `native/include/cypha/eval/epistemic.hpp`, with CTest `native_epistemic_test` (195 checks): states, degree of conflict, the two kinds of uncertainty, reason codes, unseen estimators and cards.
+  - **Still open:** S1 for `qa_infobox` (in progress), S3 and S5.
 - [ ] **H1–H3**: pick a permissively licensed GGUF teacher. Run `scripts/gguf_mine.py calibrate` on a Wikidata gold sample, then `facts`, `lexical` and `crawl` with that calibration. List: [`docs/GGUF_MINING.md`](docs/GGUF_MINING.md).
 
 - [x] **Cell sweep wrap-up** — B2 and H06 rerun 2026-08-16 @ 300k / eval 2k (isolated `bench/results/cell_sweep_rerun/`). Both **3.681 BPC** with math-integration (same as H14; not a promote vs Hybrid 2.664). Archived at `data/archive/cell_sweep/variant_B2.json` + `variant_H06.json`. Best new row remains U03 **2.822**.

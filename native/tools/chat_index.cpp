@@ -59,11 +59,38 @@
 //   Speed: build 1.0 s, index 28.0 MB + responses 4.9 MB, query p50 0.34 ms, p99 3.2 ms.
 //   Report: docs/reports/B7_CHAT_INDEX.md
 //
+// Fast path (S1, 2026-10-27). --ask "q" and --ask-file questions.tsv no longer rerun the sweep (about 52 s per
+//   question). They load Dolly, build the headline index once (about 1 s) and read the headline operating point
+//   (configuration, scorer, ts, tm at point G) from a small thresholds file next to the data
+//   (<dolly.jsonl>.chat_index_op, or --thresholds PATH). The file holds ts and tm as %.17g, so they are
+//   bit-identical to the sweep's. The sweep writes it at the end of every run; if it is missing, or was written
+//   for other data or settings (file size, record count, --irep, --configs), the fast path runs the dev stage of
+//   every configuration once (about 27 s, no T-perturb, H or speed runs), writes the file, and carries on.
+//   --sweep with --ask / --ask-file restores the old behaviour (sweep first, then answer); --recalibrate forces
+//   the one-off dev stage. Cached: one question 1.3 s end to end, 200 questions 1.3 s.
+//
+// Answers and abstentions (DISCOVERY 3.1 and 10). A question is answered only if score >= ts and
+//   (best - runner-up) >= tm. Otherwise it abstains with a reason code:
+//     NO_EVIDENCE         the best stored question scores below ts
+//     AMBIGUOUS_QUESTION  the best scores >= ts but a stored question with a different text is within tm of it
+//   (if both tests fail the code is NO_EVIDENCE: a margin between two weak matches is not ambiguity).
+//   Every answer prints an evidence card (matched stored question, score, margin, record index, category);
+//   every abstention prints an "I don't know" card with the nearest stored question (and the runner-up when
+//   the reason is AMBIGUOUS_QUESTION). Each question also prints one machine-readable line,
+//   "RESULT_JSON {...}" (decision, reason, score, margin, thresholds, nearest and runner-up question, record
+//   index, category, answer); --quiet prints only those lines (timing goes to stderr).
+//
 // Usage: g++ -O2 -std=c++20 -I native/third_party native/tools/chat_index.cpp -o chat_index
+//        chat_index dolly.jsonl --ask "a question"            fast path, one card + one RESULT_JSON line
+//        chat_index dolly.jsonl --ask-file questions.tsv      fast path, first tab-separated column = question
+//                                                             (a first line "question" is a header)
 //        chat_index dolly.jsonl [--seed N] [--irep N] [--configs plain,stem,filler,both]
-//                               [--ask "a question"]
-//   --irep N   repeat the instruction N times in the indexed text (default 1)
-//   --ask Q    after the run, answer Q from the headline index (or abstain)
+//                                                             the full evaluation sweep
+//   --irep N        repeat the instruction N times in the indexed text (default 1)
+//   --sweep         with --ask / --ask-file: run the full sweep first (old behaviour), then answer
+//   --recalibrate   ignore the thresholds file and recompute it (dev stage only)
+//   --thresholds P  where the thresholds file lives (default <dolly.jsonl>.chat_index_op)
+//   --quiet         (fast path) print only the RESULT_JSON lines; the timing line goes to stderr
 
 #include <algorithm>
 #include <array>
@@ -375,6 +402,7 @@ struct Res {
     int doc[kScorers] = {-1, -1, -1};
     float s1[kScorers] = {0, 0, 0};  // normalised best score
     float s2[kScorers] = {0, 0, 0};  // best score of a different question text
+    int doc2[kScorers] = {-1, -1, -1};  // the document behind s2 (-1: none)
 };
 
 struct Index {
@@ -570,7 +598,7 @@ struct Index {
                     d2 = static_cast<int>(d); v2 = v;
                 }
             }
-            (void)d2;
+            out.doc2[k] = d2;
             out.doc[k] = d1;
             out.s1[k] = static_cast<float>(std::max(0.0, v1));
             out.s2[k] = static_cast<float>(std::max(0.0, v2));
@@ -724,6 +752,63 @@ struct World {
     std::size_t leak_removed = 0, ambiguous = 0;
 };
 
+// One query against an index: the top-1 result of every scorer, scored against `target` when given.
+Item query_item(const std::vector<Rec>& recs, Index& ix, const Cfg& cfg, int irep, const std::string& instr, const std::string& ctx, int exclude,
+                const std::string& target, bool with_f1) {
+    Item it;
+    const QDoc q = make_q(instr, ctx, cfg, irep);
+    ix.search(q, exclude, 3, it.r);
+    for (int k = 0; k < kScorers; ++k) {
+        if (it.r.doc[k] < 0) continue;
+        const Rec& got = recs[static_cast<std::size_t>(ix.rec_of[static_cast<std::size_t>(it.r.doc[k])])];
+        it.ok[k] = got.resp == target;
+        if (with_f1) it.f1[k] = token_f1(got.resp, target);
+    }
+    return it;
+}
+
+// The dev stage, shared by the sweep and the fast path: the five perturbed forms of every D record (positives) and
+// the leave-one-out verbatim queries (negatives) pick the operating points G and B of every scorer, on D only.
+// Fills S.op, S.opb and S.dev_obj. `ix` must already be built from W.indexed with `cfg`.
+struct DevCounts { std::size_t pos = 0, neg = 0; };
+
+DevCounts dev_operating_points(const World& W, const Cfg& cfg, int irep, Index& ix, Summary& S) {
+    const auto& recs = W.recs;
+    std::vector<Item> dev_pos, dev_neg;
+    for (int id : W.dev) {
+        const Rec& r = recs[static_cast<std::size_t>(id)];
+        for (int f = 0; f < kForms; ++f) {
+            std::string i2, c2;
+            if (!make_form(static_cast<Form>(f), r, i2, c2)) continue;
+            Item it = query_item(recs, ix, cfg, irep, i2, c2, -1, r.resp, false);
+            it.form = f;
+            it.rid = id;
+            dev_pos.push_back(it);
+        }
+    }
+    for (int id : W.dev_neg) {
+        const Rec& r = recs[static_cast<std::size_t>(id)];
+        dev_neg.push_back(query_item(recs, ix, cfg, irep, r.instr, r.ctx, id, r.resp, false));
+    }
+    for (int k = 0; k < kScorers; ++k) {
+        S.op[k] = select_gate_op(dev_pos, dev_neg, k);
+        S.opb[k] = select_op(dev_pos, dev_neg, k);
+        S.dev_obj[k] = S.op[k].met ? S.op[k].obj : -1;
+    }
+    return {dev_pos.size(), dev_neg.size()};
+}
+
+// Headline = the (configuration, scorer) with the best dev score; a strictly better score wins, so ties keep the
+// earlier configuration and scorer. P and H play no part. Returns false when there is nothing to choose from.
+bool pick_headline(const std::vector<Summary>& sums, std::size_t& bi, int& bk) {
+    double best = -2;
+    bool any = false;
+    for (std::size_t i = 0; i < sums.size(); ++i)
+        for (int k = 0; k < kScorers; ++k)
+            if (sums[i].dev_obj[k] > best) { best = sums[i].dev_obj[k]; bi = i; bk = k; any = true; }
+    return any;
+}
+
 Summary run_config(const World& W, const Cfg& cfg, int irep) {
     Summary S;
     S.cfg = cfg;
@@ -743,41 +828,12 @@ Summary run_config(const World& W, const Cfg& cfg, int irep) {
                 sz.bm25 / 1e6, sz.tri / 1e6, sz.docs / 1e6, sz.total / 1e6, resp_bytes / 1e6);
 
     auto run_query = [&](const std::string& instr, const std::string& ctx, int exclude, const std::string& target, bool with_f1) {
-        Item it;
-        const QDoc q = make_q(instr, ctx, cfg, irep);
-        ix.search(q, exclude, 3, it.r);
-        for (int k = 0; k < kScorers; ++k) {
-            if (it.r.doc[k] < 0) continue;
-            const Rec& got = recs[static_cast<std::size_t>(ix.rec_of[static_cast<std::size_t>(it.r.doc[k])])];
-            it.ok[k] = got.resp == target;
-            if (with_f1) it.f1[k] = token_f1(got.resp, target);
-        }
-        return it;
+        return query_item(recs, ix, cfg, irep, instr, ctx, exclude, target, with_f1);
     };
 
     // ---- dev set: perturbed forms (positives) and leave-one-out verbatim (negatives)
-    std::vector<Item> dev_pos, dev_neg;
-    for (int id : W.dev) {
-        const Rec& r = recs[static_cast<std::size_t>(id)];
-        for (int f = 0; f < kForms; ++f) {
-            std::string i2, c2;
-            if (!make_form(static_cast<Form>(f), r, i2, c2)) continue;
-            Item it = run_query(i2, c2, -1, r.resp, false);
-            it.form = f;
-            it.rid = id;
-            dev_pos.push_back(it);
-        }
-    }
-    for (int id : W.dev_neg) {
-        const Rec& r = recs[static_cast<std::size_t>(id)];
-        dev_neg.push_back(run_query(r.instr, r.ctx, id, r.resp, false));
-    }
-    for (int k = 0; k < kScorers; ++k) {
-        S.op[k] = select_gate_op(dev_pos, dev_neg, k);
-        S.opb[k] = select_op(dev_pos, dev_neg, k);
-        S.dev_obj[k] = S.op[k].met ? S.op[k].obj : -1;
-    }
-    std::printf("\n### Dev set D (%zu records, %zu perturbed queries, %zu leave-one-out queries): operating points, chosen on D only\n\n", W.dev.size(), dev_pos.size(), dev_neg.size());
+    const DevCounts dc = dev_operating_points(W, cfg, irep, ix, S);
+    std::printf("\n### Dev set D (%zu records, %zu perturbed queries, %zu leave-one-out queries): operating points, chosen on D only\n\n", W.dev.size(), dc.pos, dc.neg);
     std::printf("G = gate point: every changed form keeps >= %.2f of verbatim answered-and-correct on D, precision >= 0.95, >= 0.95 of verbatim hits still answered, then maximise leave-one-out abstention.\n"
                 "B = balanced point: precision >= 0.95, then maximise the mean of (D perturbed answered correctly) and (D leave-one-out abstained).\n\n", kDevRatio);
     std::printf("| scorer | point | ts | tm | precision on D perturbed | D perturbed answered correctly | min changed-form ratio on D | verbatim kept on D | D leave-one-out abstained | criterion met |\n|---|---|---|---|---|---|---|---|---|---|\n");
@@ -927,27 +983,242 @@ Summary run_config(const World& W, const Cfg& cfg, int irep) {
     return S;
 }
 
+// ------------------------------------------------------------ the fast path
+
+// Everything the fast path needs from the sweep is the headline: which configuration, which scorer, and the gate
+// point (ts, tm) on D. It is written next to the data file by the sweep and by the one-off calibration, and read
+// back by --ask / --ask-file, so a question costs one index build (about 1 s) instead of the 52 s sweep.
+struct Headline {
+    Cfg cfg;
+    int scorer = 2;
+    Op op;  // gate point G
+};
+
+struct Fingerprint {
+    std::uint64_t bytes = 0, records = 0, indexed = 0;
+    int irep = 1;
+    std::string configs;
+    bool operator==(const Fingerprint& o) const {
+        return bytes == o.bytes && records == o.records && indexed == o.indexed && irep == o.irep && configs == o.configs;
+    }
+};
+
+std::uint64_t file_bytes(const std::string& path) {
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    return in ? static_cast<std::uint64_t>(in.tellg()) : 0;
+}
+
+std::vector<Cfg> parse_configs(const std::string& configs) {
+    std::vector<Cfg> cfgs;
+    std::stringstream ss(configs);
+    for (std::string tok; std::getline(ss, tok, ',');) {
+        if (tok == "plain") cfgs.push_back({false, false, "plain"});
+        else if (tok == "stem") cfgs.push_back({true, false, "+stem"});
+        else if (tok == "filler") cfgs.push_back({false, true, "+filler"});
+        else if (tok == "both") cfgs.push_back({true, true, "+stem +filler"});
+    }
+    return cfgs;
+}
+
+Fingerprint fingerprint_of(const World& W, const std::string& path, int irep, const std::string& configs) {
+    Fingerprint f;
+    f.bytes = file_bytes(path);
+    f.records = W.recs.size();
+    f.indexed = W.indexed.size();
+    f.irep = irep;
+    f.configs = configs;
+    return f;
+}
+
+// %.17g round-trips a double exactly, so the stored ts and tm are bit-identical to the sweep's.
+bool write_headline(const std::string& path, const Fingerprint& f, const Headline& h) {
+    const std::string tmp = path + ".tmp";
+    {
+        std::ofstream out(tmp);
+        if (!out) return false;
+        char buf[64];
+        out << "chat_index_op 1\n";
+        out << "dolly_bytes " << f.bytes << "\ndolly_records " << f.records << "\nindexed " << f.indexed << "\nirep " << f.irep << "\nconfigs " << f.configs << "\n";
+        out << "stem " << h.cfg.stem << "\nfiller " << h.cfg.filler << "\nname " << h.cfg.name << "\nscorer " << h.scorer << "\n";
+        std::snprintf(buf, sizeof buf, "%.17g", h.op.ts);
+        out << "ts " << buf << "\n";
+        std::snprintf(buf, sizeof buf, "%.17g", h.op.tm);
+        out << "tm " << buf << "\n";
+        if (!out) return false;
+    }
+    return std::rename(tmp.c_str(), path.c_str()) == 0;
+}
+
+// Returns false (and says why) when the file is missing, malformed, or was written for other data or settings.
+bool read_headline(const std::string& path, const Fingerprint& want, Headline& h, std::string& why) {
+    std::ifstream in(path);
+    if (!in) { why = "no thresholds file"; return false; }
+    std::unordered_map<std::string, std::string> kv;
+    std::string line;
+    while (std::getline(in, line)) {
+        const auto sp = line.find(' ');
+        if (sp == std::string::npos) continue;
+        kv[line.substr(0, sp)] = line.substr(sp + 1);
+    }
+    for (const char* key : {"chat_index_op", "dolly_bytes", "dolly_records", "indexed", "irep", "configs", "stem", "filler", "name", "scorer", "ts", "tm"})
+        if (!kv.count(key)) { why = std::string("thresholds file lacks ") + key; return false; }
+    if (kv["chat_index_op"] != "1") { why = "thresholds file version"; return false; }
+    Fingerprint got;
+    got.bytes = std::strtoull(kv["dolly_bytes"].c_str(), nullptr, 10);
+    got.records = std::strtoull(kv["dolly_records"].c_str(), nullptr, 10);
+    got.indexed = std::strtoull(kv["indexed"].c_str(), nullptr, 10);
+    got.irep = std::atoi(kv["irep"].c_str());
+    got.configs = kv["configs"];
+    if (!(got == want)) { why = "thresholds file is for other data or settings (size, records, irep or --configs differ)"; return false; }
+    h.cfg.stem = kv["stem"] == "1";
+    h.cfg.filler = kv["filler"] == "1";
+    h.cfg.name = kv["name"];
+    h.scorer = std::atoi(kv["scorer"].c_str());
+    h.op.ts = std::strtod(kv["ts"].c_str(), nullptr);
+    h.op.tm = std::strtod(kv["tm"].c_str(), nullptr);
+    if (h.scorer < 0 || h.scorer >= kScorers) { why = "thresholds file scorer"; return false; }
+    return true;
+}
+
+// The one-off calibration: only the dev stage of every configuration (no T-perturb, H, risk-coverage or speed).
+// Same code as the sweep's dev stage, so the headline is identical to the sweep's.
+bool calibrate(const World& W, const std::vector<Cfg>& cfgs, int irep, Headline& h) {
+    std::vector<Summary> sums;
+    for (const auto& cfg : cfgs) {
+        Index ix;
+        ix.build(W.recs, W.indexed, cfg, irep);
+        Summary S;
+        S.cfg = cfg;
+        dev_operating_points(W, cfg, irep, ix, S);
+        sums.push_back(S);
+    }
+    std::size_t bi = 0;
+    int bk = 2;
+    if (!pick_headline(sums, bi, bk)) return false;
+    h.cfg = sums[bi].cfg;
+    h.scorer = bk;
+    h.op = sums[bi].op[bk];
+    return true;
+}
+
+// ------------------------------------------------------------ answer or abstain, with a reason and a card
+
+// Reason codes (docs/DISCOVERY.md 3.1) the retrieval index can give:
+//   NO_EVIDENCE         the best stored question scores below ts: nothing stored is close to this question.
+//   AMBIGUOUS_QUESTION  the best scores >= ts, but a stored question with a different text is within tm of it.
+// When both tests fail, NO_EVIDENCE wins: a margin between two weak matches says nothing about ambiguity
+// (3.1 defines the code as "two or more fit the question"). Both flags are kept in the machine line.
+struct Verdict {
+    bool answer = false;
+    const char* reason = nullptr;
+    double score = 0, runner = 0, margin = 0;
+    int doc = -1, doc2 = -1;
+    bool score_low = false, margin_low = false;
+};
+
+Verdict decide(const Res& r, int k, const Op& op) {
+    Verdict v;
+    v.doc = r.doc[k];
+    v.doc2 = r.doc2[k];
+    v.score = r.s1[k];
+    v.runner = r.s2[k];
+    v.margin = r.s1[k] - r.s2[k];
+    v.score_low = !(r.s1[k] >= op.ts);
+    v.margin_low = !((r.s1[k] - r.s2[k]) >= op.tm);  // the exact expressions answers() uses
+    v.answer = !v.score_low && !v.margin_low;
+    if (!v.answer) v.reason = (v.score_low || v.doc < 0) ? "NO_EVIDENCE" : "AMBIGUOUS_QUESTION";
+    return v;
+}
+
+double r6(double x) { return std::round(x * 1e6) / 1e6; }
+
+std::string with_ctx(const Rec& r) { return r.ctx.empty() ? r.instr : r.instr + "  [+ context]"; }
+
+void print_card(const World& W, const Index& ix, const Headline& h, int n, const std::string& q, const Verdict& v) {
+    const auto rec_of = [&](int doc) -> const Rec& { return W.recs[static_cast<std::size_t>(ix.rec_of[static_cast<std::size_t>(doc)])]; };
+    const auto rec_no = [&](int doc) { return ix.rec_of[static_cast<std::size_t>(doc)]; };
+    std::printf("\nQ%d: %s\n", n, q.c_str());
+    if (v.answer) {
+        const Rec& m = rec_of(v.doc);
+        std::printf("%s\n", m.resp.c_str());
+        std::printf("[RETRIEVED · score %.3f (needs >= %.3f) · margin %.3f (needs >= %.3f)]\n", v.score, h.op.ts, v.margin, h.op.tm);
+        std::printf("Matched stored question: \"%s\" (record %d · category %s)\n", with_ctx(m).c_str(), rec_no(v.doc), m.cat.c_str());
+        std::printf("Because: the closest of %zu stored Dolly questions. This is retrieval, not understanding; the answer is the stored one.\n", ix.N);
+        return;
+    }
+    std::printf("I don't know.                    [%s]\n", v.reason);
+    if (v.doc < 0) { std::printf("Why: the index is empty.\n"); return; }
+    const Rec& m = rec_of(v.doc);
+    if (v.score_low)
+        std::printf("Why: the closest stored question scores %.3f, below the %.3f needed to answer. Nothing stored matches it closely enough to be sure it is the same question.\n", v.score, h.op.ts);
+    else
+        std::printf("Why: two stored questions with different texts match about equally (%.3f and %.3f, margin %.3f, under the %.3f needed), so I cannot tell which one is meant.\n",
+                    v.score, v.runner, v.margin, h.op.tm);
+    std::printf("Nearest stored question: \"%s\" (record %d · category %s · score %.3f)\n", with_ctx(m).c_str(), rec_no(v.doc), m.cat.c_str(), v.score);
+    if (!v.score_low && v.doc2 >= 0) {
+        const Rec& m2 = rec_of(v.doc2);
+        std::printf("Runner-up: \"%s\" (record %d · category %s · score %.3f)\n", with_ctx(m2).c_str(), rec_no(v.doc2), m2.cat.c_str(), v.runner);
+    }
+    std::printf("What would let me answer: a stored question that matches this one more closely%s.\n", v.score_low ? "" : ", or one clearly closer than the runner-up");
+}
+
+// One machine-readable line per question: "RESULT_JSON " + one JSON object.
+std::string result_json(const World& W, const Index& ix, const Headline& h, int n, const std::string& q, const Verdict& v) {
+    nlohmann::json j;
+    j["n"] = n;
+    j["question"] = q;
+    j["decision"] = v.answer ? "answer" : "abstain";
+    j["reason"] = v.answer ? nlohmann::json(nullptr) : nlohmann::json(v.reason);
+    j["score"] = r6(v.score);
+    j["margin"] = r6(v.margin);
+    j["runner_up_score"] = r6(v.runner);
+    j["ts"] = h.op.ts;
+    j["tm"] = h.op.tm;
+    j["score_below_ts"] = v.score_low;
+    j["margin_below_tm"] = v.margin_low;
+    j["scorer"] = kScorerName[h.scorer];
+    j["config"] = h.cfg.name;
+    const auto put = [&](const char* pfx, int doc) {
+        const std::string p = pfx;
+        if (doc < 0) { j[p + "question"] = nullptr; j[p + "record"] = nullptr; j[p + "category"] = nullptr; return; }
+        const int rn = ix.rec_of[static_cast<std::size_t>(doc)];
+        const Rec& m = W.recs[static_cast<std::size_t>(rn)];
+        j[p + "question"] = m.instr;
+        j[p + "has_context"] = !m.ctx.empty();
+        j[p + "record"] = rn;
+        j[p + "category"] = m.cat;
+    };
+    put("nearest_", v.doc);
+    put("runner_up_", v.doc2);
+    j["answer"] = (v.answer && v.doc >= 0) ? nlohmann::json(W.recs[static_cast<std::size_t>(ix.rec_of[static_cast<std::size_t>(v.doc)])].resp) : nlohmann::json(nullptr);
+    return j.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+}
+
+// Questions: the first tab-separated column of each line. A first line whose first cell is "question" is a header.
+std::vector<std::string> read_questions(const std::string& path) {
+    std::vector<std::string> qs;
+    std::ifstream in(path);
+    std::string line;
+    bool first = true;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        const std::string cell = line.substr(0, line.find('\t'));
+        const bool header = first && cell == "question";
+        first = false;
+        if (cell.empty() || header) continue;
+        qs.push_back(cell);
+    }
+    return qs;
+}
+
 }  // namespace
 
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::fprintf(stderr, "usage: %s dolly.jsonl [--seed N] [--irep N] [--configs plain,stem,filler,both] [--ask \"question\"]\n", argv[0]);
-        return 2;
-    }
-    std::string path = argv[1], configs = "plain,stem,filler,both", ask;
-    std::uint64_t seed = 20261027;
-    int irep = 1;
-    for (int i = 2; i + 1 < argc; i += 2) {
-        const std::string a = argv[i];
-        if (a == "--seed") seed = std::strtoull(argv[i + 1], nullptr, 10);
-        else if (a == "--irep") irep = std::atoi(argv[i + 1]);
-        else if (a == "--configs") configs = argv[i + 1];
-        else if (a == "--ask") ask = argv[i + 1];
-    }
+namespace {
 
-    World W;
+// Loads Dolly and lays out the protocol sets (H, D, P) exactly as the sweep always has.
+bool build_world(const std::string& path, std::uint64_t seed, World& W) {
     W.recs = load_dolly(path);
-    if (W.recs.empty()) { std::fprintf(stderr, "no records in %s\n", path.c_str()); return 1; }
+    if (W.recs.empty()) return false;
     {
         std::unordered_map<std::string, int> keys;
         for (auto& r : W.recs) {
@@ -986,6 +1257,96 @@ int main(int argc, char** argv) {
         for (int i : W.pset)
             if (by_key[W.recs[static_cast<std::size_t>(i)].keyid].size() > 1) ++W.ambiguous;
     }
+    return true;
+}
+
+void answer_questions(const World& W, const Headline& h, int irep, const std::vector<std::string>& qs, bool quiet, double* build_s, double* ask_s) {
+    Index ix;
+    auto t0 = Clock::now();
+    ix.build(W.recs, W.indexed, h.cfg, irep);
+    *build_s = secs_since(t0);
+    t0 = Clock::now();
+    int n = 0;
+    for (const auto& q : qs) {
+        Res r;
+        ix.search(make_q(q, "", h.cfg, irep), -1, 3, r);
+        const Verdict v = decide(r, h.scorer, h.op);
+        ++n;
+        if (!quiet) print_card(W, ix, h, n, q, v);
+        std::printf("RESULT_JSON %s\n", result_json(W, ix, h, n, q, v).c_str());
+    }
+    *ask_s = secs_since(t0);
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    const auto t_start = Clock::now();
+    if (argc < 2) {
+        std::fprintf(stderr,
+                     "usage: %s dolly.jsonl [--ask \"question\"] [--ask-file questions.tsv] [--quiet] [--recalibrate] [--thresholds PATH]\n"
+                     "       %s dolly.jsonl [--sweep] [--seed N] [--irep N] [--configs plain,stem,filler,both] [--ask ...]\n",
+                     argv[0], argv[0]);
+        return 2;
+    }
+    std::string path = argv[1], configs = "plain,stem,filler,both", ask, ask_file, op_path;
+    std::uint64_t seed = 20261027;
+    int irep = 1;
+    bool sweep = false, quiet = false, recalibrate = false;
+    for (int i = 2; i < argc; ++i) {
+        const std::string a = argv[i];
+        if (a == "--sweep") { sweep = true; continue; }
+        if (a == "--quiet") { quiet = true; continue; }
+        if (a == "--recalibrate") { recalibrate = true; continue; }
+        if (i + 1 >= argc) { std::fprintf(stderr, "option %s needs a value\n", a.c_str()); return 2; }
+        const char* val = argv[++i];
+        if (a == "--seed") seed = std::strtoull(val, nullptr, 10);
+        else if (a == "--irep") irep = std::atoi(val);
+        else if (a == "--configs") configs = val;
+        else if (a == "--ask") ask = val;
+        else if (a == "--ask-file") ask_file = val;
+        else if (a == "--thresholds") op_path = val;
+        else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+    }
+    if (op_path.empty()) op_path = path + ".chat_index_op";
+    const bool asking = !ask.empty() || !ask_file.empty();
+    // --ask / --ask-file alone take the fast path; the full sweep runs only for a bare run or with --sweep.
+    const bool fast = asking && !sweep;
+
+    std::vector<std::string> qs;
+    if (!ask.empty()) qs.push_back(ask);
+    if (!ask_file.empty()) {
+        const auto more = read_questions(ask_file);
+        if (more.empty()) { std::fprintf(stderr, "no questions in %s\n", ask_file.c_str()); return 1; }
+        qs.insert(qs.end(), more.begin(), more.end());
+    }
+
+    World W;
+    if (!build_world(path, seed, W)) { std::fprintf(stderr, "no records in %s\n", path.c_str()); return 1; }
+    const double load_s = secs_since(t_start);
+    const std::vector<Cfg> cfgs = parse_configs(configs);
+    const Fingerprint fp = fingerprint_of(W, path, irep, configs);
+    const int R = static_cast<int>(W.recs.size());
+
+    if (fast) {
+        Headline h;
+        std::string why, source = "file";
+        double cal_s = 0;
+        if (recalibrate || !read_headline(op_path, fp, h, why)) {
+            if (recalibrate) why = "--recalibrate";
+            std::fprintf(quiet ? stderr : stdout, "# calibrating the operating point (%s); dev stage only, one-off\n", why.c_str());
+            const auto tc = Clock::now();
+            if (!calibrate(W, cfgs, irep, h)) { std::fprintf(stderr, "calibration failed\n"); return 1; }
+            cal_s = secs_since(tc);
+            source = "calibrated";
+            if (!write_headline(op_path, fp, h)) std::fprintf(stderr, "warning: could not write %s\n", op_path.c_str());
+        }
+        double build_s = 0, ask_s = 0;
+        answer_questions(W, h, irep, qs, quiet, &build_s, &ask_s);
+        std::fprintf(quiet ? stderr : stdout, "\n# fast path: thresholds %s (%s) -> config %s, scorer %s, ts %.3f tm %.3f. load %.2f s, calibrate %.2f s, index build %.2f s, %zu question(s) in %.3f s, total %.2f s\n",
+                     source.c_str(), op_path.c_str(), h.cfg.name.c_str(), kScorerName[h.scorer], h.op.ts, h.op.tm, load_s, cal_s, build_s, qs.size(), ask_s, secs_since(t_start));
+        return 0;
+    }
 
     std::printf("# chat_index run (seed %llu, irep %d)\n\n", static_cast<unsigned long long>(seed), irep);
     std::printf("Records %d. Indexed %zu (train %zu + D %zu). Held-out H candidates %zu; removed as near-duplicates of an indexed instruction: %zu; H used: %zu.\n",
@@ -1014,43 +1375,31 @@ int main(int argc, char** argv) {
         for (int f = 0; f < kForms; ++f) std::printf(" %s %zu%s", kFormName[f], app[static_cast<std::size_t>(f)], f + 1 < kForms ? "," : "\n");
     }
 
-    std::vector<Cfg> cfgs;
-    std::stringstream ss(configs);
-    for (std::string tok; std::getline(ss, tok, ',');) {
-        if (tok == "plain") cfgs.push_back({false, false, "plain"});
-        else if (tok == "stem") cfgs.push_back({true, false, "+stem"});
-        else if (tok == "filler") cfgs.push_back({false, true, "+filler"});
-        else if (tok == "both") cfgs.push_back({true, true, "+stem +filler"});
-    }
     std::vector<Summary> sums;
     for (const auto& c : cfgs) sums.push_back(run_config(W, c, irep));
 
     std::printf("\n## Summary across configurations (dev score picks the headline; P and H play no part in the choice)\n\n");
     std::printf("| config | scorer | dev score (D leave-one-out abstain at G) | verbatim acc at G | min changed ratio always | min ratio at G | min ratio at B | H abstain at G | H abstain at B | H answered mean F1 at G |\n|---|---|---|---|---|---|---|---|---|---|\n");
-    std::size_t bi = 0;
-    int bk = 2;
-    double best = -2;
     for (std::size_t i = 0; i < sums.size(); ++i)
         for (int k = 0; k < kScorers; ++k) {
             const auto& s = sums[i];
             std::printf("| %s | %s | %.3f | %.1f%% | %.3f | %.3f | %.3f | %.1f%% | %.1f%% | %.3f |\n", s.cfg.name.c_str(), kScorerName[k], s.dev_obj[k], pct(s.verb_acc_abs[k]),
                         s.min_ratio_all[k], s.min_ratio_abs[k], s.min_ratio_b[k], pct(s.h_abstain[k]), pct(s.h_abstain_b[k]), s.h_f1_ans[k]);
-            if (s.dev_obj[k] > best) { best = s.dev_obj[k]; bi = i; bk = k; }
         }
+    std::size_t bi = 0;
+    int bk = 2;
+    const bool have_headline = pick_headline(sums, bi, bk);
     if (!sums.empty()) std::printf("\nHeadline by dev score: %s / %s.\n", sums[bi].cfg.name.c_str(), kScorerName[bk]);
-
-    if (!ask.empty() && !sums.empty()) {
-        Index ix;
-        ix.build(W.recs, W.indexed, sums[bi].cfg, irep);
-        Res r;
-        ix.search(make_q(ask, "", sums[bi].cfg, irep), -1, 3, r);
-        const Op& op = sums[bi].op[bk];  // gate point
-        const bool answer = r.s1[bk] >= op.ts && r.s1[bk] - r.s2[bk] >= op.tm;
-        std::printf("\nASK: %s\nscore %.3f margin %.3f (ts %.3f tm %.3f) -> %s\n", ask.c_str(), r.s1[bk], r.s1[bk] - r.s2[bk], op.ts, op.tm, answer ? "ANSWER (retrieved)" : "ABSTAIN");
-        if (r.doc[bk] >= 0) {
-            const Rec& m = W.recs[static_cast<std::size_t>(ix.rec_of[static_cast<std::size_t>(r.doc[bk])])];
-            std::printf("nearest stored question: %s\n", m.instr.c_str());
-            if (answer) std::printf("stored answer: %s\n", m.resp.c_str());
+    if (have_headline) {
+        Headline h;
+        h.cfg = sums[bi].cfg;
+        h.scorer = bk;
+        h.op = sums[bi].op[bk];
+        if (write_headline(op_path, fp, h)) std::printf("Headline operating point (G: ts %.3f tm %.3f) written to %s for --ask / --ask-file.\n", h.op.ts, h.op.tm, op_path.c_str());
+        else std::fprintf(stderr, "warning: could not write %s\n", op_path.c_str());
+        if (asking) {
+            double build_s = 0, ask_s = 0;
+            answer_questions(W, h, irep, qs, quiet, &build_s, &ask_s);
         }
     }
     return 0;

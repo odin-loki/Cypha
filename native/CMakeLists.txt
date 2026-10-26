@@ -2743,3 +2743,12 @@ cypha_mingw_apply_exe_link_options(scribe_ladder)
 add_test(NAME native_scribe_selftest COMMAND "$<TARGET_FILE:scribe_ladder>" --selftest)
 set_tests_properties(native_scribe_selftest PROPERTIES TIMEOUT 120)
 # --- end SCRIBE block ---------------------------------------------------------------------------
+
+# --- S2: epistemic layer (DISCOVERY 2.1-2.3, 3.1, 3.3, 10) header-only library test --------------
+# Header-only (include/cypha/eval/epistemic.hpp, which includes ecs.hpp); the test needs no link against cypha_core.
+add_executable(epistemic_test tools/epistemic_test.cpp)
+target_include_directories(epistemic_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(epistemic_test)
+add_test(NAME native_epistemic_test COMMAND "$<TARGET_FILE:epistemic_test>")
+set_tests_properties(native_epistemic_test PROPERTIES TIMEOUT 120)
+# --- end S2 block -------------------------------------------------------------------------------
