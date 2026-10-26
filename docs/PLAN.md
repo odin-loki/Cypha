@@ -253,9 +253,17 @@ propose  →  sandbox on dev set  →  LCI on the referee set  →  promote or r
 
 **Forgetting.** Shared-model continual learning is an open problem here: D16B's forgetting score is ≈ 0.81, while isolated model files show zero forgetting (D16F). So the system keeps one model file per decision type (tagger, parser, linker, question classifier, sense classifier), versions the knowledge store, and runs canary sets on every promotion.
 
-### 3.5 Speculative mode (later, for discovery)
+### 3.5 Speculative mode and discovery
 
-Hypothetical and speculative thinking will be added later as a **separate mode**. It never mixes into answers:
+**Designed in full in [`DISCOVERY.md`](DISCOVERY.md) (2026-10-27), as Track S.** That document covers:
+- knowing what it knows (epistemic states, the competence self-model);
+- knowing what it does not know (reason codes, the gap map, estimates of the unseen);
+- 20 hypothesis generators;
+- scoring by value of information;
+- tests with pre-registration;
+- 16 discovery processes, the curiosity scheduler, honesty invariants and benchmarks.
+
+The principles in short — hypothetical and speculative thinking is a **separate mode**. It never mixes into answers:
 
 - **What it does.** It proposes hypotheses: facts the rules or analogies suggest, connections between distant concepts, gaps in the store. Each comes with how it was derived (rule chain, analogy, pattern) and what would confirm or refute it.
 - **How it is labelled.** Every output is marked as a hypothesis, with its own grade (`Hypothesis`, below Very low in section 7.3). It is stored apart from working knowledge.
@@ -444,6 +452,14 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 | H2 | Generate question paraphrases (pattern variety for E4 and F2), definitions, relation examples and Q/A pairs | Volume per relation | — |
 | H3 | Admit through ECS with a low source prior, Beta(1, 3), until corroborated by Wikidata or text | Hallucination rate per relation | Measured and reported |
 | H4 | Measure what distillation adds: the same tests with and without distilled items | LCI | Kept only if LCI ≥ 0.95 |
+
+### Track S: knowing, not knowing, and discovery
+
+The full design, work items S1–S15 and gates are in [`DISCOVERY.md`](DISCOVERY.md) §13. The first steps are honesty steps on the stores that exist now:
+- **S1:** reason codes and evidence cards in `qa_infobox` and `chat_index`;
+- **S2:** epistemic states on `ecs.hpp`;
+- **S5:** the hypothesis store with its firewall;
+- **S3:** the gap map.
 
 ### Track M: metrics and the evaluation harness
 
@@ -811,6 +827,9 @@ These are initial budgets, revised by measurement but never silently:
    3. B6 serve wiring.
 9. **Relations and answers.** F2 pattern learning, F3 full pipeline, F4 composed answers.
 10. **Learning.** G1–G3, then the G4 self-improvement loop with LCI, plus G5–G7 running throughout.
+    **Knowing and discovery (Track S)** runs alongside from step 4 on:
+    - S1, S2, S5 and S3 come as soon as the fact store and chat index exist (they do now);
+    - the generators follow once F2 and D4 give them a store to work on (order in [`DISCOVERY.md`](DISCOVERY.md) §13).
 11. **Distillation.** H1–H4 once ECS and LCI exist to police it.
 
 Each step ends with a dated report and a report card. Promotions to defaults go through LCI.
@@ -868,6 +887,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 43 | A full list and a script to statistically datamine a GGUF neural model, relations included | Track H; [`GGUF_MINING.md`](GGUF_MINING.md); `scripts/gguf_mine.py` |
 | 44 | Keep "it doesn't answer what it doesn't know" as a feature | Rule 9; right / abstained / wrong reporting |
 | 45 | Add speculative / hypothetical thinking for discovery later | §3.5 speculative mode, kept apart from answers |
+| 46 | Do the speculative thinking now: know what it knows, know what it doesn't, think hard on discovery, map out the discovery processes | [`DISCOVERY.md`](DISCOVERY.md); Track S |
 
 ---
 

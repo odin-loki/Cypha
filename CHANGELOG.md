@@ -9,6 +9,16 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Discovery design** ([`docs/DISCOVERY.md`](docs/DISCOVERY.md), PLAN Track S):
+  - answer mode and discovery mode behind a firewall;
+  - epistemic states and the two kinds of uncertainty;
+  - a competence self-model;
+  - reason codes for every "I don't know";
+  - a gap map, with estimates of the unseen (Good–Turing, Chao1, capture–recapture);
+  - 20 hypothesis generators;
+  - scoring by novelty, impact, compression gain and expected information gain;
+  - 10 test kinds with pre-registration;
+  - 16 discovery processes, a curiosity scheduler, possible-worlds reasoning, 10 honesty invariants, benchmarks and work items S1–S15.
 - **Fact-store Q/A** (PLAN F1, [report](docs/reports/F1_INFOBOX_QA.md)): `native/tools/qa_infobox.cpp` extracts infobox fields and a few sentence patterns from the training slice into 141 facts. A question classifier v0 answers from them or abstains.
   - 8/8 on the seed questions (in-sample), up from the trie's 0/8.
   - Fact precision 0.90, with a Wilson lower bound of 0.744.

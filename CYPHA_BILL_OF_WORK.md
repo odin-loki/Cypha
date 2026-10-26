@@ -27,6 +27,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **B7**: normalised, fuzzy chat index that can abstain, reported as retrieval. Dolly part done (2026-10-27): `native/tools/chat_index.cpp`, [report](docs/reports/B7_CHAT_INDEX.md). The gate passes with no abstain and narrowly with abstain on, but not on every resample (the synonym form fails 1 of 4 seeds for two scorers). Open: OpenAssistant (not reachable from here); encoder similarity and Cypha OOD as the abstain signal.
 - [ ] **C0–C1**: fair TF-IDF baselines with `W_enc` frozen, then PPMI-SVD and random-indexing vectors.
 - [ ] **E1**: Cypha part-of-speech tagger on UD EWT (gate ≥ 94%).
+- [ ] **S1–S3, S5** ([`docs/DISCOVERY.md`](docs/DISCOVERY.md)): reason codes and evidence cards on every answer and every "I don't know"; epistemic states; the hypothesis store and firewall; the gap map.
 - [ ] **H1–H3**: pick a permissively licensed GGUF teacher. Run `scripts/gguf_mine.py calibrate` on a Wikidata gold sample, then `facts`, `lexical` and `crawl` with that calibration. List: [`docs/GGUF_MINING.md`](docs/GGUF_MINING.md).
 
 - [x] **Cell sweep wrap-up** — B2 and H06 rerun 2026-08-16 @ 300k / eval 2k (isolated `bench/results/cell_sweep_rerun/`). Both **3.681 BPC** with math-integration (same as H14; not a promote vs Hybrid 2.664). Archived at `data/archive/cell_sweep/variant_B2.json` + `variant_H06.json`. Best new row remains U03 **2.822**.
