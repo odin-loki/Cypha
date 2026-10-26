@@ -9,6 +9,12 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **GGUF mining** ([`docs/GGUF_MINING.md`](docs/GGUF_MINING.md), [`scripts/gguf_mine.py`](scripts/gguf_mine.py)): PLAN Track H.
+  - The full list of what can be statistically extracted from a neural model in GGUF format, with references, status and how each output feeds the data pack and ECS.
+  - A tool with 18 subcommands:
+    - **static:** tokenizer priors and morphology; embedding neighbours, clusters, Brown-style bit paths, PCA, relation offsets and direct-path bigrams; FFN neuron read/write vocabularies; attention-head copy scores; weight spectra with power-law alpha;
+    - **dynamic, through llama-cpp-python:** Wikidata relation probing over 52 relations with paraphrase, sample, verification and inverse statistics; an LMCRAWL-style crawl; lexical, taxonomy and commonsense relations; question paraphrases; Q/A; synthetic corpora with text statistics; corpus bits per byte; model-pooled vectors and word senses; calibration into ECS priors; ID linking.
+  - The self-test builds a tiny random GGUF and passes all 18 subcommands on SPM and BPE vocabularies.
 - **Default plan** ([`docs/PLAN.md`](docs/PLAN.md), 2026-10-26):
   - Language understanding from statistics plus a data pack (Wikidata, Open English WordNet, Wiktionary, ConceptNet, OpenCyc upper ontology, UD treebank), with the Cypha classifier making the decisions and learning online through rewards. No neural network at runtime.
   - Self-improvement is promoted only through a referee.

@@ -11,6 +11,12 @@ Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`)
 | `fetch_corpus.py` | Stoppable download toward ~1 TB under `D:\cypha_llm\corpus`. `--check` probes seed URLs. Ctrl+C resumes. |
 | `run_fetch.sh` | WSL launcher for that fetch. |
 
+## Mining a teacher model (offline)
+
+| Script | Purpose |
+|--------|---------|
+| `gguf_mine.py` | Statistically mine a GGUF language model for the data pack. **Static** (numpy + gguf): `info`, `vocab`, `embed`, `neurons`, `heads`, `spectra`. **Dynamic** (llama-cpp-python): `facts`, `crawl`, `lexical`, `taxonomy`, `commonsense`, `paraphrase`, `qa`, `sample`, `score`, `vectors`, `calibrate`. **Utility:** `canon`, `selftest`. Full list and recipe: [`docs/GGUF_MINING.md`](../docs/GGUF_MINING.md). |
+
 ## Where files go
 
 | Kind | Path |

@@ -1,0 +1,259 @@
+# Mining a GGUF language model for Cypha
+
+**Odin Loch** · 2026-10-26 · part of [PLAN.md](PLAN.md) Track H (offline distillation, verified)
+
+This is the full list of what can be statistically extracted from a neural language model stored in GGUF format, and how each item feeds Cypha's data pack and evidence scores. The script is [`scripts/gguf_mine.py`](../scripts/gguf_mine.py).
+
+The teacher model never runs inside Cypha. Everything it gives is data, and every mined item carries the statistics ECS needs ([PLAN §7](PLAN.md#7-ecs-evidence-certainty-score)).
+
+**Status column**
+- **script**: the subcommand that does it now.
+- **planned**: listed, not built. See section 9 for the route.
+- **excluded**: deliberately not done, with the reason.
+
+---
+
+## 0. Ground rules
+
+1. **One model is one witness.**
+   - Ten paraphrases agreeing is strong evidence that the *model* believes something. It is not ten independent sources.
+   - ECS counts a model as a single source, with an independence weight of `1 + ln n` over its own items ([PLAN §7.1](PLAN.md#71-evidence-items)).
+   - A mined fact reaches High grade only when an independent source agrees, such as Wikidata, Wikipedia text or a second model trained on different data.
+2. **Calibrate before trusting.**
+   - `calibrate` measures the model's accuracy per relation against gold facts and writes the Beta prior that ECS uses as the model's source trust.
+   - Uncalibrated, the default prior is Beta(1, 3), as PLAN §7.1 sets for distilled items.
+3. **Licence first.**
+   - `info` reads `general.license` and warns when it is not on a permissive list.
+   - Some licences restrict using outputs to build other models (section 10).
+4. **No memorised training text.** Extracting verbatim training data is excluded (section 11).
+5. **Provenance on everything.** Every output directory has `provenance.json`:
+   - model SHA-256, name, architecture, quantisation and licence;
+   - tool and library versions, the command, the seed and the time.
+
+---
+
+## 1. File, metadata and tensor census (static)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 1.1 | Architecture and hyperparameters: layers, width, heads, KV heads, FFN size, context length, RoPE, norm epsilon | GGUF `general.*` and `<arch>.*` keys | Context for every other number; profiling comparisons | script: `info` |
+| 1.2 | Licence, name, base model, source URL | `general.license`, `general.name`, … | Licence gate; provenance | script: `info` |
+| 1.3 | Chat template | `tokenizer.chat_template` | Whether to prompt as base or chat model | script: `info` |
+| 1.4 | Tensor census: name, quantisation type, shape, bytes, parameter count; tied output or not | Reader tensor table | Which analyses apply (fused QKV, MoE experts, tied embeddings) | script: `info` |
+
+## 2. Tokenizer (static)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 2.1 | Vocabulary with surface text | Tokens, decoded from SPM `▁` or GPT-2 byte maps | A ready subword inventory | script: `vocab` |
+| 2.2 | Frequency prior | SPM unigram scores (log-probabilities) or BPE merge order (earlier merge = more frequent pair) | Word-frequency ranks without a corpus; a prior for the lexicon (PLAN D2) and the word trie (B3) | script: `vocab` (`freq_rank`) |
+| 2.3 | Whole-word candidates | Word-initial alphabetic tokens. Prefix fan-out flags fragments ("con" extends into 200+ tokens). `--dictionary` marks real words | Seed word list, frequency-ordered | script: `vocab` (`words.tsv`) |
+| 2.4 | Morphology | Suffix statistics over word tokens (-ing, -ed, -tion, …); frequent continuation pieces | Morphological units for the lexicon and tagger features (E1) | script: `vocab` |
+| 2.5 | BPE merge list | Ranked pair merges | A learned subword grammar; pair statistics | script: `vocab` (`merges.tsv`) |
+| 2.6 | Script and language coverage | Unicode script of every token | Which languages the pack can cover | script: `vocab` (`vocab_stats.json`) |
+| 2.7 | Special and control tokens, byte fallback | Token types | Tokenisation rules | script: `vocab` |
+
+## 3. Embedding geometry (static)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 3.1 | Static word vectors | Rows of `token_embd.weight` for whole-word tokens | Teacher vectors to compare with Cypha's own PPMI-SVD (C1) and to retrofit (C4). An offline table, not a runtime network | script: `embed` (`vectors.npy`) |
+| 3.2 | Nearest neighbours | Cosine top-k | Synonym and inflection candidates for the lexicon, to be verified | script: `embed` |
+| 3.3 | Clusters | Spherical k-means | Word classes for class-level counts (B4) | script: `embed` |
+| 3.4 | Class hierarchy | Average-linkage merge tree over cluster centroids, written as bit paths like Brown clusters | A hierarchy for B4 and SCRIBE E | script: `embed` (`clusters.tsv`, `hierarchy.tsv`) |
+| 3.5 | Principal axes | Randomised PCA; the words at each end of each axis | Interpretable directions (frequency, language, topic) | script: `embed` (`pca.tsv`) |
+| 3.6 | Norm against frequency | Spearman correlation between vector norm and frequency rank | Diagnostic for vector quality | script: `embed` |
+| 3.7 | Relation offsets | Leave-one-out mean offset `b − a` per relation (capital-of, female-of, plural, past tense, comparative, or your `--pairs`), accuracy @1 and @10 | Which relations are linear in the static space: cheap relation vectors | script: `embed` (`relation_offsets.tsv`) |
+| 3.8 | Direct-path bigrams | Embedding → final norm → unembedding, skipping every layer (the zero-layer path of the transformer-circuits framework) | A bigram prior per word, approximate | script: `embed` (`direct_bigrams.tsv`) |
+
+## 4. Circuits in the weights (static)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 4.1 | What each FFN neuron **writes** | Project each `ffn_down` column through the final norm and unembedding; list top and bottom tokens and the write entropy (Geva et al. 2022: FFN layers promote concepts in vocabulary space) | A concept dictionary: neurons with low write entropy name a concept; feeds pattern and class discovery | script: `neurons` |
+| 4.2 | What each FFN neuron **reads** | Score word embeddings against each `ffn_up` row (key–value view of FFNs) | Trigger words per concept | script: `neurons` |
+| 4.3 | MoE experts | The same per expert (`*_exps` tensors) | Expert specialisation map | script: `neurons` |
+| 4.4 | Attention OV circuits | Per head: embedding → attention norm → V → O → final norm → unembedding. Copy score: how often a token maps to itself in the top 1 or top 5 (Elhage et al. 2021) | Which heads copy, and which map tokens to related tokens; context for B9 (copy-from-prompt) | script: `heads` |
+| 4.5 | QK circuits (which tokens attend to which) | Needs RoPE positions; static analysis is approximate | Attention-pattern priors | planned |
+| 4.6 | Weight spectra | Per matrix: singular values, stable rank, effective rank, a power-law α fitted to the eigenvalue tail (MLE with KS-chosen xmin, as in heavy-tailed self-regularisation work), log–log slope of σ_k against k, kurtosis, outliers | Model-quality diagnostics. The σ_k slope tests the harmonic-spectrum claims in the NMP paper on real models | script: `spectra` |
+
+## 5. Probability behaviour (dynamic)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 5.1 | Teacher-forced log-probabilities | Exact per-token scores from logits (`logits_all`), with prefix reuse checked bit-identical against fresh evaluation | The base of every statistic below | script: `Runner` |
+| 5.2 | Corpus bits per byte | Sliding-window scoring | Data selection for Track A ("picky" learning): flag junk or out-of-domain text; a fluency reference beside BPC | script: `score` |
+| 5.3 | Synthetic corpus | Sampling from prompts (temperature, top-p, seeds recorded) | Training text for counts in Cypha's trie format (distillation by sampling) | script: `sample` |
+| 5.4 | Text statistics of that corpus | Unigram and bigram counts, PMI collocations, Zipf slope, type–token ratio | Collocations for the pattern layer; a reference for SCRIBE E | script: `sample` (`text_stats.json`) |
+| 5.5 | Next-token distributions on a frozen prompt set | Full distributions | A teacher distribution for comparing Cypha's mixer | planned |
+
+## 6. Knowledge and relations (dynamic)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 6.1 | Factual relations | LAMA-style probing (Petroni et al. 2019) over 52 Wikidata relations, each with 2–3 paraphrased cloze templates plus a question. Candidates come from greedy and sampled answers; each is scored under every template (ParaRel-style consistency, Elazar et al. 2021) | Facts layer (D4): candidate triples with full statistics | script: `facts` |
+| 6.2 | Inverse-relation agreement | Score the inverse direction where one exists (capital ↔ capital of, part of ↔ has part) | A consistency feature for ECS | script: `facts --inverse` |
+| 6.3 | Knowledge-graph crawl | LMCRAWL (Cohen et al. 2023) and GPTKB (2024) style: list relations for an entity, generate objects, keep an object only when at least two paraphrases agree, queue new entities, dedupe. LMCRAWL reported 82–83% precision for one- and two-hop facts with this rule; GPTKB materialised 101M triples over 2.9M entities from GPT-4o-mini | New entities and relations beyond the fixed relation list | script: `crawl` |
+| 6.4 | Arbitrary relations from seed pairs | BertNet (Hao et al. 2023): a relation prompt and a few example pairs; paraphrase the prompt, search entity pairs, rescore | Relations Wikidata lacks | planned (use `facts --relations-file` with your own templates meanwhile) |
+| 6.5 | Lexical relations | Synonyms, antonyms, hypernyms, hyponyms, meronyms, holonyms, definitions, plurals, past tenses, each with templates and statistics | Lexicon and concept layers (D2, D3); thesaurus candidates to check against WordNet | script: `lexical` |
+| 6.6 | Lexical classifications | Distribution over labels by scored options: part of speech, polarity, entity type, concreteness, formality | Lexicon features; gazetteer for E2; polarity lexicon | script: `lexical` |
+| 6.7 | Taxonomy chains | Repeated "X is a kind of ___" with cycle detection and a probability cut-off (zero-shot taxonomy induction, Jain & Espinosa-Anke 2022) | Concept hierarchy candidates (D3) | script: `taxonomy` |
+| 6.8 | Commonsense relations | ConceptNet relations (UsedFor, CapableOf, HasProperty, AtLocation, MadeOf, HasA, Causes, HasPrerequisite, Desires, CreatedBy, PartOf, MotivatedByGoal), in the spirit of symbolic knowledge distillation (West et al. 2022) | Commonsense facts, low prior until corroborated by ConceptNet | script: `commonsense` |
+| 6.9 | Entity linking | Attach IDs to mined strings from a label table (Wikidata labels and aliases from the pack) | Canonical IDs so facts merge with D4 | script: `canon` |
+
+## 7. Language patterns (dynamic)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 7.1 | Question paraphrases | A few-shot rewrite of each relation's question. A paraphrase is kept with its answer-agreement rate: the same answer as the original on test subjects (paraphrase mining as in LPAQA, Jiang et al. 2020) | Pattern variety for the question classifier (E4) and the pattern layer (F2); the "Thanks."/paraphrase failures in the 2026-10-26 test are exactly this gap | script: `paraphrase` |
+| 7.2 | Q/A pairs | From mined facts above a confidence threshold, with every verified question pattern | Training data for E4 and B7, marked synthetic | script: `qa` |
+| 7.3 | Instruction data | Self-Instruct-style generation | Low priority; low trust | planned |
+
+## 8. Representations through inference (dynamic)
+
+| # | Item | How | Gives Cypha | Status |
+|---|---|---|---|---|
+| 8.1 | Model-pooled word vectors | Each word through the model in embedding mode, mean-pooled, optional PCA. A static table, the same idea as Model2Vec's static-embedding distillation | Teacher vectors for C1/C4 comparisons; neighbour lists | script: `vectors` |
+| 8.2 | Word senses | Contextual vectors of a word across sentences, spherical k-means with a minimum cluster size, best k by a silhouette-like score | Sense inventory candidates for C5 (Cypha sense classes) | script: `vectors --senses` |
+
+## 9. Needs internal activations (not in the script)
+
+These need per-layer hidden states. llama-cpp-python exposes the final layer only, so there are two routes:
+- llama.cpp's eval-callback mechanism (the one `imatrix` uses), from C++;
+- loading the GGUF into PyTorch: the transformers library can dequantise GGUF files for supported architectures.
+
+| # | Item | Reference | Gives Cypha |
+|---|---|---|---|
+| 9.1 | Logit lens / tuned lens: what each layer predicts | nostalgebraist 2020; Belrose et al. 2023 | Where facts resolve; layer choice for 9.2–9.4 |
+| 9.2 | Linear relational embeddings: a relation as an affine map on the subject's hidden state | Hernandez et al. 2024 | Relation operators that generalise to unseen subjects |
+| 9.3 | Knowledge neurons | Dai et al. 2022 | Neuron-level fact attribution |
+| 9.4 | Causal tracing | Meng et al. 2022 (ROME) | Which states carry a fact |
+| 9.5 | Sparse-autoencoder dictionary features | Cunningham et al. 2024; Bricken et al. 2023 | A large interpretable concept inventory |
+| 9.6 | Contrast-consistent truth directions | Burns et al. 2023 | An unsupervised truth score for ECS |
+| 9.7 | Structural probes for syntax | Hewitt & Manning 2019 | Parse supervision for E3 |
+| 9.8 | Decoding hidden states into text | Patchscopes, Ghandeharioun et al. 2024 | Explanations of internal concepts |
+
+## 10. Uncertainty statistics attached to every mined item
+
+| Statistic | Meaning | Where |
+|---|---|---|
+| `choice_p` | Model probability of the candidate among all candidates (whole string), averaged over templates | `facts`, `lexical`, `crawl`, … |
+| `choice_p_tok` | The same with per-token normalisation; whole-string probability favours short answers | same |
+| `lp_mean`, `lp_mean_sd` | Mean token log-probability and its spread across paraphrases | same |
+| `para_agree` | Fraction of templates whose greedy answer is this candidate | same |
+| `sample_frac` | Fraction of sampled answers that are this candidate | same |
+| `margin` | Log-probability gap to the best other candidate | same |
+| `verify` | `log P(Yes) − log P(No)` for "Is it true that …?" | same |
+| `sem_entropy` | Entropy over clusters of sampled answers, after Farquhar et al. 2024 (here clustered by folded string; bidirectional entailment is the stronger version) | per (subject, relation) |
+| `dk_rate` | Fraction of "don't know" or empty answers | per (subject, relation) |
+| `inverse_lp_mean` | Score of the inverse direction | `facts --inverse` |
+| `confidence` | Logistic calibration of these features per relation once `calibrate` has run; before that, the heuristic `choice_p × max(para_agree, sample_frac)`, marked `calibrated: false` | all |
+| `evidence` | The ECS record: source, method, source-trust Beta prior (from calibration), extraction confidence | all |
+
+`calibrate` also reports accuracy, ECE and Brier per relation, in sample. To measure calibration honestly, hold gold facts out of the fit.
+
+## 11. Excluded
+
+| Item | Why |
+|---|---|
+| Extracting memorised training text (Carlini et al. 2021; Nasr et al. 2025) | Copyright and personal-data risk; also not useful for structure |
+| Personal facts about private individuals | Privacy; the pack covers public entities only |
+| Redistributing teacher weights or verbatim outputs where the licence forbids it | Licence terms |
+
+---
+
+## 12. Licences for teacher models
+
+Check the model card for the exact model and size; terms differ within families.
+
+| Family | Terms, as far as checked on 2026-10-26 |
+|---|---|
+| Qwen2.5 | Apache 2.0 for most sizes. The 3B and 72B use a Qwen licence that needs arrangements for commercial use |
+| Llama 3 | The community licence prohibited using outputs to improve other large language models |
+| Llama 3.1 | That prohibition was removed. Attribution and naming conditions apply ("Built with …"; derived model names must begin with "Llama") |
+| Others (Mistral 7B, OLMo, SmolLM, Phi, Gemma) | Check each model card. Gemma has its own terms with a prohibited-use policy |
+
+Prefer Apache-2.0 or MIT models. `info` and every `provenance.json` record the GGUF's own licence field.
+
+---
+
+## 13. Recipe
+
+```bash
+pip install numpy gguf                 # static commands
+pip install llama-cpp-python           # dynamic commands
+M=path/to/model.gguf; O=mined/$(basename $M .gguf)
+
+python scripts/gguf_mine.py info     --model $M --out $O/info
+python scripts/gguf_mine.py vocab    --model $M --out $O/vocab --dictionary pack/words.txt
+python scripts/gguf_mine.py embed    --model $M --out $O/embed --dictionary pack/words.txt
+python scripts/gguf_mine.py neurons  --model $M --out $O/neurons --max-neurons 2048
+python scripts/gguf_mine.py heads    --model $M --out $O/heads
+python scripts/gguf_mine.py spectra  --model $M --out $O/spectra --pattern 'blk\.(0|8|16)\.'
+
+# Calibrate on a held-in sample of Wikidata facts, then mine with that calibration.
+python scripts/gguf_mine.py calibrate --model $M --out $O/cal --gold pack/wikidata_gold.tsv
+python scripts/gguf_mine.py facts    --model $M --out $O/facts --subjects pack/entities.tsv --inverse --calibration $O/cal/calibration.json --resume
+python scripts/gguf_mine.py crawl    --model $M --out $O/crawl --seeds pack/seeds.txt --depth 2 --calibration $O/cal/calibration.json
+python scripts/gguf_mine.py lexical  --model $M --out $O/lexical --words pack/words.txt --resume
+python scripts/gguf_mine.py taxonomy --model $M --out $O/taxonomy --words pack/nouns.txt
+python scripts/gguf_mine.py commonsense --model $M --out $O/commonsense --words pack/concepts.txt
+python scripts/gguf_mine.py paraphrase --model $M --out $O/para --subjects pack/entities.tsv
+python scripts/gguf_mine.py qa       --out $O/qa --facts $O/facts/facts.jsonl --patterns $O/para/patterns.jsonl
+python scripts/gguf_mine.py sample   --model $M --out $O/sample --n 10000
+python scripts/gguf_mine.py score    --model $M --out $O/score corpus_shard.txt --split
+python scripts/gguf_mine.py vectors  --model $M --out $O/vectors --words pack/words.txt --senses pack/ambiguous.txt --corpus corpus_sentences.txt
+python scripts/gguf_mine.py canon    --input $O/facts/facts.jsonl --labels pack/wikidata_labels.tsv --output $O/facts/facts_ids.jsonl
+```
+
+**Self-test.** This builds a tiny random llama-architecture GGUF from a vocab-only file (llama.cpp ships them in `models/`) and runs all 18 subcommands:
+
+```bash
+python scripts/gguf_mine.py selftest --vocab llama.cpp/models/ggml-vocab-llama-spm.gguf --out /tmp/gguf_selftest
+```
+
+- **Result on 2026-10-26:** all 18 pass with the SPM (Llama) and BPE (Qwen2) vocabularies, on llama-cpp-python 0.3.36 and gguf 0.19.0.
+- **Scoring checks:**
+  - teacher-forced scores with prefix reuse are bit-identical to fresh evaluation;
+  - the first-token score matches the next-token distribution;
+  - bits per byte agree within 0.001 across window sizes.
+- **Logic test:** a scripted fake model checked crawl (relation listing, "don't know" skipping, the two-paraphrase rule, depth-limited expansion) and candidate ranking.
+- **What it does not test:** a random model knows nothing, so the self-test checks plumbing, not knowledge. The first real run should be `calibrate` on a Wikidata sample, so the numbers mean something.
+
+**Cost.**
+- Static commands are dominated by dequantising tensors; `neurons` and `spectra` scale with vocabulary × width per layer.
+- Dynamic commands cost about `templates × (1 + samples)` generations plus `candidates × templates` scorings per item.
+- Time a small run first with `--samples 1` and a few subjects.
+
+---
+
+## Sources
+
+- [GGUF format (ggml docs)](https://github.com/ggerganov/ggml/blob/9c2adc4962a3a5d259f10db2171e0df5c83e4b05/docs/gguf.md)
+- [llama-cpp-python issue on logprobs/logits_all](https://github.com/abetlen/llama-cpp-python/issues/1983)
+- [Petroni et al. 2019, Language Models as Knowledge Bases?](https://arxiv.org/pdf/1909.01066)
+- [Elazar et al. 2021, Measuring and Improving Consistency in Pretrained Language Models (ParaRel)](https://transacl.org/ojs/index.php/tacl/article/view/3015)
+- [Jiang et al. 2020, How Can We Know What Language Models Know?](https://www.arxiv.org/pdf/1911.12543)
+- [Jiang et al. 2021, How Can We Know When Language Models Know? (calibration)](https://arxiv.org/pdf/2012.00955)
+- [Cohen et al. 2023, Crawling the Internal Knowledge-Base of Language Models](https://arxiv.org/pdf/2301.12810)
+- [GPTKB: Enabling LLM Knowledge Analysis via Extensive Materialization](https://www.arxiv.org/abs/2411.04920)
+- [Hao et al. 2023, BertNet](https://arxiv.org/abs/2206.14268v3)
+- [Jain & Espinosa-Anke 2022, Distilling Hypernymy Relations from Language Models](https://arxiv.org/pdf/2202.04876)
+- [West et al. 2022, Symbolic Knowledge Distillation](https://aclanthology.org/2022.naacl-main.341)
+- [Wang et al. 2023, Self-Instruct](https://arxiv.org/pdf/2212.10560)
+- [Geva et al. 2022, Transformer Feed-Forward Layers Build Predictions by Promoting Concepts in the Vocabulary Space](https://arxiv.org/abs/2203.14680)
+- [Elhage et al. 2021, A Mathematical Framework for Transformer Circuits (explainer)](https://www.lesswrong.com/posts/CJsxd8ofLjGFxkmAP/explaining-the-transformer-circuits-framework-by-example)
+- [Belrose et al. 2023, Tuned Lens](https://arxiv.org/pdf/2303.08112)
+- [Hernandez et al. 2024, Linearity of Relation Decoding in Transformer LMs](https://arxiv.org/pdf/2308.09124)
+- [Dai et al. 2022, Knowledge Neurons in Pretrained Transformers](https://arxiv.org/abs/2104.08696v1)
+- [Meng et al. 2022, Locating and Editing Factual Associations in GPT](https://arxiv.org/pdf/2202.05262)
+- [Cunningham et al. 2024, Sparse Autoencoders Find Highly Interpretable Features](https://arxiv.org/pdf/2309.08600)
+- [Burns et al. 2023, Discovering Latent Knowledge Without Supervision](https://arxiv.org/pdf/2212.03827)
+- [Farquhar et al. 2024, Detecting hallucinations using semantic entropy](https://pmc.ncbi.nlm.nih.gov/articles/PMC11186750)
+- [Model2Vec: static embeddings distilled from a sentence transformer](https://huggingface.co/blog/Pringled/model2vec)
+- [WeightWatcher (heavy-tailed self-regularisation)](https://pypi.org/project/weightwatcher/0.5.5)
+- [Carlini et al. 2021, Extracting Training Data from Large Language Models](https://www.usenix.org/conference/usenixsecurity21/presentation/carlini-extracting)
+- [Nasr et al. 2025, Scalable Extraction of Training Data from Aligned, Production Language Models](https://iclr.cc/virtual/2025/poster/27894)
+- [Llama 3 vs Llama 3.1 licence terms](https://writing.kemitchell.com/2024/07/24/Llama-3-versus-Llama-3-1-License)
+- [Qwen 2.5 release and licences](https://www.deeplearning.ai/the-batch/alibaba-releases-qwen-2-5-models-raising-the-bar-for-open-weight-llms)
+- [LLM-empowered knowledge graph construction: a survey](https://arxiv.org/html/2510.20345v1)

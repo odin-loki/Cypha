@@ -415,6 +415,13 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 
 ### Track H: distilling symbolic knowledge from a neural model (offline, verified)
 
+**What to mine and how:** [`GGUF_MINING.md`](GGUF_MINING.md) has the full list.
+- **Static, from the weights:** tokenizer priors, embedding geometry and relation offsets, FFN neuron and attention-head circuits, weight spectra.
+- **Dynamic, by running the model:** facts, crawls, lexical, taxonomy and commonsense relations, question paraphrases, synthetic corpora, corpus scoring, word senses.
+- **Statistics:** every item carries the uncertainty statistics ECS needs.
+
+**The tool:** [`scripts/gguf_mine.py`](../scripts/gguf_mine.py), with a self-test that runs all 18 subcommands.
+
 | ID | Work | Measure | Gate |
 |---|---|---|---|
 | H1 | Pick an open-weight model under a permissive licence (Apache 2.0 or MIT). It runs offline only, never in Cypha's runtime | — | Licence recorded |
@@ -842,6 +849,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 40 | Earlier advice: word-similarity tests, 20NG rerun, PPMI-SVD, random indexing, SIF | §9, C0, C1, C6 |
 | 41 | Earlier advice: NELL drift, referee for self-improvement | §3.4, §7.5, G7, §8 |
 | 42 | Earlier advice: verify distilled facts; licences | H3; §4.3 |
+| 43 | A full list and a script to statistically datamine a GGUF neural model, relations included | Track H; [`GGUF_MINING.md`](GGUF_MINING.md); `scripts/gguf_mine.py` |
 
 ---
 
