@@ -2723,3 +2723,12 @@ endif()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaCTest.cmake")
 cypha_apply_ctest_slow_labels()
+
+# --- M1: ECS (PLAN 7) and LCI (PLAN 8) header-only library tests --------------------------------
+# Header-only (include/cypha/eval/ecs.hpp, lci.hpp); the test needs no link against cypha_core.
+add_executable(ecs_lci_test tools/ecs_lci_test.cpp)
+target_include_directories(ecs_lci_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(ecs_lci_test)
+add_test(NAME native_ecs_lci_test COMMAND "$<TARGET_FILE:ecs_lci_test>")
+set_tests_properties(native_ecs_lci_test PROPERTIES TIMEOUT 120)
+# --- end M1 block -------------------------------------------------------------------------------

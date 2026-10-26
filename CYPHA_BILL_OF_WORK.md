@@ -22,7 +22,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 
 - [ ] **Track A**: 1 TB packed-trie run; score each checkpoint against predictions P-A1 to P-A5.
 - [ ] **Q1–Q3 / B1**: one packed-trie library replacing the 7 forked `trie_*.cpp` tools; CMake targets; CTests; paths as arguments.
-- [ ] **M1–M4**: frozen suites in `bench/eval/`; SCRIBE v0 with its control ladders; the ECS and LCI library; `cypha_report_card`.
+- [ ] **M1–M4**: frozen suites in `bench/eval/`; SCRIBE v0 with its control ladders; `cypha_report_card`. The ECS and LCI library is done (2026-10-27): `native/include/cypha/eval/`, CTest `native_ecs_lci_test` (242 checks), [report](docs/reports/M1_ECS_LCI_LIBRARY.md).
 - [ ] **F1**: infobox facts + question classifier v0 on the 8 Wikipedia questions (currently 0/8).
 - [ ] **B7**: normalised, fuzzy chat index (Dolly + OpenAssistant) that can abstain, reported as retrieval.
 - [ ] **C0–C1**: fair TF-IDF baselines with `W_enc` frozen, then PPMI-SVD and random-indexing vectors.

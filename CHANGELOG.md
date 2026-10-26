@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **ECS and LCI library** (PLAN M1, [report](docs/reports/M1_ECS_LCI_LIBRARY.md)): header-only `native/include/cypha/eval/ecs.hpp` and `lci.hpp`. Covers evidence fusion, grades, calibration, the Bayesian-bootstrap learning gain, canaries, e-process with alpha spending, Benjamini–Hochberg, Thresholdout, BWT and learning-curve fit. CTest `native_ecs_lci_test` runs 242 known-answer checks.
 - **GGUF mining** ([`docs/GGUF_MINING.md`](docs/GGUF_MINING.md), [`scripts/gguf_mine.py`](scripts/gguf_mine.py)): PLAN Track H.
   - The full list of what can be statistically extracted from a neural model in GGUF format, with references, status and how each output feeds the data pack and ECS.
   - A tool with 18 subcommands:
