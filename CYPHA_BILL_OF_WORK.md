@@ -41,6 +41,12 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
     - **S1 for `chat_index`:** reason codes and evidence cards; `--ask`/`--ask-file` fast path, 1.3 s instead of 53 s. On the 200 blind questions the strict reading gives 4 wrong; counting true Dolly facts as evidence gives 1.
     - **S2:** `native/include/cypha/eval/epistemic.hpp`, with CTest `native_epistemic_test` (195 checks): states, degree of conflict, the two kinds of uncertainty, reason codes, unseen estimators and cards.
   - **Still open:** S1 for `qa_infobox` (in progress), S3 and S5.
+- [ ] **K2–K5** ([`docs/THOUGHT.md`](docs/THOUGHT.md)):
+  - interpreter for the thought-process library;
+  - the standard learners (Beta, Dirichlet, Welford, Thompson, TD(λ), value of computation);
+  - primitives bound to the existing tools;
+  - the first executable processes on their benchmarks.
+  - K1 (106 processes, validator) is done.
 - [ ] **H1–H3**: pick a permissively licensed GGUF teacher. Run `scripts/gguf_mine.py calibrate` on a Wikidata gold sample, then `facts`, `lexical` and `crawl` with that calibration. List: [`docs/GGUF_MINING.md`](docs/GGUF_MINING.md).
 
 - [x] **Cell sweep wrap-up** — B2 and H06 rerun 2026-08-16 @ 300k / eval 2k (isolated `bench/results/cell_sweep_rerun/`). Both **3.681 BPC** with math-integration (same as H14; not a promote vs Hybrid 2.664). Archived at `data/archive/cell_sweep/variant_B2.json` + `variant_H06.json`. Best new row remains U03 **2.822**.

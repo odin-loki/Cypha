@@ -461,6 +461,16 @@ The full design, work items S1–S15 and gates are in [`DISCOVERY.md`](DISCOVERY
 - **S5:** the hypothesis store with its firewall;
 - **S3:** the gap map.
 
+### Track K: thought processes
+
+A learnable library of human thinking and work processes. It has 106 processes in 23 categories, each a control graph with its source and core maths. Cypha runs, selects and improves them with its own statistics:
+- Beta and Dirichlet counts and Welford moments;
+- DIF applicability;
+- Thompson selection, TD(λ) credit and the value-of-computation stop;
+- promotion through LCI.
+
+Design: [`THOUGHT.md`](THOUGHT.md). Library: [`thought/processes.yaml`](thought/processes.yaml). Work items K1–K9 are in THOUGHT.md §12; K1, the library and validator, is done.
+
 ### Track M: metrics and the evaluation harness
 
 - **M1.** SCRIBE (section 6), ECS (section 7) and LCI (section 8) as a library, `native/include/cypha/eval/`, with CTests on synthetic cases where the answer is known.
@@ -888,6 +898,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 44 | Keep "it doesn't answer what it doesn't know" as a feature | Rule 9; right / abstained / wrong reporting |
 | 45 | Add speculative / hypothetical thinking for discovery later | §3.5 speculative mode, kept apart from answers |
 | 46 | Do the speculative thinking now: know what it knows, know what it doesn't, think hard on discovery, map out the discovery processes | [`DISCOVERY.md`](DISCOVERY.md); Track S |
+| 47 | Model human thought and work processes across many categories (UML/processes) as "thought" for Cypha, done mathematically with its online learning and statistical feedback | Track K; [`THOUGHT.md`](THOUGHT.md); [`thought/processes.yaml`](thought/processes.yaml) |
 
 ---
 
