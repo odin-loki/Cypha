@@ -9,6 +9,8 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **SCRIBE v0** (PLAN §6, [report](docs/reports/SCRIBE_V0.md)): header-only `native/include/cypha/eval/scribe.hpp` covers the open-text axes S, C, I and E, with human-reference normalisation. `native/tools/scribe_ladder.cpp` runs the V1 control ladder; CTest `native_scribe_selftest`.
+  - It fails the ladder: 1 of 6 adjacent pairs pass, as does surface S. Recorded as a negative result, with the fixes.
 - **Count-based word vectors** (PLAN C1, [report](docs/reports/C1_PPMI_SVD_VECTORS.md)): `native/tools/ppmi_svd.cpp` builds PPMI with smoothed contexts and a home-built randomised SVD, plus random indexing, from enwik8. No neural network is involved. Scores: WordSim-353 0.672, SimLex-999 0.255, MEN 0.637. This is the baseline the other Cypha encoders must beat.
 - **T-QA-wiki, 200 blind questions** (`bench/eval/t_qa_wiki.tsv`, [report](docs/reports/T_QA_WIKI_200.md)): 150 answerable from the training slice and 50 not.
   - `qa_infobox`: 3 right / 197 abstained / 0 wrong. The 8/8 seed score was in-sample.

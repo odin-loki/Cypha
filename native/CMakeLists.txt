@@ -2732,3 +2732,14 @@ cypha_mingw_apply_exe_link_options(ecs_lci_test)
 add_test(NAME native_ecs_lci_test COMMAND "$<TARGET_FILE:ecs_lci_test>")
 set_tests_properties(native_ecs_lci_test PROPERTIES TIMEOUT 120)
 # --- end M1 block -------------------------------------------------------------------------------
+
+# --- SCRIBE v0: control-ladder tool (PLAN 6.4) and known-answer self-test ------------------------
+# Header-only library include/cypha/eval/scribe.hpp. The ladder needs enwik8 and is NOT a CTest; run
+# it by hand: scribe_ladder <enwik8> <model_gen_lines.txt> [more_gen_lines.txt]
+# The self-test needs no corpus.
+add_executable(scribe_ladder tools/scribe_ladder.cpp)
+target_include_directories(scribe_ladder PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(scribe_ladder)
+add_test(NAME native_scribe_selftest COMMAND "$<TARGET_FILE:scribe_ladder>" --selftest)
+set_tests_properties(native_scribe_selftest PROPERTIES TIMEOUT 120)
+# --- end SCRIBE block ---------------------------------------------------------------------------
