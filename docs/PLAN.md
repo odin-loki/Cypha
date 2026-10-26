@@ -104,6 +104,11 @@ Also from the repo's history (survey of `docs/history`, `docs/archive`, `bench/c
 6. **Kill criteria are written first** (section 11). A track that misses its gate twice stops.
 7. **Name things honestly.** Retrieval is called retrieval. The README already does this for the chat copy. Keep it that way in anything sent to outside reviewers.
 8. **Track licences.** Every data source has a licence line in the manifest, and share-alike terms are checked before anything ships under the commercial licence (section 4.3).
+9. **Not answering is a feature.** When the evidence is not there, Cypha says it does not know. It never fills the gap with a fluent guess.
+   - A wrong answer costs more than an abstention.
+   - Every Q/A result is reported as right / abstained / wrong, and the wrong count is the number to drive down first.
+   - A change that raises coverage by adding wrong answers fails LCI on the wrong-answer rate, even if accuracy rises.
+   - Decided by Odin Loch, 2026-10-27.
 
 ---
 
@@ -247,6 +252,17 @@ propose  →  sandbox on dev set  →  LCI on the referee set  →  promote or r
 - a corpus slice must lower held-out code length per byte (MDL gain > 0).
 
 **Forgetting.** Shared-model continual learning is an open problem here: D16B's forgetting score is ≈ 0.81, while isolated model files show zero forgetting (D16F). So the system keeps one model file per decision type (tagger, parser, linker, question classifier, sense classifier), versions the knowledge store, and runs canary sets on every promotion.
+
+### 3.5 Speculative mode (later, for discovery)
+
+Hypothetical and speculative thinking will be added later as a **separate mode**. It never mixes into answers:
+
+- **What it does.** It proposes hypotheses: facts the rules or analogies suggest, connections between distant concepts, gaps in the store. Each comes with how it was derived (rule chain, analogy, pattern) and what would confirm or refute it.
+- **How it is labelled.** Every output is marked as a hypothesis, with its own grade (`Hypothesis`, below Very low in section 7.3). It is stored apart from working knowledge.
+- **What it cannot do.** A hypothesis is never used as a premise, never returned as an answer, and never admitted until independent evidence lifts it through ECS like anything else.
+- **How it is judged.** The share of hypotheses later confirmed, per generator, is that generator's reliability (a Beta posterior). Generators that never get confirmed are retired.
+
+Answer mode keeps rule 9 unchanged: no evidence, no answer.
 
 ---
 
@@ -850,6 +866,8 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 41 | Earlier advice: NELL drift, referee for self-improvement | §3.4, §7.5, G7, §8 |
 | 42 | Earlier advice: verify distilled facts; licences | H3; §4.3 |
 | 43 | A full list and a script to statistically datamine a GGUF neural model, relations included | Track H; [`GGUF_MINING.md`](GGUF_MINING.md); `scripts/gguf_mine.py` |
+| 44 | Keep "it doesn't answer what it doesn't know" as a feature | Rule 9; right / abstained / wrong reporting |
+| 45 | Add speculative / hypothetical thinking for discovery later | §3.5 speculative mode, kept apart from answers |
 
 ---
 
