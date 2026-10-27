@@ -1,0 +1,32 @@
+{
+  "model": "Qwen3.5-9B-Q4_K_M.gguf",
+  "n_ctx": 1024,
+  "threads": 2,
+  "load_s": 21.59,
+  "arch": "qwen35",
+  "prompt_format": {
+    "prompt_mode": "chat",
+    "template_warning": null,
+    "template_has_think": true
+  },
+  "prompt_no_think": "<|im_start|>user\nWhat is the capital of France? Answer in one short sentence.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "prompt_think_tail": "f France? Answer in one short sentence.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+  "prompt_tokens": 25,
+  "prompt_eval_s": 25.919,
+  "prompt_tokens_per_s": 0.96,
+  "answer": "The capital of France is Paris.",
+  "completion_tokens": 7,
+  "generate_s": 15.836,
+  "generate_tokens_per_s_incl_prompt": 0.442,
+  "verify_yes_minus_no": 4.638,
+  "verify_s": 13.051,
+  "verify_irrelevant_yes_minus_no": -7.653,
+  "max_rss_mb": 9204.4,
+  "model_file": "unsloth/Qwen3.5-9B-GGUF Qwen3.5-9B-Q4_K_M.gguf (repo revision 3885219b6810b007914f3a7950a8d1b469d598a5)",
+  "model_sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+  "model_bytes": 5680522464,
+  "licence": "apache-2.0 (general.license in the GGUF)",
+  "llama_cpp_python": "0.3.36 (vendored llama.cpp/ggml 0c1e570)",
+  "how": "/root/work/teacher/bin/smoke_9b.py: gguf_mine.Runner(n_ctx 1024, 2 threads, logits_all) + gguf_mine.PromptFormat('auto') + gguf_mine.judge (VERIFY_Q)",
+  "note": "prompt_eval_s is the first evaluation after load (cold pages); generate_s re-evaluates the 25-token prompt and generates 7 tokens; max_rss includes the logits_all buffer (n_ctx x 248,320 floats = 1.0 GB)"
+}
