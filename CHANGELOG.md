@@ -9,6 +9,10 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Part-of-speech tagger and chunker** (PLAN E1, [report](docs/reports/E1_POS_TAGGER.md)): `native/tools/pos_tagger.cpp`, an averaged perceptron on UD English EWT v2.18.
+  - Test UPOS 94.81%, passing the 94% gate; about 1M tokens/s.
+  - Rule-based noun-phrase chunker, F1 83.8 on test.
+  - Question-parse mode: wh-word, auxiliary, main verb, entity.
 - **AI and data-science processes** in the thought library ([`docs/THOUGHT.md`](docs/THOUGHT.md) §3.9): 36 more processes, for 142 in total.
   - 17 data science: CRISP-DM, EDA, cleaning, quality scorecard, tests, A/B, regression, time series, clustering, anomalies, observational causal effects, honest charts, features, sampling, record linkage, near-duplicates, ETL.
   - 19 AI/ML: workflow, cross-validation, successive-halving search, error analysis, evaluation, ablation, leakage, drift (PSI/KS/CUSUM), active learning, safe online update, model selection, retrieval, teacher queries, benchmark hygiene, tracking, slice audit, bandits, model cards.

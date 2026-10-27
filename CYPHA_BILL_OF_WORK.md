@@ -36,6 +36,9 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - **C1 vectors done (2026-10-27):** `native/tools/ppmi_svd.cpp`, [report](docs/reports/C1_PPMI_SVD_VECTORS.md). PPMI-SVD on enwik8 (11.2M tokens, 152 s, 640 MB) scores WordSim-353 0.672, SimLex-999 0.255 and MEN 0.637. WS353 is inside the published range; SimLex is below it. Random indexing scores 0.404 / 0.131 / 0.374.
   - **Still open:** the C0 baselines and the 20 Newsgroups gate.
 - [ ] **E1**: Cypha part-of-speech tagger on UD EWT (gate ≥ 94%).
+  - **Perceptron baseline passes (2026-10-27):** `native/tools/pos_tagger.cpp`, [report](docs/reports/E1_POS_TAGGER.md). Test UPOS 94.81% (known words 96.4%, unknown 79.2%, questions 93.3%); about 1M tokens/s, 5.6 MB.
+  - Noun-phrase chunker F1 83.8 on test, plus a question-parse helper.
+  - **Still open:** the Cypha-classifier tagger, and entities (E2).
 - [ ] **S1–S3, S5** ([`docs/DISCOVERY.md`](docs/DISCOVERY.md)): reason codes and evidence cards on every answer and every "I don't know"; epistemic states; the hypothesis store and firewall; the gap map.
   - **Done 2026-10-27** ([report](docs/reports/S1_S2_EPISTEMIC.md)):
     - **S1 for `chat_index`:** reason codes and evidence cards; `--ask`/`--ask-file` fast path, 1.3 s instead of 53 s. On the 200 blind questions the strict reading gives 4 wrong; counting true Dolly facts as evidence gives 1.
