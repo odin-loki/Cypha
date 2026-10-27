@@ -64,6 +64,10 @@ Tool: `cyphalm_trie qa` (dev 130 questions, frozen test 200; coverage at a 2% wr
 | Entity familiarity (`ent_title`) | dev AUROC 0.795 [0.745, 0.847] |
 | Copy expert (option) | holdout BPC trie 2.114, trie + InfiniGram 1.926 |
 
+## Word vectors
+
+PPMI-SVD (`native/tools/ppmi_svd.cpp`) stays the source: WordSim-353 0.672, SimLex-999 0.255, MEN 0.637 on all of enwik8 (C1 pairs). Cypha's own learner, `cypha_word_classes train --method sgns --epochs 5 --var0 0.3` ([S-1b](reports/S1B_LEARNED_CONTEXTS.md)): 0.683 / 0.246 / 0.669 on the same pairs, 0.750 / 0.270 / 0.756 on the top-10,000 pairs; no worse on common words, worse on rare ones.
+
 ## Fact store and fact text (for CyphaLM to learn from)
 
 Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md), 2026-10-28). These facts never answer anything. They become training text for CyphaLM (PLAN rule 10).

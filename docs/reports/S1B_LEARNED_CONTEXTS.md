@@ -362,6 +362,22 @@ The gate above asked for superiority, and (b) came out level. Odin's instruction
 - **Rule:** (b) `sgns_v0p3_e5_wc` replaces PPMI-SVD as the vector source if, on each of the three large sets (MTurk-771, RW, SimVerb-3500), the lower 95% bound of ρ(b) − ρ(PPMI-SVD) is above −0.03. The three small sets are reported only.
 - **Prediction:** (b) passes on all three large sets, with point differences between −0.01 and +0.04.
 
+**Result (read once, 2026-10-28).** Both words in the top 50,000; 2,000 paired resamples.
+
+| Set | Pairs used | ρ (b) [95%] | ρ(b) − ρ(PPMI-SVD) [95%] | P(diff > 0) | Rule |
+|---|---|---|---|---|---|
+| MTurk-771 | 761 of 771 | 0.606 [0.560, 0.649] | +0.013 [−0.017, +0.042] | 0.813 | pass |
+| RW (rare words) | 732 of 2,034 | 0.329 [0.260, 0.395] | −0.035 [−0.083, +0.013] | 0.081 | **fail** |
+| SimVerb-3500 | 3,056 of 3,500 | 0.148 [0.110, 0.185] | +0.006 [−0.018, +0.029] | 0.687 | pass |
+| RG-65 (reported only) | 61 of 65 | 0.589 [0.396, 0.738] | −0.050 [−0.204, +0.092] | 0.240 | |
+| YP-130 (reported only) | 112 of 130 | 0.434 [0.272, 0.568] | +0.107 [−0.032, +0.254] | 0.930 | |
+| MC-30 (reported only) | 29 of 30 | 0.526 [0.168, 0.776] | −0.154 [−0.406, +0.073] | 0.084 | |
+
+- **Decision: PPMI-SVD stays the vector source.** (b) is no worse on common words (MTurk-771, SimVerb) but is worse on rare words: its lower bound on RW is −0.083, past the −0.03 margin.
+- **Why rare words, plausibly:** (b) learns each word from its own events, so a word seen a few times gets a few noisy natural-gradient steps; PPMI-SVD's factorisation shares strength across the whole matrix. A count-dependent prior on Σ0 is the obvious next try.
+- **Prediction:** missed (it failed on RW).
+- The scores were read with `cwc eval`, passing the fresh sets in the three pair-file slots (its section titles then name the slots, not the sets).
+
 ## Reproduce
 
 Build the core library and the tools (from the repo root):

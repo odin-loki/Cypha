@@ -17,6 +17,7 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **S-1b learned contexts** ([report](docs/reports/S1B_LEARNED_CONTEXTS.md)): `cypha_word_classes` gains `train` (`--method sgns|pullpush`), `distill`, `eval` (paired bootstrap, relations, hypernymy) and `export` (.npy + index, SIF sentences, k-means classes); `s1 --obs ppmi|ppmi-row --save`. Cypha's vectors reach PPMI-SVD's level (WordSim 0.750, SimLex 0.270) but fail both gates, so PPMI-SVD stays the source.
 - **B4 class-context expert** ([report](docs/reports/B4_CLASS_CONTEXT_EXPERT.md)): `native/include/cypha/cyphalm/class_context.hpp` (200 lines) predicts the next byte from the classes of the last two words plus up to 6 bytes since; `cyphalm_trie cls` (the experiment) and `qa --cls` (the tool-profile grid).
   - On fresh enwik8 text, read once: trie + InfiniGram 2.1660 → 2.0879 BPC with shape classes only, 2.0751 with E1 tags; surface S 0.761 → 0.905 / 0.877 (human 0.870).
   - The tags add −0.0128 BPC [−0.0147, −0.0110] over shape classes but lower surface S by 0.029. Q/A comes with the grid.
