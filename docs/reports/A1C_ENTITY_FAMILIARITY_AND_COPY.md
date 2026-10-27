@@ -183,3 +183,115 @@ Same as run D, except `--fam-train outcome`: all 15,015 Dolly turns carry `high`
 ### No `NO_EVIDENCE` rows (skipped)
 
 A `NO_EVIDENCE` row needs an entity with an article and a relation the slice never states. The only evidence of "never states" here is F2's store, and its absence is not evidence: F2's report has 451 birth-place seeds against 1,144 birth-year seeds, so most people's birth place is missing from the store whether the article states it or not, and most relations have no kept pattern at all. A row built from it would teach "I have read about X but not where X was born" for facts the article does state. That would be training a false reason. So every don't-know row stays `UNKNOWN_ENTITY`, and in-slice abstentions keep the wrong code.
+
+---
+
+## Frozen test (200 questions, run once): A1c-gate
+
+The final A1c configuration is run D′: `ent_title` token after `Assistant: `, `--fam-train outcome`, 20% don't-know turns from the mention file, copy models included. The `--test` run re-prints every dev line; they are byte-identical to run D′.
+
+| Model (chat form) | Raw R / A / W | Not-in-slice abstained | Precision (Wilson 95%) | Recall (Wilson 95%) | Gated (2% wrong) R / A / W |
+|---|---|---:|---|---|---|
+| trie | 0 / 132 / 68 | 49/50 | **0.371** (0.294–0.456) | **0.98** (0.895–0.997) | 0 / 200 / 0 |
+| trie + copy | 1 / 132 / 67 | 49/50 | 0.371 | 0.98 | 0 / 200 / 0 |
+| trie + InfiniGram | 1 / 132 / 67 | 49/50 | 0.371 | 0.98 | 0 / 200 / 0 |
+| trie + InfiniGram + copy | 1 / 132 / 67 | 49/50 | 0.371 | 0.98 | 0 / 200 / 0 |
+
+- **The token transfers.** All four models write the message on the same 132 test questions, the ones the statistic marks `low` or `mid`: 49 of the 50 not-in-slice and 83 of the 150 in-slice (55%; dev: 39%).
+- **D2: miss.** Precision 0.371 (Wilson upper 0.456) against ≥ 0.8; recall 0.98 against ≥ 0.5. Dev and test agree this time: 0.435 and 0.371, both inside each other's intervals. A1b-after's test precision of 1.00 at recall 0.30 was the lucky split its report said it was.
+- **At 2% wrong the gate answers nothing**, as on dev (wrong rate 0, Wilson upper 1.9%).
+- **Raw right answers are luck or echo:** "How many lunar orbits did Apollo 8 make?" → "…Quentin Tarantino has made 10 movies"; with copy, "Who is the ampere named after?" → "…the ampere named after?" (the gold "Ampère" is in the question).
+- **BPC** (same holdout, this model): trie mixture 2.348246, trie + InfiniGram 2.072703; with copy 2.118240 and 1.928737.
+
+---
+
+## Predictions, scored
+
+| Prediction | Result | Score |
+|---|---|---|
+| F1. `ent_bold` dev AUROC 0.70–0.80 | 0.765 (0.714–0.818) | **Hit** |
+| F2. `ent_title` 0.68–0.78 | 0.795 (0.745–0.847) | **Miss** (better) |
+| F3. `ent_count` 0.30–0.55 | 0.535 | **Hit** |
+| F4. `ent_link` 0.35–0.60 | 0.517 | **Hit** |
+| F5. `ent_igfrac` 0.45–0.55 | 0.495 | **Hit** |
+| F6. `ent_lp` 0.45–0.65 | 0.771 (0.667–0.864) | **Miss** (better) |
+| F7. Run D (statistic on every turn): precision 0.35–0.55, recall 0.75–0.95 | trie 0.231 / 1.00; trie + IG 0.273 / 0.50 | **Miss** |
+| F8. Run D BPC change ≤ 0.005 | +0.0034 (trie), +0.0010 (+ IG) | **Hit** |
+| G1. Run D′ trie precision 0.43–0.45, recall 1.00 | 0.435 / 1.00 | **Hit** |
+| G2. Run D′ trie + IG precision 0.30–0.45, recall 0.60–1.00 | 0.435 / 1.00 | **Hit** |
+| G3. Run D′ BPC within 0.005 | +0.0037, +0.0011 | **Hit** |
+| G4. Run D′ tags naming the entity 0–10% | 0 of 68 | **Hit** |
+| C1. Copy gains 0.05–0.15 (trie), 0.02–0.08 (+ IG); LCI ≥ 0.95 | 0.206, 0.145; P_gain 1.000 | **Miss** on size (better), **hit** on LCI |
+| C2. Copy: tags naming the entity 0–10% | 0 | **Hit** |
+| C3. Copy: abstention within ±0.05, completeness within ±10 points | identical | **Hit** |
+| D2 (A0/A1). Precision ≥ 0.8 and recall ≥ 0.5 | dev 0.435 / 1.00; test 0.371 / 0.98 | **Miss** |
+| CYPHALM_ANSWERING §4: abstain precision ≥ 0.8 on not-in-slice | as D2 | **Miss** |
+
+---
+
+## Flags for Odin
+
+1. **The copy expert.** It is the largest BPC gain since InfiniGram (−0.206 on the trie, −0.145 on trie + InfiniGram, P_gain 1.000), and it costs nothing in training. But the brief's second condition, that tags improve, failed: no tag names the question's entity. By the brief's rule it stays an option (`--copy`), not a default. Should BPC alone make it a default for the language model (it would then go into `packed_trie.hpp`, which this work could not touch)?
+2. **The entity in the tag needs a pointer, not a copy.** The copy expert continues an entity once its first bytes match the question, but nothing in the context before `about ` or `entity="` points at the question's entity, so the first byte comes from training entities and the copy never starts. Putting E1's entity into the gate-side token (for example `<|fam=low entity="Napoleon"|>`) would let the copy expert carry it into the tag. That moves the parse into the prompt as a side input; it needs your decision.
+3. **The token's training labels.** Run D followed the A1 rule (the statistic on every turn) and failed, because Dolly's subjects rarely have an article in the slice. Run D′ labels the training turns by outcome (answered `high`, don't-know `low`) and lets the statistic decide only at answer time. That makes the token exactly a gate decision written into the prompt, which CyphaLM then follows. You allowed the token gate-side; this is that, stated plainly.
+4. **`ent_title` reads XML title tags.** It is a count in CyphaLM's own training bytes by its own suffix array, used only to gate. `ent_bold` (the article's bold lead) is within its interval (0.765 against 0.795) and reads only article text, if you prefer that.
+5. **Precision is capped by the parse, not the statistic.** 37 of 100 in-slice dev questions get `low` because E1's entity is not the article's subject ("Canada" for the Prime Ministers, "the world", "Iowa" for Ames). A better entity (E2/E5 linking, or the parse's head noun with its modifiers) is the next lever.
+
+---
+
+## Verdict
+
+- **Familiarity: solved at the statistic level.** The entity's title count separates not-in-slice from in-slice questions with dev AUROC 0.795 (lower bound 0.745), against 0.54–0.60 in A1. Counts of plain mentions and links do not work (0.52–0.54).
+- **Abstention: high recall, low precision.** With the token as a clean gate decision, CyphaLM writes the message on every `low` question: recall 1.00 (dev) and 0.98 (test), precision 0.435 and 0.371. D2 misses on precision, and the cause is E1's entity on in-slice questions.
+- **Copy expert: a big BPC win, no tag win.** −0.206 / −0.145 BPC with P_gain 1.000; no tag names the question's entity.
+- **Nothing becomes a default** without Odin's decision on flags 1–3.
+
+---
+
+## Costs
+
+| Item | Value |
+|---|---|
+| Code | `native/tools/cyphalm_trie.cpp` 1,765 → 2,528 lines (+763, shared with A2/A3): parse loading, 7 familiarity statistics, AUROC with bootstrap, Youden cut, `--fam-train`, the copy expert, `--mention`, selftest checks. `packed_trie.hpp` and `infinigram.cpp` unchanged |
+| `qa` run | 7.3–8.4 min wall time on a shared core (A0: 7.5 min); `--fam-only` 1.2 min |
+| Peak RSS | not measured separately (`/usr/bin/time` is not installed); the lowered index adds 4 bytes a byte over about 20 MB while it is built |
+| `dktext --mention` | 6 s; 6,583 rows |
+| E1 parse | 1.1 s for 15,015 Dolly instructions (external, `pos_tagger question --tsv`) |
+| `selftest` | 0.12 s; the golden BPC is unchanged |
+| Surface score | skipped: `native/tools/surface_score.cpp` takes no input (fixed built-in samples, a hard-coded `/mnt/d` path), so it cannot score these answers without editing it |
+
+---
+
+## Reproduce
+
+```bash
+gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
+g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
+    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+./cyphalm_trie selftest
+E=/root/cdata/enwik8; D=/root/cdata/dolly.jsonl; DEV=bench/eval/t_qa_wiki_dev.tsv; TEST=bench/eval/t_qa_wiki.tsv
+./cyphalm_trie dktext $E $D --dev $DEV --test $TEST --out dk.tsv                      # A1's rows (parity)
+./cyphalm_trie dktext $E $D --dev $DEV --test $TEST --out dk_mention.tsv --mention    # + mentioned entities
+# E1 parse of every question the runs read (the tagger and model from the E1 report):
+tail -n +2 $DEV | cut -f1 > dev_q.txt; tail -n +2 $TEST | cut -f1 > test_q.txt
+python3 -c "import json,sys
+for l in open('$D'):
+    j=json.loads(l) if l.strip() else {}
+    if j.get('instruction') and j.get('response'): print(j['instruction'].split('\n')[0].replace('\t',' '))" > dolly_instr.txt
+tail -n +2 dk_mention.tsv | cut -f1 > dk_q.txt
+cat dev_q.txt dolly_instr.txt dk_q.txt | pos_tagger question pos_model.bin --tsv > parse_dev.tsv
+pos_tagger question pos_model.bin --tsv < test_q.txt | tail -n +2 | cat parse_dev.tsv - > parse_all.tsv
+./cyphalm_trie qa $E $D --dev $DEV --out a0_rows.tsv                                          # A0 (parity)
+./cyphalm_trie qa $E $D --dev $DEV --leak $TEST --parse parse_dev.tsv --dk dk_mention.tsv --fam-only   # AUROC, cuts
+./cyphalm_trie qa $E $D --dev $DEV --leak $TEST --parse parse_dev.tsv --dk dk.tsv --fam-only           # A1's set
+./cyphalm_trie qa $E $D --dev $DEV --leak $TEST --parse parse_dev.tsv --copy                           # copy BPC (C1 run adds --r3)
+./cyphalm_trie qa $E $D --dev $DEV --leak $TEST --parse parse_dev.tsv --dk dk_mention.tsv --dk-ratio 0.20 \
+    --fam after --fam-stat ent_title --copy --base a0_rows.tsv                                         # run D
+./cyphalm_trie qa $E $D --dev $DEV --leak $TEST --parse parse_dev.tsv --dk dk_mention.tsv --dk-ratio 0.20 \
+    --fam after --fam-stat ent_title --fam-train outcome --copy --base a0_rows.tsv                     # run D'
+# the frozen test, once, at the end:
+./cyphalm_trie qa $E $D --dev $DEV --test $TEST --parse parse_all.tsv --dk dk_mention.tsv --dk-ratio 0.20 \
+    --fam after --fam-stat ent_title --fam-train outcome --copy --base a0_rows.tsv
+```
+
+stdout lines: `FAMSTAT` (dev AUROC), `FAMCAL` (training-side cut), `fam_*` (token counts), `holdout*` and `copy_lci` (BPC), `RAW` / `CV` / `ABSTAIN` (answers, abstention, tags), `TEST_*` (the frozen test). Run outputs are in `/root/work/answer/` (`famonly_*.out`, `c1.out`, `d.out`, `d2.out`, `t1.out`).

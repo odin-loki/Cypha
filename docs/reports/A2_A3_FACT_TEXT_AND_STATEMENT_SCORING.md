@@ -57,3 +57,46 @@ R3 ran on **25** of 130 dev questions: `birth_place` 8, `capital` 7, `birth_date
 - **Gate:** chosen on all of dev, `min_lp ≥ −1.088` keeps Markov alone. Out of fold it keeps 1 wrong answer and no right one: coverage 0.8%, wrong 0.8% (Wilson upper 4.2%).
 - **What still wins.** "Albert Sidney Johnston was born in Genghis Khan": its best frame was `[O], [S]` (object first). There the subject comes after the candidate, the copy expert copies it from the question almost free, and that drags any candidate's bits per byte down. Junk continuations still pass as objects ("met with in the 13th century" for the capital of Angola).
 - **Third revision (a dev choice, made once):** skip frames whose object comes before the subject; count bits per byte from the object onward (the bytes a candidate changes); a continuation's head is a candidate only if it is a name (at most 5 words, one capitalised), as F2's own type checks require.
+
+### Third revision (run E2): the A3 result on dev
+
+Run E2: model B, F2's patterns (the f2 agent's seed-fixed run), the third revision.
+
+- **R3 runs on 25 questions** (16 in-slice, 9 not-in-slice). **S1: hit** (20–30; about two thirds in-slice).
+- **Raw: 1 right, 24 wrong** (selective accuracy 0.04, Wilson 0.007–0.195). Still only Markov → Ryazan. **S3: miss** (predicted 2–6).
+- **Coverage at 2% wrong (5-fold CV): 0 right, 2 wrong** (1.5% answered, all wrong; Wilson upper of the wrong rate 5.4%). On in-slice questions with the fact in the prose: 0 of 98. **S2: hit** (0–3 of 130; 0–5%). **The registered CYPHALM_ANSWERING prediction (5–20%) misses.**
+- The gate chosen on all of dev (`min_lp ≥ −1.088`) keeps the one right answer; out of fold it keeps two wrong ones instead. With one right answer in 130, no gate can generalise.
+- What the revision changed: Johnston now gets "North Carolina" (it was "Genghis Khan"), Allan Dwan "Aldershot", the capital of Angola "Southeast". These are names now, but not the right ones.
+
+**Why R3 cannot work much better here.** Where the article says "X was born in [[Y]]", CyphaLM continues the frame with Y and wins (Markov). That form is rare. "Andrei Tarkovsky was born" does not occur at all; the lead says `'''Andrei Arsenyevich Tarkovsky''' (… [[April 4]], [[1932]] …`, and the date frames (`[S] ([O]`) never match a bold name followed by a Russian gloss. Of the 6 in-slice birth-place questions, the frame's prefix with the subject occurs verbatim in the training text for 2 ("Markov was born in [[Ryazan]]", "Johnston was born in [[Washington, Kentucky…"); De Morgan's article says "De Morgan was born June 27, 1806 … in Madura", and the training bytes have no "Koestler was born", "Dwan was born" or "Schweitzer was born" at all (their articles may say "He was born…") (checked with grep on the training bytes, for diagnosis only). An order-4 trie and a suffix-match expert can connect subject and object only through verbatim text.
+
+---
+
+## A2: R1 question-form fact shards
+
+### The shard and the leakage check (`qa --shard F.tsv`, `--shard2 F.tsv`)
+
+- **Shard:** the f2 agent's `pattern_learn shard` output, in question form (`question entity relation source response`), facts from the seeds and extractions of F2. Two versions were run on dev: the base shard (`shard_facts_base.tsv`, 1,915 rows) and the final one with Wikidata-assisted seeds (`shard_facts.tsv`, 2,001 rows).
+- **Rows from the BPC holdout are dropped at load** (source ending in `_holdout`): 486 of the base rows, 513 of the final ones. They come from pages inside `[7340032, 8388608)`, so training on them would leak holdout text and teach facts CyphaLM never read. Kept: 1,429 and 1,488 rows.
+- **Leakage check at load:** no shard question may equal a dev or test question after normalisation (test questions from `--test`, or `--leak` on dev-only runs, which reads only the questions). Otherwise `qa` exits with status 1. Both shards: **0**. Tested on a synthetic file: 2 leaking rows give exit 1, and a missing `--leak` gives exit 1.
+- **Turns:** `User: <question>\nAssistant: <response>\n\n`, spread evenly through both Dolly passes, as the don't-know turns are.
+- **Coverage (analysis only).** A dev question is covered when a shard row has its E1 entity and its relation (the dktext template relation; a year relation counts for its date). **11 dev questions are covered**, all in-slice: 5 birth dates (Meighen, Avicenna, Tarkovsky, Al Gore, Alan Kay), 3 capitals (Angola, Anguilla, Alabama), 2 birth places (Johnston, Schweitzer), 1 death date (Alcuin). 30 more have a shard row on their entity but for another relation; 87 have none; 2 have no E1 entity. The f2 agent counted 16 of 100 in-slice before dropping holdout rows, with its own matching rule, so the counts differ.
+
+### Results on dev
+
+| Run | Shard | Holdout BPC trie / + IG (Δ vs A0) | Raw right, trie + IG (in-slice) | CV at 2% wrong: right / wrong (coverage) | Covered: CV right | Not covered: CV right |
+|---|---|---|---|---|---|---|
+| A0 / E2 (B) | none | 2.344571 / 2.071574 | 2 (luck) | 0 / 0 (0.0%) | 0 / 11 | 0 / 117 |
+| F | base, 1,429 rows | 2.345865 (+0.0013) / 2.072343 (+0.0008) | **7** | **2 / 0 (1.5%)** | **2 / 11** | 0 / 117 |
+| F2 | final, 1,488 rows | 2.345941 (+0.0014) / 2.072393 (+0.0008) | **7** | **2 / 0 (1.5%)** | **2 / 11** | 0 / 117 |
+
+- **What it answers now** (trie + InfiniGram, chat form): "When was Avicenna born?" → *Avicenna was born in 980.*; Al Gore → *1948*; Alan Kay → *1940*; "When did Alcuin die?" → *Alcuin died in 804.*; "In which Mexican state is Acapulco?" → *Acapulco is in Guerrero.* (the shard's `located_in` row; the question's relation has no template, so it counts as not covered). The other two right answers are A0's luck (Alexis Carrel, Montgomery).
+- **Raw right on covered questions:** 5 of 11 (0.45, Wilson 0.21–0.72), one of them A0's lucky Montgomery.
+- **The gate keeps 2 out of fold** (`min_lp`, chosen in all five folds), both right: coverage 1.5% (Wilson 0.4–5.4%), selective accuracy 2/2 (Wilson lower 0.34), wrong rate 0 (Wilson upper 2.9%). On all of dev the gate (`min_lp ≥ −0.895`) keeps 3, all right.
+- **The trie alone gains nothing:** its 4-byte context cannot reach the question. **With copy** (trie + InfiniGram + copy), raw right is 6 but the gate keeps none out of fold: the CV picks `ig_match0` in four folds and no gate in one.
+- **The final shard adds nothing over the base one on dev.**
+- **Predictions.** S4 (registered): **hit**, +1.5 per 100, only on covered questions, all dates. S5: **miss** on the count (11 covered, predicted 3–8); **hit** on raw right (0.45 in 0.30–0.70) and on coverage (+1.5 in 0–4 per 100); not-covered questions gain one raw right answer (Acapulco, an entity-only match) and nothing gated. S6: **hit** (+0.0014).
+
+### A2 + A3 together (run F2)
+
+R3 on the shard model runs on 33 questions (the final patterns add `author`, `founder` and `inventor` frames; one question gets no candidate). **Raw: 3 right**, all from the shard's facts: Anguilla → *The Valley*, Schweitzer → *Kaysersberg* (InfiniGram match 71 bytes into the shard sentence), Alcuin → *804*. Out of fold: **0 right, 1 wrong**. The gate on all of dev (`min_lp ≥ −0.632`) keeps 2 right. So A2 + A3 is worse than A2 alone at 2% wrong (0 against 2): **S7 hit** (no better than the better of the two).

@@ -1,0 +1,30 @@
+{
+  "tool": "scripts/gguf_mine.py",
+  "tool_version": "1.0",
+  "command": [
+    "scripts/gguf_mine.py",
+    "wdiff",
+    "--model",
+    "/root/work/teacher/models/Qwen3-Embedding-0.6B-Q8_0.gguf",
+    "--base",
+    "/root/work/teacher/models/Qwen3-0.6B-Base.Q8_0.gguf",
+    "--out",
+    "mined/qwen3emb/wdiff/q8_vs_base_q8"
+  ],
+  "time_utc": "2026-10-27T21:25:59+00:00",
+  "seed": 1234,
+  "model_path": "/root/work/teacher/models/Qwen3-Embedding-0.6B-Q8_0.gguf",
+  "numpy": "2.5.4",
+  "gguf": "0.19.0",
+  "llama_cpp_python": "0.3.36",
+  "model_bytes": 639150592,
+  "model_sha256": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+  "model_name": "Qwen3 Embedding 0.6b",
+  "architecture": "qwen3",
+  "file_type": 7,
+  "licence": "apache-2.0",
+  "licence_permissive": true,
+  "base_path": "/root/work/teacher/models/Qwen3-0.6B-Base.Q8_0.gguf",
+  "base_name": "Qwen3 0.6B Base",
+  "base_sha256": "4b088f1793f6cba9f0c2f77ab835ef6734f205c2159168698c6e1a51b7df168a"
+}

@@ -1,0 +1,311 @@
+tensor	shape	dW_fro	W_base_fro	rel_change	top_share	sigma_max	stable_rank	esd_alpha	method	note
+output_norm.weight	1024	0	125.056	0	nan	nan	nan	nan	norm only	
+token_embd.weight	32768x1024	0	175.084	0	nan	nan	nan	nan	norm only	first 151669 rows (151669 vs 151936; vocabularies agree on them); rows sampled to 32768
+blk.0.attn_k.weight	1024x1024	1.43851	31.7493	0.0453083	0.926284	0.665551	4.67156	1.81715	full	
+blk.0.attn_k_norm.weight	128	0	110.691	0	nan	nan	nan	nan	norm only	
+blk.0.attn_norm.weight	1024	0	6.16533	0	nan	nan	nan	nan	norm only	
+blk.0.attn_output.weight	1024x2048	1.42855	37.858	0.0377345	0.873791	0.578542	6.09709	1.94655	full	
+blk.0.attn_q.weight	2048x1024	2.51943	45.9253	0.0548594	0.948837	1.52041	2.7459	1.72764	full	
+blk.0.attn_q_norm.weight	128	0	25.7188	0	nan	nan	nan	nan	norm only	
+blk.0.attn_v.weight	1024x1024	1.14409	27.658	0.0413658	0.883991	0.366352	9.75274	1.94989	full	
+blk.0.ffn_down.weight	1024x3072	2.34521	47.0701	0.0498238	0.910473	1.21158	3.74677	1.82573	full	
+blk.0.ffn_gate.weight	3072x1024	3.79109	65.7322	0.0576748	0.948969	1.96858	3.70871	1.71724	full	
+blk.0.ffn_norm.weight	1024	0	16.3838	0	nan	nan	nan	nan	norm only	
+blk.0.ffn_up.weight	3072x1024	2.84258	46.3832	0.0612846	0.919615	1.10618	6.60351	1.83411	full	
+blk.1.attn_k.weight	1024x1024	1.66762	29.9891	0.0556075	0.949956	0.836846	3.97103	1.68764	full	
+blk.1.attn_k_norm.weight	128	0	52.1517	0	nan	nan	nan	nan	norm only	
+blk.1.attn_norm.weight	1024	0	4.70024	0	nan	nan	nan	nan	norm only	
+blk.1.attn_output.weight	1024x2048	1.85837	39.2445	0.0473536	0.942367	0.819114	5.14726	1.62548	full	
+blk.1.attn_q.weight	2048x1024	2.84002	45.0378	0.0630588	0.973105	1.65424	2.94745	1.58319	full	
+blk.1.attn_q_norm.weight	128	0	19.8225	0	nan	nan	nan	nan	norm only	
+blk.1.attn_v.weight	1024x1024	1.27958	29.4169	0.0434983	0.925024	0.604373	4.48257	1.75763	full	
+blk.1.ffn_down.weight	1024x3072	2.3403	40.8364	0.0573091	0.905161	0.927215	6.37061	1.8169	full	
+blk.1.ffn_gate.weight	3072x1024	4.47059	78.4896	0.0569578	0.965537	3.02458	2.18474	1.64109	full	
+blk.1.ffn_norm.weight	1024	0	29.0388	0	nan	nan	nan	nan	norm only	
+blk.1.ffn_up.weight	3072x1024	2.5878	41.9525	0.061684	0.917381	1.16424	4.94055	1.8456	full	
+blk.2.attn_k.weight	1024x1024	1.48574	29.0504	0.0511437	0.942209	0.562308	6.98136	1.65644	full	
+blk.2.attn_k_norm.weight	128	0	52.3505	0	nan	nan	nan	nan	norm only	
+blk.2.attn_norm.weight	1024	0	6.44422	0	nan	nan	nan	nan	norm only	
+blk.2.attn_output.weight	1024x2048	1.83727	37.6444	0.0488059	0.940405	0.781998	5.51995	1.64677	full	
+blk.2.attn_q.weight	2048x1024	2.76664	44.0447	0.0628144	0.967425	1.50733	3.36892	1.61719	full	
+blk.2.attn_q_norm.weight	128	0	18.1925	0	nan	nan	nan	nan	norm only	
+blk.2.attn_v.weight	1024x1024	1.18262	28.862	0.0409751	0.911305	0.388308	9.27556	1.8021	full	
+blk.2.ffn_down.weight	1024x3072	2.36553	42.4998	0.0556598	0.950067	1.38938	2.89876	1.69386	full	
+blk.2.ffn_gate.weight	3072x1024	4.42761	71.2466	0.0621448	0.96447	2.76429	2.5655	1.61597	full	
+blk.2.ffn_norm.weight	1024	0	27.2797	0	nan	nan	nan	nan	norm only	
+blk.2.ffn_up.weight	3072x1024	3.17166	42.446	0.0747222	0.93788	1.43751	4.86804	1.74688	full	
+blk.3.attn_k.weight	1024x1024	1.68412	29.8105	0.0564942	0.958749	0.814327	4.27708	1.66076	full	
+blk.3.attn_k_norm.weight	128	0	31.5222	0	nan	nan	nan	nan	norm only	
+blk.3.attn_norm.weight	1024	0	17.3694	0	nan	nan	nan	nan	norm only	
+blk.3.attn_output.weight	1024x2048	2.88508	40.9236	0.0704993	0.973512	1.91076	2.27983	1.5854	full	
+blk.3.attn_q.weight	2048x1024	2.53244	44.156	0.0573522	0.960723	1.42829	3.14374	1.67213	full	
+blk.3.attn_q_norm.weight	128	0	23.0998	0	nan	nan	nan	nan	norm only	
+blk.3.attn_v.weight	1024x1024	1.55153	31.1753	0.0497679	0.945174	0.715645	4.70028	1.69051	full	
+blk.3.ffn_down.weight	1024x3072	2.97253	42.9982	0.0691316	0.94182	1.12053	7.03736	1.65889	full	
+blk.3.ffn_gate.weight	3072x1024	4.87967	71.46	0.0682853	0.967297	3.16565	2.37604	1.64659	full	
+blk.3.ffn_norm.weight	1024	0	30.3575	0	nan	nan	nan	nan	norm only	
+blk.3.ffn_up.weight	3072x1024	3.13709	44.1164	0.0711093	0.933714	1.51515	4.28687	1.81035	full	
+blk.4.attn_k.weight	1024x1024	1.66864	29.2123	0.0571212	0.96289	0.924518	3.25759	1.62686	full	
+blk.4.attn_k_norm.weight	128	0	58.8123	0	nan	nan	nan	nan	norm only	
+blk.4.attn_norm.weight	1024	0	16.7477	0	nan	nan	nan	nan	norm only	
+blk.4.attn_output.weight	1024x2048	2.33198	39.6092	0.0588747	0.953783	1.11482	4.37568	1.64558	full	
+blk.4.attn_q.weight	2048x1024	2.27	43.0518	0.0527272	0.948734	1.17762	3.7157	1.68266	full	
+blk.4.attn_q_norm.weight	128	0	14.0379	0	nan	nan	nan	nan	norm only	
+blk.4.attn_v.weight	1024x1024	1.58785	30.6258	0.0518466	0.939392	0.719846	4.8656	1.72358	full	
+blk.4.ffn_down.weight	1024x3072	2.56452	43.3461	0.0591638	0.935818	0.990922	6.69783	1.68562	full	
+blk.4.ffn_gate.weight	3072x1024	5.07164	68.4461	0.0740968	0.977516	3.36786	2.26772	1.61958	full	
+blk.4.ffn_norm.weight	1024	0	32.6413	0	nan	nan	nan	nan	norm only	
+blk.4.ffn_up.weight	3072x1024	2.75594	44.6389	0.0617384	0.922071	0.985148	7.82593	1.839	full	
+blk.5.attn_k.weight	1024x1024	1.76968	28.8695	0.0612995	0.971111	1.17218	2.27932	1.61201	full	
+blk.5.attn_k_norm.weight	128	0	54.5041	0	nan	nan	nan	nan	norm only	
+blk.5.attn_norm.weight	1024	0	21.4483	0	nan	nan	nan	nan	norm only	
+blk.5.attn_output.weight	1024x2048	2.10943	39.3028	0.0536711	0.94286	0.78681	7.18769	1.66697	full	
+blk.5.attn_q.weight	2048x1024	2.53972	44.6863	0.0568345	0.963625	1.64908	2.37185	1.64306	full	
+blk.5.attn_q_norm.weight	128	0	21.7256	0	nan	nan	nan	nan	norm only	
+blk.5.attn_v.weight	1024x1024	1.4067	29.1198	0.0483074	0.932197	0.577984	5.92343	1.72183	full	
+blk.5.ffn_down.weight	1024x3072	2.5785	45.7482	0.0563629	0.940451	1.18085	4.76811	1.66785	full	
+blk.5.ffn_gate.weight	3072x1024	4.52986	61.7066	0.0734096	0.975387	3.12658	2.09908	1.62536	full	
+blk.5.ffn_norm.weight	1024	0	30.9147	0	nan	nan	nan	nan	norm only	
+blk.5.ffn_up.weight	3072x1024	2.76928	47.0823	0.058818	0.929426	1.23462	5.03119	1.79706	full	
+blk.6.attn_k.weight	1024x1024	1.58035	28.5544	0.055345	0.962575	0.796659	3.93513	1.60811	full	
+blk.6.attn_k_norm.weight	128	0	39.8807	0	nan	nan	nan	nan	norm only	
+blk.6.attn_norm.weight	1024	0	18.4447	0	nan	nan	nan	nan	norm only	
+blk.6.attn_output.weight	1024x2048	2.25488	36.7035	0.0614349	0.965844	1.25977	3.20377	1.60396	full	
+blk.6.attn_q.weight	2048x1024	2.43934	44.2165	0.0551682	0.961934	1.39469	3.05906	1.63515	full	
+blk.6.attn_q_norm.weight	128	0	21.9587	0	nan	nan	nan	nan	norm only	
+blk.6.attn_v.weight	1024x1024	1.36032	29.1711	0.0466325	0.942023	0.631586	4.63895	1.68029	full	
+blk.6.ffn_down.weight	1024x3072	2.58597	45.1186	0.0573149	0.946961	1.29808	3.96868	1.65957	full	
+blk.6.ffn_gate.weight	3072x1024	4.58696	60.0129	0.0764329	0.978633	2.87235	2.55021	1.58288	full	
+blk.6.ffn_norm.weight	1024	0	34.4298	0	nan	nan	nan	nan	norm only	
+blk.6.ffn_up.weight	3072x1024	2.65191	46.994	0.0564308	0.933346	1.22995	4.6488	1.77592	full	
+blk.7.attn_k.weight	1024x1024	1.61402	27.2129	0.0593108	0.967491	0.811348	3.95734	1.58796	full	
+blk.7.attn_k_norm.weight	128	0	34.6855	0	nan	nan	nan	nan	norm only	
+blk.7.attn_norm.weight	1024	0	26.9648	0	nan	nan	nan	nan	norm only	
+blk.7.attn_output.weight	1024x2048	2.17875	37.0404	0.0588209	0.962708	1.10099	3.91604	1.59286	full	
+blk.7.attn_q.weight	2048x1024	2.29224	42.1102	0.0544344	0.9628	1.42057	2.60372	1.62733	full	
+blk.7.attn_q_norm.weight	128	0	20.1992	0	nan	nan	nan	nan	norm only	
+blk.7.attn_v.weight	1024x1024	1.45129	28.6712	0.0506182	0.946061	0.603535	5.7823	1.67276	full	
+blk.7.ffn_down.weight	1024x3072	2.38858	44.2908	0.0539294	0.936108	0.92697	6.63967	1.64939	full	
+blk.7.ffn_gate.weight	3072x1024	4.52093	60.3588	0.0749008	0.979533	2.97834	2.30413	1.57478	full	
+blk.7.ffn_norm.weight	1024	0	36.3717	0	nan	nan	nan	nan	norm only	
+blk.7.ffn_up.weight	3072x1024	2.66324	46.6691	0.0570665	0.936178	1.1353	5.50299	1.7458	full	
+blk.8.attn_k.weight	1024x1024	1.70739	27.92	0.0611528	0.970823	0.911746	3.50685	1.58518	full	
+blk.8.attn_k_norm.weight	128	0	22.5111	0	nan	nan	nan	nan	norm only	
+blk.8.attn_norm.weight	1024	0	28.24	0	nan	nan	nan	nan	norm only	
+blk.8.attn_output.weight	1024x2048	2.28655	36.2522	0.0630734	0.971397	1.2351	3.42736	1.56811	full	
+blk.8.attn_q.weight	2048x1024	2.51835	43.9561	0.0572924	0.962124	1.43279	3.08934	1.60015	full	
+blk.8.attn_q_norm.weight	128	0	17.8412	0	nan	nan	nan	nan	norm only	
+blk.8.attn_v.weight	1024x1024	1.54592	28.6108	0.0540329	0.958153	0.9602	2.5921	1.63806	full	
+blk.8.ffn_down.weight	1024x3072	2.41056	44.8817	0.0537093	0.943655	1.08472	4.93861	1.6439	full	
+blk.8.ffn_gate.weight	3072x1024	4.52793	59.038	0.0766952	0.980419	2.85199	2.5206	1.5566	full	
+blk.8.ffn_norm.weight	1024	0	37.2066	0	nan	nan	nan	nan	norm only	
+blk.8.ffn_up.weight	3072x1024	2.86386	46.6549	0.061384	0.945574	1.48636	3.7124	1.73067	full	
+blk.9.attn_k.weight	1024x1024	1.62879	27.5779	0.0590612	0.969609	0.911301	3.19451	1.58137	full	
+blk.9.attn_k_norm.weight	128	0	31.9277	0	nan	nan	nan	nan	norm only	
+blk.9.attn_norm.weight	1024	0	37.2761	0	nan	nan	nan	nan	norm only	
+blk.9.attn_output.weight	1024x2048	1.96112	36.7727	0.053331	0.954359	0.932946	4.41872	1.59697	full	
+blk.9.attn_q.weight	2048x1024	2.34781	43.8697	0.0535178	0.964731	1.1677	4.04264	1.61245	full	
+blk.9.attn_q_norm.weight	128	0	22.6881	0	nan	nan	nan	nan	norm only	
+blk.9.attn_v.weight	1024x1024	1.28928	27.9615	0.0461093	0.934337	0.576207	5.00658	1.69634	full	
+blk.9.ffn_down.weight	1024x3072	2.52691	43.7805	0.0577178	0.951549	1.20567	4.39265	1.61894	full	
+blk.9.ffn_gate.weight	3072x1024	4.65056	60.5566	0.0767969	0.983018	2.63967	3.10393	1.53908	full	
+blk.9.ffn_norm.weight	1024	0	38.746	0	nan	nan	nan	nan	norm only	
+blk.9.ffn_up.weight	3072x1024	3.00044	47.4491	0.0632349	0.959799	1.81117	2.74441	1.65593	full	
+blk.10.attn_k.weight	1024x1024	1.48707	27.9183	0.0532653	0.963103	0.761579	3.81272	1.61053	full	
+blk.10.attn_k_norm.weight	128	0	33.5595	0	nan	nan	nan	nan	norm only	
+blk.10.attn_norm.weight	1024	0	37.0847	0	nan	nan	nan	nan	norm only	
+blk.10.attn_output.weight	1024x2048	1.96989	35.9908	0.0547331	0.958836	1.00538	3.83904	1.59051	full	
+blk.10.attn_q.weight	2048x1024	2.59557	42.4061	0.0612074	0.97041	1.6126	2.59067	1.6044	full	
+blk.10.attn_q_norm.weight	128	0	24.8852	0	nan	nan	nan	nan	norm only	
+blk.10.attn_v.weight	1024x1024	1.31553	27.9423	0.0470803	0.942118	0.6086	4.67239	1.68362	full	
+blk.10.ffn_down.weight	1024x3072	2.44489	42.3855	0.0576822	0.949673	1.21525	4.04752	1.62927	full	
+blk.10.ffn_gate.weight	3072x1024	4.77677	60.1815	0.0793728	0.984705	2.88916	2.73354	1.52599	full	
+blk.10.ffn_norm.weight	1024	0	37.9524	0	nan	nan	nan	nan	norm only	
+blk.10.ffn_up.weight	3072x1024	3.357	46.9318	0.0715294	0.970095	2.29125	2.14664	1.6381	full	
+blk.11.attn_k.weight	1024x1024	1.50254	27.5684	0.0545021	0.965068	0.735832	4.16958	1.54561	full	
+blk.11.attn_k_norm.weight	128	0	26.3728	0	nan	nan	nan	nan	norm only	
+blk.11.attn_norm.weight	1024	0	47.6481	0	nan	nan	nan	nan	norm only	
+blk.11.attn_output.weight	1024x2048	1.81113	34.0609	0.0531732	0.948945	0.787989	5.28273	1.62614	full	
+blk.11.attn_q.weight	2048x1024	3.10801	45.911	0.0676965	0.977613	2.10084	2.18867	1.58081	full	
+blk.11.attn_q_norm.weight	128	0	21.091	0	nan	nan	nan	nan	norm only	
+blk.11.attn_v.weight	1024x1024	1.18888	26.5351	0.0448041	0.927017	0.491603	5.84856	1.71983	full	
+blk.11.ffn_down.weight	1024x3072	2.50627	44.9652	0.0557379	0.947867	1.08682	5.31789	1.64166	full	
+blk.11.ffn_gate.weight	3072x1024	4.76255	55.7703	0.0853959	0.984939	2.92165	2.6572	1.51671	full	
+blk.11.ffn_norm.weight	1024	0	40.2151	0	nan	nan	nan	nan	norm only	
+blk.11.ffn_up.weight	3072x1024	2.99063	48.3929	0.061799	0.952874	1.53946	3.77388	1.65455	full	
+blk.12.attn_k.weight	1024x1024	1.64605	26.6003	0.0618808	0.969682	0.874123	3.546	1.58217	full	
+blk.12.attn_k_norm.weight	128	0	29.6741	0	nan	nan	nan	nan	norm only	
+blk.12.attn_norm.weight	1024	0	56.7413	0	nan	nan	nan	nan	norm only	
+blk.12.attn_output.weight	1024x2048	1.89004	34.0358	0.0555309	0.964133	0.98345	3.69348	1.55915	full	
+blk.12.attn_q.weight	2048x1024	2.59512	44.4041	0.0584432	0.966913	1.60441	2.61628	1.60667	full	
+blk.12.attn_q_norm.weight	128	0	21.168	0	nan	nan	nan	nan	norm only	
+blk.12.attn_v.weight	1024x1024	1.33871	27.2642	0.0491016	0.948756	0.643463	4.32842	1.67524	full	
+blk.12.ffn_down.weight	1024x3072	2.61232	44.7741	0.0583444	0.960992	1.46249	3.19055	1.597	full	
+blk.12.ffn_gate.weight	3072x1024	4.82244	53.3638	0.0903691	0.988117	2.82625	2.91147	1.49839	full	
+blk.12.ffn_norm.weight	1024	0	40.0176	0	nan	nan	nan	nan	norm only	
+blk.12.ffn_up.weight	3072x1024	2.94503	47.7403	0.0616886	0.955872	1.446	4.14807	1.6719	full	
+blk.13.attn_k.weight	1024x1024	1.60187	25.1438	0.0637085	0.971951	0.820996	3.80691	1.56473	full	
+blk.13.attn_k_norm.weight	128	0	22.4777	0	nan	nan	nan	nan	norm only	
+blk.13.attn_norm.weight	1024	0	59.3043	0	nan	nan	nan	nan	norm only	
+blk.13.attn_output.weight	1024x2048	1.76175	32.9515	0.0534649	0.962279	0.863948	4.15828	1.55653	full	
+blk.13.attn_q.weight	2048x1024	2.36056	42.7673	0.0551955	0.962333	1.34211	3.09355	1.59209	full	
+blk.13.attn_q_norm.weight	128	0	23.3828	0	nan	nan	nan	nan	norm only	
+blk.13.attn_v.weight	1024x1024	1.33211	27.132	0.0490975	0.951633	0.62986	4.47294	1.61444	full	
+blk.13.ffn_down.weight	1024x3072	2.77414	43.045	0.0644475	0.96759	1.61602	2.94691	1.56721	full	
+blk.13.ffn_gate.weight	3072x1024	4.76334	51.2506	0.0929421	0.987758	2.59237	3.37619	1.49407	full	
+blk.13.ffn_norm.weight	1024	0	43.6801	0	nan	nan	nan	nan	norm only	
+blk.13.ffn_up.weight	3072x1024	3.02537	45.7847	0.0660782	0.961924	1.8239	2.7514	1.65642	full	
+blk.14.attn_k.weight	1024x1024	1.6121	25.0582	0.0643341	0.97357	0.783159	4.23724	1.54635	full	
+blk.14.attn_k_norm.weight	128	0	25.6679	0	nan	nan	nan	nan	norm only	
+blk.14.attn_norm.weight	1024	0	68.9024	0	nan	nan	nan	nan	norm only	
+blk.14.attn_output.weight	1024x2048	1.94195	32.0804	0.0605338	0.963974	0.910715	4.54685	1.60798	full	
+blk.14.attn_q.weight	2048x1024	2.48234	41.9909	0.059116	0.969366	1.33648	3.44982	1.58644	full	
+blk.14.attn_q_norm.weight	128	0	23.2367	0	nan	nan	nan	nan	norm only	
+blk.14.attn_v.weight	1024x1024	1.2466	25.6908	0.0485233	0.945267	0.643978	3.74726	1.67049	full	
+blk.14.ffn_down.weight	1024x3072	2.82772	42.2957	0.0668561	0.97103	1.52209	3.45138	1.57675	full	
+blk.14.ffn_gate.weight	3072x1024	4.65432	48.9906	0.0950042	0.988709	2.63288	3.125	1.50536	full	
+blk.14.ffn_norm.weight	1024	0	46.7006	0	nan	nan	nan	nan	norm only	
+blk.14.ffn_up.weight	3072x1024	3.05586	44.1384	0.0692336	0.963133	1.64968	3.4314	1.65511	full	
+blk.15.attn_k.weight	1024x1024	1.55013	23.6414	0.0655685	0.971365	0.804399	3.71358	1.56949	full	
+blk.15.attn_k_norm.weight	128	0	42.3649	0	nan	nan	nan	nan	norm only	
+blk.15.attn_norm.weight	1024	0	92.3649	0	nan	nan	nan	nan	norm only	
+blk.15.attn_output.weight	1024x2048	2.10457	33.7456	0.0623658	0.969995	1.07689	3.81935	1.55289	full	
+blk.15.attn_q.weight	2048x1024	2.74289	42.7317	0.0641886	0.978247	1.73054	2.51218	1.55203	full	
+blk.15.attn_q_norm.weight	128	0	18.3055	0	nan	nan	nan	nan	norm only	
+blk.15.attn_v.weight	1024x1024	1.30895	26.7588	0.0489167	0.948719	0.643389	4.13903	1.66261	full	
+blk.15.ffn_down.weight	1024x3072	2.72593	42.2441	0.0645281	0.969367	1.47877	3.39804	1.5556	full	
+blk.15.ffn_gate.weight	3072x1024	4.91647	49.2259	0.0998756	0.990106	3.08566	2.53869	1.49533	full	
+blk.15.ffn_norm.weight	1024	0	44.3836	0	nan	nan	nan	nan	norm only	
+blk.15.ffn_up.weight	3072x1024	3.3162	45.0435	0.0736223	0.973292	2.21645	2.23855	1.61222	full	
+blk.16.attn_k.weight	1024x1024	1.68086	24.6089	0.0683031	0.97438	0.94477	3.16529	1.57356	full	
+blk.16.attn_k_norm.weight	128	0	27.5364	0	nan	nan	nan	nan	norm only	
+blk.16.attn_norm.weight	1024	0	85.1172	0	nan	nan	nan	nan	norm only	
+blk.16.attn_output.weight	1024x2048	2.07503	33.4862	0.0619667	0.966213	1.03472	4.02161	1.56312	full	
+blk.16.attn_q.weight	2048x1024	2.75614	46.4254	0.0593671	0.971716	1.58547	3.02197	1.56646	full	
+blk.16.attn_q_norm.weight	128	0	20.0196	0	nan	nan	nan	nan	norm only	
+blk.16.attn_v.weight	1024x1024	1.39291	26.5264	0.0525102	0.957611	0.768285	3.28699	1.61473	full	
+blk.16.ffn_down.weight	1024x3072	2.32285	42.7337	0.0543565	0.955061	1.28703	3.25736	1.61677	full	
+blk.16.ffn_gate.weight	3072x1024	4.83773	48.7781	0.0991784	0.99002	2.71892	3.16585	1.49159	full	
+blk.16.ffn_norm.weight	1024	0	41.9961	0	nan	nan	nan	nan	norm only	
+blk.16.ffn_up.weight	3072x1024	3.23015	46.5569	0.0693807	0.967618	1.83468	3.09975	1.61677	full	
+blk.17.attn_k.weight	1024x1024	1.74063	24.1197	0.0721662	0.974777	0.871772	3.98662	1.55807	full	
+blk.17.attn_k_norm.weight	128	0	30.6726	0	nan	nan	nan	nan	norm only	
+blk.17.attn_norm.weight	1024	0	138.159	0	nan	nan	nan	nan	norm only	
+blk.17.attn_output.weight	1024x2048	1.90351	33.5267	0.0567761	0.957395	0.849189	5.02463	1.59986	full	
+blk.17.attn_q.weight	2048x1024	3.35312	43.7254	0.0766858	0.98624	2.49297	1.80911	1.47872	full	
+blk.17.attn_q_norm.weight	128	0	23.3267	0	nan	nan	nan	nan	norm only	
+blk.17.attn_v.weight	1024x1024	1.31444	27.4141	0.0479477	0.939098	0.516449	6.47779	1.66723	full	
+blk.17.ffn_down.weight	1024x3072	2.73976	43.0154	0.0636925	0.967083	1.69608	2.60934	1.59339	full	
+blk.17.ffn_gate.weight	3072x1024	5.05979	48.9715	0.103321	0.991089	2.72688	3.44296	1.48406	full	
+blk.17.ffn_norm.weight	1024	0	51.7998	0	nan	nan	nan	nan	norm only	
+blk.17.ffn_up.weight	3072x1024	3.74675	48.1494	0.0778151	0.981196	2.83666	1.74459	1.59561	full	
+blk.18.attn_k.weight	1024x1024	1.63199	23.511	0.0694138	0.97751	0.924936	3.11323	1.5271	full	
+blk.18.attn_k_norm.weight	128	0	24.6484	0	nan	nan	nan	nan	norm only	
+blk.18.attn_norm.weight	1024	0	129.295	0	nan	nan	nan	nan	norm only	
+blk.18.attn_output.weight	1024x2048	2.2623	32.2935	0.0700545	0.966698	1.03139	4.81126	1.58469	full	
+blk.18.attn_q.weight	2048x1024	3.14583	44.5147	0.0706694	0.98396	2.28881	1.88909	1.52542	full	
+blk.18.attn_q_norm.weight	128	0	18.591	0	nan	nan	nan	nan	norm only	
+blk.18.attn_v.weight	1024x1024	1.26647	26.2947	0.0481644	0.944296	0.520423	5.92208	1.64059	full	
+blk.18.ffn_down.weight	1024x3072	2.66732	44.8819	0.0594296	0.962597	1.66373	2.57029	1.65252	full	
+blk.18.ffn_gate.weight	3072x1024	5.05687	48.9334	0.103342	0.991022	3.35789	2.26794	1.5129	full	
+blk.18.ffn_norm.weight	1024	0	55.4206	0	nan	nan	nan	nan	norm only	
+blk.18.ffn_up.weight	3072x1024	3.94069	48.6334	0.0810285	0.981256	2.85297	1.90788	1.57381	full	
+blk.19.attn_k.weight	1024x1024	1.79767	23.7322	0.0757479	0.978482	0.965527	3.46649	1.53411	full	
+blk.19.attn_k_norm.weight	128	0	25.2051	0	nan	nan	nan	nan	norm only	
+blk.19.attn_norm.weight	1024	0	162.013	0	nan	nan	nan	nan	norm only	
+blk.19.attn_output.weight	1024x2048	2.28899	34.0196	0.0672844	0.96638	1.28267	3.1846	1.60419	full	
+blk.19.attn_q.weight	2048x1024	3.09972	46.5964	0.0665228	0.980827	1.80658	2.94396	1.49595	full	
+blk.19.attn_q_norm.weight	128	0	20.537	0	nan	nan	nan	nan	norm only	
+blk.19.attn_v.weight	1024x1024	1.48054	26.692	0.0554674	0.957498	0.917269	2.60523	1.6596	full	
+blk.19.ffn_down.weight	1024x3072	2.58667	47.4771	0.0544826	0.95781	1.4583	3.14624	1.64136	full	
+blk.19.ffn_gate.weight	3072x1024	5.15586	48.1302	0.107123	0.991727	3.20693	2.58477	1.50633	full	
+blk.19.ffn_norm.weight	1024	0	56.7845	0	nan	nan	nan	nan	norm only	
+blk.19.ffn_up.weight	3072x1024	3.83073	50.8889	0.0752764	0.979625	2.77693	1.90298	1.60852	full	
+blk.20.attn_k.weight	1024x1024	1.99149	25.6733	0.0775705	0.980712	1.16393	2.92752	1.52756	full	
+blk.20.attn_k_norm.weight	128	0	24.1357	0	nan	nan	nan	nan	norm only	
+blk.20.attn_norm.weight	1024	0	171.006	0	nan	nan	nan	nan	norm only	
+blk.20.attn_output.weight	1024x2048	2.6361	35.8402	0.0735515	0.963471	1.42045	3.4441	1.60448	full	
+blk.20.attn_q.weight	2048x1024	4.35624	48.8551	0.0891667	0.989924	3.12125	1.94791	1.49437	full	
+blk.20.attn_q_norm.weight	128	0	20.6514	0	nan	nan	nan	nan	norm only	
+blk.20.attn_v.weight	1024x1024	1.56289	27.9108	0.055996	0.952371	0.682511	5.24373	1.61923	full	
+blk.20.ffn_down.weight	1024x3072	2.97841	50.3777	0.0591215	0.965599	1.98071	2.26113	1.63775	full	
+blk.20.ffn_gate.weight	3072x1024	5.20234	49.2683	0.105592	0.990648	3.33317	2.43603	1.50534	full	
+blk.20.ffn_norm.weight	1024	0	60.8264	0	nan	nan	nan	nan	norm only	
+blk.20.ffn_up.weight	3072x1024	4.23015	53.5915	0.0789332	0.981976	3.04431	1.93078	1.58443	full	
+blk.21.attn_k.weight	1024x1024	1.80394	26.2721	0.0686638	0.968148	0.84	4.61198	1.57451	full	
+blk.21.attn_k_norm.weight	128	0	24.161	0	nan	nan	nan	nan	norm only	
+blk.21.attn_norm.weight	1024	0	224.354	0	nan	nan	nan	nan	norm only	
+blk.21.attn_output.weight	1024x2048	2.62193	37.9378	0.0691113	0.965702	1.6637	2.48367	1.61184	full	
+blk.21.attn_q.weight	2048x1024	3.67516	49.7526	0.0738687	0.98482	2.60148	1.99577	1.50043	full	
+blk.21.attn_q_norm.weight	128	0	18.7356	0	nan	nan	nan	nan	norm only	
+blk.21.attn_v.weight	1024x1024	1.4958	29.8251	0.0501524	0.948638	0.626241	5.7051	1.65575	full	
+blk.21.ffn_down.weight	1024x3072	3.1504	54.1103	0.0582219	0.968693	1.70965	3.39562	1.64391	full	
+blk.21.ffn_gate.weight	3072x1024	5.56248	50.3226	0.110537	0.992544	3.56673	2.43218	1.52511	full	
+blk.21.ffn_norm.weight	1024	0	63.8001	0	nan	nan	nan	nan	norm only	
+blk.21.ffn_up.weight	3072x1024	4.24304	57.2407	0.0741263	0.981015	2.64858	2.56642	1.59174	full	
+blk.22.attn_k.weight	1024x1024	1.85576	26.9075	0.0689684	0.977343	0.922064	4.05063	1.56832	full	
+blk.22.attn_k_norm.weight	128	0	21.1743	0	nan	nan	nan	nan	norm only	
+blk.22.attn_norm.weight	1024	0	248.973	0	nan	nan	nan	nan	norm only	
+blk.22.attn_output.weight	1024x2048	2.56972	38.0638	0.0675108	0.957225	1.03483	6.16645	1.61426	full	
+blk.22.attn_q.weight	2048x1024	3.11939	48.9027	0.0637877	0.978949	1.8387	2.87816	1.55154	full	
+blk.22.attn_q_norm.weight	128	0	19.0105	0	nan	nan	nan	nan	norm only	
+blk.22.attn_v.weight	1024x1024	1.56945	29.8128	0.0526436	0.952646	0.826691	3.60422	1.6477	full	
+blk.22.ffn_down.weight	1024x3072	3.06434	57.1156	0.0536515	0.965323	1.67692	3.33927	1.61648	full	
+blk.22.ffn_gate.weight	3072x1024	6.33361	51.878	0.122087	0.994255	4.18525	2.29013	1.48852	full	
+blk.22.ffn_norm.weight	1024	0	68.4502	0	nan	nan	nan	nan	norm only	
+blk.22.ffn_up.weight	3072x1024	5.18354	59.5824	0.0869978	0.988095	3.39587	2.32997	1.56404	full	
+blk.23.attn_k.weight	1024x1024	1.55995	26.1529	0.0596472	0.965685	0.821876	3.60251	1.60997	full	
+blk.23.attn_k_norm.weight	128	0	28.1227	0	nan	nan	nan	nan	norm only	
+blk.23.attn_norm.weight	1024	0	286.487	0	nan	nan	nan	nan	norm only	
+blk.23.attn_output.weight	1024x2048	2.35853	38.348	0.0615033	0.959998	1.30626	3.26003	1.60152	full	
+blk.23.attn_q.weight	2048x1024	2.96367	44.4687	0.0666462	0.979997	1.95562	2.29662	1.55551	full	
+blk.23.attn_q_norm.weight	128	0	17.9946	0	nan	nan	nan	nan	norm only	
+blk.23.attn_v.weight	1024x1024	1.52709	29.06	0.0525496	0.951273	0.974229	2.45701	1.67405	full	
+blk.23.ffn_down.weight	1024x3072	3.19869	58.849	0.0543542	0.968859	1.96306	2.65508	1.59126	full	
+blk.23.ffn_gate.weight	3072x1024	6.45628	52.9036	0.122039	0.994056	4.46261	2.09308	1.52725	full	
+blk.23.ffn_norm.weight	1024	0	73.211	0	nan	nan	nan	nan	norm only	
+blk.23.ffn_up.weight	3072x1024	5.77626	60.8927	0.0948596	0.990952	4.20942	1.883	1.55808	full	
+blk.24.attn_k.weight	1024x1024	1.59511	26.2454	0.0607768	0.963781	0.75257	4.4925	1.6017	full	
+blk.24.attn_k_norm.weight	128	0	30.2438	0	nan	nan	nan	nan	norm only	
+blk.24.attn_norm.weight	1024	0	399.263	0	nan	nan	nan	nan	norm only	
+blk.24.attn_output.weight	1024x2048	2.55922	38.6344	0.066242	0.962758	1.2362	4.28584	1.62503	full	
+blk.24.attn_q.weight	2048x1024	3.54709	47.9488	0.0739768	0.985754	2.33143	2.31473	1.52142	full	
+blk.24.attn_q_norm.weight	128	0	18.2987	0	nan	nan	nan	nan	norm only	
+blk.24.attn_v.weight	1024x1024	1.58231	28.805	0.0549319	0.944477	0.803108	3.88182	1.69247	full	
+blk.24.ffn_down.weight	1024x3072	3.5202	59.6897	0.0589749	0.976638	2.29881	2.34493	1.60005	full	
+blk.24.ffn_gate.weight	3072x1024	7.05214	52.2003	0.135098	0.995421	4.82147	2.13935	1.52206	full	
+blk.24.ffn_norm.weight	1024	0	75.3133	0	nan	nan	nan	nan	norm only	
+blk.24.ffn_up.weight	3072x1024	6.22986	61.7184	0.10094	0.992243	4.69241	1.76264	1.55315	full	
+blk.25.attn_k.weight	1024x1024	1.38128	24.6398	0.0560587	0.952101	0.577531	5.72018	1.66006	full	
+blk.25.attn_k_norm.weight	128	0	26.9862	0	nan	nan	nan	nan	norm only	
+blk.25.attn_norm.weight	1024	0	529.6	0	nan	nan	nan	nan	norm only	
+blk.25.attn_output.weight	1024x2048	2.37211	40.6845	0.058305	0.953619	1.06222	4.98703	1.64124	full	
+blk.25.attn_q.weight	2048x1024	2.83085	48.6093	0.0582367	0.973576	1.80513	2.45933	1.56246	full	
+blk.25.attn_q_norm.weight	128	0	18.4441	0	nan	nan	nan	nan	norm only	
+blk.25.attn_v.weight	1024x1024	1.57536	31.8022	0.0495363	0.937825	0.700866	5.05233	1.66152	full	
+blk.25.ffn_down.weight	1024x3072	3.36211	59.3711	0.0566287	0.975007	2.21004	2.31431	1.5642	full	
+blk.25.ffn_gate.weight	3072x1024	6.92827	50.9389	0.136011	0.995406	5.07982	1.86017	1.51608	full	
+blk.25.ffn_norm.weight	1024	0	79.7564	0	nan	nan	nan	nan	norm only	
+blk.25.ffn_up.weight	3072x1024	6.21456	62.0858	0.100096	0.991905	4.76383	1.7018	1.56634	full	
+blk.26.attn_k.weight	1024x1024	1.59075	24.1802	0.0657872	0.960271	0.691913	5.28566	1.64429	full	
+blk.26.attn_k_norm.weight	128	0	22.215	0	nan	nan	nan	nan	norm only	
+blk.26.attn_norm.weight	1024	0	630.837	0	nan	nan	nan	nan	norm only	
+blk.26.attn_output.weight	1024x2048	2.65482	40.2724	0.0659216	0.964199	1.3413	3.91757	1.58402	full	
+blk.26.attn_q.weight	2048x1024	3.13004	52.5813	0.0595276	0.976857	1.79655	3.03544	1.55627	full	
+blk.26.attn_q_norm.weight	128	0	17.0761	0	nan	nan	nan	nan	norm only	
+blk.26.attn_v.weight	1024x1024	1.77768	30.6094	0.0580764	0.952966	0.850986	4.36379	1.65941	full	
+blk.26.ffn_down.weight	1024x3072	3.6969	56.8775	0.0649975	0.980101	2.65966	1.93207	1.5342	full	
+blk.26.ffn_gate.weight	3072x1024	7.53017	50.255	0.149839	0.996611	5.68128	1.75678	1.45013	full	
+blk.26.ffn_norm.weight	1024	0	96.5735	0	nan	nan	nan	nan	norm only	
+blk.26.ffn_up.weight	3072x1024	6.94064	61.3152	0.113196	0.994287	5.85624	1.40463	1.50117	full	
+blk.27.attn_k.weight	1024x1024	2.39115	29.6001	0.0807817	0.98902	1.6315	2.14802	1.53731	full	
+blk.27.attn_k_norm.weight	128	0	25.8584	0	nan	nan	nan	nan	norm only	
+blk.27.attn_norm.weight	1024	0	484.284	0	nan	nan	nan	nan	norm only	
+blk.27.attn_output.weight	1024x2048	2.72565	42.6224	0.0639489	0.96797	1.74196	2.44829	1.60869	full	
+blk.27.attn_q.weight	2048x1024	3.32604	45.0133	0.0738902	0.985682	2.30005	2.09113	1.55944	full	
+blk.27.attn_q_norm.weight	128	0	21.3434	0	nan	nan	nan	nan	norm only	
+blk.27.attn_v.weight	1024x1024	1.8014	33.4418	0.0538669	0.954751	0.756641	5.66817	1.59229	full	
+blk.27.ffn_down.weight	1024x3072	15.2521	48.4179	0.315009	0.999333	14.7406	1.07059	1.50321	full	
+blk.27.ffn_gate.weight	3072x1024	6.34671	55.0636	0.115262	0.994386	4.92038	1.6638	1.46473	full	
+blk.27.ffn_norm.weight	1024	0	226.582	0	nan	nan	nan	nan	norm only	
+blk.27.ffn_up.weight	3072x1024	7.4791	58.7146	0.12738	0.99562	6.71738	1.23965	1.53324	full	

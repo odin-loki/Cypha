@@ -2107,22 +2107,23 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::getline(in, line);
         while (std::getline(in, line)) {
             const auto f = split(line, '\t');
-            if (f.size() >= 6 && f[0] == "dev")
+            if (f.size() >= 6 && f[0] == "dev" && (f[4] == "trie" || f[4] == "trie_ig"))
                 base[{std::atoi(f[1].c_str()), f[3] == "wiki", f[4] == "trie_ig"}] = std::atoi(f[5].c_str());
         }
     }
-    auto write_rows = [&](const char* set, const std::vector<Graded>& gs, bool append) {
+    // A3 rows carry lm "r3" (cypha_gate reads these rows and splits them by set, then by --where).
+    auto write_rows = [&](const char* set, const std::vector<Graded>& gs, bool append, bool r3 = false) {
         if (o.out.empty()) return;
         std::ofstream f(o.out, append ? std::ios::app : std::ios::trunc);
         if (!append)
             f << "set\trow\tin_slice\tform\tlm\tgrade\tmean_lp\tmin_lp\tentropy0\tig_n0\tquestion_lp\tfam\tanswer\n";
         for (const auto& g : gs)
-            f << set << "\t" << g.row << "\t" << g.in_slice << "\t" << form_name[g.form] << "\t" << lm_name[g.lm] << "\t"
+            f << set << "\t" << g.row << "\t" << g.in_slice << "\t" << form_name[g.form] << "\t" << (r3 ? "r3" : lm_name[g.lm]) << "\t"
               << g.grade << "\t" << g.ans.mean_lp << "\t" << g.ans.min_lp << "\t" << g.ans.ent0 << "\t" << g.ans.ig_n0
               << "\t" << g.qlp << "\t" << g.fam_tok << "\t" << printable(g.ans.text) << "\n";
     };
     write_rows("dev", gd, false);
-    write_rows("dev_r3", gr3, true);
+    write_rows("dev", gr3, true, true);
 
     std::cout.precision(4);
     // RAW (everything it wrote counts; only its own message abstains), CV (the 2%-wrong gate chosen on four folds,
@@ -2282,7 +2283,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::map<std::string, int> why_test;
         const std::vector<Graded> gt3 = o.r3.empty() ? std::vector<Graded>{} : r3_set(test, why_test);
         write_rows("test", gt, true);
-        write_rows("test_r3", gt3, true);
+        write_rows("test", gt3, true, true);
         auto test_report = [&](const std::string& tag, const std::vector<const Graded*>& v, const Gate& gate) {
             Tally raw, gated, gin, gout, pr[2], cov[2];
             int abst = 0, abst_out = 0, n_out = 0;

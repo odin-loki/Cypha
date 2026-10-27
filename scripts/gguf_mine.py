@@ -1049,7 +1049,9 @@ class Runner:
         except ImportError:
             die("the dynamic commands need llama-cpp-python: pip install llama-cpp-python")
         self.lc = llama_cpp
-        kw = dict(model_path=path, n_ctx=n_ctx, n_threads=threads, seed=seed, verbose=False)
+        # n_threads_batch too: llama-cpp-python defaults it to cpu_count(), which ignored --threads for every
+        # prompt and embedding decode (found on the first real runs, 2026-10-28).
+        kw = dict(model_path=path, n_ctx=n_ctx, n_threads=threads, n_threads_batch=threads, seed=seed, verbose=False)
         self.pooling = pooling if embedding else None
         if embedding:
             kw["embedding"] = True
