@@ -801,7 +801,7 @@ These are initial budgets, revised by measurement but never silently:
 
 | Risk | Signal | Response |
 |---|---|---|
-| Cypha DIF struggles with sparse text features (TF-IDF scored 34%) | E1 below 90% after two design rounds | Feed dense C-vectors and hashed features. If it still fails, the averaged perceptron does syntax and Cypha keeps confidence, OOD and routing |
+| Cypha DIF struggles with sparse text features (TF-IDF scored 34%) | E1 below 90% after two design rounds | Feed dense C-vectors and hashed features. If it still fails, the averaged perceptron does syntax and Cypha keeps confidence, OOD and routing. **Measured 2026-10-27 ([E4](reports/E4_QUESTION_CLASSIFIER.md)):** the risk is confirmed for question types. On TREC, Cypha (W_enc frozen, online) scored 75.0 coarse and 62–67 fine; the averaged perceptron scored 89.0–91.6 and 84.6. Cypha's confidence was badly under-calibrated, and its OOD flag never fired. The perceptron is the question classifier for now. Fixing Cypha's online update on text is an open research item |
 | Pattern coverage too low | T-QA-wiki under 50% after F2 | More distant supervision, distilled paraphrases (H2), retrieval fallback |
 | Drift: errors admitted, then used to admit more | Weekly audit lower bound below 0.90 | Pause, roll back, update the source and pattern Betas, tighten thresholds |
 | Pipeline error compounding | Per-stage accuracy product far below end-to-end needs | Joint decisions where cheap (tag and chunk together); keep the top-k parses |

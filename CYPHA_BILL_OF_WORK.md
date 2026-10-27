@@ -35,6 +35,10 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **C0–C1**: fair TF-IDF baselines with `W_enc` frozen, then PPMI-SVD and random-indexing vectors.
   - **C1 vectors done (2026-10-27):** `native/tools/ppmi_svd.cpp`, [report](docs/reports/C1_PPMI_SVD_VECTORS.md). PPMI-SVD on enwik8 (11.2M tokens, 152 s, 640 MB) scores WordSim-353 0.672, SimLex-999 0.255 and MEN 0.637. WS353 is inside the published range; SimLex is below it. Random indexing scores 0.404 / 0.131 / 0.374.
   - **Still open:** the C0 baselines and the 20 Newsgroups gate.
+- [ ] **E4**: question classifier ([report](docs/reports/E4_QUESTION_CLASSIFIER.md), `native/tools/question_classifier.cpp`).
+  - On TREC, the averaged perceptron scores 89.0–91.6 coarse and 84.6 fine; it is the classifier to use.
+  - The Cypha classifier scores 75.0 coarse and 62–67 fine, with badly low confidence and an OOD flag that never fired.
+  - **Open research:** close the roughly 10-point gap that batch LDA (84.8 / 74.4) attributes to Cypha's online update noise; recalibrate Cypha's confidence on text; and look at the sparse-feature projection.
 - [ ] **E1**: Cypha part-of-speech tagger on UD EWT (gate ≥ 94%).
   - **Perceptron baseline passes (2026-10-27):** `native/tools/pos_tagger.cpp`, [report](docs/reports/E1_POS_TAGGER.md). Test UPOS 94.81% (known words 96.4%, unknown 79.2%, questions 93.3%); about 1M tokens/s, 5.6 MB.
   - Noun-phrase chunker F1 83.8 on test, plus a question-parse helper.
