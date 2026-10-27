@@ -13,6 +13,7 @@ milestone or a significant self-contained change.
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **Two teacher-geometry processes** in the thought library: `synthetic_pair_mining` (generate, verify, filter, cross-check, audit the mask, admit as hypotheses) and `geometry_distillation` (teacher-minus-Cypha forces, mask, natural-gradient step, gate by LCI). The library now has 144 processes and 856 steps.
 - **Embedding geometry plan** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md), Track C): make Cypha's vectors attract and repel like Qwen3-Embedding-8B's without a neural net at runtime.
   - **Mechanics:** the teacher's verified training (three stages, InfoNCE with hard negatives, the +0.1 false-negative mask, last-token pooling, MRL, slerp merging) written as forces.
   - **Cypha's version:** a softmax pull–push rule in Fisher geometry with confidence-scaled steps; relational distillation where each pair's force is p_teacher − p_Cypha.

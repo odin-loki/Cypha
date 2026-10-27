@@ -53,7 +53,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
     - **S2:** `native/include/cypha/eval/epistemic.hpp`, with CTest `native_epistemic_test` (195 checks): states, degree of conflict, the two kinds of uncertainty, reason codes, unseen estimators and cards.
   - **Still open:** S1 on CyphaLM's answers, S3 and S5.
 - [ ] **K2–K5** ([`docs/THOUGHT.md`](docs/THOUGHT.md)):
-  - K1 (142 processes including AI and data science, validator) is done.
+  - K1 (144 processes including AI, data science and teacher mining, validator) is done.
   - **K2 and K3 done 2026-10-27** ([report](docs/reports/K2_K3_THOUGHT_INTERPRETER.md)): the interpreter and the standard learners in `native/include/cypha/thought/`, with CTest `native_thought_test` (5,534 checks). half_split takes 6 tests against 31.3 for random probing; SPRT errors are 0.028 / 0.038 at α = β = 0.05; selection regret falls from 243 to 92.5; ECE 0.015; replay is bit-identical.
   - **Still open:** K4 (primitives bound to CyphaLM and the existing libraries), K5 (first executable processes on their benchmarks), and DIF applicability in place of the per-(process, task) Beta.
 - [ ] **"Don't know" message and tag** ([DISCOVERY §3.5](docs/DISCOVERY.md#35-the-dont-know-message-and-tag)):

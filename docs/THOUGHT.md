@@ -8,7 +8,7 @@ This gives Cypha a library of the processes people use to think and work, writte
 
 | File | What it is |
 |---|---|
-| [`thought/processes.yaml`](thought/processes.yaml) | The library: **142 processes in 25 categories, 840 steps**, machine-readable |
+| [`thought/processes.yaml`](thought/processes.yaml) | The library: **144 processes in 25 categories, 856 steps**, machine-readable |
 | [`thought/INDEX.md`](thought/INDEX.md) | Generated index: every process with its source, when to use it and its core maths |
 | [`../scripts/thought_check.py`](../scripts/thought_check.py) | Validator, index builder, and UML export (`--uml <id>` for PlantUML, `--mermaid <id>`) |
 

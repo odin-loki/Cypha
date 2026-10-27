@@ -356,7 +356,7 @@ The geometry only counts once CyphaLM uses it: the similar-context and class-con
 |---|---|
 | **The hard negatives do the shaping** (softmax-weighted push) | Cypha's competitor sampler aims at its own confusions and at mined near-misses, not at random words |
 | **The false-negative mask** (positive + 0.1) | Cypha never pushes a probable paraphrase away. The mask is checked by ECS and by the C3 audit, not just assumed |
-| **Synthetic pairs with controls and a consistency filter** (cosine > 0.7) | A data-pack process: generate, cross-check against several sources, admit only what agrees. This is the "picky about what it learns" rule, written down as a process (add to `processes.yaml` as `synthetic_pair_mining`) |
+| **Synthetic pairs with controls and a consistency filter** (cosine > 0.7) | A data-pack process: generate, cross-check against several sources, admit only what agrees. This is the "picky about what it learns" rule, written down as the processes `synthetic_pair_mining` and `geometry_distillation` in `processes.yaml` |
 | **Personas and controls give diverse queries** | T-QA and CyphaLM's class-context expert need many phrasings of each question, not one |
 | **Instructions as task regions** | Per-task similarity in Cypha: a small offset or reweighting for each task (E4) |
 | **Matryoshka nesting** | RAM tiers: search on 32 dimensions, confirm on 256 |

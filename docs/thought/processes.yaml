@@ -2535,6 +2535,46 @@ processes:
   learn: ["Beta(teacher right | relation)"]
   feedback: "verification outcome"
 
+- id: synthetic_pair_mining
+  name: "Mine training pairs with a teacher, keep only what agrees"
+  cat: ai
+  ref: "Qwen3 Embedding report (Zhang et al. 2025); Chan et al. 2024 (personas); docs/EMBEDDING_GEOMETRY.md section 6 C"
+  when: "the geometry or a classifier needs positives and hard negatives it does not have"
+  start: pick
+  steps:
+    pick:     {op: select, do: "documents from held-out-free splits; persona and controls (type, length, difficulty)", next: [gen]}
+    gen:      {op: generate, do: "queries for each document, plus hard negatives (same topic wrong answer, negation, role swap, wrong entity)", next: [check]}
+    check:    {op: verify, do: "teacher yes/no: does the document answer the query?", next: [filter]}
+    filter:   {op: score, do: "embedder cosine above 0.7 for positives; near the positive but judged irrelevant for hard negatives", next: [cross]}
+    cross:    {op: compare, do: "against Cypha's own evidence: drop pairs its store contradicts", next: [audit]}
+    audit:    {op: decide, do: "would the false-negative mask drop it? sample those for a relevance audit", next: [admit, out]}
+    admit:    {op: record, do: "pair with every score and provenance, as a hypothesis (ECS Beta(1, 3))", next: [out]}
+    out:      {op: return}
+  stop: "batch admitted or rejected; audit sample recorded"
+  math: "keep rate and audit precision as Beta posteriors per (teacher, control setting); controls chosen by Thompson sampling on downstream agreement gain"
+  learn: ["Beta(pair kept | control setting)", "Beta(mask right | audit)"]
+  feedback: "geometry agreement gain on the dev probe set (EMBEDDING_GEOMETRY section 7.1)"
+
+- id: geometry_distillation
+  name: "Copy a teacher's similarity structure"
+  cat: ai
+  ref: "Park et al. 2019; Tian, Krishnan & Isola 2020; docs/EMBEDDING_GEOMETRY.md sections 4-5"
+  when: "Cypha's vectors disagree with a trusted teacher's neighbourhoods"
+  start: sample
+  steps:
+    sample:   {op: generate, do: "anchors and candidate sets: own confusions, unigram^0.75 random, mined hard negatives", next: [forces]}
+    forces:   {op: compare, do: "p_teacher - p_Cypha for each candidate at temperature tau", next: [mask]}
+    mask:     {op: test, do: "zero the push on probable paraphrases (s > s_pos + 0.1 or known synonym)", next: [step]}
+    step:     {op: update, do: "natural-gradient pull and push scaled by Sigma / (n + kappa0); MDL shrink rare items", next: [measure]}
+    measure:  {op: measure, do: "pair Spearman, kNN@10, CKA, force KL on dev", next: [gate]}
+    gate:     {op: decide, do: "gain with LCI >= 0.95 inside the RAM budget? else stop", next: [sample, keep, out]}
+    keep:     {op: record, do: "promote the new state; log the agreement curve", next: [out]}
+    out:      {op: return}
+  stop: "agreement gain below the gate, or budget spent"
+  math: "loss alpha * KL(p_T || p_S) + (1 - alpha) * InfoNCE; step size from posterior covariance; stop by VOC on the agreement Welford"
+  learn: ["Welford(agreement gain per epoch)", "Beta(epoch kept)"]
+  feedback: "held-out task scores (STS, retrieval) and CyphaLM Q/A through S-4"
+
 - id: benchmark_hygiene
   name: "Benchmark hygiene"
   cat: ai
