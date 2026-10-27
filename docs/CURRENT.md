@@ -78,6 +78,7 @@ Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AN
 | Kept patterns, `--cv --wikidata` | 70 (F2 alone: 44) |
 | Admitted facts extracted from the text | 1,216 (F2 alone: 832) |
 | Agreement with Wikidata on held-out subjects | 0.951, Wilson [0.909, 0.974] |
+| Raw-byte patterns (`--raw`, F2R) | 81 kept, 1,025 facts, Wikidata 0.950 [0.904, 0.974]; joined store 1,257 facts (0.951); raw frames + raw shard reach the dev answer for 7/13 eligible questions (cleaned frames + D4 shard: 4/13) |
 | Fact shard (`--shard`) | 2,001 question-form rows from 675 facts on pages in the 8 MiB slice; 0 equal to a dev or test question; dev reach 16 / 100 in-slice questions |
 
 ## Corpus on D:
