@@ -100,3 +100,15 @@ The copy expert looks back 4,096 bytes. Articles are longer than that, so a long
 | # | Prediction |
 |---|---|
 | L8 | A 16,384-byte window adds at most 0.02 BPC of gain over 4,096 on fresh text, and surface S does not change (generated texts are 400 bytes, inside any window) |
+
+**Result (run 2026-10-28).** m = 8, class expert (shape:6) on.
+
+| Copy window | Fresh BPC, trie + IG + class + copy | Copy gain over class (95%) | S change over class (95%) | Copy cost per byte: mean / p50 / p99 | One 80-byte answer |
+|---|---:|---|---|---|---:|
+| 4,096 | 1.937724 | −0.1502 [−0.1842, −0.1199] | +0.0016 [−0.0035, +0.0069] | 7.9 / 7.1 / 22.8 µs | 0.6 ms |
+| 8,192 | 1.922851 | −0.1651 [−0.1995, −0.1345] | +0.0004 [−0.0047, +0.0054] | 16.2 / 14.1 / 42.9 µs | 1.3 ms |
+| **16,384** | **1.912150** | **−0.1758 [−0.2108, −0.1449]** | −0.0007 [−0.0058, +0.0043] | 30.0 / 27.3 / 67.1 µs | 2.4 ms |
+
+- The cost is the linear search over the window, timed on 200,000 fresh-text positions, one core. Even at 16,384 bytes an answer costs 2.4 ms, far inside the 200 ms budget (PLAN §10). In Q/A the prompt and answer fit inside 4,096 bytes, so the window changes nothing there.
+- **Prediction L8: miss** on the gain (−0.026 over 4,096, more than the 0.02 predicted); hit on S.
+- **Chosen: 16,384 bytes, m = 8.** CyphaLM with the class expert (shape) and this copy expert reads fresh text at **1.912** BPC (trie + InfiniGram: 2.166), with surface S unchanged by the copy expert.
