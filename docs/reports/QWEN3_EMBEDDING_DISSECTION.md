@@ -213,7 +213,29 @@ Each neuron's write vector (a column of `ffn_down`) is read through the final no
 
 The summary per layer is in `mined/qwen3emb/static_0.6b/neurons_summary.json`. The full table (9.3 MB) stays on the build machine. The run took 24 minutes.
 
-EIGHTB_PLACEHOLDER
+### 5.8 Qwen3-Embedding-8B, statically
+
+Same commands, with layer subsets where the cost scales with vocabulary × width. Outputs: `mined/qwen3emb/static_8b/` and `mined/qwen3emb/wdiff/q8_8b_vs_base_q8/`.
+
+**Input embedding matrix (20,000 word vectors), against the 0.6B's:**
+
+| Measure | 8B | 0.6B |
+|---|---|---|
+| Mean cosine of random word pairs | 0.023 | 0.067 |
+| Norm of the mean unit vector | 0.152 | 0.261 |
+| Effective rank; PCA dimensions for 95% | 2,140; 2,310 of 4,096 | 780; 817 of 1,024 |
+| TwoNN intrinsic dimension | 47.5 | 7.9 |
+| Hubness skew (k = 10); under CSLS | 1.15; 0.35 | 48.9; 1.03 |
+| Spearman of norm against merge rank | −0.651 (frequent words longer) | +0.236 |
+| Offset relations at @1 (capital, female, plural, past, comparative) | 0, 0.3, 0.2, 0.2, 0 | 0.67, 0.7, 0.7, 0.7, 0.9 |
+| … at @10 | 0.33, 0.9, 1.0, 1.0, 0.9 | 0.83, 1.0, 1.0, 1.0, 0.9 |
+
+- **More isotropic, with no hub problem.** The 8B input matrix is more isotropic than the 0.6B's and has no bad hubs; the worst is "embod" with 51 of 5,000.
+- **Weaker parallelograms.** Its relation offsets rarely land first, though the answer is usually in the top 10. Neighbours are right but with small cosines (bank → Bank 0.29, banks 0.25). So the 8B spreads the same relations over many more dimensions.
+
+**Neurons** (`--max-neurons 256` per layer, all 36 layers, 9,216 neurons). As on 0.6B, single-neuron write entropy is at its maximum (11.92–11.93), with median top logits of 0.11–0.42. The lowest-entropy neurons of this sample show no clear theme; a larger sample or a sharper statistic is needed. The run took 11 minutes.
+
+HEADS8B_PLACEHOLDER
 
 ## 6. QE2: the probe set
 

@@ -1,0 +1,761 @@
+{
+ "max_entropy_ln_vocab": 11.929429420193609,
+ "per_layer": [
+  {
+   "layer": 0,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.404,
+   "sharpest": [
+    {
+     "neuron": "5716",
+     "entropy": 11.924,
+     "writes": "\"\"\" \"\"\" [ ); are its ''' ; /* ) ') ) \") { I",
+     "reads": "founded elif answering interested even surprise ay basement can drivers ingredie"
+    },
+    {
+     "neuron": "98",
+     "entropy": 11.9254,
+     "writes": "精彩 _adapter aco 法律 pilot Vintage ทธ 键 停车 struct 癌 conducted den 建军 triangle",
+     "reads": "HQ verb different cir which act graduated flagship Study rises Cir bolster progr"
+    }
+   ]
+  },
+  {
+   "layer": 1,
+   "neurons": 256,
+   "write_entropy_median": 11.929,
+   "write_entropy_min": 11.926,
+   "max_logit_median": 0.195,
+   "sharpest": [
+    {
+     "neuron": "12111",
+     "entropy": 11.9257,
+     "writes": "_per thập mater .Util umd Setter Gov ;; (ii _INPUT Pending exiting .learn parl #",
+     "reads": "along posting refer put guaranteed represented Row impact Far configured domain "
+    },
+    {
+     "neuron": "2853",
+     "entropy": 11.9258,
+     "writes": "CM differentiation constantly population Election ические ificación .DEFAULT deb",
+     "reads": "fund Du train sprint Additional equipment Operation ping exports tolerance RF AS"
+    }
+   ]
+  },
+  {
+   "layer": 2,
+   "neurons": 256,
+   "write_entropy_median": 11.929,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.114,
+   "sharpest": [
+    {
+     "neuron": "5284",
+     "entropy": 11.925,
+     "writes": "development Uuid IL aquí nit sak 于此 kad cape ∀ 危 pain institutions OSP 관",
+     "reads": "Learn part element kv bank defin Returns Kre keras Zh experienced TASK material "
+    },
+    {
+     "neuron": "3946",
+     "entropy": 11.9252,
+     "writes": "CON 段 AA efficient 内容 功 ität UEL applications recall Ö CTION 引力 ru ê",
+     "reads": "deserves attend Get equations exported fur engineers Est glasses route controls "
+    }
+   ]
+  },
+  {
+   "layer": 3,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.308,
+   "sharpest": [
+    {
+     "neuron": "3685",
+     "entropy": 11.9253,
+     "writes": ".” .[ 长大 STATE Fetching long .groupby initial 重复 Fatal STATE age ? -depth strip",
+     "reads": "difficulty mins Chronicle Points Buffer Chapter const played synchronized probab"
+    },
+    {
+     "neuron": "396",
+     "entropy": 11.9259,
+     "writes": "(routes 술 conteúdo named _skill .phase août Camping _parameter incremented gpoin",
+     "reads": "triple csrf functions Construct funds construct ui True simplest fulfill fetch v"
+    }
+   ]
+  },
+  {
+   "layer": 4,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.35,
+   "sharpest": [
+    {
+     "neuron": "3703",
+     "entropy": 11.9249,
+     "writes": "产业集聚 万元以上 hamburger 须 试管 蔬菜 shrink ponder screenplay Uttar isArray 遗憾 ynn ework ",
+     "reads": "JSONArray LANGUAGE reasoning кон DLL networking une street SimpleDateFormat DIRE"
+    },
+    {
+     "neuron": "9956",
+     "entropy": 11.925,
+     "writes": "aps Ş km replaced segment Ge [m 错过 包袱 フォ 作文 commuter .ibm thỏa distant",
+     "reads": "tricks created apenas callable torch redis Fa gcd Lisa rc och April replaces mal"
+    }
+   ]
+  },
+  {
+   "layer": 5,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.922,
+   "max_logit_median": 0.364,
+   "sharpest": [
+    {
+     "neuron": "9434",
+     "entropy": 11.9221,
+     "writes": "的局面 苛 лу 盾 _recv 产出 subpackage 勘探 Arn subscribe izziness ук Middleton ()){ 还有很多",
+     "reads": "és DESC els words double Assessment Marco indeed True technically bat Double Ant"
+    },
+    {
+     "neuron": "4874",
+     "entropy": 11.926,
+     "writes": "God God PO š 生成 father Jehovah .shape direction .model possibility 主 да 完成 G",
+     "reads": "God Put cin Dog tied pn grinding girl OUT Today sometime fifth Ke stiff sock"
+    }
+   ]
+  },
+  {
+   "layer": 6,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.921,
+   "max_logit_median": 0.368,
+   "sharpest": [
+    {
+     "neuron": "10755",
+     "entropy": 11.9209,
+     "writes": ". 。 about pr ]. atten CH .init ACC 观 ، MAC قي マ init",
+     "reads": "remaining elapsed worldwide True MS technology Friday visitor detected chips gro"
+    },
+    {
+     "neuron": "1358",
+     "entropy": 11.9222,
+     "writes": "鉴 ánd pline tran izzes GroupName 岸 Practice khỏi ред unan 商标 cxx abol وت",
+     "reads": "node hem concern polar reason miss wx Goldman stupid FOX annot Page sí potential"
+    }
+   ]
+  },
+  {
+   "layer": 7,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.926,
+   "max_logit_median": 0.37,
+   "sharpest": [
+    {
+     "neuron": "568",
+     "entropy": 11.9262,
+     "writes": "knights MenuItem .contains _access .push adem defenders 两点 _similarity ,omitempt",
+     "reads": "overlay Welt NotFound skin slider NSObject promise riot cooling Col variables th"
+    },
+    {
+     "neuron": "1052",
+     "entropy": 11.9262,
+     "writes": "垢 decrypt orang unique nail 较小 uniqu OOT Ang 利用率 lamp chromosome Chain gon knex",
+     "reads": "ut Cler unusual wont invested harmony assistant Une ma savings mr shoes Capacity"
+    }
+   ]
+  },
+  {
+   "layer": 8,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.387,
+   "sharpest": [
+    {
+     "neuron": "6420",
+     "entropy": 11.9255,
+     "writes": "Appro specifically 还未 DirectoryInfo Discuss blems ::= seja лон (async 之力 .Query ",
+     "reads": "sim posterior firms Fre Com Pier cent Ber simult Sov sty Mercedes expect horizon"
+    },
+    {
+     "neuron": "3192",
+     "entropy": 11.9258,
+     "writes": "thus .. 清代 very attached potentially wn �数 Values his rim lim /dis 意思是 串联",
+     "reads": "DEL sur sprintf Southwest specifications cycle success hundreds mist intercept s"
+    }
+   ]
+  },
+  {
+   "layer": 9,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.373,
+   "sharpest": [
+    {
+     "neuron": "6618",
+     "entropy": 11.9248,
+     "writes": "的理解 ('$ hoff 纪律 ote /# Maintenance 坚守 Transaction 忌 autocomplete 全能 债务 .images p",
+     "reads": "crops Fact disposable modify Knowledge Pont Asian portfolio finding Optional Moo"
+    },
+    {
+     "neuron": "1524",
+     "entropy": 11.9256,
+     "writes": "及其 album Assume 奉 although .core 《 music avoiding plot 港 ??? rear Top Equ",
+     "reads": "trace priced sleeping pdf intersect Weekly Aws basketball CONTENT licensed Villa"
+    }
+   ]
+  },
+  {
+   "layer": 10,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.384,
+   "sharpest": [
+    {
+     "neuron": "4352",
+     "entropy": 11.9252,
+     "writes": "readcrumb need ____________ UNDLE below _COUNT 副总 连续 _field 阳光 victims CLK 依然 -n",
+     "reads": "local Quick river sklearn level joint horizontal score boxes satisfaction Step E"
+    },
+    {
+     "neuron": "10003",
+     "entropy": 11.9258,
+     "writes": "实质 anchors Ide 我们 Creation 受益 Kernel Ly kindly Check ansen Vi .dep classNames Re",
+     "reads": "Kernel company included killer Might sibling characteristic apparent genres Out "
+    }
+   ]
+  },
+  {
+   "layer": 11,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.389,
+   "sharpest": [
+    {
+     "neuron": "1756",
+     "entropy": 11.9242,
+     "writes": ".drop Free Leap 지 洗 echo .Column atter _images 寥 Share mast 千里 商品 Bayesian",
+     "reads": "Free echo Fifth yield mast print population Fed edges Post commit auto uw lung f"
+    },
+    {
+     "neuron": "7971",
+     "entropy": 11.9254,
+     "writes": "/g 最 anan 岁的 의 sc 其中有 .index 先前 能 集中 suffering 一些  会",
+     "reads": "folk answering sc suffering Wir boundary conditioning spinning Archive birds nav"
+    }
+   ]
+  },
+  {
+   "layer": 12,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.391,
+   "sharpest": [
+    {
+     "neuron": "12121",
+     "entropy": 11.9239,
+     "writes": "won workbook readers iterations tran ysics 但是 spac уется ffective lu Fisheries p",
+     "reads": "norm readers Nest yes give sequences Container printing Gu copying strain Notice"
+    },
+    {
+     "neuron": "11311",
+     "entropy": 11.924,
+     "writes": "政协 influence 大量 could variables possible maximizing resistance Extended 在北京 dete",
+     "reads": "affect dn tail resistance suggest numer could Paris also dependence virgin slave"
+    }
+   ]
+  },
+  {
+   "layer": 13,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.919,
+   "max_logit_median": 0.395,
+   "sharpest": [
+    {
+     "neuron": "11963",
+     "entropy": 11.9193,
+     "writes": "     Human  ', \" import i 性  n ”",
+     "reads": "sit publishing heard desc nä insight SW looking fear раз cel Edu tart involves s"
+    },
+    {
+     "neuron": "855",
+     "entropy": 11.9233,
+     "writes": "ت 苍白 LoginForm hiro Jub 羁 追究 InitialState QTableWidgetItem 娑 TCL keras Wah atalo",
+     "reads": "unacceptable leaving mam door coefficient Hier Successful lend Gordon tras Bound"
+    }
+   ]
+  },
+  {
+   "layer": 14,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.923,
+   "max_logit_median": 0.388,
+   "sharpest": [
+    {
+     "neuron": "5686",
+     "entropy": 11.9234,
+     "writes": "and 标题 of 关于 rics ming OF de của . 后来 fungus ague во company",
+     "reads": "knee quiz ft kid ud Straight ul download compete identify Rail slider tube State"
+    },
+    {
+     "neuron": "5834",
+     "entropy": 11.9235,
+     "writes": "dictionary setup reviews 国 陶瓷 example ended 先 industry 率 ratio example Study 스 s",
+     "reads": "dictionary reviews networks Israel Capt setup respond industry variations techno"
+    }
+   ]
+  },
+  {
+   "layer": 15,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.386,
+   "sharpest": [
+    {
+     "neuron": "10822",
+     "entropy": 11.924,
+     "writes": "avery _widget brahim Win 高度重视 食品 archical von いい &w 基地 (nameof Imports 天津 并不",
+     "reads": "Bar oral Documents Budd unique Fat worst Rice response Ang eight Limit hai Heave"
+    },
+    {
+     "neuron": "910",
+     "entropy": 11.9247,
+     "writes": "规模 adjust 那个 算了 组织 午 -flex 选出 Jerusalem  .to top icity Taking exactly",
+     "reads": "having natural dealing adjust revision early knowing crush lugar differently cal"
+    }
+   ]
+  },
+  {
+   "layer": 16,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.383,
+   "sharpest": [
+    {
+     "neuron": "11193",
+     "entropy": 11.9245,
+     "writes": "j complex matrices py 直接 older javafx 본 _py Ky ml component Statistical Kre 置换",
+     "reads": "complex inappropriate default py extended Italy socialist bonds older exam fish "
+    },
+    {
+     "neuron": "5429",
+     "entropy": 11.9246,
+     "writes": "Price Grupo rist Τ disk 后者 NR Nor ont 随后 adjusted >{{ uch usk spread",
+     "reads": "adjusted firm NR Dry Whether Work Administration dual AUTHOR scientists except e"
+    }
+   ]
+  },
+  {
+   "layer": 17,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.383,
+   "sharpest": [
+    {
+     "neuron": "4586",
+     "entropy": 11.9243,
+     "writes": "perm 体制机制 bas conjug repeated back ร Anderson mạch 传说 memb -header abstraction H",
+     "reads": "endpoints repeated prot Asian perm od sexual ком Miller extr disputes simpl Cour"
+    },
+    {
+     "neuron": "776",
+     "entropy": 11.9249,
+     "writes": "屁 替代 大熊猫 Flag agram ист 交 说明 oky parsed short Clark 虽说 :::: 讲",
+     "reads": "short suspected fundamentally conservation comple publication cuts ngOnInit Idah"
+    }
+   ]
+  },
+  {
+   "layer": 18,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.382,
+   "sharpest": [
+    {
+     "neuron": "11234",
+     "entropy": 11.9246,
+     "writes": "规矩 .console 保温 .misc ность -right Prof when 敬畏 变化 Temp 天真  field 上的",
+     "reads": "Linear Process val linear compiled Template Motion ship journals ONLY cb FIN lis"
+    },
+    {
+     "neuron": "5485",
+     "entropy": 11.9249,
+     "writes": "처 SET eness result ь ีย ArrayList 夷 Parcel ensor Err _route essel 髓 _standard",
+     "reads": "rest Buch Getting full enjoyable quarter Parcel eval TAG controller pathname pre"
+    }
+   ]
+  },
+  {
+   "layer": 19,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.384,
+   "sharpest": [
+    {
+     "neuron": "10703",
+     "entropy": 11.9246,
+     "writes": "Sc mos 叙 西 GG Ridge owered rig shuttle мат 屯 aph BI 是可以 体系",
+     "reads": "according XX deal Empire greater easy Study topic widely theory American ISBN Ar"
+    },
+    {
+     "neuron": "8521",
+     "entropy": 11.9248,
+     "writes": "aren Eden 想 电机 yes td -s у Bro Ron )$ stadium 贝 /e je",
+     "reads": "uniform hard loop Question che yes slept imagination pi eye Chemical College don"
+    }
+   ]
+  },
+  {
+   "layer": 20,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.918,
+   "max_logit_median": 0.391,
+   "sharpest": [
+    {
+     "neuron": "11679",
+     "entropy": 11.9185,
+     "writes": "Collector _logger coin Coll blank 刚好 pkg Ol .warning ד 九 程序 .response 墩 doubts",
+     "reads": "job Forces Frame iter insights spirit из loyalty iterator Toolbar collect depres"
+    },
+    {
+     "neuron": "8570",
+     "entropy": 11.924,
+     "writes": "� pygame _. 岗位 ပ -API wiring am amus ioms 仍未 latex redeemed 及 现货",
+     "reads": "plants collections device lake spin current bin light Enterprise jar vent talent"
+    }
+   ]
+  },
+  {
+   "layer": 21,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.387,
+   "sharpest": [
+    {
+     "neuron": "8432",
+     "entropy": 11.925,
+     "writes": "ba am 履职 terrible 清明 nue nature adj sum ri org bucket Be 只会 律",
+     "reads": "cease venue prefix API lambda Wilson sum clarity MOT notice tribe morning siblin"
+    },
+    {
+     "neuron": "2220",
+     "entropy": 11.9251,
+     "writes": "verages Mont đ 康熙 .getName 会上 -- みんな tables ulares 电子 _edges B 纵 Palestinian",
+     "reads": "kid rb Ne tables allow flowing fields draw young mongo methods Word unfold searc"
+    }
+   ]
+  },
+  {
+   "layer": 22,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.923,
+   "max_logit_median": 0.4,
+   "sharpest": [
+    {
+     "neuron": "1281",
+     "entropy": 11.923,
+     "writes": "诟 卓越 防腐 safeguard CHECK 电量 /graphql Extras 财务管理 心跳 .env 钤 END skilled icon",
+     "reads": "operate carbon danger gan lose Committee zn Children flower existence thy figure"
+    },
+    {
+     "neuron": "3127",
+     "entropy": 11.9237,
+     "writes": "package #  import   // Human  rất  : \\\\ def #include",
+     "reads": "disruption run follow discourse Purpose explosion Endpoint Uint paragraph throw "
+    }
+   ]
+  },
+  {
+   "layer": 23,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.398,
+   "sharpest": [
+    {
+     "neuron": "1357",
+     "entropy": 11.925,
+     "writes": "********************************************************************************",
+     "reads": "Mozilla decimal bill academic BM density caching Cult vx Google bass interventio"
+    },
+    {
+     "neuron": "3506",
+     "entropy": 11.9251,
+     "writes": "Otherwise Keep <T VD Est aspect planning control 的形式 自治区 Beh Flask toggle filt p",
+     "reads": "Element deals Id HEAD decide indoor interfaces expenditure Sequelize xy Historic"
+    }
+   ]
+  },
+  {
+   "layer": 24,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.923,
+   "max_logit_median": 0.402,
+   "sharpest": [
+    {
+     "neuron": "7339",
+     "entropy": 11.9232,
+     "writes": "- { -s ; adapted AV AP  */ ) ) food surfaces () *",
+     "reads": "instead hyper irre tests percentage QObject partly not absorb roz rect producto "
+    },
+    {
+     "neuron": "5486",
+     "entropy": 11.9246,
+     "writes": " ); ; { } \", ', ; shown }  { suggest ), ],",
+     "reads": "learn padded dynamics DIS structures weights sul Mer adults rb Default instantly"
+    }
+   ]
+  },
+  {
+   "layer": 25,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.404,
+   "sharpest": [
+    {
+     "neuron": "6684",
+     "entropy": 11.9247,
+     "writes": "好坏 erring psych sc }& structures Tick zz 先后 Dict compute translation 一日 -sync Ea",
+     "reads": "oversight Wing essay cleaning collected Concept Education Football League pepper"
+    },
+    {
+     "neuron": "4809",
+     "entropy": 11.9252,
+     "writes": "ython 的作用 之一 arrows Ver dans .nb 盎 Import (R dari simulate WWII ２ 2",
+     "reads": "rice Ctrl My textAlign selector Chiefs Gren NV Tier part Bol Products sir Andy h"
+    }
+   ]
+  },
+  {
+   "layer": 26,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.405,
+   "sharpest": [
+    {
+     "neuron": "2850",
+     "entropy": 11.9247,
+     "writes": "asm sell 结构 dance 发动机 _image party 网 ward ki ulas 衡量 도 als obtains",
+     "reads": "select audit production dos Pro falling gas essay cop WebSocket vessels Mag pq f"
+    },
+    {
+     "neuron": "6224",
+     "entropy": 11.9251,
+     "writes": "same A ); 以及 salary ; (); selling 完毕 ');  {  ( M",
+     "reads": "arguments solo seeks repairs sealed Employee PI endorsement duties Gets detector"
+    }
+   ]
+  },
+  {
+   "layer": 27,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.412,
+   "sharpest": [
+    {
+     "neuron": "6393",
+     "entropy": 11.9249,
+     "writes": "那里 成为 etcode ubar 口碑 Excel 简称 Serialization 生涯 黑色 身边 log 障碍 Renderer cluding",
+     "reads": "Gr cab ROM realm Issues shape Kennedy ст Sie three strtolower she sau cor Sim"
+    },
+    {
+     "neuron": "8082",
+     "entropy": 11.925,
+     "writes": "弧 structural <int eros цен /', ideas 麻烦 || 零 复合 -best 大局 distributed package",
+     "reads": "worship auch along transferred reported interfere los Poor estimate OR dp pounds"
+    }
+   ]
+  },
+  {
+   "layer": 28,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.407,
+   "sharpest": [
+    {
+     "neuron": "2010",
+     "entropy": 11.9248,
+     "writes": "游 蓝色 apply 两个 \") 带 沉淀 纵向 吸入 笑 version , друг 位 syn",
+     "reads": "Opt concept occurs Catalog Cort fer Course Collections selective ingres EXISTS l"
+    },
+    {
+     "neuron": "2597",
+     "entropy": 11.9248,
+     "writes": "   Animals Human 设置 特色 sens optional return iphone 年来 data : val",
+     "reads": "Parts new un approaches sf reporter sv varieties specifications cho Accept extra"
+    }
+   ]
+  },
+  {
+   "layer": 29,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.925,
+   "max_logit_median": 0.416,
+   "sharpest": [
+    {
+     "neuron": "3062",
+     "entropy": 11.9249,
+     "writes": "-low ponder 旱 手术 Transaction ---------------------------------------------------",
+     "reads": "criminal eng contribute dominance investment COMP Chair circuits validated Brasi"
+    },
+    {
+     "neuron": "8286",
+     "entropy": 11.925,
+     "writes": "eo 资本 Credentials handleError moderated wei Python 自我 协议 ités 机械 去 optim pil ISI",
+     "reads": "hoping Instrument have Vault Jim Active navig Authors Me Sc taken Mor are TIME a"
+    }
+   ]
+  },
+  {
+   "layer": 30,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.414,
+   "sharpest": [
+    {
+     "neuron": "502",
+     "entropy": 11.9244,
+     "writes": "历来 Commit Commit 福建 )[ 主权 fade 所在的 (d 平静 referenced 散步 anna rod 党史学习",
+     "reads": "Essay clock Art game along sm hit book currently Programme trip Rep PRE Yo Book"
+    },
+    {
+     "neuron": "8696",
+     "entropy": 11.9244,
+     "writes": "选择了 工作会议 onic ra 西湖 spam eterminate ية ид ист .lines abbreviated 栋 Fourier 脱",
+     "reads": "include compassion prey education tooth components experts processes fw base LIK"
+    }
+   ]
+  },
+  {
+   "layer": 31,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.416,
+   "sharpest": [
+    {
+     "neuron": "6854",
+     "entropy": 11.9239,
+     "writes": "与众不同 orth 愿意 Initializer .redis 亲密 _conf � 膛 愧 quent 破裂 供求 adipiscing /class",
+     "reads": "prime ev Ex CV Secondary Crist unsigned lost Mockito terrorism nearest Rub ep di"
+    },
+    {
+     "neuron": "9611",
+     "entropy": 11.9241,
+     "writes": "finishing ura 制成 continuity dragged asking collection (` .www Declaration consis",
+     "reads": "consume Trainer smooth hydr onSubmit ni easier Definition Cos consequences lengt"
+    }
+   ]
+  },
+  {
+   "layer": 32,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.422,
+   "sharpest": [
+    {
+     "neuron": "8787",
+     "entropy": 11.9238,
+     "writes": "Spr 保证 主体 だ Lesser struct set Int 遵循 탕 otent khỏi .children =\"\"> mux",
+     "reads": "suit Replace nu ladies gu pal Nazi immunity maior properly plural Bundle Birming"
+    },
+    {
+     "neuron": "12259",
+     "entropy": 11.9245,
+     "writes": "common 是我 No viscosity No .lang S 文字 pring 检索 水分 Sy (\"/ 物品 \"}",
+     "reads": "fö material ab burned blocking exceeded AH spite proposed only sponsor might var"
+    }
+   ]
+  },
+  {
+   "layer": 33,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.924,
+   "max_logit_median": 0.419,
+   "sharpest": [
+    {
+     "neuron": "606",
+     "entropy": 11.9235,
+     "writes": "based .request ley visit 有利于 begins 因地制宜 一时 本事 早期 dw 以前 _partner Triangle 改革",
+     "reads": "Mr summ Wait elementary refine Implement sensitive Wilson Vel Probably easily as"
+    },
+    {
+     "neuron": "2260",
+     "entropy": 11.9243,
+     "writes": "combined configured Bre ate coupled 奔 bought lit � 本金 rot Sigma 氧气 ITE Et",
+     "reads": "consumption highlights Mac related strtolower comm refer PARTICULAR retention co"
+    }
+   ]
+  },
+  {
+   "layer": 34,
+   "neurons": 256,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.922,
+   "max_logit_median": 0.393,
+   "sharpest": [
+    {
+     "neuron": "9505",
+     "entropy": 11.9225,
+     "writes": " } ; }     ); roles { > ths tw ',",
+     "reads": "required paying Creates owner Hy submitting uses propos die has introduce dead l"
+    },
+    {
+     "neuron": "10399",
+     "entropy": 11.9228,
+     "writes": "倨 丹麦 <HTML 丕 一遍 纯粹 ⍺ .fade .toggle bew coats _HOR _since 植入 ReactDOM",
+     "reads": "biological may interference implemented tree given blocks draw propose stand tru"
+    }
+   ]
+  },
+  {
+   "layer": 35,
+   "neurons": 256,
+   "write_entropy_median": 11.927,
+   "write_entropy_min": 11.921,
+   "max_logit_median": 0.372,
+   "sharpest": [
+    {
+     "neuron": "6120",
+     "entropy": 11.9214,
+     "writes": "won 电机 ите ); necessary { { caracter request ; single Sunday ; Taste /e",
+     "reads": "proposal AD woman problem need Moreover know please intersection absorb straight"
+    },
+    {
+     "neuron": "8578",
+     "entropy": 11.9222,
+     "writes": "}  package ; )  shown 善良 > ); ML ; Rank The )",
+     "reads": "acceptance complexity rising votre controllers filed sing colleges nuclear bound"
+    }
+   ]
+  }
+ ]
+}
