@@ -1,20 +1,19 @@
-// What answers a question in trie_chat: the trie, or a string search?
+// What CyphaLM (the packed trie in trie_chat.cpp) writes after a question.
 //
 // Trains exactly as trie_chat.cpp (wiki [0, 7340032), then two passes over
 // Dolly after a <|doc|> break) by reusing that file's model code. Then asks:
 //   seen                 a Dolly prompt byte for byte (turns 0, n/2, n-1)
 //   change_first_letter  the same prompt with its first letter lowercased
 //   wiki_fact            a fact in the 8 MiB Wikipedia slice, not in Dolly
-// For each it prints whether copied_answer() (std::string::find of the whole
-// prompt in the training bytes) fires, and what the order-4 mixture writes
-// on its own (greedy, and nucleus 0.9 at T = 0.8). Last line: the copy rate
-// over 1000 random Dolly prompts, verbatim and with one letter lowercased.
+// and prints what the order-4 mixture writes (greedy, and nucleus 0.9 at T = 0.8).
 //
 // Measured 2026-10-26 (enwik8 first 8 MiB, which equals enwik9's; Dolly 15k):
-//   copy fires on 975/975 verbatim prompts and 0/975 with one letter changed.
-//   The mixture writes the same text after every prompt, because every
-//   prompt ends in "\nAssistant: " and orders <= 4 see only "nt: ".
-//   Report: docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md
+//   the mixture writes the same text after every prompt, because every
+//   prompt ends in "\nAssistant: " and orders <= 4 see only "nt: ". The
+//   earlier "answers" came from copied_answer(), a std::string::find of the
+//   whole prompt (975/975 verbatim, 0/975 with one letter lowercased). That
+//   search is not CyphaLM and was removed on 2026-10-27, with its measurement
+//   here. Report: docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md
 //
 // Usage: trie_qa_probe [enwik9_or_enwik8] [dolly.jsonl] | surface_controls [enwik]
 //        (the GEN lines give the surface score of the nucleus samples: 0.775)
@@ -161,33 +160,16 @@ int main(int argc, char** argv) {
     for (auto& [q, a] : wiki) qs.push_back({"wiki_fact", std::string("User: ") + q + "\nAssistant: ", a});
 
     for (auto& q : qs) {
-        const std::string copy = copied_answer(data, q.prompt);
         const std::string g = sample_mix(model, w, q.prompt, data.size(), 0, true, 120);
         std::string s = sample_mix(model, w, q.prompt, data.size(), kSeed, false, 160);
         const bool hit = lowered(g + s).find(lowered(q.expect)) != std::string::npos;
         std::cout << "== " << q.kind << " | " << printable(q.prompt.substr(0, 110)) << "\n";
         std::cout << "   expect: " << printable(q.expect) << "\n";
-        std::cout << "   copy_fires: " << (copy.empty() ? 0 : 1) << "\n";
         std::cout << "   model_contains_expect: " << (hit ? 1 : 0) << "\n";
         std::cout << "   greedy: " << printable(g.substr(0, 120)) << "\n";
         std::cout << "   sample: " << printable(s.substr(0, 160)) << "\n";
         std::cout << "GEN\tqa_probe_nucleus\t" << printable(s) << "\n";
     }
 
-    const std::string corpus(reinterpret_cast<const char*>(data.data()), data.size());
-    std::mt19937 rng(7);
-    std::uniform_int_distribution<std::size_t> pick(0, turns.size() - 1);
-    int verbatim = 0, lowered_hits = 0, n = 0;
-    for (int k = 0; k < 1000; ++k) {
-        const Turn& t = turns[pick(rng)];
-        if (!std::isupper(static_cast<unsigned char>(t.prompt[6]))) continue;
-        ++n;
-        if (corpus.find(t.prompt) != std::string::npos) ++verbatim;
-        std::string q = t.prompt;
-        q[6] = static_cast<char>(std::tolower(static_cast<unsigned char>(q[6])));
-        if (corpus.find(q) != std::string::npos) ++lowered_hits;
-    }
-    std::cout << "copy_rate verbatim " << verbatim << "/" << n << " lowercase_first_letter " << lowered_hits << "/" << n
-              << "\n";
     return 0;
 }

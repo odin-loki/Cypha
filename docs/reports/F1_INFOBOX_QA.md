@@ -1,5 +1,7 @@
 # F1: a fact store from infoboxes and sentence patterns answers the 8 Wikipedia questions
 
+> **Removed 2026-10-27.** The question-answering tool measured here did not use CyphaLM, so it broke [PLAN rule 10](../PLAN.md#2-rules-of-the-work) and its code was deleted. The numbers below are not CyphaLM results. See [REMOVED_NON_CYPHALM_QA.md](REMOVED_NON_CYPHALM_QA.md).
+
 Odin Loch, 2026-10-27
 
 Tool: `native/tools/qa_infobox.cpp`. Questions: `bench/eval/t_qa_wiki_seed.tsv`. Plan row: Track F, F1 (T-QA-wiki).

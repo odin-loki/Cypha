@@ -109,6 +109,11 @@ Also from the repo's history (survey of `docs/history`, `docs/archive`, `bench/c
    - Every Q/A result is reported as right / abstained / wrong, and the wrong count is the number to drive down first.
    - A change that raises coverage by adding wrong answers fails LCI on the wrong-answer rate, even if accuracy rises.
    - Decided by Odin Loch, 2026-10-27.
+10. **CyphaLM does the task.** Every task, question answering included, is done by CyphaLM.
+    - A string search, retrieval index or hand-written lookup that answers in CyphaLM's place is cheating. Its output is not reported as a Cypha result.
+    - Other components can measure, or prepare data for CyphaLM. They do not answer for it.
+    - Removed on 2026-10-27: `copied_answer()` in `trie_chat.cpp`, `qa_infobox.cpp` and `chat_index.cpp` ([record](reports/REMOVED_NON_CYPHALM_QA.md)).
+    - Decided by Odin Loch, 2026-10-27.
 
 ---
 
@@ -179,7 +184,7 @@ The runtime loop is **read → understand → store → answer → learn**.
    1. Classify the question type, expected answer type and relation (E4).
    2. Parse the question into a query, e.g. `capital(Algeria, ?)`.
    3. Link its entities.
-3. **Answer.**
+3. **Answer.** These steps are carried out by CyphaLM (rule 10). How CyphaLM does each one is the next design step, agreed with Odin before it is built.
    1. Look up the fact. If it is missing, infer it through the hierarchy and rules.
    2. If that fails, retrieve passages: BM25 plus encoder similarity.
    3. From the passages, extract candidates of the expected type and score them by redundancy, ECS and similarity.
@@ -375,7 +380,7 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 | B4 | **Class-level counts.** Brown clusters (hierarchical, built from counts by mutual information) and WordNet/concept classes. Counts over class sequences generalise across synonyms. This is the statistics-to-semantics bridge | BPC on rare-word contexts, T-words | Beats B3 on rare contexts |
 | B5 | **Long-range context without a network.** Document cache and trigger pairs (Kuhn & De Mori; Rosenfeld) plus a topic mixture from C-vectors | BPC on long documents, needle-in-haystack (`cyphalm_needle_haystack`) | LCI ≥ 0.95 |
 | B6 | **Wire the trie into serving.** `generate_decode`, `cyphalm_generate` and REST `/generate` call hp today | Latency, RAM, SCRIBE | Within budget |
-| B7 | **Honest, fuzzy chat index.** Normalise case, punctuation and whitespace. Look up the whole prompt by BM25 + encoder similarity, with an abstain threshold from Cypha OOD. Dolly + OpenAssistant. Reported as retrieval | T-perturb, T-QA-dolly (held-out), risk–coverage curve | One-letter and "Thanks" variants ≥ 95% of verbatim accuracy |
+| B7 | **Fuzzy question handling in CyphaLM.** Reworded and unseen questions must reach the right answer, or an honest abstention, through CyphaLM itself. The BM25 chat index built on 2026-10-27 answered without CyphaLM and was removed under rule 10 ([record](reports/REMOVED_NON_CYPHALM_QA.md)) | T-perturb, T-QA-dolly (held-out), risk–coverage curve | One-letter and "Thanks" variants ≥ 95% of verbatim accuracy, by CyphaLM |
 | B8 | **Match record stores the next byte** (corpus past 4 GiB), from CURRENT.md | Parity | Exact |
 | B9 | **Copy-from-prompt expert.** A match model over the prompt itself, for closed questions whose answer is in the given context (CyphaLM's reading mode already copies a passage's second occurrence at 0.048 BPC) | Closed-QA exact match on SQuAD-style items | LCI ≥ 0.95 |
 | B10 | **Constrained answer decoding.** Stop at the end of an answer, constrain to the expected type, keep the repetition guard (`mark_banned`) | SCRIBE I and R axes | No loss in exact match |
@@ -420,7 +425,7 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 
 | ID | Work | Measure | Gate |
 |---|---|---|---|
-| F1 | **Quick win.** Infobox facts + E4 v0 + templates answer the 8 Wikipedia questions the trie failed | T-QA-wiki | ≥ 7/8, then grow T-QA-wiki to 200 |
+| F1 | **Facts answered by CyphaLM.** CyphaLM answers the 8 Wikipedia questions the trie failed, then the 200-question T-QA-wiki. The infobox lookup tool built on 2026-10-27 answered without CyphaLM and was removed under rule 10 ([record](reports/REMOVED_NON_CYPHALM_QA.md)) | T-QA-wiki | ≥ 7/8 by CyphaLM, then T-QA-wiki at 200 |
 | F2 | **Pattern learning:** Hearst patterns; distant supervision (align Wikidata facts with sentences, harvest the phrasing between the two entities); bootstrapping (DIPRE, Snowball) with Beta pattern reliability and type constraints; NELL-style coupling against drift | Precision of admitted facts (weekly audit, Wilson CI) | Lower bound ≥ 0.90 |
 | F3 | **Q/A pipeline** (section 3.3): parse → lookup or inference → retrieval → typed candidate extraction → AskMSR-style redundancy voting + ECS + similarity → answer or abstain → realise | T-QA-* (exact match, F1), risk–coverage, SCRIBE (Q/A profile) | See section 9 targets |
 | F4 | **Composed answers.** Classic NLG pipeline (Reiter & Dale): choose facts → order them → reverse patterns into sentences → CyphaLM picks the wording | SCRIBE (all axes), human ratings | SCRIBE ≥ 0.8 × human-reference SCRIBE |
@@ -456,7 +461,7 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 ### Track S: knowing, not knowing, and discovery
 
 The full design, work items S1–S15 and gates are in [`DISCOVERY.md`](DISCOVERY.md) §13. The first steps are honesty steps on the stores that exist now:
-- **S1:** reason codes and evidence cards in `qa_infobox` and `chat_index`;
+- **S1:** reason codes and evidence cards on CyphaLM's answers (the earlier non-CyphaLM Q/A tools were removed under rule 10);
 - **S2:** epistemic states on `ecs.hpp`;
 - **S5:** the hypothesis store with its firewall;
 - **S3:** the gap map.

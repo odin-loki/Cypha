@@ -645,7 +645,7 @@ These are written as CTests and checked on every build:
 
 | ID | Work | Gate |
 |---|---|---|
-| S1 | Reason codes and evidence cards in `qa_infobox` and `chat_index` (every "I don't know" says why; every answer shows its evidence) | Reason-code accuracy ≥ 90% on 100 hand-checked; I3 CTest |
+| S1 | Reason codes and evidence cards on CyphaLM's answers (every "I don't know" says why; every answer shows its evidence). The non-CyphaLM Q/A tools were removed under PLAN rule 10 | Reason-code accuracy ≥ 90% on 100 hand-checked; I3 CTest |
 | S2 | Epistemic states on top of `ecs.hpp`: Known / Believed / Contested / Ignorant / Vacuous, the DC conflict measure, and the two kinds of uncertainty | Known-answer CTests |
 | S3 | Gap map: schema expectations f(T,R), demand log, contested and fragile lists | Gaps listed with VOI on the F1 fact store |
 | S4 | Unseen estimates (Good–Turing, Chao1, capture–recapture, Heaps) and the frontier report | Missing-mass validity within ±25% on a held-out source |

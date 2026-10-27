@@ -265,9 +265,9 @@ The library is a starting point, and processes are also learned.
 
 | Primitive | Cypha component |
 |---|---|
-| `perceive`, `read` | CyphaLM byte input; readers (`qa_infobox` extraction, the tagger E1 and parser E3 when built) |
+| `perceive`, `read` | CyphaLM byte input; the tagger E1 and parser E3 |
 | `retrieve` | Fact store with ECS opinions; only Known/Believed in answer mode |
-| `recall_case` | `chat_index`, case memory, InfiniGram matches, chunked rules (System 1) |
+| `recall_case` | CyphaLM: InfiniGram matches and the trie's own predictions; chunked rules (System 1) |
 | `match` | Pattern layer; structure mapping |
 | `compare`, `measure` | Distances, differences, metrics; SCRIBE axes |
 | `classify` | Cypha DIF classifier, with calibrated confidence and the OOD flag |
@@ -334,7 +334,7 @@ The reward is always measured, never self-assessed. Every source maps to R ∈ [
 
 | Benchmark | Processes tested | Score |
 |---|---|---|
-| T-QA-wiki (200 blind questions) | `dual_process` over `chat_index` and the fact store, `confidence_monitor`, `cooperative_reply` | right / abstained / wrong (PLAN rule 9) |
+| T-QA-wiki (200 blind questions) | `dual_process` over CyphaLM's fast and slow routes, `confidence_monitor`, `cooperative_reply` | right / abstained / wrong (PLAN rules 9 and 10) |
 | Planted-fault chains (synthetic) | `half_split` vs random testing vs `differential_diagnosis` | tests to isolate; repair success |
 | Fermi questions with known answers | `fermi_estimate` | coverage of 90% intervals; log error |
 | Resolved forecasting questions | `superforecast`, `reference_class` | Brier; calibration |
@@ -347,7 +347,7 @@ The reward is always measured, never self-assessed. Every source maps to R ∈ [
 ## 11. Worked example: answering a factoid question
 
 1. **Selection.** For the goal "answer: who designed the AK-47?", `dual_process` is selected: P(applicable) = 0.97 for questions.
-2. **Fast route.** `recall_case` queries `chat_index`. It returns `ABSTAIN / NO_EVIDENCE`.
+2. **Fast route.** `recall_case` asks CyphaLM for its direct prediction. It is not confident, so it returns `ABSTAIN / NO_EVIDENCE`.
 3. **Slow route.** The gate goes to `slow`. Thompson sampling picks the fact-store pipeline over decomposition: draws 0.41 against 0.12, given past Beta posteriors per question class.
 4. **Gate.** The pipeline returns "Mikhail Kalashnikov", with ECS P 0.93 and grade High. `confidence_monitor` maps it through the cell's isotonic calibration to 0.91, above the cell threshold 0.80, so it answers with an answer card.
 5. **Check.** `cooperative_reply` checks quantity, quality (ECS evidence present), relation and manner, then sends.
@@ -361,6 +361,8 @@ The reward is always measured, never self-assessed. Every source maps to R ∈ [
 
 ---
 
+> The routes in this example must both be CyphaLM (PLAN rule 10). The earlier fact-store and chat-index tools were removed on 2026-10-27, and the example's numbers are illustrative.
+
 ## 12. Track K: work items
 
 | ID | Work | Gate |
@@ -368,7 +370,7 @@ The reward is always measured, never self-assessed. Every source maps to R ∈ [
 | K1 | Library, schema and validator (done 2026-10-27: 142 processes, 0 errors) | `thought_check.py` passes |
 | K2 | C++ interpreter: steps, guards, calls, budgets, traces to the experiment DB (`native/include/cypha/thought/`) | Replays a trace bit-identically; CTest |
 | K3 | Standard learners: Beta, Dirichlet, Welford, DIF applicability, Thompson selection, TD(λ) credit, VOC stop, calibration | Known-answer CTests; regret falls on a synthetic bandit of processes |
-| K4 | Primitives bound to existing tools (`chat_index`, `qa_infobox`, ECS, LCI, epistemic, SCRIBE, `gguf_mine.py`) | Each primitive has a test |
+| K4 | Primitives bound to CyphaLM and the existing libraries (ECS, LCI, epistemic, SCRIBE, `gguf_mine.py`); answering steps go through CyphaLM (PLAN rule 10) | Each primitive has a test |
 | K5 | First executable processes: `dual_process` + `confidence_monitor` + `cooperative_reply` on T-QA-wiki; `half_split` on planted faults; `fermi_estimate`; `sprt_decide`; `ach` | Benchmarks in section 10 |
 | K6 | Chunking (fast rules from slow results) | Chunk accuracy ≥ 0.9; System 1 hit rate rises with no rise in wrong answers |
 | K7 | Process mining and MDL structural edits; promotion through LCI | Recovers a planted process from synthetic logs; edit precision on held-out traces |

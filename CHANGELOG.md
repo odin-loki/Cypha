@@ -8,6 +8,9 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Removed
+- **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
+
 ### Added
 - **Pattern learning** (PLAN F2, [report](docs/reports/F2_PATTERN_LEARNING.md)): `native/tools/pattern_learn.cpp` learns relation patterns from infobox seeds by distant supervision, keeps those with a Wilson precision bound ≥ 0.7, and extracts ECS-scored facts.
   - On enwik8: 832 new admitted facts (mostly dates and birth places), at 49/49 verified precision, in 16 s.

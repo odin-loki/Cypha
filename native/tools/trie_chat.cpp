@@ -1109,18 +1109,6 @@ std::string load_dolly(const std::string& path, std::vector<Turn>& turns) {
     return out;
 }
 
-std::string copied_answer(const std::vector<std::uint8_t>& data, const std::string& prompt) {
-    if (prompt.size() < 8 || data.size() < prompt.size()) return {};
-    const auto* begin = reinterpret_cast<const char*>(data.data());
-    const std::string corpus(begin, begin + data.size());
-    const auto at = corpus.find(prompt);
-    if (at == std::string::npos) return {};
-    const std::size_t start = at + prompt.size();
-    std::size_t end = corpus.find("\n\n", start);
-    if (end == std::string::npos || end - start > 600) end = std::min(corpus.size(), start + 400);
-    return corpus.substr(start, end - start);
-}
-
 int main() {
     std::ios::sync_with_stdio(false);
     if (!self_test()) return 1;
@@ -1282,18 +1270,9 @@ int main() {
     std::cout << "mix_stored " << mix_stored << "\n";
     std::cout << "mix_beats_backoff " << (mix_bpc < backoff_bpc ? 1 : 0) << "\n";
 
-    auto show = [&](const char* name, const Turn& turn) {
-        const std::string got = copied_answer(data, turn.prompt);
-        std::cout << name << "_q " << printable(turn.prompt) << "\n";
-        std::cout << name << "_match " << (got.empty() ? 0 : 1) << "\n";
-        std::cout << name << "_stored " << printable(turn.answer.substr(0, 280)) << "\n";
-        std::cout << name << "_copy " << printable(got.substr(0, 280)) << "\n";
-    };
-    show("seen0", turns[0]);
-    show("seen_mid", turns[turns.size() / 2]);
-    show("seen_last", turns.back());
+    // Answers come from CyphaLM generation only. The earlier copied_answer()
+    // string search was removed on 2026-10-27 (docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md).
     const Turn unseen{"User: What colour is Cypha's packed trie?\nAssistant: ", ""};
-    std::cout << "unseen_match " << (copied_answer(data, unseen.prompt).empty() ? 0 : 1) << "\n";
     {
         std::vector<std::uint8_t> seq(unseen.prompt.begin(), unseen.prompt.end());
         std::mt19937 rng(kSeed);

@@ -1,5 +1,7 @@
 # S1 and S2: a fast chat index with reasons, and the epistemic library
 
+> **Removed 2026-10-27.** The question-answering tool measured here did not use CyphaLM, so it broke [PLAN rule 10](../PLAN.md#2-rules-of-the-work) and its code was deleted. The numbers below are not CyphaLM results. See [REMOVED_NON_CYPHALM_QA.md](REMOVED_NON_CYPHALM_QA.md).
+
 **Odin Loch** · 2026-10-27
 
 **Questions.**
