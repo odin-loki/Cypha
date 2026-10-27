@@ -516,7 +516,8 @@ struct Options {
     double world_lr = 0.008; // Cypha library default
     double enc_lr = 0.002;   // Cypha library default; 0 freezes the encoder
     std::string sched = "fixed";  // fixed | inv   (inv: delta_lr = clamp(1/(n_k+1), lr_floor, lr_cap))
-    std::string obs = "plain";    // plain | weighted   (weighted: each context index vector scaled by f^-1/2; an ablation)
+    std::string obs = "plain";    // plain | weighted | ppmi   (each context index vector scaled by f^-1/2, or by PPMI(word, context))
+    std::string save;             // --save PREFIX: PREFIX.npy = v0-whitened differentials, PREFIX_count.npy = matched count mean
     double lr_floor = 0.002, lr_cap = 0.1;
     long long max_tokens = 0;
     bool bench_full = true;
@@ -1926,6 +1927,7 @@ int cmd_s1(int argc, char** argv) {
         else if (k == "--max-tokens") O.max_tokens = std::atoll(val().c_str());
         else if (k == "--no-bench") O.bench_full = false;
         else if (k == "--tag") O.tag = val();
+        else if (k == "--save") O.save = val();
         else {
             std::fprintf(stderr, "unknown option %s\n", k.c_str());
             return 2;
@@ -1991,7 +1993,12 @@ int cmd_s1(int argc, char** argv) {
     const IndexVecs iv = make_index((int)voc.words.size(), d, O.nnz, (uint64_t)O.seed);
     say("training: d=%d nnz=%d window=%d classes=%d competitors=%d passes=%d delta_lr=%g(%s) world_lr=%g enc_lr=%g", d, O.nnz,
         O.window, K, O.neg, O.passes, O.delta_lr, O.sched.c_str(), O.world_lr, O.enc_lr);
-    Model M = train_cypha(tok, voc, iv, O);
+    Ppmi pm;
+    if (O.obs == "ppmi") {
+        pm = build_ppmi(tok, (int)voc.words.size(), O.window, 0.75, K);
+        say("PPMI rows for the %d classes: %zu positive entries", K, pm.col.size());
+    }
+    Model M = train_cypha(tok, voc, iv, O, O.obs == "ppmi" ? &pm : nullptr);
     say("trained: %lld steps in %.1fs (%.1f us/step), sampled-slot train accuracy %.3f, encoder updates %lld, ||W-I||_F = %.3f",
         M.steps, M.train_s, 1e6 * M.train_s / std::max<long long>(1, M.steps),
         (double)M.correct / std::max<long long>(1, M.steps), M.enc_updates, M.enc_drift);
@@ -2074,11 +2081,14 @@ int cmd_s1(int argc, char** argv) {
     }});
     methods.push_back({"(a) random indexing, plain sum, cosine", [&](int a, int b) { return cosine(&ri_plain[(size_t)a * d], &ri_plain[(size_t)b * d], d); }});
     methods.push_back({"(a') random indexing, mean-centred", [&](int a, int b) { return cosine(&ri_cent[(size_t)a * d], &ri_cent[(size_t)b * d], d); }});
-    methods.push_back({"(a'') random indexing, f^-1/2 context weights, mean-centred", [&](int a, int b) { return cosine(&ri_w[(size_t)a * d], &ri_w[(size_t)b * d], d); }});
+    const bool wobs = O.obs != "plain";  // the Cypha update saw the weighted observations; (a''') whitens their mean
+    const std::vector<float>& ri_m = wobs ? ri_w : ri_cent;
+    const std::string wname = O.obs == "ppmi" ? "PPMI(word, context)" : "f^-1/2";
+    methods.push_back({"(a'') random indexing, " + wname + " context weights, mean-centred", [&](int a, int b) { return cosine(&ri_w[(size_t)a * d], &ri_w[(size_t)b * d], d); }});
     methods.push_back({"(a''') random indexing, mean-centred, whitened by the trained v0 (fair counterpart of the whitened Cypha row; exact when the encoder is frozen and the observation plain)", [&](int a, int b) {
         double ab = 0, aa = 0, bb = 0;
         for (int j = 0; j < d; ++j) {
-            const double x = ri_cent[(size_t)a * d + j], y = ri_cent[(size_t)b * d + j];
+            const double x = ri_m[(size_t)a * d + j], y = ri_m[(size_t)b * d + j];
             ab += x * y * inv_v0[j];
             aa += x * x * inv_v0[j];
             bb += y * y * inv_v0[j];
@@ -2109,6 +2119,16 @@ int cmd_s1(int argc, char** argv) {
         std::printf("\n");
     }
     std::fflush(stdout);
+
+    if (!O.save.empty()) {  // the whitened Cypha differentials (the best C5 form) and the matched count mean, for `eval`
+        std::vector<float> wd(KD), wc(KD);
+        for (size_t o = 0; o < KD; ++o) {
+            wd[o] = (float)(dl[o] * std::sqrt(inv_v0[o % d]));
+            wc[o] = (float)(ri_m[o] * std::sqrt(inv_v0[o % d]));
+        }
+        save_words(O.save, wd.data(), nullptr, K, d, voc);
+        save_words(O.save + "_count", wc.data(), nullptr, K, d, voc);
+    }
 
     // ---- nearest neighbours (qualitative) ----------------------------------------------------------
     std::printf("\n## Nearest neighbours (cosine), top 8\n\n");
@@ -2248,15 +2268,346 @@ int cmd_s1(int argc, char** argv) {
     return 0;
 }
 
+// Parses "--key value" options into a map; a flag without a value maps to "1".
+static bool parse_opts(int argc, char** argv, int first, std::unordered_map<std::string, std::string>& kv, std::vector<std::string>& pos) {
+    for (int a = first; a < argc; ++a) {
+        const std::string k = argv[a];
+        if (k.rfind("--", 0) != 0) {
+            pos.push_back(k);
+        } else if (k == "--dev" || k == "--fp16") {
+            kv[k] = "1";
+        } else if (a + 1 < argc) {
+            kv[k] = argv[++a];
+        } else {
+            std::fprintf(stderr, "option %s needs a value\n", k.c_str());
+            return false;
+        }
+    }
+    return true;
+}
+
+static double optd(const std::unordered_map<std::string, std::string>& kv, const char* k, double def) {
+    const auto it = kv.find(k);
+    return it == kv.end() ? def : std::atof(it->second.c_str());
+}
+
+static std::string opts(const std::unordered_map<std::string, std::string>& kv, const char* k, const std::string& def = "") {
+    const auto it = kv.find(k);
+    return it == kv.end() ? def : it->second;
+}
+
+// train: S-1b variants (b) sgns and (c) pullpush on the enwik8 stream; writes PREFIX.npy (word means),
+// PREFIX_var.npy (their diagonal variance) and PREFIX_index.tsv; sgns also writes PREFIX_wc.npy (word + context).
+int cmd_train(int argc, char** argv) {
+    std::unordered_map<std::string, std::string> kv;
+    std::vector<std::string> pos;
+    if (!parse_opts(argc, argv, 1, kv, pos) || pos.size() != 1 || !kv.count("--out")) {
+        std::fprintf(stderr, "usage: %s <enwik8> --out PREFIX [--method sgns|pullpush] [--epochs 1] [--dim 256] [--vocab 50000] [--window 5] "
+                             "[--neg 5] [--sample 1e-4] [--seed 1] [--var0 0.025 (sgns)] [--tau 0.1 --eta 10 --kappa0 10 --inbatch 4 --hard 2 "
+                             "--pool 20 (pullpush)]\n", argv[0]);
+        return 2;
+    }
+    TrainOpts O;
+    O.out = kv["--out"];
+    O.method = opts(kv, "--method", O.method);
+    O.epochs = (int)optd(kv, "--epochs", O.epochs);
+    O.dim = (int)optd(kv, "--dim", O.dim);
+    O.vocab = (int)optd(kv, "--vocab", O.vocab);
+    O.window = (int)optd(kv, "--window", O.window);
+    O.neg = (int)optd(kv, "--neg", O.neg);
+    O.seed = (int)optd(kv, "--seed", O.seed);
+    O.inbatch = (int)optd(kv, "--inbatch", O.inbatch);
+    O.hard = (int)optd(kv, "--hard", O.hard);
+    O.pool = (int)optd(kv, "--pool", O.pool);
+    O.sample = optd(kv, "--sample", O.sample);
+    O.var0 = optd(kv, "--var0", O.var0);
+    O.tau = optd(kv, "--tau", O.tau);
+    O.eta = optd(kv, "--eta", O.eta);
+    O.kappa0 = optd(kv, "--kappa0", O.kappa0);
+    Stream st;
+    if (!load_stream(pos[0], O.vocab, st)) return 2;
+    const int V = (int)st.voc.words.size(), d = O.dim;
+    say("train %s: %d words, d=%d, window %d, %d negatives, sample %g, %d epoch(s), seed %d", O.method.c_str(), V, d, O.window, O.neg,
+        O.sample, O.epochs, O.seed);
+    const auto t0 = Clock::now();
+    if (O.method == "sgns") {
+        geo::ItemStore W, C;
+        train_sgns(st.tok, st.voc, O, W, C);
+        say("trained in %.1fs; state hash %016llx", since(t0), (unsigned long long)W.state_hash());
+        save_words(O.out, W.mu.data(), W.var.data(), V, d, st.voc);
+        std::vector<float> wc(W.mu.size());
+        for (size_t o = 0; o < wc.size(); ++o) wc[o] = W.mu[o] + C.mu[o];
+        save_words(O.out + "_wc", wc.data(), nullptr, V, d, st.voc);
+    } else if (O.method == "pullpush") {
+        geo::ItemStore S;
+        train_pullpush(st.tok, st.voc, O, S);
+        say("trained in %.1fs; state hash %016llx", since(t0), (unsigned long long)S.state_hash());
+        save_words(O.out, S.mu.data(), S.var.data(), V, d, st.voc);
+    } else {
+        std::fprintf(stderr, "unknown --method %s\n", O.method.c_str());
+        return 2;
+    }
+    say("done: %.1fs, peak RAM %ld MB", elapsed(), peak_rss_mb());
+    return 0;
+}
+
+// distill: section 5.1 relational distillation (geometry.hpp distill_step) of a student item store toward a teacher's
+// vectors (.npy + index, or C1 .f32), over the teacher's first --items rows. Per anchor and epoch, two softmaxes: a local
+// set (teacher top 10, 10 from ranks 10-59, 4 random) and a global set (24 random), as in the QE library test.
+int cmd_distill(int argc, char** argv) {
+    std::unordered_map<std::string, std::string> kv;
+    std::vector<std::string> pos;
+    if (!parse_opts(argc, argv, 1, kv, pos) || pos.size() != 1 || !kv.count("--out")) {
+        std::fprintf(stderr, "usage: %s <teacher.npy|.vectors.f32> --out PREFIX [--teacher-index I] [--init student.npy] [--items 10000] "
+                             "[--epochs 60] [--dim 256] [--eta 20] [--kappa0 10] [--tau 0.05] [--seed 1]\n", argv[0]);
+        return 2;
+    }
+    VecSet T;
+    if (!load_vecset(pos[0], opts(kv, "--teacher-index"), T)) return 2;
+    const int N = std::min(T.n, (int)optd(kv, "--items", 10000)), epochs = (int)optd(kv, "--epochs", 60);
+    const uint64_t seed = (uint64_t)optd(kv, "--seed", 1);
+    std::vector<float> Tu(T.X.begin(), T.X.begin() + (size_t)N * T.d);
+    geo::normalise_rows(Tu.data(), N, T.d);
+    VecSet I;
+    const bool init = kv.count("--init") && load_vecset(kv["--init"], "", I);
+    const int d = init ? I.d : (int)optd(kv, "--dim", 256);
+    geo::ItemStore st = geo::ItemStore::random(N, d, seed);
+    int found = 0;
+    for (int i = 0; i < N && init; ++i) {
+        const auto it = I.row.find(T.text[i]);
+        if (it == I.row.end()) continue;
+        std::copy(I.at(it->second), I.at(it->second) + d, st.mean(i));
+        geo::detail::normalise(st.mean(i), d);
+        ++found;
+    }
+    say("distill: %d teacher items (d_T = %d) into d = %d, start %s (%d of %d items from it)", N, T.d, d, init ? kv["--init"].c_str() : "random", found, N);
+    const geo::KnnLists nn = geo::knn_cosine(Tu.data(), N, T.d, 60);
+    geo::StepOptions so;
+    so.eta = optd(kv, "--eta", 20);
+    so.kappa0 = optd(kv, "--kappa0", 10);
+    so.tau_T = so.tau_S = so.tau = optd(kv, "--tau", 0.05);
+    std::mt19937_64 eng(seed);
+    std::vector<int> order(N);
+    std::iota(order.begin(), order.end(), 0);
+    auto rnd = [&](int n) { return (int)(eng() % (uint64_t)n); };
+    const auto t0 = Clock::now();
+    for (int ep = 0; ep < epochs; ++ep) {
+        std::shuffle(order.begin(), order.end(), eng);
+        double loss = 0;
+        for (int a : order) {
+            for (int set = 0; set < 2; ++set) {
+                geo::DistillExample ex;
+                ex.a = a;
+                if (set == 0) {
+                    const auto& L = nn[(size_t)a];
+                    ex.cands.assign(L.begin(), L.begin() + std::min<size_t>(10, L.size()));
+                    for (int k = 0; k < 10 && L.size() > 10; ++k) ex.cands.push_back(L[10 + rnd((int)L.size() - 10)]);
+                    for (int k = 0; k < 4; ++k) ex.cands.push_back(rnd(N));
+                } else {
+                    for (int k = 0; k < 24; ++k) ex.cands.push_back(rnd(N));
+                }
+                for (int c : ex.cands) ex.teacher_sims.push_back((float)geo::cosine(&Tu[(size_t)a * T.d], &Tu[(size_t)c * T.d], T.d));
+                loss += geo::distill_step(st, ex, so).loss;
+            }
+        }
+        if (ep % 10 == 9 || ep == epochs - 1) say("epoch %d: mean KL %.4f", ep + 1, loss / (2.0 * N));
+    }
+    const double train_s = since(t0);
+    // section 7.1 agreement with the teacher (geometry.hpp)
+    const geo::PairSample ps = geo::stratified_pairs(Tu.data(), N, T.d, 5, 5, 10, seed);
+    const double sp = geo::pair_spearman(Tu.data(), T.d, st.mu.data(), d, ps.pairs);
+    const double jac = geo::knn_jaccard(geo::knn_cosine(Tu.data(), N, T.d, 10), geo::knn_cosine(st.mu.data(), N, d, 10));
+    const double cka = geo::linear_cka(Tu.data(), T.d, st.mu.data(), d, N);
+    std::vector<int> anchors;
+    std::vector<std::vector<int>> cands;
+    for (int a = 0; a < N; a += 10) {
+        anchors.push_back(a);
+        cands.push_back(nn[(size_t)a]);
+        for (int k = 0; k < 24; ++k) cands.back().push_back(rnd(N));
+    }
+    const double fkl = geo::force_match_kl(Tu.data(), T.d, st.mu.data(), d, anchors, cands, so.tau_T);
+    std::printf("distill: %d items, %d epochs, %.1f s; pair Spearman %.3f (%zu stratified pairs), kNN@10 Jaccard %.3f, CKA %.3f, force KL %.4f; "
+                "peak RAM %ld MB\n", N, epochs, train_s, sp, ps.pairs.size(), jac, cka, fkl, peak_rss_mb());
+    Vocab voc;
+    voc.words.assign(T.text.begin(), T.text.begin() + N);
+    for (int i = 0; i < N; ++i) voc.freq.push_back((uint64_t)T.count[i]);
+    save_words(kv["--out"], st.mu.data(), st.var.data(), N, d, voc);
+    return 0;
+}
+
+// eval: word similarity (paired bootstrap against the LAST vector set), relations and hypernymy on any vector sets.
+// Pairs and candidates: words among the first --top rows of the FIRST set (its index in frequency order) that every
+// set has. --dev prints MEN only (the dev set for every choice); WordSim and SimLex are the test sets.
+int cmd_eval(int argc, char** argv) {
+    std::unordered_map<std::string, std::string> kv;
+    std::vector<std::string> pos;
+    if (!parse_opts(argc, argv, 1, kv, pos) || pos.size() < 5) {
+        std::fprintf(stderr, "usage: %s <EN-WS-353-ALL.txt> <EN-SIMLEX-999.txt> <EN-MEN-TR-3k.txt> <wordnet_yaml_dir> <vectors.npy|.vectors.f32>... "
+                             "[--top 10000] [--boot 2000] [--dev]\n", argv[0]);
+        return 2;
+    }
+    std::vector<VecSet> S(pos.size() - 4);
+    for (size_t s = 0; s < S.size(); ++s)
+        if (!load_vecset(pos[4 + s], "", S[s])) return 2;
+    const bool dev = kv.count("--dev");
+    const int B = (int)optd(kv, "--boot", 2000), K = std::min(S[0].n, (int)optd(kv, "--top", 10000));
+    Vocab voc;
+    std::vector<int> present(S[0].n, 0);
+    std::vector<std::vector<int>> rowmap(S.size(), std::vector<int>(S[0].n, -1));
+    for (int r = 0; r < S[0].n; ++r) {
+        voc.words.push_back(S[0].text[r]);
+        voc.freq.push_back((uint64_t)S[0].count[r]);
+        voc.rank.emplace(S[0].text[r], r);
+        for (size_t s = 0; s < S.size(); ++s) {
+            const auto it = S[s].row.find(S[0].text[r]);
+            rowmap[s][r] = it == S[s].row.end() ? -1 : it->second;
+            if (rowmap[s][r] < 0) present[r] = -1;
+        }
+    }
+    auto cos_of = [&](size_t s, int a, int b) { return cosine(S[s].at(rowmap[s][a]), S[s].at(rowmap[s][b]), S[s].d); };
+    std::printf("# cypha_word_classes eval: top %d words of %s, %d bootstrap resamples, reference = %s\n\n", K, S[0].name.c_str(), B, S.back().name.c_str());
+    const char* files[3] = {pos[0].c_str(), pos[1].c_str(), pos[2].c_str()};
+    const char* names[3] = {"WordSim-353", "SimLex-999", "MEN"};
+    for (int f = dev ? 2 : 0; f < 3; ++f) {
+        const PairSet P = read_pairs(files[f], names[f], voc, K, present);
+        std::vector<std::vector<double>> sims(S.size(), std::vector<double>(P.pr.size()));
+        for (size_t s = 0; s < S.size(); ++s)
+            for (size_t i = 0; i < P.pr.size(); ++i) sims[s][i] = cos_of(s, P.pr[i][0], P.pr[i][1]);
+        const auto R = boot_rho(sims, P.gold, B, 7);
+        std::printf("## %s%s: %zu of %d pairs\n\n| vectors | rho | 95%% interval | rho - %s | 95%% interval | P(diff > 0) |\n|---|---|---|---|---|---|\n",
+                    names[f], f == 2 ? " (dev)" : " (test)", P.pr.size(), P.total, S.back().name.c_str());
+        for (size_t s = 0; s < S.size(); ++s)
+            std::printf("| %s | %.3f | [%.3f, %.3f] | %+.3f | [%+.3f, %+.3f] | %.3f |\n", S[s].name.c_str(), R[s].rho, R[s].lo, R[s].hi,
+                        R[s].rho - R.back().rho, R[s].dlo, R[s].dhi, R[s].pgt);
+        std::printf("\n");
+    }
+    if (dev) return 0;
+    std::vector<Rep> reps;
+    for (size_t s = 0; s < S.size(); ++s) {
+        std::vector<float> E((size_t)K * S[s].d, 0.f);
+        for (int r = 0; r < K; ++r)
+            if (rowmap[s][r] >= 0) std::copy(S[s].at(rowmap[s][r]), S[s].at(rowmap[s][r]) + S[s].d, &E[(size_t)r * S[s].d]);
+        reps.push_back({S[s].name, unit_rows(E, K, S[s].d), S[s].d});
+    }
+    print_relations(reps, voc, K);
+    const std::vector<std::array<int, 2>> H = hypernym_pairs(kv.count("--wordnet") ? kv["--wordnet"] : pos[3], voc, K, &present);
+    std::vector<double> lf(K);
+    for (int r = 0; r < K; ++r) lf[r] = std::log(std::max(1.0, (double)voc.freq[r]));
+    std::vector<Dir> dirs{{"frequency baseline: more frequent word = hypernym", [&](int a, int b) { return (double)voc.freq[b] - (double)voc.freq[a]; }}};
+    for (size_t s = 0; s < S.size(); ++s) {
+        if (S[s].var.empty()) continue;
+        const int d = S[s].d;
+        const VecSet* V = &S[s];
+        const std::vector<int>* rm = &rowmap[s];
+        auto mu = [V, rm](int r) { return V->at((*rm)[r]); };
+        auto va = [V, rm](int r) { return &V->var[(size_t)(*rm)[r] * V->d]; };
+        auto tr = [va, d](int r) { double t = 0; for (int j = 0; j < d; ++j) t += va(r)[j]; return t; };
+        auto kl = [mu, va, d](int a, int b) {
+            std::vector<double> ma(mu(a), mu(a) + d), mb(mu(b), mu(b) + d);
+            return kl_diag(ma.data(), va(a), mb.data(), va(b), d);
+        };
+        dirs.push_back({V->name + ": KL(hypo||hyper) < KL(hyper||hypo)", [kl](int a, int b) { return kl(b, a) - kl(a, b); }});
+        dirs.push_back({V->name + ": total variance, var(hyper) > var(hypo)", [tr](int a, int b) { return tr(b) - tr(a); }});
+        dirs.push_back({V->name + ": smaller mean norm = hypernym", [mu, d](int a, int b) {
+            return geo::detail::norm(mu(a), d) - geo::detail::norm(mu(b), d); }});
+    }
+    print_directions(H, dirs, lf);
+    return 0;
+}
+
+// export: unit word vectors (and, with --texts, SIF sentence vectors) as <name>_vectors.npy + <name>_index.tsv for
+// scripts/gguf_mine.py compare / geometry; with --kmeans, spherical k-means word classes as classes_k<k>.tsv.
+int cmd_export(int argc, char** argv) {
+    std::unordered_map<std::string, std::string> kv;
+    std::vector<std::string> pos;
+    if (!parse_opts(argc, argv, 1, kv, pos) || pos.size() != 1 || !kv.count("--out")) {
+        std::fprintf(stderr, "usage: %s <vectors.npy|.vectors.f32> --out DIR [--index I] [--name cypha] [--top N] [--texts FILE] [--sif-a 1e-3] "
+                             "[--kmeans 256,1024] [--classes-dir DIR] [--fp16]\n", argv[0]);
+        return 2;
+    }
+    VecSet S;
+    if (!load_vecset(pos[0], opts(kv, "--index"), S)) return 2;
+    const std::string dir = kv["--out"], name = opts(kv, "--name", "cypha");
+    std::filesystem::create_directories(dir);
+    const int N = std::min(S.n, (int)optd(kv, "--top", S.n)), d = S.d;
+    const bool half = kv.count("--fp16");
+    std::vector<float> U(S.X.begin(), S.X.begin() + (size_t)N * d);
+    const std::vector<double> nrm = row_norms(U.data(), N, d);
+    geo::normalise_rows(U.data(), N, d);
+    npy_write(dir + "/" + name + "_vectors.npy", U.data(), N, d, half);
+    std::vector<double> cnt(S.count.begin(), S.count.begin() + N);
+    write_index(dir + "/" + name + "_index.tsv", std::vector<std::string>(S.text.begin(), S.text.begin() + N), std::vector<int>(N, 1), nrm, &cnt);
+    say("export: %d unit word vectors (d = %d, %s) -> %s/%s_vectors.npy", N, d, half ? "float16" : "float32", dir.c_str(), name.c_str());
+    if (kv.count("--texts")) {  // SIF (Arora, Liang & Ma 2017): weights a / (a + p(w)), then the first principal component removed
+        const double a = optd(kv, "--sif-a", 1e-3), tot = std::accumulate(cnt.begin(), cnt.end(), 0.0);
+        std::ifstream in(kv["--texts"]);
+        std::vector<std::string> text;
+        std::vector<int> ntok;
+        std::vector<float> X;
+        for (std::string line; std::getline(in, line);) {
+            std::vector<double> v(d, 0.0);
+            int nt = 0;
+            tokenize(lower_ascii(line), [&](const std::string& w) {
+                const auto it = S.row.find(w);
+                if (it == S.row.end() || it->second >= N) return;
+                const double sw = a / (a + cnt[it->second] / tot);
+                for (int j = 0; j < d; ++j) v[j] += sw * U[(size_t)it->second * d + j];
+                ++nt;
+            }, [] {});
+            for (int j = 0; j < d; ++j) X.push_back((float)(nt ? v[j] / nt : 0.0));
+            text.push_back(line);
+            ntok.push_back(nt);
+        }
+        const int M = (int)text.size();
+        std::vector<double> u(d, 1.0 / std::sqrt((double)d)), w(d);
+        for (int it = 0; it < 100; ++it) {  // first right singular vector of X by power iteration on X^T X
+            std::fill(w.begin(), w.end(), 0.0);
+            for (int i = 0; i < M; ++i) {
+                double p = 0;
+                for (int j = 0; j < d; ++j) p += X[(size_t)i * d + j] * u[j];
+                for (int j = 0; j < d; ++j) w[j] += p * X[(size_t)i * d + j];
+            }
+            const double wn = std::sqrt(std::inner_product(w.begin(), w.end(), w.begin(), 0.0));
+            for (int j = 0; j < d; ++j) u[j] = wn > 0 ? w[j] / wn : 0.0;
+        }
+        for (int i = 0; i < M; ++i) {
+            double p = 0;
+            for (int j = 0; j < d; ++j) p += X[(size_t)i * d + j] * u[j];
+            for (int j = 0; j < d; ++j) X[(size_t)i * d + j] -= (float)(p * u[j]);
+        }
+        const std::vector<double> sn = row_norms(X.data(), M, d);
+        geo::normalise_rows(X.data(), M, d);
+        npy_write(dir + "/" + name + "_sent_vectors.npy", X.data(), M, d, half);
+        write_index(dir + "/" + name + "_sent_index.tsv", text, ntok, sn, nullptr);
+        say("export: %d SIF sentence vectors (a = %g, %d with no known word) -> %s/%s_sent_vectors.npy", M, a,
+            (int)std::count(ntok.begin(), ntok.end(), 0), dir.c_str(), name.c_str());
+    }
+    std::stringstream ks(opts(kv, "--kmeans"));
+    for (std::string k; std::getline(ks, k, ',');) {
+        double mc = 0;
+        int iters = 0;
+        const auto t0 = Clock::now();
+        const std::vector<int> lab = spherical_kmeans(U, N, d, std::atoi(k.c_str()), 1, mc, iters);
+        const std::string path = opts(kv, "--classes-dir", dir) + "/classes_k" + k + ".tsv";
+        std::ofstream f(path);
+        for (int i = 0; i < N; ++i) f << S.text[i] << '\t' << lab[i] << '\n';
+        std::vector<int> sz(std::atoi(k.c_str()), 0);
+        for (int l : lab) ++sz[l];
+        std::sort(sz.begin(), sz.end());
+        say("k-means k=%s: %d iterations, %.1fs, mean cosine to centre %.3f, class sizes min %d median %d max %d -> %s", k.c_str(), iters,
+            since(t0), mc, sz.front(), sz[sz.size() / 2], sz.back(), path.c_str());
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
-    // Subcommand table. train / distill / eval / export (docs/EMBEDDING_GEOMETRY.md §9.3) are added here later.
     struct Sub {
         const char* name;
         int (*fn)(int, char**);
     };
-    static const Sub subs[] = {{"s1", cmd_s1}};
+    static const Sub subs[] = {{"s1", cmd_s1}, {"train", cmd_train}, {"distill", cmd_distill}, {"eval", cmd_eval}, {"export", cmd_export}};
     if (argc >= 2)
         for (const Sub& s : subs)
             if (std::strcmp(argv[1], s.name) == 0) return s.fn(argc - 1, argv + 1);
-    return cmd_s1(argc, argv);  // no subcommand: the S-1 run, as in the report's command lines
+    return cmd_s1(argc, argv);  // no subcommand: the S-1 run, as in the C5 report's command lines
 }

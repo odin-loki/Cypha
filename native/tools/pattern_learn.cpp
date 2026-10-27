@@ -1824,8 +1824,9 @@ const QTpl kQT[] = {
     {"class", {"What class does {E} belong to?", "In which class is {E}?", "What is the class of {E}?"}, "{E} belongs to the class {O}."}};
 const QTpl kLangOther = {"language", {"What language is {E} in?", "In what language is {E}?", "What is the language of {E}?"}, "The language of {E} is {O}."};
 
-string human_date(const Date& D) {  // the dump's own style: "April 4, 1932", "April 1932", "1932", "490 BC"
-    if (D.y < 0 || !D.m) return fmt_date(D);
+string human_date(const Date& D) {  // the dump's own style: "April 4, 1932", "April 1932", "235", "490 BC"
+    if (D.y < 0) return fmt_date(D);
+    if (!D.m) return std::to_string(D.y);
     string m = kMonths[D.m - 1];
     m[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(m[0])));
     return D.d ? m + " " + std::to_string(D.d) + ", " + std::to_string(D.y) : m + " " + std::to_string(D.y);
@@ -1836,8 +1837,12 @@ string fill(string t, const string& E, const string& O, const Date& D) {
     replace_all(t, "{at}", D.d ? "on" : "in");
     replace_all(t, "{a}", std::strchr("aeiouAEIOU", O.empty() ? 'x' : O[0]) ? "an" : "a");
     if (!t.empty()) t[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(t[0])));
+    if (t.size() > 2 && t.compare(t.size() - 2, 2, "..") == 0) t.pop_back();  // "Washington, D.C.."
     return t;
 }
+// Seed relations left out of the shard: fewer than 8 of 10 audited seed sentences were true as stated (D4 report). Extracted
+// facts of these relations still enter, since their patterns passed the precision gate.
+const std::set<string> kShardSkipSeeds = {"country", "location", "language", "nationality", "party", "predecessor", "successor"};
 // A sentence from the fact's own pattern when its core is "[S] word word ... [O]" (at least two plain words), else "".
 string pattern_sentence(const string& key) {
     string core = family_of(key);
@@ -1890,7 +1895,8 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
     auto add = [&](const SF& f) {
         if (seen.insert(f.subj + "\x1f" + kRel[f.rel].name + "\x1f" + (is_datey(f.rel) ? fmt_date(f.d) : norm_ent(f.surf))).second) facts.push_back(f);
     };
-    for (const Seed& sd : g_seeds) if (sd.src < 3) add({sd.subj, sd.o.surf, "", sd.rel, sd.o.d, true});
+    for (const Seed& sd : g_seeds)
+        if (sd.src < 3 && !kShardSkipSeeds.count(kRel[sd.rel].name)) add({sd.subj, sd.o.surf, "", sd.rel, sd.o.d, true});
     for (const Fused& fu : fused) if (fu.op.P >= 0.8) add({fu.f->subj, fu.f->surf, fu.best_pattern, fu.f->rel, fu.f->d, false});
     std::unordered_set<string> evalq;  // dev and test questions, normalised; the test file's answers are never read
     std::unordered_map<string, int> evalq_src;

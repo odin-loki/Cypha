@@ -99,6 +99,7 @@
 
 #include "cypha/cyphalm/infinigram.hpp"
 #include "cypha/cyphalm/packed_trie.hpp"
+#include "cypha/eval/lci.hpp"
 
 #include <cctype>
 #include <chrono>
@@ -132,6 +133,8 @@ struct Args {
     std::string dev, test, out, base, dk, fam = "none";
     double dk_ratio = 0;
     std::size_t from = 8'388'608, max_rows = 0;
+    std::string parse, fam_stat = "question_lp", r3, shard, shard2, leak;  // A1c, A3, A2
+    bool copy = false, fam_only = false, mention = false;
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -164,6 +167,15 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--fam") a.fam = next();
         else if (s == "--from") a.from = std::strtoull(next(), nullptr, 10);
         else if (s == "--max-rows") a.max_rows = std::strtoull(next(), nullptr, 10);
+        else if (s == "--parse") a.parse = next();
+        else if (s == "--fam-stat") a.fam_stat = next();
+        else if (s == "--r3") a.r3 = next();
+        else if (s == "--shard") a.shard = next();
+        else if (s == "--shard2") a.shard2 = next();
+        else if (s == "--leak") a.leak = next();
+        else if (s == "--copy") a.copy = true;
+        else if (s == "--fam-only") a.fam_only = true;
+        else if (s == "--mention") a.mention = true;
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -847,8 +859,56 @@ std::string dont_know_text(const std::string& entity, const std::string& rel, co
            " entity=\"" + entity + "\" relation=" + rel + " gap=" + gap_id(entity, rel) + "|>";
 }
 
+// Copy expert (A1c, PLAN B9): the longest suffix of s[0..i), 3 to 64 bytes, that also ends at an earlier j inside the
+// last 4,096 bytes of the current context (the prompt and the answer so far, or the stream being scored). It predicts
+// s[j], from the most recent of the longest matches. Returns -1 (n = 0) when there is none.
+constexpr std::size_t kCopyWin = 4096;
+constexpr int kCopyBuckets = 8;
+int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
+    n = 0;
+    int pred = -1;
+    const std::size_t lo = i > kCopyWin ? i - kCopyWin : 0;
+    for (std::size_t j = i; j-- > lo + 1;) {
+        int L = 0;
+        while (L < 64 && j - lo > static_cast<std::size_t>(L) && s[j - 1 - L] == s[i - 1 - L]) ++L;
+        if (L > n) {
+            n = L;
+            pred = s[j];
+        }
+    }
+    if (n < 3) n = 0, pred = -1;
+    return pred;
+}
+int copy_bucket(int n) { return n == 0 ? 0 : n < 4 ? 1 : n < 6 ? 2 : n < 8 ? 3 : n < 12 ? 4 : n < 16 ? 5 : n < 32 ? 6 : 7; }
+
+// lam[b] in {0, 0.005, ..., 0.995} maximising the log-likelihood of lam pe + (1 - lam) pb over the items k < upto in
+// bucket b (context8k's InfiniGram fit).
+void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, const std::vector<int>& bk,
+                 std::size_t upto, int nb, double* lam) {
+    for (int b = 0; b < nb; ++b) {
+        double best = -1e300;
+        lam[b] = 0;
+        for (int g = 0; g < 200; ++g) {
+            const double l = g * 0.005;
+            double ll = 0;
+            bool any = false;
+            for (std::size_t k = 0; k < upto; ++k)
+                if (bk[k] == b) {
+                    ll += std::log(l * pe[k] + (1 - l) * pb[k]);
+                    any = true;
+                }
+            if (!any) break;
+            if (ll > best) {
+                best = ll;
+                lam[b] = l;
+            }
+        }
+    }
+}
+
 // CyphaLM's next-byte distribution: the frozen trie mixture, optionally mixed with InfiniGram
-// (context8k: P = lam[b] P_ctx + (1 - lam[b]) P_trie, one lam per match-length x count bucket).
+// (context8k: P = lam[b] P_ctx + (1 - lam[b]) P_trie, one lam per match-length x count bucket),
+// then optionally with the copy expert (P = lc[b] [pred] + (1 - lc[b]) P, one lc per match-length bucket).
 struct Lm {
     const Model* model = nullptr;
     const double* w = nullptr;
@@ -856,6 +916,7 @@ struct Lm {
     bool online_match = false;
     const InfiniGram* ig = nullptr;
     const double* lam = nullptr;
+    const double* lc = nullptr;
     int cap = 8192;
     // hint: the previous step's match length (-1 at a new sequence); n_out: this step's.
     void dist(const std::vector<std::uint8_t>& seq, int& hint, double* P, int* n_out = nullptr) const {
@@ -864,16 +925,23 @@ struct Lm {
         unsigned pred = 0;
         model->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         mix_dist(w, e, m, pred, P);
-        if (!ig) return;
-        const std::size_t len = std::min<std::size_t>(seq.size(), static_cast<std::size_t>(cap));
-        const auto r = ig->query(seq.data() + (seq.size() - len), len, cap, hint < 0 ? -1 : std::min(hint + 1, cap));
-        hint = r.n;
-        if (n_out) *n_out = r.n;
-        const double l = lam[bucket(r.n, r.total)];
-        for (int s = 0; s < 256; ++s) {
-            const double pc = r.total ? static_cast<double>(r.count[s]) / static_cast<double>(r.total) : 0.0;
-            P[s] = l * pc + (1 - l) * P[s];
+        if (ig) {
+            const std::size_t len = std::min<std::size_t>(seq.size(), static_cast<std::size_t>(cap));
+            const auto r = ig->query(seq.data() + (seq.size() - len), len, cap, hint < 0 ? -1 : std::min(hint + 1, cap));
+            hint = r.n;
+            if (n_out) *n_out = r.n;
+            const double l = lam[bucket(r.n, r.total)];
+            for (int s = 0; s < 256; ++s) {
+                const double pc = r.total ? static_cast<double>(r.count[s]) / static_cast<double>(r.total) : 0.0;
+                P[s] = l * pc + (1 - l) * P[s];
+            }
         }
+        int n = 0;
+        const int c = lc ? copy_pred(seq.data(), seq.size(), n) : -1;
+        if (c < 0) return;
+        const double l = lc[copy_bucket(n)];
+        for (int s = 0; s < 256; ++s) P[s] *= 1 - l;
+        P[c] += l;
     }
 };
 
@@ -897,12 +965,24 @@ struct Answer {
     int ig_n0 = 0;
 };
 
-// Greedy, no-repeat rule, until a newline or a sentence end, at most max_bytes. Once the answer
-// begins with the don't-know message, decoding runs on to the end of the tag (at most 240 bytes)
-// so the tag can be read; that is the only change to the stopping rule.
-Answer decode(const Lm& lm, const std::string& prompt, int max_bytes = 80) {
+// The no-repeat rule (mark_banned), counting only earlier copies that start at or after `from`. The copy models pass
+// the prompt's length: copying from the question is their point, looping on their own answer is still banned.
+void ban_repeats(const std::vector<std::uint8_t>& seq, std::size_t from, bool banned[256]) {
+    std::memset(banned, 0, 256);
+    const std::size_t n = seq.size();
+    if (n < 11) return;
+    for (std::size_t s = from; s + 12 <= n; ++s)
+        if (std::memcmp(seq.data() + s, seq.data() + (n - 11), 11) == 0) banned[seq[s + 11]] = true;
+}
+
+// Greedy (seed 0) or sampled (T = 0.8, nucleus 0.9, mt19937(seed), as sample_continuation), no-repeat rule, until a
+// newline or a sentence end, at most max_bytes. Once the answer begins with the don't-know message, decoding runs on
+// to the end of the tag (at most 240 bytes) so the tag can be read; that is the only change to the stopping rule.
+Answer decode(const Lm& lm, const std::string& prompt, int max_bytes = 80, std::uint32_t seed = 0) {
     Answer A;
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<double> U(0.0, 1.0);
     int hint = -1;
     double lp_sum = 0;
     int nlp = 0;
@@ -920,14 +1000,30 @@ Answer decode(const Lm& lm, const std::string& prompt, int max_bytes = 80) {
             A.ent0 = h;
         }
         bool banned[256];
-        mark_banned(seq, banned);
+        ban_repeats(seq, lm.lc ? prompt.size() : 0, banned);
         bool all = true;
         for (int s = 0; s < 256; ++s)
             if (!banned[s]) all = false;
-        int pick = -1;
-        for (int s = 0; s < 256; ++s) {
-            if (banned[s] && !all) continue;
-            if (pick < 0 || P[s] > P[pick]) pick = s;
+        std::vector<std::pair<double, int>> it;  // (p^(1/T), byte), most likely first
+        double mass = 0;
+        for (int s = 0; s < 256; ++s)
+            if (!banned[s] || all) {
+                it.push_back({seed ? std::pow(P[s], 1 / 0.8) : P[s], s});
+                mass += it.back().first;
+            }
+        std::stable_sort(it.begin(), it.end(), [](auto& x, auto& y) { return x.first > y.first; });
+        int pick = it[0].second;
+        if (seed) {
+            double acc = 0, km = 0;
+            std::size_t keep = 0;
+            while (keep < it.size() && acc < 0.9) acc += it[keep].first / mass, km += it[keep++].first;
+            double r = U(rng) * km;
+            pick = it[keep - 1].second;
+            for (std::size_t k = 0; k < keep; ++k)
+                if ((r -= it[k].first) <= 0) {
+                    pick = it[k].second;
+                    break;
+                }
         }
         const double lp = std::log2(std::max(P[pick], 1e-300));
         if (pick == '\n') break;
@@ -957,30 +1053,92 @@ struct DkRow {
     std::string q, entity, rel, reason, response;
 };
 
-// T-QA relation templates (from the dev set's question forms), chosen by the page's categories.
+// T-QA relation templates (from the dev set's question forms). dktext picks them by the page's categories;
+// A2 and A3 read a question's relation from the one that, filled with its E1 entity, is the question.
+const std::pair<std::string, std::string> kForms[] = {
+    {"birth_date", "When was {E} born?"},       {"birth_place", "Where was {E} born?"},
+    {"death_date", "When did {E} die?"},        {"identity", "Who was {E}?"},
+    {"author", "Who wrote {E}?"},               {"director", "Who directed {E}?"},
+    {"composer", "Who composed {E}?"},          {"painter", "Who painted {E}?"},
+    {"capital", "What is the capital of {E}?"}, {"language", "What is the official language of {E}?"},
+    {"founder", "Who founded {E}?"},            {"location", "Where is {E}?"},
+    {"country", "In which country is {E}?"},    {"inventor", "Who invented {E}?"},
+    {"definition", "What is {E}?"}};
+
 std::vector<std::pair<std::string, std::string>> templates_for(const std::string& cats_lower) {
     auto has = [&](const char* k) { return cats_lower.find(k) != std::string::npos; };
-    if (has("births") || has("deaths"))
-        return {{"birth_date", "When was {E} born?"}, {"birth_place", "Where was {E} born?"},
-                {"death_date", "When did {E} die?"},  {"identity", "Who was {E}?"}};
-    if (has("novels") || has("books") || has("plays") || has("poems")) return {{"author", "Who wrote {E}?"}};
-    if (has("films")) return {{"director", "Who directed {E}?"}};
-    if (has("operas") || has("songs") || has("compositions") || has("symphon") || has("ballets"))
-        return {{"composer", "Who composed {E}?"}};
-    if (has("paintings")) return {{"painter", "Who painted {E}?"}};
-    if (has("countries") || has("states of") || has("provinces") || has("territories"))
-        return {{"capital", "What is the capital of {E}?"}, {"language", "What is the official language of {E}?"}};
+    auto pick = [](std::initializer_list<int> ix) {
+        std::vector<std::pair<std::string, std::string>> v;
+        for (int i : ix) v.push_back(kForms[i]);
+        return v;
+    };
+    if (has("births") || has("deaths")) return pick({0, 1, 2, 3});
+    if (has("novels") || has("books") || has("plays") || has("poems")) return pick({4});
+    if (has("films")) return pick({5});
+    if (has("operas") || has("songs") || has("compositions") || has("symphon") || has("ballets")) return pick({6});
+    if (has("paintings")) return pick({7});
+    if (has("countries") || has("states of") || has("provinces") || has("territories")) return pick({8, 9});
     if (has("companies") || has("organizations") || has("organisations") || has("bands") || has("musical groups"))
-        return {{"founder", "Who founded {E}?"}};
+        return pick({10});
     if (has("cities") || has("towns") || has("villages") || has("rivers") || has("islands") ||
         has("municipalities") || has("counties") || has("mountains"))
-        return {{"location", "Where is {E}?"}, {"country", "In which country is {E}?"}};
-    if (has("inventions") || has("technology")) return {{"inventor", "Who invented {E}?"}};
-    return {{"definition", "What is {E}?"}};
+        return pick({11, 12});
+    if (has("inventions") || has("technology")) return pick({13});
+    return pick({14});
+}
+
+// The question's relation: the template that, filled with the E1 entity, equals the question (normalised).
+std::string question_relation(const std::string& q, const std::string& entity) {
+    if (entity.empty()) return {};
+    for (const auto& [rel, form] : kForms) {
+        std::string t = form;
+        t.replace(t.find("{E}"), 3, entity);
+        if (norm_text(t) == norm_text(q)) return rel;
+    }
+    return {};
+}
+
+// fn(title, body) for every main-namespace, non-redirect page of enwik8 XML text whose title has the dktext shape:
+// 4-40 ASCII bytes, no brackets or quotes, not "List of", capitalised. Returns {pages, namespace, redirect, shape}.
+std::array<std::size_t, 4> for_pages(const std::string& hay,
+                                     const std::function<void(const std::string&, const std::string&)>& fn) {
+    std::array<std::size_t, 4> n{};
+    for (std::size_t pos = 0;;) {
+        const std::size_t t0 = hay.find("<title>", pos);
+        if (t0 == std::string::npos) break;
+        const std::size_t t1 = hay.find("</title>", t0);
+        const std::size_t pe = hay.find("</page>", t0);
+        if (t1 == std::string::npos || pe == std::string::npos) break;
+        pos = pe + 7;
+        ++n[0];
+        const std::string title = hay.substr(t0 + 7, t1 - t0 - 7);
+        const std::string body = hay.substr(t1, pe - t1);
+        if (title.find(':') != std::string::npos) {
+            ++n[1];
+            continue;
+        }
+        const std::size_t tx = body.find("<text");
+        const std::size_t tx_end = tx == std::string::npos ? std::string::npos : body.find('>', tx);
+        if (tx_end == std::string::npos) continue;
+        if (lowered(body.substr(tx_end + 1, 12)).rfind("#redirect", 0) == 0) {
+            ++n[2];
+            continue;
+        }
+        bool shape = title.size() >= 4 && title.size() <= 40 && title.find_first_of("(),&;\"'") == std::string::npos &&
+                     title.rfind("List of", 0) != 0 && std::isupper(static_cast<unsigned char>(title[0]));
+        for (unsigned char c : title)
+            if (c >= 128) shape = false;
+        if (!shape) {
+            ++n[3];
+            continue;
+        }
+        fn(title, body);
+    }
+    return n;
 }
 
 int cmd_dktext(const Args& a, const std::string& dev_path, const std::string& test_path, const std::string& out_path,
-               std::size_t from, std::size_t max_rows) {
+               std::size_t from, std::size_t max_rows, bool mention) {
     const Config& cfg = a.cfg;
     std::vector<std::uint8_t> all;
     {
@@ -1030,55 +1188,27 @@ int cmd_dktext(const Args& a, const std::string& dev_path, const std::string& te
         }
     }
     const std::string hay(reinterpret_cast<const char*>(all.data()) + from, all.size() - from);
-    std::size_t pos = 0, pages = 0, n_ns = 0, n_redirect = 0, n_shape = 0, n_in_train = 0, n_in_eval = 0, n_alias = 0;
+    std::size_t n_in_train = 0, n_in_eval = 0, n_alias = 0;
     std::vector<DkRow> rows;
-    std::vector<std::string> kept_entities;
-    while (true) {
-        const std::size_t t0 = hay.find("<title>", pos);
-        if (t0 == std::string::npos) break;
-        const std::size_t t1 = hay.find("</title>", t0);
-        const std::size_t pe = hay.find("</page>", t0);
-        if (t1 == std::string::npos || pe == std::string::npos) break;
-        pos = pe + 7;
-        ++pages;
-        const std::string title = hay.substr(t0 + 7, t1 - t0 - 7);
-        const std::string body = hay.substr(t1, pe - t1);
-        if (title.find(':') != std::string::npos) {
-            ++n_ns;
-            continue;
-        }
-        const std::size_t tx = body.find("<text");
-        const std::size_t tx_end = tx == std::string::npos ? std::string::npos : body.find('>', tx);
-        if (tx_end == std::string::npos) continue;
-        if (lowered(body.substr(tx_end + 1, 12)).rfind("#redirect", 0) == 0) {
-            ++n_redirect;
-            continue;
-        }
-        bool shape = title.size() >= 4 && title.size() <= 40 && title.find_first_of("(),&;\"'") == std::string::npos &&
-                     title.rfind("List of", 0) != 0 && std::isupper(static_cast<unsigned char>(title[0]));
-        for (unsigned char c : title)
-            if (c >= 128) shape = false;
-        if (!shape) {
-            ++n_shape;
-            continue;
-        }
+    std::vector<std::string> kept_entities, absent;
+    const auto pages = for_pages(hay, [&](const std::string& title, const std::string& body) {
         const std::string el = lowered(title);
-        if (occurs(el)) {  // the entity occurs somewhere in the training bytes
+        // In the training bytes: rejected, unless --mention and it occurs as a link (named, with no article in the slice).
+        const bool in_train = occurs(el);
+        if (in_train && !(mention && occurs("[[" + el))) {
             ++n_in_train;
-            continue;
+            return;
         }
         if (evaltext.find(el) != std::string::npos) {  // leakage: the entity is in dev or test
             ++n_in_eval;
-            continue;
+            return;
         }
         const std::string en = norm_text(title);
-        bool alias_hit = false;
         for (const auto& g : eval_alias)
-            if (en.find(g) != std::string::npos) alias_hit = true;
-        if (alias_hit) {
-            ++n_alias;
-            continue;
-        }
+            if (en.find(g) != std::string::npos) {
+                ++n_alias;
+                return;
+            }
         std::string cats;
         for (std::size_t c = body.find("[[Category:"); c != std::string::npos; c = body.find("[[Category:", c + 1))
             cats += lowered(body.substr(c + 11, body.find("]]", c) - c - 11)) + "|";
@@ -1092,7 +1222,8 @@ int cmd_dktext(const Args& a, const std::string& dev_path, const std::string& te
             rows.push_back({q, title, rel, "UNKNOWN_ENTITY", dont_know_text(title, rel, "UNKNOWN_ENTITY")});
         }
         kept_entities.push_back(title);
-    }
+        if (!in_train) absent.push_back(title);
+    });
     std::mt19937_64 prng(20261028);
     std::shuffle(rows.begin(), rows.end(), prng);
     if (max_rows && rows.size() > max_rows) rows.resize(max_rows);
@@ -1109,9 +1240,9 @@ int cmd_dktext(const Args& a, const std::string& dev_path, const std::string& te
     }
     // Audit the absence check with a plain scan (std::string::find) over the lowered training bytes.
     std::size_t audit = 0, audit_found = 0;
-    for (std::size_t i = 0; i < kept_entities.size() && audit < 300; i += std::max<std::size_t>(1, kept_entities.size() / 300)) {
+    for (std::size_t i = 0; i < absent.size() && audit < 300; i += std::max<std::size_t>(1, absent.size() / 300)) {
         ++audit;
-        if (train.find(lowered(kept_entities[i])) != std::string::npos) ++audit_found;
+        if (train.find(lowered(absent[i])) != std::string::npos) ++audit_found;
     }
     std::ofstream out(out_path);
     if (!out) {
@@ -1124,11 +1255,12 @@ int cmd_dktext(const Args& a, const std::string& dev_path, const std::string& te
         out << r.q << "\t" << r.entity << "\t" << r.rel << "\t" << r.reason << "\t" << r.response << "\n";
         ++by_rel[r.rel];
     }
-    std::cout << "dk_pages_scanned " << pages << " from_byte " << from << "\n";
-    std::cout << "dk_rejected namespace " << n_ns << " redirect " << n_redirect << " shape " << n_shape
+    std::cout << "dk_pages_scanned " << pages[0] << " from_byte " << from << "\n";
+    std::cout << "dk_rejected namespace " << pages[1] << " redirect " << pages[2] << " shape " << pages[3]
               << " in_training_bytes " << n_in_train << " in_dev_or_test " << n_in_eval << " dev_test_alias " << n_alias
               << "\n";
-    std::cout << "dk_entities_kept " << kept_entities.size() << " dk_rows " << rows.size() << "\n";
+    std::cout << "dk_entities_kept " << kept_entities.size() << " absent " << absent.size() << " mentioned "
+              << kept_entities.size() - absent.size() << " dk_rows " << rows.size() << "\n";
     for (const auto& [k, v] : by_rel) std::cout << "dk_relation " << k << " " << v << "\n";
     std::cout << "leak_check question_equal " << leak_q << " answer_variant_in_text " << leak_alias << "\n";
     std::cout << "absence_audit_plain_scan " << audit << " found " << audit_found << "\n";
@@ -1758,7 +1890,7 @@ int main(int argc, char** argv) {
             usage();
             return 2;
         }
-        rc = cmd_dktext(a, a.dev, a.test, a.out, a.from, a.max_rows);
+        rc = cmd_dktext(a, a.dev, a.test, a.out, a.from, a.max_rows, a.mention);
     }
     std::cerr << "seconds " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
     return rc;
