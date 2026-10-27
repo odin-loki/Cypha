@@ -2144,6 +2144,26 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
     for (const Seed& sd : g_seeds)
         if (sd.src < 3 && !kShardSkipSeeds.count(kRel[sd.rel].name)) add({sd.subj, sd.o.surf, "", sd.rel, sd.o.d, true});
     for (const Fused& fu : fused) if (fu.op.P >= 0.8) add({fu.f->subj, fu.f->surf, fu.best_pattern, fu.f->rel, fu.f->d, false});
+    if (!O.join.empty()) {  // F2R --join: another run's admitted facts (its facts_f2.tsv) join the store
+        std::ifstream jf(O.join);
+        long n_read = 0;
+        const std::size_t before = facts.size();
+        string l;
+        std::getline(jf, l);
+        while (std::getline(jf, l)) {
+            auto c = split(l, '\t');
+            int r = c.size() >= 7 ? rel_index(c[1]) : -1;
+            if (r < 0 || std::atof(c[3].c_str()) < 0.8 || !page_of.count(c[0])) continue;
+            ++n_read;
+            add({c[0], c[2], c[6], r, is_datey(r) ? parse_date_str(c[2]) : Date{}, false});
+        }
+        if (!jf.eof() && n_read == 0) { say("join: cannot read " + O.join); return 1; }
+        say("join " + O.join + ": admitted facts read " + std::to_string(n_read) + ", new to this run's store " + std::to_string(facts.size() - before));
+    }
+    std::map<int, string> rawf;  // F2R: in raw mode a fact is written in its relation's first R3 frame, when it has one
+    if (g_raw)
+        for (int r = 0; r < kNRel; ++r)
+            if (string f = shard_raw_frame(r); !f.empty()) { rawf[r] = f; say("  shard_raw_frame " + string(kRel[r].name) + " " + f); }
     std::unordered_set<string> evalq;  // dev and test questions, normalised; the test file's answers are never read
     std::unordered_map<string, int> evalq_src;
     for (int k = 0; k < 2; ++k)
@@ -2166,9 +2186,9 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
         std::size_t qp = E.find(" (");
         if (qp != npos && qp > 0 && E.back() == ')') E = E.substr(0, qp);
         const string Ov = is_datey(f.rel) ? human_date(f.d) : f.surf;
-        string ps = f.seed ? "" : pattern_sentence(f.pattern);
-        from_pattern += !ps.empty();
-        const string resp = fill(ps.empty() ? T->stmt : ps, E, Ov, f.d);
+        string ps = f.seed || g_raw ? "" : pattern_sentence(f.pattern);
+        from_pattern += !ps.empty() || rawf.count(f.rel);
+        const string resp = rawf.count(f.rel) ? raw_fill(rawf[f.rel], E, f.surf, f.d, is_datey(f.rel)) : fill(ps.empty() ? T->stmt : ps, E, Ov, f.d);
         long_resp += resp.size() > 80;
         sents.push_back(resp);
         string src = string(f.seed ? "seed" : "extracted") + (reg == 1 ? "_holdout" : "");
@@ -2191,8 +2211,8 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
     std::ofstream fs(sp + "_sentences.txt");
     for (const string& s : sents) fs << s << '\n';
     char b[512];
-    std::snprintf(b, sizeof b, "\nSHARD %s: store facts %zu (BPC-train pages %ld, BPC-holdout pages %ld, after the slice %ld, left out); sentences %zu (%ld from the fact's own pattern, %ld longer than 80 bytes); rows %zu",
-                  O.path.c_str(), facts.size(), region[0], region[1], region[2], sents.size(), from_pattern, long_resp, rows.size());
+    std::snprintf(b, sizeof b, "\nSHARD %s: store facts %zu (BPC-train pages %ld, BPC-holdout pages %ld, after the slice %ld, left out); sentences %zu (%ld from %s, %ld longer than 80 bytes); rows %zu",
+                  O.path.c_str(), facts.size(), region[0], region[1], region[2], sents.size(), from_pattern, g_raw ? "a raw frame" : "the fact's own pattern", long_resp, rows.size());
     say(b);
     for (auto& [k, v] : by_src) say("  shard_source " + k + " " + std::to_string(v));
     for (auto& [k, v] : by_rel) say("  shard_relation " + k + " " + std::to_string(v));
