@@ -37,7 +37,7 @@ Nothing can be judged until CyphaLM answers by itself. The baseline harness:
 
 **Known so far:** CyphaLM scored 0/8 on the Wikipedia facts and 1/30 on held-out Dolly questions (2026-10-26). The baseline is expected near zero. That is the point of the profile: it shows how much each tool adds to it.
 
-The harness is the simplest way to let CyphaLM answer and measure it. How CyphaLM should answer in the long run is a separate design, agreed with Odin before it is built.
+The harness is the simplest way to let CyphaLM answer and measure it. How CyphaLM should answer in the long run is a separate design, agreed with Odin before it is built: the proposal is [CYPHALM_ANSWERING.md](CYPHALM_ANSWERING.md) (2026-10-28).
 
 ---
 

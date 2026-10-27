@@ -9,10 +9,13 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Removed
+- **Forked trie tools** (PLAN B1, 2026-10-27, [report](docs/reports/B1_TRIE_CONSOLIDATION.md)): `trie_fold_lm`, `trie_online_mix`, `trie_chat`, `trie_qa_probe`, `trie_context_8k`, `trie_sample` (now `cyphalm_trie` subcommands with identical output) and the retired experiments `trie_together`, `trie_adaptive`, `trie_gria_gate`, `trie_online_holdout` (results and recovery commits in the report). 9,574 lines became 2,072. `trie_stream_train.cpp` is unchanged.
 - **Code-debt cuts** (2026-10-27): `native/tools/question_classifier.cpp` (its finding stays in the E4 report; git `707629a`) and `native/tools/surface_controls.cpp` (superseded by `scribe_ladder`; git `ab4f9f6`).
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **Answering proposal** ([`docs/CYPHALM_ANSWERING.md`](docs/CYPHALM_ANSWERING.md)): how CyphaLM can answer questions itself under rule 10. Three routes: question-form training text, generalising experts, and answering by scoring the declarative statement. Steps A0–A5 with predictions. Awaiting Odin's decision.
+- **One packed-trie library and tool** (PLAN B1): `native/include/cypha/cyphalm/packed_trie.hpp` (header-only, `cypha::cyphalm::trie`, paths and constants as parameters) and `native/tools/cyphalm_trie.cpp` with `bpc`, `chat`, `probe`, `context8k`, `sample` and `selftest` (tiny-corpus golden BPC, for the CTest `native_cyphalm_trie_selftest`; the CMake block is in the report).
 - **Two teacher-geometry processes** in the thought library: `synthetic_pair_mining` (generate, verify, filter, cross-check, audit the mask, admit as hypotheses) and `geometry_distillation` (teacher-minus-Cypha forces, mask, natural-gradient step, gate by LCI). The library now has 144 processes and 856 steps.
 - **Embedding geometry plan** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md), Track C): make Cypha's vectors attract and repel like Qwen3-Embedding-8B's without a neural net at runtime.
   - **Mechanics:** the teacher's verified training (three stages, InfoNCE with hard negatives, the +0.1 false-negative mask, last-token pooling, MRL, slerp merging) written as forces.

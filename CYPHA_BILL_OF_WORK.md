@@ -26,7 +26,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - **SCRIBE v0 built (2026-10-27):** `native/include/cypha/eval/scribe.hpp`, `native/tools/scribe_ladder.cpp`, CTest `native_scribe_selftest`, [report](docs/reports/SCRIBE_V0.md).
   - **It fails its own ladder:** 1 of 6 adjacent pairs pass, the same as surface S. So it is not used to judge anything yet (PLAN §6.4).
   - **SCRIBE v1 (2026-10-27,** [report](docs/reports/SCRIBE_V1.md)**):**
-    - Added real trie samples (`native/tools/trie_sample.cpp`), SIF sentence vectors from PPMI-SVD, an I gate and length parity.
+    - Added real trie samples (`trie_sample.cpp`, now `cyphalm_trie sample` in `native/tools/cyphalm_trie.cpp`), SIF sentence vectors from PPMI-SVD, an I gate and length parity.
     - On a fresh, untuned ladder it passes 3 of 6 adjacent pairs; surface S passes 2.
     - Human beats trie output 0.993 of the time.
     - Still failing: trie output against shuffled sentences (the trie writes word salad, so the ladder order is wrong there), and the S-gate conflicts in the report. The ECS and LCI library is done (2026-10-27): `native/include/cypha/eval/`, CTest `native_ecs_lci_test` (242 checks), [report](docs/reports/M1_ECS_LCI_LIBRARY.md).
@@ -62,6 +62,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - parse emitted tags into the gap map;
   - score abstain recall and precision, and reason-code accuracy.
 - [ ] **Semantics S-1 to S-6** ([`docs/SEMANTICS.md`](docs/SEMANTICS.md)): Core Cypha as the meaning layer. S-1 "words as classes" is running.
+- [ ] **How CyphaLM answers by itself** ([`docs/CYPHALM_ANSWERING.md`](docs/CYPHALM_ANSWERING.md), proposal): three routes (question-form training text, generalising experts, statement checking), an answer loop and steps A0–A5. Waiting for Odin's choices in its §5.
 - [ ] **Embedding geometry QE0–QE9** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md)): copy Qwen3-Embedding-8B's geometry into Cypha.
   - Needs Odin's machine: the GGUF downloads (Qwen3-Embedding 0.6B and 8B, Qwen3-8B, Qwen3.5-9B) and the teacher passes.
   - Here: the new `gguf_mine.py` subcommands (`embedtexts`, `geometry`, `compare`, `sensitivity`, `occlusion`, `instruct`, `wdiff`, `pairs`), `--pooling last` for `vectors`, and the Cypha-side `semantics/geometry.hpp`.
