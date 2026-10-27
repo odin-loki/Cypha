@@ -2,7 +2,7 @@
 
 /// Class-context expert for CyphaLM (PLAN B4; TOOL_PROFILE_PLAN P1, the one adapter shared by the
 /// part-of-speech tagger and the word classes). It predicts the next byte from the *classes* of the
-/// last two completed words plus the bytes typed since the last one ended (at most kTail), so a
+/// last two completed words plus the bytes typed since the last one ended (at most ``tail``, default 6), so a
 /// context learned after "Who wrote" also serves "Who composed" when the two verbs share a class.
 ///
 /// - A word is a run of ASCII letters, digits or apostrophes. Its class comes from a word -> class
@@ -29,7 +29,7 @@ namespace cypha::cyphalm {
 
 class ClassContext {
  public:
-    static constexpr int kTail = 6;      ///< bytes since the last completed word that are kept
+    static constexpr int kMaxTail = 7;   ///< most bytes since the last completed word that can be kept
     static constexpr int kScan = 256;    ///< how far back a context is looked for
     static constexpr int kBuckets = 12;  ///< bucket(): deepest order found (0..2) x count bucket (0..3)
 
@@ -69,7 +69,9 @@ class ClassContext {
         return out;
     }
 
-    explicit ClassContext(std::unordered_map<std::string, std::uint16_t> classes) : cls_(std::move(classes)) {}
+    /// ``tail``: bytes since the last completed word kept in the context (1..kMaxTail).
+    explicit ClassContext(std::unordered_map<std::string, std::uint16_t> classes, int tail = 6)
+        : cls_(std::move(classes)), tail_(std::clamp(tail, 1, kMaxTail)) {}
 
     /// Count every (context, next byte) event in text[0..n).
     void build(const std::uint8_t* text, std::size_t n) {
@@ -164,7 +166,7 @@ class ClassContext {
         std::size_t i = n;
         while (i > stop && is_word(h[i - 1])) --i;  // the word being typed
         while (i > stop && !is_word(h[i - 1])) --i;  // and the bytes before it
-        const std::size_t tail_end = n, tail_beg = std::max(i, n >= static_cast<std::size_t>(kTail) ? n - kTail : 0);
+        const std::size_t tail_end = n, tail_beg = std::max(i, n >= static_cast<std::size_t>(tail_) ? n - tail_ : 0);
         std::uint16_t c[2] = {0, 0};
         for (int w = 0; w < 2 && i > stop; ++w) {  // the last two completed words
             std::size_t j = i;
@@ -186,6 +188,7 @@ class ClassContext {
     }
 
     std::unordered_map<std::string, std::uint16_t> cls_;
+    int tail_;
     std::vector<std::uint64_t> key_;    // sorted context hashes
     std::vector<std::uint32_t> first_;  // followers of context c: [first_[c], first_[c + 1])
     std::vector<std::uint32_t> total_;  // their summed counts
