@@ -16,7 +16,7 @@ PLAN rule 10 holds. The expert predicts the next byte inside CyphaLM's mixture; 
 
 ## The expert
 
-`native/include/cypha/cyphalm/class_context.hpp` (199 lines, header-only).
+`native/include/cypha/cyphalm/class_context.hpp` (200 lines, header-only).
 
 - **Context.** The classes of the last two completed words, plus the bytes typed since the last word ended (at most `tail` bytes, default 6). A word is a run of ASCII letters, digits or apostrophes.
 - **Classes.** A `word<TAB>class` table, looked up in lower case. A word not in the table gets one of three shape classes: lower case, capitalised, number. With no table at all, every word is a shape class.
@@ -111,7 +111,7 @@ Intervals are 95% block bootstraps over 4 KiB blocks (4,000 resamples). Each gai
 
 | Item | Value |
 |---|---|
-| Code | `class_context.hpp`, 199 lines; the tag table is a shell pipeline over `pos_tagger tag` |
+| Code | `class_context.hpp`, 200 lines; in `cyphalm_trie`, the `cls` subcommand and `qa --cls` (326 lines with the self-test checks and help text); the tag table is a shell pipeline over `pos_tagger tag` |
 | Build of the table | 4.0 s (shape only, tail 6) to 6.0 s (tags, tail 6) on 7 MiB; tagging the 7 MiB takes 5 s |
 | Scoring | 1.4 s (shape only) to 2.6 s (tags) for the 1,048,576 holdout bytes, about 1.3–2.5 µs a byte |
 | Table in RAM | 29.1 MB (shape only) or 61.3 MB (tags), against the trie's 25 MB of nodes |
@@ -125,15 +125,19 @@ Intervals are 95% block bootstraps over 4 KiB blocks (4,000 resamples). Each gai
 1. **The expert is a CyphaLM upgrade in its own right** (PLAN B4). Shape classes alone pass LCI on BPC and on surface S. It should be measured on Q/A in the P2 grid before it becomes a default.
 2. **The tagger is a borderline case.** It helps BPC (−0.0128) but not by enough per line, and it lowers surface S. Its Q/A effect decides it (TOOL_PROFILE §5).
 3. **Word classes next.** S-1b's k-means classes (256 and 1,024) go through the same harness, both alone and with the tags (the F − T rows).
-4. **Wiring.** The expert goes into `cyphalm_trie` as an option of `qa`, `context8k` and `sample`, with fixed-input checks in `selftest`.
+4. **Wiring (done).** `cyphalm_trie cls` reproduces this report; `qa --cls` adds the expert to the Q/A harness; `selftest` checks it on fixed inputs.
 
 ---
 
 ## Reproduce
 
-The numbers above come from three scratch harnesses that are not in the repo (`classbpc.cpp`, `classfresh.cpp`, `classgen.cpp`). They are replaced by the `cyphalm_trie` options in the wiring step; this section is rewritten then.
+`cyphalm_trie cls` prints every number in this report. Its output matches the first runs to the last printed digit (BPC, intervals and surface S); those runs used scratch harnesses that `cls` replaces. `qa --cls` adds the expert to the Q/A harness for the tool-profile grid.
 
 ```bash
+g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
+    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+./cyphalm_trie selftest        # includes fixed-input checks of the expert
+
 # the tag table (E1 model as in docs/reports/E1_POS_TAGGER.md)
 head -c 7340032 enwik8 > wiki_train.txt
 ./pos_tagger tag pos_model.bin < wiki_train.txt > wiki_train.tags
@@ -141,4 +145,15 @@ tr ' ' '\n' < wiki_train.tags | awk -F'/' 'NF==2 && $1 ~ /^[A-Za-z0-9'"'"']+$/ {
   | sort | uniq -c \
   | awk '{if($1>=2){ if(!($2 in best) || $1>bc[$2]){best[$2]=$3; bc[$2]=$1}}} END{for(w in best) print w"\t"best[w]}' \
   | sort > tags_lex_wiki.tsv          # 25,517 words
+
+# the decision run: shape classes against tags, tail 6 (holdout, fresh text, surface S); about 6 minutes
+./cyphalm_trie cls enwik8 shape:6 tags_lex_wiki.tsv:6
+
+# the sweep (the holdout lines are the sweep table)
+tr -cs "A-Za-z0-9'" '\n' < wiki_train.txt | tr 'A-Z' 'a-z' | sort | uniq -c | sort -rn \
+  | awk '$1>=2 && NR<=60000 {print $2"\t"$2}' > words_lex_wiki.tsv     # word identity, 35,819 words
+./cyphalm_trie cls enwik8 shape:4 shape:6 shape:7 tags_lex_wiki.tsv:4 tags_lex_wiki.tsv:6 tags_lex_wiki.tsv:7 \
+    words_lex_wiki.tsv:4 words_lex_wiki.tsv:6
 ```
+
+Output lines: `holdout2` and `fresh` (the model without the expert), `spec … holdout2 / fresh` (with it), `… gain_over_trie[_ig]` (mean, 95% interval, share of resamples below and above 0), `surface`, and the comparisons with the first spec.

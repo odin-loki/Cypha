@@ -19,6 +19,8 @@ Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 83
 | GRIA as a probability gate | 2.642 | Worse than backoff |
 | Packed-layout accounting | — | **5.4 MB** if singletons are dropped and counts are one byte |
 | After 15,011 Dolly turns | 2.341 wiki | Stored accounting about **11 MB** |
+| + class-context expert, second half of the holdout (B4) | 1.999 / 1.982 | Over trie + InfiniGram (2.0725): shape classes / E1 tags, tail 6. `cyphalm_trie cls`. On fresh text 2.166 → 2.088 / 2.075 |
+| + copy expert, second half of the holdout (A1c) | 1.927 | Over trie + InfiniGram (2.072), chat model; `qa --copy`; an option, not a default |
 
 Surface scores of trie samples are about **0.74–0.83**. That is readable fragments, not answers.
 

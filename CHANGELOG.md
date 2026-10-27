@@ -17,6 +17,9 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **B4 class-context expert** ([report](docs/reports/B4_CLASS_CONTEXT_EXPERT.md)): `native/include/cypha/cyphalm/class_context.hpp` (200 lines) predicts the next byte from the classes of the last two words plus up to 6 bytes since; `cyphalm_trie cls` (the experiment) and `qa --cls` (the tool-profile grid).
+  - On fresh enwik8 text, read once: trie + InfiniGram 2.1660 → 2.0879 BPC with shape classes only, 2.0751 with E1 tags; surface S 0.761 → 0.905 / 0.877 (human 0.870).
+  - The tags add −0.0128 BPC [−0.0147, −0.0110] over shape classes but lower surface S by 0.029. Q/A comes with the grid.
 - **A1c, A2, A3 in `cyphalm_trie qa`** ([A1c report](docs/reports/A1C_ENTITY_FAMILIARITY_AND_COPY.md), [A2/A3 report](docs/reports/A2_A3_FACT_TEXT_AND_STATEMENT_SCORING.md)): options `--parse` (E1 question parse), `--fam-stat`, `--fam-train stat|outcome`, `--fam-only`, `--copy` (copy expert over the current context), `--r3` (statement scoring with F2's patterns as frames), `--shard` / `--shard2` (question-form fact text; holdout pages dropped; exits on a dev or test question), `--leak`; `dktext --mention`.
   - **Familiarity:** the entity's count as a page title gives dev AUROC 0.795 (A1: 0.54–0.60); as a gate token, precision 0.435 / 0.371 at recall ≈ 1.00. D2 still missed.
   - **Copy expert:** holdout BPC trie 2.320 → 2.114, trie + InfiniGram 2.072 → 1.926; an option, not a default (no tag names the entity yet).
