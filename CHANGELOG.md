@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Removed
+- **`native/tools/scribe_ladder.cpp`** (2026-10-28): replaced by `native/tools/scribe.cpp`, which reproduces v1's ladder numbers to the printed digit with `--profile v1` ([SCRIBE v2 report](docs/reports/SCRIBE_V2.md)).
 - **Forked trie tools** (PLAN B1, 2026-10-27, [report](docs/reports/B1_TRIE_CONSOLIDATION.md)): `trie_fold_lm`, `trie_online_mix`, `trie_chat`, `trie_qa_probe`, `trie_context_8k`, `trie_sample` (now `cyphalm_trie` subcommands with identical output) and the retired experiments `trie_together`, `trie_adaptive`, `trie_gria_gate`, `trie_online_holdout` (results and recovery commits in the report). 9,574 lines became 2,072. `trie_stream_train.cpp` is unchanged.
 - **Code-debt cuts** (2026-10-27): `native/tools/question_classifier.cpp` (its finding stays in the E4 report; git `707629a`) and `native/tools/surface_controls.cpp` (superseded by `scribe_ladder`; git `ab4f9f6`).
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
@@ -17,6 +18,12 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **SCRIBE v2 and its paper** ([report](docs/reports/SCRIBE_V2.md), [plan with registered predictions](docs/SCRIBE_PAPER_PLAN.md), [paper](paper/scribe/SCRIBE_paper.md)):
+  - `native/tools/scribe.cpp`, one tool: `docs`, `prompts`, `samples`, `prepare`, `windows`, `ladder`, `score`, `selftest` (CTest `native_scribe_selftest`, 76 checks). JSONL in and out; enwik ranges, plain-text JSONL and raw JSONL as sources.
+  - v2 scores each statistic as a robust z against human reference samples and combines them with one rule: lexical and syntax failures are categorical and saturate, degeneration is the worst failure, coherence is graded. New statistics: context gain of the word and skeleton trigrams over unigram frequency (s3g, s2g), lexical cohesion (c2), adjacent cohesion, verbatim 8-gram copy, and a prompted relevance axis (profile `v2p`).
+  - Designed on development ladders only, frozen, then read once on fresh enwik8 [72, 95.37) MiB: **5 of 5 control pairs** (v1 2 of 5, surface S 1 of 5); also 5 of 5 on web text and 3 of 5 on books.
+  - `scripts/scribe_eval/`: dataset preparation (WebText and the GPT-2 output dataset, Gutenberg, WritingPrompts, HANNA, OpenMEVA, MAUVE human evaluation, Dolly, UD EWT), model-ladder generation, baseline metrics and an LLM judge, held-out corruptions, attacks, prompted and Q/A ladders, and the meta-evaluation statistics.
+  - `cyphalm_trie cls --out FILE` writes its samples and the human continuations for SCRIBE.
 - **B4 class-context expert** ([report](docs/reports/B4_CLASS_CONTEXT_EXPERT.md)): `native/include/cypha/cyphalm/class_context.hpp` (200 lines) predicts the next byte from the classes of the last two words plus up to 6 bytes since; `cyphalm_trie cls` (the experiment) and `qa --cls` (the tool-profile grid).
   - On fresh enwik8 text, read once: trie + InfiniGram 2.1660 → 2.0879 BPC with shape classes only, 2.0751 with E1 tags; surface S 0.761 → 0.905 / 0.877 (human 0.870).
   - The tags add −0.0128 BPC [−0.0147, −0.0110] over shape classes but lower surface S by 0.029. Q/A comes with the grid.

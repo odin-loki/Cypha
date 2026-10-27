@@ -2108,6 +2108,7 @@ struct V2Params {
   double capS = 30, kapS = 4;
   double wC = 1, wI = 3, wR = 0;  // wR = 8 in the prompted profile (v2p)
   double rdead = 0.5;            // relevance dead zone (chosen on the development prompts)
+  bool two_sided = false;        // exploratory, post hoc (not v2): syntax gains and coherence also penalised when higher than human
   double tau = 5;
   double missing_z = 4;
   std::vector<int> off;  // statistics switched off (ablations)
@@ -2132,6 +2133,7 @@ struct V2Params {
       else if (k == "wI") wI = x;
       else if (k == "wR") wR = x;
       else if (k == "rdead") rdead = x;
+      else if (k == "twosided") two_sided = x != 0;
       else if (k == "tau") tau = x;
       else if (k == "missing") missing_z = x;
       else if (k == "off" || k == "on") {
@@ -2399,7 +2401,8 @@ class ScribeV2Scorer {
       if (has[k]) {
         o.has[k] = true;
         o.z[k] = ref_[b][k].z(x[k]);
-        u = sp.side > 0 ? std::max(0.0, -o.z[k]) : sp.side < 0 ? std::max(0.0, o.z[k]) : std::fabs(o.z[k]);
+        const bool ts = params.two_sided && (k == V_S2G || k == V_S3G || a == 1);
+        u = ts ? std::fabs(o.z[k]) : sp.side > 0 ? std::max(0.0, -o.z[k]) : sp.side < 0 ? std::max(0.0, o.z[k]) : std::fabs(o.z[k]);
       } else if (a != 3 && present_[b][k] >= 0.95 * static_cast<double>(nref_[b])) {
         o.imputed[k] = true;
         o.z[k] = sp.side > 0 ? -params.missing_z : params.missing_z;

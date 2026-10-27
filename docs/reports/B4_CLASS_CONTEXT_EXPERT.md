@@ -157,3 +157,15 @@ tr -cs "A-Za-z0-9'" '\n' < wiki_train.txt | tr 'A-Z' 'a-z' | sort | uniq -c | so
 ```
 
 Output lines: `holdout2` and `fresh` (the model without the expert), `spec … holdout2 / fresh` (with it), `… gain_over_trie[_ig]` (mean, 95% interval, share of resamples below and above 0), `surface`, and the comparisons with the first spec.
+
+## Addendum 2026-10-28: SCRIBE v2 on the class-context samples
+
+The surface-S gain above (0.761 → 0.905) is not a gain in text quality. SCRIBE v2 ([report](SCRIBE_V2.md)), which passes its control ladder on fresh text where surface S passes 1 of 5 pairs, scored the same kind of samples: `cyphalm_trie cls enwik8 shape --out cls_samples.jsonl` (the new `--out` writes the 200 samples per model and the human continuations), then `scribe prepare --mode wikiraw` and `scribe score` with the Wikipedia pack and reference.
+
+| Text (after cleaning; n) | Surface S | SCRIBE v2 [95% interval] |
+|---|---|---|
+| human continuation (169) | 0.904 | 0.770 [0.722, 0.817] |
+| trie (162) | 0.749 | 0.014 [0.006, 0.028] |
+| trie + class context, shape (162) | 0.901 | 0.002 [0.002, 0.003] |
+
+Surface S puts the class-context samples level with human text; SCRIBE puts both trie models among word salad, and the class-context samples no higher than the trie (trie + class > trie in 40% of pairs). A sample reads: "names that his home or the referred such major a since the who legal of increasill actions and National of the states called Catalan-Soviet…". The expert makes the words more word-like, not the text more like prose. The BPC gain stands; the surface-S claim should not be read as better generation.
