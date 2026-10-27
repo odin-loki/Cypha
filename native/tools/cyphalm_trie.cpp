@@ -34,7 +34,7 @@
 //        trie_context_8k: InfiniGram (order up to 8192) mixed with the trie, BPC at five
 //        caps, matched-length histogram, 50 questions with 30 Dolly turns held out.
 //   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600]
-//        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for scribe_ladder.
+//        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for `scribe ladder --gen-trie`.
 //   cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]
 //        B4 (docs/reports/B4_CLASS_CONTEXT_EXPERT.md): the class-context expert (class_context.hpp) over the
 //        bpc model, each spec paired against the model without it: holdout second-half BPC (lambdas on the
