@@ -394,6 +394,8 @@ The geometry only counts once CyphaLM uses it: the similar-context and class-con
 
 **Teacher side: new subcommands in `scripts/gguf_mine.py`, no new script.**
 
+**Built (2026-10-28):** all eight subcommands below and `vectors --pooling last`, plumbing-tested by `selftest` with known-answer checks of the maths; usage in [GGUF_MINING.md](GGUF_MINING.md) section 14.
+
 | Subcommand | Does |
 |---|---|
 | `embedtexts` | Batched last-token embeddings, with an optional instruction, an MRL prefix and resume. It checks that `<|endoftext|>` was appended and appends it if not |

@@ -113,7 +113,7 @@ The teacher model never runs inside Cypha. Everything it gives is data, and ever
 
 | # | Item | How | Gives Cypha | Status |
 |---|---|---|---|---|
-| 8.1 | Model-pooled word vectors | Each word through the model in embedding mode, mean-pooled, optional PCA. A static table, the same idea as Model2Vec's static-embedding distillation | Teacher vectors for C1/C4 comparisons; neighbour lists | script: `vectors` |
+| 8.1 | Model-pooled word vectors | Each word through the model in embedding mode, optional PCA. `--pooling mean` (default, as before), `last` (last-token state with the EOS check of section 14, needed for Qwen3-Embedding) or `none` (per-token states averaged over the word's own tokens). A static table, the same idea as Model2Vec's static-embedding distillation | Teacher vectors for C1/C4 comparisons; neighbour lists | script: `vectors` |
 | 8.2 | Word senses | Contextual vectors of a word across sentences, spherical k-means with a minimum cluster size, best k by a silhouette-like score | Sense inventory candidates for C5 (Cypha sense classes) | script: `vectors --senses` |
 
 ## 9. Needs internal activations (not in the script)
@@ -206,13 +206,37 @@ python scripts/gguf_mine.py vectors  --model $M --out $O/vectors --words pack/wo
 python scripts/gguf_mine.py canon    --input $O/facts/facts.jsonl --labels pack/wikidata_labels.tsv --output $O/facts/facts_ids.jsonl
 ```
 
-**Self-test.** This builds a tiny random llama-architecture GGUF from a vocab-only file (llama.cpp ships them in `models/`) and runs all 18 subcommands:
+**Self-test.** This builds two tiny random llama-architecture GGUFs from a vocab-only file (llama.cpp ships them in `models/`). The second has other weights and a Qwen3-style chat template with a `<think>` block. It then runs:
+- all 26 subcommands, in 36 steps that include an `embedtexts --resume` rebuild and `wdiff` between the two models;
+- checks on the outputs;
+- known-answer checks of the geometry maths;
+- pooling checks.
 
 ```bash
 python scripts/gguf_mine.py selftest --vocab llama.cpp/models/ggml-vocab-llama-spm.gguf --out /tmp/gguf_selftest
 ```
 
 - **Result on 2026-10-26:** all 18 pass with the SPM (Llama) and BPE (Qwen2) vocabularies, on llama-cpp-python 0.3.36 and gguf 0.19.0.
+- **Result on 2026-10-28:** all 50 rows pass with both vocabularies (Qwen2 11 min, SPM 6 min, on 2 shared cores).
+  - *EOS.* `<|endoftext|>` (151643) is appended for Qwen2 and `</s>` for SPM; neither tokenizer appends one itself.
+- **Known-answer checks (section 14):**
+  - Spearman against hand-worked cases, with and without ties (0.8 and 8/√95);
+  - Mann–Whitney AUC 0.75;
+  - CKA(X, 3XR) = 1, in both the feature and the Gram branch;
+  - Procrustes recovers a planted rotation;
+  - TwoNN on uniform cubes of dimension 2, 5 and 8 is within 25% (1.94, 4.63, 6.82);
+  - the temperature fit recovers a planted τ = 0.05 (0.0498);
+  - the ridge word weights recover planted weights;
+  - randomized SVD matches the full SVD, and a rank-1 ΔW has a top-5% share of 1;
+  - a pure offset is fully explained by the offset model, and a rank-1 map by the affine model, with rank 1;
+  - alignment is 0 for identical pairs.
+- **Output checks:**
+  - `compare` on X against XR gives CKA 1, Procrustes residual about 0, Spearman 1, Jaccard 1 and KL about 0;
+  - `embedtexts --resume` rebuilds only a deleted part, and the result is identical;
+  - token-level mean pooling matches `Llama.embed`;
+  - batched decoding matches single decoding;
+  - last pooling equals the last token's state;
+  - the no-think chat prompt closes `<think>`.
 - **Scoring checks:**
   - teacher-forced scores with prefix reuse are bit-identical to fresh evaluation;
   - the first-token score matches the next-token distribution;
@@ -224,6 +248,82 @@ python scripts/gguf_mine.py selftest --vocab llama.cpp/models/ggml-vocab-llama-s
 - Static commands are dominated by dequantising tensors; `neurons` and `spectra` scale with vocabulary × width per layer.
 - Dynamic commands cost about `templates × (1 + samples)` generations plus `candidates × templates` scorings per item.
 - Time a small run first with `--samples 1` and a few subjects.
+
+---
+
+## 14. Embedding geometry ([EMBEDDING_GEOMETRY.md](EMBEDDING_GEOMETRY.md))
+
+These subcommands dissect an embedding teacher (Qwen3-Embedding) and mine with a generative one (Qwen3.5-9B). The IDs are those of EMBEDDING_GEOMETRY §6. `geometry` and `compare` need no model: they read any `.npy` plus an index TSV, so Cypha's exported vectors work too.
+
+**Last-token pooling and EOS.**
+- `--pooling last` reads `tokenizer.ggml.add_eos_token` and `add_sep_token`. It then tokenises a probe with special tokens on and checks whether the tokenizer itself appends an end token.
+- If it does not, the script appends `<|endoftext|>` when the vocabulary has it as a single control token, otherwise the GGUF's EOS. `--eos append` forces this and `--eos never` turns it off.
+- The decision is logged and written to provenance as `eos.action`: `tokenizer`, `appended` or `none`.
+- Embedding runs from tokens through llama.cpp's batch path, several sequences per decode, so the appended EOS survives. llama-cpp-python's `embed()` tokenises the text itself and cannot add it.
+- The self-test checks this path three ways:
+  - mean pooling matches `embed()`;
+  - batched decoding matches one sequence at a time;
+  - last pooling equals the last row of per-token states.
+
+| Command | IDs | Needs | Main flags | Output |
+|---|---|---|---|---|
+| `embedtexts` | QE0, QE2 | embedding model | `--input` (one item per line, or a TSV with `--column`, `--id-column`, `--side-column`); `--pooling` (default `last`); `--eos`; `--instruction`, applied to queries only in the `--template` form (default `Instruct: {instruction}\nQuery:{text}`); `--side`; `--dims N` (MRL prefix: truncate, then renormalise); `--batch`; `--chunk`; `--resume`; `--limit` | `embeddings.npy` (fp16, unit rows); `embeddings_index.tsv` (row, id, side, n_tokens, raw norm, text); `parts/`; items/s and tokens/s in provenance |
+| `sensitivity` | B10, C6 | embedding model | `--sentences` (minimal pairs made by rule: negation, role swap, number, entity, shuffle, typo, synonym, padding, plus built-in subject–verb–object templates); `--pairs` (external a, b, kind TSV, e.g. a generated C6 suite); `--kinds`; `--per-kind`; `--typos`; `--role-templates` | `pairs.tsv` (per pair); `summary.tsv` (n, mean, median, IQR per kind, and the median above the unrelated-pair floor); `summary.json` (Q6) |
+| `occlusion` | B15, B16 | embedding model | `--sentences`; `--freq` (word, count for the SIF p(w)); `--sif-a`; `--ridge`; `--ridge-map`; `--heldout` | `word_weights.tsv` (per word: occlusions, mean cosine drop, SE, p(w), SIF weight, fitted weight); `additivity.tsv`; `summary.json` (Q5) |
+| `instruct` | B8, B9 | embedding model | `--queries`; `--instructions` (default: five Qwen/MTEB-style ones); `--template`; `--heldout`; `--ridge` | `instruct.tsv` (per instruction: query–document cosine, own-document top-1, offset share, affine share, effective rank of A − I); `instruct_items.tsv`; `offset_cos.tsv`; `summary.json` (Q10) |
+| `pairs` | C1–C3 | generator, optional embedder | `--docs`; `--types` (keyword, factual, summary, judgement); `--length`; `--difficulty`; `--personas`; `--n`; `--negatives` (topic, negation, role_swap, entity); `--chat-template auto\|on\|off`; `--think`, `--think-tokens`; `--embedder`, `--instruction`, `--min-cos 0.7`, `--neg-margin`; `--min-verify`; `--audit`; `--resume` | `pairs.jsonl` (every row with its controls, `verify`, `p_yes`, `kept`, method, seed and provenance; cosine fields with `--embedder`); `audit.jsonl`; `summary.json` (mask precision with a Wilson interval) |
+| `geometry` | B1–B7, B13, B17 | vectors only | `--vectors`, `--index`, `--key`; `--max-items`; `--pairs` (anchor, positive); `--batch-size`; `--labelled-pairs` (a, b, class); `--lengths` (a file, or `index` for the n_tokens column); `--prefixes`; `--knn`, `--knn-max`, `--no-knn-graph` | `geometry.json` (with Q1–Q3 flags); `floor.tsv`; `spectrum.tsv`; `mrl.tsv`; `hubs.tsv`; `classes.tsv`; `class_auc.tsv`; `knn_graph.tsv` |
+| `compare` | §7.1 | vectors only | `--a` (teacher), `--b`; `--index-a`, `--index-b`, `--key` (align on an index column); `--procrustes-dim`; `--tau`, `--tau-student`; `--pairs` (fits the teacher τ) | `compare.json`; `compare_strata.tsv` |
+| `wdiff` | A4 | two GGUFs | `--model` (the child), `--base` (the parent); `--pattern`; `--max-full`; `--top-frac`; `--iters`; `--max-rows` | `wdiff.tsv` (per tensor); `wdiff_layers.tsv`; `wdiff_summary.json` (Q4) |
+
+**Method notes.**
+- **`geometry`.**
+  - *Floor and anisotropy.* The floor is the cosine distribution of random pairs, raw and after centring. Anisotropy is the mean vector's norm and the exact mean cosine over all pairs. The five dimensions that contribute most to the mean cosine are listed as rogue dimensions.
+  - *Temperature.* τ is the maximum-likelihood estimate of the positive among in-batch candidates. It is found by a golden-section search over log τ; the NLL is convex in 1/τ.
+  - *TwoNN.* This is Facco et al.'s line through the origin, fitted with the largest 10% of μ dropped.
+  - *Hubness.* This is the skewness of the k-occurrence at k = 10, before and after CSLS.
+  - *MRL.* Each prefix is truncated and renormalised, then compared with the full vector: pair Spearman, kNN@10 Jaccard, TwoNN, and the PCA dimensions needed for 95%.
+- **Pair Spearman.** In both `geometry` and `compare`, pairs are stratified by the first set's neighbour rank: near (top 10), mid (rank 10 to n/10) and random. Each stratum is also reported on its own.
+- **`occlusion`.** There are four fits:
+  - (a) the uniform mean and (b) the SIF mean, each with one global scale fitted on the training sentences;
+  - (c) per-word weights with ridge towards 1, solved exactly by conjugate gradients on the sparse normal equations;
+  - (d) (c) followed by a ridge linear map.
+
+  R² is measured against the held-out mean vector, which is a strong baseline when the vectors are anisotropic. Pair Spearman is the Q5 number.
+- **`instruct`.** The offset share is 1 − ‖Δ − t‖²/‖Δ‖² on held-out queries, where t is the mean shift on the training queries. The affine map is fitted by dual ridge. The effective rank of A − I comes from its singular values.
+- **`compare` force match.** This is KL(p_T‖p_S) of each anchor's softmax over the other items. It is reported at the teacher's τ (given, fitted from `--pairs`, or 0.05) and at the student τ that minimises it.
+- **`wdiff`.**
+  - ΔW = W_model − W_base, and the relative change is ΔW measured against ‖W_base‖.
+  - The spectrum is exact up to `--max-full`. Above that, a randomized SVD (Halko et al. 2011) gives the top ⌈5%⌉ of the singular values. It is slightly low, so the Q4 share is conservative.
+  - For matrices taller than `--max-rows` (the vocabulary matrices), rows are sampled; this is noted on each row of the output.
+- **`pairs`.**
+  - *Thinking.* It is off by default. The GGUF's own jinja chat template is rendered with llama-cpp-python's `Jinja2ChatFormatter` with `enable_thinking=False`. If a template has a `<think>` block but ignores that flag, the script appends the empty `<think>\n\n</think>` itself.
+  - *Template fallback.* With no template, `--chat-template` is a no-op. If the template cannot be rendered, the script falls back to plain prompts and logs a warning; every row records `prompt_mode` and `template_warning`.
+  - *`--think`* is used for audit judging only (C3). A thought is generated up to `--think-tokens`, closed, and then the yes/no answer is scored. It needs a template with a `<think>` block.
+  - *Embedder.* It is loaded only after the generator has been freed.
+  - *Keep rules.* A positive is kept when `verify` > `--min-verify` and its cosine is above `--min-cos`. A hard negative is kept when `verify` < −`--min-verify` and its cosine is within `--neg-margin` of its positive's (C2). C1's third check, that Cypha's evidence does not contradict the pair, runs on the Cypha side.
+- **Sizing.** `embedtexts` logs items/s and tokens/s (decode time only) and writes them to provenance. Time 1,000 probe sentences first, then size the full jobs; the full probe set is about 3M tokens (EMBEDDING_GEOMETRY §9.1). `--ctx` (default 512) truncates longer texts, so raise it for paragraphs.
+
+```bash
+E=Qwen3-Embedding-0.6B-Q8_0.gguf; G=Qwen3.5-9B-Q8_0.gguf; O=mined/qwen3emb
+python scripts/gguf_mine.py info        --model $E --out $O/info     # A1: add_eos_token, chat template
+python scripts/gguf_mine.py embedtexts  --model $E --out $O/timing --input probe.txt --limit 1000   # size jobs from this
+python scripts/gguf_mine.py embedtexts  --model $E --out $O/probe --input probe.txt --ctx 2048 --resume
+python scripts/gguf_mine.py geometry    --vectors $O/probe/embeddings.npy --out $O/geometry --pairs pos_pairs.tsv \
+                                        --labelled-pairs classes.tsv --lengths index
+python scripts/gguf_mine.py compare     --a $O/probe/embeddings.npy --b cypha_vectors.npy --index-b cypha_index.tsv --key text --out $O/vs_cypha
+python scripts/gguf_mine.py sensitivity --model $E --out $O/sensitivity --sentences held_out.txt
+python scripts/gguf_mine.py occlusion   --model $E --out $O/occlusion --sentences held_out.txt --freq pack/word_counts.tsv
+python scripts/gguf_mine.py instruct    --model $E --out $O/instruct --queries questions.txt
+python scripts/gguf_mine.py wdiff       --model $E --base Qwen3-0.6B-Q8_0.gguf --out $O/wdiff --pattern 'blk\.'
+python scripts/gguf_mine.py pairs       --model $G --out $O/pairs --docs docs.txt --personas personas.txt --embedder $E --resume
+python scripts/gguf_mine.py pairs       --model $G --out $O/audit --audit masked_candidates.tsv --think
+```
+
+**Not yet checked on real models.**
+- **Qwen3.5-9B support.** llama-cpp-python 0.3.36's support for the Qwen3.5 architecture is unconfirmed (QE0).
+- **Qwen3.5's template.** Its jinja template has not been rendered here. If it does not render, the warning and plain-prompt fallback apply.
+- **EOS detection.** It has been exercised only on vocab-only GGUFs, which set no `add_eos_token`. The QE0 gate, a cosine of at least 0.999 against `llama-embedding --pooling last`, runs on Odin's machine.
 
 ---
 

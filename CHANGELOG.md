@@ -14,6 +14,11 @@ milestone or a significant self-contained change.
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **Embedding-geometry mining commands** in `scripts/gguf_mine.py` ([GGUF_MINING.md](docs/GGUF_MINING.md) §14), now 4,199 lines:
+  - **With a model:** `embedtexts` (last-token pooling with the EOS check, query instructions, MRL prefix, resume, timing), `sensitivity`, `occlusion`, `instruct`, `pairs` (Qwen3.5-style synthetic pairs, hard negatives, verification, mask audit).
+  - **Offline:** `geometry`, `compare` and `wdiff`.
+  - **Changed:** `vectors` gains `--pooling`.
+  - **Selftest:** passes with two vocabularies, with known-answer maths checks.
 - **Embedding geometry library** (EMBEDDING_GEOMETRY §4–5, [report](docs/reports/QE_GEOMETRY_LIBRARY.md)): header-only `native/include/cypha/semantics/geometry.hpp`. It provides Gaussian items, the softmax pull–push rule with the false-negative mask and confidence-scaled natural-gradient steps, relational distillation, MRL ordering and nested loss, whitening, CSLS and the agreement metrics.
   - **CTest `native_geometry_test`:** 32,096 checks. On a planted teacher, distillation reaches pair Spearman 0.943 against 0.367 for InfoNCE alone.
   - **CMake:** the `cyphalm_trie` target and the `native_cyphalm_trie_selftest` CTest are added.

@@ -68,7 +68,8 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **Embedding geometry QE0–QE9** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md)): copy Qwen3-Embedding-8B's geometry into Cypha.
   - Needs Odin's machine: the GGUF downloads (Qwen3-Embedding 0.6B and 8B, Qwen3-8B, Qwen3.5-9B) and the teacher passes.
   - **Built 2026-10-28:** `native/include/cypha/semantics/geometry.hpp` with CTest `native_geometry_test` ([report](docs/reports/QE_GEOMETRY_LIBRARY.md)). On a planted teacher, distillation reaches pair Spearman 0.943 and kNN@10 0.889, against 0.367 / 0.429 for InfoNCE alone. With the mask, paraphrases end at cosine 0.750, against 0.640 without. CSLS cuts hub skew from 3.18 to 0.32.
-  - Here: the new `gguf_mine.py` subcommands (`embedtexts`, `geometry`, `compare`, `sensitivity`, `occlusion`, `instruct`, `wdiff`, `pairs`), `--pooling last` for `vectors`, and the Cypha-side `semantics/geometry.hpp`.
+  - **Built 2026-10-28:** the `gguf_mine.py` subcommands `embedtexts`, `geometry`, `compare`, `sensitivity`, `occlusion`, `instruct`, `wdiff` and `pairs`, plus `vectors --pooling last` with an EOS check ([GGUF_MINING.md](docs/GGUF_MINING.md) §14). The selftest passes with the Qwen2 and llama-spm vocabularies, with known-answer checks for Spearman, CKA, Procrustes, TwoNN, τ fitting and randomized SVD.
+  - **Still to do on Odin's machine:** the QE0 pooling gate on real models, and the first real render of Qwen3.5-9B's chat template.
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
   1. Build the CyphaLM Q/A baseline harness.
   2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.

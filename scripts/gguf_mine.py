@@ -28,13 +28,29 @@ Dynamic subcommands (run the model; also need llama-cpp-python):
   qa          question/answer pairs from mined facts
   sample      synthetic corpus + n-gram, collocation and Zipf statistics
   score       bits per byte of a corpus under the model (data selection)
-  vectors     model-pooled word vectors and induced word senses
+  vectors     model-pooled word vectors (--pooling mean|last|none) and senses
   calibrate   accuracy and calibration against gold facts -> ECS priors
+
+Embedding geometry (docs/EMBEDDING_GEOMETRY.md; teacher e.g. Qwen3-Embedding):
+  embedtexts  batched text embeddings: last-token pooling with the EOS check,
+              query-side instruction, MRL prefix, resume, timing
+  sensitivity B10 minimal pairs (negation, role swap, number, entity, shuffle,
+              typo, synonym, padding) or an external pairs TSV
+  occlusion   B15 word importance by dropping words; B16 additivity fits
+  instruct    B8 instruction shifts (offset vs affine), B9 query/document asymmetry
+  pairs       C1-C3 synthetic queries, hard negatives, yes/no verification,
+              optional embedder cosine filter, false-negative audit
+  geometry    (no model) B1, B3-B7, B13, B17 on any .npy + index: floor,
+              anisotropy, PCA, TwoNN, hubness/CSLS, MRL curves, temperature
+  compare     (no model) two vector sets: pair Spearman, kNN overlap, CKA,
+              Procrustes, force-match KL
+  wdiff       (static) A4 weight difference between two GGUFs
 
 Utility:
   canon       attach IDs to mined strings from a label table (e.g. Wikidata)
   selftest    build a tiny random GGUF from a vocab-only GGUF and run all of
-              the above (plumbing test; a random model knows nothing)
+              the above, plus known-answer checks of the geometry maths
+              (plumbing test; a random model knows nothing)
 
 Every output directory gets provenance.json (model hash, metadata, licence,
 versions, command, seed). Licences: prefer models whose terms allow using
@@ -677,13 +693,27 @@ def randomized_pca(x: np.ndarray, k: int, rng: np.random.Generator, iters: int =
     return vt[:k], (s[:k] ** 2) / max(total, 1e-12)
 
 
+def rankdata(a) -> np.ndarray:
+    """Ranks from 1, ties given their average rank."""
+    a = np.asarray(a, dtype=np.float64)
+    o = np.argsort(a, kind="mergesort")
+    sa = a[o]
+    first = np.r_[True, sa[1:] != sa[:-1]] if a.size else np.zeros(0, dtype=bool)
+    starts = np.flatnonzero(first)
+    ends = np.r_[starts[1:], a.size]
+    r = np.empty(a.size)
+    r[o] = ((starts + ends - 1) / 2.0 + 1.0)[np.cumsum(first) - 1]
+    return r
+
+
 def spearman(a, b) -> float:
     a = np.asarray(a, dtype=np.float64)
     b = np.asarray(b, dtype=np.float64)
     if a.size < 3:
         return float("nan")
-    ra = np.argsort(np.argsort(a))
-    rb = np.argsort(np.argsort(b))
+    ra, rb = rankdata(a), rankdata(b)
+    if ra.std() == 0 or rb.std() == 0:
+        return float("nan")
     return float(np.corrcoef(ra, rb)[0, 1])
 
 
@@ -1020,10 +1050,13 @@ class Runner:
             die("the dynamic commands need llama-cpp-python: pip install llama-cpp-python")
         self.lc = llama_cpp
         kw = dict(model_path=path, n_ctx=n_ctx, n_threads=threads, seed=seed, verbose=False)
+        self.pooling = pooling if embedding else None
         if embedding:
             kw["embedding"] = True
             kw["pooling_type"] = {"mean": llama_cpp.LLAMA_POOLING_TYPE_MEAN,
+                                  "last": llama_cpp.LLAMA_POOLING_TYPE_LAST,
                                   "none": llama_cpp.LLAMA_POOLING_TYPE_NONE}.get(pooling, llama_cpp.LLAMA_POOLING_TYPE_MEAN)
+            kw["n_batch"] = kw["n_ubatch"] = n_ctx  # a whole sequence in one ubatch (pooled outputs)
         else:
             kw["logits_all"] = True
         self.llm = llama_cpp.Llama(**kw)
@@ -1036,8 +1069,97 @@ class Runner:
         self._yes = [i for i in yes if i not in both]
         self._no = [i for i in no if i not in both]
 
-    def tok(self, text: str, bos: bool = True) -> list[int]:
-        return self.llm.tokenize(text.encode("utf-8"), add_bos=bos, special=False)
+    def tok(self, text: str, bos: bool = True, special: bool = False) -> list[int]:
+        return self.llm.tokenize(text.encode("utf-8"), add_bos=bos, special=special)
+
+    def piece(self, tid: int) -> str:
+        if tid is None or tid < 0:
+            return ""
+        return self.llm.detokenize([tid], special=True).decode("utf-8", errors="replace")
+
+    def _ptoks(self, prompt: str, special: bool) -> list[int]:
+        """Prompt tokens. A rendered chat template (special=True) parses control tokens and brings
+        its own BOS when the model needs one, so BOS is added only when it is not already there."""
+        if not special:
+            return self.tok(prompt) or self._start()
+        b = self.piece(self.llm.token_bos())
+        return self.tok(prompt, bos=not (b and prompt.startswith(b)), special=True) or self._start()
+
+    def eos_plan(self, reader, mode: str = "auto") -> dict:
+        """How a last-token-pooled input must end (Qwen3-Embedding: with <|endoftext|>).
+        Reads tokenizer.ggml.add_eos_token / add_sep_token and checks the tokenizer itself:
+        does tokenising with special tokens on append an end token? If not, we append one."""
+        llm = self.llm
+        eot = self.tok("<|endoftext|>", bos=False, special=True)
+        if len(eot) == 1 and len(self.tok("<|endoftext|>", bos=False)) > 1:
+            eos_id, src = eot[0], "<|endoftext|> in vocabulary"
+        else:
+            eos_id, src = llm.token_eos(), "tokenizer.ggml.eos_token_id"
+        probe, bare = self.tok("hello world", bos=True), self.tok("hello world", bos=False)
+        ends = {eos_id, llm.token_eos(), meta(reader, "tokenizer.ggml.seperator_token_id", -1)}
+        appends = len(probe) > len(bare) and probe[-1] in ends
+        plan = {"add_eos_token_meta": meta(reader, "tokenizer.ggml.add_eos_token", None),
+                "add_sep_token_meta": meta(reader, "tokenizer.ggml.add_sep_token", None),
+                "tokenizer_appends_end": bool(appends), "tokenizer_end_token_id": int(probe[-1]) if appends else None,
+                "eos_token_id": int(eos_id), "eos_token": self.piece(eos_id), "eos_source": src, "mode": mode}
+        if mode == "never":
+            plan["action"] = "none"
+        elif mode == "append" or not appends:
+            plan["action"] = "appended"
+        else:
+            plan["action"] = "tokenizer"
+            if probe[-1] != eos_id:
+                log(f"WARNING: the tokenizer appends token {probe[-1]} ({self.piece(probe[-1])!r}), "
+                    f"not {self.piece(eos_id)!r}; check the model card (pass --eos append to force it)")
+        log(f"last pooling: EOS {plan['action']} (add_eos_token={plan['add_eos_token_meta']}, tokenizer appends: "
+            f"{appends}, token {eos_id} {plan['eos_token']!r})")
+        return plan
+
+    def pooled_tokens(self, text: str, plan: dict | None, special: bool = False) -> list[int]:
+        """Tokens of one embedding input, cut to the context, ending in EOS when the plan says so."""
+        t = self.tok(text, bos=True, special=special)
+        cap = self.n_ctx
+        action = (plan or {}).get("action", "none")
+        if action == "appended":
+            t = t[: cap - 1] + [plan["eos_token_id"]]
+        elif action == "tokenizer" and len(t) > cap:
+            t = t[: cap - 1] + [t[-1]]
+        else:
+            t = t[:cap]
+        return t or self._start()
+
+    def embed_tokens(self, seqs: list[list[int]]) -> list[np.ndarray]:
+        """Embed token sequences, several per decode (as Llama.embed does, but from tokens, so an
+        appended EOS survives). Pooled vectors (n_embd,) or, for pooling none, (len, n_embd)."""
+        llm, lc = self.llm, self.lc
+        d, nb, nmax = llm.n_embd(), llm.n_batch, max(1, int(llm.context_params.n_seq_max))
+        batch, out, sizes, used = llm._batch, [], [], 0
+        seqs = [s[:nb] for s in seqs]
+        i = 0
+        while i <= len(seqs):
+            if sizes and (i == len(seqs) or used + len(seqs[i]) > nb or len(sizes) >= nmax):
+                llm._ctx.kv_cache_clear()
+                llm._ctx.decode(batch)
+                if self.pooling == "none":
+                    flat = np.ctypeslib.as_array(lc.llama_get_embeddings(llm._ctx.ctx), shape=(used * d,))
+                    pos = 0
+                    for s in sizes:
+                        out.append(flat[pos * d:(pos + s) * d].reshape(s, d).copy())
+                        pos += s
+                else:
+                    for k in range(len(sizes)):
+                        out.append(np.ctypeslib.as_array(lc.llama_get_embeddings_seq(llm._ctx.ctx, k), shape=(d,)).copy())
+                batch.reset()
+                sizes, used = [], 0
+            if i == len(seqs):
+                break
+            if not sizes:
+                batch.reset()
+            batch.add_sequence(seqs[i], len(sizes), True)
+            sizes.append(len(seqs[i]))
+            used += len(seqs[i])
+            i += 1
+        return out
 
     def _start(self) -> list[int]:
         """A token to condition on when a prompt tokenizes to nothing (no BOS in some vocabularies)."""
@@ -1091,23 +1213,24 @@ class Runner:
             out.append(float(row[full[i]] - logsumexp(row)))
         return out
 
-    def next_logprobs(self, prompt: str) -> np.ndarray:
-        toks = self.tok(prompt) or self._start()
+    def next_logprobs(self, prompt: str, special: bool = False) -> np.ndarray:
+        toks = self._ptoks(prompt, special)
         logits, toks = self._eval(toks)
         return log_softmax(logits[len(toks) - 1])
 
     def option_logprob(self, prompt: str, options: list[str]) -> np.ndarray:
         return np.array([sum(self.cont_logprobs(prompt, o)) for o in options], dtype=np.float64)
 
-    def yes_no(self, prompt: str) -> float:
-        lp = self.next_logprobs(prompt)
+    def yes_no(self, prompt: str, special: bool = False) -> float:
+        lp = self.next_logprobs(prompt, special)
         ly = logsumexp(lp[self._yes]) if self._yes else -1e9
         ln = logsumexp(lp[self._no]) if self._no else -1e9
         return float(ly - ln)
 
-    def generate(self, prompt: str, n: int, temperature: float, max_tokens: int, stop, seed: int, top_p: float = 0.95) -> list[str]:
+    def generate(self, prompt: str, n: int, temperature: float, max_tokens: int, stop, seed: int, top_p: float = 0.95,
+                 special: bool = False) -> list[str]:
         outs = []
-        ptoks = self.tok(prompt) or self._start()
+        ptoks = self._ptoks(prompt, special)
         for j in range(n):
             res = self.llm.create_completion(ptoks, max_tokens=max_tokens, temperature=temperature, top_p=top_p,
                                              top_k=0 if temperature > 0 else 1, min_p=0.0, stop=stop or [],
@@ -1830,11 +1953,22 @@ def cmd_vectors(args) -> None:
     licence_warning(reader)
     words = word_list(args, reader)
     rng = np.random.default_rng(args.seed)
-    emb = Runner(args.model, args.ctx, args.threads, args.seed, embedding=True, pooling="mean")
+    emb = Runner(args.model, args.ctx, args.threads, args.seed, embedding=True, pooling=args.pooling)
+    eos = emb.eos_plan(reader, args.eos) if args.pooling == "last" else {"action": "none", "reason": f"pooling {args.pooling}"}
+    bos = emb.llm.token_bos()
     V = []
     for i, w in enumerate(words):
-        e = np.asarray(emb.llm.embed(w if not args.template else args.template.replace("{w}", w)), dtype=np.float32)
-        V.append(e.reshape(-1, e.shape[-1]).mean(axis=0))
+        text = w if not args.template else args.template.replace("{w}", w)
+        if args.pooling == "mean":  # unchanged behaviour: llama.cpp mean pooling over every token
+            e = np.asarray(emb.llm.embed(text), dtype=np.float32)
+            V.append(e.reshape(-1, e.shape[-1]).mean(axis=0))
+        elif args.pooling == "last":
+            V.append(emb.embed_tokens([emb.pooled_tokens(text, eos)])[0])
+        else:  # none: per-token states averaged over the text's own tokens (BOS left out)
+            toks = emb.tok(text) or emb._start()
+            e = emb.embed_tokens([toks])[0]
+            lo = 1 if len(toks) > 1 and toks[0] == bos else 0
+            V.append(e[lo:].mean(axis=0))
         if (i + 1) % 200 == 0:
             log(f"vectors: {i + 1}/{len(words)}")
     V = np.stack(V)
@@ -1895,8 +2029,1472 @@ def cmd_vectors(args) -> None:
             log(f"senses: {target}: {len(senses)} clusters from {len(vecs)} contexts")
         with open(os.path.join(out, "senses.json"), "w", encoding="utf-8") as f:
             json.dump(res, f, indent=2, ensure_ascii=False)
-    write_provenance(out, args, reader)
-    log(f"vectors: {len(words)} words, dim {V.shape[1]} -> {out}")
+    write_provenance(out, args, reader, {"pooling": args.pooling, "eos": eos})
+    log(f"vectors: {len(words)} words, dim {V.shape[1]}, pooling {args.pooling} -> {out}")
+
+
+# --------------------------------------------------------------------------- embedding geometry: maths
+# docs/EMBEDDING_GEOMETRY.md section 6. Each function is checked on known answers in `selftest`.
+
+def qsummary(x) -> dict:
+    x = np.asarray(x, dtype=np.float64)
+    x = x[np.isfinite(x)]
+    if not x.size:
+        return {"n": 0}
+    q = np.quantile(x, [0.05, 0.25, 0.5, 0.75, 0.95])
+    return {"n": int(x.size), "mean": float(x.mean()), "sd": float(x.std()), "min": float(x.min()), "q05": float(q[0]),
+            "q25": float(q[1]), "median": float(q[2]), "q75": float(q[3]), "q95": float(q[4]), "max": float(x.max()),
+            "iqr": float(q[3] - q[1])}
+
+
+def sigmoid(v: float) -> float:
+    return 1.0 / (1.0 + math.exp(-v)) if v >= 0 else math.exp(v) / (1.0 + math.exp(v))
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> list:
+    if n == 0:
+        return [float("nan"), float("nan")]
+    p = k / n
+    c = (p + z * z / (2 * n)) / (1 + z * z / n)
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return [c - h, c + h]
+
+
+def linear_cka(X, Y) -> float:
+    """Linear CKA (Kornblith et al. 2019) between two row-aligned sets of vectors."""
+    X = np.asarray(X, dtype=np.float64)
+    Y = np.asarray(Y, dtype=np.float64)
+    X = X - X.mean(axis=0)
+    Y = Y - Y.mean(axis=0)
+    if X.shape[0] < min(X.shape[1], Y.shape[1]):
+        K, L = X @ X.T, Y @ Y.T
+        return float((K * L).sum() / max(math.sqrt(float((K * K).sum() * (L * L).sum())), 1e-300))
+    xy = float(np.linalg.norm(Y.T @ X) ** 2)
+    return xy / max(float(np.linalg.norm(X.T @ X) * np.linalg.norm(Y.T @ Y)), 1e-300)
+
+
+def procrustes(X, Y):
+    """Orthogonal R minimising ||XR - Y||_F. Returns (R, ||XR - Y||^2 / ||Y||^2)."""
+    X = np.asarray(X, dtype=np.float64)
+    Y = np.asarray(Y, dtype=np.float64)
+    U, _s, Vt = np.linalg.svd(X.T @ Y)
+    R = U @ Vt
+    return R, float(np.linalg.norm(X @ R - Y) ** 2 / max(float(np.linalg.norm(Y) ** 2), 1e-300))
+
+
+def pca_project(X, k: int, rng) -> np.ndarray:
+    Xc = np.asarray(X, dtype=np.float64)
+    Xc = Xc - Xc.mean(axis=0)
+    if min(Xc.shape) <= 2048:
+        _u, _s, vt = np.linalg.svd(Xc, full_matrices=False)
+        return Xc @ vt[:k].T
+    comps, _v = randomized_pca(Xc.astype(np.float32), k, rng)
+    return Xc @ comps.T.astype(np.float64)
+
+
+def pca_spectrum(X) -> np.ndarray:
+    """Covariance eigenvalues, largest first."""
+    Xc = np.asarray(X, dtype=np.float64)
+    Xc = Xc - Xc.mean(axis=0)
+    G = Xc @ Xc.T if Xc.shape[0] < Xc.shape[1] else Xc.T @ Xc
+    return np.clip(np.linalg.eigvalsh(G), 0, None)[::-1] / max(Xc.shape[0] - 1, 1)
+
+
+def spectrum_stats(ev) -> dict:
+    tot = float(np.sum(ev))
+    if tot <= 0:
+        return {}
+    p = np.asarray(ev) / tot
+    c = np.cumsum(p)
+    d = {f"dims_{int(round(q * 100))}pct": int(np.searchsorted(c, q - 1e-12) + 1) for q in (0.9, 0.95, 0.99)}
+    d["effective_rank"] = float(math.exp(entropy(p)))
+    d["participation_ratio"] = float(tot ** 2 / float(np.sum(np.asarray(ev) ** 2)))
+    d["top1_share"] = float(p[0])
+    return d
+
+
+def twonn(X, discard: float = 0.1, chunk: int = 1024) -> float:
+    """TwoNN intrinsic dimension (Facco et al. 2017). mu = r2/r1 is Pareto with exponent d, so
+    -log(1 - F(mu)) = d log mu: a line through the origin, fitted with the largest `discard` of mu dropped."""
+    X = np.asarray(X, dtype=np.float64)
+    n = X.shape[0]
+    if n < 10:
+        return float("nan")
+    sq = (X * X).sum(axis=1)
+    r = np.empty((n, 2))
+    for s in range(0, n, chunk):
+        d2 = sq[s:s + chunk, None] + sq[None, :] - 2.0 * (X[s:s + chunk] @ X.T)
+        d2[np.arange(d2.shape[0]), np.arange(s, s + d2.shape[0])] = np.inf
+        r[s:s + chunk] = np.sqrt(np.sort(np.partition(np.maximum(d2, 0), 1, axis=1)[:, :2], axis=1))
+    ok = r[:, 0] > 1e-12
+    mu = np.sort(r[ok, 1] / r[ok, 0])
+    m = mu.size
+    if m < 10:
+        return float("nan")
+    keep = int(m * (1 - discard))
+    x = np.log(mu[:keep])
+    y = -np.log(1.0 - np.arange(1, keep + 1) / m)
+    return float((x * y).sum() / max(float((x * x).sum()), 1e-300))
+
+
+def knn_cos(Xn, k: int, Q=None, chunk: int = 1024):
+    """Top-k cosine neighbours of each row of Q (default: of Xn itself, self excluded)."""
+    self_q = Q is None
+    Q = Xn if self_q else Q
+    k = min(k, Xn.shape[0] - (1 if self_q else 0))
+    idx = np.empty((Q.shape[0], k), dtype=np.int64)
+    sims = np.empty((Q.shape[0], k), dtype=np.float32)
+    for s in range(0, Q.shape[0], chunk):
+        S = Q[s:s + chunk] @ Xn.T
+        if self_q:
+            S[np.arange(S.shape[0]), np.arange(s, s + S.shape[0])] = -np.inf
+        t = topk_rows(S, k)
+        idx[s:s + chunk] = t
+        sims[s:s + chunk] = np.take_along_axis(S, t, axis=1)
+    return idx, sims
+
+
+def csls_knn(Xn, k: int, chunk: int = 1024):
+    """Neighbours under CSLS (Conneau et al. 2018): 2 cos(x, y) - r(x) - r(y), r = mean cosine to the k nearest."""
+    _i, s = knn_cos(Xn, k, chunk=chunk)
+    r = s.mean(axis=1)
+    k = s.shape[1]
+    idx = np.empty((Xn.shape[0], k), dtype=np.int64)
+    for st in range(0, Xn.shape[0], chunk):
+        S = 2.0 * (Xn[st:st + chunk] @ Xn.T) - r[None, :]
+        S[np.arange(S.shape[0]), np.arange(st, st + S.shape[0])] = -np.inf
+        idx[st:st + chunk] = topk_rows(S, k)
+    return idx, r
+
+
+def skewness(x) -> float:
+    x = np.asarray(x, dtype=np.float64)
+    s = x.std()
+    return float(((x - x.mean()) ** 3).mean() / s ** 3) if s > 0 else 0.0
+
+
+def auc(pos, neg) -> float:
+    """P(a pos score beats a neg score), ties counted half (Mann-Whitney U / n_pos n_neg)."""
+    pos = np.asarray(pos, dtype=np.float64)
+    neg = np.asarray(neg, dtype=np.float64)
+    if not pos.size or not neg.size:
+        return float("nan")
+    r = rankdata(np.r_[pos, neg])
+    return float((r[:pos.size].sum() - pos.size * (pos.size + 1) / 2.0) / (pos.size * neg.size))
+
+
+def golden_min(f, lo: float, hi: float, iters: int = 80):
+    """Minimum of a unimodal f on [lo, hi]."""
+    g = (math.sqrt(5) - 1) / 2
+    a, b = lo, hi
+    c, d = b - g * (b - a), a + g * (b - a)
+    fc, fd = f(c), f(d)
+    for _ in range(iters):
+        if fc < fd:
+            b, d, fd = d, c, fc
+            c = b - g * (b - a)
+            fc = f(c)
+        else:
+            a, c, fc = c, d, fd
+            d = a + g * (b - a)
+            fd = f(d)
+    x = (a + b) / 2
+    return x, f(x)
+
+
+def softmax_nll(S, pos, tau: float) -> float:
+    Z = np.asarray(S, dtype=np.float64) / tau
+    m = Z.max(axis=1, keepdims=True)
+    lse = m[:, 0] + np.log(np.exp(Z - m).sum(axis=1))
+    return float(np.mean(lse - Z[np.arange(len(pos)), pos]))
+
+
+def fit_temperature(S, pos, lo: float = 1e-3, hi: float = 10.0):
+    """Maximum-likelihood tau of softmax(S / tau) picking column pos[i] in row i (in-batch negatives).
+    The NLL is convex in 1/tau, so a golden-section search over log tau finds the optimum."""
+    pos = np.asarray(pos, dtype=np.int64)
+    lt, v = golden_min(lambda t: softmax_nll(S, pos, math.exp(t)), math.log(lo), math.log(hi))
+    return math.exp(lt), v
+
+
+def align_uniform(Xn, a, b, rng, max_n: int = 2000) -> tuple[float, float]:
+    """Wang & Isola (2020): L_align = E||f(x) - f(y)||^2 over positives; L_unif = log E exp(-2||f(x) - f(y)||^2)."""
+    al = float(np.mean(((Xn[a] - Xn[b]) ** 2).sum(axis=1)))
+    s = rng.choice(Xn.shape[0], min(max_n, Xn.shape[0]), replace=False)
+    Y = Xn[s].astype(np.float64)
+    iu = np.triu_indices(len(s), 1)
+    d2 = np.maximum(2.0 - 2.0 * (Y @ Y.T), 0)[iu]
+    return al, float(math.log(np.mean(np.exp(-2.0 * d2))))
+
+
+def stratified_pairs(Xn, rng, n_anchor: int = 500, near_k: int = 10, per: int = 2, chunk: int = 256):
+    """Pairs stratified by the first set's neighbour rank (EMBEDDING_GEOMETRY 7.1): near (top near_k),
+    mid (ranks near_k .. n/10) and random, so random pairs do not swamp the agreement score."""
+    n = Xn.shape[0]
+    anchors = rng.choice(n, min(n_anchor, n), replace=False)
+    I, J, T = [], [], []
+    nk = min(near_k, n - 1)
+    hi = min(max(nk + 2, n // 10), n - 1)
+    for s in range(0, len(anchors), chunk):
+        A = anchors[s:s + chunk]
+        S = Xn[A] @ Xn.T
+        S[np.arange(len(A)), A] = -np.inf
+        order = np.argsort(-S, axis=1)
+        for r, i in enumerate(A):
+            for _ in range(per):
+                I.append(i), J.append(order[r, rng.integers(nk)]), T.append("near")
+                if hi > nk:
+                    I.append(i), J.append(order[r, rng.integers(nk, hi)]), T.append("mid")
+                j = int(rng.integers(n - 1))
+                I.append(i), J.append(j + (j >= i)), T.append("random")
+    return np.array(I, dtype=np.int64), np.array(J, dtype=np.int64), np.array(T)
+
+
+def rowcos(Xn, i, j) -> np.ndarray:
+    return (Xn[i] * Xn[j]).sum(axis=1)
+
+
+def mrl_prefixes(D: int, spec: str | None = None) -> list[int]:
+    if spec:
+        return sorted({min(int(x), D) for x in spec.split(",") if x.strip()})
+    return [2 ** k for k in range(3, 20) if 2 ** k < D] + [D]
+
+
+def conj_grad(A, b, iters: int = 1000, tol: float = 1e-10) -> np.ndarray:
+    x = np.zeros_like(b)
+    r = b.copy()
+    p = r.copy()
+    rs = float(r @ r)
+    b2 = max(float(b @ b), 1e-300)
+    for _ in range(iters):
+        if rs <= tol * tol * b2:
+            break
+        Ap = A(p)
+        alpha = rs / float(p @ Ap)
+        x += alpha * p
+        r -= alpha * Ap
+        rn = float(r @ r)
+        p = r + (rn / rs) * p
+        rs = rn
+    return x
+
+
+def ridge_word_weights(sent_words, E, Y, lam_rel: float = 1e-2, iters: int = 2000):
+    """Per-word scalar weights a_w for y_s ~ sum_w m_sw a_w e_w (m_sw = count / sentence length), ridge
+    towards a_w = 1 (the plain mean). The normal equations are sparse (only words that share a sentence
+    interact), so they are solved exactly by conjugate gradients. Returns (a, seen-in-training mask)."""
+    V = E.shape[0]
+    rows, cols, vals = [], [], []
+    b = np.zeros(V)
+    for (w, m), y in zip(sent_words, Y):
+        if not len(w):
+            continue
+        Es = E[w].astype(np.float64)
+        rows.append(np.repeat(w, len(w)))
+        cols.append(np.tile(w, len(w)))
+        vals.append(((Es @ Es.T) * np.outer(m, m)).ravel())
+        np.add.at(b, w, m * (Es @ np.asarray(y, dtype=np.float64)))
+    if not rows:
+        return np.ones(V), np.zeros(V, dtype=bool)
+    rows, cols, vals = np.concatenate(rows), np.concatenate(cols), np.concatenate(vals)
+
+    def gmul(v):
+        return np.bincount(rows, weights=vals * v[cols], minlength=V)
+
+    on = rows == cols
+    diag = np.bincount(rows[on], weights=vals[on], minlength=V)
+    seen = diag > 0
+    lam = lam_rel * max(float(diag[seen].mean()), 1e-12)
+    beta = conj_grad(lambda v: gmul(v) + lam * v, b - gmul(np.ones(V)), iters)
+    return 1.0 + beta, seen
+
+
+def ridge_map(P, Y, P_test, lam_rel: float = 0.1) -> np.ndarray:
+    """Linear map W = argmin ||PW - Y||^2 + mu ||W||^2 (mu relative to the mean eigenvalue), applied to P_test."""
+    P = np.asarray(P, dtype=np.float64)
+    Y = np.asarray(Y, dtype=np.float64)
+    mu = lam_rel * max(float((P * P).sum()) / min(P.shape), 1e-12)
+    if P.shape[0] < P.shape[1]:
+        return (np.asarray(P_test, dtype=np.float64) @ P.T) @ np.linalg.solve(P @ P.T + mu * np.eye(P.shape[0]), Y)
+    return np.asarray(P_test, dtype=np.float64) @ np.linalg.solve(P.T @ P + mu * np.eye(P.shape[1]), P.T @ Y)
+
+
+def r2_multi(Y, P) -> float:
+    Y = np.asarray(Y, dtype=np.float64)
+    st = float(((Y - Y.mean(axis=0)) ** 2).sum())
+    return 1.0 - float(((Y - P) ** 2).sum()) / st if st > 0 else float("nan")
+
+
+def pair_cos_spearman(Y, P, rng, max_pairs: int = 20000) -> float:
+    n = Y.shape[0]
+    if n < 3:
+        return float("nan")
+    if n * (n - 1) // 2 <= max_pairs:
+        i, j = np.triu_indices(n, 1)
+    else:
+        i = rng.integers(n, size=max_pairs)
+        j = rng.integers(n - 1, size=max_pairs)
+        j = j + (j >= i)
+    Yn, Pn = l2n(np.asarray(Y, dtype=np.float64)), l2n(np.asarray(P, dtype=np.float64))
+    return spearman(rowcos(Yn, i, j), rowcos(Pn, i, j))
+
+
+def shift_stats(X, Y, tr, te, ridge: float = 0.1) -> dict:
+    """How an instruction moves vectors X -> Y (B8): the share of the held-out shift explained by one
+    offset (Q10), by an affine map, and the effective rank of A - I for the affine fit."""
+    X = np.asarray(X, dtype=np.float64)
+    D = np.asarray(Y, dtype=np.float64) - X
+    e_te = float((D[te] ** 2).sum())
+    t = D[tr].mean(axis=0)
+    off = 1.0 - float(((D[te] - t) ** 2).sum()) / e_te if e_te > 0 else float("nan")
+    xb, Xc, Dc = X[tr].mean(axis=0), X[tr] - X[tr].mean(axis=0), D[tr] - t
+    mu = ridge * max(float((Xc * Xc).sum()) / min(Xc.shape), 1e-12)
+    B = np.linalg.solve(Xc @ Xc.T + mu * np.eye(len(tr)), Dc)  # A - I = Xc^T B (dual ridge)
+    pred = ((X[te] - xb) @ Xc.T) @ B + t
+    aff = 1.0 - float(((D[te] - pred) ** 2).sum()) / e_te if e_te > 0 else float("nan")
+    sv = np.linalg.svd(np.linalg.qr(Xc.T)[1] @ B, compute_uv=False)
+    tot = float(sv.sum())
+    eff = float(math.exp(entropy(sv / tot))) if tot > 0 else 0.0
+    e2 = np.cumsum(sv ** 2) / max(float((sv ** 2).sum()), 1e-300)
+    return {"offset_explained": off, "affine_explained": aff, "offset_norm": float(np.linalg.norm(t)),
+            "A_minus_I_effective_rank": eff, "A_minus_I_rank90": int(np.searchsorted(e2, 0.9 - 1e-12) + 1), "offset": t}
+
+
+def randomized_svals(A, k: int, rng, iters: int = 4, over: int = 10) -> np.ndarray:
+    """Top-k singular values: randomized range finder with power iterations (Halko et al. 2011)."""
+    A = np.asarray(A, dtype=np.float32)
+    m, n = A.shape
+    p = min(k + over, m, n)
+    Q = np.linalg.qr(A @ rng.standard_normal((n, p)).astype(np.float32))[0]
+    for _ in range(iters):
+        Q = np.linalg.qr(A.T @ Q)[0]
+        Q = np.linalg.qr(A @ Q)[0]
+    return np.linalg.svd(Q.T @ A, compute_uv=False)[:k].astype(np.float64)
+
+
+def sumsq(A, rows: int = 4096) -> float:
+    A = A.reshape(A.shape[0], -1) if A.ndim > 1 else A.reshape(1, -1)
+    return float(sum(np.einsum("ij,ij->", A[s:s + rows], A[s:s + rows], dtype=np.float64) for s in range(0, A.shape[0], rows)))
+
+
+def delta_stats(Wa, Wb, rng, max_full: int = 1024, top_frac: float = 0.05, iters: int = 4) -> dict:
+    """A4: size and shape of dW = Wa - Wb. top_share is the part of ||dW||_F^2 in the top `top_frac` of
+    singular values (prediction Q4); randomized SVD (slightly low, so conservative) for big matrices."""
+    D = np.asarray(Wa, dtype=np.float32) - np.asarray(Wb, dtype=np.float32)
+    fro2, base2 = sumsq(D), sumsq(np.asarray(Wb, dtype=np.float32))
+    o = {"fro": math.sqrt(fro2), "base_fro": math.sqrt(base2), "rel": math.sqrt(fro2 / base2) if base2 > 0 else float("nan"),
+         "k_top": None, "top_share": float("nan"), "sigma_max": float("nan"), "stable_rank": float("nan"),
+         "esd_alpha": float("nan"), "method": "norm only"}
+    if D.ndim != 2 or min(D.shape) < 2 or fro2 <= 0:
+        return o
+    r = min(D.shape)
+    k = max(1, int(math.ceil(top_frac * r)))
+    if r <= max_full:
+        G = (D @ D.T if D.shape[0] <= D.shape[1] else D.T @ D).astype(np.float64)
+        ev = np.clip(np.linalg.eigvalsh(G), 0, None)[::-1]
+        sv = np.sqrt(ev)
+        o["esd_alpha"] = powerlaw_alpha(ev)[0]
+        o["method"] = "full"
+    else:
+        sv = randomized_svals(D, k, rng, iters)
+        o["method"] = f"randomized k={k}"
+    o.update(k_top=k, top_share=float((sv[:k] ** 2).sum()) / fro2, sigma_max=float(sv[0]),
+             stable_rank=fro2 / max(float(sv[0]) ** 2, 1e-300))
+    return o
+
+
+# --------------------------------------------------------------------------- offline: vectors in, geometry out
+
+def load_vectors(path: str, index: str | None = None):
+    """A (n, d) .npy (fp16 or fp32) and its index TSV with a header (default: <stem>_index.tsv or
+    index.tsv beside it). Cypha's exported vectors work the same way."""
+    if not os.path.exists(path):
+        die(f"no such vectors file: {path}")
+    X = np.load(path, allow_pickle=False)
+    if X.ndim != 2:
+        die(f"{path}: expected a 2-D array, got shape {X.shape}")
+    X = X.astype(np.float32)
+    if index is None:
+        stem = os.path.splitext(path)[0]
+        for c in (stem + "_index.tsv", os.path.join(os.path.dirname(path) or ".", "index.tsv")):
+            if os.path.exists(c):
+                index = c
+                break
+    rows = None
+    if index:
+        with open(index, encoding="utf-8") as f:
+            hdr = f.readline().rstrip("\n").split("\t")
+            rows = [dict(zip(hdr, ln.rstrip("\n").split("\t"))) for ln in f if ln.rstrip("\n")]
+        if len(rows) != X.shape[0]:
+            die(f"{index}: {len(rows)} rows for {X.shape[0]} vectors")
+    return X, rows, index
+
+
+def row_label(rows, i: int) -> str:
+    if rows:
+        for c in ("text", "word", "item", "id"):
+            if c in rows[i]:
+                return rows[i][c][:120]
+    return str(i)
+
+
+def row_resolver(rows, key: str | None = None):
+    """Map a pairs-file token to a row: a value of the index's key column, else a row number."""
+    m = {}
+    if rows:
+        col = key or next((c for c in ("id", "text", "word", "item") if c in rows[0]), None)
+        if col in rows[0]:
+            for i in range(len(rows) - 1, -1, -1):
+                m[rows[i][col]] = i
+
+    def f(tok: str):
+        tok = tok.strip()
+        if tok in m:
+            return m[tok]
+        try:
+            return int(tok)
+        except ValueError:
+            return None
+    return f
+
+
+def read_pair_rows(path: str, resolve, n: int, extra: int = 0) -> list[tuple]:
+    out, bad = [], 0
+    for ln in read_lines(path):
+        p = ln.split("\t")
+        if len(p) < 2 + extra:
+            bad += 1
+            continue
+        a, b = resolve(p[0]), resolve(p[1])
+        if a is None or b is None or not (0 <= a < n and 0 <= b < n):
+            bad += 1
+            continue
+        out.append((a, b) + tuple(x.strip() for x in p[2:2 + extra]))
+    if bad:
+        log(f"{path}: {bad} lines skipped (header, or not rows/keys of the index)")
+    return out
+
+
+def read_lengths(spec: str, rows, n: int) -> np.ndarray:
+    if spec.startswith("index"):
+        col = spec.split(":", 1)[1] if ":" in spec else "n_tokens"
+        if not rows or col not in rows[0]:
+            die(f"--lengths {spec}: the index has no column {col!r}")
+        L = [float(r[col]) for r in rows]
+    else:
+        L = []
+        for ln in read_lines(spec):
+            try:
+                L.append(float(ln.split("\t")[-1]))
+            except ValueError:
+                continue
+    if len(L) != n:
+        die(f"--lengths: {len(L)} lengths for {n} vectors")
+    return np.asarray(L, dtype=np.float64)
+
+
+def input_hashes(paths) -> dict:
+    return {os.path.abspath(p): sha256_file(p) for p in paths if p and os.path.exists(p)}
+
+
+def cmd_geometry(args) -> None:
+    out = ensure_dir(args.out)
+    rng = np.random.default_rng(args.seed)
+    X, rows, index = load_vectors(args.vectors, args.index)
+    n, d = X.shape
+    if n < 3:
+        die("geometry needs at least 3 vectors")
+    norms = np.linalg.norm(X, axis=1)
+    Xn = l2n(X)
+    res = {"n": n, "dim": d, "index": index, "norm_mean": float(norms.mean()),
+           "norm_cv": float(norms.std() / max(float(norms.mean()), 1e-12)), "predictions": {}}
+    samp = np.sort(rng.choice(n, min(n, args.max_items), replace=False))
+    Xs = Xn[samp]
+    m = int(min(args.n_pairs, n * (n - 1) // 2))
+    i = rng.integers(n, size=m)
+    j = rng.integers(n - 1, size=m)
+    j = j + (j >= i)
+    cos = rowcos(Xn, i, j)
+    # B1: the similarity floor and anisotropy
+    res["random_pair_cos"] = qsummary(cos)
+    tot = Xn.astype(np.float64).sum(axis=0)
+    mu = tot / n
+    res["mean_vector_norm"] = float(np.linalg.norm(mu))
+    res["mean_cos_all_pairs"] = float((tot @ tot - (norms > 0).sum()) / (n * (n - 1)))
+    Xc = l2n(Xn - mu.astype(np.float32))
+    res["random_pair_cos_centred"] = qsummary(rowcos(Xc, i, j))
+    share = mu ** 2 / max(float(mu @ mu), 1e-30)
+    res["rogue_dims"] = [{"dim": int(t), "share_of_mean_cos": float(share[t])} for t in np.argsort(-share)[:5]]
+    res["predictions"]["Q1_floor_0.05_to_0.5"] = bool(0.05 <= res["random_pair_cos"]["mean"] <= 0.5)
+    h, edges = np.histogram(cos, bins=40, range=(-1, 1))
+    write_tsv(os.path.join(out, "floor.tsv"), ["cos_lo", "cos_hi", "count"], zip(edges[:-1], edges[1:], h))
+    # B6: PCA spectrum and TwoNN
+    ev = pca_spectrum(Xs)
+    res["pca"] = spectrum_stats(ev)
+    c = np.cumsum(ev) / max(float(ev.sum()), 1e-300)
+    write_tsv(os.path.join(out, "spectrum.tsv"), ["k", "eigenvalue", "share", "cumulative"],
+              ((k + 1, ev[k], ev[k] / max(float(ev.sum()), 1e-300), c[k]) for k in range(min(len(ev), 2048))))
+    res["twonn"] = twonn(Xs[: args.twonn_items])
+    # B5: hubness before and after CSLS
+    k = min(args.knn, len(samp) - 1)
+    kidx, _s = knn_cos(Xs, k)
+    cidx, _r = csls_knn(Xs, k)
+    Nk, Nc = np.bincount(kidx.ravel(), minlength=len(samp)), np.bincount(cidx.ravel(), minlength=len(samp))
+    res["hubness"] = {"k": k, "items": len(samp), "skew": skewness(Nk), "skew_csls": skewness(Nc),
+                      "max_k_occurrence": int(Nk.max()), "max_k_occurrence_csls": int(Nc.max()),
+                      "anti_hub_frac": float((Nk == 0).mean()), "anti_hub_frac_csls": float((Nc == 0).mean())}
+    top = np.argsort(-Nk)[:50]
+    write_tsv(os.path.join(out, "hubs.tsv"), ["row", "item", "k_occurrence", "k_occurrence_csls"],
+              ((int(samp[t]), row_label(rows, int(samp[t])), int(Nk[t]), int(Nc[t])) for t in top))
+    # B7 (+B6 per prefix): MRL truncation curves
+    I, J, T = stratified_pairs(Xs, rng, args.anchors)
+    full = rowcos(Xs, I, J)
+    mrl, curve = [], {}
+    for p in mrl_prefixes(d, args.prefixes):
+        P = l2n(Xs[:, :p])
+        cp = rowcos(P, I, J)
+        pk, _ = knn_cos(P, k)
+        jac = float(np.mean([len(set(a) & set(b)) / max(len(set(a) | set(b)), 1) for a, b in zip(kidx, pk)]))
+        st = {t: spearman(full[T == t], cp[T == t]) for t in ("near", "mid", "random")}
+        sp = spearman(full, cp)
+        curve[p] = sp
+        mrl.append((p, sp, st["near"], st["mid"], st["random"], jac, twonn(P[: args.twonn_items]),
+                    spectrum_stats(pca_spectrum(P)).get("dims_95pct", 0)))
+    write_tsv(os.path.join(out, "mrl.tsv"), ["dims", "pair_spearman_vs_full", "near", "mid", "random", "knn10_jaccard_vs_full",
+                                             "twonn", "pca_dims_95pct"], mrl)
+    res["mrl"] = {str(p): s for p, s in curve.items()}
+    if 256 in curve and 32 in curve:
+        res["predictions"]["Q3_256_keeps_95pct"] = bool(curve[256] >= 0.95)
+        res["predictions"]["Q3_32_keeps_80pct"] = bool(curve[32] >= 0.80)
+    resolve = row_resolver(rows, args.key)
+    # B4 and B3: alignment, uniformity, temperature
+    if args.pairs:
+        pr = read_pair_rows(args.pairs, resolve, n)
+        if len(pr) >= 2:
+            a = np.array([x[0] for x in pr])
+            b = np.array([x[1] for x in pr])
+            al, un = align_uniform(Xn, a, b, rng)
+            B = min(args.batch_size, len(a))
+            nb = len(a) // B
+            perm = rng.permutation(len(a))
+            S = np.concatenate([Xn[a[perm[t * B:(t + 1) * B]]] @ Xn[b[perm[t * B:(t + 1) * B]]].T for t in range(nb)])
+            pos = np.tile(np.arange(B), nb)
+            tau, nll = fit_temperature(S, pos)
+            res["pairs"] = {"n": len(a), "positive_cos": qsummary(rowcos(Xn, a, b)), "align": al, "uniformity": un,
+                            "tau_ml": tau, "nll_at_tau": nll, "batch": B, "batches": nb,
+                            "in_batch_top1": float(np.mean(np.argmax(S, axis=1) == pos))}
+            res["predictions"]["Q2_tau_0.01_to_0.1"] = bool(0.01 <= tau <= 0.1)
+    # B2: per-class similarity and pairwise AUCs
+    if args.labelled_pairs:
+        groups = collections.defaultdict(list)
+        for a, b, cl in read_pair_rows(args.labelled_pairs, resolve, n, extra=1):
+            groups[cl].append(float(Xn[a] @ Xn[b]))
+        cls = sorted(groups, key=lambda g: -float(np.mean(groups[g])))
+        res["classes"] = {g: qsummary(groups[g]) for g in cls}
+        write_tsv(os.path.join(out, "classes.tsv"), ["class", "n", "mean", "median", "q25", "q75"],
+                  ((g, len(groups[g]), *(res["classes"][g][q] for q in ("mean", "median", "q25", "q75"))) for g in cls))
+        write_tsv(os.path.join(out, "class_auc.tsv"), ["higher", "lower", "auc"],
+                  ((g1, g2, auc(groups[g1], groups[g2])) for x, g1 in enumerate(cls) for g2 in cls[x + 1:]))
+    # B17: length bias
+    if args.lengths:
+        ll = np.log(np.maximum(read_lengths(args.lengths, rows, n), 1.0))
+        dl, ml = np.abs(ll[i] - ll[j]), (ll[i] + ll[j]) / 2
+        A = np.stack([np.ones_like(dl), dl, ml], axis=1)
+        coef = np.linalg.lstsq(A, cos.astype(np.float64), rcond=None)[0]
+        res["length_bias"] = {"coef_intercept": float(coef[0]), "coef_abs_dlog_len": float(coef[1]),
+                              "coef_mean_log_len": float(coef[2]), "r2": r2_multi(cos[:, None], (A @ coef)[:, None]),
+                              "spearman_cos_vs_abs_dlog_len": spearman(cos, dl),
+                              "spearman_log_len_vs_centroid_cos": spearman(ll, Xn @ (mu / max(float(np.linalg.norm(mu)), 1e-30)))}
+    # B13: kNN graph
+    if not args.no_knn_graph:
+        g = np.arange(n) if n <= args.knn_max else np.sort(rng.choice(n, args.knn_max, replace=False))
+        gi, gs = knn_cos(Xn[g], args.knn)
+        with open(os.path.join(out, "knn_graph.tsv"), "w", encoding="utf-8") as f:
+            f.write("row\titem\tneighbours\n")
+            for r_, (ii, ss) in enumerate(zip(gi, gs)):
+                f.write(f"{int(g[r_])}\t{esc(row_label(rows, int(g[r_])))}\t" + " ".join(f"{int(g[x])}:{s:.4f}" for x, s in zip(ii, ss)) + "\n")
+        res["knn_graph"] = {"items": len(g), "k": int(gi.shape[1])}
+    with open(os.path.join(out, "geometry.json"), "w", encoding="utf-8") as f:
+        json.dump(res, f, indent=2, default=_json_default)
+    write_provenance(out, args, extra={"inputs": input_hashes([args.vectors, index, args.pairs, args.labelled_pairs])})
+    log(f"geometry: n={n} d={d} floor mean {res['random_pair_cos']['mean']:.3f}, twonn {res['twonn']:.1f}, "
+        f"hub skew {res['hubness']['skew']:.2f} -> {args.out}")
+
+
+def cmd_compare(args) -> None:
+    out = ensure_dir(args.out)
+    rng = np.random.default_rng(args.seed)
+    A, ra, ia = load_vectors(args.a, args.index_a)
+    B, rb, ib = load_vectors(args.b, args.index_b)
+    A0 = A
+    if args.key:
+        if not ra or not rb or args.key not in ra[0] or args.key not in rb[0]:
+            die(f"--key {args.key}: both index files need that column")
+        kb = {r[args.key]: x for x, r in enumerate(rb)}
+        pairs = [(x, kb[r[args.key]]) for x, r in enumerate(ra) if r[args.key] in kb]
+        A, B = A[[p for p, _ in pairs]], B[[q for _, q in pairs]]
+        log(f"compare: {len(pairs)} items matched on {args.key}")
+    elif A.shape[0] != B.shape[0]:
+        die(f"different item counts ({A.shape[0]} vs {B.shape[0]}); pass --key to align by an index column")
+    n = A.shape[0]
+    if n < 4:
+        die("compare needs at least 4 items")
+    samp = np.sort(rng.choice(n, min(n, args.max_items), replace=False))
+    An, Bn = l2n(A[samp]), l2n(B[samp])
+    m = len(samp)
+    I, J, T = stratified_pairs(An, rng, args.anchors)
+    ca, cb = rowcos(An, I, J), rowcos(Bn, I, J)
+    res = {"n": n, "items_used": m, "dim_a": A.shape[1], "dim_b": B.shape[1], "pair_spearman": spearman(ca, cb),
+           "pair_spearman_by_stratum": {t: spearman(ca[T == t], cb[T == t]) for t in ("near", "mid", "random")},
+           "pairs": int(len(I))}
+    k = min(10, m - 1)
+    kA, _ = knn_cos(An, k)
+    kB, _ = knn_cos(Bn, k)
+    kB50, _ = knn_cos(Bn, min(50, m - 1))
+    res["knn10_jaccard"] = float(np.mean([len(set(x) & set(y)) / len(set(x) | set(y)) for x, y in zip(kA, kB)]))
+    res["recall_top10_in_top50"] = float(np.mean([len(set(x) & set(y)) / len(x) for x, y in zip(kA, kB50)]))
+    res["linear_cka"] = linear_cka(An, Bn)
+    kp = min(args.procrustes_dim, An.shape[1], Bn.shape[1], m - 1)
+    PA, PB = pca_project(An, kp, rng), pca_project(Bn, kp, rng)
+    PA /= max(float(np.linalg.norm(PA)), 1e-300)
+    PB /= max(float(np.linalg.norm(PB)), 1e-300)
+    _R, resid = procrustes(PA, PB)
+    res["procrustes"] = {"dims": kp, "residual": resid, "r2": 1.0 - resid}
+    # Force match: KL(p_T || p_S) over each anchor's softmax on the other items (section 5.1).
+    tau_t, tau_src = args.tau, "--tau"
+    if tau_t is None and args.pairs:
+        pr = read_pair_rows(args.pairs, row_resolver(ra, args.key), A0.shape[0])
+        if len(pr) >= 2:
+            Xa = l2n(A0)
+            a_, b_ = np.array([x[0] for x in pr]), np.array([x[1] for x in pr])
+            tau_t, _ = fit_temperature(Xa[a_] @ Xa[b_].T, np.arange(len(a_)))
+            tau_src = "fitted on --pairs (teacher, in-batch)"
+    if tau_t is None:
+        tau_t, tau_src = 0.05, "default 0.05 (pass --tau, or --pairs to fit it)"
+    anc = rng.permutation(m)[: min(args.anchors, m)]
+    ST, SS = (An[anc] @ An.T).astype(np.float64), (Bn[anc] @ Bn.T).astype(np.float64)
+    ST[np.arange(len(anc)), anc] = -1e6
+    SS[np.arange(len(anc)), anc] = -1e6
+    lpT = ST / tau_t - (ST / tau_t).max(axis=1, keepdims=True)
+    lpT -= np.log(np.exp(lpT).sum(axis=1, keepdims=True))
+    pT = np.exp(lpT)
+
+    def kl(tau_s: float) -> float:
+        z = SS / tau_s
+        z = z - z.max(axis=1, keepdims=True)
+        lpS = z - np.log(np.exp(z).sum(axis=1, keepdims=True))
+        return float(np.mean((pT * (lpT - lpS)).sum(axis=1)))
+
+    lt, kl_fit = golden_min(lambda t: kl(math.exp(t)), math.log(1e-3), math.log(10.0))
+    res["force_match"] = {"tau_teacher": tau_t, "tau_teacher_source": tau_src, "kl_at_teacher_tau": kl(tau_t),
+                          "tau_student_fitted": math.exp(lt), "kl_at_fitted_tau": kl_fit, "anchors": int(len(anc))}
+    if args.tau_student:
+        res["force_match"]["kl_at_given_student_tau"] = kl(args.tau_student)
+    write_tsv(os.path.join(out, "compare_strata.tsv"), ["stratum", "pairs", "spearman"],
+              ((t, int((T == t).sum()), res["pair_spearman_by_stratum"][t]) for t in ("near", "mid", "random")))
+    with open(os.path.join(out, "compare.json"), "w", encoding="utf-8") as f:
+        json.dump(res, f, indent=2, default=_json_default)
+    write_provenance(out, args, extra={"inputs": input_hashes([args.a, args.b, ia, ib, args.pairs])})
+    log(f"compare: spearman {res['pair_spearman']:.3f}, knn10 jaccard {res['knn10_jaccard']:.3f}, "
+        f"CKA {res['linear_cka']:.3f}, procrustes r2 {1 - resid:.3f} -> {args.out}")
+
+
+def cmd_wdiff(args) -> None:
+    out = ensure_dir(args.out)
+    rng = np.random.default_rng(args.seed)
+    ra, rb = open_gguf(args.model), open_gguf(args.base)
+    ta, tb = tensor_map(ra), tensor_map(rb)
+    pat = re.compile(args.pattern) if args.pattern else None
+    names = [t.name for t in ra.tensors if t.name in tb and (not pat or pat.search(t.name))]
+    only = {"model_only": sorted(set(ta) - set(tb)), "base_only": sorted(set(tb) - set(ta))}
+    rows, layers = [], collections.defaultdict(lambda: [0.0, 0.0, [], 0])
+    for nm in names:
+        Wa, Wb = dequant(ta[nm]), dequant(tb[nm])
+        if Wa.shape != Wb.shape:
+            rows.append((nm, "x".join(map(str, Wa.shape)) + " vs " + "x".join(map(str, Wb.shape)), *([float("nan")] * 7), "", "shape mismatch"))
+            continue
+        note = ""
+        if Wa.ndim == 2 and args.max_rows and Wa.shape[0] > args.max_rows:
+            sel = np.sort(rng.choice(Wa.shape[0], args.max_rows, replace=False))
+            Wa, Wb = Wa[sel], Wb[sel]
+            note = f"rows sampled to {args.max_rows}"
+        s = delta_stats(Wa, Wb, rng, args.max_full, args.top_frac, args.iters)
+        rows.append((nm, "x".join(map(str, Wa.shape)), s["fro"], s["base_fro"], s["rel"], s["top_share"], s["sigma_max"],
+                     s["stable_rank"], s["esd_alpha"], s["method"], note))
+        m = re.match(r"blk\.(\d+)\.", nm)
+        L = layers[int(m.group(1)) if m else -1]
+        L[0] += s["fro"] ** 2
+        L[1] += s["base_fro"] ** 2
+        if math.isfinite(s["top_share"]):
+            L[2].append(s["top_share"])
+        L[3] += 1
+        del Wa, Wb
+    write_tsv(os.path.join(out, "wdiff.tsv"), ["tensor", "shape", "dW_fro", "W_base_fro", "rel_change", "top_share",
+                                               "sigma_max", "stable_rank", "esd_alpha", "method", "note"], rows)
+    lay = [(("other" if k < 0 else k), v[3], math.sqrt(v[0]), math.sqrt(v[0] / v[1]) if v[1] > 0 else float("nan"),
+            float(np.mean(v[2])) if v[2] else float("nan")) for k, v in sorted(layers.items())]
+    write_tsv(os.path.join(out, "wdiff_layers.tsv"), ["layer", "tensors", "dW_fro", "rel_change", "mean_top_share"], lay)
+    shares = [r[5] for r in rows if isinstance(r[5], float) and math.isfinite(r[5])]
+    summary = {"tensors_compared": len(rows), "matrices_with_spectrum": len(shares), "top_frac": args.top_frac,
+               "Q4_frac_matrices_top_share_ge_0.5": float(np.mean([x >= 0.5 for x in shares])) if shares else None,
+               "Q4_holds_in_most": bool(shares and np.mean([x >= 0.5 for x in shares]) > 0.5),
+               "total_rel_change": math.sqrt(sum(v[0] for v in layers.values()) / max(sum(v[1] for v in layers.values()), 1e-300)),
+               **only}
+    with open(os.path.join(out, "wdiff_summary.json"), "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, default=_json_default)
+    extra = {"base_path": os.path.abspath(args.base), "base_name": meta(rb, "general.name")}
+    if not args.no_hash:
+        extra["base_sha256"] = sha256_file(args.base)
+    write_provenance(out, args, ra, extra)
+    log(f"wdiff: {len(rows)} tensors, relative change {summary['total_rel_change']:.4g} -> {args.out}")
+
+
+# --------------------------------------------------------------------------- dynamic: embedding-mode teacher
+
+DEFAULT_QUERY_TEMPLATE = "Instruct: {instruction}\nQuery:{text}"
+DEFAULT_INSTRUCTIONS = [
+    "Given a web search query, retrieve relevant passages that answer the query",
+    "Retrieve semantically similar text",
+    "Given a question, retrieve questions that are semantically equivalent to the given question",
+    "Classify the topic of the given text",
+    "Given a claim, find documents that refute the claim",
+]
+
+
+class Embedder:
+    """Text embeddings from a GGUF in embedding mode (EMBEDDING_GEOMETRY 2.1): pooling, the EOS check,
+    the query-side instruction, the MRL prefix and timing, shared by the B-commands and `pairs`."""
+
+    def __init__(self, args, model: str | None = None):
+        self.path = model or args.model
+        self.reader = open_gguf(self.path)
+        self.pooling = args.pooling
+        self.r = Runner(self.path, args.ctx, args.threads, args.seed, embedding=True, pooling=self.pooling)
+        self.eos = (self.r.eos_plan(self.reader, args.eos) if self.pooling == "last"
+                    else {"action": "none", "reason": f"pooling {self.pooling}"})
+        self.instruction = getattr(args, "instruction", None)
+        self.template = getattr(args, "template", None) or DEFAULT_QUERY_TEMPLATE
+        self.dims = getattr(args, "dims", 0) or 0
+        self.batch = max(1, getattr(args, "batch", 32))
+        self.n_items = self.n_tokens = 0
+        self.seconds = 0.0
+        self.cache: dict = {}
+
+    def form(self, text: str, side: str = "document", instruction: str | None = None) -> str:
+        ins = self.instruction if instruction is None else instruction
+        if side == "query" and ins:
+            return self.template.replace("{instruction}", ins).replace("{text}", text)
+        return text
+
+    def raw(self, forms: list[str]) -> tuple[np.ndarray, list[int]]:
+        """Unnormalised full-width vectors of formatted inputs, and their token counts."""
+        V, lens = [], []
+        for s in range(0, len(forms), self.batch):
+            toks = [self.r.pooled_tokens(f, self.eos) for f in forms[s:s + self.batch]]
+            t0 = time.time()
+            V.extend(self.r.embed_tokens(toks))
+            self.seconds += time.time() - t0
+            lens += [len(t) for t in toks]
+        self.n_items += len(forms)
+        self.n_tokens += sum(lens)
+        return (np.stack(V).astype(np.float32) if V else np.zeros((0, self.r.llm.n_embd()), dtype=np.float32)), lens
+
+    def prefix(self, V: np.ndarray) -> np.ndarray:
+        """MRL prefix: truncate, then renormalise."""
+        if self.dims and self.dims < V.shape[1]:
+            V = V[:, :self.dims]
+        return l2n(V)
+
+    def encode(self, texts, side: str = "document", instruction: str | None = None) -> np.ndarray:
+        forms = [self.form(t, side, instruction) for t in texts]
+        need = [f for f in dict.fromkeys(forms) if f not in self.cache]
+        if need:
+            V, _ = self.raw(need)
+            for f, v in zip(need, self.prefix(V)):
+                self.cache[f] = v
+        return np.stack([self.cache[f] for f in forms]) if forms else np.zeros((0, self.dims or self.r.llm.n_embd()), np.float32)
+
+    def timing(self) -> dict:
+        s = max(self.seconds, 1e-9)
+        return {"items": self.n_items, "tokens": self.n_tokens, "seconds": round(self.seconds, 3),
+                "items_per_s": self.n_items / s if self.n_items else None,
+                "tokens_per_s": self.n_tokens / s if self.n_items else None,
+                "note": "decode time only (model load excluded); size jobs from this (EMBEDDING_GEOMETRY 9.1)"}
+
+    def info(self) -> dict:
+        return {"embedding_model": os.path.abspath(self.path), "pooling": self.pooling, "eos": self.eos,
+                "instruction": self.instruction, "template": self.template if self.instruction else None,
+                "dims": self.dims or None, "full_dim": self.r.llm.n_embd(), "ctx": self.r.n_ctx, "timing": self.timing()}
+
+
+def read_items(args) -> list[tuple[str, str, str]]:
+    """(id, side, text) per item: one per line, or one column of a TSV with a header."""
+    if args.column is None:
+        return [(str(i), args.side, t) for i, t in enumerate(read_lines(args.input))]
+    out = []
+    with open(args.input, encoding="utf-8") as f:
+        hdr = f.readline().rstrip("\n").split("\t")
+
+        def col(c):
+            if c is None:
+                return None
+            if c in hdr:
+                return hdr.index(c)
+            if c.isdigit():
+                return int(c)
+            die(f"no column {c!r} in {args.input} (header: {hdr})")
+        ci, ii, si = col(args.column), col(args.id_column), col(args.side_column)
+        for n, ln in enumerate(f):
+            p = ln.rstrip("\n").split("\t")
+            if len(p) <= ci or not p[ci].strip():
+                continue
+            side = args.side
+            if si is not None and si < len(p):
+                side = "query" if p[si].strip().lower() in ("q", "query") else "document"
+            out.append((p[ii] if ii is not None and ii < len(p) else str(n), side, p[ci]))
+    return out
+
+
+def cmd_embedtexts(args) -> None:
+    out = ensure_dir(args.out)
+    items = read_items(args)
+    if args.limit:
+        items = items[: args.limit]
+    if not items:
+        die("no input items")
+    emb = Embedder(args)
+    licence_warning(emb.reader)
+    parts = ensure_dir(os.path.join(out, "parts"))
+    cfg = {"model_bytes": os.path.getsize(args.model), "pooling": args.pooling, "eos": emb.eos.get("action"),
+           "instruction": args.instruction, "template": args.template, "dims": args.dims, "ctx": args.ctx,
+           "chunk": args.chunk, "n_items": len(items), "input": os.path.abspath(args.input), "column": args.column}
+    cfg_path = os.path.join(parts, "config.json")
+    if args.resume and os.path.exists(cfg_path):
+        with open(cfg_path, encoding="utf-8") as f:
+            if json.load(f) != cfg:
+                die(f"--resume: the settings differ from the run recorded in {cfg_path}; use a new --out")
+    elif not args.resume:
+        for fn in os.listdir(parts):
+            if fn.startswith("part_"):
+                os.remove(os.path.join(parts, fn))
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    hdr = ["row", "id", "side", "n_tokens", "norm", "text"]
+    starts, resumed = list(range(0, len(items), args.chunk)), 0
+    for start in starts:
+        stem = os.path.join(parts, f"part_{start:09d}")
+        if args.resume and os.path.exists(stem + ".npy") and os.path.exists(stem + ".tsv"):
+            resumed += 1
+            continue
+        sub = items[start:start + args.chunk]
+        raw, lens = emb.raw([emb.form(t, side) for _, side, t in sub])
+        np.save(stem + ".tmp.npy", emb.prefix(raw).astype(np.float16))
+        os.replace(stem + ".tmp.npy", stem + ".npy")
+        norms = np.linalg.norm(raw, axis=1)
+        write_tsv(stem + ".tmp.tsv", hdr, ((start + x, iid, side, lens[x], norms[x], t) for x, (iid, side, t) in enumerate(sub)))
+        os.replace(stem + ".tmp.tsv", stem + ".tsv")
+        tm = emb.timing()
+        log(f"embedtexts: {start + len(sub)}/{len(items)} items, {tm['items_per_s']:.2f} items/s, {tm['tokens_per_s']:.1f} tokens/s")
+    V = np.concatenate([np.load(os.path.join(parts, f"part_{s:09d}.npy")) for s in starts])
+    np.save(os.path.join(out, "embeddings.npy"), V)
+    with open(os.path.join(out, "embeddings_index.tsv"), "w", encoding="utf-8") as f:
+        f.write("\t".join(hdr) + "\n")
+        for s in starts:
+            with open(os.path.join(parts, f"part_{s:09d}.tsv"), encoding="utf-8") as g:
+                g.readline()
+                f.write(g.read())
+    write_provenance(out, args, emb.reader, {"embedding": emb.info(), "n_items": len(items), "dim": int(V.shape[1]),
+                                             "parts": len(starts), "parts_resumed": resumed, "timing": emb.timing()})
+    log(f"embedtexts: {len(items)} items, dim {V.shape[1]}, pooling {args.pooling}, EOS {emb.eos.get('action')} -> {out}")
+
+
+# Minimal-pair rules for `sensitivity` (B10). Small built-in lists; an external TSV takes generated suites (C6).
+NEG_AUX = {"is", "are", "was", "were", "can", "will", "does", "do", "did", "has", "have", "had", "should", "would",
+           "could", "must", "may", "might"}
+NEG_CONTRACT = {"isn't": "is", "aren't": "are", "wasn't": "was", "weren't": "were", "can't": "can", "cannot": "can",
+                "won't": "will", "doesn't": "does", "don't": "do", "didn't": "did", "hasn't": "has", "haven't": "have",
+                "hadn't": "had", "shouldn't": "should", "wouldn't": "would", "couldn't": "could", "mustn't": "must"}
+SVO_NOUNS = ["dog", "cat", "teacher", "student", "doctor", "patient", "police officer", "thief", "company", "customer",
+             "lawyer", "judge", "boy", "girl", "manager", "worker"]
+SVO_VERBS = ["chased", "praised", "called", "helped", "followed", "paid", "hired", "blamed", "thanked", "visited",
+             "warned", "watched"]
+SVO_TEMPLATES = ["The {a} {v} the {b}.", "Yesterday the {a} {v} the {b}.", "The {a} {v} the {b} in the morning."]
+SVO_RE = re.compile(r"^(The|A|An|the|a|an) ([A-Za-z]+) ([A-Za-z]+(?:ed|s)) (the|a|an) ([A-Za-z]+)([.!?]?)$")
+ENTITIES = {
+    "country": ["France", "Germany", "Italy", "Spain", "Japan", "China", "India", "Brazil", "Canada", "Australia", "Egypt", "Mexico"],
+    "city": ["Paris", "Berlin", "Rome", "Madrid", "Tokyo", "Beijing", "Delhi", "London", "Sydney", "Cairo", "Toronto", "Moscow"],
+    "person": ["Albert Einstein", "Marie Curie", "Isaac Newton", "Charles Darwin", "Ada Lovelace", "Alan Turing",
+               "William Shakespeare", "Jane Austen", "Nikola Tesla", "Leonardo da Vinci"],
+    "first_name": ["John", "Mary", "James", "Linda", "Robert", "Sarah", "David", "Emma", "Michael", "Anna"],
+}
+SYNONYMS = {"big": "large", "large": "big", "small": "little", "little": "small", "quick": "fast", "fast": "quick",
+            "happy": "glad", "glad": "happy", "begin": "start", "start": "begin", "buy": "purchase", "bought": "purchased",
+            "purchase": "buy", "car": "automobile", "help": "assist", "assist": "help", "answer": "reply", "reply": "answer",
+            "children": "kids", "kids": "children", "house": "home", "home": "house", "difficult": "hard", "hard": "difficult",
+            "easy": "simple", "simple": "easy", "speak": "talk", "talk": "speak", "smart": "clever", "clever": "smart",
+            "rich": "wealthy", "wealthy": "rich", "end": "finish", "finish": "end", "city": "town", "job": "occupation",
+            "won": "received", "muddy": "dirty"}
+PAD_PREFIX = ["To be honest, ", "Well, ", "As far as I know, "]
+PAD_SUFFIX = [" That is all.", " Thank you.", " (See above.)"]
+NUMBER_WORDS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+NUM_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
+WORD_PUNCT = "\"'“”‘’.,;:!?()[]{}"
+
+
+def _case_like(src: str, new: str) -> str:
+    return new[:1].upper() + new[1:] if src[:1].isupper() else new
+
+
+def edit_negation(s: str, rng=None):
+    w = s.split(" ")
+    for k, t in enumerate(w):
+        core = t.strip(WORD_PUNCT)
+        low = core.lower()
+        if low in NEG_CONTRACT:
+            w[k] = t.replace(core, _case_like(core, NEG_CONTRACT[low]), 1)
+            return " ".join(w), f"negation removed ({core})"
+        if low in NEG_AUX and core == t:
+            if k + 1 < len(w) and w[k + 1].strip(WORD_PUNCT).lower() == "not":
+                return " ".join(w[:k + 1] + w[k + 2:]), "negation removed (not)"
+            if low == "can":
+                w[k] = t + "not"
+                return " ".join(w), "can -> cannot"
+            return " ".join(w[:k + 1] + ["not"] + w[k + 1:]), f"not after {low}"
+    return None
+
+
+def edit_role(s: str, rng=None):
+    m = SVO_RE.match(s.strip())
+    if not m or m.group(2).lower() == m.group(5).lower():
+        return None
+    d1, a, v, d2, b, p = m.groups()
+    return f"{d1} {b} {v} {d2} {a}{p}", "subject and object swapped"
+
+
+def edit_number(s: str, rng):
+    m = NUM_RE.search(s)
+    if m:
+        x = m.group(0)
+        if "." in x:
+            new = f"{float(x) * 2 + 1:.{len(x.split('.')[1])}f}"
+        else:
+            new = str(int(x) + int(rng.integers(1, 10 if int(x) < 1000 else 100)))
+        return s[:m.start()] + new + s[m.end():], f"{x}->{new}"
+    for wd in NUMBER_WORDS:
+        m = re.search(rf"\b{wd}\b", s, re.I)
+        if m:
+            other = [x for x in NUMBER_WORDS if x != wd]
+            new = _case_like(m.group(0), other[int(rng.integers(len(other)))])
+            return s[:m.start()] + new + s[m.end():], f"{m.group(0)}->{new}"
+    return None
+
+
+def edit_entity(s: str, rng):
+    for kind, names in ENTITIES.items():
+        for nm in names:
+            m = re.search(rf"\b{re.escape(nm)}\b", s)
+            if m:
+                other = [x for x in names if x != nm]
+                new = other[int(rng.integers(len(other)))]
+                return s[:m.start()] + new + s[m.end():], f"{kind}: {nm}->{new}"
+    return None
+
+
+def edit_shuffle(s: str, rng):
+    core, end = s.rstrip(), ""
+    if core and core[-1] in ".!?":
+        core, end = core[:-1], core[-1]
+    w = core.split()
+    if len(w) < 3 or len(set(w)) < 2:
+        return None
+    for _ in range(20):
+        new = " ".join(w[i] for i in rng.permutation(len(w)))
+        if new != core:
+            return new + end, "words shuffled"
+    return None
+
+
+def edit_typo(s: str, rng, n: int = 2):
+    w = s.split(" ")
+    cand = [k for k, t in enumerate(w) if len(t.strip(WORD_PUNCT)) >= 4 and t.strip(WORD_PUNCT).isalpha()]
+    if not cand:
+        return None
+    notes = []
+    for k in rng.choice(cand, min(n, len(cand)), replace=False):
+        t = w[k]
+        core = t.strip(WORD_PUNCT)
+        i0 = t.index(core)
+        c = list(core)
+        j = int(rng.integers(1, len(c) - 1))
+        op = int(rng.integers(4))
+        if op == 0:
+            c[j], c[j + 1] = c[j + 1], c[j]
+        elif op == 1:
+            del c[j]
+        elif op == 2:
+            c.insert(j, c[j])
+        else:
+            c[j] = chr(ord("a") + (ord(c[j].lower()) - ord("a") + 1 + int(rng.integers(25))) % 26)
+        new = "".join(c)
+        w[k] = t[:i0] + new + t[i0 + len(core):]
+        notes.append(f"{core}->{new}")
+    out = " ".join(w)
+    return (out, "; ".join(notes)) if out != s else None
+
+
+def edit_synonym(s: str, rng=None):
+    w = s.split(" ")
+    for k, t in enumerate(w):
+        core = t.strip(WORD_PUNCT)
+        if core.lower() in SYNONYMS:
+            new = _case_like(core, SYNONYMS[core.lower()])
+            w[k] = t.replace(core, new, 1)
+            return " ".join(w), f"{core}->{new}"
+    return None
+
+
+def edit_padding(s: str, rng):
+    v = int(rng.integers(3))
+    if v == 0:
+        p = PAD_PREFIX[int(rng.integers(len(PAD_PREFIX)))]
+        return p + (s[:1].lower() + s[1:] if s[:2].istitle() and s.split(" ")[0].lower() in ("the", "a", "an", "it", "this") else s), "filler prefix"
+    if v == 1:
+        return s + PAD_SUFFIX[int(rng.integers(len(PAD_SUFFIX)))], "filler suffix"
+    return s + " " * 8, "trailing whitespace"
+
+
+EDITS = {"negation": edit_negation, "role_swap": edit_role, "number": edit_number, "entity": edit_entity,
+         "shuffle": edit_shuffle, "typo": edit_typo, "synonym": edit_synonym, "padding": edit_padding}
+
+
+def cmd_sensitivity(args) -> None:
+    out = ensure_dir(args.out)
+    rng = np.random.default_rng(args.seed)
+    kinds = args.kinds.split(",") if args.kinds else list(EDITS)
+    sents = read_lines(args.sentences) if args.sentences else []
+    pairs = []  # (kind, a, b, note, source)
+    for kind in kinds:
+        if kind not in EDITS:
+            die(f"unknown kind {kind!r}; choose from {', '.join(EDITS)}")
+        got = 0
+        for s in sents:
+            if got >= args.per_kind:
+                break
+            r = edit_typo(s, rng, args.typos) if kind == "typo" else EDITS[kind](s, rng)
+            if r and r[0] != s:
+                pairs.append((kind, s, r[0], r[1], "rule"))
+                got += 1
+        if kind == "role_swap":
+            for t in range(min(args.role_templates, args.per_kind)):
+                a, b = rng.choice(len(SVO_NOUNS), 2, replace=False)
+                v, tpl = SVO_VERBS[int(rng.integers(len(SVO_VERBS)))], SVO_TEMPLATES[t % len(SVO_TEMPLATES)]
+                pairs.append(("role_swap", tpl.format(a=SVO_NOUNS[a], v=v, b=SVO_NOUNS[b]),
+                              tpl.format(a=SVO_NOUNS[b], v=v, b=SVO_NOUNS[a]), "built-in SVO template", "template"))
+    if len(sents) >= 2:  # control: the floor, so each kind can be read against unrelated pairs
+        for _ in range(min(args.per_kind, len(sents))):
+            i, j = rng.choice(len(sents), 2, replace=False)
+            pairs.append(("unrelated", sents[i], sents[j], "control", "random"))
+    if args.pairs:
+        for ln in read_lines(args.pairs):
+            p = ln.split("\t")
+            if len(p) >= 3 and p[2].strip().lower() != "kind":
+                pairs.append((p[2].strip(), p[0], p[1], p[3] if len(p) > 3 else "", "external"))
+    if not pairs:
+        die("no pairs: give --sentences and/or --pairs")
+    emb = Embedder(args)
+    side = "query" if args.instruction else "document"
+    V = emb.encode([p[1] for p in pairs] + [p[2] for p in pairs], side)
+    n = len(pairs)
+    cos = (V[:n] * V[n:]).sum(axis=1)
+    write_tsv(os.path.join(out, "pairs.tsv"), ["kind", "cos", "note", "source", "a", "b"],
+              ((k, float(c), note, src, a, b) for (k, a, b, note, src), c in zip(pairs, cos)))
+    by = collections.OrderedDict()
+    for (k, *_r), c in zip(pairs, cos):
+        by.setdefault(k, []).append(float(c))
+    summ = {k: qsummary(v) for k, v in by.items()}
+    floor = summ.get("unrelated", {}).get("median")
+    rows = []
+    for k, q in summ.items():
+        above = (q["median"] - floor) / (1 - floor) if floor is not None and floor < 1 else float("nan")
+        rows.append((k, q["n"], q["mean"], q["median"], q["q25"], q["q75"], q["iqr"], q["min"], q["max"], above))
+    write_tsv(os.path.join(out, "summary.tsv"), ["kind", "n", "mean", "median", "q25", "q75", "iqr", "min", "max",
+                                                 "median_above_floor"], rows)
+    res = {"kinds": summ, "floor_median": floor}
+    if "negation" in summ:
+        res["Q6_negation_median_ge_0.8"] = bool(summ["negation"]["median"] >= 0.8)
+    with open(os.path.join(out, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump(res, f, indent=2)
+    write_provenance(out, args, emb.reader, {"embedding": emb.info(), "pairs": n})
+    log(f"sensitivity: {n} pairs over {len(summ)} kinds -> {out}")
+
+
+def word_key(t: str) -> str:
+    return t.strip(WORD_PUNCT).lower()
+
+
+def cmd_occlusion(args) -> None:
+    out = ensure_dir(args.out)
+    rng = np.random.default_rng(args.seed)
+    sents = read_lines(args.sentences)[: args.max_sentences]
+    toks = [s.split() for s in sents]
+    cnt = collections.Counter(word_key(t) for ws in toks for t in ws if word_key(t))
+    if args.freq:
+        cnt = collections.Counter()
+        for ln in read_lines(args.freq):
+            p = ln.split("\t")
+            try:
+                cnt[p[0].strip().lower()] += float(p[1])
+            except (IndexError, ValueError):
+                continue
+    total = max(float(sum(cnt.values())), 1.0)
+    emb = Embedder(args)
+    Y = emb.encode(sents)
+    # B15: drop each word, record how far the sentence vector moves
+    variants, owners = [], []
+    for si, ws in enumerate(toks):
+        if len(ws) < 2:
+            continue
+        for k in range(len(ws)):
+            if word_key(ws[k]):
+                variants.append(" ".join(ws[:k] + ws[k + 1:]))
+                owners.append((si, word_key(ws[k])))
+    drops = collections.defaultdict(list)
+    if variants:
+        Vv = emb.encode(variants)
+        dd = 1.0 - (Vv * Y[[o[0] for o in owners]]).sum(axis=1)
+        for (_si, key), x in zip(owners, dd):
+            drops[key].append(float(x))
+    # B16: additivity over single-word vectors
+    surf = collections.defaultdict(collections.Counter)
+    for ws in toks:
+        for t in ws:
+            if word_key(t):
+                surf[word_key(t)][t.strip(WORD_PUNCT)] += 1
+    types = sorted(surf)
+    widx = {k: i for i, k in enumerate(types)}
+    E = emb.encode([surf[k].most_common(1)[0][0] for k in types]).astype(np.float64)
+    sent_words = []
+    for ws in toks:
+        c = collections.Counter(word_key(t) for t in ws if word_key(t))
+        L = max(sum(c.values()), 1)
+        sent_words.append((np.array([widx[k] for k in c], dtype=np.int64), np.array([c[k] / L for k in c])))
+    n = len(sents)
+    perm = rng.permutation(n)
+    if n >= 6:
+        n_te = max(2, int(round(args.heldout * n)))
+        te, tr = np.sort(perm[:n_te]), np.sort(perm[n_te:])
+        split = "held-out"
+    else:
+        te = tr = np.arange(n)
+        split = "in-sample (fewer than 6 sentences)"
+        log("occlusion: too few sentences for a held-out split; numbers are in-sample")
+
+    def predict(a, idx):
+        P = np.zeros((len(idx), E.shape[1]))
+        for r_, s in enumerate(idx):
+            w, m = sent_words[s]
+            if len(w):
+                P[r_] = (m * a[w]) @ E[w]
+        return P
+
+    p_w = np.array([cnt.get(k, 1.0) / total for k in types])
+    sif = args.sif_a / (args.sif_a + p_w)
+    alpha, seen = ridge_word_weights([sent_words[s] for s in tr], E, Y[tr], args.ridge)
+    fits, rows = {}, []
+    for name, a in (("a_uniform_mean", np.ones(len(types))), ("b_sif_mean", sif), ("c_ridge_word_weights", alpha)):
+        Ptr, Pte = predict(a, tr), predict(a, te)
+        if name != "c_ridge_word_weights":  # one global scale, fitted on train (a mean of unit vectors is short)
+            sc = float((Ptr * Y[tr]).sum()) / max(float((Ptr * Ptr).sum()), 1e-300)
+            Ptr, Pte = Ptr * sc, Pte * sc
+        fits[name] = (Ptr, Pte)
+    Ptr_c, Pte_c = fits["c_ridge_word_weights"]
+    fits["d_ridge_weights_then_linear_map"] = (ridge_map(Ptr_c, Y[tr], Ptr_c, args.ridge_map), ridge_map(Ptr_c, Y[tr], Pte_c, args.ridge_map))
+    res = {"sentences": n, "word_types": len(types), "split": split, "train": int(len(tr)), "test": int(len(te)), "fits": {}}
+    for name, (Ptr, Pte) in fits.items():
+        r = {"r2_test": r2_multi(Y[te], Pte), "pair_spearman_test": pair_cos_spearman(Y[te], Pte, rng),
+             "mean_cos_test": float((l2n(Pte) * Y[te]).sum(axis=1).mean()),
+             "r2_train": r2_multi(Y[tr], Ptr)}
+        res["fits"][name] = r
+        rows.append((name, r["r2_test"], r["pair_spearman_test"], r["mean_cos_test"], r["r2_train"], len(tr), len(te)))
+    write_tsv(os.path.join(out, "additivity.tsv"), ["fit", "r2_test", "pair_spearman_test", "mean_cos_test", "r2_train",
+                                                    "n_train", "n_test"], rows)
+    best = max((res["fits"][k]["pair_spearman_test"] for k in list(res["fits"])[:3]
+                if math.isfinite(res["fits"][k]["pair_spearman_test"])), default=float("nan"))
+    res["Q5_weighted_sum_pair_spearman"] = best
+    res["Q5_holds"] = bool(math.isfinite(best) and best >= 0.8)
+    wrows = []
+    for k in types:
+        d = drops.get(k, [])
+        se = float(np.std(d, ddof=1) / math.sqrt(len(d))) if len(d) > 1 else float("nan")
+        wrows.append((k, len(d), float(np.mean(d)) if d else float("nan"), se, cnt.get(k, 0), cnt.get(k, 1.0) / total,
+                      float(sif[widx[k]]), float(alpha[widx[k]]), int(seen[widx[k]])))
+    wrows.sort(key=lambda r: -(r[2] if math.isfinite(r[2]) else -1))
+    write_tsv(os.path.join(out, "word_weights.tsv"), ["word", "occlusions", "mean_cos_drop", "se", "corpus_count", "p_w",
+                                                      "sif_weight", "fitted_weight", "fitted_on_train"], wrows)
+    with open(os.path.join(out, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump(res, f, indent=2)
+    write_provenance(out, args, emb.reader, {"embedding": emb.info(), "sif_a": args.sif_a, "ridge": args.ridge,
+                                             "ridge_map": args.ridge_map})
+    log(f"occlusion: {n} sentences, {len(types)} word types, best weighted-sum pair Spearman {best:.3f} -> {out}")
+
+
+def cmd_instruct(args) -> None:
+    out = ensure_dir(args.out)
+    rng = np.random.default_rng(args.seed)
+    queries = read_lines(args.queries)[: args.max_queries]
+    if len(queries) < 4:
+        die("instruct needs at least 4 queries")
+    instructions = read_lines(args.instructions) if args.instructions else DEFAULT_INSTRUCTIONS
+    emb = Embedder(args)
+    X = emb.encode(queries, "document")  # no instruction: the text as a document is
+    n = len(queries)
+    perm = rng.permutation(n)
+    n_te = max(2, int(round(args.heldout * n)))
+    te, tr = np.sort(perm[:n_te]), np.sort(perm[n_te:])
+    rows, items, offs = [], [], []
+    for k, ins in enumerate(instructions):
+        Y = emb.encode(queries, "query", instruction=ins)
+        asym = (X * Y).sum(axis=1)  # B9: the same text as query and as document
+        st = shift_stats(X, Y, tr, te, args.ridge)
+        offs.append(st.pop("offset"))
+        top1 = float(np.mean(np.argmax(Y @ X.T, axis=1) == np.arange(n)))
+        q = qsummary(asym)
+        rows.append((k, ins, n, q["mean"], q["median"], q["q25"], q["q75"], top1, st["offset_norm"], st["offset_explained"],
+                     st["affine_explained"], st["A_minus_I_effective_rank"], st["A_minus_I_rank90"]))
+        items += [(k, queries[x], float(asym[x]), float(np.linalg.norm(Y[x] - X[x]))) for x in range(n)]
+    write_tsv(os.path.join(out, "instruct.tsv"), ["instruction_id", "instruction", "queries", "query_doc_cos_mean",
+                                                  "query_doc_cos_median", "q25", "q75", "own_doc_top1", "offset_norm",
+                                                  "offset_explained_test", "affine_explained_test", "A_minus_I_effective_rank",
+                                                  "A_minus_I_rank90"], rows)
+    write_tsv(os.path.join(out, "instruct_items.tsv"), ["instruction_id", "query", "query_doc_cos", "shift_norm"], items)
+    O = l2n(np.stack(offs))
+    write_tsv(os.path.join(out, "offset_cos.tsv"), ["instruction_a", "instruction_b", "cos"],
+              ((a, b, float(O[a] @ O[b])) for a in range(len(offs)) for b in range(a + 1, len(offs))))
+    fr = [r[9] for r in rows if math.isfinite(r[9])]
+    res = {"queries": n, "train": int(len(tr)), "test": int(len(te)), "instructions": len(instructions),
+           "median_offset_explained": float(np.median(fr)) if fr else None,
+           "Q10_frac_instructions_offset_ge_0.7": float(np.mean([x >= 0.7 for x in fr])) if fr else None,
+           "template": emb.template}
+    with open(os.path.join(out, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump(res, f, indent=2)
+    write_provenance(out, args, emb.reader, {"embedding": emb.info(), "instructions": instructions})
+    log(f"instruct: {n} queries x {len(instructions)} instructions, median offset share {res['median_offset_explained']} -> {out}")
+
+
+# Synthetic pairs, Qwen style (C1-C3), with a generative teacher such as Qwen3.5-9B.
+QUERY_TYPES = {"keyword": "a short keyword-style search query (key terms only, not a sentence)",
+               "factual": "a factual question", "summary": "a request for a summary or overview",
+               "judgement": "a question asking for a judgement, opinion or evaluation"}
+QUERY_LENGTHS = {"short": "Use at most 5 words.", "medium": "Use 6 to 12 words.", "long": "Use 13 to 25 words."}
+QUERY_DIFFICULTY = {"easy": "Make it easy: it may reuse words from the document.",
+                    "medium": "Make it moderately hard: paraphrase instead of copying words.",
+                    "hard": "Make it hard: it should need real understanding of the document and share few words with it."}
+NEG_TASKS = {"topic": "Write one sentence on the same topic as the document that does NOT answer the query.",
+             "negation": "Rewrite the document so that it says the opposite of its main claim. Change nothing else.",
+             "role_swap": "Rewrite the document with the roles of the main participants swapped (who did what to whom).",
+             "entity": "Rewrite the document with its main named entity replaced by a different one of the same kind."}
+NEG_RULES = {"negation": edit_negation, "role_swap": edit_role, "entity": edit_entity}
+VERIFY_Q = "Document: {doc}\nQuery: {query}\nDoes the document answer the query? Answer Yes or No."
+AUDIT_Q = ("Query: {query}\nPassage: {doc}\nIs the passage relevant to the query, that is, does it answer the query "
+           "or say the same thing? Answer Yes or No.")
+
+
+class PromptFormat:
+    """Plain prompts, or the GGUF's own jinja chat template (Qwen3.5 needs it), thinking off by default.
+    A model with no template, or one llama-cpp-python cannot render, gets plain prompts (logged)."""
+
+    def __init__(self, runner: Runner, reader, mode: str = "auto"):
+        self.mode, self.fmt, self.warn = "plain", None, None
+        tpl = meta(reader, "tokenizer.chat_template", None)
+        self.has_think = bool(tpl and "<think>" in tpl)
+        if mode == "off":
+            return
+        if not tpl:
+            if mode == "on":
+                log("--chat-template on: the model has no chat template, so prompts stay plain (no-op)")
+            return
+        try:
+            from llama_cpp.llama_chat_format import Jinja2ChatFormatter
+            self.fmt = Jinja2ChatFormatter(template=tpl, eos_token=runner.piece(runner.llm.token_eos()),
+                                           bos_token=runner.piece(runner.llm.token_bos()))
+            self.render("ping", False)
+            self.mode = "chat"
+        except Exception as e:
+            self.fmt, self.warn = None, f"{type(e).__name__}: {e}"
+            log(f"WARNING: could not apply the model's chat template ({self.warn}); falling back to plain prompts")
+
+    def render(self, user: str, think: bool) -> str:
+        p = self.fmt(messages=[{"role": "user", "content": user}], enable_thinking=think).prompt
+        if self.has_think and not think and "</think>" not in p[-64:]:
+            p += "<think>\n\n</think>\n\n"  # a template that ignores enable_thinking: close the block ourselves
+        return p
+
+    def prompt(self, user: str, plain_cue: str, think: bool = False) -> tuple[str, bool]:
+        if self.mode == "chat":
+            return self.render(user, think), True
+        return f"{user}\n{plain_cue}", False
+
+    @property
+    def can_think(self) -> bool:
+        return self.mode == "chat" and self.has_think
+
+    def info(self) -> dict:
+        return {"prompt_mode": self.mode, "template_warning": self.warn, "template_has_think": self.has_think}
+
+
+def clean_gen(s: str) -> str:
+    for ln in s.splitlines():
+        ln = re.sub(r"^(query|new text|answer)\s*:\s*", "", ln.strip(), flags=re.I).strip(" \"'`“”")
+        if ln:
+            return ln
+    return ""
+
+
+def judge(runner: Runner, pf: PromptFormat, user: str, think: bool, think_tokens: int, seed: int) -> tuple[float, int]:
+    """log P(Yes) - log P(No) for a yes/no question; with thinking, a capped thought first."""
+    think = think and pf.can_think
+    prompt, special = pf.prompt(user, "Answer:", think=think)
+    thought = ""
+    if think:
+        thought = runner.generate(prompt, 1, 0.0, think_tokens, ["</think>"], seed, special=True)[0]
+        prompt = prompt + thought + "</think>\n\n"
+    return runner.yes_no(prompt, special), len(thought)
+
+
+def pairs_embed_filter(path: str, args) -> dict:
+    with open(path, encoding="utf-8") as f:
+        rows = [json.loads(ln) for ln in f if ln.strip()]
+    if not rows:
+        return {}
+    emb = Embedder(args, model=args.embedder)
+    Q = emb.encode([r["query"] for r in rows], "query")
+    D = emb.encode([r["document"] for r in rows], "document")
+    cos = (Q * D).sum(axis=1)
+    pos = {}
+    for r, c in zip(rows, cos):
+        r["cos"] = float(c)
+        if r["kind"] == "positive":
+            pos[(r["doc_id"], r["query"])] = float(c)
+    tag = {"model": os.path.basename(args.embedder), "pooling": emb.pooling, "eos": emb.eos.get("action"),
+           "instruction": emb.instruction}
+    for r in rows:
+        r["embedder"] = tag
+        if r["kind"] == "positive":
+            r["pass_cos"] = r["cos"] > args.min_cos
+            r["kept"] = r["verify"] > args.min_verify and r["pass_cos"]
+        else:
+            cp = pos.get((r["doc_id"], r["query"]))
+            r["cos_positive"] = cp
+            r["hard"] = cp is not None and r["cos"] >= cp - args.neg_margin
+            r["kept"] = r["verify"] < -args.min_verify and r["hard"]
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False, default=_json_default) + "\n")
+    os.replace(path + ".tmp", path)
+    return emb.info()
+
+
+def cmd_pairs(args) -> None:
+    out = ensure_dir(args.out)
+    if not args.docs and not args.audit:
+        die("pairs needs --docs (C1/C2) and/or --audit (C3)")
+    reader = open_gguf(args.model)
+    licence_warning(reader)
+    runner = Runner(args.model, args.ctx, args.threads, args.seed)
+    pf = PromptFormat(runner, reader, args.chat_template)
+    if args.think and not pf.can_think:
+        log("--think: the chat template in use has no <think> block, so judging runs without thinking (no-op)")
+    prov = {"generator": model_id_of(args), "tool_version": VERSION, "temperature": args.temperature, **pf.info()}
+    types = args.types.split(",")
+    lengths, diffs = args.length.split(","), args.difficulty.split(",")
+    negs = [x for x in args.negatives.split(",") if x]
+    for x, table in ((types, QUERY_TYPES), (lengths, QUERY_LENGTHS), (diffs, QUERY_DIFFICULTY), (negs, NEG_TASKS)):
+        bad = [v for v in x if v not in table]
+        if bad:
+            die(f"unknown choice(s) {bad}; choose from {', '.join(table)}")
+    personas = read_lines(args.personas) if args.personas else []
+    summary = {"prompt": pf.info()}
+    path = os.path.join(out, "pairs.jsonl")
+    if args.docs:
+        if not args.resume and os.path.exists(path):
+            os.remove(path)
+        done = done_keys(path, ("doc_id",)) if args.resume else set()
+        docs = read_lines(args.docs)[: args.max_docs or None]
+        stats = collections.Counter()
+        for di, doc in enumerate(docs):
+            if (di,) in done:
+                continue
+            drng = np.random.default_rng([args.seed, di])  # per document, so --resume reproduces the controls
+            persona = personas[int(drng.integers(len(personas)))] if personas else None
+            rows = []
+            for ti, qt in enumerate(types):
+                for rep in range(args.n):
+                    ctrl = {"type": qt, "length": lengths[int(drng.integers(len(lengths)))],
+                            "difficulty": diffs[int(drng.integers(len(diffs)))], "persona": persona}
+                    seed = args.seed + 7919 * di + 101 * ti + rep
+                    who = f"You are {persona}. " if persona else ""
+                    user = (f"{who}Here is a document.\n\nDocument: {doc}\n\nWrite {QUERY_TYPES[qt]} that this document "
+                            f"answers. {QUERY_LENGTHS[ctrl['length']]} {QUERY_DIFFICULTY[ctrl['difficulty']]} "
+                            f"Reply with the query only, on one line.")
+                    prompt, sp = pf.prompt(user, "Query:")
+                    q = clean_gen(runner.generate(prompt, 1, args.temperature, args.max_tokens, ["\n"], seed, special=sp)[0])
+                    if not q:
+                        stats["empty_query"] += 1
+                        continue
+                    v, _ = judge(runner, pf, VERIFY_Q.format(doc=doc, query=q), False, 0, seed)
+                    rows.append({"doc_id": di, "kind": "positive", "query": q, "document": doc, "controls": ctrl,
+                                 "verify": v, "p_yes": sigmoid(v), "kept": v > args.min_verify, "method": "generated",
+                                 "seed": seed, "provenance": prov})
+                    for ni, nk in enumerate(negs):
+                        neg, method = None, "rule"
+                        if nk in NEG_RULES:
+                            r = NEG_RULES[nk](doc, drng)
+                            neg = r[0] if r else None
+                        if neg is None:
+                            method = "generated"
+                            prompt, sp = pf.prompt(f"Document: {doc}\nQuery: {q}\n\n{NEG_TASKS[nk]} Reply with the new text only, on one line.", "New text:")
+                            neg = clean_gen(runner.generate(prompt, 1, args.temperature, args.neg_tokens, ["\n"], seed + 1 + ni, special=sp)[0])
+                        if not neg or neg == doc:
+                            stats[f"no_negative_{nk}"] += 1
+                            continue
+                        vn, _ = judge(runner, pf, VERIFY_Q.format(doc=neg, query=q), False, 0, seed)
+                        rows.append({"doc_id": di, "kind": "negative", "neg_kind": nk, "query": q, "document": neg,
+                                     "positive": doc, "verify": vn, "p_yes": sigmoid(vn), "kept": vn < -args.min_verify,
+                                     "method": method, "seed": seed, "provenance": prov})
+            for r in rows:
+                jsonl_append(path, r)
+            stats["docs"] += 1
+            log(f"pairs: document {di + 1}/{len(docs)}: {len(rows)} rows")
+        summary["generation"] = dict(stats)
+    if args.audit:
+        arows = []
+        for k, ln in enumerate(read_lines(args.audit)):
+            p = ln.split("\t")
+            if len(p) < 2 or (k == 0 and p[0].strip().lower() == "query"):
+                continue
+            v, nth = judge(runner, pf, AUDIT_Q.format(query=p[0], doc=p[1]), args.think, args.think_tokens, args.seed + k)
+            arows.append({"query": p[0], "candidate": p[1], "extra": p[2:], "verify": v, "p_yes": sigmoid(v),
+                          "relevant": v > 0, "thinking": bool(args.think and pf.can_think), "thought_chars": nth,
+                          "provenance": prov})
+        with open(os.path.join(out, "audit.jsonl"), "w", encoding="utf-8") as f:
+            for r in arows:
+                f.write(json.dumps(r, ensure_ascii=False, default=_json_default) + "\n")
+        kk = sum(r["relevant"] for r in arows)
+        summary["audit"] = {"n": len(arows), "judged_relevant": kk, "mask_precision": kk / len(arows) if arows else None,
+                            "wilson95": wilson(kk, len(arows))}
+    del runner  # free the generator before loading the embedder
+    if args.embedder and args.docs and os.path.exists(path):
+        summary["embedder"] = pairs_embed_filter(path, args)
+    if args.docs and os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            rows = [json.loads(ln) for ln in f if ln.strip()]
+        kinds = collections.Counter((r["kind"], r.get("neg_kind")) for r in rows)
+        kept = collections.Counter((r["kind"], r.get("neg_kind")) for r in rows if r.get("kept"))
+        summary["rows"] = {f"{a}{':' + b if b else ''}": {"n": kinds[(a, b)], "kept": kept[(a, b)]} for a, b in kinds}
+    with open(os.path.join(out, "summary.json"), "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, default=_json_default)
+    write_provenance(out, args, reader, {"prompt": pf.info(), "thinking_for_judging": bool(args.think and pf.can_think)})
+    log(f"pairs: done -> {out}")
 
 
 # --------------------------------------------------------------------------- calibrate
@@ -2002,8 +3600,14 @@ def cmd_canon(args) -> None:
 
 # --------------------------------------------------------------------------- selftest
 
+QWEN3_STYLE_TEMPLATE = ("{%- for message in messages %}{{- '<|im_start|>' + message.role + '\\n' + message.content + "
+                        "'<|im_end|>\\n' }}{%- endfor %}{%- if add_generation_prompt %}{{- '<|im_start|>assistant\\n' }}"
+                        "{%- if enable_thinking is defined and enable_thinking is false %}{{- '<think>\\n\\n</think>\\n\\n' }}"
+                        "{%- endif %}{%- endif %}")
+
+
 def build_tiny_model(vocab_gguf: str, out_path: str, seed: int, n_embd: int = 64, n_layer: int = 2,
-                     n_head: int = 4, n_ff: int = 128, n_ctx: int = 512) -> None:
+                     n_head: int = 4, n_ff: int = 128, n_ctx: int = 512, chat_template: str | None = None) -> None:
     from gguf import GGUFWriter, GGUFValueType
     r = open_gguf(vocab_gguf)
     rng = np.random.default_rng(seed)
@@ -2022,7 +3626,7 @@ def build_tiny_model(vocab_gguf: str, out_path: str, seed: int, n_embd: int = 64
     w.add_layer_norm_rms_eps(1e-5)
     w.add_file_type(0)
     for k, f in r.fields.items():
-        if not k.startswith("tokenizer."):
+        if not k.startswith("tokenizer.") or (chat_template and k == "tokenizer.chat_template"):
             continue
         v = field_value(f)
         t = f.types[0]
@@ -2036,6 +3640,8 @@ def build_tiny_model(vocab_gguf: str, out_path: str, seed: int, n_embd: int = 64
             w.add_float32(k, float(v))
         else:
             w.add_uint32(k, int(v))
+    if chat_template:
+        w.add_string("tokenizer.chat_template", chat_template)
     s = 0.02
 
     def rnd(*shape):
@@ -2060,11 +3666,139 @@ def build_tiny_model(vocab_gguf: str, out_path: str, seed: int, n_embd: int = 64
     w.close()
 
 
+def selftest_maths(seed: int) -> list[tuple[str, bool, str]]:
+    """Known-answer checks for the embedding-geometry maths."""
+    rng = np.random.default_rng(seed)
+    res = []
+
+    def chk(name, ok, val):
+        res.append((f"math:{name}", bool(ok), val))
+
+    # Spearman, worked by hand: d = (-1, 1, -1, 1, 0), rho = 1 - 6*4/(5*24) = 0.8.
+    # With ties, y ranks (1, 2, 3.5, 5, 3.5): rho = 8 / sqrt(10 * 9.5) = 8 / sqrt(95).
+    s1, s2 = spearman([1, 2, 3, 4, 5], [2, 1, 4, 3, 5]), spearman([1, 2, 3, 4, 5], [5, 6, 7, 8, 7])
+    chk("spearman_hand", abs(s1 - 0.8) < 1e-12 and abs(s2 - 8 / math.sqrt(95)) < 1e-12, f"{s1:.6f}=0.8, {s2:.6f}={8 / math.sqrt(95):.6f}")
+    a = auc([1, 2, 3], [0, 2])  # wins 1+0+1+0.5+1+1 = 4.5 of 6
+    chk("auc_hand", abs(a - 0.75) < 1e-12, f"{a:.4f}=0.75")
+    X = rng.standard_normal((300, 24))
+    R = np.linalg.qr(rng.standard_normal((24, 24)))[0]
+    c, c0 = linear_cka(X, 3.0 * X @ R), linear_cka(X, rng.standard_normal((300, 24)))
+    Xw = rng.standard_normal((20, 50))
+    Rw = np.linalg.qr(rng.standard_normal((50, 50)))[0]
+    cw = linear_cka(Xw, Xw @ Rw)  # the n < d (Gram) branch
+    chk("cka_rotation", abs(c - 1) < 1e-9 and abs(cw - 1) < 1e-9 and c0 < 0.3, f"CKA(X,3XR)={c:.10f}, gram {cw:.10f}, random {c0:.3f}")
+    R2, resid = procrustes(X, X @ R)
+    _r, resid_n = procrustes(X, X @ R + 0.01 * rng.standard_normal(X.shape))
+    chk("procrustes_rotation", np.abs(R2 - R).max() < 1e-8 and resid < 1e-20 and resid_n < 1e-3,
+        f"max|R'-R|={np.abs(R2 - R).max():.1e}, residual {resid:.1e}, noisy {resid_n:.1e}")
+    tw = []
+    for d in (2, 5, 8):
+        U = rng.random((2000, d)) @ np.linalg.qr(rng.standard_normal((20, d)))[0].T  # uniform cube, rotated into 20-D
+        tw.append((d, twonn(U)))
+    chk("twonn_uniform", all(abs(e - d) <= 0.25 * d for d, e in tw), ", ".join(f"d={d}: {e:.2f}" for d, e in tw))
+    S = rng.uniform(-1, 1, (4000, 32))
+    P = np.exp(S / 0.05)
+    P /= P.sum(axis=1, keepdims=True)
+    pos = (P.cumsum(axis=1) > rng.random((4000, 1))).argmax(axis=1)
+    tau, _ = fit_temperature(S, pos)
+    chk("temperature_planted", abs(tau - 0.05) / 0.05 < 0.1, f"tau={tau:.4f} (planted 0.05)")
+    V, D = 50, 32
+    E = l2n(rng.standard_normal((V, D)))
+    al = rng.uniform(0.5, 2.0, V)
+    sw, Yp = [], []
+    for _ in range(400):
+        w = rng.choice(V, int(rng.integers(3, 9)), replace=False)
+        m = np.full(len(w), 1.0 / len(w))
+        sw.append((w, m))
+        Yp.append((m * al[w]) @ E[w])
+    ah, _seen = ridge_word_weights(sw, E, np.array(Yp), lam_rel=1e-10)
+    chk("ridge_weights_planted", np.abs(ah - al).max() < 1e-4, f"max|a'-a|={np.abs(ah - al).max():.1e}")
+    A = rng.standard_normal((300, 200)) @ np.diag(0.8 ** np.arange(200)) @ np.linalg.qr(rng.standard_normal((200, 200)))[0]
+    sf, sr = np.linalg.svd(A, compute_uv=False)[:8], randomized_svals(A, 8, rng)
+    Wb = rng.standard_normal((120, 80))
+    Wa = Wb + np.outer(rng.standard_normal(120), rng.standard_normal(80))
+    t_full = delta_stats(Wa, Wb, rng)["top_share"]
+    t_rand = delta_stats(Wa, Wb, rng, max_full=10)["top_share"]
+    t_iso = delta_stats(Wb + rng.standard_normal(Wb.shape), Wb, rng)["top_share"]
+    chk("svd_and_top_share", np.abs(sr - sf).max() / sf[0] < 1e-3 and t_full > 0.999 and t_rand > 0.999 and t_iso < 0.25,
+        f"rsvd err {np.abs(sr - sf).max() / sf[0]:.1e}; rank-1 dW top-5% share {t_full:.4f}/{t_rand:.4f}; noise {t_iso:.3f}")
+    Xq = l2n(rng.standard_normal((60, 16)))
+    tr, te = np.arange(40), np.arange(40, 60)
+    so = shift_stats(Xq, Xq + rng.standard_normal(16) * 0.3, tr, te, 1e-6)
+    M = np.outer(rng.standard_normal(16), rng.standard_normal(16)) * 0.2
+    sl = shift_stats(Xq, Xq @ (np.eye(16) + M), tr, te, 1e-6)
+    chk("offset_vs_affine", abs(so["offset_explained"] - 1) < 1e-9 and sl["affine_explained"] > 0.999
+        and sl["offset_explained"] < 0.5 and sl["A_minus_I_rank90"] == 1,
+        f"pure offset {so['offset_explained']:.4f}; rank-1 map: affine {sl['affine_explained']:.4f}, "
+        f"offset {sl['offset_explained']:.3f}, rank90 {sl['A_minus_I_rank90']}")
+    Xu = l2n(rng.standard_normal((500, 8)))
+    al0, un = align_uniform(Xu, np.arange(500), np.arange(500), rng)
+    chk("align_uniform", al0 == 0.0 and -4.0 < un < -1.0, f"align(identical)={al0}, uniformity {un:.3f}")
+    return res
+
+
+def selftest_pooling(model: str) -> list[tuple[str, bool, str]]:
+    """The token-level embedding path against llama-cpp-python's own, and last pooling against per-token states."""
+    res = []
+    texts = ["The river bank was muddy.", "hello world", "A longer sentence about the bank of the river and the money in it."]
+    rm = Runner(model, 256, 1, 0, embedding=True, pooling="mean")
+    ours = rm.embed_tokens([rm.tok(t) for t in texts])  # several sequences in one decode
+    ref = [np.asarray(rm.llm.embed(t), dtype=np.float32).reshape(-1) for t in texts]
+    single = [rm.embed_tokens([rm.tok(t)])[0] for t in texts]
+    cm = min(float(l2n(a) @ l2n(b)) for a, b in zip(ours, ref))
+    db = max(float(np.abs(a - b).max()) for a, b in zip(ours, single))
+    res.append(("pool:mean_matches_llama_embed", cm > 0.99999, f"min cos {cm:.7f}"))
+    res.append(("pool:batched_equals_single", db < 1e-4, f"max |diff| {db:.1e}"))
+    rl = Runner(model, 256, 1, 0, embedding=True, pooling="last")
+    rn = Runner(model, 256, 1, 0, embedding=True, pooling="none")
+    plan = rl.eos_plan(open_gguf(model))
+    toks = [rl.pooled_tokens(t, plan) for t in texts]
+    last, none = rl.embed_tokens(toks), rn.embed_tokens(toks)
+    cl = min(float(l2n(a) @ l2n(b[-1])) for a, b in zip(last, none))
+    res.append(("pool:last_is_last_token_state", cl > 0.99999, f"min cos {cl:.7f}"))
+    ends = all(t[-1] == plan["eos_token_id"] for t in toks)
+    res.append(("pool:eos_plan", plan["action"] in ("appended", "tokenizer") and ends,
+                f"{plan['action']} {plan['eos_token']!r} id {plan['eos_token_id']} (add_eos_token={plan['add_eos_token_meta']})"))
+    return res
+
+
 def cmd_selftest(args) -> None:
     out = ensure_dir(args.out)
     model = os.path.join(out, "tiny_random.gguf")
     build_tiny_model(args.vocab, model, args.seed)
-    log(f"selftest: built {model} (random weights; outputs are meaningless by design)")
+    model_b = os.path.join(out, "tiny_random_b.gguf")
+    build_tiny_model(args.vocab, model_b, args.seed + 1, chat_template=QWEN3_STYLE_TEMPLATE)
+    log(f"selftest: built {model} and {model_b} (random weights; outputs are meaningless by design)")
+    sentences = ["The cat is on the mat.", "Paris is the capital of France.", "The dog chased the cat.",
+                 "Albert Einstein was born in 1879.", "She bought 3 apples and two pears.", "The teacher praised the student.",
+                 "This is a big house near the river.", "The company hired the lawyer.", "It is not easy to begin a new job.",
+                 "Tokyo is a large city in Japan.", "The quick brown fox jumps over the lazy dog.",
+                 "Marie Curie won the Nobel Prize in 1903.", "He can speak four languages.",
+                 "The river bank was muddy after the rain.", "Water boils at 100 degrees Celsius.",
+                 "The children were happy to go home.", "John visited Berlin last summer.", "The manager called the worker."]
+    with open(os.path.join(out, "sentences.txt"), "w") as f:
+        f.write("\n".join(sentences) + "\n")
+    with open(os.path.join(out, "queries.txt"), "w") as f:
+        f.write("capital of France\nwho discovered radium\nhow hot does water boil\nwhat did the dog chase\n"
+                "largest city in Japan\nwhen was Einstein born\nhow many languages can he speak\nwhy was the bank muddy\n")
+    with open(os.path.join(out, "docs.txt"), "w") as f:
+        f.write("Paris is the capital of France.\nThe dog chased the cat.\n")
+    with open(os.path.join(out, "personas.txt"), "w") as f:
+        f.write("a curious student\na retired engineer\n")
+    with open(os.path.join(out, "ext_pairs.tsv"), "w") as f:
+        f.write("a\tb\tkind\nThe cat sat.\tThe cat did not sit.\tnegation_c6\nParis is big.\tParis is large.\tparaphrase_c6\n")
+    with open(os.path.join(out, "audit.tsv"), "w") as f:
+        f.write("query\tcandidate\ncapital of France\tParis is the capital of France.\ncapital of France\tThe dog chased the cat.\n")
+    with open(os.path.join(out, "gpairs.tsv"), "w") as f:
+        f.write("".join(f"{i}\t{i + 1}\n" for i in range(0, 16, 2)))
+    with open(os.path.join(out, "glabelled.tsv"), "w") as f:
+        f.write("a\tb\tclass\n" + "".join(f"{i}\t{i + 1}\tnear\n{i}\t{(i + 9) % 18}\tfar\n" for i in range(0, 16, 2)))
+    srng = np.random.default_rng(args.seed)
+    syn = srng.standard_normal((300, 32)).astype(np.float32)
+    np.save(os.path.join(out, "syn_a.npy"), syn)
+    np.save(os.path.join(out, "syn_b.npy"), syn @ np.linalg.qr(srng.standard_normal((32, 32)))[0].astype(np.float32))
+    with open(os.path.join(out, "syn_pairs.tsv"), "w") as f:
+        f.write("".join(f"{i}\t{i + 1}\n" for i in range(0, 300, 2)))
     with open(os.path.join(out, "subjects.tsv"), "w") as f:
         f.write("France\tQ142\nAlbert Einstein\tQ937\n")
     with open(os.path.join(out, "gold.tsv"), "w") as f:
@@ -2090,7 +3824,49 @@ def cmd_selftest(args) -> None:
         ["neurons", *common, "--out", f"{out}/neurons", "--layers", "0", "--max-neurons", "16", "--read-tokens", "500"],
         ["heads", *common, "--out", f"{out}/heads", "--tokens", "300"],
         ["spectra", *common, "--out", f"{out}/spectra", "--pattern", "blk\\.0\\."],
+        ["wdiff", *common, "--out", f"{out}/wdiff", "--base", model_b, "--max-full", "32"],
+        ["geometry", "--out", f"{out}/geometry_syn", "--vectors", f"{out}/syn_a.npy", "--pairs", f"{out}/syn_pairs.tsv",
+         "--batch-size", "32"],
+        ["compare", "--out", f"{out}/compare_syn", "--a", f"{out}/syn_a.npy", "--b", f"{out}/syn_b.npy",
+         "--pairs", f"{out}/syn_pairs.tsv"],
     ]
+    et = f"{out}/embedtexts"
+
+    def drop_part():  # keep the full run, delete one part, so the --resume step must rebuild exactly that part
+        import shutil
+        shutil.copy(f"{et}/embeddings.npy", f"{out}/embeddings_full.npy")
+        os.remove(f"{et}/parts/part_{14:09d}.npy")
+        return True, "removed the part at row 14"
+
+    def check_resume():
+        with open(f"{et}/provenance.json") as f:
+            pv = json.load(f)
+        same = np.array_equal(np.load(f"{et}/embeddings.npy"), np.load(f"{out}/embeddings_full.npy"))
+        ok = same and pv["parts_resumed"] == pv["parts"] - 1
+        return ok, f"identical after resume: {same}; parts resumed {pv['parts_resumed']}/{pv['parts']}; EOS {pv['embedding']['eos']['action']}"
+
+    def check_compare_syn():
+        with open(f"{out}/compare_syn/compare.json") as f:
+            c = json.load(f)
+        ok = (c["linear_cka"] > 0.999999 and c["procrustes"]["residual"] < 1e-6 and c["pair_spearman"] > 0.9999
+              and c["knn10_jaccard"] > 0.999 and c["force_match"]["kl_at_teacher_tau"] < 1e-6)
+        return ok, (f"X vs XR: CKA {c['linear_cka']:.7f}, procrustes residual {c['procrustes']['residual']:.1e}, "
+                    f"spearman {c['pair_spearman']:.5f}, jaccard {c['knn10_jaccard']:.3f}, KL {c['force_match']['kl_at_teacher_tau']:.1e}")
+
+    def check_think():  # model_b carries a Qwen3-style template: thinking off closes the block, on leaves it open
+        class Stub:
+            class llm:
+                token_eos = token_bos = staticmethod(lambda: -1)
+            piece = staticmethod(lambda t: "")
+        pf = PromptFormat(Stub, open_gguf(model_b), "auto")
+        off, on = pf.render("hi", False), pf.render("hi", True)
+        with open(f"{out}/pairs_think/audit.jsonl") as f:
+            thought = [json.loads(ln)["thinking"] for ln in f]
+        ok = pf.can_think and off.endswith("<think>\n\n</think>\n\n") and on.endswith("assistant\n") and all(thought)
+        return ok, f"mode {pf.mode}, no-think prompt closes <think>: {off.endswith('</think>' + chr(10) * 2)}, audit thought: {all(thought)}"
+
+    steps.append(("check:compare_X_vs_XR", check_compare_syn))
+    sent, emb_c = f"{out}/sentences.txt", common + ["--batch", "4"]
     dyn = [
         ["facts", *common, "--out", f"{out}/facts", "--subjects", f"{out}/subjects.tsv", "--relations", "P36,P30", "--samples", "2", "--inverse"],
         ["calibrate", *common, "--out", f"{out}/calibrate", "--gold", f"{out}/gold.tsv", "--samples", "1", "--min-items", "2"],
@@ -2104,25 +3880,63 @@ def cmd_selftest(args) -> None:
         ["score", *common, "--out", f"{out}/score", f"{out}/corpus.txt", "--split"],
         ["vectors", *common, "--out", f"{out}/vectors", "--words", f"{out}/words.txt", "--senses", f"{out}/senses.txt", "--corpus", f"{out}/corpus.txt"],
         ["canon", "--input", f"{out}/facts/facts.jsonl", "--labels", f"{out}/labels.tsv", "--output", f"{out}/facts/facts_canon.jsonl"],
+        ["vectors", *common, "--out", f"{out}/vectors_last", "--words", f"{out}/words.txt", "--pooling", "last"],
+        ["embedtexts", *emb_c, "--out", et, "--input", sent, "--instruction", "Retrieve semantically similar text", "--chunk", "2"],
+        ("embedtexts:drop_part", drop_part),
+        ["embedtexts", *emb_c, "--out", et, "--input", sent, "--instruction", "Retrieve semantically similar text", "--chunk", "2", "--resume"],
+        ("check:embedtexts_resume", check_resume),
+        ["embedtexts", *emb_c, "--out", f"{out}/embedtexts_mean", "--input", sent, "--pooling", "mean", "--dims", "32", "--chunk", "100"],
+        ["geometry", "--out", f"{out}/geometry", "--vectors", f"{et}/embeddings.npy", "--pairs", f"{out}/gpairs.tsv",
+         "--labelled-pairs", f"{out}/glabelled.tsv", "--lengths", "index", "--batch-size", "4"],
+        ["compare", "--out", f"{out}/compare", "--a", f"{et}/embeddings.npy", "--b", f"{out}/embedtexts_mean/embeddings.npy"],
+        ["sensitivity", *emb_c, "--out", f"{out}/sensitivity", "--sentences", sent, "--pairs", f"{out}/ext_pairs.tsv", "--role-templates", "4"],
+        ["occlusion", *emb_c, "--out", f"{out}/occlusion", "--sentences", sent],
+        ["instruct", *emb_c, "--out", f"{out}/instruct", "--queries", f"{out}/queries.txt"],
+        ["pairs", *common, "--out", f"{out}/pairs", "--docs", f"{out}/docs.txt", "--types", "factual,keyword",
+         "--personas", f"{out}/personas.txt", "--embedder", model, "--audit", f"{out}/audit.tsv", "--think",
+         "--think-tokens", "8", "--max-tokens", "12", "--neg-tokens", "16"],
+        ["pairs", "--model", model_b, "--no-hash", "--out", f"{out}/pairs_think", "--docs", f"{out}/docs.txt", "--types",
+         "factual", "--negatives", "negation", "--audit", f"{out}/audit.tsv", "--think", "--think-tokens", "8", "--max-tokens", "8"],
+        ("check:chat_template_thinking", check_think),
     ]
     import importlib.util
-    if importlib.util.find_spec("llama_cpp") is not None:
+    have_llama = importlib.util.find_spec("llama_cpp") is not None
+    if have_llama:
         steps += dyn
     else:
         log("selftest: llama-cpp-python not installed; dynamic commands skipped")
+    if args.only:
+        want = set(args.only.split(","))
+        steps = [s for s in steps if (s[0] if isinstance(s, tuple) else s[0]) in want or (isinstance(s, tuple) and "check" in want)]
     import subprocess
     results = []
     for st in steps:
         t0 = time.time()
+        if isinstance(st, tuple):  # an in-process step: (label, fn) -> (ok, detail)
+            try:
+                ok, detail = st[1]()
+            except Exception as e:
+                ok, detail = False, f"{type(e).__name__}: {e}"
+            results.append((st[0], ok, time.time() - t0, detail))
+            continue
         p = subprocess.run([py, me, *st], capture_output=True, text=True)
         ok = p.returncode == 0
-        results.append((st[0], ok, time.time() - t0))
+        label = (os.path.basename(st[st.index("--out") + 1]) if "--out" in st else st[0]) + (" --resume" if "--resume" in st else "")
+        results.append((label, ok, time.time() - t0, ""))
         if not ok:
             print(p.stderr[-3000:], file=sys.stderr)
+    t0 = time.time()
+    checks = selftest_maths(args.seed)
+    if have_llama and not args.only:
+        try:
+            checks += selftest_pooling(model)
+        except Exception as e:
+            checks.append(("pool:checks", False, f"{type(e).__name__}: {e}"))
+    results += [(n, ok, (time.time() - t0) / max(len(checks), 1), d) for n, ok, d in checks]
     w = max(len(r[0]) for r in results)
-    for name, ok, dt in results:
-        print(f"{name.ljust(w)}  {'ok ' if ok else 'FAIL'}  {dt:6.1f} s")
-    if not all(ok for _, ok, _ in results):
+    for name, ok, dt, detail in results:
+        print(f"{name.ljust(w)}  {'ok ' if ok else 'FAIL'}  {dt:6.1f} s  {detail}".rstrip())
+    if not all(r[1] for r in results):
         sys.exit(1)
 
 
@@ -2248,7 +4062,116 @@ def main(argv=None) -> None:
     p.add_argument("--senses", help="words to induce senses for")
     p.add_argument("--corpus", help="text with one sentence per line, for senses")
     p.add_argument("--max-contexts", type=int, default=200)
+    p.add_argument("--pooling", choices=("mean", "last", "none"), default="mean",
+                   help="mean (default, as before); last = last-token state, EOS checked/appended (Qwen3-Embedding); "
+                        "none = per-token states averaged over the word's own tokens")
+    p.add_argument("--eos", choices=("auto", "append", "never"), default="auto",
+                   help="last pooling: auto appends EOS only when the tokenizer does not")
     p.set_defaults(fn=cmd_vectors)
+
+    def emb(p, pooling="last"):
+        p.add_argument("--pooling", choices=("mean", "last"), default=pooling)
+        p.add_argument("--eos", choices=("auto", "append", "never"), default="auto",
+                       help="last pooling: auto appends EOS (<|endoftext|> when the vocabulary has it) only when the "
+                            "tokenizer does not; the choice is logged and in provenance")
+        p.add_argument("--instruction", help="query-side instruction (documents get none)")
+        p.add_argument("--template", default=DEFAULT_QUERY_TEMPLATE, help="query form, with {instruction} and {text}")
+        p.add_argument("--dims", type=int, default=0, help="MRL prefix: truncate to N dims, then renormalise")
+        p.add_argument("--batch", type=int, default=32, help="texts per embedding call")
+        return p
+
+    p = emb(dyn(base("embedtexts", "batched text embeddings (fp16 .npy + index TSV + timing)")))
+    p.add_argument("--input", required=True, help="one item per line, or a TSV with a header (see --column)")
+    p.add_argument("--column", help="TSV column (name or 0-based index) holding the text")
+    p.add_argument("--id-column")
+    p.add_argument("--side", choices=("query", "document"), default="query", help="the instruction applies to queries only")
+    p.add_argument("--side-column", help="TSV column with query/document per row")
+    p.add_argument("--chunk", type=int, default=1000, help="items per resumable part")
+    p.add_argument("--limit", type=int, default=0)
+    p.set_defaults(fn=cmd_embedtexts)
+    p = emb(dyn(base("sensitivity", "B10 minimal-pair sensitivity")))
+    p.add_argument("--sentences", help="one sentence per line; minimal pairs are made from it by rule")
+    p.add_argument("--pairs", help="external TSV: a, b, kind [, note] (e.g. a generated C6 suite)")
+    p.add_argument("--kinds", help=f"subset of {','.join(EDITS)}")
+    p.add_argument("--per-kind", type=int, default=200)
+    p.add_argument("--typos", type=int, default=2, help="typos per sentence")
+    p.add_argument("--role-templates", type=int, default=20, help="built-in SVO role-swap pairs")
+    p.set_defaults(fn=cmd_sensitivity)
+    p = emb(dyn(base("occlusion", "B15 word importance and B16 additivity")))
+    p.add_argument("--sentences", required=True)
+    p.add_argument("--max-sentences", type=int, default=2000)
+    p.add_argument("--freq", help="TSV word, count for the SIF p(w) (default: counts in --sentences)")
+    p.add_argument("--sif-a", type=float, default=1e-3)
+    p.add_argument("--ridge", type=float, default=1e-2, help="per-word weight ridge, relative to the mean diagonal")
+    p.add_argument("--ridge-map", type=float, default=0.1, help="linear-map ridge, relative to the mean eigenvalue")
+    p.add_argument("--heldout", type=float, default=0.2)
+    p.set_defaults(fn=cmd_occlusion)
+    p = emb(dyn(base("instruct", "B8 instruction effects and B9 query/document asymmetry")))
+    p.add_argument("--queries", required=True)
+    p.add_argument("--instructions", help="one per line (default: five Qwen/MTEB-style instructions)")
+    p.add_argument("--max-queries", type=int, default=2000)
+    p.add_argument("--heldout", type=float, default=0.3)
+    p.add_argument("--ridge", type=float, default=0.1, help="affine-map ridge, relative to the mean eigenvalue")
+    p.set_defaults(fn=cmd_instruct)
+    p = emb(dyn(base("pairs", "C1-C3 synthetic pairs, hard negatives and false-negative audit")))
+    p.add_argument("--docs", help="one document per line")
+    p.add_argument("--max-docs", type=int, default=0)
+    p.add_argument("--types", default=",".join(QUERY_TYPES))
+    p.add_argument("--length", default=",".join(QUERY_LENGTHS), help="query lengths to draw from")
+    p.add_argument("--difficulty", default=",".join(QUERY_DIFFICULTY))
+    p.add_argument("--personas", help="one persona per line; one is drawn per document")
+    p.add_argument("--n", type=int, default=1, help="queries per document and type")
+    p.add_argument("--negatives", default=",".join(NEG_TASKS), help="hard-negative kinds ('' for none)")
+    p.add_argument("--neg-tokens", type=int, default=64)
+    p.add_argument("--chat-template", choices=("auto", "on", "off"), default="auto",
+                   help="use the GGUF's jinja chat template (thinking off); a no-op when the model has none")
+    p.add_argument("--think", action="store_true", help="thinking on, capped, for audit judging (C3)")
+    p.add_argument("--think-tokens", type=int, default=256)
+    p.add_argument("--min-verify", type=float, default=0.0, help="keep positives with verify above this, negatives below minus it")
+    p.add_argument("--embedder", help="embedding GGUF for the cosine filter (loaded after the generator is freed)")
+    p.add_argument("--min-cos", type=float, default=0.7)
+    p.add_argument("--neg-margin", type=float, default=0.1, help="a hard negative is within this of the positive's cosine")
+    p.add_argument("--audit", help="TSV: query, candidate [, ...]: candidate false negatives to judge (C3)")
+    p.set_defaults(fn=cmd_pairs, max_tokens=48, instruction=DEFAULT_INSTRUCTIONS[0])
+
+    p = base("geometry", "B1, B3-B7, B13, B17 on one set of vectors (no model)", model=False)
+    p.add_argument("--vectors", required=True, help=".npy (n, d)")
+    p.add_argument("--index", help="index TSV with a header (default: <stem>_index.tsv or index.tsv beside it)")
+    p.add_argument("--key", help="index column that pairs files name items by (default id/text/word, else row numbers)")
+    p.add_argument("--max-items", type=int, default=5000, help="sample for the O(n^2) statistics")
+    p.add_argument("--n-pairs", type=int, default=20000, help="random pairs for the floor")
+    p.add_argument("--anchors", type=int, default=500, help="anchors for stratified pairs (MRL curves)")
+    p.add_argument("--prefixes", help="MRL prefixes, e.g. 32,64,128,256 (default: powers of two)")
+    p.add_argument("--twonn-items", type=int, default=5000)
+    p.add_argument("--knn", type=int, default=10)
+    p.add_argument("--knn-max", type=int, default=20000, help="items in the exported kNN graph")
+    p.add_argument("--no-knn-graph", action="store_true")
+    p.add_argument("--pairs", help="TSV anchor, positive: alignment, uniformity and the ML temperature")
+    p.add_argument("--batch-size", type=int, default=128, help="in-batch negatives for the temperature fit")
+    p.add_argument("--labelled-pairs", help="TSV a, b, class: per-class cosines and pairwise AUCs (B2)")
+    p.add_argument("--lengths", help="one length per line in row order, or 'index[:column]' (default column n_tokens)")
+    p.set_defaults(fn=cmd_geometry)
+    p = base("compare", "two vector sets over the same items (section 7.1, no model)", model=False)
+    p.add_argument("--a", required=True, help="teacher .npy")
+    p.add_argument("--b", required=True, help="other .npy")
+    p.add_argument("--index-a")
+    p.add_argument("--index-b")
+    p.add_argument("--key", help="align the sets on this index column (default: row order)")
+    p.add_argument("--max-items", type=int, default=5000)
+    p.add_argument("--anchors", type=int, default=500)
+    p.add_argument("--procrustes-dim", type=int, default=256)
+    p.add_argument("--tau", type=float, help="teacher temperature for the force match")
+    p.add_argument("--tau-student", type=float, help="also report KL at this student temperature")
+    p.add_argument("--pairs", help="TSV anchor, positive in --a's rows: fits the teacher tau when --tau is not given")
+    p.set_defaults(fn=cmd_compare)
+    p = base("wdiff", "A4 weight difference between two GGUFs")
+    p.add_argument("--base", required=True, help="the parent model; dW = W_model - W_base")
+    p.add_argument("--pattern", help="regex on tensor names (e.g. 'blk\\.' to skip the embedding matrices)")
+    p.add_argument("--max-full", type=int, default=1024, help="exact SVD up to this min dimension, randomized above")
+    p.add_argument("--top-frac", type=float, default=0.05)
+    p.add_argument("--iters", type=int, default=4, help="power iterations for the randomized SVD")
+    p.add_argument("--max-rows", type=int, default=32768, help="sample rows of taller matrices (0 = all)")
+    p.set_defaults(fn=cmd_wdiff)
     p = dyn(base("calibrate", "calibration against gold facts"))
     p.add_argument("--gold", required=True, help="TSV: subject, property id, object [, alias|alias]")
     p.add_argument("--min-items", type=int, default=30)
@@ -2263,6 +4186,7 @@ def main(argv=None) -> None:
     p.add_argument("--vocab", required=True, help="a vocab-only GGUF, e.g. llama.cpp models/ggml-vocab-llama-spm.gguf")
     p.add_argument("--out", required=True)
     p.add_argument("--seed", type=int, default=1234)
+    p.add_argument("--only", help="comma list of step labels to run (development aid); maths checks always run")
     p.set_defaults(fn=cmd_selftest)
 
     args = ap.parse_args(argv)
