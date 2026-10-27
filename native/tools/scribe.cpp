@@ -4,8 +4,9 @@
 //
 // Subcommands
 //   docs     SRC --out F                                    cleaned documents, one JSON object per line
-//   prompts  SRC --n 250 --seed S --set NAME --out F        prompt (100-300 B) + true human continuation (400-600 B,
-//                                                           >= 3 sentences), one per document
+//   prompts  SRC --n 250 --seed S --set NAME [--per-doc K] --out F
+//                                                           prompt (100-300 B) + true human continuation (400-600 B,
+//                                                           >= 3 sentences), one per document (K > 1: up to K consecutive)
 //   samples  SRC --n 500 --seed S --set NAME [--short] [--system NAME] --out F
 //                                                           samples cut from documents the way human samples are
 //                                                           (sentence windows of 400-600 B with >= 3 sentences, or 60-260 B)
@@ -19,12 +20,16 @@
 //   score    --pack SRC --ref SRC [--vectors P] [--profile v1|v2] [--v2 PARAMS] [--ref-prompts F] --in F --out G
 //                                                           every text of F scored: axes, sub-scores, raw statistics; a text
 //                                                           with a "prompt" also gets the relevance statistics (R, scored
-//                                                           against --ref-prompts, and counted in D only with wR > 0)
+//                                                           against --ref-prompts, and counted in D only with wR > 0).
+//                                                           --window: a long text scores the mean over its sentence windows
+//                                                           of 300-600 B; --ref-whole: reference documents are samples as
+//                                                           they are (short whole texts such as ROC stories)
+//   windows  --in F --out G                                 each text cut into its --window scoring windows (prompt kept)
 //   selftest                                                known-answer checks (CTest native_scribe_selftest)
 //
 // SRC is enwik:PATH:LO:HI (bytes [LO, HI) MiB of a MediaWiki XML dump such as enwik8/enwik9, cleaned page by page
-// with clean_wiki_documents, as v0 and v1 did) or a JSONL file whose "text" fields are documents (cleaned with
-// clean_plain_document: prose lines only). JSONL lines in and out: {"id", "set", "system", "text", "prompt"?, "ref"?}.
+// with clean_wiki_documents, as v0 and v1 did), a JSONL file whose "text" fields are documents (cleaned with
+// clean_plain_document: prose lines only), or raw:PATH (JSONL documents used as they are, white space collapsed). JSONL lines in and out: {"id", "set", "system", "text", "prompt"?, "ref"?}.
 //
 // v1 parity: `ladder --pack enwik:E:16:48 --ref enwik:E:48:56 --test enwik:E:56:64 --vectors v32 --profile v1
 // --seed 20261027 --chain-rng --gen-trie gen_dev.txt` prints the v1 development ladder's rung means and pair verdicts to
@@ -58,6 +63,11 @@ double now_s() {
   return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 double g_t0 = now_s();
+// Profiling counters (printed with --timing): seconds in extract_features (v1 statistics, sentence vectors) and in
+// ScribeV2Scorer::extend (skeleton, word rarity, 8-gram copy, relevance), and the number of texts featurised.
+double g_t_extract = 0, g_t_extend = 0, g_t_pack_model = 0, g_t_pack_v2 = 0, g_t_pack_vec = 0;
+std::size_t g_n_feat = 0;
+
 
 // ===========================================================================
 // JSON lines: a small reader for flat objects (nested values are skipped) and a writer
@@ -295,9 +305,12 @@ std::vector<std::string> load_docs(const std::string& spec) {
     in.read(raw.data(), static_cast<std::streamsize>(raw.size()));
     return clean_wiki_documents(raw.data(), raw.size());
   }
+  // raw:PATH = JSONL documents used as they are (white space collapsed), for sets that are already one-line,
+  // lowercased or tokenised (ROCStories, OpenMEVA); the pack, the reference and the scored texts then all match.
+  const bool raw = spec.rfind("raw:", 0) == 0;
   std::vector<std::string> docs;
-  for (const JsonObj& o : read_jsonl(spec)) {
-    std::string d = clean_plain_document(o.get("text"));
+  for (const JsonObj& o : read_jsonl(raw ? spec.substr(4) : spec)) {
+    std::string d = raw ? scribe_detail::collapse_ws(collapse_newlines(o.get("text"))) : clean_plain_document(o.get("text"));
     if (!d.empty()) docs.push_back(std::move(d));
   }
   return docs;
@@ -511,7 +524,9 @@ struct Ctx {
 };
 
 // --v2 "k=v,..." (V2Params::parse) must be set before the reference is built: the thresholds depend on it.
+// Profile v2p (prompted) is v2 with wR = 8; its headline is the same `scribe_v2` field.
 void set_v2_params(Ctx& c, const std::string& spec) {
+  if (c.profile == "v2p") c.v2.params.wR = 8;
   if (spec.empty()) return;
   if (!c.v2.params.parse(spec)) {
     std::fprintf(stderr, "bad --v2 parameters: %s\n", spec.c_str());
@@ -522,8 +537,12 @@ void set_v2_params(Ctx& c, const std::string& spec) {
 void build_pack(Ctx& c, const std::vector<std::string>& pack_docs, const std::string& vec_prefix) {
   for (const auto& d : pack_docs) c.pack_bytes += d.size();
   c.n_pack_docs = pack_docs.size();
+  double t0 = now_s();
   c.model.train(pack_docs);
+  g_t_pack_model = now_s() - t0;
+  t0 = now_s();
   c.v2.train_pack(pack_docs);
+  g_t_pack_v2 = now_s() - t0;
   for (const auto& d : pack_docs) surface_add_vocab(c.surf, d);
   std::fprintf(stderr, "[%.0fs] pack: %zu docs, %zu bytes; vocab %zu, %zu trigrams\n", now_s() - g_t0, c.n_pack_docs, c.pack_bytes,
                c.model.vocab_size(), c.model.n_trigrams());
@@ -535,6 +554,7 @@ void build_pack(Ctx& c, const std::vector<std::string>& pack_docs, const std::st
     std::fprintf(stderr, "cannot load word vectors %s.{vectors.f32,vocab.tsv} (300 dimensions)\n", vec_prefix.c_str());
     std::exit(1);
   }
+  const double tv = now_s();
   c.emb = SentenceEmbedder(&c.wv, 1e-3);
   std::vector<std::vector<float>> X;
   std::mt19937_64 prng(5);
@@ -550,21 +570,43 @@ void build_pack(Ctx& c, const std::vector<std::string>& pack_docs, const std::st
   }
   c.emb.fit_pc(X);
   c.use_vectors = true;
+  g_t_pack_vec = now_s() - tv;
   std::fprintf(stderr, "[%.0fs] word vectors: %zu words x %zu; principal component from %zu pack sentences\n", now_s() - g_t0, c.wv.size(), c.wv.dim(),
                X.size());
 }
 
 Features featurize(Ctx& c, const std::string& text, const std::string& prompt = "") {
+  const double t0 = now_s();
   Features f = extract_features(c.model, c.dict, text, c.embedder());
+  const double t1 = now_s();
   c.v2.extend(f, text, prompt, c.embedder());
+  g_t_extract += t1 - t0;
+  g_t_extend += now_s() - t1;
+  ++g_n_feat;
   return f;
 }
 
 // Reference samples from ref_docs with rng (v1's draw order: standard first, then short). ref_prompts (optional):
 // JSONL of human prompt / continuation pairs (`scribe prompts` on the reference range) for the relevance statistics.
-void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19937_64& rng, const std::string& ref_prompts = "") {
-  const std::vector<Sample> ref_std = make_samples(ref_docs, 400, 600, 3, 4, rng);
-  const std::vector<Sample> ref_short = make_samples(ref_docs, 60, 260, 1, 3, rng);
+// ref_whole: every reference document is one sample as it is (for sets whose units are short whole texts, such as
+// five-sentence ROC stories), instead of sentence windows.
+void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19937_64& rng, const std::string& ref_prompts = "",
+                     bool ref_whole = false, std::size_t ref_n = 0) {
+  std::vector<Sample> ref_std, ref_short;
+  if (ref_whole) {
+    for (std::size_t d = 0; d < ref_docs.size(); ++d)
+      if (ref_docs[d].size() >= 60) (length_bucket(ref_docs[d].size()) ? ref_std : ref_short).push_back({ref_docs[d], static_cast<int>(d)});
+  } else {
+    ref_std = make_samples(ref_docs, 400, 600, 3, 4, rng);
+    ref_short = make_samples(ref_docs, 60, 260, 1, 3, rng);
+  }
+  if (ref_n > 0) {  // --ref-n: a random subset of N reference samples per length bucket (profiling the reference size)
+    std::mt19937_64 sr(77);
+    for (auto* v : {&ref_std, &ref_short}) {
+      std::shuffle(v->begin(), v->end(), sr);
+      if (v->size() > ref_n) v->resize(ref_n);
+    }
+  }
   c.n_ref_std = ref_std.size();
   c.n_ref_short = ref_short.size();
   c.ref_feats.reserve(ref_std.size() + ref_short.size());
@@ -601,7 +643,7 @@ struct Result {
   Scored v1;
   ScoredV2 v2;
   double surface = 0;
-  double headline(const std::string& profile) const { return profile == "v1" ? v1.scribe : v2.scribe; }
+  double headline(const std::string& profile) const { return profile == "v1" ? v1.scribe : v2.scribe; }  // v2 or v2p
 };
 
 Result score_one(const Ctx& c, const Features& f, const std::string& text) {
@@ -640,7 +682,7 @@ struct Args {
 };
 
 Args parse_args(int argc, char** argv, int from) {
-  static const std::vector<std::string> flags = {"--short", "--chain-rng", "--quiet"};
+  static const std::vector<std::string> flags = {"--short", "--chain-rng", "--quiet", "--window", "--ref-whole", "--timing"};
   Args a;
   for (int i = from; i < argc; ++i) {
     const std::string s = argv[i];
@@ -703,11 +745,37 @@ int cmd_prompts(const Args& a) {
   std::shuffle(order.begin(), order.end(), rng);
   std::ofstream o = open_out(a.get("--out"));
   std::uniform_real_distribution<double> U(0.0, 1.0);
+  const int per_doc = std::atoi(a.get("--per-doc", "1").c_str());
   std::size_t made = 0;
   for (std::size_t d : order) {
     if (made >= n) break;
     const std::vector<std::string> s = split_sentences(docs[d]);
     if (s.size() < 5) continue;
+    if (per_doc > 1) {
+      // Consecutive, non-overlapping prompt + continuation windows from the start of the document.
+      int got = 0;
+      for (std::size_t i0 = 0; i0 + 4 < s.size() && got < per_doc && made < n;) {
+        std::size_t j = i0, pb = 0;
+        while (j < s.size() && pb < 100) pb += s[j++].size() + (pb ? 1 : 0);
+        const double target = 400.0 + U(rng) * 200.0;
+        std::size_t k = j, cb = 0;
+        while (k < s.size() && static_cast<double>(cb) < target) cb += s[k++].size() + (cb ? 1 : 0);
+        if (pb < 100 || pb > 300 || cb < 400 || cb > 600 || k - j < 3) {
+          ++i0;
+          continue;
+        }
+        std::vector<std::string> ps(s.begin() + static_cast<std::ptrdiff_t>(i0), s.begin() + static_cast<std::ptrdiff_t>(j));
+        std::vector<std::string> cs(s.begin() + static_cast<std::ptrdiff_t>(j), s.begin() + static_cast<std::ptrdiff_t>(k));
+        const std::string ref = join(cs);
+        char id[64];
+        std::snprintf(id, sizeof id, "%s/%04zu", set.c_str(), made);
+        o << text_line(id, set, "human", ref, join(ps), ref, "\"meta\":{\"doc\":" + std::to_string(d) + "}") << "\n";
+        ++made;
+        ++got;
+        i0 = k;
+      }
+      continue;
+    }
     bool done = false;
     for (int tries = 0; tries < 6 && !done; ++tries) {
       const std::size_t i0 = static_cast<std::size_t>(U(rng) * static_cast<double>(s.size() - 4));
@@ -836,7 +904,7 @@ int cmd_ladder(const Args& a) {
   set_v2_params(c, a.get("--v2"));
   build_pack(c, pack_docs, a.get("--vectors"));
   std::mt19937_64 rng(ref_seed);
-  build_reference(c, ref_docs, rng, a.get("--ref-prompts"));
+  build_reference(c, ref_docs, rng, a.get("--ref-prompts"), a.has("--ref-whole"), std::strtoull(a.get("--ref-n", "0").c_str(), nullptr, 10));
 
   // ---- samples: --chain-rng continues the reference draws (v1's development ladder), else a fresh generator.
   std::mt19937_64 trng(seed);
@@ -1049,6 +1117,41 @@ int cmd_ladder(const Args& a) {
 // score
 // ===========================================================================
 
+// Consecutive sentence windows covering a long text: a window closes before it would pass 600 bytes once it holds
+// at least 300; a last window under 300 bytes joins the one before it. Each window is scored like a reference sample.
+std::vector<std::string> text_windows(const std::string& text) {
+  std::vector<std::string> w;
+  std::string cur;
+  for (const std::string& snt : split_sentences(scribe_detail::collapse_ws(collapse_newlines(text)))) {
+    if (!cur.empty() && cur.size() + 1 + snt.size() > 600 && cur.size() >= 300) {
+      w.push_back(cur);
+      cur.clear();
+    }
+    if (!cur.empty()) cur.push_back(' ');
+    cur += snt;
+  }
+  if (!cur.empty()) {
+    if (cur.size() < 300 && !w.empty()) w.back() += " " + cur;
+    else w.push_back(cur);
+  }
+  return w;
+}
+
+// windows --in F --out G: every text of F cut into its scoring windows (text_windows), prompt and fields kept; for
+// building a prompted reference that matches --window scoring.
+int cmd_windows(const Args& a) {
+  std::ofstream o = open_out(a.get("--out"));
+  std::size_t n = 0, w = 0;
+  for (const JsonObj& j : read_jsonl(a.get("--in"))) {
+    ++n;
+    const std::vector<std::string> ws = text_windows(j.get("text"));
+    for (std::size_t k = 0; k < ws.size(); ++k, ++w)
+      o << text_line(j.get("id") + "/w" + std::to_string(k), j.get("set"), j.get("system"), ws[k], j.get("prompt"), j.get("ref")) << "\n";
+  }
+  std::fprintf(stderr, "%zu texts, %zu windows\n", n, w);
+  return 0;
+}
+
 int cmd_score(const Args& a) {
   Ctx c;
   c.profile = a.get("--profile", "v2");
@@ -1057,18 +1160,58 @@ int cmd_score(const Args& a) {
   set_v2_params(c, a.get("--v2"));
   build_pack(c, pack_docs, a.get("--vectors"));
   std::mt19937_64 rng(std::strtoull(a.get("--ref-seed", "20261027").c_str(), nullptr, 10));
-  build_reference(c, ref_docs, rng, a.get("--ref-prompts"));
+  build_reference(c, ref_docs, rng, a.get("--ref-prompts"), a.has("--ref-whole"), std::strtoull(a.get("--ref-n", "0").c_str(), nullptr, 10));
   const std::vector<JsonObj> in = read_jsonl(a.get("--in"));
   std::ofstream o = open_out(a.get("--out"));
+  const bool windowed = a.has("--window");
   const double t1 = now_s();
   for (const JsonObj& j : in) {
     const std::string text = j.get("text");
     const Features f = featurize(c, text, j.get("prompt"));
-    const Result r = score_one(c, f, text);
-    o << "{\"id\":\"" << json_escape(j.get("id")) << "\",\"system\":\"" << json_escape(j.get("system")) << "\"," << result_json(f, r, c.profile) << "}\n";
+    Result r = score_one(c, f, text);
+    std::string extra;
+    if (windowed) {
+      // The text's score is the mean over its windows; raw statistics stay those of the whole text.
+      const std::vector<std::string> ws = text_windows(text);
+      if (ws.size() > 1) {
+        Result m;
+        m.v1 = r.v1;
+        double n = 0;
+        for (const std::string& wt : ws) {
+          const Result x = score_one(c, featurize(c, wt, j.get("prompt")), wt);
+          m.v1.scribe += x.v1.scribe;
+          m.v2.scribe += x.v2.scribe;
+          m.surface += x.surface;
+          m.v2.D += x.v2.D;
+          m.v2.DL += x.v2.DL;
+          m.v2.DS += x.v2.DS;
+          m.v2.DC += x.v2.DC;
+          m.v2.DI += x.v2.DI;
+          m.v2.DR += x.v2.DR;
+          m.v2.L += x.v2.L;
+          m.v2.S += x.v2.S;
+          m.v2.C += x.v2.C;
+          m.v2.I += x.v2.I;
+          m.v2.R += x.v2.R;
+          n += 1;
+        }
+        m.v1.scribe = (m.v1.scribe - r.v1.scribe) / n;
+        for (double* x : {&m.v2.scribe, &m.surface, &m.v2.D, &m.v2.DL, &m.v2.DS, &m.v2.DC, &m.v2.DI, &m.v2.DR, &m.v2.L, &m.v2.S, &m.v2.C, &m.v2.I, &m.v2.R})
+          *x /= n;
+        r = m;
+      }
+      extra = ",\"windows\":" + std::to_string(ws.size());
+    }
+    o << "{\"id\":\"" << json_escape(j.get("id")) << "\",\"system\":\"" << json_escape(j.get("system")) << "\"," << result_json(f, r, c.profile) << extra << "}\n";
   }
   const double dt = now_s() - t1;
   std::fprintf(stderr, "[%.0fs] scored %zu texts in %.2f s (%.0f texts/s)\n", now_s() - g_t0, in.size(), dt, dt > 0 ? double(in.size()) / dt : 0.0);
+  if (a.has("--timing"))
+    std::fprintf(stderr,
+                 "TIMING {\"pack_bytes\":%zu,\"pack_model_s\":%.3f,\"pack_v2_s\":%.3f,\"pack_vectors_s\":%.3f,\"n_featurised\":%zu,"
+                 "\"extract_ms\":%.4f,\"extend_ms\":%.4f,\"score_texts\":%zu,\"score_s\":%.3f,\"texts_per_s\":%.1f,\"total_s\":%.2f}\n",
+                 c.pack_bytes, g_t_pack_model, g_t_pack_v2, g_t_pack_vec, g_n_feat, 1000 * g_t_extract / std::max<std::size_t>(1, g_n_feat),
+                 1000 * g_t_extend / std::max<std::size_t>(1, g_n_feat), in.size(), dt, dt > 0 ? double(in.size()) / dt : 0.0, now_s() - g_t0);
   return 0;
 }
 
@@ -1218,6 +1361,19 @@ int selftest() {
     CHECK(split_sentences(ctl_shuffle_words(t, r)).size() == 3);
     CHECK(ctl_repeat_phrase(t).size() >= t.size());
   }
+  {
+    std::string t;
+    for (int i = 0; i < 30; ++i) t += "This is sentence number " + std::to_string(i) + " of a long story here. ";
+    const std::vector<std::string> ws = text_windows(t);
+    std::size_t total = 0;
+    bool ok = !ws.empty();
+    for (const std::string& w : ws) {
+      total += w.size();
+      ok = ok && w.size() >= 300 && w.size() <= 900;
+    }
+    CHECK(ok && ws.size() >= 2 && total + ws.size() - 1 == scribe_detail::collapse_ws(t).size());
+    CHECK(text_windows("Short text. Only two sentences.").size() == 1);
+  }
   scribe_v2_selftest(g_checks, g_fail);
   std::printf("scribe selftest: %d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? 1 : 0;
@@ -1240,6 +1396,7 @@ int main(int argc, char** argv) {
   if (cmd == "prepare") return cmd_prepare(a);
   if (cmd == "ladder") return cmd_ladder(a);
   if (cmd == "score") return cmd_score(a);
+  if (cmd == "windows") return cmd_windows(a);
   std::fprintf(stderr, "unknown subcommand %s\n", cmd.c_str());
   return 2;
 }

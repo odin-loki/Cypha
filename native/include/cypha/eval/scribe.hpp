@@ -1694,7 +1694,8 @@ class ScribeScorer {
     ref[1].finish();
   }
   Scored score(const Features& f) const {
-    const BucketReference& r = ref[length_bucket(f.bytes)];
+    const int b0 = length_bucket(f.bytes);
+    const BucketReference& r = ref[ref[b0].n < 20 && ref[1 - b0].n >= 20 ? 1 - b0 : b0];  // too few in the bucket: the other
     Scored o;
     o.s1 = r.s1.one_sided(f.s1);
     o.s3 = r.s3.one_sided(f.s3);
@@ -2096,6 +2097,7 @@ class QuantileZ {
 //   D = cap * sat(L - thL) + cap * sat(S - thS) + wI * max(0, I - thI) + wC * C + wR * R,  sat(x) = 1 - exp(-max(0, x) / kap)
 //   thL, thS, thI = the q quantiles of L, S and I over the human reference samples of the length bucket
 //   SCRIBE = exp(-D / tau)
+// Prompted profile (v2p): wR = 8, with relevance dead zone 0.5 (rdead); chosen on development prompts only.
 // Not being made of words (L) and not being in an order people write (S) are two separate, categorical form
 // failures: each counts only beyond what 99% of human samples show, and each saturates at cap, so samples that fail
 // in the same way are ordered by their coherence. Degeneration (I) is the worst failure and does not saturate.
@@ -2104,7 +2106,8 @@ struct V2Params {
   double dead = 1.0;
   double qS = 0.99, qI = 0.99;  // qS is used for both L and S
   double capS = 30, kapS = 4;
-  double wC = 1, wI = 3, wR = 0;
+  double wC = 1, wI = 3, wR = 0;  // wR = 8 in the prompted profile (v2p)
+  double rdead = 0.5;            // relevance dead zone (chosen on the development prompts)
   double tau = 5;
   double missing_z = 4;
   std::vector<int> off;  // statistics switched off (ablations)
@@ -2128,6 +2131,7 @@ struct V2Params {
       else if (k == "wC") wC = x;
       else if (k == "wI") wI = x;
       else if (k == "wR") wR = x;
+      else if (k == "rdead") rdead = x;
       else if (k == "tau") tau = x;
       else if (k == "missing") missing_z = x;
       else if (k == "off" || k == "on") {
@@ -2359,9 +2363,15 @@ class ScribeV2Scorer {
   double threshold_S(int b) const { return thS_[b]; }
   double threshold_I(int b) const { return thI_[b]; }
 
+  // The reference bucket for a sample: its length bucket, or the other one when that bucket has under 20 samples.
+  int bucket(const Features& f) const {
+    const int b = length_bucket(f.bytes);
+    return nref_[b] < 20 && nref_[1 - b] >= 20 ? 1 - b : b;
+  }
+
   ScoredV2 score(const Features& f) const {
     ScoredV2 o = evidence(f);
-    const int b = length_bucket(f.bytes);
+    const int b = bucket(f);
     o.DL = params.capS * (1.0 - std::exp(-std::max(0.0, o.L - thL_[b]) / params.kapS));
     o.DS = params.capS * (1.0 - std::exp(-std::max(0.0, o.S - thS_[b]) / params.kapS));
     o.DI = params.wI * std::max(0.0, o.I - thI_[b]);
@@ -2375,7 +2385,7 @@ class ScribeV2Scorer {
   // z-scores and raw axis evidence (no thresholds).
   ScoredV2 evidence(const Features& f) const {
     ScoredV2 o;
-    const int b = length_bucket(f.bytes);
+    const int b = bucket(f);
     double x[V_N];
     bool has[V_N];
     v2_values(f, x, has);
@@ -2397,7 +2407,7 @@ class ScribeV2Scorer {
       } else {
         continue;
       }
-      if (params.counts(k)) ax[a] += std::max(0.0, u - params.dead);
+      if (params.counts(k)) ax[a] += std::max(0.0, u - (a == 3 ? params.rdead : params.dead));
     }
     o.S = ax[0];
     o.C = ax[1];
