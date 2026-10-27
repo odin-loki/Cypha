@@ -349,6 +349,8 @@ The rows by relation (augmented): occupation 258, birth_year 359, death_year 346
 - **Holdout rows:** every training run drops `_holdout` rows (`cyphalm_trie qa` enforces it).
 - **Leakage rule for fact shards:** no shard question may equal a dev or test question; the builder never reads test answers; coverage of test questions by (entity, relation) is reported. Evidence: 0 equal questions, the near-matches are template collisions, and the shard adds 0 right test answers (A2). TOOL_PROFILE_PLAN §4 now says this.
 
+- **Year rows (decided 2026-10-28, [F2R](F2R_RAW_BYTE_PATTERNS.md) flag 3):** a year fact keeps its year only. This changes 6 rows of `shard_facts.tsv` (Aldous Huxley's years: "died in November 22, 1963" → "died in 1963"); facts and counts are unchanged. The A2 runs used the file before this fix.
+
 The flags as they were raised:
 
 1. **The base rate (F2's open item).** Per relation (the default here) admits 1,216 learned facts into the store and the shard. `a = 0.5` admits none. See the table above.

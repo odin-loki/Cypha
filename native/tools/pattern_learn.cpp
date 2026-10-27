@@ -58,7 +58,8 @@
 //   are the prefix CyphaLM continues. --cv with Wikidata: 81 kept, 1,025 admitted (cleaned 1,216), gold 151/159; 41 facts
 //   the cleaned run lacks (hand check 30/30); no kept pattern for capital, author, director, composer or founder.
 //   --join FILE (with --shard): another run's admitted facts join the store. In raw mode the shard writes a fact of a
-//   relation with a raw frame in that frame's bytes ("'''Al Gore''' ([[March 31]], [[1948]]).") and a year as a year.
+//   relation with a raw frame in that frame's bytes ("'''Al Gore''' ([[March 31]], [[1948]]).").
+//   Every mode writes a year fact as a year (2026-10-28; before, the default shard wrote 6 with a full date).
 //   --reach PARSE (with --dev; grading only): how often the frames' prefixes, with a dev question's subject filled, occur in
 //   the training bytes [0, --holdout-from), and with --shard also in the shard text.
 //
@@ -2162,7 +2163,7 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
     vector<SF> facts;
     std::set<string> seen;
     auto add = [&](SF f) {
-        if (g_raw && kRel[f.rel].type == T_YEAR) f.d.m = f.d.d = 0;  // F2R: a year fact is a year (the default shard writes 6 with a full date)
+        if (kRel[f.rel].type == T_YEAR) f.d.m = f.d.d = 0;  // a year fact is a year (before 2026-10-28 the shard wrote 6 with a full date)
         if (seen.insert(f.subj + "\x1f" + kRel[f.rel].name + "\x1f" + (is_datey(f.rel) ? fmt_date(f.d) : norm_ent(f.surf))).second) facts.push_back(f);
     };
     for (const Seed& sd : g_seeds)

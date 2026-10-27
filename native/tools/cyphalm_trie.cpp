@@ -191,6 +191,7 @@ struct Args {
     bool copy = false, fam_only = false, mention = false;
     std::string cls;      // B4: class-context expert spec, TABLE[:tail] or shape[:tail]
     std::string fam_ent;  // A1d: the entity's frames before the token, e.g. entity="{E}" ("" = no entity)
+    int copy_min = 0;     // B4B: copy lambdas of match lengths below this set to 0 after fitting
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -233,6 +234,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--copy") a.copy = true;
         else if (s == "--cls") a.cls = next();
         else if (s == "--fam-ent") a.fam_ent = next();
+        else if (s == "--copy-min") a.copy_min = std::atoi(next());
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--mention") a.mention = true;
         else if (s.rfind("--", 0) == 0) {
@@ -939,6 +941,12 @@ int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
     return pred;
 }
 int copy_bucket(int n) { return n == 0 ? 0 : n < 4 ? 1 : n < 6 ? 2 : n < 8 ? 3 : n < 12 ? 4 : n < 16 ? 5 : n < 32 ? 6 : 7; }
+// --copy-min m (B4B): copy only from matches of at least m bytes; the lambdas of buckets starting below m become 0.
+void copy_clip(double* lam, int m) {
+    static const int lo[kCopyBuckets] = {0, 3, 4, 6, 8, 12, 16, 32};
+    for (int b = 0; b < kCopyBuckets; ++b)
+        if (lo[b] < m) lam[b] = 0;
+}
 
 // lam[b] in {0, 0.005, ..., 0.995} maximising the log-likelihood of lam pe + (1 - lam) pb over the items k < upto in
 // bucket b (context8k's InfiniGram fit).
@@ -1616,6 +1624,7 @@ struct QaOpts {
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;
     bool copy = false, fam_only = false;
     std::string cls, fam_ent;
+    int copy_min = 0;
 };
 
 constexpr int kFeat = 5;
@@ -1848,7 +1857,8 @@ std::string fill_frame(std::string f, const std::string& subj, const std::string
 
 // A3 statement frames from F2's patterns.tsv, per relation: kept patterns first, then candidates by training
 // subjects, at most 3 distinct ones. Skipped: slots CyphaLM cannot fill (<M>, #), and the object before the subject
-// (nothing would tie the object to the subject).
+// (nothing would tie the object to the subject). A 12th column `frame` (F2R's patterns_raw.tsv: the raw bytes with
+// their markup, e.g. '''[S]''' (born [[[O]]]) is used as it stands, [S] and [O] filled in place.
 std::map<std::string, std::vector<std::string>> load_frames(const std::string& path) {
     std::map<std::string, std::vector<std::tuple<int, int, std::string>>> by;
     std::ifstream in(path);
@@ -1856,12 +1866,16 @@ std::map<std::string, std::vector<std::string>> load_frames(const std::string& p
     while (std::getline(in, line)) {
         const auto f = split(line, '\t');
         if (f.size() < 11 || f[0] == "relation") continue;
-        const std::string& p = f[1];
+        const bool raw = f.size() >= 12 && !f[11].empty();
+        const std::string& p = raw ? f[11] : f[1];
         const std::size_t subj = std::min(p.find("[S]"), p.find("[P]")), obj = p.find("[O]");
         if (obj == std::string::npos || subj == std::string::npos || obj < subj || p.find("<M>") != std::string::npos ||
             p.find('#') != std::string::npos)
             continue;
-        by[f[0]].push_back({-std::atoi(f[10].c_str()), -std::atoi(f[2].c_str()), render_frame(p, "\x01", "\x02")});
+        std::string r = p;
+        for (const char* t : {"[S]", "[P]", "[O]"})
+            for (std::size_t q; (q = r.find(t)) != std::string::npos;) r.replace(q, 3, t[1] == 'O' ? "\x02" : "\x01");
+        by[f[0]].push_back({-std::atoi(f[10].c_str()), -std::atoi(f[2].c_str()), raw ? r : render_frame(p, "\x01", "\x02")});
     }
     std::map<std::string, std::vector<std::string>> out;
     for (auto& [rel, v] : by) {
@@ -1897,9 +1911,10 @@ std::string strip_markup(const std::string& text) {
 
 // A3 candidate objects inside CyphaLM's own text, as (the bytes it wrote, the value with the markup dropped): every
 // year (3-4 digits) for a date relation; otherwise every run of capitalised words ("of" allowed inside) and, with
-// head (a frame continuation, which fills the slot directly), its bytes before the first , . ; ( ) | or newline when
-// they are a name: at most 5 words, one of them capitalised.
-std::vector<std::pair<std::string, std::string>> r3_candidates(const std::string& text, bool date, bool head) {
+// head (a frame continuation, which fills the slot directly), its bytes before the first , . ; ( ) | or newline (and
+// `close`, a raw frame's markup after its object, e.g. ]]) when they are a name: at most 5 words, one capitalised.
+std::vector<std::pair<std::string, std::string>> r3_candidates(const std::string& text, bool date, bool head,
+                                                               const std::string& close = "") {
     std::vector<std::pair<std::string, std::string>> out;
     auto trim = [](std::string h) {
         while (!h.empty() && h.back() == ' ') h.pop_back();
@@ -1907,7 +1922,8 @@ std::vector<std::pair<std::string, std::string>> r3_candidates(const std::string
         return h;
     };
     if (head && !date) {
-        const std::string sf = trim(text.substr(0, text.find_first_of(",.;()\n|"))), v = trim(strip_markup(sf));
+        const std::size_t cut = std::min(text.find_first_of(",.;()\n|"), close.empty() ? text.npos : text.find(close));
+        const std::string sf = trim(text.substr(0, cut)), v = trim(strip_markup(sf));
         const auto ws = split(v, ' ');
         if (!v.empty() && ws.size() <= 5 &&
             std::any_of(ws.begin(), ws.end(), [](const std::string& x) { return !x.empty() && std::isupper(static_cast<unsigned char>(x[0])); }))
@@ -2389,6 +2405,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         }
         fit_lambdas(pcp, bt, cbk, half, kCopyBuckets, lc_t);
         fit_lambdas(pcp, bi, cbk, half, kCopyBuckets, lc_i);
+        copy_clip(lc_t, o.copy_min);
+        copy_clip(lc_i, o.copy_min);
         // 256 blocks of the second half: per block, bits per byte of b with copy mixed in at lam (lam 0: without it).
         const std::size_t nb = 256, bl = (H - half) / nb;
         auto blocks = [&](const double* lam, const std::vector<double>& b, std::vector<double>& out) {
@@ -2422,6 +2440,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             double l0t[kCopyBuckets], l0i[kCopyBuckets];
             fit_lambdas(pcp, pt, cbk, half, kCopyBuckets, l0t);
             fit_lambdas(pcp, pig, cbk, half, kCopyBuckets, l0i);
+            copy_clip(l0t, o.copy_min);
+            copy_clip(l0i, o.copy_min);
             std::vector<double> zt, zi;
             const double c0t = blocks(l0t, pt, zt), c0i = blocks(l0i, pig, zi);
             std::cout << "holdout2_trie_copy_bpc " << c0t << " holdout2_trie_ig_copy_bpc " << c0i << "\n";
@@ -2534,8 +2554,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             for (const auto& f : fr) {
                 const std::string pre = fill_frame(f.substr(0, f.find('\x02')), subj, "");
                 if (f.find('\x02') == 0) continue;  // the object comes first: nothing to continue
+                const std::string close = f.compare(f.find('\x02') + 1, 2, "]]") == 0 ? "]]" : "";
                 for (std::uint32_t s = 0; s < 3; ++s)
-                    src.push_back(r3_candidates(decode(r3lm, prompt + pre, 40, s).text, date, true));
+                    src.push_back(r3_candidates(decode(r3lm, prompt + pre, 40, s).text, date, true, close));
             }
             std::vector<std::pair<std::string, std::string>> cand;  // (surface, value): the first of each value
             std::set<std::string> seen;
@@ -2941,6 +2962,7 @@ int cmd_selftest() {
                         cp[0] == std::pair<std::string, std::string>{"the village of [[Zavrazhye]]", "the village of Zavrazhye"} &&
                         cp[1].second == "Zavrazhye" && cp[2].second == "Ivanovo Oblast" &&
                         win == 1 && std::fabs(margin - 0.25) < 1e-12 && r3_candidates("met with in the 13th century", false, true).empty() &&
+                        r3_candidates("Ryazan]], Russia", false, true, "]]")[0].first == "Ryazan" &&
                         question_relation("when was al gore born", "Al Gore") == "birth_date" &&
                         question_relation("Who directed the film Jaws?", "the film Jaws") == "director" &&
                         question_relation("Who was the second Prime Minister of Canada?", "Canada").empty() &&
@@ -2952,16 +2974,19 @@ int cmd_selftest() {
         }
     }
     {
-        // A1d: the token with its entity, the matched cut (NaN counts in the total, never below), the message's entity.
+        // A1d: the token with its entity, the matched cut (NaN counts in the total, never below), the message's entity,
+        // and --copy-min 8 (B4B) zeroing the copy buckets below 8 bytes.
         const std::string m = dont_know_text("Zorbia", "capital", "UNKNOWN_ENTITY");
-        const bool ok = fam_token("low", "entity=\"{E}\"", "the Zorbia") == "<|entity=\"Zorbia\"|><|fam=low|>" &&
+        double lam[kCopyBuckets] = {0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7};
+        copy_clip(lam, 8);
+        const bool ok = lam[3] == 0 && lam[1] == 0 && lam[4] == 0.4 && lam[7] == 0.7 && fam_token("low", "entity=\"{E}\"", "the Zorbia") == "<|entity=\"Zorbia\"|><|fam=low|>" &&
                         fam_token("high", "", "Zorbia") == "<|fam=high|>" && fam_token("mid", "a {E};b {E}", "") == "<|fam=mid|>" &&
                         fam_token("low", "about {E};entity=\"{E}\"", "Zorbia") == "<|about Zorbia|><|entity=\"Zorbia\"|><|fam=low|>" &&
                         quantile_cut({3, 1, std::nan(""), 2}, 0.5) == 3 && quantile_cut({}, 0.2) == 0 &&
                         msg_entity(m) == "Zorbia" && msg_entity("I don't know.").empty() &&
                         names_in("the Zorbia", "What is the capital of Zorbia?") && !names_in("or", "Zorbia or not?");
         if (!ok) {
-            std::cerr << "selftest: familiarity token / matched cut / message entity checks failed\n";
+            std::cerr << "selftest: familiarity token / matched cut / message entity / copy-min checks failed\n";
             return 1;
         }
     }
@@ -3046,7 +3071,7 @@ int main(int argc, char** argv) {
             return 2;
         }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
-                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.fam_ent});
+                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.fam_ent, a.copy_min});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();
