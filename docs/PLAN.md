@@ -112,6 +112,7 @@ Also from the repo's history (survey of `docs/history`, `docs/archive`, `bench/c
 10. **CyphaLM does the task.** Every task, question answering included, is done by CyphaLM.
     - A string search, retrieval index or hand-written lookup that answers in CyphaLM's place is cheating. Its output is not reported as a Cypha result.
     - Other components can measure, or prepare data for CyphaLM. They do not answer for it.
+    - A Cypha-classifier gate that decides whether to abstain on CyphaLM's own answer counts as CyphaLM doing the task **for now** (Odin Loch, 2026-10-27). Later, Cypha investigates this itself through discovery mode ([DISCOVERY §8a](DISCOVERY.md#8a-standing-investigation-who-decides-to-abstain)).
     - Removed on 2026-10-27: `copied_answer()` in `trie_chat.cpp`, `qa_infobox.cpp` and `chat_index.cpp` ([record](reports/REMOVED_NON_CYPHALM_QA.md)).
     - Decided by Odin Loch, 2026-10-27.
 

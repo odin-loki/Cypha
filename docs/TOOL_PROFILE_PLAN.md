@@ -15,7 +15,7 @@
 | `ppmi_svd` (C1) | 1,370 | **Word classes from vectors** (k-means over PPMI-SVD) as a second class-level count expert. Also soft matching of unseen question words to seen ones inside CyphaLM's context lookup |
 | `scripts/gguf_mine.py` (kept by decision) | 2,275 | **Teacher text:** paraphrases and Q/A text from a calibrated teacher, as a separate low-trust shard. Leakage-checked against the test set |
 | InfiniGram 8K context (existing CyphaLM expert) | ~350 | Already inside CyphaLM. Measured at −0.26 BPC on 8 MiB. Profiled here for Q/A too |
-| Cypha classifier (core) | — | **Abstain gate** on CyphaLM's own answer, from features of CyphaLM's predictive distribution. The answer bytes stay CyphaLM's. Odin to confirm this counts as CyphaLM doing the task |
+| Cypha classifier (core) | — | **Abstain gate** on CyphaLM's own answer, from features of CyphaLM's predictive distribution. The answer bytes stay CyphaLM's. **Counts as CyphaLM doing the task for now** (Odin Loch, 2026-10-27). Later, Cypha investigates this through discovery mode: whether CyphaLM can judge its own answers, and what the gate actually contributes ([DISCOVERY §8a](DISCOVERY.md#8a-standing-investigation-who-decides-to-abstain)) |
 
 **Not profiled for removal**, because they are core and kept: ECS, LCI and epistemic (honesty and certainty), SCRIBE (the judge, not a feature), and the thought interpreter. For these, only cost (latency, RAM) is profiled, to keep them inside the PLAN §10 budgets.
 

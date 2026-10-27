@@ -513,6 +513,19 @@ Allocates effort across P1–P11, the generators and the tiers. See section 9.
 
 ---
 
+## 8a. Standing investigation: who decides to abstain
+
+**Status.** Decided by Odin Loch, 2026-10-27. For now, a Cypha-classifier gate that decides whether to abstain on CyphaLM's own answer counts as CyphaLM doing the task (PLAN rule 10). That is a starting position, not a settled one.
+
+**Later, Cypha takes this up itself** as a discovery project and records what it finds, using the processes above (P2 conjecture, P3 anomaly, P6 rule induction, P13 self-audit, P14 journal). Questions it should work through:
+
+1. **What does the gate add** over CyphaLM's own probabilities? Measure the wrong-answer rate at fixed coverage both ways.
+2. **Can CyphaLM learn to judge its own answers?** For example, by training on its own right and wrong answers as text, or by an abstention expert inside its mixture.
+3. **Which signals predict a wrong answer?** Entropy, match length, margin, the reason codes. Do they generalise across question types?
+4. **Is there a better arrangement** than "generate then gate"? For example, abstention as a learned stop byte, or confidence carried through the mixture.
+
+Each answer is a hypothesis with pre-registered tests (section 7), and changes are promoted only through LCI. The findings go to Odin in the research journal. He decides whether the gate stays, moves into CyphaLM, or goes.
+
 ## 9. Curiosity: allocating the effort
 
 The scheduler treats each (process, generator, tier) as an arm of a multi-armed bandit.
