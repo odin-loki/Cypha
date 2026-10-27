@@ -16,8 +16,10 @@
 //   ladder   --pack SRC --ref SRC --test SRC [--vectors P] [--profile v1|v2] [--seed S] [--chain-rng]
 //            [--gen-trie F] [--model F]... [--export DIR] [--label L]
 //                                                           the PLAN 6.4 V1 control ladder (and model rungs), report on stdout
-//   score    --pack SRC --ref SRC [--vectors P] [--profile v1|v2] --in F --out G
-//                                                           every text of F scored: axes, sub-scores, raw statistics
+//   score    --pack SRC --ref SRC [--vectors P] [--profile v1|v2] [--v2 PARAMS] [--ref-prompts F] --in F --out G
+//                                                           every text of F scored: axes, sub-scores, raw statistics; a text
+//                                                           with a "prompt" also gets the relevance statistics (R, scored
+//                                                           against --ref-prompts, and counted in D only with wR > 0)
 //   selftest                                                known-answer checks (CTest native_scribe_selftest)
 //
 // SRC is enwik:PATH:LO:HI (bytes [LO, HI) MiB of a MediaWiki XML dump such as enwik8/enwik9, cleaned page by page
@@ -558,8 +560,9 @@ Features featurize(Ctx& c, const std::string& text, const std::string& prompt = 
   return f;
 }
 
-// Reference samples from ref_docs with rng (v1's draw order: standard first, then short).
-void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19937_64& rng) {
+// Reference samples from ref_docs with rng (v1's draw order: standard first, then short). ref_prompts (optional):
+// JSONL of human prompt / continuation pairs (`scribe prompts` on the reference range) for the relevance statistics.
+void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19937_64& rng, const std::string& ref_prompts = "") {
   const std::vector<Sample> ref_std = make_samples(ref_docs, 400, 600, 3, 4, rng);
   const std::vector<Sample> ref_short = make_samples(ref_docs, 60, 260, 1, 3, rng);
   c.n_ref_std = ref_std.size();
@@ -570,6 +573,11 @@ void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19
   for (const Features& f : c.ref_feats) {
     c.scorer.add_reference(f);
     c.v2.add_reference(f);
+  }
+  if (!ref_prompts.empty()) {
+    for (const JsonObj& j : read_jsonl(ref_prompts)) c.v2.add_reference_prompted(featurize(c, j.get("text"), j.get("prompt")));
+    std::fprintf(stderr, "[%.0fs] prompted reference: %zu standard + %zu short continuations\n", now_s() - g_t0, c.v2.n_reference_prompted(1),
+                 c.v2.n_reference_prompted(0));
   }
   c.scorer.finish();
   c.v2.finish();
@@ -828,7 +836,7 @@ int cmd_ladder(const Args& a) {
   set_v2_params(c, a.get("--v2"));
   build_pack(c, pack_docs, a.get("--vectors"));
   std::mt19937_64 rng(ref_seed);
-  build_reference(c, ref_docs, rng);
+  build_reference(c, ref_docs, rng, a.get("--ref-prompts"));
 
   // ---- samples: --chain-rng continues the reference draws (v1's development ladder), else a fresh generator.
   std::mt19937_64 trng(seed);
@@ -1049,7 +1057,7 @@ int cmd_score(const Args& a) {
   set_v2_params(c, a.get("--v2"));
   build_pack(c, pack_docs, a.get("--vectors"));
   std::mt19937_64 rng(std::strtoull(a.get("--ref-seed", "20261027").c_str(), nullptr, 10));
-  build_reference(c, ref_docs, rng);
+  build_reference(c, ref_docs, rng, a.get("--ref-prompts"));
   const std::vector<JsonObj> in = read_jsonl(a.get("--in"));
   std::ofstream o = open_out(a.get("--out"));
   const double t1 = now_s();

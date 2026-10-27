@@ -2326,6 +2326,18 @@ class ScribeV2Scorer {
     }
     ref_feats_[b].push_back(f);
   }
+  // A human continuation of a prompt: adds only the relevance statistics (r1, r4, r5, i4) to the reference.
+  void add_reference_prompted(const Features& f) {
+    if (!f.has_r) return;
+    const int b = length_bucket(f.bytes);
+    double x[V_N];
+    bool has[V_N];
+    v2_values(f, x, has);
+    for (int k : {V_R1, V_R4, V_R5, V_I4})
+      if (has[k]) ref_[b][k].add(x[k]);
+    ++nref_prompted_[b];
+  }
+  size_t n_reference_prompted(int b) const { return nref_prompted_[b]; }
   // Finishes the z-transforms, then the thresholds thS and thI from the reference samples' own S and I.
   void finish() {
     for (int b = 0; b < 2; ++b)
@@ -2378,7 +2390,7 @@ class ScribeV2Scorer {
         o.has[k] = true;
         o.z[k] = ref_[b][k].z(x[k]);
         u = sp.side > 0 ? std::max(0.0, -o.z[k]) : sp.side < 0 ? std::max(0.0, o.z[k]) : std::fabs(o.z[k]);
-      } else if (present_[b][k] >= 0.95 * static_cast<double>(nref_[b])) {
+      } else if (a != 3 && present_[b][k] >= 0.95 * static_cast<double>(nref_[b])) {
         o.imputed[k] = true;
         o.z[k] = sp.side > 0 ? -params.missing_z : params.missing_z;
         u = params.missing_z;
@@ -2442,7 +2454,7 @@ class ScribeV2Scorer {
   std::vector<std::uint64_t> grams8_;
   QuantileZ ref_[2][V_N];
   double present_[2][V_N] = {};
-  size_t nref_[2] = {0, 0};
+  size_t nref_[2] = {0, 0}, nref_prompted_[2] = {0, 0};
   std::vector<Features> ref_feats_[2];
   double thL_[2] = {0, 0}, thS_[2] = {0, 0}, thI_[2] = {0, 0};
   static double quantile_of(std::vector<double> v, double p) {
