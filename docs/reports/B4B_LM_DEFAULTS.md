@@ -59,3 +59,18 @@ In real text, a long match inside the document is almost always a true repeat; i
 |---|---|
 | L6 | With m = 8, copy keeps at least 70% of its fresh-text BPC gain on top of the class expert (shape), and surface S no longer falls (the interval of the change over class alone includes 0 or is above it) |
 | L7 | With m = 12 or 16, S does not fall and at least 50% of the gain is kept; m = 6 still lowers S |
+
+**Result (run 2026-10-28).** Class expert (shape:6) on, copy lambdas zeroed below m bytes; everything else as the first read.
+
+| Copy minimum match m | Fresh BPC, trie + IG + class + copy | Copy gain over class (95%) | Share of the m = 0 gain | Surface S, trie + class + copy | S change over class (95%) | Rule 2 |
+|---|---:|---|---:|---:|---|---|
+| 0 (as A1c) | 1.869297 | −0.2186 [−0.2566, −0.1839] | 100% | 0.8398 | −0.0654 [−0.0763, −0.0550] | fail |
+| 6 | 1.909310 | −0.1786 [−0.2144, −0.1467] | 82% | 0.8973 | −0.0080 [−0.0153, −0.0008] | fail |
+| **8** | **1.937724** | **−0.1502 [−0.1842, −0.1199]** | **69%** | **0.9068** | **+0.0016 [−0.0035, +0.0069]** | **pass** |
+| 12 | 1.976828 | −0.1111 [−0.1427, −0.0839] | 51% | 0.9052 | 0 (copy never fires) | pass |
+| 16 | 2.003554 | −0.0844 [−0.1125, −0.0603] | 39% | 0.9052 | 0 | pass |
+
+- **Why m ≥ 12 has no effect on generated text:** the no-repeat rule already bans continuing any 11-byte context that occurred before, so a copy of 12 or more bytes can never be sampled. On real text those long matches still pay (−0.111 at m = 12).
+- **m = 8 is the largest gain that passes rule 2.** With the class expert, CyphaLM on fresh text goes from 2.166 (trie + IG) to **1.938** BPC, with surface S 0.907 (trie alone 0.761; human continuations 0.870).
+- **Predictions:** L6 **miss** on the gain (69% against ≥ 70%), hit on S. L7: m = 6 still lowers S (hit), m = 12 keeps 51% with S unchanged (hit), m = 16 keeps 39% (miss).
+- **Rule 3 (answers)** for class + copy (m = 8) is being read in `qa` (the answering-variants run, A1D/A2B). Note: in A2, the copy model (m = 0) lost both gated right answers (raw right 6, kept 0), so this read matters.
