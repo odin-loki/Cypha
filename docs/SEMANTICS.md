@@ -102,6 +102,8 @@ All of this enters as low-trust priors and hypotheses (ECS Beta(1, 3)). After le
 
 Teacher-initialised and from-scratch versions are always compared, so the teacher's contribution is measured, not assumed.
 
+**Copying a whole embedding space.** [EMBEDDING_GEOMETRY.md](EMBEDDING_GEOMETRY.md) (2026-10-27) plans how Cypha's vectors are made to attract and repel like Qwen3-Embedding-8B's: a full dissection of that model, the same pull–push forces in Cypha's Fisher geometry, relational distillation, and Qwen3.5-9B as the miner of pairs and hard negatives (work items QE0–QE9, predictions Q1–Q10).
+
 ---
 
 ## 7. Experiments and gates

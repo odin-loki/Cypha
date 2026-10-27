@@ -397,6 +397,8 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 
 **Design: [`SEMANTICS.md`](SEMANTICS.md)** (2026-10-27). Core Cypha becomes the meaning layer: words and concepts as classes, contexts as observations. Its Gaussians, natural-gradient and contrastive updates, MDL shrinkage and uncertainty learn embeddings, directional is-a relations, relation maps with abstention, and senses. These feed CyphaLM as a class-context expert and a similar-context expert. Experiments S-1 to S-6 and their gates are there; the rows below stay as baselines.
 
+**Geometry teacher: [`EMBEDDING_GEOMETRY.md`](EMBEDDING_GEOMETRY.md)** (2026-10-27). Make Cypha's vectors behave like Qwen3-Embedding-8B's: dissect it (weights, outputs, the weight change from its base model), copy its pull–push forces into Cypha's contrastive update, distil its similarity structure pair by pair, and mine pairs and hard negatives with Qwen3.5-9B. Work items QE0–QE9.
+
 | ID | Work | Measure | Gate |
 |---|---|---|---|
 | C0 | **Fair baselines first.** TF-IDF with `W_enc` frozen (the 34% ran with it learning); plain TF-IDF + logistic regression; the native hashing router (`branch_a_router.hpp`, 16–19%). MiniLM 62.5% is the external yardstick | T-topic (20NG at 2k, same protocol) | Recorded |
@@ -917,6 +919,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 47 | Model human thought and work processes across many categories (UML/processes) as "thought" for Cypha, done mathematically with its online learning and statistical feedback | Track K; [`THOUGHT.md`](THOUGHT.md); [`thought/processes.yaml`](thought/processes.yaml) |
 | 48 | Cut and merge tools to the minimal and best (keep `gguf_mine.py`); plan to profile the tagger, pattern learner and word vectors with other tools to see what makes the cut | Code-debt cuts (changelog); B1; [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md) |
 | 49 | Get vectors and statistical association into Cypha, extract them from a trained LLM, and reinterpret Core Cypha | Track C; [`SEMANTICS.md`](SEMANTICS.md); experiment S-1 |
+| 50 | Make Cypha's vectors run like Qwen3-Embedding-8B's (how they attract and push away), fully dissect and datamine it, with Qwen3.5-9B as the mining LLM | Track C; [`EMBEDDING_GEOMETRY.md`](EMBEDDING_GEOMETRY.md); QE0–QE9 |
 
 ---
 

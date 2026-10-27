@@ -62,6 +62,9 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - parse emitted tags into the gap map;
   - score abstain recall and precision, and reason-code accuracy.
 - [ ] **Semantics S-1 to S-6** ([`docs/SEMANTICS.md`](docs/SEMANTICS.md)): Core Cypha as the meaning layer. S-1 "words as classes" is running.
+- [ ] **Embedding geometry QE0–QE9** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md)): copy Qwen3-Embedding-8B's geometry into Cypha.
+  - Needs Odin's machine: the GGUF downloads (Qwen3-Embedding 0.6B and 8B, Qwen3-8B, Qwen3.5-9B) and the teacher passes.
+  - Here: the new `gguf_mine.py` subcommands (`embedtexts`, `geometry`, `compare`, `sensitivity`, `occlusion`, `instruct`, `wdiff`, `pairs`), `--pooling last` for `vectors`, and the Cypha-side `semantics/geometry.hpp`.
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
   1. Build the CyphaLM Q/A baseline harness.
   2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.
