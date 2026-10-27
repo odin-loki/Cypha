@@ -17,6 +17,7 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **`cypha_gate`** (TOOL_PROFILE P1, the adapter for the Cypha classifier as abstain gate; DISCOVERY §8a): the Core Cypha classifier learns right vs wrong from CyphaLM's own confidence features in `cyphalm_trie qa --out` rows, with 5-fold CV inside dev and a threshold at 2% wrong. It only keeps or withholds answers CyphaLM wrote. CTest `native_cypha_gate_selftest` (synthetic rows: CV coverage 0.293 at a 2.0% wrong rate). On the A0 rows it answers nothing, as there is nothing right to keep.
 - **D4 Wikidata seeds and the fact-text shard** ([report](docs/reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md)):
   - `scripts/wikidata_seeds.py` (180 lines, stdlib only) maps enwik8 titles to Wikidata (98.7%) and fetches relation values as distant supervision. T-QA dev and test subjects are excluded before any query.
   - `pattern_learn` gains `--wikidata`, `--wikidata-gold-only`, `--phi` and `--shard` (question-form fact text with a built-in leakage check), and a seed fix that drops 664 citation-template seeds.
