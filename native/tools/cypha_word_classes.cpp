@@ -1722,6 +1722,7 @@ struct TrainOpts {
     std::string method = "sgns", out;
     int vocab = 50000, dim = 256, window = 5, neg = 5, epochs = 1, seed = 1, inbatch = 4, hard = 2, pool = 20;
     double sample = 1e-4, var0 = 0.025, tau = 0.1, eta = 10, kappa0 = 10;
+    std::string init;  // pullpush: start from an sgns run, PREFIX.npy (words) and PREFIX_wc.npy (words + contexts)
 };
 
 // One epoch's stream with frequent words dropped by word2vec's rule, keep = (sqrt(f / (t N)) + 1) t N / f.
@@ -1814,6 +1815,14 @@ void train_sgns(const std::vector<uint16_t>& tok, const Vocab& voc, const TrainO
 void train_pullpush(const std::vector<uint16_t>& tok, const Vocab& voc, const TrainOpts& O, geo::ItemStore& st) {
     const int V = (int)voc.words.size(), d = O.dim;
     st = geo::ItemStore::random(2 * V, d, (uint64_t)O.seed);
+    VecSet W, WC;
+    if (!O.init.empty() && load_vecset(O.init + ".npy", "", W) && load_vecset(O.init + "_wc.npy", "", WC) && W.d == d && WC.n == W.n)
+        for (int r = 0; r < std::min(V, W.n); ++r) {  // rows in the same frequency order (same stream)
+            std::copy(W.at(r), W.at(r) + d, st.mean(r));
+            for (int j = 0; j < d; ++j) st.mean(V + r)[j] = WC.at(r)[j] - W.at(r)[j];
+            geo::detail::normalise(st.mean(r), d);
+            geo::detail::normalise(st.mean(V + r), d);
+        }
     geo::StepOptions so;
     so.tau = O.tau;
     so.eta = O.eta;
@@ -2326,7 +2335,7 @@ int cmd_train(int argc, char** argv) {
     if (!parse_opts(argc, argv, 1, kv, pos) || pos.size() != 1 || !kv.count("--out")) {
         std::fprintf(stderr, "usage: %s <enwik8> --out PREFIX [--method sgns|pullpush] [--epochs 1] [--dim 256] [--vocab 50000] [--window 5] "
                              "[--neg 5] [--sample 1e-4] [--seed 1] [--var0 0.025 (sgns)] [--tau 0.1 --eta 10 --kappa0 10 --inbatch 4 --hard 2 "
-                             "--pool 20 (pullpush)]\n", argv[0]);
+                             "--pool 20 --init SGNS_PREFIX (pullpush)]\n", argv[0]);
         return 2;
     }
     TrainOpts O;
@@ -2346,6 +2355,7 @@ int cmd_train(int argc, char** argv) {
     O.tau = optd(kv, "--tau", O.tau);
     O.eta = optd(kv, "--eta", O.eta);
     O.kappa0 = optd(kv, "--kappa0", O.kappa0);
+    O.init = opts(kv, "--init");
     Stream st;
     if (!load_stream(pos[0], O.vocab, st)) return 2;
     const int V = (int)st.voc.words.size(), d = O.dim;

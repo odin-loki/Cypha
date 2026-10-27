@@ -35,9 +35,16 @@
 //        caps, matched-length histogram, 50 questions with 30 Dolly turns held out.
 //   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600]
 //        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for scribe_ladder.
+//   cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]
+//        B4 (docs/reports/B4_CLASS_CONTEXT_EXPERT.md): the class-context expert (class_context.hpp) over the
+//        bpc model, each spec paired against the model without it: holdout second-half BPC (lambdas on the
+//        first half), fresh-text BPC on [sample, sample + 1 MiB) (lambdas on the whole holdout), and surface S
+//        of 400-byte samples from 200 holdout prompts, with block-bootstrap intervals; later specs are also
+//        compared with the first. TABLE is word<TAB>class (e.g. E1 tags); "shape" is shape classes only.
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
 //      [--fam-train stat|outcome] [--fam-only] [--copy] [--r3 PATTERNS.tsv] [--shard F.tsv] [--shard2 F.tsv]
+//      [--cls TABLE[:tail]|shape[:tail]]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
 //        familiarity token <|fam=low|mid|high|> before (or after) "Assistant: ". CyphaLM answers
@@ -59,6 +66,8 @@
 //        holdout's first half; BPC and LCI gain on the second half) as two more models. --r3 runs statement
 //        scoring with F2's patterns as frames. --shard / --shard2 add question-form fact turns (rows from the
 //        BPC holdout dropped; exits if a shard question equals a dev or test question, from --test or --leak).
+//        --cls (B4; TOOL_PROFILE P2) adds the class-context expert, built on the same bytes as InfiniGram, to both
+//        models (lambdas on the holdout's first half); not with --copy.
 //   dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608]
 //        A1 training text: T-QA relation templates filled with page titles from enwik8 after
 //        --from whose lowered text never occurs in the lowered training bytes (wiki train +
@@ -69,7 +78,7 @@
 //   selftest
 //        packed_trie.hpp self_test plus a golden BPC on a 40,000-byte built-in corpus, plus the
 //        qa grading, tag parsing, Wilson bounds, abstain gate, copy expert, AUROC / Youden cut, frames,
-//        candidates, statement choice, question relation and shard leakage check on fixed inputs
+//        candidates, statement choice, question relation, shard leakage check and class-context expert on fixed inputs
 //        (CTest native_cyphalm_trie_selftest; needs no data files; about 0.1 second).
 // Every subcommand takes --wiki P, --dolly P, --train N, --sample N in place of the
 // positional paths; the paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then to the paths
@@ -98,6 +107,20 @@
 //              exactly the `low` questions, dev precision 0.50 / recall 0.43, test 1.00 / 0.30.
 //              BPC +0.0003 to +0.0033. About 6 min a run, peak RSS <= 265 MB.
 //   dktext     3,963 rows from 3,274 absent entities; leakage 0; plain-scan audit 0/300. 6 s.
+//              --mention: + 2,231 linked-only entities, 6,583 rows, leakage 0.
+// Measured 2026-10-28 (docs/reports/A1C_ENTITY_FAMILIARITY_AND_COPY.md, A2_A3_FACT_TEXT_AND_STATEMENT_SCORING.md):
+//   qa A1c     dev AUROC (not-in-slice vs in-slice): ent_title 0.795 (boot95 0.745-0.847), ent_lp 0.771,
+//              ent_bold 0.765, question_lp 0.693, ent_count 0.535, ent_link 0.517, ent_igfrac 0.495.
+//              ent_title token, --fam-train outcome: every model abstains on exactly the low/mid
+//              questions; precision / recall dev 0.435 / 1.00, test 0.371 / 0.98. On every turn
+//              (stat): 97% of Dolly turns get low and the trie abstains on all 130 (0.231 / 1.00).
+//   --copy     holdout BPC (second half) trie 2.319989 -> 2.113702, trie + InfiniGram 2.071574 ->
+//              1.926101; LCI P_gain(> 0.005) 1.000 on 256 blocks. No tag names the question's entity.
+//   --r3       runs on 25-32 dev questions, raw 1 right; 0 right at 2% wrong out of fold.
+//   --shard    1,488 F2 fact rows (513 holdout rows dropped, leakage 0): dev raw right 2 -> 7
+//              (trie + InfiniGram), 2 right 0 wrong at 2% wrong out of fold (1.5%); BPC +0.0014.
+//              Test: covers 3 questions, adds 0; with --r3 the gate keeps 1 right, 0 wrong.
+//              About 7.5-8.5 min a run.
 //
 // Build (from the repo root):
 //   gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
@@ -110,9 +133,11 @@
 //   ./cyphalm_trie sample /root/cdata/enwik8 gen_dev.txt gen_fresh.txt
 //   ./cyphalm_trie selftest
 
+#include "cypha/cyphalm/class_context.hpp"
 #include "cypha/cyphalm/infinigram.hpp"
 #include "cypha/cyphalm/packed_trie.hpp"
 #include "cypha/eval/lci.hpp"
+#include "cypha/eval/scribe.hpp"
 
 #include <cctype>
 #include <chrono>
@@ -122,11 +147,13 @@
 #include <map>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <set>
 #include <string_view>
 #include <tuple>
 
 using namespace cypha::cyphalm::trie;
+using cypha::cyphalm::ClassContext;
 using cypha::cyphalm::InfiniGram;
 
 namespace {
@@ -152,6 +179,7 @@ struct Args {
     std::size_t from = 8'388'608, max_rows = 0;
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;  // A1c, A3, A2
     bool copy = false, fam_only = false, mention = false;
+    std::string cls;  // B4: class-context expert spec, TABLE[:tail] or shape[:tail]
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -192,6 +220,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--shard2") a.shard2 = next();
         else if (s == "--leak") a.leak = next();
         else if (s == "--copy") a.copy = true;
+        else if (s == "--cls") a.cls = next();
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--mention") a.mention = true;
         else if (s.rfind("--", 0) == 0) {
@@ -924,6 +953,24 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
     }
 }
 
+// B4: the class-context expert from "TABLE[:tail]": TABLE a word<TAB>class file, or "shape" (shape classes only);
+// tail defaults to 6. Not built yet (call build()).
+std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
+    const std::size_t colon = spec.rfind(':');
+    const std::string table = colon == std::string::npos ? spec : spec.substr(0, colon);
+    const int tail = colon == std::string::npos ? 6 : std::atoi(spec.c_str() + colon + 1);
+    std::unordered_map<std::string, std::uint16_t> cls;
+    if (table != "shape") {
+        std::string err;
+        cls = ClassContext::load_tsv(table, err);
+        if (!err.empty()) {
+            std::cerr << err << "\n";
+            return nullptr;
+        }
+    }
+    return std::make_unique<ClassContext>(std::move(cls), tail);
+}
+
 // CyphaLM's next-byte distribution: the frozen trie mixture, optionally mixed with InfiniGram
 // (context8k: P = lam[b] P_ctx + (1 - lam[b]) P_trie, one lam per match-length x count bucket),
 // then optionally with the copy expert (P = lc[b] [pred] + (1 - lc[b]) P, one lc per match-length bucket).
@@ -936,6 +983,8 @@ struct Lm {
     const double* lam = nullptr;
     const double* lc = nullptr;
     int cap = 8192;
+    const ClassContext* cc = nullptr;  // B4: class-context expert, P = lcls[b] P_cls + (1 - lcls[b]) P, before the copy
+    const double* lcls = nullptr;
     // hint: the previous step's match length (-1 at a new sequence); n_out: this step's.
     void dist(const std::vector<std::uint8_t>& seq, int& hint, double* P, int* n_out = nullptr) const {
         double e[5][256];
@@ -954,6 +1003,11 @@ struct Lm {
                 P[s] = l * pc + (1 - l) * P[s];
             }
         }
+        if (cc) {
+            double Pc[256];
+            const double l = lcls[ClassContext::bucket(cc->predict(seq.data(), seq.size(), Pc))];
+            for (int s = 0; s < 256; ++s) P[s] = l * Pc[s] + (1 - l) * P[s];
+        }
         int n = 0;
         const int c = lc ? copy_pred(seq.data(), seq.size(), n) : -1;
         if (c < 0) return;
@@ -962,6 +1016,241 @@ struct Lm {
         P[c] += l;
     }
 };
+
+// ---------------------------------------------------------------- cls (B4: the class-context expert)
+//
+// The bpc model (train bytes only) and InfiniGram over the train bytes; then, for each spec, the class-context expert
+// built on the train bytes. Three reads, every one paired against the same model without the expert:
+//   holdout  second half of the holdout, lambdas (InfiniGram's and the expert's) fit on the first half;
+//   fresh    [sample, sample + 1 MiB) of the corpus, lambdas refit on the whole holdout; the read that decides;
+//   surface  S = H*D*L (scribe.hpp) of 400 bytes from each of 200 holdout prompts (sample's prompt rule and seed),
+//            T 0.8, nucleus 0.9, no-repeat, the same seed for every model; D and L referenced to the human
+//            continuations; the trie alone and the trie + expert (lambdas on the first holdout half).
+// Intervals are block bootstraps of the mean gain: 4 KiB blocks (2,000 resamples on the holdout, 4,000 on fresh text),
+// prompts on the surface score (4,000).
+
+struct Boot {
+    double mean, lo, hi, p_neg, p_pos;
+};
+Boot block_boot(const std::vector<double>& d, std::size_t block, int reps, std::uint64_t seed) {
+    const std::size_t nb = d.size() / block;
+    std::vector<double> bm(nb), bs;
+    for (std::size_t b = 0; b < nb; ++b)
+        bm[b] = std::accumulate(d.begin() + static_cast<std::ptrdiff_t>(b * block),
+                                d.begin() + static_cast<std::ptrdiff_t>((b + 1) * block), 0.0) / static_cast<double>(block);
+    std::mt19937_64 rng(seed);
+    for (int r = 0; r < reps; ++r) {
+        double t = 0;
+        for (std::size_t b = 0; b < nb; ++b) t += bm[rng() % nb];
+        bs.push_back(t / static_cast<double>(nb));
+    }
+    std::sort(bs.begin(), bs.end());
+    double neg = 0, pos = 0;
+    for (double x : bs) neg += x < 0, pos += x > 0;
+    return {std::accumulate(d.begin(), d.end(), 0.0) / static_cast<double>(d.size()), bs[reps / 40],
+            bs[reps - reps / 40 - 1], neg / reps, pos / reps};
+}
+
+void print_boot(const std::string& name, const Boot& b) {
+    std::printf("%s mean %.6f ci95 %.6f %.6f p_lt0 %.4f p_gt0 %.4f\n", name.c_str(), b.mean, b.lo, b.hi, b.p_neg, b.p_pos);
+}
+
+std::string sample_with_class(const Model& model, const double w[6], std::size_t limit, const ClassContext* cc,
+                              const double* lam, const std::string& prompt, int n, std::uint32_t seed) {
+    std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+    std::mt19937 rng(seed);
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    for (int t = 0; t < n; ++t) {
+        double e[5][256], M[256];
+        bool matched = false;
+        unsigned pred = 0;
+        model.fill_experts(seq.data(), seq.size(), limit, Mode::Synth, e, matched, pred, false);
+        mix_dist(w, e, matched, pred, M);
+        if (cc) {
+            double P[256];
+            const double l = lam[ClassContext::bucket(cc->predict(seq.data(), seq.size(), P))];
+            for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+        }
+        bool banned[256];
+        mark_banned(seq, banned);
+        double p[256], mass = 0;
+        for (int pass = 0; pass < 2 && !(mass > 0); ++pass) {
+            mass = 0;
+            for (int s = 0; s < 256; ++s) mass += p[s] = (pass == 0 && banned[s]) ? 0.0 : std::pow(M[s], 1.0 / 0.8);
+        }
+        int order[256];
+        std::iota(order, order + 256, 0);
+        std::sort(order, order + 256, [&](int x, int y) { return p[x] > p[y]; });
+        double acc = 0, km = 0;
+        int keep = 1;
+        for (int k = 0; k < 256; ++k) {
+            acc += p[order[k]] / mass;
+            keep = k + 1;
+            if (acc >= 0.9) break;
+        }
+        for (int k = 0; k < keep; ++k) km += p[order[k]];
+        double r = U(rng) * km;
+        int pick = order[keep - 1];
+        for (int k = 0; k < keep; ++k)
+            if ((r -= p[order[k]]) <= 0) {
+                pick = order[k];
+                break;
+            }
+        seq.push_back(static_cast<std::uint8_t>(pick));
+    }
+    return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
+}
+
+int cmd_cls(const Args& a) {
+    const Config& cfg = a.cfg;
+    if (a.pos.size() < 2) {
+        std::fprintf(stderr, "usage: cyphalm_trie cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]\n");
+        return 2;
+    }
+    const std::size_t H = cfg.sample - cfg.train, half = H / 2, N = H + (std::size_t{1} << 20);
+    std::vector<std::uint8_t> data;
+    if (const std::string e = read_prefix(a.wiki, cfg.sample + (std::size_t{1} << 20), data); !e.empty()) {
+        std::cerr << e << "\n";
+        return 1;
+    }
+    Model model;
+    model.data = data.data();
+    model.init(cfg);
+    double w[6];
+    init_weights(w, cfg);
+    train_span(model, data, w, 0, cfg.train, cfg);
+    model.compact_match();
+    InfiniGram ig(data.data(), cfg.train);
+    std::vector<double> pt(N), pi(N);
+    std::vector<int> bi(N);
+    for (std::size_t k = 0, prev = 0; k < N; ++k) {
+        const std::size_t i = cfg.train + k;
+        double e[5][256], M[256];
+        bool em = false;
+        unsigned pred = 0;
+        model.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
+        mix_dist(w, e, em, pred, M);
+        pt[k] = M[data[i]];
+        const std::size_t len = std::min<std::size_t>(i, 8192);
+        const auto r = ig.query(data.data() + (i - len), len, 8192, k == 0 ? -1 : std::min<int>(static_cast<int>(prev) + 1, 8192));
+        prev = static_cast<std::size_t>(r.n);
+        pi[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
+        bi[k] = bucket(r.n, r.total);
+    }
+    // InfiniGram mixed over the trie: lambdas on the first holdout half (holdout read) and on the whole holdout (fresh).
+    double lam_h[kBuckets], lam_f[kBuckets];
+    fit_lambdas(pi, pt, bi, half, kBuckets, lam_h);
+    fit_lambdas(pi, pt, bi, H, kBuckets, lam_f);
+    std::vector<double> pih(N), pif(N);
+    for (std::size_t k = 0; k < N; ++k) {
+        pih[k] = lam_h[bi[k]] * pi[k] + (1 - lam_h[bi[k]]) * pt[k];
+        pif[k] = lam_f[bi[k]] * pi[k] + (1 - lam_f[bi[k]]) * pt[k];
+    }
+    auto bits = [](const std::vector<double>& p, std::size_t from, std::size_t to) {
+        std::vector<double> b;
+        for (std::size_t k = from; k < to; ++k) b.push_back(-std::log2(p[k]));
+        return b;
+    };
+    auto mean = [](const std::vector<double>& v) { return std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size()); };
+    const auto h_t = bits(pt, half, H), h_i = bits(pih, half, H), f_t = bits(pt, H, N), f_i = bits(pif, H, N);
+    std::printf("holdout2 trie %.6f trie+ig %.6f | fresh trie %.6f trie+ig %.6f\n", mean(h_t), mean(h_i), mean(f_t), mean(f_i));
+
+    // Surface prompts and their human continuations.
+    const int np = 200, nbytes = 400;
+    std::vector<std::pair<std::string, std::string>> pr;
+    {
+        const std::string hold(reinterpret_cast<const char*>(data.data()) + cfg.train, H);
+        std::size_t pos = hold.find('\n') + 1;
+        while (pos < hold.size()) {
+            const std::size_t e = hold.find('\n', pos);
+            if (e == std::string::npos) break;
+            const std::string line = hold.substr(pos, e - pos);
+            const std::size_t at = pos;
+            pos = e + 1;
+            if (!good_start(line)) continue;
+            std::size_t cut = 64;
+            while (cut > 0 && (static_cast<unsigned char>(line[cut]) & 0xC0) == 0x80) --cut;
+            if (at + cut + nbytes > hold.size()) continue;
+            pr.push_back({line.substr(0, cut), hold.substr(at + cut, nbytes)});
+        }
+        std::mt19937_64 prng(20261027);
+        std::shuffle(pr.begin(), pr.end(), prng);
+        pr.resize(std::min<std::size_t>(pr.size(), np));
+    }
+    cypha::eval::SurfaceRef ref;
+    cypha::eval::surface_add_vocab(ref, std::string(reinterpret_cast<const char*>(data.data()), cfg.train));
+    double d4 = 0, lp8 = 0;
+    for (auto& ph : pr) d4 += cypha::eval::scribe_detail::distinct4_bytes(ph.second), lp8 += cypha::eval::scribe_detail::loop8_bytes(ph.second);
+    ref.ref_d4[1] = d4 / static_cast<double>(pr.size());
+    ref.ref_loop[1] = lp8 / static_cast<double>(pr.size());
+    auto surface = [&](const ClassContext* cc, const double* lam) {
+        std::vector<double> v;
+        for (std::size_t i = 0; i < pr.size(); ++i) {
+            const std::uint64_t seed = 1000003ull * (i + 1) + 2ull * 7919ull;
+            v.push_back(cypha::eval::surface_S(
+                ref, sample_with_class(model, w, cfg.train, cc, lam, pr[i].first, nbytes, static_cast<std::uint32_t>(seed ^ (seed >> 32)))));
+        }
+        return v;
+    };
+    std::vector<double> s_human;
+    for (auto& ph : pr) s_human.push_back(cypha::eval::surface_S(ref, ph.second));
+    const auto s_trie = surface(nullptr, nullptr);
+    std::printf("surface prompts %zu human %.4f trie %.4f\n", pr.size(), mean(s_human), mean(s_trie));
+
+    std::vector<double> first_f, first_s;
+    for (std::size_t sp = 1; sp < a.pos.size(); ++sp) {
+        const std::string& spec = a.pos[sp];
+        auto cc = make_class_context(spec);
+        if (!cc) return 1;
+        const auto t0 = std::chrono::steady_clock::now();
+        cc->build(data.data(), cfg.train);
+        const double build_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::vector<double> pc(N);
+        std::vector<int> bc(N);
+        for (std::size_t k = 0; k < N; ++k) {
+            double P[256];
+            bc[k] = ClassContext::bucket(cc->predict(data.data(), cfg.train + k, P));
+            pc[k] = P[data[cfg.train + k]];
+        }
+        double lt_h[ClassContext::kBuckets], li_h[ClassContext::kBuckets], lt_f[ClassContext::kBuckets], li_f[ClassContext::kBuckets];
+        fit_lambdas(pc, pt, bc, half, ClassContext::kBuckets, lt_h);
+        fit_lambdas(pc, pih, bc, half, ClassContext::kBuckets, li_h);
+        fit_lambdas(pc, pt, bc, H, ClassContext::kBuckets, lt_f);
+        fit_lambdas(pc, pif, bc, H, ClassContext::kBuckets, li_f);
+        auto mixed = [&](const std::vector<double>& base, const double* l, std::size_t from, std::size_t to) {
+            std::vector<double> b;
+            for (std::size_t k = from; k < to; ++k) b.push_back(-std::log2(l[bc[k]] * pc[k] + (1 - l[bc[k]]) * base[k]));
+            return b;
+        };
+        auto gain = [](const std::vector<double>& with, const std::vector<double>& without) {
+            std::vector<double> d(with.size());
+            for (std::size_t k = 0; k < d.size(); ++k) d[k] = with[k] - without[k];
+            return d;
+        };
+        const auto ht = mixed(pt, lt_h, half, H), hi = mixed(pih, li_h, half, H);
+        const auto ft = mixed(pt, lt_f, H, N), fi = mixed(pif, li_f, H, N);
+        std::printf("spec %s classes %zu contexts %zu followers %zu table_bytes %zu build_s %.1f\n", spec.c_str(),
+                    cc->classes(), cc->contexts(), cc->followers(), cc->bytes(), build_s);
+        std::printf("spec %s holdout2 trie+cls %.6f trie+ig+cls %.6f | fresh trie+cls %.6f trie+ig+cls %.6f\n", spec.c_str(),
+                    mean(ht), mean(hi), mean(ft), mean(fi));
+        print_boot("spec " + spec + " holdout2_gain_over_trie", block_boot(gain(ht, h_t), 4096, 2000, 7));
+        print_boot("spec " + spec + " holdout2_gain_over_trie_ig", block_boot(gain(hi, h_i), 4096, 2000, 7));
+        print_boot("spec " + spec + " fresh_gain_over_trie", block_boot(gain(ft, f_t), 4096, 4000, 11));
+        print_boot("spec " + spec + " fresh_gain_over_trie_ig", block_boot(gain(fi, f_i), 4096, 4000, 11));
+        const auto sv = surface(cc.get(), lt_h);
+        std::printf("spec %s surface %.4f\n", spec.c_str(), mean(sv));
+        print_boot("spec " + spec + " surface_gain_over_trie", block_boot(gain(sv, s_trie), 1, 4000, 5));
+        if (sp == 1) {
+            first_f = fi;
+            first_s = sv;
+        } else {
+            print_boot("spec " + spec + " fresh_trie_ig_vs_" + a.pos[1], block_boot(gain(fi, first_f), 4096, 4000, 11));
+            print_boot("spec " + spec + " surface_vs_" + a.pos[1], block_boot(gain(sv, first_s), 1, 4000, 5));
+        }
+        std::fflush(stdout);
+    }
+    return 0;
+}
 
 struct R3Score {
     double bpb = 1e300, min_lp = 0;
@@ -1314,6 +1603,7 @@ struct QaOpts {
     std::string fam = "none";  // none | before | after: where the <|fam=..|> token goes
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;
     bool copy = false, fam_only = false;
+    std::string cls;
 };
 
 constexpr int kFeat = 5;
@@ -1910,6 +2200,32 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     std::cout << "holdout_mix_bpc " << bits_all / static_cast<double>(H) << "\n";
     std::cout << "holdout2_trie_bpc " << bits_trie2 / static_cast<double>(H - half) << " holdout2_trie_ig_bpc "
               << bits_ig2 / static_cast<double>(H - half) << "\n";
+    // B4: the class-context expert over the same training bytes as InfiniGram (wiki train + chat), lambdas on the
+    // first half of the holdout over the trie (lcl_t) and over trie + InfiniGram (lcl_i).
+    std::unique_ptr<ClassContext> cc;
+    double lcl_t[ClassContext::kBuckets] = {0}, lcl_i[ClassContext::kBuckets] = {0};
+    if (!o.cls.empty()) {
+        cc = make_class_context(o.cls);
+        if (!cc) return 1;
+        cc->build(T.data(), T.size());
+        std::vector<double> pcl(H);
+        std::vector<int> clb(H);
+        for (std::size_t k = 0; k < H; ++k) {
+            double P[256];
+            clb[k] = ClassContext::bucket(cc->predict(data.data(), cfg.train + k, P));
+            pcl[k] = P[data[cfg.train + k]];
+        }
+        fit_lambdas(pcl, pt, clb, half, ClassContext::kBuckets, lcl_t);
+        fit_lambdas(pcl, pig, clb, half, ClassContext::kBuckets, lcl_i);
+        double bt = 0, bi = 0;
+        for (std::size_t k = half; k < H; ++k) {
+            bt += -std::log2(lcl_t[clb[k]] * pcl[k] + (1 - lcl_t[clb[k]]) * pt[k]);
+            bi += -std::log2(lcl_i[clb[k]] * pcl[k] + (1 - lcl_i[clb[k]]) * pig[k]);
+        }
+        std::cout << "cls " << o.cls << " contexts " << cc->contexts() << " table_bytes " << cc->bytes()
+                  << " holdout2_trie_cls_bpc " << bt / static_cast<double>(H - half) << " holdout2_trie_ig_cls_bpc "
+                  << bi / static_cast<double>(H - half) << "\n";
+    }
     if (o.copy) {
         for (std::size_t k = 0; k < H; ++k) {
             int n = 0;
@@ -1951,8 +2267,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
 
     const int nlm = o.copy ? 4 : 2;
     const char* const lm_name[4] = {"trie", "trie_ig", "trie_cp", "trie_ig_cp"};
-    const Lm lms[4] = {{&model, w, data.size(), false, nullptr, nullptr, nullptr},
-                       {&model, w, data.size(), false, &ig, lam, nullptr},
+    const Lm lms[4] = {{&model, w, data.size(), false, nullptr, nullptr, nullptr, 8192, cc.get(), lcl_t},
+                       {&model, w, data.size(), false, &ig, lam, nullptr, 8192, cc.get(), lcl_i},
                        {&model, w, data.size(), false, nullptr, nullptr, lc_t},
                        {&model, w, data.size(), false, &ig, lam, lc_i}};
 
@@ -2458,21 +2774,44 @@ int cmd_selftest() {
             return 1;
         }
     }
+    {
+        // B4: the class-context expert on a tiny corpus. A verb of the same class reuses what "wrote" learned; an
+        // unknown word falls to the uniform floor; P sums to 1; the bucket packs order and count.
+        ClassContext cc({{"wrote", 10}, {"composed", 10}, {"who", 11}, {"the", 12}}, 6);
+        const std::string t = "who wrote the song? who wrote the play? who wrote the book? ";
+        cc.build(reinterpret_cast<const std::uint8_t*>(t.data()), t.size());
+        auto ask = [&](const std::string& h, double* P) {
+            return cc.predict(reinterpret_cast<const std::uint8_t*>(h.data()), h.size(), P);
+        };
+        double P1[256], P2[256], P3[256];
+        const auto h1 = ask("who wrote t", P1), h2 = ask("who composed t", P2), h3 = ask("who painted t", P3);
+        const double sum = std::accumulate(P1, P1 + 256, 0.0), sum3 = std::accumulate(P3, P3 + 256, 0.0);
+        const bool ok = h1.order == 2 && h1.total == 3 && P1['h'] > 0.9 && std::fabs(sum - 1) < 1e-9 && h2.order == 2 &&
+                        std::fabs(P2['h'] - P1['h']) < 1e-12 && h3.order == 0 && std::fabs(P3['h'] - 1.0 / 256) < 1e-12 &&
+                        std::fabs(sum3 - 1) < 1e-9 && ClassContext::bucket({2, 3}) == 9 && cc.contexts() == 68 &&
+                        make_class_context("shape:4") != nullptr;
+        if (!ok) {
+            std::cerr << "selftest: class-context expert checks failed\n";
+            return 1;
+        }
+    }
     std::cout << "selftest ok\n";
     return 0;
 }
 
 void usage() {
     std::fprintf(stderr,
-                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|qa|dktext|selftest> [wiki] [dolly] [options]\n"
+                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|selftest> [wiki] [dolly] [options]\n"
                  "  bpc [wiki] [--negative] [--no-guard]\n"
                  "  chat [wiki] [dolly] [--prompt TEXT] [--no-repeat]\n"
                  "  probe [wiki] [dolly]\n"
                  "  context8k [wiki] [dolly]\n"
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600]\n"
+                 "  cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome] [--fam-only] [--copy] [--r3 PATTERNS.tsv] [--shard F.tsv] [--shard2 F.tsv]\n"
+                 "     [--cls TABLE[:tail]|shape[:tail]]  (not with --copy)\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  selftest\n"
                  "  options: --wiki P --dolly P --train N --sample N\n"
@@ -2496,7 +2835,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (cmd != "bpc" && cmd != "chat" && cmd != "probe" && cmd != "context8k" && cmd != "sample" && cmd != "qa" &&
-        cmd != "dktext") {
+        cmd != "dktext" && cmd != "cls") {
         usage();
         return 2;
     }
@@ -2508,14 +2847,15 @@ int main(int argc, char** argv) {
     else if (cmd == "probe") rc = cmd_probe(a);
     else if (cmd == "context8k") rc = cmd_context8k(a);
     else if (cmd == "sample") rc = cmd_sample(a);
+    else if (cmd == "cls") rc = cmd_cls(a);
     else if (cmd == "qa") {
         if (a.dev.empty() || (a.fam != "none" && a.fam != "before" && a.fam != "after") || a.dk_ratio < 0 ||
-            a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome")) {
+            a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome") || (a.copy && !a.cls.empty())) {
             usage();
             return 2;
         }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
-                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only});
+                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();

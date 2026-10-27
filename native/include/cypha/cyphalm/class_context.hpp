@@ -130,6 +130,7 @@ class ClassContext {
         return h.order * 4 + cb;
     }
 
+    std::size_t classes() const { return cls_.size(); }
     std::size_t contexts() const { return key_.size(); }
     std::size_t followers() const { return byte_.size(); }
     std::size_t bytes() const { return key_.size() * 16 + byte_.size() * 5; }

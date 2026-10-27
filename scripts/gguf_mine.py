@@ -1007,13 +1007,14 @@ def cmd_spectra(args) -> None:
     for t in r.tensors:
         if len(t.shape) != 2 or (pat and not pat.search(t.name)):
             continue
-        W = dequant(t).astype(np.float64)
+        W = dequant(t)
         if min(W.shape) < 8:
             continue
         sampled = ""
-        if W.shape[0] > args.max_rows:
+        if W.shape[0] > args.max_rows:  # sample before the float64 copy (an 8B vocabulary matrix would need 5 GB)
             W = W[rng.choice(W.shape[0], args.max_rows, replace=False)]
             sampled = f"rows sampled to {args.max_rows}"
+        W = W.astype(np.float64)
         G = W @ W.T if W.shape[0] <= W.shape[1] else W.T @ W
         ev = np.clip(np.linalg.eigvalsh(G), 0, None)[::-1]
         sv = np.sqrt(ev)

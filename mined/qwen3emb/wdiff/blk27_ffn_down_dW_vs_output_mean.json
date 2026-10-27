@@ -1,0 +1,56 @@
+{
+ "sv_top5": [
+  14.7406468522941,
+  3.4594530667124452,
+  1.4938305108421193,
+  0.653823951813776,
+  0.5342515477058349
+ ],
+ "share_top1": 0.9340630032260265,
+ "share_top3": 0.9951025643079681,
+ "u1": {
+  "abs_cos_with_mean_output_dir": 0.11644823987131653,
+  "mean_projection_of_outputs": 0.06158145761219352,
+  "sd_projection": 0.03413917152422925,
+  "top_dims": [
+   35,
+   13,
+   2,
+   14,
+   22,
+   51
+  ],
+  "abs_cos_gain_scaled_vs_raw": 0.2634164430529674
+ },
+ "u2": {
+  "abs_cos_with_mean_output_dir": 0.5242199808297232,
+  "mean_projection_of_outputs": 0.2772238598419748,
+  "sd_projection": 0.08902467066104361,
+  "top_dims": [
+   14,
+   1004,
+   1022,
+   998,
+   894,
+   963
+  ],
+  "abs_cos_gain_scaled_vs_raw": 0.9785412356861292
+ },
+ "u3": {
+  "abs_cos_with_mean_output_dir": 0.01261616177640398,
+  "mean_projection_of_outputs": 0.006671819449746522,
+  "sd_projection": 0.019755439701597658,
+  "top_dims": [
+   2,
+   35,
+   13,
+   56,
+   954,
+   66
+  ],
+  "abs_cos_gain_scaled_vs_raw": 0.7447887232078542
+ },
+ "random_dir_abs_cos_q95": 0.061260737193102564,
+ "mean_output_norm": 0.5288311586353334,
+ "mean_dir_share_in_top3_span": 0.29726916290305194
+}

@@ -49,6 +49,19 @@ From 512 MB to 10⁹ bytes the 4-gram count grows like about N^0.47. The packed 
 
 Chat must not be poured into those counts. On the 8 MiB split, the 4-byte match fires on **96%** of holdout bytes, and **75.7%** of holdout bytes use a 4-gram that also occurs in Dolly. The match table keeps only the latest follower, so those wiki predictions become the last Dolly byte. Every Dolly prompt also ends in the same 12 bytes, `\nAssistant: `, so a fixed 8-byte or 16-byte key does not tell the questions apart (0 of 15,011 prompts are unique at 12 bytes; **19%** are unique at 16). The chat index has to be the whole prompt pointing at its answer, in its own table, after the wiki counts and the mixture weights are frozen.
 
+## Question answering, CyphaLM by itself
+
+Tool: `cyphalm_trie qa` (dev 130 questions, frozen test 200; coverage at a 2% wrong rate by 5-fold CV inside dev). Reports: [A0/A1](reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md), [A1c](reports/A1C_ENTITY_FAMILIARITY_AND_COPY.md), [A2/A3](reports/A2_A3_FACT_TEXT_AND_STATEMENT_SCORING.md).
+
+| Read | Value |
+|---|---|
+| A0, CyphaLM alone | 0.0% coverage at 2% wrong on dev; raw right 0–2 / 130 |
+| A2, + fact shard (R1) | dev 2 right / 0 wrong out of fold (1.5%, Wilson 0.4–5.4%); test +0 |
+| A3, statement scoring (R3) | 0% at 2% wrong |
+| A2 + A3, frozen test, gated | 1 right / 0 wrong |
+| Entity familiarity (`ent_title`) | dev AUROC 0.795 [0.745, 0.847] |
+| Copy expert (option) | holdout BPC trie 2.114, trie + InfiniGram 1.926 |
+
 ## Fact store and fact text (for CyphaLM to learn from)
 
 Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md), 2026-10-28). These facts never answer anything. They become training text for CyphaLM (PLAN rule 10).

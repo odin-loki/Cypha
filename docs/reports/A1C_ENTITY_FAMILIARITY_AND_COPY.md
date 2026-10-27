@@ -2,7 +2,17 @@
 
 **Odin Loch** · 2026-10-28 · follows [A0_A1_CYPHALM_QA_AND_DONT_KNOW.md](A0_A1_CYPHALM_QA_AND_DONT_KNOW.md) "Next steps" 1, 3 and 4 · step A1 of [CYPHALM_ANSWERING.md](../CYPHALM_ANSWERING.md) §4
 
-**Status: in progress.** Predictions are written first; results follow as each run ends.
+**Questions.**
+1. Is there a familiarity statistic of CyphaLM's own model that tells not-in-slice questions from in-slice ones far better than A1's (AUROC 0.54–0.60)?
+2. With it as the token after `Assistant: `, does CyphaLM's own message reach D2 (precision ≥ 0.8, recall ≥ 0.5 on not-in-slice)?
+3. Does a copy expert over the current context improve BPC, and let the tag name the question's entity?
+
+**Answers.**
+1. **Yes.** The count of the E1 entity as a page title in CyphaLM's training bytes (`ent_title`) gives dev AUROC **0.795** (bootstrap 0.745–0.847). The bold-lead count gives 0.765, the entity's trie log-probability 0.771. Plain counts and links stay at chance (0.52–0.54).
+2. **No, on precision.** Used on every training turn, the token fails: Dolly subjects rarely have a slice article, so 97% of Dolly turns get `low` and the trie says "I don't know" to everything (precision 0.231). As a clean gate decision (`--fam-train outcome`), CyphaLM follows it exactly in all four models: dev precision **0.435**, recall **1.00**; frozen test **0.371** / **0.98**. The limit is E1's entity on in-slice questions, not the statistic.
+3. **BPC yes, tag no.** Holdout BPC 2.320 → **2.114** (trie) and 2.072 → **1.926** (trie + InfiniGram), LCI P_gain 1.000. No tag names the question's entity (0 of 68): nothing points the copy at the entity's first byte.
+
+PLAN rule 10 holds. CyphaLM writes every answer byte. The familiarity statistic only gates (Odin allowed the token gate-side). Strings are compared only to grade, to build training text, and for leakage checks.
 
 ---
 
@@ -34,7 +44,7 @@
 
 Everything is as in A0/A1 ([report](A0_A1_CYPHALM_QA_AND_DONT_KNOW.md) "Setup"): enwik8's first 8 MiB (train `[0, 7340032)`, holdout `[7340032, 8388608)`), Dolly 15,015 records, `cyphalm_trie qa`, dev 130 questions (100 in-slice, 30 not-in-slice), the frozen test 200 once at the end. Machine: 4 shared cores, every run under `nice -n 5`, one at a time; g++ 13.3 `-O2 -std=c++20`, clean under `-Wall -Wextra`.
 
-**Parity first.** The rebuilt tool reproduces A0 exactly: holdout mixture 2.344571, trie + InfiniGram 2.071574, dev raw right 0 (trie) and 2 (+ InfiniGram). 7.5 min. `dktext` writes a byte-identical `dk.tsv` (3,963 rows).
+**Parity first.** The rebuilt tool reproduces A0 exactly: holdout mixture 2.344571, trie + InfiniGram 2.071574, dev raw right 0 (trie) and 2 (+ InfiniGram). 7.5 min. `dktext` writes a byte-identical `dk.tsv` (3,963 rows). The final code still prints A0's lines for the trie and trie + InfiniGram models byte for byte (runs E2 and E3, which add copy and R3 alongside).
 
 ### The question parse (E1)
 
@@ -252,7 +262,7 @@ The final A1c configuration is run D′: `ent_title` token after `Assistant: `, 
 
 | Item | Value |
 |---|---|
-| Code | `native/tools/cyphalm_trie.cpp` 1,765 → 2,528 lines (+763, shared with A2/A3): parse loading, 7 familiarity statistics, AUROC with bootstrap, Youden cut, `--fam-train`, the copy expert, `--mention`, selftest checks. `packed_trie.hpp` and `infinigram.cpp` unchanged |
+| Code | `native/tools/cyphalm_trie.cpp` 1,765 → 2,542 lines (+777, shared with A2/A3): parse loading, 7 familiarity statistics, AUROC with bootstrap, Youden cut, `--fam-train`, the copy expert, `--mention`, selftest checks. `packed_trie.hpp` and `infinigram.cpp` unchanged |
 | `qa` run | 7.3–8.4 min wall time on a shared core (A0: 7.5 min); `--fam-only` 1.2 min |
 | Peak RSS | not measured separately (`/usr/bin/time` is not installed); the lowered index adds 4 bytes a byte over about 20 MB while it is built |
 | `dktext --mention` | 6 s; 6,583 rows |
