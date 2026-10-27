@@ -1,61 +1,54 @@
-// S-1 "words as classes": Core Cypha's classifier fitted with one class per word (docs/SEMANTICS.md §2-3, §7).
+// The single semantics tool (docs/SEMANTICS.md §2-3, §7; docs/EMBEDDING_GEOMETRY.md §4.2, §5.1, §9.3): Cypha learns
+// word meaning as class parameters, and the same tool evaluates and exports vectors.
 //
-// Each of the top 10,000 enwik8 words is a Cypha class. Each occurrence is one observation: the sum of fixed
-// sparse +-1 random index vectors (d = 256, 8 nonzeros) of the words within +-5 on the same line, weighted
-// 1/distance (random indexing). One online pass. Per token, the true class and 5 competitors drawn by
-// unigram^0.75 are swapped into a 6-slot CyphaDifMemoryState, and Cypha's own memory_train() scores them,
-// pulls the true class differential toward h - theta0, repels the competitors (softmax weighted, capped),
-// applies MDL shrinkage and updates the WorldPrior. With --enc-lr > 0, Cypha's batch_encode() gives h = W x and
-// contrastive_update_encoder_w() runs on every miss. The public Cypha::update() scores every class, so it is
-// too slow here (probe at the end: about 70-120 hours for 10,000 classes x 10M tokens).
-//   Cypha parts used: create_fresh_model_root / Cypha::load, CyphaDifMemoryState::memory_train,
-//   class_mean_and_variance, batch_encode, contrastive_update_encoder_w, regression::ridge_fit_bias (a check).
-//   Written here: the slot swapping and negative-sampling table, the context vectors, a per-class diagonal
-//   variance (EMA of the squared residual; the core keeps only the shared v0), the optional 1/(n+1) step
-//   schedule (--sched inv), KL / Fisher-Rao distances, the vector-output Bayesian ridge map, the WordNet reader,
-//   and the count baselines accumulated from the same observations.
+// Subcommands (no subcommand = s1, as in the C5 report's command lines):
+//   s1       S-1 "words as classes" (docs/reports/C5_WORDS_AS_CLASSES.md): each of the top 10,000 enwik8 words is a
+//            Cypha class; each occurrence is one observation, the 1/distance-weighted sum of fixed sparse +-1 random
+//            index vectors (d = 256, 8 nonzeros) of the words within +-5. Per token the true class and 5 unigram^0.75
+//            competitors are swapped into a 6-slot CyphaDifMemoryState and Cypha's own memory_train() updates them
+//            (natural-gradient pull, capped softmax push, MDL shrinkage, WorldPrior). --enc-lr > 0 adds
+//            contrastive_update_encoder_w(). The public Cypha::update() scores every class (probe: 70-120 hours).
+//            S-1b (a): --obs ppmi weights each context by PPMI(w, c); --obs ppmi-row by PPMI(w, c) n_w / C(w, c), so the
+//            plain mean is the random projection of the word's PPMI row. --save PREFIX writes the v0-whitened
+//            differentials (and the matched count mean) for `eval`.
+//   train    S-1b (b) --method sgns: two tables of diagonal Gaussians (words, contexts; geometry.hpp ItemStore) under
+//            the skip-gram negative-sampling objective; online diagonal Laplace (natural-gradient) step, precision +=
+//            p(1-p) x^2, mean += Sigma * gradient. (c) --method pullpush: geometry.hpp pull_push_step (section 4.2) on
+//            the same two tables, one context per token, unigram^0.75 + in-batch + hard negatives; --init from (b).
+//   distill  Section 5.1 relational distillation (geometry.hpp distill_step) toward a teacher .npy + index.
+//   eval     Any vector sets: WordSim / SimLex / MEN with a paired bootstrap against the last set, relations as
+//            leave-one-out ridge maps with abstention, WordNet hypernym direction (variance / KL when <stem>_var.npy).
+//   export   Unit word vectors and SIF sentence vectors as .npy + index TSV for scripts/gguf_mine.py compare /
+//            geometry; spherical k-means word classes (word<TAB>class).
 //
-// Evaluation, all on the same pairs (both words among the 10,000 classes and in the PPMI-SVD vocabulary):
-//   word similarity   WordSim-353, SimLex-999, MEN; Spearman rho
-//   hypernymy         Open English WordNet direct noun hypernym pairs; direction by KL asymmetry, total
-//                     variance and |delta|, against "more frequent word = hypernym"
-//   relations         capital-of, country -> language; leave-one-out ridge map and mean offset, @1 / @10,
-//                     abstention on the ridge predictive variance
-//   baselines         random indexing (plain, centred, f^-1/2 weighted, v0-whitened), a count Gaussian of
-//                     the same observations, and the C1 PPMI-SVD vectors (native/tools/ppmi_svd.cpp)
+// Measured on enwik8, WordSim / SimLex / MEN on the C5 pairs (259 / 651 / 1316; both words in the top 10,000):
+//   S-1 (2026-10-27)  Cypha 1/(n+1) step, world_lr 5e-5, whitened cos(delta)  0.240 / 0.134 / 0.372
+//   S-1b (a)          PPMI-weighted observations                            0.215 / 0.110 / 0.308
+//   S-1b (a2)         projected PPMI rows (count mean of them: 0.351 / 0.126 / 0.376)  0.256 / 0.082 / 0.241
+//   S-1b (b)          sgns, Sigma0 0.3, 5 epochs, words + contexts         0.750 / 0.270 / 0.756  (1,542 s, 316 MB)
+//   S-1b (c)          pullpush from random, 1 epoch: MEN 0.073 (no structure; 110 us per library step)
+//   PPMI-SVD 300 d (native/tools/ppmi_svd.cpp)                              0.723 / 0.265 / 0.732
+//   Reports: docs/reports/C5_WORDS_AS_CLASSES.md, docs/reports/S1B_LEARNED_CONTEXTS.md
 //
-// Measured 2026-10-27 (enwik8, 9.87M class tokens, one pass). Report: docs/reports/C5_WORDS_AS_CLASSES.md
-//   WordSim / SimLex / MEN on 259 / 651 / 1316 pairs:
-//     Cypha defaults, frozen encoder     cos(mu) 0.017 / 0.116 / 0.137
-//     Cypha, 1/(n+1) step, world_lr 5e-5 cos(mu) 0.141 / -0.048 / 0.136; whitened cos(delta) 0.240 / 0.134 / 0.372
-//     Cypha defaults + contrastive enc.  cos(mu) 0.093 / -0.004 / 0.103
-//     random indexing, centred           0.208 / 0.066 / 0.223 (whitened by the same v0: 0.256 / 0.101 / 0.358)
-//     PPMI-SVD 300 d                     0.723 / 0.265 / 0.732
-//   Hypernym direction, 13,722 pairs: frequency 60.6%; Cypha KL 46.9-53.8%, variance 50.5-53.8%.
-//   Capital-of (26 pairs), ridge @10: Cypha 0-11.5%, random indexing 7.7%, PPMI-SVD 80.8%.
-//   Cost: 82 s training (8.3 us/step, frozen encoder) or 806 s (contrastive encoder); peak RAM 343 MB;
-//   model 20.5 MB (float32 differentials + variances).
-//
-// Subcommands: only "s1" (this experiment) exists, and it is also the default when the first argument is a
-// path. train / distill / eval / export (docs/EMBEDDING_GEOMETRY.md §9.3) are to be added to the table in main().
-//
-// Usage:
+// Usage (each subcommand prints its own usage line when called without arguments):
 //   cypha_word_classes [s1] <enwik8> <EN-WS-353-ALL.txt> <EN-SIMLEX-999.txt> <EN-MEN-TR-3k.txt>
 //       <ppmi.vectors.f32> <ppmi.vocab.tsv> <wordnet_yaml_dir> [options] > report.md 2> log
+//     options: --classes 10000 --ctx-vocab 50000 --dim 256 --nnz 8 --window 5 --neg 5 --passes 1 --seed 1
+//              --delta-lr 0.05 --world-lr 0.008 --enc-lr 0.002 (0 freezes the encoder) --sched fixed|inv
+//              --lr-floor 0.002 --lr-cap 0.1 --obs plain|weighted|ppmi|ppmi-row --max-tokens 0 --no-bench --tag NAME
+//              --save PREFIX
+//   cypha_word_classes train <enwik8> --out PREFIX --method sgns --epochs 5 --var0 0.3
+//   cypha_word_classes distill <teacher.npy> --out PREFIX [--init student.npy] --items 10000 --epochs 60
+//   cypha_word_classes eval <ws> <simlex> <men> <wordnet_yaml_dir> <a.npy> ... <reference.npy> [--top N] [--dev]
+//   cypha_word_classes export <vectors.npy> --out DIR [--texts FILE] [--kmeans 256,1024]
 //   <wordnet_yaml_dir> holds src/yaml/noun.*.yaml from github.com/globalwordnet/english-wordnet.
-//   options: --classes 10000 --ctx-vocab 50000 --dim 256 --nnz 8 --window 5 --neg 5 --passes 1 --seed 1
-//            --delta-lr 0.05 --world-lr 0.008 --enc-lr 0.002 (0 freezes the encoder) --sched fixed|inv
-//            --lr-floor 0.002 --lr-cap 0.1 --obs plain|weighted --max-tokens 0 --no-bench --tag NAME
-//   Runs in the report: defaults with --enc-lr 0; --enc-lr 0 --sched inv --world-lr 0.00005 --no-bench;
-//   defaults --no-bench (contrastive encoder on).
 //
-// Build (from the repo root, against the already built core library):
+// Build (from the repo root, against the core library built by `cmake --build <dir> --target cypha_core`):
 //   g++ -O3 -DNDEBUG -std=c++20 -msse4.1 -fopenmp -DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=1 -DCYPHA_HP_GATE24=1
 //       -DCYPHA_HP_SLOT_MAX=24 -DCYPHA_LLM_ALGORITHM_HP=1 -DHP_SLOT_MAX=24 -DHP_XSIMD=1
 //       -Inative/third_party/hp/include -Inative/third_party/hp/third_party/xsimd/include -Inative/include
 //       -Inative/third_party native/tools/cypha_word_classes.cpp /root/cb_core/libcypha_core.a -lpthread
 //       -o cypha_word_classes
-
 
 #include <algorithm>
 #include <array>
@@ -77,6 +70,7 @@
 #include <sstream>
 #include <string>
 #include <strings.h>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -2341,20 +2335,10 @@ int cmd_train(int argc, char** argv) {
     TrainOpts O;
     O.out = kv["--out"];
     O.method = opts(kv, "--method", O.method);
-    O.epochs = (int)optd(kv, "--epochs", O.epochs);
-    O.dim = (int)optd(kv, "--dim", O.dim);
-    O.vocab = (int)optd(kv, "--vocab", O.vocab);
-    O.window = (int)optd(kv, "--window", O.window);
-    O.neg = (int)optd(kv, "--neg", O.neg);
-    O.seed = (int)optd(kv, "--seed", O.seed);
-    O.inbatch = (int)optd(kv, "--inbatch", O.inbatch);
-    O.hard = (int)optd(kv, "--hard", O.hard);
-    O.pool = (int)optd(kv, "--pool", O.pool);
-    O.sample = optd(kv, "--sample", O.sample);
-    O.var0 = optd(kv, "--var0", O.var0);
-    O.tau = optd(kv, "--tau", O.tau);
-    O.eta = optd(kv, "--eta", O.eta);
-    O.kappa0 = optd(kv, "--kappa0", O.kappa0);
+    auto num = [&](const char* k, auto& f) { f = static_cast<std::remove_reference_t<decltype(f)>>(optd(kv, k, (double)f)); };
+    num("--epochs", O.epochs), num("--dim", O.dim), num("--vocab", O.vocab), num("--window", O.window), num("--neg", O.neg);
+    num("--seed", O.seed), num("--inbatch", O.inbatch), num("--hard", O.hard), num("--pool", O.pool), num("--sample", O.sample);
+    num("--var0", O.var0), num("--tau", O.tau), num("--eta", O.eta), num("--kappa0", O.kappa0);
     O.init = opts(kv, "--init");
     Stream st;
     if (!load_stream(pos[0], O.vocab, st)) return 2;
@@ -2550,7 +2534,7 @@ int cmd_eval(int argc, char** argv) {
     return 0;
 }
 
-// export: unit word vectors (and, with --texts, SIF sentence vectors) as <name>_vectors.npy + <name>_index.tsv for
+// export: unit word vectors, dimensions in variance order (and, with --texts, SIF sentence vectors) as <name>_vectors.npy + <name>_index.tsv for
 // scripts/gguf_mine.py compare / geometry; with --kmeans, spherical k-means word classes as classes_k<k>.tsv.
 int cmd_export(int argc, char** argv) {
     std::unordered_map<std::string, std::string> kv;
@@ -2569,6 +2553,12 @@ int cmd_export(int argc, char** argv) {
     std::vector<float> U(S.X.begin(), S.X.begin() + (size_t)N * d);
     const std::vector<double> nrm = row_norms(U.data(), N, d);
     geo::normalise_rows(U.data(), N, d);
+    {  // dimensions ordered by variance (geometry.hpp mrl_order, a rotation: no cosine changes), so prefixes act as MRL prefixes
+        geo::ItemStore st(N, d, 1.f);
+        st.mu.swap(U);
+        geo::mrl_order(st);
+        U.swap(st.mu);
+    }
     npy_write(dir + "/" + name + "_vectors.npy", U.data(), N, d, half);
     std::vector<double> cnt(S.count.begin(), S.count.begin() + N);
     write_index(dir + "/" + name + "_index.tsv", std::vector<std::string>(S.text.begin(), S.text.begin() + N), std::vector<int>(N, 1), nrm, &cnt);

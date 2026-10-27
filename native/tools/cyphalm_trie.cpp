@@ -43,8 +43,8 @@
 //        compared with the first. TABLE is word<TAB>class (e.g. E1 tags); "shape" is shape classes only.
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
-//      [--fam-train stat|outcome] [--fam-only] [--copy] [--r3 PATTERNS.tsv] [--shard F.tsv] [--shard2 F.tsv]
-//      [--cls TABLE[:tail]|shape[:tail]]
+//      [--fam-train stat|outcome|matched] [--fam-ent FRAMES] [--fam-only] [--copy] [--r3 PATTERNS.tsv]
+//      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE[:tail]|shape[:tail]]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
 //        familiarity token <|fam=low|mid|high|> before (or after) "Assistant: ". CyphaLM answers
@@ -66,8 +66,17 @@
 //        holdout's first half; BPC and LCI gain on the second half) as two more models. --r3 runs statement
 //        scoring with F2's patterns as frames. --shard / --shard2 add question-form fact turns (rows from the
 //        BPC holdout dropped; exits if a shard question equals a dev or test question, from --test or --leak).
-//        --cls (B4; TOOL_PROFILE P2) adds the class-context expert, built on the same bytes as InfiniGram, to both
-//        models (lambdas on the holdout's first half); not with --copy.
+//        --cls (B4; TOOL_PROFILE P2) adds the class-context expert, built on the same bytes as InfiniGram, to every
+//        model (lambdas on the holdout's first half); with --copy the copy expert goes on after it, its lambdas fit
+//        over the class-mixed distribution, and cls_given_copy_lci gives the class expert's gain with copy present.
+//        A1d (docs/reports/A1D_A2B_ANSWERING_VARIANTS.md): the --parse entity column may hold several candidates
+//        ("a|b|c", E1's first): per statistic the best candidate's value counts, and the token's entity is the best
+//        by --fam-stat (ENTITY: its accuracy against the source title, grading only). ent_tb is the larger of the
+//        bold-lead and title counts; FAMSTAT adds the paired-bootstrap difference from ent_bold, FAMTOK the token's
+//        implied precision / recall. --fam-train matched puts the cut where the dev base rate of not-in-slice
+//        questions is the share of training turns below it (ties by ent_lp). --fam-ent FRAMES writes the entity in
+//        each frame (e.g. 'entity="{E}"'; several joined by ';') as tokens before <|fam=..|>. A shard row with no
+//        question is plain text (a fact sentence).
 //   dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608]
 //        A1 training text: T-QA relation templates filled with page titles from enwik8 after
 //        --from whose lowered text never occurs in the lowered training bytes (wiki train +
@@ -149,6 +158,7 @@
 #include <numeric>
 #include <random>
 #include <set>
+#include <sstream>
 #include <string_view>
 #include <tuple>
 
@@ -179,7 +189,8 @@ struct Args {
     std::size_t from = 8'388'608, max_rows = 0;
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;  // A1c, A3, A2
     bool copy = false, fam_only = false, mention = false;
-    std::string cls;  // B4: class-context expert spec, TABLE[:tail] or shape[:tail]
+    std::string cls;      // B4: class-context expert spec, TABLE[:tail] or shape[:tail]
+    std::string fam_ent;  // A1d: the entity's frames before the token, e.g. entity="{E}" ("" = no entity)
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -221,6 +232,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--leak") a.leak = next();
         else if (s == "--copy") a.copy = true;
         else if (s == "--cls") a.cls = next();
+        else if (s == "--fam-ent") a.fam_ent = next();
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--mention") a.mention = true;
         else if (s.rfind("--", 0) == 0) {
@@ -1603,7 +1615,7 @@ struct QaOpts {
     std::string fam = "none";  // none | before | after: where the <|fam=..|> token goes
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;
     bool copy = false, fam_only = false;
-    std::string cls;
+    std::string cls, fam_ent;
 };
 
 constexpr int kFeat = 5;
@@ -1705,18 +1717,27 @@ std::string strip_article(const std::string& e) {
     return e;
 }
 
-constexpr int kFam = 7;
-const char* const kFamName[kFam] = {"question_lp", "ent_count", "ent_link", "ent_bold", "ent_title", "ent_igfrac", "ent_lp"};
+constexpr int kFam = 8;
+const char* const kFamName[kFam] = {"question_lp", "ent_count", "ent_link", "ent_bold",
+                                    "ent_title",   "ent_igfrac", "ent_lp",  "ent_tb"};
 
 // A1c: how familiar CyphaLM is with a question's subject, from its own model. question_lp is A1's statistic (the
 // question's mean log2 p under the wiki trie). For the E1 entity (article dropped, lowered): log2(1 + its count) in
 // the lowered training bytes (wiki train + Dolly, `low`), the same after "[[" (a link), after "'''" (a bold lead) and
 // as "<title>entity</title>"; the longest piece of it found there, as a share of its length; its mean log2 p under the
-// wiki trie, read in the question. NaN when there is no entity.
+// wiki trie, read in the question; ent_tb, the larger of the bold-lead and title counts (A1d). NaN when there is no
+// entity. Several candidates ("a|b|c", A1d): per statistic, the best candidate's value.
 std::array<double, kFam> fam_stats(const Lm& wiki_lm, const InfiniGram& low, const std::string& q,
                                    const std::string& entity) {
     std::array<double, kFam> v;
     v.fill(std::nan(""));
+    if (entity.find('|') != std::string::npos) {
+        for (const auto& c : split(entity, '|')) {
+            const auto x = fam_stats(wiki_lm, low, q, c);
+            for (std::size_t k = 0; k < kFam; ++k) v[k] = std::isnan(v[k]) || x[k] > v[k] ? x[k] : v[k];
+        }
+        return v;
+    }
     v[0] = text_logprob(wiki_lm, "User: ", q);
     const std::string raw = strip_article(entity), e = lowered(raw);
     if (e.empty()) return v;
@@ -1739,7 +1760,38 @@ std::array<double, kFam> fam_stats(const Lm& wiki_lm, const InfiniGram& low, con
     const std::size_t at = lowered(q).find(e);
     v[6] = at == std::string::npos ? text_logprob(wiki_lm, "User: ", raw)
                                    : text_logprob(wiki_lm, "User: " + q.substr(0, at), q.substr(at, e.size()));
+    v[7] = std::max(v[3], v[4]);
     return v;
+}
+
+// A1d: the familiarity token, preceded by the entity in each frame of `frames` (e.g. entity="{E}"; several joined by
+// ';'), each as its own <|...|>, so that the level stays the last bytes before the answer.
+std::string fam_token(const std::string& level, const std::string& frames, const std::string& entity) {
+    const std::string e = strip_article(entity);
+    std::string t;
+    for (std::string f : split(frames, ';'))
+        if (!e.empty() && f.find("{E}") != std::string::npos) t += "<|" + f.replace(f.find("{E}"), 3, e) + "|>";
+    return t + "<|fam=" + level + "|>";
+}
+
+// A1d: the cut below which a share `rate` of all of x lies (NaN counts in the total but is never below).
+double quantile_cut(std::vector<double> x, double rate) {
+    const std::size_t n = x.size();
+    x.erase(std::remove_if(x.begin(), x.end(), [](double v) { return std::isnan(v); }), x.end());
+    std::sort(x.begin(), x.end());
+    return x.empty() ? 0.0 : x[std::min(x.size() - 1, static_cast<std::size_t>(rate * static_cast<double>(n)))];
+}
+
+// A1d (grading only): the entity of the message "... nothing about X in what I've read.", and whether a name is a
+// span of a question (normalised, word-bounded, at least 3 bytes; a leading article dropped).
+std::string msg_entity(const std::string& a) {
+    const std::size_t p = a.find("nothing about ");
+    const std::size_t e = p == std::string::npos ? p : a.find(" in what", p + 14);
+    return e == std::string::npos ? std::string() : a.substr(p + 14, e - p - 14);
+}
+bool names_in(const std::string& name, const std::string& q) {
+    const std::string n = norm_text(strip_article(name));
+    return n.size() >= 5 && norm_text(q).find(n) != std::string::npos;
 }
 
 // AUROC of `pos` above `neg` (ties count half; NaN sits below every number).
@@ -1967,16 +2019,33 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::cerr << "cannot read the parse " << o.parse << "\n";
         return 1;
     }
-    auto entity_of = [&](const std::string& q) {
-        const auto it = parse.find(q);
-        return it == parse.end() ? std::string() : it->second;
-    };
     const int fam_k = static_cast<int>(std::find(kFamName, kFamName + kFam, o.fam_stat) - kFamName);
     if (fam_k == kFam || (fam_k > 0 && (parse.empty() || dk.empty()))) {
-        std::cerr << "--fam-stat: one of question_lp ent_count ent_link ent_bold ent_title ent_igfrac ent_lp; an entity "
-                     "statistic needs --parse and --dk\n";
+        std::cerr << "--fam-stat: one of question_lp ent_count ent_link ent_bold ent_title ent_igfrac ent_lp ent_tb; an "
+                     "entity statistic needs --parse and --dk\n";
         return 1;
     }
+    std::unique_ptr<InfiniGram> low;  // A1c: the lowered training bytes, built below with --parse
+    const Lm* wiki_lmp = nullptr;
+    std::map<std::string, std::string> chosen;
+    // E1's entity for a question. With several candidates (A1d), the best by the --fam-stat statistic (ties: the
+    // earlier; the first when the statistic is question_lp).
+    auto entity_of = [&](const std::string& q) -> std::string {
+        const auto it = parse.find(q);
+        if (it == parse.end() || it->second.find('|') == std::string::npos) return it == parse.end() ? "" : it->second;
+        const auto c = split(it->second, '|');
+        if (fam_k == 0 || !low) return c[0];
+        std::string& best = chosen[q];
+        if (best.empty()) {
+            double bv = std::nan("");
+            best = c[0];
+            for (const auto& e : c) {
+                const double x = fam_stats(*wiki_lmp, *low, q, e)[static_cast<std::size_t>(fam_k)];
+                if (!std::isnan(x) && (std::isnan(bv) || x > bv)) bv = x, best = e;
+            }
+        }
+        return best;
+    };
     std::vector<std::uint8_t> data;
     if (!load_wiki(a, data)) return 1;
     Model model;
@@ -2001,9 +2070,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     double wf[6];
     std::copy(w, w + 6, wf);
     const Lm wiki_lm{&model, wf, cfg.train, true};
+    wiki_lmp = &wiki_lm;
 
     // A1c: entity familiarity, from CyphaLM's wiki trie and its lowered training bytes (wiki train + Dolly).
-    std::unique_ptr<InfiniGram> low;
     std::array<double, kFam> fam_cut;
     fam_cut.fill(std::nan(""));
     if (!parse.empty()) {
@@ -2011,27 +2080,63 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         lt = lowered(lt + "\n" + dolly_text);
         low = std::make_unique<InfiniGram>(reinterpret_cast<const std::uint8_t*>(lt.data()), lt.size());
         std::vector<std::array<double, kFam>> dv;
-        for (const auto& r : dev) dv.push_back(fam_stats(wiki_lm, *low, r.q, entity_of(r.q)));
-        // Dev AUROC (in-slice above not-in-slice) with a bootstrap 95% interval over the dev questions.
+        for (const auto& r : dev) {
+            const auto it = parse.find(r.q);
+            dv.push_back(fam_stats(wiki_lm, *low, r.q, it == parse.end() ? "" : it->second));
+        }
+        // Dev AUROC (in-slice above not-in-slice) with a bootstrap 95% interval over the dev questions, and the paired
+        // bootstrap interval of its difference from ent_bold's (A1d: the statistic that reads no XML markup).
         std::mt19937_64 rng(20261028);
         std::vector<std::vector<std::size_t>> boot(2000, std::vector<std::size_t>(dev.size()));
         for (auto& b : boot)
             for (auto& i : b) i = rng() % dev.size();
+        std::vector<std::size_t> all(dev.size());
+        std::iota(all.begin(), all.end(), 0);
+        std::vector<std::vector<double>> bsk(kFam);
         for (int k = 0; k < kFam; ++k) {
             auto au = [&](const std::vector<std::size_t>& idx) {
                 std::vector<double> p, n;
                 for (std::size_t i : idx) (dev[i].in_slice ? p : n).push_back(dv[i][static_cast<std::size_t>(k)]);
                 return auroc(p, n);
             };
-            std::vector<std::size_t> all(dev.size());
-            std::iota(all.begin(), all.end(), 0);
-            std::vector<double> bs;
-            for (const auto& b : boot) bs.push_back(au(b));
+            for (const auto& b : boot) bsk[static_cast<std::size_t>(k)].push_back(au(b));
+            std::vector<double> bs = bsk[static_cast<std::size_t>(k)], d;
             std::sort(bs.begin(), bs.end());
+            for (std::size_t b = 0; k > 3 && b < boot.size(); ++b) d.push_back(bsk[static_cast<std::size_t>(k)][b] - bsk[3][b]);
+            std::sort(d.begin(), d.end());
             int miss = 0;
             for (const auto& v : dv) miss += std::isnan(v[static_cast<std::size_t>(k)]);
             std::cout << "FAMSTAT " << kFamName[k] << " dev_auroc " << au(all) << " boot95 " << bs[49] << " "
-                      << bs[1949] << " missing " << miss << "\n";
+                      << bs[1949] << " missing " << miss;
+            if (!d.empty()) std::cout << " minus_ent_bold boot95 " << d[49] << " " << d[1949];
+            std::cout << "\n";
+        }
+        // Entity choice (grading only): the chosen candidate against the in-slice question's source title.
+        {
+            int n = 0, first = 0, any = 0, by[kFam] = {0};
+            auto same = [](const std::string& x, const std::string& t) {
+                return norm_text(strip_article(x)) == norm_text(strip_article(t));
+            };
+            for (const auto& r : dev) {
+                const auto it = parse.find(r.q);
+                if (!r.in_slice || it == parse.end()) continue;
+                ++n;
+                const auto c = split(it->second, '|');
+                first += same(c[0], r.title);
+                any += std::any_of(c.begin(), c.end(), [&](const std::string& e) { return same(e, r.title); });
+                for (int k = 1; k < kFam; ++k) {
+                    std::string best = c[0];
+                    double bv = std::nan("");
+                    for (const auto& e : c) {
+                        const double x = fam_stats(wiki_lm, *low, r.q, e)[static_cast<std::size_t>(k)];
+                        if (!std::isnan(x) && (std::isnan(bv) || x > bv)) bv = x, best = e;
+                    }
+                    by[k] += same(best, r.title);
+                }
+            }
+            std::cout << "ENTITY in_slice " << n << " first_eq_title " << first << " any_candidate_eq_title " << any;
+            for (int k = 1; k < kFam; ++k) std::cout << " " << kFamName[k] << " " << by[k];
+            std::cout << "\n";
         }
         // Cuts from training-side entities only: titles of the wiki-train pages (they have an article) against the
         // don't-know entities (no article in the slice); neither may occur in dev or test text.
@@ -2055,6 +2160,18 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                 std::cout << "FAMCAL " << kFamName[k] << " train_titles " << P[k].size() << " dk_entities " << N[k].size()
                           << " auroc " << auroc(P[k], N[k]) << " cut " << fam_cut[static_cast<std::size_t>(k)]
                           << " youden_j " << j << "\n";
+                // A1d: the token this cut gives the dev questions, and its precision and recall on not-in-slice if
+                // CyphaLM abstains exactly on low and mid (as it did in every A1c model).
+                int c[3][2] = {{0, 0}, {0, 0}, {0, 0}};  // low, mid, high x (not-in-slice, in-slice)
+                for (std::size_t i = 0; i < dev.size(); ++i) {
+                    const double x = dv[i][static_cast<std::size_t>(k)];
+                    ++c[std::isnan(x) ? 1 : x < fam_cut[static_cast<std::size_t>(k)] ? 0 : 2][dev[i].in_slice];
+                }
+                const double ab = c[0][0] + c[0][1] + c[1][0] + c[1][1], tp = c[0][0] + c[1][0], nis = tp + c[2][0];
+                std::cout << "FAMTOK " << kFamName[k] << " low " << c[0][1] << "/" << c[0][0] << " mid " << c[1][1] << "/"
+                          << c[1][0] << " high " << c[2][1] << "/" << c[2][0] << " (in/not) precision "
+                          << (ab ? tp / ab : 0.0) << " " << wilson_lo(tp, ab) << " " << wilson_hi(tp, ab) << " recall "
+                          << (nis ? tp / nis : 0.0) << " " << wilson_lo(tp, nis) << " " << wilson_hi(tp, nis) << "\n";
             }
         }
         if (o.fam_only) return 0;
@@ -2063,6 +2180,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // Familiarity token: A1b (question_lp; cuts from the Dolly and don't-know questions) or A1c (an entity statistic;
     // low below the calibrated cut, high above, mid when E1 found no entity).
     const bool fam_on = o.fam != "none";
+    std::size_t n_dk = 0;
+    if (!dk.empty() && o.dk_ratio > 0)
+        n_dk = std::min(dk.size(), static_cast<std::size_t>(std::llround(o.dk_ratio / (1 - o.dk_ratio) * turns.size())));
     std::vector<std::string> tok_dolly(turns.size()), tok_dk(dk.size()), tok_dev(dev.size()), tok_test(test.size()),
         tok_sh1(sh1.size()), tok_sh2(sh2.size());
     std::function<std::string(const std::string&)> tokq;
@@ -2096,31 +2216,61 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::cout << "fam_thresholds t1 " << t1 << " t2 " << t2 << " youden_j " << bestj << "\n";
         tokq = [&wiki_lm, t1, t2](const std::string& q) {
             const double x = text_logprob(wiki_lm, "User: ", q);
-            return std::string(x < t1 ? "<|fam=low|>" : x < t2 ? "<|fam=mid|>" : "<|fam=high|>");
+            return std::string(x < t1 ? "low" : x < t2 ? "mid" : "high");
         };
     } else if (fam_on) {
-        const double cut = fam_cut[static_cast<std::size_t>(fam_k)];
+        // --fam-train matched (A1d): the statistic on every turn, its cut put where the dev base rate of not-in-slice
+        // questions (one number) is the share of training turns (Dolly and the don't-know turns used) below it; ties
+        // are broken by ent_lp.
+        const bool mt = o.fam_train == "matched";
+        auto val = [&, mt](const std::string& q) {
+            const auto v = fam_stats(wiki_lm, *low, q, entity_of(q));
+            return v[static_cast<std::size_t>(fam_k)] + (mt ? 1e-3 * std::tanh(v[6] / 16) : 0.0);
+        };
+        double cut = fam_cut[static_cast<std::size_t>(fam_k)];
+        if (mt) {
+            std::vector<double> x;
+            for (std::size_t i = 0; i < turns.size(); ++i) x.push_back(val(instruction(i)));
+            for (std::size_t i = 0; i < n_dk; ++i) x.push_back(val(dk[i].q));
+            const double rate = static_cast<double>(std::count_if(dev.begin(), dev.end(), [](const QaRow& r) { return !r.in_slice; })) /
+                                static_cast<double>(dev.size());
+            cut = quantile_cut(x, rate);
+            std::cout << "fam_matched base_rate " << rate << " training_turns " << x.size() << "\n";
+        }
         std::cout << "fam_thresholds " << o.fam_stat << " cut " << cut << "\n";
-        tokq = [&, cut](const std::string& q) {
-            const double x = fam_stats(wiki_lm, *low, q, entity_of(q))[static_cast<std::size_t>(fam_k)];
-            return std::string(std::isnan(x) ? "<|fam=mid|>" : x < cut ? "<|fam=low|>" : "<|fam=high|>");
+        tokq = [val, cut](const std::string& q) {
+            const double x = val(q);
+            return std::string(std::isnan(x) ? "mid" : x < cut ? "low" : "high");
         };
     }
     if (fam_on) {
         // --fam-train outcome: the training turns carry the gate's decision instead (high on answered turns, low on
-        // don't-know turns); dev and test still get the statistic's token.
+        // don't-know turns); dev and test still get the statistic's token. --fam-ent KEY (A1d) adds the entity: the
+        // don't-know or shard row's own, or the chosen E1 candidate of a Dolly, dev or test question.
         const bool oc = o.fam_train == "outcome";
+        auto ent = [&](const std::string& q) { return o.fam_ent.empty() ? std::string() : entity_of(q); };
         std::map<std::string, int> cd, ck;
-        for (std::size_t i = 0; i < turns.size(); ++i) ++cd[tok_dolly[i] = oc ? "<|fam=high|>" : tokq(instruction(i))];
-        for (std::size_t i = 0; i < dk.size(); ++i) ++ck[tok_dk[i] = oc ? "<|fam=low|>" : tokq(dk[i].q)];
-        for (std::size_t i = 0; i < dev.size(); ++i) tok_dev[i] = tokq(dev[i].q);
-        for (std::size_t i = 0; i < test.size(); ++i) tok_test[i] = tokq(test[i].q);
-        for (std::size_t i = 0; i < sh1.size(); ++i) tok_sh1[i] = oc ? "<|fam=high|>" : tokq(sh1[i].q);
-        for (std::size_t i = 0; i < sh2.size(); ++i) tok_sh2[i] = oc ? "<|fam=high|>" : tokq(sh2[i].q);
+        std::map<std::string, std::pair<int, int>> cv;
+        for (std::size_t i = 0; i < turns.size(); ++i) {
+            const std::string l = oc ? "high" : tokq(instruction(i));
+            ++cd["<|fam=" + l + "|>"];
+            tok_dolly[i] = fam_token(l, o.fam_ent, ent(instruction(i)));
+        }
+        for (std::size_t i = 0; i < dk.size(); ++i) {
+            const std::string l = oc ? "low" : tokq(dk[i].q);
+            ++ck["<|fam=" + l + "|>"];
+            tok_dk[i] = fam_token(l, o.fam_ent, dk[i].entity);
+        }
+        for (std::size_t i = 0; i < dev.size(); ++i) {
+            const std::string l = tokq(dev[i].q);
+            (dev[i].in_slice ? cv["<|fam=" + l + "|>"].first : cv["<|fam=" + l + "|>"].second)++;
+            tok_dev[i] = fam_token(l, o.fam_ent, ent(dev[i].q));
+        }
+        for (std::size_t i = 0; i < test.size(); ++i) tok_test[i] = fam_token(tokq(test[i].q), o.fam_ent, ent(test[i].q));
+        for (std::size_t i = 0; i < sh1.size(); ++i) tok_sh1[i] = fam_token(oc ? "high" : tokq(sh1[i].q), o.fam_ent, sh1[i].entity);
+        for (std::size_t i = 0; i < sh2.size(); ++i) tok_sh2[i] = fam_token(oc ? "high" : tokq(sh2[i].q), o.fam_ent, sh2[i].entity);
         for (auto& [k, v] : cd) std::cout << "fam_dolly " << k << " " << v << "\n";
         for (auto& [k, v] : ck) std::cout << "fam_dk " << k << " " << v << "\n";
-        std::map<std::string, std::pair<int, int>> cv;
-        for (std::size_t i = 0; i < dev.size(); ++i) (dev[i].in_slice ? cv[tok_dev[i]].first : cv[tok_dev[i]].second)++;
         for (auto& [k, v] : cv) std::cout << "fam_dev " << k << " in_slice " << v.first << " not_in_slice " << v.second << "\n";
     }
     auto with_tok = [&](const std::string& prompt, const std::string& tok) {
@@ -2131,15 +2281,13 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
 
     // Chat text: Dolly, with the extra turns (don't-know pairs at dk_ratio of all turns, then every shard row), each
-    // list spread evenly through it.
-    std::size_t n_dk = 0;
-    if (!dk.empty() && o.dk_ratio > 0)
-        n_dk = std::min(dk.size(), static_cast<std::size_t>(std::llround(o.dk_ratio / (1 - o.dk_ratio) * turns.size())));
+    // list spread evenly through it. A shard row with no question (A1d: a fact sentence) is plain text.
     std::vector<std::pair<std::size_t, std::string>> extra;  // (after which Dolly turn, text)
     auto spread = [&](const std::vector<DkRow>& rows, std::size_t n, const std::vector<std::string>& toks) {
         for (std::size_t j = 0; j < n; ++j)
             extra.push_back({(j + 1) * turns.size() / (n + 1),
-                             with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j]) + rows[j].response + "\n\n"});
+                             (rows[j].q.empty() ? "" : with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j])) +
+                                 rows[j].response + "\n\n"});
     };
     spread(dk, n_dk, tok_dk);
     spread(sh1, sh1.size(), tok_sh1);
@@ -2204,12 +2352,12 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // first half of the holdout over the trie (lcl_t) and over trie + InfiniGram (lcl_i).
     std::unique_ptr<ClassContext> cc;
     double lcl_t[ClassContext::kBuckets] = {0}, lcl_i[ClassContext::kBuckets] = {0};
+    std::vector<double> pcl(H);
+    std::vector<int> clb(H);
     if (!o.cls.empty()) {
         cc = make_class_context(o.cls);
         if (!cc) return 1;
         cc->build(T.data(), T.size());
-        std::vector<double> pcl(H);
-        std::vector<int> clb(H);
         for (std::size_t k = 0; k < H; ++k) {
             double P[256];
             clb[k] = ClassContext::bucket(cc->predict(data.data(), cfg.train + k, P));
@@ -2232,29 +2380,53 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             pcp[k] = copy_pred(data.data(), cfg.train + k, n) == data[cfg.train + k] ? 1.0 : 0.0;
             cbk[k] = copy_bucket(n);
         }
-        fit_lambdas(pcp, pt, cbk, half, kCopyBuckets, lc_t);
-        fit_lambdas(pcp, pig, cbk, half, kCopyBuckets, lc_i);
-        // 256 blocks of the second half; per block, bits per byte saved by the copy expert.
-        const std::size_t nb = 256, bl = (H - half) / nb;
-        std::vector<double> dt(nb), di(nb);
-        double ct = 0, ci = 0;
-        for (std::size_t k = half; k < half + nb * bl; ++k) {
-            const double a_t = -std::log2(lc_t[cbk[k]] * pcp[k] + (1 - lc_t[cbk[k]]) * pt[k]);
-            const double a_i = -std::log2(lc_i[cbk[k]] * pcp[k] + (1 - lc_i[cbk[k]]) * pig[k]);
-            dt[(k - half) / bl] += (-std::log2(pt[k]) - a_t) / static_cast<double>(bl);
-            di[(k - half) / bl] += (-std::log2(pig[k]) - a_i) / static_cast<double>(bl);
-            ct += a_t;
-            ci += a_i;
+        // With --cls the copy expert goes on after the class expert (B4, then copy, A1d): its lambdas are fit over
+        // trie + cls and trie + InfiniGram + cls (bt, bi), and its gain is over those.
+        std::vector<double> bt = pt, bi = pig;
+        for (std::size_t k = 0; cc && k < H; ++k) {
+            bt[k] = lcl_t[clb[k]] * pcl[k] + (1 - lcl_t[clb[k]]) * pt[k];
+            bi[k] = lcl_i[clb[k]] * pcl[k] + (1 - lcl_i[clb[k]]) * pig[k];
         }
-        const double m = static_cast<double>(nb * bl);
-        std::cout << "holdout2_trie_copy_bpc " << ct / m << " holdout2_trie_ig_copy_bpc " << ci / m << " (first "
-                  << nb * bl << " bytes of the second half)\n";
-        for (int s = 0; s < 2; ++s) {
-            const auto& d = s ? di : dt;
+        fit_lambdas(pcp, bt, cbk, half, kCopyBuckets, lc_t);
+        fit_lambdas(pcp, bi, cbk, half, kCopyBuckets, lc_i);
+        // 256 blocks of the second half: per block, bits per byte of b with copy mixed in at lam (lam 0: without it).
+        const std::size_t nb = 256, bl = (H - half) / nb;
+        auto blocks = [&](const double* lam, const std::vector<double>& b, std::vector<double>& out) {
+            out.assign(nb, 0.0);
+            double sum = 0;
+            for (std::size_t k = half; k < half + nb * bl; ++k) {
+                const double x = -std::log2(lam[cbk[k]] * pcp[k] + (1 - lam[cbk[k]]) * b[k]);
+                out[(k - half) / bl] += x / static_cast<double>(bl);
+                sum += x;
+            }
+            return sum / static_cast<double>(nb * bl);
+        };
+        auto lci = [](const std::string& name, const std::vector<double>& x, const std::vector<double>& y) {
+            std::vector<double> d(x.size());
+            for (std::size_t b = 0; b < d.size(); ++b) d[b] = x[b] - y[b];  // bits per byte saved
             const auto g = cypha::eval::bayesian_bootstrap(d, 0.005), g0 = cypha::eval::bayesian_bootstrap(d, 0.0);
-            std::cout << "copy_lci " << (s ? "trie_ig" : "trie") << " gain_bpc " << g.mean << " lo90 " << g.lo90
-                      << " hi90 " << g.hi90 << " p_gain_gt_0.005 " << g.p_gt << " p_gain_gt_0 " << g0.p_gt << " blocks "
-                      << g.n_eff << "\n";
+            std::cout << name << " gain_bpc " << g.mean << " lo90 " << g.lo90 << " hi90 " << g.hi90 << " p_gain_gt_0.005 "
+                      << g.p_gt << " p_gain_gt_0 " << g0.p_gt << " blocks " << g.n_eff << "\n";
+        };
+        const double none[kCopyBuckets] = {0};
+        std::vector<double> xt, xi, yt, yi;
+        const double ct = blocks(lc_t, bt, xt), ci = blocks(lc_i, bi, xi);
+        blocks(none, bt, yt);
+        blocks(none, bi, yi);
+        const std::string cl = cc ? "_cls" : "";
+        std::cout << "holdout2_trie" << cl << "_copy_bpc " << ct << " holdout2_trie_ig" << cl << "_copy_bpc " << ci
+                  << " (first " << nb * bl << " bytes of the second half)\n";
+        lci("copy_lci trie" + cl, yt, xt);
+        lci("copy_lci trie_ig" + cl, yi, xi);
+        if (cc) {  // what the class expert adds with copy present: copy alone (lambdas over pt, pig) against cls + copy
+            double l0t[kCopyBuckets], l0i[kCopyBuckets];
+            fit_lambdas(pcp, pt, cbk, half, kCopyBuckets, l0t);
+            fit_lambdas(pcp, pig, cbk, half, kCopyBuckets, l0i);
+            std::vector<double> zt, zi;
+            const double c0t = blocks(l0t, pt, zt), c0i = blocks(l0i, pig, zi);
+            std::cout << "holdout2_trie_copy_bpc " << c0t << " holdout2_trie_ig_copy_bpc " << c0i << "\n";
+            lci("cls_given_copy_lci trie", zt, xt);
+            lci("cls_given_copy_lci trie_ig", zi, xi);
         }
         std::cout << "copy_lambdas trie";
         for (double l : lc_t) std::cout << " " << l;
@@ -2269,8 +2441,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     const char* const lm_name[4] = {"trie", "trie_ig", "trie_cp", "trie_ig_cp"};
     const Lm lms[4] = {{&model, w, data.size(), false, nullptr, nullptr, nullptr, 8192, cc.get(), lcl_t},
                        {&model, w, data.size(), false, &ig, lam, nullptr, 8192, cc.get(), lcl_i},
-                       {&model, w, data.size(), false, nullptr, nullptr, lc_t},
-                       {&model, w, data.size(), false, &ig, lam, lc_i}};
+                       {&model, w, data.size(), false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t},
+                       {&model, w, data.size(), false, &ig, lam, lc_i, 8192, cc.get(), lcl_i}};
 
     // Grading only: is a gold answer in the source article's text (wiki train)? Splits A3's results.
     const std::string_view wiki(reinterpret_cast<const char*>(data.data()), cfg.train);
@@ -2503,6 +2675,57 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         }
         return gate;
     };
+    // A1: abstention by CyphaLM's own message, its precision and recall on not-in-slice questions (and, with an A0 base
+    // run, on in-slice questions that run got wrong), its tags, reason codes, and whether the tag (A1d: and the message)
+    // names the question's entity: a span of the question, the chosen E1 entity, the in-slice source title.
+    auto abstain_line = [&](const std::vector<QaRow>& rows, const std::vector<const Graded*>& v,
+                            const std::map<std::tuple<int, int, int>, int>* bs, int form, int l) {
+        int abst = 0, abst_out = 0, n_out = 0, abst_inw = 0, n_inw = 0, tags = 0, code_ok = 0, ent_ok = 0, ent_eq = 0,
+            complete = 0, ent_title = 0, msg_ok = 0;
+        for (auto* g : v) {
+            const bool ab = g->grade == 1 && !g->ans.text.empty();
+            const QaRow& r = rows[static_cast<std::size_t>(g->row)];
+            abst += ab;
+            if (!g->in_slice) {
+                ++n_out;
+                abst_out += ab;
+            } else {
+                auto it = bs ? bs->find({g->row, form, l % 2}) : std::map<std::tuple<int, int, int>, int>::const_iterator{};
+                const bool base_wrong = !bs || it == bs->end() || it->second != 0;
+                if (base_wrong) {
+                    ++n_inw;
+                    abst_inw += ab;
+                }
+            }
+            msg_ok += ab && names_in(msg_entity(g->ans.text), r.q);
+            const std::string code = tag_field(g->ans.text, "reason");
+            if (code.empty()) continue;
+            ++tags;
+            // Expected: UNKNOWN_ENTITY for a subject with no article in the slice (not-in-slice),
+            // NO_EVIDENCE or LOW_CERTAINTY when the article is there (in-slice).
+            code_ok += g->in_slice ? (code == "NO_EVIDENCE" || code == "LOW_CERTAINTY") : code == "UNKNOWN_ENTITY";
+            const std::string ent = tag_field(g->ans.text, "entity");
+            ent_ok += !ent.empty() && lowered(r.q).find(lowered(ent)) != std::string::npos;
+            ent_eq += !ent.empty() && lowered(strip_article(ent)) == lowered(strip_article(entity_of(r.q)));
+            ent_title += g->in_slice && !ent.empty() && norm_text(strip_article(ent)) == norm_text(strip_article(r.title));
+            complete += g->ans.text.find("gap=G-") != std::string::npos &&
+                        g->ans.text.compare(g->ans.text.size() - 2, 2, "|>") == 0;
+        }
+        std::ostringstream b;
+        b.setf(std::ios::fixed);
+        b.precision(4);
+        const double base_rate = static_cast<double>(n_out) / static_cast<double>(v.size());
+        b << " abstained " << abst << " not_in_slice " << abst_out << "/" << n_out << " precision_nis "
+          << (abst ? static_cast<double>(abst_out) / abst : 0.0) << " recall_nis "
+          << (n_out ? static_cast<double>(abst_out) / n_out : 0.0) << " base_rate_nis " << base_rate
+          << " | in_slice_base_wrong " << abst_inw << "/" << n_inw << " precision_should "
+          << (abst ? static_cast<double>(abst_out + abst_inw) / abst : 0.0) << " recall_should "
+          << (n_out + n_inw ? static_cast<double>(abst_out + abst_inw) / (n_out + n_inw) : 0.0) << " base_rate_should "
+          << static_cast<double>(n_out + n_inw) / static_cast<double>(v.size()) << " | tags " << tags << " complete "
+          << complete << " reason_ok " << code_ok << " entity_in_question " << ent_ok << " entity_eq_parse " << ent_eq
+          << " entity_eq_title " << ent_title << " message_entity_in_question " << msg_ok;
+        return b.str();
+    };
     // The test's gates: chosen once on all of dev.
     std::vector<Gate> final_gate(static_cast<std::size_t>(2 * nlm));
     for (int form = 0; form < 2; ++form)
@@ -2512,46 +2735,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                 if (g.form == form && g.lm == l) v.push_back(&g);
             const std::string tag = std::string(form_name[form]) + "/" + lm_name[l];
             final_gate[static_cast<std::size_t>(form * nlm + l)] = report(tag, v, l % 2 == 1, kFeatName);
-            // A1: abstention by CyphaLM's own message.
-            int abst = 0, abst_out = 0, n_out = 0, abst_inw = 0, n_inw = 0, tags = 0, code_ok = 0, ent_ok = 0, ent_eq = 0,
-                complete = 0;
-            for (auto* g : v) {
-                const bool ab = g->grade == 1 && !g->ans.text.empty();
-                abst += ab;
-                if (!g->in_slice) {
-                    ++n_out;
-                    abst_out += ab;
-                } else {
-                    auto it = base.find({g->row, form, l % 2});
-                    const bool base_wrong = it == base.end() ? true : it->second != 0;
-                    if (base_wrong) {
-                        ++n_inw;
-                        abst_inw += ab;
-                    }
-                }
-                const std::string code = tag_field(g->ans.text, "reason");
-                if (!code.empty()) {
-                    ++tags;
-                    // Expected: UNKNOWN_ENTITY for a subject with no article in the slice (not-in-slice),
-                    // NO_EVIDENCE or LOW_CERTAINTY when the article is there (in-slice).
-                    code_ok += g->in_slice ? (code == "NO_EVIDENCE" || code == "LOW_CERTAINTY") : code == "UNKNOWN_ENTITY";
-                    const std::string ent = tag_field(g->ans.text, "entity"), q = dev[static_cast<std::size_t>(g->row)].q;
-                    ent_ok += !ent.empty() && lowered(q).find(lowered(ent)) != std::string::npos;
-                    ent_eq += !ent.empty() && lowered(strip_article(ent)) == lowered(strip_article(entity_of(q)));
-                    complete += g->ans.text.find("gap=G-") != std::string::npos &&
-                                g->ans.text.compare(g->ans.text.size() - 2, 2, "|>") == 0;
-                }
-            }
-            const double base_rate = static_cast<double>(n_out) / static_cast<double>(v.size());
-            std::cout << "ABSTAIN " << tag << " abstained " << abst << " not_in_slice " << abst_out << "/" << n_out
-                      << " precision_nis " << (abst ? static_cast<double>(abst_out) / abst : 0.0) << " recall_nis "
-                      << (n_out ? static_cast<double>(abst_out) / n_out : 0.0) << " base_rate_nis " << base_rate
-                      << " | in_slice_base_wrong " << abst_inw << "/" << n_inw << " precision_should "
-                      << (abst ? static_cast<double>(abst_out + abst_inw) / abst : 0.0) << " recall_should "
-                      << (n_out + n_inw ? static_cast<double>(abst_out + abst_inw) / (n_out + n_inw) : 0.0)
-                      << " base_rate_should " << static_cast<double>(n_out + n_inw) / static_cast<double>(v.size())
-                      << " | tags " << tags << " complete " << complete << " reason_ok " << code_ok
-                      << " entity_in_question " << ent_ok << " entity_eq_parse " << ent_eq << "\n";
+            std::cout << "ABSTAIN " << tag << abstain_line(dev, v, &base, form, l) << "\n";
         }
     Gate r3_gate;
     if (!o.r3.empty()) {
@@ -2600,9 +2784,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         const std::vector<Graded> gt3 = o.r3.empty() ? std::vector<Graded>{} : r3_set(test, why_test);
         write_rows("test", gt, true);
         write_rows("test", gt3, true, true);
-        auto test_report = [&](const std::string& tag, const std::vector<const Graded*>& v, const Gate& gate) {
+        auto test_report = [&](const std::string& tag, const std::vector<const Graded*>& v, const Gate& gate, int form = -1,
+                               int l = 0) {
             Tally raw, gated, gin, gout, pr[2], cov[2];
-            int abst = 0, abst_out = 0, n_out = 0;
             for (auto* g : v) {
                 raw.add(g->grade);
                 const int gr = gated_answer(*g, gate) ? g->grade : 1;
@@ -2610,12 +2794,6 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                 (g->in_slice ? gin : gout).add(gr);
                 if (g->prose >= 0) pr[g->prose].add(gr);
                 if (g->covered >= 0) cov[g->covered == 2].add(gr);
-                const bool ab = g->grade == 1 && !g->ans.text.empty();
-                abst += ab;
-                if (!g->in_slice) {
-                    ++n_out;
-                    abst_out += ab;
-                }
             }
             print_tally("TEST_RAW " + tag + " all", raw);
             print_tally("TEST_GATED " + tag + " all", gated);
@@ -2625,16 +2803,15 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                 if (pr[b].n) print_tally("TEST_GATED " + tag + (b ? " in_slice_fact_in_prose" : " in_slice_fact_not_in_prose"), pr[b]);
                 if (cov[b].n) print_tally("TEST_GATED " + tag + (b ? " shard_covered" : " shard_not_covered"), cov[b]);
             }
-            std::cout << "TEST_ABSTAIN " << tag << " abstained " << abst << " not_in_slice " << abst_out << "/" << n_out
-                      << " precision_nis " << (abst ? static_cast<double>(abst_out) / abst : 0.0) << " recall_nis "
-                      << (n_out ? static_cast<double>(abst_out) / n_out : 0.0) << "\n";
+            if (form >= 0) std::cout << "TEST_ABSTAIN " << tag << abstain_line(test, v, nullptr, form, l) << "\n";
         };
         for (int form = 0; form < 2; ++form)
             for (int l = 0; l < nlm; ++l) {
                 std::vector<const Graded*> v;
                 for (const auto& g : gt)
                     if (g.form == form && g.lm == l) v.push_back(&g);
-                test_report(std::string(form_name[form]) + "/" + lm_name[l], v, final_gate[static_cast<std::size_t>(form * nlm + l)]);
+                test_report(std::string(form_name[form]) + "/" + lm_name[l], v, final_gate[static_cast<std::size_t>(form * nlm + l)],
+                            form, l);
             }
         if (!o.r3.empty()) {
             for (const auto& [k, v] : why_test) std::cout << "TEST_R3_RUNS " << k << " " << v << "\n";
@@ -2775,6 +2952,20 @@ int cmd_selftest() {
         }
     }
     {
+        // A1d: the token with its entity, the matched cut (NaN counts in the total, never below), the message's entity.
+        const std::string m = dont_know_text("Zorbia", "capital", "UNKNOWN_ENTITY");
+        const bool ok = fam_token("low", "entity=\"{E}\"", "the Zorbia") == "<|entity=\"Zorbia\"|><|fam=low|>" &&
+                        fam_token("high", "", "Zorbia") == "<|fam=high|>" && fam_token("mid", "a {E};b {E}", "") == "<|fam=mid|>" &&
+                        fam_token("low", "about {E};entity=\"{E}\"", "Zorbia") == "<|about Zorbia|><|entity=\"Zorbia\"|><|fam=low|>" &&
+                        quantile_cut({3, 1, std::nan(""), 2}, 0.5) == 3 && quantile_cut({}, 0.2) == 0 &&
+                        msg_entity(m) == "Zorbia" && msg_entity("I don't know.").empty() &&
+                        names_in("the Zorbia", "What is the capital of Zorbia?") && !names_in("or", "Zorbia or not?");
+        if (!ok) {
+            std::cerr << "selftest: familiarity token / matched cut / message entity checks failed\n";
+            return 1;
+        }
+    }
+    {
         // B4: the class-context expert on a tiny corpus. A verb of the same class reuses what "wrote" learned; an
         // unknown word falls to the uniform floor; P sums to 1; the bucket packs order and count.
         ClassContext cc({{"wrote", 10}, {"composed", 10}, {"who", 11}, {"the", 12}}, 6);
@@ -2810,8 +3001,8 @@ void usage() {
                  "  cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
-                 "     [--fam-train stat|outcome] [--fam-only] [--copy] [--r3 PATTERNS.tsv] [--shard F.tsv] [--shard2 F.tsv]\n"
-                 "     [--cls TABLE[:tail]|shape[:tail]]  (not with --copy)\n"
+                 "     [--fam-train stat|outcome|matched] [--fam-ent FRAMES] [--fam-only] [--copy] [--r3 PATTERNS.tsv]\n"
+                 "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE[:tail]|shape[:tail]]\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  selftest\n"
                  "  options: --wiki P --dolly P --train N --sample N\n"
@@ -2850,12 +3041,12 @@ int main(int argc, char** argv) {
     else if (cmd == "cls") rc = cmd_cls(a);
     else if (cmd == "qa") {
         if (a.dev.empty() || (a.fam != "none" && a.fam != "before" && a.fam != "after") || a.dk_ratio < 0 ||
-            a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome") || (a.copy && !a.cls.empty())) {
+            a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome" && a.fam_train != "matched")) {
             usage();
             return 2;
         }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
-                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls});
+                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.fam_ent});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();
