@@ -2094,7 +2094,44 @@ vector<string> q_rels(const string& nq) {
     if (has("where")) return {"location", "located_in", "country"};
     return {};
 }
-struct ShardOpt { string path, dev, test; std::size_t slice_end = 8388608, holdout_from = 7340032; std::uint32_t seed = 0; };
+struct ShardOpt { string path, dev, test, join; std::size_t slice_end = 8388608, holdout_from = 7340032; std::uint32_t seed = 0; };
+// F2R: the first frame cyphalm_trie --r3 would load for relation r (kept patterns by training subjects, then frame bytes)
+// that is a bare core: the subject slot first, the object slot last, no context, no # or <M>. "" when there is none.
+string shard_raw_frame(int r) {
+    vector<std::tuple<int, string, string>> v;
+    for (const Pat& p : g_pats) {
+        string f = raw_frame(p.key), core = f, x = f;
+        while (!core.empty() && (core[0] == '\'' || core[0] == '[') && core.compare(0, 3, "[S]") != 0) core.erase(0, 1);
+        while (!core.empty() && (core.back() == '\'' || core.back() == ']') && core.size() >= 3 && core.compare(core.size() - 3, 3, "[O]") != 0) core.pop_back();
+        if (p.rel != r || core.compare(0, 3, "[S]") != 0 || core.size() < 7 || core.compare(core.size() - 3, 3, "[O]") != 0 ||
+            f.find('#') != npos || f.find("<M>") != npos || p.key[0] == '^' || p.key.back() == '$')
+            continue;
+        replace_all(x, "[S]", "\x01");
+        replace_all(x, "[O]", "\x02");
+        v.emplace_back(-p.train_subj, x, f);
+    }
+    std::sort(v.begin(), v.end());
+    return v.empty() ? "" : std::get<2>(v[0]);
+}
+// A fact in a raw frame: the subject (title) in [S], the object in [O] as the dump writes it there (a linked date is
+// "March 31]], [[1948"), an open "(" closed, and a full stop.
+string raw_fill(const string& frame, const string& E, const string& surf, const Date& D, bool date) {
+    string f = frame, O = surf;
+    const std::size_t o = f.find("[O]");
+    const bool linked = o >= 2 && f.compare(o - 2, 2, "[[") == 0;
+    if (date) {
+        O = human_date(D);
+        if (D.y > 0 && D.m) {
+            string m = kMonths[D.m - 1];
+            m[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(m[0])));
+            O = D.d ? m + " " + std::to_string(D.d) + (linked ? "]], [[" : ", ") + std::to_string(D.y) : m + (linked ? "]] [[" : " ") + std::to_string(D.y);
+        }
+    }
+    f.replace(o, 3, O);
+    replace_all(f, "[S]", E);
+    if (std::count(f.begin(), f.end(), '(') > std::count(f.begin(), f.end(), ')')) f += ")";
+    return f.back() == '.' ? f : f + ".";
+}
 // Returns 1 when the leakage check fails.
 int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<PageRef>& pages, const std::unordered_map<string, int>& page_of,
                 const std::function<void(const string&)>& say) {
