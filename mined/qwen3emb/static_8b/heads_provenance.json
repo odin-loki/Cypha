@@ -1,0 +1,29 @@
+{
+  "tool": "scripts/gguf_mine.py",
+  "tool_version": "1.0",
+  "command": [
+    "scripts/gguf_mine.py",
+    "heads",
+    "--model",
+    "/root/work/teacher/models/Qwen3-Embedding-8B-Q8_0.gguf",
+    "--out",
+    "/root/work/teacher/qe/static/heads_emb_8b",
+    "--layers",
+    "0,9,18,27,35",
+    "--tokens",
+    "200",
+    "--no-hash"
+  ],
+  "time_utc": "2026-10-27T23:15:57+00:00",
+  "seed": 1234,
+  "model_path": "/root/work/teacher/models/Qwen3-Embedding-8B-Q8_0.gguf",
+  "numpy": "2.5.4",
+  "gguf": "0.19.0",
+  "llama_cpp_python": "0.3.36",
+  "model_bytes": 8047105824,
+  "model_name": "Qwen3 Embedding 8B",
+  "architecture": "qwen3",
+  "file_type": 7,
+  "licence": "apache-2.0",
+  "licence_permissive": true
+}

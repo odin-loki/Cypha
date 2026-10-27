@@ -235,7 +235,13 @@ Same commands, with layer subsets where the cost scales with vocabulary × width
 
 **Neurons** (`--max-neurons 256` per layer, all 36 layers, 9,216 neurons). As on 0.6B, single-neuron write entropy is at its maximum (11.92–11.93), with median top logits of 0.11–0.42. The lowest-entropy neurons of this sample show no clear theme; a larger sample or a sharper statistic is needed. The run took 11 minutes.
 
-HEADS8B_PLACEHOLDER
+**Heads** (`--layers 0,9,18,27,35 --tokens 200`, 160 heads, 13 minutes):
+- The mean copy@1 is 0.141; 21 heads are above 0.5 and 34 above 0.2.
+- By layer the mean is 0.096 (layer 0), 0.184 (9), 0.118 (18), 0.095 (27) and 0.214 (35).
+- Five heads copy perfectly (copy@1 = 1.0): layer 9 heads 14 and 15, layer 18 head 19, layer 35 heads 5 and 19.
+- Copying heads are denser than in the 0.6B: 13% of the sampled heads against 5% of all 448.
+
+SPECTRA8B_PLACEHOLDER
 
 ## 6. QE2: the probe set
 
