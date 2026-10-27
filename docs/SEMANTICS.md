@@ -110,7 +110,7 @@ Teacher-initialised and from-scratch versions are always compared, so the teache
 
 | ID | Experiment | Gate |
 |---|---|---|
-| S-1 | **Words as classes** (running): 10,000 word classes on enwik8 contexts. Word similarity against random indexing and PPMI-SVD on the same pairs | Replaces PPMI-SVD as the vector source if ≥ PPMI-SVD on WordSim and SimLex (same pairs) |
+| S-1 | **Words as classes**: 10,000 word classes on enwik8 contexts. Word similarity against random indexing and PPMI-SVD on the same pairs. **Done 2026-10-28, gate failed** ([report](reports/C5_WORDS_AS_CLASSES.md)): best WordSim / SimLex / MEN 0.240 / 0.134 / 0.372, level with a matched count baseline (0.256 / 0.101 / 0.358), far below PPMI-SVD (0.723 / 0.265 / 0.732) | Replaces PPMI-SVD as the vector source if ≥ PPMI-SVD on WordSim and SimLex (same pairs) |
 | S-2 | Hypernymy from KL asymmetry and variance (BLESS, HyperLex or WordNet pairs) | Direction accuracy above the frequency baseline, with a bootstrap interval |
 | S-3 | Relations as maps with abstention (capital-of and one more) | Leave-one-out accuracy above the mean-offset method; abstention lowers the wrong rate |
 | S-4 | The class-context and similar-context experts inside CyphaLM | Tool-profile gates: Q/A coverage at 2% wrong, BPC |
@@ -123,6 +123,21 @@ Teacher-initialised and from-scratch versions are always compared, so the teache
 - **P3.** The capital-of map gets leave-one-out @10 of 20–60%.
 
 If S-1 matches PPMI-SVD, the C1 tool becomes a baseline, not a dependency, and the tool profile can cut it.
+
+**Result (2026-10-28).** P1, P2 and P3 all missed; S-1 to S-3 fail their gates, and PPMI-SVD stays the vector source ([report](reports/C5_WORDS_AS_CLASSES.md)).
+- Hypernym direction from KL or variance was 47–54%, against a frequency baseline of 60.6%.
+- The capital-of map found 0–12% in the top 10, against 81% on PPMI-SVD vectors.
+- The contrastive encoder update lowered similarity.
+
+**Why, in hindsight** (Odin Loch's reading):
+- The observations were fixed random context vectors, and Cypha's class update is a running mean of them. So a class mean is a linear projection of raw co-occurrence counts. It cannot express the log-odds (PMI) weighting that makes PPMI-SVD and word2vec work.
+- Word2vec gets PMI because it learns a second table of context vectors under a logistic objective (Levy & Goldberg 2014).
+- **What has to change:**
+  - The contexts must be learned too (two tables), or PMI-weighted before they reach Cypha.
+  - The pull–push must be the softmax-weighted, temperature-scaled rule of [EMBEDDING_GEOMETRY.md](EMBEDDING_GEOMETRY.md) §4.2, not a mean with a capped push.
+  - The targets can come from a teacher's geometry (§5 there).
+
+S-1's tool stays as the home for that work.
 
 ---
 

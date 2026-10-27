@@ -61,7 +61,9 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - train CyphaLM on it;
   - parse emitted tags into the gap map;
   - score abstain recall and precision, and reason-code accuracy.
-- [ ] **Semantics S-1 to S-6** ([`docs/SEMANTICS.md`](docs/SEMANTICS.md)): Core Cypha as the meaning layer. S-1 "words as classes" is running.
+- [ ] **Semantics S-1 to S-6** ([`docs/SEMANTICS.md`](docs/SEMANTICS.md)): Core Cypha as the meaning layer.
+  - **S-1 done 2026-10-28, gate failed** ([report](docs/reports/C5_WORDS_AS_CLASSES.md)): Cypha's word means reach count level (WordSim 0.240) but not PPMI-SVD (0.723); no is-a direction from variance; P1–P3 missed. PPMI-SVD stays the vector source.
+  - **Next:** learned context vectors or PMI-weighted inputs, and the EMBEDDING_GEOMETRY §4.2 rule, in the same tool.
 - [ ] **How CyphaLM answers by itself** ([`docs/CYPHALM_ANSWERING.md`](docs/CYPHALM_ANSWERING.md), proposal): three routes (question-form training text, generalising experts, statement checking), an answer loop and steps A0–A5. Waiting for Odin's choices in its §5.
 - [ ] **Embedding geometry QE0–QE9** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md)): copy Qwen3-Embedding-8B's geometry into Cypha.
   - Needs Odin's machine: the GGUF downloads (Qwen3-Embedding 0.6B and 8B, Qwen3-8B, Qwen3.5-9B) and the teacher passes.
