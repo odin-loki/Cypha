@@ -120,3 +120,13 @@ The copy expert looks back 4,096 bytes. Articles are longer than that, so a long
 | # | Prediction |
 |---|---|
 | L9 | With shape classes, the third order adds −0.005 to −0.02 BPC on fresh text over two orders, and surface S moves by less than ±0.01 |
+
+**Result (run 2026-10-28; fresh text read once; surface S on B4's protocol).**
+
+| Shape classes, tail 6 | Contexts | Table | Fresh BPC, trie + IG + class | Change (95%) | Surface S | S change (95%) |
+|---|---:|---:|---:|---|---:|---|
+| 2 orders (default) | 1,242,013 | 29 MB | 2.087926 (parity: equal to B4) | | 0.9052 (parity) | |
+| 3 orders | 2,160,001 | 50 MB | 2.084349 | −0.0036 [−0.0051, −0.0022] | 0.9097 | +0.0045 [−0.0026, +0.0115] |
+
+- **Prediction L9: miss** on the size of the gain (−0.0036, below the −0.005 to −0.02 predicted); hit on S.
+- The third order passes rules 1 and 2 at +21 MB of table and a slightly longer build. It goes into the final combined read (rule 3, answers) with the copy expert, and becomes the default only if that read holds.
