@@ -210,4 +210,4 @@ Never use T-QA test questions in them.
 - **No network beyond the package registries and GitHub.** Hugging Face, Wikidata and dumps.wikimedia.org are blocked from the shell.
 - **The remote URL is the old lowercase `odin-loki/cypha`.** Pushing prints "This repository moved" (to `odin-loki/Cypha`); it is harmless and the push lands.
 - **Deletions and globs.** When committing deletions, use `git rm` or `git add -A` on the directory. A shell glob over deleted files matches nothing, which once left B1's deletions out of a commit.
-- **The `wip/agents-2026-10-28` branch** holds snapshots of in-progress agent work. It can be deleted once everything is on `main`.
+- **The `wip/agents-2026-10-28` branch** holds old snapshots of in-progress agent work. Everything in it is now on `main` in verified form. Odin can delete it (the session token may not delete branches).
