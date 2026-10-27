@@ -74,3 +74,21 @@ In real text, a long match inside the document is almost always a true repeat; i
 - **m = 8 is the largest gain that passes rule 2.** With the class expert, CyphaLM on fresh text goes from 2.166 (trie + IG) to **1.938** BPC, with surface S 0.907 (trie alone 0.761; human continuations 0.870).
 - **Predictions:** L6 **miss** on the gain (69% against ≥ 70%), hit on S. L7: m = 6 still lowers S (hit), m = 12 keeps 51% with S unchanged (hit), m = 16 keeps 39% (miss).
 - **Rule 3 (answers)** for class + copy (m = 8) is being read in `qa` (the answering-variants run, A1D/A2B). Note: in A2, the copy model (m = 0) lost both gated right answers (raw right 6, kept 0), so this read matters.
+
+### Which class table (run 2026-10-28; `cyphalm_trie cls`, one run, fresh text read once)
+
+The word classes are S-1b's k-means classes over Cypha's own learned vectors (50,000 words; [S1B report](S1B_LEARNED_CONTEXTS.md)). The product tables map a word to (E1 tag, k-means class) where both tables have it (20,832 words); other words fall to shape classes.
+
+| Table, tail 6 | Contexts | Table | Fresh BPC, trie + IG + class | Change vs shape (95%) | Surface S | S change vs shape (95%) |
+|---|---:|---:|---:|---|---:|---|
+| shape only | 1,242,013 | 29 MB | 2.087926 | | **0.9052** | |
+| E1 tags | 2,709,055 | 61 MB | **2.075081** | −0.0128 [−0.0147, −0.0110] | 0.8766 | −0.0286 [−0.0370, −0.0206] |
+| k-means 256 | 5,628,017 | 124 MB | 2.092801 | +0.0049 [+0.0002, +0.0093] | 0.8263 | −0.0789 [−0.0893, −0.0682] |
+| k-means 1,024 | 6,331,989 | 138 MB | 2.091095 | +0.0032 [−0.0022, +0.0081] | 0.8130 | −0.0922 [−0.1026, −0.0819] |
+| tags × k-means 256 | 6,253,503 | 137 MB | 2.081371 | −0.0066 [−0.0116, −0.0018] | 0.8173 | −0.0880 [−0.0967, −0.0789] |
+| tags × k-means 1,024 | 6,644,921 | 145 MB | 2.084709 | −0.0032 [−0.0083, +0.0016] | 0.8176 | −0.0876 [−0.0971, −0.0784] |
+
+- **Word classes from vectors do not help the expert.** They are no better than shape classes on BPC, and they cost 8–9 points of surface S. Classes that group words by meaning spread each context's counts over words that do not share spelling patterns, so the expert's within-word predictions get worse while its word-to-word ones gain little.
+- **Tags help BPC but cost S**; product tables are worse than tags alone on both.
+- **Predictions:** L3 (k-means beat shape by 0.00–0.02) **miss**: they are worse or level. L4 (a product beats the better single table by under 0.005) **hit**: it does not beat it at all.
+- **Decision (rules 1–2): the default table is shape classes only** (no table). Tags and word classes fail rule 2. This is also the tool-profile result for the tagger's and the word vectors' class-context adapters (see TOOL_PROFILE_P2_GRID).
