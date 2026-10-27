@@ -342,6 +342,15 @@ The rows by relation (augmented): occupation 258, birth_year 359, death_year 346
 
 ## Flags and decisions for Odin
 
+**Decided 2026-10-28, from the evidence** (Odin: "try a lot of things, profile and record everything, then pick a fact-based decision"):
+- **Base rate: per relation stays the default.** Its learned facts agree with Wikidata 175/184 times (0.951). With `a = 0.5` and one evidence item no extracted fact can reach P 0.8, so 0.5 admits none and drops only correct facts.
+- **phi: the hand-set values stay.** `--phi` changes 2 facts; on a tie, the option with fewer dependencies wins (TOOL_PROFILE §5).
+- **Wikidata in the type lexicons: kept.** It adds 105 facts at the same precision (the 0.951 gold agreement includes them).
+- **Holdout rows:** every training run drops `_holdout` rows (`cyphalm_trie qa` enforces it).
+- **Leakage rule for fact shards:** no shard question may equal a dev or test question; the builder never reads test answers; coverage of test questions by (entity, relation) is reported. Evidence: 0 equal questions, the near-matches are template collisions, and the shard adds 0 right test answers (A2). TOOL_PROFILE_PLAN §4 now says this.
+
+The flags as they were raised:
+
 1. **The base rate (F2's open item).** Per relation (the default here) admits 1,216 learned facts into the store and the shard. `a = 0.5` admits none. See the table above.
 2. **phi.** The Wikidata estimates (author 0.925 against a hand-set 0.30) are better grounded, but they barely matter today. Keep hand-set, or switch with `--phi`.
 3. **Wikidata in the type lexicons.** Wikidata objects also decide what counts as a place or person when an extraction is type-checked. That adds 105 of the 384 extra facts at the same precision. It is distant supervision of types, not facts. Still, a Wikidata value changes which text spans can be extracted.
