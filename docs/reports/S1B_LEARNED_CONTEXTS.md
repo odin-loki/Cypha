@@ -18,12 +18,13 @@ S-1 failed because Cypha's class mean only averaged fixed random context vectors
 - **PMI-weighted inputs (variant a) do not help.** Cypha's update still only averages a 256-dimensional random projection.
   - With per-event PPMI weights, WordSim is 0.215.
   - Even when the class mean is exactly the projection of the word's PPMI row (a2), the count mean reaches only 0.351, and Cypha's update 0.256.
-- **The §4.2 pull–push rule (variant c) learns nothing from a random start in the time available.** MEN dev is 0.073 after one epoch, and the vectors are still random. Started from (b)'s tables, it PENDING_C2.
+- **The §4.2 pull–push rule (variant c) learns nothing from a random start in the time available.** MEN dev is 0.073 after one epoch, and the vectors are still random. Started from (b)'s tables, it keeps their structure but does not improve it: MEN 0.711, WordSim 0.723, SimLex 0.218, against (b)'s 0.730, 0.736 and 0.234 for the same word table.
 - **Relations come back.** On (b)'s vectors, capital-of ridge @10 is 69% (PPMI-SVD 81%) and offset @10 is 100% (PPMI-SVD 96%). Country → language ridge @10 is 95% (PPMI-SVD 91%).
 - **Is-a does not come back.** (b)'s Fisher variance tracks frequency. "Larger variance = hypernym" scores 39.1%, against the frequency baseline's 60.6%.
-- **Export for QE5 works.** `gguf_mine.py compare` reads the Cypha and PPMI-SVD vectors. On words, pair Spearman is PENDING_CMPW; on SIF sentence vectors, PENDING_CMPS. k-means word classes (k = 256 and 1,024) are written for the class-context expert.
+- **Export for QE5 works.** `gguf_mine.py compare` reads the Cypha and PPMI-SVD vectors. On words, pair Spearman is 0.714 and kNN@10 Jaccard 0.166; on SIF sentence vectors, 0.931 and 0.489. k-means word classes (k = 256 and 1,024) are written for the class-context expert.
+- **Distillation works from a good start, not from a random one.** With PPMI-SVD as a stand-in teacher, `distill` reaches pair Spearman 0.935 starting from (b), but 0.770 from random vectors.
 
-**Predictions:** R0 hit, PA miss, PA2 miss, PB miss (WordSim 0.750 is 0.01 above the band), PC hit, PC2 PENDING, PG hit, PD PENDING, PE hit, PF miss (offset above the band), PX PENDING.
+**Predictions:** R0 hit, PA miss, PA2 miss, PB miss (WordSim 0.750 is 0.010 above the band), PC miss, PC2 hit, PG hit, PD miss, PE hit, PF miss (offset above the band), PX miss (the vectors agree more and are more isotropic than predicted). 4 hits, 7 misses.
 
 **Gate (S-1b replaces PPMI-SVD as the vector source):** fails on the significance bar. PPMI-SVD stays the source. (b) is a level, Cypha-learned alternative, and Odin decides whether level is enough (§9).
 
@@ -66,7 +67,7 @@ Dev grids, fixed before the runs (MEN rho on the C5 pairs decides; ties go to th
 | C5 pairs | Both words among the top 10,000: WordSim 259, SimLex 651, MEN 1,316 |
 | C1 pairs | Both words among the top 50,000: WordSim 350, SimLex 982, MEN 2,800 |
 | WordNet | Open English WordNet `src/yaml/noun.*.yaml`, 26 files, 71,872 synsets (fetched 2026-10-27, the same count as C5) |
-| Machine | 4 cores shared with three other agents, 15 GB. Every run single-threaded under `nice -n 5`, one heavy job at a time. Timings are wall-clock on a loaded machine |
+| Machine | 4 cores shared with other jobs, 15 GB. Every run single-threaded under `nice -n 5`, one heavy job at a time. Timings are wall-clock on a loaded machine |
 
 ### 1.2 The variants
 
@@ -109,10 +110,11 @@ Spearman rho with a 95% paired-bootstrap interval. Δ is against PPMI-SVD on the
 | **(b) W + C**, Σ0 0.3, 5 epochs | **0.750** [0.692, 0.797] | +0.027 [−0.008, +0.061], **0.941** | **0.270** [0.192, 0.347] | +0.005 [−0.029, +0.037], **0.604** | 0.756 [0.736, 0.776] |
 | (b) W (the word means alone) | 0.736 [0.669, 0.788] | +0.013 [−0.031, +0.054], 0.720 | 0.234 [0.152, 0.311] | −0.031 [−0.072, +0.004], 0.045 | 0.730 [0.706, 0.752] |
 | (c) from scratch, 1 epoch | not read (dev failed) | | not read | | 0.073 [0.021, 0.126] |
-| (c) from (b)'s tables, 1 epoch | PENDING | | PENDING | | PENDING |
+| (c) from (b)'s tables, 1 epoch | 0.723 [0.654, 0.776] | −0.001 [−0.052, +0.047], 0.488 | 0.218 [0.137, 0.297] | −0.047 [−0.093, −0.006], 0.013 | 0.711 [0.686, 0.736] |
 | (a) PPMI-weighted observations | 0.215 [0.092, 0.326] | −0.509 | 0.110 [0.028, 0.193] | −0.155 | 0.308 [0.258, 0.355] |
 | (a2) projected PPMI rows | 0.256 [0.146, 0.362] | −0.467 | 0.082 [0.000, 0.158] | −0.183 | 0.241 [0.189, 0.294] |
-| C5 tuned (S-1's best) | PENDING_C5 | | | | |
+| C5 tuned (S-1's best: whitened cos(Δ)) | 0.240 [0.119, 0.350] | −0.484 | 0.134 [0.052, 0.214] | −0.131 | 0.372 [0.324, 0.416] |
+| C5 matched count mean (a‴) | 0.256 [0.131, 0.371] | −0.468 | 0.101 [0.022, 0.178] | −0.163 | 0.358 [0.309, 0.403] |
 | **PPMI-SVD 300 d** | **0.723** [0.657, 0.777] | | **0.265** [0.189, 0.341] | | 0.732 [0.710, 0.753] |
 
 Reading the table:
@@ -162,7 +164,7 @@ No setting learns. The reason, as far as these runs show:
 - K = Σ/(n + κ0) counts every event as one unit of evidence, even while the partners are still random. So the step decays before any structure forms.
 - (b) escapes both. Its contexts start at zero, and its precision grows only as fast as the partners' squared size p(1 − p) x². Early events are cheap in evidence.
 
-**(c), started from (b).** On the 5 MB prefix, from (b)'s W at 0.224: (0.05, 10, 1000) gave 0.226, (0.05, 100, 1000) 0.245 and (0.05, 100, 10) 0.007. A gentle rate keeps or slightly improves the start, and a fast one destroys it. On the full corpus, (0.05, 100, 1000) for one epoch: PENDING_C2DETAIL.
+**(c), started from (b).** On the 5 MB prefix, from (b)'s W at 0.224: (0.05, 10, 1000) gave 0.226, (0.05, 100, 1000) 0.245 and (0.05, 100, 10) 0.007. A gentle rate keeps or slightly improves the start, and a fast one destroys it. On the full corpus, (0.05, 100, 1000) for one epoch (6,407,796 events, 764 s) took W's MEN from 0.730 to 0.711. The rule keeps the structure it is given but does not add to it.
 
 ### 2.4 Why (a) fails
 
@@ -228,29 +230,86 @@ Candidates are the top 10,000 words. The map and its abstention are C5's code, u
 | (b): total variance, var(hyper) > var(hypo) | 39.1% (±0.8) | 46.0% (±1.4) |
 | (b): smaller mean norm = hypernym (**not registered**) | 61.9% (±0.8) | 56.5% (±1.4) |
 
-- The Fisher variance is the frequency rule reversed: frequent words gather precision, so they have small Σ. The 39.1% is 100% − 60.9%, as the core's epistemic variance was in C5 (39.4%).
+- The Fisher variance is close to the frequency rule reversed (100% − 60.6% = 39.4%): frequent words gather precision, so they have small Σ. The core's epistemic variance did the same in C5 (39.4%).
+- (c) started from (b) has the library's online variance instead (the spread of an item's partners about it). It scores 60.6% / 53.3% by KL and 61.1% / 54.7% by total variance. That is at most 1.6 points above the frequency baseline, and it was not registered either.
 - **One unregistered reading.** "Smaller ‖μ‖ = hypernym" is 3.4 points above the frequency baseline on matched pairs (56.5% against 53.1%), and 1.3 points above it on all pairs. On the C1 view (39,462 pairs, 8,604 matched) it is 67.1% against 66.5%, and 55.9% against 53.3%. It was not registered, and the intervals are normal approximations. It needs a registered retest with a paired bootstrap before it counts.
 
 ## 4. Distillation (`distill`, §5.1) with PPMI-SVD as a stand-in teacher
 
-PENDING_DISTILL
+The teacher is C1's PPMI-SVD (300 d), on its 10,000 most frequent words. The student is a 256-d `ItemStore`, trained by `geometry.hpp` `distill_step` (§5.1, α = 1) with the library test's settings: η = 20, κ0 = 10, τ_T = τ_S = 0.05. Each anchor and epoch has two softmaxes: a local set (teacher top 10, 10 from ranks 10–59, 4 random) and a global set (24 random). There were 60 epochs. Agreement is the §7.1 suite in `geometry.hpp`, on 183,553 stratified pairs (5 near, 5 middle and 10 random per item). Force KL is at τ 0.05 over each tenth anchor's top 60 plus 24 random.
+
+| student start | pair Spearman | kNN@10 Jaccard | CKA | force KL | WordSim (C5 pairs) | SimLex | MEN | time | peak RAM |
+|---|---|---|---|---|---|---|---|---|---|
+| random | 0.770 | 0.374 | 0.319 | 0.171 | 0.586 [0.506, 0.660] | 0.196 [0.120, 0.271] | 0.584 | 352 s | 879 MB |
+| (b) W + C | **0.935** | **0.694** | **0.752** | **0.060** | 0.742 [0.679, 0.792] | 0.265 [0.189, 0.341] | 0.738 | 409 s | 933 MB |
+| (teacher, PPMI-SVD) | 1 | 1 | 1 | 0 | 0.723 | 0.265 | 0.732 | | |
+
+- **From random, 60 epochs are not enough.** The mean KL was still falling: 0.991 at epoch 10, 0.608 at epoch 60. The student is 0.137 below the teacher on WordSim.
+- **From (b), the student moves to the teacher and keeps (b)'s level.** Its SimLex equals the teacher's (Δ −0.000 [−0.017, +0.015]).
+- **What this means for QE5.** Start Cypha's items at their own (b) vectors and then distil Qwen's geometry. Do not start from random (SEMANTICS S-5).
+- `distill` reads any teacher `.npy` plus index, matched on the `text` column. The Qwen vectors from `gguf_mine.py embedtexts` drop in unchanged.
 
 ## 5. Export for QE5
 
-PENDING_EXPORT
+`export` writes, for any vector set:
+- `<name>_vectors.npy`: float32 (`--fp16` for float16), one unit-length row per word, in frequency order. The dimensions are rotated into variance order by `geometry.hpp` `mrl_order` (a rotation, so no cosine changes), so a prefix works as an MRL prefix.
+- `<name>_index.tsv`: header `row id side n_tokens norm text count`. `text` is the word and `norm` its length before normalising. These are the columns of `gguf_mine.py embedtexts`, plus `count`.
+- With `--texts FILE`: `<name>_sent_vectors.npy` and `<name>_sent_index.tsv`, one row per input line. SIF (Arora, Liang & Ma 2017): word weights a/(a + p(w)), a = 1e-3, p(w) from the corpus counts; the mean of the unit word vectors; then the first principal component of the sentence matrix removed; unit length. The sentences are the first 2,000 Dolly instructions. None of them lacks a known word.
+- With `--kmeans`: spherical k-means, seeded by k-means++, as `word<TAB>class`.
+
+**Files** (all in `/root/work/sem/`):
+
+| file | what |
+|---|---|
+| `export/cypha_vectors.npy`, `export/cypha_index.tsv` | (b) W + C, 50,000 × 256, float32, unit rows |
+| `export/cypha_sent_vectors.npy`, `export/cypha_sent_index.tsv` | 2,000 SIF sentence vectors from them |
+| `export/ppmi_vectors.npy`, `export/ppmi_index.tsv` | C1's PPMI-SVD, 50,000 × 300, the same format |
+| `export/ppmi_sent_vectors.npy`, `export/ppmi_sent_index.tsv` | the same 2,000 sentences from PPMI-SVD |
+| `classes_k256.tsv`, `classes_k1024.tsv` | k-means word classes over the 50,000 (b) vectors |
+| `out/sgns_v0p3_e5{,_var,_wc}.npy` with `_index.tsv` | (b)'s raw tables: word means, their variance, words + contexts |
+
+**`gguf_mine.py compare`** (PPMI-SVD as `--a`, Cypha as `--b`, `--key text`, 5,000 sampled items for words, single-threaded BLAS):
+
+| | pair Spearman (near / mid / random) | kNN@10 Jaccard | top-10 in top-50 | linear CKA | Procrustes r² | force KL at τ 0.05 (fitted τ_S, KL) |
+|---|---|---|---|---|---|---|
+| words (50,000 matched) | 0.714 (0.650 / 0.235 / 0.327) | 0.166 | 0.495 | 0.413 | −0.005 | 1.426 (0.0566, 1.395) |
+| SIF sentences (2,000) | 0.931 (0.859 / 0.648 / 0.723) | 0.489 | 0.938 | 0.794 | 0.581 | 0.465 (0.0539, 0.453) |
+
+**`gguf_mine.py geometry`**:
+
+| | random-pair cosine, mean (IQR) | mean-vector norm | TwoNN | hubness skew (CSLS) | PCA dims for 90 / 95 / 99% | MRL agreement at 32 / 64 / 128 dims |
+|---|---|---|---|---|---|---|
+| Cypha words | 0.004 (−0.049, 0.053) | 0.057 | 38.1 | 2.45 (0.79) | 196 / 220 / 244 | 0.881 / 0.929 / 0.969 |
+| PPMI-SVD words | 0.030 (−0.010, 0.063) | 0.175 | 28.7 | 1.18 (0.48) | 247 / 272 / 293 | 0.756 / 0.834 / 0.919 |
+| Cypha SIF sentences | 0.008 (−0.078, 0.079) | 0.096 | 14.5 | 1.59 (0.53) | 149 / 187 / 234 | 0.934 / 0.968 / 0.991 |
+
+- **The two word spaces agree in rank order (0.714), but not in neighbourhoods (Jaccard 0.166) or linearly (CKA 0.41, Procrustes r² ≈ 0).** They are two different factorisations of the same counts. Averaged into sentences, they nearly coincide (0.931).
+- **Cypha's words are nearly isotropic** (floor 0.004 against PPMI-SVD's 0.030). They are more hub-prone (skew 2.45), and CSLS fixes most of it (0.79).
+- **The MRL rotation matters.** Before it, Cypha's 32-dimension prefix kept 0.619 agreement with the full vector; after it, 0.881.
+
+**k-means word classes** (for the class-context expert, TOOL_PROFILE P1):
+
+| k | iterations | mean cosine to centre | class sizes min / median / max | time |
+|---|---|---|---|---|
+| 256 | 40 | 0.410 | 30 / 190 / 525 | 27 s |
+| 1,024 | 17 | 0.457 | 4 / 42 / 171 | 55 s |
+
+Examples at k = 1,024: "france" is with paris lyon bordeaux toulouse gaulle commune département …; "red" with black white blue color green dark brown yellow …; "january" with the other months; "computer" with designed machine machines computing portable calculator pdp colossus …. At k = 256, "france" shares a class with French function words (de, et, des, le, du), the same leak C1 saw in PPMI-SVD's neighbours of "paris".
 
 ## 6. Cost
 
 | item | value |
 |---|---|
-| Tool lines | 1,812 → PENDING_LINES (`s1`, `train`, `distill`, `eval`, `export`). The relation, hypernymy and corpus code was moved out of `s1` into functions that `eval` shares, not copied |
+| Tool lines | 1,812 → 2,638 (+826) for `train`, `distill`, `eval`, `export`, the `.npy` reader and writer, the PPMI table, the bootstrap and k-means. The relation, hypernymy and corpus code was moved out of `s1` into functions that `eval` shares, not copied. No new tool, and `geometry.hpp` is unchanged |
 | Build | Clean under `-Wall -Wextra` (g++ 13.3), against `libcypha_core.a` built from `native/CMakeLists.txt` target `cypha_core` |
 | PPMI-SVD (C1 tool) | 136 s for the whole run including the min_count 2 ablation; headline vectors at 87 s; peak RAM 607 MB |
 | (a), (a2) | 216 s and 228 s per run (the 9.87M-step Cypha pass is 189–207 s); peak RAM 1,198 MB, of which the sort of 97M co-occurrence keys is most |
 | (b), one epoch | 33.5M events, 305–338 s (about 9–10 µs per event, six logistic terms in 256 dimensions); peak RAM 303 MB |
 | (b), 5 epochs | 1,542 s; peak RAM 316 MB |
 | (b) model | Two tables of 50,000 × 256 means and variances in fp32: 205 MB in memory; the exported word means are 51 MB (fp32) or 26 MB (fp16) |
-| (c), one epoch | 6.4M events, 702 s: about 110 µs per `pull_push_step`, 12 times (b)'s cost per event. Most of it is heap allocation inside the library step (a `std::vector` per touched item, per call) |
+| (c), one epoch | 6.4M events, 702 s: about 110 µs per `pull_push_step`, 12 times (b)'s cost per event. Most of it is likely heap allocation inside the library step (a `std::vector` per touched item, per call); this was not profiled |
+| `distill`, 10,000 items, 60 epochs | 352–409 s; peak RAM 879–933 MB (two 10,000 × 10,000 double cosine matrices for the teacher kNN and the stratified pairs) |
+| `export` + k-means 256 and 1,024 | 92 s; peak RAM 207 MB |
 | `eval` | 14 s for five vector sets with 2,000 resamples, relations and hypernymy |
 
 ## 7. Predictions scored
@@ -262,12 +321,12 @@ PENDING_EXPORT
 | PA2 | (a2) count mean WordSim 0.35–0.55; Cypha more than 0.10 below it | Count mean 0.351 (whitened) and 0.377 (centred). Cypha 0.256: 0.095 below on WordSim, 0.044 on SimLex, 0.135 on MEN | **Miss** (the band held; the drop was not above 0.10 on every set) |
 | PB | (b) WordSim 0.62–0.74, SimLex 0.22–0.32, within ±0.06 of PPMI-SVD | 0.750 and 0.270; Δ +0.027 and +0.005 | **Miss** (WordSim 0.010 above the band; the rest held) |
 | PC | (c) WordSim 0.50–0.70, SimLex 0.18–0.30, not above (b) | From scratch it never passed dev (MEN 0.073), so the test sets were not read | **Miss** (far below the band) |
-| PC2 | (c) from (b): W's MEN within ±0.02 of 0.730; WordSim and SimLex below (b) W + C | PENDING | PENDING |
+| PC2 | (c) from (b): W's MEN within ±0.02 of 0.730; WordSim and SimLex below (b) W + C | MEN 0.711 (Δ −0.019); WordSim 0.723 < 0.750; SimLex 0.218 < 0.270 | **Hit** |
 | PG | The gate fails | (b): P = 0.941 on WordSim, 0.604 on SimLex | **Hit** |
-| PD | Distilled pair Spearman ≥ 0.80; WordSim and SimLex within 0.05 of the teacher | PENDING | PENDING |
+| PD | Distilled pair Spearman ≥ 0.80; WordSim and SimLex within 0.05 of the teacher (from a random start) | From random: 0.770; WordSim 0.586 (−0.137), SimLex 0.196 (−0.068). From (b): 0.935, WordSim +0.018, SimLex −0.000 | **Miss** (the random start was registered) |
 | PE | Is-a below the frequency baseline; variance rule 35–50% | 39.1% (KL and variance) against 60.6% | **Hit** |
 | PF | Capital-of ridge @10 40–85%, offset @10 60–95% | 69.2% and 100% | **Miss** (the offset was above the band) |
-| PX | Export: words pair Spearman 0.4–0.7, Jaccard 0.10–0.30; sentences 0.6–0.85; floor 0.02–0.20 | PENDING | PENDING |
+| PX | Export: words pair Spearman 0.4–0.7, Jaccard 0.10–0.30; sentences 0.6–0.85; floor 0.02–0.20 | 0.714; 0.166; 0.931; 0.004 | **Miss** (only the Jaccard was in its band) |
 
 ## 8. Verdict
 
@@ -276,7 +335,7 @@ PENDING_EXPORT
 **What exactly does the work.**
 - **The second table.** A fixed projection caps averaging at about 0.38 even when it projects the PPMI row exactly (a2). Learned contexts lift that cap.
 - **The logistic objective.** Its optimum is the shifted PMI matrix, so it supplies the log-odds weighting that averaging cannot.
-- **Cypha's step.** The diagonal Laplace update sets every item's step to its own posterior variance. The variance falls with the Fisher information the item has gathered. Rare items move a lot and frequent ones little, as EMBEDDING_GEOMETRY §4.2 asks. It needs no learning-rate schedule. Σ0 = 0.3 for five epochs beat word2vec's step (Σ0 = 0.025) by 0.16 on MEN after one epoch.
+- **Cypha's step.** The diagonal Laplace update sets every item's step to its own posterior variance. The variance falls with the Fisher information the item has gathered. Rare items move a lot and frequent ones little, as EMBEDDING_GEOMETRY §4.2 asks. It needs no learning-rate schedule. After one epoch, Σ0 = 0.3 beat word2vec's step size (Σ0 = 0.025) by 0.139 on MEN (W + C: 0.736 against 0.597).
 
 **What does not work.**
 - **The §4.2 rule from scratch.** In 256 dimensions, from random unit vectors, nothing forms within an epoch at any step size tried. The evidence count n grows with every event, informative or not. The library step also costs 110 µs.
@@ -286,13 +345,22 @@ PENDING_EXPORT
 
 ## 9. Decisions for Odin and next steps
 
-1. **The gate's reading.** The registered gate asks for "significantly above". (b) is level and Cypha-learned: online-capable, with a variance per item, and from the same counts. Under a non-inferiority reading, it would pass: Δ ≥ −0.03 with P ≥ 0.95 on both sets, since the lower bounds are −0.008 and −0.029. Odin decides which reading S-1b uses. Either way, keeping both costs nothing now.
+1. **The gate's reading.** The registered gate asks for "significantly above". (b) is level and Cypha-learned: online-capable, with a variance per item, and from the same counts. Its lower 2.5% bounds are −0.008 (WordSim) and −0.029 (SimLex), so it would pass a non-inferiority gate with a margin of 0.03. That margin would be chosen after the fact. If Odin wants a non-inferiority gate, he should set the margin first, and the test should be a fresh read: new pairs or a new seed. Until then, PPMI-SVD stays the source, and keeping both costs nothing.
 2. **If (b) is accepted, the C1 tool becomes a baseline** (TOOL_PROFILE_PLAN), and `export` already writes (b)'s vectors in the form QE5 reads.
 3. **`geometry.hpp` (not changed here; it belongs to the QE library).**
    - `pull_push_step` allocates per call. A caller-owned scratch buffer would cut most of its 110 µs.
    - K = Σ/(n + κ0) should count information, not events. A Fisher-weighted count (n += p(1 − p)|x|², as (b) does) would let the §4.2 rule start from random vectors. Equivalently, Σ should scale as 1/d, so that η does not have to.
 4. **Is-a.** Learn breadth through a direction-ranking loss (C5 §8, point 5). Then retest the unregistered norm reading with a registered prediction.
 5. **Distillation from Qwen.** `distill` takes a teacher `.npy` plus index as `gguf_mine.py embedtexts` writes it. Embed the 50,000-word list with the teacher, then run `distill --init` from (b) (S-5).
+
+## 9. A non-inferiority read on fresh word sets (registered 2026-10-28, before the run)
+
+The gate above asked for superiority, and (b) came out level. Odin's instruction is to decide from the evidence, so the question for adoption is changed to the one that matters for a vector source: is Cypha's own learner (b) **no worse** than PPMI-SVD? That needs a margin fixed in advance and a read on data never used here.
+
+- **Data, never read before:** MTurk-771, RW (Stanford rare words), SimVerb-3500, RG-65, YP-130, MC-30, from the same `mfaruqui/eval-word-vectors` folder.
+- **Pairs:** both words in the top 50,000 (the C1 protocol); paired bootstrap, 2,000 resamples, as `eval`.
+- **Rule:** (b) `sgns_v0p3_e5_wc` replaces PPMI-SVD as the vector source if, on each of the three large sets (MTurk-771, RW, SimVerb-3500), the lower 95% bound of ρ(b) − ρ(PPMI-SVD) is above −0.03. The three small sets are reported only.
+- **Prediction:** (b) passes on all three large sets, with point differences between −0.01 and +0.04.
 
 ## Reproduce
 
@@ -308,13 +376,19 @@ g++ -O3 -DNDEBUG -std=c++20 -msse4.1 -fopenmp -Wall -Wextra -DCYPHA_ACCEL_GPU_MI
 g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd
 ```
 
-Inputs: `EN-WS-353-ALL.txt` (sha256 `ce12919b…5c619c`), `EN-SIMLEX-999.txt` (`405394ff…b11685`) and `EN-MEN-TR-3k.txt` (`888b1358…c5619c` → `888b13580faa…6c5619c`) from `raw.githubusercontent.com/mfaruqui/eval-word-vectors/master/data/word-sim/`. Open English WordNet `src/yaml/noun.*.yaml` (26 files) from `globalwordnet/english-wordnet` (main) into `wn/`.
+Inputs, from `raw.githubusercontent.com/mfaruqui/eval-word-vectors/master/data/word-sim/`, with sha256:
+- `EN-WS-353-ALL.txt` `ce12919b240af45bdf46d243601eaca2b6212b159b5e7e9b435ee7ee40c5619c`
+- `EN-SIMLEX-999.txt` `405394ffb7d25f6d0e3c041f87c9f27d29dc6b047506769953e85c4523b11685`
+- `EN-MEN-TR-3k.txt` `888b13580faa362c7b11da0a670258cf1b1eb4bf0ecbcd418918729a3bd3f43a`
+
+WordNet: Open English WordNet `src/yaml/noun.*.yaml` (26 files) from `globalwordnet/english-wordnet` (main) into `wn/`.
 
 ```
 E=/root/cdata/enwik8; P="ev/EN-WS-353-ALL.txt ev/EN-SIMLEX-999.txt ev/EN-MEN-TR-3k.txt"
 ./ppmi_svd $E $P out/enwik8 --no-ri                                    # C1 headline, out/enwik8.vectors.f32
 ./cwc export out/enwik8.vectors.f32 --out export --name ppmi \
-      --texts texts/dolly_instructions_2000.txt                         # PPMI-SVD as .npy + index (+ SIF sentences)
+      --texts texts/dolly_instructions_2000.txt                         # PPMI-SVD as .npy + index (+ SIF sentences);
+                                                                        # eval and distill read the .f32 directly
 S1="./cwc s1 $E $P out/enwik8.vectors.f32 out/enwik8.vocab.tsv wn --enc-lr 0 --sched inv --world-lr 0.00005 --no-bench"
 $S1 --save out/c5_tuned                                                 # C5 tuned (R0)
 $S1 --obs ppmi --save out/s1b_a                                         # (a)
@@ -322,15 +396,15 @@ $S1 --obs ppmi-row --save out/s1b_a2                                    # (a2)
 ./cwc train $E --method sgns --epochs 5 --var0 0.3 --out out/sgns       # (b): out/sgns.npy, _var.npy, _wc.npy
 ./cwc train $E --method pullpush --epochs 1 --tau 0.05 --eta 10 --kappa0 10 --out out/pp          # (c) from scratch
 ./cwc train $E --method pullpush --init out/sgns --epochs 1 --tau 0.05 --eta 100 --kappa0 1000 --out out/pp_init
-./cwc eval $P wn out/sgns_wc.npy out/sgns.npy out/pp_init.npy out/s1b_a.npy out/s1b_a2.npy out/c5_tuned.npy out/ppmi.npy   # C5 pairs
-./cwc eval $P wn out/sgns_wc.npy out/sgns.npy out/ppmi.npy --top 50000                     # C1 pairs
-./cwc eval $P wn out/X.npy out/ppmi.npy --dev                                              # dev (MEN only)
-./cwc distill out/ppmi.npy --out out/distill_rand --items 10000 --epochs 60
-./cwc distill out/ppmi.npy --init out/sgns_wc.npy --out out/distill_init --items 10000 --epochs 60
+./cwc eval $P wn out/sgns_wc.npy out/sgns.npy out/pp_init.npy out/s1b_a.npy out/s1b_a2.npy out/c5_tuned.npy out/enwik8.vectors.f32   # C5 pairs
+./cwc eval $P wn out/sgns_wc.npy out/sgns.npy out/enwik8.vectors.f32 --top 50000                     # C1 pairs
+./cwc eval $P wn out/X.npy out/enwik8.vectors.f32 --dev                                              # dev (MEN only)
+./cwc distill out/enwik8.vectors.f32 --out out/distill_rand --items 10000 --epochs 60
+./cwc distill out/enwik8.vectors.f32 --init out/sgns_wc.npy --out out/distill_init --items 10000 --epochs 60
 ./cwc export out/sgns_wc.npy --out export --name cypha --texts texts/dolly_instructions_2000.txt --kmeans 256,1024 --classes-dir .
 python3 scripts/gguf_mine.py compare --a export/ppmi_vectors.npy --b export/cypha_vectors.npy \
         --index-a export/ppmi_index.tsv --index-b export/cypha_index.tsv --key text --out cmp_words
 python3 scripts/gguf_mine.py geometry --vectors export/cypha_vectors.npy --index export/cypha_index.tsv --out geo_words
 ```
 
-`texts/dolly_instructions_2000.txt` is the `instruction` field of the first 2,000 records of `/root/cdata/dolly.jsonl`, whitespace-collapsed, one per line. Every run is deterministic for its seed (seed 1): (b) at 5 epochs has state hash PENDING_HASH.
+`texts/dolly_instructions_2000.txt` is the `instruction` field of the first 2,000 records of `/root/cdata/dolly.jsonl`, whitespace-collapsed, one per line. Every run is deterministic for its seed (seed 1). State hashes (`ItemStore::state_hash`): (b) at 5 epochs `d775ddc8993c2acb`, (c) from scratch `31fd777203bf096d`, (c) from (b) `39a5ceb4f1dbc7b4`. Run the Python checks with `OPENBLAS_NUM_THREADS=1`.
