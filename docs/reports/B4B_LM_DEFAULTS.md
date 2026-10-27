@@ -130,3 +130,19 @@ The copy expert looks back 4,096 bytes. Articles are longer than that, so a long
 
 - **Prediction L9: miss** on the size of the gain (−0.0036, below the −0.005 to −0.02 predicted); hit on S.
 - The third order passes rules 1 and 2 at +21 MB of table and a slightly longer build. It goes into the final combined read (rule 3, answers) with the copy expert, and becomes the default only if that read holds.
+
+### SCRIBE on the new experts' text (reported only; run 2026-10-28)
+
+Surface S saturates: it scores the experts' word salad at or above human text. SCRIBE v1 has not passed its own ladder, so it decides nothing (PLAN §6.4), but it sees the word salad. Its fresh ladder (SCRIBE v1 protocol: 250 prompts × T 0.6 / 0.8 / 1.0, 600 bytes, cleaned; human text from [64, 72) MiB), run on three sample files written exactly as `cyphalm_trie sample` writes them. The trie-only file is byte-identical to `sample`'s.
+
+| Text | n | SCRIBE [95%] | Surface S (this ladder's cleaning) |
+|---|---:|---|---:|
+| held-out human | 500 | 0.535 [0.517, 0.553] | 0.909 |
+| sentences shuffled across documents | 500 | 0.230 [0.220, 0.241] | 0.899 |
+| words shuffled within sentences | 500 | 0.111 [0.104, 0.118] | 0.920 |
+| trie | 623 | 0.028 [0.025, 0.032] | 0.734 |
+| trie + class (shape, tail 6, 3 orders) | 647 | **0.074 [0.068, 0.081]** | 0.857 |
+| trie + class + copy (m = 8, 16,384) | 641 | 0.072 [0.066, 0.080] | 0.843 |
+
+- **The class expert lifts SCRIBE 2.6 times** (0.028 → 0.074), with disjoint intervals. The copy expert changes nothing on it.
+- **It is still far from human text** (0.535), and below shuffled human words (0.111). The text is better word salad, not sense.
