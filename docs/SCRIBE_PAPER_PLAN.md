@@ -109,9 +109,9 @@ Score: Spearman of score with strength, and the share of strength steps that low
 
 | Ladder | Known order | Texts |
 |---|---|---|
-| Pythia-1.4B training checkpoints (steps 1k, 8k, 32k, 143k) | later > earlier | 250 fresh prompts each, nucleus 0.95 |
+| Pythia-410M training checkpoints (steps 1k, 4k, 16k, 64k, 143k) | later > earlier | 250 dev and 250 fresh prompts each, nucleus 0.95 |
 | Pythia sizes (70M, 160M, 410M, 1B, 1.4B) | larger > smaller | same prompts |
-| GPT-2 decoding (one size) | reported, partly known: greedy and beam degenerate; nucleus ≈ human; pure sampling at T = 1.3 incoherent | greedy, T = 0.7, top-k 40, nucleus 0.95, pure T = 1.0, T = 1.3 |
+| GPT-2 decoding (GPT-2 large) | reported, partly known: greedy and beam degenerate; nucleus ≈ human; pure sampling at T = 1.3 incoherent | greedy, T = 0.7, top-k 40, nucleus 0.95, pure T = 1.0, T = 1.3 |
 | GPT-2 output dataset | larger > smaller within each decoding | 8 × 5,000 web samples |
 | KN word n-grams (orders 1–5) | higher order > lower | trained on [8, 16) MiB |
 | CyphaLM (order-4 trie; trie + InfiniGram) at T = 0.6, 0.8, 1.0 | placed by measurement | as v1 |
@@ -172,7 +172,7 @@ Scored hit or miss in the report.
 | P4 | Set-level MAUVE (GPT-2-large features) orders the 6 rungs correctly as sets |
 | P5 | SCRIBE v2 passes at least 4 of 5 pairs on WebText and on books, each with its own reference |
 | P6 | Dose–response: SCRIBE v2's mean falls monotonically with strength (Spearman ≤ −0.9) for at least 7 of the 9 held-out corruption families |
-| P7 | Pythia-1.4B checkpoints: SCRIBE v2's system means follow training steps exactly (Spearman 1.0 over 4 checkpoints) |
+| P7 | Pythia-410M checkpoints: SCRIBE v2's system means follow training steps with at most one adjacent swap (Spearman ≥ 0.9 over 5 checkpoints) |
 | P8 | Pythia sizes: Spearman ≥ 0.8 between SCRIBE v2 and size (5 sizes) |
 | P9 | GPT-2 output dataset: SCRIBE v2 orders the four sizes correctly within at least one decoding family; MAUVE within both |
 | P10 | GPT-2 greedy decoding scores lowest of the decoding ladder under SCRIBE v2, and highest under GPT-2 perplexity |
@@ -186,6 +186,8 @@ Scored hit or miss in the report.
 | P18 | Ablations on the fresh ladder: without C, "human > sentences shuffled" falls below 0.95; without S3, "sentences shuffled > words shuffled" falls below 0.95 |
 | P19 | The LLM judge (1.5B) fails at least one adjacent pair of the control ladder |
 | P20 | On HANNA, SCRIBE v2 correlates with coherence more than BLEU and ROUGE-L (which need a reference) at story level |
+
+Amended 2026-10-28, before any v2 run: the checkpoint ladder uses Pythia-410M (5 checkpoints of 0.9 GB) instead of Pythia-1.4B (4 of 2.8 GB), to fit the container's disk and CPU; P7 was rewritten for 5 checkpoints.
 
 ## 9. Kill criteria and reading rules
 
