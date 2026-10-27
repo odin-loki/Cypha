@@ -50,9 +50,22 @@
 //   or test question are dropped and the written rows re-checked (exit 1 on a match); test answers are never read. Prints the
 //   dev coverage (reads dev answers only).
 //
+// F2R (2026-10-28, docs/reports/F2R_RAW_BYTE_PATTERNS.md):
+//   --raw: the same seeds, mentions, type checks and gate, but a pattern is the dump's own bytes between the two mentions
+//   (XML escapes and markup kept, digit runs -> #, month names -> <M>), each mention widened over the link or quote markup
+//   that wraps it and kept around its slot: '''[S]''' ([[[O]]], [S] was born in [[[O]]]. A mention that cuts a link is not
+//   used. patterns.tsv gets a 12th column, frame (the key without ^ / $, [P] as [S]): fill [S], and the bytes before [O]
+//   are the prefix CyphaLM continues. --cv with Wikidata: 81 kept, 1,025 admitted (cleaned 1,216), gold 151/159; 41 facts
+//   the cleaned run lacks (hand check 30/30); no kept pattern for capital, author, director, composer or founder.
+//   --join FILE (with --shard): another run's admitted facts join the store. In raw mode the shard writes a fact of a
+//   relation with a raw frame in that frame's bytes ("'''Al Gore''' ([[March 31]], [[1948]]).") and a year as a year.
+//   --reach PARSE (with --dev; grading only): how often the frames' prefixes, with a dev question's subject filled, occur in
+//   the training bytes [0, --holdout-from), and with --shard also in the shard text.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
+//          [--raw] [--join FACTS] [--reach PARSE]
 //        pattern_learn --wilson K N
 //   <outdir> gets facts_f2.tsv (subject, relation, object, P, grade, n_evidence, best_pattern, source_page, byte_offset;
 //   byte_offset is the start of the line holding the strongest evidence), facts_f2.evidence.tsv (the sentence for each fact),
@@ -2094,6 +2107,16 @@ vector<string> q_rels(const string& nq) {
     if (has("where")) return {"location", "located_in", "country"};
     return {};
 }
+// ============================================================ F2R: raw frames, and the raw-form shard
+// The frame of a raw pattern: the key without its ^ / $ ends, [P] read as [S]. Fill [S] with the subject; the bytes before
+// [O] (they end with the object's opening markup, e.g. "[[") are the prefix CyphaLM continues. A linked date fills its
+// slot as the dump writes it: [[[O]]] -> [[June 14]], [[1856]].
+string raw_frame(string k) {
+    if (!k.empty() && k[0] == '^') k.erase(0, 1);
+    if (!k.empty() && k.back() == '$') k.pop_back();
+    replace_all(k, "[P]", "[S]");
+    return k;
+}
 struct ShardOpt { string path, dev, test, join; std::size_t slice_end = 8388608, holdout_from = 7340032; std::uint32_t seed = 0; };
 // F2R: the first frame cyphalm_trie --r3 would load for relation r (kept patterns by training subjects, then frame bytes)
 // that is a bare core: the subject slot first, the object slot last, no context, no # or <M>. "" when there is none.
@@ -2134,11 +2157,12 @@ string raw_fill(const string& frame, const string& E, const string& surf, const 
 }
 // Returns 1 when the leakage check fails.
 int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<PageRef>& pages, const std::unordered_map<string, int>& page_of,
-                const std::function<void(const string&)>& say) {
+                const std::function<void(const string&)>& say, string* train_text = nullptr) {
     struct SF { string subj, surf, pattern; int rel; Date d; bool seed; };
     vector<SF> facts;
     std::set<string> seen;
-    auto add = [&](const SF& f) {
+    auto add = [&](SF f) {
+        if (g_raw && kRel[f.rel].type == T_YEAR) f.d.m = f.d.d = 0;  // F2R: a year fact is a year (the default shard writes 6 with a full date)
         if (seen.insert(f.subj + "\x1f" + kRel[f.rel].name + "\x1f" + (is_datey(f.rel) ? fmt_date(f.d) : norm_ent(f.surf))).second) facts.push_back(f);
     };
     for (const Seed& sd : g_seeds)
@@ -2146,6 +2170,7 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
     for (const Fused& fu : fused) if (fu.op.P >= 0.8) add({fu.f->subj, fu.f->surf, fu.best_pattern, fu.f->rel, fu.f->d, false});
     if (!O.join.empty()) {  // F2R --join: another run's admitted facts (its facts_f2.tsv) join the store
         std::ifstream jf(O.join);
+        if (!jf) { say("join: cannot read " + O.join); return 1; }
         long n_read = 0;
         const std::size_t before = facts.size();
         string l;
@@ -2157,13 +2182,12 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
             ++n_read;
             add({c[0], c[2], c[6], r, is_datey(r) ? parse_date_str(c[2]) : Date{}, false});
         }
-        if (!jf.eof() && n_read == 0) { say("join: cannot read " + O.join); return 1; }
         say("join " + O.join + ": admitted facts read " + std::to_string(n_read) + ", new to this run's store " + std::to_string(facts.size() - before));
     }
-    std::map<int, string> rawf;  // F2R: in raw mode a fact is written in its relation's first R3 frame, when it has one
-    if (g_raw)
+    std::map<int, string> rawf;  // F2R: in raw mode a fact is written in its relation's first R3 frame, when it has one;
+    if (g_raw)                    // not a year: the dump writes "died on [[April 15]], [[1865]]", never "died on [[1865]]"
         for (int r = 0; r < kNRel; ++r)
-            if (string f = shard_raw_frame(r); !f.empty()) { rawf[r] = f; say("  shard_raw_frame " + string(kRel[r].name) + " " + f); }
+            if (string f = kRel[r].type == T_YEAR ? "" : shard_raw_frame(r); !f.empty()) { rawf[r] = f; say("  shard_raw_frame " + string(kRel[r].name) + " " + f); }
     std::unordered_set<string> evalq;  // dev and test questions, normalised; the test file's answers are never read
     std::unordered_map<string, int> evalq_src;
     for (int k = 0; k < 2; ++k)
@@ -2206,7 +2230,12 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
     std::ofstream f(O.path);
     f << "question\tentity\trelation\tsource\tresponse\n";
     std::map<string, int> by_rel, by_src;
-    for (const Row& r : rows) { f << r.q << '\t' << r.ent << '\t' << r.rel << '\t' << r.src << '\t' << r.resp << '\n'; ++by_rel[r.rel]; ++by_src[r.src]; }
+    for (const Row& r : rows) {
+        f << r.q << '\t' << r.ent << '\t' << r.rel << '\t' << r.src << '\t' << r.resp << '\n';
+        ++by_rel[r.rel];
+        ++by_src[r.src];
+        if (train_text && r.src.find("_holdout") == npos) *train_text += r.resp + "\n";  // what a BPC-clean run trains on
+    }
     string sp = O.path.size() > 4 && O.path.compare(O.path.size() - 4, 4, ".tsv") == 0 ? O.path.substr(0, O.path.size() - 4) : O.path;
     std::ofstream fs(sp + "_sentences.txt");
     for (const string& s : sents) fs << s << '\n';
@@ -2246,15 +2275,6 @@ int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<Page
 }
 
 // ============================================================ F2R: frames for R3, and how often they meet the training bytes
-// The frame of a raw pattern: the key without its ^ / $ ends, [P] read as [S]. Fill [S] with the subject; the bytes before
-// [O] (they end with the object's opening markup, e.g. "[[") are the prefix CyphaLM continues. A linked date fills its
-// slot as the dump writes it: [[[O]]] -> [[June 14]], [[1856]].
-string raw_frame(string k) {
-    if (!k.empty() && k[0] == '^') k.erase(0, 1);
-    if (!k.empty() && k.back() == '$') k.pop_back();
-    replace_all(k, "[P]", "[S]");
-    return k;
-}
 // A cleaned pattern as cyphalm_trie's render_frame writes it (tokens joined by spaces; , . ; : ) ' glued; ^ dropped).
 string clean_frame(const string& key) {
     string out, prev;
@@ -2273,9 +2293,10 @@ string clean_frame(const string& key) {
 // (and its year relation for a date): "kept" = every kept pattern, "r3" = what cyphalm_trie --r3 loads (kept first, then by
 // training subjects, 3 at most; no <M>, #, or object before subject). A frame reaches when its prefix, with the subject
 // (article dropped) filled, occurs verbatim in the training bytes [0, train_end); it ties when the prefix from the subject's
-// last word on occurs; it leads to gold when a dev answer (its year for a date) is in the 48 bytes after a tie.
+// last word on occurs; it leads to gold when a dev answer (its year for a date) is in the 48 bytes after a tie. With --shard
+// the same is measured again over the training bytes plus the shard's responses on rows not marked _holdout.
 void reach_report(const vector<Pat>& pats, const string& data, std::size_t train_end, const string& dev, const string& parse_path,
-                  const std::function<void(const string&)>& say) {
+                  const string& shard_text, const std::function<void(const string&)>& say) {
     std::unordered_map<string, string> ent;
     {
         std::ifstream f(parse_path);
@@ -2306,8 +2327,10 @@ void reach_report(const vector<Pat>& pats, const string& data, std::size_t train
             if (p->kept && std::find(kp.begin(), kp.end(), f) == kp.end()) kp.push_back(f);
         }
     }
+    for (const auto& [rel, fs] : fr[1])
+        for (const string& f : fs) say("  REACH_FRAME r3 " + rel + " | " + f);
     int n_rel = 0, n_in = 0;
-    std::array<std::array<int, 4>, 2> all{}, in{};  // per set: with a frame, reach, tie, gold
+    int all[2][2][4] = {}, in[2][2][4] = {};  // [frames kept / r3][training bytes / + shard text][with a frame, reach, tie, gold]
     for (const TqaQ& d : load_tqa(dev, true)) {
         auto it = ent.find(d.q);
         if (it == ent.end() || it->second.empty()) continue;
@@ -2341,36 +2364,42 @@ void reach_report(const vector<Pat>& pats, const string& data, std::size_t train
             vector<string> fs;
             for (const string& r : {rel, string(date ? (rel == "birth_date" ? "birth_year" : "death_year") : "")})
                 if (fr[k].count(r)) fs.insert(fs.end(), fr[k][r].begin(), fr[k][r].end());
-            bool reach = false, tie = false, gold = false;
-            string hit;
-            for (const string& f : fs) {
-                string pre = f.substr(0, f.find("[O]")), full = pre;
-                replace_all(full, "[S]", subj);
-                string t = last + pre.substr(pre.find("[S]") + 3);
-                replace_all(t, "[S]", subj);
-                if (train.find(full) != npos) { reach = true; if (hit.empty()) hit = full; }
-                std::size_t p = train.find(t);
-                if (p == npos) continue;
-                tie = true;
-                for (int occ = 0; p != npos && occ < 400 && !gold; ++occ, p = train.find(t, p + 1)) {
-                    const std::string_view w = train.substr(p + t.size(), 48);
-                    for (const string& g : golds) gold = gold || w.find(g) != npos;
+            for (int h = 0; h < (shard_text.empty() ? 1 : 2); ++h) {
+                const vector<std::string_view> hay = h ? vector<std::string_view>{train, shard_text} : vector<std::string_view>{train};
+                bool reach = false, tie = false, gold = false;
+                string hit;
+                for (const string& f : fs) {
+                    string pre = f.substr(0, f.find("[O]")), full = pre;
+                    replace_all(full, "[S]", subj);
+                    string t = last + pre.substr(pre.find("[S]") + 3);
+                    replace_all(t, "[S]", subj);
+                    for (const std::string_view& H : hay) {
+                        if (H.find(full) != npos) { reach = true; if (hit.empty()) hit = full; }
+                        std::size_t p = H.find(t);
+                        tie = tie || p != npos;
+                        for (int occ = 0; p != npos && occ < 400 && !gold; ++occ, p = H.find(t, p + 1)) {
+                            const std::string_view w = H.substr(p + t.size(), 48);
+                            for (const string& g : golds) gold = gold || w.find(g) != npos;
+                        }
+                    }
                 }
+                int v[4] = {!fs.empty(), reach, tie, gold && d.in_slice};
+                for (int j = 0; j < 4; ++j) { all[k][h][j] += v[j]; in[k][h][j] += v[j] && d.in_slice; }
+                line += string(k ? " || r3" : " || kept") + (h ? "+shard" : "") + " frames " + std::to_string(fs.size()) + " reach " +
+                        std::to_string(reach) + " tie " + std::to_string(tie) + " gold " + std::to_string(v[3]) + (hit.empty() ? "" : " [" + hit + "]");
             }
-            int v[4] = {!fs.empty(), reach, tie, gold && d.in_slice};
-            for (int j = 0; j < 4; ++j) { all[k][j] += v[j]; in[k][j] += v[j] && d.in_slice; }
-            line += string(k ? " || r3" : " || kept") + " frames " + std::to_string(fs.size()) + " reach " + std::to_string(reach) +
-                    " tie " + std::to_string(tie) + " gold " + std::to_string(v[3]) + (hit.empty() ? "" : " [" + hit + "]");
         }
         say(line);
     }
-    char b[320];
-    for (int k = 0; k < 2; ++k) {
-        std::snprintf(b, sizeof b, "REACH_SUMMARY %s frames=%s: questions with entity and template relation %d (in-slice %d); with a frame %d (%d); "
-                      "prefix reaches %d (%d); ties %d (%d); leads to a dev answer (in-slice) %d", g_raw ? "raw" : "cleaned", k ? "r3" : "kept",
-                      n_rel, n_in, all[k][0], in[k][0], all[k][1], in[k][1], all[k][2], in[k][2], in[k][3]);
-        say(b);
-    }
+    char b[360];
+    for (int k = 0; k < 2; ++k)
+        for (int h = 0; h < (shard_text.empty() ? 1 : 2); ++h) {
+            std::snprintf(b, sizeof b, "REACH_SUMMARY %s frames=%s text=%s: questions with entity and template relation %d (in-slice %d); "
+                          "with a frame %d (%d); prefix reaches %d (%d); ties %d (%d); leads to a dev answer (in-slice) %d", g_raw ? "raw" : "cleaned",
+                          k ? "r3" : "kept", h ? "train+shard" : "train", n_rel, n_in, all[k][h][0], in[k][h][0], all[k][h][1], in[k][h][1],
+                          all[k][h][2], in[k][h][2], in[k][h][3]);
+            say(b);
+        }
 }
 
 struct Args {
@@ -2399,6 +2428,7 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: pattern_learn <enwik8> <outdir> [--folds K] [--cv] [--min-train N] [--sample N] [--seed S] [--base-rate A]\n"
                              "         [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
+                             "         [--raw] [--join FACTS] [--reach PARSE]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
@@ -2426,8 +2456,10 @@ int main(int argc, char** argv) {
         else if (a == "--holdout-from" && i + 1 < argc) A.shard.holdout_from = static_cast<std::size_t>(std::atoll(argv[++i]));
         else if (a == "--raw") g_raw = true;
         else if (a == "--reach" && i + 1 < argc) A.reach = argv[++i];
+        else if (a == "--join" && i + 1 < argc) A.shard.join = argv[++i];
     }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
+    if (!A.shard.join.empty() && A.shard.path.empty()) { std::fprintf(stderr, "--join needs --shard\n"); return 2; }
     A.shard.seed = A.seed;
     if (!A.shard.path.empty() && (A.shard.dev.empty() || A.shard.test.empty())) { std::fprintf(stderr, "--shard needs --dev and --test (leakage check)\n"); return 2; }
     std::ostringstream rep;
@@ -2572,7 +2604,6 @@ int main(int argc, char** argv) {
             f << kRel[p.rel].name << '\t' << p.key << '\t' << p.train_subj << '\t' << p.train_sent << '\t' << p.checks << '\t' << p.correct << '\t' << p.unchecked << '\t'
               << p.prec << '\t' << p.lo << '\t' << p.reliability << '\t' << (p.kept ? 1 : 0) << (g_raw ? "\t" + raw_frame(p.key) : string()) << '\n';
     }
-    if (!A.reach.empty()) reach_report(cand_all, data, A.shard.holdout_from, A.shard.dev, A.reach, say);
     say("\nPATTERNS per relation (candidates = >= " + std::to_string(A.min_train) + " training subjects; kept = >= 20 checks and Wilson lower bound >= 0.7)");
     say("  relation      candidates checked>=1 checks>=20 kept   top kept patterns (precision, checks, Wilson lower)");
     for (int r = 0; r < kNRel; ++r) {
@@ -2667,7 +2698,9 @@ int main(int argc, char** argv) {
         }
     }
     if (!g_gold.empty()) score_gold(fused, A.outdir, say);
-    int exit_code = A.shard.path.empty() ? 0 : write_shard(A.shard, fused, pages, page_of, say);
+    string shard_text;
+    int exit_code = A.shard.path.empty() ? 0 : write_shard(A.shard, fused, pages, page_of, say, &shard_text);
+    if (!A.reach.empty()) reach_report(cand_all, data, A.shard.holdout_from, A.shard.dev, A.reach, shard_text, say);
     std::snprintf(buf, sizeof buf, "\nrun time %.1f s, peak RAM %.0f MB, facts written %s/facts_f2.tsv", now_s() - t0, peak_mb(), A.outdir.c_str());
     say(buf);
     std::ofstream(A.outdir + "/stats.txt") << rep.str();

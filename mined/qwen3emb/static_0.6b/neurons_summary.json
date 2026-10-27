@@ -1,0 +1,621 @@
+{
+ "max_entropy_ln_vocab": 11.92945579376202,
+ "per_layer": [
+  {
+   "layer": 0,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.923,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.45,
+   "sharpest": [
+    {
+     "neuron": "2988",
+     "entropy": 11.9233,
+     "writes": "ken ** and info ! ut : ane . - address env not ne 0",
+     "reads": "Legisl mach Markets Mach committees watches earnings galleries vale bindings val"
+    },
+    {
+     "neuron": "2215",
+     "entropy": 11.9234,
+     "writes": "e i er o iya ы erin ein y ي erot eer ei erator s",
+     "reads": "cents NotImplementedError downward DOWN Down down parent downs Wes ing Sydney re"
+    }
+   ]
+  },
+  {
+   "layer": 1,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.919,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.378,
+   "sharpest": [
+    {
+     "neuron": "1424",
+     "entropy": 11.9186,
+     "writes": " - d ( N _ D R K t S / d a C",
+     "reads": "feared Murphy méd communities ainsi HttpServlet nightmare interface dB eta remai"
+    },
+    {
+     "neuron": "2648",
+     "entropy": 11.9217,
+     "writes": "rowsers Hue Là older 網站 verter thumbs webView ní íst hung ť setMax Years Democra",
+     "reads": "Hyp folders Feder Relationship DevExpress don RequestMethod dont somehow distrib"
+    }
+   ]
+  },
+  {
+   "layer": 2,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.919,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.406,
+   "sharpest": [
+    {
+     "neuron": "727",
+     "entropy": 11.9192,
+     "writes": "CustomLabel 独一 odata .CommandType ocrates enti ugin 的地图 .compare 动摇 uble 他们在 的语言",
+     "reads": "Roose manages recru sovere NOI aver conspir APIs Entity deport entity Riley Asse"
+    },
+    {
+     "neuron": "260",
+     "entropy": 11.922,
+     "writes": "PR PR CDDL erland ouble (PR ufficient Jeg kke 하실 -Col porter inex iece घ",
+     "reads": "guys Piece realised Yard scrut drew dare grote elsif HE squeez ended nel possibi"
+    }
+   ]
+  },
+  {
+   "layer": 3,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.921,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.411,
+   "sharpest": [
+    {
+     "neuron": "301",
+     "entropy": 11.9209,
+     "writes": "飨 anj Traits 詞 auprès 的功效 atisf hypers 听起来 用量 oft flu ampo quam Trait",
+     "reads": "dish CommandType oils suited synth sensitivity aboard husband swim Ful stop meta"
+    },
+    {
+     "neuron": "359",
+     "entropy": 11.921,
+     "writes": "Kang ра outines лад acks Klo zie owler )** strands DIM Dou ** argas drs",
+     "reads": "doubles él Parents findAll Dub Components Madd kicks sesso ges receives lis TAG "
+    }
+   ]
+  },
+  {
+   "layer": 4,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.92,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.415,
+   "sharpest": [
+    {
+     "neuron": "190",
+     "entropy": 11.9197,
+     "writes": "riz 办法 alon 的办法 обяз 惯例 的道理 党组成员 venta endregion 的感情 alculate akan 不准 etch",
+     "reads": "felt enumerate ac Trou Roch sturdy acquire lovely Made brick feels Clients Fan w"
+    },
+    {
+     "neuron": "215",
+     "entropy": 11.9211,
+     "writes": "ício unta fter arat ifice anny ullet einmal nắm usses анию chen suming passé avo",
+     "reads": "vida фай lives submar Life fel ihn Cruz Comics Lives SL createState Pictures ana"
+    }
+   ]
+  },
+  {
+   "layer": 5,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.919,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.437,
+   "sharpest": [
+    {
+     "neuron": "2991",
+     "entropy": 11.9186,
+     "writes": " RT emerged RG menus HR menu D P DT pre p Met V Advanced",
+     "reads": "simult Tory tal mush pics Patri Something proceedings sesso mog slo processes pr"
+    },
+    {
+     "neuron": "2016",
+     "entropy": 11.923,
+     "writes": "Recovery _RA 跤 repid )init recover zens concert resilience raid lev recovery oun",
+     "reads": "nuclear Roof Mit North COPYING Course Foundation foundation course floor Nuclear"
+    }
+   ]
+  },
+  {
+   "layer": 6,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.918,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.433,
+   "sharpest": [
+    {
+     "neuron": "917",
+     "entropy": 11.918,
+     "writes": " as in \" us a no to pres public V b ( . individual",
+     "reads": "Few Abr gall natur cx USER bucks libert Calendar Users Mate Box Manufacturers no"
+    },
+    {
+     "neuron": "95",
+     "entropy": 11.9213,
+     "writes": "isses olation offs isis ittest pyx -offs JOR (ps ADOW addin utation zx Ờ orse",
+     "reads": "ours GTX Budd Cath duplicates Dou additions DET cath Mig incumb Coron Titans Ub "
+    }
+   ]
+  },
+  {
+   "layer": 7,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.919,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.426,
+   "sharpest": [
+    {
+     "neuron": "115",
+     "entropy": 11.9188,
+     "writes": "air inherits copyright ether air assign inf copy copies 道 copies 纬 ystate гр air",
+     "reads": "air all FT int Rush qw Il Alt state interest BST bou gall Inf Viv"
+    },
+    {
+     "neuron": "56",
+     "entropy": 11.9191,
+     "writes": "隶 ).</ ออน erner スタン 低头 brush ophobic posting ਰ iban 殿下 肃 卣 ンド",
+     "reads": "develops displays Cases subclass Sterling Cross Films Newsletter VR film develop"
+    }
+   ]
+  },
+  {
+   "layer": 8,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.922,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.425,
+   "sharpest": [
+    {
+     "neuron": "828",
+     "entropy": 11.9225,
+     "writes": "pired piration цы \",\"\\\\ ities allergies annies ologies entials atoes documentari",
+     "reads": "Copy Bureau Download conf Select bor Casino select Sing COPY Answer Bever Conf w"
+    },
+    {
+     "neuron": "1593",
+     "entropy": 11.9226,
+     "writes": "olars alia 罗斯 ulia abs herself 乌鲁 hers {text 莫斯 <tbody opes oub (tab lections",
+     "reads": "Americ dou Pol herself She POL Her pol under boil polynomial CONTENT sous pressi"
+    }
+   ]
+  },
+  {
+   "layer": 9,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.922,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.408,
+   "sharpest": [
+    {
+     "neuron": "2532",
+     "entropy": 11.9217,
+     "writes": "’à 倓 habi ApplicationDbContext >e チ Ass EventHandler Emerson uilt \\\\views uator ",
+     "reads": "Hus rescued Assistance tem exception pun Stra recognised punt penalty Exception "
+    },
+    {
+     "neuron": "1532",
+     "entropy": 11.9219,
+     "writes": "pper 於 勋 ROY &: constexpr rial ⁻ ille えて isle eter łów OrDefault ville",
+     "reads": "Browns VERSION hello chosen version region corrid YORK Cheese bord Version HttpH"
+    }
+   ]
+  },
+  {
+   "layer": 10,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.922,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.399,
+   "sharpest": [
+    {
+     "neuron": "1837",
+     "entropy": 11.9216,
+     "writes": "isper udit ussion ifestyle .IsSuccess reetings usterity idelberg pline ност isib",
+     "reads": "belonged DET locator lord rural Lov walks sorts polygon graduated lace toxic St "
+    },
+    {
+     "neuron": "1703",
+     "entropy": 11.9219,
+     "writes": "畏 휘 ETH weighing 탄 .boolean .assertThat LESS 过 -weight orest unn bole 랐 才是真正",
+     "reads": "inhabit Element estimates vag Ter materia ped ide elements UI neu wow why LT ter"
+    }
+   ]
+  },
+  {
+   "layer": 11,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.92,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.42,
+   "sharpest": [
+    {
+     "neuron": "2715",
+     "entropy": 11.9196,
+     "writes": "afford ﬂ ease nil NSS arith heit nia Sen alo item ahead 跤 ITEM flask",
+     "reads": "away unh lassen Ocean exit ste abdom te floor vivo Harbor uns deve off Crusher"
+    },
+    {
+     "neuron": "2448",
+     "entropy": 11.9198,
+     "writes": "Blonde HONE _SIDE (chan HERE ?! alers _Red ALER HIM =?\", alot .': Matte Shoulder",
+     "reads": "answering się custody beds Site Unsupported Arena side different Side Different "
+    }
+   ]
+  },
+  {
+   "layer": 12,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.921,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.407,
+   "sharpest": [
+    {
+     "neuron": "2356",
+     "entropy": 11.9206,
+     "writes": "stances sj elsea чив SJ 服 � (sv Saul geber sar account Charl JsonResult jn",
+     "reads": "reasons Author authorities nd yr crown sie dn PY av Success Stephen autor Stepha"
+    },
+    {
+     "neuron": "1926",
+     "entropy": 11.9207,
+     "writes": "yet yth uden Reached 这么 ilege Entered 这般 inary 陕 asion ît rgyz 来到 mens",
+     "reads": "automatic Behind represents life elsewhere selective Except issued Represents Fl"
+    }
+   ]
+  },
+  {
+   "layer": 13,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.919,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.399,
+   "sharpest": [
+    {
+     "neuron": "2309",
+     "entropy": 11.9195,
+     "writes": "again _REPEAT 回来 uplicates reconnect reint 回去 reun rebound repost _again obox re",
+     "reads": "retro Retro BACK Square BEGIN Abb revert INFORMATION forwards Gib Bristol Duty r"
+    },
+    {
+     "neuron": "3026",
+     "entropy": 11.9196,
+     "writes": "половин Clippers alto coop aan _handling doubled halves caled aab letics stracti",
+     "reads": "ban downt Biden fast Dou Republic RS arrange banking rall myself bank symbolic l"
+    }
+   ]
+  },
+  {
+   "layer": 14,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.92,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.398,
+   "sharpest": [
+    {
+     "neuron": "2878",
+     "entropy": 11.9201,
+     "writes": "licht enting ibles ofire loses <Class -render ******************************** e",
+     "reads": "weighing Tip tip weighed Licensed weigh soph caller Monday vin closing ric linge"
+    },
+    {
+     "neuron": "2807",
+     "entropy": 11.9205,
+     "writes": "yar van _codegen зор avors agos фер nel esh urlpatterns symbol VIRTUAL erus 嗝 ượ",
+     "reads": "nett ngOn submar Manage wt acceler conspir NOI Warren offsets relent serialVersi"
+    }
+   ]
+  },
+  {
+   "layer": 15,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.919,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.397,
+   "sharpest": [
+    {
+     "neuron": "2504",
+     "entropy": 11.9193,
+     "writes": "chrift Laguna strup ZA 没关系 mitters .toJSONString .cx ament confidence ollection ",
+     "reads": "ma refr transmission reception accumulation illum Treat treated Nom append eros "
+    },
+    {
+     "neuron": "2070",
+     "entropy": 11.9198,
+     "writes": ", ， 、 ？ = \", , ## @ — - ++ ?? = –",
+     "reads": "Glas critically Elementary WAS waterproof Grinding transit nl critique acquisiti"
+    }
+   ]
+  },
+  {
+   "layer": 16,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.921,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.407,
+   "sharpest": [
+    {
+     "neuron": "1982",
+     "entropy": 11.9214,
+     "writes": "Depos Emb Mart Cell Maths Entr Absent Disk Qualified Path Tier Cat Mp Produ Body",
+     "reads": "Harbor beating Democratic bas boil Physical Culture Ep bypass Pred INCLUDING pus"
+    },
+    {
+     "neuron": "571",
+     "entropy": 11.9215,
+     "writes": "(Max (MAX getMax MAX maxX Max Max _EXT MAX 长大 Extensions max 期末 maxSize endTime",
+     "reads": "CommonModule slavery sinon parte cig Plate ii theirs OPTION Pearl Ptr rall heels"
+    }
+   ]
+  },
+  {
+   "layer": 17,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.92,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.422,
+   "sharpest": [
+    {
+     "neuron": "1762",
+     "entropy": 11.9199,
+     "writes": "<location seriousness lığ thought Lotus mental setResult hely stan setObject Won",
+     "reads": "eyeb rein resign Points Squ Easter autos squares fil Filip lun Hans Forces pon i"
+    },
+    {
+     "neuron": "1775",
+     "entropy": 11.9199,
+     "writes": "duce sheet -sheet heets 哒 né _sheet нер ixe sheets ounding zie sheet ibile ison",
+     "reads": "Missouri Desk mn Netherlands Nexus Dennis dioxide xsi Minneapolis Vietnam notify"
+    }
+   ]
+  },
+  {
+   "layer": 18,
+   "neurons": 1024,
+   "write_entropy_median": 11.926,
+   "write_entropy_min": 11.918,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.435,
+   "sharpest": [
+    {
+     "neuron": "1017",
+     "entropy": 11.9182,
+     "writes": "ynes Blank ав onas blank 空白 aven global signature ista 但他们 actice uniform isti A",
+     "reads": "erf alle larg deaf Rank fal qw QUE Warm Rus qt boats Places ku shar"
+    },
+    {
+     "neuron": "1873",
+     "entropy": 11.9195,
+     "writes": "sov -goal scorer 继承 revert 寡 scen estate owners icl sc ext 僳 coal 条件",
+     "reads": "rode Cond courtesy learned Posted safer Kenn branch node będ Output elder posted"
+    }
+   ]
+  },
+  {
+   "layer": 19,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.916,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.474,
+   "sharpest": [
+    {
+     "neuron": "2154",
+     "entropy": 11.9165,
+     "writes": "negatives minus Negative negative Negative egative negativity NEG -minus negativ",
+     "reads": "purs Positive toes Ridge WHITE positive focuses encode Public alike PAR Script P"
+    },
+    {
+     "neuron": "1230",
+     "entropy": 11.9182,
+     "writes": "abs absolute absolute ABS Absolute (abs .abs ABS absol Absolute absolut -abs |r ",
+     "reads": "abs absolute strlen fabs ABS Liter merit Abs utilis protagon inequality costs kw"
+    }
+   ]
+  },
+  {
+   "layer": 20,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.917,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.516,
+   "sharpest": [
+    {
+     "neuron": "1447",
+     "entropy": 11.9172,
+     "writes": "[param indo {text <context verm ardu 上调 Publi xdc celona /LICENSE quí paramInt ,",
+     "reads": "wer fil Fil erf IEnumerator Kong terminal met Way concurrent stere meta conver C"
+    },
+    {
+     "neuron": "2070",
+     "entropy": 11.9186,
+     "writes": "each each Each Each EACH (each _each 每个 .each друг cada nh elkaar 每 каждый",
+     "reads": "themselves himself ourselves myself herself yourself else itself their isLoading"
+    }
+   ]
+  },
+  {
+   "layer": 21,
+   "neurons": 1024,
+   "write_entropy_median": 11.924,
+   "write_entropy_min": 11.911,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.562,
+   "sharpest": [
+    {
+     "neuron": "2017",
+     "entropy": 11.9106,
+     "writes": "addition Addition +v +p +j 加 Adds .add +y +C +d Adding + +A +",
+     "reads": "vig cli cities cele toes zones Ed gegen alike Value xsi weaken divide gray exist"
+    },
+    {
+     "neuron": "2651",
+     "entropy": 11.9181,
+     "writes": "ষ 洙 新西 ύ Υ 秦皇 quis طال タ trinsic مو وم /u .u ست",
+     "reads": "volume gravel piece Stewart him PORT UA DA ring posed Screen forKey wardrobe SCR"
+    }
+   ]
+  },
+  {
+   "layer": 22,
+   "neurons": 1024,
+   "write_entropy_median": 11.923,
+   "write_entropy_min": 11.917,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.589,
+   "sharpest": [
+    {
+     "neuron": "1593",
+     "entropy": 11.9167,
+     "writes": "image 图片 images picture 照片 Image photo image pictures 图像 Images Image _image Pho",
+     "reads": "description descriptions images pictured photos xml Tip SQL remin pictures evt e"
+    },
+    {
+     "neuron": "2302",
+     "entropy": 11.9183,
+     "writes": "apes imentos logan ément a ardon ело amment enty 贡献 agate uard ollect amt riages",
+     "reads": "compreh doch ven round syndrome reputation webpage COM effect cuisine Another Li"
+    }
+   ]
+  },
+  {
+   "layer": 23,
+   "neurons": 1024,
+   "write_entropy_median": 11.923,
+   "write_entropy_min": 11.913,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.606,
+   "sharpest": [
+    {
+     "neuron": "2119",
+     "entropy": 11.913,
+     "writes": "* * *, * * * * * *: *\\\\ *. *- *, *\\\\ *",
+     "reads": "star narc retr stars Stars led bug catch links Gross aster purs SUCH follow lead"
+    },
+    {
+     "neuron": "2482",
+     "entropy": 11.9161,
+     "writes": "log log logs Log Log .log (log -log logging LOG ln Logs _log log LOG",
+     "reads": "Log logs log ln logged LOG trans LOGGER newsp sized Trans privile ceil Half UNIT"
+    }
+   ]
+  },
+  {
+   "layer": 24,
+   "neurons": 1024,
+   "write_entropy_median": 11.923,
+   "write_entropy_min": 11.918,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.609,
+   "sharpest": [
+    {
+     "neuron": "2880",
+     "entropy": 11.9175,
+     "writes": "都需要 都被 都非常 都 都会 都可以 都将 都很 都不能 都无法 都要 are 都能 都不会 都在",
+     "reads": "these These those Those some estos several viele them les Panthers few two zwei "
+    },
+    {
+     "neuron": "1857",
+     "entropy": 11.9177,
+     "writes": "state state states -state state State State _state 状态 (state .state states State",
+     "reads": "behaviour behavior tone formats Behavior practices affairs actions attitude habi"
+    }
+   ]
+  },
+  {
+   "layer": 25,
+   "neurons": 1024,
+   "write_entropy_median": 11.923,
+   "write_entropy_min": 11.915,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.6,
+   "sharpest": [
+    {
+     "neuron": "409",
+     "entropy": 11.9145,
+     "writes": "التنفيذي inecraft ní تصني �� تماما سياس العسكري etCode amient entral ASHINGTON i",
+     "reads": "Zion publicity quint Brexit IPC hype handic Basket mailing Troy RPG handful Mark"
+    },
+    {
+     "neuron": "2298",
+     "entropy": 11.9163,
+     "writes": "2 ２ ₂ 二 -two two tw 二是 TWO 第二 二百 Two .two 二十 Twenty",
+     "reads": "democr luck useHistory steps Stat Love Insider captures democracy capital unique"
+    }
+   ]
+  },
+  {
+   "layer": 26,
+   "neurons": 1024,
+   "write_entropy_median": 11.923,
+   "write_entropy_min": 11.916,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.58,
+   "sharpest": [
+    {
+     "neuron": "590",
+     "entropy": 11.9157,
+     "writes": "}*/ */ }*/ */ }*/ */ */ */ */ }*/ ;*/ );*/ */ */ )*/",
+     "reads": "percent Ret amenities audience relations heritage defense ten Rec whatsoever bas"
+    },
+    {
+     "neuron": "2948",
+     "entropy": 11.9178,
+     "writes": "er erg ER era erk erc ERA erp Mer Ber erge erset mer Mer ER",
+     "reads": "facing author strain method Horn voor views back cho three Back ruling starting "
+    }
+   ]
+  },
+  {
+   "layer": 27,
+   "neurons": 1024,
+   "write_entropy_median": 11.925,
+   "write_entropy_min": 11.919,
+   "frac_entropy_below_8": 0.0,
+   "max_logit_median": 0.553,
+   "sharpest": [
+    {
+     "neuron": "1665",
+     "entropy": 11.9191,
+     "writes": "{ { else await getRandom []( validate assert getList expect require { elif getIn",
+     "reads": "elif herself come nature et during clar case won become led cul durante elseif n"
+    },
+    {
+     "neuron": "959",
+     "entropy": 11.9194,
+     "writes": "� Riv жить 潘 trolling 江东 � haps langu sut reluct riv Hut FAG pij",
+     "reads": "such sucht compares CASE yourself Such stringBy hopes seeks Bath bath Schedule C"
+    }
+   ]
+  }
+ ]
+}

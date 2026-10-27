@@ -163,6 +163,11 @@ Q8_0 noise lowers the share a little (median 0.980 → 0.965) but changes no con
   - Its second direction, scaled by the final norm gains, has |cosine| 0.52 with the mean of the model's output vectors. A random direction has 0.061 at the 95th percentile. (The mean is of the 1,000 timing vectors, §7.)
   - The three directions hold 30% of that mean direction.
   - So the contrastive fine-tune shapes the output's common component in this one matrix.
+- **By neuron (Q8_0, `ffn_down` columns).**
+  - In layers 0–26, each neuron's write vector changed by a median of 4.7–6.7%. The change is spread out: half of a layer's ‖ΔW‖² takes 670–1,040 of its 3,072 neurons, and 90% takes 2,150–2,490. A low-rank change written by many neurons looks like this.
+  - In layer 27 the median neuron changed by 23.5% (largest 195%), and half the change sits in 422 neurons.
+  - Read through the tied embedding, the change in the most-changed layer-27 neurons promotes the same odd tokens every time ("生产总", "游戏当中", "getEmail", "删除成功"). It is one geometric direction, not a word-level feature.
+  - Output: `mined/qwen3emb/wdiff/ffn_down_neuron_changes_0.6b.json`.
 
 **Q4 (the top 5% of singular values hold at least 50% of ‖ΔW‖² in most matrices): hit.** 196 of 196 matrices, with a median share of 0.980 (F16).
 
@@ -182,9 +187,31 @@ Q8_0 noise lowers the share a little (median 0.980 → 0.965) but changes no con
 
 The medians are over the 28 layers. The embedder's spectra are the base's almost exactly: median α 5.01 against 5.13, with 72% against 69% of matrices in the "well trained" band 2–6. The only clear shift is in the FFN: ffn_up's α falls from 8.04 to 7.43, and the stable ranks of ffn_up and ffn_down fall by 5–6%. A 3% low-rank edit hardly moves a spectrum.
 
-HEADS_PLACEHOLDER
+### 5.6 Attention copying circuits (A6, `heads --tokens 300`, all 448 heads of both models)
 
-NEURONS_PLACEHOLDER
+Each head's OV circuit is read through the tied embedding: does a word's own token come out on top?
+
+| | Mean copy@1 | Heads with copy@1 > 0.5 | Heads > 0.2 |
+|---|---|---|---|
+| Embedder | 0.0621 | 23 | 44 |
+| Base | 0.0628 | 24 | 44 |
+
+The copying heads are spread over layers 4–27, at most two per layer. The strongest are layer 7 head 12 (copy@1 0.87), layer 10 head 4 (0.86), layer 25 head 0 (0.84) and layer 9 head 12 (0.83). No head's copy score moved by more than 0.023. **Contrastive training did not touch the copying circuits.** For Cypha's context views (A6), the base model's circuits are the embedder's. Each run took 13–17 minutes on 2 cores.
+
+### 5.7 FFN neurons as key–value memories (A5, `neurons --max-neurons 1024`, 28,672 neurons)
+
+Each neuron's write vector (a column of `ffn_down`) is read through the final norm and the tied embedding. The embedder has no output head, and its `token_embd` is the base's, so this is the base model's logit lens.
+
+- **Entropy is uninformative here.** One neuron's logits are small: the median top logit is 0.38 in layer 1 and rises to 0.61 by layer 23. So the write entropy is 11.91–11.93 for every neuron, against a maximum of ln 151,669 = 11.93. A sharper statistic, such as a temperature or the logit margin, would separate neurons; the script does not compute one.
+- **What the top tokens say.** Early layers write subword fragments with no theme. From about layer 13, many neurons write one concept, often across languages, and read its trigger:
+  - layer 13: writes "again, _REPEAT, 回来, reconnect, rebound"; reads "retro, BACK, revert";
+  - layer 19: writes "negatives, minus, Negative, negativity"; reads "Positive, positive";
+  - layer 21: writes "addition, +, 加, Adds, .add";
+  - layer 22: writes "image, 图片, images, picture, 照片"; reads "description, images, pictured";
+  - layer 24: writes "都需要, 都被, 都会" (all, both); reads "these, those, several".
+- These are hypotheses for the DISCOVERY firewall, not facts.
+
+The summary per layer is in `mined/qwen3emb/static_0.6b/neurons_summary.json`. The full table (9.3 MB) stays on the build machine. The run took 24 minutes.
 
 EIGHTB_PLACEHOLDER
 
