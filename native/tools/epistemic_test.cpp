@@ -1,6 +1,9 @@
-// Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10).
+// Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
+// (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8) and gap_map.hpp (S3: 3.2, 3.5).
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
+#include "cypha/eval/gap_map.hpp"
+#include "cypha/eval/hypothesis.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -503,6 +506,460 @@ static void test_cards() {
   CHECK(w0t.find("Nothing here is stored.") != std::string::npos);
 }
 
+
+// ---------------------------------------------------------------------------
+// S5 hypothesis store (hypothesis.hpp): 6.3 VOI, 4.2 lifecycle, 4.3 tiers, 7.2 updating, I1, I4, I7, I8
+// ---------------------------------------------------------------------------
+static void test_voi_and_tiers() {
+  // EIG at p .5 with s = c = .9: P(pos) .5, p+ .9, p- .1, EIG = 1 - H(.9) = 0.5310044.
+  const InfoGain g = expected_information_gain(0.5, 0.9, 0.9);
+  CHECK_NEAR(g.p_pos, 0.5, 1e-12);
+  CHECK_NEAR(g.p_plus, 0.9, 1e-12);
+  CHECK_NEAR(g.p_minus, 0.1, 1e-12);
+  CHECK_NEAR(g.eig, 0.5310044064107189, 1e-12);
+  CHECK_NEAR(binary_entropy_bits(0.9), 1.0 - 0.5310044064107189, 1e-12);
+  // p .2, s .9, c .8: P(pos) .34, p+ .5294, p- .0303, EIG .2534771.
+  const InfoGain g2 = expected_information_gain(0.2, 0.9, 0.8);
+  CHECK_NEAR(g2.p_pos, 0.34, 1e-12);
+  CHECK_NEAR(g2.eig, 0.253477110345284, 1e-12);
+  CHECK_NEAR(expected_information_gain(0.25, 1.0, 1.0).eig, 0.8112781244591328, 1e-12);  // a perfect test gains H(p)
+  CHECK_NEAR(expected_information_gain(0.3, 0.7, 0.3).eig, 0.0, 1e-12);                // s = 1 - c tells nothing
+  CHECK_NEAR(expected_information_gain(0.0, 0.9, 0.9).eig, 0.0, 1e-15);
+  CHECK_NEAR(expected_information_gain(1.0, 0.9, 0.9).eig, 0.0, 1e-15);
+  CHECK(expected_information_gain(0.5, 0.9, 0.9).eig > expected_information_gain(0.95, 0.9, 0.9).eig);
+  // Priority = EIG (1 + Impact)(1 + max(0, I)) / Cost; a negative I and a zero cost are neutral.
+  CHECK_NEAR(voi_priority(0.5, 2.0, 1.0, 4.0), 0.5 * 3.0 * 2.0 / 4.0, 1e-12);
+  CHECK_NEAR(voi_priority(0.5, 2.0, -1.0, 0.0), 1.5, 1e-12);
+  // 6.1 P0.
+  CHECK_NEAR(plausibility_prior(0.8, 0.5), 0.4, 1e-12);
+  CHECK_NEAR(plausibility_prior(0.8, 0.5, 0.5), 0.2, 1e-12);
+  CHECK_NEAR(plausibility_prior(0.8, 0.5, 0.0), 0.0, 1e-15);
+  // 4.3 tiers, on both sides of each cut, and the starting budget shares.
+  CHECK(tier_of(0.3) == Tier::Conjecture);
+  CHECK(tier_of(0.2999) == Tier::Speculation);
+  CHECK(tier_of(0.05) == Tier::Speculation);
+  CHECK(tier_of(0.0499) == Tier::Wild);
+  CHECK_NEAR(tier_budget_share(Tier::Conjecture) + tier_budget_share(Tier::Speculation) + tier_budget_share(Tier::Wild), 1.0, 1e-12);
+  CHECK_NEAR(tier_budget_share(Tier::Wild), 0.05, 1e-12);
+  CHECK_STR(tier_name(Tier::Wild), "wild");
+  // 7.2 Bayes factors and odds updating.
+  CHECK_NEAR(bayes_factor(true, 0.9, 0.9), 9.0, 1e-9);
+  CHECK_NEAR(bayes_factor(false, 0.9, 0.9), 1.0 / 9.0, 1e-9);
+  CHECK_NEAR(update_posterior(0.5, 9.0), 0.9, 1e-12);
+  CHECK_NEAR(update_posterior(0.7, 9.0), 21.0 / 22.0, 1e-12);
+  CHECK_NEAR(update_posterior(update_posterior(0.5, 9.0), 9.0), 81.0 / 82.0, 1e-12);
+  CHECK(std::isfinite(bayes_factor(true, 1.0, 1.0)) && bayes_factor(false, 1.0, 1.0) > 0.0);
+}
+
+static void test_lifecycle() {
+  using S = HypState;
+  // Legal arrows of 4.2.
+  CHECK(legal_transition(S::Proposed, S::Scored));
+  CHECK(legal_transition(S::Scored, S::Queued));
+  CHECK(legal_transition(S::Queued, S::UnderTest));
+  CHECK(legal_transition(S::Queued, S::Parked));
+  for (S to : {S::Supported, S::Refuted, S::Parked, S::Irreducible, S::Queued}) CHECK(legal_transition(S::UnderTest, to));
+  CHECK(legal_transition(S::Supported, S::Promoted));
+  CHECK(legal_transition(S::Supported, S::Queued));
+  CHECK(legal_transition(S::Parked, S::Scored));
+  for (S from : {S::Proposed, S::Scored, S::Queued, S::Supported, S::Refuted, S::Parked, S::Irreducible}) CHECK(legal_transition(from, S::Retired));
+  // Illegal ones: skipping a step, leaving a final state, undoing a refutation.
+  CHECK(!legal_transition(S::Proposed, S::Queued));
+  CHECK(!legal_transition(S::Queued, S::Supported));
+  CHECK(!legal_transition(S::Scored, S::Promoted));
+  CHECK(!legal_transition(S::Refuted, S::Promoted));
+  CHECK(!legal_transition(S::Refuted, S::Queued));
+  CHECK(!legal_transition(S::Irreducible, S::Queued));
+  CHECK(!legal_transition(S::Parked, S::Queued));
+  CHECK(!legal_transition(S::Supported, S::Refuted));
+  CHECK(!legal_transition(S::UnderTest, S::Retired));
+  CHECK(!legal_transition(S::UnderTest, S::Promoted));
+  for (S to : {S::Proposed, S::Scored, S::Queued, S::Retired}) CHECK(!legal_transition(S::Promoted, to));
+  for (S to : {S::Proposed, S::Scored, S::Queued, S::Promoted}) CHECK(!legal_transition(S::Retired, to));
+  CHECK_STR(hyp_state_name(S::UnderTest), "under test");
+
+  // Through the store: scoring sets P0, the tier and the history; an illegal move changes nothing.
+  HypothesisStore st;
+  Hypothesis h;
+  h.id = "h-irr";
+  h.key = "founded|Atlantis|-9600";
+  h.generator = "G18";
+  for (int i = 0; i < 6; ++i) {
+    HypTest t;
+    t.kind = "T8 prospective " + std::to_string(i);
+    t.source = "later data";
+    t.independent = true;
+    t.sensitivity = 0.51;  // nearly uninformative: BF 1.02 for a positive
+    t.specificity = 0.5;
+    h.tests.push_back(t);
+  }
+  CHECK(st.propose(h));
+  CHECK(!st.propose(h));  // the id is taken
+  CHECK(!st.transition("h-irr", S::Queued, "skip scoring"));
+  CHECK(st.find("h-irr")->state == S::Proposed);
+  CHECK(st.score("h-irr", 0.5));
+  CHECK(st.find("h-irr")->tier == Tier::Conjecture);
+  CHECK_NEAR(st.find("h-irr")->posterior, 0.5, 1e-15);
+  CHECK(st.transition("h-irr", S::Queued, "queued"));
+  // Irreducible: five tests that move the posterior .5 -> .5247 (less than .05 in total).
+  const double expect[5] = {0.504950495049505, 0.5099000196039992, 0.5148476039293464, 0.5197922798118908, 0.5247330813155342};
+  for (int i = 0; i < 5; ++i) {
+    CHECK(st.transition("h-irr", S::UnderTest, "test"));
+    const auto r = st.record_result("h-irr", static_cast<std::size_t>(i), true);
+    CHECK(r.has_value());
+    CHECK_NEAR(st.find("h-irr")->posterior, expect[i], 1e-12);
+    CHECK(*r == (i < 4 ? S::Queued : S::Irreducible));
+  }
+  CHECK(!st.transition("h-irr", S::UnderTest, "more"));  // irreducible: stop spending on it
+  CHECK(!st.record_result("h-irr", 5, true).has_value());  // not under test
+  CHECK(st.transition("h-irr", S::Retired, "stop"));
+  const Hypothesis* hi = st.find("h-irr");
+  CHECK(hi->history.size() == 1 + 1 + 1 + 5 * 2 + 1);  // proposed, scored, queued, 5 x (under test, result), retired
+  CHECK(hi->history.back().from == S::Irreducible && hi->history.back().to == S::Retired);
+  // Parked hypotheses are re-scored when the store changes.
+  Hypothesis p;
+  p.id = "h-park";
+  p.key = "capital|Mu|?";
+  p.generator = "G4";
+  CHECK(st.propose(p));
+  CHECK(st.score("h-park", 0.01));
+  CHECK(st.find("h-park")->tier == Tier::Wild);  // below the floor: still queued, in the wild tier
+  CHECK(st.transition("h-park", S::Queued, "queued"));
+  CHECK(st.transition("h-park", S::Parked, "no feasible test"));
+  CHECK(st.rescore_parked() == 1);
+  CHECK(st.find("h-park")->state == S::Scored);
+  CHECK(st.score("h-park", 0.12));  // re-scored in place
+  CHECK(st.find("h-park")->state == S::Scored && st.find("h-park")->tier == Tier::Speculation);
+  CHECK(st.find("h-park")->history.back().cause == "re-scored");
+}
+
+// I1: answer mode never returns an item with the hypothetical taint, directly or through derivation (and I10: contested
+// items are never answers). Also the firewall's read and write rules of section 1.
+static void test_firewall_I1() {
+  CHECK(may_read(Mode::Answer, StoreKind::Facts));
+  CHECK(!may_read(Mode::Answer, StoreKind::Hypotheses));
+  CHECK(!may_read(Mode::Answer, StoreKind::Journal));
+  for (StoreKind s : {StoreKind::Facts, StoreKind::Hypotheses, StoreKind::GapMap, StoreKind::Journal}) CHECK(may_read(Mode::Discovery, s));
+  CHECK(!may_write(Mode::Discovery, StoreKind::Facts));
+  CHECK(may_write(Mode::Discovery, StoreKind::Hypotheses) && may_write(Mode::Discovery, StoreKind::GapMap) && may_write(Mode::Discovery, StoreKind::Journal));
+  CHECK(!may_write(Mode::Answer, StoreKind::Facts));
+  CHECK(!may_write(Mode::Answer, StoreKind::Hypotheses));
+  CHECK(may_write(Mode::Answer, StoreKind::GapMap));  // demand from a "don't know" tag
+
+  const Opinion known = opinion_from_counts(40, 0);
+  KnowledgeStore ks;
+  ks.add({"A", known, std::nullopt, false, {}});
+  ks.add({"H", known, std::nullopt, true, {}});                  // a hypothesis in discovery's working view
+  ks.add({"D1", known, std::nullopt, false, {"A", "H"}});        // laundering attempt: arrives untainted
+  ks.add({"D2", known, std::nullopt, false, {"D1"}});
+  ks.add({"D3", known, std::nullopt, false, {"A"}});
+  ks.add({"X", known, std::nullopt, false, {"missing"}});        // premise not in the store: fails closed
+  ks.add({"C1", known, std::nullopt, false, {}});
+  ks.add({"C2", known, std::nullopt, false, {"C1"}});
+  CHECK(ks.find("D1")->hypothetical);  // inherited at derivation
+  CHECK(ks.find("D2")->hypothetical);
+  CHECK(!ks.find("D3")->hypothetical);
+  CHECK(ks.find("X")->hypothetical);
+  CHECK(ks.tainted("H") && ks.tainted("D1") && ks.tainted("D2") && ks.tainted("X"));
+  CHECK(!ks.tainted("A") && !ks.tainted("D3"));
+  CHECK(ks.answerable("A") != nullptr);
+  CHECK(ks.answerable("D3") != nullptr);
+  for (const char* id : {"H", "D1", "D2", "X", "nope"}) CHECK(ks.answerable(id) == nullptr);
+  // Taint that arrives later still reaches the derived item at answer time: C1 is replaced by a hypothetical version.
+  CHECK(ks.answerable("C2") != nullptr);
+  ks.add({"C1", known, std::nullopt, true, {}});
+  CHECK(!ks.find("C2")->hypothetical);  // its own flag is still clear ...
+  CHECK(ks.tainted("C2"));               // ... but the derivation is followed
+  CHECK(ks.answerable("C2") == nullptr);
+  // A derivation cycle fails closed.
+  ks.add({"Y1", known, std::nullopt, false, {"Y2"}});
+  ks.add({"Y2", known, std::nullopt, false, {"Y1"}});
+  CHECK(ks.tainted("Y2") && ks.answerable("Y2") == nullptr);
+  // States: contested (I10), ignorant and vacuous items are not answers even when untainted; Believed is.
+  ks.add({"K", known, opinion_from_counts(0, 40), false, {}});
+  ks.add({"I", opinion_from_counts(0.2, 0), std::nullopt, false, {}});
+  ks.add({"V", opinion_from_counts(0, 0), std::nullopt, false, {}});
+  ks.add({"B", opinion_from_counts(1, 0), std::nullopt, false, {}});
+  CHECK(ks.answerable("K") == nullptr && ks.answerable("I") == nullptr && ks.answerable("V") == nullptr);
+  CHECK(ks.answerable("B") != nullptr);
+  std::string view;
+  for (const KnowledgeItem* it : ks.answer_view()) view += it->id + " ";
+  CHECK_STR(view, "A B D3 ");
+  for (const KnowledgeItem* it : ks.answer_view()) CHECK(!ks.tainted(it->id));
+}
+
+// I4: promotion only with evidence independent of the generator. 7.4: the generator's support is the base rate only.
+static void test_promotion_I4() {
+  HypothesisStore st;
+  KnowledgeStore ks;
+  // A teacher hypothesis whose every test comes from the teacher (one even flagged "independent"): the posterior passes
+  // .9 but it never becomes supported, so it cannot be promoted.
+  Hypothesis t;
+  t.id = "h-teacher";
+  t.key = "author|Atlas Shrugged|Ayn Rand";
+  t.generator = "G16";
+  for (int i = 0; i < 3; ++i) {
+    HypTest x;
+    x.kind = "T7 teacher";
+    x.source = "G16";
+    x.independent = (i == 0);  // mislabelled: the source is the generator itself
+    x.sensitivity = x.specificity = 0.95;
+    t.tests.push_back(x);
+  }
+  CHECK(st.propose(t));
+  CHECK(st.score("h-teacher", 0.5));
+  CHECK(st.transition("h-teacher", HypState::Queued, "queued"));
+  for (std::size_t i = 0; i < 3; ++i) {
+    CHECK(st.transition("h-teacher", HypState::UnderTest, "test"));
+    CHECK(st.record_result("h-teacher", i, true) == HypState::Queued);
+  }
+  CHECK(st.find("h-teacher")->posterior > 0.999);
+  CHECK(!has_independent_evidence(*st.find("h-teacher")));
+  CHECK(!independent_evidence(*st.find("h-teacher"), st.find("h-teacher")->tests[0]));
+  CHECK(!st.promote("h-teacher", ks).has_value());  // not supported
+  CHECK(ks.find("h-teacher") == nullptr);
+  CHECK(st.find("h-teacher")->hypothetical);
+  CHECK_NEAR(st.generator_reliability("G16").alpha, 1.0, 1e-15);
+
+  // A rule-induction hypothesis: one dependent positive (its own support restated) and independent positives.
+  Hypothesis h;
+  h.id = "h-rule";
+  h.key = "language|Atlas Shrugged|English";
+  h.generator = "G2";
+  h.rule = "author-nationality-language";
+  HypTest dep;
+  dep.kind = "G2 support";
+  dep.source = "G2";
+  dep.independent = false;
+  h.tests.push_back(dep);
+  for (int i = 0; i < 5; ++i) {
+    HypTest x;
+    x.kind = i % 2 ? "T4 corpus search" : "T5 Wikidata";
+    x.source = i % 2 ? "corpus" : "wikidata";
+    x.independent = true;
+    x.disconfirmation = true;
+    h.tests.push_back(x);
+  }
+  CHECK(st.propose(h));
+  CHECK(st.score("h-rule", 0.7));
+  CHECK(st.transition("h-rule", HypState::Queued, "queued"));
+  CHECK(st.transition("h-rule", HypState::UnderTest, "test"));
+  CHECK(st.record_result("h-rule", 0, true) == HypState::Queued);  // .7 -> .9545 but the evidence is the generator's
+  CHECK_NEAR(st.find("h-rule")->posterior, 21.0 / 22.0, 1e-12);
+  CHECK(st.transition("h-rule", HypState::UnderTest, "test"));
+  CHECK(st.record_result("h-rule", 1, true) == HypState::Supported);
+  // ECS on one independent item, a = P0 = .7, W = 2: b 1/3, u 2/3, P .8, grade Low -> Candidate, not promoted.
+  const auto op1 = st.promote("h-rule", ks);
+  CHECK(op1.has_value());
+  CHECK_NEAR(op1->r, 1.0, 1e-12);  // the dependent positive is not an ECS item
+  CHECK_NEAR(op1->P, 0.8, 1e-12);
+  CHECK(admission_decision(*op1) != Admission::Admit);
+  CHECK(st.find("h-rule")->state == HypState::Supported);
+  CHECK(ks.find("h-rule") == nullptr);
+  for (std::size_t i = 2; i <= 5; ++i) {
+    CHECK(st.transition("h-rule", HypState::Queued, "more evidence"));
+    CHECK(st.transition("h-rule", HypState::UnderTest, "test"));
+    CHECK(st.record_result("h-rule", i, true) == HypState::Supported);
+  }
+  // Five independent items: b 5/7, u 2/7, P 5/7 + .7 x 2/7 = .9143, Moderate -> Admit -> promoted.
+  const auto op5 = st.promote("h-rule", ks);
+  CHECK(op5.has_value());
+  CHECK_NEAR(op5->r, 5.0, 1e-12);
+  CHECK_NEAR(op5->base_rate, 0.7, 1e-12);
+  CHECK_NEAR(op5->P, 5.0 / 7.0 + 0.7 * 2.0 / 7.0, 1e-12);
+  CHECK(op5->grade == Grade::Moderate);
+  CHECK(st.find("h-rule")->state == HypState::Promoted);
+  CHECK(!st.find("h-rule")->hypothetical);
+  CHECK(ks.answerable("h-rule") != nullptr);
+  CHECK_NEAR(st.generator_reliability("G2").alpha, 2.0, 1e-15);
+  CHECK_NEAR(st.rule_reliability("author-nationality-language").alpha, 2.0, 1e-15);
+  CHECK(!st.promote("h-rule", ks).has_value());  // only once
+  // Taint and promotion: an item derived from the working copy before promotion stays tainted; one derived after is clean.
+  KnowledgeStore wk;
+  wk.add({"h-rule", opinion_from_counts(40, 0), std::nullopt, true, {}});
+  wk.add({"pre", opinion_from_counts(40, 0), std::nullopt, false, {"h-rule"}});
+  wk.add({"h-rule", *op5, std::nullopt, false, {}});
+  wk.add({"post", opinion_from_counts(40, 0), std::nullopt, false, {"h-rule"}});
+  CHECK(wk.answerable("pre") == nullptr);
+  CHECK(wk.answerable("post") != nullptr);
+}
+
+// I7: refuted hypotheses are kept and block regeneration for the cooling period.
+static void test_refutation_I7() {
+  HypothesisStore st;
+  Hypothesis h;
+  h.id = "h-ref";
+  h.key = "capital|Australia|Sydney";
+  h.statement = "Sydney is the capital of Australia.";
+  h.generator = "G7";
+  h.rule = "path:largest_city";
+  HypTest x;
+  x.kind = "T5 Wikidata";
+  x.source = "wikidata";
+  x.independent = true;
+  x.disconfirmation = true;
+  h.tests = {x, x};
+  CHECK(st.propose(h));
+  CHECK(st.score("h-ref", 0.3));
+  CHECK(st.transition("h-ref", HypState::Queued, "queued"));
+  CHECK(st.transition("h-ref", HypState::UnderTest, "test"));
+  CHECK(st.record_result("h-ref", 0, false) == HypState::Refuted);  // .3 -> 1/22 = .04545 < .05
+  const Hypothesis* r = st.find("h-ref");
+  CHECK_NEAR(r->posterior, 1.0 / 22.0, 1e-12);
+  CHECK(r->refuted_cycle == 0);
+  CHECK(r->tests[0].done && !r->tests[0].positive);  // kept with its test
+  CHECK_NEAR(st.generator_reliability("G7").beta, 2.0, 1e-15);
+  CHECK_NEAR(st.rule_reliability("path:largest_city").beta, 2.0, 1e-15);
+  CHECK(!st.transition("h-ref", HypState::Queued, "try again"));
+  CHECK(!st.transition("h-ref", HypState::Promoted, "promote anyway"));
+  // Regeneration of the same key is blocked for 10 cycles; a different key is not.
+  Hypothesis again = h;
+  again.id = "h-ref-2";
+  CHECK(st.blocked("capital|Australia|Sydney"));
+  CHECK(!st.propose(again));
+  Hypothesis other = h;
+  other.id = "h-other";
+  other.key = "capital|Australia|Canberra";
+  CHECK(st.propose(other));
+  CHECK(!st.blocked("capital|Australia|Sydney", true));  // unless new evidence arrives
+  CHECK(st.transition("h-ref", HypState::Retired, "negative result"));
+  for (int c = 1; c <= 9; ++c) {
+    st.advance_cycle();
+    CHECK(st.blocked("capital|Australia|Sydney"));  // retired, still blocking
+  }
+  CHECK(!st.propose(again));
+  st.advance_cycle();
+  CHECK(st.cycle() == 10);
+  CHECK(!st.blocked("capital|Australia|Sydney"));
+  CHECK(st.propose(again));
+  // Nothing was deleted: the refuted record is still there, with its tests and its history.
+  CHECK(st.all().size() == 3);
+  CHECK(st.find("h-ref") != nullptr && st.find("h-ref")->state == HypState::Retired && st.find("h-ref")->refuted_cycle == 0);
+  CHECK(st.find("h-ref")->history.size() >= 5);
+  CHECK(st.find("h-ref-2")->state == HypState::Proposed && st.find("h-ref-2")->hypothetical);
+}
+
+// I8: discovery output is always labelled (SPECULATION / HYPOTHETICAL).
+static void test_labels_I8() {
+  const std::string label = std::string("SPECULATION ") + "\xE2\x80\x94" + " not knowledge.";
+  HypothesisStore st;
+  int n = 0;
+  for (double p0 : {0.6, 0.1, 0.01}) {
+    Hypothesis h;
+    h.id = "h" + std::to_string(n++);
+    h.key = h.id;
+    h.statement = "Atlantis had a capital.";
+    h.generator = "G20";
+    CHECK(st.propose(h));
+    CHECK(starts_with(discovery_card(*st.find(h.id)), label));  // proposed, no tier yet
+    CHECK(st.score(h.id, p0));
+    const std::string card = discovery_card(*st.find(h.id));
+    CHECK(starts_with(card, label));
+    CHECK(is_labelled(card));
+    CHECK(card.find(std::string("(") + tier_name(tier_of(p0)) + " tier)") != std::string::npos);
+  }
+  CHECK(discovery_card(*st.find("h2")).find("Status: scored (wild tier)") != std::string::npos);
+  CHECK(starts_with(discovery_card(Hypothesis{}), label));  // an empty record is labelled too
+  // Free text from discovery mode gets the label once; labelled text is left alone.
+  const std::string t = label_discovery_text("Atlantis probably had a capital.");
+  CHECK(starts_with(t, label + "\n") && t.find("Atlantis probably had a capital.") != std::string::npos);
+  CHECK_STR(label_discovery_text(t), t);
+  HypotheticalCard w;
+  w.assumption = "Berlin is not the capital of Germany";
+  const std::string wt = format_hypothetical_card(w);
+  CHECK(is_labelled(wt));
+  CHECK_STR(label_discovery_text(wt), wt);
+  // An answer card is not discovery output and carries no label.
+  AnswerCard a;
+  a.question = "Q";
+  a.answer = "A";
+  CHECK(!is_labelled(format_answer_card(a)));
+  CHECK(!is_labelled(""));
+}
+
+// ---------------------------------------------------------------------------
+// S3 gap map (gap_map.hpp): the tag, the gap id, schema cells, demand, VOI
+// ---------------------------------------------------------------------------
+static void test_gap_map() {
+  // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
+  CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
+  CHECK_STR(gap_id("Chess", "definition"), "G-CFEC");
+  CHECK_STR(gap_id("Antares", "definition"), "G-1482");
+  // A training tag, as dktext writes it.
+  UnknownTag a = parse_unknown_tag(
+      "I don't know. I have nothing about Honduras in what I've read. <|unknown reason=UNKNOWN_ENTITY entity=\"Honduras\" relation=capital gap=G-AEC1|>");
+  CHECK(a.found && a.closed && a.complete() && a.id_consistent());
+  CHECK(a.code == ReasonCode::UnknownEntity);
+  CHECK_STR(a.entity, "Honduras");
+  CHECK_STR(a.relation, "capital");
+  // Fields in another order (A1c's later frames put the entity last).
+  UnknownTag b = parse_unknown_tag("x <|unknown reason=UNKNOWN_ENTITY relation=definition gap=G-1482 entity=\"Antares\"|> y");
+  CHECK(b.complete() && b.id_consistent());
+  CHECK_STR(b.entity, "Antares");
+  // A field name inside the quoted entity does not fool the parser.
+  UnknownTag q = parse_unknown_tag("<|unknown reason=NO_EVIDENCE entity=\"the relation=x of Y\" relation=author gap=G-0000|>");
+  CHECK_STR(q.entity, "the relation=x of Y");
+  CHECK_STR(q.relation, "author");
+  CHECK(q.complete() && !q.id_consistent());
+  // Cut off inside the entity: no entity, not closed, not complete.
+  UnknownTag c = parse_unknown_tag("<|unknown reason=UNKNOWN_ENTITY entity=\"Eden Projecond the hosts bleed when pierced");
+  CHECK(c.found && !c.closed && c.entity.empty() && !c.complete());
+  CHECK_STR(c.reason, "UNKNOWN_ENTITY");
+  // Unknown or empty reason names.
+  CHECK(!parse_unknown_tag("<|unknown reason= entity=\"X\" relation=r gap=G-0000|>").code.has_value());
+  CHECK(!parse_unknown_tag("<|unknown reason=UN entity=\"X\" relation=r gap=G-0000|>").complete());
+  CHECK(!parse_unknown_tag("I don't know.").found);
+  // A complete tag whose id belongs to another slot.
+  UnknownTag d = parse_unknown_tag("<|unknown reason=NO_EVIDENCE entity=\"Hamlet\" relation=author gap=G-0412|>");
+  CHECK(d.complete() && !d.id_consistent());
+  CHECK_STR(gap_id("Hamlet", "author"), "G-785D");
+  for (std::size_t i = 0; i < kReasonCodeCount; ++i)
+    CHECK(reason_from_name(reason_name(static_cast<ReasonCode>(i))) == static_cast<ReasonCode>(i));
+
+  // f(T, R).
+  CHECK_NEAR((SchemaCell{4, 3}).f(), 0.75, 1e-15);
+  CHECK_NEAR(SchemaCell{}.f(), 0.0, 1e-15);
+
+  // The map: a schema gap, demand on it, a new demand gap, a parked gap, VOI.
+  GapMap m;
+  Gap& s = m.open(GapKind::Schema, "Atlantis", "capital", "country");
+  s.p_exists = s.p = 0.9;
+  CHECK_STR(s.id, "G-72B1");
+  CHECK(&m.open(GapKind::Schema, "Atlantis", "capital") == &m.gaps()[0]);  // same gap
+  CHECK(m.size() == 1);
+  CHECK(m.find(GapKind::Schema, "ATLANTIS", "capital") != nullptr);       // keys are normalised
+  CHECK(m.find(GapKind::Demand, "Atlantis", "capital") == nullptr);
+  Gap* g1 = m.add_demand(parse_unknown_tag("<|unknown reason=NO_EVIDENCE entity=\"atlantis\" relation=capital gap=G-0000|>"));
+  CHECK(g1 == &m.gaps()[0]);
+  CHECK(g1->demand == 1 && g1->status == GapStatus::Queued && g1->kind == GapKind::Schema);
+  Gap* g2 = m.add_demand(a, "unknown");
+  CHECK(g2 != nullptr && g2->kind == GapKind::Demand && g2->status == GapStatus::Queued && g2->demand == 1);
+  CHECK_NEAR(g2->p, 0.5, 1e-15);
+  CHECK_STR(g2->type, "unknown");
+  CHECK(m.add_demand(a)->demand == 2);  // the same slot again: demand +1, no new gap
+  CHECK(m.size() == 2);
+  CHECK(m.add_demand(c) == nullptr);    // a cut-off tag names no slot
+  Gap& k = m.open(GapKind::Contradiction, "Bob Dylan", "birth_place", "person");
+  k.p = 0.55;
+  k.status = GapStatus::Parked;
+  CHECK(m.add_demand(parse_unknown_tag("<|unknown reason=CONFLICT entity=\"Bob Dylan\" relation=birth_place gap=G-0000|>"))->kind == GapKind::Contradiction);
+  CHECK(m.find(GapKind::Contradiction, "Bob Dylan", "birth_place")->status == GapStatus::Parked);  // demand does not unpark
+  Gap& cert = m.open(GapKind::Certainty, "Auguste Rodin", "death_date", "person");
+  cert.p = 0.974;
+  m.score();
+  CHECK_NEAR(m.find(GapKind::Schema, "Atlantis", "capital")->eig, expected_information_gain(0.9, 0.9, 0.9).eig, 1e-15);
+  CHECK_NEAR(m.find(GapKind::Demand, "Honduras", "capital")->eig, 0.5310044064107189, 1e-12);
+  CHECK_NEAR(m.find(GapKind::Demand, "Honduras", "capital")->voi, 0.5310044064107189 * 3.0, 1e-12);  // demand 2
+  CHECK_NEAR(m.find(GapKind::Certainty, "Auguste Rodin", "death_date")->voi, expected_information_gain(0.974, 0.9, 0.9).eig, 1e-15);
+  const auto rk = m.ranked();
+  CHECK(rk.size() == 4);
+  CHECK(rk.front()->entity == "Honduras");
+  CHECK(rk.back()->entity == "Auguste Rodin");
+  for (std::size_t i = 1; i < rk.size(); ++i) CHECK(rk[i - 1]->voi >= rk[i]->voi);
+  CHECK_STR(gap_kind_name(GapKind::Contradiction), "contradiction");
+  CHECK_STR(gap_status_name(GapStatus::Queued), "queued");
+}
+
 int main() {
   test_degree_of_conflict();
   test_classify();
@@ -510,6 +967,13 @@ int main() {
   test_reason_codes();
   test_estimators();
   test_cards();
+  test_voi_and_tiers();
+  test_lifecycle();
+  test_firewall_I1();
+  test_promotion_I4();
+  test_refutation_I7();
+  test_labels_I8();
+  test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

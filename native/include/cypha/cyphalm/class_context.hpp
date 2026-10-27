@@ -2,8 +2,8 @@
 
 /// Class-context expert for CyphaLM (PLAN B4; TOOL_PROFILE_PLAN P1, the one adapter shared by the
 /// part-of-speech tagger and the word classes). It predicts the next byte from the *classes* of the
-/// last two completed words plus the bytes typed since the last one ended (at most ``tail``, default 6), so a
-/// context learned after "Who wrote" also serves "Who composed" when the two verbs share a class.
+/// last two completed words plus the bytes typed since the last one ended (at most ``tail``, default 6),
+/// so a context learned after "Who wrote" also serves "Who composed" when the two verbs share a class.
 ///
 /// - A word is a run of ASCII letters, digits or apostrophes. Its class comes from a word -> class
 ///   table (E1 tags, or k-means word classes), looked up in lower case. A word not in the table gets
@@ -12,13 +12,20 @@
 ///   Witten-Bell style over a uniform floor.
 ///   The caller mixes the result into CyphaLM's distribution with one lambda per bucket(), as
 ///   cyphalm_trie mixes InfiniGram, so the trie stays the main expert.
-/// - Counts are built once over the training bytes: (context, byte) keys are sorted and packed into
-///   one table. So this expert is batch-built, not online. Peak build memory is 16 bytes a training
-///   byte; the packed table is 16 bytes per distinct context plus 5 per distinct follower.
-/// - Hashes are 56 bits; with ~10M contexts a collision is about a 1-in-1,000 event per table.
+/// - Counts are built once over the training bytes, so this expert is batch-built, not online. The
+///   build sorts the (context, byte) events chunk by chunk and merges the counted runs, so its peak is
+///   about one chunk of events plus the distinct (context, byte) pairs, not every event at once.
+/// - Storage (docs/reports/RAM_PROFILE.md): by default 16 bytes per distinct context (56-bit hash key,
+///   first follower, total) and 5 per distinct follower (byte, 32-bit count). ``compact`` keeps a 32-bit
+///   key, 1-byte counts on the trie's quantising ladder and no stored total: 8 + 2 bytes. ``min_total``
+///   drops contexts seen fewer times than that.
+/// - Hashes are 56 bits; with ~10M contexts a collision is about a 1-in-1,000 event per table. Compact
+///   keys are 32 bits: contexts that share one have their counts merged (a few hundred of 2M).
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -37,6 +44,14 @@ class ClassContext {
     struct Hit {
         int order = 0;            ///< 0 nothing seen, 1 (c1, tail), 2 (c2, c1, tail), 3 (c3, c2, c1, tail)
         std::uint64_t total = 0;  ///< followers counted at the deepest order found
+    };
+
+    struct Options {
+        int tail = 6;                ///< bytes since the last completed word kept in the context (1..kMaxTail)
+        int orders = 2;              ///< 2: the last two words; 3: also the third
+        bool compact = false;        ///< 32-bit keys, 1-byte quantised counts, totals summed at lookup
+        std::uint32_t min_total = 1; ///< contexts seen fewer times are dropped
+        std::size_t chunk = std::size_t{1} << 21;  ///< positions per build chunk
     };
 
     /// Read a ``word<TAB>class`` table. Class names are arbitrary strings; ids are assigned in order
@@ -70,40 +85,76 @@ class ClassContext {
         return out;
     }
 
-    /// ``tail``: bytes since the last completed word kept in the context (1..kMaxTail). ``orders``: 2 uses the
-    /// last two words, 3 also the third (the default 2 gives the same counts and hashes as before it existed).
+    ClassContext(std::unordered_map<std::string, std::uint16_t> classes, const Options& o)
+        : cls_(std::move(classes)), opt_(o) {
+        opt_.tail = std::clamp(opt_.tail, 1, kMaxTail);
+        opt_.orders = std::clamp(opt_.orders, 2, 3);
+        opt_.chunk = std::max<std::size_t>(opt_.chunk, 1);
+    }
+    /// The default storage (the same counts and hashes as before Options existed).
     explicit ClassContext(std::unordered_map<std::string, std::uint16_t> classes, int tail = 6, int orders = 2)
-        : cls_(std::move(classes)), tail_(std::clamp(tail, 1, kMaxTail)), orders_(std::clamp(orders, 2, 3)) {}
+        : ClassContext(std::move(classes), Options{tail, orders}) {}
 
     /// Count every (context, next byte) event in text[0..n).
     void build(const std::uint8_t* text, std::size_t n) {
-        std::vector<std::uint64_t> ev;
-        ev.reserve(static_cast<std::size_t>(orders_) * n);
-        for (std::size_t i = 1; i < n; ++i) {
-            std::uint64_t k[3];
-            keys(text, i, k);
-            for (int o = 0; o < orders_; ++o) ev.push_back(k[o] << 8 | text[i]);
+        // Counted runs, sorted by (key << 8 | byte), merged chunk by chunk.
+        std::vector<std::uint64_t> kb, ev, kb2;
+        std::vector<std::uint32_t> cnt, cnt2;
+        for (std::size_t a = 1; a < n; a += opt_.chunk) {
+            const std::size_t b = std::min(n, a + opt_.chunk);
+            ev.clear();
+            ev.reserve(static_cast<std::size_t>(opt_.orders) * (b - a));
+            for (std::size_t i = a; i < b; ++i) {
+                std::uint64_t k[3];
+                keys(text, i, k);
+                for (int o = 0; o < opt_.orders; ++o) ev.push_back(stored_key(k[o]) << 8 | text[i]);
+            }
+            std::sort(ev.begin(), ev.end());
+            kb2.clear();
+            cnt2.clear();
+            std::size_t x = 0, y = 0;
+            while (x < kb.size() || y < ev.size()) {  // merge the old runs with this chunk's sorted events
+                std::uint64_t key;
+                std::uint32_t c = 0;
+                if (y >= ev.size() || (x < kb.size() && kb[x] <= ev[y])) {
+                    key = kb[x];
+                    c = cnt[x++];
+                } else {
+                    key = ev[y];
+                }
+                while (y < ev.size() && ev[y] == key) ++c, ++y;
+                if (!kb2.empty() && kb2.back() == key) cnt2.back() += c;
+                else kb2.push_back(key), cnt2.push_back(c);
+            }
+            kb.swap(kb2);
+            cnt.swap(cnt2);
         }
-        std::sort(ev.begin(), ev.end());
+        std::vector<std::uint64_t>().swap(ev);
+        std::vector<std::uint64_t>().swap(kb2);
+        std::vector<std::uint32_t>().swap(cnt2);
         key_.clear();
+        key32_.clear();
         first_.clear();
         total_.clear();
         byte_.clear();
         count_.clear();
-        for (std::size_t a = 0; a < ev.size();) {
-            const std::uint64_t key = ev[a] >> 8;
-            key_.push_back(key);
-            first_.push_back(static_cast<std::uint32_t>(byte_.size()));
-            std::uint32_t tot = 0;
-            while (a < ev.size() && ev[a] >> 8 == key) {
-                std::size_t b = a;
-                while (b < ev.size() && ev[b] == ev[a]) ++b;
-                byte_.push_back(static_cast<std::uint8_t>(ev[a] & 0xff));
-                count_.push_back(static_cast<std::uint32_t>(b - a));
-                tot += static_cast<std::uint32_t>(b - a);
-                a = b;
+        q_.clear();
+        for (std::size_t a = 0; a < kb.size();) {
+            const std::uint64_t key = kb[a] >> 8;
+            std::size_t b = a;
+            std::uint64_t tot = 0;
+            while (b < kb.size() && kb[b] >> 8 == key) tot += cnt[b++];
+            if (tot >= opt_.min_total) {
+                if (opt_.compact) key32_.push_back(static_cast<std::uint32_t>(key));
+                else key_.push_back(key), total_.push_back(static_cast<std::uint32_t>(tot));
+                first_.push_back(static_cast<std::uint32_t>(byte_.size()));
+                for (std::size_t f = a; f < b; ++f) {
+                    byte_.push_back(static_cast<std::uint8_t>(kb[f] & 0xff));
+                    if (opt_.compact) q_.push_back(quantise(cnt[f]));
+                    else count_.push_back(cnt[f]);
+                }
             }
-            total_.push_back(tot);
+            a = b;
         }
         first_.push_back(static_cast<std::uint32_t>(byte_.size()));
     }
@@ -114,14 +165,20 @@ class ClassContext {
         Hit hit;
         std::uint64_t k[3];
         keys(h, n, k);
-        for (int o = 0; o < orders_; ++o) {  // lower order first: (c1, tail), (c2, c1, tail), (c3, c2, c1, tail)
-            const std::size_t c = find(k[o]);
+        for (int o = 0; o < opt_.orders; ++o) {  // lower order first: (c1, tail), (c2, c1, tail), (c3, c2, c1, tail)
+            const std::size_t c = find(stored_key(k[o]));
             if (c == kNone) break;
-            const double N = total_[c], T = first_[c + 1] - first_[c];
+            double N = 0;
+            if (opt_.compact)
+                for (std::uint32_t f = first_[c]; f < first_[c + 1]; ++f) N += qdec()[q_[f]];
+            else
+                N = total_[c];
+            const double T = first_[c + 1] - first_[c];
             for (int s = 0; s < 256; ++s) P[s] *= T / (N + T);
-            for (std::uint32_t f = first_[c]; f < first_[c + 1]; ++f) P[byte_[f]] += count_[f] / (N + T);
+            for (std::uint32_t f = first_[c]; f < first_[c + 1]; ++f)
+                P[byte_[f]] += (opt_.compact ? qdec()[q_[f]] : count_[f]) / (N + T);
             hit.order = o + 1;
-            hit.total = total_[c];
+            hit.total = static_cast<std::uint64_t>(N);
         }
         return hit;
     }
@@ -132,14 +189,45 @@ class ClassContext {
     }
 
     std::size_t classes() const { return cls_.size(); }
-    std::size_t contexts() const { return key_.size(); }
+    std::size_t contexts() const { return first_.empty() ? 0 : first_.size() - 1; }
     std::size_t followers() const { return byte_.size(); }
-    std::size_t bytes() const { return key_.size() * 16 + byte_.size() * 5; }
+    std::size_t bytes() const {
+        return opt_.compact ? contexts() * 8 + followers() * 2 : contexts() * 16 + followers() * 5;
+    }
 
  private:
     static constexpr std::uint16_t kShapes = 4;  // 0 none, 1 lower, 2 capitalised, 3 number
 
     static constexpr std::size_t kNone = ~std::size_t{0};
+
+    // The trie's count ladder (packed_trie.hpp): exact to 64, then one byte on a 1.08 geometric ladder.
+    static const std::array<std::uint32_t, 256>& qdec() {
+        static const std::array<std::uint32_t, 256> q = [] {
+            std::array<std::uint32_t, 256> t{};
+            for (int s = 1; s <= 64; ++s) t[static_cast<std::size_t>(s)] = static_cast<std::uint32_t>(s);
+            double v = 64.0;
+            for (int s = 65; s < 256; ++s) {
+                v *= 1.08;
+                auto c = static_cast<std::uint32_t>(std::llround(v));
+                if (c <= t[static_cast<std::size_t>(s - 1)]) c = t[static_cast<std::size_t>(s - 1)] + 1;
+                t[static_cast<std::size_t>(s)] = c;
+            }
+            return t;
+        }();
+        return q;
+    }
+    static std::uint8_t quantise(std::uint32_t c) {
+        if (c <= 64) return static_cast<std::uint8_t>(c);
+        const auto& q = qdec();
+        int lo = 65, hi = 255;
+        while (lo < hi) {
+            const int mid = (lo + hi) / 2;
+            if (q[static_cast<std::size_t>(mid)] < c) lo = mid + 1;
+            else hi = mid;
+        }
+        if (lo > 65 && c - q[static_cast<std::size_t>(lo - 1)] <= q[static_cast<std::size_t>(lo)] - c) --lo;
+        return static_cast<std::uint8_t>(lo);
+    }
 
     static bool is_word(std::uint8_t b) { return std::isalnum(b) || b == '\''; }
 
@@ -155,6 +243,8 @@ class ClassContext {
         return x ^ (x >> 31);
     }
 
+    std::uint64_t stored_key(std::uint64_t k56) const { return opt_.compact ? k56 >> 24 : k56; }
+
     std::uint16_t word_class(const std::uint8_t* w, std::size_t len) const {
         if (len == 0) return 0;
         const auto it = cls_.find(lower(std::string(reinterpret_cast<const char*>(w), len)));
@@ -168,9 +258,10 @@ class ClassContext {
         std::size_t i = n;
         while (i > stop && is_word(h[i - 1])) --i;  // the word being typed
         while (i > stop && !is_word(h[i - 1])) --i;  // and the bytes before it
-        const std::size_t tail_end = n, tail_beg = std::max(i, n >= static_cast<std::size_t>(tail_) ? n - tail_ : 0);
+        const std::size_t tail_end = n,
+                          tail_beg = std::max(i, n >= static_cast<std::size_t>(opt_.tail) ? n - opt_.tail : 0);
         std::uint16_t c[3] = {0, 0, 0};
-        for (int w = 0; w < orders_ && i > stop; ++w) {  // the last two (or three) completed words
+        for (int w = 0; w < opt_.orders && i > stop; ++w) {  // the last two (or three) completed words
             std::size_t j = i;
             while (j > stop && is_word(h[j - 1])) --j;
             c[w] = (j == stop && stop > 0) ? 0 : word_class(h + j, i - j);
@@ -186,18 +277,23 @@ class ClassContext {
     }
 
     std::size_t find(std::uint64_t key) const {
+        if (opt_.compact) {
+            const auto it = std::lower_bound(key32_.begin(), key32_.end(), static_cast<std::uint32_t>(key));
+            return it != key32_.end() && *it == key ? static_cast<std::size_t>(it - key32_.begin()) : kNone;
+        }
         const auto it = std::lower_bound(key_.begin(), key_.end(), key);
         return it != key_.end() && *it == key ? static_cast<std::size_t>(it - key_.begin()) : kNone;
     }
 
     std::unordered_map<std::string, std::uint16_t> cls_;
-    int tail_;
-    int orders_;
-    std::vector<std::uint64_t> key_;    // sorted context hashes
+    Options opt_;
+    std::vector<std::uint64_t> key_;    // sorted context hashes (default storage)
+    std::vector<std::uint32_t> key32_;  // sorted 32-bit context hashes (compact storage)
     std::vector<std::uint32_t> first_;  // followers of context c: [first_[c], first_[c + 1])
-    std::vector<std::uint32_t> total_;  // their summed counts
+    std::vector<std::uint32_t> total_;  // their summed counts (default storage)
     std::vector<std::uint8_t> byte_;
-    std::vector<std::uint32_t> count_;
+    std::vector<std::uint32_t> count_;  // default storage
+    std::vector<std::uint8_t> q_;       // compact storage: quantised counts
 };
 
 }  // namespace cypha::cyphalm
