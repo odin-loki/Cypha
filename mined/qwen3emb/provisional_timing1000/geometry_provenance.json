@@ -1,0 +1,28 @@
+{
+  "tool": "scripts/gguf_mine.py",
+  "tool_version": "1.0",
+  "command": [
+    "scripts/gguf_mine.py",
+    "geometry",
+    "--vectors",
+    "/root/work/teacher/qe/timing/embeddings.npy",
+    "--out",
+    "/root/work/teacher/qe/geometry_timing1000",
+    "--lengths",
+    "index",
+    "--prefixes",
+    "32,64,128,256,512,1024",
+    "--anchors",
+    "300"
+  ],
+  "time_utc": "2026-10-27T21:36:20+00:00",
+  "seed": 1234,
+  "model_path": null,
+  "numpy": "2.5.4",
+  "gguf": "0.19.0",
+  "llama_cpp_python": "0.3.36",
+  "inputs": {
+    "/root/work/teacher/qe/timing/embeddings.npy": "799b2a1aa59152e04be056dc5c30b0d27b0dc6ef22e45558adb1c9ce446bd2ee",
+    "/root/work/teacher/qe/timing/embeddings_index.tsv": "cc4482bb18e6ae830daef1ad2b135263af398aa0d61c8a57a1c9b2c7a4e44dd3"
+  }
+}

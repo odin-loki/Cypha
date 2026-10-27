@@ -77,6 +77,31 @@ Words and phrases fall a little short of 20,000 each because an item that alread
 
 **classes.tsv by class:** dolly_instruction_response 7,991; paws_not_paraphrase 4,461; paws_paraphrase 3,532; snli_entailment 3,325; snli_contradiction 3,278; snli_neutral 3,235; wiki_adjacent, wiki_same_article and unrelated 3,000 each; dolly_wrong_response 2,993; mrpc_paraphrase 2,753; wiki_title_lead 2,000; stsb_3to4 1,953; stsb_4to5 1,669; mrpc_not_paraphrase 1,323; stsb_2to3 1,255; stsb_0to1 1,235; stsb_1to2 1,135. (Counts before de-duplication of repeated pairs; the file has 51,073 rows.)
 
+## Nested subsets
+
+Runs that cannot take the full set use these. They keep probe.txt's order and text exactly, so `--key text` still matches. Both are made by `/root/work/teacher/bin/pilot_subset.py` (SHA-256 `cb9ad356…aad5`, seed 20261028).
+
+| Subset | Rule | Items | Qwen3 tokens | Pairs |
+|---|---|---|---|---|
+| `probe_pilot.txt` (0.6B pilot) | every word, phrase and title; both sides of up to 600 seeded pairs per class; the first 6,000 other held-out wiki sentences | 67,379 | 745,914 | `classes_pilot.tsv` 10,800; `pos_pairs_pilot.tsv` 4,895 |
+| `probe_s8b.txt` (8B subset, inside the pilot) | the first 3,000 words and phrases and all 2,000 titles of the pilot; 50 pairs per class drawn from the pilot's pairs; 500 more pilot wiki sentences | 10,239 | 82,063 | `classes_s8b.tsv` 900; `pos_pairs_s8b.tsv` 391 |
+
+| File | SHA-256 | Where |
+|---|---|---|
+| `probe_pilot.txt` | `01c8b137902be15a303baa22fd9227e0f4db3d934df22e768b9ea15f1023429c` | build machine (3.1 MB) |
+| `classes_pilot.tsv` | `a8c308c3ec7c727477e3e697156ec552652b502b4ee44c53a0eb1a10dd318c2b` | build machine (2.2 MB) |
+| `pos_pairs_pilot.tsv` | `6a6f8ae4d33ac91f99ab398f6c5a9d6f45b3c70697fa4794de170bb981e9d792` | build machine (1.1 MB) |
+| `probe_s8b.txt` | `2e530cf876a37faf9316e21901133f17f85a7a67c0e2616cb1eb533dd0ca3237` | here and build machine |
+| `classes_s8b.tsv` | `1e297b2d7faa2d23adb4d8ff0653ca4bb154756ab752ec02de91e8a193ad474e` | here and build machine |
+| `pos_pairs_s8b.tsv` | `4b722c6a7db9a2799854d64b4fefe3d952b8c6a74a0108f34eb59b3721c4ca2c` | here and build machine |
+
+```bash
+python -I /root/work/teacher/bin/pilot_subset.py /root/work/teacher/probe 600 6000                       # the pilot
+python -I /root/work/teacher/bin/pilot_subset.py /root/work/teacher/probe 50 500 20261028 3000 s8b pilot  # the 8B subset
+```
+
+No teacher vectors exist for any of these yet. Inference moved to Odin's PC on 2026-10-28; the runbook is in [QWEN3_EMBEDDING_DISSECTION.md](../../docs/reports/QWEN3_EMBEDDING_DISSECTION.md) §9.
+
 ## Reproduce
 
 ```bash
@@ -85,4 +110,4 @@ python -I /root/work/teacher/bin/build_probe.py /root/work/teacher/probe /root/w
 cd /root/work/teacher/probe && sha256sum -c SHA256SUMS
 ```
 
-The data directory holds the parquet files above, fetched by their revision URLs. The builder needs Python 3.13 with pyarrow (26.0.0 here). A rerun gave the same hashes (see below).
+The data directory holds the parquet files above, fetched by their revision URLs. The builder needs Python 3.13 with pyarrow (26.0.0 here). A second build on 2026-10-28 gave the same SHA-256 for all nine files.

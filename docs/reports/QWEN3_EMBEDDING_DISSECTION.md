@@ -212,7 +212,27 @@ Built and hashed; details in [mined/probe/README.md](../../mined/probe/README.md
 
 The timing run had already embedded the first 1,000 probe items (the same random mix of words, phrases and sentences as the full set). `geometry` reads vectors only, so it was run on them. **These numbers are provisional.** They are not the registered measurements, which need the probe set and its pairs (§9).
 
-PROVISIONAL_PLACEHOLDER
+Outputs are in `mined/qwen3emb/provisional_timing1000/`. The intervals are 95% percentile bootstraps: over items for the pair means, over anchors for MRL.
+
+| Measure (0.6B, 1,000 items: 582 sentences, 142 words, 142 phrases, others) | Value |
+|---|---|
+| Mean cosine of random pairs, all items | 0.278 [0.270, 0.288] |
+| … sentences only | **0.216** [0.210, 0.221] |
+| … held-out wiki sentences only (282) | 0.230 [0.222, 0.237] |
+| … words only / phrases only | 0.600 [0.590, 0.611] / 0.538 [0.528, 0.551] |
+| After centring (all items) | −0.001 |
+| Norm of the mean unit vector | 0.529 |
+| Effective rank; PCA dimensions for 95% | 246; 379 of 1,024 |
+| TwoNN intrinsic dimension | 23.4 |
+| Hubness skew at k = 10 | 3.32, and 1.12 under CSLS |
+| Spearman of log length against cosine to the centroid | −0.75 |
+| Prefix agreement with 1,024 dims, all items: 32 / 64 / 128 / 256 / 512 | 0.884 / 0.926 / 0.954 / 0.972 / 0.988 |
+| Prefix agreement, sentences only: 32 / 256 | **0.783** [0.751, 0.810] / **0.937** [0.927, 0.946] |
+
+- **A floor exists.** Random sentence pairs average 0.22, which is inside Q1's band of 0.05–0.5. Q1's registered measure is the "unrelated" class of the probe set, so it is not scored here.
+- **Short items crowd together.** Words average 0.60 with each other, against 0.22 for sentences. Shorter items also sit nearer the centroid (Spearman −0.75), so raw cosine thresholds must depend on length (B17).
+- **The output is far more anisotropic than the input.** The mean vector's norm is 0.53 here, against 0.26 for the input word vectors, and the effective rank is 246 against 780.
+- **Nesting depends on the mix of items.** On mixed items the 256 and 32 prefixes clear Q3's bars (0.972, 0.884). On sentences alone both fall just short (0.937, 0.783), with intervals that exclude 0.95 and 0.80. Q3 is defined at the 8B's 4,096 dimensions and on the probe set, so it waits for §9.
 
 ## 8. Timing and job sizes
 

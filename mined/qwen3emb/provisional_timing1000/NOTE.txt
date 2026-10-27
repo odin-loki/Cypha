@@ -1,0 +1,4 @@
+Provisional. Model-free `geometry` (and a bootstrap reader) on the 1,000 vectors that the timing run had already
+made (Qwen3-Embedding-0.6B Q8_0, first 1,000 lines of probe.txt = timing_1000.txt). No new inference.
+Not the registered Q1-Q3 measurements: those need the probe set and its pairs (report section 9).
+Vectors: /root/work/teacher/qe/timing/embeddings.npy (+ embeddings_index.tsv), not in the repository.
