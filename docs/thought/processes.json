@@ -1,0 +1,7531 @@
+{
+ "version": 1,
+ "primitives": {
+  "perceive": "take in input or observations",
+  "read": "parse text into the store's structures",
+  "retrieve": "look up Known/Believed items",
+  "recall_case": "fetch similar past cases (System 1)",
+  "match": "align a pattern or structure to data",
+  "compare": "measure a difference between two things",
+  "classify": "assign a label with confidence (Cypha classifier)",
+  "measure": "obtain a quantity",
+  "estimate": "produce a quantity with an interval",
+  "decompose": "split into parts",
+  "generate": "propose candidates",
+  "transform": "change a candidate by an operator",
+  "combine": "merge parts or results",
+  "evaluate": "judge candidates against criteria",
+  "score": "compute a numeric score",
+  "rank": "order candidates",
+  "select": "choose one option or process",
+  "decide": "take a branch on a guard",
+  "simulate": "run a possible world (sandbox)",
+  "test": "run a check with a known pass rule",
+  "verify": "check against independent evidence",
+  "falsify": "look for evidence against",
+  "infer": "apply rules",
+  "explain": "produce reasons for a result",
+  "ask": "request information (store, teacher, human)",
+  "communicate": "produce output for someone",
+  "record": "write to journal / experiment DB",
+  "update": "change beliefs or parameters",
+  "monitor": "watch a signal over time",
+  "act": "execute an action or sub-plan",
+  "schedule": "order work in time",
+  "wait": "pause until a trigger",
+  "return": "final node"
+ },
+ "categories": {
+  "core": "control loops every other process is built from",
+  "reason": "reasoning forms",
+  "solve": "problem-solving methods",
+  "decide": "decision making",
+  "plan": "planning and scheduling",
+  "learn": "learning and memory",
+  "meta": "metacognition and self-regulation",
+  "create": "creativity",
+  "discover": "discovery (full design in docs/DISCOVERY.md)",
+  "science": "science and research",
+  "eng": "engineering and design",
+  "quality": "quality, safety, reliability, maintenance",
+  "diagnose": "troubleshooting and diagnosis",
+  "intel": "intelligence analysis and defence decision making",
+  "comm": "language and communication",
+  "social": "social reasoning, negotiation, ethics",
+  "software": "software work",
+  "manage": "management and operations",
+  "finance": "finance and resource allocation",
+  "law": "argument, evidence standards, cases",
+  "teach": "teaching and coaching",
+  "estimate": "estimation and forecasting",
+  "perceive": "perception and attention",
+  "data": "data science and statistics",
+  "ai": "machine learning and AI engineering, including Cypha's own daily upkeep"
+ },
+ "processes": [
+  {
+   "id": "tote",
+   "name": "TOTE loop (Test-Operate-Test-Exit)",
+   "cat": "core",
+   "ref": "Miller, Galanter & Pribram 1960",
+   "when": "a goal and a measurable gap to it",
+   "start": "test",
+   "steps": {
+    "test": {
+     "op": "compare",
+     "do": "gap e = goal - state",
+     "next": [
+      "exit",
+      "operate"
+     ]
+    },
+    "operate": {
+     "op": "act",
+     "do": "apply the operator expected to cut e most",
+     "next": [
+      "test"
+     ]
+    },
+    "exit": {
+     "op": "return"
+    }
+   },
+   "stop": "e <= tolerance, or VOC <= 0 (metareason_stop)",
+   "math": "choose operator argmax_o E[delta e | o, context] / cost(o)",
+   "learn": [
+    "Welford(gap reduction | operator, context)",
+    "Beta(operator helps | context)"
+   ],
+   "feedback": "final gap and cost"
+  },
+  {
+   "id": "dual_process",
+   "name": "System 1 / System 2 arbitration",
+   "cat": "core",
+   "ref": "Kahneman 2011; Daw, Niv & Dayan 2005",
+   "when": "any task with a cached answer route and a deliberate route",
+   "start": "fast",
+   "steps": {
+    "fast": {
+     "op": "recall_case",
+     "do": "cached answer + calibrated confidence",
+     "next": [
+      "gate"
+     ]
+    },
+    "gate": {
+     "op": "decide",
+     "do": "fast confident and its cell track record good?",
+     "next": [
+      "answer",
+      "slow"
+     ]
+    },
+    "slow": {
+     "op": "select",
+     "do": "pick a deliberate process for the goal",
+     "next": [
+      "run"
+     ]
+    },
+    "run": {
+     "op": "act",
+     "do": "run it",
+     "next": [
+      "compare"
+     ]
+    },
+    "compare": {
+     "op": "compare",
+     "do": "fast vs slow result",
+     "next": [
+      "answer",
+      "monitor"
+     ]
+    },
+    "monitor": {
+     "op": "update",
+     "do": "disagreement lowers fast-route trust for the cell",
+     "next": [
+      "answer"
+     ]
+    },
+    "answer": {
+     "op": "return"
+    }
+   },
+   "stop": "answer given or abstained",
+   "math": "use fast if Var_fast + bias_fast^2 < Var_slow + lambda * cost_slow (uncertainty-based arbitration)",
+   "learn": [
+    "Beta(fast correct | cell)",
+    "threshold tau_cell from the risk-coverage curve"
+   ],
+   "feedback": "correctness of the answer; time"
+  },
+  {
+   "id": "impasse",
+   "name": "Impasse to subgoal",
+   "cat": "core",
+   "ref": "Laird 2012 (Soar)",
+   "when": "no process applies, or every applicable one failed",
+   "start": "detect",
+   "steps": {
+    "detect": {
+     "op": "monitor",
+     "do": "max_p P(applicable_p | x) < theta, or k failures",
+     "next": [
+      "subgoal"
+     ]
+    },
+    "subgoal": {
+     "op": "generate",
+     "do": "new goal: resolve the impasse",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "select",
+     "do": "decompose / ask / teacher / discovery mode",
+     "next": [
+      "resolve"
+     ]
+    },
+    "resolve": {
+     "op": "act",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "test",
+     "do": "can the parent continue?",
+     "next": [
+      "done",
+      "choose"
+     ]
+    },
+    "done": {
+     "op": "return"
+    }
+   },
+   "stop": "parent unblocked, or every route tried (abstain with reason)",
+   "math": "route choice by Thompson sampling over Beta(resolves | impasse kind, route)",
+   "learn": [
+    "Beta(route resolves | impasse kind)"
+   ],
+   "feedback": "parent outcome"
+  },
+  {
+   "id": "chunking",
+   "name": "Compile deliberation into a fast rule",
+   "cat": "core",
+   "ref": "Laird, Rosenbloom & Newell 1986",
+   "when": "the same situation class was solved the same way by System 2 n times",
+   "start": "watch",
+   "steps": {
+    "watch": {
+     "op": "monitor",
+     "do": "n >= 5 identical results for a situation class",
+     "next": [
+      "compile"
+     ]
+    },
+    "compile": {
+     "op": "transform",
+     "do": "situation class -> result rule, tainted until tried",
+     "next": [
+      "trial"
+     ]
+    },
+    "trial": {
+     "op": "test",
+     "do": "use on fresh cases, System 2 still checks",
+     "next": [
+      "keep",
+      "demote"
+     ]
+    },
+    "keep": {
+     "op": "update",
+     "do": "rule joins System 1",
+     "next": [
+      "end"
+     ]
+    },
+    "demote": {
+     "op": "update",
+     "do": "rule removed; class marked not chunkable",
+     "next": [
+      "end"
+     ]
+    },
+    "end": {
+     "op": "return"
+    }
+   },
+   "stop": "decision made",
+   "math": "keep if Wilson lower bound of rule accuracy >= 0.9 over >= 20 uses; demote below 0.8",
+   "learn": [
+    "Beta(rule correct)"
+   ],
+   "feedback": "System 2 agreement during trial"
+  },
+  {
+   "id": "global_workspace",
+   "name": "Attention and broadcast cycle",
+   "cat": "core",
+   "ref": "Baars 1988",
+   "when": "several processes post intermediate results to working memory",
+   "start": "collect",
+   "steps": {
+    "collect": {
+     "op": "perceive",
+     "do": "items posted this cycle",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "score",
+     "do": "salience = relevance x novelty x confidence",
+     "next": [
+      "broadcast"
+     ]
+    },
+    "broadcast": {
+     "op": "select",
+     "do": "winner becomes visible to every process",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "decide",
+     "do": "goal met or budget spent?",
+     "next": [
+      "end",
+      "collect"
+     ]
+    },
+    "end": {
+     "op": "return"
+    }
+   },
+   "stop": "goal met or budget spent",
+   "math": "P(item i wins) = softmax(r_i * n_i * c_i / T); n_i = surprisal -log2 P(item | store)",
+   "learn": [
+    "weights of the salience product by which broadcasts led to reward (Welford of reward)"
+   ],
+   "feedback": "task reward attributed to broadcasts"
+  },
+  {
+   "id": "satisficing",
+   "name": "Satisficing search",
+   "cat": "core",
+   "ref": "Simon 1956",
+   "when": "options arrive one at a time and search is costly",
+   "start": "aspire",
+   "steps": {
+    "aspire": {
+     "op": "estimate",
+     "do": "aspiration A from past outcomes",
+     "next": [
+      "gen"
+     ]
+    },
+    "gen": {
+     "op": "generate",
+     "do": "next option",
+     "next": [
+      "eval"
+     ]
+    },
+    "eval": {
+     "op": "evaluate",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "decide",
+     "do": "value >= A?",
+     "next": [
+      "accept",
+      "lower"
+     ]
+    },
+    "lower": {
+     "op": "update",
+     "do": "after k misses, A <- A - delta",
+     "next": [
+      "gen"
+     ]
+    },
+    "accept": {
+     "op": "return"
+    }
+   },
+   "stop": "first option with value >= A",
+   "math": "A <- A + lambda (v_accepted - A) after each episode",
+   "learn": [
+    "EMA(aspiration A | task class)"
+   ],
+   "feedback": "regret against the best option seen later"
+  },
+  {
+   "id": "metareason_stop",
+   "name": "Value of computation: when to stop thinking",
+   "cat": "core",
+   "ref": "Russell & Wefald 1991",
+   "when": "inside any iterative process, before each extra step",
+   "start": "gain",
+   "steps": {
+    "gain": {
+     "op": "estimate",
+     "do": "expected improvement of one more step",
+     "next": [
+      "cost"
+     ]
+    },
+    "cost": {
+     "op": "estimate",
+     "do": "cost of the step (time, compute, asking)",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "VOC > 0?",
+     "next": [
+      "go",
+      "halt"
+     ]
+    },
+    "go": {
+     "op": "return"
+    },
+    "halt": {
+     "op": "return"
+    }
+   },
+   "stop": "one decision",
+   "math": "VOC = E[max(U_after) - U_now] - c_step; E from the step's learned gain distribution",
+   "learn": [
+    "Welford(gain per step | process, step index)"
+   ],
+   "feedback": "realised gain of steps taken"
+  },
+  {
+   "id": "predictive_perception",
+   "name": "Predict, compare, update",
+   "cat": "core",
+   "ref": "Rao & Ballard 1999; Friston 2010",
+   "when": "a stream of observations",
+   "start": "predict",
+   "steps": {
+    "predict": {
+     "op": "estimate",
+     "do": "expected next observation",
+     "next": [
+      "sense"
+     ]
+    },
+    "sense": {
+     "op": "perceive",
+     "next": [
+      "error"
+     ]
+    },
+    "error": {
+     "op": "compare",
+     "do": "prediction error eps",
+     "next": [
+      "update"
+     ]
+    },
+    "update": {
+     "op": "update",
+     "do": "precision-weighted belief update",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "decide",
+     "do": "stream ended?",
+     "next": [
+      "end",
+      "predict"
+     ]
+    },
+    "end": {
+     "op": "return"
+    }
+   },
+   "stop": "end of stream",
+   "math": "mu <- mu + kappa * pi_eps * eps; pi_eps = 1 / Var(eps) (the same form as Cypha's WorldPrior EMA)",
+   "learn": [
+    "Welford(eps)",
+    "kappa by minimising held-out prediction error"
+   ],
+   "feedback": "prediction error"
+  },
+  {
+   "id": "deduction",
+   "name": "Deduction (forward chaining)",
+   "cat": "reason",
+   "ref": "classical logic; PLAN 3.2 rules",
+   "when": "premises and rules are Known",
+   "start": "gather",
+   "steps": {
+    "gather": {
+     "op": "retrieve",
+     "do": "Known premises",
+     "next": [
+      "apply"
+     ]
+    },
+    "apply": {
+     "op": "infer",
+     "do": "apply rules, depth <= 3",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "verify",
+     "do": "consistent with Known items?",
+     "next": [
+      "out",
+      "flag"
+     ]
+    },
+    "flag": {
+     "op": "record",
+     "do": "contradiction -> contradiction gap",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "fixpoint or depth cap",
+   "math": "P(conclusion) >= prod P(premise) * rule reliability (ECS derivation factor)",
+   "learn": [
+    "Beta(rule reliability)"
+   ],
+   "feedback": "later verification of conclusions"
+  },
+  {
+   "id": "induction",
+   "name": "Induction (generalise from cases)",
+   "cat": "reason",
+   "ref": "Mill; Galarraga et al. 2013",
+   "when": "many cases share a pattern",
+   "start": "cases",
+   "steps": {
+    "cases": {
+     "op": "retrieve",
+     "next": [
+      "propose"
+     ]
+    },
+    "propose": {
+     "op": "generate",
+     "do": "candidate general rule",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "score",
+     "do": "support and confidence",
+     "next": [
+      "holdout"
+     ]
+    },
+    "holdout": {
+     "op": "test",
+     "do": "predict held-out cases",
+     "next": [
+      "keep",
+      "drop"
+     ]
+    },
+    "keep": {
+     "op": "record",
+     "next": [
+      "end"
+     ]
+    },
+    "drop": {
+     "op": "record",
+     "next": [
+      "end"
+     ]
+    },
+    "end": {
+     "op": "return"
+    }
+   },
+   "stop": "rule kept or dropped",
+   "math": "keep if support >= 10 and Wilson lower bound of held-out precision >= 0.9",
+   "learn": [
+    "Beta(generalisations of this kind hold)"
+   ],
+   "feedback": "held-out precision; later counterexamples"
+  },
+  {
+   "id": "abduction",
+   "name": "Abduction (best explanation)",
+   "cat": "reason",
+   "ref": "Peirce; DISCOVERY G3",
+   "when": "a surprising observation",
+   "start": "observe",
+   "steps": {
+    "observe": {
+     "op": "perceive",
+     "do": "what is surprising, in bits",
+     "next": [
+      "explain"
+     ]
+    },
+    "explain": {
+     "op": "generate",
+     "do": "candidate explanations",
+     "next": [
+      "rank"
+     ]
+    },
+    "rank": {
+     "op": "rank",
+     "do": "prior x likelihood / complexity",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "do": "check the best one's consequences",
+     "next": [
+      "out",
+      "rank"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "an explanation survives its test, or none left (hypotheses only)",
+   "math": "score(h) = log P(h) + log P(obs | h) - lambda * L(h)",
+   "learn": [
+    "Beta(top explanation survives | observation kind)"
+   ],
+   "feedback": "test outcomes"
+  },
+  {
+   "id": "analogy",
+   "name": "Analogy (structure mapping)",
+   "cat": "reason",
+   "ref": "Gentner 1983; Falkenhainer, Forbus & Gentner 1989",
+   "when": "a target is poorly known and a similar source is well known",
+   "start": "source",
+   "steps": {
+    "source": {
+     "op": "recall_case",
+     "do": "structurally similar source",
+     "next": [
+      "map"
+     ]
+    },
+    "map": {
+     "op": "match",
+     "do": "relation-preserving mapping",
+     "next": [
+      "enough"
+     ]
+    },
+    "enough": {
+     "op": "decide",
+     "do": ">= 3 aligned relations?",
+     "next": [
+      "transfer",
+      "source"
+     ]
+    },
+    "transfer": {
+     "op": "infer",
+     "do": "carry missing relations over as hypotheses",
+     "next": [
+      "verify"
+     ]
+    },
+    "verify": {
+     "op": "verify",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "transfers verified or rejected",
+   "math": "structural score = sum over matched relations of systematicity weight",
+   "learn": [
+    "Beta(transfer correct | analogy kind)"
+   ],
+   "feedback": "verification results"
+  },
+  {
+   "id": "causal_reasoning",
+   "name": "Causal reasoning by intervention",
+   "cat": "reason",
+   "ref": "Pearl 2009",
+   "when": "a question of what causes what, or what would happen if",
+   "start": "model",
+   "steps": {
+    "model": {
+     "op": "retrieve",
+     "do": "causal links and confounders known",
+     "next": [
+      "intervene"
+     ]
+    },
+    "intervene": {
+     "op": "simulate",
+     "do": "do(X = x) in a possible world",
+     "next": [
+      "contrast"
+     ]
+    },
+    "contrast": {
+     "op": "compare",
+     "do": "outcome under do(X = 1) vs do(X = 0)",
+     "next": [
+      "label"
+     ]
+    },
+    "label": {
+     "op": "decide",
+     "do": "observational only? -> hypothesis",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "effect estimated and labelled",
+   "math": "ATE = E[Y | do(X=1)] - E[Y | do(X=0)]; back-door adjustment only when confounders are known",
+   "learn": [
+    "Beta(causal claim later confirmed | evidence kind)"
+   ],
+   "feedback": "later interventional or temporal evidence"
+  },
+  {
+   "id": "categorisation",
+   "name": "Categorisation by exemplars",
+   "cat": "reason",
+   "ref": "Nosofsky 1986",
+   "when": "an item to place in a category",
+   "start": "features",
+   "steps": {
+    "features": {
+     "op": "perceive",
+     "next": [
+      "similar"
+     ]
+    },
+    "similar": {
+     "op": "compare",
+     "do": "similarity to stored exemplars",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "classify",
+     "next": [
+      "gate"
+     ]
+    },
+    "gate": {
+     "op": "decide",
+     "do": "confident and in distribution?",
+     "next": [
+      "out",
+      "abstain"
+     ]
+    },
+    "abstain": {
+     "op": "record",
+     "do": "OUT_OF_SCOPE or AMBIGUOUS_ENTITY",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "label or abstain",
+   "math": "P(A | x) = sum_{j in A} s(x, j) / sum_j s(x, j); s = exp(-c d(x, j))",
+   "learn": [
+    "sensitivity c by held-out log-loss",
+    "DIF class differentials"
+   ],
+   "feedback": "label correctness"
+  },
+  {
+   "id": "argument_toulmin",
+   "name": "Build or check an argument (Toulmin)",
+   "cat": "reason",
+   "ref": "Toulmin 1958",
+   "when": "a claim has to be justified or assessed",
+   "start": "claim",
+   "steps": {
+    "claim": {
+     "op": "perceive",
+     "next": [
+      "data"
+     ]
+    },
+    "data": {
+     "op": "retrieve",
+     "do": "evidence for",
+     "next": [
+      "warrant"
+     ]
+    },
+    "warrant": {
+     "op": "infer",
+     "do": "rule linking data to claim",
+     "next": [
+      "backing"
+     ]
+    },
+    "backing": {
+     "op": "retrieve",
+     "do": "support for the warrant",
+     "next": [
+      "rebuttal"
+     ]
+    },
+    "rebuttal": {
+     "op": "falsify",
+     "do": "evidence against, exceptions",
+     "next": [
+      "qualifier"
+     ]
+    },
+    "qualifier": {
+     "op": "estimate",
+     "do": "strength from ECS grade",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "argument card complete",
+   "math": "qualifier = grade(ECS(claim)); a rebuttal counts if its mass >= m",
+   "learn": [
+    "Beta(warrant holds | warrant type)"
+   ],
+   "feedback": "later status of the claim"
+  },
+  {
+   "id": "counterexample_search",
+   "name": "Try to break a general claim",
+   "cat": "reason",
+   "ref": "Popper 1959; Lakatos 1976",
+   "when": "a general claim is about to be relied on",
+   "start": "state",
+   "steps": {
+    "state": {
+     "op": "perceive",
+     "next": [
+      "edges"
+     ]
+    },
+    "edges": {
+     "op": "generate",
+     "do": "edge and extreme cases",
+     "next": [
+      "try"
+     ]
+    },
+    "try": {
+     "op": "test",
+     "next": [
+      "found",
+      "more"
+     ]
+    },
+    "more": {
+     "op": "decide",
+     "do": "budget left?",
+     "next": [
+      "edges",
+      "hold"
+     ]
+    },
+    "found": {
+     "op": "update",
+     "do": "refine the claim or reject it",
+     "next": [
+      "out"
+     ]
+    },
+    "hold": {
+     "op": "update",
+     "do": "confidence up",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "counterexample found or budget spent",
+   "math": "after n passed tests, P(next fails) <= 1/(n+2) (rule of succession)",
+   "learn": [
+    "Beta(edge-case generator finds counterexamples)"
+   ],
+   "feedback": "counterexamples found later"
+  },
+  {
+   "id": "polya",
+   "name": "How to solve it",
+   "cat": "solve",
+   "ref": "Polya 1945",
+   "when": "a well-posed problem",
+   "start": "understand",
+   "steps": {
+    "understand": {
+     "op": "read",
+     "do": "unknown, data, conditions",
+     "next": [
+      "plan"
+     ]
+    },
+    "plan": {
+     "op": "select",
+     "do": "heuristic: similar problem, decompose, work backwards, ...",
+     "next": [
+      "carry"
+     ]
+    },
+    "carry": {
+     "op": "act",
+     "do": "run the chosen heuristic",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "verify",
+     "next": [
+      "look",
+      "plan"
+     ]
+    },
+    "look": {
+     "op": "record",
+     "do": "look back: result, method, reuse",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "verified solution, or every heuristic tried",
+   "math": "heuristic choice by Thompson sampling over Beta(success | problem class, heuristic)",
+   "learn": [
+    "Beta(heuristic works | problem class)"
+   ],
+   "feedback": "verification"
+  },
+  {
+   "id": "means_ends",
+   "name": "Means-ends analysis",
+   "cat": "solve",
+   "ref": "Newell & Simon 1972",
+   "when": "states, a goal and operators with preconditions",
+   "start": "diff",
+   "steps": {
+    "diff": {
+     "op": "compare",
+     "do": "differences between state and goal",
+     "next": [
+      "done",
+      "pick"
+     ]
+    },
+    "pick": {
+     "op": "select",
+     "do": "largest difference, then an operator that reduces it",
+     "next": [
+      "pre"
+     ]
+    },
+    "pre": {
+     "op": "decide",
+     "do": "preconditions met?",
+     "next": [
+      "apply",
+      "sub"
+     ]
+    },
+    "sub": {
+     "op": "call:means_ends",
+     "do": "subgoal: meet the preconditions",
+     "next": [
+      "apply"
+     ]
+    },
+    "apply": {
+     "op": "act",
+     "next": [
+      "diff"
+     ]
+    },
+    "done": {
+     "op": "return"
+    }
+   },
+   "stop": "no differences, or depth or budget limit",
+   "math": "operator table P(op reduces difference d) from Dirichlet counts",
+   "learn": [
+    "Dir(operator | difference kind)"
+   ],
+   "feedback": "difference reduction per operator"
+  },
+  {
+   "id": "generate_test",
+   "name": "Generate and test",
+   "cat": "solve",
+   "ref": "Newell & Simon 1972",
+   "when": "candidates are cheap to produce and to check",
+   "start": "gen",
+   "steps": {
+    "gen": {
+     "op": "generate",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "next": [
+      "found",
+      "more"
+     ]
+    },
+    "more": {
+     "op": "decide",
+     "do": "VOC > 0?",
+     "next": [
+      "gen",
+      "fail"
+     ]
+    },
+    "found": {
+     "op": "return"
+    },
+    "fail": {
+     "op": "return"
+    }
+   },
+   "stop": "a candidate passes, or VOC <= 0",
+   "math": "expected tries = 1/p for pass rate p",
+   "learn": [
+    "Beta(pass | generator, problem class)"
+   ],
+   "feedback": "pass or fail"
+  },
+  {
+   "id": "decompose",
+   "name": "Divide and conquer",
+   "cat": "solve",
+   "ref": "classical",
+   "when": "a problem splits into nearly independent parts",
+   "start": "split",
+   "steps": {
+    "split": {
+     "op": "decompose",
+     "next": [
+      "solve"
+     ]
+    },
+    "solve": {
+     "op": "call:polya",
+     "do": "each part",
+     "next": [
+      "combine"
+     ]
+    },
+    "combine": {
+     "op": "combine",
+     "next": [
+      "verify"
+     ]
+    },
+    "verify": {
+     "op": "verify",
+     "next": [
+      "out",
+      "split"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "combined result verified",
+   "math": "split only when sum of estimated part costs + combine cost < direct estimate",
+   "learn": [
+    "Welford(cost | part kind)",
+    "Beta(combination verifies)"
+   ],
+   "feedback": "verification; total cost"
+  },
+  {
+   "id": "work_backwards",
+   "name": "Work backwards",
+   "cat": "solve",
+   "ref": "Polya 1945",
+   "when": "the goal is clear and the start is not",
+   "start": "goal",
+   "steps": {
+    "goal": {
+     "op": "perceive",
+     "next": [
+      "prior"
+     ]
+    },
+    "prior": {
+     "op": "infer",
+     "do": "what step produces this?",
+     "next": [
+      "givens"
+     ]
+    },
+    "givens": {
+     "op": "decide",
+     "do": "reached the givens?",
+     "next": [
+      "forward",
+      "prior"
+     ]
+    },
+    "forward": {
+     "op": "act",
+     "do": "execute the chain forwards",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "chain reaches the givens, or depth limit",
+   "math": "backward branching factor b; cost ~ b^d, so stop at depth cap",
+   "learn": [
+    "Beta(backward step valid | rule)"
+   ],
+   "feedback": "forward execution succeeds"
+  },
+  {
+   "id": "hill_climb_restart",
+   "name": "Local search with restarts",
+   "cat": "solve",
+   "ref": "classical optimisation",
+   "when": "a scored search space with neighbours",
+   "start": "init",
+   "steps": {
+    "init": {
+     "op": "generate",
+     "do": "random start",
+     "next": [
+      "nbrs"
+     ]
+    },
+    "nbrs": {
+     "op": "generate",
+     "do": "neighbours",
+     "next": [
+      "best"
+     ]
+    },
+    "best": {
+     "op": "select",
+     "do": "best improving neighbour",
+     "next": [
+      "move",
+      "restart"
+     ]
+    },
+    "move": {
+     "op": "update",
+     "next": [
+      "nbrs"
+     ]
+    },
+    "restart": {
+     "op": "decide",
+     "do": "budget left?",
+     "next": [
+      "init",
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "budget spent; return best seen",
+   "math": "P(best found within r restarts) = 1 - (1 - q)^r",
+   "learn": [
+    "Welford(local optimum value)",
+    "q estimated per problem class"
+   ],
+   "feedback": "best value"
+  },
+  {
+   "id": "backtracking_search",
+   "name": "Constraint search with backtracking",
+   "cat": "solve",
+   "ref": "classical constraint satisfaction",
+   "when": "variables with domains and constraints",
+   "start": "var",
+   "steps": {
+    "var": {
+     "op": "select",
+     "do": "most constrained unassigned variable",
+     "next": [
+      "value"
+     ]
+    },
+    "value": {
+     "op": "select",
+     "do": "least constraining value",
+     "next": [
+      "propagate"
+     ]
+    },
+    "propagate": {
+     "op": "infer",
+     "do": "forward checking",
+     "next": [
+      "ok"
+     ]
+    },
+    "ok": {
+     "op": "decide",
+     "do": "contradiction / complete / continue",
+     "next": [
+      "back",
+      "out",
+      "var"
+     ]
+    },
+    "back": {
+     "op": "update",
+     "do": "undo and try next value",
+     "next": [
+      "value"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "complete assignment or proof of none",
+   "math": "worst case d^n; heuristics measured by nodes expanded",
+   "learn": [
+    "Welford(nodes expanded | heuristic, problem class)"
+   ],
+   "feedback": "solved, nodes expanded"
+  },
+  {
+   "id": "expected_utility",
+   "name": "Expected-utility choice",
+   "cat": "decide",
+   "ref": "von Neumann & Morgenstern 1944",
+   "when": "options, outcomes with probabilities and values",
+   "start": "options",
+   "steps": {
+    "options": {
+     "op": "generate",
+     "next": [
+      "outcomes"
+     ]
+    },
+    "outcomes": {
+     "op": "estimate",
+     "do": "P(outcome | option) with intervals",
+     "next": [
+      "utility"
+     ]
+    },
+    "utility": {
+     "op": "evaluate",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "decide",
+     "do": "best clearly ahead?",
+     "next": [
+      "act",
+      "abstain"
+     ]
+    },
+    "act": {
+     "op": "return"
+    },
+    "abstain": {
+     "op": "return"
+    }
+   },
+   "stop": "choice or abstain",
+   "math": "EU(a) = sum_o P(o | a) u(o); abstain if EU gap of the top two < 2 SE",
+   "learn": [
+    "calibration of P(o | a) (ECE)"
+   ],
+   "feedback": "realised outcome vs predicted"
+  },
+  {
+   "id": "sprt_decide",
+   "name": "Sequential evidence to a threshold",
+   "cat": "decide",
+   "ref": "Wald 1945; Ratcliff 1978",
+   "when": "a binary decision with evidence arriving over time",
+   "start": "bounds",
+   "steps": {
+    "bounds": {
+     "op": "estimate",
+     "do": "alpha, beta from error costs",
+     "next": [
+      "obs"
+     ]
+    },
+    "obs": {
+     "op": "perceive",
+     "do": "next evidence item",
+     "next": [
+      "llr"
+     ]
+    },
+    "llr": {
+     "op": "update",
+     "do": "add its log-likelihood ratio",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "decide",
+     "do": "crossed a bound?",
+     "next": [
+      "h1",
+      "h0",
+      "obs"
+     ]
+    },
+    "h1": {
+     "op": "return"
+    },
+    "h0": {
+     "op": "return"
+    }
+   },
+   "stop": "a bound is crossed (or evidence runs out: abstain)",
+   "math": "Lambda_n = sum ln(P(e_i | H1) / P(e_i | H0)); H1 if Lambda >= ln((1-beta)/alpha); H0 if <= ln(beta/(1-alpha))",
+   "learn": [
+    "likelihood models per evidence type (Beta)"
+   ],
+   "feedback": "decision correctness; items used"
+  },
+  {
+   "id": "mcda_ahp",
+   "name": "Multi-criteria choice (AHP)",
+   "cat": "decide",
+   "ref": "Saaty 1980",
+   "when": "options judged on several criteria",
+   "start": "criteria",
+   "steps": {
+    "criteria": {
+     "op": "generate",
+     "next": [
+      "pairs"
+     ]
+    },
+    "pairs": {
+     "op": "compare",
+     "do": "pairwise importance of criteria",
+     "next": [
+      "weights"
+     ]
+    },
+    "weights": {
+     "op": "estimate",
+     "do": "principal eigenvector",
+     "next": [
+      "consistent"
+     ]
+    },
+    "consistent": {
+     "op": "decide",
+     "do": "CR < 0.1?",
+     "next": [
+      "score",
+      "pairs"
+     ]
+    },
+    "score": {
+     "op": "evaluate",
+     "do": "options on each criterion",
+     "next": [
+      "rank"
+     ]
+    },
+    "rank": {
+     "op": "rank",
+     "next": [
+      "sensitivity"
+     ]
+    },
+    "sensitivity": {
+     "op": "simulate",
+     "do": "does the winner change under weight noise?",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "ranking with stability",
+   "math": "w = principal eigenvector; CI = (lambda_max - n)/(n - 1); CR = CI / RI_n",
+   "learn": [
+    "criterion weights per decision class (Dirichlet over weights)"
+   ],
+   "feedback": "satisfaction with the choice later"
+  },
+  {
+   "id": "minimax_regret",
+   "name": "Robust choice by minimax regret",
+   "cat": "decide",
+   "ref": "Savage 1951",
+   "when": "probabilities unknown, scenarios known",
+   "start": "table",
+   "steps": {
+    "table": {
+     "op": "evaluate",
+     "do": "payoff for each option and scenario",
+     "next": [
+      "regret"
+     ]
+    },
+    "regret": {
+     "op": "compare",
+     "do": "regret = best in scenario - payoff",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "select",
+     "do": "minimum of the maximum regret",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "choice",
+   "math": "R(a, s) = max_a' u(a', s) - u(a, s); choose argmin_a max_s R(a, s)",
+   "learn": [],
+   "feedback": "realised regret"
+  },
+  {
+   "id": "recognition_primed",
+   "name": "Recognition-primed decision",
+   "cat": "decide",
+   "ref": "Klein 1993",
+   "when": "time pressure, an experienced situation",
+   "start": "see",
+   "steps": {
+    "see": {
+     "op": "perceive",
+     "next": [
+      "typical"
+     ]
+    },
+    "typical": {
+     "op": "recall_case",
+     "do": "typical case: goals, cues, expectancies, action",
+     "next": [
+      "cues"
+     ]
+    },
+    "cues": {
+     "op": "compare",
+     "do": "expectancies hold?",
+     "next": [
+      "simulate",
+      "typical"
+     ]
+    },
+    "simulate": {
+     "op": "simulate",
+     "do": "mentally run the action",
+     "next": [
+      "works"
+     ]
+    },
+    "works": {
+     "op": "decide",
+     "do": "works?",
+     "next": [
+      "act",
+      "modify"
+     ]
+    },
+    "modify": {
+     "op": "transform",
+     "do": "adjust the action or take the next option",
+     "next": [
+      "simulate"
+     ]
+    },
+    "act": {
+     "op": "return"
+    }
+   },
+   "stop": "first option that survives simulation",
+   "math": "accept first option with simulated success Beta mean >= aspiration A (no full comparison)",
+   "learn": [
+    "Beta(typical action works | case)",
+    "case memory"
+   ],
+   "feedback": "outcome of the action"
+  },
+  {
+   "id": "premortem",
+   "name": "Pre-mortem",
+   "cat": "decide",
+   "ref": "Klein 2007",
+   "when": "a plan is about to be committed",
+   "start": "assume",
+   "steps": {
+    "assume": {
+     "op": "simulate",
+     "do": "the plan has failed; it is a year later",
+     "next": [
+      "causes"
+     ]
+    },
+    "causes": {
+     "op": "generate",
+     "do": "reasons it failed",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "estimate",
+     "do": "likelihood x impact",
+     "next": [
+      "mitigate"
+     ]
+    },
+    "mitigate": {
+     "op": "transform",
+     "do": "change the plan for the top risks",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "residual risk within budget",
+   "math": "risk_i = P_i * I_i; mitigate top-k until sum of residual risk <= budget",
+   "learn": [
+    "Beta(failure cause later observed | cause type)"
+   ],
+   "feedback": "which causes actually happened"
+  },
+  {
+   "id": "htn_plan",
+   "name": "Hierarchical task planning",
+   "cat": "plan",
+   "ref": "Erol, Hendler & Nau 1994",
+   "when": "a compound task with known decomposition methods",
+   "start": "task",
+   "steps": {
+    "task": {
+     "op": "decide",
+     "do": "primitive?",
+     "next": [
+      "schedule",
+      "method"
+     ]
+    },
+    "method": {
+     "op": "select",
+     "do": "decomposition method",
+     "next": [
+      "subtasks"
+     ]
+    },
+    "subtasks": {
+     "op": "call:htn_plan",
+     "do": "each subtask",
+     "next": [
+      "order"
+     ]
+    },
+    "order": {
+     "op": "schedule",
+     "do": "ordering constraints, resources",
+     "next": [
+      "out"
+     ]
+    },
+    "schedule": {
+     "op": "schedule",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "all tasks primitive and scheduled",
+   "math": "method choice by Beta(success | task, method); plan cost = sum of step costs",
+   "learn": [
+    "Beta(method succeeds | task)",
+    "Welford(step duration)"
+   ],
+   "feedback": "plan execution outcome"
+  },
+  {
+   "id": "cpm_pert",
+   "name": "Critical path and PERT",
+   "cat": "plan",
+   "ref": "Kelley & Walker 1959; Malcolm et al. 1959",
+   "when": "a project of dependent activities",
+   "start": "list",
+   "steps": {
+    "list": {
+     "op": "decompose",
+     "do": "activities and dependencies",
+     "next": [
+      "times"
+     ]
+    },
+    "times": {
+     "op": "estimate",
+     "do": "optimistic o, likely m, pessimistic p",
+     "next": [
+      "passes"
+     ]
+    },
+    "passes": {
+     "op": "infer",
+     "do": "forward and backward pass",
+     "next": [
+      "critical"
+     ]
+    },
+    "critical": {
+     "op": "select",
+     "do": "zero-slack path",
+     "next": [
+      "prob"
+     ]
+    },
+    "prob": {
+     "op": "estimate",
+     "do": "P(finish by deadline)",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "schedule with risk",
+   "math": "t_e = (o + 4m + p)/6; var = ((p - o)/6)^2; P(T <= D) = Phi((D - sum t_e)/sqrt(sum var))",
+   "learn": [
+    "bias of estimates: Welford(actual / t_e | activity type)"
+   ],
+   "feedback": "actual durations"
+  },
+  {
+   "id": "contingency_plan",
+   "name": "Contingency planning",
+   "cat": "plan",
+   "ref": "classical",
+   "when": "a plan with uncertain branch points",
+   "start": "base",
+   "steps": {
+    "base": {
+     "op": "retrieve",
+     "do": "base plan",
+     "next": [
+      "branches"
+     ]
+    },
+    "branches": {
+     "op": "generate",
+     "do": "uncertain points and triggers",
+     "next": [
+      "worth"
+     ]
+    },
+    "worth": {
+     "op": "decide",
+     "do": "P(trigger) x loss without branch > branch cost?",
+     "next": [
+      "add",
+      "out"
+     ]
+    },
+    "add": {
+     "op": "transform",
+     "do": "alternative action + monitor",
+     "next": [
+      "branches"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "no branch worth adding",
+   "math": "add branch iff P(trigger) * L_without > C_branch",
+   "learn": [
+    "Beta(trigger occurs | trigger type)"
+   ],
+   "feedback": "triggers that fired"
+  },
+  {
+   "id": "priority_schedule",
+   "name": "Value-per-time scheduling",
+   "cat": "plan",
+   "ref": "Reinertsen 2009",
+   "when": "a queue of tasks and limited capacity",
+   "start": "queue",
+   "steps": {
+    "queue": {
+     "op": "retrieve",
+     "next": [
+      "value"
+     ]
+    },
+    "value": {
+     "op": "estimate",
+     "do": "cost of delay and duration per task",
+     "next": [
+      "rank"
+     ]
+    },
+    "rank": {
+     "op": "rank",
+     "do": "weighted shortest job first",
+     "next": [
+      "run"
+     ]
+    },
+    "run": {
+     "op": "act",
+     "next": [
+      "measure"
+     ]
+    },
+    "measure": {
+     "op": "measure",
+     "do": "throughput, cycle time",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "queue empty or period over",
+   "math": "WSJF = cost of delay / duration; Little's law WIP = throughput x cycle time",
+   "learn": [
+    "Welford(duration | task type)",
+    "Welford(cost of delay | task type)"
+   ],
+   "feedback": "realised value delivered per period"
+  },
+  {
+   "id": "spaced_repetition",
+   "name": "Spaced repetition",
+   "cat": "learn",
+   "ref": "Wozniak 1990 (SM-2); Settles & Meeder 2016",
+   "when": "items to keep in memory",
+   "start": "due",
+   "steps": {
+    "due": {
+     "op": "schedule",
+     "do": "items whose recall probability fell below target",
+     "next": [
+      "recall"
+     ]
+    },
+    "recall": {
+     "op": "test",
+     "next": [
+      "grade"
+     ]
+    },
+    "grade": {
+     "op": "evaluate",
+     "do": "quality q 0-5",
+     "next": [
+      "update"
+     ]
+    },
+    "update": {
+     "op": "update",
+     "do": "interval / half-life",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "session done",
+   "math": "p = 2^(-delta / h); SM-2: EF' = EF + (0.1 - (5 - q)(0.08 + 0.02 (5 - q)))",
+   "learn": [
+    "half-life h per item (regression on features)"
+   ],
+   "feedback": "recall success"
+  },
+  {
+   "id": "kolb_cycle",
+   "name": "Experiential learning cycle",
+   "cat": "learn",
+   "ref": "Kolb 1984",
+   "when": "learning from doing",
+   "start": "experience",
+   "steps": {
+    "experience": {
+     "op": "act",
+     "next": [
+      "reflect"
+     ]
+    },
+    "reflect": {
+     "op": "explain",
+     "do": "what happened and why",
+     "next": [
+      "conceptualise"
+     ]
+    },
+    "conceptualise": {
+     "op": "call:induction",
+     "next": [
+      "experiment"
+     ]
+    },
+    "experiment": {
+     "op": "test",
+     "do": "try the new idea",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "decide",
+     "do": "learning progress still positive?",
+     "next": [
+      "experience",
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "learning progress ~ 0",
+   "math": "learning progress LP = -d(error)/dt over a window",
+   "learn": [
+    "Welford(error per cycle)"
+   ],
+   "feedback": "error over cycles"
+  },
+  {
+   "id": "deliberate_practice",
+   "name": "Deliberate practice",
+   "cat": "learn",
+   "ref": "Ericsson, Krampe & Tesch-Romer 1993",
+   "when": "a skill to improve",
+   "start": "weakest",
+   "steps": {
+    "weakest": {
+     "op": "select",
+     "do": "cell with highest learning progress (competence table)",
+     "next": [
+      "design"
+     ]
+    },
+    "design": {
+     "op": "generate",
+     "do": "task just beyond current level",
+     "next": [
+      "attempt"
+     ]
+    },
+    "attempt": {
+     "op": "act",
+     "next": [
+      "feedback"
+     ]
+    },
+    "feedback": {
+     "op": "evaluate",
+     "do": "immediate, specific",
+     "next": [
+      "adjust"
+     ]
+    },
+    "adjust": {
+     "op": "update",
+     "next": [
+      "plateau"
+     ]
+    },
+    "plateau": {
+     "op": "decide",
+     "do": "learning progress ~ 0 or budget spent?",
+     "next": [
+      "out",
+      "weakest"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "plateau or budget",
+   "math": "pick argmax_cell LP_cell (Oudeyer et al. 2007); target difficulty with P(success) ~ 0.7",
+   "learn": [
+    "Beta(success | cell, difficulty)"
+   ],
+   "feedback": "skill measure per cell"
+  },
+  {
+   "id": "after_action_review",
+   "name": "After-action review",
+   "cat": "learn",
+   "ref": "US Army TC 25-20 (1993)",
+   "when": "after any significant task",
+   "start": "intended",
+   "steps": {
+    "intended": {
+     "op": "retrieve",
+     "do": "what was supposed to happen",
+     "next": [
+      "actual"
+     ]
+    },
+    "actual": {
+     "op": "retrieve",
+     "do": "what happened",
+     "next": [
+      "why"
+     ]
+    },
+    "why": {
+     "op": "call:five_whys",
+     "do": "why they differ",
+     "next": [
+      "lessons"
+     ]
+    },
+    "lessons": {
+     "op": "generate",
+     "do": "sustain / improve",
+     "next": [
+      "record"
+     ]
+    },
+    "record": {
+     "op": "record",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "lessons recorded",
+   "math": "credit each plan step by eligibility e_k = lambda^(T - k) times the outcome gap",
+   "learn": [
+    "Beta(step succeeded) updated by credit"
+   ],
+   "feedback": "next run of the same task"
+  },
+  {
+   "id": "gibbs_reflection",
+   "name": "Reflective cycle",
+   "cat": "learn",
+   "ref": "Gibbs 1988",
+   "when": "an experience worth learning from",
+   "start": "describe",
+   "steps": {
+    "describe": {
+     "op": "retrieve",
+     "next": [
+      "affect"
+     ]
+    },
+    "affect": {
+     "op": "measure",
+     "do": "surprise and valence of the outcome",
+     "next": [
+      "evaluate"
+     ]
+    },
+    "evaluate": {
+     "op": "evaluate",
+     "do": "what went well and badly",
+     "next": [
+      "analyse"
+     ]
+    },
+    "analyse": {
+     "op": "explain",
+     "next": [
+      "conclude"
+     ]
+    },
+    "conclude": {
+     "op": "generate",
+     "do": "what else could have been done",
+     "next": [
+      "plan"
+     ]
+    },
+    "plan": {
+     "op": "record",
+     "do": "action plan for next time",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "action plan recorded",
+   "math": "surprise = -log2 P(outcome | expectation); valence = outcome - expectation",
+   "learn": [],
+   "feedback": "whether the action plan was followed and helped"
+  },
+  {
+   "id": "habit_formation",
+   "name": "Habit formation",
+   "cat": "learn",
+   "ref": "Lally et al. 2010",
+   "when": "a routine repeated in a stable context",
+   "start": "cue",
+   "steps": {
+    "cue": {
+     "op": "perceive",
+     "next": [
+      "routine"
+     ]
+    },
+    "routine": {
+     "op": "act",
+     "next": [
+      "reward"
+     ]
+    },
+    "reward": {
+     "op": "measure",
+     "next": [
+      "strength"
+     ]
+    },
+    "strength": {
+     "op": "update",
+     "do": "habit strength",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "one repetition",
+   "math": "H <- H + alpha (1 - H) on rewarded repetition; H <- H (1 - gamma) on a skip",
+   "learn": [
+    "H per (cue, routine)"
+   ],
+   "feedback": "reward"
+  },
+  {
+   "id": "confidence_monitor",
+   "name": "Confidence monitoring and abstention",
+   "cat": "meta",
+   "ref": "PLAN rule 9; DISCOVERY 2, 3",
+   "when": "every answer",
+   "start": "produce",
+   "steps": {
+    "produce": {
+     "op": "estimate",
+     "do": "answer + raw confidence",
+     "next": [
+      "calibrate"
+     ]
+    },
+    "calibrate": {
+     "op": "transform",
+     "do": "isotonic map per cell",
+     "next": [
+      "gate"
+     ]
+    },
+    "gate": {
+     "op": "decide",
+     "do": "conf >= tau_cell?",
+     "next": [
+      "answer",
+      "idk"
+     ]
+    },
+    "answer": {
+     "op": "communicate",
+     "do": "answer card",
+     "next": [
+      "later"
+     ]
+    },
+    "idk": {
+     "op": "communicate",
+     "do": "I-don't-know card with reason code",
+     "next": [
+      "later"
+     ]
+    },
+    "later": {
+     "op": "update",
+     "do": "when the truth is known: calibration",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "answer or abstain",
+   "math": "ECE per cell; tau_cell chosen on the risk-coverage curve for the target wrong rate",
+   "learn": [
+    "isotonic calibration per cell",
+    "tau_cell"
+   ],
+   "feedback": "correctness of answers; correctness of abstentions"
+  },
+  {
+   "id": "self_explain",
+   "name": "Self-explanation check",
+   "cat": "meta",
+   "ref": "Chi et al. 1989",
+   "when": "before giving a non-trivial answer",
+   "start": "explain",
+   "steps": {
+    "explain": {
+     "op": "explain",
+     "do": "step-by-step reasons",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "verify",
+     "do": "each step against evidence",
+     "next": [
+      "ok",
+      "gap"
+     ]
+    },
+    "gap": {
+     "op": "update",
+     "do": "mark the weak step; lower confidence or repair",
+     "next": [
+      "ok"
+     ]
+    },
+    "ok": {
+     "op": "return"
+    }
+   },
+   "stop": "every step checked",
+   "math": "conf_answer <= min over steps of P(step)",
+   "learn": [
+    "Beta(step type holds)"
+   ],
+   "feedback": "answer correctness"
+  },
+  {
+   "id": "goal_monitor",
+   "name": "Goal setting and progress monitoring",
+   "cat": "meta",
+   "ref": "Locke & Latham 2002",
+   "when": "a goal with a deadline",
+   "start": "set",
+   "steps": {
+    "set": {
+     "op": "generate",
+     "do": "specific, measurable goal and milestones",
+     "next": [
+      "track"
+     ]
+    },
+    "track": {
+     "op": "monitor",
+     "do": "progress vs expected trajectory",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "decide",
+     "do": "behind, on track, done?",
+     "next": [
+      "adjust",
+      "track",
+      "out"
+     ]
+    },
+    "adjust": {
+     "op": "transform",
+     "do": "more effort, new method, or revise the goal",
+     "next": [
+      "track"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "goal met or revised away",
+   "math": "z = (actual - expected) / sigma; replan when z < -2 on two checks running",
+   "learn": [
+    "Welford(progress rate | goal type)"
+   ],
+   "feedback": "goal outcome"
+  },
+  {
+   "id": "error_review",
+   "name": "Error review",
+   "cat": "meta",
+   "ref": "Reason 1990",
+   "when": "a wrong answer or failed action is found",
+   "start": "log",
+   "steps": {
+    "log": {
+     "op": "record",
+     "next": [
+      "kind"
+     ]
+    },
+    "kind": {
+     "op": "classify",
+     "do": "slip / rule mistake / knowledge gap / bad source",
+     "next": [
+      "cause"
+     ]
+    },
+    "cause": {
+     "op": "call:five_whys",
+     "next": [
+      "fix"
+     ]
+    },
+    "fix": {
+     "op": "transform",
+     "do": "change rule, source trust, threshold or pattern",
+     "next": [
+      "canary"
+     ]
+    },
+    "canary": {
+     "op": "record",
+     "do": "add the case to a canary set",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "fix and canary in place",
+   "math": "error kind rates as Dirichlet; fix promoted only through LCI",
+   "learn": [
+    "Dir(error kind | process)"
+   ],
+   "feedback": "recurrence of the error"
+  },
+  {
+   "id": "divergent_convergent",
+   "name": "Diverge then converge",
+   "cat": "create",
+   "ref": "Guilford 1967; Osborn 1953",
+   "when": "open-ended ideas needed",
+   "start": "diverge",
+   "steps": {
+    "diverge": {
+     "op": "generate",
+     "do": "many ideas, judgement deferred",
+     "next": [
+      "cluster"
+     ]
+    },
+    "cluster": {
+     "op": "combine",
+     "do": "group similar ideas",
+     "next": [
+      "converge"
+     ]
+    },
+    "converge": {
+     "op": "evaluate",
+     "do": "feasibility, value, novelty",
+     "next": [
+      "pick"
+     ]
+    },
+    "pick": {
+     "op": "select",
+     "next": [
+      "refine"
+     ]
+    },
+    "refine": {
+     "op": "transform",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "a refined idea",
+   "math": "fluency = n; flexibility = number of clusters; originality = mean -log2 P(idea | pool)",
+   "learn": [
+    "Beta(idea survives evaluation | generator)"
+   ],
+   "feedback": "idea outcome"
+  },
+  {
+   "id": "scamper",
+   "name": "SCAMPER transformations",
+   "cat": "create",
+   "ref": "Eberle 1971",
+   "when": "an existing thing to improve",
+   "start": "item",
+   "steps": {
+    "item": {
+     "op": "retrieve",
+     "next": [
+      "apply"
+     ]
+    },
+    "apply": {
+     "op": "transform",
+     "do": "substitute, combine, adapt, modify, put to other use, eliminate, reverse",
+     "next": [
+      "eval"
+     ]
+    },
+    "eval": {
+     "op": "evaluate",
+     "next": [
+      "more"
+     ]
+    },
+    "more": {
+     "op": "decide",
+     "do": "operators left?",
+     "next": [
+      "apply",
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "all seven tried",
+   "math": "operator choice by Beta(useful | domain, operator)",
+   "learn": [
+    "Beta(operator useful | domain)"
+   ],
+   "feedback": "ideas kept"
+  },
+  {
+   "id": "triz",
+   "name": "TRIZ contradiction solving",
+   "cat": "create",
+   "ref": "Altshuller 1984",
+   "when": "improving one parameter worsens another",
+   "start": "contradiction",
+   "steps": {
+    "contradiction": {
+     "op": "perceive",
+     "do": "improving vs worsening parameter",
+     "next": [
+      "lookup"
+     ]
+    },
+    "lookup": {
+     "op": "retrieve",
+     "do": "contradiction matrix -> inventive principles",
+     "next": [
+      "apply"
+     ]
+    },
+    "apply": {
+     "op": "transform",
+     "next": [
+      "eval"
+     ]
+    },
+    "eval": {
+     "op": "evaluate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "a solution resolves the contradiction",
+   "math": "principle choice by Beta(success | contradiction class, principle)",
+   "learn": [
+    "Beta(principle works | contradiction class)"
+   ],
+   "feedback": "solution evaluation"
+  },
+  {
+   "id": "morphological",
+   "name": "Morphological analysis",
+   "cat": "create",
+   "ref": "Zwicky 1969",
+   "when": "a design space with independent dimensions",
+   "start": "dims",
+   "steps": {
+    "dims": {
+     "op": "decompose",
+     "do": "dimensions and their options",
+     "next": [
+      "enum"
+     ]
+    },
+    "enum": {
+     "op": "combine",
+     "do": "combinations",
+     "next": [
+      "prune"
+     ]
+    },
+    "prune": {
+     "op": "test",
+     "do": "cross-consistency of pairs",
+     "next": [
+      "eval"
+     ]
+    },
+    "eval": {
+     "op": "evaluate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "ranked consistent combinations",
+   "math": "space size = prod k_i; pruning by a pairwise cross-consistency matrix",
+   "learn": [
+    "Beta(pair consistent)"
+   ],
+   "feedback": "chosen combination outcome"
+  },
+  {
+   "id": "random_stimulus",
+   "name": "Random stimulus",
+   "cat": "create",
+   "ref": "de Bono 1970; DISCOVERY G20",
+   "when": "stuck; need distant ideas",
+   "start": "pick",
+   "steps": {
+    "pick": {
+     "op": "generate",
+     "do": "a concept far from the problem",
+     "next": [
+      "connect"
+     ]
+    },
+    "connect": {
+     "op": "generate",
+     "do": "forced links to the problem",
+     "next": [
+      "eval"
+     ]
+    },
+    "eval": {
+     "op": "evaluate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "budget (wild tier, 5%)",
+   "math": "keep only links whose support beats chance",
+   "learn": [
+    "Beta(useful link)"
+   ],
+   "feedback": "ideas kept"
+  },
+  {
+   "id": "gap_closing",
+   "name": "Close a known gap (asking ladder)",
+   "cat": "discover",
+   "ref": "DISCOVERY P1",
+   "when": "a gap in the gap map with high value of information",
+   "start": "corpus",
+   "steps": {
+    "corpus": {
+     "op": "read",
+     "do": "re-read the corpus with current patterns",
+     "next": [
+      "found1"
+     ]
+    },
+    "found1": {
+     "op": "decide",
+     "next": [
+      "admit",
+      "infer"
+     ]
+    },
+    "infer": {
+     "op": "infer",
+     "do": "inference from Known items",
+     "next": [
+      "found2"
+     ]
+    },
+    "found2": {
+     "op": "decide",
+     "next": [
+      "admit",
+      "pack"
+     ]
+    },
+    "pack": {
+     "op": "retrieve",
+     "do": "other data-pack sources",
+     "next": [
+      "found3"
+     ]
+    },
+    "found3": {
+     "op": "decide",
+     "next": [
+      "admit",
+      "teacher"
+     ]
+    },
+    "teacher": {
+     "op": "ask",
+     "do": "GGUF teacher (gguf_mine.py)",
+     "next": [
+      "found4"
+     ]
+    },
+    "found4": {
+     "op": "decide",
+     "next": [
+      "admit",
+      "human"
+     ]
+    },
+    "human": {
+     "op": "ask",
+     "do": "queue for Odin",
+     "next": [
+      "admit",
+      "park"
+     ]
+    },
+    "admit": {
+     "op": "update",
+     "do": "through ECS",
+     "next": [
+      "out"
+     ]
+    },
+    "park": {
+     "op": "record",
+     "do": "unresolvable now",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "filled or parked",
+   "math": "rung order by expected success / cost from Beta(success | rung, gap kind)",
+   "learn": [
+    "Beta(rung fills gap | gap kind)"
+   ],
+   "feedback": "gap closed and the fact's later audit"
+  },
+  {
+   "id": "conjecture_loop",
+   "name": "Conjecture and test",
+   "cat": "discover",
+   "ref": "DISCOVERY P2, sections 6-7",
+   "when": "scheduled discovery budget",
+   "start": "generate",
+   "steps": {
+    "generate": {
+     "op": "generate",
+     "do": "hypotheses from a generator G1-G20",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "score",
+     "do": "plausibility, novelty, impact, EIG/cost",
+     "next": [
+      "prereg"
+     ]
+    },
+    "prereg": {
+     "op": "record",
+     "do": "pre-register tests and predictions",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "do": "cheapest first, for and against",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "supported / refuted / parked",
+     "next": [
+      "promote",
+      "out"
+     ]
+    },
+    "promote": {
+     "op": "update",
+     "do": "ECS with independent evidence only",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "decision per hypothesis",
+   "math": "posterior odds = prior odds x prod BF; batch BH at q = 0.1",
+   "learn": [
+    "Beta(generator confirmed)"
+   ],
+   "feedback": "confirmations, refutations, audits"
+  },
+  {
+   "id": "scientific_method",
+   "name": "Scientific method",
+   "cat": "science",
+   "ref": "Popper 1959",
+   "when": "an empirical question",
+   "start": "observe",
+   "steps": {
+    "observe": {
+     "op": "perceive",
+     "next": [
+      "question"
+     ]
+    },
+    "question": {
+     "op": "generate",
+     "next": [
+      "hypothesis"
+     ]
+    },
+    "hypothesis": {
+     "op": "generate",
+     "next": [
+      "predict"
+     ]
+    },
+    "predict": {
+     "op": "record",
+     "do": "pre-registered prediction",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "next": [
+      "analyse"
+     ]
+    },
+    "analyse": {
+     "op": "evaluate",
+     "do": "statistics",
+     "next": [
+      "conclude"
+     ]
+    },
+    "conclude": {
+     "op": "decide",
+     "do": "support / refute / inconclusive",
+     "next": [
+      "replicate"
+     ]
+    },
+    "replicate": {
+     "op": "test",
+     "do": "independent replication",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "replicated conclusion",
+   "math": "claim only if the e-value >= 1/alpha; report the effect size with an interval",
+   "learn": [
+    "Beta(replicates | claim kind)"
+   ],
+   "feedback": "replication outcome"
+  },
+  {
+   "id": "literature_review",
+   "name": "Systematic literature review",
+   "cat": "science",
+   "ref": "Page et al. 2021 (PRISMA 2020)",
+   "when": "what is known about a question",
+   "start": "define",
+   "steps": {
+    "define": {
+     "op": "generate",
+     "do": "question and inclusion criteria",
+     "next": [
+      "search"
+     ]
+    },
+    "search": {
+     "op": "retrieve",
+     "next": [
+      "screen"
+     ]
+    },
+    "screen": {
+     "op": "classify",
+     "do": "include / exclude",
+     "next": [
+      "extract"
+     ]
+    },
+    "extract": {
+     "op": "read",
+     "next": [
+      "grade"
+     ]
+    },
+    "grade": {
+     "op": "evaluate",
+     "do": "certainty of evidence (GRADE / ECS)",
+     "next": [
+      "synthesise"
+     ]
+    },
+    "synthesise": {
+     "op": "combine",
+     "next": [
+      "gaps"
+     ]
+    },
+    "gaps": {
+     "op": "record",
+     "do": "gaps -> gap map",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "synthesis and gaps",
+   "math": "inverse-variance pooled estimate; heterogeneity I^2 = (Q - df)/Q",
+   "learn": [
+    "Beta(screening decision correct)"
+   ],
+   "feedback": "audit of screening"
+  },
+  {
+   "id": "experiment_design",
+   "name": "Experiment design",
+   "cat": "science",
+   "ref": "Fisher 1935",
+   "when": "a test must be designed",
+   "start": "vars",
+   "steps": {
+    "vars": {
+     "op": "decompose",
+     "do": "variables, outcome, confounders",
+     "next": [
+      "control"
+     ]
+    },
+    "control": {
+     "op": "generate",
+     "do": "controls and randomisation",
+     "next": [
+      "power"
+     ]
+    },
+    "power": {
+     "op": "estimate",
+     "do": "sample size",
+     "next": [
+      "prereg"
+     ]
+    },
+    "prereg": {
+     "op": "record",
+     "next": [
+      "run"
+     ]
+    },
+    "run": {
+     "op": "act",
+     "next": [
+      "analyse"
+     ]
+    },
+    "analyse": {
+     "op": "evaluate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "analysed result",
+   "math": "n per group ~ 2 (z_{1-alpha/2} + z_{1-beta})^2 sigma^2 / delta^2",
+   "learn": [
+    "Welford(effect size | intervention kind)"
+   ],
+   "feedback": "whether the design detected the effect"
+  },
+  {
+   "id": "peer_review",
+   "name": "Peer review",
+   "cat": "science",
+   "ref": "classical",
+   "when": "a claimed result to check",
+   "start": "claims",
+   "steps": {
+    "claims": {
+     "op": "read",
+     "next": [
+      "methods"
+     ]
+    },
+    "methods": {
+     "op": "evaluate",
+     "do": "design, controls, leakage",
+     "next": [
+      "stats"
+     ]
+    },
+    "stats": {
+     "op": "evaluate",
+     "do": "effect sizes, intervals, multiple comparisons",
+     "next": [
+      "repro"
+     ]
+    },
+    "repro": {
+     "op": "test",
+     "do": "rerun if possible",
+     "next": [
+      "verdict"
+     ]
+    },
+    "verdict": {
+     "op": "communicate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "verdict",
+   "math": "flag if p-hacking signs: many tests, no correction, outcome switching",
+   "learn": [
+    "Beta(flagged issue confirmed | check)"
+   ],
+   "feedback": "later replication"
+  },
+  {
+   "id": "bayesian_update",
+   "name": "Bayesian update",
+   "cat": "science",
+   "ref": "Bayes 1763; Laplace 1812",
+   "when": "new evidence about a hypothesis",
+   "start": "prior",
+   "steps": {
+    "prior": {
+     "op": "retrieve",
+     "next": [
+      "likelihood"
+     ]
+    },
+    "likelihood": {
+     "op": "estimate",
+     "do": "P(E | H), P(E | not H)",
+     "next": [
+      "posterior"
+     ]
+    },
+    "posterior": {
+     "op": "update",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "posterior",
+   "math": "P(H | E) = P(E | H) P(H) / P(E); odds form O1 = O0 x BF",
+   "learn": [
+    "likelihood models"
+   ],
+   "feedback": "calibration of posteriors"
+  },
+  {
+   "id": "engineering_design",
+   "name": "Engineering design process",
+   "cat": "eng",
+   "ref": "Pahl & Beitz 2007",
+   "when": "something to be designed and built",
+   "start": "requirements",
+   "steps": {
+    "requirements": {
+     "op": "generate",
+     "do": "requirements with measures",
+     "next": [
+      "concepts"
+     ]
+    },
+    "concepts": {
+     "op": "call:divergent_convergent",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "call:mcda_ahp",
+     "next": [
+      "detail"
+     ]
+    },
+    "detail": {
+     "op": "transform",
+     "do": "embodiment and detail design",
+     "next": [
+      "prototype"
+     ]
+    },
+    "prototype": {
+     "op": "act",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "do": "against the requirements",
+     "next": [
+      "release",
+      "detail"
+     ]
+    },
+    "release": {
+     "op": "return"
+    }
+   },
+   "stop": "all requirements verified",
+   "math": "requirement coverage = verified / total; iterate while the cost of change < the value of the fix",
+   "learn": [
+    "Beta(test passes first time | design stage)"
+   ],
+   "feedback": "test results, field failures"
+  },
+  {
+   "id": "design_thinking",
+   "name": "Design thinking",
+   "cat": "eng",
+   "ref": "Brown 2008",
+   "when": "a human-centred problem",
+   "start": "empathise",
+   "steps": {
+    "empathise": {
+     "op": "call:perspective_taking",
+     "do": "users' needs",
+     "next": [
+      "define"
+     ]
+    },
+    "define": {
+     "op": "generate",
+     "do": "problem statement",
+     "next": [
+      "ideate"
+     ]
+    },
+    "ideate": {
+     "op": "call:divergent_convergent",
+     "next": [
+      "prototype"
+     ]
+    },
+    "prototype": {
+     "op": "act",
+     "do": "cheap prototype",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "do": "with users",
+     "next": [
+      "out",
+      "define"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "users' needs met",
+   "math": "loop while the expected information gain about user needs > the cost of a loop",
+   "learn": [
+    "Beta(prototype accepted)"
+   ],
+   "feedback": "user test outcomes"
+  },
+  {
+   "id": "v_model",
+   "name": "V-model verification",
+   "cat": "eng",
+   "ref": "systems engineering",
+   "when": "a system with requirements and components",
+   "start": "reqs",
+   "steps": {
+    "reqs": {
+     "op": "generate",
+     "next": [
+      "design"
+     ]
+    },
+    "design": {
+     "op": "decompose",
+     "do": "system -> components",
+     "next": [
+      "build"
+     ]
+    },
+    "build": {
+     "op": "act",
+     "next": [
+      "unit"
+     ]
+    },
+    "unit": {
+     "op": "test",
+     "do": "components vs component design",
+     "next": [
+      "integrate"
+     ]
+    },
+    "integrate": {
+     "op": "test",
+     "do": "system vs system design",
+     "next": [
+      "accept"
+     ]
+    },
+    "accept": {
+     "op": "test",
+     "do": "acceptance vs requirements",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "accepted",
+   "math": "each requirement has >= 1 verification; coverage = verified / total",
+   "learn": [
+    "Beta(defect caught at level | defect type)"
+   ],
+   "feedback": "escaped defects"
+  },
+  {
+   "id": "tolerance_stackup",
+   "name": "Tolerance stack-up",
+   "cat": "eng",
+   "ref": "standard mechanical practice",
+   "when": "an assembly dimension depends on a chain of parts",
+   "start": "loop",
+   "steps": {
+    "loop": {
+     "op": "decompose",
+     "do": "dimension loop and tolerances",
+     "next": [
+      "wc"
+     ]
+    },
+    "wc": {
+     "op": "estimate",
+     "do": "worst case",
+     "next": [
+      "rss"
+     ]
+    },
+    "rss": {
+     "op": "estimate",
+     "do": "statistical (RSS)",
+     "next": [
+      "spec"
+     ]
+    },
+    "spec": {
+     "op": "compare",
+     "do": "against the requirement",
+     "next": [
+      "ok",
+      "tighten"
+     ]
+    },
+    "tighten": {
+     "op": "transform",
+     "do": "re-allocate tolerances",
+     "next": [
+      "wc"
+     ]
+    },
+    "ok": {
+     "op": "return"
+    }
+   },
+   "stop": "within spec at the required yield",
+   "math": "WC = sum |t_i|; RSS = sqrt(sum t_i^2); yield from Normal with sigma_i = t_i / 3",
+   "learn": [
+    "Welford(actual / nominal variation | process)"
+   ],
+   "feedback": "measured assemblies"
+  },
+  {
+   "id": "machining_process_plan",
+   "name": "Machining process plan",
+   "cat": "eng",
+   "ref": "standard toolmaking and fitting practice",
+   "when": "a part drawing to be made",
+   "start": "drawing",
+   "steps": {
+    "drawing": {
+     "op": "read",
+     "do": "features, tolerances, finish, material",
+     "next": [
+      "datums"
+     ]
+    },
+    "datums": {
+     "op": "select",
+     "do": "datum scheme",
+     "next": [
+      "stock"
+     ]
+    },
+    "stock": {
+     "op": "select",
+     "do": "stock size and material condition",
+     "next": [
+      "sequence"
+     ]
+    },
+    "sequence": {
+     "op": "schedule",
+     "do": "rough, semi-finish, finish; fewest set-ups",
+     "next": [
+      "fixture"
+     ]
+    },
+    "fixture": {
+     "op": "generate",
+     "do": "workholding per set-up",
+     "next": [
+      "tools"
+     ]
+    },
+    "tools": {
+     "op": "select",
+     "do": "tools, speeds, feeds",
+     "next": [
+      "inspect"
+     ]
+    },
+    "inspect": {
+     "op": "generate",
+     "do": "inspection plan",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "complete plan",
+   "math": "v = pi D N / 1000; f = f_z z N; sequence minimises set-ups subject to datum precedence",
+   "learn": [
+    "Welford(cycle time | operation)",
+    "Beta(first-off part passes | plan feature)"
+   ],
+   "feedback": "inspection results, cycle time"
+  },
+  {
+   "id": "fmea",
+   "name": "Failure mode and effects analysis",
+   "cat": "eng",
+   "ref": "AIAG & VDA 2019",
+   "when": "a design or process before release",
+   "start": "functions",
+   "steps": {
+    "functions": {
+     "op": "decompose",
+     "next": [
+      "modes"
+     ]
+    },
+    "modes": {
+     "op": "generate",
+     "do": "failure modes per function",
+     "next": [
+      "rate"
+     ]
+    },
+    "rate": {
+     "op": "estimate",
+     "do": "severity S, occurrence O, detection D",
+     "next": [
+      "prioritise"
+     ]
+    },
+    "prioritise": {
+     "op": "rank",
+     "next": [
+      "actions"
+     ]
+    },
+    "actions": {
+     "op": "transform",
+     "do": "design or control changes",
+     "next": [
+      "rerate"
+     ]
+    },
+    "rerate": {
+     "op": "estimate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "high-priority modes actioned",
+   "math": "RPN = S x O x D (1-10 each); rank by S first, then O x D",
+   "learn": [
+    "Beta(failure mode observed | mode type)"
+   ],
+   "feedback": "field failures"
+  },
+  {
+   "id": "job_safety_analysis",
+   "name": "Job safety analysis",
+   "cat": "quality",
+   "ref": "OSHA 3071",
+   "when": "before a job with hazards",
+   "start": "steps",
+   "steps": {
+    "steps": {
+     "op": "decompose",
+     "do": "the job into steps",
+     "next": [
+      "hazards"
+     ]
+    },
+    "hazards": {
+     "op": "generate",
+     "do": "hazards per step",
+     "next": [
+      "risk"
+     ]
+    },
+    "risk": {
+     "op": "estimate",
+     "do": "likelihood x consequence",
+     "next": [
+      "controls"
+     ]
+    },
+    "controls": {
+     "op": "select",
+     "do": "eliminate, substitute, engineer, administer, PPE",
+     "next": [
+      "residual"
+     ]
+    },
+    "residual": {
+     "op": "decide",
+     "do": "residual risk tolerable?",
+     "next": [
+      "signoff",
+      "controls"
+     ]
+    },
+    "signoff": {
+     "op": "return"
+    }
+   },
+   "stop": "every step at tolerable risk",
+   "math": "risk = L x C on a 5 x 5 matrix; take the highest control in the hierarchy that brings risk to tolerable",
+   "learn": [
+    "Beta(hazard realised | hazard type)"
+   ],
+   "feedback": "incidents and near misses"
+  },
+  {
+   "id": "pdca",
+   "name": "Plan-Do-Check-Act",
+   "cat": "quality",
+   "ref": "Deming 1986",
+   "when": "continuous improvement of a process",
+   "start": "plan",
+   "steps": {
+    "plan": {
+     "op": "generate",
+     "do": "change and expected effect",
+     "next": [
+      "do"
+     ]
+    },
+    "do": {
+     "op": "act",
+     "do": "small-scale trial",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "compare",
+     "do": "measured vs expected",
+     "next": [
+      "act"
+     ]
+    },
+    "act": {
+     "op": "decide",
+     "do": "adopt, adapt, abandon",
+     "next": [
+      "plan",
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "change adopted or abandoned",
+   "math": "adopt only if LCI >= 0.95 on the process metric",
+   "learn": [
+    "Beta(change kind helps)"
+   ],
+   "feedback": "process metric"
+  },
+  {
+   "id": "dmaic",
+   "name": "Define-Measure-Analyse-Improve-Control",
+   "cat": "quality",
+   "ref": "Six Sigma",
+   "when": "a process defect to remove",
+   "start": "define",
+   "steps": {
+    "define": {
+     "op": "generate",
+     "do": "problem, customer requirement",
+     "next": [
+      "measure"
+     ]
+    },
+    "measure": {
+     "op": "measure",
+     "do": "baseline capability",
+     "next": [
+      "analyse"
+     ]
+    },
+    "analyse": {
+     "op": "call:ishikawa",
+     "next": [
+      "improve"
+     ]
+    },
+    "improve": {
+     "op": "transform",
+     "next": [
+      "control"
+     ]
+    },
+    "control": {
+     "op": "call:spc_control",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "improvement held under control",
+   "math": "Cpk = min(USL - mu, mu - LSL) / (3 sigma)",
+   "learn": [
+    "Welford(Cpk gain | improvement type)"
+   ],
+   "feedback": "capability after"
+  },
+  {
+   "id": "spc_control",
+   "name": "Statistical process control",
+   "cat": "quality",
+   "ref": "Shewhart 1931; Western Electric 1956",
+   "when": "a running process with a measured characteristic",
+   "start": "sample",
+   "steps": {
+    "sample": {
+     "op": "measure",
+     "next": [
+      "stat"
+     ]
+    },
+    "stat": {
+     "op": "estimate",
+     "do": "subgroup mean and range",
+     "next": [
+      "rules"
+     ]
+    },
+    "rules": {
+     "op": "test",
+     "do": "control-chart rules",
+     "next": [
+      "continue",
+      "investigate"
+     ]
+    },
+    "investigate": {
+     "op": "call:five_whys",
+     "next": [
+      "continue"
+     ]
+    },
+    "continue": {
+     "op": "return"
+    }
+   },
+   "stop": "one subgroup",
+   "math": "limits mu +- 3 sigma / sqrt(n); 1 beyond 3 sigma, 2 of 3 beyond 2 sigma, 4 of 5 beyond 1 sigma, 8 in a row on one side",
+   "learn": [
+    "mu, sigma by Welford over in-control data"
+   ],
+   "feedback": "confirmed special causes"
+  },
+  {
+   "id": "rcm_maintenance",
+   "name": "Reliability-centred maintenance",
+   "cat": "quality",
+   "ref": "Moubray 1997",
+   "when": "an asset to maintain",
+   "start": "function",
+   "steps": {
+    "function": {
+     "op": "decompose",
+     "do": "functions and failures",
+     "next": [
+      "modes"
+     ]
+    },
+    "modes": {
+     "op": "generate",
+     "do": "failure modes and consequences",
+     "next": [
+      "fit"
+     ]
+    },
+    "fit": {
+     "op": "estimate",
+     "do": "Weibull fit to failure history",
+     "next": [
+      "task"
+     ]
+    },
+    "task": {
+     "op": "select",
+     "do": "on-condition, scheduled, run-to-failure",
+     "next": [
+      "interval"
+     ]
+    },
+    "interval": {
+     "op": "estimate",
+     "do": "interval minimising cost per unit time",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "a task and interval per mode",
+   "math": "R(t) = exp(-(t / eta)^beta); beta > 1 wear-out -> scheduled replacement; minimise (C_p R(T) + C_f (1 - R(T))) / integral_0^T R",
+   "learn": [
+    "Weibull (beta, eta) per mode, updated by new failures"
+   ],
+   "feedback": "failures and costs"
+  },
+  {
+   "id": "five_whys",
+   "name": "Five whys",
+   "cat": "quality",
+   "ref": "Ohno 1988",
+   "when": "a problem to trace to a root cause",
+   "start": "problem",
+   "steps": {
+    "problem": {
+     "op": "perceive",
+     "next": [
+      "why"
+     ]
+    },
+    "why": {
+     "op": "explain",
+     "do": "why did this happen?",
+     "next": [
+      "actionable"
+     ]
+    },
+    "actionable": {
+     "op": "decide",
+     "do": "actionable root cause, or about 5 levels?",
+     "next": [
+      "verify",
+      "why"
+     ]
+    },
+    "verify": {
+     "op": "verify",
+     "do": "does removing it prevent recurrence?",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "verified root cause",
+   "math": "depth chosen by VOC; a cause is kept only if verified",
+   "learn": [
+    "Beta(root cause verified | depth)"
+   ],
+   "feedback": "recurrence"
+  },
+  {
+   "id": "ishikawa",
+   "name": "Cause-and-effect (fishbone)",
+   "cat": "quality",
+   "ref": "Ishikawa 1968",
+   "when": "many possible causes of an effect",
+   "start": "effect",
+   "steps": {
+    "effect": {
+     "op": "perceive",
+     "next": [
+      "bones"
+     ]
+    },
+    "bones": {
+     "op": "generate",
+     "do": "causes under method, machine, material, man, measurement, environment",
+     "next": [
+      "rank"
+     ]
+    },
+    "rank": {
+     "op": "rank",
+     "do": "by likelihood",
+     "next": [
+      "verify"
+     ]
+    },
+    "verify": {
+     "op": "verify",
+     "do": "top causes with data",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "verified main causes",
+   "math": "rank by posterior P(cause | effect) from Dirichlet over past cause categories",
+   "learn": [
+    "Dir(cause category | effect type)"
+   ],
+   "feedback": "verified causes"
+  },
+  {
+   "id": "half_split",
+   "name": "Half-split fault finding",
+   "cat": "diagnose",
+   "ref": "standard troubleshooting",
+   "when": "a fault somewhere along a chain",
+   "start": "chain",
+   "steps": {
+    "chain": {
+     "op": "decompose",
+     "do": "signal or flow path",
+     "next": [
+      "mid"
+     ]
+    },
+    "mid": {
+     "op": "select",
+     "do": "split point that halves the probability mass",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "next": [
+      "narrow"
+     ]
+    },
+    "narrow": {
+     "op": "decide",
+     "do": "one element left?",
+     "next": [
+      "repair",
+      "mid"
+     ]
+    },
+    "repair": {
+     "op": "act",
+     "next": [
+      "confirm"
+     ]
+    },
+    "confirm": {
+     "op": "verify",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "fault repaired and confirmed",
+   "math": "about ceil(log2 n) tests; with unequal priors or costs, split to equalise P / cost",
+   "learn": [
+    "Dir(fault location | system, symptom)",
+    "Welford(test cost | point)"
+   ],
+   "feedback": "tests used; repair confirmed"
+  },
+  {
+   "id": "differential_diagnosis",
+   "name": "Differential diagnosis",
+   "cat": "diagnose",
+   "ref": "Pauker & Kassirer 1980",
+   "when": "symptoms with several possible causes",
+   "start": "findings",
+   "steps": {
+    "findings": {
+     "op": "perceive",
+     "next": [
+      "list"
+     ]
+    },
+    "list": {
+     "op": "generate",
+     "do": "candidates with priors",
+     "next": [
+      "testpick"
+     ]
+    },
+    "testpick": {
+     "op": "select",
+     "do": "test with the highest EIG / cost",
+     "next": [
+      "result"
+     ]
+    },
+    "result": {
+     "op": "update",
+     "do": "posteriors",
+     "next": [
+      "threshold"
+     ]
+    },
+    "threshold": {
+     "op": "decide",
+     "do": "top above the act threshold?",
+     "next": [
+      "act",
+      "testpick"
+     ]
+    },
+    "act": {
+     "op": "return"
+    }
+   },
+   "stop": "act threshold reached, or no useful test left (abstain)",
+   "math": "test only when P is between the test and treatment thresholds; EIG per test from its sensitivity and specificity",
+   "learn": [
+    "Beta(sensitivity), Beta(specificity) per test",
+    "priors per symptom set"
+   ],
+   "feedback": "confirmed cause"
+  },
+  {
+   "id": "fault_tree",
+   "name": "Fault tree analysis",
+   "cat": "diagnose",
+   "ref": "Vesely et al. 1981",
+   "when": "a top event to analyse",
+   "start": "top",
+   "steps": {
+    "top": {
+     "op": "perceive",
+     "next": [
+      "gates"
+     ]
+    },
+    "gates": {
+     "op": "decompose",
+     "do": "AND / OR gates to basic events",
+     "next": [
+      "probs"
+     ]
+    },
+    "probs": {
+     "op": "estimate",
+     "do": "basic event probabilities",
+     "next": [
+      "cutsets"
+     ]
+    },
+    "cutsets": {
+     "op": "infer",
+     "do": "minimal cut sets",
+     "next": [
+      "importance"
+     ]
+    },
+    "importance": {
+     "op": "rank",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "ranked contributors",
+   "math": "AND: prod p_i; OR: 1 - prod(1 - p_i); Birnbaum importance dP_top / dp_i",
+   "learn": [
+    "Beta(basic event)"
+   ],
+   "feedback": "observed events"
+  },
+  {
+   "id": "debugging",
+   "name": "Debugging",
+   "cat": "diagnose",
+   "ref": "Zeller 2009",
+   "when": "a program misbehaves",
+   "start": "reproduce",
+   "steps": {
+    "reproduce": {
+     "op": "test",
+     "do": "reliable reproduction",
+     "next": [
+      "minimise"
+     ]
+    },
+    "minimise": {
+     "op": "transform",
+     "do": "delta-debug the input",
+     "next": [
+      "hypo"
+     ]
+    },
+    "hypo": {
+     "op": "generate",
+     "do": "cause hypotheses",
+     "next": [
+      "experiment"
+     ]
+    },
+    "experiment": {
+     "op": "test",
+     "next": [
+      "fix",
+      "hypo"
+     ]
+    },
+    "fix": {
+     "op": "act",
+     "next": [
+      "regress"
+     ]
+    },
+    "regress": {
+     "op": "test",
+     "do": "regression test added",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "fixed with a regression test",
+   "math": "delta debugging needs O(log n) tests for a single cause",
+   "learn": [
+    "Beta(hypothesis kind correct | symptom)"
+   ],
+   "feedback": "fix holds"
+  },
+  {
+   "id": "ooda",
+   "name": "Observe-Orient-Decide-Act",
+   "cat": "intel",
+   "ref": "Boyd 1987",
+   "when": "a competitive, changing situation",
+   "start": "observe",
+   "steps": {
+    "observe": {
+     "op": "perceive",
+     "next": [
+      "orient"
+     ]
+    },
+    "orient": {
+     "op": "call:situational_awareness",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "select",
+     "next": [
+      "act"
+     ]
+    },
+    "act": {
+     "op": "act",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "decide",
+     "do": "situation resolved?",
+     "next": [
+      "out",
+      "observe"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "resolved",
+   "math": "advantage when loop time t_own < t_other; orientation by Bayesian fusion of observations",
+   "learn": [
+    "Welford(loop time)",
+    "Beta(decision worked | situation kind)"
+   ],
+   "feedback": "outcome and tempo"
+  },
+  {
+   "id": "intelligence_cycle",
+   "name": "Intelligence cycle",
+   "cat": "intel",
+   "ref": "classical",
+   "when": "a standing information requirement",
+   "start": "direction",
+   "steps": {
+    "direction": {
+     "op": "generate",
+     "do": "requirements and priorities",
+     "next": [
+      "collect"
+     ]
+    },
+    "collect": {
+     "op": "perceive",
+     "next": [
+      "process"
+     ]
+    },
+    "process": {
+     "op": "read",
+     "next": [
+      "analyse"
+     ]
+    },
+    "analyse": {
+     "op": "call:ach",
+     "next": [
+      "disseminate"
+     ]
+    },
+    "disseminate": {
+     "op": "communicate",
+     "next": [
+      "feedback"
+     ]
+    },
+    "feedback": {
+     "op": "update",
+     "do": "requirements refined",
+     "next": [
+      "direction",
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "requirement satisfied or withdrawn",
+   "math": "collection priority by VOI per requirement",
+   "learn": [
+    "Beta(source reliable)",
+    "Welford(VOI realised | collection type)"
+   ],
+   "feedback": "customer use of products"
+  },
+  {
+   "id": "ach",
+   "name": "Analysis of competing hypotheses",
+   "cat": "intel",
+   "ref": "Heuer 1999",
+   "when": "several explanations of the same evidence",
+   "start": "hyps",
+   "steps": {
+    "hyps": {
+     "op": "generate",
+     "do": "all reasonable hypotheses",
+     "next": [
+      "evidence"
+     ]
+    },
+    "evidence": {
+     "op": "retrieve",
+     "do": "significant evidence and assumptions",
+     "next": [
+      "matrix"
+     ]
+    },
+    "matrix": {
+     "op": "evaluate",
+     "do": "consistency of each item with each hypothesis",
+     "next": [
+      "diagnostic"
+     ]
+    },
+    "diagnostic": {
+     "op": "rank",
+     "do": "evidence by diagnosticity",
+     "next": [
+      "refine"
+     ]
+    },
+    "refine": {
+     "op": "transform",
+     "do": "drop non-diagnostic evidence; merge or split hypotheses",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "score",
+     "do": "inconsistency per hypothesis",
+     "next": [
+      "sensitive"
+     ]
+    },
+    "sensitive": {
+     "op": "simulate",
+     "do": "which items drive the result?",
+     "next": [
+      "report"
+     ]
+    },
+    "report": {
+     "op": "communicate",
+     "do": "likelihood words + milestones to watch",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "report with sensitivities",
+   "math": "inconsistency(H) = sum_e w_e [e inconsistent with H]; diagnosticity(e) = variance of P(e | H) across H; report with estimative words (Kent 1964)",
+   "learn": [
+    "Beta(item reliable)",
+    "calibration of estimative words"
+   ],
+   "feedback": "which hypothesis turned out true"
+  },
+  {
+   "id": "mdmp",
+   "name": "Military decision-making process",
+   "cat": "intel",
+   "ref": "US Army FM 5-0",
+   "when": "a mission to plan",
+   "start": "receipt",
+   "steps": {
+    "receipt": {
+     "op": "perceive",
+     "next": [
+      "analysis"
+     ]
+    },
+    "analysis": {
+     "op": "call:situational_awareness",
+     "next": [
+      "coas"
+     ]
+    },
+    "coas": {
+     "op": "generate",
+     "do": "courses of action",
+     "next": [
+      "wargame"
+     ]
+    },
+    "wargame": {
+     "op": "simulate",
+     "do": "action, reaction, counteraction",
+     "next": [
+      "compare"
+     ]
+    },
+    "compare": {
+     "op": "call:mcda_ahp",
+     "next": [
+      "approve"
+     ]
+    },
+    "approve": {
+     "op": "decide",
+     "next": [
+      "orders",
+      "coas"
+     ]
+    },
+    "orders": {
+     "op": "communicate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "orders issued",
+   "math": "COA score = weighted criteria; wargame outcome distribution from simulation",
+   "learn": [
+    "Beta(COA succeeded | COA type, situation)"
+   ],
+   "feedback": "mission outcome"
+  },
+  {
+   "id": "red_team",
+   "name": "Red teaming",
+   "cat": "intel",
+   "ref": "Zenko 2015",
+   "when": "a plan, design or belief to stress-test",
+   "start": "adopt",
+   "steps": {
+    "adopt": {
+     "op": "call:perspective_taking",
+     "do": "an adversary's view",
+     "next": [
+      "attack"
+     ]
+    },
+    "attack": {
+     "op": "falsify",
+     "do": "weaknesses and failure paths",
+     "next": [
+      "assume"
+     ]
+    },
+    "assume": {
+     "op": "evaluate",
+     "do": "which assumptions break",
+     "next": [
+      "report"
+     ]
+    },
+    "report": {
+     "op": "communicate",
+     "next": [
+      "fix"
+     ]
+    },
+    "fix": {
+     "op": "transform",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "findings addressed",
+   "math": "rank findings by P(exploit) x impact",
+   "learn": [
+    "Beta(finding real | attack type)"
+   ],
+   "feedback": "incidents later"
+  },
+  {
+   "id": "situational_awareness",
+   "name": "Situational awareness",
+   "cat": "intel",
+   "ref": "Endsley 1995",
+   "when": "understanding a current situation",
+   "start": "perceive",
+   "steps": {
+    "perceive": {
+     "op": "perceive",
+     "do": "level 1: elements",
+     "next": [
+      "comprehend"
+     ]
+    },
+    "comprehend": {
+     "op": "infer",
+     "do": "level 2: meaning against goals",
+     "next": [
+      "project"
+     ]
+    },
+    "project": {
+     "op": "estimate",
+     "do": "level 3: future states with intervals",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "picture formed",
+   "math": "SA error = divergence between projected and observed states (log score)",
+   "learn": [
+    "calibration of projections"
+   ],
+   "feedback": "observed future states"
+  },
+  {
+   "id": "signal_detection",
+   "name": "Signal detection",
+   "cat": "intel",
+   "ref": "Green & Swets 1966",
+   "when": "deciding if a signal is present in noise (radar, RF, alarms)",
+   "start": "measure",
+   "steps": {
+    "measure": {
+     "op": "measure",
+     "next": [
+      "criterion"
+     ]
+    },
+    "criterion": {
+     "op": "estimate",
+     "do": "criterion from priors and costs",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "signal / no signal",
+     "next": [
+      "track"
+     ]
+    },
+    "track": {
+     "op": "update",
+     "do": "hits, false alarms",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "decision",
+   "math": "d' = z(H) - z(FA); optimal likelihood-ratio criterion beta* = (P(N)/P(S)) (V_CR + C_FA)/(V_H + C_M)",
+   "learn": [
+    "Beta(hit rate), Beta(false-alarm rate)"
+   ],
+   "feedback": "ground truth when available"
+  },
+  {
+   "id": "sq3r_reading",
+   "name": "Reading for understanding (SQ3R)",
+   "cat": "comm",
+   "ref": "Robinson 1946",
+   "when": "a document to learn from",
+   "start": "survey",
+   "steps": {
+    "survey": {
+     "op": "perceive",
+     "do": "headings, structure",
+     "next": [
+      "question"
+     ]
+    },
+    "question": {
+     "op": "generate",
+     "do": "questions the text should answer",
+     "next": [
+      "read"
+     ]
+    },
+    "read": {
+     "op": "read",
+     "next": [
+      "recite"
+     ]
+    },
+    "recite": {
+     "op": "test",
+     "do": "answer the questions from memory",
+     "next": [
+      "review"
+     ]
+    },
+    "review": {
+     "op": "update",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "questions answered",
+   "math": "comprehension = share of self-set questions answered correctly",
+   "learn": [
+    "Beta(question answered | document type)"
+   ],
+   "feedback": "later recall"
+  },
+  {
+   "id": "writing_process",
+   "name": "Writing",
+   "cat": "comm",
+   "ref": "Hayes & Flower 1980",
+   "when": "text to produce",
+   "start": "plan",
+   "steps": {
+    "plan": {
+     "op": "generate",
+     "do": "goal, audience, outline",
+     "next": [
+      "translate"
+     ]
+    },
+    "translate": {
+     "op": "generate",
+     "do": "draft",
+     "next": [
+      "review"
+     ]
+    },
+    "review": {
+     "op": "evaluate",
+     "do": "SCRIBE, evidence, clarity",
+     "next": [
+      "good",
+      "revise"
+     ]
+    },
+    "revise": {
+     "op": "transform",
+     "next": [
+      "review"
+     ]
+    },
+    "good": {
+     "op": "return"
+    }
+   },
+   "stop": "quality target met or VOC <= 0",
+   "math": "revise while expected SCRIBE gain > cost",
+   "learn": [
+    "Welford(SCRIBE gain per revision)"
+   ],
+   "feedback": "reader rating"
+  },
+  {
+   "id": "explain_to_audience",
+   "name": "Explain to an audience",
+   "cat": "comm",
+   "ref": "classical",
+   "when": "someone needs to understand something",
+   "start": "model",
+   "steps": {
+    "model": {
+     "op": "call:perspective_taking",
+     "do": "what they already know",
+     "next": [
+      "level"
+     ]
+    },
+    "level": {
+     "op": "select",
+     "do": "level of detail and examples",
+     "next": [
+      "explain"
+     ]
+    },
+    "explain": {
+     "op": "communicate",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "ask",
+     "do": "check understanding",
+     "next": [
+      "out",
+      "repair"
+     ]
+    },
+    "repair": {
+     "op": "transform",
+     "do": "different example or level",
+     "next": [
+      "explain"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "understood",
+   "math": "choose level with the highest P(understood | audience model)",
+   "learn": [
+    "Beta(understood | level, audience type)"
+   ],
+   "feedback": "understanding checks"
+  },
+  {
+   "id": "clarifying_question",
+   "name": "Ask a clarifying question",
+   "cat": "comm",
+   "ref": "Rao & Daume 2018",
+   "when": "a request has several readings",
+   "start": "readings",
+   "steps": {
+    "readings": {
+     "op": "generate",
+     "do": "interpretations with probabilities",
+     "next": [
+      "entropy"
+     ]
+    },
+    "entropy": {
+     "op": "estimate",
+     "do": "entropy and value of asking",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "decide",
+     "do": "ask, or assume and say so",
+     "next": [
+      "ask",
+      "assume"
+     ]
+    },
+    "ask": {
+     "op": "ask",
+     "next": [
+      "out"
+     ]
+    },
+    "assume": {
+     "op": "communicate",
+     "do": "state the reading taken",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "reading fixed",
+   "math": "ask iff EVI = E[U | answer] - U(best guess now) > cost of asking",
+   "learn": [
+    "Beta(guessed reading right | ambiguity level)"
+   ],
+   "feedback": "whether the guess was right"
+  },
+  {
+   "id": "conversation_repair",
+   "name": "Conversation repair",
+   "cat": "comm",
+   "ref": "Schegloff, Jefferson & Sacks 1977",
+   "when": "signs of misunderstanding",
+   "start": "detect",
+   "steps": {
+    "detect": {
+     "op": "monitor",
+     "do": "repeated question, correction, confusion",
+     "next": [
+      "locate"
+     ]
+    },
+    "locate": {
+     "op": "infer",
+     "do": "trouble source",
+     "next": [
+      "repair"
+     ]
+    },
+    "repair": {
+     "op": "communicate",
+     "do": "rephrase or clarify",
+     "next": [
+      "confirm"
+     ]
+    },
+    "confirm": {
+     "op": "ask",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "repaired",
+   "math": "trouble-source posterior over recent turns",
+   "learn": [
+    "Beta(repair works | trouble type)"
+   ],
+   "feedback": "conversation continues normally"
+  },
+  {
+   "id": "cooperative_reply",
+   "name": "Cooperative reply check (Grice)",
+   "cat": "comm",
+   "ref": "Grice 1975",
+   "when": "before sending any reply",
+   "start": "quantity",
+   "steps": {
+    "quantity": {
+     "op": "test",
+     "do": "enough, not too much",
+     "next": [
+      "quality"
+     ]
+    },
+    "quality": {
+     "op": "test",
+     "do": "every claim evidence-backed (ECS)",
+     "next": [
+      "relation"
+     ]
+    },
+    "relation": {
+     "op": "test",
+     "do": "answers what was asked (SCRIBE R)",
+     "next": [
+      "manner"
+     ]
+    },
+    "manner": {
+     "op": "test",
+     "do": "clear and orderly",
+     "next": [
+      "send"
+     ]
+    },
+    "send": {
+     "op": "communicate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "sent",
+   "math": "a failing check sends the reply back to revision; quality failures turn into abstentions",
+   "learn": [
+    "Beta(check catches a real problem)"
+   ],
+   "feedback": "user follow-ups"
+  },
+  {
+   "id": "perspective_taking",
+   "name": "Perspective taking",
+   "cat": "social",
+   "ref": "Baker, Saxe & Tenenbaum 2009",
+   "when": "another agent's view matters",
+   "start": "who",
+   "steps": {
+    "who": {
+     "op": "perceive",
+     "next": [
+      "model"
+     ]
+    },
+    "model": {
+     "op": "estimate",
+     "do": "their beliefs, goals, knowledge",
+     "next": [
+      "predict"
+     ]
+    },
+    "predict": {
+     "op": "simulate",
+     "do": "their likely reaction",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "model formed",
+   "math": "beliefs about them updated by inverse planning: P(goal | actions) proportional to P(actions | goal) P(goal)",
+   "learn": [
+    "calibration of predicted reactions"
+   ],
+   "feedback": "their actual reactions"
+  },
+  {
+   "id": "negotiation",
+   "name": "Principled negotiation",
+   "cat": "social",
+   "ref": "Fisher & Ury 1981",
+   "when": "a deal with another party",
+   "start": "interests",
+   "steps": {
+    "interests": {
+     "op": "call:perspective_taking",
+     "do": "interests, not positions",
+     "next": [
+      "batna"
+     ]
+    },
+    "batna": {
+     "op": "estimate",
+     "do": "own and their best alternative",
+     "next": [
+      "zopa"
+     ]
+    },
+    "zopa": {
+     "op": "estimate",
+     "do": "zone of possible agreement",
+     "next": [
+      "options"
+     ]
+    },
+    "options": {
+     "op": "generate",
+     "do": "options for mutual gain",
+     "next": [
+      "criteria"
+     ]
+    },
+    "criteria": {
+     "op": "retrieve",
+     "do": "objective standards",
+     "next": [
+      "offer"
+     ]
+    },
+    "offer": {
+     "op": "communicate",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "agree, counter or walk",
+     "next": [
+      "out",
+      "offer"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "agreement or walk-away",
+   "math": "ZOPA = [seller reservation, buyer reservation]; walk away if the best offer < BATNA",
+   "learn": [
+    "Welford(final terms vs BATNA)"
+   ],
+   "feedback": "deal outcome"
+  },
+  {
+   "id": "ethical_check",
+   "name": "Ethical check",
+   "cat": "social",
+   "ref": "Beauchamp & Childress 2019",
+   "when": "an action affects people",
+   "start": "stakeholders",
+   "steps": {
+    "stakeholders": {
+     "op": "generate",
+     "next": [
+      "harms"
+     ]
+    },
+    "harms": {
+     "op": "estimate",
+     "do": "benefits and harms per stakeholder",
+     "next": [
+      "duties"
+     ]
+    },
+    "duties": {
+     "op": "test",
+     "do": "rules, rights, consent",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "proceed, change or escalate to a human",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "decision or escalation",
+   "math": "any hard-rule failure blocks the action; uncertain cases escalate rather than guess",
+   "learn": [],
+   "feedback": "human review of escalations"
+  },
+  {
+   "id": "tdd",
+   "name": "Test-driven development",
+   "cat": "software",
+   "ref": "Beck 2002",
+   "when": "code to write",
+   "start": "red",
+   "steps": {
+    "red": {
+     "op": "test",
+     "do": "write a failing test",
+     "next": [
+      "green"
+     ]
+    },
+    "green": {
+     "op": "act",
+     "do": "simplest code that passes",
+     "next": [
+      "refactor"
+     ]
+    },
+    "refactor": {
+     "op": "transform",
+     "do": "clean up, tests still pass",
+     "next": [
+      "more"
+     ]
+    },
+    "more": {
+     "op": "decide",
+     "do": "feature complete?",
+     "next": [
+      "out",
+      "red"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "feature complete, all tests pass",
+   "math": "defects per change tracked; a cycle should stay small (minutes)",
+   "learn": [
+    "Welford(cycle time)",
+    "Beta(test caught a defect)"
+   ],
+   "feedback": "escaped defects"
+  },
+  {
+   "id": "code_review",
+   "name": "Code review",
+   "cat": "software",
+   "ref": "Fagan 1976",
+   "when": "a change to merge",
+   "start": "read",
+   "steps": {
+    "read": {
+     "op": "read",
+     "do": "the diff and its intent",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "evaluate",
+     "do": "correctness, tests, security, clarity",
+     "next": [
+      "comment"
+     ]
+    },
+    "comment": {
+     "op": "communicate",
+     "next": [
+      "verdict"
+     ]
+    },
+    "verdict": {
+     "op": "decide",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "approve or request changes",
+   "math": "detection rate per checklist item as Beta; order the checklist by yield / cost",
+   "learn": [
+    "Beta(item finds defects)"
+   ],
+   "feedback": "post-merge defects"
+  },
+  {
+   "id": "git_bisect",
+   "name": "Bisect a regression",
+   "cat": "software",
+   "ref": "git bisect",
+   "when": "a regression between a good and a bad version",
+   "start": "bounds",
+   "steps": {
+    "bounds": {
+     "op": "retrieve",
+     "do": "last good, first bad",
+     "next": [
+      "mid"
+     ]
+    },
+    "mid": {
+     "op": "select",
+     "do": "middle version",
+     "next": [
+      "test"
+     ]
+    },
+    "test": {
+     "op": "test",
+     "next": [
+      "narrow"
+     ]
+    },
+    "narrow": {
+     "op": "decide",
+     "do": "one change left?",
+     "next": [
+      "out",
+      "mid"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "first bad change found",
+   "math": "ceil(log2 n) tests",
+   "learn": [],
+   "feedback": "fix confirms the culprit"
+  },
+  {
+   "id": "incident_response",
+   "name": "Incident response",
+   "cat": "software",
+   "ref": "Beyer et al. 2016",
+   "when": "a live failure",
+   "start": "detect",
+   "steps": {
+    "detect": {
+     "op": "monitor",
+     "next": [
+      "triage"
+     ]
+    },
+    "triage": {
+     "op": "classify",
+     "do": "severity",
+     "next": [
+      "mitigate"
+     ]
+    },
+    "mitigate": {
+     "op": "act",
+     "do": "stop the bleeding first",
+     "next": [
+      "inform"
+     ]
+    },
+    "inform": {
+     "op": "communicate",
+     "next": [
+      "cause"
+     ]
+    },
+    "cause": {
+     "op": "call:five_whys",
+     "next": [
+      "postmortem"
+     ]
+    },
+    "postmortem": {
+     "op": "record",
+     "do": "blameless review, actions",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "resolved and reviewed",
+   "math": "track time to detect, time to mitigate (Welford); action items closed rate",
+   "learn": [
+    "Welford(time to mitigate | severity)"
+   ],
+   "feedback": "recurrence"
+  },
+  {
+   "id": "scrum_sprint",
+   "name": "Sprint",
+   "cat": "manage",
+   "ref": "Schwaber & Sutherland 2020",
+   "when": "iterative team work",
+   "start": "plan",
+   "steps": {
+    "plan": {
+     "op": "schedule",
+     "do": "sprint goal and backlog items",
+     "next": [
+      "daily"
+     ]
+    },
+    "daily": {
+     "op": "monitor",
+     "do": "progress and blockers",
+     "next": [
+      "done"
+     ]
+    },
+    "done": {
+     "op": "decide",
+     "do": "sprint over?",
+     "next": [
+      "review",
+      "daily"
+     ]
+    },
+    "review": {
+     "op": "communicate",
+     "next": [
+      "retro"
+     ]
+    },
+    "retro": {
+     "op": "call:after_action_review",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "sprint over",
+   "math": "velocity forecast from Welford of past sprints, with an interval",
+   "learn": [
+    "Welford(velocity)"
+   ],
+   "feedback": "items done vs planned"
+  },
+  {
+   "id": "kanban_flow",
+   "name": "Kanban flow",
+   "cat": "manage",
+   "ref": "Anderson 2010",
+   "when": "a continuous stream of work",
+   "start": "visualise",
+   "steps": {
+    "visualise": {
+     "op": "perceive",
+     "next": [
+      "limit"
+     ]
+    },
+    "limit": {
+     "op": "test",
+     "do": "work in progress under limit?",
+     "next": [
+      "pull",
+      "wait"
+     ]
+    },
+    "pull": {
+     "op": "act",
+     "do": "pull the next item",
+     "next": [
+      "measure"
+     ]
+    },
+    "wait": {
+     "op": "wait",
+     "next": [
+      "limit"
+     ]
+    },
+    "measure": {
+     "op": "measure",
+     "do": "cycle time",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "one item",
+   "math": "Little's law L = lambda W; tune the WIP limit to minimise W at stable throughput",
+   "learn": [
+    "Welford(cycle time)",
+    "throughput lambda"
+   ],
+   "feedback": "cycle time"
+  },
+  {
+   "id": "risk_register",
+   "name": "Risk register",
+   "cat": "manage",
+   "ref": "ISO 31000",
+   "when": "a project or operation",
+   "start": "identify",
+   "steps": {
+    "identify": {
+     "op": "generate",
+     "next": [
+      "assess"
+     ]
+    },
+    "assess": {
+     "op": "estimate",
+     "do": "likelihood x impact",
+     "next": [
+      "owner"
+     ]
+    },
+    "owner": {
+     "op": "select",
+     "do": "owner and mitigation",
+     "next": [
+      "monitor"
+     ]
+    },
+    "monitor": {
+     "op": "monitor",
+     "next": [
+      "close"
+     ]
+    },
+    "close": {
+     "op": "decide",
+     "do": "risk passed or realised?",
+     "next": [
+      "out",
+      "monitor"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "risk closed",
+   "math": "exposure = sum_i P_i I_i; calibration of P_i scored when risks close (Brier)",
+   "learn": [
+    "Beta(risk realised | risk type)"
+   ],
+   "feedback": "realised risks"
+  },
+  {
+   "id": "kelly_sizing",
+   "name": "Bet sizing (Kelly)",
+   "cat": "finance",
+   "ref": "Kelly 1956",
+   "when": "repeated bets or allocations with an estimated edge",
+   "start": "edge",
+   "steps": {
+    "edge": {
+     "op": "estimate",
+     "do": "win probability p with an interval",
+     "next": [
+      "odds"
+     ]
+    },
+    "odds": {
+     "op": "retrieve",
+     "do": "net odds b",
+     "next": [
+      "size"
+     ]
+    },
+    "size": {
+     "op": "estimate",
+     "do": "Kelly fraction, shrunk for uncertainty",
+     "next": [
+      "act"
+     ]
+    },
+    "act": {
+     "op": "act",
+     "next": [
+      "update"
+     ]
+    },
+    "update": {
+     "op": "update",
+     "do": "p from outcomes",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "one allocation",
+   "math": "f* = (b p - q) / b, q = 1 - p; use a fraction (e.g. half Kelly) or the Beta lower bound of p",
+   "learn": [
+    "Beta(p)"
+   ],
+   "feedback": "outcomes"
+  },
+  {
+   "id": "cost_benefit",
+   "name": "Cost-benefit with uncertainty",
+   "cat": "finance",
+   "ref": "standard practice",
+   "when": "an investment decision",
+   "start": "flows",
+   "steps": {
+    "flows": {
+     "op": "estimate",
+     "do": "cash flows with distributions",
+     "next": [
+      "sim"
+     ]
+    },
+    "sim": {
+     "op": "simulate",
+     "do": "Monte Carlo NPV",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "P(NPV > 0) above the bar?",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "decision",
+   "math": "NPV = sum_t CF_t / (1 + r)^t; report P(NPV > 0) and quantiles",
+   "learn": [
+    "bias of past estimates: Welford(actual / forecast)"
+   ],
+   "feedback": "realised cash flows"
+  },
+  {
+   "id": "burden_of_proof",
+   "name": "Standard of proof",
+   "cat": "law",
+   "ref": "legal convention",
+   "when": "a claim must meet an evidence standard",
+   "start": "standard",
+   "steps": {
+    "standard": {
+     "op": "retrieve",
+     "do": "which standard applies",
+     "next": [
+      "weigh"
+     ]
+    },
+    "weigh": {
+     "op": "call:argument_toulmin",
+     "next": [
+      "compare"
+     ]
+    },
+    "compare": {
+     "op": "decide",
+     "do": "ECS P against the threshold",
+     "next": [
+      "met",
+      "unmet"
+     ]
+    },
+    "met": {
+     "op": "return"
+    },
+    "unmet": {
+     "op": "return"
+    }
+   },
+   "stop": "met or not met",
+   "math": "balance of probabilities P > 0.5; higher standards need a higher P and a lower u (conventions, set per domain)",
+   "learn": [],
+   "feedback": "review of decisions"
+  },
+  {
+   "id": "case_based_reasoning",
+   "name": "Case-based reasoning",
+   "cat": "law",
+   "ref": "Aamodt & Plaza 1994",
+   "when": "a new case resembling past ones",
+   "start": "retrieve",
+   "steps": {
+    "retrieve": {
+     "op": "recall_case",
+     "next": [
+      "reuse"
+     ]
+    },
+    "reuse": {
+     "op": "transform",
+     "do": "adapt the past solution",
+     "next": [
+      "revise"
+     ]
+    },
+    "revise": {
+     "op": "verify",
+     "next": [
+      "retain"
+     ]
+    },
+    "retain": {
+     "op": "record",
+     "do": "store if it adds coverage",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "solution and case stored",
+   "math": "similarity-weighted kNN; retain if no stored case within distance d",
+   "learn": [
+    "Beta(adapted solution works | similarity band)"
+   ],
+   "feedback": "solution outcome"
+  },
+  {
+   "id": "scaffolded_teaching",
+   "name": "Scaffolded teaching",
+   "cat": "teach",
+   "ref": "Wood, Bruner & Ross 1976; Vygotsky 1978",
+   "when": "someone is learning a skill",
+   "start": "assess",
+   "steps": {
+    "assess": {
+     "op": "test",
+     "do": "current level",
+     "next": [
+      "task"
+     ]
+    },
+    "task": {
+     "op": "generate",
+     "do": "task in the zone of proximal development",
+     "next": [
+      "hint"
+     ]
+    },
+    "hint": {
+     "op": "communicate",
+     "do": "least help first, more if stuck",
+     "next": [
+      "fade"
+     ]
+    },
+    "fade": {
+     "op": "update",
+     "do": "withdraw support as success rises",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "independent success",
+   "math": "target P(success with current support) ~ 0.7; hint level by Beta(success | level)",
+   "learn": [
+    "Beta(success | hint level)"
+   ],
+   "feedback": "independent success rate"
+  },
+  {
+   "id": "socratic_questioning",
+   "name": "Socratic questioning",
+   "cat": "teach",
+   "ref": "Paul & Elder 2006",
+   "when": "an assumption-laden belief to examine",
+   "start": "clarify",
+   "steps": {
+    "clarify": {
+     "op": "ask",
+     "do": "what exactly is meant?",
+     "next": [
+      "assumptions"
+     ]
+    },
+    "assumptions": {
+     "op": "ask",
+     "do": "what is assumed?",
+     "next": [
+      "evidence"
+     ]
+    },
+    "evidence": {
+     "op": "ask",
+     "do": "what supports it?",
+     "next": [
+      "viewpoints"
+     ]
+    },
+    "viewpoints": {
+     "op": "ask",
+     "do": "what would others say?",
+     "next": [
+      "implications"
+     ]
+    },
+    "implications": {
+     "op": "ask",
+     "do": "what follows?",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "belief examined",
+   "math": "order questions by expected information gain about the weak point",
+   "learn": [
+    "Beta(question exposes a weak point | question type)"
+   ],
+   "feedback": "belief revised or confirmed"
+  },
+  {
+   "id": "fermi_estimate",
+   "name": "Fermi estimation",
+   "cat": "estimate",
+   "ref": "Fermi; Weinstein & Adam 2008",
+   "when": "a quantity with no direct data",
+   "start": "decompose",
+   "steps": {
+    "decompose": {
+     "op": "decompose",
+     "do": "product of factors",
+     "next": [
+      "factors"
+     ]
+    },
+    "factors": {
+     "op": "estimate",
+     "do": "90% interval for each",
+     "next": [
+      "combine"
+     ]
+    },
+    "combine": {
+     "op": "combine",
+     "do": "in log space",
+     "next": [
+      "sanity"
+     ]
+    },
+    "sanity": {
+     "op": "verify",
+     "do": "against any reference value",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "estimate with interval",
+   "math": "log-normal factors: mu = sum mu_i, sigma^2 = sum sigma_i^2 (log space); sigma_i = (ln hi - ln lo) / 3.29",
+   "learn": [
+    "calibration of 90% intervals (coverage rate)"
+   ],
+   "feedback": "true value when known"
+  },
+  {
+   "id": "superforecast",
+   "name": "Forecasting (outside view, then inside view)",
+   "cat": "estimate",
+   "ref": "Tetlock & Gardner 2015",
+   "when": "a question about a future event",
+   "start": "base",
+   "steps": {
+    "base": {
+     "op": "call:reference_class",
+     "do": "base rate",
+     "next": [
+      "adjust"
+     ]
+    },
+    "adjust": {
+     "op": "update",
+     "do": "specifics of this case",
+     "next": [
+      "state"
+     ]
+    },
+    "state": {
+     "op": "communicate",
+     "do": "a probability",
+     "next": [
+      "news"
+     ]
+    },
+    "news": {
+     "op": "wait",
+     "do": "new information",
+     "next": [
+      "small"
+     ]
+    },
+    "small": {
+     "op": "update",
+     "do": "small, frequent updates",
+     "next": [
+      "resolved"
+     ]
+    },
+    "resolved": {
+     "op": "decide",
+     "do": "question resolved?",
+     "next": [
+      "score",
+      "news"
+     ]
+    },
+    "score": {
+     "op": "record",
+     "do": "Brier score",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "resolution",
+   "math": "Brier = (f - o)^2; aggregate by extremised mean: logit(p_agg) = a * mean logit(p_i), a > 1",
+   "learn": [
+    "calibration per question type"
+   ],
+   "feedback": "resolution"
+  },
+  {
+   "id": "reference_class",
+   "name": "Reference-class forecasting",
+   "cat": "estimate",
+   "ref": "Kahneman & Tversky 1979; Flyvbjerg 2006",
+   "when": "a case similar to many past ones",
+   "start": "classpick",
+   "steps": {
+    "classpick": {
+     "op": "select",
+     "do": "reference class",
+     "next": [
+      "dist"
+     ]
+    },
+    "dist": {
+     "op": "retrieve",
+     "do": "distribution of outcomes",
+     "next": [
+      "place"
+     ]
+    },
+    "place": {
+     "op": "estimate",
+     "do": "where the case sits",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "forecast with interval",
+   "math": "forecast = quantiles of the class distribution, shifted by evidence of difference",
+   "learn": [
+    "coverage of forecast intervals"
+   ],
+   "feedback": "actual outcome"
+  },
+  {
+   "id": "salience_attention",
+   "name": "Where to look",
+   "cat": "perceive",
+   "ref": "Itti & Koch 2001",
+   "when": "more inputs than capacity",
+   "start": "items",
+   "steps": {
+    "items": {
+     "op": "perceive",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "score",
+     "do": "salience, goal relevance, uncertainty",
+     "next": [
+      "focus"
+     ]
+    },
+    "focus": {
+     "op": "select",
+     "next": [
+      "shift"
+     ]
+    },
+    "shift": {
+     "op": "monitor",
+     "do": "change elsewhere?",
+     "next": [
+      "items",
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "budget",
+   "math": "priority = w_s salience + w_r relevance + w_u uncertainty; weights by which focus led to reward",
+   "learn": [
+    "weights (Welford of reward per weight setting)"
+   ],
+   "feedback": "task reward"
+  },
+  {
+   "id": "change_detection",
+   "name": "Change detection (CUSUM)",
+   "cat": "perceive",
+   "ref": "Page 1954",
+   "when": "a stream that may shift",
+   "start": "obs",
+   "steps": {
+    "obs": {
+     "op": "perceive",
+     "next": [
+      "cusum"
+     ]
+    },
+    "cusum": {
+     "op": "update",
+     "do": "S_t",
+     "next": [
+      "alarm"
+     ]
+    },
+    "alarm": {
+     "op": "decide",
+     "do": "S_t > h?",
+     "next": [
+      "investigate",
+      "obs"
+     ]
+    },
+    "investigate": {
+     "op": "call:abduction",
+     "next": [
+      "reset"
+     ]
+    },
+    "reset": {
+     "op": "update",
+     "do": "S_t = 0, new baseline",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "alarm handled",
+   "math": "S_t = max(0, S_{t-1} + x_t - mu_0 - k); alarm when S_t > h; h set for the target false-alarm rate",
+   "learn": [
+    "mu_0 and sigma by Welford over the baseline"
+   ],
+   "feedback": "confirmed changes"
+  },
+  {
+   "id": "crisp_dm",
+   "name": "Data-mining project cycle (CRISP-DM)",
+   "cat": "data",
+   "ref": "Chapman et al. 2000",
+   "when": "a question to answer from data",
+   "start": "business",
+   "steps": {
+    "business": {
+     "op": "generate",
+     "do": "question, decision it serves, success metric",
+     "next": [
+      "understand"
+     ]
+    },
+    "understand": {
+     "op": "call:eda",
+     "next": [
+      "prepare"
+     ]
+    },
+    "prepare": {
+     "op": "call:data_cleaning",
+     "next": [
+      "model"
+     ]
+    },
+    "model": {
+     "op": "call:ml_workflow",
+     "next": [
+      "evaluate"
+     ]
+    },
+    "evaluate": {
+     "op": "decide",
+     "do": "answers the question at the needed quality?",
+     "next": [
+      "deploy",
+      "business"
+     ]
+    },
+    "deploy": {
+     "op": "act",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "deployed, or the question reframed away",
+   "math": "loop while the expected value of a better answer > the cost of another cycle",
+   "learn": [
+    "Beta(cycle succeeds | question type)"
+   ],
+   "feedback": "decision quality after deployment"
+  },
+  {
+   "id": "eda",
+   "name": "Exploratory data analysis",
+   "cat": "data",
+   "ref": "Tukey 1977",
+   "when": "a new dataset",
+   "start": "shape",
+   "steps": {
+    "shape": {
+     "op": "measure",
+     "do": "rows, columns, types, memory",
+     "next": [
+      "summary"
+     ]
+    },
+    "summary": {
+     "op": "estimate",
+     "do": "per column: missing share, distinct, quantiles",
+     "next": [
+      "dist"
+     ]
+    },
+    "dist": {
+     "op": "perceive",
+     "do": "distributions, skew, heavy tails",
+     "next": [
+      "outliers"
+     ]
+    },
+    "outliers": {
+     "op": "test",
+     "do": "robust z beyond 3.5",
+     "next": [
+      "relations"
+     ]
+    },
+    "relations": {
+     "op": "compare",
+     "do": "pairwise association, rank correlation",
+     "next": [
+      "notes"
+     ]
+    },
+    "notes": {
+     "op": "record",
+     "do": "findings and questions",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "profile and questions recorded",
+   "math": "robust z = 0.6745 (x - median) / MAD; association by Spearman rho or mutual information",
+   "learn": [
+    "Beta(finding later mattered | finding type)"
+   ],
+   "feedback": "which findings changed the analysis"
+  },
+  {
+   "id": "data_cleaning",
+   "name": "Data cleaning",
+   "cat": "data",
+   "ref": "Wickham 2014",
+   "when": "data to be made fit for use",
+   "start": "schema",
+   "steps": {
+    "schema": {
+     "op": "test",
+     "do": "types, ranges, required fields",
+     "next": [
+      "dupes"
+     ]
+    },
+    "dupes": {
+     "op": "call:near_duplicates",
+     "next": [
+      "missing"
+     ]
+    },
+    "missing": {
+     "op": "decide",
+     "do": "drop, impute or flag, by missingness pattern",
+     "next": [
+      "units"
+     ]
+    },
+    "units": {
+     "op": "test",
+     "do": "unit and encoding consistency",
+     "next": [
+      "log"
+     ]
+    },
+    "log": {
+     "op": "record",
+     "do": "every change, reversible",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "passes the quality checks",
+   "math": "impute only when the missing share < 5% or the mechanism is plausibly random; report the share imputed",
+   "learn": [
+    "Dir(issue type | source)"
+   ],
+   "feedback": "downstream errors traced to data issues"
+  },
+  {
+   "id": "data_quality_check",
+   "name": "Data quality scorecard",
+   "cat": "data",
+   "ref": "Wang & Strong 1996",
+   "when": "before any data is used for training or answers",
+   "start": "complete",
+   "steps": {
+    "complete": {
+     "op": "measure",
+     "do": "completeness",
+     "next": [
+      "valid"
+     ]
+    },
+    "valid": {
+     "op": "measure",
+     "do": "validity against rules",
+     "next": [
+      "unique"
+     ]
+    },
+    "unique": {
+     "op": "measure",
+     "do": "uniqueness",
+     "next": [
+      "consist"
+     ]
+    },
+    "consist": {
+     "op": "measure",
+     "do": "consistency across sources",
+     "next": [
+      "timely"
+     ]
+    },
+    "timely": {
+     "op": "measure",
+     "do": "age against the relation's half-life",
+     "next": [
+      "gate"
+     ]
+    },
+    "gate": {
+     "op": "decide",
+     "do": "every dimension above its floor?",
+     "next": [
+      "pass",
+      "fail"
+     ]
+    },
+    "pass": {
+     "op": "return"
+    },
+    "fail": {
+     "op": "return"
+    }
+   },
+   "stop": "pass or fail with the failing dimension",
+   "math": "each dimension = share of records passing; source trust Beta updated by the share",
+   "learn": [
+    "Beta(source passes | dimension)"
+   ],
+   "feedback": "later errors from data that passed"
+  },
+  {
+   "id": "hypothesis_test",
+   "name": "Statistical hypothesis test",
+   "cat": "data",
+   "ref": "Neyman & Pearson 1933; Benjamini & Hochberg 1995",
+   "when": "is an observed difference real?",
+   "start": "choose",
+   "steps": {
+    "choose": {
+     "op": "select",
+     "do": "test matching the data and design",
+     "next": [
+      "assume"
+     ]
+    },
+    "assume": {
+     "op": "test",
+     "do": "assumptions (independence, distribution)",
+     "next": [
+      "compute",
+      "choose"
+     ]
+    },
+    "compute": {
+     "op": "estimate",
+     "do": "statistic, p or e-value, effect size, interval",
+     "next": [
+      "multi"
+     ]
+    },
+    "multi": {
+     "op": "update",
+     "do": "correct for the number of tests",
+     "next": [
+      "report"
+     ]
+    },
+    "report": {
+     "op": "communicate",
+     "do": "effect size and interval first",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "reported",
+   "math": "report effect with 95% CI; BH at q across a family; e-values when looking repeatedly",
+   "learn": [
+    "Beta(finding replicates | effect size band)"
+   ],
+   "feedback": "replication"
+  },
+  {
+   "id": "ab_test",
+   "name": "Controlled experiment (A/B test)",
+   "cat": "data",
+   "ref": "Kohavi, Tang & Xu 2020",
+   "when": "choosing between two versions by measured effect",
+   "start": "metric",
+   "steps": {
+    "metric": {
+     "op": "generate",
+     "do": "primary metric and guardrails",
+     "next": [
+      "power"
+     ]
+    },
+    "power": {
+     "op": "estimate",
+     "do": "sample size for the smallest effect worth finding",
+     "next": [
+      "randomise"
+     ]
+    },
+    "randomise": {
+     "op": "act",
+     "do": "random assignment; check sample ratio",
+     "next": [
+      "run"
+     ]
+    },
+    "run": {
+     "op": "monitor",
+     "do": "only with a sequential (e-value) test, otherwise wait for n",
+     "next": [
+      "analyse"
+     ]
+    },
+    "analyse": {
+     "op": "call:hypothesis_test",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "ship, keep, or inconclusive",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "decision",
+   "math": "n per arm ~ 2 (z_{1-a/2} + z_{1-b})^2 s^2 / d^2; sample-ratio check by chi-square",
+   "learn": [
+    "Welford(effect size | change type)"
+   ],
+   "feedback": "long-run metric after shipping"
+  },
+  {
+   "id": "regression_analysis",
+   "name": "Regression analysis",
+   "cat": "data",
+   "ref": "Gelman, Hill & Vehtari 2020",
+   "when": "how an outcome depends on inputs",
+   "start": "specify",
+   "steps": {
+    "specify": {
+     "op": "generate",
+     "do": "model form from the question",
+     "next": [
+      "fit"
+     ]
+    },
+    "fit": {
+     "op": "estimate",
+     "next": [
+      "diagnose"
+     ]
+    },
+    "diagnose": {
+     "op": "test",
+     "do": "residuals, leverage, collinearity",
+     "next": [
+      "interpret",
+      "specify"
+     ]
+    },
+    "interpret": {
+     "op": "explain",
+     "do": "coefficients with intervals; association, not cause",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "diagnostics pass",
+   "math": "VIF_j = 1 / (1 - R_j^2) (flag > 10); Cook's distance > 4/n flags influence",
+   "learn": [
+    "Beta(model passes diagnostics first time | data type)"
+   ],
+   "feedback": "held-out error"
+  },
+  {
+   "id": "time_series_analysis",
+   "name": "Time-series analysis and forecasting",
+   "cat": "data",
+   "ref": "Hyndman & Athanasopoulos 2021",
+   "when": "data ordered in time",
+   "start": "plot",
+   "steps": {
+    "plot": {
+     "op": "perceive",
+     "do": "level, trend, seasonality, breaks",
+     "next": [
+      "decompose"
+     ]
+    },
+    "decompose": {
+     "op": "decompose",
+     "do": "trend + season + remainder",
+     "next": [
+      "model"
+     ]
+    },
+    "model": {
+     "op": "estimate",
+     "do": "baseline, exponential smoothing, Cypha forecasting module",
+     "next": [
+      "backtest"
+     ]
+    },
+    "backtest": {
+     "op": "test",
+     "do": "rolling-origin evaluation",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "forecast with intervals and backtest score",
+   "math": "MASE = MAE / MAE of the in-sample naive forecast; interval coverage checked on the backtest",
+   "learn": [
+    "Welford(MASE | model, series type)"
+   ],
+   "feedback": "realised values"
+  },
+  {
+   "id": "clustering_analysis",
+   "name": "Clustering analysis",
+   "cat": "data",
+   "ref": "Kaufman & Rousseeuw 1990",
+   "when": "finding groups without labels",
+   "start": "features",
+   "steps": {
+    "features": {
+     "op": "select",
+     "do": "features and scaling",
+     "next": [
+      "k"
+     ]
+    },
+    "k": {
+     "op": "estimate",
+     "do": "number of clusters by silhouette or gap statistic",
+     "next": [
+      "cluster"
+     ]
+    },
+    "cluster": {
+     "op": "combine",
+     "next": [
+      "stable"
+     ]
+    },
+    "stable": {
+     "op": "test",
+     "do": "bootstrap stability",
+     "next": [
+      "name",
+      "features"
+     ]
+    },
+    "name": {
+     "op": "explain",
+     "do": "what each cluster has in common",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "stable, named clusters",
+   "math": "silhouette s = (b - a) / max(a, b); stability = mean ARI over bootstrap resamples >= 0.75",
+   "learn": [
+    "Welford(stability | method, data type)"
+   ],
+   "feedback": "use of the clusters downstream"
+  },
+  {
+   "id": "anomaly_detection",
+   "name": "Anomaly detection",
+   "cat": "data",
+   "ref": "Chandola, Banerjee & Kumar 2009",
+   "when": "finding unusual records or events",
+   "start": "baseline",
+   "steps": {
+    "baseline": {
+     "op": "estimate",
+     "do": "normal behaviour",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "score",
+     "do": "robust z, density, or Cypha OOD score",
+     "next": [
+      "threshold"
+     ]
+    },
+    "threshold": {
+     "op": "estimate",
+     "do": "for the target false-alarm rate",
+     "next": [
+      "review"
+     ]
+    },
+    "review": {
+     "op": "call:abduction",
+     "do": "error, attack, or real but rare?",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "flags reviewed",
+   "math": "threshold = (1 - target alarm rate) quantile of scores on clean data",
+   "learn": [
+    "Beta(flag is real | score band)"
+   ],
+   "feedback": "review outcomes"
+  },
+  {
+   "id": "observational_causal",
+   "name": "Causal effect from observational data",
+   "cat": "data",
+   "ref": "Hernan & Robins 2020; VanderWeele & Ding 2017",
+   "when": "an effect question with no experiment possible",
+   "start": "dag",
+   "steps": {
+    "dag": {
+     "op": "generate",
+     "do": "causal graph of assumptions",
+     "next": [
+      "adjust"
+     ]
+    },
+    "adjust": {
+     "op": "infer",
+     "do": "adjustment set (back-door)",
+     "next": [
+      "estimate"
+     ]
+    },
+    "estimate": {
+     "op": "estimate",
+     "do": "matching or inverse-probability weighting",
+     "next": [
+      "sensitivity"
+     ]
+    },
+    "sensitivity": {
+     "op": "estimate",
+     "do": "how strong an unmeasured confounder would undo it",
+     "next": [
+      "label"
+     ]
+    },
+    "label": {
+     "op": "communicate",
+     "do": "observational: graded Believed at most",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "estimate with sensitivity",
+   "math": "IPW weights 1/e(x) treated, 1/(1 - e(x)) control; E-value = RR + sqrt(RR (RR - 1))",
+   "learn": [
+    "Beta(observational estimate matches a later experiment)"
+   ],
+   "feedback": "later experimental evidence"
+  },
+  {
+   "id": "data_visualisation",
+   "name": "Honest chart",
+   "cat": "data",
+   "ref": "Tufte 1983; Cleveland & McGill 1984",
+   "when": "data to show someone",
+   "start": "question",
+   "steps": {
+    "question": {
+     "op": "generate",
+     "do": "the one comparison the chart must make",
+     "next": [
+      "encode"
+     ]
+    },
+    "encode": {
+     "op": "select",
+     "do": "position before length before angle before colour",
+     "next": [
+      "check"
+     ]
+    },
+    "check": {
+     "op": "test",
+     "do": "axes, scale, baseline, labels honest",
+     "next": [
+      "annotate",
+      "encode"
+     ]
+    },
+    "annotate": {
+     "op": "communicate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "chart passes the honesty check",
+   "math": "lie factor = effect shown / effect in data, kept within 0.95-1.05; bars start at zero",
+   "learn": [
+    "Beta(reader reads the comparison correctly | encoding)"
+   ],
+   "feedback": "reader understanding checks"
+  },
+  {
+   "id": "feature_engineering",
+   "name": "Feature engineering",
+   "cat": "data",
+   "ref": "Kuhn & Johnson 2019",
+   "when": "inputs for a model",
+   "start": "ideas",
+   "steps": {
+    "ideas": {
+     "op": "generate",
+     "do": "features from domain hypotheses",
+     "next": [
+      "leak"
+     ]
+    },
+    "leak": {
+     "op": "call:leakage_check",
+     "next": [
+      "value"
+     ]
+    },
+    "value": {
+     "op": "evaluate",
+     "do": "held-out gain of each feature",
+     "next": [
+      "keep"
+     ]
+    },
+    "keep": {
+     "op": "select",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "feature set chosen",
+   "math": "keep a feature if its paired held-out gain has a 95% lower bound > 0",
+   "learn": [
+    "Beta(feature idea helps | idea type)"
+   ],
+   "feedback": "held-out score"
+  },
+  {
+   "id": "survey_sampling",
+   "name": "Survey sampling",
+   "cat": "data",
+   "ref": "Cochran 1977",
+   "when": "estimating a population quantity from a sample",
+   "start": "frame",
+   "steps": {
+    "frame": {
+     "op": "retrieve",
+     "do": "sampling frame and its gaps",
+     "next": [
+      "design"
+     ]
+    },
+    "design": {
+     "op": "select",
+     "do": "simple, stratified or cluster",
+     "next": [
+      "size"
+     ]
+    },
+    "size": {
+     "op": "estimate",
+     "next": [
+      "draw"
+     ]
+    },
+    "draw": {
+     "op": "act",
+     "next": [
+      "weight"
+     ]
+    },
+    "weight": {
+     "op": "estimate",
+     "do": "design and non-response weights",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "estimate with standard error",
+   "math": "SE of a mean = sqrt((1 - f) s^2 / n) x sqrt(design effect)",
+   "learn": [
+    "Welford(non-response | mode)"
+   ],
+   "feedback": "benchmarks against known totals"
+  },
+  {
+   "id": "record_linkage",
+   "name": "Record linkage",
+   "cat": "data",
+   "ref": "Fellegi & Sunter 1969",
+   "when": "the same entity appears in two sources without a shared key",
+   "start": "block",
+   "steps": {
+    "block": {
+     "op": "decompose",
+     "do": "blocking keys to limit comparisons",
+     "next": [
+      "compare"
+     ]
+    },
+    "compare": {
+     "op": "compare",
+     "do": "field agreement",
+     "next": [
+      "weight"
+     ]
+    },
+    "weight": {
+     "op": "score",
+     "do": "sum of field weights",
+     "next": [
+      "classify"
+     ]
+    },
+    "classify": {
+     "op": "decide",
+     "do": "link, non-link, or review",
+     "next": [
+      "review",
+      "out"
+     ]
+    },
+    "review": {
+     "op": "ask",
+     "do": "clerical review",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "pairs classified",
+   "math": "agree weight log2(m/u), disagree weight log2((1 - m)/(1 - u)); m, u estimated by EM",
+   "learn": [
+    "m, u per field by EM",
+    "thresholds by review outcomes"
+   ],
+   "feedback": "review decisions"
+  },
+  {
+   "id": "near_duplicates",
+   "name": "Near-duplicate detection",
+   "cat": "data",
+   "ref": "Broder 1997",
+   "when": "copies that are not byte-identical",
+   "start": "shingle",
+   "steps": {
+    "shingle": {
+     "op": "transform",
+     "do": "shingles of each document",
+     "next": [
+      "minhash"
+     ]
+    },
+    "minhash": {
+     "op": "estimate",
+     "do": "MinHash signatures",
+     "next": [
+      "lsh"
+     ]
+    },
+    "lsh": {
+     "op": "match",
+     "do": "banded locality-sensitive hashing",
+     "next": [
+      "verify"
+     ]
+    },
+    "verify": {
+     "op": "verify",
+     "do": "exact Jaccard on candidates",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "clusters of near-duplicates",
+   "math": "P(equal MinHash) = Jaccard; with b bands of r rows, P(candidate) = 1 - (1 - s^r)^b",
+   "learn": [],
+   "feedback": "precision of flagged pairs"
+  },
+  {
+   "id": "etl_pipeline",
+   "name": "Extract-transform-load with reconciliation",
+   "cat": "data",
+   "ref": "Kimball & Caserta 2004",
+   "when": "moving data between systems",
+   "start": "extract",
+   "steps": {
+    "extract": {
+     "op": "retrieve",
+     "next": [
+      "validate"
+     ]
+    },
+    "validate": {
+     "op": "call:data_quality_check",
+     "next": [
+      "transform"
+     ]
+    },
+    "transform": {
+     "op": "transform",
+     "next": [
+      "load"
+     ]
+    },
+    "load": {
+     "op": "act",
+     "next": [
+      "reconcile"
+     ]
+    },
+    "reconcile": {
+     "op": "test",
+     "do": "row counts and checksums match",
+     "next": [
+      "lineage",
+      "extract"
+     ]
+    },
+    "lineage": {
+     "op": "record",
+     "do": "source, version, hash",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "reconciled",
+   "math": "counts and checksums must match exactly; any mismatch reruns the batch",
+   "learn": [
+    "Beta(batch reconciles first time | source)"
+   ],
+   "feedback": "reconciliation"
+  },
+  {
+   "id": "ml_workflow",
+   "name": "Machine-learning workflow",
+   "cat": "ai",
+   "ref": "Ng 2018; PLAN rules 1-4",
+   "when": "a model to build or improve",
+   "start": "define",
+   "steps": {
+    "define": {
+     "op": "generate",
+     "do": "task, metric, the number to beat",
+     "next": [
+      "split"
+     ]
+    },
+    "split": {
+     "op": "decompose",
+     "do": "train / dev / frozen test, leakage-checked",
+     "next": [
+      "baseline"
+     ]
+    },
+    "baseline": {
+     "op": "estimate",
+     "do": "simplest reasonable model",
+     "next": [
+      "train"
+     ]
+    },
+    "train": {
+     "op": "act",
+     "next": [
+      "dev"
+     ]
+    },
+    "dev": {
+     "op": "call:model_evaluation",
+     "next": [
+      "errors"
+     ]
+    },
+    "errors": {
+     "op": "call:error_analysis",
+     "next": [
+      "decide"
+     ]
+    },
+    "decide": {
+     "op": "decide",
+     "do": "good enough, or another iteration worth it?",
+     "next": [
+      "final",
+      "train"
+     ]
+    },
+    "final": {
+     "op": "test",
+     "do": "frozen test once",
+     "next": [
+      "promote"
+     ]
+    },
+    "promote": {
+     "op": "decide",
+     "do": "LCI >= 0.95?",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "promoted or rejected through LCI",
+   "math": "iterate while the expected dev gain of an iteration > its cost (VOC); touch the test set once",
+   "learn": [
+    "Welford(dev gain per iteration | change type)"
+   ],
+   "feedback": "LCI decision; later canaries"
+  },
+  {
+   "id": "cross_validation",
+   "name": "Cross-validation",
+   "cat": "ai",
+   "ref": "Stone 1974",
+   "when": "estimating held-out performance from limited data",
+   "start": "folds",
+   "steps": {
+    "folds": {
+     "op": "decompose",
+     "do": "k folds; grouped or time-ordered when needed",
+     "next": [
+      "loop"
+     ]
+    },
+    "loop": {
+     "op": "test",
+     "do": "train on k-1, score the held-out fold",
+     "next": [
+      "pool"
+     ]
+    },
+    "pool": {
+     "op": "estimate",
+     "do": "mean and standard error",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "estimate with SE",
+   "math": "SE ~ sd(fold scores) / sqrt(k); folds respect groups and time",
+   "learn": [],
+   "feedback": "agreement with the frozen test later"
+  },
+  {
+   "id": "hyperparameter_search",
+   "name": "Hyperparameter search",
+   "cat": "ai",
+   "ref": "Bergstra & Bengio 2012; Li et al. 2017",
+   "when": "settings to tune under a compute budget",
+   "start": "space",
+   "steps": {
+    "space": {
+     "op": "generate",
+     "do": "ranges, log scale where natural",
+     "next": [
+      "sample"
+     ]
+    },
+    "sample": {
+     "op": "generate",
+     "do": "random configurations",
+     "next": [
+      "halve"
+     ]
+    },
+    "halve": {
+     "op": "rank",
+     "do": "successive halving: keep the top 1/eta at each budget",
+     "next": [
+      "more"
+     ]
+    },
+    "more": {
+     "op": "decide",
+     "do": "budget left and VOC > 0?",
+     "next": [
+      "sample",
+      "best"
+     ]
+    },
+    "best": {
+     "op": "select",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "budget spent or VOC <= 0",
+   "math": "successive halving with ratio eta (3 by default); report the best with its dev interval",
+   "learn": [
+    "Welford(score | region of the space)"
+   ],
+   "feedback": "frozen-test result of the chosen setting"
+  },
+  {
+   "id": "error_analysis",
+   "name": "Error analysis",
+   "cat": "ai",
+   "ref": "Ng 2018",
+   "when": "after evaluating a model",
+   "start": "sample",
+   "steps": {
+    "sample": {
+     "op": "retrieve",
+     "do": "random sample of dev errors",
+     "next": [
+      "tag"
+     ]
+    },
+    "tag": {
+     "op": "classify",
+     "do": "error categories",
+     "next": [
+      "size"
+     ]
+    },
+    "size": {
+     "op": "estimate",
+     "do": "share of errors per category",
+     "next": [
+      "prioritise"
+     ]
+    },
+    "prioritise": {
+     "op": "rank",
+     "do": "share x fixability / cost",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "ranked fix list",
+   "math": "the ceiling gain of fixing category c = its share of errors x the error rate",
+   "learn": [
+    "Beta(fix of category helped | category)"
+   ],
+   "feedback": "gain after the fix"
+  },
+  {
+   "id": "model_evaluation",
+   "name": "Model evaluation",
+   "cat": "ai",
+   "ref": "PLAN 8; Guo et al. 2017",
+   "when": "judging a model or a change",
+   "start": "metrics",
+   "steps": {
+    "metrics": {
+     "op": "measure",
+     "do": "primary metric with a bootstrap interval",
+     "next": [
+      "calib"
+     ]
+    },
+    "calib": {
+     "op": "measure",
+     "do": "ECE, Brier, risk-coverage",
+     "next": [
+      "slices"
+     ]
+    },
+    "slices": {
+     "op": "call:slice_audit",
+     "next": [
+      "robust"
+     ]
+    },
+    "robust": {
+     "op": "test",
+     "do": "perturbations (T-perturb style)",
+     "next": [
+      "compare"
+     ]
+    },
+    "compare": {
+     "op": "compare",
+     "do": "paired against the current model (LCI)",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "evaluation card complete",
+   "math": "paired Bayesian bootstrap P(gain > eps); report wrong-answer rate with a Wilson upper bound",
+   "learn": [],
+   "feedback": "agreement with later canaries"
+  },
+  {
+   "id": "ablation_study",
+   "name": "Ablation study",
+   "cat": "ai",
+   "ref": "Newell 1975; Meyes et al. 2019",
+   "when": "which parts of a system matter",
+   "start": "full",
+   "steps": {
+    "full": {
+     "op": "measure",
+     "do": "full system",
+     "next": [
+      "remove"
+     ]
+    },
+    "remove": {
+     "op": "transform",
+     "do": "remove one component",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "measure",
+     "next": [
+      "more"
+     ]
+    },
+    "more": {
+     "op": "decide",
+     "do": "components left?",
+     "next": [
+      "remove",
+      "attribute"
+     ]
+    },
+    "attribute": {
+     "op": "explain",
+     "do": "contribution of each with an interval",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "every component ablated",
+   "math": "contribution = paired score drop with a bootstrap interval; flag interactions when drops do not add up",
+   "learn": [],
+   "feedback": "decisions to keep or remove components"
+  },
+  {
+   "id": "leakage_check",
+   "name": "Leakage check",
+   "cat": "ai",
+   "ref": "Kaufman et al. 2012",
+   "when": "before trusting any evaluation",
+   "start": "dupes",
+   "steps": {
+    "dupes": {
+     "op": "call:near_duplicates",
+     "do": "across train and test",
+     "next": [
+      "target"
+     ]
+    },
+    "target": {
+     "op": "test",
+     "do": "features that encode the label",
+     "next": [
+      "time"
+     ]
+    },
+    "time": {
+     "op": "test",
+     "do": "information from the future",
+     "next": [
+      "verdict"
+     ]
+    },
+    "verdict": {
+     "op": "decide",
+     "next": [
+      "clean",
+      "fix"
+     ]
+    },
+    "fix": {
+     "op": "transform",
+     "do": "remove leaked items or features",
+     "next": [
+      "dupes"
+     ]
+    },
+    "clean": {
+     "op": "return"
+    }
+   },
+   "stop": "no leakage found",
+   "math": "share of test items with a train near-duplicate (Jaccard >= 0.8); must be ~0",
+   "learn": [
+    "Dir(leak type | dataset type)"
+   ],
+   "feedback": "surprise drops when moving to fresh data"
+  },
+  {
+   "id": "drift_monitoring",
+   "name": "Drift monitoring",
+   "cat": "ai",
+   "ref": "Gama et al. 2014",
+   "when": "a model in daily use",
+   "start": "inputs",
+   "steps": {
+    "inputs": {
+     "op": "compare",
+     "do": "input distribution vs training",
+     "next": [
+      "outputs"
+     ]
+    },
+    "outputs": {
+     "op": "compare",
+     "do": "prediction distribution vs baseline",
+     "next": [
+      "perf"
+     ]
+    },
+    "perf": {
+     "op": "measure",
+     "do": "performance where labels arrive",
+     "next": [
+      "alarm"
+     ]
+    },
+    "alarm": {
+     "op": "decide",
+     "do": "drift beyond threshold?",
+     "next": [
+      "act",
+      "out"
+     ]
+    },
+    "act": {
+     "op": "call:online_update",
+     "do": "or schedule retraining",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "daily check done",
+   "math": "PSI = sum (a_i - e_i) ln(a_i / e_i) (> 0.25 major); KS D = sup |F_1 - F_2|; CUSUM on errors",
+   "learn": [
+    "Welford(PSI | feature)"
+   ],
+   "feedback": "performance after the alarm"
+  },
+  {
+   "id": "active_learning",
+   "name": "Active learning",
+   "cat": "ai",
+   "ref": "Settles 2009",
+   "when": "labels are expensive",
+   "start": "pool",
+   "steps": {
+    "pool": {
+     "op": "retrieve",
+     "do": "unlabelled items",
+     "next": [
+      "pick"
+     ]
+    },
+    "pick": {
+     "op": "select",
+     "do": "most informative: uncertainty x diversity",
+     "next": [
+      "label"
+     ]
+    },
+    "label": {
+     "op": "ask",
+     "do": "label from human, teacher or test",
+     "next": [
+      "retrain"
+     ]
+    },
+    "retrain": {
+     "op": "call:online_update",
+     "next": [
+      "stop"
+     ]
+    },
+    "stop": {
+     "op": "decide",
+     "do": "gain per label below its cost?",
+     "next": [
+      "out",
+      "pick"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "gain per label below cost",
+   "math": "pick argmax entropy of P(y | x), penalised by similarity to already-picked items",
+   "learn": [
+    "Welford(gain per label)"
+   ],
+   "feedback": "held-out score per label spent"
+  },
+  {
+   "id": "online_update",
+   "name": "Online update with safety (Cypha's own)",
+   "cat": "ai",
+   "ref": "Dawid 1984; PLAN 3.4 and 8",
+   "when": "new labelled data arrives",
+   "start": "predict",
+   "steps": {
+    "predict": {
+     "op": "estimate",
+     "do": "predict first (prequential)",
+     "next": [
+      "learn"
+     ]
+    },
+    "learn": {
+     "op": "update",
+     "do": "DIF update; replay mix",
+     "next": [
+      "canary"
+     ]
+    },
+    "canary": {
+     "op": "test",
+     "do": "canary sets",
+     "next": [
+      "keep",
+      "rollback"
+     ]
+    },
+    "rollback": {
+     "op": "update",
+     "do": "restore the last snapshot",
+     "next": [
+      "out"
+     ]
+    },
+    "keep": {
+     "op": "record",
+     "do": "snapshot",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "update kept or rolled back",
+   "math": "prequential loss = sum of the loss on each item before learning it; roll back if a canary drops beyond delta",
+   "learn": [],
+   "feedback": "prequential loss; canaries"
+  },
+  {
+   "id": "model_selection",
+   "name": "Model selection",
+   "cat": "ai",
+   "ref": "Akaike 1974; Schwarz 1978; Rissanen 1978",
+   "when": "several candidate models",
+   "start": "fit",
+   "steps": {
+    "fit": {
+     "op": "estimate",
+     "do": "each candidate",
+     "next": [
+      "score"
+     ]
+    },
+    "score": {
+     "op": "score",
+     "do": "held-out loss and complexity",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "select",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "one model chosen",
+   "math": "AIC = 2k - 2 ln L; BIC = k ln n - 2 ln L; MDL = L(model) + L(data | model); prefer held-out loss when data allows",
+   "learn": [],
+   "feedback": "frozen-test agreement"
+  },
+  {
+   "id": "retrieval_pipeline",
+   "name": "Retrieval pipeline",
+   "cat": "ai",
+   "ref": "Robertson & Zaragoza 2009",
+   "when": "finding the stored items relevant to a query",
+   "start": "normalise",
+   "steps": {
+    "normalise": {
+     "op": "transform",
+     "do": "case, punctuation, stemming as measured",
+     "next": [
+      "candidates"
+     ]
+    },
+    "candidates": {
+     "op": "retrieve",
+     "do": "BM25 and vector similarity",
+     "next": [
+      "rerank"
+     ]
+    },
+    "rerank": {
+     "op": "rank",
+     "do": "combined score",
+     "next": [
+      "gate"
+     ]
+    },
+    "gate": {
+     "op": "decide",
+     "do": "top score and margin above thresholds?",
+     "next": [
+      "hit",
+      "abstain"
+     ]
+    },
+    "hit": {
+     "op": "return"
+    },
+    "abstain": {
+     "op": "return"
+    }
+   },
+   "stop": "result or NO_EVIDENCE",
+   "math": "BM25 with k1 = 1.2, b = 0.75; evaluate recall@k and MRR = mean 1/rank; thresholds from the risk-coverage curve",
+   "learn": [
+    "thresholds per collection"
+   ],
+   "feedback": "relevance of returned items"
+  },
+  {
+   "id": "teacher_query",
+   "name": "Query a teacher model",
+   "cat": "ai",
+   "ref": "Wang et al. 2023 (self-consistency); docs/GGUF_MINING.md",
+   "when": "a gap the cheaper sources could not fill",
+   "start": "prompt",
+   "steps": {
+    "prompt": {
+     "op": "generate",
+     "do": "templated prompts, several phrasings",
+     "next": [
+      "sample"
+     ]
+    },
+    "sample": {
+     "op": "ask",
+     "do": "greedy + k samples per phrasing",
+     "next": [
+      "agree"
+     ]
+    },
+    "agree": {
+     "op": "estimate",
+     "do": "majority answer, agreement, semantic entropy",
+     "next": [
+      "prior"
+     ]
+    },
+    "prior": {
+     "op": "update",
+     "do": "hypothesis with the teacher's calibrated prior",
+     "next": [
+      "verify"
+     ]
+    },
+    "verify": {
+     "op": "verify",
+     "do": "independent check before any promotion",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "hypothesis recorded, tested or not",
+   "math": "confidence from the calibration fitted by gguf_mine.py calibrate; never counted as independent evidence",
+   "learn": [
+    "Beta(teacher right | relation)"
+   ],
+   "feedback": "verification outcome"
+  },
+  {
+   "id": "benchmark_hygiene",
+   "name": "Benchmark hygiene",
+   "cat": "ai",
+   "ref": "PLAN rules 1-4; Dwork et al. 2015",
+   "when": "creating or using a test set",
+   "start": "freeze",
+   "steps": {
+    "freeze": {
+     "op": "record",
+     "do": "checksum, date, provenance",
+     "next": [
+      "isolate"
+     ]
+    },
+    "isolate": {
+     "op": "test",
+     "do": "training readers skip it",
+     "next": [
+      "contam"
+     ]
+    },
+    "contam": {
+     "op": "call:leakage_check",
+     "next": [
+      "use"
+     ]
+    },
+    "use": {
+     "op": "test",
+     "do": "through Thresholdout, final runs once",
+     "next": [
+      "rotate"
+     ]
+    },
+    "rotate": {
+     "op": "decide",
+     "do": "budget spent? retire to canaries",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "used within its budget",
+   "math": "Thresholdout returns dev unless |dev - test| > T + noise; rotate after N = 20 promotions",
+   "learn": [],
+   "feedback": "agreement between rotated test sets"
+  },
+  {
+   "id": "experiment_tracking",
+   "name": "Experiment tracking",
+   "cat": "ai",
+   "ref": "native/sql/experiment_schema.sql",
+   "when": "any run that produces a number",
+   "start": "register",
+   "steps": {
+    "register": {
+     "op": "record",
+     "do": "config, seed, code and data hashes, prediction",
+     "next": [
+      "run"
+     ]
+    },
+    "run": {
+     "op": "act",
+     "next": [
+      "log"
+     ]
+    },
+    "log": {
+     "op": "record",
+     "do": "metrics, intervals, cost",
+     "next": [
+      "compare"
+     ]
+    },
+    "compare": {
+     "op": "compare",
+     "do": "against the prediction and earlier runs",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "run recorded",
+   "math": "a result without a hash of code and data is not counted",
+   "learn": [],
+   "feedback": "reproduction of results"
+  },
+  {
+   "id": "slice_audit",
+   "name": "Slice audit",
+   "cat": "ai",
+   "ref": "Mitchell et al. 2019",
+   "when": "a model serves different kinds of input or people",
+   "start": "slices",
+   "steps": {
+    "slices": {
+     "op": "decompose",
+     "do": "domains, question types, sources, groups",
+     "next": [
+      "measure"
+     ]
+    },
+    "measure": {
+     "op": "measure",
+     "do": "metric per slice with an interval",
+     "next": [
+      "gaps"
+     ]
+    },
+    "gaps": {
+     "op": "compare",
+     "do": "gap to the overall metric",
+     "next": [
+      "act"
+     ]
+    },
+    "act": {
+     "op": "decide",
+     "do": "gap beyond tolerance with confidence?",
+     "next": [
+      "fix",
+      "out"
+     ]
+    },
+    "fix": {
+     "op": "call:error_analysis",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "audit card",
+   "math": "flag a slice when the bootstrap interval of its gap excludes the tolerance",
+   "learn": [],
+   "feedback": "gap after fixes"
+  },
+  {
+   "id": "bandit_loop",
+   "name": "Bandit learning loop",
+   "cat": "ai",
+   "ref": "Thompson 1933; Lattimore & Szepesvari 2020",
+   "when": "repeated choices with feedback",
+   "start": "draw",
+   "steps": {
+    "draw": {
+     "op": "estimate",
+     "do": "sample from each option's posterior",
+     "next": [
+      "choose"
+     ]
+    },
+    "choose": {
+     "op": "select",
+     "do": "argmax of the samples",
+     "next": [
+      "observe"
+     ]
+    },
+    "observe": {
+     "op": "measure",
+     "do": "reward",
+     "next": [
+      "update"
+     ]
+    },
+    "update": {
+     "op": "update",
+     "do": "posterior of the chosen option",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "one round",
+   "math": "Beta-Bernoulli: a += r, b += 1 - r; cumulative regret grows ~ log T",
+   "learn": [
+    "Beta per option"
+   ],
+   "feedback": "reward"
+  },
+  {
+   "id": "daily_upkeep",
+   "name": "Cypha's daily upkeep",
+   "cat": "ai",
+   "ref": "DISCOVERY P13-P14; PLAN 7.5, 8.6",
+   "when": "every day",
+   "start": "canaries",
+   "steps": {
+    "canaries": {
+     "op": "test",
+     "do": "all canary suites",
+     "next": [
+      "drift"
+     ]
+    },
+    "drift": {
+     "op": "call:drift_monitoring",
+     "next": [
+      "audit"
+     ]
+    },
+    "audit": {
+     "op": "verify",
+     "do": "random sample of new facts and abstentions",
+     "next": [
+      "calib"
+     ]
+    },
+    "calib": {
+     "op": "update",
+     "do": "calibration per cell",
+     "next": [
+      "gaps"
+     ]
+    },
+    "gaps": {
+     "op": "update",
+     "do": "gap map and frontier report",
+     "next": [
+      "plan"
+     ]
+    },
+    "plan": {
+     "op": "schedule",
+     "do": "curiosity scheduler sets today's discovery budget",
+     "next": [
+      "journal"
+     ]
+    },
+    "journal": {
+     "op": "record",
+     "do": "daily journal: what changed, what failed, open questions for Odin",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "journal written",
+   "math": "pause admissions if the audit's Wilson lower bound < 0.90; roll back if a canary drops beyond delta",
+   "learn": [],
+   "feedback": "Odin's journal rating"
+  },
+  {
+   "id": "model_card",
+   "name": "Model card update",
+   "cat": "ai",
+   "ref": "Mitchell et al. 2019",
+   "when": "a model or default changes",
+   "start": "facts",
+   "steps": {
+    "facts": {
+     "op": "retrieve",
+     "do": "data, training, version, hashes",
+     "next": [
+      "metrics"
+     ]
+    },
+    "metrics": {
+     "op": "call:model_evaluation",
+     "next": [
+      "limits"
+     ]
+    },
+    "limits": {
+     "op": "explain",
+     "do": "known limits and failure cases",
+     "next": [
+      "write"
+     ]
+    },
+    "write": {
+     "op": "communicate",
+     "next": [
+      "out"
+     ]
+    },
+    "out": {
+     "op": "return"
+    }
+   },
+   "stop": "card updated",
+   "math": "every number on the card links to an experiment record",
+   "learn": [],
+   "feedback": "reader questions about the card"
+  }
+ ]
+}

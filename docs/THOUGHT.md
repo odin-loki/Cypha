@@ -368,8 +368,8 @@ The reward is always measured, never self-assessed. Every source maps to R ∈ [
 | ID | Work | Gate |
 |---|---|---|
 | K1 | Library, schema and validator (done 2026-10-27: 142 processes, 0 errors) | `thought_check.py` passes |
-| K2 | C++ interpreter: steps, guards, calls, budgets, traces to the experiment DB (`native/include/cypha/thought/`) | Replays a trace bit-identically; CTest |
-| K3 | Standard learners: Beta, Dirichlet, Welford, DIF applicability, Thompson selection, TD(λ) credit, VOC stop, calibration | Known-answer CTests; regret falls on a synthetic bandit of processes |
+| K2 | C++ interpreter: steps, guards, calls, budgets, traces to the experiment DB (`native/include/cypha/thought/`). **Done 2026-10-27** ([report](reports/K2_K3_THOUGHT_INTERPRETER.md)); the experiment-DB sink is a hook for now | Replays a trace bit-identically; CTest |
+| K3 | Standard learners: Beta, Dirichlet, Welford, DIF applicability, Thompson selection, TD(λ) credit, VOC stop, calibration. **Done 2026-10-27** except DIF applicability (a per-(process, task class) Beta stands in) | Known-answer CTests; regret falls on a synthetic bandit of processes |
 | K4 | Primitives bound to CyphaLM and the existing libraries (ECS, LCI, epistemic, SCRIBE, `gguf_mine.py`); answering steps go through CyphaLM (PLAN rule 10) | Each primitive has a test |
 | K5 | First executable processes: `dual_process` + `confidence_monitor` + `cooperative_reply` on T-QA-wiki; `half_split` on planted faults; `fermi_estimate`; `sprt_decide`; `ach` | Benchmarks in section 10 |
 | K6 | Chunking (fast rules from slow results) | Chunk accuracy ≥ 0.9; System 1 hit rate rises with no rise in wrong answers |

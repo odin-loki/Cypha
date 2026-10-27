@@ -2752,3 +2752,16 @@ cypha_mingw_apply_exe_link_options(epistemic_test)
 add_test(NAME native_epistemic_test COMMAND "$<TARGET_FILE:epistemic_test>")
 set_tests_properties(native_epistemic_test PROPERTIES TIMEOUT 120)
 # --- end S2 block -------------------------------------------------------------------------------
+
+# --- K2/K3: thought-process interpreter and standard learners (docs/THOUGHT.md sections 1.3, 3, 5, 12) ----
+# Header-only (include/cypha/thought/learners.hpp, interpreter.hpp; the latter uses third_party/nlohmann).
+# The test loads docs/thought/processes.json, written by: python3 scripts/thought_check.py --json docs/thought/processes.json
+add_executable(thought_test tools/thought_test.cpp)
+target_include_directories(thought_test PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+cypha_mingw_apply_exe_link_options(thought_test)
+add_test(NAME native_thought_test
+  COMMAND "$<TARGET_FILE:thought_test>" "${CMAKE_CURRENT_SOURCE_DIR}/../docs/thought/processes.json")
+set_tests_properties(native_thought_test PROPERTIES TIMEOUT 300)
+# --- end K2/K3 block ----------------------------------------------------------------------------------

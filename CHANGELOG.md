@@ -13,6 +13,7 @@ milestone or a significant self-contained change.
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **Thought interpreter and learners** (THOUGHT K2–K3, [report](docs/reports/K2_K3_THOUGHT_INTERPRETER.md)): header-only `native/include/cypha/thought/{learners,interpreter}.hpp` run the process library (`docs/thought/processes.json`, written by `thought_check.py --json`). Portable Beta, Dirichlet, Welford, Thompson selection, ACT-R utility, TD(λ), VOC stop, calibration log. CTest `native_thought_test`: 5,534 checks; half_split 6 tests against 31.3 for random probing; SPRT errors 0.028 / 0.038 at 0.05; selection regret 243 → 92.5; bit-identical replay.
 - **Semantics design** ([`docs/SEMANTICS.md`](docs/SEMANTICS.md), Track C): Core Cypha reinterpreted as a statistical meaning layer.
   - **How it works:** words and concepts become classes and contexts become observations. That gives online embeddings, Gaussian variance for breadth and is-a direction, relation maps with abstention, and sense splitting.
   - **Into CyphaLM:** through class-context and similar-context experts.

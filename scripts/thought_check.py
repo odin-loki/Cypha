@@ -5,6 +5,7 @@
   python3 scripts/thought_check.py --index docs/thought/INDEX.md
   python3 scripts/thought_check.py --uml ach             # PlantUML state diagram (text) for one process
   python3 scripts/thought_check.py --mermaid ach         # the same as Mermaid text
+  python3 scripts/thought_check.py --json docs/thought/processes.json   # validated library as JSON (for C++)
 
 Checks: unique ids; known categories; required fields; start step exists; every
 op is a primitive or "call:<existing process>"; every `next` target exists;
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import json
 import os
 import sys
 
@@ -107,6 +109,22 @@ def validate(lib):
     return errors, calls
 
 
+def write_json(lib, path):
+    """Write the validated library as JSON (the C++ interpreter has no YAML parser).
+
+    Key order follows the YAML. Refuses non-string ids or step targets (YAML 1.1 turns a bare
+    yes/no/on/off into a boolean, which json would silently rewrite as true/false).
+    """
+    for p in lib["processes"]:
+        for sid, s in p["steps"].items():
+            ok = isinstance(sid, str) and all(isinstance(n, str) for n in (s.get("next") or []))
+            if not ok or not isinstance(p["start"], str):
+                sys.exit(f"{p['id']}.{sid}: step ids, next and start must be strings for JSON export")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(lib, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+
+
 def index_md(lib, calls):
     cats = lib["categories"]
     by = collections.defaultdict(list)
@@ -170,6 +188,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--lib", default=DEFAULT)
     ap.add_argument("--index", help="write the markdown index here")
+    ap.add_argument("--json", metavar="OUT", help="write the validated library as JSON here")
     ap.add_argument("--uml", help="print a PlantUML state diagram for this process id")
     ap.add_argument("--mermaid", help="print a Mermaid state diagram for this process id")
     a = ap.parse_args()
@@ -192,6 +211,9 @@ def main():
         with open(a.index, "w", encoding="utf-8") as f:
             f.write(index_md(lib, calls))
         print(f"index written to {a.index}")
+    if a.json and not errors:
+        write_json(lib, a.json)
+        print(f"json written to {a.json}")
     sys.exit(1 if errors else 0)
 
 
