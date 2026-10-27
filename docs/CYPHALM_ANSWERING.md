@@ -51,8 +51,8 @@ That is the whole of the 0/8 on Wikipedia facts and the 1/30 on held-out Dolly (
 
 | Step | Work | Measure |
 |---|---|---|
-| A0 | TOOL_PROFILE P0 harness: CyphaLM alone, greedy, with its own confidence | Right / abstained / wrong on dev 130; coverage at 2% wrong |
-| A1 | "Don't know" training text (not-in-slice questions, held-out facts and contested slots, each with message and tag) | Abstain recall and precision; reason-code accuracy |
+| A0 | TOOL_PROFILE P0 harness: CyphaLM alone, greedy, with its own confidence. **Done 2026-10-28:** coverage at 2% wrong is 0.0% on dev; test 0–2 of 200 raw ([report](reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md)) | Right / abstained / wrong on dev 130; coverage at 2% wrong |
+| A1 | "Don't know" training text (not-in-slice questions, held-out facts and contested slots, each with message and tag). **Run 2026-10-28:** CyphaLM writes the message itself, but when it writes it is no better than its familiarity signal (AUROC 0.54–0.60). D1 hit, D2 missed, D3 hit | Abstain recall and precision; reason-code accuracy |
 | A2 | R1 shards: fact text in question form | Coverage at 2% wrong; BPC unchanged or better |
 | A3 | R3 statement scoring | The same, on facts with no R1 shard (it should work there) |
 | A4 | R2 experts, after S-1 and the geometry work | Coverage on reworded questions (T-perturb) |

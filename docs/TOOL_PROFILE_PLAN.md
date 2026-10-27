@@ -102,7 +102,7 @@ A tool stays only if **all** of these hold:
 
 ## 7. Order of work
 
-1. **P0:** the CyphaLM Q/A harness and baseline (section 2). This needs the consolidated trie library from B1, which is in progress.
+1. **P0:** the CyphaLM Q/A harness and baseline (section 2). **Done 2026-10-28:** `cyphalm_trie qa`; the baseline is 0.0% coverage at 2% wrong ([report](reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md)).
 2. **P1:** one adapter per tool, each at most about 200 lines: tag-context expert, class-context expert, fact-text shard writer, teacher-text shard writer, abstain gate.
 3. **P2:** the grid (section 4), plus the leakage check.
 4. **P3:** decisions (section 5). The frozen test runs once, on the final kept set only.

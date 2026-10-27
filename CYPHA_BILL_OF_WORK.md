@@ -56,7 +56,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - K1 (144 processes including AI, data science and teacher mining, validator) is done.
   - **K2 and K3 done 2026-10-27** ([report](docs/reports/K2_K3_THOUGHT_INTERPRETER.md)): the interpreter and the standard learners in `native/include/cypha/thought/`, with CTest `native_thought_test` (5,534 checks). half_split takes 6 tests against 31.3 for random probing; SPRT errors are 0.028 / 0.038 at α = β = 0.05; selection regret falls from 243 to 92.5; ECE 0.015; replay is bit-identical.
   - **Still open:** K4 (primitives bound to CyphaLM and the existing libraries), K5 (first executable processes on their benchmarks), and DIF applicability in place of the per-(process, task) Beta.
-- [ ] **"Don't know" message and tag** ([DISCOVERY §3.5](docs/DISCOVERY.md#35-the-dont-know-message-and-tag)):
+- [ ] **"Don't know" message and tag** ([DISCOVERY §3.5](docs/DISCOVERY.md#35-the-dont-know-message-and-tag)). **First run 2026-10-28** ([report](docs/reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md)): CyphaLM writes the message itself (`cyphalm_trie dktext` builds the text), but its familiarity signal is weak (AUROC 0.54–0.60), and no tag names the entity. Next: an entity-level familiarity signal, a copy path, and Odin's ruling on the control token. Original items:
   - build training text pairing unanswerable questions with the message and the `<|unknown ...|>` tag;
   - train CyphaLM on it;
   - parse emitted tags into the gap map;
@@ -71,7 +71,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - **Built 2026-10-28:** the `gguf_mine.py` subcommands `embedtexts`, `geometry`, `compare`, `sensitivity`, `occlusion`, `instruct`, `wdiff` and `pairs`, plus `vectors --pooling last` with an EOS check ([GGUF_MINING.md](docs/GGUF_MINING.md) §14). The selftest passes with the Qwen2 and llama-spm vocabularies, with known-answer checks for Spearman, CKA, Procrustes, TwoNN, τ fitting and randomized SVD.
   - **Still to do on Odin's machine:** the QE0 pooling gate on real models, and the first real render of Qwen3.5-9B's chat template.
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
-  1. Build the CyphaLM Q/A baseline harness.
+  1. Build the CyphaLM Q/A baseline harness. **Done 2026-10-28** (`cyphalm_trie qa`; baseline 0.0% coverage at 2% wrong).
   2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.
   3. Run the B / B+T / F / F−T grid with a leakage check.
   4. Keep only the tools that pass LCI and their lines-per-gain bar; delete the rest.

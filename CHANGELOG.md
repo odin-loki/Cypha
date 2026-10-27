@@ -14,6 +14,9 @@ milestone or a significant self-contained change.
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **CyphaLM Q/A harness and don't-know training** (CYPHALM_ANSWERING A0–A1, [report](docs/reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md)): `cyphalm_trie qa` and `cyphalm_trie dktext`.
+  - **Q/A:** CyphaLM alone has 0.0% coverage at a 2% wrong rate on dev.
+  - **Don't know:** trained on its own message and tag, it writes them, but only as well as its familiarity signal allows (AUROC 0.54–0.60). D1 hit, D2 missed, D3 hit (BPC change ≤ 0.0033).
 - **Embedding-geometry mining commands** in `scripts/gguf_mine.py` ([GGUF_MINING.md](docs/GGUF_MINING.md) §14), now 4,199 lines:
   - **With a model:** `embedtexts` (last-token pooling with the EOS check, query instructions, MRL prefix, resume, timing), `sensitivity`, `occlusion`, `instruct`, `pairs` (Qwen3.5-style synthetic pairs, hard negatives, verification, mask audit).
   - **Offline:** `geometry`, `compare` and `wdiff`.

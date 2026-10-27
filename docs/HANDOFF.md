@@ -102,10 +102,21 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 
 ### 4.2 CyphaLM Q/A baseline (A0) and "don't know" training (A1)
 
-**Running at the time of writing.** The report will be `docs/reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md`.
-- **A0.** The `qa` subcommand of `cyphalm_trie`: greedy answers, CyphaLM's own confidence, and the threshold for a 2% wrong rate chosen by 5-fold cross-validation inside dev.
-- **A1a.** Naive don't-know text. Predicted (D1) to abstain without discrimination, because the trie's short context cannot see which question it is answering.
-- **A1b.** A familiarity control token. Predicted (D2): precision ≥ 0.8 and recall ≥ 0.5 on not-in-slice questions.
+**Done 2026-10-28** ([report](reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md)). `cyphalm_trie qa` (the harness) and `cyphalm_trie dktext` (the don't-know training-text builder, with a leakage check).
+
+- **A0: CyphaLM answers none by itself.**
+  - **Dev:** 0–2 of 130 right, both lucky words inside nonsense. Coverage at 2% wrong is 0.0% (5-fold CV inside dev).
+  - **Frozen test:** 0–2 of 200 raw. The dev gate kept 3 answers, all wrong.
+  - **BPC:** 2.344571, unchanged.
+- **A1: it learns to write the message, not when to.** 3,963 don't-know rows, with 0 leakage.
+  - **Naive text (A1a):** the message comes out at about its training share, indiscriminately. Precision 0.23–0.27 against a base rate of 0.23. **D1 hit.**
+  - **Familiarity token (A1b):** CyphaLM follows a token placed after `Assistant: ` exactly. But the familiarity statistic, the model's own mean log-probability of the question, separates not-in-slice from in-slice questions with an AUROC of only 0.54–0.60. Dev precision 0.50, recall 0.43. **D2 missed.**
+  - **Tags:** no tag names the question's entity.
+  - **BPC:** changes by ≤ 0.0033. **D3 hit.**
+- **What this says.**
+  - The bottleneck is a better familiarity signal: an entity-level count rather than the whole question's probability, or the R2 experts.
+  - CyphaLM needs a way to copy the entity from the question into its answer and its tag.
+  - Odin still has to rule on the familiarity token.
 
 ### 4.3 Earlier results still in force
 
@@ -135,7 +146,7 @@ These four run on every change:
    - whether Qwen3.5-9B text goes in a separate low-trust shard;
    - whether the question parse and learned patterns may supply R3's statement frames;
    - keeping the abstain gate "for now".
-2. **The familiarity control token** for "don't know" (see §4.2): using CyphaLM's own question log-probability or InfiniGram match as a control token. It is a design choice, and he should sign it off.
+2. **The familiarity control token** for "don't know" (see §4.2): using CyphaLM's own question log-probability as a control token. It is a design choice, and he should rule on it. A1 showed that CyphaLM follows the token exactly and that the statistic behind it is weak. Two related choices: whether to try an entity-level familiarity instead, and whether to place the token after `Assistant: ` (the trie cannot see it before).
 3. **F2's per-relation base rate.**
 4. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp`.
 
@@ -145,7 +156,9 @@ These four run on every change:
 
 ### 6.1 Can run anywhere (cloud container or Odin's machine)
 
-1. **A2 and A3** of CYPHALM_ANSWERING, once Odin agrees: question-form fact shards, then statement scoring, in `cyphalm_trie`.
+1. **A2 and A3** of CYPHALM_ANSWERING, once Odin agrees: question-form fact shards, then statement scoring, in `cyphalm_trie` (`qa` is the harness; `dktext` shows how to build a training shard with a leakage check).
+   - In parallel, test a better familiarity signal for A1: the InfiniGram count of the question's entity span in the training text, a statistic of CyphaLM's own model.
+   - Add a copy path, so the tag can name the entity.
 2. **TOOL_PROFILE P1–P4.**
    - P1: adapters of at most about 200 lines each.
    - P2: the 12-configuration grid with the leakage check, about 6–8 min each on one core.
