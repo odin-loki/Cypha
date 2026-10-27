@@ -2420,16 +2420,14 @@ void reach_report(const vector<Pat>& pats, const string& data, std::size_t train
 //              store's f, or Wikidata's rate (over covered or all entities, over all or only empty store slots), fit on the
 //              other fifths, then refit on all. Relations with no Wikidata value keep the store's f. Listed at >= --gap-floor.
 //   contradiction  a stored extracted value of a functional relation with competing-value or constraint mass in its ECS
-//              fusion; p = its P over its P
-//              plus the best rival's (a text seed counts 20/21). certainty: a stored extracted value that is Believed at
-//              grade Low, or Known on one sentence; p = P.
+//              fusion; p = its P over its P plus the best rival's (a text seed counts 20/21).
+//   certainty  a stored extracted value that is Believed at grade Low, or Known on one sentence; p = P.
 //   demand     --demand ROWS[,ROWS...]: cyphalm_trie qa rows, dev rows only; each tag adds demand to its slot (gap_map.hpp).
 //   status     parked when no automatic rung can fill the slot now (no kept pattern for R, or the entity has no page), else
 //              open, or queued when asked about. VOI = gap_map.hpp score(): EIG of a 0.9 / 0.9 test x (1 + w demand),
 //              w = --demand-weight (0: 0 of 750 dev tags name their question's slot; the demand column is kept).
 //   grading    with --dev (grading only, dev only): does a tag name its question's slot (subject: the in-slice title, else
 //              --parse's E1 entity; relation: q_rels), and is that slot a gap?
-// Demand weight 0 (S3, dev): 0 of CyphaLM's 750 dev tags name their question's slot, so tag demand is logged but not ranked.
 struct GapOpt { string path, parse; vector<string> demand; double floor = 0.05, demand_weight = 0.0; };
 void write_gaps(const GapOpt& G, const string& dev, const vector<PageRef>& pages, const vector<Fused>& fused,
                 const std::function<void(const string&)>& say) {
