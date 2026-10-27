@@ -12,6 +12,11 @@ Protocol fixed before the runs:
 - **Intervals.** Paired bootstrap over pairs, 2,000 resamples, 95% percentile intervals, and P(Δ > 0) for each variant against PPMI-SVD on the same pairs.
 - **Gate.** S-1b replaces PPMI-SVD as the vector source only if its best variant is ≥ PPMI-SVD on both WordSim and SimLex on the C5 pairs, with P(Δ > 0) ≥ 0.95 on each.
 
+Dev grids, fixed before the runs (MEN rho on the C5 pairs decides; ties go to the cheaper setting):
+- (b): prior variance Σ0 ∈ {0.01, 0.025, 0.1} at 1 epoch; then the best Σ0 at 5 epochs; word means W against W + C read from every run.
+- (c): (τ, η) ∈ {(0.05, 10), (0.1, 10), (0.1, 30), (0.2, 30)} at 1 epoch; then the best at more epochs if time allows.
+- Fixed everywhere: d = 256, the 50,000-word stream of C1, dynamic window 5, 5 negatives, subsampling t = 1e-4, seed 1.
+
 | ID | Prediction |
 |---|---|
 | R0 | The unchanged tool reproduces C5's tuned row exactly (whitened cos(Δ) 0.240 / 0.134 / 0.372; PPMI-SVD 0.723 / 0.265 / 0.732), and `ppmi_svd` reproduces C1's headline (0.672 / 0.255 / 0.637) |
@@ -22,4 +27,5 @@ Protocol fixed before the runs:
 | PD | `distill` with the PPMI-SVD vectors as a stand-in teacher (top 10,000 words, from a random start): pair Spearman with the teacher ≥ 0.80, and WordSim and SimLex within 0.05 of the teacher's own |
 | PE | Is-a on the best variant: variance or KL direction stays below the frequency baseline (60.6%) on all pairs; the variance rule lands at 35–50%, because a Fisher-precision variance tracks frequency |
 | PF | Capital-of on the best variant: ridge @10 40–85% and offset @10 60–95% (PPMI-SVD: 81% and 96%) |
+| PA2 | (Registered after (a) missed, before its run.) (a2) weight each context by PPMI(w, c) · n_w / C(w, c), so that the plain mean of the observations is exactly the random projection of the word's PPMI row. The matched count mean reaches WordSim 0.35–0.55. Cypha's whitened Δ falls more than 0.10 below it, because the weights are heavy-tailed (C5's R9 lesson) |
 | PX | Export: `compare` of PPMI-SVD against the best Cypha word vectors gives pair Spearman 0.4–0.7 and kNN@10 Jaccard 0.10–0.30; on SIF sentence vectors, pair Spearman 0.6–0.85. `geometry` on the Cypha word vectors gives a random-pair cosine floor of 0.02–0.20 |

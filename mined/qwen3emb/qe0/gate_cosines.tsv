@@ -1,0 +1,21 @@
+row	n_tokens	cos_vs_llama_embedding_fa_off	cos_vs_llama_embedding_fa_on	text
+0	13	1.0000000	0.9995459	The cat sat on the warm mat by the kitchen door.
+1	13	1.0000000	0.9988326	Photosynthesis converts light energy into chemical energy stored in glucose.
+2	13	1.0000000	0.9996795	How do I reset a forgotten password on an old laptop?
+3	21	1.0000000	0.9996421	The treaty was signed in 1648 and ended thirty years of war in central Europe.
+4	15	1.0000000	0.9997364	Interest rates rose by 0.25 percentage points last quarter.
+5	12	1.0000000	0.9996094	She did not want to leave the party before midnight.
+6	16	1.0000000	0.9996409	A river bank is not the same thing as a bank that lends money.
+7	7	1.0000000	0.9998318	Retrieve semantically similar text.
+8	14	1.0000000	0.9992981	Water boils at 100 degrees Celsius at sea level.
+9	11	1.0000000	0.9997154	def add(a, b): return a + b
+10	18	1.0000000	0.9997959	The committee rejected the proposal because the budget was too small and the timeline was unrealistic.
+11	14	1.0000000	0.9995844	Le chat dort sur le canapé depuis ce matin.
+12	13	1.0000000	0.9997187	Neural networks are not used at runtime in this system.
+13	11	1.0000000	0.9995469	Tokyo, Paris and Cairo are capital cities.
+14	14	1.0000000	0.9995674	Why is the sky blue during the day but red at sunset?
+15	11	1.0000000	0.9995198	The quick brown fox jumps over the lazy dog.
+16	20	1.0000000	0.9996057	In 1969, Neil Armstrong became the first person to walk on the Moon.
+17	13	1.0000000	0.9997026	Prices of fresh vegetables vary with the season and the weather.
+18	3	1.0000000	0.9994959	Hello!
+19	46	1.0000000	0.9997687	An embedding maps each text to a point on a high-dimensional sphere, so that texts with similar meanings land near each other and unrelated texts land far apart, which makes search, clustering and classification possible with a single dot product.

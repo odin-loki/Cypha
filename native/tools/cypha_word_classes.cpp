@@ -516,7 +516,7 @@ struct Options {
     double world_lr = 0.008; // Cypha library default
     double enc_lr = 0.002;   // Cypha library default; 0 freezes the encoder
     std::string sched = "fixed";  // fixed | inv   (inv: delta_lr = clamp(1/(n_k+1), lr_floor, lr_cap))
-    std::string obs = "plain";    // plain | weighted | ppmi   (each context index vector scaled by f^-1/2, or by PPMI(word, context))
+    std::string obs = "plain";    // plain | weighted | ppmi | ppmi-row  (context index vectors scaled by f^-1/2, PPMI(w, c), or as in build_ppmi)
     std::string save;             // --save PREFIX: PREFIX.npy = v0-whitened differentials, PREFIX_count.npy = matched count mean
     double lr_floor = 0.002, lr_cap = 0.1;
     long long max_tokens = 0;
@@ -607,6 +607,8 @@ IndexVecs make_index(int V, int d, int nnz, uint64_t seed) {
 
 // S-1b (a): word-context PPMI exactly as native/tools/ppmi_svd.cpp builds it (window W, weight 1/distance,
 // min_count 1, context smoothing alpha, marginals from all pairs), kept as sorted CSR rows for the first R targets.
+// With nw (the word counts) each value is PPMI(t, c) * n_t / C(t, c) instead, so that the plain mean of a word's
+// observations is exactly the random projection of its PPMI row (--obs ppmi-row).
 struct Ppmi {
     std::vector<uint64_t> rp;
     std::vector<uint16_t> col;
@@ -619,7 +621,7 @@ struct Ppmi {
     }
 };
 
-Ppmi build_ppmi(const std::vector<uint16_t>& tok, int V, int W, double alpha, int R) {
+Ppmi build_ppmi(const std::vector<uint16_t>& tok, int V, int W, double alpha, int R, const std::vector<uint64_t>* nw = nullptr) {
     std::vector<uint64_t> keys;  // ((t * V + c) << 3) | distance, both directions
     keys.reserve(tok.size() * 2 * (size_t)W);
     for (size_t i = 0; i < tok.size(); ++i)
@@ -651,7 +653,7 @@ Ppmi build_ppmi(const std::vector<uint16_t>& tok, int V, int W, double alpha, in
         const double pmi = std::log((double)pw[p]) + std::log(Z) - std::log(row[t]) - alpha * std::log(colsum[c]);
         if (pmi <= 0) continue;
         P.col.push_back((uint16_t)c);
-        P.val.push_back((float)pmi);
+        P.val.push_back((float)(nw ? pmi * (double)(*nw)[t] / pw[p] : pmi));
         ++P.rp[t + 1];
     }
     for (int t = 0; t < R; ++t) P.rp[t + 1] += P.rp[t];
@@ -786,7 +788,7 @@ Model train_cypha(const std::vector<uint16_t>& tok, const Vocab& voc, const Inde
     std::vector<int> slot_cls(Kp);
     const size_t N = (O.max_tokens > 0) ? std::min<size_t>(tok.size(), (size_t)O.max_tokens) : tok.size();
     const double temp = infer->temperature;
-    const bool wobs = (O.obs == "weighted" || O.obs == "ppmi");
+    const bool wobs = (O.obs != "plain");
     int enc_count = 0;
     const auto t_train = Clock::now();
 
@@ -1669,6 +1671,8 @@ bool load_vecset(const std::string& path, std::string index, VecSet& S) {
         return false;
     }
     for (int r = S.n - 1; r >= 0; --r) S.row[S.text[r]] = r;
+    const auto bad = std::count_if(S.X.begin(), S.X.end(), [](float x) { return !std::isfinite(x); });
+    if (bad) say("warning: %s has %lld non-finite values (a diverged run); their cosines count as 0", path.c_str(), (long long)bad);
     return true;
 }
 
@@ -1733,15 +1737,23 @@ std::vector<uint16_t> subsample(const std::vector<uint16_t>& tok, const Vocab& v
     return s;
 }
 
-// Calls fn(word, context) for each context in a dynamic window b ~ U{1..W} on the same line (word2vec).
+// Calls fn(word, context) for each context in a dynamic window b ~ U{1..W} on the same line (word2vec),
+// or, with one, for one context drawn uniformly from that window.
 template <class F>
-void for_pairs(const std::vector<uint16_t>& s, int W, Rng& g, F&& fn) {
+long long for_pairs(const std::vector<uint16_t>& s, int W, Rng& g, F&& fn, bool one = false) {
+    std::vector<uint16_t> ctx;
+    long long n = 0;
     for (size_t i = 0; i < s.size(); ++i) {
         if (s[i] == kSep) continue;
         const int b = 1 + (int)(g.next() % (uint64_t)W);
-        for (int k = 1; k <= b && i >= (size_t)k && s[i - k] != kSep; ++k) fn(s[i], s[i - k]);
-        for (int k = 1; k <= b && i + k < s.size() && s[i + k] != kSep; ++k) fn(s[i], s[i + k]);
+        ctx.clear();
+        for (int k = 1; k <= b && i >= (size_t)k && s[i - k] != kSep; ++k) ctx.push_back(s[i - k]);
+        for (int k = 1; k <= b && i + k < s.size() && s[i + k] != kSep; ++k) ctx.push_back(s[i + k]);
+        if (one && !ctx.empty()) ctx = {ctx[g.next() % ctx.size()]};
+        for (uint16_t c : ctx) fn(s[i], c);
+        n += (long long)ctx.size();
     }
+    return n;
 }
 
 // (b) Skip-gram with negative sampling (Mikolov et al. 2013), whose optimum is the shifted PMI matrix (Levy &
@@ -1761,7 +1773,7 @@ void train_sgns(const std::vector<uint16_t>& tok, const Vocab& voc, const TrainO
     long long ev = 0;
     for (int ep = 0; ep < O.epochs; ++ep) {
         const std::vector<uint16_t> s = subsample(tok, voc, O.sample, g);
-        for_pairs(s, O.window, g, [&](int w, int c) {
+        const long long n = for_pairs(s, O.window, g, [&](int w, int c) {
             float* mw = Wd.mean(w);
             float* vw = Wd.variance(w);
             std::fill(gw.begin(), gw.end(), 0.f);
@@ -1789,13 +1801,15 @@ void train_sgns(const std::vector<uint16_t>& tok, const Vocab& voc, const TrainO
             Wd.n[w] += 1.f;
             if ((++ev & 0x7FFFFF) == 0) say("sgns epoch %d: %lld events", ep + 1, ev);
         });
+        say("sgns epoch %d: %lld events", ep + 1, n);
     }
 }
 
 // (c) The section 4.2 pull-push rule of geometry.hpp on the same two tables, as one ItemStore (words 0..V-1,
-// contexts V..2V-1): anchor = word, positive = one context in its window, candidates = --neg unigram^0.75
-// contexts, the positives of the previous --inbatch examples (in-batch negatives) and the --hard most similar of
-// --pool unigram^0.75 contexts (hard negatives). Softmax at tau, the delta = 0.1 mask, the natural-gradient step
+// contexts V..2V-1): anchor = each kept token, positive = one context drawn from its window (the library step
+// costs ~100 us, so every pair as in (b) would take an hour per epoch), candidates = --neg unigram^0.75
+// contexts, --inbatch positives of examples 61-64 steps back (in-batch negatives from other words, outside
+// the window) and the --hard most similar of --pool unigram^0.75 contexts (hard negatives). Softmax at tau, the delta = 0.1 mask, the natural-gradient step
 // K = Sigma / (n + kappa0), mirror updates, online variance; all inside geo::pull_push_step.
 void train_pullpush(const std::vector<uint16_t>& tok, const Vocab& voc, const TrainOpts& O, geo::ItemStore& st) {
     const int V = (int)voc.words.size(), d = O.dim;
@@ -1813,12 +1827,12 @@ void train_pullpush(const std::vector<uint16_t>& tok, const Vocab& voc, const Tr
     double loss = 0;
     for (int ep = 0; ep < O.epochs; ++ep) {
         const std::vector<uint16_t> s = subsample(tok, voc, O.sample, g);
-        for_pairs(s, O.window, g, [&](int w, int c) {
+        const long long n = for_pairs(s, O.window, g, [&](int w, int c) {
             ex.a = w;
             ex.b = V + c;
             ex.cands.clear();
             for (int k = 0; k < O.neg; ++k) ex.cands.push_back(V + table[g.next() & (TB - 1)]);
-            ex.cands.insert(ex.cands.end(), recent.begin(), recent.end());
+            ex.cands.insert(ex.cands.end(), recent.begin(), recent.begin() + std::min<size_t>(recent.size(), O.inbatch));
             pool.clear();
             for (int k = 0; k < O.pool && O.hard > 0; ++k) {
                 const int x = V + table[g.next() & (TB - 1)];
@@ -1828,13 +1842,24 @@ void train_pullpush(const std::vector<uint16_t>& tok, const Vocab& voc, const Tr
             for (int k = 0; k < O.hard && k < (int)pool.size(); ++k) ex.cands.push_back(pool[k].second);
             loss += geo::pull_push_step(st, ex, so).loss;
             recent.push_back(ex.b);
-            if ((int)recent.size() > O.inbatch) recent.erase(recent.begin());
+            if (recent.size() > 64) recent.erase(recent.begin());
             if ((++ev & 0x3FFFFF) == 0) {
                 say("pullpush epoch %d: %lld events, mean loss %.4f", ep + 1, ev, loss / 0x400000);
                 loss = 0;
             }
-        });
+        }, true);
+        say("pullpush epoch %d: %lld events", ep + 1, n);
     }
+}
+
+// Float dot product in 8 lanes, so that it vectorises without -ffast-math.
+inline float fdot(const float* a, const float* b, int d) {
+    float s[8] = {0, 0, 0, 0, 0, 0, 0, 0}, r = 0;
+    int j = 0;
+    for (; j + 8 <= d; j += 8)
+        for (int t = 0; t < 8; ++t) s[t] += a[j + t] * b[j + t];
+    for (; j < d; ++j) r += a[j] * b[j];
+    return r + ((s[0] + s[1]) + (s[2] + s[3])) + ((s[4] + s[5]) + (s[6] + s[7]));
 }
 
 // Spherical k-means (cosine) with k-means++ seeding on unit rows; returns the class of each row.
@@ -1850,7 +1875,7 @@ std::vector<int> spherical_kmeans(const std::vector<float>& U, int n, int d, int
             for (pick = 0; pick < n - 1 && (u -= (1 - best[pick]) * (1 - best[pick])) > 0; ++pick) {}
         }
         std::copy(U.begin() + (size_t)pick * d, U.begin() + (size_t)(pick + 1) * d, C.begin() + (size_t)c * d);
-        for (int x = 0; x < n; ++x) best[x] = std::max(best[x], geo::detail::dot(&U[(size_t)x * d], &C[(size_t)c * d], d));
+        for (int x = 0; x < n; ++x) best[x] = std::max(best[x], (double)fdot(&U[(size_t)x * d], &C[(size_t)c * d], d));
     }
     std::vector<int> lab(n, -1);
     for (iters = 1; iters <= 50; ++iters) {
@@ -1859,11 +1884,8 @@ std::vector<int> spherical_kmeans(const std::vector<float>& U, int n, int d, int
         for (int x = 0; x < n; ++x) {
             int bc = 0;
             float bs = -2.f;
-            const float* u = &U[(size_t)x * d];
             for (int c = 0; c < k; ++c) {
-                const float* cc = &C[(size_t)c * d];
-                float s = 0;
-                for (int j = 0; j < d; ++j) s += u[j] * cc[j];
+                const float s = fdot(&U[(size_t)x * d], &C[(size_t)c * d], d);
                 if (s > bs) bs = s, bc = c;
             }
             changed += lab[x] != bc;
@@ -1994,11 +2016,11 @@ int cmd_s1(int argc, char** argv) {
     say("training: d=%d nnz=%d window=%d classes=%d competitors=%d passes=%d delta_lr=%g(%s) world_lr=%g enc_lr=%g", d, O.nnz,
         O.window, K, O.neg, O.passes, O.delta_lr, O.sched.c_str(), O.world_lr, O.enc_lr);
     Ppmi pm;
-    if (O.obs == "ppmi") {
-        pm = build_ppmi(tok, (int)voc.words.size(), O.window, 0.75, K);
+    if (O.obs.rfind("ppmi", 0) == 0) {
+        pm = build_ppmi(tok, (int)voc.words.size(), O.window, 0.75, K, O.obs == "ppmi-row" ? &voc.freq : nullptr);
         say("PPMI rows for the %d classes: %zu positive entries", K, pm.col.size());
     }
-    Model M = train_cypha(tok, voc, iv, O, O.obs == "ppmi" ? &pm : nullptr);
+    Model M = train_cypha(tok, voc, iv, O, O.obs.rfind("ppmi", 0) == 0 ? &pm : nullptr);
     say("trained: %lld steps in %.1fs (%.1f us/step), sampled-slot train accuracy %.3f, encoder updates %lld, ||W-I||_F = %.3f",
         M.steps, M.train_s, 1e6 * M.train_s / std::max<long long>(1, M.steps),
         (double)M.correct / std::max<long long>(1, M.steps), M.enc_updates, M.enc_drift);
@@ -2083,7 +2105,7 @@ int cmd_s1(int argc, char** argv) {
     methods.push_back({"(a') random indexing, mean-centred", [&](int a, int b) { return cosine(&ri_cent[(size_t)a * d], &ri_cent[(size_t)b * d], d); }});
     const bool wobs = O.obs != "plain";  // the Cypha update saw the weighted observations; (a''') whitens their mean
     const std::vector<float>& ri_m = wobs ? ri_w : ri_cent;
-    const std::string wname = O.obs == "ppmi" ? "PPMI(word, context)" : "f^-1/2";
+    const std::string wname = O.obs == "ppmi" ? "PPMI(w, c)" : O.obs == "ppmi-row" ? "PPMI(w, c) n_w / C(w, c)" : "f^-1/2";
     methods.push_back({"(a'') random indexing, " + wname + " context weights, mean-centred", [&](int a, int b) { return cosine(&ri_w[(size_t)a * d], &ri_w[(size_t)b * d], d); }});
     methods.push_back({"(a''') random indexing, mean-centred, whitened by the trained v0 (fair counterpart of the whitened Cypha row; exact when the encoder is frozen and the observation plain)", [&](int a, int b) {
         double ab = 0, aa = 0, bb = 0;
@@ -2464,7 +2486,10 @@ int cmd_eval(int argc, char** argv) {
             if (rowmap[s][r] < 0) present[r] = -1;
         }
     }
-    auto cos_of = [&](size_t s, int a, int b) { return cosine(S[s].at(rowmap[s][a]), S[s].at(rowmap[s][b]), S[s].d); };
+    auto cos_of = [&](size_t s, int a, int b) {
+        const double c = cosine(S[s].at(rowmap[s][a]), S[s].at(rowmap[s][b]), S[s].d);
+        return std::isfinite(c) ? c : 0.0;
+    };
     std::printf("# cypha_word_classes eval: top %d words of %s, %d bootstrap resamples, reference = %s\n\n", K, S[0].name.c_str(), B, S.back().name.c_str());
     const char* files[3] = {pos[0].c_str(), pos[1].c_str(), pos[2].c_str()};
     const char* names[3] = {"WordSim-353", "SimLex-999", "MEN"};
