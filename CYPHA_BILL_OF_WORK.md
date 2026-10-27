@@ -58,6 +58,11 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - primitives bound to the existing tools;
   - the first executable processes on their benchmarks.
   - K1 (142 processes including AI and data science, validator) is done.
+- [ ] **"Don't know" message and tag** ([DISCOVERY §3.5](docs/DISCOVERY.md#35-the-dont-know-message-and-tag)):
+  - build training text pairing unanswerable questions with the message and the `<|unknown ...|>` tag;
+  - train CyphaLM on it;
+  - parse emitted tags into the gap map;
+  - score abstain recall and precision, and reason-code accuracy.
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
   1. Build the CyphaLM Q/A baseline harness.
   2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.

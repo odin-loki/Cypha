@@ -105,6 +105,12 @@ Also from the repo's history (survey of `docs/history`, `docs/archive`, `bench/c
 7. **Name things honestly.** Retrieval is called retrieval. The README already does this for the chat copy. Keep it that way in anything sent to outside reviewers.
 8. **Track licences.** Every data source has a licence line in the manifest, and share-alike terms are checked before anything ships under the commercial licence (section 4.3).
 9. **Not answering is a feature.** When the evidence is not there, Cypha says it does not know. It never fills the gap with a fluent guess.
+   - **This is not a refusal.** A refusal declines a question it could answer. Cypha is saying it doesn't know.
+   - **The output has two parts:**
+     - a plain message, e.g. "I don't know. I have nothing about Hamlet in what I've read.";
+     - a machine tag, e.g. `<|unknown reason=NO_EVIDENCE gap=G-0412|>`.
+   - **The tag is for later.** The system reads it, logs the gap in the gap map (demand +1) and queues it for discovery ([DISCOVERY §3.5](DISCOVERY.md#35-the-dont-know-message-and-tag)).
+   - **CyphaLM is trained to produce both itself**, the way commercial LLMs are trained on their refusal messages. Decided by Odin Loch, 2026-10-27.
    - A wrong answer costs more than an abstention.
    - Every Q/A result is reported as right / abstained / wrong, and the wrong count is the number to drive down first.
    - A change that raises coverage by adding wrong answers fails LCI on the wrong-answer rate, even if accuracy rises.

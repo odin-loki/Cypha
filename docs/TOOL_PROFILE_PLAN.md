@@ -26,7 +26,7 @@
 Nothing can be judged until CyphaLM answers by itself. The baseline harness:
 
 1. **Prompt.** The question in the same form CyphaLM was trained on, e.g. `User: <question>\nAssistant: `, and also a Wikipedia-style form, `<question> `.
-2. **Answer.** CyphaLM (trie + InfiniGram mixture) decodes greedily until a newline or sentence end, at most 80 bytes.
+2. **Answer.** CyphaLM (trie + InfiniGram mixture) decodes greedily until a newline or sentence end, at most 80 bytes. Its answer may be the "I don't know" message and tag ([DISCOVERY §3.5](DISCOVERY.md#35-the-dont-know-message-and-tag)), which CyphaLM is trained to produce. That counts as abstained, and the tag is logged to the gap map.
 3. **Confidence from CyphaLM's own probabilities:**
    - the mean per-byte log-probability of the answer;
    - the minimum;

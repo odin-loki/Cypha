@@ -188,6 +188,29 @@ What it doesn't know it doesn't know can't be listed, but it leaves traces. Thes
 
 A rising rate means a region of ignorance has been found, and a new gap is opened for it.
 
+### 3.5 The "don't know" message and tag
+
+When Cypha does not know, it says so in two parts. This is not a refusal: it is saying it lacks the knowledge, not that it won't share it (PLAN rule 9).
+
+| Part | Form | Purpose |
+|---|---|---|
+| **Message** | Plain text: "I don't know." plus one short reason in everyday words ("I have nothing about Hamlet in what I've read."; "My sources disagree about this.") | For the person asking |
+| **Tag** | `<|unknown reason=<CODE> entity="<mention>" relation=<rel> gap=<id>|>`, with CODE from section 3.1 | For later. It is parsed into the gap map (demand +1), opens or updates gap `<id>`, and queues it for gap closing (P1) and the curiosity scheduler (section 9). Shown to users as a small label, or hidden |
+
+**Trained, not bolted on.** CyphaLM is trained to produce the message and the tag itself, the way commercial LLMs are trained on their refusal messages. Training text pairs questions it cannot answer with the right message and tag:
+- not-in-slice questions;
+- questions about held-out facts;
+- contested slots.
+
+The reason code in each training tag comes from the epistemic breakdown (section 3.1).
+
+**What is scored:**
+- whether CyphaLM says it doesn't know exactly when it should (abstain recall and precision, PLAN rule 9);
+- whether the reason in its tag is the real one (reason-code accuracy, section 12.1);
+- whether the tagged gaps get closed later (gaps closed per week, P1).
+
+**For now**, the Cypha-classifier gate (section 8a) may trigger the same message and tag on CyphaLM's behalf.
+
 ---
 
 ## 4. Hypotheses: the speculative store
@@ -522,7 +545,7 @@ Allocates effort across P1–P11, the generators and the tiers. See section 9.
 1. **What does the gate add** over CyphaLM's own probabilities? Measure the wrong-answer rate at fixed coverage both ways.
 2. **Can CyphaLM learn to judge its own answers?** For example, by training on its own right and wrong answers as text, or by an abstention expert inside its mixture.
 3. **Which signals predict a wrong answer?** Entropy, match length, margin, the reason codes. Do they generalise across question types?
-4. **Is there a better arrangement** than "generate then gate"? For example, abstention as a learned stop byte, or confidence carried through the mixture.
+4. **Is there a better arrangement** than "generate then gate"? For example, CyphaLM producing the "I don't know" message and tag of section 3.5 by itself, as a learned output, or confidence carried through the mixture.
 
 Each answer is a hypothesis with pre-registered tests (section 7), and changes are promoted only through LCI. The findings go to Odin in the research journal. He decides whether the gate stays, moves into CyphaLM, or goes.
 
@@ -558,10 +581,11 @@ Weakest link: entity link "Algeria" (0.99)
 Would change my mind: a current source naming another capital
 ```
 
-**"I don't know" card**
+**"I don't know" card** (message + tag; section 3.5)
 ```text
 Q: Who wrote Hamlet?
-I don't know.                    [NO_EVIDENCE]
+I don't know. I have nothing about Hamlet in what I've read.
+<|unknown reason=NO_EVIDENCE entity="Hamlet" relation=author gap=G-0412|>
 Why: I have no source about "Hamlet"; it is outside the text I have read.
 What I can say: "author" is a well-covered relation for books here (precision 0.90).
 What would let me answer: any source about Hamlet.

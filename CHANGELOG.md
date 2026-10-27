@@ -13,6 +13,7 @@ milestone or a significant self-contained change.
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **"Don't know" message and tag** (PLAN rule 9, DISCOVERY §3.5): when Cypha doesn't know, CyphaLM writes a plain message and a machine tag (`<|unknown reason=... gap=...|>`). It is trained to produce both itself. The tag logs the gap for later discovery. This is "doesn't know", not a refusal.
 - **Tool profiling plan** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
   - It decides which support tools stay (tagger, pattern learner, word vectors, teacher text, InfiniGram, Cypha abstain gate), by what each adds to CyphaLM's own Q/A and BPC.
   - It uses an ablation grid with LCI, a lines-per-gain bar and predictions registered in advance.
