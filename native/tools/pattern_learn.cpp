@@ -36,12 +36,28 @@
 //   Without --cv (a single 80/20 split) only 7 birth_year and 4 death_year patterns pass, and 17 facts are admitted.
 //   Report: docs/reports/F2_PATTERN_LEARNING.md
 //
+// D4 (2026-10-28, docs/reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md):
+//   Seed fix: a template opened mid-line ("* {{Book reference |") is named, so its fields are no longer read under a stale
+//   name; this drops 664 citation seeds (all 101 infobox "author" seeds, 408 publisher, 155 location): 7,484 text seeds.
+//   --wikidata FILE (scripts/wikidata_seeds.py): Wikidata values are distant supervision only. Four fifths of the subjects (by
+//   hash) get them as extra seeds, which choose and check patterns; they never become facts, never vote in ECS, and an
+//   extraction equal to one still enters the store (the text states it). The other fifth is gold: it only scores the new facts
+//   (facts_wd_check.tsv). --wikidata-gold-only scores a run without Wikidata seeds. --phi FILE overrides the hand-set phi.
+//   --cv with Wikidata: 70 kept patterns (death_place is new), 1,216 admitted facts (store +16.2%); gold check 173/182.
+//   --shard FILE --dev DEV --test TEST: the fact store (text seeds + admitted facts) as CyphaLM training text: three question
+//   phrasings per fact (cyphalm_trie dktext's template first) with a one-sentence answer, and FILE_sentences.txt. Only pages
+//   before --slice-end (8,388,608, the T-QA slice); rows from the BPC holdout get source *_holdout. Questions equal to a dev
+//   or test question are dropped and the written rows re-checked (exit 1 on a match); test answers are never read. Prints the
+//   dev coverage (reads dev answers only).
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
+//          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
 //        pattern_learn --wilson K N
 //   <outdir> gets facts_f2.tsv (subject, relation, object, P, grade, n_evidence, best_pattern, source_page, byte_offset;
 //   byte_offset is the start of the line holding the strongest evidence), facts_f2.evidence.tsv (the sentence for each fact),
-//   seeds.tsv, patterns.tsv, sample_admitted.tsv (random admitted facts, fixed seed, to hand-judge) and stats.txt.
+//   seeds.tsv, patterns.tsv (kept first), pages.tsv (titles and text offsets), sample_admitted.tsv (random admitted facts,
+//   fixed seed, to hand-judge) and stats.txt.
 //   Default is one 80/20 split (fold 0 of K = 5); --cv repeats it over all K folds and pools the checks.
 //
 // Author: Odin Loch
@@ -1364,6 +1380,7 @@ struct PStat { int train_subj = 0, train_sent = 0, checks = 0, correct = 0, unch
 
 vector<Pat> g_pats;                                   // patterns of the current stage
 double g_base[64];                                    // base rate a per relation (PLAN 7.2)
+double g_phi[64];                                     // --phi overrides of the hand-set functionality (< 0: kRel)
 std::unordered_map<string, vector<int>> g_patmap;     // pattern text -> ids in g_pats
 
 bool heldout(const string& subj, int K, int fold) { return static_cast<int>((fnv(subj) >> 20) % static_cast<std::uint64_t>(K)) == fold; }
@@ -1630,7 +1647,7 @@ vector<Fused> fuse_all() {
                 }
             }
             ecs::FusionConfig cfg;
-            cfg.phi = kRel[r].phi;
+            cfg.phi = g_phi[r] >= 0 ? g_phi[r] : kRel[r].phi;
             cfg.base_rate = g_base[r];
             cfg.hard_violations = hard;
             Fused fu;
@@ -1743,11 +1760,18 @@ bool load_wikidata(const string& path, bool gold_only, const std::unordered_map<
     return true;
 }
 // New facts against held-out Wikidata values: right if one value agrees (a place inside it counts, as for the pattern checks),
-// wrong if the subject has values for the relation and none agrees, unchecked otherwise. Writes facts_wd_check.tsv.
+// coarse if a Wikidata place lies inside the fact's place (located_in, up to 3 steps), wrong if the subject has values for the
+// relation and none agrees, unchecked (none) otherwise. Writes facts_wd_check.tsv.
+bool inside(const string& a, const string& b, int depth) {
+    auto it = g_loc.find(a);
+    if (a.empty() || it == g_loc.end() || depth == 0) return false;
+    for (const string& p : it->second) if (p == b || inside(p, b, depth - 1)) return true;
+    return false;
+}
 void score_gold(const vector<Fused>& fused, const string& outdir, const std::function<void(const string&)>& say) {
     std::ofstream f(outdir + "/facts_wd_check.tsv");
-    f << "subject\trelation\tobject\tP\twikidata\twikidata_values\n";
-    std::map<int, std::array<int, 4>> n;  // admitted right, admitted checks, candidate right, candidate checks
+    f << "subject\trelation\tobject\tP\twikidata\twikidata_values\tgold_fifth\n";
+    std::map<int, std::array<int, 5>> n;  // admitted right, admitted checks, candidate right, candidate checks, admitted coarse
     for (const Fused& fu : fused) {
         if (fu.op.P < 0.5) continue;
         const FactAcc& fa = *fu.f;
@@ -1764,23 +1788,28 @@ void score_gold(const vector<Fused>& fused, const string& outdir, const std::fun
                 vals += (vals.empty() ? "" : "; ") + o.surf;
                 if (obj_consistent(fa.rel, c, o)) st = "right";
             }
+            for (const Obj& o : it->second)
+                for (const string* k : {&o.k1, &o.k2, &o.k3})
+                    if (st == "wrong" && (inside(*k, c.k1, 3) || inside(*k, c.k2, 3))) st = "coarse";
             auto& a = n[fa.rel];
             int k = fu.op.P >= 0.8 ? 0 : 2;
             a[static_cast<std::size_t>(k) + 1]++;
             if (st == "right") a[static_cast<std::size_t>(k)]++;
+            if (st == "coarse" && k == 0) a[4]++;
         }
-        f << fa.subj << '\t' << kRel[fa.rel].name << '\t' << fa.surf << '\t' << fu.op.P << '\t' << st << '\t' << vals << '\n';
+        f << fa.subj << '\t' << kRel[fa.rel].name << '\t' << fa.surf << '\t' << fu.op.P << '\t' << st << '\t' << vals << '\t' << wd_gold_subject(fa.subj) << '\n';
     }
-    say("\nWIKIDATA CHECK of new facts on gold subjects (admitted P>=0.8: right/checked, Wilson 95% | candidates 0.5..0.8)");
+    say("\nWIKIDATA CHECK of new facts on gold subjects (admitted P>=0.8: right/checked, Wilson 95%, coarse | candidates 0.5..0.8: right/checked)");
     char b[256];
-    int t[4] = {0, 0, 0, 0};
+    std::array<int, 5> t{};
     for (auto& [r, a] : n) {
-        std::snprintf(b, sizeof b, "  %-13s %4d/%-4d [%.3f, %.3f] | %d/%d", kRel[r].name, a[0], a[1], ecs::wilson_lower(a[0], a[1]),
-                      ecs::wilson_upper(a[0], a[1]), a[2], a[3]);
+        std::snprintf(b, sizeof b, "  %-13s %4d/%-4d [%.3f, %.3f] coarse %d | %d/%d", kRel[r].name, a[0], a[1], ecs::wilson_lower(a[0], a[1]),
+                      ecs::wilson_upper(a[0], a[1]), a[4], a[2], a[3]);
         say(b);
-        for (int k = 0; k < 4; ++k) t[k] += a[static_cast<std::size_t>(k)];
+        for (std::size_t k = 0; k < 5; ++k) t[k] += a[k];
     }
-    std::snprintf(b, sizeof b, "  %-13s %4d/%-4d [%.3f, %.3f] | %d/%d", "TOTAL", t[0], t[1], ecs::wilson_lower(t[0], t[1]), ecs::wilson_upper(t[0], t[1]), t[2], t[3]);
+    std::snprintf(b, sizeof b, "  %-13s %4d/%-4d [%.3f, %.3f] coarse %d | %d/%d", "TOTAL", t[0], t[1], ecs::wilson_lower(t[0], t[1]),
+                  ecs::wilson_upper(t[0], t[1]), t[4], t[2], t[3]);
     say(b);
 }
 
@@ -1840,9 +1869,9 @@ string fill(string t, const string& E, const string& O, const Date& D) {
     if (t.size() > 2 && t.compare(t.size() - 2, 2, "..") == 0) t.pop_back();  // "Washington, D.C.."
     return t;
 }
-// Seed relations left out of the shard: fewer than 8 of 10 audited seed sentences were true as stated (D4 report). Extracted
-// facts of these relations still enter, since their patterns passed the precision gate.
-const std::set<string> kShardSkipSeeds = {"country", "location", "language", "nationality", "party", "predecessor", "successor"};
+// Seed relations left out of the shard: under 0.8 of their audited seed sentences (10, or all when fewer) were true as stated
+// (D4 report). Extracted facts of these relations still enter, since their patterns passed the precision gate.
+const std::set<string> kShardSkipSeeds = {"country", "location", "language", "nationality", "party", "predecessor", "spouse", "successor"};
 // A sentence from the fact's own pattern when its core is "[S] word word ... [O]" (at least two plain words), else "".
 string pattern_sentence(const string& key) {
     string core = family_of(key);
@@ -2003,10 +2032,11 @@ int main(int argc, char** argv) {
     Args A;
     if (argc < 3) {
         std::fprintf(stderr, "usage: pattern_learn <enwik8> <outdir> [--folds K] [--cv] [--min-train N] [--sample N] [--seed S] [--base-rate A]\n"
-                             "         [--wikidata FILE [--wikidata-gold-only]] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
+                             "         [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
+    std::fill(g_phi, g_phi + 64, -1.0);
     A.enwik = argv[1];
     A.outdir = argv[2];
     for (int i = 3; i < argc; ++i) {
@@ -2019,6 +2049,10 @@ int main(int argc, char** argv) {
         else if (a == "--seed" && i + 1 < argc) A.seed = static_cast<std::uint32_t>(std::atoll(argv[++i]));
         else if (a == "--wikidata" && i + 1 < argc) A.wikidata = argv[++i];
         else if (a == "--wikidata-gold-only") A.wd_gold_only = true;
+        else if (a == "--phi" && i + 1 < argc) {  // relation \t ... \t phi (last column), e.g. wikidata_seeds.py's phi.tsv
+            std::ifstream pf(argv[++i]);
+            for (string l; std::getline(pf, l);) { auto c = split(l, '\t'); int r = rel_index(c[0]); if (r >= 0) g_phi[r] = std::atof(c.back().c_str()); }
+        }
         else if (a == "--shard" && i + 1 < argc) A.shard.path = argv[++i];
         else if (a == "--dev" && i + 1 < argc) A.shard.dev = argv[++i];
         else if (a == "--test" && i + 1 < argc) A.shard.test = argv[++i];

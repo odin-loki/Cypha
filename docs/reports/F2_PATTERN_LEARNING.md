@@ -2,6 +2,8 @@
 
 **Odin Loch** · 2026-10-27
 
+**Update 2026-10-28.** 664 of the 8,148 seeds came from citation templates read under a stale template name, including all 101 infobox "author" seeds. With the fix there are 7,484 text seeds; the 920 facts and their hand check are unchanged ([D4 report](D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md)).
+
 ## Summary
 
 `T_QA_WIKI_200` showed that the fact store answered 3 of 150 answerable held-out questions. F2 asks whether patterns learned from the text itself can add facts. The tool `native/tools/pattern_learn.cpp` takes seeds from infobox and template fields, finds the sentences that carry them, learns lexical patterns, measures each pattern on held-out subjects, and applies the reliable ones to every article.

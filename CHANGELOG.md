@@ -17,6 +17,10 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **D4 Wikidata seeds and the fact-text shard** ([report](docs/reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md)):
+  - `scripts/wikidata_seeds.py` (180 lines, stdlib only) maps enwik8 titles to Wikidata (98.7%) and fetches relation values as distant supervision. T-QA dev and test subjects are excluded before any query.
+  - `pattern_learn` gains `--wikidata`, `--wikidata-gold-only`, `--phi` and `--shard` (question-form fact text with a built-in leakage check), and a seed fix that drops 664 citation-template seeds.
+  - Kept patterns 44 → 70; admitted facts 832 → 1,216; agreement with Wikidata 0.951 [0.909, 0.974]. Capital, author and director still get no kept pattern.
 - **CyphaLM Q/A harness and don't-know training** (CYPHALM_ANSWERING A0–A1, [report](docs/reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md)): `cyphalm_trie qa` and `cyphalm_trie dktext`.
   - **Q/A:** CyphaLM alone has 0.0% coverage at a 2% wrong rate on dev.
   - **Don't know:** trained on its own message and tag, it writes them, but only as well as its familiarity signal allows (AUROC 0.54–0.60). D1 hit, D2 missed, D3 hit (BPC change ≤ 0.0033).
