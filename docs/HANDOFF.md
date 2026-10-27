@@ -176,7 +176,7 @@ Run these on every change:
 | Timing | `embedtexts --input probe.txt --limit 1000`, then size the full jobs (the probe set is about 3M tokens) |
 | QE1–QE3 | The runbook in GGUF_MINING §14: `geometry`, `sensitivity`, `occlusion`, `instruct`, `wdiff`. Pilot on 0.6B, then 8B. Score predictions Q1–Q6 and Q10 |
 | QE4 | `pairs` with Qwen3.5-9B (thinking off; `--think` only for the audit) |
-| D4 Wikidata seeds | For F2's Q/A relations. Wikidata is unreachable from the cloud container |
+| D4 Wikidata seeds | **Done 2026-10-28 from the cloud container** ([report](reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md)). Wikidata SPARQL is reachable there now; the Wikipedia action API is throttled (429s) |
 | Results back | Commit the small outputs (`*.json`, `*.tsv`) under `mined/`, or put the large `.npy` files on a GitHub release. Write `docs/reports/QWEN3_EMBEDDING_DISSECTION.md` |
 
 Probe-set inputs (`probe.txt`, `pos_pairs.tsv`, `classes.tsv`, `held_out.txt`, `questions.txt`) do not exist yet. Build them first, from:

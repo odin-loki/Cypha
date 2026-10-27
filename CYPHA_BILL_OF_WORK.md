@@ -38,7 +38,10 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **F2**: pattern learning by distant supervision ([report](docs/reports/F2_PATTERN_LEARNING.md), `native/tools/pattern_learn.cpp`).
   - On all of enwik8 the fact store grows from 8,148 to 8,980 facts. The new ones are almost all birth and death dates and birth places.
   - Precision is 49/49 verifiable in a 50-fact sample (Wilson lower bound 0.927), and 35/37 for birth places.
-  - **Limits:** the Q/A relations (capital, author, director, spouse) have too few seeds to learn patterns; Wikidata seeds are the fix (D4). 919 of 920 new facts rest on one sentence. The base rate is set per relation from pattern precision instead of the plan's default 0.5, which needs a decision.
+  - [x] **D4 Wikidata seeds** (2026-10-28, [report](docs/reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md)): 98.7% of enwik8 titles map to Wikidata; its values are distant supervision only. Kept patterns 44 → 70, admitted facts 832 → 1,216 (store +16.2%), agreement with Wikidata 0.951 [0.909, 0.974]. A seed bug is fixed: 664 citation seeds dropped, text seeds now 7,484, facts unchanged.
+  - [x] **TOOL_PROFILE P1 adapter:** `pattern_learn --shard` writes question-form fact text with a built-in leakage check: 2,001 rows from 675 facts, 0 questions equal to a dev or test question, dev reach 16/100.
+  - **Still open:** capital, author and director get no kept pattern even with Wikidata seeds; the 2006 text states them in too many wordings ("is the capital of [[X]]" occurs 12 times in all of enwik8). Next: pattern classes in the gaps (E1) and cross-article evidence. Clean the seed relations left out of the shard (country, location, language, nationality, party, predecessor, successor, spouse).
+  - **Waiting for Odin:** the per-relation base rate (it admits 1,216 facts; the plan's 0.5 admits 0) and which leakage rule governs fact shards (TOOL_PROFILE §4 says no test answer string in an added shard; a fact shard must contain answers).
 - [ ] **E4**: question classifier ([report](docs/reports/E4_QUESTION_CLASSIFIER.md); code removed 2026-10-27, in git at `707629a`).
   - On TREC, the averaged perceptron scores 89.0–91.6 coarse and 84.6 fine; it is the classifier to use.
   - The Cypha classifier scores 75.0 coarse and 62–67 fine, with badly low confidence and an OOD flag that never fired.

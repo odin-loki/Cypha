@@ -49,6 +49,18 @@ From 512 MB to 10⁹ bytes the 4-gram count grows like about N^0.47. The packed 
 
 Chat must not be poured into those counts. On the 8 MiB split, the 4-byte match fires on **96%** of holdout bytes, and **75.7%** of holdout bytes use a 4-gram that also occurs in Dolly. The match table keeps only the latest follower, so those wiki predictions become the last Dolly byte. Every Dolly prompt also ends in the same 12 bytes, `\nAssistant: `, so a fixed 8-byte or 16-byte key does not tell the questions apart (0 of 15,011 prompts are unique at 12 bytes; **19%** are unique at 16). The chat index has to be the whole prompt pointing at its answer, in its own table, after the wiki counts and the mixture weights are frozen.
 
+## Fact store and fact text (for CyphaLM to learn from)
+
+Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md), 2026-10-28). These facts never answer anything. They become training text for CyphaLM (PLAN rule 10).
+
+| Read | Value |
+|---|---|
+| Text seeds (infobox, table, category) | 7,484 (8,148 before a citation-template seed bug was fixed) |
+| Kept patterns, `--cv --wikidata` | 70 (F2 alone: 44) |
+| Admitted facts extracted from the text | 1,216 (F2 alone: 832) |
+| Agreement with Wikidata on held-out subjects | 0.951, Wilson [0.909, 0.974] |
+| Fact shard (`--shard`) | 2,001 question-form rows from 675 facts on pages in the 8 MiB slice; 0 equal to a dev or test question; dev reach 16 / 100 in-slice questions |
+
 ## Corpus on D:
 
 `scripts/fetch_corpus.py` writes `D:\cypha_llm\corpus` (`/mnt/d/cypha_llm/corpus` from WSL). Ctrl+C stops it. The same command continues. `scripts/run_fetch.sh` is the visible WSL launcher.
