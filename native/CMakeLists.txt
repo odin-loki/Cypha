@@ -2765,3 +2765,30 @@ add_test(NAME native_thought_test
   COMMAND "$<TARGET_FILE:thought_test>" "${CMAKE_CURRENT_SOURCE_DIR}/../docs/thought/processes.json")
 set_tests_properties(native_thought_test PROPERTIES TIMEOUT 300)
 # --- end K2/K3 block ----------------------------------------------------------------------------------
+
+# --- QE geometry: Cypha-side embedding geometry library (docs/EMBEDDING_GEOMETRY.md sections 4.2, 4.5, 5.1, 7.1, 9.3) ----
+# Header-only (include/cypha/semantics/geometry.hpp, which includes eval/ecs.hpp); the test needs no link against
+# cypha_core. Synthetic data only: planted 400-item teacher, mask, confidence steps, CSLS, MRL, confidence check.
+add_executable(geometry_test tools/geometry_test.cpp)
+target_include_directories(geometry_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(geometry_test)
+add_test(NAME native_geometry_test COMMAND "$<TARGET_FILE:geometry_test>")
+set_tests_properties(native_geometry_test PROPERTIES TIMEOUT 300)
+# --- end QE geometry block --------------------------------------------------------------------------------------------
+
+# --- B1: CyphaLM packed trie, one library and one tool (PLAN Track B1) ----------------------------
+# Header-only library include/cypha/cyphalm/packed_trie.hpp. cyphalm_trie replaces trie_fold_lm,
+# trie_online_mix, trie_chat, trie_qa_probe, trie_context_8k and trie_sample. Only the selftest is a
+# CTest (no corpus); bpc/chat/probe/context8k/sample need enwik8 and Dolly and are run by hand.
+add_executable(cyphalm_trie
+  tools/cyphalm_trie.cpp
+  src/cyphalm/infinigram.cpp
+  third_party/libsais/libsais.c)
+target_include_directories(cyphalm_trie PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
+cypha_mingw_apply_exe_link_options(cyphalm_trie)
+add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>" selftest)
+set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
+# --- end B1 block ---------------------------------------------------------------------------------

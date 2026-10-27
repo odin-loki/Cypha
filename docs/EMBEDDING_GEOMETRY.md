@@ -408,7 +408,7 @@ The geometry only counts once CyphaLM uses it: the similar-context and class-con
 **Fix in `vectors`.** The existing command mean-pools. That is wrong for Qwen3-Embedding, so it gets `--pooling last`.
 
 **Cypha side.**
-- One library header, `native/include/cypha/semantics/geometry.hpp`, holds the §4.2 rule, §5.1 distillation, MRL ordering, whitening and CSLS.
+- One library header, `native/include/cypha/semantics/geometry.hpp`, holds the §4.2 rule, §5.1 distillation, MRL ordering, whitening and CSLS. **Built 2026-10-28** (test `native_geometry_test`; [QE_GEOMETRY_LIBRARY.md](reports/QE_GEOMETRY_LIBRARY.md)).
 - The S-1 tool (`cypha_word_classes.cpp`) grows into the one semantics tool, with `train`, `distill`, `eval` and `export`. There is no third vector tool. If S-1 shows the PPMI-SVD tool is no longer needed, it is cut (TOOL_PROFILE_PLAN).
 - Probes (B11) run in C++ with Cypha's DIF classifier on exported vectors, so Cypha does the probing.
 

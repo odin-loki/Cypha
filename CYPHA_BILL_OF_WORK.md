@@ -21,7 +21,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 **Default plan: [`docs/PLAN.md`](docs/PLAN.md)** (2026-10-26). Order of work: its section 12. First items:
 
 - [ ] **Track A**: 1 TB packed-trie run; score each checkpoint against predictions P-A1 to P-A5.
-- [x] **Q1–Q3 / B1** (done 2026-10-28, [report](docs/reports/B1_TRIE_CONSOLIDATION.md)): one packed-trie library (`native/include/cypha/cyphalm/packed_trie.hpp`) and one tool (`cyphalm_trie`: `bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`) replace ten tools with exact parity; 9,574 lines became 2,072. Paths are arguments. The CMake target and the `native_cyphalm_trie_selftest` CTest go in with the next CMake edit. `trie_stream_train.cpp` keeps its own copy until the 1 TB run ends.
+- [x] **Q1–Q3 / B1** (done 2026-10-28, [report](docs/reports/B1_TRIE_CONSOLIDATION.md)): one packed-trie library (`native/include/cypha/cyphalm/packed_trie.hpp`) and one tool (`cyphalm_trie`: `bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`) replace ten tools with exact parity; 9,574 lines became 2,072. Paths are arguments. The CMake target and the `native_cyphalm_trie_selftest` CTest are in (2026-10-28). `trie_stream_train.cpp` keeps its own copy until the 1 TB run ends.
 - [ ] **M1–M4**: frozen suites in `bench/eval/`; SCRIBE with its control ladders; `cypha_report_card`.
   - **SCRIBE v0 built (2026-10-27):** `native/include/cypha/eval/scribe.hpp`, `native/tools/scribe_ladder.cpp`, CTest `native_scribe_selftest`, [report](docs/reports/SCRIBE_V0.md).
   - **It fails its own ladder:** 1 of 6 adjacent pairs pass, the same as surface S. So it is not used to judge anything yet (PLAN §6.4).
@@ -67,6 +67,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **How CyphaLM answers by itself** ([`docs/CYPHALM_ANSWERING.md`](docs/CYPHALM_ANSWERING.md), proposal): three routes (question-form training text, generalising experts, statement checking), an answer loop and steps A0–A5. Waiting for Odin's choices in its §5.
 - [ ] **Embedding geometry QE0–QE9** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md)): copy Qwen3-Embedding-8B's geometry into Cypha.
   - Needs Odin's machine: the GGUF downloads (Qwen3-Embedding 0.6B and 8B, Qwen3-8B, Qwen3.5-9B) and the teacher passes.
+  - **Built 2026-10-28:** `native/include/cypha/semantics/geometry.hpp` with CTest `native_geometry_test` ([report](docs/reports/QE_GEOMETRY_LIBRARY.md)). On a planted teacher, distillation reaches pair Spearman 0.943 and kNN@10 0.889, against 0.367 / 0.429 for InfoNCE alone. With the mask, paraphrases end at cosine 0.750, against 0.640 without. CSLS cuts hub skew from 3.18 to 0.32.
   - Here: the new `gguf_mine.py` subcommands (`embedtexts`, `geometry`, `compare`, `sensitivity`, `occlusion`, `instruct`, `wdiff`, `pairs`), `--pooling last` for `vectors`, and the Cypha-side `semantics/geometry.hpp`.
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
   1. Build the CyphaLM Q/A baseline harness.

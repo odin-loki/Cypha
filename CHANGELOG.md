@@ -14,6 +14,9 @@ milestone or a significant self-contained change.
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **Embedding geometry library** (EMBEDDING_GEOMETRY §4–5, [report](docs/reports/QE_GEOMETRY_LIBRARY.md)): header-only `native/include/cypha/semantics/geometry.hpp`. It provides Gaussian items, the softmax pull–push rule with the false-negative mask and confidence-scaled natural-gradient steps, relational distillation, MRL ordering and nested loss, whitening, CSLS and the agreement metrics.
+  - **CTest `native_geometry_test`:** 32,096 checks. On a planted teacher, distillation reaches pair Spearman 0.943 against 0.367 for InfoNCE alone.
+  - **CMake:** the `cyphalm_trie` target and the `native_cyphalm_trie_selftest` CTest are added.
 - **Words as classes** (SEMANTICS S-1, [report](docs/reports/C5_WORDS_AS_CLASSES.md)): `native/tools/cypha_word_classes.cpp` runs Core Cypha's own class update over 10,000 enwik8 word classes with sampled competitors.
   - **Result, negative:** WordSim / SimLex / MEN 0.240 / 0.134 / 0.372. That is level with a matched count baseline and far below PPMI-SVD (0.723 / 0.265 / 0.732). Hypernym direction is below the frequency baseline, and the capital-of map reaches 0–12% in the top 10. P1–P3 missed.
   - **What stays:** PPMI-SVD stays the vector source.
