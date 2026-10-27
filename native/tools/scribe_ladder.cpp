@@ -13,7 +13,7 @@
 // Rungs, best to worst: held-out human > trie samples > sentences shuffled across documents > words shuffled
 // within sentences > random lexicon words > random letters > one phrase repeated. The controls keep the
 // surface form (sentence lengths, final punctuation, capital first letter). The trie rung is real model
-// output from trie_sample (GEN<TAB>kind<TAB>text lines, 600-byte continuations of paragraph starts of the
+// output from cyphalm_trie sample (GEN<TAB>kind<TAB>text lines, 600-byte continuations of paragraph starts of the
 // trie's holdout at T = 0.6, 0.8, 1.0, nucleus 0.9), prepared by clean_generated_text (markup stripped, the
 // cut first and last word and the prompt's sentence dropped). Reported pooled and per temperature.
 // PASS for a pair (PLAN 6.4): pairwise ordering accuracy >= 0.95 over all (upper, lower) pairs (ties 1/2) AND
@@ -47,8 +47,9 @@
 //   PREFIX: ppmi_svd output for enwik8 [16, 48) MiB only, e.g.
 //     dd if=enwik8 of=train32.xml bs=1048576 skip=16 count=32
 //     ppmi_svd train32.xml none none - PREFIX --no-ri --no-ablation        (the two similarity files may be absent)
-//   FILE:   trie_sample output (dev and fresh files use disjoint prompts):
-//     trie_sample enwik8 gen_dev.txt gen_fresh.txt
+//   FILE:   cyphalm_trie sample output (dev and fresh files use disjoint prompts; it was trie_sample until
+//           2026-10-27, same bytes):
+//     cyphalm_trie sample enwik8 gen_dev.txt gen_fresh.txt
 //   --c-one-sided and --soft-gate switch on the variants that were tried and not adopted (see the report).
 //   Prints Markdown on stdout, progress on stderr. About 10 s and 210 MB peak for both ladders on one core; the output is deterministic.
 
@@ -313,7 +314,7 @@ std::string fmt_ci(double m, std::pair<double, double> ci, int prec = 3) {
   return fmt(m, prec) + " [" + fmt(ci.first, prec) + ", " + fmt(ci.second, prec) + "]";
 }
 
-// GEN lines of a trie_sample file -> prepared texts (clean_generated_text), with their kinds.
+// GEN lines of a cyphalm_trie sample file -> prepared texts (clean_generated_text), with their kinds.
 // Texts under 100 bytes after preparation are dropped (counted); a text with no sentence boundary is kept.
 struct GenSet {
   std::vector<std::string> texts, kinds;
@@ -1003,7 +1004,7 @@ int main(int argc, char** argv) {
                  "usage: scribe_ladder <enwik8> [--vectors PREFIX] [--gen-dev FILE] [--gen-fresh FILE] [--fresh-seed N] [--only-dev|--only-fresh] [--c-one-sided] [--soft-gate]\n"
                  "       scribe_ladder --selftest\n"
                  "  PREFIX: ppmi_svd output (PREFIX.vectors.f32 + PREFIX.vocab.tsv), trained on enwik8 [16,48) MiB only.\n"
-                 "  FILE:   GEN<TAB>kind<TAB>text lines from trie_sample (dev and fresh prompts are disjoint).\n");
+                 "  FILE:   GEN<TAB>kind<TAB>text lines from cyphalm_trie sample (dev and fresh prompts are disjoint).\n");
     return 2;
   }
   const std::uint64_t kDevSeed = 20261027;

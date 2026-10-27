@@ -6,7 +6,7 @@ The language model being taken forward is the packed byte trie. hp gate24 stays 
 
 ## Packed trie (the model to train)
 
-Tools: `native/tools/trie_fold_lm.cpp`, `trie_online_mix.cpp`, `trie_together.cpp`, `trie_chat.cpp`. Surface score: `native/tools/surface_score.cpp`.
+Tools: `native/tools/cyphalm_trie.cpp` (`bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`) over the one model in `native/include/cypha/cyphalm/packed_trie.hpp`. On 2026-10-27 it replaced the forked `trie_*.cpp` tools and reproduces their numbers to the printed digit. The experiments behind the 2.286, 2.642 and word-trie rows (`trie_together`, `trie_gria_gate`) were retired; their results and the git commits that hold them are in [`reports/B1_TRIE_CONSOLIDATION.md`](reports/B1_TRIE_CONSOLIDATION.md). Surface score: `native/tools/surface_score.cpp`.
 
 Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 8388608)` frozen holdout, unless a row says otherwise.
 

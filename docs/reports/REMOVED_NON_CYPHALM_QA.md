@@ -8,7 +8,7 @@
 
 | Code | What it did | Why it broke the rule |
 |---|---|---|
-| `copied_answer()` in `native/tools/trie_chat.cpp` (and its use in `trie_qa_probe.cpp`) | `std::string::find` of the whole prompt in the training bytes, returning the bytes after it | A string search, not the model. It produced the original "3 answered questions" |
+| `copied_answer()` in `native/tools/trie_chat.cpp` (and its use in `trie_qa_probe.cpp`). Both tools later became `cyphalm_trie chat` and `probe` (PLAN B1, [report](B1_TRIE_CONSOLIDATION.md)), still without it | `std::string::find` of the whole prompt in the training bytes, returning the bytes after it | A string search, not the model. It produced the original "3 answered questions" |
 | `native/tools/qa_infobox.cpp` | Parsed infobox fields and a few sentence patterns into a fact table, matched questions to it with regex templates, and printed the stored value | Hand-written extraction and lookup. CyphaLM was not involved |
 | `native/tools/chat_index.cpp` | BM25 and character-3-gram retrieval over Dolly prompts, returning the stored response | A retrieval index. CyphaLM was not involved |
 

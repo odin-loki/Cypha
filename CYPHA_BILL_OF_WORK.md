@@ -21,7 +21,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 **Default plan: [`docs/PLAN.md`](docs/PLAN.md)** (2026-10-26). Order of work: its section 12. First items:
 
 - [ ] **Track A**: 1 TB packed-trie run; score each checkpoint against predictions P-A1 to P-A5.
-- [ ] **Q1–Q3 / B1**: one packed-trie library replacing the 7 forked `trie_*.cpp` tools; CMake targets; CTests; paths as arguments.
+- [x] **Q1–Q3 / B1** (done 2026-10-28, [report](docs/reports/B1_TRIE_CONSOLIDATION.md)): one packed-trie library (`native/include/cypha/cyphalm/packed_trie.hpp`) and one tool (`cyphalm_trie`: `bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`) replace ten tools with exact parity; 9,574 lines became 2,072. Paths are arguments. The CMake target and the `native_cyphalm_trie_selftest` CTest go in with the next CMake edit. `trie_stream_train.cpp` keeps its own copy until the 1 TB run ends.
 - [ ] **M1–M4**: frozen suites in `bench/eval/`; SCRIBE with its control ladders; `cypha_report_card`.
   - **SCRIBE v0 built (2026-10-27):** `native/include/cypha/eval/scribe.hpp`, `native/tools/scribe_ladder.cpp`, CTest `native_scribe_selftest`, [report](docs/reports/SCRIBE_V0.md).
   - **It fails its own ladder:** 1 of 6 adjacent pairs pass, the same as surface S. So it is not used to judge anything yet (PLAN §6.4).

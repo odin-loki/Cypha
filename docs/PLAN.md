@@ -308,7 +308,7 @@ Every licence line says "verify at download". It records what we believe today, 
 | **Distilled** (Track H) | Paraphrases, definitions, facts from an open-weight model under a permissive licence | All layers, with a low ECS prior | Per the model's licence |
 | Evaluation only: SimLex-999, WordSim-353, MEN, 20 Newsgroups, AG News | Benchmarks | — | Research use; check terms |
 
-**Correction for the record.** The "8 MB of Wikidata" used for the trie was the first 8 MiB of **enwik9**, which is Wikipedia XML text. Wikidata is the separate structured fact base listed above. The committed `trie_chat.cpp` loads **Dolly only**. OpenAssistant goes in with B7.
+**Correction for the record.** The "8 MB of Wikidata" used for the trie was the first 8 MiB of **enwik9**, which is Wikipedia XML text. Wikidata is the separate structured fact base listed above. The chat model (`cyphalm_trie chat`, formerly `trie_chat.cpp`) loads **Dolly only**. OpenAssistant goes in with B7.
 
 ### 4.2 Build and format
 

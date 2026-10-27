@@ -23,33 +23,29 @@ The forward plan built on these results is [`../PLAN.md`](../PLAN.md).
 | Item | Value |
 |---|---|
 | Text | First 8 MiB of enwik8, which equals enwik9's first 8 MiB. enwik8 MD5 `a1fa5ffddb56f4953e226637dabbb36a` |
-| Split | Train `[0, 7340032)`, holdout `[7340032, 8388608)`, as in `trie_chat.cpp` |
-| Chat | Dolly 15k, `databricks-dolly-15k.jsonl` from `databrickslabs/dolly`, 15,015 records loaded. `CURRENT.md` reports 15,011, so this copy differs slightly. The committed `trie_chat.cpp` loads Dolly only |
-| Model | The packed trie and six-expert mixture exactly as `trie_chat.cpp`: wiki pass, `<\|doc\|>` break, two Dolly passes, Synth mode. Reproduced weights: 0.961 on order 4, 0.039 on the match |
+| Split | Train `[0, 7340032)`, holdout `[7340032, 8388608)`, as in `cyphalm_trie chat` (then `trie_chat.cpp`) |
+| Chat | Dolly 15k, `databricks-dolly-15k.jsonl` from `databrickslabs/dolly`, 15,015 records loaded. `CURRENT.md` reports 15,011, so this copy differs slightly. The chat model (`cyphalm_trie chat`, then `trie_chat.cpp`) loads Dolly only |
+| Model | The packed trie and six-expert mixture exactly as `cyphalm_trie chat` (then `trie_chat.cpp`): wiki pass, `<\|doc\|>` break, two Dolly passes, Synth mode. Reproduced weights: 0.961 on order 4, 0.039 on the match |
 | Machine | 2 cores, 7 GB RAM, g++ 13.3, `-O2` |
 
-**Tools** (all reuse `trie_chat.cpp`'s model through `#define main …; #include`, so there is no copy of the trie):
+**Tools.** The test was run with `trie_qa_probe.cpp` and `trie_context_8k.cpp`, which reused `trie_chat.cpp`'s model through `#include`. On 2026-10-27 (PLAN B1) all three became subcommands of `native/tools/cyphalm_trie.cpp` over `native/include/cypha/cyphalm/packed_trie.hpp`, with byte-identical output ([B1 report](B1_TRIE_CONSOLIDATION.md); the old files are in git `9f35798` and `ab4f9f6`).
 
-| Tool | What it does |
+| Subcommand | What it does |
 |---|---|
-| `native/tools/trie_qa_probe.cpp` | Seen, one-letter-changed and Wikipedia-fact questions; copy rate over 975 prompts; what the mixture writes on its own |
-| `native/tools/trie_context_8k.cpp` | `InfiniGram` (order up to 8192) mixed with the trie; BPC at five context caps; matched-length histogram; 50 questions with 30 Dolly turns held out |
-| `native/tools/surface_controls.cpp` | Surface score `S` on controls, and on any `GEN` lines piped in |
+| `cyphalm_trie probe` | Seen, one-letter-changed and Wikipedia-fact questions; what the mixture writes on its own (greedy, and nucleus 0.9). The copy rate over 975 prompts used `copied_answer()`, which was removed under PLAN rule 10 ([record](REMOVED_NON_CYPHALM_QA.md)) |
+| `cyphalm_trie context8k` | `InfiniGram` (order up to 8192) mixed with the trie; BPC at five context caps; matched-length histogram; 50 questions with 30 Dolly turns held out |
+| `native/tools/surface_controls.cpp` | Surface score `S` on controls, and on any `GEN` lines piped in. Since retired in favour of `scribe_ladder` (git `ab4f9f6`) |
 
 ```bash
 gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
-g++ -O2 -std=c++20 -I native/third_party -o trie_qa_probe native/tools/trie_qa_probe.cpp
-g++ -O2 -std=c++20 -I native/third_party -I native/third_party/libsais -I native/include \
-    -o trie_context_8k native/tools/trie_context_8k.cpp native/src/cyphalm/infinigram.cpp libsais.o
-g++ -O2 -std=c++20 -o surface_controls native/tools/surface_controls.cpp
+g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
+    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
 
-./trie_qa_probe   enwik8 dolly.jsonl > qa.txt
-./trie_context_8k enwik8 dolly.jsonl > ctx.txt
-./surface_controls enwik8 < ctx.txt
-./surface_controls enwik8 < qa.txt
+./cyphalm_trie probe     enwik8 dolly.jsonl > qa.txt
+./cyphalm_trie context8k enwik8 dolly.jsonl > ctx.txt
 ```
 
-Each of the two model runs takes about 6 minutes on one core.
+Each of the two model runs takes about 4–6 minutes on one core.
 
 ---
 
