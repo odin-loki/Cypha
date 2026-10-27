@@ -9,9 +9,13 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Removed
+- **Code-debt cuts** (2026-10-27): `native/tools/question_classifier.cpp` (its finding stays in the E4 report; git `707629a`) and `native/tools/surface_controls.cpp` (superseded by `scribe_ladder`; git `ab4f9f6`).
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Added
+- **Tool profiling plan** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
+  - It decides which support tools stay (tagger, pattern learner, word vectors, teacher text, InfiniGram, Cypha abstain gate), by what each adds to CyphaLM's own Q/A and BPC.
+  - It uses an ablation grid with LCI, a lines-per-gain bar and predictions registered in advance.
 - **Pattern learning** (PLAN F2, [report](docs/reports/F2_PATTERN_LEARNING.md)): `native/tools/pattern_learn.cpp` learns relation patterns from infobox seeds by distant supervision, keeps those with a Wilson precision bound ≥ 0.7, and extracts ECS-scored facts.
   - On enwik8: 832 new admitted facts (mostly dates and birth places), at 49/49 verified precision, in 16 s.
 - **Question classifier** (PLAN E4, [report](docs/reports/E4_QUESTION_CLASSIFIER.md)): `native/tools/question_classifier.cpp` on TREC. The averaged perceptron scores 89.0–91.6 coarse and 84.6 fine; Cypha's classifier 75.0 and 62–67. This confirms the PLAN §11 risk, so the perceptron is used for question types and Cypha's text learning is an open item.

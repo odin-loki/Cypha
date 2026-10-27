@@ -39,7 +39,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - On all of enwik8 the fact store grows from 8,148 to 8,980 facts. The new ones are almost all birth and death dates and birth places.
   - Precision is 49/49 verifiable in a 50-fact sample (Wilson lower bound 0.927), and 35/37 for birth places.
   - **Limits:** the Q/A relations (capital, author, director, spouse) have too few seeds to learn patterns; Wikidata seeds are the fix (D4). 919 of 920 new facts rest on one sentence. The base rate is set per relation from pattern precision instead of the plan's default 0.5, which needs a decision.
-- [ ] **E4**: question classifier ([report](docs/reports/E4_QUESTION_CLASSIFIER.md), `native/tools/question_classifier.cpp`).
+- [ ] **E4**: question classifier ([report](docs/reports/E4_QUESTION_CLASSIFIER.md); code removed 2026-10-27, in git at `707629a`).
   - On TREC, the averaged perceptron scores 89.0–91.6 coarse and 84.6 fine; it is the classifier to use.
   - The Cypha classifier scores 75.0 coarse and 62–67 fine, with badly low confidence and an OOD flag that never fired.
   - **Open research:** close the roughly 10-point gap that batch LDA (84.8 / 74.4) attributes to Cypha's online update noise; recalibrate Cypha's confidence on text; and look at the sparse-feature projection.
@@ -58,6 +58,11 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - primitives bound to the existing tools;
   - the first executable processes on their benchmarks.
   - K1 (142 processes including AI and data science, validator) is done.
+- [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
+  1. Build the CyphaLM Q/A baseline harness.
+  2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.
+  3. Run the B / B+T / F / F−T grid with a leakage check.
+  4. Keep only the tools that pass LCI and their lines-per-gain bar; delete the rest.
 - [ ] **H1–H3**: pick a permissively licensed GGUF teacher. Run `scripts/gguf_mine.py calibrate` on a Wikidata gold sample, then `facts`, `lexical` and `crawl` with that calibration. List: [`docs/GGUF_MINING.md`](docs/GGUF_MINING.md).
 
 - [x] **Cell sweep wrap-up** — B2 and H06 rerun 2026-08-16 @ 300k / eval 2k (isolated `bench/results/cell_sweep_rerun/`). Both **3.681 BPC** with math-integration (same as H14; not a promote vs Hybrid 2.664). Archived at `data/archive/cell_sweep/variant_B2.json` + `variant_H06.json`. Best new row remains U03 **2.822**.

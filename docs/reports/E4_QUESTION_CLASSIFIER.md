@@ -1,5 +1,7 @@
 # E4: question classifier on TREC, and a test of whether Cypha's classifier can learn language from counts
 
+> **Code removed 2026-10-27** to cut code debt. The finding stands: the averaged perceptron beat the Cypha classifier on TREC, which confirms the PLAN §11 risk. The tool is in git at commit `707629a` (`native/tools/question_classifier.cpp`) if the benchmark has to be rerun. Re-testing Cypha's text learning is part of the tool-profiling plan ([TOOL_PROFILE_PLAN.md](../TOOL_PROFILE_PLAN.md)).
+
 Odin Loch, 2026-10-27
 
 Tool: `native/tools/question_classifier.cpp` (C++20, links `cypha_core`; no other library).

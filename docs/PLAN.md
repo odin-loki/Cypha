@@ -489,6 +489,8 @@ Design: [`THOUGHT.md`](THOUGHT.md). Library: [`thought/processes.yaml`](thought/
 
 See section 10. It covers every component, every checkpoint, and every promotion.
 
+**Which support tools make the cut** (tagger, pattern learner, word vectors, teacher text, InfiniGram, Cypha abstain gate): [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md). Each tool is measured only by what it adds to CyphaLM's own Q/A and BPC (rule 10), for its cost in code and RAM, with LCI as referee.
+
 ### Track Q: code health
 
 - **Q1.** Track B1 (consolidation) plus the three test tools from 2026-10-26 folded into CTests.
@@ -904,6 +906,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 45 | Add speculative / hypothetical thinking for discovery later | §3.5 speculative mode, kept apart from answers |
 | 46 | Do the speculative thinking now: know what it knows, know what it doesn't, think hard on discovery, map out the discovery processes | [`DISCOVERY.md`](DISCOVERY.md); Track S |
 | 47 | Model human thought and work processes across many categories (UML/processes) as "thought" for Cypha, done mathematically with its online learning and statistical feedback | Track K; [`THOUGHT.md`](THOUGHT.md); [`thought/processes.yaml`](thought/processes.yaml) |
+| 48 | Cut and merge tools to the minimal and best (keep `gguf_mine.py`); plan to profile the tagger, pattern learner and word vectors with other tools to see what makes the cut | Code-debt cuts (changelog); B1; [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md) |
 
 ---
 

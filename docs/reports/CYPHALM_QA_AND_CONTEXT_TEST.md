@@ -1,5 +1,7 @@
 # CyphaLM question answering and count-context test
 
+> **2026-10-27:** `surface_controls.cpp` was removed to cut code debt; the SCRIBE ladder (`scribe_ladder`) now scores surface S on the controls. It is in git at commit `ab4f9f6` for exact reproduction of section 3. The find-based `copied_answer()` measured in section 1 was removed under PLAN rule 10 ([record](REMOVED_NON_CYPHALM_QA.md)).
+
 **Odin Loch** · 2026-10-26
 
 **Questions.**
