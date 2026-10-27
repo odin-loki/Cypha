@@ -63,10 +63,16 @@
 //   --reach PARSE (with --dev; grading only): how often the frames' prefixes, with a dev question's subject filled, occur in
 //   the training bytes [0, --holdout-from), and with --shard also in the shard text.
 //
+// S3 (2026-10-28, docs/reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md):
+//   --gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]: the gap map (DISCOVERY 3.2) of the store after the run:
+//   schema gaps with P(exists) from f(T, R), contradiction gaps from the ECS fusion, certainty gaps, and demand from
+//   CyphaLM's own <|unknown ...|> tags (dev rows only), each with VOI (gap_map.hpp). Writes FILE, FILE.cells.tsv and
+//   FILE.demand.tsv. With --dev it grades whether each tag names its question's slot. Bookkeeping only: it answers nothing.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
-//          [--raw] [--join FACTS] [--reach PARSE]
+//          [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]
 //        pattern_learn --wilson K N
 //   <outdir> gets facts_f2.tsv (subject, relation, object, P, grade, n_evidence, best_pattern, source_page, byte_offset;
 //   byte_offset is the start of the line holding the strongest evidence), facts_f2.evidence.tsv (the sentence for each fact),
@@ -77,6 +83,7 @@
 // Author: Odin Loch
 
 #include "cypha/eval/ecs.hpp"
+#include "cypha/eval/gap_map.hpp"
 
 #include <sys/resource.h>
 
@@ -2403,6 +2410,311 @@ void reach_report(const vector<Pat>& pats, const string& data, std::size_t train
         }
 }
 
+// ============================================================ S3: the gap map (DISCOVERY 3.2, 3.5, 6.3; docs/reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md)
+// --gaps FILE, after a normal run: what the store lacks, per entity and relation, with VOI. Bookkeeping only: nothing here
+// answers a question, and Wikidata gives only the type-level rate f(T, R), never a value. Writes FILE (gaps by VOI),
+// FILE.cells.tsv (f per type and relation) and, with --demand, FILE.demand.tsv (one row per CyphaLM tag).
+//   types      F2's own sets on the title: country, else person, else place, else other (lists and disambiguations skipped).
+//   filled     a text seed or a stored extracted value (P >= 0.5); a date slot also fills its year slot.
+//   P(exists)  the estimator of f(T, R) with the lowest Brier score on the held-out Wikidata fifth's empty store slots: the
+//              store's f, or Wikidata's rate (over covered or all entities, over all or only empty store slots), fit on the
+//              other fifths, then refit on all. Relations with no Wikidata value keep the store's f. Listed at >= --gap-floor.
+//   contradiction  a stored extracted value of a functional relation with competing-value or constraint mass in its ECS
+//              fusion; p = its P over its P
+//              plus the best rival's (a text seed counts 20/21). certainty: a stored extracted value that is Believed at
+//              grade Low, or Known on one sentence; p = P.
+//   demand     --demand ROWS[,ROWS...]: cyphalm_trie qa rows, dev rows only; each tag adds demand to its slot (gap_map.hpp).
+//   status     parked when no automatic rung can fill the slot now (no kept pattern for R, or the entity has no page), else
+//              open, or queued when asked about. VOI = gap_map.hpp score(): EIG of a 0.9 / 0.9 test x (1 + w demand),
+//              w = --demand-weight (0: 0 of 750 dev tags name their question's slot; the demand column is kept).
+//   grading    with --dev (grading only, dev only): does a tag name its question's slot (subject: the in-slice title, else
+//              --parse's E1 entity; relation: q_rels), and is that slot a gap?
+// Demand weight 0 (S3, dev): 0 of CyphaLM's 750 dev tags name their question's slot, so tag demand is logged but not ranked.
+struct GapOpt { string path, parse; vector<string> demand; double floor = 0.05, demand_weight = 0.0; };
+void write_gaps(const GapOpt& G, const string& dev, const vector<PageRef>& pages, const vector<Fused>& fused,
+                const std::function<void(const string&)>& say) {
+    const char* kT[4] = {"country", "person", "place", "other"};
+    auto tname = [&](int t) { return t < 0 ? "unknown" : kT[t]; };
+    vector<string> ent;
+    vector<int> type;
+    vector<std::uint64_t> fill, wd;
+    std::unordered_map<string, int> eix;
+    for (const PageRef& pg : pages) {
+        string lt = lower(pg.title), nk = norm_ent(pg.title);
+        if (lt.compare(0, 8, "list of ") == 0 || lt.find("(disambiguation)") != npos || eix.count(nk)) continue;
+        eix[nk] = static_cast<int>(ent.size());
+        ent.push_back(pg.title);
+        type.push_back(g_country.count(nk) ? 0 : g_person.count(nk) ? 1 : g_place.count(nk) ? 2 : 3);
+    }
+    const std::size_t N = ent.size();
+    fill.assign(N, 0);
+    wd.assign(N, 0);
+    auto bit = [](int r) { return std::uint64_t{1} << r; };
+    auto at = [&](const string& t) { auto it = eix.find(norm_ent(t)); return it == eix.end() ? -1 : it->second; };
+    const int bd = rel_index("birth_date"), by = rel_index("birth_year"), dd = rel_index("death_date"), dy = rel_index("death_year");
+    auto put = [&](int e, int r) { if (e >= 0) fill[e] |= bit(r) | (r == bd ? bit(by) : 0) | (r == dd ? bit(dy) : 0); };
+    for (const Seed& sd : g_seeds) {
+        if (sd.src < 3) put(at(sd.subj), sd.rel);
+        else if (int e = at(sd.subj); e >= 0) wd[e] |= bit(sd.rel);
+    }
+    for (auto& [k, v] : g_gold) if (int e = at(k.substr(0, k.find('\x1f'))); e >= 0) wd[e] |= bit(rel_index(k.substr(k.find('\x1f') + 1)));
+    for (const Fused& fu : fused) if (fu.op.P >= 0.5) put(at(fu.f->subj), fu.f->rel);
+    std::uint64_t wd_rel = 0, kept = 0;
+    for (std::uint64_t w : wd) wd_rel |= w;
+    for (const Pat& p : g_pats) kept |= bit(p.rel);
+    // f(T, R) five ways: [0] store; Wikidata [1] on covered entities (>= 1 Wikidata value), [2] on their empty store slots,
+    // [3] on all entities (no Wikidata value counts as none), [4] on all empty store slots; [5..8] = [1..4] on four fifths.
+    struct C { long n[9] = {}, w[9] = {}; };
+    vector<C> cell(4 * kNRel);
+    for (std::size_t e = 0; e < N; ++e)
+        for (int r = 0; r < kNRel; ++r) {
+            C& c = cell[type[e] * kNRel + r];
+            const bool f = fill[e] & bit(r), w = wd[e] & bit(r), cov = wd[e] != 0, four = !wd_gold_subject(ent[e]);
+            const bool in[9] = {true, cov, cov && !f, true, !f, cov && four, cov && !f && four, four, !f && four};
+            for (int k = 0; k < 9; ++k) if (in[k]) { ++c.n[k]; c.w[k] += k ? w : f; }
+        }
+    auto rate = [](const C& c, int k) { return c.n[k] ? static_cast<double>(c.w[k]) / static_cast<double>(c.n[k]) : 0.0; };
+    // Calibration on the held-out fifth's empty store slots, outcome = Wikidata has a value: [0] covered entities only,
+    // [1] all entities (where P(exists) is used; it picks the estimator).
+    const int est_src[5] = {0, 5, 6, 7, 8};
+    double brier[2][5] = {}, ll[2][5] = {}, mp[2][5] = {}, obs[2] = {};
+    long ncal[2] = {};
+    for (std::size_t e = 0; e < N; ++e) {
+        if (!wd_gold_subject(ent[e])) continue;
+        for (int r = 0; r < kNRel; ++r) {
+            if ((fill[e] & bit(r)) || !(wd_rel & bit(r))) continue;
+            const double y = (wd[e] & bit(r)) ? 1.0 : 0.0;
+            for (int pop = wd[e] ? 0 : 1; pop < 2; ++pop) {
+                ++ncal[pop];
+                obs[pop] += y;
+                for (int k = 0; k < 5; ++k) {
+                    const double q = rate(cell[type[e] * kNRel + r], est_src[k]), qc = std::min(0.999, std::max(0.001, q));
+                    brier[pop][k] += (q - y) * (q - y);
+                    ll[pop][k] -= y ? std::log2(qc) : std::log2(1 - qc);
+                    mp[pop][k] += q;
+                }
+            }
+        }
+    }
+    const char* kEst[5] = {"store f", "Wikidata f, covered", "Wikidata f, covered empty slots", "Wikidata f, all", "Wikidata f, all empty slots"};
+    int best = 0;
+    for (int k = 0; k < 5; ++k) if (ncal[1] && brier[1][k] < brier[1][best]) best = k;
+    char b[512];
+    for (int pop = 0; pop < 2; ++pop)
+        for (int k = 0; k < 5; ++k) {
+            const double n = ncal[pop] ? static_cast<double>(ncal[pop]) : 1.0;
+            std::snprintf(b, sizeof b, "  GAPCAL %s %-32s Brier %.4f  log-loss %.4f bits  mean predicted %.4f  observed %.4f  slots %ld%s", pop ? "all    " : "covered",
+                          kEst[k], brier[pop][k] / n, ll[pop][k] / n, mp[pop][k] / n, obs[pop] / n, ncal[pop], pop && k == best ? "  <- P(exists)" : "");
+            say(b);
+        }
+    auto pex = [&](int t, int r) { const C& c = cell[t * kNRel + r]; return best && (wd_rel & bit(r)) && c.n[best] ? rate(c, best) : rate(c, 0); };
+    // The map.
+    ecs::GapMap gm;
+    gm.norm = norm_ent;
+    for (std::size_t e = 0; e < N; ++e)
+        for (int r = 0; r < kNRel; ++r) {
+            const double p = pex(type[e], r);
+            if ((fill[e] & bit(r)) || p < G.floor) continue;
+            ecs::Gap& g = gm.open(ecs::GapKind::Schema, ent[e], kRel[r].name, kT[type[e]]);
+            g.p_exists = g.p = p;
+            g.status = (kept & bit(r)) ? ecs::GapStatus::Open : ecs::GapStatus::Parked;
+        }
+    const double seed_tau = ecs::prior_infobox().mean();
+    std::map<string, int> states;
+    long contested_d = 0;
+    for (const Fused& fu : fused) {
+        if (fu.op.P < 0.5) continue;
+        const FactAcc& f = *fu.f;
+        const ecs::EpistemicState st = ecs::classify(fu.op);
+        ++states[string(ecs::state_name(st)) + " " + ecs::grade_name(fu.op.grade)];
+        const int e = at(f.subj);
+        if (!kRel[f.rel].multi && (fu.op.s_competing > 0 || fu.op.s_constraint > 0)) {  // a functional slot (2.3)
+            double rival = 0;
+            for (const Fused& o : fused) {
+                if (o.f == fu.f || o.f->subj != f.subj || o.f->rel != f.rel) continue;
+                const bool compat = is_datey(f.rel) ? (kRel[f.rel].type == T_YEAR ? o.f->d.y == f.d.y : date_compat(o.f->d, f.d)) : o.f->okey == f.okey;
+                if (!compat) rival = std::max(rival, o.op.P);
+            }
+            if (rival == 0 && fu.op.s_competing > 0) rival = seed_tau;
+            ecs::Gap* g = gm.find(ecs::GapKind::Contradiction, f.subj, kRel[f.rel].name);
+            if (!g) {  // the slot's leading value (fused is sorted by P, highest first)
+                g = &gm.open(ecs::GapKind::Contradiction, f.subj, kRel[f.rel].name, e < 0 ? "unknown" : kT[type[e]]);
+                g->p = rival > 0 ? fu.op.P / (fu.op.P + rival) : fu.op.P;
+                g->p_exists = 1;
+                g->note = f.surf + " P " + std::to_string(fu.op.P).substr(0, 5) + " d " + std::to_string(fu.op.d).substr(0, 5) + (rival > 0 ? " rival P " + std::to_string(rival).substr(0, 5) : " lifespan");
+            }
+            if (st == ecs::EpistemicState::Contested) { ++contested_d; g->note += " Contested"; }
+        }
+        if ((st == ecs::EpistemicState::Believed && fu.op.grade == ecs::Grade::Low) || (st == ecs::EpistemicState::Known && fu.n_ev == 1)) {
+            if (gm.find(ecs::GapKind::Certainty, f.subj, kRel[f.rel].name)) continue;
+            ecs::Gap& g = gm.open(ecs::GapKind::Certainty, f.subj, kRel[f.rel].name, e < 0 ? "unknown" : kT[type[e]]);
+            g.p = fu.op.P;
+            g.p_exists = 1;
+            g.note = f.surf + " " + ecs::state_name(st) + " " + ecs::grade_name(fu.op.grade) + " sentences " + std::to_string(fu.n_ev);
+        }
+    }
+    // Seed-only conflicts, which ECS never sees (report only): functional relations with two text-seed values of different
+    // years (dates) or keys (others). Places inside each other are counted too, so this is an upper bound.
+    std::set<string> seed_conf;
+    {
+        std::unordered_map<string, std::set<string>> vals;
+        for (const Seed& sd : g_seeds)
+            if (sd.src < 3 && kRel[sd.rel].phi >= 0.9) vals[sd.subj + "\x1f" + kRel[sd.rel].name].insert(is_datey(sd.rel) ? std::to_string(sd.o.d.y) : sd.o.k1);
+        for (auto& [k, v] : vals) if (v.size() > 1) seed_conf.insert(k);
+    }
+    // Demand: CyphaLM's own tags, dev rows only.
+    vector<TqaQ> devq = dev.empty() ? vector<TqaQ>{} : load_tqa(dev, false);
+    std::unordered_map<string, string> e1;
+    if (!G.parse.empty()) {
+        std::ifstream f(G.parse);
+        for (string l; std::getline(f, l);) { auto c = split(l, '\t'); if (c.size() >= 9 && c[0] != "question") e1[c[0]] = c[7] == "-" ? "" : c[7]; }
+    }
+    // A question's slot: 0 no store relation, 1 no page, 2 filled, 3 schema gap, 4 empty below the floor.
+    auto qslot = [&](const TqaQ& d, int& e, vector<string>& rels) {
+        rels = q_rels(norm_q(d.q));
+        string subj = d.in_slice ? d.title : (e1.count(d.q) ? e1[d.q] : "");
+        e = subj.empty() ? -1 : at(subj);
+        if (rels.empty()) return 0;
+        if (e < 0) return 1;
+        bool gap = false;
+        for (const string& r : rels) { if (fill[e] & bit(rel_index(r))) return 2; gap |= pex(type[e], rel_index(r)) >= G.floor; }
+        return gap ? 3 : 4;
+    };
+    const char* kQs[5] = {"no store relation", "no page", "filled", "schema gap", "empty below floor"};
+    std::map<std::pair<string, string>, std::pair<long, std::set<string>>> clusters;
+    long lad[8] = {};  // tags, complete, id consistent, question asks a store relation, relation right, entity right, slot right, real gap
+    std::ofstream dm;
+    if (!G.demand.empty()) {
+        dm.open(G.path + ".demand.tsv");
+        dm << "file\trow\tin_slice\tform\tlm\tcomplete\tid_consistent\treason\tentity\trelation\tgap\tentity_type\tlanded_on\tquestion_slot\trelation_right\tentity_right\treal_gap\n";
+    }
+    for (const string& path : G.demand) {
+        std::ifstream f(path);
+        string line, label = path.substr(path.rfind('/') == npos ? 0 : path.rfind('/') + 1);
+        std::getline(f, line);
+        vector<string> h = split(line, '\t');
+        const std::size_t ia = std::find(h.begin(), h.end(), "answer") - h.begin();
+        long rows = 0, tags = 0;
+        while (std::getline(f, line)) {
+            vector<string> c = split(line, '\t');
+            if (c.size() <= ia || c[0] != "dev") continue;  // dev only; other sets are skipped unread
+            ++rows;
+            const ecs::UnknownTag t = ecs::parse_unknown_tag(c[ia]);
+            if (!t.found) continue;
+            ++tags;
+            const int e = t.entity.empty() ? -1 : at(t.entity);
+            const string ty = tname(e < 0 ? -1 : type[e]);
+            const ecs::Gap* g = gm.add_demand(t, ty);
+            if (!t.relation.empty()) { auto& cl = clusters[{t.relation, ty}]; ++cl.first; cl.second.insert(norm_ent(t.entity)); }
+            int qe = -1, qs = 0;
+            bool rr = false, er = false, real = false;
+            vector<string> rels;
+            const std::size_t row = static_cast<std::size_t>(std::atol(c[1].c_str()));
+            if (row < devq.size()) {
+                const TqaQ& d = devq[row];
+                qs = qslot(d, qe, rels);
+                rr = std::find(rels.begin(), rels.end(), t.relation) != rels.end();
+                const string subj = d.in_slice ? d.title : (e1.count(d.q) ? e1[d.q] : "");
+                er = !t.entity.empty() && !subj.empty() && norm_ent(t.entity) == norm_ent(subj);
+                real = rr && er && (qs == 1 || qs == 3);
+            }
+            const long v[8] = {1, t.complete(), t.id_consistent(), qs != 0, rr, er, rr && er, real};
+            for (int k = 0; k < 8; ++k) lad[k] += v[k];
+            dm << label << '\t' << c[1] << '\t' << c[2] << '\t' << c[3] << '\t' << c[4] << '\t' << t.complete() << '\t' << t.id_consistent() << '\t' << t.reason << '\t'
+               << t.entity << '\t' << t.relation << '\t' << t.gap << '\t' << ty << '\t' << (g ? ecs::gap_kind_name(g->kind) : "none") << '\t'
+               << (row < devq.size() ? kQs[qs] : "") << '\t' << rr << '\t' << er << '\t' << real << '\n';
+        }
+        say("  DEMAND " + label + ": dev rows " + std::to_string(rows) + ", tags " + std::to_string(tags));
+    }
+    for (const ecs::Gap& g : gm.gaps())  // a demand gap no rung can fill (no kept pattern for its relation, or no page) is parked
+        if (g.kind == ecs::GapKind::Demand && (rel_index(g.relation) < 0 || !(kept & bit(rel_index(g.relation))) || at(g.entity) < 0))
+            gm.find(g.kind, g.entity, g.relation)->status = ecs::GapStatus::Parked;
+    ecs::VoiConfig vc;
+    vc.demand_weight = G.demand_weight;
+    gm.score(vc);
+    // Outputs.
+    std::ofstream out(G.path);
+    out << "gap_id\tkind\tstatus\tentity\ttype\trelation\tp_exists\tf_store\tf_wd\tp\teig_bits\tdemand\tvoi\tnote\n";
+    for (const ecs::Gap* g : gm.ranked()) {
+        const int r = rel_index(g->relation);
+        const int t = std::find(kT, kT + 4, g->type) - kT;
+        const bool c = r >= 0 && t < 4;
+        std::snprintf(b, sizeof b, "\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%d\t%.4f\t", g->p_exists, c ? rate(cell[t * kNRel + r], 0) : -1.0,
+                      c ? rate(cell[t * kNRel + r], 1) : -1.0, g->p, g->eig, g->demand, g->voi);
+        out << g->id << '\t' << ecs::gap_kind_name(g->kind) << '\t' << ecs::gap_status_name(g->status) << '\t' << g->entity << '\t' << g->type << '\t' << g->relation << b << g->note << '\n';
+    }
+    std::ofstream co(G.path + ".cells.tsv");
+    co << "type\trelation\tentities\twith_store\tf_store\twd_entities\twith_wd\tf_wd\twd_empty_slots\twith_wd_empty\tf_wd_empty\tp_exists\tkept_pattern\tschema_gaps\n";
+    std::map<std::pair<int, int>, long> gaps_tr;
+    std::map<string, long> kind_n, status_n, rel_n, ids;
+    for (const ecs::Gap& g : gm.gaps()) {
+        ++kind_n[ecs::gap_kind_name(g.kind)];
+        ++status_n[string(ecs::gap_kind_name(g.kind)) + " " + ecs::gap_status_name(g.status)];
+        ++ids[g.id];
+        if (g.kind == ecs::GapKind::Schema) { ++rel_n[g.relation]; ++gaps_tr[{static_cast<int>(std::find(kT, kT + 4, g.type) - kT), rel_index(g.relation)}]; }
+    }
+    for (int t = 0; t < 4; ++t)
+        for (int r = 0; r < kNRel; ++r) {
+            const C& c = cell[t * kNRel + r];
+            std::snprintf(b, sizeof b, "%s\t%s\t%ld\t%ld\t%.4f\t%ld\t%ld\t%.4f\t%ld\t%ld\t%.4f\t%.4f\t%d\t%ld", kT[t], kRel[r].name, c.n[0], c.w[0], rate(c, 0), c.n[1], c.w[1],
+                          rate(c, 1), c.n[2], c.w[2], rate(c, 2), pex(t, r), (kept & bit(r)) ? 1 : 0, gaps_tr[{t, r}]);
+            co << b << '\n';
+        }
+    // Summary.
+    long tn[4] = {};
+    for (int t : type) ++tn[t];
+    std::snprintf(b, sizeof b, "\nGAPMAP %s: entities %zu (country %ld, person %ld, place %ld, other %ld); gaps %zu; P(exists) floor %.2f", G.path.c_str(), N, tn[0], tn[1], tn[2], tn[3], gm.size(), G.floor);
+    say(b);
+    for (auto& [k, v] : kind_n) say("  GAPKIND " + k + " " + std::to_string(v));
+    for (auto& [k, v] : status_n) say("  GAPSTATUS " + k + " " + std::to_string(v));
+    for (auto& [k, v] : rel_n) say("  GAPREL " + k + " " + std::to_string(v));
+    for (double fl : {0.05, 0.10, 0.20, 0.50, 0.80}) {  // listed schema gaps; on the held-out fifth, how many Wikidata confirms
+        long n = 0, ng = 0, nc = 0;
+        double sp = 0;
+        for (const ecs::Gap& g : gm.gaps()) {
+            if (g.kind != ecs::GapKind::Schema || g.p_exists < fl) continue;
+            ++n;
+            sp += g.p_exists;
+            const int e = at(g.entity), r = rel_index(g.relation);
+            if (e < 0 || !wd_gold_subject(ent[e]) || !(wd_rel & bit(r))) continue;
+            ++ng;
+            nc += (wd[e] & bit(r)) != 0;
+        }
+        std::snprintf(b, sizeof b, "  GAPFLOOR %.2f schema %ld, sum P(exists) %.0f; held-out fifth %ld, Wikidata has a value %ld (%.3f)", fl, n, sp, ng, nc, ng ? static_cast<double>(nc) / ng : 0.0);
+        say(b);
+    }
+    long shared = 0;
+    for (const ecs::Gap& g : gm.gaps()) shared += ids[g.id] > 1;
+    say("  GAPID 16-bit ids: distinct " + std::to_string(ids.size()) + ", gaps sharing an id " + std::to_string(shared));
+    say("  CONTRADICTION slots " + std::to_string(kind_n["contradiction"]) + ", values Contested by d >= 0.5: " + std::to_string(contested_d) +
+        "; seed-only conflicting slots (functional relations, upper bound) " + std::to_string(seed_conf.size()));
+    for (auto& [k, v] : states) say("  STORED_STATE " + k + " " + std::to_string(v));
+    for (auto& [k, v] : clusters) say("  DEMAND_CLUSTER " + k.first + " " + k.second + " demand " + std::to_string(v.first) + " entities " + std::to_string(v.second.size()));
+    if (!G.demand.empty()) {
+        std::snprintf(b, sizeof b, "  GRADE tags %ld complete %ld id_consistent %ld | question asks a store relation %ld relation_right %ld entity_right %ld slot_right %ld real_gap %ld",
+                      lad[0], lad[1], lad[2], lad[3], lad[4], lad[5], lad[6], lad[7]);
+        say(b);
+    }
+    long qn[2][5] = {};
+    for (const TqaQ& d : devq) { int e; vector<string> rels; ++qn[d.in_slice ? 1 : 0][qslot(d, e, rels)]; }
+    for (int k = 0; k < 5 && !devq.empty(); ++k) say(string("  QSLOT ") + kQs[k] + ": in-slice " + std::to_string(qn[1][k]) + ", not in slice " + std::to_string(qn[0][k]));
+    std::map<string, int> top[2];  // [0] all gaps, [1] P1's queue: gaps a rung can fill now (not parked)
+    int k[2] = {};
+    for (const ecs::Gap* g : gm.ranked())
+        for (int q = 0; q < 2; ++q) {
+            if (q && g->status == ecs::GapStatus::Parked) continue;
+            if (k[q] < 100) ++top[q][ecs::gap_kind_name(g->kind)];
+            if (q && k[q] < 15) {
+                std::snprintf(b, sizeof b, "  TOPQ %2d %s %-13s %-7s %s | %s (%s) p %.3f eig %.3f demand %d voi %.3f %s", k[q] + 1, g->id.c_str(), ecs::gap_kind_name(g->kind),
+                              ecs::gap_status_name(g->status), g->relation.c_str(), g->entity.c_str(), g->type.c_str(), g->p, g->eig, g->demand, g->voi, g->note.c_str());
+                say(b);
+            }
+            ++k[q];
+        }
+    for (int q = 0; q < 2; ++q)
+        for (auto& [kk, v] : top[q]) say(string(q ? "  TOP100_QUEUE " : "  TOP100_ALL ") + kk + " " + std::to_string(v));
+}
+
 struct Args {
     string enwik, outdir;
     int folds = 5;
@@ -2415,6 +2727,7 @@ struct Args {
     bool wd_gold_only = false;  // all Wikidata values only score (to check a run without Wikidata seeds)
     ShardOpt shard;
     string reach;               // F2R: the E1 parse file for --reach (with --dev)
+    GapOpt gaps;                // S3: --gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F]
 };
 
 }  // namespace
@@ -2429,7 +2742,7 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: pattern_learn <enwik8> <outdir> [--folds K] [--cv] [--min-train N] [--sample N] [--seed S] [--base-rate A]\n"
                              "         [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
-                             "         [--raw] [--join FACTS] [--reach PARSE]\n"
+                             "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
@@ -2458,6 +2771,11 @@ int main(int argc, char** argv) {
         else if (a == "--raw") g_raw = true;
         else if (a == "--reach" && i + 1 < argc) A.reach = argv[++i];
         else if (a == "--join" && i + 1 < argc) A.shard.join = argv[++i];
+        else if (a == "--gaps" && i + 1 < argc) A.gaps.path = argv[++i];
+        else if (a == "--demand" && i + 1 < argc) A.gaps.demand = split(argv[++i], ',');
+        else if (a == "--parse" && i + 1 < argc) A.gaps.parse = argv[++i];
+        else if (a == "--gap-floor" && i + 1 < argc) A.gaps.floor = std::atof(argv[++i]);
+        else if (a == "--demand-weight" && i + 1 < argc) A.gaps.demand_weight = std::atof(argv[++i]);
     }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
     if (!A.shard.join.empty() && A.shard.path.empty()) { std::fprintf(stderr, "--join needs --shard\n"); return 2; }
@@ -2702,6 +3020,7 @@ int main(int argc, char** argv) {
     string shard_text;
     int exit_code = A.shard.path.empty() ? 0 : write_shard(A.shard, fused, pages, page_of, say, &shard_text);
     if (!A.reach.empty()) reach_report(cand_all, data, A.shard.holdout_from, A.shard.dev, A.reach, shard_text, say);
+    if (!A.gaps.path.empty()) write_gaps(A.gaps, A.shard.dev, pages, fused, say);
     std::snprintf(buf, sizeof buf, "\nrun time %.1f s, peak RAM %.0f MB, facts written %s/facts_f2.tsv", now_s() - t0, peak_mb(), A.outdir.c_str());
     say(buf);
     std::ofstream(A.outdir + "/stats.txt") << rep.str();

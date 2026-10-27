@@ -150,6 +150,7 @@ struct VoiConfig {
   double sensitivity = 0.9;
   double specificity = 0.9;
   double cost = 1.0;
+  double demand_weight = 1.0;  // Impact = weight x demand; below 1 when tags are known to name the wrong slot
 };
 
 class GapMap {
@@ -199,11 +200,11 @@ class GapMap {
     return g;
   }
 
-  /// 6.3 for every gap: EIG of the placeholder test on the gap's p, Impact = demand, I+ = 0, priority = VOI.
+  /// 6.3 for every gap: EIG of the placeholder test on the gap's p, Impact = weight x demand, I+ = 0, priority = VOI.
   void score(const VoiConfig& c = {}) {
     for (Gap& g : gaps_) {
       g.eig = expected_information_gain(g.p, c.sensitivity, c.specificity).eig;
-      g.impact = g.demand;
+      g.impact = c.demand_weight * g.demand;
       g.cost = c.cost;
       g.voi = voi_priority(g.eig, g.impact, 0.0, g.cost);
     }
