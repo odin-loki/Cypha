@@ -25,3 +25,37 @@ Settings (tail length, class table) are chosen on the protocol holdout; only the
 | L3 | S-1b's k-means word classes (256 or 1,024) beat shape classes by −0.00 to −0.02 BPC on fresh text, no more than the E1 tags do (−0.013) |
 | L4 | Tags × word classes (one product table) beat the better single table by less than 0.005 BPC |
 | L5 | The copy expert raises surface S less than the class expert does (S counts real words, and copying repeats words the document already has, which the loop term L can penalise) |
+
+---
+
+## Results, first read (run 2026-10-28)
+
+Wiki-only `bpc` model (train bytes only). Class expert and copy expert as in B4 and A1c; mixing order trie → InfiniGram → class → copy, each lambda set fit over the distribution it is mixed into. Holdout: lambdas on the first half, read on the second. Fresh text `[8388608, 9437184)`: lambdas on the whole holdout, read once. Intervals: 4 KiB block bootstrap (2,000 / 4,000 resamples). Surface S: B4's protocol (200 prompts, trie base, no InfiniGram).
+
+| Model | Holdout BPC | Fresh BPC | Fresh gain over trie + IG (95%) | Surface S | S change over trie (95%) |
+|---|---:|---:|---|---:|---|
+| trie | 2.278066 | 2.367826 | | 0.7612 | |
+| trie + IG | 2.072500 | 2.166032 | | | |
+| + class (shape:6) | 1.998603 | 2.087926 | −0.0781 [−0.0810, −0.0751] | 0.9052 | +0.1440 [+0.1341, +0.1538] |
+| + class (E1 tags:6) | 1.982232 | 2.075081 | −0.0910 [−0.0939, −0.0879] | 0.8766 | +0.1154 [+0.1052, +0.1256] |
+| + copy | 1.922956 | **1.934289** | −0.2317 [−0.2713, −0.1957] | 0.7086 | **−0.0526 [−0.0654, −0.0402]** |
+| + class (shape) + copy | 1.859114 | 1.869297 | −0.2967 [−0.3363, −0.2613] | 0.8398 | +0.0786 [+0.0656, +0.0910] |
+| + class (tags) + copy | 1.844656 | **1.857687** | −0.3083 [−0.3469, −0.2738] | 0.8475 | +0.0862 [+0.0742, +0.0977] |
+
+- **They stack.** On fresh text, class (shape) + copy gains 96% of the sum of the single gains (−0.297 against −0.310); with tags, 95%.
+- **Copy lowers surface S**, alone (−0.053) and on top of the class expert (−0.065 shape, −0.029 tags). Its samples are full of word fragments: *"Chan the [[salty, Alabama prote and othere early also a famous legal [[parland is fall internich's…"*. In generated text, short matches inside the model's own output are unreliable, while in real text they are mostly repeated words.
+- **Copy on fresh text is worth far more than on the holdout's second half** (−0.232 against −0.150): the fresh megabyte has more repetition inside its articles.
+- Peak RSS of the whole harness: 305 MB (shape), 341 MB (tags).
+
+**Predictions:** L1 (stacking 70–100%) **hit**: 96% and 95%. L2 (both together 1.95–2.03 on fresh text) **miss**: 1.869 / 1.858, better than predicted, because copy's fresh gain was underestimated. L5 (copy raises S less than class) **miss**: copy lowers S.
+
+**By the decision rule, copy as it is cannot be a default** (rule 2: S falls). The class expert with shape classes passes rules 1 and 2; rule 3 is read below. Tags pass rule 1 but fail rule 2 against shape classes (S −0.029, B4).
+
+### Variant: copy only on long matches (registered before the run)
+
+In real text, a long match inside the document is almost always a true repeat; in generated text, short matches are what produce fragments. So the copy expert is tried with its lambda forced to 0 below a minimum match length m (its other lambdas as fit).
+
+| # | Prediction |
+|---|---|
+| L6 | With m = 8, copy keeps at least 70% of its fresh-text BPC gain on top of the class expert (shape), and surface S no longer falls (the interval of the change over class alone includes 0 or is above it) |
+| L7 | With m = 12 or 16, S does not fall and at least 50% of the gain is kept; m = 6 still lowers S |
