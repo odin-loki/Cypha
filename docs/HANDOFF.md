@@ -131,7 +131,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 
 ### 4.4 CTests
 
-These four run on every change:
+Run these on every change:
 - `native_thought_test`
 - `native_geometry_test`
 - `native_cyphalm_trie_selftest`
