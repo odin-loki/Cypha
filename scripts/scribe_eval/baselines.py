@@ -17,7 +17,8 @@ Subcommands (families)
   stats      distinct-1..4, rep-2/3/4, seq-rep-4, diversity, type-token ratio,
              gzip ratio, mean word length, word/byte/sentence counts. Pure Python.
   ppl        GPT-2 perplexity (--model gpt2 or gpt2-large), and the perplexity
-             of the text given its prompt (ppl_cond) when a prompt exists.
+             of the text given its prompt (ppl_cond) when a prompt exists
+             (--no-cond skips it). --max-len 257 scores the first 256 text tokens.
   cola       RoBERTa CoLA classifier, P(acceptable) per sentence: mean and min.
   coherence  all-MiniLM-L6-v2 sentence cosines: adjacent, all pairs, prompt-text.
   detector   OpenAI GPT-2 output detector (RoBERTa base), P(real) per text.
@@ -308,7 +309,7 @@ def cmd_ppl(args):
         ids = full[: max_len - 1]
         r["_ids"], r["_trunc"] = ids, len(full) > len(ids)
         r["_ctx"] = None
-        if r.get("prompt") and ids:
+        if r.get("prompt") and ids and not args.no_cond:
             room = max_len - 1 - len(ids)
             ctx = tok(joiner(r["prompt"], r["text"])).input_ids
             r["_ctx"] = ctx[-room:] if room > 0 else []
@@ -370,7 +371,9 @@ def cmd_ppl(args):
     meta = {"model": model_id, "revision": hf_revision(model_id), "dtype": "float32",
             "max_len": max_len, "bos": "<|endoftext|> prepended; every text token scored",
             "nll": "mean token NLL in nats; ppl = exp(nll)",
-            "cond": f"[eos] + prompt tail + text tokens, joiner={args.cond_joiner}; only text tokens scored",
+            "cond": "not computed (--no-cond)" if args.no_cond else
+                    f"[eos] + prompt tail + text tokens, joiner={args.cond_joiner}; only text tokens scored",
+            "text_tokens_max": max_len - 1,
             "max_batch_tokens": args.max_batch_tokens}
     run_family(args, f"ppl_{tag}", rows, setup, meta)
 
@@ -788,6 +791,7 @@ def main(argv=None):
     p = common(sub.add_parser("ppl", help="GPT-2 perplexity"), max_len=1024)
     p.add_argument("--model", default="gpt2", help="gpt2, gpt2-large or a Hugging Face id")
     p.add_argument("--cond-joiner", default="auto", choices=["auto", "none", "newline"])
+    p.add_argument("--no-cond", action="store_true", help="skip ppl_cond even when a prompt exists")
     p.set_defaults(func=cmd_ppl)
     p = common(sub.add_parser("cola", help="RoBERTa CoLA acceptability"), batch=64, tokens=8192, max_len=128)
     p.add_argument("--acceptable-label", type=int, default=1)
