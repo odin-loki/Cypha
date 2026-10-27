@@ -29,7 +29,7 @@ Machine: the cloud container, 4 shared cores (2 used, `nice -n 5`), 15 GB RAM. L
 | Probe set (QE2 inputs) | done (§6) |
 | Timing: `embedtexts --limit 1000` on 0.6B | done before the stop (§8) |
 | Static dissection of 0.6B: `vocab`, `embed`, token-matrix geometry, `spectra`, `heads`, `neurons`, `wdiff` against the base and the instruct model | done (§5) |
-| Static dissection of 8B | see §5.8 |
+| Static dissection of 8B: `info`, `embed`, token-matrix geometry, `neurons`, `heads` and `spectra` (layer subsets), `wdiff` against Qwen3-8B-Base | done (§5.8) |
 | QE2 probe vectors, QE3 `geometry`, `sensitivity`, `occlusion`, `instruct`, 8B timing, 0.6B against 8B | **not run: Odin's PC** (§9) |
 | QE4 `pairs` with Qwen3.5-9B; teacher Q/A text | not started (next wave; Odin's PC) |
 
@@ -94,7 +94,7 @@ The Qwen team publishes no base-model GGUF for Qwen3-0.6B, so the base is mrader
 2. **`wdiff` skipped vocabulary matrices padded to another size.** The embedder's `token_embd` has 151,669 rows and the base's has 151,936. `wdiff` reported a shape mismatch. Now it compares the shared rows when both token lists agree on them.
 3. **`spectra` copied a whole tensor to float64 before sampling rows.** For the 8B vocabulary matrix that is 5 GB on top of 2.5 GB. It now samples first. The same random rows are drawn, so the output is unchanged.
 
-The self-test passes all 50 rows on both vocabularies after these fixes (§10).
+The self-test passes all 50 rows on both vocabularies after these fixes (§11). It builds tiny random models, not Qwen ones.
 
 ### 4.2 Not a bug, but a cost
 
@@ -241,7 +241,9 @@ Same commands, with layer subsets where the cost scales with vocabulary × width
 - Five heads copy perfectly (copy@1 = 1.0): layer 9 heads 14 and 15, layer 18 head 19, layer 35 heads 5 and 19.
 - Copying heads are denser than in the 0.6B: 13% of the sampled heads against 5% of all 448.
 
-SPECTRA8B_PLACEHOLDER
+**Spectra** (layers 0, 9, 18, 27 and 35 plus `token_embd`, 36 matrices, 8 minutes). The median heavy-tail α is 4.56, and 75% of the matrices lie in the 2–6 band (0.6B embedder: 5.01 and 72%). By type: attn_q 3.44, attn_k 4.07, ffn_gate 4.17, attn_output 4.30, ffn_down 4.58, ffn_up 6.00, attn_v 6.46, token_embd 4.73. As in the 0.6B, the query and key projections have the heaviest tails and attn_v and ffn_up the lightest.
+
+WDIFF8B_PLACEHOLDER
 
 ## 6. QE2: the probe set
 
