@@ -395,6 +395,8 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 
 ### Track C: semantics from statistics (the encoders)
 
+**Design: [`SEMANTICS.md`](SEMANTICS.md)** (2026-10-27). Core Cypha becomes the meaning layer: words and concepts as classes, contexts as observations. Its Gaussians, natural-gradient and contrastive updates, MDL shrinkage and uncertainty learn embeddings, directional is-a relations, relation maps with abstention, and senses. These feed CyphaLM as a class-context expert and a similar-context expert. Experiments S-1 to S-6 and their gates are there; the rows below stay as baselines.
+
 | ID | Work | Measure | Gate |
 |---|---|---|---|
 | C0 | **Fair baselines first.** TF-IDF with `W_enc` frozen (the 34% ran with it learning); plain TF-IDF + logistic regression; the native hashing router (`branch_a_router.hpp`, 16–19%). MiniLM 62.5% is the external yardstick | T-topic (20NG at 2k, same protocol) | Recorded |
@@ -914,6 +916,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 46 | Do the speculative thinking now: know what it knows, know what it doesn't, think hard on discovery, map out the discovery processes | [`DISCOVERY.md`](DISCOVERY.md); Track S |
 | 47 | Model human thought and work processes across many categories (UML/processes) as "thought" for Cypha, done mathematically with its online learning and statistical feedback | Track K; [`THOUGHT.md`](THOUGHT.md); [`thought/processes.yaml`](thought/processes.yaml) |
 | 48 | Cut and merge tools to the minimal and best (keep `gguf_mine.py`); plan to profile the tagger, pattern learner and word vectors with other tools to see what makes the cut | Code-debt cuts (changelog); B1; [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md) |
+| 49 | Get vectors and statistical association into Cypha, extract them from a trained LLM, and reinterpret Core Cypha | Track C; [`SEMANTICS.md`](SEMANTICS.md); experiment S-1 |
 
 ---
 

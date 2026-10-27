@@ -63,6 +63,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - train CyphaLM on it;
   - parse emitted tags into the gap map;
   - score abstain recall and precision, and reason-code accuracy.
+- [ ] **Semantics S-1 to S-6** ([`docs/SEMANTICS.md`](docs/SEMANTICS.md)): Core Cypha as the meaning layer. S-1 "words as classes" is running.
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
   1. Build the CyphaLM Q/A baseline harness.
   2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.
