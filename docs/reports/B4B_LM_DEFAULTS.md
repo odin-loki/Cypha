@@ -92,3 +92,11 @@ The word classes are S-1b's k-means classes over Cypha's own learned vectors (50
 - **Tags help BPC but cost S**; product tables are worse than tags alone on both.
 - **Predictions:** L3 (k-means beat shape by 0.00–0.02) **miss**: they are worse or level. L4 (a product beats the better single table by under 0.005) **hit**: it does not beat it at all.
 - **Decision (rules 1–2): the default table is shape classes only** (no table). Tags and word classes fail rule 2. This is also the tool-profile result for the tagger's and the word vectors' class-context adapters (see TOOL_PROFILE_P2_GRID).
+
+### Variant: the copy expert's window (registered before the run)
+
+The copy expert looks back 4,096 bytes. Articles are longer than that, so a longer window may find more true repeats. Tried with m = 8 and the class expert (shape:6), windows 4,096, 8,192 and 16,384 bytes (the search is linear in the window, so the cost grows with it).
+
+| # | Prediction |
+|---|---|
+| L8 | A 16,384-byte window adds at most 0.02 BPC of gain over 4,096 on fresh text, and surface S does not change (generated texts are 400 bytes, inside any window) |
