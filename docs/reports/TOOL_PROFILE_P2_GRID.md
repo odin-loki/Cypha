@@ -40,3 +40,48 @@ From TOOL_PROFILE_PLAN §6, plus the ones the B4 result calls for:
 | G6 | **InfiniGram:** BPC −0.2 to −0.3; Q/A gains only where a fact's phrasing matches the question |
 | G7 | **Cypha gate:** no lower wrong rate at the same coverage than the best single-feature threshold gate (E4 found Cypha's text confidence badly calibrated) |
 | G8 | **Cuts:** the tagger fails §5.4 on BPC alone (it needs −0.014 for its 1,396 lines and gave −0.013 in B4); whether it stays depends on Q/A |
+
+---
+
+## Results, first grid (dev, 130 questions; run 2026-10-28)
+
+All runs: `cyphalm_trie qa` on the 8 MiB protocol, wiki then two Dolly passes, chat form shown (the wiki form answers nothing right in any run). "Kept" is the out-of-fold gate at a 2% wrong target (5-fold CV inside dev). BPC is the second half of the holdout, with InfiniGram and, where named, the class-context expert; its lambdas are fit on the first half. B0 and B0 + facts are the A0 and A2 runs (reproduced byte for byte, A2/A3 report).
+
+| Run | Expert | Fact shard | BPC trie | BPC trie + IG | Raw right (trie + IG) | Kept: right / wrong (coverage) | Wrong rate, Wilson upper |
+|---|---|---|---:|---:|---:|---|---:|
+| B0 | none | no | 2.319989 | 2.071574 | 2 | 0 / 0 (0.0%) | 2.9% |
+| B0 + facts | none | yes | 2.321002 | 2.072393 | 7 | 2 / 0 (1.5%) | 2.9% |
+| B | shape:6 | no | 2.133872 | 1.995847 | 2 | 0 / 0 (0.0%) | 2.9% |
+| B + tags | E1 tags:6 | no | 2.096562 | 1.973015 | 1 | 0 / 0 (0.0%) | 2.9% |
+| B + facts | shape:6 | yes | 2.134429 | 1.996357 | 6 | 2 / 1 (2.3%) | 4.2% |
+| B + tags + facts | E1 tags:6 | yes | 2.097419 | 1.973696 | 5 | 1 / 1 (1.5%) | 4.2% |
+
+The trie alone (no InfiniGram) gets 0 right raw in every run. The tag table here is E1's tags over wiki train and Dolly (49,536 words), because `qa` trains on both.
+
+**The Cypha gate** (`cypha_gate`, same rows, same 2% target, same folds), against `qa`'s threshold gate:
+
+| Rows | Threshold gate: right / wrong | Cypha gate: right / wrong | Cypha wrong rate (Wilson upper) |
+|---|---|---|---|
+| B0 + facts | 2 / 0 | 1 / 2 | 1.5% (5.4%) |
+| B + facts | 2 / 1 | 3 / 4 | 3.1% (7.6%) |
+| B + tags + facts | 1 / 1 | 1 / 3 | 2.3% (6.6%) |
+| B | 0 / 0 | 0 / 0 | 0.0% (2.9%) |
+
+### What the first grid says
+
+- **The class-context expert does not help answers.** It lowers BPC by 0.076 (shape) or 0.099 (tags) on this protocol and leaves coverage at 0 without facts. With facts it lets one extra wrong answer through the gate, which is inside the noise of 1–2 answers.
+- **The tags add BPC, not answers.** −0.0228 over shape classes on this protocol (−0.0128 on fresh text, B4). Q/A: 0 vs 0 without facts, 1/1 vs 2/1 with them.
+- **Facts are the only thing that adds right answers**, and only on the questions they cover (A2).
+- **InfiniGram is what makes any answer possible**: every right answer needs it.
+- **The Cypha gate is worse than a single-feature threshold** on every set: it keeps more wrong answers at the same target. With at most 7 right answers in 130, any learned gate is underpowered.
+
+### Predictions so far
+
+| # | Result | Score |
+|---|---|---|
+| G1 | B vs B0: coverage 0 → 0; BPC −0.076; surface S +0.144 (B4) | **Hit** |
+| G2 | Tags: BPC −0.0228 (this protocol), −0.0128 (fresh text); Q/A 0 without facts, −1 right with facts | **Hit** on BPC; Q/A inside 0 to +2 without facts, outside it with facts (−1) |
+| G4 | Facts: +2 right / +1 wrong over B (+1.5 per 100 at 2.3% coverage), BPC +0.0005 | **Hit** |
+| G6 | InfiniGram: BPC −0.248 on the trie; answers only with it | **Hit** |
+| G7 | Cypha gate no better than the threshold gate | **Hit** (worse on every set) |
+| G3, G5, G8 | Word classes, teacher text, the tagger cut | Waiting for S-1b's classes, Odin's PC, and the full grid |
