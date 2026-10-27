@@ -40,3 +40,20 @@ Of 2,592 settings of the combination's free parameters tried on both development
 4. **Categorical form and integrity.** Counting form and integrity only beyond a high human quantile, and coherence from the dead zone on, gave 4 of 5; the remaining conflict was between the size of the form penalty and the coherence signal inside word salad.
 5. **Context gain.** The word trigram's log-probability minus the word's unigram log-probability (and the same for the skeleton model) measures how much the context predicts each word. Rare-topic human text keeps that gain, word salad loses it. Shuffled words moved from a median bad-side z of 3.1–3.5 (raw log-probability) to 6.8–8.8, with none inside the human 99.5th percentile.
 6. **Two form failures.** Once syntax saturates, real words and non-words got the same penalty. Lexical validity (s1) and syntax (s2g, s3g, s4) became separate saturating failures. That passes all five pairs on both ladders, robustly.
+
+## Fresh verdict (read once, 2026-10-28)
+
+enwik8 [72, 95.37) MiB, seed 1123581321, 500 standard human samples from 2,409 candidates, the frozen v2 above, same pack and reference. Command: `scribe ladder --pack enwik:enwik8:16:48 --ref enwik:enwik8:48:56 --test enwik:enwik8:72:95.37 --vectors v32 --profile v2 --seed 1123581321 --gen-trie gen_fresh.txt --label wiki_fresh --export wiki_fresh` (20 s, 415 MB peak).
+
+| Upper > lower | SCRIBE v2 | SCRIBE v1 | surface S |
+|---|---|---|---|
+| human > sentences shuffled | **0.975 PASS** | 0.888 | 0.627 |
+| sentences shuffled > words shuffled | **0.999 PASS** | 0.806 | 0.341 |
+| words shuffled > random lexicon words | **0.998 PASS** | 0.696 | 0.750 |
+| random lexicon words > random letters | **0.998 PASS** | 1.000 PASS | 1.000 PASS |
+| random letters > one phrase repeated | **1.000 PASS** | 0.999 PASS | 0.559 |
+| **pairs passed** | **5 of 5** | 2 of 5 | 1 of 5 |
+
+All v2 intervals are disjoint. Rung means (SCRIBE v2, 95% interval): human 0.916 [0.902, 0.930]; sentences shuffled 0.354 [0.341, 0.366]; words shuffled 0.003; random lexicon words 0.001; random letters 0.000 (mean D 53.5); one phrase repeated 0.000 (mean D 305.8). Trie samples 0.017 [0.012, 0.024], between words shuffled and random letters. Short human samples 0.954, standard 0.916.
+
+V4 on this ladder: Pearson of SCRIBE with bytes 0.009 (standard), 0.041 (short), −0.124 pooled (Spearman 0.010 pooled): short samples score a little higher than standard ones.
