@@ -2708,16 +2708,25 @@ def cmd_wdiff(args) -> None:
     names = [t.name for t in ra.tensors if t.name in tb and (not pat or pat.search(t.name))]
     only = {"model_only": sorted(set(ta) - set(tb)), "base_only": sorted(set(tb) - set(ta))}
     rows, layers = [], collections.defaultdict(lambda: [0.0, 0.0, [], 0])
+    vocab_a, vocab_b = meta(ra, "tokenizer.ggml.tokens", None), meta(rb, "tokenizer.ggml.tokens", None)
     for nm in names:
         Wa, Wb = dequant(ta[nm]), dequant(tb[nm])
-        if Wa.shape != Wb.shape:
-            rows.append((nm, "x".join(map(str, Wa.shape)) + " vs " + "x".join(map(str, Wb.shape)), *([float("nan")] * 7), "", "shape mismatch"))
-            continue
         note = ""
+        if Wa.shape != Wb.shape:
+            # A vocabulary matrix padded to another size (Qwen3-Embedding 151,669 rows, Qwen3 base 151,936):
+            # compare the shared rows when both token lists agree on them.
+            n = min(Wa.shape[0], Wb.shape[0])
+            if (Wa.ndim == 2 and Wa.shape[1:] == Wb.shape[1:] and vocab_a is not None and vocab_b is not None
+                    and n <= min(len(vocab_a), len(vocab_b)) and list(vocab_a[:n]) == list(vocab_b[:n])):
+                note = f"first {n} rows ({Wa.shape[0]} vs {Wb.shape[0]}; vocabularies agree on them)"
+                Wa, Wb = Wa[:n], Wb[:n]
+            else:
+                rows.append((nm, "x".join(map(str, Wa.shape)) + " vs " + "x".join(map(str, Wb.shape)), *([float("nan")] * 7), "", "shape mismatch"))
+                continue
         if Wa.ndim == 2 and args.max_rows and Wa.shape[0] > args.max_rows:
             sel = np.sort(rng.choice(Wa.shape[0], args.max_rows, replace=False))
             Wa, Wb = Wa[sel], Wb[sel]
-            note = f"rows sampled to {args.max_rows}"
+            note = "; ".join(x for x in (note, f"rows sampled to {args.max_rows}") if x)
         s = delta_stats(Wa, Wb, rng, args.max_full, args.top_frac, args.iters)
         rows.append((nm, "x".join(map(str, Wa.shape)), s["fro"], s["base_fro"], s["rel"], s["top_share"], s["sigma_max"],
                      s["stable_rank"], s["esd_alpha"], s["method"], note))

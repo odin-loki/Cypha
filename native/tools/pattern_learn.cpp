@@ -117,20 +117,32 @@ string fold_ascii(const string& s) {
     }
     return o;
 }
-// Normal form of an entity string for matching: folded, lower case, no "(qualifier)", alnum words, no leading "the".
-string norm_ent(const string& in) {
-    string s = fold_ascii(in);
-    std::size_t p = s.find(" (");
-    if (p != npos && p > 0) s = s.substr(0, p);
+// Normal form of a question: folded, lower case, alnum words (punctuation stripped).
+string norm_q(const string& in) {
     string o;
     bool sp = true;
-    for (unsigned char c : s) {
+    for (unsigned char c : fold_ascii(in)) {
         if (std::isalnum(c) || c >= 0x80) { o += static_cast<char>(std::tolower(c)); sp = false; }
         else if (!sp) { o += ' '; sp = true; }
     }
     while (!o.empty() && o.back() == ' ') o.pop_back();
+    return o;
+}
+// Normal form of an entity string for matching: norm_q with no "(qualifier)" and no leading "the".
+string norm_ent(const string& in) {
+    std::size_t p = in.find(" (");
+    string o = norm_q(p != npos && p > 0 ? in.substr(0, p) : in);
     if (o.compare(0, 4, "the ") == 0) o.erase(0, 4);
     return o;
+}
+vector<string> split(const string& s, char d) {
+    vector<string> out;
+    for (std::size_t a = 0;;) {
+        std::size_t b = s.find(d, a);
+        out.push_back(s.substr(a, b == npos ? npos : b - a));
+        if (b == npos) return out;
+        a = b + 1;
+    }
 }
 std::uint64_t fnv(const string& s) {
     std::uint64_t h = 1469598103934665603ULL;
@@ -577,7 +589,7 @@ const RelDef kRel[] = {
     {"publisher", T_NAME, 0.60, true},      {"owner", T_NAME, 0.80, true},               {"genre", T_LEX, 0.10, true},
     {"language", T_LEX, 0.20, true},        {"currency", T_LEX, 0.90, false},            {"occupation", T_LEX, 0.10, true},
     {"nationality", T_LEX, 0.50, true},     {"party", T_LEX, 0.50, true},                {"family", T_LEX, 0.95, false},
-    {"order", T_LEX, 0.95, false},          {"class", T_LEX, 0.95, false}};
+    {"order", T_LEX, 0.95, false},          {"class", T_LEX, 0.95, false},           {"inventor", T_PERSON, 0.50, true}};
 constexpr int kNRel = static_cast<int>(sizeof(kRel) / sizeof(kRel[0]));
 int rel_index(const string& n) {
     for (int i = 0; i < kNRel; ++i) if (n == kRel[i].name) return i;
@@ -940,16 +952,16 @@ string family_of(const string& key) {
 namespace {
 
 // ============================================================ seeds (pass 1)
-struct Obj { string surf, k1, k2, k3; Date d; };
+struct Obj { string surf, k1, k2, k3; Date d; vector<string> alt; };  // alt: more surface keys (Wikidata aliases)
 struct Seed {
     string subj;
     int rel = 0;
     Obj o;
-    int src = 0;  // 0 infobox/template, 1 wiki table, 2 category
+    int src = 0;  // 0 infobox/template, 1 wiki table, 2 category, 3 Wikidata (distant supervision only: never a fact)
     string tpl;
     std::uint64_t off = 0;
 };
-const char* const kSrcName[3] = {"infobox", "table", "category"};
+const char* const kSrcName[4] = {"infobox", "table", "category", "wikidata"};
 
 vector<Seed> g_seeds;
 std::unordered_map<string, vector<int>> g_by_subj;  // page title -> indices into g_seeds
@@ -1247,9 +1259,18 @@ void scan_page(const string& data, const PageRef& pg, PageFlags& fl) {
         int delta = count_of(nc, "{{") - count_of(nc, "}}");
         std::uint64_t off = pg.tb + pos;
         bool starts_tpl = t.compare(0, 2, "{{") == 0;
-        if (depth == 0 && starts_tpl) {
-            std::size_t e = nc.find('|', nc.find("{{") + 2);
-            string nm = nc.substr(nc.find("{{") + 2, e == npos ? npos : e - nc.find("{{") - 2);
+        std::size_t open_at = starts_tpl ? nc.find("{{") : npos;
+        if (!starts_tpl && delta > 0) {  // "* {{Book reference |" left open mid-line: name it, so its fields are not read under a stale name
+            vector<std::size_t> st;
+            for (std::size_t q = 0; q + 1 < nc.size(); ++q) {
+                if (nc.compare(q, 2, "{{") == 0) st.push_back(q++);
+                else if (nc.compare(q, 2, "}}") == 0 && !st.empty()) { st.pop_back(); ++q; }
+            }
+            if (!st.empty()) open_at = st.front();
+        }
+        if (depth == 0 && open_at != npos) {
+            std::size_t e = nc.find('|', open_at + 2);
+            string nm = nc.substr(open_at + 2, e == npos ? npos : e - open_at - 2);
             std::size_t cl = nm.find("}}");
             if (cl != npos) nm = nm.substr(0, cl);
             nm = trim(nm);
@@ -1350,9 +1371,11 @@ bool heldout(const string& subj, int K, int fold) { return static_cast<int>((fnv
 bool obj_matches(int r, const Cand& c, const Obj& o) {
     if (kRel[r].type == T_DATE) return c.kind == K_DATE && date_compat(c.d, o.d);
     if (kRel[r].type == T_YEAR) return c.kind == K_DATE && c.d.ok() && c.d.y == o.d.y;
-    for (const string* a : {&c.k1, &c.k2, &c.k3})
-        for (const string* b : {&o.k1, &o.k2, &o.k3})
-            if (!a->empty() && *a == *b) return true;
+    for (const string* a : {&c.k1, &c.k2, &c.k3}) {
+        if (a->empty()) continue;
+        for (const string* b : {&o.k1, &o.k2, &o.k3}) if (*a == *b) return true;
+        for (const string& b : o.alt) if (*a == b) return true;
+    }
     return false;
 }
 // Place -> parents from the located_in seeds ("Detroit" -> "Michigan"). Used only to score patterns against coarse gold.
@@ -1364,6 +1387,7 @@ bool obj_consistent(int r, const Cand& c, const Obj& o) {
         auto it = g_loc.find(*a);
         if (it == g_loc.end()) continue;
         for (const string* b : {&o.k1, &o.k2, &o.k3}) if (!b->empty() && it->second.count(*b)) return true;
+        for (const string& b : o.alt) if (it->second.count(b)) return true;
     }
     return false;
 }
@@ -1510,7 +1534,7 @@ void extract_page(const string& data, const PageRef& pg) {
             if (sit != g_by_subj.end())
                 for (int si : sit->second) {
                     const Seed& sd = g_seeds[static_cast<std::size_t>(si)];
-                    if (sd.rel == p.rel && obj_matches(p.rel, c, sd.o)) return;  // already a seed
+                    if (sd.src < 3 && sd.rel == p.rel && obj_matches(p.rel, c, sd.o)) return;  // already a text seed
                 }
             string fk = pg.title + "\x1f" + std::to_string(p.rel) + "\x1f" + obj_key(p.rel, c);
             FactAcc& f = g_new[fk];
@@ -1587,6 +1611,7 @@ vector<Fused> fuse_all() {
             if (sit != g_by_subj.end()) {
                 for (int si : sit->second) {
                     const Seed& sd = g_seeds[static_cast<std::size_t>(si)];
+                    if (sd.src == 3) continue;  // Wikidata values never vote on a fact
                     if (sd.rel == r) {
                         bool compat = is_datey(r) ? (kRel[r].type == T_YEAR ? sd.o.d.y == f.d.y : date_compat(sd.o.d, f.d)) : sd.o.k1 == f.okey || sd.o.k2 == f.okey;
                         if (!compat) {
@@ -1678,6 +1703,276 @@ vector<PageRef> list_pages(const string& data, long& total, long& redirects) {
     return out;
 }
 
+// ============================================================ D4: Wikidata values (distant supervision only)
+// Row: subject title \t relation \t surface|surface|... (label, enwiki title, aliases; dates YYYY-MM-DD, "Month YYYY", YYYY or
+// "N BC") \t subject item \t value item. Subjects in the gold fifth (by hash) are never seeds: their values only score new facts.
+// A Wikidata value is never a fact: it can only choose and check patterns (and widen the type lexicons).
+std::unordered_map<string, vector<Obj>> g_gold;  // subject \x1f relation -> Wikidata values used only for scoring
+bool wd_gold_subject(const string& subj) { return (fnv(subj) >> 40) % 5 == 0; }
+bool load_wikidata(const string& path, bool gold_only, const std::unordered_map<string, int>& page_of, long& n_seed, long& n_gold) {
+    std::ifstream f(path);
+    string line;
+    if (!f) return false;
+    while (std::getline(f, line)) {
+        vector<string> c = split(line, '\t');
+        int r = c.size() >= 3 ? rel_index(c[1]) : -1;
+        if (r < 0 || !page_of.count(c[0])) continue;
+        vector<string> sf = split(c[2], '|');
+        Obj o;
+        o.surf = sf[0];
+        if (is_datey(r)) {
+            o.d = parse_date_str(sf[0]);
+            if (!o.d.ok() || o.d.y > 2006) continue;
+            if (kRel[r].type == T_YEAR) o.d.m = o.d.d = 0;
+            o.surf = o.k1 = o.k2 = fmt_date(o.d);
+        } else {
+            vector<string> keys;
+            for (const string& x : sf) {
+                string k = norm_ent(x);
+                if (!k.empty() && std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
+            }
+            if (keys.empty()) continue;
+            o.k1 = keys[0];
+            if (keys.size() > 1) o.k2 = keys[1];
+            if (keys.size() > 2) o.k3 = keys[2];
+            if (keys.size() > 3) o.alt.assign(keys.begin() + 3, keys.end());
+        }
+        if (gold_only || wd_gold_subject(c[0])) { g_gold[c[0] + "\x1f" + c[1]].push_back(o); ++n_gold; }
+        else { add_seed(c[0], r, o, 3, "wikidata", 0); ++n_seed; }
+    }
+    return true;
+}
+// New facts against held-out Wikidata values: right if one value agrees (a place inside it counts, as for the pattern checks),
+// wrong if the subject has values for the relation and none agrees, unchecked otherwise. Writes facts_wd_check.tsv.
+void score_gold(const vector<Fused>& fused, const string& outdir, const std::function<void(const string&)>& say) {
+    std::ofstream f(outdir + "/facts_wd_check.tsv");
+    f << "subject\trelation\tobject\tP\twikidata\twikidata_values\n";
+    std::map<int, std::array<int, 4>> n;  // admitted right, admitted checks, candidate right, candidate checks
+    for (const Fused& fu : fused) {
+        if (fu.op.P < 0.5) continue;
+        const FactAcc& fa = *fu.f;
+        auto it = g_gold.find(fa.subj + "\x1f" + kRel[fa.rel].name);
+        string st = "none", vals;
+        if (it != g_gold.end()) {
+            Cand c;
+            c.kind = is_datey(fa.rel) ? K_DATE : K_LINK;
+            c.d = fa.d;
+            c.k1 = fa.okey;
+            c.k2 = norm_ent(fa.surf);
+            st = "wrong";
+            for (const Obj& o : it->second) {
+                vals += (vals.empty() ? "" : "; ") + o.surf;
+                if (obj_consistent(fa.rel, c, o)) st = "right";
+            }
+            auto& a = n[fa.rel];
+            int k = fu.op.P >= 0.8 ? 0 : 2;
+            a[static_cast<std::size_t>(k) + 1]++;
+            if (st == "right") a[static_cast<std::size_t>(k)]++;
+        }
+        f << fa.subj << '\t' << kRel[fa.rel].name << '\t' << fa.surf << '\t' << fu.op.P << '\t' << st << '\t' << vals << '\n';
+    }
+    say("\nWIKIDATA CHECK of new facts on gold subjects (admitted P>=0.8: right/checked, Wilson 95% | candidates 0.5..0.8)");
+    char b[256];
+    int t[4] = {0, 0, 0, 0};
+    for (auto& [r, a] : n) {
+        std::snprintf(b, sizeof b, "  %-13s %4d/%-4d [%.3f, %.3f] | %d/%d", kRel[r].name, a[0], a[1], ecs::wilson_lower(a[0], a[1]),
+                      ecs::wilson_upper(a[0], a[1]), a[2], a[3]);
+        say(b);
+        for (int k = 0; k < 4; ++k) t[k] += a[static_cast<std::size_t>(k)];
+    }
+    std::snprintf(b, sizeof b, "  %-13s %4d/%-4d [%.3f, %.3f] | %d/%d", "TOTAL", t[0], t[1], ecs::wilson_lower(t[0], t[1]), ecs::wilson_upper(t[0], t[1]), t[2], t[3]);
+    say(b);
+}
+
+// ============================================================ D4: the fact-text shard (TOOL_PROFILE P1, CYPHALM_ANSWERING R1)
+// The fact store (text seeds + admitted facts, P >= 0.8) written as question-form turns and plain sentences for CyphaLM.
+// Questions: the cyphalm_trie dktext template first, then two variants. {E} subject, {O} object, {at} on/in, {a} a/an.
+struct QTpl { const char* rel; const char* q[3]; const char* stmt; };
+const QTpl kQT[] = {
+    {"birth_date", {"When was {E} born?", "What is {E}'s date of birth?", "On what date was {E} born?"}, "{E} was born {at} {O}."},
+    {"birth_year", {"When was {E} born?", "In what year was {E} born?", "What year was {E} born?"}, "{E} was born in {O}."},
+    {"death_date", {"When did {E} die?", "What is {E}'s date of death?", "On what date did {E} die?"}, "{E} died {at} {O}."},
+    {"death_year", {"When did {E} die?", "In what year did {E} die?", "What year did {E} die?"}, "{E} died in {O}."},
+    {"birth_place", {"Where was {E} born?", "What is {E}'s place of birth?", "In what place was {E} born?"}, "{E} was born in {O}."},
+    {"death_place", {"Where did {E} die?", "What is {E}'s place of death?", "In what place did {E} die?"}, "{E} died in {O}."},
+    {"capital", {"What is the capital of {E}?", "What is {E}'s capital?", "Which city is the capital of {E}?"}, "The capital of {E} is {O}."},
+    {"largest_city", {"What is the largest city in {E}?", "Which is the largest city of {E}?", "What is {E}'s largest city?"}, "The largest city in {E} is {O}."},
+    {"country", {"In which country is {E}?", "What country is {E} in?", "Which country is {E} located in?"}, "{E} is in {O}."},
+    {"location", {"Where is {E}?", "Where is {E} located?", "Where is {E} based?"}, "{E} is located in {O}."},
+    {"located_in", {"Where is {E}?", "Where is {E} located?", "What region is {E} in?"}, "{E} is in {O}."},
+    {"founded", {"When was {E} founded?", "In what year was {E} founded?", "When was {E} established?"}, "{E} was founded in {O}."},
+    {"author", {"Who wrote {E}?", "Who is the author of {E}?", "Who was {E} written by?"}, "{E} was written by {O}."},
+    {"director", {"Who directed {E}?", "Who was the director of {E}?", "Who was {E} directed by?"}, "{E} was directed by {O}."},
+    {"composer", {"Who composed {E}?", "Who was the composer of {E}?", "Who wrote the music for {E}?"}, "{E} was composed by {O}."},
+    {"founder", {"Who founded {E}?", "Who was the founder of {E}?", "Who established {E}?"}, "{E} was founded by {O}."},
+    {"creator", {"Who created {E}?", "Who was the creator of {E}?", "Who made {E}?"}, "{E} was created by {O}."},
+    {"inventor", {"Who invented {E}?", "Who was the inventor of {E}?", "Who is credited with inventing {E}?"}, "{E} was invented by {O}."},
+    {"spouse", {"Who was {E} married to?", "Who was {E}'s spouse?", "Whom did {E} marry?"}, "{E} was married to {O}."},
+    {"predecessor", {"Who preceded {E}?", "Who was {E}'s predecessor?", "Who came before {E}?"}, "{E} was preceded by {O}."},
+    {"successor", {"Who succeeded {E}?", "Who was {E}'s successor?", "Who came after {E}?"}, "{E} was succeeded by {O}."},
+    {"developer", {"Who developed {E}?", "Who is the developer of {E}?", "Which company developed {E}?"}, "{E} was developed by {O}."},
+    {"publisher", {"Who published {E}?", "Who is the publisher of {E}?", "Which company published {E}?"}, "{E} was published by {O}."},
+    {"owner", {"Who owns {E}?", "Who is the owner of {E}?", "Who is {E} owned by?"}, "{E} is owned by {O}."},
+    {"genre", {"What genre is {E}?", "What is the genre of {E}?", "To what genre does {E} belong?"}, "{E} belongs to the {O} genre."},
+    {"language", {"What is the official language of {E}?", "What language is spoken in {E}?", "Which language is official in {E}?"}, "The official language of {E} is {O}."},
+    {"currency", {"What is the currency of {E}?", "What currency is used in {E}?", "What is {E}'s currency?"}, "The currency of {E} is {O}."},
+    {"occupation", {"What was {E}'s occupation?", "What did {E} do for a living?", "What was {E}'s profession?"}, "{E} was {a} {O}."},
+    {"nationality", {"What nationality was {E}?", "What was {E}'s nationality?", "What was the nationality of {E}?"}, "{E}'s nationality was {O}."},
+    {"party", {"Which party did {E} belong to?", "What political party was {E} a member of?", "What was {E}'s party?"}, "{E} was a member of the {O}."},
+    {"family", {"What family does {E} belong to?", "In which family is {E}?", "What is the family of {E}?"}, "{E} belongs to the family {O}."},
+    {"order", {"What order does {E} belong to?", "In which order is {E}?", "What is the order of {E}?"}, "{E} belongs to the order {O}."},
+    {"class", {"What class does {E} belong to?", "In which class is {E}?", "What is the class of {E}?"}, "{E} belongs to the class {O}."}};
+const QTpl kLangOther = {"language", {"What language is {E} in?", "In what language is {E}?", "What is the language of {E}?"}, "The language of {E} is {O}."};
+
+string human_date(const Date& D) {  // the dump's own style: "April 4, 1932", "April 1932", "1932", "490 BC"
+    if (D.y < 0 || !D.m) return fmt_date(D);
+    string m = kMonths[D.m - 1];
+    m[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(m[0])));
+    return D.d ? m + " " + std::to_string(D.d) + ", " + std::to_string(D.y) : m + " " + std::to_string(D.y);
+}
+string fill(string t, const string& E, const string& O, const Date& D) {
+    replace_all(t, "{E}", E);
+    replace_all(t, "{O}", O);
+    replace_all(t, "{at}", D.d ? "on" : "in");
+    replace_all(t, "{a}", std::strchr("aeiouAEIOU", O.empty() ? 'x' : O[0]) ? "an" : "a");
+    if (!t.empty()) t[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(t[0])));
+    return t;
+}
+// A sentence from the fact's own pattern when its core is "[S] word word ... [O]" (at least two plain words), else "".
+string pattern_sentence(const string& key) {
+    string core = family_of(key);
+    if (core.compare(0, 4, "[S] ") != 0 || core.size() < 8 || core.compare(core.size() - 4, 4, " [O]") != 0) return "";
+    string mid = core.substr(4, core.size() - 8);
+    int words = 1;
+    for (char c : mid) {
+        if (c == ' ') ++words;
+        else if (!std::islower(static_cast<unsigned char>(c))) return "";
+    }
+    return words >= 2 ? "{E} " + mid + " {O}." : "";
+}
+struct TqaQ { string q, title; vector<string> ans; int in_slice = 0; };
+// T-QA rows: question, answers, source_title, in_slice. Answers are kept only when asked for (never for the frozen test).
+vector<TqaQ> load_tqa(const string& path, bool answers) {
+    vector<TqaQ> out;
+    std::ifstream f(path);
+    string line;
+    std::getline(f, line);
+    while (std::getline(f, line)) {
+        vector<string> c = split(line, '\t');
+        if (c.size() < 4) continue;
+        out.push_back({c[0], c[2], answers ? split(c[1], '|') : vector<string>{}, std::atoi(c[3].c_str())});
+    }
+    return out;
+}
+// Relations a T-QA question asks for, from its words (dev coverage report only).
+vector<string> q_rels(const string& nq) {
+    auto has = [&](const char* w) { return (" " + nq + " ").find(string(" ") + w + " ") != npos; };
+    bool when = has("when") || has("year") || has("date");
+    if (has("born")) return when ? vector<string>{"birth_date", "birth_year"} : has("where") ? vector<string>{"birth_place"} : vector<string>{};
+    if (has("die") || has("died") || has("death")) return when ? vector<string>{"death_date", "death_year"} : vector<string>{"death_place"};
+    for (auto& [w, r] : vector<std::pair<const char*, const char*>>{{"capital", "capital"}, {"wrote", "author"}, {"author", "author"}, {"written", "author"},
+             {"directed", "director"}, {"director", "director"}, {"composed", "composer"}, {"composer", "composer"}, {"invented", "inventor"},
+             {"inventor", "inventor"}, {"painted", "creator"}, {"created", "creator"}, {"creator", "creator"}, {"designed", "creator"},
+             {"married", "spouse"}, {"wife", "spouse"}, {"husband", "spouse"}, {"spouse", "spouse"}, {"language", "language"}, {"currency", "currency"}})
+        if (has(w)) return {r};
+    if (has("founded") || has("founder") || has("established")) return {has("who") ? "founder" : "founded"};
+    if (has("country")) return {"country"};
+    if (has("where")) return {"location", "located_in", "country"};
+    return {};
+}
+struct ShardOpt { string path, dev, test; std::size_t slice_end = 8388608, holdout_from = 7340032; std::uint32_t seed = 0; };
+// Returns 1 when the leakage check fails.
+int write_shard(const ShardOpt& O, const vector<Fused>& fused, const vector<PageRef>& pages, const std::unordered_map<string, int>& page_of,
+                const std::function<void(const string&)>& say) {
+    struct SF { string subj, surf, pattern; int rel; Date d; bool seed; };
+    vector<SF> facts;
+    std::set<string> seen;
+    auto add = [&](const SF& f) {
+        if (seen.insert(f.subj + "\x1f" + kRel[f.rel].name + "\x1f" + (is_datey(f.rel) ? fmt_date(f.d) : norm_ent(f.surf))).second) facts.push_back(f);
+    };
+    for (const Seed& sd : g_seeds) if (sd.src < 3) add({sd.subj, sd.o.surf, "", sd.rel, sd.o.d, true});
+    for (const Fused& fu : fused) if (fu.op.P >= 0.8) add({fu.f->subj, fu.f->surf, fu.best_pattern, fu.f->rel, fu.f->d, false});
+    std::unordered_set<string> evalq;  // dev and test questions, normalised; the test file's answers are never read
+    std::unordered_map<string, int> evalq_src;
+    for (int k = 0; k < 2; ++k)
+        for (const TqaQ& r : load_tqa(k ? O.test : O.dev, false)) { evalq.insert(norm_q(r.q)); evalq_src[norm_q(r.q)] |= 1 << k; }
+    if (evalq.empty()) { say("shard: cannot read the dev/test questions"); return 1; }
+    struct Row { string q, ent, rel, src, resp; };
+    vector<Row> rows;
+    vector<string> sents;
+    long region[3] = {0, 0, 0}, from_pattern = 0, dropped_dev = 0, dropped_test = 0, long_resp = 0;
+    for (const SF& f : facts) {
+        const std::size_t off = pages[static_cast<std::size_t>(page_of.at(f.subj))].tb;
+        int reg = off >= O.slice_end ? 2 : off >= O.holdout_from ? 1 : 0;
+        ++region[reg];
+        if (reg == 2) continue;
+        const QTpl* T = nullptr;
+        for (const QTpl& t : kQT) if (kRel[f.rel].name == string(t.rel)) T = &t;
+        if (!T) continue;
+        if (T->rel == string("language") && !g_country.count(norm_ent(f.subj))) T = &kLangOther;
+        string E = f.subj;
+        std::size_t qp = E.find(" (");
+        if (qp != npos && qp > 0 && E.back() == ')') E = E.substr(0, qp);
+        const string Ov = is_datey(f.rel) ? human_date(f.d) : f.surf;
+        string ps = f.seed ? "" : pattern_sentence(f.pattern);
+        from_pattern += !ps.empty();
+        const string resp = fill(ps.empty() ? T->stmt : ps, E, Ov, f.d);
+        long_resp += resp.size() > 80;
+        sents.push_back(resp);
+        string src = string(f.seed ? "seed" : "extracted") + (reg == 1 ? "_holdout" : "");
+        for (const char* q : T->q) {
+            string qq = fill(q, E, Ov, f.d);
+            auto it = evalq_src.find(norm_q(qq));
+            if (it != evalq_src.end()) { dropped_dev += it->second & 1; dropped_test += (it->second >> 1) & 1; continue; }
+            rows.push_back({qq, f.subj, kRel[f.rel].name, src, resp});
+        }
+    }
+    std::mt19937_64 prng(O.seed);
+    std::shuffle(rows.begin(), rows.end(), prng);
+    long leak = 0;  // the final check, on the rows as written
+    for (const Row& r : rows) leak += evalq.count(norm_q(r.q)) > 0;
+    std::ofstream f(O.path);
+    f << "question\tentity\trelation\tsource\tresponse\n";
+    std::map<string, int> by_rel, by_src;
+    for (const Row& r : rows) { f << r.q << '\t' << r.ent << '\t' << r.rel << '\t' << r.src << '\t' << r.resp << '\n'; ++by_rel[r.rel]; ++by_src[r.src]; }
+    string sp = O.path.size() > 4 && O.path.compare(O.path.size() - 4, 4, ".tsv") == 0 ? O.path.substr(0, O.path.size() - 4) : O.path;
+    std::ofstream fs(sp + "_sentences.txt");
+    for (const string& s : sents) fs << s << '\n';
+    char b[512];
+    std::snprintf(b, sizeof b, "\nSHARD %s: store facts %zu (BPC-train pages %ld, BPC-holdout pages %ld, after the slice %ld, left out); sentences %zu (%ld from the fact's own pattern, %ld longer than 80 bytes); rows %zu",
+                  O.path.c_str(), facts.size(), region[0], region[1], region[2], sents.size(), from_pattern, long_resp, rows.size());
+    say(b);
+    for (auto& [k, v] : by_src) say("  shard_source " + k + " " + std::to_string(v));
+    for (auto& [k, v] : by_rel) say("  shard_relation " + k + " " + std::to_string(v));
+    say("  leak_check dropped_equal_to_dev " + std::to_string(dropped_dev) + " dropped_equal_to_test " + std::to_string(dropped_test) +
+        " final_question_equal " + std::to_string(leak));
+    // Dev coverage (report only; reads the dev answers, never the test's): in-slice dev questions whose (entity, relation) is in the shard.
+    std::unordered_map<string, vector<const Row*>> by_pair;
+    std::unordered_set<string> ents;
+    for (const Row& r : rows) { by_pair[norm_ent(r.ent) + "\x1f" + r.rel].push_back(&r); ents.insert(norm_ent(r.ent)); }
+    int n = 0, ne = 0, np = 0, ng = 0;
+    for (const TqaQ& d : load_tqa(O.dev, true)) {
+        if (!d.in_slice) continue;
+        ++n;
+        ne += ents.count(norm_ent(d.title)) > 0;
+        bool pair = false, gold = false;
+        for (const string& r : q_rels(norm_q(d.q))) {
+            auto it = by_pair.find(norm_ent(d.title) + "\x1f" + r);
+            if (it == by_pair.end()) continue;
+            pair = true;
+            for (const Row* x : it->second)
+                for (const string& a : d.ans)
+                    if (!norm_q(a).empty() && (" " + norm_q(x->resp) + " ").find(" " + norm_q(a) + " ") != npos) gold = true;
+        }
+        np += pair;
+        ng += gold;
+        if (pair) say("  dev_covered " + string(gold ? "gold_in_response " : "other_value      ") + d.q);
+    }
+    std::snprintf(b, sizeof b, "  dev_coverage in_slice %d entity_in_shard %d entity_and_relation %d response_holds_a_dev_answer %d", n, ne, np, ng);
+    say(b);
+    return leak ? 1 : 0;
+}
+
 struct Args {
     string enwik, outdir;
     int folds = 5;
@@ -1686,6 +1981,9 @@ struct Args {
     int sample = 50;
     double base_rate = -1;  // < 0: estimate per relation from the kept patterns' held-out precision
     std::uint32_t seed = 20261027;
+    string wikidata;          // D4: Wikidata values (seeds for 4/5 of the subjects, scoring gold for 1/5)
+    bool wd_gold_only = false;  // all Wikidata values only score (to check a run without Wikidata seeds)
+    ShardOpt shard;
 };
 
 }  // namespace
@@ -1698,7 +1996,9 @@ int main(int argc, char** argv) {
     }
     Args A;
     if (argc < 3) {
-        std::fprintf(stderr, "usage: pattern_learn <enwik8> <outdir> [--folds K] [--cv] [--min-train N] [--sample N] [--seed S]\n       pattern_learn --wilson K N\n");
+        std::fprintf(stderr, "usage: pattern_learn <enwik8> <outdir> [--folds K] [--cv] [--min-train N] [--sample N] [--seed S] [--base-rate A]\n"
+                             "         [--wikidata FILE [--wikidata-gold-only]] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
+                             "       pattern_learn --wilson K N\n");
         return 2;
     }
     A.enwik = argv[1];
@@ -1711,7 +2011,16 @@ int main(int argc, char** argv) {
         else if (a == "--sample" && i + 1 < argc) A.sample = std::atoi(argv[++i]);
         else if (a == "--base-rate" && i + 1 < argc) A.base_rate = std::atof(argv[++i]);
         else if (a == "--seed" && i + 1 < argc) A.seed = static_cast<std::uint32_t>(std::atoll(argv[++i]));
+        else if (a == "--wikidata" && i + 1 < argc) A.wikidata = argv[++i];
+        else if (a == "--wikidata-gold-only") A.wd_gold_only = true;
+        else if (a == "--shard" && i + 1 < argc) A.shard.path = argv[++i];
+        else if (a == "--dev" && i + 1 < argc) A.shard.dev = argv[++i];
+        else if (a == "--test" && i + 1 < argc) A.shard.test = argv[++i];
+        else if (a == "--slice-end" && i + 1 < argc) A.shard.slice_end = static_cast<std::size_t>(std::atoll(argv[++i]));
+        else if (a == "--holdout-from" && i + 1 < argc) A.shard.holdout_from = static_cast<std::size_t>(std::atoll(argv[++i]));
     }
+    A.shard.seed = A.seed;
+    if (!A.shard.path.empty() && (A.shard.dev.empty() || A.shard.test.empty())) { std::fprintf(stderr, "--shard needs --dev and --test (leakage check)\n"); return 2; }
     std::ostringstream rep;
     auto say = [&](const string& s) { std::cout << s << "\n"; rep << s << "\n"; };
     char buf[512];
@@ -1736,6 +2045,15 @@ int main(int argc, char** argv) {
         if (fl.person) g_person.insert(nk);
         if (fl.country) g_country.insert(nk);
     }
+    {
+        std::ofstream pf(A.outdir + "/pages.tsv");
+        for (const PageRef& pg : pages) pf << pg.title << '\t' << pg.tb << '\n';
+    }
+    if (!A.wikidata.empty()) {
+        long ns = 0, ng = 0;
+        if (!load_wikidata(A.wikidata, A.wd_gold_only, page_of, ns, ng)) { std::fprintf(stderr, "cannot read %s\n", A.wikidata.c_str()); return 1; }
+        say("wikidata values: " + std::to_string(ns) + " seeds, " + std::to_string(ng) + " gold (scoring only), " + std::to_string(g_gold.size()) + " gold (subject, relation) pairs");
+    }
     for (const Seed& sd : g_seeds) {
         RT ty = kRel[sd.rel].type;
         if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
@@ -1748,19 +2066,20 @@ int main(int argc, char** argv) {
 
     // seed table
     {
-        std::map<int, std::array<int, 3>> cnt;
+        std::map<int, std::array<int, 4>> cnt;
         std::map<int, std::unordered_set<string>> subj;
         for (const Seed& sd : g_seeds) { ++cnt[sd.rel][static_cast<std::size_t>(sd.src)]; subj[sd.rel].insert(sd.subj); }
-        say("\nSEEDS per relation (infobox/template | wiki table | category | total | subjects)");
-        int tot = 0;
+        say("\nSEEDS per relation (infobox/template | wiki table | category | text total | wikidata | subjects)");
+        int tot = 0, wd = 0;
         for (int r = 0; r < kNRel; ++r) {
             auto& c = cnt[r];
             int t = c[0] + c[1] + c[2];
             tot += t;
-            std::snprintf(buf, sizeof buf, "  %-13s %6d %6d %6d %7d %7zu", kRel[r].name, c[0], c[1], c[2], t, subj[r].size());
+            wd += c[3];
+            std::snprintf(buf, sizeof buf, "  %-13s %6d %6d %6d %7d %7d %7zu", kRel[r].name, c[0], c[1], c[2], t, c[3], subj[r].size());
             say(buf);
         }
-        say("  total seeds " + std::to_string(tot) + " over " + std::to_string(g_by_subj.size()) + " subject pages");
+        say("  total seeds " + std::to_string(tot) + (wd ? " from the text + " + std::to_string(wd) + " from Wikidata" : "") + " over " + std::to_string(g_by_subj.size()) + " subject pages");
         std::ofstream f(A.outdir + "/seeds.tsv");
         f << "subject\trelation\tobject\tsource\ttemplate\tbyte_offset\n";
         for (const Seed& sd : g_seeds) f << sd.subj << '\t' << kRel[sd.rel].name << '\t' << sd.o.surf << '\t' << kSrcName[sd.src] << '\t' << sd.tpl << '\t' << sd.off << '\n';
@@ -1829,7 +2148,12 @@ int main(int argc, char** argv) {
         cand_all.push_back(p);
         if (p.kept) kept_all.push_back(p);
     }
-    std::sort(cand_all.begin(), cand_all.end(), [](const Pat& a, const Pat& b) { if (a.rel != b.rel) return a.rel < b.rel; if (a.lo != b.lo) return a.lo > b.lo; return a.key < b.key; });
+    std::sort(cand_all.begin(), cand_all.end(), [](const Pat& a, const Pat& b) {
+        if (a.kept != b.kept) return a.kept;
+        if (a.rel != b.rel) return a.rel < b.rel;
+        if (a.lo != b.lo) return a.lo > b.lo;
+        return a.key < b.key;
+    });
     {
         std::ofstream f(A.outdir + "/patterns.tsv");
         f << "relation\tpattern\ttrain_subjects\ttrain_sentences\tchecks\tcorrect\tunchecked\tprecision\twilson_lower\treliability\tkept\n";
@@ -1905,7 +2229,7 @@ int main(int argc, char** argv) {
     }
     say("\nNEW FACTS per relation (seeds before | raw extractions | candidates 0.5<=P<0.8 | admitted P>=0.8 | admitted also grade>=Moderate | seeds+admitted after)");
     std::map<int, int> seedn;
-    for (const Seed& sd : g_seeds) ++seedn[sd.rel];
+    for (const Seed& sd : g_seeds) if (sd.src < 3) ++seedn[sd.rel];
     int sb = 0, sa = 0, rc = 0, rr = 0, ra = 0, rm = 0;
     for (int r = 0; r < kNRel; ++r) {
         RelOut o = ro[r];
@@ -1930,8 +2254,10 @@ int main(int argc, char** argv) {
             sm << (k + 1) << '\t' << fu.f->subj << '\t' << kRel[fu.f->rel].name << '\t' << fu.f->surf << '\t' << fu.op.P << '\t' << fu.best_pattern << '\t' << fu.f->snippet << '\n';
         }
     }
+    if (!g_gold.empty()) score_gold(fused, A.outdir, say);
+    int exit_code = A.shard.path.empty() ? 0 : write_shard(A.shard, fused, pages, page_of, say);
     std::snprintf(buf, sizeof buf, "\nrun time %.1f s, peak RAM %.0f MB, facts written %s/facts_f2.tsv", now_s() - t0, peak_mb(), A.outdir.c_str());
     say(buf);
     std::ofstream(A.outdir + "/stats.txt") << rep.str();
-    return 0;
+    return exit_code;
 }
