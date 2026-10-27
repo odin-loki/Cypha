@@ -76,6 +76,9 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
   1. Build the CyphaLM Q/A baseline harness. **Done 2026-10-28** (`cyphalm_trie qa`; baseline 0.0% coverage at 2% wrong).
   2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.
+     - **Done 2026-10-28:** the fact-text shard (`pattern_learn --shard`, D4) and the abstain gate (`native/tools/cypha_gate.cpp`, CTest `native_cypha_gate_selftest`).
+     - **Built, not yet wired:** the class-context expert `native/include/cypha/cyphalm/class_context.hpp`, shared by the tagger and the word classes.
+     - **Still to do:** the teacher-text shard (Qwen3.5-9B).
   3. Run the B / B+T / F / F−T grid with a leakage check.
   4. Keep only the tools that pass LCI and their lines-per-gain bar; delete the rest.
 - [ ] **H1–H3**: pick a permissively licensed GGUF teacher. Run `scripts/gguf_mine.py calibrate` on a Wikidata gold sample, then `facts`, `lexical` and `crawl` with that calibration. List: [`docs/GGUF_MINING.md`](docs/GGUF_MINING.md).
