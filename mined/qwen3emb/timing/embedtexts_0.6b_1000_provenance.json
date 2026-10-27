@@ -21,7 +21,7 @@
     "--chunk",
     "250"
   ],
-  "time_utc": "2026-10-27T21:10:22+00:00",
+  "time_utc": "2026-10-27T21:21:26+00:00",
   "seed": 1234,
   "model_path": "/root/work/teacher/models/Qwen3-Embedding-0.6B-Q8_0.gguf",
   "numpy": "2.5.4",
@@ -56,9 +56,9 @@
     "timing": {
       "items": 1000,
       "tokens": 18352,
-      "seconds": 965.37,
-      "items_per_s": 1.035871788953855,
-      "tokens_per_s": 19.010319070881145,
+      "seconds": 314.747,
+      "items_per_s": 3.177154272634362,
+      "tokens_per_s": 58.30713521138581,
       "note": "decode time only (model load excluded); size jobs from this (EMBEDDING_GEOMETRY 9.1)"
     }
   },
@@ -69,9 +69,9 @@
   "timing": {
     "items": 1000,
     "tokens": 18352,
-    "seconds": 965.37,
-    "items_per_s": 1.035871788953855,
-    "tokens_per_s": 19.010319070881145,
+    "seconds": 314.747,
+    "items_per_s": 3.177154272634362,
+    "tokens_per_s": 58.30713521138581,
     "note": "decode time only (model load excluded); size jobs from this (EMBEDDING_GEOMETRY 9.1)"
   }
 }
