@@ -923,6 +923,8 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 51 | Answering routes (2026-10-28): R1 question-form fact text and R3 statement scoring first; R3's frames may come from the question parse and the learned patterns | [`CYPHALM_ANSWERING.md`](CYPHALM_ANSWERING.md) §5; A2, A3 |
 | 52 | Teacher (Qwen3.5-9B) Q/A text is allowed only as a separate, leakage-checked, low-trust shard, measured against Cypha's own fact store alone (2026-10-28) | [`CYPHALM_ANSWERING.md`](CYPHALM_ANSWERING.md) §5; TOOL_PROFILE teacher-text shard |
 | 53 | The familiarity control token is allowed, on the gate side like the abstain gate; try an entity-level familiarity; keep the token after `Assistant: ` (2026-10-28) | [`CYPHALM_ANSWERING.md`](CYPHALM_ANSWERING.md) §5; A0/A1 report, flags 1–2 |
+| 54 | Do not run the Qwen models in the cloud container: only analytics on their weights. Inference and distillation run on Odin's PC (2026-10-28) | [`EMBEDDING_GEOMETRY.md`](EMBEDDING_GEOMETRY.md) §9; GGUF_MINING §14 |
+| 55 | "Try a lot of things, profile and record everything, then pick a fact-based decision" (2026-10-28): open design questions are settled by measurement, with the evidence recorded | Every report's Decisions section; this ledger |
 
 ---
 

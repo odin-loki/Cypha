@@ -143,7 +143,7 @@ Run these on every change:
 
 1. **Answering proposal: ruled 2026-10-28.** R1 + R3 first; teacher text only as a separate low-trust shard; R3 frames from the question parse and learned patterns; the abstain gate stays "for now" (`CYPHALM_ANSWERING.md` §5).
 2. **Familiarity control token: ruled 2026-10-28.** Allowed on the gate side; try an entity-level familiarity; token after `Assistant: `.
-3. **F2's per-relation base rate.**
+3. **F2's per-relation base rate: decided 2026-10-28 from the evidence** (stays per relation; D4 report).
 4. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp`.
 
 ---

@@ -66,6 +66,7 @@ The harness is the simplest way to let CyphaLM answer and measure it. How CyphaL
 - Decoding is deterministic, so one run per configuration. Where sampling is involved, use 3 seeds.
 - The grid is about 12 configurations, at about 6–8 minutes each on one core.
 - **Leakage check** first (`leakage_check` process): no test question or answer string may appear in any added shard (fact text, teacher text).
+  - **For fact shards (decided 2026-10-28, from the D4 and A2 evidence):** a fact shard about in-slice entities must contain answers, because that is route R1. So: no shard question may equal a dev or test question; the shard is built without reading test answers; and the share of test questions it covers by (entity, relation) is reported with every result.
 - Every run is recorded in the experiment DB with code and data hashes and its prediction (PLAN rule 3).
 
 ---
