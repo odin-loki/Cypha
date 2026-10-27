@@ -329,3 +329,36 @@ Zheng, L., et al. (2023). Judging LLM-as-a-judge with MT-Bench and Chatbot Arena
 Zhu, W., and Bhat, S. (2020). GRUEN for evaluating linguistic quality of generated text. *Findings of EMNLP*.
 
 Zhu, Y., Lu, S., Zheng, L., Guo, J., Zhang, W., Wang, J., and Yu, Y. (2018). Texygen: A benchmarking platform for text generation models. *SIGIR*.
+
+
+## Appendix A. Every parameter of SCRIBE v2
+
+**Table A1.** Parameters, with the stage at which each was fixed. "Inherited" means it comes from v0 or v1 unchanged; "dev" means it was chosen on development ladders A and B (or, for relevance, development prompts).
+
+| Parameter | Value | Fixed |
+|---|---|---|
+| Text cleaning (Wikipedia) | entities, tags, `<ref>`, templates, tables and links stripped; prose lines of ≥ 60 bytes kept | inherited |
+| Text cleaning (other JSONL) | prose lines of ≥ 20 bytes starting like a sentence and ending in . ! or ? | v2 |
+| Sentence splitter, tokenizer | abbreviation and initial rules; lowercased words; hyphens split; digit groups kept | inherited |
+| Lexicon | words seen ≥ 2 times in the pack | inherited |
+| Word trigram | interpolated Kneser–Ney, one discount per order `n1/(n1 + 2 n2)`, out-of-vocabulary penalty 8 nats (only in s3, not scored) | inherited |
+| Skeleton classes | 150 most frequent pack words keep their identity; suffix classes -ing, -ed, -ly, nominal (-tion -sion -ment -ness -ity -ism), adjectival (-al -ive -ous -ful -able -ible -ic -ish), -er/-or, plural -s, other alphabetic, non-alphabetic, number | v2 |
+| Context gains s2g, s3g | mean over in-lexicon tokens of trigram minus unigram log-probability; s3g needs ≥ 3 such tokens | dev |
+| Content words | sentence IDF ≥ 3 (i.e. in fewer than about 5% of pack sentences) | inherited |
+| Word vectors | PPMI-SVD, window ±5 with 1/distance weights, context smoothing 0.75, 50,000 words, 300 dimensions, `U·S^0.5`, rows centred and normalised | inherited (C1) |
+| Sentence vectors | SIF, `a = 10⁻³`, first principal component of 60,000 pack sentences removed | inherited |
+| Short-text cohesion | a text with fewer than two embeddable sentences is cut into two halves of its tokens (≥ 8 tokens) | inherited |
+| 8-gram copy set | all word 8-grams of the pack, hashed to 64 bits | v2 |
+| Length buckets | short < 300 bytes ≤ standard; reference samples 60–260 and 400–600 bytes; a bucket with < 20 reference samples falls back to the other | inherited / v2 |
+| z-score | mid-rank ECDF inside the 2nd–98th percentile; linear tails with scales from the 2nd–16th and 84th–98th percentiles | dev |
+| Tail floors | s1 0.01; s2g, s3g 0.05; s4 0.15; c0, c2 0.005; c1, c1a, c3 0.01; loop8 0.01; rep 0.05; d1, d2 0.01; d3, d4 0.005; i1 0.01; r1 0.01; r4, r5 0.02; i4 0.01 | dev (s4), otherwise first choice |
+| Missing statistic | counts as `u = 4` if ≥ 95% of reference samples of the bucket have it (not for relevance) | dev |
+| Sides | Table 1; coherence one-sided | dev |
+| Dead zone | 1 (relevance 0.5) | dev |
+| Thresholds θ_L, θ_S, θ_I | 99th percentile over the reference samples of the bucket | dev |
+| Saturation | height 30, softness 4, for L and S | dev |
+| Weights | integrity 3, coherence 1, relevance 0 (open) or 8 (prompted) | dev |
+| Score | `exp(−D/5)` | dev (monotone; affects no ordering) |
+| Long texts | windows of whole sentences: a window closes before 600 bytes once it holds 300; a last window under 300 bytes joins the previous one; the score is the mean over windows | v2 |
+
+**Exploratory option (not v2).** `twosided=1` also penalises s2g, s3g and every coherence statistic when they are higher than human text; it is reported only in Sections 6.3 and 6.4 and was decided after those results were seen.
