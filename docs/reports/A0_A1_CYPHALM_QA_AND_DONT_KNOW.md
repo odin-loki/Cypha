@@ -318,6 +318,8 @@ Test abstention by token (trie, chat form):
 
 ## Flags for Odin
 
+**Ruled 2026-10-28.** Flag 1: the control token is allowed, on the gate side, like the Cypha-classifier abstain gate. Flag 2: the token goes after `Assistant: `. Odin also asked for an entity-level familiarity to be tried ([CYPHALM_ANSWERING.md](../CYPHALM_ANSWERING.md) §5).
+
 1. **The familiarity token is a design choice, and it needs your decision.** CyphaLM's own statistic about a question, computed from an earlier model state (after the wiki pass), is put into the prompt as a control token. That moves part of "deciding to abstain" from the byte model into a hand-placed number:
    - The statistic is CyphaLM's own, and the thresholds come only from training text.
    - But the cut points and the choice of statistic are mine, not learned.

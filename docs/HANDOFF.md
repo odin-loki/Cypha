@@ -141,12 +141,8 @@ Run these on every change:
 
 ## 5. Decisions waiting for Odin
 
-1. **Answering proposal** (`CYPHALM_ANSWERING.md` §5):
-   - the order of routes (the recommendation is R1 question-form training text plus R3 statement checking first);
-   - whether Qwen3.5-9B text goes in a separate low-trust shard;
-   - whether the question parse and learned patterns may supply R3's statement frames;
-   - keeping the abstain gate "for now".
-2. **The familiarity control token** for "don't know" (see §4.2): using CyphaLM's own question log-probability as a control token. It is a design choice, and he should rule on it. A1 showed that CyphaLM follows the token exactly and that the statistic behind it is weak. Two related choices: whether to try an entity-level familiarity instead, and whether to place the token after `Assistant: ` (the trie cannot see it before).
+1. **Answering proposal: ruled 2026-10-28.** R1 + R3 first; teacher text only as a separate low-trust shard; R3 frames from the question parse and learned patterns; the abstain gate stays "for now" (`CYPHALM_ANSWERING.md` §5).
+2. **Familiarity control token: ruled 2026-10-28.** Allowed on the gate side; try an entity-level familiarity; token after `Assistant: `.
 3. **F2's per-relation base rate.**
 4. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp`.
 

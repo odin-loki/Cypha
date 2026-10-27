@@ -920,6 +920,9 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 48 | Cut and merge tools to the minimal and best (keep `gguf_mine.py`); plan to profile the tagger, pattern learner and word vectors with other tools to see what makes the cut | Code-debt cuts (changelog); B1; [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md) |
 | 49 | Get vectors and statistical association into Cypha, extract them from a trained LLM, and reinterpret Core Cypha | Track C; [`SEMANTICS.md`](SEMANTICS.md); experiment S-1 |
 | 50 | Make Cypha's vectors run like Qwen3-Embedding-8B's (how they attract and push away), fully dissect and datamine it, with Qwen3.5-9B as the mining LLM | Track C; [`EMBEDDING_GEOMETRY.md`](EMBEDDING_GEOMETRY.md); QE0–QE9 |
+| 51 | Answering routes (2026-10-28): R1 question-form fact text and R3 statement scoring first; R3's frames may come from the question parse and the learned patterns | [`CYPHALM_ANSWERING.md`](CYPHALM_ANSWERING.md) §5; A2, A3 |
+| 52 | Teacher (Qwen3.5-9B) Q/A text is allowed only as a separate, leakage-checked, low-trust shard, measured against Cypha's own fact store alone (2026-10-28) | [`CYPHALM_ANSWERING.md`](CYPHALM_ANSWERING.md) §5; TOOL_PROFILE teacher-text shard |
+| 53 | The familiarity control token is allowed, on the gate side like the abstain gate; try an entity-level familiarity; keep the token after `Assistant: ` (2026-10-28) | [`CYPHALM_ANSWERING.md`](CYPHALM_ANSWERING.md) §5; A0/A1 report, flags 1–2 |
 
 ---
 

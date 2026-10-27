@@ -1,6 +1,6 @@
 # How CyphaLM answers questions by itself (proposal)
 
-**Odin Loch** · 2026-10-28 · **Status: proposal, waiting for Odin's agreement before anything is built** (TOOL_PROFILE_PLAN §2)
+**Odin Loch** · 2026-10-28 · **Status: agreed 2026-10-28** (the rulings are in §5). A0 and A1 are done; A2 and A3 are being built (TOOL_PROFILE_PLAN §2)
 
 **In one line.** CyphaLM writes every answer byte. Tools may only add training text, add experts that predict the next byte, or gate (PLAN rule 10). Within that, there are three ways CyphaLM can get from a question to an answer, and they work best together.
 
@@ -68,6 +68,14 @@ The frozen test (200 questions) runs once, at the end of each step that changes 
 ---
 
 ## 5. What Odin decides
+
+**Ruled 2026-10-28.** Odin took the recommendation on all four points:
+1. **Routes:** R1 and R3 first (A0–A3), then R2 once S-1b and the geometry work report.
+2. **Teacher text:** allowed, but only as a separate, leakage-checked, low-trust shard. Its effect is measured against Cypha's own fact store alone.
+3. **R3 frames:** they may come from the question parse (E1) and the learned patterns (F2). No hand-written frames.
+4. **Abstain gate:** stays as "counts as CyphaLM for now". The familiarity control token from the A1 run is allowed on the same footing, on the gate side. An entity-level familiarity is to be tried, and the token goes after `Assistant: `.
+
+The questions as they were put:
 
 1. **Which routes, and in which order.** The recommendation is R1 + R3 first (A0–A3), then R2 once S-1 and the geometry work report.
 2. **Teacher text in R1.** Should Qwen3.5-9B queries be allowed in the R1 shards, as a low-trust shard kept separate so its effect can be measured? Or should the shards come only from Cypha's own fact store?

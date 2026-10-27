@@ -13,6 +13,9 @@ milestone or a significant self-contained change.
 - **Code-debt cuts** (2026-10-27): `native/tools/question_classifier.cpp` (its finding stays in the E4 report; git `707629a`) and `native/tools/surface_controls.cpp` (superseded by `scribe_ladder`; git `ab4f9f6`).
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
+### Changed
+- **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
+
 ### Added
 - **CyphaLM Q/A harness and don't-know training** (CYPHALM_ANSWERING A0–A1, [report](docs/reports/A0_A1_CYPHALM_QA_AND_DONT_KNOW.md)): `cyphalm_trie qa` and `cyphalm_trie dktext`.
   - **Q/A:** CyphaLM alone has 0.0% coverage at a 2% wrong rate on dev.
