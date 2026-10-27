@@ -9,6 +9,8 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **Pattern learning** (PLAN F2, [report](docs/reports/F2_PATTERN_LEARNING.md)): `native/tools/pattern_learn.cpp` learns relation patterns from infobox seeds by distant supervision, keeps those with a Wilson precision bound ≥ 0.7, and extracts ECS-scored facts.
+  - On enwik8: 832 new admitted facts (mostly dates and birth places), at 49/49 verified precision, in 16 s.
 - **Question classifier** (PLAN E4, [report](docs/reports/E4_QUESTION_CLASSIFIER.md)): `native/tools/question_classifier.cpp` on TREC. The averaged perceptron scores 89.0–91.6 coarse and 84.6 fine; Cypha's classifier 75.0 and 62–67. This confirms the PLAN §11 risk, so the perceptron is used for question types and Cypha's text learning is an open item.
 - **Part-of-speech tagger and chunker** (PLAN E1, [report](docs/reports/E1_POS_TAGGER.md)): `native/tools/pos_tagger.cpp`, an averaged perceptron on UD English EWT v2.18.
   - Test UPOS 94.81%, passing the 94% gate; about 1M tokens/s.

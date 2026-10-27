@@ -35,6 +35,10 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **C0–C1**: fair TF-IDF baselines with `W_enc` frozen, then PPMI-SVD and random-indexing vectors.
   - **C1 vectors done (2026-10-27):** `native/tools/ppmi_svd.cpp`, [report](docs/reports/C1_PPMI_SVD_VECTORS.md). PPMI-SVD on enwik8 (11.2M tokens, 152 s, 640 MB) scores WordSim-353 0.672, SimLex-999 0.255 and MEN 0.637. WS353 is inside the published range; SimLex is below it. Random indexing scores 0.404 / 0.131 / 0.374.
   - **Still open:** the C0 baselines and the 20 Newsgroups gate.
+- [ ] **F2**: pattern learning by distant supervision ([report](docs/reports/F2_PATTERN_LEARNING.md), `native/tools/pattern_learn.cpp`).
+  - On all of enwik8 the fact store grows from 8,148 to 8,980 facts. The new ones are almost all birth and death dates and birth places.
+  - Precision is 49/49 verifiable in a 50-fact sample (Wilson lower bound 0.927), and 35/37 for birth places.
+  - **Limits:** the Q/A relations (capital, author, director, spouse) have too few seeds to learn patterns; Wikidata seeds are the fix (D4). 919 of 920 new facts rest on one sentence. The base rate is set per relation from pattern precision instead of the plan's default 0.5, which needs a decision.
 - [ ] **E4**: question classifier ([report](docs/reports/E4_QUESTION_CLASSIFIER.md), `native/tools/question_classifier.cpp`).
   - On TREC, the averaged perceptron scores 89.0–91.6 coarse and 84.6 fine; it is the classifier to use.
   - The Cypha classifier scores 75.0 coarse and 62–67 fine, with badly low confidence and an OOD flag that never fired.
