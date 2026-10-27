@@ -112,3 +112,11 @@ The copy expert looks back 4,096 bytes. Articles are longer than that, so a long
 - The cost is the linear search over the window, timed on 200,000 fresh-text positions, one core. Even at 16,384 bytes an answer costs 2.4 ms, far inside the 200 ms budget (PLAN §10). In Q/A the prompt and answer fit inside 4,096 bytes, so the window changes nothing there.
 - **Prediction L8: miss** on the gain (−0.026 over 4,096, more than the 0.02 predicted); hit on S.
 - **Chosen: 16,384 bytes, m = 8.** CyphaLM with the class expert (shape) and this copy expert reads fresh text at **1.912** BPC (trie + InfiniGram: 2.166), with surface S unchanged by the copy expert.
+
+### Variant: a third word order in the class expert (registered before the run)
+
+`class_context.hpp` gains an option `orders = 3`: a third context, (c3, c2, c1, tail), above the two it had. With the default `orders = 2`, counts and hashes are unchanged (the parity line below checks it).
+
+| # | Prediction |
+|---|---|
+| L9 | With shape classes, the third order adds −0.005 to −0.02 BPC on fresh text over two orders, and surface S moves by less than ±0.01 |

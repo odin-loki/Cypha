@@ -8,7 +8,8 @@
 /// - A word is a run of ASCII letters, digits or apostrophes. Its class comes from a word -> class
 ///   table (E1 tags, or k-means word classes), looked up in lower case. A word not in the table gets
 ///   one of three shape classes (lower case, capitalised, number).
-/// - Two orders, (c2, c1, tail) and (c1, tail), interpolated Witten-Bell style over a uniform floor.
+/// - Two orders, (c2, c1, tail) and (c1, tail), or optionally a third, (c3, c2, c1, tail), interpolated
+///   Witten-Bell style over a uniform floor.
 ///   The caller mixes the result into CyphaLM's distribution with one lambda per bucket(), as
 ///   cyphalm_trie mixes InfiniGram, so the trie stays the main expert.
 /// - Counts are built once over the training bytes: (context, byte) keys are sorted and packed into
@@ -31,10 +32,10 @@ class ClassContext {
  public:
     static constexpr int kMaxTail = 7;   ///< most bytes since the last completed word that can be kept
     static constexpr int kScan = 256;    ///< how far back a context is looked for
-    static constexpr int kBuckets = 12;  ///< bucket(): deepest order found (0..2) x count bucket (0..3)
+    static constexpr int kBuckets = 16;  ///< bucket(): deepest order found (0..3) x count bucket (0..3)
 
     struct Hit {
-        int order = 0;            ///< 0 nothing seen, 1 (c1, tail), 2 (c2, c1, tail)
+        int order = 0;            ///< 0 nothing seen, 1 (c1, tail), 2 (c2, c1, tail), 3 (c3, c2, c1, tail)
         std::uint64_t total = 0;  ///< followers counted at the deepest order found
     };
 
@@ -69,19 +70,19 @@ class ClassContext {
         return out;
     }
 
-    /// ``tail``: bytes since the last completed word kept in the context (1..kMaxTail).
-    explicit ClassContext(std::unordered_map<std::string, std::uint16_t> classes, int tail = 6)
-        : cls_(std::move(classes)), tail_(std::clamp(tail, 1, kMaxTail)) {}
+    /// ``tail``: bytes since the last completed word kept in the context (1..kMaxTail). ``orders``: 2 uses the
+    /// last two words, 3 also the third (the default 2 gives the same counts and hashes as before it existed).
+    explicit ClassContext(std::unordered_map<std::string, std::uint16_t> classes, int tail = 6, int orders = 2)
+        : cls_(std::move(classes)), tail_(std::clamp(tail, 1, kMaxTail)), orders_(std::clamp(orders, 2, 3)) {}
 
     /// Count every (context, next byte) event in text[0..n).
     void build(const std::uint8_t* text, std::size_t n) {
         std::vector<std::uint64_t> ev;
-        ev.reserve(2 * n);
+        ev.reserve(static_cast<std::size_t>(orders_) * n);
         for (std::size_t i = 1; i < n; ++i) {
-            std::uint64_t k[2];
+            std::uint64_t k[3];
             keys(text, i, k);
-            ev.push_back(k[0] << 8 | text[i]);
-            ev.push_back(k[1] << 8 | text[i]);
+            for (int o = 0; o < orders_; ++o) ev.push_back(k[o] << 8 | text[i]);
         }
         std::sort(ev.begin(), ev.end());
         key_.clear();
@@ -111,15 +112,15 @@ class ClassContext {
     Hit predict(const std::uint8_t* h, std::size_t n, double P[256]) const {
         for (int s = 0; s < 256; ++s) P[s] = 1.0 / 256;
         Hit hit;
-        std::uint64_t k[2];
+        std::uint64_t k[3];
         keys(h, n, k);
-        for (int o = 1; o >= 0; --o) {  // lower order first: (c1, tail), then (c2, c1, tail)
+        for (int o = 0; o < orders_; ++o) {  // lower order first: (c1, tail), (c2, c1, tail), (c3, c2, c1, tail)
             const std::size_t c = find(k[o]);
             if (c == kNone) break;
             const double N = total_[c], T = first_[c + 1] - first_[c];
             for (int s = 0; s < 256; ++s) P[s] *= T / (N + T);
             for (std::uint32_t f = first_[c]; f < first_[c + 1]; ++f) P[byte_[f]] += count_[f] / (N + T);
-            hit.order = 2 - o;
+            hit.order = o + 1;
             hit.total = total_[c];
         }
         return hit;
@@ -161,15 +162,15 @@ class ClassContext {
         return std::isdigit(w[0]) ? 3 : std::isupper(w[0]) ? 2 : 1;
     }
 
-    // k[0] = (c2, c1, tail), k[1] = (c1, tail), as 56-bit hashes, for the history h[0..n).
-    void keys(const std::uint8_t* h, std::size_t n, std::uint64_t k[2]) const {
+    // k[0] = (c1, tail), k[1] = (c2, c1, tail), k[2] = (c3, c2, c1, tail), as 56-bit hashes, for the history h[0..n).
+    void keys(const std::uint8_t* h, std::size_t n, std::uint64_t k[3]) const {
         const std::size_t stop = n > static_cast<std::size_t>(kScan) ? n - kScan : 0;
         std::size_t i = n;
         while (i > stop && is_word(h[i - 1])) --i;  // the word being typed
         while (i > stop && !is_word(h[i - 1])) --i;  // and the bytes before it
         const std::size_t tail_end = n, tail_beg = std::max(i, n >= static_cast<std::size_t>(tail_) ? n - tail_ : 0);
-        std::uint16_t c[2] = {0, 0};
-        for (int w = 0; w < 2 && i > stop; ++w) {  // the last two completed words
+        std::uint16_t c[3] = {0, 0, 0};
+        for (int w = 0; w < orders_ && i > stop; ++w) {  // the last two (or three) completed words
             std::size_t j = i;
             while (j > stop && is_word(h[j - 1])) --j;
             c[w] = (j == stop && stop > 0) ? 0 : word_class(h + j, i - j);
@@ -179,8 +180,9 @@ class ClassContext {
         std::uint64_t t = tail_end - tail_beg;
         for (std::size_t p = tail_beg; p < tail_end; ++p) t = t << 8 | h[p];
         const std::uint64_t base = mix(t ^ mix(tail_end - tail_beg));
-        k[1] = mix(base ^ (std::uint64_t{c[0]} << 32 | 1)) >> 8;
-        k[0] = mix(base ^ (std::uint64_t{c[0]} << 32 | std::uint64_t{c[1]} << 16 | 2)) >> 8;
+        k[0] = mix(base ^ (std::uint64_t{c[0]} << 32 | 1)) >> 8;
+        k[1] = mix(base ^ (std::uint64_t{c[0]} << 32 | std::uint64_t{c[1]} << 16 | 2)) >> 8;
+        k[2] = mix(base ^ (std::uint64_t{c[2]} << 48 | std::uint64_t{c[0]} << 32 | std::uint64_t{c[1]} << 16 | 3)) >> 8;
     }
 
     std::size_t find(std::uint64_t key) const {
@@ -190,6 +192,7 @@ class ClassContext {
 
     std::unordered_map<std::string, std::uint16_t> cls_;
     int tail_;
+    int orders_;
     std::vector<std::uint64_t> key_;    // sorted context hashes
     std::vector<std::uint32_t> first_;  // followers of context c: [first_[c], first_[c + 1])
     std::vector<std::uint32_t> total_;  // their summed counts
