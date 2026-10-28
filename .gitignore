@@ -59,6 +59,7 @@ desktop.ini
 bessel_ratios.npz
 *.npz
 *.bin
+!data/cyphalm/simvec_ppmi32.bin
 kernel_*_roundtrip_out.cypha
 
 config/*.jsonl
