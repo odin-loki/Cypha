@@ -4,7 +4,8 @@
 // a table is built on a fixed text, saved and loaded. The loaded table must equal the built one in every array and
 // give the same prediction (every double, the order and the total) at every third position of the text and of an
 // unseen text. Then damaged copies of each file must be refused: one bit flipped at spread positions, the file cut
-// short, a byte appended, another file. An unbuilt table round-trips too.
+// short, a byte appended, another file. An unbuilt table round-trips too. M15: built in chunks of 1, 7, 997 or 2^20
+// bytes, each table must equal the 4,096-byte one (the build merges its runs chunk by chunk in key buckets).
 
 #include "cypha/cyphalm/class_context.hpp"
 
@@ -110,6 +111,14 @@ int main() {
                            what + ": sizes");
                     same_predictions(built, back, train, what + " (training text)");
                     same_predictions(built, back, unseen, what + " (unseen text)");
+                    // M15: the build merges its runs chunk by chunk in key buckets; any chunk size gives the same table.
+                    for (const std::size_t ch : {std::size_t{1}, std::size_t{7}, std::size_t{997}, std::size_t{1} << 20}) {
+                        ClassContext::Options oc = o;
+                        oc.chunk = ch;
+                        ClassContext other(t ? table : std::unordered_map<std::string, std::uint16_t>{}, oc);
+                        other.build(train.data(), train.size());
+                        expect(other == built, what + ": chunk " + std::to_string(ch) + " builds the same table");
+                    }
 
                     const std::vector<char> good = read_all(path);
                     expect(good.size() >= built.bytes() && good.size() <= built.bytes() + 1024 + 16 * table.size(),
