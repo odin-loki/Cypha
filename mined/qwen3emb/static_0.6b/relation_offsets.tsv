@@ -1,0 +1,6 @@
+relation	pairs	acc@1	acc@10	method
+capital_of	12	0.666667	0.833333	leave-one-out offset
+female_of	10	0.7	1	leave-one-out offset
+plural	10	0.7	1	leave-one-out offset
+past_tense	10	0.7	1	leave-one-out offset
+comparative	10	0.9	0.9	leave-one-out offset

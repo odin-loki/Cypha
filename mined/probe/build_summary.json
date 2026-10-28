@@ -1,0 +1,50 @@
+{
+  "seed": 20261028,
+  "items": 135895,
+  "by_kind_source": {
+    "instruction/dolly": 7924,
+    "phrase/e1_np_chunk": 19752,
+    "response/dolly": 7904,
+    "sentence/enwik8_heldout": 38081,
+    "sentence/mrpc": 7815,
+    "sentence/paws": 6476,
+    "sentence/snli": 12917,
+    "sentence/stsb": 13194,
+    "title/enwik8_heldout": 2000,
+    "word/enwik8_heldout_freq": 19832
+  },
+  "pos_pairs": {
+    "wiki_adjacent": 3000,
+    "wiki_title_lead": 2000,
+    "dolly_instruction_response": 7991,
+    "stsb_ge4": 1669,
+    "mrpc_paraphrase": 2753,
+    "paws_paraphrase": 3532,
+    "snli_entailment": 3325
+  },
+  "classes": {
+    "wiki_adjacent": 3000,
+    "wiki_title_lead": 2000,
+    "wiki_same_article": 3000,
+    "unrelated": 3000,
+    "dolly_instruction_response": 7991,
+    "dolly_wrong_response": 2993,
+    "stsb_4to5": 1669,
+    "stsb_3to4": 1953,
+    "stsb_2to3": 1255,
+    "stsb_0to1": 1235,
+    "stsb_1to2": 1135,
+    "mrpc_paraphrase": 2753,
+    "mrpc_not_paraphrase": 1323,
+    "paws_not_paraphrase": 4461,
+    "paws_paraphrase": 3532,
+    "snli_neutral": 3235,
+    "snli_entailment": 3325,
+    "snli_contradiction": 3278
+  },
+  "held_out": 4000,
+  "questions": 2000,
+  "np_chunk_input_sentences": 120000,
+  "tqa_questions_excluded_set": 327,
+  "enwik_articles": 7236
+}

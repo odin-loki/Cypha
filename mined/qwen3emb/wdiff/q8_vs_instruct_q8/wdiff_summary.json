@@ -1,0 +1,10 @@
+{
+  "tensors_compared": 310,
+  "matrices_with_spectrum": 197,
+  "top_frac": 0.05,
+  "Q4_frac_matrices_top_share_ge_0.5": 0.05583756345177665,
+  "Q4_holds_in_most": false,
+  "total_rel_change": 0.06626904317558908,
+  "model_only": [],
+  "base_only": []
+}

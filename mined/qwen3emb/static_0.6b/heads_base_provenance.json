@@ -1,0 +1,27 @@
+{
+  "tool": "scripts/gguf_mine.py",
+  "tool_version": "1.0",
+  "command": [
+    "scripts/gguf_mine.py",
+    "heads",
+    "--model",
+    "/root/work/teacher/models/Qwen3-0.6B-Base.Q8_0.gguf",
+    "--out",
+    "/root/work/teacher/qe/static/heads_base_0.6b",
+    "--tokens",
+    "300"
+  ],
+  "time_utc": "2026-10-27T22:13:48+00:00",
+  "seed": 1234,
+  "model_path": "/root/work/teacher/models/Qwen3-0.6B-Base.Q8_0.gguf",
+  "numpy": "2.5.4",
+  "gguf": "0.19.0",
+  "llama_cpp_python": "0.3.36",
+  "model_bytes": 639447232,
+  "model_sha256": "4b088f1793f6cba9f0c2f77ab835ef6734f205c2159168698c6e1a51b7df168a",
+  "model_name": "Qwen3 0.6B Base",
+  "architecture": "qwen3",
+  "file_type": 7,
+  "licence": "apache-2.0",
+  "licence_permissive": true
+}

@@ -1,0 +1,20 @@
+The cat sat on the warm mat by the kitchen door.
+Photosynthesis converts light energy into chemical energy stored in glucose.
+How do I reset a forgotten password on an old laptop?
+The treaty was signed in 1648 and ended thirty years of war in central Europe.
+Interest rates rose by 0.25 percentage points last quarter.
+She did not want to leave the party before midnight.
+A river bank is not the same thing as a bank that lends money.
+Retrieve semantically similar text.
+Water boils at 100 degrees Celsius at sea level.
+def add(a, b): return a + b
+The committee rejected the proposal because the budget was too small and the timeline was unrealistic.
+Le chat dort sur le canapé depuis ce matin.
+Neural networks are not used at runtime in this system.
+Tokyo, Paris and Cairo are capital cities.
+Why is the sky blue during the day but red at sunset?
+The quick brown fox jumps over the lazy dog.
+In 1969, Neil Armstrong became the first person to walk on the Moon.
+Prices of fresh vegetables vary with the season and the weather.
+Hello!
+An embedding maps each text to a point on a high-dimensional sphere, so that texts with similar meanings land near each other and unrelated texts land far apart, which makes search, clustering and classification possible with a single dot product.

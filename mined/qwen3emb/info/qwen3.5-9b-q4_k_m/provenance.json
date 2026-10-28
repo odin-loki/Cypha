@@ -1,0 +1,24 @@
+{
+  "tool": "scripts/gguf_mine.py",
+  "tool_version": "1.0",
+  "command": [
+    "scripts/gguf_mine.py",
+    "info",
+    "--model",
+    "/root/work/teacher/models/Qwen3.5-9B-Q4_K_M.gguf",
+    "--out",
+    "mined/qwen3emb/info/qwen3.5-9b-q4_k_m"
+  ],
+  "time_utc": "2026-10-27T20:03:22+00:00",
+  "seed": 1234,
+  "model_path": "/root/work/teacher/models/Qwen3.5-9B-Q4_K_M.gguf",
+  "numpy": "2.5.4",
+  "gguf": "0.19.0",
+  "model_bytes": 5680522464,
+  "model_sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+  "model_name": "Qwen3.5-9B",
+  "architecture": "qwen35",
+  "file_type": 15,
+  "licence": "apache-2.0",
+  "licence_permissive": true
+}

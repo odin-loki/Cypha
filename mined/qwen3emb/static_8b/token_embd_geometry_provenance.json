@@ -1,0 +1,27 @@
+{
+  "tool": "scripts/gguf_mine.py",
+  "tool_version": "1.0",
+  "command": [
+    "scripts/gguf_mine.py",
+    "geometry",
+    "--vectors",
+    "/root/work/teacher/qe/static/embed_8b/vectors.npy",
+    "--index",
+    "/root/work/teacher/qe/static/embed_8b/vectors_index.tsv",
+    "--out",
+    "/root/work/teacher/qe/static/geometry_static_8b",
+    "--prefixes",
+    "32,64,128,256,512,1024,2048,4096",
+    "--no-knn-graph"
+  ],
+  "time_utc": "2026-10-27T22:42:11+00:00",
+  "seed": 1234,
+  "model_path": null,
+  "numpy": "2.5.4",
+  "gguf": "0.19.0",
+  "llama_cpp_python": "0.3.36",
+  "inputs": {
+    "/root/work/teacher/qe/static/embed_8b/vectors.npy": "47fc65146c0924f97cdb84db10169eb6287a4c8d1a549cb83fb8a5d6859c30ef",
+    "/root/work/teacher/qe/static/embed_8b/vectors_index.tsv": "4e15bd8a77d57dc3155d538ac5592737461546a9f1480765ad45a12c44cb9119"
+  }
+}

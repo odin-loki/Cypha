@@ -1,0 +1,39 @@
+{
+  "gate": "QE0: embedtexts --pooling last reproduces llama-embedding --pooling last to cosine >= 0.999 on every sentence",
+  "n": 20,
+  "fa_off": {
+    "min": 0.9999999742163064,
+    "mean": 0.9999999785769024,
+    "n_ge_0.999": 20,
+    "note": "same attention path as llama-cpp-python (flash attention disabled by default)"
+  },
+  "fa_on": {
+    "min": 0.998832563870683,
+    "mean": 0.9995919039404472,
+    "n_ge_0.999": 19,
+    "note": "llama-embedding default (-fa auto enables it on CPU)"
+  },
+  "llama_embedding_fa_off_vs_on_min": 0.9988321895984769,
+  "result": "hit (fa off: every cosine >= 0.9999999); with flash attention on in llama-embedding only, 19/20 >= 0.999 (min 0.99883), the same gap llama-embedding shows between its own fa on and off",
+  "eos": {
+    "add_eos_token_meta": true,
+    "add_sep_token_meta": null,
+    "tokenizer_appends_end": true,
+    "tokenizer_end_token_id": 151643,
+    "eos_token_id": 151643,
+    "eos_token": "<|endoftext|>",
+    "eos_source": "<|endoftext|> in vocabulary",
+    "mode": "auto",
+    "action": "tokenizer"
+  },
+  "model": "/root/work/teacher/models/Qwen3-Embedding-0.6B-Q8_0.gguf",
+  "model_sha256": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
+  "llama_cpp_python": "0.3.36",
+  "gguf": "0.19.0",
+  "llama_embedding": "llama.cpp vendored in llama_cpp_python-0.3.36 (ggml commit 0c1e570), built with cmake -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DLLAMA_OPENSSL=OFF, target llama-embedding",
+  "commands": [
+    "python scripts/gguf_mine.py embedtexts --model Qwen3-Embedding-0.6B-Q8_0.gguf --out qe0/embedtexts --input gate20.txt --pooling last --threads 2 --ctx 512",
+    "llama-embedding -m Qwen3-Embedding-0.6B-Q8_0.gguf --pooling last -f gate20.txt --embd-output-format json --embd-normalize 2 -t 2 -c 512 -b 512 -ub 512 -fa off|on"
+  ],
+  "gate20_sha256": "a5c5b2019395ca350c7e6a9905ebb6db54a75a82ee9fc7a6efd957e6f0e46e20"
+}

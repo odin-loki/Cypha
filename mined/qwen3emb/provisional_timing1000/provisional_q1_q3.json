@@ -1,0 +1,58 @@
+{
+ "all": {
+  "items": 1000,
+  "mean_cos_random_pairs": 0.2778921526705173,
+  "ci95_bootstrap_items": [
+   0.269731079777377,
+   0.2877849672134828
+  ]
+ },
+ "sentences": {
+  "items": 582,
+  "mean_cos_random_pairs": 0.21549412971050033,
+  "ci95_bootstrap_items": [
+   0.20974235967667687,
+   0.220886224641886
+  ]
+ },
+ "wiki_sentences": {
+  "items": 282,
+  "mean_cos_random_pairs": 0.22971068434660935,
+  "ci95_bootstrap_items": [
+   0.22225969856547265,
+   0.23683587647434876
+  ]
+ },
+ "words": {
+  "items": 142,
+  "mean_cos_random_pairs": 0.6001216889790478,
+  "ci95_bootstrap_items": [
+   0.5896900860273031,
+   0.6106321434100804
+  ]
+ },
+ "phrases": {
+  "items": 142,
+  "mean_cos_random_pairs": 0.5377353866241457,
+  "ci95_bootstrap_items": [
+   0.5275534823136926,
+   0.5512414307848387
+  ]
+ },
+ "mrl_sentences": {
+  "32": {
+   "spearman_vs_full": 0.7825648779849391,
+   "ci95_bootstrap_anchors": [
+    0.7513357414329218,
+    0.809747596569655
+   ]
+  },
+  "256": {
+   "spearman_vs_full": 0.9367307836845734,
+   "ci95_bootstrap_anchors": [
+    0.927320486649222,
+    0.946089449311782
+   ]
+  }
+ }
+}

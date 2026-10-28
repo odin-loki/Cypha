@@ -320,10 +320,34 @@ python scripts/gguf_mine.py pairs       --model $G --out $O/pairs --docs docs.tx
 python scripts/gguf_mine.py pairs       --model $G --out $O/audit --audit masked_candidates.tsv --think
 ```
 
-**Not yet checked on real models.**
-- **Qwen3.5-9B support.** llama-cpp-python 0.3.36's support for the Qwen3.5 architecture is unconfirmed (QE0).
-- **Qwen3.5's template.** Its jinja template has not been rendered here. If it does not render, the warning and plain-prompt fallback apply.
-- **EOS detection.** It has been exercised only on vocab-only GGUFs, which set no `add_eos_token`. The QE0 gate, a cosine of at least 0.999 against `llama-embedding --pooling last`, runs on Odin's machine.
+**Checked on real models (2026-10-28, [QWEN3_EMBEDDING_DISSECTION.md](reports/QWEN3_EMBEDDING_DISSECTION.md)).** llama-cpp-python 0.3.36 (vendored llama.cpp, ggml `0c1e570`), gguf 0.19.0, 2 threads.
+- **Qwen3.5-9B support.** It loads (`general.architecture = qwen35`, unsloth Q4_K_M). Greedy answer to "What is the capital of France?": "The capital of France is Paris." `llama-bench` at 2 threads: 10.6 tokens/s prompt, 1.91 tokens/s generation.
+- **Qwen3.5's template.** It renders through `PromptFormat` with no warning. With thinking off the prompt ends in an empty `<think>\n\n</think>\n\n` block, from the template itself. The yes/no judge scores +4.64 for a relevant document and −7.65 for an irrelevant one.
+- **Memory with `logits_all`.** The generative `Runner` keeps logits for every position: n_ctx × 248,320 floats for Qwen3.5 (1.0 GB at n_ctx 1,024). Peak RSS was 9.2 GB with the 5.7 GB model. Keep `--ctx` small for `pairs`.
+- **EOS detection.** Qwen3-Embedding-0.6B's GGUF sets `add_eos_token = true`, EOS 151643 `<|endoftext|>`, and `pooling_type = 3` (last). The tokenizer appends the EOS itself, so the plan is `tokenizer`; `llama-embedding` appends the same token.
+- **QE0 gate.** `embedtexts --pooling last` against `llama-embedding --pooling last` on 20 sentences: every cosine ≥ 0.9999999 with flash attention off (llama-cpp-python's default). `llama-embedding`'s default turns flash attention on; then one sentence falls to 0.99883, the same gap `llama-embedding` shows between its own two modes.
+- **Fixed: `--threads` ignored for batches.** `Runner` set `n_threads` but not `n_threads_batch`, which llama-cpp-python defaults to `cpu_count()`. Every embedding and prompt decode ran on all cores. Fixed; on 4 shared cores this made `embedtexts` 3.1× faster (19.0 → 58.3 tokens/s on 1,000 probe items). The vectors are bit-identical.
+- **Fixed: `wdiff` and padded vocabularies.** Qwen3-Embedding's `token_embd` has 151,669 rows and Qwen3-0.6B-Base's 151,936. `wdiff` now compares the shared rows when both token lists agree on them, instead of reporting a shape mismatch.
+- **Fixed: `spectra` memory.** It copied a whole tensor to float64 before sampling rows (5 GB for the 8B vocabulary matrix). It now samples first; the same rows are drawn.
+- **Cost in embedding mode.** llama.cpp marks every token as an output and still runs the (tied) output head on each one, about 35% extra compute for the 0.6B model and about 9% for the 8B. This is llama.cpp's, not the script's.
+- **Self-test after these fixes:** all 50 rows pass with both vocabularies (Qwen2 657 s, SPM 99 s, 2 cores).
+- **Static commands on real models.** `info`, `vocab`, `embed`, `spectra`, `heads`, `neurons` and `wdiff` ran on Qwen3-Embedding-0.6B and its base, and on the 8B embedder (`wdiff` against Qwen3-8B-Base). `heads` and `neurons` cost vocabulary × width per token or neuron: use `--tokens 300` and `--max-neurons 1024` on 0.6B, and `--layers` subsets on 8B.
+
+**Still to run, on Odin's PC (no inference in the cloud container from 2026-10-28).** The exact commands are in [QWEN3_EMBEDDING_DISSECTION.md](reports/QWEN3_EMBEDDING_DISSECTION.md) §9. The sizes are in Qwen3 tokens, with this container's rates at 2 threads: 0.6B 58.3 tokens/s; 8B about 4.6 (estimated at 12.7× the work per token); Qwen3.5-9B 10.6 tokens/s prompt and 1.91 generation.
+
+| Step | Command | Tokens | Here, 0.6B / 8B |
+|---|---|---|---|
+| QE0 on 8B | `embedtexts` on `mined/qwen3emb/qe0/gate20.txt` and `llama-embedding -fa off` | 298 | — / 1 min |
+| Timing | `embedtexts --limit 1000` (0.6B), `--limit 200` (8B) | 18,352 / 3,981 | 5 min / 14 min |
+| QE2 probe vectors | `embedtexts --input probe.txt --batch 256 --chunk 2000 --resume` | 2,455,468 | 11.7 h / 6.2 days |
+| QE3 geometry | `geometry --key text --pairs pos_pairs.tsv --labelled-pairs classes.tsv --lengths index` | none (vectors only) | minutes |
+| B10 (Q6) | `sensitivity --sentences held_out.txt` | about 86,000 | 25 min / 5 h |
+| B15–B16 (Q5) | `occlusion --sentences held_out.txt --freq word_counts.tsv` (2,000 sentences) | 888,387 | 4.2 h / 54 h |
+| B8–B9 (Q10) | `instruct --queries questions.txt` (2,000 × 5 instructions) | 310,874 | 1.5 h / 19 h |
+| 0.6B against 8B | `compare --key text` | none | minutes |
+| QE4 (next wave) | `pairs` with Qwen3.5-9B, thinking off | about 3,000–4,300 prompt + 160–520 generated per one-sentence document | 6–11 min per document |
+
+The nested subsets in [mined/probe/README.md](../mined/probe/README.md) (746k and 82k tokens) are for machines where the full set is too slow.
 
 ---
 

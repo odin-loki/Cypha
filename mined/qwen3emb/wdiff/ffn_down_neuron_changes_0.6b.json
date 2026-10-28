@@ -1,0 +1,242 @@
+{
+ "per_layer": [
+  {
+   "layer": 0,
+   "median_rel_change": 0.04700608178973198,
+   "max_rel_change": 0.1173396110534668,
+   "neurons_for_50pct_of_dW": 1010,
+   "neurons_for_90pct_of_dW": 2493
+  },
+  {
+   "layer": 1,
+   "median_rel_change": 0.05642186105251312,
+   "max_rel_change": 0.1738600730895996,
+   "neurons_for_50pct_of_dW": 1040,
+   "neurons_for_90pct_of_dW": 2485
+  },
+  {
+   "layer": 2,
+   "median_rel_change": 0.051060404628515244,
+   "max_rel_change": 0.13181574642658234,
+   "neurons_for_50pct_of_dW": 852,
+   "neurons_for_90pct_of_dW": 2333
+  },
+  {
+   "layer": 3,
+   "median_rel_change": 0.06694186478853226,
+   "max_rel_change": 0.1938270777463913,
+   "neurons_for_50pct_of_dW": 1035,
+   "neurons_for_90pct_of_dW": 2462
+  },
+  {
+   "layer": 4,
+   "median_rel_change": 0.05694218724966049,
+   "max_rel_change": 0.1564835011959076,
+   "neurons_for_50pct_of_dW": 1010,
+   "neurons_for_90pct_of_dW": 2460
+  },
+  {
+   "layer": 5,
+   "median_rel_change": 0.05325154960155487,
+   "max_rel_change": 0.1712028533220291,
+   "neurons_for_50pct_of_dW": 990,
+   "neurons_for_90pct_of_dW": 2455
+  },
+  {
+   "layer": 6,
+   "median_rel_change": 0.05415937304496765,
+   "max_rel_change": 0.1716027408838272,
+   "neurons_for_50pct_of_dW": 955,
+   "neurons_for_90pct_of_dW": 2435
+  },
+  {
+   "layer": 7,
+   "median_rel_change": 0.05126849561929703,
+   "max_rel_change": 0.16956542432308197,
+   "neurons_for_50pct_of_dW": 1016,
+   "neurons_for_90pct_of_dW": 2475
+  },
+  {
+   "layer": 8,
+   "median_rel_change": 0.050556644797325134,
+   "max_rel_change": 0.15881602466106415,
+   "neurons_for_50pct_of_dW": 969,
+   "neurons_for_90pct_of_dW": 2453
+  },
+  {
+   "layer": 9,
+   "median_rel_change": 0.05530979111790657,
+   "max_rel_change": 0.21673987805843353,
+   "neurons_for_50pct_of_dW": 920,
+   "neurons_for_90pct_of_dW": 2410
+  },
+  {
+   "layer": 10,
+   "median_rel_change": 0.05529600754380226,
+   "max_rel_change": 0.22614163160324097,
+   "neurons_for_50pct_of_dW": 915,
+   "neurons_for_90pct_of_dW": 2402
+  },
+  {
+   "layer": 11,
+   "median_rel_change": 0.05482551455497742,
+   "max_rel_change": 0.19415156543254852,
+   "neurons_for_50pct_of_dW": 963,
+   "neurons_for_90pct_of_dW": 2446
+  },
+  {
+   "layer": 12,
+   "median_rel_change": 0.05567397177219391,
+   "max_rel_change": 0.1889151781797409,
+   "neurons_for_50pct_of_dW": 858,
+   "neurons_for_90pct_of_dW": 2382
+  },
+  {
+   "layer": 13,
+   "median_rel_change": 0.060522690415382385,
+   "max_rel_change": 0.17831312119960785,
+   "neurons_for_50pct_of_dW": 839,
+   "neurons_for_90pct_of_dW": 2352
+  },
+  {
+   "layer": 14,
+   "median_rel_change": 0.06343847513198853,
+   "max_rel_change": 0.2841840982437134,
+   "neurons_for_50pct_of_dW": 853,
+   "neurons_for_90pct_of_dW": 2327
+  },
+  {
+   "layer": 15,
+   "median_rel_change": 0.0618513822555542,
+   "max_rel_change": 0.17328844964504242,
+   "neurons_for_50pct_of_dW": 881,
+   "neurons_for_90pct_of_dW": 2369
+  },
+  {
+   "layer": 16,
+   "median_rel_change": 0.05138753354549408,
+   "max_rel_change": 0.1580454707145691,
+   "neurons_for_50pct_of_dW": 881,
+   "neurons_for_90pct_of_dW": 2387
+  },
+  {
+   "layer": 17,
+   "median_rel_change": 0.057598698884248734,
+   "max_rel_change": 0.2781376540660858,
+   "neurons_for_50pct_of_dW": 757,
+   "neurons_for_90pct_of_dW": 2275
+  },
+  {
+   "layer": 18,
+   "median_rel_change": 0.05374754220247269,
+   "max_rel_change": 0.2872176766395569,
+   "neurons_for_50pct_of_dW": 752,
+   "neurons_for_90pct_of_dW": 2279
+  },
+  {
+   "layer": 19,
+   "median_rel_change": 0.04987332224845886,
+   "max_rel_change": 0.19471873342990875,
+   "neurons_for_50pct_of_dW": 773,
+   "neurons_for_90pct_of_dW": 2280
+  },
+  {
+   "layer": 20,
+   "median_rel_change": 0.05225549265742302,
+   "max_rel_change": 0.19690242409706116,
+   "neurons_for_50pct_of_dW": 703,
+   "neurons_for_90pct_of_dW": 2229
+  },
+  {
+   "layer": 21,
+   "median_rel_change": 0.052902836352586746,
+   "max_rel_change": 0.1690092235803604,
+   "neurons_for_50pct_of_dW": 757,
+   "neurons_for_90pct_of_dW": 2227
+  },
+  {
+   "layer": 22,
+   "median_rel_change": 0.049606967717409134,
+   "max_rel_change": 0.22942183911800385,
+   "neurons_for_50pct_of_dW": 820,
+   "neurons_for_90pct_of_dW": 2293
+  },
+  {
+   "layer": 23,
+   "median_rel_change": 0.04948834329843521,
+   "max_rel_change": 0.17555350065231323,
+   "neurons_for_50pct_of_dW": 801,
+   "neurons_for_90pct_of_dW": 2299
+  },
+  {
+   "layer": 24,
+   "median_rel_change": 0.05209428071975708,
+   "max_rel_change": 0.2191590964794159,
+   "neurons_for_50pct_of_dW": 724,
+   "neurons_for_90pct_of_dW": 2199
+  },
+  {
+   "layer": 25,
+   "median_rel_change": 0.05074962228536606,
+   "max_rel_change": 0.18957069516181946,
+   "neurons_for_50pct_of_dW": 749,
+   "neurons_for_90pct_of_dW": 2232
+  },
+  {
+   "layer": 26,
+   "median_rel_change": 0.056301943957805634,
+   "max_rel_change": 0.2613268196582794,
+   "neurons_for_50pct_of_dW": 672,
+   "neurons_for_90pct_of_dW": 2148
+  },
+  {
+   "layer": 27,
+   "median_rel_change": 0.23545122146606445,
+   "max_rel_change": 1.9466509819030762,
+   "neurons_for_50pct_of_dW": 422,
+   "neurons_for_90pct_of_dW": 1548
+  }
+ ],
+ "top_changed_layer27": [
+  {
+   "neuron": 1463,
+   "rel_change": 1.0876195430755615,
+   "share_of_layer_dW": 0.004843779373914003,
+   "writes_base": "SU LB S live hdr SB DH SF",
+   "writes_embedder": "SU hdr TU LB live DH gui RX",
+   "writes_dW": "getEmail 什么事情 游戏当中 getMenu 非常多的 生产总 删除成功 的进步"
+  },
+  {
+   "neuron": 978,
+   "rel_change": 1.0417261123657227,
+   "share_of_layer_dW": 0.0043538399040699005,
+   "writes_base": "(Server ,user venue \",[ ,P ,array ','% ,np",
+   "writes_embedder": ",P ,f 近 ad ,G .pt com ,array",
+   "writes_dW": "' ' （ � � ( � ( �"
+  },
+  {
+   "neuron": 2377,
+   "rel_change": 0.8928950428962708,
+   "share_of_layer_dW": 0.004017327446490526,
+   "writes_base": "ab AB ut ForResource abs inson (ab abar",
+   "writes_embedder": "ForResource inson 的机会 arbonate scarc 生活环境 的产品 ража",
+   "writes_dW": "生产总 游戏当中 什么事情 删除成功 getEmail 非常多的 锦标 getMenu"
+  },
+  {
+   "neuron": 160,
+   "rel_change": 1.4163850545883179,
+   "share_of_layer_dW": 0.002992189023643732,
+   "writes_base": "ial iated iation ity iate ials ative ation",
+   "writes_embedder": "iated iation iate ial antly ials icator aneous",
+   "writes_dW": "生产总 游戏当中 锦标 什么事情 非常多的 删除成功 erotica getEmail"
+  },
+  {
+   "neuron": 2434,
+   "rel_change": 0.7797102928161621,
+   "share_of_layer_dW": 0.0029129390604794025,
+   "writes_base": "atives afari 反正 люд rent icolor ologna (point",
+   "writes_embedder": "国 atives � real catch re rent 反正",
+   "writes_dW": "' ' � � （ � '\\n' ( �"
+  }
+ ]
+}

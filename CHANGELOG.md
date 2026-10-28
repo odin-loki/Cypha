@@ -18,6 +18,8 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **Qwen3-Embedding dissection, weights only** ([report](docs/reports/QWEN3_EMBEDDING_DISSECTION.md)): the QE0 gate on 0.6B (hit, cosine ≥ 0.9999999 against `llama-embedding`), the hashed QE2 probe set with its builder (`mined/probe/`), and the QE1 static dissection of the 0.6B and 8B embedders (`mined/qwen3emb/`). Q4 hit on both. Inference moved to Odin's PC on 2026-10-28; the report's §9 has the commands.
+  - **Fixed in `gguf_mine.py`:** `--threads` was ignored for batch decodes (19.0 → 58.3 tokens/s, same vectors); `wdiff` on padded vocabularies; `spectra` copied a whole tensor to float64 before sampling.
 - **S5 hypothesis store and S3 gap map** ([report](docs/reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md)): `native/include/cypha/eval/hypothesis.hpp` (record, lifecycle, tiers, taint and firewall, promotion through ECS on independent evidence, refutation block, labelled cards) and `gap_map.hpp` (tag parser, CyphaLM gap id, gap map, VOI).
   - `native_epistemic_test` covers I1, I4, I7 and I8: 195 → 516 checks. Four planted bugs, one per invariant, each fail it.
   - `pattern_learn --gaps FILE [--demand ROWS,…] [--parse P] [--gap-floor F] [--demand-weight W]`: 27,842 gaps on the v2 store; the store itself is byte-identical to the run without `--gaps`.

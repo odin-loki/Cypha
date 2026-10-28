@@ -1,0 +1,2000 @@
+What is the smallest country in the world?
+When was the second series of Renminbi banknotes introduced in China?
+What is a medallion architecture in data engineering?
+Does Niksar have a castle?
+Given the reference text about The Sun Also Rises, when was the book written and who wrote it?
+Why is Spanish spoken in large parts of Latin America?
+Do I need Hadoop to run Spark?
+What is a good approach to grocery shopping?
+What is Mr. Burn's assistant name on the Simpsons?
+Given this paragraph about Novak Djokovic, how many majors titles does he currently hold?
+Is GitHub Actions are free?
+How do I know it is the spring season?
+When was the Tesla Factory in Fremont purchased by Tesla?
+Given this short paragraph about the life of George K. McGunnegle, how old was he when he retired and what month of the year did that happen?
+Does Irina Korzhanenko still have her gold medal?
+Why is it good to fly direct?
+Who is Mauricio Macri?
+Why has the percentage of CEOs of Indian descent gone up in the last decade ?
+How many events were completed in first modern Olympic Games?
+Does my Myers-Briggs personality type determine my long-term career potential?
+How is a circular economy different than the USA's economy?
+Why might someone choose to move to Seattle?
+Who is Luke Skywalker's parents?
+What makes a good presentation in a workplace setting?
+How do you gain muscle?
+How do I get better at the game of golf?
+When was golf invented?
+Which football team should I support?
+What is an earphone?
+What is the major source of income in Ethiopia and why its important?
+What type of effect does Coffee have on humans?
+How do airplanes land?
+What channel did the series begin on?
+What is a Mormon?
+what is the current location of Voyager 1 spacecraft in the cosmos?
+Why democracy doesn't works and in old times we had autocracy?
+Who created the musical genre metal?
+Haven't you always believed that Earth is flat?
+What do the suits on a deck of cards represent?
+How old was Dominik Volek when he made his Czech Extraliga debut?
+Why do people purchase ski passes?
+What makes a healthy diet?
+Was Furze Hill an established community in the 19th century?
+Who were the original Fantastic Four in the comics?
+What is the name of Google's email service?
+Can anyone play rugby?
+What are some good steps to getting an AWS cloud certification and getting a cloud job?
+Given this reference text that describes the importance of tigers in chinese culture, what do they symbolize in modern China and what types were common in the northeast?
+When did Christoph Karl von Piacsek serve as a Hungarian officer?
+Why is Dungeons and Dragons so popular nowadays?
+Name some famous anime shows?
+Why are Dr. Seuss books so good?
+Given the reference text below, what is the official name of the church San Vincenzo?
+What do economists study?
+What are the types of RVs?
+What's West High School located?
+When was Santa Monica founded?
+Who is the greatest basketball player of all time?
+What are the words of House Smallwood?
+Who is Gordon Lightfoot?
+What is the primary cause of rain?
+What type of natural disaster is known for occurring in San Francisco, California?
+How are healthcare organizations thinking about their strategy to improve healthcare delivery?
+Given this paragraph, what is the out of state acceptance rate at the University of Virginia?
+Why do humans like golf?
+What does non subjective mean?
+Where did Allen Eager grow up?
+Which houseplants are the most popular?
+What awards did Bill Murray receive for Lost in Translation?
+Where does the molecular formula of D-allulose?
+How many episodes in season one of "Game of Thrones" did Brian Kirk direct?
+When was the United States officially recognized as an independent nation?
+Why is JDAM so cost effective?
+Given the text about the 2019 Masters Tournament, tell me who won the golf tournament, where the tournament was held and what age the winner was?
+What is the popular TV show called where they send a number of people to a deserted island and they have to vote people off of the tribe?
+What are the primary causes of inflation?
+How many James Bond movies did Daniel Craig star in?
+Who are Daenerys Targaryen's dragons named after?
+Is Belgrandia varica a type of plant?
+What is a lab environment?
+What Is a Request for Proposal (RFP)?
+What does IHAC mean?
+Which US astronauts that landed on the moon were Scouts?
+Given this paragraph, what is the size in acres of Walt Disney World?
+Given the following paragraph about Latin Text, what does "Dona nobis pacem" mean in English?
+Why did the Allies invade Normandy during world war 2?
+Where is Amazon rainforest located?
+how do you decide which job to take?
+Q: What treatments are available in the U.S. to treat COVID-19?
+Is it worth buying a multi-unit property as a first-time home buyer?
+What is a data pipeline?
+What is the best sport?
+What is the key to longevity?
+What is the history of the saxophone?
+In the field of economics, what is considered a monopoly?
+How long does it take for a mustard seed to germinate?
+Why should I change my car oil?
+Who is the 'sole Survivor' on the TV Show Survivor?
+Why are windows not attached directly to the studs of a house?
+What are all the different ways of saying customer lifetime value?
+What is a skiff?
+What is the difference between a road bike and a mountain bike?
+Why do hindus worship idols?
+When did World War II finish?
+what is a project milestone?
+How can I ensure exactly-once delivery when reading data from Kafka with Spark?
+What is "A Song of Ice and Fire"?
+How many squares does a chessboard have?
+Could you please describe the winter of Seattle?
+What is the Gospel in the context of the Christian faith?
+Is it better to live in the city or the suburbs?
+What is a snowman?
+What country is the newest member of NATO?
+What was Angie Thomas's first published novel?
+What is a plot hole?
+Who built the great pyramid of Giza?
+What are some of the causes for the 1929 US stock market crash?
+How can I decide what bike I should get?
+Why do the San Francisco 49ers play in Santa Clara, California?
+What is the difference between a quartz and a mechanical watch?
+What is the best bidding system in duplicate bridge?
+What is the purpose of a shot clock in basketball?
+Best film in Motion Picture 27th Screen Actors Guild(SAG) Awards was given to which film?
+What countries make up the Benelux region?
+What and how should you feed your baby?
+Who was the Father of Elizabeth II ?
+What is a traditional IRA or 401k?
+Who did Stafford throw touchdown passes to in Super Bowl LV?
+What equipment is required for scuba diving?
+Why kids who pursue athletics do well in professional life ?
+Who was the first president of the United States of America?
+What are the five romance languages?
+Who are the best chess players of all time?
+How to have an evergreen garden?
+In English do adjectives go before or after nouns they describe?
+How many legs has octopus?
+Given a reference text about Farhad Moshiri, what do his painted jars look like?
+Who is the all time leading goal scorer for Manchester United?
+How can I treat a cough without medication?
+What is Houston, Texas, known for?
+What is Ad valorem in finance?
+What triggers urticaria at night and why are hives and itching at their worst?
+Which Roman general was conspired against and assassinated that is quoted "Et tu, Brute?"?
+How many books did Dr Seuss write?
+Do archaeologists dig up dinosaurs?
+What are some popular game shows that can be watched on TV?
+What is the empire state building?
+Who composed the theme song for the movie Marvin's Room?
+What is a herbivore?
+What are the words of House Mooton?
+How much money comes in a game of Monopoly?
+What are the different kind of hits in baseball?
+How many maharatna companies are there in India?
+Why is Falmouth, Massachusetts a great place to visit for vacation?
+Given these paragraphs about Asperger syndrome, after whom it was named?
+Where did Sly and the Family Stone come from?
+What is Long COVID?
+Does Starlink perform well for working on the road?
+What's Rockhopper Exploration PLC business?
+What is the oldest type of flight technology?
+What is a spiral staircase?
+Where do the Kardashians live?
+Who owns the best dog in the world?
+How do airplanes fly?
+How do I turn on my Tesla Y?
+Why is Manchester United the best football team in England?
+What is a mutual fund?
+What is a, "one-timer" in ice hockey?
+What is the significance of the moon's hidden face?
+What is Apu's wife's name on the Simpsons?
+What is ECharts Java?
+What is dihydrogen monoxide?
+Is Star Wars based on a book?
+When did the first World war start?
+When is the best time to catch Bass in Michigan?
+What foods does a tortoise eat?
+Given this paragraph about National Beer Day in the United States, which president signed National Beer Day into law?
+What is Big Data?
+Given this paragraph about video games in the Netherlands, how many people work in the games industry?
+What year did the hindenburg disaster occur?
+How can I find accurate directions between two places?
+Why is drinking coffee better before sport?
+Why invest in the stock market?
+Where is Michael Phelps from?
+Why do cloud providers use dedicated hardware for network and storage processing but not large enterprises for their private cloud?
+I bought a new shirt online but I changed my mind. How can I return it?
+How are racial categories used historically?
+How difficult is it to learn how to water ski?
+What does BAFTA stands for ?
+How many members are in FATF ?
+Difference between EST and EDT?
+What is the difference between a pomelo and a grapefruit?
+Does Belgrandia varica live in the ocean?
+What is the difference between a sitar and a tanpura?
+What does NSAID stand for?
+Who were the Ottomans?
+What are the two longest rivers located in the United States?
+"William Bowery" is a pseudonym for whom?
+What is the main difference between decoder only transformer and encoder only transformer?
+Why should I use EKS over ECS?
+Is Spain a good place to live?
+Given a reference text about Easter eggs, tell me what they are, what they symbolize, and where they originated from?
+When is the best time to transplant bearded iris?
+What year was Genghis Khan born?
+What is 'karma' according to Buddhism?
+What is another name for the Great Pyramid in Egypt?
+Do Texans have a Southern accent?
+What years did the Patriots win a Super Bowl?
+What is data visualisation in the context of business intelligence?
+Given this reference text, what sport other than baseball did David Ortiz play growing up, how many children did his parents have, and what age is he today?
+Given the following paragraph about Kenneth McAlpine, where was he born?
+What types of Barbecue (BBQ) are there?
+When is the best time of year to visit Seattle?
+Where was city musician Thomas Russell born?
+What are the words of House Beesbury?
+Who is the winner of Abel Prize 2022 ?
+How many years passed from Ghana's decline to the Mali Empire consolidating western Sudan?
+Why do we love movies so much?
+What language is easy to learn?
+How many inches are in a mile?
+What country has the 2nd highest bungie jump in the world?
+Who founded the city of Price, Quebec?
+What are the types of space objects ?
+Who owns the canoe named The Island Bird?
+Why do people use computer mice?
+What is the best type of RV for a retired couple?
+Where did Christopher Columbus sail his ship when he discovered America?
+What is the difference between retinol and tretinoin?
+What was the cause of MH370 flight's disappearance?
+How is life like living on the pacific north west?
+What books has David Duchovny written?
+Do dogs have a third eye?
+why does daylight savings still exist in the United States?
+How do I find the best interior decorator and best price?
+When was "I'm Just a Singer (In a Rock and Roll Band)" released?
+What is a synapse notebook?
+What is the smallest state in the USA?
+How can a drought impact food supplies, and what effect does this change have?
+Who is the greatest golfer ever?
+What did Gary C. Butler do?
+Q: Am I at risk for serious complications from COVID-19 if I smoke cigarettes?
+Where did Anne Frank live after her family fled Germany?
+What are startup fundraising rounds?
+Who is the winningest college women's basketball coach?
+In the series, A Song of Ice and Fire, who is the founder of House Arryn?
+Given the following paragraph about New York City, how many people live in the city?
+Why would someone want to ride a bike?
+Should investors time the market?
+What is a pronoun?
+What does “that’s sus” mean?
+What advise would you give on touring India?
+What are some nice activities to do in the Netherlands in spring?
+Why do people have children?
+What's your favorite baseball team?
+What are the most common meals?
+Given this question about tourism, what country is the 6th most visited country?
+I am thinking of going to yoga. What type of class is good for me?
+Why is it so hard now to name a favorite musician?
+How important is pilot communication with a non-towered controlled airport?
+What are good tips to drive in the snow?
+What is the stock market?
+What makes an organization standout?
+What are the main disadvantages of electric cars versus combustion engine vehicles?
+What is the first step in teaching someone how to ski?
+What is the difference between a fire fighter and a nurse?
+What's loquat fruit and where does it originate from?
+What type of democracy is Nigeria?
+What mammal lays the largest eggs?
+Based on this questio about Kingdom Hearts, what company published it?
+What is Cabernet Sauvignon?
+What are Gummi Bears called in England?
+What is dialtune drums?
+Who was the drummer for the band Rush?
+What is an adjective?
+How long did World War 2 last?
+What is the story of the decline of Wang Computer?
+Where did Waldo E. Koop work?
+How deep is the Gulf of Mexico measured in Empire State buildings?
+What do the different ski slope colors mean?
+What is the best food place in Bangalore?
+Given this paragraph about computers, what is the first RISC system?
+Explain what is April Fools' Day?
+What’s the difference between Spark Streaming and Spark Structured Streaming? What should I use?
+Given these paragraphs about Large language models, what is hallucination?
+What area in Washington is best known for its wine production?
+What makes bread rise?
+How many octaves does a harpsichord have?
+Is Microsoft a FAANG stock?
+When did the Post Office in Mission Beach first open?
+What countries are regarded as Nordic?
+What is an adverb?
+Who is the founder of the I Liq Chuan martial art?
+What state is known as the Lone Star State?
+Which are the best movie sequels in the past century?
+What are the components of sound reproduction that are important in a home setting?
+What are some of the best things to do in Fort Collins, Colorado?
+What is the fundamental problem of economics as a discipline?
+Will robots ever feel and think like humans? Will these robots solve all of our problems, or will they spell the end of the human race?
+Who is Sachin Tendulkar?
+Which is the best work from Goethe?
+Why can camels survive for long without water?
+Given this paragraph, who won the Montenegro presidential elections and how much of the vote did they receive in each runoff round?
+How do you play chess?
+What are the boroughs of New York City?
+Is it fun to play guitar? How do you start playing guitar?
+Where is Lebanon ?
+What is the main language spoken in South America?
+What is the best way to make Indian ginger tea?
+Where was Old French language spoken?
+I need to plan a wedding and I have no idea where to start. Will you help me brainstorm a few things I should do?
+What is Intel Xeon good for?
+What event triggered the start of WWI?
+Why did the earliest vendors and retailers in the U.S. decide to charge 99 cents rather than a dollar?
+Based on this paragraph about the Final Fantasy series, who created it?
+Based on this passage, which years did the Patriots win the Super Bowl?
+What are the primary caused of fever?
+What are the defense mechanisms?
+What is a python?
+What is accepted to be California's first official wine-producing vineyard?
+Where can I go to workout?
+How much wood could a woodchuck chuck if a woodchuck could chuck wood?
+Are rugby and American football similar?
+Which festival takes place next to Walibi Holland every year in august?
+What is a persona?
+What are magical creatures?
+What is the largest spider?
+Is the sum of an even number and an odd number even or odd?
+Who set the first Guinness World Record for swimming under ice?
+What is Detroit style pizza?
+what is a sql query?
+What team has won the most Stanley Cups?
+What percent of the population were Hungarian?
+Do you recommend playing Dr. Mercy who is also called Swiss doctor Angela Ziegler to support your Chinese teammates in Overwatch ?
+What are some of the best outdoor experiences in Italy?
+What makes a good woodworking bench?
+For whom is Daenerys Targaryen's dragon, Drogon, named for?
+Why is it important to vote?
+Based on the provided text, how many awards did the book "The Killing Jar" win and what year were they awarded?
+Where is Hoober Stand located?
+How do cryptic crosswords work?
+What is compound weightlifting?
+What date was the Men's Madison Competition at the 2018 UCI Track Cycling World Championships?
+what is a fast break in basketball?
+Will the Penrith Panthers win the NRL Grand Final this year?
+What can help with puppy teething?
+What are some languages spoken in Mexico?
+How to find a boyfriend or girlfriend?
+What is Bart Simpson's graffiti tag?
+Which President of the US was less of a hawk than people supposed?
+What is the format of an email?
+What is the main tax benefit of a Roth IRA and 401K?
+How do I maintain friendships?
+What was special about the 2021 Formula 1 World Championship?
+What are the key functions of FDIC?
+What do you understand by Boosting in machine learning?
+I want to buy a work monitor which is to be used along with the laptop. What features of monitor should be considered?
+Who invented the game of basketball?
+Why are in person events important to business growth?
+What constitutes the AWS Kinesis family?
+What is an interchange fee?
+What is the Shiba Inu (crypto)?
+What colour usually is the wax surrounding Edam cheese?
+How to take care of a horse?
+Given this paragraph about the climate of Seville, Spain, what's the average temperature during the day, at night, and overall?
+Who was the US president when WWII ended?
+What career did GeLing Yan have?
+Why there is no infant rice cereal in the market now?
+Given this paragraph, what are the potential advantages or disadvantages of using XGBoost versus a single decision tree?
+What does GPT stand for in ChatGPT?
+What are the benefits of working with a coach?
+Based on the reference text about Bruce Nodwell, what did he create?
+when was the first digital electronic calculating machine developed?
+What are the most common types of pizzas?
+What types of political organizations did pre-colonial Africa have?
+What is the main language spoken in Latin America?
+What is a music chord?
+Is a golden doodle a good pet for a family with young children?
+What is the mission of the Federal Bureau of Investigation?
+What is a difference between baseball and cricket?
+What was the impact of Citizens United vs FEC on the impact of corporations funding politicians in the United States?
+How many oscars India won this year 2023?
+I have 3 apples, Jack has 4 pears and Jill has 5 books. After I ate two of Jack's pears, how many fruits we have in total now?
+What are the core ingredients of a bechamel sauce?
+In autosports, what is the apex and racing line?
+What is a quantum computer?
+Which is the well-known sport in India?
+Why was Michael Jackson the "King of Pop"?
+When was Chhatrapati Shivaji Maharaj born?
+What is the Tau Circle Constant?
+How did you prepare for your business case competition?
+What happens when someone throws a phone onto a mattress?
+What are the differences between the New York Giants and New York Jets?
+Who has been named as Kid of the year by Time Magazine?
+What is your political stance?
+Who really invented the telephone ?
+How long is a running ultra?
+What format does Delta Lake use to store data?
+Who is the Greatest male Tennis player of all time?
+What is an Incorporation?
+When was the newest country created?
+What's the best way to potty train a puppy?
+Have you heard of Malibamat'so River and where does it flow?
+What was the twist in this short story?
+How do I keep a kitchen knife sharp?
+What is s3 equivalent in Azure?
+What genre did Taylor Swift begin her career in?
+When was Amsterdam founded?
+What is an Italian Greyhound?
+What is absolute address in memory?
+Are alpacas and llamas the same thing?
+What is the best season to ski?
+What is it like be a father?
+What are the steps to care for a houseplant?
+Is it possible to raise your child trilingual?
+What is the best modern motorcycle for a beginning rider?
+Who leads the Cambridge Zero initiative?
+how is white rice made?
+Why are cats better than dogs?
+Which country produces the most pineapples?
+How do you operate a car with a manual transmission?
+What is the Oxford Comma?
+What is a planet ?
+What is the origin of Flamenco?
+How fast do you move when riding a wave?
+What is an office space?
+What is the Philly Special and when was it used ?
+Given this paragraph, which was built first Disneyland or Disney World?
+What is the kiwi bird?
+How many strings does a bass guitar have?
+Who was the most popular musical artist in the 1980s?
+Why is pickleball growing more popular than tennis?
+What are some of the best restaurants to try in Las Vegas, Nevada?
+Who is Ted Lasso in the eponymous TV show?
+What is St. Peters Basilica?
+What is the stone age?
+How many grandslams are there in Tennis in one year?
+What is the best selling book in history?
+What Is a Request for Quote (RFQ)?
+Why do people love the FIFA world cup?
+When is the best time to visit the Jersey shore in New Jersey?
+What is a quark?
+What do Georgians like about their home state?
+Which sport is the most popular worldwide?
+What are some common data warehouse challenges?
+What kind of dog is a Bernedoodle?
+Why do some people prefer to drink hot water than cold water?
+Why do people like to travel?
+Is it safe to smoke at a gas station?
+What is the American show The Office based on?
+why pluto is not a planet?
+How was the universe created?
+What is the difference between a shrub and a tree?
+Given this paragraph about Nicaraguan nationality law, with which countries can Nicaraguan citizens obtain dual citizenship?
+How did Robert Baratheon die?
+what is kangen water?
+What is a fixed-rate mortgage (FRM)?
+What is the definition of Vegetarian?
+What did Special Agent Fox Mulder study when he was in university?
+When did Peloton IPO?
+What is a lepton?
+what is the sunniest state in the US?
+Are there polar bears in Antarctica?
+In what year did the Pac-10 Become the Pac-12?
+What is the Antartic?
+How can I contribute to Spark?
+Given this paragraph about a country, what is the most populous Spanish-speaking country?
+What type of jacket do grizzlies usually wear?
+What is the name of the curvy street in San Francisco?
+Given this paragraph about Mohamed Fourati, at what age was he appointed as hospital assistant?
+What is the plot of The Count of Monte Cristo?
+What is Canada known for?
+What is the currency in use in the Netherlands?
+Some people describe braising as "transformative". Why is this so?
+What is the difference between income and property taxes?
+What is a benefit of salsa dancing?
+What book was the musical Hamilton based on?
+What do you think a conversation between two AI bots would look like?
+What kind of jelly is best for a peanut butter and jelly sandwich?
+Given this paragraph, can you tell me why Santa Barbara is referred to as The American Riviera?
+What caused the millenium tower to sink in san francisco?
+How many island does Hawaii have?
+What are top JavaScript frameworks?
+According to this passage, what percent of the lithography machine market do Ultratech, Canon and Nikon, MKS Instruments, Lam Research and Cadence Design Systems have in aggregate?
+What is the biggest passenger airliner?
+Where is Mount Everest?
+When is the first day of summer 2023?
+How do you push start a car with a manual transmission?
+Is a life without meaning, a life of pessimism?
+What is Twenty20 or T20 in cricket?
+How do you install tubeless tires on a bicycle?
+How often do Germans vote?
+Which is bigger, a lion or a house cat?
+What are some of Whitney Houston's top hits?
+How many times did Jorge compete in the Olympics?
+What is a water hammer?
+What are the main use cases for AWS Kinesis?
+How do I make great espresso?
+Who is Daniel Ricciardo?
+Why is job training such as upskilling and reskilling so important?
+Who is considered the G.O.A.T. in basketball?
+What is ICD-9 in medical terminology?
+What is the difference between it's and its?
+What makes Alabama Football coach Nick Saban so good at his job?
+Where are the oldest oak trees in Central America?
+Do humans have stripes?
+What is non dual philosophy?
+What was the profession of Araber Rahaman?
+Do you have an idea of why Graviton didn’t perform better?
+Given this paragraph that describes the country of Peru, what is its population size?
+What is the difference between a GPU and a CPU?
+What is the largest state in the United States?
+During Passover, what are some distinctions of what is and is not Kosher?
+Here is some reference information about Huaquechula, When does the feast of the Holy Cross in Huaquechula start?
+What is the study of flags called?
+Who is Manchester United's current manager?
+Where is Tiger Woods from?
+Who invented the first electric car?
+Which club has won the most number of UEFA Champions League?
+When was the Bitcoin white paper released?
+How do I get to Juneau, Alaska?
+How did the United States win the Cold War?
+When was the first newspaper published in the United States?
+Can you tell me about the Chicago Blackhawks?
+What are the differences between an upright piano and a grand piano?
+Is tap water safe to drink in Japan?
+How is a distiller used?
+How many people live in the city of Oakland in 2022?
+What are the tax boxes in the Netherlands?
+I like live music. What are some examples of improvisational live music?
+Who was the first man to walk on the moon?
+Based on this paragraph about San Diego, what is the largest city in the state of california?
+What should I do if I disagree with a friend, co-worker or family member on something I feel passionate about, such as politics?
+What is the capital of Kansas?
+Why is the sky blue?
+What year did humankind walk on the moon?
+How to be a good software engineer?
+What are the 5 most effective ways to convert a prospect to a customer?
+Why do home power outages occur?
+What are some of the best comedy movies of the 1980's?
+Can I use my electric car battery to power my house?
+Given this article, what is the largest size for a dead man zone?
+Why are there so many different types of cheeses in France?
+Why did George HW Bush lose the presidency?
+What is the answer to life, the universe and everything?
+What kind of dog breed do you get when you mate a poodle with an old english sheep dog?
+What is the Masters?
+Who is Mariano Sánchez?
+What is an aurora?
+Which temple was the first female holocaust survivor ordained as a rabbi?
+Why 2 is greater than 3?
+I'm going on a hike and the weather is cold, how should I dress?
+What are the words of House Mallister?
+Who is the Avatar? And what was he trying to accomplish?
+What is the best drum kit?
+Which season three episode did Alik Sakharov direct in Game of Thrones?
+What are some signs and symptoms of Type 2 Diabetes?
+What is the difference between a kidnapping and a vacation?
+When did Maggie Wilson first appear on TV?
+What is the average interest rate for a 30 year mortgage in the United States?
+What is IPL T20?
+Where in Australia is Palm Cove located?
+Who is the greatest Boston Red Sox player of all time?
+What sport did Troy Stradford play in college?
+Why is the Pacific ocean typically cold off of the West Coast of the United States?
+Where to visit in Brazil?
+With this paragraph on Austen Hurgon's biography, what movies did he direct before My Mimosa Maid?
+What was Freddie Mercury's real name?
+Who is playing in 2023 women’s NCAA championship game?
+Given this paragraph about video game consoles, when was the Nintendo DS released?
+What was revolutionary about the Barbie doll when it was first sold?
+How is chocolate made?
+Why do we still use vacuum tubes in modern electric guitar amplifier?
+Who invented the music notation that we know today?
+What football team did Jerome Bettis play for?
+In the Impeachment proceeding against Donald Trump, the motion was passed by?
+Who are the little Japanese girls who find Totoro?
+How do you score three points in basketball?
+Give me the answer to this riddle, explain the answer, and explain why the answer may be challenging to identify: what gets wetter as it dries?
+What countries have won the ODI Cricket World Cup?
+What city is Microsoft Based in?
+How can the dialogue be described in this film?
+Is the glass ceiling real?
+Hello, how are you?
+When was the last time the Raiders won the Super Bowl?
+Whats the name of the person who wrote the US declaration of independence?
+What is Targetted Allele-Specific CRISPR/Cas9 Activation (TASCA)?
+What's the best way to brew an espresso?
+Who brews Shiner Bock beer?
+What are the top 5 soccer(football) leagues in the world?
+I plan a trip to Italy, what is the top 2 cities to visit?
+Who is the first king in China history?
+Who produced the song Polly?
+What is a PIN?
+Given the following paragraph on gene regulation, what are operons and where do they occur?
+Why do people like traveling for leisure?
+Which bears are the best bears?
+What are some of the pros and cons of owning a pet?
+When was the NFL founded? Which NFL team won the most Super Bowls? Which quarterback has won the most Super Bowls?
+The International Booker Prize 2021 was given to whom?
+What's the architecture in Maskavas Forstate look like?
+How many continents are there on Earth?
+What are some key considerations when deciding whether or not to implement ERP in my organization?
+Why do some people prefer pickleball over tennis?
+What is a Central Bank?
+Given this reference text about beneficence, what can I do to ensure compliance to the beneficence concept?
+When I use Delta Lake, will I be able to port my code to other Spark platforms easily?
+Who was the first woman to have four country albums reach No. 1 on the Billboard 200?
+What is the difference between open-toed and close-toed shoes?
+Who is using Spark in production?
+Toronto Maple Leafs is a team in the NHL. Who was their captain and star player in the early 2000s?
+What is oxidation reduction potential?
+How do you install a wooden fence?
+Why did Captain Bligh sail to Tahiti?
+whats the total number of US senator?
+I need to move a large piece of furniture out of my second-story apartment. I assembled it in my apartment and would rather not disassemble it. What can I do?
+What are the features offered by Github Copilot?
+How to make a dish thicken fast without adding cream or starch?
+Who was favored to win the 2023 NCAA Men's Collegiate Basketball Championship game?
+Why do people drink coffee?
+Where should I go for vacation?
+What is a good anime to watch for someone who has never watched anime before?
+What is the potential hydrogen (ph) of water?
+Given this paragraph about Aronia, what is another name for the plant and where were they first cultivated?
+Which second-season episode of Game of Thrones did Neil Marshall direct?
+Was the creator of Beavis and Butthead and King of the Hill the son of an archaeologist?
+Given a reference text about Adventfjorden, how wide and long is it?
+Based on the following paragraph on paleontology, what's the difference between paleontology and archaeology?
+What's the difference between Spiders and insects?
+In which country are the world's four busiest commuter rail stations located?
+How do you generate power in a roundhouse kick in Muay Thai?
+How do you jump start a car?
+Which universe we are living today and how large the universe is?
+When was the Victorian Football League renamed to the Australian Football League?
+Who is the winner of International Booker Prize 2022 ?
+Would you rather be Tom Brady or a Dragon?
+Is it better to visit Yosemite or Venice?
+Why are there so few works of Kafka left even though he was a prolific writer?
+Could you provide some recommendations for restaurants in Yountville?
+what book would you recommend for pregnant women?
+Should I use microservices for my project? How many microservices should I have?
+What plant do cats like to chew or sniff, which may give them a "high"?
+Why is security important for organizations?
+What family was well known for their power in Renaissance Italy?
+What is the FDIC?
+What is the name of the wine that can only be named for its specific growing location in France?
+What about the battle of Salamis (fought in 480 BC), do many historians believe make it one of the most significant battles of human history?
+How many books are there in the Harry Potter series?
+What is the Taylor rule?
+What does "digital nomads" mean?
+What is a bank run?
+What is the best way to drink coffee?
+When was the Australian city Canberra founded?
+Who were supporters of Quit India movement?
+What is brackish water and where does it occur?
+What is a T20 cricket game?
+What is the Charles 'Chick' Evans Memorial Scholarship?
+What exactly was Apollo 11?
+Does Rajasthan - the desert state of India, have winters?
+What is solar minimum and how it is related to sun cycle?
+Is Yoga effective in losing weight?
+Where is Galapogas Island located? What is the area of Galapogas? How many islands are there in total? When was the first island formed? What are few Volcanos in Galapogas?
+What is a Balance sheet?
+Who created Sesame Street?
+What is the best way to travel from Philadelphia to Raleigh?
+Which American president spoke Dutch as their first language?
+What are three cities on the west coast of Florida?
+What is the difference between UI design, UX design and Product design?
+In the series A Song of Ice and Fire, who is the founder of House Seaworth?
+What are the main components of AWS Kinesis?
+What did Apple co-founder, Steve Jobs, die from?
+Were cars used for transportation in the 19th century in King Field?
+What is molecular biology?
+Who was the first female to swim the English Channel?
+How many keys are in a standard piano?
+What does it mean to be customer obsessed or achieve customer obsession?
+Why do babies cry?
+What are popular young adult books?
+What is predictive maintenance?
+How do you throw a cutter in baseball?
+What is a good investment strategy?
+What are some criticism of Betty Friedan's Feminine Mystique?
+What are the best places to eat and top Japanese sushi restaurant in San Mateo?
+What are some examples of popular sitcoms on television in the 1980s?
+Why is Cricket so popular ?
+What is the capital of Germany?
+What is Milky Way?
+Where did Bob Ross learn to paint?
+Why do people need sunshine?
+What shape are Philodendron leaves?
+What math classes are offered at high schools in the United States?
+Which country has the largest landmass?
+Why are children so special?
+Home many storage options does Azure Synapse provide?
+Is it safe to invest in stocks?
+What kind of dog should I get?
+What happens during the section called "Giggle Box"?
+What is one of your favorite color?
+What are the best ramen places to eat in San Mateo, CA?
+What are crawfish and how do you eat them?
+Should high school students be allowed to drink coffee?
+Did Magic Johnson or Larry Bird win more collegiate and professional basketball championships?
+What are the official languages of the United Nations?
+Why we need music?
+In the series A Song of Ice and Fire, who is the founder of House Rowan?
+What is the difference between a dialect and an accent?
+What is Elbow Cay like in the Bahamas?
+At what age should I get a shingles vaccine?
+What states do not have a state gambling lottery?
+What is the difference between dark matter and dark energy?
+Why is pickleball popular?
+Why is the F-15EX Eagle II an ideal aircraft not an ideal aircraft for conducting modern offensive war fighting?
+Given the following paragraph about the history of tallest buildings, which was the first skyscraper and when was it build?
+What is the month of Ramadan?
+By what other name does Bunnie DeFord go by?
+What is Mount Rainier?
+What is the population of North Carolina?
+What is the difference between archaeology and paleontology?
+Based on the paragraph below, the failure to uphold the commitments outlined in Magna Carta lead to what war?
+Where is Muckle Water?
+Where are oysters found?
+Why do we have seasons, and what are they?
+What is a speedrun in video games?
+What is Halt and Catch Fire about?
+Who is the current manager of Arsenal Football Club?
+How do you start your child playing soccer?
+Why do little boys jump in a puddle of water or mud?
+What is a "love hotel"?
+Which vegetable do sailors hate the most?
+What is Edison famous for?
+Given a reference text that describes about hotpot, from which country does this dish originate?
+What animals are famously depicted playing poker in a painting?
+What is Data Profiling?
+How do you call the Arkansas Razorbacks?
+What is social media and how is it used?
+What are some interesting things to do in the spa town of Harrogate, North Yorkshire?
+In what year was the Oakland Ski Club founded?
+Which company introduced new kits for Marseille?
+Given this short summary of Giovan Battista Cavagna, how long did it take to build the second Monte di Pieta?
+Given this reference text about the Flex Computer System, why was it created?
+Who is John D. Rockefeller?
+When is the best time of day to exercise?
+Given this paragraph, how many seasons are there of Ted Lasso?
+Which member of *NSYNC was a replacement for another who quit before they got big?
+Is C++ hard to learn?
+How can sunshine lift your mood?
+How many golf clubs can a player carry in their bag?
+Who is Michael Jordan?
+How many goals did Archie Thompson's team mates score?
+What is A State of Trance?
+Why is healthcare so bad in US?
+Where can I find a bristly bellflower in the wild?
+Does the position of a dog's tail communicate how it is feeling?
+what type of economy is China?
+Who developed the Black Swan theory?
+Who is the lead singer of Korn?
+Who are ''The Lumières" ?
+What are the words of House Tyrell?
+What is the difference between a putter and a driver in golf?
+Where is the planet mars?
+How was art used for manipulative purpose in racial discuss in the 20th century?
+Which country has topped the swimming medals list in the summer olympics?
+When was West Ham started and when did they get the name West Ham United?
+What are all the different names for COVID-19 and which one is the most recommended?
+How old was Stefan Richarz when he received his phD?
+How many cents do I have if I have 3 dimes?
+Which drum kit should I buy?
+Why do cooks use kosher salt?
+Given this paragraph how much do Beavers weigh?
+What type of model is the Citroen C4 Cactus?
+What color is Perpetual Spinach?
+Given this article about Operation Aurora, Which nation was beleived to be behund the attacks?
+In Digital Marketing, what is the difference between SEO and SEM?
+What natural disaster transports Dorothy to Oz in the Wizard of Oz?
+Tell me about the discovery of coffee bean?
+What are the benefits of the 2-3 zone defense in basketball?
+What are Jindo dogs like?
+What is the most popular sport in Canada?
+Given the following paragraph about a film, who directed "Our War"?
+What genre did the Chicks (formerly the Dixie Chicks) begin their career in?
+What is a tender?
+What is an experiment?
+What is combinatorial optimisation?
+Who is the best all-time soccer player?
+What is a subprocessor for purposes of data privacy laws?
+How many awards did the film The Walrus and the Whistleblower win per this entry of information?
+Why is the Bay Area football team called the 49ers?
+What are the different swimming styles? Which one is the fastest and which one the slowest?
+How long was the Nazi German battleship Bismarck active during WWII?
+Who sings the song "Riptide"?
+How does a transistor amplify a signal?
+Which country produces the most wine on an annual basis?
+What is the difference between futures and options?
+What causes mortgage interest rates to rise in the US?
+How do you make an iced matcha latter?
+What is India famous for?
+What colors are typically associated with Christmas?
+Who was awarded the Nobel Prize for Physics ?
+What color is the Rainbow?
+Why are lemons sometimes considered Alkaline?
+According to this paragraph about the University of Virginia, where did Edgar Allan Poe live during his time at the university?
+What is the movie The Fabelmans about?
+How is it that some high net-worth individuals are able to avoid paying taxes completely?
+What are some important devices you would see in a kitchen? And what are they used for?
+What are some of the best places to eat in Boston?
+Why does it feel so hot in Houston?
+What is the name of the woman D'Artagnan falls in love with ?
+What is the coldest place on Earth to live?
+What could be a clean, inexpensive and efficient way of transportation?
+What are the only three ingredients to make authentic Chantilly cream?
+What is Solidarity Tax?
+what are the benefit of meditation?
+What does WHO refer to?
+What foods are high in antioxidants?
+Which African country was formerly known as Abyssinia?
+What is a cookie?
+What is the Internet of Things (IoT)?
+Why is the Chernobyl disaster considered to be the world's worst-ever civil nuclear incident when only an excess of 15 childhood thyroid cancer deaths were documented as of 2011?
+How many cents do I have if I have 3 quarters?
+How should I plan my week as a working mom ?
+How do you train for a half marathon?
+Which US state produces the most pineapples?
+Who was the first American to win a Nobel Peace?
+What is the best nightly skin care routine?
+When was the Bitcoin whitepaper published?
+Who is the winner of International Booker Prize 2020?
+What is the difference between mean, mode, and median?
+When is the World Teacher's Day celebrated?
+How many coaches (full and part-time) from The Voice have won Grammys?
+Who won the 1998-99 UEFA Champions League?
+Based on this paragraph on Japanese bullet trains, how many cars do the longest trains have?
+How many minutes in a football match?
+Where is the best place to work in my house?
+What is Venture Capital?
+What is Magical Thinking?
+How can I become a better runner?
+What is prize money for Abel Prize ?
+What did the 0 say to the 8?
+What is the English football league system?
+How many movies did director Quentin Tarantino make?
+According to this paragraph about UVA, what happens to a student who commits an offense from the honor system?
+Who is known as The Invincibles in English football?
+When did money originate?
+Given this text about speakers of varieties of Louisiana French, has the number of French speakers in Texas increased or decreased since the middle of the twentieth century?
+Who was the first women to do the spacewalk?
+What high school did Tyrone Brazelton go to?
+How are rocks formed?
+Given this paragraph about Riot Games' history, which game was used an indication that games could be supported and monetized long-term?
+Why do people like playing video games?
+What type of battery should I get to power my trolling motor?
+How do people collaborate in a hybrid work environment?
+What is an Edgeworth box in Economics?
+Who won the 2016 Nobel Prize?
+Tell me about Holi and why so many people in the world celebrate it?
+Why do developers like Agile?
+What is a covalent bond?
+What birds can I find in San Francisco?
+What is an ATV?
+Why are lunar eclipses more common than solar?
+How do you make brisket on a pellet smoker?
+How many players are on a hockey team?
+What was the first name of Thomas Attewell's brother and cousin?
+What is a t-style guitar?
+Which Bond girl guest starred on the TV show Game of Thrones?
+How should you care for grapes?
+Why is lacrosse considered the fastest game on two feet?
+How do I cast on a knitting project?
+Who is Bill Gates?
+What is the current world population? Is it growing?
+What are some edible weeds that grow well in Maryland?
+Who wrote The Godfather?
+What are the best brunch places in Burlingame, CA?
+What is elite shungite?
+What is the difference between tennis and pickleball?
+Why is the Republican Party against gun control legislation?
+How should I pick a name for my baby?
+Where should I go this summer?
+Which author wrote the ‘Winnie-the-Pooh’ books?
+What is your favorite teaching from Stoic philosophy?
+How can I improve my sleep?
+Given a reference text about Elk Grove, what state is it located in and about how many people live there?
+What is the appeal to baby led weaning?
+Is there an answer to the universe?
+What is the shape of the Earth?
+Given this paragraph about the longest living person, what was their name and when were they born?
+What is Special Agent Fox Mulder's FBI identification number?
+What are the advantages to studying Engineering in college?
+How many voyages did Columbus lead to America?
+What is a geodetic system?
+What was the Cold War?
+Who tends to participates in hackathons?
+What are some examples of a woodwind instrument?
+Does Julie Andrews have an EGOT?
+What's the best binding setup for ski touring?
+Why is the Alabama's football team called the Crimson Tide?
+What is beta oxidation?
+Do you have to get training to go scuba diving?
+Who is the current prime minister of India?
+What is the main difference between ORC and Parquet?
+Why is the traffic so bad in Seattle Tuesday through Thursday?
+How many episodes in season one of Game of Thrones did Tim Van Patten direct?
+If I wanted to travel the world, would it be faster to travel by air or sea?
+What’s the difference between Delta Live Tables and Workflows?
+What is the difference between love and affection?
+What is a computer network?
+Do I need diverter to charge my car using excess generated power from solar panels?
+What is an ATM?
+Did David Petrarca direct any episodes in the second season of Game of Thrones?
+What is the national bird of New Zealand?
+Who wrote the most episodes of season four of Game of Thrones?
+Can you provide a list of foods that are both high in protein and low in fat?
+Why do people like California?
+Identify and briefly discuss four “commandments” for effective presidential relations with the Congress. Do you think a president needs a good relationship with Congress to be an effective president?
+What is the capital of Australia and when was it founded?
+What was the Underground Railroad?
+How do you decide what type of bicycle to buy?
+When was IGFBP3 first characterized?
+I've heard astronauts talk about the normalization of deviance and the risks therein. What is the normalization of deviance, and how do I avoid it?
+Who is Roger Federer?
+What is the name of Dorothy's dog?
+People love cats but can be highly divided about what breed of cat is the best - What is your favorite, and why?
+What is Hinton's citizenship?
+What do you mean trekking?
+why is american football the most poplar sport in the US?
+What should we conserve electricity?
+What is a bear in finance?
+What is the history of Tax Day in the United States?
+Given this paragraph, how much control of the world's cocaine market did the Cali Cartel have at its peak?
+When was the first iPhone released to the public?
+How long is an Ironman triathlon?
+Who wrote the book "The 7 Habits of Highly Effective Families" ?
+What does the idiom burning your bridges mean?
+What is conspicuous consumption?
+How large are elephant eggs?
+What color do most people perceive the sky to be on a sunny day?
+Given the reference text below the eruption of Mount Vesuvius, how high was the mountain after the disaster?
+What are fun activities to do with a toddler in Los Angeles?
+why do human beings have a tendency to think they are always right?
+Why did Kim Kardashian and Ye divorce?
+Where are most apples grown?
+What makes someone beautiful?
+What are good plants to have in your home if you have cats?
+Abel Prize is given in which field ?
+Q: How can I prevent COVID-19?
+What are the four great inventions of Ancient China?
+What is Bart Simpson's best friend named?
+Which are some famous cuisines from Rajasthan, India?
+Name the spyware used by Israel to hack Whatsapp?
+Why did Christopher Columbus think he had sailed to Asia instead of America? What maps did he have at his disposal?
+How many years did the Pony Express mail delivery service last?
+When was Belgium founded?
+What is the city of Denver like?
+What causes that feeling of weightlessness when you're on a rollercoaster?
+How old is the Greek language?
+What is the difference between NumPy and pandas?
+What is Project Mosaic?
+Which Shakespeare play inspired West Side Story?
+What is absolute URL?
+What is positive cash flow?
+Why is cold water coming out of my water heater?
+Given the following paragraph, what university has evidence of teaching as early as 1096?
+In the series A Song of Ice and Fire, who is the founder of House Grafton?
+What year did World War 2 end?
+Q: What is the risk of using a hand sanitizer that contains methanol (wood alcohol) or 1-propanol?
+In the following initial summary of the plot of the series My Hero Academia, what is the secret that Izuku must keep and from whom?
+Is it safe for dogs to eat chocolate?
+Who were the children of the legendary Garth Greenhand, the High King of the First Men in the series A Song of Ice and Fire?
+Why does coconut water turn pink?
+Why we have different seasons on earth?
+Why is Alien the greatest space horror film of all time?
+Given this article about the NSA's ANT catalog, Which hacking tools are used to infect the BIOS of computers or networking devices?
+Why are so many US Hollywood films made in the state of Georgia?
+Why did the dinosaurs go extinct?
+What is the purpose of operating a motor vehicle?
+Why should you use multi factor authentication to secure your computer accounts?
+what is a competition?
+Is Moore's law still viable?
+What is your worst habit?
+How do I do a headstand?
+What is the name of Baltimore Maryland's professional football team?
+How do you know if you reached product market fit?
+What are the four major tournaments for the Professional Golfers Association?
+which weighs more, cold or hot water?
+What are AAC devices used for?
+Why do people watch the English Premier League more than any other soccer league in the world?
+How does running improve your health?
+Who is called Napoleon of Iran?
+Do you prefer pancakes or waffles?
+What city in Ireland is the band U2 from?
+Given this paragraph about the Allegory of Peace, what does it represent?
+What city in the world is regarded as having the largest number of professional and famous surfers and surfboard shapers?
+What is an enzyme inhibitor?
+What does CMWCs stand for?
+Given a reference text about Jeremiah Mutwalante Twa-Twa, when and where was he born?
+In the series A Song of Ice and Fire, who is the founder of House Gardener?
+How did Kdramas become so popular?
+What medicine is inside of an EpiPen?
+What coloring of cat is usually almost always female?
+What band sings the song "My Own Worst Enemy"?
+What are some good ways school kids can get started with chess in the San Francisco Bay Area?
+What is the Shy Plant?
+How are people from the Netherlands called (in English)?
+Why do some people try to limit the amount of dessert they eat?
+What is a vegetarian diet?
+What is Ultimate Frisbee?
+How many Anglo-Dutch wars were there?
+how is yogurt made?
+Why is Mediterranean diet considered the healthiest?
+What are the three main states of matter and how does it transition between them?
+What is one-child policy?
+What colors are on the United States of America flag?
+What are the words of House Ambrose?
+What's the difference between splitboarding and snowboarding?
+Who was On the Point of Death directed by, given the following information?
+How large is the Earth?
+What American city is referred to as The City of Roses?
+Where is Salvador Brazil?
+Given this paragraph, which two US interstates were not originally continuous? Have they now been made continuous?
+What K-pop group did Kang Se-jung sing for?
+Which countries are the freest?
+What is the difference between Holland and The Netherlands?
+How are odds different from probability?
+Who is best college football coach?
+Who won the 2004 World Series?
+How do solar panels create energy?
+Given this paragraph about Arlington, Virginia, what are the 3 public high schools in Arlington?
+What are the two professional football teams in Chicago?
+When was Franz Kafka born and who was he?
+Given these paragraphs about battery storage power stations, what was the levelized cost of electricity from battery storage as of 2020?
+Why is Utah a great place to visit?
+Why is it important to hug your child?
+What is the best way to relax?
+What is the Premier League?
+Which continent can Callixena versicolora be found?
+How do you check the weather on an iPhone?
+What is linear programming and how to solve?
+Before Miley Cyrus recorded "Wrecking Ball," it was offered to which singer?
+How can I avoid sunburn?
+What is the difference between the Masters and the U.S. Open in golf?
+Given a reference text about Lotus Mark IX, who designed the car?
+Given this reference text about Nintendo, when was it founded?
+Based on the reference text, why was the eastern section of the bridge rebuilt?
+Based on this text, where was Susan Eaton a professor?
+What is the name of the Winslow's nerdy next-door neighbor on the TV show "Family Matters"?
+What makes for a great pizza?
+What are four universities in the state of Texas?
+What is the Mayan Civilization known for?
+What is a graph in graph theory?
+Where did Bermuda grass come from?
+Who is currently US president?
+Is Python better than R?
+What is a car used for?
+Given this paragraph about mushroom growth, why is it related to the English language expression "to mushroom"?
+What do the Olympic rings mean?
+Who was chairman of the board of directors of Tesla as of March 2004?
+What do giant Pandas eats?
+What's the best place to visit China?
+Should I buy an electric car?
+In the series A Song of Ice and Fire, who is the founder of House Crayne?
+What is the primary information in this paragraph?
+What are some vacation ideas this summer?
+If the sponsor of the Burns and Allen show was Pee Wee Herman's Big Adventure, the show would be called what?
+What does BATNA stand for?
+What is the circumference of the earth?
+How should I invest my money?
+What food is served at a Mexican restaurant?
+What is the world's oldest annual marathon based on the reference text below?
+What is a Limited company?
+Given this paragraph about South Korea, which body of water forms the country's western border and which body of water borders it's eastern border?
+Why are weddings so expensive?
+How many days was the women's individual competition?
+Aztec civilization originated from which country?
+Where is the Bulgan Volcanic Field located?
+What is the tallest mountain in the continental US?
+Given these paragraphs about Large language models, what is an LLM?
+How to cook Filipino chicken adobo?
+Kingston, Zuma, and Apollo are the sons of which American female pop star?
+Why are protein waffles so dry?
+How do you make a Martini?
+When was the US flag created?
+What is a graph?
+When did Singapore achieve independence?
+What is I Liq Chuan?
+Who is the inventor of electric light?
+What is a noun?
+What is AWS EKS?
+Which party Sam Jones was part of?
+Why do people enjoy the beach?
+Is the recording of a person's last words reliable?
+Given the paragraph, what is the term budgie smuggler colloquially use to describe?
+Given this paragraph about British Shorthairs, what are the typical characteristics of this cat breed's temperament?
+How many people died as a result of the plague?
+Is there really no speed limit on the German Autobahn?
+How can you prepare for a longer airplane flight with children?
+What is Share capital in finance?
+Why do people foster dogs?
+How many countries in Europe do have the Euro as monetary currency?
+When is Thai New Year?
+What type of poetry is Sappho best known for?
+What happens when you meditate?
+Is learning piano on a keyboard just as effective as learning on a grand/upright piano?
+What are the key benefits of Delta Live Tables?
+What is Sinking Sand?
+How many countries do the Netherlands share a land border with?
+What is a DAW?
+What are the official languages of Belgium?
+What does Touch Typing refer to?
+What is a chemical structure?
+Which are the states in India with coastlines?
+What is the structure of Public Forum debate, as used in US debate competitions?
+Where do we go when we die?
+What is the biggest land mammal?
+What were some historical reasons for the invention of pad thai?
+What is the difference between medicare and medicaid?
+Where was poutine invented?
+Why some people like spicy food?
+What is Original Joe's restaurant and where are they located?
+What is a Peloton in a bicycle race?
+Given this paragraph about Twitch Interactive, in what year did Amazon acquire them?
+Given this paragraph about Sam Baker, what is the Outland Trophy?
+How long did Air Finland operate?
+Who wrote Vande Mataram poem?
+Why was there a lockout during the 1998-1999 NBA season?
+Which rivers were the birthplaces of the first great civilizations?
+Why should I move to New York City?
+Given this paragraph, what is Peru's most popular tourist attraction and how many people visit it every year?
+What is a mainframe?
+What is a snook?
+What is a speech language pathologist?
+How to remove grease on clothes after a bike trip?
+Why did my portable solar panel not work when I plugged it into the solar receptor on the side of my camper van?
+In the series, A Song of Ice and Fire, who is the founder of House Yew?
+Which NBA team has the longest playoff drought?
+What are the words of House Bulwer?
+What are the merits of skipping breakfast? Can you target your answer to a typical American and describe in layman's terms rather than detailed scientific jargon?
+What are some important things that have happened on the Day April 6?
+Given this paragraph about Museo Municipal Taurino Francisco Montes, where is it located?
+What is the best hand in poker?
+Why is free climbing called free climbing?
+What is the right time to do workouts or yoga?
+How do you fry shrimp?
+What do west coast oysters taste like?
+Why do we have work meetings?
+What would Bruce lee do if he is alive?
+What is intermittent fasting and can it help?
+Given this reference text about the Hawaiian scale, how tall is a wave that is six foot Hawaiian?
+Can you write a High Five to a colleague for the partnership at a customer account and the hard work he did?
+How can I tell my sourdough starter is ready to use?
+What did the note in Hermione's hand say when she was found petrified in Harry Potter and the Chamber of Secrets?
+Who is the most powerful person in the world?
+Why is the Chrysler Hemi V8 so legendary?
+Who invented the airplane?
+Which NFL team has won the most Super Bowls?
+Why do people say "if I had a nickle for every time"?
+Given this paragraph about flashcards, is flashcard useful for learning painting?
+Given this paragraph, what is the top speed of a Kia Stinger?
+What are the words of House Swygert?
+How is interest paid on a series I bond?
+What civilization built temples across the Yucatan peninsula?
+What is the best kind of dog breed?
+How many soccer teams are in the English Premier League?
+When was Heineken founded?
+What is the name of Special Agent Dana Scully's daughter?
+Given this paragraph about Berwick, what was its population during the most up to date census?
+What is National Financial Switch or NFS?
+What is the difference between MMA and boxing?
+Why do some people select private schools over public schools?
+Who was Bran the Builder?
+What are some of the best science fiction movies of all time?
+Why is soccer so popular?
+Based on this paragraph about a singer, how many top-ten singles has Rihanna had in the United States?
+Should I have Kids?
+How many canals are in Amsterdam?
+What is the Forever War about?
+What is a mortgage?
+What is a computer?
+What is the difference between an alligator and a crocodile?
+What is the coldest month in Warsaw and how cold does it get on average?
+Best Actress Award in Drama series in 27th Screen Actors Guild(SAG) Awards was won by whom?
+When Aegon the Conqueror took over Westeros, which great house of the Reach became extinct as a result?
+What are 3 popular movies with Adam Sandler?
+What's the game engine used by Bethesda before Creation Engine? And what's the last game make with it?
+Based on this article, what countries have implemented the use of a dead man zone?
+What is the legal drinking age in the USA?
+What is the Auburn Ski Club?
+How many series did Dance Mums air?
+Office of War Information?
+what is the capital of China?
+Where is the first Summer Olympics held?
+Given the following summary of the book "Human Compatible" by Stuart Russell, what is the author's proposal to overcome the limitations of the standard approach for developing AI?
+What was the result of the Emancipation Proclamation?
+Given this paragraph are Beavers the largest living rodents?
+What is difference between ECS and EC2?
+Which one is more popular? Soccer vs Basketball?
+Why are ragdoll cats called ragdolls?
+How can I drive from South Bay to San Francisco?
+How object-oriented programming is different from functional programming?
+What is the most popular sport?
+What are the best books of Dostoyevsky?
+Heres a summary of Gioia Del Colle, a town in Italy that I will be traveling to, how should I pack?
+What did Stevie Ray Vaughan name his most beloved guitar?
+What’s the official language in Brazil?
+How do you keep you dog happy?
+Who founded the city of Detroit?
+What is a credit card?
+What is March Madness?
+What hemispheres is the United States in?
+What are all Marvel movies with Thanos in it?
+Who is Evelyn Quan Wang in the move "Everything Everywhere All at Once"?
+what is typical enterprise sales person comp mix between base and commission?
+Wat id DNA annotation?
+When you get a new dog, how to prepare the living space?
+What was Lieutenant Columbo's catch phrase on his TV show?
+How can I learn to snowboad?
+What does the acronym MEDDPICC stand for?
+Stevens Pass vs Whistler Blackcomb, which is better? Why?
+What is a hardwired smoke detector?
+What is OAuth 2.0?
+Of the cities listed, which was furthest from the station?
+How food insecurity can lead to obesity. How can teachers help alleviate food insecurity if they identify this problem in children’s families?
+Who was the highest-paid College president in 2003-2004 in U.S.?
+Why would people not like Goose Goose Duck?
+When was Irina Vysheslavska born?
+What is the difference between a donut and a scone?
+Where are the 4 best international travel destinations if you want a tropical location rich with history?
+Why do people need money?
+Who wrote the TV series Babylon5?
+How many member states does the European Union have?
+Where can I go to find out where my polling place is in Wisconsin so that I know where I can vote?
+What is Apache Spark?
+Using the following text, list the top 4 drugs by revenue for Pfizer in 2022?
+What are different tools and channels used in organizations for communication and training?
+Why is backcountry skiing fun?
+Why do audiophiles spend lots of money on high-end audio equipment and does more expensive gear always sound better than less expensive hardware?
+Who has hosted Saturday Night Live the most in the history of the show?
+Who is Sasha? How does her life compare to Becky?
+What are some different types of salt?
+What is genome analysis?
+Why do humans like sports?
+What is the history of Afrobeats?
+What is a debit card?
+Given these paragraphs about Large language models, what are "emergent abilities"?
+Given a reference text about Friedrich Rudolf Ludwig Freiherr von Canitz, when and where was he born?
+Why was Tamazulapam del Espíritu Santo placed under quarantine?
+What do vaccines do?
+What is the best way to recover from a shoulder SLAP tear?
+Why are shiba inus the best dogs?
+Given this paragraph about the JW Marriott building in Downtown Houston, what was the framing made of and how tall was it?
+How did Andy Warhol create the "piss paintings"?
+What enabled Libya to obtain rapid economic growth prior to 1990?
+What is the job of Army Rangers?
+What is the largest land animal in the world?
+Where did Jackson move to become an actor?
+What is the difference between cherry blossoms and plum blossoms?
+In Berkeley, how do parents select their public middle school?
+Why does my dog dig in the furniture?
+Can you please describe the game of golf?
+What are the best exercises for lower back pain?
+Who is the white rapper that sings 'Thrift Shop'?
+Which NFL teams have gone to the Super Bowl only once and won?
+What are some of the most common activities during winter in cold weather climates?
+Is he still an active football player?
+why do dogs like humans?
+What is the Research Collaboratory for Structural Bioinformatics Protein Data Bank (RCSB PDB)?
+Why did the chicken cross the playground?
+what does it mean to have brunette hair?
+What is the capital of Arkansas?
+Given this paragraph about John C. Young, where did he go to college?
+what are the five pillars of migration or modernization from a legacy data warehouse to a modern lakehouse?
+What is the largest city in Oregon?
+Given this paragraph about Outlander, who stars in Outlander?
+Why are plants green?
+Given this paragraph about the Grammy Awards, who has the most Grammys of all time?
+Who was the last king of the Reach before Aegon's Conquest?
+What are the three major Abrahamic religions?
+What should I do if my motherboard won't post?
+What are some good kids activities on Lake Norman, NC?
+Who won the Man Booker International Prize for 2019?
+How can I quickly treat a headache?
+Does Alaska have six months of darkness and six months of light?
+How do learn how to ride a bicycle?
+Why do companies play dividends?
+How many compute services does Azure Synapse have?
+Marburg Virus Disease was first detected in which year?
+What are examples of endocrine disruptors?
+How do I learn how to code?
+Which US state produces the most wine?
+What are the benefits of a carbon-fiber paddle for whitewater kayaking?
+Why do kids have to take tests in school?
+How do you cook ribs?
+What re the differences between recruiters and sourcers at a company?
+What is the capital of CA?
+Who was the greatest President of the United States of America?
+What kind of salt should I use while cooking?
+What is at the center of our solar system?
+Given the biography of Nemacolin, what years did George Washington use Nemacolin's Path?
+What is the oldest incorporated academy in the united states, with multiple u.s. presidents as alumni?
+What singer has had a Billboard No. 1 hit in each of the last four decades?
+As a leader, how do you build an environment of trust?
+What are the number of provinces in Belgium?
+Which Game of Thrones episode does Arya go blind?
+What is the difference between electric guitar and acoustic guitar?
+What are common executive roles at large companies?
+How many children did Louis Pasteur have, and how many died of typhoid fever?
+Given a reference text about Megan Reid, American professional soccer player, what college did she attend and how many soccer games did she start in her senior year of college?
+How many F1 races are there in a year?
+I'm a vegan and traveling to new york city next month, can you suggest some vegan restaurants that i can eat at during my trip?
+When did Virgin Australia start operating?
+How do I obtain help for an adult relative with a serious mental illness?
+Based on the paragraph about the Korean War, what is the name of the new sovereign state created in the north?
+Does Indermaur work as CTO, CEO, or CFO?
+What is the capital of Spain and what is it's population?
+In the series A Song of Ice and Fire, who is the founder of House Frey?
+Given this reference test, what is the daily recommended value of magnesium for men in the U.S.?
+What is the capital of Colorado?
+How can I change the type of a column?
+What is Fascism and what is the historical context?
+Who did John Evelyn support during the English Civil War?
+Is my children's school information available to anyone on the Internet?
+Which Australia Rules Football team has won the most grand finals?
+What is Beggar's Chicken?
+Which country won the most recent soccer world cup?
+What famous character did William B. Davis portray?
+Why don't soccer players kick with their toe?
+What is the universe made of?
+What percentage of the world is left-handed?
+Why do some countries call football soccer?
+Which of the current Girl Scout cookies is based on one of the original Girl Scout cookies?
+In the series A Song of Ice and Fire, who is the founder of House Qoherys?
+What is Visual Studio Code?
+"Big Bang": what does it mean?
+What age would a child become a tween?
+What does an east coast oyster taste like?
+How does FTX collapse?
+In dimensional modeling, what is a bus matrix?
+What happens at a track meet?
+How do you clear a scuba mask underwater ?
+When was Tomoaki Komorida born?
+Can you tell if someone has hypothyroidism by looking at their face?
+What wine varietal is the most popular produced in Oregon?
+What skis should I buy?
+What are the words of House Royce?
+Who played Dr. Jerry Buss in the show Winning Time?
+What are some pro tips when cold calling?
+What is a dataset?
+What is District 13 in "The Hunger Games" known for developing?
+How many cards are there is a standard deck of cards ?
+What if a buff?
+How did Jon Rahm win the Farmers Insurance Open?
+Can you tell me about Rugby Union?
+Who invented scratching ?
+Given this paragraph about Zoom, where is the company based and when was the Zoom software released?
+where does the word dynamite come from?
+What are the four quadrants in the Old City of Jerusalem?
+Which inventions of the 20th century had the greatest positive impact on human lifespan?
+Who wrote the Great Gatsby?
+On what date was the country of Belize granted independence?
+Which F1 drivers race for Red Bull Racing in the 2023 season?
+What do people usually do at a birthday party?
+Given these paragraphs about Natural hydrogen, what is it?
+Given the reference text about the marathon, who currently holds the men's record in the marathon?
+Is a manned mission to Mars worth the cost ?
+Why is Brazilian jiu jitsu an excellent martial art?
+Given this paragraph about the rock band The Basics, what is notable about the Get Back album?
+Based on this reference text about bull sharks, why can bull sharks live in both salt and fresh water?
+How many human beings are on the planet?
+Some families get rid of TVs and smartphones for the proper growth of children, but are those things desirable?
+How does water freeze?
+What is a headlamp?
+How do you build a roof?
+How many keys does a full piano have?
+Why did the US join WW2?
+Is The Last Of Us Part I a good PC game?
+Given this paragraph about blockchain, how did blockchain influence bitcoin cryptocurrency?
+Is Gillian Anderson an English actress?
+Who are the tallest people in the world?
+What is a difference between alligators and crocodiles?
+What is the triple crown of baseball?
+How do I turn on my Tesla Model Y?
+What are some popular social media applications?
+Based on this passage, what is the average number of people per family in Zangisheh?
+Where is the Mall of America located?
+Why is the D silent in words like Bridge?
+Can artificial intelligence and large language models replace software engineers?
+Which Dutch actor was named the Best Dutch Actor of the Century in 1999?
+How will Artificial Intelligence change the education industry in the future?
+What are some physical health benefits from doing strength training exercises?
+What's next generation energy?
+How much wood would a woodchuck chuck if a woodchuck could chuck wood?
+Given a reference text about the Mid-South Grizzlies vs NFL, what was the result of the lawsuit?
+In Paul Simon's famous song, how many different ways are there to leave your lover?
+Who started the Reformation?
+What is API abuse?
+What is the last step before a star collapses into a black hole?
+Whats the difference between a bass guitar and a regular guitar?
+Is Seattle a nice place to live?
+Do all dog breeds have long tails?
+Boiling water is 100 degree in celsius, is that an obtuse angle?
+What is fractional-reserve banking?
+What is rain good for?
+How long did it take for ironworking to be commonplace in West Africa following its introduction in Northern Africa?
+Which Targaryen has the dragon Rhaegal named after him?
+What is the difference between guitar and ukulele?
+Who created the grading system for the I Liq Chuan martial art?
+How can I improve Kafka performance with Spark?
+India with the world's highest TB burden, introduced the BCG mass immunisation in which year?
+What is sbt in Scala?
+Who is the best NBA player of all time?
+Who is the best tennis player of all time?
+Given that preserving human brains for more than a century is fairly uncommon, what do you think was the motivation for preserving Guiteau's brain?
+Why do children sometimes leave milk and cookies out on Christmas Eve?
+What is the most popular breed of dog to have as a pet in the United States?
+What car manufacturers were associated with American Muscle cars in the 1960s and 1970s?
+What type of bicycle should I buy?
+What is Autism and how varied is the spectrum?
+Should a human be happy all the time?
+What is Occam's razor?
+How many people died in the Cloquet fire of Illinois according to the text?
+What is Lawson in Japan?
+What institutions make up the Ivy League?
+How does one state something as an opinion, belief, or preference rather than as if something is a fact?
+How can I learn how to ski?
+Why is the University of Waterloo the best school for software engineering?
+How many grand slams did Boris Becker win?
+How many items is in a baker's dozen?
+In the series A Song of Ice and Fire, who is the founder of House Targaryen?
+Is Paris a good city to live in?
+How to introduce a new cat to the household if you already have cats?
+Can we be lovers?
+Do vegetarians eat meat?
+Where does the name Gibraltar come from?
+How much sleep is too much?
+How to evaluate an equation with multiple operations?
+Who was Elizabeth II?
+What did Deneen do in her teens?
+Why are emotions important when day trading?
+What does Pinot Noir mean?
+Given this paragraph about Password-authenticated key exchange, what year were the first provably-secure protocols created?
+What is R language?
+Why do you practice Kyokushin karate?
+I want to get in shape. What nutrition and exercise program should I follow?
+When should I take a medication?
+What is the meaning of life?
+What are the main differences between traditional fishing with a spinning rod or baitcasting rod and fly fishing?
+What could you do on a Sunday?
+Why is WiFi such a popular way to implement a home network?
+What chinese like drinking hot water?
+How many Harry Potter books are there?
+What is it like to live in New Zealand?
+When buying a whole fish, how do you pick a good fish?
+Who directed the Lost in Translation movie?
+What is the difference between a sunny side up egg and a scrambled egg?
+Given these paragraphs about Hydrogen Storage, what are some of its use cases?
+What is a haiku?
+What are the essential skills required for a communication?
+What is one of the first recorded mentions of the sauna in Finnish literature?
+What year did the Star Wars Trilogy premier in theaters?
+What family do tigers, lions and panthers all belong to?
+Which episode of The X-Files did Dana Scully get diagnosed with cancer?
+Why is baseball called America's Pastime?
+Can you give me a short summary of Mindfulness and how to practice it?
+What is a romance language?
+According to this paragraph, how many NCAA championships has UVA won?
+Who wrote The Originals?
+Who invented the first car?
+What is Gingham fabric?
+What was the first full-length animated movie that Disney released?
+How do I run faster?
+What is the difference between a Transformation and Action in Spark?
+What Does the Referee Do?
+Who was among the famous Roman poets?
+What was Meghan Markle's royal title?
+What are some top ski resorts to visit if I live in SF bay area?
+How do I apply for a single-entry e-visa to Uzbekistan as a US citizen for tourism? What potential pitfalls do I need to look out for?
+What new car should I buy for my family?
+What’s the easiest coffee brewing method?
+Which of these sentences is correct: "If I was you, I would do it" or "If I were you, I would do it"?
+How many languages are spoken in the country of Nigeria?
+who won the last soccer world cup ?
+What is data denormalization in data warehouse?
+How do you replace a hole in the drywall?
+Why is football called soccer in the US?
+What is a Haiku?
+What is the difference between a research university and a liberal arts college?
+What is Azure HDInsight?
+Why are visualisations useful for communicating information?
+what was the impact on software companies from the revenue standard called 606?
+Who has been elected as the 15th President of India?
+How can you identify and suss out misinformation seen in so-called news stories and on social media?
+Why does the divide and average method for computing square roots work?
+Given this paragraph on LeBron James' early career, when did he win his first NBA MVP?
+What is India’s rank in UN Human Development Index 2021?
+What is the first computer recognized in human history?
+What is an audible?
+Why do my plants keep dying?
+Which french football player is considered one of the best strikers of all time?
+What is the capital of the united kingdom?
+What factors are identified as contributing to growth and development in early childhood?
+I have some vermouth and bitters. What cocktails can I make with those ingredients?
+What are the benefits of exercising and why one should workout everyday especially if you have a sedentary lifestyle that makes you sit all day long?
+What are the names of some great New England Patriots football players?
+Of the living animal species which have been described, which group has the most?
+When to use stones in your landscape?
+What is the best string tension for a tennis racket?
+What cause toe fungus?
+Why do humans fall in love?
+How can I save money when travelling?
+Who won the Second World War?
+Where was Sarah Schechter born?
+Should I use a dynamic microphone or a condenser microphone for recording a podcast? What about streaming on twitch or making youtube videos? Should I ever use a ribbon microphone?
+How long does a tennis match take?
+Art Garfunkel initially declined to sing one of Simon & Garfunkel's biggest hits solo. Which song is it?
+Who was the first American president?
+In what part of the United States is the New England region?
+What is the highest mountain peak in Kosovo?
+What is the Coachella festival?
+What are the words of House Frey?
+When buying a used car, what are some red flags to look out for?
+What's the best part of having children?
+Which martial art or arts did Brazilian jiu-jitsu derive from?
+What mode of transport is stereotypically associated with San Francisco?
+How many languages are spoken in India?
+In the series A Song of Ice and Fire, who is the founder of House Plowman?
+Why do people like to drink tea?
+What is the best place for tacos in San Francisco?
+Why is Sauna or heat therapy good for you?
+What is the largest lake in the united states?
+Who is the St Louis Cardinals?
+What are the benefits of meditation?
+What states make up New England?
+What languages are spoken in Tunisia?
+What is the objective of a batter in the sport of baseball?
+What is cholesterol and bad cholesterol and why would I want to reduce my levels?
+Which is better the Free Software Movement or the Open Source Initiative?
+What was the US civil war about?
+How many feet are in 1 mile?
+What shape is the constellation of Orion?
+Which USA government agency is responsible for preventing diseases?
+What is a use case?
+What is database meaning?
+In climbing, what is a hand jam?
+Is Slovenia a nice place to take a food fueled vacation?
+What is a coded application?
+Who was Margaret Thatcher?
+What are some weight loss tips?
+If there are only two genera remaining, what happened to the other 24?
+Who was responsible for creating Skynet?
+Where is the best place in my home to store valuable and sensitive documents?
+What is the "iron curtain"?
+What is the best Hip-Hop artist of all time ?
+What does the phrase “ignorance is bliss” mean?
+What is MBB and what does it stand for?
+Why did Cato think that Carthage must be destroyed?
+How do you prepare lentil soup?
+Why do people like playing games?
+How do you throw a cutter in Wiffle Ball?
+What is the law of sines?
+What are some tricks to baking a really good cake?
+Why do sheep keepers paint their sheep?
+What are some fun things to do on Oahu?
+What public health inventions did Louis Pasteur contribute to society?
+How do you get dressed in the morning?
+Why do people prefer Dunkin over Starbucks?
+What was the main treaty that marked the end of World War I?
+What is the difference between NAFTA and NATO?
+What is Douglas Stuart Moore's best remembered for?
+What are four universities in the state of Florida?
+Who were the United States Presidents?
+Using the reference information, how many years was the People's Revolutionary Government in control in Grenada, and under what leader?
+Were the months that Shirley C. Guthrie Jr. was born and died in the same month or different months?
+Who were the "Big Four" of Thrash Metal?
+What are the benefits of working out?
+What sound was 'This Mortal Coil' known for?
+What are monsoons in India?
+What are the best places to visit in France?
+How to tell if someone told a good joke?
+What is the best soccer club in history?
+What makes a song popular?
+How did 'March Madness' get its name?
+When was Lee Kuan Yew born and when did he rule as the Prime Minister of Singapore?
+What is the FDA doing to respond to the COVID-19 pandemic?
+Is Britain the only country that drives on the left-hand side of the road?
+What are 6 natural resources of Africa?
+How do you cook eggs?
+What's the hardest mineral?
+How do you play Baseball?
+What singer was born Georgios Kyriacos Panayiotou?
+Who was the best player in Denver Broncos franchise history?
+What caused Africa's integration into the Roman System?
+What film won Best Picture at the 95th Academy Awards in 2023?
+Did you know the Earth is flat?
+What came first the chicken or the egg?
+What is the mascot of Cornell University?
+Can we move away from fossil fuels in the next decade ?
+At what age are children considered adults?
+What direction did Italy Avenue go in Uruguay per this block of text?
+How many episodes of the first season of Game of Thrones did Daniel Minahan direct?
+How did the Royal Navy Protect the British Task Force from Argentine air attacks during the Falklands War?
+What is a credit score?
+Why do people prefer Windows over Linux?
+Given this paragraph about the town of Birkenhead, what the does the name Birkenhead probably mean?
+At what temperature does water boil?
+What is an expert system, and when did they first emerge?
+What is the evolved form of Pikachu?
+What is the largest American city by population?
+Where was the 11th BRICS held?
+Why do cats make purring sounds?
+Where can you find Lygodactylus gutturalis?
+Why to people lift their trucks?
+What is the minimum amount of points a player needs to score to win a badminton match?
+Given a reference text about the 2022 Mazar-i-Sharif mosque bombing, how many people were injured and killed?
+Who did Outcault paint electric light displays for?
+Given this paragraph about the origin of zero, in which century did it first make an appearance in India?
+What is the state flower of California?
+Who are the three main characters of the Harry Potter Series?
+Who is the greatest tennis player of all time?
+How much more water does a bath use than a shower?
+How do we increase voter turnout in the United States?
+Why is the band Phish so popular?
+Who is the greatest golfer of all time?
+What are some of most popular science fiction and fantasy books with TV or movie adaptations in the past twenty years?
+Where was the beer Yuengling founded?
+When and where was Nero born?
+How is the The U.S. Naturalization Interview and test done?
+What was the public reaction to the draft during the Vietnam War?
+Given the reference text about Tottenham Hotspur, what was the name of the stadium that the new stadium replaced?
+What are a few dishes you can cook with potatoes?
+How do influencers make money?
+What is Agent Fox Mulder's badge number?
+What high school did Paul Allen and Bill Gates attend?
+What is reserve requirement?
+Who was the Colossus of Rhodes a likeness of?
+Based on this paragraph, how many younger siblings did Kennedy have?
+Why is "The quick brown fox jumps over the lazy dog" used so often to show fonts?
+How reliable is public transportation?
+Which sub-Saharan colony was the first to gain independence?
+How are you doing today?
+What is a DBU?
+What is an API endpoint?
+What is the fourth album from The Tragically Hip?
+Why does a US $20 bill have a vertical strip on it when held to light?
+What is the difference between a quartz watch and a mechanical watch?
+Where should you go on vacation?
+What is the most popular sport in the UK?
+What are the benefits of building a DIY home build off grid?
+How to add two cells in Excel?
+How do I cook basmati rice?
+What's the preferred mode of transportation in Vietnam?
+Are iodized salt and kosher salt the same?
+Who is the best golfer in the world?
+How far did Oskar Dillon kick in the winning goal at the NPL Queensland championship?
+Which are the main reasons for doing a PhD?
+What is the NBA All-Star game?
+What is a sight-reading contest?
+In what year did Singapore become an independent sovereign country?
+What is the best kind of bread?
+Since it began, how many years has FIVB not been held?
+Why do people blink?
+What is Airsoft ?
+Did Thomas Attewell bat with a right or left hand?
+What is the origin of the Easter Egg in video games?
+What does a lawyer do?
+who is the worlds most popular cricketer?
+Can I copy my Delta Lake table to another location?
+How is the price of an Uber ride calculated?
+How do you tell a story with data?
+When is tax day?
+What is the difference between interface and abstract class in Java?
+What is AWS ECS?
+What is a mulligan in Magic the Gathering?
+What are the colors of the rainbow?
+What wine is the Oregon Willamette Valley known for?
+What is the standard loft of a 9-iron in golf?
+Who is the author of Harry Potter?
+Is it football or soccer that they play in the Netherlands?
+Why is Football a popular spectator sport?
+What makes the platypus such an interesting animal?
+What is a proper noun?
+Who is the lead singer of the band elbow?
+What's the origin of Dog Day Afternoon?
+Will any country learn from their own mistakes and not repeat history?
+How do UK telephone numbers work?
+What are some of the most popular undergraduate majors at UC Berkeley?
+Was Richard Nixon born in California?
+Is it wrong to split the infinitive?
+What was the deadliest battle in history?
+Based on the reference text about Bitcoin, how many countries have banned Bitcoin?
+What attractions should I visit whilst in London?
+Given this reference text about the consumption of peanut butter, when is national peanut butter day?
+What is the best English food?
+Who was the first Time Magazine Man of the Year?
+What are the three teams in the mobile game Pokemon Go?
+Is it a good situation to be a dev ?
+What are some reasons not to live in far northern locations?
+Why is biathlon a challenging sport?
+Who is the Disney character named Grogu?
+What is special about Luis Miguel's music?
+What are the 3 largest oil companies?
+Why is University of Wisconsin Madison the best college?
+What is the best season to visit Japan?
+Who is raiden shogun?
+Given this paragraph about cat's senses, what light level can domestic house cats see at in comparison to human sight?
+What are toe beans?
+Are you going for a walk today?
+Give this paragraph about TCP/IP, what are the four abstraction laters?
+Which country is the best at hockey?
+How many seasons was Jeff Fisher the head coach of the Titans while they were not in Tennessee?
+Why is California the best state?
+Why do people read books?
+What do redshifts tell astronomers?
+Which MTV show featured Jenny McCarthy hosting a dating show?
+When did the Portuguese royal family move to Brazil?
+How many species of Stingrays are there?
+What is OEE in manufacturing?
+How much is in a baker's dozen?
+Who are the top tennis players right now?
+What does AWS stand for?
+Why does my back hurt?
+What is the east Asian process of training small trees called?
+What were the last ten states to enter the union of the United States?
+What is buoyant force?
+How do I get rid of mosquitos in my house?
+Which is better for you, red or green grapes?
+Annapolis is the capital city of which state?
+Why do human beings react slow on climate changes?
+What is the biggest fish in the ocean?
+Given this reference text about the history of statistics, what was the earliest publican of writing on statistics?
+What does the percentage chance of rain in a weather forecast indicate?
+Whats the difference between a CPU and RAM?
+What is a pot hole?
+Given the following text, what is special about Prime Numbers?
+What equipment do I need to go camping?
+What is the capital of Florida?
+What are the Grand Slams of tennis?
+What are the most successful Premier League football teams?
+Why Rock Climbing so popular? Is rock climbing a good sport?
+Given the reference text, what is the female equivalent of Karl?
+Given a reference text about Anoop Nautiyal, what did his work focus on?
+What decade is the Great Gatsby set in, and what is the nickname for that time period?
+What is the difference between acoustic and classical guitar?
+What does this mean: "Steady-state theory"?
+Which part of the United States is known as the "four corners" area?
+What is the best time of the year to visit Paris?
+Given these paragraphs about battery storage power stations, for how long a battery storage power station can output?
+What is the difference between a resume and a cv?
+What seven houses ruled the Seven Kingdoms before Aegon's Conquest?
+Why is open source so important?
+What cocktail contributed to the rise of vodka in America?
+What is the best way to build relationships?
+Based on the following paragraph on squat lobster fisheries, where do such fisheries exist today?
+What are the Great Lakes?
+What are some fun board games to play as a family?
+What are the main football teams in the city of Madrid?
+Given the following paragraph on cell structure, what is an example of membrane proteins?
+Is the Cordyceps fungus from The Last of US real?
+Given this reference paragraph, who coined the term dead man zone?
+Is golf an easy sport?
+What is a top spin serve in tennis?
+Given this paragraph, who was the first person to run the Western States 100 in under 24 hours?
+What is the city of Seattle known for?
+What caused Covid 19?
+Why are kids inquisitive?
+Who does the Navy Cross is awarded to?
+What is a bokoblin?
+given this reference text about 1891 Cypriot legislative election, What caused the non-Muslim seats to drop in 1886 to 10,030?
+What is the best seasoning for ribeye steak that will be grilled?
+Who wrote Jane Eyre?
+Who finished the Wheel of Time series?
+Based on the provided text, In what year did the National Gallery of Ireland open its doors to the public and what kind of art is it known for?
+What are the main cat personality types?
+Who invented cement that could be set underwater?
+How do archaeologists study the past?
+per the context given, how would illiterate politicians able to vote?
+what are the 5 skandhas?
+Who was Bhagat Singh?
+What are people from Wisconsin also referred to as?
+Where does College Avenue begin and end in Berkeley, CA?
+What is the largest living thing?
+What should you do if you see a brown bear approach you while you are hiking?
+What are the most common sorting algorithms?
+When was The White Mandigos band formed?
+How many hands do humans have?
+Why are pools fun?
+What is the tallest building in Chicago?
+What is the male population in Madaria?
+What is the proper greeting for Passover?
+What are some of the highest-rated episodes of The X-Files, based on viewer's ratings?
+Should I buy a convertible?
+Given a reference text about NATO, when did Finland become a member?
+Given this paragraph about material, what is lithophane?
+Which film holds the record for most Academy Award wins?
+Where should I travel for a summer vacation in the United States?
+Is Scala a good programming language?
+What is the tallest building in Seattle?
+What is the Mahatma Gandhi Marg (Allahabad)?
+Given this paragraph, how big are the non-volley zones in pickleball and where are they located?
+Based on this article, considerations of what time zone is used for determining what land is in the dead man zone?
+What is Sunshine Recession?
+When is the best time to visit Chicago?
+What is one of the main trigger for autism in current generation?
+Why does in-person contact create more impactful human connections than relationships based on purely virtual meetings?
+Should I take extra fuel when traveling to Alaska?
+What does fasting mean?
+What is a vegan?
+Explain the answer to this riddle: What has four legs in the morning, two legs in the afternoon, and three legs in the evening?
+What happens if I let go of a helium balloon?
+Why do people get sore after working out?
+What are the most airplanes to learn how to fly?
+What are the typical items used to create a Haft-sin?
+What is a homonym?
+Who won the masters in golf in 2019?
+What is a dig in baseball?
+What extra ingredients can you use when baking a bread?
+Who is the most decorated olympian of all time?
+How can UV light be used?
+What is Jon Snow's true name?
+When was the last flight of Concorde?
+Given a reference text about twitter, how many accounts were estimated to be fake?
+Can you give me some reasons why Hockey is not as popular in the United States as many other sports?
+How many toes do polydactyl cats have?
+What is the largest lake in Switzerland?
+How many planets are there?
+What was The Last Dance about?
+I have 3 apples, Jack has 4 pears and Jill has 5 books. After I ate 5 of Jack's pears, how many fruits we have in total now?
+What is the oldest musical composition in the world?
+What is Purchasing power parity (PPP)?
+Which countries are the world's largest or biggest manufacturer in terms of $ value?
+How many atomic bombs have been used in combat in human history?
+What should I consider when deciding between electric car or gas car?
+Why do people put ICE as a contact in their cell phone?
+What is Szalay doing these days?
+Is the person who invented bitcoin Japanese?
+What kind of activity do good sales people do?
+Is there any river that doesn’t meet a sea?
+How many prototypes were made?
+In the series A Song of Ice and Fire, who is the founder of House Fossoway?
+Which movie was originally declared the winner for Best Picture?
+What are the words of House Crakehall?
+How would you describe the differences between Indian and Western music, especially as it relates to the sense of pitch?
+Who is Gendry's father?
+Is it advisable to dress in costume for a musical theater audition?
+What is the purpose of a phone case?
+How can I join two pieces of wood together for making furniture or drawers?
+At what age can you get a driver's permit in the state of Washington?
+Where was the 7th edition of Slinex conducted?
+As a child, what singer held the longest note ever on Star Search?
+What are a few ways that I can keep my house cool when it is hot in the summer?
+What causes a recession?
+Given a reference text about Pwojè Pyebwa, who funded the project?
+What are the names of Daenerys Targaryen's three dragons?
+What kind of cancer did Agent Dana Scully get diagnosed with in "The X-Files"?
+What position is best to use in your Fantasy Football flex slot?
+Who create Ben & Jerry's icecream?
+Was the USS Rachel Seaman built in the 20th century?
+Why use an ereader to read a book?
+What is a woodwind instrument?
+Why do babies cry so much?
+How to raise a kitten?
+What is one of your favorite hobbies?
+How old was Pukeiti when he died?
+What is the name of the world's oldest city?
+Who is the most successful driver in Formula 1 history?
+Given this paragraph about the Subaru Outback, in what year was the Wilderness trim introduced?
+Who is Asa Wood?
+Why does Israel offer huge discounts to Chicago Booth students' spring break trips?
+What causes ocean tides?
+What are the signs and symptoms of Sensory processing disorder?
+What is a snowball?
+Why is Chicago so windy?
+What team is the latest expansion in Major League Soccer?
+What is the smallest state in the United States?
+What is the nuclear magnetic resonance spectroscopy of proteins?
+My family wants to buy a dog. Which breed should we chose?
+What do I need to be aware of when talking to an alien?
+What is the political philosophy of isolationists?
+What are the common toppings that can go on a hotdog?
+How do you wheelie a motorcycle?
+What does the term ACID mean with respect to databases?
+Why are all the planets and moons round in shape? What makes them round? Does there exist another shape?
+How do you make a good cappuccino?
+Given the this paragraph about the invention of transistors, why did lawyers at Bell Labs advise Shockley against filing a patent for his field-effect transistors?
+What is the difference between bikepacking and bicycle touring?
+How to make an americano ?
+Can dogs look up?
+What is the difference between basketball and netball?
+Given this paragraph, what method of scientific study did Edmund Selous champion?
+Who is the Patron Saint of Ireland?
+What are the India’s Foreign Exchange Reserves as on week ended Sept 23, 2022?
+Who was the prime minister of Spain when Spain joined NATO?
+Who won the 149th Boat Race?
+the first person was on the moon?
+What is the difference between AWS ECS and EKS?
+Where is Ecsenius tessera commonly found?
+When did the gallipoli campaign take place?
+What are the rules changes made to baseball this year?
+What does a vegan lifestyle mean to you?
+According to this reference text about UVA, what years have UVA women won NCAA titles in rowing?
+What is the current best TV show?
+What are some popular search engines?
+Why are people migrating in the US from the NE and Mid-West to the South and SE?
+Who has scored the most runs in ODI cricket?
+How is "crisp" pronounced?
+What is the difference between a violin and a viola?
+In the series A Song of Ice and Fire, who is the founder of House Clegane?
+Which episode of "The X-Files" was broadcast in black-and-white?
+What does ROYGBIV stand for?
+What is AWS EMR?
+Which was the first satellite launched by China?
+Does Gen Z appreciate Radiohead's music?
+What are the pros and cons of charging a Tesla at Public Charging Stations?
+What is an emote?
+What is the English Premier League?
+What are the benefits of audio books over physical books?
+What is Apache Hive?
+Based on this paragraph, who was Donald Trump's physician during 2018 to 2021?
+What is a demand plan?
+Why is it important to brush and floss your teeth everyday?
+Why is skiing a great sport?
+How many volumes of Wheel of Time are there?
+Why are Donald Trump’s followers stereotyped as idiots?
+What is a bubble vest?
+How do you shift a manual transmission in vehicle?
+I am on a week long vacation to India and specifically want to explore Himalayan state of Himachal Pradesh. How should I plan my trip ?
+What is the paleolithic?
+Which is the best tube line?
+What is the difference between laser cutting and 3D printing?
+What are all the books in the Lord of the Rings trilogy?
+By what percentage of vote margin did Ralph Northam win over Aneesh Chopra in the 2013 election for Governor of Virginia?
+Who is the greatest NFL running back of all time?
+What are the pros and cons of living in Seattle?
+Did Paul Ernest Adolph ever served the military?
+How are the teams which qualify for the National Football League Playoffs determined?
+Im considering buying a boat? How do I decide which boat meets my needs?
+What is stream processing ?
+Who is the greatest ever soccer player?
+What is the fastest car in the world?
+What is the capital of Arizona?
+What is special about the number 1729?
+How does a tack work in windsurfing?
+What is a Pythagorean triple?
+What is the nickname for Spokane, Washington?
+How can I become a private pilot?
+What is the black oil on the TV show The X-Files?
+What is a surf board used for?
+What are some typical characteristics of a Persian cat?
+What is the JRE in Java?
+How do you know if a chicken breast is fully cooked?
+What international trophy did the Club Africain football team won in 1971 ?
+What is Autism Spectrum Disorder?
+What is graph theory?
+How do you make fresh pasta?
+For whom is Daenerys Targaryen's dragon, Viserion, named for?
+Who are some of the best basketball players of all time?
+Why is American Football popular?
+Does Alaska have any professional sports teams?
+Why was the movie The Happytime Murders given such bad reviews if it was award winning?
+Based on this paragraph, what was the main focus of Mohammad Shah I's reign over his sultanate?
+What is Microsoft Teams?
+What is your favorite piece of classical music?
+How many cities in Lithuania are larger than Neris?
+When did the American Civil War end?
+How many windows does the building have based on the provided paragraph?
+What's the most important thing in a marriage?
+How to write a college essay?
+Who is the creator of Python?
+If 2 carpenters can build 4 chairs in 3 hours, then how many chairs can 6 carpenters build in 6 hours?
+What are the words of House Tarly?
+What dog breed is a mix between a Cocker Spaniel and a Poodle?
+Why did Georges think that Helene redirected her affections towards Walter Rogers?
+Given these paragraphs about the Tesla bot, what kind of tasks is it expected to perform?
+Is Realpolitik diplomacy strategy based on pragmatism or idealism?
+What is Credit scoring?
+What are the pros and cons of charging your Tesla at home?
+Where does paprika come from?
+Based on this paragraph, how many times has Joe Biden run for president and what characteristics make him unique among all past presidents?
+What does it mean for something to be compostable?
+Why didn’t people like the end of Game of Thrones?
+Where is Black Oak?
+How should I sleep train my baby?
+What is the FA Cup?
+How Many Players are there in a Football Team?
+Given this paragraph, explain who Robert Kiyosaki is?
+Where is the baseball Hall of Fame?
+From this paragraph, tell me when Mary died and when did Elizabeth had Mary, Queen of Scots imprisoned. Also, who supported plots to have Elizabeth overthrown?
+When rock climbing, what is the difference between lead climbing and top rope climbing?
+I have problems to connect to the remote service. How I could debug the networking issue?
+Given this paragraph about Mahatma Gandhi, can you tell me why did he go to London?
+Given this paragraph about muscle strains and that my symptoms include severe and acute pain with movement limitations, how bad is my strain?
+The Gulbenkian Prize for Humanity was given to whom?
+Can you name five of the most successful professional golfers in history?
+What is Daylight savings time?
+To which town in the UK did the Ford Motor Company relocate to in 1931?
+How do you explain cloud computing to a 5 year old?
+How can I learn to snowboard?
+What is the difference between a rose and a sunflower?
+I'm considering buying a bicycle. How do I know which one I should buy?
+What is the best party to vote for in the US?
+What are the benefits of in-person learning versus online?
+Given this paragraph, how many public high schools are in Arlington, Virginia?
+What are some of the best Sports Movies of all time?
+Which social media platform is the best?
