@@ -2782,7 +2782,7 @@ set_tests_properties(native_geometry_test PROPERTIES TIMEOUT 300)
 # CTest (no corpus); bpc/chat/probe/context8k/sample need enwik8 and Dolly and are run by hand.
 add_executable(cyphalm_trie
   tools/cyphalm_trie.cpp
-  src/cyphalm/infinigram.cpp
+  src/cyphalm/fm_infinigram.cpp
   third_party/libsais/libsais.c)
 target_include_directories(cyphalm_trie PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"

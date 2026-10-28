@@ -45,7 +45,9 @@ BPC is held-out `−log2 p`. It is not a generation score.
 | InfiniGram | 77 MB | **26.0 MB** | `FmInfiniGram` (M5), the same answers |
 | Class expert, 3 orders | 77.7 MB | **18.2 MB** | compact and seen-once dropped (M2, M3): +0.0009 BPC on fresh text, surface S unchanged within its interval |
 | Class expert build, 3 orders: memory it adds at its peak | 560 MB | **132 MB** | chunked, each order merged on its own (M1), identical table |
-| Whole qa model, resident | 228 MB | **76 MB** | M2–M5 together (scratch harness; the `cyphalm_trie` wiring follows) |
+| Whole qa model, resident | 228 MB | **76 MB** | M2–M5 together (scratch harness) |
+| `cyphalm_trie qa`, peak | 264 MB | **171 MB** | M9: the tool on M4–M6, every number unchanged (C1L 368 → 199 MB; `context8k` 230 → 165 MB) |
+| `chat` served from a stored model | 104 MB, 476 s (trains) | **21 MB, 12 s** | `chat --model FILE` (M7) |
 
 ### What grows, and what must stay separate
 

@@ -2,7 +2,7 @@
 
 **Odin Loch** · 2026-10-28 · PLAN §10 (budgets) and Odin's goal of low RAM
 
-(Draft. The profile below is measured; the decision rule and predictions were written before any change was tried. Results are added under them.)
+(The profile below is measured; the decision rule and the predictions were written before any change was tried, M5–M9 each before its own run. Results are added under them.)
 
 **Question.** Where does CyphaLM's memory go at the 8 MiB protocol, and how much of it can be cut without losing BPC, text quality or answers?
 
@@ -51,6 +51,7 @@ A memory change is adopted only if:
 | M6 | In `cyphalm_trie qa`, build the class expert and the FM-index before the trie is trained (neither reads the trie), and let the index take the training text. Registered after M1–M5 were read | Every qa number identical; peak 303 → under 200 MB with 3 orders |
 | M7 | A stored packed trie file (`PackedModel::save` / `load`): magic, version, sizes and a checksum, with the six mixture weights and the scoring split, so a served model is self-contained. Registered before it was written | Loaded model bit-identical (every array, every holdout distribution, BPC to the bit); file within 1 KB of the packed bytes; load under 0.2 s for the qa model (8.1 MB); resident after load within 2 MB of the packed bytes + the 8 MiB text + the empty process |
 | M8 | A stored FM-index file (`FmInfiniGram::save` / `load`), so serving never builds the index. Registered before it was written | Load gives the same answers; file within 1% of the index's bytes; load under 0.5 s for 19.6 MB of text; peak while loading under the index's size + 10 MB |
+| M9 | M4, M5 and M6 in `cyphalm_trie`: the packed trie; FmInfiniGram with cursors in place of InfiniGram everywhere; in `qa` the class table is built from T, then the index consumes T, and the chat bytes leave the text buffer; class spec flags. Registered before the tool was changed | Every printed number identical to the build before (times excepted); `cls shape:6:3:cp2` gives the M2/M3 row's fresh trie + IG + class 2.085255; peak: `qa` A0 263 → under 160 MB, `context8k` 229 → under 160 MB, `qa --cls shape:6:3:cp2` under 200 MB (M6's bound) |
 
 ## Results (2026-10-28)
 
@@ -301,3 +302,64 @@ Scratch harness `packfile.cpp`. `build` trains as the tool does, packs, saves an
 
 - **Prediction M8: hit** (same answers; file within 1%; load 0.06 s; peak + 26 MB, under the index + 10 MB).
 - A served model that loads the index never pays the build's 6 bytes a text byte. CTest `native_fm_infinigram_test` checks the round trip on every tenth random text.
+
+### M6 and M5 in the tool (M9)
+
+`cyphalm_trie` now serves from the packed trie and from the FM-index. The change is +266 / −117 lines over main `8528663` (with A4's `--sim`). `native/CMakeLists.txt` builds `fm_infinigram.cpp` in place of `infinigram.cpp`.
+- **M4:** every subcommand packs the trie after training and frees the training form. `bpc --negative` keeps it.
+- **M5:** InfiniGram is `FmInfiniGram` everywhere: qa's index, A1c's lowered index (`match_prefix`), `context8k`, `cls`, `dktext` and `Lm`. The holdout loops and `Lm` carry a cursor.
+- **M6 order in `qa`:** the trie is packed first. Then T is built and the class table is built from it. Then the index takes T. It copies T instead when `--sim` reads it (`src=all`). The chat bytes leave the text buffer, and the chat string and the Dolly turns are released. The per-byte holdout arrays are allocated after both builds.
+- **Class specs:** `TABLE[:tail[:orders[:flags]]]`, orders 2 or 3, flags `c` (compact) and `pN` (min_total N), for example `shape:6:3:cp2`. The fields are read from the right, so `TABLE` and `TABLE:tail` parse as before, and a Windows drive colon stays in the path.
+- **M7:** `chat` and `sample` take `--save FILE` (store the trained model) and `--model FILE` (serve it without training). A served `chat` prints no `mix_stored` line, because that line measures the training form.
+
+**Parity.** Each subcommand was run with the old build and the new build. Old means main before the change: `02fc5318`, and `8528663` for the `--sim` rows. Standard output is identical, line for line, except timing fields: `cls`'s `build_s`, A4's `score_s`, `p50_us` and `p99_us`, and qa's `LATENCY` lines (decode times, added by A4). Rows files, sample files and `DK.tsv` are byte-identical. Peak RSS is `VmHWM`, polled every 0.2 s. Peaks of the same code varied by up to 5 MB between runs.
+
+| Subcommand | Output | Peak, old → new |
+|---|---|---:|
+| `bpc` | identical (22 lines) | 52.5 → 52.0 MB |
+| `bpc --negative` | identical (30 lines) | 67.9 → 68.0 MB |
+| `chat` | identical (10 lines) | 103.9 → 103.6 MB |
+| `sample` | both files identical | 52.4 → 52.2 MB |
+| `context8k` | identical (221 lines) | 229.8 → **165.1–169.0 MB** |
+| `dktext` | identical (24 lines), `DK.tsv` identical | 321.8 → 275.9 MB |
+| `cls shape:6` | identical (10 lines) | 260.5 → 223.0–228.4 MB |
+| `qa` A0 | identical (98 lines), rows identical | 264.0 → **170.7–174.8 MB** |
+| `qa` C1L (A1d's default) | identical (264 lines), rows identical | 367.7 → **199.1 MB** |
+| `qa --cls shape:6` | identical (99 lines), rows identical | 359.9 → 219.7 MB |
+| `qa`, class with 3 orders (old: main built with 3 orders; new: `shape:6:3`) | identical but for the spec label (98 lines), rows identical | 413.1 → 294.4 MB |
+| `qa --cls shape:6 --sim S` (`src=all`) | identical (491 lines), rows identical | 847.6 → 717.2 MB |
+| `qa --cls shape:6 --sim S,src=wiki` | identical (491 lines), rows identical | 556.2 → 406.0 MB |
+| `cls shape:6 --sim S --sim-fresh --sim-surface` | identical (15 lines) | 524.0 → 486.0 MB |
+
+S is A4's decision spec, `vec=ppmi_noeval,sif=0,W=2,k=2048,drop=0,lists=2048,probe=32`. The merge with A4 changed only A4's own lines and one line (the index copies T for `src=all`). So `bpc`, `chat`, `sample` and `dktext` were run before the merge, and `qa`, `cls`, `context8k` and the `--sim` rows after it. `bpc`, `cls shape:6` and `context8k` were run again with the final build, which is byte-identical to the CMake build of the repo.
+
+**New paths.**
+
+| Run | Result | Peak |
+|---|---|---:|
+| `cls shape:6:3:cp2` | M2/M3's row exactly: 885,985 contexts, 10,787,584 table bytes, fresh trie + IG + class **2.085255**, surface **0.9067** | 219.8 MB |
+| `qa --cls shape:6:3:cp2` | 1,562,354 contexts, 19,115,288 bytes; holdout2 trie + IG + class 1.994082 | 234.9 MB |
+| `chat --model chat.pk` | identical to `chat` but for the `mix_stored` line; 12 s against 476 s | 20.9 MB (training: 103.9) |
+| `sample --model sample.pk` | both files identical to `sample`'s | 18.3 MB (training: 52.4) |
+
+The qa class table has one context more than the `memprof3` harness's (1,562,353), because the tool's T has the `<|doc|>` boundary.
+
+**Where the peaks are now.** Scratch profile of `qa` A0: `VmRSS` every 0.25 s, with stage markers on stderr.
+- Training peaks at 107.6 MB. After packing, 90.4 MB stays resident, 42 MB of it the per-byte holdout arrays.
+- The FM build on T (19.6 MB) adds about 128 MB. That was 218.4 MB with the arrays allocated first. With the arrays allocated after the builds, it is 170.7–174.8 MB.
+- In `qa --cls shape:6:3:cp2` the class build sets the peak instead (234.9 MB). The index build then fits in the freed heap.
+- **The heap keeps what the builds free.** After the index build of `qa` A0, 144.1 MB stays resident. `malloc_trim(0)` returns 43.5 MB of it (to 100.6 MB). The tool does not call it, because it is glibc-only.
+- **Releasing buffers does not always lower the peak.** In `qa`, releasing the chat string and the turns lowered the peak by 24 MB (198.8 → 174.8). In `context8k`, releasing the chat string raised it by 16–17 MB (165.1 → 181.7, 169.1 → 185.9), so `context8k` keeps it.
+
+**Predictions.**
+- **M9:**
+  - every printed number identical: **hit**;
+  - `cls shape:6:3:cp2` gives 2.085255: **hit**;
+  - `qa` A0 peak under 160 MB: **miss** (170.7–174.8, from 264.0);
+  - `context8k` under 160 MB: **miss** (165.1–169.0, from 229.8);
+  - `qa --cls shape:6:3:cp2` under 200 MB: **miss** (234.9).
+- **M6 on the tool:**
+  - every qa number identical: **hit**;
+  - peak under 200 MB with 3 orders: **miss**.
+  - What was compared. "Now" is the old tool with a 3-order class table, built from main with orders set to 3: 413.1 MB. The same table on the new tool (`shape:6:3`) takes 294.4 MB; compact with contexts seen once dropped (`shape:6:3:cp2`), 234.9 MB. With 2 orders it is 359.9 → 219.7 MB. The 303 MB in M6's prediction came from the `memprof3` harness.
+- **Why the peaks stay above 200 MB.** In `qa` the class table and the index cannot be built before training, because A1c's tokens need the wiki trie before the chat text exists. So their builds, about 130–170 MB each over what is resident, come after training and on top of the packed model and the holdout data.
