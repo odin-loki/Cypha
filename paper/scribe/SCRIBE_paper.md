@@ -77,17 +77,17 @@ Table 1 lists the statistics. "Side" says which direction is bad: `+` means lowe
 | S | s2g skeleton gain | mean over tokens of `log p(c_t | c_{t−2}, c_{t−1}) − log p(c_t)` for the class sequence: the 150 most frequent words keep their identity, other words map to one of 9 suffix classes, numbers to one class; trigram and unigram trained on the pack | + |
 | S | s3g context gain | mean over in-lexicon words of `log p_KN(w_t | w_{t−2}, w_{t−1}) − log p(w_t)`: how much the two preceding words predict each word, beyond its frequency | + |
 | S | s4 well-formedness | pass rate of six checks: valid UTF-8, sentence-initial capitals, terminal punctuation, balanced brackets, paired quotes, no cut-off last word | + |
-| C | c0 word cohesion | mean cosine over all pairs of distinct content words (sentence IDF ≥ 3, known to the vectors) | + |
-| C | c1 sentence cohesion | mean cosine over all pairs of SIF sentence vectors (two halves of the text when it has one sentence) | + |
-| C | c1a adjacent cohesion | mean cosine of adjacent sentence vectors | + |
+| C | c0 word cohesion | mean cosine over all pairs of distinct content words (sentence IDF ≥ 3, known to the vectors; at least 4 of them) | + |
+| C | c1 sentence cohesion | mean cosine over all pairs of SIF sentence vectors (two halves of the text, of at least 8 tokens, when it has fewer than two embeddable sentences) | + |
+| C | c1a adjacent cohesion | mean cosine of consecutive embeddable sentence vectors | + |
 | C | c2 lexical cohesion | mean over all pairs of sentences of the IDF mass of their shared content words, over the smaller sentence's IDF mass | + |
-| C | c3 topic drift | Jensen–Shannon divergence between the content-word distributions of the two halves | − |
+| C | c3 topic drift | Jensen–Shannon divergence between the content-word distributions of the two halves (at least 4 content words) | − |
 | I | loop8 | share of 8-byte windows seen earlier in the text | − |
 | I | rep | share of sentences that repeat an earlier sentence | − |
 | I | d1–d4 | distinct-1 to distinct-4 over word n-grams | ± |
 | I | i1 verbatim copy | share of tokens inside a word 8-gram that occurs in the pack | ± |
 | R | r1 prompt cosine | cosine of the SIF vectors of prompt and text | + |
-| R | r4 key-term coverage | IDF-weighted share of the prompt's content words that the text uses | + |
+| R | r4 key-term coverage | share of the prompt's content words that the text uses, each weighted by its surprisal `−log p(w)` under the pack's unigram model | + |
 | R | r5 informativeness | share of the text's content tokens not in the prompt | ± |
 | R | i4 prompt echo | share of the text's word 4-grams that occur in the prompt | − |
 
@@ -180,7 +180,7 @@ Every pack and reference is disjoint from every test text; documents identical t
 
 ### 5.3 Baselines
 
-All baselines score exactly the texts SCRIBE scores, or a fixed subset of them stated with each result. **Earlier versions:** surface S and SCRIBE v1. **Statistical:** distinct-1–4, repetition rates rep-2–4 and seq-rep-4 (Welleck et al., 2020), their product as a diversity score, type–token ratio and gzip compression ratio; per system, self-BLEU and the Zipf coefficient. **Neural:** GPT-2 (124M) perplexity (`openai-community/gpt2`); grammatical acceptability, the mean probability of "acceptable" over sentences from a RoBERTa-base CoLA classifier (`textattack/roberta-base-CoLA`; Warstadt et al., 2019); sentence-embedding coherence, the mean cosine of adjacent sentences under all-MiniLM-L6-v2 (Reimers and Gurevych, 2019); the RoBERTa-base GPT-2 output detector's probability of human text (`openai-community/roberta-base-openai-detector`; Solaiman et al., 2019); and set-level MAUVE (Pillutla et al., 2021) with GPT-2 features. **Shipped with HANNA:** 72 automatic metrics (among them BLEU, ROUGE, METEOR, chrF, BERTScore, MoverScore, BaryScore, BARTScore and SUPERT) and the ratings of LLM judges (ChatGPT, Mistral-7B, Llama-13B, Beluga-13B). **Published:** the MAUVE scores of the MAUVE human evaluation. Baselines run with their published defaults; nothing is tuned for any metric on test data. The neural baselines are slow on a 4-core CPU, so they read only the first 256 GPT-2 tokens of each text and run on fixed subsets. GPT-2 large, conditional perplexity and an LLM judge of our own were planned but not run.
+All baselines score exactly the texts SCRIBE scores, or a fixed subset of them stated with each result. **Earlier versions:** surface S and SCRIBE v1. **Statistical:** distinct-1–4, repetition rates rep-2–4 and seq-rep-4 (Welleck et al., 2020; for a single text rep-n = 1 − distinct-n, and seq-rep-4 equals rep-4), their product as a diversity score, type–token ratio and gzip compression ratio; per system, self-BLEU and the Zipf coefficient. **Neural:** GPT-2 (124M) perplexity (`openai-community/gpt2`); grammatical acceptability, the mean probability of "acceptable" over sentences from a RoBERTa-base CoLA classifier (`textattack/roberta-base-CoLA`; Warstadt et al., 2019); sentence-embedding coherence, the mean cosine of adjacent sentences under all-MiniLM-L6-v2 (Reimers and Gurevych, 2019); the RoBERTa-base GPT-2 output detector's probability of human text (`openai-community/roberta-base-openai-detector`; Solaiman et al., 2019); and set-level MAUVE (Pillutla et al., 2021) with GPT-2 features. **Shipped with HANNA:** 72 automatic metrics (among them BLEU, ROUGE, METEOR, chrF, BERTScore, MoverScore, BaryScore, BARTScore and SUPERT) and the ratings of LLM judges (ChatGPT, Mistral-7B, Llama-13B, Beluga-13B). **Published:** the MAUVE scores of the MAUVE human evaluation. Baselines run with their published defaults; nothing is tuned for any metric on test data. The neural baselines are slow on a 4-core CPU, so they read only the first 256 GPT-2 tokens of each text and run on fixed subsets. GPT-2 large, conditional perplexity and an LLM judge of our own were planned but not run.
 
 ### 5.4 Statistics
 
@@ -445,6 +445,18 @@ Per text, SCRIBE v2 spends about 0.49 ms computing the v1 statistics and 0.20 ms
 
 ⟨P_COUNT⟩ The misses are informative. Books are harder than Wikipedia and web text for SCRIBE's cohesion statistics (P5). SCRIBE's lexical statistics depend less on genre than predicted (P15). Short texts score a little higher than long ones (P14). The syntax axis is more redundant than predicted: the skeleton gain alone carries it (P18). Two predictions about agreement with people were too optimistic (P11, P13). P17 was tested against GPT-2 small, which is cheaper than GPT-2-large featurisation, so the margin against GPT-2 large is larger still.
 
+### 6.10 Defects found after the freeze
+
+An independent review of the code, done after all results were in, found five defects in the frozen metric and its test generators. None changes a verdict. Fixing them would change v2's definition, so v2 stays as frozen and tested, and the fixes are left for a later version.
+
+1. **Possessive "'s" in the skeleton model.** The skeleton model learns the possessive as "s" but looks it up as "'s", so every possessive is unknown to s2g and the next word loses its context. With the fix, the fresh ladder moves by at most 0.002 (human mean 0.916 to 0.915; human > sentences shuffled 0.975 to 0.973) and still passes 5 of 5.
+2. **Curly closing quotes.** The well-formedness checks treat a text that ends in .” as unterminated and cut off, and the word-shuffle control leaves such punctuation on its word. Only the books genre is affected: 16–17% of its samples end that way. With both fixes, the books human mean rises from 0.906 to 0.910, and the ladder still passes 3 of 5.
+3. **Short texts in the prompted profile.** The prompted reference holds continuations of 300 bytes or more, so a prompted text under 300 bytes gets no relevance evidence. This affects 26 of the 1,056 HANNA stories, 25 of them from one system, in the prompted profile only.
+4. **Adjacent cohesion.** c1a averages over consecutive embeddable sentences, so it skips over a sentence with no known word.
+5. **Weak low doses.** At 10% strength the sentence-level corruptions (reordering, repetition, truncation and off-topic sentences) leave most 4–6-sentence samples unchanged, because a tenth of five sentences rounds to none. Reordering stays a no-op for most samples at 25% too. The first step of those dose curves is therefore near zero for every metric. The content-word swap also draws partly from the sample's own words.
+
+The review also found input-handling defects that changed no reported number. An empty pack or reference silently scored every text 1, the prompted profile without its reference silently scored relevance as 0, and one malformed JSON escape could drop a character. These are fixed in the released tool, which still reproduces the published fresh ladder exactly.
+
 ## 7. Discussion
 
 **What counts can see.** SCRIBE v2's statistics see whether a text is made of words, whether its words follow each other the way they do in human text once their frequency is accounted for, whether its sentences share vocabulary and topic, whether it repeats itself, whether it copies its training text, and how it overlaps with a prompt. With those, it orders every rung of the control ladder on Wikipedia and web text (and 3 of 5 pairs on novels), follows seven of nine held-out degradations, catches the repetition, echo, stuffing and copying attacks, and puts word-salad generators (n-gram models) far below human text.
@@ -470,6 +482,7 @@ Per text, SCRIBE v2 spends about 0.49 ms computing the v1 statistics and 0.20 ms
 - **Graded agreement.** Item-level correlations with people are modest (Kendall up to about 0.2 on stories), like most metrics in Table 10; SCRIBE is stronger at system level and at ordering clear differences than at ranking fluent texts.
 - **Design data.** The control ladder's corruption types were used in design (on development text), so the fresh ladder tests generalisation to new text, not to new kinds of damage. The held-out families, the model ladders and the human judgments test the latter, and they show the limits above.
 - **Compute.** Everything ran on one 4-core CPU without a GPU. The neural baselines read only the first 256 GPT-2 tokens of each text and ran on fixed subsets. No LLM judge of our own was run, so the comparison with LLM judges rests on the judges shipped with HANNA. The model ladders stop at GPT-2 XL (1.5B parameters), and the planned Pythia and decoding ladders were not run, so three registered predictions on them are untested.
+- **Known defects.** Five small defects found after the freeze are listed in Section 6.10. None changes a verdict, and v2 is reported as frozen.
 - **No rating study of our own.** The study plan's own rating test (300 samples rated by the author) was not run; published ratings stand in for it.
 
 ## 9. Conclusion
@@ -613,7 +626,7 @@ Zhu, Y., Lu, S., Zheng, L., Guo, J., Zhang, W., Wang, J., and Yu, Y. (2018). Tex
 | Context gains s2g, s3g | mean over in-lexicon tokens of trigram minus unigram log-probability; s3g needs ≥ 3 such tokens | dev |
 | Content words | sentence IDF ≥ 3 (i.e. in fewer than about 5% of pack sentences) | inherited |
 | Word vectors | PPMI-SVD, window ±5 with 1/distance weights, context smoothing 0.75, 50,000 words, 300 dimensions, `U·S^0.5`, rows centred and normalised | inherited (C1) |
-| Sentence vectors | SIF, `a = 10⁻³`, first principal component of 60,000 pack sentences removed | inherited |
+| Sentence vectors | SIF, `a = 10⁻³`, first principal component of up to 60,000 pack sentences removed (15,680 for the Wikipedia pack) | inherited |
 | Short-text cohesion | a text with fewer than two embeddable sentences is cut into two halves of its tokens (≥ 8 tokens) | inherited |
 | 8-gram copy set | all word 8-grams of the pack, hashed to 64 bits | v2 |
 | Length buckets | short < 300 bytes ≤ standard; reference samples 60–260 and 400–600 bytes; a bucket with < 20 reference samples falls back to the other | inherited / v2 |

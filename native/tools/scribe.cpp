@@ -202,11 +202,16 @@ class JsonReader {
           unsigned cp = 0;
           if (!hex4(cp)) return false;
           if (cp >= 0xD800 && cp <= 0xDBFF && p_ + 6 <= s_.size() && s_[p_] == '\\' && s_[p_ + 1] == 'u') {
+            const std::size_t at = p_;
             p_ += 2;
             unsigned lo = 0;
             if (!hex4(lo)) return false;
-            if (lo >= 0xDC00 && lo <= 0xDFFF) cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-            else cp = 0xFFFD;
+            if (lo >= 0xDC00 && lo <= 0xDFFF) {
+              cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+            } else {  // a lone high surrogate: replace it, and read the next escape on its own
+              cp = 0xFFFD;
+              p_ = at;
+            }
           } else if (cp >= 0xD800 && cp <= 0xDFFF) {
             cp = 0xFFFD;
           }
@@ -298,11 +303,20 @@ std::vector<std::string> load_docs(const std::string& spec) {
       std::exit(1);
     }
     in.seekg(0, std::ios::end);
-    const std::size_t size = static_cast<std::size_t>(in.tellg());
+    const std::streamoff end = in.tellg();
+    if (!in || end < 0) {
+      std::fprintf(stderr, "cannot read %s (not a regular file?)\n", path.c_str());
+      std::exit(1);
+    }
+    const std::size_t size = static_cast<std::size_t>(end);
     const std::size_t b = std::min(size, static_cast<std::size_t>(lo * MiB)), e = std::min(size, static_cast<std::size_t>(hi * MiB));
     std::vector<char> raw(e > b ? e - b : 0);
     in.seekg(static_cast<std::streamoff>(b));
     in.read(raw.data(), static_cast<std::streamsize>(raw.size()));
+    if (!in) {
+      std::fprintf(stderr, "cannot read %s bytes [%zu, %zu)\n", path.c_str(), b, e);
+      std::exit(1);
+    }
     return clean_wiki_documents(raw.data(), raw.size());
   }
   // raw:PATH = JSONL documents used as they are (white space collapsed), for sets that are already one-line,
@@ -535,6 +549,10 @@ void set_v2_params(Ctx& c, const std::string& spec) {
 }
 
 void build_pack(Ctx& c, const std::vector<std::string>& pack_docs, const std::string& vec_prefix) {
+  if (pack_docs.empty()) {  // an empty pack would make every statistic missing and every score 1
+    std::fprintf(stderr, "the pack has no documents (wrong path, or lowercased JSONL that needs the raw: prefix?)\n");
+    std::exit(1);
+  }
   for (const auto& d : pack_docs) c.pack_bytes += d.size();
   c.n_pack_docs = pack_docs.size();
   double t0 = now_s();
@@ -609,6 +627,14 @@ void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19
   }
   c.n_ref_std = ref_std.size();
   c.n_ref_short = ref_short.size();
+  if (c.n_ref_std < 20 && c.n_ref_short < 20) {  // below this no bucket has a distribution to score against
+    std::fprintf(stderr, "the reference has %zu standard and %zu short samples; at least 20 in one bucket are needed\n", c.n_ref_std, c.n_ref_short);
+    std::exit(1);
+  }
+  if (c.profile == "v2p" && ref_prompts.empty()) {  // without it relevance would silently count as 0
+    std::fprintf(stderr, "profile v2p needs --ref-prompts (human prompt-continuation pairs of the genre)\n");
+    std::exit(2);
+  }
   c.ref_feats.reserve(ref_std.size() + ref_short.size());
   for (const auto* v : {&ref_std, &ref_short})
     for (const Sample& s : *v) c.ref_feats.push_back(featurize(c, s.text));

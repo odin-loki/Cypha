@@ -1853,9 +1853,12 @@ inline SetReference build_set_reference(const std::vector<std::vector<const Feat
 //      instead of saturating at the ECDF's last step). A statistic that human samples almost always have (>= 95%) and
 //      this sample lacks counts as z = 4 on its bad side.
 //   2. Only the bad side counts: u = max(0, -z) for higher-is-better statistics, max(0, z) for lower-is-better, |z| for
-//      two-sided ones. A dead zone d forgives the ordinary human spread: phi = max(0, u - d)^2.
-//   3. Axis deviance D_a combines the phi of its statistics (sum, mean or max: V2Params::agg); the sample's deviance
-//      D = sum_a w_a D_a. No gates: a deviance can only add, so no axis can rescue another (PLAN 6.3's intent).
+//      two-sided ones. A dead zone d (1; 0.5 for relevance) forgives the ordinary human spread: e = max(0, u - d).
+//   3. The evidence of each axis is summed (L, S, C, I, R), and
+//        D = capS*sat(L - thL) + capS*sat(S - thS) + wI*max(0, I - thI) + wC*C + wR*R,  sat(x) = 1 - exp(-max(0, x)/kapS),
+//      with thL, thS, thI the qS/qI quantiles of the reference samples' own L, S, I in the bucket. Form failures are
+//      categorical and saturate; degeneration counts beyond the human quantile; coherence is graded. No gates: a
+//      deviance can only add, so no axis can rescue another (PLAN 6.3's intent).
 //   4. SCRIBE_x = exp(-D / tau): 1 for a sample that is human-typical on every statistic, falling with the evidence
 //      that it is not. Pairwise orderings depend only on D.
 

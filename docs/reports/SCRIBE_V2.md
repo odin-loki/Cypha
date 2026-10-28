@@ -73,3 +73,15 @@ The full study is the paper `paper/scribe/SCRIBE_paper.md` (PDF next to it; tabl
 - **Cost.** 1,054 texts/s on one core, 394 MB (Wikipedia pack); GPT-2 perplexity 4.7 texts/s on two threads.
 
 The planned Pythia and GPT-2 decoding ladders and the LLM judge were not run, at the owner's request (about 20 CPU-hours). Of the twenty registered predictions, the scorecard is Table 14 of the paper.
+
+## Code review after the freeze (2026-10-28)
+
+A review of the code after all results were in found five defects. v2 stays as frozen; the fixes are left for a later version (paper Section 6.10):
+
+1. The skeleton model learns the possessive as `s` but looks up `'s`, so possessives are unknown to s2g. Fixed and rerun: fresh ladder human 0.916 → 0.915, first pair 0.975 → 0.973, still 5 of 5.
+2. s4 and the word-shuffle control do not handle a closing curly quote after the full stop (`.”`). Books only (16–17% of samples). Fixed and rerun: books human 0.906 → 0.910, still 3 of 5.
+3. v2p texts under 300 bytes get no relevance evidence (the prompted reference has only longer continuations): 26 of 1,056 HANNA stories.
+4. c1a skips non-embeddable sentences when it pairs consecutive sentences.
+5. `corrupt.py` at 10% (and reordering at 25%) leaves most samples unchanged (`round` of a tenth of 4–6 sentences is 0); `nounswap` draws partly from the sample's own words.
+
+Fixed in the tool, with no change to any reported number (the fresh ladder reproduces byte for byte): an empty pack, a reference with fewer than 20 samples in both buckets, or `--profile v2p` without `--ref-prompts` now stop with an error instead of scoring silently; an unreadable enwik range stops with an error; a lone high surrogate followed by another `\u` escape no longer swallows that escape.
