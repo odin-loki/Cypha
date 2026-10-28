@@ -2,15 +2,32 @@
   "title": "SCRIBE: Scoring Generated Text Against Human Text With Counts Alone",
   "upload_type": "publication",
   "publication_type": "preprint",
-  "creators": [{"name": "Loch, Odin"}],
+  "creators": [
+    {
+      "name": "Loch, Odin"
+    }
+  ],
   "description": "ABSTRACT_PLACEHOLDER",
-  "keywords": ["natural language generation", "evaluation metrics", "text quality", "meta-evaluation", "n-gram models", "language models", "control ladders", "Cypha", "CyphaLM"],
+  "keywords": [
+    "natural language generation",
+    "evaluation metrics",
+    "text quality",
+    "reference-free evaluation",
+    "meta-evaluation",
+    "n-gram models",
+    "count-based methods",
+    "control ladders"
+  ],
   "license": "cc-by-4.0",
   "version": "1.0",
   "language": "eng",
   "publication_date": "2026-10-28",
   "related_identifiers": [
-    {"identifier": "https://github.com/odin-loki/Cypha", "relation": "isSupplementedBy", "resource_type": "software"}
+    {
+      "identifier": "https://github.com/odin-loki/Cypha",
+      "relation": "isSupplementedBy",
+      "resource_type": "software"
+    }
   ],
   "notes": "Code (AGPL-3.0, with a commercial licence) is in the Cypha repository: native/include/cypha/eval/scribe.hpp, native/tools/scribe.cpp, scripts/scribe_eval/. Result tables are in results/. Per-sample scores are keyed by public dataset ids; no third-party text is redistributed."
 }

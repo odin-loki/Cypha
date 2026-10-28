@@ -1045,7 +1045,13 @@ def main(argv=None):
     started = time.time()
     statuses = []
     for a in analyses:
-        st = run_analysis(a, P, args, out_dir, work)
+        try:
+            st = run_analysis(a, P, args, out_dir, work)
+        except (Exception, SystemExit) as e:   # one analysis never stops the others
+            # e.g. a baseline file read while it is being written: rerun later
+            msg = str(e).splitlines()[0][:300] if str(e) else type(e).__name__
+            st = {"name": a.name, "section": a.section, "title": a.title, "cmd": a.cmd,
+                  "status": "failed", "why": f"{type(e).__name__}: {msg}"}
         statuses.append(st)
         extra = st.get("why") or ", ".join(st.get("outputs", []))
         print(f"{st['status']:9s} {a.name}: {extra}" + (f" ({st['seconds']:.0f} s)" if "seconds" in st else ""),

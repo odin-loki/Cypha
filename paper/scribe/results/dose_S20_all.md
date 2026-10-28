@@ -2,7 +2,7 @@
 
 Analysis `dose_S20_all` (3. Held-out corruptions, dose-response). meta.py `dose`.
 Inputs: SP/run/baselines/subsets/corrupt_S20.jsonl, SP/run/fresh/corrupt.scribe.jsonl, SP/run/baselines/corrupt_S20/stats.jsonl.
-Not available yet (left out): R/corrupt_S20/ppl_gpt2.jsonl, R/corrupt_S20/cola.jsonl, R/corrupt_S20/coherence.jsonl, R/corrupt_S20/detector.jsonl.
+Not available yet (left out): R/corrupt_S20/ppl_gpt2.jsonl (partial), R/corrupt_S20/cola.jsonl, R/corrupt_S20/coherence.jsonl, R/corrupt_S20/detector.jsonl.
 
 1080 texts, families from `meta.family`, strengths from `meta.strength`. A family without its own strength-0 texts uses the shared base texts (strength 0, family ['', 'base', 'none'] or none): 0. Bootstrap: 1000 resamples within each strength, seed 20261028. Spearman uses the oriented score, so −1 means quality falls perfectly with strength; a step moves the right way when the oriented mean falls.
 

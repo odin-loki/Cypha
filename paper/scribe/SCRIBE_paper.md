@@ -12,7 +12,7 @@ date: "28 October 2026"
 
 ## Abstract
 
-<!-- ABSTRACT -->
+SCRIBE is a metric for generated text that uses no neural network. It computes about twenty statistics of a text from counts. They cover how much each word's context predicts it beyond its frequency, for words and for word classes; whether the words are real; whether sentences are well formed; how much the sentences share vocabulary and topic, using count-based word vectors; repetition; copying of the training text; and overlap with a prompt. Each statistic is read as a robust z-score against human reference text of the same genre and length. Lexical and syntactic failures count as categorical, saturating evidence, coherence as graded evidence, and repetition only beyond what 99% of human samples show. SCRIBE v2 was designed on development text and then frozen. On fresh Wikipedia text it is the only metric tested that passes all five pairs of a control ladder: human text, then sentences shuffled across documents, words shuffled within sentences, random words, random letters and a repeated phrase, with pairwise accuracies of 0.975 to 1.000. GPT-2 perplexity, a CoLA acceptability classifier, embedding coherence and the usual diversity statistics each pass one or two pairs. SCRIBE v2 also passes on web text, and 3 of 5 pairs on novels. It follows seven of nine held-out kinds of damage and catches copying, prompt echo, keyword stuffing and loops. In its prompted form it separates right from wrong answers to Dolly questions (accuracy 0.961). On HANNA stories it correlates with human coherence ratings (Kendall 0.194) better than BLEU and ROUGE-L, and as well as ChatGPT. It is stable across seeds, across training-text sizes from 8 to 128 MiB, and with 100 or more reference samples per length bucket. It scores about 1,000 texts per second on one CPU core with 0.4 GB of memory. Its blind spots are sentence order, truncated sentences, factual errors, and text that is more predictable than human text: it rates GPT-2 top-k samples above human web text, and it cannot rank models that all write word salad. Of twenty predictions registered before testing, ⟨P_ABS⟩.
 
 ---
 
@@ -123,7 +123,7 @@ The **open-continuation** profile (`v2`) scores a text on its own. The **prompte
 
 ### 3.7 Implementation
 
-SCRIBE is a header-only C++20 library using only the standard library, with a command-line tool for document cleaning, prompt extraction, sampling, preparation of model output, control ladders and scoring. Building the Wikipedia pack (32 MiB) takes about 10 s; the PPMI-SVD vectors take about 50 s once. Scoring needs about 415 MB of memory and runs at roughly a thousand texts per second on one core (Section 6.8). The tool reproduces the earlier v1 ladder to the printed digit.
+SCRIBE is a header-only C++20 library using only the standard library, with a command-line tool for document cleaning, prompt extraction, sampling, preparation of model output, control ladders and scoring. Building the Wikipedia pack (32 MiB) and its reference takes under 10 s; the PPMI-SVD vectors take about a minute, once. Scoring needs about 400 MB of memory and runs at roughly a thousand texts per second on one core (Section 6.8). The tool reproduces the earlier v1 ladder to the printed digit.
 
 ## 4. How the design was found
 
@@ -180,50 +180,310 @@ Every pack and reference is disjoint from every test text; documents identical t
 
 ### 5.3 Baselines
 
-All baselines score exactly the texts SCRIBE scores, or a fixed subset of them stated with each result. **Earlier versions:** surface S and SCRIBE v1. **Statistical:** distinct-1–4, repetition rates rep-2–4 and seq-rep-4 (Welleck et al., 2020), their product as a diversity score, type–token ratio and gzip compression ratio; per system, self-BLEU and the Zipf coefficient. **Neural:** GPT-2 (124M) perplexity (`openai-community/gpt2`); grammatical acceptability, the mean probability of "acceptable" over sentences from a RoBERTa-base CoLA classifier (`textattack/roberta-base-CoLA`; Warstadt et al., 2019); sentence-embedding coherence, the mean cosine of adjacent sentences under all-MiniLM-L6-v2 (Reimers and Gurevych, 2019); the RoBERTa GPT-2 output detector's probability of human text (Solaiman et al., 2019); and set-level MAUVE (Pillutla et al., 2021) with GPT-2 features. **Shipped with HANNA:** 72 automatic metrics (among them BLEU, ROUGE, METEOR, chrF, BERTScore, MoverScore, BaryScore, BARTScore and SUPERT) and the ratings of LLM judges (ChatGPT, Mistral-7B, Llama-13B, Beluga-13B). **Published:** the MAUVE scores of the MAUVE human evaluation. Baselines run with their published defaults; nothing is tuned for any metric on test data. The neural baselines are slow on a 4-core CPU, so they read only the first 256 GPT-2 tokens of each text and run on fixed subsets. GPT-2 large, conditional perplexity and an LLM judge of our own were planned but not run.
+All baselines score exactly the texts SCRIBE scores, or a fixed subset of them stated with each result. **Earlier versions:** surface S and SCRIBE v1. **Statistical:** distinct-1–4, repetition rates rep-2–4 and seq-rep-4 (Welleck et al., 2020), their product as a diversity score, type–token ratio and gzip compression ratio; per system, self-BLEU and the Zipf coefficient. **Neural:** GPT-2 (124M) perplexity (`openai-community/gpt2`); grammatical acceptability, the mean probability of "acceptable" over sentences from a RoBERTa-base CoLA classifier (`textattack/roberta-base-CoLA`; Warstadt et al., 2019); sentence-embedding coherence, the mean cosine of adjacent sentences under all-MiniLM-L6-v2 (Reimers and Gurevych, 2019); the RoBERTa-base GPT-2 output detector's probability of human text (`openai-community/roberta-base-openai-detector`; Solaiman et al., 2019); and set-level MAUVE (Pillutla et al., 2021) with GPT-2 features. **Shipped with HANNA:** 72 automatic metrics (among them BLEU, ROUGE, METEOR, chrF, BERTScore, MoverScore, BaryScore, BARTScore and SUPERT) and the ratings of LLM judges (ChatGPT, Mistral-7B, Llama-13B, Beluga-13B). **Published:** the MAUVE scores of the MAUVE human evaluation. Baselines run with their published defaults; nothing is tuned for any metric on test data. The neural baselines are slow on a 4-core CPU, so they read only the first 256 GPT-2 tokens of each text and run on fixed subsets. GPT-2 large, conditional perplexity and an LLM judge of our own were planned but not run.
 
 ### 5.4 Statistics
 
-Rung and system means carry 95% percentile bootstrap intervals (1,000 resamples). Ordering accuracy counts ties as one half. Agreement with pairwise human choices carries Wilson intervals; Bradley–Terry strengths are fitted to the human choices with a small ridge (Bradley and Terry, 1952). Correlations with ratings are Pearson, Spearman and Kendall's tau-b (Kendall, 1945) with item bootstrap intervals; differences between metrics use a paired bootstrap test with Benjamini–Hochberg adjustment (Benjamini and Hochberg, 1995). The statistics module reproduces the MAUVE paper's published system-level correlations exactly (Spearman 0.810, 0.857 and 0.952 for the three questions) when given the published MAUVE scores.
+Rung and system means carry 95% percentile bootstrap intervals (Efron and Tibshirani, 1993; 1,000 resamples). Ordering accuracy counts ties as one half. Agreement with pairwise human choices carries Wilson intervals (Wilson, 1927); Bradley–Terry strengths are fitted to the human choices with a small ridge (Bradley and Terry, 1952). Correlations with ratings are Pearson, Spearman and Kendall's tau-b (Kendall, 1945) with item bootstrap intervals; differences between metrics use a paired bootstrap test with Benjamini–Hochberg adjustment (Benjamini and Hochberg, 1995). The statistics module reproduces the MAUVE paper's published system-level correlations exactly (Spearman 0.810, 0.857 and 0.952 for the three questions) when given the published MAUVE scores.
 
 ## 6. Results
 
-<!-- RESULTS -->
+Every number in this section comes from frozen SCRIBE v2. The fresh region was read once, after the freeze. Tables give means with 95% bootstrap intervals where space allows. "Accuracy" is the share of (upper, lower) pairs ordered correctly, ties counting one half (the AUROC). The full tables, with intervals for every cell, are in the results bundle (Reproducibility).
+
+### 6.1 Control ladders
+
+**Table 2.** Fresh Wikipedia control ladder: accuracy for each adjacent pair. SCRIBE and surface S use 500 texts per rung; the other baselines use the first 150 texts of each rung. Bold: the pair passes (accuracy ≥ 0.95 and disjoint intervals in the right order).
+
+| Metric | human > sentences shuffled | > words shuffled | > random words | > random letters | > repeated phrase | Passed |
+|---|---|---|---|---|---|---|
+| **SCRIBE v2** | **0.975** | **0.999** | **0.998** | **0.998** | **1.000** | **5 of 5** |
+| SCRIBE v1 | 0.888 | 0.806 | 0.696 | **1.000** | **0.999** | 2 of 5 |
+| surface S | 0.627 | 0.341 | 0.750 | **1.000** | 0.559 | 1 of 5 |
+| GPT-2 perplexity | 0.866 | **1.000** | 0.948 | 0.000 | 0.000 | 1 of 5 |
+| CoLA acceptability | 0.527 | **1.000** | 0.715 | 0.000 | 0.556 | 1 of 5 |
+| MiniLM coherence | **0.992** | 0.007 | **0.956** | 0.000 | 0.020 | 2 of 5 |
+| GPT-2 output detector | 0.654 | 0.520 | 0.943 | 0.163 | 0.895 | 0 of 5 |
+| distinct-2 | 0.273 | 0.342 | 0.410 | 0.360 | **1.000** | 1 of 5 |
+| seq-rep-4 | 0.463 | 0.480 | 0.500 | 0.500 | **1.000** | 1 of 5 |
+| type–token ratio | 0.258 | 0.742 | 0.123 | 0.000 | **1.000** | 1 of 5 |
+| gzip ratio | 0.214 | 0.693 | 0.226 | 0.060 | **1.000** | 1 of 5 |
+
+SCRIBE v2 is the only metric that passes every pair. Each baseline sees one kind of damage and misses the rest:
+
+- **GPT-2 perplexity** sees word order. But it rates one phrase repeated (perplexity 1.7) far above human text (36.5), and random letters (515) above random dictionary words (2,450), because random letters split into many short, cheap tokens.
+- **CoLA acceptability** sees broken syntax inside a sentence. It cannot see shuffled sentences (0.527), and it rates random letters (0.495) above random words (0.057).
+- **Embedding coherence** sees shuffled sentences (0.992). It rates a repeated phrase as the most coherent text of all (0.985 against 0.391 for human text).
+- **The GPT-2 output detector** passes no pair. It was trained to tell GPT-2 samples from web text, not prose from broken text, and it rates words shuffled within sentences (0.710) as more human than sentences shuffled across documents (0.695).
+- **Diversity and compression statistics** see only repetition.
+
+⟨MAUVE_LADDER⟩
+
+**Table 3.** SCRIBE v2 on control ladders in other genres, each with its own pack and reference (last row: web text scored against the Wikipedia pack and reference). 500 texts per rung.
+
+| Ladder | human > sentences shuffled | > words shuffled | > random words | > random letters | > repeated phrase | Passed | Human mean | Surface S passed |
+|---|---|---|---|---|---|---|---|---|
+| Wikipedia (fresh) | **0.975** | **0.999** | **0.998** | **0.998** | **1.000** | 5 of 5 | 0.916 | 1 of 5 |
+| WebText | **0.966** | **1.000** | **0.985** | **0.999** | **1.000** | 5 of 5 | 0.923 | 1 of 5 |
+| Books | 0.785 | **1.000** | 0.894 | **1.000** | **1.000** | 3 of 5 | 0.906 | 1 of 5 |
+| WebText, Wikipedia reference | 0.879 | **1.000** | **0.997** | **0.998** | **1.000** | 4 of 5 | 0.821 | 1 of 5 |
+
+On novels SCRIBE v2 fails two pairs. Sentences shuffled across novels keep a mean score of 0.747 (0.354 on Wikipedia): fiction shares much of its vocabulary across books, so the cohesion statistics that catch shuffled sentences are weaker. The same weakness lets shuffled words (0.003) and random words (0.002) come close. Scored against the wrong genre, human web text keeps 89% of its score, and the ladder loses only its first pair.
+
+### 6.2 Held-out corruptions
+
+**Table 4.** Dose–response on 200 fresh human samples: SCRIBE v2's mean at each strength, and Spearman's correlation between strength and score (over the 1,200 texts of a family, and over the six means). Last two columns: the same correlation over texts for v1 and surface S. −1 means the score falls perfectly with damage.
+
+| Family | 0% | 10% | 25% | 50% | 75% | 100% | Spearman, texts | Spearman, means | v1, texts | surface S, texts |
+|---|---|---|---|---|---|---|---|---|---|---|
+| word substitution | 0.905 | 0.770 | 0.111 | 0.004 | 0.001 | 0.001 | −0.939 | −1.000 | −0.817 | −0.347 |
+| typos | 0.905 | 0.861 | 0.417 | 0.018 | 0.001 | 0.000 | −0.937 | −1.000 | −0.909 | −0.970 |
+| sentence repetition | 0.905 | 0.887 | 0.310 | 0.009 | 0.005 | 0.000 | −0.917 | −1.000 | −0.898 | −0.903 |
+| adjacent word swaps | 0.905 | 0.620 | 0.067 | 0.005 | 0.003 | 0.003 | −0.902 | −1.000 | −0.677 | +0.025 |
+| dropped words | 0.905 | 0.842 | 0.447 | 0.195 | 0.053 | 0.013 | −0.858 | −1.000 | −0.293 | −0.106 |
+| content-word swaps | 0.905 | 0.872 | 0.795 | 0.534 | 0.191 | 0.054 | −0.819 | −1.000 | −0.707 | −0.298 |
+| off-topic sentences | 0.905 | 0.893 | 0.737 | 0.484 | 0.356 | 0.364 | −0.754 | −0.943 | −0.592 | −0.187 |
+| truncated sentences | 0.905 | 0.904 | 0.899 | 0.864 | 0.857 | 0.922 | −0.050 | −0.143 | −0.060 | +0.003 |
+| sentence reordering | 0.905 | 0.906 | 0.905 | 0.905 | 0.907 | 0.906 | +0.013 | +0.429 | −0.002 | +0.000 |
+
+SCRIBE v2 follows seven of the nine families. It falls more steeply than v1 on all seven, and more steeply than surface S on six; surface S, whose vocabulary term counts misspellings directly, falls faster with typos. Off-topic sentences level off at about 0.36: text made entirely of human sentences from other documents is fluent, and only its cohesion is lower. Two families are blind spots. Reordering a text's own sentences changes no statistic, because every cohesion statistic ignores order. Cutting sentences in half and closing them with a full stop leaves them well formed and fluent word by word. At full strength the shorter, simpler text even scores a little higher. The swap generator first swapped overlapping word pairs, which at 100% rotates each sentence by one word instead of scrambling it; it was corrected to disjoint pairs, all results use the corrected version, and the scores of both versions are kept with the study's outputs.
+
+⟨CORRUPT_BASELINES⟩
+
+### 6.3 Model ladders
+
+**Table 5.** Word n-gram generators on fresh Wikipedia prompts (about 250 continuations each). Accuracy is against the next rung down.
+
+| Generator | SCRIBE v2 | Accuracy vs next | SCRIBE v1 | surface S |
+|---|---|---|---|---|
+| human continuation | 0.911 | 0.994 | 0.522 | 0.911 |
+| 5-gram | 0.089 | 0.501 | 0.075 | 0.873 |
+| 4-gram | 0.081 | 0.476 | 0.076 | 0.870 |
+| 3-gram | 0.081 | 0.667 | 0.080 | 0.872 |
+| 2-gram | 0.051 | 0.993 | 0.078 | 0.871 |
+| 1-gram | 0.001 | | 0.019 | 0.866 |
+
+Every n-gram order scores far below human text and below sentences shuffled across documents (0.354), and unigrams are far below bigrams. Orders 3, 4 and 5 are not told apart. All three write locally fluent word salad, and once a text is clearly not prose, SCRIBE's saturating form axes stop measuring how far from prose it is. That is the intended behaviour of the design (Section 3.5), and it means SCRIBE v2 cannot rank models that all fail. Surface S puts the 5-gram model within 0.04 of human text.
+
+**Table 6.** The GPT-2 output dataset (1,000 texts per system, WebText pack and reference). The two-sided column is an exploratory variant (Section 7), not the frozen metric.
+
+| System | SCRIBE v2 | two-sided variant | SCRIBE v1 | surface S | GPT-2 perplexity | self-BLEU | Zipf |
+|---|---|---|---|---|---|---|---|
+| WebText (human) | 0.925 | 0.855 | 0.534 | 0.931 | ⟨G_h⟩ |
+| xl-1542M, pure sampling | 0.826 | 0.807 | 0.479 | 0.929 | ⟨G_xl⟩ |
+| large-762M, pure sampling | 0.816 | 0.800 | 0.471 | 0.927 | ⟨G_l⟩ |
+| medium-345M, pure sampling | 0.706 | 0.723 | 0.364 | 0.904 | ⟨G_m⟩ |
+| small-117M, pure sampling | 0.767 | 0.765 | 0.426 | 0.915 | ⟨G_s⟩ |
+| xl-1542M, top-k 40 | 0.969 | 0.819 | 0.540 | 0.929 | ⟨G_xlk⟩ |
+| large-762M, top-k 40 | 0.968 | 0.811 | 0.523 | 0.927 | ⟨G_lk⟩ |
+| medium-345M, top-k 40 | 0.972 | 0.811 | 0.549 | 0.936 | ⟨G_mk⟩ |
+| small-117M, top-k 40 | 0.970 | 0.746 | 0.478 | 0.922 | ⟨G_sk⟩ |
+
+Under pure sampling, SCRIBE v2 ranks XL above large above the two small models, but puts medium below small. Under top-k 40 sampling, all four sizes score 0.968–0.972, above WebText itself, and are not ordered. Truncated sampling removes the rare, surprising words that make human text less predictable, and SCRIBE v2 counts only the bad side of each statistic, so text that is more predictable and more cohesive than human text is never penalised. Section 7 discusses this blind spot.
+
+⟨GPT2OUT_BASELINES⟩
+
+### 6.4 Question answering and attacks
+
+**Table 7.** Dolly question answering (600 questions, four answers each). Accuracy of the correct answer against each wrong one.
+
+| Profile | correct | another question's answer | question echoed | words shuffled | correct > other | correct > echo | correct > shuffled |
+|---|---|---|---|---|---|---|---|
+| open (v2) | 0.894 | 0.875 | 0.372 | 0.135 | 0.519 | 0.813 | 0.937 |
+| prompted (v2p) | 0.431 | 0.005 | 0.006 | 0.058 | **0.961** | **0.957** | 0.863 |
+
+The open profile cannot see which question an answer belongs to, as intended. The prompted profile separates the right answer from a fluent answer to another question (0.961) and from the echoed question (0.957). It separates right-topic word salad less well (0.863), because many Dolly answers are lists and fragments whose form varies more than prose. Its scale is lower: relevance beyond its small dead zone is common even for correct answers, so only the order of v2p scores is meaningful.
+
+**Table 8.** Attacks on 250 fresh Wikipedia prompts. Mean score, and the share of prompts where the true continuation beats the attack (ties one half).
+
+| Attack | v2 mean | v2p mean | v2: human wins | v2p: human wins |
+|---|---|---|---|---|
+| true continuation | 0.911 | 0.481 | | |
+| copied pack text | 0.102 | 0.001 | 0.996 | 0.996 |
+| copied pack text, copy statistic i1 off | 0.950 | | 0.396 | |
+| prompt echoed | 0.000 | 0.000 | 1.000 | 1.000 |
+| keyword stuffing | 0.021 | 0.000 | 0.996 | 1.000 |
+| function-word loop | 0.000 | 0.000 | 1.000 | 1.000 |
+| generic paragraph | 0.835 | 0.012 | 0.788 | 0.948 |
+| generic paragraph with the prompt's topic words | 0.910 | 0.130 | 0.662 | 0.800 |
+| another document's continuation | 0.913 | 0.010 | 0.506 | 0.980 |
+| randomised numbers | 0.911 | 0.484 | 0.502 | 0.498 |
+| inserted negations | 0.907 | 0.482 | 0.508 | 0.502 |
+
+Repetition, echo, stuffing and copying are caught. Without the copy statistic i1, text copied from the pack scores above the true continuation, so i1 is necessary whenever a model could have seen the pack. A fluent, contentless paragraph is the strongest attack: the open profile rates it near human, and the prompted profile catches it only when it does not borrow the prompt's words (0.948 against 0.800). Wrong numbers and inserted negations are invisible to both profiles: SCRIBE has no notion of truth.
+
+⟨ATTACK_BASELINES⟩
+
+### 6.5 Agreement with people
+
+**Table 9.** The MAUVE human evaluation (3,240 pairwise judgments of WebText continuations; q1 more interesting, q2 makes more sense, q3 more likely written by a person). Per pair: the share of pairs where the metric prefers the text the person chose. System: Spearman between metric means and Bradley–Terry scores over the eight GPT-2 configurations. MAUVE is set-level, so it has no per-pair value; its correlations are those of its published scores.
+
+| Metric | q1 per pair | q2 per pair | q3 per pair | q1 system | q2 system | q3 system |
+|---|---|---|---|---|---|---|
+| SCRIBE v2 | 0.531 | 0.527 | 0.531 | 0.571 | 0.810 | 0.714 |
+| SCRIBE v1 | 0.511 | 0.510 | 0.506 | 0.333 | 0.524 | 0.500 |
+| surface S | 0.531 | 0.530 | 0.525 | 0.286 | 0.476 | 0.357 |
+⟨MHE_BASELINES⟩
+| MAUVE, GPT-2 large features (published) | | | | 0.810 | 0.857 | 0.952 |
+
+People's pairwise choices are hard to predict from one text: no single-text metric here is far above chance. At system level, SCRIBE v2 tracks "makes more sense" (0.810) and "human-like" (0.714) better than its predecessors, but below MAUVE, which compares whole distributions with a large model's features. The system intervals are wide (eight systems).
+
+**Table 10.** HANNA (960 machine-written stories from ten systems; human-written stories excluded). Story-level Kendall τ with the mean human rating of each criterion, and system-level Kendall τ for coherence. RE relevance, CH coherence, EM empathy, SU surprise, EG engagement, CX complexity. Reference-based metrics compare each story with the human story for the same prompt.
+
+| Metric | RE | CH | EM | SU | EG | CX | CH, system |
+|---|---|---|---|---|---|---|---|
+| SCRIBE v2 | 0.014 | 0.194 | 0.124 | 0.143 | 0.168 | 0.228 | 0.689 |
+| SCRIBE v1 | 0.074 | 0.232 | 0.183 | 0.209 | 0.262 | 0.322 | 0.600 |
+| surface S | 0.062 | 0.215 | 0.147 | 0.191 | 0.229 | 0.282 | 0.556 |
+⟨HANNA_GPT2⟩
+| BLEU | 0.074 | 0.110 | 0.133 | 0.106 | 0.139 | 0.189 | 0.333 |
+| ROUGE-L | 0.081 | 0.112 | 0.145 | 0.096 | 0.143 | 0.168 | 0.422 |
+| METEOR | 0.091 | 0.146 | 0.181 | 0.156 | 0.190 | 0.277 | 0.422 |
+| chrF | 0.096 | 0.166 | 0.174 | 0.171 | 0.202 | 0.290 | 0.467 |
+| BERTScore F1 | 0.132 | 0.139 | 0.169 | 0.123 | 0.192 | 0.241 | 0.556 |
+| MoverScore | 0.160 | 0.161 | 0.149 | 0.126 | 0.198 | 0.250 | 0.556 |
+| BARTScore | 0.035 | 0.034 | 0.107 | 0.039 | 0.078 | 0.078 | 0.556 |
+| Repetition-3 | 0.049 | 0.195 | 0.107 | 0.189 | 0.204 | 0.260 | 0.333 |
+| Text length | 0.114 | 0.164 | 0.169 | 0.198 | 0.229 | 0.352 | 0.333 |
+| ChatGPT | 0.156 | 0.202 | 0.147 | 0.111 | 0.181 | 0.171 | 0.600 |
+| Mistral-7B | 0.200 | 0.261 | 0.226 | 0.152 | 0.240 | 0.192 | 0.600 |
+| Llama-13B | 0.122 | 0.202 | 0.185 | 0.152 | 0.212 | 0.253 | 0.733 |
+| Beluga-13B | 0.203 | 0.282 | 0.259 | 0.216 | 0.290 | 0.304 | 0.733 |
+
+On coherence, SCRIBE v2 (0.194) beats BLEU and ROUGE-L (paired bootstrap, p ≤ 0.035 after Benjamini–Hochberg adjustment), matches ChatGPT (0.202) and Llama-13B (0.202), and is below Beluga-13B (0.282, p = 0.009). SCRIBE v1 is higher still (0.232), as is surface S (0.215), though neither difference with v2 is significant. At system level SCRIBE v2's coherence correlation (0.689) is the highest of all metrics that are not LLM judges, and below only the two strongest judges (0.733). Relevance to a creative prompt is invisible to it (0.014). When the 96 human stories are included, the reference-based metrics gain sharply (BLEU 0.248 on coherence) because each human story is its own reference, while SCRIBE v2 falls to 0.172.
+
+**Table 11.** OpenMEVA MANS (1,000 machine-written stories per corpus, overall quality). Story-level Pearson and Kendall, and system-level Kendall over five systems.
+
+| Metric | ROC Pearson | ROC Kendall | ROC system | WP Pearson | WP Kendall | WP system |
+|---|---|---|---|---|---|---|
+| SCRIBE v2 | 0.189 | 0.146 | 0.200 | 0.057 | 0.049 | 0.200 |
+| SCRIBE v2, prompted | 0.054 | 0.044 | −0.400 | 0.047 | 0.040 | −0.800 |
+| SCRIBE v1 | 0.108 | 0.069 | 0.000 | −0.022 | −0.007 | −0.800 |
+| surface S | 0.065 | −0.005 | −0.400 | −0.070 | −0.045 | −0.800 |
+⟨MANS_GPT2⟩
+
+On five-sentence ROC stories SCRIBE v2 correlates with overall quality at 0.189, more than twice its predecessors. On WritingPrompts stories the correlation is near zero. The prompted profile does worse than the open one on both: lexical overlap with a story's opening is not what makes a story good.
+
+### 6.6 Stability
+
+- **Seeds.** Five further test draws of the fresh ladder all pass 5 of 5 pairs. The weakest pair, human > sentences shuffled, ranges from 0.969 to 0.990, and the human mean from 0.908 to 0.931.
+- **Reference size.** With three random reference draws at each size, 100, 200, 500 and 1,000 reference samples per bucket pass 5 of 5 in every draw. With 50 samples every draw fails the first pair (0.885–0.941), and the human mean falls to 0.81–0.85, because the 99th-percentile thresholds and the tail scales are then set by a handful of samples.
+- **Pack size.** Packs of 8, 16, 32, 64 and 128 MiB of enwik9, each with its own word vectors, all pass 5 of 5 (first pair 0.971–0.983). A few MiB of text are enough.
+- **Length.** On held-out human text, Pearson's correlation of SCRIBE v2 with length in bytes is 0.009 in the standard bucket and 0.041 in the short bucket. Pooled, it is −0.124, because short texts score a little higher on average (0.954 against 0.916).
+- **Genre.** Scored against the Wikipedia reference, human web text keeps 89% of its score (Table 3).
+
+### 6.7 Ablations
+
+**Table 12.** Fresh Wikipedia control ladder with one part removed or changed (500 texts per rung; italic: the pair fails). Removing any single statistic other than those listed leaves all five pairs passing.
+
+| Change | human > sentences shuffled | > words shuffled | > random words | > random letters | > repeated phrase | Passed | Human mean |
+|---|---|---|---|---|---|---|---|
+| frozen v2 | 0.975 | 0.999 | 0.998 | 0.998 | 1.000 | 5 of 5 | 0.916 |
+| no lexical axis L | 0.977 | 0.999 | 0.999 | *0.001* | 1.000 | 4 of 5 | 0.920 |
+| no syntax axis S | 0.975 | *0.013* | 0.999 | 1.000 | 1.000 | 4 of 5 | 0.918 |
+| no coherence axis C | *0.488* | 1.000 | *0.592* | 1.000 | 1.000 | 3 of 5 | 0.982 |
+| no integrity axis I | 0.987 | 1.000 | 0.998 | 0.998 | *0.000* | 4 of 5 | 0.928 |
+| no skeleton gain s2g | 0.975 | 0.997 | 0.992 | 0.999 | 1.000 | 5 of 5 | 0.915 |
+| no context gain s3g | 0.975 | 0.998 | 0.973 | 0.991 | 1.000 | 5 of 5 | 0.916 |
+| raw log-probabilities instead of gains | 0.975 | 0.961 | *0.869* | 1.000 | 1.000 | 4 of 5 | 0.916 |
+| no saturation of L and S | 0.978 | 0.992 | 0.994 | *0.455* | 1.000 | 4 of 5 | 0.920 |
+| thresholds at the 95th percentile | *0.937* | 0.996 | 0.993 | 1.000 | 1.000 | 4 of 5 | 0.864 |
+| dead zone 0.5 | 0.977 | 0.998 | 0.999 | 0.998 | 1.000 | 5 of 5 | 0.837 |
+| dead zone 1.5 | 0.969 | 1.000 | 0.996 | 0.998 | 1.000 | 5 of 5 | 0.957 |
+| integrity weight 1 | 0.984 | 1.000 | 0.998 | 0.998 | 1.000 | 5 of 5 | 0.921 |
+| plus four diagnostic statistics | 0.972 | 0.999 | 0.998 | 1.000 | 1.000 | 5 of 5 | 0.914 |
+
+Each axis carries one rung, and removing it breaks that rung. Without coherence, shuffled sentences score as high as human text. Without the syntax axis, shuffled words do. Without the lexical axis, random letters tie with real words. Without integrity, a repeated phrase is the best text on the ladder. No single statistic is necessary: the two gains and the well-formedness checks overlap, so either gain alone carries the syntax axis. Replacing the gains by raw log-probabilities, removing the saturation, or lowering the thresholds each breaks a pair, which confirms the three structural decisions of Section 4. The dead zone and the integrity weight can move by half a unit either way without breaking anything; they change only the scale of human scores.
+
+### 6.8 Cost
+
+**Table 13.** Time and memory on one Intel Xeon (2.8 GHz, 4 cores), no GPU. SCRIBE uses one core; the Python baselines use two or three threads.
+
+| Metric | Texts per second | Threads | Peak memory | One-off setup |
+|---|---|---|---|---|
+| SCRIBE v2, Wikipedia pack (32 MiB) | 1,054 | 1 | 394 MB | pack 3.8 s; vectors 50–60 s once |
+| SCRIBE v2, WebText pack (31 MiB) | 726 | 1 | 664 MB | pack 7.5 s |
+| count statistics (distinct-n, rep-n, gzip) | 2,300–6,100 | 2 | | none |
+| MiniLM embedding coherence | 35.6 | 3 | | model download |
+| CoLA acceptability | 5.2 | 3 | | model download |
+| GPT-2 perplexity (256 tokens) | 4.7 | 2 | | model download |
+| GPT-2 output detector (RoBERTa-base) | 5.9 | 2 | | model download |
+
+Per text, SCRIBE v2 spends about 0.49 ms computing the v1 statistics and 0.20 ms on the v2 additions. Training the word vectors takes 44 s (8 MiB pack) to 99 s (128 MiB) with 377–645 MB of memory, once per pack. SCRIBE is over 200 times faster than GPT-2 perplexity while using half the threads.
+
+### 6.9 Registered predictions
+
+**Table 14.** The twenty predictions registered before the first v2 run, scored.
+
+| | Prediction (short form) | Result | Verdict |
+|---|---|---|---|
+| P1 | v2 passes all 5 pairs on fresh Wikipedia | 5 of 5 | hit |
+| P2 | surface S passes at most 2 pairs | 1 of 5 | hit |
+| P3 | GPT-2 perplexity fails letters > repeated and ranks the repeated phrase above human text | accuracy 0.000; perplexity 1.7 against 36.5 | hit |
+| P4 | set-level MAUVE orders the six rungs | ⟨P4⟩ | ⟨P4V⟩ |
+| P5 | v2 passes ≥ 4 pairs on WebText and on books | 5 and 3 | miss |
+| P6 | Spearman ≤ −0.9 for ≥ 7 of 9 held-out families | 7 of 9 | hit |
+| P7 | Pythia checkpoints in order | not run | untested |
+| P8 | Pythia sizes, Spearman ≥ 0.8 | not run | untested |
+| P9 | v2 orders GPT-2 sizes within one decoding family; MAUVE within both | v2 swaps small and medium (pure) and ties all four (top-k); MAUVE not run | miss |
+| P10 | greedy decoding lowest under v2, highest under GPT-2 perplexity | not run | untested |
+| P11 | MAUVE human evaluation: q3 system Spearman ≥ 0.6 and per-pair agreement > 0.55 | 0.714 and 0.531 | miss |
+| P12 | HANNA coherence: story Kendall ≥ 0.15 and system Kendall ≥ 0.6 | 0.194 and 0.689 | hit |
+| P13 | OpenMEVA: story Pearson between 0.1 and 0.4 | ROC 0.189, WP 0.057 | miss |
+| P14 | \|Pearson with length\| ≤ 0.1 per bucket and pooled | 0.009, 0.041; pooled −0.124 | miss |
+| P15 | web text against the Wikipedia reference keeps < 0.8 of its score | 0.89 | miss |
+| P16 | copied pack text: parity ≥ 0.9 without i1 and < 0.5 with it; stuffing and loop < 0.2 | 1.04 and 0.11; 0.02 and 0.00 | hit |
+| P17 | ≥ 1,000 texts/s on one core, < 500 MB, ≥ 100 times faster than GPT-2-large features | 1,054/s, 394 MB, 224 times faster than GPT-2 small | hit |
+| P18 | without C the first pair < 0.95; without s3 the second pair < 0.95 | 0.488; 0.998 | miss |
+| P19 | the 1.5B LLM judge fails a ladder pair | judge not run | untested |
+| P20 | on HANNA, v2 beats BLEU and ROUGE-L on coherence | 0.194 against 0.110 and 0.112 | hit |
+
+⟨P_COUNT⟩ The misses are informative. Books are harder than Wikipedia and web text for SCRIBE's cohesion statistics (P5). SCRIBE's lexical statistics depend less on genre than predicted (P15). Short texts score a little higher than long ones (P14). The syntax axis is more redundant than predicted: the skeleton gain alone carries it (P18). Two predictions about agreement with people were too optimistic (P11, P13). P17 was tested against GPT-2 small, which is cheaper than GPT-2-large featurisation, so the margin against GPT-2 large is larger still.
 
 ## 7. Discussion
 
-**What counts can see.** SCRIBE v2's statistics see whether a text is made of words, whether its words follow each other the way they do in human text once their frequency is accounted for, whether its sentences share vocabulary and topic, whether it repeats itself, whether it copies its training text, and how it overlaps with a prompt. With those, it orders every rung of the control ladder in three genres, follows seven of nine held-out degradations, catches the repetition, echo, stuffing and copying attacks, and puts word-salad generators (n-gram models) far below human text.
+**What counts can see.** SCRIBE v2's statistics see whether a text is made of words, whether its words follow each other the way they do in human text once their frequency is accounted for, whether its sentences share vocabulary and topic, whether it repeats itself, whether it copies its training text, and how it overlaps with a prompt. With those, it orders every rung of the control ladder on Wikipedia and web text (and 3 of 5 pairs on novels), follows seven of nine held-out degradations, catches the repetition, echo, stuffing and copying attacks, and puts word-salad generators (n-gram models) far below human text.
 
 **What counts cannot see.** Four blind spots showed up, each a direct consequence of a design choice:
 
-1. *Sentence order.* All cohesion statistics are symmetric in the order of sentences, so reordering the sentences of a text costs nothing (Table 8). An ordered statistic, such as the entity grid's transition model or the probability of discourse connectives given the previous sentence, is the obvious addition.
+1. *Sentence order.* All cohesion statistics are symmetric in the order of sentences, so reordering the sentences of a text costs nothing (Table 4). An ordered statistic, such as the entity grid's transition model or the probability of discourse connectives given the previous sentence, is the obvious addition.
 2. *Truncation with punctuation.* A sentence cut in half and closed with a full stop is still well formed and still fluent word by word; the context gain ignores the end-of-sentence token. Scoring the end-of-sentence event would catch it.
 3. *Truth.* Random numbers and inserted negations keep their human parity. SCRIBE has no belief axis; the PLAN's B axis needs a fact store and claim extraction, which this version does not have.
-4. *Too typical.* SCRIBE v2 never penalises text for being more predictable or more cohesive than human text. Truncated sampling (top-k 40) produces exactly such text, and v2 scores it above WebText itself (Section 6.3). An exploratory two-sided variant puts human text first and roughly orders the top-k models by size while still passing the ladder, but it does not agree better with people on the MAUVE pairs. Whether a quality metric should penalise excess typicality is a value judgment: detectors exploit it (Gehrmann et al., 2019; Ippolito et al., 2020), people often prefer it, and typical-set decoding (Meister et al., 2023) treats it as a flaw.
+4. *Too typical.* SCRIBE v2 never penalises text for being more predictable or more cohesive than human text. Truncated sampling (top-k 40) produces exactly such text, and v2 scores it above WebText itself (Section 6.3). An exploratory two-sided variant, which also penalises syntax gains and cohesion that are higher than in human text, puts human text first and the smallest top-k model last while still passing the control ladder (Table 6). It does not agree better with people on the MAUVE pairs (per-pair agreement 0.521–0.531, system Spearman 0.38–0.67). Truncated sampling trades diversity for quality (Caccia et al., 2020). Whether a quality metric should penalise excess typicality is a value judgment: detectors exploit it (Gehrmann et al., 2019; Ippolito et al., 2020), people often prefer it, and typical-set decoding (Meister et al., 2023) treats it as a flaw.
 
 **Passing the ladder is not the same as ranking fluent texts.** v2's dead zones make it a strict judge of whether a text is human-like at all: most human samples score near 1, and every degradation falls far below. Inside the range of fluent text it has little resolution, and on HANNA's graded ratings SCRIBE v1, whose percentile scores keep the ordinary variation of human text, correlates better with people than v2 does. A deployment might use both: v2 as the gate that a model must pass, and a graded within-human-range score to rank models that pass it.
 
 **Where the line falls.** The control ladder puts "sentences shuffled across documents" just below human text. On Wikipedia every n-gram generator falls far below that rung (means 0.001–0.089 against 0.354). On web text every GPT-2 configuration scores above it (0.71–0.97 against 0.43). So the ladder gives a model builder a concrete first target: a model whose samples do not score above shuffled sentences has not yet learned to write prose, however well it compresses text.
 
-**Cost.** SCRIBE needs no GPU and no downloaded model. It scores about a thousand texts per second on one core with 0.4 GB of memory. That is over 200 times faster than GPT-2 small perplexity on two cores of the same CPU, and several hundred times faster than the other neural baselines (Section 6.8). It can run inside a training loop, on every checkpoint, or on every generated answer.
+**Cost.** SCRIBE needs no GPU and no downloaded model. It scores about a thousand texts per second on one core with 0.4 GB of memory. On the same CPU that is about 30 times faster than MiniLM embedding coherence, and about 200 times faster than CoLA, the GPT-2 output detector and GPT-2 small perplexity, each of which used two or three cores (Section 6.8). It can run inside a training loop, on every checkpoint, or on every generated answer.
 
 ## 8. Limitations
 
 - **English only, four genres.** Every pack and reference is English: Wikipedia, web text, novels and short stories. Another language or genre needs its own pack and reference (100 or more reference samples per length bucket and a few MiB of pack text were enough here).
 - **Reference dependence.** SCRIBE measures distance from its reference. A reference of the wrong genre lowers human parity (web text against the Wikipedia reference keeps 0.90 of it), and SCRIBE cannot rate text that is better than its reference in ways the statistics do not see.
 - **Blind spots.** Sentence order, truncation with punctuation, factual errors and excess typicality (Section 7). The relevance axis is lexical: it separates right from wrong answers on Dolly and on Wikipedia prompts, but not good from bad stories for a creative prompt (HANNA relevance).
-- **Graded agreement.** Item-level correlations with people are modest (Kendall up to about 0.2 on stories), like most metrics in Table 11; SCRIBE is stronger at system level and at ordering clear differences than at ranking fluent texts.
+- **Graded agreement.** Item-level correlations with people are modest (Kendall up to about 0.2 on stories), like most metrics in Table 10; SCRIBE is stronger at system level and at ordering clear differences than at ranking fluent texts.
 - **Design data.** The control ladder's corruption types were used in design (on development text), so the fresh ladder tests generalisation to new text, not to new kinds of damage. The held-out families, the model ladders and the human judgments test the latter, and they show the limits above.
 - **Compute.** Everything ran on one 4-core CPU without a GPU. The neural baselines read only the first 256 GPT-2 tokens of each text and ran on fixed subsets. No LLM judge of our own was run, so the comparison with LLM judges rests on the judges shipped with HANNA. The model ladders stop at GPT-2 XL (1.5B parameters), and the planned Pythia and decoding ladders were not run, so three registered predictions on them are untested.
 - **No rating study of our own.** The study plan's own rating test (300 samples rated by the author) was not run; published ratings stand in for it.
 
 ## 9. Conclusion
 
-<!-- CONCLUSION -->
+Counts alone can tell prose from the main kinds of broken text, reliably and cheaply, if two things hold. Each statistic must be read against human text of the same genre. And the evidence must be combined with the right structure: categorical form failures, graded coherence, and a separate penalty for degeneration. The control ladder is a demanding test. None of the standard metrics tried here passes it, and SCRIBE v1, built on almost the same statistics with percentile scores, does not either.
+
+Within fluent text, counts see much less. SCRIBE v2 does not rank GPT-2 sizes. It cannot see order, truth or excess typicality, and it agrees only modestly with people on single texts. Its best use is as a gate and a diagnostic: a cheap, transparent check that a model writes human-like text at all, with per-axis evidence of how it fails. A distributional or learned metric can then rank the models that pass. The clearest next steps follow from the blind spots: an ordered coherence statistic, an end-of-sentence term in the context gain, and a decision on whether text more predictable than people write should count against it.
 
 ## Reproducibility
 
-<!-- REPRO -->
+**Code.** All code is in the repository github.com/odin-loki/Cypha; the Zenodo record names the commit. The metric is `native/include/cypha/eval/scribe.hpp`, a header-only C++20 library with no dependency beyond the standard library. The command-line tool is `native/tools/scribe.cpp`. Build it with `cmake -S native -B build && cmake --build build --target scribe`. Its self-test, `scribe selftest`, runs 76 checks and is the CTest `native_scribe_selftest`. Word vectors come from `native/tools/ppmi_svd.cpp` (`g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd`). The evaluation scripts are in `scripts/scribe_eval/`:
+
+- `data.py` downloads and converts every dataset.
+- `corrupt.py`, `attacks.py`, `prompted.py` and `qa_ladder.py` build the test texts.
+- `baselines.py` computes the baselines, and `meta.py` holds the statistics.
+- `report.py` writes every table of Section 6 to `paper/scribe/results/`.
+
+**Data.** All data is public: enwik8 and enwik9 (Mahoney, 2011), the GPT-2 output dataset, Project Gutenberg, WritingPrompts, HANNA, OpenMEVA, the MAUVE human evaluation, and Dolly 15k. `data.py` writes a manifest with the source, licence, size and SHA-256 hash of every converted file.
+
+**Determinism.** Every random choice is seeded. The splits and seeds are in the study plan (`docs/SCRIBE_PAPER_PLAN.md`) and the freeze record (`docs/reports/SCRIBE_V2.md`). One control-ladder run (pack, reference and 3,000 test texts) takes about 20 seconds on one core.
 
 ## References
 
@@ -246,6 +506,8 @@ Chen, S. F., and Goodman, J. (1999). An empirical study of smoothing techniques 
 Chhun, C., Colombo, P., Suchanek, F. M., and Clavel, C. (2022). Of human criteria and automatic metrics: A benchmark of the evaluation of story generation. *COLING*.
 
 Chhun, C., Suchanek, F. M., and Clavel, C. (2024). Do language models enjoy their own stories? Prompting large language models for automatic story evaluation. *Transactions of the ACL*, 12.
+
+Conover, M., Hayes, M., Mathur, A., Xie, J., Wan, J., Shah, S., Ghodsi, A., Wendell, P., Zaharia, M., and Xin, R. (2023). Free Dolly: Introducing the world's first truly open instruction-tuned LLM. Databricks blog; dataset databricks-dolly-15k.
 
 Efron, B., and Tibshirani, R. J. (1993). *An Introduction to the Bootstrap*. Chapman and Hall.
 
@@ -296,8 +558,6 @@ Papineni, K., Roukos, S., Ward, T., and Zhu, W.-J. (2002). BLEU: A method for au
 Pillutla, K., Swayamdipta, S., Zellers, R., Thickstun, J., Welleck, S., Choi, Y., and Harchaoui, Z. (2021). MAUVE: Measuring the gap between neural text and human text using divergence frontiers. *NeurIPS*.
 
 Popović, M. (2015). chrF: Character n-gram F-score for automatic MT evaluation. *WMT*.
-
-Qwen Team (2024). Qwen2.5 technical report. arXiv:2412.15115.
 
 Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., and Sutskever, I. (2019). Language models are unsupervised multitask learners. OpenAI technical report.
 

@@ -36,7 +36,7 @@ Of 2,592 settings of the combination's free parameters tried on both development
 
 1. **v2 as first written** (sum of squared excess z over all statistics, coherence two-sided): 2 of 5 pairs on dev A. One weak sub-score on a human sample still dragged it down, and one failed well-formedness check (an unbalanced quote) put a human sample at z ≈ −5.
 2. **Coherence one-sided.** The all-pairs sentence cosine alone separates human from shuffled sentences at 0.989 (dev A) when low cohesion is the bad side, against 0.972 two-sided. Too much cohesion from repetition is the I axis's job.
-3. **No additive weighting passes.** Raising form's weight to order "shuffled sentences > shuffled words" also raises the form noise of human samples, which breaks "human > shuffled sentences". Across 2,592 additive settings the best minimum pair accuracy was 0.60.
+3. **No additive weighting passes.** Raising form's weight to order "shuffled sentences > shuffled words" also raises the form noise of human samples, which breaks "human > shuffled sentences". Across several thousand additive settings (squared or linear evidence; sum, mean or maximum within an axis; axis weights 1 to 4) none passed all five pairs on dev A; the best minimum pair accuracy was 0.926.
 4. **Categorical form and integrity.** Counting form and integrity only beyond a high human quantile, and coherence from the dead zone on, gave 4 of 5; the remaining conflict was between the size of the form penalty and the coherence signal inside word salad.
 5. **Context gain.** The word trigram's log-probability minus the word's unigram log-probability (and the same for the skeleton model) measures how much the context predicts each word. Rare-topic human text keeps that gain, word salad loses it. Shuffled words moved from a median bad-side z of 3.1–3.5 (raw log-probability) to 6.8–8.8, with none inside the human 99.5th percentile.
 6. **Two form failures.** Once syntax saturates, real words and non-words got the same penalty. Lexical validity (s1) and syntax (s2g, s3g, s4) became separate saturating failures. That passes all five pairs on both ladders, robustly.
@@ -57,3 +57,19 @@ enwik8 [72, 95.37) MiB, seed 1123581321, 500 standard human samples from 2,409 c
 All v2 intervals are disjoint. Rung means (SCRIBE v2, 95% interval): human 0.916 [0.902, 0.930]; sentences shuffled 0.354 [0.341, 0.366]; words shuffled 0.003; random lexicon words 0.001; random letters 0.000 (mean D 53.5); one phrase repeated 0.000 (mean D 305.8). Trie samples 0.017 [0.012, 0.024], between words shuffled and random letters. Short human samples 0.954, standard 0.916.
 
 V4 on this ladder: Pearson of SCRIBE with bytes 0.009 (standard), 0.041 (short), −0.124 pooled (Spearman 0.010 pooled): short samples score a little higher than standard ones.
+
+## Study results (2026-10-28)
+
+The full study is the paper `paper/scribe/SCRIBE_paper.md` (PDF next to it; tables with every interval in `paper/scribe/results/`). The main results for frozen v2:
+
+- **Control ladders.** Fresh Wikipedia 5 of 5 pairs. WebText 5 of 5. Books 3 of 5 (human > sentences shuffled 0.785; words shuffled > random words 0.894). WebText against the Wikipedia reference 4 of 5, keeping 89% of its human score. No baseline passes more than 2 of 5 on Wikipedia: GPT-2 perplexity 1, CoLA 1, MiniLM coherence 2, the GPT-2 output detector 0, distinct-n, rep-n, type–token ratio and gzip 1 each.
+- **Held-out corruptions** (9 families × 6 strengths × 200 samples). Spearman of the means ≤ −0.9 for 7 families (substitution, typos, repetition, swaps, dropped words, content-word swaps, off-topic sentences). Blind to sentence reordering and to truncated sentences.
+- **Model ladders.** n-gram orders 1–5 all far below human text (0.001–0.089 against 0.911); orders 3–5 tied. GPT-2 output dataset: pure sampling XL 0.826 > large 0.816 > small 0.767 > medium 0.706; top-k 40 all 0.968–0.972, above WebText (0.925).
+- **Question answering** (Dolly, prompted profile): correct > another question's answer 0.961, > echo 0.957, > shuffled 0.863.
+- **Attacks.** Copying (with i1), echo, stuffing and loops caught; a fluent generic paragraph is the strongest attack; wrong numbers and negations are invisible.
+- **Human judgments.** MAUVE human evaluation: per pair 0.527–0.531; system Spearman 0.571, 0.810, 0.714 (q1–q3). HANNA without human stories: coherence Kendall 0.194 (BLEU 0.110, ROUGE-L 0.112, ChatGPT 0.202, Beluga-13B 0.282; v1 0.232); system 0.689. OpenMEVA: ROC Pearson 0.189, WP 0.057.
+- **Stability.** Five seeds, packs of 8–128 MiB, and references of 100–1,000 samples all pass 5 of 5; 50 reference samples fail the first pair.
+- **Ablations.** Each axis carries one rung; no single statistic is necessary; raw log-probabilities, no saturation, or 95th-percentile thresholds each break a pair.
+- **Cost.** 1,054 texts/s on one core, 394 MB (Wikipedia pack); GPT-2 perplexity 4.7 texts/s on two threads.
+
+The planned Pythia and GPT-2 decoding ladders and the LLM judge were not run, at the owner's request (about 20 CPU-hours). Of the twenty registered predictions, the scorecard is Table 14 of the paper.

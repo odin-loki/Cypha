@@ -1,8 +1,7 @@
 # Where the trie falls, all per-text metrics on W
 
 Analysis `wiki_fresh_W_trie` (1. Fresh Wikipedia control ladder). meta.py `ladder`.
-Inputs: SP/run/baselines/subsets/wiki_fresh_W.jsonl, SP/run/fresh/wiki_fresh/scores.jsonl, SP/run/baselines/wiki_fresh_W/stats.jsonl, SP/run/baselines/wiki_fresh_W/cola.jsonl, SP/run/baselines/wiki_fresh_W/coherence.jsonl.
-Not available yet (left out): R/wiki_fresh_W/ppl_gpt2.jsonl (partial), R/wiki_fresh_W/detector.jsonl (partial).
+Inputs: SP/run/baselines/subsets/wiki_fresh_W.jsonl, SP/run/fresh/wiki_fresh/scores.jsonl, SP/run/baselines/wiki_fresh_W/stats.jsonl, SP/run/baselines/wiki_fresh_W/ppl_gpt2.jsonl, SP/run/baselines/wiki_fresh_W/cola.jsonl, SP/run/baselines/wiki_fresh_W/coherence.jsonl, SP/run/baselines/wiki_fresh_W/detector.jsonl.
 
 Share of (trie, control) pairs in which the trie text scores higher (ties one half), with 95% bootstrap intervals. 0.5 is no information; the trie writes word salad, so a correct metric puts it below fluent rungs.
 
@@ -22,10 +21,12 @@ Share of (trie, control) pairs in which the trie text scores higher (ties one ha
 | diversity | 0.566 [0.499, 0.632] | 0.392 [0.331, 0.456] | 0.292 [0.238, 0.350] | 0.244 [0.195, 0.296] | 0.183 [0.146, 0.223] | 1.000 [1.000, 1.000] |
 | type-token ratio | 0.575 [0.509, 0.639] | 0.410 [0.346, 0.480] | 0.575 [0.510, 0.642] | 0.310 [0.252, 0.380] | 0.009 [0.000, 0.022] | 1.000 [1.000, 1.000] |
 | gzip ratio | 0.820 [0.771, 0.869] | 0.698 [0.634, 0.761] | 0.776 [0.718, 0.830] | 0.664 [0.595, 0.733] | 0.465 [0.389, 0.544] | 1.000 [1.000, 1.000] |
+| GPT-2 PPL | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.347 [0.282, 0.410] | 0.800 [0.745, 0.850] | 0.071 [0.041, 0.104] | 0.000 [0.000, 0.000] |
 | CoLA acceptability, mean | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] | 0.683 [0.618, 0.741] | 0.884 [0.839, 0.918] | 0.000 [0.000, 0.001] | 0.073 [0.039, 0.107] |
 | CoLA acceptability, min | 0.007 [0.000, 0.020] | 0.011 [0.002, 0.026] | 0.906 [0.870, 0.938] | 0.964 [0.940, 0.984] | 0.003 [0.000, 0.009] | 0.059 [0.028, 0.090] |
 | MiniLM coherence, adjacent | 0.055 [0.027, 0.090] | 0.879 [0.813, 0.936] | 0.074 [0.040, 0.113] | 0.552 [0.445, 0.659] | 0.000 [0.000, 0.000] | 0.003 [0.000, 0.008] |
 | MiniLM coherence, all pairs | 0.064 [0.031, 0.100] | 0.928 [0.872, 0.969] | 0.095 [0.053, 0.140] | 0.576 [0.469, 0.682] | 0.000 [0.000, 0.000] | 0.000 [0.000, 0.000] |
+| GPT-2 detector P(human) | 0.060 [0.038, 0.082] | 0.115 [0.081, 0.153] | 0.097 [0.066, 0.136] | 0.496 [0.430, 0.561] | 0.233 [0.181, 0.288] | 0.747 [0.694, 0.803] |
 
 Rung means [95% interval]:
 
@@ -45,9 +46,11 @@ Rung means [95% interval]:
 | diversity | 0.961 [0.955, 0.967] | 0.950 [0.940, 0.959] | 0.981 [0.976, 0.984] | 0.991 [0.988, 0.993] | 0.996 [0.994, 0.997] | 1.000 [0.999, 1.000] | 0.000 [0.000, 0.000] |
 | type-token ratio | 0.749 [0.733, 0.768] | 0.724 [0.713, 0.735] | 0.782 [0.774, 0.790] | 0.724 [0.712, 0.735] | 0.815 [0.807, 0.822] | 0.995 [0.993, 0.996] | 0.068 [0.066, 0.071] |
 | gzip ratio | 0.731 [0.713, 0.751] | 0.621 [0.615, 0.627] | 0.659 [0.655, 0.664] | 0.636 [0.630, 0.642] | 0.667 [0.663, 0.671] | 0.718 [0.715, 0.722] | 0.117 [0.114, 0.119] |
+| GPT-2 PPL | 1577.409 [1419.505, 1767.124] | 36.469 [33.919, 39.254] | 66.184 [62.470, 70.465] | 1034.817 [960.240, 1111.744] | 2449.814 [2304.278, 2594.924] | 515.325 [502.597, 528.932] | 1.725 [1.686, 1.768] |
 | CoLA acceptability, mean | 0.089 [0.081, 0.098] | 0.874 [0.860, 0.886] | 0.863 [0.848, 0.878] | 0.076 [0.069, 0.083] | 0.057 [0.054, 0.061] | 0.495 [0.489, 0.501] | 0.477 [0.430, 0.527] |
 | CoLA acceptability, min | 0.071 [0.068, 0.075] | 0.720 [0.682, 0.755] | 0.681 [0.639, 0.718] | 0.045 [0.043, 0.047] | 0.040 [0.039, 0.041] | 0.411 [0.401, 0.421] | 0.471 [0.422, 0.520] |
 | MiniLM coherence, adjacent | 0.161 [0.139, 0.182] | 0.391 [0.372, 0.412] | 0.052 [0.042, 0.062] | 0.351 [0.333, 0.371] | 0.152 [0.144, 0.160] | 0.567 [0.553, 0.579] | 0.985 [0.966, 1.000] |
 | MiniLM coherence, all pairs | 0.166 [0.144, 0.186] | 0.372 [0.353, 0.392] | 0.047 [0.040, 0.054] | 0.334 [0.317, 0.352] | 0.151 [0.145, 0.158] | 0.567 [0.555, 0.579] | 0.992 [0.982, 1.000] |
+| GPT-2 detector P(human) | 0.145 [0.106, 0.186] | 0.818 [0.770, 0.865] | 0.695 [0.636, 0.753] | 0.710 [0.659, 0.760] | 0.077 [0.055, 0.100] | 0.267 [0.230, 0.304] | 0.074 [0.041, 0.113] |
 
 Full meta.py output: [wiki_fresh_W_trie.full.md](wiki_fresh_W_trie.full.md).

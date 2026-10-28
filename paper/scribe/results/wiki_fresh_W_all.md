@@ -1,8 +1,7 @@
 # All per-text metrics on subset W (150 texts per rung)
 
 Analysis `wiki_fresh_W_all` (1. Fresh Wikipedia control ladder). meta.py `ladder`.
-Inputs: SP/run/baselines/subsets/wiki_fresh_W.jsonl, SP/run/fresh/wiki_fresh/scores.jsonl, SP/run/baselines/wiki_fresh_W/stats.jsonl, SP/run/baselines/wiki_fresh_W/cola.jsonl, SP/run/baselines/wiki_fresh_W/coherence.jsonl.
-Not available yet (left out): R/wiki_fresh_W/ppl_gpt2.jsonl (partial), R/wiki_fresh_W/detector.jsonl (partial).
+Inputs: SP/run/baselines/subsets/wiki_fresh_W.jsonl, SP/run/fresh/wiki_fresh/scores.jsonl, SP/run/baselines/wiki_fresh_W/stats.jsonl, SP/run/baselines/wiki_fresh_W/ppl_gpt2.jsonl, SP/run/baselines/wiki_fresh_W/cola.jsonl, SP/run/baselines/wiki_fresh_W/coherence.jsonl, SP/run/baselines/wiki_fresh_W/detector.jsonl.
 
 900 texts. Bootstrap: 1000 resamples, seed 20261028, percentile 95% intervals. Accuracy is P(upper > lower) over all (upper, lower) pairs with ties one half (the AUROC), computed on oriented scores (lower-is-better metrics negated). "Intervals disjoint" means the rung-mean intervals do not overlap and are in the right order. A pair passes when accuracy >= 0.95 and the intervals are disjoint.
 
@@ -440,6 +439,37 @@ All pairs (accuracy of row > column):
 | random lexicon words |  |  |  | 0.060 | 1.000 |
 | random letters |  |  |  |  | 1.000 |
 
+### GPT-2 PPL (lower is better)
+
+| rung | n | missing | mean [95% interval] |
+|---|---|---|---|
+| held-out human | 150 | 0 | 36.469 [33.919, 39.254] |
+| sentences shuffled | 150 | 0 | 66.184 [62.470, 70.465] |
+| words shuffled | 150 | 0 | 1034.817 [960.240, 1111.744] |
+| random lexicon words | 150 | 0 | 2449.814 [2304.278, 2594.924] |
+| random letters | 150 | 0 | 515.325 [502.597, 528.932] |
+| one phrase repeated | 150 | 0 | 1.725 [1.686, 1.768] |
+
+| upper > lower | accuracy | 95% interval | intervals disjoint | verdict |
+|---|---|---|---|---|
+| held-out human > sentences shuffled | 0.866 | [0.825, 0.904] | yes | FAIL |
+| sentences shuffled > words shuffled | 1.000 | [1.000, 1.000] | yes | **PASS** |
+| words shuffled > random lexicon words | 0.948 | [0.924, 0.970] | yes | FAIL |
+| random lexicon words > random letters | 0.000 | [0.000, 0.000] | no | FAIL |
+| random letters > one phrase repeated | 0.000 | [0.000, 0.000] | no | FAIL |
+
+Passed 1 of 5 adjacent pairs.
+
+All pairs (accuracy of row > column):
+
+| upper \ lower | sentences shuffled | words shuffled | random lexicon words | random letters | one phrase repeated |
+|---|---|---|---|---|---|
+| held-out human | 0.866 | 1.000 | 1.000 | 1.000 | 0.000 |
+| sentences shuffled |  | 1.000 | 1.000 | 1.000 | 0.000 |
+| words shuffled |  |  | 0.948 | 0.095 | 0.000 |
+| random lexicon words |  |  |  | 0.000 | 0.000 |
+| random letters |  |  |  |  | 0.000 |
+
 ### CoLA acceptability, mean (higher is better)
 
 | rung | n | missing | mean [95% interval] |
@@ -564,6 +594,37 @@ All pairs (accuracy of row > column):
 | random lexicon words |  |  |  | 0.000 | 0.000 |
 | random letters |  |  |  |  | 0.006 |
 
+### GPT-2 detector P(human) (higher is better)
+
+| rung | n | missing | mean [95% interval] |
+|---|---|---|---|
+| held-out human | 150 | 0 | 0.818 [0.770, 0.865] |
+| sentences shuffled | 150 | 0 | 0.695 [0.636, 0.753] |
+| words shuffled | 150 | 0 | 0.710 [0.659, 0.760] |
+| random lexicon words | 150 | 0 | 0.077 [0.055, 0.100] |
+| random letters | 150 | 0 | 0.267 [0.230, 0.304] |
+| one phrase repeated | 150 | 0 | 0.074 [0.041, 0.113] |
+
+| upper > lower | accuracy | 95% interval | intervals disjoint | verdict |
+|---|---|---|---|---|
+| held-out human > sentences shuffled | 0.654 | [0.592, 0.713] | yes | FAIL |
+| sentences shuffled > words shuffled | 0.520 | [0.455, 0.583] | no | FAIL |
+| words shuffled > random lexicon words | 0.943 | [0.914, 0.968] | yes | FAIL |
+| random lexicon words > random letters | 0.163 | [0.118, 0.209] | no | FAIL |
+| random letters > one phrase repeated | 0.895 | [0.851, 0.935] | yes | FAIL |
+
+Passed 0 of 5 adjacent pairs.
+
+All pairs (accuracy of row > column):
+
+| upper \ lower | sentences shuffled | words shuffled | random lexicon words | random letters | one phrase repeated |
+|---|---|---|---|---|---|
+| held-out human | 0.654 | 0.691 | 0.961 | 0.890 | 0.961 |
+| sentences shuffled |  | 0.520 | 0.916 | 0.817 | 0.935 |
+| words shuffled |  |  | 0.943 | 0.848 | 0.941 |
+| random lexicon words |  |  |  | 0.163 | 0.764 |
+| random letters |  |  |  |  | 0.895 |
+
 ## Summary
 
 Adjacent pairs, accuracy and verdict (pass: accuracy >= 0.95 and disjoint intervals in the right order).
@@ -584,7 +645,9 @@ Adjacent pairs, accuracy and verdict (pass: accuracy >= 0.95 and disjoint interv
 | diversity | 0.273 FAIL | 0.338 FAIL | 0.410 FAIL | 0.360 FAIL | 1.000 **PASS** | 1 of 5 |
 | type-token ratio | 0.258 FAIL | 0.742 FAIL | 0.123 FAIL | 0.000 FAIL | 1.000 **PASS** | 1 of 5 |
 | gzip ratio | 0.214 FAIL | 0.693 FAIL | 0.226 FAIL | 0.060 FAIL | 1.000 **PASS** | 1 of 5 |
+| GPT-2 PPL | 0.866 FAIL | 1.000 **PASS** | 0.948 FAIL | 0.000 FAIL | 0.000 FAIL | 1 of 5 |
 | CoLA acceptability, mean | 0.527 FAIL | 1.000 **PASS** | 0.715 FAIL | 0.000 FAIL | 0.556 FAIL | 1 of 5 |
 | CoLA acceptability, min | 0.542 FAIL | 0.999 **PASS** | 0.621 FAIL | 0.000 FAIL | 0.505 FAIL | 1 of 5 |
 | MiniLM coherence, adjacent | 0.992 **PASS** | 0.007 FAIL | 0.956 **PASS** | 0.000 FAIL | 0.020 FAIL | 2 of 5 |
 | MiniLM coherence, all pairs | 0.997 **PASS** | 0.003 FAIL | 0.954 **PASS** | 0.000 FAIL | 0.006 FAIL | 2 of 5 |
+| GPT-2 detector P(human) | 0.654 FAIL | 0.520 FAIL | 0.943 FAIL | 0.163 FAIL | 0.895 FAIL | 0 of 5 |
