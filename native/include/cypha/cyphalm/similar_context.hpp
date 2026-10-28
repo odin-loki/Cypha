@@ -104,6 +104,7 @@ class SimilarContext {
         p_.probe = q.probe;
         p_.max_tail = q.max_tail;
         cache_ = ~std::uint64_t{0};
+        restart_ = true;
         lat_us_.clear();
     }
 
@@ -216,6 +217,7 @@ class SimilarContext {
         }
         lists_ = L;
         cache_ = ~std::uint64_t{0};
+        restart_ = true;
     }
 
     /// The next-byte distribution after h[0..n) (oldest byte first): the live neighbours' proposals, summing to 1, or
@@ -226,21 +228,32 @@ class SimilarContext {
         std::size_t anchor = 0, ctx = 0;
         if (!anchor_of(h, n, anchor, ctx, hit.word)) return hit;
         search_cached(h, ctx, anchor);
+        // The live neighbours: when this tail extends the last call's, only that call's survivors are checked.
         const std::size_t t = n - anchor;
-        double wsum = 0, best = -2;
-        for (std::size_t j = 0; j < nb_pos_.size(); ++j)
-            if (alive(nb_pos_[j], h + anchor, t)) best = std::max(best, static_cast<double>(nb_sim_[j]));
-        for (std::size_t j = 0; j < nb_pos_.size(); ++j) {
-            if (!alive(nb_pos_[j], h + anchor, t)) continue;
-            const double w = p_.temp > 0 ? std::exp((nb_sim_[j] - best) / p_.temp) : 1.0;
-            P[text_[nb_pos_[j] + t]] += w;
-            wsum += w;
-            ++hit.live;
+        const std::uint8_t* tail = h + anchor;
+        if (restart_ || t < tail_.size() || !std::equal(tail_.begin(), tail_.end(), tail)) {
+            live_.resize(nb_pos_.size());
+            for (std::size_t j = 0; j < live_.size(); ++j) live_[j] = static_cast<std::uint32_t>(j);
+            tail_.clear();
+            restart_ = false;
         }
-        if (hit.live == 0) return hit;
-        double mx = 0;
+        const std::size_t from = tail_.size();
+        std::size_t m = 0;
+        for (const std::uint32_t j : live_) {
+            const std::uint32_t pos = nb_pos_[j];
+            if (pos + t < n_ && std::memcmp(text_ + pos + from, tail + from, t - from) == 0) live_[m++] = j;
+        }
+        live_.resize(m);
+        tail_.assign(tail, tail + t);
+        if (m == 0) return hit;
+        double wsum = 0, mx = 0;
+        for (const std::uint32_t j : live_) {
+            P[text_[nb_pos_[j] + t]] += nb_w_[j];
+            wsum += nb_w_[j];
+        }
         for (int s = 0; s < 256; ++s) mx = std::max(mx, P[s] /= wsum);
-        hit.top = best;
+        hit.live = static_cast<int>(m);
+        hit.top = nb_sim_[live_[0]];  // neighbours are kept best first
         hit.agree = mx;
         return hit;
     }
@@ -457,11 +470,10 @@ class SimilarContext {
         nb_pos_.clear();
         nb_sim_.clear();
         if (query_key(h, ctx, anchor, q.data())) search(q.data(), p_.probe, nb_pos_, nb_sim_);
+        nb_w_.resize(nb_sim_.size());  // exp((cos - cos_best) / temp); the shift cancels when the live ones are normalised
+        for (std::size_t j = 0; j < nb_w_.size(); ++j) nb_w_[j] = p_.temp > 0 ? std::exp((double{nb_sim_[j]} - double{nb_sim_[0]}) / p_.temp) : 1.0;
+        restart_ = true;  // predict() starts again from every neighbour
         lat_us_.push_back(static_cast<float>(std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count()));
-    }
-
-    bool alive(std::uint32_t pos, const std::uint8_t* tail, std::size_t t) const {
-        return pos + t < n_ && std::memcmp(text_ + pos, tail, t) == 0;
     }
 
     Vectors vec_;
@@ -473,8 +485,11 @@ class SimilarContext {
     std::vector<std::int8_t> keys_, cent_;  // keys grouped by list; centroids
     std::vector<std::uint32_t> pos_, start_;
     mutable std::uint64_t cache_ = ~std::uint64_t{0};  // the last searched context, and its neighbours
-    mutable std::vector<std::uint32_t> nb_pos_;
+    mutable std::vector<std::uint32_t> nb_pos_, live_;  // live_: the neighbours that agree with tail_
     mutable std::vector<float> nb_sim_, lat_us_;
+    mutable std::vector<double> nb_w_;
+    mutable std::vector<std::uint8_t> tail_;
+    mutable bool restart_ = true;
 };
 
 }  // namespace cypha::cyphalm
