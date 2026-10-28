@@ -1,19 +1,19 @@
 # SCRIBE paper results
 
-Written by `scripts/scribe_eval/report.py` on 2026-10-27 23:55 (197 s). Inputs under SP = `/tmp/claude-0/-home-user-Cypha/36c53d01-6fbd-5b4b-903b-8b30032ddc8e/scratchpad`. Statistics: `scripts/scribe_eval/meta.py`, 1000 bootstrap resamples, seed 20261028. Each analysis has a Markdown file, a CSV of every table (column `table` names the table) and a JSON file with the same tables. Rerun the script as inputs land; analyses listed under Skipped run once their inputs exist.
+Written by `scripts/scribe_eval/report.py` on 2026-10-28 00:02 (199 s). Inputs under SP = `/tmp/claude-0/-home-user-Cypha/36c53d01-6fbd-5b4b-903b-8b30032ddc8e/scratchpad`. Statistics: `scripts/scribe_eval/meta.py`, 1000 bootstrap resamples, seed 20261028. Each analysis has a Markdown file, a CSV of every table (column `table` names the table) and a JSON file with the same tables. Rerun the script as inputs land; analyses listed under Skipped run once their inputs exist.
 
 ## Outputs
 
 | analysis | section | what | units | metrics | not available yet |
 |---|---|---|---|---|---|
 | [wiki_fresh_scribe](wiki_fresh_scribe.md) | 1 | SCRIBE v2, v1, surface S and the v2 deviance parts; 500 texts per rung | 4746 | 9 | — |
-| [wiki_fresh_W_all](wiki_fresh_W_all.md) | 1 | All per-text metrics on subset W (150 texts per rung) | 1650 | 18 | R/wiki_fresh_W/ppl_gpt2.jsonl (partial), R/wiki_fresh_W/detector.jsonl (partial) |
+| [wiki_fresh_W_all](wiki_fresh_W_all.md) | 1 | All per-text metrics on subset W (150 texts per rung) | 1650 | 20 | — |
 | [wiki_fresh_trie](wiki_fresh_trie.md) | 1 | Where the order-4 trie falls: P(trie > control rung), SCRIBE on all texts | 4746 | 9 | — |
-| [wiki_fresh_W_trie](wiki_fresh_W_trie.md) | 1 | Where the trie falls, all per-text metrics on W | 1650 | 18 | R/wiki_fresh_W/ppl_gpt2.jsonl (partial), R/wiki_fresh_W/detector.jsonl (partial) |
+| [wiki_fresh_W_trie](wiki_fresh_W_trie.md) | 1 | Where the trie falls, all per-text metrics on W | 1650 | 20 | — |
 | [genre_web](genre_web.md) | 2 | Web ladder, each genre with its own pack and reference, SCRIBE only | 3500 | 3 | — |
 | [genre_books](genre_books.md) | 2 | Books ladder, each genre with its own pack and reference, SCRIBE only | 3500 | 3 | — |
 | [dose_scribe](dose_scribe.md) | 3 | SCRIBE on all corruptions (9 families x 6 strengths x 200 texts) | 10800 | 3 | — |
-| [dose_S20_all](dose_S20_all.md) | 3 | All per-text metrics on S20 (every family and strength of the first 20 sources) | 1080 | 14 | R/corrupt_S20/ppl_gpt2.jsonl, R/corrupt_S20/cola.jsonl, R/corrupt_S20/coherence.jsonl, R/corrupt_S20/detector.jsonl |
+| [dose_S20_all](dose_S20_all.md) | 3 | All per-text metrics on S20 (every family and strength of the first 20 sources) | 1080 | 14 | R/corrupt_S20/ppl_gpt2.jsonl (partial), R/corrupt_S20/cola.jsonl, R/corrupt_S20/coherence.jsonl, R/corrupt_S20/detector.jsonl |
 | [mauve_he_scribe](mauve_he_scribe.md) | 4 | SCRIBE on all 3,240 judgments | 6116 | 5 | — |
 | [mauve_he_scribe_te25](mauve_he_scribe_te25.md) | 4 | SCRIBE, judgments with an estimated answer time over 25 s only (the MAUVE paper's filter; times from the raw CSV) | 6116 | 5 | — |
 | [mauve_he_M300_all](mauve_he_M300_all.md) | 4 | All per-text metrics on M300 (first 300 pairs) | 596 | 16 | R/mauve_he_M300/ppl_gpt2.jsonl, R/mauve_he_M300/detector.jsonl |

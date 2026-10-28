@@ -13,7 +13,7 @@
   "n": 4746,
   "n_metrics": 9,
   "missing_optional": [],
-  "seconds": 7.118414640426636,
+  "seconds": 9.845978736877441,
   "checks": [
    {
     "analysis": "wiki_fresh_scribe",
@@ -109,12 +109,9 @@
    "wiki_fresh_W_all.json"
   ],
   "n": 1650,
-  "n_metrics": 18,
-  "missing_optional": [
-   "R/wiki_fresh_W/ppl_gpt2.jsonl (partial)",
-   "R/wiki_fresh_W/detector.jsonl (partial)"
-  ],
-  "seconds": 3.1427431106567383,
+  "n_metrics": 20,
+  "missing_optional": [],
+  "seconds": 3.709632158279419,
   "checks": []
  },
  {
@@ -164,7 +161,7 @@
   "n": 4746,
   "n_metrics": 9,
   "missing_optional": [],
-  "seconds": 9.920895099639893,
+  "seconds": 8.219714164733887,
   "checks": []
  },
  {
@@ -180,12 +177,9 @@
    "wiki_fresh_W_trie.json"
   ],
   "n": 1650,
-  "n_metrics": 18,
-  "missing_optional": [
-   "R/wiki_fresh_W/ppl_gpt2.jsonl (partial)",
-   "R/wiki_fresh_W/detector.jsonl (partial)"
-  ],
-  "seconds": 3.808095693588257,
+  "n_metrics": 20,
+  "missing_optional": [],
+  "seconds": 3.587390899658203,
   "checks": []
  },
  {
@@ -202,7 +196,7 @@
   "n": 3500,
   "n_metrics": 3,
   "missing_optional": [],
-  "seconds": 3.300137996673584,
+  "seconds": 5.043930292129517,
   "checks": []
  },
  {
@@ -219,7 +213,7 @@
   "n": 3500,
   "n_metrics": 3,
   "missing_optional": [],
-  "seconds": 3.129282236099243,
+  "seconds": 9.36051869392395,
   "checks": []
  },
  {
@@ -236,7 +230,7 @@
   "n": 10800,
   "n_metrics": 3,
   "missing_optional": [],
-  "seconds": 4.0730180740356445,
+  "seconds": 7.614979028701782,
   "checks": []
  },
  {
@@ -253,12 +247,12 @@
   "n": 1080,
   "n_metrics": 14,
   "missing_optional": [
-   "R/corrupt_S20/ppl_gpt2.jsonl",
+   "R/corrupt_S20/ppl_gpt2.jsonl (partial)",
    "R/corrupt_S20/cola.jsonl",
    "R/corrupt_S20/coherence.jsonl",
    "R/corrupt_S20/detector.jsonl"
   ],
-  "seconds": 1.7336528301239014,
+  "seconds": 1.8023872375488281,
   "checks": []
  },
  {
@@ -291,7 +285,7 @@
   "n": 6116,
   "n_metrics": 5,
   "missing_optional": [],
-  "seconds": 3.6407365798950195,
+  "seconds": 9.158531188964844,
   "checks": []
  },
  {
@@ -308,7 +302,7 @@
   "n": 6116,
   "n_metrics": 5,
   "missing_optional": [],
-  "seconds": 3.852107524871826,
+  "seconds": 4.123142242431641,
   "checks": []
  },
  {
@@ -328,7 +322,7 @@
    "R/mauve_he_M300/ppl_gpt2.jsonl",
    "R/mauve_he_M300/detector.jsonl"
   ],
-  "seconds": 3.1666297912597656,
+  "seconds": 2.917325258255005,
   "checks": []
  },
  {
@@ -345,7 +339,7 @@
   "n": 1962,
   "n_metrics": 16,
   "missing_optional": [],
-  "seconds": 3.440767526626587,
+  "seconds": 3.087033987045288,
   "checks": []
  },
  {
@@ -372,7 +366,7 @@
   "missing_optional": [
    "R/hanna/ppl_gpt2.jsonl"
   ],
-  "seconds": 33.95413517951965,
+  "seconds": 32.44363069534302,
   "checks": []
  },
  {
@@ -389,7 +383,7 @@
   "n": 1056,
   "n_metrics": 75,
   "missing_optional": [],
-  "seconds": 76.33083653450012,
+  "seconds": 64.90591335296631,
   "checks": []
  },
  {
@@ -408,7 +402,7 @@
   "missing_optional": [
    "R/mans_roc/ppl_gpt2.jsonl"
   ],
-  "seconds": 2.610447883605957,
+  "seconds": 2.8576345443725586,
   "checks": []
  },
  {
@@ -427,7 +421,7 @@
   "missing_optional": [
    "R/mans_wp/ppl_gpt2.jsonl"
   ],
-  "seconds": 2.6944921016693115,
+  "seconds": 2.6635429859161377,
   "checks": []
  },
  {
@@ -444,7 +438,7 @@
   "n": 9000,
   "n_metrics": 4,
   "missing_optional": [],
-  "seconds": 3.909552812576294,
+  "seconds": 4.530197381973267,
   "checks": []
  },
  {
@@ -463,7 +457,7 @@
   "missing_optional": [
    "R/gpt2out_200/ppl_gpt2.jsonl"
   ],
-  "seconds": 1.6953353881835938,
+  "seconds": 1.4720573425292969,
   "checks": []
  },
  {
@@ -480,7 +474,7 @@
   "n": 4500,
   "n_metrics": 15,
   "missing_optional": [],
-  "seconds": 3.6763932704925537,
+  "seconds": 2.989483118057251,
   "checks": []
  },
  {
@@ -505,7 +499,7 @@
   "n": 9000,
   "n_metrics": 4,
   "missing_optional": [],
-  "seconds": 3.428201675415039,
+  "seconds": 2.569732427597046,
   "checks": []
  },
  {
@@ -524,7 +518,7 @@
   "missing_optional": [
    "R/gpt2out_200/ppl_gpt2.jsonl"
   ],
-  "seconds": 1.6149523258209229,
+  "seconds": 1.3645474910736084,
   "checks": []
  },
  {
@@ -541,7 +535,7 @@
   "n": 4500,
   "n_metrics": 15,
   "missing_optional": [],
-  "seconds": 3.835080146789551,
+  "seconds": 2.8381500244140625,
   "checks": []
  },
  {
@@ -566,7 +560,7 @@
   "n": 1491,
   "n_metrics": 3,
   "missing_optional": [],
-  "seconds": 0.4971449375152588,
+  "seconds": 0.5771212577819824,
   "checks": []
  },
  {
@@ -584,7 +578,7 @@
   "n": 493,
   "n_metrics": 4,
   "missing_optional": [],
-  "seconds": 0.30356836318969727,
+  "seconds": 0.25682902336120605,
   "checks": []
  },
  {
@@ -627,7 +621,7 @@
   "n": 2500,
   "n_metrics": 5,
   "missing_optional": [],
-  "seconds": 4.4024059772491455,
+  "seconds": 3.9976425170898438,
   "checks": []
  },
  {
@@ -649,7 +643,7 @@
    "R/attacks_50/ppl_gpt2.jsonl",
    "R/attacks_50/detector.jsonl"
   ],
-  "seconds": 2.394052743911743,
+  "seconds": 1.9512383937835693,
   "checks": []
  },
  {
@@ -666,7 +660,7 @@
   "n": 4746,
   "n_metrics": 3,
   "missing_optional": [],
-  "seconds": 1.3489255905151367,
+  "seconds": 1.085080623626709,
   "checks": []
  },
  {
@@ -683,7 +677,7 @@
   "n": 1650,
   "n_metrics": 20,
   "missing_optional": [],
-  "seconds": 2.148512125015259,
+  "seconds": 1.633932113647461,
   "checks": []
  },
  {
@@ -700,7 +694,7 @@
   "n": 2400,
   "n_metrics": 4,
   "missing_optional": [],
-  "seconds": 2.017430543899536,
+  "seconds": 2.315850257873535,
   "checks": []
  },
  {
@@ -714,6 +708,6 @@
    "profiling.csv",
    "profiling.json"
   ],
-  "seconds": 0.03377890586853027
+  "seconds": 0.055098772048950195
  }
 ]

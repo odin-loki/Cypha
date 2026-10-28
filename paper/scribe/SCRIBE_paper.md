@@ -192,7 +192,7 @@ Every number in this section comes from frozen SCRIBE v2. The fresh region was r
 
 ### 6.1 Control ladders
 
-**Table 2.** Fresh Wikipedia control ladder: accuracy for each adjacent pair. SCRIBE and surface S use 500 texts per rung; the other baselines use the first 150 texts of each rung. Bold: the pair passes (accuracy ≥ 0.95 and disjoint intervals in the right order).
+**Table 2.** Fresh Wikipedia control ladder: accuracy for each adjacent pair. SCRIBE v2, SCRIBE v1 and surface S use 500 texts per rung; the other metrics use the first 150 texts of each rung. Bold: the pair passes (accuracy ≥ 0.95 and disjoint intervals in the right order).
 
 | Metric | human > sentences shuffled | > words shuffled | > random words | > random letters | > repeated phrase | Passed |
 |---|---|---|---|---|---|---|
