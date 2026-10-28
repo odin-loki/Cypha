@@ -2,7 +2,7 @@
 
 **Odin Loch** · 2026-10-28 · PLAN B4 and B9 · follows [B4_CLASS_CONTEXT_EXPERT.md](B4_CLASS_CONTEXT_EXPERT.md) and [A1C_ENTITY_FAMILIARITY_AND_COPY.md](A1C_ENTITY_FAMILIARITY_AND_COPY.md)
 
-(Draft. The decision rule and the predictions below were written before the runs. Results are added under them.)
+(The decision rule and the predictions below were written before the runs. Results and the decision are added under them.)
 
 **Question.** Two new experts each lower CyphaLM's BPC a lot: the class-context expert (B4: −0.078 on fresh text with shape classes, −0.091 with E1 tags) and the copy expert (A1c: −0.146 on the holdout's second half, chat model). Do they add up, which class table is best, and which of them become defaults?
 
@@ -146,3 +146,20 @@ Surface S saturates: it scores the experts' word salad at or above human text. S
 
 - **The class expert lifts SCRIBE 2.6 times** (0.028 → 0.074), with disjoint intervals. The copy expert changes nothing on it.
 - **It is still far from human text** (0.535), and below shuffled human words (0.111). The text is better word salad, not sense.
+
+### Rule 3, answers, and the decision (2026-10-28)
+
+Rule 3 was read in `qa` by the answering-variants runs ([A1D/A2B](A1D_A2B_ANSWERING_VARIANTS.md), step 6). Dev, chat form, 5-fold CV gate at 2% wrong:
+
+| Configuration | Without the class expert: raw right; kept right / wrong | With it | Rule 3 |
+|---|---|---|---|
+| No fact shard: trie + IG (+ class) | 2; 0 / 0 | 2; 0 / 0 | holds |
+| No fact shard: + copy (with the class expert m 8; the reference is A1c's copy, m 0) | 1; 0 / 2 | 1; 0 / 1 | holds |
+| D4 fact shard: trie + IG (+ class) | 7; 2 / 0 | 6; 2 / 1 | **fails**: a wrong answer gets through |
+| D4 fact shard: + copy (m 8) | 6; 0 / 0 | 2; 0 / 0 | **fails** on raw answers: the model echoes the question (*"Avicenna born?"*) |
+| C1L's setting (token, shard): + copy, shape / tags | 6 raw right | 4 / 5 | fails on raw answers |
+
+**Decision: the defaults do not change.** CyphaLM's default stays trie + InfiniGram. The class expert (shape classes, tail 6, 3 orders) and the copy expert (m = 8, window 16,384) pass rules 1 and 2 and cost little after the RAM work (the class table is 18 MB compact with contexts seen once dropped; RAM_PROFILE M2/M3). But with the fact shard, which is how CyphaLM answers anything today, they make it echo the question or let a wrong answer through, so they fail rule 3.
+
+- **They stay options:** `cls`, `qa --cls`, `qa --copy --copy-min 8`. For text alone they are the best measured setting: fresh text 2.166 → 1.912 BPC, surface S 0.907, SCRIBE 0.028 → 0.072.
+- **What would change this:** a fix for the echo (a copy weight that depends on where it is, inside the answer or not; flagged for Odin in A1D/A2B), then rule 3 read again.

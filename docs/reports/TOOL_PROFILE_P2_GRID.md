@@ -2,7 +2,7 @@
 
 **Odin Loch** · 2026-10-28 · [TOOL_PROFILE_PLAN.md](../TOOL_PROFILE_PLAN.md) §4–§7
 
-(Draft. The design and the predictions below were written before any grid run. Results are added under them.)
+(The design and the predictions below were written before any grid run. Results and the P3/P4 decisions are added under them.)
 
 ## Design
 
@@ -84,4 +84,29 @@ The trie alone (no InfiniGram) gets 0 right raw in every run. The tag table here
 | G4 | Facts: +2 right / +1 wrong over B (+1.5 per 100 at 2.3% coverage), BPC +0.0005 | **Hit** |
 | G6 | InfiniGram: BPC −0.248 on the trie; answers only with it | **Hit** |
 | G7 | Cypha gate no better than the threshold gate | **Hit** (worse on every set) |
-| G3, G5, G8 | Word classes, teacher text, the tagger cut | Waiting for S-1b's classes, Odin's PC, and the full grid |
+| G3 | Word classes: S-1b's k-means classes (256, 1,024) as the class table: fresh BPC +0.0049 / +0.0032 against shape classes, surface S −0.079 / −0.092 (B4B) | **Miss** (no gain at all) |
+| G5 | Teacher text | Not run: inference moved to Odin's PC (PLAN ledger 54) |
+| G8 | The tagger fails §5.4 on BPC alone | **Hit**: −0.0128 on fresh text for 1,396 lines, under the −0.014 it needs |
+
+---
+
+## P3: decisions (2026-10-28)
+
+The rule is TOOL_PROFILE_PLAN §5: a tool stays only if (1) adding it to B passes LCI ≥ 0.95 on its primary metric, (2) it still helps with the others present, (3) the wrong rate does not rise, (4) it gives at least +2 right answers per 100 or −0.01 BPC per 1,000 lines of tool code, and (5) it fits the budgets. The evidence is the grid above, B4B ([report](B4B_LM_DEFAULTS.md)) and the answering-variants runs ([A1D/A2B](A1D_A2B_ANSWERING_VARIANTS.md)), which reran the combinations with the familiarity token.
+
+| Tool, in the role profiled | (1) helps | (3) honest | (4) worth its code | Decision |
+|---|---|---|---|---|
+| `pos_tagger` as the class-expert table | BPC −0.0128 on fresh text, LCI 1.00; Q/A 0 | with facts: 1 right / 1 wrong against shape's 2 / 1 | needs −0.014 for 1,396 lines: **fails** | **Role cut**: the class expert uses shape classes. The tagger **stays as the question parser**: E1's entity and its span candidates drive the familiarity token (A1d: entity right for 76 of 100, token precision 0.600 dev, 0.635 test) |
+| `ppmi_svd` / S-1b classes as the class-expert table | **fails**: +0.0049 / +0.0032 BPC against shape classes | | | **Role cut.** The vectors stay a SEMANTICS source; the similar-context expert (A4) is their next use and is being measured |
+| `pattern_learn` as the fact-shard writer | +2 right, 0 wrong over B0 (1.5 per 100); sign test on 2 questions, LCI about 0.75–0.87: **fails** | holds (0 wrong) | needs +6 per 100 for 3,026 lines: **fails** | **Fails the cut as a Q/A tool. Not deleted: flagged for Odin.** It is also the fact store behind D4, F2R and Track S's gap map (S3), which this profile does not measure |
+| InfiniGram | BPC −0.248 on the trie; every right answer needs it | | far above | **Stays** (core expert) |
+| `cypha_gate` (the Cypha classifier as abstain gate) | over ten configurations it keeps 21.7 right / 18.0 wrong (mean of 3 seeds) against the threshold gate's 15 / 5 | **fails**: over the 2% target in 6 of 30 seed runs | | **Deleted** (P4). The threshold gate in `qa` stays |
+| Teacher text | not run | | | Waits for Odin's PC |
+
+**Frozen test, read once on the kept set** (A1D/A2B report, configuration C1L: InfiniGram, D4's fact shard, the low-only familiarity token from E1's span candidates, threshold gate): 0 right, 0 wrong kept at 2% wrong (Wilson upper 1.9%); the token's abstain precision 0.635, recall 0.94. R3 with F2R's raw frames: 1 right, 0 wrong.
+
+## P4: cuts (2026-10-28)
+
+- **`native/tools/cypha_gate.cpp`** (224 lines) and its CTest `native_cypha_gate_selftest` are deleted. Its last version is in commit `e82a4a4` (added) as published; the result is the table above and A1D/A2B step 7.
+- **Class tables from the tagger and from word vectors** are not used by default: nothing to delete, the class expert simply runs on shape classes.
+- **`pattern_learn`** stays until Odin rules on it (above).
