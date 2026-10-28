@@ -1,0 +1,21 @@
+table,metric,label,dir,system,system_label,position,n,missing,mean,lo,hi,upper,lower,upper_label,lower_label,n_upper,n_lower,acc,acc_lo,acc_hi,disjoint,spearman,spearman_lo,spearman_hi,kendall,kendall_lo,kendall_hi,p_perfect,perfect
+systems,self_bleu,self-BLEU,-,human,WebText (human),0,1,0,0.08499668511320536,0.08499668511320536,0.08499668511320536,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,xl-1542M,GPT-2 xl,1,1,0,0.07377150953016638,0.07377150953016638,0.07377150953016638,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,large-762M,GPT-2 large,2,1,0,0.07932812404694257,0.07932812404694257,0.07932812404694257,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,medium-345M,GPT-2 medium,3,1,0,0.05822651204850775,0.05822651204850775,0.05822651204850775,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,small-117M,GPT-2 small,4,1,0,0.06720804199267878,0.06720804199267878,0.06720804199267878,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,human,WebText (human),0,1,0,0.0,0.0,0.0,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,xl-1542M,GPT-2 xl,1,1,0,0.00810793819240263,0.00810793819240263,0.00810793819240263,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,large-762M,GPT-2 large,2,1,0,0.0008656518365444121,0.0008656518365444121,0.0008656518365444121,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,medium-345M,GPT-2 medium,3,1,0,0.035111023766643434,0.035111023766643434,0.035111023766643434,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,small-117M,GPT-2 small,4,1,0,0.011053999319358132,0.011053999319358132,0.011053999319358132,,,,,,,,,,,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,human,xl-1542M,WebText (human),GPT-2 xl,1,1,0.0,0.0,0.0,False,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,xl-1542M,large-762M,GPT-2 xl,GPT-2 large,1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,large-762M,medium-345M,GPT-2 large,GPT-2 medium,1,1,0.0,0.0,0.0,False,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,medium-345M,small-117M,GPT-2 medium,GPT-2 small,1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,human,xl-1542M,WebText (human),GPT-2 xl,1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,xl-1542M,large-762M,GPT-2 xl,GPT-2 large,1,1,0.0,0.0,0.0,False,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,large-762M,medium-345M,GPT-2 large,GPT-2 medium,1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,medium-345M,small-117M,GPT-2 medium,GPT-2 small,1,1,0.0,0.0,0.0,False,,,,,,,,
+order,self_bleu,self-BLEU,-,,,,,,,,,,,,,,,,,,,-0.7999999999999999,-0.8,-0.8,-0.6,-0.6,-0.6,0.0,False
+order,zipf_gap,|Zipf − human Zipf|,-,,,,,,,,,,,,,,,,,,,0.7999999999999999,0.8,0.8,0.6,0.6,0.6,0.0,False

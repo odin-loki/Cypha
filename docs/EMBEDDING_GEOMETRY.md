@@ -448,6 +448,8 @@ The geometry only counts once CyphaLM uses it: the similar-context and class-con
 
 A miss is a result. It is recorded with the number and the reason, and the plan changes accordingly.
 
+**Scored so far (2026-10-28, [report](reports/QWEN3_EMBEDDING_DISSECTION.md)):** Q4 hit: 0.6B 196/196 matrices (top-5% share median 0.980), 8B 252/252 (median 0.976). Q1–Q3, Q5, Q6 and Q10 are not scored: inference moved to Odin's PC. A provisional look at 1,000 timing vectors gives a floor of 0.216 on sentences, and MRL on sentences 0.937 at 256 dimensions and 0.783 at 32.
+
 ---
 
 ## 11. Rules for this track

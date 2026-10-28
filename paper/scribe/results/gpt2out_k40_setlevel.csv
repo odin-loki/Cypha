@@ -1,0 +1,21 @@
+table,metric,label,dir,system,system_label,position,n,missing,mean,lo,hi,upper,lower,upper_label,lower_label,n_upper,n_lower,acc,acc_lo,acc_hi,disjoint,spearman,spearman_lo,spearman_hi,kendall,kendall_lo,kendall_hi,p_perfect,perfect
+systems,self_bleu,self-BLEU,-,human,WebText (human),0,1,0,0.08499668511320536,0.08499668511320536,0.08499668511320536,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,xl-1542M-k40,"GPT-2 xl, top-k 40",1,1,0,0.11802913229546316,0.11802913229546316,0.11802913229546316,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,large-762M-k40,"GPT-2 large, top-k 40",2,1,0,0.11819904039350881,0.11819904039350881,0.11819904039350881,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,medium-345M-k40,"GPT-2 medium, top-k 40",3,1,0,0.11545435924878383,0.11545435924878383,0.11545435924878383,,,,,,,,,,,,,,,,,,
+systems,self_bleu,self-BLEU,-,small-117M-k40,"GPT-2 small, top-k 40",4,1,0,0.14066672764694754,0.14066672764694754,0.14066672764694754,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,human,WebText (human),0,1,0,0.0,0.0,0.0,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,xl-1542M-k40,"GPT-2 xl, top-k 40",1,1,0,0.054398604567291176,0.054398604567291176,0.054398604567291176,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,large-762M-k40,"GPT-2 large, top-k 40",2,1,0,0.051231812164821866,0.051231812164821866,0.051231812164821866,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,medium-345M-k40,"GPT-2 medium, top-k 40",3,1,0,0.04442290583512998,0.04442290583512998,0.04442290583512998,,,,,,,,,,,,,,,,,,
+systems,zipf_gap,|Zipf − human Zipf|,-,small-117M-k40,"GPT-2 small, top-k 40",4,1,0,0.10063764857620161,0.10063764857620161,0.10063764857620161,,,,,,,,,,,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,human,xl-1542M-k40,WebText (human),"GPT-2 xl, top-k 40",1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,xl-1542M-k40,large-762M-k40,"GPT-2 xl, top-k 40","GPT-2 large, top-k 40",1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,large-762M-k40,medium-345M-k40,"GPT-2 large, top-k 40","GPT-2 medium, top-k 40",1,1,0.0,0.0,0.0,False,,,,,,,,
+adjacent,self_bleu,self-BLEU,,,,,,,,,,medium-345M-k40,small-117M-k40,"GPT-2 medium, top-k 40","GPT-2 small, top-k 40",1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,human,xl-1542M-k40,WebText (human),"GPT-2 xl, top-k 40",1,1,1.0,1.0,1.0,True,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,xl-1542M-k40,large-762M-k40,"GPT-2 xl, top-k 40","GPT-2 large, top-k 40",1,1,0.0,0.0,0.0,False,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,large-762M-k40,medium-345M-k40,"GPT-2 large, top-k 40","GPT-2 medium, top-k 40",1,1,0.0,0.0,0.0,False,,,,,,,,
+adjacent,zipf_gap,|Zipf − human Zipf|,,,,,,,,,,medium-345M-k40,small-117M-k40,"GPT-2 medium, top-k 40","GPT-2 small, top-k 40",1,1,1.0,1.0,1.0,True,,,,,,,,
+order,self_bleu,self-BLEU,-,,,,,,,,,,,,,,,,,,,0.7,0.7,0.7,0.6,0.6,0.6,0.0,False
+order,zipf_gap,|Zipf − human Zipf|,-,,,,,,,,,,,,,,,,,,,0.6,0.6,0.6,0.39999999999999997,0.4,0.4,0.0,False

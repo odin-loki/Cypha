@@ -57,6 +57,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <istream>
@@ -917,6 +918,11 @@ class ScribeModel {
   }
 
   bool trained() const { return trained_; }
+  // Natural-log unigram probability of a lexicon id (ids >= 4) among lexicon tokens; 0 for other ids.
+  double log_unigram(std::uint32_t id) const {
+    if (id < 4 || id >= V_ || cum_.empty() || cum_.back() == 0) return 0.0;
+    return std::log(static_cast<double>(counts_[id]) / static_cast<double>(cum_.back()));
+  }
   size_t vocab_size() const { return V_; }
   std::uint64_t n_train_sentences() const { return n_sent_; }
   size_t n_trigrams() const { return tri_.k.size(); }
@@ -972,6 +978,20 @@ class ScribeModel {
     return std::log(p);
   }
 
+  // Sum over the in-lexicon words of a sentence of log p(w | u, v) - log p_freq(w), and their number (v2 s3g).
+  double sentence_gain(const std::vector<std::uint32_t>& ids, size_t& n) const {
+    std::uint32_t u = kBos, v = kBos;
+    double g = 0;
+    for (std::uint32_t w : ids) {
+      if (w >= 4) {
+        g += logp(u, v, w) - log_unigram(w);
+        ++n;
+      }
+      u = v;
+      v = w;
+    }
+    return g;
+  }
   // Log-prob of one sentence (ids of its tokens) including </s>; adds the OOV penalty.
   // Returns the number of predicted tokens (words + </s>) through n_pred.
   double sentence_logp(const std::vector<std::uint32_t>& ids, size_t& n_pred) const {
@@ -1220,6 +1240,23 @@ struct Features {
   bool has_c0 = false, has_c1 = false, has_c3 = false;
   // raw statistics
   double s1 = 0, s3 = -30, s4 = 0, c0 = 0, c1 = 0, c3 = 1, loop8 = 0, rep = 0, d[4] = {1, 1, 1, 1};
+  // v2 additions from extract_features (v1 never reads them)
+  bool has_c1a = false;   // two or more embeddable sentences in a row
+  double c1a = 0;         // mean cosine of ADJACENT sentence vectors
+  bool has_c2 = false;    // two or more segments with content words
+  double c2 = 0;          // lexical cohesion: mean IDF-weighted overlap of content words over all pairs of segments
+  double s3min = -30;     // worst sentence: lowest per-token log-probability of a sentence with >= 3 tokens
+  double s3g = 0;         // context gain: mean of log p(w | u, v) - log p_freq(w) over in-lexicon words (order information)
+  bool has_s3g = false;
+  double sl_mean = 0;     // mean sentence length (tokens)
+  double sl_max = 0;      // longest sentence (tokens)
+  // v2 additions from ScribeV2Scorer::extend
+  bool has_v2 = false, has_prompt = false, has_r = false;
+  double s2 = -30;        // skeleton trigram: per-token log-probability of the function-word / word-class sequence
+  double s2g = 0;         // skeleton context gain over the skeleton unigram
+  double wfreq = 0;       // mean unigram log-probability of the lexicon words (word rarity)
+  double i1 = 0;          // share of tokens inside a word 8-gram that occurs verbatim in the pack
+  double r1 = 0, r4 = 0, r5 = 0, i4 = 0;  // prompted: prompt cosine, key-term coverage, informativeness, prompt echo
   // set level
   std::vector<std::uint32_t> ids;       // WordDict ids of the tokens
   std::vector<std::uint16_t> sent_len;  // tokens per sentence
@@ -1392,7 +1429,11 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
   std::vector<std::vector<float>> sentence_vecs;
   std::vector<std::vector<float>> content_word_vecs;  // unique content words known to the vectors
   std::unordered_set<int> content_seen;
+  std::vector<std::unordered_map<std::uint64_t, double>> seg_content;  // C2: content words of each sentence
+  double gain_sum = 0;
+  size_t gain_n = 0;
   for (const auto& t : toks) {
+    seg_content.emplace_back();
     std::vector<std::uint32_t> ids;
     std::unordered_map<std::uint64_t, float> tf;
     for (const std::string& w : t) {
@@ -1407,6 +1448,7 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
         tf[key] += 1.0f;
         if (idf >= kContentIdf) {
           content.emplace_back(key, idf);
+          seg_content.back()[key] = idf;
           if (use_vec) {
             const int vi = emb->vectors().index(w);
             if (vi >= 0 && content_seen.insert(vi).second) {
@@ -1418,7 +1460,17 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
       }
     }
     f.sent_len.push_back(static_cast<std::uint16_t>(std::min<size_t>(t.size(), 65535)));
-    lp += m.sentence_logp(ids, npred);
+    gain_sum += m.sentence_gain(ids, gain_n);
+    {
+      size_t np_s = 0;
+      const double lps = m.sentence_logp(ids, np_s);
+      lp += lps;
+      npred += np_s;
+      if (t.size() >= 3) {
+        const double per = lps / static_cast<double>(np_s);
+        if (f.s3min == -30 || per < f.s3min) f.s3min = per;
+      }
+    }
     SparseVec v;
     v.reserve(tf.size());
     for (const auto& kv : tf) {
@@ -1433,6 +1485,26 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
     }
   }
   f.n_words = static_cast<int>(flat.size());
+  if (f.s3min == -30 && npred) f.s3min = lp / static_cast<double>(npred);  // no sentence of 3 tokens: the sample's mean
+  if (gain_n >= 3) {
+    f.s3g = gain_sum / static_cast<double>(gain_n);
+    f.has_s3g = true;
+  }
+  for (std::uint16_t L : f.sent_len) {
+    f.sl_mean += L;
+    f.sl_max = std::max<double>(f.sl_max, L);
+  }
+  if (!f.sent_len.empty()) f.sl_mean /= static_cast<double>(f.sent_len.size());
+  if (sentence_vecs.size() >= 2) {
+    double sa = 0;
+    for (size_t k = 0; k + 1 < sentence_vecs.size(); ++k) {
+      double dot = 0;
+      for (size_t q = 0; q < sentence_vecs[k].size(); ++q) dot += double(sentence_vecs[k][q]) * sentence_vecs[k + 1][q];
+      sa += dot;
+    }
+    f.c1a = sa / static_cast<double>(sentence_vecs.size() - 1);
+    f.has_c1a = true;
+  }
   f.s1 = f.n_words ? static_cast<double>(hit) / f.n_words : 0.0;
   f.s3 = npred ? lp / static_cast<double>(npred) : -30.0;
   f.s4 = well_formedness(text, sents);
@@ -1486,6 +1558,38 @@ inline Features extract_features(const ScribeModel& m, WordDict& dict, const std
       }
       f.c3 = jsd_bits(p, q);
       f.has_c3 = true;
+    }
+  }
+  // C2: lexical cohesion (the entity-grid idea with counts only). Segments are the sentences that have content
+  // words; with fewer than two, the two halves of the sample's content words. For each pair of segments, the IDF
+  // mass of the shared content words over the smaller segment's IDF mass; C2 is the mean over all pairs.
+  {
+    std::vector<std::unordered_map<std::uint64_t, double>> segs;
+    for (auto& sc : seg_content)
+      if (!sc.empty()) segs.push_back(std::move(sc));
+    if (segs.size() < 2 && content.size() >= 4) {
+      segs.assign(2, {});
+      for (size_t i = 0; i < content.size(); ++i) segs[i < content.size() / 2 ? 0 : 1][content[i].first] = content[i].second;
+    }
+    if (segs.size() >= 2) {
+      std::vector<double> mass(segs.size(), 0.0);
+      for (size_t i = 0; i < segs.size(); ++i)
+        for (const auto& kv : segs[i]) mass[i] += kv.second;
+      double tot = 0;
+      size_t np = 0;
+      for (size_t i = 0; i < segs.size(); ++i)
+        for (size_t j = i + 1; j < segs.size(); ++j) {
+          const auto& a = segs[i].size() <= segs[j].size() ? segs[i] : segs[j];
+          const auto& b = segs[i].size() <= segs[j].size() ? segs[j] : segs[i];
+          double sh = 0;
+          for (const auto& kv : a)
+            if (b.count(kv.first)) sh += kv.second;
+          const double den = std::min(mass[i], mass[j]);
+          tot += den > 0 ? sh / den : 0.0;
+          ++np;
+        }
+      f.c2 = tot / static_cast<double>(np);
+      f.has_c2 = true;
     }
   }
   f.has_c = f.has_c0 || f.has_c1 || f.has_c3;
@@ -1590,7 +1694,8 @@ class ScribeScorer {
     ref[1].finish();
   }
   Scored score(const Features& f) const {
-    const BucketReference& r = ref[length_bucket(f.bytes)];
+    const int b0 = length_bucket(f.bytes);
+    const BucketReference& r = ref[ref[b0].n < 20 && ref[1 - b0].n >= 20 ? 1 - b0 : b0];  // too few in the bucket: the other
     Scored o;
     o.s1 = r.s1.one_sided(f.s1);
     o.s3 = r.s3.one_sided(f.s3);
@@ -1734,6 +1839,807 @@ inline SetReference build_set_reference(const std::vector<std::vector<const Feat
   r.zipf.finish();
   r.ks.finish();
   return r;
+}
+
+// ===========================================================================
+// v2: plain-text documents, continuations, and the human-typicality deviance
+// ===========================================================================
+//
+// v2 keeps v1's statistics, adds a few (s2, s3min, sentence lengths, word rarity, adjacent cohesion, verbatim copy,
+// and the prompted ones r1, r4, r5, i4), and replaces v1's percentile scores, geometric means and caps by one rule:
+//   1. Every raw statistic x becomes a signed z-score against the human reference samples of the same length bucket:
+//      inside the 2nd-98th percentile z = Phi^-1(F(x)) with F the mid-rank ECDF; beyond it the tail is extended
+//      linearly with a scale taken from the outer quantiles (so a value far outside the human range keeps its distance
+//      instead of saturating at the ECDF's last step). A statistic that human samples almost always have (>= 95%) and
+//      this sample lacks counts as z = 4 on its bad side.
+//   2. Only the bad side counts: u = max(0, -z) for higher-is-better statistics, max(0, z) for lower-is-better, |z| for
+//      two-sided ones. A dead zone d (1; 0.5 for relevance) forgives the ordinary human spread: e = max(0, u - d).
+//   3. The evidence of each axis is summed (L, S, C, I, R), and
+//        D = capS*sat(L - thL) + capS*sat(S - thS) + wI*max(0, I - thI) + wC*C + wR*R,  sat(x) = 1 - exp(-max(0, x)/kapS),
+//      with thL, thS, thI the qS/qI quantiles of the reference samples' own L, S, I in the bucket. Form failures are
+//      categorical and saturate; degeneration counts beyond the human quantile; coherence is graded. No gates: a
+//      deviance can only add, so no axis can rescue another (PLAN 6.3's intent).
+//   4. SCRIBE_x = exp(-D / tau): 1 for a sample that is human-typical on every statistic, falling with the evidence
+//      that it is not. Pairwise orderings depend only on D.
+
+inline std::string collapse_newlines(std::string s) {
+  for (char& c : s)
+    if (c == '\n' || c == '\r' || c == '\t' || c == '\f' || c == '\v') c = ' ';
+  return s;
+}
+
+namespace scribe_detail {
+
+// True if x ends with . ! or ? followed only by closing quotes or brackets (ASCII or the UTF-8 right quotes).
+inline bool ends_terminal(const std::string& x) {
+  size_t e = x.size();
+  while (e > 0) {
+    if (x[e - 1] == '"' || x[e - 1] == '\'' || x[e - 1] == ')' || x[e - 1] == ']') {
+      --e;
+    } else if (e >= 3 && (x.compare(e - 3, 3, "\xE2\x80\x9D") == 0 || x.compare(e - 3, 3, "\xE2\x80\x99") == 0)) {
+      e -= 3;
+    } else {
+      break;
+    }
+  }
+  return e > 0 && (x[e - 1] == '.' || x[e - 1] == '!' || x[e - 1] == '?');
+}
+
+// A prose line of a plain-text document: at least 20 bytes, starts like a sentence, ends like one, no markup.
+inline bool prose_plain_line(const std::string& l) {
+  if (l.size() < 20) return false;
+  size_t b = 0;
+  while (b < l.size() && (l[b] == '"' || l[b] == '\'' || l[b] == '(')) ++b;
+  if (b >= l.size()) return false;
+  const unsigned char f = static_cast<unsigned char>(l[b]);
+  if (!(is_upper_a(f) || is_digit_a(f) || f >= 0xC0)) return false;
+  if (!ends_terminal(l)) return false;
+  for (char c : l)
+    if (c == '{' || c == '}' || c == '[' || c == ']' || c == '|' || c == '<' || c == '>' || c == '=' || c == '*' || c == '#' || c == '_' ||
+        c == '\\' || c == '~')
+      return false;
+  if (l.find("http") != std::string::npos || l.find("www.") != std::string::npos) return false;
+  return true;
+}
+
+// Inverse standard normal CDF (Acklam's rational approximation, relative error < 1.2e-9).
+inline double inv_phi(double p) {
+  if (p <= 0) return -40;
+  if (p >= 1) return 40;
+  static const double a[] = {-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+                             1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00};
+  static const double b[] = {-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01,
+                             -1.328068155288572e+01};
+  static const double c[] = {-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+                             -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00};
+  static const double d[] = {7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00};
+  const double plow = 0.02425;
+  if (p < plow) {
+    const double q = std::sqrt(-2 * std::log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  if (p > 1 - plow) {
+    const double q = std::sqrt(-2 * std::log(1 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  const double q = p - 0.5, r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+         (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+inline std::uint64_t mix64(std::uint64_t x) {
+  x ^= x >> 33;
+  x *= 0xff51afd7ed558ccdull;
+  x ^= x >> 33;
+  x *= 0xc4ceb9fe1a85ec53ull;
+  x ^= x >> 33;
+  return x;
+}
+
+}  // namespace scribe_detail
+
+// A plain-text document (web page, book chunk, story) to prose: each line is collapsed and kept only if it is a
+// prose line (prose_plain_line); kept lines are joined with spaces. The counterpart of clean_wiki_body.
+inline std::string clean_plain_document(const std::string& text) {
+  using namespace scribe_detail;
+  std::string doc;
+  size_t pos = 0;
+  while (pos <= text.size()) {
+    size_t e = text.find('\n', pos);
+    if (e == std::string::npos) e = text.size();
+    const std::string line = collapse_ws(collapse_newlines(text.substr(pos, e - pos)));
+    size_t b = 0;
+    while (b < line.size() && line[b] == ' ') ++b;
+    const std::string l = line.substr(b);
+    if (prose_plain_line(l)) {
+      if (!doc.empty()) doc.push_back(' ');
+      doc += l;
+    }
+    if (e == text.size()) break;
+    pos = e + 1;
+  }
+  return doc;
+}
+
+// A model's continuation of a prompt (the prompt itself excluded), prepared for scoring: white space collapsed,
+// and an unterminated last sentence dropped when at least one whole sentence comes before it. A text without any
+// sentence boundary is kept whole, so the missing boundary is scored rather than hidden.
+inline std::string prepare_continuation(const std::string& raw) {
+  using namespace scribe_detail;
+  std::string t = collapse_ws(collapse_newlines(raw));
+  size_t b = 0;
+  while (b < t.size() && t[b] == ' ') ++b;
+  t = t.substr(b);
+  std::vector<std::string> s = split_sentences(t);
+  if (s.size() >= 2 && !ends_terminal(s.back())) s.pop_back();
+  std::string o;
+  for (const std::string& x : s) {
+    if (!o.empty()) o.push_back(' ');
+    o += x;
+  }
+  return o;
+}
+
+// ---------------------------------------------------------------------------
+// The v2 statistics
+// ---------------------------------------------------------------------------
+
+enum V2Stat {
+  V_S1, V_S2, V_S2G, V_S3, V_S3G, V_S3MIN, V_S4, V_SLMEAN, V_SLMAX, V_WFREQ,  // S: form
+  V_C0, V_C1, V_C1A, V_C2, V_C3,                                // C: coherence
+  V_LOOP, V_REP, V_D1, V_D2, V_D3, V_D4, V_I1,                  // I: integrity
+  V_R1, V_R4, V_R5, V_I4,                                       // R: relevance (prompted only)
+  V_N
+};
+
+struct V2StatSpec {
+  const char* name;
+  char axis;      // 'L' lexical validity, 'S' syntax, 'C' coherence, 'I' integrity, 'R' relevance
+  int side;       // +1 higher is better, -1 lower is better, 0 two-sided
+  double min_sd;  // floor of the tail scale, in the statistic's units
+  bool used;      // counts in the deviance (false: computed and reported only)
+};
+
+inline const V2StatSpec& v2_spec(int k) {
+  // Coherence is one-sided in v2 (more cohesion and less drift are better): too much cohesion from repetition is
+  // the I axis's job, and two-sided C cost 0.02-0.03 of ordering accuracy on the development ladders. s4's floor is
+  // 0.15 (about one failed check of six), so one unbalanced quote is moderate evidence, not z = -5.
+  static const V2StatSpec specs[V_N] = {
+      {"s1", 'L', +1, 0.01, true},      {"s2", 'S', +1, 0.05, false},    {"s2g", 'S', +1, 0.05, true},
+      {"s3", 'S', +1, 0.05, false},     {"s3g", 'S', +1, 0.05, true},
+      {"s3min", 'S', +1, 0.10, false},  {"s4", 'S', +1, 0.15, true},     {"sl_mean", 'S', 0, 0.5, false},
+      {"sl_max", 'S', -1, 1.0, false},  {"wfreq", 'S', 0, 0.05, false},  {"c0", 'C', +1, 0.005, true},
+      {"c1", 'C', +1, 0.01, true},      {"c1a", 'C', +1, 0.01, true},    {"c2", 'C', +1, 0.005, true},
+      {"c3", 'C', -1, 0.01, true},      {"loop8", 'I', -1, 0.01, true},  {"rep", 'I', -1, 0.05, true},
+      {"d1", 'I', 0, 0.01, true},       {"d2", 'I', 0, 0.01, true},      {"d3", 'I', 0, 0.005, true},
+      {"d4", 'I', 0, 0.005, true},      {"i1", 'I', 0, 0.01, true},      {"r1", 'R', +1, 0.01, true},
+      {"r4", 'R', +1, 0.02, true},      {"r5", 'R', 0, 0.02, true},      {"i4", 'R', -1, 0.01, true}};
+  return specs[k];
+}
+
+// The raw value of each v2 statistic and whether the sample has it.
+inline void v2_values(const Features& f, double* x, bool* has) {
+  for (int k = 0; k < V_N; ++k) has[k] = true;
+  x[V_S1] = f.s1;
+  x[V_S2] = f.s2;
+  x[V_S3] = f.s3;
+  x[V_S2G] = f.s2g;
+  x[V_S3G] = f.s3g;
+  has[V_S3G] = f.has_s3g;
+  x[V_S3MIN] = f.s3min;
+  x[V_S4] = f.s4;
+  x[V_SLMEAN] = f.sl_mean;
+  x[V_SLMAX] = f.sl_max;
+  x[V_WFREQ] = f.wfreq;
+  x[V_C0] = f.c0;
+  has[V_C0] = f.has_c0;
+  x[V_C1] = f.c1;
+  has[V_C1] = f.has_c1;
+  x[V_C1A] = f.c1a;
+  has[V_C1A] = f.has_c1a;
+  x[V_C2] = f.c2;
+  has[V_C2] = f.has_c2;
+  x[V_C3] = f.c3;
+  has[V_C3] = f.has_c3;
+  x[V_LOOP] = f.loop8;
+  x[V_REP] = f.rep;
+  for (int n = 0; n < 4; ++n) x[V_D1 + n] = f.d[n];
+  x[V_I1] = f.i1;
+  x[V_R1] = f.r1;
+  x[V_R4] = f.r4;
+  x[V_R5] = f.r5;
+  x[V_I4] = f.i4;
+  for (int k : {V_R1, V_R4, V_R5, V_I4}) has[k] = f.has_r;
+  if (!f.has_v2)
+    for (int k : {V_S2, V_S2G, V_WFREQ, V_I1}) has[k] = false;
+  if (f.n_words == 0)
+    for (int k = 0; k < V_N; ++k) has[k] = has[k] && (k == V_S4);
+}
+
+// Signed robust z-score of x against a human sample (see the v2 rule above).
+class QuantileZ {
+ public:
+  void add(double x) { v_.push_back(x); }
+  size_t size() const { return v_.size(); }
+  void finish(double min_sd) {
+    std::sort(v_.begin(), v_.end());
+    if (v_.empty()) return;
+    q02_ = quantile(0.02);
+    q16_ = quantile(0.16);
+    q84_ = quantile(0.84);
+    q98_ = quantile(0.98);
+    const double span = 2.053748910631823 - 0.994457883209753;
+    sl_ = std::max(min_sd, (q16_ - q02_) / span);
+    su_ = std::max(min_sd, (q98_ - q84_) / span);
+  }
+  double z(double x) const {
+    if (v_.empty()) return 0;
+    if (x < q02_) return -2.053748910631823 - (q02_ - x) / sl_;
+    if (x > q98_) return 2.053748910631823 + (x - q98_) / su_;
+    const auto lo = std::lower_bound(v_.begin(), v_.end(), x);
+    const auto hi = std::upper_bound(v_.begin(), v_.end(), x);
+    const double F = (static_cast<double>(lo - v_.begin()) + 0.5 * static_cast<double>(hi - lo) + 0.5) / (static_cast<double>(v_.size()) + 1.0);
+    return std::max(-2.053748910631823, std::min(2.053748910631823, scribe_detail::inv_phi(F)));
+  }
+
+ private:
+  double quantile(double p) const {
+    const double h = p * static_cast<double>(v_.size() - 1);
+    const size_t i = static_cast<size_t>(h);
+    const double fr = h - static_cast<double>(i);
+    return i + 1 < v_.size() ? v_[i] * (1 - fr) + v_[i + 1] * fr : v_.back();
+  }
+  std::vector<double> v_;
+  double q02_ = 0, q16_ = 0, q84_ = 0, q98_ = 0, sl_ = 1, su_ = 1;
+};
+
+// The v2 combination (chosen on the development ladders A and B only; docs/reports/SCRIBE_V2.md):
+//   u_k = bad-side |z_k|, e_k = max(0, u_k - dead) for every used statistic k
+//   L, S, C, I, R = sums of e_k over the lexical (s1), syntax (s2g, s3g, s4), coherence (c0, c1, c1a, c2, c3),
+//                   integrity (loop8, rep, d1-d4, i1) and relevance (r1, r4, r5, i4; prompted only) statistics
+//   D = cap * sat(L - thL) + cap * sat(S - thS) + wI * max(0, I - thI) + wC * C + wR * R,  sat(x) = 1 - exp(-max(0, x) / kap)
+//   thL, thS, thI = the q quantiles of L, S and I over the human reference samples of the length bucket
+//   SCRIBE = exp(-D / tau)
+// Prompted profile (v2p): wR = 8, with relevance dead zone 0.5 (rdead); chosen on development prompts only.
+// Not being made of words (L) and not being in an order people write (S) are two separate, categorical form
+// failures: each counts only beyond what 99% of human samples show, and each saturates at cap, so samples that fail
+// in the same way are ordered by their coherence. Degeneration (I) is the worst failure and does not saturate.
+// Coherence is graded: less cohesive is worse at every level, so it counts from the dead zone on.
+struct V2Params {
+  double dead = 1.0;
+  double qS = 0.99, qI = 0.99;  // qS is used for both L and S
+  double capS = 30, kapS = 4;
+  double wC = 1, wI = 3, wR = 0;  // wR = 8 in the prompted profile (v2p)
+  double rdead = 0.5;            // relevance dead zone (chosen on the development prompts)
+  bool two_sided = false;        // exploratory, post hoc (not v2): syntax gains and coherence also penalised when higher than human
+  double tau = 5;
+  double missing_z = 4;
+  std::vector<int> off;  // statistics switched off (ablations)
+  std::vector<int> on;   // reported-only statistics switched on (experiments)
+  // "dead=1,qS=0.95,qI=0.98,capS=30,kapS=8,wC=1,wI=1,wR=0,tau=5,off=s2+i1,on=wfreq"
+  bool parse(const std::string& spec) {
+    size_t p = 0;
+    while (p < spec.size()) {
+      size_t e = spec.find(',', p);
+      if (e == std::string::npos) e = spec.size();
+      const std::string kv = spec.substr(p, e - p);
+      const size_t eq = kv.find('=');
+      if (eq == std::string::npos) return false;
+      const std::string k = kv.substr(0, eq), v = kv.substr(eq + 1);
+      const double x = std::strtod(v.c_str(), nullptr);
+      if (k == "dead") dead = x;
+      else if (k == "qS") qS = x;
+      else if (k == "qI") qI = x;
+      else if (k == "capS") capS = x;
+      else if (k == "kapS") kapS = x;
+      else if (k == "wC") wC = x;
+      else if (k == "wI") wI = x;
+      else if (k == "wR") wR = x;
+      else if (k == "rdead") rdead = x;
+      else if (k == "twosided") two_sided = x != 0;
+      else if (k == "tau") tau = x;
+      else if (k == "missing") missing_z = x;
+      else if (k == "off" || k == "on") {
+        std::vector<int>& dst = k == "off" ? off : on;
+        size_t q = 0;
+        while (q < v.size()) {
+          size_t r = v.find('+', q);
+          if (r == std::string::npos) r = v.size();
+          const std::string nm = v.substr(q, r - q);
+          bool found = false;
+          for (int st = 0; st < V_N; ++st)
+            if (nm == v2_spec(st).name) {
+              dst.push_back(st);
+              found = true;
+            }
+          if (!found) return false;
+          q = r + 1;
+        }
+      } else {
+        return false;
+      }
+      p = e + 1;
+    }
+    return true;
+  }
+  bool counts(int k) const {
+    if (std::find(off.begin(), off.end(), k) != off.end()) return false;
+    return v2_spec(k).used || std::find(on.begin(), on.end(), k) != on.end();
+  }
+};
+
+struct ScoredV2 {
+  double z[V_N] = {};
+  bool has[V_N] = {};
+  bool imputed[V_N] = {};  // missing where humans almost always have it: counted at missing_z
+  double L = 0, S = 0, C = 0, I = 0, R = 0;      // raw axis evidence (sums of e_k)
+  double D = 0, DL = 0, DS = 0, DC = 0, DI = 0, DR = 0;  // the axis terms of D, and D
+  double scribe = 0;
+};
+
+class ScribeV2Scorer {
+ public:
+  V2Params params;
+
+  // Trains what v2 adds on top of ScribeModel: the skeleton trigram (function words kept, every other word mapped to
+  // a suffix class), unigram counts for word rarity, the function-word list, and the set of word 8-grams for I1.
+  void train_pack(const std::vector<std::string>& docs, size_t n_function_words = 150) {
+    std::unordered_map<std::string, std::uint64_t> cnt;
+    cnt.reserve(1u << 20);
+    std::vector<std::string> toks;
+    std::vector<std::vector<std::string>> sents;
+    total_ = 0;
+    for (const std::string& d : docs)
+      for (const std::string& s : split_sentences(d)) {
+        toks.clear();
+        tokenize_words(s, toks);
+        if (toks.empty()) continue;
+        for (const std::string& t : toks)
+          if (!numeric_token(t)) {
+            ++cnt[t];
+            ++total_;
+          }
+        sents.push_back(toks);
+      }
+    std::vector<std::pair<std::uint64_t, std::string>> byc;
+    byc.reserve(cnt.size());
+    for (auto& kv : cnt) byc.emplace_back(kv.second, kv.first);
+    std::sort(byc.begin(), byc.end(), [](const auto& a, const auto& b) { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+    fw_.clear();
+    for (size_t i = 0; i < byc.size() && fw_.size() < n_function_words; ++i) fw_.insert(byc[i].second);
+    uni_.clear();
+    uni_.reserve(cnt.size());
+    for (auto& kv : cnt)
+      if (kv.second >= 2) uni_.emplace(kv.first, std::log(static_cast<double>(kv.second) / static_cast<double>(total_)));
+    std::vector<std::string> mapped;
+    mapped.reserve(sents.size());
+    grams8_.clear();
+    for (const auto& t : sents) {
+      std::string m;
+      for (const std::string& w : t) {
+        if (!m.empty()) m.push_back(' ');
+        m += skel_token(w);
+      }
+      mapped.push_back(std::move(m));
+    }
+    std::vector<std::string> all;
+    for (const auto& t : sents) all.insert(all.end(), t.begin(), t.end());
+    std::vector<std::vector<std::string>>().swap(sents);
+    const std::vector<std::uint64_t> h = token_hashes(all);
+    std::vector<std::string>().swap(all);
+    grams8_.reserve(h.size());
+    for (size_t i = 0; i + 8 <= h.size(); ++i) grams8_.push_back(gram_key(h, i));
+    std::sort(grams8_.begin(), grams8_.end());
+    grams8_.erase(std::unique(grams8_.begin(), grams8_.end()), grams8_.end());
+    skel_.train(mapped, 1);
+    trained_ = true;
+  }
+  bool trained() const { return trained_; }
+  size_t n_grams8() const { return grams8_.size(); }
+
+  // Adds the v2 statistics that need the pack's v2 models (and the prompt, when there is one) to f.
+  void extend(Features& f, const std::string& text, const std::string& prompt, const SentenceEmbedder* emb) const {
+    if (!trained_) return;
+    f.has_v2 = true;
+    std::vector<std::vector<std::string>> st = sentence_tokens(text);
+    std::vector<std::string> flat;
+    double lp = 0, wsum = 0, sg = 0;
+    size_t npred = 0, nw = 0, sgn = 0;
+    for (const auto& t : st) {
+      std::vector<std::uint32_t> ids;
+      ids.reserve(t.size());
+      for (const std::string& w : t) {
+        ids.push_back(skel_.word_id(skel_token(w)));
+        flat.push_back(w);
+        const auto it = uni_.find(w);
+        if (it != uni_.end()) {
+          wsum += it->second;
+          ++nw;
+        }
+      }
+      lp += skel_.sentence_logp(ids, npred);
+      sg += skel_.sentence_gain(ids, sgn);
+    }
+    f.s2 = npred ? lp / static_cast<double>(npred) : -30.0;
+    f.s2g = sgn ? sg / static_cast<double>(sgn) : 0.0;
+    f.wfreq = nw ? wsum / static_cast<double>(nw) : -20.0;
+    // I1: share of tokens covered by a word 8-gram that occurs in the pack.
+    if (flat.size() >= 8) {
+      const std::vector<std::uint64_t> h = token_hashes(flat);
+      std::vector<char> cov(flat.size(), 0);
+      for (size_t i = 0; i + 8 <= h.size(); ++i)
+        if (std::binary_search(grams8_.begin(), grams8_.end(), gram_key(h, i)))
+          for (size_t k = i; k < i + 8; ++k) cov[k] = 1;
+      size_t c = 0;
+      for (char x : cov) c += static_cast<size_t>(x);
+      f.i1 = static_cast<double>(c) / static_cast<double>(flat.size());
+    }
+    // Prompted statistics.
+    if (!prompt.empty()) {
+      std::vector<std::string> ptoks;
+      for (const auto& t : sentence_tokens(prompt)) ptoks.insert(ptoks.end(), t.begin(), t.end());
+      if (!ptoks.empty() && !flat.empty()) {
+        f.has_prompt = true;
+        f.has_r = true;
+        std::unordered_set<std::string> pset(ptoks.begin(), ptoks.end()), tset(flat.begin(), flat.end());
+        // R4: rarity-weighted share of the prompt's content words that the text uses.
+        double num = 0, den = 0;
+        std::unordered_set<std::string> seenp;
+        for (const std::string& w : ptoks) {
+          if (!content_word(w) || !seenp.insert(w).second) continue;
+          const double wt = rarity(w);
+          den += wt;
+          if (tset.count(w)) num += wt;
+        }
+        f.r4 = den > 0 ? num / den : 0.0;
+        // R5: share of the text's content tokens that are not in the prompt.
+        size_t ct = 0, nov = 0;
+        for (const std::string& w : flat)
+          if (content_word(w)) {
+            ++ct;
+            nov += pset.count(w) ? 0 : 1;
+          }
+        f.r5 = ct ? static_cast<double>(nov) / static_cast<double>(ct) : 1.0;
+        // I4: share of the text's word 4-grams that occur in the prompt.
+        if (flat.size() >= 4 && ptoks.size() >= 4) {
+          std::unordered_set<std::string> p4;
+          for (size_t i = 0; i + 4 <= ptoks.size(); ++i) p4.insert(ptoks[i] + " " + ptoks[i + 1] + " " + ptoks[i + 2] + " " + ptoks[i + 3]);
+          size_t hit = 0, tot = 0;
+          for (size_t i = 0; i + 4 <= flat.size(); ++i, ++tot)
+            hit += p4.count(flat[i] + " " + flat[i + 1] + " " + flat[i + 2] + " " + flat[i + 3]);
+          f.i4 = tot ? static_cast<double>(hit) / static_cast<double>(tot) : 0.0;
+        }
+        // R1: cosine of the SIF vectors of the prompt and the text.
+        if (emb != nullptr && emb->ready()) {
+          std::vector<float> a, b;
+          if (emb->embed(ptoks, a, 1) && emb->embed(flat, b, 1)) {
+            double dot = 0;
+            for (size_t k = 0; k < a.size(); ++k) dot += double(a[k]) * b[k];
+            f.r1 = dot;
+          }
+        }
+      }
+    }
+  }
+
+  void add_reference(const Features& f) {
+    const int b = length_bucket(f.bytes);
+    double x[V_N];
+    bool has[V_N];
+    v2_values(f, x, has);
+    ++nref_[b];
+    for (int k = 0; k < V_N; ++k) {
+      if (!has[k]) continue;
+      ref_[b][k].add(x[k]);
+      ++present_[b][k];
+    }
+    ref_feats_[b].push_back(f);
+  }
+  // A human continuation of a prompt: adds only the relevance statistics (r1, r4, r5, i4) to the reference.
+  void add_reference_prompted(const Features& f) {
+    if (!f.has_r) return;
+    const int b = length_bucket(f.bytes);
+    double x[V_N];
+    bool has[V_N];
+    v2_values(f, x, has);
+    for (int k : {V_R1, V_R4, V_R5, V_I4})
+      if (has[k]) ref_[b][k].add(x[k]);
+    ++nref_prompted_[b];
+  }
+  size_t n_reference_prompted(int b) const { return nref_prompted_[b]; }
+  // Finishes the z-transforms, then the thresholds thS and thI from the reference samples' own S and I.
+  void finish() {
+    for (int b = 0; b < 2; ++b)
+      for (int k = 0; k < V_N; ++k) ref_[b][k].finish(v2_spec(k).min_sd);
+    for (int b = 0; b < 2; ++b) {
+      std::vector<double> L, S, I;
+      for (const Features& f : ref_feats_[b]) {
+        const ScoredV2 o = evidence(f);
+        L.push_back(o.L);
+        S.push_back(o.S);
+        I.push_back(o.I);
+      }
+      thL_[b] = quantile_of(L, params.qS);
+      thS_[b] = quantile_of(S, params.qS);
+      thI_[b] = quantile_of(I, params.qI);
+    }
+  }
+  double threshold_L(int b) const { return thL_[b]; }
+  double threshold_S(int b) const { return thS_[b]; }
+  double threshold_I(int b) const { return thI_[b]; }
+
+  // The reference bucket for a sample: its length bucket, or the other one when that bucket has under 20 samples.
+  int bucket(const Features& f) const {
+    const int b = length_bucket(f.bytes);
+    return nref_[b] < 20 && nref_[1 - b] >= 20 ? 1 - b : b;
+  }
+
+  ScoredV2 score(const Features& f) const {
+    ScoredV2 o = evidence(f);
+    const int b = bucket(f);
+    o.DL = params.capS * (1.0 - std::exp(-std::max(0.0, o.L - thL_[b]) / params.kapS));
+    o.DS = params.capS * (1.0 - std::exp(-std::max(0.0, o.S - thS_[b]) / params.kapS));
+    o.DI = params.wI * std::max(0.0, o.I - thI_[b]);
+    o.DC = params.wC * o.C;
+    o.DR = params.wR * o.R;
+    o.D = o.DL + o.DS + o.DI + o.DC + o.DR;
+    o.scribe = std::exp(-o.D / params.tau);
+    return o;
+  }
+
+  // z-scores and raw axis evidence (no thresholds).
+  ScoredV2 evidence(const Features& f) const {
+    ScoredV2 o;
+    const int b = bucket(f);
+    double x[V_N];
+    bool has[V_N];
+    v2_values(f, x, has);
+    double ax[5] = {0, 0, 0, 0, 0};
+    for (int k = 0; k < V_N; ++k) {
+      const V2StatSpec& sp = v2_spec(k);
+      const int a = sp.axis == 'S' ? 0 : sp.axis == 'C' ? 1 : sp.axis == 'I' ? 2 : sp.axis == 'R' ? 3 : 4;
+      if (a == 3 && !f.has_prompt) continue;
+      if (ref_[b][k].size() < 20) continue;  // the reference does not have it: not scored
+      double u;
+      if (has[k]) {
+        o.has[k] = true;
+        o.z[k] = ref_[b][k].z(x[k]);
+        const bool ts = params.two_sided && (k == V_S2G || k == V_S3G || a == 1);
+        u = ts ? std::fabs(o.z[k]) : sp.side > 0 ? std::max(0.0, -o.z[k]) : sp.side < 0 ? std::max(0.0, o.z[k]) : std::fabs(o.z[k]);
+      } else if (a != 3 && present_[b][k] >= 0.95 * static_cast<double>(nref_[b])) {
+        o.imputed[k] = true;
+        o.z[k] = sp.side > 0 ? -params.missing_z : params.missing_z;
+        u = params.missing_z;
+      } else {
+        continue;
+      }
+      if (params.counts(k)) ax[a] += std::max(0.0, u - (a == 3 ? params.rdead : params.dead));
+    }
+    o.S = ax[0];
+    o.C = ax[1];
+    o.I = ax[2];
+    o.R = ax[3];
+    o.L = ax[4];
+    return o;
+  }
+
+  // Skeleton token: a function word stays itself; any other word becomes its class.
+  std::string skel_token(const std::string& w) const {
+    if (numeric_token(w)) return "zznum";
+    if (fw_.count(w)) return w;
+    for (unsigned char c : w)
+      if (!(c >= 'a' && c <= 'z') && c != '\'') return "zzother";
+    auto ends = [&](const char* suf) {
+      const size_t L = std::strlen(suf);
+      return w.size() > L + 1 && w.compare(w.size() - L, L, suf) == 0;
+    };
+    if (ends("ing")) return "zzing";
+    if (ends("ed")) return "zzed";
+    if (ends("ly")) return "zzly";
+    if (ends("tion") || ends("sion") || ends("ment") || ends("ness") || ends("ity") || ends("ism")) return "zznom";
+    if (ends("al") || ends("ive") || ends("ous") || ends("ful") || ends("able") || ends("ible") || ends("ic") || ends("ish")) return "zzadj";
+    if (ends("er") || ends("or")) return "zzer";
+    if (ends("s") && !ends("ss")) return "zzs";
+    return "zzw";
+  }
+  bool content_word(const std::string& w) const {
+    if (w.size() < 2 || fw_.count(w) || numeric_token(w)) return false;
+    return true;
+  }
+  double rarity(const std::string& w) const {
+    const auto it = uni_.find(w);
+    return it == uni_.end() ? std::log(static_cast<double>(std::max<std::uint64_t>(2, total_))) : -it->second;
+  }
+
+ private:
+  static std::vector<std::uint64_t> token_hashes(const std::vector<std::string>& t) {
+    std::vector<std::uint64_t> h(t.size());
+    for (size_t i = 0; i < t.size(); ++i) h[i] = scribe_detail::fnv1a(t[i]);
+    return h;
+  }
+  static std::uint64_t gram_key(const std::vector<std::uint64_t>& h, size_t i) {
+    std::uint64_t k = 0x9e3779b97f4a7c15ull;
+    for (size_t j = 0; j < 8; ++j) k = scribe_detail::mix64(k ^ (h[i + j] + 0x9e3779b97f4a7c15ull * (j + 1)));
+    return k;
+  }
+  bool trained_ = false;
+  ScribeModel skel_;
+  std::unordered_set<std::string> fw_;
+  std::unordered_map<std::string, double> uni_;
+  std::uint64_t total_ = 0;
+  std::vector<std::uint64_t> grams8_;
+  QuantileZ ref_[2][V_N];
+  double present_[2][V_N] = {};
+  size_t nref_[2] = {0, 0}, nref_prompted_[2] = {0, 0};
+  std::vector<Features> ref_feats_[2];
+  double thL_[2] = {0, 0}, thS_[2] = {0, 0}, thI_[2] = {0, 0};
+  static double quantile_of(std::vector<double> v, double p) {
+    if (v.empty()) return 0;
+    std::sort(v.begin(), v.end());
+    const double h = p * static_cast<double>(v.size() - 1);
+    const size_t i = static_cast<size_t>(h);
+    const double fr = h - static_cast<double>(i);
+    return i + 1 < v.size() ? v[i] * (1 - fr) + v[i + 1] * fr : v.back();
+  }
+};
+
+// ---------------------------------------------------------------------------
+// JSON and Markdown helpers for the tool
+// ---------------------------------------------------------------------------
+
+inline std::string scribe_num(double v, int prec = 6) {
+  if (!std::isfinite(v)) return "null";
+  char b[64];
+  std::snprintf(b, sizeof b, "%.*g", prec, v);
+  return b;
+}
+
+inline std::string features_json(const Features& f) {
+  double x[V_N];
+  bool has[V_N];
+  v2_values(f, x, has);
+  std::string o = "{\"bytes\":" + std::to_string(f.bytes) + ",\"n_sent\":" + std::to_string(f.n_sent) + ",\"n_words\":" + std::to_string(f.n_words);
+  for (int k = 0; k < V_N; ++k) o += ",\"" + std::string(v2_spec(k).name) + "\":" + (has[k] ? scribe_num(x[k]) : std::string("null"));
+  o += ",\"has_prompt\":" + std::string(f.has_prompt ? "1" : "0") + "}";
+  return o;
+}
+
+inline std::string v2_json(const ScoredV2& s) {
+  std::string o = "{\"scribe\":" + scribe_num(s.scribe) + ",\"D\":" + scribe_num(s.D) + ",\"DL\":" + scribe_num(s.DL) + ",\"DS\":" + scribe_num(s.DS) + ",\"DC\":" + scribe_num(s.DC) +
+                  ",\"DI\":" + scribe_num(s.DI) + ",\"DR\":" + scribe_num(s.DR) + ",\"L\":" + scribe_num(s.L) + ",\"S\":" + scribe_num(s.S) + ",\"C\":" + scribe_num(s.C) +
+                  ",\"I\":" + scribe_num(s.I) + ",\"R\":" + scribe_num(s.R) + ",\"z\":{";
+  bool first = true;
+  for (int k = 0; k < V_N; ++k) {
+    if (!s.has[k] && !s.imputed[k]) continue;
+    if (!first) o += ",";
+    first = false;
+    o += "\"" + std::string(v2_spec(k).name) + "\":" + scribe_num(s.z[k], 4);
+  }
+  o += "}}";
+  return o;
+}
+
+inline std::string v2_profile_header() {
+  return "| rung | n | SCRIBE | mean D | D_L | D_S | D_C | D_I | D_R | share D_L > 0 | share D_S > 0 | share D_I > 0 |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n";
+}
+inline std::string v2_profile_row(const std::string& name, const std::vector<ScoredV2>& v) {
+  if (v.empty()) return "";
+  double sc = 0, D = 0, l = 0, a = 0, b = 0, c = 0, d = 0, pl = 0, pa = 0, pc = 0;
+  for (const ScoredV2& s : v) {
+    sc += s.scribe;
+    D += s.D;
+    l += s.DL;
+    a += s.DS;
+    b += s.DC;
+    c += s.DI;
+    d += s.DR;
+    pl += s.DL > 0;
+    pa += s.DS > 0;
+    pc += s.DI > 0;
+  }
+  const double n = static_cast<double>(v.size());
+  char buf[512];
+  std::snprintf(buf, sizeof buf, "| %s | %zu | %.3f | %.2f | %.2f | %.2f | %.2f | %.2f | %.2f | %.0f%% | %.0f%% | %.0f%% |\n", name.c_str(), v.size(), sc / n, D / n,
+                l / n, a / n, b / n, c / n, d / n, 100 * pl / n, 100 * pa / n, 100 * pc / n);
+  return buf;
+}
+
+// Known-answer checks of the v2 parts (called by the tool's selftest).
+inline void scribe_v2_selftest(int& checks, int& fails) {
+  auto check = [&](bool ok, const char* what) {
+    ++checks;
+    if (!ok) {
+      ++fails;
+      std::printf("FAIL v2: %s\n", what);
+    }
+  };
+  using scribe_detail::inv_phi;
+  check(std::fabs(inv_phi(0.5)) < 1e-9, "inv_phi(0.5) = 0");
+  check(std::fabs(inv_phi(0.975) - 1.959963985) < 1e-6, "inv_phi(0.975)");
+  check(std::fabs(inv_phi(0.001) + 3.090232306) < 1e-6, "inv_phi(0.001)");
+  // QuantileZ on a standard normal sample: z(x) close to x inside, linear outside.
+  {
+    QuantileZ q;
+    std::mt19937_64 r(7);
+    std::normal_distribution<double> N(0.0, 1.0);
+    for (int i = 0; i < 20000; ++i) q.add(N(r));
+    q.finish(0.01);
+    check(std::fabs(q.z(0.0)) < 0.05 && std::fabs(q.z(1.0) - 1.0) < 0.06, "QuantileZ centre");
+    check(std::fabs(q.z(-5.0) + 5.0) < 0.25 && std::fabs(q.z(6.0) - 6.0) < 0.3, "QuantileZ tails extend linearly");
+    check(q.z(-50) < q.z(-10) && q.z(50) > q.z(10), "QuantileZ monotone far out");
+  }
+  // A constant human statistic: anything else is far out, on the right side.
+  {
+    QuantileZ q;
+    for (int i = 0; i < 100; ++i) q.add(1.0);
+    q.finish(0.05);
+    check(q.z(0.5) < -9 && q.z(1.0) > -2.1 && q.z(1.0) < 2.1, "QuantileZ with ties");
+  }
+  check(prepare_continuation("A big cat sat. Dogs ran to") == "A big cat sat.", "prepare_continuation drops the cut tail");
+  check(clean_plain_document("Title line\nThis is a real sentence of prose here.\n* list item that is long enough.\nAnother full sentence follows it.") ==
+            "This is a real sentence of prose here. Another full sentence follows it.",
+        "clean_plain_document keeps prose lines");
+  check(scribe_detail::ends_terminal("He left.\xE2\x80\x9D") && !scribe_detail::ends_terminal("He left"), "ends_terminal");
+  // Skeleton, rarity, copy detection and prompted statistics on a toy pack.
+  {
+    std::vector<std::string> docs;
+    for (int i = 0; i < 40; ++i)
+      docs.push_back("The quick brown fox jumps over the lazy dog near the river bank today. The old man was walking slowly along the road. "
+                     "Green trees grow beside the quiet water.");
+    ScribeV2Scorer v;
+    v.train_pack(docs, 10);
+    check(v.trained() && v.n_grams8() > 10, "v2 pack trained");
+    check(v.skel_token("walking") == "zzing" && v.skel_token("1990") == "zznum" && v.skel_token("the") == "the", "skeleton tokens");
+    Features f;
+    v.extend(f, "The quick brown fox jumps over the lazy dog near the river bank today.", "", nullptr);
+    check(f.has_v2 && f.i1 > 0.99, "copied pack text has i1 = 1");
+    Features g;
+    v.extend(g, "Purple elephants calculate distant galaxies with patient enthusiasm forever.", "", nullptr);
+    check(g.i1 < 0.01 && g.s2 < f.s2, "new text: no copy, less typical skeleton");
+    Features h;
+    v.extend(h, "The old man was walking slowly along the road near the river.", "The old man near the river.", nullptr);
+    check(h.has_r && h.r4 > 0.99 && h.r5 < 0.8, "prompted coverage and informativeness");
+  }
+  // The deviance: a human-typical sample scores near 1, one far-out statistic lowers it, ablation removes it.
+  {
+    ScribeV2Scorer v;
+    std::mt19937_64 r(3);
+    std::normal_distribution<double> N(0.0, 1.0);
+    auto mk = [&](double shift) {
+      Features f;
+      f.bytes = 500;
+      f.n_words = 90;
+      f.n_sent = 4;
+      f.s1 = 0.95 + 0.01 * N(r);
+      f.s3 = -6 + 0.3 * N(r);
+      f.s3min = -7 + 0.4 * N(r);
+      f.s4 = 1.0;
+      f.sl_mean = 22 + 3 * N(r);
+      f.sl_max = 30 + 4 * N(r);
+      f.has_c = f.has_c0 = f.has_c1 = f.has_c1a = f.has_c3 = true;
+      f.c0 = 0.1 + 0.02 * N(r);
+      f.c1 = 0.3 + 0.1 * N(r) + shift;
+      f.c1a = 0.3 + 0.1 * N(r);
+      f.c3 = 0.6 + 0.05 * N(r);
+      f.loop8 = 0.05 + 0.01 * N(r);
+      f.d[0] = 0.7 + 0.03 * N(r);
+      f.d[1] = 0.95;
+      f.d[2] = 0.99;
+      f.d[3] = 1.0;
+      return f;
+    };
+    for (int i = 0; i < 1000; ++i) v.add_reference(mk(0));
+    v.finish();
+    const ScoredV2 a = v.score(mk(0)), b = v.score(mk(-1.0));
+    check(a.scribe > 0.5 && b.scribe < a.scribe && b.DC > 5, "a far-out coherence statistic adds deviance");
+    v.params.off = {V_C1};
+    check(v.score(mk(-1.0)).DC < b.DC, "an ablated statistic stops counting");
+    V2Params p;
+    check(p.parse("dead=0.5,capS=20,wC=2,off=s2+c1,on=wfreq") && p.dead == 0.5 && p.capS == 20 && p.wC == 2 && p.off.size() == 2 &&
+              p.on.size() == 1 && !p.counts(V_S2) && p.counts(V_WFREQ) && p.counts(V_S3G) && !p.counts(V_S3) && !p.counts(V_SLMAX),
+          "V2Params parse");
+    check(!p.parse("bogus=1"), "V2Params rejects unknown keys");
+  }
 }
 
 // ===========================================================================
