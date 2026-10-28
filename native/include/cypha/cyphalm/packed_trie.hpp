@@ -8,6 +8,9 @@
 //   Synth     symbol counts of 1 dropped, remaining counts packed into one
 //             byte (quantiser below), one-child edges inlined, match kept only
 //             when seen twice
+// PackedModel (pack()) is the Synth form built as a read-only structure for
+// serving; its distributions equal the training Model's in Synth bit for bit
+// (docs/reports/RAM_PROFILE.md, M4).
 //
 // Stupid backoff alpha = 0.4. Order-1 and the unigram stay dense KT tables
 // (0.25 MB). u = H(order-1) / ln(256).
@@ -23,7 +26,8 @@
 // fires. An order the walk cannot reach reuses the shorter expert.
 //
 // What is here:        Quantiser, Node/Fol/Hit, Model (observe, fill_experts,
-//                      mix, mix_dist, compact_match), eg_update, layout
+//                      mix, mix_dist, compact_match), PackedModel and pack()
+//                      (the serving form), eg_update, layout
 //                      accounting (measure, hash_*), the Dolly loader, text
 //                      helpers (printable), self_test, and sampling with the
 //                      no-repeat rule.
@@ -50,6 +54,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -151,6 +156,12 @@ inline std::uint32_t mix32(std::uint32_t x) {
 inline std::uint32_t key4(const std::uint8_t* h, std::size_t len) {
     return (std::uint32_t(h[len - 4]) << 24) | (std::uint32_t(h[len - 3]) << 16) | (std::uint32_t(h[len - 2]) << 8) |
            std::uint32_t(h[len - 1]);
+}
+
+// KT estimate (c + 1/2) / (n + 128) over 256 counts: the unigram and order-1 experts of both model forms.
+inline void fill_kt(const std::uint32_t* c, std::uint32_t n, double* p) {
+    const double den = static_cast<double>(n) + 128.0;
+    for (int s = 0; s < 256; ++s) p[s] = (static_cast<double>(c[s]) + 0.5) / den;
 }
 
 // ---- Model
@@ -343,6 +354,16 @@ struct Model {
         std::vector<std::uint32_t>().swap(ms);
     }
 
+    // Frees the trie, the followers and the match once pack() holds the serving form. The count
+    // tables stay, so a released model answers from orders 0 and 1 only.
+    void release() {
+        std::vector<Node>(1).swap(nodes);
+        std::vector<Fol>().swap(fols);
+        std::vector<Hit>().swap(dense);
+        for (auto* v : {&mk, &mv, &ms}) std::vector<std::uint32_t>().swap(*v);
+        for (auto& c : root_child) c = kNil;
+    }
+
     bool find_match(const std::uint8_t* hist, std::size_t len, std::size_t limit, unsigned& pred) const {
         if (len < 4 || data == nullptr) return false;
         const std::uint32_t key = key4(hist, len);
@@ -383,15 +404,8 @@ struct Model {
         return n > 0;
     }
 
-    void fill_kt0(double* p) const {
-        const double den = static_cast<double>(uni_n) + 128.0;
-        for (int s = 0; s < 256; ++s) p[s] = (static_cast<double>(uni[s]) + 0.5) / den;
-    }
-
-    void fill_kt1(unsigned prev, double* p) const {
-        const double den = static_cast<double>(o1n[prev]) + 128.0;
-        for (int s = 0; s < 256; ++s) p[s] = (static_cast<double>(o1[prev][s]) + 0.5) / den;
-    }
+    void fill_kt0(double* p) const { fill_kt(uni, uni_n, p); }
+    void fill_kt1(unsigned prev, double* p) const { fill_kt(o1[prev], o1n[prev], p); }
 
     static double entropy_u(const double* p) {
         double h = 0.0;
@@ -424,102 +438,14 @@ struct Model {
     // order, divided by its mass. A shorter expert is copied when this order
     // is past the available context. online_match reads the training hash;
     // otherwise the compacted table, with followers strictly before follower_limit.
+    // (Body: detail::fill_experts below, shared with PackedModel.)
     void fill_experts(const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode,
-                      double e[5][256], bool& matched, unsigned& pred, bool online_match) const {
-        fill_kt0(e[0]);
-        const unsigned prev = len ? hist[len - 1] : 0;
-        fill_kt1(prev, e[1]);
-
-        double buf[2][256];
-        double* cur = buf[0];
-        double* nxt = buf[1];
-        if (len >= 1 && o1n[prev] > 0) std::memcpy(cur, e[1], sizeof(double) * 256);
-        else std::memcpy(cur, e[0], sizeof(double) * 256);
-
-        const int top = std::min(4, static_cast<int>(len));
-        std::uint32_t ctx_node[5];
-        ctx_node[0] = 0;
-        int depth = 0;
-        for (int d = 1; d <= top; ++d) {
-            const std::uint32_t c = find_child(ctx_node[d - 1], hist[len - static_cast<std::size_t>(d)]);
-            if (c == kNil) break;
-            ctx_node[d] = c;
-            depth = d;
-        }
-
-        int reached = 1;
-        for (int o = 2; o <= top; ++o) {
-            for (int s = 0; s < 256; ++s) nxt[s] = alpha * cur[s];
-            const std::uint32_t node = (o <= depth) ? ctx_node[o] : kNil;
-            std::uint8_t syms[256];
-            std::uint32_t cs[256];
-            int nf = 0;
-            std::uint32_t tot = 0;
-            if (gather(node, mode, syms, cs, nf, tot)) {
-                const double inv = 1.0 / static_cast<double>(tot);
-                for (int i = 0; i < nf; ++i) nxt[syms[i]] = static_cast<double>(cs[i]) * inv;
-            }
-            std::swap(cur, nxt);
-            double z = 0.0;
-            for (int s = 0; s < 256; ++s) z += cur[s];
-            if (!(z > 0.0)) z = 1.0;
-            const double invz = 1.0 / z;
-            for (int s = 0; s < 256; ++s) e[o][s] = cur[s] * invz;
-            reached = o;
-        }
-        for (int o = reached + 1; o <= 4; ++o) std::memcpy(e[o], e[o - 1], sizeof(double) * 256);
-
-        if (online_match) matched = match_online(hist, len, pred);
-        else matched = find_match(hist, len, follower_limit, pred);
-    }
+                      double e[5][256], bool& matched, unsigned& pred, bool online_match) const;
 
     // The fixed backoff distribution with the match folded in at weight match_w.
-    // Returns u = H(order-1) / ln(256).
+    // Returns u = H(order-1) / ln(256). (Body: detail::mix below, shared with PackedModel.)
     double mix(const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode, double* P,
-               bool& matched) const {
-        double kt1p[256];
-        const unsigned prev = len ? hist[len - 1] : 0;
-        fill_kt1(prev, kt1p);
-        const double u = entropy_u(kt1p);
-        double buf[2][256];
-        double* cur = buf[0];
-        double* nxt = buf[1];
-        if (len >= 1 && o1n[prev] > 0) std::memcpy(cur, kt1p, sizeof(double) * 256);
-        else fill_kt0(cur);
-
-        const int top = std::min(4, static_cast<int>(len));
-        for (int o = 2; o <= top; ++o) {
-            for (int s = 0; s < 256; ++s) nxt[s] = alpha * cur[s];
-            const std::uint32_t node = find_ctx(hist, len, o);
-            std::uint8_t syms[256];
-            std::uint32_t cs[256];
-            int nf = 0;
-            std::uint32_t tot = 0;
-            if (gather(node, mode, syms, cs, nf, tot)) {
-                const double inv = 1.0 / static_cast<double>(tot);
-                for (int i = 0; i < nf; ++i) nxt[syms[i]] = static_cast<double>(cs[i]) * inv;
-            }
-            std::swap(cur, nxt);
-        }
-        double z = 0.0;
-        for (int s = 0; s < 256; ++s) z += cur[s];
-        double B[256];
-        const double invz = 1.0 / z;
-        for (int s = 0; s < 256; ++s) B[s] = cur[s] * invz;
-
-        unsigned pred = 0;
-        matched = find_match(hist, len, follower_limit, pred);
-        double match_w = 0.0;
-        if (matched) {
-            const double agree = kt1p[pred] / (kt1p[pred] + agree_floor);
-            match_w = (1.0 - u) * agree;
-            if (match_w < 0.0) match_w = 0.0;
-            if (match_w > match_cap) match_w = match_cap;
-        }
-        for (int s = 0; s < 256; ++s) P[s] = (1.0 - match_w) * B[s];
-        if (matched) P[pred] += match_w;
-        return u;
-    }
+               bool& matched) const;
 
     // ---- Negative results (CURRENT.md "PPMD, longer chains, or inheritance ~2.42").
 
@@ -713,6 +639,334 @@ struct Model {
     }
 };
 
+// ---- fill_experts and mix: one body for both model forms
+//
+// Model and PackedModel run the same arithmetic in the same order, so they give the same doubles.
+// M provides fill_kt0, fill_kt1, o1n, alpha, agree_floor, match_cap, find_child, find_ctx, gather,
+// find_match and match_online, with Model's meanings.
+namespace detail {
+
+template <class M>
+void fill_experts(const M& m, const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode,
+                  double e[5][256], bool& matched, unsigned& pred, bool online_match) {
+    m.fill_kt0(e[0]);
+    const unsigned prev = len ? hist[len - 1] : 0;
+    m.fill_kt1(prev, e[1]);
+
+    double buf[2][256];
+    double* cur = buf[0];
+    double* nxt = buf[1];
+    if (len >= 1 && m.o1n[prev] > 0) std::memcpy(cur, e[1], sizeof(double) * 256);
+    else std::memcpy(cur, e[0], sizeof(double) * 256);
+
+    const int top = std::min(4, static_cast<int>(len));
+    std::uint32_t ctx_node[5];
+    ctx_node[0] = 0;
+    int depth = 0;
+    for (int d = 1; d <= top; ++d) {
+        const std::uint32_t c = m.find_child(ctx_node[d - 1], hist[len - static_cast<std::size_t>(d)]);
+        if (c == kNil) break;
+        ctx_node[d] = c;
+        depth = d;
+    }
+
+    int reached = 1;
+    for (int o = 2; o <= top; ++o) {
+        for (int s = 0; s < 256; ++s) nxt[s] = m.alpha * cur[s];
+        const std::uint32_t node = (o <= depth) ? ctx_node[o] : kNil;
+        std::uint8_t syms[256];
+        std::uint32_t cs[256];
+        int nf = 0;
+        std::uint32_t tot = 0;
+        if (m.gather(node, mode, syms, cs, nf, tot)) {
+            const double inv = 1.0 / static_cast<double>(tot);
+            for (int i = 0; i < nf; ++i) nxt[syms[i]] = static_cast<double>(cs[i]) * inv;
+        }
+        std::swap(cur, nxt);
+        double z = 0.0;
+        for (int s = 0; s < 256; ++s) z += cur[s];
+        if (!(z > 0.0)) z = 1.0;
+        const double invz = 1.0 / z;
+        for (int s = 0; s < 256; ++s) e[o][s] = cur[s] * invz;
+        reached = o;
+    }
+    for (int o = reached + 1; o <= 4; ++o) std::memcpy(e[o], e[o - 1], sizeof(double) * 256);
+
+    if (online_match) matched = m.match_online(hist, len, pred);
+    else matched = m.find_match(hist, len, follower_limit, pred);
+}
+
+template <class M>
+double mix(const M& m, const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode, double* P,
+           bool& matched) {
+    double kt1p[256];
+    const unsigned prev = len ? hist[len - 1] : 0;
+    m.fill_kt1(prev, kt1p);
+    const double u = Model::entropy_u(kt1p);
+    double buf[2][256];
+    double* cur = buf[0];
+    double* nxt = buf[1];
+    if (len >= 1 && m.o1n[prev] > 0) std::memcpy(cur, kt1p, sizeof(double) * 256);
+    else m.fill_kt0(cur);
+
+    const int top = std::min(4, static_cast<int>(len));
+    for (int o = 2; o <= top; ++o) {
+        for (int s = 0; s < 256; ++s) nxt[s] = m.alpha * cur[s];
+        const std::uint32_t node = m.find_ctx(hist, len, o);
+        std::uint8_t syms[256];
+        std::uint32_t cs[256];
+        int nf = 0;
+        std::uint32_t tot = 0;
+        if (m.gather(node, mode, syms, cs, nf, tot)) {
+            const double inv = 1.0 / static_cast<double>(tot);
+            for (int i = 0; i < nf; ++i) nxt[syms[i]] = static_cast<double>(cs[i]) * inv;
+        }
+        std::swap(cur, nxt);
+    }
+    double z = 0.0;
+    for (int s = 0; s < 256; ++s) z += cur[s];
+    double B[256];
+    const double invz = 1.0 / z;
+    for (int s = 0; s < 256; ++s) B[s] = cur[s] * invz;
+
+    unsigned pred = 0;
+    matched = m.find_match(hist, len, follower_limit, pred);
+    double match_w = 0.0;
+    if (matched) {
+        const double agree = kt1p[pred] / (kt1p[pred] + m.agree_floor);
+        match_w = (1.0 - u) * agree;
+        if (match_w < 0.0) match_w = 0.0;
+        if (match_w > m.match_cap) match_w = m.match_cap;
+    }
+    for (int s = 0; s < 256; ++s) P[s] = (1.0 - match_w) * B[s];
+    if (matched) P[pred] += match_w;
+    return u;
+}
+
+}  // namespace detail
+
+inline void Model::fill_experts(const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode,
+                                double e[5][256], bool& matched, unsigned& pred, bool online_match) const {
+    detail::fill_experts(*this, hist, len, follower_limit, mode, e, matched, pred, online_match);
+}
+
+inline double Model::mix(const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode, double* P,
+                         bool& matched) const {
+    return detail::mix(*this, hist, len, follower_limit, mode, P, matched);
+}
+
+// ---- PackedModel: the read-only serving form (docs/reports/RAM_PROFILE.md, M4)
+//
+// pack(model) keeps what Mode::Synth reads with the compacted match, and nothing else:
+//   - the unigram and order-1 count tables, as trained (the KT experts use full counts);
+//   - the trie nodes Synth can reach: a node with a follower seen at least twice, or on the path to
+//     one (measure()'s "useful" nodes). Ids are breadth first: 0 is the root, 1 + b the order-1 node
+//     of byte b (all 256), then orders 2, 3 and 4. A node's children are consecutive ids sorted by
+//     their edge byte, ids kid[n] .. kid[n + 1] - 1, so there are no child or sibling links;
+//   - the followers seen at least twice: a symbol byte and the count quantised to one byte (qdec),
+//     node n of order >= 2 owning fol[n - kFirst2] .. fol[n - kFirst2 + 1] - 1;
+//   - the compacted match (contexts seen at least twice), bucketed by the key's high 16 bits: the
+//     low 16 bits, the follower's offset (for follower_limit) and the predicted byte itself, so the
+//     serving form does not read the training text.
+// fill_experts and mix are Model's (detail:: above), so every distribution is bit-identical to the
+// training Model's in Mode::Synth with the compacted match (online_match = false). The packed form
+// holds Mode::Synth only, and online_match finds nothing, as in a Model after compact_match.
+struct PackedModel {
+    static constexpr std::uint32_t kFirst2 = 257;  // the first order-2 id
+    std::uint32_t uni[256]{};
+    std::uint32_t uni_n = 0;
+    std::vector<std::uint32_t> o1;     // 256 x 256 order-1 counts, row = the previous byte (on the heap)
+    std::uint32_t o1n[256]{};
+    std::vector<std::uint32_t> kid;    // ids 0 .. kend: children [kid[n], kid[n + 1])
+    std::vector<std::uint8_t> edge;    // every id: the byte on the edge from its parent
+    std::vector<std::uint32_t> fol;    // ids kFirst2 ..: followers [fol[n - kFirst2], fol[n - kFirst2 + 1])
+    std::vector<std::uint8_t> fsym, fq;  // follower symbol, quantised count
+    std::vector<std::uint32_t> mstart;   // 65,537 bucket starts (empty: no match table)
+    std::vector<std::uint16_t> mlo;      // key & 0xffff, sorted within the bucket
+    std::vector<std::uint32_t> mfol;     // follower offset in the training text
+    std::vector<std::uint8_t> mnext;     // the byte at that offset
+    std::uint32_t kend = 0;              // the first order-4 id (order-4 nodes have no children)
+    double alpha = 0.4, agree_floor = 0.05, match_cap = 0.75;
+
+    void fill_kt0(double* p) const { fill_kt(uni, uni_n, p); }
+    void fill_kt1(unsigned prev, double* p) const { fill_kt(o1.data() + std::size_t{prev} * 256u, o1n[prev], p); }
+
+    std::uint32_t find_child(std::uint32_t n, std::uint8_t b) const {
+        if (n == 0) return 1u + b;
+        if (n >= kend) return kNil;
+        const std::uint8_t* lo = edge.data() + kid[n];
+        const std::uint8_t* hi = edge.data() + kid[n + 1];
+        const std::uint8_t* it = std::lower_bound(lo, hi, b);
+        return (it != hi && *it == b) ? static_cast<std::uint32_t>(it - edge.data()) : kNil;
+    }
+
+    std::uint32_t find_ctx(const std::uint8_t* h, std::size_t len, int order) const {
+        if (static_cast<int>(len) < order) return kNil;
+        std::uint32_t n = 0;
+        for (int d = 1; d <= order; ++d) {
+            n = find_child(n, h[len - static_cast<std::size_t>(d)]);
+            if (n == kNil) return kNil;
+        }
+        return n;
+    }
+
+    // Model::gather in Mode::Synth (the only mode stored).
+    bool gather(std::uint32_t node, Mode, std::uint8_t* syms, std::uint32_t* cs, int& n, std::uint32_t& total) const {
+        n = 0;
+        total = 0;
+        if (node == kNil || node < kFirst2) return false;
+        for (std::uint32_t f = fol[node - kFirst2]; f < fol[node - kFirst2 + 1]; ++f) {
+            syms[n] = fsym[f];
+            cs[n] = qdec[fq[f]];
+            total += cs[n];
+            ++n;
+        }
+        return n > 0;
+    }
+
+    bool find_match(const std::uint8_t* hist, std::size_t len, std::size_t limit, unsigned& pred) const {
+        if (len < 4 || mstart.empty()) return false;
+        const std::uint32_t key = key4(hist, len);
+        const std::uint16_t low = static_cast<std::uint16_t>(key & 0xffffu);
+        const std::uint16_t* lo = mlo.data() + mstart[key >> 16];
+        const std::uint16_t* hi = mlo.data() + mstart[(key >> 16) + 1];
+        const std::uint16_t* it = std::lower_bound(lo, hi, low);
+        if (it == hi || *it != low) return false;
+        const auto j = static_cast<std::size_t>(it - mlo.data());
+        if (static_cast<std::size_t>(mfol[j]) >= limit) return false;
+        pred = mnext[j];
+        return true;
+    }
+
+    // The training hash is not kept: as in a Model after compact_match, the online match finds nothing.
+    bool match_online(const std::uint8_t*, std::size_t, unsigned&) const { return false; }
+
+    static void require_synth(Mode mode) {
+        if (mode == Mode::Synth) return;
+        std::cerr << "PackedModel holds Mode::Synth only\n";
+        std::abort();
+    }
+
+    // Same signatures and meanings as Model's; mode must be Mode::Synth.
+    void fill_experts(const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode,
+                      double e[5][256], bool& matched, unsigned& pred, bool online_match) const {
+        require_synth(mode);
+        detail::fill_experts(*this, hist, len, follower_limit, mode, e, matched, pred, online_match);
+    }
+
+    double mix(const std::uint8_t* hist, std::size_t len, std::size_t follower_limit, Mode mode, double* P,
+               bool& matched) const {
+        require_synth(mode);
+        return detail::mix(*this, hist, len, follower_limit, mode, P, matched);
+    }
+
+    std::uint64_t nodes() const { return edge.size() - 1; }  // without the root; all 256 order-1 nodes
+    std::uint64_t followers() const { return fsym.size(); }
+    std::uint64_t matches() const { return mlo.size(); }
+    // Bytes held: the tables in the struct plus every array (pack() allocates each array once, at its size).
+    std::uint64_t bytes() const {
+        return sizeof(*this) + o1.size() * 4ull + kid.size() * 4ull + edge.size() + fol.size() * 4ull + fsym.size() +
+               fq.size() + mstart.size() * 4ull + mlo.size() * 2ull + mfol.size() * 4ull + mnext.size();
+    }
+};
+
+// The packed form of a trained model (after compact_match; before it, the match table is empty, as
+// Model::find_match then finds nothing). The Model is not changed; m.release() then frees it.
+inline PackedModel pack(const Model& m) {
+    PackedModel p;
+    std::memcpy(p.uni, m.uni, sizeof p.uni);
+    p.uni_n = m.uni_n;
+    p.o1.assign(&m.o1[0][0], &m.o1[0][0] + 256 * 256);
+    std::memcpy(p.o1n, m.o1n, sizeof p.o1n);
+    p.alpha = m.alpha;
+    p.agree_floor = m.agree_floor;
+    p.match_cap = m.match_cap;
+
+    // Kept: a follower seen twice, or a kept descendant. Counted first, so every array is allocated once.
+    const std::size_t N = m.nodes.size();
+    std::vector<char> keep(N, 0);
+    std::size_t nfol = 0, ndeep = 0, n4 = 0;
+    for (std::uint32_t id = 1; id < N; ++id) {
+        std::size_t k = 0;
+        for (std::uint32_t f = m.nodes[id].fol_head; f != kNil; f = m.fols[f].next) k += m.fols[f].count >= 2;
+        if (m.nodes[id].depth <= 4) nfol += k;
+        for (std::uint32_t a = id; k && a != 0 && a != kNil && !keep[a]; a = m.nodes[a].parent) keep[a] = 1;
+    }
+    for (std::uint32_t id = 1; id < N; ++id) {
+        if (!keep[id] || m.nodes[id].depth < 2 || m.nodes[id].depth > 4) continue;
+        ++ndeep;
+        n4 += m.nodes[id].depth == 4;
+    }
+    const std::size_t total = PackedModel::kFirst2 + ndeep;
+    p.edge.reserve(total);
+    p.kid.reserve(total - n4 + 1);
+    p.fol.reserve(ndeep + 1);
+    p.fsym.reserve(nfol);
+    p.fq.reserve(nfol);
+
+    // Breadth first. src: the training id behind each packed id (kNil: an order-1 byte with nothing kept).
+    std::vector<std::uint32_t> src;
+    src.reserve(total);
+    src.push_back(0);
+    p.edge.push_back(0);
+    std::vector<std::pair<std::uint8_t, std::uint32_t>> kids;
+    std::uint32_t lo = 0, hi = 1;
+    for (int d = 0; d < 4; ++d) {
+        for (std::uint32_t id = lo; id < hi; ++id) {
+            p.kid.push_back(static_cast<std::uint32_t>(src.size()));
+            kids.clear();
+            if (d == 0) {
+                for (int b = 0; b < 256; ++b) {
+                    const std::uint32_t c = m.root_child[b];
+                    kids.push_back({static_cast<std::uint8_t>(b), c != kNil && keep[c] ? c : kNil});
+                }
+            } else if (src[id] != kNil) {
+                for (std::uint32_t c = m.nodes[src[id]].child_head; c != kNil; c = m.nodes[c].sibling)
+                    if (keep[c]) kids.push_back({m.nodes[c].byte, c});
+                std::sort(kids.begin(), kids.end());
+            }
+            for (const auto& [b, c] : kids) {
+                p.edge.push_back(b);
+                src.push_back(c);
+            }
+        }
+        lo = hi;
+        hi = static_cast<std::uint32_t>(src.size());
+    }
+    p.kend = lo;
+    p.kid.push_back(hi);
+
+    std::vector<std::pair<std::uint8_t, std::uint8_t>> fs;
+    for (std::uint32_t id = PackedModel::kFirst2; id < src.size(); ++id) {
+        p.fol.push_back(static_cast<std::uint32_t>(p.fsym.size()));
+        fs.clear();
+        for (std::uint32_t f = m.nodes[src[id]].fol_head; f != kNil; f = m.fols[f].next)
+            if (m.fols[f].count >= 2) fs.push_back({m.fols[f].sym, quantize(m.fols[f].count)});
+        std::sort(fs.begin(), fs.end());
+        for (const auto& [s, q] : fs) {
+            p.fsym.push_back(s);
+            p.fq.push_back(q);
+        }
+    }
+    p.fol.push_back(static_cast<std::uint32_t>(p.fsym.size()));
+
+    // compact_match leaves dense sorted by key, so the buckets fill in order.
+    if (m.data != nullptr) {
+        p.mstart.assign(65537, 0);
+        p.mlo.reserve(m.dense.size());
+        p.mfol.reserve(m.dense.size());
+        p.mnext.reserve(m.dense.size());
+        for (const Hit& h : m.dense) {
+            ++p.mstart[(h.key >> 16) + 1];
+            p.mlo.push_back(static_cast<std::uint16_t>(h.key & 0xffffu));
+            p.mfol.push_back(h.follower);
+            p.mnext.push_back(m.data[h.follower]);
+        }
+        for (std::size_t k = 1; k < p.mstart.size(); ++k) p.mstart[k] += p.mstart[k - 1];
+    }
+    return p;
+}
+
 // ---- Mixture weights: six experts (E0..E4 and the match).
 
 // E0..E4 share (1 - w_match0) equally; the match expert starts at w_match0.
@@ -860,7 +1114,9 @@ struct Holdout {
 // before cfg.train) both ways: the fixed backoff and the mixture with weights w.
 // With checks on, each 2^16 bytes it verifies sum(M) = 1 and that the mixture's E4 expert
 // reproduces mix() to 1e-6. Failures set ok = false and write the reason to stderr.
-inline Holdout score_holdout(const Model& model, const std::uint8_t* data, const double w[6],
+// ModelT is Model or PackedModel.
+template <class ModelT>
+inline Holdout score_holdout(const ModelT& model, const std::uint8_t* data, const double w[6],
                              const Config& cfg = Config{}, bool progress = true) {
     Holdout r;
     double bits_b = 0.0, bits_m = 0.0;
@@ -932,17 +1188,26 @@ struct Score {
 };
 
 // The fixed backoff (or PPMD, max_depth) alone, as fold_lm printed it: BPC, mean u, match rate.
-// Exits the process on a bad probability, as the tool did.
-inline Score heldout(const Model& m, const std::uint8_t* data, Mode mode, const Config& cfg = Config{},
+// Exits the process on a bad probability, as the tool did. ModelT is Model or PackedModel (no PPMD).
+template <class ModelT>
+inline Score heldout(const ModelT& m, const std::uint8_t* data, Mode mode, const Config& cfg = Config{},
                      bool ppmd = false, int max_depth = 4) {
+    if (!std::is_same_v<ModelT, Model> && ppmd) {
+        std::cerr << "PPMD needs the training Model\n";
+        std::exit(1);
+    }
     double bits = 0, sum_u = 0;
     std::uint64_t matches = 0;
     const double n = static_cast<double>(cfg.sample - cfg.train);
     for (std::size_t i = cfg.train; i < cfg.sample; ++i) {
         double P[256];
         bool matched = false;
-        const double u = ppmd ? m.mix_ppmd(data, i, cfg.train, mode, max_depth, P, matched)
-                              : m.mix(data, i, cfg.train, mode, P, matched);
+        double u = 0.0;
+        if constexpr (std::is_same_v<ModelT, Model>)
+            u = ppmd ? m.mix_ppmd(data, i, cfg.train, mode, max_depth, P, matched)
+                     : m.mix(data, i, cfg.train, mode, P, matched);
+        else
+            u = m.mix(data, i, cfg.train, mode, P, matched);
         if (matched) ++matches;
         if (((i - cfg.train) & 0xffff) == 0) {
             double sum = 0;
@@ -1133,8 +1398,9 @@ struct SampleOptions {
 
 // n bytes after prompt from the learned mixture (E0..E4 and the match, weights w), Synth mode,
 // compacted match with followers strictly before follower_limit. Temperature, then the
-// nucleus, then one uniform draw per byte from mt19937(seed).
-inline std::string sample_continuation(const Model& model, const double w[6], const std::string& prompt,
+// nucleus, then one uniform draw per byte from mt19937(seed). ModelT is Model or PackedModel.
+template <class ModelT>
+inline std::string sample_continuation(const ModelT& model, const double w[6], const std::string& prompt,
                                        std::size_t follower_limit, int n, std::uint32_t seed,
                                        const SampleOptions& opt = SampleOptions{}) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
@@ -1285,6 +1551,59 @@ inline bool self_test() {
     for (int s = 0; s < 256; ++s) sum += Q[s];
     if (std::fabs(sum - 1.0) > 1e-6 || !(Q['c'] > Q['Z'])) {
         std::cerr << "self-test ppmd failed sum=" << sum << " Qc=" << Q['c'] << "\n";
+        return false;
+    }
+
+    // M4: the packed form against the training Model (Mode::Synth, compacted match) on a fixed text with
+    // counts above 64 (quantised), singletons (dropped) and matches on both sides of a follower limit. At
+    // every prefix of the text plus unseen bytes (the limit alternating between all followers and the first
+    // half), E0..E4, the match and mix() must be bit-identical. Sizes and match hits are golden.
+    std::string ttext;
+    for (int r = 0; r < 66; ++r) ttext += "cat sat. ";
+    ttext += "a dog ran far, zq xj vk. the cat ran. a dog sat. a dog sat. ";
+    std::vector<std::uint8_t> tb(ttext.begin(), ttext.end());
+    Model tm;
+    tm.verbose = false;
+    tm.data = tb.data();
+    Config tc;
+    tc.reserve_nodes = 1024;
+    tc.reserve_fols = 2048;
+    tc.match_bits = 8;
+    tm.init(tc);
+    for (std::size_t i = 0; i < tb.size(); ++i) tm.observe(i);
+    tm.compact_match();
+    const PackedModel pk = pack(tm);
+    std::string probe = ttext + "the dog sat on a mat. zq xj vk";
+    const auto* ph = reinterpret_cast<const std::uint8_t*>(probe.data());
+    int differ = 0, hits = 0;
+    for (std::size_t len = 0; len <= probe.size(); ++len) {
+        const std::size_t limit = len % 2 ? tb.size() : tb.size() / 2;
+        double e1[5][256], e2[5][256], P1[256], P2[256];
+        bool m1 = false, m2 = false, x1 = false, x2 = false;
+        unsigned p1 = 0, p2 = 0;
+        tm.fill_experts(ph, len, limit, Mode::Synth, e1, m1, p1, false);
+        pk.fill_experts(ph, len, limit, Mode::Synth, e2, m2, p2, false);
+        const double u1 = tm.mix(ph, len, limit, Mode::Synth, P1, x1);
+        const double u2 = pk.mix(ph, len, limit, Mode::Synth, P2, x2);
+        hits += m1;
+        if (std::memcmp(e1, e2, sizeof e1) != 0 || std::memcmp(P1, P2, sizeof P1) != 0 ||
+            std::memcmp(&u1, &u2, sizeof u1) != 0 || m1 != m2 || p1 != p2 || x1 != x2)
+            ++differ;
+    }
+    // online_match after compact_match (qa's wiki-stage reads): neither form has the training hash, so neither
+    // matches, and the experts are the same.
+    double eo1[5][256], eo2[5][256];
+    bool mo1 = true, mo2 = true;
+    unsigned po1 = 0, po2 = 0;
+    tm.fill_experts(ph, probe.size(), tb.size(), Mode::Synth, eo1, mo1, po1, true);
+    pk.fill_experts(ph, probe.size(), tb.size(), Mode::Synth, eo2, mo2, po2, true);
+    const bool online_ok = !mo1 && !mo2 && std::memcmp(eo1, eo2, sizeof eo1) == 0;
+    std::uint8_t qmax = 0;
+    for (const std::uint8_t q : pk.fq) qmax = std::max(qmax, q);
+    if (differ != 0 || hits != 313 || pk.nodes() != 306 || pk.followers() != 54 || pk.matches() != 18 ||
+        pk.followers() != measure(tm, Mode::Synth).followers || qmax != 65 || !online_ok) {
+        std::cerr << "self-test packed model: differ " << differ << " hits " << hits << " nodes " << pk.nodes()
+                  << " followers " << pk.followers() << " matches " << pk.matches() << " qmax " << int(qmax) << "\n";
         return false;
     }
     return true;

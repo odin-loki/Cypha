@@ -2793,6 +2793,21 @@ add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>"
 set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
 # --- end B1 block ---------------------------------------------------------------------------------
 
+# --- RAM_PROFILE M5: InfiniGram over a compressed index (bidirectional FM-index) -------------------
+# The CTest checks it gives InfiniGram's answers on random texts; --bench FILE BYTES times both.
+add_executable(fm_infinigram_test
+  tools/fm_infinigram_test.cpp
+  src/cyphalm/fm_infinigram.cpp
+  src/cyphalm/infinigram.cpp
+  third_party/libsais/libsais.c)
+target_include_directories(fm_infinigram_test PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
+cypha_mingw_apply_exe_link_options(fm_infinigram_test)
+add_test(NAME native_fm_infinigram_test COMMAND "$<TARGET_FILE:fm_infinigram_test>")
+set_tests_properties(native_fm_infinigram_test PROPERTIES TIMEOUT 120)
+# --- end M5 block ----------------------------------------------------------------------------------
+
 # --- TOOL_PROFILE P1: the Core Cypha classifier as CyphaLM's abstain gate (DISCOVERY 8a) ---------------
 # Reads `cyphalm_trie qa --out` rows; the self-test uses synthetic rows and needs no corpus.
 add_executable(cypha_gate tools/cypha_gate.cpp)

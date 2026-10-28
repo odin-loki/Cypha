@@ -13,8 +13,9 @@
 ///   The caller mixes the result into CyphaLM's distribution with one lambda per bucket(), as
 ///   cyphalm_trie mixes InfiniGram, so the trie stays the main expert.
 /// - Counts are built once over the training bytes, so this expert is batch-built, not online. The
-///   build sorts the (context, byte) events chunk by chunk and merges the counted runs, so its peak is
-///   about one chunk of events plus the distinct (context, byte) pairs, not every event at once.
+///   build sorts the (context, byte) events chunk by chunk and merges the counted runs, each order on its
+///   own, so its peak is about one chunk of events, the distinct (context, byte) pairs, and one order's
+///   pairs again, not every event at once.
 /// - Storage (docs/reports/RAM_PROFILE.md): by default 16 bytes per distinct context (56-bit hash key,
 ///   first follower, total) and 5 per distinct follower (byte, 32-bit count). ``compact`` keeps a 32-bit
 ///   key, 1-byte counts on the trie's quantising ladder and no stored total: 8 + 2 bytes. ``min_total``
@@ -51,7 +52,7 @@ class ClassContext {
         int orders = 2;              ///< 2: the last two words; 3: also the third
         bool compact = false;        ///< 32-bit keys, 1-byte quantised counts, totals summed at lookup
         std::uint32_t min_total = 1; ///< contexts seen fewer times are dropped
-        std::size_t chunk = std::size_t{1} << 21;  ///< positions per build chunk
+        std::size_t chunk = std::size_t{1} << 17;  ///< positions per build chunk (RAM_PROFILE: 2^17 gave the lowest peak)
     };
 
     /// Read a ``word<TAB>class`` table. Class names are arbitrary strings; ids are assigned in order
@@ -97,41 +98,79 @@ class ClassContext {
 
     /// Count every (context, next byte) event in text[0..n).
     void build(const std::uint8_t* text, std::size_t n) {
-        // Counted runs, sorted by (key << 8 | byte), merged chunk by chunk.
-        std::vector<std::uint64_t> kb, ev, kb2;
-        std::vector<std::uint32_t> cnt, cnt2;
+        // Counted runs per order, sorted by (key << 8 | byte), merged chunk by chunk. Each order is
+        // merged on its own, so only one order's runs are ever held twice.
+        const int no = opt_.orders;
+        std::vector<std::uint64_t> kb[3], ev[3], kb2;
+        std::vector<std::uint32_t> cnt[3], cnt2;
         for (std::size_t a = 1; a < n; a += opt_.chunk) {
             const std::size_t b = std::min(n, a + opt_.chunk);
-            ev.clear();
-            ev.reserve(static_cast<std::size_t>(opt_.orders) * (b - a));
+            for (int o = 0; o < no; ++o) ev[o].clear(), ev[o].reserve(b - a);
             for (std::size_t i = a; i < b; ++i) {
                 std::uint64_t k[3];
                 keys(text, i, k);
-                for (int o = 0; o < opt_.orders; ++o) ev.push_back(stored_key(k[o]) << 8 | text[i]);
+                for (int o = 0; o < no; ++o) ev[o].push_back(stored_key(k[o]) << 8 | text[i]);
             }
-            std::sort(ev.begin(), ev.end());
-            kb2.clear();
-            cnt2.clear();
-            std::size_t x = 0, y = 0;
-            while (x < kb.size() || y < ev.size()) {  // merge the old runs with this chunk's sorted events
-                std::uint64_t key;
-                std::uint32_t c = 0;
-                if (y >= ev.size() || (x < kb.size() && kb[x] <= ev[y])) {
-                    key = kb[x];
-                    c = cnt[x++];
-                } else {
-                    key = ev[y];
+            for (int o = 0; o < no; ++o) {
+                std::sort(ev[o].begin(), ev[o].end());
+                std::vector<std::uint64_t>& K = kb[o];
+                std::vector<std::uint32_t>& C = cnt[o];
+                const std::vector<std::uint64_t>& E = ev[o];
+                kb2.clear();
+                cnt2.clear();
+                kb2.reserve(K.size() + E.size());  // an upper bound: the merge never regrows
+                cnt2.reserve(K.size() + E.size());
+                std::size_t x = 0, y = 0;
+                while (x < K.size() || y < E.size()) {  // merge the old runs with this chunk's sorted events
+                    std::uint64_t key;
+                    std::uint32_t c = 0;
+                    if (y >= E.size() || (x < K.size() && K[x] <= E[y])) {
+                        key = K[x];
+                        c = C[x++];
+                    } else {
+                        key = E[y];
+                    }
+                    while (y < E.size() && E[y] == key) ++c, ++y;
+                    if (!kb2.empty() && kb2.back() == key) cnt2.back() += c;
+                    else kb2.push_back(key), cnt2.push_back(c);
                 }
-                while (y < ev.size() && ev[y] == key) ++c, ++y;
-                if (!kb2.empty() && kb2.back() == key) cnt2.back() += c;
-                else kb2.push_back(key), cnt2.push_back(c);
+                K.swap(kb2);
+                C.swap(cnt2);
             }
-            kb.swap(kb2);
-            cnt.swap(cnt2);
         }
-        std::vector<std::uint64_t>().swap(ev);
+        for (auto& e : ev) std::vector<std::uint64_t>().swap(e);
         std::vector<std::uint64_t>().swap(kb2);
         std::vector<std::uint32_t>().swap(cnt2);
+        // The table holds every order's contexts in one sorted array: merge the orders' runs (two
+        // runs with the same key and byte, a hash collision across orders, are added together).
+        auto each = [&](auto&& visit) {
+            std::size_t at[3] = {0, 0, 0};
+            for (;;) {
+                std::uint64_t key = ~std::uint64_t{0};
+                bool any = false;
+                for (int o = 0; o < no; ++o)
+                    if (at[o] < kb[o].size() && (!any || kb[o][at[o]] < key)) key = kb[o][at[o]], any = true;
+                if (!any) return;
+                std::uint64_t c = 0;
+                for (int o = 0; o < no; ++o)
+                    if (at[o] < kb[o].size() && kb[o][at[o]] == key) c += cnt[o][at[o]++];
+                visit(key, static_cast<std::uint32_t>(c));
+            }
+        };
+        // Pass 1: the table's exact size, so its vectors are allocated once. Pass 2: fill it.
+        std::size_t nctx = 0, nfol = 0;
+        {
+            std::uint64_t cur = ~std::uint64_t{0};
+            std::uint64_t tot = 0, fol = 0;
+            auto close = [&] {
+                if (fol && tot >= opt_.min_total) ++nctx, nfol += fol;
+            };
+            each([&](std::uint64_t k, std::uint32_t c) {
+                if (k >> 8 != cur) close(), cur = k >> 8, tot = 0, fol = 0;
+                tot += c, ++fol;
+            });
+            close();
+        }
         key_.clear();
         key32_.clear();
         first_.clear();
@@ -139,22 +178,30 @@ class ClassContext {
         byte_.clear();
         count_.clear();
         q_.clear();
-        for (std::size_t a = 0; a < kb.size();) {
-            const std::uint64_t key = kb[a] >> 8;
-            std::size_t b = a;
-            std::uint64_t tot = 0;
-            while (b < kb.size() && kb[b] >> 8 == key) tot += cnt[b++];
-            if (tot >= opt_.min_total) {
-                if (opt_.compact) key32_.push_back(static_cast<std::uint32_t>(key));
-                else key_.push_back(key), total_.push_back(static_cast<std::uint32_t>(tot));
+        if (opt_.compact) key32_.reserve(nctx), q_.reserve(nfol);
+        else key_.reserve(nctx), total_.reserve(nctx), count_.reserve(nfol);
+        first_.reserve(nctx + 1);
+        byte_.reserve(nfol);
+        {
+            std::vector<std::pair<std::uint8_t, std::uint32_t>> run;  // one context's followers
+            std::uint64_t cur = ~std::uint64_t{0}, tot = 0;
+            auto close = [&] {
+                if (run.empty() || tot < opt_.min_total) return;
+                if (opt_.compact) key32_.push_back(static_cast<std::uint32_t>(cur));
+                else key_.push_back(cur), total_.push_back(static_cast<std::uint32_t>(tot));
                 first_.push_back(static_cast<std::uint32_t>(byte_.size()));
-                for (std::size_t f = a; f < b; ++f) {
-                    byte_.push_back(static_cast<std::uint8_t>(kb[f] & 0xff));
-                    if (opt_.compact) q_.push_back(quantise(cnt[f]));
-                    else count_.push_back(cnt[f]);
+                for (const auto& f : run) {
+                    byte_.push_back(f.first);
+                    if (opt_.compact) q_.push_back(quantise(f.second));
+                    else count_.push_back(f.second);
                 }
-            }
-            a = b;
+            };
+            each([&](std::uint64_t k, std::uint32_t c) {
+                if (k >> 8 != cur) close(), cur = k >> 8, tot = 0, run.clear();
+                tot += c;
+                run.emplace_back(static_cast<std::uint8_t>(k & 0xff), c);
+            });
+            close();
         }
         first_.push_back(static_cast<std::uint32_t>(byte_.size()));
     }
