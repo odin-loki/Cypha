@@ -111,7 +111,7 @@
   "n": 1650,
   "n_metrics": 20,
   "missing_optional": [],
-  "seconds": 3.709632158279419,
+  "seconds": 4.032414197921753,
   "checks": []
  },
  {
@@ -127,8 +127,17 @@
   "section": "1. Fresh Wikipedia control ladder",
   "title": "Set-level metrics on W, one set per rung (q: 100 texts per rung; MAUVE with GPT-2 small features against 100 other human texts)",
   "cmd": "setladder",
-  "status": "skipped",
-  "why": "missing: SP/run/baselines/wiki_fresh_W_mauve/setlevel.jsonl"
+  "status": "ran",
+  "outputs": [
+   "wiki_fresh_W_setlevel.md",
+   "wiki_fresh_W_setlevel.csv",
+   "wiki_fresh_W_setlevel.json"
+  ],
+  "n": 8,
+  "n_metrics": 3,
+  "missing_optional": [],
+  "seconds": 0.08375668525695801,
+  "checks": []
  },
  {
   "name": "wiki_fresh_setlevel",
@@ -245,14 +254,9 @@
    "dose_S20_all.json"
   ],
   "n": 1080,
-  "n_metrics": 14,
-  "missing_optional": [
-   "R/corrupt_S20/ppl_gpt2.jsonl (partial)",
-   "R/corrupt_S20/cola.jsonl",
-   "R/corrupt_S20/coherence.jsonl",
-   "R/corrupt_S20/detector.jsonl"
-  ],
-  "seconds": 1.8023872375488281,
+  "n_metrics": 20,
+  "missing_optional": [],
+  "seconds": 2.0524001121520996,
   "checks": []
  },
  {
@@ -317,12 +321,9 @@
    "mauve_he_M300_all.json"
   ],
   "n": 596,
-  "n_metrics": 16,
-  "missing_optional": [
-   "R/mauve_he_M300/ppl_gpt2.jsonl",
-   "R/mauve_he_M300/detector.jsonl"
-  ],
-  "seconds": 2.917325258255005,
+  "n_metrics": 18,
+  "missing_optional": [],
+  "seconds": 2.33577561378479,
   "checks": []
  },
  {
@@ -362,11 +363,9 @@
    "hanna_corr.json"
   ],
   "n": 1056,
-  "n_metrics": 33,
-  "missing_optional": [
-   "R/hanna/ppl_gpt2.jsonl"
-  ],
-  "seconds": 32.44363069534302,
+  "n_metrics": 34,
+  "missing_optional": [],
+  "seconds": 32.083292722702026,
   "checks": []
  },
  {
@@ -398,11 +397,9 @@
    "mans_roc_corr.json"
   ],
   "n": 1000,
-  "n_metrics": 16,
-  "missing_optional": [
-   "R/mans_roc/ppl_gpt2.jsonl"
-  ],
-  "seconds": 2.8576345443725586,
+  "n_metrics": 17,
+  "missing_optional": [],
+  "seconds": 2.169987916946411,
   "checks": []
  },
  {
@@ -417,11 +414,9 @@
    "mans_wp_corr.json"
   ],
   "n": 1000,
-  "n_metrics": 16,
-  "missing_optional": [
-   "R/mans_wp/ppl_gpt2.jsonl"
-  ],
-  "seconds": 2.6635429859161377,
+  "n_metrics": 17,
+  "missing_optional": [],
+  "seconds": 2.3631725311279297,
   "checks": []
  },
  {
@@ -453,11 +448,9 @@
    "gpt2out_pure_200_all.json"
   ],
   "n": 1800,
-  "n_metrics": 15,
-  "missing_optional": [
-   "R/gpt2out_200/ppl_gpt2.jsonl"
-  ],
-  "seconds": 1.4720573425292969,
+  "n_metrics": 16,
+  "missing_optional": [],
+  "seconds": 1.5217509269714355,
   "checks": []
  },
  {
@@ -482,8 +475,19 @@
   "section": "6. Model ladders (known order)",
   "title": "GPT-2 output dataset, pure sampling, set-level metrics (one set per system: self-BLEU and Zipf on gpt2out_200; MAUVE with GPT-2 small features if run)",
   "cmd": "models",
-  "status": "skipped",
-  "why": "missing: SP/run/baselines/gpt2out_200/setlevel.jsonl, SP/run/baselines/gpt2out_mauve/setlevel.jsonl"
+  "status": "ran",
+  "outputs": [
+   "gpt2out_pure_setlevel.md",
+   "gpt2out_pure_setlevel.csv",
+   "gpt2out_pure_setlevel.json"
+  ],
+  "n": 9,
+  "n_metrics": 2,
+  "missing_optional": [
+   "SP/run/baselines/gpt2out_mauve/setlevel.jsonl"
+  ],
+  "seconds": 0.032657623291015625,
+  "checks": []
  },
  {
   "name": "gpt2out_k40_scribe",
@@ -514,11 +518,9 @@
    "gpt2out_k40_200_all.json"
   ],
   "n": 1800,
-  "n_metrics": 15,
-  "missing_optional": [
-   "R/gpt2out_200/ppl_gpt2.jsonl"
-  ],
-  "seconds": 1.3645474910736084,
+  "n_metrics": 16,
+  "missing_optional": [],
+  "seconds": 1.4138669967651367,
   "checks": []
  },
  {
@@ -543,8 +545,19 @@
   "section": "6. Model ladders (known order)",
   "title": "GPT-2 output dataset, top-k 40, set-level metrics (one set per system: self-BLEU and Zipf on gpt2out_200; MAUVE with GPT-2 small features if run)",
   "cmd": "models",
-  "status": "skipped",
-  "why": "missing: SP/run/baselines/gpt2out_200/setlevel.jsonl, SP/run/baselines/gpt2out_mauve/setlevel.jsonl"
+  "status": "ran",
+  "outputs": [
+   "gpt2out_k40_setlevel.md",
+   "gpt2out_k40_setlevel.csv",
+   "gpt2out_k40_setlevel.json"
+  ],
+  "n": 9,
+  "n_metrics": 2,
+  "missing_optional": [
+   "SP/run/baselines/gpt2out_mauve/setlevel.jsonl"
+  ],
+  "seconds": 0.03368949890136719,
+  "checks": []
  },
  {
   "name": "ngram_ladder",
@@ -638,12 +651,9 @@
    "attacks_50_all.extra.csv"
   ],
   "n": 500,
-  "n_metrics": 16,
-  "missing_optional": [
-   "R/attacks_50/ppl_gpt2.jsonl",
-   "R/attacks_50/detector.jsonl"
-  ],
-  "seconds": 1.9512383937835693,
+  "n_metrics": 18,
+  "missing_optional": [],
+  "seconds": 2.1892993450164795,
   "checks": []
  },
  {

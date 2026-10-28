@@ -1,8 +1,7 @@
 # The same on attacks_50 (first 50 prompts) with every baseline
 
 Analysis `attacks_50_all` (7. Attacks). meta.py `ladder`.
-Inputs: SP/run/baselines/subsets/attacks_50.jsonl, SP/run/attacks/attacks.v2.jsonl, SP/run/attacks/attacks.v2p.jsonl, SP/run/attacks/attacks.v2_noi1.jsonl, SP/run/baselines/attacks_50/stats.jsonl.
-Not available yet (left out): R/attacks_50/ppl_gpt2.jsonl, R/attacks_50/detector.jsonl.
+Inputs: SP/run/baselines/subsets/attacks_50.jsonl, SP/run/attacks/attacks.v2.jsonl, SP/run/attacks/attacks.v2p.jsonl, SP/run/attacks/attacks.v2_noi1.jsonl, SP/run/baselines/attacks_50/stats.jsonl, SP/run/baselines/attacks_50/ppl_gpt2.jsonl, SP/run/baselines/attacks_50/detector.jsonl.
 
 500 texts. Bootstrap: 1000 resamples, seed 20261028, percentile 95% intervals. Accuracy is P(upper > lower) over all (upper, lower) pairs with ties one half (the AUROC), computed on oriented scores (lower-is-better metrics negated). "Intervals disjoint" means the rung-mean intervals do not overlap and are in the right order. A pair passes when accuracy >= 0.95 and the intervals are disjoint.
 
@@ -694,6 +693,92 @@ All pairs (accuracy of row > column):
 | numbers |  |  |  |  |  |  |  | 0.557 | 1.000 |
 | negation |  |  |  |  |  |  |  |  | 1.000 |
 
+### GPT-2 PPL (lower is better)
+
+| rung | n | missing | mean [95% interval] |
+|---|---|---|---|
+| held-out human | 50 | 0 | 40.018 [35.530, 44.672] |
+| copy_pack | 50 | 0 | 34.776 [30.932, 38.636] |
+| offprompt | 50 | 0 | 38.437 [34.535, 42.438] |
+| echo | 50 | 0 | 3.784 [3.447, 4.125] |
+| stuffing | 50 | 0 | 246.913 [199.789, 297.514] |
+| generic | 50 | 0 | 15.433 [15.433, 15.433] |
+| generic_topic | 50 | 0 | 32.081 [30.420, 33.604] |
+| numbers | 50 | 0 | 44.161 [39.008, 49.425] |
+| negation | 50 | 0 | 43.562 [39.148, 48.863] |
+| fwloop | 50 | 0 | 50.844 [49.388, 52.252] |
+
+| upper > lower | accuracy | 95% interval | intervals disjoint | verdict |
+|---|---|---|---|---|
+| held-out human > copy_pack | 0.408 | [0.296, 0.523] | no | FAIL |
+| copy_pack > offprompt | 0.582 | [0.467, 0.694] | no | FAIL |
+| offprompt > echo | 0.000 | [0.000, 0.000] | no | FAIL |
+| echo > stuffing | 1.000 | [1.000, 1.000] | yes | **PASS** |
+| stuffing > generic | 0.000 | [0.000, 0.000] | no | FAIL |
+| generic > generic_topic | 1.000 | [1.000, 1.000] | yes | **PASS** |
+| generic_topic > numbers | 0.739 | [0.636, 0.836] | yes | FAIL |
+| numbers > negation | 0.493 | [0.376, 0.606] | no | FAIL |
+| negation > fwloop | 0.725 | [0.615, 0.822] | yes | FAIL |
+
+Passed 2 of 9 adjacent pairs.
+
+All pairs (accuracy of row > column):
+
+| upper \ lower | copy_pack | offprompt | echo | stuffing | generic | generic_topic | numbers | negation | fwloop |
+|---|---|---|---|---|---|---|---|---|---|
+| held-out human | 0.408 | 0.483 | 0.000 | 0.943 | 0.060 | 0.356 | 0.578 | 0.569 | 0.784 |
+| copy_pack |  | 0.582 | 0.000 | 0.960 | 0.020 | 0.488 | 0.668 | 0.656 | 0.850 |
+| offprompt |  |  | 0.000 | 0.949 | 0.020 | 0.384 | 0.603 | 0.585 | 0.813 |
+| echo |  |  |  | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| stuffing |  |  |  |  | 0.000 | 0.020 | 0.074 | 0.074 | 0.110 |
+| generic |  |  |  |  |  | 1.000 | 0.940 | 0.960 | 1.000 |
+| generic_topic |  |  |  |  |  |  | 0.739 | 0.724 | 0.996 |
+| numbers |  |  |  |  |  |  |  | 0.493 | 0.692 |
+| negation |  |  |  |  |  |  |  |  | 0.725 |
+
+### GPT-2 detector P(human) (higher is better)
+
+| rung | n | missing | mean [95% interval] |
+|---|---|---|---|
+| held-out human | 50 | 0 | 0.845 [0.766, 0.913] |
+| copy_pack | 50 | 0 | 0.925 [0.866, 0.968] |
+| offprompt | 50 | 0 | 0.839 [0.764, 0.906] |
+| echo | 50 | 0 | 0.269 [0.170, 0.385] |
+| stuffing | 50 | 0 | 0.529 [0.416, 0.646] |
+| generic | 50 | 0 | 0.025 [0.025, 0.025] |
+| generic_topic | 50 | 0 | 0.610 [0.508, 0.704] |
+| numbers | 50 | 0 | 0.854 [0.778, 0.920] |
+| negation | 50 | 0 | 0.758 [0.669, 0.849] |
+| fwloop | 50 | 0 | 0.054 [0.037, 0.073] |
+
+| upper > lower | accuracy | 95% interval | intervals disjoint | verdict |
+|---|---|---|---|---|
+| held-out human > copy_pack | 0.457 | [0.337, 0.572] | no | FAIL |
+| copy_pack > offprompt | 0.583 | [0.472, 0.691] | no | FAIL |
+| offprompt > echo | 0.886 | [0.812, 0.939] | yes | FAIL |
+| echo > stuffing | 0.326 | [0.229, 0.436] | no | FAIL |
+| stuffing > generic | 0.720 | [0.580, 0.840] | yes | FAIL |
+| generic > generic_topic | 0.040 | [0.000, 0.100] | no | FAIL |
+| generic_topic > numbers | 0.221 | [0.139, 0.310] | no | FAIL |
+| numbers > negation | 0.582 | [0.474, 0.690] | no | FAIL |
+| negation > fwloop | 0.948 | [0.898, 0.987] | yes | FAIL |
+
+Passed 0 of 9 adjacent pairs.
+
+All pairs (accuracy of row > column):
+
+| upper \ lower | copy_pack | offprompt | echo | stuffing | generic | generic_topic | numbers | negation | fwloop |
+|---|---|---|---|---|---|---|---|---|---|
+| held-out human | 0.457 | 0.531 | 0.888 | 0.765 | 0.960 | 0.758 | 0.494 | 0.578 | 0.967 |
+| copy_pack |  | 0.583 | 0.924 | 0.822 | 1.000 | 0.839 | 0.533 | 0.618 | 0.998 |
+| offprompt |  |  | 0.886 | 0.750 | 0.980 | 0.753 | 0.454 | 0.543 | 0.978 |
+| echo |  |  |  | 0.326 | 0.480 | 0.232 | 0.109 | 0.151 | 0.489 |
+| stuffing |  |  |  |  | 0.720 | 0.446 | 0.228 | 0.294 | 0.723 |
+| generic |  |  |  |  |  | 0.040 | 0.040 | 0.040 | 0.500 |
+| generic_topic |  |  |  |  |  |  | 0.221 | 0.326 | 0.929 |
+| numbers |  |  |  |  |  |  |  | 0.582 | 0.964 |
+| negation |  |  |  |  |  |  |  |  | 0.948 |
+
 ## Summary
 
 Adjacent pairs, accuracy and verdict (pass: accuracy >= 0.95 and disjoint intervals in the right order).
@@ -716,3 +801,5 @@ Adjacent pairs, accuracy and verdict (pass: accuracy >= 0.95 and disjoint interv
 | diversity | 0.441 FAIL | 0.549 FAIL | 1.000 **PASS** | 0.000 FAIL | 0.020 FAIL | 0.000 FAIL | 0.896 FAIL | 0.576 FAIL | 0.979 **PASS** | 2 of 9 |
 | type-token ratio | 0.498 FAIL | 0.492 FAIL | 1.000 **PASS** | 0.000 FAIL | 0.000 FAIL | 1.000 **PASS** | 0.771 FAIL | 0.576 FAIL | 1.000 **PASS** | 3 of 9 |
 | gzip ratio | 0.510 FAIL | 0.481 FAIL | 1.000 **PASS** | 0.002 FAIL | 0.000 FAIL | 0.700 FAIL | 0.831 FAIL | 0.557 FAIL | 1.000 **PASS** | 2 of 9 |
+| GPT-2 PPL | 0.408 FAIL | 0.582 FAIL | 0.000 FAIL | 1.000 **PASS** | 0.000 FAIL | 1.000 **PASS** | 0.739 FAIL | 0.493 FAIL | 0.725 FAIL | 2 of 9 |
+| GPT-2 detector P(human) | 0.457 FAIL | 0.583 FAIL | 0.886 FAIL | 0.326 FAIL | 0.720 FAIL | 0.040 FAIL | 0.221 FAIL | 0.582 FAIL | 0.948 FAIL | 0 of 9 |

@@ -1,8 +1,7 @@
 # GPT-2 output dataset, pure sampling, all per-text metrics on gpt2out_200
 
 Analysis `gpt2out_pure_200_all` (6. Model ladders (known order)). meta.py `models`.
-Inputs: SP/run/baselines/subsets/gpt2out_200.jsonl, SP/run/gpt2out/samples.scribe.jsonl, SP/run/gpt2out/samples.ts.jsonl, SP/run/baselines/gpt2out_200/stats.jsonl.
-Not available yet (left out): R/gpt2out_200/ppl_gpt2.jsonl.
+Inputs: SP/run/baselines/subsets/gpt2out_200.jsonl, SP/run/gpt2out/samples.scribe.jsonl, SP/run/gpt2out/samples.ts.jsonl, SP/run/baselines/gpt2out_200/stats.jsonl, SP/run/baselines/gpt2out_200/ppl_gpt2.jsonl.
 
 1000 texts in 5 systems, known order best first: WebText (human), GPT-2 xl, GPT-2 large, GPT-2 medium, GPT-2 small. Spearman and Kendall (tau-b) are between the oriented system means and the known order (1 = the known order). Bootstrap: 1000 resamples of the texts within each system, seed 20261028; P(perfect) is the share of resamples whose system means are in exactly the known order. Adjacent accuracy is P(upper > lower) over text pairs, ties one half.
 
@@ -291,6 +290,25 @@ Spearman −0.800 [−1.000, −0.800], Kendall −0.600 [−1.000, −0.600], i
 
 Spearman −1.000 [−1.000, −0.800], Kendall −1.000 [−1.000, −0.600], in the known order: no, P(perfect) 0.000.
 
+### GPT-2 PPL (lower is better)
+
+| system | n | missing | mean [95% interval] |
+|---|---|---|---|
+| WebText (human) | 200 | 0 | 35.766 [33.677, 38.058] |
+| GPT-2 xl | 200 | 0 | 74.710 [66.010, 86.104] |
+| GPT-2 large | 200 | 0 | 78.002 [70.099, 86.868] |
+| GPT-2 medium | 200 | 0 | 176.679 [148.385, 214.482] |
+| GPT-2 small | 200 | 0 | 103.554 [91.424, 115.393] |
+
+| upper > lower | accuracy | 95% interval | intervals disjoint |
+|---|---|---|---|
+| WebText (human) > GPT-2 xl | 0.782 | [0.738, 0.823] | yes |
+| GPT-2 xl > GPT-2 large | 0.534 | [0.480, 0.590] | no |
+| GPT-2 large > GPT-2 medium | 0.737 | [0.688, 0.785] | yes |
+| GPT-2 medium > GPT-2 small | 0.348 | [0.291, 0.403] | no |
+
+Spearman 0.900 [0.800, 0.900], Kendall 0.800 [0.600, 0.800], in the known order: no, P(perfect) 0.000.
+
 ## Summary
 
 | metric | Spearman [95% interval] | Kendall [95% interval] | in order | P(perfect) | WebText (human) > GPT-2 xl | GPT-2 xl > GPT-2 large | GPT-2 large > GPT-2 medium | GPT-2 medium > GPT-2 small |
@@ -310,3 +328,4 @@ Spearman −1.000 [−1.000, −0.800], Kendall −1.000 [−1.000, −0.600], i
 | diversity | −1.000 [−1.000, −0.600] | −1.000 [−1.000, −0.400] | no | 0.000 | 0.459 | 0.456 | 0.407 | 0.482 |
 | type-token ratio | −0.800 [−1.000, −0.800] | −0.600 [−1.000, −0.600] | no | 0.000 | 0.369 | 0.497 | 0.313 | 0.547 |
 | gzip ratio | −1.000 [−1.000, −0.800] | −1.000 [−1.000, −0.600] | no | 0.000 | 0.480 | 0.450 | 0.391 | 0.498 |
+| GPT-2 PPL | 0.900 [0.800, 0.900] | 0.800 [0.600, 0.800] | no | 0.000 | 0.782 | 0.534 | 0.737 | 0.348 |

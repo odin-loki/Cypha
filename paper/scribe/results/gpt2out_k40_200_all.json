@@ -996,6 +996,71 @@
     "mean": 0.6059235647583148,
     "lo": 0.6007975782705324,
     "hi": 0.6111447784942713
+   },
+   {
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL",
+    "dir": "-",
+    "system": "human",
+    "system_label": "WebText (human)",
+    "position": 0,
+    "n": 200,
+    "missing": 0,
+    "mean": 35.76624745780473,
+    "lo": 33.676952601845414,
+    "hi": 38.058477037216605
+   },
+   {
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL",
+    "dir": "-",
+    "system": "xl-1542M-k40",
+    "system_label": "GPT-2 xl, top-k 40",
+    "position": 1,
+    "n": 200,
+    "missing": 0,
+    "mean": 18.22253644425266,
+    "lo": 17.44719839852231,
+    "hi": 18.97571170848072
+   },
+   {
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL",
+    "dir": "-",
+    "system": "large-762M-k40",
+    "system_label": "GPT-2 large, top-k 40",
+    "position": 2,
+    "n": 200,
+    "missing": 0,
+    "mean": 16.948195274887183,
+    "lo": 16.301478680519253,
+    "hi": 17.611360979222304
+   },
+   {
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL",
+    "dir": "-",
+    "system": "medium-345M-k40",
+    "system_label": "GPT-2 medium, top-k 40",
+    "position": 3,
+    "n": 200,
+    "missing": 0,
+    "mean": 19.239231833157202,
+    "lo": 18.454567873865024,
+    "hi": 20.03214064496542
+   },
+   {
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL",
+    "dir": "-",
+    "system": "small-117M-k40",
+    "system_label": "GPT-2 small, top-k 40",
+    "position": 4,
+    "n": 200,
+    "missing": 0,
+    "mean": 14.892924858148854,
+    "lo": 14.388290947839232,
+    "hi": 15.448378720788273
    }
   ],
   "adjacent": [
@@ -1838,6 +1903,62 @@
     "disjoint": false,
     "metric": "gzip_ratio",
     "label": "gzip ratio"
+   },
+   {
+    "upper": "human",
+    "lower": "xl-1542M-k40",
+    "upper_label": "WebText (human)",
+    "lower_label": "GPT-2 xl, top-k 40",
+    "n_upper": 200,
+    "n_lower": 200,
+    "acc": 0.118875,
+    "acc_lo": 0.0866475,
+    "acc_hi": 0.15146312499999998,
+    "disjoint": false,
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL"
+   },
+   {
+    "upper": "xl-1542M-k40",
+    "lower": "large-762M-k40",
+    "upper_label": "GPT-2 xl, top-k 40",
+    "lower_label": "GPT-2 large, top-k 40",
+    "n_upper": 200,
+    "n_lower": 200,
+    "acc": 0.443425,
+    "acc_lo": 0.38897750000000003,
+    "acc_hi": 0.5033568749999999,
+    "disjoint": false,
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL"
+   },
+   {
+    "upper": "large-762M-k40",
+    "lower": "medium-345M-k40",
+    "upper_label": "GPT-2 large, top-k 40",
+    "lower_label": "GPT-2 medium, top-k 40",
+    "n_upper": 200,
+    "n_lower": 200,
+    "acc": 0.6281,
+    "acc_lo": 0.568669375,
+    "acc_hi": 0.6846075,
+    "disjoint": true,
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL"
+   },
+   {
+    "upper": "medium-345M-k40",
+    "lower": "small-117M-k40",
+    "upper_label": "GPT-2 medium, top-k 40",
+    "lower_label": "GPT-2 small, top-k 40",
+    "n_upper": 200,
+    "n_lower": 200,
+    "acc": 0.248125,
+    "acc_lo": 0.200745625,
+    "acc_hi": 0.299160625,
+    "disjoint": false,
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL"
    }
   ],
   "order": [
@@ -2034,6 +2155,19 @@
     "kendall_lo": 0.2,
     "kendall_hi": 1.0,
     "p_perfect": 0.035,
+    "perfect": false
+   },
+   {
+    "metric": "ppl_gpt2",
+    "label": "GPT-2 PPL",
+    "dir": "-",
+    "spearman": -0.7,
+    "spearman_lo": -0.9,
+    "spearman_hi": -0.7,
+    "kendall": -0.6,
+    "kendall_lo": -0.8,
+    "kendall_hi": -0.6,
+    "p_perfect": 0.0,
     "perfect": false
    }
   ]

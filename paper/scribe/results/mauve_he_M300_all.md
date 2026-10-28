@@ -1,8 +1,7 @@
 # All per-text metrics on M300 (first 300 pairs)
 
 Analysis `mauve_he_M300_all` (4. MAUVE human evaluation (pairwise)). meta.py `pairs`.
-Inputs: SP/data/mauve_he/texts.jsonl, SP/data/mauve_he/pairs.jsonl (first 300), SP/run/human/mauve_he.v2.jsonl, SP/run/human/mauve_he.v2p.jsonl, SP/run/ts/mauve_he.ts.jsonl, SP/run/baselines/mauve_he_M300/stats.jsonl, SP/run/baselines/mauve_he/stats.jsonl.
-Not available yet (left out): R/mauve_he_M300/ppl_gpt2.jsonl, R/mauve_he_M300/detector.jsonl.
+Inputs: SP/data/mauve_he/texts.jsonl, SP/data/mauve_he/pairs.jsonl (first 300), SP/run/human/mauve_he.v2.jsonl, SP/run/human/mauve_he.v2p.jsonl, SP/run/ts/mauve_he.ts.jsonl, SP/run/baselines/mauve_he_M300/stats.jsonl, SP/run/baselines/mauve_he_M300/ppl_gpt2.jsonl, SP/run/baselines/mauve_he_M300/detector.jsonl, SP/run/baselines/mauve_he/stats.jsonl.
 MAUVE paper (Pillutla et al. 2021), published system-level Spearman between MAUVE (GPT-2-large features) and the Bradley-Terry scores over the 8 models, judgments with te > 25 s: q1 0.810, q2 0.857, q3 0.952.
 
 300 judged pairs over 596 texts in 9 systems (gpt2 p0.9, gpt2 p1.0, gpt2-large p0.95, gpt2-large p1.0, gpt2-medium p0.9, gpt2-medium p1.0, gpt2-xl p0.95, gpt2-xl p1.0, human). no time filter. Codes: 2a definitely A, 1a slightly A or tie, 1b slightly B, 2b definitely B; a 1a or 2a is a win for A (as in the MAUVE paper). Metric agreement: the metric prefers the text with the higher oriented score; exact metric ties and missing scores are dropped; Wilson 95% intervals. Bradley-Terry: penalised maximum likelihood (ridge 0.01), reported as 100 x log-strength centred at 0 (the MAUVE paper's scale). System-level correlations are between the metric's mean oriented score per system (over the unique texts of the pairs) and the BT scores, over the models (human excluded, as in the MAUVE paper) and over all systems. Bootstrap: 1000 resamples of the pairs, seed 20261028; each resample refits BT and recomputes the system means over the texts it contains.
@@ -29,6 +28,8 @@ Per-pair agreement with the people's choice:
 | diversity | 300 | 0.500 [0.444, 0.556] | 92 | 0.478 [0.379, 0.579] | 0 | 0 |
 | type-token ratio | 300 | 0.490 [0.434, 0.546] | 92 | 0.413 [0.318, 0.515] | 0 | 0 |
 | gzip ratio | 300 | 0.483 [0.427, 0.540] | 92 | 0.435 [0.338, 0.537] | 0 | 0 |
+| GPT-2 PPL | 300 | 0.520 [0.464, 0.576] | 92 | 0.587 [0.485, 0.682] | 0 | 0 |
+| GPT-2 detector P(human) | 300 | 0.550 [0.493, 0.605] | 92 | 0.576 [0.474, 0.672] | 0 | 0 |
 
 Bradley-Terry scores of the people's choices:
 
@@ -64,6 +65,8 @@ System level, metric means against BT scores (8 models; 9 systems with human):
 | diversity | −0.429 [−0.810, 0.501] | −0.286 [−0.643, 0.357] | −0.517 [−0.817, 0.267] | −0.389 [−0.667, 0.222] |
 | type-token ratio | −0.476 [−0.833, 0.405] | −0.357 [−0.643, 0.286] | −0.367 [−0.784, 0.283] | −0.278 [−0.611, 0.222] |
 | gzip ratio | −0.262 [−0.786, 0.453] | −0.143 [−0.643, 0.357] | −0.400 [−0.800, 0.217] | −0.278 [−0.667, 0.167] |
+| GPT-2 PPL | 0.571 [−0.357, 0.857] | 0.500 [−0.286, 0.714] | 0.617 [−0.167, 0.850] | 0.500 [−0.111, 0.722] |
+| GPT-2 detector P(human) | 0.476 [−0.619, 0.762] | 0.357 [−0.500, 0.573] | 0.633 [−0.233, 0.833] | 0.500 [−0.222, 0.667] |
 
 ## Question q2
 
@@ -87,6 +90,8 @@ Per-pair agreement with the people's choice:
 | diversity | 300 | 0.427 [0.372, 0.483] | 119 | 0.454 [0.367, 0.543] | 0 | 0 |
 | type-token ratio | 300 | 0.450 [0.395, 0.507] | 119 | 0.437 [0.351, 0.527] | 0 | 0 |
 | gzip ratio | 300 | 0.437 [0.382, 0.493] | 119 | 0.420 [0.335, 0.510] | 0 | 0 |
+| GPT-2 PPL | 300 | 0.540 [0.483, 0.596] | 119 | 0.546 [0.457, 0.633] | 0 | 0 |
+| GPT-2 detector P(human) | 300 | 0.570 [0.513, 0.625] | 119 | 0.571 [0.482, 0.657] | 0 | 0 |
 
 Bradley-Terry scores of the people's choices:
 
@@ -122,6 +127,8 @@ System level, metric means against BT scores (8 models; 9 systems with human):
 | diversity | −0.238 [−0.667, 0.476] | −0.214 [−0.502, 0.357] | −0.433 [−0.733, 0.201] | −0.333 [−0.611, 0.167] |
 | type-token ratio | −0.190 [−0.667, 0.452] | −0.286 [−0.500, 0.357] | −0.150 [−0.683, 0.350] | −0.222 [−0.500, 0.278] |
 | gzip ratio | −0.238 [−0.691, 0.452] | −0.214 [−0.571, 0.357] | −0.433 [−0.767, 0.167] | −0.333 [−0.611, 0.112] |
+| GPT-2 PPL | −0.024 [−0.524, 0.667] | 0.000 [−0.429, 0.500] | 0.117 [−0.317, 0.683] | 0.111 [−0.222, 0.500] |
+| GPT-2 detector P(human) | 0.381 [−0.215, 0.857] | 0.286 [−0.143, 0.714] | 0.567 [0.117, 0.883] | 0.444 [0.056, 0.778] |
 
 ## Question q3
 
@@ -145,6 +152,8 @@ Per-pair agreement with the people's choice:
 | diversity | 300 | 0.453 [0.398, 0.510] | 127 | 0.457 [0.373, 0.543] | 0 | 0 |
 | type-token ratio | 300 | 0.483 [0.427, 0.540] | 127 | 0.488 [0.403, 0.574] | 0 | 0 |
 | gzip ratio | 300 | 0.463 [0.408, 0.520] | 127 | 0.449 [0.365, 0.536] | 0 | 0 |
+| GPT-2 PPL | 300 | 0.533 [0.477, 0.589] | 127 | 0.520 [0.433, 0.605] | 0 | 0 |
+| GPT-2 detector P(human) | 300 | 0.563 [0.507, 0.618] | 127 | 0.598 [0.511, 0.680] | 0 | 0 |
 
 Bradley-Terry scores of the people's choices:
 
@@ -180,6 +189,8 @@ System level, metric means against BT scores (8 models; 9 systems with human):
 | diversity | 0.119 [−0.573, 0.691] | 0.071 [−0.500, 0.500] | −0.133 [−0.683, 0.367] | −0.111 [−0.556, 0.279] |
 | type-token ratio | 0.167 [−0.571, 0.667] | 0.143 [−0.429, 0.500] | 0.150 [−0.567, 0.483] | 0.111 [−0.444, 0.333] |
 | gzip ratio | −0.095 [−0.619, 0.643] | −0.071 [−0.500, 0.500] | −0.283 [−0.683, 0.300] | −0.222 [−0.556, 0.224] |
+| GPT-2 PPL | −0.310 [−0.667, 0.571] | −0.286 [−0.500, 0.429] | −0.133 [−0.417, 0.617] | −0.111 [−0.279, 0.444] |
+| GPT-2 detector P(human) | 0.524 [−0.357, 0.881] | 0.429 [−0.286, 0.714] | 0.667 [0.050, 0.900] | 0.556 [0.000, 0.778] |
 
 ## Agreement between workers
 

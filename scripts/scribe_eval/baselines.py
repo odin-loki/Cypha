@@ -723,7 +723,8 @@ def cmd_setlevel(args):
     write_json(d / f"{fam}.time.json", {
         "family": fam, "input": str(args.input), "ref": args.ref_file or ref_name, "group_field": gf,
         "n_texts": len(rows), "n_groups": len(groups), "subsets": K,
-        "truncate_tokens": L, "featurize_model": feat_model, "featurize_revision": hf_revision(feat_model),
+        "truncate_tokens": L, "featurize_model": None if args.no_mauve else feat_model,
+        "featurize_revision": None if args.no_mauve else hf_revision(feat_model),
         "mauve_settings": "mauve-text compute_mauve defaults (num_buckets auto = n/10, PCA 0.9 var, "
                           "5 k-means redos, 500 iters, scaling 5, seed 25), features passed in",
         "mauve_text_version": getattr(mauve_lib, "__version__", None) or _pkg_version("mauve-text"),

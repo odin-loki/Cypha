@@ -74,6 +74,11 @@ systems,gzip_ratio,gzip ratio,+,xl-1542M,GPT-2 xl,1,200,0,0.6442168701476814,0.6
 systems,gzip_ratio,gzip ratio,+,large-762M,GPT-2 large,2,200,0,0.6480396706672262,0.643680672534322,0.6522823410974736,,,,,,,,,,,,,,,,,,
 systems,gzip_ratio,gzip ratio,+,medium-345M,GPT-2 medium,3,200,0,0.6591844783911992,0.6548211035336511,0.6634929232558779,,,,,,,,,,,,,,,,,,
 systems,gzip_ratio,gzip ratio,+,small-117M,GPT-2 small,4,200,0,0.6602496073811723,0.6564494747824396,0.6640329852669979,,,,,,,,,,,,,,,,,,
+systems,ppl_gpt2,GPT-2 PPL,-,human,WebText (human),0,200,0,35.76624745780473,33.676952601845414,38.058477037216605,,,,,,,,,,,,,,,,,,
+systems,ppl_gpt2,GPT-2 PPL,-,xl-1542M,GPT-2 xl,1,200,0,74.70969563237568,66.00994279637777,86.10375574649595,,,,,,,,,,,,,,,,,,
+systems,ppl_gpt2,GPT-2 PPL,-,large-762M,GPT-2 large,2,200,0,78.00166720543355,70.09850265291172,86.86751919975315,,,,,,,,,,,,,,,,,,
+systems,ppl_gpt2,GPT-2 PPL,-,medium-345M,GPT-2 medium,3,200,0,176.67862961555147,148.38499898551214,214.48215948710654,,,,,,,,,,,,,,,,,,
+systems,ppl_gpt2,GPT-2 PPL,-,small-117M,GPT-2 small,4,200,0,103.5544327201735,91.42385071554497,115.39345364721544,,,,,,,,,,,,,,,,,,
 adjacent,scribe_v2,SCRIBE v2,,,,,,,,,,human,xl-1542M,WebText (human),GPT-2 xl,200,200,0.6482625,0.59461,0.6974818749999999,True,,,,,,,,
 adjacent,scribe_v2,SCRIBE v2,,,,,,,,,,xl-1542M,large-762M,GPT-2 xl,GPT-2 large,200,200,0.5602875,0.5058771875,0.6140671875,False,,,,,,,,
 adjacent,scribe_v2,SCRIBE v2,,,,,,,,,,large-762M,medium-345M,GPT-2 large,GPT-2 medium,200,200,0.5752125,0.5211296875,0.634655625,True,,,,,,,,
@@ -134,6 +139,10 @@ adjacent,gzip_ratio,gzip ratio,,,,,,,,,,human,xl-1542M,WebText (human),GPT-2 xl,
 adjacent,gzip_ratio,gzip ratio,,,,,,,,,,xl-1542M,large-762M,GPT-2 xl,GPT-2 large,200,200,0.4504375,0.3914734375,0.512465625,False,,,,,,,,
 adjacent,gzip_ratio,gzip ratio,,,,,,,,,,large-762M,medium-345M,GPT-2 large,GPT-2 medium,200,200,0.39135,0.3334090625,0.4508771875,False,,,,,,,,
 adjacent,gzip_ratio,gzip ratio,,,,,,,,,,medium-345M,small-117M,GPT-2 medium,GPT-2 small,200,200,0.4976125,0.4380240625,0.5549265625,False,,,,,,,,
+adjacent,ppl_gpt2,GPT-2 PPL,,,,,,,,,,human,xl-1542M,WebText (human),GPT-2 xl,200,200,0.782025,0.737993125,0.823075625,True,,,,,,,,
+adjacent,ppl_gpt2,GPT-2 PPL,,,,,,,,,,xl-1542M,large-762M,GPT-2 xl,GPT-2 large,200,200,0.533975,0.479720625,0.58958,False,,,,,,,,
+adjacent,ppl_gpt2,GPT-2 PPL,,,,,,,,,,large-762M,medium-345M,GPT-2 large,GPT-2 medium,200,200,0.73715,0.6879225,0.785426875,True,,,,,,,,
+adjacent,ppl_gpt2,GPT-2 PPL,,,,,,,,,,medium-345M,small-117M,GPT-2 medium,GPT-2 small,200,200,0.3476,0.29052249999999996,0.40335375,False,,,,,,,,
 order,scribe_v2,SCRIBE v2,+,,,,,,,,,,,,,,,,,,,0.8999999999999998,0.7,1.0,0.7999999999999999,0.6,1.0,0.052,False
 order,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",+,,,,,,,,,,,,,,,,,,,0.8999999999999998,0.7,1.0,0.7999999999999999,0.6,1.0,0.07,False
 order,scribe_v1,SCRIBE v1,+,,,,,,,,,,,,,,,,,,,0.8999999999999998,0.7,0.9,0.7999999999999999,0.6,0.8,0.001,False
@@ -149,3 +158,4 @@ order,seq_rep_4,seq-rep-4,-,,,,,,,,,,,,,,,,,,,-0.3,-1.0,0.1,-0.19999999999999998
 order,diversity,diversity,+,,,,,,,,,,,,,,,,,,,-0.9999999999999999,-1.0,-0.6,-0.9999999999999999,-1.0,-0.4,0.0,False
 order,ttr,type-token ratio,+,,,,,,,,,,,,,,,,,,,-0.7999999999999999,-1.0,-0.8,-0.6,-1.0,-0.6,0.0,False
 order,gzip_ratio,gzip ratio,+,,,,,,,,,,,,,,,,,,,-0.9999999999999999,-1.0,-0.8,-0.9999999999999999,-1.0,-0.6,0.0,False
+order,ppl_gpt2,GPT-2 PPL,-,,,,,,,,,,,,,,,,,,,0.8999999999999998,0.8,0.9,0.7999999999999999,0.6,0.8,0.0,False
