@@ -12,6 +12,7 @@ The design and the predictions were written before any run; the results are unde
 3. **Answers: no.** On dev it adds no right answer at a 2% wrong rate (0 → 0). With the fact shard it does harm: look-alike wrong answers pass the gate, or the shard's right answers break. The topical form of the expert finds the right article (*Markov was born in [[Ryazan]]. He ▸ studied…*), but the answer lies before the point it predicts from, and taking it from there would break rule 10. On the frozen test, read once for the recommended configuration, it answers 0 of 200 and the gate keeps nothing (wrong rate 0%, Wilson upper 1.9%).
 4. **Cost: inside PLAN §10.** An 85 MB index (wiki keys), built in about a minute; 0.8 ms a query, one query a word; Q/A p50 17 ms a question.
 5. **A4b, later the same day: a default.** Gated out of every answer, the expert is now on in `qa`, `sample` and `context8k`, and answering is not worse with it (the trie and trie + InfiniGram answers are byte-identical). It reads a 2.23 MB file that ships (32-d projected PPMI-SVD rows, fresh BPC −0.0002 against the full vectors), and adds 42 MB resident (was 142). `sample` text: SCRIBE v2 0.014 → 0.061, still word salad.
+6. **A4c, later the same day: distinct contexts, whole counts.** Each distinct two-word key is now stored once with all its occurrences, and the 8,192 nearest pool them. Fresh text over trie + InfiniGram + class: a further −0.0040 [−0.0048, −0.0032] (2.0275 → 2.0235); surface S and SCRIBE v2 up; answers unchanged. The expert's memory halves (40.0 → 19.3 MB). Pooling whole k-means lists instead (the "counts" form) was 6 MB and very fast but worse, and was removed.
 
 PLAN rule 10 holds by design. The expert is one more next-byte expert inside CyphaLM's mixture, used on all text and scored on BPC. Each neighbour proposes only the next byte, and only while its bytes agree with what has been written since the last word ended; at the next word the neighbours are found again. Lambdas are fit on held-out wiki bytes, never on questions. Nothing returns a stored string.
 
@@ -473,6 +474,144 @@ By temperature: T 0.6 0.013 → 0.072, T 0.8 0.020 → 0.074, T 1.0 0.010 → 0.
 
 ---
 
+## A4c: counts in place of neighbours (2026-10-28)
+
+HANDOFF §6.2 and A4b's "Next": "k keeps paying" (sweeps 2 and 3), so pool the stored contexts' continuations instead of keeping k live neighbours. The design, the rule and the predictions below were written before any A4c run.
+
+**Why it might pay.** The default takes the k = 2,048 nearest stored *occurrences*. A two-word context like *of the* occurs thousands of times, and its copies all have cosine 1, so they fill the 2,048 slots by themselves: the expert then sees a sample of that exact context's continuations and nothing similar. Rare contexts reach similar ones. Two ways to pool all occurrences instead:
+
+- **`mode=dedupe`.** Each distinct key is stored once (a two-word context with unknown words dropped from its mean), with all its occurrences. The k nearest *distinct* contexts are found as now, and each pools all its occurrences, weighted by exp((cos − cos_max) / T) as a neighbour is now. `norm=1` lets each distinct context vote once (its occurrences' shares) instead of with its count.
+- **`mode=counts`.** No neighbours at all: the query's `probe` nearest k-means lists (the inverted file's lists, `lists` of them), each pooling all its occurrences, weighted by exp((cos − cos_max) / T) on the centroid cosine. The keys are dropped after the build; only positions, centroids and the word rows stay.
+
+In both modes, each group's occurrences are sorted by the bytes that follow them, so the occurrences that agree with what has been written since the word ended (the tail) are one contiguous range: a binary search narrows it as the tail grows, and the next bytes are counted by binary search too. An occurrence still lives only through the word being written; nothing returns a stored string (PLAN rule 10). The default mode (`knn`) is unchanged.
+
+**Rules (fixed before the runs).**
+1. **Choice, on the holdout's second half** (`cls shape`, the class expert's default table, keys over wiki train, the shipped 32-d vectors; lambdas on the first half). Over trie + InfiniGram + class: the lowest BPC among the candidates below; candidates within 0.0005 of it go to the lowest scoring time per byte.
+2. **Default, on fresh text read once** for the chosen candidate, paired against the current default (`default`) in the same run (lambdas on the whole holdout). It replaces the default by either route:
+   - **better:** fresh trie + InfiniGram + class + sim lower, with P(paired change < 0) ≥ 0.95 over 4 KiB blocks (LCI); surface S of the change not entirely below 0; SCRIBE v2 of `sample` text not below the current default's 95% interval; inside PLAN §10 (Q/A p50 ≤ 200 ms, the language system ≤ 4 GB);
+   - **cheaper (the lossy rule):** fresh within +0.002 of the current default; surface S of the change not entirely below 0; SCRIBE v2 as above; and at least 25% less resident memory or scoring time per byte.
+3. **Answers (B4B rule 3):** `qa` in B4c's rule-3 configuration (C1L without `--copy` and `--cls`): the answer rows byte-identical with the new spec and with `default` (the expert is off inside answers, so this must hold by construction).
+4. **Code debt.** A mode that is neither the default nor needed by a report's numbers is removed, with its result recorded here.
+
+**Candidates** (all with the default's W = 2, equal word weights, 2,048 lists, the shipped vectors):
+- `default` (the reference, the first spec);
+- dedupe: k 512, 2,048, 8,192 at T 0.05; T 0.02 and 0.1 at k 2,048; `norm=1` at k 2,048, T 0.05;
+- counts: probe 1, 4, 16, 64 at T 0.05; T 0, 0.02, 0.1 at probe 16; and 512 lists with probe 4 and 16 at T 0.05.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| N1 | Distinct keys are 35–55% of the 1,059,311 occurrences |
+| N2 | dedupe's best candidate is better than `default` on the holdout by 0.000–0.006 over trie + IG + class: frequent contexts get their whole count, rare ones are unchanged |
+| N3 | dedupe's best T is lower than 0.05 or `norm=1` wins: with whole counts, frequent similar contexts swamp the exact one at T 0.05 |
+| N4 | counts' best candidate is worse than `default` by 0.000–0.010 on the holdout (a list is coarser than 2,048 nearest neighbours), and scores 2–4× faster per byte |
+| N5 | Resident memory: dedupe saves 12–20 MB of the expert's 42 MB; counts saves 30–36 MB |
+| N6 | The chosen candidate's fresh change against `default` is within ±0.003 of its holdout change |
+| N7 | Answers: byte-identical (rule 3) |
+| N8 | SCRIBE v2 of `sample` text with the chosen candidate is inside `default`'s interval (B4c: trie + sim + copy 0.056 [0.044, 0.068]) |
+
+### Step 1: the holdout sweep (rule 1)
+
+`cls shape` (the class table `shape:6:3:cp2`), keys over wiki train, the shipped 32-d vectors, one run, the specs in the order below. Over trie + InfiniGram + class (1.995766). The paired change is against `default` in the same run (4 KiB blocks, 2,000 resamples). Memory is the expert's index and rows (`bytes()`); scoring time is the whole holdout (1 MiB) on the shared machine. `default`'s lines equal those of `main` e8748a2's tool (run separately) to the last digit.
+
+| Spec (all `default,` + …) | trie + IG + cls + sim | Against `default` (95%), P(< 0) | Memory | Scoring 1 MiB | Query p50 / p99 | Live |
+|---|---:|---|---:|---:|---|---:|
+| (`default`: knn, k 2,048) | 1.940055 | | 40.0 MB | 130 s | 0.63 / 4.79 ms | 0.674 |
+| dedupe, k 512 | 1.939380 | −0.0007 [−0.0013, −0.0001], 0.99 | 19.3 MB | 49 s | 0.19 / 0.42 ms | 0.681 |
+| dedupe, k 2,048 | 1.935892 | −0.0042 [−0.0051, −0.0033], 1.00 | 19.3 MB | 120 s | 0.39 / 1.61 ms | 0.739 |
+| **dedupe, k 8,192** | **1.934176** | **−0.0059 [−0.0070, −0.0048], 1.00** | 19.3 MB | 319 s | 0.77 / 4.96 ms | 0.779 |
+| dedupe, T 0.02 | 1.945090 | +0.0050 [+0.0038, +0.0062], 0.00 | 19.3 MB | 143 s | 0.41 / 4.49 ms | 0.739 |
+| dedupe, T 0.1 | 1.941724 | +0.0017 [+0.0001, +0.0033], 0.02 | 19.3 MB | 116 s | 0.40 / 0.76 ms | 0.739 |
+| dedupe, `norm=1` | 1.952130 | +0.0121 [+0.0099, +0.0146], 0.00 | 19.3 MB | 110 s | 0.39 / 0.68 ms | 0.739 |
+| counts, probe 1 | 1.956363 | +0.0163 [+0.0150, +0.0177], 0.00 | 6.1 MB | 4 s | 0.015 / 0.059 ms | 0.610 |
+| counts, probe 4 | 1.950410 | +0.0104 [+0.0086, +0.0123], 0.00 | 6.1 MB | 6 s | 0.016 / 0.062 ms | 0.690 |
+| counts, probe 16 | 1.947715 | +0.0077 [+0.0055, +0.0100], 0.00 | 6.1 MB | 12 s | 0.019 / 0.066 ms | 0.754 |
+| counts, probe 64 | 1.945785 | +0.0057 [+0.0032, +0.0083], 0.00 | 6.1 MB | 34 s | 0.031 / 0.086 ms | 0.799 |
+| counts, probe 16, T 0 | 1.958960 | +0.0189 [+0.0155, +0.0228], 0.00 | 6.1 MB | 13 s | 0.019 / 0.068 ms | 0.754 |
+| counts, probe 16, T 0.02 | 1.952850 | +0.0128 [+0.0109, +0.0149], 0.00 | 6.1 MB | 12 s | 0.019 / 0.068 ms | 0.754 |
+| counts, probe 16, T 0.1 | 1.949606 | +0.0096 [+0.0070, +0.0124], 0.00 | 6.1 MB | 12 s | 0.019 / 0.068 ms | 0.754 |
+| counts, 512 lists, probe 4 | 1.954302 | +0.0142 [+0.0113, +0.0175], 0.00 | 6.1 MB | 5 s | 0.006 / 0.017 ms | 0.753 |
+| counts, 512 lists, probe 16 | 1.952665 | +0.0126 [+0.0094, +0.0162], 0.00 | 6.1 MB | 17 s | 0.009 / 0.044 ms | 0.799 |
+
+- **Distinct keys: 366,725 of 1,059,311 (34.6%).** Two words make few distinct contexts. Storing each once halves the expert (40.0 → 19.3 MB) and keeps every occurrence.
+- **Pooling whole counts pays.** At the same k = 2,048, dedupe is better by 0.0042: frequent contexts now count all their occurrences and still reach similar ones. k keeps paying here too (512 → 2,048 → 8,192: −0.0007, −0.0042, −0.0059). At k = 8,192 the 32 probed lists hold about 5,700 distinct keys on average, so the search returns most or all of them, and the index limits it (recall against an exact scan 0.65).
+- **T = 0.05 stays best** (0.02 and 0.1 lose), and **letting each context vote once loses** (+0.012): a context's count matters.
+- **counts is cheap but coarse.** It needs 6.1 MB and scores 4–38 times faster, but a whole list is too broad a neighbourhood: the best (probe 64) is 0.0057 worse than `default`.
+- **Rule 1 picks dedupe with k = 8,192** (1.934176); no other candidate is within 0.0005 of it.
+
+### Step 2: fresh text, read once, surface S and SCRIBE v2 (rule 2)
+
+`cls shape --sim default --sim default,mode=dedupe,k=8192 --sim-fresh --sim-surface`: the fresh text `[8388608, 9437184)` read once for the chosen spec, with `default` beside it for the paired change; lambdas on the whole holdout. Surface S on B4's protocol (200 holdout prompts, 400 bytes, T 0.8, nucleus 0.9, the same seed). Trie + InfiniGram + class on fresh text: 2.085255.
+
+| Read | `default` | dedupe, k 8,192 | Change (95%), P(< 0) |
+|---|---:|---:|---|
+| Fresh trie + IG + sim | 2.076665 | 2.059846 | |
+| **Fresh trie + IG + class + sim** | 2.027493 | **2.023522** | **−0.0040 [−0.0048, −0.0032], 1.00** |
+| Surface S, trie + sim | 0.8365 | 0.8828 | +0.0463 [+0.0367, +0.0558] |
+| Surface S, trie + class + sim | 0.9111 | 0.9292 | +0.0181 [+0.0107, +0.0252] |
+
+`sample` text (750 GEN lines, the defaults: trie + sim + copy), `scribe ladder --profile v2` as in B4c:
+
+| Text | Kept | SCRIBE v2 (95%) | Surface S | T 0.6 / 0.8 / 1.0 |
+|---|---:|---|---:|---|
+| `default` (B4c's run) | 613 | 0.056 [0.044, 0.068] | 0.790 | 0.066 / 0.063 / 0.039 |
+| dedupe, k 8,192 | 636 | **0.064 [0.052, 0.078]** | 0.845 | 0.083 / 0.076 / 0.033 |
+
+- **The "better" route holds.** Fresh BPC falls by 0.0040 with every resample below zero, surface S rises in both models, SCRIBE v2 is above `default`'s interval's lower end (and its mean higher), and the costs stay inside PLAN §10 (step 3).
+- **The gain carries to fresh text at two thirds of its holdout size** (−0.0040 against −0.0059).
+- **Text.** Surface S rises more than the BPC suggests (+0.046 over trie + sim): with whole counts the frequent contexts' next words are sampled from their real distribution, not from a 2,048-copy sample. SCRIBE v2 moves within its interval; the text is still word salad.
+
+### Step 3: answers and cost (rule 3, PLAN §10)
+
+`qa` in B4c's rule-3 configuration (C1L without `--copy` and `--cls`: class + sim + copy defaults), dev 130, against B4c's run with `default` (whose rows `main` reproduces):
+
+- **Answers: unchanged.** All 520 rows have the same answer and grade; the four in-answer features are identical; every gate, tally, abstention and risk-coverage line is identical. Only the `question_lp` column moves in every row: the question is outside the answer, so the expert reads it (as in A4b and B4c).
+- **Holdout (chat model, second half):** trie + IG + class + sim 1.922375 → **1.914913**; with copy 1.834525 → **1.826934** (−0.0076).
+- **Cost:** decode p50 (chat, trie + IG) 1.45 → 1.23 ms; `qa` peak 274.6 → 259.2 MB; time 736 → 765 s on the shared machine.
+
+| Cost | `default` | dedupe, k 8,192 |
+|---|---:|---:|
+| Expert's memory (index and rows) | 40.0 MB | **19.3 MB** |
+| Build (wiki keys) | 24–31 s | 15–18 s |
+| Query p50 / p99 (`cls`, fresh read) | 0.61 / 1.18 ms | 0.74 / 1.38 ms |
+| Scoring 2 MiB (`cls`, fresh read) | 219 s | 528 s |
+| `sample` (1,500 samples), time / peak | 306 s / 82.8 MB | 492 s / **79.1 MB** (558 s / 105.8 MB with the first build; step 4) |
+| `context8k`, time / peak | 723 s / 248.8 MB | 504 s / **234.8 MB** |
+
+`context8k` with the new default changes only its two expert lines: trie + IG + class + sim 1.9231 → **1.9159**, with copy 1.8345 → **1.8271**. Every other line, its 50 generated answers included, is identical to B4c's.
+
+### Step 4: the build, and parity
+
+- **The first dedupe build held every key at once** (1,059,311 × 32 bytes) and then copied the distinct ones, so `sample`'s peak, which the expert's build sets, rose 82.8 → 105.8 MB. The final build finds distinct keys with an open-addressing table as they are made, then sorts them by their bytes as the first build did. The index is identical: the new default reprints the sweep's dedupe line (1.964769 / 1.934176) and `sample` writes the same text byte for byte (only its `MODEL` line names the spec). `sample`'s peak is now 79.1 MB, below the old default's.
+- **`--no-sim` prints what `main` e8748a2 printed**, byte for byte: `qa` (rows and lines, latencies aside) and `sample` (both files and stdout).
+- **The vector file rebuilds byte for byte** with the new default (`cyphalm_trie simvec … --sim default,vec=ppmi_noeval,dim=32`: sha256 `c9fdf9ef…`), so `data/cyphalm/` is unchanged: the file holds the words' projected rows, which do not depend on the mode.
+- **`knn` at the same k.** `default,mode=knn` (k 8,192, each occurrence a neighbour) reads 1.936362 on the holdout: dedupe is better by 0.0022 [0.0016, 0.0028] at the same k, with half the query time (p50 0.75 against 1.50 ms). A4b's spec is `default,mode=knn,k=2048`: on the final tool it reprints `main`'s default lines to the last digit (1.984330 / 1.940055, the same table size, recall and live share).
+- **Selftest:** with every occurrence pooled at equal weight, knn and dedupe give the same distribution bit for bit at every position of a random text (a planted sort bug fails it).
+
+### Predictions, scored (A4c)
+
+| Prediction | Result | Score |
+|---|---|---|
+| N1. Distinct keys 35–55% | 366,725 of 1,059,311: 34.6% | **Miss** (just under) |
+| N2. dedupe's best better than `default` by 0.000–0.006 on the holdout | −0.0059 (k 8,192) | **Hit** |
+| N3. dedupe's best T is lower than 0.05, or `norm=1` wins | T 0.05 best; `norm=1` loses by 0.012 | **Miss** |
+| N4. counts' best worse by 0.000–0.010; 2–4× faster | +0.0057 (probe 64), 3.8× faster | **Hit** |
+| N5. dedupe saves 12–20 MB; counts 30–36 MB | 20.7 MB; 33.9 MB | **Miss** (dedupe saves a little more); **hit** |
+| N6. Fresh change within ±0.003 of the holdout change | −0.0040 against −0.0059 | **Hit** |
+| N7. Answers byte-identical | 520 / 520 answers and grades, all in-answer features and every gate line; the question's log-probability moves | **Hit** |
+| N8. SCRIBE v2 inside `default`'s interval | 0.064, inside [0.044, 0.068] | **Hit** |
+
+### Decisions (A4c)
+
+1. **The default spec is now dedupe with k = 8,192** (`default` = `W=2,sif=0,k=8192,drop=0,lists=2048,probe=32,src=wiki,mode=dedupe`), by the "better" route of rule 2: fresh text −0.0040 [−0.0048, −0.0032] over `default`, surface S up, SCRIBE v2 up, answers unchanged. `qa`, `sample` and `context8k` use it; the gate and `--no-sim` are as before.
+2. **It is also smaller:** the expert holds 19.3 MB instead of 40.0 MB, and no run's peak rises (`qa` 274.6 → 259.2 MB, `context8k` 248.8 → 234.8 MB, `sample` 82.8 → 79.1 MB). It scores more slowly where the expert reads every byte (`cls`: 2.4× per byte; `sample` 306 → 492 s); a query is 0.74 ms at p50, inside PLAN §10.
+3. **The counts mode and `norm=1` are removed** (rule 4). They lost on the holdout; their numbers reproduce at commit 2849b32. Whole lists are too coarse a neighbourhood, even at 64 probed.
+4. **`mode=knn` stays** for comparison: A4's and A4b's numbers use it (`default,mode=knn,k=2048` is A4b's default).
+5. **Next.** At k = 8,192 the 32 probed lists limit the search (recall 0.65): more probed lists is the next dial, at more time per query. Online keys are still open.
+
+---
+
 ## Reproduce
 
 The numbers come from `cyphalm_trie` at sha256 `8af187a0…b30948` plus this report's changes, built against the repository's headers of 2026-10-28 00:06. The parity lines (B4's holdout, fresh and surface numbers; the P2 grid's run B) reproduce to the last digit. The same changes merged onto the later `cyphalm_trie.cpp` (sha256 `02fc5318…68824b`, after the A1d/A2b, M7 and RAM work) and built against that day's later headers print the same holdout numbers for the chosen spec (1.987329 / 1.938765) and the same parity lines.
@@ -509,6 +648,15 @@ Q="qa enwik8 dolly.jsonl --dev bench/eval/t_qa_wiki_dev.tsv --leak bench/eval/t_
 # the frozen test, once
 ./cyphalm_trie qa enwik8 dolly.jsonl --dev bench/eval/t_qa_wiki_dev.tsv --test bench/eval/t_qa_wiki.tsv \
     --cls shape:6 --sim "$S,src=wiki" --out TEST.rows.tsv
+# A4c (from the repository root; enwik8 the 100 MB file). Step 1: the sweep (16 specs; the counts mode is at commit 2849b32)
+./cyphalm_trie cls enwik8 shape --sim default,mode=knn,k=2048 --sim default,mode=dedupe,k=512 --sim default,mode=dedupe,k=2048 \
+  --sim default,mode=dedupe,k=8192 --sim default,mode=dedupe,k=2048,T=0.02 --sim default,mode=dedupe,k=2048,T=0.1
+# step 2: fresh text once and surface S (A4c ran it before the default changed, as --sim default --sim default,mode=dedupe,k=8192)
+./cyphalm_trie cls enwik8 shape --sim default,mode=knn,k=2048 --sim default --sim-fresh --sim-surface
+./cyphalm_trie sample enwik8 dev.txt fresh.txt      # then scribe ladder --gen-trie dev.txt as in B4c
+# step 3: answers (B4c's rule-3 configuration), against --sim default,mode=knn,k=2048
+./cyphalm_trie qa enwik8 dolly.jsonl --dev bench/eval/t_qa_wiki_dev.tsv --leak bench/eval/t_qa_wiki.tsv --parse parse_dev_span.tsv \
+  --dk dk_mention.tsv --dk-ratio 0.20 --fam after --fam-stat ent_title --fam-train low --shard shard_facts.tsv --base a0_rows.tsv --out rows.tsv
 ```
 
 Output lines: `cls` prints `sim SPEC keys … recall`, `holdout2 …`, the gains with their intervals, `holdout2_split` (silent / word start / inside a word), `…_vs_first_sim` (paired against the first spec), and with the flags `fresh …` and `surface …`. `qa` adds `sim …` and `sim_lci …` (the holdout read), `SIM_LAT`, `LATENCY` (decode time a question) and `SIM_NB` (the three nearest stored contexts at each dev chat prompt). Run outputs, the sweep scripts and the vector files are in `/root/work/r2/` (`runs/`, `vec/`).
