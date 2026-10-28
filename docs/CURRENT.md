@@ -80,6 +80,7 @@ Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AN
 | Agreement with Wikidata on held-out subjects | 0.951, Wilson [0.909, 0.974] |
 | Raw-byte patterns (`--raw`, F2R) | 81 kept, 1,025 facts, Wikidata 0.950 [0.904, 0.974]; joined store 1,257 facts (0.951); raw frames + raw shard reach the dev answer for 7/13 eligible questions (cleaned frames + D4 shard: 4/13) |
 | Fact shard (`--shard`) | 2,001 question-form rows from 675 facts on pages in the 8 MiB slice; 0 equal to a dev or test question; dev reach 16 / 100 in-slice questions |
+| Gap map (`--gaps`, [S3/S5 report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md)) | 27,842 gaps (schema 26,333, contradiction 128, certainty 1,342, demand 39); 6,062 not parked; P(exists) Brier 0.0301, calibrated. CyphaLM's dev tags name their question's slot 0 / 750 |
 
 ## Corpus on D:
 
