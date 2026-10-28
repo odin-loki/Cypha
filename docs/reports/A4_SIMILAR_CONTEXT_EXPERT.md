@@ -334,6 +334,34 @@ The configuration recommended in Decisions 2, fixed before this read: the class 
 
 ---
 
+## A4b: the expert as a default (2026-10-28)
+
+Odin, 2026-10-28: "the similar context expert should be used as soon as it is useful." Five steps: a gate that keeps it out of answers; defaults where measurement supports them; a vector file small enough to ship; its RAM; a SCRIBE v2 read. The design, the rules and the predictions below were written before any of these runs.
+
+**The gate.** Inside an answer the expert is off: after the latest `Assistant: ` until the next `User: ` (a chat turn), and in `qa` from the end of the prompt on, which covers the wiki prompt form (`<question> `). Everywhere else, including the question and every BPC read, it stays on. `gate=0` in the spec turns the gate off, for comparison only.
+
+**The shipped vectors.** The keys use 64 principal components of the context means. A word's projection onto them is all a query needs, so the file holds each word's projected row as int8 with one scale per row (`simvec`, 3.8 MB at 64 dimensions, 2.2 MB at 32). A build over the text the projection came from then gives the same keys as the full vectors, up to the rows' int8 rounding. Built from the PPMI-SVD vectors without the evaluation bytes, over wiki train, with the chosen spec.
+
+**Rules (fixed before the runs).**
+- **Gate (step 1, B4B rule 3).** In A1d's C1L configuration with the class expert (`shape:6:2:f`, B4's two-order table, as A4 ran it): with the gated expert, raw right and the out-of-fold gate's kept right / wrong are not worse than without the expert, in every model; the holdout lines keep the expert's gain.
+- **Vector file (step 3, the lossy rule).** Fresh trie + InfiniGram + class + sim at most +0.002 above the full-precision vectors (2.026693 in A4), and the surface S interval of the change not entirely below 0. Of the files that pass, the smallest ships. If none passes, nothing is committed.
+- **Defaults (step 2).** A path gets the expert by default when it improves that path's own reads (BPC with LCI ≥ 0.95, or surface S) and does not worsen its answers.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| D1 | With the gate, the trie and trie + InfiniGram answers are byte-identical to the run without the expert (inside an answer the distribution is the same); raw right and the kept right / wrong are equal in those models. The copy models may differ by at most one answer (their lambdas are fit with the expert present). The question's log-probability changes, so a gate on that feature could move |
+| D2 | Without the gate (`gate=0`), the C1L shard configuration loses: trie + InfiniGram raw right falls by 1–4, or the out-of-fold gate keeps fewer right or more wrong (as A4's QF and QFW) |
+| D3 | The holdout lines are the same with and without the gate, and the expert gains 0.07–0.08 over trie + InfiniGram + class (A4's QW: 0.075) |
+| V1 | 64-d int8 file: fresh BPC within +0.0005 of the full vectors; surface S unchanged (interval spans 0) |
+| V2 | 32-d int8 file: fresh BPC within +0.002 (A4's holdout: +0.0002 to +0.0007 for 32 dimensions); surface S unchanged. It ships |
+| C1 | `context8k`: the expert lowers trie + InfiniGram (cap 8192) on the holdout's second half by 0.06–0.09 |
+| C2 | `sample`: trie + sim text scores higher on SCRIBE v2 than trie text, by +0.00 to +0.05 on the mean (word salad stays word salad; trie text scores 0.017 in SCRIBE_V2) |
+| M1 | RAM, after the cuts: the default expert adds about 0.04 GB resident in `qa` (32-d keys) and at most 0.1 GB to the peak; before the cuts (A4's code and float vectors) about 0.18 GB to the peak |
+
+---
+
 ## Reproduce
 
 The numbers come from `cyphalm_trie` at sha256 `8af187a0…b30948` plus this report's changes, built against the repository's headers of 2026-10-28 00:06. The parity lines (B4's holdout, fresh and surface numbers; the P2 grid's run B) reproduce to the last digit. The same changes merged onto the later `cyphalm_trie.cpp` (sha256 `02fc5318…68824b`, after the A1d/A2b, M7 and RAM work) and built against that day's later headers print the same holdout numbers for the chosen spec (1.987329 / 1.938765) and the same parity lines.
