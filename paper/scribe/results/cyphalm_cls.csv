@@ -1,0 +1,29 @@
+table,metric,label,dir,rung,rung_label,position,n,missing,mean,lo,hi,upper,lower,upper_label,lower_label,n_upper,n_lower,acc,acc_lo,acc_hi,disjoint,pass,adjacent,passed,adjacent_pairs
+rungs,scribe_v2,SCRIBE v2,+,human,held-out human,0,169,0,0.7698802911242603,0.7179433090236687,0.8188424094230767,,,,,,,,,,,,,,
+rungs,scribe_v2,SCRIBE v2,+,trie+cls:shape,trie+cls:shape,1,162,0,0.0023715656296296296,0.0019407789675925926,0.00280070521558642,,,,,,,,,,,,,,
+rungs,scribe_v2,SCRIBE v2,+,trie,trie samples (pooled),2,162,0,0.01444671257654321,0.006179885838117284,0.02680942891327159,,,,,,,,,,,,,,
+rungs,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",+,human,held-out human,0,169,0,0.7563169622485207,0.7086781684822485,0.8024790572189349,,,,,,,,,,,,,,
+rungs,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",+,trie+cls:shape,trie+cls:shape,1,162,0,0.0026722280493827162,0.0021385133143518517,0.003214642301388889,,,,,,,,,,,,,,
+rungs,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",+,trie,trie samples (pooled),2,162,0,0.01886090403641975,0.00847285157447531,0.03290711555555555,,,,,,,,,,,,,,
+rungs,scribe_v1,SCRIBE v1,+,human,held-out human,0,169,0,0.45557163739644974,0.4165584612174556,0.49588745972337267,,,,,,,,,,,,,,
+rungs,scribe_v1,SCRIBE v1,+,trie+cls:shape,trie+cls:shape,1,162,0,0.06726695043209877,0.05415019930709878,0.08105839236882714,,,,,,,,,,,,,,
+rungs,scribe_v1,SCRIBE v1,+,trie,trie samples (pooled),2,162,0,0.026581692746913584,0.020135256338734572,0.03481956429320987,,,,,,,,,,,,,,
+rungs,surface_s,surface S,+,human,held-out human,0,169,0,0.9043990887573966,0.8906068899408285,0.9166175156804733,,,,,,,,,,,,,,
+rungs,surface_s,surface S,+,trie+cls:shape,trie+cls:shape,1,162,0,0.900539172839506,0.8922666155864197,0.9086210694444444,,,,,,,,,,,,,,
+rungs,surface_s,surface S,+,trie,trie samples (pooled),2,162,0,0.74890112345679,0.7369196944444444,0.7620635277777779,,,,,,,,,,,,,,
+pairs,scribe_v2,SCRIBE v2,,,,,,,,,,human,trie+cls:shape,held-out human,trie+cls:shape,169,162,0.9996712689020382,0.9989033165315218,1.0,True,True,True,,
+pairs,scribe_v2,SCRIBE v2,,,,,,,,,,human,trie,held-out human,trie samples (pooled),169,162,0.9929140185550442,0.985754072613047,0.9978093724888596,True,,False,,
+pairs,scribe_v2,SCRIBE v2,,,,,,,,,,trie+cls:shape,trie,trie+cls:shape,trie samples (pooled),162,162,0.3986816034141137,0.3363416399939033,0.4623237692424935,False,False,True,,
+pairs,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",,,,,,,,,,human,trie+cls:shape,held-out human,trie+cls:shape,169,162,0.9994521148367302,0.998392870187742,1.0,True,True,True,,
+pairs,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",,,,,,,,,,human,trie,held-out human,trie samples (pooled),169,162,0.9911973117101323,0.983048433048433,0.9971537365768135,True,,False,,
+pairs,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",,,,,,,,,,trie+cls:shape,trie,trie+cls:shape,trie samples (pooled),162,162,0.3949855204999238,0.3325636335924402,0.4570625666819082,False,False,True,,
+pairs,scribe_v1,SCRIBE v1,,,,,,,,,,human,trie+cls:shape,held-out human,trie+cls:shape,169,162,0.9027686463583899,0.8624744320257142,0.93656220322887,True,False,True,,
+pairs,scribe_v1,SCRIBE v1,,,,,,,,,,human,trie,held-out human,trie samples (pooled),169,162,0.9579589451384323,0.9354563883410038,0.9778316531521659,True,,False,,
+pairs,scribe_v1,SCRIBE v1,,,,,,,,,,trie+cls:shape,trie,trie+cls:shape,trie samples (pooled),162,162,0.7922572778539857,0.7397767108672458,0.842603071178174,True,False,True,,
+pairs,surface_s,surface S,,,,,,,,,,human,trie+cls:shape,held-out human,trie+cls:shape,169,162,0.5716451165169114,0.5052386953027979,0.6328119292862883,False,False,True,,
+pairs,surface_s,surface S,,,,,,,,,,human,trie,held-out human,trie samples (pooled),169,162,0.9172510775074878,0.8808751552341295,0.9464204835999708,True,,False,,
+pairs,surface_s,surface S,,,,,,,,,,trie+cls:shape,trie,trie+cls:shape,trie samples (pooled),162,162,0.9436061575979271,0.918342287761012,0.9643756668190825,True,False,True,,
+summary,scribe_v2,SCRIBE v2,+,,,,,,,,,,,,,,,,,,,,,1,2
+summary,scribe_v2ts,"SCRIBE v2, two-sided (exploratory)",+,,,,,,,,,,,,,,,,,,,,,1,2
+summary,scribe_v1,SCRIBE v1,+,,,,,,,,,,,,,,,,,,,,,0,2
+summary,surface_s,surface S,+,,,,,,,,,,,,,,,,,,,,,0,2

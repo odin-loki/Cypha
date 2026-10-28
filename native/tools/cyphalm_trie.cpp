@@ -34,13 +34,15 @@
 //        trie_context_8k: InfiniGram (order up to 8192) mixed with the trie, BPC at five
 //        caps, matched-length histogram, 50 questions with 30 Dolly turns held out.
 //   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600]
-//        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for scribe_ladder.
+//        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for `scribe ladder --gen-trie`.
 //   cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]
 //        B4 (docs/reports/B4_CLASS_CONTEXT_EXPERT.md): the class-context expert (class_context.hpp) over the
 //        bpc model, each spec paired against the model without it: holdout second-half BPC (lambdas on the
 //        first half), fresh-text BPC on [sample, sample + 1 MiB) (lambdas on the whole holdout), and surface S
 //        of 400-byte samples from 200 holdout prompts, with block-bootstrap intervals; later specs are also
 //        compared with the first. TABLE is word<TAB>class (e.g. E1 tags); "shape" is shape classes only.
+//        --out FILE writes the samples (systems trie, trie+cls:SPEC) and the human continuations (human) as JSON
+//        lines for the SCRIBE model ladder.
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
 //      [--fam-train stat|outcome] [--fam-only] [--copy] [--r3 PATTERNS.tsv] [--shard F.tsv] [--shard2 F.tsv]
@@ -1183,18 +1185,59 @@ int cmd_cls(const Args& a) {
     for (auto& ph : pr) d4 += cypha::eval::scribe_detail::distinct4_bytes(ph.second), lp8 += cypha::eval::scribe_detail::loop8_bytes(ph.second);
     ref.ref_d4[1] = d4 / static_cast<double>(pr.size());
     ref.ref_loop[1] = lp8 / static_cast<double>(pr.size());
-    auto surface = [&](const ClassContext* cc, const double* lam) {
+    // --out FILE: the samples (and the human continuations) as JSON lines, for `scribe prepare --mode wikiraw`.
+    std::ofstream samples_out;
+    if (!a.out.empty()) samples_out.open(a.out);
+    auto json_str = [](const std::string& x) {
+        std::string o = "\"";
+        for (std::size_t i = 0; i < x.size();) {
+            const unsigned char c = static_cast<unsigned char>(x[i]);
+            if (c >= 0x80) {
+                const std::size_t L = cypha::eval::scribe_detail::utf8_seq_len(x, i);
+                if (L == 0) {
+                    o += "\\ufffd";
+                    ++i;
+                } else {
+                    o.append(x, i, L);
+                    i += L;
+                }
+                continue;
+            }
+            if (c == '"' || c == '\\') {
+                o.push_back('\\');
+                o.push_back(static_cast<char>(c));
+            } else if (c < 0x20) {
+                char b[8];
+                std::snprintf(b, sizeof b, "\\u%04x", c);
+                o += b;
+            } else {
+                o.push_back(static_cast<char>(c));
+            }
+            ++i;
+        }
+        return o + "\"";
+    };
+    auto write_sample = [&](const std::string& system, std::size_t i, const std::string& text) {
+        if (!samples_out) return;
+        samples_out << "{\"id\":" << json_str("cls/" + system + "/" + std::to_string(i)) << ",\"set\":\"cls\",\"system\":" << json_str(system)
+                    << ",\"prompt\":" << json_str(pr[i].first) << ",\"text\":" << json_str(text) << "}\n";
+    };
+    auto surface = [&](const ClassContext* cc, const double* lam, const std::string& system) {
         std::vector<double> v;
         for (std::size_t i = 0; i < pr.size(); ++i) {
             const std::uint64_t seed = 1000003ull * (i + 1) + 2ull * 7919ull;
-            v.push_back(cypha::eval::surface_S(
-                ref, sample_with_class(model, w, cfg.train, cc, lam, pr[i].first, nbytes, static_cast<std::uint32_t>(seed ^ (seed >> 32)))));
+            const std::string smp = sample_with_class(model, w, cfg.train, cc, lam, pr[i].first, nbytes, static_cast<std::uint32_t>(seed ^ (seed >> 32)));
+            write_sample(system, i, smp);
+            v.push_back(cypha::eval::surface_S(ref, smp));
         }
         return v;
     };
     std::vector<double> s_human;
-    for (auto& ph : pr) s_human.push_back(cypha::eval::surface_S(ref, ph.second));
-    const auto s_trie = surface(nullptr, nullptr);
+    for (std::size_t i = 0; i < pr.size(); ++i) {
+        s_human.push_back(cypha::eval::surface_S(ref, pr[i].second));
+        write_sample("human", i, pr[i].second);
+    }
+    const auto s_trie = surface(nullptr, nullptr, "trie");
     std::printf("surface prompts %zu human %.4f trie %.4f\n", pr.size(), mean(s_human), mean(s_trie));
 
     std::vector<double> first_f, first_s;
@@ -1237,7 +1280,7 @@ int cmd_cls(const Args& a) {
         print_boot("spec " + spec + " holdout2_gain_over_trie_ig", block_boot(gain(hi, h_i), 4096, 2000, 7));
         print_boot("spec " + spec + " fresh_gain_over_trie", block_boot(gain(ft, f_t), 4096, 4000, 11));
         print_boot("spec " + spec + " fresh_gain_over_trie_ig", block_boot(gain(fi, f_i), 4096, 4000, 11));
-        const auto sv = surface(cc.get(), lt_h);
+        const auto sv = surface(cc.get(), lt_h, "trie+cls:" + spec);
         std::printf("spec %s surface %.4f\n", spec.c_str(), mean(sv));
         print_boot("spec " + spec + " surface_gain_over_trie", block_boot(gain(sv, s_trie), 1, 4000, 5));
         if (sp == 1) {

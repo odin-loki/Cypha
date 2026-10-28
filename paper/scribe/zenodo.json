@@ -1,0 +1,33 @@
+{
+  "title": "SCRIBE: Scoring Generated Text Against Human Text With Counts Alone",
+  "upload_type": "publication",
+  "publication_type": "preprint",
+  "creators": [
+    {
+      "name": "Loch, Odin"
+    }
+  ],
+  "description": "SCRIBE is a metric for generated text that uses no neural network. It computes about twenty statistics of a text from counts. They cover how much each word's context predicts it beyond its frequency, for words and for word classes; whether the words are real; whether sentences are well formed; how much the sentences share vocabulary and topic, using count-based word vectors; repetition; copying of the training text; and overlap with a prompt. Each statistic is read as a robust z-score against human reference text of the same genre and length. Lexical and syntactic failures count as categorical, saturating evidence, coherence as graded evidence, and repetition only beyond what 99% of human samples show. SCRIBE v2 was designed on development text and then frozen. On fresh Wikipedia text it is the only per-text metric tested that passes all five pairs of a control ladder: human text, then sentences shuffled across documents, words shuffled within sentences, random words, random letters and a repeated phrase, with pairwise accuracies of 0.975 to 1.000. GPT-2 perplexity, a CoLA acceptability classifier, embedding coherence and the usual diversity statistics each pass one or two pairs. SCRIBE v2 also passes on web text, and 3 of 5 pairs on novels. It follows seven of nine held-out kinds of damage and catches copying, prompt echo, keyword stuffing and loops. In its prompted form it separates the right answer to a Dolly question from a fluent answer to another question (accuracy 0.961). On HANNA stories it correlates with human coherence ratings (Kendall 0.194) better than BLEU and ROUGE-L and as well as ChatGPT, though there a plain repetition count does as well. It is stable across seeds, across training-text sizes from 8 to 128 MiB, and with 100 or more reference samples per length bucket. It scores about 1,000 texts per second on one CPU core with 0.4 GB of memory. Its blind spots are sentence order, truncated sentences, factual errors, and text that is more predictable than human text: it rates GPT-2 top-k samples above human web text, and it cannot rank models that all write word salad. Of twenty predictions registered before testing, eight hit, seven missed and five could not be tested as registered.",
+  "keywords": [
+    "natural language generation",
+    "evaluation metrics",
+    "text quality",
+    "reference-free evaluation",
+    "meta-evaluation",
+    "n-gram models",
+    "count-based methods",
+    "control ladders"
+  ],
+  "license": "cc-by-4.0",
+  "version": "1.0",
+  "language": "eng",
+  "publication_date": "2026-10-28",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/odin-loki/Cypha",
+      "relation": "isSupplementedBy",
+      "resource_type": "software"
+    }
+  ],
+  "notes": "Code (AGPL-3.0, with a commercial licence) is in the repository github.com/odin-loki/Cypha: native/include/cypha/eval/scribe.hpp, native/tools/scribe.cpp, scripts/scribe_eval/. The bundle holds the paper and every result table (Markdown, CSV and JSON) in results/. No third-party text is redistributed; scripts/scribe_eval/data.py downloads and prepares every dataset."
+}

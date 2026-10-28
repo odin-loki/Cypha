@@ -1,0 +1,723 @@
+[
+ {
+  "name": "wiki_fresh_scribe",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "SCRIBE v2, v1, surface S and the v2 deviance parts; 500 texts per rung",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "wiki_fresh_scribe.md",
+   "wiki_fresh_scribe.csv",
+   "wiki_fresh_scribe.json"
+  ],
+  "n": 4746,
+  "n_metrics": 9,
+  "missing_optional": [],
+  "seconds": 9.845978736877441,
+  "checks": [
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "scribe_v2",
+    "pair": "human > sent_shuffled",
+    "expected": 0.975,
+    "got": 0.974532,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "scribe_v2",
+    "pair": "sent_shuffled > word_shuffled",
+    "expected": 0.999,
+    "got": 0.998856,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "scribe_v2",
+    "pair": "word_shuffled > random_lexicon",
+    "expected": 0.998,
+    "got": 0.99834,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "scribe_v2",
+    "pair": "random_lexicon > random_letters",
+    "expected": 0.998,
+    "got": 0.99807,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "scribe_v2",
+    "pair": "random_letters > repeated_phrase",
+    "expected": 1.0,
+    "got": 1.0,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "surface_s",
+    "pair": "human > sent_shuffled",
+    "expected": 0.627,
+    "got": 0.627198,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "surface_s",
+    "pair": "sent_shuffled > word_shuffled",
+    "expected": 0.341,
+    "got": 0.341256,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "surface_s",
+    "pair": "word_shuffled > random_lexicon",
+    "expected": 0.75,
+    "got": 0.750104,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "surface_s",
+    "pair": "random_lexicon > random_letters",
+    "expected": 1.0,
+    "got": 1.0,
+    "ok": true
+   },
+   {
+    "analysis": "wiki_fresh_scribe",
+    "metric": "surface_s",
+    "pair": "random_letters > repeated_phrase",
+    "expected": 0.559,
+    "got": 0.559388,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "name": "wiki_fresh_W_all",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "All per-text metrics on subset W (150 texts per rung)",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "wiki_fresh_W_all.md",
+   "wiki_fresh_W_all.csv",
+   "wiki_fresh_W_all.json"
+  ],
+  "n": 1650,
+  "n_metrics": 20,
+  "missing_optional": [],
+  "seconds": 4.032414197921753,
+  "checks": []
+ },
+ {
+  "name": "wiki_fresh_W60_judge",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "The LLM judge and every other metric on W60 (60 texts per rung)",
+  "cmd": "ladder",
+  "status": "skipped",
+  "why": "missing: R/wiki_fresh_W60/judge_*.jsonl"
+ },
+ {
+  "name": "wiki_fresh_W_setlevel",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "Set-level metrics on W, one set per rung (q: 100 texts per rung; MAUVE with GPT-2 small features against 100 other human texts)",
+  "cmd": "setladder",
+  "status": "ran",
+  "outputs": [
+   "wiki_fresh_W_setlevel.md",
+   "wiki_fresh_W_setlevel.csv",
+   "wiki_fresh_W_setlevel.json"
+  ],
+  "n": 8,
+  "n_metrics": 3,
+  "missing_optional": [],
+  "seconds": 0.08375668525695801,
+  "checks": []
+ },
+ {
+  "name": "wiki_fresh_setlevel",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "Set-level metrics, one set of 250 texts per rung (MAUVE with GPT-2-large features, reference: 250 other human texts)",
+  "cmd": "setladder",
+  "status": "skipped",
+  "why": "missing: SP/run/baselines/wiki_fresh_mauve/setlevel.jsonl"
+ },
+ {
+  "name": "wiki_fresh_setlevel_K5",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "Set-level metrics on 5 disjoint subsets of 50 texts per rung",
+  "cmd": "setladder",
+  "status": "skipped",
+  "why": "missing: SP/run/baselines/wiki_fresh_mauve/setlevel_K5.jsonl"
+ },
+ {
+  "name": "wiki_fresh_trie",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "Where the order-4 trie falls: P(trie > control rung), SCRIBE on all texts",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "wiki_fresh_trie.md",
+   "wiki_fresh_trie.full.md",
+   "wiki_fresh_trie.csv",
+   "wiki_fresh_trie.json"
+  ],
+  "n": 4746,
+  "n_metrics": 9,
+  "missing_optional": [],
+  "seconds": 8.219714164733887,
+  "checks": []
+ },
+ {
+  "name": "wiki_fresh_W_trie",
+  "section": "1. Fresh Wikipedia control ladder",
+  "title": "Where the trie falls, all per-text metrics on W",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "wiki_fresh_W_trie.md",
+   "wiki_fresh_W_trie.full.md",
+   "wiki_fresh_W_trie.csv",
+   "wiki_fresh_W_trie.json"
+  ],
+  "n": 1650,
+  "n_metrics": 20,
+  "missing_optional": [],
+  "seconds": 3.587390899658203,
+  "checks": []
+ },
+ {
+  "name": "genre_web",
+  "section": "2. Genre control ladders",
+  "title": "Web ladder, each genre with its own pack and reference, SCRIBE only",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "genre_web.md",
+   "genre_web.csv",
+   "genre_web.json"
+  ],
+  "n": 3500,
+  "n_metrics": 3,
+  "missing_optional": [],
+  "seconds": 5.043930292129517,
+  "checks": []
+ },
+ {
+  "name": "genre_books",
+  "section": "2. Genre control ladders",
+  "title": "Books ladder, each genre with its own pack and reference, SCRIBE only",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "genre_books.md",
+   "genre_books.csv",
+   "genre_books.json"
+  ],
+  "n": 3500,
+  "n_metrics": 3,
+  "missing_optional": [],
+  "seconds": 9.36051869392395,
+  "checks": []
+ },
+ {
+  "name": "dose_scribe",
+  "section": "3. Held-out corruptions, dose-response",
+  "title": "SCRIBE on all corruptions (9 families x 6 strengths x 200 texts)",
+  "cmd": "dose",
+  "status": "ran",
+  "outputs": [
+   "dose_scribe.md",
+   "dose_scribe.csv",
+   "dose_scribe.json"
+  ],
+  "n": 10800,
+  "n_metrics": 3,
+  "missing_optional": [],
+  "seconds": 7.614979028701782,
+  "checks": []
+ },
+ {
+  "name": "dose_S20_all",
+  "section": "3. Held-out corruptions, dose-response",
+  "title": "All per-text metrics on S20 (every family and strength of the first 20 sources)",
+  "cmd": "dose",
+  "status": "ran",
+  "outputs": [
+   "dose_S20_all.md",
+   "dose_S20_all.csv",
+   "dose_S20_all.json"
+  ],
+  "n": 1080,
+  "n_metrics": 20,
+  "missing_optional": [],
+  "seconds": 2.0524001121520996,
+  "checks": []
+ },
+ {
+  "name": "dose_S40_all",
+  "section": "3. Held-out corruptions, dose-response",
+  "title": "All per-text metrics on S40 (earlier plan; runs if its files appear)",
+  "cmd": "dose",
+  "status": "skipped",
+  "why": "no baseline output yet: R/corrupt_S40/*"
+ },
+ {
+  "name": "dose_S10_judge",
+  "section": "3. Held-out corruptions, dose-response",
+  "title": "The LLM judge and every other metric on S10 (first 10 sources)",
+  "cmd": "dose",
+  "status": "skipped",
+  "why": "missing: R/corrupt_S10/judge_*.jsonl"
+ },
+ {
+  "name": "mauve_he_scribe",
+  "section": "4. MAUVE human evaluation (pairwise)",
+  "title": "SCRIBE on all 3,240 judgments",
+  "cmd": "pairs",
+  "status": "ran",
+  "outputs": [
+   "mauve_he_scribe.md",
+   "mauve_he_scribe.csv",
+   "mauve_he_scribe.json"
+  ],
+  "n": 6116,
+  "n_metrics": 5,
+  "missing_optional": [],
+  "seconds": 9.158531188964844,
+  "checks": []
+ },
+ {
+  "name": "mauve_he_scribe_te25",
+  "section": "4. MAUVE human evaluation (pairwise)",
+  "title": "SCRIBE, judgments with an estimated answer time over 25 s only (the MAUVE paper's filter; times from the raw CSV)",
+  "cmd": "pairs",
+  "status": "ran",
+  "outputs": [
+   "mauve_he_scribe_te25.md",
+   "mauve_he_scribe_te25.csv",
+   "mauve_he_scribe_te25.json"
+  ],
+  "n": 6116,
+  "n_metrics": 5,
+  "missing_optional": [],
+  "seconds": 4.123142242431641,
+  "checks": []
+ },
+ {
+  "name": "mauve_he_M300_all",
+  "section": "4. MAUVE human evaluation (pairwise)",
+  "title": "All per-text metrics on M300 (first 300 pairs)",
+  "cmd": "pairs",
+  "status": "ran",
+  "outputs": [
+   "mauve_he_M300_all.md",
+   "mauve_he_M300_all.csv",
+   "mauve_he_M300_all.json"
+  ],
+  "n": 596,
+  "n_metrics": 18,
+  "missing_optional": [],
+  "seconds": 2.33577561378479,
+  "checks": []
+ },
+ {
+  "name": "mauve_he_M_all",
+  "section": "4. MAUVE human evaluation (pairwise)",
+  "title": "All per-text metrics on M (first 1,000 pairs; only stats under the plan in force)",
+  "cmd": "pairs",
+  "status": "ran",
+  "outputs": [
+   "mauve_he_M_all.md",
+   "mauve_he_M_all.csv",
+   "mauve_he_M_all.json"
+  ],
+  "n": 1962,
+  "n_metrics": 16,
+  "missing_optional": [],
+  "seconds": 3.087033987045288,
+  "checks": []
+ },
+ {
+  "name": "mauve_he_M300_judge",
+  "section": "4. MAUVE human evaluation (pairwise)",
+  "title": "The LLM judge and every other metric on M300 (first 300 pairs)",
+  "cmd": "pairs",
+  "status": "skipped",
+  "why": "missing: R/mauve_he_M300/judge_*.jsonl"
+ },
+ {
+  "name": "hanna_corr",
+  "section": "5. Human ratings (HANNA, OpenMEVA)",
+  "title": "HANNA, 6 criteria, with and without human stories: SCRIBE, our baselines, 13 shipped automatic metrics and 4 shipped LLM judges",
+  "cmd": "corr",
+  "status": "ran",
+  "outputs": [
+   "hanna_corr.md",
+   "hanna_corr.csv",
+   "hanna_corr.json"
+  ],
+  "n": 1056,
+  "n_metrics": 34,
+  "missing_optional": [],
+  "seconds": 32.083292722702026,
+  "checks": []
+ },
+ {
+  "name": "hanna_corr_full",
+  "section": "5. Human ratings (HANNA, OpenMEVA)",
+  "title": "HANNA, SCRIBE against all 72 shipped automatic metrics",
+  "cmd": "corr",
+  "status": "ran",
+  "outputs": [
+   "hanna_corr_full.md",
+   "hanna_corr_full.csv",
+   "hanna_corr_full.json"
+  ],
+  "n": 1056,
+  "n_metrics": 75,
+  "missing_optional": [],
+  "seconds": 64.90591335296631,
+  "checks": []
+ },
+ {
+  "name": "mans_roc_corr",
+  "section": "5. Human ratings (HANNA, OpenMEVA)",
+  "title": "OpenMEVA MANS ROC, overall quality (5 ratings per story)",
+  "cmd": "corr",
+  "status": "ran",
+  "outputs": [
+   "mans_roc_corr.md",
+   "mans_roc_corr.csv",
+   "mans_roc_corr.json"
+  ],
+  "n": 1000,
+  "n_metrics": 17,
+  "missing_optional": [],
+  "seconds": 2.169987916946411,
+  "checks": []
+ },
+ {
+  "name": "mans_wp_corr",
+  "section": "5. Human ratings (HANNA, OpenMEVA)",
+  "title": "OpenMEVA MANS WP, overall quality (5 ratings per story)",
+  "cmd": "corr",
+  "status": "ran",
+  "outputs": [
+   "mans_wp_corr.md",
+   "mans_wp_corr.csv",
+   "mans_wp_corr.json"
+  ],
+  "n": 1000,
+  "n_metrics": 17,
+  "missing_optional": [],
+  "seconds": 2.3631725311279297,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_pure_scribe",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, pure sampling: human > xl > large > medium > small, SCRIBE on 1,000 texts per system",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_pure_scribe.md",
+   "gpt2out_pure_scribe.csv",
+   "gpt2out_pure_scribe.json"
+  ],
+  "n": 9000,
+  "n_metrics": 4,
+  "missing_optional": [],
+  "seconds": 4.530197381973267,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_pure_200_all",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, pure sampling, all per-text metrics on gpt2out_200",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_pure_200_all.md",
+   "gpt2out_pure_200_all.csv",
+   "gpt2out_pure_200_all.json"
+  ],
+  "n": 1800,
+  "n_metrics": 16,
+  "missing_optional": [],
+  "seconds": 1.5217509269714355,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_pure_500_all",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, pure sampling, per-text metrics on gpt2out_500 (stats only under the plan in force)",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_pure_500_all.md",
+   "gpt2out_pure_500_all.csv",
+   "gpt2out_pure_500_all.json"
+  ],
+  "n": 4500,
+  "n_metrics": 15,
+  "missing_optional": [],
+  "seconds": 2.989483118057251,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_pure_setlevel",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, pure sampling, set-level metrics (one set per system: self-BLEU and Zipf on gpt2out_200; MAUVE with GPT-2 small features if run)",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_pure_setlevel.md",
+   "gpt2out_pure_setlevel.csv",
+   "gpt2out_pure_setlevel.json"
+  ],
+  "n": 9,
+  "n_metrics": 2,
+  "missing_optional": [
+   "SP/run/baselines/gpt2out_mauve/setlevel.jsonl"
+  ],
+  "seconds": 0.032657623291015625,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_k40_scribe",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, top-k 40: human > xl > large > medium > small, SCRIBE on 1,000 texts per system",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_k40_scribe.md",
+   "gpt2out_k40_scribe.csv",
+   "gpt2out_k40_scribe.json"
+  ],
+  "n": 9000,
+  "n_metrics": 4,
+  "missing_optional": [],
+  "seconds": 2.569732427597046,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_k40_200_all",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, top-k 40, all per-text metrics on gpt2out_200",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_k40_200_all.md",
+   "gpt2out_k40_200_all.csv",
+   "gpt2out_k40_200_all.json"
+  ],
+  "n": 1800,
+  "n_metrics": 16,
+  "missing_optional": [],
+  "seconds": 1.4138669967651367,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_k40_500_all",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, top-k 40, per-text metrics on gpt2out_500 (stats only under the plan in force)",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_k40_500_all.md",
+   "gpt2out_k40_500_all.csv",
+   "gpt2out_k40_500_all.json"
+  ],
+  "n": 4500,
+  "n_metrics": 15,
+  "missing_optional": [],
+  "seconds": 2.8381500244140625,
+  "checks": []
+ },
+ {
+  "name": "gpt2out_k40_setlevel",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2 output dataset, top-k 40, set-level metrics (one set per system: self-BLEU and Zipf on gpt2out_200; MAUVE with GPT-2 small features if run)",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "gpt2out_k40_setlevel.md",
+   "gpt2out_k40_setlevel.csv",
+   "gpt2out_k40_setlevel.json"
+  ],
+  "n": 9,
+  "n_metrics": 2,
+  "missing_optional": [
+   "SP/run/baselines/gpt2out_mauve/setlevel.jsonl"
+  ],
+  "seconds": 0.03368949890136719,
+  "checks": []
+ },
+ {
+  "name": "ngram_ladder",
+  "section": "6. Model ladders (known order)",
+  "title": "KN word n-grams: human > 5 > 4 > 3 > 2 > 1",
+  "cmd": "models",
+  "status": "ran",
+  "outputs": [
+   "ngram_ladder.md",
+   "ngram_ladder.csv",
+   "ngram_ladder.json"
+  ],
+  "n": 1491,
+  "n_metrics": 3,
+  "missing_optional": [],
+  "seconds": 0.5771212577819824,
+  "checks": []
+ },
+ {
+  "name": "cyphalm_cls",
+  "section": "6. Model ladders (known order)",
+  "title": "CyphaLM: human, trie, trie + class expert (no known order: means and pairwise accuracies)",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "cyphalm_cls.md",
+   "cyphalm_cls.full.md",
+   "cyphalm_cls.csv",
+   "cyphalm_cls.json"
+  ],
+  "n": 493,
+  "n_metrics": 4,
+  "missing_optional": [],
+  "seconds": 0.25682902336120605,
+  "checks": []
+ },
+ {
+  "name": "pythia_steps",
+  "section": "6. Model ladders (known order)",
+  "title": "Pythia-410M training checkpoints: later > earlier",
+  "cmd": "models",
+  "status": "skipped",
+  "why": "missing: SP/run/models/pythia_steps.jsonl, SP/run/models/pythia_steps.scribe.jsonl"
+ },
+ {
+  "name": "pythia_size",
+  "section": "6. Model ladders (known order)",
+  "title": "Pythia sizes: larger > smaller",
+  "cmd": "models",
+  "status": "skipped",
+  "why": "missing: SP/run/models/pythia_size.jsonl, SP/run/models/pythia_size.scribe.jsonl"
+ },
+ {
+  "name": "gpt2_decoding",
+  "section": "6. Model ladders (known order)",
+  "title": "GPT-2-large decoding (no known order): means, pairwise accuracies and the share of texts flagged degenerate (D_I > 0)",
+  "cmd": "ladder",
+  "status": "skipped",
+  "why": "missing: SP/run/models/gpt2_decoding.jsonl, SP/run/models/gpt2_decoding.scribe.jsonl"
+ },
+ {
+  "name": "attacks",
+  "section": "7. Attacks",
+  "title": "Mean per attack and parity with human text (mean / mean of human); P(human > attack)",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "attacks.md",
+   "attacks.full.md",
+   "attacks.csv",
+   "attacks.json",
+   "attacks.extra.csv"
+  ],
+  "n": 2500,
+  "n_metrics": 5,
+  "missing_optional": [],
+  "seconds": 3.9976425170898438,
+  "checks": []
+ },
+ {
+  "name": "attacks_50_all",
+  "section": "7. Attacks",
+  "title": "The same on attacks_50 (first 50 prompts) with every baseline",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "attacks_50_all.md",
+   "attacks_50_all.full.md",
+   "attacks_50_all.csv",
+   "attacks_50_all.json",
+   "attacks_50_all.extra.csv"
+  ],
+  "n": 500,
+  "n_metrics": 18,
+  "missing_optional": [],
+  "seconds": 2.1892993450164795,
+  "checks": []
+ },
+ {
+  "name": "length_wiki_scribe",
+  "section": "8. Correlation with length",
+  "title": "Held-out human text, standard (human) and short (human_short) buckets and pooled, SCRIBE",
+  "cmd": "length",
+  "status": "ran",
+  "outputs": [
+   "length_wiki_scribe.md",
+   "length_wiki_scribe.csv",
+   "length_wiki_scribe.json"
+  ],
+  "n": 4746,
+  "n_metrics": 3,
+  "missing_optional": [],
+  "seconds": 1.085080623626709,
+  "checks": []
+ },
+ {
+  "name": "length_wiki_W_all",
+  "section": "8. Correlation with length",
+  "title": "Held-out human text on W (150 per bucket), all per-text metrics",
+  "cmd": "length",
+  "status": "ran",
+  "outputs": [
+   "length_wiki_W_all.md",
+   "length_wiki_W_all.csv",
+   "length_wiki_W_all.json"
+  ],
+  "n": 1650,
+  "n_metrics": 20,
+  "missing_optional": [],
+  "seconds": 1.633932113647461,
+  "checks": []
+ },
+ {
+  "name": "qa_ladder",
+  "section": "9. Q/A ladder",
+  "title": "correct > other answer > prompt echo > shuffled words",
+  "cmd": "ladder",
+  "status": "ran",
+  "outputs": [
+   "qa_ladder.md",
+   "qa_ladder.csv",
+   "qa_ladder.json"
+  ],
+  "n": 2400,
+  "n_metrics": 4,
+  "missing_optional": [],
+  "seconds": 2.315850257873535,
+  "checks": []
+ },
+ {
+  "name": "profiling",
+  "section": "10. Ablations and cost",
+  "title": "Ablation ladder table (as explore/abl.py), TIMING and peak RAM of SCRIBE, throughput of every baseline",
+  "cmd": "profile",
+  "status": "ran",
+  "outputs": [
+   "profiling.md",
+   "profiling.csv",
+   "profiling.json"
+  ],
+  "seconds": 0.055098772048950195
+ }
+]
