@@ -925,6 +925,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 53 | The familiarity control token is allowed, on the gate side like the abstain gate; try an entity-level familiarity; keep the token after `Assistant: ` (2026-10-28) | [`CYPHALM_ANSWERING.md`](CYPHALM_ANSWERING.md) §5; A0/A1 report, flags 1–2 |
 | 54 | Do not run the Qwen models in the cloud container: only analytics on their weights. Inference and distillation run on Odin's PC (2026-10-28) | [`EMBEDDING_GEOMETRY.md`](EMBEDDING_GEOMETRY.md) §9; GGUF_MINING §14 |
 | 55 | "Try a lot of things, profile and record everything, then pick a fact-based decision" (2026-10-28): open design questions are settled by measurement, with the evidence recorded | Every report's Decisions section; this ledger |
+| 56 | Reduce CyphaLM's RAM use (2026-10-28) | [`reports/RAM_PROFILE.md`](reports/RAM_PROFILE.md): measured, with a rule fixed before each change |
 | 56 | A paper on the text-generation metric for Zenodo: hard work, cast the net wide, profile it until it is right, many comparisons (2026-10-28) | [`SCRIBE_PAPER_PLAN.md`](SCRIBE_PAPER_PLAN.md); [`reports/SCRIBE_V2.md`](reports/SCRIBE_V2.md); [`../paper/scribe/`](../paper/scribe/) |
 
 ---
