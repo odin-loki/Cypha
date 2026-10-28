@@ -31,7 +31,7 @@ Passing a ladder is necessary, not sufficient. We therefore test SCRIBE v2, and 
 **Contributions.**
 
 1. A complete, neural-network-free metric for generated text, SCRIBE v2, defined by human-relative z-scores and a fixed combination rule, with a header-only C++ implementation that scores about a thousand texts per second on one CPU core.
-2. A context-gain statistic: the log-probability of each word given its context minus its log-probability from frequency alone. It separates word salad from rare-topic human text far better than raw n-gram probability (Section 4).
+2. Evidence that a per-word context gain, the log-probability of each word given its context minus its log-probability from frequency alone, read against human text and computed for both words and word classes, separates word salad from rare-topic human text far better than raw n-gram probability (Section 4). The quantity itself is the per-word form of SLOR (Pauls and Klein, 2012; Lau et al., 2017), known as a fluency measure.
 3. A design history that keeps the failures: v0 and v1, every combination that did not pass, and why the final structure, with categorical form failures and graded coherence, was needed.
 4. A broad meta-evaluation of SCRIBE and of standard metrics on the same texts, with pre-registered predictions, bootstrap intervals, and the cases where SCRIBE fails.
 
@@ -40,6 +40,8 @@ Passing a ladder is necessary, not sufficient. We therefore test SCRIBE v2, and 
 **Reference-based metrics.** BLEU (Papineni et al., 2002), ROUGE (Lin, 2004), METEOR (Banerjee and Lavie, 2005) and chrF (Popović, 2015) count n-gram overlap with a reference. BERTScore (Zhang et al., 2020), MoverScore (Zhao et al., 2019), BLEURT (Sellam et al., 2020) and BARTScore (Yuan et al., 2021) compare texts through neural representations. All of them need a reference written for the same input, and their validity for open-ended generation, where many different texts are good, is weak (Novikova et al., 2017; Reiter, 2018; Gehrmann et al., 2023).
 
 **Reference-free and distributional metrics.** Perplexity under a large language model rewards predictable text and is known to prefer degenerate, repetitive output (Holtzman et al., 2020). Diversity statistics such as distinct-n (Li et al., 2016), self-BLEU (Zhu et al., 2018), repetition rates (Welleck et al., 2020) and the Zipf coefficient (Holtzman et al., 2020) each capture one property. MAUVE (Pillutla et al., 2021) compares the distribution of model text with human text in the embedding space of a large language model and correlates well with human judgments of model families. Meister and Cotterell (2021) compare model text and human text on statistical tendencies such as type–token ratios and length distributions; SCRIBE shares their premise that human text sets the norm, but scores individual texts. HUSE (Hashimoto et al., 2019) combines human judgments with model probabilities to estimate how distinguishable model text is from human text. GRUEN (Zhu and Bhat, 2020) and UNION (Guan and Huang, 2020) learn quality from perturbations with neural encoders.
+
+**Fluency from language-model probability.** SLOR, the syntactic log-odds ratio, subtracts a sentence's unigram log-probability from its language-model log-probability and divides by its length, so that rare words do not count as disfluency (Pauls and Klein, 2012). It predicts human acceptability judgments (Lau et al., 2017) and, with a neural language model, rates sentence fluency without a reference (Kann et al., 2018). SCRIBE's context gains s3g and s2g are SLOR computed per word with a count trigram, for words and for word classes; what SCRIBE adds is reading them against a human reference distribution and combining them with the other axes.
 
 **Language models as judges.** Prompting a large language model for a rating (G-Eval, Liu et al., 2023; Zheng et al., 2023) gives strong correlations with people, at a large cost and with the model's own biases; HANNA (Chhun et al., 2022, 2024) measures this for story generation.
 
@@ -141,7 +143,7 @@ v2 replaced percentiles by the robust z-scores of Section 3.4, so that a value f
 2. **Coherence one-sided.** The all-pairs sentence cosine alone separates human from shuffled sentences at 0.989 when only low cohesion counts, against 0.972 two-sided.
 3. **No additive weighting passes.** Ordering "shuffled sentences > shuffled words" needs syntax weighted above coherence; but that also amplifies the syntax noise of human samples and breaks "human > shuffled sentences". Across several thousand additive settings (squared or linear evidence; sum, mean or maximum within an axis; axis weights from 1 to 4), none passed all five pairs on ladder A; the best minimum pair accuracy was 0.926.
 4. **Categorical form and integrity.** Counting syntax and integrity only beyond a high human quantile, and coherence from the dead zone on, gave 4 of 5 pairs. The remaining conflict was inside word salad: how badly a text fails syntax varied more than the coherence signal that orders shuffled words above random words.
-5. **Context gain.** Raw n-gram probability is low for word salad and also for human text about rare topics. Subtracting each word's frequency-only log-probability leaves the part the context explains. Shuffled words moved from a median bad-side z of 3.1–3.5 (raw probability) to 6.8–8.8 (gain), with none inside the human 99.5th percentile. Samples from a byte-level count language model moved from 19% to 96% beyond the human 99th percentile.
+5. **Context gain.** Raw n-gram probability is low for word salad and also for human text about rare topics. Subtracting each word's frequency-only log-probability leaves the part the context explains; this is SLOR (Section 2) averaged per word. Shuffled words moved from a median bad-side z of 3.1–3.5 (raw probability) to 6.8–8.8 (gain), with none inside the human 99.5th percentile. Samples from a byte-level count language model moved from 19% to 96% beyond the human 99th percentile.
 6. **Two form failures.** Once syntax saturates, real words and non-words received the same penalty. Splitting lexical validity (L) from syntax (S), each saturating on its own, passed all five pairs on both development ladders.
 
 The parameters of the final structure are not a knife-edge. Of 2,592 settings of the thresholds, cap, softness, integrity weight and dead zone tried on both development ladders, 1,729 pass all five pairs on both, and every one-step change of a frozen parameter passes. Section 6.7 repeats the main changes on the fresh region. The design was then frozen and committed before the fresh region was read (repository commit `c7fd176`).
@@ -548,9 +550,13 @@ Ippolito, D., Duckworth, D., Callison-Burch, C., and Eck, D. (2020). Automatic d
 
 Kendall, M. G. (1945). The treatment of ties in ranking problems. *Biometrika*, 33(3).
 
+Kann, K., Rothe, S., and Filippova, K. (2018). Sentence-level fluency evaluation: References help, but can be spared! *CoNLL*.
+
 Kneser, R., and Ney, H. (1995). Improved backing-off for m-gram language modeling. *ICASSP*.
 
 Lapata, M. (2003). Probabilistic text structuring: Experiments with sentence ordering. *ACL*.
+
+Lau, J. H., Clark, A., and Lappin, S. (2017). Grammaticality, acceptability, and probability: A probabilistic view of linguistic knowledge. *Cognitive Science*, 41(5).
 
 Levy, O., Goldberg, Y., and Dagan, I. (2015). Improving distributional similarity with lessons learned from word embeddings. *Transactions of the ACL*, 3.
 
@@ -573,6 +579,8 @@ Mostafazadeh, N., Chambers, N., He, X., Parikh, D., Batra, D., Vanderwende, L., 
 Novikova, J., Dušek, O., Cercas Curry, A., and Rieser, V. (2017). Why we need new evaluation metrics for NLG. *EMNLP*.
 
 Papineni, K., Roukos, S., Ward, T., and Zhu, W.-J. (2002). BLEU: A method for automatic evaluation of machine translation. *ACL*.
+
+Pauls, A., and Klein, D. (2012). Large-scale syntactic language modeling with treelets. *ACL*.
 
 Pillutla, K., Swayamdipta, S., Zellers, R., Thickstun, J., Welleck, S., Choi, Y., and Harchaoui, Z. (2021). MAUVE: Measuring the gap between neural text and human text using divergence frontiers. *NeurIPS*.
 
