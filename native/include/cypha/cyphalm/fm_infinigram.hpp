@@ -23,6 +23,9 @@
 /// A query costs one step a context byte. A caller that reads text one byte at
 /// a time passes a Cursor: when the last match plus the new byte still occurs,
 /// that is one step, so a long copy costs the same per byte as a short one.
+///
+/// Positions (S1, evidence cards): build_locate adds sampled suffix-array
+/// entries, only when asked; queries do not use them.
 
 #include "cypha/cyphalm/infinigram.hpp"
 
@@ -50,6 +53,7 @@ struct RankBits {
         if (i & 63) r += static_cast<std::size_t>(std::popcount(w[word] & ((std::uint64_t{1} << (i & 63)) - 1)));
         return r;
     }
+    bool get(std::size_t i) const { return (w[i >> 6] >> (i & 63)) & 1; }
     std::size_t bytes() const { return w.size() * 8 + cum.size() * 4; }
 };
 
@@ -79,6 +83,18 @@ class AlphaTree {
     }
     /// Adds the count of each symbol in [lo, hi) to out[symbol].
     void counts(std::size_t lo, std::size_t hi, std::uint32_t* out) const { counts_(root_, lo, hi, out); }
+    /// The symbol at i, and in rank its count in [0, i).
+    int access(std::size_t i, std::size_t& rank) const {
+        int v = root_;
+        while (v >= 0) {
+            const Node& nd = nodes_[static_cast<std::size_t>(v)];
+            const std::size_t o1 = nd.bits.rank1(i);
+            if (nd.bits.get(i)) i = o1, v = nd.right;
+            else i -= o1, v = nd.left;
+        }
+        rank = i;
+        return -v - 1;
+    }
     std::size_t bytes() const;
     void write(std::ostream& out) const;
     void read(std::istream& in);
@@ -130,13 +146,34 @@ class FmInfiniGram {
     /// for the empty prefix). A prefix grows to the right: one step on the reversed BWT.
     std::size_t match_prefix(const std::uint8_t* s, std::size_t len, std::size_t cap, std::size_t& count) const;
 
-    /// A stored index (RAM_PROFILE M8): "FMIG", version 1, little-endian, with a checksum.
-    /// Loading reads the arrays as they are, so serving needs no text and no build.
+    /// Rows [lo, hi) of the suffixes of text$ that start with p[0..len), len >= 1: hi - lo occurrences, lo == hi
+    /// when there are none. Row r is the r-th suffix in sorted order; row 0 is the empty one.
+    struct Rows {
+        std::size_t lo = 0, hi = 0;
+    };
+    Rows rows(const std::uint8_t* p, std::size_t len) const;
+    /// The longest suffix of ctx[0..len), at most cap bytes, that occurs in the text: its length in n (0: none) and
+    /// its rows.
+    Rows longest_suffix(const std::uint8_t* ctx, std::size_t len, std::size_t cap, std::size_t& n) const;
+
+    /// Locate (S1, evidence cards): a sampled suffix-array entry for each text position divisible by rate, and a
+    /// mark bit a row, about n (4 / rate + 1 / 8) bytes. Built by one walk back through the BWT, so a stored index
+    /// needs no text. Queries and their results do not change.
+    void build_locate(std::uint32_t rate = 32);
+    bool can_locate() const { return rate_ != 0; }
+    /// The text position where the suffix at row starts (1 <= row <= n): at most rate - 1 steps back through the
+    /// BWT. Needs build_locate.
+    std::size_t locate(std::size_t row) const;
+    std::size_t locate_bytes() const { return rate_ ? marks_.bytes() + samples_.size() * 4 : 0; }
+
+    /// A stored index (RAM_PROFILE M8): "FMIG", little-endian, with a checksum. Version 2 (S1) adds the locate
+    /// samples when built; version 1 files still load. Loading reads the arrays as they are, so serving needs no
+    /// text and no build.
     void save(const std::string& path) const;
     static FmInfiniGram load(const std::string& path);
 
     std::size_t size() const { return n_; }
-    /// Bytes the index holds.
+    /// Bytes the index holds (without the locate samples).
     std::size_t bytes() const { return fwd_.bytes() + rev_.bytes(); }
 
  private:
@@ -148,11 +185,16 @@ class FmInfiniGram {
     Found search_(const std::uint8_t* ctx, std::size_t len, std::size_t cap, std::size_t need) const;
     InfiniGram::Result counts_(int n, std::size_t loR, std::size_t sz) const;
     static std::size_t cap_(std::size_t len, int max_n, int hint);
+    bool step_back_(int c, std::size_t& lo, std::size_t& hi) const;
+    std::size_t lf_(std::size_t row) const;
 
     std::size_t n_ = 0;
     std::size_t C_[256] = {};          // first row of each byte (row 0 is the empty suffix)
     std::size_t dT_ = 0, dR_ = 0;      // the $ row of each BWT (it stores 0)
     fm_detail::AlphaTree fwd_, rev_;   // BWT of text$ and of reversed(text)$
+    std::uint32_t rate_ = 0;           // locate: 0 = not built
+    fm_detail::RankBits marks_;        // rows whose position is sampled
+    std::vector<std::uint32_t> samples_;  // their positions, in row order
 };
 
 }  // namespace cypha::cyphalm

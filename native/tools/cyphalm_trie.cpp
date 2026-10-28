@@ -72,7 +72,7 @@
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
 //      [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]
-//      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]
+//      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
 //        familiarity token <|fam=low|mid|high|> before (or after) "Assistant: ". CyphaLM answers
@@ -114,7 +114,13 @@
 //        or building (the similar-context expert is built from its vector file). The build's calibration lines
 //        (FAMSTAT, ENTITY, FAMCAL, FAMTOK, fam_dolly, chat_turns) print at build time only; every other line and the rows
 //        file are the build's. A served model refuses other options or data, --fam-only, the token statistics that read
-//        the wiki-stage trie (question_lp, ent_lp), and --sim src=all.
+//        the wiki-stage trie (question_lp, ent_lp), --sim src=all, and --cards (S1's cards map T's bytes to the chat
+//        turns, which a served model does not rebuild).
+//        S1 (docs/reports/S1_REASON_CODES_AND_EVIDENCE.md): --cards FILE writes what the system shows for each answer
+//        (a kept answer, or a don't-know with its reason code: CyphaLM's own, or the gate's on its behalf) with its
+//        evidence (where in the training text its bytes, or the question's entity, were seen: FmInfiniGram locate),
+//        REASON lines (reason codes against the reference, grading only) and FILE.audit.tsv (100 dev rows for Odin).
+//        Made after the answers and gates; the rows file is the same with and without it.
 //   simvec [wiki] --sim vec=PREFIX[,...] --out FILE
 //        A4: builds the similar-context expert of the spec over the train bytes and writes its projected word rows (int8,
 //        a scale a row) as the file the default reads.
@@ -194,6 +200,7 @@
 //   ./cyphalm_trie selftest
 
 #include "cypha/cyphalm/class_context.hpp"
+#include "cypha/cyphalm/evidence.hpp"
 #include "cypha/cyphalm/fm_infinigram.hpp"
 #include "cypha/cyphalm/packed_trie.hpp"
 #include "cypha/cyphalm/similar_context.hpp"
@@ -220,6 +227,7 @@ using namespace cypha::cyphalm::trie;
 using cypha::cyphalm::ClassContext;
 using cypha::cyphalm::FmInfiniGram;
 using cypha::cyphalm::SimilarContext;
+namespace evidence = cypha::cyphalm::evidence;
 
 namespace {
 
@@ -250,6 +258,7 @@ struct Args {
     std::vector<std::string> sims;               // A4: similar-context expert specs (cls: each; qa: the first)
     bool sim_fresh = false, sim_surface = false;  // A4, cls: also the fresh text / surface S
     bool no_sim = false;                          // A4: the similar-context expert off where it is a default
+    std::string cards;                            // S1: qa's evidence cards and reason codes (--cards FILE)
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -300,6 +309,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--model") a.model = next();
         else if (s == "--save") a.save = next();
         else if (s == "--mention") a.mention = true;
+        else if (s == "--cards") a.cards = next();
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -1105,6 +1115,48 @@ std::string gap_id(const std::string& entity, const std::string& rel) {
 std::string dont_know_text(const std::string& entity, const std::string& rel, const std::string& reason) {
     return "I don't know. I have nothing about " + entity + " in what I've read. <|unknown reason=" + reason +
            " entity=\"" + entity + "\" relation=" + rel + " gap=" + gap_id(entity, rel) + "|>";
+}
+
+// S1 (DISCOVERY 3.1, 3.5, 12 I3; docs/reports/S1_REASON_CODES_AND_EVIDENCE.md): the codes, the gate's message, and what
+// the system shows for one answer.
+const char* const kReasonCodes[] = {"OUT_OF_SCOPE",     "UNPARSEABLE", "AMBIGUOUS_QUESTION", "UNKNOWN_ENTITY",
+                                    "AMBIGUOUS_ENTITY", "NO_EVIDENCE", "CONFLICT",           "LOW_CERTAINTY",
+                                    "STALE",            "BEYOND_DEPTH", "HYPOTHESIS_ONLY"};
+bool known_code(const std::string& c) {
+    return std::find(std::begin(kReasonCodes), std::end(kReasonCodes), c) != std::end(kReasonCodes);
+}
+
+// The gate's message and tag, written on CyphaLM's behalf (DISCOVERY 3.5). UNKNOWN_ENTITY's is the training rows' text.
+std::string gate_message(const std::string& entity, const std::string& rel, const std::string& code) {
+    if (code == "UNKNOWN_ENTITY") return dont_know_text(entity, rel, code);
+    const std::string why =
+        code == "NO_EVIDENCE" ? "I have read about " + entity + ", but not this." : std::string("I am not sure enough to answer.");
+    return "I don't know. " + why + " <|unknown reason=" + code + " entity=\"" + entity + "\" relation=" + rel +
+           " gap=" + gap_id(entity, rel) + "|>";
+}
+
+// What the system shows for one answer. A kept answer stands. Anything else says it does not know, with a code:
+// CyphaLM's own message keeps its own code; when that message has no readable code, the gate's code completes it
+// (by cyphalm+gate); an answer the gate does not keep, or no answer, becomes the gate's message (by gate). I3: whenever
+// the gate does not keep an answer, the card is a don't-know with a known code (given a known gate_code).
+struct Card {
+    std::string kind, by, code, text;
+};
+Card final_card(const std::string& answer, bool kept, const std::string& gate_code, const std::string& entity,
+                const std::string& rel) {
+    if (is_dont_know(answer)) {
+        const std::string c = tag_field(answer, "reason");
+        if (known_code(c)) return {"dont_know", "cyphalm", c, answer};
+        return {"dont_know", "cyphalm+gate", gate_code, answer};
+    }
+    if (kept && !answer.empty()) return {"answer", "cyphalm", "", answer};
+    return {"dont_know", "gate", gate_code, gate_message(entity, rel, gate_code)};
+}
+
+// The reference code (grading only; slice meaning): not in the slice, UNKNOWN_ENTITY; in it, LOW_CERTAINTY when the fact
+// is in what it read (a gold answer in the source article, or the shard's entity and relation), else NO_EVIDENCE.
+std::string reference_code(int in_slice, int prose, int covered) {
+    return !in_slice ? "UNKNOWN_ENTITY" : (prose == 1 || covered == 2) ? "LOW_CERTAINTY" : "NO_EVIDENCE";
 }
 
 // Copy expert (A1c, PLAN B9): the longest suffix of s[0..i), 3 to 64 bytes, that also ends at an earlier j inside the
@@ -2637,6 +2689,258 @@ bool load_qa(const std::string& dir, const std::string& record, const QaOpts& o,
     return true;
 }
 
+// ---------------------------------------------------------------- S1: evidence cards (qa --cards FILE)
+//
+// Made after a set's answers and gates, from those decisions only: nothing here feeds an answer, a gate or a tag. One
+// card a question, form and model: what the system shows (final_card) and its evidence (evidence.hpp). For an answer:
+// the longest suffix of prompt + answer in qa's training text T, its count and its places. For a don't-know: the
+// question's entity (E1's choice) in A1c's lowered training bytes, its page-title and mention counts and places.
+// Gates: on dev each question's 5-fold CV gate, as qa's CV lines; on test the gate chosen on all of dev.
+// Gate codes: G0 LOW_CERTAINTY; G1 UNKNOWN_ENTITY when the familiarity token is low, else LOW_CERTAINTY; G2
+// UNKNOWN_ENTITY when the entity has no page title and fewer than c mentions, else LOW_CERTAINTY, c by 5-fold CV on the
+// audit rows. G1x and G2x (reported only) also replace CyphaLM's own code with G1's or G2's.
+// REASON lines (stdout): per rule, the don't-know cards whose code is the reference (reference_code, grading only).
+// Dev also writes FILE.audit.tsv: 100 dev questions drawn before any run, chat form, trie + InfiniGram, for Odin.
+// The rule the cards carry, chosen on dev (2026-10-28): G0. On the audit rows G0 and G2 are right on 82 of 100 and G1
+// on 81; G2's CV estimate is 81, and G0 has no parameter.
+constexpr const char* kCardRule = "G0";
+constexpr int kAuditLm = 1;              // trie_ig
+const std::size_t kG2Cuts[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, std::numeric_limits<std::size_t>::max()};
+
+struct CardContext {
+    FmInfiniGram* ig = nullptr;   // T (wiki train + chat); locate is built on first use
+    FmInfiniGram* low = nullptr;  // A1c's lowered training bytes (wiki train + Dolly); null without --parse
+    evidence::Sources t_src, low_src;
+    std::function<std::string(const std::string&)> entity_of;
+    std::function<std::string(int, const QaRow&, const std::string&)> prompt;  // (form, row, token): decode's prompt
+    const char* const* lm_name = nullptr;
+    int nlm = 0;
+    std::string path;
+    std::size_t g2_cut = std::numeric_limits<std::size_t>::max();  // chosen on dev
+    double locate_s = 0;
+};
+
+// T's sources: wiki pages, the document boundary, then the chat turns (kind shard, dk or dolly).
+void card_sources_t(CardContext& cx, const std::vector<std::uint8_t>& data, std::size_t train, const std::string& chat,
+                    const std::vector<DkRow>& sh1, const std::vector<DkRow>& sh2) {
+    std::set<std::string> shard_q;
+    for (const auto* v : {&sh1, &sh2})
+        for (const auto& r : *v) shard_q.insert(r.q);
+    cx.t_src.add_pages(data.data(), train);
+    cx.t_src.add(train, "boundary");
+    cx.t_src.add_turns(chat, train + std::strlen(kDocBoundary), [&](const std::string& turn) {
+        const std::size_t nl = turn.find('\n');
+        if (shard_q.count(turn.substr(6, nl == std::string::npos ? std::string::npos : nl - 6))) return std::string("shard");
+        const std::size_t as = turn.find("Assistant: ");
+        return std::string(as != std::string::npos && turn.find("I don't know.", as) != std::string::npos ? "dk" : "dolly");
+    });
+}
+
+// The lowered index's sources (A1c: wiki train, a newline, then the Dolly text, which is read again here).
+void card_sources_low(CardContext& cx, const Args& a, const std::vector<std::uint8_t>& data, std::size_t train) {
+    std::vector<Turn> turns;
+    const std::string dolly = load_dolly(a.dolly, turns);
+    cx.low_src.add_pages(data.data(), train);
+    cx.low_src.add_turns(dolly, train + 1, [](const std::string&) { return std::string("dolly"); });  // same offsets lowered
+}
+
+// The audit rows: 100 of n, drawn with mt19937_64(20261028) (Fisher-Yates, the same on every platform), in row order.
+std::vector<std::size_t> audit_rows(std::size_t n) {
+    std::vector<std::size_t> idx(n);
+    std::iota(idx.begin(), idx.end(), 0);
+    std::mt19937_64 rng(20261028);
+    for (std::size_t i = n; i > 1; --i) std::swap(idx[i - 1], idx[rng() % i]);
+    idx.resize(std::min<std::size_t>(100, n));
+    std::sort(idx.begin(), idx.end());
+    return idx;
+}
+
+void write_cards(CardContext& cx, const char* set, const std::vector<QaRow>& rows, const std::vector<Graded>& gs,
+                 const std::vector<std::string>& toks, const std::vector<Gate>* full_gates) {
+    const bool dev = full_gates == nullptr;
+    auto t0 = std::chrono::steady_clock::now();
+    for (FmInfiniGram* ix : {cx.ig, cx.low})
+        if (ix && !ix->can_locate()) ix->build_locate();
+    cx.locate_s += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    t0 = std::chrono::steady_clock::now();
+    std::map<std::tuple<int, int, int>, Gate> cv;  // dev: (form, model, fold) -> the gate chosen on the other folds
+    for (int form = 0; dev && form < 2; ++form)
+        for (int l = 0; l < cx.nlm; ++l)
+            for (int fold = 0; fold < 5; ++fold) {
+                std::vector<const Graded*> tr;
+                for (const auto& g : gs)
+                    if (g.form == form && g.lm == l && g.row % 5 != fold) tr.push_back(&g);
+                cv[{form, l, fold}] = choose_gate(tr, l % 2 == 1);
+            }
+    auto gate_of = [&](const Graded& g) {
+        return dev ? cv[{g.form, g.lm, g.row % 5}] : (*full_gates)[static_cast<std::size_t>(g.form * cx.nlm + g.lm)];
+    };
+    struct Q {
+        std::string e, rel, ev;
+        std::size_t titles = 0, mentions = 0;
+        bool low_tok = false;
+    };
+    std::vector<Q> qs(rows.size());
+    for (std::size_t r = 0; r < rows.size(); ++r) {
+        Q& q = qs[r];
+        q.e = cx.entity_of(rows[r].q);
+        q.rel = question_relation(rows[r].q, q.e);
+        q.low_tok = toks[r].find("fam=low") != std::string::npos;
+        q.ev = "entity=\"" + q.e + "\"";
+        const std::string el = lowered(strip_article(q.e));
+        if (cx.low && !el.empty()) {
+            const auto m = evidence::occurrences(*cx.low, cx.low_src, el);
+            q.titles = evidence::occurrences(*cx.low, cx.low_src, "<title>" + el + "</title>", 0).count;
+            q.mentions = m.count;
+            q.ev += " titles " + std::to_string(q.titles) + " mentions " + std::to_string(q.mentions);
+            for (const auto& p : m.places) q.ev += " | " + p;
+        }
+    }
+    auto rule_code = [&](const Q& q, const std::string& rule, std::size_t cut) -> std::string {
+        if (rule == "G0") return "LOW_CERTAINTY";
+        const bool unknown = rule == "G2" && cx.low ? q.titles == 0 && q.mentions < cut : q.low_tok;
+        return unknown ? "UNKNOWN_ENTITY" : "LOW_CERTAINTY";
+    };
+    // The card under a rule (G1x, G2x: G1, G2, and CyphaLM's own code replaced too; reported only).
+    auto card_of = [&](const Graded& g, const std::string& rule, std::size_t cut) {
+        const Q& q = qs[static_cast<std::size_t>(g.row)];
+        const bool over = rule.back() == 'x';
+        const std::string gc = rule_code(q, over ? rule.substr(0, 2) : rule, cut);
+        Card c = final_card(g.ans.text, gated_answer(g, gate_of(g)), gc, q.e, q.rel);
+        if (over && c.kind == "dont_know") c.code = gc;
+        return c;
+    };
+    // Tally of don't-know cards: n, right (the reference code), lenient right (in the slice: NO_EVIDENCE or
+    // LOW_CERTAINTY), and the same for CyphaLM's own codes and the gate's.
+    struct T {
+        int n = 0, right = 0, lenient = 0, own = 0, own_right = 0, gate = 0, gate_right = 0;
+    };
+    auto tally = [&](const std::vector<const Graded*>& v, const std::string& rule, std::size_t cut) {
+        T t;
+        for (auto* g : v) {
+            const Card c = card_of(*g, rule, cut);
+            if (c.kind != "dont_know") continue;
+            const QaRow& r = rows[static_cast<std::size_t>(g->row)];
+            const bool ok = c.code == reference_code(r.in_slice, g->prose, g->covered);
+            ++t.n, t.right += ok;
+            t.lenient += r.in_slice ? (c.code == "NO_EVIDENCE" || c.code == "LOW_CERTAINTY") : c.code == "UNKNOWN_ENTITY";
+            (c.by == "cyphalm" ? t.own : t.gate)++;
+            (c.by == "cyphalm" ? t.own_right : t.gate_right) += ok;
+        }
+        return t;
+    };
+    auto print_t = [](const std::string& label, const T& t) {  // std::cout only: qa runs without stdio sync
+        char b[512];
+        std::snprintf(b, sizeof b,
+                      " dont_know %d right %d rate %.4f wilson95 %.4f %.4f lenient %d | cyphalm_code %d right %d | "
+                      "gate_code %d right %d\n",
+                      t.n, t.right, t.n ? static_cast<double>(t.right) / t.n : 0.0, wilson_lo(t.right, t.n),
+                      wilson_hi(t.right, t.n), t.lenient, t.own, t.own_right, t.gate, t.gate_right);
+        std::cout << label << b;
+    };
+    auto cut_name = [](std::size_t c) { return c == kG2Cuts[11] ? std::string("inf") : std::to_string(c); };
+    auto group = [&](int form, int l, const std::vector<std::size_t>* only) {
+        std::vector<const Graded*> v;
+        for (const auto& g : gs)
+            if (g.form == form && g.lm == l &&
+                (!only || std::binary_search(only->begin(), only->end(), static_cast<std::size_t>(g.row))))
+                v.push_back(&g);
+        return v;
+    };
+    const auto audit = audit_rows(rows.size());
+    if (dev) {  // G2's cut: 5-fold CV over the audit rows (fold = row % 5), then chosen on all of them; ties: the larger
+        const auto v = group(0, kAuditLm, &audit);
+        auto best_cut = [&](int skip) {
+            std::size_t best = kG2Cuts[0];
+            int br = -1;
+            for (std::size_t c : kG2Cuts) {
+                std::vector<const Graded*> tr;
+                for (auto* g : v)
+                    if (g->row % 5 != skip) tr.push_back(g);
+                const int r = tally(tr, "G2", c).right;
+                if (r >= br) br = r, best = c;
+            }
+            return best;
+        };
+        T cvt;
+        std::cout << "REASON_G2_CV cuts";
+        for (int fold = 0; fold < 5; ++fold) {
+            const std::size_t c = best_cut(fold);
+            std::vector<const Graded*> te;
+            for (auto* g : v)
+                if (g->row % 5 == fold) te.push_back(g);
+            const T t = tally(te, "G2", c);
+            cvt.n += t.n, cvt.right += t.right, cvt.lenient += t.lenient, cvt.own += t.own, cvt.own_right += t.own_right,
+                cvt.gate += t.gate, cvt.gate_right += t.gate_right;
+            std::cout << " " << cut_name(c);
+        }
+        std::cout << "\n";
+        print_t("REASON_AUDIT dev chat/trie_ig G2_cv", cvt);
+        cx.g2_cut = best_cut(-1);
+        std::cout << "REASON_G2 cut " << cut_name(cx.g2_cut) << " (all audit rows)\n";
+    }
+    for (const char* rule : {"G0", "G1", "G2", "G1x", "G2x"}) {
+        if (dev) print_t(std::string("REASON_AUDIT dev chat/trie_ig ") + rule, tally(group(0, kAuditLm, &audit), rule, cx.g2_cut));
+        for (int form = 0; form < 2; ++form)
+            for (int l = 0; l < cx.nlm; ++l)
+                print_t(std::string("REASON ") + set + " " + (form ? "wiki/" : "chat/") + cx.lm_name[l] + " " + rule,
+                        tally(group(form, l, nullptr), rule, cx.g2_cut));
+    }
+    // The cards, under kCardRule.
+    std::ofstream out(cx.path, dev ? std::ios::trunc : std::ios::app);
+    if (dev) out << "set\trow\tform\tlm\tkind\tby\tcode\tgate\tentity\trelation\ttext\tevidence\n";
+    int n_ans = 0, n_dk = 0;
+    std::map<std::size_t, std::string> audit_line;
+    for (const auto& g : gs) {
+        const QaRow& r = rows[static_cast<std::size_t>(g.row)];
+        const Q& q = qs[static_cast<std::size_t>(g.row)];
+        const Card c = card_of(g, kCardRule, cx.g2_cut);
+        const Gate gt = gate_of(g);
+        std::string ev = q.ev;
+        if (c.kind == "answer") {
+            ++n_ans;
+            const std::string pr = cx.prompt(g.form, r, toks[static_cast<std::size_t>(g.row)]);
+            const auto f = evidence::longest(*cx.ig, cx.t_src, pr + c.text, 8192);
+            ev = "match " + std::to_string(f.n) + " answer_bytes " + std::to_string(std::min(f.n, c.text.size())) + "/" +
+                 std::to_string(c.text.size()) + " count " + std::to_string(f.count);
+            for (const auto& p : f.places) ev += " | " + p;
+        } else ++n_dk;
+        const std::string gate = gt.f < 0 ? "none" : std::string(kFeatName[gt.f]) + " " + std::to_string(g.fv[gt.f]) +
+                                                         (g.fv[gt.f] >= gt.tau ? " >= " : " < ") + std::to_string(gt.tau);
+        out << set << "\t" << g.row << "\t" << (g.form ? "wiki" : "chat") << "\t" << cx.lm_name[g.lm] << "\t" << c.kind
+            << "\t" << c.by << "\t" << c.code << "\t" << gate << "\t" << q.e << "\t" << q.rel << "\t" << printable(c.text)
+            << "\t" << printable(ev) << "\n";
+        if (dev && g.form == 0 && g.lm == kAuditLm && std::binary_search(audit.begin(), audit.end(), static_cast<std::size_t>(g.row))) {
+            const std::string ref = reference_code(r.in_slice, g.prose, g.covered);
+            const std::string why = !r.in_slice ? "not in the slice: its source article is outside wiki train"
+                                    : g.prose == 1 ? "in the slice; a gold answer is in the source article's text"
+                                    : g.covered == 2 ? "in the slice; the shard has its entity and relation"
+                                                     : "in the slice; no gold answer in the source article, not in the shard";
+            std::ostringstream l;
+            l << g.row << "\t" << r.q << "\t" << r.in_slice << "\t" << g.prose << "\t" << g.covered << "\t" << ref << "\t" << why
+              << "\t" << c.kind << "\t" << c.by << "\t" << c.code << "\t"
+              << (c.kind == "dont_know" ? (c.code == ref ? "1" : "0") : "-") << "\t" << q.e << "\t" << q.titles << "\t"
+              << q.mentions << "\t" << printable(c.text.substr(0, 240)) << "\t\n";
+            audit_line[static_cast<std::size_t>(g.row)] = l.str();
+        }
+    }
+    if (dev) {
+        std::ofstream au(cx.path + ".audit.tsv");
+        au << "row\tquestion\tin_slice\tfact_in_prose\tshard\treference\twhy\tkind\tby\tcode\tright\tentity\ttitles\tmentions"
+              "\toutput\todin\n";
+        for (const auto& [row, l] : audit_line) au << l;
+    }
+    const double card_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    char b[512];
+    std::snprintf(b, sizeof b,
+                  "CARDS %s cards %zu answers %d dont_know %d rule %s locate_build_s %.3f locate_bytes ig %zu low %zu "
+                  "sources_bytes %zu ms_per_card %.4f\n",
+                  set, gs.size(), n_ans, n_dk, kCardRule, cx.locate_s, cx.ig->locate_bytes(),
+                  cx.low ? cx.low->locate_bytes() : std::size_t{0}, cx.t_src.bytes() + cx.low_src.bytes(),
+                  1000.0 * card_s / static_cast<double>(std::max<std::size_t>(1, gs.size())));
+    std::cout << b;
+}
+
 int cmd_qa(const Args& a, const QaOpts& o) {
     const Config& cfg = a.cfg;
     // M11: --model DIR serves a stored model; --save DIR stores the one built here. A served model has no wiki-stage
@@ -2647,9 +2951,11 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         const int fk = static_cast<int>(std::find(kFamName, kFamName + kFam, o.fam_stat) - kFamName);
         if ((serve || !a.save.empty()) &&
             (o.fam_only || (serve && !a.save.empty()) ||
-             (serve && ((o.fam != "none" && (fk == 0 || fk == 6)) || (!o.sim.empty() && parse_sim(o.sim).src != "wiki"))))) {
+             (serve && ((o.fam != "none" && (fk == 0 || fk == 6)) || (!o.sim.empty() && parse_sim(o.sim).src != "wiki") ||
+                        !a.cards.empty())))) {
             std::cerr << "qa --model / --save: not with --fam-only, not both, and a served model takes neither a token "
-                         "statistic that reads the wiki-stage trie (question_lp, ent_lp) nor --sim src=all\n";
+                         "statistic that reads the wiki-stage trie (question_lp, ent_lp), nor --sim src=all, nor --cards "
+                         "(S1's cards map T's bytes to the chat turns, which a served model does not rebuild)\n";
             return 2;
         }
     }
@@ -2943,7 +3249,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     }
     // M14: with an entity statistic in the token, every dev and test entity was chosen above and is kept (`chosen`), and
     // nothing below reads the lowered index: free it (a store writes it later, so --save keeps it).
-    if (fam_on && fam_k > 0 && a.save.empty()) low.reset();
+    if (fam_on && fam_k > 0 && a.save.empty() && a.cards.empty()) low.reset();  // --cards reads it (S1)
     auto with_tok = [&](const std::string& prompt, const std::string& tok) {
         // prompt ends in "Assistant: "; "before" puts the token in front of it, "after" behind it.
         if (!fam_on) return prompt;
@@ -2953,6 +3259,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
 
     // Chat text: Dolly, with the extra turns (don't-know pairs at dk_ratio of all turns, then every shard row), each
     // list spread evenly through it. A served model (M11) has it trained in already.
+    CardContext cards;  // S1: where T's bytes come from (wiki pages, then chat turns), for --cards
     if (!serve) {
         std::vector<std::pair<std::size_t, std::string>> extra;  // (after which Dolly turn, text)
         auto spread = [&](const std::vector<DkRow>& rows, std::size_t n, const std::vector<std::string>& toks) {
@@ -2972,6 +3279,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::cout << "chat_turns dolly " << turns.size() << " dont_know " << n_dk << " share "
                   << static_cast<double>(n_dk) / static_cast<double>(turns.size() + n_dk) << " fam " << o.fam << " shard "
                   << sh1.size() << " shard2 " << sh2.size() << "\n";
+        if (!a.cards.empty()) card_sources_t(cards, data, cfg.train, chat, sh1, sh2);  // S1: where T's bytes come from
         const std::size_t chat_at = append_chat(model, data, chat);
         std::string().swap(chat);  // data holds the chat bytes now, and nothing below reads the turns
         std::vector<Turn>().swap(turns);
@@ -3001,8 +3309,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     }
     // InfiniGram takes T, unless the similar-context expert reads it (A4, src=all: its keys and its neighbours are T's).
     const bool sim_reads_t = !o.sim.empty() && parse_sim(o.sim).src != "wiki";
-    const FmInfiniGram ig = serve ? std::move(*st.ig) : sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
-    std::cerr << (serve ? "served" : "index built") << "\n";
+    FmInfiniGram ig = serve ? std::move(*st.ig) : sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
+    std::cerr << (serve ? "served" : "index built") << "\n";  // S1: not const, --cards builds locate on it
     if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get())) return 1;
     // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
     // (src=wiki). M13: built here, before the per-byte holdout arrays, so its build does not sit on them; its lambdas
@@ -3561,6 +3869,19 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             std::cout << "RIGHT " << form_name[g.form] << "/" << lm_name[g.lm] << " | "
                       << dev[static_cast<std::size_t>(g.row)].q << " => " << printable(g.ans.text) << "\n";
 
+    if (!a.cards.empty()) {  // S1: cards after dev's answers and gates; nothing below reads them
+        cards.ig = &ig;
+        cards.low = low.get();
+        cards.entity_of = entity_of;
+        cards.prompt = [&](int form, const QaRow& r, const std::string& tok) {
+            return form == 0 ? with_tok("User: " + r.q + "\nAssistant: ", tok) : r.q + " ";
+        };
+        cards.lm_name = lm_name;
+        cards.nlm = nlm;
+        cards.path = a.cards;
+        if (low) card_sources_low(cards, a, data, cfg.train);
+        write_cards(cards, "dev", dev, gd, tok_dev, nullptr);
+    }
     // The frozen test, once: gates chosen on all of dev, applied unchanged.
     if (!test.empty()) {
         const std::vector<Graded> gt = run_set(test, tok_test);
@@ -3611,6 +3932,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             if (g.grade == 0)
                 std::cout << "TEST_RIGHT " << form_name[g.form] << "/" << lm_name[g.lm] << " | "
                           << test[static_cast<std::size_t>(g.row)].q << " => " << printable(g.ans.text) << "\n";
+        if (!a.cards.empty()) write_cards(cards, "test", test, gt, tok_test, &final_gate);  // S1
     }
     return 0;
 }
@@ -3701,6 +4023,68 @@ int cmd_selftest() {
                         std::fabs(wilson_hi(0, 130) - 0.028703) < 1e-5 && gate.f == 0 && gate.tau == -1.0 && right == 2;
         if (!ok) {
             std::cerr << "selftest: qa grading / tag / gate checks failed\n";
+            return 1;
+        }
+    }
+    // S1, I3: whenever the gate does not keep an answer, the card is a don't-know with a known code. CyphaLM's own code
+    // stands; its message without a code takes the gate's; the gate's message parses back; the reference rule; the
+    // audit draw; evidence places on a tiny index.
+    {
+        const Gate gate{0, -1.0};
+        const std::string own = dont_know_text("Zorbia", "capital", "NO_EVIDENCE");
+        const char* const outs[] = {"Paris", "", "I don't know.", "<|fam=low|>I don't know.", own.c_str(),
+                                    "x reason=UNKNOWN_ENTI"};
+        bool i3 = true;
+        std::mt19937 rng(7);
+        for (int k = 0; k < 600; ++k) {
+            const std::string ans = outs[k % 6];
+            Graded g;
+            g.fv[0] = -3.0 + 4.0 * std::uniform_real_distribution<double>(0, 1)(rng);
+            g.grade = is_dont_know(ans) || ans.empty() ? 1 : 2;
+            const bool kept = gated_answer(g, gate);
+            for (const char* gc : {"LOW_CERTAINTY", "UNKNOWN_ENTITY", "NO_EVIDENCE"}) {
+                const Card c = final_card(ans, kept, gc, "Zorbia", "capital");
+                if (!kept) i3 = i3 && c.kind == "dont_know" && known_code(c.code) && is_dont_know(c.text);
+                else i3 = i3 && c.kind == "answer" && c.text == ans && g.fv[0] >= gate.tau;
+            }
+        }
+        const Card c_own = final_card(own, false, "LOW_CERTAINTY", "Zorbia", "capital");
+        const Card c_bare = final_card("<|fam=low|>I don't know.", false, "LOW_CERTAINTY", "Zorbia", "capital");
+        const Card c_gate = final_card("Paris", false, "UNKNOWN_ENTITY", "Zorbia", "capital");
+        bool msgs = true;
+        for (const char* code : {"LOW_CERTAINTY", "UNKNOWN_ENTITY", "NO_EVIDENCE"}) {
+            const std::string m = gate_message("Zorbia", "capital", code);
+            msgs = msgs && is_dont_know(m) && tag_field(m, "reason") == code && tag_field(m, "entity") == "Zorbia" &&
+                   tag_field(m, "relation") == "capital" && m.compare(m.size() - 2, 2, "|>") == 0;
+        }
+        const auto au = audit_rows(130);
+        bool draw = au.size() == 100 && std::is_sorted(au.begin(), au.end()) &&
+                    std::adjacent_find(au.begin(), au.end()) == au.end() && au.back() < 130 && audit_rows(5).size() == 5;
+        // Evidence: a tiny text of two pages, a boundary and two chat turns.
+        const std::string w = "<page><title>Alpha</title> one two</page><page><title>Beta</title> three</page>";
+        const std::string chat = "User: who?\nAssistant: Beta.\n\nUser: where?\nAssistant: I don't know.\n\n";
+        evidence::Sources src;
+        src.add_pages(reinterpret_cast<const std::uint8_t*>(w.data()), w.size());
+        src.add(w.size(), "boundary");
+        src.add_turns(chat, w.size() + 1, [](const std::string& t) {
+            return std::string(t.find("I don't know.") != std::string::npos ? "dk" : "dolly");
+        });
+        const std::string text = w + "\n" + chat;
+        FmInfiniGram ix(reinterpret_cast<const std::uint8_t*>(text.data()), text.size());
+        ix.build_locate(4);
+        const auto f = evidence::longest(ix, src, "zzz Assistant: Beta.", 100);
+        const auto m = evidence::occurrences(ix, src, "three");
+        const auto d = evidence::occurrences(ix, src, "Assistant: I");
+        const bool ev = f.n == 16 && f.count == 1 && f.places.size() == 1 && f.places[0] == "dolly:User: who?+11" &&
+                        m.count == 1 && m.places[0] == "wiki:Beta+" + std::to_string(w.find("three") - w.find("<title>Beta")) &&
+                        d.count == 1 && d.places[0] == "dk:User: where?+13" && src.where(w.size()) == "boundary+0";
+        const bool ok = i3 && c_own.by == "cyphalm" && c_own.code == "NO_EVIDENCE" && c_bare.by == "cyphalm+gate" &&
+                        c_bare.code == "LOW_CERTAINTY" && c_gate.by == "gate" && c_gate.code == "UNKNOWN_ENTITY" && msgs &&
+                        reference_code(0, -1, -1) == "UNKNOWN_ENTITY" && reference_code(1, 1, 0) == "LOW_CERTAINTY" &&
+                        reference_code(1, 0, 2) == "LOW_CERTAINTY" && reference_code(1, 0, 1) == "NO_EVIDENCE" && draw && ev;
+        if (!ok) {
+            std::cerr << "selftest: S1 cards / I3 checks failed (i3 " << i3 << " messages " << msgs << " draw " << draw
+                      << " evidence " << ev << ")\n";
             return 1;
         }
     }
@@ -3869,7 +4253,7 @@ void usage() {
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
-                 "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]\n"
+                 "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]\n"
                  "     [--save DIR | --model DIR]\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  simvec [wiki] --sim SPEC --out FILE\n"
