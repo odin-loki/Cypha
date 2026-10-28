@@ -109,6 +109,12 @@
 //        holdout's first half; SIM_NB prints the three nearest stored contexts at each dev chat prompt, LATENCY the
 //        decode time a question. The expert is a default here (spec `default`; --no-sim leaves it out); gate=0 in a
 //        spec lets it into answers, for comparison only.
+//        M11 (docs/reports/RAM_PROFILE.md): --save DIR stores the built model (packed trie, InfiniGram, the lowered
+//        index, the class table and a record of the options, each file checked); --model DIR serves it without training
+//        or building (the similar-context expert is built from its vector file). The build's calibration lines
+//        (FAMSTAT, ENTITY, FAMCAL, FAMTOK, fam_dolly, chat_turns) print at build time only; every other line and the rows
+//        file are the build's. A served model refuses other options or data, --fam-only, the token statistics that read
+//        the wiki-stage trie (question_lp, ent_lp), and --sim src=all.
 //   simvec [wiki] --sim vec=PREFIX[,...] --out FILE
 //        A4: builds the similar-context expert of the spec over the train bytes and writes its projected word rows (int8,
 //        a scale a row) as the file the default reads.
@@ -197,6 +203,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -2525,8 +2532,127 @@ std::size_t shard_leaks(const std::vector<DkRow>& rows, const std::vector<std::s
     return n;
 }
 
+// M11 (docs/reports/RAM_PROFILE.md): a stored qa model, so serving never trains or builds. `qa --save DIR` writes
+// model.pk (the packed chat-stage trie, its weights and split, M7), ig.fm (InfiniGram over T, M8), low.fm (A1c's
+// lowered index, with --parse), cls.cc (the class table, M10, with --cls) and qa.meta: the record of what the model
+// was built from, the wiki-stage weights, the follower limit and the familiarity cuts, as text (exact hex doubles)
+// with an FNV-1a 64 checksum. `qa --model DIR` loads them, and refuses a store whose record differs.
+struct QaStore {
+    double wf[6] = {0, 0, 0, 0, 0, 0};
+    std::size_t all_followers = 0;
+    std::array<double, kFam> fam_cut{};
+    std::unique_ptr<FmInfiniGram> ig, low;
+    std::unique_ptr<ClassContext> cc;
+};
+
+std::uint64_t fnv64(std::string_view s) {
+    std::uint64_t h = 14695981039346656037ull;
+    for (const char c : s) h = (h ^ static_cast<unsigned char>(c)) * 1099511628211ull;
+    return h;
+}
+
+// What a qa model is built from: the split, the wiki bytes it reads, and the options that shape the training text,
+// the tokens and the class table.
+std::string qa_record(const Args& a, const QaOpts& o, const std::vector<std::uint8_t>& data) {
+    std::ostringstream s;
+    s << "train=" << a.cfg.train << " sample=" << a.cfg.sample << " wiki_fnv=" << std::hex
+      << fnv64(std::string_view(reinterpret_cast<const char*>(data.data()), std::min(data.size(), a.cfg.sample))) << std::dec
+      << " dolly=" << a.dolly << " dk=" << o.dk << " dk_ratio=" << o.dk_ratio << " fam=" << o.fam << " fam_stat=" << o.fam_stat
+      << " fam_train=" << o.fam_train << " parse=" << o.parse << " shard=" << o.shard << " shard2=" << o.shard2 << " cls=" << o.cls;
+    return s.str();
+}
+
+bool save_qa(const std::string& dir, const std::string& record, const PackedModel& pm, const double w[6], const Config& cfg,
+             const double wf[6], std::size_t all_followers, const std::array<double, kFam>& fam_cut, const FmInfiniGram& ig,
+             const FmInfiniGram* low, const ClassContext* cc) {
+    try {
+        std::filesystem::create_directories(dir);
+        pm.save(dir + "/model.pk", w, cfg);
+        ig.save(dir + "/ig.fm");
+        if (low) low->save(dir + "/low.fm");
+        if (cc) cc->save(dir + "/cls.cc");
+        std::ostringstream m;
+        auto reals = [&m](const double* x, std::size_t n) {
+            for (std::size_t i = 0; i < n; ++i) {
+                char b[48];
+                std::snprintf(b, sizeof b, " %a", x[i]);
+                m << (std::isnan(x[i]) ? " nan" : b);
+            }
+        };
+        m << "cypha-qa-store 1\nrecord " << record << "\nwiki_weights";
+        reals(wf, 6);
+        m << "\nfollower_limit " << all_followers << "\nfam_cut";
+        reals(fam_cut.data(), fam_cut.size());
+        m << "\nparts model.pk ig.fm" << (low ? " low.fm" : "") << (cc ? " cls.cc" : "") << "\n";
+        const std::string body = m.str();
+        std::ofstream f(dir + "/qa.meta", std::ios::binary);
+        f << body << "fnv " << std::hex << fnv64(body) << "\n";
+        f.close();
+        if (!f) throw std::runtime_error("cannot write " + dir + "/qa.meta");
+    } catch (const std::exception& e) {
+        std::cerr << "qa --save: " << e.what() << "\n";
+        return false;
+    }
+    std::cerr << "stored the qa model in " << dir << "\n";
+    return true;
+}
+
+bool load_qa(const std::string& dir, const std::string& record, const QaOpts& o, const Config& cfg, PackedModel& pm,
+             double w[6], QaStore& st) {
+    try {
+        std::ifstream f(dir + "/qa.meta", std::ios::binary);
+        if (!f) throw std::runtime_error("cannot open " + dir + "/qa.meta");
+        const std::string text((std::istreambuf_iterator<char>(f)), {});
+        const std::size_t at = text.rfind("fnv ");
+        if (text.rfind("cypha-qa-store 1\n", 0) != 0 || at == std::string::npos ||
+            std::strtoull(text.c_str() + at + 4, nullptr, 16) != fnv64(std::string_view(text).substr(0, at)))
+            throw std::runtime_error(dir + "/qa.meta is not a stored qa model, or it is damaged");
+        std::map<std::string, std::string> kv;
+        std::istringstream in(text.substr(0, at));
+        for (std::string line; std::getline(in, line);)
+            if (const std::size_t sp = line.find(' '); sp != std::string::npos) kv[line.substr(0, sp)] = line.substr(sp + 1);
+        if (kv["record"] != record)
+            throw std::runtime_error("the store was built from other options or data\n  stored: " + kv["record"] +
+                                     "\n  given:  " + record);
+        auto reals = [&](const std::string& k, double* x, std::size_t n) {
+            std::istringstream s(kv[k]);
+            std::size_t i = 0;
+            for (std::string t; i < n && s >> t; ++i) x[i] = t == "nan" ? std::nan("") : std::strtod(t.c_str(), nullptr);
+            if (i != n) throw std::runtime_error(dir + "/qa.meta: bad " + k);
+        };
+        reals("wiki_weights", st.wf, 6);
+        reals("fam_cut", st.fam_cut.data(), st.fam_cut.size());
+        st.all_followers = static_cast<std::size_t>(std::strtoull(kv["follower_limit"].c_str(), nullptr, 10));
+        Config c = cfg;
+        pm = PackedModel::load(dir + "/model.pk", w, c);
+        if (c.train != cfg.train || c.sample != cfg.sample) throw std::runtime_error(dir + "/model.pk has another split");
+        st.ig = std::make_unique<FmInfiniGram>(FmInfiniGram::load(dir + "/ig.fm"));
+        if (!o.parse.empty()) st.low = std::make_unique<FmInfiniGram>(FmInfiniGram::load(dir + "/low.fm"));
+        if (!o.cls.empty()) st.cc = std::make_unique<ClassContext>(ClassContext::load(dir + "/cls.cc"));
+    } catch (const std::exception& e) {
+        std::cerr << "qa --model: " << e.what() << "\n";
+        return false;
+    }
+    std::cerr << "served from " << dir << ": no training, no index or class build\n";
+    return true;
+}
+
 int cmd_qa(const Args& a, const QaOpts& o) {
     const Config& cfg = a.cfg;
+    // M11: --model DIR serves a stored model; --save DIR stores the one built here. A served model has no wiki-stage
+    // training form, so the token statistics that read it (question_lp, ent_lp) and --fam-only are refused, and the
+    // similar-context expert must key on wiki train (src=wiki): T is not kept.
+    const bool serve = !a.model.empty();
+    {
+        const int fk = static_cast<int>(std::find(kFamName, kFamName + kFam, o.fam_stat) - kFamName);
+        if ((serve || !a.save.empty()) &&
+            (o.fam_only || (serve && !a.save.empty()) ||
+             (serve && ((o.fam != "none" && (fk == 0 || fk == 6)) || (!o.sim.empty() && parse_sim(o.sim).src != "wiki"))))) {
+            std::cerr << "qa --model / --save: not with --fam-only, not both, and a served model takes neither a token "
+                         "statistic that reads the wiki-stage trie (question_lp, ent_lp) nor --sim src=all\n";
+            return 2;
+        }
+    }
     const std::vector<QaRow> dev = load_tqa(o.dev);
     const std::vector<QaRow> test = o.test.empty() ? std::vector<QaRow>{} : load_tqa(o.test);
     const std::vector<QaRow> leak = o.leak.empty() ? std::vector<QaRow>{} : load_tqa(o.leak);
@@ -2580,6 +2706,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         const auto it = parse.find(q);
         if (it == parse.end() || it->second.find('|') == std::string::npos) return it == parse.end() ? "" : it->second;
         const auto c = split(it->second, '|');
+        if (const auto ch = chosen.find(q); ch != chosen.end() && !ch->second.empty()) return ch->second;  // M14
         if (fam_k == 0 || !low) return c[0];
         std::string& best = chosen[q];
         if (best.empty()) {
@@ -2594,17 +2721,23 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
     std::vector<std::uint8_t> data;
     if (!load_wiki(a, data)) return 1;
-    Model model;
-    model.data = data.data();
-    model.init(cfg);
+    const std::string record = qa_record(a, o, data);  // M11
+    QaStore st;
+    PackedModel pm;
     double w[6];
-    init_weights(w, cfg);
-    train_span(model, data, w, 0, cfg.train, cfg);
-    std::cerr << "wiki trained, nodes " << model.nodes.size() << "\n";
+    if (serve && !load_qa(a.model, record, o, cfg, pm, w, st)) return 1;
+    Model model;
+    if (!serve) {
+        model.data = data.data();
+        model.init(cfg);
+        init_weights(w, cfg);
+        train_span(model, data, w, 0, cfg.train, cfg);
+        std::cerr << "wiki trained, nodes " << model.nodes.size() << "\n";
+    }
 
     std::vector<Turn> turns;
-    std::string dolly_text = load_dolly(a.dolly, turns);
-    if (turns.empty()) {
+    std::string dolly_text = serve ? std::string() : load_dolly(a.dolly, turns);
+    if (!serve && turns.empty()) {
         std::cerr << "dolly missing " << a.dolly << "\n";
         return 1;
     }
@@ -2614,15 +2747,17 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
     // The model state after the wiki pass, before any chat (the match expert does not fire on a separate buffer).
     double wf[6];
-    std::copy(w, w + 6, wf);
+    std::copy(serve ? st.wf : w, (serve ? st.wf : w) + 6, wf);
     Lm wiki_lm{&model, wf, cfg.train, true};
+    if (serve) wiki_lm.model = nullptr, wiki_lm.packed = &pm;  // as after the chat passes below
     wiki_lmp = &wiki_lm;
 
     // A1c: entity familiarity, from CyphaLM's wiki trie and its lowered training bytes (wiki train + Dolly).
     std::array<double, kFam> fam_cut;
     fam_cut.fill(std::nan(""));
+    if (serve) fam_cut = st.fam_cut, low = std::move(st.low);  // M11: the build's cuts and index
     if (parse.empty()) std::string().swap(dolly_text);  // only A1c's lowered text reads it
-    if (!parse.empty()) {
+    if (!serve && !parse.empty()) {
         std::vector<std::uint8_t> lt(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
         lt.push_back('\n');
         lt.insert(lt.end(), dolly_text.begin(), dolly_text.end());
@@ -2806,6 +2941,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         for (auto& [k, v] : ck) std::cout << "fam_dk " << k << " " << v << "\n";
         for (auto& [k, v] : cv) std::cout << "fam_dev " << k << " in_slice " << v.first << " not_in_slice " << v.second << "\n";
     }
+    // M14: with an entity statistic in the token, every dev and test entity was chosen above and is kept (`chosen`), and
+    // nothing below reads the lowered index: free it (a store writes it later, so --save keeps it).
+    if (fam_on && fam_k > 0 && a.save.empty()) low.reset();
     auto with_tok = [&](const std::string& prompt, const std::string& tok) {
         // prompt ends in "Assistant: "; "before" puts the token in front of it, "after" behind it.
         if (!fam_on) return prompt;
@@ -2814,59 +2952,83 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
 
     // Chat text: Dolly, with the extra turns (don't-know pairs at dk_ratio of all turns, then every shard row), each
-    // list spread evenly through it.
-    std::vector<std::pair<std::size_t, std::string>> extra;  // (after which Dolly turn, text)
-    auto spread = [&](const std::vector<DkRow>& rows, std::size_t n, const std::vector<std::string>& toks) {
-        for (std::size_t j = 0; j < n; ++j)
-            extra.push_back({(j + 1) * turns.size() / (n + 1),
-                             with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j]) + rows[j].response + "\n\n"});
-    };
-    spread(dk, n_dk, tok_dk);
-    spread(sh1, sh1.size(), tok_sh1);
-    spread(sh2, sh2.size(), tok_sh2);
-    std::stable_sort(extra.begin(), extra.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
-    std::string chat;
-    for (std::size_t i = 0, j = 0; i < turns.size(); ++i) {
-        chat += with_tok(turns[i].prompt, tok_dolly[i]) + turns[i].answer + "\n\n";
-        while (j < extra.size() && extra[j].first <= i) chat += extra[j++].second;
+    // list spread evenly through it. A served model (M11) has it trained in already.
+    if (!serve) {
+        std::vector<std::pair<std::size_t, std::string>> extra;  // (after which Dolly turn, text)
+        auto spread = [&](const std::vector<DkRow>& rows, std::size_t n, const std::vector<std::string>& toks) {
+            for (std::size_t j = 0; j < n; ++j)
+                extra.push_back({(j + 1) * turns.size() / (n + 1),
+                                 with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j]) + rows[j].response + "\n\n"});
+        };
+        spread(dk, n_dk, tok_dk);
+        spread(sh1, sh1.size(), tok_sh1);
+        spread(sh2, sh2.size(), tok_sh2);
+        std::stable_sort(extra.begin(), extra.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+        std::string chat;
+        for (std::size_t i = 0, j = 0; i < turns.size(); ++i) {
+            chat += with_tok(turns[i].prompt, tok_dolly[i]) + turns[i].answer + "\n\n";
+            while (j < extra.size() && extra[j].first <= i) chat += extra[j++].second;
+        }
+        std::cout << "chat_turns dolly " << turns.size() << " dont_know " << n_dk << " share "
+                  << static_cast<double>(n_dk) / static_cast<double>(turns.size() + n_dk) << " fam " << o.fam << " shard "
+                  << sh1.size() << " shard2 " << sh2.size() << "\n";
+        const std::size_t chat_at = append_chat(model, data, chat);
+        std::string().swap(chat);  // data holds the chat bytes now, and nothing below reads the turns
+        std::vector<Turn>().swap(turns);
+        train_span(model, data, w, chat_at, data.size(), cfg);
+        train_span(model, data, w, chat_at, data.size(), cfg);
+        model.compact_match();
+        std::cerr << "chat trained\n";
+        // M4: the packed form serves from here and the training form is freed. A later wiki_lm read (entity_of) sees the
+        // chat-trained counts with no online match in either form (compact_match freed the training hash).
+        pm = pack(model);
+        model.release();
+        wiki_lm.model = nullptr;
+        wiki_lm.packed = &pm;
     }
-    std::cout << "chat_turns dolly " << turns.size() << " dont_know " << n_dk << " share "
-              << static_cast<double>(n_dk) / static_cast<double>(turns.size() + n_dk) << " fam " << o.fam << " shard "
-              << sh1.size() << " shard2 " << sh2.size() << "\n";
-    const std::size_t chat_at = append_chat(model, data, chat);
-    std::string().swap(chat);  // data holds the chat bytes now, and nothing below reads the turns
-    std::vector<Turn>().swap(turns);
-    train_span(model, data, w, chat_at, data.size(), cfg);
-    train_span(model, data, w, chat_at, data.size(), cfg);
-    model.compact_match();
-    std::cerr << "chat trained\n";
-    // M4: the packed form serves from here and the training form is freed. A later wiki_lm read (entity_of) sees the
-    // chat-trained counts with no online match in either form (compact_match freed the training hash).
-    const PackedModel pm = pack(model);
-    model.release();
-    wiki_lm.model = nullptr;
-    wiki_lm.packed = &pm;
 
     // T, the training text (wiki train + chat): the class expert is built from it first (B4), then InfiniGram takes it
     // (M6 order, after the trie: A1c's tokens need the wiki trie before the chat text exists). Both builds come before
-    // the holdout arrays below, which they do not read.
+    // the holdout arrays below, which they do not read. A served model (M11) loads both instead, and T is not made.
     std::vector<std::uint8_t> T;
-    const std::size_t all_followers = training_text(data, cfg, T);
-    std::unique_ptr<ClassContext> cc;
-    if (!o.cls.empty()) {
+    const std::size_t all_followers = serve ? st.all_followers : training_text(data, cfg, T);
+    std::unique_ptr<ClassContext> cc = std::move(st.cc);
+    if (!serve && !o.cls.empty()) {
         cc = make_class_context(o.cls);
         if (!cc) return 1;
         cc->build(T.data(), T.size());
+        std::cerr << "class table built\n";
     }
     // InfiniGram takes T, unless the similar-context expert reads it (A4, src=all: its keys and its neighbours are T's).
     const bool sim_reads_t = !o.sim.empty() && parse_sim(o.sim).src != "wiki";
-    const FmInfiniGram ig = sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
+    const FmInfiniGram ig = serve ? std::move(*st.ig) : sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
+    std::cerr << (serve ? "served" : "index built") << "\n";
+    if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get())) return 1;
+    // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
+    // (src=wiki). M13: built here, before the per-byte holdout arrays, so its build does not sit on them; its lambdas
+    // and lines come after the class expert's, below.
+    std::unique_ptr<SimilarContext> sc;
+    const std::uint8_t* sc_text = nullptr;
+    double build_s = 0;
+    if (!o.sim.empty()) {
+        const SimSpec ss = parse_sim(o.sim);
+        if (!ss.ok) {
+            std::cerr << "bad --sim spec " << o.sim << "\n";
+            return 2;
+        }
+        if (!(sc = make_similar_context(ss))) return 1;
+        const auto t0 = std::chrono::steady_clock::now();
+        sc_text = ss.src == "wiki" ? data.data() : T.data();
+        sc->build(sc_text, ss.src == "wiki" ? cfg.train : T.size());
+        build_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::cerr << "similar-context expert built\n";
+    }
     // Holdout: the trie mixture's BPC (= chat's wiki_bpc_after_chat), then InfiniGram's lambdas on the first half and
     // the trie + InfiniGram BPC on the second half (as context8k, cap 8192); with --copy, the copy expert's lambdas
     // on the first half (its context: the holdout stream itself) and its BPC and LCI gain on the second half.
     const std::size_t H = cfg.sample - cfg.train, half = H / 2;
-    std::vector<double> pt(H), pinf(H), pig(H), pcp(H);
-    std::vector<int> bk(H), cbk(H);
+    std::vector<double> pt(H), pinf(H), pig(H), pcp(o.copy ? H : 0);  // M13: each array only when it is read
+    std::vector<int> bk(H), cbk(o.copy ? H : 0);
     double bits_all = 0;
     for (std::size_t k = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
@@ -2896,6 +3058,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         pig[k] = lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k];
         if (k >= half) bits_trie2 += -std::log2(pt[k]), bits_ig2 += -std::log2(pig[k]);
     }
+    std::vector<double>().swap(pinf);  // M13: not read again
+    std::vector<int>().swap(bk);
     std::cout.setf(std::ios::fixed);
     std::cout.precision(6);
     std::cout << "holdout_mix_bpc " << bits_all / static_cast<double>(H) << "\n";
@@ -2904,8 +3068,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // B4: the class-context expert over the same training bytes as InfiniGram (wiki train + chat), built above, lambdas
     // on the first half of the holdout over the trie (lcl_t) and over trie + InfiniGram (lcl_i).
     double lcl_t[ClassContext::kBuckets] = {0}, lcl_i[ClassContext::kBuckets] = {0};
-    std::vector<double> pcl(H);
-    std::vector<int> clb(H);
+    std::vector<double> pcl(cc ? H : 0);
+    std::vector<int> clb(cc ? H : 0);
     if (cc) {
         for (std::size_t k = 0; k < H; ++k) {
             double P[256];
@@ -2929,23 +3093,12 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         bt0[k] = lcl_t[clb[k]] * pcl[k] + (1 - lcl_t[clb[k]]) * pt[k];
         bi0[k] = lcl_i[clb[k]] * pcl[k] + (1 - lcl_i[clb[k]]) * pig[k];
     }
-    // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
-    // (src=wiki); lambdas on the first half of the holdout over trie (+ cls) (lsm_t) and trie + InfiniGram (+ cls)
-    // (lsm_i); its gain on the second half (LCI over 256 blocks). The copy expert, if on, is fit over it.
-    std::unique_ptr<SimilarContext> sc;
+    std::vector<double>().swap(pcl);  // M13: not read again
+    std::vector<int>().swap(clb);
+    // A4: the similar-context expert's lambdas on the first half of the holdout over trie (+ cls) (lsm_t) and trie +
+    // InfiniGram (+ cls) (lsm_i); its gain on the second half (LCI over 256 blocks). The copy expert, if on, is fit over it.
     double lsm_t[SimilarContext::kBuckets] = {0}, lsm_i[SimilarContext::kBuckets] = {0};
-    const std::uint8_t* sc_text = nullptr;
-    if (!o.sim.empty()) {
-        const SimSpec ss = parse_sim(o.sim);
-        if (!ss.ok) {
-            std::cerr << "bad --sim spec " << o.sim << "\n";
-            return 2;
-        }
-        if (!(sc = make_similar_context(ss))) return 1;
-        const auto t0 = std::chrono::steady_clock::now();
-        sc_text = ss.src == "wiki" ? data.data() : T.data();
-        sc->build(sc_text, ss.src == "wiki" ? cfg.train : T.size());
-        const double build_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    if (sc) {
         std::vector<double> ps(H);
         std::vector<int> sb(H);
         for (std::size_t k = 0; k < H; ++k) {
@@ -3717,6 +3870,7 @@ void usage() {
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
                  "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]\n"
+                 "     [--save DIR | --model DIR]\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  simvec [wiki] --sim SPEC --out FILE\n"
                  "  selftest\n"
@@ -3745,8 +3899,8 @@ int main(int argc, char** argv) {
         usage();
         return 2;
     }
-    if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample") {
-        std::cerr << "--model and --save are for chat and sample\n";
+    if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa") {
+        std::cerr << "--model and --save are for chat, sample and qa\n";
         return 2;
     }
     if (!self_test()) return 1;
