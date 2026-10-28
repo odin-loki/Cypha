@@ -5,9 +5,9 @@
 /// *near* the current one in vector space, not identical to it. Report: docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md.
 ///
 /// - Keys. At every word end in the stored text (a word is a run of ASCII letters, digits or apostrophes, as in
-///   class_context.hpp), the vector of the previous W words: the SIF-weighted mean (a / (a + p(w)), p from the stored
-///   text's own counts) of unit word vectors, centred, projected on principal components (the first `drop` removed),
-///   unit-normalised and stored as int8. Each key points at the byte after its word.
+///   class_context.hpp), the vector of the previous W words: the SIF-weighted (a / (a + p(w)), p from the stored
+///   text's own counts) or equal-weighted mean of unit word vectors, centred, projected on principal components (the
+///   first `drop` removed), unit-normalised and stored as int8. Each key points at the byte after its word.
 /// - Query. At the end of the last completed word (the anchor), the k nearest keys by cosine, from an inverted file
 ///   over spherical k-means centroids (`probe` of `lists` scanned). One query per word, cached while the tail (the
 ///   bytes since the anchor: separators and the partial word, at most `max_tail`) grows.
@@ -16,6 +16,9 @@
 ///   CyphaLM's distribution with one lambda per bucket(), as cyphalm_trie mixes InfiniGram. A neighbour never lives
 ///   past the word being written, so the expert proposes bytes, never a stored passage (PLAN rule 10).
 /// - Batch-built over a text that must outlive the expert. RAM: about (dim rounded up to 16) + 4 bytes a key.
+/// - Params' defaults are the design registered before A4's runs. The settings chosen on the holdout are W 2, equal
+///   weights, k 2048, drop 0, 2048 lists with 32 probed (PPMI-SVD vectors): fresh text -0.061 BPC over trie +
+///   InfiniGram + class.
 
 #include <algorithm>
 #include <cctype>
