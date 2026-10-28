@@ -87,9 +87,10 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - **Next:** wire M4, M5 and the M2/M3 flags into `cyphalm_trie`, with the M6 build order (class expert and index before the trie) and an FM index for A1c's lowered text; then a stored packed file and a stored FM file, so serving never builds anything.
 - [ ] **Answering, after A1d** ([report](docs/reports/A1D_A2B_ANSWERING_VARIANTS.md)): a better entity for the familiarity token is done (span candidates, 76 of 100). Open: a copy weight that depends on the context, to get the entity into the tag (Odin); the title lookup drops a leading "The"; class + copy echoes the question when the fact shard is in (B4B); D2 still misses (precision 0.600 / 0.635 against 0.8).
 - [ ] **Tool profile** ([`docs/TOOL_PROFILE_PLAN.md`](docs/TOOL_PROFILE_PLAN.md)):
+  - **P3 and P4 done 2026-10-28** ([report](docs/reports/TOOL_PROFILE_P2_GRID.md)): the tagger and word-vector class tables are cut from the class expert (the tagger stays as the question parser); `cypha_gate` is deleted (it lets more wrong answers through); `pattern_learn` fails the cut as a Q/A tool but is flagged for Odin, because the fact store and Track S use it; teacher text waits for Odin's PC. The class and copy experts stay options, not defaults ([B4B](docs/reports/B4B_LM_DEFAULTS.md): they fail rule 3 with the fact shard).
   1. Build the CyphaLM Q/A baseline harness. **Done 2026-10-28** (`cyphalm_trie qa`; baseline 0.0% coverage at 2% wrong).
   2. Write adapters for the tagger, the pattern learner, word classes, teacher text and the abstain gate.
-     - **Done 2026-10-28:** the fact-text shard (`pattern_learn --shard`, D4) and the abstain gate (`native/tools/cypha_gate.cpp`, CTest `native_cypha_gate_selftest`).
+     - **Done 2026-10-28:** the fact-text shard (`pattern_learn --shard`, D4) and the abstain gate (`cypha_gate`, since deleted).
      - **Done 2026-10-28:** the class-context expert `native/include/cypha/cyphalm/class_context.hpp`, shared by the tagger and the word classes ([B4 report](docs/reports/B4_CLASS_CONTEXT_EXPERT.md)): −0.078 BPC on fresh text with shape classes alone, −0.091 with E1 tags; surface S up. In `cyphalm_trie` as `cls` and `qa --cls`.
      - **Still to do:** the teacher-text shard (Qwen3.5-9B).
   3. Run the B / B+T / F / F−T grid with a leakage check.

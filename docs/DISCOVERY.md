@@ -542,7 +542,7 @@ Allocates effort across P1–P11, the generators and the tiers. See section 9.
 
 **Later, Cypha takes this up itself** as a discovery project and records what it finds, using the processes above (P2 conjecture, P3 anomaly, P6 rule induction, P13 self-audit, P14 journal). Questions it should work through:
 
-1. **What does the gate add** over CyphaLM's own probabilities? Measure the wrong-answer rate at fixed coverage both ways.
+1. **What does the gate add** over CyphaLM's own probabilities? Measure the wrong-answer rate at fixed coverage both ways. **Measured 2026-10-28** (TOOL_PROFILE P3, [report](reports/TOOL_PROFILE_P2_GRID.md)): with at most 7 right answers in 130, the classifier gate kept more wrong answers than a single-feature threshold (18.0 against 5 over ten configurations) and was deleted; the question stays open for when CyphaLM has more right answers to learn from.
 2. **Can CyphaLM learn to judge its own answers?** For example, by training on its own right and wrong answers as text, or by an abstention expert inside its mixture.
 3. **Which signals predict a wrong answer?** Entropy, match length, margin, the reason codes. Do they generalise across question types?
 4. **Is there a better arrangement** than "generate then gate"? For example, CyphaLM producing the "I don't know" message and tag of section 3.5 by itself, as a learned output, or confidence carried through the mixture.

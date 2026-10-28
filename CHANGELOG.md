@@ -9,12 +9,14 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Removed
+- **`cypha_gate`** and CTest `native_cypha_gate_selftest` (TOOL_PROFILE P4, [report](docs/reports/TOOL_PROFILE_P2_GRID.md)): over ten configurations the Cypha-classifier gate kept 21.7 right and 18.0 wrong answers (mean of 3 seeds) against the threshold gate's 15 and 5, and broke the 2% target in 6 of 30 seed runs. `qa`'s threshold gate stays. Last version: commit `e82a4a4`.
 - **`native/tools/scribe_ladder.cpp`** (2026-10-28): replaced by `native/tools/scribe.cpp`, which reproduces v1's ladder numbers to the printed digit with `--profile v1` ([SCRIBE v2 report](docs/reports/SCRIBE_V2.md)).
 - **Forked trie tools** (PLAN B1, 2026-10-27, [report](docs/reports/B1_TRIE_CONSOLIDATION.md)): `trie_fold_lm`, `trie_online_mix`, `trie_chat`, `trie_qa_probe`, `trie_context_8k`, `trie_sample` (now `cyphalm_trie` subcommands with identical output) and the retired experiments `trie_together`, `trie_adaptive`, `trie_gria_gate`, `trie_online_holdout` (results and recovery commits in the report). 9,574 lines became 2,072. `trie_stream_train.cpp` is unchanged.
 - **Code-debt cuts** (2026-10-27): `native/tools/question_classifier.cpp` (its finding stays in the E4 report; git `707629a`) and `native/tools/surface_controls.cpp` (superseded by `scribe_ladder`; git `ab4f9f6`).
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Changed
+- **Language-model defaults unchanged** ([B4B](docs/reports/B4B_LM_DEFAULTS.md)): the class expert (shape, 3 orders) and copy (m 8, window 16,384) take fresh text from 2.166 to 1.912 BPC with surface S 0.907, but with the fact shard they echo the question or let a wrong answer through (rule 3), so they stay options.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
