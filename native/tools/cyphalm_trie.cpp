@@ -46,7 +46,9 @@
 //        bpc model, each spec paired against the model without it: holdout second-half BPC (lambdas on the
 //        first half), fresh-text BPC on [sample, sample + 1 MiB) (lambdas on the whole holdout), and surface S
 //        of 400-byte samples from 200 holdout prompts, with block-bootstrap intervals; later specs are also
-//        compared with the first. TABLE is word<TAB>class (e.g. E1 tags); "shape" is shape classes only.
+//        compared with the first. TABLE is word<TAB>class (e.g. E1 tags); "shape" is shape classes only. The
+//        default table is three orders, compact, contexts seen once dropped (shape = shape:6:3:cp2, Odin
+//        2026-10-28); B4's two-order full table, which its report's numbers come from, is shape:6:2:f.
 //        A4 (docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md): --sim adds the similar-context expert (similar_context.hpp) instead
 //        of the class loop: each SPEC over trie + InfiniGram and over trie + InfiniGram + the first class spec, holdout
 //        second half (lambdas on the first), the index's recall against an exact search, build time, table bytes and
@@ -154,7 +156,7 @@
 //              Token (ent_title, --fam-train low): dev precision / recall 0.600 / 1.00 (trie), test 0.635 / 0.94
 //              (A1c: 0.371 / 0.98); with D4's shard trie + InfiniGram keeps 2 right 0 wrong at 2% wrong out of
 //              fold (a high token keeps none). stat: trie + IG 0.313 / 0.50. Entity in the token: 0 of 65 tags.
-//   --cls + --copy  holdout2 trie + IG 2.071574, + shape:6 1.995847, + copy(m 8) 1.985451, both 1.914210;
+//   --cls + --copy  holdout2 trie + IG 2.071574, + shape:6:2:f 1.995847, + copy(m 8) 1.985451, both 1.914210;
 //              with the shard, class + copy echoes the question (raw right 6 -> 2).
 //   --r3 raw   F2R's frames (column 12) + raw-form shard: dev 5 raw right, 2 right 1 wrong out of fold; test 1 / 0.
 //
@@ -1075,19 +1077,23 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
 }
 
 // B4: the class-context expert from "TABLE[:tail[:orders[:flags]]]": TABLE a word<TAB>class file, or "shape" (shape
-// classes only); tail defaults to 6, orders to 2 (2 or 3); flags (RAM_PROFILE M2/M3) are c (compact table) and pN
-// (contexts seen fewer than N times dropped), e.g. shape:6:3:cp2. The fields are read from the right, so a Windows path
-// keeps its drive colon. Not built yet (call build()). nullptr (and a message) for a bad spec or table.
+// classes only). Defaults (Odin, 2026-10-28): tail 6, orders 3, a compact table with contexts seen once dropped, so
+// "shape" is shape:6:3:cp2. A flags field states the storage in full: c (compact table), pN (contexts seen fewer
+// than N times dropped), f (neither: the full table); the earlier default is shape:6:2:f. The fields are read from the
+// right, so a Windows path keeps its drive colon. Not built yet (call build()). nullptr (and a message) for a bad spec
+// or table.
 std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
     const auto f = split(spec, ':');
     auto digits = [](const std::string& x) {
         return !x.empty() && x.size() < 6 && std::all_of(x.begin(), x.end(), [](char c) { return c >= '0' && c <= '9'; });
     };
     ClassContext::Options o;
-    auto flags = [&](const std::string& x) {
+    auto flags = [&](const std::string& x) {  // a flags field states the storage in full, from the full table up
         bool any = false;
+        o.compact = false, o.min_total = 1;
         for (std::size_t i = 0; i < x.size();) {
             if (x[i] == 'c' && !o.compact) o.compact = true, ++i;
+            else if (x[i] == 'f' && i == 0 && x.size() == 1) ++i;
             else if (x[i] == 'p' && i + 1 < x.size() && std::isdigit(static_cast<unsigned char>(x[i + 1]))) {
                 std::size_t j = i + 1;
                 while (j < x.size() && std::isdigit(static_cast<unsigned char>(x[j]))) ++j;
@@ -3429,7 +3435,7 @@ int cmd_selftest() {
     {
         // B4: the class-context expert on a tiny corpus. A verb of the same class reuses what "wrote" learned; an
         // unknown word falls to the uniform floor; P sums to 1; the bucket packs order and count.
-        ClassContext cc({{"wrote", 10}, {"composed", 10}, {"who", 11}, {"the", 12}}, 6);
+        ClassContext cc({{"wrote", 10}, {"composed", 10}, {"who", 11}, {"the", 12}}, ClassContext::Options{6, 2, false, 1});
         const std::string t = "who wrote the song? who wrote the play? who wrote the book? ";
         cc.build(reinterpret_cast<const std::uint8_t*>(t.data()), t.size());
         auto ask = [&](const std::string& h, double* P) {
@@ -3442,19 +3448,20 @@ int cmd_selftest() {
                         std::fabs(P2['h'] - P1['h']) < 1e-12 && h3.order == 0 && std::fabs(P3['h'] - 1.0 / 256) < 1e-12 &&
                         std::fabs(sum3 - 1) < 1e-9 && ClassContext::bucket({2, 3}) == 9 && cc.contexts() == 68 &&
                         make_class_context("shape:4") != nullptr;
-        // Spec fields are read from the right (M2/M3 flags): a third order and dropping contexts change the table,
-        // and the plain forms parse as before.
+        // Spec fields are read from the right (M2/M3 flags). The default is three orders, compact, contexts seen
+        // once dropped (Odin, 2026-10-28); a flags field states the storage in full, and f is the full table.
         auto built = [&](const std::string& spec) {
             const auto c = make_class_context(spec);
             if (c) c->build(reinterpret_cast<const std::uint8_t*>(t.data()), t.size());
             return c ? c->contexts() : std::size_t{0};
         };
-        const std::size_t s2 = built("shape"), s3 = built("shape:6:3"), s3p = built("shape:6:3:p2"),
-                          s3cp = built("shape:6:3:cp2");
-        const bool flags_ok = s2 == built("shape:6") && s2 == 64 && s3 == 103 && s3p == 42 && s3cp == 42;
+        const std::size_t sd = built("shape"), s2f = built("shape:6:2:f"), s3f = built("shape:6:3:f"),
+                          s3p = built("shape:6:3:p2"), s3cp = built("shape:6:3:cp2");
+        const bool flags_ok = sd == built("shape:6") && sd == built("shape:6:3") && sd == s3cp && s2f == 64 &&
+                              s3f == 103 && s3p == 42 && s3cp == 42;
         if (!ok || !flags_ok) {
-            std::cerr << "selftest: class-context expert checks failed (spec sizes " << s2 << " " << s3 << " " << s3p
-                      << " " << s3cp << ")\n";
+            std::cerr << "selftest: class-context expert checks failed (spec sizes " << sd << " " << s2f << " " << s3f
+                      << " " << s3p << " " << s3cp << ")\n";
             return 1;
         }
     }
