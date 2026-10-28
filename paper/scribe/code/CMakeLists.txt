@@ -1,0 +1,13 @@
+# SCRIBE: the metric tool, the word-vector builder and the self-test. Standard C++20, no other dependency.
+cmake_minimum_required(VERSION 3.16)
+project(scribe CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+enable_testing()
+add_executable(scribe native/tools/scribe.cpp)
+target_include_directories(scribe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/native/include")
+add_executable(ppmi_svd native/tools/ppmi_svd.cpp)
+add_test(NAME scribe_selftest COMMAND scribe selftest)

@@ -22,12 +22,5 @@
   "version": "1.0",
   "language": "eng",
   "publication_date": "2026-10-28",
-  "related_identifiers": [
-    {
-      "identifier": "https://github.com/odin-loki/Cypha",
-      "relation": "isSupplementedBy",
-      "resource_type": "software"
-    }
-  ],
-  "notes": "Code (AGPL-3.0, with a commercial licence) is in the repository github.com/odin-loki/Cypha: native/include/cypha/eval/scribe.hpp, native/tools/scribe.cpp, scripts/scribe_eval/. The bundle holds the paper and every result table (Markdown, CSV and JSON) in results/. No third-party text is redistributed; scripts/scribe_eval/data.py downloads and prepares every dataset."
+  "notes": "Three files: SCRIBE_paper.pdf (the paper, CC BY 4.0); SCRIBE_code_v1.0.zip (all code: the SCRIBE metric and tool in C++20, the word-vector builder, the evaluation and run scripts, the study plan with the registered predictions, the freeze record and the paper source; GNU AGPL v3); SCRIBE_results_v1.0.zip (every result table of the paper as Markdown, CSV and JSON). No third-party text is redistributed; the code's data.py downloads and prepares every dataset."
 }
