@@ -700,6 +700,7 @@ These are written as CTests and checked on every build:
 
 **Order.**
 1. S1 → S2 → S5 → S3. Honesty first: reason codes, states and the firewall, on the stores that exist now.
+   - S5 done 2026-10-28 (I1, I4, I7, I8 CTests); S3 done 2026-10-28 (gaps with VOI on the v2 fact store). [Report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md).
 2. S4 → S6 → S7. Measurement of the unknown, then the hypothesis machinery.
 3. S8 → S9 → S10. The first generators, worlds and the scheduler.
 4. S11 → S12 → S13 → S14, with S15 built alongside S8 so discovery has a fair test from the start.

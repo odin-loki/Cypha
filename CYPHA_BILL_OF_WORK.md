@@ -55,7 +55,10 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - **Done 2026-10-27** ([report](docs/reports/S1_S2_EPISTEMIC.md)):
     - **S1 for `chat_index`:** removed with `chat_index` on 2026-10-27 (PLAN rule 10).
     - **S2:** `native/include/cypha/eval/epistemic.hpp`, with CTest `native_epistemic_test` (195 checks): states, degree of conflict, the two kinds of uncertainty, reason codes, unseen estimators and cards.
-  - **Still open:** S1 on CyphaLM's answers, S3 and S5.
+  - **S5 and S3 done 2026-10-28** ([report](docs/reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md)):
+    - **S5:** `native/include/cypha/eval/hypothesis.hpp`: record, lifecycle, tiers, taint and firewall, promotion through ECS on independent evidence. I1, I4, I7 and I8 in `native_epistemic_test` (195 → 516 checks).
+    - **S3:** `native/include/cypha/eval/gap_map.hpp` and `pattern_learn --gaps`: 27,842 gaps with VOI on the v2 fact store; CyphaLM's own dev tags are parsed into it.
+  - **Still open:** S1 on CyphaLM's answers; S4 next. Also: where demand should come from (Odin), finer entity types (76% are "other"), a `located_in` check before place contests, seed-seed conflicts into ECS.
 - [ ] **K2–K5** ([`docs/THOUGHT.md`](docs/THOUGHT.md)):
   - K1 (144 processes including AI, data science and teacher mining, validator) is done.
   - **K2 and K3 done 2026-10-27** ([report](docs/reports/K2_K3_THOUGHT_INTERPRETER.md)): the interpreter and the standard learners in `native/include/cypha/thought/`, with CTest `native_thought_test` (5,534 checks). half_split takes 6 tests against 31.3 for random probing; SPRT errors are 0.028 / 0.038 at α = β = 0.05; selection regret falls from 243 to 92.5; ECE 0.015; replay is bit-identical.
