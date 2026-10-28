@@ -29,5 +29,5 @@
       "resource_type": "software"
     }
   ],
-  "notes": "Code (AGPL-3.0, with a commercial licence) is in the Cypha repository: native/include/cypha/eval/scribe.hpp, native/tools/scribe.cpp, scripts/scribe_eval/. Result tables are in results/. Per-sample scores are keyed by public dataset ids; no third-party text is redistributed."
+  "notes": "Code (AGPL-3.0, with a commercial licence) is in the repository github.com/odin-loki/Cypha: native/include/cypha/eval/scribe.hpp, native/tools/scribe.cpp, scripts/scribe_eval/. The bundle holds the paper and every result table (Markdown, CSV and JSON) in results/. No third-party text is redistributed; scripts/scribe_eval/data.py downloads and prepares every dataset."
 }

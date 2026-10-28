@@ -12,7 +12,7 @@ date: "28 October 2026"
 
 ## Abstract
 
-SCRIBE is a metric for generated text that uses no neural network. It computes about twenty statistics of a text from counts. They cover how much each word's context predicts it beyond its frequency, for words and for word classes; whether the words are real; whether sentences are well formed; how much the sentences share vocabulary and topic, using count-based word vectors; repetition; copying of the training text; and overlap with a prompt. Each statistic is read as a robust z-score against human reference text of the same genre and length. Lexical and syntactic failures count as categorical, saturating evidence, coherence as graded evidence, and repetition only beyond what 99% of human samples show. SCRIBE v2 was designed on development text and then frozen. On fresh Wikipedia text it is the only metric tested that passes all five pairs of a control ladder: human text, then sentences shuffled across documents, words shuffled within sentences, random words, random letters and a repeated phrase, with pairwise accuracies of 0.975 to 1.000. GPT-2 perplexity, a CoLA acceptability classifier, embedding coherence and the usual diversity statistics each pass one or two pairs. SCRIBE v2 also passes on web text, and 3 of 5 pairs on novels. It follows seven of nine held-out kinds of damage and catches copying, prompt echo, keyword stuffing and loops. In its prompted form it separates right from wrong answers to Dolly questions (accuracy 0.961). On HANNA stories it correlates with human coherence ratings (Kendall 0.194) better than BLEU and ROUGE-L, and as well as ChatGPT. It is stable across seeds, across training-text sizes from 8 to 128 MiB, and with 100 or more reference samples per length bucket. It scores about 1,000 texts per second on one CPU core with 0.4 GB of memory. Its blind spots are sentence order, truncated sentences, factual errors, and text that is more predictable than human text: it rates GPT-2 top-k samples above human web text, and it cannot rank models that all write word salad. Of twenty predictions registered before testing, ⟨P_ABS⟩.
+SCRIBE is a metric for generated text that uses no neural network. It computes about twenty statistics of a text from counts. They cover how much each word's context predicts it beyond its frequency, for words and for word classes; whether the words are real; whether sentences are well formed; how much the sentences share vocabulary and topic, using count-based word vectors; repetition; copying of the training text; and overlap with a prompt. Each statistic is read as a robust z-score against human reference text of the same genre and length. Lexical and syntactic failures count as categorical, saturating evidence, coherence as graded evidence, and repetition only beyond what 99% of human samples show. SCRIBE v2 was designed on development text and then frozen. On fresh Wikipedia text it is the only metric tested that passes all five pairs of a control ladder: human text, then sentences shuffled across documents, words shuffled within sentences, random words, random letters and a repeated phrase, with pairwise accuracies of 0.975 to 1.000. GPT-2 perplexity, a CoLA acceptability classifier, embedding coherence and the usual diversity statistics each pass one or two pairs. SCRIBE v2 also passes on web text, and 3 of 5 pairs on novels. It follows seven of nine held-out kinds of damage and catches copying, prompt echo, keyword stuffing and loops. In its prompted form it separates right from wrong answers to Dolly questions (accuracy 0.961). On HANNA stories it correlates with human coherence ratings (Kendall 0.194) better than BLEU and ROUGE-L and as well as ChatGPT, though there a plain repetition count does as well. It is stable across seeds, across training-text sizes from 8 to 128 MiB, and with 100 or more reference samples per length bucket. It scores about 1,000 texts per second on one CPU core with 0.4 GB of memory. Its blind spots are sentence order, truncated sentences, factual errors, and text that is more predictable than human text: it rates GPT-2 top-k samples above human web text, and it cannot rank models that all write word salad. Of twenty predictions registered before testing, ⟨P_ABS⟩.
 
 ---
 
@@ -315,17 +315,20 @@ Repetition, echo, stuffing and copying are caught. Without the copy statistic i1
 
 ### 6.5 Agreement with people
 
-**Table 9.** The MAUVE human evaluation (3,240 pairwise judgments of WebText continuations; q1 more interesting, q2 makes more sense, q3 more likely written by a person). Per pair: the share of pairs where the metric prefers the text the person chose. System: Spearman between metric means and Bradley–Terry scores over the eight GPT-2 configurations. MAUVE is set-level, so it has no per-pair value; its correlations are those of its published scores.
+**Table 9.** The MAUVE human evaluation: pairwise judgments of WebText continuations (q1 more interesting, q2 makes more sense, q3 more likely written by a person). Per pair: the share of pairs where the metric prefers the text the person chose. System: Spearman between metric means and Bradley–Terry scores over the eight GPT-2 configurations. The main rows use the 1,667–1,695 judgments with an estimated answer time over 25 seconds, the MAUVE paper's filter, so they compare directly with MAUVE's published correlations. MAUVE is set-level, so it has no per-pair value.
 
 | Metric | q1 per pair | q2 per pair | q3 per pair | q1 system | q2 system | q3 system |
 |---|---|---|---|---|---|---|
-| SCRIBE v2 | 0.531 | 0.527 | 0.531 | 0.571 | 0.810 | 0.714 |
-| SCRIBE v1 | 0.511 | 0.510 | 0.506 | 0.333 | 0.524 | 0.500 |
-| surface S | 0.531 | 0.530 | 0.525 | 0.286 | 0.476 | 0.357 |
-⟨MHE_BASELINES⟩
+| SCRIBE v2 | 0.547 | 0.534 | 0.541 | 0.714 | 0.762 | 0.857 |
+| SCRIBE v2, prompted | 0.526 | 0.529 | 0.542 | 0.690 | 0.786 | 0.833 |
+| SCRIBE v1 | 0.550 | 0.541 | 0.535 | 0.500 | 0.500 | 0.571 |
+| surface S | 0.534 | 0.535 | 0.528 | 0.476 | 0.405 | 0.476 |
 | MAUVE, GPT-2 large features (published) | | | | 0.810 | 0.857 | 0.952 |
+| SCRIBE v2, all 3,240 judgments | 0.531 | 0.527 | 0.531 | 0.571 | 0.810 | 0.714 |
 
-People's pairwise choices are hard to predict from one text: no single-text metric here is far above chance. At system level, SCRIBE v2 tracks "makes more sense" (0.810) and "human-like" (0.714) better than its predecessors, but below MAUVE, which compares whole distributions with a large model's features. The system intervals are wide (eight systems).
+People's pairwise choices are hard to predict from one text: no single-text metric here is far above chance (0.53–0.55 per pair). At system level, SCRIBE v2 tracks all three questions better than v1 and surface S, and comes within 0.1 of MAUVE on each (0.714, 0.762 and 0.857 against 0.810, 0.857 and 0.952). MAUVE compares whole distributions in a large model's feature space; SCRIBE averages single-text scores. With eight systems the intervals are wide (q3: 0.21 to 0.88). Without the answer-time filter, SCRIBE v2's system correlations are 0.571, 0.810 and 0.714.
+
+⟨MHE_BASELINES⟩
 
 **Table 10.** HANNA (960 machine-written stories from ten systems; human-written stories excluded). Story-level Kendall τ with the mean human rating of each criterion, and system-level Kendall τ for coherence. RE relevance, CH coherence, EM empathy, SU surprise, EG engagement, CX complexity. Reference-based metrics compare each story with the human story for the same prompt.
 
@@ -334,6 +337,7 @@ People's pairwise choices are hard to predict from one text: no single-text metr
 | SCRIBE v2 | 0.014 | 0.194 | 0.124 | 0.143 | 0.168 | 0.228 | 0.689 |
 | SCRIBE v1 | 0.074 | 0.232 | 0.183 | 0.209 | 0.262 | 0.322 | 0.600 |
 | surface S | 0.062 | 0.215 | 0.147 | 0.191 | 0.229 | 0.282 | 0.556 |
+| rep-4 (repeated word 4-grams) | 0.044 | 0.194 | 0.098 | 0.185 | 0.199 | 0.264 | 0.378 |
 ⟨HANNA_GPT2⟩
 | BLEU | 0.074 | 0.110 | 0.133 | 0.106 | 0.139 | 0.189 | 0.333 |
 | ROUGE-L | 0.081 | 0.112 | 0.145 | 0.096 | 0.143 | 0.168 | 0.422 |
@@ -349,7 +353,7 @@ People's pairwise choices are hard to predict from one text: no single-text metr
 | Llama-13B | 0.122 | 0.202 | 0.185 | 0.152 | 0.212 | 0.253 | 0.733 |
 | Beluga-13B | 0.203 | 0.282 | 0.259 | 0.216 | 0.290 | 0.304 | 0.733 |
 
-On coherence, SCRIBE v2 (0.194) beats BLEU and ROUGE-L (paired bootstrap, p ≤ 0.035 after Benjamini–Hochberg adjustment), matches ChatGPT (0.202) and Llama-13B (0.202), and is below Beluga-13B (0.282, p = 0.009). SCRIBE v1 is higher still (0.232), as is surface S (0.215), though neither difference with v2 is significant. At system level SCRIBE v2's coherence correlation (0.689) is the highest of all metrics that are not LLM judges, and below only the two strongest judges (0.733). Relevance to a creative prompt is invisible to it (0.014). When the 96 human stories are included, the reference-based metrics gain sharply (BLEU 0.248 on coherence) because each human story is its own reference, while SCRIBE v2 falls to 0.172.
+On coherence, SCRIBE v2 (0.194) beats BLEU and ROUGE-L (paired bootstrap, p ≤ 0.035 after Benjamini–Hochberg adjustment), matches ChatGPT (0.202) and Llama-13B (0.202), and is below Beluga-13B (0.282, p = 0.009). SCRIBE v1 is higher still (0.232), as is surface S (0.215), though neither difference with v2 is significant. A plain repetition statistic, rep-4, ties SCRIBE v2 exactly (0.194): on HANNA, much of what separates coherent from incoherent machine stories is repetition. At system level SCRIBE v2 is far ahead of it (0.689 against 0.378). At system level SCRIBE v2's coherence correlation (0.689) is the highest of all metrics that are not LLM judges, and below only the two strongest judges (0.733). Relevance to a creative prompt is invisible to it (0.014). When the 96 human stories are included, the reference-based metrics gain sharply (BLEU 0.248 on coherence) because each human story is its own reference, while SCRIBE v2 falls to 0.172.
 
 **Table 11.** OpenMEVA MANS (1,000 machine-written stories per corpus, overall quality). Story-level Pearson and Kendall, and system-level Kendall over five systems.
 
@@ -359,9 +363,11 @@ On coherence, SCRIBE v2 (0.194) beats BLEU and ROUGE-L (paired bootstrap, p ≤ 
 | SCRIBE v2, prompted | 0.054 | 0.044 | −0.400 | 0.047 | 0.040 | −0.800 |
 | SCRIBE v1 | 0.108 | 0.069 | 0.000 | −0.022 | −0.007 | −0.800 |
 | surface S | 0.065 | −0.005 | −0.400 | −0.070 | −0.045 | −0.800 |
+| best count statistic | 0.109 (distinct-4) | 0.086 | −0.400 | −0.022 (distinct-4) | −0.046 | −0.800 |
 ⟨MANS_GPT2⟩
+| one rater against the others (human ceiling) | 0.848 | 0.737 | | 0.797 | 0.709 | |
 
-On five-sentence ROC stories SCRIBE v2 correlates with overall quality at 0.189, more than twice its predecessors. On WritingPrompts stories the correlation is near zero. The prompted profile does worse than the open one on both: lexical overlap with a story's opening is not what makes a story good.
+On five-sentence ROC stories SCRIBE v2 correlates with overall quality at 0.189, more than twice its predecessors and every count statistic. On WritingPrompts stories the correlation is near zero, and every count statistic is negative. All of these are far below the agreement between OpenMEVA's raters (Kendall 0.71–0.74 for one rater against the mean of the other four). The prompted profile does worse than the open one on both: lexical overlap with a story's opening is not what makes a story good.
 
 ### 6.6 Stability
 
@@ -426,7 +432,7 @@ Per text, SCRIBE v2 spends about 0.49 ms computing the v1 statistics and 0.20 ms
 | P8 | Pythia sizes, Spearman ≥ 0.8 | not run | untested |
 | P9 | v2 orders GPT-2 sizes within one decoding family; MAUVE within both | v2 swaps small and medium (pure) and ties all four (top-k); MAUVE not run | miss |
 | P10 | greedy decoding lowest under v2, highest under GPT-2 perplexity | not run | untested |
-| P11 | MAUVE human evaluation: q3 system Spearman ≥ 0.6 and per-pair agreement > 0.55 | 0.714 and 0.531 | miss |
+| P11 | MAUVE human evaluation: q3 system Spearman ≥ 0.6 and per-pair agreement > 0.55 | 0.857 and 0.541 (all judgments: 0.714 and 0.531) | miss |
 | P12 | HANNA coherence: story Kendall ≥ 0.15 and system Kendall ≥ 0.6 | 0.194 and 0.689 | hit |
 | P13 | OpenMEVA: story Pearson between 0.1 and 0.4 | ROC 0.189, WP 0.057 | miss |
 | P14 | \|Pearson with length\| ≤ 0.1 per bucket and pooled | 0.009, 0.041; pooled −0.124 | miss |

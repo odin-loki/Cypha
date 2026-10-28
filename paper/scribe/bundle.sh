@@ -5,5 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 out=SCRIBE_zenodo_v1.0.zip
 rm -f "$out"
-zip -q -r "$out" SCRIBE_paper.pdf SCRIBE_paper.html SCRIBE_paper.md paper.css zenodo.json UPLOAD.md results
+# The trie and CyphaLM tables belong to the Cypha project, not to the metric study, so they stay out of the bundle.
+zip -q -r "$out" SCRIBE_paper.pdf SCRIBE_paper.html SCRIBE_paper.md paper.css zenodo.json UPLOAD.md results \
+  -x "results/cyphalm_*" "results/*trie*"
 echo "wrote $out ($(du -h "$out" | cut -f1))"
