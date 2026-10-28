@@ -2808,11 +2808,3 @@ add_test(NAME native_fm_infinigram_test COMMAND "$<TARGET_FILE:fm_infinigram_tes
 set_tests_properties(native_fm_infinigram_test PROPERTIES TIMEOUT 120)
 # --- end M5 block ----------------------------------------------------------------------------------
 
-# --- TOOL_PROFILE P1: the Core Cypha classifier as CyphaLM's abstain gate (DISCOVERY 8a) ---------------
-# Reads `cyphalm_trie qa --out` rows; the self-test uses synthetic rows and needs no corpus.
-add_executable(cypha_gate tools/cypha_gate.cpp)
-target_link_libraries(cypha_gate PRIVATE cypha_core)
-cypha_mingw_apply_exe_link_options(cypha_gate)
-add_test(NAME native_cypha_gate_selftest COMMAND "$<TARGET_FILE:cypha_gate>" --selftest)
-set_tests_properties(native_cypha_gate_selftest PROPERTIES TIMEOUT 120)
-# --- end cypha_gate block ---------------------------------------------------------------------------------
