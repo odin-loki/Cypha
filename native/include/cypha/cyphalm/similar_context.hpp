@@ -22,7 +22,11 @@
 ///   same keys as the full vectors, up to the int8 rounding of the rows.
 /// - Params' defaults are the design registered before A4's runs. The settings chosen on the holdout are W 2, equal
 ///   weights, k 2048, drop 0, 2048 lists with 32 probed (PPMI-SVD vectors): fresh text -0.061 BPC over trie +
-///   InfiniGram + class.
+///   InfiniGram + class. A4c's default adds mode 1 (dedupe) with k 8192: fresh text a further -0.0040.
+/// - A4c, `mode` 1 (dedupe, the default spec's): each distinct key is stored once with all its occurrences; the k
+///   nearest distinct keys each pool their occurrences, weighted as a neighbour is. A key's occurrences are sorted by
+///   the bytes after them, so the ones that agree with the tail are one range, narrowed by binary search. Mode 0 (knn,
+///   each occurrence a neighbour) is A4's. A4c's counts mode (whole lists pooled) lost and was removed (commit 2849b32).
 
 #include <algorithm>
 #include <cctype>
@@ -58,6 +62,7 @@ class SimilarContext {
         int max_tail = 32;      ///< bytes after the anchor that a neighbour is followed through
         int iters = 8;          ///< k-means iterations
         std::uint64_t seed = 20261028;
+        int mode = 0;           ///< A4c: 0 knn (each occurrence a neighbour), 1 dedupe (see above)
     };
     struct Vectors {  ///< word vectors, row r for word id r
         int d = 0;
@@ -222,7 +227,7 @@ class SimilarContext {
         p_.temp = q.temp;
         p_.min_sim = q.min_sim;
         p_.probe = q.probe;
-        p_.max_tail = q.max_tail;
+        p_.max_tail = p_.mode ? std::min(q.max_tail, sort_tail_) : q.max_tail;  // A4c: groups are sorted that deep
         cache_ = ~std::uint64_t{0};
         restart_ = true;
         lat_us_.clear();
@@ -319,13 +324,18 @@ class SimilarContext {
     void build_index(const std::vector<std::pair<std::uint32_t, int>>& words) {
         std::vector<std::int8_t> keys;
         std::vector<std::uint32_t> pos;
-        keys.reserve(words.size() * static_cast<std::size_t>(stride_));  // at most one key a word: no reallocation
-        pos.reserve(words.size());
-        std::vector<std::int8_t> q(static_cast<std::size_t>(stride_));
-        for (std::size_t w = 0; w < words.size(); ++w) {
-            if (!key_of(window(words, w), q.data())) continue;
-            keys.insert(keys.end(), q.begin(), q.end());
-            pos.push_back(words[w].first);
+        std::vector<std::uint32_t> occ, grp;  // A4c dedupe: the occurrences, grouped by distinct key
+        if (p_.mode == 1) {
+            distinct_keys(words, keys, pos, occ, grp);
+        } else {
+            keys.reserve(words.size() * static_cast<std::size_t>(stride_));  // at most one key a word: no reallocation
+            pos.reserve(words.size());
+            std::vector<std::int8_t> q(static_cast<std::size_t>(stride_));
+            for (std::size_t w = 0; w < words.size(); ++w) {
+                if (!key_of(window(words, w), q.data())) continue;
+                keys.insert(keys.end(), q.begin(), q.end());
+                pos.push_back(words[w].first);
+            }
         }
         // Inverted file: spherical k-means on a sample, then every key to its nearest centroid.
         const std::size_t N = pos.size();
@@ -374,17 +384,101 @@ class SimilarContext {
                 std::swap(pos[i], pos[j]);
                 std::swap(slot[i], slot[j]);
             }
+        lists_ = L;
+        if (p_.mode == 1) group_occurrences(pos, occ, grp);  // A4c
         keys_ = std::move(keys);
         pos_ = std::move(pos);
-        lists_ = L;
         cache_ = ~std::uint64_t{0};
         restart_ = true;
+    }
+
+    // A4c dedupe: the distinct keys, found with an open-addressing table as they are made (the N keys are never held
+    // at once), then sorted by their bytes. keys: the distinct rows in that order; pos: their ids 0..U-1; occ: the
+    // occurrences grouped by row, each group in text order; grp: each group's start (U + 1 entries).
+    void distinct_keys(const std::vector<std::pair<std::uint32_t, int>>& words, std::vector<std::int8_t>& keys,
+                       std::vector<std::uint32_t>& pos, std::vector<std::uint32_t>& occ, std::vector<std::uint32_t>& grp) const {
+        const std::size_t S = static_cast<std::size_t>(stride_);
+        constexpr std::uint32_t kNone = ~std::uint32_t{0};
+        std::vector<std::int8_t> rows, q(S);
+        std::vector<std::uint32_t> table(std::size_t{1} << 16, kNone), gid, at;
+        const auto hash = [&](const std::int8_t* x) {
+            std::uint64_t h = 0xcbf29ce484222325ull;
+            for (std::size_t d = 0; d < S; ++d) h = (h ^ static_cast<std::uint8_t>(x[d])) * 0x100000001b3ull;
+            return h;
+        };
+        const auto place = [&](std::uint32_t g) {  // the empty slot for row g
+            std::size_t i = hash(&rows[g * S]) & (table.size() - 1);
+            while (table[i] != kNone) i = (i + 1) & (table.size() - 1);
+            table[i] = g;
+        };
+        for (std::size_t w = 0; w < words.size(); ++w) {
+            if (!key_of(window(words, w), q.data())) continue;
+            std::size_t i = hash(q.data()) & (table.size() - 1);
+            while (table[i] != kNone && std::memcmp(&rows[table[i] * S], q.data(), S) != 0) i = (i + 1) & (table.size() - 1);
+            if (table[i] == kNone) {
+                table[i] = static_cast<std::uint32_t>(rows.size() / S);
+                rows.insert(rows.end(), q.begin(), q.end());
+                if (rows.size() / S * 2 > table.size()) {  // keep the load under one half
+                    table.assign(table.size() * 2, kNone);
+                    for (std::uint32_t g = 0; g < rows.size() / S; ++g) place(g);
+                }
+                gid.push_back(static_cast<std::uint32_t>(rows.size() / S - 1));
+            } else {
+                gid.push_back(table[i]);
+            }
+            at.push_back(words[w].first);
+        }
+        std::vector<std::uint32_t>().swap(table);
+        const std::size_t U = rows.size() / S;
+        std::vector<std::uint32_t> order(U), rank(U);
+        for (std::uint32_t g = 0; g < U; ++g) order[g] = g;
+        std::sort(order.begin(), order.end(), [&](std::uint32_t a, std::uint32_t b) {
+            const int c = std::memcmp(&rows[a * S], &rows[b * S], S);
+            return c ? c < 0 : a < b;
+        });
+        keys.resize(U * S);
+        for (std::size_t r = 0; r < U; ++r) {
+            rank[order[r]] = static_cast<std::uint32_t>(r);
+            std::memcpy(&keys[r * S], &rows[order[r] * S], S);
+        }
+        std::vector<std::int8_t>().swap(rows);
+        grp.assign(U + 1, 0);  // counting sort of the occurrences by their row's rank, stable in text order
+        for (const std::uint32_t g : gid) ++grp[rank[g] + std::size_t{1}];
+        for (std::size_t r = 0; r < U; ++r) grp[r + 1] += grp[r];
+        occ.resize(at.size());
+        std::vector<std::uint32_t> fill(grp.begin(), grp.end() - 1);
+        for (std::size_t i = 0; i < at.size(); ++i) occ[fill[rank[gid[i]]]++] = at[i];
+        pos.resize(U);
+        for (std::size_t g = 0; g < U; ++g) pos[g] = static_cast<std::uint32_t>(g);
+    }
+
+    // A4c, after the lists are made: the distinct keys' occurrences in list order (grp_), each key's sorted by the bytes
+    // after it (max_tail + 1 of them; the shorter first at the text's end).
+    void group_occurrences(std::vector<std::uint32_t>& pos, const std::vector<std::uint32_t>& occ, const std::vector<std::uint32_t>& grp) {
+        sort_tail_ = p_.max_tail;
+        const std::size_t L = static_cast<std::size_t>(sort_tail_) + 1;
+        const auto less = [&](std::uint32_t a, std::uint32_t b) {
+            const std::size_t la = std::min(L, n_ - a), lb = std::min(L, n_ - b);
+            const int c = std::memcmp(text_ + a, text_ + b, std::min(la, lb));
+            return c ? c < 0 : la != lb ? la < lb : a < b;
+        };
+        std::vector<std::uint32_t> o;
+        o.reserve(occ.size());
+        grp_.assign(pos.size() + 1, 0);
+        for (std::size_t s = 0; s < pos.size(); ++s) {
+            grp_[s] = static_cast<std::uint32_t>(o.size());
+            o.insert(o.end(), occ.begin() + grp[pos[s]], occ.begin() + grp[pos[s] + 1]);
+        }
+        grp_[pos.size()] = static_cast<std::uint32_t>(o.size());
+        pos = std::move(o);
+        for (std::size_t g = 0; g + 1 < grp_.size(); ++g) std::sort(pos.begin() + grp_[g], pos.begin() + grp_[g + 1], less);
     }
 
  public:
     /// The next-byte distribution after h[0..n) (oldest byte first): the live neighbours' proposals, summing to 1, or
     /// all zero when no neighbour is live (live = 0, bucket 0).
     Hit predict(const std::uint8_t* h, std::size_t n, double P[256]) const {
+        if (p_.mode) return predict_pooled(h, n, P);  // A4c
         std::fill(P, P + 256, 0.0);
         Hit hit;
         std::size_t anchor = 0, ctx = 0;
@@ -420,6 +514,70 @@ class SimilarContext {
         return hit;
     }
 
+    /// A4c (dedupe): the distinct keys found for the anchor, each pooling its occurrences that agree with the tail,
+    /// weighted as a neighbour is. Live = live occurrences.
+    Hit predict_pooled(const std::uint8_t* h, std::size_t n, double P[256]) const {
+        std::fill(P, P + 256, 0.0);
+        Hit hit;
+        std::size_t anchor = 0, ctx = 0;
+        if (!anchor_of(h, n, anchor, ctx, hit.word)) return hit;
+        search_cached(h, ctx, anchor);
+        const std::size_t t = n - anchor;
+        const std::uint8_t* tail = h + anchor;
+        if (restart_ || t < tail_.size() || !std::equal(tail_.begin(), tail_.end(), tail)) {
+            live_.resize(nb_pos_.size());
+            glo_.resize(nb_pos_.size());
+            ghi_.resize(nb_pos_.size());
+            for (std::size_t j = 0; j < live_.size(); ++j) {
+                live_[j] = static_cast<std::uint32_t>(j);
+                glo_[j] = grp_[nb_pos_[j]];
+                ghi_[j] = grp_[nb_pos_[j] + std::size_t{1}];
+            }
+            tail_.clear();
+            restart_ = false;
+        }
+        const std::size_t from = tail_.size();
+        const auto cmp = [&](std::uint32_t pos) {  // the bytes [from, t) after pos against the tail's, shorter first
+            const std::size_t want = t - from, avail = pos + from < n_ ? std::min(want, n_ - pos - from) : 0;
+            const int c = avail ? std::memcmp(text_ + pos + from, tail + from, avail) : 0;
+            return c ? c : avail < want ? -1 : 0;
+        };
+        std::size_t m = 0;
+        for (const std::uint32_t j : live_) {
+            auto lo = pos_.begin() + glo_[j], hi = pos_.begin() + ghi_[j];
+            if (t > from) {
+                lo = std::partition_point(lo, hi, [&](std::uint32_t p) { return cmp(p) < 0; });
+                hi = std::partition_point(lo, hi, [&](std::uint32_t p) { return cmp(p) <= 0; });
+            }
+            while (lo < hi && *lo + t >= n_) ++lo;  // no next byte: these sort first
+            if (lo == hi) continue;
+            glo_[j] = static_cast<std::uint32_t>(lo - pos_.begin());
+            ghi_[j] = static_cast<std::uint32_t>(hi - pos_.begin());
+            live_[m++] = j;
+        }
+        live_.resize(m);
+        tail_.assign(tail, tail + t);
+        if (m == 0) return hit;
+        double wsum = 0, mx = 0;
+        std::size_t occ = 0;
+        for (const std::uint32_t j : live_) {
+            const double w = nb_w_[j];
+            for (auto i = pos_.begin() + glo_[j], e = pos_.begin() + ghi_[j]; i < e;) {
+                const std::uint8_t b = text_[*i + t];
+                const auto f = std::partition_point(i, e, [&](std::uint32_t p) { return text_[p + t] <= b; });
+                P[b] += w * static_cast<double>(f - i);
+                i = f;
+            }
+            wsum += w * static_cast<double>(ghi_[j] - glo_[j]);
+            occ += ghi_[j] - glo_[j];
+        }
+        for (int s = 0; s < 256; ++s) mx = std::max(mx, P[s] /= wsum);
+        hit.live = static_cast<int>(std::min<std::size_t>(occ, std::numeric_limits<int>::max()));
+        hit.top = nb_sim_[live_[0]];  // groups are kept best first
+        hit.agree = mx;
+        return hit;
+    }
+
     static int bucket(const Hit& h) {
         if (h.live == 0) return 0;
         const int sb = h.top < 0.5 ? 0 : h.top < 0.65 ? 1 : h.top < 0.8 ? 2 : h.top < 0.9 ? 3 : 4;
@@ -445,9 +603,11 @@ class SimilarContext {
     }
 
     std::size_t keys() const { return pos_.size(); }
+    /// A4c: the keys stored: distinct keys (dedupe), all keys (knn).
+    std::size_t contexts() const { return keys_.size() / static_cast<std::size_t>(stride_); }
     /// The index and the word coordinates (keys, positions, centroids, list starts, rows); the word map not counted.
     std::size_t bytes() const {
-        return keys_.size() + pos_.size() * 4 + cent_.size() + start_.size() * 4 + proj_.size() * 4 + vec_.q.size() +
+        return keys_.size() + pos_.size() * 4 + grp_.size() * 4 + cent_.size() + start_.size() * 4 + proj_.size() * 4 + vec_.q.size() +
                vec_.scale.size() * 4 + vec_.v.size() * 4;
     }
     int dim() const { return dim_; }
@@ -635,7 +795,7 @@ class SimilarContext {
         for (std::size_t j = 0; j < k; ++j) {
             const float sim = static_cast<float>(cand[j].first / (127.0 * 127.0));
             if (sim < p_.min_sim) break;
-            p.push_back(pos_[cand[j].second]);
+            p.push_back(p_.mode == 1 ? cand[j].second : pos_[cand[j].second]);  // A4c dedupe: the distinct key's slot
             s.push_back(sim);
         }
     }
@@ -665,8 +825,11 @@ class SimilarContext {
     std::vector<float> weight_, proj_, mu_proj_;  // proj_: the unit rows' projections (empty for projected rows)
     std::vector<std::int8_t> keys_, cent_;  // keys grouped by list; centroids
     std::vector<std::uint32_t> pos_, start_;
+    std::vector<std::uint32_t> grp_;  // A4c dedupe: each distinct key's occurrences in pos_, U + 1 starts
+    int sort_tail_ = 0;               // A4c: the tail depth each key's occurrences are sorted by
     mutable std::uint64_t cache_ = ~std::uint64_t{0};  // the last searched context, and its neighbours
     mutable std::vector<std::uint32_t> nb_pos_, live_;  // live_: the neighbours that agree with tail_
+    mutable std::vector<std::uint32_t> glo_, ghi_;      // A4c: each key's range of occurrences that agrees with tail_
     mutable std::vector<float> nb_sim_, lat_us_;
     mutable std::vector<double> nb_w_;
     mutable std::vector<std::uint8_t> tail_;

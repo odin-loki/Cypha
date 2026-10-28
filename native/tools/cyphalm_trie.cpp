@@ -20,8 +20,8 @@
 // answering here (PLAN rule 10).
 //
 // The similar-context expert (A4, similar_context.hpp; docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md "A4b") is a default in
-// qa, sample and context8k: the spec `default` (W=2, equal word weights, k=2048, 2048 lists with 32 probed, keys over
-// wiki train) with the projected PPMI-SVD file data/cyphalm/simvec_ppmi32.bin, read from $CYPHA_SIMVEC, else from
+// qa, sample and context8k: the spec `default` (W=2, equal word weights, 2048 lists with 32 probed, keys over wiki
+// train; A4c: distinct keys stored once, the k=8192 nearest each pooling its occurrences) with the projected PPMI-SVD file data/cyphalm/simvec_ppmi32.bin, read from $CYPHA_SIMVEC, else from
 // CYPHA_SIMVEC_DEFAULT (a compile-time path), else from that path under the current directory. It is off inside every
 // answer (in_answer), so answers are written without it. --no-sim leaves it out; without the file those subcommands
 // stop and say so. bpc, chat and probe never build it: bpc's lines are the trie's reference numbers, and chat and
@@ -1394,11 +1394,11 @@ std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* tex
 // file (simvec's output). qa's src: all = wiki train + chat, wiki = wiki train only. gate=1 (default): the expert is off
 // inside an answer (in_answer). The token `default` stands for kSimDefault; with no vec= the shipped file is read
 // (sim_vectors_path). `build` names what the index depends on: specs that differ only in k, T, min, probe, tail or gate
-// share it.
+// share it. A4c: [,mode=knn|dedupe] (similar_context.hpp; in dedupe the tail depth is fixed at the build).
 #ifndef CYPHA_SIMVEC_DEFAULT
 #define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi32.bin"
 #endif
-constexpr const char* kSimDefault = "W=2,sif=0,k=2048,drop=0,lists=2048,probe=32,src=wiki";
+constexpr const char* kSimDefault = "W=2,sif=0,k=8192,drop=0,lists=2048,probe=32,src=wiki,mode=dedupe";  // A4c
 std::string sim_vectors_path() { return env_or("CYPHA_SIMVEC", CYPHA_SIMVEC_DEFAULT); }
 struct SimSpec {
     SimilarContext::Params p;
@@ -1431,11 +1431,13 @@ SimSpec parse_sim(const std::string& spec) {
         else if (k == "probe") s.p.probe = static_cast<int>(x);
         else if (k == "tail") s.p.max_tail = static_cast<int>(x);
         else if (k == "gate") s.gate = x != 0;
+        else if (k == "mode" && (v == "knn" || v == "dedupe")) s.p.mode = v == "dedupe";  // A4c
         else return s;
     }
     if (s.vec.empty()) s.vec = sim_vectors_path();
     s.build = s.vec + "|" + s.src + "|" + std::to_string(s.p.W) + "|" + std::to_string(s.p.sif) + "|" +
-              std::to_string(s.p.dim) + "|" + std::to_string(s.p.drop) + "|" + std::to_string(s.p.lists);
+              std::to_string(s.p.dim) + "|" + std::to_string(s.p.drop) + "|" + std::to_string(s.p.lists) + "|" +
+              std::to_string(s.p.mode) + "|" + std::to_string(s.p.mode ? s.p.max_tail : 0);  // A4c: groups sort by the tail
     s.ok = !s.vec.empty() && (s.src == "all" || s.src == "wiki");
     return s;
 }
@@ -4407,11 +4409,45 @@ int cmd_selftest() {
                          in_answer(bytes("User: who?\nAssistant: it is "), std::string::npos) &&
                          !in_answer(bytes("User: who?\nAssistant: it.\n\nUser: and "), std::string::npos) &&
                          !in_answer(bytes("the wiki text"), std::string::npos) && in_answer(bytes("Who? "), 5) &&
-                         !in_answer(bytes("Who?"), 5) && dflt.ok && dflt.p.W == 2 && !dflt.p.sif && dflt.p.k == 2048 &&
+                         !in_answer(bytes("Who?"), 5) && dflt.ok && dflt.p.W == 2 && !dflt.p.sif && dflt.p.k == 8192 && dflt.p.mode == 1 &&
                          dflt.src == "wiki" && dflt.gate && dflt.vec == sim_vectors_path() && dk8.p.k == 8 && !ng.gate &&
                          err.empty() && !err2.empty() && PV.projected() && PV.rows() == 12 && hq.live == 2 && Q1['o'] == 1.0;
         if (!ok2) {
             std::cerr << "selftest: similar-context gate / default / projected file checks failed\n";
+            return 1;
+        }
+        // A4c: with every occurrence pooled at equal weight (k above the key count, every list probed, T 0), knn and dedupe
+        // give the same distribution, bit for bit, at every position of a random text over the same words.
+        std::mt19937 rw(20261028);
+        auto words = [&](int n) {
+            std::string x;
+            for (int i = 0; i < n; ++i) x += std::string(wd[rw() % 12]) + (rw() % 7 == 0 ? ". " : " ");
+            return x;
+        };
+        const std::string big = words(3000), probe_text = words(80);
+        SimilarContext::Params ap;
+        ap.W = 2, ap.k = 1 << 30, ap.temp = 0, ap.dim = 0, ap.drop = 0, ap.sif = false, ap.lists = 8, ap.probe = 8;
+        std::vector<std::unique_ptr<SimilarContext>> m3;
+        for (int mode = 0; mode < 2; ++mode) {
+            ap.mode = mode;
+            m3.push_back(std::make_unique<SimilarContext>(V, ap));
+            m3.back()->build(reinterpret_cast<const std::uint8_t*>(big.data()), big.size());
+        }
+        bool same = m3[1]->contexts() < m3[0]->contexts() && m3[1]->contexts() > 0 && m3[0]->keys() == m3[1]->keys() &&
+                    parse_sim("default").p.mode == 1 && parse_sim("default,mode=knn").p.mode == 0 && !parse_sim("default,mode=x").ok &&
+                    parse_sim("default,mode=knn").build != parse_sim("default").build;
+        int live_pos = 0;
+        for (std::size_t n = 1; same && n <= probe_text.size(); ++n) {
+            double A[2][256];
+            SimilarContext::Hit hh[2];
+            for (int mode = 0; mode < 2; ++mode)
+                hh[mode] = m3[static_cast<std::size_t>(mode)]->predict(reinterpret_cast<const std::uint8_t*>(probe_text.data()), n, A[mode]);
+            live_pos += hh[0].live > 0;
+            for (int mode = 1; mode < 2; ++mode)
+                same = same && hh[mode].live == hh[0].live && hh[mode].word == hh[0].word && std::equal(A[0], A[0] + 256, A[mode]);
+        }
+        if (!same || live_pos < 100) {
+            std::cerr << "selftest: similar-context dedupe mode (A4c) disagrees with knn\n";
             return 1;
         }
     }
@@ -4429,7 +4465,7 @@ void usage() {
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
                  "  SPEC: [default,][vec=PREFIX|FILE][,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32]\n"
-                 "        [,src=all|wiki][,gate=1]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
+                 "        [,src=all|wiki][,gate=1][,mode=knn|dedupe]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"

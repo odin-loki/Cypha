@@ -24,6 +24,7 @@ Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 83
 | + copy expert, second half of the holdout (A1c) | 1.927 | Over trie + InfiniGram (2.072), chat model; `qa --copy`; an option, not a default |
 | + similar-context expert (A4), second half of the holdout | 1.939 | Over trie + InfiniGram + class (1.999); fresh text 2.088 → 2.027. `cls --sim`, `qa --sim`; an option, not a default ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md)) |
 | Similar-context expert, default in `qa` / `sample` / `context8k` (A4b) | 1.9686 | `qa` holdout trie + IG 2.0716 → 1.9686; off inside answers, so answers are unchanged; `sample` SCRIBE v2 0.014 → 0.061 (still word salad); `--no-sim` turns it off |
+| **Similar-context expert: distinct contexts stored once, k 8,192 (A4c, 2026-10-28)** | **1.8269** | `qa` holdout with class + copy (B4c: 1.8345); fresh trie + IG + class + sim 2.0275 → 2.0235 (−0.0040 [−0.0048, −0.0032]); the expert 40.0 → 19.3 MB; answers unchanged ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md), A4c) |
 | **Class + similar-context + copy, defaults (B4c, 2026-10-28)** | **1.8345** | `qa` holdout (C1L chat model) trie + IG 2.0729 → 1.9944 (+ class) → 1.9224 (+ similar-context) → 1.8345 (+ copy, m 8, window 16,384); `context8k` the same. All three are off inside answers, so answers are unchanged (dev 520 / 520 rows, frozen test 800 / 800). `sample` takes similar-context + copy; the class expert only with `--cls` (SCRIBE v2 falls with it). `--no-cls`, `--no-sim`, `--no-copy` ([report](reports/B4C_ECHO_GATE.md)) |
 
 Surface scores of trie samples are about **0.74–0.83**. That is readable fragments, not answers.
@@ -52,6 +53,7 @@ BPC is held-out `−log2 p`. It is not a generation score.
 | `cyphalm_trie qa`, peak | 264 MB | **171 MB** | M9: the tool on M4–M6, every number unchanged (C1L 368 → 199 MB; `context8k` 230 → 165 MB) |
 | `chat` served from a stored model | 104 MB, 476 s (trains) | **21 MB, 12 s** | `chat --model FILE` (M7) |
 | `cyphalm_trie qa` served from a store, peak | 186.8 / 245.3 / 275.1 MB (A0 / + class + copy / C1L + class + copy, built) | **138.4 / 169.4 / 189.1 MB** | `qa --save DIR`, then `qa --model DIR` (M10–M14): no training, no index or class build; parts load in 0.15 s; 3–5× faster; every printed number and the rows file unchanged |
+| `cyphalm_trie qa` built with the defaults, peak | 225.8 (E) / 259.3 (C1L + E) MB | **194.0 / 235.0 MB** | M15: the class table built in key buckets (identical table; repeats within 0.1 MB); the FM-index build now sets the peak |
 
 ### What grows, and what must stay separate
 
@@ -80,7 +82,7 @@ Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([re
 | Control ladder, web text / books (own references) | 5 of 5 / 3 of 5 |
 | Held-out degradations followed | 7 of 9 families (blind to sentence order and truncation) |
 | CyphaLM trie samples / trie + class context / human, same prompts | 0.014 / 0.002 / 0.770 (word salad by SCRIBE; surface S said 0.749 / 0.901 / 0.904) |
-| `sample` with its defaults: trie + similar-context (+ copy) / + class | 0.061 [0.049, 0.074] (0.056 with copy) / 0.025 (surface S 0.801 → 0.880: the two scores disagree; B4c) |
+| `sample` with its defaults: trie + similar-context (+ copy) / + class | A4c's default 0.064 [0.052, 0.078]; B4c's 0.061 [0.049, 0.074] (0.056 with copy) / 0.025 (surface S 0.801 → 0.880: the two scores disagree; B4c) |
 | Cost | about 1,000 texts/s on one core, about 0.4 GB, 14 s with the 32 MiB pack built |
 
 BPC and surface S are not generation scores. SCRIBE v2 is the one that passes its ladder.
@@ -124,6 +126,8 @@ Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AN
 | Raw-byte patterns (`--raw`, F2R) | 81 kept, 1,025 facts, Wikidata 0.950 [0.904, 0.974]; joined store 1,257 facts (0.951); raw frames + raw shard reach the dev answer for 7/13 eligible questions (cleaned frames + D4 shard: 4/13) |
 | Fact shard (`--shard`) | 2,001 question-form rows from 675 facts on pages in the 8 MiB slice; 0 equal to a dev or test question; dev reach 16 / 100 in-slice questions |
 | Gap map (`--gaps`, [S3/S5 report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md)) | 27,842 gaps (schema 26,333, contradiction 128, certainty 1,342, demand 39); 6,062 not parked; P(exists) Brier 0.0301, calibrated. CyphaLM's dev tags name their question's slot 0 / 750 |
+| Unseen estimates (S4, [report](reports/S4_UNSEEN_AND_FRONTIER.md)) | Good–Turing with the page as the unit is within 4% of what held-out pages bring (test half, read once: words 0.968, entities 0.980, facts 1.000); the plain n₁/N undercounts by 20–50%. Store coverage 0.42 of the slots that exist on pages already read (person 0.56, place 0.25, other 0.20); `pattern_learn --frontier` |
+| Hypothesis scoring (S6, [report](reports/S6_HYPOTHESIS_SCORING.md)) | P0 ranks known-true above known-false at 0.738 [0.717, 0.758] on a fresh planted set (gate 0.75 missed); the store's pairwise rules carry it; the hard date constraint lifts dates 0.55 → 0.66 |
 
 ## Corpus on D:
 

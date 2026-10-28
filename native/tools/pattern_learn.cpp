@@ -69,10 +69,17 @@
 //   CyphaLM's own <|unknown ...|> tags (dev rows only), each with VOI (gap_map.hpp). Writes FILE, FILE.cells.tsv and
 //   FILE.demand.tsv. With --dev it grades whether each tag names its question's slot. Bookkeeping only: it answers nothing.
 //
+// S4 (2026-10-28, docs/reports/S4_UNSEEN_AND_FRONTIER.md):
+//   --frontier FILE [--frontier-test] [--frontier-split B] (with --gaps): estimates of the unseen (DISCOVERY 3.3) on
+//   words, link entities, facts and their values, checked on held-out pages (UNSEEN, UNSEEN_REL, HEAPS lines; the test
+//   half only with --frontier-test), Chapman per relation against Wikidata (CHAPMAN), and the frontier report: FILE, one
+//   row per (type, relation) cell, with the two rankings (FRONTIER_TOP_READ, FRONTIER_TOP_SLICE). Self-assessment only.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
 //          [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]
+//          [--frontier FILE [--frontier-test] [--frontier-split B]]
 //        pattern_learn --wilson K N
 //   <outdir> gets facts_f2.tsv (subject, relation, object, P, grade, n_evidence, best_pattern, source_page, byte_offset;
 //   byte_offset is the start of the line holding the strongest evidence), facts_f2.evidence.tsv (the sentence for each fact),
@@ -83,6 +90,7 @@
 // Author: Odin Loch
 
 #include "cypha/eval/ecs.hpp"
+#include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 
 #include <sys/resource.h>
@@ -100,6 +108,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <random>
 #include <set>
 #include <sstream>
@@ -2713,6 +2722,465 @@ void write_gaps(const GapOpt& G, const string& dev, const vector<PageRef>& pages
         for (auto& [kk, v] : top[q]) say(string(q ? "  TOP100_QUEUE " : "  TOP100_ALL ") + kk + " " + std::to_string(v));
 }
 
+// S4 (docs/reports/S4_UNSEEN_AND_FRONTIER.md; DISCOVERY 3.3, 3.4): estimates of the unseen, checked on held-out pages,
+// and the frontier report. Self-assessment only: nothing here answers a question or feeds CyphaLM.
+//   items      words (runs of ASCII letters in a page's raw text, lower-cased), entities (link targets, norm_ent, no
+//              #section, namespace and language links skipped), facts (subject, relation, object: text seeds and stored
+//              extracted facts with P >= 0.5; an observation is a seed or an evidence sentence, on the page that holds
+//              it) and values (relation, object of the same facts). A page is the sampling unit.
+//   views      store: E = pages starting before --frontier-split (50,000,000), H = the rest; cyphalm: E = pages starting
+//              before 7,340,032 (CyphaLM's wiki train), H = pages from 8,388,608; random: E and H by a title-hash bit.
+//              H is split into dev and test by another hash bit; test is printed only with --frontier-test.
+//   estimates  on E: GT0 = n1 / N; GTu = observations of items on exactly one page / N; Q1/U; Chao extrapolation of the
+//              distinct items to E + H (pages as units, and observations); Heaps (words). Targets on H: the share of H's
+//              observations (incidences) whose item is not in E; the distinct items in E + H. Intervals: a bootstrap over
+//              H's pages (E fixed) for the target, a 20-group jackknife over E's pages for the estimate.
+//   Chapman    per relation with a kept pattern: A text-seed slots, B slots where a kept pattern fires on the subject's
+//              page, m both; N_ref = |A u B u W|, W the slots with a Wikidata value.
+//   --frontier FILE (with --gaps): one row per (type, relation) cell: known, unseen in the slice ((entities - known) x
+//              P(exists): S3's P(exists) is calibrated on empty slots), expected (known + unseen), coverage, certainty (mean P of the cell's slots; a text seed 20/21), demand (CyphaLM's tags),
+//              the missing mass of the cell's fact observations over all pages, new facts per 10 MiB of comparable text,
+//              and the relation's values (seen, Chao1 with pages as units).
+struct FrontierOpt { string path; bool test = false; std::size_t split = 50000000; };
+using S4Items = vector<vector<std::pair<std::uint32_t, std::uint32_t>>>;  // per page: (item, count), sorted by item
+
+struct S4Kind {
+    string name;
+    S4Items pages;
+    vector<int> group;  // a relation index for facts and values, else -1
+    vector<int> type;   // facts: the subject's type (write_gaps' rule; -1 not a page)
+};
+
+void s4_finish_page(vector<std::uint32_t>& ids, vector<std::pair<std::uint32_t, std::uint32_t>>& out) {
+    std::sort(ids.begin(), ids.end());
+    for (std::size_t i = 0; i < ids.size();) {
+        std::size_t j = i;
+        while (j < ids.size() && ids[j] == ids[i]) ++j;
+        out.push_back({ids[i], static_cast<std::uint32_t>(j - i)});
+        i = j;
+    }
+    ids.clear();
+}
+
+// Words and entities of every page.
+void s4_text_items(const string& data, const vector<PageRef>& pages, S4Kind& words, S4Kind& ents) {
+    std::unordered_map<string, std::uint32_t> wid, eid;
+    words.pages.assign(pages.size(), {});
+    ents.pages.assign(pages.size(), {});
+    vector<std::uint32_t> ids;
+    string w;
+    auto letter = [](unsigned char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
+    for (std::size_t p = 0; p < pages.size(); ++p) {
+        const std::size_t tb = pages[p].tb, te = pages[p].te;
+        for (std::size_t i = tb; i < te;) {
+            if (!letter(static_cast<unsigned char>(data[i]))) { ++i; continue; }
+            w.clear();
+            while (i < te && letter(static_cast<unsigned char>(data[i]))) w += static_cast<char>(std::tolower(static_cast<unsigned char>(data[i++])));
+            auto it = wid.try_emplace(w, static_cast<std::uint32_t>(wid.size())).first;
+            ids.push_back(it->second);
+        }
+        s4_finish_page(ids, words.pages[p]);
+        for (std::size_t i = data.find("[[", tb); i != npos && i < te; i = data.find("[[", i + 2)) {
+            std::size_t j = i + 2;
+            while (j < te && j < i + 300 && data[j] != '|' && data[j] != ']' && data[j] != '\n' && data[j] != '[') ++j;
+            if (j >= te || (data[j] != '|' && data[j] != ']')) continue;
+            string t = data.substr(i + 2, j - i - 2);
+            if (std::size_t h = t.find('#'); h != npos) t.erase(h);
+            if (std::size_t c = t.find(':'); c != npos && c > 0) {  // Image:, Category:, fr:, ... (a one-word prefix)
+                bool ns = true;
+                for (std::size_t k = 0; k < c; ++k) ns &= letter(static_cast<unsigned char>(t[k])) || t[k] == '-';
+                if (ns) continue;
+            }
+            std::replace(t.begin(), t.end(), '_', ' ');
+            const string k = norm_ent(xml_decode(t));
+            if (k.empty()) continue;
+            ids.push_back(eid.try_emplace(k, static_cast<std::uint32_t>(eid.size())).first->second);
+        }
+        s4_finish_page(ids, ents.pages[p]);
+    }
+    words.group.assign(wid.size(), -1);
+    ents.group.assign(eid.size(), -1);
+}
+
+// Facts and values: text seeds and stored extracted facts (P >= 0.5), on the page holding each observation.
+void s4_fact_items(const vector<PageRef>& pages, const vector<Fused>& fused, const std::unordered_map<string, int>& etype, S4Kind& facts,
+                   S4Kind& vals) {
+    vector<vector<std::uint32_t>> fp(pages.size()), vp(pages.size());
+    std::unordered_map<string, std::uint32_t> fid, vid;
+    auto page_at = [&](std::uint64_t off) -> long {
+        auto it = std::upper_bound(pages.begin(), pages.end(), off, [](std::uint64_t o, const PageRef& p) { return o < p.tb; });
+        if (it == pages.begin()) return -1;
+        --it;
+        return off < it->te ? static_cast<long>(it - pages.begin()) : -1;
+    };
+    auto add = [&](std::uint64_t off, const string& subj, int r, const string& okey) {
+        const long p = page_at(off);
+        if (p < 0 || okey.empty()) return;
+        const string rs = std::to_string(r);
+        const string sk = norm_ent(subj);
+        auto f = fid.try_emplace(sk + "\x1f" + rs + "\x1f" + okey, static_cast<std::uint32_t>(fid.size()));
+        if (f.second) {
+            facts.group.push_back(r);
+            const auto t = etype.find(sk);
+            facts.type.push_back(t == etype.end() ? -1 : t->second);
+        }
+        auto v = vid.try_emplace(rs + "\x1f" + okey, static_cast<std::uint32_t>(vid.size()));
+        if (v.second) vals.group.push_back(r);
+        fp[static_cast<std::size_t>(p)].push_back(f.first->second);
+        vp[static_cast<std::size_t>(p)].push_back(v.first->second);
+    };
+    for (const Seed& sd : g_seeds) if (sd.src < 3) add(sd.off, sd.subj, sd.rel, sd.o.k1);
+    for (const Fused& fu : fused)
+        if (fu.op.P >= 0.5)
+            for (const EvRec& e : fu.f->ev) add(e.off, fu.f->subj, fu.f->rel, fu.f->okey);
+    facts.pages.assign(pages.size(), {});
+    vals.pages.assign(pages.size(), {});
+    for (std::size_t p = 0; p < pages.size(); ++p) {
+        s4_finish_page(fp[p], facts.pages[p]);
+        s4_finish_page(vp[p], vals.pages[p]);
+    }
+}
+
+// One kind in one view: E's statistics against one held-out set. role: 1 E, 2 H-dev, 3 H-test (0: not used).
+struct S4Res {
+    ecs::ClumpedStats st;
+    std::size_t f1 = 0, f2 = 0;  // abundance: items seen once / twice
+    double gt0 = 0, gtu = 0, q1u = 0, t_obs = 0, t_inc = 0, h_obs = 0, h_pages = 0, distinct = 0, chao_inc = 0, chao_ab = 0;
+    double lo_obs = 0, hi_obs = 0, lo_inc = 0, hi_inc = 0, jk_gt0 = 0, jk_gtu = 0;
+};
+
+S4Res s4_eval(const S4Kind& K, const vector<char>& role, char h, int group, bool intervals) {
+    S4Res R;
+    const std::size_t n = K.group.size();
+    vector<std::uint32_t> cnt(n, 0), unit(n, 0);
+    vector<std::size_t> E;
+    for (std::size_t p = 0; p < role.size(); ++p) if (role[p] == 1) E.push_back(p);
+    auto in = [&](std::uint32_t i) { return group < 0 || K.group[i] == group; };
+    auto stats = [&](const vector<std::uint32_t>& c, const vector<std::uint32_t>& u, std::size_t T, std::size_t* f1, std::size_t* f2) {
+        vector<std::size_t> cc, uu;
+        cc.reserve(n);
+        uu.reserve(n);
+        std::size_t a1 = 0, a2 = 0;
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!c[i] || !in(static_cast<std::uint32_t>(i))) continue;
+            cc.push_back(c[i]);
+            uu.push_back(u[i]);
+            a1 += c[i] == 1;
+            a2 += c[i] == 2;
+        }
+        if (f1) *f1 = a1, *f2 = a2;
+        return ecs::clumped_stats(cc, uu, T);
+    };
+    for (std::size_t p : E)
+        for (auto [i, c] : K.pages[p]) cnt[i] += c, ++unit[i];
+    std::size_t T = 0;
+    for (std::size_t p : E) {
+        bool any = false;
+        for (auto [i, c] : K.pages[p]) any |= in(i);
+        T += any;
+    }
+    R.st = stats(cnt, unit, T, &R.f1, &R.f2);
+    R.gt0 = ecs::good_turing_missing_mass(R.f1, R.st.total);
+    R.gtu = ecs::unit_missing_mass(R.st);
+    R.q1u = ecs::incidence_missing_mass(R.st);
+    // Held-out: per page (observations new, observations, incidences new, incidences).
+    vector<std::array<double, 4>> hp;
+    vector<char> mark(n, 0);
+    double newd = 0;
+    for (std::size_t p = 0; p < role.size(); ++p) {
+        if (role[p] != h) continue;
+        std::array<double, 4> a{0, 0, 0, 0};
+        for (auto [i, c] : K.pages[p]) {
+            if (!in(i)) continue;
+            const bool nw = cnt[i] == 0;
+            a[0] += nw ? c : 0;
+            a[1] += c;
+            a[2] += nw;
+            a[3] += 1;
+            if (nw && !mark[i]) mark[i] = 1, ++newd;
+        }
+        if (a[3] > 0) hp.push_back(a);
+    }
+    double s[4] = {0, 0, 0, 0};
+    for (const auto& a : hp) for (int k = 0; k < 4; ++k) s[k] += a[k];
+    R.t_obs = s[1] > 0 ? s[0] / s[1] : 0;
+    R.t_inc = s[3] > 0 ? s[2] / s[3] : 0;
+    R.h_obs = s[1];
+    R.h_pages = static_cast<double>(hp.size());
+    R.distinct = static_cast<double>(R.st.s_obs) + newd;
+    R.chao_inc = ecs::chao_extrapolated_richness(R.st.s_obs, R.st.q1, R.st.q2, R.st.units, R.h_pages);
+    R.chao_ab = ecs::chao_extrapolated_richness(R.st.s_obs, R.f1, R.f2, R.st.total, R.h_obs);
+    if (!intervals || hp.empty()) return R;
+    std::mt19937_64 rng(20261028);
+    vector<double> bo, bi;
+    for (int b = 0; b < 2000; ++b) {
+        double x[4] = {0, 0, 0, 0};
+        for (std::size_t k = 0; k < hp.size(); ++k) {
+            const auto& a = hp[rng() % hp.size()];
+            for (int q = 0; q < 4; ++q) x[q] += a[q];
+        }
+        bo.push_back(x[1] > 0 ? x[0] / x[1] : 0);
+        bi.push_back(x[3] > 0 ? x[2] / x[3] : 0);
+    }
+    std::sort(bo.begin(), bo.end());
+    std::sort(bi.begin(), bi.end());
+    R.lo_obs = bo[49], R.hi_obs = bo[1949], R.lo_inc = bi[49], R.hi_inc = bi[1949];
+    // Delete-a-group jackknife over 20 groups of E's pages (by position).
+    const int G = 20;
+    vector<double> j0, ju;
+    for (int g = 0; g < G; ++g) {
+        vector<std::uint32_t> c2 = cnt, u2 = unit;
+        std::size_t T2 = 0;
+        for (std::size_t k = 0; k < E.size(); ++k) {
+            if (static_cast<int>(k % G) != g) { bool any = false; for (auto [i, c] : K.pages[E[k]]) any |= in(i); T2 += any; continue; }
+            for (auto [i, c] : K.pages[E[k]]) c2[i] -= c, --u2[i];
+        }
+        std::size_t a1 = 0, a2 = 0;
+        const ecs::ClumpedStats st = stats(c2, u2, T2, &a1, &a2);
+        j0.push_back(ecs::good_turing_missing_mass(a1, st.total));
+        ju.push_back(ecs::unit_missing_mass(st));
+    }
+    auto se = [&](const vector<double>& v) {
+        double m = 0, q = 0;
+        for (double x : v) m += x;
+        m /= G;
+        for (double x : v) q += (x - m) * (x - m);
+        return std::sqrt((G - 1.0) / G * q);
+    };
+    R.jk_gt0 = se(j0), R.jk_gtu = se(ju);
+    return R;
+}
+
+// Heaps on E's growth curve (every 25th page, in page order), checked on E + H.
+void s4_heaps(const S4Kind& W, const vector<char>& role, const S4Res& R, const string& label, const std::function<void(const string&)>& say) {
+    vector<char> seen(W.group.size(), 0);
+    vector<double> N, V;
+    double tok = 0, typ = 0;
+    std::size_t k = 0;
+    for (std::size_t p = 0; p < role.size(); ++p) {
+        if (role[p] != 1) continue;
+        for (auto [i, c] : W.pages[p]) { tok += c; if (!seen[i]) seen[i] = 1, ++typ; }
+        if (++k % 25 == 0) N.push_back(tok), V.push_back(typ);
+    }
+    N.push_back(tok), V.push_back(typ);
+    const ecs::HeapsFit f = ecs::fit_heaps(N, V);
+    const double vp = ecs::heaps_vocab(f, tok + R.h_obs), rate = f.beta * ecs::heaps_vocab(f, tok) / tok;
+    char b[400];
+    std::snprintf(b, sizeof b, "  HEAPS %s K %.3f beta %.4f r2 %.5f points %zu | vocab E+H predicted %.0f observed %.0f ratio %.4f | new-word rate predicted %.5f target %.5f ratio %.4f",
+                  label.c_str(), f.K, f.beta, f.r2, f.n, vp, R.distinct, R.distinct > 0 ? vp / R.distinct : 0.0, rate, R.t_obs, R.t_obs > 0 ? rate / R.t_obs : 0.0);
+    say(b);
+}
+
+void s4_line(const char* tag, const string& label, const S4Res& R, const std::function<void(const string&)>& say) {
+    char b[900];
+    auto rt = [](double e, double t) { return t > 0 ? e / t : 0.0; };
+    std::snprintf(b, sizeof b,
+                  "  %s %s | E pages %zu obs %zu items %zu n1 %zu q1 %zu | GT0 %.5f (jk se %.5f) GTu %.5f (jk se %.5f) Q1/U %.5f | target obs %.5f [%.5f, %.5f] inc %.5f [%.5f, %.5f] "
+                  "H pages %.0f obs %.0f | GT0/t %.4f [%.4f, %.4f] GTu/t %.4f [%.4f, %.4f] Q1U/t %.4f | distinct E+H %.0f chao_pages %.0f (%.4f) chao_obs %.0f (%.4f)",
+                  tag, label.c_str(), R.st.units, R.st.total, R.st.s_obs, R.f1, R.st.q1, R.gt0, R.jk_gt0, R.gtu, R.jk_gtu, R.q1u, R.t_obs, R.lo_obs, R.hi_obs, R.t_inc, R.lo_inc,
+                  R.hi_inc, R.h_pages, R.h_obs, rt(R.gt0, R.t_obs), rt(R.gt0, R.hi_obs), rt(R.gt0, R.lo_obs), rt(R.gtu, R.t_obs), rt(R.gtu, R.hi_obs), rt(R.gtu, R.lo_obs),
+                  rt(R.q1u, R.t_inc), R.distinct, R.chao_inc, rt(R.chao_inc, R.distinct), R.chao_ab, rt(R.chao_ab, R.distinct));
+    say(b);
+}
+
+void write_frontier(const FrontierOpt& F, const GapOpt& G, const string& data, const vector<PageRef>& pages, const vector<Fused>& fused,
+                    const std::function<void(const string&)>& say) {
+    // Types (write_gaps' rule).
+    std::unordered_map<string, int> etype;
+    for (const PageRef& pg : pages) {
+        const string lt = lower(pg.title), nk = norm_ent(pg.title);
+        if (lt.compare(0, 8, "list of ") == 0 || lt.find("(disambiguation)") != npos || etype.count(nk)) continue;
+        etype[nk] = g_country.count(nk) ? 0 : g_person.count(nk) ? 1 : g_place.count(nk) ? 2 : 3;
+    }
+    S4Kind words{"words", {}, {}, {}}, ents{"entities", {}, {}, {}}, facts{"facts", {}, {}, {}}, vals{"values", {}, {}, {}};
+    s4_text_items(data, pages, words, ents);
+    s4_fact_items(pages, fused, etype, facts, vals);
+    // Views.
+    struct View { string name; vector<char> role; };
+    vector<View> views(3);
+    views[0].name = "store", views[1].name = "cyphalm", views[2].name = "random";
+    for (View& v : views) v.role.assign(pages.size(), 0);
+    for (std::size_t p = 0; p < pages.size(); ++p) {
+        const std::uint64_t hsh = fnv(pages[p].title);
+        const char half = ((hsh >> 21) & 1) ? 3 : 2;
+        views[0].role[p] = pages[p].tb < F.split ? 1 : half;
+        views[1].role[p] = pages[p].tb < 7340032 ? 1 : pages[p].tb >= 8388608 ? half : 0;
+        views[2].role[p] = ((hsh >> 22) & 1) ? half : 1;
+    }
+    say("\nS4 UNSEEN (items: words " + std::to_string(words.group.size()) + ", entities " + std::to_string(ents.group.size()) + ", facts " +
+        std::to_string(facts.group.size()) + ", values " + std::to_string(vals.group.size()) + ")");
+    for (const View& v : views)
+        for (char h : {char(2), char(3)}) {
+            if (h == 3 && (!F.test || v.name == "random")) continue;
+            const string set = h == 2 ? "dev" : "test";
+            for (const S4Kind* K : {&words, &ents, &facts, &vals}) {
+                const S4Res R = s4_eval(*K, v.role, h, -1, true);
+                s4_line("UNSEEN", v.name + " " + set + " " + K->name, R, say);
+                if (K == &words) s4_heaps(words, v.role, R, v.name + " " + set, say);
+            }
+            for (const S4Kind* K : {&facts, &vals})
+                for (int r = 0; r < kNRel; ++r) {
+                    const S4Res R = s4_eval(*K, v.role, h, r, false);
+                    if (R.h_obs < 1) continue;
+                    char b[400];
+                    std::snprintf(b, sizeof b, "  UNSEEN_REL %s %s %s %-13s E obs %zu items %zu | GT0 %.4f GTu %.4f | target %.4f H obs %.0f | GT0/t %.4f GTu/t %.4f",
+                                  v.name.c_str(), set.c_str(), K->name.c_str(), kRel[r].name, R.st.total, R.st.s_obs, R.gt0, R.gtu, R.t_obs, R.h_obs,
+                                  R.t_obs > 0 ? R.gt0 / R.t_obs : 0.0, R.t_obs > 0 ? R.gtu / R.t_obs : 0.0);
+                    say(b);
+                }
+        }
+    // Chapman per relation with a kept pattern: A text seeds, B kept patterns firing on the subject's page, W Wikidata.
+    std::uint64_t kept = 0;
+    for (const Pat& p : g_pats) kept |= std::uint64_t{1} << p.rel;
+    std::set<std::pair<string, int>> A, B, W;
+    for (const Seed& sd : g_seeds) {
+        const string k = norm_ent(sd.subj);
+        if (!etype.count(k) || !(kept >> sd.rel & 1)) continue;
+        (sd.src < 3 ? A : W).insert({k, sd.rel});
+    }
+    for (auto& [key, v] : g_gold) {
+        const string k = norm_ent(key.substr(0, key.find('\x1f')));
+        const int r = rel_index(key.substr(key.find('\x1f') + 1));
+        if (r >= 0 && etype.count(k) && (kept >> r & 1)) W.insert({k, r});
+    }
+    for (const PageRef& pg : pages) {
+        const string lt = lower(pg.title);
+        if (lt.compare(0, 8, "list of ") == 0 || lt.find("(disambiguation)") != npos) continue;
+        PageCtx px;
+        load_page(data, pg, px);
+        vector<Cand> cands;
+        const string k = norm_ent(pg.title);
+        for (const Sent& s : px.sents) {
+            auto spans = find_subject(s, px.forms);
+            if (spans.empty()) continue;
+            gen_cands(s, cands);
+            apply_patterns(s, spans, cands, px.forms.title_key, [&](int pid, const Cand&, const Span&) { B.insert({k, g_pats[static_cast<std::size_t>(pid)].rel}); });
+        }
+    }
+    say("\nS4 CHAPMAN per relation with a kept pattern (A text seeds, B kept patterns firing, W Wikidata; N_ref = |A u B u W|)");
+    for (int r = 0; r < kNRel; ++r) {
+        if (!(kept >> r & 1)) continue;
+        double a = 0, bb = 0, m = 0, ab = 0, w = 0, mw = 0;
+        std::set<string> all;
+        for (auto& [k, rr] : A) if (rr == r) { ++a; all.insert(k); m += B.count({k, r}); }
+        for (auto& [k, rr] : B) if (rr == r) { ++bb; all.insert(k); }
+        ab = static_cast<double>(all.size());
+        for (auto& [k, rr] : W) if (rr == r) { ++w; mw += all.count(k); all.insert(k); }
+        const ecs::ChapmanResult c = ecs::chapman(a, bb, m), ct = ecs::chapman(ab, w, mw);
+        const double nref = static_cast<double>(all.size());
+        char b[400];
+        std::snprintf(b, sizeof b, "  CHAPMAN %-13s A %.0f B %.0f m %.0f N_hat %.0f (sd %.0f) | N_ref %.0f ratio %.4f lower_bound %s | text %.0f vs Wikidata %.0f m %.0f: N_hat %.0f",
+                      kRel[r].name, a, bb, m, c.estimate, std::sqrt(c.variance), nref, nref > 0 ? c.estimate / nref : 0.0, c.estimate <= nref ? "holds" : "fails", ab, w, mw, ct.estimate);
+        say(b);
+    }
+    // The frontier: S3's cells, demand and the store's slots.
+    std::map<std::pair<string, string>, vector<string>> cell;
+    {
+        std::ifstream f(G.path + ".cells.tsv");
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) { auto c = split(l, '\t'); if (c.size() >= 14) cell[{c[0], c[1]}] = c; }
+    }
+    std::map<std::pair<string, string>, long> demand;
+    {
+        std::ifstream f(G.path + ".demand.tsv");
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) { auto c = split(l, '\t'); if (c.size() >= 12) ++demand[{c[11], c[9]}]; }
+    }
+    const char* kT[4] = {"country", "person", "place", "other"};
+    std::map<std::pair<string, int>, double> slotP;  // (subject, relation) -> best P
+    for (const Seed& sd : g_seeds) if (sd.src < 3) { double& p = slotP[{norm_ent(sd.subj), sd.rel}]; p = std::max(p, 20.0 / 21.0); }
+    for (const Fused& fu : fused) if (fu.op.P >= 0.5) { double& p = slotP[{norm_ent(fu.f->subj), fu.f->rel}]; p = std::max(p, fu.op.P); }
+    double cP[4][64] = {}, cN[4][64] = {};
+    for (auto& [k, p] : slotP) if (auto it = etype.find(k.first); it != etype.end()) cP[it->second][k.second] += p, ++cN[it->second][k.second];
+    // Missing mass per cell over all pages (facts whose subject has the cell's type), and per relation the values.
+    double mib = 0;
+    for (const PageRef& pg : pages) mib += static_cast<double>(pg.te - pg.tb);
+    mib /= 1048576.0;
+    std::map<std::pair<int, int>, std::array<double, 5>> cellmm;  // (type, rel) -> obs, n1, q1_mass, incidences, q1
+    {
+        vector<std::uint32_t> cnt(facts.group.size(), 0), unit(facts.group.size(), 0);
+        for (const auto& pg : facts.pages) for (auto [i, c] : pg) cnt[i] += c, ++unit[i];
+        for (std::size_t i = 0; i < facts.group.size(); ++i) {
+            if (facts.type[i] < 0 || !cnt[i]) continue;
+            auto& a = cellmm[{facts.type[i], facts.group[i]}];
+            a[0] += cnt[i];
+            a[1] += cnt[i] == 1;
+            a[2] += unit[i] == 1 ? cnt[i] : 0;
+            a[3] += unit[i];
+            a[4] += unit[i] == 1;
+        }
+    }
+    vector<double> vseen(kNRel, 0), vchao(kNRel, 0);
+    for (int r = 0; r < kNRel; ++r) {
+        vector<std::uint32_t> cnt(vals.group.size(), 0), unit(vals.group.size(), 0);
+        std::size_t T = 0;
+        for (const auto& pg : vals.pages) {
+            bool any = false;
+            for (auto [i, c] : pg) if (vals.group[i] == r) cnt[i] += c, ++unit[i], any = true;
+            T += any;
+        }
+        vector<std::size_t> cc, uu;
+        for (std::size_t i = 0; i < cnt.size(); ++i) if (cnt[i]) cc.push_back(cnt[i]), uu.push_back(unit[i]);
+        const ecs::ClumpedStats st = ecs::clumped_stats(cc, uu, T);
+        vseen[r] = static_cast<double>(st.s_obs);
+        vchao[r] = ecs::chao_extrapolated_richness(st.s_obs, st.q1, st.q2, st.units, 1e18);
+    }
+    struct Row { string type, rel; double ent, known, expected, cov, unseen, cert, dem, obs, per_mib, gt0, gtu, new10, newd10, vs, vc; int kept; };
+    vector<Row> rows;
+    for (int t = 0; t < 4; ++t)
+        for (int r = 0; r < kNRel; ++r) {
+            auto it = cell.find({kT[t], kRel[r].name});
+            if (it == cell.end()) continue;
+            const auto& c = it->second;
+            Row w;
+            w.type = kT[t], w.rel = kRel[r].name;
+            w.ent = std::atof(c[2].c_str()), w.known = std::atof(c[3].c_str());
+            // S3's P(exists) is the chance that an empty store slot has a value (calibrated on empty slots), so the slots
+            // still unseen are the empty ones times it.
+            w.unseen = std::max(0.0, w.ent - w.known) * std::atof(c[11].c_str());
+            w.expected = w.known + w.unseen;
+            w.cov = w.expected > 0 ? w.known / w.expected : 1.0;
+            w.cert = cN[t][r] ? cP[t][r] / cN[t][r] : 0.0;
+            w.dem = static_cast<double>(demand[{kT[t], kRel[r].name}]);
+            const auto mm = cellmm.count({t, r}) ? cellmm[{t, r}] : std::array<double, 5>{0, 0, 0, 0, 0};
+            w.obs = mm[0], w.per_mib = mm[0] / mib;
+            w.gt0 = mm[0] > 0 ? mm[1] / mm[0] : 1.0, w.gtu = mm[0] > 0 ? mm[2] / mm[0] : 1.0;
+            w.new10 = w.gtu * w.per_mib * 10.0;
+            w.newd10 = mm[4] / mib * 10.0;  // Q1/U x incidences per MiB: distinct new facts, not observations
+            w.vs = vseen[r], w.vc = vchao[r];
+            w.kept = std::atoi(c[12].c_str());
+            rows.push_back(w);
+        }
+    std::ofstream out(F.path);
+    out << "type\trelation\tentities\tknown\texpected\tcoverage\tunseen_in_slice\tcertainty\tdemand\tfact_obs\tobs_per_mib\tgt0\tgtu\tnew_facts_per_10mib\t"
+           "new_distinct_per_10mib\tvalues_seen\tvalues_chao1\tkept_pattern\n";
+    char b[600];
+    for (const Row& w : rows) {
+        std::snprintf(b, sizeof b, "%s\t%s\t%.0f\t%.0f\t%.1f\t%.4f\t%.1f\t%.4f\t%.0f\t%.0f\t%.3f\t%.4f\t%.4f\t%.2f\t%.2f\t%.0f\t%.0f\t%d\n", w.type.c_str(), w.rel.c_str(), w.ent,
+                      w.known, w.expected, w.cov, w.unseen, w.cert, w.dem, w.obs, w.per_mib, w.gt0, w.gtu, w.new10, w.newd10, w.vs, w.vc, w.kept);
+        out << b;
+    }
+    std::snprintf(b, sizeof b, "\nS4 FRONTIER %s: %zu cells, article text %.1f MiB", F.path.c_str(), rows.size(), mib);
+    say(b);
+    for (int pass = 0; pass < 2; ++pass) {
+        vector<const Row*> v;
+        for (const Row& w : rows) v.push_back(&w);
+        std::sort(v.begin(), v.end(), [&](const Row* x, const Row* y) {
+            const double a = pass ? x->unseen : x->new10, c = pass ? y->unseen : y->new10;
+            return a != c ? a > c : x->type + x->rel < y->type + y->rel;
+        });
+        for (std::size_t k = 0; k < 10 && k < v.size(); ++k) {
+            const Row& w = *v[k];
+            std::snprintf(b, sizeof b, "  %s %2zu %-7s %-13s new/10MiB %.1f (distinct %.1f) | known %.0f expected %.1f coverage %.3f unseen %.1f | certainty %.3f demand %.0f | values %.0f chao1 %.0f",
+                          pass ? "FRONTIER_TOP_SLICE" : "FRONTIER_TOP_READ", k + 1, w.type.c_str(), w.rel.c_str(), w.new10, w.newd10, w.known, w.expected, w.cov, w.unseen, w.cert, w.dem,
+                          w.vs, w.vc);
+            say(b);
+        }
+    }
+}
+
 struct Args {
     string enwik, outdir;
     int folds = 5;
@@ -2726,11 +3194,344 @@ struct Args {
     ShardOpt shard;
     string reach;               // F2R: the E1 parse file for --reach (with --dev)
     GapOpt gaps;                // S3: --gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F]
+    FrontierOpt frontier;       // S4: --frontier FILE [--frontier-test] [--frontier-split B] (with --gaps)
 };
 
 }  // namespace
 
+// ============================================================ S6: scoring a planted set (docs/reports/S6_HYPOTHESIS_SCORING.md)
+//
+// pattern_learn --score-planted SEEDS.tsv WD_VALUES.tsv OUT_PREFIX [--subjects N] [--read-test] [--read-fresh]
+// Holds one fact out of each of N subjects of the seed store (a known-true hypothesis), pairs it with a known-false one
+// (the same subject and relation, an object drawn by triple from the relation in the reduced store), and scores both
+// against the reduced store with hypothesis.hpp's terms. S6b's P0: an isotonic fit (dev) of z(logit P_assoc) +
+// z(ln(1 + Adamic-Adar)), times the hard constraint, kept by one joint test on dev. The dev variants are at commit
+// 9a8c6a7. S6's test half prints only with --read-test (read once, for S6's change); the fresh set (the qualifying
+// subjects S6 did not use) only with --read-fresh. Nothing here answers a question: these are Cypha's own hypotheses
+// (PLAN rule 10).
+namespace s6 {
+
+struct Item {
+    string s, r, o;
+    int label = 0, pair = 0;
+    bool dev = true;
+    double base = 0, p = 0, p_nocopy = 0, aa = 0, hard = 1, bridging = 0, impact = 0;
+    double p0 = 0, nov = 0, dl = 0, inter = 0, prio = 0;
+};
+using Score = std::function<double(const Item&)>;
+
+const char* group_of(const string& r) {
+    static const char* D[] = {"birth_year", "death_year", "birth_date", "death_date", "founded"};
+    static const char* P[] = {"birth_place", "death_place", "located_in", "country", "capital", "location", "largest_city"};
+    static const char* L[] = {"occupation", "genre", "language", "nationality", "party", "currency", "class", "order", "family"};
+    for (const char* x : D) if (r == x) return "dates";
+    for (const char* x : P) if (r == x) return "places";
+    for (const char* x : L) if (r == x) return "lexical";
+    return "people";
+}
+
+// The hard constraint (DISCOVERY 6.1's constraint term, hard part): 0 when a date slot of s already holds another year,
+// or death comes before birth, or a life is longer than 125 years (as pass 3's fusion); 1 otherwise.
+double hard_constraint(const ecs::TripleStore& st, const string& s, int r, const string& o) {
+    if (!is_datey(r)) return 1.0;
+    auto kind = [](const string& n) { return n == "birth_year" || n == "birth_date" ? 1 : n == "death_year" || n == "death_date" ? 2 : n == "founded" ? 3 : 0; };
+    const int k = kind(kRel[r].name);
+    const Date D = parse_date_str(o);
+    if (!D.ok()) return 1.0;
+    for (const auto& f : st.facts_of(s)) {
+        const int kf = kind(f.r);
+        if (!kf) continue;
+        const Date F = parse_date_str(f.o);
+        if (!F.ok()) continue;
+        if (kf == k && F.y != D.y) return 0.0;
+        if (k == 1 && kf == 2 && (F.y < D.y || F.y - D.y > 125)) return 0.0;
+        if (k == 2 && kf == 1 && (D.y < F.y || D.y - F.y > 125)) return 0.0;
+    }
+    return 1.0;
+}
+
+// AUROC (label 1 above label 0) over items idx, by mid-ranks.
+double auroc(const vector<Item>& it, const vector<std::size_t>& idx, const Score& f) {
+    vector<std::pair<double, int>> v;
+    v.reserve(idx.size());
+    for (std::size_t i : idx) v.push_back({f(it[i]), it[i].label});
+    std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    double rank_pos = 0, npos = 0, nneg = 0;
+    for (std::size_t i = 0; i < v.size();) {
+        std::size_t j = i;
+        while (j < v.size() && v[j].first == v[i].first) ++j;
+        const double mid = 0.5 * static_cast<double>(i + 1 + j);
+        for (std::size_t k = i; k < j; ++k)
+            if (v[k].second) rank_pos += mid, ++npos; else ++nneg;
+        i = j;
+    }
+    return npos && nneg ? (rank_pos - npos * (npos + 1) / 2) / (npos * nneg) : 0.5;
+}
+
+// AUROC of f, and of f - g when g is given, with 95% bootstrap intervals over pairs (one pair per subject); and the
+// share of pairs whose true member scores higher.
+struct Read { double auc, lo, hi, pair_acc; };
+Read read(const vector<Item>& it, const vector<std::size_t>& pt, const vector<std::size_t>& pf, const Score& f, const Score* g = nullptr) {
+    vector<std::size_t> all;
+    double acc = 0;
+    for (std::size_t k = 0; k < pt.size(); ++k) {
+        all.push_back(pt[k]), all.push_back(pf[k]);
+        const double a = f(it[pt[k]]), b = f(it[pf[k]]);
+        acc += a > b ? 1.0 : a == b ? 0.5 : 0.0;
+    }
+    Read r{auroc(it, all, f) - (g ? auroc(it, all, *g) : 0.0), 0, 0, pt.empty() ? 0.0 : acc / static_cast<double>(pt.size())};
+    std::mt19937_64 rng(20261028);
+    vector<double> bs;
+    for (int rep = 0; rep < 2000 && !pt.empty(); ++rep) {
+        vector<std::size_t> idx;
+        for (std::size_t k = 0; k < pt.size(); ++k) {
+            const std::size_t j = rng() % pt.size();
+            idx.push_back(pt[j]), idx.push_back(pf[j]);
+        }
+        bs.push_back(auroc(it, idx, f) - (g ? auroc(it, idx, *g) : 0.0));
+    }
+    std::sort(bs.begin(), bs.end());
+    if (!bs.empty()) r.lo = bs[49], r.hi = bs[1949];
+    return r;
+}
+
+// One planted set: its reduced store, its pairs, and the counts of what was skipped or dropped.
+struct PlantedSet {
+    ecs::TripleStore st;
+    vector<Item> it;
+    std::size_t subjects = 0, held = 0, skipped_unseen = 0, dropped_gone = 0, dropped_nofalse = 0;
+};
+
+// The planted-set rule on the shuffled subjects from `from` on: each subject's triples are shuffled and the first whose
+// object occurs for another subject is held out, until held + skipped reaches `limit`; then the reduced store (the full
+// store without these hold-outs) and the false partners. Returns where the next set starts. Every draw is from `rng`.
+std::size_t build_set(PlantedSet& ps, const vector<string>& subj, std::size_t from, std::size_t limit,
+                      std::map<string, vector<std::pair<string, string>>>& by_subj, const ecs::TripleStore& full,
+                      std::unordered_map<string, std::set<string>>& wd, std::mt19937_64& rng) {
+    auto shuffle = [&](auto& v) { for (std::size_t i = v.size(); i > 1; --i) std::swap(v[i - 1], v[rng() % i]); };
+    struct Held { string s, r, o; };
+    vector<Held> held;
+    std::set<string> held_keys;
+    std::size_t i = from;
+    for (; i < subj.size() && held.size() + ps.skipped_unseen < limit; ++i) {
+        auto fs = by_subj[subj[i]];
+        shuffle(fs);
+        bool got = false;
+        for (const auto& [r, o] : fs)
+            if (full.count(r, o) >= 2) {
+                held.push_back({subj[i], r, o});
+                held_keys.insert(subj[i] + '\x1f' + r + '\x1f' + o);
+                got = true;
+                break;
+            }
+        if (!got) ++ps.skipped_unseen;
+    }
+    ps.subjects = i - from, ps.held = held.size();
+    std::unordered_map<string, vector<string>> objects_of_rel;  // one entry per triple, in subject order
+    for (const auto& [s, fs] : by_subj)
+        for (const auto& [r, o] : fs)
+            if (!held_keys.count(s + '\x1f' + r + '\x1f' + o)) ps.st.add(s, r, o), objects_of_rel[r].push_back(o);
+    for (const auto& h : held) {
+        if (ps.st.count(h.r, h.o) == 0) { ++ps.dropped_gone; continue; }
+        const auto& pool = objects_of_rel[h.r];
+        const auto& wds = wd[h.s + '\x1f' + h.r];
+        const int ri = rel_index(h.r);
+        const Date hd = is_datey(ri) ? parse_date_str(h.o) : Date{};
+        string neg;
+        for (int t = 0; t < 100 && neg.empty(); ++t) {
+            const string& c = pool[rng() % pool.size()];
+            if (c == h.o || c == h.s || full.has(h.s, h.r, c) || wds.count(lower(c))) continue;
+            if (is_datey(ri)) {
+                const Date cd = parse_date_str(c);
+                if (cd.ok() && hd.ok() && cd.y == hd.y) continue;
+            }
+            neg = c;
+        }
+        if (neg.empty()) { ++ps.dropped_nofalse; continue; }
+        const bool dev = ((fnv(h.s) >> 7) & 1) == 0;
+        const int pr = static_cast<int>(ps.it.size() / 2);
+        Item a, b;
+        a.s = b.s = h.s, a.r = b.r = h.r, a.o = h.o, b.o = neg, a.label = 1, b.label = 0, a.pair = b.pair = pr, a.dev = b.dev = dev;
+        ps.it.push_back(a), ps.it.push_back(b);
+    }
+    // The raw terms, against this set's reduced store.
+    const ecs::LinkPredictor lp(ps.st, {}), lp_nocopy(ps.st, {1.0, false});
+    for (auto& x : ps.it) {
+        x.base = ecs::base_rate(ps.st, x.r, x.o);
+        x.p = lp.prob(x.s, x.r, x.o);
+        x.p_nocopy = lp_nocopy.prob(x.s, x.r, x.o);
+        x.aa = ecs::adamic_adar(ps.st, x.s, x.o);
+        x.hard = hard_constraint(ps.st, x.s, rel_index(x.r), x.o);
+        x.bridging = ecs::graph_distance(ps.st, x.s, x.o, 6) - 1;
+        x.impact = ecs::hypothesis_impact(ps.st.has_relation(x.s, x.r) ? 0.0 : 1.0, 0.0);
+        x.nov = ecs::novelty_bits(x.p);
+        x.dl = ecs::compression_gain_bits(lp, ps.st, x.s, x.r, x.o);
+    }
+    return i;
+}
+
+int run(int argc, char** argv) {
+    if (argc < 5) {
+        std::fprintf(stderr, "usage: pattern_learn --score-planted SEEDS.tsv WD_VALUES.tsv OUT_PREFIX [--subjects N] [--read-test] [--read-fresh]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[4];
+    std::size_t nsub = 2000;
+    bool read_test = false, read_fresh = false;
+    for (int i = 5; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--subjects" && i + 1 < argc) nsub = static_cast<std::size_t>(std::atoll(argv[++i]));
+        else if (a == "--read-test") read_test = true;
+        else if (a == "--read-fresh") read_fresh = true;
+        else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+    }
+    // The store: distinct seed triples of a known relation.
+    std::map<string, vector<std::pair<string, string>>> by_subj;  // sorted, so the order does not depend on the file
+    std::set<string> seen;
+    {
+        std::ifstream f(argv[2]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() != 6 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+            if (seen.insert(c[0] + '\x1f' + c[1] + '\x1f' + c[2]).second) by_subj[c[0]].push_back({c[1], c[2]});
+        }
+    }
+    ecs::TripleStore full;
+    for (auto& [s, fs] : by_subj) {
+        std::sort(fs.begin(), fs.end());
+        for (const auto& [r, o] : fs) full.add(s, r, o);
+    }
+    std::unordered_map<string, std::set<string>> wd;  // (s, r) -> lowered Wikidata surfaces
+    {
+        std::ifstream f(argv[3]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 3) continue;
+            for (const auto& x : split(c[2], '|')) wd[c[0] + '\x1f' + c[1]].insert(lower(x));
+        }
+    }
+    // Qualifying subjects (two or more triples), shuffled (Fisher-Yates with mt19937_64, the same on every platform).
+    std::mt19937_64 rng(20261028);
+    vector<string> subj;
+    for (const auto& [s, fs] : by_subj)
+        if (fs.size() >= 2) subj.push_back(s);
+    for (std::size_t i = subj.size(); i > 1; --i) std::swap(subj[i - 1], subj[rng() % i]);
+    PlantedSet A, F;  // S6's planted set (dev and test halves), then the fresh set (S6b) from the subjects A did not use
+    const std::size_t next = build_set(A, subj, 0, nsub, by_subj, full, wd, rng);
+    build_set(F, subj, next, std::numeric_limits<std::size_t>::max(), by_subj, full, wd, rng);
+    char b[512];
+    for (const auto* ps : {&A, &F}) {
+        std::snprintf(b, sizeof b, "S6 %s: subjects %zu, held out %zu (skipped: no seen object %zu) | reduced store %zu of %zu triples | pairs %zu (dropped: object gone %zu, no false partner %zu)",
+                      ps == &A ? "planted" : "fresh", ps->subjects, ps->held, ps->skipped_unseen, ps->st.size(), full.size(), ps->it.size() / 2, ps->dropped_gone, ps->dropped_nofalse);
+        std::cout << b << "\n";
+    }
+    vector<std::size_t> dt, df, tt, tf, ft, ff;  // dev / test / fresh pairs: the true and the false member
+    for (std::size_t i = 0; i + 1 < A.it.size(); i += 2) (A.it[i].dev ? dt : tt).push_back(i), (A.it[i].dev ? df : tf).push_back(i + 1);
+    for (std::size_t i = 0; i + 1 < F.it.size(); i += 2) ft.push_back(i), ff.push_back(i + 1);
+    std::cout << "S6 dev pairs " << dt.size() << " test pairs " << tt.size() << " fresh pairs " << ft.size() << "\n";
+    // Everything fitted is fitted on A's dev half: the z-score pools and the isotonic fits.
+    auto logit = [](double p) { p = std::min(1 - 1e-12, std::max(1e-12, p)); return std::log(p / (1 - p)); };
+    auto dev_pool = [&](const Score& f) {
+        vector<double> v;
+        for (std::size_t i : dt) v.push_back(f(A.it[i])), v.push_back(f(A.it[i + 1]));
+        return ecs::pool_stats(v);
+    };
+    const Score lp_raw = [=](const Item& x) { return logit(x.p); }, lpn_raw = [=](const Item& x) { return logit(x.p_nocopy); };
+    const Score aa_raw = [](const Item& x) { return std::log1p(x.aa); };
+    const auto zp = dev_pool(lp_raw), zpn = dev_pool(lpn_raw), za = dev_pool(aa_raw);
+    auto fit = [&](const Score& raw, bool hard) {
+        vector<double> p;
+        vector<int> y;
+        for (std::size_t i : dt) p.push_back(raw(A.it[i])), y.push_back(1), p.push_back(raw(A.it[i + 1])), y.push_back(0);
+        auto cal = std::make_shared<ecs::IsotonicCalibrator>();
+        cal->fit(p, y);
+        return Score([=](const Item& x) { return ecs::plausibility_prior(1.0, cal->predict(raw(x)), hard ? x.hard : 1.0); });
+    };
+    const Score s_full = [=](const Item& x) { return ecs::zscore(lp_raw(x), zp) + ecs::zscore(aa_raw(x), za); };
+    const Score s_nocopy = [=](const Item& x) { return ecs::zscore(lpn_raw(x), zpn) + ecs::zscore(aa_raw(x), za); };
+    const Score p0_full = fit(s_full, true);
+    const vector<std::pair<string, Score>> abl = {
+        {"joint_removed", fit([](const Item& x) { return x.p_nocopy; }, false)},  // no path, no constraint, no copy rules
+        {"without_path", fit([](const Item& x) { return x.p; }, true)},
+        {"without_constraint", fit(s_full, false)},
+        {"without_copy_rules", fit(s_nocopy, true)},
+        {"without_rules", fit([](const Item& x) { return x.base; }, false)}};
+    // The joint test (S6b): keep {path, constraint, copy rules} when removing them together costs >= 0.01 on dev, with
+    // the interval of the drop above 0.
+    const Read joint = read(A.it, dt, df, p0_full, &abl[0].second);
+    const bool keep = joint.auc >= 0.01 && joint.lo > 0.0;
+    std::snprintf(b, sizeof b, "S6b JOINT dev drop %.4f ci95 %.4f %.4f -> %s", joint.auc, joint.lo, joint.hi, keep ? "keep path, constraint and copy rules" : "cut all three");
+    std::cout << b << "\n";
+    const Score p0 = keep ? p0_full : abl[0].second;
+    for (auto* ps : {&A, &F})
+        for (auto& x : ps->it) x.p0 = p0(x);
+    const auto zn = dev_pool([](const Item& x) { return x.nov; }), zi = dev_pool([](const Item& x) { return x.impact; });
+    const auto zd = dev_pool([](const Item& x) { return x.dl; }), zb = dev_pool([](const Item& x) { return x.bridging; });
+    for (auto* ps : {&A, &F})
+        for (auto& x : ps->it) {
+            x.inter = ecs::interestingness(ecs::zscore(x.nov, zn), ecs::zscore(x.impact, zi), ecs::zscore(x.dl, zd), ecs::zscore(x.bridging, zb));
+            x.prio = ecs::voi_priority(ecs::expected_information_gain(x.p0, 0.9, 0.9).eig, x.impact, x.inter, 1.0);
+        }
+    const vector<std::pair<string, Score>> terms = {
+        {"P0", [](const Item& x) { return x.p0; }},
+        {"base_rate", [](const Item& x) { return x.base; }},
+        {"hard_constraint", [](const Item& x) { return x.hard; }},
+        {"novelty", [](const Item& x) { return x.nov; }},
+        {"compression_dL", [](const Item& x) { return x.dl; }},
+        {"bridging", [](const Item& x) { return x.bridging; }},
+        {"impact", [](const Item& x) { return x.impact; }},
+        {"interestingness", [](const Item& x) { return x.inter; }},
+        {"priority", [](const Item& x) { return x.prio; }}};
+    auto pr = [&](const char* tag, const string& name, const Read& r, const char* what = "auroc") {
+        std::snprintf(b, sizeof b, "%s %-22s %s %.4f ci95 %.4f %.4f pair_acc %.4f", tag, name.c_str(), what, r.auc, r.lo, r.hi, r.pair_acc);
+        std::cout << b << "\n";
+    };
+    auto table = [&](const char* tag, const vector<Item>& it, const vector<std::size_t>& pt, const vector<std::size_t>& pf) {
+        for (const auto& [name, f] : terms) pr(tag, name, read(it, pt, pf, f));
+        if (tag == string("FRESH") || tag == string("TEST") || tag == string("DEV")) {
+            const Read g = read(it, pt, pf, terms[0].second);
+            std::snprintf(b, sizeof b, "%s GATE P0 auroc %.4f ci95 %.4f %.4f -> %s (>= 0.75)", tag, g.auc, g.lo, g.hi, g.auc >= 0.75 ? "met" : "missed");
+            std::cout << b << "\n";
+        }
+        for (const auto& [name, f] : abl) {
+            pr(tag, name, read(it, pt, pf, f));
+            pr(tag, "P0_minus_" + name, read(it, pt, pf, terms[0].second, &f), "delta");
+        }
+        for (const char* g : {"dates", "places", "lexical", "people"}) {
+            vector<std::size_t> gt, gf;
+            for (std::size_t k = 0; k < pt.size(); ++k)
+                if (string(group_of(it[pt[k]].r)) == g) gt.push_back(pt[k]), gf.push_back(pf[k]);
+            pr(tag, string("P0_") + g + "_" + std::to_string(gt.size()), read(it, gt, gf, terms[0].second));
+        }
+    };
+    table("DEV", A.it, dt, df);
+    if (read_test) table("TEST", A.it, tt, tf);
+    if (read_fresh) table("FRESH", F.it, ft, ff);
+    std::ofstream f(out + ".planted.tsv");
+    f << "set\tpair\tsplit\tlabel\tsubject\trelation\tobject\tbase\tp_link\taa\thard\tP0\tnovelty\tdL\tbridging\timpact\tI\tpriority\n";
+    for (const auto* ps : {&A, &F})
+        for (const auto& x : ps->it) {
+            if (ps == &A ? !x.dev && !read_test : !read_fresh) continue;
+            f << (ps == &A ? "planted" : "fresh") << '\t' << x.pair << '\t' << (ps == &F ? "fresh" : x.dev ? "dev" : "test") << '\t' << x.label << '\t' << x.s << '\t' << x.r << '\t'
+              << x.o << '\t' << x.base << '\t' << x.p << '\t' << x.aa << '\t' << x.hard << '\t' << x.p0 << '\t' << x.nov << '\t' << x.dl << '\t' << x.bridging << '\t'
+              << x.impact << '\t' << x.inter << '\t' << x.prio << "\n";
+        }
+    struct rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    std::snprintf(b, sizeof b, "S6 seconds %.1f max_rss_mb %.1f", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s6
+
 int main(int argc, char** argv) {
+    if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
@@ -2741,6 +3542,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "usage: pattern_learn <enwik8> <outdir> [--folds K] [--cv] [--min-train N] [--sample N] [--seed S] [--base-rate A]\n"
                              "         [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
                              "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]\n"
+                             "         [--frontier FILE [--frontier-test] [--frontier-split B]]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
@@ -2774,8 +3576,12 @@ int main(int argc, char** argv) {
         else if (a == "--parse" && i + 1 < argc) A.gaps.parse = argv[++i];
         else if (a == "--gap-floor" && i + 1 < argc) A.gaps.floor = std::atof(argv[++i]);
         else if (a == "--demand-weight" && i + 1 < argc) A.gaps.demand_weight = std::atof(argv[++i]);
+        else if (a == "--frontier" && i + 1 < argc) A.frontier.path = argv[++i];
+        else if (a == "--frontier-test") A.frontier.test = true;
+        else if (a == "--frontier-split" && i + 1 < argc) A.frontier.split = static_cast<std::size_t>(std::atoll(argv[++i]));
     }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
+    if (!A.frontier.path.empty() && A.gaps.path.empty()) { std::fprintf(stderr, "--frontier needs --gaps\n"); return 2; }
     if (!A.shard.join.empty() && A.shard.path.empty()) { std::fprintf(stderr, "--join needs --shard\n"); return 2; }
     A.shard.seed = A.seed;
     if (!A.shard.path.empty() && (A.shard.dev.empty() || A.shard.test.empty())) { std::fprintf(stderr, "--shard needs --dev and --test (leakage check)\n"); return 2; }
@@ -3019,6 +3825,7 @@ int main(int argc, char** argv) {
     int exit_code = A.shard.path.empty() ? 0 : write_shard(A.shard, fused, pages, page_of, say, &shard_text);
     if (!A.reach.empty()) reach_report(cand_all, data, A.shard.holdout_from, A.shard.dev, A.reach, shard_text, say);
     if (!A.gaps.path.empty()) write_gaps(A.gaps, A.shard.dev, pages, fused, say);
+    if (!A.frontier.path.empty()) write_frontier(A.frontier, A.gaps, data, pages, fused, say);
     std::snprintf(buf, sizeof buf, "\nrun time %.1f s, peak RAM %.0f MB, facts written %s/facts_f2.tsv", now_s() - t0, peak_mb(), A.outdir.c_str());
     say(buf);
     std::ofstream(A.outdir + "/stats.txt") << rep.str();

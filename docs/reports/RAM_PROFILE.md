@@ -583,3 +583,128 @@ A0 and E take no token statistic, so M14 leaves them as M13 has them. C1L+E buil
 - **A served model cannot use `question_lp` or `ent_lp` tokens.** They read the wiki-stage trie with its live match table, which no stored form holds.
 - **`sample` and `chat`** serve a stored trie (M7). When the class expert becomes a default there, their `--save` / `--model` should carry its table too (`ClassContext::save` / `load`).
 - **Memory-mapping the stored files** was not tried. The data-structure cuts were enough for the target.
+
+## M15: the class build's peak when building (registered 2026-10-28, before any run)
+
+**Question.** Building a `qa` model with B4c's defaults (class + similar-context + copy) peaks at the class build. C1L+E built at 264–275 MB, and the same code and data varied 226–302 MB between runs (M10–M14). Served, it is 189 MB. Why does the build's peak vary, and can it be made lower and steady without changing a number?
+
+**What is known.** The class build adds about 132–190 MB at its peak (M1, M14). It started from 92–135 MB resident in the M14 runs. Whether the C library keeps the build's freed memory resident afterwards also changed between runs (224.6 against 268.8 MB after the build).
+
+**Decision rule (fixed before the runs).**
+1. **Lossless.** Every printed number and the rows file byte-identical to the unchanged tool (main `e8748a2`) for A0 (`--no-cls --no-copy`), E (the defaults) and C1L+E. Timing fields are excepted: `build_s`, the `LATENCY` lines, `SIM_LAT`'s p50 and p99. The class table must be equal to the unchanged build's (`operator==`; the stored `cls.cc` files byte-identical).
+2. **Peaks** are `VmHWM` in kB / 1000, at least two runs per configuration and tool. A change is kept if it lowers the built peak of E and C1L+E by more than the unchanged tool's spread between repeat runs, or makes the spread 5 MB or less without raising the mean.
+3. **No OS-specific calls in the code** (no `malloc_trim`, `mallopt`, `madvise`): Odin, "don't worry about the OS". Allocator settings may be changed by environment variable in test runs only, to test the cause.
+4. **Lossy changes** follow rule 2 at the top of this report. None is planned.
+
+**Target.** C1L+E built at 220 MB or less, with repeat runs within 5 MB.
+
+**Predictions (registered before the runs).**
+
+| # | Prediction |
+|---|---|
+| M15a | The unchanged tool's repeat runs of E differ by more than 10 MB at the peak (M14: 245.3 and 232.1) |
+| M15b | The peak of E and C1L+E is reached inside the class build, in every run |
+| M15c | The spread comes from the C library's heap. With large blocks forced into their own mappings by environment variable (`GLIBC_TUNABLES=glibc.malloc.mmap_threshold=131072`), repeat runs agree within 5 MB and the peak falls by at least 20 MB |
+| M15d | Most of the build's extra memory is the chunk-by-chunk merge: each chunk reserves a new array of (the order's runs + the chunk's events) while the old one is alive, on top of every order's runs. A build whose arrays never regrow cuts the build's addition by at least a third |
+
+The change itself is chosen after the profile, and its predictions are registered before its runs (as M13 and M14 were).
+
+### M15e: the class build in key buckets (registered 2026-10-28, before its runs)
+
+**Why.** A harness that builds only the default class table over an approximate T (wiki train + raw Dolly, 20.6 MB) shows where the build's memory goes:
+- the distinct (context, byte) pairs are 1.28 M, 1.66 M and 2.14 M for the three orders: 5.09 M in all, 61 MB as 12-byte runs;
+- the table is 18.8 MB;
+- yet the build adds 151 MB to the peak (36 → 187 MB), and 73 MB stays resident afterwards for a 19 MB table.
+
+With the C library's mmap threshold fixed by environment variable (test runs only), the same build adds 103 MB and leaves 42 MB resident. So about 48 MB of the peak is heap left behind by the merge. Every chunk reserves a new run array a little longer than the order's old one, and frees the old one, which is too short to reuse. The harness repeats to 0.1 MB alone, but with 80 MB held before the build it peaks at 269 MB. So the spread in `qa` comes from the heap the build starts from.
+
+**Change (lossless).** In `ClassContext::build`:
+1. Every order's runs go into one array, since the table adds up a (key, byte) counted in two orders anyway.
+2. The runs are split into 256 buckets by the key's top 8 bits. A chunk's sorted events fall in each bucket as one stretch, and only that bucket's runs (about 0.25 MB) are copied by its merge.
+3. The table is filled bucket by bucket, and each bucket is freed once read.
+
+**Predictions (registered before the runs).**
+
+| # | Prediction |
+|---|---|
+| M15e1 | The class table is byte-identical (stored files) in the harness and in `qa` (A0, E, C1L+E); `native_class_context_test` passes unchanged; every printed number and the rows file identical |
+| M15e2 | Harness: the build adds under 100 MB to the peak (151 before) |
+| M15e3 | Harness: with 80 MB held before the build, the addition is the same within 5 MB |
+| M15e4 | `qa` built: E under 210 MB; C1L+E 220 MB or less (the target); repeat runs within 5 MB |
+| M15e5 | The build's time is within +20% of the unchanged build's |
+| M15e6 | The class build no longer sets `qa`'s peak in E. The next highest is the FM-index build or the similar-context build |
+
+### Results: M15 (2026-10-28)
+
+**How it was run.**
+- `cyphalm_trie qa` on the 8 MiB protocol. The unchanged tool is main `e8748a2`, and the changed one is that commit plus M15e.
+- Configurations, with B4c's defaults: **A0** (`--no-cls --no-copy`), **E** (the defaults: class + similar-context + copy) and **C1L+E** (A1d's C1L options).
+- Peaks are `VmHWM` in kB / 1000. A wrapper also polled `VmRSS` every 0.25 s next to the tool's progress lines, stamped with their times, to place each peak in a phase.
+- The machine was shared with other agents' runs, so wall times are noisy.
+- A harness (scratch, not committed) built only the default class table over an approximate T: wiki train plus the raw Dolly file, 20.6 MB.
+
+**The cause.**
+- The unchanged build kept one run array per order and, for every 131,072-byte chunk, reserved a new array of (the order's runs + the chunk's events) before freeing the old one.
+- In the harness, that build adds 151 MB to the peak for a 19 MB table, and leaves 73 MB resident after it.
+- With the C library's mmap threshold fixed by environment variable, the same build adds 103 MB and leaves 42 MB. In `qa` (E), the unchanged tool under that setting peaks at 169.3 MB instead of 225.8, one run. So about 50 MB of the build's peak was heap: freed arrays too short to reuse, held resident.
+- With 80 MB held before the build, the harness peaks at 269 MB (+164): the build's cost depends on the heap it starts from. This is the spread M10–M14 saw between runs of different tool versions.
+- A first bucketed build still added 110 MB in the harness. Its run arrays held 92 MB of capacity for 61 MB of runs: the spare merge array passes from bucket to bucket and never shrinks, so every bucket grew to the largest one's room. Sizing each merge to the distinct events it can add, and dropping a spare array more than 1/16 too long, fixed it. That was before any `qa` run of the change.
+
+**The change.** `ClassContext::build` (`class_context.hpp`, +126 / −109 lines):
+- every order's runs in one array, split into 256 buckets by the event's top 8 bits;
+- a compact table's runs keep 32-bit keys, the bits below the bucket's (56 bits in a u64 otherwise);
+- each merge sized to the distinct events it can add;
+- the table filled bucket by bucket, each bucket freed once read.
+
+`class_context_test` gains 64 checks: every one of its 16 settings, built in chunks of 1, 7, 997 or 2^20 bytes, must equal the 4,096-byte build. A planted merge bug (old counts lost across chunks) fails all 64. The 979 earlier checks did not catch it.
+
+**Parity.**
+- **Tables.** The harness tables are byte-identical to the unchanged build's in 11 settings:
+  - compact and full storage;
+  - 2 and 3 orders;
+  - min_total 1 to 3;
+  - chunks of 1 to 131,072 bytes;
+  - texts of 0 to 20.6 MB.
+- **`qa` stores.** The stores written by `qa --save` are byte-identical, file for file:
+  - E: `cls.cc` 19,115,392 bytes, `ig.fm`, `model.pk`, `qa.meta`;
+  - C1L+E: `cls.cc` 19,537,998 bytes, `low.fm`, `ig.fm`, `model.pk`, `qa.meta`.
+- **Output.** Every A0, E and C1L+E run, with and without `--save`, printed the same lines as the unchanged tool (timing masked) with byte-identical rows.
+
+**Peaks** (MB; repeat runs listed).
+
+| Configuration | Unchanged tool | Changed tool | Where the changed tool peaks |
+|---|---:|---:|---|
+| A0 | 175.3 | 175.3 | the similar-context build (no class table) |
+| E | 225.8 / 225.9 / 225.8 (`--save`) | **194.0 / 194.1** (`--save`) | the FM-index build after the class build |
+| C1L+E | 259.3 | **235.0** | the FM-index build |
+| C1L+E with `--save` (the lowered index kept for the store) | 264.0 | 260.7 | the FM-index build, with the lowered index's 26 MB |
+
+- **The class build itself** now adds 22 MB in E (110.4 → 132.5) and 19 MB in C1L+E (92 → 111): its small bucket arrays reuse heap the training freed. Before, it added 115 MB (E: 110.5 → 225.8).
+- **The class build's time** is unchanged: 11.4 s against 11.2 s (E), and 11.6 s against 12.1 s (C1L+E). In the harness, alternating runs gave 12.2–14.2 s against 11.6–15.2 s.
+- **The next peak is the FM-index build** (`FmInfiniGram` over T, 21 MB). libsais needs a 4-byte suffix-array scratch per byte (85 MB). The text and the first wavelet tree are held while the second BWT is made. In the harness that build adds 114 MB. In `qa` C1L+E it goes 111 → 215 (first BWT) → 235 MB (second BWT).
+  - Building the index first does not help: the class build needs T, so the index would have to copy it.
+  - A served model (M11) loads the index and never builds it.
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| M15a | Unchanged E repeats differ by more than 10 MB | **Miss.** 225.8, 225.9 and 225.8: the same binary repeats on this machine. The spread M10–M14 saw was between different tools' runs and options (`--save`, M13, M14), which change the heap the class build starts from |
+| M15b | The peak of E and C1L+E is inside the class build | **Hit.** At its end in every unchanged run; the index build's first second reaches the same level within 0.1 MB |
+| M15c | With a fixed mmap threshold, repeats agree within 5 MB and the peak falls 20 MB or more | **Hit** on the fall (harness 187.4 → 126.7; `qa` E 225.8 → 169.3, one run). Repeats only measured in the harness (within 0.1 MB) |
+| M15d | The merge is most of the build's extra memory; arrays that never regrow cut the addition by a third | **Hit.** 151 → 73 MB in the harness (−52%) |
+| M15e1 | Byte-identical table, lines and rows; the CTest passes | **Hit** |
+| M15e2 | Harness: the build adds under 100 MB | **Hit** (73). The first bucketed version added 110, fixed before the `qa` runs (above) |
+| M15e3 | Harness with 80 MB held: the same addition within 5 MB | **Hit** (73.1 and 73.1; unchanged: 151 and 164) |
+| M15e4 | `qa` E under 210 MB; C1L+E 220 or less; repeats within 5 MB | E **hit** (194.0, 194.1); C1L+E **miss** (235.0: the index build) |
+| M15e5 | The build's time within +20% | **Hit** |
+| M15e6 | The class build no longer sets the peak in E; the index or the similar-context build does | **Hit:** the FM-index build |
+
+**Decision.** By the rule (lossless, measured; the E peak falls 31.8 MB, far beyond the unchanged tool's 0.1 MB spread), M15e is adopted.
+- Building a `qa` model peaks at 194 MB (E) and 235 MB (C1L+E), down from 226 and 259.
+- Repeat runs agree within 0.1 MB.
+- The class build no longer sets any peak. The 220 MB target for C1L+E is missed because of the FM-index build.
+
+**Still open.**
+- **The FM-index build** sets the built peak: libsais's 4-byte scratch per byte. A lower-memory BWT, or freeing what is resident at that moment, is the next step. A served model never builds it.
+- **The heap.** The C library holds memory freed by earlier steps. Without code changes, a fixed mmap threshold takes the unchanged tool's E build to 169 MB. That is an environment setting, not code (Odin: "don't worry about the OS"), so it is recorded here, not adopted.
