@@ -21,6 +21,7 @@ Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 83
 | After 15,011 Dolly turns | 2.341 wiki | Stored accounting about **11 MB** |
 | + class-context expert, second half of the holdout (B4) | 1.999 / 1.982 | Over trie + InfiniGram (2.0725): shape classes / E1 tags, tail 6. `cyphalm_trie cls`. On fresh text 2.166 → 2.088 / 2.075 |
 | + copy expert, second half of the holdout (A1c) | 1.927 | Over trie + InfiniGram (2.072), chat model; `qa --copy`; an option, not a default |
+| + similar-context expert (A4), second half of the holdout | 1.939 | Over trie + InfiniGram + class (1.999); fresh text 2.088 → 2.027. `cls --sim`, `qa --sim`; an option, not a default ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md)) |
 
 Surface scores of trie samples are about **0.74–0.83**. That is readable fragments, not answers.
 
