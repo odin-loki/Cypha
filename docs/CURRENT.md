@@ -84,6 +84,10 @@ Tool: `cyphalm_trie qa` (dev 130 questions, frozen test 200; coverage at a 2% wr
 | Read | Value |
 |---|---|
 | A0, CyphaLM alone | 0.0% coverage at 2% wrong on dev; raw right 0–2 / 130 |
+| A1d don't-know token (span candidates, `ent_title`, `low` only) | dev precision 0.600, recall 1.00; frozen test 0.635 / 0.94 ([report](reports/A1D_A2B_ANSWERING_VARIANTS.md)) |
+| With D4's shard (C1L) | dev 2 right, 0 wrong at 2% wrong; test 0 / 0 (the shard covers 3 test questions) |
+| R3 with F2R raw frames | dev 2 right / 1 wrong out of fold; test 1 / 0 |
+| trie + IG + class (tags) + copy, holdout second half | 1.8437 BPC (trie + IG 2.0735); with the shard it echoes the question |
 | A2, + fact shard (R1) | dev 2 right / 0 wrong out of fold (1.5%, Wilson 0.4–5.4%); test +0 |
 | A3, statement scoring (R3) | 0% at 2% wrong |
 | A2 + A3, frozen test, gated | 1 right / 0 wrong |
