@@ -69,10 +69,10 @@ The full study is the paper `paper/scribe/SCRIBE_paper.md` (PDF next to it; tabl
 - **Attacks.** Copying (with i1), echo, stuffing and loops caught; a fluent generic paragraph is the strongest attack; wrong numbers and negations are invisible.
 - **Human judgments.** MAUVE human evaluation: per pair 0.527–0.531; system Spearman 0.571, 0.810, 0.714 (q1–q3). HANNA without human stories: coherence Kendall 0.194 (BLEU 0.110, ROUGE-L 0.112, ChatGPT 0.202, Beluga-13B 0.282; v1 0.232); system 0.689. OpenMEVA: ROC Pearson 0.189, WP 0.057.
 - **Stability.** Five seeds, packs of 8–128 MiB, and references of 100–1,000 samples all pass 5 of 5; 50 reference samples fail the first pair.
-- **Ablations.** Each axis carries one rung; no single statistic is necessary; raw log-probabilities, no saturation, or 95th-percentile thresholds each break a pair.
+- **Ablations.** Each axis carries at least one rung; apart from lexical validity s1, no single statistic is necessary; raw log-probabilities, no saturation, or 95th-percentile thresholds each break a pair.
 - **Cost.** 1,054 texts/s on one core, 394 MB (Wikipedia pack); GPT-2 perplexity 4.7 texts/s on two threads.
 
-The planned Pythia and GPT-2 decoding ladders and the LLM judge were not run, at the owner's request (about 20 CPU-hours). Of the twenty registered predictions, 8 hit, 8 missed and 4 could not be tested (paper Table 14). The misses: P4 (MAUVE puts the repeated phrase above word salad), P5 (books 3 of 5), P9 (GPT-2 sizes), P11 (per-pair agreement 0.541), P13 (WP Pearson 0.057), P14 (pooled length correlation −0.124), P15 (web keeps 0.89 of its score), P18 (s3g alone is not necessary).
+The planned Pythia and GPT-2 decoding ladders and the LLM judge were not run, at the owner's request (about 20 CPU-hours). Of the twenty registered predictions, 8 hit, 7 missed and 5 could not be tested as registered (paper Table 15; P4 ran with GPT-2 small instead of GPT-2-large features, so it counts as untested, and would be a miss). The misses: P5 (books 3 of 5), P9 (GPT-2 sizes), P11 (per-pair agreement 0.541), P13 (WP Pearson 0.057), P14 (pooled length correlation −0.124), P15 (web keeps 0.89 of its score), P18 (s3g alone is not necessary).
 
 ## Code review after the freeze (2026-10-28)
 
