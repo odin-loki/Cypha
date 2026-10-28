@@ -928,6 +928,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 56 | A paper on the text-generation metric for Zenodo: hard work, cast the net wide, profile it until it is right, many comparisons (2026-10-28) | [`SCRIBE_PAPER_PLAN.md`](SCRIBE_PAPER_PLAN.md); [`reports/SCRIBE_V2.md`](reports/SCRIBE_V2.md); [`../paper/scribe/`](../paper/scribe/) |
 | 57 | Reduce CyphaLM's RAM use (2026-10-28) | [`reports/RAM_PROFILE.md`](reports/RAM_PROFILE.md): measured, with a rule fixed before each change |
 | 58 | Fix the CI jobs that are not green (2026-10-28) | Done: all six `ci.yml` jobs green on `main` (HANDOFF §4.5) |
+| 59 | Make the smaller class table the default; don't worry about returning freed memory to the OS; use the similar-context expert as soon as it is useful (2026-10-28) | `class_context.hpp` defaults (CHANGELOG); the similar-context expert gated off inside answers and made a default where measured useful (A4 report) |
 
 ---
 

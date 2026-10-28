@@ -20,6 +20,7 @@ Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 83
 | Packed form (M4, `PackedModel`) | — | **3.9 MB** (bpc model) and **7.7 MB** (chat model), bit-identical to the training form in Synth mode; lookups about 5× faster ([RAM report](reports/RAM_PROFILE.md)) |
 | After 15,011 Dolly turns | 2.341 wiki | Stored accounting about **11 MB** |
 | + class-context expert, second half of the holdout (B4) | 1.999 / 1.982 | Over trie + InfiniGram (2.0725): shape classes / E1 tags, tail 6. `cyphalm_trie cls`. On fresh text 2.166 → 2.088 / 2.075 |
+| Class expert's default table (Odin, 2026-10-28) | 2.0853 fresh | Three orders, compact, contexts seen once dropped (`shape` = `shape:6:3:cp2`); the B4 rows above are `shape:6:2:f` |
 | + copy expert, second half of the holdout (A1c) | 1.927 | Over trie + InfiniGram (2.072), chat model; `qa --copy`; an option, not a default |
 | + similar-context expert (A4), second half of the holdout | 1.939 | Over trie + InfiniGram + class (1.999); fresh text 2.088 → 2.027. `cls --sim`, `qa --sim`; an option, not a default ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md)) |
 
