@@ -17,7 +17,7 @@ Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 83
 | Same mixture, weights still adapting on the holdout | 2.286 | The router is learning the test bytes. The counts are not. |
 | PPMD, longer chains, or inheritance | ~2.42 | Worse than backoff |
 | GRIA as a probability gate | 2.642 | Worse than backoff |
-| Packed-layout accounting | — | **5.4 MB** if singletons are dropped and counts are one byte |
+| Packed form (M4, `PackedModel`) | — | **3.9 MB** (bpc model) and **7.7 MB** (chat model), bit-identical to the training form in Synth mode; lookups about 5× faster ([RAM report](reports/RAM_PROFILE.md)) |
 | After 15,011 Dolly turns | 2.341 wiki | Stored accounting about **11 MB** |
 | + class-context expert, second half of the holdout (B4) | 1.999 / 1.982 | Over trie + InfiniGram (2.0725): shape classes / E1 tags, tail 6. `cyphalm_trie cls`. On fresh text 2.166 → 2.088 / 2.075 |
 | + copy expert, second half of the holdout (A1c) | 1.927 | Over trie + InfiniGram (2.072), chat model; `qa --copy`; an option, not a default |
@@ -33,6 +33,18 @@ BPC is held-out `−log2 p`. It is not a generation score.
 - `32/(32+n)` and NIG `r_eu` die after many counts. They are not mix weights. The uncertainty used on the match is `u = H(order-1) / ln(256)`, about **0.49** on this holdout.
 - A word-sized trie added as another expert fell to weight **0.0005** and did not change the samples.
 - Dolly questions that occur byte-for-byte in the stored chat are copied back. The copy is a search for that prompt, not the order-4 model reading the question. An unseen question stays Wikipedia-shaped. A `<|doc|>` marker is written between the Wikipedia bytes and the chat so those contexts do not glue together.
+
+### Memory (qa model, 8 MiB protocol)
+
+[`reports/RAM_PROFILE.md`](reports/RAM_PROFILE.md), 2026-10-28. The qa model is the trie on wiki train and two Dolly passes, with InfiniGram and the class expert over the training text (19.6 MB).
+
+| Part | Before | Now | How |
+|---|---:|---:|---|
+| Trie | 38.5 MB | **7.7 MB** | `pack()` (M4), bit-identical |
+| InfiniGram | 77 MB | **26.0 MB** | `FmInfiniGram` (M5), the same answers |
+| Class expert, 3 orders | 77.7 MB | **18.2 MB** | compact and seen-once dropped (M2, M3): +0.0009 BPC on fresh text, surface S unchanged within its interval |
+| Class expert build, 3 orders: memory it adds at its peak | 560 MB | **132 MB** | chunked, each order merged on its own (M1), identical table |
+| Whole qa model, resident | 228 MB | **76 MB** | M2–M5 together (scratch harness; the `cyphalm_trie` wiring follows) |
 
 ### What grows, and what must stay separate
 
