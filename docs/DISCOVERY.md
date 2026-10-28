@@ -167,7 +167,7 @@ Cypha estimates the size of what it hasn't seen, not just its location. These ar
 
 | Estimate | Formula | Use |
 |---|---|---|
-| **Good–Turing missing mass** | `M̂₀ = n₁ / N`, where n₁ is the number of items seen exactly once and N the total observations | Probability that the **next** item read is new: per relation, per domain, per pattern set. A high M̂₀ means reading more will still teach it things |
+| **Good–Turing missing mass** | `M̂₀ = n₁ / N`, where n₁ is the number of items seen exactly once and N the total observations. **For text, count by page** (S4, 2026-10-28): n₁ = items found on exactly one page, N = page-item incidences (`unit_missing_mass`). A page repeats what it talks about, so the plain form undercounts what is new by 20–50%; the page form is within 4% on held-out pages | Probability that the **next** item read is new: per relation, per domain, per pattern set. A high M̂₀ means reading more will still teach it things |
 | **Chao1 richness** | `Ŝ = S_obs + n₁² / (2 n₂)` (if n₂ = 0: `S_obs + n₁(n₁−1)/2`) | Estimated total number of distinct items, so coverage = `S_obs / Ŝ` |
 | **Capture–recapture** (Chapman) | `N̂ = (n_A + 1)(n_B + 1)/(m + 1) − 1`, where n_A and n_B are facts found by two independent sources and m by both | Estimated total facts for a relation; coverage = known / N̂. It underestimates when the sources are correlated, so it is reported as a lower bound |
 | **Heaps' law** | `V = K·N^β` fit on the lexicon | Expected new words per million tokens |
@@ -685,9 +685,9 @@ These are written as CTests and checked on every build:
 | S1 | Reason codes and evidence cards on CyphaLM's answers (every "I don't know" says why; every answer shows its evidence). The non-CyphaLM Q/A tools were removed under PLAN rule 10 | Reason-code accuracy ≥ 90% on 100 hand-checked; I3 CTest. **Run 2026-10-28:** 82% dev, 84.5% test; I3 check passes; `qa --cards` gives evidence cards. The 90% gate is missed and Odin closed S1 there: codes describe what CyphaLM has read, and where the data isn't there, saying so is right ([report](reports/S1_REASON_CODES_AND_EVIDENCE.md)) |
 | S2 | Epistemic states on top of `ecs.hpp`: Known / Believed / Contested / Ignorant / Vacuous, the DC conflict measure, and the two kinds of uncertainty | Known-answer CTests |
 | S3 | Gap map: schema expectations f(T,R), demand log, contested and fragile lists | Gaps listed with VOI on the F1 fact store |
-| S4 | Unseen estimates (Good–Turing, Chao1, capture–recapture, Heaps) and the frontier report | Missing-mass validity within ±25% on a held-out source |
+| S4 | Unseen estimates (Good–Turing, Chao1, capture–recapture, Heaps) and the frontier report | Missing-mass validity within ±25% on a held-out source  **Run 2026-10-28:** gate met; Good–Turing with the page as the unit is within 4% on held-out pages (n₁/N undercounts by 20–50%); `pattern_learn --frontier` writes the frontier report ([report](reports/S4_UNSEEN_AND_FRONTIER.md)) |
 | S5 | Hypothesis store, taint, lifecycle, firewall | I1, I4, I7, I8 CTests |
-| S6 | Scoring: plausibility, novelty, impact, compression gain, EIG and priority | Ranks known-true above known-false hypotheses (AUROC ≥ 0.75) on a planted set |
+| S6 | Scoring: plausibility, novelty, impact, compression gain, EIG and priority | Ranks known-true above known-false hypotheses (AUROC ≥ 0.75) on a planted set  **Run 2026-10-28:** P0 0.738 [0.717, 0.758] on a fresh planted set, gate missed; the terms are in `hypothesis.hpp` ([report](reports/S6_HYPOTHESIS_SCORING.md)) |
 | S7 | Tests T1–T6 with measured sensitivity and specificity, pre-registration in the experiment DB, Bayes-factor and e-value updating | I5, I6 CTests; s and c measured |
 | S8 | Generators batch 1: G2 rule induction, G6 and G7 link prediction, G14 contradiction resolution, G16 teacher | Rediscovery Hits@10 reported; promotion precision ≥ 0.9 |
 | S9 | Possible-worlds sandbox and the hypothetical card; fragility analysis | I9 CTest; consequence tests pass |
@@ -702,6 +702,7 @@ These are written as CTests and checked on every build:
 1. S1 → S2 → S5 → S3. Honesty first: reason codes, states and the firewall, on the stores that exist now.
    - S1 done 2026-10-28 at 82% (Odin closed the 90% gate); S5 done 2026-10-28 (I1, I4, I7, I8 CTests); S3 done 2026-10-28 (gaps with VOI on the v2 fact store). [Report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md).
 2. S4 → S6 → S7. Measurement of the unknown, then the hypothesis machinery.
+   - S4 done 2026-10-28 (gate met); S6 done 2026-10-28 (gate missed at 0.738; its next change needs S15 or another fresh source); S7 and S15 started 2026-10-28.
 3. S8 → S9 → S10. The first generators, worlds and the scheduler.
 4. S11 → S12 → S13 → S14, with S15 built alongside S8 so discovery has a fair test from the start.
 

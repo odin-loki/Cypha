@@ -1,6 +1,6 @@
 # Handoff for Claude Code: Cypha / CyphaLM
 
-**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1 and RAM M10–M14 · repo `odin-loki/Cypha` (branch `main`)
+**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1, RAM M10–M15, S4, S6 and A4c · repo `odin-loki/Cypha` (branch `main`)
 
 Read this first. Then read the documents in §3 for whatever you are working on. The goal, the rules and Odin's standing instructions are in §1–§2 and are not optional.
 
@@ -90,6 +90,10 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | B4B language-model defaults | Class (shape, 3 orders) + copy (m 8, window 16,384): fresh text 1.912. Not defaults then: with the fact shard they echo the question (rule 3) | `B4B_LM_DEFAULTS.md` |
 | **B4c echo gate** (Odin: all three in parallel) | Class + copy off inside answers, like the similar-context expert. **Defaults** in `qa` and `context8k` (class + sim + copy); `sample` takes sim + copy, the class expert only with `--cls` (SCRIBE v2 falls with it). Rule 3 holds: dev 520 / 520 and test 800 / 800 answer rows identical. `qa` holdout trie + IG 2.0729 → **1.8345** | `B4C_ECHO_GATE.md` |
 | **S1 reason codes, evidence cards** | Codes right 82 / 100 dev, 169 / 200 test; the 90% gate is missed (17 of 18 dev errors: the `low` token on in-slice entities) and Odin closed it there. "Unknown" = what CyphaLM has read (Odin: "most honest"). `qa --cards` via `FmInfiniGram::locate` (+10 MB, 0.02 ms a card); answers byte-identical | `S1_REASON_CODES_AND_EVIDENCE.md` |
+| **S4 unseen estimates, frontier** | Gate met: Good–Turing with the page as the unit is 0.968 / 0.980 / 1.000 of the held-out new share (words / entities / facts; plain n₁/N: 0.55–0.80); Chapman a lower bound in 7 / 7 relations; the frontier: 7,124 slots known, about 9,970 unseen on pages already read | `S4_UNSEEN_AND_FRONTIER.md` |
+| **S6 hypothesis scoring** | P0 0.738 [0.717, 0.758] on a fresh planted set, gate 0.75 missed; the store's pairwise rules carry it (hard constraint +0.010, path +0.004); value terms untested until S10 | `S6_HYPOTHESIS_SCORING.md` |
+| **A4c similar-context, distinct contexts** | `dedupe` k 8,192 is the default: fresh −0.0040 [−0.0048, −0.0032], S and SCRIBE up, answers unchanged, the expert 40 → 19 MB; counts per k-means list were worse and are removed | `A4_SIMILAR_CONTEXT_EXPERT.md` |
+| **M15 class build in key buckets** | Built `qa` 226 → 194 MB (defaults), 259 → 235 MB (C1L + defaults), repeating within 0.1 MB; lossless | `RAM_PROFILE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
 | S5 hypothesis store, S3 gap map | `hypothesis.hpp` (I1, I4, I7, I8), `gap_map.hpp`, `pattern_learn --gaps`: 27,842 gaps with VOI. CyphaLM's dev tags name their question's slot 0 / 750 | `S3_S5_GAP_MAP_AND_HYPOTHESES.md` |
@@ -104,9 +108,9 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 |---|---|
 | BPC, holdout, learned mixture | 2.298 (bpc model); chat model 2.345 |
 | Fresh text | trie + IG 2.166; + class + copy 1.912; + class + similar-context 2.027 |
-| `qa` holdout, default model | trie + IG 2.0729 → **1.8345** with class + similar-context + copy (defaults since B4c, off inside answers); `context8k` 2.0715 → 1.8345 |
+| `qa` holdout, default model | trie + IG 2.0729 → **1.8269** with class + similar-context + copy (defaults since B4c, off inside answers; A4c's similar-context default: B4c read 1.8345); `context8k` 2.0715 → 1.8271 |
 | Class expert's table | default `shape` = three orders, compact, seen once dropped (fresh 2.0853; Odin, 2026-10-28) |
-| Text, SCRIBE v2 | trie 0.014, trie + class 0.002, `sample`'s default (trie + similar-context + copy) 0.056, human 0.770 |
+| Text, SCRIBE v2 | trie 0.014, trie + class 0.002, `sample`'s default (trie + similar-context + copy) 0.064 [0.052, 0.078] (A4c; B4c's 0.056), human 0.770 |
 | Reason codes (S1) | 82 / 100 dev, 169 / 200 test; `qa --cards` gives evidence cards |
 | Q/A, frozen test (C1L) | 0 right kept at 2% wrong; don't-know precision 0.635, recall 0.94 |
 | Q/A, dev, with D4's shard (C1L) | 2 right, 0 wrong at 2% wrong |
@@ -129,11 +133,11 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 
 - Every printed number of `cyphalm_trie` is unchanged by M9 (bpc, chat, sample, context8k, dktext, cls, qa, the `--sim` paths).
 - **Served `qa` is under 200 MB** in every configuration (M10–M14). With B4c's defaults (C1L, class + similar-context + copy): built 264–275 MB and about 705 s; served **189 MB and 229 s**, the same rows (checked on the merged tool, 2026-10-28). A served model refuses the token statistics that read the wiki-stage trie (`question_lp`, `ent_lp`), `--sim src=all` and `--cards`.
-- **Still missed:** building. A built `qa` with B4c's defaults peaks at 275 MB; the class build sets it and varies 226–302 MB between runs of the same code (suspected heap placement, not confirmed).
+- **Building** (M15): the class build no longer sets the peak (it adds about 20 MB). Built peaks: defaults 194 MB, C1L + defaults 235 MB, repeating within 0.1 MB. The FM-index build sets them now (libsais's 4-byte scratch per text byte). The earlier 226–302 MB spread was the C library's heap under the old per-chunk merge.
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` now runs 191,885 checks (locate included).
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 573 (S4, S6), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical.
 
 ### 4.5 CI
 
@@ -152,17 +156,19 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 6. **Which text score the rules use.** SCRIBE v2 passes its ladder; surface S does not, and scores the experts' word salad above human text. B4c: surface S rises with the class expert while SCRIBE v2 falls to the shuffled-words rung (0.061 → 0.025 over trie + similar-context). The choice decides whether the class expert joins `sample`'s defaults.
 7. **Track S:** where gap demand comes from; Wikidata's type-level rate as P(exists); finer entity types (S3/S5 report). Answered 2026-10-28: the reason code describes what CyphaLM has read ("most honest"), and S1 stays at 82% ("if the data isn't there, it isn't there").
 8. **PPMI-SVD without the evaluation bytes** as the standard vector file (its leak is worth 0.001 BPC).
-9. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
+9. **Decided by measurement (PLAN ledger 62), open to Odin's veto:** DISCOVERY §3.3's missing mass for text is Good–Turing with the page as the unit (S4: within 4%; n₁/N undercounts by 20–50%); S6's P0 keeps the constraint term and judges its parts by one joint test (S6b).
+10. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
 
 ---
 
 ## 6. Next work, in order
 
-1. **S4** (unseen estimates and the frontier report), then S6. (S1, the echo fix and serving from stored files were done 2026-10-28.)
-2. **Similar-context expert, counts version:** next-word counts per cluster of two-word contexts instead of k neighbours (k keeps paying).
-3. **RAM next:** the class build's peak when building (226–302 MB, varies by run). When the class expert joins `sample`'s or `chat`'s defaults, their `--save` / `--model` should carry its table (`ClassContext::save` / `load`).
-4. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
-5. **Bill of work upkeep** with every commit.
+1. **S7** (tests T1–T6 with measured sensitivity and specificity, pre-registration, Bayes factors and e-values) and **S15** (the temporal-holdout benchmark, frozen in `bench/eval/`): running 2026-10-28. S6's next change needs a new held-out source (S15, or Wikidata facts the store lacks). (S1, S4, S6, the echo fix, A4c, M15 and serving from stored files were done 2026-10-28.)
+2. **RAM:** the FM-index build's peak when building (M16, running: libsais scratch, 4 bytes per text byte; C1L + defaults 235 MB). When the class expert joins `sample`'s or `chat`'s defaults, their `--save` / `--model` should carry its table.
+3. **The 38 failing `cypha_slow` tests** (§4.5): triage running; cut candidates go to Odin.
+4. **Similar-context expert:** more probed lists (k 8,192's recall is 0.65), online keys. **S4:** the §3.4 unknown-unknown signals other than vocabulary (no producers yet).
+5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
+6. **Bill of work upkeep** with every commit.
 
 ---
 
