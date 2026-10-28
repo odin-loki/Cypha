@@ -8,7 +8,7 @@
 /// - A word is a run of ASCII letters, digits or apostrophes. Its class comes from a word -> class
 ///   table (E1 tags, or k-means word classes), looked up in lower case. A word not in the table gets
 ///   one of three shape classes (lower case, capitalised, number).
-/// - Two orders, (c2, c1, tail) and (c1, tail), or optionally a third, (c3, c2, c1, tail), interpolated
+/// - Three orders by default, (c1, tail), (c2, c1, tail) and (c3, c2, c1, tail), or two, interpolated
 ///   Witten-Bell style over a uniform floor.
 ///   The caller mixes the result into CyphaLM's distribution with one lambda per bucket(), as
 ///   cyphalm_trie mixes InfiniGram, so the trie stays the main expert.
@@ -47,11 +47,14 @@ class ClassContext {
         std::uint64_t total = 0;  ///< followers counted at the deepest order found
     };
 
+    /// The defaults are the smaller table Odin chose on 2026-10-28 (RAM_PROFILE M2/M3, B4B): three word orders,
+    /// compact storage, contexts seen once dropped. Fresh text 2.0853 BPC against 2.0879 for the earlier
+    /// two-order full table, in about a third of its memory. The earlier table is {6, 2, false, 1}.
     struct Options {
         int tail = 6;                ///< bytes since the last completed word kept in the context (1..kMaxTail)
-        int orders = 2;              ///< 2: the last two words; 3: also the third
-        bool compact = false;        ///< 32-bit keys, 1-byte quantised counts, totals summed at lookup
-        std::uint32_t min_total = 1; ///< contexts seen fewer times are dropped
+        int orders = 3;              ///< 2: the last two words; 3: also the third
+        bool compact = true;         ///< 32-bit keys, 1-byte quantised counts, totals summed at lookup
+        std::uint32_t min_total = 2; ///< contexts seen fewer times are dropped
         std::size_t chunk = std::size_t{1} << 17;  ///< positions per build chunk (RAM_PROFILE: 2^17 gave the lowest peak)
     };
 
@@ -92,9 +95,6 @@ class ClassContext {
         opt_.orders = std::clamp(opt_.orders, 2, 3);
         opt_.chunk = std::max<std::size_t>(opt_.chunk, 1);
     }
-    /// The default storage (the same counts and hashes as before Options existed).
-    explicit ClassContext(std::unordered_map<std::string, std::uint16_t> classes, int tail = 6, int orders = 2)
-        : ClassContext(std::move(classes), Options{tail, orders}) {}
 
     /// Count every (context, next byte) event in text[0..n).
     void build(const std::uint8_t* text, std::size_t n) {

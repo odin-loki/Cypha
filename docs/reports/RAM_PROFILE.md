@@ -363,3 +363,8 @@ The qa class table has one context more than the `memprof3` harness's (1,562,353
   - peak under 200 MB with 3 orders: **miss**.
   - What was compared. "Now" is the old tool with a 3-order class table, built from main with orders set to 3: 413.1 MB. The same table on the new tool (`shape:6:3`) takes 294.4 MB; compact with contexts seen once dropped (`shape:6:3:cp2`), 234.9 MB. With 2 orders it is 359.9 → 219.7 MB. The 303 MB in M6's prediction came from the `memprof3` harness.
 - **Why the peaks stay above 200 MB.** In `qa` the class table and the index cannot be built before training, because A1c's tokens need the wiki trie before the chat text exists. So their builds, about 130–170 MB each over what is resident, come after training and on top of the packed model and the holdout data.
+
+### Odin's rulings (2026-10-28)
+
+- The smaller class table (M2 + M3, three orders) is the default: `class_context.hpp`'s `Options` and a flagless `cyphalm_trie` class spec.
+- Returning freed build memory to the OS (`malloc_trim`, glibc only): not wanted. The tool stays portable.
