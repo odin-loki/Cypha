@@ -267,8 +267,13 @@ int main() {
         }
         hp.observe_next_byte(static_cast<std::uint8_t>(ch));
     }
-    // AVX2 / AVX-512 must match the portable kernels within 1e-6 (float
-    // rounding only). Replay the same bytes under each set.
+    // AVX2 / AVX-512 must match the portable kernels up to float rounding.
+    // Replay the same bytes under each set. The kernels work in float32, so a
+    // log-probability of size L carries rounding of a few ulps of L: the limit
+    // is 1e-6 * (1 + |log p|), about 8 float32 ulps. (The random Transformer
+    // writes log-probabilities down to about -15, where a flat 1e-6 sat inside
+    // that rounding: 2e-6 at its first step, without growing with the steps.)
+    // A wrong kernel misses by far more.
     auto kernel_gap = [](const cypha::cyphalm::ByteNeuralExpert& expert, const std::string& bytes) {
         if (!cypha::cyphalm::set_neural_kernel("portable")) return -1.0;
         auto base = expert.initial_state();
@@ -283,8 +288,10 @@ int main() {
             if (!cypha::cyphalm::set_neural_kernel(name)) continue;
             auto alt = expert.initial_state();
             for (std::size_t i = 0; i < seq.size(); ++i) {
-                for (int b = 0; b < 256; ++b)
-                    worst = std::max(worst, std::abs(alt.log_p[static_cast<std::size_t>(b)] - seq[i][static_cast<std::size_t>(b)]));
+                for (int b = 0; b < 256; ++b) {
+                    const double ref = seq[i][static_cast<std::size_t>(b)];
+                    worst = std::max(worst, std::abs(alt.log_p[static_cast<std::size_t>(b)] - ref) / (1.0 + std::abs(ref)));
+                }
                 if (i + 1 < seq.size()) expert.step(alt, static_cast<std::uint8_t>(bytes[i]));
             }
         }
@@ -294,7 +301,7 @@ int main() {
     const double lstm_gap = kernel_gap(*nn, text);
     const double gpt_gap = kernel_gap(*gpt, text);
     if (lstm_gap < 0.0 || gpt_gap < 0.0 || lstm_gap > 1e-6 || gpt_gap > 1e-6) {
-        std::printf("cyphalm_neural_smoke FAIL: kernel parity lstm %.3g gpt %.3g (limit 1e-6, kernel %s)\n",
+        std::printf("cyphalm_neural_smoke FAIL: kernel parity lstm %.3g gpt %.3g (error / (1 + |log p|), limit 1e-6, kernel %s)\n",
                     lstm_gap, gpt_gap, cypha::cyphalm::neural_kernel().c_str());
         return 1;
     }
