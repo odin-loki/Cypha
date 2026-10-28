@@ -7,6 +7,10 @@
 // docs/reports/B1_TRIE_CONSOLIDATION.md). The model itself is
 // native/include/cypha/cyphalm/packed_trie.hpp (namespace cypha::cyphalm::trie).
 // trie_stream_train.cpp still carries its own copy of the model.
+// After training, every subcommand serves from PackedModel (packed_trie.hpp; docs/reports/RAM_PROFILE.md M4),
+// which gives the training Model's Synth distributions bit for bit, and frees the training form (bpc keeps it
+// for --negative). InfiniGram is FmInfiniGram (fm_infinigram.hpp, M5: the same answers from a compressed index),
+// queried with a cursor where text is read one byte at a time; it takes its training text (M6, M9).
 //
 // Backoff orders 2..4 as a byte trie (alpha 0.4) + a 4-byte match, mixed by six
 // experts (unigram, order 1, orders 2, 3, 4, match) whose weights learn on the
@@ -23,7 +27,7 @@
 //        weights, mix_stored. --negative adds the PPMD / chains / inheritance rows
 //        (CURRENT.md "~2.42, worse than backoff"). The guard stops the run if the
 //        backoff is outside 2.36..2.41 on the default split.
-//   chat [wiki] [dolly] [--prompt TEXT] [--no-repeat]
+//   chat [wiki] [dolly] [--prompt TEXT] [--no-repeat] [--save FILE | --model FILE]
 //        trie_chat: train on wiki, then two passes over Dolly after a <|doc|> break;
 //        prints the wiki BPC after chat, the weights, mix_stored and one sample after
 //        a question the chat never saw.
@@ -33,9 +37,11 @@
 //   context8k [wiki] [dolly]
 //        trie_context_8k: InfiniGram (order up to 8192) mixed with the trie, BPC at five
 //        caps, matched-length histogram, 50 questions with 30 Dolly turns held out.
-//   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600]
+//   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]
 //        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for `scribe ladder --gen-trie`.
-//   cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]
+//        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
+//        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
+//   cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]
 //        B4 (docs/reports/B4_CLASS_CONTEXT_EXPERT.md): the class-context expert (class_context.hpp) over the
 //        bpc model, each spec paired against the model without it: holdout second-half BPC (lambdas on the
 //        first half), fresh-text BPC on [sample, sample + 1 MiB) (lambdas on the whole holdout), and surface S
@@ -52,7 +58,7 @@
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
 //      [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]
-//      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE[:tail]|shape[:tail]] [--sim SPEC]
+//      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
 //        familiarity token <|fam=low|mid|high|> before (or after) "Assistant: ". CyphaLM answers
@@ -155,7 +161,7 @@
 // Build (from the repo root):
 //   gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
 //   g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais
-//       native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+//       native/tools/cyphalm_trie.cpp native/src/cyphalm/fm_infinigram.cpp libsais.o -o cyphalm_trie
 //   (one command line; the two lines above are split for width)
 // Usage:
 //   ./cyphalm_trie bpc /root/cdata/enwik8
@@ -164,7 +170,7 @@
 //   ./cyphalm_trie selftest
 
 #include "cypha/cyphalm/class_context.hpp"
-#include "cypha/cyphalm/infinigram.hpp"
+#include "cypha/cyphalm/fm_infinigram.hpp"
 #include "cypha/cyphalm/packed_trie.hpp"
 #include "cypha/cyphalm/similar_context.hpp"
 #include "cypha/eval/lci.hpp"
@@ -175,6 +181,7 @@
 #include <cstdio>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -186,7 +193,7 @@
 
 using namespace cypha::cyphalm::trie;
 using cypha::cyphalm::ClassContext;
-using cypha::cyphalm::InfiniGram;
+using cypha::cyphalm::FmInfiniGram;
 using cypha::cyphalm::SimilarContext;
 
 namespace {
@@ -212,8 +219,9 @@ struct Args {
     std::size_t from = 8'388'608, max_rows = 0;
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;  // A1c, A3, A2
     bool copy = false, fam_only = false, mention = false;
-    std::string cls;      // B4: class-context expert spec, TABLE[:tail] or shape[:tail]
+    std::string cls;      // B4: class-context expert spec, TABLE|shape[:tail[:orders[:flags]]] (make_class_context)
     int copy_min = 0;     // B4B: copy lambdas of match lengths below this set to 0 after fitting
+    std::string model, save;  // M7: serve a stored packed trie (chat, sample); store the one just trained
     std::vector<std::string> sims;               // A4: similar-context expert specs (cls: each; qa: the first)
     bool sim_fresh = false, sim_surface = false;  // A4, cls: also the fresh text / surface S
 };
@@ -262,6 +270,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--sim-fresh") a.sim_fresh = true;
         else if (s == "--sim-surface") a.sim_surface = true;
         else if (s == "--fam-only") a.fam_only = true;
+        else if (s == "--model") a.model = next();
+        else if (s == "--save") a.save = next();
         else if (s == "--mention") a.mention = true;
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
@@ -282,6 +292,45 @@ Args parse(int argc, char** argv, int from) {
 
 bool load_wiki(const Args& a, std::vector<std::uint8_t>& data) {
     const std::string err = read_prefix(a.wiki, a.cfg.sample, data);
+    if (!err.empty()) std::cerr << err << "\n";
+    return err.empty();
+}
+
+// The training text of InfiniGram and the class expert: wiki train + the <|doc|> boundary + chat, never the wiki
+// holdout. The chat bytes then leave data, which keeps [0, sample) for the holdout contexts (the packed trie never
+// reads the training text). Returns data's size before: a follower limit that admits every follower.
+std::size_t training_text(std::vector<std::uint8_t>& data, const Config& cfg, std::vector<std::uint8_t>& T) {
+    const std::size_t all = data.size();
+    T.reserve(cfg.train + (all - cfg.sample));
+    T.assign(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
+    T.insert(T.end(), data.begin() + static_cast<std::ptrdiff_t>(cfg.sample), data.end());
+    std::vector<std::uint8_t>(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.sample)).swap(data);
+    return all;
+}
+
+// M7: --save FILE stores the packed trie just trained; --model FILE serves one without training. The file holds the
+// mixture weights and the split, so cfg's train and sample come from it, and only the wiki text is read.
+constexpr std::size_t kAllFollowers = std::numeric_limits<std::size_t>::max();
+
+bool save_model(const std::string& path, const PackedModel& pm, const double w[6], const Config& cfg) {
+    try {
+        pm.save(path, w, cfg);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << "\n";
+        return false;
+    }
+    return true;
+}
+
+bool load_model(const Args& a, PackedModel& pm, double w[6], Config& cfg, std::vector<std::uint8_t>& data) {
+    try {
+        pm = PackedModel::load(a.model, w, cfg);
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << "\n";
+        return false;
+    }
+    std::cerr << "served from " << a.model << " (" << pm.bytes() << " bytes), no training\n";
+    const std::string err = read_prefix(a.wiki, cfg.sample, data);
     if (!err.empty()) std::cerr << err << "\n";
     return err.empty();
 }
@@ -322,11 +371,15 @@ int cmd_bpc(const Args& a) {
     const std::uint64_t mt_bytes = match_bytes(model);
     const std::uint64_t build_bytes = model.nodes.capacity() * sizeof(Node) + model.fols.capacity() * sizeof(Fol);
     const std::uint64_t mix_stored = synth.bytes + o1_bytes + mt_bytes + 6ull * sizeof(double);
+    // M4: the packed form scores. The training form is freed unless --negative still reads it.
+    const PackedModel pm = pack(model);
+    const std::uint64_t h_res = hash_reserved(model), h_pay = hash_payload(model);
+    if (!a.negative) model.release();
 
     std::cerr << "scoring synth\n";
-    const Score s_synth = heldout(model, data.data(), Mode::Synth, cfg);
+    const Score s_synth = heldout(pm, data.data(), Mode::Synth, cfg);
     std::cerr << "scoring mixture\n";
-    const Holdout h = score_holdout(model, data.data(), w, cfg);
+    const Holdout h = score_holdout(pm, data.data(), w, cfg);
     if (!h.ok) return 1;
 
     Score s_ppmd, s_chain, s_inherit;
@@ -357,7 +410,8 @@ int cmd_bpc(const Args& a) {
     std::cout << "order2_nodes " << ts.by_depth[2] << " mean_children "
               << (static_cast<double>(ts.sum_child) / static_cast<double>(ts.by_depth[2])) << " max_children "
               << ts.max_child << " one_child " << ts.one_child << "\n";
-    std::cout << "hash_reserved " << hash_reserved(model) << " hash_payload " << hash_payload(model) << "\n";
+    std::cout << "hash_reserved " << (a.negative ? hash_reserved(model) : h_res) << " hash_payload "
+              << (a.negative ? hash_payload(model) : h_pay) << "\n";
     std::cout << "build_heap " << build_bytes << " order1_bytes " << o1_bytes << " match_dense " << mt_bytes << "\n";
     dump("full", full);
     dump("drop_ctx", drop);
@@ -402,38 +456,47 @@ int cmd_bpc(const Args& a) {
 // ---------------------------------------------------------------- chat
 
 int cmd_chat(const Args& a) {
-    const Config& cfg = a.cfg;
+    Config cfg = a.cfg;
     std::vector<std::uint8_t> data;
-    if (!load_wiki(a, data)) return 1;
-    Model model;
-    model.data = data.data();
-    model.init(cfg);
     double w[6];
-    init_weights(w, cfg);
-    TrainLog log;
-    log.progress = true;
-    train_span(model, data, w, 0, cfg.train, cfg, &log);
+    PackedModel pm;
+    std::uint64_t mix_stored = 0;  // the training form's Synth accounting (not printed when served from --model)
+    if (!a.model.empty()) {
+        if (!load_model(a, pm, w, cfg, data)) return 1;
+    } else {
+        if (!load_wiki(a, data)) return 1;
+        Model model;
+        model.data = data.data();
+        model.init(cfg);
+        init_weights(w, cfg);
+        TrainLog log;
+        log.progress = true;
+        train_span(model, data, w, 0, cfg.train, cfg, &log);
 
-    std::vector<Turn> turns;
-    const std::string chat = load_dolly(a.dolly, turns);
-    if (turns.empty()) {
-        std::cerr << "dolly missing " << a.dolly << "\n";
-        return 1;
-    }
-    std::cerr << "dolly_turns " << turns.size() << " chat_bytes " << chat.size() << "\n";
-    const std::size_t chat_at = append_chat(model, data, chat);
-    for (int pass = 0; pass < 2; ++pass) {
-        train_span(model, data, w, chat_at, data.size(), cfg);
-        std::cerr << "chat_pass " << pass << " w4 " << w[4] << " wmatch " << w[5] << "\n";
-    }
-    model.compact_match();
-    std::cerr << "train_match_rate " << (static_cast<double>(log.matches) / static_cast<double>(cfg.train)) << "\n";
+        std::vector<Turn> turns;
+        const std::string chat = load_dolly(a.dolly, turns);
+        if (turns.empty()) {
+            std::cerr << "dolly missing " << a.dolly << "\n";
+            return 1;
+        }
+        std::cerr << "dolly_turns " << turns.size() << " chat_bytes " << chat.size() << "\n";
+        const std::size_t chat_at = append_chat(model, data, chat);
+        for (int pass = 0; pass < 2; ++pass) {
+            train_span(model, data, w, chat_at, data.size(), cfg);
+            std::cerr << "chat_pass " << pass << " w4 " << w[4] << " wmatch " << w[5] << "\n";
+        }
+        model.compact_match();
+        std::cerr << "train_match_rate " << (static_cast<double>(log.matches) / static_cast<double>(cfg.train)) << "\n";
 
-    const Layout synth = measure(model, Mode::Synth);
-    const std::uint64_t mix_stored = synth.bytes + order1_bytes(model) + match_bytes(model) + 6ull * sizeof(double);
+        const Layout synth = measure(model, Mode::Synth);
+        mix_stored = synth.bytes + order1_bytes(model) + match_bytes(model) + 6ull * sizeof(double);
+        pm = pack(model);  // M4: the packed form serves; the training form is freed
+        model.release();
+        if (!a.save.empty() && !save_model(a.save, pm, w, cfg)) return 1;
+    }
 
     std::cerr << "scoring\n";
-    const Holdout h = score_holdout(model, data.data(), w, cfg);
+    const Holdout h = score_holdout(pm, data.data(), w, cfg);
     if (!h.ok) return 1;
 
     std::cout.setf(std::ios::fixed);
@@ -441,13 +504,13 @@ int cmd_chat(const Args& a) {
     std::cout << "wiki_bpc_after_chat " << h.mix_bpc << "\n";
     for (int i = 0; i < 5; ++i) std::cout << "w" << i << " " << w[i] << "\n";
     std::cout << "wmatch " << w[5] << "\n";
-    std::cout << "mix_stored " << mix_stored << "\n";
+    if (a.model.empty()) std::cout << "mix_stored " << mix_stored << "\n";
     std::cout << "mix_beats_backoff " << (h.mix_bpc < h.backoff_bpc ? 1 : 0) << "\n";
 
     // Answers come from CyphaLM generation only (PLAN rule 10).
     SampleOptions opt;
     opt.no_repeat = a.no_repeat;
-    const std::string sample = sample_continuation(model, w, a.prompt, data.size(), 160, kSeed, opt);
+    const std::string sample = sample_continuation(pm, w, a.prompt, kAllFollowers, 160, kSeed, opt);
     std::cout << "unseen_sample " << printable(sample) << "\n";
     return 0;
 }
@@ -483,6 +546,8 @@ int cmd_probe(const Args& a) {
     std::vector<Turn> turns;
     if (!train_wiki_and_chat(a, data, model, w, turns)) return 1;
     std::cerr << "trained turns " << turns.size() << " w4 " << w[4] << " wmatch " << w[5] << "\n";
+    const PackedModel pm = pack(model);  // M4
+    model.release();
 
     struct Q {
         std::string kind, prompt, expect;
@@ -510,8 +575,8 @@ int cmd_probe(const Args& a) {
     SampleOptions greedy;
     greedy.greedy = true;
     for (auto& q : qs) {
-        const std::string g = sample_continuation(model, w, q.prompt, data.size(), 120, 0, greedy);
-        const std::string s = sample_continuation(model, w, q.prompt, data.size(), 160, kSeed);
+        const std::string g = sample_continuation(pm, w, q.prompt, data.size(), 120, 0, greedy);
+        const std::string s = sample_continuation(pm, w, q.prompt, data.size(), 160, kSeed);
         const bool hit = lowered(g + s).find(lowered(q.expect)) != std::string::npos;
         std::cout << "== " << q.kind << " | " << printable(q.prompt.substr(0, 110)) << "\n";
         std::cout << "   expect: " << printable(q.expect) << "\n";
@@ -562,12 +627,14 @@ int cmd_context8k(const Args& a) {
     train_span(model, data, w, chat_at, data.size(), cfg);
     model.compact_match();
     std::cerr << "trie trained, held out " << held_idx.size() << " dolly turns\n";
+    const PackedModel pm = pack(model);  // M4
+    model.release();
 
-    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout.
-    std::vector<std::uint8_t> T(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
-    T.insert(T.end(), data.begin() + static_cast<std::ptrdiff_t>(cfg.sample), data.end());
-    InfiniGram ig(T.data(), T.size());
-    std::cerr << "index built over " << T.size() << " bytes\n";
+    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T.
+    std::vector<std::uint8_t> T;
+    const std::size_t all = training_text(data, cfg, T), tn = T.size();
+    const FmInfiniGram ig(std::move(T));
+    std::cerr << "index built over " << tn << " bytes\n";
 
     const std::size_t kTrain = cfg.train, kSample = cfg.sample;
     const std::size_t H = kSample - kTrain, half = H / 2;
@@ -577,7 +644,7 @@ int cmd_context8k(const Args& a) {
         double e[5][256];
         bool em = false;
         unsigned pred = 0;
-        model.fill_experts(data.data(), i, kTrain, Mode::Synth, e, em, pred, false);
+        pm.fill_experts(data.data(), i, kTrain, Mode::Synth, e, em, pred, false);
         double M[256];
         mix_dist(w, e, em, pred, M);
         pt[k] = M[data[i]];
@@ -595,11 +662,12 @@ int cmd_context8k(const Args& a) {
         std::vector<double> pinf(H);
         std::vector<int> bk(H);
         int prev = -1;
+        FmInfiniGram::Cursor cur;
         for (std::size_t k = 0; k < H; ++k) {
             const std::size_t i = kTrain + k;
             const std::size_t len = std::min<std::size_t>(i, static_cast<std::size_t>(cap));
             const int hint = prev < 0 ? -1 : std::min(prev + 1, cap);
-            const auto r = ig.query(data.data() + (i - len), len, cap, hint);
+            const auto r = ig.query(data.data() + (i - len), len, cap, hint, 1, cur);
             prev = r.n;
             pinf[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
             bk[k] = bucket(r.n, r.total);
@@ -648,17 +716,18 @@ int cmd_context8k(const Args& a) {
     auto gen = [&](const std::string& prompt, int& n0) {
         std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
         int prev = -1;
+        FmInfiniGram::Cursor cur;
         n0 = -1;
         for (int t = 0; t < 150; ++t) {
             double e[5][256];
             bool m = false;
             unsigned pred = 0;
-            model.fill_experts(seq.data(), seq.size(), data.size(), Mode::Synth, e, m, pred, false);
+            pm.fill_experts(seq.data(), seq.size(), all, Mode::Synth, e, m, pred, false);
             double M[256];
             mix_dist(w, e, m, pred, M);
             const std::size_t len = std::min<std::size_t>(seq.size(), 8192);
-            const auto r =
-                ig.query(seq.data() + (seq.size() - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192));
+            const auto r = ig.query(seq.data() + (seq.size() - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192),
+                                    1, cur);
             prev = r.n;
             if (t == 0) n0 = r.n;
             const double l = lam8k[bucket(r.n, r.total)];
@@ -736,7 +805,7 @@ bool good_start(const std::string& l) {
 // with nucleus 0.9 and the no-repeat rule. The match expert may only copy from bytes before
 // cfg.train, so a prompt's own paragraph can never be copied back.
 int cmd_sample(const Args& a) {
-    const Config& cfg = a.cfg;
+    Config cfg = a.cfg;
     if (a.outs.empty() || a.outs.size() > 2 || a.prompts < 1 || a.bytes < 100) {
         std::fprintf(stderr,
                      "usage: cyphalm_trie sample <enwik8> <out_dev.txt> [out_fresh.txt] [--prompts 250] [--bytes 600]\n");
@@ -744,7 +813,9 @@ int cmd_sample(const Args& a) {
     }
     const std::size_t nfiles = a.outs.size();
     std::vector<std::uint8_t> data;
-    if (!load_wiki(a, data)) return 1;
+    double w[6];
+    PackedModel pm;
+    if (!a.model.empty() ? !load_model(a, pm, w, cfg, data) : !load_wiki(a, data)) return 1;
 
     std::vector<std::string> prompts;
     {
@@ -771,17 +842,21 @@ int cmd_sample(const Args& a) {
         return 1;
     }
 
-    Model model;
-    model.data = data.data();
-    model.init(cfg);
-    double w[6];
-    init_weights(w, cfg);
-    TrainLog log;
-    log.progress = true;
-    train_span(model, data, w, 0, cfg.train, cfg, &log);
-    model.compact_match();
-    std::cerr << "trained on [0, " << cfg.train << ") nodes " << model.nodes.size() << " w4 " << w[4] << " wmatch "
-              << w[5] << "\n";
+    if (a.model.empty()) {
+        Model model;
+        model.data = data.data();
+        model.init(cfg);
+        init_weights(w, cfg);
+        TrainLog log;
+        log.progress = true;
+        train_span(model, data, w, 0, cfg.train, cfg, &log);
+        model.compact_match();
+        std::cerr << "trained on [0, " << cfg.train << ") nodes " << model.nodes.size() << " w4 " << w[4] << " wmatch "
+                  << w[5] << "\n";
+        pm = pack(model);  // M4
+        model.release();
+        if (!a.save.empty() && !save_model(a.save, pm, w, cfg)) return 1;
+    }
 
     const double temps[3] = {0.6, 0.8, 1.0};
     for (std::size_t f = 0; f < nfiles; ++f) {
@@ -799,7 +874,7 @@ int cmd_sample(const Args& a) {
                 SampleOptions opt;
                 opt.temperature = temps[ti];
                 opt.no_repeat = true;
-                const std::string text = sample_continuation(model, w, p, cfg.train, a.bytes,
+                const std::string text = sample_continuation(pm, w, p, cfg.train, a.bytes,
                                                               static_cast<std::uint32_t>(seed ^ (seed >> 32)), opt);
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
@@ -999,12 +1074,44 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
     }
 }
 
-// B4: the class-context expert from "TABLE[:tail]": TABLE a word<TAB>class file, or "shape" (shape classes only);
-// tail defaults to 6. Not built yet (call build()).
+// B4: the class-context expert from "TABLE[:tail[:orders[:flags]]]": TABLE a word<TAB>class file, or "shape" (shape
+// classes only); tail defaults to 6, orders to 2 (2 or 3); flags (RAM_PROFILE M2/M3) are c (compact table) and pN
+// (contexts seen fewer than N times dropped), e.g. shape:6:3:cp2. The fields are read from the right, so a Windows path
+// keeps its drive colon. Not built yet (call build()). nullptr (and a message) for a bad spec or table.
 std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
-    const std::size_t colon = spec.rfind(':');
-    const std::string table = colon == std::string::npos ? spec : spec.substr(0, colon);
-    const int tail = colon == std::string::npos ? 6 : std::atoi(spec.c_str() + colon + 1);
+    const auto f = split(spec, ':');
+    auto digits = [](const std::string& x) {
+        return !x.empty() && x.size() < 6 && std::all_of(x.begin(), x.end(), [](char c) { return c >= '0' && c <= '9'; });
+    };
+    ClassContext::Options o;
+    auto flags = [&](const std::string& x) {
+        bool any = false;
+        for (std::size_t i = 0; i < x.size();) {
+            if (x[i] == 'c' && !o.compact) o.compact = true, ++i;
+            else if (x[i] == 'p' && i + 1 < x.size() && std::isdigit(static_cast<unsigned char>(x[i + 1]))) {
+                std::size_t j = i + 1;
+                while (j < x.size() && std::isdigit(static_cast<unsigned char>(x[j]))) ++j;
+                o.min_total = static_cast<std::uint32_t>(std::atoi(x.substr(i + 1, j - i - 1).c_str()));
+                i = j;
+            } else return false;
+            any = true;
+        }
+        return any;
+    };
+    std::size_t k = f.size();  // f[0..k) is the table
+    if (k >= 4 && digits(f[k - 3]) && digits(f[k - 2]) && flags(f[k - 1])) {
+        o.tail = std::atoi(f[k - 3].c_str()), o.orders = std::atoi(f[k - 2].c_str()), k -= 3;
+    } else {
+        o = ClassContext::Options{};
+        if (k >= 3 && digits(f[k - 2]) && digits(f[k - 1])) o.tail = std::atoi(f[k - 2].c_str()), o.orders = std::atoi(f[k - 1].c_str()), k -= 2;
+        else if (k >= 2 && digits(f[k - 1])) o.tail = std::atoi(f[k - 1].c_str()), k -= 1;
+    }
+    std::string table = f[0];
+    for (std::size_t i = 1; i < k; ++i) table += ":" + f[i];
+    if (o.orders != 2 && o.orders != 3) {
+        std::cerr << "class spec " << spec << ": orders must be 2 or 3\n";
+        return nullptr;
+    }
     std::unordered_map<std::string, std::uint16_t> cls;
     if (table != "shape") {
         std::string err;
@@ -1014,7 +1121,7 @@ std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
             return nullptr;
         }
     }
-    return std::make_unique<ClassContext>(std::move(cls), tail);
+    return std::make_unique<ClassContext>(std::move(cls), o);
 }
 
 // A4: the similar-context expert from "vec=PREFIX[,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512]
@@ -1065,11 +1172,11 @@ std::unique_ptr<SimilarContext> make_similar_context(const SimSpec& s) {
 // (context8k: P = lam[b] P_ctx + (1 - lam[b]) P_trie, one lam per match-length x count bucket),
 // then optionally with the copy expert (P = lc[b] [pred] + (1 - lc[b]) P, one lc per match-length bucket).
 struct Lm {
-    const Model* model = nullptr;
+    const Model* model = nullptr;  // the training form (qa's wiki stage); not read when packed is set
     const double* w = nullptr;
     std::size_t follower_limit = 0;
     bool online_match = false;
-    const InfiniGram* ig = nullptr;
+    const FmInfiniGram* ig = nullptr;
     const double* lam = nullptr;
     const double* lc = nullptr;
     int cap = 8192;
@@ -1077,16 +1184,20 @@ struct Lm {
     const double* lcls = nullptr;
     const SimilarContext* sc = nullptr;  // A4: similar-context expert, P = lsim[b] P_sim + (1 - lsim[b]) P, after the class
     const double* lsim = nullptr;        // expert and before the copy
+    const PackedModel* packed = nullptr;  // M4: the serving form
+    mutable FmInfiniGram::Cursor cur{};   // M5: InfiniGram's last match, for the next byte of the same text
     // hint: the previous step's match length (-1 at a new sequence); n_out: this step's.
     void dist(const std::vector<std::uint8_t>& seq, int& hint, double* P, int* n_out = nullptr) const {
         double e[5][256];
         bool m = false;
         unsigned pred = 0;
-        model->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
+        if (packed) packed->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
+        else model->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         mix_dist(w, e, m, pred, P);
         if (ig) {
             const std::size_t len = std::min<std::size_t>(seq.size(), static_cast<std::size_t>(cap));
-            const auto r = ig->query(seq.data() + (seq.size() - len), len, cap, hint < 0 ? -1 : std::min(hint + 1, cap));
+            const auto r =
+                ig->query(seq.data() + (seq.size() - len), len, cap, hint < 0 ? -1 : std::min(hint + 1, cap), 1, cur);
             hint = r.n;
             if (n_out) *n_out = r.n;
             const double l = lam[bucket(r.n, r.total)];
@@ -1152,7 +1263,7 @@ void print_boot(const std::string& name, const Boot& b) {
     std::printf("%s mean %.6f ci95 %.6f %.6f p_lt0 %.4f p_gt0 %.4f\n", name.c_str(), b.mean, b.lo, b.hi, b.p_neg, b.p_pos);
 }
 
-std::string sample_with_class(const Model& model, const double w[6], std::size_t limit, const ClassContext* cc,
+std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc = nullptr, const double* lsm = nullptr) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
@@ -1207,7 +1318,7 @@ std::string sample_with_class(const Model& model, const double w[6], std::size_t
 int cmd_cls(const Args& a) {
     const Config& cfg = a.cfg;
     if (a.pos.size() < 2) {
-        std::fprintf(stderr, "usage: cyphalm_trie cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]\n");
+        std::fprintf(stderr, "usage: cyphalm_trie cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs]\n");
         return 2;
     }
     const std::size_t H = cfg.sample - cfg.train, half = H / 2, N = H + (std::size_t{1} << 20);
@@ -1223,19 +1334,23 @@ int cmd_cls(const Args& a) {
     init_weights(w, cfg);
     train_span(model, data, w, 0, cfg.train, cfg);
     model.compact_match();
-    InfiniGram ig(data.data(), cfg.train);
+    const PackedModel pm = pack(model);  // M4
+    model.release();
+    const FmInfiniGram ig(data.data(), cfg.train);
     std::vector<double> pt(N), pi(N);
     std::vector<int> bi(N);
+    FmInfiniGram::Cursor cur;
     for (std::size_t k = 0, prev = 0; k < N; ++k) {
         const std::size_t i = cfg.train + k;
         double e[5][256], M[256];
         bool em = false;
         unsigned pred = 0;
-        model.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
+        pm.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
         mix_dist(w, e, em, pred, M);
         pt[k] = M[data[i]];
         const std::size_t len = std::min<std::size_t>(i, 8192);
-        const auto r = ig.query(data.data() + (i - len), len, 8192, k == 0 ? -1 : std::min<int>(static_cast<int>(prev) + 1, 8192));
+        const auto r = ig.query(data.data() + (i - len), len, 8192, k == 0 ? -1 : std::min<int>(static_cast<int>(prev) + 1, 8192),
+                                1, cur);
         prev = static_cast<std::size_t>(r.n);
         pi[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
         bi[k] = bucket(r.n, r.total);
@@ -1328,7 +1443,7 @@ int cmd_cls(const Args& a) {
         std::vector<double> v;
         for (std::size_t i = 0; i < pr.size(); ++i) {
             const std::uint64_t seed = 1000003ull * (i + 1) + 2ull * 7919ull;
-            const std::string smp = sample_with_class(model, w, cfg.train, cc, lam, pr[i].first, nbytes,
+            const std::string smp = sample_with_class(pm, w, cfg.train, cc, lam, pr[i].first, nbytes,
                                                       static_cast<std::uint32_t>(seed ^ (seed >> 32)), sc, lsm);
             write_sample(system, i, smp);
             v.push_back(cypha::eval::surface_S(ref, smp));
@@ -1770,11 +1885,11 @@ int cmd_dktext(const Args& a, const std::string& dev_path, const std::string& te
     std::string train(reinterpret_cast<const char*>(all.data()), cfg.train);
     train += chat;
     for (auto& c : train) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    InfiniGram occ(reinterpret_cast<const std::uint8_t*>(train.data()), train.size());
+    const FmInfiniGram occ(reinterpret_cast<const std::uint8_t*>(train.data()), train.size());
     auto occurs = [&](const std::string& lower) {
-        std::size_t pos = 0, cnt = 0;
-        return occ.match_prefix(reinterpret_cast<const std::uint8_t*>(lower.data()), lower.size(), lower.size(), 0,
-                                pos, cnt) == lower.size();
+        std::size_t cnt = 0;
+        return occ.match_prefix(reinterpret_cast<const std::uint8_t*>(lower.data()), lower.size(), lower.size(), cnt) ==
+               lower.size();
     };
     // Dev and test, lowered, for the leakage check.
     std::string evaltext;
@@ -1999,7 +2114,7 @@ const char* const kFamName[kFam] = {"question_lp", "ent_count", "ent_link", "ent
 // as "<title>entity</title>"; the longest piece of it found there, as a share of its length; its mean log2 p under the
 // wiki trie, read in the question; ent_tb, the larger of the bold-lead and title counts (A1d). NaN when there is no
 // entity. Several candidates ("a|b|c", A1d): per statistic, the best candidate's value.
-std::array<double, kFam> fam_stats(const Lm& wiki_lm, const InfiniGram& low, const std::string& q,
+std::array<double, kFam> fam_stats(const Lm& wiki_lm, const FmInfiniGram& low, const std::string& q,
                                    const std::string& entity) {
     std::array<double, kFam> v;
     v.fill(std::nan(""));
@@ -2014,9 +2129,8 @@ std::array<double, kFam> fam_stats(const Lm& wiki_lm, const InfiniGram& low, con
     const std::string raw = strip_article(entity), e = lowered(raw);
     if (e.empty()) return v;
     auto longest = [&](const std::string& s, std::size_t from, std::size_t& n) {
-        std::size_t pos = 0;
         return low.match_prefix(reinterpret_cast<const std::uint8_t*>(s.data()) + from, s.size() - from,
-                                s.size() - from, 0, pos, n);
+                                s.size() - from, n);
     };
     auto count = [&](const std::string& s) {
         std::size_t n = 0;
@@ -2286,7 +2400,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                      "entity statistic needs --parse and --dk\n";
         return 1;
     }
-    std::unique_ptr<InfiniGram> low;  // A1c: the lowered training bytes, built below with --parse
+    std::unique_ptr<FmInfiniGram> low;  // A1c: the lowered training bytes, built below with --parse
     const Lm* wiki_lmp = nullptr;
     std::map<std::string, std::string> chosen;
     // E1's entity for a question. With several candidates (A1d), the best by the --fam-stat statistic (ties: the
@@ -2318,7 +2432,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     std::cerr << "wiki trained, nodes " << model.nodes.size() << "\n";
 
     std::vector<Turn> turns;
-    const std::string dolly_text = load_dolly(a.dolly, turns);
+    std::string dolly_text = load_dolly(a.dolly, turns);
     if (turns.empty()) {
         std::cerr << "dolly missing " << a.dolly << "\n";
         return 1;
@@ -2330,16 +2444,20 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // The model state after the wiki pass, before any chat (the match expert does not fire on a separate buffer).
     double wf[6];
     std::copy(w, w + 6, wf);
-    const Lm wiki_lm{&model, wf, cfg.train, true};
+    Lm wiki_lm{&model, wf, cfg.train, true};
     wiki_lmp = &wiki_lm;
 
     // A1c: entity familiarity, from CyphaLM's wiki trie and its lowered training bytes (wiki train + Dolly).
     std::array<double, kFam> fam_cut;
     fam_cut.fill(std::nan(""));
+    if (parse.empty()) std::string().swap(dolly_text);  // only A1c's lowered text reads it
     if (!parse.empty()) {
-        std::string lt(reinterpret_cast<const char*>(data.data()), cfg.train);
-        lt = lowered(lt + "\n" + dolly_text);
-        low = std::make_unique<InfiniGram>(reinterpret_cast<const std::uint8_t*>(lt.data()), lt.size());
+        std::vector<std::uint8_t> lt(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
+        lt.push_back('\n');
+        lt.insert(lt.end(), dolly_text.begin(), dolly_text.end());
+        std::string().swap(dolly_text);
+        for (auto& c : lt) c = static_cast<std::uint8_t>(std::tolower(c));
+        low = std::make_unique<FmInfiniGram>(std::move(lt));  // the index takes the lowered bytes
         std::vector<std::array<double, kFam>> dv;
         for (const auto& r : dev) {
             const auto it = parse.find(r.q);
@@ -2545,11 +2663,33 @@ int cmd_qa(const Args& a, const QaOpts& o) {
               << static_cast<double>(n_dk) / static_cast<double>(turns.size() + n_dk) << " fam " << o.fam << " shard "
               << sh1.size() << " shard2 " << sh2.size() << "\n";
     const std::size_t chat_at = append_chat(model, data, chat);
+    std::string().swap(chat);  // data holds the chat bytes now, and nothing below reads the turns
+    std::vector<Turn>().swap(turns);
     train_span(model, data, w, chat_at, data.size(), cfg);
     train_span(model, data, w, chat_at, data.size(), cfg);
     model.compact_match();
     std::cerr << "chat trained\n";
+    // M4: the packed form serves from here and the training form is freed. A later wiki_lm read (entity_of) sees the
+    // chat-trained counts with no online match in either form (compact_match freed the training hash).
+    const PackedModel pm = pack(model);
+    model.release();
+    wiki_lm.model = nullptr;
+    wiki_lm.packed = &pm;
 
+    // T, the training text (wiki train + chat): the class expert is built from it first (B4), then InfiniGram takes it
+    // (M6 order, after the trie: A1c's tokens need the wiki trie before the chat text exists). Both builds come before
+    // the holdout arrays below, which they do not read.
+    std::vector<std::uint8_t> T;
+    const std::size_t all_followers = training_text(data, cfg, T);
+    std::unique_ptr<ClassContext> cc;
+    if (!o.cls.empty()) {
+        cc = make_class_context(o.cls);
+        if (!cc) return 1;
+        cc->build(T.data(), T.size());
+    }
+    // InfiniGram takes T, unless the similar-context expert reads it (A4, src=all: its keys and its neighbours are T's).
+    const bool sim_reads_t = !o.sim.empty() && parse_sim(o.sim).src != "wiki";
+    const FmInfiniGram ig = sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
     // Holdout: the trie mixture's BPC (= chat's wiki_bpc_after_chat), then InfiniGram's lambdas on the first half and
     // the trie + InfiniGram BPC on the second half (as context8k, cap 8192); with --copy, the copy expert's lambdas
     // on the first half (its context: the holdout stream itself) and its BPC and LCI gain on the second half.
@@ -2562,20 +2702,19 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         double e[5][256];
         bool em = false;
         unsigned pred = 0;
-        model.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
+        pm.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
         double M[256];
         mix_dist(w, e, em, pred, M);
         pt[k] = M[data[i]];
         bits_all += -std::log2(pt[k]);
     }
-    std::vector<std::uint8_t> T(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
-    T.insert(T.end(), data.begin() + static_cast<std::ptrdiff_t>(cfg.sample), data.end());
-    InfiniGram ig(T.data(), T.size());
     double lam[kBuckets] = {0}, lc_t[kCopyBuckets] = {0}, lc_i[kCopyBuckets] = {0};
+    FmInfiniGram::Cursor cur;
     for (std::size_t k = 0, prev = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
         const std::size_t len = std::min<std::size_t>(i, 8192);
-        const auto r = ig.query(data.data() + (i - len), len, 8192, k == 0 ? -1 : std::min<int>(static_cast<int>(prev) + 1, 8192));
+        const auto r = ig.query(data.data() + (i - len), len, 8192, k == 0 ? -1 : std::min<int>(static_cast<int>(prev) + 1, 8192),
+                                1, cur);
         prev = static_cast<std::size_t>(r.n);
         pinf[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
         bk[k] = bucket(r.n, r.total);
@@ -2591,16 +2730,12 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     std::cout << "holdout_mix_bpc " << bits_all / static_cast<double>(H) << "\n";
     std::cout << "holdout2_trie_bpc " << bits_trie2 / static_cast<double>(H - half) << " holdout2_trie_ig_bpc "
               << bits_ig2 / static_cast<double>(H - half) << "\n";
-    // B4: the class-context expert over the same training bytes as InfiniGram (wiki train + chat), lambdas on the
-    // first half of the holdout over the trie (lcl_t) and over trie + InfiniGram (lcl_i).
-    std::unique_ptr<ClassContext> cc;
+    // B4: the class-context expert over the same training bytes as InfiniGram (wiki train + chat), built above, lambdas
+    // on the first half of the holdout over the trie (lcl_t) and over trie + InfiniGram (lcl_i).
     double lcl_t[ClassContext::kBuckets] = {0}, lcl_i[ClassContext::kBuckets] = {0};
     std::vector<double> pcl(H);
     std::vector<int> clb(H);
-    if (!o.cls.empty()) {
-        cc = make_class_context(o.cls);
-        if (!cc) return 1;
-        cc->build(T.data(), T.size());
+    if (cc) {
         for (std::size_t k = 0; k < H; ++k) {
             double P[256];
             clb[k] = ClassContext::bucket(cc->predict(data.data(), cfg.train + k, P));
@@ -2740,10 +2875,11 @@ int cmd_qa(const Args& a, const QaOpts& o) {
 
     const int nlm = o.copy ? 4 : 2;
     const char* const lm_name[4] = {"trie", "trie_ig", "trie_cp", "trie_ig_cp"};
-    const Lm lms[4] = {{&model, w, data.size(), false, nullptr, nullptr, nullptr, 8192, cc.get(), lcl_t, sc.get(), lsm_t},
-                       {&model, w, data.size(), false, &ig, lam, nullptr, 8192, cc.get(), lcl_i, sc.get(), lsm_i},
-                       {&model, w, data.size(), false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t, sc.get(), lsm_t},
-                       {&model, w, data.size(), false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i}};
+    const std::size_t lim = all_followers;
+    const Lm lms[4] = {{nullptr, w, lim, false, nullptr, nullptr, nullptr, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
+                       {nullptr, w, lim, false, &ig, lam, nullptr, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm},
+                       {nullptr, w, lim, false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
+                       {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
 
     // Grading only: is a gold answer in the source article's text (wiki train)? Splits A3's results.
     const std::string_view wiki(reinterpret_cast<const char*>(data.data()), cfg.train);
@@ -3198,8 +3334,10 @@ int cmd_selftest() {
     train_span(model, data, w, 0, cfg.train, cfg);
     model.compact_match();
     const Holdout h = score_holdout(model, data.data(), w, cfg, false);
-    if (!h.ok) {
-        std::cerr << "selftest: holdout scoring failed\n";
+    const Holdout hp = score_holdout(pack(model), data.data(), w, cfg, false);  // M4: bit-identical
+    if (!h.ok || !hp.ok || std::memcmp(&h.backoff_bpc, &hp.backoff_bpc, sizeof(double)) != 0 ||
+        std::memcmp(&h.mix_bpc, &hp.mix_bpc, sizeof(double)) != 0) {
+        std::cerr << "selftest: holdout scoring failed, or the packed form differs\n";
         return 1;
     }
     double ws = 0;
@@ -3304,8 +3442,19 @@ int cmd_selftest() {
                         std::fabs(P2['h'] - P1['h']) < 1e-12 && h3.order == 0 && std::fabs(P3['h'] - 1.0 / 256) < 1e-12 &&
                         std::fabs(sum3 - 1) < 1e-9 && ClassContext::bucket({2, 3}) == 9 && cc.contexts() == 68 &&
                         make_class_context("shape:4") != nullptr;
-        if (!ok) {
-            std::cerr << "selftest: class-context expert checks failed\n";
+        // Spec fields are read from the right (M2/M3 flags): a third order and dropping contexts change the table,
+        // and the plain forms parse as before.
+        auto built = [&](const std::string& spec) {
+            const auto c = make_class_context(spec);
+            if (c) c->build(reinterpret_cast<const std::uint8_t*>(t.data()), t.size());
+            return c ? c->contexts() : std::size_t{0};
+        };
+        const std::size_t s2 = built("shape"), s3 = built("shape:6:3"), s3p = built("shape:6:3:p2"),
+                          s3cp = built("shape:6:3:cp2");
+        const bool flags_ok = s2 == built("shape:6") && s2 == 64 && s3 == 103 && s3p == 42 && s3cp == 42;
+        if (!ok || !flags_ok) {
+            std::cerr << "selftest: class-context expert checks failed (spec sizes " << s2 << " " << s3 << " " << s3p
+                      << " " << s3cp << ")\n";
             return 1;
         }
     }
@@ -3358,16 +3507,16 @@ void usage() {
     std::fprintf(stderr,
                  "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|selftest> [wiki] [dolly] [options]\n"
                  "  bpc [wiki] [--negative] [--no-guard]\n"
-                 "  chat [wiki] [dolly] [--prompt TEXT] [--no-repeat]\n"
+                 "  chat [wiki] [dolly] [--prompt TEXT] [--no-repeat] [--save FILE | --model FILE]\n"
                  "  probe [wiki] [dolly]\n"
                  "  context8k [wiki] [dolly]\n"
-                 "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600]\n"
-                 "  cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
+                 "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
+                 "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
                  "  SPEC: vec=PREFIX[,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32][,src=all|wiki]\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
-                 "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE[:tail]|shape[:tail]] [--sim SPEC]\n"
+                 "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  selftest\n"
                  "  options: --wiki P --dolly P --train N --sample N\n"
@@ -3393,6 +3542,10 @@ int main(int argc, char** argv) {
     if (cmd != "bpc" && cmd != "chat" && cmd != "probe" && cmd != "context8k" && cmd != "sample" && cmd != "qa" &&
         cmd != "dktext" && cmd != "cls") {
         usage();
+        return 2;
+    }
+    if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample") {
+        std::cerr << "--model and --save are for chat and sample\n";
         return 2;
     }
     if (!self_test()) return 1;
