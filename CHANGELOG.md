@@ -20,6 +20,9 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **A4 similar-context expert** ([report](docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md)): `native/include/cypha/cyphalm/similar_context.hpp` (header-only: int8 PCA keys of the last W words' mean vector, spherical k-means inverted file, neighbours live through the word being written) and `cyphalm_trie cls --sim` / `--sim-fresh` / `--sim-surface`, `qa --sim`.
+  - Fresh text, read once: trie + IG + class 2.0879 → 2.0267 (−0.0612 [−0.0658, −0.0572]); surface S unchanged. Meaning carries 44% of the gain (random word vectors give −0.033).
+  - Answers: 0 more at 2% wrong on dev, 0 / 200 on the test; with the fact shard it lets look-alike wrong answers through. An option, not a default.
 - **A1d / A2b answering variants** ([report](docs/reports/A1D_A2B_ANSWERING_VARIANTS.md)): `qa` adds entity candidates (`a|b|c`, the best by `--fam-stat`), `ent_tb`, `ENTITY` and `FAMTOK` lines, `--fam-train low`, `--cls` together with `--copy`, `--copy-min N`, and `--r3` reading F2R's raw frames. Tried and deleted: `--fam-ent`, `--fam-train matched`, plain-text shard rows.
   - The don't-know token (span candidates, `ent_title`, `low` only): dev precision 0.600 / recall 1.00, frozen test 0.635 / 0.94. With D4's shard the gate keeps 2 right, 0 wrong on dev; test 0 / 0.
   - Class + copy: holdout BPC 2.072 → 1.914 (trie + IG), but with the shard CyphaLM echoes the question and 6 raw right answers fall to 2. Neither is a default for answering.
