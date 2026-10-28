@@ -24,6 +24,7 @@ Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 83
 | + copy expert, second half of the holdout (A1c) | 1.927 | Over trie + InfiniGram (2.072), chat model; `qa --copy`; an option, not a default |
 | + similar-context expert (A4), second half of the holdout | 1.939 | Over trie + InfiniGram + class (1.999); fresh text 2.088 → 2.027. `cls --sim`, `qa --sim`; an option, not a default ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md)) |
 | Similar-context expert, default in `qa` / `sample` / `context8k` (A4b) | 1.9686 | `qa` holdout trie + IG 2.0716 → 1.9686; off inside answers, so answers are unchanged; `sample` SCRIBE v2 0.014 → 0.061 (still word salad); `--no-sim` turns it off |
+| **Class + similar-context + copy, defaults (B4c, 2026-10-28)** | **1.8345** | `qa` holdout (C1L chat model) trie + IG 2.0729 → 1.9944 (+ class) → 1.9224 (+ similar-context) → 1.8345 (+ copy, m 8, window 16,384); `context8k` the same. All three are off inside answers, so answers are unchanged (dev 520 / 520 rows, frozen test 800 / 800). `sample` takes similar-context + copy; the class expert only with `--cls` (SCRIBE v2 falls with it). `--no-cls`, `--no-sim`, `--no-copy` ([report](reports/B4C_ECHO_GATE.md)) |
 
 Surface scores of trie samples are about **0.74–0.83**. That is readable fragments, not answers.
 
@@ -50,6 +51,7 @@ BPC is held-out `−log2 p`. It is not a generation score.
 | Whole qa model, resident | 228 MB | **76 MB** | M2–M5 together (scratch harness) |
 | `cyphalm_trie qa`, peak | 264 MB | **171 MB** | M9: the tool on M4–M6, every number unchanged (C1L 368 → 199 MB; `context8k` 230 → 165 MB) |
 | `chat` served from a stored model | 104 MB, 476 s (trains) | **21 MB, 12 s** | `chat --model FILE` (M7) |
+| `cyphalm_trie qa` served from a store, peak | 186.8 / 245.3 / 275.1 MB (A0 / + class + copy / C1L + class + copy, built) | **138.4 / 169.4 / 189.1 MB** | `qa --save DIR`, then `qa --model DIR` (M10–M14): no training, no index or class build; parts load in 0.15 s; 3–5× faster; every printed number and the rows file unchanged |
 
 ### What grows, and what must stay separate
 
@@ -78,6 +80,7 @@ Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([re
 | Control ladder, web text / books (own references) | 5 of 5 / 3 of 5 |
 | Held-out degradations followed | 7 of 9 families (blind to sentence order and truncation) |
 | CyphaLM trie samples / trie + class context / human, same prompts | 0.014 / 0.002 / 0.770 (word salad by SCRIBE; surface S said 0.749 / 0.901 / 0.904) |
+| `sample` with its defaults: trie + similar-context (+ copy) / + class | 0.061 [0.049, 0.074] (0.056 with copy) / 0.025 (surface S 0.801 → 0.880: the two scores disagree; B4c) |
 | Cost | about 1,000 texts/s on one core, about 0.4 GB, 14 s with the 32 MiB pack built |
 
 BPC and surface S are not generation scores. SCRIBE v2 is the one that passes its ladder.
@@ -92,11 +95,12 @@ Tool: `cyphalm_trie qa` (dev 130 questions, frozen test 200; coverage at a 2% wr
 | A1d don't-know token (span candidates, `ent_title`, `low` only) | dev precision 0.600, recall 1.00; frozen test 0.635 / 0.94 ([report](reports/A1D_A2B_ANSWERING_VARIANTS.md)) |
 | With D4's shard (C1L) | dev 2 right, 0 wrong at 2% wrong; test 0 / 0 (the shard covers 3 test questions) |
 | R3 with F2R raw frames | dev 2 right / 1 wrong out of fold; test 1 / 0 |
-| trie + IG + class (tags) + copy, holdout second half | 1.8437 BPC (trie + IG 2.0735); with the shard it echoes the question |
+| trie + IG + class (tags) + copy, holdout second half | 1.8437 BPC (trie + IG 2.0735); with the shard it echoed the question until B4c turned the experts off inside answers |
 | A2, + fact shard (R1) | dev 2 right / 0 wrong out of fold (1.5%, Wilson 0.4–5.4%); test +0 |
 | A3, statement scoring (R3) | 0% at 2% wrong |
 | A2 + A3, frozen test, gated | 1 right / 0 wrong |
 | Entity familiarity (`ent_title`) | dev AUROC 0.795 [0.745, 0.847] |
+| Reason codes on don't-knows (S1) | right 82 / 100 on the dev audit (Wilson 0.733–0.883), 169 / 200 on the frozen test (0.845); CyphaLM's own codes 0.60 / 0.63. The 90% gate is missed and closed there (Odin: "if the data isn't there, it isn't there"). "Unknown" means what CyphaLM has read. `qa --cards FILE` gives each answer its evidence card ([report](reports/S1_REASON_CODES_AND_EVIDENCE.md)) |
 | Copy expert (option) | holdout BPC trie 2.114, trie + InfiniGram 1.926 |
 
 ## Word vectors

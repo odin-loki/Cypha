@@ -227,6 +227,19 @@ The structures are built after the answers, below qa's peak (the class and simil
   - let the gate replace CyphaLM's own code when its statistic disagrees (G2x). On dev that gives 83, at most 85, so it is not enough alone.
 - **The audit file is ready for the hand-check:** `bench/eval/s1_reason_audit_dev.tsv`, with a blank `odin` column.
 
+## Odin's rulings (2026-10-28)
+
+- **Which knowledge a code describes:** "You pick. Most honest." The code describes what CyphaLM itself has read (the slice meaning used here). It states the model's own knowledge, not a store it never saw (PLAN ledger 61).
+- **The 17 wrong codes:** "Who cares. If the data isn't there, it isn't there. Don't worry about it." S1 stays at 82% dev and 84.5% test; the 90% gate is closed there, and neither fix above is pursued.
+
+## After B4c (published with it, 2026-10-28)
+
+B4c turns the class and copy experts off inside answers ([report](B4C_ECHO_GATE.md)). On the merged tool:
+
+- With B4c's defaults (C1L without `--copy` and `--cls`), the 48 dev `REASON` lines equal this report's, line for line. The audit reads 82 of 100 under G0.
+- With this report's command (`--copy --cls shape:6:2:f`), the 48 dev `REASON` lines are also identical. The raw answers differ (1,040 of 1,040 rows), because `--cls` is now off inside answers; raw right goes 16 → 13 over the 1,040 rows, before the gate.
+- So the reason-code numbers hold on `main`. The rows and cards of the runs above reproduce at `main` commit 9305613 (S1, before B4c).
+
 ## How to reproduce
 
 ```

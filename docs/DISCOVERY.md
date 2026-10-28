@@ -682,7 +682,7 @@ These are written as CTests and checked on every build:
 
 | ID | Work | Gate |
 |---|---|---|
-| S1 | Reason codes and evidence cards on CyphaLM's answers (every "I don't know" says why; every answer shows its evidence). The non-CyphaLM Q/A tools were removed under PLAN rule 10 | Reason-code accuracy ≥ 90% on 100 hand-checked; I3 CTest |
+| S1 | Reason codes and evidence cards on CyphaLM's answers (every "I don't know" says why; every answer shows its evidence). The non-CyphaLM Q/A tools were removed under PLAN rule 10 | Reason-code accuracy ≥ 90% on 100 hand-checked; I3 CTest. **Run 2026-10-28:** 82% dev, 84.5% test; I3 check passes; `qa --cards` gives evidence cards. The 90% gate is missed and Odin closed S1 there: codes describe what CyphaLM has read, and where the data isn't there, saying so is right ([report](reports/S1_REASON_CODES_AND_EVIDENCE.md)) |
 | S2 | Epistemic states on top of `ecs.hpp`: Known / Believed / Contested / Ignorant / Vacuous, the DC conflict measure, and the two kinds of uncertainty | Known-answer CTests |
 | S3 | Gap map: schema expectations f(T,R), demand log, contested and fragile lists | Gaps listed with VOI on the F1 fact store |
 | S4 | Unseen estimates (Good–Turing, Chao1, capture–recapture, Heaps) and the frontier report | Missing-mass validity within ±25% on a held-out source |
@@ -700,7 +700,7 @@ These are written as CTests and checked on every build:
 
 **Order.**
 1. S1 → S2 → S5 → S3. Honesty first: reason codes, states and the firewall, on the stores that exist now.
-   - S5 done 2026-10-28 (I1, I4, I7, I8 CTests); S3 done 2026-10-28 (gaps with VOI on the v2 fact store). [Report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md).
+   - S1 done 2026-10-28 at 82% (Odin closed the 90% gate); S5 done 2026-10-28 (I1, I4, I7, I8 CTests); S3 done 2026-10-28 (gaps with VOI on the v2 fact store). [Report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md).
 2. S4 → S6 → S7. Measurement of the unknown, then the hypothesis machinery.
 3. S8 → S9 → S10. The first generators, worlds and the scheduler.
 4. S11 → S12 → S13 → S14, with S15 built alongside S8 so discovery has a fair test from the start.

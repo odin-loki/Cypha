@@ -26,6 +26,11 @@
 // answer (in_answer), so answers are written without it. --no-sim leaves it out; without the file those subcommands
 // stop and say so. bpc, chat and probe never build it: bpc's lines are the trie's reference numbers, and chat and
 // probe write only answers.
+// B4C (docs/reports/B4C_ECHO_GATE.md): the class-context expert (`shape` = shape:6:3:cp2, or --cls SPEC) and the copy
+// expert (m = --copy-min, default 8; a 16,384-byte window) are defaults in qa and context8k, in the order class,
+// similar-context, copy; in sample only the copy expert is (SCRIBE v2 falls with the class expert; --cls adds it). Like
+// the similar-context expert they are off inside every answer, so answers are written without them. --no-cls and
+// --no-copy leave them out; with --no-cls --no-copy --no-sim each subcommand prints what it printed before them.
 //
 // Subcommands (stdout carries the numbers, stderr the progress):
 //   bpc [wiki] [--negative] [--no-guard]
@@ -45,11 +50,16 @@
 //   context8k [wiki] [dolly]
 //        trie_context_8k: InfiniGram (order up to 8192) mixed with the trie, BPC at five
 //        caps, matched-length histogram, 50 questions with 30 Dolly turns held out. A4: trie_plus_context_8192_sim_bpc
-//        adds the similar-context expert (lambdas on the first half; --no-sim leaves the line out).
+//        adds the similar-context expert (lambdas on the first half; --no-sim leaves the line out). B4C: the class
+//        expert (on InfiniGram's bytes) and the copy expert add lines too, each name the chain so far
+//        (trie_plus_context_8192_cls_bpc, ..._cls_sim_bpc, ..._cls_sim_copy_bpc), each expert's lambdas fit on the
+//        first half over the distribution it is mixed into.
 //   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]
 //        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for `scribe ladder --gen-trie`.
 //        A4: with the similar-context expert (its lambdas over the trie on the first half of the holdout) the files
-//        start with a MODEL line and keep the GEN kinds; --no-sim writes the trie alone (B1's files).
+//        start with a MODEL line and keep the GEN kinds; --no-sim writes the trie alone (B1's files). B4C: the copy
+//        expert joins it, fit over trie + sim (--no-copy --no-sim writes B1's files). The class expert is not a default
+//        here, because SCRIBE v2 falls with it; --cls SPEC adds it (built on the train bytes, before the others).
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]
@@ -90,12 +100,15 @@
 //        in a suffix array over the lowered training bytes; its longest piece found; its trie log2 p), cuts
 //        fit on training-side entities only (wiki-train titles against the --dk entities), and --fam-stat
 //        picks the token's statistic (--fam-train outcome: training turns carry the decision instead).
-//        --copy adds the copy expert (a match over the current context, lambdas per match length fit on the
-//        holdout's first half; BPC and LCI gain on the second half) as two more models. --r3 runs statement
+//        The copy expert (B4C, a default): a match over the current context, lambdas per match length fit on the
+//        holdout's first half (BPC and LCI gain on the second half), off inside answers. --copy adds two more models
+//        whose copy expert is also on inside answers (A1c's answer copy, for comparison; with the same lambdas, so
+//        --copy-min 0 gives A1c's m 0). --no-copy leaves the default copy out. --r3 runs statement
 //        scoring with F2's patterns as frames. --shard / --shard2 add question-form fact turns (rows from the
 //        BPC holdout dropped; exits if a shard question equals a dev or test question, from --test or --leak).
-//        --cls (B4; TOOL_PROFILE P2) adds the class-context expert, built on the same bytes as InfiniGram, to every
-//        model (lambdas on the holdout's first half); with --copy the copy expert goes on after it, its lambdas fit
+//        The class-context expert (B4; TOOL_PROFILE P2; a default since B4C, --cls SPEC sets its table, --no-cls
+//        leaves it out), built on the same bytes as InfiniGram, is in every model and off inside answers (lambdas on
+//        the holdout's first half); the copy expert goes on after it, its lambdas fit
 //        over the class-mixed distribution, and cls_given_copy_lci gives the class expert's gain with copy present.
 //        --copy-min N (B4B) sets the copy lambdas of matches shorter than N bytes to 0 after fitting.
 //        A1d / A2b (docs/reports/A1D_A2B_ANSWERING_VARIANTS.md): the --parse entity column may hold several
@@ -253,12 +266,13 @@ struct Args {
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;  // A1c, A3, A2
     bool copy = false, fam_only = false, mention = false;
     std::string cls;      // B4: class-context expert spec, TABLE|shape[:tail[:orders[:flags]]] (make_class_context)
-    int copy_min = 0;     // B4B: copy lambdas of match lengths below this set to 0 after fitting
+    int copy_min = 8;     // B4B: copy lambdas of match lengths below this set to 0 after fitting (B4C: 8, was 0)
     std::string model, save;  // M7: serve a stored packed trie (chat, sample); store the one just trained
     std::vector<std::string> sims;               // A4: similar-context expert specs (cls: each; qa: the first)
     bool sim_fresh = false, sim_surface = false;  // A4, cls: also the fresh text / surface S
     bool no_sim = false;                          // A4: the similar-context expert off where it is a default
     std::string cards;                            // S1: qa's evidence cards and reason codes (--cards FILE)
+    bool no_cls = false, no_copy = false;         // B4C: the class and copy experts off where they are defaults
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -305,6 +319,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--sim-fresh") a.sim_fresh = true;
         else if (s == "--sim-surface") a.sim_surface = true;
         else if (s == "--no-sim") a.no_sim = true;
+        else if (s == "--no-cls") a.no_cls = true;
+        else if (s == "--no-copy") a.no_copy = true;
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
         else if (s == "--save") a.save = next();
@@ -638,7 +654,14 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
 std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
-                              const SimilarContext* sc, const double* lsm, double temperature);
+                              const SimilarContext* sc, const double* lsm, double temperature, const double* lcp);
+// B4C, defined below with the copy and class experts: the class and copy experts where they are defaults.
+std::string default_cls_spec(const Args& a);
+std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
+std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* data, std::size_t train, std::size_t half,
+                                 std::vector<double>& cur);
+std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
+                                  std::vector<double>& cur);
 
 int cmd_context8k(const Args& a) {
     const Config& cfg = a.cfg;
@@ -675,9 +698,13 @@ int cmd_context8k(const Args& a) {
     const PackedModel pm = pack(model);  // M4
     model.release();
 
-    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T.
+    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T, after the class
+    // expert (B4C, a default; --no-cls leaves it out) is built on the same bytes, as in qa.
     std::vector<std::uint8_t> T;
     const std::size_t all = training_text(data, cfg, T), tn = T.size();
+    int crc = 0;
+    const auto cc = default_cls(a, T.data(), T.size(), crc);
+    if (crc) return crc;
     const FmInfiniGram ig(std::move(T));
     std::cerr << "index built over " << tn << " bytes\n";
 
@@ -748,26 +775,43 @@ int cmd_context8k(const Args& a) {
             bk8k = std::move(bk);
         }
     }
-    // A4: the similar-context expert (a default; --no-sim leaves it out) over trie + InfiniGram (cap 8192), keys over
-    // the wiki train bytes, lambdas on the first half. The answers below are not touched: the expert is off inside
-    // answers (in_answer), and they are written without it.
+    // A4, B4C: the default experts over trie + InfiniGram (cap 8192), in qa's order: the class expert (built above),
+    // the similar-context expert (keys over the wiki train bytes), the copy expert (m = --copy-min, over the holdout
+    // stream). Each one's lambdas are fit on the first half over the distribution it is mixed into; its line reads the
+    // second half. --no-cls, --no-sim and --no-copy leave them out. The answers below are not touched: the experts are
+    // off inside answers (in_answer), and they are written without them.
+    std::vector<double> base(H);
+    for (std::size_t k = 0; k < H; ++k) base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
+    std::string chain = "trie_plus_context_8192";
+    auto chain_line = [&](const char* part) {
+        double bits = 0;
+        for (std::size_t k = half; k < H; ++k) bits += -std::log2(base[k]);
+        chain += part;
+        std::cout << chain << "_bpc " << bits / static_cast<double>(H - half) << "\n";
+    };
+    if (cc) {
+        mix_cls_into(*cc, data.data(), kTrain, half, base);
+        chain_line("_cls");
+    }
     int rc = 0;
     if (const auto sc = default_sim(a, data.data(), kTrain, rc)) {
-        std::vector<double> base(H), ps(H);
+        std::vector<double> ps(H);
         std::vector<int> sb(H);
         for (std::size_t k = 0; k < H; ++k) {
-            base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
             double P[256];
             sb[k] = SimilarContext::bucket(sc->predict(data.data(), kTrain + k, P));
             ps[k] = P[data[kTrain + k]];
         }
         double ls[SimilarContext::kBuckets];
         fit_lambdas(ps, base, sb, half, SimilarContext::kBuckets, ls);
-        double bits = 0;
-        for (std::size_t k = half; k < H; ++k) bits += -std::log2(ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k]);
-        std::cout << "trie_plus_context_8192_sim_bpc " << bits / static_cast<double>(H - half) << "\n";
+        for (std::size_t k = 0; k < H; ++k) base[k] = ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k];
+        chain_line("_sim");
     } else if (rc)
         return rc;
+    if (!a.no_copy) {
+        mix_copy_into(data.data(), kTrain, half, a.copy_min, base);
+        chain_line("_copy");
+    }
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
     const char* names[] = {"<4", "4-7", "8-15", "16-31", "32-63", "64-255", "256-1023", "1024-8192"};
@@ -928,29 +972,50 @@ int cmd_sample(const Args& a) {
         if (!a.save.empty() && !save_model(a.save, pm, w, cfg)) return 1;
     }
 
-    // A4: the similar-context expert (a default; --no-sim writes the trie alone, B1's files), keys over the train
-    // bytes, its lambdas over the trie fit on the first half of the holdout. The files then start with a MODEL line.
+    // A4, B4C: the default experts (--no-sim, --no-copy leave them out; with none, the trie alone writes B1's files) in
+    // qa's order: the similar-context expert with keys over the train bytes, then the copy expert (m = --copy-min). The
+    // class expert is not a default here (B4C: SCRIBE v2 falls with it); --cls SPEC adds it first, built on the train
+    // bytes. Each one's lambdas are fit on the first half of the holdout over the trie with the experts before it. The
+    // files then start with a MODEL line.
     int rc = 0;
+    std::unique_ptr<ClassContext> cc;
+    if (!a.cls.empty()) cc = default_cls(a, data.data(), cfg.train, rc);
+    if (rc) return rc;
     const auto sc = default_sim(a, data.data(), cfg.train, rc);
     if (rc) return rc;
     double lsm[SimilarContext::kBuckets] = {0};
-    if (sc) {
+    std::vector<double> lcl, lcp;
+    if (cc || sc || !a.no_copy) {
         const std::size_t half = (cfg.sample - cfg.train) / 2;
-        std::vector<double> pt(half), ps(half);
-        std::vector<int> sb(half);
+        std::vector<double> pt(half);
         for (std::size_t k = 0; k < half; ++k) {
             const std::size_t i = cfg.train + k;
-            double e[5][256], M[256], P[256];
+            double e[5][256], M[256];
             bool em = false;
             unsigned pred = 0;
             pm.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
             mix_dist(w, e, em, pred, M);
             pt[k] = M[data[i]];
-            sb[k] = SimilarContext::bucket(sc->predict(data.data(), i, P));
-            ps[k] = P[data[i]];
         }
-        fit_lambdas(ps, pt, sb, half, SimilarContext::kBuckets, lsm);
+        if (cc) lcl = mix_cls_into(*cc, data.data(), cfg.train, half, pt);
+        if (sc) {
+            std::vector<double> ps(half);
+            std::vector<int> sb(half);
+            for (std::size_t k = 0; k < half; ++k) {
+                double P[256];
+                sb[k] = SimilarContext::bucket(sc->predict(data.data(), cfg.train + k, P));
+                ps[k] = P[data[cfg.train + k]];
+            }
+            fit_lambdas(ps, pt, sb, half, SimilarContext::kBuckets, lsm);
+            for (std::size_t k = 0; k < half; ++k) pt[k] = lsm[sb[k]] * ps[k] + (1 - lsm[sb[k]]) * pt[k];
+        }
+        if (!a.no_copy) lcp = mix_copy_into(data.data(), cfg.train, half, a.copy_min, pt);
     }
+    const bool experts = cc || sc || !lcp.empty();
+    std::string model_line = std::string("MODEL\ttrie") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
+                             "\t" + (sc ? (a.sims.empty() ? std::string("default") : a.sims[0]) : std::string("-"));
+    if (cc) model_line += "\tcls=" + default_cls_spec(a);
+    if (!lcp.empty()) model_line += "\tcopy_min=" + std::to_string(a.copy_min);
     const double temps[3] = {0.6, 0.8, 1.0};
     for (std::size_t f = 0; f < nfiles; ++f) {
         std::ofstream out(a.outs[f]);
@@ -958,7 +1023,7 @@ int cmd_sample(const Args& a) {
             std::cerr << "cannot write " << a.outs[f] << "\n";
             return 1;
         }
-        if (sc) out << "MODEL\ttrie+sim\t" << (a.sims.empty() ? std::string("default") : a.sims[0]) << "\n";
+        if (experts) out << model_line << "\n";
         for (int k = 0; k < a.prompts; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
@@ -970,8 +1035,9 @@ int cmd_sample(const Args& a) {
                 opt.no_repeat = true;
                 const auto seed32 = static_cast<std::uint32_t>(seed ^ (seed >> 32));
                 const std::string text =
-                    sc ? sample_with_class(pm, w, cfg.train, nullptr, nullptr, p, a.bytes, seed32, sc.get(), lsm, temps[ti])
-                       : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
+                    experts ? sample_with_class(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), p, a.bytes,
+                                                seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data())
+                            : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
                 out << "GEN\t" << kind << "\t" << printable(text) << "\n";
@@ -1160,9 +1226,10 @@ std::string reference_code(int in_slice, int prose, int covered) {
 }
 
 // Copy expert (A1c, PLAN B9): the longest suffix of s[0..i), 3 to 64 bytes, that also ends at an earlier j inside the
-// last 4,096 bytes of the current context (the prompt and the answer so far, or the stream being scored). It predicts
-// s[j], from the most recent of the longest matches. Returns -1 (n = 0) when there is none.
-constexpr std::size_t kCopyWin = 4096;
+// last 16,384 bytes of the current context (the prompt and the answer so far, or the stream being scored). It predicts
+// s[j], from the most recent of the longest matches. Returns -1 (n = 0) when there is none. The window was 4,096 bytes
+// until B4C (B4B chose 16,384; a Q/A prompt and its answer fit inside either).
+constexpr std::size_t kCopyWin = 16384;
 constexpr int kCopyBuckets = 8;
 int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
     n = 0;
@@ -1210,6 +1277,43 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
             }
         }
     }
+}
+
+// B4C: one default expert mixed into cur, where cur[k] is a distribution's probability of the true byte data[train + k]:
+// the expert's lambdas are fit on k < half over cur (the copy expert's then zeroed below a match of m bytes), and cur
+// becomes lam pe + (1 - lam) cur. Returns the lambdas, one a bucket.
+std::vector<double> mix_into(const std::vector<double>& pe, const std::vector<int>& bk, std::size_t half, int nb,
+                             std::vector<double>& cur, int copy_m = -1) {
+    std::vector<double> lam(static_cast<std::size_t>(nb), 0.0);
+    fit_lambdas(pe, cur, bk, half, nb, lam.data());
+    if (copy_m >= 0) copy_clip(lam.data(), copy_m);
+    for (std::size_t k = 0; k < cur.size(); ++k) {
+        const double l = lam[static_cast<std::size_t>(bk[k])];
+        cur[k] = l * pe[k] + (1 - l) * cur[k];
+    }
+    return lam;
+}
+std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* data, std::size_t train, std::size_t half,
+                                 std::vector<double>& cur) {
+    std::vector<double> pe(cur.size());
+    std::vector<int> bk(cur.size());
+    for (std::size_t k = 0; k < cur.size(); ++k) {
+        double P[256];
+        bk[k] = ClassContext::bucket(cc.predict(data, train + k, P));
+        pe[k] = P[data[train + k]];
+    }
+    return mix_into(pe, bk, half, ClassContext::kBuckets, cur);
+}
+std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
+                                  std::vector<double>& cur) {
+    std::vector<double> pe(cur.size());
+    std::vector<int> bk(cur.size());
+    for (std::size_t k = 0; k < cur.size(); ++k) {
+        int n = 0;
+        pe[k] = copy_pred(data, train + k, n) == data[train + k] ? 1.0 : 0.0;
+        bk[k] = copy_bucket(n);
+    }
+    return mix_into(pe, bk, half, kCopyBuckets, cur, m);
 }
 
 // B4: the class-context expert from "TABLE[:tail[:orders[:flags]]]": TABLE a word<TAB>class file, or "shape" (shape
@@ -1264,6 +1368,25 @@ std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
         }
     }
     return std::make_unique<ClassContext>(std::move(cls), o);
+}
+
+// B4C: the class-context expert where it is a default (qa, context8k; sample only with --cls): --cls SPEC, else
+// `shape`. Built on text[0, n). nullptr with rc 0 under --no-cls; nullptr with rc 1 for a bad spec.
+std::string default_cls_spec(const Args& a) { return a.no_cls ? std::string() : a.cls.empty() ? std::string("shape") : a.cls; }
+std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc) {
+    rc = 0;
+    const std::string spec = default_cls_spec(a);
+    if (spec.empty()) return nullptr;
+    auto cc = make_class_context(spec);
+    if (!cc) {
+        rc = 1;
+        return nullptr;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    cc->build(text, n);
+    std::cerr << "class expert " << spec << " contexts " << cc->contexts() << " table_bytes " << cc->bytes() << " build_s "
+              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
+    return cc;
 }
 
 // A4: the similar-context expert from "vec=PREFIX[,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512]
@@ -1392,6 +1515,9 @@ bool in_answer(const std::vector<std::uint8_t>& seq, std::size_t answer_at) {
 // CyphaLM's next-byte distribution: the frozen trie mixture, optionally mixed with InfiniGram
 // (context8k: P = lam[b] P_ctx + (1 - lam[b]) P_trie, one lam per match-length x count bucket),
 // then optionally with the copy expert (P = lc[b] [pred] + (1 - lc[b]) P, one lc per match-length bucket).
+// B4C: the class expert (cls_gate) and the default copy expert (lc_out) are off inside an answer, as the
+// similar-context expert is (sim_gate). lc is the copy expert inside answers too (qa's --copy models, A1c); decode's
+// no-repeat rule reads lc, so the gated copy has its own pointer.
 struct Lm {
     const Model* model = nullptr;  // the training form (qa's wiki stage); not read when packed is set
     const double* w = nullptr;
@@ -1409,6 +1535,8 @@ struct Lm {
     mutable FmInfiniGram::Cursor cur{};   // M5: InfiniGram's last match, for the next byte of the same text
     bool sim_gate = false;                // A4: the similar-context expert off inside an answer (in_answer)
     std::size_t answer_at = std::string::npos;  // A4: where the answer starts (decode sets it to the prompt's end)
+    bool cls_gate = false;                // B4C: the class expert off inside an answer
+    const double* lc_out = nullptr;       // B4C: the copy expert's lambdas, outside answers only (when lc is null)
     // hint: the previous step's match length (-1 at a new sequence); n_out: this step's.
     void dist(const std::vector<std::uint8_t>& seq, int& hint, double* P, int* n_out = nullptr) const {
         double e[5][256];
@@ -1429,20 +1557,22 @@ struct Lm {
                 P[s] = l * pc + (1 - l) * P[s];
             }
         }
-        if (cc) {
+        const bool ans = ((cc && cls_gate) || (sc && sim_gate) || (lc_out && !lc)) && in_answer(seq, answer_at);
+        if (cc && !(cls_gate && ans)) {
             double Pc[256];
             const double l = lcls[ClassContext::bucket(cc->predict(seq.data(), seq.size(), Pc))];
             for (int s = 0; s < 256; ++s) P[s] = l * Pc[s] + (1 - l) * P[s];
         }
-        if (sc && !(sim_gate && in_answer(seq, answer_at))) {
+        if (sc && !(sim_gate && ans)) {
             double Ps[256];
             const double l = lsim[SimilarContext::bucket(sc->predict(seq.data(), seq.size(), Ps))];
             for (int s = 0; s < 256; ++s) P[s] = l * Ps[s] + (1 - l) * P[s];
         }
+        const double* lcp = lc ? lc : ans ? nullptr : lc_out;
         int n = 0;
-        const int c = lc ? copy_pred(seq.data(), seq.size(), n) : -1;
+        const int c = lcp ? copy_pred(seq.data(), seq.size(), n) : -1;
         if (c < 0) return;
-        const double l = lc[copy_bucket(n)];
+        const double l = lcp[copy_bucket(n)];
         for (int s = 0; s < 256; ++s) P[s] *= 1 - l;
         P[c] += l;
     }
@@ -1488,7 +1618,8 @@ void print_boot(const std::string& name, const Boot& b) {
 
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
-                              const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8) {
+                              const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8,
+                              const double* lcp = nullptr) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
     std::mt19937 rng(seed);
     std::uniform_real_distribution<double> U(0.0, 1.0);
@@ -1507,6 +1638,13 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
             double P[256];
             const double l = lsm[SimilarContext::bucket(sc->predict(seq.data(), seq.size(), P))];
             for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+        }
+        int cn = 0;
+        const int c = lcp ? copy_pred(seq.data(), seq.size(), cn) : -1;
+        if (c >= 0) {  // B4C: the copy expert, mixed last
+            const double l = lcp[copy_bucket(cn)];
+            for (int s = 0; s < 256; ++s) M[s] *= 1 - l;
+            M[c] += l;
         }
         bool banned[256];
         mark_banned(seq, banned);
@@ -2232,6 +2370,7 @@ struct QaOpts {
     std::string cls;
     int copy_min = 0;
     std::string sim;  // A4: similar-context expert spec
+    bool copy_out = false;  // B4C: the default copy expert, off inside answers
 };
 
 constexpr int kFeat = 5;
@@ -3335,8 +3474,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // the trie + InfiniGram BPC on the second half (as context8k, cap 8192); with --copy, the copy expert's lambdas
     // on the first half (its context: the holdout stream itself) and its BPC and LCI gain on the second half.
     const std::size_t H = cfg.sample - cfg.train, half = H / 2;
-    std::vector<double> pt(H), pinf(H), pig(H), pcp(o.copy ? H : 0);  // M13: each array only when it is read
-    std::vector<int> bk(H), cbk(o.copy ? H : 0);
+    const bool copy_fit = o.copy || o.copy_out;  // B4C: the default copy expert reads the copy arrays too
+    std::vector<double> pt(H), pinf(H), pig(H), pcp(copy_fit ? H : 0);  // M13: each array only when it is read
+    std::vector<int> bk(H), cbk(copy_fit ? H : 0);
     double bits_all = 0;
     for (std::size_t k = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
@@ -3442,7 +3582,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                       << " p_gain_gt_0.005 " << g.p_gt << " p_gain_gt_0 " << g0.p_gt << " blocks " << g.n_eff << "\n";
         }
     }
-    if (o.copy) {
+    if (copy_fit) {  // B4C: the default copy expert and --copy's models share these lambdas
         for (std::size_t k = 0; k < H; ++k) {
             int n = 0;
             pcp[k] = copy_pred(data.data(), cfg.train + k, n) == data[cfg.train + k] ? 1.0 : 0.0;
@@ -3513,6 +3653,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                  {nullptr, w, lim, false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
                  {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
     for (auto& l : lms) l.sim_gate = sc && parse_sim(o.sim).gate;  // A4: the expert off inside answers
+    for (int l = 0; l < 4; ++l) lms[l].cls_gate = true, lms[l].lc_out = o.copy_out ? (l % 2 ? lc_i : lc_t) : nullptr;  // B4C
 
     // Grading only: is a gold answer in the source article's text (wiki train)? Splits A3's results.
     const std::string_view wiki(reinterpret_cast<const char*>(data.data()), cfg.train);
@@ -4001,6 +4142,45 @@ int cmd_selftest() {
         std::cerr << "selftest: golden BPC mismatch (want " << kGoldenBackoff << " and " << kGoldenMix << ")\n";
         return 1;
     }
+    // B4C: the gates, on the tiny model with a class expert and copy lambdas. Inside an answer the gated distribution
+    // is the trie's, bit for bit; outside one it is not; qa's --copy models (lc) keep copying inside answers.
+    {
+        const PackedModel pk = pack(model);
+        ClassContext tc({}, ClassContext::Options{});
+        tc.build(data.data(), cfg.train);
+        double lcl[ClassContext::kBuckets], lcp[kCopyBuckets];
+        std::fill(lcl, lcl + ClassContext::kBuckets, 0.5);
+        std::fill(lcp, lcp + kCopyBuckets, 0.5);
+        const Lm plain{nullptr, w, cfg.train, false, nullptr, nullptr, nullptr, 8192, nullptr, nullptr, nullptr, nullptr, &pk};
+        Lm gated = plain, open = plain;
+        gated.cc = open.cc = &tc;
+        gated.lcls = open.lcls = lcl;
+        gated.cls_gate = open.cls_gate = true;
+        gated.lc_out = lcp;
+        open.lc = lcp;
+        auto dist = [](const Lm& lm, const std::string& t, double* P) {
+            const std::vector<std::uint8_t> seq(t.begin(), t.end());
+            int hint = -1;
+            lm.dist(seq, hint, P);
+            return seq;
+        };
+        const std::string inside = "User: the trie model is a byte context?\nAssistant: the trie model is a",
+                          outside(data.begin() + static_cast<std::ptrdiff_t>(cfg.train), data.begin() + static_cast<std::ptrdiff_t>(cfg.train) + 300);
+        double A[256], B[256], C[256], D[256], E[256];
+        dist(plain, inside, A);
+        const auto si = dist(gated, inside, B);
+        dist(open, inside, C);
+        const auto so = dist(plain, outside, D);
+        dist(gated, outside, E);
+        int n = 0;
+        const bool ok = in_answer(si, std::string::npos) && !in_answer(so, std::string::npos) &&
+                        std::memcmp(A, B, sizeof A) == 0 && std::memcmp(B, C, sizeof B) != 0 &&
+                        copy_pred(si.data(), si.size(), n) == ' ' && std::memcmp(D, E, sizeof D) != 0;
+        if (!ok) {
+            std::cerr << "selftest: class / copy gate checks failed\n";
+            return 1;
+        }
+    }
     // qa grading, the don't-know message and tag, Wilson bounds and the abstain gate.
     {
         const std::string dk = dont_know_text("Zorbia", "capital", "UNKNOWN_ENTITY");
@@ -4255,10 +4435,12 @@ void usage() {
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
                  "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]\n"
                  "     [--save DIR | --model DIR]\n"
+                 "     (class, similar-context and copy experts are defaults, off inside answers: --no-cls --no-sim --no-copy)\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  simvec [wiki] --sim SPEC --out FILE\n"
                  "  selftest\n"
-                 "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim\n"
+                 "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim,\n"
+                 "           --cls SPEC | --no-cls (sample: no class expert unless --cls), --copy-min N (default 8) | --no-copy\n"
                  "  paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then %s and %s\n",
                  kSimDefault, CYPHA_SIMVEC_DEFAULT, kDefaultWiki, kDefaultDolly);
 }
@@ -4296,6 +4478,13 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
+    if (cmd == "qa" || cmd == "sample" || cmd == "context8k") {  // B4C: the class spec is read before any work
+        if (a.no_cls && !a.cls.empty()) {
+            std::cerr << "--cls and --no-cls together\n";
+            return 2;
+        }
+        if (!default_cls_spec(a).empty() && !make_class_context(default_cls_spec(a))) return 2;
+    }
     const auto t0 = std::chrono::steady_clock::now();
     int rc = 2;
     if (cmd == "bpc") rc = cmd_bpc(a);
@@ -4312,8 +4501,8 @@ int main(int argc, char** argv) {
             return 2;
         }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
-                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.copy_min,
-                              a.no_sim ? std::string() : a.sims.empty() ? std::string("default") : a.sims[0]});
+                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, default_cls_spec(a), a.copy_min,
+                              a.no_sim ? std::string() : a.sims.empty() ? std::string("default") : a.sims[0], !a.no_copy});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();
