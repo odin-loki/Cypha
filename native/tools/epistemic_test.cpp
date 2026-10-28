@@ -913,6 +913,94 @@ static void test_labels_I8() {
 }
 
 // ---------------------------------------------------------------------------
+// S6 scoring (hypothesis.hpp 6.1, 6.2): the triple store, base rate, the link predictor, novelty, compression gain,
+// graph distance (bridging), impact, interestingness. Every expected value is worked by hand in the comments.
+// ---------------------------------------------------------------------------
+static void test_scoring_S6() {
+  CHECK_NEAR(novelty_bits(0.25), 2.0, 1e-12);
+  CHECK_NEAR(novelty_bits(1.0), 0.0, 1e-12);
+  CHECK_NEAR(novelty_bits(0.0), -std::log2(1e-12), 1e-9);  // floored, never infinite
+  CHECK_NEAR(hypothesis_impact(1, 2, 3, 0.5), 4.5, 1e-12);
+  const PoolStats ps = pool_stats({1, 2, 3, 4});  // mean 2.5, population sd sqrt(1.25)
+  CHECK_NEAR(ps.mean, 2.5, 1e-12);
+  CHECK_NEAR(ps.sd, std::sqrt(1.25), 1e-12);
+  CHECK_NEAR(zscore(4, ps), 1.5 / std::sqrt(1.25), 1e-12);
+  CHECK_NEAR(zscore(7, PoolStats{7, 0}), 0.0, 1e-12);  // no spread: no signal
+  CHECK_NEAR(interestingness(1, 2, 3, 4), 10.0, 1e-12);
+
+  // The store: duplicates and empty fields are ignored.
+  TripleStore st;
+  CHECK(st.add("z1", "occ", "poet"));
+  CHECK(!st.add("z1", "occ", "poet"));
+  CHECK(!st.add("z1", "", "poet"));
+  st.add("z1", "nat", "French");
+  st.add("z1", "era", "modern");
+  st.add("z2", "occ", "poet");
+  st.add("z2", "nat", "French");
+  st.add("z3", "occ", "painter");
+  st.add("z3", "nat", "French");
+  st.add("z3", "era", "modern");
+  st.add("s", "occ", "poet");
+  st.add("s", "era", "modern");
+  CHECK(st.size() == 10);
+  CHECK(st.count("nat", "French") == 3 && st.count("nat") == 3 && st.values("nat") == 1 && st.count("occ") == 4);
+  CHECK(st.has("z2", "nat", "French") && !st.has("s", "nat", "French"));
+  CHECK(st.has_relation("s", "era") && !st.has_relation("s", "nat"));
+  CHECK(st.facts_of("s").size() == 2 && st.facts_of("nobody").empty());
+  CHECK(st.subjects_with("occ", "poet").size() == 3);
+  CHECK(st.neighbours("poet").size() == 3 && st.neighbours("s").size() == 2);
+
+  // Base rate: (c + 1) / (n + values + 1). nat=French: (3 + 1) / (3 + 2) = 0.8; unseen German: 1/5. Left out of its own
+  // count (self): (2 + 1) / (2 + 2) = 0.75.
+  CHECK_NEAR(base_rate(st, "nat", "French"), 0.8, 1e-12);
+  CHECK_NEAR(base_rate(st, "nat", "German"), 0.2, 1e-12);
+  CHECK_NEAR(base_rate(st, "nat", "French", 1.0, true), 0.75, 1e-12);
+
+  // The link predictor, m = 1. h = (s, nat, French), b = 0.8 (logit ln 4). Body (occ, poet): other subjects z1, z2 both
+  // have a nat, both French: c = (2 + 0.8) / 3 = 14/15 (odds 14). Body (era, modern): z1, z3, both French: the same c.
+  // Naive Bayes: odds = 4 x (14/4)^2 = 49, so P = 49/50 = 0.98.
+  const LinkPredictor lp(st, {});
+  CHECK_NEAR(lp.prob("s", "nat", "French"), 0.98, 1e-9);
+  // Without (era, modern) in the body (skip it): one rule, P = 14/15.
+  const TripleStore::Fact era{"era", "modern"};
+  CHECK_NEAR(lp.prob("s", "nat", "French", &era), 14.0 / 15.0, 1e-9);
+  // Shrinkage m = 2, one rule: c = (2 + 2 x 0.8) / (2 + 2) = 0.9.
+  CHECK_NEAR(LinkPredictor(st, {2.0, true}).prob("s", "nat", "French", &era), 0.9, 1e-9);
+  // A subject with no facts: the base rate.
+  CHECK_NEAR(lp.prob("nobody", "nat", "French"), 0.8, 1e-9);
+  // Compression gain of a hypothesis on a subject with no other facts: only its own cost, log2 0.8.
+  CHECK_NEAR(compression_gain_bits(lp, st, "nobody", "nat", "French"), std::log2(0.8), 1e-9);
+  // ... and on s: its own cost, plus what it saves on s's two facts. Both terms are finite; h explains its co-facts here,
+  // so the gain exceeds its own cost.
+  const double dl = compression_gain_bits(lp, st, "s", "nat", "French");
+  CHECK(std::isfinite(dl) && dl > std::log2(0.98));
+
+  // A copy rule. bp and dp: z4 and z5 have both, z4's are the same (Paris), z5's differ. h = (s2, bp, Lyon) with s2's
+  // dp = Lyon. b(bp = Lyon) = (0 + 1) / (2 + 3) = 0.2; no other subject has dp = Lyon, so only the copy rule fires:
+  // c = (1 + 0.2) / (2 + 1) = 0.4, and P = 0.4. Without copy rules, P = b = 0.2.
+  TripleStore cp;
+  cp.add("z4", "bp", "Paris");
+  cp.add("z4", "dp", "Paris");
+  cp.add("z5", "bp", "Rome");
+  cp.add("z5", "dp", "Milan");
+  cp.add("s2", "dp", "Lyon");
+  CHECK_NEAR(LinkPredictor(cp, {}).prob("s2", "bp", "Lyon"), 0.4, 1e-9);
+  CHECK_NEAR(LinkPredictor(cp, {1.0, false}).prob("s2", "bp", "Lyon"), 0.2, 1e-9);
+
+  // Adamic-Adar (S6b's path term): z1 and z2 share poet (neighbours z1, z2, s) and French (z1, z2, z3), each of degree 3:
+  // 2 / ln 3. s and French share no neighbour: 0.
+  CHECK_NEAR(adamic_adar(st, "z1", "z2"), 2.0 / std::log(3.0), 1e-12);
+  CHECK_NEAR(adamic_adar(st, "s", "French"), 0.0, 1e-12);
+
+  // Graph distance (bridging): s - poet - z1 - French; nothing links Lyon to the first store.
+  CHECK(graph_distance(st, "s", "s") == 0);
+  CHECK(graph_distance(st, "s", "poet") == 1);
+  CHECK(graph_distance(st, "s", "French") == 3);
+  CHECK(graph_distance(st, "s", "French", 2) == 3);  // beyond the cap: cap + 1
+  CHECK(graph_distance(st, "s", "Lyon") == 7);
+}
+
+// ---------------------------------------------------------------------------
 // S3 gap map (gap_map.hpp): the tag, the gap id, schema cells, demand, VOI
 // ---------------------------------------------------------------------------
 static void test_gap_map() {
@@ -1009,6 +1097,7 @@ int main() {
   test_promotion_I4();
   test_refutation_I7();
   test_labels_I8();
+  test_scoring_S6();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;

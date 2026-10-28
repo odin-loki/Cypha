@@ -108,6 +108,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <random>
 #include <set>
 #include <sstream>
@@ -3198,7 +3199,339 @@ struct Args {
 
 }  // namespace
 
+// ============================================================ S6: scoring a planted set (docs/reports/S6_HYPOTHESIS_SCORING.md)
+//
+// pattern_learn --score-planted SEEDS.tsv WD_VALUES.tsv OUT_PREFIX [--subjects N] [--read-test] [--read-fresh]
+// Holds one fact out of each of N subjects of the seed store (a known-true hypothesis), pairs it with a known-false one
+// (the same subject and relation, an object drawn by triple from the relation in the reduced store), and scores both
+// against the reduced store with hypothesis.hpp's terms. S6b's P0: an isotonic fit (dev) of z(logit P_assoc) +
+// z(ln(1 + Adamic-Adar)), times the hard constraint, kept by one joint test on dev. The dev variants are at commit
+// 9a8c6a7. S6's test half prints only with --read-test (read once, for S6's change); the fresh set (the qualifying
+// subjects S6 did not use) only with --read-fresh. Nothing here answers a question: these are Cypha's own hypotheses
+// (PLAN rule 10).
+namespace s6 {
+
+struct Item {
+    string s, r, o;
+    int label = 0, pair = 0;
+    bool dev = true;
+    double base = 0, p = 0, p_nocopy = 0, aa = 0, hard = 1, bridging = 0, impact = 0;
+    double p0 = 0, nov = 0, dl = 0, inter = 0, prio = 0;
+};
+using Score = std::function<double(const Item&)>;
+
+const char* group_of(const string& r) {
+    static const char* D[] = {"birth_year", "death_year", "birth_date", "death_date", "founded"};
+    static const char* P[] = {"birth_place", "death_place", "located_in", "country", "capital", "location", "largest_city"};
+    static const char* L[] = {"occupation", "genre", "language", "nationality", "party", "currency", "class", "order", "family"};
+    for (const char* x : D) if (r == x) return "dates";
+    for (const char* x : P) if (r == x) return "places";
+    for (const char* x : L) if (r == x) return "lexical";
+    return "people";
+}
+
+// The hard constraint (DISCOVERY 6.1's constraint term, hard part): 0 when a date slot of s already holds another year,
+// or death comes before birth, or a life is longer than 125 years (as pass 3's fusion); 1 otherwise.
+double hard_constraint(const ecs::TripleStore& st, const string& s, int r, const string& o) {
+    if (!is_datey(r)) return 1.0;
+    auto kind = [](const string& n) { return n == "birth_year" || n == "birth_date" ? 1 : n == "death_year" || n == "death_date" ? 2 : n == "founded" ? 3 : 0; };
+    const int k = kind(kRel[r].name);
+    const Date D = parse_date_str(o);
+    if (!D.ok()) return 1.0;
+    for (const auto& f : st.facts_of(s)) {
+        const int kf = kind(f.r);
+        if (!kf) continue;
+        const Date F = parse_date_str(f.o);
+        if (!F.ok()) continue;
+        if (kf == k && F.y != D.y) return 0.0;
+        if (k == 1 && kf == 2 && (F.y < D.y || F.y - D.y > 125)) return 0.0;
+        if (k == 2 && kf == 1 && (D.y < F.y || D.y - F.y > 125)) return 0.0;
+    }
+    return 1.0;
+}
+
+// AUROC (label 1 above label 0) over items idx, by mid-ranks.
+double auroc(const vector<Item>& it, const vector<std::size_t>& idx, const Score& f) {
+    vector<std::pair<double, int>> v;
+    v.reserve(idx.size());
+    for (std::size_t i : idx) v.push_back({f(it[i]), it[i].label});
+    std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    double rank_pos = 0, npos = 0, nneg = 0;
+    for (std::size_t i = 0; i < v.size();) {
+        std::size_t j = i;
+        while (j < v.size() && v[j].first == v[i].first) ++j;
+        const double mid = 0.5 * static_cast<double>(i + 1 + j);
+        for (std::size_t k = i; k < j; ++k)
+            if (v[k].second) rank_pos += mid, ++npos; else ++nneg;
+        i = j;
+    }
+    return npos && nneg ? (rank_pos - npos * (npos + 1) / 2) / (npos * nneg) : 0.5;
+}
+
+// AUROC of f, and of f - g when g is given, with 95% bootstrap intervals over pairs (one pair per subject); and the
+// share of pairs whose true member scores higher.
+struct Read { double auc, lo, hi, pair_acc; };
+Read read(const vector<Item>& it, const vector<std::size_t>& pt, const vector<std::size_t>& pf, const Score& f, const Score* g = nullptr) {
+    vector<std::size_t> all;
+    double acc = 0;
+    for (std::size_t k = 0; k < pt.size(); ++k) {
+        all.push_back(pt[k]), all.push_back(pf[k]);
+        const double a = f(it[pt[k]]), b = f(it[pf[k]]);
+        acc += a > b ? 1.0 : a == b ? 0.5 : 0.0;
+    }
+    Read r{auroc(it, all, f) - (g ? auroc(it, all, *g) : 0.0), 0, 0, pt.empty() ? 0.0 : acc / static_cast<double>(pt.size())};
+    std::mt19937_64 rng(20261028);
+    vector<double> bs;
+    for (int rep = 0; rep < 2000 && !pt.empty(); ++rep) {
+        vector<std::size_t> idx;
+        for (std::size_t k = 0; k < pt.size(); ++k) {
+            const std::size_t j = rng() % pt.size();
+            idx.push_back(pt[j]), idx.push_back(pf[j]);
+        }
+        bs.push_back(auroc(it, idx, f) - (g ? auroc(it, idx, *g) : 0.0));
+    }
+    std::sort(bs.begin(), bs.end());
+    if (!bs.empty()) r.lo = bs[49], r.hi = bs[1949];
+    return r;
+}
+
+// One planted set: its reduced store, its pairs, and the counts of what was skipped or dropped.
+struct PlantedSet {
+    ecs::TripleStore st;
+    vector<Item> it;
+    std::size_t subjects = 0, held = 0, skipped_unseen = 0, dropped_gone = 0, dropped_nofalse = 0;
+};
+
+// The planted-set rule on the shuffled subjects from `from` on: each subject's triples are shuffled and the first whose
+// object occurs for another subject is held out, until held + skipped reaches `limit`; then the reduced store (the full
+// store without these hold-outs) and the false partners. Returns where the next set starts. Every draw is from `rng`.
+std::size_t build_set(PlantedSet& ps, const vector<string>& subj, std::size_t from, std::size_t limit,
+                      std::map<string, vector<std::pair<string, string>>>& by_subj, const ecs::TripleStore& full,
+                      std::unordered_map<string, std::set<string>>& wd, std::mt19937_64& rng) {
+    auto shuffle = [&](auto& v) { for (std::size_t i = v.size(); i > 1; --i) std::swap(v[i - 1], v[rng() % i]); };
+    struct Held { string s, r, o; };
+    vector<Held> held;
+    std::set<string> held_keys;
+    std::size_t i = from;
+    for (; i < subj.size() && held.size() + ps.skipped_unseen < limit; ++i) {
+        auto fs = by_subj[subj[i]];
+        shuffle(fs);
+        bool got = false;
+        for (const auto& [r, o] : fs)
+            if (full.count(r, o) >= 2) {
+                held.push_back({subj[i], r, o});
+                held_keys.insert(subj[i] + '\x1f' + r + '\x1f' + o);
+                got = true;
+                break;
+            }
+        if (!got) ++ps.skipped_unseen;
+    }
+    ps.subjects = i - from, ps.held = held.size();
+    std::unordered_map<string, vector<string>> objects_of_rel;  // one entry per triple, in subject order
+    for (const auto& [s, fs] : by_subj)
+        for (const auto& [r, o] : fs)
+            if (!held_keys.count(s + '\x1f' + r + '\x1f' + o)) ps.st.add(s, r, o), objects_of_rel[r].push_back(o);
+    for (const auto& h : held) {
+        if (ps.st.count(h.r, h.o) == 0) { ++ps.dropped_gone; continue; }
+        const auto& pool = objects_of_rel[h.r];
+        const auto& wds = wd[h.s + '\x1f' + h.r];
+        const int ri = rel_index(h.r);
+        const Date hd = is_datey(ri) ? parse_date_str(h.o) : Date{};
+        string neg;
+        for (int t = 0; t < 100 && neg.empty(); ++t) {
+            const string& c = pool[rng() % pool.size()];
+            if (c == h.o || c == h.s || full.has(h.s, h.r, c) || wds.count(lower(c))) continue;
+            if (is_datey(ri)) {
+                const Date cd = parse_date_str(c);
+                if (cd.ok() && hd.ok() && cd.y == hd.y) continue;
+            }
+            neg = c;
+        }
+        if (neg.empty()) { ++ps.dropped_nofalse; continue; }
+        const bool dev = ((fnv(h.s) >> 7) & 1) == 0;
+        const int pr = static_cast<int>(ps.it.size() / 2);
+        Item a, b;
+        a.s = b.s = h.s, a.r = b.r = h.r, a.o = h.o, b.o = neg, a.label = 1, b.label = 0, a.pair = b.pair = pr, a.dev = b.dev = dev;
+        ps.it.push_back(a), ps.it.push_back(b);
+    }
+    // The raw terms, against this set's reduced store.
+    const ecs::LinkPredictor lp(ps.st, {}), lp_nocopy(ps.st, {1.0, false});
+    for (auto& x : ps.it) {
+        x.base = ecs::base_rate(ps.st, x.r, x.o);
+        x.p = lp.prob(x.s, x.r, x.o);
+        x.p_nocopy = lp_nocopy.prob(x.s, x.r, x.o);
+        x.aa = ecs::adamic_adar(ps.st, x.s, x.o);
+        x.hard = hard_constraint(ps.st, x.s, rel_index(x.r), x.o);
+        x.bridging = ecs::graph_distance(ps.st, x.s, x.o, 6) - 1;
+        x.impact = ecs::hypothesis_impact(ps.st.has_relation(x.s, x.r) ? 0.0 : 1.0, 0.0);
+        x.nov = ecs::novelty_bits(x.p);
+        x.dl = ecs::compression_gain_bits(lp, ps.st, x.s, x.r, x.o);
+    }
+    return i;
+}
+
+int run(int argc, char** argv) {
+    if (argc < 5) {
+        std::fprintf(stderr, "usage: pattern_learn --score-planted SEEDS.tsv WD_VALUES.tsv OUT_PREFIX [--subjects N] [--read-test] [--read-fresh]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[4];
+    std::size_t nsub = 2000;
+    bool read_test = false, read_fresh = false;
+    for (int i = 5; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--subjects" && i + 1 < argc) nsub = static_cast<std::size_t>(std::atoll(argv[++i]));
+        else if (a == "--read-test") read_test = true;
+        else if (a == "--read-fresh") read_fresh = true;
+        else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
+    }
+    // The store: distinct seed triples of a known relation.
+    std::map<string, vector<std::pair<string, string>>> by_subj;  // sorted, so the order does not depend on the file
+    std::set<string> seen;
+    {
+        std::ifstream f(argv[2]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() != 6 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+            if (seen.insert(c[0] + '\x1f' + c[1] + '\x1f' + c[2]).second) by_subj[c[0]].push_back({c[1], c[2]});
+        }
+    }
+    ecs::TripleStore full;
+    for (auto& [s, fs] : by_subj) {
+        std::sort(fs.begin(), fs.end());
+        for (const auto& [r, o] : fs) full.add(s, r, o);
+    }
+    std::unordered_map<string, std::set<string>> wd;  // (s, r) -> lowered Wikidata surfaces
+    {
+        std::ifstream f(argv[3]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 3) continue;
+            for (const auto& x : split(c[2], '|')) wd[c[0] + '\x1f' + c[1]].insert(lower(x));
+        }
+    }
+    // Qualifying subjects (two or more triples), shuffled (Fisher-Yates with mt19937_64, the same on every platform).
+    std::mt19937_64 rng(20261028);
+    vector<string> subj;
+    for (const auto& [s, fs] : by_subj)
+        if (fs.size() >= 2) subj.push_back(s);
+    for (std::size_t i = subj.size(); i > 1; --i) std::swap(subj[i - 1], subj[rng() % i]);
+    PlantedSet A, F;  // S6's planted set (dev and test halves), then the fresh set (S6b) from the subjects A did not use
+    const std::size_t next = build_set(A, subj, 0, nsub, by_subj, full, wd, rng);
+    build_set(F, subj, next, std::numeric_limits<std::size_t>::max(), by_subj, full, wd, rng);
+    char b[512];
+    for (const auto* ps : {&A, &F}) {
+        std::snprintf(b, sizeof b, "S6 %s: subjects %zu, held out %zu (skipped: no seen object %zu) | reduced store %zu of %zu triples | pairs %zu (dropped: object gone %zu, no false partner %zu)",
+                      ps == &A ? "planted" : "fresh", ps->subjects, ps->held, ps->skipped_unseen, ps->st.size(), full.size(), ps->it.size() / 2, ps->dropped_gone, ps->dropped_nofalse);
+        std::cout << b << "\n";
+    }
+    vector<std::size_t> dt, df, tt, tf, ft, ff;  // dev / test / fresh pairs: the true and the false member
+    for (std::size_t i = 0; i + 1 < A.it.size(); i += 2) (A.it[i].dev ? dt : tt).push_back(i), (A.it[i].dev ? df : tf).push_back(i + 1);
+    for (std::size_t i = 0; i + 1 < F.it.size(); i += 2) ft.push_back(i), ff.push_back(i + 1);
+    std::cout << "S6 dev pairs " << dt.size() << " test pairs " << tt.size() << " fresh pairs " << ft.size() << "\n";
+    // Everything fitted is fitted on A's dev half: the z-score pools and the isotonic fits.
+    auto logit = [](double p) { p = std::min(1 - 1e-12, std::max(1e-12, p)); return std::log(p / (1 - p)); };
+    auto dev_pool = [&](const Score& f) {
+        vector<double> v;
+        for (std::size_t i : dt) v.push_back(f(A.it[i])), v.push_back(f(A.it[i + 1]));
+        return ecs::pool_stats(v);
+    };
+    const Score lp_raw = [=](const Item& x) { return logit(x.p); }, lpn_raw = [=](const Item& x) { return logit(x.p_nocopy); };
+    const Score aa_raw = [](const Item& x) { return std::log1p(x.aa); };
+    const auto zp = dev_pool(lp_raw), zpn = dev_pool(lpn_raw), za = dev_pool(aa_raw);
+    auto fit = [&](const Score& raw, bool hard) {
+        vector<double> p;
+        vector<int> y;
+        for (std::size_t i : dt) p.push_back(raw(A.it[i])), y.push_back(1), p.push_back(raw(A.it[i + 1])), y.push_back(0);
+        auto cal = std::make_shared<ecs::IsotonicCalibrator>();
+        cal->fit(p, y);
+        return Score([=](const Item& x) { return ecs::plausibility_prior(1.0, cal->predict(raw(x)), hard ? x.hard : 1.0); });
+    };
+    const Score s_full = [=](const Item& x) { return ecs::zscore(lp_raw(x), zp) + ecs::zscore(aa_raw(x), za); };
+    const Score s_nocopy = [=](const Item& x) { return ecs::zscore(lpn_raw(x), zpn) + ecs::zscore(aa_raw(x), za); };
+    const Score p0_full = fit(s_full, true);
+    const vector<std::pair<string, Score>> abl = {
+        {"joint_removed", fit([](const Item& x) { return x.p_nocopy; }, false)},  // no path, no constraint, no copy rules
+        {"without_path", fit([](const Item& x) { return x.p; }, true)},
+        {"without_constraint", fit(s_full, false)},
+        {"without_copy_rules", fit(s_nocopy, true)},
+        {"without_rules", fit([](const Item& x) { return x.base; }, false)}};
+    // The joint test (S6b): keep {path, constraint, copy rules} when removing them together costs >= 0.01 on dev, with
+    // the interval of the drop above 0.
+    const Read joint = read(A.it, dt, df, p0_full, &abl[0].second);
+    const bool keep = joint.auc >= 0.01 && joint.lo > 0.0;
+    std::snprintf(b, sizeof b, "S6b JOINT dev drop %.4f ci95 %.4f %.4f -> %s", joint.auc, joint.lo, joint.hi, keep ? "keep path, constraint and copy rules" : "cut all three");
+    std::cout << b << "\n";
+    const Score p0 = keep ? p0_full : abl[0].second;
+    for (auto* ps : {&A, &F})
+        for (auto& x : ps->it) x.p0 = p0(x);
+    const auto zn = dev_pool([](const Item& x) { return x.nov; }), zi = dev_pool([](const Item& x) { return x.impact; });
+    const auto zd = dev_pool([](const Item& x) { return x.dl; }), zb = dev_pool([](const Item& x) { return x.bridging; });
+    for (auto* ps : {&A, &F})
+        for (auto& x : ps->it) {
+            x.inter = ecs::interestingness(ecs::zscore(x.nov, zn), ecs::zscore(x.impact, zi), ecs::zscore(x.dl, zd), ecs::zscore(x.bridging, zb));
+            x.prio = ecs::voi_priority(ecs::expected_information_gain(x.p0, 0.9, 0.9).eig, x.impact, x.inter, 1.0);
+        }
+    const vector<std::pair<string, Score>> terms = {
+        {"P0", [](const Item& x) { return x.p0; }},
+        {"base_rate", [](const Item& x) { return x.base; }},
+        {"hard_constraint", [](const Item& x) { return x.hard; }},
+        {"novelty", [](const Item& x) { return x.nov; }},
+        {"compression_dL", [](const Item& x) { return x.dl; }},
+        {"bridging", [](const Item& x) { return x.bridging; }},
+        {"impact", [](const Item& x) { return x.impact; }},
+        {"interestingness", [](const Item& x) { return x.inter; }},
+        {"priority", [](const Item& x) { return x.prio; }}};
+    auto pr = [&](const char* tag, const string& name, const Read& r, const char* what = "auroc") {
+        std::snprintf(b, sizeof b, "%s %-22s %s %.4f ci95 %.4f %.4f pair_acc %.4f", tag, name.c_str(), what, r.auc, r.lo, r.hi, r.pair_acc);
+        std::cout << b << "\n";
+    };
+    auto table = [&](const char* tag, const vector<Item>& it, const vector<std::size_t>& pt, const vector<std::size_t>& pf) {
+        for (const auto& [name, f] : terms) pr(tag, name, read(it, pt, pf, f));
+        if (tag == string("FRESH") || tag == string("TEST") || tag == string("DEV")) {
+            const Read g = read(it, pt, pf, terms[0].second);
+            std::snprintf(b, sizeof b, "%s GATE P0 auroc %.4f ci95 %.4f %.4f -> %s (>= 0.75)", tag, g.auc, g.lo, g.hi, g.auc >= 0.75 ? "met" : "missed");
+            std::cout << b << "\n";
+        }
+        for (const auto& [name, f] : abl) {
+            pr(tag, name, read(it, pt, pf, f));
+            pr(tag, "P0_minus_" + name, read(it, pt, pf, terms[0].second, &f), "delta");
+        }
+        for (const char* g : {"dates", "places", "lexical", "people"}) {
+            vector<std::size_t> gt, gf;
+            for (std::size_t k = 0; k < pt.size(); ++k)
+                if (string(group_of(it[pt[k]].r)) == g) gt.push_back(pt[k]), gf.push_back(pf[k]);
+            pr(tag, string("P0_") + g + "_" + std::to_string(gt.size()), read(it, gt, gf, terms[0].second));
+        }
+    };
+    table("DEV", A.it, dt, df);
+    if (read_test) table("TEST", A.it, tt, tf);
+    if (read_fresh) table("FRESH", F.it, ft, ff);
+    std::ofstream f(out + ".planted.tsv");
+    f << "set\tpair\tsplit\tlabel\tsubject\trelation\tobject\tbase\tp_link\taa\thard\tP0\tnovelty\tdL\tbridging\timpact\tI\tpriority\n";
+    for (const auto* ps : {&A, &F})
+        for (const auto& x : ps->it) {
+            if (ps == &A ? !x.dev && !read_test : !read_fresh) continue;
+            f << (ps == &A ? "planted" : "fresh") << '\t' << x.pair << '\t' << (ps == &F ? "fresh" : x.dev ? "dev" : "test") << '\t' << x.label << '\t' << x.s << '\t' << x.r << '\t'
+              << x.o << '\t' << x.base << '\t' << x.p << '\t' << x.aa << '\t' << x.hard << '\t' << x.p0 << '\t' << x.nov << '\t' << x.dl << '\t' << x.bridging << '\t'
+              << x.impact << '\t' << x.inter << '\t' << x.prio << "\n";
+        }
+    struct rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    std::snprintf(b, sizeof b, "S6 seconds %.1f max_rss_mb %.1f", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s6
+
 int main(int argc, char** argv) {
+    if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));

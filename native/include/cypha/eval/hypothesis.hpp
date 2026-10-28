@@ -5,6 +5,8 @@
 //   1     the firewall: what each mode may read and write; taint carried through derivation; the answer-mode view
 //   4.1   the hypothesis record; 4.2 lifecycle states and the legal transitions; 4.3 tiers
 //   6.1   P0 = generator reliability x support x constraint; 6.3 EIG and priority (also used by the gap map)
+//   6.1, 6.2 (S6) scoring a triple against a store: base rate, the link predictor (pairwise rules), Adamic-Adar, graph
+//         distance (bridging), novelty, compression gain, impact, z-scored interestingness
 //   7.2   Bayes-factor updating and the decision rule; 7.4 promotion through ECS on independent evidence only;
 //   7.5   refutation: kept, counted against the generator and the rule, blocks regeneration while cooling
 //   11    invariants I1 (no hypothetical item in answers), I4 (independent evidence), I7 (refuted kept, blocks), I8 (labels)
@@ -16,9 +18,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <map>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -66,6 +71,224 @@ inline double voi_priority(double eig, double impact, double interestingness = 0
 /// 6.1: P0 = generator reliability x support term x constraint term (0 hard violation, 0.5 soft, 1 none), each clamped.
 inline double plausibility_prior(double generator_reliability, double support, double constraint = 1.0) {
   return detail::ecs_clamp01(generator_reliability) * detail::ecs_clamp01(support) * detail::ecs_clamp01(constraint);
+}
+
+// ---------------------------------------------------------------------------
+// 6.1, 6.2 Scoring a (subject, relation, object) hypothesis against a store of triples (S6)
+// ---------------------------------------------------------------------------
+
+/// Novelty (6.2): surprisal under the store, -log2 P_store(h). P is floored at 1e-12.
+inline double novelty_bits(double p_store) { return -std::log2(std::max(1e-12, std::min(1.0, p_store))); }
+
+/// Impact (6.2): gaps the hypothesis would fill, contradictions it would resolve, and the demand on those gaps.
+inline double hypothesis_impact(double gaps_filled, double contradictions_resolved, double demand = 0.0,
+                                double demand_weight = 1.0) {
+  return gaps_filled + contradictions_resolved + demand_weight * demand;
+}
+
+/// Mean and standard deviation of a pool, for the z-scores of interestingness.
+struct PoolStats {
+  double mean = 0.0, sd = 0.0;
+};
+inline PoolStats pool_stats(const std::vector<double>& x) {
+  PoolStats p;
+  if (x.empty()) return p;
+  for (double v : x) p.mean += v;
+  p.mean /= static_cast<double>(x.size());
+  for (double v : x) p.sd += (v - p.mean) * (v - p.mean);
+  p.sd = std::sqrt(p.sd / static_cast<double>(x.size()));
+  return p;
+}
+inline double zscore(double x, const PoolStats& p) { return p.sd > 0.0 ? (x - p.mean) / p.sd : 0.0; }
+
+/// Interestingness (6.2): I = z(novelty) + z(impact) + z(dL) + z(bridging), each against the current pool.
+inline double interestingness(double z_novelty, double z_impact, double z_compression, double z_bridging) {
+  return z_novelty + z_impact + z_compression + z_bridging;
+}
+
+/// The store the scores read: distinct (s, r, o) triples. A node of the entity graph is any subject or object string;
+/// the graph is undirected, one edge per related pair.
+class TripleStore {
+ public:
+  struct Fact {
+    std::string r, o;
+  };
+
+  /// Adds a triple; a duplicate or an empty field is ignored. Returns whether it was new.
+  bool add(const std::string& s, const std::string& r, const std::string& o) {
+    if (s.empty() || r.empty() || o.empty() || !triples_.insert(key3(s, r, o)).second) return false;
+    facts_[s].push_back({r, o});
+    if (ro_[key2(r, o)]++ == 0) ++values_[r];
+    ++n_r_[r];
+    subjects_[key2(r, o)].push_back(s);
+    has_rel_.insert(key2(s, r));
+    if (s != o) adj_[s].insert(o), adj_[o].insert(s);
+    return true;
+  }
+
+  bool has(const std::string& s, const std::string& r, const std::string& o) const { return triples_.count(key3(s, r, o)) > 0; }
+  bool has_relation(const std::string& s, const std::string& r) const { return has_rel_.count(key2(s, r)) > 0; }
+  std::size_t count(const std::string& r, const std::string& o) const { return lookup(ro_, key2(r, o)); }
+  std::size_t count(const std::string& r) const { return lookup(n_r_, r); }
+  std::size_t values(const std::string& r) const { return lookup(values_, r); }
+  std::size_t size() const { return triples_.size(); }
+
+  const std::vector<Fact>& facts_of(const std::string& s) const {
+    static const std::vector<Fact> none;
+    auto it = facts_.find(s);
+    return it == facts_.end() ? none : it->second;
+  }
+  const std::vector<std::string>& subjects_with(const std::string& r, const std::string& o) const {
+    static const std::vector<std::string> none;
+    auto it = subjects_.find(key2(r, o));
+    return it == subjects_.end() ? none : it->second;
+  }
+  const std::unordered_set<std::string>& neighbours(const std::string& node) const {
+    static const std::unordered_set<std::string> none;
+    auto it = adj_.find(node);
+    return it == adj_.end() ? none : it->second;
+  }
+  const std::unordered_map<std::string, std::vector<Fact>>& subjects() const { return facts_; }
+
+ private:
+  static std::string key2(const std::string& a, const std::string& b) { return a + '\x1f' + b; }
+  static std::string key3(const std::string& a, const std::string& b, const std::string& c) { return a + '\x1f' + b + '\x1f' + c; }
+  static std::size_t lookup(const std::unordered_map<std::string, std::size_t>& m, const std::string& k) {
+    auto it = m.find(k);
+    return it == m.end() ? 0 : it->second;
+  }
+
+  std::unordered_set<std::string> triples_, has_rel_;
+  std::unordered_map<std::string, std::vector<Fact>> facts_;
+  std::unordered_map<std::string, std::size_t> ro_, n_r_, values_;
+  std::unordered_map<std::string, std::vector<std::string>> subjects_;
+  std::unordered_map<std::string, std::unordered_set<std::string>> adj_;
+};
+
+/// P(o | r) over the relation's values, add-alpha with one unseen value. With `self` set, (s, r, o) is itself in the
+/// store and is left out of the counts.
+inline double base_rate(const TripleStore& st, const std::string& r, const std::string& o, double alpha = 1.0, bool self = false) {
+  const double c = static_cast<double>(st.count(r, o)) - (self ? 1.0 : 0.0);
+  const double n = static_cast<double>(st.count(r)) - (self ? 1.0 : 0.0);
+  return (std::max(0.0, c) + alpha) / (std::max(0.0, n) + alpha * (static_cast<double>(st.values(r)) + 1.0));
+}
+
+/// Adamic-Adar of two nodes (6.1's support, S6b's path term): the sum over common neighbours z of 1 / ln(degree z).
+inline double adamic_adar(const TripleStore& st, const std::string& a, const std::string& b) {
+  const auto& na = st.neighbours(a);
+  const auto& nb = st.neighbours(b);
+  const auto& small = na.size() <= nb.size() ? na : nb;
+  const auto& large = na.size() <= nb.size() ? nb : na;
+  double s = 0.0;
+  for (const std::string& z : small)
+    if (large.count(z)) s += 1.0 / std::log(static_cast<double>(std::max<std::size_t>(2, st.neighbours(z).size())));
+  return s;
+}
+
+/// Shortest-path length between two nodes (breadth first), or cap + 1 when there is none within cap steps.
+inline int graph_distance(const TripleStore& st, const std::string& a, const std::string& b, int cap = 6) {
+  if (a == b) return 0;
+  std::unordered_map<std::string, int> seen{{a, 0}};
+  std::deque<std::string> q{a};
+  while (!q.empty()) {
+    const std::string u = q.front();
+    q.pop_front();
+    const int d = seen[u];
+    if (d >= cap) continue;
+    for (const std::string& v : st.neighbours(u)) {
+      if (v == b) return d + 1;
+      if (seen.emplace(v, d + 1).second) q.push_back(v);
+    }
+  }
+  return cap + 1;
+}
+
+/// The link predictor (6.1's support term, 6.2's P_store): P(s r o | the other facts of s), from pairwise rules over the
+/// store (DISCOVERY G2). For a body fact (r2, o2) of s the rule's confidence is c = (n_both + m b) / (n_body + m), where
+/// n_body counts the other subjects with (r2, o2) and some value of r, n_both those with (r, o) too, and b is the base
+/// rate. A body fact with the same object adds a copy rule: how often a subject's r and r2 share a value. Rules combine
+/// as naive Bayes in log-odds from b. m = 1 was chosen on S6's planted dev set (docs/reports/S6_HYPOTHESIS_SCORING.md).
+class LinkPredictor {
+ public:
+  struct Config {
+    double m = 1.0;          // shrinkage toward the base rate, in pseudo-subjects
+    bool copy_rules = true;  // rules "r and r2 share a value" (off only for S6's ablation)
+  };
+
+  LinkPredictor(const TripleStore& st, Config cfg) : st_(st), cfg_(cfg) {}
+
+  /// `skip`: a fact of s left out of the body (it is the one being coded); `extra`: a fact added to the body.
+  double prob(const std::string& s, const std::string& r, const std::string& o, const TripleStore::Fact* skip = nullptr,
+              const TripleStore::Fact* extra = nullptr) const {
+    const bool self = st_.has(s, r, o);
+    const double b = std::min(1.0 - 1e-9, base_rate(st_, r, o, 1.0, self));
+    double lo = logit(b);
+    auto use = [&](const TripleStore::Fact& f) {
+      if (f.r == r && f.o == o) return;
+      for (const double c : rule_confidences(s, r, o, f, b)) lo += logit(c) - logit(b);
+    };
+    for (const auto& f : st_.facts_of(s))
+      if (!(skip && f.r == skip->r && f.o == skip->o)) use(f);
+    if (extra) use(*extra);
+    return 1.0 / (1.0 + std::exp(-lo));
+  }
+
+ private:
+  static double logit(double p) {
+    p = std::min(1.0 - 1e-9, std::max(1e-9, p));
+    return std::log(p / (1.0 - p));
+  }
+
+  std::vector<double> rule_confidences(const std::string& s, const std::string& r, const std::string& o,
+                                       const TripleStore::Fact& f, double b) const {
+    std::vector<double> out;
+    double body = 0.0, both = 0.0;
+    for (const std::string& z : st_.subjects_with(f.r, f.o)) {
+      if (z == s || !st_.has_relation(z, r)) continue;
+      body += 1.0;
+      both += st_.has(z, r, o) ? 1.0 : 0.0;
+    }
+    if (body > 0.0) out.push_back((both + cfg_.m * b) / (body + cfg_.m));
+    if (cfg_.copy_rules && f.o == o && f.r != r) {
+      const auto [pair, same] = copy_stats(r, f.r);
+      if (pair > 0.0) out.push_back((same + cfg_.m * b) / (pair + cfg_.m));
+    }
+    return out;
+  }
+
+  /// Subjects with both relations, and those whose r and r2 share a value (cached per pair).
+  std::pair<double, double> copy_stats(const std::string& r, const std::string& r2) const {
+    const std::string k = r + '\x1f' + r2;
+    auto it = copy_.find(k);
+    if (it != copy_.end()) return it->second;
+    double pair = 0.0, same = 0.0;
+    for (const auto& [z, fs] : st_.subjects()) {
+      if (!st_.has_relation(z, r) || !st_.has_relation(z, r2)) continue;
+      pair += 1.0;
+      bool shared = false;
+      for (const auto& f : fs)
+        if (f.r == r && st_.has(z, r2, f.o)) shared = true;
+      same += shared ? 1.0 : 0.0;
+    }
+    return copy_[k] = {pair, same};
+  }
+
+  const TripleStore& st_;
+  Config cfg_;
+  mutable std::unordered_map<std::string, std::pair<double, double>> copy_;
+};
+
+/// Compression gain (6.2), bits: coding s's facts with the link predictor as the model, what h saves on s's other facts
+/// minus what h itself costs. dL = sum_f [log2 P(f | rest + h) - log2 P(f | rest)] + log2 P(h | facts of s).
+inline double compression_gain_bits(const LinkPredictor& lp, const TripleStore& st, const std::string& s,
+                                    const std::string& r, const std::string& o) {
+  const TripleStore::Fact h{r, o};
+  double gain = std::log2(std::max(1e-12, lp.prob(s, r, o)));
+  for (const auto& f : st.facts_of(s)) {
+    if (f.r == r && f.o == o) continue;
+    gain += std::log2(std::max(1e-12, lp.prob(s, f.r, f.o, &f, &h))) - std::log2(std::max(1e-12, lp.prob(s, f.r, f.o, &f)));
+  }
+  return gain;
 }
 
 // ---------------------------------------------------------------------------
