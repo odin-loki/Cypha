@@ -368,3 +368,4 @@ The qa class table has one context more than the `memprof3` harness's (1,562,353
 
 - The smaller class table (M2 + M3, three orders) is the default: `class_context.hpp`'s `Options` and a flagless `cyphalm_trie` class spec.
 - Returning freed build memory to the OS (`malloc_trim`, glibc only): not wanted. The tool stays portable.
+- The similar-context expert is a default in `qa`, `sample` and `context8k` (Odin; A4 report, A4b). Its 32-d int8 vectors and int8 keys add 42 MB resident (its first version added 142 MB); `qa` A0's peak 175 → 187 MB.

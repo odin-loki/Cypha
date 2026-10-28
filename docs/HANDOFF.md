@@ -18,7 +18,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 - saying it doesn't know rather than guessing.
 
 **Where it stands.**
-- **Language model.** BPC 2.298 on the enwik 8 MiB protocol (chat model 2.345). Fresh text: 2.166 with InfiniGram; 1.912 with the class and copy experts, 2.027 with class and similar-context (options, not defaults).
+- **Language model.** BPC 2.298 on the enwik 8 MiB protocol (chat model 2.345). Fresh text: 2.166 with InfiniGram; 1.912 with the class and copy experts, 2.027 with class and similar-context. The similar-context expert is on by default in `qa`, `sample` and `context8k`, off inside answers (Odin, 2026-10-28); class and copy are options.
 - **Text.** SCRIBE v2, the generation score that passes its ladder, calls the trie's text word salad (0.014; human 0.770). Surface S does not see it.
 - **Questions.** CyphaLM answers almost nothing by itself: 2 right, 0 wrong at a 2% wrong rate on dev with the fact shard; 0 on the frozen test. Its "I don't know" is real: precision 0.635, recall 0.94 on the test.
 - **RAM.** The qa model's resident memory fell from 228 MB to 76 MB (§4.3).
@@ -84,7 +84,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | B4 class-context expert | Fresh text 2.166 → 2.088 BPC (shape classes) | `B4_CLASS_CONTEXT_EXPERT.md` |
 | A1c, A2, A3 | Entity familiarity (AUROC 0.795), the copy expert, the fact shard (2 right, 0 wrong on dev), statement scoring (0) | `A1C_…`, `A2_A3_…` |
 | A1d / A2b answering variants | Span candidates pick the right entity 76 / 100 (E1: 63). The `low`-only don't-know token: dev 0.600 / 1.00, **test 0.635 / 0.94**. No variant names the entity in the tag | `A1D_A2B_ANSWERING_VARIANTS.md` |
-| A4 similar-context expert | Fresh text −0.061 BPC over trie + IG + class; no answers; with the fact shard it lets look-alike wrong answers through. An option | `A4_SIMILAR_CONTEXT_EXPERT.md` |
+| A4 / A4b similar-context expert | Fresh text −0.061 BPC over trie + IG + class; no answers by itself. **Now a default** in `qa`, `sample`, `context8k`, gated off inside answers (answers unchanged: C1L keeps 2 right, 0 wrong); 2.2 MB shipped vectors (`data/cyphalm/`); +42 MB resident | `A4_SIMILAR_CONTEXT_EXPERT.md` |
 | B4B language-model defaults | Class (shape, 3 orders) + copy (m 8, window 16,384): fresh text 1.912. **Defaults unchanged**: with the fact shard they echo the question (rule 3) | `B4B_LM_DEFAULTS.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
@@ -99,7 +99,9 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | Read | Value |
 |---|---|
 | BPC, holdout, learned mixture | 2.298 (bpc model); chat model 2.345 |
-| Fresh text | trie + IG 2.166; + class + copy 1.912; + class + similar-context 2.027 (options) |
+| Fresh text | trie + IG 2.166; + class + copy 1.912; + class + similar-context 2.027 |
+| `qa` holdout, default model | trie + IG 2.0716 → 1.9686 with the similar-context expert (default since A4b) |
+| Class expert's table | default `shape` = three orders, compact, seen once dropped (fresh 2.0853; Odin, 2026-10-28) |
 | Text, SCRIBE v2 | trie 0.014, trie + class 0.002, human 0.770 |
 | Q/A, frozen test (C1L) | 0 right kept at 2% wrong; don't-know precision 0.635, recall 0.94 |
 | Q/A, dev, with D4's shard (C1L) | 2 right, 0 wrong at 2% wrong |
@@ -139,7 +141,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 2. **The `low`-only don't-know token** (A1D/A2B): the form that lets the token and the fact shard work together (dev 2 right, 0 wrong). Odin allowed the token; this is a narrower form.
 3. **`ent_title` against `ent_bold`.** `ent_title` reads XML title tags; `ent_bold` reads none and meets D2 on dev (0.833 / 0.50) but halves recall.
 4. **The entity in the tag** needs a copy weight that depends on context (inside the answer or not). That changes the mixture.
-5. **Experts and the fact shard.** Class, copy and similar-context all lower BPC but hurt answering when the shard is in. A gate that turns them off after `Assistant: `, or a gate feature they cannot inflate?
+5. **Class and copy with the fact shard.** Both lower BPC but hurt answering when the shard is in. The similar-context expert now has a gate that turns it off inside answers (Odin: use it as soon as it is useful). The same gate for class and copy?
 6. **Which text score the rules use.** SCRIBE v2 passes its ladder; surface S does not, and scores the experts' word salad above human text.
 7. **Track S:** where gap demand comes from; Wikidata's type-level rate as P(exists); which knowledge the reason code describes; finer entity types (S3/S5 report).
 8. **PPMI-SVD without the evaluation bytes** as the standard vector file (its leak is worth 0.001 BPC).
@@ -168,6 +170,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 | Build | `cmake -S native -B <dir> -DCMAKE_BUILD_TYPE=Release && cmake --build <dir> --target <t> -j2 && ctest --test-dir <dir> -R <test>` |
 | Scratch results | `/root/work/<track>/` (lost when the container is reclaimed; every report says how to rebuild) |
 | Python with llama-cpp-python | `/root/work/teacher/venv/bin/python` (weights-only analytics) |
+| Similar-context vectors | `data/cyphalm/simvec_ppmi32.bin`, compiled in by CMake; `$CYPHA_SIMVEC` overrides; `--no-sim` turns the expert off |
 
 **Gotchas.**
 - **The machine:** 4 shared cores, 16 GB RAM. Use `nice`, give each agent its own files.

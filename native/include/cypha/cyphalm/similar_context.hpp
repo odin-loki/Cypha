@@ -16,12 +16,19 @@
 ///   CyphaLM's distribution with one lambda per bucket(), as cyphalm_trie mixes InfiniGram. A neighbour never lives
 ///   past the word being written, so the expert proposes bytes, never a stored passage (PLAN rule 10).
 /// - Batch-built over a text that must outlive the expert. RAM: about (dim rounded up to 16) + 4 bytes a key.
+/// - Vectors come as unit rows (`load`: ppmi_svd's .vectors.f32 and .vocab.tsv; the build finds the principal
+///   components) or already projected (`load_projected`: int8 rows with a scale each, as `save_projected` writes them
+///   after a build; the build then only centres them). A projected file from a build over a text gives that text the
+///   same keys as the full vectors, up to the int8 rounding of the rows.
 /// - Params' defaults are the design registered before A4's runs. The settings chosen on the holdout are W 2, equal
 ///   weights, k 2048, drop 0, 2048 lists with 32 probed (PPMI-SVD vectors): fresh text -0.061 BPC over trie +
 ///   InfiniGram + class.
 
 #include <algorithm>
 #include <cctype>
+#include <istream>
+#include <limits>
+#include <ostream>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -52,11 +59,16 @@ class SimilarContext {
         int iters = 8;          ///< k-means iterations
         std::uint64_t seed = 20261028;
     };
-    struct Vectors {  ///< unit word vectors, row r for word id r
+    struct Vectors {  ///< word vectors, row r for word id r
         int d = 0;
-        std::vector<float> v;
+        std::vector<float> v;            ///< unit rows (load); empty for projected vectors
+        std::vector<std::int8_t> q;      ///< projected rows (load_projected): row r is scale[r] * q[r * d .. r * d + d)
+        std::vector<float> scale;
         std::unordered_map<std::string, int> id;
-        std::size_t rows() const { return d ? v.size() / static_cast<std::size_t>(d) : 0; }
+        bool projected() const { return !scale.empty(); }
+        std::size_t rows() const {
+            return projected() ? scale.size() : d ? v.size() / static_cast<std::size_t>(d) : 0;
+        }
     };
     struct Hit {
         int live = 0;        ///< neighbours whose bytes agree with the tail
@@ -91,11 +103,116 @@ class SimilarContext {
         return V;
     }
 
+    /// A projected file: "CYSIMV1" and a zero byte, rows and dim (uint32), each row's word (a length byte and its
+    /// bytes), the rows' scales (float32), the rows (int8, rows x dim), then the FNV-1a hash of every byte before it.
+    /// Little-endian. Returns empty vectors and sets err on a bad file.
+    static Vectors load_projected(std::istream& in, std::string& err) {
+        Vectors V;
+        std::uint64_t h = 0xcbf29ce484222325ull;
+        auto get = [&](void* dst, std::size_t n) {
+            in.read(static_cast<char*>(dst), static_cast<std::streamsize>(n));
+            const auto* b = static_cast<const unsigned char*>(dst);
+            for (std::size_t i = 0; in && i < n; ++i) h = (h ^ b[i]) * 0x100000001b3ull;
+            return static_cast<bool>(in);
+        };
+        auto u32 = [&](std::uint32_t& x) {
+            unsigned char b[4];
+            if (!get(b, 4)) return false;
+            x = std::uint32_t{b[0]} | std::uint32_t{b[1]} << 8 | std::uint32_t{b[2]} << 16 | std::uint32_t{b[3]} << 24;
+            return true;
+        };
+        char magic[8];
+        std::uint32_t rows = 0, dim = 0;
+        if (!get(magic, 8) || std::memcmp(magic, "CYSIMV1", 8) != 0 || !u32(rows) || !u32(dim) || dim == 0 || dim > 4096 ||
+            rows == 0 || rows > (1u << 26))
+            return err = "not a projected vector file", Vectors{};
+        V.d = static_cast<int>(dim);
+        for (std::uint32_t r = 0; r < rows; ++r) {
+            unsigned char len = 0;
+            std::string w(255, '\0');
+            if (!get(&len, 1) || (len && !get(&w[0], len))) return err = "projected vector file cut short", Vectors{};
+            w.resize(len);
+            if (len) V.id.emplace(lower(w), static_cast<int>(r));
+        }
+        V.scale.resize(rows);
+        for (auto& f : V.scale) {
+            std::uint32_t x = 0;
+            if (!u32(x)) return err = "projected vector file cut short", Vectors{};
+            std::memcpy(&f, &x, 4);
+        }
+        V.q.resize(std::size_t{rows} * dim);
+        if (!get(V.q.data(), V.q.size())) return err = "projected vector file cut short", Vectors{};
+        const std::uint64_t want = h;
+        unsigned char b[8];
+        if (!in.read(reinterpret_cast<char*>(b), 8)) return err = "projected vector file cut short", Vectors{};
+        std::uint64_t got = 0;
+        for (int i = 7; i >= 0; --i) got = got << 8 | b[i];
+        if (got != want) return err = "projected vector file checksum mismatch", Vectors{};
+        return V;
+    }
+    static Vectors load_projected(const std::string& path, std::string& err) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) return err = "cannot read " + path, Vectors{};
+        return load_projected(in, err);
+    }
+
+    /// Write this expert's projected rows (its keys' coordinates for every word) after build(), int8 with a scale a row.
+    bool save_projected(std::ostream& out) const {
+        if (!rows_ || !dim_) return false;
+        std::uint64_t h = 0xcbf29ce484222325ull;
+        auto put = [&](const void* src, std::size_t n) {
+            const auto* b = static_cast<const unsigned char*>(src);
+            for (std::size_t i = 0; i < n; ++i) h = (h ^ b[i]) * 0x100000001b3ull;
+            out.write(static_cast<const char*>(src), static_cast<std::streamsize>(n));
+        };
+        auto u32 = [&](std::uint32_t x) {
+            const unsigned char b[4] = {static_cast<unsigned char>(x), static_cast<unsigned char>(x >> 8),
+                                        static_cast<unsigned char>(x >> 16), static_cast<unsigned char>(x >> 24)};
+            put(b, 4);
+        };
+        std::vector<std::string> word(rows_);
+        for (const auto& [w, r] : vec_.id)
+            if (static_cast<std::size_t>(r) < rows_ && w.size() < 256) word[static_cast<std::size_t>(r)] = w;
+        std::vector<float> sc(rows_);
+        std::vector<std::int8_t> qv(rows_ * static_cast<std::size_t>(dim_));
+        for (std::size_t r = 0; r < rows_; ++r) {
+            float mx = 0;
+            for (int d = 0; d < dim_; ++d) mx = std::max(mx, std::fabs(proj(r, d)));
+            sc[r] = mx > 0 ? mx / 127.0f : 0.0f;
+            for (int d = 0; d < dim_; ++d)
+                qv[r * static_cast<std::size_t>(dim_) + static_cast<std::size_t>(d)] =
+                    sc[r] > 0 ? static_cast<std::int8_t>(std::lround(std::clamp(proj(r, d) / sc[r], -127.0f, 127.0f))) : 0;
+        }
+        put("CYSIMV1", 8);
+        u32(static_cast<std::uint32_t>(rows_));
+        u32(static_cast<std::uint32_t>(dim_));
+        for (const auto& w : word) {
+            const unsigned char len = static_cast<unsigned char>(w.size());
+            put(&len, 1);
+            put(w.data(), w.size());
+        }
+        for (float f : sc) {
+            std::uint32_t x = 0;
+            std::memcpy(&x, &f, 4);
+            u32(x);
+        }
+        put(qv.data(), qv.size());
+        unsigned char b[8];
+        for (int i = 0; i < 8; ++i) b[i] = static_cast<unsigned char>(h >> (8 * i));
+        out.write(reinterpret_cast<const char*>(b), 8);
+        return static_cast<bool>(out);
+    }
+
     SimilarContext(Vectors vec, Params p) : vec_(std::move(vec)), p_(p) {
         p_.W = std::max(1, p_.W);
         p_.k = std::max(1, p_.k);
-        p_.drop = std::clamp(p_.drop, 0, vec_.d - 1);
-        dim_ = p_.dim <= 0 || p_.dim > vec_.d - p_.drop ? vec_.d - p_.drop : p_.dim;
+        if (vec_.projected()) {  // already the coordinates: no components dropped; dim keeps the leading ones
+            p_.drop = 0;
+            dim_ = p_.dim <= 0 || p_.dim > vec_.d ? vec_.d : p_.dim;
+        } else {
+            p_.drop = std::clamp(p_.drop, 0, vec_.d - 1);
+            dim_ = p_.dim <= 0 || p_.dim > vec_.d - p_.drop ? vec_.d - p_.drop : p_.dim;
+        }
         stride_ = (dim_ + 15) / 16 * 16;
     }
 
@@ -115,6 +232,7 @@ class SimilarContext {
     void build(const std::uint8_t* text, std::size_t n) {
         text_ = text;
         n_ = n;
+        rows_ = vec_.rows();
         std::vector<std::pair<std::uint32_t, int>> words;  // (end, word id or -1)
         std::vector<double> count(vec_.rows(), 0);
         for (std::size_t i = 0; i < n;) {
@@ -131,9 +249,30 @@ class SimilarContext {
         weight_.assign(vec_.rows(), 1.0f);
         for (std::size_t r = 0; p_.sif && r < weight_.size(); ++r)
             weight_[r] = static_cast<float>(p_.sif_a / (p_.sif_a + count[r] / std::max(total, 1.0)));
-        // Principal components of the weighted means (in the vectors' own space) on a sample of contexts.
+        const std::size_t step = std::max<std::size_t>(1, words.size() / 40000);  // the sample of contexts
+        if (vec_.projected()) {  // the rows are the coordinates already: only the centre is needed
+            std::vector<double> mu(static_cast<std::size_t>(dim_), 0);
+            std::vector<float> x(static_cast<std::size_t>(dim_));
+            std::size_t m = 0;
+            for (std::size_t w = 0; w < words.size(); w += step)
+                if (proj_mean(window(words, w), x.data())) {
+                    ++m;
+                    for (int d = 0; d < dim_; ++d) mu[static_cast<std::size_t>(d)] += x[static_cast<std::size_t>(d)];
+                }
+            if (m == 0) return;
+            mu_proj_.assign(static_cast<std::size_t>(dim_), 0.0f);
+            for (int d = 0; d < dim_; ++d) mu_proj_[static_cast<std::size_t>(d)] = static_cast<float>(mu[static_cast<std::size_t>(d)] / static_cast<double>(m));
+        } else if (!pca(words, step)) {
+            return;
+        }
+        build_index(words);
+    }
+
+ private:
+    // Principal components of the weighted means (in the vectors' own space) on a sample of contexts; the rows'
+    // projections and the projected centre. The unit rows are then freed: queries read only the projections.
+    bool pca(const std::vector<std::pair<std::uint32_t, int>>& words, std::size_t step) {
         const int D = vec_.d;
-        const std::size_t step = std::max<std::size_t>(1, words.size() / 40000);
         std::vector<double> mu(static_cast<std::size_t>(D), 0), C(static_cast<std::size_t>(D) * D, 0), x(static_cast<std::size_t>(D));
         std::size_t m = 0;
         for (std::size_t w = 0; w < words.size(); w += step) {
@@ -144,7 +283,7 @@ class SimilarContext {
                 for (int b = a; b < D; ++b) C[static_cast<std::size_t>(a) * D + b] += x[static_cast<std::size_t>(a)] * x[static_cast<std::size_t>(b)];
             }
         }
-        if (m == 0) return;
+        if (m == 0) return false;
         for (auto& v : mu) v /= static_cast<double>(m);
         for (int a = 0; a < D; ++a)
             for (int b = a; b < D; ++b)
@@ -165,14 +304,26 @@ class SimilarContext {
                 proj_[r * static_cast<std::size_t>(dim_) + static_cast<std::size_t>(c)] = static_cast<float>(t);
             }
         }
-        // Keys.
+        std::vector<float>().swap(vec_.v);
+        return true;
+    }
+
+    // The ids of the words w - W + 1 .. w, newest first.
+    std::vector<int> window(const std::vector<std::pair<std::uint32_t, int>>& words, std::size_t w) const {
+        std::vector<int> ids;
+        for (std::size_t j = w + 1; j-- > 0 && w - j < static_cast<std::size_t>(p_.W);) ids.push_back(words[j].second);
+        return ids;
+    }
+
+    // Keys at every word end, then the inverted file. The keys are put in list order in place.
+    void build_index(const std::vector<std::pair<std::uint32_t, int>>& words) {
         std::vector<std::int8_t> keys;
         std::vector<std::uint32_t> pos;
+        keys.reserve(words.size() * static_cast<std::size_t>(stride_));  // at most one key a word: no reallocation
+        pos.reserve(words.size());
         std::vector<std::int8_t> q(static_cast<std::size_t>(stride_));
         for (std::size_t w = 0; w < words.size(); ++w) {
-            std::vector<int> ids;
-            for (std::size_t j = w + 1; j-- > 0 && w - j < static_cast<std::size_t>(p_.W);) ids.push_back(words[j].second);
-            if (!key_of(ids, q.data())) continue;
+            if (!key_of(window(words, w), q.data())) continue;
             keys.insert(keys.end(), q.begin(), q.end());
             pos.push_back(words[w].first);
         }
@@ -206,23 +357,31 @@ class SimilarContext {
                 quantize(f.data(), &cent_[static_cast<std::size_t>(c) * stride_]);
             }
         }
-        std::vector<int> list(N);
+        std::vector<std::uint32_t> slot(N);  // each key's list, then its place in list order
         start_.assign(static_cast<std::size_t>(L) + 1, 0);
-        for (std::size_t i = 0; i < N; ++i) ++start_[static_cast<std::size_t>(list[i] = nearest(&keys[i * stride_], L)) + 1];
+        for (std::size_t i = 0; i < N; ++i)
+            ++start_[(slot[i] = static_cast<std::uint32_t>(nearest(&keys[i * stride_], L))) + std::size_t{1}];
         for (int c = 0; c < L; ++c) start_[static_cast<std::size_t>(c) + 1] += start_[static_cast<std::size_t>(c)];
-        keys_.assign(N * stride_, 0);
-        pos_.assign(N, 0);
         std::vector<std::uint32_t> fill(start_.begin(), start_.end() - 1);
-        for (std::size_t i = 0; i < N; ++i) {
-            const std::uint32_t at = fill[static_cast<std::size_t>(list[i])]++;
-            std::memcpy(&keys_[static_cast<std::size_t>(at) * stride_], &keys[i * stride_], static_cast<std::size_t>(stride_));
-            pos_[at] = pos[i];
-        }
+        for (std::size_t i = 0; i < N; ++i) slot[i] = fill[slot[i]]++;
+        std::vector<std::int8_t> tmp(static_cast<std::size_t>(stride_));
+        for (std::size_t i = 0; i < N; ++i)  // follow each cycle of the permutation
+            while (slot[i] != i) {
+                const std::size_t j = slot[i];
+                std::memcpy(tmp.data(), &keys[i * stride_], static_cast<std::size_t>(stride_));
+                std::memcpy(&keys[i * stride_], &keys[j * stride_], static_cast<std::size_t>(stride_));
+                std::memcpy(&keys[j * stride_], tmp.data(), static_cast<std::size_t>(stride_));
+                std::swap(pos[i], pos[j]);
+                std::swap(slot[i], slot[j]);
+            }
+        keys_ = std::move(keys);
+        pos_ = std::move(pos);
         lists_ = L;
         cache_ = ~std::uint64_t{0};
         restart_ = true;
     }
 
+ public:
     /// The next-byte distribution after h[0..n) (oldest byte first): the live neighbours' proposals, summing to 1, or
     /// all zero when no neighbour is live (live = 0, bucket 0).
     Hit predict(const std::uint8_t* h, std::size_t n, double P[256]) const {
@@ -286,7 +445,11 @@ class SimilarContext {
     }
 
     std::size_t keys() const { return pos_.size(); }
-    std::size_t bytes() const { return keys_.size() + pos_.size() * 4 + cent_.size() + proj_.size() * 4; }
+    /// The index and the word coordinates (keys, positions, centroids, list starts, rows); the word map not counted.
+    std::size_t bytes() const {
+        return keys_.size() + pos_.size() * 4 + cent_.size() + start_.size() * 4 + proj_.size() * 4 + vec_.q.size() +
+               vec_.scale.size() * 4 + vec_.v.size() * 4;
+    }
     int dim() const { return dim_; }
     int lists() const { return lists_; }
     std::size_t queries() const { return lat_us_.size(); }
@@ -368,18 +531,32 @@ class SimilarContext {
         return true;
     }
 
-    // The key of a context from its word ids (unknown = -1): the projected weighted mean, centred, unit, as int8.
-    bool key_of(const std::vector<int>& ids, std::int8_t* q) const {
-        std::vector<float> x(static_cast<std::size_t>(stride_), 0.0f);
+    // Row r's coordinate d: the PCA projection (unit rows) or the stored int8 row times its scale (projected rows).
+    float proj(std::size_t r, int d) const {
+        return vec_.projected() ? vec_.scale[r] * vec_.q[r * static_cast<std::size_t>(vec_.d) + static_cast<std::size_t>(d)]
+                                : proj_[r * static_cast<std::size_t>(dim_) + static_cast<std::size_t>(d)];
+    }
+
+    // The weighted mean of the known words' coordinates (x[0..dim)). False if none is known.
+    bool proj_mean(const std::vector<int>& ids, float* x) const {
+        std::fill(x, x + dim_, 0.0f);
         double m = 0;
         for (int id : ids) {
             if (id < 0) continue;
             const float a = weight_[static_cast<std::size_t>(id)];
-            for (int d = 0; d < dim_; ++d) x[static_cast<std::size_t>(d)] += a * proj_[static_cast<std::size_t>(id) * dim_ + d];
+            for (int d = 0; d < dim_; ++d) x[d] += a * proj(static_cast<std::size_t>(id), d);
             ++m;
         }
         if (m == 0) return false;
-        for (int d = 0; d < dim_; ++d) x[static_cast<std::size_t>(d)] = static_cast<float>(x[static_cast<std::size_t>(d)] / m) - mu_proj_[static_cast<std::size_t>(d)];
+        for (int d = 0; d < dim_; ++d) x[d] = static_cast<float>(x[d] / m);
+        return true;
+    }
+
+    // The key of a context from its word ids (unknown = -1): the projected weighted mean, centred, unit, as int8.
+    bool key_of(const std::vector<int>& ids, std::int8_t* q) const {
+        std::vector<float> x(static_cast<std::size_t>(stride_), 0.0f);
+        if (!proj_mean(ids, x.data())) return false;
+        for (int d = 0; d < dim_; ++d) x[static_cast<std::size_t>(d)] -= mu_proj_[static_cast<std::size_t>(d)];
         return quantize(x.data(), q);
     }
 
@@ -398,7 +575,7 @@ class SimilarContext {
         return s;
     }
     int nearest(const std::int8_t* x, int L) const {
-        int best = 0, bs = -1 << 30;
+        int best = 0, bs = std::numeric_limits<int>::min();
         for (int c = 0; c < L; ++c) {
             const int s = dot(x, &cent_[static_cast<std::size_t>(c) * stride_]);
             if (s > bs) bs = s, best = c;
@@ -484,7 +661,8 @@ class SimilarContext {
     int dim_ = 0, stride_ = 16, lists_ = 0;
     const std::uint8_t* text_ = nullptr;
     std::size_t n_ = 0;
-    std::vector<float> weight_, proj_, mu_proj_;
+    std::size_t rows_ = 0;
+    std::vector<float> weight_, proj_, mu_proj_;  // proj_: the unit rows' projections (empty for projected rows)
     std::vector<std::int8_t> keys_, cent_;  // keys grouped by list; centroids
     std::vector<std::uint32_t> pos_, start_;
     mutable std::uint64_t cache_ = ~std::uint64_t{0};  // the last searched context, and its neighbours

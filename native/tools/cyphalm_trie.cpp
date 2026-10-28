@@ -19,6 +19,14 @@
 // 8 MiB are the same bytes. CyphaLM answers every task: there is no string-search
 // answering here (PLAN rule 10).
 //
+// The similar-context expert (A4, similar_context.hpp; docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md "A4b") is a default in
+// qa, sample and context8k: the spec `default` (W=2, equal word weights, k=2048, 2048 lists with 32 probed, keys over
+// wiki train) with the projected PPMI-SVD file data/cyphalm/simvec_ppmi32.bin, read from $CYPHA_SIMVEC, else from
+// CYPHA_SIMVEC_DEFAULT (a compile-time path), else from that path under the current directory. It is off inside every
+// answer (in_answer), so answers are written without it. --no-sim leaves it out; without the file those subcommands
+// stop and say so. bpc, chat and probe never build it: bpc's lines are the trie's reference numbers, and chat and
+// probe write only answers.
+//
 // Subcommands (stdout carries the numbers, stderr the progress):
 //   bpc [wiki] [--negative] [--no-guard]
 //        fold_lm + online_mix. Prints the context counts, hash accounting, the
@@ -36,9 +44,12 @@
 //        Wikipedia-fact question (greedy and nucleus 0.9, T = 0.8).
 //   context8k [wiki] [dolly]
 //        trie_context_8k: InfiniGram (order up to 8192) mixed with the trie, BPC at five
-//        caps, matched-length histogram, 50 questions with 30 Dolly turns held out.
+//        caps, matched-length histogram, 50 questions with 30 Dolly turns held out. A4: trie_plus_context_8192_sim_bpc
+//        adds the similar-context expert (lambdas on the first half; --no-sim leaves the line out).
 //   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]
 //        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for `scribe ladder --gen-trie`.
+//        A4: with the similar-context expert (its lambdas over the trie on the first half of the holdout) the files
+//        start with a MODEL line and keep the GEN kinds; --no-sim writes the trie alone (B1's files).
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]
@@ -54,7 +65,8 @@
 //        second half (lambdas on the first), the index's recall against an exact search, build time, table bytes and
 //        query latency; --sim-fresh adds the fresh text (lambdas on the whole holdout), --sim-surface surface S of
 //        trie + sim and trie + class + sim. SPEC is vec=PREFIX (PREFIX.vectors.f32 and PREFIX.vocab.tsv, as ppmi_svd
-//        writes them) plus W, k, T, min, sif, dim, drop, lists, probe, tail (see parse_sim).
+//        writes them) or a projected file (simvec), plus W, k, T, min, sif, dim, drop, lists, probe, tail, src, gate (see
+//        parse_sim); the token `default` is the default spec.
 //        --out FILE writes the samples (systems trie, trie+cls:SPEC) and the human continuations (human) as JSON
 //        lines for the SCRIBE model ladder.
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
@@ -95,7 +107,11 @@
 //        A4: --sim SPEC adds the similar-context expert to every model, after the class expert and before the copy
 //        expert (src=all: keys over InfiniGram's bytes, wiki train + chat; src=wiki: wiki train only), lambdas on the
 //        holdout's first half; SIM_NB prints the three nearest stored contexts at each dev chat prompt, LATENCY the
-//        decode time a question.
+//        decode time a question. The expert is a default here (spec `default`; --no-sim leaves it out); gate=0 in a
+//        spec lets it into answers, for comparison only.
+//   simvec [wiki] --sim vec=PREFIX[,...] --out FILE
+//        A4: builds the similar-context expert of the spec over the train bytes and writes its projected word rows (int8,
+//        a scale a row) as the file the default reads.
 //   dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608]
 //        A1 training text: T-QA relation templates filled with page titles from enwik8 after
 //        --from whose lowered text never occurs in the lowered training bytes (wiki train +
@@ -226,6 +242,7 @@ struct Args {
     std::string model, save;  // M7: serve a stored packed trie (chat, sample); store the one just trained
     std::vector<std::string> sims;               // A4: similar-context expert specs (cls: each; qa: the first)
     bool sim_fresh = false, sim_surface = false;  // A4, cls: also the fresh text / surface S
+    bool no_sim = false;                          // A4: the similar-context expert off where it is a default
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -271,6 +288,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--sim") a.sims.push_back(next());
         else if (s == "--sim-fresh") a.sim_fresh = true;
         else if (s == "--sim-surface") a.sim_surface = true;
+        else if (s == "--no-sim") a.no_sim = true;
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
         else if (s == "--save") a.save = next();
@@ -597,6 +615,14 @@ int count_bucket(std::uint64_t t) { return t <= 1 ? 0 : t <= 3 ? 1 : t <= 15 ? 2
 int bucket(int n, std::uint64_t t) { return len_bucket(n) * 4 + count_bucket(t); }
 constexpr int kBuckets = 28;
 
+// A4, defined below with the similar-context expert's spec: the expert where it is a default, and its use in sampling.
+void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, const std::vector<int>& bk,
+                 std::size_t upto, int nb, double* lam);
+std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
+std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
+                              const double* lam, const std::string& prompt, int n, std::uint32_t seed,
+                              const SimilarContext* sc, const double* lsm, double temperature);
+
 int cmd_context8k(const Args& a) {
     const Config& cfg = a.cfg;
     std::vector<std::uint8_t> data;
@@ -659,7 +685,8 @@ int cmd_context8k(const Args& a) {
 
     const int caps[] = {4, 16, 64, 512, 8192};
     double lam8k[kBuckets] = {0};
-    std::vector<int> n8k(H);
+    std::vector<int> n8k(H), bk8k;
+    std::vector<double> pinf8k;
     for (int cap : caps) {
         std::vector<double> pinf(H);
         std::vector<int> bk(H);
@@ -698,8 +725,32 @@ int cmd_context8k(const Args& a) {
         double bits = 0;
         for (std::size_t k = half; k < H; ++k) bits += -std::log2(lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k]);
         std::cout << "trie_plus_context_" << cap << "_bpc " << bits / static_cast<double>(H - half) << "\n";
-        if (cap == 8192) std::copy(lam, lam + kBuckets, lam8k);
+        if (cap == 8192) {
+            std::copy(lam, lam + kBuckets, lam8k);
+            pinf8k = std::move(pinf);
+            bk8k = std::move(bk);
+        }
     }
+    // A4: the similar-context expert (a default; --no-sim leaves it out) over trie + InfiniGram (cap 8192), keys over
+    // the wiki train bytes, lambdas on the first half. The answers below are not touched: the expert is off inside
+    // answers (in_answer), and they are written without it.
+    int rc = 0;
+    if (const auto sc = default_sim(a, data.data(), kTrain, rc)) {
+        std::vector<double> base(H), ps(H);
+        std::vector<int> sb(H);
+        for (std::size_t k = 0; k < H; ++k) {
+            base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
+            double P[256];
+            sb[k] = SimilarContext::bucket(sc->predict(data.data(), kTrain + k, P));
+            ps[k] = P[data[kTrain + k]];
+        }
+        double ls[SimilarContext::kBuckets];
+        fit_lambdas(ps, base, sb, half, SimilarContext::kBuckets, ls);
+        double bits = 0;
+        for (std::size_t k = half; k < H; ++k) bits += -std::log2(ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k]);
+        std::cout << "trie_plus_context_8192_sim_bpc " << bits / static_cast<double>(H - half) << "\n";
+    } else if (rc)
+        return rc;
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
     const char* names[] = {"<4", "4-7", "8-15", "16-31", "32-63", "64-255", "256-1023", "1024-8192"};
@@ -860,6 +911,29 @@ int cmd_sample(const Args& a) {
         if (!a.save.empty() && !save_model(a.save, pm, w, cfg)) return 1;
     }
 
+    // A4: the similar-context expert (a default; --no-sim writes the trie alone, B1's files), keys over the train
+    // bytes, its lambdas over the trie fit on the first half of the holdout. The files then start with a MODEL line.
+    int rc = 0;
+    const auto sc = default_sim(a, data.data(), cfg.train, rc);
+    if (rc) return rc;
+    double lsm[SimilarContext::kBuckets] = {0};
+    if (sc) {
+        const std::size_t half = (cfg.sample - cfg.train) / 2;
+        std::vector<double> pt(half), ps(half);
+        std::vector<int> sb(half);
+        for (std::size_t k = 0; k < half; ++k) {
+            const std::size_t i = cfg.train + k;
+            double e[5][256], M[256], P[256];
+            bool em = false;
+            unsigned pred = 0;
+            pm.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
+            mix_dist(w, e, em, pred, M);
+            pt[k] = M[data[i]];
+            sb[k] = SimilarContext::bucket(sc->predict(data.data(), i, P));
+            ps[k] = P[data[i]];
+        }
+        fit_lambdas(ps, pt, sb, half, SimilarContext::kBuckets, lsm);
+    }
     const double temps[3] = {0.6, 0.8, 1.0};
     for (std::size_t f = 0; f < nfiles; ++f) {
         std::ofstream out(a.outs[f]);
@@ -867,6 +941,7 @@ int cmd_sample(const Args& a) {
             std::cerr << "cannot write " << a.outs[f] << "\n";
             return 1;
         }
+        if (sc) out << "MODEL\ttrie+sim\t" << (a.sims.empty() ? std::string("default") : a.sims[0]) << "\n";
         for (int k = 0; k < a.prompts; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
@@ -876,8 +951,10 @@ int cmd_sample(const Args& a) {
                 SampleOptions opt;
                 opt.temperature = temps[ti];
                 opt.no_repeat = true;
-                const std::string text = sample_continuation(pm, w, p, cfg.train, a.bytes,
-                                                              static_cast<std::uint32_t>(seed ^ (seed >> 32)), opt);
+                const auto seed32 = static_cast<std::uint32_t>(seed ^ (seed >> 32));
+                const std::string text =
+                    sc ? sample_with_class(pm, w, cfg.train, nullptr, nullptr, p, a.bytes, seed32, sc.get(), lsm, temps[ti])
+                       : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
                 out << "GEN\t" << kind << "\t" << printable(text) << "\n";
@@ -1131,16 +1208,30 @@ std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
 }
 
 // A4: the similar-context expert from "vec=PREFIX[,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512]
-// [,probe=8][,tail=32][,src=all]" (PREFIX.vectors.f32 and PREFIX.vocab.tsv; qa's src: all = wiki train + chat, wiki =
-// wiki train only). `build` names what the index depends on: specs that differ only in k, T, min, probe or tail share it.
+// [,probe=8][,tail=32][,src=all][,gate=1]". PREFIX.vectors.f32 and PREFIX.vocab.tsv (ppmi_svd's output), or a projected
+// file (simvec's output). qa's src: all = wiki train + chat, wiki = wiki train only. gate=1 (default): the expert is off
+// inside an answer (in_answer). The token `default` stands for kSimDefault; with no vec= the shipped file is read
+// (sim_vectors_path). `build` names what the index depends on: specs that differ only in k, T, min, probe, tail or gate
+// share it.
+#ifndef CYPHA_SIMVEC_DEFAULT
+#define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi32.bin"
+#endif
+constexpr const char* kSimDefault = "W=2,sif=0,k=2048,drop=0,lists=2048,probe=32,src=wiki";
+std::string sim_vectors_path() { return env_or("CYPHA_SIMVEC", CYPHA_SIMVEC_DEFAULT); }
 struct SimSpec {
     SimilarContext::Params p;
     std::string vec, src = "all", build;
-    bool ok = false;
+    bool gate = true, ok = false;
 };
 SimSpec parse_sim(const std::string& spec) {
     SimSpec s;
-    for (const auto& kv : split(spec, ',')) {
+    std::vector<std::string> kvs;
+    for (const auto& kv : split(spec, ','))
+        if (kv == "default")
+            for (const auto& d : split(kSimDefault, ',')) kvs.push_back(d);
+        else
+            kvs.push_back(kv);
+    for (const auto& kv : kvs) {
         const std::size_t eq = kv.find('=');
         if (eq == std::string::npos) return s;
         const std::string k = kv.substr(0, eq), v = kv.substr(eq + 1);
@@ -1157,8 +1248,10 @@ SimSpec parse_sim(const std::string& spec) {
         else if (k == "lists") s.p.lists = static_cast<int>(x);
         else if (k == "probe") s.p.probe = static_cast<int>(x);
         else if (k == "tail") s.p.max_tail = static_cast<int>(x);
+        else if (k == "gate") s.gate = x != 0;
         else return s;
     }
+    if (s.vec.empty()) s.vec = sim_vectors_path();
     s.build = s.vec + "|" + s.src + "|" + std::to_string(s.p.W) + "|" + std::to_string(s.p.sif) + "|" +
               std::to_string(s.p.dim) + "|" + std::to_string(s.p.drop) + "|" + std::to_string(s.p.lists);
     s.ok = !s.vec.empty() && (s.src == "all" || s.src == "wiki");
@@ -1166,12 +1259,75 @@ SimSpec parse_sim(const std::string& spec) {
 }
 std::unique_ptr<SimilarContext> make_similar_context(const SimSpec& s) {
     std::string err;
-    auto V = SimilarContext::load(s.vec + ".vectors.f32", s.vec + ".vocab.tsv", err);
+    auto V = std::ifstream(s.vec, std::ios::binary) ? SimilarContext::load_projected(s.vec, err)
+                                                     : SimilarContext::load(s.vec + ".vectors.f32", s.vec + ".vocab.tsv", err);
     if (!err.empty()) {
         std::cerr << err << "\n";
         return nullptr;
     }
     return std::make_unique<SimilarContext>(std::move(V), s.p);
+}
+
+// A4: the similar-context expert where it is a default (qa builds its own; sample, context8k): the first --sim spec or
+// `default`, keys over text[0, n). nullptr with rc 0 under --no-sim; nullptr with rc 1 when it cannot be built.
+std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* text, std::size_t n, int& rc) {
+    rc = 0;
+    if (a.no_sim) return nullptr;
+    const std::string spec = a.sims.empty() ? "default" : a.sims[0];
+    const SimSpec ss = parse_sim(spec);
+    std::unique_ptr<SimilarContext> sc = ss.ok ? make_similar_context(ss) : nullptr;
+    if (!sc) {
+        std::cerr << "similar-context expert: cannot build '" << spec << "' (vectors " << ss.vec
+                  << "): run from the repository root, set CYPHA_SIMVEC, or pass --no-sim\n";
+        rc = 1;
+        return nullptr;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    sc->build(text, n);
+    std::cerr << "sim " << spec << " keys " << sc->keys() << " bytes " << sc->bytes() << " build_s "
+              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
+    return sc;
+}
+
+// simvec [wiki] --sim SPEC --out FILE (A4): the expert of SPEC built over the train bytes; its projected word rows
+// written as the file the default reads.
+int cmd_simvec(const Args& a) {
+    if (a.out.empty() || a.sims.empty()) {
+        std::cerr << "usage: cyphalm_trie simvec <wiki> --sim vec=PREFIX[,...] --out FILE\n";
+        return 2;
+    }
+    std::vector<std::uint8_t> data;
+    if (!load_wiki(a, data)) return 1;
+    const SimSpec ss = parse_sim(a.sims[0]);
+    auto sc = ss.ok ? make_similar_context(ss) : nullptr;
+    if (!sc) {
+        std::cerr << "bad --sim spec " << a.sims[0] << "\n";
+        return 1;
+    }
+    sc->build(data.data(), a.cfg.train);
+    std::ofstream out(a.out, std::ios::binary);
+    if (!out || !sc->save_projected(out)) {
+        std::cerr << "cannot write " << a.out << "\n";
+        return 1;
+    }
+    out.close();
+    std::cout << "simvec " << a.sims[0] << " keys " << sc->keys() << " dim " << sc->dim() << " file_bytes "
+              << std::ifstream(a.out, std::ios::binary | std::ios::ate).tellg() << "\n";
+    return 0;
+}
+
+// A4's gate: is the next byte after seq inside an answer? Yes from `answer_at` on (the end of decode's prompt: the
+// question in either prompt form), and after the latest "Assistant: " when no "User: " follows it (a chat turn runs
+// until the next user turn). The look back stops at 8 KiB.
+bool in_answer(const std::vector<std::uint8_t>& seq, std::size_t answer_at) {
+    if (seq.size() >= answer_at) return true;
+    const std::size_t lo = seq.size() > 8192 ? seq.size() - 8192 : 0;
+    for (std::size_t i = seq.size(); i-- > lo + 1;) {
+        if (seq[i] != ' ' || seq[i - 1] != ':') continue;
+        if (i >= lo + 10 && std::memcmp(&seq[i - 10], "Assistant: ", 11) == 0) return true;
+        if (i >= lo + 5 && std::memcmp(&seq[i - 5], "User: ", 6) == 0) return false;
+    }
+    return false;
 }
 
 // CyphaLM's next-byte distribution: the frozen trie mixture, optionally mixed with InfiniGram
@@ -1192,6 +1348,8 @@ struct Lm {
     const double* lsim = nullptr;        // expert and before the copy
     const PackedModel* packed = nullptr;  // M4: the serving form
     mutable FmInfiniGram::Cursor cur{};   // M5: InfiniGram's last match, for the next byte of the same text
+    bool sim_gate = false;                // A4: the similar-context expert off inside an answer (in_answer)
+    std::size_t answer_at = std::string::npos;  // A4: where the answer starts (decode sets it to the prompt's end)
     // hint: the previous step's match length (-1 at a new sequence); n_out: this step's.
     void dist(const std::vector<std::uint8_t>& seq, int& hint, double* P, int* n_out = nullptr) const {
         double e[5][256];
@@ -1217,7 +1375,7 @@ struct Lm {
             const double l = lcls[ClassContext::bucket(cc->predict(seq.data(), seq.size(), Pc))];
             for (int s = 0; s < 256; ++s) P[s] = l * Pc[s] + (1 - l) * P[s];
         }
-        if (sc) {
+        if (sc && !(sim_gate && in_answer(seq, answer_at))) {
             double Ps[256];
             const double l = lsim[SimilarContext::bucket(sc->predict(seq.data(), seq.size(), Ps))];
             for (int s = 0; s < 256; ++s) P[s] = l * Ps[s] + (1 - l) * P[s];
@@ -1271,7 +1429,7 @@ void print_boot(const std::string& name, const Boot& b) {
 
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
-                              const SimilarContext* sc = nullptr, const double* lsm = nullptr) {
+                              const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
     std::mt19937 rng(seed);
     std::uniform_real_distribution<double> U(0.0, 1.0);
@@ -1296,7 +1454,7 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
         double p[256], mass = 0;
         for (int pass = 0; pass < 2 && !(mass > 0); ++pass) {
             mass = 0;
-            for (int s = 0; s < 256; ++s) mass += p[s] = (pass == 0 && banned[s]) ? 0.0 : std::pow(M[s], 1.0 / 0.8);
+            for (int s = 0; s < 256; ++s) mass += p[s] = (pass == 0 && banned[s]) ? 0.0 : std::pow(M[s], 1.0 / temperature);
         }
         int order[256];
         std::iota(order, order + 256, 0);
@@ -1504,7 +1662,7 @@ int cmd_cls(const Args& a) {
         }
         std::unique_ptr<SimilarContext> sc;
         std::string built;
-        std::vector<double> first_hc, first_fc;  // the first spec's reads, for paired comparisons
+        std::vector<double> first_hc, first_fc, first_sv, first_svt;  // the first spec's reads, for paired comparisons
         for (const auto& spec : a.sims) {
             const SimSpec ss = parse_sim(spec);
             if (!ss.ok) {
@@ -1598,6 +1756,11 @@ int cmd_cls(const Args& a) {
                 std::printf("sim %s surface trie+sim %.4f trie+cls+sim %.4f\n", spec.c_str(), mean(sv), mean(svc));
                 print_boot("sim " + spec + " surface_gain_over_trie", block_boot(gain(sv, s_trie), 1, 4000, 5));
                 print_boot("sim " + spec + " surface_gain_over_trie_cls", block_boot(gain(svc, s_cls), 1, 4000, 5));
+                if (first_sv.empty()) first_sv = svc, first_svt = sv;
+                else {
+                    print_boot("sim " + spec + " surface_trie_vs_first_sim", block_boot(gain(sv, first_svt), 1, 4000, 5));
+                    print_boot("sim " + spec + " surface_trie_cls_vs_first_sim", block_boot(gain(svc, first_sv), 1, 4000, 5));
+                }
             }
             std::fflush(stdout);
         }
@@ -1706,7 +1869,9 @@ void ban_repeats(const std::vector<std::uint8_t>& seq, std::size_t from, bool ba
 // Greedy (seed 0) or sampled (T = 0.8, nucleus 0.9, mt19937(seed), as sample_continuation), no-repeat rule, until a
 // newline or a sentence end, at most max_bytes. Once the answer begins with the don't-know message, decoding runs on
 // to the end of the tag (at most 240 bytes) so the tag can be read; that is the only change to the stopping rule.
-Answer decode(const Lm& lm, const std::string& prompt, int max_bytes = 80, std::uint32_t seed = 0) {
+Answer decode(const Lm& lm_in, const std::string& prompt, int max_bytes = 80, std::uint32_t seed = 0) {
+    Lm lm = lm_in;  // A4: the answer starts after the prompt, whatever its form
+    lm.answer_at = prompt.size();
     Answer A;
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
     std::mt19937 rng(seed);
@@ -2882,10 +3047,11 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     const int nlm = o.copy ? 4 : 2;
     const char* const lm_name[4] = {"trie", "trie_ig", "trie_cp", "trie_ig_cp"};
     const std::size_t lim = all_followers;
-    const Lm lms[4] = {{nullptr, w, lim, false, nullptr, nullptr, nullptr, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
-                       {nullptr, w, lim, false, &ig, lam, nullptr, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm},
-                       {nullptr, w, lim, false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
-                       {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
+    Lm lms[4] = {{nullptr, w, lim, false, nullptr, nullptr, nullptr, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
+                 {nullptr, w, lim, false, &ig, lam, nullptr, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm},
+                 {nullptr, w, lim, false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
+                 {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
+    for (auto& l : lms) l.sim_gate = sc && parse_sim(o.sim).gate;  // A4: the expert off inside answers
 
     // Grading only: is a gold answer in the source article's text (wiki train)? Splits A3's results.
     const std::string_view wiki(reinterpret_cast<const char*>(data.data()), cfg.train);
@@ -3498,11 +3664,37 @@ int cmd_selftest() {
                         h3.live == 0 && std::accumulate(P3, P3 + 256, 0.0) == 0 && SimilarContext::bucket(h3) == 0 &&
                         SimilarContext::bucket(h1) == 118 && ex.size() == 4 && ex == iv && ex[0].first == 13 &&
                         std::fabs(std::fabs(E[0]) - std::sqrt(0.5)) < 1e-9 && std::fabs(E[6]) < 1e-9 &&
-                        parse_sim("vec=x,W=4,k=8,src=wiki").ok && !parse_sim("vec=x,src=dolly").ok && !parse_sim("W=4").ok &&
+                        parse_sim("vec=x,W=4,k=8,src=wiki").ok && !parse_sim("vec=x,src=dolly").ok && !parse_sim("W4").ok &&
                         parse_sim("vec=x,k=8").build == parse_sim("vec=x,k=128,T=0").build &&
                         parse_sim("vec=x,W=4").build != parse_sim("vec=x,W=8").build;
         if (!ok) {
             std::cerr << "selftest: similar-context expert checks failed\n";
+            return 1;
+        }
+        // A4 defaults: the gate's rule (chat turns and decode's prompt end), the default spec, and a projected file:
+        // written, read back (a flipped byte is refused) and built on the same text, it gives the same prediction.
+        auto bytes = [](const std::string& x) { return std::vector<std::uint8_t>(x.begin(), x.end()); };
+        const auto dflt = parse_sim("default"), dk8 = parse_sim("default,k=8"), ng = parse_sim("vec=x,gate=0");
+        std::stringstream file;
+        sc.save_projected(file);
+        std::string bad_file = file.str(), err, err2;
+        bad_file[bad_file.size() / 2] ^= 1;
+        std::stringstream bad(bad_file);
+        const auto PV = SimilarContext::load_projected(file, err);
+        SimilarContext::load_projected(bad, err2);
+        SimilarContext sx(PV, sp);
+        sx.build(reinterpret_cast<const std::uint8_t*>(t.data()), t.size());
+        double Q1[256];
+        const auto hq = sx.predict(reinterpret_cast<const std::uint8_t*>(q.data()), q.size(), Q1);
+        const bool ok2 = in_answer(bytes("User: who?\nAssistant: "), std::string::npos) &&
+                         in_answer(bytes("User: who?\nAssistant: it is "), std::string::npos) &&
+                         !in_answer(bytes("User: who?\nAssistant: it.\n\nUser: and "), std::string::npos) &&
+                         !in_answer(bytes("the wiki text"), std::string::npos) && in_answer(bytes("Who? "), 5) &&
+                         !in_answer(bytes("Who?"), 5) && dflt.ok && dflt.p.W == 2 && !dflt.p.sif && dflt.p.k == 2048 &&
+                         dflt.src == "wiki" && dflt.gate && dflt.vec == sim_vectors_path() && dk8.p.k == 8 && !ng.gate &&
+                         err.empty() && !err2.empty() && PV.projected() && PV.rows() == 12 && hq.live == 2 && Q1['o'] == 1.0;
+        if (!ok2) {
+            std::cerr << "selftest: similar-context gate / default / projected file checks failed\n";
             return 1;
         }
     }
@@ -3512,23 +3704,25 @@ int cmd_selftest() {
 
 void usage() {
     std::fprintf(stderr,
-                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|selftest> [wiki] [dolly] [options]\n"
+                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|simvec|selftest> [wiki] [dolly] [options]\n"
                  "  bpc [wiki] [--negative] [--no-guard]\n"
                  "  chat [wiki] [dolly] [--prompt TEXT] [--no-repeat] [--save FILE | --model FILE]\n"
                  "  probe [wiki] [dolly]\n"
                  "  context8k [wiki] [dolly]\n"
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
-                 "  SPEC: vec=PREFIX[,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32][,src=all|wiki]\n"
+                 "  SPEC: [default,][vec=PREFIX|FILE][,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32]\n"
+                 "        [,src=all|wiki][,gate=1]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
                  "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
+                 "  simvec [wiki] --sim SPEC --out FILE\n"
                  "  selftest\n"
-                 "  options: --wiki P --dolly P --train N --sample N\n"
+                 "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim\n"
                  "  paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then %s and %s\n",
-                 kDefaultWiki, kDefaultDolly);
+                 kSimDefault, CYPHA_SIMVEC_DEFAULT, kDefaultWiki, kDefaultDolly);
 }
 
 }  // namespace
@@ -3547,7 +3741,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (cmd != "bpc" && cmd != "chat" && cmd != "probe" && cmd != "context8k" && cmd != "sample" && cmd != "qa" &&
-        cmd != "dktext" && cmd != "cls") {
+        cmd != "dktext" && cmd != "cls" && cmd != "simvec") {
         usage();
         return 2;
     }
@@ -3556,6 +3750,14 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (!self_test()) return 1;
+    if ((cmd == "qa" || cmd == "sample" || cmd == "context8k") && !a.no_sim) {  // A4: find the vectors before any work
+        const SimSpec ss = parse_sim(a.sims.empty() ? "default" : a.sims[0]);
+        if (!ss.ok || !(std::ifstream(ss.vec, std::ios::binary) || std::ifstream(ss.vec + ".vectors.f32", std::ios::binary))) {
+            std::cerr << "similar-context expert: no vectors at " << ss.vec
+                      << " (run from the repository root, set CYPHA_SIMVEC, or pass --no-sim)\n";
+            return 1;
+        }
+    }
     const auto t0 = std::chrono::steady_clock::now();
     int rc = 2;
     if (cmd == "bpc") rc = cmd_bpc(a);
@@ -3564,6 +3766,7 @@ int main(int argc, char** argv) {
     else if (cmd == "context8k") rc = cmd_context8k(a);
     else if (cmd == "sample") rc = cmd_sample(a);
     else if (cmd == "cls") rc = cmd_cls(a);
+    else if (cmd == "simvec") rc = cmd_simvec(a);
     else if (cmd == "qa") {
         if (a.dev.empty() || (a.fam != "none" && a.fam != "before" && a.fam != "after") || a.dk_ratio < 0 ||
             a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome" && a.fam_train != "low")) {
@@ -3572,7 +3775,7 @@ int main(int argc, char** argv) {
         }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
                               a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.copy_min,
-                              a.sims.empty() ? std::string() : a.sims[0]});
+                              a.no_sim ? std::string() : a.sims.empty() ? std::string("default") : a.sims[0]});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();
