@@ -11,6 +11,7 @@ The design and the predictions were written before any run; the results are unde
 2. **Text: better alone, unchanged on top of the class expert.** Surface S of the trie 0.761 → 0.839; of trie + class 0.905 → 0.910 (the interval spans 0).
 3. **Answers: no.** On dev it adds no right answer at a 2% wrong rate (0 → 0). With the fact shard it does harm: look-alike wrong answers pass the gate, or the shard's right answers break. The topical form of the expert finds the right article (*Markov was born in [[Ryazan]]. He ▸ studied…*), but the answer lies before the point it predicts from, and taking it from there would break rule 10. On the frozen test, read once for the recommended configuration, it answers 0 of 200 and the gate keeps nothing (wrong rate 0%, Wilson upper 1.9%).
 4. **Cost: inside PLAN §10.** An 85 MB index (wiki keys), built in about a minute; 0.8 ms a query, one query a word; Q/A p50 17 ms a question.
+5. **A4b, later the same day: a default.** Gated out of every answer, the expert is now on in `qa`, `sample` and `context8k`, and answering is not worse with it (the trie and trie + InfiniGram answers are byte-identical). It reads a 2.23 MB file that ships (32-d projected PPMI-SVD rows, fresh BPC −0.0002 against the full vectors), and adds 42 MB resident (was 142). `sample` text: SCRIBE v2 0.014 → 0.061, still word salad.
 
 PLAN rule 10 holds by design. The expert is one more next-byte expert inside CyphaLM's mixture, used on all text and scored on BPC. Each neighbour proposes only the next byte, and only while its bytes agree with what has been written since the last word ended; at the next word the neighbours are found again. Lambdas are fit on held-out wiki bytes, never on questions. Nothing returns a stored string.
 
@@ -360,6 +361,116 @@ Odin, 2026-10-28: "the similar context expert should be used as soon as it is us
 | C2 | `sample`: trie + sim text scores higher on SCRIBE v2 than trie text, by +0.00 to +0.05 on the mean (word salad stays word salad; trie text scores 0.017 in SCRIBE_V2) |
 | M1 | RAM, after the cuts: the default expert adds about 0.04 GB resident in `qa` (32-d keys) and at most 0.1 GB to the peak; before the cuts (A4's code and float vectors) about 0.18 GB to the peak |
 
+### Step 1: the gate
+
+`qa` in A1d's C1L configuration (span candidates, `ent_title`, the low-only token, 20% don't-know turns, D4's fact shard, copy models alongside) with the class expert `shape:6:2:f` (B4's two-order table, as A4 ran it), dev 130, chat form. The expert uses the shipped 32-d file, keys over wiki train.
+
+| Run | Expert | Holdout trie + cls / trie + IG + cls (+ sim) | + copy (trie + IG) | Raw R / A / W: trie | trie + IG | trie + IG + copy | Kept by the out-of-fold gate, trie + IG: right / wrong | Wrong rate, Wilson upper | Decode p50, trie + IG |
+|---|---|---|---:|---|---|---|---|---:|---:|
+| G0 | none | 2.135181 / 1.996391 | 1.862964 | 0 / 50 / 80 | 6 / 68 / 56 | 3 / 68 / 59 | **2 / 0** (1.5%) | 2.9% | 1.5 ms |
+| **G2** | **gated (the default)** | **1.987304 / 1.920925** | **1.799409** | 0 / 50 / 80 | 6 / 68 / 56 | 4 / 68 / 58 | **2 / 0** (1.5%) | 2.9% | 2.0 ms |
+| G1 | in answers too (`gate=0`) | 1.987304 / 1.920925 | 1.799409 | 0 / **0** / 130 | **4** / 67 / 59 | **1** / 67 / 62 | **0 / 2** (1.5%) | 5.4% | 17.2 ms |
+
+- **With the gate nothing in answering gets worse.** The trie and trie + InfiniGram answers are byte-identical to G0's in both prompt forms (130 of 130 each), and so are their confidence features; only the question's log-probability moves (the question is not an answer). Raw right, abstentions and the gate's kept right / wrong are the same; the gate picks `min_lp` in all five folds, as without the expert. The copy models keep 107–113 of 130 answers word for word (their lambdas are fit with the expert present); one grade changes, for the better: "When was Alan Kay born?" → *Alan Kay was born in 1940.* (trie + IG + copy, raw right 3 → 4).
+- **The holdout keeps the expert's gain**: trie + InfiniGram + class 1.996391 → 1.920925 (−0.0755, LCI P(gain > 0.005) = 1.000 over 256 blocks); with copy, 1.862964 → 1.799409.
+- **Without the gate it gets worse, as A4 found.** The trie stops writing its own "I don't know" (50 abstentions → 0); trie + InfiniGram loses two right answers and its gate keeps two wrong ones instead of two right ones.
+- **`--no-sim` reproduces the tool as it was**: run G0N (`--no-sim`, the new build) prints G0's lines and rows file (main before the class change, `--cls shape:6`) byte for byte, latencies aside.
+- Peak RSS is 284.4 MB in all four runs: the expert's build does not set the `qa` peak in this configuration.
+
+### Step 2: where the expert is a default, and why
+
+| Path | Default? | Evidence |
+|---|---|---|
+| `qa` | **yes, gated** | Holdout trie + IG + class −0.0755 (LCI 1.000); answers and the gate's kept right / wrong unchanged (step 1); decode p50 1.5 → 2.0 ms a question; peak unchanged in C1L (284.4 MB). In A0 (no class, no copy): holdout trie 2.319989 → 2.106547 (−0.213), trie + IG 2.071574 → 1.968617 (−0.103), LCI 1.000; every printed line equal to `--no-sim` but one risk-coverage curve of the question's log-probability; 447 → 626 s; peak 175.1 → 186.9 MB |
+| `sample` | **yes** | Surface S of trie + sim over the trie +0.075 [+0.064, +0.086] (step 3, the 32-d file); SCRIBE v2 0.014 → 0.061 (step 5). The files keep their GEN kinds and gain a `MODEL` line, so `scribe ladder --gen-trie` reads them as before; `--no-sim` writes B1's files byte for byte (sha256 `fcc2b9c4…`, `8592fb7e…`). 76 → 292 s for 1,500 samples; peak 53.6 → 82.7 MB |
+| `context8k` | **yes, one line added** | `trie_plus_context_8192_sim_bpc` 1.9686 against trie + InfiniGram 2.0715 (−0.103, holdout second half, chat model). The 221 existing lines, its 50 generated answers included, are byte-identical to M9's output: the answers never see the expert. 645 s; peak 169.3 MB (M9: 165.1–169.0) |
+| `cls` | no (an option) | It measures the class expert; `--sim default` adds the default expert's reads when wanted |
+| `chat`, `probe` | no | They write only answers, which the gate excludes: the expert would change nothing and cost RAM. Run G1 shows what it does inside answers: the trie stops abstaining and the gate keeps wrong answers |
+| `bpc` | no | Its lines are the trie's reference numbers (Odin) |
+
+`--no-sim` turns the expert off in `qa`, `sample` and `context8k`. Without the vector file those subcommands stop with a message (run from the repository root, set `CYPHA_SIMVEC`, or pass `--no-sim`); they never fall back silently.
+
+### Step 3: a vector file that ships
+
+`cls shape:6:2:f` with the chosen spec three times: the full-precision PPMI-SVD vectors (300-d floats, 60 MB, the A4 numbers), and the projected files at 64 and 32 dimensions. Fresh text read for the lossy rule; paired against the full vectors.
+
+| Vectors | File | Index in RAM | Holdout trie + IG + cls + sim (paired change) | Fresh trie + IG + cls + sim (paired change) | Surface S trie + sim (paired change) | Surface S trie + cls + sim (paired change) | Query p50 |
+|---|---:|---:|---|---|---|---|---:|
+| PPMI-SVD, 300-d float | 60 MB + 0.6 MB | 85.0 MB | 1.938765 | 2.026693 | 0.8386 | 0.9095 | 0.79 ms |
+| projected, 64-d int8 | 3.83 MB | 75.6 MB | 1.938865 (+0.0001 [−0.0001, +0.0002]) | 2.026718 (+0.00003 [−0.00008, +0.00013]) | 0.8272 (**−0.0113 [−0.0213, −0.0014]**) | 0.9128 (+0.0032 [−0.0044, +0.0109]) | 0.80 ms |
+| **projected, 32-d int8** | **2.23 MB** | **40.0 MB** | 1.939552 (+0.0008 [+0.0000, +0.0017]) | **2.026526 (−0.0002 [−0.0008, +0.0005])** | 0.8365 (−0.0021 [−0.0124, +0.0083]) | 0.9055 (−0.0041 [−0.0116, +0.0037]) | 0.64 ms |
+
+- **The full-precision row reproduces A4 to the last digit** (holdout 1.987329 / 1.938765, fresh 2.080674 / 2.026693, S 0.8386 / 0.9095): the reworked header gives the same expert.
+- **The 32-d file passes the lossy rule and ships**: fresh BPC −0.0002 (the rule allows up to +0.002), neither surface interval below 0. It is 2.23 MB (the repository's `.git` is 35 MB) and halves the index.
+- **The 64-d file fails the rule** on surface S of trie + sim (−0.011, the interval entirely below 0), though its BPC is level. S is a sampled score: a small change in the distribution changes every sample after its first different byte. The rule was fixed before the run, so the 64-d file does not ship either way.
+
+The file rebuilds byte for byte from enwik8 with the commands in `data/cyphalm/README.md` (PPMI-SVD vectors and file both checked by sha256).
+
+### Step 4: RAM
+
+**The expert alone** (scratch harness `simmem.cpp`: 8 MiB of text read, then the vectors loaded and the expert built over wiki train with the chosen spec; `VmHWM` reset before the load; MB over the 11.6 MB process):
+
+| Version | Resident after the build (`malloc_trim`) | Build peak | Predictions |
+|---|---:|---:|---|
+| A4's code, 300-d float vectors | +142.2 | +240.9 | (reference) |
+| Reworked header, float vectors: the 300-d rows freed after the build, the keys put in list order in place | +85.0 | +106.1 | identical (same checksum over 200,000 reads) |
+| The same with the 64-d projected file | +76.0 | +97.1 | lossy (step 3) |
+| **The same with the 32-d projected file (the default)** | **+42.1** | **+63.2** | lossy, within the rule (step 3) |
+
+The 42 MB are the index (1,059,311 keys × 32 int8 = 33.9 MB; positions 4.2 MB; centroids and list starts 0.07 MB), the rows (1.8 MB) and the word map (about 2 MB).
+
+**In the subcommands** (peak RSS of the whole run, `--no-sim` → default):
+
+| Subcommand | Peak RSS | Resident the expert adds |
+|---|---:|---:|
+| `qa` A0 (RAM_PROFILE's configuration) | 175.1 → 186.9 MB | about 42 MB (its index and rows) |
+| `qa` C1L + class (step 1) | 284.4 → 284.4 MB | about 42 MB |
+| `sample` | 53.6 → 82.7 MB | about 42 MB |
+| `context8k` | 165.1–169.0 (M9) → 169.3 MB | about 42 MB |
+| `chat`, `probe`, `bpc` | unchanged | 0 (not built) |
+
+Where training or the class and index builds set the peak, the expert's build does not raise it; where the trie's training sets a low peak (`sample`), the expert's build becomes the peak.
+
+**Further cuts, not taken.** Many keys repeat (the same two words give the same key): storing each distinct key once with its positions would save up to about 18 MB, but it changes which tied neighbours fill the k slots, so it is lossy and needs its own read. A sorted word list in place of the hash map would save about 2 MB.
+
+### Step 5: SCRIBE v2 on `sample` text
+
+`sample`'s 750 GEN lines (250 holdout prompts, T 0.6 / 0.8 / 1.0, 600 bytes), with and without the expert, through `scribe ladder --profile v2` on SCRIBE's development ladder A (test [56, 64) MiB, seed 20261027, pack [16, 48), reference [48, 56), PPMI vectors on the pack; the frozen v2 profile). Reported only; not a decision input.
+
+| Text | Kept (≥ 100 B) | SCRIBE v2 (95%) | Surface S | D_L lexical | D_S syntax | D_C coherence | Samples failing syntax |
+|---|---:|---|---:|---:|---:|---:|---:|
+| human (test) | 500 | 0.923 [0.910, 0.935] | 0.912 | 0.02 | 0.00 | 0.38 | 0% |
+| trie | 623 | 0.014 [0.009, 0.021] | 0.734 | 2.29 | 23.64 | 5.20 | 99% |
+| **trie + sim** | 605 | **0.061 [0.049, 0.074]** | 0.801 | 0.94 | 18.75 | 4.72 | 94% |
+| (sentences shuffled) | 500 | 0.344 | 0.905 | | | | |
+| (words shuffled) | 500 | 0.003 | 0.923 | | | | |
+
+By temperature: T 0.6 0.013 → 0.072, T 0.8 0.020 → 0.074, T 1.0 0.010 → 0.033. The expert mostly removes non-words (samples with a lexical penalty 44% → 21%) and some syntax failures. The text is still word salad: it stays far below shuffled sentences, and above shuffled words.
+
+### Predictions, scored (A4b)
+
+| Prediction | Result | Score |
+|---|---|---|
+| D1. With the gate, trie and trie + IG answers byte-identical; equal raw right and kept; copy models differ by at most one answer | 130 / 130 identical in both forms; equal tallies; copy models: one grade changes (wrong → right), 17–23 answer texts change | **Hit** (the copy texts change more than "one answer", their grades by one) |
+| D2. Without the gate, trie + IG loses 1–4 raw right, or the gate keeps fewer right / more wrong | 6 → 4 raw right; kept 2 / 0 → 0 / 2; the trie's abstentions 50 → 0 | **Hit** |
+| D3. Holdout lines equal with and without the gate; gain 0.07–0.08 over trie + IG + class | equal; −0.0755 | **Hit** |
+| V1. 64-d file: fresh within +0.0005; S unchanged | +0.00003; S of trie + sim −0.011 [−0.021, −0.001] | **Hit** on BPC, **miss** on S |
+| V2. 32-d file: fresh within +0.002; S unchanged; it ships | −0.0002; both S intervals span 0; ships | **Hit** |
+| C1. `context8k`: −0.06 to −0.09 | −0.103 | **Miss** (larger) |
+| C2. SCRIBE v2: +0.00 to +0.05 on the mean | +0.047 pooled (+0.023 to +0.059 by temperature) | **Hit** |
+| M1. After the cuts about 0.04 GB resident and at most 0.1 GB peak; before, about 0.18 GB peak | +42 MB resident, +63 MB build peak (no rise in `qa`'s peak); before: +142 MB resident, +241 MB peak | **Hit** after; **miss** before (0.24 GB, larger) |
+
+### Decisions (A4b)
+
+1. **The gate is part of the expert.** It is on wherever the expert runs; `gate=0` exists only to show what it prevents (run G1). It settles A4's decision 3: C1L carries D4's fact shard, and with the gate the shard's answers are untouched (G2 against G0), where A4's ungated runs lost them or let wrong ones through.
+2. **A default in `qa` (gated), `sample` and `context8k`; not in `cls`, `chat`, `probe` or `bpc`** (step 2's table). Every default passes its own read: BPC with LCI 1.000 (`qa`, `context8k`), surface S and SCRIBE v2 (`sample`); none worsens an answer.
+3. **The shipped vectors are `data/cyphalm/simvec_ppmi32.bin`** (2.23 MB): the 32-d projected file, the only one that passes the lossy rule. It rebuilds byte for byte from enwik8.
+4. **RAM: +42 MB resident** where the expert runs, against +142 MB with A4's code; the build peak +63 MB against +241 MB. It does not move `qa`'s peak with the class expert (284.4 MB) and adds 11.8 MB to A0's (175.1 → 186.9 MB).
+5. **For Odin.**
+   - `sample`'s GEN kinds still read `trie_T0.8` though the text is now trie + sim (a `MODEL` line says so). This keeps `scribe ladder --gen-trie` working; renaming the kinds would need a change in `scribe.cpp`.
+   - A CMake build should set `CYPHA_SIMVEC_DEFAULT` to the file's absolute path, so the tools find it from any directory.
+6. **Next.** Distinct keys stored once (up to −18 MB, lossy: it needs its own read); next-word counts per cluster of two-word contexts in place of 2,048 neighbours (A4 decision 6); keys appended online.
+
 ---
 
 ## Reproduce
@@ -401,3 +512,30 @@ Q="qa enwik8 dolly.jsonl --dev bench/eval/t_qa_wiki_dev.tsv --leak bench/eval/t_
 ```
 
 Output lines: `cls` prints `sim SPEC keys … recall`, `holdout2 …`, the gains with their intervals, `holdout2_split` (silent / word start / inside a word), `…_vs_first_sim` (paired against the first spec), and with the flags `fresh …` and `surface …`. `qa` adds `sim …` and `sim_lci …` (the holdout read), `SIM_LAT`, `LATENCY` (decode time a question) and `SIM_NB` (the three nearest stored contexts at each dev chat prompt). Run outputs, the sweep scripts and the vector files are in `/root/work/r2/` (`runs/`, `vec/`).
+
+**A4b** (the tool at main `0a90374` plus this step's changes; `$C1L` is A1d's C1L options with `--cls shape:6:2:f`):
+
+```bash
+C1L="--dev $DEV --leak $TEST --parse parse_dev_span.tsv --dk dk_mention.tsv --dk-ratio 0.20 --fam after --fam-stat ent_title \
+     --fam-train low --shard shard_facts.tsv --copy --base a0_rows.tsv --cls shape:6:2:f"
+./cyphalm_trie selftest                                  # the gate's rule, the default spec, a projected file round trip
+# step 3: the vector files, and the lossy read (fresh text, surface S, paired against the full vectors)
+./cyphalm_trie simvec enwik8 --sim default,vec=vec/ppmi_noeval,dim=64 --out simvec_ppmi64.bin
+./cyphalm_trie simvec enwik8 --sim default,vec=vec/ppmi_noeval,dim=32 --out simvec_ppmi32.bin   # = data/cyphalm/
+./cyphalm_trie cls enwik8 shape:6:2:f --sim default,vec=vec/ppmi_noeval --sim default,vec=simvec_ppmi64.bin \
+    --sim default,vec=simvec_ppmi32.bin --sim-fresh --sim-surface
+# step 1 (from the repository root, or with CYPHA_SIMVEC set)
+./cyphalm_trie qa enwik8 dolly.jsonl $C1L --no-sim --out G0N.rows.tsv     # without the expert (= G0, main before)
+./cyphalm_trie qa enwik8 dolly.jsonl $C1L --out G2.rows.tsv               # the default: gated
+./cyphalm_trie qa enwik8 dolly.jsonl $C1L --sim default,gate=0 --out G1.rows.tsv
+# step 2 and step 4's subcommand peaks
+./cyphalm_trie sample enwik8 trie_dev.txt trie_fresh.txt --no-sim         # B1's files
+./cyphalm_trie sample enwik8 sim_dev.txt sim_fresh.txt
+./cyphalm_trie context8k enwik8 dolly.jsonl
+./cyphalm_trie qa enwik8 dolly.jsonl --dev $DEV --leak $TEST --no-sim; ./cyphalm_trie qa enwik8 dolly.jsonl --dev $DEV --leak $TEST
+# step 5
+scribe ladder --pack enwik:enwik8:16:48 --ref enwik:enwik8:48:56 --test enwik:enwik8:56:64 --vectors v32 --profile v2 \
+    --seed 20261027 --gen-trie trie_dev.txt        # and --gen-trie sim_dev.txt
+```
+
+Step 4's harness (`simmem.cpp`), the run outputs and the files are in `/root/work/r2/v2/` (`runs/`, `mem/`, `vec/`, `rebuild/`). Runs G0 (main before the class change, `--cls shape:6`) and G0N print the same lines and rows. The binary used for the runs differs from the final source only in comments, help text, the default file's name (the runs set the path) and an up-front check that the vector file exists.

@@ -21,7 +21,7 @@
 //
 // The similar-context expert (A4, similar_context.hpp; docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md "A4b") is a default in
 // qa, sample and context8k: the spec `default` (W=2, equal word weights, k=2048, 2048 lists with 32 probed, keys over
-// wiki train) with the projected PPMI-SVD file data/cyphalm/simvec_ppmi64.bin, read from $CYPHA_SIMVEC, else from
+// wiki train) with the projected PPMI-SVD file data/cyphalm/simvec_ppmi32.bin, read from $CYPHA_SIMVEC, else from
 // CYPHA_SIMVEC_DEFAULT (a compile-time path), else from that path under the current directory. It is off inside every
 // answer (in_answer), so answers are written without it. --no-sim leaves it out; without the file those subcommands
 // stop and say so. bpc, chat and probe never build it: bpc's lines are the trie's reference numbers, and chat and
@@ -1214,7 +1214,7 @@ std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
 // (sim_vectors_path). `build` names what the index depends on: specs that differ only in k, T, min, probe, tail or gate
 // share it.
 #ifndef CYPHA_SIMVEC_DEFAULT
-#define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi64.bin"
+#define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi32.bin"
 #endif
 constexpr const char* kSimDefault = "W=2,sif=0,k=2048,drop=0,lists=2048,probe=32,src=wiki";
 std::string sim_vectors_path() { return env_or("CYPHA_SIMVEC", CYPHA_SIMVEC_DEFAULT); }
@@ -3704,23 +3704,25 @@ int cmd_selftest() {
 
 void usage() {
     std::fprintf(stderr,
-                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|selftest> [wiki] [dolly] [options]\n"
+                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|simvec|selftest> [wiki] [dolly] [options]\n"
                  "  bpc [wiki] [--negative] [--no-guard]\n"
                  "  chat [wiki] [dolly] [--prompt TEXT] [--no-repeat] [--save FILE | --model FILE]\n"
                  "  probe [wiki] [dolly]\n"
                  "  context8k [wiki] [dolly]\n"
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
-                 "  SPEC: vec=PREFIX[,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32][,src=all|wiki]\n"
+                 "  SPEC: [default,][vec=PREFIX|FILE][,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32]\n"
+                 "        [,src=all|wiki][,gate=1]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
                  "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
+                 "  simvec [wiki] --sim SPEC --out FILE\n"
                  "  selftest\n"
-                 "  options: --wiki P --dolly P --train N --sample N\n"
+                 "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim\n"
                  "  paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then %s and %s\n",
-                 kDefaultWiki, kDefaultDolly);
+                 kSimDefault, CYPHA_SIMVEC_DEFAULT, kDefaultWiki, kDefaultDolly);
 }
 
 }  // namespace
@@ -3748,6 +3750,14 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (!self_test()) return 1;
+    if ((cmd == "qa" || cmd == "sample" || cmd == "context8k") && !a.no_sim) {  // A4: find the vectors before any work
+        const SimSpec ss = parse_sim(a.sims.empty() ? "default" : a.sims[0]);
+        if (!ss.ok || !(std::ifstream(ss.vec, std::ios::binary) || std::ifstream(ss.vec + ".vectors.f32", std::ios::binary))) {
+            std::cerr << "similar-context expert: no vectors at " << ss.vec
+                      << " (run from the repository root, set CYPHA_SIMVEC, or pass --no-sim)\n";
+            return 1;
+        }
+    }
     const auto t0 = std::chrono::steady_clock::now();
     int rc = 2;
     if (cmd == "bpc") rc = cmd_bpc(a);
