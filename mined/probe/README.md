@@ -28,7 +28,7 @@ The PAWS and SNLI train files were also downloaded but are not used.
 
 ## How it was built
 
-The builder is a scratch file outside the repository: `/root/work/teacher/bin/build_probe.py`, SHA-256 `625cc37f…0398`, seed 20261028. It runs in about 2 min 15 s on one core. What it does:
+The builder is [`build_probe.py`](build_probe.py) (SHA-256 `102846af…1c4428ef`), seed 20261028. It runs in about 2 min 15 s on one core. It was a scratch file (`625cc37f…0398`) when the set was built; the repository copy differs only in its docstring and in reading the corpus paths from `ENWIK8` and `DOLLY` when they are set, and it rebuilt all nine files with the same SHA-256. What it does:
 
 1. **Clean the wiki text.** Split held-out enwik8 into pages and drop redirects and pages with a colon in the title. Unescape the XML twice (so `&amp;mdash;` becomes —). Remove comments, `<ref>` blocks, `<math>`/`<code>`/`<pre>`/`<gallery>` blocks and other tags. Remove `{{templates}}` and `{| tables |}` from the inside out. Replace `[[target|text]]` by its text and drop namespaced links (Image, Category, interwiki). Drop external links, bold and italic quotes, and every line that starts with a heading, list, indent or table mark. This leaves 7,236 articles with prose.
 2. **Split sentences.** Split after `.`, `!` or `?` before a capital or digit, except after common abbreviations and single initials. Keep a sentence when it has 6–40 words, starts with a capital, ends with `.`, `!` or `?`, has balanced brackets and quotes, has no markup character (`[]{}|<>=*#_\~^`), and is at least 75% letters. This gives 307,047 sentences.
@@ -79,7 +79,7 @@ Words and phrases fall a little short of 20,000 each because an item that alread
 
 ## Nested subsets
 
-Runs that cannot take the full set use these. They keep probe.txt's order and text exactly, so `--key text` still matches. Both are made by `/root/work/teacher/bin/pilot_subset.py` (SHA-256 `cb9ad356…aad5`, seed 20261028).
+Runs that cannot take the full set use these. They keep probe.txt's order and text exactly, so `--key text` still matches. Both are made by [`pilot_subset.py`](pilot_subset.py) (SHA-256 `cb9ad356…aad5` as run; the repository copy is the same file), seed 20261028.
 
 | Subset | Rule | Items | Qwen3 tokens | Pairs |
 |---|---|---|---|---|
@@ -96,8 +96,8 @@ Runs that cannot take the full set use these. They keep probe.txt's order and te
 | `pos_pairs_s8b.tsv` | `4b722c6a7db9a2799854d64b4fefe3d952b8c6a74a0108f34eb59b3721c4ca2c` | here and build machine |
 
 ```bash
-python -I /root/work/teacher/bin/pilot_subset.py /root/work/teacher/probe 600 6000                       # the pilot
-python -I /root/work/teacher/bin/pilot_subset.py /root/work/teacher/probe 50 500 20261028 3000 s8b pilot  # the 8B subset
+python -I mined/probe/pilot_subset.py /root/work/teacher/probe 600 6000                       # the pilot
+python -I mined/probe/pilot_subset.py /root/work/teacher/probe 50 500 20261028 3000 s8b pilot  # the 8B subset
 ```
 
 No teacher vectors exist for any of these yet. Inference moved to Odin's PC on 2026-10-28; the runbook is in [QWEN3_EMBEDDING_DISSECTION.md](../../docs/reports/QWEN3_EMBEDDING_DISSECTION.md) §9.
@@ -105,8 +105,9 @@ No teacher vectors exist for any of these yet. Inference moved to Odin's PC on 2
 ## Reproduce
 
 ```bash
-python -I /root/work/teacher/bin/build_probe.py /root/work/teacher/probe /root/work/teacher/data \
-    /home/user/Cypha /root/work/e1/pos_tagger /root/work/e1/pos_model.bin
+ENWIK8=/root/cdata/enwik8 DOLLY=/root/cdata/dolly.jsonl \
+python -I mined/probe/build_probe.py /root/work/teacher/probe /root/work/teacher/data \
+    . /root/work/e1/pos_tagger /root/work/e1/pos_model.bin
 cd /root/work/teacher/probe && sha256sum -c SHA256SUMS
 ```
 

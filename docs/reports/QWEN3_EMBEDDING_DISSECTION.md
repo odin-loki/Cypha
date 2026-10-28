@@ -4,7 +4,7 @@
 
 Plan: [EMBEDDING_GEOMETRY.md](../EMBEDDING_GEOMETRY.md) §6 (dissection IDs), §9 (logistics), §10 (QE0–QE9, predictions Q1–Q10).
 Tool: `scripts/gguf_mine.py` ([GGUF_MINING.md](../GGUF_MINING.md) §14). Small outputs: `mined/qwen3emb/`. Probe set: [mined/probe/README.md](../../mined/probe/README.md).
-Machine: the cloud container, 4 shared cores (2 used, `nice -n 5`), 15 GB RAM. Load average 3–8 from other agents during every run.
+Machine: the cloud container, 4 shared cores (2 used, `nice -n 5`), 15 GB RAM. Load average 3–8 from other jobs during every run.
 
 ## In short
 
@@ -12,9 +12,11 @@ Machine: the cloud container, 4 shared cores (2 used, `nice -n 5`), 15 GB RAM. L
 - **Qwen3.5-9B loads** in llama-cpp-python 0.3.36, and its chat template renders with thinking off. It runs at 10.6 tokens/s for prompts and 1.91 tokens/s for generation on 2 cores here.
 - **Three bugs fixed in `gguf_mine.py`.** The worst one made every batch decode ignore `--threads`. Fixing it made `embedtexts` 3.1× faster here.
 - **The probe set is built and hashed:** 135,895 items, 2,455,468 tokens. A rebuild gives the same hashes.
-- **A4: the weight change from the base is small and low-rank. Q4 hit**, in all 196 matrices.
-  - Contrastive training left the token embeddings and every norm untouched. It changed the linear layers by 3.3%, and the last FFN down-projection by 31%.
-  - That last change is almost rank 1, and it shapes the common direction of the output vectors.
+- **A4: the weight change from the base is small and low-rank. Q4 hit** on both models: 196 of 196 matrices on 0.6B and 252 of 252 on 8B.
+  - Contrastive training left the token embeddings and every norm untouched on both.
+  - It changed the linear layers by 3.3% (0.6B) and 6.3% (8B).
+  - The largest single change is in the last FFN down-projection (31% and 12%). It is almost rank 1, and on 0.6B it shapes the common direction of the output vectors.
+- **Static anatomy otherwise unchanged.** The copying heads and the weight spectra of the 0.6B embedder are the base's. The 8B input embedding is more isotropic than the 0.6B's and has no hub problem.
 - **The dynamic dissection did not run.** Odin stopped all inference in this container on 2026-10-28; it runs on his PC. Section 9 gives the commands, sized from the timing here. Q1–Q3, Q5, Q6 and Q10 are not scored yet. Section 7 has a provisional look at the 1,000 vectors the timing run had already made.
 
 ## 1. What ran, and what did not
@@ -46,8 +48,9 @@ The 0.6B probe run had started and was stopped after 180 s, before its first par
 | Qwen3-0.6B-Q8_0.gguf (instruct) | Qwen/Qwen3-0.6B-GGUF (`23749fef`) | 639,446,688 | `9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031` | Apache-2.0 on the card; the GGUF has no `general.license` key, so `info` warns |
 | Qwen3.5-9B-Q4_K_M.gguf | unsloth/Qwen3.5-9B-GGUF (`3885219b`) | 5,680,522,464 | `03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8` | Apache-2.0 |
 | Qwen3-Embedding-8B-Q8_0.gguf | Qwen/Qwen3-Embedding-8B-GGUF (`69d0e58a`) | 8,047,105,824 | `d20ddc71e8a5c4344f2343481e242233a997dc5eaff442427a945836c97b4deb` | Apache-2.0 |
+| Qwen3-8B-Base.Q8_0.gguf | mradermacher/Qwen3-8B-Base-GGUF, converted from Qwen/Qwen3-8B-Base | 8,709,518,592 | `2b28cadaea98be2506e289e786b531bc0d7a8acf6026bab67eca78a5da2e8456` | Apache-2.0 |
 
-The Qwen team publishes no base-model GGUF for Qwen3-0.6B, so the base is mradermacher's conversion of the official `Qwen/Qwen3-0.6B-Base`. Its metadata names that source (`general.source.url`). Every file was deleted after use to keep under the disk budget; the hashes above identify them.
+The Qwen team publishes no base-model GGUF for Qwen3-0.6B, so the base is mradermacher's conversion of the official `Qwen/Qwen3-0.6B-Base`. Its metadata names that source (`general.source.url`). Every file was deleted after use to keep under the disk budget; the hashes above identify them. The two 8B files were on disk together only for `wdiff` (16.8 GB for about 70 minutes).
 
 ## 3. QE0: metadata, EOS and the pooling gate
 
@@ -158,7 +161,7 @@ Q8_0 noise lowers the share a little (median 0.980 → 0.965) but changes no con
 - **By layer:** the relative change is 3.8% in layer 0, peaks at 6.0% in layer 3, stays at 4–6% to layer 18, then falls to 1.8% in layer 26. Layer 27 is at 3.4%.
 - **By matrix type:** the median relative change is largest for `ffn_gate` (9.4%) and smallest for `attn_v` (4.9%).
 - **The largest single changes are in the last three layers:** `ffn_gate` of layers 24–26 (13.5–15.0%), `ffn_up` of layer 27 (12.7%), and **`ffn_down` of layer 27 (31.5%)**.
-- **Low rank, but not one small adapter rank.** Stable ranks are 1.1–7. In 35 matrices from layers 0, 3, 10, 20 and 27, 90% of ‖ΔW‖² lies in a median of 22 singular values and 99% in a median of 67 (range 3–104) of 1,024. There is no sharp cut-off at 8, 16, 32 or 64. The largest gap between neighbouring singular values is at most 2.7×, except in layer 27's `ffn_down`.
+- **Low rank, but not one small adapter rank.** Stable ranks are 1.1–9.4. In 35 matrices from layers 0, 3, 10, 20 and 27, 90% of ‖ΔW‖² lies in a median of 22 singular values and 99% in a median of 67 (range 3–104) of 1,024. There is no sharp cut-off at 8, 16, 32 or 64. The largest gap between neighbouring singular values is at most 2.75×, except in layer 27's `ffn_down`.
 - **The last down-projection is almost rank 1.** 93.4% of its change lies in the top singular direction and 99.5% in the top three (largest gap 4.3×).
   - Its second direction, scaled by the final norm gains, has |cosine| 0.52 with the mean of the model's output vectors. A random direction has 0.061 at the 95th percentile. (The mean is of the 1,000 timing vectors, §7.)
   - The three directions hold 30% of that mean direction.
@@ -243,7 +246,20 @@ Same commands, with layer subsets where the cost scales with vocabulary × width
 
 **Spectra** (layers 0, 9, 18, 27 and 35 plus `token_embd`, 36 matrices, 8 minutes). The median heavy-tail α is 4.56, and 75% of the matrices lie in the 2–6 band (0.6B embedder: 5.01 and 72%). By type: attn_q 3.44, attn_k 4.07, ffn_gate 4.17, attn_output 4.30, ffn_down 4.58, ffn_up 6.00, attn_v 6.46, token_embd 4.73. As in the 0.6B, the query and key projections have the heaviest tails and attn_v and ffn_up the lightest.
 
-WDIFF8B_PLACEHOLDER
+**Weight difference from Qwen3-8B-Base (A4, Q8_0 against Q8_0, 398 tensors, 66 minutes).** The base is mradermacher's Q8_0 conversion of `Qwen/Qwen3-8B-Base`. The Qwen team publishes no base GGUF.
+
+| | 8B | 0.6B (Q8_0) |
+|---|---|---|
+| Total relative change | **0.0628** | 0.0334 |
+| Matrices with top-5% share ≥ 0.5 | **252 / 252** | 196 / 196 |
+| Top-5% share, median (min) | 0.976 (0.895) | 0.965 (0.874) |
+| `token_embd` (shared 151,665 rows) and all norms | unchanged (0) | unchanged (0) |
+| Output head | dropped (the base's `output.weight` has no counterpart) | tied in both |
+| Relative change by layer | 5.3% (layer 0) to 7.7% (layer 35), fairly even | 1.8% to 6.0% |
+| Largest single change | `blk.35.ffn_down` 12.0%, stable rank 1.29 | `blk.27.ffn_down` 31.5%, stable rank 1.07 |
+| Median relative change by type | ffn_gate 8.5%, attn_q 6.3%, attn_k 5.8%, ffn_up 5.6%, ffn_down 4.7%, attn_output 4.6%, attn_v 4.0% | ffn_gate 9.4% … attn_v 4.9% |
+
+Above 1,024 the script uses a randomized SVD (k = 205 of 4,096), which slightly underestimates the share, so the 8B numbers are conservative. The 8B embedder was made the same way as the 0.6B: the token embeddings and every norm frozen, a low-rank change to every linear layer, and the strongest single change in the last FFN down-projection, again close to rank 1. The relative change is twice the 0.6B's but spread more evenly over the layers.
 
 ## 6. QE2: the probe set
 
@@ -261,7 +277,7 @@ Built and hashed; details in [mined/probe/README.md](../../mined/probe/README.md
 - **Exclusions.** No T-QA question is in it, and no test split of STS-B, MRPC, PAWS or SNLI.
 - **Splits.** Every item has a dev or test split from a hash of its text (20.1% test).
 - **QE2 gate (reproducible to the hash): hit** for the inputs. A second build gave the same SHA-256 for all nine files.
-- **Two nested subsets for runs that cannot take the full set**, both from scratch builders recorded in the probe README:
+- **Two nested subsets for runs that cannot take the full set**, both made by `mined/probe/pilot_subset.py`:
   - the 0.6B pilot: 600 pairs per class, all words, phrases and titles, and 6,000 more wiki sentences. 67,379 items, 745,914 tokens.
   - an 8B subset inside it: 50 pairs per class, 3,000 words and phrases, all titles, 500 more wiki sentences. 10,239 items, 82,063 tokens.
 
@@ -304,7 +320,7 @@ Outputs are in `mined/qwen3emb/provisional_timing1000/`. The intervals are 95% p
 
 ### 8.2 Estimates
 
-The 8B embedder does 12.7× the 0.6B's work per token: 7.57B against 0.596B parameters, each including the tied output head that embedding mode runs on every token. The brief's 13× agrees. At this machine's rates:
+The 8B embedder does 12.7× the 0.6B's work per token: 7.57B against 0.596B parameters, each including the tied output head that embedding mode runs on every token. The 8B rate below is that estimate, not a measurement. At this machine's rates:
 
 | Job | Tokens | 0.6B at 58.3 tokens/s | 8B at about 4.6 tokens/s |
 |---|---|---|---|
@@ -316,7 +332,7 @@ The 8B embedder does 12.7× the 0.6B's work per token: 7.57B against 0.596B para
 | `instruct`, 2,000 questions × 5 instructions (12,000 texts) | 310,874 | 1.5 h | 19 h |
 | `sensitivity`, 200 per kind (about 3,600 texts, estimated) | about 86,000 | 25 min | 5.2 h |
 
-- **Qwen3.5-9B mining (QE4, next wave).** The cost per document is a property of `pairs`, not of this machine. With the default four query types, one query each, four hard negatives and a verification of every row, one document needs about 2,200 prompt tokens and 340 generated tokens, with thinking off. That is about 6.4 minutes per document here (1,000 documents in 107 h). Use Odin's own `llama-bench` rates in the same sum.
+- **Qwen3.5-9B mining (QE4, next wave).** The cost per document is a property of `pairs`, not of this machine. Defaults, thinking off, one-sentence document: each of the 4 query types gets a generated query and its yes/no verification. Each query also gets a generated topic negative and three more negatives, made by rule when the negation, role-swap and entity rules apply and generated otherwise. Every negative is verified too. That is about 3,000–4,300 prompt tokens and 160–520 generated tokens per document, or 6–11 minutes per document here (1,000 documents in 100–190 h). Use Odin's own `llama-bench` rates in the same sum.
 - **Odin's PC.** Rates there will be far higher. Time 1,000 items first (§9) and scale this table by the ratio.
 
 ## 9. What remains, on Odin's PC
@@ -356,7 +372,7 @@ $GM pairs --model $G --out $O/audit --audit masked_candidates.tsv --think --ctx 
 
 - **If the full set is too slow,** use the nested subsets: `probe_pilot.txt` with `pos_pairs_pilot.tsv` and `classes_pilot.tsv`, or `probe_s8b.txt` with its pairs files (probe README).
 - **What each run scores.** `geometry` scores Q1–Q3 and gives B1–B7, B13 and B17. `sensitivity` scores Q6, `occlusion` Q5 and `instruct` Q10. `compare` gives what scale adds.
-- **Bootstrap intervals.** For these, `/root/work/teacher/bin/analyse.py` (a scratch reader of these outputs, described in §10) gives percentile intervals for Q1, Q2, Q3 and Q6, plus the B2 AUCs and the STS-B Spearman.
+- **Bootstrap intervals.** For these, `/root/work/teacher/bin/analyse.py` (a scratch reader of these outputs, listed in §11) gives percentile intervals for Q1, Q2, Q3 and Q6, plus the B2 AUCs and the STS-B Spearman.
 - **Keep the vectors.** The 0.6B vectors belong at `work/qe/probe/embeddings.npy` with `embeddings_index.tsv`, so that Cypha's exported vectors can be compared to them with `compare --key text`.
 
 ## 10. Predictions
@@ -366,7 +382,7 @@ $GM pairs --model $G --out $O/audit --audit masked_candidates.tsv --think --ctx 
 | Q1 | Floor: mean cosine of unrelated sentence pairs in 0.05–0.5 | **not scored** (needs the probe pairs; provisional value in §7) |
 | Q2 | Effective temperature in 0.01–0.1 | **not scored** (needs probe-set positives) |
 | Q3 | MRL: 256 dims keep ≥ 95% of the full pair Spearman, 32 dims keep ≥ 80% | **not scored** (provisional value in §7) |
-| Q4 | Weight change concentrated: top 5% of singular values hold ≥ 50% of ‖ΔW‖² in most matrices | **hit** on 0.6B: 196 / 196 matrices, median share 0.980, minimum 0.907 (F16). EIGHTB_Q4 |
+| Q4 | Weight change concentrated: top 5% of singular values hold ≥ 50% of ‖ΔW‖² in most matrices | **hit** on 0.6B: 196 / 196 matrices, median share 0.980, minimum 0.907 (F16). **Hit** on 8B: 252 / 252, median 0.976, minimum 0.895 (Q8_0, randomized SVD, conservative) |
 | Q5 | Additivity: weighted word sum reaches ≥ 0.8 pair Spearman | **not scored** (`occlusion`, Odin's PC) |
 | Q6 | Median cosine of "X is Y" against "X is not Y" ≥ 0.8 | **not scored** (`sensitivity`, Odin's PC) |
 | Q10 | One offset per instruction explains ≥ 70% of its shift | **not scored** (`instruct`, Odin's PC) |
@@ -405,6 +421,12 @@ $GM neurons --model $M/Qwen3-Embedding-0.6B-Q8_0.gguf --out work/neurons_emb_0.6
 $GM wdiff   --model $M/Qwen3-Embedding-0.6B-f16.gguf --base $M/Qwen3-0.6B-Base.f16.gguf --out $O/wdiff/f16_vs_base_f16
 $GM wdiff   --model $M/Qwen3-Embedding-0.6B-Q8_0.gguf --base $M/Qwen3-0.6B-Base.Q8_0.gguf --out $O/wdiff/q8_vs_base_q8
 $GM wdiff   --model $M/Qwen3-Embedding-0.6B-Q8_0.gguf --base $M/Qwen3-0.6B-Q8_0.gguf --out $O/wdiff/q8_vs_instruct_q8
+# 8B (same commands; subsets where the cost is vocabulary x width)
+$GM embed   --model $M/Qwen3-Embedding-8B-Q8_0.gguf --out work/embed_8b
+$GM neurons --model $M/Qwen3-Embedding-8B-Q8_0.gguf --out work/neurons_emb_8b --max-neurons 256
+$GM heads   --model $M/Qwen3-Embedding-8B-Q8_0.gguf --out work/heads_emb_8b --layers 0,9,18,27,35 --tokens 200
+$GM spectra --model $M/Qwen3-Embedding-8B-Q8_0.gguf --out work/spectra_emb_8b --pattern 'blk\.(0|9|18|27|35)\.|token_embd'
+$GM wdiff   --model $M/Qwen3-Embedding-8B-Q8_0.gguf --base $M/Qwen3-8B-Base.Q8_0.gguf --out $O/wdiff/q8_8b_vs_base_q8
 ```
 
 Done before the stop:
