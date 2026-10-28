@@ -72,7 +72,7 @@ The full study is the paper `paper/scribe/SCRIBE_paper.md` (PDF next to it; tabl
 - **Ablations.** Each axis carries one rung; no single statistic is necessary; raw log-probabilities, no saturation, or 95th-percentile thresholds each break a pair.
 - **Cost.** 1,054 texts/s on one core, 394 MB (Wikipedia pack); GPT-2 perplexity 4.7 texts/s on two threads.
 
-The planned Pythia and GPT-2 decoding ladders and the LLM judge were not run, at the owner's request (about 20 CPU-hours). Of the twenty registered predictions, the scorecard is Table 14 of the paper.
+The planned Pythia and GPT-2 decoding ladders and the LLM judge were not run, at the owner's request (about 20 CPU-hours). Of the twenty registered predictions, 8 hit, 8 missed and 4 could not be tested (paper Table 14). The misses: P4 (MAUVE puts the repeated phrase above word salad), P5 (books 3 of 5), P9 (GPT-2 sizes), P11 (per-pair agreement 0.541), P13 (WP Pearson 0.057), P14 (pooled length correlation −0.124), P15 (web keeps 0.89 of its score), P18 (s3g alone is not necessary).
 
 ## Code review after the freeze (2026-10-28)
 
