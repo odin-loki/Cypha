@@ -29,6 +29,8 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <iosfwd>
+#include <string>
 #include <vector>
 
 namespace cypha::cyphalm {
@@ -78,6 +80,8 @@ class AlphaTree {
     /// Adds the count of each symbol in [lo, hi) to out[symbol].
     void counts(std::size_t lo, std::size_t hi, std::uint32_t* out) const { counts_(root_, lo, hi, out); }
     std::size_t bytes() const;
+    void write(std::ostream& out) const;
+    void read(std::istream& in);
 
  private:
     struct Node {
@@ -126,11 +130,17 @@ class FmInfiniGram {
     /// for the empty prefix). A prefix grows to the right: one step on the reversed BWT.
     std::size_t match_prefix(const std::uint8_t* s, std::size_t len, std::size_t cap, std::size_t& count) const;
 
+    /// A stored index (RAM_PROFILE M8): "FMIG", version 1, little-endian, with a checksum.
+    /// Loading reads the arrays as they are, so serving needs no text and no build.
+    void save(const std::string& path) const;
+    static FmInfiniGram load(const std::string& path);
+
     std::size_t size() const { return n_; }
     /// Bytes the index holds.
     std::size_t bytes() const { return fwd_.bytes() + rev_.bytes(); }
 
  private:
+    FmInfiniGram() = default;
     struct Found {
         int n = 0;
         std::size_t loR = 0, sz = 0;

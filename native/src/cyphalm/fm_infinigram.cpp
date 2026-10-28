@@ -2,11 +2,36 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include <stdexcept>
 
 #include "libsais.h"
 
 namespace cypha::cyphalm {
+
+// Stored form: plain little-endian integers and arrays, each array after its length.
+namespace {
+template <class T>
+void put(std::ostream& o, const T& v) { o.write(reinterpret_cast<const char*>(&v), sizeof v); }
+template <class T>
+void put_vec(std::ostream& o, const std::vector<T>& v) {
+    put(o, static_cast<std::uint64_t>(v.size()));
+    o.write(reinterpret_cast<const char*>(v.data()), static_cast<std::streamsize>(v.size() * sizeof(T)));
+}
+template <class T>
+void get(std::istream& in, T& v) {
+    if (!in.read(reinterpret_cast<char*>(&v), sizeof v)) throw std::runtime_error("FmInfiniGram: stored index cut short");
+}
+template <class T>
+void get_vec(std::istream& in, std::vector<T>& v, std::uint64_t most) {
+    std::uint64_t n = 0;
+    get(in, n);
+    if (n > most) throw std::runtime_error("FmInfiniGram: stored index damaged");
+    v.resize(static_cast<std::size_t>(n));
+    if (!in.read(reinterpret_cast<char*>(v.data()), static_cast<std::streamsize>(n * sizeof(T))))
+        throw std::runtime_error("FmInfiniGram: stored index cut short");
+}
+}  // namespace
 
 namespace fm_detail {
 
@@ -94,6 +119,43 @@ std::size_t AlphaTree::bytes() const {
     return b;
 }
 
+
+void AlphaTree::write(std::ostream& out) const {
+    for (auto f : freq_) put(out, f);
+    put(out, static_cast<std::int32_t>(root_));
+    put(out, static_cast<std::uint64_t>(nodes_.size()));
+    for (const auto& nd : nodes_) {
+        put(out, static_cast<std::int32_t>(nd.mid));
+        put(out, static_cast<std::int32_t>(nd.left));
+        put(out, static_cast<std::int32_t>(nd.right));
+        put_vec(out, nd.bits.w);
+        put_vec(out, nd.bits.cum);
+    }
+}
+
+void AlphaTree::read(std::istream& in) {
+    for (auto& f : freq_) get(in, f);
+    std::int32_t root = 0;
+    get(in, root);
+    root_ = root;
+    std::uint64_t nn = 0;
+    get(in, nn);
+    if (nn > 255) throw std::runtime_error("FmInfiniGram: stored index damaged");
+    nodes_.assign(static_cast<std::size_t>(nn), Node{});
+    for (auto& nd : nodes_) {
+        std::int32_t mid = 0, l = 0, r = 0;
+        get(in, mid), get(in, l), get(in, r);
+        nd.mid = mid, nd.left = l, nd.right = r;
+        get_vec(in, nd.bits.w, std::uint64_t{1} << 32);
+        get_vec(in, nd.bits.cum, std::uint64_t{1} << 32);
+        if (nd.bits.cum.size() != nd.bits.w.size() / 8 + 2) throw std::runtime_error("FmInfiniGram: stored index damaged");
+    }
+    const auto ok = [&](int v) { return v < 0 ? v >= -256 : static_cast<std::size_t>(v) < nodes_.size(); };
+    if (!ok(root_)) throw std::runtime_error("FmInfiniGram: stored index damaged");
+    for (const auto& nd : nodes_)
+        if (!ok(nd.left) || !ok(nd.right) || nd.mid < 0 || nd.mid > 255) throw std::runtime_error("FmInfiniGram: stored index damaged");
+}
+
 // BWT of t$ as n + 1 bytes, the $ row holding 0 (libsais gives the n others and
 // the $ row). With in_place the text's own buffer becomes the BWT.
 static std::vector<std::uint8_t> bwt(std::vector<std::uint8_t>& t, bool in_place, std::size_t& dollar) {
@@ -128,6 +190,87 @@ FmInfiniGram::FmInfiniGram(std::vector<std::uint8_t>&& text) : n_(text.size()) {
     fwd_.build(fm_detail::bwt(text, false, dT_));
     std::reverse(text.begin(), text.end());
     rev_.build(fm_detail::bwt(text, true, dR_));
+}
+
+namespace {
+constexpr char kMagic[4] = {'F', 'M', 'I', 'G'};
+constexpr std::uint32_t kVersion = 1;
+// FNV-1a over the stored bytes after the header, checked on load.
+struct Fnv {
+    std::uint64_t h = 1469598103934665603ull;
+    void add(const char* p, std::size_t n) {
+        for (std::size_t i = 0; i < n; ++i) h = (h ^ static_cast<unsigned char>(p[i])) * 1099511628211ull;
+    }
+};
+}  // namespace
+
+void FmInfiniGram::save(const std::string& path) const {
+    // Header (magic, version, body size, checksum) with the last two filled in after the body is written.
+    std::fstream out(path, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+    if (!out) throw std::runtime_error("FmInfiniGram: cannot write " + path);
+    const std::streamoff head = 4 + sizeof(std::uint32_t) + 2 * sizeof(std::uint64_t);
+    out.write(kMagic, 4);
+    put(out, kVersion);
+    put(out, std::uint64_t{0});
+    put(out, std::uint64_t{0});
+    put(out, static_cast<std::uint64_t>(n_));
+    for (auto c : C_) put(out, static_cast<std::uint64_t>(c));
+    put(out, static_cast<std::uint64_t>(dT_));
+    put(out, static_cast<std::uint64_t>(dR_));
+    fwd_.write(out);
+    rev_.write(out);
+    const std::uint64_t size = static_cast<std::uint64_t>(static_cast<std::streamoff>(out.tellp()) - head);
+    Fnv f;
+    out.seekg(head);
+    std::vector<char> buf(1 << 20);
+    for (std::uint64_t left = size; left;) {
+        const std::size_t k = static_cast<std::size_t>(std::min<std::uint64_t>(left, buf.size()));
+        if (!out.read(buf.data(), static_cast<std::streamsize>(k))) throw std::runtime_error("FmInfiniGram: cannot reread " + path);
+        f.add(buf.data(), k);
+        left -= k;
+    }
+    out.seekp(4 + sizeof(std::uint32_t));
+    put(out, size);
+    put(out, f.h);
+    if (!out) throw std::runtime_error("FmInfiniGram: cannot write " + path);
+}
+
+FmInfiniGram FmInfiniGram::load(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::runtime_error("FmInfiniGram: cannot open " + path);
+    char magic[4] = {};
+    std::uint32_t version = 0;
+    std::uint64_t size = 0, sum = 0;
+    in.read(magic, 4);
+    get(in, version), get(in, size), get(in, sum);
+    if (std::memcmp(magic, kMagic, 4) != 0 || version != kVersion) throw std::runtime_error("FmInfiniGram: not a stored index: " + path);
+    // Check the checksum while reading the body in blocks, then parse it from the start.
+    {
+        Fnv f;
+        std::vector<char> buf(1 << 20);
+        std::uint64_t left = size;
+        while (left) {
+            const std::size_t k = static_cast<std::size_t>(std::min<std::uint64_t>(left, buf.size()));
+            if (!in.read(buf.data(), static_cast<std::streamsize>(k))) throw std::runtime_error("FmInfiniGram: stored index cut short");
+            f.add(buf.data(), k);
+            left -= k;
+        }
+        if (f.h != sum) throw std::runtime_error("FmInfiniGram: stored index damaged (checksum)");
+    }
+    in.clear();
+    in.seekg(4 + sizeof(std::uint32_t) + 2 * sizeof(std::uint64_t));
+    FmInfiniGram g;
+    std::uint64_t v = 0;
+    get(in, v);
+    g.n_ = static_cast<std::size_t>(v);
+    for (auto& c : g.C_) get(in, v), c = static_cast<std::size_t>(v);
+    get(in, v);
+    g.dT_ = static_cast<std::size_t>(v);
+    get(in, v);
+    g.dR_ = static_cast<std::size_t>(v);
+    g.fwd_.read(in);
+    g.rev_.read(in);
+    return g;
 }
 
 std::size_t FmInfiniGram::cap_(std::size_t len, int max_n, int hint) {

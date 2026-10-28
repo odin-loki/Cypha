@@ -92,7 +92,27 @@ void one_text(std::mt19937_64& g, std::size_t n, int sigma, bool repeats) {
                 if (failures++ < 10) std::printf("FAIL match_prefix at %zu: length %zu/%zu count %zu/%zu\n", at, la, lb, ca, cb);
             }
         }
-    // 4) the empty context and a context longer than the text
+    // 4) a stored index gives the same answers (every tenth text)
+    static int stored = 0;
+    if (stored++ % 10 == 0) {
+        const std::string path = "fm_infinigram_test.fmig";
+        fm.save(path);
+        const FmInfiniGram back = FmInfiniGram::load(path);
+        std::remove(path.c_str());
+        ++checks;
+        if (back.bytes() != fm.bytes() || back.size() != fm.size()) {
+            if (failures++ < 10) std::printf("FAIL stored index: bytes %zu/%zu\n", back.bytes(), fm.bytes());
+        }
+        int pb = -1, pc = -1;
+        for (std::size_t i = 1; i <= q.size(); ++i) {
+            const std::size_t len = std::min<std::size_t>(i, 64);
+            const auto x = fm.query(q.data() + (i - len), len, 64, pb < 0 ? -1 : std::min(pb + 1, 64));
+            const auto y = back.query(q.data() + (i - len), len, 64, pc < 0 ? -1 : std::min(pc + 1, 64));
+            same(x, y, "stored", i);
+            pb = x.n, pc = y.n;
+        }
+    }
+    // 5) the empty context and a context longer than the text
     same(sa.query(t.data(), 0, 10), fm.query(t.data(), 0, 10), "empty", 0);
     same(sa.query(q.data(), q.size(), 1 << 20), fm.query(q.data(), q.size(), 1 << 20), "long", 0);
 }

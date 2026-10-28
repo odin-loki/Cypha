@@ -49,6 +49,8 @@ A memory change is adopted only if:
 | M4 | A packed read-only trie for serving, built from the trained model, predictions equal to Synth mode | Trie 36 → about 11 MB resident, BPC identical to the digit |
 | M5 | InfiniGram as a bidirectional FM-index (BWT of the text and of the reversed text, each in a wavelet matrix), no suffix array and no text copy. Registered after M1–M3 were read | Every query result identical (n, total, all 256 counts) on the holdout; index 77 → under 45 MB; query time at most 3× the suffix array's |
 | M6 | In `cyphalm_trie qa`, build the class expert and the FM-index before the trie is trained (neither reads the trie), and let the index take the training text. Registered after M1–M5 were read | Every qa number identical; peak 303 → under 200 MB with 3 orders |
+| M7 | A stored packed trie file (`PackedModel::save` / `load`): magic, version, sizes and a checksum, with the six mixture weights and the scoring split, so a served model is self-contained. Registered before it was written | Loaded model bit-identical (every array, every holdout distribution, BPC to the bit); file within 1 KB of the packed bytes; load under 0.2 s for the qa model (8.1 MB); resident after load within 2 MB of the packed bytes + the 8 MiB text + the empty process |
+| M8 | A stored FM-index file (`FmInfiniGram::save` / `load`), so serving never builds the index. Registered before it was written | Load gives the same answers; file within 1% of the index's bytes; load under 0.5 s for 19.6 MB of text; peak while loading under the index's size + 10 MB |
 
 ## Results (2026-10-28)
 
@@ -237,3 +239,32 @@ The training form walks linked sibling and follower lists. The packed form reads
 - **Peak.** Where training sets the peak (`bpc`, `chat`, `sample`), it does not move. Where InfiniGram or the class table is built after training, it is now built after the training form is freed: the peak falls by 35.2 MB (`context8k`), 31.4 MB (`qa`), 31.7 MB (`qa` with the class expert) and 21.1 MB (`cls`).
 - **Prediction M4: hit.** Every BPC and every distribution is identical to the bit. The trie fell from 35.6 to 4.9 MB, the whole model from 38.5 to 7.7 MB, and resident memory by 34.2 MB (42.7 MB with `malloc_trim`). The size beat the prediction (about 11 MB), which came from the Synth accounting.
 - **Not done yet:** a stored packed file. With a load path, a served model would never hold the training form at all.
+
+### M6: the build order
+
+Scratch harness `memprof6.cpp`: the texts are read and T (wiki train + the `<|doc|>` boundary + chat, the same bytes as the tool's T) is built first; then the class expert; then the FM-index, which takes T; then the trie is trained. Final `class_context.hpp` (per-order merge, chunk 2^17).
+
+| Configuration | Class built: resident / peak | Index built: resident / peak | Trie trained: resident | Peak, now order → M6 order |
+|---|---:|---:|---:|---:|
+| FM-index, class 3 orders compact, seen once dropped | 61.2 / 186.8 MB | 68.1 / 186.8 MB | 119.6 MB | 302.9 → **186.8 MB** |
+| FM-index, class 2 orders compact | 63.7 / 155.3 MB | 70.5 / 208.2 MB | 122.0 MB | 231.0 → 208.2 MB |
+| Suffix array, class 2 orders (B4's setting) | 87.2 / 155.6 MB | 145.6 / 161.7 MB | 195.7 MB | 220.7 → 211.4 MB |
+
+- **Prediction M6, on the harness: hit** (186.8 MB with 3 orders, under 200). The qa numbers are read when the tool is wired.
+- **The FM build sets the 2-order peak.** It needs the text, its BWT and libsais's 4-byte-a-byte work array at once (about 6 bytes a text byte), and the heap fragments; one run added 144 MB, another at most 125.
+- **The registered method does not fit `qa` as it is.** There, the chat text depends on the wiki trie (A1c's familiarity tokens are chosen with it), so the chat text cannot be built before training. M4 gives the same effect another way: the tool packs the trie and frees its training form before InfiniGram and the class expert are built, and the packed form never reads the training text. The harness with M4 (the M4 section) gives 234.5 MB with the earlier class build; with the per-order build the class step adds 132 MB instead of 166–203, so that peak falls further.
+
+### M8: a stored FM-index file
+
+`FmInfiniGram::save(path)` and `FmInfiniGram::load(path)`: "FMIG", version 1, the body's size and an FNV-1a checksum, then the arrays as they are. Scratch harness `fmstore.cpp` on the qa training text (19.6 MB):
+
+| Read | Value |
+|---|---:|
+| Build, then save | 3.7 s, then 0.08 s |
+| File | 27,227,720 B; the index in memory is 26.0 MB |
+| Load | 0.06 s |
+| Peak while loading, over the process before it | +26.0 MB (the index itself) |
+| Holdout answers after loading | the same: hash `9652039fc4d09c09` over every holdout query's n, total and count, built and loaded |
+
+- **Prediction M8: hit** (same answers; file within 1%; load 0.06 s; peak + 26 MB, under the index + 10 MB).
+- A served model that loads the index never pays the build's 6 bytes a text byte. CTest `native_fm_infinigram_test` checks the round trip on every tenth random text.
