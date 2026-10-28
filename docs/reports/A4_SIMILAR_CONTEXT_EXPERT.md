@@ -189,3 +189,27 @@ A rule fixed before this sweep ran picks the spec: the lowest trie + InfiniGram 
 - **Not chosen: k = 8,192.** It gains about 0.006 more for 2.5 times the query time. It is the dial to turn if BPC matters more than speed.
 
 **How the design moved from the registered one.** The registered expert (W = 8, SIF, k = 32) is a topical expert: it gains 0.020 over trie + InfiniGram + class. The data pulled it to a local one: two words, function words kept, thousands of neighbours. It then works as a smoothed next-word model over contexts of similar meaning, and gains three times as much.
+
+---
+
+## Fresh text, read once (1,048,576 bytes), and surface S
+
+The chosen spec, keys over the train bytes, lambdas refit on the whole holdout. Trie 2.367826, trie + InfiniGram 2.166032, + class 2.087926 (B4's numbers, reproduced).
+
+| Model | Fresh BPC | Gain (95% block bootstrap, 4,000 resamples) |
+|---|---:|---|
+| trie + InfiniGram + sim | 2.080674 | −0.0854 [−0.0905, −0.0807] over trie + InfiniGram |
+| trie + InfiniGram + class + sim | **2.026693** | **−0.0612 [−0.0658, −0.0572]** over trie + InfiniGram + class |
+
+Every resample is below zero, so LCI ≥ 0.95 holds for both. On the holdout's second half the same spec gave −0.0852 and −0.0598: the gain carries over to fresh text unchanged. Of the 1,048,576 fresh and 1,048,576 holdout bytes, the expert is live on 67%.
+
+**Surface S** (B4's protocol: 200 holdout prompts, 400 bytes each, T 0.8, nucleus 0.9, no-repeat, the same seed for every model; trie base, no InfiniGram; human text 0.8702):
+
+| Text | Surface S | Change (95% bootstrap over prompts) |
+|---|---:|---|
+| trie | 0.7612 | |
+| trie + sim | 0.8386 | +0.0773 [+0.0658, +0.0879] over the trie |
+| trie + class | 0.9052 | |
+| trie + class + sim | 0.9095 | +0.0043 [−0.0036, +0.0117] over trie + class |
+
+The expert alone lifts S as the class expert does, a little less. On top of the class expert S does not move: the class expert already brought the samples to real words, which is what S counts.
