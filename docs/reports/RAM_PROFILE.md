@@ -254,6 +254,39 @@ Scratch harness `memprof6.cpp`: the texts are read and T (wiki train + the `<|do
 - **The FM build sets the 2-order peak.** It needs the text, its BWT and libsais's 4-byte-a-byte work array at once (about 6 bytes a text byte), and the heap fragments; one run added 144 MB, another at most 125.
 - **The registered method does not fit `qa` as it is.** There, the chat text depends on the wiki trie (A1c's familiarity tokens are chosen with it), so the chat text cannot be built before training. M4 gives the same effect another way: the tool packs the trie and frees its training form before InfiniGram and the class expert are built, and the packed form never reads the training text. The harness with M4 (the M4 section) gives 234.5 MB with the earlier class build; with the per-order build the class step adds 132 MB instead of 166–203, so that peak falls further.
 
+### M7: a stored packed trie file
+
+`PackedModel::save` and `PackedModel::load`, each for a path or a stream. The file holds the packed form, the six mixture weights and the scoring split (`train`, `sample`, `alpha`, `agree_floor`, `match_cap`), so a served model is self-contained. The format:
+- little-endian, no padding: "CYPHAPK" and a zero byte, version 1, then the split, the weights and the count tables;
+- each array as a 64-bit count and its elements;
+- last, the FNV-1a 64-bit hash of every byte before it.
+
+`load()` checks the magic and the version, every count against the bytes left, the hash, and that the arrays fit together (`consistent()`: sizes, rising starts, every start inside its array). A damaged file throws `std::runtime_error`. `operator==` compares every table and array. The code is 199 lines. `self_test()` round-trips its fixed-input model in memory (528,449 bytes) and checks that a copy with one bit flipped, and a copy cut short, are refused. That adds 3.6 ms (fastest of 15 runs: 14.4 → 18.0 ms).
+
+Scratch harness `packfile.cpp`. `build` trains as the tool does, packs, saves and reloads. `serve` is a fresh process: it loads the file, reads the 8 MiB text and scores the holdout.
+
+| | bpc model | chat/qa model |
+|---|---:|---:|
+| Packed form in memory (`bytes()`) | 4,111,378 B | 8,106,219 B |
+| **File** | **4,111,298 B** | **8,106,139 B** |
+| Save | 6.8 ms | 13.7 ms |
+| **Load** in a fresh process (three more loads) | **9.2 ms** (8.2–9.2) | **17.0 ms** (17.5–18.8) |
+| Building instead: train, then pack | 54.7 s, then 0.24 s | 369.6 s, then 0.48 s |
+| Fresh process, empty | 3.50 MB | 3.56 MB |
+| **After load** | **7.86 MB** | **11.72 MB** |
+| After reading the 8 MiB text | 15.91 MB | 19.78 MB |
+| After scoring the holdout (also the peak) | 16.22 MB | 20.09 MB |
+| Building instead: training form / packed and released / peak | 37.27 / 17.27 / 49.80 MB | 75.20 / 40.91 / 95.93 MB |
+
+- **Identical.** The loaded model equals the saved one: every array, the weights and the split. All 1,048,576 holdout positions give the same experts, match and `mix()` distribution, bit for bit.
+- **BPC from the file, in a fresh process:** bpc model 2.3862928313539933 (backoff) and 2.2977939389859512 (mixture); chat/qa model 2.3645558122752401 and 2.3445707246454637. These are the training form's numbers.
+- **The file is the packed form.** It is 80 bytes smaller than `bytes()`, which also counts the vectors' headers.
+- **Resident after load** is the empty process plus the packed form, and 0.43–0.44 MB more (3.50 + 3.92 = 7.42 against 7.86 MB; 3.56 + 7.73 = 11.29 against 11.72 MB). With the text it is 0.49 MB above packed form + text + empty process, for both models.
+- **Serving never holds the training form or the chat text.** The chat model's serving peak is 20.09 MB, against 95.93 MB when it is trained in the same process. The build process keeps 40.91 MB after release, because it still holds the chat text.
+- Loads were timed with the file in the page cache.
+- **Prediction M7: hit.** Bit-identical; the file is 80 bytes under the packed bytes; load 9–19 ms (under 0.2 s); resident 0.49 MB above packed form + text + empty process (within 2 MB).
+- **Not done yet:** `cyphalm_trie` options to save a model and serve from a file. They come with the tool's integration.
+
 ### M8: a stored FM-index file
 
 `FmInfiniGram::save(path)` and `FmInfiniGram::load(path)`: "FMIG", version 1, the body's size and an FNV-1a checksum, then the arrays as they are. Scratch harness `fmstore.cpp` on the qa training text (19.6 MB):

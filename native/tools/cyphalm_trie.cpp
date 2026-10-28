@@ -45,7 +45,7 @@
 //        lines for the SCRIBE model ladder.
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
-//      [--fam-train stat|outcome|matched] [--fam-ent FRAMES] [--fam-only] [--copy] [--r3 PATTERNS.tsv]
+//      [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]
 //      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE[:tail]|shape[:tail]]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
@@ -71,14 +71,13 @@
 //        --cls (B4; TOOL_PROFILE P2) adds the class-context expert, built on the same bytes as InfiniGram, to every
 //        model (lambdas on the holdout's first half); with --copy the copy expert goes on after it, its lambdas fit
 //        over the class-mixed distribution, and cls_given_copy_lci gives the class expert's gain with copy present.
-//        A1d (docs/reports/A1D_A2B_ANSWERING_VARIANTS.md): the --parse entity column may hold several candidates
-//        ("a|b|c", E1's first): per statistic the best candidate's value counts, and the token's entity is the best
-//        by --fam-stat (ENTITY: its accuracy against the source title, grading only). ent_tb is the larger of the
-//        bold-lead and title counts; FAMSTAT adds the paired-bootstrap difference from ent_bold, FAMTOK the token's
-//        implied precision / recall. --fam-train matched puts the cut where the dev base rate of not-in-slice
-//        questions is the share of training turns below it (ties by ent_lp). --fam-ent FRAMES writes the entity in
-//        each frame (e.g. 'entity="{E}"'; several joined by ';') as tokens before <|fam=..|>. A shard row with no
-//        question is plain text (a fact sentence).
+//        --copy-min N (B4B) sets the copy lambdas of matches shorter than N bytes to 0 after fitting.
+//        A1d / A2b (docs/reports/A1D_A2B_ANSWERING_VARIANTS.md): the --parse entity column may hold several
+//        candidates ("a|b|c", E1's first): per statistic the best candidate's value counts, and the token's entity is
+//        the best by --fam-stat (ENTITY: its accuracy against the source title, grading only). ent_tb is the larger of
+//        the bold-lead and title counts; FAMSTAT adds the paired-bootstrap difference from ent_bold, FAMTOK the
+//        token's implied precision / recall. --fam-train low is outcome, but answered turns and high questions carry
+//        no token. --r3 reads a 12th column `frame` (F2R's raw-byte frames, markup kept) when present.
 //   dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608]
 //        A1 training text: T-QA relation templates filled with page titles from enwik8 after
 //        --from whose lowered text never occurs in the lowered training bytes (wiki train +
@@ -132,6 +131,15 @@
 //              (trie + InfiniGram), 2 right 0 wrong at 2% wrong out of fold (1.5%); BPC +0.0014.
 //              Test: covers 3 questions, adds 0; with --r3 the gate keeps 1 right, 0 wrong.
 //              About 7.5-8.5 min a run.
+// Measured 2026-10-28 (docs/reports/A1D_A2B_ANSWERING_VARIANTS.md):
+//   qa A1d     span candidates (every 1-6-word span of the question), best by ent_title: entity = source title
+//              76/100 in-slice (E1 63); dev AUROC ent_title 0.900 (boot95 0.862-0.940; E1 0.795), ent_bold 0.869.
+//              Token (ent_title, --fam-train low): dev precision / recall 0.600 / 1.00 (trie), test 0.635 / 0.94
+//              (A1c: 0.371 / 0.98); with D4's shard trie + InfiniGram keeps 2 right 0 wrong at 2% wrong out of
+//              fold (a high token keeps none). stat: trie + IG 0.313 / 0.50. Entity in the token: 0 of 65 tags.
+//   --cls + --copy  holdout2 trie + IG 2.071574, + shape:6 1.995847, + copy(m 8) 1.985451, both 1.914210;
+//              with the shard, class + copy echoes the question (raw right 6 -> 2).
+//   --r3 raw   F2R's frames (column 12) + raw-form shard: dev 5 raw right, 2 right 1 wrong out of fold; test 1 / 0.
 //
 // Build (from the repo root):
 //   gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
@@ -192,7 +200,6 @@ struct Args {
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;  // A1c, A3, A2
     bool copy = false, fam_only = false, mention = false;
     std::string cls;      // B4: class-context expert spec, TABLE[:tail] or shape[:tail]
-    std::string fam_ent;  // A1d: the entity's frames before the token, e.g. entity="{E}" ("" = no entity)
     int copy_min = 0;     // B4B: copy lambdas of match lengths below this set to 0 after fitting
 };
 
@@ -235,7 +242,6 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--leak") a.leak = next();
         else if (s == "--copy") a.copy = true;
         else if (s == "--cls") a.cls = next();
-        else if (s == "--fam-ent") a.fam_ent = next();
         else if (s == "--copy-min") a.copy_min = std::atoi(next());
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--mention") a.mention = true;
@@ -1666,7 +1672,7 @@ struct QaOpts {
     std::string fam = "none";  // none | before | after: where the <|fam=..|> token goes
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;
     bool copy = false, fam_only = false;
-    std::string cls, fam_ent;
+    std::string cls;
     int copy_min = 0;
 };
 
@@ -1814,24 +1820,6 @@ std::array<double, kFam> fam_stats(const Lm& wiki_lm, const InfiniGram& low, con
                                    : text_logprob(wiki_lm, "User: " + q.substr(0, at), q.substr(at, e.size()));
     v[7] = std::max(v[3], v[4]);
     return v;
-}
-
-// A1d: the familiarity token, preceded by the entity in each frame of `frames` (e.g. entity="{E}"; several joined by
-// ';'), each as its own <|...|>, so that the level stays the last bytes before the answer.
-std::string fam_token(const std::string& level, const std::string& frames, const std::string& entity) {
-    const std::string e = strip_article(entity);
-    std::string t;
-    for (std::string f : split(frames, ';'))
-        if (!e.empty() && f.find("{E}") != std::string::npos) t += "<|" + f.replace(f.find("{E}"), 3, e) + "|>";
-    return t + "<|fam=" + level + "|>";
-}
-
-// A1d: the cut below which a share `rate` of all of x lies (NaN counts in the total but is never below).
-double quantile_cut(std::vector<double> x, double rate) {
-    const std::size_t n = x.size();
-    x.erase(std::remove_if(x.begin(), x.end(), [](double v) { return std::isnan(v); }), x.end());
-    std::sort(x.begin(), x.end());
-    return x.empty() ? 0.0 : x[std::min(x.size() - 1, static_cast<std::size_t>(rate * static_cast<double>(n)))];
 }
 
 // A1d (grading only): the entity of the message "... nothing about X in what I've read.", and whether a name is a
@@ -2278,56 +2266,39 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             return std::string(x < t1 ? "low" : x < t2 ? "mid" : "high");
         };
     } else if (fam_on) {
-        // --fam-train matched (A1d): the statistic on every turn, its cut put where the dev base rate of not-in-slice
-        // questions (one number) is the share of training turns (Dolly and the don't-know turns used) below it; ties
-        // are broken by ent_lp.
-        const bool mt = o.fam_train == "matched";
-        auto val = [&, mt](const std::string& q) {
-            const auto v = fam_stats(wiki_lm, *low, q, entity_of(q));
-            return v[static_cast<std::size_t>(fam_k)] + (mt ? 1e-3 * std::tanh(v[6] / 16) : 0.0);
-        };
-        double cut = fam_cut[static_cast<std::size_t>(fam_k)];
-        if (mt) {
-            std::vector<double> x;
-            for (std::size_t i = 0; i < turns.size(); ++i) x.push_back(val(instruction(i)));
-            for (std::size_t i = 0; i < n_dk; ++i) x.push_back(val(dk[i].q));
-            const double rate = static_cast<double>(std::count_if(dev.begin(), dev.end(), [](const QaRow& r) { return !r.in_slice; })) /
-                                static_cast<double>(dev.size());
-            cut = quantile_cut(x, rate);
-            std::cout << "fam_matched base_rate " << rate << " training_turns " << x.size() << "\n";
-        }
+        const double cut = fam_cut[static_cast<std::size_t>(fam_k)];
         std::cout << "fam_thresholds " << o.fam_stat << " cut " << cut << "\n";
-        tokq = [val, cut](const std::string& q) {
-            const double x = val(q);
+        tokq = [&, cut](const std::string& q) {
+            const double x = fam_stats(wiki_lm, *low, q, entity_of(q))[static_cast<std::size_t>(fam_k)];
             return std::string(std::isnan(x) ? "mid" : x < cut ? "low" : "high");
         };
     }
     if (fam_on) {
         // --fam-train outcome: the training turns carry the gate's decision instead (high on answered turns, low on
-        // don't-know turns); dev and test still get the statistic's token. --fam-ent KEY (A1d) adds the entity: the
-        // don't-know or shard row's own, or the chosen E1 candidate of a Dolly, dev or test question.
-        const bool oc = o.fam_train == "outcome";
-        auto ent = [&](const std::string& q) { return o.fam_ent.empty() ? std::string() : entity_of(q); };
+        // don't-know turns); dev and test still get the statistic's token. --fam-train low (A1d): the same, but answered
+        // turns and high questions carry no token at all.
+        const bool lo = o.fam_train == "low", oc = o.fam_train == "outcome" || lo;
+        auto tok = [lo](const std::string& l) { return lo && l == "high" ? std::string() : "<|fam=" + l + "|>"; };
         std::map<std::string, int> cd, ck;
         std::map<std::string, std::pair<int, int>> cv;
         for (std::size_t i = 0; i < turns.size(); ++i) {
             const std::string l = oc ? "high" : tokq(instruction(i));
             ++cd["<|fam=" + l + "|>"];
-            tok_dolly[i] = fam_token(l, o.fam_ent, ent(instruction(i)));
+            tok_dolly[i] = tok(l);
         }
         for (std::size_t i = 0; i < dk.size(); ++i) {
             const std::string l = oc ? "low" : tokq(dk[i].q);
             ++ck["<|fam=" + l + "|>"];
-            tok_dk[i] = fam_token(l, o.fam_ent, dk[i].entity);
+            tok_dk[i] = tok(l);
         }
         for (std::size_t i = 0; i < dev.size(); ++i) {
             const std::string l = tokq(dev[i].q);
             (dev[i].in_slice ? cv["<|fam=" + l + "|>"].first : cv["<|fam=" + l + "|>"].second)++;
-            tok_dev[i] = fam_token(l, o.fam_ent, ent(dev[i].q));
+            tok_dev[i] = tok(l);
         }
-        for (std::size_t i = 0; i < test.size(); ++i) tok_test[i] = fam_token(tokq(test[i].q), o.fam_ent, ent(test[i].q));
-        for (std::size_t i = 0; i < sh1.size(); ++i) tok_sh1[i] = fam_token(oc ? "high" : tokq(sh1[i].q), o.fam_ent, sh1[i].entity);
-        for (std::size_t i = 0; i < sh2.size(); ++i) tok_sh2[i] = fam_token(oc ? "high" : tokq(sh2[i].q), o.fam_ent, sh2[i].entity);
+        for (std::size_t i = 0; i < test.size(); ++i) tok_test[i] = tok(tokq(test[i].q));
+        for (std::size_t i = 0; i < sh1.size(); ++i) tok_sh1[i] = tok(oc ? "high" : tokq(sh1[i].q));
+        for (std::size_t i = 0; i < sh2.size(); ++i) tok_sh2[i] = tok(oc ? "high" : tokq(sh2[i].q));
         for (auto& [k, v] : cd) std::cout << "fam_dolly " << k << " " << v << "\n";
         for (auto& [k, v] : ck) std::cout << "fam_dk " << k << " " << v << "\n";
         for (auto& [k, v] : cv) std::cout << "fam_dev " << k << " in_slice " << v.first << " not_in_slice " << v.second << "\n";
@@ -2340,13 +2311,12 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
 
     // Chat text: Dolly, with the extra turns (don't-know pairs at dk_ratio of all turns, then every shard row), each
-    // list spread evenly through it. A shard row with no question (A1d: a fact sentence) is plain text.
+    // list spread evenly through it.
     std::vector<std::pair<std::size_t, std::string>> extra;  // (after which Dolly turn, text)
     auto spread = [&](const std::vector<DkRow>& rows, std::size_t n, const std::vector<std::string>& toks) {
         for (std::size_t j = 0; j < n; ++j)
             extra.push_back({(j + 1) * turns.size() / (n + 1),
-                             (rows[j].q.empty() ? "" : with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j])) +
-                                 rows[j].response + "\n\n"});
+                             with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j]) + rows[j].response + "\n\n"});
     };
     spread(dk, n_dk, tok_dk);
     spread(sh1, sh1.size(), tok_sh1);
@@ -3017,19 +2987,15 @@ int cmd_selftest() {
         }
     }
     {
-        // A1d: the token with its entity, the matched cut (NaN counts in the total, never below), the message's entity,
-        // and --copy-min 8 (B4B) zeroing the copy buckets below 8 bytes.
+        // A1d: the message's entity, and --copy-min 8 (B4B) zeroing the copy buckets below 8 bytes.
         const std::string m = dont_know_text("Zorbia", "capital", "UNKNOWN_ENTITY");
         double lam[kCopyBuckets] = {0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7};
         copy_clip(lam, 8);
-        const bool ok = lam[3] == 0 && lam[1] == 0 && lam[4] == 0.4 && lam[7] == 0.7 && fam_token("low", "entity=\"{E}\"", "the Zorbia") == "<|entity=\"Zorbia\"|><|fam=low|>" &&
-                        fam_token("high", "", "Zorbia") == "<|fam=high|>" && fam_token("mid", "a {E};b {E}", "") == "<|fam=mid|>" &&
-                        fam_token("low", "about {E};entity=\"{E}\"", "Zorbia") == "<|about Zorbia|><|entity=\"Zorbia\"|><|fam=low|>" &&
-                        quantile_cut({3, 1, std::nan(""), 2}, 0.5) == 3 && quantile_cut({}, 0.2) == 0 &&
-                        msg_entity(m) == "Zorbia" && msg_entity("I don't know.").empty() &&
-                        names_in("the Zorbia", "What is the capital of Zorbia?") && !names_in("or", "Zorbia or not?");
+        const bool ok = lam[3] == 0 && lam[1] == 0 && lam[4] == 0.4 && lam[7] == 0.7 && msg_entity(m) == "Zorbia" &&
+                        msg_entity("I don't know.").empty() && names_in("the Zorbia", "What is the capital of Zorbia?") &&
+                        !names_in("or", "Zorbia or not?");
         if (!ok) {
-            std::cerr << "selftest: familiarity token / matched cut / message entity / copy-min checks failed\n";
+            std::cerr << "selftest: message entity / copy-min checks failed\n";
             return 1;
         }
     }
@@ -3069,7 +3035,7 @@ void usage() {
                  "  cls <wiki> <TABLE[:tail]|shape[:tail]> [more specs]\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
-                 "     [--fam-train stat|outcome|matched] [--fam-ent FRAMES] [--fam-only] [--copy] [--r3 PATTERNS.tsv]\n"
+                 "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
                  "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE[:tail]|shape[:tail]]\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  selftest\n"
@@ -3109,12 +3075,12 @@ int main(int argc, char** argv) {
     else if (cmd == "cls") rc = cmd_cls(a);
     else if (cmd == "qa") {
         if (a.dev.empty() || (a.fam != "none" && a.fam != "before" && a.fam != "after") || a.dk_ratio < 0 ||
-            a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome" && a.fam_train != "matched")) {
+            a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome" && a.fam_train != "low")) {
             usage();
             return 2;
         }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
-                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.fam_ent, a.copy_min});
+                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.copy_min});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();

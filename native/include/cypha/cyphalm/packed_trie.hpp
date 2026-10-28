@@ -27,7 +27,8 @@
 //
 // What is here:        Quantiser, Node/Fol/Hit, Model (observe, fill_experts,
 //                      mix, mix_dist, compact_match), PackedModel and pack()
-//                      (the serving form), eg_update, layout
+//                      (the serving form; save / load: the stored file),
+//                      eg_update, layout
 //                      accounting (measure, hash_*), the Dolly loader, text
 //                      helpers (printable), self_test, and sampling with the
 //                      no-repeat rule.
@@ -53,6 +54,8 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <sstream>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -868,7 +871,205 @@ struct PackedModel {
         return sizeof(*this) + o1.size() * 4ull + kid.size() * 4ull + edge.size() + fol.size() * 4ull + fsym.size() +
                fq.size() + mstart.size() * 4ull + mlo.size() * 2ull + mfol.size() * 4ull + mnext.size();
     }
+
+    bool operator==(const PackedModel&) const = default;  // every table and array
+
+    // The arrays fit together, so every lookup stays inside them. load() checks a stored file with it.
+    bool consistent() const {
+        const std::size_t n = edge.size();
+        auto rising = [](const std::vector<std::uint32_t>& v, std::size_t top) {
+            for (std::size_t i = 1; i < v.size(); ++i)
+                if (v[i] < v[i - 1]) return false;
+            return v.empty() || v.back() <= top;
+        };
+        const bool trie = o1.size() == 65536 && n >= kFirst2 && kend >= kFirst2 && kend <= n &&
+                          kid.size() == std::size_t{kend} + 1 && kid.back() == n && rising(kid, n) &&
+                          fol.size() == n - kFirst2 + 1 && fol.back() == fsym.size() && rising(fol, fsym.size()) &&
+                          fq.size() == fsym.size();
+        const bool match = mstart.empty() ? mlo.empty() && mfol.empty() && mnext.empty()
+                                          : mstart.size() == 65537 && mstart.back() == mlo.size() &&
+                                                rising(mstart, mlo.size()) && mfol.size() == mlo.size() &&
+                                                mnext.size() == mlo.size();
+        return trie && match;
+    }
+
+    // A stored packed file (docs/reports/RAM_PROFILE.md, M7). It also holds the mixture weights w and the
+    // scoring split, so a served model is self-contained. Little-endian, no padding: "CYPHAPK" and a zero
+    // byte, u32 version 1, u32 0, u64 cfg.train and cfg.sample, f64 alpha, agree_floor, match_cap and w[0..5],
+    // u32 uni_n and kend, u32 uni[256] and o1n[256], then o1, kid, edge, fol, fsym, fq, mstart, mlo, mfol and
+    // mnext, each a u64 count and its elements, then the FNV-1a 64-bit hash of every byte before it.
+    // Errors throw std::runtime_error. load() sets cfg.train, sample, alpha, agree_floor and match_cap and
+    // leaves the training-only fields of cfg as they are.
+    void save(std::ostream& os, const double w[6], const Config& cfg) const;
+    void save(const std::string& path, const double w[6], const Config& cfg) const;
+    static PackedModel load(std::istream& is, double w[6], Config& cfg);
+    static PackedModel load(const std::string& path, double w[6], Config& cfg);
 };
+
+namespace detail {
+
+inline constexpr char kPackMagic[8] = {'C', 'Y', 'P', 'H', 'A', 'P', 'K', '\0'};
+inline constexpr std::uint32_t kPackVersion = 1;
+
+struct Fnv64 {
+    std::uint64_t h = 14695981039346656037ull;
+    void add(const void* p, std::size_t n) {
+        const auto* b = static_cast<const unsigned char*>(p);
+        for (std::size_t i = 0; i < n; ++i) h = (h ^ b[i]) * 1099511628211ull;
+    }
+};
+
+// Little-endian writer and reader of the stored file. On a little-endian machine an array is one block.
+struct PackOut {
+    std::ostream& os;
+    Fnv64 sum{};
+    void raw(const void* p, std::size_t n) {
+        sum.add(p, n);
+        os.write(static_cast<const char*>(p), static_cast<std::streamsize>(n));
+    }
+    template <class T>
+    void num(T v) {  // an unsigned integer
+        unsigned char b[sizeof(T)];
+        for (std::size_t i = 0; i < sizeof(T); ++i) b[i] = static_cast<unsigned char>(std::uint64_t{v} >> (8 * i));
+        raw(b, sizeof b);
+    }
+    void real(double v) { num(std::bit_cast<std::uint64_t>(v)); }
+    template <class T>
+    void array(const T* p, std::size_t n) {
+        if constexpr (std::endian::native == std::endian::little) raw(p, n * sizeof(T));
+        else
+            for (std::size_t i = 0; i < n; ++i) num(p[i]);
+    }
+    template <class T>
+    void vec(const std::vector<T>& v) {
+        num(std::uint64_t{v.size()});
+        array(v.data(), v.size());
+    }
+};
+
+struct PackIn {
+    std::istream& is;
+    std::uint64_t left;  // bytes the stream still holds
+    Fnv64 sum{};
+    void raw(void* p, std::size_t n) {
+        if (n > left || !is.read(static_cast<char*>(p), static_cast<std::streamsize>(n)))
+            throw std::runtime_error("PackedModel: stored file cut short");
+        left -= n;
+        sum.add(p, n);
+    }
+    template <class T>
+    T num() {
+        unsigned char b[sizeof(T)];
+        raw(b, sizeof b);
+        std::uint64_t v = 0;
+        for (std::size_t i = 0; i < sizeof(T); ++i) v |= std::uint64_t{b[i]} << (8 * i);
+        return static_cast<T>(v);
+    }
+    double real() { return std::bit_cast<double>(num<std::uint64_t>()); }
+    template <class T>
+    void array(T* p, std::size_t n) {
+        if constexpr (std::endian::native == std::endian::little) raw(p, n * sizeof(T));
+        else
+            for (std::size_t i = 0; i < n; ++i) p[i] = num<T>();
+    }
+    template <class T>
+    void vec(std::vector<T>& v) {
+        const auto n = num<std::uint64_t>();
+        if (n > left / sizeof(T)) throw std::runtime_error("PackedModel: stored file damaged");
+        v.resize(static_cast<std::size_t>(n));
+        array(v.data(), v.size());
+    }
+};
+
+}  // namespace detail
+
+inline void PackedModel::save(std::ostream& os, const double w[6], const Config& cfg) const {
+    detail::PackOut o{os};
+    o.raw(detail::kPackMagic, sizeof detail::kPackMagic);
+    o.num(detail::kPackVersion);
+    o.num(std::uint32_t{0});
+    o.num(std::uint64_t{cfg.train});
+    o.num(std::uint64_t{cfg.sample});
+    for (const double v : {alpha, agree_floor, match_cap}) o.real(v);
+    for (int i = 0; i < 6; ++i) o.real(w[i]);
+    o.num(uni_n);
+    o.num(kend);
+    o.array(uni, 256);
+    o.array(o1n, 256);
+    o.vec(o1);
+    o.vec(kid);
+    o.vec(edge);
+    o.vec(fol);
+    o.vec(fsym);
+    o.vec(fq);
+    o.vec(mstart);
+    o.vec(mlo);
+    o.vec(mfol);
+    o.vec(mnext);
+    o.num(o.sum.h);
+    if (!os) throw std::runtime_error("PackedModel: cannot write the stored file");
+}
+
+inline void PackedModel::save(const std::string& path, const double w[6], const Config& cfg) const {
+    std::ofstream os(path, std::ios::binary);
+    if (!os) throw std::runtime_error("PackedModel: cannot write " + path);
+    save(os, w, cfg);
+    os.close();
+    if (!os) throw std::runtime_error("PackedModel: cannot write " + path);
+}
+
+inline PackedModel PackedModel::load(std::istream& is, double w[6], Config& cfg) {
+    std::uint64_t left = ~std::uint64_t{0};
+    if (const auto here = is.tellg(); here >= 0) {
+        is.seekg(0, std::ios::end);
+        const auto end = is.tellg();
+        is.seekg(here);
+        if (end >= here) left = static_cast<std::uint64_t>(end - here);
+    }
+    detail::PackIn in{is, left};
+    char magic[sizeof detail::kPackMagic];
+    in.raw(magic, sizeof magic);
+    if (std::memcmp(magic, detail::kPackMagic, sizeof magic) != 0 || in.num<std::uint32_t>() != detail::kPackVersion)
+        throw std::runtime_error("PackedModel: not a stored packed trie (or another version)");
+    (void)in.num<std::uint32_t>();
+    PackedModel p;
+    const auto train = in.num<std::uint64_t>(), sample = in.num<std::uint64_t>();
+    p.alpha = in.real();
+    p.agree_floor = in.real();
+    p.match_cap = in.real();
+    double ws[6];
+    for (double& v : ws) v = in.real();
+    p.uni_n = in.num<std::uint32_t>();
+    p.kend = in.num<std::uint32_t>();
+    in.array(p.uni, 256);
+    in.array(p.o1n, 256);
+    in.vec(p.o1);
+    in.vec(p.kid);
+    in.vec(p.edge);
+    in.vec(p.fol);
+    in.vec(p.fsym);
+    in.vec(p.fq);
+    in.vec(p.mstart);
+    in.vec(p.mlo);
+    in.vec(p.mfol);
+    in.vec(p.mnext);
+    const std::uint64_t h = in.sum.h;
+    if (in.num<std::uint64_t>() != h) throw std::runtime_error("PackedModel: stored file damaged (checksum)");
+    if (!p.consistent()) throw std::runtime_error("PackedModel: stored file damaged");
+    std::copy(ws, ws + 6, w);
+    cfg.train = static_cast<std::size_t>(train);
+    cfg.sample = static_cast<std::size_t>(sample);
+    cfg.alpha = p.alpha;
+    cfg.agree_floor = p.agree_floor;
+    cfg.match_cap = p.match_cap;
+    return p;
+}
+
+inline PackedModel PackedModel::load(const std::string& path, double w[6], Config& cfg) {
+    std::ifstream is(path, std::ios::binary);
+    if (!is) throw std::runtime_error("PackedModel: cannot open " + path);
+    return load(is, w, cfg);
+}
 
 // The packed form of a trained model (after compact_match; before it, the match table is empty, as
 // Model::find_match then finds nothing). The Model is not changed; m.release() then frees it.
@@ -1604,6 +1805,43 @@ inline bool self_test() {
         pk.followers() != measure(tm, Mode::Synth).followers || qmax != 65 || !online_ok) {
         std::cerr << "self-test packed model: differ " << differ << " hits " << hits << " nodes " << pk.nodes()
                   << " followers " << pk.followers() << " matches " << pk.matches() << " qmax " << int(qmax) << "\n";
+        return false;
+    }
+
+    // M7: the stored file, in memory. The round trip gives the same model (every array), weights and split;
+    // a copy with one bit flipped, or cut short, is refused.
+    std::size_t image = 0;
+    int refused = 0;
+    bool same = false;
+    try {
+        const double tw[6] = {0.1, 0.2, 0.05, 0.15, 0.3, 0.2};
+        Config sc;
+        sc.train = 600;
+        sc.sample = tb.size();
+        std::stringstream ss;
+        pk.save(ss, tw, sc);
+        const std::string img = ss.str();
+        image = img.size();
+        double bw[6] = {};
+        Config bc;
+        const PackedModel back = PackedModel::load(ss, bw, bc);
+        same = back == pk && std::memcmp(bw, tw, sizeof tw) == 0 && bc.train == 600 && bc.sample == tb.size() &&
+               bc.alpha == pk.alpha && bc.match_cap == pk.match_cap;
+        std::string flipped = img;
+        flipped[img.size() / 2] = static_cast<char>(flipped[img.size() / 2] ^ 1);
+        for (const std::string& bad : {flipped, img.substr(0, 60)}) {
+            std::istringstream bs(bad);
+            try {
+                (void)PackedModel::load(bs, bw, bc);
+            } catch (const std::runtime_error&) {
+                ++refused;
+            }
+        }
+    } catch (const std::runtime_error& e) {
+        std::cerr << "self-test stored file: " << e.what() << "\n";
+    }
+    if (!same || refused != 2 || image != 528449) {
+        std::cerr << "self-test stored file: same " << same << " refused " << refused << " bytes " << image << "\n";
         return false;
     }
     return true;
